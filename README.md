@@ -1,3 +1,5 @@
+# This project has moved to github https://github.com/IAS-Astrophysics/athenak
+
 # AthenaK
 
 Experimental version of Athena++ with Kokkos.
