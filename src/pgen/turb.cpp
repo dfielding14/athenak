@@ -26,7 +26,15 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm);
 //  \brief Problem Generator for turbulence
 
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
+  // Things to do for sims starting from ICs and restarts
+
+  // enroll user history function
+  user_hist_func = TurbulentHistory;
+
+  // end here for restarts
   if (restart) return;
+
+  // Things to do only for sims starting from ICs
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   auto &indcs = pmy_mesh_->mb_indcs;
 
@@ -36,9 +44,6 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
        << "<hydro> or <mhd> block in input file" << std::endl;
     exit(EXIT_FAILURE);
   }
-
-  // enroll user history function
-  user_hist_func = TurbulentHistory;
 
   // capture variables for kernel
   int &is = indcs.is; int &ie = indcs.ie;
@@ -223,9 +228,9 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
     array_sum::GlobalSum hvars;
 
     // calculate mean B
-    hvars.the_array[0] = bcc(m,IBX,k,j,i);
-    hvars.the_array[1] = bcc(m,IBY,k,j,i);
-    hvars.the_array[2] = bcc(m,IBZ,k,j,i);
+    hvars.the_array[0] = bcc(m,IBX,k,j,i)*vol;
+    hvars.the_array[1] = bcc(m,IBY,k,j,i)*vol;
+    hvars.the_array[2] = bcc(m,IBZ,k,j,i)*vol;
 
     // 0 = < B^2 >
     Real B_mag_sq = bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
@@ -318,7 +323,6 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
     // sum into parallel reduce
     mb_sum += hvars;
   }, Kokkos::Sum<array_sum::GlobalSum>(sum_this_mb));
-  Kokkos::fence();
 
   // store data into hdata array
   for (int n=0; n<pdata->nhist; ++n) {
