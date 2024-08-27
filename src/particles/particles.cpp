@@ -23,6 +23,8 @@ namespace particles {
 
 Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     pmy_pack(ppack) {
+  std::cout << "Entering Particles constructor" << std::endl;
+
   // check this is at least a 2D problem
   if (pmy_pack->pmesh->one_d) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
@@ -32,13 +34,21 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // read number of particles per cell, and calculate number of particles this pack
   Real ppc = pin->GetOrAddReal("particles","ppc",1.0);
-
+  nspecies = pin->GetOrAddInteger("particles","nspecies",1);
   // compute number of particles as real number, since ppc can be < 1
+
+  std::string evolution_t = pin->GetString("time","evolution");
+  is_dynamic = (evolution_t.compare("static") != 0);
+  std::cout<<"Is dynamic? "<<is_dynamic<<std::endl;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int ncells = indcs.nx1*indcs.nx2*indcs.nx3;
   Real r_npart = ppc*static_cast<Real>((pmy_pack->nmb_thispack)*ncells);
   // then cast to integer
-  nprtcl_thispack = static_cast<int>(r_npart);
+  nprtcl_thispack = static_cast<int>(r_npart) * nspecies;
+  nprtcl_perspec_thispack = static_cast<int>(r_npart);
+
+  std::cout << "Particles: nprtcl_thispack = " << nprtcl_thispack << std::endl;
+  std::cout << "Particles: nprtcl_perspec_thispack = " << nprtcl_perspec_thispack << std::endl;
 
   // select particle type
   {
@@ -58,7 +68,11 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::string ppush = pin->GetString("particles","pusher");
     if (ppush.compare("drift") == 0) {
       pusher = ParticlesPusher::drift;
-    } else {
+    }
+    else if (ppush.compare("boris") ==0  ){
+      pusher = ParticlesPusher::boris;
+    }
+    else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle pusher must be specified in <particles> block"
                 <<std::endl;
@@ -75,10 +89,10 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   switch (particle_type) {
     case ParticleType::cosmic_ray:
       {
-        int ndim=4;
+        int ndim=5;
         if (pmy_pack->pmesh->three_d) {ndim+=2;}
         nrdata = ndim;
-        nidata = 2;
+        nidata = 3;
         break;
       }
     default:
@@ -89,6 +103,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // allocate boundary object
   pbval_part = new ParticlesBoundaryValues(this, pin);
+
+  std::cout << "Exiting Particles constructor" << std::endl;
 }
 
 //----------------------------------------------------------------------------------------
@@ -109,23 +125,31 @@ void Particles::CreateParticleTags(ParameterInput *pin) {
   if (assign.compare("index_order") == 0) {
     int tagstart = 0;
     for (int n=1; n<=global_variable::my_rank; ++n) {
-      tagstart += pmy_pack->pmesh->nprtcl_eachrank[n-1];
+      tagstart += pmy_pack->pmesh->nprtcl_eachrank[n-1] / nspecies;
     }
 
+    auto &nspecies_ = nspecies;
     auto &pi = prtcl_idata;
+    auto &nprtcl_total_ = pmy_pack->pmesh->nprtcl_total;
+    auto &nprtcl_perspec_thispack_ = nprtcl_perspec_thispack;
     par_for("ptags",DevExeSpace(),0,(nprtcl_thispack-1),
     KOKKOS_LAMBDA(const int p) {
-      pi(PTAG,p) = tagstart + p;
+      int spec = p / nprtcl_perspec_thispack_;
+      pi(PTAG,p) = tagstart + p + spec*nprtcl_total_/nspecies_;
     });
 
   // tags are assigned sequentially across ranks
   } else if (assign.compare("rank_order") == 0) {
     int myrank = global_variable::my_rank;
     int nranks = global_variable::nranks;
+    auto &nspecies_ = nspecies;
     auto &pi = prtcl_idata;
+    auto &nprtcl_total_ = pmy_pack->pmesh->nprtcl_total;
+    auto &nprtcl_perspec_thispack_ = nprtcl_perspec_thispack;
     par_for("ptags",DevExeSpace(),0,(nprtcl_thispack-1),
     KOKKOS_LAMBDA(const int p) {
-      pi(PTAG,p) = myrank + nranks*p;
+      int spec = p / nprtcl_perspec_thispack_;
+      pi(PTAG,p) = myrank + nranks*p + spec*nprtcl_total_/nspecies_ ;
     });
 
   // tag algorithm not recognized, so quit with error

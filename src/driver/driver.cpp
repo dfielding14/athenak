@@ -81,6 +81,12 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
     }
   } // extra brace to limit scope of string
 
+  if (time_evolution == TimeEvolution::tstatic && pmesh->pmb_pack->ppart != nullptr){
+    tlim = pin->GetReal("time", "tlim");
+    nlim = pin->GetOrAddInteger("time", "nlim", -1);
+    ndiag = pin->GetOrAddInteger("time", "ndiag", 1);
+  }
+
   // read <time> parameters controlling driver if run requires time-evolution
   if (time_evolution != TimeEvolution::tstatic) {
     integrator = pin->GetOrAddString("time", "integrator", "rk2");
@@ -277,6 +283,11 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   radiation::Radiation *prad = pmesh->pmb_pack->prad;
   z4c::Z4c *pz4c = pmesh->pmb_pack->pz4c;
   dyngr::DynGRMHD *pdyngr = pmesh->pmb_pack->pdyngr;
+
+  if (time_evolution == TimeEvolution::tstatic && pmesh->pmb_pack->ppart != nullptr){
+    pmesh->NewTimeStep(tlim);
+  }
+
   if (time_evolution != TimeEvolution::tstatic) {
     if (phydro != nullptr) {
       (void) pmesh->pmb_pack->phydro->NewTimeStep(this, nexp_stages);
@@ -341,7 +352,54 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
   if (time_evolution == TimeEvolution::tstatic) {
     // TODO(@user): add work for time static problems here
-  } else {
+    Real elapsed_time = -1.;
+    if (wall_time > 0.) {
+      elapsed_time = pwall_clock_->seconds();
+    }
+    while ((pmesh->time < tlim) && (pmesh->ncycle < nlim || nlim < 0) &&
+           (elapsed_time < wall_time)) {
+      if (global_variable::my_rank == 0) {OutputCycleDiagnostics(pmesh);}
+
+      // Execute TaskLists
+      // Work before time integrator indicated by "0" in stage
+      ExecuteTaskList(pmesh, "before_timeintegrator", 0);
+      // Work outside of TaskLists:
+      // increment time, ncycle, etc.
+      pmesh->time = pmesh->time + pmesh->dt;
+      pmesh->ncycle++;
+      nmb_updated_ += pmesh->nmb_total;
+      npart_updated_ += pmesh->nprtcl_total;
+      // load balancing efficiency
+      if (global_variable::nranks > 1) {
+        int minnmb = std::numeric_limits<int>::max();
+        for (int i=0; i<global_variable::nranks; ++i) {
+          minnmb = std::min(minnmb, pmesh->nmb_eachrank[i]);
+        }
+        lb_efficiency_ += static_cast<float>(minnmb*(global_variable::nranks))/
+            static_cast<float>(pmesh->nmb_total);
+      }
+
+      // Test for/make outputs
+      for (auto &out : pout->pout_list) {
+        // compare at floating point (32-bit) precision to reduce effect of round off
+        float time_32 = static_cast<float>(pmesh->time);
+        float next_32 = static_cast<float>(out->out_params.last_time+out->out_params.dt);
+        float tlim_32 = static_cast<float>(tlim);
+        int &dcycle_ = out->out_params.dcycle;
+
+        if (((out->out_params.dt > 0.0) && ((time_32 >= next_32) && (time_32<tlim_32))) ||
+            ((dcycle_ > 0) && ((pmesh->ncycle)%(dcycle_) == 0)) ) {
+          out->LoadOutputData(pmesh);
+          out->WriteOutputFile(pmesh, pin);
+        }
+      }
+      // Update wall clock time if needed.
+      if (wall_time > 0.) {
+        elapsed_time = pwall_clock_->seconds();
+      }
+    }  // end while
+  }    // end of (time_evolution == tstatic) clause
+  else {
     Real elapsed_time = -1.;
     if (wall_time > 0.) {
       elapsed_time = UpdateWallClock();

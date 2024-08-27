@@ -59,6 +59,8 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
   // loop over input block names.  Find those that start with "output", read parameters,
   // and add to linked list of BaseTypeOutputs.
 
+
+  int NPartOutputs = pin->GetOrAddInteger("particles", "n_outputs",1); // Temporary fix for outputs when restarting
   int num_hst=0, num_rst=0, num_log=0; // count # of hst,rst,log outputs
   for (auto it = pin->block.begin(); it != pin->block.end(); ++it) {
     if (it->block_name.compare(0, 6, "output") == 0) {
@@ -66,6 +68,7 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
 
       // extract integer number of output block.  Save name and number
       std::string outn = it->block_name.substr(6); // 6 because counting starts at 0!
+      if (std::stoi(outn) > NPartOutputs && pm->pmb_pack->ppart != nullptr) continue; // Temporary fix for outputs when restarting						    
       opar.block_number = atoi(outn.c_str());
       opar.block_name.assign(it->block_name);
 
@@ -182,7 +185,8 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
       // set output variable and optional file id (default is output variable name)
       if (opar.file_type.compare("hst") != 0 &&
           opar.file_type.compare("rst") != 0 &&
-          opar.file_type.compare("log") != 0) {
+          opar.file_type.compare("log") != 0 &&
+          opar.file_type.compare("trk") != 0) {
         opar.variable = pin->GetString(opar.block_name, "variable");
         opar.file_id = pin->GetOrAddString(opar.block_name,"id",opar.variable);
       }
