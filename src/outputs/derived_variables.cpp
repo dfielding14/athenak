@@ -454,6 +454,140 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
       }
     });
   }
+  // cos of the angle between the current and the magnetic field vector
+  if (name.compare("mhd_theta_jb") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto &bcc = pm->pmb_pack->pmhd->bcc0;
+    par_for("j2", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+
+      // calculate current
+      Real j1 = 0.0;
+      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/size.d_view(m).dx1;
+      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/size.d_view(m).dx1;
+      if (multi_d) {
+        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/size.d_view(m).dx2;
+        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/size.d_view(m).dx2;
+      }
+      if (three_d) {
+        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/size.d_view(m).dx3;
+        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/size.d_view(m).dx3;
+      }
+      // Calculate |J|
+      Real J_mag = sqrt(j1*j1 + j2*j2 + j3*j3);
+
+      // Calculate |B|
+      Real B_mag = sqrt( bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
+                       + bcc(m,IBY,k,j,i)*bcc(m,IBY,k,j,i)
+                       + bcc(m,IBZ,k,j,i)*bcc(m,IBZ,k,j,i));
+
+      // calculate j dot B
+      Real jdotB = j1*bcc(m,IBX,k,j,i) + j2*bcc(m,IBY,k,j,i) + j3*bcc(m,IBZ,k,j,i);
+
+      // calculate cos(theta) = j dot B / (|J| |B|)
+      dv(m,i_dv,k,j,i) = jdotB / (J_mag * B_mag);
+    });
+    i_dv += 1; // increment derived variable index
+  }
+
+  // cos of the angle between the velocity and the magnetic field vector
+  if (name.compare("mhd_theta_vb") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto &w0_ = pm->pmb_pack->pmhd->w0;
+    auto &bcc = pm->pmb_pack->pmhd->bcc0;
+    par_for("j2", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      // Calculate |v|
+      Real v_mag = sqrt( w0_(m,IVX,k,j,i)*w0_(m,IVX,k,j,i)
+                       + w0_(m,IVY,k,j,i)*w0_(m,IVY,k,j,i)
+                       + w0_(m,IVZ,k,j,i)*w0_(m,IVZ,k,j,i));
+
+      // Calculate |B|
+      Real B_mag = sqrt( bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
+                       + bcc(m,IBY,k,j,i)*bcc(m,IBY,k,j,i)
+                       + bcc(m,IBZ,k,j,i)*bcc(m,IBZ,k,j,i));
+
+      // calculate v dot B
+      Real vdotB = w0_(m,IVX,k,j,i)*bcc(m,IBX,k,j,i)
+                 + w0_(m,IVY,k,j,i)*bcc(m,IBY,k,j,i)
+                 + w0_(m,IVZ,k,j,i)*bcc(m,IBZ,k,j,i);
+
+      // calculate cos(theta) = v dot B / (|v| |B|)
+      dv(m,i_dv,k,j,i) = vdotB / (v_mag * B_mag);
+    });
+    i_dv += 1; // increment derived variable index
+  }
+
+  // magnitude of curvature over the magnitude of B
+  if (name.compare("mhd_curv_B_ratio") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto &bcc = pm->pmb_pack->pmhd->bcc0;
+    par_for("curv_B_ratio", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      // Calculate |B|
+      Real &Bx = bcc(m,IBX,k,j,i);
+      Real &By = bcc(m,IBY,k,j,i);
+      Real &Bz = bcc(m,IBZ,k,j,i);
+
+      Real B_mag_squared = (Bx*Bx + By*By + Bz*Bz);
+      Real B_mag = sqrt(B_mag_squared);
+
+      // Calculate gradB tensor
+      Real dBx_dx = (bcc(m,IBX,k,j,i+1) - bcc(m,IBX,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real dBx_dy = (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+      Real dBx_dz = (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*size.d_view(m).dx3);
+
+      Real dBy_dx = (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real dBy_dy = (bcc(m,IBY,k,j+1,i) - bcc(m,IBY,k,j-1,i))/(2.0*size.d_view(m).dx2);
+      Real dBy_dz = (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*size.d_view(m).dx3);
+
+      Real dBz_dx = (bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real dBz_dy = (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
+      Real dBz_dz = (bcc(m,IBZ,k+1,j,i) - bcc(m,IBZ,k-1,j,i))/(2.0*size.d_view(m).dx3);
+
+      Real BdotGradB_x = (Bx * dBx_dx + By * dBx_dy + Bz * dBx_dz);
+      Real BdotGradB_y = (Bx * dBy_dx + By * dBy_dy + Bz * dBy_dz);
+      Real BdotGradB_z = (Bx * dBz_dx + By * dBz_dy + Bz * dBz_dz);
+
+      Real Identity_minus_bhat_bhat_xx = 1.0 - Bx*Bx/B_mag_squared;
+      Real Identity_minus_bhat_bhat_xy = 0.0 - Bx*By/B_mag_squared;
+      Real Identity_minus_bhat_bhat_xz = 0.0 - Bx*Bz/B_mag_squared;
+
+      Real Identity_minus_bhat_bhat_yx = 0.0 - By*Bx/B_mag_squared;
+      Real Identity_minus_bhat_bhat_yy = 1.0 - By*By/B_mag_squared;
+      Real Identity_minus_bhat_bhat_yz = 0.0 - By*Bz/B_mag_squared;
+
+      Real Identity_minus_bhat_bhat_zx = 0.0 - Bz*Bx/B_mag_squared;
+      Real Identity_minus_bhat_bhat_zy = 0.0 - Bz*By/B_mag_squared;
+      Real Identity_minus_bhat_bhat_zz = 1.0 - Bz*Bz/B_mag_squared;
+
+      // Calculate curvature which is |(B.gradB).(I - bhat bhat)/B^2|
+      Real curv1 = (
+            BdotGradB_x * Identity_minus_bhat_bhat_xx
+          + BdotGradB_y * Identity_minus_bhat_bhat_yx
+          + BdotGradB_z * Identity_minus_bhat_bhat_zx
+        );
+      Real curv2 = (
+            BdotGradB_x * Identity_minus_bhat_bhat_xy
+          + BdotGradB_y * Identity_minus_bhat_bhat_yy
+          + BdotGradB_z * Identity_minus_bhat_bhat_zy
+        );
+      Real curv3 = (
+            BdotGradB_x * Identity_minus_bhat_bhat_xz
+          + BdotGradB_y * Identity_minus_bhat_bhat_yz
+          + BdotGradB_z * Identity_minus_bhat_bhat_zz
+        );
+
+      dv(m,i_dv,k,j,i) = sqrt(curv1*curv1+curv2*curv2+curv3*curv3)/B_mag_squared/B_mag;
+    });
+    i_dv += 1; // increment derived variable index
+  }
 
   // get all sgs terms for the MHD equations
   if (name.compare("mhd_sgs") == 0) {
