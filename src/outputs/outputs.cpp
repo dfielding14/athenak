@@ -61,6 +61,7 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
 
 
   // int NPartOutputs = pin->GetOrAddInteger("particles", "n_outputs",1); // Temporary fix for outputs when restarting
+  // TO DO: Fix this so that it works with restarts and live particles
   int NPartOutputs = pin->DoesParameterExist("particles", "n_outputs") ?
                    pin->GetInteger("particles", "n_outputs") : 0;
   int num_hst=0, num_rst=0, num_log=0; // count # of hst,rst,log outputs
