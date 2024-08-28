@@ -389,8 +389,18 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
         if (((out->out_params.dt > 0.0) && ((time_32 >= next_32) && (time_32<tlim_32))) ||
             ((dcycle_ > 0) && ((pmesh->ncycle)%(dcycle_) == 0)) ) {
+          Real start_time = pwall_clock_->seconds();
+
           out->LoadOutputData(pmesh);
           out->WriteOutputFile(pmesh, pin);
+
+          Real end_time = pwall_clock_->seconds();
+          Real output_time = end_time - start_time;
+
+          if (global_variable::my_rank == 0) {
+            std::cout << "Output '" << out->out_params.block_name << "' took "
+                      << output_time << " seconds" << std::endl;
+          }
         }
       }
       // Update wall clock time if needed.
@@ -448,8 +458,18 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
         if (((out->out_params.dt > 0.0) && ((time_32 >= next_32) && (time_32<tlim_32))) ||
             ((dcycle_ > 0) && ((pmesh->ncycle)%(dcycle_) == 0)) ) {
+          Real start_time = pwall_clock_->seconds();
+
           out->LoadOutputData(pmesh);
           out->WriteOutputFile(pmesh, pin);
+
+          Real end_time = pwall_clock_->seconds();
+          Real output_time = end_time - start_time;
+
+          if (global_variable::my_rank == 0) {
+            std::cout << "Output '" << out->out_params.block_name << "' took "
+                      << output_time << " seconds" << std::endl;
+          }
         }
       }
 
@@ -539,16 +559,29 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 //! \fn Driver::OutputCycleDiagnostics()
 //! \brief Simple function to print diagnostics every 'ndiag' cycles to stdout
 
+// void Driver::OutputCycleDiagnostics(Mesh *pm) {
+// //  const int dtprcsn = std::numeric_limits<Real>::max_digits10 - 1;
+//   const int dtprcsn = 6;
+//   if (pm->ncycle % ndiag == 0) {
+//     std::cout << "cycle=" << pm->ncycle << std::scientific << std::setprecision(dtprcsn)
+//               << " time=" << pm->time << " dt=" << pm->dt << std::endl;
+//   }
+//   return;
+// }
+
 void Driver::OutputCycleDiagnostics(Mesh *pm) {
-//  const int dtprcsn = std::numeric_limits<Real>::max_digits10 - 1;
   const int dtprcsn = 6;
+  static double last_time = 0.0;
   if (pm->ncycle % ndiag == 0) {
+    double current_time = pwall_clock_->seconds();
+    double cycle_duration = current_time - last_time;
+    last_time = current_time;
     std::cout << "cycle=" << pm->ncycle << std::scientific << std::setprecision(dtprcsn)
-              << " time=" << pm->time << " dt=" << pm->dt << std::endl;
+              << " time=" << pm->time << " dt=" << pm->dt
+              << " dt_wall=" << cycle_duration << std::endl;
   }
   return;
 }
-
 //----------------------------------------------------------------------------------------
 //! \fn Driver::UpdateWallClock()
 //! \brief Update and sync the wall clock across all MPI ranks. This is necessary because

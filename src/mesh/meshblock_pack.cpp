@@ -235,6 +235,7 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   // (8) PARTICLES
   // Create particles module.  Create tasklist.
   if (pin->DoesBlockExist("particles")) {
+    std::cout << "Adding particles" << std::endl;
     ppart = new particles::Particles(this, pin);
     ppart->AssembleTasks(tl_map);
     nphysics++;
