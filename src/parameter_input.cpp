@@ -178,9 +178,10 @@ void ParameterInput::LoadFromFile(IOWrapper &input, bool single_file_per_rank) {
 
   // search for <par_end> (reading from restart files) or EOF (reading from input file).
   do {
-    if (global_variable::my_rank == 0 || single_file_per_rank) {
+    if (global_variable::my_rank == 0 || single_file_per_rank) { // only the master process reads header from file
       ret = input.Read_bytes(buf, sizeof(char), kBufSize, single_file_per_rank);
     }
+
 #if MPI_PARALLEL_ENABLED
   if (!single_file_per_rank) {
     MPI_Bcast(&ret, sizeof(IOWrapperSizeT), MPI_BYTE, 0, MPI_COMM_WORLD);
@@ -190,22 +191,23 @@ void ParameterInput::LoadFromFile(IOWrapper &input, bool single_file_per_rank) {
     MPI_Bcast(buf, ret, MPI_BYTE, 0, MPI_COMM_WORLD);
   }
 #endif
-    par.write(buf, ret); // add the buffer into the stream
+
+    par.write(buf, ret);
     header += ret;
-    std::string sbuf = par.str(); // create string for search
-    loc = sbuf.find("<par_end>", 0); // search from the top of the stream
-    if (loc != std::string::npos) { // found <par_end>
-      header = loc + 10; // store the header length
+    std::string sbuf = par.str();
+    loc = sbuf.find("<par_end>", 0);
+    if (loc != std::string::npos) {
+      header = loc + 10;
       break;
     }
+
     if (header > kBufSize*10) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "<par_end> is not found in the first 40KBytes."
-                << std::endl << "Probably the file is broken or the wrong file is "
-                << "specified" << std::endl;
+      std::cerr << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << ": <par_end> not found in the first 40KBytes." << std::endl;
       std::exit(EXIT_FAILURE);
     }
-  } while (ret == kBufSize); // till EOF (or par_end is found)
+  } while (ret == kBufSize);
+
 
   // Now par contains the parameter inputs + some additional including <par_end>
   // Read the stream and load the parameters

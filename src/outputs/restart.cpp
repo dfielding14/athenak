@@ -36,6 +36,12 @@ RestartOutput::RestartOutput(ParameterInput *pin, Mesh *pm, OutputParameters op)
   BaseTypeOutput(pin, pm, op) {
   // create directories for outputs. Comments in binary.cpp constructor explain why
   mkdir("rst",0775);
+  bool single_file_per_rank = op.single_file_per_rank;
+  if (single_file_per_rank) {
+    char rank_dir[20];
+    std::snprintf(rank_dir, sizeof(rank_dir), "rst/rank_%08d/", global_variable::my_rank);
+    mkdir(rank_dir, 0775);
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -198,7 +204,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   resfile.Open(fname.c_str(), IOWrapper::FileMode::write, single_file_per_rank);
   if (global_variable::my_rank == 0 || single_file_per_rank) {
     // output the input parameters (input file)
-    resfile.Write_any_type(sbuf.c_str(), sbuf.size(), "byte");
+    resfile.Write_any_type(sbuf.c_str(), sbuf.size(), "byte", single_file_per_rank);
 
     // output Mesh information
     resfile.Write_any_type(&(pm->nmb_total), (sizeof(int)), "byte",
@@ -222,7 +228,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   //--- STEP 2.  Root process writes list of logical locations and cost of MeshBlocks
   // This data read in Mesh::BuildTreeFromRestart()
 
-  if (global_variable::my_rank == 0) {
+  if (global_variable::my_rank == 0 || single_file_per_rank) {
     resfile.Write_any_type(&(pm->lloc_eachmb[0]),(pm->nmb_total)*sizeof(LogicalLocation),
                            "byte", single_file_per_rank);
     resfile.Write_any_type(&(pm->cost_eachmb[0]), (pm->nmb_total)*sizeof(float),
