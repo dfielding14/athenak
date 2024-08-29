@@ -277,11 +277,13 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
         pnode = new PDFOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("bin") == 0) {
+        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name, "single_file_per_rank", false);
         pnode = new MeshBinaryOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("rst") == 0) {
       // Add restarts to the tail end of BaseTypeOutput list, so file counters for other
       // output types are up-to-date in restart file
+        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name, "single_file_per_rank", false);
         pnode = new RestartOutput(pin,pm,opar);
         pout_list.push_back(pnode);
         num_rst++;

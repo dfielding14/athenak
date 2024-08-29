@@ -89,11 +89,11 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
     Real mu = 2.0*(rand_gen.frand()-0.5);
     Real phi = 2.0*M_PI * rand_gen.frand();
-    pr(IPVX,p) = std::sqrt(1.0-mu*mu) * std::cos(phi); 
-    pr(IPVY,p) = std::sqrt(1.0-mu*mu) * std::sin(phi); 
+    pr(IPVX,p) = std::sqrt(1.0-mu*mu) * std::cos(phi);
+    pr(IPVY,p) = std::sqrt(1.0-mu*mu) * std::sin(phi);
     pr(IPVZ,p) = mu;
     pr(IPM,p) = min_mass * pow(mass_log_spacing, spec   );
-    rand_pool64.free_state(rand_gen);  
+    rand_pool64.free_state(rand_gen);
   });
 
   // set timestep (which will remain constant for entire run
@@ -123,7 +123,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     const int nji  = nx2*nx1;
     Real dtOmega = std::numeric_limits<float>::max();
 
-    Kokkos::parallel_reduce("pgen_restart_w_part",Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    Kokkos::parallel_reduce("pgen_restart_w_part",Kokkos::RangePolicy<>(DevExeSpace(),
+                            0, nmkji),
     KOKKOS_LAMBDA(const int &idx, Real &min_dt) {
     // compute m,k,j,i indices of thread and call function
       int m = (idx)/nkji;
@@ -132,16 +133,16 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       int i = (idx - m*nkji - k*nji - j*nx1) + is;
       k += ks;
       j += js;
-      Real Btemp = std::sqrt( SQR(b.x1f(m,k,j,i) ) + SQR( b.x2f(m,k,j,i) ) + SQR( b.x3f(m,k,j,i) )  );
+      Real Btemp = std::sqrt(  SQR( b.x1f(m,k,j,i) )
+                             + SQR( b.x2f(m,k,j,i) )
+                             + SQR( b.x3f(m,k,j,i) )  );
       min_dt = fmin(cfl_part*min_mass/Btemp, min_dt);
     }, Kokkos::Min<Real>(dtOmega));
 
     dtnew_ = std::min(dtnew_, dtOmega);
     return;
-  }
-  
-  else{
-    // initialize MHD variables ------------------------------------------------------------
+  } else{
+    // initialize MHD variables ----------------------------------------------------------
     if (pmbp->pmhd != nullptr) {
       EOS_Data &eos = pmbp->pmhd->peos->eos_data;
       Real gm1 = eos.gamma - 1.0;
@@ -182,11 +183,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
           u0(m,IEN,k,j,i) = p0/gm1 + 0.5*B0z*B0z + // fix contribution from dB
              0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
              SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
-        } 
+        }
       });
     }  // End initialization MHD variables
-    dtnew_ = std::min(dtnew_, cfl_part*min_mass / B0z); 
+    dtnew_ = std::min(dtnew_, cfl_part*min_mass / B0z);
     return;
-
   }
 }
