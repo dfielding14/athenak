@@ -511,12 +511,52 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       outvars.emplace_back("curv_perp",i_derived,&(derived_var));
     }
 
+    // mhd magnitude of magnetic curvature alt
+    if (variable.compare("mhd_curv_alt") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("curv_alt",i_derived,&(derived_var));
+    }
+
     // mhd magnitude of magnetic curvature
     if (variable.compare("mhd_bmag") == 0) {
       out_params.contains_derived = true;
       out_params.n_derived += 1;
       int i_derived = out_params.n_derived - 1;
       outvars.emplace_back("bmag",i_derived,&(derived_var));
+    }
+
+    // mhd magnitude of Alfven Velocity
+    if (variable.compare("mhd_vA_mag") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("vA_mag",i_derived,&(derived_var));
+    }
+
+    // ratio of curvature to magnetic field strength
+    if (variable.compare("mhd_curv_B_ratio") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("curv_B_ratio",i_derived,&(derived_var));
+    }
+
+    // mhd_theta_jb
+    if (variable.compare("mhd_theta_jb") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("costheta_jb",i_derived,&(derived_var));
+    }
+
+    // mhd_theta_vb
+    if (variable.compare("mhd_theta_vb") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("costheta_vb",i_derived,&(derived_var));
     }
 
     // mhd divergence of B
