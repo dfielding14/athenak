@@ -202,7 +202,7 @@ void TurbulenceDriver::Initialize() {
   Real nhigh_sqr = nhigh*nhigh;
   for (nkx = 0; nkx <= nhigh; nkx++) {
     for (nky = 0; nky <= nhigh; nky++) {
-      for (nkz = 0; nkz <= nhigh; nkz++) {
+      for (nkz = min_kz; nkz <= max_kz; nkz++) {
         if (nkx == 0 && nky == 0 && nkz == 0) continue;
         nsqr = 0.0;
         bool flag_prl = true;
