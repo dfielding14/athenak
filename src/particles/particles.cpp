@@ -89,7 +89,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   switch (particle_type) {
     case ParticleType::cosmic_ray:
       {
-        int ndim=5;
+        int ndim=5+7;
         if (pmy_pack->pmesh->three_d) {ndim+=2;}
         nrdata = ndim;
         nidata = 3;

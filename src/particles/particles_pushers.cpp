@@ -69,7 +69,7 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
         Real x1p = pr(IPX,p);
         Real x2p = pr(IPY,p);
         Real x3p = pr(IPZ,p);
-
+        
         x[0] = pr(IPX,p) + dt_/(2.0) * pr(IPVX,p);
         if (multi_d) { x[1] = pr(IPY,p) + dt_/(2.0)*pr(IPVY,p);}
         if (three_d) { x[2] = pr(IPZ,p) + dt_/(2.0)*pr(IPVZ,p);}
@@ -132,6 +132,23 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
         pr(IPX,p) = x[0] + dt_/(2.0)*  pr(IPVX,p);
         if (multi_d) { pr(IPY,p) = x[1] + dt_/(2.0) * pr(IPVY,p);}
         if (three_d) { pr(IPZ,p) = x[2] + dt_/(2.0) * pr(IPVZ,p);}
+
+	pr(IPBX,p) = B[0];
+	pr(IPBY,p) = B[1];
+	pr(IPBZ,p) = B[2];
+	
+        Real Dx1 = pr(IPX,p)-x1p;
+        Real Dx2 = pr(IPY,p)-x2p;
+	Real Dx3 = pr(IPZ,p)-x3p;
+
+        pr(IPDX,p) += Dx1;
+	pr(IPDY,p) += Dx2;
+	pr(IPDZ,p) += Dx3;
+	
+	Real Bmag = std::sqrt( SQR(B[0]) + SQR(B[1]) + SQR(B[2]) );
+
+	pr(IPDB,p) += (Dx1 * B[0] + Dx2 * B[1] + Dx3 * B[2] ) / Bmag;	
+
       });
     break;}
   default:

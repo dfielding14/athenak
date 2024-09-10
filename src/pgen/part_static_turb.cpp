@@ -24,12 +24,21 @@
 #include "mhd/mhd.hpp"
 #include "pgen.hpp"
 
+
+
+// User-defined history functions
+void ParticleHistory(HistoryData *pdata, Mesh *pm);
+
 //----------------------------------------------------------------------------------------
 //! \fn ProblemGenerator::UserProblem_()
 //! \brief Problem Generator for random particle positions/velocities
 
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   //if (restart) return;
+
+
+  // enroll user history function
+  user_hist_func = ParticleHistory;
 
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   if (pmbp->ppart == nullptr) {
@@ -38,6 +47,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
               << std::endl;
     exit(EXIT_FAILURE);
   }
+
 
   Real cfl_part  = pin->GetOrAddReal("particles","cfl_part",0.05);
   Real B0z  = pin->GetOrAddReal("problem","B0z",1.0);
@@ -93,6 +103,15 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     pr(IPVY,p) = std::sqrt(1.0-mu*mu) * std::sin(phi);
     pr(IPVZ,p) = mu;
     pr(IPM,p) = min_mass * pow(mass_log_spacing, spec   );
+    pr(IPDX,p) = 0.0;
+    pr(IPDY,p) = 0.0;
+    pr(IPDZ,p) = 0.0;
+    pr(IPDB,p) = 0.0;
+    // Fix below so that DF & track at first timestep is wrt to real B field. 
+    // Only an issue for the very first output
+    pr(IPBX,p) = 0.0;
+    pr(IPBY,p) = 0.0;
+    pr(IPBZ,p) = 1.0; 
     rand_pool64.free_state(rand_gen);
   });
 
@@ -190,3 +209,58 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     return;
   }
 }
+
+// User defined history output for particle data
+// Outputs running diffusion coefficients using all particles
+
+void ParticleHistory(HistoryData *pdata, Mesh *pm) {
+
+  particles::Particles *pp = pm->pmb_pack->ppart;
+  //int npart = pm->nprtcl_thisrank;
+  auto &npart = pm->pmb_pack->ppart->nprtcl_thispack;
+  auto &pr = pp->prtcl_rdata;
+  auto &pi = pp->prtcl_idata;
+  auto nspecies_ = pp->nspecies;
+  auto nprtcl_total_ = pm->nprtcl_total;
+  int nfields = 4;
+  pdata->nhist = nfields*nspecies_;
+  int &nhist_ = pdata->nhist;
+
+  for(int i=0; i < nspecies_; ++i){
+    pdata->label[nfields*i+0] = "Dx^2";
+    pdata->label[nfields*i+1] = "Dy^2";
+    pdata->label[nfields*i+2] = "Dz^2";
+    pdata->label[nfields*i+3] = "Db^2";
+    //pdata->label[nfields*i+4] = "<mu>";
+  }
+
+  array_sum::GlobalSum sum_this_mb;
+  Kokkos::parallel_reduce("HistSums",Kokkos::RangePolicy<>(DevExeSpace(), 0, npart-1),
+  KOKKOS_LAMBDA(const int &p, array_sum::GlobalSum &mb_sum) {
+    // MHD conserved variables:
+    array_sum::GlobalSum hvars;
+    int spec = pi(PSP,p);
+    // fill the_array with zeros , if nhist < NHISTORY_VARIABLES
+    for (int n=0; n<NHISTORY_VARIABLES; ++n) {
+      hvars.the_array[n] = 0.0;
+    } 
+    // Now fill the fields relevant to that species   
+    hvars.the_array[spec*nfields+0] = SQR(pr(IPDX, p))/nprtcl_total_ * nspecies_;
+    hvars.the_array[spec*nfields+1] = SQR(pr(IPDY, p))/nprtcl_total_ * nspecies_;
+    hvars.the_array[spec*nfields+2] = SQR(pr(IPDZ, p))/nprtcl_total_ * nspecies_;
+    hvars.the_array[spec*nfields+3] = SQR(pr(IPDB, p))/nprtcl_total_ * nspecies_;
+
+    // sum into parallel reduce
+    mb_sum += hvars;
+  }, Kokkos::Sum<array_sum::GlobalSum>(sum_this_mb));
+  Kokkos::fence();
+
+  // store data into hdata array
+  for (int n=0; n<pdata->nhist; ++n) {
+    pdata->hdata[n] = sum_this_mb.the_array[n];
+  }
+
+  return;
+}
+
+

@@ -16,7 +16,7 @@
 #include "athena.hpp"
 #include "io_wrapper.hpp"
 
-#define NHISTORY_VARIABLES 15
+#define NHISTORY_VARIABLES 100
 #if NHISTORY_VARIABLES > NREDUCTION_VARIABLES
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif
@@ -198,6 +198,7 @@ struct TrackedParticleData {
   int tag;
   Real x,y,z;
   Real vx,vy,vz;
+  Real Bx, By, Bz;
 };
 
 //----------------------------------------------------------------------------------------
@@ -419,6 +420,23 @@ class TrackedParticleOutput : public BaseTypeOutput {
   bool header_written;
   std::vector<int> npout_eachrank;
   HostArray1D<TrackedParticleData> outpart;
+};
+
+//----------------------------------------------------------------------------------------
+//! \class ParticleDFOutput
+//  \brief derived BaseTypeOutput class for particle distribution function  data in binary format
+
+class ParticleDFOutput : public BaseTypeOutput {
+ public:
+  ParticleDFOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int nbin;
+  Real vmin;
+  Real vmax;
+  HostArray2D<int> host_histogram;
+  bool header_written;
 };
 
 //----------------------------------------------------------------------------------------
