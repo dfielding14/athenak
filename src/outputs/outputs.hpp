@@ -413,6 +413,7 @@ class TrackedParticleOutput : public BaseTypeOutput {
   TrackedParticleOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
   void LoadOutputData(Mesh *pm) override;
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+  void WriteOutputFileWithBuffer(Mesh *pm, ParameterInput *pin);
  protected:
   int ntrack;           // total number of tracked particles across all ranks
   int ntrack_thisrank;  // number of tracked particles this rank (guess)
@@ -420,6 +421,11 @@ class TrackedParticleOutput : public BaseTypeOutput {
   bool header_written;
   std::vector<int> npout_eachrank;
   HostArray1D<TrackedParticleData> outpart;
+  float *particle_buffer;
+  int buffer_size;
+  int ncycle_buffer;
+  int icycle_buffer;
+  int nout_thisrank;
 };
 
 //----------------------------------------------------------------------------------------

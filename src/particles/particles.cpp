@@ -66,11 +66,20 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   // select pusher algorithm
   {
     std::string ppush = pin->GetString("particles","pusher");
+    std::string interp = pin->GetOrAddString("particles","interpolation", "tsc");
+    
     if (ppush.compare("drift") == 0) {
       pusher = ParticlesPusher::drift;
     }
     else if (ppush.compare("boris") ==0  ){
-      pusher = ParticlesPusher::boris;
+      if(interp.compare("tsc") == 0) pusher = ParticlesPusher::boris_tsc;
+      else if(interp.compare("lin") == 0) pusher = ParticlesPusher::boris_lin;
+      else {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Interpolation method not recognized"
+                <<std::endl;
+        std::exit(EXIT_FAILURE);
+      }
     }
     else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
