@@ -3,7 +3,7 @@ Functions to:
   (1) convert bin --> Python dictionary
   (2) convert Python dictionary --> athdf(xdmf) files
 
-This module contains a collection of helper functions for reading and
+This module contains a collection of helper functions for readng and
 writing athena file data formats. More information is provided in the
 function docstrings.
 

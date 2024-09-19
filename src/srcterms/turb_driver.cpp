@@ -366,13 +366,15 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
     for (int i_turb_update = n_turb_updates_yet;
          i_turb_update < n_turb_updates_reqd;
          i_turb_update++) {
-      if (global_variable::my_rank == 0) {
-        std::cout << "i_turb_update = " << i_turb_update << std::endl;
-      }
+      // if (global_variable::my_rank == 0) {
+      //   std::cout << "i_turb_update = " << i_turb_update << std::endl;
+      // }
+      std::cout << "i_turb_update rank= " << global_variable::my_rank << std::endl;
 
       auto force_tmp2_ = force_tmp2;
       int &nmb = pmy_pack->nmb_thispack;
 
+      std::cout << "force_init, rank = " << global_variable::my_rank << std::endl;
       // Zero out new force array
       par_for("force_init", DevExeSpace(),0,nmb-1,0,2,ks,ke,js,je,is,ie,
       KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
@@ -381,6 +383,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
       int no_dir=3;
       int nmode = 0;
       int nkx, nky, nkz, nsqr;
+      std::cout << "force_init done, rank = " << global_variable::my_rank << std::endl;
 
       for (nkx = 0; nkx <= nhigh; nkx++) {
         for (nky = 0; nky <= nhigh; nky++) {
@@ -482,6 +485,10 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
       auto zcos_ = zcos;
       auto zsin_ = zsin;
 
+      if (global_variable::my_rank == 0) {
+        std::cout << "Aka akb done" << std::endl;
+      }
+
       for (int n=0; n<mode_count_; n++) {
         par_for("force_compute", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
         KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -500,6 +507,10 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
           }
         });
       }
+      if (global_variable::my_rank == 0) {
+        std::cout << "force_compute done" << std::endl;
+      }
+
       Real fcorr, gcorr;
       if ((tcorr <= 1e-6) || (i_turb_update==0)) {  // use whitenoise
         fcorr = 0.0;
@@ -508,15 +519,27 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
         fcorr = std::exp(-dt_turb_update/tcorr);
         gcorr = std::sqrt(1.0 - fcorr*fcorr);
       }
+      if (global_variable::my_rank == 0) {
+        std::cout << "fcorr, gcorr done" << std::endl;
+      }
+
       // update force if number of required steps is greater than 1
       auto force_tmp1_ = force_tmp1;
       par_for("OU_process", DevExeSpace(),0,nmb-1,0,2,ks,ke,js,je,is,ie,
       KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
         force_tmp1_(m,n,k,j,i) =fcorr*force_tmp1_(m,n,k,j,i)+gcorr*force_tmp2_(m,n,k,j,i);
       });
+      if (global_variable::my_rank == 0) {
+        std::cout << "OU_process done" << std::endl;
+      }
+
     } // end of for loop over i_turb_update
   }
   n_turb_updates_yet = n_turb_updates_reqd;
+  if (global_variable::my_rank == 0) {
+    std::cout << "Done with TurbulenceDriver::InitializeModes " << std::endl;
+  }
+
   return TaskStatus::complete;
 }
 
@@ -524,6 +547,10 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 //! \fn apply forcing
 
 TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
+  if (global_variable::my_rank == 0) {
+    std::cout << "Starting TurbulenceDriver::AddForcing " << std::endl;
+  }
+
   Mesh *pm = pmy_pack->pmesh;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
@@ -972,6 +999,9 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
       force_(m,1,k,j,i) = 0.0;
       force_(m,2,k,j,i) = 0.0;
     });
+  }
+  if (global_variable::my_rank == 0) {
+    std::cout << "Finished TurbulenceDriver::AddForcing " << std::endl;
   }
 
   return TaskStatus::complete;
