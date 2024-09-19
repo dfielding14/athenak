@@ -313,9 +313,9 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
         }
       }
   });
-  Kokkos::fence();
+  //Kokkos::fence();
   Kokkos::deep_copy(counter, atom_count);
-  Kokkos::fence();
+  //Kokkos::fence();
   nprtcl_send = counter;
   Kokkos::resize(sendlist, nprtcl_send);
 
@@ -386,6 +386,7 @@ TaskStatus ParticlesBoundaryValues::CountSendsAndRecvs() {
   MPI_Allgatherv(MPI_IN_PLACE, nsends_eachrank[global_variable::my_rank],
                    mpi_ituple, sends_allranks.data(), nsends_eachrank.data(),
                    nsends_displ.data(), mpi_ituple, mpi_comm_part);
+  MPI_Type_free(&mpi_ituple);  
 #endif
   return TaskStatus::complete;
 }
@@ -417,10 +418,6 @@ TaskStatus ParticlesBoundaryValues::InitPrtclRecv() {
 
   bool no_errors=true;
   if (nprtcl_recv > 0) {
-    // Allocate receive buffer
-    Kokkos::realloc(prtcl_rrecvbuf, (pmy_part->nrdata)*nprtcl_recv);
-    Kokkos::realloc(prtcl_irecvbuf, (pmy_part->nidata)*nprtcl_recv);
-
     // Post non-blocking receives
     rrecv_req.clear();
     irecv_req.clear();
@@ -464,7 +461,6 @@ TaskStatus ParticlesBoundaryValues::InitPrtclRecv() {
       data_start += data_size;
     }
   }
-
   // Quit if MPI error detected
   if (!(no_errors)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -489,10 +485,6 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
 
   bool no_errors=true;
   if (nprtcl_send > 0) {
-    // Allocate send buffer
-    Kokkos::realloc(prtcl_rsendbuf, (pmy_part->nrdata)*nprtcl_send);
-    Kokkos::realloc(prtcl_isendbuf, (pmy_part->nidata)*nprtcl_send);
-
     // sendlist on device is already sorted by destrank in CountSendAndRecvs()
     // Use sendlist on device to load particles into send buffer ordered by dest_rank
     int nrdata = pmy_part->nrdata;
@@ -587,7 +579,6 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
     Kokkos::resize(pmy_part->prtcl_idata, pmy_part->nidata, new_npart);
     Kokkos::resize(pmy_part->prtcl_rdata, pmy_part->nrdata, new_npart);
   }
-
   // check that particle communications have all completed
   bool bflag = false;
   bool no_errors=true;
@@ -604,6 +595,7 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
       bflag = true;
     }
   }
+
   // Quit if MPI error detected
   if (!(no_errors)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__

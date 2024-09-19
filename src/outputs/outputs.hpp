@@ -426,6 +426,7 @@ class TrackedParticleOutput : public BaseTypeOutput {
   int ncycle_buffer;
   int icycle_buffer;
   int nout_thisrank;
+  int track_single_file_per_rank;
 };
 
 //----------------------------------------------------------------------------------------

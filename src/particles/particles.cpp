@@ -39,14 +39,12 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
   std::string evolution_t = pin->GetString("time","evolution");
   is_dynamic = (evolution_t.compare("static") != 0);
-  std::cout<<"Is dynamic? "<<is_dynamic<<std::endl;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int ncells = indcs.nx1*indcs.nx2*indcs.nx3;
   Real r_npart = ppc*static_cast<Real>((pmy_pack->nmb_thispack)*ncells);
   // then cast to integer
   nprtcl_thispack = static_cast<int>(r_npart) * nspecies;
   nprtcl_perspec_thispack = static_cast<int>(r_npart);
-
   std::cout << "Particles: nprtcl_thispack = " << nprtcl_thispack << std::endl;
   std::cout << "Particles: nprtcl_perspec_thispack = " << nprtcl_perspec_thispack << std::endl;
 
@@ -112,7 +110,6 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // allocate boundary object
   pbval_part = new ParticlesBoundaryValues(this, pin);
-
   std::cout << "Exiting Particles constructor" << std::endl;
 }
 

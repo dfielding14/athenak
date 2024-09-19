@@ -41,6 +41,12 @@ TrackedParticleOutput::TrackedParticleOutput(ParameterInput *pin, Mesh *pm,
   buffer_size = pin->GetOrAddInteger(op.block_name,"buffer_size", 0);
   nout_thisrank=0;
   if (buffer_size > 0) particle_buffer = new float [buffer_size];
+  track_single_file_per_rank = pin->GetOrAddInteger(op.block_name,"track_single_file_per_rank", 0);
+  if (track_single_file_per_rank) {
+    char rank_dir[20];
+    std::snprintf(rank_dir, sizeof(rank_dir), "trk/rank_%08d/", global_variable::my_rank);
+    mkdir(rank_dir, 0775);
+  }  
 }
 
 //----------------------------------------------------------------------------------------
@@ -206,26 +212,79 @@ void TrackedParticleOutput::WriteOutputFileWithBuffer(Mesh *pm, ParameterInput *
   int big_end = IsBigEndian(); // =1 on big endian machine
   int pp;
   int nspecies_ =  pm->pmb_pack->ppart->nspecies;
+  double time_cycle = pm->time;
   // Loop over particles, load positions into data[]
   for (int p=nout_thisrank; p<nout_thisrank + npout; ++p) {
     pp = p - nout_thisrank;
-    particle_buffer[(11*p)+0]  = static_cast<float>(outpart(pp).tag);	  
-    particle_buffer[(11*p)+1]  = static_cast<float>(icycle_buffer);    
-    particle_buffer[(11*p)+2]  = static_cast<float>(outpart(pp).x);
-    particle_buffer[(11*p)+3]  = static_cast<float>(outpart(pp).y);
-    particle_buffer[(11*p)+4]  = static_cast<float>(outpart(pp).z);
-    particle_buffer[(11*p)+5]  = static_cast<float>(outpart(pp).vx);
-    particle_buffer[(11*p)+6]  = static_cast<float>(outpart(pp).vy);
-    particle_buffer[(11*p)+7]  = static_cast<float>(outpart(pp).vz);
-    particle_buffer[(11*p)+8]  = static_cast<float>(outpart(pp).Bx);
-    particle_buffer[(11*p)+9]  = static_cast<float>(outpart(pp).By);
-    particle_buffer[(11*p)+10] = static_cast<float>(outpart(pp).Bz);
+    particle_buffer[(12*p)+0]  = static_cast<float>(icycle_buffer);    
+    particle_buffer[(12*p)+1]  = static_cast<float>(outpart(pp).tag);	  
+    particle_buffer[(12*p)+2]  = static_cast<float>(time_cycle);    
+    particle_buffer[(12*p)+3]  = static_cast<float>(outpart(pp).x);
+    particle_buffer[(12*p)+4]  = static_cast<float>(outpart(pp).y);
+    particle_buffer[(12*p)+5]  = static_cast<float>(outpart(pp).z);
+    particle_buffer[(12*p)+6]  = static_cast<float>(outpart(pp).vx);
+    particle_buffer[(12*p)+7]  = static_cast<float>(outpart(pp).vy);
+    particle_buffer[(12*p)+8]  = static_cast<float>(outpart(pp).vz);
+    particle_buffer[(12*p)+9]  = static_cast<float>(outpart(pp).Bx);
+    particle_buffer[(12*p)+10]  = static_cast<float>(outpart(pp).By);
+    particle_buffer[(12*p)+11] = static_cast<float>(outpart(pp).Bz);
   }
 
   nout_thisrank += npout;
   icycle_buffer += 1;
 
   if (icycle_buffer >= ncycle_buffer){
+    if(track_single_file_per_rank){
+    std::string fname;	    
+    char rank_dir[20];
+    std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d/", global_variable::my_rank);
+    fname = std::string("trk/") + std::string(rank_dir) + out_params.file_basename + "." + out_params.file_id + ".bin";    
+      std::stringstream msg;
+      msg << std::endl << "# AthenaK tracked particle data at time= " << pm->time
+	  << "  rank= " << global_variable::my_rank
+          << "  nout= "	<< nout_thisrank  
+          << "  nranks= " << global_variable::nranks
+          << "  cycle=" << pm->ncycle
+          << "  buffer cycles" << ncycle_buffer
+          << "  ntracked_prtcls=" << ntrack << std::endl;
+      FILE *pfile;
+      if ((pfile = std::fopen(fname.c_str(),"a")) == nullptr) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "Output file '" << fname << "' could not be opened" <<std::endl;
+        exit(EXIT_FAILURE);
+      }
+      std::fprintf(pfile,"%s \n",msg.str().c_str());
+      std::fclose(pfile);
+
+    // Now all ranks open file and append data
+    IOWrapper partfile;
+    partfile.Open(fname.c_str(), IOWrapper::FileMode::append);
+    std::size_t header_offset = partfile.GetPosition();
+
+    std::size_t datasize = sizeof(float);
+    int ptag_, icycle_;
+    // Write tracked particle data collectively over minimum shared number of prtcls
+    for (int p=0; p<nout_thisrank; ++p) {
+      // offset computed assuming tags run 0...(ntrack-1) sequentially
+      icycle_ = static_cast<int>(particle_buffer[12*p]);
+      ptag_ = static_cast<int>(particle_buffer[12*p+1]);
+      std::size_t myoffset = header_offset +  11*p* datasize;
+      // Write particle positions collectively for minimum number of particles across ranks
+      if (partfile.Write_any_type_at_all(&(particle_buffer[12*p+1]),11,myoffset,"float") != 11) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << "particle data not written correctly to tracked particle file"
+            << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
+
+    // close the output file and clean up
+    partfile.Close();
+    icycle_buffer = 0;
+    nout_thisrank = 0;
+
+    }
+    else{
     // create filename: "trk/file_basename".trk
     std::string fname;
     fname.assign("trk/");
@@ -260,11 +319,11 @@ void TrackedParticleOutput::WriteOutputFileWithBuffer(Mesh *pm, ParameterInput *
     // Write tracked particle data collectively over minimum shared number of prtcls
     for (int p=0; p<nout_thisrank; ++p) {
       // offset computed assuming tags run 0...(ntrack-1) sequentially
-      icycle_ = static_cast<int>(particle_buffer[11*p+1]);
-      ptag_ = static_cast<int>(particle_buffer[11*p]);
+      icycle_ = static_cast<int>(particle_buffer[12*p]);
+      ptag_ = static_cast<int>(particle_buffer[12*p+1]);
       std::size_t myoffset = header_offset + icycle_ * ntrack * nspecies_ * 11 * datasize  +  11*ptag_* datasize;
       // Write particle positions collectively for minimum number of particles across ranks
-      if (partfile.Write_any_type_at_all(&(particle_buffer[11*p]),11,myoffset,"float") != 11) {
+      if (partfile.Write_any_type_at_all(&(particle_buffer[12*p+1]),11,myoffset,"float") != 11) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
             << std::endl << "particle data not written correctly to tracked particle file"
             << std::endl;
@@ -276,6 +335,7 @@ void TrackedParticleOutput::WriteOutputFileWithBuffer(Mesh *pm, ParameterInput *
     partfile.Close();
     icycle_buffer = 0;
     nout_thisrank = 0;
+  }
   }
   // increment counters
   if (out_params.last_time < 0.0) {

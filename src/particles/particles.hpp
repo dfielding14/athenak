@@ -65,9 +65,10 @@ class Particles {
   Real dtnew;
   int is_dynamic;
   ParticlesPusher pusher;
-
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
+
+  Real *timers ;
 
   // container to hold names of TaskIDs
   ParticlesTaskIDs id;
