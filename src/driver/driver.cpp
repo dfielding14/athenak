@@ -306,7 +306,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   }
 
   //---- Step 3.  Cycle through output Types and load data / write files.
-  if (!res_flag) { // only write outputs at the beginning of the run
+  if (!res_flag || time_evolution == TimeEvolution::tstatic) { // only write outputs at the beginning of the run
     for (auto &out : pout->pout_list) {
       out->LoadOutputData(pmesh);
       out->WriteOutputFile(pmesh, pin);

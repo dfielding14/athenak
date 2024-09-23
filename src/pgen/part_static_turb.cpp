@@ -64,7 +64,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   auto &npart_spec = pmy_mesh_->pmb_pack->ppart->nprtcl_perspec_thispack;
   auto gids = pmy_mesh_->pmb_pack->gids;
   auto gide = pmy_mesh_->pmb_pack->gide;
-
+  auto &nspecies_ = pmy_mesh_->pmb_pack->ppart->nspecies;
   Real x1size = pmy_mesh_->mesh_size.x1max - pmy_mesh_->mesh_size.x1min;
   Real x2size = pmy_mesh_->mesh_size.x2max - pmy_mesh_->mesh_size.x2min;
   Real x3size = pmy_mesh_->mesh_size.x3max - pmy_mesh_->mesh_size.x3min;
@@ -82,6 +82,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     m = min(m,nmbtp-1 );
     pi(PGID,p) = gids + m;
     int spec = p /npart_spec;
+    spec = max(spec, 0);
+    spec = min(spec, nspecies_ -1);
     pi(PSP,p) = spec;
     Real rand = rand_gen.frand();
     pr(IPX,p) = (1. - rand)*mbsize.d_view(m).x1min + rand*mbsize.d_view(m).x1max;
@@ -97,7 +99,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     pr(IPZ,p) = fmin(pr(IPZ,p),mbsize.d_view(m).x3max);
     pr(IPZ,p) = fmax(pr(IPZ,p),mbsize.d_view(m).x3min);
 
-    Real mu = 2.0*(rand_gen.frand()-0.5);
+    Real mu = 0.99; //2.0*(rand_gen.frand()-0.5);
     Real phi = 2.0*M_PI * rand_gen.frand();
     pr(IPVX,p) = std::sqrt(1.0-mu*mu) * std::cos(phi);
     pr(IPVY,p) = std::sqrt(1.0-mu*mu) * std::sin(phi);

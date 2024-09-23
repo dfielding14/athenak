@@ -98,6 +98,8 @@ add_executable(
         outputs/vtk_mesh.cpp
         outputs/vtk_prtcl.cpp
 	outputs/df_prtcl.cpp
+        outputs/dxhist_prtcl.cpp
+        outputs/pos_prtcl.cpp
 
         particles/particles.cpp
         particles/particles_pushers.cpp

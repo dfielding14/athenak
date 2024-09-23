@@ -444,6 +444,43 @@ class ParticleDFOutput : public BaseTypeOutput {
   Real vmax;
   HostArray2D<int> host_histogram;
   bool header_written;
+  int df_single_file_per_rank;
+};
+
+//----------------------------------------------------------------------------------------
+//! \class ParticleDFOutput
+//  \brief derived BaseTypeOutput class for particle distribution function  data in binary format
+
+class ParticleDxHistOutput : public BaseTypeOutput {
+ public:
+  ParticleDxHistOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int nbin;
+  Real vmin;
+  Real vmax;
+  HostArray2D<int> host_histogram;
+  bool header_written;
+  int dxhist_single_file_per_rank;
+};
+
+
+//----------------------------------------------------------------------------------------
+//! \class ParticlePositionsOutput 
+//  \brief derived BaseTypeOutput class for particle positions dump 
+  
+class ParticlePositionsOutput : public BaseTypeOutput {
+ public:
+  ParticlePositionsOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int npout_thisrank;
+  int npout_total;
+  int pos_single_file_per_rank;
+  HostArray2D<Real> outpart_rdata;   
+  HostArray2D<int>  outpart_idata;
 };
 
 //----------------------------------------------------------------------------------------

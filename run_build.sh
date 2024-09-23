@@ -8,11 +8,22 @@ module load cce/17.0.0
 module load rocm/5.7.1
 module load cmake cray-python emacs
 module unload darshan-runtime
+#all enabled worked earlier
+#export MPICH_GPU_SUPPORT_ENABLED=1
+#export FI_MR_CACHE_MONITOR=disabled #memhooks
+#export FI_MR_CACHE_MAX_COUNT=0  # libfabric disable caching
+#export MPICH_SMP_SINGLE_COPY_MODE=NONE
+#export FI_CXI_RX_MATCH_MODE=software
+
 export MPICH_GPU_SUPPORT_ENABLED=1
-export FI_MR_CACHE_MONITOR=disabled #memhooks
-export FI_MR_CACHE_MAX_COUNT=0  # libfabric disable caching
-export MPICH_SMP_SINGLE_COPY_MODE=NONE
+export FI_MR_CACHE_MONITOR=disabled #memhooks  # alternative cache monitor
+#export FI_MR_CACHE_MAX_COUNT=0
+#export MPICH_SMP_SINGLE_COPY_MODE=NONE
 export FI_CXI_RX_MATCH_MODE=software
+
+
+# Can get an increase in write performance when disabling collective buffering for MPI IO
+export MPICH_MPIIO_HINTS="*:romio_cb_write=disable"
 
 
 athenak='/ccs/home/pkempski/athenak-PK'

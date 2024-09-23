@@ -238,7 +238,7 @@ void TrackedParticleOutput::WriteOutputFileWithBuffer(Mesh *pm, ParameterInput *
     std::string fname;	    
     char rank_dir[20];
     std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d/", global_variable::my_rank);
-    fname = std::string("trk/") + std::string(rank_dir) + out_params.file_basename + "." + out_params.file_id + ".bin";    
+    fname = std::string("trk/") + std::string(rank_dir) + out_params.file_basename  + ".trk";    
       std::stringstream msg;
       msg << std::endl << "# AthenaK tracked particle data at time= " << pm->time
 	  << "  rank= " << global_variable::my_rank

@@ -26,21 +26,21 @@
 //----------------------------------------------------------------------------------------
 // ctor: also calls BaseTypeOutput base class constructor
 
-ParticleDFOutput::ParticleDFOutput(ParameterInput *pin, Mesh *pm,
+ParticleDxHistOutput::ParticleDxHistOutput(ParameterInput *pin, Mesh *pm,
                                              OutputParameters op) :
   BaseTypeOutput(pin, pm, op) {
   int nspec = pm->pmb_pack->ppart->nspecies;	  
   // create new directory for this output. Comments in binary.cpp constructor explain why
-  mkdir("df",0775);
+  mkdir("dxh",0775);
   // allocate arrays
   nbin = pin->GetOrAddInteger(op.block_name,"nbin", 100);
   vmin = pin->GetOrAddReal(op.block_name, "vmin", -1.0);
   vmax = pin->GetOrAddReal(op.block_name, "vmax", 1.0);
-  Kokkos::realloc(host_histogram, nspec, nbin);  
-  df_single_file_per_rank = pin->GetOrAddInteger(op.block_name,"df_single_file_per_rank", 0);
-  if (df_single_file_per_rank) {
+  Kokkos::realloc(host_histogram, nspec*3, nbin);  
+  dxhist_single_file_per_rank = pin->GetOrAddInteger(op.block_name,"dxhist_single_file_per_rank", 0);
+  if (dxhist_single_file_per_rank) {
     char rank_dir[20];
-    std::snprintf(rank_dir, sizeof(rank_dir), "df/rank_%08d/", global_variable::my_rank);
+    std::snprintf(rank_dir, sizeof(rank_dir), "dxh/rank_%08d/", global_variable::my_rank);
     mkdir(rank_dir, 0775);
   }  
 }
@@ -49,7 +49,7 @@ ParticleDFOutput::ParticleDFOutput(ParameterInput *pin, Mesh *pm,
 // TrackedParticleOutput::LoadOutputData()
 // Copies data for tracked particles on this rank to host outpart array
 
-void ParticleDFOutput::LoadOutputData(Mesh *pm) {
+void ParticleDxHistOutput::LoadOutputData(Mesh *pm) {
   particles::Particles *pp = pm->pmb_pack->ppart;
 
   // Load data for tracked particles on this rank into new device array
@@ -62,17 +62,22 @@ void ParticleDFOutput::LoadOutputData(Mesh *pm) {
   auto vmax_ = vmax;
   auto nbin_ = nbin;
   auto nprtcl_total_ = pm->nprtcl_total;
-  Kokkos::View<int**> local_histogram("local_hist", nspecies_, nbin_);
+  Kokkos::View<int**> local_histogram("local_hist", nspecies_*3, nbin_);
   Kokkos::deep_copy(local_histogram, 0);  
   par_for("part_hist",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
-      Real Bmag = std::sqrt( SQR(pr(IPBX,p)) + SQR(pr(IPBY,p)) + SQR(pr(IPBZ,p)) );
-      Real vmag = std::sqrt( SQR(pr(IPVX,p)) + SQR(pr(IPVY,p)) + SQR(pr(IPVZ,p)) );      
-      Real mu = ( pr(IPVX,p)*pr(IPBX,p) + pr(IPVY,p)*pr(IPBY,p) + pr(IPVZ,p)*pr(IPBZ,p)    )/vmag/Bmag;
       int spec = pi(PSP,p);
-      int ip = (mu - vmin_)/(vmax_-vmin_)*nbin_;  	
+      int ip = (pr(IPDX,p) - vmin_)/(vmax_-vmin_)*nbin_;  	
       ip = max(0,ip);
       ip = min(nbin_-1, ip);
-      Kokkos::atomic_add(&local_histogram(spec, ip),1);    
+      Kokkos::atomic_add(&local_histogram(spec*3, ip),1);
+      ip = (pr(IPDY,p) - vmin_)/(vmax_-vmin_)*nbin_;
+      ip = max(0,ip);
+      ip = min(nbin_-1, ip);      
+      Kokkos::atomic_add(&local_histogram(spec*3+1, ip),1);
+      ip = (pr(IPDZ,p) - vmin_)/(vmax_-vmin_)*nbin_;
+      ip = max(0,ip);
+      ip = min(nbin_-1, ip);      
+      Kokkos::atomic_add(&local_histogram(spec*3+2, ip),1);      
     });
   // Wait for all threads to finish
   Kokkos::fence();
@@ -86,21 +91,21 @@ void ParticleDFOutput::LoadOutputData(Mesh *pm) {
 //! \brief Cycles over all tracked particles on this rank and writes ouput data
 //! With MPI, all particles are written to the same file.
 
-void ParticleDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void ParticleDxHistOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   int big_end = IsBigEndian(); // =1 on big endian machine
 
   // create filename: "trk/file_basename".trk
   std::string fname;
-  fname.assign("df/");
+  fname.assign("dxh/");
   fname.append(out_params.file_basename);
-  fname.append(".df");
+  fname.append(".dxh");
 
-  if(df_single_file_per_rank){
+  if(dxhist_single_file_per_rank){
     char rank_dir[20];
     std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d/", global_variable::my_rank);
-    fname = std::string("df/") + std::string(rank_dir) + out_params.file_basename  + ".df";
+    fname = std::string("dxh/") + std::string(rank_dir) + out_params.file_basename  + ".dxh";
       std::stringstream msg;
-      msg << std::endl << "# AthenaK particle distribution function at time= " << pm->time
+      msg << std::endl << "# AthenaK particle spatial displacement histogram at time= " << pm->time
         << "  rank= " << global_variable::my_rank
         << "  cycle=" << pm->ncycle <<std::endl;
       FILE *pfile;
@@ -117,7 +122,7 @@ void ParticleDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     // Root process opens/creates file and appends string
     if (global_variable::my_rank == 0) {
       std::stringstream msg;
-      msg << std::endl << "# AthenaK particle distribution function at time= " << pm->time
+      msg << std::endl << "# AthenaK particle spatial displacement histogram at time=" << pm->time
         << "  nranks= " << global_variable::nranks
         << "  cycle=" << pm->ncycle <<std::endl;
       FILE *pfile;
@@ -137,12 +142,14 @@ void ParticleDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 //  std::size_t header_offset = 0;
   int nspecies_ = pm->pmb_pack->ppart->nspecies;
   // allocate 1D vector of floats used to convert and output particle data
-  int nout = nspecies_*nbin;
+  int nout = 3*nspecies_*nbin;
   int *data = new int[nout];
   // Loop over particles, load positions into data[]
   for (int sp=0; sp<nspecies_; ++sp) { 
     for (int bin=0; bin<nbin; ++bin){
-      data[sp*nbin + bin] = host_histogram(sp, bin);
+      data[sp*3*nbin + bin] = host_histogram(sp*3, bin);
+      data[sp*3*nbin + nbin +  bin] = host_histogram(sp*3+1, bin);
+      data[sp*3*nbin + 2*nbin + bin] = host_histogram(sp*3+2, bin);
     }
   }
   // calculate local data offset
@@ -153,7 +160,7 @@ void ParticleDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   
   std::size_t datasize = sizeof(int);
   std::size_t myoffset = header_offset;
-  if (!df_single_file_per_rank) myoffset +=  rank_offset[global_variable::my_rank] * datasize;    
+  if (!dxhist_single_file_per_rank) myoffset +=  rank_offset[global_variable::my_rank] * datasize;    
   // Write particle positions collectively for minimum number of particles across ranks
   if (partfile.Write_any_type_at_all(&(data[0]),nout,myoffset,"int") != nout) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__

@@ -105,6 +105,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     default:
       break;
   }
+  
   Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
   Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
 
