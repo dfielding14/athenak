@@ -87,6 +87,7 @@ import numpy as np
 import struct
 import h5py
 import os
+import glob
 
 def read_binary(filename):
     """
