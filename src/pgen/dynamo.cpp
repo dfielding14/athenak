@@ -39,104 +39,141 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Real p0 = 1.0 / (pin->GetOrAddReal("eos", "gamma", 5.0/3.0) - 1.0);
 
   // Initialize MHD variables
+  // if (pmbp->pmhd != nullptr) {
+  //   auto &u0 = pmbp->pmhd->u0;
+  //   auto &b0 = pmbp->pmhd->b0;
+  //   EOS_Data &eos = pmbp->pmhd->peos->eos_data;
+  //   Real gm1 = eos.gamma - 1.0;
+
+  //   // Zero-Net Magnetic Field Initialization Parameters
+  //   Real rseed = pin->GetReal("problem", "rseed", -1.0);
+  //   bool first_time_ = true;
+  //   int64_t iran = static_cast<int64_t>(rseed);
+  //   int nrange = pin->GetOrAddInteger("problem", "nrange", 2);
+  //   Real total_amp = 0.0;
+  //   Real k_par = 2.0 * M_PI;
+  //   Real b0_amp = pin->GetReal("problem", "b0_amp", B0); // Desired RMS magnetic field strength
+
+  //   // Parallel loop to initialize magnetic fields with zero net flux
+  //   par_for("pgen_turb", DevExeSpace(), 0, pmbp->nmb_thispack - 1, ks, ke, js, je, is, ie,
+  //   KOKKOS_LAMBDA(int m, int k, int j, int i) {
+  //     // Initialize magnetic field components to zero
+  //     b0.x1f(m, k, j, i) = 0.0;
+  //     b0.x2f(m, k, j, i) = 0.0;
+  //     b0.x3f(m, k, j, i) = 0.0;
+
+  //     // Calculate positions
+  //     Real x1 = pcoord->x1v(i);
+  //     Real x2 = pcoord->x2v(j);
+  //     Real x3 = pcoord->x3v(k);
+
+  //     // Loop over wave numbers to superimpose cosine waves
+  //     for (int nkx = -nrange; nkx <= nrange; nkx++) {
+  //       for (int nky = -nrange; nky <= nrange; nky++) {
+  //         for (int nkz = -nrange; nkz <= nrange; nkz++) {
+  //           Real nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
+
+  //           if (nsqr > 0 && nsqr <= SQR(nrange)) {
+  //             // Avoid double-counting by only initializing positive wave numbers
+  //             if (nkx < 0 || (nkx == 0 && nky < 0) || (nkx == 0 && nky == 0 && nkz < 0)) {
+  //               continue;
+  //             }
+
+  //             // Random amplitudes and phases
+  //             Real ampx = (nkx != 0) ? 0.0 : RanGaussian(&iran);
+  //             Real ampy = (nky != 0) ? 0.0 : RanGaussian(&iran);
+  //             Real ampz = (nkz != 0) ? 0.0 : RanGaussian(&iran);
+
+  //             Real ph1 = 2.0 * M_PI * Ran2(&iran);
+  //             Real ph2 = 2.0 * M_PI * Ran2(&iran);
+  //             Real ph3 = 2.0 * M_PI * Ran2(&iran);
+
+  //             // Accumulate total amplitude for normalization
+  //             total_amp += SQR(ampx) + SQR(ampy) + SQR(ampz);
+
+  //             // Superimpose cosine waves
+  //             b0.x1f(m, k, j, i) += ampx * cos(k_par * (nky * x2 + nkz * x3) + ph1);
+  //             b0.x2f(m, k, j, i) += ampy * cos(k_par * (nkx * x1 + nkz * x3) + ph2);
+  //             b0.x3f(m, k, j, i) += ampz * cos(k_par * (nkx * x1 + nky * x2) + ph3);
+  //           }
+  //         }
+  //       }
+  //     }
+
+  //     // Apply boundary conditions for face-centered fields
+  //     if (i == ie) {
+  //       b0.x1f(m, k, j, i + 1) = b0.x1f(m, k, j, i);
+  //     }
+  //     if (j == je) {
+  //       b0.x2f(m, k, je + 1, i) = b0.x2f(m, k, j, i);
+  //     }
+  //     if (k == ke) {
+  //       b0.x3f(m, ke + 1, j, i) = b0.x3f(m, k, j, i);
+  //     }
+
+  //     // Update conserved variables if using ideal EOS
+  //     if (eos.is_ideal) {
+  //       u0(m, IEN, k, j, i) = p0 / gm1 + 0.5 * (SQR(u0(m, IM1, k, j, i)) +
+  //                                               SQR(u0(m, IM2, k, j, i)) +
+  //                                               SQR(u0(m, IM3, k, j, i))) / u0(m, IDN, k, j, i);
+  //     }
+  //   });
+
+  //   // Normalize the magnetic field to achieve zero net flux
+  //   Real Brms = b0_amp / sqrt(0.5 * total_amp);
+
+  //   // Parallel loop to normalize all face-centered magnetic fields
+  //   par_for("normalize_b0", DevExeSpace(), 0, pmbp->nmb_thispack - 1, ks, ke, js, je, is, ie,
+  //   KOKKOS_LAMBDA(int m, int k, int j, int i) {
+  //     b0.x1f(m, k, j, i) *= Brms;
+  //     b0.x2f(m, k, j, i) *= Brms;
+  //     b0.x3f(m, k, j, i) *= Brms;
+
+  //     // Update conserved variables after normalization
+  //     if (eos.is_ideal) {
+  //       u0(m, IEN, k, j, i) += 0.5 * (SQR(b0.x1f(m, k, j, i)) +
+  //                                                SQR(b0.x2f(m, k, j, i)) +
+  //                                                SQR(b0.x3f(m, k, j, i)));
+  //     }
+  //   });
+  // }
+
+
+  // Initialize MHD variables ---------------------------------
   if (pmbp->pmhd != nullptr) {
+    Real B0 = cs*std::sqrt(2.0*d_i/beta);
     auto &u0 = pmbp->pmhd->u0;
     auto &b0 = pmbp->pmhd->b0;
     EOS_Data &eos = pmbp->pmhd->peos->eos_data;
     Real gm1 = eos.gamma - 1.0;
+    Real p0 = 1.0/eos.gamma;
 
-    // Zero-Net Magnetic Field Initialization Parameters
-    Real rseed = pin->GetReal("problem", "rseed", -1.0);
-    bool first_time_ = true;
-    int64_t iran = static_cast<int64_t>(rseed);
-    int nrange = pin->GetOrAddInteger("problem", "nrange", 2);
-    Real total_amp = 0.0;
-    Real k_par = 2.0 * M_PI;
-    Real b0_amp = pin->GetReal("problem", "b0_amp", B0); // Desired RMS magnetic field strength
-
-    // Parallel loop to initialize magnetic fields with zero net flux
-    par_for("pgen_turb", DevExeSpace(), 0, pmbp->nmb_thispack - 1, ks, ke, js, je, is, ie,
+    // Set initial conditions
+    par_for("pgen_turb", DevExeSpace(),0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      // Initialize magnetic field components to zero
-      b0.x1f(m, k, j, i) = 0.0;
-      b0.x2f(m, k, j, i) = 0.0;
-      b0.x3f(m, k, j, i) = 0.0;
+      u0(m,IDN,k,j,i) = 1.0;
+      u0(m,IM1,k,j,i) = 0.0;
+      u0(m,IM2,k,j,i) = 0.0;
+      u0(m,IM3,k,j,i) = 0.0;
 
-      // Calculate positions
-      Real x1 = pcoord->x1v(i);
-      Real x2 = pcoord->x2v(j);
-      Real x3 = pcoord->x3v(k);
+      // initialize B
+      b0.x1f(m,k,j,i) = 0.0;
+      b0.x2f(m,k,j,i) = 0.0;
+      Real x1 = pcoord->x1f(i);
+      b0.x3f(m,k,j,i) = B0 * std::tanh(16.0*x1);
+      if (i==ie) {b0.x1f(m,k,j,i+1) = 0.0;}
+      if (j==je) {b0.x2f(m,k,j+1,i) = 0.0;}
+      if (k==ke) {b0.x3f(m,k+1,j,i) = B0;}
 
-      // Loop over wave numbers to superimpose cosine waves
-      for (int nkx = -nrange; nkx <= nrange; nkx++) {
-        for (int nky = -nrange; nky <= nrange; nky++) {
-          for (int nkz = -nrange; nkz <= nrange; nkz++) {
-            Real nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
-
-            if (nsqr > 0 && nsqr <= SQR(nrange)) {
-              // Avoid double-counting by only initializing positive wave numbers
-              if (nkx < 0 || (nkx == 0 && nky < 0) || (nkx == 0 && nky == 0 && nkz < 0)) {
-                continue;
-              }
-
-              // Random amplitudes and phases
-              Real ampx = (nkx != 0) ? 0.0 : RanGaussian(&iran);
-              Real ampy = (nky != 0) ? 0.0 : RanGaussian(&iran);
-              Real ampz = (nkz != 0) ? 0.0 : RanGaussian(&iran);
-
-              Real ph1 = 2.0 * M_PI * Ran2(&iran);
-              Real ph2 = 2.0 * M_PI * Ran2(&iran);
-              Real ph3 = 2.0 * M_PI * Ran2(&iran);
-
-              // Accumulate total amplitude for normalization
-              total_amp += SQR(ampx) + SQR(ampy) + SQR(ampz);
-
-              // Superimpose cosine waves
-              b0.x1f(m, k, j, i) += ampx * cos(k_par * (nky * x2 + nkz * x3) + ph1);
-              b0.x2f(m, k, j, i) += ampy * cos(k_par * (nkx * x1 + nkz * x3) + ph2);
-              b0.x3f(m, k, j, i) += ampz * cos(k_par * (nkx * x1 + nky * x2) + ph3);
-            }
-          }
-        }
-      }
-
-      // Apply boundary conditions for face-centered fields
-      if (i == ie) {
-        b0.x1f(m, k, j, i + 1) = b0.x1f(m, k, j, i);
-      }
-      if (j == je) {
-        b0.x2f(m, k, je + 1, i) = b0.x2f(m, k, j, i);
-      }
-      if (k == ke) {
-        b0.x3f(m, ke + 1, j, i) = b0.x3f(m, k, j, i);
-      }
-
-      // Update conserved variables if using ideal EOS
       if (eos.is_ideal) {
-        u0(m, IEN, k, j, i) = p0 / gm1 + 0.5 * (SQR(u0(m, IM1, k, j, i)) +
-                                                SQR(u0(m, IM2, k, j, i)) +
-                                                SQR(u0(m, IM3, k, j, i))) / u0(m, IDN, k, j, i);
-      }
-    });
-
-    // Normalize the magnetic field to achieve zero net flux
-    Real Brms = b0_amp / sqrt(0.5 * total_amp);
-
-    // Parallel loop to normalize all face-centered magnetic fields
-    par_for("normalize_b0", DevExeSpace(), 0, pmbp->nmb_thispack - 1, ks, ke, js, je, is, ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      b0.x1f(m, k, j, i) *= Brms;
-      b0.x2f(m, k, j, i) *= Brms;
-      b0.x3f(m, k, j, i) *= Brms;
-
-      // Update conserved variables after normalization
-      if (eos.is_ideal) {
-        u0(m, IEN, k, j, i) += 0.5 * (SQR(b0.x1f(m, k, j, i)) +
-                                                 SQR(b0.x2f(m, k, j, i)) +
-                                                 SQR(b0.x3f(m, k, j, i)));
+        Real x1v = pcoord->x1v(i);
+        u0(m,IEN,k,j,i) = p0/gm1 + 0.5*SQR(B0 * std::tanh(16.0*x1v)) +
+           0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
+           SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
       }
     });
   }
+
 
   return;
 }
