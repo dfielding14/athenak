@@ -22,6 +22,9 @@
 #include "mesh/mesh.hpp"
 #include "particles/particles.hpp"
 #include "outputs.hpp"
+#include "mhd/mhd.hpp"
+
+
 
 //----------------------------------------------------------------------------------------
 // ctor: also calls BaseTypeOutput base class constructor
@@ -66,6 +69,19 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
   auto nspecies_ = pp->nspecies;
   auto nprtcl_total_ = pm->nprtcl_total;
   int species_offset = nprtcl_total_ / nspecies_;
+
+  auto &indcs = pm->mb_indcs;
+  const int is = indcs.is;
+  const int js = indcs.js;
+  const int ks = indcs.ks;
+  const int ie = indcs.ie;
+  const int je = indcs.je;
+  const int ke = indcs.ke;
+  const int ngh = indcs.ng;
+  auto &mbsize = pm->pmb_pack->pmb->mb_size;
+  auto &gids = pm->pmb_pack->gids;
+  auto &bcc = pm->pmb_pack->pmhd->bcc0;
+
   Kokkos::View<int> counter("counter");
   Kokkos::deep_copy(counter, 0); 
   par_for("part_trackout",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
@@ -81,6 +97,63 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
       tracked_prtcl.d_view(index).Bx  = pr(IPBX,p);
       tracked_prtcl.d_view(index).By  = pr(IPBY,p);
       tracked_prtcl.d_view(index).Bz  = pr(IPBZ,p); 
+
+      // Now compute curvature. 
+      int m = pi(PGID,p) - gids;
+      int i = (pr(IPX,p) - mbsize.d_view(m).x1min)/mbsize.d_view(m).dx1 + is;      
+      int j = (pr(IPY,p) - mbsize.d_view(m).x2min)/mbsize.d_view(m).dx2 + js;
+      int k = (pr(IPZ,p) - mbsize.d_view(m).x3min)/mbsize.d_view(m).dx3 + ks;
+      
+      Real &bx = bcc(m,IBX,k,j,i);
+      Real &by = bcc(m,IBY,k,j,i);
+      Real &bz = bcc(m,IBZ,k,j,i);
+      Real B_mag_squared = ( bx*bx + by*by + bz*bz);
+  
+      // Calculate gradB tensor
+      Real dBx_dx = (bcc(m,IBX,k,j,i+1) - bcc(m,IBX,k,j,i-1))/(2.0*mbsize.d_view(m).dx1);
+      Real dBx_dy = (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*mbsize.d_view(m).dx2);
+      Real dBx_dz = (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*mbsize.d_view(m).dx3);
+
+  
+      Real dBy_dx = (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*mbsize.d_view(m).dx1);
+      Real dBy_dy = (bcc(m,IBY,k,j+1,i) - bcc(m,IBY,k,j-1,i))/(2.0*mbsize.d_view(m).dx2);
+      Real dBy_dz = (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*mbsize.d_view(m).dx3);
+
+      Real dBz_dx = (bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*mbsize.d_view(m).dx1);
+      Real dBz_dy = (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*mbsize.d_view(m).dx2);
+      Real dBz_dz = (bcc(m,IBZ,k+1,j,i) - bcc(m,IBZ,k-1,j,i))/(2.0*mbsize.d_view(m).dx3);
+
+      Real BdotGradB_x = (bx * dBx_dx + by * dBx_dy + bz * dBx_dz);
+      Real BdotGradB_y = (bx * dBy_dx + by * dBy_dy + bz * dBy_dz);
+      Real BdotGradB_z = (bx * dBz_dx + by * dBz_dy + bz * dBz_dz);
+  
+      Real Identity_minus_bhat_bhat_xx = 1.0 - bx*bx/B_mag_squared;
+      Real Identity_minus_bhat_bhat_xy = 0.0 - bx*by/B_mag_squared;
+      Real Identity_minus_bhat_bhat_xz = 0.0 - bx*bz/B_mag_squared;
+
+      Real Identity_minus_bhat_bhat_yx = 0.0 - by*bx/B_mag_squared;
+      Real Identity_minus_bhat_bhat_yy = 1.0 - by*by/B_mag_squared;
+      Real Identity_minus_bhat_bhat_yz = 0.0 - by*bz/B_mag_squared;
+
+      Real Identity_minus_bhat_bhat_zx = 0.0 - bz*bx/B_mag_squared;
+      Real Identity_minus_bhat_bhat_zy = 0.0 - bz*by/B_mag_squared;
+      Real Identity_minus_bhat_bhat_zz = 1.0 - bz*bz/B_mag_squared;
+
+      // Calculate curvature which is |(B.gradB).(I - bhat bhat)/B^2|    
+      Real curv1 = (BdotGradB_x * Identity_minus_bhat_bhat_xx
+		      + BdotGradB_y * Identity_minus_bhat_bhat_yx
+		      + BdotGradB_z * Identity_minus_bhat_bhat_zx
+		      );
+      Real curv2 = (BdotGradB_x * Identity_minus_bhat_bhat_xy
+		      + BdotGradB_y * Identity_minus_bhat_bhat_yy
+		      + BdotGradB_z * Identity_minus_bhat_bhat_zy
+		      );
+      Real curv3 = (BdotGradB_x * Identity_minus_bhat_bhat_xz
+		      + BdotGradB_y * Identity_minus_bhat_bhat_yz
+		      + BdotGradB_z * Identity_minus_bhat_bhat_zz
+		      );
+      Real bdotb = sqrt(curv1*curv1 + curv2*curv2 + curv3*curv3)/B_mag_squared;
+      tracked_prtcl.d_view(index).Kmag  = bdotb;
     }
   });
   Kokkos::deep_copy(npout, counter);  
@@ -106,8 +179,10 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
 
 void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   
-  if (ncycle_buffer > 1) WriteOutputFileWithBuffer(pm, pin);
-  else{
+  if (ncycle_buffer > 1) {
+    WriteOutputFileWithBuffer(pm, pin);
+    return;
+  }
   int big_end = IsBigEndian(); // =1 on big endian machine
 
   // create filename: "trk/file_basename".trk
@@ -198,7 +273,7 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     out_params.last_time += out_params.dt;
   }
   pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
-  }
+  
   return;
 }
 
@@ -216,18 +291,19 @@ void TrackedParticleOutput::WriteOutputFileWithBuffer(Mesh *pm, ParameterInput *
   // Loop over particles, load positions into data[]
   for (int p=nout_thisrank; p<nout_thisrank + npout; ++p) {
     pp = p - nout_thisrank;
-    particle_buffer[(12*p)+0]  = static_cast<float>(icycle_buffer);    
-    particle_buffer[(12*p)+1]  = static_cast<float>(outpart(pp).tag);	  
-    particle_buffer[(12*p)+2]  = static_cast<float>(time_cycle);    
-    particle_buffer[(12*p)+3]  = static_cast<float>(outpart(pp).x);
-    particle_buffer[(12*p)+4]  = static_cast<float>(outpart(pp).y);
-    particle_buffer[(12*p)+5]  = static_cast<float>(outpart(pp).z);
-    particle_buffer[(12*p)+6]  = static_cast<float>(outpart(pp).vx);
-    particle_buffer[(12*p)+7]  = static_cast<float>(outpart(pp).vy);
-    particle_buffer[(12*p)+8]  = static_cast<float>(outpart(pp).vz);
-    particle_buffer[(12*p)+9]  = static_cast<float>(outpart(pp).Bx);
-    particle_buffer[(12*p)+10]  = static_cast<float>(outpart(pp).By);
-    particle_buffer[(12*p)+11] = static_cast<float>(outpart(pp).Bz);
+    particle_buffer[(13*p)+0]  = static_cast<float>(icycle_buffer);    
+    particle_buffer[(13*p)+1]  = static_cast<float>(outpart(pp).tag);	  
+    particle_buffer[(13*p)+2]  = static_cast<float>(time_cycle);    
+    particle_buffer[(13*p)+3]  = static_cast<float>(outpart(pp).x);
+    particle_buffer[(13*p)+4]  = static_cast<float>(outpart(pp).y);
+    particle_buffer[(13*p)+5]  = static_cast<float>(outpart(pp).z);
+    particle_buffer[(13*p)+6]  = static_cast<float>(outpart(pp).vx);
+    particle_buffer[(13*p)+7]  = static_cast<float>(outpart(pp).vy);
+    particle_buffer[(13*p)+8]  = static_cast<float>(outpart(pp).vz);
+    particle_buffer[(13*p)+9]  = static_cast<float>(outpart(pp).Bx);
+    particle_buffer[(13*p)+10]  = static_cast<float>(outpart(pp).By);
+    particle_buffer[(13*p)+11] = static_cast<float>(outpart(pp).Bz);
+    particle_buffer[(13*p)+12] = static_cast<float>(outpart(pp).Kmag);
   }
 
   nout_thisrank += npout;
@@ -266,11 +342,11 @@ void TrackedParticleOutput::WriteOutputFileWithBuffer(Mesh *pm, ParameterInput *
     // Write tracked particle data collectively over minimum shared number of prtcls
     for (int p=0; p<nout_thisrank; ++p) {
       // offset computed assuming tags run 0...(ntrack-1) sequentially
-      icycle_ = static_cast<int>(particle_buffer[12*p]);
-      ptag_ = static_cast<int>(particle_buffer[12*p+1]);
-      std::size_t myoffset = header_offset +  11*p* datasize;
+      icycle_ = static_cast<int>(particle_buffer[13*p]);
+      ptag_ = static_cast<int>(particle_buffer[13*p+1]);
+      std::size_t myoffset = header_offset +  12*p* datasize;
       // Write particle positions collectively for minimum number of particles across ranks
-      if (partfile.Write_any_type_at_all(&(particle_buffer[12*p+1]),11,myoffset,"float") != 11) {
+      if (partfile.Write_any_type_at_all(&(particle_buffer[13*p+1]),12,myoffset,"float") != 12) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
             << std::endl << "particle data not written correctly to tracked particle file"
             << std::endl;
@@ -319,11 +395,11 @@ void TrackedParticleOutput::WriteOutputFileWithBuffer(Mesh *pm, ParameterInput *
     // Write tracked particle data collectively over minimum shared number of prtcls
     for (int p=0; p<nout_thisrank; ++p) {
       // offset computed assuming tags run 0...(ntrack-1) sequentially
-      icycle_ = static_cast<int>(particle_buffer[12*p]);
-      ptag_ = static_cast<int>(particle_buffer[12*p+1]);
-      std::size_t myoffset = header_offset + icycle_ * ntrack * nspecies_ * 11 * datasize  +  11*ptag_* datasize;
+      icycle_ = static_cast<int>(particle_buffer[13*p]);
+      ptag_ = static_cast<int>(particle_buffer[13*p+1]);
+      std::size_t myoffset = header_offset + icycle_ * ntrack * nspecies_ * 12 * datasize  +  12*ptag_* datasize;
       // Write particle positions collectively for minimum number of particles across ranks
-      if (partfile.Write_any_type_at_all(&(particle_buffer[12*p+1]),11,myoffset,"float") != 11) {
+      if (partfile.Write_any_type_at_all(&(particle_buffer[13*p+1]),12,myoffset,"float") != 12) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
             << std::endl << "particle data not written correctly to tracked particle file"
             << std::endl;

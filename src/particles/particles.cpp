@@ -45,9 +45,25 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   // then cast to integer
   nprtcl_thispack = static_cast<int>(r_npart) * nspecies;
   nprtcl_perspec_thispack = static_cast<int>(r_npart);
+  
+  prtcl_rst_flag = pin->GetOrAddInteger("problem","prtcl_rst_flag",0);
+  if (prtcl_rst_flag) {
+    std::string prst_fname = pin->GetString("problem","prtcl_res_file");
+    char rank_dir[20];
+    std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d", global_variable::my_rank);
+    prst_fname.replace(prst_fname.find("rank_00000000"), sizeof("rank_00000000") - 1, rank_dir);
+    std::cout<<"Restarting particles from file "<<prst_fname<<std::endl;
+    std::size_t myoffset = 0;
+    Real *gen_data = new Real [3]; 
+    FILE* pfile = std::fopen(prst_fname.c_str(),"r");
+    std::fseek(pfile, myoffset, SEEK_SET);
+    std::fread(gen_data, sizeof(Real), 3, pfile);
+    nprtcl_thispack = static_cast<int>(gen_data[2]);
+    std::fclose(pfile);
+    delete [] gen_data;
+  }
   std::cout << "Particles: nprtcl_thispack = " << nprtcl_thispack << std::endl;
   std::cout << "Particles: nprtcl_perspec_thispack = " << nprtcl_perspec_thispack << std::endl;
-
   // select particle type
   {
     std::string ptype = pin->GetString("particles","particle_type");
@@ -126,45 +142,46 @@ Particles::~Particles() {
 // those with tag numbers less than ntrack.
 
 void Particles::CreateParticleTags(ParameterInput *pin) {
-  std::string assign = pin->GetOrAddString("particles","assign_tag","index_order");
+  if (!prtcl_rst_flag){
+    std::string assign = pin->GetOrAddString("particles","assign_tag","index_order");
+    // tags are assigned sequentially within this rank, starting at 0 with rank=0
+    if (assign.compare("index_order") == 0) {
+      int tagstart = 0;
+      for (int n=1; n<=global_variable::my_rank; ++n) {
+        tagstart += pmy_pack->pmesh->nprtcl_eachrank[n-1] / nspecies;
+      }
 
-  // tags are assigned sequentially within this rank, starting at 0 with rank=0
-  if (assign.compare("index_order") == 0) {
-    int tagstart = 0;
-    for (int n=1; n<=global_variable::my_rank; ++n) {
-      tagstart += pmy_pack->pmesh->nprtcl_eachrank[n-1] / nspecies;
+      auto &nspecies_ = nspecies;
+      auto &pi = prtcl_idata;
+      auto &nprtcl_total_ = pmy_pack->pmesh->nprtcl_total;
+      auto &nprtcl_perspec_thispack_ = nprtcl_perspec_thispack;
+      par_for("ptags",DevExeSpace(),0,(nprtcl_thispack-1),
+      KOKKOS_LAMBDA(const int p) {
+        int spec = p / nprtcl_perspec_thispack_;
+        pi(PTAG,p) = tagstart + p + spec*nprtcl_total_/nspecies_;
+      });
+
+    // tags are assigned sequentially across ranks
+    } else if (assign.compare("rank_order") == 0) {
+      int myrank = global_variable::my_rank;
+      int nranks = global_variable::nranks;
+      auto &nspecies_ = nspecies;
+      auto &pi = prtcl_idata;
+      auto &nprtcl_total_ = pmy_pack->pmesh->nprtcl_total;
+      auto &nprtcl_perspec_thispack_ = nprtcl_perspec_thispack;
+      par_for("ptags",DevExeSpace(),0,(nprtcl_thispack-1),
+      KOKKOS_LAMBDA(const int p) {
+        int spec = p / nprtcl_perspec_thispack_;
+        pi(PTAG,p) = myrank + nranks*p + spec*nprtcl_total_/nspecies_ ;
+      });
+
+    // tag algorithm not recognized, so quit with error
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+                << "Particle tag assinment type = '" << assign << "' not recognized"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
     }
-
-    auto &nspecies_ = nspecies;
-    auto &pi = prtcl_idata;
-    auto &nprtcl_total_ = pmy_pack->pmesh->nprtcl_total;
-    auto &nprtcl_perspec_thispack_ = nprtcl_perspec_thispack;
-    par_for("ptags",DevExeSpace(),0,(nprtcl_thispack-1),
-    KOKKOS_LAMBDA(const int p) {
-      int spec = p / nprtcl_perspec_thispack_;
-      pi(PTAG,p) = tagstart + p + spec*nprtcl_total_/nspecies_;
-    });
-
-  // tags are assigned sequentially across ranks
-  } else if (assign.compare("rank_order") == 0) {
-    int myrank = global_variable::my_rank;
-    int nranks = global_variable::nranks;
-    auto &nspecies_ = nspecies;
-    auto &pi = prtcl_idata;
-    auto &nprtcl_total_ = pmy_pack->pmesh->nprtcl_total;
-    auto &nprtcl_perspec_thispack_ = nprtcl_perspec_thispack;
-    par_for("ptags",DevExeSpace(),0,(nprtcl_thispack-1),
-    KOKKOS_LAMBDA(const int p) {
-      int spec = p / nprtcl_perspec_thispack_;
-      pi(PTAG,p) = myrank + nranks*p + spec*nprtcl_total_/nspecies_ ;
-    });
-
-  // tag algorithm not recognized, so quit with error
-  } else {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-              << "Particle tag assinment type = '" << assign << "' not recognized"
-              << std::endl;
-    std::exit(EXIT_FAILURE);
   }
 }
 

@@ -23,6 +23,7 @@
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "pgen.hpp"
+#include "globals.hpp"
 
 
 
@@ -70,7 +71,54 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Real x3size = pmy_mesh_->mesh_size.x3max - pmy_mesh_->mesh_size.x3min;
 
   auto &nmbtp = pmbp->nmb_thispack;
+  auto prtcl_rst_flag_ = pmy_mesh_->pmb_pack->ppart->prtcl_rst_flag;
+  
+  if (prtcl_rst_flag_) {
+    std::string prst_fname = pin->GetString("problem","prtcl_res_file");
+    char rank_dir[20];
+    std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d", global_variable::my_rank);
+    prst_fname.replace(prst_fname.find("rank_00000000"), sizeof("rank_00000000") - 1, rank_dir);
+    std::size_t header_offset=0;
+    std::size_t myoffset = 0;
+    
+    Real *gen_data = new Real [3];
+    FILE* pfile = std::fopen(prst_fname.c_str(),"r");
+    std::fseek(pfile, myoffset, SEEK_SET);
+    std::fread(gen_data, sizeof(Real), 3, pfile);    
+    Real &dtnew_ = pmy_mesh_->pmb_pack->ppart->dtnew;
+    dtnew_ = gen_data[1];
+    pmy_mesh_->time = gen_data[0];
+    delete [] gen_data;
+    Real *host_part_data = new Real [17*npart]; 
+    std::fread(host_part_data, sizeof(Real), 17*npart, pfile);
+    Kokkos::View<Real*, Kokkos::LayoutRight, Kokkos::DefaultExecutionSpace> part_data("part_data", 17 * npart);
+    Kokkos::deep_copy(part_data, Kokkos::View<Real*, Kokkos::LayoutRight, Kokkos::HostSpace>(host_part_data, 17 * npart));
+    delete[] host_part_data;
 
+    par_for("part_update",DevExeSpace(),0,(npart-1),
+    KOKKOS_LAMBDA(const int p) {
+     pi(PGID,p) = static_cast<int>(part_data(17*p+0));
+      pi(PTAG,p) = static_cast<int>(part_data(17*p+1));
+      pi(PSP,p) = static_cast<int>(part_data(17*p+2));
+      pr(IPX,p) = part_data(17*p+3);
+      pr(IPY,p) = part_data(17*p+4);
+      pr(IPZ,p) = part_data(17*p+5);
+      pr(IPVX,p) = part_data(17*p+6);
+      pr(IPVY,p) = part_data(17*p+7);
+      pr(IPVZ,p) = part_data(17*p+8);
+      pr(IPM,p) = part_data(17*p+9);
+      pr(IPBX,p) = part_data(17*p+10);
+      pr(IPBY,p) = part_data(17*p+11);
+      pr(IPBZ,p) = part_data(17*p+12);
+      pr(IPDX,p) = part_data(17*p+13);
+      pr(IPDY,p) = part_data(17*p+14);
+      pr(IPDZ,p) = part_data(17*p+15);
+      pr(IPDB,p) = part_data(17*p+16);
+    });
+    std::fclose(pfile);
+    return;
+  }
+   
   // initialize particles
   Kokkos::Random_XorShift64_Pool<> rand_pool64(pmbp->gids);
   par_for("part_update",DevExeSpace(),0,(npart-1),

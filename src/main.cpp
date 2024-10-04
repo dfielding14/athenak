@@ -328,7 +328,6 @@ int main(int argc, char *argv[]) {
     pmesh->pgen = std::make_unique<ProblemGenerator>(pinput, pmesh, restartfile, single_file_per_rank);
     restartfile.Close(single_file_per_rank);
   }
-
   //--- Step 6. --------------------------------------------------------------------------
   // Construct Driver and Outputs. Actual outputs (including initial conditions) are made
   // in Driver.Initialize(). Add wall clock timer to Driver if necessary.
@@ -336,6 +335,8 @@ int main(int argc, char *argv[]) {
   ChangeRunDir(run_dir);
   Driver* pdriver = new Driver(pinput, pmesh, wtlim, &timer);
   Outputs* pout = new Outputs(pinput, pmesh);
+
+
 
   //--- Step 7. --------------------------------------------------------------------------
   // Execute Driver.

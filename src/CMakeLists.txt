@@ -100,6 +100,7 @@ add_executable(
 	outputs/df_prtcl.cpp
         outputs/dxhist_prtcl.cpp
         outputs/pos_prtcl.cpp
+        outputs/rst_prtcl.cpp
 
         particles/particles.cpp
         particles/particles_pushers.cpp

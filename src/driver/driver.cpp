@@ -403,6 +403,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
           }
         }
       }
+      pmesh->NewTimeStep(tlim);
       // Update wall clock time if needed.
       if (wall_time > 0.) {
         elapsed_time = pwall_clock_->seconds();
@@ -507,7 +508,7 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
   float exe_time = run_time_.seconds();
 
-  if (time_evolution != TimeEvolution::tstatic) {
+  if (time_evolution != TimeEvolution::tstatic  || pmesh->pmb_pack->ppart != nullptr) {
 #if MPI_PARALLEL_ENABLED
     // Collect number of MeshBlocks communicated during load balancing across all ranks
     if (pmesh->adaptive) {

@@ -199,6 +199,7 @@ struct TrackedParticleData {
   Real x,y,z;
   Real vx,vy,vz;
   Real Bx, By, Bz;
+  Real Kmag;
 };
 
 //----------------------------------------------------------------------------------------
@@ -463,6 +464,22 @@ class ParticleDxHistOutput : public BaseTypeOutput {
   HostArray2D<int> host_histogram;
   bool header_written;
   int dxhist_single_file_per_rank;
+};
+
+//----------------------------------------------------------------------------------------
+//! \class ParticleRestartOutput 
+//  \brief derived BaseTypeOutput class for particle restart dump 
+
+class ParticleRestartOutput : public BaseTypeOutput {
+ public:
+  ParticleRestartOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int npout_thisrank;
+  int npout_total;
+  HostArray2D<Real> outpart_rdata;   
+  HostArray2D<int>  outpart_idata;
 };
 
 

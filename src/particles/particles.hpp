@@ -64,6 +64,8 @@ class Particles {
   DvceArray2D<int>  prtcl_idata;   // integer properties each particle (gid, tag, etc.)
   Real dtnew;
   int is_dynamic;
+  int prtcl_rst_flag;
+  
   ParticlesPusher pusher;
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
