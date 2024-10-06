@@ -35,7 +35,7 @@ class TurbulenceDriver {
   int nlow, nhigh, spect_form;
   int mode_count;
   Real kpeak;
-  Real tcorr, dedt, tdriv_duration;
+  Real tcorr, dedt, tdriv_duration, tdriv_start;
   Real expo, exp_prl, exp_prp;
   int driving_type, turb_flag;
   int min_kz, max_kz;
@@ -44,10 +44,16 @@ class TurbulenceDriver {
   // Real t_last_update;
   int n_turb_updates_yet;
 
+  // spatially varying driving
+  Real x_turb_scale_height, y_turb_scale_height, z_turb_scale_height;
+  Real x_turb_center, y_turb_center, z_turb_center;
+
+
   // functions
   void IncludeInitializeModesTask(std::shared_ptr<TaskList> tl, TaskID start);
   void IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskID start);
   TaskStatus InitializeModes(Driver *pdrive, int stage);
+  TaskStatus UpdateForcing(Driver *pdrive, int stage);
   TaskStatus AddForcing(Driver *pdrive, int stage);
   void Initialize();
 
