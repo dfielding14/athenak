@@ -343,7 +343,8 @@ inline void par_for_outer(const std::string &name, DevExeSpace exec_space,
   Kokkos::TeamPolicy<> policy(exec_space, nk, 256);
 #else
   Kokkos::TeamPolicy<> policy(exec_space, nk, Kokkos::AUTO);
-#endif  Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
+#endif
+  Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
   KOKKOS_LAMBDA(TeamMember_t tmember) {
     const int k = tmember.league_rank() + kl;
     function(tmember, k);
@@ -364,7 +365,8 @@ inline void par_for_outer(const std::string &name, DevExeSpace exec_space,
   Kokkos::TeamPolicy<> policy(exec_space, nkj, 256);
 #else
   Kokkos::TeamPolicy<> policy(exec_space, nkj, Kokkos::AUTO);
-#endif  Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
+#endif
+  Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
   KOKKOS_LAMBDA(TeamMember_t tmember) {
     const int k = tmember.league_rank()/nj + kl;
     const int j = tmember.league_rank()%nj + jl;
@@ -388,7 +390,8 @@ inline void par_for_outer(const std::string &name, DevExeSpace exec_space,
   Kokkos::TeamPolicy<> policy(exec_space, nnkj, 256);
 #else
   Kokkos::TeamPolicy<> policy(exec_space, nnkj, Kokkos::AUTO);
-#endif  Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
+#endif
+  Kokkos::parallel_for(name, policy.set_scratch_size(scr_level,Kokkos::PerTeam(scr_size)),
   KOKKOS_LAMBDA(TeamMember_t tmember) {
     int n = (tmember.league_rank())/nkj;
     int k = (tmember.league_rank() - n*nkj)/nj;
