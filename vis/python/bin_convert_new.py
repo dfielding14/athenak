@@ -683,47 +683,187 @@ def read_binary_as_athdf(filename, raw=False, data=None, quantities=None, dtype=
 
     return data
 
+# def read_single_rank_binary_as_athdf(filename, raw=False, data=None, quantities=None, dtype=None,
+#                                      return_levels=False, x1_min=None, x1_max=None, x2_min=None,
+#                                      x2_max=None, x3_min=None, x3_max=None, vol_func=None,
+#                                      center_func_1=None, center_func_2=None, center_func_3=None):
+#     """
+#     Reads a single rank binary file and organizes data similar to athdf format without writing to file.
+#     Handles multiple meshblocks by merging them into a unified grid covering the combined region.
+
+#     args:
+#       filename - string
+#           filename of bin file to read
+
+#       raw - bool (default=False)
+#           If True, returns the raw filedata without processing.
+
+#       data - dict (default=None)
+#           Dictionary to store the organized data.
+
+#       quantities - list (default=None)
+#           List of variables to extract. If None, all variables are extracted.
+
+#       dtype - numpy dtype (default=None)
+#           Data type for the output arrays. Defaults to np.float32.
+
+#       return_levels - bool (default=False)
+#           If True, includes the hierarchical level information of each cell.
+
+#       x1_min, x1_max, x2_min, x2_max, x3_min, x3_max - float (default=None)
+#           Spatial bounds for selecting a subset of the data.
+
+#       vol_func - function (default=None)
+#           Function to compute the volume for each cell. Defaults to a simple Cartesian volume.
+
+#       center_func_1, center_func_2, center_func_3 - functions (default=None)
+#           Functions to compute the center coordinates for each dimension. Defaults to midpoint.
+
+#     returns:
+#       data - dict
+#           Organized data in a grid spanning all meshblocks in the rank.
+#     """
+
+#     # Step 1: Read binary data for a single rank
+#     filedata = read_binary(filename)
+
+#     if raw:
+#         return filedata
+
+#     # Prepare dictionary for results
+#     if data is None:
+#         data = {}
+#         new_data = True
+#     else:
+#         new_data = False
+
+#     # Extract size and spatial information from all meshblocks
+#     x1min_all = np.min(filedata['mb_geometry'][:, 0])
+#     x1max_all = np.max(filedata['mb_geometry'][:, 0] + filedata['mb_geometry'][:, 3])
+#     x2min_all = np.min(filedata['mb_geometry'][:, 1])
+#     x2max_all = np.max(filedata['mb_geometry'][:, 1] + filedata['mb_geometry'][:, 4])
+#     x3min_all = np.min(filedata['mb_geometry'][:, 2])
+#     x3max_all = np.max(filedata['mb_geometry'][:, 2] + filedata['mb_geometry'][:, 5])
+
+#     # Initialize overall grid based on all meshblocks
+#     if dtype is None:
+#         dtype = np.float32
+
+#     # Populate coordinate arrays for the unified grid
+#     if center_func_1 is None:
+#         def center_func_1(xm, xp):
+#             return 0.5 * (xm + xp)
+#     if center_func_2 is None:
+#         def center_func_2(xm, xp):
+#             return 0.5 * (xm + xp)
+#     if center_func_3 is None:
+#         def center_func_3(xm, xp):
+#             return 0.5 * (xm + xp)
+
+#     center_funcs = [center_func_1, center_func_2, center_func_3]
+
+#     # Define the unified grid boundaries
+#     data['x1f'] = np.linspace(x1min_all, x1max_all, filedata['Nx1'] + 1, dtype=dtype)
+#     data['x1v'] = np.array([center_func_1(xm, xp) for xm, xp in zip(data['x1f'][:-1], data['x1f'][1:])], dtype=dtype)
+
+#     data['x2f'] = np.linspace(x2min_all, x2max_all, filedata['Nx2'] + 1, dtype=dtype)
+#     data['x2v'] = np.array([center_func_2(xm, xp) for xm, xp in zip(data['x2f'][:-1], data['x2f'][1:])], dtype=dtype)
+
+#     data['x3f'] = np.linspace(x3min_all, x3max_all, filedata['Nx3'] + 1, dtype=dtype)
+#     data['x3v'] = np.array([center_func_3(xm, xp) for xm, xp in zip(data['x3f'][:-1], data['x3f'][1:])], dtype=dtype)
+
+#     # Initialize data arrays for variables
+#     if quantities is None:
+#         quantities = filedata['var_names']
+
+#     for q in quantities:
+#         data[q] = np.zeros((filedata['Nx3'], filedata['Nx2'], filedata['Nx1']), dtype=dtype)
+
+#     if return_levels:
+#         data['Levels'] = np.zeros((filedata['Nx3'], filedata['Nx2'], filedata['Nx1']), dtype=np.int32)
+
+#     # Step 2: Insert data from each meshblock into the unified grid
+#     for mb in range(filedata['n_mbs']):
+#         # Get meshblock geometry
+#         mb_geom = filedata['mb_geometry'][mb]
+#         mb_x1i, mb_x2i, mb_x3i = mb_geom[0], mb_geom[1], mb_geom[2]
+#         mb_dx1, mb_dx2, mb_dx3 = mb_geom[3], mb_geom[4], mb_geom[5]
+#         mb_x1f = np.linspace(mb_x1i, mb_x1i + mb_dx1, filedata['nx1_mb'] + 1, dtype=dtype)
+#         mb_x2f = np.linspace(mb_x2i, mb_x2i + mb_dx2, filedata['nx2_mb'] + 1, dtype=dtype)
+#         mb_x3f = np.linspace(mb_x3i, mb_x3i + mb_dx3, filedata['nx3_mb'] + 1, dtype=dtype)
+
+#         # Find the indices in the unified grid where this meshblock fits
+#         i_start = np.searchsorted(data['x1f'], mb_x1f[0], side='left') - 1
+#         j_start = np.searchsorted(data['x2f'], mb_x2f[0], side='left') - 1
+#         k_start = np.searchsorted(data['x3f'], mb_x3f[0], side='left') - 1
+
+#         i_end = i_start + filedata['nx1_mb']
+#         j_end = j_start + filedata['nx2_mb']
+#         k_end = k_start + filedata['nx3_mb']
+
+#         # Ensure indices are within bounds
+#         i_start = max(i_start, 0)
+#         j_start = max(j_start, 0)
+#         k_start = max(k_start, 0)
+#         i_end = min(i_end, filedata['Nx1'])
+#         j_end = min(j_end, filedata['Nx2'])
+#         k_end = min(k_end, filedata['Nx3'])
+
+#         # Insert data for each variable
+#         for q in quantities:
+#             block_data = filedata['mb_data'][q][mb]
+#             data[q][k_start:k_end, j_start:j_end, i_start:i_end] = block_data[:k_end - k_start, :j_end - j_start, :i_end - i_start]
+
+#         # Insert level information if required
+#         if return_levels:
+#             level = filedata['mb_logical'][mb][3]
+#             data['Levels'][k_start:k_end, j_start:j_end, i_start:i_end] = level
+
+#     # Step 3: Apply any spatial selections if specified
+#     if any(v is not None for v in [x1_min, x1_max, x2_min, x2_max, x3_min, x3_max]):
+#         # Determine the slicing indices based on the provided bounds
+#         i_min = np.searchsorted(data['x1f'], x1_min) if x1_min is not None else 0
+#         i_max = np.searchsorted(data['x1f'], x1_max) if x1_max is not None else filedata['Nx1']
+#         j_min = np.searchsorted(data['x2f'], x2_min) if x2_min is not None else 0
+#         j_max = np.searchsorted(data['x2f'], x2_max) if x2_max is not None else filedata['Nx2']
+#         k_min = np.searchsorted(data['x3f'], x3_min) if x3_min is not None else 0
+#         k_max = np.searchsorted(data['x3f'], x3_max) if x3_max is not None else filedata['Nx3']
+
+#         # Slice the data arrays accordingly
+#         for q in quantities:
+#             data[q] = data[q][k_min:k_max, j_min:j_max, i_min:i_max]
+#         if return_levels:
+#             data['Levels'] = data['Levels'][k_min:k_max, j_min:j_max, i_min:i_max]
+#         data['x1f'] = data['x1f'][i_min:i_max+1]
+#         data['x1v'] = data['x1v'][i_min:i_max]
+#         data['x2f'] = data['x2f'][j_min:j_max+1]
+#         data['x2v'] = data['x2v'][j_min:j_max]
+#         data['x3f'] = data['x3f'][k_min:k_max+1]
+#         data['x3v'] = data['x3v'][k_min:k_max]
+
+#     # Step 4: Finalize data by computing volume factors if necessary
+#     if vol_func is not None:
+#         # Compute volumes for normalization if a volume function is provided
+#         for q in quantities:
+#             # Assuming vol_func can take meshgrid arrays
+#             X1M, X2M, X3M = np.meshgrid(data['x1f'][:-1], data['x2f'][:-1], data['x3f'][:-1], indexing='ij')
+#             X1P, X2P, X3P = np.meshgrid(data['x1f'][1:], data['x2f'][1:], data['x3f'][1:], indexing='ij')
+#             volumes = vol_func(X1M, X1P, X2M, X2P, X3M, X3P)
+#             data[q] /= volumes.T  # Transpose to match the data array's axis order
+
+#     # Add metadata
+#     data['Time'] = filedata['time']
+#     data['NumCycles'] = filedata['cycle']
+
+#     return data
+
 def read_single_rank_binary_as_athdf(filename, raw=False, data=None, quantities=None, dtype=None,
                                      return_levels=False, x1_min=None, x1_max=None, x2_min=None,
                                      x2_max=None, x3_min=None, x3_max=None, vol_func=None,
                                      center_func_1=None, center_func_2=None, center_func_3=None):
     """
     Reads a single rank binary file and organizes data similar to athdf format without writing to file.
-    Handles multiple meshblocks by merging them into a unified grid covering the combined region.
-
-    args:
-      filename - string
-          filename of bin file to read
-
-      raw - bool (default=False)
-          If True, returns the raw filedata without processing.
-
-      data - dict (default=None)
-          Dictionary to store the organized data.
-
-      quantities - list (default=None)
-          List of variables to extract. If None, all variables are extracted.
-
-      dtype - numpy dtype (default=None)
-          Data type for the output arrays. Defaults to np.float32.
-
-      return_levels - bool (default=False)
-          If True, includes the hierarchical level information of each cell.
-
-      x1_min, x1_max, x2_min, x2_max, x3_min, x3_max - float (default=None)
-          Spatial bounds for selecting a subset of the data.
-
-      vol_func - function (default=None)
-          Function to compute the volume for each cell. Defaults to a simple Cartesian volume.
-
-      center_func_1, center_func_2, center_func_3 - functions (default=None)
-          Functions to compute the center coordinates for each dimension. Defaults to midpoint.
-
-    returns:
-      data - dict
-          Organized data in a grid spanning all meshblocks in the rank.
     """
-
     # Step 1: Read binary data for a single rank
     filedata = read_binary(filename)
 
@@ -737,19 +877,15 @@ def read_single_rank_binary_as_athdf(filename, raw=False, data=None, quantities=
     else:
         new_data = False
 
-    # Extract size and spatial information from all meshblocks
-    x1min_all = np.min(filedata['mb_geometry'][:, 0])
-    x1max_all = np.max(filedata['mb_geometry'][:, 0] + filedata['mb_geometry'][:, 3])
-    x2min_all = np.min(filedata['mb_geometry'][:, 1])
-    x2max_all = np.max(filedata['mb_geometry'][:, 1] + filedata['mb_geometry'][:, 4])
-    x3min_all = np.min(filedata['mb_geometry'][:, 2])
-    x3max_all = np.max(filedata['mb_geometry'][:, 2] + filedata['mb_geometry'][:, 5])
-
-    # Initialize overall grid based on all meshblocks
+    # Extract size information
+    block_size = [filedata['nx1_mb'], filedata['nx2_mb'], filedata['nx3_mb']]
     if dtype is None:
         dtype = np.float32
 
-    # Populate coordinate arrays for the unified grid
+    # Set coordinate system and related functions
+    if vol_func is None:
+        def vol_func(xm, xp, ym, yp, zm, zp):
+            return (xp-xm) * (yp-ym) * (zp-zm)
     if center_func_1 is None:
         def center_func_1(xm, xp):
             return 0.5 * (xm + xp)
@@ -760,102 +896,69 @@ def read_single_rank_binary_as_athdf(filename, raw=False, data=None, quantities=
         def center_func_3(xm, xp):
             return 0.5 * (xm + xp)
 
+    # Populate coordinate arrays
     center_funcs = [center_func_1, center_func_2, center_func_3]
+    for d in range(1, 4):
+        xf = f'x{d}f'
+        xv = f'x{d}v'
+        nx = block_size[d-1]
 
-    # Define the unified grid boundaries
-    data['x1f'] = np.linspace(x1min_all, x1max_all, filedata['Nx1'] + 1, dtype=dtype)
-    data['x1v'] = np.array([center_func_1(xm, xp) for xm, xp in zip(data['x1f'][:-1], data['x1f'][1:])], dtype=dtype)
+        # Use the meshblock geometry for local min and max
+        xmin = filedata['mb_geometry'][0, (d-1)*2]
+        xmax = filedata['mb_geometry'][0, (d-1)*2 + 1]
 
-    data['x2f'] = np.linspace(x2min_all, x2max_all, filedata['Nx2'] + 1, dtype=dtype)
-    data['x2v'] = np.array([center_func_2(xm, xp) for xm, xp in zip(data['x2f'][:-1], data['x2f'][1:])], dtype=dtype)
+        data[xf] = np.linspace(xmin, xmax, nx + 1, dtype=dtype)
+        data[xv] = np.empty(nx, dtype=dtype)
+        for i in range(nx):
+            data[xv][i] = center_funcs[d-1](data[xf][i], data[xf][i+1])
 
-    data['x3f'] = np.linspace(x3min_all, x3max_all, filedata['Nx3'] + 1, dtype=dtype)
-    data['x3v'] = np.array([center_func_3(xm, xp) for xm, xp in zip(data['x3f'][:-1], data['x3f'][1:])], dtype=dtype)
-
-    # Initialize data arrays for variables
+    # Create list of quantities
     if quantities is None:
         quantities = filedata['var_names']
 
+    # Account for selection
+    i_min, i_max = 0, block_size[0]
+    j_min, j_max = 0, block_size[1]
+    k_min, k_max = 0, block_size[2]
+    if x1_min is not None:
+        i_min = max(i_min, np.searchsorted(data['x1f'], x1_min))
+    if x1_max is not None:
+        i_max = min(i_max, np.searchsorted(data['x1f'], x1_max))
+    if x2_min is not None:
+        j_min = max(j_min, np.searchsorted(data['x2f'], x2_min))
+    if x2_max is not None:
+        j_max = min(j_max, np.searchsorted(data['x2f'], x2_max))
+    if x3_min is not None:
+        k_min = max(k_min, np.searchsorted(data['x3f'], x3_min))
+    if x3_max is not None:
+        k_max = min(k_max, np.searchsorted(data['x3f'], x3_max))
+
+    # Prepare arrays for data
+    if new_data:
+        for q in quantities:
+            data[q] = np.zeros((k_max-k_min, j_max-j_min, i_max-i_min), dtype=dtype)
+        if return_levels:
+            data['Levels'] = np.empty((k_max-k_min, j_max-j_min, i_max-i_min), dtype=np.int32)
+    else:
+        for q in quantities:
+            data[q].fill(0.0)
+
+    # Process the single block
     for q in quantities:
-        data[q] = np.zeros((filedata['Nx3'], filedata['Nx2'], filedata['Nx1']), dtype=dtype)
+        block_data = filedata['mb_data'][q][0]  # Single rank, so only one block
+        data[q] = block_data[k_min:k_max, j_min:j_max, i_min:i_max]
 
     if return_levels:
-        data['Levels'] = np.zeros((filedata['Nx3'], filedata['Nx2'], filedata['Nx1']), dtype=np.int32)
-
-    # Step 2: Insert data from each meshblock into the unified grid
-    for mb in range(filedata['n_mbs']):
-        # Get meshblock geometry
-        mb_geom = filedata['mb_geometry'][mb]
-        mb_x1i, mb_x2i, mb_x3i = mb_geom[0], mb_geom[1], mb_geom[2]
-        mb_dx1, mb_dx2, mb_dx3 = mb_geom[3], mb_geom[4], mb_geom[5]
-        mb_x1f = np.linspace(mb_x1i, mb_x1i + mb_dx1, filedata['nx1_mb'] + 1, dtype=dtype)
-        mb_x2f = np.linspace(mb_x2i, mb_x2i + mb_dx2, filedata['nx2_mb'] + 1, dtype=dtype)
-        mb_x3f = np.linspace(mb_x3i, mb_x3i + mb_dx3, filedata['nx3_mb'] + 1, dtype=dtype)
-
-        # Find the indices in the unified grid where this meshblock fits
-        i_start = np.searchsorted(data['x1f'], mb_x1f[0], side='left') - 1
-        j_start = np.searchsorted(data['x2f'], mb_x2f[0], side='left') - 1
-        k_start = np.searchsorted(data['x3f'], mb_x3f[0], side='left') - 1
-
-        i_end = i_start + filedata['nx1_mb']
-        j_end = j_start + filedata['nx2_mb']
-        k_end = k_start + filedata['nx3_mb']
-
-        # Ensure indices are within bounds
-        i_start = max(i_start, 0)
-        j_start = max(j_start, 0)
-        k_start = max(k_start, 0)
-        i_end = min(i_end, filedata['Nx1'])
-        j_end = min(j_end, filedata['Nx2'])
-        k_end = min(k_end, filedata['Nx3'])
-
-        # Insert data for each variable
-        for q in quantities:
-            block_data = filedata['mb_data'][q][mb]
-            data[q][k_start:k_end, j_start:j_end, i_start:i_end] = block_data[:k_end - k_start, :j_end - j_start, :i_end - i_start]
-
-        # Insert level information if required
-        if return_levels:
-            level = filedata['mb_logical'][mb][3]
-            data['Levels'][k_start:k_end, j_start:j_end, i_start:i_end] = level
-
-    # Step 3: Apply any spatial selections if specified
-    if any(v is not None for v in [x1_min, x1_max, x2_min, x2_max, x3_min, x3_max]):
-        # Determine the slicing indices based on the provided bounds
-        i_min = np.searchsorted(data['x1f'], x1_min) if x1_min is not None else 0
-        i_max = np.searchsorted(data['x1f'], x1_max) if x1_max is not None else filedata['Nx1']
-        j_min = np.searchsorted(data['x2f'], x2_min) if x2_min is not None else 0
-        j_max = np.searchsorted(data['x2f'], x2_max) if x2_max is not None else filedata['Nx2']
-        k_min = np.searchsorted(data['x3f'], x3_min) if x3_min is not None else 0
-        k_max = np.searchsorted(data['x3f'], x3_max) if x3_max is not None else filedata['Nx3']
-
-        # Slice the data arrays accordingly
-        for q in quantities:
-            data[q] = data[q][k_min:k_max, j_min:j_max, i_min:i_max]
-        if return_levels:
-            data['Levels'] = data['Levels'][k_min:k_max, j_min:j_max, i_min:i_max]
-        data['x1f'] = data['x1f'][i_min:i_max+1]
-        data['x1v'] = data['x1v'][i_min:i_max]
-        data['x2f'] = data['x2f'][j_min:j_max+1]
-        data['x2v'] = data['x2v'][j_min:j_max]
-        data['x3f'] = data['x3f'][k_min:k_max+1]
-        data['x3v'] = data['x3v'][k_min:k_max]
-
-    # Step 4: Finalize data by computing volume factors if necessary
-    if vol_func is not None:
-        # Compute volumes for normalization if a volume function is provided
-        for q in quantities:
-            # Assuming vol_func can take meshgrid arrays
-            X1M, X2M, X3M = np.meshgrid(data['x1f'][:-1], data['x2f'][:-1], data['x3f'][:-1], indexing='ij')
-            X1P, X2P, X3P = np.meshgrid(data['x1f'][1:], data['x2f'][1:], data['x3f'][1:], indexing='ij')
-            volumes = vol_func(X1M, X1P, X2M, X2P, X3M, X3P)
-            data[q] /= volumes.T  # Transpose to match the data array's axis order
+        data['Levels'].fill(filedata['mb_logical'][0, 3])  # Level of the single block
 
     # Add metadata
     data['Time'] = filedata['time']
     data['NumCycles'] = filedata['cycle']
+    data['MaxLevel'] = filedata['mb_logical'][0, 3]
 
     return data
+
+
 
 def read_coarsened_binary_as_athdf(filename, raw=False, data=None, quantities=None, dtype=None, level=None,
                          return_levels=False, subsample=False, fast_restrict=False, x1_min=None,
@@ -1050,6 +1153,57 @@ def read_coarsened_binary_as_athdf(filename, raw=False, data=None, quantities=No
     data['MaxLevel'] = max_level
 
     return data
+
+def write_xdmf_for(xdmfname, dumpname, fdata, mode="auto"):
+    """
+    Writes an xdmf file for a fluid snapshot file.
+
+    args:
+      xdmfname - string
+          name of xdmf file
+      dumpname - string
+          location of fluid data file relative to xdmfname directory
+      fdata    - dict
+          dictionary of fluid file data, e.g., as loaded from read_binary(...)
+      mode     - string (unimplemented)
+          force xdmf for format (auto sets by extension)
+    """
+
+    fp = open(xdmfname, "w")
+
+    def write_meshblock(fp, mb, nx1, nx2, nx3, nmb, dumpname, vars_no_b, vars_w_b):
+        fp.write(f"""  <Grid Name="MeshBlock{mb}" GridType="Uniform">\n""")
+        fp.write("""   <Topology TopologyType="3DRectMesh" """)
+        fp.write(f""" NumberOfElements="{nx3+1} {nx2+1} {nx1+1}"/>\n""")
+        fp.write("""   <Geometry GeometryType="VXVYVZ">\n""")
+        fp.write(
+            f"""    <DataItem ItemType="HyperSlab" Dimensions="{nx1+1}">
+     <DataItem Dimensions="3 2" NumberType="Int"> {mb} 0 1 1 1 {nx1+1} </DataItem>
+     <DataItem Dimensions="{nmb} {nx1+1}" Format="HDF"> {dumpname}:/x1f </DataItem>
+    </DataItem>
+    <DataItem ItemType="HyperSlab" Dimensions="{nx2+1}">
+     <DataItem Dimensions="3 2" NumberType="Int"> {mb} 0 1 1 1 {nx2+1} </DataItem>
+     <DataItem Dimensions="{nmb} {nx2+1}" Format="HDF"> {dumpname}:/x2f </DataItem>
+    </DataItem>
+    <DataItem ItemType="HyperSlab" Dimensions="{nx3+1}">
+     <DataItem Dimensions="3 2" NumberType="Int"> {mb} 0 1 1 1 {nx3+1} </DataItem>
+     <DataItem Dimensions="{nmb} {nx3+1}" Format="HDF"> {dumpname}:/x3f </DataItem>
+    </DataItem>
+   </Geometry>\n"""
+        )
+
+        nvar_no_b = len(vars_no_b)
+        for vi, var_name in enumerate(vars_no_b):
+            fp.write(
+                f"""   <Attribute Name="{var_name}" Center="Cell">
+    <DataItem ItemType="HyperSlab" Dimensions="{nx3} {nx2} {nx1}">
+     <DataItem Dimensions="3 5" NumberType="Int">
+      {vi} {mb} 0 0 0 1 1 1 1 1 1 1 {nx3} {nx2} {nx1}
+     </DataItem>
+     <DataItem Dimensions="{nvar_no_b} {nmb} {nx3} {nx2} {nx1}" Format="HDF">
+      {dumpname}:/uov
+     </DataItem>
+    </DataItem>
    </Attribute>\n"""
             )
 
@@ -1100,7 +1254,6 @@ def read_coarsened_binary_as_athdf(filename, raw=False, data=None, quantities=No
 
     fp.close()
 
-
 def convert_file(binary_fname):
     """
     Converts a single file.
@@ -1117,7 +1270,6 @@ def convert_file(binary_fname):
     filedata = read_binary(binary_fname)
     write_athdf(athdf_fname, filedata)
     write_xdmf_for(xdmf_fname, os.path.basename(athdf_fname), filedata)
-
 
 if __name__ == "__main__":
     import sys
