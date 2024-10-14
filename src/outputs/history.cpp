@@ -48,6 +48,11 @@ HistoryOutput::HistoryOutput(ParameterInput *pin, Mesh *pm, OutputParameters op)
   if (pm->pmb_pack->pz4c != nullptr) {
     hist_data.emplace_back(PhysicsModule::SpaceTimeDynamics);
   }
+
+  std::string evolution_t = pin->GetString("time","evolution");
+  if (evolution_t.compare("static") == 0 && pm->pmb_pack->ppart != nullptr){
+    out_params.last_time = pm->time;
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -395,7 +400,7 @@ void HistoryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   } // End loop over hist_data vector
 
   // increment counters, clean up
-  if (out_params.last_time < 0.0) {
+  if (out_params.last_time < 0.0 || out_params.last_time == pm->time) {
     out_params.last_time = pm->time;
   } else {
     out_params.last_time += out_params.dt;

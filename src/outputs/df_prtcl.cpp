@@ -43,6 +43,7 @@ ParticleDFOutput::ParticleDFOutput(ParameterInput *pin, Mesh *pm,
     std::snprintf(rank_dir, sizeof(rank_dir), "df/rank_%08d/", global_variable::my_rank);
     mkdir(rank_dir, 0775);
   }  
+  out_params.last_time = pm->time;
 }
 
 //----------------------------------------------------------------------------------------
@@ -167,7 +168,7 @@ void ParticleDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   delete[] data;
 
   // increment counters
-  if (out_params.last_time < 0.0) {
+  if (out_params.last_time < 0.0 || out_params.last_time == pm->time) {
     out_params.last_time = pm->time;
   } else {
     out_params.last_time += out_params.dt;

@@ -50,6 +50,7 @@ TrackedParticleOutput::TrackedParticleOutput(ParameterInput *pin, Mesh *pm,
     std::snprintf(rank_dir, sizeof(rank_dir), "trk/rank_%08d/", global_variable::my_rank);
     mkdir(rank_dir, 0775);
   }  
+  out_params.last_time = pm->time;
 }
 
 //----------------------------------------------------------------------------------------
@@ -154,6 +155,15 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
 		      );
       Real bdotb = sqrt(curv1*curv1 + curv2*curv2 + curv3*curv3)/B_mag_squared;
       tracked_prtcl.d_view(index).Kmag  = bdotb;
+
+      // Now compute current
+      Real j1 = (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/mbsize.d_view(m).dx2;;
+      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/mbsize.d_view(m).dx1;
+      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/mbsize.d_view(m).dx1;
+      j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/mbsize.d_view(m).dx3;
+      j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/mbsize.d_view(m).dx3;      
+      j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/mbsize.d_view(m).dx2;
+      tracked_prtcl.d_view(index).jmag  = std::sqrt(j1*j1+j2*j2+j3*j3);
     }
   });
   Kokkos::deep_copy(npout, counter);  
@@ -267,7 +277,7 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   delete[] data;
   
   // increment counters
-  if (out_params.last_time < 0.0) {
+  if (out_params.last_time < 0.0 || out_params.last_time == pm->time) {
     out_params.last_time = pm->time;
   } else {
     out_params.last_time += out_params.dt;
@@ -291,19 +301,20 @@ void TrackedParticleOutput::WriteOutputFileWithBuffer(Mesh *pm, ParameterInput *
   // Loop over particles, load positions into data[]
   for (int p=nout_thisrank; p<nout_thisrank + npout; ++p) {
     pp = p - nout_thisrank;
-    particle_buffer[(13*p)+0]  = static_cast<float>(icycle_buffer);    
-    particle_buffer[(13*p)+1]  = static_cast<float>(outpart(pp).tag);	  
-    particle_buffer[(13*p)+2]  = static_cast<float>(time_cycle);    
-    particle_buffer[(13*p)+3]  = static_cast<float>(outpart(pp).x);
-    particle_buffer[(13*p)+4]  = static_cast<float>(outpart(pp).y);
-    particle_buffer[(13*p)+5]  = static_cast<float>(outpart(pp).z);
-    particle_buffer[(13*p)+6]  = static_cast<float>(outpart(pp).vx);
-    particle_buffer[(13*p)+7]  = static_cast<float>(outpart(pp).vy);
-    particle_buffer[(13*p)+8]  = static_cast<float>(outpart(pp).vz);
-    particle_buffer[(13*p)+9]  = static_cast<float>(outpart(pp).Bx);
-    particle_buffer[(13*p)+10]  = static_cast<float>(outpart(pp).By);
-    particle_buffer[(13*p)+11] = static_cast<float>(outpart(pp).Bz);
-    particle_buffer[(13*p)+12] = static_cast<float>(outpart(pp).Kmag);
+    particle_buffer[(14*p)+0]  = static_cast<float>(icycle_buffer);    
+    particle_buffer[(14*p)+1]  = static_cast<float>(outpart(pp).tag);	  
+    particle_buffer[(14*p)+2]  = static_cast<float>(time_cycle);    
+    particle_buffer[(14*p)+3]  = static_cast<float>(outpart(pp).x);
+    particle_buffer[(14*p)+4]  = static_cast<float>(outpart(pp).y);
+    particle_buffer[(14*p)+5]  = static_cast<float>(outpart(pp).z);
+    particle_buffer[(14*p)+6]  = static_cast<float>(outpart(pp).vx);
+    particle_buffer[(14*p)+7]  = static_cast<float>(outpart(pp).vy);
+    particle_buffer[(14*p)+8]  = static_cast<float>(outpart(pp).vz);
+    particle_buffer[(14*p)+9]  = static_cast<float>(outpart(pp).Bx);
+    particle_buffer[(14*p)+10]  = static_cast<float>(outpart(pp).By);
+    particle_buffer[(14*p)+11] = static_cast<float>(outpart(pp).Bz);
+    particle_buffer[(14*p)+12] = static_cast<float>(outpart(pp).Kmag);
+    particle_buffer[(14*p)+13] = static_cast<float>(outpart(pp).jmag);
   }
 
   nout_thisrank += npout;
@@ -342,11 +353,11 @@ void TrackedParticleOutput::WriteOutputFileWithBuffer(Mesh *pm, ParameterInput *
     // Write tracked particle data collectively over minimum shared number of prtcls
     for (int p=0; p<nout_thisrank; ++p) {
       // offset computed assuming tags run 0...(ntrack-1) sequentially
-      icycle_ = static_cast<int>(particle_buffer[13*p]);
-      ptag_ = static_cast<int>(particle_buffer[13*p+1]);
-      std::size_t myoffset = header_offset +  12*p* datasize;
+      icycle_ = static_cast<int>(particle_buffer[14*p]);
+      ptag_ = static_cast<int>(particle_buffer[14*p+1]);
+      std::size_t myoffset = header_offset +  13*p* datasize;
       // Write particle positions collectively for minimum number of particles across ranks
-      if (partfile.Write_any_type_at_all(&(particle_buffer[13*p+1]),12,myoffset,"float") != 12) {
+      if (partfile.Write_any_type_at_all(&(particle_buffer[14*p+1]),13,myoffset,"float") != 13) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
             << std::endl << "particle data not written correctly to tracked particle file"
             << std::endl;
@@ -395,11 +406,11 @@ void TrackedParticleOutput::WriteOutputFileWithBuffer(Mesh *pm, ParameterInput *
     // Write tracked particle data collectively over minimum shared number of prtcls
     for (int p=0; p<nout_thisrank; ++p) {
       // offset computed assuming tags run 0...(ntrack-1) sequentially
-      icycle_ = static_cast<int>(particle_buffer[13*p]);
-      ptag_ = static_cast<int>(particle_buffer[13*p+1]);
-      std::size_t myoffset = header_offset + icycle_ * ntrack * nspecies_ * 12 * datasize  +  12*ptag_* datasize;
+      icycle_ = static_cast<int>(particle_buffer[14*p]);
+      ptag_ = static_cast<int>(particle_buffer[14*p+1]);
+      std::size_t myoffset = header_offset + icycle_ * ntrack * nspecies_ * 13 * datasize  +  13*ptag_* datasize;
       // Write particle positions collectively for minimum number of particles across ranks
-      if (partfile.Write_any_type_at_all(&(particle_buffer[13*p+1]),12,myoffset,"float") != 12) {
+      if (partfile.Write_any_type_at_all(&(particle_buffer[14*p+1]),13,myoffset,"float") != 13) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
             << std::endl << "particle data not written correctly to tracked particle file"
             << std::endl;
@@ -414,7 +425,7 @@ void TrackedParticleOutput::WriteOutputFileWithBuffer(Mesh *pm, ParameterInput *
   }
   }
   // increment counters
-  if (out_params.last_time < 0.0) {
+  if (out_params.last_time < 0.0 || out_params.last_time == pm->time) {
     out_params.last_time = pm->time;
   } else {
     out_params.last_time += out_params.dt;
