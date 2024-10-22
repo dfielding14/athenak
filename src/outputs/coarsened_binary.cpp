@@ -46,7 +46,7 @@ CoarsenedBinaryOutput::CoarsenedBinaryOutput(ParameterInput *pin, Mesh *pm,
   if (single_file_per_rank) {
     char rank_dir[20];
     std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d/", global_variable::my_rank);
-    dir_name.append('/');
+    dir_name.append("/");
     dir_name.append(rank_dir);
     mkdir(dir_name.c_str(), 0775);
   }
@@ -322,7 +322,7 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   if (single_file_per_rank) {
     char rank_dir[20];
     std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d/", global_variable::my_rank);
-    fname.append('/');
+    fname.append("/");
     fname.append(rank_dir);
   }
 
