@@ -163,7 +163,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       b0.x3f(m,k,j,i) = B0 * std::tanh(16.0*x1);
       if (i==ie) {b0.x1f(m,k,j,i+1) = 0.0;}
       if (j==je) {b0.x2f(m,k,j+1,i) = 0.0;}
-      if (k==ke) {b0.x3f(m,k+1,j,i) = B0;}
+      if (k==ke) {b0.x3f(m,k+1,j,i) = B0 * std::tanh(16.0*x1);}
 
       if (eos.is_ideal) {
         Real x1v = pcoord->x1v(i);

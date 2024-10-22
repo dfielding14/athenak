@@ -467,8 +467,8 @@ class ParticleDxHistOutput : public BaseTypeOutput {
 };
 
 //----------------------------------------------------------------------------------------
-//! \class ParticleRestartOutput 
-//  \brief derived BaseTypeOutput class for particle restart dump 
+//! \class ParticleRestartOutput
+//  \brief derived BaseTypeOutput class for particle restart dump
 
 class ParticleRestartOutput : public BaseTypeOutput {
  public:
@@ -478,15 +478,15 @@ class ParticleRestartOutput : public BaseTypeOutput {
  protected:
   int npout_thisrank;
   int npout_total;
-  HostArray2D<Real> outpart_rdata;   
+  HostArray2D<Real> outpart_rdata;
   HostArray2D<int>  outpart_idata;
 };
 
 
 //----------------------------------------------------------------------------------------
-//! \class ParticlePositionsOutput 
-//  \brief derived BaseTypeOutput class for particle positions dump 
-  
+//! \class ParticlePositionsOutput
+//  \brief derived BaseTypeOutput class for particle positions dump
+
 class ParticlePositionsOutput : public BaseTypeOutput {
  public:
   ParticlePositionsOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
@@ -496,7 +496,7 @@ class ParticlePositionsOutput : public BaseTypeOutput {
   int npout_thisrank;
   int npout_total;
   int pos_single_file_per_rank;
-  HostArray2D<Real> outpart_rdata;   
+  HostArray2D<Real> outpart_rdata;
   HostArray2D<int>  outpart_idata;
 };
 

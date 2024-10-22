@@ -257,18 +257,19 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
         pnode = new TrackedParticleOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("df") == 0){
-	pnode = new ParticleDFOutput(pin,pm,opar);
-	pout_list.insert(pout_list.begin(),pnode);
+        pnode = new ParticleDFOutput(pin,pm,opar);
+        pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("dxh") == 0){
         pnode = new ParticleDxHistOutput(pin,pm,opar);
-        pout_list.insert(pout_list.begin(),pnode);	
+        pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("ppd") == 0){
         pnode = new ParticlePositionsOutput(pin,pm,opar);
-        pout_list.insert(pout_list.begin(),pnode);	
+        pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("prst") == 0){
         pnode = new ParticleRestartOutput(pin,pm,opar);
-        pout_list.insert(pout_list.begin(),pnode); 	
+        pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("cbin") == 0) {
+        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name, "single_file_per_rank", false);
         opar.coarsen_factor = pin->GetInteger(opar.block_name,"coarsen_factor");
         opar.compute_moments = pin->GetOrAddBoolean(opar.block_name,
           "compute_moments", false);
