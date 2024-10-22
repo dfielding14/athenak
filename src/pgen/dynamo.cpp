@@ -54,6 +54,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Real B0 = cs * std::sqrt(2.0 * d_i / beta);
   Real p0 = 1.0 / (pin->GetOrAddReal("eos", "gamma", 5.0/3.0) - 1.0);
 
+  auto &size = pmbp->pmb->mb_size;
+
   // Initialize MHD variables ---------------------------------
   if (pmbp->pmhd != nullptr) {
     Real B0 = cs*std::sqrt(2.0*d_i/beta);
