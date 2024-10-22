@@ -74,14 +74,16 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       // initialize B
       b0.x1f(m,k,j,i) = 0.0;
       b0.x2f(m,k,j,i) = 0.0;
-      Real x1 = pcoord->x1f(i);
-      b0.x3f(m,k,j,i) = B0 * std::tanh(16.0*x1);
+      Real &x1min = size.d_view(m).x1min;
+      Real &x1max = size.d_view(m).x1max;
+      int nx1 = indcs.nx1;
+      Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+      b0.x3f(m,k,j,i) = B0 * std::tanh(16.0*x1v);
       if (i==ie) {b0.x1f(m,k,j,i+1) = 0.0;}
       if (j==je) {b0.x2f(m,k,j+1,i) = 0.0;}
-      if (k==ke) {b0.x3f(m,k+1,j,i) = B0 * std::tanh(16.0*x1);}
+      if (k==ke) {b0.x3f(m,k+1,j,i) = B0 * std::tanh(16.0*x1v);}
 
       if (eos.is_ideal) {
-        Real x1v = pcoord->x1v(i);
         u0(m,IEN,k,j,i) = p0/gm1 + 0.5*SQR(B0 * std::tanh(16.0*x1v)) +
            0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
            SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
