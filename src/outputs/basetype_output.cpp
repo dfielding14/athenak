@@ -499,6 +499,14 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       outvars.emplace_back("curv",i_derived,&(derived_var));
     }
 
+    // mhd magnitude of magnetic curvature alt
+    if (variable.compare("mhd_curv_alt") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("curv_alt",i_derived,&(derived_var));
+    }
+
     // mhd magnitude of magnetic curvature
     if (variable.compare("mhd_k_jxb") == 0) {
       out_params.contains_derived = true;
@@ -513,14 +521,6 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       out_params.n_derived += 1;
       int i_derived = out_params.n_derived - 1;
       outvars.emplace_back("curv_perp",i_derived,&(derived_var));
-    }
-
-    // mhd magnitude of magnetic curvature alt
-    if (variable.compare("mhd_curv_alt") == 0) {
-      out_params.contains_derived = true;
-      out_params.n_derived += 1;
-      int i_derived = out_params.n_derived - 1;
-      outvars.emplace_back("curv_alt",i_derived,&(derived_var));
     }
 
     // mhd magnitude of magnetic curvature
