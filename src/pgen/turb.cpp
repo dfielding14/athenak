@@ -188,7 +188,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 // < |J|^2 >
 // < Pi:dv >
 void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
-  pdata->nhist = 14;
+  pdata->nhist = 13;
   pdata->label[0] = "Bx";
   pdata->label[1] = "By";
   pdata->label[2] = "Bz";
@@ -331,7 +331,7 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
                           +(SQR(dvx_dx3) + SQR(dvy_dx3) + SQR(dvz_dx3))/dx3_squared)*vol;
 
     // < |J|^2 >
-    hvars.the_array[11] += SQR(Jx) + SQR(Jy) + SQR(Jz)*vol;
+    hvars.the_array[11] += (SQR(Jx) + SQR(Jy) + SQR(Jz))*vol;
 
     // <Pi_ij d_i v_j>
     Real Pi_xx = (2*dvx_dx1 - (2/3.)*(dvx_dx1 + dvy_dx2 + dvz_dx3));
