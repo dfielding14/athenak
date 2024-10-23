@@ -201,7 +201,7 @@ void ParameterInput::LoadFromFile(IOWrapper &input, bool single_file_per_rank) {
       break;
     }
 
-    if (header > kBufSize*10) {
+    if (header > kBufSize*30) {
       std::cerr << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << ": <par_end> not found in the first 40KBytes." << std::endl;
       std::exit(EXIT_FAILURE);

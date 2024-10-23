@@ -259,12 +259,12 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
     hvars.the_array[11] += (SQR(Jx) + SQR(Jy) + SQR(Jz))*vol;
 
     // <Pi_ij d_i v_j>
-    Real Pi_xx = (2*dvx_dx1 - (2/3.)*(dvx_dx1 + dvy_dx2 + dvz_dx3));
-    Real Pi_yy = (2*dvy_dx2 - (2/3.)*(dvx_dx1 + dvy_dx2 + dvz_dx3));
-    Real Pi_zz = (2*dvz_dx3 - (2/3.)*(dvx_dx1 + dvy_dx2 + dvz_dx3));
-    Real Pi_xy = (dvx_dx2 + dvy_dx1);
-    Real Pi_xz = (dvx_dx3 + dvz_dx1);
-    Real Pi_yz = (dvy_dx3 + dvz_dx2);
+    Real Pi_xx = (2*dvx_dx1/dx1 - (2/3.)*(dvx_dx1/dx1 + dvy_dx2/dx2 + dvz_dx3/dx3));
+    Real Pi_yy = (2*dvy_dx2/dx2 - (2/3.)*(dvx_dx1/dx1 + dvy_dx2/dx2 + dvz_dx3/dx3));
+    Real Pi_zz = (2*dvz_dx3/dx3 - (2/3.)*(dvx_dx1/dx1 + dvy_dx2/dx2 + dvz_dx3/dx3));
+    Real Pi_xy = (dvx_dx2/dx2 + dvy_dx1/dx1);
+    Real Pi_xz = (dvx_dx3/dx3 + dvz_dx1/dx1);
+    Real Pi_yz = (dvy_dx3/dx3 + dvz_dx2/dx2);
     hvars.the_array[12] += (Pi_xx*dvx_dx1 + Pi_yy*dvy_dx2 + Pi_zz*dvz_dx3
                            + Pi_xy*(dvx_dx2 + dvy_dx1)
                            + Pi_xz*(dvx_dx3 + dvz_dx1)
