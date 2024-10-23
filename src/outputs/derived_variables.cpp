@@ -980,8 +980,8 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
 
       // calculate |(j x B / B^2) - b_hat dot nabla b_hat|
       dv(m,i_dv,k,j,i) = sqrt((jxB1_Bsq - curv1)*(jxB1_Bsq - curv1)
-                         + (jxB2_Bsq - curv2)*(jxB2_Bsq - curv2)
-                         + (jxB3_Bsq - curv3)*(jxB3_Bsq - curv3));
+                            + (jxB2_Bsq - curv2)*(jxB2_Bsq - curv2)
+                            + (jxB3_Bsq - curv3)*(jxB3_Bsq - curv3));
     });
     i_dv += 1; // increment derived variable index
   }
@@ -1002,6 +1002,26 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     });
     i_dv += 1; // increment derived variable index
   }
+
+  // magnitude of vA_mag = |vA| = |B| / sqrt(rho)
+  // Calculated from cell-centered fields.
+  // Not computed in ghost zones since requires derivative
+  if (name.compare("mhd_vA_mag") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto &bcc = pm->pmb_pack->pmhd->bcc0;
+    auto &w0_ = pm->pmb_pack->pmhd->w0;
+    par_for("vA_mag", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      dv(m,i_dv,k,j,i) = sqrt( bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
+                          + bcc(m,IBY,k,j,i)*bcc(m,IBY,k,j,i)
+                          + bcc(m,IBZ,k,j,i)*bcc(m,IBZ,k,j,i))
+                          / sqrt(w0_(m,IDN,k,j,i));
+    });
+    i_dv += 1; // increment derived variable index
+  }
+
 
   // Calculated from cell-centered fields.
   // Not computed in ghost zones since requires derivative
