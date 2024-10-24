@@ -317,29 +317,29 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
                          + (w0_(m,IVY,k,j,i)*w0_(m,IVY,k,j,i))
                          + (w0_(m,IVZ,k,j,i)*w0_(m,IVZ,k,j,i)))*vol;
     // < (d_j U_i)(d_j U_i) >
-    Real dvx_dx1 = (w0_(m,IVX,k,j,i+1)-w0_(m,IVX,k,j,i-1))*0.5;
-    Real dvx_dx2 = (w0_(m,IVX,k,j+1,i)-w0_(m,IVX,k,j-1,i))*0.5;
-    Real dvx_dx3 = (w0_(m,IVX,k+1,j,i)-w0_(m,IVX,k-1,j,i))*0.5;
-    Real dvy_dx1 = (w0_(m,IVY,k,j,i+1)-w0_(m,IVY,k,j,i-1))*0.5;
-    Real dvy_dx2 = (w0_(m,IVY,k,j+1,i)-w0_(m,IVY,k,j-1,i))*0.5;
-    Real dvy_dx3 = (w0_(m,IVY,k+1,j,i)-w0_(m,IVY,k-1,j,i))*0.5;
-    Real dvz_dx1 = (w0_(m,IVZ,k,j,i+1)-w0_(m,IVZ,k,j,i-1))*0.5;
-    Real dvz_dx2 = (w0_(m,IVZ,k,j+1,i)-w0_(m,IVZ,k,j-1,i))*0.5;
-    Real dvz_dx3 = (w0_(m,IVZ,k+1,j,i)-w0_(m,IVZ,k-1,j,i))*0.5;
-    hvars.the_array[10] +=((SQR(dvx_dx1) + SQR(dvy_dx1) + SQR(dvz_dx1))/dx1_squared
-                          +(SQR(dvx_dx2) + SQR(dvy_dx2) + SQR(dvz_dx2))/dx2_squared
-                          +(SQR(dvx_dx3) + SQR(dvy_dx3) + SQR(dvz_dx3))/dx3_squared)*vol;
+    Real dvx_dx1 = (w0_(m,IVX,k,j,i+1)-w0_(m,IVX,k,j,i-1))*0.5/dx1;
+    Real dvx_dx2 = (w0_(m,IVX,k,j+1,i)-w0_(m,IVX,k,j-1,i))*0.5/dx2;
+    Real dvx_dx3 = (w0_(m,IVX,k+1,j,i)-w0_(m,IVX,k-1,j,i))*0.5/dx3;
+    Real dvy_dx1 = (w0_(m,IVY,k,j,i+1)-w0_(m,IVY,k,j,i-1))*0.5/dx1;
+    Real dvy_dx2 = (w0_(m,IVY,k,j+1,i)-w0_(m,IVY,k,j-1,i))*0.5/dx2;
+    Real dvy_dx3 = (w0_(m,IVY,k+1,j,i)-w0_(m,IVY,k-1,j,i))*0.5/dx3;
+    Real dvz_dx1 = (w0_(m,IVZ,k,j,i+1)-w0_(m,IVZ,k,j,i-1))*0.5/dx1;
+    Real dvz_dx2 = (w0_(m,IVZ,k,j+1,i)-w0_(m,IVZ,k,j-1,i))*0.5/dx2;
+    Real dvz_dx3 = (w0_(m,IVZ,k+1,j,i)-w0_(m,IVZ,k-1,j,i))*0.5/dx3;
+    hvars.the_array[10] +=((SQR(dvx_dx1) + SQR(dvy_dx1) + SQR(dvz_dx1))
+                          +(SQR(dvx_dx2) + SQR(dvy_dx2) + SQR(dvz_dx2))
+                          +(SQR(dvx_dx3) + SQR(dvy_dx3) + SQR(dvz_dx3)))*vol;
 
     // < |J|^2 >
     hvars.the_array[11] += (SQR(Jx) + SQR(Jy) + SQR(Jz))*vol;
 
     // <Pi_ij d_i v_j>
-    Real Pi_xx = (2*dvx_dx1/dx1 - (2/3.)*(dvx_dx1/dx1 + dvy_dx2/dx2 + dvz_dx3/dx3));
-    Real Pi_yy = (2*dvy_dx2/dx2 - (2/3.)*(dvx_dx1/dx1 + dvy_dx2/dx2 + dvz_dx3/dx3));
-    Real Pi_zz = (2*dvz_dx3/dx3 - (2/3.)*(dvx_dx1/dx1 + dvy_dx2/dx2 + dvz_dx3/dx3));
-    Real Pi_xy = (dvx_dx2/dx2 + dvy_dx1/dx1);
-    Real Pi_xz = (dvx_dx3/dx3 + dvz_dx1/dx1);
-    Real Pi_yz = (dvy_dx3/dx3 + dvz_dx2/dx2);
+    Real Pi_xx = (2*dvx_dx1 - (2/3.)*(dvx_dx1 + dvy_dx2 + dvz_dx3));
+    Real Pi_yy = (2*dvy_dx2 - (2/3.)*(dvx_dx1 + dvy_dx2 + dvz_dx3));
+    Real Pi_zz = (2*dvz_dx3 - (2/3.)*(dvx_dx1 + dvy_dx2 + dvz_dx3));
+    Real Pi_xy = (dvx_dx2 + dvy_dx1);
+    Real Pi_xz = (dvx_dx3 + dvz_dx1);
+    Real Pi_yz = (dvy_dx3 + dvz_dx2);
     hvars.the_array[12] += (Pi_xx*dvx_dx1 + Pi_yy*dvy_dx2 + Pi_zz*dvz_dx3
                            + Pi_xy*(dvx_dx2 + dvy_dx1)
                            + Pi_xz*(dvx_dx3 + dvz_dx1)
