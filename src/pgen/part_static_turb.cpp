@@ -267,18 +267,35 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       pr(IPZ,p) = fmin(pr(IPZ,p),mbsize.d_view(m).x3max);
       pr(IPZ,p) = fmax(pr(IPZ,p),mbsize.d_view(m).x3min);
 
-      // Now compute curvature. 
+      // Now compute local B field. 
       int i = (pr(IPX,p) - mbsize.d_view(m).x1min)/mbsize.d_view(m).dx1 + is;
       int j = (pr(IPY,p) - mbsize.d_view(m).x2min)/mbsize.d_view(m).dx2 + js;
       int k = (pr(IPZ,p) - mbsize.d_view(m).x3min)/mbsize.d_view(m).dx3 + ks;
 
-      pr(IPBX,p) = b.x1f(m,k,j,i);
-      pr(IPBY,p) = b.x2f(m,k,j,i);
-      pr(IPBZ,p) = b.x3f(m,k,j,i);
+      Real &x1min = mbsize.d_view(m).x1min;
+      Real &x2min = mbsize.d_view(m).x2min;
+      Real &x3min = mbsize.d_view(m).x3min;
+      Real &x1max = mbsize.d_view(m).x1max;
+      Real &x2max = mbsize.d_view(m).x2max;
+      Real &x3max = mbsize.d_view(m).x3max;
 
-      Real bx = b.x1f(m,k,j,i);
-      Real by = b.x2f(m,k,j,i);
-      Real bz = b.x3f(m,k,j,i);
+
+      Real x1v,x2v,x3v;
+      x1v = LeftEdgeX(i, indcs.nx1, x1min, x1max);
+      x2v = LeftEdgeX(j, indcs.nx2, x2min, x2max);
+      x3v = LeftEdgeX(k, indcs.nx3, x3min, x3max);
+      Real Dx,Dy,Dz;
+      Dx = (x1max - x1min)/indcs.nx1;
+      Dy = (x2max - x2min)/indcs.nx2;
+      Dz = (x3max - x3min)/indcs.nx3;
+
+      pr(IPBX,p) = b.x1f(m, k, j, i) + (pr(IPX,p) - x1v)*(b.x1f(m, k, j, i+1) - b.x1f(m, k, j, i))/Dx; //b.x1f(m,k,j,i);
+      pr(IPBY,p) = b.x2f(m, k, j, i) + (pr(IPY,p) - x2v)*(b.x2f(m, k, j+1, i) - b.x2f(m, k, j, i))/Dy; //b.x2f(m,k,j,i);
+      pr(IPBZ,p) = b.x3f(m, k, j, i) + (pr(IPZ,p) - x3v)*(b.x3f(m, k+1, j, i) - b.x3f(m, k, j, i))/Dz; //b.x3f(m,k,j,i);
+
+      Real bx = pr(IPBX,p);
+      Real by = pr(IPBY,p);
+      Real bz = pr(IPBZ,p);
 
       Real bmag=std::sqrt(bx*bx+by*by+bz*bz);
 
@@ -318,6 +335,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       //pr(IPVZ,p) = mu;				     //
 				    
       pr(IPM,p) = min_mass * pow(mass_log_spacing, spec   );
+      if (spec == nspecies_ -1) pr(IPM,p)=-1.0;      
       pr(IPDX,p) = 0.0;
       pr(IPDY,p) = 0.0;
       pr(IPDZ,p) = 0.0;

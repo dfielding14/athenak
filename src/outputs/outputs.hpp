@@ -199,7 +199,7 @@ struct TrackedParticleData {
   Real x,y,z;
   Real vx,vy,vz;
   Real Bx, By, Bz;
-  Real Kmag, jmag;
+  Real K1, K2, K3, dB1, dB2, dB3, jmag;
 };
 
 //----------------------------------------------------------------------------------------

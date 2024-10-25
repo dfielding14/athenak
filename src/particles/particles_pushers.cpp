@@ -226,44 +226,48 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
         pr(IPBY,p) = By;
         pr(IPBZ,p) = Bz;
 
-        Bx *= halfdt / pr(IPM,p);
-        By *= halfdt / pr(IPM,p);
-        Bz *= halfdt / pr(IPM,p);
+        if(pr(IPM,p)<0 ){
+          pr(IPVX,p) = Bx / sqrt(Bx*Bx+By*By+Bz*Bz);
+          pr(IPVY,p) = By / sqrt(Bx*Bx+By*By+Bz*Bz);
+          pr(IPVZ,p) = Bz / sqrt(Bx*Bx+By*By+Bz*Bz);
+        }
+        else{
+          Bx *= halfdt / pr(IPM,p);
+          By *= halfdt / pr(IPM,p);
+          Bz *= halfdt / pr(IPM,p);
 
-        v1tmp = pr(IPVX,p);
-        v2tmp = pr(IPVY,p);
-        v3tmp = pr(IPVZ,p);
+          v1tmp = pr(IPVX,p);
+          v2tmp = pr(IPVY,p);
+          v3tmp = pr(IPVZ,p);
 
-        // Velocity update
-        bsq = Bx*Bx + By*By + Bz*Bz;
-        b = 2.0 / (1.0 + bsq);
-        s1 = Bx * b;
-        s2 = By * b;
-        s3 = Bz * b;
+          // Velocity update
+          bsq = Bx*Bx + By*By + Bz*Bz;
+          b = 2.0 / (1.0 + bsq);
+          s1 = Bx * b;
+          s2 = By * b;
+          s3 = Bz * b;
 
-        vp1 = v1tmp + v2tmp * Bz - v3tmp * By;
-        vp2 = v2tmp + v3tmp * Bx - v1tmp * Bz;
-        vp3 = v3tmp + v1tmp * By - v2tmp * Bx;
+          vp1 = v1tmp + v2tmp * Bz - v3tmp * By;
+          vp2 = v2tmp + v3tmp * Bx - v1tmp * Bz;
+          vp3 = v3tmp + v1tmp * By - v2tmp * Bx;
 
-        v1tmp = v1tmp + vp2 * s3 - vp3 * s2;
-        v2tmp = v2tmp + vp3 * s1 - vp1 * s3;
-        v3tmp = v3tmp + vp1 * s2 - vp2 * s1;
+          v1tmp = v1tmp + vp2 * s3 - vp3 * s2;
+          v2tmp = v2tmp + vp3 * s1 - vp1 * s3;
+          v3tmp = v3tmp + vp1 * s2 - vp2 * s1;
 
-        pr(IPX,p) += 0.5*dt_* v1tmp;
+          pr(IPVX,p) = v1tmp;
+          pr(IPVY,p) = v2tmp;
+          pr(IPVZ,p) = v3tmp;
+        }
+        pr(IPX,p) += 0.5*dt_* pr(IPVX,p);
 
         if (multi_d) {
-          pr(IPY,p) += 0.5*dt_ * v2tmp;
+          pr(IPY,p) += 0.5*dt_ * pr(IPVY,p);
         }
 
         if (three_d) {
-          pr(IPZ,p) += 0.5*dt_ * v3tmp;
+          pr(IPZ,p) += 0.5*dt_ * pr(IPVZ,p);
         }
-
-	
-        pr(IPVX,p) = v1tmp;
-        pr(IPVY,p) = v2tmp;
-        pr(IPVZ,p) = v3tmp;
-
 
         Real Dx1 = pr(IPX,p)-x1p;
         Real Dx2 = pr(IPY,p)-x2p;
