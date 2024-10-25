@@ -243,25 +243,25 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
 
     // gradient components
     // face-centered
-    Real db1f_dx1 = (b.x1f(m,k,j,i+1)-b.x1f(m,k,j,i));
-    Real db1f_dx2 = (b.x1f(m,k,j+1,i)-b.x1f(m,k,j,i));
-    Real db1f_dx3 = (b.x1f(m,k+1,j,i)-b.x1f(m,k,j,i));
-    Real db2f_dx1 = (b.x2f(m,k,j,i+1)-b.x2f(m,k,j,i));
-    Real db2f_dx2 = (b.x2f(m,k,j+1,i)-b.x2f(m,k,j,i));
-    Real db2f_dx3 = (b.x2f(m,k+1,j,i)-b.x2f(m,k,j,i));
-    Real db3f_dx1 = (b.x3f(m,k,j,i+1)-b.x3f(m,k,j,i));
-    Real db3f_dx2 = (b.x3f(m,k,j+1,i)-b.x3f(m,k,j,i));
-    Real db3f_dx3 = (b.x3f(m,k+1,j,i)-b.x3f(m,k,j,i));
+    Real db1f_dx1 = (b.x1f(m,k,j,i)-b.x1f(m,k,j,i-1));
+    Real db1f_dx2 = (b.x1f(m,k,j,i)-b.x1f(m,k,j-1,i));
+    Real db1f_dx3 = (b.x1f(m,k,j,i)-b.x1f(m,k-1,j,i));
+    Real db2f_dx1 = (b.x2f(m,k,j,i)-b.x2f(m,k,j,i-1));
+    Real db2f_dx2 = (b.x2f(m,k,j,i)-b.x2f(m,k,j-1,i));
+    Real db2f_dx3 = (b.x2f(m,k,j,i)-b.x2f(m,k-1,j,i));
+    Real db3f_dx1 = (b.x3f(m,k,j,i)-b.x3f(m,k,j,i-1));
+    Real db3f_dx2 = (b.x3f(m,k,j,i)-b.x3f(m,k,j-1,i));
+    Real db3f_dx3 = (b.x3f(m,k,j,i)-b.x3f(m,k-1,j,i));
     // cell-centered
     Real db1c_dx1 = (bcc(m,IBX,k,j,i+1)-bcc(m,IBX,k,j,i-1))*0.5;
     Real db1c_dx2 = (bcc(m,IBX,k,j+1,i)-bcc(m,IBX,k,j-1,i))*0.5;
     Real db1c_dx3 = (bcc(m,IBX,k+1,j,i)-bcc(m,IBX,k-1,j,i))*0.5;
-    Real db2c_dx1 = (bcc(m,IBX,k,j,i+1)-bcc(m,IBX,k,j,i-1))*0.5;
-    Real db2c_dx2 = (bcc(m,IBX,k,j+1,i)-bcc(m,IBX,k,j-1,i))*0.5;
-    Real db2c_dx3 = (bcc(m,IBX,k+1,j,i)-bcc(m,IBX,k-1,j,i))*0.5;
-    Real db3c_dx1 = (bcc(m,IBX,k,j,i+1)-bcc(m,IBX,k,j,i-1))*0.5;
-    Real db3c_dx2 = (bcc(m,IBX,k,j+1,i)-bcc(m,IBX,k,j-1,i))*0.5;
-    Real db3c_dx3 = (bcc(m,IBX,k+1,j,i)-bcc(m,IBX,k-1,j,i))*0.5;
+    Real db2c_dx1 = (bcc(m,IBY,k,j,i+1)-bcc(m,IBY,k,j,i-1))*0.5;
+    Real db2c_dx2 = (bcc(m,IBY,k,j+1,i)-bcc(m,IBY,k,j-1,i))*0.5;
+    Real db2c_dx3 = (bcc(m,IBY,k+1,j,i)-bcc(m,IBY,k-1,j,i))*0.5;
+    Real db3c_dx1 = (bcc(m,IBZ,k,j,i+1)-bcc(m,IBZ,k,j,i-1))*0.5;
+    Real db3c_dx2 = (bcc(m,IBZ,k,j+1,i)-bcc(m,IBZ,k,j-1,i))*0.5;
+    Real db3c_dx3 = (bcc(m,IBZ,k+1,j,i)-bcc(m,IBZ,k-1,j,i))*0.5;
     // gradient terms
     Real db1_dx1 = (4/3.)*db1f_dx1 - (1/6.)*db1c_dx1;
     Real db2_dx1 = (4/3.)*db2f_dx1 - (1/6.)*db2c_dx1;
@@ -350,22 +350,23 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
                            + Pi_yz*(dvy_dx3 + dvz_dx2))*vol*w0_(m,IDN,k,j,i);
 
     // testing if the face centered gradients are messing up the resistive heating
-    // < |BxJ|^2 >
+    // < |J|^2 >
     Real Jx_cc = (db3c_dx2/dx2 - db2c_dx3/dx3);
     Real Jy_cc = (db1c_dx3/dx3 - db3c_dx1/dx1);
     Real Jz_cc = (db2c_dx1/dx1 - db1c_dx2/dx2);
     hvars.the_array[13] += (SQR(Jx_cc) + SQR(Jy_cc) + SQR(Jz_cc))*vol;
 
-    // fill rest of the_array with zeros, if nhist < NHISTORY_VARIABLES
-    for (int n=nhist_; n<NHISTORY_VARIABLES; ++n) {
-      hvars.the_array[n] = 0.0;
-    }
     // testing if the cell centered gradients are messing up the resistive heating
-    // < |BxJ|^2 >
+    // < |J|^2 >
     Real Jx_fc = (db3f_dx2/dx2 - db2f_dx3/dx3);
     Real Jy_fc = (db1f_dx3/dx3 - db3f_dx1/dx1);
     Real Jz_fc = (db2f_dx1/dx1 - db1f_dx2/dx2);
     hvars.the_array[14] += (SQR(Jx_fc) + SQR(Jy_fc) + SQR(Jz_fc))*vol;
+
+    // fill rest of the_array with zeros, if nhist < NHISTORY_VARIABLES
+    for (int n=nhist_; n<NHISTORY_VARIABLES; ++n) {
+      hvars.the_array[n] = 0.0;
+    }
 
     // sum into parallel reduce
     mb_sum += hvars;

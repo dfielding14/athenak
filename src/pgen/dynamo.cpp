@@ -97,6 +97,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   return;
 }
 
+
 //----------------------------------------------------------------------------------------
 // Function for computing history variables
 // < Bx >
@@ -112,8 +113,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 // < (d_j U_i)(d_j U_i) >
 // < |J|^2 >
 // < Pi:dv >
+// < |J_cc|^2 >
+// < |J_fc|^2 >
 void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
-  pdata->nhist = 13;
+  pdata->nhist = 15;
   pdata->label[0] = "Bx";
   pdata->label[1] = "By";
   pdata->label[2] = "Bz";
@@ -127,6 +130,8 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
   pdata->label[10] = "|dU|^2";
   pdata->label[11] = "|J|^2";
   pdata->label[12] = "Pi:dv";
+  pdata->label[13] = "|J_cc|^2";
+  pdata->label[14] = "|J_fc|^2";
 
   // capture class variabels for kernel
   auto &bcc = pm->pmb_pack->pmhd->bcc0;
@@ -164,25 +169,25 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
 
     // gradient components
     // face-centered
-    Real db1f_dx1 = (b.x1f(m,k,j,i+1)-b.x1f(m,k,j,i));
-    Real db1f_dx2 = (b.x1f(m,k,j+1,i)-b.x1f(m,k,j,i));
-    Real db1f_dx3 = (b.x1f(m,k+1,j,i)-b.x1f(m,k,j,i));
-    Real db2f_dx1 = (b.x2f(m,k,j,i+1)-b.x2f(m,k,j,i));
-    Real db2f_dx2 = (b.x2f(m,k,j+1,i)-b.x2f(m,k,j,i));
-    Real db2f_dx3 = (b.x2f(m,k+1,j,i)-b.x2f(m,k,j,i));
-    Real db3f_dx1 = (b.x3f(m,k,j,i+1)-b.x3f(m,k,j,i));
-    Real db3f_dx2 = (b.x3f(m,k,j+1,i)-b.x3f(m,k,j,i));
-    Real db3f_dx3 = (b.x3f(m,k+1,j,i)-b.x3f(m,k,j,i));
+    Real db1f_dx1 = (b.x1f(m,k,j,i)-b.x1f(m,k,j,i-1));
+    Real db1f_dx2 = (b.x1f(m,k,j,i)-b.x1f(m,k,j-1,i));
+    Real db1f_dx3 = (b.x1f(m,k,j,i)-b.x1f(m,k-1,j,i));
+    Real db2f_dx1 = (b.x2f(m,k,j,i)-b.x2f(m,k,j,i-1));
+    Real db2f_dx2 = (b.x2f(m,k,j,i)-b.x2f(m,k,j-1,i));
+    Real db2f_dx3 = (b.x2f(m,k,j,i)-b.x2f(m,k-1,j,i));
+    Real db3f_dx1 = (b.x3f(m,k,j,i)-b.x3f(m,k,j,i-1));
+    Real db3f_dx2 = (b.x3f(m,k,j,i)-b.x3f(m,k,j-1,i));
+    Real db3f_dx3 = (b.x3f(m,k,j,i)-b.x3f(m,k-1,j,i));
     // cell-centered
     Real db1c_dx1 = (bcc(m,IBX,k,j,i+1)-bcc(m,IBX,k,j,i-1))*0.5;
     Real db1c_dx2 = (bcc(m,IBX,k,j+1,i)-bcc(m,IBX,k,j-1,i))*0.5;
     Real db1c_dx3 = (bcc(m,IBX,k+1,j,i)-bcc(m,IBX,k-1,j,i))*0.5;
-    Real db2c_dx1 = (bcc(m,IBX,k,j,i+1)-bcc(m,IBX,k,j,i-1))*0.5;
-    Real db2c_dx2 = (bcc(m,IBX,k,j+1,i)-bcc(m,IBX,k,j-1,i))*0.5;
-    Real db2c_dx3 = (bcc(m,IBX,k+1,j,i)-bcc(m,IBX,k-1,j,i))*0.5;
-    Real db3c_dx1 = (bcc(m,IBX,k,j,i+1)-bcc(m,IBX,k,j,i-1))*0.5;
-    Real db3c_dx2 = (bcc(m,IBX,k,j+1,i)-bcc(m,IBX,k,j-1,i))*0.5;
-    Real db3c_dx3 = (bcc(m,IBX,k+1,j,i)-bcc(m,IBX,k-1,j,i))*0.5;
+    Real db2c_dx1 = (bcc(m,IBY,k,j,i+1)-bcc(m,IBY,k,j,i-1))*0.5;
+    Real db2c_dx2 = (bcc(m,IBY,k,j+1,i)-bcc(m,IBY,k,j-1,i))*0.5;
+    Real db2c_dx3 = (bcc(m,IBY,k+1,j,i)-bcc(m,IBY,k-1,j,i))*0.5;
+    Real db3c_dx1 = (bcc(m,IBZ,k,j,i+1)-bcc(m,IBZ,k,j,i-1))*0.5;
+    Real db3c_dx2 = (bcc(m,IBZ,k,j+1,i)-bcc(m,IBZ,k,j-1,i))*0.5;
+    Real db3c_dx3 = (bcc(m,IBZ,k+1,j,i)-bcc(m,IBZ,k-1,j,i))*0.5;
     // gradient terms
     Real db1_dx1 = (4/3.)*db1f_dx1 - (1/6.)*db1c_dx1;
     Real db2_dx1 = (4/3.)*db2f_dx1 - (1/6.)*db2c_dx1;
@@ -269,6 +274,21 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
                            + Pi_xy*(dvx_dx2 + dvy_dx1)
                            + Pi_xz*(dvx_dx3 + dvz_dx1)
                            + Pi_yz*(dvy_dx3 + dvz_dx2))*vol*w0_(m,IDN,k,j,i);
+
+    // testing if the face centered gradients are messing up the resistive heating
+    // < |J|^2 >
+    Real Jx_cc = (db3c_dx2/dx2 - db2c_dx3/dx3);
+    Real Jy_cc = (db1c_dx3/dx3 - db3c_dx1/dx1);
+    Real Jz_cc = (db2c_dx1/dx1 - db1c_dx2/dx2);
+    hvars.the_array[13] += (SQR(Jx_cc) + SQR(Jy_cc) + SQR(Jz_cc))*vol;
+
+    // testing if the cell centered gradients are messing up the resistive heating
+    // < |J|^2 >
+    Real Jx_fc = (db3f_dx2/dx2 - db2f_dx3/dx3);
+    Real Jy_fc = (db1f_dx3/dx3 - db3f_dx1/dx1);
+    Real Jz_fc = (db2f_dx1/dx1 - db1f_dx2/dx2);
+    hvars.the_array[14] += (SQR(Jx_fc) + SQR(Jy_fc) + SQR(Jz_fc))*vol;
+
     // fill rest of the_array with zeros, if nhist < NHISTORY_VARIABLES
     for (int n=nhist_; n<NHISTORY_VARIABLES; ++n) {
       hvars.the_array[n] = 0.0;
@@ -284,104 +304,3 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
   }
   return;
 }
-
-
-  // Initialize MHD variables
-  // if (pmbp->pmhd != nullptr) {
-  //   auto &u0 = pmbp->pmhd->u0;
-  //   auto &b0 = pmbp->pmhd->b0;
-  //   EOS_Data &eos = pmbp->pmhd->peos->eos_data;
-  //   Real gm1 = eos.gamma - 1.0;
-
-  //   // Zero-Net Magnetic Field Initialization Parameters
-  //   Real rseed = pin->GetReal("problem", "rseed", -1.0);
-  //   bool first_time_ = true;
-  //   int64_t iran = static_cast<int64_t>(rseed);
-  //   int nrange = pin->GetOrAddInteger("problem", "nrange", 2);
-  //   Real total_amp = 0.0;
-  //   Real k_par = 2.0 * M_PI;
-  //   Real b0_amp = pin->GetReal("problem", "b0_amp", B0); // Desired RMS magnetic field strength
-
-  //   // Parallel loop to initialize magnetic fields with zero net flux
-  //   par_for("pgen_turb", DevExeSpace(), 0, pmbp->nmb_thispack - 1, ks, ke, js, je, is, ie,
-  //   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-  //     // Initialize magnetic field components to zero
-  //     b0.x1f(m, k, j, i) = 0.0;
-  //     b0.x2f(m, k, j, i) = 0.0;
-  //     b0.x3f(m, k, j, i) = 0.0;
-
-  //     // Calculate positions
-  //     Real x1 = pcoord->x1v(i);
-  //     Real x2 = pcoord->x2v(j);
-  //     Real x3 = pcoord->x3v(k);
-
-  //     // Loop over wave numbers to superimpose cosine waves
-  //     for (int nkx = -nrange; nkx <= nrange; nkx++) {
-  //       for (int nky = -nrange; nky <= nrange; nky++) {
-  //         for (int nkz = -nrange; nkz <= nrange; nkz++) {
-  //           Real nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
-
-  //           if (nsqr > 0 && nsqr <= SQR(nrange)) {
-  //             // Avoid double-counting by only initializing positive wave numbers
-  //             if (nkx < 0 || (nkx == 0 && nky < 0) || (nkx == 0 && nky == 0 && nkz < 0)) {
-  //               continue;
-  //             }
-
-  //             // Random amplitudes and phases
-  //             Real ampx = (nkx != 0) ? 0.0 : RanGaussian(&iran);
-  //             Real ampy = (nky != 0) ? 0.0 : RanGaussian(&iran);
-  //             Real ampz = (nkz != 0) ? 0.0 : RanGaussian(&iran);
-
-  //             Real ph1 = 2.0 * M_PI * Ran2(&iran);
-  //             Real ph2 = 2.0 * M_PI * Ran2(&iran);
-  //             Real ph3 = 2.0 * M_PI * Ran2(&iran);
-
-  //             // Accumulate total amplitude for normalization
-  //             total_amp += SQR(ampx) + SQR(ampy) + SQR(ampz);
-
-  //             // Superimpose cosine waves
-  //             b0.x1f(m, k, j, i) += ampx * cos(k_par * (nky * x2 + nkz * x3) + ph1);
-  //             b0.x2f(m, k, j, i) += ampy * cos(k_par * (nkx * x1 + nkz * x3) + ph2);
-  //             b0.x3f(m, k, j, i) += ampz * cos(k_par * (nkx * x1 + nky * x2) + ph3);
-  //           }
-  //         }
-  //       }
-  //     }
-
-  //     // Apply boundary conditions for face-centered fields
-  //     if (i == ie) {
-  //       b0.x1f(m, k, j, i + 1) = b0.x1f(m, k, j, i);
-  //     }
-  //     if (j == je) {
-  //       b0.x2f(m, k, je + 1, i) = b0.x2f(m, k, j, i);
-  //     }
-  //     if (k == ke) {
-  //       b0.x3f(m, ke + 1, j, i) = b0.x3f(m, k, j, i);
-  //     }
-
-  //     // Update conserved variables if using ideal EOS
-  //     if (eos.is_ideal) {
-  //       u0(m, IEN, k, j, i) = p0 / gm1 + 0.5 * (SQR(u0(m, IM1, k, j, i)) +
-  //                                               SQR(u0(m, IM2, k, j, i)) +
-  //                                               SQR(u0(m, IM3, k, j, i))) / u0(m, IDN, k, j, i);
-  //     }
-  //   });
-
-  //   // Normalize the magnetic field to achieve zero net flux
-  //   Real Brms = b0_amp / sqrt(0.5 * total_amp);
-
-  //   // Parallel loop to normalize all face-centered magnetic fields
-  //   par_for("normalize_b0", DevExeSpace(), 0, pmbp->nmb_thispack - 1, ks, ke, js, je, is, ie,
-  //   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-  //     b0.x1f(m, k, j, i) *= Brms;
-  //     b0.x2f(m, k, j, i) *= Brms;
-  //     b0.x3f(m, k, j, i) *= Brms;
-
-  //     // Update conserved variables after normalization
-  //     if (eos.is_ideal) {
-  //       u0(m, IEN, k, j, i) += 0.5 * (SQR(b0.x1f(m, k, j, i)) +
-  //                                                SQR(b0.x2f(m, k, j, i)) +
-  //                                                SQR(b0.x3f(m, k, j, i)));
-  //     }
-  //   });
-  // }
