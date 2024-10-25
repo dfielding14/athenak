@@ -187,8 +187,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 // < (d_j U_i)(d_j U_i) >
 // < |J|^2 >
 // < Pi:dv >
+// < |J_cc|^2 >
+// < |J_fc|^2 >
 void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
-  pdata->nhist = 13;
+  pdata->nhist = 15;
   pdata->label[0] = "Bx";
   pdata->label[1] = "By";
   pdata->label[2] = "Bz";
@@ -202,6 +204,8 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
   pdata->label[10] = "|dU|^2";
   pdata->label[11] = "|J|^2";
   pdata->label[12] = "Pi:dv";
+  pdata->label[13] = "|J_cc|^2";
+  pdata->label[14] = "|J_fc|^2";
 
   // capture class variabels for kernel
   auto &bcc = pm->pmb_pack->pmhd->bcc0;
@@ -344,10 +348,24 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
                            + Pi_xy*(dvx_dx2 + dvy_dx1)
                            + Pi_xz*(dvx_dx3 + dvz_dx1)
                            + Pi_yz*(dvy_dx3 + dvz_dx2))*vol*w0_(m,IDN,k,j,i);
+
+    // testing if the face centered gradients are messing up the resistive heating
+    // < |BxJ|^2 >
+    Real Jx_cc = (db3c_dx2/dx2 - db2c_dx3/dx3);
+    Real Jy_cc = (db1c_dx3/dx3 - db3c_dx1/dx1);
+    Real Jz_cc = (db2c_dx1/dx1 - db1c_dx2/dx2);
+    hvars.the_array[13] += (SQR(Jx_cc) + SQR(Jy_cc) + SQR(Jz_cc))*vol;
+
     // fill rest of the_array with zeros, if nhist < NHISTORY_VARIABLES
     for (int n=nhist_; n<NHISTORY_VARIABLES; ++n) {
       hvars.the_array[n] = 0.0;
     }
+    // testing if the cell centered gradients are messing up the resistive heating
+    // < |BxJ|^2 >
+    Real Jx_fc = (db3f_dx2/dx2 - db2f_dx3/dx3);
+    Real Jy_fc = (db1f_dx3/dx3 - db3f_dx1/dx1);
+    Real Jz_fc = (db2f_dx1/dx1 - db1f_dx2/dx2);
+    hvars.the_array[14] += (SQR(Jx_fc) + SQR(Jy_fc) + SQR(Jz_fc))*vol;
 
     // sum into parallel reduce
     mb_sum += hvars;
