@@ -1316,12 +1316,12 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   }
 
   // Viscous heating rate -- < Pi:dv > needs to be multiplied by nu
-  if (name.compare("hydro_visc_heat") == 0 ||
-      name.compare("mhd_visc_heat") == 0) {
+  if (name.compare("hydro_visc_heat") == 0 || name.compare("mhd_visc_heat") == 0) {
     if (derived_var.extent(4) <= 1)
       Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
-    auto &w0_ = pm->pmb_pack->pmhd->w0;
+    auto &w0_ = (name.compare("hydro_visc_heat") == 0)?
+      pm->pmb_pack->phydro->w0 : pm->pmb_pack->pmhd->w0;
     par_for("Pi:dv", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real dx1_inv = 1.0/size.d_view(m).dx1;

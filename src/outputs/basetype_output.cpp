@@ -77,14 +77,13 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     exit(EXIT_FAILURE);
   }
   if ((ivar>=14) && (ivar <17) &&
-      ((pm->pmb_pack->phydro == nullptr) || (pm->pmb_pack->pmhd == nullptr))) {
+       (pm->pmb_pack->phydro != nullptr || pm->pmb_pack->pmhd != nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Output of Hydro/MHD variable requested in <output> block '"
        << out_params.block_name << "' but no Hydro/MHD object has been constructed."
        << std::endl << "Input file is missing a <hydro> or <mhd> block" << std::endl;
     exit(EXIT_FAILURE);
   }
-
   if ((ivar>=17) && (ivar<52) && (pm->pmb_pack->pmhd == nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Output of MHD variable requested in <output> block '"
