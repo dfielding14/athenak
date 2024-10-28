@@ -522,6 +522,80 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     i_dv += 1; // increment derived variable index
   }
 
+  // cos of the angle between the current and the density gradient vector
+  if (name.compare("mhd_theta_jdrho") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto &bcc = pm->pmb_pack->pmhd->bcc0;
+    auto &u0 = pm->pmb_pack->pmhd->u0;
+    par_for("theta_jdrho", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+
+      // calculate current
+      Real j1 = 0.0;
+      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      if (multi_d) {
+        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+      }
+      if (three_d) {
+        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*size.d_view(m).dx3);
+        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*size.d_view(m).dx3);
+      }
+      // Calculate |J|
+      Real J_mag = sqrt(j1*j1 + j2*j2 + j3*j3);
+
+      // Calculate drho
+      Real drho_dx1 = (u0(m,IDN,k,j,i+1) - u0(m,IDN,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real drho_dx2 = (multi_d) ? (u0(m,IDN,k,j+1,i) - u0(m,IDN,k,j-1,i))/(2.0*size.d_view(m).dx2) : 0.;
+      Real drho_dx3 = (three_d) ? (u0(m,IDN,k+1,j,i) - u0(m,IDN,k-1,j,i))/(2.0*size.d_view(m).dx3) : 0.;
+
+      // Calculate |drho|
+      Real drho_mag = sqrt(drho_dx1*drho_dx1 + drho_dx2*drho_dx2 + drho_dx3*drho_dx3);
+
+      // calculate j dot drho
+      Real jdotdrho = j1*drho_dx1 + j2*drho_dx2 + j3*drho_dx3;
+
+      // calculate cos(theta) = j dot drho / (|J| |drho|)
+      dv(m,i_dv,k,j,i) = jdotdrho / (J_mag * drho_mag);
+    });
+    i_dv += 1; // increment derived variable index
+  }
+
+  // cos of the angle between the magnetic field and the density gradient vector
+  if (name.compare("mhd_theta_bdrho") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto &bcc = pm->pmb_pack->pmhd->bcc0;
+    auto &u0 = pm->pmb_pack->pmhd->u0;
+    par_for("theta_bdrho", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+
+      // Calculate |B|
+      Real B_mag = sqrt( bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
+                       + bcc(m,IBY,k,j,i)*bcc(m,IBY,k,j,i)
+                       + bcc(m,IBZ,k,j,i)*bcc(m,IBZ,k,j,i));
+
+      // Calculate drho
+      Real drho_dx1 = (u0(m,IDN,k,j,i+1) - u0(m,IDN,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real drho_dx2 = (multi_d) ? (u0(m,IDN,k,j+1,i) - u0(m,IDN,k,j-1,i))/(2.0*size.d_view(m).dx2) : 0.;
+      Real drho_dx3 = (three_d) ? (u0(m,IDN,k+1,j,i) - u0(m,IDN,k-1,j,i))/(2.0*size.d_view(m).dx3) : 0.;
+
+      // Calculate |drho|
+      Real drho_mag = sqrt(drho_dx1*drho_dx1 + drho_dx2*drho_dx2 + drho_dx3*drho_dx3);
+
+      // calculate B dot drho
+      Real Bdotdrho = bcc(m,IBX,k,j,i)*drho_dx1 + bcc(m,IBY,k,j,i)*drho_dx2 + bcc(m,IBZ,k,j,i)*drho_dx3;
+
+      // calculate cos(theta) = B dot drho / (|B| |drho|)
+      dv(m,i_dv,k,j,i) = Bdotdrho / (B_mag * drho_mag);
+    });
+    i_dv += 1; // increment derived variable index
+  }
+
   // magnitude of curvature over the magnitude of B
   if (name.compare("mhd_curv_B_ratio") == 0) {
     if (derived_var.extent(4) <= 1)
@@ -1344,7 +1418,6 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
       Real Pi_xz = (dvx_dx3 + dvz_dx1);
       Real Pi_yz = (dvy_dx3 + dvz_dx2);
 
-      // calculate cos(theta) = v dot B / (|v| |B|)
       dv(m,i_dv,k,j,i) = (Pi_xx*dvx_dx1 + Pi_yy*dvy_dx2 + Pi_zz*dvz_dx3
                         + Pi_xy*(dvx_dx2 + dvy_dx1)
                         + Pi_xz*(dvx_dx3 + dvz_dx1)
