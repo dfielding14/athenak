@@ -74,6 +74,9 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   dt_turb_thresh=pin->GetOrAddReal("turb_driving","dt_turb_thresh",1e-6); //We'll match the code time-step within this value of dt_turb_update steps
   sol_fraction=pin->GetOrAddReal("turb_driving","sol_fraction",1.0); // To store fraction of energy in solenoidal modes
 
+  // drive with constant edot or constant acceleration
+  constant_edot = pin->GetOrAddBoolean("turb_driving", "constant_edot", true);
+
   // spatially varying driving
   x_turb_scale_height = pin->GetOrAddReal("turb_driving", "x_turb_scale_height", -1.0);
   y_turb_scale_height = pin->GetOrAddReal("turb_driving", "y_turb_scale_height", -1.0);
@@ -733,10 +736,14 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
     Real m1 = t1;
 
     Real s;
-    if (m1 >= 0) {
-      s = -m1/2./m0 + sqrt(m1*m1/4./m0/m0 + dedt/m0);
+    if (constant_edot) {
+      if (m1 >= 0) {
+        s = -m1/2./m0 + sqrt(m1*m1/4./m0/m0 + dedt/m0);
+      } else {
+        s = m1/2./m0 + sqrt(m1*m1/4./m0/m0 + dedt/m0);
+      }
     } else {
-      s = m1/2./m0 + sqrt(m1*m1/4./m0/m0 + dedt/m0);
+      s = dedt/m0;
     }
     // s = dedt*totvol/m1;
     // if (m0 == 0.0) s = 1.0;

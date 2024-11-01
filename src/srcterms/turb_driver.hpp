@@ -44,6 +44,9 @@ class TurbulenceDriver {
   // Real t_last_update;
   int n_turb_updates_yet;
 
+  // drive with constant edot or constant acceleration
+  bool constant_edot;
+
   // spatially varying driving
   Real x_turb_scale_height, y_turb_scale_height, z_turb_scale_height;
   Real x_turb_center, y_turb_center, z_turb_center;
