@@ -462,9 +462,6 @@ def write_athdf(filename, fdata, varsize_bytes=4, locsize_bytes=8):
     number_of_moments = fdata.get("number_of_moments", 1)
 
     # check dimensionality/slicing
-    nx1_out = fdata["nx1_out_mb"]
-    nx2_out = fdata["nx2_out_mb"]
-    nx3_out = fdata["nx3_out_mb"]
     two_d = Nx2 != 1 and Nx3 == 1
     three_d = Nx3 != 1
     x1slice = nx1_out == 1
