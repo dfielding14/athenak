@@ -743,19 +743,8 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
         s = m1/2./m0 + sqrt(m1*m1/4./m0/m0 + dedt/m0);
       }
     } else {
-      s = dedt/m0;
+      s = sqrt(dedt/m0);
     }
-    // s = dedt*totvol/m1;
-    // if (m0 == 0.0) s = 1.0;
-    // if (abs(m0) <= 1e-20) s = dedt*totvol/m1;
-
-    // if (global_variable::my_rank == 0){
-    //   std::cout << m0 << ", scaling_factor = " << s << std::endl <<
-    //   " dt = " << dt << " totvol = " << totvol  << std::endl;
-    //   std::cout << " beta dt = " << beta << std::endl;
-    //   std::cout << " alternate scaling factor = " << dedt*totvol/m1 << std::endl;
-    //   std::cout << " initial scaling factor = " << sqrt(dedt/m0) << std::endl;
-    // }
     if (scale_forcing){
       par_for("force_norm", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
