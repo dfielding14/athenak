@@ -119,18 +119,20 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
         int nx3 = indcs.nx3;
         Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
         Real x3f = LeftEdgeX(k-ks, nx3, x3min, x3max);
-        b0.x1f(m,k,j,i) += B0 * (std::cos(2.0*M_PI*x3f) + std::cos(2.0*M_PI*x2f));
-        b0.x2f(m,k,j,i) += B0 * (std::cos(2.0*M_PI*x1f) + std::cos(2.0*M_PI*x3f));
-        b0.x3f(m,k,j,i) += B0 * (std::cos(2.0*M_PI*x1f) + std::cos(2.0*M_PI*x2f));
-        if (i==ie) {b0.x1f(m,k,j,i+1) = b0.x1f(m,k,j,i);}
-        if (j==je) {b0.x2f(m,k,j+1,i) = b0.x2f(m,k,j,i);}
-        if (k==ke) {b0.x3f(m,k+1,j,i) = b0.x3f(m,k,j,i);}
+        for (int n = nlow_ICs; n <= nhigh_ICs; n++) {
+          b0.x1f(m,k,j,i) += B0 * (std::cos(n*2.0*M_PI*x3f) + std::cos(n*2.0*M_PI*x2f));
+          b0.x2f(m,k,j,i) += B0 * (std::cos(n*2.0*M_PI*x1f) + std::cos(n*2.0*M_PI*x3f));
+          b0.x3f(m,k,j,i) += B0 * (std::cos(n*2.0*M_PI*x1f) + std::cos(n*2.0*M_PI*x2f));
+          if (i==ie) {b0.x1f(m,k,j,i+1) = b0.x1f(m,k,j,i);}
+          if (j==je) {b0.x2f(m,k,j+1,i) = b0.x2f(m,k,j,i);}
+          if (k==ke) {b0.x3f(m,k+1,j,i) = b0.x3f(m,k,j,i);}
 
-        if (eos.is_ideal) {
-          u0(m,IEN,k,j,i) = p0/gm1
-                          + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x3v) + std::cos(2.0*M_PI*x2v)))
-                          + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x1v) + std::cos(2.0*M_PI*x3v)))
-                          + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x1v) + std::cos(2.0*M_PI*x2v)));
+          if (eos.is_ideal) {
+            u0(m,IEN,k,j,i) = p0/gm1
+                            + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x3v) + std::cos(2.0*M_PI*x2v)))
+                            + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x1v) + std::cos(2.0*M_PI*x3v)))
+                            + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x1v) + std::cos(2.0*M_PI*x2v)));
+          }
         }
       });
     }

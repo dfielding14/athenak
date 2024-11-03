@@ -719,8 +719,8 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
       Real a2 = force_(m,1,k,j,i);
       Real a3 = force_(m,2,k,j,i);
 
-      sum_t0 += den*0.5*(a1*a1+a2*a2+a3*a3)*dt*vol;
-      sum_t1 += (mom1*a1+mom2*a2+mom3*a3)*vol;
+      sum_t0 += den*0.5*(a1*a1 + a2*a2 + a3*a3)*dt*vol;
+      sum_t1 += (mom1*a1 + mom2*a2 + mom3*a3)*vol;
       totvol_ += vol;
     }, Kokkos::Sum<Real>(t0), Kokkos::Sum<Real>(t1), Kokkos::Sum<Real>(totvol));
 
@@ -737,12 +737,16 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
 
     Real s;
     if (constant_edot) {
+      // 1/2 rho (s vdot dt)^2 / dt + rho (s vdot dt).v / dt = dedt
       if (m1 >= 0) {
         s = -m1/2./m0 + sqrt(m1*m1/4./m0/m0 + dedt/m0);
       } else {
         s = m1/2./m0 + sqrt(m1*m1/4./m0/m0 + dedt/m0);
       }
     } else {
+      // 1/2 rho (s vdot dt)^2 / dt = dedt
+      // s = sqrt(dedt * dt / (1/2 rho (vdot dt)^2))
+      // s = sqrt(dedt / (1/2 rho vdot^2 dt))
       s = sqrt(dedt/m0);
     }
     if (scale_forcing){
