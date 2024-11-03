@@ -53,7 +53,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Real d_n = pin->GetOrAddReal("problem","d_n",1.0);
   Real B0 = cs * std::sqrt(2.0 * d_i / beta);
   Real p0 = 1.0 / (pin->GetOrAddReal("eos", "gamma", 5.0/3.0) - 1.0);
-
+  bool tangled_ICs = pin->GetOrAddBoolean("problem","tangled_ICs",false);
   auto &size = pmbp->pmb->mb_size;
 
   // Initialize MHD variables ---------------------------------
@@ -65,35 +65,76 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     Real gm1 = eos.gamma - 1.0;
     Real p0 = 1.0/eos.gamma;
 
-    // Set initial conditions
-    par_for("pgen_turb", DevExeSpace(),0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      u0(m,IDN,k,j,i) = 1.0;
-      u0(m,IM1,k,j,i) = 0.0;
-      u0(m,IM2,k,j,i) = 0.0;
-      u0(m,IM3,k,j,i) = 0.0;
+    if (!tangled_ICs) {
+      // Set initial conditions
+      par_for("pgen_turb", DevExeSpace(),0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        u0(m,IDN,k,j,i) = 1.0;
+        u0(m,IM1,k,j,i) = 0.0;
+        u0(m,IM2,k,j,i) = 0.0;
+        u0(m,IM3,k,j,i) = 0.0;
 
-      // initialize B
-      b0.x1f(m,k,j,i) = 0.0;
-      b0.x2f(m,k,j,i) = 0.0;
-      Real &x1min = size.d_view(m).x1min;
-      Real &x1max = size.d_view(m).x1max;
-      int nx1 = indcs.nx1;
-      Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
-      b0.x3f(m,k,j,i) = B0 * std::tanh(16.0*x1v);
-      if (i==ie) {b0.x1f(m,k,j,i+1) = 0.0;}
-      if (j==je) {b0.x2f(m,k,j+1,i) = 0.0;}
-      if (k==ke) {b0.x3f(m,k+1,j,i) = B0 * std::tanh(16.0*x1v);}
+        // initialize B
+        b0.x1f(m,k,j,i) = 0.0;
+        b0.x2f(m,k,j,i) = 0.0;
+        Real &x1min = size.d_view(m).x1min;
+        Real &x1max = size.d_view(m).x1max;
+        int nx1 = indcs.nx1;
+        Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+        b0.x3f(m,k,j,i) = B0 * std::tanh(16.0*x1v);
+        if (i==ie) {b0.x1f(m,k,j,i+1) = 0.0;}
+        if (j==je) {b0.x2f(m,k,j+1,i) = 0.0;}
+        if (k==ke) {b0.x3f(m,k+1,j,i) = B0 * std::tanh(16.0*x1v);}
 
-      if (eos.is_ideal) {
-        u0(m,IEN,k,j,i) = p0/gm1 + 0.5*SQR(B0 * std::tanh(16.0*x1v)) +
-           0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
-           SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
-      }
-    });
+        if (eos.is_ideal) {
+          u0(m,IEN,k,j,i) = p0/gm1 + 0.5*SQR(B0 * std::tanh(16.0*x1v)) +
+            0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
+            SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
+        }
+      });
+    } else {
+      // Tangled ICs
+      int nlow_ICs = pin->GetOrAddInteger("problem","nlow_ICs",1);
+      int nhigh_ICs = pin->GetOrAddInteger("problem","nhigh_ICs",4);
+      par_for("pgen_turb", DevExeSpace(),0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        u0(m,IDN,k,j,i) = 1.0;
+        u0(m,IM1,k,j,i) = 0.0;
+        u0(m,IM2,k,j,i) = 0.0;
+        u0(m,IM3,k,j,i) = 0.0;
+
+        // initialize B
+        Real &x1min = size.d_view(m).x1min;
+        Real &x1max = size.d_view(m).x1max;
+        int nx1 = indcs.nx1;
+        Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+        Real x1f = LeftEdgeX(i-is, nx1, x1min, x1max);
+        Real &x2min = size.d_view(m).x2min;
+        Real &x2max = size.d_view(m).x2max;
+        int nx2 = indcs.nx2;
+        Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+        Real x2f = LeftEdgeX(j-js, nx2, x2min, x2max);
+        Real &x3min = size.d_view(m).x3min;
+        Real &x3max = size.d_view(m).x3max;
+        int nx3 = indcs.nx3;
+        Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+        Real x3f = LeftEdgeX(k-ks, nx3, x3min, x3max);
+        b0.x1f(m,k,j,i) += B0 * (std::cos(2.0*M_PI*x3f) + std::cos(2.0*M_PI*x2f));
+        b0.x2f(m,k,j,i) += B0 * (std::cos(2.0*M_PI*x1f) + std::cos(2.0*M_PI*x3f));
+        b0.x3f(m,k,j,i) += B0 * (std::cos(2.0*M_PI*x1f) + std::cos(2.0*M_PI*x2f));
+        if (i==ie) {b0.x1f(m,k,j,i+1) = b0.x1f(m,k,j,i);}
+        if (j==je) {b0.x2f(m,k,j+1,i) = b0.x2f(m,k,j,i);}
+        if (k==ke) {b0.x3f(m,k+1,j,i) = b0.x3f(m,k,j,i);}
+
+        if (eos.is_ideal) {
+          u0(m,IEN,k,j,i) = p0/gm1
+                          + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x3v) + std::cos(2.0*M_PI*x2v)))
+                          + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x1v) + std::cos(2.0*M_PI*x3v)))
+                          + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x1v) + std::cos(2.0*M_PI*x2v)));
+        }
+      });
+    }
   }
-
-
   return;
 }
 
