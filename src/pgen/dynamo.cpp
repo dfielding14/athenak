@@ -102,6 +102,12 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
         u0(m,IM1,k,j,i) = 0.0;
         u0(m,IM2,k,j,i) = 0.0;
         u0(m,IM3,k,j,i) = 0.0;
+        if (eos.is_ideal) {
+          u0(m,IEN,k,j,i) = p0/gm1;
+        }
+        b0.x1f(m,k,j,i) = 0.0;
+        b0.x2f(m,k,j,i) = 0.0;
+        b0.x3f(m,k,j,i) = 0.0;
 
         // initialize B
         Real &x1min = size.d_view(m).x1min;
@@ -128,10 +134,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
           if (k==ke) {b0.x3f(m,k+1,j,i) = b0.x3f(m,k,j,i);}
 
           if (eos.is_ideal) {
-            u0(m,IEN,k,j,i) = p0/gm1
-                            + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x3v) + std::cos(2.0*M_PI*x2v)))
-                            + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x1v) + std::cos(2.0*M_PI*x3v)))
-                            + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x1v) + std::cos(2.0*M_PI*x2v)));
+            u0(m,IEN,k,j,i) += 0.5*SQR(B0 * (std::cos(2.0*M_PI*x3v) + std::cos(2.0*M_PI*x2v)))
+                             + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x1v) + std::cos(2.0*M_PI*x3v)))
+                             + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x1v) + std::cos(2.0*M_PI*x2v)));
           }
         }
       });
@@ -242,7 +247,7 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
     Real bdb1 = b1*db1_dx1 + b2*db1_dx2 + b3*db1_dx3;
     Real bdb2 = b1*db2_dx1 + b2*db2_dx2 + b3*db2_dx3;
     Real bdb3 = b1*db3_dx1 + b2*db3_dx2 + b3*db3_dx3;
-    hvars.the_array[6] += ( bdb1*bdb1 + bdb2*bdb2 + bdb3*bdb3)*vol;
+    hvars.the_array[6] += (bdb1*bdb1 + bdb2*bdb2 + bdb3*bdb3)*vol;
 
     // < |BxJ|^2 >
     Real Jx = (db3_dx2 - db2_dx3);

@@ -694,6 +694,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
     t0 = 0.0;
     t1 = 0.0;
     Real totvol=0.0;
+    bool flag_constant_edot = constant_edot;
     Kokkos::parallel_reduce("net_mom_2", Kokkos::RangePolicy<>(DevExeSpace(),0,nmkji),
     KOKKOS_LAMBDA(const int &idx, Real &sum_t0, Real &sum_t1, Real &totvol_) {
       // compute n,k,j,i indices of thread
@@ -719,11 +720,12 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
       Real a2 = force_(m,1,k,j,i);
       Real a3 = force_(m,2,k,j,i);
 
-      if (constant_edot){
+      if (flag_constant_edot){
         sum_t0 += den*0.5*(a1*a1 + a2*a2 + a3*a3)*dt*vol;
         sum_t1 += (mom1*a1 + mom2*a2 + mom3*a3)*vol;
       } else {
         sum_t0 += 0.5*(a1*a1 + a2*a2 + a3*a3)*dt;
+        sum_t1 += 0.0;
       }
       totvol_ += vol;
     }, Kokkos::Sum<Real>(t0), Kokkos::Sum<Real>(t1), Kokkos::Sum<Real>(totvol));
