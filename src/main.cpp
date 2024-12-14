@@ -238,10 +238,6 @@ int main(int argc, char *argv[]) {
     size_t rank_pos = restart_file.find("/rank_");
     single_file_per_rank = (rank_pos != std::string::npos);
 
-    // Debug output
-    std::cout << "Restart file path: " << restart_file << std::endl;
-    std::cout << "single_file_per_rank: " << (single_file_per_rank ? "true" : "false") << std::endl;
-
     // If single_file_per_rank is true, modify the path for the current rank
     if (single_file_per_rank) {
         // Extract the base directory and file name

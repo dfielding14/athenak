@@ -71,8 +71,10 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   tcorr = pin->GetOrAddReal("turb_driving", "tcorr", 0.0);
   // update time for the turbulence driver
   dt_turb_update=pin->GetOrAddReal("turb_driving","dt_turb_update",0.01);
-  dt_turb_thresh=pin->GetOrAddReal("turb_driving","dt_turb_thresh",1e-6); //We'll match the code time-step within this value of dt_turb_update steps
-  sol_fraction=pin->GetOrAddReal("turb_driving","sol_fraction",1.0); // To store fraction of energy in solenoidal modes
+   //We'll match the code time-step within this value of dt_turb_update steps
+  dt_turb_thresh=pin->GetOrAddReal("turb_driving","dt_turb_thresh",1e-6);
+  // To store fraction of energy in solenoidal modes
+  sol_fraction=pin->GetOrAddReal("turb_driving","sol_fraction",1.0);
 
   // drive with constant edot or constant acceleration
   constant_edot = pin->GetOrAddBoolean("turb_driving", "constant_edot", true);
