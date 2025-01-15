@@ -18,6 +18,7 @@
 
 void UserSource(Mesh* pm, const Real bdt);
 void GravitySource(Mesh* pm, const Real bdt);
+Real GravPot(Real g, Real x1, Real x2, Real x3);
 void Static(Mesh* pm);
 
 Real scale_height, g_acc;
@@ -94,18 +95,57 @@ void GravitySource(Mesh* pm, const Real bdt) {
 
   par_for("gravity_source", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real &x1min = size.d_view(m).x1min;
+    Real &x1max = size.d_view(m).x1max;
+    int nx1 = indcs.nx1;
+    Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+    Real x1l =   LeftEdgeX(i-is, nx1, x1min, x1max);
+    Real x1r = LeftEdgeX(i+1-is, nx1, x1min, x1max);
+
+    Real &x2min = size.d_view(m).x2min;
+    Real &x2max = size.d_view(m).x2max;
+    int nx2 = indcs.nx2;
+    Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+    Real x2l =   LeftEdgeX(j-js, nx2, x2min, x2max);
+    Real x2r = LeftEdgeX(j+1-js, nx2, x2min, x2max);
+
     Real &x3min = size.d_view(m).x3min;
     Real &x3max = size.d_view(m).x3max;
     int nx3 = indcs.nx3;
     Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+    Real x3l =   LeftEdgeX(k-ks, nx3, x3min, x3max);
+    Real x3r = LeftEdgeX(k+1-ks, nx3, x3min, x3max);
 
-    Real src = bdt*g*w0(m,IDN,k,j,i);
-	
-    u0(m,IM3,k,j,i) -= src;
-    u0(m,IEN,k,j,i) -= src*w0(m,IVZ,k,j,i);
+    Real phi1l = GravPot(g,x1l,x2v,x3v);
+    Real phi1r = GravPot(g,x1r,x2v,x3v);
+    Real f_x1 = -(phi1r-phi1l)/(x1r-x1l);
+
+    Real phi2l = GravPot(g,x1v,x2l,x3v);
+    Real phi2r = GravPot(g,x1v,x2r,x3v);
+    Real f_x2 = -(phi2r-phi2l)/(x2r-x2l);
+
+    Real phi3l = GravPot(g,x1v,x2v,x3l);
+    Real phi3r = GravPot(g,x1v,x2v,x3r);
+    Real f_x3 = -(phi3r-phi3l)/(x3r-x3l);
+
+    Real src_x1 = bdt*w0(m,IDN,k,j,i)*f_x1;
+    Real src_x2 = bdt*w0(m,IDN,k,j,i)*f_x2;
+    Real src_x3 = bdt*w0(m,IDN,k,j,i)*f_x3;
+
+    u0(m,IM1,k,j,i) += src_x1;	
+    u0(m,IM2,k,j,i) += src_x2;
+    u0(m,IM3,k,j,i) += src_x3;
+    u0(m,IEN,k,j,i) += (src_x1*w0(m,IVX,k,j,i) 
+                       +src_x2*w0(m,IVY,k,j,i) 
+                       +src_x3*w0(m,IVZ,k,j,i));
   });
 
   return;
+}
+
+KOKKOS_INLINE_FUNCTION
+Real GravPot(Real g, Real x1, Real x2, Real x3) {
+  return g*x3;
 }
 
 void Static(Mesh* pm) {
