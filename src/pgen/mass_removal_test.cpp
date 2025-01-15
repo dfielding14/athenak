@@ -24,7 +24,6 @@ void UserSource(Mesh* pm, const Real bdt);
 //  \brief Problem Generator for mass removal
 
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
-  if (restart) return;
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   auto &indcs = pmy_mesh_->mb_indcs;
  
@@ -33,6 +32,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   // Enroll user souce function 
   user_srcs_func = UserSource;
+
+  if (restart) return;
 
   // Capture variables for kernel
   int &is = indcs.is; int &ie = indcs.ie;
@@ -69,11 +70,13 @@ void UserSource(Mesh* pm, const Real bdt) {
   int nmb1 = pmbp->nmb_thispack - 1;
   auto &size = pmbp->pmb->mb_size;
   auto &u0 = pmbp->phydro->u0;
+  auto &w0 = pmbp->phydro->w0;
+  auto &eos = pmbp->phydro->peos->eos_data;
+  Real gm1 = eos.gamma - 1.0;
   Real &mlr = mass_loss_rate;
   Real &rad = radius;
 
-  // Remove some mass from the center
-  par_for("mass_removal", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+  par_for("user_source", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     Real &x1min = size.d_view(m).x1min;
     Real &x1max = size.d_view(m).x1max;
@@ -90,9 +93,22 @@ void UserSource(Mesh* pm, const Real bdt) {
     int nx3 = indcs.nx3;
     Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
 
+    Real rho = w0(m,IDN,k,j,i);
+    Real temp = w0(m,IEN,k,j,i)/rho*gm1;
 
-    if (x1v*x1v + x2v*x2v + x3v*x3v < rad*rad) {
-      u0(m,IDN,k,j,i) -= bdt*mlr;
+    // remove some mass from the center
+    if (w0(m,IDN,k,j,i)>0.1 and x1v*x1v + x2v*x2v + x3v*x3v < rad*rad) {
+      Real dm = bdt*mlr;
+      u0(m,IDN,k,j,i) -= dm;
+      u0(m,IM1,k,j,i) -= dm*w0(m,IVX,k,j,i);
+      u0(m,IM2,k,j,i) -= dm*w0(m,IVY,k,j,i);
+      u0(m,IM3,k,j,i) -= dm*w0(m,IVZ,k,j,i);
+      u0(m,IEN,k,j,i) -= dm*(temp/gm1 + 0.5*(SQR(w0(m,IVX,k,j,i))+SQR(w0(m,IVY,k,j,i))+SQR(w0(m,IVZ,k,j,i))));
+    }
+
+    // add some cooling to counteract compressive heating at the center
+    if (temp>1) {
+	u0(m,IEN,k,j,i) += (1.0-temp)*rho/gm1;
     }
   });
 
