@@ -36,6 +36,7 @@ class SourceTerms {
   // flags for various source terms
   bool const_accel;
   bool ism_cooling;
+  bool cgm_cooling;
   bool rel_cooling;
   bool beam;
   bool shearing_box, shearing_box_r_phi;
@@ -49,6 +50,11 @@ class SourceTerms {
 
   // heating rate used with ISM cooling
   Real hrate;
+
+  // CGM cooling tables
+  DvceArray1D<Real> Tbins, nHbins, He_mf_bins;
+  DvceArray2D<Real> Metal_Cooling;
+  DvceArray3D<Real> H_He_Cooling;
 
   // cooling rate used with relativistic cooling
   Real crate_rel;
@@ -64,6 +70,8 @@ class SourceTerms {
   void ConstantAccel(const DvceArray5D<Real> &w0, const EOS_Data &eos,
                      const Real dt, DvceArray5D<Real> &u0);
   void ISMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos,
+                  const Real dt, DvceArray5D<Real> &u0);
+  void CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos,
                   const Real dt, DvceArray5D<Real> &u0);
   void RelCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos,
                   const Real dt, DvceArray5D<Real> &u0);

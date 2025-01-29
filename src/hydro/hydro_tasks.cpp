@@ -236,6 +236,7 @@ TaskStatus Hydro::HydroSrcTerms(Driver *pdrive, int stage) {
   // Add source terms for various physics.  Must be computed from primitives.
   if (psrc->const_accel)  psrc->ConstantAccel(w0, peos->eos_data,  beta_dt, u0);
   if (psrc->ism_cooling)  psrc->ISMCooling(w0, peos->eos_data, beta_dt, u0);
+  if (psrc->cgm_cooling)  psrc->CGMCooling(w0, peos->eos_data, beta_dt, u0);
   if (psrc->rel_cooling)  psrc->RelCooling(w0, peos->eos_data, beta_dt, u0);
   if (psrc->shearing_box) psrc->ShearingBox(w0, peos->eos_data, beta_dt, u0);
 

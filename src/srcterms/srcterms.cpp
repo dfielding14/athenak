@@ -26,6 +26,7 @@
 #include "radiation/radiation.hpp"
 #include "turb_driver.hpp"
 #include "units/units.hpp"
+#include "cooling_tables.hpp"
 
 //----------------------------------------------------------------------------------------
 // constructor, parses input file and initializes data structures and parameters
@@ -33,6 +34,8 @@
 
 SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *pin) :
   pmy_pack(pp),
+  Tbins("Tbins",1), nHbins("nHbins",1), He_mf_bins("He_mf_bins",1),
+  Metal_Cooling("Metal_Cooling",1,1), H_He_Cooling("H_He_Cooling",1,1,1),
   shearing_box_r_phi(false) {
   // (1) (constant) gravitational acceleration
   const_accel = pin->GetOrAddBoolean(block, "const_accel", false);
@@ -50,6 +53,33 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
   ism_cooling = pin->GetOrAddBoolean(block, "ism_cooling", false);
   if (ism_cooling) {
     hrate = pin->GetReal(block, "hrate");
+  }
+
+  // (2b) CGM cooling
+  cgm_cooling = pin->GetOrAddBoolean(block, "cgm_cooling", false);
+  if (cgm_cooling) {
+    // Load cooling tables from cooling tables.hpp
+    Kokkos::realloc(Tbins, Tbins_TOTAL_SIZE);
+    Kokkos::realloc(nHbins, nHbins_TOTAL_SIZE);
+    Kokkos::realloc(He_mf_bins, He_mf_bins_TOTAL_SIZE);
+    Kokkos::realloc(Metal_Cooling, Metal_Cooling_DIM_0, Metal_Cooling_DIM_1);
+    Kokkos::realloc(H_He_Cooling, H_He_Cooling_DIM_0, H_He_Cooling_DIM_1, H_He_Cooling_DIM_2);
+
+    for (int i = 0; i < Tbins_TOTAL_SIZE; ++i) Tbins(i) = Tbins_ARR[i];
+    for (int i = 0; i < nHbins_TOTAL_SIZE; ++i) nHbins(i) = nHbins_ARR[i];
+    for (int i = 0; i < He_mf_bins_TOTAL_SIZE; ++i) He_mf_bins(i) = He_mf_bins_ARR[i];
+
+    for (int i = 0; i < Metal_Cooling_DIM_0; ++i) {
+      for (int j = 0; j < Metal_Cooling_DIM_1; ++j) {
+        Metal_Cooling(i, j) = Metal_Cooling_ARR[i * H_He_Cooling_DIM_2 + j];
+    }}
+
+    for (int i = 0; i < H_He_Cooling_DIM_0; ++i) {
+      for (int j = 0; j < H_He_Cooling_DIM_1; ++j) {
+        for (int k = 0; k < H_He_Cooling_DIM_2; ++k) {
+          H_He_Cooling(i, j, k) = H_He_Cooling_ARR[i * (H_He_Cooling_DIM_1 * H_He_Cooling_DIM_2) 
+                                                   + j * (H_He_Cooling_DIM_2) + k];
+    }}}
   }
 
   // (3) beam source (radiation)
@@ -130,7 +160,7 @@ void SourceTerms::ISMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
                       /n_unit/n_unit;
   Real heating_unit = pmy_pack->punit->pressure_cgs()/pmy_pack->punit->time_cgs()/n_unit;
 
-  par_for("cooling", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+  par_for("ism_cooling", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     // temperature in cgs unit
     Real temp = 1.0;
@@ -148,6 +178,140 @@ void SourceTerms::ISMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
   });
 
   return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void SourceTerms::CGMCooling()
+//! \brief Add explict CGM cooling source term in the energy equations.
+// NOTE source terms must be computed using primitive (w0) and NOT conserved (u0) vars
+
+void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_data,
+                             const Real bdt, DvceArray5D<Real> &u0) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  Real use_e = eos_data.use_e;
+  Real gamma = eos_data.gamma;
+  Real gm1 = gamma - 1.0;
+
+  auto &units = pmy_pack->punit; 
+  Real temp_unit = units->temperature_cgs();
+  Real n_unit = units->density_cgs()/units->mu()/units->atomic_mass_unit_cgs;
+  Real cooling_unit = units->pressure_cgs()/units->time_cgs()/n_unit/n_unit;
+
+  // Read only cooling tables
+  DvceArray1D<const Real> Tbins_ = Tbins;
+  DvceArray1D<const Real> nHbins_ = nHbins;
+  DvceArray1D<const Real> He_mf_bins_ = He_mf_bins;
+  DvceArray2D<const Real> Metal_Cooling_ = Metal_Cooling;
+  DvceArray3D<const Real> H_He_Cooling_ = H_He_Cooling;
+
+  par_for("cgm_cooling", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real temp = 1.0; // temperature in cgs units
+    if (use_e) {
+      temp = temp_unit*w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)*gm1;
+    } else {
+      temp = temp_unit*w0(m,ITM,k,j,i);
+    }
+    Real nH = n_unit*w0(m,IDN,k,j,i); // density in cgs units
+    Real Z = 1.0/3; // metallicity [Zsun]
+
+    // WiersmaCooling at redshift z = 0 taken from Wiersma et al (2009)
+    Real lambda_cooling = 0.0; // Ensure we are in range of cooling table
+    if (temp > Tbins_(0) && temp < Tbins_(Tbins_.extent(0) - 1)
+        && nH > nHbins_(0)  && nH < nHbins_(nHbins_.extent(0) -1)) {
+      // Compute Helium Mass Fraction
+      Real He2Habundance = pow(10, -1.07) * (0.71553 + 0.28447 * Z); // Asplund+09, Groves+04
+      Real X = (1.0 - 0.014 * Z) / (1.0 + 4.0 * He2Habundance);
+      Real Y = 4.0 * He2Habundance * X;
+
+      int iHe = 0;
+      // Check if val is outside the bounds of the He_mf_bins array
+      if (Y > He_mf_bins_(He_mf_bins_.extent(0) - 1)) {
+        iHe = He_mf_bins_.extent(0) - 1;
+      }
+      else if (Y > He_mf_bins_(0)) {
+        Real dx = He_mf_bins_.extent(1) - He_mf_bins_.extent(0);
+        // We assume that the spacing in He_mf_bins is regular
+        iHe = static_cast<int>((Y + (dx / 2) - He_mf_bins_(0)) / dx);
+      }
+      
+      // Convert input values to log space
+      Real log_temp = log10(temp);
+      Real log_density = log10(nH);
+
+      // Locate indices in Tbins and nHbins
+      int i = 0, j = 0;
+      while (i < Tbins_.extent(0) - 1 && log10(Tbins_(i + 1)) < log_temp) ++i; 
+      while (j < nHbins_.extent(0) - 1 && log10(nHbins_(j + 1)) < log_density) ++j;
+
+      // Logarithms of the Tbins and nHbins bounding the point
+      Real log_T0 = log10(Tbins_(i));
+      Real log_T1 = log10(Tbins_(i + 1));
+      Real log_nH0 = log10(nHbins_(j));
+      Real log_nH1 = log10(nHbins_(j + 1));
+
+      // Compute weights for bilinear interpolation
+      Real t = (log_temp - log_T0) / (log_T1 - log_T0);
+      Real u = (log_density - log_nH0) / (log_nH1 - log_nH0);
+  
+      // Corner values in log space from the H_He cooling grid
+      Real log_C00 = log10(H_He_Cooling_(iHe, i, j));
+      Real log_C10 = log10(H_He_Cooling_(iHe, i + 1, j));
+      Real log_C01 = log10(H_He_Cooling_(iHe, i, j + 1));
+      Real log_C11 = log10(H_He_Cooling_(iHe, i + 1, j + 1));
+  
+      // Corner values in log space from the Metal cooling grid
+      Real log_M00 = log10(Metal_Cooling_(i, j));
+      Real log_M10 = log10(Metal_Cooling_(i + 1, j));
+      Real log_M01 = log10(Metal_Cooling_(i, j + 1));
+      Real log_M11 = log10(Metal_Cooling_(i + 1, j + 1));
+  
+      // Bilinear interpolation in log space
+      Real log_interpolated_prim_cooling =
+          (1 - t) * (1 - u) * log_C00 +
+          t * (1 - u) * log_C10 +
+          (1 - t) * u * log_C01 +
+          t * u * log_C11;
+      Real log_interpolated_metal_cooling =
+          (1 - t) * (1 - u) * log_M00 +
+          t * (1 - u) * log_M10 +
+          (1 - t) * u * log_M01 +
+          t * u * log_M11;
+  
+      // Convert back to linear space and return
+      Real prim_cooling = pow(10.0, log_interpolated_prim_cooling);
+      Real metal_cooling = pow(10.0, log_interpolated_metal_cooling);
+
+  
+      lambda_cooling = prim_cooling + Z * metal_cooling;
+    }
+
+    u0(m,IEN,k,j,i) -= bdt * pow(w0(m,IDN,k,j,i),2) * lambda_cooling/cooling_unit;
+  });
+
+  return;
+}
+
+KOKKOS_INLINE_FUNCTION
+int find_he_bin(Real val) {
+    Real he_0 = He_mf_bins_ARR[0];
+    Real he_1 = He_mf_bins_ARR[1];
+    Real he_N = He_mf_bins_ARR[He_mf_bins_TOTAL_SIZE - 1];
+
+    // Check if val is outside the bounds of the He_mf_bins array
+    if (val < he_0) return 0;    
+    if (val > he_N) return He_mf_bins_TOTAL_SIZE - 1;
+
+    // Calculate the step size (dx) between consecutive elements
+    Real dx = he_1 - he_0;
+
+    // Calculate the bin index and return it
+    // We assume that the spacing in He_mf_bins is regular
+    return static_cast<int>((val + (dx / 2) - he_0) / dx);
 }
 
 //----------------------------------------------------------------------------------------
