@@ -78,7 +78,7 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
       min_dt = fmin((eint/cooling_heating), min_dt);
     }, Kokkos::Min<Real>(dtnew));
   }
-
+ 
   if (cgm_cooling) {
     Real use_e = eos_data.use_e;
     Real gamma = eos_data.gamma;
@@ -90,11 +90,11 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
     Real cooling_unit = units->pressure_cgs()/units->time_cgs()/n_unit/n_unit;
 
     // Read only cooling tables
-    DvceArray1D<const Real> Tbins_ = Tbins;
-    DvceArray1D<const Real> nHbins_ = nHbins;
-    DvceArray1D<const Real> He_mf_bins_ = He_mf_bins;
-    DvceArray2D<const Real> Metal_Cooling_ = Metal_Cooling;
-    DvceArray3D<const Real> H_He_Cooling_ = H_He_Cooling;
+    auto Tbins_ = Tbins.d_view;
+    auto nHbins_ = nHbins.d_view;
+    auto He_mf_bins_ = He_mf_bins.d_view;
+    auto Metal_Cooling_ = Metal_Cooling.d_view;
+    auto H_He_Cooling_ = H_He_Cooling.d_view;
 
     // find smallest (e/cooling_rate) in each cell
     Kokkos::parallel_reduce("srcterms_cooling_newdt",

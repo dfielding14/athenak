@@ -52,9 +52,9 @@ class SourceTerms {
   Real hrate;
 
   // CGM cooling tables
-  DvceArray1D<Real> Tbins, nHbins, He_mf_bins;
-  DvceArray2D<Real> Metal_Cooling;
-  DvceArray3D<Real> H_He_Cooling;
+  DualArray1D<Real> Tbins, nHbins, He_mf_bins;
+  DualArray2D<Real> Metal_Cooling;
+  DualArray3D<Real> H_He_Cooling;
 
   // cooling rate used with relativistic cooling
   Real crate_rel;
@@ -84,6 +84,7 @@ class SourceTerms {
   void SBoxEField(const DvceFaceFld4D<Real> &b0, DvceEdgeFld4D<Real> &efld);
 
   void NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos);
+  void Initialize();
 
  private:
   MeshBlockPack *pmy_pack;
