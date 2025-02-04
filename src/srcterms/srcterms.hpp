@@ -52,9 +52,9 @@ class SourceTerms {
   Real hrate;
 
   // CGM cooling tables
-  DualArray1D<Real> Tbins, nHbins, He_mf_bins;
-  DualArray2D<Real> Metal_Cooling;
-  DualArray3D<Real> H_He_Cooling;
+  DualArray1D<Real> Tbins, nHbins;
+  DualArray2D<Real> Metal_Cooling, H_He_Cooling;
+  DualArray1D<Real> Metal_Cooling_CIE, H_He_Cooling_CIE;
 
   // cooling rate used with relativistic cooling
   Real crate_rel;
