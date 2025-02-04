@@ -34,8 +34,9 @@
 
 SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *pin) :
   pmy_pack(pp),
-  Tbins("Tbins",1), nHbins("nHbins",1), He_mf_bins("He_mf_bins",1),
-  Metal_Cooling("Metal_Cooling",1,1), H_He_Cooling("H_He_Cooling",1,1,1),
+  Tbins("Tbins",1), nHbins("nHbins",1),
+  Metal_Cooling("Metal_Cooling",1,1), H_He_Cooling("H_He_Cooling",1,1),
+  Metal_Cooling_CIE("Metal_Cooling_CIE",1), H_He_Cooling_CIE("H_He_Cooling_CIE",1),
   shearing_box_r_phi(false) {
   // (1) (constant) gravitational acceleration
   const_accel = pin->GetOrAddBoolean(block, "const_accel", false);
@@ -55,16 +56,16 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
     hrate = pin->GetReal(block, "hrate");
   }
 
-  // (2b) CGM cooling
+  // (2b) CGM cooling - Not compatible with ISM cooling above
   cgm_cooling = pin->GetOrAddBoolean(block, "cgm_cooling", false);
   if (cgm_cooling) {
-    Kokkos::printf("nhbins: %d \n", nHbins_TOTAL_SIZE);
     // Initialize Cooling Tables to the right dimensions from cooling_tables.hpp
     Kokkos::realloc(Tbins, Tbins_TOTAL_SIZE);
     Kokkos::realloc(nHbins, nHbins_TOTAL_SIZE);
-    Kokkos::realloc(He_mf_bins, He_mf_bins_TOTAL_SIZE);
     Kokkos::realloc(Metal_Cooling, Metal_Cooling_DIM_0, Metal_Cooling_DIM_1);
-    Kokkos::realloc(H_He_Cooling, H_He_Cooling_DIM_0, H_He_Cooling_DIM_1, H_He_Cooling_DIM_2);
+    Kokkos::realloc(H_He_Cooling, H_He_Cooling_DIM_0, H_He_Cooling_DIM_1);
+    Kokkos::realloc(Metal_Cooling_CIE, Metal_Cooling_CIE_DIM_0);
+    Kokkos::realloc(H_He_Cooling_CIE, H_He_Cooling_CIE_DIM_0);
   }
 
   // (3) beam source (radiation)
@@ -98,7 +99,6 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
 SourceTerms::~SourceTerms() {
 }
 
-
 //----------------------------------------------------------------------------------------
 //! \fn
 //  \brief Function to initialize
@@ -106,36 +106,40 @@ SourceTerms::~SourceTerms() {
 void SourceTerms::Initialize() {
   if (cgm_cooling) {
     // Load Cooling Tables from cooling_tables.hpp into host device
-    for (int i = 0; i < Tbins_TOTAL_SIZE; ++i) Tbins.h_view(i) = Tbins_ARR[i];
-    for (int i = 0; i < nHbins_TOTAL_SIZE; ++i) nHbins.h_view(i) = nHbins_ARR[i];
-    for (int i = 0; i < He_mf_bins_TOTAL_SIZE; ++i) He_mf_bins.h_view(i) = He_mf_bins_ARR[i];
-
-    Kokkos::printf("nhbins filled: %d \n", nHbins.extent(0));
+    for (int i = 0; i < Tbins_DIM_0; ++i) Tbins.h_view(i) = Tbins_ARR[i];
+    for (int i = 0; i < nHbins_DIM_0; ++i) nHbins.h_view(i) = nHbins_ARR[i];
 
     for (int i = 0; i < Metal_Cooling_DIM_0; ++i) {
       for (int j = 0; j < Metal_Cooling_DIM_1; ++j) {
-        Metal_Cooling.h_view(i, j) = Metal_Cooling_ARR[i * H_He_Cooling_DIM_2 + j];
+        Metal_Cooling.h_view(i, j) = Metal_Cooling_ARR[i * Metal_Cooling_DIM_1 + j];
     }}
 
     for (int i = 0; i < H_He_Cooling_DIM_0; ++i) {
       for (int j = 0; j < H_He_Cooling_DIM_1; ++j) {
-        for (int k = 0; k < H_He_Cooling_DIM_2; ++k) {
-          H_He_Cooling.h_view(i, j, k) =
-            H_He_Cooling_ARR[i * (H_He_Cooling_DIM_1 * H_He_Cooling_DIM_2)
-                             + j * (H_He_Cooling_DIM_2) + k];
-    }}}
+        H_He_Cooling.h_view(i, j) = H_He_Cooling_ARR[i * H_He_Cooling_DIM_1 + j];
+    }}
+
+    for (int i = 0; i < Metal_Cooling_CIE_DIM_0; ++i) {
+      Metal_Cooling_CIE.h_view(i) = Metal_Cooling_CIE_ARR[i];
+    }
+
+    for (int i = 0; i < H_He_Cooling_CIE_DIM_0; ++i) {
+      H_He_Cooling_CIE.h_view(i) = H_He_Cooling_CIE_ARR[i];
+    }
 
     // Synchronize Cooling Tables to device memory
     Tbins.template modify<HostMemSpace>();
     Tbins.template sync<DevExeSpace>();
     nHbins.template modify<HostMemSpace>();
     nHbins.template sync<DevExeSpace>();
-    He_mf_bins.template modify<HostMemSpace>();
-    He_mf_bins.template sync<DevExeSpace>();
     Metal_Cooling.template modify<HostMemSpace>();
     Metal_Cooling.template sync<DevExeSpace>();
     H_He_Cooling.template modify<HostMemSpace>();
     H_He_Cooling.template sync<DevExeSpace>();
+    Metal_Cooling_CIE.template modify<HostMemSpace>();
+    Metal_Cooling_CIE.template sync<DevExeSpace>();
+    H_He_Cooling_CIE.template modify<HostMemSpace>();
+    H_He_Cooling_CIE.template sync<DevExeSpace>();
   }
 }
 
@@ -229,12 +233,17 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
   Real n_unit = units->density_cgs()/units->mu()/units->atomic_mass_unit_cgs;
   Real cooling_unit = units->pressure_cgs()/units->time_cgs()/n_unit/n_unit;
 
-  // Read only cooling tables
-  auto Tbins_ = Tbins;
-  auto nHbins_ = nHbins;
-  auto He_mf_bins_ = He_mf_bins;
-  auto Metal_Cooling_ = Metal_Cooling;
-  auto H_He_Cooling_ = H_He_Cooling;
+  auto Tbins_ = Tbins.d_view;
+  auto nHbins_ = nHbins.d_view;
+  auto Metal_Cooling_ = Metal_Cooling.d_view;
+  auto H_He_Cooling_ = H_He_Cooling.d_view;
+  auto Metal_Cooling_CIE_ = Metal_Cooling_CIE.d_view;
+  auto H_He_Cooling_CIE_ = H_He_Cooling_CIE.d_view;
+
+  auto Tfloor  = Tbins_ARR[0];
+  auto Tceil   = Tbins_ARR[Tbins_DIM_0 - 1];
+  auto nHfloor = nHbins_ARR[0];
+  auto nHceil  = nHbins_ARR[nHbins_DIM_0 - 1];
 
   par_for("cgm_cooling", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -245,108 +254,96 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
       temp = temp_unit*w0(m,ITM,k,j,i);
     }
     Real nH = n_unit*w0(m,IDN,k,j,i); // density in cgs units
-    Real Z = 1.0/3; // metallicity [Zsun]
+    Real Z = 1.0; // metallicity [Zsun]
 
     // WiersmaCooling at redshift z = 0 taken from Wiersma et al (2009)
     Real lambda_cooling = 0.0; // Ensure we are in range of cooling table
-    if (temp > Tbins_.d_view(0) && temp < Tbins_.d_view(Tbins_.extent(0) - 1)
-        && nH > nHbins_.d_view(0)  && nH < nHbins_.d_view(nHbins_.extent(0) -1)) {
-      // Compute Helium Mass Fraction
-      Real He2Habundance = pow(10, -1.07) * (0.71553 + 0.28447 * Z); // Asplund+09, Groves+04
-      Real X = (1.0 - 0.014 * Z) / (1.0 + 4.0 * He2Habundance);
-      Real Y = 4.0 * He2Habundance * X;
-
-      int iHe = 0;
-      // Check if val is outside the bounds of the He_mf_bins array
-      if (Y > He_mf_bins_.d_view(He_mf_bins_.extent(0) - 1)) {
-        iHe = He_mf_bins_.extent(0) - 1;
-      }
-      else if (Y > He_mf_bins_.d_view(0)) {
-        Real dx = He_mf_bins_.extent(1) - He_mf_bins_.extent(0);
-        // We assume that the spacing in He_mf_bins is regular
-        iHe = static_cast<int>((Y + (dx / 2) - He_mf_bins_.d_view(0)) / dx);
-      }
-  
-      Kokkos::printf("iHe = %d\n", iHe);
-
+    if (temp > Tfloor && temp < Tceil && nH > nHfloor && nH < nHceil) {
       // Convert input values to log space
       Real log_temp = log10(temp);
       Real log_density = log10(nH);
 
       // Locate indices in Tbins and nHbins
       int i = 0, j = 0;
-      while (i < Tbins_.extent(0) - 2 && log10(Tbins_.d_view(i + 1)) < log_temp) ++i; 
-      while (j < nHbins_.extent(0) - 2 && log10(nHbins_.d_view(j + 1)) < log_density) ++j;
-
-      Kokkos::printf("Extents (Tbins) = %d \n", Tbins_.extent(0));
-      Kokkos::printf("Extent (nHbins) = %d \n", nHbins_.extent(0));
-      Kokkos::printf("indices = %d %d\n", i, j);
+      while (i < Tbins_DIM_0 - 2 && log10(Tbins_(i + 1)) < log_temp) ++i; 
+      while (j < nHbins_DIM_0 - 2 && log10(nHbins_(j + 1)) < log_density) ++j;
 
       // Logarithms of the Tbins and nHbins bounding the point
-      Real log_T0 = log10(Tbins_.d_view(i));
-      Real log_T1 = log10(Tbins_.d_view(i + 1));
-      Real log_nH0 = log10(nHbins_.d_view(j));
-      Real log_nH1 = log10(nHbins_.d_view(j + 1));
+      Real log_T0 = log10(Tbins_(i));
+      Real log_T1 = log10(Tbins_(i + 1));
+      Real log_nH0 = log10(nHbins_(j));
+      Real log_nH1 = log10(nHbins_(j + 1));
 
       // Compute weights for bilinear interpolation
       Real t = (log_temp - log_T0) / (log_T1 - log_T0);
       Real u = (log_density - log_nH0) / (log_nH1 - log_nH0);
   
       // Corner values in log space from the H_He cooling grid
-      Real log_C00 = log10(H_He_Cooling_.d_view(iHe, i, j));
-      Real log_C10 = log10(H_He_Cooling_.d_view(iHe, i + 1, j));
-      Real log_C01 = log10(H_He_Cooling_.d_view(iHe, i, j + 1));
-      Real log_C11 = log10(H_He_Cooling_.d_view(iHe, i + 1, j + 1));
-  
+      Real C00 = H_He_Cooling_(i, j);
+      Real C10 = H_He_Cooling_(i + 1, j);
+      Real C01 = H_He_Cooling_(i, j + 1);
+      Real C11 = H_He_Cooling_(i + 1, j + 1);
+ 
       // Corner values in log space from the Metal cooling grid
-      Real log_M00 = log10(Metal_Cooling_.d_view(i, j));
-      Real log_M10 = log10(Metal_Cooling_.d_view(i + 1, j));
-      Real log_M01 = log10(Metal_Cooling_.d_view(i, j + 1));
-      Real log_M11 = log10(Metal_Cooling_.d_view(i + 1, j + 1));
-  
-      // Bilinear interpolation in log space
-      Real log_interpolated_prim_cooling =
-          (1 - t) * (1 - u) * log_C00 +
-          t * (1 - u) * log_C10 +
-          (1 - t) * u * log_C01 +
-          t * u * log_C11;
-      Real log_interpolated_metal_cooling =
-          (1 - t) * (1 - u) * log_M00 +
-          t * (1 - u) * log_M10 +
-          (1 - t) * u * log_M01 +
-          t * u * log_M11;
-  
-      // Convert back to linear space and return
-      Real prim_cooling = pow(10.0, log_interpolated_prim_cooling);
-      Real metal_cooling = pow(10.0, log_interpolated_metal_cooling);
+      Real M00 = Metal_Cooling_(i, j);
+      Real M10 = Metal_Cooling_(i + 1, j);
+      Real M01 = Metal_Cooling_(i, j + 1);
+      Real M11 = Metal_Cooling_(i + 1, j + 1);
 
-  
+      // Bilinear interpolation in log space
+      Real prim_cooling =
+          (1 - t) * (1 - u) * C00 +
+          t * (1 - u) * C10 +
+          (1 - t) * u * C01 +
+          t * u * C11;
+      Real metal_cooling =
+          (1 - t) * (1 - u) * M00 +
+          t * (1 - u) * M10 +
+          (1 - t) * u * M01 +
+          t * u * M11;
+ 
       lambda_cooling = prim_cooling + Z * metal_cooling;
-      Kokkos:printf("cooling : %f", lambda_cooling/cooling_unit);
+    } // If density is higher than ceiling, switch to CIE
+    else if (temp > Tfloor && temp < Tceil && nH >= nHceil) {
+      // Convert input values to log space
+      Real log_temp = log10(temp);
+
+      // Locate index in Tbins
+      int i = 0;
+      while (i < Tbins_DIM_0 - 2 && log10(Tbins_(i + 1)) < log_temp) ++i;
+
+      // Logarithms of the Tbins bounding the point
+      Real log_T0 = log10(Tbins_(i));
+      Real log_T1 = log10(Tbins_(i + 1));
+
+      // Compute weight for linear interpolation
+      Real t = (log_temp - log_T0) / (log_T1 - log_T0);
+
+      // Bin values in log space from the H_He cooling grid
+      Real C0 = H_He_Cooling_CIE_(i);
+      Real C1 = H_He_Cooling_CIE_(i + 1);
+
+      // Bin values in log space from the Metal cooling grid
+      Real M0 = Metal_Cooling_CIE_(i);
+      Real M1 = Metal_Cooling_CIE_(i + 1);
+
+      // Linear Interpolation
+      Real prim_cooling = C0 + t * (C1 - C0);
+      Real metal_cooling = M0 + t * (M1 - M0);
+
+      lambda_cooling = prim_cooling + Z * metal_cooling;
+    }
+    else if (temp < Tfloor && nH >= nHceil) {
+      // for temperatures less than 100 K, use Koyama & Inutsuka (2002)
+      lambda_cooling = Z*(2.0e-19*exp(-1.184e5/(temp + 1.0e3)) +
+                          2.8e-28*sqrt(temp)*exp(-92.0/temp));
     }
 
     u0(m,IEN,k,j,i) -= bdt * pow(w0(m,IDN,k,j,i),2) * lambda_cooling/cooling_unit;
+    
   });
 
   return;
-}
-
-KOKKOS_INLINE_FUNCTION
-int find_he_bin(Real val) {
-    Real he_0 = He_mf_bins_ARR[0];
-    Real he_1 = He_mf_bins_ARR[1];
-    Real he_N = He_mf_bins_ARR[He_mf_bins_TOTAL_SIZE - 1];
-
-    // Check if val is outside the bounds of the He_mf_bins array
-    if (val < he_0) return 0;    
-    if (val > he_N) return He_mf_bins_TOTAL_SIZE - 1;
-
-    // Calculate the step size (dx) between consecutive elements
-    Real dx = he_1 - he_0;
-
-    // Calculate the bin index and return it
-    // We assume that the spacing in He_mf_bins is regular
-    return static_cast<int>((val + (dx / 2) - he_0) / dx);
 }
 
 //----------------------------------------------------------------------------------------
