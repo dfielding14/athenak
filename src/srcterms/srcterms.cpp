@@ -230,8 +230,8 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
 
   auto &units = pmy_pack->punit; 
   Real temp_unit = units->temperature_cgs();
-  Real n_unit = units->density_cgs()/units->mu()/units->atomic_mass_unit_cgs;
-  Real cooling_unit = units->pressure_cgs()/units->time_cgs()/n_unit/n_unit;
+  Real nH_unit = units->density_cgs()/units->atomic_mass_unit_cgs;
+  Real cooling_unit = units->pressure_cgs()/units->time_cgs()/nH_unit/nH_unit;
 
   auto Tbins_ = Tbins.d_view;
   auto nHbins_ = nHbins.d_view;
@@ -245,6 +245,9 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
   auto nHfloor = nHbins_ARR[0];
   auto nHceil  = nHbins_ARR[nHbins_DIM_0 - 1];
 
+  Real X = 0.75; // Hydrogen mass fraction
+  Real Z = 1./3; // metallicity [Zsun]
+
   par_for("cgm_cooling", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     Real temp = 1.0; // temperature in cgs units
@@ -253,8 +256,7 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
     } else {
       temp = temp_unit*w0(m,ITM,k,j,i);
     }
-    Real nH = n_unit*w0(m,IDN,k,j,i); // density in cgs units
-    Real Z = 1.0; // metallicity [Zsun]
+    Real nH = X*nH_unit*w0(m,IDN,k,j,i); // density in cgs units
 
     // WiersmaCooling at redshift z = 0 taken from Wiersma et al (2009)
     Real lambda_cooling = 0.0; // Ensure we are in range of cooling table
@@ -330,7 +332,7 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
       // Linear Interpolation
       Real prim_cooling = C0 + t * (C1 - C0);
       Real metal_cooling = M0 + t * (M1 - M0);
-
+      
       lambda_cooling = prim_cooling + Z * metal_cooling;
     }
     else if (temp < Tfloor && nH >= nHceil) {
@@ -339,7 +341,7 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
                           2.8e-28*sqrt(temp)*exp(-92.0/temp));
     }
 
-    u0(m,IEN,k,j,i) -= bdt * pow(w0(m,IDN,k,j,i),2) * lambda_cooling/cooling_unit;
+    u0(m,IEN,k,j,i) -= bdt * pow(X*w0(m,IDN,k,j,i),2) * lambda_cooling/cooling_unit;
     
   });
 
