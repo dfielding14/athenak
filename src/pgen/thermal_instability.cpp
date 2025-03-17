@@ -49,7 +49,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     u0(m,IM1,k,j,i) = 0.0;
     u0(m,IM2,k,j,i) = 0.0;
     u0(m,IM3,k,j,i) = 0.0;
-    u0(m,IEN,k,j,i) = 0.1/gm1 +
+    u0(m,IEN,k,j,i) = 2.0/gm1 +
        0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
        SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
   });

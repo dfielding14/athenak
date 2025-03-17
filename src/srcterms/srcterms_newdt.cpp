@@ -87,8 +87,8 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
 
     auto &units = pmy_pack->punit;
     Real temp_unit = units->temperature_cgs();
-    Real n_unit = units->density_cgs()/units->mu()/units->atomic_mass_unit_cgs;
-    Real cooling_unit = units->pressure_cgs()/units->time_cgs()/n_unit/n_unit;
+    Real nH_unit = units->density_cgs()/units->atomic_mass_unit_cgs;
+    Real cooling_unit = units->pressure_cgs()/units->time_cgs()/nH_unit/nH_unit;
 
     auto Tbins_ = Tbins.d_view;
     auto nHbins_ = nHbins.d_view;
@@ -101,6 +101,9 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
     auto Tceil   = Tbins_ARR[Tbins_DIM_0 - 1];
     auto nHfloor = nHbins_ARR[0];
     auto nHceil  = nHbins_ARR[nHbins_DIM_0 - 1];
+
+    Real X = 0.75; // Hydrogen mass fraction
+    Real Z = 1./3; // metallicity [Zsun]
 
     // find smallest (e/cooling_rate) in each cell
     Kokkos::parallel_reduce("srcterms_cooling_newdt",
@@ -123,8 +126,7 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
         temp = temp_unit*w0(m,ITM,k,j,i);
         eint = w0(m,ITM,k,j,i)*w0(m,IDN,k,j,i)/gm1;
       }
-      Real nH = n_unit*w0(m,IDN,k,j,i); // density in cgs units
-      Real Z = 1.0; // metallicity [Zsun]
+      Real nH = X*nH_unit*w0(m,IDN,k,j,i); // density in cgs units
 
       // WiersmaCooling at redshift z = 0 taken from Wiersma et al (2009)
       Real lambda_cooling = 0.0; // Ensure we are in range of cooling table
@@ -210,7 +212,7 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
       }
  
       Real cooling_heating = FLT_MIN // add a tiny number
-        + fabs(pow(w0(m,IDN,k,j,i),2) * lambda_cooling/cooling_unit);
+        + fabs(X*pow(w0(m,IDN,k,j,i),2) * lambda_cooling/cooling_unit);
 
       min_dt = fmin((eint/cooling_heating), min_dt);
     }, Kokkos::Min<Real>(dtnew));
