@@ -130,7 +130,8 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
 
       // WiersmaCooling at redshift z = 0 taken from Wiersma et al (2009)
       Real lambda_cooling = 0.0; // Ensure we are in range of cooling table
-      if (temp > Tfloor && temp < Tceil && nH > nHfloor && nH < nHceil) {
+      if (false) {
+      // if (temp > Tfloor && temp < Tceil && nH > nHfloor && nH < nHceil) {
         // Convert input values to log space
         Real log_temp = log10(temp);
         Real log_density = log10(nH);
@@ -176,7 +177,7 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
 
         lambda_cooling = prim_cooling + Z * metal_cooling;
       } // If density is higher than ceiling, switch to CIE
-      else if (temp > Tfloor && temp < Tceil && nH >= nHceil) {
+      else if (temp > 1e4 && temp > Tfloor && temp < Tceil && nH >= nHceil) {
         // Convert input values to log space
         Real log_temp = log10(temp);
 
@@ -205,11 +206,11 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
 
         lambda_cooling = prim_cooling + Z * metal_cooling;
       }
-      else if (temp < Tfloor && nH >= nHceil) {
-        // for temperatures less than 100 K, use Koyama & Inutsuka (2002)
-        lambda_cooling = Z*(2.0e-19*exp(-1.184e5/(temp + 1.0e3)) +
-                            2.8e-28*sqrt(temp)*exp(-92.0/temp));
-      }
+      // else if (temp < Tfloor && nH >= nHceil) {
+      //   // for temperatures less than 100 K, use Koyama & Inutsuka (2002)
+      //   lambda_cooling = Z*(2.0e-19*exp(-1.184e5/(temp + 1.0e3)) +
+      //                       2.8e-28*sqrt(temp)*exp(-92.0/temp));
+      // }
  
       Real cooling_heating = FLT_MIN // add a tiny number
         + fabs(X*pow(w0(m,IDN,k,j,i),2) * lambda_cooling/cooling_unit);

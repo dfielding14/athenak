@@ -108,7 +108,7 @@ void UserSource(Mesh* pm, const Real bdt) {
 
     // add some cooling to counteract compressive heating at the center
     if (temp>1) {
-	u0(m,IEN,k,j,i) += (1.0-temp)*rho/gm1;
+	    u0(m,IEN,k,j,i) += (1.0-temp)*rho/gm1;
     }
   });
 
