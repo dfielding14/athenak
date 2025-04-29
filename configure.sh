@@ -1,19 +1,30 @@
-module --force purge
-module load modules/2.3-20240529 cuda/12.3.2 openmpi/cuda-4.0.7
-export LD_PRELOAD=/mnt/sw/fi/cephtweaks/lib/libcephtweaks.so
-export CEPHTWEAKS_LAZYIO=1
+module load cmake
 
-athenak="/mnt/home/btan1/Work/athenak"
 build="build"
 
+#cmake \
+#    -D CMAKE_POLICY_DEFAULT_CMP0074=NEW \
+#    -D Athena_ENABLE_MPI=ON \
+#    -D CMAKE_CXX_COMPILER=icpx \
+#    -D Kokkos_ENABLE_SERIAL=ON \
+#    -D Kokkos_ENABLE_SYCL=ON \
+#    -D Kokkos_ARCH_INTEL_PVC=ON \
+#    -D Kokkos_ENABLE_SYCL_RELOCATABLE_DEVICE_CODE=ON \
+#    -D Kokkos_ENABLE_OPENMP=ON \
+#    -D CMAKE_INSTALL_PREFIX=$build \
+#    -D PROBLEM=cgm_cooling_flow \
+#    -B $build
+
 cmake \
-  -D CMAKE_CXX_COMPILER=$athenak/kokkos/bin/nvcc_wrapper \
-  -D Kokkos_ENABLE_CUDA=On \
-  -D Kokkos_ARCH_AMPERE80=On \
-  -D Athena_ENABLE_MPI=On \
-  -D PROBLEM=cgm_cooling_flow\
-  -B $build
+    -D Athena_ENABLE_MPI=ON \
+    -D CMAKE_CXX_COMPILER=icpx \
+    -D Kokkos_ENABLE_SERIAL=ON \
+    -D Kokkos_ENABLE_SYCL=ON \
+    -D Kokkos_ARCH_INTEL_PVC=ON \
+    -D Kokkos_ENABLE_SYCL_RELOCATABLE_DEVICE_CODE=ON \
+    -D PROBLEM=turb \
+    -B $build
 
 cd $build
 #make clean
-make -j 16
+make -j 104 all

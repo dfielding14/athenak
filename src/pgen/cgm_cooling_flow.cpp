@@ -122,9 +122,13 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Real r_c = r_circ;
   Real v_c = v_circ;
 
+  std::cout << "Initializing... " << std::endl;
+
   // Use loaded profiles
   par_for("pgen_ic", DevExeSpace(), 0, (pmbp->nmb_thispack-1), ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
+    Kokkos::printf("hello world from thread %d\n", m);
+    
     Real &x1min = size.d_view(m).x1min;
     Real &x1max = size.d_view(m).x1max;
     int nx1 = indcs.nx1;
@@ -143,6 +147,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     SetCoolingFlowState(u0, m, k, j, i, x1v, x2v, x3v, gm1, profile);
     SetRotation(u0, m, k, j, i, x1v, x2v, x3v, r_c, v_c);
   });
+
+  std::cout << "Initialized. " << std::endl;
 
   return;
 }

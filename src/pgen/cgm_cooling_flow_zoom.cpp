@@ -233,7 +233,7 @@ void SetEquilibriumState(const DvceArray5D<Real> &u0,
     }
                       
     // Calculate circular velocity
-    Real v_phi = sqrt(R*max(dP_dR_over_rho - dPhi_dR, 0.0));
+    Real v_phi = sqrt(R*fmax(dP_dR_over_rho - dPhi_dR, 0.0));
     
     // Calculate azimuthal velocity
     Real v1 = 0.0, v2 = 0.0;
