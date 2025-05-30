@@ -56,9 +56,24 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
     hrate = pin->GetReal(block, "hrate");
   }
 
-  // (2b) CGM cooling - Not compatible with ISM cooling above
+  // (2b) CGM cooling
   cgm_cooling = pin->GetOrAddBoolean(block, "cgm_cooling", false);
   if (cgm_cooling) {
+    // Ensure that ISM cooling is not enabled 
+    if (ism_cooling) {
+      std::cout << "### FATAL ERROR in "<< __FILE__ <<" at line " << __LINE__ << std::endl
+                << "CGM cooling and ISM cooling are incompatible" << std::endl;
+      std::exit(EXIT_FAILURE);
+    };
+
+    // User input parameters for ISM heating
+    hrate = pin->GetOrAddReal(block, "hrate", 0.0); // Heating rate in cgs units
+    // Normalization factor in density code units 
+    hscale_norm = pin->GetOrAddReal(block, "hscale_norm", 0.0); 
+    hscale_height = pin->GetOrAddReal(block, "hscale_height", 0.0); // Scale height in code units
+    hscale_radius = pin->GetOrAddReal(block, "hscale_radius", 0.0); // Scale radius in code units
+    hscale_alpha = pin->GetOrAddReal(block, "hscale_alpha", 0.0); // Scale coeff in code units
+
     // Initialize Cooling Tables to the right dimensions from cooling_tables.hpp
     Kokkos::realloc(Tbins, Tbins_TOTAL_SIZE);
     Kokkos::realloc(nHbins, nHbins_TOTAL_SIZE);
@@ -223,6 +238,7 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
   int ks = indcs.ks, ke = indcs.ke;
+  auto &size = pmy_pack->pmb->mb_size;
   int nmb1 = pmy_pack->nmb_thispack - 1;
   Real use_e = eos_data.use_e;
   Real gamma = eos_data.gamma;
@@ -232,6 +248,8 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
   Real temp_unit = units->temperature_cgs();
   Real nH_unit = units->density_cgs()/units->atomic_mass_unit_cgs;
   Real cooling_unit = units->pressure_cgs()/units->time_cgs()/nH_unit/nH_unit;
+  Real heating_unit = units->pressure_cgs()/units->time_cgs()/nH_unit;
+  Real length_unit = units->length_cgs();
 
   auto Tbins_ = Tbins.d_view;
   auto nHbins_ = nHbins.d_view;
@@ -246,22 +264,46 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
   auto nHceil  = nHbins_ARR[nHbins_DIM_0 - 1];
 
   Real X = 0.75; // Hydrogen mass fraction
-  Real Z = 1./3; // metallicity [Zsun]
+  Real Z = 1.00; // metallicity [Zsun]
+
+  Real h_rate = hrate;
+  Real h_norm = hscale_norm;
+  Real h_height = hscale_height;
+  Real h_radius = hscale_radius;
+  Real h_alpha = hscale_alpha;
 
   par_for("cgm_cooling", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real &x1min = size.d_view(m).x1min;
+    Real &x1max = size.d_view(m).x1max;
+    int nx1 = indcs.nx1;
+    Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+
+    Real &x2min = size.d_view(m).x2min;
+    Real &x2max = size.d_view(m).x2max;
+    int nx2 = indcs.nx2;
+    Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+
+    Real &x3min = size.d_view(m).x3min;
+    Real &x3max = size.d_view(m).x3max;
+    int nx3 = indcs.nx3;
+    Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+
+    Real R = sqrt(x1v * x1v + x2v * x2v); 
+
     Real temp = 1.0; // temperature in cgs units
     if (use_e) {
-      temp = temp_unit*w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)*gm1;
+      temp = temp_unit * w0(m,IEN,k,j,i) / w0(m,IDN,k,j,i) * gm1;
     } else {
-      temp = temp_unit*w0(m,ITM,k,j,i);
+      temp = temp_unit * w0(m,ITM,k,j,i);
     }
-    Real nH = X*nH_unit*w0(m,IDN,k,j,i); // density in cgs units
+    Real nH = X * nH_unit * w0(m,IDN,k,j,i); // density in cgs units
 
+    // Caculate PIE cooling
     // WiersmaCooling at redshift z = 0 taken from Wiersma et al (2009)
-    Real lambda_cooling = 0.0; // Ensure we are in range of cooling table
-    if (false) {
-    // if (temp > Tfloor && temp < Tceil && nH > nHfloor && nH < nHceil) {
+    Real lambda_cooling_PIE = 0.0;     
+    // Ensure we are in range of cooling table
+    if (temp > Tfloor && temp < Tceil && nH > nHfloor && nH < nHceil) {
       // Convert input values to log space
       Real log_temp = log10(temp);
       Real log_density = log10(nH);
@@ -305,9 +347,12 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
           (1 - t) * u * M01 +
           t * u * M11;
  
-      lambda_cooling = prim_cooling + Z * metal_cooling;
-    } // If density is higher than ceiling, switch to CIE
-    else if (temp > 1e4 &&  temp > Tfloor && temp < Tceil && nH >= nHceil) {
+      lambda_cooling_PIE = prim_cooling + Z * metal_cooling;
+    } 
+    
+    // Caculate CIE cooling
+    Real lambda_cooling_CIE = 0.0;  
+    if (temp > Tfloor && temp < Tceil) {
       // Convert input values to log space
       Real log_temp = log10(temp);
 
@@ -334,16 +379,32 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
       Real prim_cooling = C0 + t * (C1 - C0);
       Real metal_cooling = M0 + t * (M1 - M0);
       
-      lambda_cooling = prim_cooling + Z * metal_cooling;
+      lambda_cooling_CIE = prim_cooling + Z * metal_cooling;
     }
-    // else if (temp < Tfloor && nH >= nHceil) {
-    //   // for temperatures less than 100 K, use Koyama & Inutsuka (2002)
-    //   lambda_cooling = Z*(2.0e-19*exp(-1.184e5/(temp + 1.0e3)) +
-    //                       2.8e-28*sqrt(temp)*exp(-92.0/temp));
-    // }
+    else if (temp < Tfloor) {
+      // for temperatures less than 100 K, use Koyama & Inutsuka (2002)
+      lambda_cooling_CIE = Z * (2.0e-19 * exp(-1.184e5 / (temp + 1.0e3))
+                                + 2.8e-28 * sqrt(temp) * exp(-92.0 / temp));
+    }
 
-    u0(m,IEN,k,j,i) -= bdt * pow(X*w0(m,IDN,k,j,i),2) * lambda_cooling/cooling_unit;
+    // Calculate heating
+    Real horz_falloff = exp(-R / h_radius);
+    Real vert_falloff = exp(-(x3v*x3v) / sqrt(h_height*h_height + h_alpha*R*R));
+    Real gamma_heating = h_rate * h_norm * nH_unit * horz_falloff * vert_falloff;
+    // gamma_heating *= w0(m,IDN,k,j,i) * nH_unit;
+    if (temp > 1e4) gamma_heating *= pow(temp / 1e4, -8.0);
+
+    // Combine CIE and PIE cooling
+    Real dx = size.d_view(m).dx1 * length_unit;
+    Real tau = nH * 1e-17 * dx; // optical depth of cell
+    Real frac = exp(-tau);
+    Real lambda_cooling = (1 - frac) * lambda_cooling_CIE + frac * lambda_cooling_PIE;
     
+    // Add cooling and heating source terms to energy equation
+    u0(m,IEN,k,j,i) -= bdt * w0(m,IDN,k,j,i) *
+                       (w0(m,IDN,k,j,i) * lambda_cooling / cooling_unit 
+			                  - gamma_heating / heating_unit);
+   // Should I multiply this by X^2 to be cosnsitent with nH^2 cooling? 
   });
 
   return;

@@ -48,8 +48,12 @@ class SourceTerms {
   Real const_accel_val;
   int const_accel_dir;
 
-  // heating rate used with ISM cooling
+  // heating rate used with ISM/CGM cooling
   Real hrate;
+  Real hscale_norm;
+  Real hscale_height; // Gaussian Scale Height
+  Real hscale_radius; // Exponential Scale Radius
+  Real hscale_alpha;  // Scale coefficient
 
   // CGM cooling tables
   DualArray1D<Real> Tbins, nHbins;
