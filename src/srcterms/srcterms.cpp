@@ -264,7 +264,7 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
   auto nHceil  = nHbins_ARR[nHbins_DIM_0 - 1];
 
   Real X = 0.75; // Hydrogen mass fraction
-  Real Z = 1.00; // metallicity [Zsun]
+  Real Z = 1./3; // metallicity [Zsun]
 
   Real h_rate = hrate;
   Real h_norm = hscale_norm;
@@ -390,21 +390,21 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
     // Calculate heating
     Real horz_falloff = exp(-R / h_radius);
     Real vert_falloff = exp(-(x3v*x3v) / sqrt(h_height*h_height + h_alpha*R*R));
-    Real gamma_heating = h_rate * h_norm * nH_unit * horz_falloff * vert_falloff;
-    // gamma_heating *= w0(m,IDN,k,j,i) * nH_unit;
+    Real gamma_heating = h_rate * h_norm * X * nH_unit * horz_falloff * vert_falloff;
     if (temp > 1e4) gamma_heating *= pow(temp / 1e4, -8.0);
 
     // Combine CIE and PIE cooling
     Real dx = size.d_view(m).dx1 * length_unit;
-    Real tau = nH * 1e-17 * dx; // optical depth of cell
+    Real neutral_frac = 1 - (0.5 * (1 + tanh((temp - 8e3) / 1.5e3)));
+    Real tau = neutral_frac * nH * 1e-17 * dx; // optical depth of cell
     Real frac = exp(-tau);
     Real lambda_cooling = (1 - frac) * lambda_cooling_CIE + frac * lambda_cooling_PIE;
+    gamma_heating *= (1 - frac);
     
     // Add cooling and heating source terms to energy equation
-    u0(m,IEN,k,j,i) -= bdt * w0(m,IDN,k,j,i) *
-                       (w0(m,IDN,k,j,i) * lambda_cooling / cooling_unit 
-			                  - gamma_heating / heating_unit);
-   // Should I multiply this by X^2 to be cosnsitent with nH^2 cooling? 
+    u0(m,IEN,k,j,i) -= bdt * X * w0(m,IDN,k,j,i) *
+                       (X * w0(m,IDN,k,j,i) * lambda_cooling / cooling_unit 
+                                             - gamma_heating / heating_unit);
   });
 
   return;
