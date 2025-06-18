@@ -3,8 +3,8 @@
 // Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
-//! \file cgm_cooling_flow.cpp
-//  \brief Problem generator for a cooling flow CGM
+//! \file cgm_cooling_flow_amr.cpp
+//  \brief Problem generator for a cooling flow CGM with AMR resolved disk
 
 #include <iostream>
 #include "athena.hpp"
@@ -68,10 +68,9 @@ namespace {
   Real r_circ;
   Real v_circ;
 
-  // Add profile reader and flag
+  // Add profile readers on host and device
   ProfileReaderHost profile_reader_host;  // Host-side reader
   ProfileReader profile_reader;           // Device-side reader
-
   ProfileReaderHost disk_profile_reader_host;  // Host-side reader
   ProfileReader disk_profile_reader;           // Device-side reader
 }
@@ -100,11 +99,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   z_gal     = pin->GetReal("potential", "z_gal");
   r_200     = pin->GetReal("potential", "r_200");
   rho_mean  = pin->GetReal("potential", "rho_mean");
+  r_circ    = pin->GetReal("problem", "r_circ");
+  v_circ    = pin->GetReal("problem", "v_circ");
 
-  r_circ = pin->GetReal("problem", "r_circ");
-  v_circ = pin->GetReal("problem", "v_circ");
-
-  // Read the profile file
+  // Read the CGM cooling flow profile file
   std::string profile_file = pin->GetString("problem", "profile_file");
   try {
     profile_reader_host.ReadProfiles(profile_file);
@@ -135,10 +133,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   auto &u0 = pmbp->phydro->u0;
   EOS_Data &eos = pmbp->phydro->peos->eos_data;
   Real gm1 = eos.gamma - 1.0;
+
   auto &profile = profile_reader;
   auto &disk_profile = disk_profile_reader;
-  Real r_c = r_circ;
-  Real v_c = v_circ;
 
   Real G = pmbp->punit->grav_constant();
   Real r_s = r_scale;
@@ -148,6 +145,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Real z_g = z_gal;
   Real r_m = r_200;
   Real rho_m = rho_mean;
+
+  Real r_c = r_circ;
+  Real v_c = v_circ;
 
   // Use loaded profiles
   par_for("pgen_ic", DevExeSpace(), 0, (pmbp->nmb_thispack-1), ks, ke, js, je, is, ie,
@@ -182,6 +182,83 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 }
 
 KOKKOS_INLINE_FUNCTION
+void SetCoolingFlowState(const DvceArray5D<Real> &u0, 
+                         int m, int k, int j, int i, 
+                         Real x1v, Real x2v, Real x3v, 
+                         Real gm1, const ProfileReader &profile) {
+    // Calculate radius
+    Real r = sqrt(x1v*x1v + x2v*x2v + x3v*x3v);
+      
+    // Get values from profiles via interpolation
+    Real rho  = profile.GetDensity(r);
+    Real temp = profile.GetTemperature(r);
+    Real vr   = profile.GetVelocity(r);
+    Real rmin = profile.GetRmin();
+
+    // set vr to go to zero if r < rmin
+    if (r < rmin) {
+      vr *= (r / rmin);
+    }
+    
+    // Calculate pressure from temperature
+    Real press = rho * temp;
+    
+    // Set radial velocity components based on position
+    Real v1 = 0.0, v2 = 0.0, v3 = 0.0;
+    constexpr Real tiny = 1.0e-20;
+    if (r > tiny) {  // Avoid division by zero
+      // Negative sign accounts for inflowing vr
+      v1 = -vr * x1v / r;
+      v2 = -vr * x2v / r;
+      v3 = -vr * x3v / r;
+    }
+
+    // Set state variables
+    u0(m, IDN, k, j, i) = rho;
+    u0(m, IM1, k, j, i) = rho * v1;
+    u0(m, IM2, k, j, i) = rho * v2;
+    u0(m, IM3, k, j, i) = rho * v3;
+    u0(m, IEN, k, j, i) = press/gm1 + 0.5*rho*(SQR(v1) + SQR(v2) + SQR(v3));
+}
+
+KOKKOS_INLINE_FUNCTION
+void SetRotation(const DvceArray5D<Real> &u0, 
+                 int m, int k, int j, int i, 
+                 Real x1v, Real x2v, Real x3v, 
+                 Real r_circ, Real v_circ) {
+  // Calculate radius
+  Real r = sqrt(x1v*x1v + x2v*x2v + x3v*x3v);
+  Real R = sqrt(x1v*x1v + x2v*x2v);
+  
+  // Calculate azimuthal velocity
+  Real v1 = 0.0, v2 = 0.0, v3 = 0.0;
+  constexpr Real tiny = 1.0e-20;
+  if (r > tiny and R > tiny) {  // Avoid division by zero
+    Real v_phi = 0.0;
+    Real sin_theta = R / r;
+
+    if (r < r_circ) {
+      v_phi = v_circ * sin_theta;
+    }
+    if (r > r_circ) {
+      v_phi = v_circ * sin_theta * r_circ / r;
+    }
+    
+    // Calculate azimuthal velocity components
+    v1 = -v_phi * x2v / R;
+    v2 = v_phi * x1v / R;
+    v3 = 0.0;
+  }
+  
+  // Set state variables
+  Real rho = u0(m, IDN, k, j, i);
+  u0(m, IM1, k, j, i) += rho * v1;
+  u0(m, IM2, k, j, i) += rho * v2;
+  u0(m, IM3, k, j, i) += rho * v3;
+  u0(m, IEN, k, j, i) += 0.5 * rho * (SQR(v1) + SQR(v2) + SQR(v3));
+}
+
+KOKKOS_INLINE_FUNCTION
 void SetEquilibriumState(const DvceArray5D<Real> &u0, 
                          int m, int k, int j, int i, 
                          Real x1v, Real x2v, Real x3v, 
@@ -191,8 +268,6 @@ void SetEquilibriumState(const DvceArray5D<Real> &u0,
                          Real gm1, const ProfileReader &disk_profile) {
     // Calculate radius
     Real R = sqrt(x1v * x1v + x2v * x2v);
-    // if (R > 3 * a_g or abs(x3v) > 3 * z_g) return;
-
     Real R1l = sqrt(x1l * x1l + x2v * x2v);
     Real R1r = sqrt(x1r * x1r + x2v * x2v);
     Real R2l = sqrt(x1v * x1v + x2l * x2l);
@@ -251,77 +326,6 @@ void SetEquilibriumState(const DvceArray5D<Real> &u0,
     u0(m, IM2, k, j, i) += rho * v2;
     u0(m, IM3, k, j, i) += 0.0;
     u0(m, IEN, k, j, i) += (rho * temp)/gm1 + 0.5 * rho * (SQR(v1) + SQR(v2));
-}
-
-KOKKOS_INLINE_FUNCTION
-void SetCoolingFlowState(const DvceArray5D<Real> &u0, 
-                         int m, int k, int j, int i, 
-                         Real x1v, Real x2v, Real x3v, 
-                         Real gm1, const ProfileReader &profile) {
-    // Calculate radius
-    Real r = sqrt(x1v*x1v + x2v*x2v + x3v*x3v);
-      
-    // Get values from profiles via interpolation
-    Real rho  = profile.GetDensity(r);
-    Real temp = profile.GetTemperature(r);
-    Real vr   = profile.GetVelocity(r);
-    
-    // Calculate pressure from temperature
-    Real press = rho * temp;
-    
-    // Set radial velocity components based on position
-    Real v1 = 0.0, v2 = 0.0, v3 = 0.0;
-    constexpr Real tiny = 1.0e-20;
-    if (r > tiny) {  // Avoid division by zero
-      // Negative sign accounts for inflowing vr
-      v1 = -vr * x1v / r;
-      v2 = -vr * x2v / r;
-      v3 = -vr * x3v / r;
-    }
-
-    // Set state variables
-    u0(m, IDN, k, j, i) = rho;
-    u0(m, IM1, k, j, i) = rho * v1;
-    u0(m, IM2, k, j, i) = rho * v2;
-    u0(m, IM3, k, j, i) = rho * v3;
-    u0(m, IEN, k, j, i) = press/gm1 + 0.5*rho*(SQR(v1) + SQR(v2) + SQR(v3));
-}
-
-KOKKOS_INLINE_FUNCTION
-void SetRotation(const DvceArray5D<Real> &u0, 
-                 int m, int k, int j, int i, 
-                 Real x1v, Real x2v, Real x3v, 
-                 Real r_circ, Real v_circ) {
-  // Calculate radius
-  Real r = sqrt(x1v*x1v + x2v*x2v + x3v*x3v);
-  Real R = sqrt(x1v*x1v + x2v*x2v);
-  
-  // Calculate azimuthal velocity
-  Real v1 = 0.0, v2 = 0.0, v3 = 0.0;
-  // constexpr Real tiny = 1.0e-20;
-  // if (r > tiny and R > tiny) {  // Avoid division by zero
-  //   Real v_phi = 0.0;
-  //   Real sin_theta = R / r;
-
-  //   if (r < r_circ) {
-  //     v_phi = v_circ * sin_theta;
-  //   }
-  //   if (r > r_circ) {
-  //     v_phi = v_circ * sin_theta * r_circ / r;
-  //   }
-    
-  //   // Calculate azimuthal velocity components
-  //   v1 = -v_phi * x2v / R;
-  //   v2 = v_phi * x1v / R;
-  //   v3 = 0.0;
-  // }
-  
-  // Set state variables
-  Real rho = u0(m, IDN, k, j, i);
-  u0(m, IM1, k, j, i) += rho * v1;
-  u0(m, IM2, k, j, i) += rho * v2;
-  u0(m, IM3, k, j, i) += rho * v3;
-  u0(m, IEN, k, j, i) += 0.5 * rho * (SQR(v1) + SQR(v2) + SQR(v3));
 }
 
 //===========================================================================//
@@ -399,12 +403,6 @@ void GravitySource(Mesh* pm, const Real bdt) {
     u0(m,IEN,k,j,i) += (src_x1*w0(m,IVX,k,j,i) 
                        +src_x2*w0(m,IVY,k,j,i) 
                        +src_x3*w0(m,IVZ,k,j,i));
-
-    // // add some cooling to counteract compressive heating at the center
-    // Real temp = w0(m,IEN,k,j,i)/density*(2.0/3);
-    // if (temp > 1.4) {
-    //   u0(m,IEN,k,j,i) += (1.4-temp)*density/(2.0/3);
-    // }
     
   });
 
@@ -466,19 +464,9 @@ void UserBoundary(Mesh* pm) {
   Real gm1 = eos.gamma - 1.0;
 
   auto &profile = profile_reader;
-  // auto &disk_profile = disk_profile_reader;
 
   Real r_c = r_circ;
   Real v_c = v_circ;
-
-  // Real G = pmbp->punit->grav_constant();
-  // Real r_s = r_scale;
-  // Real rho_s = rho_scale;
-  // Real m_g = m_gal;
-  // Real a_g = a_gal;
-  // Real z_g = z_gal;
-  // Real r_m = r_200;
-  // Real rho_m = rho_mean;
 
   // Handle X1 boundaries
   par_for("static_x1", DevExeSpace(), 0, nmb1, 0, (n3-1), 0, (n2-1), 0, (ng-1),
@@ -499,8 +487,6 @@ void UserBoundary(Mesh* pm) {
       
       SetCoolingFlowState(u0, m, k, j, i, x1v, x2v, x3v, gm1, profile);
       SetRotation(u0, m, k, j, i, x1v, x2v, x3v, r_c, v_c);
-      // SetEquilibriumState(u0, m, k, j, i, x1v, x2v, x3v, G, r_s, rho_s, 
-      //                     m_g, a_g, z_g, r_m, rho_m, gm1, disk_profile);
     }
   
     // Outer X1 boundary
@@ -510,8 +496,6 @@ void UserBoundary(Mesh* pm) {
       
       SetCoolingFlowState(u0, m, k, j, i_out, x1v, x2v, x3v, gm1, profile);
       SetRotation(u0, m, k, j, i_out, x1v, x2v, x3v,r_c, v_c);
-      // SetEquilibriumState(u0, m, k, j, i_out, x1v, x2v, x3v, G, r_s, rho_s, 
-      //                     m_g, a_g, z_g, r_m, rho_m, gm1, disk_profile);
     }
   });
   
@@ -534,8 +518,6 @@ void UserBoundary(Mesh* pm) {
       
       SetCoolingFlowState(u0, m, k, j, i, x1v, x2v, x3v, gm1, profile);
       SetRotation(u0, m, k, j, i, x1v, x2v, x3v, r_c, v_c);
-      // SetEquilibriumState(u0, m, k, j, i, x1v, x2v, x3v, G, r_s, rho_s, 
-      //   m_g, a_g, z_g, r_m, rho_m, gm1, disk_profile);
     }
   
     // Outer X2 boundary
@@ -545,8 +527,6 @@ void UserBoundary(Mesh* pm) {
       
       SetCoolingFlowState(u0, m, k, j_out, i, x1v, x2v, x3v, gm1, profile);
       SetRotation(u0, m, k, j_out, i, x1v, x2v, x3v, r_c, v_c);
-      // SetEquilibriumState(u0, m, k, j_out, i, x1v, x2v, x3v, G, r_s, rho_s, 
-      //   m_g, a_g, z_g, r_m, rho_m, gm1, disk_profile);
     }
   });
   
@@ -569,8 +549,6 @@ void UserBoundary(Mesh* pm) {
       
       SetCoolingFlowState(u0, m, k, j, i, x1v, x2v, x3v, gm1, profile);
       SetRotation(u0, m, k, j, i, x1v, x2v, x3v, r_c, v_c);
-      // SetEquilibriumState(u0, m, k, j, i, x1v, x2v, x3v, G, r_s, rho_s, 
-      //   m_g, a_g, z_g, r_m, rho_m, gm1, disk_profile);
     }
     
     // Outer X3 boundary
@@ -580,8 +558,6 @@ void UserBoundary(Mesh* pm) {
       
       SetCoolingFlowState(u0, m, k_out, j, i, x1v, x2v, x3v, gm1, profile);
       SetRotation(u0, m, k_out, j, i, x1v, x2v, x3v, r_c, v_c);
-      // SetEquilibriumState(u0, m, k_out, j, i, x1v, x2v, x3v, G, r_s, rho_s, 
-      //   m_g, a_g, z_g, r_m, rho_m, gm1, disk_profile);
     }
   });
   
@@ -593,7 +569,7 @@ void UserBoundary(Mesh* pm) {
 
 // User defined refinement
 void RefinementCondition(MeshBlockPack* pmbp) {
-  return; //pmbp->pz4c->pamr->Refine(pmbp);
+  return;
 }
 
 //===========================================================================//
