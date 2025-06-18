@@ -40,6 +40,7 @@ class ProfileReader {
   KOKKOS_INLINE_FUNCTION Real GetDensity(Real r) const;
   KOKKOS_INLINE_FUNCTION Real GetTemperature(Real r) const;
   KOKKOS_INLINE_FUNCTION Real GetVelocity(Real r) const;
+  KOKKOS_INLINE_FUNCTION Real GetRmin() const;
   
   private:
   // Device views for profile data
@@ -184,6 +185,12 @@ Real ProfileReader::GetTemperature(Real r) const {
 KOKKOS_INLINE_FUNCTION
 Real ProfileReader::GetVelocity(Real r) const {
   return Interpolate(d_r_vals, d_v_vals, r);
+}
+
+KOKKOS_INLINE_FUNCTION
+Real ProfileReader::GetRmin() const {
+  // Return the minimum radius from the first value in the r_vals array
+  return d_r_vals(0);
 }
 
 #endif // PROFILE_READER_HPP_
