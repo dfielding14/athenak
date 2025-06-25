@@ -41,15 +41,24 @@ class TurbulenceDriver {
   // Quantum numbers for each mode when using SFB basis
   DualArray1D<int> l_mode, m_mode, n_mode;
   DualArray1D<Real> kln_mode;  // radial wavenumber = x_ln / r0_turb
+  DualArray1D<Real> xln_root;  // spherical bessel roots
 
   // User-supplied limits (only used if basis_type_ == SphericalFB)
   int lmax = 0;   // maximum l
   int nmax = 0;   // maximum radial index n
   Real r0_turb = -1.0; // outer radius of driven region
+  
+  // For efficient mode selection
+  Real kmin_sfb = 0.0;  // minimum wavenumber
+  Real kmax_sfb = 0.0;  // maximum wavenumber
 
   // Pre-computed jl*Ylm per mode and cell (real and imaginary parts)
   DvceArray4D<Real> sfb_basis_real; // (mode,nk,nj,ni)
   DvceArray4D<Real> sfb_basis_imag;
+  
+  // Vector spherical harmonics components for proper divergence-free projection
+  DvceArray5D<Real> sfb_vector_basis_real; // (mode,dir,nk,nj,ni) 
+  DvceArray5D<Real> sfb_vector_basis_imag;
 
   // -----------------------------------------------------------------------------
   // Helper functions – defined in turb_driver.cpp but declared here so that they
@@ -58,10 +67,13 @@ class TurbulenceDriver {
   KOKKOS_INLINE_FUNCTION static Real sph_bessel_jl(int l, Real x);
   KOKKOS_INLINE_FUNCTION static Real legendre_Plm(int l, int m, Real x);
   KOKKOS_INLINE_FUNCTION static Real ylm_norm(int l, int m);
+  KOKKOS_INLINE_FUNCTION static Real sph_bessel_jl_prime(int l, Real x);
 
   // Pre-compute lookup tables (host side)
   void BuildCartesianModeTable(ParameterInput *pin);
   void BuildSFBModeTable(ParameterInput *pin);
+  void ComputeSphericalBesselRoots();
+  static Real FindSphericalBesselRoot(int l, int n);
 
   // -----------------------------------------------------------------------------
 
@@ -117,6 +129,19 @@ static Real sph_bessel_jl_rec(int l, Real x) {
 KOKKOS_INLINE_FUNCTION
 Real TurbulenceDriver::sph_bessel_jl(int l, Real x) {
   return sph_bessel_jl_rec(l, x);
+}
+
+// Derivative of spherical Bessel function
+KOKKOS_INLINE_FUNCTION
+Real TurbulenceDriver::sph_bessel_jl_prime(int l, Real x) {
+  if (x == 0.0) {
+    return (l == 1) ? 1.0/3.0 : 0.0;
+  }
+  // Use recurrence: j'_l(x) = j_{l-1}(x) - (l+1)/x * j_l(x)
+  if (l == 0) {
+    return -sph_bessel_jl(1, x);
+  }
+  return sph_bessel_jl(l-1, x) - (l+1.0)/x * sph_bessel_jl(l, x);
 }
 
 // Associated Legendre polynomial P_l^m using forward recurrence
