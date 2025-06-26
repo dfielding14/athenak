@@ -75,6 +75,9 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   dt_turb_thresh=pin->GetOrAddReal("turb_driving","dt_turb_thresh",1e-6);
   // To store fraction of energy in solenoidal modes
   sol_fraction=pin->GetOrAddReal("turb_driving","sol_fraction",1.0);
+  
+  // random seed for turbulence driving (-1 = use time-based seed)
+  rseed = pin->GetOrAddInteger("turb_driving", "rseed", -1);
 
   // drive with constant edot or constant acceleration
   constant_edot = pin->GetOrAddBoolean("turb_driving", "constant_edot", true);
@@ -182,7 +185,7 @@ void TurbulenceDriver::Initialize() {
     force_tmp1_(m,n,k,j,i) = 0.0;
   });
 
-  rstate.idum = -1;
+  rstate.idum = rseed;
 
   auto kx_mode_ = kx_mode;
   auto ky_mode_ = ky_mode;
@@ -498,15 +501,29 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
       auto zcos_ = zcos;
       auto zsin_ = zsin;
 
-      for (int n=0; n<mode_count_; n++) {
+      // Use precomputed basis functions for SFB
+      auto sfb_basis_real_ = sfb_vector_basis_real;
+      auto sfb_basis_imag_ = sfb_vector_basis_imag;
+      auto basis_type = basis_type_;
+      
+      for (int n=0; n<mode_count; n++) {
         par_for("force_compute", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
         KOKKOS_LAMBDA(int m, int k, int j, int i) {
-          Real forc_real = ( xcos_(m,n,i)*ycos_(m,n,j) - xsin_(m,n,i)*ysin_(m,n,j) ) * zcos_(m,n,k) -
-                      ( xsin_(m,n,i)*ycos_(m,n,j) + xcos_(m,n,i)*ysin_(m,n,j) ) * zsin_(m,n,k);
-          Real forc_imag = ( ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k) ) * xcos_(m,n,i) +
-                      ( ycos_(m,n,j)*zcos_(m,n,k) - ysin_(m,n,j)*zsin_(m,n,k) ) * xsin_(m,n,i);
-          for (int dir = 0; dir < no_dir; dir ++){
-            force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real - akb_.d_view(dir,n)*forc_imag;
+          if (basis_type == TurbBasis::Cartesian) {
+            Real forc_real = ( xcos_(m,n,i)*ycos_(m,n,j) - xsin_(m,n,i)*ysin_(m,n,j) ) * zcos_(m,n,k) -
+                            ( xsin_(m,n,i)*ycos_(m,n,j) + xcos_(m,n,i)*ysin_(m,n,j) ) * zsin_(m,n,k);
+            Real forc_imag = ( ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k) ) * xcos_(m,n,i) +
+                            ( ycos_(m,n,j)*zcos_(m,n,k) - ysin_(m,n,j)*zsin_(m,n,k) ) * xsin_(m,n,i);
+            for (int dir = 0; dir < 3; dir ++){
+              force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real - akb_.d_view(dir,n)*forc_imag;
+            }
+          } else {
+            // SFB basis - use precomputed vector spherical harmonics
+            for (int dir = 0; dir < 3; dir ++){
+              Real basis_real = sfb_basis_real_(n,dir,k,j,i);
+              Real basis_imag = sfb_basis_imag_(n,dir,k,j,i);
+              force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*basis_real - akb_.d_view(dir,n)*basis_imag;
+            }
           }
         });
       }
