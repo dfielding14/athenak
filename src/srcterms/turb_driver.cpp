@@ -360,8 +360,7 @@ void TurbulenceDriver::Initialize() {
     Real &x1min = size.d_view(m).x1min;
     Real &x1max = size.d_view(m).x1max;
     // Calculate global position from local MeshBlock position
-    Real dx_local = (x1max - x1min) / nx1;
-    Real x1v_global = x1min + (i-is + 0.5) * dx_local;
+    Real x1v_global = CellCenterX(i-is, nx1, x1min, x1max);
     Real k1v = kx_mode_.d_view(n);
     xsin_(m,n,i) = sin(k1v*x1v_global);
     xcos_(m,n,i) = cos(k1v*x1v_global);
@@ -372,8 +371,7 @@ void TurbulenceDriver::Initialize() {
     Real &x2min = size.d_view(m).x2min;
     Real &x2max = size.d_view(m).x2max;
     // Calculate global position from local MeshBlock position
-    Real dy_local = (x2max - x2min) / nx2;
-    Real x2v_global = x2min + (j-js + 0.5) * dy_local;
+    Real x2v_global = CellCenterX(j-js, nx2, x2min, x2max);
     Real k2v = ky_mode_.d_view(n);
     ysin_(m,n,j) = sin(k2v*x2v_global);
     ycos_(m,n,j) = cos(k2v*x2v_global);
@@ -388,8 +386,7 @@ void TurbulenceDriver::Initialize() {
     Real &x3min = size.d_view(m).x3min;
     Real &x3max = size.d_view(m).x3max;
     // Calculate global position from local MeshBlock position
-    Real dz_local = (x3max - x3min) / nx3;
-    Real x3v_global = x3min + (k-ks + 0.5) * dz_local;
+    Real x3v_global = CellCenterX(k-ks, nx3, x3min, x3max);
     Real k3v = kz_mode_.d_view(n);
     zsin_(m,n,k) = sin(k3v*x3v_global);
     zcos_(m,n,k) = cos(k3v*x3v_global);
