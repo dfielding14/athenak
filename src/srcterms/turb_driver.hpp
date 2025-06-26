@@ -57,8 +57,8 @@ class TurbulenceDriver {
   DvceArray4D<Real> sfb_basis_imag;
   
   // Vector spherical harmonics components for proper divergence-free projection
-  DvceArray5D<Real> sfb_vector_basis_real; // (mode,dir,nk,nj,ni) 
-  DvceArray5D<Real> sfb_vector_basis_imag;
+  DvceArray6D<Real> sfb_vector_basis_real; // (nmb,mode,dir,nk,nj,ni) 
+  DvceArray6D<Real> sfb_vector_basis_imag;
 
   // -----------------------------------------------------------------------------
   // Helper functions – defined in turb_driver.cpp but declared here so that they

@@ -242,8 +242,8 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
 
   // Allocate precomputed SFB basis arrays if needed
   if (basis_type_ == TurbBasis::SphericalFB) {
-    Kokkos::realloc(sfb_vector_basis_real, mode_count, 3, ncells3, ncells2, ncells1);
-    Kokkos::realloc(sfb_vector_basis_imag, mode_count, 3, ncells3, ncells2, ncells1);
+    Kokkos::realloc(sfb_vector_basis_real, nmb, mode_count, 3, ncells3, ncells2, ncells1);
+    Kokkos::realloc(sfb_vector_basis_imag, nmb, mode_count, 3, ncells3, ncells2, ncells1);
   }
 
   Initialize();
@@ -446,12 +446,12 @@ void TurbulenceDriver::Initialize() {
       
       // Apply radial cutoff - force is zero outside r0
       if (r >= r0) {
-        sfbR_(n,0,k,j,i) = 0.0;
-        sfbR_(n,1,k,j,i) = 0.0;
-        sfbR_(n,2,k,j,i) = 0.0;
-        sfbI_(n,0,k,j,i) = 0.0;
-        sfbI_(n,1,k,j,i) = 0.0;
-        sfbI_(n,2,k,j,i) = 0.0;
+        sfbR_(mb,n,0,k,j,i) = 0.0;
+        sfbR_(mb,n,1,k,j,i) = 0.0;
+        sfbR_(mb,n,2,k,j,i) = 0.0;
+        sfbI_(mb,n,0,k,j,i) = 0.0;
+        sfbI_(mb,n,1,k,j,i) = 0.0;
+        sfbI_(mb,n,2,k,j,i) = 0.0;
         return;
       }
       
@@ -460,31 +460,31 @@ void TurbulenceDriver::Initialize() {
         // Near origin, use regularized form
         if (l_val == 0) {
           // l=0 modes vanish at origin
-          sfbR_(n,0,k,j,i) = 0.0;
-          sfbR_(n,1,k,j,i) = 0.0;
-          sfbR_(n,2,k,j,i) = 0.0;
-          sfbI_(n,0,k,j,i) = 0.0;
-          sfbI_(n,1,k,j,i) = 0.0;
-          sfbI_(n,2,k,j,i) = 0.0;
+          sfbR_(mb,n,0,k,j,i) = 0.0;
+          sfbR_(mb,n,1,k,j,i) = 0.0;
+          sfbR_(mb,n,2,k,j,i) = 0.0;
+          sfbI_(mb,n,0,k,j,i) = 0.0;
+          sfbI_(mb,n,1,k,j,i) = 0.0;
+          sfbI_(mb,n,2,k,j,i) = 0.0;
         } else if (l_val == 1) {
           // l=1 modes: use linear approximation j_1(kr) ~ kr/3
           Real factor = kln_val * r / 3.0;
           Real Nlm = ylm_norm(l_val, m_val);
           // Simple dipole pattern
-          sfbR_(n,0,k,j,i) = factor * Nlm * x / (r + 1e-20);
-          sfbR_(n,1,k,j,i) = factor * Nlm * y / (r + 1e-20);
-          sfbR_(n,2,k,j,i) = factor * Nlm * z / (r + 1e-20);
-          sfbI_(n,0,k,j,i) = 0.0;
-          sfbI_(n,1,k,j,i) = 0.0;
-          sfbI_(n,2,k,j,i) = 0.0;
+          sfbR_(mb,n,0,k,j,i) = factor * Nlm * x / (r + 1e-20);
+          sfbR_(mb,n,1,k,j,i) = factor * Nlm * y / (r + 1e-20);
+          sfbR_(mb,n,2,k,j,i) = factor * Nlm * z / (r + 1e-20);
+          sfbI_(mb,n,0,k,j,i) = 0.0;
+          sfbI_(mb,n,1,k,j,i) = 0.0;
+          sfbI_(mb,n,2,k,j,i) = 0.0;
         } else {
           // Higher l modes are suppressed near origin
-          sfbR_(n,0,k,j,i) = 0.0;
-          sfbR_(n,1,k,j,i) = 0.0;
-          sfbR_(n,2,k,j,i) = 0.0;
-          sfbI_(n,0,k,j,i) = 0.0;
-          sfbI_(n,1,k,j,i) = 0.0;
-          sfbI_(n,2,k,j,i) = 0.0;
+          sfbR_(mb,n,0,k,j,i) = 0.0;
+          sfbR_(mb,n,1,k,j,i) = 0.0;
+          sfbR_(mb,n,2,k,j,i) = 0.0;
+          sfbI_(mb,n,0,k,j,i) = 0.0;
+          sfbI_(mb,n,1,k,j,i) = 0.0;
+          sfbI_(mb,n,2,k,j,i) = 0.0;
         }
         return;
       }
@@ -500,12 +500,12 @@ void TurbulenceDriver::Initialize() {
       if (sinth < 1e-10) {
         // At poles, only m=0 modes survive
         if (m_val != 0) {
-          sfbR_(n,0,k,j,i) = 0.0;
-          sfbR_(n,1,k,j,i) = 0.0;
-          sfbR_(n,2,k,j,i) = 0.0;
-          sfbI_(n,0,k,j,i) = 0.0;
-          sfbI_(n,1,k,j,i) = 0.0;
-          sfbI_(n,2,k,j,i) = 0.0;
+          sfbR_(mb,n,0,k,j,i) = 0.0;
+          sfbR_(mb,n,1,k,j,i) = 0.0;
+          sfbR_(mb,n,2,k,j,i) = 0.0;
+          sfbI_(mb,n,0,k,j,i) = 0.0;
+          sfbI_(mb,n,1,k,j,i) = 0.0;
+          sfbI_(mb,n,2,k,j,i) = 0.0;
           return;
         }
       }
@@ -569,13 +569,13 @@ void TurbulenceDriver::Initialize() {
       //               th_hat = (cos(th)cos(phi), cos(th)sin(phi), -sin(th))
       //               phi_hat = (-sin(phi), cos(phi), 0)
       
-      sfbR_(n,0,k,j,i) = Br*sinth*cosphi + Bth*costh*cosphi - Bphi*sinphi;
-      sfbR_(n,1,k,j,i) = Br*sinth*sinphi + Bth*costh*sinphi + Bphi*cosphi;
-      sfbR_(n,2,k,j,i) = Br*costh - Bth*sinth;
+      sfbR_(mb,n,0,k,j,i) = Br*sinth*cosphi + Bth*costh*cosphi - Bphi*sinphi;
+      sfbR_(mb,n,1,k,j,i) = Br*sinth*sinphi + Bth*costh*sinphi + Bphi*cosphi;
+      sfbR_(mb,n,2,k,j,i) = Br*costh - Bth*sinth;
       
-      sfbI_(n,0,k,j,i) = Br_i*sinth*cosphi + Bth_i*costh*cosphi - Bphi_i*sinphi;
-      sfbI_(n,1,k,j,i) = Br_i*sinth*sinphi + Bth_i*costh*sinphi + Bphi_i*cosphi;
-      sfbI_(n,2,k,j,i) = Br_i*costh - Bth_i*sinth;
+      sfbI_(mb,n,0,k,j,i) = Br_i*sinth*cosphi + Bth_i*costh*cosphi - Bphi_i*sinphi;
+      sfbI_(mb,n,1,k,j,i) = Br_i*sinth*sinphi + Bth_i*costh*sinphi + Bphi_i*cosphi;
+      sfbI_(mb,n,2,k,j,i) = Br_i*costh - Bth_i*sinth;
     });
   }
 
@@ -841,8 +841,8 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
           } else {
             // SFB basis - use precomputed vector spherical harmonics
             for (int dir = 0; dir < 3; dir ++){
-              Real basis_real = sfb_basis_real_(n,dir,k,j,i);
-              Real basis_imag = sfb_basis_imag_(n,dir,k,j,i);
+              Real basis_real = sfb_basis_real_(m,n,dir,k,j,i);
+              Real basis_imag = sfb_basis_imag_(m,n,dir,k,j,i);
               force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*basis_real - akb_.d_view(dir,n)*basis_imag;
             }
           }
