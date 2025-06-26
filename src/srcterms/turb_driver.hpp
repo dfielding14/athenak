@@ -106,10 +106,12 @@ class TurbulenceDriver {
   TaskStatus UpdateForcing(Driver *pdrive, int stage);
   TaskStatus AddForcing(Driver *pdrive, int stage);
   void Initialize();
+  void ResizeArrays(int new_nmb);  // Resize arrays when mesh changes
 
  private:
   bool first_time = true;   // flag to enable initialization on first call
   MeshBlockPack *pmy_pack;  // ptr to MeshBlockPack containing this TurbulenceDriver
+  int current_nmb = 0;      // current number of MeshBlocks for array sizing
 };
 
 // ========================== Inline math utilities =============================

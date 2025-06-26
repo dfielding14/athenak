@@ -58,6 +58,9 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
   int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
 
+  // Set initial MeshBlock count
+  current_nmb = nmb;
+
   Kokkos::realloc(force, nmb, 3, ncells3, ncells2, ncells1);
   Kokkos::realloc(force_tmp1, nmb, 3, ncells3, ncells2, ncells1);
   Kokkos::realloc(force_tmp2, nmb, 3, ncells3, ncells2, ncells1);
@@ -583,6 +586,55 @@ void TurbulenceDriver::Initialize() {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void TurbulenceDriver::ResizeArrays
+//  \brief Resize arrays when mesh changes due to refinement/derefinement
+
+void TurbulenceDriver::ResizeArrays(int new_nmb) {
+  // Only resize if the number of MeshBlocks has changed
+  if (new_nmb == current_nmb) return;
+  
+  // Get mesh indices
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int ncells1 = indcs.nx1 + 2*(indcs.ng);
+  int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
+  int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
+  
+  if (global_variable::my_rank == 0) {
+    std::cout << "### TurbulenceDriver::ResizeArrays: Resizing from " 
+              << current_nmb << " to " << new_nmb << " MeshBlocks" << std::endl;
+  }
+  
+  // Resize force arrays
+  Kokkos::realloc(force, new_nmb, 3, ncells3, ncells2, ncells1);
+  Kokkos::realloc(force_tmp1, new_nmb, 3, ncells3, ncells2, ncells1);
+  Kokkos::realloc(force_tmp2, new_nmb, 3, ncells3, ncells2, ncells1);
+  
+  // Resize mode arrays
+  Kokkos::realloc(xcos, new_nmb, mode_count, ncells1);
+  Kokkos::realloc(xsin, new_nmb, mode_count, ncells1);
+  Kokkos::realloc(ycos, new_nmb, mode_count, ncells2);
+  Kokkos::realloc(ysin, new_nmb, mode_count, ncells2);
+  Kokkos::realloc(zcos, new_nmb, mode_count, ncells3);
+  Kokkos::realloc(zsin, new_nmb, mode_count, ncells3);
+  
+  // Resize SFB basis arrays if using SFB
+  if (basis_type_ == TurbBasis::SphericalFB) {
+    Kokkos::realloc(sfb_vector_basis_real, new_nmb, mode_count, 3, ncells3, ncells2, ncells1);
+    Kokkos::realloc(sfb_vector_basis_imag, new_nmb, mode_count, 3, ncells3, ncells2, ncells1);
+  }
+  
+  // Update current size
+  int old_nmb = current_nmb;
+  current_nmb = new_nmb;
+  
+  // If expanding, initialize new MeshBlock data
+  if (new_nmb > old_nmb) {
+    // Re-initialize all arrays to ensure consistency
+    Initialize();
+  }
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn  void IncludeModeEvolutionTasks
 //  \brief Includes task in the operator split task list that constructs new modes with
 //  random amplitudes and phases that can be used to evolve the force via an O-U process
@@ -903,6 +955,16 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
   int &nx1 = indcs.nx1;
   int &nx2 = indcs.nx2;
   int &nx3 = indcs.nx3;
+  
+  // Check if mesh has changed and resize arrays if needed
+  ResizeArrays(nmb);
+  
+  // Diagnostic output
+  static int diag_count = 0;
+  if (diag_count++ % 10 == 0 && global_variable::my_rank == 0) {
+    std::cout << "### TurbulenceDriver::UpdateForcing: nmb=" << nmb 
+              << ", force array size=" << force.extent(0) << std::endl;
+  }
 
   Real dt = pm->dt;
   Real current_time=pm->time;
@@ -1227,6 +1289,9 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
   int &nx1 = indcs.nx1;
   int &nx2 = indcs.nx2;
   int &nx3 = indcs.nx3;
+  
+  // Check if mesh has changed and resize arrays if needed
+  ResizeArrays(nmb);
 
   Real dt = pm->dt;
   Real bdt = (pdrive->beta[stage-1])*dt;

@@ -36,6 +36,7 @@ nx3       = 16         # Number of cells in each MeshBlock, X3-dir
 refinement = adaptive   # adaptive refinement
 max_level = 2          # maximum refinement level
 refine_interval = 5    # cycles between refinement checks
+max_nmb_per_rank = 1000 # maximum number of MeshBlocks per rank
 
 <time>
 evolution  = dynamic   # dynamic evolution
