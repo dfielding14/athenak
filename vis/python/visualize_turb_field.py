@@ -11,12 +11,44 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from bin_convert_new import read_binary_as_athdf
 
+def draw_meshblock_boundaries(ax, mb_boundaries, max_level):
+    """Draw MeshBlock boundaries colored by refinement level"""
+    # Define colors for each level
+    level_colors = ['black', 'blue', 'red', 'green', 'orange', 'purple']
+    
+    for mb in mb_boundaries:
+        level = mb['level']
+        color = level_colors[level % len(level_colors)]
+        linewidth = max(0.5, 2.0 - 0.5 * level)  # Ensure positive linewidth
+        
+        # Draw rectangle using plot instead of Rectangle to avoid dash issues
+        x1min, x1max = mb['x1min'], mb['x1max']
+        x2min, x2max = mb['x2min'], mb['x2max']
+        
+        # Draw the four sides of the rectangle
+        ax.plot([x1min, x1max], [x2min, x2min], color=color, linewidth=linewidth, alpha=0.8)
+        ax.plot([x1max, x1max], [x2min, x2max], color=color, linewidth=linewidth, alpha=0.8)
+        ax.plot([x1max, x1min], [x2max, x2max], color=color, linewidth=linewidth, alpha=0.8)
+        ax.plot([x1min, x1min], [x2max, x2min], color=color, linewidth=linewidth, alpha=0.8)
+    
+    # Add legend for levels
+    legend_elements = []
+    for level in range(max_level + 1):
+        color = level_colors[level % len(level_colors)]
+        legend_elements.append(patches.Patch(edgecolor=color, facecolor='none', 
+                                           label=f'Level {level}'))
+    return legend_elements
+
 def visualize_turb_field(filename, output_name):
     """Create a nice visualization of the turbulence driving field"""
     
     # Read binary data
     print(f"Reading {filename}...")
     data = read_binary_as_athdf(filename)
+    
+    # Also read raw data to get MeshBlock information
+    from bin_convert_new import read_binary
+    raw_data = read_binary(filename)
     
     # Extract force components
     force_x = data['force1']
@@ -30,6 +62,32 @@ def visualize_turb_field(filename, output_name):
     # Calculate magnitude of force
     force_mag = np.sqrt(force_x**2 + force_y**2 + force_z**2)
     
+    # Extract MeshBlock information
+    mb_logical = raw_data.get('mb_logical', None)  # Contains level information
+    mb_geometry = raw_data.get('mb_geometry', None)  # Contains spatial bounds
+    max_level = raw_data.get('MaxLevel', 0)
+    print(f"Maximum refinement level: {max_level}")
+    
+    # Prepare MeshBlock boundary data for z-slice
+    mb_boundaries = []
+    if mb_logical is not None and mb_geometry is not None:
+        n_mbs = mb_geometry.shape[0]
+        k_slice_coord = 0.0  # z=0 slice
+        
+        for mb in range(n_mbs):
+            level = mb_logical[mb, 0]  # Refinement level
+            x1min, x1max = mb_geometry[mb, 0], mb_geometry[mb, 1]
+            x2min, x2max = mb_geometry[mb, 2], mb_geometry[mb, 3]
+            x3min, x3max = mb_geometry[mb, 4], mb_geometry[mb, 5]
+            
+            # Check if this MeshBlock intersects our z-slice
+            if x3min <= k_slice_coord <= x3max:
+                mb_boundaries.append({
+                    'level': level,
+                    'x1min': x1min, 'x1max': x1max,
+                    'x2min': x2min, 'x2max': x2max
+                })
+    
     # Take slice at z=nz//2
     k_slice = nz // 2
     fx_slice = force_x[k_slice, :, :]
@@ -39,27 +97,18 @@ def visualize_turb_field(filename, output_name):
     # Create figure with multiple panels
     fig = plt.figure(figsize=(16, 12))
     
-    # Panel 1: Force magnitude with refinement regions
+    # Panel 1: Force magnitude with MeshBlock boundaries
     ax1 = plt.subplot(2, 3, 1)
     im1 = ax1.imshow(fmag_slice, origin='lower', cmap='viridis', 
                      extent=[-0.5, 0.5, -0.5, 0.5], interpolation='bilinear')
-    ax1.set_title('Turbulence Force Magnitude', fontsize=14)
+    ax1.set_title('Turbulence Force Magnitude with MeshBlocks', fontsize=14)
     ax1.set_xlabel('x')
     ax1.set_ylabel('y')
     
-    # Add refinement region boxes
-    refinement_boxes = [
-        patches.Rectangle((-0.3, -0.5), 0.2, 1.0, linewidth=2, 
-                         edgecolor='white', facecolor='none', linestyle='--'),
-        patches.Rectangle((0.1, -0.5), 0.2, 1.0, linewidth=2, 
-                         edgecolor='white', facecolor='none', linestyle='--')
-    ]
-    for box in refinement_boxes:
-        ax1.add_patch(box)
-    ax1.text(-0.2, 0.45, 'Refined', color='white', ha='center', fontsize=10, 
-             bbox=dict(boxstyle='round,pad=0.3', facecolor='black', alpha=0.5))
-    ax1.text(0.2, 0.45, 'Refined', color='white', ha='center', fontsize=10,
-             bbox=dict(boxstyle='round,pad=0.3', facecolor='black', alpha=0.5))
+    # Draw MeshBlock boundaries
+    if mb_boundaries:
+        legend_elements = draw_meshblock_boundaries(ax1, mb_boundaries, max_level)
+        ax1.legend(handles=legend_elements, loc='upper right', fontsize=8)
     
     plt.colorbar(im1, ax=ax1, label='|F|')
     
@@ -71,9 +120,8 @@ def visualize_turb_field(filename, output_name):
     ax2.set_title('Force X-component', fontsize=14)
     ax2.set_xlabel('x')
     ax2.set_ylabel('y')
-    for box in refinement_boxes:
-        ax2.add_patch(patches.Rectangle(box.get_xy(), box.get_width(), box.get_height(),
-                                       linewidth=2, edgecolor='black', facecolor='none', linestyle='--'))
+    if mb_boundaries:
+        draw_meshblock_boundaries(ax2, mb_boundaries, max_level)
     plt.colorbar(im2, ax=ax2, label='Fx')
     
     # Panel 3: Y-component of force
@@ -84,9 +132,8 @@ def visualize_turb_field(filename, output_name):
     ax3.set_title('Force Y-component', fontsize=14)
     ax3.set_xlabel('x')
     ax3.set_ylabel('y')
-    for box in refinement_boxes:
-        ax3.add_patch(patches.Rectangle(box.get_xy(), box.get_width(), box.get_height(),
-                                       linewidth=2, edgecolor='black', facecolor='none', linestyle='--'))
+    if mb_boundaries:
+        draw_meshblock_boundaries(ax3, mb_boundaries, max_level)
     plt.colorbar(im3, ax=ax3, label='Fy')
     
     # Panel 4: Vector field (quiver plot)
@@ -108,9 +155,8 @@ def visualize_turb_field(filename, output_name):
     ax4.set_xlabel('x')
     ax4.set_ylabel('y')
     ax4.set_aspect('equal')
-    for box in refinement_boxes:
-        ax4.add_patch(patches.Rectangle(box.get_xy(), box.get_width(), box.get_height(),
-                                       linewidth=2, edgecolor='white', facecolor='none', linestyle='--'))
+    if mb_boundaries:
+        draw_meshblock_boundaries(ax4, mb_boundaries, max_level)
     plt.colorbar(Q, ax=ax4, label='|F|')
     
     # Panel 5: Line cut through y=0
@@ -128,9 +174,23 @@ def visualize_turb_field(filename, output_name):
     ax5.grid(True, alpha=0.3)
     ax5.legend()
     
-    # Mark refinement boundaries
-    for x_bound in [-0.3, -0.1, 0.1, 0.3]:
-        ax5.axvline(x=x_bound, color='gray', linestyle='--', alpha=0.5)
+    # Mark refinement boundaries from MeshBlock data
+    if mb_boundaries:
+        # Collect unique x boundaries and their levels
+        x_boundaries = {}
+        for mb in mb_boundaries:
+            if abs(mb['x2min'] - (-0.5)) < 0.01 or abs(mb['x2max'] - 0.5) < 0.01:
+                # This MB spans y=0
+                for x in [mb['x1min'], mb['x1max']]:
+                    if x not in x_boundaries or x_boundaries[x] < mb['level']:
+                        x_boundaries[x] = mb['level']
+        
+        # Draw vertical lines colored by level
+        level_colors = ['black', 'blue', 'red', 'green', 'orange', 'purple']
+        for x, level in x_boundaries.items():
+            if -0.5 < x < 0.5:  # Don't draw domain boundaries
+                color = level_colors[level % len(level_colors)]
+                ax5.axvline(x=x, color=color, linestyle='--', alpha=0.7, linewidth=max(0.5, 2-0.3*level))
     
     # Panel 6: Fourier spectrum
     ax6 = plt.subplot(2, 3, 6)
