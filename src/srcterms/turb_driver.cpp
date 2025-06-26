@@ -347,24 +347,36 @@ void TurbulenceDriver::Initialize() {
   auto &size = pmy_pack->pmb->mb_size;
   auto &drivingtype = driving_type;
 
+  // Use global mesh coordinates for continuous phase across AMR boundaries
+  Real global_x1min = pm->mesh_size.x1min;
+  Real global_x1max = pm->mesh_size.x1max;
+  Real global_x2min = pm->mesh_size.x2min;
+  Real global_x2max = pm->mesh_size.x2max;
+  Real global_x3min = pm->mesh_size.x3min;
+  Real global_x3max = pm->mesh_size.x3max;
+  
   par_for("xsin/xcos", DevExeSpace(),0,nmb-1,0,mode_count-1,is,ie,
   KOKKOS_LAMBDA(int m, int n, int i) {
     Real &x1min = size.d_view(m).x1min;
     Real &x1max = size.d_view(m).x1max;
-    Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+    // Calculate global position from local MeshBlock position
+    Real dx_local = (x1max - x1min) / nx1;
+    Real x1v_global = x1min + (i-is + 0.5) * dx_local;
     Real k1v = kx_mode_.d_view(n);
-    xsin_(m,n,i) = sin(k1v*x1v);
-    xcos_(m,n,i) = cos(k1v*x1v);
+    xsin_(m,n,i) = sin(k1v*x1v_global);
+    xcos_(m,n,i) = cos(k1v*x1v_global);
   });
 
   par_for("ysin/ycos", DevExeSpace(),0,nmb-1,0,mode_count-1,js,je,
   KOKKOS_LAMBDA(int m, int n, int j) {
     Real &x2min = size.d_view(m).x2min;
     Real &x2max = size.d_view(m).x2max;
-    Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+    // Calculate global position from local MeshBlock position
+    Real dy_local = (x2max - x2min) / nx2;
+    Real x2v_global = x2min + (j-js + 0.5) * dy_local;
     Real k2v = ky_mode_.d_view(n);
-    ysin_(m,n,j) = sin(k2v*x2v);
-    ycos_(m,n,j) = cos(k2v*x2v);
+    ysin_(m,n,j) = sin(k2v*x2v_global);
+    ycos_(m,n,j) = cos(k2v*x2v_global);
     if (ncells2-1 == 0) {
       ysin_(m,n,j) = 0.0;
       ycos_(m,n,j) = 1.0;
@@ -375,10 +387,12 @@ void TurbulenceDriver::Initialize() {
   KOKKOS_LAMBDA(int m, int n, int k) {
     Real &x3min = size.d_view(m).x3min;
     Real &x3max = size.d_view(m).x3max;
-    Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+    // Calculate global position from local MeshBlock position
+    Real dz_local = (x3max - x3min) / nx3;
+    Real x3v_global = x3min + (k-ks + 0.5) * dz_local;
     Real k3v = kz_mode_.d_view(n);
-    zsin_(m,n,k) = sin(k3v*x3v);
-    zcos_(m,n,k) = cos(k3v*x3v);
+    zsin_(m,n,k) = sin(k3v*x3v_global);
+    zcos_(m,n,k) = cos(k3v*x3v_global);
     if (ncells3-1 == 0 || (drivingtype == 1)) {
       zsin_(m,n,k) = 0.0;
       zcos_(m,n,k) = 1.0;
