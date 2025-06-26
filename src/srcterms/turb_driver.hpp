@@ -34,7 +34,6 @@ class TurbulenceDriver {
   // parameters of driving
   int nlow, nhigh, spect_form;
   int mode_count;
-  int rseed;  // random seed for turbulence driving
   Real kpeak;
   Real tcorr, dedt, tdriv_duration, tdriv_start;
   Real expo, exp_prl, exp_prp;
