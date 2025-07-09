@@ -92,6 +92,9 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   dt_turb_thresh=pin->GetOrAddReal("turb_driving","dt_turb_thresh",1e-6);
   // To store fraction of energy in solenoidal modes
   sol_fraction=pin->GetOrAddReal("turb_driving","sol_fraction",1.0);
+  
+  // random seed for turbulence driving (-1 = use time-based seed)
+  rseed = pin->GetOrAddInteger("turb_driving", "rseed", -1);
 
   // drive with constant edot or constant acceleration
   constant_edot = pin->GetOrAddBoolean("turb_driving", "constant_edot", true);
@@ -278,7 +281,7 @@ void TurbulenceDriver::Initialize() {
     force_tmp1_(m,n,k,j,i) = 0.0;
   });
 
-  rstate.idum = -1;
+  rstate.idum = rseed;
 
   auto kx_mode_ = kx_mode;
   auto ky_mode_ = ky_mode;
@@ -346,37 +349,25 @@ void TurbulenceDriver::Initialize() {
 
   auto &size = pmy_pack->pmb->mb_size;
   auto &drivingtype = driving_type;
-
-  // Use global mesh coordinates for continuous phase across AMR boundaries
-  Real global_x1min = pm->mesh_size.x1min;
-  Real global_x1max = pm->mesh_size.x1max;
-  Real global_x2min = pm->mesh_size.x2min;
-  Real global_x2max = pm->mesh_size.x2max;
-  Real global_x3min = pm->mesh_size.x3min;
-  Real global_x3max = pm->mesh_size.x3max;
   
   par_for("xsin/xcos", DevExeSpace(),0,nmb-1,0,mode_count-1,is,ie,
   KOKKOS_LAMBDA(int m, int n, int i) {
     Real &x1min = size.d_view(m).x1min;
     Real &x1max = size.d_view(m).x1max;
-    // Calculate global position from local MeshBlock position
-    Real dx_local = (x1max - x1min) / nx1;
-    Real x1v_global = x1min + (i-is + 0.5) * dx_local;
+    Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
     Real k1v = kx_mode_.d_view(n);
-    xsin_(m,n,i) = sin(k1v*x1v_global);
-    xcos_(m,n,i) = cos(k1v*x1v_global);
+    xsin_(m,n,i) = sin(k1v*x1v);
+    xcos_(m,n,i) = cos(k1v*x1v);
   });
 
   par_for("ysin/ycos", DevExeSpace(),0,nmb-1,0,mode_count-1,js,je,
   KOKKOS_LAMBDA(int m, int n, int j) {
     Real &x2min = size.d_view(m).x2min;
     Real &x2max = size.d_view(m).x2max;
-    // Calculate global position from local MeshBlock position
-    Real dy_local = (x2max - x2min) / nx2;
-    Real x2v_global = x2min + (j-js + 0.5) * dy_local;
+    Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
     Real k2v = ky_mode_.d_view(n);
-    ysin_(m,n,j) = sin(k2v*x2v_global);
-    ycos_(m,n,j) = cos(k2v*x2v_global);
+    ysin_(m,n,j) = sin(k2v*x2v);
+    ycos_(m,n,j) = cos(k2v*x2v);
     if (ncells2-1 == 0) {
       ysin_(m,n,j) = 0.0;
       ycos_(m,n,j) = 1.0;
@@ -387,12 +378,10 @@ void TurbulenceDriver::Initialize() {
   KOKKOS_LAMBDA(int m, int n, int k) {
     Real &x3min = size.d_view(m).x3min;
     Real &x3max = size.d_view(m).x3max;
-    // Calculate global position from local MeshBlock position
-    Real dz_local = (x3max - x3min) / nx3;
-    Real x3v_global = x3min + (k-ks + 0.5) * dz_local;
+    Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
     Real k3v = kz_mode_.d_view(n);
-    zsin_(m,n,k) = sin(k3v*x3v_global);
-    zcos_(m,n,k) = cos(k3v*x3v_global);
+    zsin_(m,n,k) = sin(k3v*x3v);
+    zcos_(m,n,k) = cos(k3v*x3v);
     if (ncells3-1 == 0 || (drivingtype == 1)) {
       zsin_(m,n,k) = 0.0;
       zcos_(m,n,k) = 1.0;
@@ -825,11 +814,12 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
       // Use precomputed basis functions for SFB
       auto sfb_basis_real_ = sfb_vector_basis_real;
       auto sfb_basis_imag_ = sfb_vector_basis_imag;
-      
+      auto basis_type = basis_type_;
+
       for (int n=0; n<mode_count; n++) {
         par_for("force_compute", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
         KOKKOS_LAMBDA(int m, int k, int j, int i) {
-          if (basis_type_ == TurbBasis::Cartesian) {
+          if (basis_type == TurbBasis::Cartesian) {
             Real forc_real = ( xcos_(m,n,i)*ycos_(m,n,j) - xsin_(m,n,i)*ysin_(m,n,j) ) * zcos_(m,n,k) -
                             ( xsin_(m,n,i)*ycos_(m,n,j) + xcos_(m,n,i)*ysin_(m,n,j) ) * zsin_(m,n,k);
             Real forc_imag = ( ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k) ) * xcos_(m,n,i) +
