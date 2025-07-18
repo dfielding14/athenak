@@ -20,10 +20,10 @@
 // forward declarations
 
 // constants that enumerate ParticlesPusher options
-enum class ParticlesPusher {drift, leap_frog, lagrangian_tracer, lagrangian_mc};
+enum class ParticlesPusher {drift, rk4_gravity, leap_frog, lagrangian_tracer, lagrangian_mc};
 
 // constants that enumerate ParticleTypes
-enum class ParticleType {cosmic_ray};
+enum class ParticleType {cosmic_ray, star};
 
 //----------------------------------------------------------------------------------------
 //! \struct ParticlesTaskIDs
@@ -38,6 +38,7 @@ struct ParticlesTaskIDs {
   TaskID recvp;
   TaskID csend;
   TaskID crecv;
+  TaskID regrid;
 };
 
 namespace particles {
@@ -55,14 +56,20 @@ class Particles {
   ParticleType particle_type;
   int nprtcl_thispack;             // number of particles this MeshBlockPack
   int nrdata, nidata;
-//  DvceArray1D<int>  prtcl_gid;     // GID of MeshBlock containing each par
-//  DvceArray2D<Real> prtcl_pos;     // positions
-//  DvceArray2D<Real> prtcl_vel;     // velocities
   DvceArray2D<Real> prtcl_rdata;   // real number properties each particle (x,v,etc.)
   DvceArray2D<int>  prtcl_idata;   // integer properties each particle (gid, tag, etc.)
   Real dtnew;
 
   ParticlesPusher pusher;
+  // Constants for rk4_gravity pusher
+  Real r_scale;
+  Real rho_scale;
+  Real m_gal;
+  Real a_gal;
+  Real z_gal;
+  Real r_200;
+  Real rho_mean;
+  Real par_grav_dx;
 
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
@@ -81,6 +88,7 @@ class Particles {
   TaskStatus RecvP(Driver *pdriver, int stage);
   TaskStatus ClearSend(Driver *pdriver, int stage);
   TaskStatus ClearRecv(Driver *pdriver, int stage);
+  TaskStatus Regrid(Driver *pdrive, int stage);
 
  private:
   MeshBlockPack* pmy_pack;  // ptr to MeshBlockPack containing this Particles

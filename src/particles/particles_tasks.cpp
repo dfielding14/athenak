@@ -29,7 +29,8 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   TaskID none(0);
 
   // particle integration done in "before_timeintegrator" task list
-  id.push   = tl["before_timeintegrator"]->AddTask(&Particles::Push, this, none);
+  id.regrid = tl["before_timeintegrator"]->AddTask(&Particles::Regrid, this, none);
+  id.push   = tl["before_timeintegrator"]->AddTask(&Particles::Push, this, id.regrid);
   id.newgid = tl["before_timeintegrator"]->AddTask(&Particles::NewGID, this, id.push);
   id.count  = tl["before_timeintegrator"]->AddTask(&Particles::SendCnt, this, id.newgid);
   id.irecv  = tl["before_timeintegrator"]->AddTask(&Particles::InitRecv, this, id.count);
@@ -39,6 +40,15 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   id.csend  = tl["before_timeintegrator"]->AddTask(&Particles::ClearSend, this, id.crecv);
 
   return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskList Particles::Regrid
+//! \brief Wrapper task list function to regrid particles if AMR is enabled.
+
+TaskStatus Particles::Regrid(Driver *pdrive, int stage) {
+  TaskStatus tstat = pbval_part->RegridPrtcl();
+  return tstat;
 }
 
 //----------------------------------------------------------------------------------------
