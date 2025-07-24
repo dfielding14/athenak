@@ -16,6 +16,8 @@
 #include "mesh/mesh.hpp"
 #include "bvals/bvals.hpp"
 #include "particles.hpp"
+#include "utils/sn_scheduler.hpp"
+#include "units/units.hpp"
 
 namespace particles {
 //----------------------------------------------------------------------------------------
@@ -80,9 +82,41 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       infile.close();
       nprtcl_thispack = particle_list.size(); // update to actual number of particles
 
-      // print number of particles loaded
+      // Print number of particles loaded
       std::cout << "Loaded " << particle_list.size() << " star particles from file "
                 << particle_file << std::endl;
+
+      // Initialize SN schedule
+      SNInj sn_injector;
+      Real cluster_mass = pin->GetOrAddReal("SN", "M_cluster", 1e4);
+      Real t_min = 0.0; 
+      Real t_max = pin->GetReal("time", "tlim");
+      Real unit_time = pmy_pack->punit->time_cgs();
+      std::vector<Real> sn_times_cpu = sn_injector.GetSNTimes(cluster_mass, t_min, t_max, unit_time);
+      size_t nsn_total = sn_times_cpu.size();
+      if (nsn_total > 0) {
+        // Allocate GPU memory for SN times
+        Kokkos::realloc(sn_times, nsn_total);
+
+        // Create host mirror and copy data
+        auto sn_times_host = Kokkos::create_mirror_view(sn_times);
+        for (int i = 0; i < nsn_total; ++i) {
+          sn_times_host(i) = sn_times_cpu[i];
+        }
+
+        // Copy to device
+        Kokkos::deep_copy(sn_times, sn_times_host);
+        
+	if (global_variable::my_rank == 0) {
+          std::cout << "Initialized SN schedule with " << nsn_total << " supernovae" << std::endl;
+          std::cout << "First SN at time: " << sn_times_cpu.at(0) << std::endl;
+          std::cout << "Last SN at time: " << sn_times_cpu.rbegin()[1]  << std::endl;
+	}
+      } else {
+	if (global_variable::my_rank == 0) {
+          std::cout << "No supernovae scheduled..." << std::endl;
+	}
+      }
 
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -135,8 +169,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       {
         int ndim=4;
         if (pmy_pack->pmesh->three_d) {ndim+=2;}
-        nrdata = ndim;
-        nidata = 2;
+        nrdata = ndim+1;
+        nidata = 3;
         break;
       }
     default:
@@ -160,7 +194,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       
       // Copy to device-accessible arrays
       // First create and populate a host view
-      Kokkos::View<Real**, Kokkos::HostSpace> host_pos("host_positions", 7, nprtcl_thispack);
+      HostArray2D<Real> host_pos("host_positions", 7, nprtcl_thispack);
       for (size_t i = 0; i < nprtcl_thispack; ++i) {
           host_pos(0, i) = particle_list[i][0];
           host_pos(1, i) = particle_list[i][1];
@@ -175,6 +209,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
       auto &pi = prtcl_idata;
       auto &pr = prtcl_rdata;
+      int nrdata_ = nrdata;
 
       // Initialize particles
       par_for("star_par", DevExeSpace(), 0, nprtcl_thispack-1,
@@ -187,6 +222,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
         pr(IPVX,p) = pos_data(3, p);
         pr(IPVY,p) = pos_data(4, p);
         pr(IPVZ,p) = pos_data(5, p);
+
+        pi(2, p) = 0; // int to track number of of SN
+        pr(nrdata_-1, p) = 0.0; // time of creation of star particle 
 
         // Print particle initialization
         Kokkos::printf("Initialized star particle %d in GID %d at position (%.2f, %.2f, %.2f)\n",

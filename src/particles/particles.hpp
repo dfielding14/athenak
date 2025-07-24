@@ -61,6 +61,7 @@ class Particles {
   Real dtnew;
 
   ParticlesPusher pusher;
+ 
   // Constants for rk4_gravity pusher
   Real r_scale;
   Real rho_scale;
@@ -70,6 +71,9 @@ class Particles {
   Real r_200;
   Real rho_mean;
   Real par_grav_dx;
+
+  // SN information for star particles
+  DvceArray1D<Real> sn_times;
 
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;

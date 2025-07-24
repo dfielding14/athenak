@@ -17,6 +17,7 @@
 #include "pgen.hpp"
 #include "units/units.hpp"
 #include "utils/profile_reader.hpp"
+#include "particles/particles.hpp"
 
 //===========================================================================//
 //                               Globals                                     //
@@ -51,6 +52,7 @@ Real GravPot(Real x1, Real x2, Real x3,
 
 void UserSource(Mesh* pm, const Real bdt);
 void GravitySource(Mesh* pm, const Real bdt);
+void SNSource(Mesh* pm, const Real bdt);
 void UserBoundary(Mesh* pm);
 void FreeProfile(ParameterInput *pin, Mesh *pm);
 void RefinementCondition(MeshBlockPack* pmbp);
@@ -71,6 +73,11 @@ namespace {
 
   // Constant for metallicity
   Real Z;
+
+  // Constants for SN
+  Real r_inj;
+  Real e_sn;
+  Real m_ej;
 
   // Add profile readers on host and device
   ProfileReaderHost profile_reader_host;  // Host-side reader
@@ -109,6 +116,14 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   r_circ    = pin->GetReal("problem", "r_circ");
   v_circ    = pin->GetReal("problem", "v_circ");
   Z         = pin->GetOrAddReal("problem", "metallicity", 1.0/3);
+
+  // Read in SN injection radius and compute energy and mass injection densities
+  r_inj = pin->GetReal("SN","r_inj"); // Input in code unis
+  const Real sphere_vol = (4.0/3.0)*M_PI*std::pow(r_inj,3);
+  const Real E_def = 1e51/pmbp->punit->erg(); // Default 10^51 ergs
+  const Real M_def = 8.4/pmbp->punit->msun(); // Default 8.4 solar masses
+  e_sn  = pin->GetOrAddReal("SN","E_sn",E_def)/sphere_vol; // Input in ergs
+  m_ej  = pin->GetOrAddReal("SN","M_ej",M_def)/sphere_vol; // Input in solar mass
 
   // Read the density gradient threshold for refinement
   ddens_threshold = pin->GetReal("problem", "ddens_max");
@@ -357,6 +372,9 @@ void SetEquilibriumState(const DvceArray5D<Real> &u0,
 
 void UserSource(Mesh* pm, const Real bdt) {
   GravitySource(pm, bdt);
+  SNSource(pm, bdt);
+
+  return;
 }
 
 void GravitySource(Mesh* pm, const Real bdt) {
@@ -461,6 +479,117 @@ Real GravPot(Real x1, Real x2, Real x3,
   Real phi = phi_NFW + phi_MN + phi_Outer;
   
   return phi;
+}
+
+void SNSource(Mesh* pm, const Real bdt) {
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  auto &indcs = pm->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int nmb1 = pmbp->nmb_thispack - 1;
+  auto &size = pmbp->pmb->mb_size;
+  
+  auto &u0 = pmbp->phydro->u0;
+  auto &w0 = pmbp->phydro->w0;
+
+  auto &pr = pmbp->ppart->prtcl_rdata;
+  auto &pi = pmbp->ppart->prtcl_idata;
+  int npart = pmbp->ppart->nprtcl_thispack;
+
+  auto gids = pmbp->gids;
+  auto &mbsize = pmbp->pmb->mb_size;
+
+  Real time = pm->time;
+  int nrdata = pmbp->ppart->nrdata;
+  auto &sn_times = pmbp->ppart->sn_times;
+
+  Real dr = r_inj;
+
+  // Create array of positions where SNs go off at this timestep
+  DvceArray1D<int> counter("sn_count", 1);
+  DvceArray2D<Real> sn_centers("sn_centers", 3, npart);
+
+  par_for("sn_source", DevExeSpace(), 0, npart-1, KOKKOS_LAMBDA(const int p) {
+
+    Real par_time_of_creation = pr(nrdata-1, p);
+    Real par_time = time - par_time_of_creation;
+    
+    int sn_idx = pi(2, p);
+    Real next_sn_time = sn_times(sn_idx);
+
+    if (par_time > next_sn_time) {
+      pi(2, p) += 1;
+      int idx = Kokkos::atomic_fetch_add(&counter(0), 1);
+      int m = pi(PGID, p) - gids;
+      
+      Real x1min = mbsize.d_view(m).x1min;
+      Real x1max = mbsize.d_view(m).x1max;
+      Real x2min = mbsize.d_view(m).x2min;
+      Real x2max = mbsize.d_view(m).x2max;
+      Real x3min = mbsize.d_view(m).x3min;
+      Real x3max = mbsize.d_view(m).x3max;
+
+      sn_centers(0, idx) = std::min(std::max(pr(IPX,p), x1min+dr), x1max-dr);
+      sn_centers(1, idx) = std::min(std::max(pr(IPY,p), x2min+dr), x2max-dr);
+      sn_centers(2, idx) = std::min(std::max(pr(IPZ,p), x3min+dr), x3max-dr);
+    }
+  });
+
+  Kokkos::fence();
+
+  // Get number of SNe on host
+  auto counter_host = Kokkos::create_mirror_view(counter);
+  Kokkos::deep_copy(counter_host, counter);
+  int num_sn = counter_host(0);
+  
+  if (num_sn > 0) {
+    Kokkos::resize(sn_centers, 3, num_sn);
+    std::cout << num_sn << " SN!" << std::endl;
+    
+    Real e_sn_ = e_sn;
+    Real m_ej_ = m_ej;
+
+    par_for("sn_injection", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      Real &x1min = size.d_view(m).x1min;
+      Real &x1max = size.d_view(m).x1max;
+      int nx1 = indcs.nx1;
+      Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+
+      Real &x2min = size.d_view(m).x2min;
+      Real &x2max = size.d_view(m).x2max;
+      int nx2 = indcs.nx2;
+      Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+
+      Real &x3min = size.d_view(m).x3min;
+      Real &x3max = size.d_view(m).x3max;
+      int nx3 = indcs.nx3;
+      Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+
+      for (int sn = 0; sn < num_sn; ++sn) {
+        Real sn_x = sn_centers(0, sn);
+        Real sn_y = sn_centers(1, sn);
+        Real sn_z = sn_centers(2, sn);
+              
+        // Calculate distance from SN center
+        Real dx = x1v - sn_x;
+        Real dy = x2v - sn_y;
+        Real dz = x3v - sn_z;
+        Real r = sqrt(dx*dx + dy*dy + dz*dz);
+              
+        // Inject energy if within injection radius
+        if (r <= dr) {
+          u0(m,IDN,k,j,i) += m_ej_;
+          u0(m,IEN,k,j,i) += e_sn_;
+	}
+      }
+
+    });
+    
+  }
+
+  return;
 }
 
 //===========================================================================//
