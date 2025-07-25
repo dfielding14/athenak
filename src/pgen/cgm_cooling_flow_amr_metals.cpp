@@ -7,6 +7,7 @@
 //  \brief Problem generator for a cooling flow CGM with AMR resolved disk
 
 #include <iostream>
+#include <cmath>
 #include "athena.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
@@ -120,10 +121,11 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   // Read in SN injection radius and compute energy and mass injection densities
   r_inj = pin->GetReal("SN","r_inj"); // Input in code unis
   const Real sphere_vol = (4.0/3.0)*M_PI*std::pow(r_inj,3);
-  const Real E_def = 1e51/pmbp->punit->erg(); // Default 10^51 ergs
-  const Real M_def = 8.4/pmbp->punit->msun(); // Default 8.4 solar masses
-  e_sn  = pin->GetOrAddReal("SN","E_sn",E_def)/sphere_vol; // Input in ergs
-  m_ej  = pin->GetOrAddReal("SN","M_ej",M_def)/sphere_vol; // Input in solar mass
+  const Real E_def = 1e51; // Default 10^51 ergs
+  const Real M_def = 8.4;  // Default 8.4 solar masses
+  e_sn  = pin->GetOrAddReal("SN","E_sn",E_def)*pmbp->punit->erg()/sphere_vol;
+  m_ej  = pin->GetOrAddReal("SN","M_ej",M_def)*pmbp->punit->msun()/sphere_vol;
+  std::cout << "e_sn = " << e_sn << ", m_ej = " << m_ej << std::endl;
 
   // Read the density gradient threshold for refinement
   ddens_threshold = pin->GetReal("problem", "ddens_max");
@@ -545,7 +547,7 @@ void SNSource(Mesh* pm, const Real bdt) {
   
   if (num_sn > 0) {
     Kokkos::resize(sn_centers, 3, num_sn);
-    std::cout << num_sn << " SN!" << std::endl;
+    std::cout << num_sn << " SN went off" << std::endl;
     
     Real e_sn_ = e_sn;
     Real m_ej_ = m_ej;
@@ -580,12 +582,18 @@ void SNSource(Mesh* pm, const Real bdt) {
               
         // Inject energy if within injection radius
         if (r <= dr) {
-          u0(m,IDN,k,j,i) += m_ej_;
+	  //Kokkos::printf("distance is %f , inject !\n", r);
+          
+	  //u0(m,IDN,k,j,i) += m_ej_;
           u0(m,IEN,k,j,i) += e_sn_;
+	  
+	  //Kokkos::printf("before: %.3f, after: %.3f \n", u0(m,IEN,k,j,i) - e_sn_, u0(m,IEN,k,j,i));
 	}
       }
 
     });
+    //Kokkos::fence();
+    //std::cout << "SN injection complete!" << std::endl;
     
   }
 
