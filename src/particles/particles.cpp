@@ -16,8 +16,8 @@
 #include "mesh/mesh.hpp"
 #include "bvals/bvals.hpp"
 #include "particles.hpp"
-#include "utils/sn_scheduler.hpp"
 #include "units/units.hpp"
+#include "utils/sn_scheduler.hpp"
 
 namespace particles {
 //----------------------------------------------------------------------------------------
@@ -32,12 +32,14 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
 
-  std::vector<std::array<Real, 7>> particle_list;
+  // initialize vector for star particles
+  std::vector<std::array<Real, 9>> particle_list;
 
   // select particle type
   {
     std::string ptype = pin->GetString("particles","particle_type");
     if (ptype.compare("cosmic_ray") == 0) {
+
       particle_type = ParticleType::cosmic_ray;
 
       // read number of particles per cell, and calculate number of particles this pack
@@ -48,7 +50,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       int ncells = indcs.nx1*indcs.nx2*indcs.nx3;
       Real r_npart = ppc*static_cast<Real>((pmy_pack->nmb_thispack)*ncells);
       nprtcl_thispack = static_cast<int>(r_npart); // then cast to integer
+						   
     } else if (ptype.compare("star") == 0) {
+
       particle_type = ParticleType::star;
       nprtcl_thispack = 0; // initialize to zero
 
@@ -65,64 +69,34 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       // Read particle positions from file
       int nmb = pmy_pack->nmb_thispack;
       auto &size = pmy_pack->pmb->mb_size;
-      std::array<Real, 3> p;
-      while (infile >> p[0] >> p[1] >> p[2] >> p[3] >> p[4] >> p[5]) {
+
+      // Skip header comments
+      while (infile.peek() == '#') {
+        infile.ignore(1000, '\n');
+      }
+
+      std::array<Real, 8> p;
+      while (infile >> p[0] >> p[1] >> p[2] >> p[3] >>
+		       p[4] >> p[5] >> p[6] >> p[7]) {
         for (int m=0; m<nmb; ++m) {
           // Loop over particles to see which are in this meshblock
           if (p[0] > size.h_view(m).x1min && p[0] <= size.h_view(m).x1max &&
               p[1] > size.h_view(m).x2min && p[1] <= size.h_view(m).x2max &&
               p[2] > size.h_view(m).x3min && p[2] <= size.h_view(m).x3max) {
             // Add particle to the list if it is within the mesh block bounds
-            std::array<Real, 7> new_particle = {p[0], p[1], p[2], p[3], 
-		                                p[4], p[5], static_cast<Real>(m)};
+            std::array<Real, 9> new_particle = {p[0], p[1], p[2], 
+		                                p[3], p[4], p[5], 
+						p[6], p[7], static_cast<Real>(m)};
             particle_list.push_back(new_particle);
           }
         }
       }
       infile.close();
-      nprtcl_thispack = particle_list.size(); // update to actual number of particles
+      nprtcl_thispack = particle_list.size(); 
 
       // Print number of particles loaded
-      std::cout << "Loaded " << particle_list.size() << " star particles from file "
-                << particle_file << std::endl;
-
-      // Initialize SN schedule
-      SNInj sn_injector;
-      Real cluster_mass = pin->GetOrAddReal("SN", "M_cluster", 1e4);
-      Real t_min = 0.0; 
-      Real t_max = pin->GetReal("time", "tlim");
-      Real unit_time = pmy_pack->punit->time_cgs();
-      std::vector<Real> sn_times_cpu = sn_injector.GetSNTimes(cluster_mass, t_min, t_max, unit_time);
-      size_t nsn_total = sn_times_cpu.size();
-      if (nsn_total > 0) {
-        // Allocate GPU memory for SN times
-        Kokkos::realloc(sn_times, nsn_total);
-
-        // Create host mirror and copy data
-        auto sn_times_host = Kokkos::create_mirror_view(sn_times);
-        for (int i = 0; i < nsn_total; ++i) {
-          sn_times_host(i) = sn_times_cpu[i];
-        }
-
-        // Copy to device
-        Kokkos::deep_copy(sn_times, sn_times_host);
-        
-	if (global_variable::my_rank == 0) {
-          std::cout << "Initialized SN schedule with " << nsn_total << " supernovae" << std::endl;
-          std::cout << "First SN at time: " << sn_times_cpu.at(0) << std::endl;
-          std::cout << "Last SN at time: " << sn_times_cpu.rbegin()[1]  << std::endl;
-	}
-      } else {
-	if (global_variable::my_rank == 0) {
-          std::cout << "No supernovae scheduled..." << std::endl;
-	}
-      }
-
-    } else {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Particle type = '" << ptype << "' not recognized"
-                << std::endl;
-      std::exit(EXIT_FAILURE);
+      std::cout << "Loaded " << nprtcl_thispack 
+	        << " star particles from file " << particle_file << std::endl;
     }
   }
 
@@ -156,6 +130,14 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << "Particles only work in 2D/3D, but 1D problem initialized" <<std::endl;
     std::exit(EXIT_FAILURE);
   }
+
+  // stars must be 3D
+  if (particle_type == ParticleType::star and not pmy_pack->pmesh->three_d) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "Star particles only work in 3D" <<std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
   switch (particle_type) {
     case ParticleType::cosmic_ray:
       {
@@ -167,9 +149,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       }
     case ParticleType::star:
       {
-        int ndim=4;
-        if (pmy_pack->pmesh->three_d) {ndim+=2;}
-        nrdata = ndim+1;
+        nrdata = 9;
         nidata = 3;
         break;
       }
@@ -194,43 +174,42 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       
       // Copy to device-accessible arrays
       // First create and populate a host view
-      HostArray2D<Real> host_pos("host_positions", 7, nprtcl_thispack);
+      HostArray2D<Real> host_pos("host_positions", 9, nprtcl_thispack);
       for (size_t i = 0; i < nprtcl_thispack; ++i) {
-          host_pos(0, i) = particle_list[i][0];
-          host_pos(1, i) = particle_list[i][1];
-          host_pos(2, i) = particle_list[i][2];
-          host_pos(3, i) = particle_list[i][3];
-	  host_pos(4, i) = particle_list[i][4];
-	  host_pos(5, i) = particle_list[i][5];
-          host_pos(6, i) = particle_list[i][6];
+	for (size_t j = 0; j < 9; ++j) {
+          host_pos(j, i) = particle_list[i][j];
+	}
       }
+
       // Then create the device view and copy data
       auto pos_data = Kokkos::create_mirror_view_and_copy(DevExeSpace(), host_pos);
 
       auto &pi = prtcl_idata;
       auto &pr = prtcl_rdata;
       int nrdata_ = nrdata;
+      Real unit_time = pmy_pack->punit->time_cgs();
 
       // Initialize particles
       par_for("star_par", DevExeSpace(), 0, nprtcl_thispack-1,
       KOKKOS_LAMBDA(const int p) {   
-        int m = static_cast<int>(pos_data(6, p));  
+        int m = static_cast<int>(pos_data(8, p));  
         pi(PGID,p) = gids + m;
+	pi(2, p) = 0; // int to track # of SN
         pr(IPX,p)  = pos_data(0, p);
         pr(IPY,p)  = pos_data(1, p);
         pr(IPZ,p)  = pos_data(2, p);
         pr(IPVX,p) = pos_data(3, p);
         pr(IPVY,p) = pos_data(4, p);
         pr(IPVZ,p) = pos_data(5, p);
-
-        pi(2, p) = 0; // int to track number of of SN
-        pr(nrdata_-1, p) = 0.0; // time of creation of star particle 
+        pr(6, p) = pos_data(6, p); // time of creation of star particle
+        pr(7, p) = pos_data(7, p); // mass of star particle
+	pr(8, p) = GetNthSNTime(pr(7,p), pr(6,p), unit_time, 0); // time of next SN
 
         // Print particle initialization
-        Kokkos::printf("Initialized star particle %d in GID %d at position (%.2f, %.2f, %.2f)\n",
-                  p, gids + m, pos_data(0, p), pos_data(1, p), pos_data(2, p));
+        // Kokkos::printf("Initialized star particle %d in GID %d at position (%.2f, %.2f, %.2f)\n",
+        //          p, gids + m, pos_data(0, p), pos_data(1, p), pos_data(2, p));
       });
-
+    
       dtnew = std::min(size.h_view(0).dx1, size.h_view(0).dx2);
       dtnew = std::min(dtnew, size.h_view(0).dx3);
     }

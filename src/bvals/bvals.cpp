@@ -238,10 +238,6 @@ particles::ParticlesBoundaryValues::ParticlesBoundaryValues(
 #if MPI_PARALLEL_ENABLED
   
   int npart = pmy_part->nprtcl_thispack;
-  Kokkos::realloc(prtcl_rsendbuf, static_cast<int>(3.0*npart));
-  Kokkos::realloc(prtcl_isendbuf, static_cast<int>(3.0*npart));
-  Kokkos::realloc(prtcl_rrecvbuf, static_cast<int>(3.0*npart));
-  Kokkos::realloc(prtcl_irecvbuf, static_cast<int>(3.0*npart));
 
   //resize vectors over number of ranks
   nsends_eachrank.resize(global_variable::nranks);

@@ -18,6 +18,7 @@
 #include "pgen.hpp"
 #include "units/units.hpp"
 #include "utils/profile_reader.hpp"
+#include "utils/sn_scheduler.hpp"
 #include "particles/particles.hpp"
 
 //===========================================================================//
@@ -102,9 +103,27 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   user_srcs_func  = UserSource;
   user_bcs_func   = UserBoundary;
   pgen_final_func = FreeProfile;
-  user_ref_func  = RefinementCondition;
+  user_ref_func   = RefinementCondition;
 
   if (restart) return;
+
+  if (global_variable::my_rank==0) {
+    std::cout << std::endl;
+    std::cout << "==============================================" << std::endl;
+    std::cout << "Units                                         " << std::endl;
+    std::cout << "==============================================" << std::endl;
+    std::cout << "Unit Length         : " << 1.0/pmbp->punit->kpc() 
+                                          << " kpc"    << std::endl;
+    std::cout << "Unit Temperature    : " << 1.0/pmbp->punit->kelvin()
+                                          << " K"     << std::endl;     
+    std::cout << "Unit Number Density : " << std::pow(pmbp->punit->cm(),3) 
+                                          << " cm^-3" << std::endl;        
+    std::cout << "Unit Velocity       : " << 1.0/pmbp->punit->km_s() 
+                                          << " km/s"  << std::endl;
+    std::cout << "Unit Time           : " << 1.0/pmbp->punit->myr() 
+                                          << " Myr"   << std::endl;
+    std::cout << std::endl;
+  }
 
   // Read in constants
   r_scale   = pin->GetReal("potential", "r_scale");
@@ -125,10 +144,39 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   const Real M_def = 8.4;  // Default 8.4 solar masses
   e_sn  = pin->GetOrAddReal("SN","E_sn",E_def)*pmbp->punit->erg()/sphere_vol;
   m_ej  = pin->GetOrAddReal("SN","M_ej",M_def)*pmbp->punit->msun()/sphere_vol;
-  std::cout << "e_sn = " << e_sn << ", m_ej = " << m_ej << std::endl;
 
   // Read the density gradient threshold for refinement
   ddens_threshold = pin->GetReal("problem", "ddens_max");
+  
+  // Output parameter information
+  if (global_variable::my_rank == 0) {
+    std::cout << "==============================================" << std::endl;
+    std::cout << "Potential Parameters                          " << std::endl;
+    std::cout << "==============================================" << std::endl;
+    std::cout << "r_scale             : " << r_scale    << std::endl;
+    std::cout << "rho_scale           : " << rho_scale  << std::endl;
+    std::cout << "m_gal               : " << m_gal      << std::endl;
+    std::cout << "a_gal               : " << a_gal      << std::endl;
+    std::cout << "z_gal               : " << z_gal      << std::endl;
+    std::cout << "r_200               : " << r_200      << std::endl;
+    std::cout << "rho_mean            : " << rho_mean   << std::endl;
+    std::cout << std::endl;
+    std::cout << "==============================================" << std::endl;
+    std::cout << "Other Parameters                              " << std::endl;
+    std::cout << "==============================================" << std::endl;
+    std::cout << "r_circ              : " << r_circ     << std::endl;
+    std::cout << "v_circ              : " << v_circ     << std::endl;
+    std::cout << "metallicity         : " << Z          << std::endl;
+    std::cout << "ddens_threshold     : " << ddens_threshold << std::endl;
+    std::cout << std::endl;
+    std::cout << "==============================================" << std::endl;
+    std::cout << "Supernova Parameters                          " << std::endl;
+    std::cout << "==============================================" << std::endl;
+    std::cout << "r_inj               : " << r_inj      << std::endl;
+    std::cout << "e_sn                : " << e_sn       << std::endl;
+    std::cout << "m_ej                : " << m_ej       << std::endl;
+    std::cout << std::endl;
+  }
 
   // Read the CGM cooling flow profile file
   std::string profile_file = pin->GetString("problem", "profile_file");
@@ -136,20 +184,26 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     profile_reader_host.ReadProfiles(profile_file);
     // Create device-accessible reader
     profile_reader = profile_reader_host.CreateDeviceReader();
-    std::cout << "Successfully loaded profiles from " << profile_file << std::endl;
   } catch (const std::exception& e) {
     std::cerr << "Error loading profiles: " << e.what() << std::endl;
   }
+  if (global_variable::my_rank==0) {
+    std::cout << "Successfully loaded CGM profiles from " 
+              << profile_file << std::endl;
+  }
 
-  // Read the disk profile file
+  // Read in the disk profile file
   std::string disk_profile_file = pin->GetString("problem", "disk_profile_file");
   try {
     disk_profile_reader_host.ReadProfiles(disk_profile_file);
     // Create device-accessible reader
     disk_profile_reader = disk_profile_reader_host.CreateDeviceReader();
-    std::cout << "Successfully loaded disk profiles from " << disk_profile_file << std::endl;
   } catch (const std::exception& e) {
     std::cerr << "Error loading disk profiles: " << e.what() << std::endl;
+  }
+  if (global_variable::my_rank==0) {
+    std::cout << "Successfully loaded disk profiles from " 
+	      << disk_profile_file << std::endl;
   }
 
   // Capture variables for kernel
@@ -214,6 +268,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     u0(m, nhydro, k, j, i) = Z_ * Zsol * u0(m, IDN, k, j, i);
 
   });
+
+  if (global_variable::my_rank==0) {
+    std::cout << "Successfully initialized grid!" << std::endl;
+  }
 
   return;
 }
@@ -504,7 +562,7 @@ void SNSource(Mesh* pm, const Real bdt) {
 
   Real time = pm->time;
   int nrdata = pmbp->ppart->nrdata;
-  auto &sn_times = pmbp->ppart->sn_times;
+  Real unit_time = pmbp->punit->time_cgs();
 
   Real dr = r_inj;
 
@@ -513,15 +571,18 @@ void SNSource(Mesh* pm, const Real bdt) {
   DvceArray2D<Real> sn_centers("sn_centers", 3, npart);
 
   par_for("sn_source", DevExeSpace(), 0, npart-1, KOKKOS_LAMBDA(const int p) {
-
-    Real par_time_of_creation = pr(nrdata-1, p);
-    Real par_time = time - par_time_of_creation;
     
-    int sn_idx = pi(2, p);
-    Real next_sn_time = sn_times(sn_idx);
+    Real next_sn_time = pr(nrdata-1, p);
 
-    if (par_time > next_sn_time) {
+    if (time > next_sn_time) {
+      // Update particle sn tracking
       pi(2, p) += 1;
+      int sn_idx = pi(2, p);
+      Real par_t_create = pr(nrdata-3, p);
+      Real cluster_mass = pr(nrdata-2, p);
+      pr(nrdata-1, p) = GetNthSNTime(cluster_mass, par_t_create, unit_time, sn_idx);
+
+      // Register SN center location and adjust for boundaries
       int idx = Kokkos::atomic_fetch_add(&counter(0), 1);
       int m = pi(PGID, p) - gids;
       

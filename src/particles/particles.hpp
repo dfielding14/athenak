@@ -72,9 +72,6 @@ class Particles {
   Real rho_mean;
   Real par_grav_dx;
 
-  // SN information for star particles
-  DvceArray1D<Real> sn_times;
-
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
 

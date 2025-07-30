@@ -131,6 +131,7 @@ TaskStatus ParticlesBoundaryValues::RegridPrtcl() {
     });
   }
 
+  fflush(stdout);
   return TaskStatus::complete;
 }
 
@@ -500,6 +501,10 @@ TaskStatus ParticlesBoundaryValues::InitPrtclRecv() {
 
   bool no_errors=true;
   if (nprtcl_recv > 0) {
+    // Allocate receive buffer
+    Kokkos::realloc(prtcl_rrecvbuf, (pmy_part->nrdata)*nprtcl_recv);
+    Kokkos::realloc(prtcl_irecvbuf, (pmy_part->nidata)*nprtcl_recv);
+
     // Post non-blocking receives
     rrecv_req.clear();
     irecv_req.clear();
@@ -568,6 +573,10 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
 
   bool no_errors=true;
   if (nprtcl_send > 0) {
+    // Allocate send buffer
+    Kokkos::realloc(prtcl_rsendbuf, (pmy_part->nrdata)*nprtcl_send);
+    Kokkos::realloc(prtcl_isendbuf, (pmy_part->nidata)*nprtcl_send);
+
     // sendlist on device is already sorted by destrank in CountSendAndRecvs()
     // Use sendlist on device to load particles into send buffer ordered by dest_rank
     int nrdata = pmy_part->nrdata;
