@@ -100,6 +100,15 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
 #if MPI_PARALLEL_ENABLED
   // create unique communicators for AMR
   MPI_Comm_dup(MPI_COMM_WORLD, &amr_comm);
+
+  // Initialize particle AMR communication variables
+  prtcl_rsendbuf = DvceArray1D<Real>("rsend", 1);
+  prtcl_rrecvbuf = DvceArray1D<Real>("rrecv",1);
+  prtcl_isendbuf = DvceArray1D<int>("isend",1);
+  prtcl_irecvbuf = DvceArray1D<int>("irecv",1);
+
+  prtcl_nsends_eachrank.resize(global_variable::nranks);
+
 #endif
 }
 
