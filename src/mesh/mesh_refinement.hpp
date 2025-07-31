@@ -147,6 +147,8 @@ class MeshRefinement {
   void CountParticleSendsAndRecvs(); 
   void PackAMRBuffersParticles();
   void UnpackAMRBuffersParticles();
+  void InitPartRecv();
+  void RegridParticles();
 
   // initialize interpolation weights
   void InitInterpWghts();

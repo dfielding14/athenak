@@ -38,7 +38,6 @@ struct ParticlesTaskIDs {
   TaskID recvp;
   TaskID csend;
   TaskID crecv;
-  TaskID regrid;
 };
 
 namespace particles {
@@ -89,7 +88,6 @@ class Particles {
   TaskStatus RecvP(Driver *pdriver, int stage);
   TaskStatus ClearSend(Driver *pdriver, int stage);
   TaskStatus ClearRecv(Driver *pdriver, int stage);
-  TaskStatus Regrid(Driver *pdrive, int stage);
 
  private:
   MeshBlockPack* pmy_pack;  // ptr to MeshBlockPack containing this Particles

@@ -569,6 +569,7 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   hydro::Hydro* phydro = pm->pmb_pack->phydro;
   mhd::MHD* pmhd = pm->pmb_pack->pmhd;
   z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
+  auto ppart = pm->pmb_pack->ppart;
   // derefine (if needed)
   if (ndel > 0) {
     if (phydro != nullptr) {
@@ -615,8 +616,8 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   // Step 8.
   // Wait for all MPI load balancing communications to finish.  Unpack data.
 #if MPI_PARALLEL_ENABLED
-  if (nmb_send > 0) {ClearSendAMR();}
-  if (nmb_recv > 0) {ClearRecvAndUnpackAMR();}
+  ClearSendAMR();
+  ClearRecvAndUnpackAMR();
 #endif
 
   // copy newtoold array to DualView so that it can be accessed in kernel
@@ -685,6 +686,13 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   // clean-up and return
   delete [] newtoold;
   delete [] oldtonew;
+
+  // Regrid particle after refinement just in case
+  if (ppart != nullptr) {
+    std::cout << "After Refinement on " << global_variable::my_rank << std::endl;
+    RegridParticles();
+  }
+
   return;
 }
 

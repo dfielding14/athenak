@@ -73,6 +73,8 @@ TaskStatus ParticlesBoundaryValues::RegridPrtcl() {
   int nmb = pmy_part->pmy_pack->nmb_thispack;
   auto &mbsize = pmy_part->pmy_pack->pmb->mb_size;
 
+  auto myrank = global_variable::my_rank;
+
   // Regrid particles if AMR is enabled
   if (pmy_part->pmy_pack->pmesh->adaptive) {
     par_for("regrid_part",DevExeSpace(),0,(npart-1),KOKKOS_LAMBDA(const int p) {
@@ -84,9 +86,9 @@ TaskStatus ParticlesBoundaryValues::RegridPrtcl() {
 
       // Search through all mesh blocks in this pack to find the right one
       for (int m = 0; m < nmb; ++m) {
-        if (x1 >= mbsize.d_view(m).x1min && x1 <= mbsize.d_view(m).x1max &&
-            x2 >= mbsize.d_view(m).x2min && x2 <= mbsize.d_view(m).x2max &&
-            x3 >= mbsize.d_view(m).x3min && x3 <= mbsize.d_view(m).x3max) {
+        if (x1 >= mbsize.d_view(m).x1min && x1 < mbsize.d_view(m).x1max &&
+            x2 >= mbsize.d_view(m).x2min && x2 < mbsize.d_view(m).x2max &&
+            x3 >= mbsize.d_view(m).x3min && x3 < mbsize.d_view(m).x3max) {
           pi(PGID, p) = gids + m;
 	  found = true;
           break;
@@ -119,19 +121,21 @@ TaskStatus ParticlesBoundaryValues::RegridPrtcl() {
         pi(PGID, p) = gids + nearest_mb;
   
         Kokkos::printf("Warning: Orphan particle at (%f, %f, %f) assigned to nearest block %d \
-			with bounds (%f,%f,%f,%f,%f,%f) \n", 
+			with bounds (%f,%f,%f,%f,%f,%f) on rank %d \n", 
                        x1, x2, x3, nearest_mb, 
 		       mbsize.d_view(nearest_mb).x1min,
 		       mbsize.d_view(nearest_mb).x1max,
 		       mbsize.d_view(nearest_mb).x2min,
 		       mbsize.d_view(nearest_mb).x2max,
 		       mbsize.d_view(nearest_mb).x3min,
-		       mbsize.d_view(nearest_mb).x3max);
+		       mbsize.d_view(nearest_mb).x3max,
+		       myrank);
       }
     });
   }
 
   fflush(stdout);
+  std::cout << "Regridded on rank " << myrank << std::endl;
   return TaskStatus::complete;
 }
 
