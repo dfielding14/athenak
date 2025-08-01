@@ -614,7 +614,7 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   }
 
   // Step 8.
-  // Wait for all MPI load balancing communications to finish.  Unpack data.
+  // Wait for all MPI load balancing communications to finish. Unpack data.
 #if MPI_PARALLEL_ENABLED
   ClearSendAMR();
   ClearRecvAndUnpackAMR();
@@ -686,12 +686,6 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   // clean-up and return
   delete [] newtoold;
   delete [] oldtonew;
-
-  // Regrid particle after refinement just in case
-  if (ppart != nullptr) {
-    std::cout << "After Refinement on " << global_variable::my_rank << std::endl;
-    RegridParticles();
-  }
 
   return;
 }

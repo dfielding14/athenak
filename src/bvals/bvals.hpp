@@ -247,7 +247,6 @@ class ParticlesBoundaryValues {
   TaskStatus PackAndSendPrtcls();
   TaskStatus ClearPrtclSend();
   TaskStatus RecvAndUnpackPrtcls();
-  TaskStatus RegridPrtcl();
 
  protected:
   particles::Particles* pmy_part;

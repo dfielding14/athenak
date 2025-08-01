@@ -1364,68 +1364,56 @@ void MeshRefinement::CreateParticleLists() {
   auto &pr = ppart->prtcl_rdata;
   auto &pi = ppart->prtcl_idata;
   int npart = ppart->nprtcl_thispack;
-  auto gids = pmy_mesh->pmb_pack->gids;
   int myrank = global_variable::my_rank;
-  auto &mbsize = pmy_mesh->pmb_pack->pmb->mb_size;
 
-  // Create device copy of new_rank_eachmb array
-  int new_nmb_total = pmy_mesh->nmb_total;  // Use updated mesh size
-  Kokkos::View<int*> new_rank_eachmb_d("new_rank_device", new_nmb_total);
-  auto new_rank_host = Kokkos::create_mirror_view(new_rank_eachmb_d);
-
-  // Copy host data to mirror view
-  for (int i = 0; i < new_nmb_total; i++) {
-    new_rank_host(i) = new_rank_eachmb[i];
+  // Create device copy of arrays needed for mapping
+  int old_nmb = pmy_mesh->nmb_total; 
+  
+  // Calculate total number of new MeshBlocks from the new arrays
+  int new_nmb = 0;
+  for (int n = 0; n < global_variable::nranks; n++) {
+    new_nmb += new_nmb_eachrank[n];
   }
-  Kokkos::deep_copy(new_rank_eachmb_d, new_rank_host);
+  
+  DualArray1D<int> old_to_new("oldtonew_device", old_nmb);
+  for (int i = 0; i < old_nmb; i++) {
+    old_to_new.h_view(i) = oldtonew[i];
+  }
+  old_to_new.template modify<HostMemSpace>();
+  old_to_new.template sync<DevExeSpace>();
 
+  DualArray1D<int> new_rank("new_rank_device", new_nmb);
+  for (int i = 0; i < new_nmb; i++) {
+    new_rank.h_view(i) = new_rank_eachmb[i];
+  }
+  new_rank.template modify<HostMemSpace>();
+  new_rank.template sync<DevExeSpace>();
+ 
+  // Set particle sendlist to maximum length first
   Kokkos::realloc(prtcl_sendlist, npart);
+  auto sendlist_d = prtcl_sendlist.d_view;
 
   int counter = 0;
   Kokkos::View<int> atom_count("atom_count");
   Kokkos::deep_copy(atom_count, counter);
 
-  auto sendlist_d = prtcl_sendlist.d_view;
-
   par_for("create_part_list", DevExeSpace(), 0, (npart-1),
           KOKKOS_LAMBDA(const int p) {
-    // Get particle spatial coordinates
-    Real x1 = pr(IPX, p);
-    Real x2 = pr(IPY, p);
-    Real x3 = pr(IPZ, p);
+    
+    int old_gid  = pi(PGID, p); 
+    int new_gid  = old_to_new.d_view(old_gid);
+    int dest_rank = new_rank.d_view(new_gid);
 
-    // Find which NEW mesh block this particle belongs to spatially
-    int dest_gid = -1;
-    int dest_rank = -1;
+    // Update particle's GID to new value
+    pi(PGID, p) = new_gid;
 
-    // Search through new mesh block structure to find containing block
-    for (int newm = 0; newm < new_nmb_total; newm++) {
-      // Check if particle is within bounds of this new mesh block
-      if (x1 >= mbsize.d_view(newm).x1min && x1 < mbsize.d_view(newm).x1max &&
-          x2 >= mbsize.d_view(newm).x2min && x2 < mbsize.d_view(newm).x2max &&
-          x3 >= mbsize.d_view(newm).x3min && x3 < mbsize.d_view(newm).x3max) {
-        dest_gid = newm;
-        dest_rank = new_rank_eachmb_d(newm);
-        break;
-      }
-    }
-    if (dest_rank != -1 && dest_rank != myrank) {
-      // This particle needs to move to a different rank
+    // If particle needs to move to different rank, add to send list
+    if (dest_rank != myrank) {
       int index = Kokkos::atomic_fetch_add(&atom_count(), 1);
       sendlist_d(index).prtcl_indx = p;
-      sendlist_d(index).dest_gid = dest_gid;
-      sendlist_d(index).dest_rank = dest_rank;
+      sendlist_d(index).dest_gid   = new_gid; 
+      sendlist_d(index).dest_rank  = dest_rank;
     }
-
-    //int current_gid = pi(PGID, p);
-    //int new_rank = new_rank_eachmb_d(current_gid);
-
-    //if (new_rank != myrank) {
-    //  int index = Kokkos::atomic_fetch_add(&atom_count(), 1);
-    //  sendlist_d(index).prtcl_indx = p;
-    //  sendlist_d(index).dest_gid = current_gid; 
-    //  sendlist_d(index).dest_rank = new_rank;
-    //}
   });
 
   Kokkos::deep_copy(counter, atom_count);
@@ -1523,15 +1511,5 @@ void MeshRefinement::InitPartRecv() {
   }
 #endif
 
-  return;
-}
-
-//----------------------------------------------------------------------------------------
-//! \fn void MeshRefinement::RegridParticles()
-//! \brief
-
-void MeshRefinement::RegridParticles() {
-  auto *ppart = pmy_mesh->pmb_pack->ppart;
-  ppart->pbval_part->RegridPrtcl();
   return;
 }
