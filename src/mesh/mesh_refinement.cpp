@@ -28,6 +28,7 @@
 #include "z4c/z4c_amr.hpp"
 #include "prolongation.hpp"
 #include "restriction.hpp"
+#include "particles/particles.hpp"
 
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
@@ -686,6 +687,9 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   // clean-up and return
   delete [] newtoold;
   delete [] oldtonew;
+
+  // refine particles
+  RefineParticles();
 
   return;
 }
@@ -1423,3 +1427,55 @@ void MeshRefinement::InitInterpWghts() {
   res_4th_e.template modify<HostMemSpace>();
   res_4th_e.template sync<DevExeSpace>();
 }
+
+//----------------------------------------------------------------------------------------
+//! \fn void MeshRefinement::RefineParticles
+//! \brief After refinement, check if particle gids needs to be adjusted
+
+void MeshRefinement::RefineParticles() {
+  auto pmbp = pmy_mesh->pmb_pack;
+  int nmb = pmbp->nmb_thispack;
+  auto &mbsize = pmbp->pmb->mb_size;
+  auto gids = pmbp->gids;
+  auto *ppart = pmbp->ppart;
+  auto &pr = ppart->prtcl_rdata;
+  auto &pi = ppart->prtcl_idata;
+  int npart = ppart->nprtcl_thispack;
+  int nleaf = 2; 
+  if (pmy_mesh->two_d) {nleaf = 4;}
+  if (pmy_mesh->three_d) {nleaf = 8;}
+
+  par_for("refine_part",DevExeSpace(),0,(npart-1),KOKKOS_LAMBDA(const int p) {
+    Real x1 = pr(IPX, p);
+    Real x2 = pr(IPY, p);
+    Real x3 = pr(IPZ, p);
+    int m = pi(PGID, p) - gids;
+    bool in_place = false;
+    if (x1 >= mbsize.d_view(m).x1min && x1 < mbsize.d_view(m).x1max &&
+        x2 >= mbsize.d_view(m).x2min && x2 < mbsize.d_view(m).x2max &&
+        x3 >= mbsize.d_view(m).x3min && x3 < mbsize.d_view(m).x3max) {
+        in_place = true;
+    }
+    if (not in_place) {
+      int newm;
+      for (int n = 1; n < nleaf; ++n) {
+        newm = m + n;
+        if (x1 >= mbsize.d_view(newm).x1min && x1 < mbsize.d_view(newm).x1max &&
+            x2 >= mbsize.d_view(newm).x2min && x2 < mbsize.d_view(newm).x2max &&
+            x3 >= mbsize.d_view(newm).x3min && x3 < mbsize.d_view(newm).x3max) {
+          pi(PGID, p) = gids + m;
+          in_place = true;
+	  break;
+        }
+      }
+    }
+    if (not in_place) {
+      Kokkos::printf("Error: particle orphaned!\n");
+    }
+  });
+
+  return;
+}
+
+
+

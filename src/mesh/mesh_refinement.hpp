@@ -142,12 +142,13 @@ class MeshRefinement {
   void UnpackAMRBuffersFC(DvceFaceFld4D<Real> &b,DvceFaceFld4D<Real> &cb,int ncc,int nfc);
   void ClearSendAMR();
 
-  // particle functions for load balancing
+  // particle functions
   void CreateParticleLists();
   void CountParticleSendsAndRecvs(); 
   void PackAMRBuffersParticles();
   void UnpackAMRBuffersParticles();
   void InitPartRecv();
+  void RefineParticles();
 
   // initialize interpolation weights
   void InitInterpWghts();
