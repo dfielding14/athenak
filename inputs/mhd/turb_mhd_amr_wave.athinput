@@ -1,0 +1,109 @@
+# Turbulence with MHD and traveling wave AMR refinement
+# Test for div(B) preservation during dynamic mesh refinement
+# This problem creates a moving band of refinement that travels through
+# the domain, continuously creating and destroying fine/coarse boundaries
+
+<comment>
+problem = turb_mhd_amr_wave
+
+<job>
+basename = turb_mhd_wave
+
+<mesh>
+nghost = 3        # Need 3 for PPM reconstruction
+nx1 = 64
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 64
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 64
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<mesh_refinement>
+adaptive = true
+max_nmb_per_rank = 2000
+refinement_interval = 5    # Check frequently for moving wave
+ncycle_check = 2            # Refine often to track wave
+max_level = 2               # Allow 2 levels of refinement
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 8
+
+<time>
+evolution = dynamic
+cfl_number = 0.3
+tlim = 10.0
+nlim = -1
+integrator = vl2          # Van Leer for MHD
+ncycle_out = 100
+
+<mhd>
+eos = ideal
+gamma = 1.4
+reconstruct = ppm         # High-order for better div(B) preservation
+rsolver = hlld           # HLLD Riemann solver for MHD
+dfloor = 1.0e-8
+pfloor = 1.0e-10
+
+<problem>
+# Initial conditions
+rho0 = 1.0
+pgas0 = 1.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+
+# Magnetic field configuration
+b0 = 0.1                  # Field strength
+beta = 100.0              # Plasma beta (if > 0, overrides b0)
+field_config = 3          # 0=uniform-x, 1=uniform-y, 2=uniform-z, 3=diagonal, 4=helical
+
+# Traveling wave refinement parameters
+wave_speed = 0.1          # Speed of refinement wave
+wave_width = 0.2          # Width of refined region
+wave_amplitude = 0.0      # Amplitude of density perturbation (0 = uniform)
+wave_direction = 0        # 0=x, 1=y, 2=z
+
+<turb_driving>
+dedt = 0.1                # Energy injection rate
+nlow = 2                  # Minimum driving wavenumber
+nhigh = 4                 # Maximum driving wavenumber
+expo = 2.0                # Spectrum exponent
+tcorr = 0.5               # Correlation time
+dtdrive = 0.01            # Driving timestep
+rseed = 140281            # Random seed
+
+# Output configurations
+<output1>
+file_type = hdf5
+dt = 0.1
+variable = mhd_prim
+id = prim
+
+<output2>
+file_type = hdf5
+dt = 0.1
+variable = mhd_cons
+id = cons
+
+<output3>
+file_type = hdf5
+dt = 0.05
+variable = mhd_divb       # Monitor div(B) directly
+id = divb
+
+<output4>
+file_type = hst
+dt = 0.01

@@ -1,0 +1,101 @@
+# 2D Turbulence with MHD and traveling wave AMR refinement
+# Faster 2D test for div(B) preservation during dynamic mesh refinement
+
+<comment>
+problem = turb_mhd_amr_wave
+
+<job>
+basename = turb_mhd_wave_2d
+
+<mesh>
+nghost = 3
+nx1 = 128         # Higher resolution in 2D
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 128
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 1           # 2D simulation
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<mesh_refinement>
+adaptive = true
+max_nmb_per_rank = 1000
+refinement_interval = 4    # Check frequently for moving wave
+ncycle_check = 2           # Refine often to track wave
+max_level = 3              # Allow more refinement levels in 2D
+
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 1
+
+<time>
+evolution = dynamic
+cfl_number = 0.3
+tlim = 5.0        # Shorter for 2D test
+nlim = -1
+integrator = vl2
+ncycle_out = 50
+
+<mhd>
+eos = ideal
+gamma = 1.4
+reconstruct = plm        # PLM for 2D (faster)
+rsolver = hlld
+dfloor = 1.0e-8
+pfloor = 1.0e-10
+
+<problem>
+# Initial conditions
+rho0 = 1.0
+pgas0 = 1.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+
+# Magnetic field configuration
+b0 = 0.2                  # Stronger field for 2D
+beta = -1.0               # Use b0 directly
+field_config = 3          # Diagonal field (tests both x and y components)
+
+# Traveling wave refinement parameters
+wave_speed = 0.2          # Faster wave for shorter simulation
+wave_width = 0.15         # Narrower refined region
+wave_amplitude = 0.1      # Add density wave for visualization
+wave_direction = 0        # Wave travels in x-direction
+
+<turb_driving>
+dedt = 0.5                # Higher driving for 2D
+nlow = 4                  # Higher wavenumbers for 2D
+nhigh = 8
+expo = 2.0
+tcorr = 0.2
+dtdrive = 0.01
+rseed = 140281
+
+# Output configurations
+<output1>
+file_type = hdf5
+dt = 0.05
+variable = mhd_prim
+id = prim
+
+<output2>
+file_type = hdf5
+dt = 0.025               # More frequent div(B) monitoring
+variable = mhd_divb
+id = divb
+
+<output3>
+file_type = hst
+dt = 0.005               # High-frequency history output

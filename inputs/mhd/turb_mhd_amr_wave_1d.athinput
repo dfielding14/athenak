@@ -1,0 +1,98 @@
+# 1D MHD with traveling wave AMR refinement
+# Minimal test for div(B) preservation during dynamic mesh refinement
+# This is the simplest possible test that still exercises the fix
+
+<comment>
+problem = turb_mhd_amr_wave
+
+<job>
+basename = mhd_wave_1d
+
+<mesh>
+nghost = 3
+nx1 = 256         # High resolution for 1D
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 1           # 1D simulation
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<mesh_refinement>
+adaptive = true
+max_nmb_per_rank = 500
+refinement_interval = 2    # Very frequent checks
+ncycle_check = 1           # Check every cycle
+max_level = 4              # Allow deep refinement in 1D
+
+<meshblock>
+nx1 = 32
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution = dynamic
+cfl_number = 0.4
+tlim = 2.0        # Short simulation
+nlim = -1
+integrator = rk2  # RK2 for 1D
+ncycle_out = 20
+
+<mhd>
+eos = ideal
+gamma = 1.4
+reconstruct = plm
+rsolver = hlld
+dfloor = 1.0e-8
+pfloor = 1.0e-10
+
+<problem>
+# Initial conditions
+rho0 = 1.0
+pgas0 = 1.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+
+# Magnetic field configuration
+# In 1D, only transverse fields (By, Bz) are meaningful
+b0 = 1.0                  # Strong field for 1D test
+beta = -1.0               # Use b0 directly
+field_config = 1          # Uniform By field (transverse to x)
+
+# Traveling wave refinement parameters
+wave_speed = 0.5          # Fast wave for quick test
+wave_width = 0.1          # Narrow refined region
+wave_amplitude = 0.2      # Strong density wave for clear visualization
+wave_direction = 0        # Wave must travel in x for 1D
+
+# No turbulence driving for 1D test
+<turb_driving>
+dedt = 0.0
+
+# Output configurations
+<output1>
+file_type = hdf5
+dt = 0.02
+variable = mhd_prim
+id = prim
+
+<output2>
+file_type = hdf5
+dt = 0.01
+variable = mhd_divb
+id = divb
+
+<output3>
+file_type = hst
+dt = 0.002
