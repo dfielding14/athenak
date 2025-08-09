@@ -202,10 +202,3 @@ int RefinementCondition(MeshBlockPack* pmbp) {
   return refine;
 }
 
-//----------------------------------------------------------------------------------------
-//! \fn void ProblemGenerator::UserWorkInLoop()
-//  \brief User-defined work function called in every cycle
-
-void ProblemGenerator::UserWorkInLoop(ParameterInput *pin) {
-  return;
-}

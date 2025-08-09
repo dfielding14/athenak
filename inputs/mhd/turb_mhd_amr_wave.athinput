@@ -46,7 +46,7 @@ evolution = dynamic
 cfl_number = 0.3
 tlim = 10.0
 nlim = -1
-integrator = vl2          # Van Leer for MHD
+integrator = rk2          # Van Leer for MHD
 ncycle_out = 100
 
 <mhd>

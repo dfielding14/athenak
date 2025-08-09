@@ -45,7 +45,7 @@ evolution = dynamic
 cfl_number = 0.4
 tlim = 0.1        # Very short test
 nlim = 10         # Or just 10 cycles
-integrator = vl2
+integrator = rk2
 ncycle_out = 1    # Output every cycle
 
 <mhd>
@@ -82,15 +82,15 @@ dedt = 0.0
 
 # Output
 <output1>
-file_type = hdf5
+file_type = vtk
 dt = 0.01
-variable = mhd_cons       # Include B fields
+variable = cons       # Include B fields
 id = cons
 
 <output2>
-file_type = hdf5
+file_type = vtk
 dt = 0.01
-variable = mhd_divb
+variable = prim
 id = divb
 
 <output3>

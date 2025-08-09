@@ -374,13 +374,3 @@ int RefinementCondition(MeshBlockPack* pmbp) {
   return max_flag;
 }
 
-//----------------------------------------------------------------------------------------
-//! \fn void ProblemGenerator::UserWorkInLoop()
-//! \brief User-defined work function called in every cycle
-//!
-//! Can be used to monitor div(B) errors during the simulation
-
-void ProblemGenerator::UserWorkInLoop(ParameterInput *pin) {
-  // Optional: Could add div(B) monitoring here
-  return;
-}

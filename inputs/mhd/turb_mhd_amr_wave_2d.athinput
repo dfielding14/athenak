@@ -44,7 +44,7 @@ evolution = dynamic
 cfl_number = 0.3
 tlim = 5.0        # Shorter for 2D test
 nlim = -1
-integrator = vl2
+integrator = rk2
 ncycle_out = 50
 
 <mhd>
