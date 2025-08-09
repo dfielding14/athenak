@@ -1,0 +1,72 @@
+# Rayleigh-Taylor instability with MHD and AMR
+# Test for div(B) fix in AMR
+
+<comment>
+problem = rt_mhd_amr
+
+<job>
+basename = rt_mhd_amr
+
+<mesh>
+nghost = 2
+nx1 = 64
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 128  
+x2min = -1.0
+x2max = 1.0
+ix2_bc = reflecting
+ox2_bc = reflecting
+
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<mesh_refinement>
+adaptive = true
+max_nmb_per_rank = 1000
+refinement_interval = 10
+ncycle_check = 5
+
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 1
+
+<time>
+evolution = dynamic
+cfl_number = 0.3
+tlim = 10.0
+nlim = -1
+integrator = rk2
+ncycle_out = 100
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = hlld
+dfloor = 1.0e-6
+pfloor = 1.0e-6
+
+<problem>
+amp = 0.01
+drat = 2.0
+b0 = 0.1
+ipert = 1
+
+<output1>
+file_type = hdf5
+dt = 0.5
+variable = mhd_prim
+id = prim
+
+<output2>
+file_type = hdf5
+dt = 0.5
+variable = mhd_divb
+id = divb
