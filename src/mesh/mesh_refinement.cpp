@@ -1210,6 +1210,10 @@ void MeshRefinement::FixRefinedFCBoundaries(DualArray1D<int> &n2o,
   auto &new_nmb = new_nmb_eachrank[global_variable::my_rank];
   auto &ngids = new_gids_eachrank[global_variable::my_rank];
   
+  // Diagnostic counters for analyzing cross-rank boundaries
+  int fixed_boundaries = 0;
+  int potential_cross_rank = 0;
+  
   // Get mesh indices for face-centered fields
   auto &indcs = pmy_mesh->mb_indcs;
   auto &is = indcs.is, &ie = indcs.ie;
@@ -1253,12 +1257,14 @@ void MeshRefinement::FixRefinedFCBoundaries(DualArray1D<int> &n2o,
           KOKKOS_LAMBDA(const int k, const int j) {
             b.x1f(m, k, j, is) = b.x1f(n, k, j, ie+1);
           });
+          fixed_boundaries++;
         } else if (lloc_m.lx1 == lloc_n.lx1 - 1) {
           // m is left neighbor of n: copy n's left face to m's right face
           par_for("FixDivB-x1R", DevExeSpace(), ks, ke, js, je,
           KOKKOS_LAMBDA(const int k, const int j) {
             b.x1f(m, k, j, ie+1) = b.x1f(n, k, j, is);
           });
+          fixed_boundaries++;
         }
       }
       
@@ -1270,12 +1276,14 @@ void MeshRefinement::FixRefinedFCBoundaries(DualArray1D<int> &n2o,
           KOKKOS_LAMBDA(const int k, const int i) {
             b.x2f(m, k, js, i) = b.x2f(n, k, je+1, i);
           });
+          fixed_boundaries++;
         } else if (lloc_m.lx2 == lloc_n.lx2 - 1) {
           // m is bottom neighbor of n: copy n's bottom face to m's top face
           par_for("FixDivB-x2R", DevExeSpace(), ks, ke, is, ie,
           KOKKOS_LAMBDA(const int k, const int i) {
             b.x2f(m, k, je+1, i) = b.x2f(n, k, js, i);
           });
+          fixed_boundaries++;
         }
       }
       
@@ -1287,16 +1295,83 @@ void MeshRefinement::FixRefinedFCBoundaries(DualArray1D<int> &n2o,
           KOKKOS_LAMBDA(const int j, const int i) {
             b.x3f(m, ks, j, i) = b.x3f(n, ke+1, j, i);
           });
+          fixed_boundaries++;
         } else if (lloc_m.lx3 == lloc_n.lx3 - 1) {
           // m is back neighbor of n: copy n's back face to m's front face
           par_for("FixDivB-x3R", DevExeSpace(), js, je, is, ie,
           KOKKOS_LAMBDA(const int j, const int i) {
             b.x3f(m, ke+1, j, i) = b.x3f(n, ks, j, i);
           });
+          fixed_boundaries++;
+        }
+      }
+    }
+    
+    // Now check for potential cross-rank boundaries that we're missing
+    // This is diagnostic only - we don't fix these
+    for (int face = 0; face < 6; face++) {
+      LogicalLocation neighbor_lloc = lloc_m;
+      bool is_neighbor = false;
+      
+      // Determine neighbor location based on face
+      if (face == 0) { // -x1
+        neighbor_lloc.lx1 -= 1;
+        is_neighbor = true;
+      } else if (face == 1) { // +x1
+        neighbor_lloc.lx1 += 1;
+        is_neighbor = true;
+      } else if (multi_d && face == 2) { // -x2
+        neighbor_lloc.lx2 -= 1;
+        is_neighbor = true;
+      } else if (multi_d && face == 3) { // +x2
+        neighbor_lloc.lx2 += 1;
+        is_neighbor = true;
+      } else if (three_d && face == 4) { // -x3
+        neighbor_lloc.lx3 -= 1;
+        is_neighbor = true;
+      } else if (three_d && face == 5) { // +x3
+        neighbor_lloc.lx3 += 1;
+        is_neighbor = true;
+      }
+      
+      if (is_neighbor) {
+        // Check if this neighbor exists at the same level but is NOT on this rank
+        bool found_on_this_rank = false;
+        for (int nn = 0; nn < new_nmb; ++nn) {
+          int global_nn = nn + ngids;
+          LogicalLocation &lloc_nn = new_lloc_eachmb[global_nn];
+          if (lloc_nn.level == lloc_m.level &&
+              lloc_nn.lx1 == neighbor_lloc.lx1 &&
+              lloc_nn.lx2 == neighbor_lloc.lx2 &&
+              lloc_nn.lx3 == neighbor_lloc.lx3) {
+            found_on_this_rank = true;
+            break;
+          }
+        }
+        
+        // If neighbor at same level exists but not on this rank, it's cross-rank
+        if (!found_on_this_rank && neighbor_lloc.level == lloc_m.level) {
+          // Check if this neighbor would have been already fine
+          // We can't know for sure without MPI communication, but we can estimate
+          potential_cross_rank++;
         }
       }
     }
   }
+  
+  // Output diagnostics if any boundaries were fixed or potentially missed
+#if MPI_PARALLEL_ENABLED
+  if (fixed_boundaries > 0 || potential_cross_rank > 0) {
+    std::cout << "[FixDivB] Rank " << global_variable::my_rank 
+              << ": Fixed " << fixed_boundaries << " same-rank boundaries"
+              << ", " << potential_cross_rank << " potential cross-rank boundaries"
+              << std::endl;
+  }
+#else
+  if (fixed_boundaries > 0) {
+    std::cout << "[FixDivB] Fixed " << fixed_boundaries << " boundaries" << std::endl;
+  }
+#endif
   
   return;
 }

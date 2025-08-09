@@ -1,0 +1,98 @@
+# Simplified test for div(B) with multiple MPI ranks
+# Designed to quickly test cross-rank boundary handling
+# Uses static refinement pattern that will span rank boundaries
+
+<comment>
+problem = turb_mhd_amr_wave
+
+<job>
+basename = test_divb_ranks
+
+<mesh>
+nghost = 2
+nx1 = 32          # Small for quick testing
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 32
+x2min = -0.5  
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 1           # 2D for simplicity
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<mesh_refinement>
+adaptive = true
+max_nmb_per_rank = 100
+refinement_interval = 1000   # Infrequent to keep pattern stable
+ncycle_check = 100           # Check rarely
+max_level = 2
+
+<meshblock>
+nx1 = 8           # 4x4 = 16 meshblocks at base level
+nx2 = 8           # With 4 ranks, each gets 4 blocks initially
+nx3 = 1
+
+<time>
+evolution = dynamic
+cfl_number = 0.4
+tlim = 0.1        # Very short test
+nlim = 10         # Or just 10 cycles
+integrator = vl2
+ncycle_out = 1    # Output every cycle
+
+<mhd>
+eos = ideal
+gamma = 1.4
+reconstruct = plm
+rsolver = hlld
+dfloor = 1.0e-8
+pfloor = 1.0e-10
+
+<problem>
+# Initial conditions - uniform
+rho0 = 1.0
+pgas0 = 1.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+
+# Strong diagonal magnetic field to test all components
+b0 = 1.0
+beta = -1.0       # Use b0 directly
+field_config = 3  # Diagonal field
+
+# Static refinement in center
+# This ensures refinement boundary crosses rank boundaries
+wave_speed = 0.0          # No movement
+wave_width = 0.4          # Wide band across center
+wave_amplitude = 0.0      # No density perturbation
+wave_direction = 0        # Not used with zero speed
+
+# No turbulence for this test
+<turb_driving>
+dedt = 0.0
+
+# Output
+<output1>
+file_type = hdf5
+dt = 0.01
+variable = mhd_cons       # Include B fields
+id = cons
+
+<output2>
+file_type = hdf5
+dt = 0.01
+variable = mhd_divb
+id = divb
+
+<output3>
+file_type = hst
+dt = 0.001
