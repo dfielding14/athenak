@@ -37,13 +37,14 @@ refinement = adaptive   # adaptive refinement
 max_level = 2          # maximum refinement level
 refine_interval = 5    # cycles between refinement checks
 max_nmb_per_rank = 1000 # maximum number of MeshBlocks per rank
+ncycle_check = 5       # cycles between AMR checks
 
 <time>
 evolution  = dynamic   # dynamic evolution
 integrator = rk2       # time integration algorithm
 cfl_number = 0.3       # The Courant, Friedrichs, & Lewy (CFL) Number
-nlim       = 200       # cycle limit (enough to see multiple refinements)
-tlim       = 2.0       # time limit (enough for wave to cross domain)
+nlim       = 1000      # cycle limit (enough to see wave traverse domain)
+tlim       = 4.0       # time limit (wave completes full traversal)
 ndiag      = 10        # cycles between diagnostic output
 
 <hydro>
@@ -73,15 +74,5 @@ dt_turb_update = 0.01  # frequent updates to catch derefinement issues
 
 <output1>
 file_type  = bin       # Binary output
-variable   = prim      # primitive variables
-dt         = 0.1       # output frequently to track wave
-
-<output2>
-file_type  = bin       # Binary output
 variable   = turb_force # turbulence forcing
-dt         = 0.1       # output frequently to see force discontinuities
-
-<output3>
-file_type  = bin       # Binary output  
-variable   = mb_gid    # MeshBlock ID to track refinement
-dt         = 0.1       # output frequently
+dt         = 0.25      # output frequently to see force evolution

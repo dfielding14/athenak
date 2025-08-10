@@ -103,6 +103,7 @@ class TurbulenceDriver {
   void IncludeInitializeModesTask(std::shared_ptr<TaskList> tl, TaskID start);
   void IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskID start);
   TaskStatus InitializeModes(Driver *pdrive, int stage);
+  TaskStatus CheckResize(Driver *pdrive, int stage);
   TaskStatus UpdateForcing(Driver *pdrive, int stage);
   TaskStatus AddForcing(Driver *pdrive, int stage);
   void Initialize();
@@ -112,6 +113,8 @@ class TurbulenceDriver {
   bool first_time = true;   // flag to enable initialization on first call
   MeshBlockPack *pmy_pack;  // ptr to MeshBlockPack containing this TurbulenceDriver
   int current_nmb = 0;      // current number of MeshBlocks for array sizing
+  int last_nmb_created = 0; // Last known nmb_created value for refinement tracking
+  int last_nmb_deleted = 0; // Last known nmb_deleted value for refinement tracking
 };
 
 // ========================== Inline math utilities =============================

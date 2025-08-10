@@ -60,6 +60,16 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
 
   // Set initial MeshBlock count
   current_nmb = nmb;
+  
+  // Initialize refinement tracking variables
+  Mesh *pm = pmy_pack->pmesh;
+  if (pm->adaptive && pm->pmr != nullptr) {
+    last_nmb_created = pm->pmr->nmb_created;
+    last_nmb_deleted = pm->pmr->nmb_deleted;
+  } else {
+    last_nmb_created = 0;
+    last_nmb_deleted = 0;
+  }
 
   Kokkos::realloc(force, nmb, 3, ncells3, ncells2, ncells1);
   Kokkos::realloc(force_tmp1, nmb, 3, ncells3, ncells2, ncells1);
@@ -590,8 +600,28 @@ void TurbulenceDriver::Initialize() {
 //  \brief Resize arrays when mesh changes due to refinement/derefinement
 
 void TurbulenceDriver::ResizeArrays(int new_nmb) {
-  // Only resize if the number of MeshBlocks has changed
-  if (new_nmb == current_nmb) return;
+  // Get current refinement counters from mesh
+  Mesh *pm = pmy_pack->pmesh;
+  int current_created = 0, current_deleted = 0;
+  if (pm->adaptive && pm->pmr != nullptr) {
+    current_created = pm->pmr->nmb_created;
+    current_deleted = pm->pmr->nmb_deleted;
+  }
+  
+  // Check if any refinement has occurred OR if nmb has changed
+  bool refinement_occurred = (current_created != last_nmb_created) || 
+                             (current_deleted != last_nmb_deleted);
+  
+  // Only resize if refinement occurred or number of MeshBlocks changed
+  if (!refinement_occurred && new_nmb == current_nmb) return;
+  
+  // Note: The refinement counters (nmb_created/deleted) are updated AFTER mesh
+  // refinement and array resizing, so they may show zero difference even when
+  // refinement just occurred. The MeshBlock count change is the primary indicator.
+  
+  // Update tracking variables
+  last_nmb_created = current_created;
+  last_nmb_deleted = current_deleted;
   
   // Get mesh indices
   auto &indcs = pmy_pack->pmesh->mb_indcs;
@@ -599,9 +629,33 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
   int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
   int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
   
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int nx1 = indcs.nx1;
+  int nx2 = indcs.nx2;
+  int nx3 = indcs.nx3;
+  
   if (global_variable::my_rank == 0) {
     std::cout << "### TurbulenceDriver::ResizeArrays: Resizing from " 
-              << current_nmb << " to " << new_nmb << " MeshBlocks" << std::endl;
+              << current_nmb << " to " << new_nmb << " MeshBlocks";
+    
+    // Provide clear diagnostic about what triggered the resize
+    if (new_nmb != current_nmb) {
+      int net_change = new_nmb - current_nmb;
+      if (net_change > 0) {
+        std::cout << " (refinement: +" << net_change << " blocks)";
+      } else {
+        std::cout << " (derefinement: " << net_change << " blocks)";
+      }
+    } else if (refinement_occurred) {
+      // This case handles when blocks are created and destroyed equally
+      int created_delta = current_created - last_nmb_created;
+      int deleted_delta = current_deleted - last_nmb_deleted;
+      std::cout << " (balanced refinement: +" << created_delta 
+                << " created, -" << deleted_delta << " deleted)";
+    }
+    std::cout << std::endl;
   }
   
   // Resize force arrays
@@ -624,14 +678,114 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
   }
   
   // Update current size
-  int old_nmb = current_nmb;
   current_nmb = new_nmb;
   
-  // If expanding, initialize new MeshBlock data
-  if (new_nmb > old_nmb) {
-    // Re-initialize all arrays to ensure consistency
-    Initialize();
+  // Get MeshBlock sizes for coordinate calculations
+  auto &size = pmy_pack->pmb->mb_size;
+  
+  // Recalculate sine/cosine arrays for ALL MeshBlocks
+  // (positions may have changed during AMR)
+  auto xcos_ = xcos;
+  auto xsin_ = xsin;
+  auto ycos_ = ycos;
+  auto ysin_ = ysin;
+  auto zcos_ = zcos;
+  auto zsin_ = zsin;
+  auto kx_mode_ = kx_mode;
+  auto ky_mode_ = ky_mode;
+  auto kz_mode_ = kz_mode;
+  int drivingtype = driving_type;
+  
+  par_for("xsin/xcos", DevExeSpace(),0,new_nmb-1,0,mode_count-1,is,ie,
+  KOKKOS_LAMBDA(int m, int n, int i) {
+    Real &x1min = size.d_view(m).x1min;
+    Real &x1max = size.d_view(m).x1max;
+    Real x1v_global = CellCenterX(i-is, nx1, x1min, x1max);
+    Real k1v = kx_mode_.d_view(n);
+    xsin_(m,n,i) = sin(k1v*x1v_global);
+    xcos_(m,n,i) = cos(k1v*x1v_global);
+  });
+
+  par_for("ysin/ycos", DevExeSpace(),0,new_nmb-1,0,mode_count-1,js,je,
+  KOKKOS_LAMBDA(int m, int n, int j) {
+    Real &x2min = size.d_view(m).x2min;
+    Real &x2max = size.d_view(m).x2max;
+    Real x2v_global = CellCenterX(j-js, nx2, x2min, x2max);
+    Real k2v = ky_mode_.d_view(n);
+    ysin_(m,n,j) = sin(k2v*x2v_global);
+    ycos_(m,n,j) = cos(k2v*x2v_global);
+    if (ncells2-1 == 0) {
+      ysin_(m,n,j) = 0.0;
+      ycos_(m,n,j) = 1.0;
+    }
+  });
+
+  par_for("zsin/zcos", DevExeSpace(),0,new_nmb-1,0,mode_count-1,ks,ke,
+  KOKKOS_LAMBDA(int m, int n, int k) {
+    Real &x3min = size.d_view(m).x3min;
+    Real &x3max = size.d_view(m).x3max;
+    Real x3v_global = CellCenterX(k-ks, nx3, x3min, x3max);
+    Real k3v = kz_mode_.d_view(n);
+    zsin_(m,n,k) = sin(k3v*x3v_global);
+    zcos_(m,n,k) = cos(k3v*x3v_global);
+    if (ncells3-1 == 0 || (drivingtype == 1)) {
+      zsin_(m,n,k) = 0.0;
+      zcos_(m,n,k) = 1.0;
+    }
+  });
+  
+  // If using SFB basis, recalculate basis functions for all MeshBlocks
+  if (basis_type_ == TurbBasis::SphericalFB) {
+    // TODO: Add SFB basis recalculation here
+    // This would involve recalculating the spherical Bessel functions
+    // and spherical harmonics for the new MeshBlock positions
   }
+  
+  // Now recompute the force arrays using the SAME aka_ and akb_ amplitudes
+  // but with the newly calculated basis functions
+  auto force_tmp2_ = force_tmp2;
+  auto aka_ = aka;
+  auto akb_ = akb;
+  auto basis_type = basis_type_;
+  auto sfb_basis_real_ = sfb_vector_basis_real;
+  auto sfb_basis_imag_ = sfb_vector_basis_imag;
+  
+  // Zero out force_tmp2 first
+  par_for("zero_force", DevExeSpace(),0,new_nmb-1,0,2,ks,ke,js,je,is,ie,
+  KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
+    force_tmp2_(m,n,k,j,i) = 0.0;
+  });
+  
+  // Recompute forces with updated basis functions
+  for (int n=0; n<mode_count; n++) {
+    par_for("force_compute", DevExeSpace(),0,new_nmb-1,ks,ke,js,je,is,ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      if (basis_type == TurbBasis::Cartesian) {
+        Real forc_real = ( xcos_(m,n,i)*ycos_(m,n,j) - xsin_(m,n,i)*ysin_(m,n,j) ) * zcos_(m,n,k) -
+                        ( xsin_(m,n,i)*ycos_(m,n,j) + xcos_(m,n,i)*ysin_(m,n,j) ) * zsin_(m,n,k);
+        Real forc_imag = ( ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k) ) * xcos_(m,n,i) +
+                        ( ycos_(m,n,j)*zcos_(m,n,k) - ysin_(m,n,j)*zsin_(m,n,k) ) * xsin_(m,n,i);
+        for (int dir = 0; dir < 3; dir ++){
+          force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real - akb_.d_view(dir,n)*forc_imag;
+        }
+      } else {
+        // SFB basis - use precomputed vector spherical harmonics
+        for (int dir = 0; dir < 3; dir ++){
+          Real basis_real = sfb_basis_real_(m,n,dir,k,j,i);
+          Real basis_imag = sfb_basis_imag_(m,n,dir,k,j,i);
+          force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*basis_real - akb_.d_view(dir,n)*basis_imag;
+        }
+      }
+    });
+  }
+  
+  // Update force_tmp1 with the recalculated values
+  // (assuming we want to preserve the temporal correlation)
+  auto force_tmp1_ = force_tmp1;
+  par_for("update_force_tmp1", DevExeSpace(),0,new_nmb-1,0,2,ks,ke,js,je,is,ie,
+  KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
+    force_tmp1_(m,n,k,j,i) = force_tmp2_(m,n,k,j,i);
+  });
 }
 
 //----------------------------------------------------------------------------------------
@@ -644,7 +798,8 @@ void TurbulenceDriver::IncludeInitializeModesTask(std::shared_ptr<TaskList> tl,
                                                   TaskID start) {
   //  We initialize the modes and update the forcing before the time integration loop
   auto id_init = tl->AddTask(&TurbulenceDriver::InitializeModes, this, start);
-  auto id_add  = tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_init);
+  auto id_resize = tl->AddTask(&TurbulenceDriver::CheckResize, this, id_init);
+  auto id_add  = tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_resize);
   return;
 }
 
@@ -923,6 +1078,22 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn CheckResize
+//! \brief Check if mesh has changed and resize arrays if needed
+//
+// This task is called between InitializeModes and UpdateForcing to ensure
+// arrays are properly sized for the current mesh configuration.
+
+TaskStatus TurbulenceDriver::CheckResize(Driver *pdrive, int stage) {
+  int nmb = pmy_pack->nmb_thispack;
+  if (global_variable::my_rank == 0 && current_nmb != nmb) {
+    std::cout << "### CheckResize: nmb changed from " << current_nmb << " to " << nmb << std::endl;
+  }
+  ResizeArrays(nmb);
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn Update forcing
 //
 // @brief Updates the forcing applied in the turbulence driver.
@@ -955,9 +1126,6 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
   int &nx1 = indcs.nx1;
   int &nx2 = indcs.nx2;
   int &nx3 = indcs.nx3;
-  
-  // Check if mesh has changed and resize arrays if needed
-  ResizeArrays(nmb);
   
   // Diagnostic output
   static int diag_count = 0;
@@ -1289,9 +1457,6 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
   int &nx1 = indcs.nx1;
   int &nx2 = indcs.nx2;
   int &nx3 = indcs.nx3;
-  
-  // Check if mesh has changed and resize arrays if needed
-  ResizeArrays(nmb);
 
   Real dt = pm->dt;
   Real bdt = (pdrive->beta[stage-1])*dt;

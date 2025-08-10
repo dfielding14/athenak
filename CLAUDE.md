@@ -28,18 +28,25 @@ cmake -B build -DKokkos_ENABLE_CUDA=ON -DKokkos_ARCH_VOLTA70=ON \
       -DCMAKE_CXX_COMPILER=/path/to/kokkos/bin/nvcc_wrapper
 cd build && make -j8
 ```
+Note: Replace VOLTA70 with your GPU architecture (e.g., AMPERE80, HOPPER90)
 
 ### Debug Build
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Debug
 cd build && make -j8
 ```
+This automatically enables Kokkos bounds checking and debug features.
 
 ### Custom Problem Generator
 ```bash
 cmake -B build -DPROBLEM=your_problem_name
 cd build && make -j8
 ```
+
+### Additional Build Options
+- `-DAthena_SINGLE_PRECISION=ON`: Enable single precision (default: double)
+- `-DAthena_ENABLE_OPENMP=ON`: Enable OpenMP parallelism
+- `-DKokkos_ENABLE_CUDA_LAMBDA=ON`: Enable CUDA lambdas (for GPU builds)
 
 ## Test Commands
 
@@ -61,6 +68,32 @@ After building, from the build directory:
 cd build/src
 ./athena -i ../../inputs/tests/linear_wave_hydro.athinput
 ```
+
+## Running Simulations
+
+### Basic Run
+```bash
+cd build/src
+./athena -i path/to/your.athinput
+```
+
+### MPI Parallel Run
+```bash
+cd build/src
+mpirun -np 4 ./athena -i path/to/your.athinput
+```
+
+### Restart from Checkpoint
+```bash
+./athena -r restart_file.rst
+```
+
+### Common Runtime Options
+- `-i <file>`: Specify input file
+- `-r <file>`: Restart from checkpoint
+- `-d <dir>`: Set output directory
+- `-n`: Parse input without running
+- `-h`: Show help
 
 ## Code Style and Linting
 
@@ -117,3 +150,55 @@ When creating a new problem generator:
 
 ### Current Development Focus
 The current branch (`sfb_turb_driver`) implements Spherical Fourier-Bessel turbulence driving in `src/srcterms/turb_driver.hpp/cpp`. This adds a new method for driving turbulence in spherical geometries as an alternative to the standard Cartesian Fourier modes.
+
+## Input File Format
+
+AthenaK uses `.athinput` files with section-based configuration:
+
+```ini
+<job>
+basename = my_simulation
+
+<mesh>
+nghost = 2
+nx1 = 64
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+<meshblock>
+nx1 = 32
+nx2 = 32
+nx3 = 32
+
+<time>
+cfl_number = 0.4
+tlim = 1.0
+
+<hydro>
+eos = ideal
+reconstruct = plm
+riemann_solver = hllc
+
+<problem>
+# Problem-specific parameters
+```
+
+Example input files are in `inputs/` organized by physics type (hydro/, mhd/, etc.).
+
+## Visualization Tools
+
+Python visualization scripts in `vis/python/`:
+- `athena_read.py`: Read AthenaK binary/VTK outputs
+- `plot_slice.py`: Create 2D slice plots
+- `plot_hst.py`: Plot history files
+- `plot_mesh.py`: Visualize AMR mesh structure
+- `bin_convert.py`: Convert between output formats
+
+Example usage:
+```python
+import athena_read
+data = athena_read.athdf('output.athdf')
+# Access variables like data['dens'], data['vel1'], etc.
+```

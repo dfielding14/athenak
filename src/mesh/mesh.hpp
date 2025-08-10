@@ -12,6 +12,7 @@
 //! are grouped together into MeshBlockPacks for better performance on GPUs.
 
 #include <cstdint>  // int32_t
+#include <cstddef>  // std::size_t
 #include <memory>
 #include <string>
 
@@ -61,6 +62,25 @@ struct NeighborBlock {
 
 struct LogicalLocation {
   std::int32_t lx1, lx2, lx3, level;
+};
+
+//----------------------------------------------------------------------------------------
+//! \fn inline std::int64_t rotl(std::int64_t i, int s)
+//! \brief left bit rotation function for 64bit integers (unsafe if s > 64)
+
+inline std::int64_t rotl(std::int64_t i, int s) {
+  return (i << s) | (i >> (64 - s));
+}
+
+//----------------------------------------------------------------------------------------
+//! \struct LogicalLocationHash
+//! \brief Hash function object for LogicalLocation
+
+struct LogicalLocationHash {
+ public:
+  std::size_t operator()(const LogicalLocation &l) const {
+    return static_cast<std::size_t>(l.lx1 ^ rotl(l.lx2, 21) ^ rotl(l.lx3, 42));
+  }
 };
 
 //----------------------------------------------------------------------------------------

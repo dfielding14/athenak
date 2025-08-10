@@ -4,6 +4,7 @@
 import logging
 import os
 import subprocess
+import shutil
 from timeit import default_timer as timer
 from .log_pipe import LogPipe
 
@@ -19,8 +20,12 @@ def make(arguments):
     try:
         subprocess.check_call(['mkdir', 'build'], stdout=out_log)
         build_dir = current_dir + '/build/'
+        # compute repo root (parent of tst/) as CMake source dir
+        source_dir = os.path.realpath(os.path.join(current_dir, '..'))
         os.chdir(build_dir)
-        cmake_command = ['cmake3', '../' + athena_rel_path] + arguments
+        # Prefer cmake3 if available; fallback to cmake
+        cmake_bin = shutil.which('cmake3') or shutil.which('cmake') or 'cmake3'
+        cmake_command = [cmake_bin, source_dir] + arguments
         make_command = ['make', '-j8']
         try:
             t0 = timer()
