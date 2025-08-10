@@ -1,0 +1,89 @@
+# Quick MPI test with 1.5 wave circuits
+<comment>
+problem = turb_mhd_amr_wave
+
+<job>
+basename = test_mpi
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 32
+x2min = -0.5  
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<mesh_refinement>
+adaptive = true
+max_nmb_per_rank = 100
+refinement_interval = 5
+ncycle_check = 2
+max_level = 2
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 1
+
+<time>
+evolution = dynamic
+cfl_number = 0.4
+tlim = 1.5        # 1.5 circuits at speed 1.0
+nlim = 200        # Limit cycles
+integrator = rk2
+ncycle_out = 20
+
+<mhd>
+eos = ideal
+gamma = 1.4
+reconstruct = plm
+rsolver = hlld
+dfloor = 1.0e-8
+pfloor = 1.0e-10
+
+<problem>
+rho0 = 1.0
+pgas0 = 1.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+b0 = 1.0
+beta = -1.0
+field_config = 3
+
+# Wave for 1 circuit per time unit
+wave_speed = 1.0
+wave_width = 0.2
+wave_amplitude = 0.5
+wave_direction = 0
+
+<turb_driving>
+dedt = 0.0
+
+<output1>
+file_type = bin
+dt = 0.3          # 5 outputs total
+variable = mhd_w_bcc
+id = cons
+
+<output2>
+file_type = bin
+dt = 0.3
+variable = mhd_divb
+id = divb
+
+<output3>
+file_type = hst
+dt = 0.01

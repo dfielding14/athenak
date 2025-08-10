@@ -82,17 +82,23 @@ dedt = 0.0
 
 # Output
 <output1>
-file_type = vtk
+file_type = bin
 dt = 0.01
-variable = cons       # Include B fields
+variable = mhd_w_bcc       # Conservative variables with B fields
 id = cons
 
 <output2>
-file_type = vtk
+file_type = bin
 dt = 0.01
-variable = prim
-id = divb
+variable = mhd_w_bcc
+id = prim
 
 <output3>
+file_type = bin
+dt = 0.01
+variable = mhd_divb
+id = divb
+
+<output4>
 file_type = hst
 dt = 0.001

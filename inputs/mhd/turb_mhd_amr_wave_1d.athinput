@@ -82,13 +82,13 @@ dedt = 0.0
 
 # Output configurations
 <output1>
-file_type = hdf5
+file_type = bin
 dt = 0.02
 variable = mhd_prim
 id = prim
 
 <output2>
-file_type = hdf5
+file_type = bin
 dt = 0.01
 variable = mhd_divb
 id = divb

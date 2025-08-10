@@ -93,12 +93,21 @@ run_and_analyze() {
     cd ..
 }
 
+# Get number of CPU cores (platform-aware)
+if command -v nproc &> /dev/null; then
+    NCORES=$(nproc)
+elif command -v sysctl &> /dev/null; then
+    NCORES=$(sysctl -n hw.ncpu)
+else
+    NCORES=1
+fi
+
 # Run with 1, 2, and 4 ranks
 for np in 1 2 4; do
-    if [ $(nproc) -ge $np ]; then
+    if [ $NCORES -ge $np ]; then
         run_and_analyze $np
     else
-        echo -e "${YELLOW}Skipping $np ranks (only $(nproc) cores available)${NC}"
+        echo -e "${YELLOW}Skipping $np ranks (only $NCORES cores available)${NC}"
     fi
 done
 
