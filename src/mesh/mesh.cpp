@@ -618,7 +618,13 @@ void Mesh::NewTimeStep(const Real tlim) {
   }
   // Particles timestep
   if (pmb_pack->ppart != nullptr) {
-    dt = std::min(dt, (pmb_pack->ppart->dtnew) );
+     //TODO:  find better way to enforce particle timestep in static run  
+     if(pmb_pack->ppart->is_dynamic == 0) {
+       dt = (pmb_pack->ppart->dtnew);
+       // limit last time step to stop at tlim *exactly*
+       if ( (time < tlim) && ((time + dt) > tlim) ) {dt = tlim - time;}
+     }
+     else dt = std::min(dt, (pmb_pack->ppart->dtnew) );	  
   }
 
 #if MPI_PARALLEL_ENABLED

@@ -3,11 +3,11 @@
 // Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
-//! \file turb.cpp
-//  \brief Problem generator for turbulence
-#include <iostream> // cout
+#include <cmath> // For cos and M_PI
+#include <cstdlib> // For exit and EXIT_FAILURE
 
 #include "athena.hpp"
+#include "utils/random.hpp"
 #include "parameter_input.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
@@ -16,32 +16,28 @@
 #include "mhd/mhd.hpp"
 #include "pgen.hpp"
 
-
 // User-defined history functions
 void TurbulentHistory(HistoryData *pdata, Mesh *pm);
 
-
 //----------------------------------------------------------------------------------------
-//! \fn void MeshBlock::Turb_()
-//  \brief Problem Generator for turbulence
+//! \fn void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart)
+//  \brief Problem Generator for Dynamo with Zero Net Magnetic Field
 
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
-  // Things to do for sims starting from ICs and restarts
-
-  // enroll user history function
+  // Enroll user history function
   user_hist_func = TurbulentHistory;
 
-  // end here for restarts
+  // Exit early for restarts
   if (restart) return;
 
   // Things to do only for sims starting from ICs
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   auto &indcs = pmy_mesh_->mb_indcs;
 
-  if (pmbp->phydro == nullptr && pmbp->pmhd == nullptr) {
+  if (pmbp->pmhd == nullptr) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-       << "Turbulence problem generator can only be run with Hydro and/or MHD, but no "
-       << "<hydro> or <mhd> block in input file" << std::endl;
+       << "Turbulence problem generator can only be run with MHD, but no "
+       << "<mhd> block in input file" << std::endl;
     exit(EXIT_FAILURE);
   }
 
@@ -50,37 +46,18 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   int &js = indcs.js; int &je = indcs.je;
   int &ks = indcs.ks; int &ke = indcs.ke;
 
+  // Fetch necessary parameters
   Real cs = pin->GetOrAddReal("eos","iso_sound_speed",1.0);
   Real beta = pin->GetOrAddReal("problem","beta",1.0);
-
-  // Initialize Hydro variables -------------------------------
-  if (pmbp->phydro != nullptr) {
-    Real d_i = pin->GetOrAddReal("problem","d_i",1.0);
-    Real d_n = pin->GetOrAddReal("problem","d_n",1.0);
-    auto &u0 = pmbp->phydro->u0;
-    EOS_Data &eos = pmbp->phydro->peos->eos_data;
-    Real gm1 = eos.gamma - 1.0;
-    Real p0 = 1.0/eos.gamma;
-
-    // Set initial conditions
-    par_for("pgen_turb", DevExeSpace(),0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      u0(m,IDN,k,j,i) = d_n;
-      u0(m,IM1,k,j,i) = 0.0;
-      u0(m,IM2,k,j,i) = 0.0;
-      u0(m,IM3,k,j,i) = 0.0;
-      if (eos.is_ideal) {
-        u0(m,IEN,k,j,i) = p0/gm1 +
-           0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
-           SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
-      }
-    });
-  }
+  Real d_i = pin->GetOrAddReal("problem","d_i",1.0);
+  Real d_n = pin->GetOrAddReal("problem","d_n",1.0);
+  Real B0 = cs * std::sqrt(2.0 * d_i / beta);
+  Real p0 = 1.0 / (pin->GetOrAddReal("eos", "gamma", 5.0/3.0) - 1.0);
+  bool tangled_ICs = pin->GetOrAddBoolean("problem","tangled_ICs",false);
+  auto &size = pmbp->pmb->mb_size;
 
   // Initialize MHD variables ---------------------------------
   if (pmbp->pmhd != nullptr) {
-    Real d_i = pin->GetOrAddReal("problem","d_i",1.0);
-    Real d_n = pin->GetOrAddReal("problem","d_n",1.0);
     Real B0 = cs*std::sqrt(2.0*d_i/beta);
     auto &u0 = pmbp->pmhd->u0;
     auto &b0 = pmbp->pmhd->b0;
@@ -88,89 +65,85 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     Real gm1 = eos.gamma - 1.0;
     Real p0 = 1.0/eos.gamma;
 
-    // Set initial conditions
-    par_for("pgen_turb", DevExeSpace(),0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      u0(m,IDN,k,j,i) = 1.0;
-      u0(m,IM1,k,j,i) = 0.0;
-      u0(m,IM2,k,j,i) = 0.0;
-      u0(m,IM3,k,j,i) = 0.0;
+    if (!tangled_ICs) {
+      // Set initial conditions
+      par_for("pgen_turb", DevExeSpace(),0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        u0(m,IDN,k,j,i) = 1.0;
+        u0(m,IM1,k,j,i) = 0.0;
+        u0(m,IM2,k,j,i) = 0.0;
+        u0(m,IM3,k,j,i) = 0.0;
 
-      // initialize B
-      b0.x1f(m,k,j,i) = 0.0;
-      b0.x2f(m,k,j,i) = 0.0;
-      b0.x3f(m,k,j,i) = B0;
-      if (i==ie) {b0.x1f(m,k,j,i+1) = 0.0;}
-      if (j==je) {b0.x2f(m,k,j+1,i) = 0.0;}
-      if (k==ke) {b0.x3f(m,k+1,j,i) = B0;}
+        // initialize B
+        b0.x1f(m,k,j,i) = 0.0;
+        b0.x2f(m,k,j,i) = 0.0;
+        Real &x1min = size.d_view(m).x1min;
+        Real &x1max = size.d_view(m).x1max;
+        int nx1 = indcs.nx1;
+        Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+        b0.x3f(m,k,j,i) = B0 * std::tanh(16.0*x1v);
+        if (i==ie) {b0.x1f(m,k,j,i+1) = 0.0;}
+        if (j==je) {b0.x2f(m,k,j+1,i) = 0.0;}
+        if (k==ke) {b0.x3f(m,k+1,j,i) = B0 * std::tanh(16.0*x1v);}
 
-      if (eos.is_ideal) {
-        u0(m,IEN,k,j,i) = p0/gm1 + 0.5*B0*B0 + // fix contribution from dB
-           0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
-           SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
-      }
-    });
+        if (eos.is_ideal) {
+          u0(m,IEN,k,j,i) = p0/gm1 + 0.5*SQR(B0 * std::tanh(16.0*x1v)) +
+            0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
+            SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
+        }
+      });
+    } else {
+      // Tangled ICs
+      int nlow_ICs = pin->GetOrAddInteger("problem","nlow_ICs",1);
+      int nhigh_ICs = pin->GetOrAddInteger("problem","nhigh_ICs",4);
+      par_for("pgen_turb", DevExeSpace(),0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        u0(m,IDN,k,j,i) = 1.0;
+        u0(m,IM1,k,j,i) = 0.0;
+        u0(m,IM2,k,j,i) = 0.0;
+        u0(m,IM3,k,j,i) = 0.0;
+        if (eos.is_ideal) {
+          u0(m,IEN,k,j,i) = p0/gm1;
+        }
+        b0.x1f(m,k,j,i) = 0.0;
+        b0.x2f(m,k,j,i) = 0.0;
+        b0.x3f(m,k,j,i) = 0.0;
+
+        // initialize B
+        Real &x1min = size.d_view(m).x1min;
+        Real &x1max = size.d_view(m).x1max;
+        int nx1 = indcs.nx1;
+        Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+        Real x1f = LeftEdgeX(i-is, nx1, x1min, x1max);
+        Real &x2min = size.d_view(m).x2min;
+        Real &x2max = size.d_view(m).x2max;
+        int nx2 = indcs.nx2;
+        Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+        Real x2f = LeftEdgeX(j-js, nx2, x2min, x2max);
+        Real &x3min = size.d_view(m).x3min;
+        Real &x3max = size.d_view(m).x3max;
+        int nx3 = indcs.nx3;
+        Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+        Real x3f = LeftEdgeX(k-ks, nx3, x3min, x3max);
+        for (int n = nlow_ICs; n <= nhigh_ICs; n++) {
+          b0.x1f(m,k,j,i) += B0 * (std::cos(n*2.0*M_PI*x3f) + std::cos(n*2.0*M_PI*x2f));
+          b0.x2f(m,k,j,i) += B0 * (std::cos(n*2.0*M_PI*x1f) + std::cos(n*2.0*M_PI*x3f));
+          b0.x3f(m,k,j,i) += B0 * (std::cos(n*2.0*M_PI*x1f) + std::cos(n*2.0*M_PI*x2f));
+          if (i==ie) {b0.x1f(m,k,j,i+1) = b0.x1f(m,k,j,i);}
+          if (j==je) {b0.x2f(m,k,j+1,i) = b0.x2f(m,k,j,i);}
+          if (k==ke) {b0.x3f(m,k+1,j,i) = b0.x3f(m,k,j,i);}
+
+          if (eos.is_ideal) {
+            u0(m,IEN,k,j,i) += 0.5*SQR(B0 * (std::cos(2.0*M_PI*x3v) + std::cos(2.0*M_PI*x2v)))
+                             + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x1v) + std::cos(2.0*M_PI*x3v)))
+                             + 0.5*SQR(B0 * (std::cos(2.0*M_PI*x1v) + std::cos(2.0*M_PI*x2v)));
+          }
+        }
+      });
+    }
   }
-
-  // Initialize ion-neutral variables -------------------------
-  if (pmbp->pionn != nullptr) {
-    Real d_i = pin->GetOrAddReal("problem","d_i",1.0);
-    Real d_n = pin->GetOrAddReal("problem","d_n",1.0);
-    Real B0 = cs*std::sqrt(2.0*(d_i+d_n)/beta);
-
-    // MHD
-    auto &u0 = pmbp->pmhd->u0;
-    auto &b0 = pmbp->pmhd->b0;
-    EOS_Data &eos = pmbp->pmhd->peos->eos_data;
-    Real gm1 = eos.gamma - 1.0;
-    Real p0 = d_i/eos.gamma; // TODO(@user): multiply by ionized density
-
-    // Set initial conditions
-    par_for("pgen_turb_mhd", DevExeSpace(),0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      u0(m,IDN,k,j,i) = d_i;
-      u0(m,IM1,k,j,i) = 0.0;
-      u0(m,IM2,k,j,i) = 0.0;
-      u0(m,IM3,k,j,i) = 0.0;
-
-      // initialize B
-      b0.x1f(m,k,j,i) = 0.0;
-      b0.x2f(m,k,j,i) = 0.0;
-      b0.x3f(m,k,j,i) = B0;
-      if (i==ie) {b0.x1f(m,k,j,i+1) = 0.0;}
-      if (j==je) {b0.x2f(m,k,j+1,i) = 0.0;}
-      if (k==ke) {b0.x3f(m,k+1,j,i) = B0;}
-
-      if (eos.is_ideal) {
-        u0(m,IEN,k,j,i) = p0/gm1 + 0.5*B0*B0 + // fix contribution from dB
-           0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
-           SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
-      }
-    });
-    // Hydro
-    auto &u0_ = pmbp->phydro->u0;
-    EOS_Data &eos_ = pmbp->phydro->peos->eos_data;
-    Real gm1_ = eos_.gamma - 1.0;
-    Real p0_ = d_n/eos_.gamma; // TODO(@user): multiply by neutral density
-
-    // Set initial conditions
-    par_for("pgen_turb_hydro", DevExeSpace(),0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      u0_(m,IDN,k,j,i) = d_n;
-      u0_(m,IM1,k,j,i) = 0.0;
-      u0_(m,IM2,k,j,i) = 0.0;
-      u0_(m,IM3,k,j,i) = 0.0;
-      if (eos_.is_ideal) {
-        u0_(m,IEN,k,j,i) = p0_/gm1_ +
-            0.5*(SQR(u0_(m,IM1,k,j,i)) + SQR(u0_(m,IM2,k,j,i)) +
-            SQR(u0_(m,IM3,k,j,i)))/u0_(m,IDN,k,j,i);
-      }
-    });
-  }
-
   return;
 }
-
 
 //----------------------------------------------------------------------------------------
 // Function for computing history variables
@@ -274,7 +247,7 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
     Real bdb1 = b1*db1_dx1 + b2*db1_dx2 + b3*db1_dx3;
     Real bdb2 = b1*db2_dx1 + b2*db2_dx2 + b3*db2_dx3;
     Real bdb3 = b1*db3_dx1 + b2*db3_dx2 + b3*db3_dx3;
-    hvars.the_array[6] += ( bdb1*bdb1 + bdb2*bdb2 + bdb3*bdb3)*vol;
+    hvars.the_array[6] += (bdb1*bdb1 + bdb2*bdb2 + bdb3*bdb3)*vol;
 
     // < |BxJ|^2 >
     Real Jx = (db3_dx2 - db2_dx3);

@@ -59,6 +59,11 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
   // loop over input block names.  Find those that start with "output", read parameters,
   // and add to linked list of BaseTypeOutputs.
 
+
+  // int NPartOutputs = pin->GetOrAddInteger("particles", "n_outputs",1); // Temporary fix for outputs when restarting
+  // TO DO: Fix this so that it works with restarts and live particles
+  int NPartOutputs = pin->DoesParameterExist("particles", "n_outputs") ?
+                   pin->GetInteger("particles", "n_outputs") : 0;
   int num_hst=0, num_rst=0, num_log=0; // count # of hst,rst,log outputs
   for (auto it = pin->block.begin(); it != pin->block.end(); ++it) {
     if (it->block_name.compare(0, 6, "output") == 0) {
@@ -66,6 +71,7 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
 
       // extract integer number of output block.  Save name and number
       std::string outn = it->block_name.substr(6); // 6 because counting starts at 0!
+      if (std::stoi(outn) > NPartOutputs && pm->pmb_pack->ppart != nullptr) continue; // Temporary fix for outputs when restarting
       opar.block_number = atoi(outn.c_str());
       opar.block_name.assign(it->block_name);
 
@@ -92,7 +98,11 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
       if (opar.file_type.compare("hst") != 0 &&
           opar.file_type.compare("rst") != 0 &&
           opar.file_type.compare("log") != 0 &&
-          opar.file_type.compare("trk") != 0) {
+          opar.file_type.compare("trk") != 0 &&
+	  opar.file_type.compare("df")  != 0 &&
+          opar.file_type.compare("dxh") != 0 &&
+          opar.file_type.compare("ppd") != 0 &&
+          opar.file_type.compare("prst") != 0 ) {
         opar.variable = pin->GetString(opar.block_name, "variable");
         opar.file_id = pin->GetOrAddString(opar.block_name,"id",opar.variable);
       }
@@ -182,7 +192,12 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
       // set output variable and optional file id (default is output variable name)
       if (opar.file_type.compare("hst") != 0 &&
           opar.file_type.compare("rst") != 0 &&
-          opar.file_type.compare("log") != 0) {
+          opar.file_type.compare("log") != 0 &&
+          opar.file_type.compare("trk") != 0 &&
+          opar.file_type.compare("df")  != 0 &&
+          opar.file_type.compare("dxh") != 0 &&
+          opar.file_type.compare("ppd") != 0 &&
+          opar.file_type.compare("prst") != 0 ) {
         opar.variable = pin->GetString(opar.block_name, "variable");
         opar.file_id = pin->GetOrAddString(opar.block_name,"id",opar.variable);
       }
@@ -241,9 +256,20 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
       } else if (opar.file_type.compare("trk") == 0) {
         pnode = new TrackedParticleOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
+      } else if (opar.file_type.compare("df") == 0){
+        pnode = new ParticleDFOutput(pin,pm,opar);
+        pout_list.insert(pout_list.begin(),pnode);
+      } else if (opar.file_type.compare("dxh") == 0){
+        pnode = new ParticleDxHistOutput(pin,pm,opar);
+        pout_list.insert(pout_list.begin(),pnode);
+      } else if (opar.file_type.compare("ppd") == 0){
+        pnode = new ParticlePositionsOutput(pin,pm,opar);
+        pout_list.insert(pout_list.begin(),pnode);
+      } else if (opar.file_type.compare("prst") == 0){
+        pnode = new ParticleRestartOutput(pin,pm,opar);
+        pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("cbin") == 0) {
-        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,
-          "single_file_per_rank", false);
+        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name, "single_file_per_rank", false);
         opar.coarsen_factor = pin->GetInteger(opar.block_name,"coarsen_factor");
         opar.compute_moments = pin->GetOrAddBoolean(opar.block_name,
           "compute_moments", false);
@@ -272,15 +298,13 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
         pnode = new PDFOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("bin") == 0) {
-        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,
-          "single_file_per_rank", false);
+        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name, "single_file_per_rank", false);
         pnode = new MeshBinaryOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("rst") == 0) {
       // Add restarts to the tail end of BaseTypeOutput list, so file counters for other
       // output types are up-to-date in restart file
-        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,
-          "single_file_per_rank", false);
+        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name, "single_file_per_rank", false);
         pnode = new RestartOutput(pin,pm,opar);
         pout_list.push_back(pnode);
         num_rst++;

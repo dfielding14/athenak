@@ -445,8 +445,12 @@ def read_all_ranks_binary(rank0_filename):
     # Read the rank 0 file to get the metadata
     rank0_filedata = read_binary(rank_files[0])
 
-    # Initialize combined filedata with rank 0 data
-    combined_filedata = rank0_filedata.copy()
+    # check dimensionality/slicing
+    two_d = Nx2 != 1 and Nx3 == 1
+    three_d = Nx3 != 1
+    x1slice = nx1_out == 1
+    x2slice = nx2_out == 1 and (two_d or three_d)
+    x3slice = nx3_out == 1 and three_d
 
     # Initialize lists to hold combined data
     combined_filedata["mb_index"] = []

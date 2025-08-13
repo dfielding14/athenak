@@ -317,7 +317,7 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
 //! restart file.
 
 void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
-                                                     bool single_file_per_rank) {
+                               bool single_file_per_rank) {
   // At this point, the restartfile is already open and the ParameterInput (input file)
   // data has already been read in main(). Thus the file pointer is set to after <par_end>
   IOWrapperSizeT headeroffset = resfile.GetPosition();
@@ -328,10 +328,8 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
     + sizeof(RegionSize) + 2*sizeof(RegionIndcs);
   char *headerdata = new char[headersize];
 
-  // the master process reads the header data if single_file_per_rank is false
-  if (global_variable::my_rank == 0 || single_file_per_rank) {
-    IOWrapperSizeT read_size = resfile.Read_bytes(headerdata, 1, headersize,
-                                                  single_file_per_rank);
+  if (global_variable::my_rank == 0 || single_file_per_rank) { // the master process reads the header data
+    IOWrapperSizeT read_size = resfile.Read_bytes(headerdata, 1, headersize, single_file_per_rank);
     if (read_size != headersize) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Header size read from restart file is incorrect, "
@@ -341,7 +339,6 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   }
 
 #if MPI_PARALLEL_ENABLED
-  // then broadcast the header data
   if (!single_file_per_rank) {
     int mpi_err = MPI_Bcast(headerdata, headersize, MPI_CHAR, 0, MPI_COMM_WORLD);
     if (mpi_err != MPI_SUCCESS) {
@@ -404,8 +401,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   // allocate idlist buffer and read list of logical locations and cost
   IOWrapperSizeT listsize = sizeof(LogicalLocation) + sizeof(float);
   char *idlist = new char[listsize*nmb_total];
-  // only the master process reads the ID list
-  if (global_variable::my_rank == 0 || single_file_per_rank) {
+  if (global_variable::my_rank == 0 || single_file_per_rank) { // only the master process reads the ID list
     if (resfile.Read_bytes(idlist,listsize,nmb_total,single_file_per_rank) !=
         static_cast<unsigned int>(nmb_total)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -457,8 +453,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   // check there is at least one MeshBlock per MPI rank
   if (!single_file_per_rank) {
     if (nmb_total < global_variable::nranks) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
-        << __LINE__ << std::endl
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
         << "Fewer MeshBlocks (nmb_total=" << nmb_total << ") than MPI ranks (nranks="
         << global_variable::nranks << ")" << std::endl;
       std::exit(EXIT_FAILURE);
