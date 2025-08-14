@@ -208,11 +208,7 @@ void Z4c::Z4cWeyl(MeshBlockPack *pmbp) {
             - ddg_dddd(c,d,a,b) - ddg_dddd(a,b,c,d) +
               ddg_dddd(a,c,b,d) + ddg_dddd(b,c,a,d));
       }
-    }
-
-    for(int a = 0; a < 3; ++a)
-    for(int b = 0; b < 3; ++b) {
-      R += g_uu(a,b) * R_dd(a,b);
+        R += g_uu(a,b) * R_dd(a,b);
     }
 
     // -----------------------------------------------------------------------------------

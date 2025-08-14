@@ -227,6 +227,7 @@ void MeshBoundaryValues::InitializeBuffers(const int nvar) {
 particles::ParticlesBoundaryValues::ParticlesBoundaryValues(
   particles::Particles *pp, ParameterInput *pin) :
     sendlist("sendlist",1),
+    destroylist("destroylist",1),
 #if MPI_PARALLEL_ENABLED
     prtcl_rsendbuf("rsend",1),
     prtcl_rrecvbuf("rrecv",1),
@@ -235,12 +236,9 @@ particles::ParticlesBoundaryValues::ParticlesBoundaryValues(
 #endif
     pmy_part(pp) {
 #if MPI_PARALLEL_ENABLED
-  // Guess that no more than 10% of particles will be communicated to set size of buffer
+  
   int npart = pmy_part->nprtcl_thispack;
-  Kokkos::realloc(prtcl_rsendbuf, static_cast<int>(3.0*npart));
-  Kokkos::realloc(prtcl_isendbuf, static_cast<int>(3.0*npart));
-  Kokkos::realloc(prtcl_rrecvbuf, static_cast<int>(3.0*npart));
-  Kokkos::realloc(prtcl_irecvbuf, static_cast<int>(3.0*npart));
+
   //resize vectors over number of ranks
   nsends_eachrank.resize(global_variable::nranks);
 

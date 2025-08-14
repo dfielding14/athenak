@@ -14,6 +14,7 @@
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "hydro/hydro.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "ismcooling.hpp"
 #include "srcterms.hpp"
@@ -29,6 +30,8 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
   int is = indcs.is, nx1 = indcs.nx1;
   int js = indcs.js, nx2 = indcs.nx2;
   int ks = indcs.ks, nx3 = indcs.nx3;
+  int nscalars = pmy_pack->phydro->nscalars;
+  int nhydro = pmy_pack->phydro->nhydro;
   const int nmkji = (pmy_pack->nmb_thispack)*nx3*nx2*nx1;
   const int nkji = nx3*nx2*nx1;
   const int nji  = nx2*nx1;
@@ -109,7 +112,7 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
     auto nHceil  = nHbins_ARR[nHbins_DIM_0 - 1];
 
     Real X = 0.75; // Hydrogen mass fraction
-    Real Z = 1./3; // metallicity [Zsun]
+    Real Zsol = 0.02; // Solar metallicity
 
     Real h_rate = hrate;
     Real h_norm = hscale_norm;
@@ -145,6 +148,12 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
       Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
 
       Real R = sqrt(x1v*x1v + x2v*x2v);
+
+      // Get metallicity [Zsun]
+      Real Z = 1./3;
+      if (nscalars > 0) {
+        Z = w0(m,nhydro,k,j,i)/Zsol; // Assumes Z is the first passive scalar
+      }
 
       Real temp = 1.0; // temperature in cgs units
       Real eint = 1.0;

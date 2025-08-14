@@ -65,9 +65,6 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d/", global_variable::my_rank);
     fname = std::string("bin/") + std::string(rank_dir) + out_params.file_basename
           + "." + out_params.file_id + number + ".bin";
-
-    // Debugging output to check directory and filename
-    // std::cout << "Rank " << global_variable::my_rank << " generated filename: " << fname << std::endl;
   } else {
     // Existing behavior: single restart file
     char number[7];
@@ -101,7 +98,6 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     }
     msg << std::endl;
     if (global_variable::my_rank == 0 || single_file_per_rank) {
-      binfile.Write_any_type(msg.str().c_str(),msg.str().size(),"byte", single_file_per_rank);
       binfile.Write_any_type(msg.str().c_str(),msg.str().size(),"byte",
                              single_file_per_rank);
     }
@@ -115,7 +111,6 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::string sbuf=ost.str();
     msg << "  header offset=" << sbuf.size()*sizeof(char)  << std::endl;
     if (global_variable::my_rank == 0 || single_file_per_rank) {
-      binfile.Write_any_type(msg.str().c_str(),msg.str().size(),"byte", single_file_per_rank);
       binfile.Write_any_type(msg.str().c_str(),msg.str().size(),"byte",
                              single_file_per_rank);
       binfile.Write_any_type(sbuf.c_str(),sbuf.size(),"byte", single_file_per_rank);
@@ -239,7 +234,6 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::vector<int> rank_offset(global_variable::nranks, 0);
     std::partial_sum(noutmbs.begin(),std::prev(noutmbs.end()),
                      std::next(rank_offset.begin()));
-    std::size_t myoffset = header_offset + data_size*rank_offset[global_variable::my_rank];
     std::size_t myoffset = header_offset+data_size*rank_offset[global_variable::my_rank];
 
     if (single_file_per_rank) {
@@ -247,10 +241,6 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     }
 
     if (noutmbs_min > 0) {
-      binfile.Write_any_type_at_all(data,(data_size*nout_mbs),myoffset,"byte", single_file_per_rank);
-    } else {
-      if (nout_mbs > 0) {
-        binfile.Write_any_type_at(data,(data_size*nout_mbs),myoffset,"byte", single_file_per_rank);
       binfile.Write_any_type_at_all(data,(data_size*nout_mbs),myoffset,"byte",
                                     single_file_per_rank);
     } else {
@@ -267,7 +257,6 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       if (!single_file_per_rank) {
         myoffset += data_size*ns_mbs;
       }
-      binfile.Write_any_type_at_all(data,(data_size*nb_mbs),myoffset,"byte", single_file_per_rank);
       binfile.Write_any_type_at_all(data,(data_size*nb_mbs),myoffset,"byte",
                                     single_file_per_rank);
     } else {
@@ -287,7 +276,6 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         }
         // every rank has a MB to write, so write collectively
         if (m < noutmbs_min) {
-          if (binfile.Write_any_type_at_all(pdata,(data_size),myoffset,"byte", single_file_per_rank) != 1) {
           if (binfile.Write_any_type_at_all(pdata,(data_size),myoffset,"byte",
                                               single_file_per_rank) != data_size) {
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -297,7 +285,6 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           }
         // some ranks are finished writing, so use non-collective write
         } else if (m < pm->nmb_thisrank) {
-          if (binfile.Write_any_type_at(pdata,(data_size),myoffset,"byte", single_file_per_rank) != 1) {
           if (binfile.Write_any_type_at(pdata,(data_size),myoffset,"byte",
                                           single_file_per_rank) != data_size) {
             std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__

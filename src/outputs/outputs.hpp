@@ -16,12 +16,12 @@
 #include "athena.hpp"
 #include "io_wrapper.hpp"
 
-#define NHISTORY_VARIABLES 100
+#define NHISTORY_VARIABLES 12
 #if NHISTORY_VARIABLES > NREDUCTION_VARIABLES
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif
 
-#define NOUTPUT_CHOICES 161
+#define NOUTPUT_CHOICES 152
 // choices for output variables used in <ouput> blocks in input file
 // TO ADD MORE CHOICES:
 //   - add more strings to array below, change NOUTPUT_CHOICES above appropriately
@@ -33,22 +33,23 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "hydro_u_d", "hydro_u_m1", "hydro_u_m2", "hydro_u_m3", "hydro_u_e",     "hydro_u",
   "hydro_w_d", "hydro_w_vx", "hydro_w_vy", "hydro_w_vz", "hydro_w_e",     "hydro_w",
   "hydro_u_s", "hydro_w_s",
-  // hydro derived variables (14-17)
-  "hydro_wz",   "hydro_w2", "hydro_visc_heat", "hydro_sgs",
-  // MHD variables (18-39)
+  // hydro derived variables (14-15)
+  "hydro_wz",   "hydro_w2",
+  // MHD variables (16-37)
   "mhd_u_d",   "mhd_u_m1",   "mhd_u_m2",   "mhd_u_m3",   "mhd_u_e",       "mhd_u",
   "mhd_w_d",   "mhd_w_vx",   "mhd_w_vy",   "mhd_w_vz",   "mhd_w_e",       "mhd_w",
   "mhd_u_s",   "mhd_w_s",    "mhd_wz",     "mhd_w2",
   "mhd_bcc1",  "mhd_bcc2",   "mhd_bcc3",   "mhd_bcc",    "mhd_u_bcc",     "mhd_w_bcc",
-  // MHD derived variables (40-57)
-  "mhd_jz",    "mhd_j2",     "mhd_curv",   "mhd_curv_alt", "mhd_k_jxb", "mhd_curv_perp",
-  "mhd_bmag", "mhd_vA_mag",
-  "mhd_divb", "mhd_theta_jb", "mhd_theta_vb", "mhd_theta_jdrho", "mhd_theta_bdrho",
-  "mhd_curv_B_ratio", "mhd_jcon", "mhd_visc_heat",
-  "mhd_sgs", "mhd_dynamo_ks",
-  // turbulence (58)
+  // MHD derived variables (38-45)
+  "mhd_jz",    "mhd_j2",     "mhd_curv",   "mhd_k_jxb",  "mhd_curv_perp", "mhd_bmag",
+  "mhd_divb", "mhd_jcon",
+  // useful for coarsened binary output (46-47)
+  "hydro_sgs", "mhd_sgs",
+  // dynamo wavenumber scales (48)
+  "mhd_dynamo_ks",
+  // turbulence (49)
   "turb_force",
-  // radiation (59-75, 76-95)
+  // radiation (50-66, 67-86)
   "rad_coord",     "rad_fluid",      "rad_coord_fluid",
   "rad_hydro_u_d", "rad_hydro_u_m1", "rad_hydro_u_m2", "rad_hydro_u_m3", "rad_hydro_u_e",
   "rad_hydro_u",   "rad_hydro_w_d",  "rad_hydro_w_vx", "rad_hydro_w_vy", "rad_hydro_w_vz",
@@ -58,14 +59,14 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "rad_mhd_w_e",   "rad_mhd_w",      "rad_mhd_u_s",    "rad_mhd_w_s",    "rad_mhd_bcc1",
   "rad_mhd_bcc2",  "rad_mhd_bcc3",   "rad_mhd_bcc",    "rad_mhd_u_bcc",  "rad_mhd_w_bcc",
 
-  // ADM (96-113)
+  // ADM (87-104)
   "adm_gxx", "adm_gxy", "adm_gxz", "adm_gyy", "adm_gyz", "adm_gzz",
   "adm_Kxx", "adm_Kxy", "adm_Kxz", "adm_Kyy", "adm_Kyz", "adm_Kzz",
   "adm_psi4",
   "adm_alpha", "adm_betax", "adm_betay", "adm_betaz",
   "adm",
 
-  // Z4c (114-136)
+  // Z4c (105-127)
   "z4c_chi",
   "z4c_gxx", "z4c_gxy", "z4c_gxz", "z4c_gyy", "z4c_gyz", "z4c_gzz",
   "z4c_Khat",
@@ -76,11 +77,11 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "z4c_betax", "z4c_betay", "z4c_betaz",
   "z4c",
 
-  // Weyl (137-139)
+  // Weyl (128-130)
   "weyl_rpsi4", "weyl_ipsi4",
   "weyl",
 
-  // ADM constraints (140-147)
+  // ADM constraints (131-138)
   "con_C",
   "con_H",
   "con_M",
@@ -88,13 +89,13 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "con_Mx", "con_My", "con_Mz",
   "con",
 
-  // Tmunu (148-158)
+  // Tmunu (139-149)
   "tmunu_Sxx", "tmunu_Sxy", "tmunu_Sxz", "tmunu_Syy", "tmunu_Syz", "tmunu_Szz",
   "tmunu_E",
   "tmunu_Sx", "tmunu_Sy", "tmunu_Sz",
   "tmunu",
 
-  //Particles (159-160)
+  // Particles (150-151)
   "prtcl_all", "prtcl_d"
 };
 
@@ -140,7 +141,6 @@ struct OutputParameters {
   int nbin=0, nbin2=0;
   bool logscale=true, logscale2=true;
   bool mass_weighted=false;
-  bool single_file_per_rank=false; // New parameter for single file per rank
   bool single_file_per_rank=false; // DBF: parameter for single file per rank
 };
 
@@ -196,8 +196,6 @@ struct TrackedParticleData {
   int tag;
   Real x,y,z;
   Real vx,vy,vz;
-  Real Bx, By, Bz;
-  Real K1, K2, K3, dB1, dB2, dB3, jmag;
 };
 
 //----------------------------------------------------------------------------------------
@@ -387,34 +385,6 @@ class RestartOutput : public BaseTypeOutput {
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
 };
 
-// Forward declaration
-class CartesianGrid;
-
-//----------------------------------------------------------------------------------------
-//! \class CartesianGridOutput
-//  \brief derived BaseTypeOutput class for output on a Cartesian grid
-class CartesianGridOutput : public BaseTypeOutput {
-  struct MetaData {
-    int cycle;
-    float time;
-    float center[3];
-    float extent[3];
-    int numpoints[3];
-    bool is_cheb;
-    int noutvars;
-  };
- public:
-  CartesianGridOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
-  ~CartesianGridOutput();
-  //! Interpolate the data on the Cartesian grid and handle MPI communication
-  void LoadOutputData(Mesh *pm) override;
-  //! Write the data to file
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
- private:
-  CartesianGrid *pcart;
-  MetaData md;
-};
-
 //----------------------------------------------------------------------------------------
 //! \class EventLogOutput
 //  \brief derived BaseTypeOutput class for event counter data
@@ -440,7 +410,6 @@ class TrackedParticleOutput : public BaseTypeOutput {
   TrackedParticleOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
   void LoadOutputData(Mesh *pm) override;
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
-  void WriteOutputFileWithBuffer(Mesh *pm, ParameterInput *pin);
  protected:
   int ntrack;           // total number of tracked particles across all ranks
   int ntrack_thisrank;  // number of tracked particles this rank (guess)
@@ -448,82 +417,6 @@ class TrackedParticleOutput : public BaseTypeOutput {
   bool header_written;
   std::vector<int> npout_eachrank;
   HostArray1D<TrackedParticleData> outpart;
-  float *particle_buffer;
-  int buffer_size;
-  int ncycle_buffer;
-  int icycle_buffer;
-  int nout_thisrank;
-  int track_single_file_per_rank;
-};
-
-//----------------------------------------------------------------------------------------
-//! \class ParticleDFOutput
-//  \brief derived BaseTypeOutput class for particle distribution function  data in binary format
-
-class ParticleDFOutput : public BaseTypeOutput {
- public:
-  ParticleDFOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
-  void LoadOutputData(Mesh *pm) override;
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
- protected:
-  int nbin;
-  Real vmin;
-  Real vmax;
-  HostArray2D<int> host_histogram;
-  bool header_written;
-  int df_single_file_per_rank;
-};
-
-//----------------------------------------------------------------------------------------
-//! \class ParticleDFOutput
-//  \brief derived BaseTypeOutput class for particle distribution function  data in binary format
-
-class ParticleDxHistOutput : public BaseTypeOutput {
- public:
-  ParticleDxHistOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
-  void LoadOutputData(Mesh *pm) override;
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
- protected:
-  int nbin;
-  Real vmin;
-  Real vmax;
-  HostArray2D<int> host_histogram;
-  bool header_written;
-  int dxhist_single_file_per_rank;
-};
-
-//----------------------------------------------------------------------------------------
-//! \class ParticleRestartOutput
-//  \brief derived BaseTypeOutput class for particle restart dump
-
-class ParticleRestartOutput : public BaseTypeOutput {
- public:
-  ParticleRestartOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
-  void LoadOutputData(Mesh *pm) override;
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
- protected:
-  int npout_thisrank;
-  int npout_total;
-  HostArray2D<Real> outpart_rdata;
-  HostArray2D<int>  outpart_idata;
-};
-
-
-//----------------------------------------------------------------------------------------
-//! \class ParticlePositionsOutput
-//  \brief derived BaseTypeOutput class for particle positions dump
-
-class ParticlePositionsOutput : public BaseTypeOutput {
- public:
-  ParticlePositionsOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
-  void LoadOutputData(Mesh *pm) override;
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
- protected:
-  int npout_thisrank;
-  int npout_total;
-  int pos_single_file_per_rank;
-  HostArray2D<Real> outpart_rdata;
-  HostArray2D<int>  outpart_idata;
 };
 
 //----------------------------------------------------------------------------------------

@@ -81,12 +81,6 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
     }
   } // extra brace to limit scope of string
 
-  if (time_evolution == TimeEvolution::tstatic && pmesh->pmb_pack->ppart != nullptr){
-    tlim = pin->GetReal("time", "tlim");
-    nlim = pin->GetOrAddInteger("time", "nlim", -1);
-    ndiag = pin->GetOrAddInteger("time", "ndiag", 1);
-  }
-
   // read <time> parameters controlling driver if run requires time-evolution
   if (time_evolution != TimeEvolution::tstatic) {
     integrator = pin->GetOrAddString("time", "integrator", "rk2");
@@ -171,8 +165,8 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
       nimp_stages = 3;
       nexp_stages = 2;
       cfl_limit = 1.0;
-      gam0[0] = 1.0;
-      gam1[0] = 0.0;
+      gam0[0] = 0.0;
+      gam1[0] = 1.0;
       beta[0] = 1.0;
 
       gam0[1] = 0.5;
@@ -191,48 +185,6 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
       a_twid[2][1] = 0.25;
       a_twid[2][2] = 0.25;
       a_impl = 0.5;
-    } else if (integrator == "imex2+") {
-      // IMEX(4,3,2): Krapp et al. (2024, arXiv:2310.04435), Eq.30.
-      // three-stage explicit, four-stage implicit, second-order ImEx
-      // two implicit stages added, adapting Athenak's overall architecture
-      // Note explicit steps may not reduce to RK2 based on the parameters chosen
-      nimp_stages = 4;
-      nexp_stages = 3;
-      cfl_limit = 1.0;
-      gamma = 1.707106781186547;   //1+1/sqrt(2)
-      gam0[0] = 1.0;
-      gam1[0] = 0.0;
-      beta[0] = gamma;
-
-      gam0[1] = (2.0*gamma-1.0)/(2.0*gamma*gamma);
-      gam1[1] = (1.0-(2.0*gamma-1.0)/(2.0*gamma*gamma));
-      beta[1] = 1.0/(2.0*gamma);
-
-      gam0[2] = 1.0;
-      gam1[2] = 0.0;
-      beta[2] = 0.0;
-
-      a_twid[0][0] = 0.0;
-      a_twid[0][1] = 0.0;
-      a_twid[0][2] = 0.0;
-      a_twid[0][3] = 0.0;
-
-      a_twid[1][0] = 0.0;
-      a_twid[1][1] = 0.0;
-      a_twid[1][2] = 0.0;
-      a_twid[1][3] = 0.0;
-
-      a_twid[2][0] = 0.0;
-      a_twid[2][1] = 0.0;
-      a_twid[2][2] = (1.0-2.0*gamma*gamma)/2.0/gamma;
-      a_twid[2][3] = 0.0;
-
-      a_twid[3][0] = 0.0;
-      a_twid[3][1] = 0.0;
-      a_twid[3][2] = 0.0;
-      a_twid[3][3] = 0.0;
-
-      a_impl = gamma;
     } else if (integrator == "imex3") {
       // IMEX-SSP3(4,3,3): Pareschi & Russo (2005) Table VI.
       // three-stage explicit, four-stage implicit, third-order ImEx
@@ -275,11 +227,38 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
       a_twid[3][2] = (4.0*(b + e + a) - 1.0)/6.0;
       a_twid[3][3] = 2.0*(1.0 - a)/3.0;
       a_impl = a;
+    } else if (integrator == "imex+") {
+      // IMEX(2,3,2): Krapp et al. (2024, arXiv:2310.04435), Eq.30.
+      // three-stage explicit, two-stage implicit, second-order ImEx
+      // Note explicit steps may not reduce to RK2 based on the parameters chosen
+      nimp_stages = 2;
+      nexp_stages = 3;
+      cfl_limit = 1.0;
+      Real gamma = 1.7071067811865475;   // 1 + 1/sqrt(2)
+      gam0[0] = 0.0;
+      gam1[0] = 1.0;
+      beta[0] = gamma;
+
+      gam0[1] = (2.0*gamma-1.0)/(2.0*gamma*gamma);
+      gam1[1] = 1.0-(2.0*gamma-1.0)/(2.0*gamma*gamma);
+      beta[1] = 1.0/(2.0*gamma);
+
+      gam0[2] = 1.0;
+      gam1[2] = 0.0;
+      beta[2] = 0.0;
+
+      a_twid[0][0] = (1.0-2*gamma*gamma)/(2.0*gamma);
+      a_twid[0][1] = 0.0;
+
+      a_twid[1][0] = 0.0;
+      a_twid[1][1] = 0.0;
+
+      a_impl = gamma;
     // Error, unrecognized integrator name.
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
          << std::endl << "integrator=" << integrator << " not implemented. "
-         << "Valid choices are [rk1,rk2,rk3,rk4,imex2,imex3]." << std::endl;
+         << "Valid choices are [rk1,rk2,rk3,imex2,imex3]." << std::endl;
       exit(EXIT_FAILURE);
     }
   }
@@ -324,12 +303,6 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   mhd::MHD *pmhd = pmesh->pmb_pack->pmhd;
   radiation::Radiation *prad = pmesh->pmb_pack->prad;
   z4c::Z4c *pz4c = pmesh->pmb_pack->pz4c;
-  dyngr::DynGRMHD *pdyngr = pmesh->pmb_pack->pdyngr;
-
-  if (time_evolution == TimeEvolution::tstatic && pmesh->pmb_pack->ppart != nullptr){
-    pmesh->NewTimeStep(tlim);
-  }
-
   if (time_evolution != TimeEvolution::tstatic) {
     if (phydro != nullptr) {
       (void) pmesh->pmb_pack->phydro->NewTimeStep(this, nexp_stages);
@@ -348,7 +321,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   }
 
   //---- Step 3.  Cycle through output Types and load data / write files.
-  if (!res_flag || time_evolution == TimeEvolution::tstatic) { // only write outputs at the beginning of the run
+  if (!res_flag) { // only write outputs at the beginning of the run
     for (auto &out : pout->pout_list) {
       out->LoadOutputData(pmesh);
       out->WriteOutputFile(pmesh, pin);
@@ -394,65 +367,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
   if (time_evolution == TimeEvolution::tstatic) {
     // TODO(@user): add work for time static problems here
-    Real elapsed_time = -1.;
-    if (wall_time > 0.) {
-      elapsed_time = pwall_clock_->seconds();
-    }
-    while ((pmesh->time < tlim) && (pmesh->ncycle < nlim || nlim < 0) &&
-           (elapsed_time < wall_time)) {
-      if (global_variable::my_rank == 0) {OutputCycleDiagnostics(pmesh);}
-
-      // Execute TaskLists
-      // Work before time integrator indicated by "0" in stage
-      ExecuteTaskList(pmesh, "before_timeintegrator", 0);
-      // Work outside of TaskLists:
-      // increment time, ncycle, etc.
-      pmesh->time = pmesh->time + pmesh->dt;
-      pmesh->ncycle++;
-      nmb_updated_ += pmesh->nmb_total;
-      npart_updated_ += pmesh->nprtcl_total;
-      // load balancing efficiency
-      if (global_variable::nranks > 1) {
-        int minnmb = std::numeric_limits<int>::max();
-        for (int i=0; i<global_variable::nranks; ++i) {
-          minnmb = std::min(minnmb, pmesh->nmb_eachrank[i]);
-        }
-        lb_efficiency_ += static_cast<float>(minnmb*(global_variable::nranks))/
-            static_cast<float>(pmesh->nmb_total);
-      }
-
-      // Test for/make outputs
-      for (auto &out : pout->pout_list) {
-        // compare at floating point (32-bit) precision to reduce effect of round off
-        float time_32 = static_cast<float>(pmesh->time);
-        float next_32 = static_cast<float>(out->out_params.last_time+out->out_params.dt);
-        float tlim_32 = static_cast<float>(tlim);
-        int &dcycle_ = out->out_params.dcycle;
-
-        if (((out->out_params.dt > 0.0) && ((time_32 >= next_32) && (time_32<tlim_32))) ||
-            ((dcycle_ > 0) && ((pmesh->ncycle)%(dcycle_) == 0)) ) {
-          Real start_time = pwall_clock_->seconds();
-
-          out->LoadOutputData(pmesh);
-          out->WriteOutputFile(pmesh, pin);
-
-          Real end_time = pwall_clock_->seconds();
-          Real output_time = end_time - start_time;
-
-          if (global_variable::my_rank == 0) {
-            std::cout << "Output '" << out->out_params.block_name << "' took "
-                      << output_time << " seconds" << std::endl;
-          }
-        }
-      }
-      pmesh->NewTimeStep(tlim);
-      // Update wall clock time if needed.
-      if (wall_time > 0.) {
-        elapsed_time = pwall_clock_->seconds();
-      }
-    }  // end while
-  }    // end of (time_evolution == tstatic) clause
-  else {
+  } else {
     Real elapsed_time = -1.;
     if (wall_time > 0.) {
       elapsed_time = UpdateWallClock();
@@ -501,18 +416,8 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
         if (((out->out_params.dt > 0.0) && ((time_32 >= next_32) && (time_32<tlim_32))) ||
             ((dcycle_ > 0) && ((pmesh->ncycle)%(dcycle_) == 0)) ) {
-          Real start_time = pwall_clock_->seconds();
-
           out->LoadOutputData(pmesh);
           out->WriteOutputFile(pmesh, pin);
-
-          Real end_time = pwall_clock_->seconds();
-          Real output_time = end_time - start_time;
-
-          if (global_variable::my_rank == 0) {
-            std::cout << "Output '" << out->out_params.block_name << "' took "
-                      << output_time << " seconds" << std::endl;
-          }
         }
       }
 
@@ -550,7 +455,7 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
   float exe_time = run_time_.seconds();
 
-  if (time_evolution != TimeEvolution::tstatic  || pmesh->pmb_pack->ppart != nullptr) {
+  if (time_evolution != TimeEvolution::tstatic) {
 #if MPI_PARALLEL_ENABLED
     // Collect number of MeshBlocks communicated during load balancing across all ranks
     if (pmesh->adaptive) {
@@ -602,30 +507,18 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 //! \fn Driver::OutputCycleDiagnostics()
 //! \brief Simple function to print diagnostics every 'ndiag' cycles to stdout
 
-// void Driver::OutputCycleDiagnostics(Mesh *pm) {
-// //  const int dtprcsn = std::numeric_limits<Real>::max_digits10 - 1;
-//   const int dtprcsn = 6;
-//   if (pm->ncycle % ndiag == 0) {
-//     std::cout << "cycle=" << pm->ncycle << std::scientific << std::setprecision(dtprcsn)
-//               << " time=" << pm->time << " dt=" << pm->dt << std::endl;
-//   }
-//   return;
-// }
-
 void Driver::OutputCycleDiagnostics(Mesh *pm) {
+//  const int dtprcsn = std::numeric_limits<Real>::max_digits10 - 1;
   const int dtprcsn = 6;
-  static double last_time = 0.0;
   if (pm->ncycle % ndiag == 0) {
-    double current_time = pwall_clock_->seconds();
-    double cycle_duration = current_time - last_time;
-    last_time = current_time;
-    std::cout << "elapsed=" << std::scientific << std::setprecision(dtprcsn) << current_time
+    Real elapsed = pwall_clock_->seconds();
+    std::cout << "elapsed=" << std::scientific << std::setprecision(dtprcsn) << elapsed
               << " cycle=" << pm->ncycle
-              << " time=" << pm->time << " dt=" << pm->dt
-              << " dt_wall=" << cycle_duration << std::endl;
+              << " time=" << pm->time << " dt=" << pm->dt << std::endl;
   }
   return;
 }
+
 //----------------------------------------------------------------------------------------
 //! \fn Driver::UpdateWallClock()
 //! \brief Update and sync the wall clock across all MPI ranks. This is necessary because

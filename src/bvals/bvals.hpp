@@ -26,7 +26,7 @@ enum class BoundaryFlag {undef=-1,block, reflect, inflow, outflow, diode, user, 
 #include "mesh/mesh.hpp"
 #include "coordinates/coordinates.hpp"
 #include "tasklist/task_list.hpp"
-//#include "particles/particles.hpp"
+#include "particles/particles_data_structs.hpp"
 
 // Forward declarations
 class MeshBlockPack;
@@ -210,38 +210,6 @@ class MeshBoundaryValuesFC : public MeshBoundaryValues {
 };
 
 //----------------------------------------------------------------------------------------
-//! \struct ParticleLocationData
-//! \brief data describing location of data for particles communicated with MPI
-
-struct ParticleLocationData {
-  int prtcl_indx;   // index in particle array
-  int dest_gid;     // GID of target MeshBlock
-  int dest_rank;    // rank of target MeshBlock
-};
-
-// Custom operators to sort ParticleLocationData array by dest_rank or prtcl_indx
-struct {
-  bool operator()(ParticleLocationData a, ParticleLocationData b)
-    const { return a.dest_rank < b.dest_rank; }
-} SortByRank;
-struct {
-  bool operator()(ParticleLocationData a, ParticleLocationData b)
-    const { return a.prtcl_indx < b.prtcl_indx; }
-} SortByIndex;
-
-//----------------------------------------------------------------------------------------
-//! \struct ParticleMessageData
-//! \brief Data describing MPI messages containing particles
-
-struct ParticleMessageData {
-  int sendrank;  // rank of sender
-  int recvrank;  // rank of receiver
-  int nprtcls;   // number of particles in message
-  ParticleMessageData(int a, int b, int c) :
-    sendrank(a), recvrank(b), nprtcls(c) {}
-};
-
-//----------------------------------------------------------------------------------------
 //! \class ParticlesBoundaryValues
 //  \brief Defines boundary values class for particles
 
@@ -251,8 +219,9 @@ class ParticlesBoundaryValues {
   ParticlesBoundaryValues(particles::Particles *ppart, ParameterInput *pin);
   ~ParticlesBoundaryValues();
 
-  int nprtcl_send, nprtcl_recv;
+  int nprtcl_send, nprtcl_recv, nprtcl_destroy;
   DualArray1D<ParticleLocationData> sendlist;
+  DualArray1D<ParticleLocationData> destroylist;
 
   // Data needed to count number of messages and particles to send between ranks
   int nsends; // number of MPI sends to neighboring ranks on this rank

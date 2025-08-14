@@ -78,9 +78,9 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
       pm->pmb_pack->phydro->w0 : pm->pmb_pack->pmhd->w0;
     par_for("vorz", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      dv(m,i_dv,k,j,i) = (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      dv(m,i_dv,k,j,i) = (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1))/size.d_view(m).dx1;
       if (multi_d) {
-        dv(m,i_dv,k,j,i) -=(w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        dv(m,i_dv,k,j,i) -=(w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i))/size.d_view(m).dx2;
       }
     });
     i_dv += 1; // increment derived variable index
@@ -98,15 +98,15 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     par_for("vor2", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real w1 = 0.0;
-      Real w2 = -(w0_(m,IVZ,k,j,i+1) - w0_(m,IVZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real w3 =  (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real w2 = -(w0_(m,IVZ,k,j,i+1) - w0_(m,IVZ,k,j,i-1))/size.d_view(m).dx1;
+      Real w3 =  (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1))/size.d_view(m).dx1;
       if (multi_d) {
-        w1 += (w0_(m,IVZ,k,j+1,i) - w0_(m,IVZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
-        w3 -= (w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        w1 += (w0_(m,IVZ,k,j+1,i) - w0_(m,IVZ,k,j-1,i))/size.d_view(m).dx2;
+        w3 -= (w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i))/size.d_view(m).dx2;
       }
       if (three_d) {
-        w1 -= (w0_(m,IVY,k+1,j,i) - w0_(m,IVY,k-1,j,i))/(2.0*size.d_view(m).dx3);
-        w2 += (w0_(m,IVX,k+1,j,i) - w0_(m,IVX,k-1,j,i))/(2.0*size.d_view(m).dx3);
+        w1 -= (w0_(m,IVY,k+1,j,i) - w0_(m,IVY,k-1,j,i))/size.d_view(m).dx3;
+        w2 += (w0_(m,IVX,k+1,j,i) - w0_(m,IVX,k-1,j,i))/size.d_view(m).dx3;
       }
       dv(m,i_dv,k,j,i) = w1*w1 + w2*w2 + w3*w3;
     });
@@ -123,9 +123,9 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("jz", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      dv(m,i_dv,k,j,i) = (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      dv(m,i_dv,k,j,i) = (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/size.d_view(m).dx1;
       if (multi_d) {
-        dv(m,i_dv,k,j,i) -=(bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        dv(m,i_dv,k,j,i) -=(bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/size.d_view(m).dx2;
       }
     });
     i_dv += 1; // increment derived variable index
@@ -141,15 +141,15 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     par_for("j2", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real j1 = 0.0;
-      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/size.d_view(m).dx1;
+      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/size.d_view(m).dx1;
       if (multi_d) {
-        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
-        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/size.d_view(m).dx2;
+        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/size.d_view(m).dx2;
       }
       if (three_d) {
-        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*size.d_view(m).dx3);
-        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*size.d_view(m).dx3);
+        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/size.d_view(m).dx3;
+        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/size.d_view(m).dx3;
       }
       dv(m,i_dv,k,j,i) = j1*j1 + j2*j2 + j3*j3;
     });
@@ -454,214 +454,6 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
       }
     });
   }
-  // cos of the angle between the current and the magnetic field vector
-  if (name.compare("mhd_theta_jb") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
-    auto dv = derived_var;
-    auto &bcc = pm->pmb_pack->pmhd->bcc0;
-    par_for("j2", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-
-      // calculate current
-      Real j1 = 0.0;
-      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      if (multi_d) {
-        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
-        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
-      }
-      if (three_d) {
-        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*size.d_view(m).dx3);
-        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*size.d_view(m).dx3);
-      }
-      // Calculate |J|
-      Real J_mag = sqrt(j1*j1 + j2*j2 + j3*j3);
-
-      // Calculate |B|
-      Real B_mag = sqrt( bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
-                       + bcc(m,IBY,k,j,i)*bcc(m,IBY,k,j,i)
-                       + bcc(m,IBZ,k,j,i)*bcc(m,IBZ,k,j,i));
-
-      // calculate j dot B
-      Real jdotB = j1*bcc(m,IBX,k,j,i) + j2*bcc(m,IBY,k,j,i) + j3*bcc(m,IBZ,k,j,i);
-
-      // calculate cos(theta) = j dot B / (|J| |B|)
-      dv(m,i_dv,k,j,i) = jdotB / (J_mag * B_mag);
-    });
-    i_dv += 1; // increment derived variable index
-  }
-
-  // cos of the angle between the velocity and the magnetic field vector
-  if (name.compare("mhd_theta_vb") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
-    auto dv = derived_var;
-    auto &w0_ = pm->pmb_pack->pmhd->w0;
-    auto &bcc = pm->pmb_pack->pmhd->bcc0;
-    par_for("j2", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      // Calculate |v|
-      Real v_mag = sqrt( w0_(m,IVX,k,j,i)*w0_(m,IVX,k,j,i)
-                       + w0_(m,IVY,k,j,i)*w0_(m,IVY,k,j,i)
-                       + w0_(m,IVZ,k,j,i)*w0_(m,IVZ,k,j,i));
-
-      // Calculate |B|
-      Real B_mag = sqrt( bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
-                       + bcc(m,IBY,k,j,i)*bcc(m,IBY,k,j,i)
-                       + bcc(m,IBZ,k,j,i)*bcc(m,IBZ,k,j,i));
-
-      // calculate v dot B
-      Real vdotB = w0_(m,IVX,k,j,i)*bcc(m,IBX,k,j,i)
-                 + w0_(m,IVY,k,j,i)*bcc(m,IBY,k,j,i)
-                 + w0_(m,IVZ,k,j,i)*bcc(m,IBZ,k,j,i);
-
-      // calculate cos(theta) = v dot B / (|v| |B|)
-      dv(m,i_dv,k,j,i) = vdotB / (v_mag * B_mag);
-    });
-    i_dv += 1; // increment derived variable index
-  }
-
-  // cos of the angle between the current and the density gradient vector
-  if (name.compare("mhd_theta_jdrho") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
-    auto dv = derived_var;
-    auto &bcc = pm->pmb_pack->pmhd->bcc0;
-    auto &u0 = pm->pmb_pack->pmhd->u0;
-    par_for("theta_jdrho", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-
-      // calculate current
-      Real j1 = 0.0;
-      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      if (multi_d) {
-        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
-        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
-      }
-      if (three_d) {
-        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*size.d_view(m).dx3);
-        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*size.d_view(m).dx3);
-      }
-      // Calculate |J|
-      Real J_mag = sqrt(j1*j1 + j2*j2 + j3*j3);
-
-      // Calculate drho
-      Real drho_dx1 = (u0(m,IDN,k,j,i+1) - u0(m,IDN,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real drho_dx2 = (multi_d) ? (u0(m,IDN,k,j+1,i) - u0(m,IDN,k,j-1,i))/(2.0*size.d_view(m).dx2) : 0.;
-      Real drho_dx3 = (three_d) ? (u0(m,IDN,k+1,j,i) - u0(m,IDN,k-1,j,i))/(2.0*size.d_view(m).dx3) : 0.;
-
-      // Calculate |drho|
-      Real drho_mag = sqrt(drho_dx1*drho_dx1 + drho_dx2*drho_dx2 + drho_dx3*drho_dx3);
-
-      // calculate j dot drho
-      Real jdotdrho = j1*drho_dx1 + j2*drho_dx2 + j3*drho_dx3;
-
-      // calculate cos(theta) = j dot drho / (|J| |drho|)
-      dv(m,i_dv,k,j,i) = jdotdrho / (J_mag * drho_mag);
-    });
-    i_dv += 1; // increment derived variable index
-  }
-
-  // cos of the angle between the magnetic field and the density gradient vector
-  if (name.compare("mhd_theta_bdrho") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
-    auto dv = derived_var;
-    auto &bcc = pm->pmb_pack->pmhd->bcc0;
-    auto &u0 = pm->pmb_pack->pmhd->u0;
-    par_for("theta_bdrho", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-
-      // Calculate |B|
-      Real B_mag = sqrt( bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
-                       + bcc(m,IBY,k,j,i)*bcc(m,IBY,k,j,i)
-                       + bcc(m,IBZ,k,j,i)*bcc(m,IBZ,k,j,i));
-
-      // Calculate drho
-      Real drho_dx1 = (u0(m,IDN,k,j,i+1) - u0(m,IDN,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real drho_dx2 = (multi_d) ? (u0(m,IDN,k,j+1,i) - u0(m,IDN,k,j-1,i))/(2.0*size.d_view(m).dx2) : 0.;
-      Real drho_dx3 = (three_d) ? (u0(m,IDN,k+1,j,i) - u0(m,IDN,k-1,j,i))/(2.0*size.d_view(m).dx3) : 0.;
-
-      // Calculate |drho|
-      Real drho_mag = sqrt(drho_dx1*drho_dx1 + drho_dx2*drho_dx2 + drho_dx3*drho_dx3);
-
-      // calculate B dot drho
-      Real Bdotdrho = bcc(m,IBX,k,j,i)*drho_dx1 + bcc(m,IBY,k,j,i)*drho_dx2 + bcc(m,IBZ,k,j,i)*drho_dx3;
-
-      // calculate cos(theta) = B dot drho / (|B| |drho|)
-      dv(m,i_dv,k,j,i) = Bdotdrho / (B_mag * drho_mag);
-    });
-    i_dv += 1; // increment derived variable index
-  }
-
-  // magnitude of curvature over the magnitude of B
-  if (name.compare("mhd_curv_B_ratio") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
-    auto dv = derived_var;
-    auto &bcc = pm->pmb_pack->pmhd->bcc0;
-    par_for("curv_B_ratio", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      // Calculate |B|
-      Real &Bx = bcc(m,IBX,k,j,i);
-      Real &By = bcc(m,IBY,k,j,i);
-      Real &Bz = bcc(m,IBZ,k,j,i);
-
-      Real B_mag_squared = (Bx*Bx + By*By + Bz*Bz);
-      Real B_mag = sqrt(B_mag_squared);
-
-      // Calculate gradB tensor
-      Real dBx_dx = (bcc(m,IBX,k,j,i+1) - bcc(m,IBX,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real dBx_dy = (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
-      Real dBx_dz = (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*size.d_view(m).dx3);
-
-      Real dBy_dx = (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real dBy_dy = (bcc(m,IBY,k,j+1,i) - bcc(m,IBY,k,j-1,i))/(2.0*size.d_view(m).dx2);
-      Real dBy_dz = (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*size.d_view(m).dx3);
-
-      Real dBz_dx = (bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real dBz_dy = (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
-      Real dBz_dz = (bcc(m,IBZ,k+1,j,i) - bcc(m,IBZ,k-1,j,i))/(2.0*size.d_view(m).dx3);
-
-      Real BdotGradB_x = (Bx * dBx_dx + By * dBx_dy + Bz * dBx_dz);
-      Real BdotGradB_y = (Bx * dBy_dx + By * dBy_dy + Bz * dBy_dz);
-      Real BdotGradB_z = (Bx * dBz_dx + By * dBz_dy + Bz * dBz_dz);
-
-      Real Identity_minus_bhat_bhat_xx = 1.0 - Bx*Bx/B_mag_squared;
-      Real Identity_minus_bhat_bhat_xy = 0.0 - Bx*By/B_mag_squared;
-      Real Identity_minus_bhat_bhat_xz = 0.0 - Bx*Bz/B_mag_squared;
-
-      Real Identity_minus_bhat_bhat_yx = 0.0 - By*Bx/B_mag_squared;
-      Real Identity_minus_bhat_bhat_yy = 1.0 - By*By/B_mag_squared;
-      Real Identity_minus_bhat_bhat_yz = 0.0 - By*Bz/B_mag_squared;
-
-      Real Identity_minus_bhat_bhat_zx = 0.0 - Bz*Bx/B_mag_squared;
-      Real Identity_minus_bhat_bhat_zy = 0.0 - Bz*By/B_mag_squared;
-      Real Identity_minus_bhat_bhat_zz = 1.0 - Bz*Bz/B_mag_squared;
-
-      // Calculate curvature which is |(B.gradB).(I - bhat bhat)/B^2|
-      Real curv1 = (
-            BdotGradB_x * Identity_minus_bhat_bhat_xx
-          + BdotGradB_y * Identity_minus_bhat_bhat_yx
-          + BdotGradB_z * Identity_minus_bhat_bhat_zx
-        );
-      Real curv2 = (
-            BdotGradB_x * Identity_minus_bhat_bhat_xy
-          + BdotGradB_y * Identity_minus_bhat_bhat_yy
-          + BdotGradB_z * Identity_minus_bhat_bhat_zy
-        );
-      Real curv3 = (
-            BdotGradB_x * Identity_minus_bhat_bhat_xz
-          + BdotGradB_y * Identity_minus_bhat_bhat_yz
-          + BdotGradB_z * Identity_minus_bhat_bhat_zz
-        );
-
-      dv(m,i_dv,k,j,i) = sqrt(curv1*curv1+curv2*curv2+curv3*curv3)/B_mag_squared/B_mag;
-    });
-    i_dv += 1; // increment derived variable index
-  }
 
   // get all sgs terms for the MHD equations
   if (name.compare("mhd_sgs") == 0) {
@@ -925,15 +717,15 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       // calculate j
       Real j1 = 0.0;
-      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/size.d_view(m).dx1;
+      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/size.d_view(m).dx1;
       if (multi_d) {
-        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
-        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/size.d_view(m).dx2;
+        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/size.d_view(m).dx2;
       }
       if (three_d) {
-        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*size.d_view(m).dx3);
-        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*size.d_view(m).dx3);
+        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/size.d_view(m).dx3;
+        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/size.d_view(m).dx3;
       }
       // calculate B
       Real B_mag_sq =    bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
@@ -962,15 +754,15 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       // calculate j
       Real j1 = 0.0;
-      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/size.d_view(m).dx1;
+      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/size.d_view(m).dx1;
       if (multi_d) {
-        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
-        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/size.d_view(m).dx2;
+        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/size.d_view(m).dx2;
       }
       if (three_d) {
-        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*size.d_view(m).dx3);
-        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*size.d_view(m).dx3);
+        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/size.d_view(m).dx3;
+        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/size.d_view(m).dx3;
       }
       // calculate B
       Real B_mag_sq =    bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
@@ -1054,8 +846,8 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
 
       // calculate |(j x B / B^2) - b_hat dot nabla b_hat|
       dv(m,i_dv,k,j,i) = sqrt((jxB1_Bsq - curv1)*(jxB1_Bsq - curv1)
-                            + (jxB2_Bsq - curv2)*(jxB2_Bsq - curv2)
-                            + (jxB3_Bsq - curv3)*(jxB3_Bsq - curv3));
+                         + (jxB2_Bsq - curv2)*(jxB2_Bsq - curv2)
+                         + (jxB3_Bsq - curv3)*(jxB3_Bsq - curv3));
     });
     i_dv += 1; // increment derived variable index
   }
@@ -1071,31 +863,11 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     par_for("bmag", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       dv(m,i_dv,k,j,i) = sqrt( bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
-                             + bcc(m,IBY,k,j,i)*bcc(m,IBY,k,j,i)
-                             + bcc(m,IBZ,k,j,i)*bcc(m,IBZ,k,j,i));
+                          + bcc(m,IBY,k,j,i)*bcc(m,IBY,k,j,i)
+                          + bcc(m,IBZ,k,j,i)*bcc(m,IBZ,k,j,i));
     });
     i_dv += 1; // increment derived variable index
   }
-
-  // magnitude of vA_mag = |vA| = |B| / sqrt(rho)
-  // Calculated from cell-centered fields.
-  // Not computed in ghost zones since requires derivative
-  if (name.compare("mhd_vA_mag") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
-    auto dv = derived_var;
-    auto &bcc = pm->pmb_pack->pmhd->bcc0;
-    auto &w0_ = pm->pmb_pack->pmhd->w0;
-    par_for("vA_mag", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      dv(m,i_dv,k,j,i) = sqrt( bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
-                             + bcc(m,IBY,k,j,i)*bcc(m,IBY,k,j,i)
-                             + bcc(m,IBZ,k,j,i)*bcc(m,IBZ,k,j,i))
-                             / sqrt(w0_(m,IDN,k,j,i));
-    });
-    i_dv += 1; // increment derived variable index
-  }
-
 
   // Calculated from cell-centered fields.
   // Not computed in ghost zones since requires derivative
@@ -1115,68 +887,88 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     auto &w0_ = pm->pmb_pack->pmhd->w0;
     par_for("bmag", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      Real dx1_inv = 1.0/size.d_view(m).dx1;
-      Real dx2_inv = 1.0/size.d_view(m).dx2;
-      Real dx3_inv = 1.0/size.d_view(m).dx3;
-
-      // face-centered for ii
-      Real db1_dx1 = (b.x1f(m,k,j,i)-b.x1f(m,k,j,i-1))*dx1_inv;
-      Real db2_dx2 = (b.x2f(m,k,j,i)-b.x2f(m,k,j-1,i))*dx2_inv;
-      Real db3_dx3 = (b.x3f(m,k,j,i)-b.x3f(m,k-1,j,i))*dx3_inv;
-      // cell-centered for ij
-      Real db1_dx2 = (bcc(m,IBX,k,j+1,i)-bcc(m,IBX,k,j-1,i))*0.5*dx2_inv;
-      Real db1_dx3 = (bcc(m,IBX,k+1,j,i)-bcc(m,IBX,k-1,j,i))*0.5*dx3_inv;
-      Real db2_dx1 = (bcc(m,IBY,k,j,i+1)-bcc(m,IBY,k,j,i-1))*0.5*dx1_inv;
-      Real db2_dx3 = (bcc(m,IBY,k+1,j,i)-bcc(m,IBY,k-1,j,i))*0.5*dx3_inv;
-      Real db3_dx1 = (bcc(m,IBZ,k,j,i+1)-bcc(m,IBZ,k,j,i-1))*0.5*dx1_inv;
-      Real db3_dx2 = (bcc(m,IBZ,k,j+1,i)-bcc(m,IBZ,k,j-1,i))*0.5*dx2_inv;
-      // central values
-      Real b1 = bcc(m,IBX,k,j,i);
-      Real b2 = bcc(m,IBY,k,j,i);
-      Real b3 = bcc(m,IBZ,k,j,i);
-
+      Real dx_squared = size.d_view(m).dx1 * size.d_view(m).dx1;
       // 0 = < B^4 >
-      Real B_mag_sq = b1*b1 + b2*b2 + b3*b3;
+      Real B_mag_sq = bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
+                    + bcc(m,IBY,k,j,i)*bcc(m,IBY,k,j,i)
+                    + bcc(m,IBZ,k,j,i)*bcc(m,IBZ,k,j,i);
       dv(m,0,k,j,i) = B_mag_sq;
       Real B_fourth = B_mag_sq*B_mag_sq;
       dv(m,1,k,j,i) = B_fourth;
       // 1 = < (d_j B_i)(d_j B_i) >
-      dv(m,2,k,j,i) = (  db1_dx1*db1_dx1 + db1_dx2*db1_dx2 + db1_dx3*db1_dx3
-                       + db2_dx1*db2_dx1 + db2_dx2*db2_dx2 + db2_dx3*db2_dx3
-                       + db3_dx1*db3_dx1 + db3_dx2*db3_dx2 + db3_dx3*db3_dx3);
+      dv(m,2,k,j,i) =(  (b.x1f(m,k,j,i+1)-b.x1f(m,k,j,i))
+                       *(b.x1f(m,k,j,i+1)-b.x1f(m,k,j,i))
+                      + (b.x2f(m,k,j+1,i)-b.x2f(m,k,j,i))
+                       *(b.x2f(m,k,j+1,i)-b.x2f(m,k,j,i))
+                      + (b.x3f(m,k+1,j,i)-b.x3f(m,k,j,i))
+                       *(b.x3f(m,k+1,j,i)-b.x3f(m,k,j,i))
+                      + 0.25*(bcc(m,IBX,k,j+1,i)-bcc(m,IBX,k,j-1,i))
+                            *(bcc(m,IBX,k,j+1,i)-bcc(m,IBX,k,j-1,i))
+                      + 0.25*(bcc(m,IBX,k+1,j,i)-bcc(m,IBX,k-1,j,i))
+                            *(bcc(m,IBX,k+1,j,i)-bcc(m,IBX,k-1,j,i))
+                      + 0.25*(bcc(m,IBY,k,j,i+1)-bcc(m,IBY,k,j,i-1))
+                            *(bcc(m,IBY,k,j,i+1)-bcc(m,IBY,k,j,i-1))
+                      + 0.25*(bcc(m,IBY,k+1,j,i)-bcc(m,IBY,k-1,j,i))
+                            *(bcc(m,IBY,k+1,j,i)-bcc(m,IBY,k-1,j,i))
+                      + 0.25*(bcc(m,IBZ,k,j,i+1)-bcc(m,IBZ,k,j,i-1))
+                            *(bcc(m,IBZ,k,j,i+1)-bcc(m,IBZ,k,j,i-1))
+                      + 0.25*(bcc(m,IBZ,k,j+1,i)-bcc(m,IBZ,i,j-1,i))
+                            *(bcc(m,IBZ,k,j+1,i)-bcc(m,IBZ,i,j-1,i)))
+                      / dx_squared;
       // 2 = < (B_j d_j B_i)(B_k d_k B_i) >
-      Real bdb1 = b1*db1_dx1 + b2*db1_dx2 + b3*db1_dx3;
-      Real bdb2 = b1*db2_dx1 + b2*db2_dx2 + b3*db2_dx3;
-      Real bdb3 = b1*db3_dx1 + b2*db3_dx2 + b3*db3_dx3;
-      dv(m,3,k,j,i) = (bdb1*bdb1 + bdb2*bdb2 + bdb3*bdb3);
+      Real bdb1 = bcc(m,IBX,k,j,i)*(b.x1f(m,k,j,i+1)-b.x1f(m,k,j,i))
+                  +0.5*bcc(m,IBY,k,j,i)*(bcc(m,IBX,k,j+1,i)-bcc(m,IBX,k,j-1,i))
+                  +0.5*bcc(m,IBZ,k,j,i)*(bcc(m,IBX,k+1,j,i)-bcc(m,IBX,k-1,j,i));
+      Real bdb2 = bcc(m,IBY,k,j,i)*(b.x2f(m,k,j+1,i)-b.x2f(m,k,j,i))
+                  +0.5*bcc(m,IBZ,k,j,i)*(bcc(m,IBY,k+1,j,i)-bcc(m,IBY,k-1,j,i))
+                  +0.5*bcc(m,IBX,k,j,i)*(bcc(m,IBY,k,j,i+1)-bcc(m,IBY,k,j,i-1));
+      Real bdb3 = bcc(m,IBZ,k,j,i)*(b.x3f(m,k+1,j,i)-b.x3f(m,k,j,i))
+                  +0.5*bcc(m,IBX,k,j,i)*(bcc(m,IBZ,k,j,i+1)-bcc(m,IBZ,k,j,i-1))
+                  +0.5*bcc(m,IBY,k,j,i)*(bcc(m,IBZ,k,j+1,i)-bcc(m,IBZ,k,j-1,i));
+      dv(m,3,k,j,i) = (bdb1*bdb1 + bdb2*bdb2 + bdb3*bdb3) / dx_squared;
       // 3 = < |BxJ|^2 >
-      Real Jx = (db3_dx2 - db2_dx3);
-      Real Jy = (db1_dx3 - db3_dx1);
-      Real Jz = (db2_dx1 - db1_dx2);
-      dv(m,4,k,j,i) =( (b2*Jz - b3*Jy)*(b2*Jz - b3*Jy)
-                     + (b3*Jx - b1*Jz)*(b3*Jx - b1*Jz)
-                     + (b1*Jy - b2*Jx)*(b1*Jy - b2*Jx));
+      Real Jx = 0.5*(bcc(m,IBZ,k,j+1,i)-bcc(m,IBZ,k,j-1,i))
+              - 0.5*(bcc(m,IBY,k+1,j,i)-bcc(m,IBY,k-1,j,i));
+      Real Jy = 0.5*(bcc(m,IBX,k+1,j,i)-bcc(m,IBX,k-1,j,i))
+              - 0.5*(bcc(m,IBZ,k,j,i+1)-bcc(m,IBZ,k,j,i-1));
+      Real Jz = 0.5*(bcc(m,IBY,k,j,i+1)-bcc(m,IBY,k,j,i-1))
+              - 0.5*(bcc(m,IBX,k,j+1,i)-bcc(m,IBX,k,j-1,i));
+      dv(m,4,k,j,i) =( (bcc(m,IBY,k,j,i)*Jz - bcc(m,IBZ,k,j,i)*Jy)
+                      *(bcc(m,IBY,k,j,i)*Jz - bcc(m,IBZ,k,j,i)*Jy)
+                     + (bcc(m,IBZ,k,j,i)*Jx - bcc(m,IBX,k,j,i)*Jz)
+                      *(bcc(m,IBZ,k,j,i)*Jx - bcc(m,IBX,k,j,i)*Jz)
+                     + (bcc(m,IBX,k,j,i)*Jy - bcc(m,IBY,k,j,i)*Jx)
+                      *(bcc(m,IBX,k,j,i)*Jy - bcc(m,IBY,k,j,i)*Jx))
+                     / dx_squared;
       // 4 = < |B.J|^2 >
-      dv(m,5,k,j,i) = ((b1*Jx + b2*Jy + b3*Jz)*(b1*Jx + b2*Jy + b3*Jz));
+      dv(m,5,k,j,i) = ((bcc(m,IBX,k,j,i)*Jx + bcc(m,IBY,k,j,i)*Jy + bcc(m,IBZ,k,j,i)*Jz)
+                      *(bcc(m,IBX,k,j,i)*Jx + bcc(m,IBY,k,j,i)*Jy + bcc(m,IBZ,k,j,i)*Jz))
+                      /dx_squared;
       // 5 = < U^2 >
       dv(m,6,k,j,i) += (w0_(m,IVX,k,j,i)*w0_(m,IVX,k,j,i))
                      + (w0_(m,IVY,k,j,i)*w0_(m,IVY,k,j,i))
                      + (w0_(m,IVZ,k,j,i)*w0_(m,IVZ,k,j,i));
       // 6 = < (d_j U_i)(d_j U_i) >
-      Real dvx_dx1 = (w0_(m,IVX,k,j,i+1)-w0_(m,IVX,k,j,i-1))*0.5*dx1_inv;
-      Real dvx_dx2 = (w0_(m,IVX,k,j+1,i)-w0_(m,IVX,k,j-1,i))*0.5*dx2_inv;
-      Real dvx_dx3 = (w0_(m,IVX,k+1,j,i)-w0_(m,IVX,k-1,j,i))*0.5*dx3_inv;
-      Real dvy_dx1 = (w0_(m,IVY,k,j,i+1)-w0_(m,IVY,k,j,i-1))*0.5*dx1_inv;
-      Real dvy_dx2 = (w0_(m,IVY,k,j+1,i)-w0_(m,IVY,k,j-1,i))*0.5*dx2_inv;
-      Real dvy_dx3 = (w0_(m,IVY,k+1,j,i)-w0_(m,IVY,k-1,j,i))*0.5*dx3_inv;
-      Real dvz_dx1 = (w0_(m,IVZ,k,j,i+1)-w0_(m,IVZ,k,j,i-1))*0.5*dx1_inv;
-      Real dvz_dx2 = (w0_(m,IVZ,k,j+1,i)-w0_(m,IVZ,k,j-1,i))*0.5*dx2_inv;
-      Real dvz_dx3 = (w0_(m,IVZ,k+1,j,i)-w0_(m,IVZ,k-1,j,i))*0.5*dx3_inv;
-      dv(m,7,k,j,i) += ((dvx_dx1*dvx_dx1 + dvy_dx1*dvy_dx1 + dvz_dx1*dvz_dx1)
-                      + (dvx_dx2*dvx_dx2 + dvy_dx2*dvy_dx2 + dvz_dx2*dvz_dx2)
-                      + (dvx_dx3*dvx_dx3 + dvy_dx3*dvy_dx3 + dvz_dx3*dvz_dx3));
+      dv(m,7,k,j,i) +=((0.25*(w0_(m,IVX,k,j,i+1)-w0_(m,IVX,k,j,i-1))
+                            *(w0_(m,IVX,k,j,i+1)-w0_(m,IVX,k,j,i-1))
+                      + 0.25*(w0_(m,IVY,k,j+1,i)-w0_(m,IVY,k,j-1,i))
+                            *(w0_(m,IVY,k,j+1,i)-w0_(m,IVY,k,j-1,i))
+                      + 0.25*(w0_(m,IVZ,k+1,j,i)-w0_(m,IVZ,k-1,j,i))
+                            *(w0_(m,IVZ,k+1,j,i)-w0_(m,IVZ,k-1,j,i))
+                      + 0.25*(w0_(m,IVX,k,j+1,i)-w0_(m,IVX,k,j-1,i))
+                            *(w0_(m,IVX,k,j+1,i)-w0_(m,IVX,k,j-1,i))
+                      + 0.25*(w0_(m,IVX,k+1,j,i)-w0_(m,IVX,k-1,j,i))
+                            *(w0_(m,IVX,k+1,j,i)-w0_(m,IVX,k-1,j,i))
+                      + 0.25*(w0_(m,IVY,k,j,i+1)-w0_(m,IVY,k,j,i-1))
+                            *(w0_(m,IVY,k,j,i+1)-w0_(m,IVY,k,j,i-1))
+                      + 0.25*(w0_(m,IVY,k+1,j,i)-w0_(m,IVY,k-1,j,i))
+                            *(w0_(m,IVY,k+1,j,i)-w0_(m,IVY,k-1,j,i))
+                      + 0.25*(w0_(m,IVZ,k,j,i+1)-w0_(m,IVZ,k,j,i-1))
+                            *(w0_(m,IVZ,k,j,i+1)-w0_(m,IVZ,k,j,i-1))
+                      + 0.25*(w0_(m,IVZ,k,j+1,i)-w0_(m,IVZ,k,j-1,i))
+                            *(w0_(m,IVZ,k,j+1,i)-w0_(m,IVZ,k,j-1,i))))
+                      / dx_squared;
     });
-    i_dv += 1; // increment derived variable index
   }
 
   // divergence of B, including ghost zones
@@ -1387,43 +1179,6 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
         }
       }
     });
-  }
-
-  // Viscous heating rate -- < Pi:dv > needs to be multiplied by nu
-  if (name.compare("hydro_visc_heat") == 0 || name.compare("mhd_visc_heat") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
-    auto dv = derived_var;
-    auto &w0_ = (name.compare("hydro_visc_heat") == 0)?
-      pm->pmb_pack->phydro->w0 : pm->pmb_pack->pmhd->w0;
-    par_for("Pi:dv", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      Real dx1_inv = 1.0/size.d_view(m).dx1;
-      Real dx2_inv = 1.0/size.d_view(m).dx2;
-      Real dx3_inv = 1.0/size.d_view(m).dx3;
-
-      Real dvx_dx1 = (w0_(m,IVX,k,j,i+1)-w0_(m,IVX,k,j,i-1))*0.5*dx1_inv;
-      Real dvx_dx2 = (w0_(m,IVX,k,j+1,i)-w0_(m,IVX,k,j-1,i))*0.5*dx2_inv;
-      Real dvx_dx3 = (w0_(m,IVX,k+1,j,i)-w0_(m,IVX,k-1,j,i))*0.5*dx3_inv;
-      Real dvy_dx1 = (w0_(m,IVY,k,j,i+1)-w0_(m,IVY,k,j,i-1))*0.5*dx1_inv;
-      Real dvy_dx2 = (w0_(m,IVY,k,j+1,i)-w0_(m,IVY,k,j-1,i))*0.5*dx2_inv;
-      Real dvy_dx3 = (w0_(m,IVY,k+1,j,i)-w0_(m,IVY,k-1,j,i))*0.5*dx3_inv;
-      Real dvz_dx1 = (w0_(m,IVZ,k,j,i+1)-w0_(m,IVZ,k,j,i-1))*0.5*dx1_inv;
-      Real dvz_dx2 = (w0_(m,IVZ,k,j+1,i)-w0_(m,IVZ,k,j-1,i))*0.5*dx2_inv;
-      Real dvz_dx3 = (w0_(m,IVZ,k+1,j,i)-w0_(m,IVZ,k-1,j,i))*0.5*dx3_inv;
-      Real Pi_xx = (2*dvx_dx1 - (2/3.)*(dvx_dx1 + dvy_dx2 + dvz_dx3));
-      Real Pi_yy = (2*dvy_dx2 - (2/3.)*(dvx_dx1 + dvy_dx2 + dvz_dx3));
-      Real Pi_zz = (2*dvz_dx3 - (2/3.)*(dvx_dx1 + dvy_dx2 + dvz_dx3));
-      Real Pi_xy = (dvx_dx2 + dvy_dx1);
-      Real Pi_xz = (dvx_dx3 + dvz_dx1);
-      Real Pi_yz = (dvy_dx3 + dvz_dx2);
-
-      dv(m,i_dv,k,j,i) = (Pi_xx*dvx_dx1 + Pi_yy*dvy_dx2 + Pi_zz*dvz_dx3
-                        + Pi_xy*(dvx_dx2 + dvy_dx1)
-                        + Pi_xz*(dvx_dx3 + dvz_dx1)
-                        + Pi_yz*(dvy_dx3 + dvz_dx2))*w0_(m,IDN,k,j,i);
-    });
-    i_dv += 1; // increment derived variable index
   }
 
   // Particle density binned to mesh.

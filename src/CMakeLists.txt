@@ -56,7 +56,6 @@ add_executable(
 
         geodesic-grid/geodesic_grid.cpp
         geodesic-grid/spherical_grid.cpp
-	geodesic-grid/gauss_legendre.cpp
 
         hydro/hydro.cpp
         hydro/hydro_fluxes.cpp
@@ -88,7 +87,6 @@ add_executable(
         outputs/io_wrapper.cpp
         outputs/outputs.cpp
         outputs/basetype_output.cpp
-        outputs/cartgrid.cpp
         outputs/derived_variables.cpp
         outputs/binary.cpp
         outputs/eventlog.cpp
@@ -99,10 +97,6 @@ add_executable(
         outputs/track_prtcl.cpp
         outputs/vtk_mesh.cpp
         outputs/vtk_prtcl.cpp
-	outputs/df_prtcl.cpp
-        outputs/dxhist_prtcl.cpp
-        outputs/pos_prtcl.cpp
-        outputs/rst_prtcl.cpp
 
         particles/particles.cpp
         particles/particles_pushers.cpp
@@ -153,10 +147,8 @@ add_executable(
         utils/show_config.cpp
         utils/lagrange_interpolator.cpp
         utils/tr_table.cpp
-        utils/cart_grid.cpp
 
         z4c/compact_object_tracker.cpp
-        z4c/horizon_dump.cpp
         z4c/tmunu.cpp
         z4c/z4c.cpp
         z4c/z4c_adm.cpp
@@ -169,7 +161,6 @@ add_executable(
         z4c/z4c_calculate_weyl_scalars.cpp
         z4c/z4c_wave_extr.cpp
         z4c/z4c_amr.cpp
-        z4c/cce/cce.cpp
 )
 
 # custom problem generator to be included in compile

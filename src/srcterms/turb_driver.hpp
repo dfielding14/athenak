@@ -57,8 +57,8 @@ class TurbulenceDriver {
   DvceArray4D<Real> sfb_basis_imag;
   
   // Vector spherical harmonics components for proper divergence-free projection
-  DvceArray6D<Real> sfb_vector_basis_real; // (nmb,mode,dir,nk,nj,ni) 
-  DvceArray6D<Real> sfb_vector_basis_imag;
+  DvceArray5D<Real> sfb_vector_basis_real; // (mode,dir,nk,nj,ni) 
+  DvceArray5D<Real> sfb_vector_basis_imag;
 
   // -----------------------------------------------------------------------------
   // Helper functions – defined in turb_driver.cpp but declared here so that they
@@ -80,7 +80,7 @@ class TurbulenceDriver {
   // parameters of driving
   int nlow, nhigh, spect_form;
   int mode_count;
-  int rseed;  // random seed for turbulence driving
+  int rseed; // random seed for turbulence driving
   Real kpeak;
   Real tcorr, dedt, tdriv_duration, tdriv_start;
   Real expo, exp_prl, exp_prp;
@@ -106,12 +106,10 @@ class TurbulenceDriver {
   TaskStatus UpdateForcing(Driver *pdrive, int stage);
   TaskStatus AddForcing(Driver *pdrive, int stage);
   void Initialize();
-  void ResizeArrays(int new_nmb);  // Resize arrays when mesh changes
 
  private:
   bool first_time = true;   // flag to enable initialization on first call
   MeshBlockPack *pmy_pack;  // ptr to MeshBlockPack containing this TurbulenceDriver
-  int current_nmb = 0;      // current number of MeshBlocks for array sizing
 };
 
 // ========================== Inline math utilities =============================

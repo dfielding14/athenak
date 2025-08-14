@@ -8,6 +8,8 @@
 //! \file mesh_refinement.hpp
 //! \brief defines MeshRefinement class containing data and functions controlling SMR/AMR
 
+#include "particles/particles_data_structs.hpp"
+
 //----------------------------------------------------------------------------------------
 //! \fn int CreateAMR_MPI_Tag(int lid, int ox1, int ox2, int ox3)
 //! \brief calculate an MPI tag for AMR communications.  Note maximum size of
@@ -87,9 +89,24 @@ class MeshRefinement {
 #if MPI_PARALLEL_ENABLED
   int nmb_send, nmb_recv;
   MPI_Comm amr_comm;                         // unique communicator for AMR
-  DualArray1D<AMRBuffer> sendbuf, recvbuf; // send/recv buffers
+  DualArray1D<AMRBuffer> sendbuf, recvbuf;   // send/recv buffers
   MPI_Request *send_req, *recv_req;
   DvceArray1D<Real> send_data, recv_data;    // send/recv device data
+					     
+  // particle communication buffers
+  DvceArray1D<Real> prtcl_rsendbuf, prtcl_rrecvbuf;  // particle real data buffers
+  DvceArray1D<int> prtcl_isendbuf, prtcl_irecvbuf;   // particle integer data buffers
+  // particle MPI management
+  int nprtcl_send, nprtcl_recv;
+  DualArray1D<ParticleLocationData> prtcl_sendlist;
+  std::vector<MPI_Request> prtcl_rsend_req, prtcl_isend_req;
+  std::vector<MPI_Request> prtcl_rrecv_req, prtcl_irecv_req;
+  // particle message data for count exchange
+  int prtcl_nsends; // number of MPI sends to neighboring ranks on this rank
+  int prtcl_nrecvs; // number of MPI recvs from neighboring ranks on this rank
+  std::vector<int> prtcl_nsends_eachrank; // length nranks
+  std::vector<ParticleMessageData> prtcl_sends_thisrank, prtcl_recvs_thisrank;
+  std::vector<ParticleMessageData> prtcl_sends_allranks;
 #endif
 
   // functions
@@ -110,8 +127,6 @@ class MeshRefinement {
   void RefineCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a, DvceArray5D<Real> &ca,
                 bool is_z4c=false);
   void RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b, DvceFaceFld4D<Real> &cb);
-  // Corrects FC field values at newly-refined/already-fine boundaries (div(B) fix #595)
-  void FixRefinedFCBoundaries(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b);
 
   void RestrictCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca, bool is_z4c=false);
   void RestrictFC(DvceFaceFld4D<Real> &b, DvceFaceFld4D<Real> &cb);
@@ -126,6 +141,14 @@ class MeshRefinement {
   void UnpackAMRBuffersCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca, int ncc,int nfc);
   void UnpackAMRBuffersFC(DvceFaceFld4D<Real> &b,DvceFaceFld4D<Real> &cb,int ncc,int nfc);
   void ClearSendAMR();
+
+  // particle functions
+  void CreateParticleLists();
+  void CountParticleSendsAndRecvs(); 
+  void PackAMRBuffersParticles();
+  void UnpackAMRBuffersParticles();
+  void InitPartRecv();
+  void RefineParticles();
 
   // initialize interpolation weights
   void InitInterpWghts();

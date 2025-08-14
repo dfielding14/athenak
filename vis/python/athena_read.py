@@ -10,14 +10,14 @@ import numpy as np
 
 check_nan_flag = False
 
-# ========================================================================================
+
 # Check input NumPy array for the presence of any NaN entries
 def check_nan(data):
     if np.isnan(data).any():
         raise FloatingPointError("NaN encountered")
     return
 
-# ========================================================================================
+
 # Wrapper to np.loadtxt() for checks used in regression tests
 def error_dat(filename, **kwargs):
     data = np.loadtxt(filename,
@@ -28,7 +28,7 @@ def error_dat(filename, **kwargs):
         check_nan(data)
     return data
 
-# ========================================================================================
+
 # Read .tab files and return dict.
 def tab(filename):
 
@@ -78,7 +78,6 @@ def tab(filename):
     return data_dict
 
 
-# ========================================================================================
 # Read .hst files and return dict of 1D arrays.
 # Keyword arguments:
 # raw -- if True, do not prune file to remove stale data
@@ -147,6 +146,7 @@ def hst(filename, raw=False):
 
 
 # ========================================================================================
+
 def athdf(filename, raw=False, data=None, quantities=None, dtype=None, level=None,
           return_levels=False, subsample=False, fast_restrict=False, x1_min=None,
           x1_max=None, x2_min=None, x2_max=None, x3_min=None, x3_max=None, vol_func=None,
@@ -763,54 +763,6 @@ def athdf(filename, raw=False, data=None, quantities=None, dtype=None, level=Non
                 check_nan(val)
 
     return data
-
-
-# ========================================================================================
-
-def athinput(filename):
-    """Read athinput file and returns a dictionary of dictionaries."""
-
-    # Read data
-    with open(filename, 'r') as athinput:
-        # remove comments, extra whitespace, and empty lines
-        lines = filter(None, [i.split('#')[0].strip() for i in athinput.readlines()])
-    data = {}
-    # split into blocks, first element will be empty
-    blocks = ('\n'.join(lines)).split('<')[1:]
-
-    # Function for interpreting strings numerically
-    def typecast(x):
-        if '_' in x:
-            return x
-        try:
-            return int(x)
-        except ValueError:
-            pass
-        try:
-            return float(x)
-        except ValueError:
-            pass
-        try:
-            return complex(x)
-        except ValueError:
-            pass
-        return x
-
-    # Function for parsing assignment based on first '='
-    def parse_line(line):
-        out = [i.strip() for i in line.split('=')]
-        out[1] = '='.join(out[1:])
-        out[1] = typecast(out[1])
-        return out[:2]
-
-    # Assign values into dictionaries
-    for block in blocks:
-        info = list(filter(None, block.split('\n')))
-        key = info.pop(0)[:-1]  # last character is '>'
-        data[key] = dict(map(parse_line, info))
-    return data
-
-
 
 
 # General exception class for these functions
