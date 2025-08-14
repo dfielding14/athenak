@@ -9,15 +9,22 @@
 #include <iostream>
 #include <string>
 #include <algorithm>
+<<<<<<< HEAD
 #include <fstream>
+=======
+
+>>>>>>> origin/main
 #include "athena.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "bvals/bvals.hpp"
 #include "particles.hpp"
+<<<<<<< HEAD
 #include "units/units.hpp"
 #include "utils/sn_scheduler.hpp"
+=======
+>>>>>>> origin/main
 
 namespace particles {
 //----------------------------------------------------------------------------------------
@@ -25,6 +32,11 @@ namespace particles {
 
 Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     pmy_pack(ppack) {
+<<<<<<< HEAD
+=======
+  std::cout << "Entering Particles constructor" << std::endl;
+
+>>>>>>> origin/main
   // check this is at least a 2D problem
   if (pmy_pack->pmesh->one_d) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
@@ -32,13 +44,49 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
 
+<<<<<<< HEAD
   // initialize vector for star particles
   std::vector<std::array<Real, 9>> particle_list;
 
+=======
+  // read number of particles per cell, and calculate number of particles this pack
+  Real ppc = pin->GetOrAddReal("particles","ppc",1.0);
+  nspecies = pin->GetOrAddInteger("particles","nspecies",1);
+  // compute number of particles as real number, since ppc can be < 1
+
+  std::string evolution_t = pin->GetString("time","evolution");
+  is_dynamic = (evolution_t.compare("static") != 0);
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int ncells = indcs.nx1*indcs.nx2*indcs.nx3;
+  Real r_npart = ppc*static_cast<Real>((pmy_pack->nmb_thispack)*ncells);
+  // then cast to integer
+  nprtcl_thispack = static_cast<int>(r_npart) * nspecies;
+  nprtcl_perspec_thispack = static_cast<int>(r_npart);
+  
+  prtcl_rst_flag = pin->GetOrAddInteger("problem","prtcl_rst_flag",0);
+  if (prtcl_rst_flag) {
+    std::string prst_fname = pin->GetString("problem","prtcl_res_file");
+    char rank_dir[20];
+    std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d", global_variable::my_rank);
+    prst_fname.replace(prst_fname.find("rank_00000000"), sizeof("rank_00000000") - 1, rank_dir);
+    std::cout<<"Restarting particles from file "<<prst_fname<<std::endl;
+    std::size_t myoffset = 0;
+    Real *gen_data = new Real [3]; 
+    FILE* pfile = std::fopen(prst_fname.c_str(),"r");
+    std::fseek(pfile, myoffset, SEEK_SET);
+    std::fread(gen_data, sizeof(Real), 3, pfile);
+    nprtcl_thispack = static_cast<int>(gen_data[2]);
+    std::fclose(pfile);
+    delete [] gen_data;
+  }
+  std::cout << "Particles: nprtcl_thispack = " << nprtcl_thispack << std::endl;
+  std::cout << "Particles: nprtcl_perspec_thispack = " << nprtcl_perspec_thispack << std::endl;
+>>>>>>> origin/main
   // select particle type
   {
     std::string ptype = pin->GetString("particles","particle_type");
     if (ptype.compare("cosmic_ray") == 0) {
+<<<<<<< HEAD
 
       particle_type = ParticleType::cosmic_ray;
 
@@ -97,12 +145,21 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       // Print number of particles loaded
       std::cout << "Loaded " << nprtcl_thispack 
 	        << " star particles from file " << particle_file << std::endl;
+=======
+      particle_type = ParticleType::cosmic_ray;
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Particle type = '" << ptype << "' not recognized"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+>>>>>>> origin/main
     }
   }
 
   // select pusher algorithm
   {
     std::string ppush = pin->GetString("particles","pusher");
+<<<<<<< HEAD
     if (ppush.compare("drift") == 0) {
       pusher = ParticlesPusher::drift;
     } else if (ppush.compare("rk4_gravity") == 0) {
@@ -117,6 +174,24 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       rho_mean  = pin->GetReal("potential", "rho_mean");
       par_grav_dx = pin->GetOrAddReal("particles", "grav_dx", 1e-6);
     } else {
+=======
+    std::string interp = pin->GetOrAddString("particles","interpolation", "tsc");
+    
+    if (ppush.compare("drift") == 0) {
+      pusher = ParticlesPusher::drift;
+    }
+    else if (ppush.compare("boris") ==0  ){
+      if(interp.compare("tsc") == 0) pusher = ParticlesPusher::boris_tsc;
+      else if(interp.compare("lin") == 0) pusher = ParticlesPusher::boris_lin;
+      else {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Interpolation method not recognized"
+                <<std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+    else {
+>>>>>>> origin/main
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle pusher must be specified in <particles> block"
                 <<std::endl;
@@ -130,6 +205,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << "Particles only work in 2D/3D, but 1D problem initialized" <<std::endl;
     std::exit(EXIT_FAILURE);
   }
+<<<<<<< HEAD
 
   // stars must be 3D
   if (particle_type == ParticleType::star and not pmy_pack->pmesh->three_d) {
@@ -150,6 +226,14 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     case ParticleType::star:
       {
         nrdata = 9;
+=======
+  switch (particle_type) {
+    case ParticleType::cosmic_ray:
+      {
+        int ndim=5+7;
+        if (pmy_pack->pmesh->three_d) {ndim+=2;}
+        nrdata = ndim;
+>>>>>>> origin/main
         nidata = 3;
         break;
       }
@@ -162,6 +246,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // allocate boundary object
   pbval_part = new ParticlesBoundaryValues(this, pin);
+<<<<<<< HEAD
 
   // Initialize Star particles if particle type is "star"
   {
@@ -214,6 +299,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       dtnew = std::min(dtnew, size.h_view(0).dx3);
     }
   }
+=======
+  std::cout << "Exiting Particles constructor" << std::endl;
+>>>>>>> origin/main
 }
 
 //----------------------------------------------------------------------------------------
@@ -228,6 +316,7 @@ Particles::~Particles() {
 // those with tag numbers less than ntrack.
 
 void Particles::CreateParticleTags(ParameterInput *pin) {
+<<<<<<< HEAD
   std::string assign = pin->GetOrAddString("particles","assign_tag","index_order");
 
   // tags are assigned sequentially within this rank, starting at 0 with rank=0
@@ -259,6 +348,48 @@ void Particles::CreateParticleTags(ParameterInput *pin) {
               << "Particle tag assinment type = '" << assign << "' not recognized"
               << std::endl;
     std::exit(EXIT_FAILURE);
+=======
+  if (!prtcl_rst_flag){
+    std::string assign = pin->GetOrAddString("particles","assign_tag","index_order");
+    // tags are assigned sequentially within this rank, starting at 0 with rank=0
+    if (assign.compare("index_order") == 0) {
+      int tagstart = 0;
+      for (int n=1; n<=global_variable::my_rank; ++n) {
+        tagstart += pmy_pack->pmesh->nprtcl_eachrank[n-1] / nspecies;
+      }
+
+      auto &nspecies_ = nspecies;
+      auto &pi = prtcl_idata;
+      auto &nprtcl_total_ = pmy_pack->pmesh->nprtcl_total;
+      auto &nprtcl_perspec_thispack_ = nprtcl_perspec_thispack;
+      par_for("ptags",DevExeSpace(),0,(nprtcl_thispack-1),
+      KOKKOS_LAMBDA(const int p) {
+        int spec = p / nprtcl_perspec_thispack_;
+        pi(PTAG,p) = tagstart + p + spec*nprtcl_total_/nspecies_;
+      });
+
+    // tags are assigned sequentially across ranks
+    } else if (assign.compare("rank_order") == 0) {
+      int myrank = global_variable::my_rank;
+      int nranks = global_variable::nranks;
+      auto &nspecies_ = nspecies;
+      auto &pi = prtcl_idata;
+      auto &nprtcl_total_ = pmy_pack->pmesh->nprtcl_total;
+      auto &nprtcl_perspec_thispack_ = nprtcl_perspec_thispack;
+      par_for("ptags",DevExeSpace(),0,(nprtcl_thispack-1),
+      KOKKOS_LAMBDA(const int p) {
+        int spec = p / nprtcl_perspec_thispack_;
+        pi(PTAG,p) = myrank + nranks*p + spec*nprtcl_total_/nspecies_ ;
+      });
+
+    // tag algorithm not recognized, so quit with error
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+                << "Particle tag assinment type = '" << assign << "' not recognized"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+>>>>>>> origin/main
   }
 }
 

@@ -8,7 +8,6 @@
 
 #include <iostream>
 #include "athena.hpp"
-#include "globals.hpp"
 #include "parameter_input.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
@@ -74,9 +73,6 @@ namespace {
   ProfileReader profile_reader;           // Device-side reader
   ProfileReaderHost disk_profile_reader_host;  // Host-side reader
   ProfileReader disk_profile_reader;           // Device-side reader
-  
-  // Refinment condition threshold
-  Real ddens_threshold;
 }
 
 //===========================================================================//
@@ -91,7 +87,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   user_srcs_func  = UserSource;
   user_bcs_func   = UserBoundary;
   pgen_final_func = FreeProfile;
-  user_ref_func  = RefinementCondition;
+  //user_ref_func  = RefinementCondition;
 
   if (restart) return;
 
@@ -105,9 +101,6 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   rho_mean  = pin->GetReal("potential", "rho_mean");
   r_circ    = pin->GetReal("problem", "r_circ");
   v_circ    = pin->GetReal("problem", "v_circ");
-
-  // Read the density gradient threshold for refinement
-  ddens_threshold = pin->GetReal("problem", "ddens_max");
 
   // Read the CGM cooling flow profile file
   std::string profile_file = pin->GetString("problem", "profile_file");
@@ -279,9 +272,6 @@ void SetEquilibriumState(const DvceArray5D<Real> &u0,
     Real R1r = sqrt(x1r * x1r + x2v * x2v);
     Real R2l = sqrt(x1v * x1v + x2l * x2l);
     Real R2r = sqrt(x1v * x1v + x2r * x2r);
-
-    // Don't extrapolate past the last entry in the table
-    if (R > disk_profile.GetRmax()) return;
 
     // Calculate Gravitational Potentials
     Real phi0    = GravPot(x1v, x2v, 0.0, G, r_s, rho_s, m_g, a_g, z_g, r_m, rho_m);
@@ -577,52 +567,9 @@ void UserBoundary(Mesh* pm) {
 //                              Refinement                                   //
 //===========================================================================//
 
-// Refine region based on density gradient threshold
+// User defined refinement
 void RefinementCondition(MeshBlockPack* pmbp) {
-  Mesh *pmesh       = pmbp->pmesh;
-  int nmb           = pmbp->nmb_thispack;
-  int mbs           = pmesh->gids_eachrank[global_variable::my_rank];
-  auto &refine_flag = pmesh->pmr->refine_flag;
-  auto &multi_d     = pmesh->multi_d;
-  auto &three_d     = pmesh->three_d;
-  auto &indcs       = pmesh->mb_indcs;
-  int &is = indcs.is, nx1 = indcs.nx1;
-  int &js = indcs.js, nx2 = indcs.nx2;
-  int &ks = indcs.ks, nx3 = indcs.nx3;
-  const int nkji = nx3 * nx2 * nx1;
-  const int nji  = nx2 * nx1;
-  auto &u0       = pmbp->phydro->u0;
-
-  auto &ddens_thresh = ddens_threshold;
-
-  par_for_outer("UserRefineCond",DevExeSpace(), 0, 0, 0, (nmb-1),
-  KOKKOS_LAMBDA(TeamMember_t tmember, const int m) {
-
-    Real team_ddmax;
-    Kokkos::parallel_reduce(Kokkos::TeamThreadRange(tmember, nkji),
-    [=](const int idx, Real& ddmax) {
-      int k = (idx)/nji;
-      int j = (idx - k*nji)/nx1;
-      int i = (idx - k*nji - j*nx1) + is;
-      j += js;
-      k += ks;
-
-      // Calculate density gradient
-      Real d2 = SQR(u0(m,IDN,k,j,i+1) - u0(m,IDN,k,j,i-1));
-      if (multi_d) {d2 += SQR(u0(m,IDN,k,j+1,i) - u0(m,IDN,k,j-1,i));}
-      if (three_d) {d2 += SQR(u0(m,IDN,k+1,j,i) - u0(m,IDN,k-1,j,i));}
-      ddmax = fmax((sqrt(d2)/u0(m,IDN,k,j,i)), ddmax);
-
-    },Kokkos::Max<Real>(team_ddmax));
-
-    if (team_ddmax > ddens_thresh) {refine_flag.d_view(m+mbs) = 1;}
-    if (team_ddmax < 0.25*ddens_thresh) {refine_flag.d_view(m+mbs) = -1;}
-
-  });
-
-  // sync host and device
-  refine_flag.template modify<DevExeSpace>();
-  refine_flag.template sync<HostMemSpace>();
+  return;
 }
 
 //===========================================================================//

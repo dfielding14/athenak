@@ -41,8 +41,12 @@ class ProfileReader {
   KOKKOS_INLINE_FUNCTION Real GetTemperature(Real r) const;
   KOKKOS_INLINE_FUNCTION Real GetVelocity(Real r) const;
   KOKKOS_INLINE_FUNCTION Real GetRmin() const;
+<<<<<<< HEAD
   KOKKOS_INLINE_FUNCTION Real GetRmax() const;
 
+=======
+  
+>>>>>>> origin/main
   private:
   // Device views for profile data
   DvceArray1D<Real> d_r_vals;
@@ -194,10 +198,13 @@ Real ProfileReader::GetRmin() const {
   return d_r_vals(0);
 }
 
+<<<<<<< HEAD
 KOKKOS_INLINE_FUNCTION
 Real ProfileReader::GetRmax() const {
   // Return the maximum radius from the last value in the r_vals array
   return d_r_vals(num_points -1);
 }
 
+=======
+>>>>>>> origin/main
 #endif // PROFILE_READER_HPP_

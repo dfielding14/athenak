@@ -20,7 +20,9 @@ def make(arguments):
         subprocess.check_call(['mkdir', 'build'], stdout=out_log)
         build_dir = current_dir + '/build/'
         os.chdir(build_dir)
-        cmake_command = ['cmake3', '../' + athena_rel_path] + arguments
+        # Use cmake (not cmake3) on macOS
+        cmake_cmd = 'cmake3' if os.path.exists('/usr/bin/cmake3') else 'cmake'
+        cmake_command = [cmake_cmd, '../' + athena_rel_path] + arguments
         make_command = ['make', '-j8']
         try:
             t0 = timer()

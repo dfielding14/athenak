@@ -59,13 +59,20 @@ class CompactObjectTracker {
  private:
   bool owns_compact_object;
   CompactObjectType type;
+<<<<<<< HEAD
   Real pos[NDIM];
+=======
+>>>>>>> origin/main
   Real vel[NDIM];
   int reflevel;         // requested minimum refinement level (-1 for infinity)
   Real radius;          // nominal radius of the object (for the AMR driver)
   Mesh const *pmesh;
   int out_every;
   std::ofstream ofile;
+<<<<<<< HEAD
+=======
+  Real pos[NDIM];
+>>>>>>> origin/main
 };
 
 #endif // Z4C_COMPACT_OBJECT_TRACKER_HPP_
