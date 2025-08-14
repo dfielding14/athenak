@@ -46,7 +46,11 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
   if (out_params.file_type.compare("hst") == 0 ||
       out_params.file_type.compare("rst") == 0 ||
       out_params.file_type.compare("log") == 0 ||
-      out_params.file_type.compare("trk") == 0) {return;}
+      out_params.file_type.compare("trk") == 0 ||
+      out_params.file_type.compare("df")  == 0 ||
+      out_params.file_type.compare("dxh") == 0 ||
+      out_params.file_type.compare("ppd") == 0 ||
+      out_params.file_type.compare("prst") == 0) {return;}
 
   // initialize vector containing number of output MBs per rank
   noutmbs.assign(global_variable::nranks, 0);
@@ -65,35 +69,35 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
 
   // check that appropriate physics is defined for requested output variable
   // TODO(@user): Index limits of variable choices below may change if more choices added
-  if ((ivar<16) && (pm->pmb_pack->phydro == nullptr)) {
+  if ((ivar<18) && (pm->pmb_pack->phydro == nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Output of Hydro variable requested in <output> block '"
        << out_params.block_name << "' but no Hydro object has been constructed."
        << std::endl << "Input file is likely missing a <hydro> block" << std::endl;
     exit(EXIT_FAILURE);
   }
-  if ((ivar>=16) && (ivar<49) && (pm->pmb_pack->pmhd == nullptr)) {
+  if ((ivar>=18) && (ivar<58) && (pm->pmb_pack->pmhd == nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Output of MHD variable requested in <output> block '"
        << out_params.block_name << "' but no MHD object has been constructed."
        << std::endl << "Input file is likely missing a <mhd> block" << std::endl;
     exit(EXIT_FAILURE);
   }
-  if ((ivar==49) && (pm->pmb_pack->pturb == nullptr)) {
+  if ((ivar==58) && (pm->pmb_pack->pturb == nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Output of Force variable requested in <output> block '"
        << out_params.block_name << "' but no Force object has been constructed."
        << std::endl << "Input file is likely missing a <forcing> block" << std::endl;
     exit(EXIT_FAILURE);
   }
-  if (ivar==50 && (pm->pmb_pack->prad == nullptr)) {
+  if (ivar==59 && (pm->pmb_pack->prad == nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Output of Radiation moments requested in <output> block '"
        << out_params.block_name << "' but no Radiation object has been constructed."
        << std::endl << "Input file is likely missing a <radiation> block" << std::endl;
     exit(EXIT_FAILURE);
   }
-  if ((ivar==51 || ivar==52) &&
+  if ((ivar==60 || ivar==61) &&
       ((pm->pmb_pack->prad == nullptr) ||
        (pm->pmb_pack->phydro == nullptr && pm->pmb_pack->pmhd == nullptr))) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
@@ -102,7 +106,7 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
        << " constructed, or corresponding Hydro or MHD object missing" << std::endl;
     exit(EXIT_FAILURE);
   }
-  if ((ivar>=52) && (ivar<67) &&
+  if ((ivar>=62) && (ivar<76) &&
       (pm->pmb_pack->prad == nullptr || pm->pmb_pack->phydro == nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Output of Radiation Hydro variables requested in <output> block '"
@@ -110,7 +114,7 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
        << std::endl << "Input file is likely missing corresponding block" << std::endl;
     exit(EXIT_FAILURE);
   }
-  if ((ivar>=67) && (ivar<87) &&
+  if ((ivar>=76) && (ivar<96) &&
       (pm->pmb_pack->prad == nullptr || pm->pmb_pack->pmhd == nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Output of Radiation MHD variables requested in <output> block '"
@@ -118,41 +122,41 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
        << std::endl << "Input file is likely missing corresponding block" << std::endl;
     exit(EXIT_FAILURE);
   }
-  if ((ivar>=87) && (ivar<105) && (pm->pmb_pack->padm == nullptr)) {
+  if ((ivar>=96) && (ivar<113) && (pm->pmb_pack->padm == nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Output of ADM variable requested in <output> block '"
        << out_params.block_name << "' but ADM object not constructed."
        << std::endl << "Input file is likely missing corresponding block" << std::endl;
     exit(EXIT_FAILURE);
   }
-  if ((ivar>=105) && (ivar<128) && (pm->pmb_pack->pz4c == nullptr)) {
+  if ((ivar>=114) && (ivar<137) && (pm->pmb_pack->pz4c == nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Output of Z4c variable requested in <output> block '"
        << out_params.block_name << "' but Z4c object not constructed."
        << std::endl << "Input file is likely missing corresponding block" << std::endl;
     exit(EXIT_FAILURE);
   }
-  if ((ivar>=128) && (ivar<131) && (pm->pmb_pack->pz4c == nullptr)) {
+  if ((ivar>=137) && (ivar<140) && (pm->pmb_pack->pz4c == nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Output of weyl variable requested in <output> block '"
        << out_params.block_name << "' but weyl object not constructed."
        << std::endl << "Input file is likely missing corresponding block" << std::endl;
     exit(EXIT_FAILURE);
   }
-  if ((ivar>=131) && (ivar<139) && (pm->pmb_pack->pz4c == nullptr)) {
+  if ((ivar>=140) && (ivar<148) && (pm->pmb_pack->pz4c == nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Output of constraint variables request in <output> block '"
        << out_params.block_name << "' but Z4c object not constructed."
        << std::endl << "Input file is likely missing corresponding block" << std::endl;
     exit(EXIT_FAILURE);
   }
-  if ((ivar>=139) && (ivar<150) && (pm->pmb_pack->ptmunu == nullptr)) {
+  if ((ivar>=148) && (ivar<159) && (pm->pmb_pack->ptmunu == nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Output of Tmunu variable requested in <output> block '"
        << out_params.block_name << "' but no Tmunu object has been constructed."
        << std::endl << "Input file is likely missing a <adm> block" << std::endl;
   }
-  if ((ivar>=150) && (ivar<152) && (pm->pmb_pack->ppart == nullptr)) {
+  if ((ivar>=159) && (ivar<161) && (pm->pmb_pack->ppart == nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Output of particles requested in <output> block '"
        << out_params.block_name << "' but particle object not constructed."
@@ -469,6 +473,15 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       outvars.emplace_back("vor2",i_derived,&(derived_var));
     }
 
+    // hydro/mhd magnitude of viscous heating
+    if (variable.compare("hydro_visc_heat") == 0 ||
+        variable.compare("mhd_visc_heat") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("visc_heat",i_derived,&(derived_var));
+    }
+
     // mhd z-component of current density (useful in 2D)
     if (variable.compare("mhd_jz") == 0) {
       out_params.contains_derived = true;
@@ -485,13 +498,20 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       outvars.emplace_back("j2",i_derived,&(derived_var));
     }
 
-    // Added by DBF --- check & update NOUTPUT_CHOICES
     // mhd magnitude of magnetic curvature
     if (variable.compare("mhd_curv") == 0) {
       out_params.contains_derived = true;
       out_params.n_derived += 1;
       int i_derived = out_params.n_derived - 1;
       outvars.emplace_back("curv",i_derived,&(derived_var));
+    }
+
+    // mhd magnitude of magnetic curvature alt
+    if (variable.compare("mhd_curv_alt") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("curv_alt",i_derived,&(derived_var));
     }
 
     // mhd magnitude of magnetic curvature
@@ -516,6 +536,54 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       out_params.n_derived += 1;
       int i_derived = out_params.n_derived - 1;
       outvars.emplace_back("bmag",i_derived,&(derived_var));
+    }
+
+    // mhd magnitude of Alfven Velocity
+    if (variable.compare("mhd_vA_mag") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("vA_mag",i_derived,&(derived_var));
+    }
+
+    // ratio of curvature to magnetic field strength
+    if (variable.compare("mhd_curv_B_ratio") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("curv_B_ratio",i_derived,&(derived_var));
+    }
+
+    // mhd_theta_jb
+    if (variable.compare("mhd_theta_jb") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("costheta_jb",i_derived,&(derived_var));
+    }
+
+    // mhd_theta_vb
+    if (variable.compare("mhd_theta_vb") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("costheta_vb",i_derived,&(derived_var));
+    }
+
+    // mhd_theta_jdrho
+    if (variable.compare("mhd_theta_jdrho") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("costheta_jdrho",i_derived,&(derived_var));
+    }
+
+    // mhd_theta_bdrho
+    if (variable.compare("mhd_theta_bdrho") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("costheta_bdrho",i_derived,&(derived_var));
     }
 
     // mhd divergence of B

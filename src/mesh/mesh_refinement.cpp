@@ -633,6 +633,13 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
     if (pmhd != nullptr) {
       RefineCC(new_to_old, pmhd->u0, pmhd->coarse_u0);
       RefineFC(new_to_old, pmhd->b0, pmhd->coarse_b0);
+      // IMPORTANT: Fix div(B) errors at fine/coarse boundaries after refinement
+      // When a coarse block is refined adjacent to an already-fine block, the
+      // prolongated face-centered B-field values may not match the existing fine
+      // values, violating div(B)=0. This call overwrites the prolongated values
+      // with the correct values from fine neighbors.
+      // See https://github.com/IAS-Astrophysics/athenak/issues/595 for details.
+      FixRefinedFCBoundaries(new_to_old, pmhd->b0);
     }
     if (pz4c != nullptr) {
       RefineCC(new_to_old, pz4c->u0, pz4c->coarse_u0, true);
@@ -1179,6 +1186,205 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
       }
     }
   });
+
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MeshRefinement::FixRefinedFCBoundaries
+//! \brief Corrects face-centered magnetic field values at boundaries between newly
+//! refined blocks and their already-fine neighbors to maintain div(B) = 0.
+//!
+//! \detailed When AMR refines a coarse block that neighbors an already-fine block,
+//! the prolongation operator creates face-centered field values at the shared
+//! boundary that may not match the existing fine values. This mismatch violates
+//! the divergence-free
+//! constraint for magnetic fields. This function fixes the issue by copying the
+//! face-centered field values from already-fine blocks to their newly-refined neighbors
+//! at shared boundaries.
+//!
+//! The algorithm:
+//! 1. Loop over all MeshBlocks on this rank that were just refined (refine_flag > 0)
+//! 2. For each refined block, check all other blocks on this rank at the same level
+//! 3. If a neighbor was already fine (refine_flag == 0), copy its boundary face values
+//!    to overwrite the prolongated values in the newly refined block
+//!
+//! This implements the fix for issue https://github.com/IAS-Astrophysics/athenak/issues/595
+//! based on the approach in https://github.com/PrincetonUniversity/athena/pull/625
+//!
+//! NOTE: This function only handles blocks on the same MPI rank. Cross-rank boundary
+//! corrections would require MPI communication and are not implemented here.
+//! In practice, the standard boundary communication in the next timestep should
+//! handle cross-rank boundaries.
+
+void MeshRefinement::FixRefinedFCBoundaries(DualArray1D<int> &n2o,
+                                             DvceFaceFld4D<Real> &b) {
+  // Get local variables for this rank's MeshBlocks
+  auto &new_nmb = new_nmb_eachrank[global_variable::my_rank];
+  auto &ngids = new_gids_eachrank[global_variable::my_rank];
+
+  // Diagnostic counters for analyzing cross-rank boundaries
+  int fixed_boundaries = 0;
+  int potential_cross_rank = 0;
+
+  // Get mesh indices for face-centered fields
+  auto &indcs = pmy_mesh->mb_indcs;
+  auto &is = indcs.is, &ie = indcs.ie;
+  auto &js = indcs.js, &je = indcs.je;
+  auto &ks = indcs.ks, &ke = indcs.ke;
+
+  // Check dimensionality
+  bool &multi_d = pmy_mesh->multi_d;
+  bool &three_d = pmy_mesh->three_d;
+
+  // Loop over newly refined blocks only (more efficient than checking all pairs)
+  for (int m = 0; m < new_nmb; ++m) {
+    int global_m = m + ngids;
+    int old_m = n2o.h_view(global_m);
+
+    // Skip blocks that were not refined
+    if (refine_flag.h_view(old_m) <= 0) continue;
+
+    LogicalLocation &lloc_m = new_lloc_eachmb[global_m];
+
+    // Check neighbors at the same level on this rank
+    for (int n = 0; n < new_nmb; ++n) {
+      if (m == n) continue;
+
+      int global_n = n + ngids;
+      int old_n = n2o.h_view(global_n);
+      LogicalLocation &lloc_n = new_lloc_eachmb[global_n];
+
+      // Skip if not at same level or if neighbor was also refined
+      if (lloc_m.level != lloc_n.level) continue;
+      if (refine_flag.h_view(old_n) != 0) continue;
+
+      // At this point: m was refined, n was already fine, both at same level
+      // Check if they are face neighbors and copy field values if so
+
+      // X1-face neighbors: same lx2, lx3, adjacent lx1
+      if (lloc_m.lx2 == lloc_n.lx2 && lloc_m.lx3 == lloc_n.lx3) {
+        if (lloc_m.lx1 == lloc_n.lx1 + 1) {
+          // m is right neighbor of n: copy n's right face to m's left face
+          par_for("FixDivB-x1L", DevExeSpace(), ks, ke, js, je,
+          KOKKOS_LAMBDA(const int k, const int j) {
+            b.x1f(m, k, j, is) = b.x1f(n, k, j, ie+1);
+          });
+          fixed_boundaries++;
+        } else if (lloc_m.lx1 == lloc_n.lx1 - 1) {
+          // m is left neighbor of n: copy n's left face to m's right face
+          par_for("FixDivB-x1R", DevExeSpace(), ks, ke, js, je,
+          KOKKOS_LAMBDA(const int k, const int j) {
+            b.x1f(m, k, j, ie+1) = b.x1f(n, k, j, is);
+          });
+          fixed_boundaries++;
+        }
+      }
+
+      // X2-face neighbors (2D/3D): same lx1, lx3, adjacent lx2
+      if (multi_d && lloc_m.lx1 == lloc_n.lx1 && lloc_m.lx3 == lloc_n.lx3) {
+        if (lloc_m.lx2 == lloc_n.lx2 + 1) {
+          // m is top neighbor of n: copy n's top face to m's bottom face
+          par_for("FixDivB-x2L", DevExeSpace(), ks, ke, is, ie,
+          KOKKOS_LAMBDA(const int k, const int i) {
+            b.x2f(m, k, js, i) = b.x2f(n, k, je+1, i);
+          });
+          fixed_boundaries++;
+        } else if (lloc_m.lx2 == lloc_n.lx2 - 1) {
+          // m is bottom neighbor of n: copy n's bottom face to m's top face
+          par_for("FixDivB-x2R", DevExeSpace(), ks, ke, is, ie,
+          KOKKOS_LAMBDA(const int k, const int i) {
+            b.x2f(m, k, je+1, i) = b.x2f(n, k, js, i);
+          });
+          fixed_boundaries++;
+        }
+      }
+
+      // X3-face neighbors (3D): same lx1, lx2, adjacent lx3
+      if (three_d && lloc_m.lx1 == lloc_n.lx1 && lloc_m.lx2 == lloc_n.lx2) {
+        if (lloc_m.lx3 == lloc_n.lx3 + 1) {
+          // m is front neighbor of n: copy n's front face to m's back face
+          par_for("FixDivB-x3L", DevExeSpace(), js, je, is, ie,
+          KOKKOS_LAMBDA(const int j, const int i) {
+            b.x3f(m, ks, j, i) = b.x3f(n, ke+1, j, i);
+          });
+          fixed_boundaries++;
+        } else if (lloc_m.lx3 == lloc_n.lx3 - 1) {
+          // m is back neighbor of n: copy n's back face to m's front face
+          par_for("FixDivB-x3R", DevExeSpace(), js, je, is, ie,
+          KOKKOS_LAMBDA(const int j, const int i) {
+            b.x3f(m, ke+1, j, i) = b.x3f(n, ks, j, i);
+          });
+          fixed_boundaries++;
+        }
+      }
+    }
+
+    // Now check for potential cross-rank boundaries that we're missing
+    // This is diagnostic only - we don't fix these
+    for (int face = 0; face < 6; face++) {
+      LogicalLocation neighbor_lloc = lloc_m;
+      bool is_neighbor = false;
+
+      // Determine neighbor location based on face
+      if (face == 0) { // -x1
+        neighbor_lloc.lx1 -= 1;
+        is_neighbor = true;
+      } else if (face == 1) { // +x1
+        neighbor_lloc.lx1 += 1;
+        is_neighbor = true;
+      } else if (multi_d && face == 2) { // -x2
+        neighbor_lloc.lx2 -= 1;
+        is_neighbor = true;
+      } else if (multi_d && face == 3) { // +x2
+        neighbor_lloc.lx2 += 1;
+        is_neighbor = true;
+      } else if (three_d && face == 4) { // -x3
+        neighbor_lloc.lx3 -= 1;
+        is_neighbor = true;
+      } else if (three_d && face == 5) { // +x3
+        neighbor_lloc.lx3 += 1;
+        is_neighbor = true;
+      }
+
+      if (is_neighbor) {
+        // Check if this neighbor exists at the same level but is NOT on this rank
+        bool found_on_this_rank = false;
+        for (int nn = 0; nn < new_nmb; ++nn) {
+          int global_nn = nn + ngids;
+          LogicalLocation &lloc_nn = new_lloc_eachmb[global_nn];
+          if (lloc_nn.level == lloc_m.level &&
+              lloc_nn.lx1 == neighbor_lloc.lx1 &&
+              lloc_nn.lx2 == neighbor_lloc.lx2 &&
+              lloc_nn.lx3 == neighbor_lloc.lx3) {
+            found_on_this_rank = true;
+            break;
+          }
+        }
+
+        // If neighbor at same level exists but not on this rank, it's cross-rank
+        if (!found_on_this_rank && neighbor_lloc.level == lloc_m.level) {
+          // Check if this neighbor would have been already fine
+          // We can't know for sure without MPI communication, but we can estimate
+          potential_cross_rank++;
+        }
+      }
+    }
+  }
+
+  // Output diagnostics if any boundaries were fixed or potentially missed
+#if MPI_PARALLEL_ENABLED
+  if (fixed_boundaries > 0 || potential_cross_rank > 0) {
+    std::cout << "[FixDivB] Rank " << global_variable::my_rank
+              << ": Fixed " << fixed_boundaries << " same-rank boundaries"
+              << ", " << potential_cross_rank << " potential cross-rank boundaries"
+              << std::endl;
+  }
+#else
+  if (fixed_boundaries > 0) {
+    std::cout << "[FixDivB] Fixed " << fixed_boundaries << " boundaries" << std::endl;
+  }
+#endif
 
   return;
 }

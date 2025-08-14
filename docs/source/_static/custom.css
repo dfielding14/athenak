@@ -1,0 +1,119 @@
+/* Custom CSS for AthenaK Documentation */
+
+/* Ensure Mermaid diagrams render properly */
+.mermaid {
+    text-align: center;
+    margin: 1em 0;
+}
+
+pre.mermaid {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
+
+/* Fix Mermaid dark theme */
+.mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Ensure Mermaid is visible */
+div.mermaid {
+    visibility: visible !important;
+    display: block !important;
+}
+
+/* Grid layout improvements */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1em;
+    margin: 2em 0;
+}
+
+.grid-item {
+    border: 2px solid var(--color-brand-primary);
+    padding: 1em;
+    border-radius: 8px;
+}
+
+/* Code block improvements */
+.highlight {
+    margin: 1em 0;
+}
+
+/* Navigation improvements */
+.toctree-wrapper {
+    margin: 1.5em 0;
+}
+
+/* Collapsible sidebar captions for Furo theme */
+.sidebar-tree p.caption {
+    position: relative;
+    padding-left: 0;
+}
+
+/* Style the arrow indicator */
+.sidebar-tree .caption-arrow {
+    color: var(--color-foreground-secondary);
+    transition: all 0.2s ease;
+}
+
+/* Smooth transition for lists */
+.sidebar-tree p.caption + ul {
+    transition: all 0.3s ease-out;
+    overflow: hidden;
+}
+
+/* Hover effect for captions */
+.sidebar-tree p.caption:hover .caption-arrow {
+    color: var(--color-brand-primary);
+}
+
+/* Ensure proper spacing */
+.sidebar-tree p.caption {
+    margin-bottom: 0.5em;
+}
+
+.sidebar-tree p.caption[data-collapsed="true"] {
+    margin-bottom: 1em;
+}
+
+/* Animation for smooth expand/collapse */
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        max-height: 0;
+    }
+    to {
+        opacity: 1;
+        max-height: 2000px;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 1;
+        max-height: 2000px;
+    }
+    to {
+        opacity: 0;
+        max-height: 0;
+    }
+}
+
+/* Hide bullet points for L1 items with collapsible arrows */
+.content li.toctree-l1:has(.l2-arrow) {
+    list-style: none;
+}
+
+/* Remove bullets for L2 items in main content */
+.content li.toctree-l2 {
+    list-style: none;
+}
+
+/* Adjust spacing for items without bullets */
+.content .toctree-l1:has(.l2-arrow) > a {
+    margin-left: -1em;
+}

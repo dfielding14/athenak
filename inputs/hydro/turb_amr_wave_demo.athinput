@@ -1,0 +1,87 @@
+# AthenaK input file for turbulence driving with moving AMR refinement
+# Uses a traveling wave refinement pattern to test derefinement behavior
+
+<comment>
+problem   = turb_amr_wave_test
+
+<job>
+basename  = TurbAMRWave    # problem ID: basename of output filenames
+
+<mesh>
+nghost    = 2          # Number of ghost cells
+nx1       = 64         # Number of zones in X1-direction
+x1min     = -1.0       # minimum value of X1
+x1max     = 1.0        # maximum value of X1
+ix1_bc    = periodic   # Inner-X1 boundary condition flag
+ox1_bc    = periodic   # Outer-X1 boundary condition flag
+
+nx2       = 32         # Number of zones in X2-direction
+x2min     = -1.0       # minimum value of X2
+x2max     = 1.0        # maximum value of X2
+ix2_bc    = periodic   # Inner-X2 boundary condition flag
+ox2_bc    = periodic   # Outer-X2 boundary condition flag
+
+nx3       = 32         # Number of zones in X3-direction
+x3min     = -1.0       # minimum value of X3
+x3max     = 1.0        # maximum value of X3
+ix3_bc    = periodic   # Inner-X3 boundary condition flag
+ox3_bc    = periodic   # Outer-X3 boundary condition flag
+
+<meshblock>
+nx1       = 16         # Number of cells in each MeshBlock, X1-dir
+nx2       = 16         # Number of cells in each MeshBlock, X2-dir
+nx3       = 16         # Number of cells in each MeshBlock, X3-dir
+
+<mesh_refinement>
+refinement = adaptive   # adaptive refinement
+max_level = 2          # maximum refinement level
+refine_interval = 5    # cycles between refinement checks
+max_nmb_per_rank = 1000 # maximum number of MeshBlocks per rank
+
+<time>
+evolution  = dynamic   # dynamic evolution
+integrator = rk2       # time integration algorithm
+cfl_number = 0.3       # The Courant, Friedrichs, & Lewy (CFL) Number
+nlim       = 200       # cycle limit (enough to see multiple refinements)
+tlim       = 2.0       # time limit (enough for wave to cross domain)
+ndiag      = 10        # cycles between diagnostic output
+
+<hydro>
+eos         = ideal    # EOS type
+reconstruct = plm      # spatial reconstruction method
+rsolver     = hllc     # Riemann-solver to be used
+gamma       = 1.4      # gamma = C_p/C_v
+
+<problem>
+rho0      = 1.0        # uniform density
+pgas0     = 1.0        # uniform pressure
+vx0       = 0.0        # no mean flow
+vy0       = 0.0
+vz0       = 0.0
+wave_speed = 0.5       # speed of traveling refinement wave
+wave_width = 0.3       # width of refined region
+
+<turb_driving>
+type      = hydro
+basis_type = 0         # Cartesian basis (where we see the issue)
+tcorr     = 0.5        # correlation time
+dedt      = 1.0        # energy injection rate (higher to see effect)
+nlow      = 1          # minimum wavenumber
+nhigh     = 4          # maximum wavenumber
+rseed     = -456       # random seed
+dt_turb_update = 0.01  # frequent updates to catch derefinement issues
+
+<output1>
+file_type  = bin       # Binary output
+variable   = prim      # primitive variables
+dt         = 0.1       # output frequently to track wave
+
+<output2>
+file_type  = bin       # Binary output
+variable   = turb_force # turbulence forcing
+dt         = 0.1       # output frequently to see force discontinuities
+
+<output3>
+file_type  = bin       # Binary output  
+variable   = mb_gid    # MeshBlock ID to track refinement
+dt         = 0.1       # output frequently

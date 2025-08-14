@@ -36,6 +36,7 @@ class SourceTerms {
   // flags for various source terms
   bool const_accel;
   bool ism_cooling;
+  bool cgm_cooling;
   bool rel_cooling;
   bool beam;
   bool shearing_box, shearing_box_r_phi;
@@ -47,8 +48,17 @@ class SourceTerms {
   Real const_accel_val;
   int const_accel_dir;
 
-  // heating rate used with ISM cooling
+  // heating rate used with ISM/CGM cooling
   Real hrate;
+  Real hscale_norm;
+  Real hscale_height; // Gaussian Scale Height
+  Real hscale_radius; // Exponential Scale Radius
+  Real hscale_alpha;  // Scale coefficient
+
+  // CGM cooling tables
+  DualArray1D<Real> Tbins, nHbins;
+  DualArray2D<Real> Metal_Cooling, H_He_Cooling;
+  DualArray1D<Real> Metal_Cooling_CIE, H_He_Cooling_CIE;
 
   // cooling rate used with relativistic cooling
   Real crate_rel;
@@ -65,6 +75,8 @@ class SourceTerms {
                      const Real dt, DvceArray5D<Real> &u0);
   void ISMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos,
                   const Real dt, DvceArray5D<Real> &u0);
+  void CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos,
+                  const Real dt, DvceArray5D<Real> &u0);
   void RelCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos,
                   const Real dt, DvceArray5D<Real> &u0);
   void BeamSource(DvceArray5D<Real> &i0, const Real dt);
@@ -76,6 +88,7 @@ class SourceTerms {
   void SBoxEField(const DvceFaceFld4D<Real> &b0, DvceEdgeFld4D<Real> &efld);
 
   void NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos);
+  void Initialize();
 
  private:
   MeshBlockPack *pmy_pack;

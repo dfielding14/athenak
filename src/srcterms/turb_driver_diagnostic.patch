@@ -1,0 +1,41 @@
+--- a/src/srcterms/turb_driver.cpp
++++ b/src/srcterms/turb_driver.cpp
+@@ -750,6 +750,21 @@ TaskStatus TurbulenceDriver::Generate(Driver *pdriver, int stage) {
+   Real &indcs = pmy_pack->pmesh->mb_indcs;
+   int nmb = pmy_pack->nmb_thispack;
+   
++  // DIAGNOSTIC: Check array sizes vs actual MeshBlock count
++  static int last_nmb = -1;
++  static int update_count = 0;
++  if (nmb != last_nmb || update_count % 10 == 0) {
++    int force_nmb = force.extent(0);
++    if (global_variable::my_rank == 0) {
++      std::cout << "### TURB_DIAG [t=" << pmy_pack->pmesh->time 
++                << ", update=" << update_count << "]: nmb_thispack=" << nmb 
++                << ", force array dim0=" << force_nmb;
++      if (nmb != force_nmb) {
++        std::cout << " *** MISMATCH! ***";
++      }
++      std::cout << std::endl;
++    }
++    last_nmb = nmb;
++  }
++  update_count++;
++  
+   auto &mbsize = pmy_pack->pmb->mb_size;
+   
+@@ -833,6 +848,16 @@ TaskStatus TurbulenceDriver::Generate(Driver *pdriver, int stage) {
+     
+     // Update turbulence driver
+     if (dt_turb_update_time < t_turb_now){
++      // DIAGNOSTIC: Log when updating turbulence patterns
++      if (global_variable::my_rank == 0) {
++        std::cout << "### TURB_UPDATE [t=" << t_turb_now 
++                  << "]: Updating turbulence patterns, nmb=" << nmb
++                  << ", force array size=" << force.extent(0) 
++                  << ", n_turb_updates_yet=" << n_turb_updates_yet << std::endl;
++      }
++      
+       n_turb_updates_yet++;
+       // Get the state of the RNG from the MeshBlockPack
+       auto &driver_rng = pmy_pack->pdriver->rng;

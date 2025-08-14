@@ -99,6 +99,10 @@ add_executable(
         outputs/track_prtcl.cpp
         outputs/vtk_mesh.cpp
         outputs/vtk_prtcl.cpp
+	outputs/df_prtcl.cpp
+        outputs/dxhist_prtcl.cpp
+        outputs/pos_prtcl.cpp
+        outputs/rst_prtcl.cpp
 
         particles/particles.cpp
         particles/particles_pushers.cpp

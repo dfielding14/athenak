@@ -61,6 +61,7 @@ int IOWrapper::Open(const char* fname, FileMode rw, bool single_file_per_rank) {
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
+      printf("%.*s\n", resultlen, msg);
       Kokkos::printf("%.*s\n", resultlen, msg);
       MPI_Abort(MPI_COMM_WORLD, 1);
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -110,6 +111,7 @@ std::size_t IOWrapper::Read_bytes(void *buf, IOWrapperSizeT size, IOWrapperSizeT
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
+      printf("%.*s\n", resultlen, msg);
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
@@ -123,7 +125,6 @@ std::size_t IOWrapper::Read_bytes(void *buf, IOWrapperSizeT size, IOWrapperSizeT
   return std::fread(buf, size, cnt, fh_);
 #endif
 }
-
 //----------------------------------------------------------------------------------------
 //! \fn int IOWrapper::Read_bytes_at(void *buf, IOWrapperSizeT size,
 //!                                  IOWrapperSizeT cnt, IOWrapperSizeT offset,
@@ -142,6 +143,7 @@ std::size_t IOWrapper::Read_bytes_at(void *buf, IOWrapperSizeT size,
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
+      printf("%.*s\n", resultlen, msg);
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
@@ -176,6 +178,7 @@ std::size_t IOWrapper::Read_bytes_at_all(void *buf, IOWrapperSizeT size,
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
+      printf("%.*s\n", resultlen, msg);
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
@@ -208,6 +211,7 @@ std::size_t IOWrapper::Read_Reals(void *buf, IOWrapperSizeT cnt,
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
+      printf("%.*s\n", resultlen, msg);
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
@@ -238,6 +242,7 @@ std::size_t IOWrapper::Read_Reals_at(void *buf, IOWrapperSizeT cnt,
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
+      printf("%.*s\n", resultlen, msg);
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
@@ -271,6 +276,7 @@ std::size_t IOWrapper::Read_Reals_at_all(void *buf, IOWrapperSizeT cnt,
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
+      printf("%.*s\n", resultlen, msg);
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
@@ -346,6 +352,7 @@ std::size_t IOWrapper::Write_any_type(const void *buf, IOWrapperSizeT cnt,
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
+      printf("%.*s\n", resultlen, msg);
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
@@ -391,6 +398,7 @@ std::size_t IOWrapper::Write_any_type_at(const void *buf, IOWrapperSizeT cnt,
                                          IOWrapperSizeT offset, std::string datatype,
                                          bool single_file_per_rank) {
 #if MPI_PARALLEL_ENABLED
+  if (single_file_per_rank){
   if (single_file_per_rank) {
     // set appropriate datasize
     std::size_t datasize;
@@ -443,6 +451,7 @@ std::size_t IOWrapper::Write_any_type_at(const void *buf, IOWrapperSizeT cnt,
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
+      printf("%.*s\n", resultlen, msg);
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
@@ -488,6 +497,7 @@ std::size_t IOWrapper::Write_any_type_at(const void *buf, IOWrapperSizeT cnt,
 std::size_t IOWrapper::Write_any_type_at_all(const void *buf, IOWrapperSizeT cnt,
                                             IOWrapperSizeT offset, std::string datatype,
                                             bool single_file_per_rank) {
+
 #if MPI_PARALLEL_ENABLED
   if (single_file_per_rank) {
     // set appropriate datasize
@@ -541,6 +551,7 @@ std::size_t IOWrapper::Write_any_type_at_all(const void *buf, IOWrapperSizeT cnt
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
+      printf("%.*s\n", resultlen, msg);
       Kokkos::printf("%.*s\n", resultlen, msg);
       return 0;
     }
@@ -620,6 +631,11 @@ IOWrapperSizeT IOWrapper::GetPosition(bool single_file_per_rank) {
     MPI_File_get_position(fh_, &position);
     return position;
   } else {
+    long pos = ftell(reinterpret_cast<FILE*>(fh_));
+    return pos;
+  }
+#else
+  long pos = ftell(fh_);
     int64_t pos = ftell(reinterpret_cast<FILE*>(fh_));
     return pos;
   }

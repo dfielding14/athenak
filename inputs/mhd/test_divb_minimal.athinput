@@ -1,0 +1,78 @@
+# Minimal test for div(B) diagnostics
+# Just runs a few cycles to trigger refinement and show diagnostic output
+
+<comment>
+problem = turb_mhd_amr_wave
+
+<job>
+basename = test_divb
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 32
+x2min = -0.5  
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<mesh_refinement>
+adaptive = true
+max_nmb_per_rank = 100
+refinement_interval = 2    # Check frequently  
+ncycle_check = 1          # Every cycle
+max_level = 2
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 1
+
+<time>
+evolution = dynamic
+cfl_number = 0.4
+tlim = 0.01       # Very short
+nlim = 5          # Just 5 cycles
+integrator = rk2
+ncycle_out = 100  # No output
+
+<mhd>
+eos = ideal
+gamma = 1.4
+reconstruct = plm
+rsolver = hlld
+dfloor = 1.0e-8
+pfloor = 1.0e-10
+
+<problem>
+# Initial conditions
+rho0 = 1.0
+pgas0 = 1.0
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+
+# Magnetic field
+b0 = 1.0
+beta = -1.0
+field_config = 3  # Diagonal
+
+# Static refinement in center
+wave_speed = 0.0
+wave_width = 0.3
+wave_amplitude = 0.0
+wave_direction = 0
+
+<turb_driving>
+dedt = 0.0

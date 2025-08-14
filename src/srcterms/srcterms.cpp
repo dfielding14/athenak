@@ -26,6 +26,7 @@
 #include "radiation/radiation.hpp"
 #include "turb_driver.hpp"
 #include "units/units.hpp"
+#include "cooling_tables.hpp"
 
 //----------------------------------------------------------------------------------------
 // constructor, parses input file and initializes data structures and parameters
@@ -33,6 +34,9 @@
 
 SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *pin) :
   pmy_pack(pp),
+  Tbins("Tbins",1), nHbins("nHbins",1),
+  Metal_Cooling("Metal_Cooling",1,1), H_He_Cooling("H_He_Cooling",1,1),
+  Metal_Cooling_CIE("Metal_Cooling_CIE",1), H_He_Cooling_CIE("H_He_Cooling_CIE",1),
   shearing_box_r_phi(false) {
   // (1) (constant) gravitational acceleration
   const_accel = pin->GetOrAddBoolean(block, "const_accel", false);
@@ -50,6 +54,33 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
   ism_cooling = pin->GetOrAddBoolean(block, "ism_cooling", false);
   if (ism_cooling) {
     hrate = pin->GetReal(block, "hrate");
+  }
+
+  // (2b) CGM cooling
+  cgm_cooling = pin->GetOrAddBoolean(block, "cgm_cooling", false);
+  if (cgm_cooling) {
+    // Ensure that ISM cooling is not enabled 
+    if (ism_cooling) {
+      std::cout << "### FATAL ERROR in "<< __FILE__ <<" at line " << __LINE__ << std::endl
+                << "CGM cooling and ISM cooling are incompatible" << std::endl;
+      std::exit(EXIT_FAILURE);
+    };
+
+    // User input parameters for ISM heating
+    hrate = pin->GetOrAddReal(block, "hrate", 0.0); // Heating rate in cgs units
+    // Normalization factor in density code units 
+    hscale_norm = pin->GetOrAddReal(block, "hscale_norm", 0.0); 
+    hscale_height = pin->GetOrAddReal(block, "hscale_height", 0.0); // Scale height in code units
+    hscale_radius = pin->GetOrAddReal(block, "hscale_radius", 0.0); // Scale radius in code units
+    hscale_alpha = pin->GetOrAddReal(block, "hscale_alpha", 0.0); // Scale coeff in code units
+
+    // Initialize Cooling Tables to the right dimensions from cooling_tables.hpp
+    Kokkos::realloc(Tbins, Tbins_TOTAL_SIZE);
+    Kokkos::realloc(nHbins, nHbins_TOTAL_SIZE);
+    Kokkos::realloc(Metal_Cooling, Metal_Cooling_DIM_0, Metal_Cooling_DIM_1);
+    Kokkos::realloc(H_He_Cooling, H_He_Cooling_DIM_0, H_He_Cooling_DIM_1);
+    Kokkos::realloc(Metal_Cooling_CIE, Metal_Cooling_CIE_DIM_0);
+    Kokkos::realloc(H_He_Cooling_CIE, H_He_Cooling_CIE_DIM_0);
   }
 
   // (3) beam source (radiation)
@@ -73,12 +104,58 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
   } else {
     shearing_box = false;
   }
+
+  Initialize();
 }
 
 //----------------------------------------------------------------------------------------
 // destructor
 
 SourceTerms::~SourceTerms() {
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn
+//  \brief Function to initialize
+
+void SourceTerms::Initialize() {
+  if (cgm_cooling) {
+    // Load Cooling Tables from cooling_tables.hpp into host device
+    for (int i = 0; i < Tbins_DIM_0; ++i) Tbins.h_view(i) = Tbins_ARR[i];
+    for (int i = 0; i < nHbins_DIM_0; ++i) nHbins.h_view(i) = nHbins_ARR[i];
+
+    for (int i = 0; i < Metal_Cooling_DIM_0; ++i) {
+      for (int j = 0; j < Metal_Cooling_DIM_1; ++j) {
+        Metal_Cooling.h_view(i, j) = Metal_Cooling_ARR[i * Metal_Cooling_DIM_1 + j];
+    }}
+
+    for (int i = 0; i < H_He_Cooling_DIM_0; ++i) {
+      for (int j = 0; j < H_He_Cooling_DIM_1; ++j) {
+        H_He_Cooling.h_view(i, j) = H_He_Cooling_ARR[i * H_He_Cooling_DIM_1 + j];
+    }}
+
+    for (int i = 0; i < Metal_Cooling_CIE_DIM_0; ++i) {
+      Metal_Cooling_CIE.h_view(i) = Metal_Cooling_CIE_ARR[i];
+    }
+
+    for (int i = 0; i < H_He_Cooling_CIE_DIM_0; ++i) {
+      H_He_Cooling_CIE.h_view(i) = H_He_Cooling_CIE_ARR[i];
+    }
+
+    // Synchronize Cooling Tables to device memory
+    Tbins.template modify<HostMemSpace>();
+    Tbins.template sync<DevExeSpace>();
+    nHbins.template modify<HostMemSpace>();
+    nHbins.template sync<DevExeSpace>();
+    Metal_Cooling.template modify<HostMemSpace>();
+    Metal_Cooling.template sync<DevExeSpace>();
+    H_He_Cooling.template modify<HostMemSpace>();
+    H_He_Cooling.template sync<DevExeSpace>();
+    Metal_Cooling_CIE.template modify<HostMemSpace>();
+    Metal_Cooling_CIE.template sync<DevExeSpace>();
+    H_He_Cooling_CIE.template modify<HostMemSpace>();
+    H_He_Cooling_CIE.template sync<DevExeSpace>();
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -130,7 +207,7 @@ void SourceTerms::ISMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
                       /n_unit/n_unit;
   Real heating_unit = pmy_pack->punit->pressure_cgs()/pmy_pack->punit->time_cgs()/n_unit;
 
-  par_for("cooling", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+  par_for("ism_cooling", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     // temperature in cgs unit
     Real temp = 1.0;
@@ -145,6 +222,189 @@ void SourceTerms::ISMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
 
     u0(m,IEN,k,j,i) -= bdt * w0(m,IDN,k,j,i) *
                         (w0(m,IDN,k,j,i) * lambda_cooling - gamma_heating);
+  });
+
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void SourceTerms::CGMCooling()
+//! \brief Add explict CGM cooling source term in the energy equations.
+// NOTE source terms must be computed using primitive (w0) and NOT conserved (u0) vars
+
+void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_data,
+                             const Real bdt, DvceArray5D<Real> &u0) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  auto &size = pmy_pack->pmb->mb_size;
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  Real use_e = eos_data.use_e;
+  Real gamma = eos_data.gamma;
+  Real gm1 = gamma - 1.0;
+
+  auto &units = pmy_pack->punit; 
+  Real temp_unit = units->temperature_cgs();
+  Real nH_unit = units->density_cgs()/units->atomic_mass_unit_cgs;
+  Real cooling_unit = units->pressure_cgs()/units->time_cgs()/nH_unit/nH_unit;
+  Real heating_unit = units->pressure_cgs()/units->time_cgs()/nH_unit;
+  Real length_unit = units->length_cgs();
+
+  auto Tbins_ = Tbins.d_view;
+  auto nHbins_ = nHbins.d_view;
+  auto Metal_Cooling_ = Metal_Cooling.d_view;
+  auto H_He_Cooling_ = H_He_Cooling.d_view;
+  auto Metal_Cooling_CIE_ = Metal_Cooling_CIE.d_view;
+  auto H_He_Cooling_CIE_ = H_He_Cooling_CIE.d_view;
+
+  auto Tfloor  = Tbins_ARR[0];
+  auto Tceil   = Tbins_ARR[Tbins_DIM_0 - 1];
+  auto nHfloor = nHbins_ARR[0];
+  auto nHceil  = nHbins_ARR[nHbins_DIM_0 - 1];
+
+  Real X = 0.75; // Hydrogen mass fraction
+  Real Z = 1./3; // metallicity [Zsun]
+
+  Real h_rate = hrate;
+  Real h_norm = hscale_norm;
+  Real h_height = hscale_height;
+  Real h_radius = hscale_radius;
+  Real h_alpha = hscale_alpha;
+
+  par_for("cgm_cooling", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real &x1min = size.d_view(m).x1min;
+    Real &x1max = size.d_view(m).x1max;
+    int nx1 = indcs.nx1;
+    Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+
+    Real &x2min = size.d_view(m).x2min;
+    Real &x2max = size.d_view(m).x2max;
+    int nx2 = indcs.nx2;
+    Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+
+    Real &x3min = size.d_view(m).x3min;
+    Real &x3max = size.d_view(m).x3max;
+    int nx3 = indcs.nx3;
+    Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+
+    Real R = sqrt(x1v * x1v + x2v * x2v); 
+
+    Real temp = 1.0; // temperature in cgs units
+    if (use_e) {
+      temp = temp_unit * w0(m,IEN,k,j,i) / w0(m,IDN,k,j,i) * gm1;
+    } else {
+      temp = temp_unit * w0(m,ITM,k,j,i);
+    }
+    Real nH = X * nH_unit * w0(m,IDN,k,j,i); // density in cgs units
+
+    // Caculate PIE cooling
+    // WiersmaCooling at redshift z = 0 taken from Wiersma et al (2009)
+    Real lambda_cooling_PIE = 0.0;     
+    // Ensure we are in range of cooling table
+    if (temp > Tfloor && temp < Tceil && nH > nHfloor && nH < nHceil) {
+      // Convert input values to log space
+      Real log_temp = log10(temp);
+      Real log_density = log10(nH);
+
+      // Locate indices in Tbins and nHbins
+      int i = 0, j = 0;
+      while (i < Tbins_DIM_0 - 2 && log10(Tbins_(i + 1)) < log_temp) ++i; 
+      while (j < nHbins_DIM_0 - 2 && log10(nHbins_(j + 1)) < log_density) ++j;
+
+      // Logarithms of the Tbins and nHbins bounding the point
+      Real log_T0 = log10(Tbins_(i));
+      Real log_T1 = log10(Tbins_(i + 1));
+      Real log_nH0 = log10(nHbins_(j));
+      Real log_nH1 = log10(nHbins_(j + 1));
+
+      // Compute weights for bilinear interpolation
+      Real t = (log_temp - log_T0) / (log_T1 - log_T0);
+      Real u = (log_density - log_nH0) / (log_nH1 - log_nH0);
+  
+      // Corner values in log space from the H_He cooling grid
+      Real C00 = H_He_Cooling_(i, j);
+      Real C10 = H_He_Cooling_(i + 1, j);
+      Real C01 = H_He_Cooling_(i, j + 1);
+      Real C11 = H_He_Cooling_(i + 1, j + 1);
+ 
+      // Corner values in log space from the Metal cooling grid
+      Real M00 = Metal_Cooling_(i, j);
+      Real M10 = Metal_Cooling_(i + 1, j);
+      Real M01 = Metal_Cooling_(i, j + 1);
+      Real M11 = Metal_Cooling_(i + 1, j + 1);
+
+      // Bilinear interpolation in log space
+      Real prim_cooling =
+          (1 - t) * (1 - u) * C00 +
+          t * (1 - u) * C10 +
+          (1 - t) * u * C01 +
+          t * u * C11;
+      Real metal_cooling =
+          (1 - t) * (1 - u) * M00 +
+          t * (1 - u) * M10 +
+          (1 - t) * u * M01 +
+          t * u * M11;
+ 
+      lambda_cooling_PIE = prim_cooling + Z * metal_cooling;
+    } 
+    
+    // Caculate CIE cooling
+    Real lambda_cooling_CIE = 0.0;  
+    if (temp > Tfloor && temp < Tceil) {
+      // Convert input values to log space
+      Real log_temp = log10(temp);
+
+      // Locate index in Tbins
+      int i = 0;
+      while (i < Tbins_DIM_0 - 2 && log10(Tbins_(i + 1)) < log_temp) ++i;
+
+      // Logarithms of the Tbins bounding the point
+      Real log_T0 = log10(Tbins_(i));
+      Real log_T1 = log10(Tbins_(i + 1));
+
+      // Compute weight for linear interpolation
+      Real t = (log_temp - log_T0) / (log_T1 - log_T0);
+
+      // Bin values in log space from the H_He cooling grid
+      Real C0 = H_He_Cooling_CIE_(i);
+      Real C1 = H_He_Cooling_CIE_(i + 1);
+
+      // Bin values in log space from the Metal cooling grid
+      Real M0 = Metal_Cooling_CIE_(i);
+      Real M1 = Metal_Cooling_CIE_(i + 1);
+
+      // Linear Interpolation
+      Real prim_cooling = C0 + t * (C1 - C0);
+      Real metal_cooling = M0 + t * (M1 - M0);
+      
+      lambda_cooling_CIE = prim_cooling + Z * metal_cooling;
+    }
+    else if (temp < Tfloor) {
+      // for temperatures less than 100 K, use Koyama & Inutsuka (2002)
+      lambda_cooling_CIE = Z * (2.0e-19 * exp(-1.184e5 / (temp + 1.0e3))
+                                + 2.8e-28 * sqrt(temp) * exp(-92.0 / temp));
+    }
+
+    // Calculate heating
+    Real horz_falloff = exp(-R / h_radius);
+    Real vert_falloff = exp(-(x3v*x3v) / sqrt(h_height*h_height + h_alpha*R*R));
+    Real gamma_heating = h_rate * h_norm * X * nH_unit * horz_falloff * vert_falloff;
+    if (temp > 1e4) gamma_heating *= pow(temp / 1e4, -8.0);
+
+    // Combine CIE and PIE cooling
+    Real dx = size.d_view(m).dx1 * length_unit;
+    Real neutral_frac = 1 - (0.5 * (1 + tanh((temp - 8e3) / 1.5e3)));
+    Real tau = neutral_frac * nH * 1e-17 * dx; // optical depth of cell
+    Real frac = exp(-tau);
+    Real lambda_cooling = (1 - frac) * lambda_cooling_CIE + frac * lambda_cooling_PIE;
+    gamma_heating *= (1 - frac);
+    
+    // Add cooling and heating source terms to energy equation
+    u0(m,IEN,k,j,i) -= bdt * X * w0(m,IDN,k,j,i) *
+                       (X * w0(m,IDN,k,j,i) * lambda_cooling / cooling_unit 
+                                             - gamma_heating / heating_unit);
   });
 
   return;

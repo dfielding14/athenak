@@ -182,8 +182,10 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   // task lists respectively.
   if (pin->DoesBlockExist("turb_driving")) {
     pturb = new TurbulenceDriver(this, pin);
-    pturb->IncludeInitializeModesTask(tl_map["before_timeintegrator"], none);
-    pturb->IncludeAddForcingTask(tl_map["stagen"], none);
+    if(pin->GetString("time","evolution").compare("static")!=0){
+      pturb->IncludeInitializeModesTask(tl_map["before_timeintegrator"], none);
+      pturb->IncludeAddForcingTask(tl_map["stagen"], none);
+    }
   } else {
     pturb = nullptr;
   }
@@ -233,6 +235,7 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   // (8) PARTICLES
   // Create particles module.  Create tasklist.
   if (pin->DoesBlockExist("particles")) {
+    std::cout << "Adding particles" << std::endl;
     ppart = new particles::Particles(this, pin);
     ppart->AssembleTasks(tl_map);
     nphysics++;
