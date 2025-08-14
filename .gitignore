@@ -1,6 +1,7 @@
 # build directories
 build/
 build_*/
+build*/
 
 # Athena output files
 *.tab
@@ -17,3 +18,4 @@ build_*/
 # editor temp files
 *~
 *.swp
+athena++/

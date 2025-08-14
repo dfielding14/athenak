@@ -181,6 +181,19 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   } else if (padm != nullptr) {
     nadm = padm->nadm;
   }
+  bool single_file_per_rank = out_params.single_file_per_rank;
+  std::string fname;
+  if (single_file_per_rank) {
+    // Generate a directory and filename for each rank
+    // create filename: "rst/rank_YYYYYYY/file_basename" + "." + XXXXX + ".rst"
+    // where YYYYYYY = 8-digit rank number
+    // where XXXXX = 5-digit file_number
+    char rank_dir[20];
+    char number[7];
+    std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);
+    std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d/", global_variable::my_rank);
+    fname = std::string("rst/") + std::string(rank_dir) + out_params.file_basename
+      + number + ".rst";
 
     // Debugging output to check directory and filename
     // std::cout << "Rank " << global_variable::my_rank << " generated filename: "
@@ -258,6 +271,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     if (nco > 0) {
       for (auto & pt : pz4c->ptracker) {
         resfile.Write_any_type(pt.GetPos(), 3*sizeof(Real), "byte",
+        resfile.Write_any_type(pt->GetPos(), 3*sizeof(Real), "byte",
                                single_file_per_rank);
       }
     }
@@ -307,6 +321,8 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
   // write cell-centered variables in parallel
   IOWrapperSizeT offset_myrank  = step1size + step2size + sizeof(IOWrapperSizeT);
+  IOWrapperSizeT offset_myrank = (step1size + step2size + step3size
+                                  + sizeof(IOWrapperSizeT));
 
   if (!single_file_per_rank) {
     offset_myrank += data_size*(pm->gids_eachrank[global_variable::my_rank]);
@@ -511,6 +527,43 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       }
     }
     offset_myrank += nout1*nout2*nout3*nrad*sizeof(Real);   // radiation i0
+    myoffset = offset_myrank;
+  }
+
+  if (pturb != nullptr) {
+    for (int m=0;  m<noutmbs_max; ++m) {
+      // every rank has a MB to write, so write collectively
+      if (m < noutmbs_min) {
+        // get ptr to cell-centered MeshBlock data
+        auto mbptr = Kokkos::subview(outarray_force, m, Kokkos::ALL, Kokkos::ALL,
+                                     Kokkos::ALL, Kokkos::ALL);
+        int mbcnt = mbptr.size();
+        if (resfile.Write_any_type_at_all(mbptr.data(),mbcnt,myoffset,"Real",
+                                          single_file_per_rank) != mbcnt) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "cell-centered turb data not written correctly to rst file, "
+          << "restart file is broken." << std::endl;
+          exit(EXIT_FAILURE);
+        }
+        myoffset += data_size;
+
+      // some ranks are finished writing, so use non-collective write
+      } else if (m < pm->nmb_thisrank) {
+        // get ptr to MeshBlock data
+        auto mbptr = Kokkos::subview(outarray_force, m, Kokkos::ALL, Kokkos::ALL,
+                                     Kokkos::ALL, Kokkos::ALL);
+        int mbcnt = mbptr.size();
+        if (resfile.Write_any_type_at(mbptr.data(), mbcnt, myoffset,"Real",
+                                      single_file_per_rank) != mbcnt) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "cell-centered turb data not written correctly"
+                    << " to rst file, restart file is broken." << std::endl;
+          exit(EXIT_FAILURE);
+        }
+        myoffset += data_size;
+      }
+    }
+    offset_myrank += nout1*nout2*nout3*nforce*sizeof(Real); // forcing
     myoffset = offset_myrank;
   }
 

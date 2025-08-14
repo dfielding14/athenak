@@ -178,14 +178,26 @@ void ParameterInput::LoadFromFile(IOWrapper &input, bool single_file_per_rank) {
 
   // search for <par_end> (reading from restart files) or EOF (reading from input file).
   do {
-    if (global_variable::my_rank == 0 || single_file_per_rank) { // only the master process reads header from file
+    // only the master process reads header from file
+    if (global_variable::my_rank == 0 || single_file_per_rank) {
       ret = input.Read_bytes(buf, sizeof(char), kBufSize, single_file_per_rank);
     }
 
 #if MPI_PARALLEL_ENABLED
+    // then broadcasts it
   if (!single_file_per_rank) {
     MPI_Bcast(&ret, sizeof(IOWrapperSizeT), MPI_BYTE, 0, MPI_COMM_WORLD);
     if (ret == 0) {
+    }
+    MPI_Bcast(buf, ret, MPI_BYTE, 0, MPI_COMM_WORLD);
+  }
+#endif
+    par.write(buf, ret); // add the buffer into the stream
+    header += ret;
+    std::string sbuf = par.str(); // create string for search
+    loc = sbuf.find("<par_end>", 0); // search from the top of the stream
+    if (loc != std::string::npos) { // found <par_end>
+      header = loc + 10; // store the header length
       break;
     }
     MPI_Bcast(buf, ret, MPI_BYTE, 0, MPI_COMM_WORLD);
