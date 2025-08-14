@@ -42,6 +42,12 @@ Complete documentation for all AthenaK modules, organized by category.
 | **Shearing Box** | `src/shearing_box/` | Orbital advection | [shearing_box.md](shearing_box.md) |
 | **Problem Generators** | `src/pgen/` | Initial conditions | [pgen.md](pgen.md) |
 
+## Problem-Specific Documentation
+
+| Problem | File | Description | Documentation |
+|---------|------|-------------|---------------|
+| **CGM Cooling Flow with Metals** | `src/pgen/cgm_cooling_flow_amr_metals.cpp` | Cooling flow with SNe feedback and metal enrichment | [cgm_cooling_flow_metals.md](../cgm_cooling_flow_metals.md) |
+
 ## Additional Components
 
 | Component | Directory | Description |
