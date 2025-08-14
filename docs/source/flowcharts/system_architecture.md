@@ -4,112 +4,115 @@
 
 ```{mermaid}
 flowchart TD
-    subgraph Input["Input Layer"]
+    subgraph INPUT[Input Layer]
         direction LR
         ATHINPUT[athinput file]
         RESTART[restart file]
         EXTDATA[external data]
     end
 
-    subgraph Core["Core Infrastructure"]
-        MAIN[main.cpp<br/>Entry Point]
-        MESH[Mesh Module<br/>Domain Decomposition]
-        DRIVER[Driver Module<br/>Time Integration]
-        TASKS[TaskList<br/>Execution Manager]
-        COORDS[Coordinates<br/>Geometry]
+    subgraph CORE[Core Infrastructure]
+        MAIN[main.cpp - Entry Point]
+        MESH[Mesh Module - Domain Decomposition]
+        DRIVER[Driver Module - Time Integration]
+        TASKS[TaskList - Execution Manager]
+        COORDS[Coordinates - Geometry]
     end
 
-    subgraph PhysicsRow1["Physics Modules - Primary"]
+    subgraph PHYSICS1[Physics Modules - Primary]
         direction LR
-        HYDRO[Hydrodynamics<br/>Euler Equations]
-        MHD[MHD<br/>Maxwell+Fluid]
-        RAD[Radiation<br/>Transport]
+        HYDRO[Hydrodynamics - Euler Equations]
+        MHD[MHD - Maxwell+Fluid]
+        RAD[Radiation - Transport]
     end
 
-    subgraph PhysicsRow2["Physics Modules - Advanced"]
+    subgraph PHYSICS2[Physics Modules - Advanced]
         direction LR
-        Z4C[Z4c<br/>Relativity]
-        GRMHD[DynGRMHD<br/>Relativistic MHD]
-        PARTICLES[Particles<br/>Lagrangian]
-        IONNEUTRAL[Ion-Neutral<br/>Two-Fluid]
+        Z4C[Z4c - Relativity]
+        GRMHD[DynGRMHD - Relativistic MHD]
+        PARTICLES[Particles - Lagrangian]
+        IONNEUTRAL[Ion-Neutral - Two-Fluid]
     end
 
-    subgraph Numerical["Numerical Methods"]
+    subgraph NUMERICAL[Numerical Methods]
         direction LR
-        RECON[Reconstruction<br/>PLM/PPM/WENOZ]
-        RIEMANN[Riemann<br/>Solvers]
-        EOS[EOS<br/>Thermodynamics]
-        DIFF[Diffusion<br/>Viscosity/Resistivity]
+        RECON[Reconstruction - PLM/PPM/WENOZ]
+        RIEMANN[Riemann - Solvers]
+        EOS[EOS - Thermodynamics]
+        DIFF[Diffusion - Viscosity/Resistivity]
     end
 
-    subgraph Support["Support Systems"]
+    subgraph SUPPORT[Support Systems]
         direction LR
-        BVALS[Boundaries<br/>MPI Comm]
-        OUTPUTS[Outputs<br/>I/O Manager]
-        SRCTERMS[Source Terms<br/>Forces/Cooling]
-        SHEARBOX[Shearing Box<br/>Disks]
-        PGEN[Problem<br/>Generators]
+        BVALS[Boundaries - MPI Comm]
+        OUTPUTS[Outputs - I/O Manager]
+        SRCTERMS[Source Terms - Forces/Cooling]
+        SHEARBOX[Shearing Box - Disks]
+        PGEN[Problem - Generators]
     end
 
-    subgraph Output["Output Layer"]
+    subgraph OUTPUT[Output Layer]
         direction LR
-        VTK[VTK<br/>Visualization]
-        BIN[Binary<br/>Analysis]
-        RST[Restart<br/>Checkpoints]
-        HST[History<br/>Time Series]
-        PART[Particle<br/>Tracking]
+        VTK[VTK - Visualization]
+        BIN[Binary - Analysis]
+        RST[Restart - Checkpoints]
+        HST[History - Time Series]
+        PART[Particle - Tracking]
     end
 
     %% Vertical flow - main pipeline
-    Input --> MAIN
+    ATHINPUT --> MAIN
+    RESTART --> MAIN
     MAIN --> MESH
     MESH --> DRIVER
     DRIVER --> TASKS
-    TASKS --> PhysicsRow1
-    TASKS --> PhysicsRow2
-    PhysicsRow1 --> Numerical
-    PhysicsRow2 --> Numerical
-    Numerical --> Support
-    Support --> OUTPUTS
-    OUTPUTS --> Output
+    TASKS --> HYDRO
+    TASKS --> MHD
+    TASKS --> Z4C
+    HYDRO --> RECON
+    MHD --> RIEMANN
+    Z4C --> GRMHD
+    RECON --> BVALS
+    RIEMANN --> OUTPUTS
+    OUTPUTS --> VTK
+    OUTPUTS --> BIN
 
     %% Core connections
     MESH -.-> COORDS
-    COORDS -.-> PhysicsRow1
-    COORDS -.-> PhysicsRow2
+    COORDS -.-> HYDRO
+    COORDS -.-> MHD
     
     %% Physics details
     Z4C --> GRMHD
     
     %% Support connections
     TASKS -.-> BVALS
-    PhysicsRow1 -.-> SRCTERMS
+    MHD -.-> SRCTERMS
     MHD -.-> SHEARBOX
     MESH -.-> PGEN
     EXTDATA -.-> PGEN
     PARTICLES -.-> PART
 
     %% Click handlers for navigation
-    click MESH "../modules/mesh.html" "Go to Mesh Module"
-    click DRIVER "../modules/driver.html" "Go to Driver Module"
-    click TASKS "../modules/tasklist.html" "Go to TaskList Module"
-    click COORDS "../modules/coordinates.html" "Go to Coordinates Module"
-    click HYDRO "../modules/hydro.html" "Go to Hydro Module"
-    click MHD "../modules/mhd.html" "Go to MHD Module"
-    click RAD "../modules/radiation.html" "Go to Radiation Module"
-    click Z4C "../modules/z4c.html" "Go to Z4c Module"
-    click GRMHD "../modules/dyn_grmhd.html" "Go to DynGRMHD Module"
-    click PARTICLES "../modules/particles.html" "Go to Particles Module"
-    click IONNEUTRAL "../modules/ion_neutral.html" "Go to Ion-Neutral Module"
-    click RECON "../modules/reconstruction.html" "Go to Reconstruction Module"
-    click RIEMANN "../modules/riemann_solvers.html" "Go to Riemann Solvers"
-    click EOS "../modules/eos.html" "Go to EOS Module"
-    click DIFF "../modules/diffusion.html" "Go to Diffusion Module"
-    click BVALS "../modules/boundaries.html" "Go to Boundaries Module"
-    click OUTPUTS "../modules/outputs.html" "Go to Outputs Module"
-    click SRCTERMS "../modules/srcterms.html" "Go to Source Terms"
-    click SHEARBOX "../modules/shearing_box.html" "Go to Shearing Box"
-    click PGEN "../modules/pgen.html" "Go to Problem Generators"
+    click MESH "../modules/mesh.html"
+    click DRIVER "../modules/driver.html"
+    click TASKS "../modules/tasklist.html"
+    click COORDS "../modules/coordinates.html"
+    click HYDRO "../modules/hydro.html"
+    click MHD "../modules/mhd.html"
+    click RAD "../modules/radiation.html"
+    click Z4C "../modules/z4c.html"
+    click GRMHD "../modules/dyn_grmhd.html"
+    click PARTICLES "../modules/particles.html"
+    click RECON "../modules/reconstruction.html"
+    click RIEMANN "../modules/riemann_solvers.html"
+    click EOS "../modules/eos.html"
+    click DIFF "../modules/diffusion.html"
+    click BVALS "../modules/boundaries.html"
+    click OUTPUTS "../modules/outputs.html"
+    click SRCTERMS "../modules/srcterms.html"
+    click SHEARBOX "../modules/shearing_box.html"
+    click PGEN "../modules/pgen.html"
 
     %% Styling
     classDef input fill:#e1f5fe,stroke:#01579b,stroke-width:2px
@@ -131,12 +134,12 @@ flowchart TD
 
 ```{mermaid}
 flowchart TD
-    subgraph Init["Initialization Phase"]
+    subgraph INIT[Initialization Phase]
         START([Start Program])
-        PARSE[Parse Input<br/>Read .athinput]
-        BUILD[Build Mesh<br/>Create Grid]
-        DECOMP[Domain Decomposition<br/>MPI Distribution]
-        PGEN_INIT[Problem Generator<br/>Set Initial Conditions]
+        PARSE[Parse Input - Read .athinput]
+        BUILD[Build Mesh - Create Grid]
+        DECOMP[Domain Decomposition - MPI Distribution]
+        PGEN_INIT[Problem Generator - Set Initial Conditions]
         
         START --> PARSE
         PARSE --> BUILD
@@ -144,21 +147,21 @@ flowchart TD
         DECOMP --> PGEN_INIT
     end
 
-    subgraph Evolution["Main Evolution Loop"]
-        LOOP{{"Time < tlim?"}}
+    subgraph EVOLUTION[Main Evolution Loop]
+        LOOP{Time less than tlim?}
         
-        subgraph TimeStep["Time Step"]
-            STAGE[RK Stage<br/>Integration]
-            TASKS_EXEC[Execute Tasks<br/>Physics Modules]
-            UPDATE[Update Variables<br/>Conservative to Primitive]
-            NEWDT[Calculate dt<br/>CFL Condition]
+        subgraph TIMESTEP[Time Step]
+            STAGE[RK Stage - Integration]
+            TASKS_EXEC[Execute Tasks - Physics Modules]
+            UPDATE[Update Variables - Conservative to Primitive]
+            NEWDT[Calculate dt - CFL Condition]
         end
         
-        subgraph Checks["Periodic Checks"]
-            OUTPUT_CHECK{{"Output Time?"}}
-            WRITE[Write Files<br/>VTK/Binary/History]
-            AMR_CHECK{{"Refine Mesh?"}}
-            REFINE[Mesh Refinement<br/>AMR Operations]
+        subgraph CHECKS[Periodic Checks]
+            OUTPUT_CHECK{Output Time?}
+            WRITE[Write Files - VTK/Binary/History]
+            AMR_CHECK{Refine Mesh?}
+            REFINE[Mesh Refinement - AMR Operations]
         end
         
         PGEN_INIT --> LOOP
@@ -175,9 +178,9 @@ flowchart TD
         REFINE --> LOOP
     end
 
-    subgraph Finalize["Finalization"]
-        FINAL_OUT[Final Output<br/>Save Results]
-        CLEANUP[Cleanup<br/>Free Memory]
+    subgraph FINALIZE[Finalization]
+        FINAL_OUT[Final Output - Save Results]
+        CLEANUP[Cleanup - Free Memory]
         END([End Program])
         
         LOOP -->|No| FINAL_OUT
@@ -185,27 +188,27 @@ flowchart TD
         CLEANUP --> END
     end
 
-    style Init fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
-    style Evolution fill:#fff9c4,stroke:#f57c00,stroke-width:2px
-    style TimeStep fill:#ffffff,stroke:#666,stroke-width:1px
-    style Checks fill:#ffffff,stroke:#666,stroke-width:1px
-    style Finalize fill:#efebe9,stroke:#5d4037,stroke-width:2px
+    style INIT fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style EVOLUTION fill:#fff9c4,stroke:#f57c00,stroke-width:2px
+    style TIMESTEP fill:#ffffff,stroke:#666,stroke-width:1px
+    style CHECKS fill:#ffffff,stroke:#666,stroke-width:1px
+    style FINALIZE fill:#efebe9,stroke:#5d4037,stroke-width:2px
     
-    click BUILD "../modules/mesh.html" "Go to Mesh Module"
-    click PGEN_INIT "../modules/pgen.html" "Go to Problem Generators"
-    click TASKS_EXEC "../modules/tasklist.html" "Go to TaskList Module"
-    click WRITE "../modules/outputs.html" "Go to Outputs Module"
-    click REFINE "../modules/mesh.html" "Go to Mesh Module"
+    click BUILD "../modules/mesh.html"
+    click PGEN_INIT "../modules/pgen.html"
+    click TASKS_EXEC "../modules/tasklist.html"
+    click WRITE "../modules/outputs.html"
+    click REFINE "../modules/mesh.html"
 ```
 
 ## Task Execution Detail
 
 ```{mermaid}
 flowchart TD
-    subgraph TaskStage["Single RK Stage"]
+    subgraph TaskStage[Single RK Stage]
         START_STAGE[Stage Start] --> RECV[Start MPI Recv]
         
-        subgraph PhysicsTasks["Physics Tasks (Parallel)"]
+        subgraph PhysicsTasks[Physics Tasks - Parallel]
             RECV --> HYDRO_TASK[Hydro Tasks]
             RECV --> MHD_TASK[MHD Tasks]
             RECV --> RAD_TASK[Radiation Tasks]
@@ -228,32 +231,32 @@ flowchart TD
     
     style PhysicsTasks fill:#c8e6c9
     
-    click HYDRO_TASK "../modules/hydro.html" "Go to Hydro Module"
-    click MHD_TASK "../modules/mhd.html" "Go to MHD Module"
-    click RAD_TASK "../modules/radiation.html" "Go to Radiation Module"
-    click CT "../modules/mhd.html" "Go to MHD Module"
-    click BC "../modules/boundaries.html" "Go to Boundaries Module"
+    click HYDRO_TASK "../modules/hydro.html"
+    click MHD_TASK "../modules/mhd.html"
+    click RAD_TASK "../modules/radiation.html"
+    click CT "../modules/mhd.html"
+    click BC "../modules/boundaries.html"
 ```
 
 ## Data Flow
 
 ```{mermaid}
 flowchart LR
-    subgraph MeshBlock["MeshBlock Data"]
+    subgraph MeshBlock[MeshBlock Data]
         CONS[Conservative Variables]
         PRIM[Primitive Variables]
         BFIELD[Magnetic Field]
         METRIC[Metric Data]
     end
 
-    subgraph Computation["Computation"]
+    subgraph Computation[Computation]
         C2P[Cons to Prim]
         RECONSTRUCT[Reconstruction]
         RIEMANN_SOLVE[Riemann Solver]
         FLUXES[Fluxes]
     end
 
-    subgraph Communication["MPI Communication"]
+    subgraph Communication[MPI Communication]
         PACK[Pack Buffers]
         SEND[MPI Send/Recv]
         UNPACK[Unpack Buffers]
@@ -275,26 +278,26 @@ flowchart LR
     style Computation fill:#b2dfdb
     style Communication fill:#d1c4e9
     
-    click RECONSTRUCT "../modules/reconstruction.html" "Go to Reconstruction Module"
-    click RIEMANN_SOLVE "../modules/riemann_solvers.html" "Go to Riemann Solvers"
-    click PACK "../modules/boundaries.html" "Go to Boundaries Module"
-    click SEND "../modules/boundaries.html" "Go to Boundaries Module"
+    click RECONSTRUCT "../modules/reconstruction.html"
+    click RIEMANN_SOLVE "../modules/riemann_solvers.html"
+    click PACK "../modules/boundaries.html"
+    click SEND "../modules/boundaries.html"
 ```
 
 ## Memory Layout
 
 ```{mermaid}
 flowchart TD
-    subgraph Global["Global Memory"]
+    subgraph Global[Global Memory]
         MESH_TREE[Mesh Tree]
         TASK_LIST[Task List]
         PARAMS[Parameters]
     end
 
-    subgraph PerRank["Per MPI Rank"]
+    subgraph PerRank[Per MPI Rank]
         MB_PACK[MeshBlockPack]
         
-        subgraph PerBlock["Per MeshBlock"]
+        subgraph PerBlock[Per MeshBlock]
             COORDS_DATA[Coordinates]
             CONS_VARS[Conservative Vars]
             PRIM_VARS[Primitive Vars]
@@ -306,7 +309,7 @@ flowchart TD
         OUTPUT_BUFFERS[Output Buffers]
     end
 
-    subgraph Device["Device Memory (GPU)"]
+    subgraph Device[Device Memory - GPU]
         KOKKOS_VIEWS[Kokkos Views]
         KERNELS[Compute Kernels]
     end
@@ -320,9 +323,9 @@ flowchart TD
     style PerRank fill:#c5cae9
     style Device fill:#b3e5fc
     
-    click MESH_TREE "../modules/mesh.html" "Go to Mesh Module"
-    click TASK_LIST "../modules/tasklist.html" "Go to TaskList Module"
-    click COORDS_DATA "../modules/coordinates.html" "Go to Coordinates Module"
+    click MESH_TREE "../modules/mesh.html"
+    click TASK_LIST "../modules/tasklist.html"
+    click COORDS_DATA "../modules/coordinates.html"
 ```
 
 ## Module Dependencies
@@ -367,45 +370,45 @@ graph TD
     style DRIVER fill:#fff3e0,stroke:#e65100,stroke-width:2px
     style MESH fill:#fff3e0,stroke:#e65100,stroke-width:2px
     
-    click MESH "../modules/mesh.html" "Go to Mesh Module"
-    click COORDS "../modules/coordinates.html" "Go to Coordinates Module"
-    click BVALS "../modules/boundaries.html" "Go to Boundaries Module"
-    click DRIVER "../modules/driver.html" "Go to Driver Module"
-    click TASKS "../modules/tasklist.html" "Go to TaskList Module"
-    click OUTPUTS "../modules/outputs.html" "Go to Outputs Module"
-    click HYDRO "../modules/hydro.html" "Go to Hydro Module"
-    click MHD "../modules/mhd.html" "Go to MHD Module"
-    click RAD "../modules/radiation.html" "Go to Radiation Module"
-    click Z4C "../modules/z4c.html" "Go to Z4c Module"
-    click PARTICLES "../modules/particles.html" "Go to Particles Module"
-    click EOS "../modules/eos.html" "Go to EOS Module"
-    click RECON "../modules/reconstruction.html" "Go to Reconstruction Module"
-    click RIEMANN "../modules/riemann_solvers.html" "Go to Riemann Solvers"
-    click DIFF "../modules/diffusion.html" "Go to Diffusion Module"
-    click GRMHD "../modules/dyn_grmhd.html" "Go to DynGRMHD Module"
-    click SRCTERMS "../modules/srcterms.html" "Go to Source Terms"
-    click SHEARBOX "../modules/shearing_box.html" "Go to Shearing Box"
-    click PGEN "../modules/pgen.html" "Go to Problem Generators"
+    click MESH "../modules/mesh.html"
+    click COORDS "../modules/coordinates.html"
+    click BVALS "../modules/boundaries.html"
+    click DRIVER "../modules/driver.html"
+    click TASKS "../modules/tasklist.html"
+    click OUTPUTS "../modules/outputs.html"
+    click HYDRO "../modules/hydro.html"
+    click MHD "../modules/mhd.html"
+    click RAD "../modules/radiation.html"
+    click Z4C "../modules/z4c.html"
+    click PARTICLES "../modules/particles.html"
+    click EOS "../modules/eos.html"
+    click RECON "../modules/reconstruction.html"
+    click RIEMANN "../modules/riemann_solvers.html"
+    click DIFF "../modules/diffusion.html"
+    click GRMHD "../modules/dyn_grmhd.html"
+    click SRCTERMS "../modules/srcterms.html"
+    click SHEARBOX "../modules/shearing_box.html"
+    click PGEN "../modules/pgen.html"
 ```
 
 ## Performance Scaling
 
 ```{mermaid}
 flowchart LR
-    subgraph Hardware["Hardware Detection"]
+    subgraph Hardware[Hardware Detection]
         CPU[CPU Cores]
         GPU[GPU Available?]
         MPI[MPI Ranks]
     end
 
-    subgraph Execution["Execution Strategy"]
+    subgraph Execution[Execution Strategy]
         SERIAL[Serial]
         OPENMP[OpenMP]
         CUDA[CUDA]
         MPI_EXEC[MPI Parallel]
     end
 
-    subgraph Optimization["Optimizations"]
+    subgraph Optimization[Optimizations]
         VECTOR[Vectorization]
         CACHE[Cache Blocking]
         OVERLAP[Comm/Comp Overlap]
@@ -426,8 +429,8 @@ flowchart LR
     style Execution fill:#c5e1a5
     style Optimization fill:#ffe0b2
     
-    click MPI_EXEC "../modules/boundaries.html" "Go to Boundaries/MPI Module"
-    click LOAD_BAL "../modules/mesh.html" "Go to Mesh Module"
+    click MPI_EXEC "../modules/boundaries.html"
+    click LOAD_BAL "../modules/mesh.html"
 ```
 
 ## See Also
