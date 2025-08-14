@@ -1,13 +1,5 @@
 #ifndef DIFFUSION_CONDUCTION_HPP_
 #define DIFFUSION_CONDUCTION_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file conduction.hpp
-//! \brief Contains data and functions that implement various formulations for conduction.
-//  Currently only isotropic conduction implemented
 
 #include <string>
 

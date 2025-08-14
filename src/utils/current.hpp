@@ -1,13 +1,5 @@
 #ifndef UTILS_CURRENT_HPP_
 #define UTILS_CURRENT_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file current.hpp
-//  \brief helper functions to compute current
-
 //----------------------------------------------------------------------------------------
 // Parity calculation due to Norm Hardy. Templated over number of dimensions n.
 template<int n>

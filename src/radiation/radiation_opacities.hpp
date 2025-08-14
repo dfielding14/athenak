@@ -1,13 +1,5 @@
 #ifndef RADIATION_RADIATION_OPACITIES_HPP_
 #define RADIATION_RADIATION_OPACITIES_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file radiation_opacities.hpp
-//! \brief implements functions for computing opacities
-
 #include <math.h>
 
 #include "athena.hpp"

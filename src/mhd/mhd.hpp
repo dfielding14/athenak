@@ -1,13 +1,5 @@
 #ifndef MHD_MHD_HPP_
 #define MHD_MHD_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file mhd.hpp
-//  \brief definitions for MHD class
-
 #include <map>
 #include <memory>
 #include <string>

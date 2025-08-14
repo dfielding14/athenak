@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaK astrophysical fluid dynamics code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file shearing_box_cc.cpp
-//! \brief functions to pack/send and recv/unpack boundary values for cell-centered (CC)
-//! variables with shearing box boundaries.
-
-#include <iostream>
 #include <string>
 #include <algorithm>
 #include <vector>

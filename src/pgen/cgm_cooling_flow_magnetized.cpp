@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file cgm_cooling_flow.cpp
-//  \brief Problem generator for a cooling flow CGM
-
-#include <iostream>
-#include "athena.hpp"
 #include "parameter_input.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
@@ -407,7 +397,7 @@ void GravitySource(Mesh* pm, const Real bdt) {
     Real x3r = LeftEdgeX(k+1-ks, nx3, x3min, x3max);
 
     // Real phi1l = GravPot(x1l,x2v,x3v,G,r_s,rho_s,m_g,a_g,r_m,rho_m);
-    // Kokkos::printf("x1l = %f, x2v = %f, x3v = %f, phi1l = %f\n", x1l, x2v, x3v, phi1l);
+    // printf("x1l = %f, x2v = %f, x3v = %f, phi1l = %f\n", x1l, x2v, x3v, phi1l);
     // Real phi1r = GravPot(x1r,x2v,x3v,G,r_s,rho_s,m_g,a_g,r_m,rho_m);
     // Real f_x1_ = -(phi1r-phi1l)/(x1r-x1l);
 

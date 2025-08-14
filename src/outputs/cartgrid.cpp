@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file cartgrid.cpp
-//! \brief writes data on a Cartesian sub-grid in binary format
-
-#include <sys/stat.h>  // mkdir
-
 #include <cstdio> // snprintf
 #include <fstream>
 #include <string>

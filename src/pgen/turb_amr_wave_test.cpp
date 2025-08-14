@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaK turbulence driving with moving AMR refinement test
-// Copyright(C) 2025 AthenaK code team
-// Licensed under the 3-clause BSD License
-//========================================================================================
-//! \file turb_amr_wave_test.cpp
-//! \brief Problem generator for testing turbulence driving with dynamically moving
-//!        refinement regions (traveling wave) to diagnose derefinement issues
-
-#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <limits>

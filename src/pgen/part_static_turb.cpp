@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena++ astrophysical MHD code, Kokkos version
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file particle_random.cpp
-//! \brief Problem generator that initializes random particle positions and velocities.
-
-#include <algorithm>
-#include <cmath>
 #include <sstream>
 #include <iostream>
 

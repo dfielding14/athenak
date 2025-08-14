@@ -1,19 +1,11 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file particle_pushers.cpp
-//  \brief
-
-#include "athena.hpp"
-#include "mesh/mesh.hpp"
 #include "driver/driver.hpp"
 #include "particles.hpp"
-<<<<<<< HEAD
 #include "units/units.hpp"
+#include "mhd/mhd.hpp"
+#include "coordinates/cell_locations.hpp"
 
 namespace particles {
+
 KOKKOS_INLINE_FUNCTION
 Real GravPot(Real x1, Real x2, Real x3,
              Real G, Real r_s, Real rho_s,
@@ -25,43 +17,9 @@ Real GravPot(Real x1, Real x2, Real x3,
 //  \brief
 
 TaskStatus Particles::Push(Driver *pdriver, int stage) {
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
-  int is = indcs.is;
-  int js = indcs.js;
-  int ks = indcs.ks;
-  bool &multi_d = pmy_pack->pmesh->multi_d;
-  bool &three_d = pmy_pack->pmesh->three_d;
-  auto &mbsize = pmy_pack->pmb->mb_size;
-  auto &pi = prtcl_idata;
-  auto &pr = prtcl_rdata;
-  auto dt_ = (pmy_pack->pmesh->dt);
-  auto gids = pmy_pack->gids;
-
-  switch (pusher) {
-    case ParticlesPusher::drift: {
-      par_for("part_update",DevExeSpace(),0,(nprtcl_thispack-1),
-      KOKKOS_LAMBDA(const int p) {
-        int m = pi(PGID,p) - gids;
-        int ip = (pr(IPX,p) - mbsize.d_view(m).x1min)/mbsize.d_view(m).dx1 + is;
-        pr(IPX,p) += dt_*pr(IPVX,p);
-
-        if (multi_d) {
-          int jp = (pr(IPY,p) - mbsize.d_view(m).x2min)/mbsize.d_view(m).dx2 + js;
-          pr(IPY,p) += dt_*pr(IPVY,p);
-=======
-#include "mhd/mhd.hpp"
-#include "coordinates/cell_locations.hpp"
-namespace particles {
-//----------------------------------------------------------------------------------------
-//! \fn  void Particles::ParticlesPush
-//  \brief
-
-TaskStatus Particles::Push(Driver *pdriver, int stage) {
-
   auto &npart = nprtcl_thispack;
   auto &pi = prtcl_idata;
   auto &pr = prtcl_rdata;
-  auto &b0_ = pmy_pack->pmhd->b0;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int is = indcs.is;
   const int js = indcs.js;
@@ -77,8 +35,7 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
   auto dt_ = (pmy_pack->pmesh->dt);
 
   switch (pusher) {
-    case ParticlesPusher::drift:{
-
+    case ParticlesPusher::drift: {
       par_for("part_update",DevExeSpace(),0,(npart-1),
       KOKKOS_LAMBDA(const int p) {
         int m = pi(PGID,p) - gids;
@@ -88,13 +45,11 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
         if (multi_d) {
           int jp = (pr(IPY,p) - mbsize.d_view(m).x2min)/mbsize.d_view(m).dx2 + js;
           pr(IPY,p) += 0.5*dt_*pr(IPVY,p);
->>>>>>> origin/main
         }
 
         if (three_d) {
           int kp = (pr(IPZ,p) - mbsize.d_view(m).x3min)/mbsize.d_view(m).dx3 + ks;
-<<<<<<< HEAD
-          pr(IPZ,p) += dt_*pr(IPVZ,p);
+          pr(IPZ,p) += 0.5*dt_*pr(IPVZ,p);
         }
       });
     break;}
@@ -191,12 +146,17 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
         pr(IPVX, p) = vx + dt_/6.0 * (k1vx + 2.0*k2vx + 2.0*k3vx + k4vx);
         pr(IPVY, p) = vy + dt_/6.0 * (k1vy + 2.0*k2vy + 2.0*k3vy + k4vy);
         pr(IPVZ, p) = vz + dt_/6.0 * (k1vz + 2.0*k2vz + 2.0*k3vz + k4vz);
-=======
-          pr(IPZ,p) += 0.5*dt_*pr(IPVZ,p);
-        }
       });
     break;}
     case ParticlesPusher::boris_lin:{
+      // Safety check: boris pushers require cosmic ray particles with magnetic field arrays
+      if (particle_type != ParticleType::cosmic_ray) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+                  << "Boris_lin pusher requires cosmic_ray particles with magnetic field tracking!" << std::endl
+                  << "Current particle type does not have required array allocation." << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      
       auto &b0_ = pmy_pack->pmhd->b0;
 
       // First half-step in space
@@ -291,6 +251,14 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
       });
     break;}
     case ParticlesPusher::boris_tsc:{
+      // Safety check: boris pushers require cosmic ray particles with magnetic field arrays
+      if (particle_type != ParticleType::cosmic_ray) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+                  << "Boris_tsc pusher requires cosmic_ray particles with magnetic field tracking!" << std::endl
+                  << "Current particle type does not have required array allocation." << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      
       auto &bcc = pmy_pack->pmhd->bcc0;
       par_for("part_update",DevExeSpace(),0,(nprtcl_thispack-1),
       KOKKOS_LAMBDA(const int p) {
@@ -421,7 +389,6 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
         pr(IPDB,p) += (Dx1 * Bx + Dx2 * By + Dx3 * Bz ) / Bmag;
 
 
->>>>>>> origin/main
       });
     break;}
   default:
@@ -430,7 +397,6 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
 
   return TaskStatus::complete;
 }
-<<<<<<< HEAD
 
 KOKKOS_INLINE_FUNCTION
 Real GravPot(Real x1, Real x2, Real x3,
@@ -464,7 +430,3 @@ Real GravPot(Real x1, Real x2, Real x3,
 }
 
 } // namespace particles
-=======
-} // namespace particles
-
->>>>>>> origin/main

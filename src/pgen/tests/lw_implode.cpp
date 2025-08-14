@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file lw_implode.cpp
-//  \brief Problem generator for square implosion problem
-//
-// REFERENCE: R. Liska & B. Wendroff, SIAM J. Sci. Comput., 25, 995 (2003)
-//========================================================================================
 #include <iostream> // cout
 
 #include "athena.hpp"

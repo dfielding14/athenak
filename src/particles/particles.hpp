@@ -1,13 +1,5 @@
 #ifndef PARTICLES_PARTICLES_HPP_
 #define PARTICLES_PARTICLES_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file particles.hpp
-//  \brief definitions for Particles class
-
 #include <map>
 #include <memory>
 #include <string>
@@ -20,17 +12,10 @@
 // forward declarations
 
 // constants that enumerate ParticlesPusher options
-<<<<<<< HEAD
-enum class ParticlesPusher {drift, rk4_gravity, leap_frog, lagrangian_tracer, lagrangian_mc};
+enum class ParticlesPusher {drift, rk4_gravity, leap_frog, lagrangian_tracer, lagrangian_mc, boris_lin, boris_tsc};
 
 // constants that enumerate ParticleTypes
 enum class ParticleType {cosmic_ray, star};
-=======
-enum class ParticlesPusher {drift, leap_frog, lagrangian_tracer, lagrangian_mc, boris_lin,boris_tsc};
-
-// constants that enumerate ParticleTypes
-enum class ParticleType {cosmic_ray};
->>>>>>> origin/main
 
 //----------------------------------------------------------------------------------------
 //! \struct ParticlesTaskIDs
@@ -61,11 +46,14 @@ class Particles {
   // data
   ParticleType particle_type;
   int nprtcl_thispack;             // number of particles this MeshBlockPack
-<<<<<<< HEAD
+  int nprtcl_perspec_thispack;
   int nrdata, nidata;
+  int nspecies;
   DvceArray2D<Real> prtcl_rdata;   // real number properties each particle (x,v,etc.)
   DvceArray2D<int>  prtcl_idata;   // integer properties each particle (gid, tag, etc.)
   Real dtnew;
+  int is_dynamic;
+  int prtcl_rst_flag;
 
   ParticlesPusher pusher;
  
@@ -82,26 +70,7 @@ class Particles {
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
 
-=======
-  int nprtcl_perspec_thispack;
-  int nrdata, nidata;
-  int nspecies;
-//  DvceArray1D<int>  prtcl_gid;     // GID of MeshBlock containing each par
-//  DvceArray2D<Real> prtcl_pos;     // positions
-//  DvceArray2D<Real> prtcl_vel;     // velocities
-  DvceArray2D<Real> prtcl_rdata;   // real number properties each particle (x,v,etc.)
-  DvceArray2D<int>  prtcl_idata;   // integer properties each particle (gid, tag, etc.)
-  Real dtnew;
-  int is_dynamic;
-  int prtcl_rst_flag;
-  
-  ParticlesPusher pusher;
-  // Boundary communication buffers and functions for particles
-  ParticlesBoundaryValues *pbval_part;
-
-  Real *timers ;
-
->>>>>>> origin/main
+  Real *timers;
   // container to hold names of TaskIDs
   ParticlesTaskIDs id;
 

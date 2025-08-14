@@ -1,13 +1,5 @@
 #ifndef MESH_MESH_REFINEMENT_HPP_
 #define MESH_MESH_REFINEMENT_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file mesh_refinement.hpp
-//! \brief defines MeshRefinement class containing data and functions controlling SMR/AMR
-
 #include "particles/particles_data_structs.hpp"
 
 //----------------------------------------------------------------------------------------

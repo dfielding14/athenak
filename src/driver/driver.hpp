@@ -1,13 +1,5 @@
 #ifndef DRIVER_DRIVER_HPP_
 #define DRIVER_DRIVER_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file driver.hpp
-//  \brief definitions for Driver class
-//
 // Note ProblemGenerator object is stored in Driver and is called in Initialize(). If the
 // pgen class contains analysis routines that are run at end of execution, they can be
 // called in Finalize().

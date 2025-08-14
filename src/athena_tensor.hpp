@@ -1,13 +1,5 @@
 #ifndef ATHENA_TENSOR_HPP_
 #define ATHENA_TENSOR_HPP_
-//========================================================================================
-// Athena++ astrophysical MHD code
-// Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
-// Licensed under the 3-clause BSD License, see LICENSE file for details
-//========================================================================================
-//! \file athena_tensor.hpp
-//  \brief provides classes for tensor-like fields
-//
 //  Convention: indices a,b,c,d are tensor indices. Indices n,i,j,k are grid indices.
 
 #include <cassert> // assert
@@ -498,10 +490,10 @@ class AthenaPointTensor<T, sym, ndim, 4> {
     } else if constexpr (sym == TensorSymm::SYM22) {
       constexpr int ndof2_ = TensorDOF<TensorSymm::SYM2, ndim, 2>;
       if (a < b) {
-        Kokkos::kokkos_swap(a, b);
+        std::swap(a, b);
       }
       if (c < d) {
-        Kokkos::kokkos_swap(c, d);
+        std::swap(c, d);
       }
       return data_[(b*( 2*ndim - b +1)/2 + a - b)*ndof2_ + d*( 2*ndim - d +1)/2 + c - d];
     }
@@ -515,10 +507,10 @@ class AthenaPointTensor<T, sym, ndim, 4> {
     } else if constexpr (sym == TensorSymm::SYM22) {
       constexpr int ndof2_ = TensorDOF<TensorSymm::SYM2, ndim, 2>;
       if (a < b) {
-        Kokkos::kokkos_swap(a, b);
+        std::swap(a, b);
       }
       if (c < d) {
-        Kokkos::kokkos_swap(c, d);
+        std::swap(c, d);
       }
       return data_[(b*( 2*ndim - b +1)/2 + a - b)*ndof2_ + d*( 2*ndim - d +1)/2 + c - d];
     }
@@ -630,7 +622,7 @@ class AthenaScratchTensor<T, sym, ndim, 2> {
       return data_(ndim * a + b, i);
     } else {
       if (a < b) {
-        Kokkos::kokkos_swap(a, b);
+        std::swap(a, b);
       }
       return data_(b*( 2*ndim - b +1)/2 + a - b, i);
     }
@@ -679,12 +671,12 @@ class AthenaScratchTensor<T, sym, ndim, 3> {
       return data_(ndim * ndim * a + ndim * b + c, i);
     } else if constexpr (sym == TensorSymm::SYM2) {
       if (b < c) {
-        Kokkos::kokkos_swap(b, c);
+        std::swap(b, c);
       }
       return data_(a*(ndim + 1)*ndim/2 + c*( 2*ndim - c +1)/2 + b - c,i);
     } else if constexpr (sym == TensorSymm::ISYM2) {
       if (a < b) {
-        Kokkos::kokkos_swap(a, b);
+        std::swap(a, b);
       }
       return data_((b*(2*ndim - b +1)/2 + a - b)*ndim + c,i);
     }
@@ -733,10 +725,10 @@ class AthenaScratchTensor<T, sym, ndim, 4> {
       return data_(ndim * ndim * ndim * a + ndim * ndim * b + ndim * c + d, i);
     } else if constexpr (sym == TensorSymm::SYM22) {
       if (a < b) {
-        Kokkos::kokkos_swap(a, b);
+        std::swap(a, b);
       }
       if (c < d) {
-        Kokkos::kokkos_swap(c, d);
+        std::swap(c, d);
       }
       return data_((b*( 2*ndim - b +1)/2 + a - b)*(ndim + 1)*ndim/2 +
                     d*( 2*ndim - d +1)/2 + c - d,i);

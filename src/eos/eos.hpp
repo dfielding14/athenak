@@ -1,13 +1,5 @@
 #ifndef EOS_EOS_HPP_
 #define EOS_EOS_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file eos.hpp
-//! \brief Contains data and functions that implement conserved->primitive variable
-//! conversion for various EOS (e.g. ideal gas, isothermal, etc.), for various fluids
 //! (Hydro, MHD, etc.), and for non-relativistic and relativistic flows.
 
 //#include <cmath>

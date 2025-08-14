@@ -1,13 +1,5 @@
 #ifndef SRCTERMS_TURB_DRIVER_HPP_
 #define SRCTERMS_TURB_DRIVER_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file turb_driver.hpp
-//  \brief defines turbulence driver class, which implements data and functions for
-//  randomly forced turbulence which evolves via an Ornstein-Uhlenbeck stochastic process
 
 #include <memory>
 #include <cmath>

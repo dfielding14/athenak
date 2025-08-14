@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-#include <cmath> // For cos and M_PI
-#include <cstdlib> // For exit and EXIT_FAILURE
-
-#include "athena.hpp"
-#include "utils/random.hpp"
 #include "parameter_input.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"

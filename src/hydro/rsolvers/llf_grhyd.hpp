@@ -1,13 +1,5 @@
 #ifndef HYDRO_RSOLVERS_LLF_GRHYD_HPP_
 #define HYDRO_RSOLVERS_LLF_GRHYD_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file llf_grhyd.hpp
-//! \brief LLF Riemann solver for general relativistic hydrodynamics.
-
 #include "coordinates/cell_locations.hpp"
 #include "llf_hyd_singlestate.hpp"
 

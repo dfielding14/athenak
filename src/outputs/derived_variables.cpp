@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file derived_variables.cpp
-//! \brief Calculates various derived variables for outputs, storing them into the
-//! "derived_vars" device array located in BaseTypeOutput class.  Variables are only
-//! calculated over active zones (ghost zones excluded). Currently implemented are:
-//!   - z-component of vorticity Curl(v)_z  [non-relativistic]
 //!   - magnitude of vorticity Curl(v)^2  [non-relativistic]
 //!   - z-component of current density Jz  [non-relativistic]
 //!   - magnitude of current density J^2  [non-relativistic]

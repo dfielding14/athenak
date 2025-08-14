@@ -1,13 +1,5 @@
 #ifndef EOS_PRIMITIVE_SOLVER_NUMTOOLS_ROOT_HPP_
 #define EOS_PRIMITIVE_SOLVER_NUMTOOLS_ROOT_HPP_
-//========================================================================================
-// PrimitiveSolver equation-of-state framework
-// Copyright(C) 2023 Jacob M. Fields <jmf6719@psu.edu>
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file numtools_root.hpp
-//  \author Jacob Fields
-//
 //  \brief Declares some functions for root-finding.
 
 #include <math.h>

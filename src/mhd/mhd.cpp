@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file mhd.cpp
-//! \brief implementation of MHD class constructor and assorted functions
-
-#include <iostream>
-#include <string>
 #include <algorithm>
 
 #include "athena.hpp"

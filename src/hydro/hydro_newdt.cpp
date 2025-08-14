@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file hydro_newdt.cpp
-//! \brief function to compute hydro timestep across all MeshBlock(s) in a MeshBlockPack
-
-#include <math.h>
-
 #include <limits>
 #include <iostream>
 #include <algorithm> // min

@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file shock_tube.cpp
-//! \brief Problem generator for shock tube (1-D Riemann) problems in both hydro and MHD.
-//! Works for both non-relativistic and relativistic dynamics in flat (Minkowski)
-//! spacetimes.  Can be used to test GR, but metric must be Minkowski.
-//!
 //! Works by initializing plane-parallel shock along x1 (in 1D, 2D, 3D), along x2
 //! (in 2D, 3D), and along x3 (in 3D).  Shock must be along a coordinate directions,
 //! i.e. shocks propagating along an angle inclined to grid are not implemented.

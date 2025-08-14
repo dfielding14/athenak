@@ -1,13 +1,5 @@
 #ifndef HYDRO_RSOLVERS_HLLE_SRHYD_HPP_
 #define HYDRO_RSOLVERS_HLLE_SRHYD_HPP_
-//========================================================================================
-// Athena++ (Kokkos version) astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file hlle_srhyd.hpp
-//! \brief HLLE Riemann solver for special relativistic hydrodynamics.
-//!
 //! REFERENCES
 //! - implements HLLE algorithm from Mignone & Bodo 2005, MNRAS 364 126 (MB)
 

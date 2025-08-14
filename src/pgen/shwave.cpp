@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaK astrophysical fluid dynamics and numerical relativity code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file shwave.cpp
-//! \brief Problem generator for linear HD & MHD in in shearing sheet
-//!
-//! REFERENCE: Johnson & Gammie 2005, ApJ, 626, 978
-//!            Johnson, Guan, & Gammie, ApJS, 177, 373 (2008)
 //!
 //! Three kinds of problems
 //! - ipert = 1 - epicyclic motion

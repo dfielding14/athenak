@@ -1,13 +1,5 @@
 #ifndef UTILS_FINITE_DIFF_HPP_
 #define UTILS_FINITE_DIFF_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file finite_diff.hpp
-//  \brief high order finite-differencing operators.
-
 // Reminder: this code has been generated with py/write_FD.py,
 // please do modifications there.
 // 1st derivative scalar

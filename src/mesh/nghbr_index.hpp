@@ -1,13 +1,5 @@
 #ifndef MESH_NGHBR_INDEX_HPP_
 #define MESH_NGHBR_INDEX_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file nghbr_index.hpp
-// \brief Finds ID of neighbor given input offsets.  The latter are measured relative
-// to the center of the MeshBlock (0,0,0).  Thus (-1,0,0) is the inner_x1 face, and
 // (0,0,1) the outer_x3 face.  Edges and corners are also specified in this way, e.g.
 // (0,1,-1) is the outer_x2-inner_x3 x2x3 edge, and (1,1,1) is the outer_x1/x2/x3 corner
 //

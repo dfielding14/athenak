@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file srcterms.cpp
-//  Implements various (physics) source terms to be added to the Hydro or MHD eqns.
-//  Source terms objects are stored in the respective fluid class, so that
-//  Hydro/MHD can have different source terms
-
 #include "srcterms.hpp"
 
 #include <iostream>

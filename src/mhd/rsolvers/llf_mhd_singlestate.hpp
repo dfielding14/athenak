@@ -1,13 +1,5 @@
 #ifndef MHD_RSOLVERS_LLF_MHD_SINGLESTATE_HPP_
 #define MHD_RSOLVERS_LLF_MHD_SINGLESTATE_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file llf_mhd_singlestate.hpp
-//! \brief various Local Lax Friedrichs (LLF) Riemann solvers, also known as Rusanov's
-//! method, for NR/SR/GR MHD. This flux is very diffusive, even more diffusive than HLLE,
 //! and so it is not recommended for use in applications.  However, it is useful for
 //! testing, or for problems where other Riemann solvers fail.
 //!

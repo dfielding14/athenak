@@ -1,13 +1,6 @@
 #ifndef Z4C_TMUNU_HPP_
 #define Z4C_TMUNU_HPP_
 
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file tmunu.hpp
-//! \brief definitions for Tmunu class, which represents the stress-energy tensor
 //!  decomposed into E, S_i, and S_{ij}, all undensitized.
 
 #include "athena.hpp"

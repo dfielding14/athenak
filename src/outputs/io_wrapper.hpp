@@ -1,13 +1,5 @@
 #ifndef OUTPUTS_IO_WRAPPER_HPP_
 #define OUTPUTS_IO_WRAPPER_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file io_wrapper.hpp
-//  \brief defines a set of small wrapper functions for MPI versus serial outputs.
-
 #include <string>
 #include <cstdio>
 #include "athena.hpp"

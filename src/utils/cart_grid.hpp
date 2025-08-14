@@ -1,13 +1,6 @@
 #ifndef UTILS_CART_GRID_HPP_
 #define UTILS_CART_GRID_HPP_
 
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file cart_grid.hpp
-//  \brief definitions for SphericalGrid class
 
 #include "athena.hpp"
 

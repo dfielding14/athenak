@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file z4c_tasks.cpp
-//! \brief functions that control z4c tasks in the appropriate task list
-
-#include <map>
-#include <memory>
 #include <string>
 #include <iostream>
 #include <cstdio>
@@ -28,7 +18,7 @@ namespace z4c {
 //! \fn  void Z4c::QueueZ4cTasks
 //! \brief queue Z4c tasks into NumericalRelativity
 void Z4c::QueueZ4cTasks() {
-  Kokkos::printf("AssembleZ4cTasks\n");
+  printf("AssembleZ4cTasks\n");
   using namespace mhd;     // NOLINT(build/namespaces)
   using namespace numrel;  // NOLINT(build/namespaces)
   NumericalRelativity *pnr = pmy_pack->pnr;

@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena++ astrophysical MHD code
-// Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
-// Licensed under the 3-clause BSD License, see LICENSE file for details
-//========================================================================================
-//! \file bvals_tasks.cpp
-//! \brief functions included in task lists to post/clear non-blocking MPI calls for
-//! Mesh variables. These are generic functions that work for both CC and FC variables.
-//!
-//! Note: InitFluxRecv() functions for flux correction step are specific to CC/FC vars,
 //! and are implemented in flux_correct_XX.cpp files respectively. The ClearFluxRecv()
 //! and ClearFluxSend() functions are generic and implemented below.
 //!

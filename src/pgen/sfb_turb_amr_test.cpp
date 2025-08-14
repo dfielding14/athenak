@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file sfb_turb_amr_test.cpp
-//! \brief Test problem generator for SFB turbulence driving with AMR
-//! Sets up a uniform medium with static refinement to test SFB turbulence continuity
-
-#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <limits>

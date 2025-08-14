@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaK astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file rt_mhd_amr.cpp
-//! \brief Rayleigh-Taylor instability test problem with MHD and AMR
-//! 
-//! PURPOSE: Test case for verifying div(B) preservation during adaptive mesh refinement.
-//! This problem sets up a Rayleigh-Taylor instability with a horizontal magnetic field
 //! and uses AMR to refine the interface region. It can be used to verify that the
 //! magnetic field remains divergence-free across refinement boundaries.
 //!

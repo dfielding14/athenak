@@ -1,13 +1,5 @@
 #ifndef DYN_GRMHD_RSOLVERS_LLF_DYN_GRMHD_HPP_
 #define DYN_GRMHD_RSOLVERS_LLF_DYN_GRMHD_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file llf_dyngrmhd.hpp
-//! \brief LLF Riemann solver for general relativistic magnetohydrodynamics
-
 #include <math.h>
 
 #include "coordinates/cell_locations.hpp"

@@ -1,25 +1,17 @@
 #ifndef MESH_MESHBLOCK_PACK_HPP_
 #define MESH_MESHBLOCK_PACK_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file meshblock_pack.hpp
-//  \brief defines MeshBlockPack class, a container for MeshBlocks
-
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "parameter_input.hpp"
-#include "coordinates/coordinates.hpp"
 #include "driver/driver.hpp"
 #include "tasklist/task_list.hpp"
 
 // Forward declarations
 class MeshBlock;
+class Coordinates;
 class ADM;
 class Tmunu;
 namespace hydro {class Hydro;}

@@ -1,13 +1,5 @@
 #ifndef TASKLIST_TASK_LIST_HPP_
 #define TASKLIST_TASK_LIST_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//!   \file task_list.hpp
-//    \brief provides functionality to control dynamic execution using tasks
-//           currently everything is implemented in this single header file
 //
 // The original idea and implementation of TaskLists was by Kengo Tomida
 // This version includes improvements due to Josh Dolence and the Parthenon dev team, and

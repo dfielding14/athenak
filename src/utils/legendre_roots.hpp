@@ -1,13 +1,6 @@
 #ifndef UTILS_LEGENDRE_ROOTS_HPP_
 #define UTILS_LEGENDRE_ROOTS_HPP_
 
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file legendre_roots.hpp
-//! \brief find roots of legendre polynomial using Newton–Raphson with Chebyshev guesses
 
 #include <algorithm>
 #include <cmath>

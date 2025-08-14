@@ -1,13 +1,5 @@
 #ifndef UTILS_SPHERICAL_HARM_HPP_
 #define UTILS_SPHERICAL_HARM_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file spherical_harm.hpp
-//! \brief spin-weighted spherical harmonics
-
 #include <cmath>
 #include <iostream>
 #include <list>

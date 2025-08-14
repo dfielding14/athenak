@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file rt.cpp
-//! \brief Problem generator for RT instabilty.
-//!
-//! Note the gravitational acceleration is hardwired to be 0.1. Density difference is
-//! hardwired to be 3.0 and is set by the input parameter `problem/drat`.
 //! To reproduces 2D results of Liska & Wendroff set it to 2.0,
 //! while for the 3D results of Dimonte et al use 3.0.
 //!

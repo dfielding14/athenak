@@ -1,13 +1,5 @@
 #ifndef MESH_MESH_HPP_
 #define MESH_MESH_HPP_
-//========================================================================================
-// Athena++K astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file mesh.hpp
-//! \brief defines Mesh class.
-//! The Mesh is the overall grid structure, which is divided into local patches called
 //! MeshBlocks (potentially on different levels) that tile the entire domain.  MeshBlocks
 //! are grouped together into MeshBlockPacks for better performance on GPUs.
 
@@ -164,12 +156,7 @@ class Mesh {
   }
 
   // accessors
-  int FindMeshBlockIndex(int tgid) {
-    for (int m=0; m<pmb_pack->nmb_thispack; ++m) {
-      if (pmb_pack->pmb->mb_gid.h_view(m) == tgid) return m;
-    }
-    return -1;
-  }
+  int FindMeshBlockIndex(int tgid);
   int NumberOfMeshBlockCells() const {
     return (mb_indcs.nx1)*(mb_indcs.nx2)*(mb_indcs.nx3);
   }

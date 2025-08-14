@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaK astrophysical fluid dynamics code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file shearing_box.cpp
-//! \brief constructor for ShearingBoxBoundary abstract base class, and utility functions
-
-#include <algorithm>
-#include <iostream>
 #include <string>
 #include <vector>
 

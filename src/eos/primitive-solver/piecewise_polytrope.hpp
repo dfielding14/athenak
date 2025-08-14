@@ -1,13 +1,5 @@
 #ifndef EOS_PRIMITIVE_SOLVER_PIECEWISE_POLYTROPE_HPP_
 #define EOS_PRIMITIVE_SOLVER_PIECEWISE_POLYTROPE_HPP_
-//========================================================================================
-// PrimitiveSolver equation-of-state framework
-// Copyright(C) 2023 Jacob M. Fields <jmf6719@psu.edu>
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file piecewise_polytrope.hpp
-//  \brief Defines a piecewise-polytropic equation of state.
-//
 //  Each individual piece satisfies the form
 //  \f$P_\textrm{cold} = P_i \frac{\rho}{\rho_i}^{\gamma_i}\f$,
 //  for some density \f$\rho > \rho_i\f$. There is an additional
@@ -177,7 +169,7 @@ class PiecewisePolytrope : public EOSPolicyInterface {
                           Real P0, Real m, int n) {
     // Make sure that we actually *have* polytropes
     if (n <= 1) {
-      Kokkos::printf("PiecewisePolytrope: Invalid number of polytropes requested.");
+      printf("PiecewisePolytrope: Invalid number of polytropes requested.");
       return false;
     }
     // Before we even try to construct anything, we need to make sure that
@@ -186,14 +178,14 @@ class PiecewisePolytrope : public EOSPolicyInterface {
       if(densities[i] <= densities[i-1]) {
         // The densities must be ordered from smallest to largest and strictly
         // increasing.
-        Kokkos::printf("PiecewisePolytrope: Densities must be strictly increasing.");
+        printf("PiecewisePolytrope: Densities must be strictly increasing.");
         return false;
       }
     }
 
     // Make sure that we're not trying to allocate too many polytropes
     if (n > MAX_PIECES) {
-      Kokkos::printf("PiecewisePolytrope: number of pieces requested exceeds limit.");
+      printf("PiecewisePolytrope: number of pieces requested exceeds limit.");
       return false;
     }
 

@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file sgrid_bns.cpp
-//  \brief Initial data reader for binary neutron star data with SGRID
-
-#include <math.h>
-#include <sys/stat.h> // mkdir
 
 #include <algorithm>
 #include <cstdio>

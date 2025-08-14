@@ -1,13 +1,5 @@
 #ifndef COORDINATES_CARTESIAN_KS_HPP_
 #define COORDINATES_CARTESIAN_KS_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file cartesian_ks.hpp
-//! \brief implements functions for Cartesian Kerr-Schild coordinates in GR.  This
-//! includes inline functions to compute the metric and derivatives of the metric.  Based
 //! on functions in 'gr_user.cpp' file in Athena++, as well as CartesianGR.cpp function
 //! from CJW and SR.
 

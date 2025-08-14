@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file pdf.cpp
-//  \brief writes pdf output data --- Drummond B Fielding
-//  PDFs can be 1d or 2d and can be either mass or weightume weighted.
-//  the user can specify more than one pdf to be calculated
-//  each pdf will be stored in its own directory with a new file for each output
 //  the user should be able to specify either from the var_choice listed in outputs.hpp
 //  or by specifying a custom variable in the pgen
 //  but I will need to figure out how to do multiple user defined variables

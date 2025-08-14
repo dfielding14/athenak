@@ -1,13 +1,5 @@
 #ifndef Z4C_Z4C_HPP_
 #define Z4C_Z4C_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file z4c.hpp
-//! \brief definitions for Z4c class
-
 #include <map>
 #include <memory>    // make_unique, unique_ptr
 #include <list>

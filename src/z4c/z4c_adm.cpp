@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file adm_z4c.cpp
-//! \brief implementation of functions in the Z4c class related to ADM decomposition
-
-// C standard headers
-#include <math.h> // pow
 
 // C++ standard headers
 #include <iostream>

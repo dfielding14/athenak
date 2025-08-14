@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file linear_wave.c
-//! \brief Linear wave problem generator for 1D/2D/3D problems. Initializes both hydro and
-//! MHD problems. Direction of the wavevector is set to be along the x? axis by using the
-//! along_x? input flags, else it is automatically set along the grid diagonal in 2D/3D
-//! This file also contains a function to compute L1 errors in solution, called in
 //! Driver::Finalize().
 
 // C/C++ headers

@@ -1,13 +1,5 @@
 #ifndef HYDRO_RSOLVERS_ROE_HYD_HPP_
 #define HYDRO_RSOLVERS_ROE_HYD_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file  roe_hyd.hpp
-//! \brief Roe's linearized Riemann solver.
-//!
 //! Computes 1D fluxes using Roe's linearization.  When Roe's method fails because of
 //! negative density in the intermediate states, LLF fluxes are used instead (only
 //! density, not pressure, is checked in this version).

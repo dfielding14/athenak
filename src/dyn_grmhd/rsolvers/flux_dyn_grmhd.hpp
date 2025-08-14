@@ -1,13 +1,5 @@
 #ifndef DYN_GRMHD_RSOLVERS_FLUX_DYN_GRMHD_HPP_
 #define DYN_GRMHD_RSOLVERS_FLUX_DYN_GRMHD_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file flux_dyngrmhd.hpp
-//! \brief Calculate left and right fluxes for a central scheme in GRMHD
-#include <stdio.h>
 #include <math.h>
 
 #include "eos/primitive_solver_hyd.hpp"

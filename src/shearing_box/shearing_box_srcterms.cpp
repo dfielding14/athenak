@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file shearing_box_srcterms.cpp
-//! \brief Implements shearing box source terms.  All functions are members of the
-//! SourceTerm class
-
-#include <iostream>
 #include <string>
 
 #include "athena.hpp"

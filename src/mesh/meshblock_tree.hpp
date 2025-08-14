@@ -1,13 +1,5 @@
 #ifndef MESH_MESHBLOCK_TREE_HPP_
 #define MESH_MESHBLOCK_TREE_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file meshblock_tree.hpp
-//  \brief defines the MeshBlockTree class
-// The MeshBlockTree stores the logical grid structure in a binary tree, and is used for
 // neighbor searches, storing global IDs, etc. Levels refer to "logical level", where the
 // logical root (single block) level is 0 (see Figs. 1 and 3 of method paper). Note the
 // logical level of the physical root grid (user-specified root grid) will be greater than

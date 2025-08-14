@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file meshblock_tree.cpp
-//  \brief implementation of constructor and functions in the MeshBlockTree class
-
-#include <cstdint>
-#include <iostream>
 #include <sstream>
 #include <stdexcept>
 

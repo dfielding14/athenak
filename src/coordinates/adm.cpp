@@ -1,17 +1,8 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file adm.cpp
-//  \brief implementation of ADM class
-#include <algorithm>
-
-#include "coordinates/adm.hpp"
 #include "athena.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/meshblock_pack.hpp"
+#include "coordinates/adm.hpp"
 #include "z4c/z4c.hpp"
 
 namespace adm {

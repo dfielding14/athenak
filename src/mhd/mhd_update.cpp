@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaK astrophysical fluid dynamics and numerical relativity code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file mhd_update.cpp
-//! \brief Performs explicit update of MHD conserved variables (u0) for each stage of the
-//! SSP RK integrators (e.g. RK1, RK2, RK3) implemented in AthenaK, using weighted average
-//! and partial time update of flux divergence. Source terms are added in the
-//! MHDSrcTerms() function.
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"

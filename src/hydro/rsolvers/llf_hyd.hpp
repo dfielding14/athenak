@@ -1,13 +1,5 @@
 #ifndef HYDRO_RSOLVERS_LLF_HYD_HPP_
 #define HYDRO_RSOLVERS_LLF_HYD_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file llf_hyd.hpp
-//! \brief Local Lax Friedrichs (LLF) Riemann solver for hydrodynamics
-
 #include "llf_hyd_singlestate.hpp"
 
 namespace hydro {

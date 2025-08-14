@@ -1,13 +1,6 @@
 #ifndef MESH_RESTRICTION_HPP_
 #define MESH_RESTRICTION_HPP_
 
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file restriction.hpp
-//! \brief restriction operators for cell-centered variables,
 //! implemented as templated inline functions so they can be used for z4c
 //! with different order of spatial differencing order.
 

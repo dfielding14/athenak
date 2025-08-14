@@ -1,13 +1,5 @@
 #ifndef HYDRO_RSOLVERS_HLLC_HYD_HPP_
 #define HYDRO_RSOLVERS_HLLC_HYD_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file hllc_hyd.hpp
-//! \brief The HLLC Riemann solver for hydrodynamics, an extension of the HLLE fluxes to
-//! include the contact wave.  Only works for ideal gas EOS in hydrodynamics.
 //!
 //! REFERENCES:
 //! - E.F. Toro, "Riemann Solvers and numerical methods for fluid dynamics", 2nd ed.,

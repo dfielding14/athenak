@@ -1,13 +1,5 @@
 #ifndef RECONSTRUCT_PLM_HPP_
 #define RECONSTRUCT_PLM_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file plm.hpp
-//! \brief  piecewise linear reconstruction implemented as inline functions
-//! This version only works with uniform mesh spacing
 
 #include <math.h>
 #include "athena.hpp"

@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file binary.cpp
-//! \brief writes output data in binary format, which simply consists of each MeshBlock
-//! written contiguously in order of "gid" in binary format.
-
-#include <sys/stat.h>  // mkdir
 
 #include <cstdio>      // fwrite(), fclose(), fopen(), fnprintf(), snprintf()
 #include <cstdlib>
@@ -18,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <algorithm> // min
+#include <sys/stat.h> // mkdir
 
 #include "athena.hpp"
 #include "globals.hpp"

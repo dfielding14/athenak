@@ -1,13 +1,5 @@
 #ifndef MHD_RSOLVERS_ADVECT_MHD_HPP_
 #define MHD_RSOLVERS_ADVECT_MHD_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file advect_mhd.hpp
-//! \brief MHD Riemann solver for pure advection problems (v = constant).  Simply computes
-//!  the upwind flux of each variable.  Can only be used for isothermal EOS.
 
 namespace mhd {
 //----------------------------------------------------------------------------------------

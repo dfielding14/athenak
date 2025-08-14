@@ -1,13 +1,3 @@
-//========================================================================================
-// PrimitiveSolver equation-of-state framework
-// Copyright(C) 2023 Jacob M. Fields <jmf6719@psu.edu>
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file eos_compose.cpp
-//  \brief Implementation of EOSCompose
-
-#include <math.h>
-
 #include <cassert>
 #include <cstdio>
 #include <limits>

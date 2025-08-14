@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file build_tree.cpp
-//! \brief Functions to build MeshBlockTreee, both for new runs and restarts
-
-#include <iostream>
-#include <cinttypes>
 #include <limits> // numeric_limits<>
 #include <memory> // make_unique<>
 

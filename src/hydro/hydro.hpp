@@ -1,13 +1,5 @@
 #ifndef HYDRO_HYDRO_HPP_
 #define HYDRO_HYDRO_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file hydro.hpp
-//  \brief definitions for Hydro class
-
 #include <map>
 #include <memory>
 #include <string>

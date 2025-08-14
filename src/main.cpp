@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena astrophysical MHD code (Kokkos version)
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//////////////////////////////////// Athena Main Program /////////////////////////////////
-//! \file main.cpp
-//! \brief Athena main program
-//!
-//! Based on the Athena (Cambridge version) and Athena++ MHD codes. Athena originally was
 //! written in 2002-2005 by Jim Stone, Tom Gardiner, and Peter Teuben, with many important
 //! contributions by many other developers after that, i.e. 2005-2014.
 //!

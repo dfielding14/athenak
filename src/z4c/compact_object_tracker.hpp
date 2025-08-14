@@ -1,15 +1,9 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-
 #ifndef Z4C_COMPACT_OBJECT_TRACKER_HPP_
 #define Z4C_COMPACT_OBJECT_TRACKER_HPP_
 
-#include <cstdio>
 #include <fstream>
 #include <string>
+#include <cstring>  // for std::memcpy
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
@@ -18,6 +12,11 @@
 // Forward declaration
 class Mesh;
 class ParameterInput;
+
+// Define NDIM if not already defined
+#ifndef NDIM
+#define NDIM 3
+#endif
 
 //! \class CompactObjectTracker
 //! \brief Tracks a single puncture
@@ -59,20 +58,13 @@ class CompactObjectTracker {
  private:
   bool owns_compact_object;
   CompactObjectType type;
-<<<<<<< HEAD
-  Real pos[NDIM];
-=======
->>>>>>> origin/main
   Real vel[NDIM];
   int reflevel;         // requested minimum refinement level (-1 for infinity)
   Real radius;          // nominal radius of the object (for the AMR driver)
   Mesh const *pmesh;
   int out_every;
   std::ofstream ofile;
-<<<<<<< HEAD
-=======
   Real pos[NDIM];
->>>>>>> origin/main
 };
 
 #endif // Z4C_COMPACT_OBJECT_TRACKER_HPP_

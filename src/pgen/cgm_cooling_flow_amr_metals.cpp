@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file cgm_cooling_flow_amr.cpp
-//  \brief Problem generator for a cooling flow CGM with AMR resolved disk
-
-#include <iostream>
-#include <cmath>
 #include "athena.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
@@ -643,12 +633,12 @@ void SNSource(Mesh* pm, const Real bdt) {
               
         // Inject energy if within injection radius
         if (r <= dr) {
-	  //Kokkos::printf("distance is %f , inject !\n", r);
+	  //printf("distance is %f , inject !\n", r);
           
 	  //u0(m,IDN,k,j,i) += m_ej_;
           u0(m,IEN,k,j,i) += e_sn_;
 	  
-	  //Kokkos::printf("before: %.3f, after: %.3f \n", u0(m,IEN,k,j,i) - e_sn_, u0(m,IEN,k,j,i));
+	  //printf("before: %.3f, after: %.3f \n", u0(m,IEN,k,j,i) - e_sn_, u0(m,IEN,k,j,i));
 	}
       }
 

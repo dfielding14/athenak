@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file srcterms_newdt.cpp
-//! \brief function to compute timestep for source terms across all MeshBlock(s) in a
-//! MeshBlockPack
-
-#include <float.h>
 
 #include <limits>
 

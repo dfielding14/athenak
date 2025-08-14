@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file viscosity.cpp
-//  \brief Implements functions for Viscosity class. This includes isotropic shear
-//  viscosity in a Newtonian fluid (in which stress is proportional to shear).
-//  Viscosity may be added to Hydro and/or MHD independently.
-
 #include <algorithm>
 #include <limits>
 #include <iostream>

@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaK astrophysical fluid dynamics & numerical relativity code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and other code contributors
-// Licensed under the 3-clause BSD License, see LICENSE file for details
-//========================================================================================
-//! \file orbital_advection_cc.cpp
-//! \brief functions to pack/send and recv/unpack boundary values for cell-centered (CC)
-//! variables in the orbital advection step. Data is shifted by the appropriate offset
-//! during the recv/unpack step, so these functions both communicate the data and perform
-//! the shift.
 
 #include <algorithm>
 #include <cstdlib>

@@ -1,13 +1,5 @@
 #ifndef EOS_PRIMITIVE_SOLVER_PS_TYPES_HPP_
 #define EOS_PRIMITIVE_SOLVER_PS_TYPES_HPP_
-//========================================================================================
-// PrimitiveSolver equation-of-state framework
-// Copyright(C) 2023 Jacob M. Fields <jmf6719@psu.edu>
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file ps_types.hpp
-//  \brief contains some basic type definitions consistent with Athena++.
-//
 //  Ideally this file shouldn't be required when the code is dropped into Athena.
 //  Therefore, all type definitions should be consistent with Athena.
 //

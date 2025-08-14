@@ -1,13 +1,5 @@
 #ifndef OUTPUTS_OUTPUTS_HPP_
 #define OUTPUTS_OUTPUTS_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file outputs.hpp
-//  \brief provides classes to handle ALL types of data output
-
 #include <string>
 #include <vector>
 
@@ -196,6 +188,10 @@ struct TrackedParticleData {
   int tag;
   Real x,y,z;
   Real vx,vy,vz;
+  Real Bx, By, Bz;   // Magnetic field components
+  Real K1, K2, K3;   // Curvature components
+  Real dB1, dB2, dB3; // Magnetic field gradients  
+  Real jmag;         // Current magnitude
 };
 
 //----------------------------------------------------------------------------------------
@@ -410,6 +406,7 @@ class TrackedParticleOutput : public BaseTypeOutput {
   TrackedParticleOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
   void LoadOutputData(Mesh *pm) override;
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+  void WriteOutputFileWithBuffer(Mesh *pm, ParameterInput *pin);
  protected:
   int ntrack;           // total number of tracked particles across all ranks
   int ntrack_thisrank;  // number of tracked particles this rank (guess)
@@ -417,6 +414,12 @@ class TrackedParticleOutput : public BaseTypeOutput {
   bool header_written;
   std::vector<int> npout_eachrank;
   HostArray1D<TrackedParticleData> outpart;
+  float *particle_buffer;
+  int buffer_size;
+  int ncycle_buffer;
+  int icycle_buffer;
+  int nout_thisrank;
+  int track_single_file_per_rank;
 };
 
 //----------------------------------------------------------------------------------------

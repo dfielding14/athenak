@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file mesh.cpp
-//  \brief implementation of constructor and functions in Mesh class
-
-#include <algorithm>
-#include <cinttypes>
 #include <iostream>
 #include <limits>
 #include <cstdio> // fclose
@@ -17,6 +7,8 @@
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh.hpp"
+#include "meshblock.hpp"
+#include "meshblock_pack.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
@@ -676,4 +668,15 @@ void Mesh::CountParticles() {
   for (int n=0; n<global_variable::nranks; ++n) {
     nprtcl_total += nprtcl_eachrank[n];
   }
+}
+
+//----------------------------------------------------------------------------------------
+// \fn Mesh::FindMeshBlockIndex
+// \brief Find the index of a MeshBlock with given global ID
+
+int Mesh::FindMeshBlockIndex(int tgid) {
+  for (int m=0; m<pmb_pack->nmb_thispack; ++m) {
+    if (pmb_pack->pmb->mb_gid.h_view(m) == tgid) return m;
+  }
+  return -1;
 }

@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file tr_table.cpp
-//! \brief Implementation of Table class
-#include <string>
-#include <fstream>
-#include <sstream>
 #include <map>
 #include <vector>
 

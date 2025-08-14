@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file z4c_linear_wave.cpp
-//! \brief z4c linear (gravitational) wave test
-
-
-// C/C++ headers
 #include <algorithm> // min, max
 #include <cmath>     // sqrt()
 #include <cstdio>    // fopen(), fprintf(), freopen()

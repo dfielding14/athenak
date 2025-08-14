@@ -1,13 +1,5 @@
 #ifndef EOS_PRIMITIVE_SOLVER_IDEALGAS_HPP_
 #define EOS_PRIMITIVE_SOLVER_IDEALGAS_HPP_
-//========================================================================================
-// PrimitiveSolver equation-of-state framework
-// Copyright(C) 2023 Jacob M. Fields <jmf6719@psu.edu>
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file idealgas.hpp
-//  \brief Defines an ideal gas equation of state.
-
 #include <math.h>
 #include <stdexcept>
 #include <limits>

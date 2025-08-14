@@ -1,13 +1,5 @@
 #ifndef GEODESIC_GRID_GAUSS_LEGENDRE_HPP_
 #define GEODESIC_GRID_GAUSS_LEGENDRE_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file geodesic_grid.hpp
-//  \brief definitions for GaussLegendreGrid class
-
 #include "athena.hpp"
 #include "athena_tensor.hpp"
 

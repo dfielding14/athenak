@@ -1,13 +1,3 @@
-//========================================================================================
-// PrimitiveSolver equation-of-state framework
-// Copyright(C) 2023 Jacob M. Fields <jmf6719@psu.edu>
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file piecewise_polytrope.cpp
-//  \brief Implementation of PiecewisePolytrope
-
-#include <math.h>
-#include <stdio.h>        // BUFSIZ
 #include <string.h>       // snprintf
 
 #include <string>

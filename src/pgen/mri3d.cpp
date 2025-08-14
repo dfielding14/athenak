@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file mri3d.cpp
-//! \brief Problem generator for 3D MRI.
-//!
-//! PURPOSE:  Problem generator for 3D MRI. Based on the initial conditions described in
-//! "Local Three-dimensional Magnetohydrodynamic Simulations of Accretion Disks" by
 //! Hawley, Gammie & Balbus, or HGB.  AthanK version based on pgen/hgb.cpp in Athena++.
 //!
 //! Several different field configurations are possible:

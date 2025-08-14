@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena++ astrophysical MHD code
-// Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
-// Licensed under the 3-clause BSD License, see LICENSE file for details
-//========================================================================================
-//! \file flux_correction_fc.cpp
-//! \brief functions to pack/send and recv/unpack fluxes (emfs) for face-centered fields
-//! (magnetic fields) at fine/coarse boundaries for the flux correction step.
-
-#include <cstdlib>
 #include <iostream>
 
 #include "athena.hpp"

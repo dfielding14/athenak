@@ -1,13 +1,5 @@
 #ifndef EOS_PRIMITIVE_SOLVER_EOS_HPP_
 #define EOS_PRIMITIVE_SOLVER_EOS_HPP_
-//========================================================================================
-// PrimitiveSolver equation-of-state framework
-// Copyright(C) 2023 Jacob M. Fields <jmf6719@psu.edu>
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file eos.hpp
-//  \brief Defines an equation of state.
-//
 //  EOS is effectively an interface that describes how to create an
 //  equation of state. It must be instantiated with an object implementing
 //  the following protected functions:

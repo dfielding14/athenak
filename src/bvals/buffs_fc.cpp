@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena++ astrophysical MHD code
-// Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
-// Licensed under the 3-clause BSD License, see LICENSE file for details
-//========================================================================================
-//! \file buffs_fc.cpp
-//  \brief functions to allocate and initialize buffers for face-centered variables
-
-#include <cstdlib>
-#include <iostream>
 #include <algorithm> // max
 
 #include "athena.hpp"

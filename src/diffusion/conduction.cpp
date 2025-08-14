@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file conduction.cpp
-//! \brief Implements functions for Conduction class. This includes isotropic thermal
-//! conduction, in which heat flux is proportional to negative local temperature gradient.
-//! Conduction may be added to Hydro and/or MHD independently.
-
 #include <float.h>
 #include <algorithm>
 #include <limits>

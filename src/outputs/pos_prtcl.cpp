@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file vtk_prtcl.cpp
-//! \brief writes particle data in (legacy) vtk format.
-//! Data is written in UNSTRUCTURED_GRID geometry, in BINARY format, and in FLOAT type
-//! Data over multiple MeehBlocks and MPI ranks is written to a single file using MPI-IO.
-
 #include <sys/stat.h>  // mkdir
 #include <vector>
 

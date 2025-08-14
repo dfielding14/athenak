@@ -1,13 +1,5 @@
 #ifndef EOS_PRIMITIVE_SOLVER_EOS_COMPOSE_HPP_
 #define EOS_PRIMITIVE_SOLVER_EOS_COMPOSE_HPP_
-//========================================================================================
-// PrimitiveSolver equation-of-state framework
-// Copyright(C) 2023 Jacob M. Fields <jmf6719@psu.edu>
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file eos_compose.hpp
-//  \brief Defines EOSTable, which stores information from a tabulated
-//         equation of state in CompOSE format.
 //
 //  Tables should be generated using
 //  <a href="https://bitbucket.org/dradice/pycompose">PyCompOSE</a>

@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaK astrophysical fluid dynamics & numerical relativity code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and other code contributors
-// Licensed under the 3-clause BSD License, see LICENSE file for details
-//========================================================================================
-//! \file shearing_box_tasks.cpp
-//! \brief functions included in task lists to post/clear non-blocking MPI calls for
-//! orbital advection, shearing box, and flux correction steps with shearing box
-//! boundaries.
-
 #include <cstdlib>
 #include <iostream>
 #include <utility>

@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaK astrophysical fluid dynamics and numerical relativity code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file cshock.cpp
-//! \brief problem generator for C-shock test of two-fluid MHD. Solves ODE on host to
-//! compute C-shock profile, then initializes this on the grid. Can then test whether
-//! cold holds this profile stably.
-
 // C headers
 
 // C++ headers

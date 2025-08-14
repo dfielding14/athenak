@@ -1,13 +1,5 @@
 #ifndef UTILS_RANDOM_HPP_
 #define UTILS_RANDOM_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file random.cpp
-//  \brief Random number generators (that can be included in Kokkos parallel for regions)
-
 #include "athena.hpp"
 
 //----------------------------------------------------------------------------------------

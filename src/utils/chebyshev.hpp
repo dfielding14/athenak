@@ -1,13 +1,5 @@
 #ifndef UTILS_CHEBYSHEV_HPP_
 #define UTILS_CHEBYSHEV_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file chebyshev.hpp
-//  \brief functions related to chebyshev spectral method
-
 #include "athena.hpp"
 #include "globals.hpp"
 

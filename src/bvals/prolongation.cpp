@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena++ astrophysical MHD code
-// Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
-// Licensed under the 3-clause BSD License, see LICENSE file for details
-//========================================================================================
-//! \file prolongation.cpp
-//! \brief functions to prolongate data at boundaries for cell-centered and face-centered
-//! variables. Functions are members of MeshBoundaryValuesCC or MeshBoundaryValuesFC
-//! classes.
-
 #include <cstdlib>
 #include <iostream>
 #include <iomanip>    // std::setprecision()

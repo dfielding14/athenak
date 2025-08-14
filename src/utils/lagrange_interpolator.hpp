@@ -1,13 +1,5 @@
 #ifndef UTILS_LAGRANGE_INTERPOLATOR_HPP_
 #define UTILS_LAGRANGE_INTERPOLATOR_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file lagrange_interpolator.hpp
-
-#include <cmath>
 #include <iostream>
 #include <list>
 

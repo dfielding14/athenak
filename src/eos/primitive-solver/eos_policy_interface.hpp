@@ -1,13 +1,5 @@
 #ifndef EOS_PRIMITIVE_SOLVER_EOS_POLICY_INTERFACE_HPP_
 #define EOS_PRIMITIVE_SOLVER_EOS_POLICY_INTERFACE_HPP_
-//========================================================================================
-// PrimitiveSolver equation-of-state framework
-// Copyright(C) 2023 Jacob M. Fields <jmf6719@psu.edu>
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file eos_policy_interface.hpp
-//  \brief Defines a class that provides all the common class
-//         member variables needed by an EOSPolicy.
 
 #include "ps_types.hpp"
 #include "unit_system.hpp"

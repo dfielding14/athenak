@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file spherical_grid.cpp
-//  \brief Initializes a spherical grid to interpolate data onto
-
-// C/C++ headers
-#include <cmath>
 #include <iostream>
 #include <list>
 

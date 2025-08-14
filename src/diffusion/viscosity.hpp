@@ -1,13 +1,5 @@
 #ifndef DIFFUSION_VISCOSITY_HPP_
 #define DIFFUSION_VISCOSITY_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file viscosity.hpp
-//  \brief Contains data and functions that implement various formulations for
-//  viscosity. Currently only Navier-Stokes (uniform, isotropic) shear viscosity
 //  is implemented. TODO: add Braginskii viscosity
 
 #include <string>

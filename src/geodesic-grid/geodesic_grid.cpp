@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file geodesic_grid.cpp
-//  \brief implements constructor and some fns for GeodesicGrid class
-
-// C/C++ headers
-#include <float.h>
 #include <iostream>
 
 // AthenaK headers

@@ -1,13 +1,5 @@
 #ifndef EOS_IDEAL_C2P_HYD_HPP_
 #define EOS_IDEAL_C2P_HYD_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file ideal_c2p_hyd.hpp
-//! \brief Various inline functions that transform a single state of conserved variables
-//! into primitive variables (and the reverse, primitive to conserved) for hydrodynamics
 //! with an ideal gas EOS. Versions for both non-relativistic and relativistic fluids are
 //! provided.
 

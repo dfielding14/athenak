@@ -1,13 +1,5 @@
 #ifndef SHEARING_BOX_SHEARING_BOX_HPP_
 #define SHEARING_BOX_SHEARING_BOX_HPP_
-//========================================================================================
-// AthenaK astrophysical fluid dynamics & numerical relativity code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file shearing_box.hpp
-//! \brief definitions for classes that implement both orbital adfection and shearing box.
-//! Both OrbitalAdvection and ShearingBox are abstract base classes that are used to
 //! define derived classes for CC and FC variables.
 
 #include "athena.hpp"

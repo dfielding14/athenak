@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file parameter_input.cpp
-//  \brief implementation of functions in class ParameterInput
-//
-// PURPOSE: Member functions of this class are used to read and parse the input file.
-//   Functionality is loosely modeled after FORTRAN namelist.
 //
 // EXAMPLE of input file in 'Athena++' format:
 //   <blockname1>      # block name; must be on a line by itself

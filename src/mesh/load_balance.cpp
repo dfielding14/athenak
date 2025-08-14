@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file load_balance.cpp
-//! \brief Contains various Mesh and MeshRefinement functions associated with
-//! load balancing when MPI is used, both for uniform grids and with SMR/AMR.
-
-#include <iostream>
 #include <limits> // numeric_limits<>
 #include <algorithm> // max
 #include <utility> // make_pair

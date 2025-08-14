@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena++ astrophysical MHD code, Kokkos version
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file dynbbh.cpp
-//! \brief Problem generator for superimposed Kerr-Schild black holes
-
-#include <math.h>
-
 #include <algorithm>
 #include <sstream>
 #include <string>
@@ -405,7 +395,7 @@ int four_metric_to_three_metric(const struct four_metric &met,
     //std::fprintf(stderr, "%e %e %e\n", gam.gxx, gam.gxy, gam.gxz);
     //std::fprintf(stderr, "%e %e %e\n", gam.gyy, gam.gyz, gam.gzz);
     //std::fflush(stderr);
-    Kokkos::printf("det < 0: %e\n" // NOLINT
+    printf("det < 0: %e\n" // NOLINT
                    "%e %e %e\n"
                    "%e %e %e\n",
                    det, gam.gxx, gam.gxy, gam.gxz, gam.gyy, gam.gyz, gam.gzz);

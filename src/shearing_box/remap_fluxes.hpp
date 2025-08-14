@@ -1,13 +1,5 @@
 #ifndef SHEARING_BOX_REMAP_FLUXES_HPP_
 #define SHEARING_BOX_REMAP_FLUXES_HPP_
-//========================================================================================
-// AthenaK astrophysical fluid dynamics code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file orbital_advection.hpp
-//! \brief Inline functions to compute "fluxes" for conservative remap in orbital
-//! advection. Based on RemapFlux functions in athena4.2.
 
 #include "athena.hpp"
 

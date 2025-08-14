@@ -1,13 +1,5 @@
 #ifndef EOS_PRIMITIVE_SOLVER_PRIMITIVE_SOLVER_HPP_
 #define EOS_PRIMITIVE_SOLVER_PRIMITIVE_SOLVER_HPP_
-//========================================================================================
-// PrimitiveSolver equation-of-state framework
-// Copyright(C) 2023 Jacob M. Fields <jmf6719@psu.edu>
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file primitive_solver.hpp
-//  \brief Declares PrimitiveSolver class.
-//
 //  PrimitiveSolver contains all the infrastructure for the inversion
 //  procedure from conserved to primitive variables in GRMHD. This
 //  particular implementation is based on the solver described in

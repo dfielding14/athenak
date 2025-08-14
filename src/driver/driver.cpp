@@ -1,16 +1,7 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file driver.cpp
-//  \brief implementation of functions in class Driver
-
-#include <iostream>
-#include <iomanip>    // std::setprecision()
 #include <limits>
 #include <algorithm>
 #include <string> // string
+#include <iomanip> // std::setprecision
 
 #include "athena.hpp"
 #include "globals.hpp"

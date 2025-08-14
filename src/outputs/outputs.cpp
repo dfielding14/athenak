@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file outputs.cpp
-//! \brief implements Outputs class constructor
-//!
-//! The number and types of outputs are all controlled by the number and values of
-//! parameters specified in <output[n]> blocks in the input file.  Each output block must
 //! be labelled by a unique integer "n".  Following the convention of the parser
 //! implemented in the ParameterInput class, a second output block with the same integer
 //! "n" of an earlier block will silently overwrite the values read by the first block.

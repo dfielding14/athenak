@@ -1,13 +1,5 @@
 #ifndef MHD_RSOLVERS_HLLE_MHD_HPP_
 #define MHD_RSOLVERS_HLLE_MHD_HPP_
-//========================================================================================
-// Athena++ astrophysical MHD code
-// Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
-// Licensed under the 3-clause BSD License, see LICENSE file for details
-//========================================================================================
-//! \file hlle_mhd.hpp
-//! \brief HLLE Riemann solver for MHD. See the hydro version for details.
-
 #include <algorithm>  // max(), min()
 #include <cmath>      // sqrt()
 

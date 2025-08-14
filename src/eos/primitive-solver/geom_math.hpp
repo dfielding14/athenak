@@ -1,13 +1,5 @@
 #ifndef EOS_PRIMITIVE_SOLVER_GEOM_MATH_HPP_
 #define EOS_PRIMITIVE_SOLVER_GEOM_MATH_HPP_
-//========================================================================================
-// PrimitiveSolver equation-of-state framework
-// Copyright(C) 2023 Jacob M. Fields <jmf6719@psu.edu>
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file geom_math.hpp
-//  \brief Provides some simple tensor algebra functions.
-//
 //  The provided functions work for three dimensional
 //  vectors, one-forms, and metrics.
 

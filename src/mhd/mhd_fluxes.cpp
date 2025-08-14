@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file mhd_fluxes.cpp
-//! \brief Calculate fluxes of the conserved variables, and area-averaged electric fields
-//! E = - (v X B) on cell faces for mhd.  Fluxes are stored in face-centered vector
-//! 'uflx', while electric fields are stored in individual arrays: e2x1,e3x1 on x1-faces;
-//! e1x2,e3x2 on x2-faces; e1x3,e2x3 on x3-faces.
 
 #include <iostream>
 

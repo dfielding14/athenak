@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file mri2d.cpp
-//! \brief Problem generator for 2D MRI simulations using the shearing sheet based on
-//!  "A powerful local shear instability in weakly magnetized disks. III - Long-term
-//!  evolution in a shearing sheet" by Hawley & Balbus.  Based on the hgb.cpp problem
-//!  generator in Athena++
 //! REFERENCE: Hawley, J. F. & Balbus, S. A., ApJ 400, 595-609 (1992).
 //!
 //! Two different field configurations are possible:

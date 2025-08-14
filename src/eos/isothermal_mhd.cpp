@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file isothermal_mhd.cpp
-//! \brief derived class that implements isothermal EOS for nonrelativistic mhd
-
-#include "athena.hpp"
-#include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "mhd/mhd.hpp"
 #include "eos.hpp"

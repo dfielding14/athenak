@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file shu_osher.cpp
-//  \brief Problem generator for Shu-Osher shocktube test, involving interaction of a
-//   Mach 3 shock with a sine wave density distribution.
-//
-// REFERENCE: C.W. Shu & S. Osher, "Efficient implementation of essentially
 //   non-oscillatory shock-capturing schemes, II", JCP, 83, 32 (1998)
 
 // C++ headers

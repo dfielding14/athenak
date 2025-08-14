@@ -1,13 +1,5 @@
 #ifndef DYN_GRMHD_DYN_GRMHD_UTIL_HPP_
 #define DYN_GRMHD_DYN_GRMHD_UTIL_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file dyngr_util.hpp
-//  \brief Utility functions for use with dynamic hydro
-
 #include "athena.hpp"
 #include "coordinates/adm.hpp"
 #include "dyn_grmhd.hpp"

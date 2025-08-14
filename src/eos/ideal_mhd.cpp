@@ -1,15 +1,7 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file ideal_mhd.cpp
-//! \brief derived class that implements ideal gas EOS in nonrelativistic mhd
-
-#include "athena.hpp"
-#include "mhd/mhd.hpp"
 #include "eos.hpp"
 #include "eos/ideal_c2p_mhd.hpp"
+#include "mhd/mhd.hpp"
+#include "mesh/mesh.hpp"
 
 //----------------------------------------------------------------------------------------
 // ctor: also calls EOS base class constructor

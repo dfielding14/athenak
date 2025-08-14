@@ -1,13 +1,5 @@
 #ifndef UTILS_TR_TABLE_HPP_
 #define UTILS_TR_TABLE_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file tr_table.hpp
-//! \brief Declares Table class
-
 #include <string>
 #include <map>
 #include <vector>

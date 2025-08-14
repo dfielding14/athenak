@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file eventlog.cpp
-//! \brief writes diagnostic data collected by various event counters implemented
-//! throughout the code to a log file.  Checks whether there is data to be written
-//! every time step, but only writes data if one or more counters are non-zero
-
 #include <cstdio>
 #include <cstdlib>
 #include <iomanip>

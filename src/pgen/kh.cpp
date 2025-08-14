@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file kh.cpp
-//  \brief Problem generator for KH instability
-//  Sets up different initial conditions selected by flag "iprob"
-//    - iprob=1 : tanh profile with a single mode perturbation
-//    - iprob=2 : double tanh profile with a single mode perturbation
 
 #include <iostream>
 #include <sstream>

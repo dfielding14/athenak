@@ -1,30 +1,13 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file particles.cpp
-//! \brief implementation of Particles class constructor and assorted other functions
-
-#include <iostream>
-#include <string>
 #include <algorithm>
-<<<<<<< HEAD
 #include <fstream>
-=======
-
->>>>>>> origin/main
 #include "athena.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "bvals/bvals.hpp"
 #include "particles.hpp"
-<<<<<<< HEAD
 #include "units/units.hpp"
 #include "utils/sn_scheduler.hpp"
-=======
->>>>>>> origin/main
 
 namespace particles {
 //----------------------------------------------------------------------------------------
@@ -32,11 +15,6 @@ namespace particles {
 
 Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     pmy_pack(ppack) {
-<<<<<<< HEAD
-=======
-  std::cout << "Entering Particles constructor" << std::endl;
-
->>>>>>> origin/main
   // check this is at least a 2D problem
   if (pmy_pack->pmesh->one_d) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
@@ -44,25 +22,17 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
 
-<<<<<<< HEAD
   // initialize vector for star particles
   std::vector<std::array<Real, 9>> particle_list;
 
-=======
-  // read number of particles per cell, and calculate number of particles this pack
-  Real ppc = pin->GetOrAddReal("particles","ppc",1.0);
+  // Initialize default values
   nspecies = pin->GetOrAddInteger("particles","nspecies",1);
-  // compute number of particles as real number, since ppc can be < 1
-
   std::string evolution_t = pin->GetString("time","evolution");
   is_dynamic = (evolution_t.compare("static") != 0);
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int ncells = indcs.nx1*indcs.nx2*indcs.nx3;
-  Real r_npart = ppc*static_cast<Real>((pmy_pack->nmb_thispack)*ncells);
-  // then cast to integer
-  nprtcl_thispack = static_cast<int>(r_npart) * nspecies;
-  nprtcl_perspec_thispack = static_cast<int>(r_npart);
   
+  // Check for particle restart
   prtcl_rst_flag = pin->GetOrAddInteger("problem","prtcl_rst_flag",0);
   if (prtcl_rst_flag) {
     std::string prst_fname = pin->GetString("problem","prtcl_res_file");
@@ -79,28 +49,21 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::fclose(pfile);
     delete [] gen_data;
   }
-  std::cout << "Particles: nprtcl_thispack = " << nprtcl_thispack << std::endl;
-  std::cout << "Particles: nprtcl_perspec_thispack = " << nprtcl_perspec_thispack << std::endl;
->>>>>>> origin/main
   // select particle type
   {
     std::string ptype = pin->GetString("particles","particle_type");
     if (ptype.compare("cosmic_ray") == 0) {
-<<<<<<< HEAD
-
       particle_type = ParticleType::cosmic_ray;
 
       // read number of particles per cell, and calculate number of particles this pack
       Real ppc = pin->GetOrAddReal("particles","ppc",1.0);
 
       // compute number of particles as real number, since ppc can be < 1
-      auto &indcs = pmy_pack->pmesh->mb_indcs;
-      int ncells = indcs.nx1*indcs.nx2*indcs.nx3;
       Real r_npart = ppc*static_cast<Real>((pmy_pack->nmb_thispack)*ncells);
-      nprtcl_thispack = static_cast<int>(r_npart); // then cast to integer
+      nprtcl_thispack = static_cast<int>(r_npart) * nspecies; // then cast to integer
+      nprtcl_perspec_thispack = static_cast<int>(r_npart);
 						   
     } else if (ptype.compare("star") == 0) {
-
       particle_type = ParticleType::star;
       nprtcl_thispack = 0; // initialize to zero
 
@@ -141,25 +104,24 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       }
       infile.close();
       nprtcl_thispack = particle_list.size(); 
+      nprtcl_perspec_thispack = nprtcl_thispack; // For stars, same value
 
       // Print number of particles loaded
       std::cout << "Loaded " << nprtcl_thispack 
 	        << " star particles from file " << particle_file << std::endl;
-=======
-      particle_type = ParticleType::cosmic_ray;
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle type = '" << ptype << "' not recognized"
                 << std::endl;
       std::exit(EXIT_FAILURE);
->>>>>>> origin/main
     }
   }
 
   // select pusher algorithm
   {
     std::string ppush = pin->GetString("particles","pusher");
-<<<<<<< HEAD
+    std::string interp = pin->GetOrAddString("particles","interpolation", "tsc");
+    
     if (ppush.compare("drift") == 0) {
       pusher = ParticlesPusher::drift;
     } else if (ppush.compare("rk4_gravity") == 0) {
@@ -173,14 +135,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       r_200     = pin->GetReal("potential", "r_200");
       rho_mean  = pin->GetReal("potential", "rho_mean");
       par_grav_dx = pin->GetOrAddReal("particles", "grav_dx", 1e-6);
-    } else {
-=======
-    std::string interp = pin->GetOrAddString("particles","interpolation", "tsc");
-    
-    if (ppush.compare("drift") == 0) {
-      pusher = ParticlesPusher::drift;
-    }
-    else if (ppush.compare("boris") ==0  ){
+    } else if (ppush.compare("boris") == 0) {
       if(interp.compare("tsc") == 0) pusher = ParticlesPusher::boris_tsc;
       else if(interp.compare("lin") == 0) pusher = ParticlesPusher::boris_lin;
       else {
@@ -189,9 +144,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                 <<std::endl;
         std::exit(EXIT_FAILURE);
       }
-    }
-    else {
->>>>>>> origin/main
+    } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle pusher must be specified in <particles> block"
                 <<std::endl;
@@ -205,7 +158,6 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << "Particles only work in 2D/3D, but 1D problem initialized" <<std::endl;
     std::exit(EXIT_FAILURE);
   }
-<<<<<<< HEAD
 
   // stars must be 3D
   if (particle_type == ParticleType::star and not pmy_pack->pmesh->three_d) {
@@ -214,31 +166,50 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
 
+  // IMPORTANT: Star particles and cosmic ray particles are MUTUALLY EXCLUSIVE
+  // They cannot be used simultaneously in the same simulation
+  // Each type has different array requirements and compatible pushers
+  
   switch (particle_type) {
-    case ParticleType::cosmic_ray:
-      {
-        int ndim=4;
-        if (pmy_pack->pmesh->three_d) {ndim+=2;}
-        nrdata = ndim;
-        nidata = 2;
-        break;
-      }
     case ParticleType::star:
       {
+        // Star particles need 9 real data slots:
+        // IPX(0), IPVX(1), IPY(2), IPVY(3), IPZ(4), IPVZ(5) - position & velocity
+        // Plus 3 additional slots for star-specific data (mass, age, metallicity, etc.)
         nrdata = 9;
-=======
-  switch (particle_type) {
+        nidata = 3;  // PGID, PTAG, PSP
+        
+        // Enforce compatible pushers for star particles
+        if (pusher == ParticlesPusher::boris_lin || pusher == ParticlesPusher::boris_tsc) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+                    << "Boris pushers are incompatible with star particles!" << std::endl
+                    << "Boris pushers require magnetic field tracking arrays not allocated for stars." << std::endl
+                    << "Use 'rk4_gravity' or 'drift' pusher for star particles." << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        break;
+      }
     case ParticleType::cosmic_ray:
       {
-        int ndim=5+7;
-        if (pmy_pack->pmesh->three_d) {ndim+=2;}
-        nrdata = ndim;
->>>>>>> origin/main
-        nidata = 3;
+        // Cosmic ray particles need 14 real data slots for magnetic field tracking:
+        // IPX(0), IPVX(1), IPY(2), IPVY(3), IPZ(4), IPVZ(5) - position & velocity
+        // IPM(6) - mass/charge ratio
+        // IPBX(7), IPBY(8), IPBZ(9) - magnetic field components
+        // IPDX(10), IPDY(11), IPDZ(12), IPDB(13) - displacement tracking
+        nrdata = 14;
+        nidata = 3;  // PGID, PTAG, PSP
+        
+        // Warn if using gravity pusher with cosmic rays (not forbidden but unusual)
+        if (pusher == ParticlesPusher::rk4_gravity) {
+          std::cout << "### WARNING: rk4_gravity pusher is designed for star particles." << std::endl
+                    << "### It will work with cosmic rays but may not be physically appropriate." << std::endl;
+        }
         break;
       }
     default:
-      break;
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+                << "Unknown particle type!" << std::endl;
+      std::exit(EXIT_FAILURE);
   }
   
   Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
@@ -246,7 +217,6 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // allocate boundary object
   pbval_part = new ParticlesBoundaryValues(this, pin);
-<<<<<<< HEAD
 
   // Initialize Star particles if particle type is "star"
   {
@@ -291,7 +261,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 	pr(8, p) = GetNthSNTime(pr(7,p), pr(6,p), unit_time, 0); // time of next SN
 
         // Print particle initialization
-        // Kokkos::printf("Initialized star particle %d in GID %d at position (%.2f, %.2f, %.2f)\n",
+        // printf("Initialized star particle %d in GID %d at position (%.2f, %.2f, %.2f)\n",
         //          p, gids + m, pos_data(0, p), pos_data(1, p), pos_data(2, p));
       });
     
@@ -299,9 +269,6 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       dtnew = std::min(dtnew, size.h_view(0).dx3);
     }
   }
-=======
-  std::cout << "Exiting Particles constructor" << std::endl;
->>>>>>> origin/main
 }
 
 //----------------------------------------------------------------------------------------
@@ -316,7 +283,6 @@ Particles::~Particles() {
 // those with tag numbers less than ntrack.
 
 void Particles::CreateParticleTags(ParameterInput *pin) {
-<<<<<<< HEAD
   std::string assign = pin->GetOrAddString("particles","assign_tag","index_order");
 
   // tags are assigned sequentially within this rank, starting at 0 with rank=0
@@ -336,10 +302,14 @@ void Particles::CreateParticleTags(ParameterInput *pin) {
   } else if (assign.compare("rank_order") == 0) {
     int myrank = global_variable::my_rank;
     int nranks = global_variable::nranks;
+    auto &nspecies_ = nspecies;
     auto &pi = prtcl_idata;
+    auto &nprtcl_total_ = pmy_pack->pmesh->nprtcl_total;
+    auto &nprtcl_perspec_thispack_ = nprtcl_perspec_thispack;
     par_for("ptags",DevExeSpace(),0,(nprtcl_thispack-1),
     KOKKOS_LAMBDA(const int p) {
-      pi(PTAG,p) = myrank + nranks*p;
+      int spec = (nprtcl_perspec_thispack_ > 0) ? p / nprtcl_perspec_thispack_ : 0;
+      pi(PTAG,p) = myrank + nranks*p + spec*nprtcl_total_/nspecies_ ;
     });
 
   // tag algorithm not recognized, so quit with error
@@ -348,48 +318,6 @@ void Particles::CreateParticleTags(ParameterInput *pin) {
               << "Particle tag assinment type = '" << assign << "' not recognized"
               << std::endl;
     std::exit(EXIT_FAILURE);
-=======
-  if (!prtcl_rst_flag){
-    std::string assign = pin->GetOrAddString("particles","assign_tag","index_order");
-    // tags are assigned sequentially within this rank, starting at 0 with rank=0
-    if (assign.compare("index_order") == 0) {
-      int tagstart = 0;
-      for (int n=1; n<=global_variable::my_rank; ++n) {
-        tagstart += pmy_pack->pmesh->nprtcl_eachrank[n-1] / nspecies;
-      }
-
-      auto &nspecies_ = nspecies;
-      auto &pi = prtcl_idata;
-      auto &nprtcl_total_ = pmy_pack->pmesh->nprtcl_total;
-      auto &nprtcl_perspec_thispack_ = nprtcl_perspec_thispack;
-      par_for("ptags",DevExeSpace(),0,(nprtcl_thispack-1),
-      KOKKOS_LAMBDA(const int p) {
-        int spec = p / nprtcl_perspec_thispack_;
-        pi(PTAG,p) = tagstart + p + spec*nprtcl_total_/nspecies_;
-      });
-
-    // tags are assigned sequentially across ranks
-    } else if (assign.compare("rank_order") == 0) {
-      int myrank = global_variable::my_rank;
-      int nranks = global_variable::nranks;
-      auto &nspecies_ = nspecies;
-      auto &pi = prtcl_idata;
-      auto &nprtcl_total_ = pmy_pack->pmesh->nprtcl_total;
-      auto &nprtcl_perspec_thispack_ = nprtcl_perspec_thispack;
-      par_for("ptags",DevExeSpace(),0,(nprtcl_thispack-1),
-      KOKKOS_LAMBDA(const int p) {
-        int spec = p / nprtcl_perspec_thispack_;
-        pi(PTAG,p) = myrank + nranks*p + spec*nprtcl_total_/nspecies_ ;
-      });
-
-    // tag algorithm not recognized, so quit with error
-    } else {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-                << "Particle tag assinment type = '" << assign << "' not recognized"
-                << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
->>>>>>> origin/main
   }
 }
 

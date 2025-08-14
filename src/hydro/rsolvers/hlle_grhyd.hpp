@@ -1,13 +1,5 @@
 #ifndef HYDRO_RSOLVERS_HLLE_GRHYD_HPP_
 #define HYDRO_RSOLVERS_HLLE_GRHYD_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file hlle_grhyd.hpp
-//! \brief HLLE Riemann solver for general relativistic hydrodynamics.
-//!
 //! Notes:
 //!  - cf. HLLE solver in hlle_rel_no_transform.cpp in Athena++
 

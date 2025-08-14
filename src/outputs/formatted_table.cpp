@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file formatted_table.cpp
-//  \brief writes output data as a formatted (ASCI) table.  Since outputing data in this
-//  format is very slow and creates large files, it cannot be used for anything other than
-//  1D slices.  Code will issue error if this format is selected for 2D or 3D outputs.
-//  Output is written to a single file even with multiple MeshBlocks and MPI ranks.
 
 #include <sys/stat.h>  // mkdir
 

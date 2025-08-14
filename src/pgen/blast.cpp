@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena++ astrophysical MHD code, Kokkos version
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file blast.cpp
-//! \brief Problem generator for spherical blast wave problem.
-//!
-//! REFERENCE: P. Londrillo & L. Del Zanna, "High-order upwind schemes for
-//!   multidimensional MHD", ApJ, 530, 508 (2000), and references therein.
 
 #include <math.h>
 

@@ -1,13 +1,5 @@
 #ifndef MESH_MESHBLOCK_HPP_
 #define MESH_MESHBLOCK_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file meshblock.hpp
-//! \brief defines MeshBlock class, a very lightweight class to store data about
-//! MeshBlocks inside a given MeshBlockPack.
 //! The Mesh is the overall grid structure while MeshBlocks are local patches of data
 //! (potentially on different levels) that tile the entire domain and are stored in
 //! containers called MashBlockPack.

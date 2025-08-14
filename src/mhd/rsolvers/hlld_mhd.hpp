@@ -1,13 +1,5 @@
 #ifndef MHD_RSOLVERS_HLLD_MHD_HPP_
 #define MHD_RSOLVERS_HLLD_MHD_HPP_
-//========================================================================================
-// Athena++ astrophysical MHD code
-// Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
-// Licensed under the 3-clause BSD License, see LICENSE file for details
-//========================================================================================
-//! \file hlld_mhd.hpp
-//! \brief HLLD Riemann solver for ideal gas EOS in MHD.
-//!
 //! REFERENCES:
 //! - T. Miyoshi & K. Kusano, "A multi-state HLL approximate Riemann solver for ideal
 //!   MHD", JCP, 208, 315 (2005)

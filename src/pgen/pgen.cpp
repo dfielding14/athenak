@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file pgen.cpp
-//! \brief Implementation of constructors and functions in class ProblemGenerator.
-//! Default constructor calls problem generator function, while  constructor for restarts
-//! reads data from restart file, as well as re-initializing problem-specific data.
-
 #include <iostream>
 #include <string>
 #include <utility>

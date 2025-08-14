@@ -1,14 +1,4 @@
 //========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file orszag-tang.c
-//  \brief Problem generator for Orszag-Tang vortex problem.
-//
-// REFERENCE: For example, see: G. Toth,  "The div(B)=0 constraint in shock capturing
-//   MHD codes", JCP, 161, 605 (2000)
-//========================================================================================
 
 // C++ headers
 #include <math.h>

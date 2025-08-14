@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena++ (Kokkos version) astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file ideal_srhyd.cpp
-//! \brief derived class that implements ideal gas EOS in special relativistic hydro
-//! Conserved to primitive variable inversion using algorithm described in Appendix C
-//! of Galeazzi et al., PhysRevD, 88, 064009 (2013). Equation refs are to this paper.
-
 #include <float.h>
 
 #include "athena.hpp"

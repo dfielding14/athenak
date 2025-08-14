@@ -1,13 +1,5 @@
 #ifndef ATHENA_HPP_
 #define ATHENA_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file athena.hpp
-//  \brief contains Athena++ general purpose types, structures, enums, etc.
-
 #include <string>
 
 #include <Kokkos_Core.hpp>
@@ -56,7 +48,8 @@ enum BFieldIndex {IBX=0, IBY=1, IBZ=2, NMAG=3};
 enum MetricIndex {I00=0, I01=1, I02=2, I03=3, I11=4, I12=5, I13=6, I22=7, I23=8, I33=9,
                   NMETRIC=10};
 // array indices for particle arrays
-enum ParticlesIndex {PGID=0, PTAG=1, IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5};
+enum ParticlesIndex {PGID=0, PTAG=1, PSP=2, IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5,
+                     IPM=6, IPBX=7, IPBY=8, IPBZ=9, IPDX=10, IPDY=11, IPDZ=12, IPDB=13};
 
 // integer constants to specify spatial reconstruction methods
 enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz};

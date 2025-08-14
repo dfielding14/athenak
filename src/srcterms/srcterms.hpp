@@ -1,13 +1,5 @@
 #ifndef SRCTERMS_SRCTERMS_HPP_
 #define SRCTERMS_SRCTERMS_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file srcterms.hpp
-//! \brief Data, functions, and classes to implement various source terms in the hydro
-//! and/or MHD equations of motion.  Currently implemented:
 //!  (1) constant (gravitational) acceleration - for RTI
 //!  (2) shearing box in 2D (x-z), for both hydro and MHD
 //!  (3) random forcing to drive turbulence - implemented in TurbulenceDriver class

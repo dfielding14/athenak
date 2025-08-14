@@ -1,13 +1,5 @@
 #ifndef HYDRO_RSOLVERS_ADVECT_HYD_HPP_
 #define HYDRO_RSOLVERS_ADVECT_HYD_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file advect_hyd.hpp
-//! \brief Riemann solver for pure advection problems (v = constant).  Simply computes the
-//! upwind flux of each variable.  Can only be used for isothermal EOS.
 
 namespace hydro {
 //----------------------------------------------------------------------------------------

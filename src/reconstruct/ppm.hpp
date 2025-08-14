@@ -1,13 +1,5 @@
 #ifndef RECONSTRUCT_PPM_HPP_
 #define RECONSTRUCT_PPM_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file ppm.hpp
-//! \brief piecewise parabolic reconstruction with both Collela-Woodward (CW) limiters
-//! (implemented in the PPM4 inline function) and Collela-Sekora (CS) extremum preserving
 //! limiters (implemented in the PPMX inline function) for a Cartesian-like coordinates
 //! with uniform spacing.
 //!

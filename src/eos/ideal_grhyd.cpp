@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena++ (Kokkos version) astrophysical MHD code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file ideal_grhyd.cpp
-//! \brief derived class that implements ideal gas EOS in general relativistic hydro
-//! Uses the same algorithm as implemented for SR hydro.
-
-#include <float.h>
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"

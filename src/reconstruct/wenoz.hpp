@@ -1,13 +1,5 @@
 #ifndef RECONSTRUCT_WENOZ_HPP_
 #define RECONSTRUCT_WENOZ_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file wenoz.hpp
-//! \brief WENO-Z reconstruction for a Cartesian-like coordinate with uniform spacing.
-//!
 //! REFERENCES:
 //! Borges R., Carmona M., Costa B., Don W.S. , "An improved weighted essentially
 //! non-oscillatory scheme for hyperbolic conservation laws" , JCP, 227, 3191 (2008)

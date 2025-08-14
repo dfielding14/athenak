@@ -1,13 +1,5 @@
 #ifndef PGEN_PGEN_HPP_
 #define PGEN_PGEN_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file pgen.hpp
-//  \brief definitions for ProblemGenerator class
-
 #include <functional>
 #include <memory>
 #include <vector>

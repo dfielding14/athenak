@@ -1,13 +1,5 @@
 #ifndef HYDRO_RSOLVERS_HLLE_HYD_HPP_
 #define HYDRO_RSOLVERS_HLLE_HYD_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file hlle_hyd.hpp
-//! \brief Contains HLLE Riemann solver for hydrodynamics
-//!
 //! Computes fluxes using the Harten-Lax-vanLeer-Einfeldt (HLLE) Riemann solver.  This
 //! flux is very diffusive, especially for contacts, and so it is not recommended for
 //! applications. However it is better than LLF. Einfeldt et al.(1991) prove it is

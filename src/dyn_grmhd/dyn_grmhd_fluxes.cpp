@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file dyngr_fluxes.cpp
-//  \brief Calculate 3D fluxes for hydro
-
-#include <iostream>
-//#include <stdio.h>
 
 #include "athena.hpp"
 #include "athena_tensor.hpp"

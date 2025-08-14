@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena++ astrophysical MHD code
-// Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
-// Licensed under the 3-clause BSD License, see LICENSE file for details
-//========================================================================================
-//! \file prolong_prims.cpp
-//! \brief functions to convert conserved to primitive variables (and vice-versa) in
-//! boundary buffers where prolongation is used at fine/coarse level boundaries.  This
-//! enables prolongation in either the conserved or primitive variables.
-#include <cstdlib>
 #include <iostream>
 #include <string>
 

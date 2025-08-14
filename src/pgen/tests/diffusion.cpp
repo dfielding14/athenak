@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaK astrophysical fluid dynamics and numerical relativity code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file diffusion.cpp
-//! \brief problem generator for tests of diffusion modules (viscosity, resistivity,
-//! thermal conduction).  Sets up Gaussian profile in x-direction.
-//! CURRENTLY ONLY VISCOSITY IMPLEMENTED
-//! This file also contains a function to compute L1 errors in solution, called in
 //! Driver::Finalize().
 
 // C headers

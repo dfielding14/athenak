@@ -1,13 +1,5 @@
 #ifndef EOS_PRIMITIVE_SOLVER_RESET_FLOOR_HPP_
 #define EOS_PRIMITIVE_SOLVER_RESET_FLOOR_HPP_
-//========================================================================================
-// PrimitiveSolver equation-of-state framework
-// Copyright(C) 2023 Jacob M. Fields <jmf6719@psu.edu>
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file reset_floor.hpp
-//  \brief Describes an error floor that simply resets nonphysical values.
-//
 //  If the density or pressure fall below the atmosphere, they get floored.
 //  We impose similar limits for D and tau. If the density is floored,
 //  the velocity is zeroed out and the pressure is also reset to the floor.

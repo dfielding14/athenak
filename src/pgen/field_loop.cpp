@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaK: astrophysical fluid dynamics & numerical relativity code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file field_loop.cpp
-//! \brief Problem generator for advection tests with and without the shearing box. Can be
-//! used with Hydro, but only for advection of density cylinders in shearing box.  Can be
-//! used in MHD for advection of field loop both with and without shearing box.
-//!
 //! Can only be run in 2D or 3D.  Input parameters are:
 //!  -  problem/rad   = radius of field loop
 //!  -  problem/amp   = amplitude of vector potential (and therefore B)
@@ -388,7 +378,6 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   // Initialize the ADM variables if necessary
   if (pmbp->padm != nullptr) {
-<<<<<<< HEAD
     int n1 = indcs.nx1 + 2*indcs.ng;
     int n2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*indcs.ng) : 1;
     int n3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*indcs.ng) : 1;
@@ -420,9 +409,6 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       adm.vK_dd(m, 2, 2, k, j, i) = 0.0;
     });
 
-=======
-    pmbp->padm->SetADMVariables(pmbp);
->>>>>>> origin/main
     // For DynGRMHD, the conserved variables can't be initialized until the ADM variables
     // have been populated.
     pmbp->pdyngr->PrimToConInit(is, ie, js, je, ks, ke);

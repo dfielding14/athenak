@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaK astrophysical fluid dynamics & numerical relativity code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and other code contributors
-// Licensed under the 3-clause BSD License, see LICENSE file for details
-//========================================================================================
-//! \file orbital_advection.cpp
-//! \brief constructor for OrbitalAdvection abstract base class.
-
-#include <algorithm>
-#include <cstdlib>
 #include <iostream>
 #include <utility>
 

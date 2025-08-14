@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena++ astrophysical MHD code
-// Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
-// Licensed under the 3-clause BSD License, see LICENSE file for details
-//========================================================================================
-//! \file bvals_cc.cpp
-//! \brief functions to pack/send and recv/unpack boundary values for cell-centered (CC)
-//! Mesh variables.
-//! Prolongation of CC variables  occurs in ProlongateCC() function called from task list
-
 #include <cstdlib>
 #include <iostream>
 #include <utility>

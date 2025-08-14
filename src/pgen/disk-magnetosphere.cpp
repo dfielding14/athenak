@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena++ astrophysical MHD code
-// Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
-// Licensed under the 3-clause BSD License, see LICENSE file for details
-//========================================================================================
-//! \file disk.cpp
-//! \brief Initializes stratified Keplerian accretion disk in both cylindrical and
-//! spherical polar coordinates.  Initial conditions are in vertical hydrostatic eqm.
-
-// C headers
 
 // C++ headers
 #include <algorithm>  // min

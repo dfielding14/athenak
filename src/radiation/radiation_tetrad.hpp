@@ -1,13 +1,5 @@
 #ifndef RADIATION_RADIATION_TETRAD_HPP_
 #define RADIATION_RADIATION_TETRAD_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file radiation_tetrad.hpp
-//  \brief computes orthonormal tetrad in Cartesian Kerr-Schild
-
 #include <math.h>
 
 #include "athena.hpp"

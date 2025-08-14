@@ -1,19 +1,10 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file z4c.cpp
-//! \brief implementation of Z4c class constructor and assorted other functions
-
-#include <math.h>
-#include <sys/stat.h>  // mkdir
 
 #include <iostream>
 #include <string>
 #include <algorithm>
 #include <memory>    // make_unique, unique_ptr
 #include <vector>    // vector
+#include <sys/stat.h>  // mkdir
 #include <Kokkos_Core.hpp>
 
 #include "athena.hpp"

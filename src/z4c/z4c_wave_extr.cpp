@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena++ astrophysical MHD code
-// Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
-// Licensed under the 3-clause BSD License, see LICENSE file for details
-//========================================================================================
-//! \file calculate_weyl_scalars.cpp
-//  \brief implementation of functions in the Z4c class to interpolate weyl scalar
-//  and output the waveform
-
-// C++ standard headers
 #include <unistd.h>
 #include <cstdio>
 #include <stdexcept>

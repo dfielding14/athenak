@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file gr_monopole.cpp
-//  \brief Problem generator for monopole problem (following split monopole described in
-//  Blandford-Znajek 1977 and implemented in, e.g., harmpi). Based on gr_torus pgen that
-//  is included in this repository, with edits by GNW.
-
 // C/C++ headers
 #include <stdio.h>
 #include <sys/stat.h>

@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file shock_cloud.cpp
-//! \brief Problem generator for shock-cloud problem: a planar shock impacting a single
-//! spherical cloud. Input parameters are:
-//!    - problem/Mach   = Mach number of incident shock
-//!    - problem/drat   = density ratio of cloud to ambient
 //!    - problem/beta   = ratio of Pgas/Pmag
 //! The cloud radius is fixed at 1.0.  The center of the coordinate system defines the
 //! center of the cloud, and should be in the middle of the cloud. The shock is initially

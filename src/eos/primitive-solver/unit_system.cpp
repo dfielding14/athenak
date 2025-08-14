@@ -1,16 +1,11 @@
-//========================================================================================
-// PrimitiveSolver equation-of-state framework
-// Copyright(C) 2023 Jacob M. Fields <jmf6719@psu.edu>
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file unit_system.cpp
-//  \brief Defines functions for making new unit systems.
 #include "unit_system.hpp"
+
+namespace Primitive {
 
 #define PS_SQR(x) ((x)*(x))
 #define PS_CUBE(x) ((x)*(x)*(x))
 
-Primitive::UnitSystem Primitive::MakeCGS() {
+UnitSystem MakeCGS() {
   return UnitSystem{
     2.99792458e10, // c, cm/s
     6.67408e-8, // G, cm^3 g^-1 s^-2
@@ -28,7 +23,7 @@ Primitive::UnitSystem Primitive::MakeCGS() {
   };
 }
 
-Primitive::UnitSystem Primitive::MakeGeometricKilometer() {
+UnitSystem MakeGeometricKilometer() {
   return UnitSystem{
     1.0, // c
     1.0, // G
@@ -46,7 +41,7 @@ Primitive::UnitSystem Primitive::MakeGeometricKilometer() {
   };
 }
 
-Primitive::UnitSystem Primitive::MakeGeometricSolar() {
+UnitSystem MakeGeometricSolar() {
   return UnitSystem{
     1.0, // c
     1.0, // G
@@ -65,7 +60,7 @@ Primitive::UnitSystem Primitive::MakeGeometricSolar() {
   };
 }
 
-Primitive::UnitSystem Primitive::MakeNuclear() {
+UnitSystem MakeNuclear() {
   return UnitSystem{
     1.0, // c
     CGS.G * CGS.MeV/(CGS.c*CGS.c*CGS.c*CGS.c)*1e13, // G, fm
@@ -83,7 +78,7 @@ Primitive::UnitSystem Primitive::MakeNuclear() {
   };
 }
 
-Primitive::UnitSystem Primitive::MakeMKS() {
+UnitSystem MakeMKS() {
   return UnitSystem{
     CGS.c/1e2,        // c
     CGS.G/1e3,        // G
@@ -103,3 +98,4 @@ Primitive::UnitSystem Primitive::MakeMKS() {
 
 #undef PS_SQR
 #undef PS_CUBE
+}

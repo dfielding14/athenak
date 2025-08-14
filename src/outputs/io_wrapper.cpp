@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file io_wrapper.cpp
-//! \brief functions that provide wrapper for MPI-IO versus serial input/output
-
-#include <cstdio>
-#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -61,7 +51,7 @@ int IOWrapper::Open(const char* fname, FileMode rw, bool single_file_per_rank) {
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
+      printf("%.*s\n", resultlen, msg);
       MPI_Abort(MPI_COMM_WORLD, 1);
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "File '" << fname << "' could not be opened"
@@ -110,7 +100,7 @@ std::size_t IOWrapper::Read_bytes(void *buf, IOWrapperSizeT size, IOWrapperSizeT
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
+      printf("%.*s\n", resultlen, msg);
       return 0;
     }
     int nread;
@@ -142,7 +132,7 @@ std::size_t IOWrapper::Read_bytes_at(void *buf, IOWrapperSizeT size,
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
+      printf("%.*s\n", resultlen, msg);
       return 0;
     }
     int nread;
@@ -176,7 +166,7 @@ std::size_t IOWrapper::Read_bytes_at_all(void *buf, IOWrapperSizeT size,
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
+      printf("%.*s\n", resultlen, msg);
       return 0;
     }
     int nread;
@@ -208,7 +198,7 @@ std::size_t IOWrapper::Read_Reals(void *buf, IOWrapperSizeT cnt,
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
+      printf("%.*s\n", resultlen, msg);
       return 0;
     }
     int nread;
@@ -238,7 +228,7 @@ std::size_t IOWrapper::Read_Reals_at(void *buf, IOWrapperSizeT cnt,
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
+      printf("%.*s\n", resultlen, msg);
       return 0;
     }
     int nread;
@@ -271,7 +261,7 @@ std::size_t IOWrapper::Read_Reals_at_all(void *buf, IOWrapperSizeT cnt,
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
+      printf("%.*s\n", resultlen, msg);
       return 0;
     }
     int nread;
@@ -346,7 +336,7 @@ std::size_t IOWrapper::Write_any_type(const void *buf, IOWrapperSizeT cnt,
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
+      printf("%.*s\n", resultlen, msg);
       return 0;
     }
     int nwrite;
@@ -443,7 +433,7 @@ std::size_t IOWrapper::Write_any_type_at(const void *buf, IOWrapperSizeT cnt,
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
+      printf("%.*s\n", resultlen, msg);
       return 0;
     }
     int nwrite;
@@ -541,7 +531,7 @@ std::size_t IOWrapper::Write_any_type_at_all(const void *buf, IOWrapperSizeT cnt
       char msg[MPI_MAX_ERROR_STRING];
       int resultlen;
       MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
+      printf("%.*s\n", resultlen, msg);
       return 0;
     }
     int nwrite;

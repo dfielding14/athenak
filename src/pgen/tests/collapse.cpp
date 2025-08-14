@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file collapse.cpp
-//! \brief Problem generator for Oppenheimer-Snyder spherical dust collapse in full GR.
-//! Can be done in full GR with DynGRMHD and Z4c, or can optionally be done with an
-//! analytic metric for DynGRMHD alone.
-
 #include <math.h>
 
 #include <iostream>

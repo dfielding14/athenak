@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file turb_amr_test.cpp
-//  \brief Test problem for turbulence driving with AMR/SMR
-//  Sets up a uniform density/pressure box with refined region to test turbulence driving
-
-#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <limits>

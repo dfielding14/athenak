@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file vtk_mesh.cpp
-//! \brief writes mesh data in (legacy) vtk format.
-//! Data is written in STRUCTURED_POINTS geometry, in BINARY format, and in FLOAT type
-//! Data over multiple MeshBlocks and MPI ranks is written to a single file using MPI-IO.
-
 // TODO(@user): create new communicator for MPI-IO for slicing, including only those ranks
 // that have MeshBlocks in slice.  Current design segfaults with slicing if there are
 // ranks that do not write.

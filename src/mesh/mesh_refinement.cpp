@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file mesh_refinement.cpp
-//! \brief Implements constructor and functions in MeshRefinement class.
-//! Note while restriction functions for CC and FC data are implemented in this file,
-//! prolongation operators are implemented as INLINE functions in prolongation.hpp (and
-//! are used both here for AMR and in the BVals class at fine/coarse boundaries).
 
 #include <cstdint>   // int32_t
 #include <iostream>
@@ -1470,7 +1460,7 @@ void MeshRefinement::RefineParticles() {
       }
     }
     if (not in_place) {
-      Kokkos::printf("Error: particle orphaned!\n");
+      printf("Error: particle orphaned!\n");
     }
   });
 

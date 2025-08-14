@@ -1,13 +1,5 @@
 #ifndef BVALS_BVALS_HPP_
 #define BVALS_BVALS_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file bvals.hpp
-//! \brief defines classes for handling boundary values for both particles as well as all
-//! types of Mesh variables. For Mesh variables, methods for cell-centered and
 //! face-centered fields are currently implemented, based on derived classes from the
 //! generic MeshBoundaryValue class.  A separate ParticlesBoundaryValues class is
 //! implemented for partciles.

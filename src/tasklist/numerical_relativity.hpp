@@ -1,13 +1,5 @@
 #ifndef TASKLIST_NUMERICAL_RELATIVITY_HPP_
 #define TASKLIST_NUMERICAL_RELATIVITY_HPP_
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file numerical_relativity.hpp
-//  \brief NumericalRelativity handles the creation of a TaskList for NR modules.
-
 #include <vector>
 #include <map>
 #include <functional>

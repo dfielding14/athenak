@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena++ astrophysical MHD code, Kokkos version
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file z4c_two_puncture.cpp
-//  \brief Problem generator for two punctures
-
-#include <algorithm>
-#include <cmath>
 #include <iostream>
 #include <sstream>
 #include <string>

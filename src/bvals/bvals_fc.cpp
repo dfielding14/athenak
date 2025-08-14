@@ -1,13 +1,3 @@
-//========================================================================================
-// Athena++ astrophysical MHD code
-// Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
-// Licensed under the 3-clause BSD License, see LICENSE file for details
-//========================================================================================
-//! \file bvals_fc.cpp
-//! \brief functions to pack/send and recv/unpack boundary values for face-centered (FC)
-//! Mesh variables.
-//! Prolongation of FC variables  occurs in ProlongateFC() function called from task list
-
 #include <cstdlib>
 #include <iostream>
 #include <utility>

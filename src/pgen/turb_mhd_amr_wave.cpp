@@ -1,13 +1,3 @@
-//========================================================================================
-// AthenaK astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file turb_mhd_amr_wave.cpp
-//! \brief Problem generator for testing turbulence driving with MHD and dynamically 
-//!        moving refinement regions (traveling wave) to test div(B) preservation
-//!
-//! PURPOSE: This test problem is designed to verify that div(B) remains zero when
 //! refinement boundaries move through the domain. It combines:
 //! - Turbulence driving (to create complex field structures)
 //! - MHD with initial magnetic field
