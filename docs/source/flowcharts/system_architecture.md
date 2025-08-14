@@ -3,100 +3,91 @@
 ## Complete System Overview
 
 ```{mermaid}
-flowchart TB
-    subgraph Input["Input Layer"]
+flowchart TD
+    subgraph Input["📥 Input Layer"]
+        direction LR
         ATHINPUT[athinput file]
         RESTART[restart file]
         EXTDATA[external data]
     end
 
-    subgraph Core["Core Infrastructure"]
-        MAIN[main.cpp]
-        MESH[Mesh Module]
-        DRIVER[Driver Module]
-        TASKS[TaskList]
-        COORDS[Coordinates]
+    subgraph Core["⚙️ Core Infrastructure"]
+        MAIN[main.cpp<br/>Entry Point]
+        MESH[Mesh Module<br/>Domain Decomposition]
+        DRIVER[Driver Module<br/>Time Integration]
+        TASKS[TaskList<br/>Execution Manager]
+        COORDS[Coordinates<br/>Geometry]
     end
 
-    subgraph Physics["Physics Modules"]
-        HYDRO[Hydrodynamics]
-        MHD[Magnetohydrodynamics]
-        RAD[Radiation]
-        Z4C[Z4c Relativity]
-        GRMHD[DynGRMHD]
-        PARTICLES[Particles]
-        IONNEUTRAL[Ion-Neutral]
+    subgraph PhysicsRow1["🔬 Physics Modules (Primary)"]
+        direction LR
+        HYDRO[Hydrodynamics<br/>Euler Equations]
+        MHD[MHD<br/>Maxwell+Fluid]
+        RAD[Radiation<br/>Transport]
     end
 
-    subgraph Numerical["Numerical Methods"]
-        RECON[Reconstruction]
-        RIEMANN[Riemann Solvers]
-        EOS[Equations of State]
-        DIFF[Diffusion]
+    subgraph PhysicsRow2["🔬 Physics Modules (Advanced)"]
+        direction LR
+        Z4C[Z4c<br/>Relativity]
+        GRMHD[DynGRMHD<br/>Relativistic MHD]
+        PARTICLES[Particles<br/>Lagrangian]
+        IONNEUTRAL[Ion-Neutral<br/>Two-Fluid]
     end
 
-    subgraph Support["Support Systems"]
-        BVALS[Boundaries/MPI]
-        OUTPUTS[Outputs]
-        SRCTERMS[Source Terms]
-        SHEARBOX[Shearing Box]
-        PGEN[Problem Generators]
+    subgraph Numerical["🔢 Numerical Methods"]
+        direction LR
+        RECON[Reconstruction<br/>PLM/PPM/WENOZ]
+        RIEMANN[Riemann<br/>Solvers]
+        EOS[EOS<br/>Thermodynamics]
+        DIFF[Diffusion<br/>Viscosity/Resistivity]
     end
 
-    subgraph Output["Output Layer"]
-        VTK[VTK Files]
-        BIN[Binary Files]
-        RST[Restart Files]
-        HST[History Files]
-        PART[Particle Files]
+    subgraph Support["🛠️ Support Systems"]
+        direction LR
+        BVALS[Boundaries<br/>MPI Comm]
+        OUTPUTS[Outputs<br/>I/O Manager]
+        SRCTERMS[Source Terms<br/>Forces/Cooling]
+        SHEARBOX[Shearing Box<br/>Disks]
+        PGEN[Problem<br/>Generators]
     end
 
-    %% Input connections
-    ATHINPUT --> MAIN
-    RESTART --> MAIN
-    EXTDATA --> PGEN
+    subgraph Output["💾 Output Layer"]
+        direction LR
+        VTK[VTK<br/>Visualization]
+        BIN[Binary<br/>Analysis]
+        RST[Restart<br/>Checkpoints]
+        HST[History<br/>Time Series]
+        PART[Particle<br/>Tracking]
+    end
 
-    %% Core connections
+    %% Vertical flow - main pipeline
+    Input --> MAIN
     MAIN --> MESH
     MESH --> DRIVER
     DRIVER --> TASKS
-    MESH --> COORDS
+    TASKS --> PhysicsRow1
+    TASKS --> PhysicsRow2
+    PhysicsRow1 --> Numerical
+    PhysicsRow2 --> Numerical
+    Numerical --> Support
+    Support --> OUTPUTS
+    OUTPUTS --> Output
+
+    %% Core connections
+    MESH -.-> COORDS
+    COORDS -.-> PhysicsRow1
+    COORDS -.-> PhysicsRow2
     
-    %% Physics initialization
-    DRIVER --> HYDRO
-    DRIVER --> MHD
-    DRIVER --> RAD
-    DRIVER --> Z4C
+    %% Physics details
     Z4C --> GRMHD
-    DRIVER --> PARTICLES
-    DRIVER --> IONNEUTRAL
-
-    %% Numerical methods used by physics
-    HYDRO --> RECON
-    HYDRO --> RIEMANN
-    HYDRO --> EOS
-    MHD --> RECON
-    MHD --> RIEMANN
-    MHD --> EOS
-    MHD --> DIFF
-    RAD --> RECON
-    GRMHD --> RIEMANN
-    GRMHD --> EOS
-
-    %% Support systems
-    TASKS --> BVALS
-    DRIVER --> OUTPUTS
-    HYDRO --> SRCTERMS
-    MHD --> SRCTERMS
-    MHD --> SHEARBOX
-    MESH --> PGEN
-
-    %% Output generation
-    OUTPUTS --> VTK
-    OUTPUTS --> BIN
-    OUTPUTS --> RST
-    OUTPUTS --> HST
-    PARTICLES --> PART
+    
+    %% Support connections
+    TASKS -.-> BVALS
+    PhysicsRow1 -.-> SRCTERMS
+    MHD -.-> SHEARBOX
+    MESH -.-> PGEN
+    EXTDATA -.-> PGEN
+    PARTICLES -.-> PART
 
     %% Click handlers for navigation
     click MESH "../modules/mesh.html" "Go to Mesh Module"
@@ -139,38 +130,66 @@ flowchart TB
 ## Execution Flow
 
 ```{mermaid}
-flowchart LR
-    subgraph Init["Initialization Phase"]
-        START[Start] --> PARSE[Parse Input]
-        PARSE --> BUILD[Build Mesh]
-        BUILD --> DECOMP[Domain Decomposition]
-        DECOMP --> PGEN_INIT[Problem Generator]
+flowchart TD
+    subgraph Init["🚀 Initialization Phase"]
+        START([Start Program])
+        PARSE[Parse Input<br/>Read .athinput]
+        BUILD[Build Mesh<br/>Create Grid]
+        DECOMP[Domain Decomposition<br/>MPI Distribution]
+        PGEN_INIT[Problem Generator<br/>Set Initial Conditions]
+        
+        START --> PARSE
+        PARSE --> BUILD
+        BUILD --> DECOMP
+        DECOMP --> PGEN_INIT
     end
 
-    subgraph Evolution["Evolution Loop"]
-        PGEN_INIT --> LOOP{t < tlim?}
-        LOOP -->|Yes| STAGE[RK Stage]
-        STAGE --> TASKS_EXEC[Execute Tasks]
-        TASKS_EXEC --> UPDATE[Update Variables]
-        UPDATE --> NEWDT[Calculate dt]
-        NEWDT --> OUTPUT_CHECK{Output?}
-        OUTPUT_CHECK -->|Yes| WRITE[Write Files]
-        OUTPUT_CHECK -->|No| AMR_CHECK{Refine?}
+    subgraph Evolution["🔄 Main Evolution Loop"]
+        LOOP{{"Time < tlim?"}}
+        
+        subgraph TimeStep["Time Step"]
+            STAGE[RK Stage<br/>Integration]
+            TASKS_EXEC[Execute Tasks<br/>Physics Modules]
+            UPDATE[Update Variables<br/>Conservative → Primitive]
+            NEWDT[Calculate dt<br/>CFL Condition]
+        end
+        
+        subgraph Checks["Periodic Checks"]
+            OUTPUT_CHECK{{"Output Time?"}}
+            WRITE[Write Files<br/>VTK/Binary/History]
+            AMR_CHECK{{"Refine Mesh?"}}
+            REFINE[Mesh Refinement<br/>AMR Operations]
+        end
+        
+        PGEN_INIT --> LOOP
+        LOOP -->|Yes| STAGE
+        STAGE --> TASKS_EXEC
+        TASKS_EXEC --> UPDATE
+        UPDATE --> NEWDT
+        NEWDT --> OUTPUT_CHECK
+        OUTPUT_CHECK -->|Yes| WRITE
+        OUTPUT_CHECK -->|No| AMR_CHECK
         WRITE --> AMR_CHECK
-        AMR_CHECK -->|Yes| REFINE[Mesh Refinement]
+        AMR_CHECK -->|Yes| REFINE
         AMR_CHECK -->|No| LOOP
         REFINE --> LOOP
     end
 
-    subgraph Finalize["Finalization"]
-        LOOP -->|No| FINAL_OUT[Final Output]
-        FINAL_OUT --> CLEANUP[Cleanup]
-        CLEANUP --> END[End]
+    subgraph Finalize["🏁 Finalization"]
+        FINAL_OUT[Final Output<br/>Save Results]
+        CLEANUP[Cleanup<br/>Free Memory]
+        END([End Program])
+        
+        LOOP -->|No| FINAL_OUT
+        FINAL_OUT --> CLEANUP
+        CLEANUP --> END
     end
 
-    style Init fill:#e3f2fd
-    style Evolution fill:#fff9c4
-    style Finalize fill:#efebe9
+    style Init fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style Evolution fill:#fff9c4,stroke:#f57c00,stroke-width:2px
+    style TimeStep fill:#ffffff,stroke:#666,stroke-width:1px
+    style Checks fill:#ffffff,stroke:#666,stroke-width:1px
+    style Finalize fill:#efebe9,stroke:#5d4037,stroke-width:2px
     
     click BUILD "../modules/mesh.html" "Go to Mesh Module"
     click PGEN_INIT "../modules/pgen.html" "Go to Problem Generators"
