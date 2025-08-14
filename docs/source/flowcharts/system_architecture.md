@@ -4,14 +4,14 @@
 
 ```{mermaid}
 flowchart TD
-    subgraph Input["📥 Input Layer"]
+    subgraph Input["Input Layer"]
         direction LR
         ATHINPUT[athinput file]
         RESTART[restart file]
         EXTDATA[external data]
     end
 
-    subgraph Core["⚙️ Core Infrastructure"]
+    subgraph Core["Core Infrastructure"]
         MAIN[main.cpp<br/>Entry Point]
         MESH[Mesh Module<br/>Domain Decomposition]
         DRIVER[Driver Module<br/>Time Integration]
@@ -19,14 +19,14 @@ flowchart TD
         COORDS[Coordinates<br/>Geometry]
     end
 
-    subgraph PhysicsRow1["🔬 Physics Modules (Primary)"]
+    subgraph PhysicsRow1["Physics Modules - Primary"]
         direction LR
         HYDRO[Hydrodynamics<br/>Euler Equations]
         MHD[MHD<br/>Maxwell+Fluid]
         RAD[Radiation<br/>Transport]
     end
 
-    subgraph PhysicsRow2["🔬 Physics Modules (Advanced)"]
+    subgraph PhysicsRow2["Physics Modules - Advanced"]
         direction LR
         Z4C[Z4c<br/>Relativity]
         GRMHD[DynGRMHD<br/>Relativistic MHD]
@@ -34,7 +34,7 @@ flowchart TD
         IONNEUTRAL[Ion-Neutral<br/>Two-Fluid]
     end
 
-    subgraph Numerical["🔢 Numerical Methods"]
+    subgraph Numerical["Numerical Methods"]
         direction LR
         RECON[Reconstruction<br/>PLM/PPM/WENOZ]
         RIEMANN[Riemann<br/>Solvers]
@@ -42,7 +42,7 @@ flowchart TD
         DIFF[Diffusion<br/>Viscosity/Resistivity]
     end
 
-    subgraph Support["🛠️ Support Systems"]
+    subgraph Support["Support Systems"]
         direction LR
         BVALS[Boundaries<br/>MPI Comm]
         OUTPUTS[Outputs<br/>I/O Manager]
@@ -51,7 +51,7 @@ flowchart TD
         PGEN[Problem<br/>Generators]
     end
 
-    subgraph Output["💾 Output Layer"]
+    subgraph Output["Output Layer"]
         direction LR
         VTK[VTK<br/>Visualization]
         BIN[Binary<br/>Analysis]
@@ -131,7 +131,7 @@ flowchart TD
 
 ```{mermaid}
 flowchart TD
-    subgraph Init["🚀 Initialization Phase"]
+    subgraph Init["Initialization Phase"]
         START([Start Program])
         PARSE[Parse Input<br/>Read .athinput]
         BUILD[Build Mesh<br/>Create Grid]
@@ -144,13 +144,13 @@ flowchart TD
         DECOMP --> PGEN_INIT
     end
 
-    subgraph Evolution["🔄 Main Evolution Loop"]
+    subgraph Evolution["Main Evolution Loop"]
         LOOP{{"Time < tlim?"}}
         
         subgraph TimeStep["Time Step"]
             STAGE[RK Stage<br/>Integration]
             TASKS_EXEC[Execute Tasks<br/>Physics Modules]
-            UPDATE[Update Variables<br/>Conservative → Primitive]
+            UPDATE[Update Variables<br/>Conservative to Primitive]
             NEWDT[Calculate dt<br/>CFL Condition]
         end
         
@@ -175,7 +175,7 @@ flowchart TD
         REFINE --> LOOP
     end
 
-    subgraph Finalize["🏁 Finalization"]
+    subgraph Finalize["Finalization"]
         FINAL_OUT[Final Output<br/>Save Results]
         CLEANUP[Cleanup<br/>Free Memory]
         END([End Program])
