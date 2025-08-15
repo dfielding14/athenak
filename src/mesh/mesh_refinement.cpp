@@ -429,7 +429,7 @@ void MeshRefinement::UpdateMeshBlockTree(int &nnew, int &ndel) {
   }
   // sort the lists by level
   if (ctnd > 1) {
-    std::sort(cllderef, &(cllderef[ctnd-1]), Mesh::GreaterLevel);
+    std::sort(cllderef, cllderef + ctnd, Mesh::GreaterLevel);
   }
 
   if (tnderef >= nleaf) {
@@ -1463,7 +1463,7 @@ void MeshRefinement::RefineParticles() {
         if (x1 >= mbsize.d_view(newm).x1min && x1 < mbsize.d_view(newm).x1max &&
             x2 >= mbsize.d_view(newm).x2min && x2 < mbsize.d_view(newm).x2max &&
             x3 >= mbsize.d_view(newm).x3min && x3 < mbsize.d_view(newm).x3max) {
-          pi(PGID, p) = gids + m;
+          pi(PGID, p) = gids + newm;
           in_place = true;
 	  break;
         }
@@ -1476,6 +1476,3 @@ void MeshRefinement::RefineParticles() {
 
   return;
 }
-
-
-
