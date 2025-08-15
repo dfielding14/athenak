@@ -62,8 +62,6 @@ cd build/src
 ./athena -i ../../inputs/tests/linear_wave_hydro.athinput
 ```
 
-<<<<<<< HEAD
-=======
 ### Verify Installation
 ```bash
 # Quick verification test (recommended after build)
@@ -71,7 +69,6 @@ cd tst
 python run_tests.py hydro/hydro_linwave
 ```
 
->>>>>>> origin/main
 ## Code Style and Linting
 
 ### C++ Style Check
@@ -85,11 +82,8 @@ Key style requirements:
 - Line length limit: 90 characters
 - Single closing brace per line
 - No trailing whitespace
-<<<<<<< HEAD
-=======
 - Left-justified pragmas
 - No executable permissions on source files
->>>>>>> origin/main
 
 ### Python Style Check
 ```bash
@@ -114,11 +108,7 @@ flake8 tst/ vis/
 - **radiation/**: Radiation transport solver
 - **z4c/**: Numerical relativity using Z4c formalism
 - **particles/**: Lagrangian particle tracking
-<<<<<<< HEAD
 - **srcterms/**: Source terms including turbulence driving (currently working on SFB turbulence driver)
-=======
-- **srcterms/**: Source terms including turbulence driving
->>>>>>> origin/main
 
 ### Key Design Patterns
 1. **Task-Based Execution**: Uses TaskList for managing computational tasks
@@ -134,10 +124,6 @@ When creating a new problem generator:
 4. Use Kokkos parallel constructs for initialization
 5. Build with `-DPROBLEM=your_problem_name`
 
-<<<<<<< HEAD
-### Current Development Focus
-The current branch (`sfb_turb_driver`) implements Spherical Fourier-Bessel turbulence driving in `src/srcterms/turb_driver.hpp/cpp`. This adds a new method for driving turbulence in spherical geometries as an alternative to the standard Cartesian Fourier modes.
-=======
 Example template in: `src/pgen/tests/linear_wave_hydro.cpp`
 
 ## Input File Format
@@ -238,4 +224,3 @@ The current branch (`dev/particles_turb_divb`) implements:
 - [Athena++ Documentation](https://github.com/PrincetonUniversity/athena/wiki) (for similar concepts)
 - Code papers: Stone et al. (2024), Zhu et al. (2024), Fields et al. (2024)
 - Athena++ paper: Stone et al. (2020, ApJS 249, 4) - Original framework design
->>>>>>> origin/main

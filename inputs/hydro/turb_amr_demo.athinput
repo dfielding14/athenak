@@ -71,11 +71,7 @@ tcorr     = 0.5        # correlation time
 dedt      = 0.1        # energy injection rate
 nlow      = 1          # minimum wavenumber
 nhigh     = 4          # maximum wavenumber
-<<<<<<< HEAD
-rseed     = -42
-=======
 rseed     = -42        # random seed for reproducibility
->>>>>>> origin/main
 # Use multiple modes to create more complex pattern
 min_kx    = 0
 max_kx    = 4
@@ -89,8 +85,4 @@ dt_turb_update = 0.001
 <output1>
 file_type  = bin       # Binary output to see the force directly
 variable   = turb_force # turbulence forcing
-<<<<<<< HEAD
 dt         = 0.02      # output more frequently
-=======
-dt         = 0.02      # output more frequently
->>>>>>> origin/main
