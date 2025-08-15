@@ -1054,6 +1054,7 @@ void MeshRefinement::PackAMRBuffersParticles() {
   if (nprtcl_send == 0) return;
 
   auto *ppart = pmy_mesh->pmb_pack->ppart;
+  if (ppart == nullptr) return;
   int nrdata = ppart->nrdata;
   int nidata = ppart->nidata;
   auto &pr = ppart->prtcl_rdata;
@@ -1142,6 +1143,7 @@ void MeshRefinement::PackAMRBuffersParticles() {
 void MeshRefinement::UnpackAMRBuffersParticles() {
 #if MPI_PARALLEL_ENABLED
   auto *ppart = pmy_mesh->pmb_pack->ppart;
+  if (ppart == nullptr) return;
 
   namespace KE = Kokkos::Experimental;
 
@@ -1348,6 +1350,7 @@ void MeshRefinement::CountParticleSendsAndRecvs() {
 void MeshRefinement::CreateParticleLists() {
 #if MPI_PARALLEL_ENABLED
   auto *ppart = pmy_mesh->pmb_pack->ppart;
+  if (ppart == nullptr) return;
 
   nprtcl_send = 0;
 

@@ -1428,6 +1428,12 @@ void MeshRefinement::RefineParticles() {
   auto &mbsize = pmbp->pmb->mb_size;
   auto gids = pmbp->gids;
   auto *ppart = pmbp->ppart;
+  
+  // Check if particles are enabled before accessing particle data
+  if (ppart == nullptr) {
+    return;
+  }
+  
   auto &pr = ppart->prtcl_rdata;
   auto &pi = ppart->prtcl_idata;
   int npart = ppart->nprtcl_thispack;
