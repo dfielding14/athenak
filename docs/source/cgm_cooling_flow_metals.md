@@ -1,5 +1,20 @@
 # CGM Cooling Flow with Metals and Supernovae
 
+```{index} CGM cooling flow
+```
+```{index} Supernova feedback
+```
+```{index} Metal enrichment
+```
+```{index} Cooling flow
+```
+```{index} NFW profile
+```
+```{index} Miyamoto-Nagai potential
+```
+```{index} FIRE-3 model
+```
+
 ## Overview
 
 The CGM (Circumgalactic Medium) cooling flow with metals implementation simulates the cooling flow in galaxy halos with metal enrichment from supernovae. This module combines gravitational potential modeling, radiative cooling, AMR (Adaptive Mesh Refinement), and supernova feedback with metal injection.

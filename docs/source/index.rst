@@ -122,6 +122,7 @@ Complete Documentation
    reference/input_parameters
    reference/file_reference
    reference/api_reference
+   glossary
    
 .. toctree::
    :maxdepth: 2
@@ -139,6 +140,7 @@ Complete Documentation
    examples/turbulence
    examples/mri_turbulence
    examples/binary_merger
+   cgm_cooling_flow_metals
 
 .. toctree::
    :maxdepth: 1
@@ -183,7 +185,6 @@ Search & Index
 ==============
 
 * :ref:`genindex`
-* :ref:`modindex`
 * :ref:`search`
 
 .. raw:: html
