@@ -1,4 +1,5 @@
 name: Build and Deploy Documentation
+# Builds docs from dev/frankenstein_with_docs branch but deploys from main
 
 on:
   push:
