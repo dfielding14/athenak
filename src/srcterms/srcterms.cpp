@@ -74,6 +74,9 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
     hscale_radius = pin->GetOrAddReal(block, "hscale_radius", 0.0); // Scale radius in code units
     hscale_alpha = pin->GetOrAddReal(block, "hscale_alpha", 0.0); // Scale coeff in code units
 
+    // Set temperature ceiling
+    T_max = pin->GetOrAddReal(block, "T_max", 1e10); // Temperature Ceiling in cgs
+
     // Initialize Cooling Tables to the right dimensions from cooling_tables.hpp
     Kokkos::realloc(Tbins, Tbins_TOTAL_SIZE);
     Kokkos::realloc(nHbins, nHbins_TOTAL_SIZE);
@@ -273,6 +276,7 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
   Real h_height = hscale_height;
   Real h_radius = hscale_radius;
   Real h_alpha = hscale_alpha;
+  Real T_max_ = T_max;
 
   par_for("cgm_cooling", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -411,9 +415,14 @@ void SourceTerms::CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
     gamma_heating *= (1 - frac);
     
     // Add cooling and heating source terms to energy equation
-    u0(m,IEN,k,j,i) -= bdt * X * w0(m,IDN,k,j,i) *
-                       (X * w0(m,IDN,k,j,i) * lambda_cooling / cooling_unit 
-                                             - gamma_heating / heating_unit);
+    if (temp >= T_max_) {
+      Real dE = ((temp - T_max_) / temp_unit) * w0(m,IDN,k,j,i) / gm1;
+      u0(m,IEN,k,j,i) -= dE;
+    } else {
+      u0(m,IEN,k,j,i) -= bdt * X * w0(m,IDN,k,j,i) *
+                         (X * w0(m,IDN,k,j,i) * lambda_cooling / cooling_unit 
+                                               - gamma_heating / heating_unit);
+    }
   });
 
   return;

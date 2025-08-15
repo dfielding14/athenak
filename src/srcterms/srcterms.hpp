@@ -59,6 +59,7 @@ class SourceTerms {
   DualArray1D<Real> Tbins, nHbins;
   DualArray2D<Real> Metal_Cooling, H_He_Cooling;
   DualArray1D<Real> Metal_Cooling_CIE, H_He_Cooling_CIE;
+  Real T_max;
 
   // cooling rate used with relativistic cooling
   Real crate_rel;

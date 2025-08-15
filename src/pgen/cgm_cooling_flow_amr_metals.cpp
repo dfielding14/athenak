@@ -1,11 +1,3 @@
-//========================================================================================
-// AthenaXXX astrophysical plasma code
-// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
-// Licensed under the 3-clause BSD License (the "LICENSE")
-//========================================================================================
-//! \file cgm_cooling_flow_amr.cpp
-//  \brief Problem generator for a cooling flow CGM with AMR resolved disk
-
 #include <iostream>
 #include <cmath>
 #include "athena.hpp"
@@ -81,11 +73,9 @@ namespace {
   Real e_sn;
   Real m_ej;
 
-  // Add profile readers on host and device
-  ProfileReaderHost profile_reader_host;  // Host-side reader
-  ProfileReader profile_reader;           // Device-side reader
-  ProfileReaderHost disk_profile_reader_host;  // Host-side reader
-  ProfileReader disk_profile_reader;           // Device-side reader
+  // Profiles
+  ProfileReader profile_reader;                
+  ProfileReader disk_profile_reader;           
   
   // Refinment condition threshold
   Real ddens_threshold;
@@ -181,6 +171,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   // Read the CGM cooling flow profile file
   std::string profile_file = pin->GetString("problem", "profile_file");
   try {
+    ProfileReaderHost profile_reader_host;
     profile_reader_host.ReadProfiles(profile_file);
     // Create device-accessible reader
     profile_reader = profile_reader_host.CreateDeviceReader();
@@ -195,6 +186,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   // Read in the disk profile file
   std::string disk_profile_file = pin->GetString("problem", "disk_profile_file");
   try {
+    ProfileReaderHost disk_profile_reader_host;
     disk_profile_reader_host.ReadProfiles(disk_profile_file);
     // Create device-accessible reader
     disk_profile_reader = disk_profile_reader_host.CreateDeviceReader();
@@ -583,6 +575,7 @@ void SNSource(Mesh* pm, const Real bdt) {
       pr(nrdata-1, p) = GetNthSNTime(cluster_mass, par_t_create, unit_time, sn_idx);
 
       // Register SN center location and adjust for boundaries
+      // Warning : if r_inj is large this will lead to unexpected behavior at the start
       int idx = Kokkos::atomic_fetch_add(&counter(0), 1);
       int m = pi(PGID, p) - gids;
       
@@ -643,19 +636,12 @@ void SNSource(Mesh* pm, const Real bdt) {
               
         // Inject energy if within injection radius
         if (r <= dr) {
-	  //Kokkos::printf("distance is %f , inject !\n", r);
-          
-	  //u0(m,IDN,k,j,i) += m_ej_;
+	  u0(m,IDN,k,j,i) += m_ej_;
           u0(m,IEN,k,j,i) += e_sn_;
-	  
-	  //Kokkos::printf("before: %.3f, after: %.3f \n", u0(m,IEN,k,j,i) - e_sn_, u0(m,IEN,k,j,i));
 	}
       }
 
     });
-    //Kokkos::fence();
-    //std::cout << "SN injection complete!" << std::endl;
-    
   }
 
   return;
