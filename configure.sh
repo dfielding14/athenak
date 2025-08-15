@@ -1,6 +1,7 @@
 #!/bin/bash
 module restore
-module load cpe/24.07 PrgEnv-amd cray-mpich/8.1.30 craype-accel-amd-gfx90a amd/6.2.0 rocm/6.2.0
+#module load cpe/24.07 PrgEnv-amd cray-mpich/8.1.30 craype-accel-amd-gfx90a amd/6.2.0 rocm/6.2.0
+module load cpe/25.03 PrgEnv-amd cray-mpich/8.1.32 craype-accel-amd-gfx90a amd/6.4.1 rocm/6.4.1
 module load cmake cray-python emacs
 module unload darshan-runtime
 #module -t list
@@ -9,8 +10,12 @@ export LD_LIBRARY_PATH=${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH}
 export MPICH_GPU_SUPPORT_ENABLED=1
 export MPICH_GPU_IPC_CACHE_MAX_SIZE=1000
 export MPICH_MPIIO_HINTS="*:romio_cb_write=disable"
-export FI_MR_CACHE_MONITOR=disabled
+export FI_MR_CACHE_MONITOR=kdreg2
 export MPICH_SMP_SINGLE_COPY_MODE=NONE
+
+export FI_CXI_DEFAULT_CQ_SIZE=131072
+export FI_CXI_DEFAULT_TX_SIZE=2048
+export FI_CXI_RX_MATCH_MODE=hybrid
 
 build="build"
 
