@@ -207,9 +207,24 @@ disk_profile_file = "disk_profiles.txt" # Disk profile data
 
 #### `<SN>` Block (lines 131-136)
 ```ini
-r_inj = 0.5    # Injection radius [code units]
+r_inj = 0.02   # Injection radius [code units] (20 pc typical)
 E_sn  = 1e51   # Energy per SN [ergs] (optional, default 1e51)
 M_ej  = 8.4    # Ejecta mass per SN [solar masses] (optional, default 8.4)
+```
+
+#### Additional Parameters (from actual runs)
+```ini
+<hydro>
+cgm_cooling = true        # Enable CGM cooling
+hrate       = 2e-26       # Heating rate [cgs]
+hscale_norm   = 1347.65   # Heating normalization
+hscale_radius = 0.940     # Heating scale radius
+hscale_height = 0.0495    # Heating scale height
+hscale_alpha  = 0.002     # Heating alpha parameter
+
+<problem>
+mass_loss_rate   = 44.34  # Mass outflow rate
+mass_loss_radius = 10.0   # Outflow radius
 ```
 
 ## Profile File Format
@@ -281,47 +296,112 @@ The steady-state solution balances:
 - Captures shocks and contact discontinuities
 - Essential for resolving SN bubbles and cooling interfaces
 
-## Usage Example
+## Usage Example (Actual Configuration)
 
 ```ini
+<comment>
+problem   = cgm_static
+
 <job>
-problem_id = cgm_cooling_metals
+basename  = galaxy    # problem ID: basename of output filenames
 
 <mesh>
-refinement  = adaptive
-max_level   = 3
+nghost    = 4         # Number of ghost cells
+nx1       = 192       # Number of zones in X1-direction
+x1min     = -240.0    # minimum value of X1
+x1max     = 240.0     # maximum value of X1
+ix1_bc    = user      # Inner-X1 boundary condition flag
+ox1_bc    = user      # Outer-X1 boundary condition flag
+nx2       = 192       # Number of zones in X2-direction
+x2min     = -240.0    # minimum value of X2
+x2max     = 240.0     # maximum value of X2
+ix2_bc    = user      # Inner-X2 boundary condition flag
+ox2_bc    = user      # Outer-X2 boundary condition flag
+nx3       = 192       # Number of zones in X3-direction
+x3min     = -240.0    # minimum value of X3
+x3max     = 240.0     # maximum value of X3
+ix3_bc    = user      # Inner-X3 boundary condition flag
+ox3_bc    = user      # Outer-X3 boundary condition flag
+
+<mesh_refinement>
+refinement = adaptive
+num_levels = 7
+refinement_interval = 10
+max_nmb_per_rank = 1024
+
+<refinement1>
+level = 6
+x1min = -10.0
+x1max =  10.0
+x2min = -10.0
+x2max =  10.0
+x3min = -5.0
+x3max =  5.0
+
+<meshblock>
+nx1       = 32        # Number of cells in each MeshBlock, X1-dir
+nx2       = 32        # Number of cells in each MeshBlock, X2-dir
+nx3       = 32        # Number of cells in each MeshBlock, X3-dir
+
+<time>
+evolution  = dynamic  # dynamic/kinematic/static
+integrator = rk2      # time integration algorithm
+cfl_number = 0.3      # The Courant, Friedrichs, & Lewy (CFL) Number
+tlim       = 20.0     # time limit
 
 <hydro>
-eos         = ideal
-gamma       = 1.66666667
+eos         = ideal      # EOS type
+reconstruct = plm        # spatial reconstruction method
+rsolver     = hllc       # Riemann-solver to be used
+gamma       = 1.66666667 # gamma = C_p/C_v
+cgm_cooling = true
+hrate         = 2e-26    # cooling in cgs
+hscale_norm   = 1347.6541799847946
+hscale_radius = 0.9402361259893334
+hscale_height = 0.04950000000848683
+hscale_alpha  = 0.002
+pfloor      = 1e-15
+dfloor      = 1e-15
+sfloor      = 1e-15
+tfloor      = 0.13925     # 1e3 K
+T_max       = 5e8         # K
+fofc        = true
+nscalars    = 1 # number of passive scalars: metallicity
 
 <problem>
-profile_file      = cgm_profiles.txt
+user_srcs = true
+profile_file = cgm_profiles.txt
 disk_profile_file = disk_profiles.txt
-metallicity       = 0.333
-ddens_max         = 2.0
-r_circ            = 10.0
-v_circ            = 20.0
+mass_loss_rate = 44.34339565062142
+mass_loss_radius = 10.0
+r_circ = 10.0
+v_circ = 9.54085191986995
+ddens_max = 1.0
+metallicity = 0.333333333333333333333333333333333333333333
 
 <potential>
-# Parameters from CGM_ICs output
-r_scale   = 11.605
-rho_scale = 2.174
-mass_gal  = 6547.4
-scale_gal = 1.469
+r_scale   = 11.605294024177795
+rho_scale = 2.1743800601559324
+mass_gal  = 6547.387043624801
+scale_gal = 1.4691189466064514
 z_gal     = 0.15
-r_200     = 144.77
-rho_mean  = 2.58e-5
-
-<SN>
-r_inj = 0.5
-E_sn  = 1e51
-M_ej  = 8.4
+r_200     = 144.76736317842207
+rho_mean  = 2.5759499304527406e-05
 
 <particles>
-type = star
+particle_type = star
+star_particle_file = clusters.txt
 pusher = rk4_gravity
-particle_file = star_clusters.txt
+
+<SN>
+r_inj = 0.02  # 20 pc injection radius
+#E_sn = 0.0   # Energy injection commented out in this run
+
+<units>
+length_cgs  = 3.0856775809623245e+21 # kpc
+mass_cgs    = 3.036951775493658e+39  # n = 0.1 cm^-3
+time_cgs    = 3.15576e+15            # 100 Myr
+mu          = 0.62                   # mean molecular weight
 ```
 
 ## Implementation Notes
