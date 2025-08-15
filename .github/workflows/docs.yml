@@ -26,6 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        ref: dev/frankenstein_with_docs  # Always build docs from this branch
     
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -49,7 +51,7 @@ jobs:
         path: 'docs/build/html'
 
   deploy:
-    if: github.ref == 'refs/heads/dev/frankenstein_with_docs' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
