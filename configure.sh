@@ -1,10 +1,9 @@
 #!/bin/bash
 module restore
-#module load cpe/24.07 PrgEnv-amd cray-mpich/8.1.30 craype-accel-amd-gfx90a amd/6.2.0 rocm/6.2.0
-module load cpe/25.03 PrgEnv-amd cray-mpich/8.1.32 craype-accel-amd-gfx90a amd/6.4.1 rocm/6.4.1
+module load cpe/24.07 PrgEnv-amd cray-mpich/8.1.30 craype-accel-amd-gfx90a amd/6.2.0 rocm/6.2.0
 module load cmake cray-python emacs
 module unload darshan-runtime
-#module -t list
+module load perftools-base perftools
 
 export LD_LIBRARY_PATH=${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH}
 export MPICH_GPU_SUPPORT_ENABLED=1
@@ -28,3 +27,6 @@ cmake -B $build -DAthena_ENABLE_MPI=ON -DKokkos_ARCH_ZEN3=ON -DKokkos_ARCH_VEGA9
 cd $build
 #make clean
 make -j 64
+
+rm src/athena_instrumented
+pat_build -w -o src/athena_instrumented src/athena

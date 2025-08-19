@@ -800,25 +800,45 @@ void MeshRefinement::PackAMRBuffersFC(DvceFaceFld4D<Real> &b, DvceFaceFld4D<Real
 void MeshRefinement::ClearRecvAndUnpackAMR() {
 #if MPI_PARALLEL_ENABLED
   if (pmy_mesh->pmb_pack->ppart != nullptr) {
+    // Wait for particle receives to finish
+    bool no_errors=true;
+    for (int n=0; n<prtcl_nrecvs; ++n) {
+      int ierr = MPI_Wait(&(prtcl_rrecv_req[n]), MPI_STATUS_IGNORE);
+      if (ierr != MPI_SUCCESS) no_errors=false;
+      ierr = MPI_Wait(&(prtcl_irecv_req[n]), MPI_STATUS_IGNORE);
+      if (ierr != MPI_SUCCESS) no_errors = false;
+    }
+    // Quit if MPI error detected
+    if (!(no_errors)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "MPI error in particle communication with AMR"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
+  if (nmb_recv != 0) {
+    // Wait for all receives to finish
+    bool no_errors=true;
+    for (int n=0; n<nmb_recv; ++n) {
+      int ierr = MPI_Wait(&(recv_req[n]), MPI_STATUS_IGNORE);
+      if (ierr != MPI_SUCCESS) {no_errors=false;}
+    }
+    // Quit if MPI error detected
+    if (!(no_errors)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "MPI error in posting non-blocking receives with AMR"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    delete [] recv_req;
+  }
+
+  if (pmy_mesh->pmb_pack->ppart != nullptr) {
     UnpackAMRBuffersParticles();
   }
 
   if (nmb_recv == 0) return;
-
-  // Wait for all receives to finish
-  bool no_errors=true;
-  for (int n=0; n<nmb_recv; ++n) {
-    int ierr = MPI_Wait(&(recv_req[n]), MPI_STATUS_IGNORE);
-    if (ierr != MPI_SUCCESS) {no_errors=false;}
-  }
-  // Quit if MPI error detected
-  if (!(no_errors)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "MPI error in posting non-blocking receives with AMR"
-              << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  delete [] recv_req;
 
   // Unpack data
   hydro::Hydro* phydro = pmy_mesh->pmb_pack->phydro;
@@ -1112,7 +1132,7 @@ void MeshRefinement::PackAMRBuffersParticles() {
 
     // Post non-blocking sends
     int ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
-                         amr_comm, &(prtcl_rsend_req[n]));
+                         par_comm, &(prtcl_rsend_req[n]));
     if (ierr != MPI_SUCCESS) {no_errors=false;}
     data_start += data_size;
   }
@@ -1129,7 +1149,7 @@ void MeshRefinement::PackAMRBuffersParticles() {
 
     // Post non-blocking sends
     int ierr = MPI_Isend(send_ptr.data(), data_size, MPI_INT, drank, tag,
-                         amr_comm, &(prtcl_isend_req[n]));
+                         par_comm, &(prtcl_isend_req[n]));
     if (ierr != MPI_SUCCESS) {no_errors=false;}
     data_start += data_size;
   }
@@ -1137,7 +1157,7 @@ void MeshRefinement::PackAMRBuffersParticles() {
   // Quit if MPI error detected
   if (!(no_errors)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "MPI error in posting non-blocking receives" << std::endl;
+              << std::endl << "MPI error in posting non-blocking sends" << std::endl;
     std::exit(EXIT_FAILURE);
   }
 #endif
@@ -1169,40 +1189,6 @@ void MeshRefinement::UnpackAMRBuffersParticles() {
   if (nprtcl_recv > nprtcl_send) {
     Kokkos::resize(ppart->prtcl_idata, ppart->nidata, new_npart);
     Kokkos::resize(ppart->prtcl_rdata, ppart->nrdata, new_npart);
-  }
-
-  // Check particle communication completion 
-  // Test that particle communications have all completed
-  bool particle_comm_complete = true;
-  bool no_errors = true;
-  for (int n = 0; n < prtcl_nrecvs; ++n) {
-    int test;
-    int ierr = MPI_Test(&(prtcl_rrecv_req[n]), &test, MPI_STATUS_IGNORE);
-    if (ierr != MPI_SUCCESS) no_errors = false;
-    if (!static_cast<bool>(test)) particle_comm_complete = false;
-
-    ierr = MPI_Test(&(prtcl_irecv_req[n]), &test, MPI_STATUS_IGNORE);
-    if (ierr != MPI_SUCCESS) no_errors = false;
-    if (!static_cast<bool>(test)) particle_comm_complete = false;
-  }
-
-  // If particle communication not complete, we need to wait or return incomplete
-  // For AMR load balancing, we must complete all transfers before proceeding
-  if (!particle_comm_complete) {
-    // Wait for completion (blocking wait for AMR case)
-    for (int n = 0; n < prtcl_nrecvs; ++n) {
-      int ierr = MPI_Wait(&(prtcl_rrecv_req[n]), MPI_STATUS_IGNORE);
-      if (ierr != MPI_SUCCESS) no_errors = false;
-      ierr = MPI_Wait(&(prtcl_irecv_req[n]), MPI_STATUS_IGNORE);
-      if (ierr != MPI_SUCCESS) no_errors = false;
-    }
-  }
-
-  // Check for particle MPI errors
-  if (!no_errors) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "MPI error in particle communication with AMR" << std::endl;
-    std::exit(EXIT_FAILURE);
   }
 
   // unpack particles into positions of sent particles or at end of arrays
@@ -1319,7 +1305,7 @@ void MeshRefinement::CountParticleSendsAndRecvs() {
   // Share number of ranks to send to amongst all ranks
   prtcl_nsends_eachrank[global_variable::my_rank] = prtcl_nsends;
   MPI_Allgather(&prtcl_nsends, 1, MPI_INT, prtcl_nsends_eachrank.data(), 
-		1, MPI_INT, amr_comm);
+		1, MPI_INT, par_comm);
 
   // Now share ParticleMessageData amongst all ranks
   // First create vector of starting indices in full vector
@@ -1343,7 +1329,7 @@ void MeshRefinement::CountParticleSendsAndRecvs() {
   MPI_Type_commit(&mpi_ituple);
   MPI_Allgatherv(MPI_IN_PLACE, prtcl_nsends_eachrank[global_variable::my_rank],
                    mpi_ituple, prtcl_sends_allranks.data(), prtcl_nsends_eachrank.data(),
-                   nsends_displ.data(), mpi_ituple, amr_comm);
+                   nsends_displ.data(), mpi_ituple, par_comm);
   MPI_Type_free(&mpi_ituple);
 
 #endif
@@ -1478,7 +1464,7 @@ void MeshRefinement::InitPartRecv() {
         int tag = 0; // 0 for Reals, 1 for ints
 
         int ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
-                             amr_comm, &(prtcl_rrecv_req[n]));
+                             par_comm, &(prtcl_rrecv_req[n]));
         if (ierr != MPI_SUCCESS) no_errors = false;
         data_start += data_size;
       }
@@ -1495,7 +1481,7 @@ void MeshRefinement::InitPartRecv() {
         int tag = 1; // 0 for Reals, 1 for ints
 
         int ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_INT, drank, tag,
-                             amr_comm, &(prtcl_irecv_req[n]));
+                             par_comm, &(prtcl_irecv_req[n]));
         if (ierr != MPI_SUCCESS) no_errors = false;
 
         data_start += data_size;

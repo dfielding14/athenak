@@ -102,6 +102,9 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
   // create unique communicators for AMR
   MPI_Comm_dup(MPI_COMM_WORLD, &amr_comm);
 
+  // create separate communicator for particles
+  MPI_Comm_dup(MPI_COMM_WORLD, &par_comm);
+
   // Initialize particle AMR communication variables
   prtcl_rsendbuf = DvceArray1D<Real>("rsend", 1);
   prtcl_rrecvbuf = DvceArray1D<Real>("rrecv",1);
@@ -429,7 +432,7 @@ void MeshRefinement::UpdateMeshBlockTree(int &nnew, int &ndel) {
   }
   // sort the lists by level
   if (ctnd > 1) {
-    std::sort(cllderef, cllderef + ctnd, Mesh::GreaterLevel);
+    std::sort(cllderef, &(cllderef[ctnd-1]), Mesh::GreaterLevel);
   }
 
   if (tnderef >= nleaf) {
@@ -1463,7 +1466,7 @@ void MeshRefinement::RefineParticles() {
         if (x1 >= mbsize.d_view(newm).x1min && x1 < mbsize.d_view(newm).x1max &&
             x2 >= mbsize.d_view(newm).x2min && x2 < mbsize.d_view(newm).x2max &&
             x3 >= mbsize.d_view(newm).x3min && x3 < mbsize.d_view(newm).x3max) {
-          pi(PGID, p) = gids + newm;
+          pi(PGID, p) = gids + m;
           in_place = true;
 	  break;
         }
@@ -1476,3 +1479,6 @@ void MeshRefinement::RefineParticles() {
 
   return;
 }
+
+
+
