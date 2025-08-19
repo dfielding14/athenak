@@ -1125,7 +1125,7 @@ void MeshRefinement::PackAMRBuffersParticles() {
   for (int n = 0; n < prtcl_nsends; ++n) {
     // calculate amount of data to be passed, get pointer to variables
     int data_size = nrdata*(prtcl_sends_thisrank[n].nprtcls);
-    int data_end = data_start + nrdata*(prtcl_sends_thisrank[n].nprtcls - 1);
+    int data_end = data_start + data_size;
     auto send_ptr = Kokkos::subview(prtcl_rsendbuf,std::make_pair(data_start,data_end));
     int drank = prtcl_sends_thisrank[n].recvrank;
     int tag = 0; // 0 for Reals, 1 for ints
@@ -1142,7 +1142,7 @@ void MeshRefinement::PackAMRBuffersParticles() {
   for (int n = 0; n < prtcl_nsends; ++n) {
     // calculate amount of data to be passed, get pointer to variables
     int data_size = nidata*(prtcl_sends_thisrank[n].nprtcls);
-    int data_end = data_start + nidata*(prtcl_sends_thisrank[n].nprtcls - 1);
+    int data_end = data_start + data_size;
     auto send_ptr = Kokkos::subview(prtcl_isendbuf,std::make_pair(data_start,data_end));
     int drank = prtcl_sends_thisrank[n].recvrank;
     int tag = 1; // 0 for Reals, 1 for ints
@@ -1457,7 +1457,7 @@ void MeshRefinement::InitPartRecv() {
       for (int n = 0; n < prtcl_nrecvs; ++n) {
         // calculate amount of data to be passed, get pointer to variables
         int data_size = (ppart->nrdata)*(prtcl_recvs_thisrank[n].nprtcls);
-        int data_end = data_start + (ppart->nrdata)*(prtcl_recvs_thisrank[n].nprtcls - 1);
+        int data_end = data_start + data_size;
         auto recv_ptr = Kokkos::subview(prtcl_rrecvbuf,
                                         std::make_pair(data_start, data_end));
         int drank = prtcl_recvs_thisrank[n].sendrank;
@@ -1474,7 +1474,7 @@ void MeshRefinement::InitPartRecv() {
       for (int n = 0; n < prtcl_nrecvs; ++n) {
         // calculate amount of data to be passed, get pointer to variables
         int data_size = (ppart->nidata)*(prtcl_recvs_thisrank[n].nprtcls);
-        int data_end = data_start + (ppart->nidata)*(prtcl_recvs_thisrank[n].nprtcls - 1);
+        int data_end = data_start + data_size;
         auto recv_ptr = Kokkos::subview(prtcl_irecvbuf,
                                         std::make_pair(data_start, data_end));
         int drank = prtcl_recvs_thisrank[n].sendrank;
