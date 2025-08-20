@@ -1,0 +1,85 @@
+# AthenaK input file for time-dependent AMR turbulence simulation
+# Stage 2: Continue from stage 1, refine at t=3.0 eddy times
+
+<comment>
+problem   = Turbulence with time-dependent AMR - Stage 2
+reference = Driven turbulence with staged refinement
+
+<job>
+basename  = TurbTimedAMR_S2    # problem ID: basename of output filenames
+
+<mesh>
+nghost    = 3          # Number of ghost cells
+nx1       = 64         # Number of zones in X1-direction  
+nx2       = 64         # Number of zones in X2-direction
+nx3       = 64         # Number of zones in X3-direction
+x1min     = -0.5       # minimum value of X1
+x1max     = 0.5        # maximum value of X1
+ix1_bc    = periodic   # inner-X1 boundary flag
+ox1_bc    = periodic   # outer-X1 boundary flag
+x2min     = -0.5       # minimum value of X2
+x2max     = 0.5        # maximum value of X2
+ix2_bc    = periodic   # inner-X2 boundary flag
+ox2_bc    = periodic   # outer-X2 boundary flag
+x3min     = -0.5       # minimum value of X3
+x3max     = 0.5        # maximum value of X3
+ix3_bc    = periodic   # inner-X3 boundary flag
+ox3_bc    = periodic   # outer-X3 boundary flag
+
+<meshblock>
+nx1       = 32         # Number of cells in each MeshBlock, X1-dir
+nx2       = 32         # Number of cells in each MeshBlock, X2-dir
+nx3       = 32         # Number of cells in each MeshBlock, X3-dir
+
+<mesh_refinement>
+refinement_interval = 10    # Check for refinement every N cycles
+num_levels = 3              # Allow up to level 2 refinement
+
+<time>
+evolution  = dynamic   # dynamic/kinematic/static
+integrator = rk2       # time integration algorithm
+cfl_number = 0.3       # The Courant, Friedrichs, & Lewy (CFL) Number
+nlim       = -1        # cycle limit (no limit if <0)
+tlim       = 3.01      # time limit (just after second refinement at t=3.0)
+ndiag      = 100       # cycles between diagnostic output
+restart_file = TurbTimedAMR_S1.00000.rst  # restart from stage 1
+
+<hydro>
+eos         = ideal    # EOS type
+reconstruct = plm      # spatial reconstruction method
+rsolver     = hllc     # Riemann-solver to be used
+gamma       = 1.666666667   # gamma = C_p/C_v
+iso_sound_speed = 1.0       # isothermal sound speed
+
+<problem>
+pgen_name   = turb_timed_amr  # problem generator name
+d_i         = 1.0              # initial density (ions)
+d_n         = 1.0              # initial density (neutrals)
+beta        = 100.0            # plasma beta
+eddy_time   = 1.0              # eddy turnover time
+
+<diffusion>
+viscosity   = 0.005    # kinematic viscosity (reduced for higher resolution)
+nu_iso      = 0.005    # isotropic viscosity coefficient
+
+<turb_driving>
+dedt        = 1.0      # Energy injection rate
+nlow        = 1        # Lowest wavenumber
+nhigh       = 2        # Highest wavenumber
+tcorr       = 0.1      # Correlation time
+rseed       = 1234     # Random seed
+sol_weight  = 1.0      # Solenoidal weight
+
+<output1>
+file_type   = vtk      # VTK output
+variable    = hydro_w  # output primitive variables
+dt          = 0.1      # time increment between outputs
+ghost_zones = false    # switch to output ghost cells
+
+<output2>
+file_type   = hst      # history data dump
+dt          = 0.01     # time increment between outputs
+
+<output3>
+file_type   = rst      # restart file
+dt          = 0.5      # time increment between outputs
