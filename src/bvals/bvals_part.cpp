@@ -567,7 +567,7 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
   // Quit if MPI error detected
   if (!(no_errors)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "MPI error in posting non-blocking receives" << std::endl;
+              << std::endl << "MPI error in posting non-blocking sends" << std::endl;
     std::exit(EXIT_FAILURE);
   }
 #endif
@@ -688,6 +688,26 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
         i_last_hole -= 1;
       }
     }
+  }
+
+  // Wait for ALL particle communications to complete before MPI_COMM_WORLD collective
+  if (nrecvs > 0) {
+    int ierr = MPI_Waitall(nrecvs, rrecv_req.data(), MPI_STATUSES_IGNORE);
+    if (ierr != MPI_SUCCESS) {no_errors = false;}
+    ierr = MPI_Waitall(nrecvs, irecv_req.data(), MPI_STATUSES_IGNORE);
+    if (ierr != MPI_SUCCESS) {no_errors = false;}
+  }
+
+  if (nsends > 0) {
+    int ierr = MPI_Waitall(nsends, rsend_req.data(), MPI_STATUSES_IGNORE);
+    if (ierr != MPI_SUCCESS) {no_errors = false;}
+    ierr = MPI_Waitall(nsends, isend_req.data(), MPI_STATUSES_IGNORE);
+    if (ierr != MPI_SUCCESS) {no_errors = false;}
+  }
+
+  if (!no_errors) {
+    std::cout << "### FATAL ERROR: MPI error waiting for particle communications\n";
+    std::exit(EXIT_FAILURE);
   }
 
   // Update nparticles_thisrank.  Update cost array (use npart_thismb[nmb]?)

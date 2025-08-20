@@ -79,6 +79,9 @@ namespace {
   
   // Refinment condition threshold
   Real ddens_threshold;
+
+  // SN injection persistent buffer
+  DvceArray2D<Real> sn_centers_buffer;
 }
 
 //===========================================================================//
@@ -263,6 +266,14 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   if (global_variable::my_rank==0) {
     std::cout << "Successfully initialized grid!" << std::endl;
+  }
+
+  // Count total particles and initialize SN centers buffer
+  pmy_mesh_->CountParticles();
+  sn_centers_buffer = DvceArray2D<Real>("sn_centers_buffer", 3, pmy_mesh_->nprtcl_total);
+  if (global_variable::my_rank==0) {
+    std::cout << "Successfully initialized " << pmy_mesh_->nprtcl_total 
+	      << " particles!" << std::endl;
   }
 
   return;
@@ -559,8 +570,9 @@ void SNSource(Mesh* pm, const Real bdt) {
   Real dr = r_inj;
 
   // Create array of positions where SNs go off at this timestep
-  DvceArray1D<int> counter("sn_count", 1);
-  DvceArray2D<Real> sn_centers("sn_centers", 3, npart);
+  int counter=0;
+  int *pcounter = &counter;
+  auto &sn_centers = sn_centers_buffer;
 
   par_for("sn_source", DevExeSpace(), 0, npart-1, KOKKOS_LAMBDA(const int p) {
     
@@ -576,7 +588,7 @@ void SNSource(Mesh* pm, const Real bdt) {
 
       // Register SN center location and adjust for boundaries
       // Warning : if r_inj is large this will lead to unexpected behavior at the start
-      int idx = Kokkos::atomic_fetch_add(&counter(0), 1);
+      int idx = Kokkos::atomic_fetch_add(pcounter, 1);
       int m = pi(PGID, p) - gids;
       
       Real x1min = mbsize.d_view(m).x1min;
@@ -595,12 +607,9 @@ void SNSource(Mesh* pm, const Real bdt) {
   Kokkos::fence();
 
   // Get number of SNe on host
-  auto counter_host = Kokkos::create_mirror_view(counter);
-  Kokkos::deep_copy(counter_host, counter);
-  int num_sn = counter_host(0);
+  int num_sn = counter;
   
   if (num_sn > 0) {
-    Kokkos::resize(sn_centers, 3, num_sn);
     std::cout << num_sn << " SN went off" << std::endl;
     
     Real e_sn_ = e_sn;
@@ -842,4 +851,6 @@ void FreeProfile(ParameterInput *pin, Mesh *pm) {
   // Free Kokkos views before Kokkos::finalize is called
   profile_reader.~ProfileReader();
   disk_profile_reader.~ProfileReader();
+
+  sn_centers_buffer = DvceArray2D<Real>();
 }
