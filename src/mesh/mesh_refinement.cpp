@@ -1466,7 +1466,7 @@ void MeshRefinement::RefineParticles() {
       }
     }
     if (not in_place) {
-      printf("Error: particle orphaned!\n");
+      Kokkos::printf("Error: particle orphaned!\n");
     }
   });
 
