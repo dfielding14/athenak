@@ -169,7 +169,7 @@ class PiecewisePolytrope : public EOSPolicyInterface {
                           Real P0, Real m, int n) {
     // Make sure that we actually *have* polytropes
     if (n <= 1) {
-      Kokkos::printf("PiecewisePolytrope: Invalid number of polytropes requested.");
+      KOKKOS_DEBUG_PRINTF("PiecewisePolytrope: Invalid number of polytropes requested.");
       return false;
     }
     // Before we even try to construct anything, we need to make sure that
@@ -178,14 +178,14 @@ class PiecewisePolytrope : public EOSPolicyInterface {
       if(densities[i] <= densities[i-1]) {
         // The densities must be ordered from smallest to largest and strictly
         // increasing.
-        Kokkos::printf("PiecewisePolytrope: Densities must be strictly increasing.");
+        KOKKOS_DEBUG_PRINTF("PiecewisePolytrope: Densities must be strictly increasing.");
         return false;
       }
     }
 
     // Make sure that we're not trying to allocate too many polytropes
     if (n > MAX_PIECES) {
-      Kokkos::printf("PiecewisePolytrope: number of pieces requested exceeds limit.");
+      KOKKOS_DEBUG_PRINTF("PiecewisePolytrope: number of pieces requested exceeds limit.");
       return false;
     }
 

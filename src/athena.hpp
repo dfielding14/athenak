@@ -8,6 +8,28 @@
 #include "config.hpp"
 
 //----------------------------------------------------------------------------------------
+// Cross-platform printf macro for host and device code
+// Works on CPU, CUDA, HIP, and SYCL (Intel GPUs like Aurora)
+
+#include <cstdio>
+#if defined(KOKKOS_ENABLE_SYCL)
+  #include <sycl/ext/oneapi/experimental/printf.hpp>
+#endif
+
+#ifndef KOKKOS_DEBUG_PRINTF
+  #if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
+    // CUDA/HIP device
+    #define KOKKOS_DEBUG_PRINTF(...) printf(__VA_ARGS__)
+  #elif defined(__SYCL_DEVICE_ONLY__)
+    // SYCL device (Intel GPUs - Aurora)
+    #define KOKKOS_DEBUG_PRINTF(...) sycl::ext::oneapi::experimental::printf(__VA_ARGS__)
+  #else
+    // Host side (CPU-only build, or host code of GPU builds)
+    #define KOKKOS_DEBUG_PRINTF(...) std::printf(__VA_ARGS__)
+  #endif
+#endif
+
+//----------------------------------------------------------------------------------------
 // type alias that allows code to run with either floats or doubles
 
 #if SINGLE_PRECISION_ENABLED

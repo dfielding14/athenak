@@ -151,7 +151,7 @@ class PrimitiveSolverHydro {
 
     // Check for NaNs
     /*if (CheckForConservedNaNs(cons_pt)) {
-      Kokkos::printf("Location: PrimToConsPt\n");
+      KOKKOS_DEBUG_PRINTF("Location: PrimToConsPt\n");
       DumpPrimitiveVars(prim_pt);
     }*/
 
@@ -230,7 +230,7 @@ class PrimitiveSolverHydro {
 
       // Check for NaNs
       if (CheckForConservedNaNs(cons_pt)) {
-        Kokkos::printf("Error occurred in PrimToCons at (%d, %d, %d, %d)\n", m, k, j, i);
+        KOKKOS_DEBUG_PRINTF("Error occurred in PrimToCons at (%d, %d, %d, %d)\n", m, k, j, i);
         DumpPrimitiveVars(prim_pt);
       }
 
@@ -399,7 +399,7 @@ class PrimitiveSolverHydro {
         if (result.error != Primitive::Error::SUCCESS && (nerrs_ + sumerrs < errcap_)) {
           // TODO(JF): put in a proper error response here.
           sumerrs++;
-          Kokkos::printf("An error occurred during the primitive solve: %s\n"
+          KOKKOS_DEBUG_PRINTF("An error occurred during the primitive solve: %s\n"
                  "  Location: (%d, %d, %d, %d)\n"
                  "  Conserved vars: \n"
                  "    D   = %.17g\n"
@@ -432,7 +432,7 @@ class PrimitiveSolverHydro {
                  adm.vK_dd(m, 1, 1, k, j, i), adm.vK_dd(m, 1, 2, k, j, i),
                  adm.vK_dd(m, 2, 2, k, j, i));
           if (nerrs_ + sumerrs == errcap_) {
-            Kokkos::printf("%d C2P errors have been detected on rank %d."
+            KOKKOS_DEBUG_PRINTF("%d C2P errors have been detected on rank %d."
                    "All future C2P errors\n"
                    "on this rank will be suppressed. Fix your code!\n",
                    nerrs_ + sumerrs,rank);
@@ -467,7 +467,7 @@ class PrimitiveSolverHydro {
                             (j < js) || (j > je) ||
                             (k < ks) || (k > ke);
 
-            Kokkos::printf("Density was nontrivially adjusted on MeshBlock %d!\n"
+            KOKKOS_DEBUG_PRINTF("Density was nontrivially adjusted on MeshBlock %d!\n"
                    "  Grid index: (i=%d, j=%d, k=%d)\n"
                    "  Physical position: (%g, %g, %g)\n"
                    "  D (old): %.17g\n"
@@ -573,23 +573,23 @@ class PrimitiveSolverHydro {
   static int CheckForConservedNaNs(const Real cons_pt[NCONS]) {
     int nans = 0;
     if (!isfinite(cons_pt[CDN])) {
-      Kokkos::printf("D is NaN!\n"); // NOLINT
+      KOKKOS_DEBUG_PRINTF("D is NaN!\n"); // NOLINT
       nans = 1;
     }
     if (!isfinite(cons_pt[CSX])) {
-      Kokkos::printf("Sx is NaN!\n"); // NOLINT
+      KOKKOS_DEBUG_PRINTF("Sx is NaN!\n"); // NOLINT
       nans = 1;
     }
     if (!isfinite(cons_pt[CSY])) {
-      Kokkos::printf("Sy is NaN!\n"); // NOLINT
+      KOKKOS_DEBUG_PRINTF("Sy is NaN!\n"); // NOLINT
       nans = 1;
     }
     if (!isfinite(cons_pt[CSZ])) {
-      Kokkos::printf("Sz is NaN!\n"); // NOLINT
+      KOKKOS_DEBUG_PRINTF("Sz is NaN!\n"); // NOLINT
       nans = 1;
     }
     if (!isfinite(cons_pt[CTA])) {
-      Kokkos::printf("Tau is NaN!\n"); // NOLINT
+      KOKKOS_DEBUG_PRINTF("Tau is NaN!\n"); // NOLINT
       nans = 1;
     }
 
@@ -598,7 +598,7 @@ class PrimitiveSolverHydro {
 
   KOKKOS_INLINE_FUNCTION
   static void DumpPrimitiveVars(const Real prim_pt[NPRIM]) {
-    Kokkos::printf("Primitive vars: \n" // NOLINT
+    KOKKOS_DEBUG_PRINTF("Primitive vars: \n" // NOLINT
            "  rho = %.17g\n"
            "  ux  = %.17g\n"
            "  uy  = %.17g\n"
