@@ -77,21 +77,15 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
   auto myrank = global_variable::my_rank;
   auto &nghbr = pmy_part->pmy_pack->pmb->nghbr;
   auto &psendl = sendlist;
+  auto &pdestroyl = destroylist;
   bool &multi_d = pmy_part->pmy_pack->pmesh->multi_d;
   bool &three_d = pmy_part->pmy_pack->pmesh->three_d;
   auto par_type = pmy_part->particle_type;
+  auto &mb_bcs = pmy_part->pmy_pack->pmb->mb_bcs;
 
   // Create device-side counter
-  int counter = 0;
   Kokkos::View<int> atom_count("atom_count");
-  Kokkos::deep_copy(atom_count, counter);
-
-  // Compatibility with user-defined boundary conditions
-  auto &mb_bcs = pmy_part->pmy_pack->pmb->mb_bcs;
-  int destroy_count = 0;
-  Kokkos::View<int> atom_d_count("atom_d_count");
-  Kokkos::deep_copy(atom_d_count, destroy_count);
-  auto &pdestroyl = destroylist;
+  Kokkos::View<int> atom_d_count("atom_d_count"); 
 
   Kokkos::realloc(sendlist, static_cast<int>(npart));
   Kokkos::realloc(destroylist, static_cast<int>(npart));
@@ -315,10 +309,9 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
     }
   });
   
-  Kokkos::deep_copy(counter, atom_count);
-  Kokkos::deep_copy(destroy_count, atom_d_count);
-  nprtcl_send = counter;
-  nprtcl_destroy = destroy_count;
+  Kokkos::fence();
+  Kokkos::deep_copy(nprtcl_destroy, atom_d_count);
+  Kokkos::deep_copy(nprtcl_send, atom_count);
   Kokkos::resize(sendlist, nprtcl_send);
   Kokkos::resize(destroylist, nprtcl_destroy);
   
@@ -688,26 +681,6 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
         i_last_hole -= 1;
       }
     }
-  }
-
-  // Wait for ALL particle communications to complete before MPI_COMM_WORLD collective
-  if (nrecvs > 0) {
-    int ierr = MPI_Waitall(nrecvs, rrecv_req.data(), MPI_STATUSES_IGNORE);
-    if (ierr != MPI_SUCCESS) {no_errors = false;}
-    ierr = MPI_Waitall(nrecvs, irecv_req.data(), MPI_STATUSES_IGNORE);
-    if (ierr != MPI_SUCCESS) {no_errors = false;}
-  }
-
-  if (nsends > 0) {
-    int ierr = MPI_Waitall(nsends, rsend_req.data(), MPI_STATUSES_IGNORE);
-    if (ierr != MPI_SUCCESS) {no_errors = false;}
-    ierr = MPI_Waitall(nsends, isend_req.data(), MPI_STATUSES_IGNORE);
-    if (ierr != MPI_SUCCESS) {no_errors = false;}
-  }
-
-  if (!no_errors) {
-    std::cout << "### FATAL ERROR: MPI error waiting for particle communications\n";
-    std::exit(EXIT_FAILURE);
   }
 
   // Update nparticles_thisrank.  Update cost array (use npart_thismb[nmb]?)

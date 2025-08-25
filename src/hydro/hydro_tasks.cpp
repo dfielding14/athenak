@@ -203,7 +203,7 @@ TaskStatus Hydro::Fluxes(Driver *pdrive, int stage) {
 
 TaskStatus Hydro::SendFlux(Driver *pdrive, int stage) {
   TaskStatus tstat = TaskStatus::complete;
-  // Only execute BoundaryVaLUES function with SMR/SMR
+  // Only execute BoundaryValues function with SMR/SMR
   if (pmy_pack->pmesh->multilevel) {
     tstat = pbval_u->PackAndSendFluxCC(uflx);
   }

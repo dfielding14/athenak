@@ -29,4 +29,4 @@ cd $build
 make -j 64
 
 rm src/athena_instrumented
-pat_build -w -o src/athena_instrumented src/athena
+pat_build -g hip,io,mpi -w -o src/athena_instrumented src/athena

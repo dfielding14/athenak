@@ -434,8 +434,8 @@ void SetEquilibriumState(const DvceArray5D<Real> &u0,
 //===========================================================================//
 
 void UserSource(Mesh* pm, const Real bdt) {
-  GravitySource(pm, bdt);
   SNSource(pm, bdt);
+  GravitySource(pm, bdt);
 
   return;
 }
@@ -570,14 +570,13 @@ void SNSource(Mesh* pm, const Real bdt) {
   Real dr = r_inj;
 
   // Create array of positions where SNs go off at this timestep
-  int counter=0;
-  int *pcounter = &counter;
   auto &sn_centers = sn_centers_buffer;
+  Kokkos::View<int> d_counter("sn_counter");
 
   par_for("sn_source", DevExeSpace(), 0, npart-1, KOKKOS_LAMBDA(const int p) {
     
     Real next_sn_time = pr(nrdata-1, p);
-
+    
     if (time > next_sn_time) {
       // Update particle sn tracking
       pi(2, p) += 1;
@@ -588,7 +587,7 @@ void SNSource(Mesh* pm, const Real bdt) {
 
       // Register SN center location and adjust for boundaries
       // Warning : if r_inj is large this will lead to unexpected behavior at the start
-      int idx = Kokkos::atomic_fetch_add(pcounter, 1);
+      int idx = Kokkos::atomic_fetch_add(&d_counter(), 1);
       int m = pi(PGID, p) - gids;
       
       Real x1min = mbsize.d_view(m).x1min;
@@ -598,16 +597,17 @@ void SNSource(Mesh* pm, const Real bdt) {
       Real x3min = mbsize.d_view(m).x3min;
       Real x3max = mbsize.d_view(m).x3max;
 
-      sn_centers(0, idx) = std::min(std::max(pr(IPX,p), x1min+dr), x1max-dr);
-      sn_centers(1, idx) = std::min(std::max(pr(IPY,p), x2min+dr), x2max-dr);
-      sn_centers(2, idx) = std::min(std::max(pr(IPZ,p), x3min+dr), x3max-dr);
+      sn_centers(0, idx) = min(max(pr(IPX,p), x1min+dr), x1max-dr);
+      sn_centers(1, idx) = min(max(pr(IPY,p), x2min+dr), x2max-dr);
+      sn_centers(2, idx) = min(max(pr(IPZ,p), x3min+dr), x3max-dr);
     }
   });
 
-  Kokkos::fence();
+  DevExeSpace().fence();
 
   // Get number of SNe on host
-  int num_sn = counter;
+  int num_sn;
+  Kokkos::deep_copy(num_sn, d_counter);
   
   if (num_sn > 0) {
     std::cout << num_sn << " SN went off" << std::endl;
@@ -652,7 +652,7 @@ void SNSource(Mesh* pm, const Real bdt) {
 
     });
   }
-
+  
   return;
 }
 
@@ -851,6 +851,5 @@ void FreeProfile(ParameterInput *pin, Mesh *pm) {
   // Free Kokkos views before Kokkos::finalize is called
   profile_reader.~ProfileReader();
   disk_profile_reader.~ProfileReader();
-
   sn_centers_buffer = DvceArray2D<Real>();
 }

@@ -51,12 +51,11 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
   int ntrack_ = ntrack;
 
   // Create device-side counter
-  Kokkos::View<int, DevExeSpace> d_counter("counter");
-  Kokkos::deep_copy(d_counter, 0);
+  Kokkos::View<int> d_counter("counter");
 
   par_for("part_update",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
     if (pi(PTAG,p) < ntrack_) {
-      int index = Kokkos::atomic_fetch_add(d_counter.data(),1);
+      int index = Kokkos::atomic_fetch_add(&d_counter(),1);
       tracked_prtcl.d_view(index).tag = pi(PTAG,p);
       tracked_prtcl.d_view(index).x   = pr(IPX,p);
       tracked_prtcl.d_view(index).y   = pr(IPY,p);
@@ -67,9 +66,8 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
     }
   });
   
-  int h_counter;
-  Kokkos::deep_copy(h_counter, d_counter);
-  npout = h_counter;
+  Kokkos::fence();
+  Kokkos::deep_copy(npout, d_counter);
   
   // share number of tracked particles to be output across all ranks
   npout_eachrank[global_variable::my_rank] = npout;
