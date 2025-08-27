@@ -116,4 +116,3 @@ When creating a new problem generator:
 5. Build with `-DPROBLEM=your_problem_name`
 
 ### Current Development Focus
-The current branch (`sfb_turb_driver`) implements Spherical Fourier-Bessel turbulence driving in `src/srcterms/turb_driver.hpp/cpp`. This adds a new method for driving turbulence in spherical geometries as an alternative to the standard Cartesian Fourier modes.
