@@ -436,7 +436,7 @@ void SetEquilibriumState(const DvceArray5D<Real> &u0,
 void UserSource(Mesh* pm, const Real bdt) {
   SNSource(pm, bdt);
   GravitySource(pm, bdt);
-
+  
   return;
 }
 
@@ -446,9 +446,9 @@ void GravitySource(Mesh* pm, const Real bdt) {
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
   int ks = indcs.ks, ke = indcs.ke;
+  int nx1 = indcs.nx1, nx2 = indcs.nx2, nx3 = indcs.nx3;
   int nmb1 = pmbp->nmb_thispack - 1;
   auto &size = pmbp->pmb->mb_size;
-
   auto &u0 = pmbp->phydro->u0;
   auto &w0 = pmbp->phydro->w0;
   
@@ -463,50 +463,47 @@ void GravitySource(Mesh* pm, const Real bdt) {
 
   par_for("gravity_source", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    Real &x1min = size.d_view(m).x1min;
-    Real &x1max = size.d_view(m).x1max;
-    int nx1 = indcs.nx1;
-    Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
-    Real x1l =   LeftEdgeX(i-is, nx1, x1min, x1max);
-    Real x1r = LeftEdgeX(i+1-is, nx1, x1min, x1max);
+    const Real x1min = size.d_view(m).x1min, x1max = size.d_view(m).x1max;
+    const Real x2min = size.d_view(m).x2min, x2max = size.d_view(m).x2max;
+    const Real x3min = size.d_view(m).x3min, x3max = size.d_view(m).x3max;
 
-    Real &x2min = size.d_view(m).x2min;
-    Real &x2max = size.d_view(m).x2max;
-    int nx2 = indcs.nx2;
-    Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
-    Real x2l =   LeftEdgeX(j-js, nx2, x2min, x2max);
-    Real x2r = LeftEdgeX(j+1-js, nx2, x2min, x2max);
+    const Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+    const Real x1l = LeftEdgeX(i-is,   nx1, x1min, x1max);
+    const Real x1r = LeftEdgeX(i+1-is, nx1, x1min, x1max);
 
-    Real &x3min = size.d_view(m).x3min;
-    Real &x3max = size.d_view(m).x3max;
-    int nx3 = indcs.nx3;
-    Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
-    Real x3l =   LeftEdgeX(k-ks, nx3, x3min, x3max);
-    Real x3r = LeftEdgeX(k+1-ks, nx3, x3min, x3max);
+    const Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+    const Real x2l = LeftEdgeX(j-js,   nx2, x2min, x2max);
+    const Real x2r = LeftEdgeX(j+1-js, nx2, x2min, x2max);
+
+    const Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+    const Real x3l = LeftEdgeX(k-ks,   nx3, x3min, x3max);
+    const Real x3r = LeftEdgeX(k+1-ks, nx3, x3min, x3max);
 
     Real phi1l = GravPot(x1l,x2v,x3v,G,r_s,rho_s,m_g,a_g,z_g,r_m,rho_m);
     Real phi1r = GravPot(x1r,x2v,x3v,G,r_s,rho_s,m_g,a_g,z_g,r_m,rho_m);
-    Real f_x1_ = -(phi1r-phi1l)/(x1r-x1l);
 
     Real phi2l = GravPot(x1v,x2l,x3v,G,r_s,rho_s,m_g,a_g,z_g,r_m,rho_m);
     Real phi2r = GravPot(x1v,x2r,x3v,G,r_s,rho_s,m_g,a_g,z_g,r_m,rho_m);
-    Real f_x2_ = -(phi2r-phi2l)/(x2r-x2l);
 
     Real phi3l = GravPot(x1v,x2v,x3l,G,r_s,rho_s,m_g,a_g,z_g,r_m,rho_m);
     Real phi3r = GravPot(x1v,x2v,x3r,G,r_s,rho_s,m_g,a_g,z_g,r_m,rho_m);
-    Real f_x3_ = -(phi3r-phi3l)/(x3r-x3l);
+
+    constexpr Real tiny = 1e-20;
+    Real f_x1_ = -(phi1r - phi1l) / fmax(x1r - x1l, tiny);
+    Real f_x2_ = -(phi2r - phi2l) / fmax(x2r - x2l, tiny);
+    Real f_x3_ = -(phi3r - phi3l) / fmax(x3r - x3l, tiny);
 
     Real density = w0(m, IDN, k, j, i);
-    Real src_x1 = bdt*density*f_x1_;
-    Real src_x2 = bdt*density*f_x2_;
-    Real src_x3 = bdt*density*f_x3_;
+    Real src_x1 = bdt * density * f_x1_;
+    Real src_x2 = bdt * density * f_x2_;
+    Real src_x3 = bdt * density * f_x3_;
 
     u0(m,IM1,k,j,i) += src_x1;	
     u0(m,IM2,k,j,i) += src_x2;
     u0(m,IM3,k,j,i) += src_x3;
-    u0(m,IEN,k,j,i) += (src_x1*w0(m,IVX,k,j,i) 
-                       +src_x2*w0(m,IVY,k,j,i) 
-                       +src_x3*w0(m,IVZ,k,j,i));
+    u0(m,IEN,k,j,i) += (src_x1 * w0(m,IVX,k,j,i) +
+                        src_x2 * w0(m,IVY,k,j,i) +
+                        src_x3 * w0(m,IVZ,k,j,i));
     
   });
 
@@ -518,30 +515,24 @@ Real GravPot(Real x1, Real x2, Real x3,
              Real G, Real r_s, Real rho_s, 
              Real M_gal, Real a_gal, Real z_gal,
              Real R200, Real rho_mean) {
-  Real R = sqrt(x1*x1 + x2*x2);
-  Real r2 = x1*x1 + x2*x2 + x3*x3;
-  Real r = sqrt(r2);
-
-  // Avoid division by zero
-  constexpr Real tiny = 1.0e-20;
-  r = fmax(r, tiny);
+  const Real R2 = fma(x1, x1 , x2*x2);
+  const Real R  = sqrt(R2);
+  const Real r2 = fma(x3 , x3 , R2);
+  const Real r  = sqrt(fmax(r2, 1e-20));
 
   // NFW component
   Real x = r / r_s;
-  Real phi_NFW = -4 * M_PI * G * rho_s * SQR(r_s) * log(1 + x) / x;
+  Real phi_NFW = -4 * M_PI * G * rho_s * SQR(r_s) * log1p(x) / x;
   
   // Miyamoto-Nagai model
-  Real phi_MN = -G * M_gal / sqrt(R*R + SQR(sqrt(x3*x3 + z_gal*z_gal) + a_gal));
+  Real phi_MN = -G * M_gal / sqrt(R2 + SQR(sqrt(fma(x3 , x3 , z_gal*z_gal)) + a_gal));
   
   // Outer component
-  Real term1 = (4.0 / 3.0) * pow(5 * R200, 1.5) * sqrt(r);
-  Real term2 = (1.0 / 6.0) * r2;
-  Real phi_Outer = 4 * M_PI * G * rho_mean * (term1 + term2);
+  Real c_outer = (4.0/3.0) * pow(5 * R200, 1.5);
+  Real phi_Outer = 4 * M_PI * G * rho_mean * (c_outer * sqrt(r) + (1.0/6.0) * r2);
   
   // Total potential
-  Real phi = phi_NFW + phi_MN + phi_Outer;
-  
-  return phi;
+  return phi_NFW + phi_MN + phi_Outer;
 }
 
 void SNSource(Mesh* pm, const Real bdt) {
@@ -550,6 +541,7 @@ void SNSource(Mesh* pm, const Real bdt) {
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
   int ks = indcs.ks, ke = indcs.ke;
+  int nx1 = indcs.nx1, nx2 = indcs.nx2, nx3 = indcs.nx3;
   int nmb1 = pmbp->nmb_thispack - 1;
   auto &size = pmbp->pmb->mb_size;
   
@@ -561,7 +553,6 @@ void SNSource(Mesh* pm, const Real bdt) {
   int npart = pmbp->ppart->nprtcl_thispack;
 
   auto gids = pmbp->gids;
-  auto &mbsize = pmbp->pmb->mb_size;
 
   Real time = pm->time;
   int nrdata = pmbp->ppart->nrdata;
@@ -569,7 +560,7 @@ void SNSource(Mesh* pm, const Real bdt) {
 
   Real dr = r_inj;
 
-  // Create array of positions where SNs go off at this timestep
+  // Array of positions where SNs go off at this timestep
   auto &sn_centers = sn_centers_buffer;
   Kokkos::View<int> d_counter("sn_counter");
 
@@ -590,12 +581,12 @@ void SNSource(Mesh* pm, const Real bdt) {
       int idx = Kokkos::atomic_fetch_add(&d_counter(), 1);
       int m = pi(PGID, p) - gids;
       
-      Real x1min = mbsize.d_view(m).x1min;
-      Real x1max = mbsize.d_view(m).x1max;
-      Real x2min = mbsize.d_view(m).x2min;
-      Real x2max = mbsize.d_view(m).x2max;
-      Real x3min = mbsize.d_view(m).x3min;
-      Real x3max = mbsize.d_view(m).x3max;
+      Real x1min = size.d_view(m).x1min;
+      Real x1max = size.d_view(m).x1max;
+      Real x2min = size.d_view(m).x2min;
+      Real x2max = size.d_view(m).x2max;
+      Real x3min = size.d_view(m).x3min;
+      Real x3max = size.d_view(m).x3max;
 
       sn_centers(0, idx) = min(max(pr(IPX,p), x1min+dr), x1max-dr);
       sn_centers(1, idx) = min(max(pr(IPY,p), x2min+dr), x2max-dr);
@@ -610,26 +601,23 @@ void SNSource(Mesh* pm, const Real bdt) {
   Kokkos::deep_copy(num_sn, d_counter);
   
   if (num_sn > 0) {
-    std::cout << num_sn << " SN went off" << std::endl;
+    // std::cout << num_sn << " SN went off" << std::endl;
     
     Real e_sn_ = e_sn;
     Real m_ej_ = m_ej;
 
     par_for("sn_injection", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-      Real &x1min = size.d_view(m).x1min;
-      Real &x1max = size.d_view(m).x1max;
-      int nx1 = indcs.nx1;
+      Real x1min = size.d_view(m).x1min;
+      Real x1max = size.d_view(m).x1max;
       Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
 
-      Real &x2min = size.d_view(m).x2min;
-      Real &x2max = size.d_view(m).x2max;
-      int nx2 = indcs.nx2;
+      Real x2min = size.d_view(m).x2min;
+      Real x2max = size.d_view(m).x2max;
       Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
 
-      Real &x3min = size.d_view(m).x3min;
-      Real &x3max = size.d_view(m).x3max;
-      int nx3 = indcs.nx3;
+      Real x3min = size.d_view(m).x3min;
+      Real x3max = size.d_view(m).x3max;
       Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
 
       for (int sn = 0; sn < num_sn; ++sn) {
