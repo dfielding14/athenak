@@ -95,7 +95,7 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   dt_turb_thresh=pin->GetOrAddReal("turb_driving","dt_turb_thresh",1e-6);
   // To store fraction of energy in solenoidal modes
   sol_fraction=pin->GetOrAddReal("turb_driving","sol_fraction",1.0);
-  
+
   // random seed for turbulence driving (-1 = use time-based seed)
   rseed = pin->GetOrAddInteger("turb_driving", "rseed", -1);
 
@@ -167,14 +167,14 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
     Real dk_max = fmax(fmax(dkx,dky),dkz);
     kmin_sfb = nlow * dk_min;
     kmax_sfb = nhigh * dk_max;
-    
+
     // Count modes that fall within the wavenumber range
     for (int l = 0; l <= lmax; ++l) {
       for (int n_i = 1; n_i <= nmax; ++n_i) {
         // Get spherical Bessel root
         Real xln = FindSphericalBesselRoot(l, n_i);
         Real kln = xln / r0_turb;
-        
+
         // Only include modes within the desired wavenumber range
         if (kln >= kmin_sfb && kln <= kmax_sfb) {
           // For each valid (l,n), include all m values
@@ -184,9 +184,9 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
         }
       }
     }
-    
+
     if (global_variable::my_rank == 0) {
-      std::cout << "SFB turbulence driving: selected " << mode_count << " modes with k in [" 
+      std::cout << "SFB turbulence driving: selected " << mode_count << " modes with k in ["
                 << kmin_sfb << ", " << kmax_sfb << "]" << std::endl;
     }
   }
@@ -210,7 +210,7 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
       for (int n_i = 1; n_i <= nmax; ++n_i) {
         Real xln = FindSphericalBesselRoot(l, n_i);
         Real kln = xln / r0_turb;
-        
+
         // Only include modes within the desired wavenumber range
         if (kln >= kmin_sfb && kln <= kmax_sfb) {
           for (int m = -l; m <= l; ++m) {
@@ -360,7 +360,7 @@ void TurbulenceDriver::Initialize() {
   Real global_x2max = pm->mesh_size.x2max;
   Real global_x3min = pm->mesh_size.x3min;
   Real global_x3max = pm->mesh_size.x3max;
-  
+
   par_for("xsin/xcos", DevExeSpace(),0,nmb-1,0,mode_count-1,is,ie,
   KOKKOS_LAMBDA(int m, int n, int i) {
     Real &x1min = size.d_view(m).x1min;
@@ -418,7 +418,7 @@ void TurbulenceDriver::Initialize() {
     Real r0 = r0_turb;
 
     int &nx1_ref = nx1; int &nx2_ref = nx2; int &nx3_ref = nx3;
-    
+
     // Regularization radius - a few grid cells
     Real dx = (size.d_view(0).x1max - size.d_view(0).x1min) / nx1_ref;
     Real dy = (size.d_view(0).x2max - size.d_view(0).x2min) / nx2_ref;
@@ -446,7 +446,7 @@ void TurbulenceDriver::Initialize() {
       Real z = CellCenterX(k-ks, nx3_ref, x3min, x3max) - zcen;
 
       Real r = sqrt(x*x + y*y + z*z);
-      
+
       // Apply radial cutoff - force is zero outside r0
       if (r >= r0) {
         sfbR_(mb,n,0,k,j,i) = 0.0;
@@ -457,7 +457,7 @@ void TurbulenceDriver::Initialize() {
         sfbI_(mb,n,2,k,j,i) = 0.0;
         return;
       }
-      
+
       // Regularization near r=0 to avoid divergence
       if (r < dr_min) {
         // Near origin, use regularized form
@@ -491,14 +491,14 @@ void TurbulenceDriver::Initialize() {
         }
         return;
       }
-      
+
       // Spherical coordinates
       Real costh = z/r;
       Real sinth = sqrt(fmax(0.0, 1.0 - costh*costh));
       Real phi = atan2(y,x);
       Real cosphi = cos(phi);
       Real sinphi = sin(phi);
-      
+
       // Additional check for pole singularity
       if (sinth < 1e-10) {
         // At poles, only m=0 modes survive
@@ -518,23 +518,23 @@ void TurbulenceDriver::Initialize() {
       Real Nlm = ylm_norm(l_val, m_val);
       Real cosmf = cos(m_val*phi);
       Real sinmf = sin(m_val*phi);
-      
-      // Y_lm 
+
+      // Y_lm
       Real Y_real = Nlm * Plm * cosmf;
       Real Y_imag = Nlm * Plm * sinmf;
-      
+
       // Compute spherical Bessel function and derivative
       Real kr = kln_val * r;
       Real jl = sph_bessel_jl(l_val, kr);
       Real jl_prime = sph_bessel_jl_prime(l_val, kr);
-      
-      // Vector spherical harmonics: 
+
+      // Vector spherical harmonics:
       // For divergence-free field, we use the magnetic-type VSH
       // B_lm = curl(r * jl * Y_lm) = grad(jl*Y_lm) x r
-      
+
       // Gradient of jl in spherical coords: d(jl)/dr = kln * jl'
       Real djl_dr = kln_val * jl_prime;
-      
+
       // Gradient of Y_lm in spherical coords (need derivatives of Plm)
       Real dPlm_dth = 0.0;
       if (sinth > 1e-10) {
@@ -546,36 +546,36 @@ void TurbulenceDriver::Initialize() {
           dPlm_dth = -m_val * costh/sinth * Plm + Plmp1 * sqrt((l_val+abs(m_val)+1.0)*(l_val-abs(m_val)));
         }
       }
-      
+
       // Components of grad(jl*Y_lm) in spherical coords
       Real grad_r = djl_dr * Y_real;
       Real grad_th = jl/r * Nlm * dPlm_dth * cosmf;
       Real grad_phi = (sinth > 1e-10 ? jl/(r*sinth) * m_val * Nlm * Plm * (-sinmf) : 0.0);
-      
+
       // Imaginary parts
       Real grad_r_i = djl_dr * Y_imag;
       Real grad_th_i = jl/r * Nlm * dPlm_dth * sinmf;
       Real grad_phi_i = (sinth > 1e-10 ? jl/(r*sinth) * m_val * Nlm * Plm * cosmf : 0.0);
-      
+
       // Cross product with r-hat to get B_lm = grad x r_hat
       // In spherical coords: r_hat x grad = -grad_phi*theta_hat + grad_th*phi_hat
       Real Br = 0.0;
       Real Bth = -grad_phi;
       Real Bphi = grad_th;
-      
+
       Real Br_i = 0.0;
       Real Bth_i = -grad_phi_i;
       Real Bphi_i = grad_th_i;
-      
+
       // Convert to Cartesian coordinates
       // Unit vectors: r_hat = (sin(th)cos(phi), sin(th)sin(phi), cos(th))
       //               th_hat = (cos(th)cos(phi), cos(th)sin(phi), -sin(th))
       //               phi_hat = (-sin(phi), cos(phi), 0)
-      
+
       sfbR_(mb,n,0,k,j,i) = Br*sinth*cosphi + Bth*costh*cosphi - Bphi*sinphi;
       sfbR_(mb,n,1,k,j,i) = Br*sinth*sinphi + Bth*costh*sinphi + Bphi*cosphi;
       sfbR_(mb,n,2,k,j,i) = Br*costh - Bth*sinth;
-      
+
       sfbI_(mb,n,0,k,j,i) = Br_i*sinth*cosphi + Bth_i*costh*cosphi - Bphi_i*sinphi;
       sfbI_(mb,n,1,k,j,i) = Br_i*sinth*sinphi + Bth_i*costh*sinphi + Bphi_i*cosphi;
       sfbI_(mb,n,2,k,j,i) = Br_i*costh - Bth_i*sinth;
@@ -592,23 +592,23 @@ void TurbulenceDriver::Initialize() {
 void TurbulenceDriver::ResizeArrays(int new_nmb) {
   // Only resize if the number of MeshBlocks has changed
   if (new_nmb == current_nmb) return;
-  
+
   // Get mesh indices
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int ncells1 = indcs.nx1 + 2*(indcs.ng);
   int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
   int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
-  
+
   if (global_variable::my_rank == 0) {
-    std::cout << "### TurbulenceDriver::ResizeArrays: Resizing from " 
+    std::cout << "### TurbulenceDriver::ResizeArrays: Resizing from "
               << current_nmb << " to " << new_nmb << " MeshBlocks" << std::endl;
   }
-  
+
   // Resize force arrays
   Kokkos::realloc(force, new_nmb, 3, ncells3, ncells2, ncells1);
   Kokkos::realloc(force_tmp1, new_nmb, 3, ncells3, ncells2, ncells1);
   Kokkos::realloc(force_tmp2, new_nmb, 3, ncells3, ncells2, ncells1);
-  
+
   // Resize mode arrays
   Kokkos::realloc(xcos, new_nmb, mode_count, ncells1);
   Kokkos::realloc(xsin, new_nmb, mode_count, ncells1);
@@ -616,17 +616,17 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
   Kokkos::realloc(ysin, new_nmb, mode_count, ncells2);
   Kokkos::realloc(zcos, new_nmb, mode_count, ncells3);
   Kokkos::realloc(zsin, new_nmb, mode_count, ncells3);
-  
+
   // Resize SFB basis arrays if using SFB
   if (basis_type_ == TurbBasis::SphericalFB) {
     Kokkos::realloc(sfb_vector_basis_real, new_nmb, mode_count, 3, ncells3, ncells2, ncells1);
     Kokkos::realloc(sfb_vector_basis_imag, new_nmb, mode_count, 3, ncells3, ncells2, ncells1);
   }
-  
+
   // Update current size
   int old_nmb = current_nmb;
   current_nmb = new_nmb;
-  
+
   // If expanding, initialize new MeshBlock data
   if (new_nmb > old_nmb) {
     // Re-initialize all arrays to ensure consistency
@@ -836,7 +836,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
           Real kln = kln_mode.h_view(n);
           Real kiso = fabs(kln);
           Real norm = 0.0;
-          
+
           // Apply power spectrum normalization
           if (kiso > 1e-16) {
             if (spect_form == 2) {
@@ -878,7 +878,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
       auto sfb_basis_real_ = sfb_vector_basis_real;
       auto sfb_basis_imag_ = sfb_vector_basis_imag;
       auto basis_type = basis_type_;
-      
+
       for (int n=0; n<mode_count; n++) {
         par_for("force_compute", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
         KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -955,14 +955,14 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
   int &nx1 = indcs.nx1;
   int &nx2 = indcs.nx2;
   int &nx3 = indcs.nx3;
-  
+
   // Check if mesh has changed and resize arrays if needed
   ResizeArrays(nmb);
-  
+
   // Diagnostic output
   static int diag_count = 0;
   if (diag_count++ % 10 == 0 && global_variable::my_rank == 0) {
-    std::cout << "### TurbulenceDriver::UpdateForcing: nmb=" << nmb 
+    std::cout << "### TurbulenceDriver::UpdateForcing: nmb=" << nmb
               << ", force array size=" << force.extent(0) << std::endl;
   }
 
@@ -1092,14 +1092,14 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
       force_(m,1,k,j,i) -= t2/t0;
       force_(m,2,k,j,i) -= t3/t0;
     });
-    
+
     // For SFB basis, also check for points inside r0_turb
     if (basis_type_ == TurbBasis::SphericalFB && r0_turb > 0) {
       Real r0 = r0_turb;
       Real xcen_ = x_turb_center;
       Real ycen_ = y_turb_center;
       Real zcen_ = z_turb_center;
-      
+
       // Additional pass to ensure zero mean inside r0_turb only
       Real t0_sfb = 0.0, t1_sfb = 0.0, t2_sfb = 0.0, t3_sfb = 0.0;
       Kokkos::parallel_reduce("net_mom_sfb", Kokkos::RangePolicy<>(DevExeSpace(),0,nmkji),
@@ -1111,19 +1111,19 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
         int i = (idx - m*nkji - k*nji - j*nx1) + is;
         k += ks;
         j += js;
-        
+
         Real &x1min = size.d_view(m).x1min;
         Real &x1max = size.d_view(m).x1max;
         Real &x2min = size.d_view(m).x2min;
         Real &x2max = size.d_view(m).x2max;
         Real &x3min = size.d_view(m).x3min;
         Real &x3max = size.d_view(m).x3max;
-        
+
         Real x = CellCenterX(i-is, nx1, x1min, x1max) - xcen_;
         Real y = CellCenterX(j-js, nx2, x2min, x2max) - ycen_;
         Real z = CellCenterX(k-ks, nx3, x3min, x3max) - zcen_;
         Real r = sqrt(x*x + y*y + z*z);
-        
+
         if (r < r0) {
           Real vol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
           Real den = u0(m,IDN,k,j,i);
@@ -1137,14 +1137,14 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
         }
       }, Kokkos::Sum<Real>(t0_sfb), Kokkos::Sum<Real>(t1_sfb),
          Kokkos::Sum<Real>(t2_sfb), Kokkos::Sum<Real>(t3_sfb));
-      
+
       #if MPI_PARALLEL_ENABLED
         Real m_sfb[4], gm_sfb[4];
         m_sfb[0] = t0_sfb; m_sfb[1] = t1_sfb; m_sfb[2] = t2_sfb; m_sfb[3] = t3_sfb;
         MPI_Allreduce(m_sfb, gm_sfb, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
         t0_sfb = gm_sfb[0]; t1_sfb = gm_sfb[1]; t2_sfb = gm_sfb[2]; t3_sfb = gm_sfb[3];
       #endif
-      
+
       if (t0_sfb > 0) {
         par_for("force_remove_net_mom_sfb", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
         KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -1154,12 +1154,12 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
           Real &x2max = size.d_view(m).x2max;
           Real &x3min = size.d_view(m).x3min;
           Real &x3max = size.d_view(m).x3max;
-          
+
           Real x = CellCenterX(i-is, nx1, x1min, x1max) - xcen_;
           Real y = CellCenterX(j-js, nx2, x2min, x2max) - ycen_;
           Real z = CellCenterX(k-ks, nx3, x3min, x3max) - zcen_;
           Real r = sqrt(x*x + y*y + z*z);
-          
+
           if (r < r0) {
             force_(m,0,k,j,i) -= t1_sfb/t0_sfb;
             force_(m,1,k,j,i) -= t2_sfb/t0_sfb;
@@ -1289,7 +1289,7 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
   int &nx1 = indcs.nx1;
   int &nx2 = indcs.nx2;
   int &nx3 = indcs.nx3;
-  
+
   // Check if mesh has changed and resize arrays if needed
   ResizeArrays(nmb);
 
@@ -1628,23 +1628,23 @@ Real TurbulenceDriver::FindSphericalBesselRoot(int l, int n) {
     // General asymptotic approximation
     x = (n + 0.5*l - 0.25) * M_PI;
   }
-  
+
   // Newton-Raphson iteration
   const int max_iter = 20;
   const Real tol = 1e-12;
-  
+
   for (int iter = 0; iter < max_iter; ++iter) {
     Real jl = sph_bessel_jl(l, x);
     Real jl_prime = sph_bessel_jl_prime(l, x);
-    
+
     if (fabs(jl) < tol) break;
     if (fabs(jl_prime) < 1e-20) break;  // Avoid division by zero
-    
+
     Real dx = -jl / jl_prime;
     x += dx;
-    
+
     if (fabs(dx) < tol * x) break;
   }
-  
+
   return x;
 }
