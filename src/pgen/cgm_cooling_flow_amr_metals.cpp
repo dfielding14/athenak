@@ -273,7 +273,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   sn_centers_buffer = DvceArray2D<Real>("sn_centers_buffer", 3, pmy_mesh_->nprtcl_total);
   if (global_variable::my_rank==0) {
     std::cout << "Successfully initialized " << pmy_mesh_->nprtcl_total 
-	      << " particles!" << std::endl;
+              << " particles!" << std::endl;
   }
 
   return;
