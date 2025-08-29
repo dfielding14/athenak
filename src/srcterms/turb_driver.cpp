@@ -39,18 +39,6 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   kx_mode("kx_mode",1),ky_mode("ky_mode",1),kz_mode("kz_mode",1),
   xcos("xcos",1,1,1),xsin("xsin",1,1,1),ycos("ycos",1,1,1),
   ysin("ysin",1,1,1),zcos("zcos",1,1,1),zsin("zsin",1,1,1) {
-  // Parse basis type option
-  basis_type_ = static_cast<TurbBasis>(pin->GetOrAddInteger("turb_driving", "basis_type", 0));
-  if (basis_type_ == TurbBasis::SphericalFB) {
-    lmax     = pin->GetOrAddInteger("turb_driving", "lmax", 10);
-    nmax     = pin->GetOrAddInteger("turb_driving", "nmax", 10);
-    r0_turb  = pin->GetOrAddReal   ("turb_driving", "r0_turb", 0.5);
-    if (r0_turb <= 0.0) {
-      std::cout << "### FATAL ERROR in TurbulenceDriver: r0_turb must be positive for SFB basis" << std::endl;
-      exit(EXIT_FAILURE);
-    }
-  }
-
   // allocate memory for force registers
   int nmb = pmy_pack->nmb_thispack;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
@@ -138,111 +126,40 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
 
   mode_count = 0;
 
-  if (basis_type_ == TurbBasis::Cartesian) {
-    int nkx, nky, nkz;
-    Real nsqr;
-    for (nkx = min_kx; nkx <= max_kx; nkx++) {
-      for (nky = min_ky; nky <= max_ky; nky++) {
-        for (nkz = min_kz; nkz <= max_kz; nkz++) {
-          if (nkx == 0 && nky == 0 && nkz == 0) continue;
-          nsqr = 0.0;
-          bool flag_prl = true;
-          if (driving_type == 0) {
-            nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
-          } else if (driving_type == 1) {
-            nsqr = SQR(nkx) + SQR(nky);
-            Real nprlsqr = SQR(nkz);
-            if (nprlsqr >= nlow_sqr && nprlsqr <= nhigh_sqr) {
-              flag_prl = true;
-            } else {
-              flag_prl = false;
-            }
-          }
-          if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr && flag_prl) {
-            mode_count++;
+  // Count Cartesian modes
+  int nkx, nky, nkz;
+  Real nsqr;
+  for (nkx = min_kx; nkx <= max_kx; nkx++) {
+    for (nky = min_ky; nky <= max_ky; nky++) {
+      for (nkz = min_kz; nkz <= max_kz; nkz++) {
+        if (nkx == 0 && nky == 0 && nkz == 0) continue;
+        nsqr = 0.0;
+        bool flag_prl = true;
+        if (driving_type == 0) {
+          nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
+        } else if (driving_type == 1) {
+          nsqr = SQR(nkx) + SQR(nky);
+          Real nprlsqr = SQR(nkz);
+          if (nprlsqr >= nlow_sqr && nprlsqr <= nhigh_sqr) {
+            flag_prl = true;
+          } else {
+            flag_prl = false;
           }
         }
-      }
-    }
-  } else {
-    // Spherical Fourier–Bessel basis
-    // Calculate wavenumber range from fundamental wavenumber
-    Mesh *pm = pmy_pack->pmesh;
-    Real dkx = 2.0*M_PI/(pm->mesh_size.x1max - pm->mesh_size.x1min);
-    Real dky = 2.0*M_PI/(pm->mesh_size.x2max - pm->mesh_size.x2min);
-    Real dkz = 2.0*M_PI/(pm->mesh_size.x3max - pm->mesh_size.x3min);
-    Real dk_min = fmin(fmin(dkx,dky),dkz);
-    Real dk_max = fmax(fmax(dkx,dky),dkz);
-    kmin_sfb = nlow * dk_min;
-    kmax_sfb = nhigh * dk_max;
-    
-    // Count modes that fall within the wavenumber range
-    for (int l = 0; l <= lmax; ++l) {
-      for (int n_i = 1; n_i <= nmax; ++n_i) {
-        // Get spherical Bessel root
-        Real xln = FindSphericalBesselRoot(l, n_i);
-        Real kln = xln / r0_turb;
-        
-        // Only include modes within the desired wavenumber range
-        if (kln >= kmin_sfb && kln <= kmax_sfb) {
-          // For each valid (l,n), include all m values
-          for (int m = -l; m <= l; ++m) {
-            mode_count++;
-          }
+        if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr && flag_prl) {
+          mode_count++;
         }
       }
-    }
-    
-    if (global_variable::my_rank == 0) {
-      std::cout << "SFB turbulence driving: selected " << mode_count << " modes with k in [" 
-                << kmin_sfb << ", " << kmax_sfb << "]" << std::endl;
     }
   }
 
   Kokkos::realloc(aka, 3, mode_count); // Amplitude of real component
   Kokkos::realloc(akb, 3, mode_count); // Amplitude of imaginary component
 
-  if (basis_type_ == TurbBasis::Cartesian) {
-    Kokkos::realloc(kx_mode, mode_count);
-    Kokkos::realloc(ky_mode, mode_count);
-    Kokkos::realloc(kz_mode, mode_count);
-  } else {
-    Kokkos::realloc(l_mode, mode_count);
-    Kokkos::realloc(m_mode, mode_count);
-    Kokkos::realloc(n_mode, mode_count);
-    Kokkos::realloc(kln_mode, mode_count);
-    Kokkos::realloc(xln_root, mode_count);
-
-    int idx = 0;
-    for (int l = 0; l <= lmax; ++l) {
-      for (int n_i = 1; n_i <= nmax; ++n_i) {
-        Real xln = FindSphericalBesselRoot(l, n_i);
-        Real kln = xln / r0_turb;
-        
-        // Only include modes within the desired wavenumber range
-        if (kln >= kmin_sfb && kln <= kmax_sfb) {
-          for (int m = -l; m <= l; ++m) {
-            l_mode.h_view(idx)  = l;
-            m_mode.h_view(idx)  = m;
-            n_mode.h_view(idx)  = n_i;
-            kln_mode.h_view(idx) = kln;
-            xln_root.h_view(idx) = xln;
-            ++idx;
-          }
-        }
-      }
-    }
-    l_mode.template modify<HostMemSpace>();
-    l_mode.template sync<DevExeSpace>();
-    m_mode.template modify<HostMemSpace>();
-    m_mode.template sync<DevExeSpace>();
-    n_mode.template modify<HostMemSpace>();
-    n_mode.template sync<DevExeSpace>();
-    kln_mode.template modify<HostMemSpace>();
-    kln_mode.template sync<DevExeSpace>();
-    xln_root.template modify<HostMemSpace>();
-    xln_root.template sync<DevExeSpace>();
-  }
+  // Allocate Cartesian mode arrays
+  Kokkos::realloc(kx_mode, mode_count);
+  Kokkos::realloc(ky_mode, mode_count);
+  Kokkos::realloc(kz_mode, mode_count);
 
   Kokkos::realloc(xcos, nmb, mode_count, ncells1);
   Kokkos::realloc(xsin, nmb, mode_count, ncells1);
@@ -250,12 +167,6 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   Kokkos::realloc(ysin, nmb, mode_count, ncells2);
   Kokkos::realloc(zcos, nmb, mode_count, ncells3);
   Kokkos::realloc(zsin, nmb, mode_count, ncells3);
-
-  // Allocate precomputed SFB basis arrays if needed
-  if (basis_type_ == TurbBasis::SphericalFB) {
-    Kokkos::realloc(sfb_vector_basis_real, mode_count, 3, ncells3, ncells2, ncells1);
-    Kokkos::realloc(sfb_vector_basis_imag, mode_count, 3, ncells3, ncells2, ncells1);
-  }
 
   Initialize();
 }
@@ -305,9 +216,8 @@ void TurbulenceDriver::Initialize() {
   auto zcos_ = zcos;
   auto zsin_ = zsin;
 
-  // Cartesian plane-wave precomputations only if using Cartesian basis
-  if (basis_type_ == TurbBasis::Cartesian) {
-    Real dkx, dky, dkz, kx, ky, kz;
+  // Cartesian plane-wave precomputations
+  Real dkx, dky, dkz, kx, ky, kz;
     Real lx = pm->mesh_size.x1max - pm->mesh_size.x1min;
     Real ly = pm->mesh_size.x2max - pm->mesh_size.x2min;
     Real lz = pm->mesh_size.x3max - pm->mesh_size.x3min;
@@ -349,7 +259,6 @@ void TurbulenceDriver::Initialize() {
         }
       }
     }
-  }
 
   kx_mode_.template modify<HostMemSpace>();
   kx_mode_.template sync<DevExeSpace>();
@@ -399,186 +308,6 @@ void TurbulenceDriver::Initialize() {
     }
   });
 
-  // -----------------------------------------------------------------------------
-  // Pre-compute vector spherical harmonics for SFB driving (if requested)
-  if (basis_type_ == TurbBasis::SphericalFB) {
-    auto sfbR_ = sfb_vector_basis_real;
-    auto sfbI_ = sfb_vector_basis_imag;
-    auto l_mode_ = l_mode;
-    auto m_mode_ = m_mode;
-    auto kln_mode_ = kln_mode;
-    auto xln_root_ = xln_root;
-
-    Real xcen = x_turb_center;
-    Real ycen = y_turb_center;
-    Real zcen = z_turb_center;
-    Real r0 = r0_turb;
-
-    int &nx1_ref = nx1; int &nx2_ref = nx2; int &nx3_ref = nx3;
-    
-    // Regularization radius - a few grid cells
-    Real dx = (size.d_view(0).x1max - size.d_view(0).x1min) / nx1_ref;
-    Real dy = (size.d_view(0).x2max - size.d_view(0).x2min) / nx2_ref;
-    Real dz = (size.d_view(0).x3max - size.d_view(0).x3min) / nx3_ref;
-    Real dr_min = 2.0 * fmin(fmin(dx, dy), dz);
-
-    par_for("precomp_sfb_vec", DevExeSpace(), 0, mode_count-1, 0, nmb-1, ks, ke, js, je, is, ie,
-    KOKKOS_LAMBDA(int n, int mb, int k, int j, int i) {
-      // Get mode parameters
-      int l_val = l_mode_.d_view(n);
-      int m_val = m_mode_.d_view(n);
-      Real kln_val = kln_mode_.d_view(n);
-      Real xln = xln_root_.d_view(n);
-
-      // compute coordinates of cell centre
-      Real &x1min = size.d_view(mb).x1min;
-      Real &x1max = size.d_view(mb).x1max;
-      Real &x2min = size.d_view(mb).x2min;
-      Real &x2max = size.d_view(mb).x2max;
-      Real &x3min = size.d_view(mb).x3min;
-      Real &x3max = size.d_view(mb).x3max;
-
-      Real x = CellCenterX(i-is, nx1_ref, x1min, x1max) - xcen;
-      Real y = CellCenterX(j-js, nx2_ref, x2min, x2max) - ycen;
-      Real z = CellCenterX(k-ks, nx3_ref, x3min, x3max) - zcen;
-
-      Real r = sqrt(x*x + y*y + z*z);
-      
-      // Apply radial cutoff - force is zero outside r0
-      if (r >= r0) {
-        sfbR_(n,0,k,j,i) = 0.0;
-        sfbR_(n,1,k,j,i) = 0.0;
-        sfbR_(n,2,k,j,i) = 0.0;
-        sfbI_(n,0,k,j,i) = 0.0;
-        sfbI_(n,1,k,j,i) = 0.0;
-        sfbI_(n,2,k,j,i) = 0.0;
-        return;
-      }
-      
-      // Regularization near r=0 to avoid divergence
-      if (r < dr_min) {
-        // Near origin, use regularized form
-        if (l_val == 0) {
-          // l=0 modes vanish at origin
-          sfbR_(n,0,k,j,i) = 0.0;
-          sfbR_(n,1,k,j,i) = 0.0;
-          sfbR_(n,2,k,j,i) = 0.0;
-          sfbI_(n,0,k,j,i) = 0.0;
-          sfbI_(n,1,k,j,i) = 0.0;
-          sfbI_(n,2,k,j,i) = 0.0;
-        } else if (l_val == 1) {
-          // l=1 modes: use linear approximation j_1(kr) ~ kr/3
-          Real factor = kln_val * r / 3.0;
-          Real Nlm = ylm_norm(l_val, m_val);
-          // Simple dipole pattern
-          sfbR_(n,0,k,j,i) = factor * Nlm * x / (r + 1e-20);
-          sfbR_(n,1,k,j,i) = factor * Nlm * y / (r + 1e-20);
-          sfbR_(n,2,k,j,i) = factor * Nlm * z / (r + 1e-20);
-          sfbI_(n,0,k,j,i) = 0.0;
-          sfbI_(n,1,k,j,i) = 0.0;
-          sfbI_(n,2,k,j,i) = 0.0;
-        } else {
-          // Higher l modes are suppressed near origin
-          sfbR_(n,0,k,j,i) = 0.0;
-          sfbR_(n,1,k,j,i) = 0.0;
-          sfbR_(n,2,k,j,i) = 0.0;
-          sfbI_(n,0,k,j,i) = 0.0;
-          sfbI_(n,1,k,j,i) = 0.0;
-          sfbI_(n,2,k,j,i) = 0.0;
-        }
-        return;
-      }
-      
-      // Spherical coordinates
-      Real costh = z/r;
-      Real sinth = sqrt(fmax(0.0, 1.0 - costh*costh));
-      Real phi = atan2(y,x);
-      Real cosphi = cos(phi);
-      Real sinphi = sin(phi);
-      
-      // Additional check for pole singularity
-      if (sinth < 1e-10) {
-        // At poles, only m=0 modes survive
-        if (m_val != 0) {
-          sfbR_(n,0,k,j,i) = 0.0;
-          sfbR_(n,1,k,j,i) = 0.0;
-          sfbR_(n,2,k,j,i) = 0.0;
-          sfbI_(n,0,k,j,i) = 0.0;
-          sfbI_(n,1,k,j,i) = 0.0;
-          sfbI_(n,2,k,j,i) = 0.0;
-          return;
-        }
-      }
-
-      // Compute spherical harmonics
-      Real Plm = legendre_Plm(l_val, abs(m_val), costh);
-      Real Nlm = ylm_norm(l_val, m_val);
-      Real cosmf = cos(m_val*phi);
-      Real sinmf = sin(m_val*phi);
-      
-      // Y_lm 
-      Real Y_real = Nlm * Plm * cosmf;
-      Real Y_imag = Nlm * Plm * sinmf;
-      
-      // Compute spherical Bessel function and derivative
-      Real kr = kln_val * r;
-      Real jl = sph_bessel_jl(l_val, kr);
-      Real jl_prime = sph_bessel_jl_prime(l_val, kr);
-      
-      // Vector spherical harmonics: 
-      // For divergence-free field, we use the magnetic-type VSH
-      // B_lm = curl(r * jl * Y_lm) = grad(jl*Y_lm) x r
-      
-      // Gradient of jl in spherical coords: d(jl)/dr = kln * jl'
-      Real djl_dr = kln_val * jl_prime;
-      
-      // Gradient of Y_lm in spherical coords (need derivatives of Plm)
-      Real dPlm_dth = 0.0;
-      if (sinth > 1e-10) {
-        // P_l^m derivative: dP/dtheta = -m*cot(theta)*P_l^m + P_l^{m+1}*(l+m)*(l-m+1)/sin(theta)
-        if (m_val == l_val) {
-          dPlm_dth = -m_val * costh/sinth * Plm;
-        } else {
-          Real Plmp1 = legendre_Plm(l_val, abs(m_val)+1, costh);
-          dPlm_dth = -m_val * costh/sinth * Plm + Plmp1 * sqrt((l_val+abs(m_val)+1.0)*(l_val-abs(m_val)));
-        }
-      }
-      
-      // Components of grad(jl*Y_lm) in spherical coords
-      Real grad_r = djl_dr * Y_real;
-      Real grad_th = jl/r * Nlm * dPlm_dth * cosmf;
-      Real grad_phi = (sinth > 1e-10 ? jl/(r*sinth) * m_val * Nlm * Plm * (-sinmf) : 0.0);
-      
-      // Imaginary parts
-      Real grad_r_i = djl_dr * Y_imag;
-      Real grad_th_i = jl/r * Nlm * dPlm_dth * sinmf;
-      Real grad_phi_i = (sinth > 1e-10 ? jl/(r*sinth) * m_val * Nlm * Plm * cosmf : 0.0);
-      
-      // Cross product with r-hat to get B_lm = grad x r_hat
-      // In spherical coords: r_hat x grad = -grad_phi*theta_hat + grad_th*phi_hat
-      Real Br = 0.0;
-      Real Bth = -grad_phi;
-      Real Bphi = grad_th;
-      
-      Real Br_i = 0.0;
-      Real Bth_i = -grad_phi_i;
-      Real Bphi_i = grad_th_i;
-      
-      // Convert to Cartesian coordinates
-      // Unit vectors: r_hat = (sin(th)cos(phi), sin(th)sin(phi), cos(th))
-      //               th_hat = (cos(th)cos(phi), cos(th)sin(phi), -sin(th))
-      //               phi_hat = (-sin(phi), cos(phi), 0)
-      
-      sfbR_(n,0,k,j,i) = Br*sinth*cosphi + Bth*costh*cosphi - Bphi*sinphi;
-      sfbR_(n,1,k,j,i) = Br*sinth*sinphi + Bth*costh*sinphi + Bphi*cosphi;
-      sfbR_(n,2,k,j,i) = Br*costh - Bth*sinth;
-      
-      sfbI_(n,0,k,j,i) = Br_i*sinth*cosphi + Bth_i*costh*cosphi - Bphi_i*sinphi;
-      sfbI_(n,1,k,j,i) = Br_i*sinth*sinphi + Bth_i*costh*sinphi + Bphi_i*cosphi;
-      sfbI_(n,2,k,j,i) = Br_i*costh - Bth_i*sinth;
-    });
-  }
-
   return;
 }
 
@@ -620,7 +349,6 @@ void TurbulenceDriver::IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskI
     auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
                             pmy_pack->pionn->id.n_rkupdt, pmy_pack->pionn->id.n_flux);
   }
-
   return;
 }
 
@@ -685,8 +413,8 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
       int no_dir=3;
       int nmode = 0;
 
-      if (basis_type_ == TurbBasis::Cartesian) {
-        int nkx, nky, nkz, nsqr;
+      // Cartesian mode generation
+      int nkx, nky, nkz, nsqr;
 
         for (nkx = 0; nkx <= nhigh; nkx++) {
           for (nky = 0; nky <= nhigh; nky++) {
@@ -779,36 +507,6 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
             }
           }
         }
-      } else {
-        // ------------------ SFB amplitude generation ------------------
-        for (int n=0; n<mode_count; ++n) {
-          Real kln = kln_mode.h_view(n);
-          Real kiso = fabs(kln);
-          Real norm = 0.0;
-          
-          // Apply power spectrum normalization
-          if (kiso > 1e-16) {
-            if (spect_form == 2) {
-              norm = 1.0/pow(kiso,(expo+2.0)/2.0); // power-law
-            } else if (spect_form == 1) {
-              // Parabolic spectrum
-              Real khigh = kmax_sfb;
-              Real klow = kmin_sfb;
-              Real parab_prefact = -4.0 / pow(khigh-klow,2.0);
-              norm = fabs(parab_prefact*pow(kiso-k_peak,2.0)+1.0);
-              norm = sqrt(norm);
-            }
-          }
-
-          // Generate random amplitudes
-          // For SFB modes, we directly generate divergence-free fields
-          // since the vector spherical harmonics are already divergence-free
-          for (int dir=0; dir<3; ++dir) {
-            aka_.h_view(dir,n) = norm*RanGaussianSt(&(rstate));
-            akb_.h_view(dir,n) = norm*RanGaussianSt(&(rstate));
-          }
-        }
-      }
 
       aka_.template modify<HostMemSpace>();
       aka_.template sync<DevExeSpace>();
@@ -823,29 +521,15 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
       auto zcos_ = zcos;
       auto zsin_ = zsin;
 
-      // Use precomputed basis functions for SFB
-      auto sfb_basis_real_ = sfb_vector_basis_real;
-      auto sfb_basis_imag_ = sfb_vector_basis_imag;
-      auto basis_type = basis_type_;
-
       for (int n=0; n<mode_count; n++) {
         par_for("force_compute", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
         KOKKOS_LAMBDA(int m, int k, int j, int i) {
-          if (basis_type == TurbBasis::Cartesian) {
-            Real forc_real = ( xcos_(m,n,i)*ycos_(m,n,j) - xsin_(m,n,i)*ysin_(m,n,j) ) * zcos_(m,n,k) -
-                            ( xsin_(m,n,i)*ycos_(m,n,j) + xcos_(m,n,i)*ysin_(m,n,j) ) * zsin_(m,n,k);
-            Real forc_imag = ( ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k) ) * xcos_(m,n,i) +
-                            ( ycos_(m,n,j)*zcos_(m,n,k) - ysin_(m,n,j)*zsin_(m,n,k) ) * xsin_(m,n,i);
-            for (int dir = 0; dir < 3; dir ++){
-              force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real - akb_.d_view(dir,n)*forc_imag;
-            }
-          } else {
-            // SFB basis - use precomputed vector spherical harmonics
-            for (int dir = 0; dir < 3; dir ++){
-              Real basis_real = sfb_basis_real_(n,dir,k,j,i);
-              Real basis_imag = sfb_basis_imag_(n,dir,k,j,i);
-              force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*basis_real - akb_.d_view(dir,n)*basis_imag;
-            }
+          Real forc_real = ( xcos_(m,n,i)*ycos_(m,n,j) - xsin_(m,n,i)*ysin_(m,n,j) ) * zcos_(m,n,k) -
+                          ( xsin_(m,n,i)*ycos_(m,n,j) + xcos_(m,n,i)*ysin_(m,n,j) ) * zsin_(m,n,k);
+          Real forc_imag = ( ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k) ) * xcos_(m,n,i) +
+                          ( ycos_(m,n,j)*zcos_(m,n,k) - ysin_(m,n,j)*zsin_(m,n,k) ) * xsin_(m,n,i);
+          for (int dir = 0; dir < 3; dir ++){
+            force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real - akb_.d_view(dir,n)*forc_imag;
           }
         });
       }
@@ -1031,82 +715,6 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
       force_(m,1,k,j,i) -= t2/t0;
       force_(m,2,k,j,i) -= t3/t0;
     });
-    
-    // For SFB basis, also check for points inside r0_turb
-    if (basis_type_ == TurbBasis::SphericalFB && r0_turb > 0) {
-      Real r0 = r0_turb;
-      Real xcen_ = x_turb_center;
-      Real ycen_ = y_turb_center;
-      Real zcen_ = z_turb_center;
-      
-      // Additional pass to ensure zero mean inside r0_turb only
-      Real t0_sfb = 0.0, t1_sfb = 0.0, t2_sfb = 0.0, t3_sfb = 0.0;
-      Kokkos::parallel_reduce("net_mom_sfb", Kokkos::RangePolicy<>(DevExeSpace(),0,nmkji),
-      KOKKOS_LAMBDA(const int &idx, Real &sum_t0, Real &sum_t1,
-                                    Real &sum_t2, Real &sum_t3) {
-        int m = (idx)/nkji;
-        int k = (idx - m*nkji)/nji;
-        int j = (idx - m*nkji - k*nji)/nx1;
-        int i = (idx - m*nkji - k*nji - j*nx1) + is;
-        k += ks;
-        j += js;
-        
-        Real &x1min = size.d_view(m).x1min;
-        Real &x1max = size.d_view(m).x1max;
-        Real &x2min = size.d_view(m).x2min;
-        Real &x2max = size.d_view(m).x2max;
-        Real &x3min = size.d_view(m).x3min;
-        Real &x3max = size.d_view(m).x3max;
-        
-        Real x = CellCenterX(i-is, nx1, x1min, x1max) - xcen_;
-        Real y = CellCenterX(j-js, nx2, x2min, x2max) - ycen_;
-        Real z = CellCenterX(k-ks, nx3, x3min, x3max) - zcen_;
-        Real r = sqrt(x*x + y*y + z*z);
-        
-        if (r < r0) {
-          Real vol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
-          Real den = u0(m,IDN,k,j,i);
-          if (flag_twofl) {
-            den += u0_(m,IDN,k,j,i);
-          }
-          sum_t0 += den*vol;
-          sum_t1 += den*force_(m,0,k,j,i)*vol;
-          sum_t2 += den*force_(m,1,k,j,i)*vol;
-          sum_t3 += den*force_(m,2,k,j,i)*vol;
-        }
-      }, Kokkos::Sum<Real>(t0_sfb), Kokkos::Sum<Real>(t1_sfb),
-         Kokkos::Sum<Real>(t2_sfb), Kokkos::Sum<Real>(t3_sfb));
-      
-      #if MPI_PARALLEL_ENABLED
-        Real m_sfb[4], gm_sfb[4];
-        m_sfb[0] = t0_sfb; m_sfb[1] = t1_sfb; m_sfb[2] = t2_sfb; m_sfb[3] = t3_sfb;
-        MPI_Allreduce(m_sfb, gm_sfb, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-        t0_sfb = gm_sfb[0]; t1_sfb = gm_sfb[1]; t2_sfb = gm_sfb[2]; t3_sfb = gm_sfb[3];
-      #endif
-      
-      if (t0_sfb > 0) {
-        par_for("force_remove_net_mom_sfb", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
-        KOKKOS_LAMBDA(int m, int k, int j, int i) {
-          Real &x1min = size.d_view(m).x1min;
-          Real &x1max = size.d_view(m).x1max;
-          Real &x2min = size.d_view(m).x2min;
-          Real &x2max = size.d_view(m).x2max;
-          Real &x3min = size.d_view(m).x3min;
-          Real &x3max = size.d_view(m).x3max;
-          
-          Real x = CellCenterX(i-is, nx1, x1min, x1max) - xcen_;
-          Real y = CellCenterX(j-js, nx2, x2min, x2max) - ycen_;
-          Real z = CellCenterX(k-ks, nx3, x3min, x3max) - zcen_;
-          Real r = sqrt(x*x + y*y + z*z);
-          
-          if (r < r0) {
-            force_(m,0,k,j,i) -= t1_sfb/t0_sfb;
-            force_(m,1,k,j,i) -= t2_sfb/t0_sfb;
-            force_(m,2,k,j,i) -= t3_sfb/t0_sfb;
-          }
-        });
-      }
-    }
 
     t0 = 0.0;
     t1 = 0.0;
@@ -1594,12 +1202,6 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
     Kokkos::realloc(ysin, new_nmb, mode_count, ncells2);
     Kokkos::realloc(zcos, new_nmb, mode_count, ncells3);
     Kokkos::realloc(zsin, new_nmb, mode_count, ncells3);
-    
-    // Reallocate SFB basis arrays if using spherical basis
-    if (basis_type_ == TurbBasis::SphericalFB) {
-      Kokkos::realloc(sfb_vector_basis_real, mode_count, 3, ncells3, ncells2, ncells1);
-      Kokkos::realloc(sfb_vector_basis_imag, mode_count, 3, ncells3, ncells2, ncells1);
-    }
   }
   
   // CRITICAL: Do NOT call Initialize() which would reset the turbulence state
@@ -1673,22 +1275,18 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
   // This ensures physical continuity of the turbulence forcing across AMR
   auto aka_ = aka;
   auto akb_ = akb;
-  auto basis_type = basis_type_;
   
   for (int n = 0; n < mode_count; n++) {
     par_for("force_recalc_resize", DevExeSpace(), 0, new_nmb-1, ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      if (basis_type == TurbBasis::Cartesian) {
-        // Reconstruct complex forcing from basis functions
-        Real forc_real = (xcos_(m,n,i)*ycos_(m,n,j) - xsin_(m,n,i)*ysin_(m,n,j)) * zcos_(m,n,k) -
-                        (xsin_(m,n,i)*ycos_(m,n,j) + xcos_(m,n,i)*ysin_(m,n,j)) * zsin_(m,n,k);
-        Real forc_imag = (ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k)) * xcos_(m,n,i) +
-                        (ycos_(m,n,j)*zcos_(m,n,k) - ysin_(m,n,j)*zsin_(m,n,k)) * xsin_(m,n,i);
-        for (int dir = 0; dir < 3; dir++) {
-          force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real - akb_.d_view(dir,n)*forc_imag;
-        }
+      // Reconstruct complex forcing from basis functions
+      Real forc_real = (xcos_(m,n,i)*ycos_(m,n,j) - xsin_(m,n,i)*ysin_(m,n,j)) * zcos_(m,n,k) -
+                      (xsin_(m,n,i)*ycos_(m,n,j) + xcos_(m,n,i)*ysin_(m,n,j)) * zsin_(m,n,k);
+      Real forc_imag = (ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k)) * xcos_(m,n,i) +
+                      (ycos_(m,n,j)*zcos_(m,n,k) - ysin_(m,n,j)*zsin_(m,n,k)) * xsin_(m,n,i);
+      for (int dir = 0; dir < 3; dir++) {
+        force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real - akb_.d_view(dir,n)*forc_imag;
       }
-      // Note: SFB basis would need similar treatment here
     });
   }
   
@@ -1701,41 +1299,3 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
   }
 }
 
-//----------------------------------------------------------------------------------------
-//! \fn Real TurbulenceDriver::FindSphericalBesselRoot(int l, int n)
-//  \brief Find the n-th root of the spherical Bessel function j_l(x)
-//  Uses Newton-Raphson iteration with good initial guesses
-
-Real TurbulenceDriver::FindSphericalBesselRoot(int l, int n) {
-  // Initial guess using asymptotic approximation
-  Real x;
-  if (n == 1 && l == 0) {
-    x = M_PI;  // First root of j_0
-  } else if (n == 1 && l == 1) {
-    x = 4.49341;  // First root of j_1
-  } else if (n == 1 && l == 2) {
-    x = 5.76346;  // First root of j_2
-  } else {
-    // General asymptotic approximation
-    x = (n + 0.5*l - 0.25) * M_PI;
-  }
-  
-  // Newton-Raphson iteration
-  const int max_iter = 20;
-  const Real tol = 1e-12;
-  
-  for (int iter = 0; iter < max_iter; ++iter) {
-    Real jl = sph_bessel_jl(l, x);
-    Real jl_prime = sph_bessel_jl_prime(l, x);
-    
-    if (fabs(jl) < tol) break;
-    if (fabs(jl_prime) < 1e-20) break;  // Avoid division by zero
-    
-    Real dx = -jl / jl_prime;
-    x += dx;
-    
-    if (fabs(dx) < tol * x) break;
-  }
-  
-  return x;
-}
