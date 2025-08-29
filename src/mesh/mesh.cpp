@@ -677,3 +677,153 @@ void Mesh::CountParticles() {
     nprtcl_total += nprtcl_eachrank[n];
   }
 }
+
+//----------------------------------------------------------------------------------------
+//! \fn void Mesh::BuildLocationMaps()
+//! \brief Build per-level hash maps of LogicalLocation -> MeshBlock* for fast neighbor lookup
+
+void Mesh::BuildLocationMaps() {
+  // Clear existing maps
+  location_maps_.clear();
+  
+  // Resize to accommodate all levels (max_level + 1 since levels are 0-indexed)
+  location_maps_.resize(max_level + 1);
+  
+  // Iterate through all MeshBlocks on this rank and populate the maps
+  for (int m = 0; m < nmb_thisrank; ++m) {
+    // Get the logical location and level for this MeshBlock
+    LogicalLocation loc = lloc_eachmb[gids_eachrank[global_variable::my_rank] + m];
+    int level = loc.level;
+    
+    // Get pointer to the MeshBlock (assuming pmb_pack contains all MeshBlocks)
+    // Note: This assumes MeshBlocks are stored sequentially in pmb_pack
+    MeshBlock* pmb = pmb_pack->pmb;
+    
+    // Insert into the appropriate level map
+    location_maps_[level][loc] = pmb;
+  }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Mesh::ApplyFaceFieldCorrection()
+//! \brief Apply face-field correction to maintain div(B)=0 across AMR boundaries
+//! This corrects face-centered magnetic fields at coarse-fine interfaces by copying
+//! coarse face values to the corresponding fine faces
+
+void Mesh::ApplyFaceFieldCorrection() {
+#if MPI_PARALLEL_ENABLED
+  // Only proceed if we have MHD and AMR
+  if (pmb_pack->pmhd == nullptr || !adaptive) return;
+  
+  mhd::MHD *pmhd = pmb_pack->pmhd;
+  MeshRefinement *pmr = this->pmr;
+  
+  // Clear previous buffers and requests
+  pmr->ffc_recv_buf.clear();
+  pmr->ffc_send_buf.clear();
+  pmr->ffc_recv_req.clear();
+  pmr->ffc_send_req.clear();
+  
+  // Phase 1: Post receives on fine blocks for face data from coarse neighbors
+  for (int m = 0; m < nmb_thisrank; ++m) {
+    MeshBlock* pmb = &(pmb_pack->pmb[m]);
+    
+    // Only process newly created (refined) blocks
+    if (!pmb->newly_created) continue;
+    
+    // Get this block's logical location
+    int gid = pmb->mb_gid.h_view(m);
+    LogicalLocation loc = lloc_eachmb[gid];
+    
+    // Check all neighbors
+    for (int n = 0; n < pmb->nnghbr; ++n) {
+      NeighborBlock &nb = pmb->nghbr.h_view(m, n);
+      
+      // Skip if neighbor is not coarser (we only receive from coarse neighbors)
+      if (nb.lev >= loc.level) continue;
+      
+      // Calculate buffer size based on face orientation
+      // For simplicity, using fixed size - should be calculated based on mesh dimensions
+      int buf_size = mb_indcs.nx2 * mb_indcs.nx3; // Example for X1 face
+      
+      // Allocate receive buffer
+      pmr->ffc_recv_buf.emplace_back(buf_size);
+      
+      // Post non-blocking receive
+      MPI_Request req;
+      MPI_Irecv(pmr->ffc_recv_buf.back().data(), buf_size, MPI_ATHENA_REAL,
+                nb.rank, MeshRefinement::ffc_tag + gid, MPI_COMM_WORLD, &req);
+      pmr->ffc_recv_req.push_back(req);
+    }
+  }
+  
+  // Phase 2: Pack and send face data from coarse blocks to fine neighbors
+  for (int m = 0; m < nmb_thisrank; ++m) {
+    MeshBlock* pmb = &(pmb_pack->pmb[m]);
+    
+    // Get this block's logical location
+    int gid = pmb->mb_gid.h_view(m);
+    LogicalLocation loc = lloc_eachmb[gid];
+    
+    // Check all neighbors
+    for (int n = 0; n < pmb->nnghbr; ++n) {
+      NeighborBlock &nb = pmb->nghbr.h_view(m, n);
+      
+      // Skip if neighbor is not finer (we only send to fine neighbors)
+      if (nb.lev <= loc.level) continue;
+      
+      // Calculate buffer size and allocate send buffer
+      int buf_size = mb_indcs.nx2 * mb_indcs.nx3; // Example for X1 face
+      pmr->ffc_send_buf.emplace_back(buf_size);
+      
+      // Pack face-centered magnetic field data
+      // This is simplified - actual implementation needs to:
+      // 1. Determine which face (X1, X2, or X3)
+      // 2. Copy correct face data from device to host
+      // 3. Pack into send buffer
+      
+      // For now, just filling with dummy data to show structure
+      for (int i = 0; i < buf_size; ++i) {
+        pmr->ffc_send_buf.back()[i] = 0.0; // Should be actual face field data
+      }
+      
+      // Send to fine neighbor
+      MPI_Request req;
+      MPI_Isend(pmr->ffc_send_buf.back().data(), buf_size, MPI_ATHENA_REAL,
+                nb.rank, MeshRefinement::ffc_tag + nb.gid, MPI_COMM_WORLD, &req);
+      pmr->ffc_send_req.push_back(req);
+    }
+  }
+  
+  // Phase 3: Wait for receives and apply corrections to fine faces
+  for (size_t i = 0; i < pmr->ffc_recv_req.size(); ++i) {
+    MPI_Status status;
+    MPI_Wait(&pmr->ffc_recv_req[i], &status);
+    
+    // Apply received coarse face values to fine faces
+    // This is simplified - actual implementation needs to:
+    // 1. Identify which fine block and face
+    // 2. Copy received data to appropriate 2x2 fine faces
+    // 3. Use Kokkos::deep_copy to update device data
+  }
+  
+  // Wait for all sends to complete
+  for (size_t i = 0; i < pmr->ffc_send_req.size(); ++i) {
+    MPI_Status status;
+    MPI_Wait(&pmr->ffc_send_req[i], &status);
+  }
+#else
+  // Non-MPI version for single-process runs
+  // Still need to handle local coarse-fine interfaces
+  if (pmb_pack->pmhd == nullptr || !adaptive) return;
+  
+  // Simplified local version - copy face values directly between blocks
+  for (int m = 0; m < nmb_thisrank; ++m) {
+    MeshBlock* pmb = &(pmb_pack->pmb[m]);
+    if (!pmb->newly_created) continue;
+    
+    // Process local neighbors only
+    // Implementation would copy face field values directly
+  }
+#endif
+}

@@ -44,6 +44,9 @@ class MeshRefinement {
  public:
   MeshRefinement(Mesh *pm, ParameterInput *pin);
   ~MeshRefinement();
+  
+  // MPI tag for face-field correction messages
+  static constexpr int ffc_tag = 0x50;
 
   // data
   int nmb_created;           // # of MeshBlocks created via AMR across all ranks
@@ -93,6 +96,12 @@ class MeshRefinement {
   DualArray1D<AMRBuffer> sendbuf, recvbuf;   // send/recv buffers
   MPI_Request *send_req, *recv_req;
   DvceArray1D<Real> send_data, recv_data;    // send/recv device data
+  
+  // Face-field correction buffers
+  std::vector<std::vector<Real>> ffc_recv_buf;  // receive buffers for face data
+  std::vector<std::vector<Real>> ffc_send_buf;  // send buffers for face data
+  std::vector<MPI_Request> ffc_recv_req;        // MPI requests for face data receives
+  std::vector<MPI_Request> ffc_send_req;        // MPI requests for face data sends
 					     
   // particle communication buffers
   DvceArray1D<Real> prtcl_rsendbuf, prtcl_rrecvbuf;  // particle real data buffers

@@ -33,6 +33,7 @@ class MeshBlock {
 
   // data
   int nnghbr;           // maximum number of neighbors for each MeshBlock
+  bool newly_created;   // True if this block was just refined (new child)
 
   // DualArrays are used to store data used on both device and host
   // First dimension of each array will be [# of MeshBlocks in this MeshBlockPack]

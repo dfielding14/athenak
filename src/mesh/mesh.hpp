@@ -14,6 +14,7 @@
 #include <cstdint>  // int32_t
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 #include "athena.hpp"
 
@@ -62,6 +63,26 @@ struct NeighborBlock {
 struct LogicalLocation {
   std::int32_t lx1, lx2, lx3, level;
 };
+
+//----------------------------------------------------------------------------------------
+//! \struct LogicalLocationHash
+//! \brief Hash functor for LogicalLocation to enable use in unordered_map
+
+struct LogicalLocationHash {
+  std::size_t operator()(const LogicalLocation& loc) const noexcept {
+    // Combine level and indices into hash using prime numbers for good distribution
+    return (static_cast<std::size_t>(loc.lx1) * 1315423911ULL) ^ 
+           (static_cast<std::size_t>(loc.lx2) * 2654435761ULL) ^
+           (static_cast<std::size_t>(loc.lx3) * 97531ULL) ^ 
+           (static_cast<std::size_t>(loc.level) << 1);
+  }
+};
+
+// Equality operator for LogicalLocation (needed for unordered_map)
+inline bool operator==(const LogicalLocation& a, const LogicalLocation& b) noexcept {
+  return (a.level == b.level && a.lx1 == b.lx1 && 
+          a.lx2 == b.lx2 && a.lx3 == b.lx3);
+}
 
 //----------------------------------------------------------------------------------------
 //! \struct EventCounters
@@ -174,8 +195,16 @@ class Mesh {
     return (mb_indcs.nx1)*(mb_indcs.nx2)*(mb_indcs.nx3);
   }
 
+  // Face-field correction methods for AMR
+  void BuildLocationMaps();
+  void ApplyFaceFieldCorrection();
+
  private:
   std::unique_ptr<MeshBlockTree> ptree;  // pointer to root node in binary/quad/oct-tree
+  
+  // Map of LogicalLocation -> MeshBlock* for each level (for fast neighbor lookup)
+  std::vector<std::unordered_map<LogicalLocation, MeshBlock*, LogicalLocationHash>> location_maps_;
+  
   void LoadBalance(float *clist, int *rlist, int *slist, int *nlist, int nb);
 };
 #endif  // MESH_MESH_HPP_

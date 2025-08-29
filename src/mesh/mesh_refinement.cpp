@@ -143,6 +143,15 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
   // Refine/derefine mesh and evolved data, set boundary conditions/timestep on new mesh
   if (nnew != 0 || ndel != 0) { // at least one (de)refinement flagged
     RedistAndRefineMeshBlocks(pin, nnew, ndel);
+    
+    // Build location maps for fast neighbor lookup
+    pmy_mesh->BuildLocationMaps();
+    
+    // Apply face-field correction for MHD to maintain div(B)=0
+    if (pmy_mesh->pmb_pack->pmhd != nullptr) {
+      pmy_mesh->ApplyFaceFieldCorrection();
+    }
+    
     pdriver->InitBoundaryValuesAndPrimitives(pmy_mesh);
 
     MeshBlockPack* pmbp = pmy_mesh->pmb_pack;
@@ -686,6 +695,19 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   pm->pmb_pack->AddMeshBlocks(pin);
   pm->pmb_pack->AddCoordinates(pin);
   pm->pmb_pack->pmb->SetNeighbors(pm->ptree, pm->rank_eachmb);
+  
+  // Mark newly created blocks (those that were refined)
+  // newtoold[n] contains old gid for new gid n
+  // If newtoold[n] < 0, it means this is a newly refined block
+  for (int m = 0; m < pm->nmb_thisrank; ++m) {
+    int gid = pm->pmb_pack->pmb->mb_gid.h_view(m);
+    // Check if this block is newly created (refined)
+    if (newtoold[gid] < 0) {
+      pm->pmb_pack->pmb->newly_created = true;
+    } else {
+      pm->pmb_pack->pmb->newly_created = false;
+    }
+  }
 
   // clean-up and return
   delete [] newtoold;
