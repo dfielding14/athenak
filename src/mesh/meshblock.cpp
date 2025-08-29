@@ -27,7 +27,8 @@ MeshBlock::MeshBlock(MeshBlockPack* ppack, int igids, int nmb) :
   mb_gid("mb_gid",nmb),
   mb_lev("mb_lev",nmb),
   mb_size("mbsize",nmb),
-  mb_bcs("mbbcs",nmb,6) {
+  mb_bcs("mbbcs",nmb,6),
+  newly_created("newly_created",nmb) {
   Mesh* pm = pmy_pack->pmesh;
   auto &ms = pm->mesh_size;
 
@@ -35,6 +36,7 @@ MeshBlock::MeshBlock(MeshBlockPack* ppack, int igids, int nmb) :
     // initialize host array elements of gids, levels
     mb_gid.h_view(m) = igids + m;
     mb_lev.h_view(m) = pm->lloc_eachmb[igids+m].level;
+    newly_created.h_view(m) = false;  // Initialize to false, will be set true for refined blocks
 
     // calculate physical size and set BCs of each MeshBlock in x1
     std::int32_t &lx1 = pm->lloc_eachmb[igids+m].lx1;

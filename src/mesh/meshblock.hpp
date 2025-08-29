@@ -33,7 +33,6 @@ class MeshBlock {
 
   // data
   int nnghbr;           // maximum number of neighbors for each MeshBlock
-  bool newly_created;   // True if this block was just refined (new child)
 
   // DualArrays are used to store data used on both device and host
   // First dimension of each array will be [# of MeshBlocks in this MeshBlockPack]
@@ -42,6 +41,7 @@ class MeshBlock {
   DualArray1D<RegionSize> mb_size;   // physical size of each MeshBlock
   DualArray2D<BoundaryFlag> mb_bcs;  // boundary conditions at 6 faces of each MeshBlock
   DualArray2D<NeighborBlock> nghbr;  // data on all (up to 56) neighbors for each MB
+  DualArray1D<bool> newly_created;   // True if this block was just refined (new child)
 
   // function to set data describing neighbors
   void SetNeighbors(std::unique_ptr<MeshBlockTree> &ptree, int *ranklist);

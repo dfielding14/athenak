@@ -703,9 +703,9 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
     int gid = pm->pmb_pack->pmb->mb_gid.h_view(m);
     // Check if this block is newly created (refined)
     if (newtoold[gid] < 0) {
-      pm->pmb_pack->pmb->newly_created = true;
+      pm->pmb_pack->pmb->newly_created.h_view(m) = true;
     } else {
-      pm->pmb_pack->pmb->newly_created = false;
+      pm->pmb_pack->pmb->newly_created.h_view(m) = false;
     }
   }
 
