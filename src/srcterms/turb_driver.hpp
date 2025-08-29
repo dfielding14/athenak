@@ -77,6 +77,11 @@ class TurbulenceDriver {
 
   // -----------------------------------------------------------------------------
 
+  // AMR tracking variables
+  int current_nmb_;            // current number of mesh blocks
+  int last_nmb_created_;        // last tracked created blocks count  
+  int last_nmb_deleted_;        // last tracked deleted blocks count
+
   // parameters of driving
   int nlow, nhigh, spect_form;
   int mode_count;
@@ -103,9 +108,11 @@ class TurbulenceDriver {
   void IncludeInitializeModesTask(std::shared_ptr<TaskList> tl, TaskID start);
   void IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskID start);
   TaskStatus InitializeModes(Driver *pdrive, int stage);
+  TaskStatus CheckResize(Driver *pdrive, int stage);
   TaskStatus UpdateForcing(Driver *pdrive, int stage);
   TaskStatus AddForcing(Driver *pdrive, int stage);
   void Initialize();
+  void ResizeArrays(int new_nmb);
 
  private:
   bool first_time = true;   // flag to enable initialization on first call

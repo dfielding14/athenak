@@ -58,6 +58,17 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
   int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
 
+  // Initialize AMR tracking variables
+  current_nmb_ = nmb;
+  Mesh *pm = pmy_pack->pmesh;
+  if (pm->adaptive && pm->pmr != nullptr) {
+    last_nmb_created_ = pm->pmr->nmb_created;
+    last_nmb_deleted_ = pm->pmr->nmb_deleted;
+  } else {
+    last_nmb_created_ = 0;
+    last_nmb_deleted_ = 0;
+  }
+
   Kokkos::realloc(force, nmb, 3, ncells3, ncells2, ncells1);
   Kokkos::realloc(force_tmp1, nmb, 3, ncells3, ncells2, ncells1);
   Kokkos::realloc(force_tmp2, nmb, 3, ncells3, ncells2, ncells1);
@@ -580,8 +591,9 @@ void TurbulenceDriver::Initialize() {
 void TurbulenceDriver::IncludeInitializeModesTask(std::shared_ptr<TaskList> tl,
                                                   TaskID start) {
   //  We initialize the modes and update the forcing before the time integration loop
-  auto id_init = tl->AddTask(&TurbulenceDriver::InitializeModes, this, start);
-  auto id_add  = tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_init);
+  auto id_init   = tl->AddTask(&TurbulenceDriver::InitializeModes, this, start);
+  auto id_resize = tl->AddTask(&TurbulenceDriver::CheckResize, this, id_init);
+  auto id_add    = tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_resize);
   return;
 }
 
@@ -1532,6 +1544,68 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
 
   }
   return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn CheckResize()
+// \brief Check if mesh structure has changed and trigger resizing if needed
+
+TaskStatus TurbulenceDriver::CheckResize(Driver *pdrive, int stage) {
+  Mesh *pm = pmy_pack->pmesh;
+  int nmb = pmy_pack->nmb_thispack;
+  
+  // Check if number of mesh blocks has changed or if AMR has occurred
+  if (nmb != current_nmb_ ||
+      (pm->adaptive && pm->pmr != nullptr &&
+       (pm->pmr->nmb_created != last_nmb_created_ || 
+        pm->pmr->nmb_deleted != last_nmb_deleted_))) {
+    ResizeArrays(nmb);
+  }
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn ResizeArrays()
+// \brief Resize turbulence arrays and recompute basis functions when mesh changes
+
+void TurbulenceDriver::ResizeArrays(int new_nmb) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int ncells1 = indcs.nx1 + 2*(indcs.ng);
+  int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
+  int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
+  
+  // Reallocate arrays only if MeshBlock count changed
+  if (force.extent(0) != new_nmb) {
+    // Reallocate force arrays
+    Kokkos::realloc(force, new_nmb, 3, ncells3, ncells2, ncells1);
+    Kokkos::realloc(force_tmp1, new_nmb, 3, ncells3, ncells2, ncells1);
+    Kokkos::realloc(force_tmp2, new_nmb, 3, ncells3, ncells2, ncells1);
+    
+    // Reallocate mode basis arrays
+    Kokkos::realloc(xcos, new_nmb, mode_count, ncells1);
+    Kokkos::realloc(xsin, new_nmb, mode_count, ncells1);
+    Kokkos::realloc(ycos, new_nmb, mode_count, ncells2);
+    Kokkos::realloc(ysin, new_nmb, mode_count, ncells2);
+    Kokkos::realloc(zcos, new_nmb, mode_count, ncells3);
+    Kokkos::realloc(zsin, new_nmb, mode_count, ncells3);
+    
+    // Reallocate SFB basis arrays if using spherical basis
+    if (basis_type_ == TurbBasis::SphericalFB) {
+      Kokkos::realloc(sfb_vector_basis_real, mode_count, 3, ncells3, ncells2, ncells1);
+      Kokkos::realloc(sfb_vector_basis_imag, mode_count, 3, ncells3, ncells2, ncells1);
+    }
+  }
+  
+  // Reinitialize arrays with proper basis functions
+  Initialize();
+  
+  // Update tracking variables
+  current_nmb_ = new_nmb;
+  Mesh *pm = pmy_pack->pmesh;
+  if (pm->adaptive && pm->pmr != nullptr) {
+    last_nmb_created_ = pm->pmr->nmb_created;
+    last_nmb_deleted_ = pm->pmr->nmb_deleted;
+  }
 }
 
 //----------------------------------------------------------------------------------------
