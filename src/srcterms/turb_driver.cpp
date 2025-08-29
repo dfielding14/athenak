@@ -1570,9 +1570,15 @@ TaskStatus TurbulenceDriver::CheckResize(Driver *pdrive, int stage) {
 
 void TurbulenceDriver::ResizeArrays(int new_nmb) {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
   int ncells1 = indcs.nx1 + 2*(indcs.ng);
   int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
   int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
+  int &nx1 = indcs.nx1;
+  int &nx2 = indcs.nx2;
+  int &nx3 = indcs.nx3;
   
   // Reallocate arrays only if MeshBlock count changed
   if (force.extent(0) != new_nmb) {
@@ -1596,8 +1602,95 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
     }
   }
   
-  // Reinitialize arrays with proper basis functions
-  Initialize();
+  // CRITICAL: Do NOT call Initialize() which would reset the turbulence state
+  // Instead, recompute basis functions while preserving mode amplitudes (aka_, akb_)
+  
+  // Zero out force arrays
+  auto force_tmp1_ = force_tmp1;
+  auto force_tmp2_ = force_tmp2;
+  par_for("force_resize_zero", DevExeSpace(),
+          0, new_nmb-1, 0, 2, 0, ncells3-1, 0, ncells2-1, 0, ncells1-1,
+  KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
+    force_tmp1_(m,n,k,j,i) = 0.0;
+    force_tmp2_(m,n,k,j,i) = 0.0;
+  });
+  
+  // Recompute basis functions for new mesh blocks (preserving wavenumbers)
+  auto kx_mode_ = kx_mode;
+  auto ky_mode_ = ky_mode;
+  auto kz_mode_ = kz_mode;
+  auto xcos_ = xcos;
+  auto xsin_ = xsin;
+  auto ycos_ = ycos;
+  auto ysin_ = ysin;
+  auto zcos_ = zcos;
+  auto zsin_ = zsin;
+  auto &size = pmy_pack->pmb->mb_size;
+  auto &drivingtype = driving_type;
+  
+  // Recompute x-direction basis functions
+  par_for("xsin/xcos_resize", DevExeSpace(), 0, new_nmb-1, 0, mode_count-1, is, ie,
+  KOKKOS_LAMBDA(int m, int n, int i) {
+    Real &x1min = size.d_view(m).x1min;
+    Real &x1max = size.d_view(m).x1max;
+    Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+    Real k1v = kx_mode_.d_view(n);
+    xsin_(m,n,i) = sin(k1v*x1v);
+    xcos_(m,n,i) = cos(k1v*x1v);
+  });
+  
+  // Recompute y-direction basis functions
+  par_for("ysin/ycos_resize", DevExeSpace(), 0, new_nmb-1, 0, mode_count-1, js, je,
+  KOKKOS_LAMBDA(int m, int n, int j) {
+    Real &x2min = size.d_view(m).x2min;
+    Real &x2max = size.d_view(m).x2max;
+    Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+    Real k2v = ky_mode_.d_view(n);
+    ysin_(m,n,j) = sin(k2v*x2v);
+    ycos_(m,n,j) = cos(k2v*x2v);
+    if (ncells2-1 == 0) {
+      ysin_(m,n,j) = 0.0;
+      ycos_(m,n,j) = 1.0;
+    }
+  });
+  
+  // Recompute z-direction basis functions
+  par_for("zsin/zcos_resize", DevExeSpace(), 0, new_nmb-1, 0, mode_count-1, ks, ke,
+  KOKKOS_LAMBDA(int m, int n, int k) {
+    Real &x3min = size.d_view(m).x3min;
+    Real &x3max = size.d_view(m).x3max;
+    Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+    Real k3v = kz_mode_.d_view(n);
+    zsin_(m,n,k) = sin(k3v*x3v);
+    zcos_(m,n,k) = cos(k3v*x3v);
+    if (ncells3-1 == 0 || (drivingtype == 1)) {
+      zsin_(m,n,k) = 0.0;
+      zcos_(m,n,k) = 1.0;
+    }
+  });
+  
+  // Recompute forcing field using PRESERVED mode amplitudes (aka_, akb_)
+  // This ensures physical continuity of the turbulence forcing across AMR
+  auto aka_ = aka;
+  auto akb_ = akb;
+  auto basis_type = basis_type_;
+  
+  for (int n = 0; n < mode_count; n++) {
+    par_for("force_recalc_resize", DevExeSpace(), 0, new_nmb-1, ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      if (basis_type == TurbBasis::Cartesian) {
+        // Reconstruct complex forcing from basis functions
+        Real forc_real = (xcos_(m,n,i)*ycos_(m,n,j) - xsin_(m,n,i)*ysin_(m,n,j)) * zcos_(m,n,k) -
+                        (xsin_(m,n,i)*ycos_(m,n,j) + xcos_(m,n,i)*ysin_(m,n,j)) * zsin_(m,n,k);
+        Real forc_imag = (ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k)) * xcos_(m,n,i) +
+                        (ycos_(m,n,j)*zcos_(m,n,k) - ysin_(m,n,j)*zsin_(m,n,k)) * xsin_(m,n,i);
+        for (int dir = 0; dir < 3; dir++) {
+          force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real - akb_.d_view(dir,n)*forc_imag;
+        }
+      }
+      // Note: SFB basis would need similar treatment here
+    });
+  }
   
   // Update tracking variables
   current_nmb_ = new_nmb;
