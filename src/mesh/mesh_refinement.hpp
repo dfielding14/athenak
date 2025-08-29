@@ -1,5 +1,13 @@
 #ifndef MESH_MESH_REFINEMENT_HPP_
 #define MESH_MESH_REFINEMENT_HPP_
+//========================================================================================
+// AthenaXXX astrophysical plasma code
+// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
+// Licensed under the 3-clause BSD License (the "LICENSE")
+//========================================================================================
+//! \file mesh_refinement.hpp
+//! \brief defines MeshRefinement class containing data and functions controlling SMR/AMR
+
 #include "particles/particles_data_structs.hpp"
 
 //----------------------------------------------------------------------------------------
@@ -81,6 +89,7 @@ class MeshRefinement {
 #if MPI_PARALLEL_ENABLED
   int nmb_send, nmb_recv;
   MPI_Comm amr_comm;                         // unique communicator for AMR
+  MPI_Comm par_comm;                         // seperate communicator for particles
   DualArray1D<AMRBuffer> sendbuf, recvbuf;   // send/recv buffers
   MPI_Request *send_req, *recv_req;
   DvceArray1D<Real> send_data, recv_data;    // send/recv device data
@@ -119,6 +128,8 @@ class MeshRefinement {
   void RefineCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a, DvceArray5D<Real> &ca,
                 bool is_z4c=false);
   void RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b, DvceFaceFld4D<Real> &cb);
+  // Corrects FC field values at newly-refined/already-fine boundaries (div(B) fix #595)
+  void FixRefinedFCBoundaries(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b);
 
   void RestrictCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca, bool is_z4c=false);
   void RestrictFC(DvceFaceFld4D<Real> &b, DvceFaceFld4D<Real> &cb);
@@ -133,7 +144,7 @@ class MeshRefinement {
   void UnpackAMRBuffersCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca, int ncc,int nfc);
   void UnpackAMRBuffersFC(DvceFaceFld4D<Real> &b,DvceFaceFld4D<Real> &cb,int ncc,int nfc);
   void ClearSendAMR();
-
+  
   // particle functions
   void CreateParticleLists();
   void CountParticleSendsAndRecvs(); 

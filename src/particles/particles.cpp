@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <fstream>
+#include <iostream>
 #include "athena.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
@@ -27,8 +28,10 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // Initialize default values
   nspecies = pin->GetOrAddInteger("particles","nspecies",1);
+  
   std::string evolution_t = pin->GetString("time","evolution");
   is_dynamic = (evolution_t.compare("static") != 0);
+  
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int ncells = indcs.nx1*indcs.nx2*indcs.nx3;
   

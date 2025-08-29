@@ -306,6 +306,7 @@ int main(int argc, char *argv[]) {
   // is fully constructed.
 
   pmesh->AddCoordinatesAndPhysics(pinput);
+  
   if (!res_flag) {
     // set ICs using ProblemGenerator constructor for new runs
     pmesh->pgen = std::make_unique<ProblemGenerator>(pinput, pmesh);

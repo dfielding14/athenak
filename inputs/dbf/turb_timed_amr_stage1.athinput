@@ -9,8 +9,8 @@ reference = Driven turbulence with staged refinement
 basename  = TurbTimedAMR_S1    # problem ID: basename of output filenames
 
 <mesh>
-nghost    = 3          # Number of ghost cells
-nx1       = 64         # Number of zones in X1-direction  
+nghost    = 4          # Number of ghost cells
+nx1       = 64         # Number of zones in X1-direction
 nx2       = 64         # Number of zones in X2-direction
 nx3       = 64         # Number of zones in X3-direction
 x1min     = -0.5       # minimum value of X1
@@ -32,8 +32,10 @@ nx2       = 32         # Number of cells in each MeshBlock, X2-dir
 nx3       = 32         # Number of cells in each MeshBlock, X3-dir
 
 <mesh_refinement>
-refinement_interval = 10    # Check for refinement every N cycles
-num_levels = 2              # Allow up to level 1 refinement
+refinement          = adaptive  # type of refinement
+refinement_interval = 10        # Check for refinement every N cycles
+num_levels          = 2         # Allow up to level 1 refinement
+max_nmb_per_rank    = 512
 
 <time>
 evolution  = dynamic   # dynamic/kinematic/static
@@ -41,44 +43,70 @@ integrator = rk2       # time integration algorithm
 cfl_number = 0.3       # The Courant, Friedrichs, & Lewy (CFL) Number
 nlim       = -1        # cycle limit (no limit if <0)
 tlim       = 2.01      # time limit (just after first refinement at t=2.0)
-ndiag      = 100       # cycles between diagnostic output
+ndiag      = 1         # cycles between diagnostic output
 
-<hydro>
-eos         = ideal    # EOS type
-reconstruct = plm      # spatial reconstruction method
-rsolver     = hllc     # Riemann-solver to be used
-gamma       = 1.666666667   # gamma = C_p/C_v
+<mhd>
+eos               = ideal    # EOS type
+reconstruct       = plm      # spatial reconstruction method
+rsolver           = hlld     # Riemann-solver to be used
+gamma             = 1.00001  # gamma = C_p/C_v
+ohmic_resistivity = 1.0e-14   # coefficient of Ohmic resistivity
+viscosity         = 1.0e-14   # coefficient of viscosity
+fofc              = true     # First order flux correction
+
+<eos>
 iso_sound_speed = 1.0       # isothermal sound speed
+dfloor          = 1e-3
+pfloor          = 1e-3
 
 <problem>
-pgen_name   = turb_timed_amr  # problem generator name
-d_i         = 1.0              # initial density (ions)
-d_n         = 1.0              # initial density (neutrals)
+pgen_name   = turb_timed_amr   # problem generator name
+rho0        = 1.0              # initial density
 beta        = 100.0            # plasma beta
-eddy_time   = 1.0              # eddy turnover time
-
-<diffusion>
-viscosity   = 0.01     # kinematic viscosity
-nu_iso      = 0.01     # isotropic viscosity coefficient
+t_refine    = 0.5              # time when to refine
+user_hist   = true             # enroll user-defined history function
 
 <turb_driving>
-dedt        = 1.0      # Energy injection rate
-nlow        = 1        # Lowest wavenumber
-nhigh       = 2        # Highest wavenumber
-tcorr       = 0.1      # Correlation time
-rseed       = 1234     # Random seed
-sol_weight  = 1.0      # Solenoidal weight
+tcorr = 1.0                # ~ L / 2 pi urms
+dedt  = 0.25               # ~ urms^3 / 2 L
+spect_form = 1
+npeak = 2
+nlow  = 1                  # smallest wave number
+nhigh = 3                  # largest wave number
+min_kz = 1
+sol_fraction = 1.0         # solenoidal fraction
+dt_turb_update = 0.01      # update driving pattern
+rseed = -9736342354
+
 
 <output1>
-file_type   = vtk      # VTK output
-variable    = hydro_w  # output primitive variables
-dt          = 0.1      # time increment between outputs
-ghost_zones = false    # switch to output ghost cells
+file_type   = hst       # history data dump
+dt          = 0.001     # time increment between outputs
+data_format = %24.16e   # output data format
 
-<output2>
-file_type   = hst      # history data dump
-dt          = 0.01     # time increment between outputs
+#<output2>
+#file_type   = rst      # restart file
+#dt          = 0.5      # time increment between outputs
 
-<output3>
-file_type   = rst      # restart file
-dt          = 0.5      # time increment between outputs
+#<output3>
+#file_type   = bin
+#variable    = mhd_w_bcc
+#dt          = 0.5
+
+<output4>
+file_type   = bin
+variable    = mhd_w_bcc
+dt          = 0.1
+slice_x3    = 0.0
+
+<output5>
+file_type   = bin
+variable    = mhd_divb
+dt          = 0.1
+slice_x3    = 0.0
+
+<output6>
+file_type   = bin
+variable    = turb_force
+dt          = 0.1
+slice_x3    = 0.0

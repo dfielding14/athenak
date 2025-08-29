@@ -1,5 +1,4 @@
 #include <limits>
-#include <iostream>
 #include <algorithm> // min
 
 #include "athena.hpp"
@@ -32,7 +31,7 @@ TaskStatus MHD::NewTimeStep(Driver *pdriver, int stage) {
 
   // capture class variables for kernel
   auto &w0_ = w0;
-  auto &eos = pmy_pack->pmhd->peos->eos_data;
+  auto &eos = this->peos->eos_data;
   auto &mbsize = pmy_pack->pmb->mb_size;
   auto &is_special_relativistic_ = pmy_pack->pcoord->is_special_relativistic;
   auto &is_general_relativistic_ = pmy_pack->pcoord->is_general_relativistic;
@@ -153,7 +152,9 @@ TaskStatus MHD::NewTimeStep(Driver *pdriver, int stage) {
     pcond->NewTimeStep(w0, peos->eos_data);
   }
   // compute source terms timestep
-  psrc->NewTimeStep(w0, peos->eos_data);
+  if (psrc != nullptr) {
+    psrc->NewTimeStep(w0, peos->eos_data);
+  }
 
   return TaskStatus::complete;
 }

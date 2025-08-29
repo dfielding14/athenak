@@ -162,10 +162,11 @@ Mesh::Mesh(ParameterInput *pin) :
 
   // set boolean flags indicating type of refinement (if any), and whether mesh is
   // periodic, depending on input strings
-  adaptive = (pin->GetOrAddString("mesh_refinement","refinement","none") == "adaptive")
-    ?  true : false;
-  multilevel = (adaptive || pin->GetString("mesh_refinement","refinement") == "static")
-    ?  true : false;
+  bool has_refinement_block = pin->DoesBlockExist("mesh_refinement");
+  
+  std::string refinement_type = pin->GetOrAddString("mesh_refinement","refinement","none");
+  adaptive = (refinement_type == "adaptive") ?  true : false;
+  multilevel = (adaptive || refinement_type == "static") ?  true : false;
 
   // FIXME: The shearing box is not currently compatible with SMR/AMR
   if (multilevel && pin->DoesBlockExist("shearing_box")) {
@@ -656,7 +657,8 @@ void Mesh::CountParticles() {
   particles::Particles *ppart = pmb_pack->ppart;
   nprtcl_thisrank = 0.0;
   for (int n=0; n<nmb_packs_thisrank; ++n) {
-    nprtcl_thisrank += pmb_pack->ppart->nprtcl_thispack;
+    // Fix: use the local ppart variable which we know is not null when this is called
+    nprtcl_thisrank += ppart->nprtcl_thispack;
   }
   nprtcl_eachrank = new int[global_variable::nranks];
   nprtcl_eachrank[global_variable::my_rank] = nprtcl_thisrank;

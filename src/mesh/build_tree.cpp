@@ -288,6 +288,8 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
   // Create new MeshRefinement object with either SMR or AMR (SMR needs Restrict fns)
   if (multilevel) {
     pmr = new MeshRefinement(this, pin);
+  } else {
+    pmr = nullptr;
   }
 
   // set initial time/cycle parameters, output diagnostics

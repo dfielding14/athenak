@@ -8,19 +8,34 @@
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "pgen.hpp"
+#include "globals.hpp"
 
 // User-defined history functions
 void TurbulentHistory(HistoryData *pdata, Mesh *pm);
 
-// Store eddy_time as static variable for use in RefinementCondition
-static Real eddy_time = 1.0;
+// User-defined refinement condition
+void RefinementCondition(MeshBlockPack* pmbp);
+
+// Static variable to store refinement time
+static Real t_refine = -1.0;
 
 //----------------------------------------------------------------------------------------
 //! \fn void ProblemGenerator::UserProblem()
 //  \brief Problem Generator for turbulence with time-dependent AMR
 
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
-  if (restart) return;
+  // Read refinement time from input (default to a large value if not specified)
+  // Add to input file: <problem> t_refine = <time_value>
+  // Set to a large value to disable refinement
+  t_refine = pin->GetOrAddReal("problem","t_refine",1.0e10);
+
+  // Register the refinement condition function
+  user_ref_func = RefinementCondition;
+
+  if (restart) {
+    return;
+  }
+
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   auto &indcs = pmy_mesh_->mb_indcs;
 
@@ -42,21 +57,19 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   // Read problem parameters
   Real cs = pin->GetOrAddReal("eos","iso_sound_speed",1.0);
   Real beta = pin->GetOrAddReal("problem","beta",1.0);
-  eddy_time = pin->GetOrAddReal("problem","eddy_time",1.0);
 
   // Initialize Hydro variables -------------------------------
   if (pmbp->phydro != nullptr) {
-    Real d_i = pin->GetOrAddReal("problem","d_i",1.0);
-    Real d_n = pin->GetOrAddReal("problem","d_n",1.0);
+    Real rho0 = pin->GetOrAddReal("problem","rho0",1.0);
     auto &u0 = pmbp->phydro->u0;
     EOS_Data &eos = pmbp->phydro->peos->eos_data;
     Real gm1 = eos.gamma - 1.0;
-    Real p0 = 1.0/eos.gamma;
+    Real p0 = rho0*cs*cs/eos.gamma;
 
     // Set initial conditions
     par_for("pgen_turb", DevExeSpace(),0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      u0(m,IDN,k,j,i) = d_n;
+      u0(m,IDN,k,j,i) = rho0;
       u0(m,IM1,k,j,i) = 0.0;
       u0(m,IM2,k,j,i) = 0.0;
       u0(m,IM3,k,j,i) = 0.0;
@@ -70,19 +83,19 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   // Initialize MHD variables ---------------------------------
   if (pmbp->pmhd != nullptr) {
-    Real d_i = pin->GetOrAddReal("problem","d_i",1.0);
-    Real d_n = pin->GetOrAddReal("problem","d_n",1.0);
-    Real B0 = cs*std::sqrt(2.0*d_i/beta);
+    Real rho0 = pin->GetOrAddReal("problem","rho0",1.0);
     auto &u0 = pmbp->pmhd->u0;
     auto &b0 = pmbp->pmhd->b0;
     EOS_Data &eos = pmbp->pmhd->peos->eos_data;
     Real gm1 = eos.gamma - 1.0;
-    Real p0 = 1.0/eos.gamma;
+    Real p0 = rho0*cs*cs/eos.gamma;
+    Real B0 = cs*std::sqrt(2.0*p0/beta);
+
 
     // Set initial conditions
     par_for("pgen_turb", DevExeSpace(),0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      u0(m,IDN,k,j,i) = 1.0;
+      u0(m,IDN,k,j,i) = rho0;
       u0(m,IM1,k,j,i) = 0.0;
       u0(m,IM2,k,j,i) = 0.0;
       u0(m,IM3,k,j,i) = 0.0;
@@ -107,44 +120,38 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn int RefinementCondition()
-//  \brief Time-dependent refinement condition for turbulence
+//! \fn void RefinementCondition()
+//  \brief Simple time-dependent refinement condition
+//  Refines everywhere when t > t_refine
 
-int RefinementCondition(MeshBlockPack* pmbp) {
+void RefinementCondition(MeshBlockPack* pmbp) {
+  Mesh *pmesh       = pmbp->pmesh;
+  int nmb           = pmbp->nmb_thispack;
+  int mbs           = pmesh->gids_eachrank[global_variable::my_rank];
+  auto &refine_flag = pmesh->pmr->refine_flag;
+
   // Get current simulation time
-  Real time = pmbp->pmesh->time;
+  Real time = pmesh->time;
+  Real t_ref = t_refine;  // Capture for lambda
 
-  // Define refinement schedule (in units of eddy_time)
-  // Stage 1: t = 2.0 -> refine to level 1
-  // Stage 2: t = 3.0 -> refine to level 2
-  // Stage 3: t = 3.5 -> refine to level 3
-  // Stage 4: t = 3.75 -> refine to level 4
-  // Stage 5: t = 3.875 -> refine to level 5
-  Real refine_times[] = {2.0, 3.0, 3.5, 3.75, 3.875};
-
-  // Get current maximum refinement level in the mesh
-  // We'll check the first meshblock's level and assume uniform refinement
-  int current_level = 0;
-  if (pmbp->nmb_thispack > 0) {
-    current_level = pmbp->pmb->mb_lev.h_view(0);
+  // Diagnostic output when refinement is about to trigger
+  static bool refinement_triggered = false;
+  if (time > t_ref && !refinement_triggered && global_variable::my_rank == 0) {
+    std::cout << "### REFINEMENT TRIGGERED at t=" << time
+              << " (t_refine=" << t_ref << "), nmb=" << nmb << std::endl;
+    refinement_triggered = true;
   }
 
-  // Determine which refinement stage we're at
-  int target_level = 0;
-  for (int i = 0; i < 5; i++) {
-    if (time >= refine_times[i] * eddy_time - 0.001) {  // Small tolerance
-      target_level = i + 1;
+  // Simple time-based refinement: refine all blocks when t > t_refine
+  if (time > t_ref) {
+    // Use host-side loop to avoid potential GPU memory issues
+    for (int m = 0; m < nmb; m++) {
+      refine_flag.h_view(m+mbs) = 1;  // Flag for refinement
     }
+    // Mark as modified on host and sync to device
+    refine_flag.template modify<HostMemSpace>();
+    refine_flag.template sync<DevExeSpace>();
   }
-
-  // If we need to refine to reach the target level
-  if (current_level < target_level) {
-    // Return 1 to trigger refinement for all blocks
-    return 1;
-  }
-
-  // No refinement needed
-  return 0;
 }
 
 //----------------------------------------------------------------------------------------
@@ -166,7 +173,7 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
     return;
   }
 
-  pdata->nhist = 11;
+  pdata->nhist = 12;
   pdata->label[0] = "Bx";
   pdata->label[1] = "By";
   pdata->label[2] = "Bz";
@@ -178,6 +185,7 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
   pdata->label[8] = "|B.J|^2";
   pdata->label[9] = "U^2";
   pdata->label[10] = "dU";
+  pdata->label[11] = "|divB|";
 
   // capture class variables for kernel
   auto &bcc = pm->pmb_pack->pmhd->bcc0;
@@ -185,6 +193,8 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
   auto &w0_ = pm->pmb_pack->pmhd->w0;
   auto &size = pm->pmb_pack->pmb->mb_size;
   int &nhist_ = pdata->nhist;
+  bool &multi_d = pm->multi_d;
+  bool &three_d = pm->three_d;
 
   // loop over all MeshBlocks in this pack
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
@@ -207,34 +217,119 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm) {
     j += js;
 
     Real vol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
+    Real dx_squared = size.d_view(m).dx1 * size.d_view(m).dx1;
 
-    // Compute cell-centered B
-    Real bccx = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
-    Real bccy = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
-    Real bccz = 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i));
-    Real b2 = SQR(bccx) + SQR(bccy) + SQR(bccz);
+    // MHD conserved variables:
+    array_sum::GlobalSum hvars;
 
-    // Compute velocity
-    Real ux = w0_(m,IVX,k,j,i);
-    Real uy = w0_(m,IVY,k,j,i);
-    Real uz = w0_(m,IVZ,k,j,i);
-    Real u2 = SQR(ux) + SQR(uy) + SQR(uz);
+    // calculate mean B
+    hvars.the_array[0] = bcc(m,IBX,k,j,i);
+    hvars.the_array[1] = bcc(m,IBY,k,j,i);
+    hvars.the_array[2] = bcc(m,IBZ,k,j,i);
 
-    // Basic quantities
-    mb_sum.the_array[0] += bccx*vol;
-    mb_sum.the_array[1] += bccy*vol;
-    mb_sum.the_array[2] += bccz*vol;
-    mb_sum.the_array[3] += b2*vol;
-    mb_sum.the_array[4] += b2*b2*vol;
-    mb_sum.the_array[9] += u2*vol;
+    // 0 = < B^2 >
+    Real B_mag_sq = bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
+                  + bcc(m,IBY,k,j,i)*bcc(m,IBY,k,j,i)
+                  + bcc(m,IBZ,k,j,i)*bcc(m,IBZ,k,j,i);
+    hvars.the_array[3] = B_mag_sq*vol;
+    // 0 = < B^4 >
+    Real B_fourth = B_mag_sq*B_mag_sq;
+    hvars.the_array[4] = B_fourth*vol;
+    // 1 = < (d_j B_i)(d_j B_i) >
+    hvars.the_array[5] = (
+      ((b.x1f(m,k,j,i+1)-b.x1f(m,k,j,i))*(b.x1f(m,k,j,i+1)-b.x1f(m,k,j,i))
+     + (b.x2f(m,k,j+1,i)-b.x2f(m,k,j,i))*(b.x2f(m,k,j+1,i)-b.x2f(m,k,j,i))
+     + (b.x3f(m,k+1,j,i)-b.x3f(m,k,j,i))*(b.x3f(m,k+1,j,i)-b.x3f(m,k,j,i))
+     + 0.25*(bcc(m,IBX,k,j+1,i)-bcc(m,IBX,k,j-1,i))
+           *(bcc(m,IBX,k,j+1,i)-bcc(m,IBX,k,j-1,i))
+     + 0.25*(bcc(m,IBX,k+1,j,i)-bcc(m,IBX,k-1,j,i))
+           *(bcc(m,IBX,k+1,j,i)-bcc(m,IBX,k-1,j,i))
+     + 0.25*(bcc(m,IBY,k,j,i+1)-bcc(m,IBY,k,j,i-1))
+           *(bcc(m,IBY,k,j,i+1)-bcc(m,IBY,k,j,i-1))
+     + 0.25*(bcc(m,IBY,k+1,j,i)-bcc(m,IBY,k-1,j,i))
+           *(bcc(m,IBY,k+1,j,i)-bcc(m,IBY,k-1,j,i))
+     + 0.25*(bcc(m,IBZ,k,j,i+1)-bcc(m,IBZ,k,j,i-1))
+           *(bcc(m,IBZ,k,j,i+1)-bcc(m,IBZ,k,j,i-1))
+     + 0.25*(bcc(m,IBZ,k,j+1,i)-bcc(m,IBZ,i,j-1,i))
+           *(bcc(m,IBZ,k,j+1,i)-bcc(m,IBZ,i,j-1,i)))
+       / dx_squared)*vol;
+    // 2 = < (B_j d_j B_i)(B_k d_k B_i) >
+    Real bdb1 = bcc(m,IBX,k,j,i)*(b.x1f(m,k,j,i+1)-b.x1f(m,k,j,i))
+                +0.5*bcc(m,IBY,k,j,i)*(bcc(m,IBX,k,j+1,i)-bcc(m,IBX,k,j-1,i))
+                +0.5*bcc(m,IBZ,k,j,i)*(bcc(m,IBX,k+1,j,i)-bcc(m,IBX,k-1,j,i));
+    Real bdb2 = bcc(m,IBY,k,j,i)*(b.x2f(m,k,j+1,i)-b.x2f(m,k,j,i))
+                +0.5*bcc(m,IBZ,k,j,i)*(bcc(m,IBY,k+1,j,i)-bcc(m,IBY,k-1,j,i))
+                +0.5*bcc(m,IBX,k,j,i)*(bcc(m,IBY,k,j,i+1)-bcc(m,IBY,k,j,i-1));
+    Real bdb3 = bcc(m,IBZ,k,j,i)*(b.x3f(m,k+1,j,i)-b.x3f(m,k,j,i))
+                +0.5*bcc(m,IBX,k,j,i)*(bcc(m,IBZ,k,j,i+1)-bcc(m,IBZ,k,j,i-1))
+                +0.5*bcc(m,IBY,k,j,i)*(bcc(m,IBZ,k,j+1,i)-bcc(m,IBZ,k,j-1,i));
+    hvars.the_array[6] = ((bdb1*bdb1 + bdb2*bdb2 + bdb3*bdb3) / dx_squared)*vol;
+    // 3 = < |BxJ|^2 >
+    Real Jx = 0.5*(bcc(m,IBZ,k,j+1,i)-bcc(m,IBZ,k,j-1,i))
+             -0.5*(bcc(m,IBY,k+1,j,i)-bcc(m,IBY,k-1,j,i));
+    Real Jy = 0.5*(bcc(m,IBX,k+1,j,i)-bcc(m,IBX,k-1,j,i))
+             -0.5*(bcc(m,IBZ,k,j,i+1)-bcc(m,IBZ,k,j,i-1));
+    Real Jz = 0.5*(bcc(m,IBY,k,j,i+1)-bcc(m,IBY,k,j,i-1))
+             -0.5*(bcc(m,IBX,k,j+1,i)-bcc(m,IBX,k,j-1,i));
+    hvars.the_array[7] =((
+       (bcc(m,IBY,k,j,i)*Jz - bcc(m,IBZ,k,j,i)*Jy)
+      *(bcc(m,IBY,k,j,i)*Jz - bcc(m,IBZ,k,j,i)*Jy)
+      +(bcc(m,IBZ,k,j,i)*Jx - bcc(m,IBX,k,j,i)*Jz)
+      *(bcc(m,IBZ,k,j,i)*Jx - bcc(m,IBX,k,j,i)*Jz)
+      +(bcc(m,IBX,k,j,i)*Jy - bcc(m,IBY,k,j,i)*Jx)
+      *(bcc(m,IBX,k,j,i)*Jy - bcc(m,IBY,k,j,i)*Jx))
+                    / dx_squared)*vol;
+    // 4 = < |B.J|^2 >
+    hvars.the_array[8] = (
+      ((bcc(m,IBX,k,j,i)*Jx + bcc(m,IBY,k,j,i)*Jy + bcc(m,IBZ,k,j,i)*Jz)
+      *(bcc(m,IBX,k,j,i)*Jx + bcc(m,IBY,k,j,i)*Jy + bcc(m,IBZ,k,j,i)*Jz)
+                          )/dx_squared)*vol;
+    // 5 = < U^2 >
+    hvars.the_array[9] += ((w0_(m,IVX,k,j,i)*w0_(m,IVX,k,j,i))
+                        + (w0_(m,IVY,k,j,i)*w0_(m,IVY,k,j,i))
+                        + (w0_(m,IVZ,k,j,i)*w0_(m,IVZ,k,j,i)))*vol;
+    // 6 = < (d_j U_i)(d_j U_i) >
+    hvars.the_array[10] +=
+    (((0.25*(w0_(m,IVX,k,j,i+1)-w0_(m,IVX,k,j,i-1))
+           *(w0_(m,IVX,k,j,i+1)-w0_(m,IVX,k,j,i-1))
+     + 0.25*(w0_(m,IVY,k,j+1,i)-w0_(m,IVY,k,j-1,i))
+           *(w0_(m,IVY,k,j+1,i)-w0_(m,IVY,k,j-1,i))
+     + 0.25*(w0_(m,IVZ,k+1,j,i)-w0_(m,IVZ,k-1,j,i))
+           *(w0_(m,IVZ,k+1,j,i)-w0_(m,IVZ,k-1,j,i))
+     + 0.25*(w0_(m,IVX,k,j+1,i)-w0_(m,IVX,k,j-1,i))
+           *(w0_(m,IVX,k,j+1,i)-w0_(m,IVX,k,j-1,i))
+     + 0.25*(w0_(m,IVX,k+1,j,i)-w0_(m,IVX,k-1,j,i))
+           *(w0_(m,IVX,k+1,j,i)-w0_(m,IVX,k-1,j,i))
+     + 0.25*(w0_(m,IVY,k,j,i+1)-w0_(m,IVY,k,j,i-1))
+           *(w0_(m,IVY,k,j,i+1)-w0_(m,IVY,k,j,i-1))
+     + 0.25*(w0_(m,IVY,k+1,j,i)-w0_(m,IVY,k-1,j,i))
+           *(w0_(m,IVY,k+1,j,i)-w0_(m,IVY,k-1,j,i))
+     + 0.25*(w0_(m,IVZ,k,j,i+1)-w0_(m,IVZ,k,j,i-1))
+           *(w0_(m,IVZ,k,j,i+1)-w0_(m,IVZ,k,j,i-1))
+     + 0.25*(w0_(m,IVZ,k,j+1,i)-w0_(m,IVZ,k,j-1,i))
+           *(w0_(m,IVZ,k,j+1,i)-w0_(m,IVZ,k,j-1,i))))
+     / dx_squared)*vol;
 
-    // Placeholder for gradient terms (would need proper implementation)
-    mb_sum.the_array[5] += 0.0;  // dB^2
-    mb_sum.the_array[6] += 0.0;  // BdB^2
-    mb_sum.the_array[7] += 0.0;  // |BxJ|^2
-    mb_sum.the_array[8] += 0.0;  // |B.J|^2
-    mb_sum.the_array[10] += 0.0; // dU^2
+    // Compute divergence of B
+    Real divb = (b.x1f(m,k,j,i+1) - b.x1f(m,k,j,i))/size.d_view(m).dx1;
+    if (multi_d) {
+      divb += (b.x2f(m,k,j+1,i) - b.x2f(m,k,j,i))/size.d_view(m).dx2;
+    }
+    if (three_d) {
+      divb += (b.x3f(m,k+1,j,i) - b.x3f(m,k,j,i))/size.d_view(m).dx3;
+    }
+
+    // Sum of divergence of B
+    hvars.the_array[11] += fabs(divb)*vol;
+    // fill rest of the_array with zeros, if nhist < NHISTORY_VARIABLES
+    for (int n=nhist_; n<NHISTORY_VARIABLES; ++n) {
+      hvars.the_array[n] = 0.0;
+    }
+
+    // sum into parallel reduce
+    mb_sum += hvars;
   }, Kokkos::Sum<array_sum::GlobalSum>(sum_this_mb));
+  // Kokkos::fence();
 
   // store data in HistoryData array
   for (int n=0; n<nhist_; n++) {

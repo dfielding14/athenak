@@ -5,6 +5,7 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
+#include "mhd/mhd.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "ismcooling.hpp"
 #include "srcterms.hpp"
@@ -20,8 +21,15 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
   int is = indcs.is, nx1 = indcs.nx1;
   int js = indcs.js, nx2 = indcs.nx2;
   int ks = indcs.ks, nx3 = indcs.nx3;
-  int nscalars = pmy_pack->phydro->nscalars;
-  int nhydro = pmy_pack->phydro->nhydro;
+  int nscalars = 0;
+  int nhydro = 0;
+  if (pmy_pack->phydro != nullptr) {
+    nscalars = pmy_pack->phydro->nscalars;
+    nhydro = pmy_pack->phydro->nhydro;
+  } else if (pmy_pack->pmhd != nullptr) {
+    nscalars = pmy_pack->pmhd->nscalars;
+    nhydro = pmy_pack->pmhd->nmhd;
+  }
   const int nmkji = (pmy_pack->nmb_thispack)*nx3*nx2*nx1;
   const int nkji = nx3*nx2*nx1;
   const int nji  = nx2*nx1;

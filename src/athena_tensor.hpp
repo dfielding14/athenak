@@ -6,6 +6,15 @@
 #include <utility>
 #include "athena.hpp"
 
+// Device-compatible swap function for use in KOKKOS_INLINE_FUNCTION contexts
+template<typename T>
+KOKKOS_INLINE_FUNCTION
+void device_swap(T& a, T& b) {
+  T temp = a;
+  a = b;
+  b = temp;
+}
+
 // tensor symmetries
 enum class TensorSymm {
   NONE,     // no symmetries
@@ -490,10 +499,10 @@ class AthenaPointTensor<T, sym, ndim, 4> {
     } else if constexpr (sym == TensorSymm::SYM22) {
       constexpr int ndof2_ = TensorDOF<TensorSymm::SYM2, ndim, 2>;
       if (a < b) {
-        std::swap(a, b);
+        device_swap(a, b);
       }
       if (c < d) {
-        std::swap(c, d);
+        device_swap(c, d);
       }
       return data_[(b*( 2*ndim - b +1)/2 + a - b)*ndof2_ + d*( 2*ndim - d +1)/2 + c - d];
     }
@@ -507,10 +516,10 @@ class AthenaPointTensor<T, sym, ndim, 4> {
     } else if constexpr (sym == TensorSymm::SYM22) {
       constexpr int ndof2_ = TensorDOF<TensorSymm::SYM2, ndim, 2>;
       if (a < b) {
-        std::swap(a, b);
+        device_swap(a, b);
       }
       if (c < d) {
-        std::swap(c, d);
+        device_swap(c, d);
       }
       return data_[(b*( 2*ndim - b +1)/2 + a - b)*ndof2_ + d*( 2*ndim - d +1)/2 + c - d];
     }
@@ -622,7 +631,7 @@ class AthenaScratchTensor<T, sym, ndim, 2> {
       return data_(ndim * a + b, i);
     } else {
       if (a < b) {
-        std::swap(a, b);
+        device_swap(a, b);
       }
       return data_(b*( 2*ndim - b +1)/2 + a - b, i);
     }
@@ -671,12 +680,12 @@ class AthenaScratchTensor<T, sym, ndim, 3> {
       return data_(ndim * ndim * a + ndim * b + c, i);
     } else if constexpr (sym == TensorSymm::SYM2) {
       if (b < c) {
-        std::swap(b, c);
+        device_swap(b, c);
       }
       return data_(a*(ndim + 1)*ndim/2 + c*( 2*ndim - c +1)/2 + b - c,i);
     } else if constexpr (sym == TensorSymm::ISYM2) {
       if (a < b) {
-        std::swap(a, b);
+        device_swap(a, b);
       }
       return data_((b*(2*ndim - b +1)/2 + a - b)*ndim + c,i);
     }
@@ -725,10 +734,10 @@ class AthenaScratchTensor<T, sym, ndim, 4> {
       return data_(ndim * ndim * ndim * a + ndim * ndim * b + ndim * c + d, i);
     } else if constexpr (sym == TensorSymm::SYM22) {
       if (a < b) {
-        std::swap(a, b);
+        device_swap(a, b);
       }
       if (c < d) {
-        std::swap(c, d);
+        device_swap(c, d);
       }
       return data_((b*( 2*ndim - b +1)/2 + a - b)*(ndim + 1)*ndim/2 +
                     d*( 2*ndim - d +1)/2 + c - d,i);

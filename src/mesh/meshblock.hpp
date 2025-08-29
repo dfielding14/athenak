@@ -21,7 +21,8 @@ class MeshBlock {
 
  public:
   MeshBlock(MeshBlockPack *ppack, int igids, int nmb);
-  ~MeshBlock() {}  // only default destructor needed
+  ~MeshBlock() {
+  }
 
   // data
   int nnghbr;           // maximum number of neighbors for each MeshBlock

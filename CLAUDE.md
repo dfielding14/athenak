@@ -224,3 +224,5 @@ The current branch (`dev/particles_turb_divb`) implements:
 - [Athena++ Documentation](https://github.com/PrincetonUniversity/athena/wiki) (for similar concepts)
 - Code papers: Stone et al. (2024), Zhu et al. (2024), Fields et al. (2024)
 - Athena++ paper: Stone et al. (2020, ApJS 249, 4) - Original framework design
+
+- memorize Do not build or test the code unless I explicitly tell you to
