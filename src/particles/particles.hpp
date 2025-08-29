@@ -20,7 +20,8 @@
 // forward declarations
 
 // constants that enumerate ParticlesPusher options
-enum class ParticlesPusher {drift, rk4_gravity, leap_frog, lagrangian_tracer, lagrangian_mc};
+enum class ParticlesPusher {drift, rk4_gravity, leap_frog, lagrangian_tracer, lagrangian_mc,
+                            boris_lin, boris_tsc};
 
 // constants that enumerate ParticleTypes
 enum class ParticleType {cosmic_ray, star};
@@ -60,6 +61,12 @@ class Particles {
   Real dtnew;
 
   ParticlesPusher pusher;
+  
+  // Cosmic ray specific
+  int nspecies;                    // number of CR species
+  bool track_displacement;         // enable displacement tracking
+  DvceArray1D<Real> species_mass;  // mass per species
+  DvceArray1D<Real> species_charge;// charge per species
  
   // Constants for rk4_gravity pusher
   Real r_scale;
@@ -88,6 +95,19 @@ class Particles {
   TaskStatus RecvP(Driver *pdriver, int stage);
   TaskStatus ClearSend(Driver *pdriver, int stage);
   TaskStatus ClearRecv(Driver *pdriver, int stage);
+  
+  // Cosmic ray specific methods
+  void InitializeCosmicRays(ParameterInput *pin);
+  TaskStatus PushCosmicRays(Driver *pdriver, int stage);
+  TaskStatus PushStars(Driver *pdriver, int stage);
+  
+  // Field interpolation methods
+  KOKKOS_INLINE_FUNCTION
+  void InterpolateLinear(int m, Real x, Real y, Real z,
+                        Real &Bx, Real &By, Real &Bz) const;
+  KOKKOS_INLINE_FUNCTION
+  void InterpolateTSC(int m, Real x, Real y, Real z,
+                     Real &Bx, Real &By, Real &Bz) const;
 
  private:
   MeshBlockPack* pmy_pack;  // ptr to MeshBlockPack containing this Particles

@@ -116,6 +116,10 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       r_200     = pin->GetReal("potential", "r_200");
       rho_mean  = pin->GetReal("potential", "rho_mean");
       par_grav_dx = pin->GetOrAddReal("particles", "grav_dx", 1e-6);
+    } else if (ppush.compare("boris_lin") == 0) {
+      pusher = ParticlesPusher::boris_lin;
+    } else if (ppush.compare("boris_tsc") == 0) {
+      pusher = ParticlesPusher::boris_tsc;
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle pusher must be specified in <particles> block"
@@ -141,10 +145,25 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   switch (particle_type) {
     case ParticleType::cosmic_ray:
       {
-        int ndim=4;
-        if (pmy_pack->pmesh->three_d) {ndim+=2;}
-        nrdata = ndim;
-        nidata = 2;
+        // CR particles need space for position, velocity, mass/charge, B-field, and optionally displacement
+        int ndim = 6;  // x,vx,y,vy,z,vz in 3D
+        if (pmy_pack->pmesh->two_d) {ndim = 4;}  // x,vx,y,vy in 2D
+        nrdata = ndim + 1;  // add mass/charge ratio
+        
+        // Add B-field components
+        if (pmy_pack->pmesh->three_d) {
+          nrdata += 3;  // Bx, By, Bz
+        } else {
+          nrdata += 2;  // Bx, By for 2D
+        }
+        
+        // Add displacement tracking if enabled
+        track_displacement = pin->GetOrAddBoolean("particles","track_displacement",false);
+        if (track_displacement) {
+          nrdata += 4;  // dx, dy, dz, db
+        }
+        
+        nidata = 3;  // PGID, PTAG, PSP (species)
         break;
       }
     case ParticleType::star:
@@ -163,10 +182,10 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   // allocate boundary object
   pbval_part = new ParticlesBoundaryValues(this, pin);
 
-  // Initialize Star particles if particle type is "star"
-  {
-    std::string ptype = pin->GetString("particles","particle_type");
-    if (ptype.compare("star") == 0) {
+  // Initialize particles based on type
+  if (particle_type == ParticleType::cosmic_ray) {
+    InitializeCosmicRays(pin);
+  } else if (particle_type == ParticleType::star) {
       // Loop over mesh blocks in this pack
       int nmb = pmy_pack->nmb_thispack;
       auto &size = pmy_pack->pmb->mb_size;
@@ -212,7 +231,6 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     
       dtnew = std::min(size.h_view(0).dx1, size.h_view(0).dx2);
       dtnew = std::min(dtnew, size.h_view(0).dx3);
-    }
   }
 }
 
@@ -220,6 +238,95 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 // destructor
 
 Particles::~Particles() {
+}
+
+//----------------------------------------------------------------------------------------
+// InitializeCosmicRays()
+// Initializes cosmic ray particles with species support
+
+void Particles::InitializeCosmicRays(ParameterInput *pin) {
+  // Read number of species
+  nspecies = pin->GetOrAddInteger("particles","nspecies",1);
+  
+  // Allocate species arrays
+  Kokkos::realloc(species_mass, nspecies);
+  Kokkos::realloc(species_charge, nspecies);
+  
+  // Read species properties
+  auto h_mass = Kokkos::create_mirror_view(species_mass);
+  auto h_charge = Kokkos::create_mirror_view(species_charge);
+  
+  for (int s=0; s<nspecies; ++s) {
+    std::string block = "species" + std::to_string(s);
+    h_mass(s) = pin->GetOrAddReal(block,"mass",1.0);
+    h_charge(s) = pin->GetOrAddReal(block,"charge",1.0);
+  }
+  
+  Kokkos::deep_copy(species_mass, h_mass);
+  Kokkos::deep_copy(species_charge, h_charge);
+  
+  // Initialize particle positions and velocities
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  auto &size = pmy_pack->pmb->mb_size;
+  auto &pi = prtcl_idata;
+  auto &pr = prtcl_rdata;
+  int nmb = pmy_pack->nmb_thispack;
+  const int &gids = pmy_pack->gids;
+  
+  // Simple uniform distribution for now
+  par_for("init_cr", DevExeSpace(), 0, nprtcl_thispack-1,
+  KOKKOS_LAMBDA(const int p) {
+    // Determine which meshblock this particle belongs to
+    int particles_per_mb = nprtcl_thispack / nmb;
+    int m = p / particles_per_mb;
+    if (m >= nmb) m = nmb - 1;
+    
+    // Set GID and species
+    pi(PGID,p) = gids + m;
+    pi(PTAG,p) = p;
+    pi(PSP,p) = p % nspecies;  // Round-robin species assignment
+    
+    // Initialize position (uniform random for now)
+    // TODO: Add proper initialization options
+    pr(IPX,p) = size.h_view(m).x1min + 0.5*(size.h_view(m).x1max - size.h_view(m).x1min);
+    pr(IPY,p) = size.h_view(m).x2min + 0.5*(size.h_view(m).x2max - size.h_view(m).x2min);
+    if (indcs.nx3 > 1) {
+      pr(IPZ,p) = size.h_view(m).x3min + 0.5*(size.h_view(m).x3max - size.h_view(m).x3min);
+    }
+    
+    // Initialize velocity to zero
+    pr(IPVX,p) = 0.0;
+    pr(IPVY,p) = 0.0;
+    if (indcs.nx3 > 1) {
+      pr(IPVZ,p) = 0.0;
+    }
+    
+    // Set mass/charge ratio
+    int species = pi(PSP,p);
+    pr(IPM,p) = species_charge(species) / species_mass(species);
+    
+    // Initialize B-field components to zero
+    pr(IPBX,p) = 0.0;
+    pr(IPBY,p) = 0.0;
+    if (indcs.nx3 > 1) {
+      pr(IPBZ,p) = 0.0;
+    }
+    
+    // Initialize displacement tracking if enabled
+    if (track_displacement) {
+      pr(IPDX,p) = 0.0;
+      pr(IPDY,p) = 0.0;
+      pr(IPDZ,p) = 0.0;
+      pr(IPDB,p) = 0.0;
+    }
+  });
+  
+  // Set timestep
+  auto &dx = size.h_view(0);
+  dtnew = std::min(dx.dx1, dx.dx2);
+  if (indcs.nx3 > 1) {
+    dtnew = std::min(dtnew, dx.dx3);
+  }
 }
 
 //----------------------------------------------------------------------------------------

@@ -11,6 +11,7 @@
 #include "driver/driver.hpp"
 #include "particles.hpp"
 #include "units/units.hpp"
+#include "mhd/mhd.hpp"
 
 namespace particles {
 KOKKOS_INLINE_FUNCTION
@@ -150,11 +151,155 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
         pr(IPVZ, p) = vz + dt_/6.0 * (k1vz + 2.0*k2vz + 2.0*k3vz + k4vz);
       });
     break;}
+    case ParticlesPusher::boris_lin:
+    case ParticlesPusher::boris_tsc:
+      return PushCosmicRays(pdriver, stage);
   default:
     break;
   }
 
   return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Particles::PushCosmicRays
+//  \brief Boris pusher for cosmic ray particles in electromagnetic fields
+
+TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  auto &size = pmy_pack->pmb->mb_size;
+  auto &pi = prtcl_idata;
+  auto &pr = prtcl_rdata;
+  Real dt = pmy_pack->pmesh->dt;
+  int gids = pmy_pack->gids;
+  bool use_tsc = (pusher == ParticlesPusher::boris_tsc);
+  
+  // Access MHD fields if available
+  bool has_mhd = (pmy_pack->pmhd != nullptr);
+  DvceArray5D<Real> bcc;
+  if (has_mhd) {
+    bcc = pmy_pack->pmhd->bcc0;
+  }
+  
+  // Boris pusher algorithm
+  par_for("push_cr", DevExeSpace(), 0, nprtcl_thispack-1,
+  KOKKOS_LAMBDA(const int p) {
+    // Get particle properties
+    int m = pi(PGID,p) - gids;
+    Real x = pr(IPX,p);
+    Real y = pr(IPY,p);
+    Real z = (indcs.nx3 > 1) ? pr(IPZ,p) : 0.0;
+    Real vx = pr(IPVX,p);
+    Real vy = pr(IPVY,p);
+    Real vz = (indcs.nx3 > 1) ? pr(IPVZ,p) : 0.0;
+    Real q_over_m = pr(IPM,p);
+    
+    // Interpolate B-field to particle position
+    Real Bx = 0.0, By = 0.0, Bz = 0.0;
+    if (has_mhd) {
+      // Simple linear interpolation for now
+      // TODO: Add TSC interpolation option
+      Real dx1 = size.d_view(m).dx1;
+      Real dx2 = size.d_view(m).dx2;
+      Real dx3 = (indcs.nx3 > 1) ? size.d_view(m).dx3 : 1.0;
+      
+      int i = static_cast<int>((x - size.d_view(m).x1min) / dx1) + indcs.is;
+      int j = static_cast<int>((y - size.d_view(m).x2min) / dx2) + indcs.js;
+      int k = (indcs.nx3 > 1) ? 
+              static_cast<int>((z - size.d_view(m).x3min) / dx3) + indcs.ks : indcs.ks;
+      
+      // Ensure indices are within bounds
+      i = (i < indcs.is) ? indcs.is : ((i > indcs.ie) ? indcs.ie : i);
+      j = (j < indcs.js) ? indcs.js : ((j > indcs.je) ? indcs.je : j);
+      k = (k < indcs.ks) ? indcs.ks : ((k > indcs.ke) ? indcs.ke : k);
+      
+      // Simple nearest-neighbor for now
+      Bx = bcc(m,IBX,k,j,i);
+      By = bcc(m,IBY,k,j,i);
+      if (indcs.nx3 > 1) {
+        Bz = bcc(m,IBZ,k,j,i);
+      }
+    }
+    
+    // Boris algorithm
+    Real dt_half = 0.5 * dt;
+    Real qdt_2m = q_over_m * dt_half;
+    
+    // No electric field for now
+    Real Ex = 0.0, Ey = 0.0, Ez = 0.0;
+    
+    // Half electric acceleration
+    vx += qdt_2m * Ex;
+    vy += qdt_2m * Ey;
+    vz += qdt_2m * Ez;
+    
+    // Magnetic rotation
+    Real tx = qdt_2m * Bx;
+    Real ty = qdt_2m * By;
+    Real tz = qdt_2m * Bz;
+    Real t2 = tx*tx + ty*ty + tz*tz;
+    Real s = 2.0 / (1.0 + t2);
+    
+    Real vx1 = vx + vy*tz - vz*ty;
+    Real vy1 = vy + vz*tx - vx*tz;
+    Real vz1 = vz + vx*ty - vy*tx;
+    
+    vx += s*(vy1*tz - vz1*ty);
+    vy += s*(vz1*tx - vx1*tz);
+    vz += s*(vx1*ty - vy1*tx);
+    
+    // Half electric acceleration
+    vx += qdt_2m * Ex;
+    vy += qdt_2m * Ey;
+    vz += qdt_2m * Ez;
+    
+    // Update position
+    pr(IPX,p) += dt * vx;
+    pr(IPY,p) += dt * vy;
+    if (indcs.nx3 > 1) {
+      pr(IPZ,p) += dt * vz;
+    }
+    
+    // Store updated velocity
+    pr(IPVX,p) = vx;
+    pr(IPVY,p) = vy;
+    if (indcs.nx3 > 1) {
+      pr(IPVZ,p) = vz;
+    }
+    
+    // Store B-field at particle
+    pr(IPBX,p) = Bx;
+    pr(IPBY,p) = By;
+    if (indcs.nx3 > 1) {
+      pr(IPBZ,p) = Bz;
+    }
+    
+    // Update displacement tracking if enabled
+    if (track_displacement) {
+      pr(IPDX,p) += dt * vx;
+      pr(IPDY,p) += dt * vy;
+      if (indcs.nx3 > 1) {
+        pr(IPDZ,p) += dt * vz;
+      }
+      // Parallel displacement
+      Real B_mag = sqrt(Bx*Bx + By*By + Bz*Bz);
+      if (B_mag > 0.0) {
+        pr(IPDB,p) += dt * (vx*Bx + vy*By + vz*Bz) / B_mag;
+      }
+    }
+  });
+  
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Particles::PushStars
+//  \brief Separate method for star particle dynamics
+
+TaskStatus Particles::PushStars(Driver *pdriver, int stage) {
+  // For now, just call the RK4 gravity pusher code
+  // This is a placeholder for future star-specific dynamics
+  return Push(pdriver, stage);
 }
 
 KOKKOS_INLINE_FUNCTION
