@@ -66,7 +66,10 @@ KOKKOS_INLINE_FUNCTION
 void ProlongFCSharedX1Face(const int m, const int k, const int j, const int i,
                    const int fk, const int fj, const int fi,
                    const bool multi_d, const bool three_d,
-                   const DvceArray4D<Real> &cbx1f, const DvceArray4D<Real> &bx1f) {
+                   const DvceArray4D<Real> &cbx1f, const DvceArray4D<Real> &bx1f,
+                   const bool skip_ffc = false) {
+  // Skip if this face was already corrected by face-field correction
+  if (skip_ffc) return;
   // Prolongate b.x1f (v=0) by interpolating in x2/x3
   Real dvar2 = 0.0;
   if (multi_d) {
@@ -102,7 +105,10 @@ KOKKOS_INLINE_FUNCTION
 void ProlongFCSharedX2Face(const int m, const int k, const int j, const int i,
                    const int fk, const int fj, const int fi,
                    const bool three_d,
-                   const DvceArray4D<Real> &cbx2f, const DvceArray4D<Real> &bx2f) {
+                   const DvceArray4D<Real> &cbx2f, const DvceArray4D<Real> &bx2f,
+                   const bool skip_ffc = false) {
+  // Skip if this face was already corrected by face-field correction
+  if (skip_ffc) return;
   // Prolongate b.x2f (v=1) by interpolating in x1/x3
   Real dl = cbx2f(m,k,j,i  ) - cbx2f(m,k,j,i-1);
   Real dr = cbx2f(m,k,j,i+1) - cbx2f(m,k,j,i  );
@@ -133,7 +139,10 @@ KOKKOS_INLINE_FUNCTION
 void ProlongFCSharedX3Face(const int m, const int k, const int j, const int i,
                    const int fk, const int fj, const int fi,
                    const bool multi_d,
-                   const DvceArray4D<Real> &cbx3f, const DvceArray4D<Real> &bx3f) {
+                   const DvceArray4D<Real> &cbx3f, const DvceArray4D<Real> &bx3f,
+                   const bool skip_ffc = false) {
+  // Skip if this face was already corrected by face-field correction
+  if (skip_ffc) return;
   // Prolongate b.x3f (v=2) by interpolating in x1/x2
   Real dl = cbx3f(m,k,j,i  ) - cbx3f(m,k,j,i-1);
   Real dr = cbx3f(m,k,j,i+1) - cbx3f(m,k,j,i  );

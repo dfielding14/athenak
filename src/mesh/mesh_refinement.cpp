@@ -28,6 +28,7 @@
 #include "z4c/z4c_amr.hpp"
 #include "prolongation.hpp"
 #include "restriction.hpp"
+#include "nghbr_index.hpp"
 #include "particles/particles.hpp"
 
 #if MPI_PARALLEL_ENABLED
@@ -1160,7 +1161,12 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
       int fi = (i - cis)*2 + is;                   // fine i
       int fj = (multi_d)? ((j - cjs)*2 + js) : j;  // fine j
       int fk = (three_d)? ((k - cks)*2 + ks) : k;  // fine k
-      ProlongFCSharedX1Face(m,k,j,i,fk,fj,fi,multi_d,three_d,cb.x1f,b.x1f);
+      
+      // During refinement, we don't skip faces - FFC is applied after refinement
+      // The face-field correction handles coarse-fine boundaries separately
+      bool skip_ffc = false;
+      
+      ProlongFCSharedX1Face(m,k,j,i,fk,fj,fi,multi_d,three_d,cb.x1f,b.x1f,skip_ffc);
     }
   });
 
@@ -1172,7 +1178,10 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
       int fi = (i - cis)*2 + is;                   // fine i
       int fj = (multi_d)? ((j - cjs)*2 + js) : j;  // fine j
       int fk = (three_d)? ((k - cks)*2 + ks) : k;  // fine k
-      ProlongFCSharedX2Face(m,k,j,i,fk,fj,fi,three_d,cb.x2f,b.x2f);
+      // During refinement, we don't skip faces - FFC is applied after refinement
+      bool skip_ffc = false;
+      
+      ProlongFCSharedX2Face(m,k,j,i,fk,fj,fi,three_d,cb.x2f,b.x2f,skip_ffc);
     }
   });
 
@@ -1184,7 +1193,10 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
       int fi = (i - cis)*2 + is;                   // fine i
       int fj = (multi_d)? ((j - cjs)*2 + js) : j;  // fine j
       int fk = (three_d)? ((k - cks)*2 + ks) : k;  // fine k
-      ProlongFCSharedX3Face(m,k,j,i,fk,fj,fi,multi_d,cb.x3f,b.x3f);
+      // During refinement, we don't skip faces - FFC is applied after refinement
+      bool skip_ffc = false;
+      
+      ProlongFCSharedX3Face(m,k,j,i,fk,fj,fi,multi_d,cb.x3f,b.x3f,skip_ffc);
     }
   });
 
