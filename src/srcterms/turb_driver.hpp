@@ -49,7 +49,7 @@ class TurbulenceDriver {
   int driving_type, turb_flag;
   int min_kz, max_kz, min_kx, max_kx, min_ky, max_ky;
   Real sol_fraction; // To store fraction of energy in solenoidal modes
-  Real dt_turb_update,dt_turb_thresh;
+  Real dt_turb_update;
   // Real t_last_update;
   int n_turb_updates_yet;
 
@@ -72,7 +72,6 @@ class TurbulenceDriver {
   void ResizeArrays(int new_nmb);
 
  private:
-  bool first_time = true;   // flag to enable initialization on first call
   MeshBlockPack *pmy_pack;  // ptr to MeshBlockPack containing this TurbulenceDriver
 };
 
