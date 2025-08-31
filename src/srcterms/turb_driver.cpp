@@ -11,6 +11,7 @@
 #include <limits>
 #include <memory>
 #include <cmath>
+#include <utility>
 
 #include "athena.hpp"
 #include "parameter_input.hpp"
@@ -35,7 +36,7 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   force("force",1,1,1,1,1),
   force_tmp1("force_tmp1",1,1,1,1,1),
   force_tmp2("force_tmp2",1,1,1,1,1),
-  aka("aka",1,1),akb("zssc",1,1),
+  aka("aka",1,1),akb("akb",1,1),
   kx_mode("kx_mode",1),ky_mode("ky_mode",1),kz_mode("kz_mode",1),
   xcos("xcos",1,1,1),xsin("xsin",1,1,1),ycos("ycos",1,1,1),
   ysin("ysin",1,1,1),zcos("zcos",1,1,1),zsin("zsin",1,1,1) {
@@ -87,8 +88,6 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   tcorr = pin->GetOrAddReal("turb_driving", "tcorr", 0.0);
   // update time for the turbulence driver
   dt_turb_update=pin->GetOrAddReal("turb_driving","dt_turb_update",0.01);
-   //We'll match the code time-step within this value of dt_turb_update steps
-  dt_turb_thresh=pin->GetOrAddReal("turb_driving","dt_turb_thresh",1e-6);
   // To store fraction of energy in solenoidal modes
   sol_fraction=pin->GetOrAddReal("turb_driving","sol_fraction",1.0);
   
@@ -201,6 +200,7 @@ void TurbulenceDriver::Initialize() {
           0,nmb-1,0,2,0,ncells3-1,0,ncells2-1,0,ncells1-1,
   KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
     force_tmp1_(m,n,k,j,i) = 0.0;
+    force_tmp2_(m,n,k,j,i) = 0.0;
   });
 
   rstate.idum = rseed;
@@ -319,10 +319,10 @@ void TurbulenceDriver::Initialize() {
 
 void TurbulenceDriver::IncludeInitializeModesTask(std::shared_ptr<TaskList> tl,
                                                   TaskID start) {
-  //  We initialize the modes and update the forcing before the time integration loop
-  auto id_init   = tl->AddTask(&TurbulenceDriver::InitializeModes, this, start);
-  auto id_resize = tl->AddTask(&TurbulenceDriver::CheckResize, this, id_init);
-  auto id_add    = tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_resize);
+  //  We check for mesh changes, then initialize modes and update the forcing
+  auto id_resize = tl->AddTask(&TurbulenceDriver::CheckResize, this, start);
+  auto id_init   = tl->AddTask(&TurbulenceDriver::InitializeModes, this, id_resize);
+  auto id_add    = tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_init);
   return;
 }
 
@@ -365,7 +365,9 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
   int ks = indcs.ks, ke = indcs.ke;
 
   Real current_time=pm->time;
-  int n_turb_updates_reqd = (int) (current_time/dt_turb_update) + 1;
+  if (current_time < tdriv_start) return TaskStatus::complete;
+  Real t_since_start = current_time - tdriv_start;
+  int n_turb_updates_reqd = (int) (t_since_start/dt_turb_update) + 1;
 
   int nlow_sqr = SQR(nlow);
   int nhigh_sqr = SQR(nhigh);
@@ -394,7 +396,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
   // Now compute new force using new random amplitudes and phases
   // no need to evolve force_new if dt_turb_update hasn't passed since the last update
 
-  if ((current_time < tdriv_duration) || turb_flag != 1){ // Update the forcing only if the driving is continuous or t<tdriv_duration
+  if ((t_since_start < tdriv_duration) || turb_flag != 1){ // Update forcing if continuous or t<tdriv_duration
 
     for(int i_turb_update = n_turb_updates_yet; i_turb_update < n_turb_updates_reqd; i_turb_update++){
       if (global_variable::my_rank == 0) std::cout << "i_turb_update = " << i_turb_update << std::endl;
@@ -416,8 +418,8 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
       // Cartesian mode generation
       int nkx, nky, nkz, nsqr;
 
-        for (nkx = 0; nkx <= nhigh; nkx++) {
-          for (nky = 0; nky <= nhigh; nky++) {
+        for (nkx = min_kx; nkx <= max_kx; nkx++) {
+          for (nky = min_ky; nky <= max_ky; nky++) {
             for (nkz = min_kz; nkz <= max_kz; nkz++) {
               if (nkx == 0 && nky == 0 && nkz == 0) continue;
               norm = 0.0;
@@ -521,9 +523,10 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
       auto zcos_ = zcos;
       auto zsin_ = zsin;
 
-      for (int n=0; n<mode_count; n++) {
-        par_for("force_compute", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
-        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      int mode_count_ = mode_count;
+      par_for("force_compute", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        for (int n=0; n<mode_count_; ++n) {
           Real forc_real = ( xcos_(m,n,i)*ycos_(m,n,j) - xsin_(m,n,i)*ysin_(m,n,j) ) * zcos_(m,n,k) -
                           ( xsin_(m,n,i)*ycos_(m,n,j) + xcos_(m,n,i)*ysin_(m,n,j) ) * zsin_(m,n,k);
           Real forc_imag = ( ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k) ) * xcos_(m,n,i) +
@@ -531,8 +534,8 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
           for (int dir = 0; dir < 3; dir ++){
             force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real - akb_.d_view(dir,n)*forc_imag;
           }
-        });
-      }
+        }
+      });
       // if (global_variable::my_rank == 0) std::cout << "force_tmp2_ computed." << std::endl;
       // Let's skip the momentum subtraction during restarts -- or alternatively move this to add force
       Real fcorr, gcorr;
@@ -591,6 +594,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
 
   Real dt = pm->dt;
   Real current_time=pm->time;
+  Real t_since_start = current_time - tdriv_start;
 
   bool scale_forcing = true;
 
@@ -630,7 +634,8 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
 
   // if (global_variable::my_rank == 0) std::cout << " norm_factor = " << norm_factor << std::endl;
 
-  if ((pm->ncycle >=1) && ((current_time < tdriv_duration) || turb_flag != 1))
+  if ((pm->ncycle >=1) && (current_time >= tdriv_start) &&
+      ((t_since_start < tdriv_duration) || turb_flag != 1))
   {
     // Update the forcing and add momentum and energy only if the driving is continuous or t < tdriv_duration
     par_for("force_OU_process",DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
@@ -840,6 +845,7 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
   Real dt = pm->dt;
   Real bdt = (pdrive->beta[stage-1])*dt;
   Real current_time=pm->time;
+  Real t_since_start = current_time - tdriv_start;
 
   EquationOfState *peos;
 
@@ -871,7 +877,8 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
 
   auto &eos = peos->eos_data;
 
-  if ((current_time < tdriv_duration) || turb_flag != 1)
+  if ((current_time >= tdriv_start) &&
+      ((t_since_start < tdriv_duration) || turb_flag != 1))
   {
     par_for("push",DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -1187,35 +1194,89 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
   int &nx1 = indcs.nx1;
   int &nx2 = indcs.nx2;
   int &nx3 = indcs.nx3;
-  
+
+  int old_nmb = current_nmb_;
+  Mesh *pm = pmy_pack->pmesh;
+  bool recompute_all = true;
+  if (pm->adaptive && pm->pmr != nullptr && pm->pmr->nmb_deleted == 0 && new_nmb >= old_nmb) {
+    recompute_all = false;
+  }
+  int m_start = recompute_all ? 0 : old_nmb;
+
   // Reallocate arrays only if MeshBlock count changed
   if (force.extent(0) != new_nmb) {
-    // Reallocate force arrays
+    auto force_old = force;
+    auto force_tmp1_old = force_tmp1;
+    auto force_tmp2_old = force_tmp2;
+    auto xcos_old = xcos;
+    auto xsin_old = xsin;
+    auto ycos_old = ycos;
+    auto ysin_old = ysin;
+    auto zcos_old = zcos;
+    auto zsin_old = zsin;
+
     Kokkos::realloc(force, new_nmb, 3, ncells3, ncells2, ncells1);
     Kokkos::realloc(force_tmp1, new_nmb, 3, ncells3, ncells2, ncells1);
     Kokkos::realloc(force_tmp2, new_nmb, 3, ncells3, ncells2, ncells1);
-    
-    // Reallocate mode basis arrays
     Kokkos::realloc(xcos, new_nmb, mode_count, ncells1);
     Kokkos::realloc(xsin, new_nmb, mode_count, ncells1);
     Kokkos::realloc(ycos, new_nmb, mode_count, ncells2);
     Kokkos::realloc(ysin, new_nmb, mode_count, ncells2);
     Kokkos::realloc(zcos, new_nmb, mode_count, ncells3);
     Kokkos::realloc(zsin, new_nmb, mode_count, ncells3);
+
+    int copy_n = std::min(old_nmb, new_nmb);
+    if (copy_n > 0) {
+      Kokkos::deep_copy(
+          Kokkos::subview(force, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL,
+                           Kokkos::ALL, Kokkos::ALL),
+          Kokkos::subview(force_old, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL,
+                           Kokkos::ALL, Kokkos::ALL));
+      Kokkos::deep_copy(
+          Kokkos::subview(force_tmp1, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL,
+                           Kokkos::ALL, Kokkos::ALL),
+          Kokkos::subview(force_tmp1_old, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL,
+                           Kokkos::ALL, Kokkos::ALL));
+      Kokkos::deep_copy(
+          Kokkos::subview(force_tmp2, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL,
+                           Kokkos::ALL, Kokkos::ALL),
+          Kokkos::subview(force_tmp2_old, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL,
+                           Kokkos::ALL, Kokkos::ALL));
+      Kokkos::deep_copy(
+          Kokkos::subview(xcos, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL),
+          Kokkos::subview(xcos_old, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL));
+      Kokkos::deep_copy(
+          Kokkos::subview(xsin, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL),
+          Kokkos::subview(xsin_old, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL));
+      Kokkos::deep_copy(
+          Kokkos::subview(ycos, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL),
+          Kokkos::subview(ycos_old, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL));
+      Kokkos::deep_copy(
+          Kokkos::subview(ysin, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL),
+          Kokkos::subview(ysin_old, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL));
+      Kokkos::deep_copy(
+          Kokkos::subview(zcos, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL),
+          Kokkos::subview(zcos_old, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL));
+      Kokkos::deep_copy(
+          Kokkos::subview(zsin, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL),
+          Kokkos::subview(zsin_old, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL));
+    }
   }
   
   // CRITICAL: Do NOT call Initialize() which would reset the turbulence state
   // Instead, recompute basis functions while preserving mode amplitudes (aka_, akb_)
   
-  // Zero out force arrays
+  // Zero out force arrays for new/changed blocks
   auto force_tmp1_ = force_tmp1;
   auto force_tmp2_ = force_tmp2;
-  par_for("force_resize_zero", DevExeSpace(),
-          0, new_nmb-1, 0, 2, 0, ncells3-1, 0, ncells2-1, 0, ncells1-1,
-  KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
-    force_tmp1_(m,n,k,j,i) = 0.0;
-    force_tmp2_(m,n,k,j,i) = 0.0;
-  });
+  if (m_start < new_nmb) {
+    par_for("force_resize_zero", DevExeSpace(),
+            m_start, new_nmb-1, 0, 2, 0, ncells3-1, 0, ncells2-1, 0, ncells1-1,
+    KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
+      force_tmp1_(m,n,k,j,i) = 0.0;
+      force_tmp2_(m,n,k,j,i) = 0.0;
+    });
+  }
   
   // Recompute basis functions for new mesh blocks (preserving wavenumbers)
   auto kx_mode_ = kx_mode;
@@ -1231,7 +1292,8 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
   auto &drivingtype = driving_type;
   
   // Recompute x-direction basis functions
-  par_for("xsin/xcos_resize", DevExeSpace(), 0, new_nmb-1, 0, mode_count-1, is, ie,
+  if (m_start < new_nmb) {
+  par_for("xsin/xcos_resize", DevExeSpace(), m_start, new_nmb-1, 0, mode_count-1, is, ie,
   KOKKOS_LAMBDA(int m, int n, int i) {
     Real &x1min = size.d_view(m).x1min;
     Real &x1max = size.d_view(m).x1max;
@@ -1240,9 +1302,8 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
     xsin_(m,n,i) = sin(k1v*x1v);
     xcos_(m,n,i) = cos(k1v*x1v);
   });
-  
   // Recompute y-direction basis functions
-  par_for("ysin/ycos_resize", DevExeSpace(), 0, new_nmb-1, 0, mode_count-1, js, je,
+  par_for("ysin/ycos_resize", DevExeSpace(), m_start, new_nmb-1, 0, mode_count-1, js, je,
   KOKKOS_LAMBDA(int m, int n, int j) {
     Real &x2min = size.d_view(m).x2min;
     Real &x2max = size.d_view(m).x2max;
@@ -1255,9 +1316,9 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
       ycos_(m,n,j) = 1.0;
     }
   });
-  
+
   // Recompute z-direction basis functions
-  par_for("zsin/zcos_resize", DevExeSpace(), 0, new_nmb-1, 0, mode_count-1, ks, ke,
+  par_for("zsin/zcos_resize", DevExeSpace(), m_start, new_nmb-1, 0, mode_count-1, ks, ke,
   KOKKOS_LAMBDA(int m, int n, int k) {
     Real &x3min = size.d_view(m).x3min;
     Real &x3max = size.d_view(m).x3max;
@@ -1270,29 +1331,33 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
       zcos_(m,n,k) = 1.0;
     }
   });
+  }
   
   // Recompute forcing field using PRESERVED mode amplitudes (aka_, akb_)
-  // This ensures physical continuity of the turbulence forcing across AMR
   auto aka_ = aka;
   auto akb_ = akb;
-  
-  for (int n = 0; n < mode_count; n++) {
-    par_for("force_recalc_resize", DevExeSpace(), 0, new_nmb-1, ks, ke, js, je, is, ie,
+  if (m_start < new_nmb) {
+    int mode_count_ = mode_count;
+    par_for("force_recalc_resize", DevExeSpace(), m_start, new_nmb-1, ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      // Reconstruct complex forcing from basis functions
-      Real forc_real = (xcos_(m,n,i)*ycos_(m,n,j) - xsin_(m,n,i)*ysin_(m,n,j)) * zcos_(m,n,k) -
-                      (xsin_(m,n,i)*ycos_(m,n,j) + xcos_(m,n,i)*ysin_(m,n,j)) * zsin_(m,n,k);
-      Real forc_imag = (ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k)) * xcos_(m,n,i) +
-                      (ycos_(m,n,j)*zcos_(m,n,k) - ysin_(m,n,j)*zsin_(m,n,k)) * xsin_(m,n,i);
-      for (int dir = 0; dir < 3; dir++) {
-        force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real - akb_.d_view(dir,n)*forc_imag;
+      for (int n = 0; n < mode_count_; n++) {
+        Real forc_real = (xcos_(m,n,i)*ycos_(m,n,j) - xsin_(m,n,i)*ysin_(m,n,j)) * zcos_(m,n,k) -
+                        (xsin_(m,n,i)*ycos_(m,n,j) + xcos_(m,n,i)*ysin_(m,n,j)) * zsin_(m,n,k);
+        Real forc_imag = (ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k)) * xcos_(m,n,i) +
+                        (ycos_(m,n,j)*zcos_(m,n,k) - ysin_(m,n,j)*zsin_(m,n,k)) * xsin_(m,n,i);
+        for (int dir = 0; dir < 3; dir++) {
+          force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real - akb_.d_view(dir,n)*forc_imag;
+        }
       }
     });
   }
+
+  // Copy reconstructed field back into working arrays
+  Kokkos::deep_copy(force_tmp1, force_tmp2);
+  Kokkos::deep_copy(force, force_tmp2);
   
   // Update tracking variables
   current_nmb_ = new_nmb;
-  Mesh *pm = pmy_pack->pmesh;
   if (pm->adaptive && pm->pmr != nullptr) {
     last_nmb_created_ = pm->pmr->nmb_created;
     last_nmb_deleted_ = pm->pmr->nmb_deleted;
