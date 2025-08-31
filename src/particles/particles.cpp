@@ -10,6 +10,7 @@
 #include <string>
 #include <algorithm>
 #include <fstream>
+#include <Kokkos_Random.hpp>
 #include "athena.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
@@ -145,24 +146,16 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   switch (particle_type) {
     case ParticleType::cosmic_ray:
       {
-        // CR particles need space for position, velocity, mass/charge, B-field, and optionally displacement
-        int ndim = 6;  // x,vx,y,vy,z,vz in 3D
-        if (pmy_pack->pmesh->two_d) {ndim = 4;}  // x,vx,y,vy in 2D
-        nrdata = ndim + 1;  // add mass/charge ratio
-        
-        // Add B-field components
-        if (pmy_pack->pmesh->three_d) {
-          nrdata += 3;  // Bx, By, Bz
-        } else {
-          nrdata += 2;  // Bx, By for 2D
-        }
-        
-        // Add displacement tracking if enabled
+        // Determine number of real data slots based on dimensionality and options
         track_displacement = pin->GetOrAddBoolean("particles","track_displacement",false);
         if (track_displacement) {
-          nrdata += 4;  // dx, dy, dz, db
+          nrdata = IPDB + 1;  // includes displacement indices
+        } else if (pmy_pack->pmesh->three_d) {
+          nrdata = IPBZ + 1;  // up to Bz
+        } else {
+          nrdata = IPBY + 1;  // up to By in 2D
         }
-        
+
         nidata = 3;  // PGID, PTAG, PSP (species)
         break;
       }
@@ -205,7 +198,6 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
       auto &pi = prtcl_idata;
       auto &pr = prtcl_rdata;
-      int nrdata_ = nrdata;
       Real unit_time = pmy_pack->punit->time_cgs();
 
       // Initialize particles
@@ -213,16 +205,16 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       KOKKOS_LAMBDA(const int p) {   
         int m = static_cast<int>(pos_data(8, p));  
         pi(PGID,p) = gids + m;
-	pi(2, p) = 0; // int to track # of SN
+        pi(NSN,p) = 0; // track number of SNe for star particle
         pr(IPX,p)  = pos_data(0, p);
         pr(IPY,p)  = pos_data(1, p);
         pr(IPZ,p)  = pos_data(2, p);
         pr(IPVX,p) = pos_data(3, p);
         pr(IPVY,p) = pos_data(4, p);
         pr(IPVZ,p) = pos_data(5, p);
-        pr(6, p) = pos_data(6, p); // time of creation of star particle
-        pr(7, p) = pos_data(7, p); // mass of star particle
-	pr(8, p) = GetNthSNTime(pr(7,p), pr(6,p), unit_time, 0); // time of next SN
+        pr(IPT_CREATE, p) = pos_data(6, p); // creation time of star particle
+        pr(IPMASS, p)     = pos_data(7, p); // mass of star particle
+        pr(IPT_NEXT_SN,p) = GetNthSNTime(pr(IPMASS,p), pr(IPT_CREATE,p), unit_time, 0);
 
         // Print particle initialization
         // Kokkos::printf("Initialized star particle %d in GID %d at position (%.2f, %.2f, %.2f)\n",
@@ -238,6 +230,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 // destructor
 
 Particles::~Particles() {
+  delete pbval_part;
 }
 
 //----------------------------------------------------------------------------------------
@@ -272,46 +265,64 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
   auto &pr = prtcl_rdata;
   int nmb = pmy_pack->nmb_thispack;
   const int &gids = pmy_pack->gids;
-  
+
+  // Determine distribution type for initial positions
+  std::string dist = pin->GetOrAddString("particles", "cr_distribution", "center");
+  bool random_dist = (dist.compare("random") == 0);
+
+  // Avoid division by zero if there are fewer particles than meshblocks
+  int particles_per_mb = std::max(1, (nprtcl_thispack + nmb - 1) / nmb);
+
+  // Random number pool for optional random placement
+  Kokkos::Random_XorShift64_Pool<> rand_pool64(pmy_pack->gids);
+
   // Simple uniform distribution for now
   par_for("init_cr", DevExeSpace(), 0, nprtcl_thispack-1,
   KOKKOS_LAMBDA(const int p) {
     // Determine which meshblock this particle belongs to
-    int particles_per_mb = nprtcl_thispack / nmb;
     int m = p / particles_per_mb;
     if (m >= nmb) m = nmb - 1;
-    
+
     // Set GID and species
     pi(PGID,p) = gids + m;
     pi(PTAG,p) = p;
     pi(PSP,p) = p % nspecies;  // Round-robin species assignment
-    
-    // Initialize position (uniform random for now)
-    // TODO: Add proper initialization options
-    pr(IPX,p) = size.h_view(m).x1min + 0.5*(size.h_view(m).x1max - size.h_view(m).x1min);
-    pr(IPY,p) = size.h_view(m).x2min + 0.5*(size.h_view(m).x2max - size.h_view(m).x2min);
-    if (indcs.nx3 > 1) {
-      pr(IPZ,p) = size.h_view(m).x3min + 0.5*(size.h_view(m).x3max - size.h_view(m).x3min);
+
+    // Choose position within the mesh block
+    Real rx = 0.5, ry = 0.5, rz = 0.5;
+    if (random_dist) {
+      auto rand_gen = rand_pool64.get_state();
+      rx = rand_gen.drand();
+      ry = rand_gen.drand();
+      if (indcs.nx3 > 1) {
+        rz = rand_gen.drand();
+      }
+      rand_pool64.free_state(rand_gen);
     }
-    
+
+    pr(IPX,p) = size.h_view(m).x1min + rx*(size.h_view(m).x1max - size.h_view(m).x1min);
+    pr(IPY,p) = size.h_view(m).x2min + ry*(size.h_view(m).x2max - size.h_view(m).x2min);
+    pr(IPZ,p) = 0.0;
+    if (indcs.nx3 > 1) {
+      pr(IPZ,p) = size.h_view(m).x3min + rz*(size.h_view(m).x3max - size.h_view(m).x3min);
+    }
+
     // Initialize velocity to zero
     pr(IPVX,p) = 0.0;
     pr(IPVY,p) = 0.0;
-    if (indcs.nx3 > 1) {
-      pr(IPVZ,p) = 0.0;
-    }
-    
+    pr(IPVZ,p) = 0.0;
+
     // Set mass/charge ratio
     int species = pi(PSP,p);
     pr(IPM,p) = species_charge(species) / species_mass(species);
-    
+
     // Initialize B-field components to zero
     pr(IPBX,p) = 0.0;
     pr(IPBY,p) = 0.0;
     if (indcs.nx3 > 1) {
       pr(IPBZ,p) = 0.0;
     }
-    
+
     // Initialize displacement tracking if enabled
     if (track_displacement) {
       pr(IPDX,p) = 0.0;
