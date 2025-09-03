@@ -1,0 +1,2 @@
+/usr/bin/ar qc libimpl_git_version.a CMakeFiles/impl_git_version.dir/__/generated/Kokkos_Version_Info.cpp.o
+/usr/bin/ranlib libimpl_git_version.a

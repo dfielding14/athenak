@@ -373,11 +373,26 @@ void TurbulenceDriver::IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskI
 // Cannot be included in constructor since (it seems) Kokkos::par_for not allowed in cons.
 
 TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
+  std::cout << "DEBUG_TURB: InitializeModes START" << std::endl;
+  
+  if (pmy_pack == nullptr) {
+    std::cout << "DEBUG_TURB: ERROR - pmy_pack is null in InitializeModes!" << std::endl;
+    return TaskStatus::complete;
+  }
+  
   Mesh *pm = pmy_pack->pmesh;
+  if (pm == nullptr) {
+    std::cout << "DEBUG_TURB: ERROR - pmesh is null in InitializeModes!" << std::endl;
+    return TaskStatus::complete;
+  }
+  
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
   int ks = indcs.ks, ke = indcs.ke;
+  
+  std::cout << "DEBUG_TURB: InitializeModes grid indices: is=" << is << ", ie=" << ie 
+            << ", js=" << js << ", je=" << je << ", ks=" << ks << ", ke=" << ke << std::endl;
 
   Real current_time=pm->time;
   if (current_time < tdriv_start) return TaskStatus::complete;
@@ -570,6 +585,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
     } // end of for loop over i_turb_update
   }
   n_turb_updates_yet = n_turb_updates_reqd;
+  std::cout << "DEBUG_TURB: InitializeModes END" << std::endl;
   return TaskStatus::complete;
 }
 
@@ -597,7 +613,19 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 //
 
 TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
+  std::cout << "DEBUG_TURB: UpdateForcing START" << std::endl;
+  
+  if (pmy_pack == nullptr) {
+    std::cout << "DEBUG_TURB: ERROR - pmy_pack is null in UpdateForcing!" << std::endl;
+    return TaskStatus::complete;
+  }
+  
   Mesh *pm = pmy_pack->pmesh;
+  if (pm == nullptr) {
+    std::cout << "DEBUG_TURB: ERROR - pmesh is null in UpdateForcing!" << std::endl;
+    return TaskStatus::complete;
+  }
+  
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -606,6 +634,8 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
   int &nx1 = indcs.nx1;
   int &nx2 = indcs.nx2;
   int &nx3 = indcs.nx3;
+  
+  std::cout << "DEBUG_TURB: UpdateForcing nmb=" << nmb << std::endl;
 
   Real dt = pm->dt;
   Real current_time=pm->time;
@@ -847,7 +877,19 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
 //
 
 TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
+  std::cout << "DEBUG_TURB: AddForcing START, stage=" << stage << std::endl;
+  
+  if (pmy_pack == nullptr) {
+    std::cout << "DEBUG_TURB: ERROR - pmy_pack is null in AddForcing!" << std::endl;
+    return TaskStatus::complete;
+  }
+  
   Mesh *pm = pmy_pack->pmesh;
+  if (pm == nullptr) {
+    std::cout << "DEBUG_TURB: ERROR - pmesh is null in AddForcing!" << std::endl;
+    return TaskStatus::complete;
+  }
+  
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -856,6 +898,8 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
   int &nx1 = indcs.nx1;
   int &nx2 = indcs.nx2;
   int &nx3 = indcs.nx3;
+  
+  std::cout << "DEBUG_TURB: AddForcing nmb=" << nmb << std::endl;
 
   Real dt = pm->dt;
   Real bdt = (pdrive->beta[stage-1])*dt;
@@ -1173,6 +1217,7 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
     } // end relativistic case
 
   }
+  std::cout << "DEBUG_TURB: UpdateForcing END" << std::endl;
   return TaskStatus::complete;
 }
 
@@ -1181,16 +1226,50 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
 // \brief Check if mesh structure has changed and trigger resizing if needed
 
 TaskStatus TurbulenceDriver::CheckResize(Driver *pdrive, int stage) {
+  std::cout << "DEBUG_TURB: CheckResize START" << std::endl;
+  std::cout << "DEBUG_TURB: pmy_pack = " << pmy_pack << std::endl;
+  
+  if (pmy_pack == nullptr) {
+    std::cout << "DEBUG_TURB: ERROR - pmy_pack is null!" << std::endl;
+    return TaskStatus::complete;
+  }
+  
+  std::cout << "DEBUG_TURB: pmy_pack->pmesh = " << pmy_pack->pmesh << std::endl;
   Mesh *pm = pmy_pack->pmesh;
+  
+  if (pm == nullptr) {
+    std::cout << "DEBUG_TURB: ERROR - pmesh is null!" << std::endl;
+    return TaskStatus::complete;
+  }
+  
+  std::cout << "DEBUG_TURB: Getting nmb_thispack" << std::endl;
   int nmb = pmy_pack->nmb_thispack;
+  std::cout << "DEBUG_TURB: nmb_thispack = " << nmb << ", current_nmb_ = " << current_nmb_ << std::endl;
   
   // Check if number of mesh blocks has changed or if AMR has occurred
-  if (nmb != current_nmb_ ||
-      (pm->adaptive && pm->pmr != nullptr &&
-       (pm->pmr->nmb_created != last_nmb_created_ || 
-        pm->pmr->nmb_deleted != last_nmb_deleted_))) {
-    ResizeArrays(nmb);
+  bool needs_resize = false;
+  if (nmb != current_nmb_) {
+    std::cout << "DEBUG_TURB: nmb changed from " << current_nmb_ << " to " << nmb << std::endl;
+    needs_resize = true;
   }
+  
+  if (pm->adaptive && pm->pmr != nullptr) {
+    std::cout << "DEBUG_TURB: Checking AMR: nmb_created = " << pm->pmr->nmb_created 
+              << ", last_created = " << last_nmb_created_ 
+              << ", nmb_deleted = " << pm->pmr->nmb_deleted 
+              << ", last_deleted = " << last_nmb_deleted_ << std::endl;
+    if (pm->pmr->nmb_created != last_nmb_created_ || pm->pmr->nmb_deleted != last_nmb_deleted_) {
+      needs_resize = true;
+    }
+  }
+  
+  if (needs_resize) {
+    std::cout << "DEBUG_TURB: Calling ResizeArrays with nmb = " << nmb << std::endl;
+    ResizeArrays(nmb);
+    std::cout << "DEBUG_TURB: ResizeArrays complete" << std::endl;
+  }
+  
+  std::cout << "DEBUG_TURB: CheckResize END" << std::endl;
   return TaskStatus::complete;
 }
 
@@ -1199,6 +1278,20 @@ TaskStatus TurbulenceDriver::CheckResize(Driver *pdrive, int stage) {
 // \brief Resize turbulence arrays and recompute basis functions when mesh changes
 
 void TurbulenceDriver::ResizeArrays(int new_nmb) {
+  std::cout << "DEBUG_TURB: ResizeArrays START, new_nmb = " << new_nmb << std::endl;
+  
+  std::cout << "DEBUG_TURB: Accessing pmy_pack->pmesh" << std::endl;
+  if (pmy_pack == nullptr) {
+    std::cout << "DEBUG_TURB: ERROR - pmy_pack is null in ResizeArrays!" << std::endl;
+    return;
+  }
+  
+  if (pmy_pack->pmesh == nullptr) {
+    std::cout << "DEBUG_TURB: ERROR - pmy_pack->pmesh is null in ResizeArrays!" << std::endl;
+    return;
+  }
+  
+  std::cout << "DEBUG_TURB: Getting mb_indcs" << std::endl;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -1209,8 +1302,13 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
   int &nx1 = indcs.nx1;
   int &nx2 = indcs.nx2;
   int &nx3 = indcs.nx3;
+  
+  std::cout << "DEBUG_TURB: Grid dimensions: ncells1=" << ncells1 
+            << ", ncells2=" << ncells2 << ", ncells3=" << ncells3 << std::endl;
 
   int old_nmb = current_nmb_;
+  std::cout << "DEBUG_TURB: old_nmb = " << old_nmb << ", new_nmb = " << new_nmb << std::endl;
+  
   Mesh *pm = pmy_pack->pmesh;
   bool recompute_all = true;
   if (pm->adaptive && pm->pmr != nullptr && pm->pmr->nmb_deleted == 0 && new_nmb >= old_nmb) {
@@ -1219,7 +1317,13 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
   int m_start = recompute_all ? 0 : old_nmb;
 
   // Reallocate arrays only if MeshBlock count changed
+  std::cout << "DEBUG_TURB: Checking if reallocation needed: force.extent(0)=" 
+            << force.extent(0) << ", new_nmb=" << new_nmb << std::endl;
+  
   if (force.extent(0) != new_nmb) {
+    std::cout << "DEBUG_TURB: Reallocating arrays" << std::endl;
+    std::cout << "DEBUG_TURB: mode_count = " << mode_count << std::endl;
+    
     auto force_old = force;
     auto force_tmp1_old = force_tmp1;
     auto force_tmp2_old = force_tmp2;
@@ -1229,34 +1333,65 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
     auto ysin_old = ysin;
     auto zcos_old = zcos;
     auto zsin_old = zsin;
+    
+    std::cout << "DEBUG_TURB: Saving old arrays complete" << std::endl;
 
+    std::cout << "DEBUG_TURB: Reallocating force arrays" << std::endl;
     Kokkos::realloc(force, new_nmb, 3, ncells3, ncells2, ncells1);
+    std::cout << "DEBUG_TURB: force realloc done" << std::endl;
     Kokkos::realloc(force_tmp1, new_nmb, 3, ncells3, ncells2, ncells1);
+    std::cout << "DEBUG_TURB: force_tmp1 realloc done" << std::endl;
+    
     Kokkos::realloc(force_tmp2, new_nmb, 3, ncells3, ncells2, ncells1);
+    std::cout << "DEBUG_TURB: force_tmp2 realloc done" << std::endl;
+    
     Kokkos::realloc(xcos, new_nmb, mode_count, ncells1);
+    std::cout << "DEBUG_TURB: xcos realloc done" << std::endl;
+    
     Kokkos::realloc(xsin, new_nmb, mode_count, ncells1);
+    std::cout << "DEBUG_TURB: xsin realloc done" << std::endl;
+    
     Kokkos::realloc(ycos, new_nmb, mode_count, ncells2);
+    std::cout << "DEBUG_TURB: ycos realloc done" << std::endl;
+    
     Kokkos::realloc(ysin, new_nmb, mode_count, ncells2);
+    std::cout << "DEBUG_TURB: ysin realloc done" << std::endl;
+    
     Kokkos::realloc(zcos, new_nmb, mode_count, ncells3);
+    std::cout << "DEBUG_TURB: zcos realloc done" << std::endl;
+    
     Kokkos::realloc(zsin, new_nmb, mode_count, ncells3);
+    std::cout << "DEBUG_TURB: zsin realloc done" << std::endl;
 
     int copy_n = std::min(old_nmb, new_nmb);
+    std::cout << "DEBUG_TURB: copy_n = " << copy_n << std::endl;
+    
     if (copy_n > 0) {
+      std::cout << "DEBUG_TURB: Starting deep_copy operations" << std::endl;
+      std::cout << "DEBUG_TURB: Copying force" << std::endl;
       Kokkos::deep_copy(
           Kokkos::subview(force, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL,
                            Kokkos::ALL, Kokkos::ALL),
           Kokkos::subview(force_old, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL,
                            Kokkos::ALL, Kokkos::ALL));
+      std::cout << "DEBUG_TURB: force copy done" << std::endl;
+      
+      std::cout << "DEBUG_TURB: Copying force_tmp1" << std::endl;
       Kokkos::deep_copy(
           Kokkos::subview(force_tmp1, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL,
                            Kokkos::ALL, Kokkos::ALL),
           Kokkos::subview(force_tmp1_old, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL,
                            Kokkos::ALL, Kokkos::ALL));
+      std::cout << "DEBUG_TURB: force_tmp1 copy done" << std::endl;
+      
+      std::cout << "DEBUG_TURB: Copying force_tmp2" << std::endl;
       Kokkos::deep_copy(
           Kokkos::subview(force_tmp2, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL,
                            Kokkos::ALL, Kokkos::ALL),
           Kokkos::subview(force_tmp2_old, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL,
                            Kokkos::ALL, Kokkos::ALL));
+      std::cout << "DEBUG_TURB: force_tmp2 copy done" << std::endl;
+      std::cout << "DEBUG_TURB: Copying trig arrays" << std::endl;
       Kokkos::deep_copy(
           Kokkos::subview(xcos, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL),
           Kokkos::subview(xcos_old, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL));
@@ -1275,16 +1410,21 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
       Kokkos::deep_copy(
           Kokkos::subview(zsin, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL),
           Kokkos::subview(zsin_old, std::make_pair(0, copy_n), Kokkos::ALL, Kokkos::ALL));
+      std::cout << "DEBUG_TURB: All deep_copy operations complete" << std::endl;
     }
   }
   
   // CRITICAL: Do NOT call Initialize() which would reset the turbulence state
   // Instead, recompute basis functions while preserving mode amplitudes (aka_, akb_)
   
+  std::cout << "DEBUG_TURB: m_start = " << m_start << ", new_nmb = " << new_nmb << std::endl;
+  
   // Zero out force arrays for new/changed blocks
+  std::cout << "DEBUG_TURB: Preparing to zero force arrays" << std::endl;
   auto force_tmp1_ = force_tmp1;
   auto force_tmp2_ = force_tmp2;
   if (m_start < new_nmb) {
+    std::cout << "DEBUG_TURB: Zeroing force arrays from m=" << m_start << " to " << new_nmb-1 << std::endl;
     par_for("force_resize_zero", DevExeSpace(),
             m_start, new_nmb-1, 0, 2, 0, ncells3-1, 0, ncells2-1, 0, ncells1-1,
     KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
@@ -1294,6 +1434,14 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
   }
   
   // Recompute basis functions for new mesh blocks (preserving wavenumbers)
+  std::cout << "DEBUG_TURB: Preparing to recompute basis functions" << std::endl;
+  
+  std::cout << "DEBUG_TURB: Accessing pmy_pack->pmb" << std::endl;
+  if (pmy_pack->pmb == nullptr) {
+    std::cout << "DEBUG_TURB: ERROR - pmy_pack->pmb is null!" << std::endl;
+    return;
+  }
+  
   auto kx_mode_ = kx_mode;
   auto ky_mode_ = ky_mode;
   auto kz_mode_ = kz_mode;
@@ -1303,11 +1451,15 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
   auto ysin_ = ysin;
   auto zcos_ = zcos;
   auto zsin_ = zsin;
+  
+  std::cout << "DEBUG_TURB: Getting mb_size" << std::endl;
   auto &size = pmy_pack->pmb->mb_size;
   auto &drivingtype = driving_type;
+  std::cout << "DEBUG_TURB: mb_size accessed successfully" << std::endl;
   
   // Recompute x-direction basis functions
   if (m_start < new_nmb) {
+  std::cout << "DEBUG_TURB: Recomputing x-direction basis functions" << std::endl;
   par_for("xsin/xcos_resize", DevExeSpace(), m_start, new_nmb-1, 0, mode_count-1, is, ie,
   KOKKOS_LAMBDA(int m, int n, int i) {
     Real &x1min = size.d_view(m).x1min;
@@ -1317,7 +1469,10 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
     xsin_(m,n,i) = sin(k1v*x1v);
     xcos_(m,n,i) = cos(k1v*x1v);
   });
+  std::cout << "DEBUG_TURB: x-direction basis functions done" << std::endl;
+  
   // Recompute y-direction basis functions
+  std::cout << "DEBUG_TURB: Recomputing y-direction basis functions" << std::endl;
   par_for("ysin/ycos_resize", DevExeSpace(), m_start, new_nmb-1, 0, mode_count-1, js, je,
   KOKKOS_LAMBDA(int m, int n, int j) {
     Real &x2min = size.d_view(m).x2min;
@@ -1331,8 +1486,10 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
       ycos_(m,n,j) = 1.0;
     }
   });
+  std::cout << "DEBUG_TURB: y-direction basis functions done" << std::endl;
 
   // Recompute z-direction basis functions
+  std::cout << "DEBUG_TURB: Recomputing z-direction basis functions" << std::endl;
   par_for("zsin/zcos_resize", DevExeSpace(), m_start, new_nmb-1, 0, mode_count-1, ks, ke,
   KOKKOS_LAMBDA(int m, int n, int k) {
     Real &x3min = size.d_view(m).x3min;
@@ -1346,13 +1503,16 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
       zcos_(m,n,k) = 1.0;
     }
   });
+  std::cout << "DEBUG_TURB: z-direction basis functions done" << std::endl;
   }
   
   // Recompute forcing field using PRESERVED mode amplitudes (aka_, akb_)
+  std::cout << "DEBUG_TURB: Recomputing forcing field" << std::endl;
   auto aka_ = aka;
   auto akb_ = akb;
   if (m_start < new_nmb) {
     int mode_count_ = mode_count;
+    std::cout << "DEBUG_TURB: Starting force_recalc_resize kernel" << std::endl;
     par_for("force_recalc_resize", DevExeSpace(), m_start, new_nmb-1, ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       for (int n = 0; n < mode_count_; n++) {
@@ -1365,17 +1525,28 @@ void TurbulenceDriver::ResizeArrays(int new_nmb) {
         }
       }
     });
+    std::cout << "DEBUG_TURB: force_recalc_resize kernel done" << std::endl;
   }
 
   // Copy reconstructed field back into working arrays
+  std::cout << "DEBUG_TURB: Copying reconstructed field to working arrays" << std::endl;
   Kokkos::deep_copy(force_tmp1, force_tmp2);
+  std::cout << "DEBUG_TURB: force_tmp1 copy done" << std::endl;
   Kokkos::deep_copy(force, force_tmp2);
+  std::cout << "DEBUG_TURB: force copy done" << std::endl;
   
   // Update tracking variables
+  std::cout << "DEBUG_TURB: Updating tracking variables" << std::endl;
   current_nmb_ = new_nmb;
+  std::cout << "DEBUG_TURB: current_nmb_ updated to " << current_nmb_ << std::endl;
+  
   if (pm->adaptive && pm->pmr != nullptr) {
     last_nmb_created_ = pm->pmr->nmb_created;
     last_nmb_deleted_ = pm->pmr->nmb_deleted;
+    std::cout << "DEBUG_TURB: AMR tracking updated: created=" << last_nmb_created_ 
+              << ", deleted=" << last_nmb_deleted_ << std::endl;
   }
+  
+  std::cout << "DEBUG_TURB: ResizeArrays COMPLETE" << std::endl;
 }
 

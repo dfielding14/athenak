@@ -1,0 +1,114 @@
+# AthenaK input file for time-dependent AMR turbulence simulation
+# Stage 1: Initial run up to first refinement at t=2.0 eddy times
+
+<comment>
+problem   = Turbulence with time-dependent AMR - Stage 1
+reference = Driven turbulence with staged refinement
+
+<job>
+basename  = TurbTimedAMR_S1    # problem ID: basename of output filenames
+
+<mesh>
+nghost    = 4          # Number of ghost cells
+nx1       = 64         # Number of zones in X1-direction
+nx2       = 64         # Number of zones in X2-direction
+nx3       = 64         # Number of zones in X3-direction
+x1min     = -0.5       # minimum value of X1
+x1max     = 0.5        # maximum value of X1
+ix1_bc    = periodic   # inner-X1 boundary flag
+ox1_bc    = periodic   # outer-X1 boundary flag
+x2min     = -0.5       # minimum value of X2
+x2max     = 0.5        # maximum value of X2
+ix2_bc    = periodic   # inner-X2 boundary flag
+ox2_bc    = periodic   # outer-X2 boundary flag
+x3min     = -0.5       # minimum value of X3
+x3max     = 0.5        # maximum value of X3
+ix3_bc    = periodic   # inner-X3 boundary flag
+ox3_bc    = periodic   # outer-X3 boundary flag
+
+<meshblock>
+nx1       = 32         # Number of cells in each MeshBlock, X1-dir
+nx2       = 32         # Number of cells in each MeshBlock, X2-dir
+nx3       = 32         # Number of cells in each MeshBlock, X3-dir
+
+<mesh_refinement>
+refinement          = adaptive  # type of refinement
+refinement_interval = 10        # Check for refinement every N cycles
+num_levels          = 2         # Allow up to level 1 refinement
+max_nmb_per_rank    = 512
+
+<time>
+evolution  = dynamic   # dynamic/kinematic/static
+integrator = rk2       # time integration algorithm
+cfl_number = 0.3       # The Courant, Friedrichs, & Lewy (CFL) Number
+nlim       = -1        # cycle limit (no limit if <0)
+tlim       = 2.01      # time limit (just after first refinement at t=2.0)
+ndiag      = 1         # cycles between diagnostic output
+
+<mhd>
+eos               = ideal    # EOS type
+reconstruct       = plm      # spatial reconstruction method
+rsolver           = hlld     # Riemann-solver to be used
+gamma             = 1.00001  # gamma = C_p/C_v
+ohmic_resistivity = 1.0e-14   # coefficient of Ohmic resistivity
+viscosity         = 1.0e-14   # coefficient of viscosity
+fofc              = true     # First order flux correction
+
+<eos>
+iso_sound_speed = 1.0       # isothermal sound speed
+dfloor          = 1e-3
+pfloor          = 1e-3
+
+<problem>
+pgen_name   = turb_timed_amr   # problem generator name
+rho0        = 1.0              # initial density
+beta        = 100.0            # plasma beta
+t_refine    = 0.5              # time when to refine
+user_hist   = true             # enroll user-defined history function
+
+<turb_driving>
+turb_flag = 1
+tdriv_duration = 0.4
+tcorr = 1.0                # ~ L / 2 pi urms
+dedt  = 0.25               # ~ urms^3 / 2 L
+spect_form = 1
+npeak = 2
+nlow  = 1                  # smallest wave number
+nhigh = 3                  # largest wave number
+min_kz = 1
+sol_fraction = 1.0         # solenoidal fraction
+dt_turb_update = 0.01      # update driving pattern
+rseed = -9736342354
+
+
+<output1>
+file_type   = hst       # history data dump
+dt          = 0.001     # time increment between outputs
+data_format = %24.16e   # output data format
+
+#<output2>
+#file_type   = rst      # restart file
+#dt          = 0.5      # time increment between outputs
+
+#<output3>
+#file_type   = bin
+#variable    = mhd_w_bcc
+#dt          = 0.5
+
+<output4>
+file_type   = bin
+variable    = mhd_w_bcc
+dt          = 0.1
+slice_x3    = 0.0
+
+<output5>
+file_type   = bin
+variable    = mhd_divb
+dt          = 0.1
+slice_x3    = 0.0
+
+<output6>
+file_type   = bin
+variable    = turb_force
+dt          = 0.1
+slice_x3    = 0.0

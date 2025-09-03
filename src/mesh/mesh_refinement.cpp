@@ -148,10 +148,12 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
     // Build location maps for fast neighbor lookup
     pmy_mesh->BuildLocationMaps();
     
+    // TODO: Fix ApplyFaceFieldCorrection after AMR - currently causes segfault
+    // because physics modules have stale pointers after MeshBlockPack rebuild
     // Apply face-field correction for MHD to maintain div(B)=0
-    if (pmy_mesh->pmb_pack->pmhd != nullptr) {
-      pmy_mesh->ApplyFaceFieldCorrection();
-    }
+    // if (pmy_mesh->pmb_pack->pmhd != nullptr) {
+    //   pmy_mesh->ApplyFaceFieldCorrection();
+    // }
     
     pdriver->InitBoundaryValuesAndPrimitives(pmy_mesh);
 
@@ -696,6 +698,14 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   pm->pmb_pack->AddMeshBlocks(pin);
   pm->pmb_pack->AddCoordinates(pin);
   pm->pmb_pack->pmb->SetNeighbors(pm->ptree, pm->rank_eachmb);
+  
+  // TODO: Physics modules need their pmy_pack pointers updated after MeshBlockPack rebuild
+  // Currently this causes issues because pmy_pack is private in each physics module
+  // The proper fix would be to either:
+  // 1. Add a public UpdateMeshBlockPack() method to each physics module
+  // 2. Make MeshRefinement a friend class of the physics modules
+  // 3. Recreate the physics modules after AMR (expensive)
+  // For now, the turbulence driver's CheckResize should handle the mesh changes
   
   // Mark newly created blocks (those that were refined)
   // newtoold[n] contains old gid for new gid n
