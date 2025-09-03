@@ -59,7 +59,9 @@ Must remain zero to machine precision at all grid interfaces.
 3. **Correction Algorithm** (`mesh.cpp::ApplyFaceFieldCorrection`)
    - Three-phase correction process
    - 2×2 replication pattern for flux conservation
-   - Host/device memory synchronization
+   - Replicates directly on device; only coarse faces copied to host for MPI
+   - Robust in 3‑D, 2‑D, and 1‑D meshes
+   - Works in both MPI and single-process builds
 
 4. **Prolongation Integration** (`prolongation.hpp`)
    - Skip correction for already-synchronized faces
@@ -75,13 +77,14 @@ Must remain zero to machine precision at all grid interfaces.
 - Added `BuildLocationMaps()` method
 - Added `ApplyFaceFieldCorrection()` method
 - Added `location_maps_` member variable for per-level neighbor tracking
+- `FindMeshBlockIndex()` now consults `location_maps_` for O(1) lookups when available
 
 **src/mesh/mesh.cpp**
 - Implemented `BuildLocationMaps()` - Creates hash maps for O(1) neighbor lookup
 - Implemented `ApplyFaceFieldCorrection()` - Main FFC algorithm with three phases:
-  1. Pack and send coarse face data to fine neighbors
-  2. Receive and apply 2×2 replication pattern
-  3. Synchronize device memory
+  1. Pack and send coarse face data to fine neighbors using direct `deep_copy` into host buffers
+  2. Receive and apply 2×2 replication pattern directly on device
+  3. No additional host/device synchronization required
 
 **src/mesh/mesh_refinement.cpp**
 - Integrated FFC into AMR workflow after `UpdateMeshBlockTree()`
@@ -251,7 +254,6 @@ The FFC is integrated into `MeshRefinement::UpdateMesh()`:
 ✅ Compilation and basic testing
 
 ### In Progress
-🔄 Comprehensive test suite development
 🔄 Performance profiling and optimization
 🔄 Documentation and examples
 
@@ -363,6 +365,8 @@ The implementation follows established numerical methods from the computational 
 - [x] Integration with AMR workflow
 - [x] Prolongation operator updates
 - [x] Compilation and basic testing
+- [x] Single-rank correction path
+- [x] Unit test for divergence across AMR boundaries
 - [ ] Comprehensive test suite
 - [ ] Performance profiling
 - [ ] Production validation
