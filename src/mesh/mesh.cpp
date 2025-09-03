@@ -692,16 +692,15 @@ void Mesh::BuildLocationMaps() {
   // Iterate through all MeshBlocks on this rank and populate the maps
   for (int m = 0; m < nmb_thisrank; ++m) {
     // Get the logical location and level for this MeshBlock
-    LogicalLocation loc = lloc_eachmb[gids_eachrank[global_variable::my_rank] + m];
+    LogicalLocation loc =
+        lloc_eachmb[gids_eachrank[global_variable::my_rank] + m];
     int level = loc.level;
-    
-    // Get pointer to the specific MeshBlock in the array
-    // MeshBlock is not an array itself, but we can use the gid to identify it uniquely
-    // For now, store the base pointer - will need to use gid to find specific block
-    MeshBlock* pmb = pmb_pack->pmb;
-    
+
+    // Store pointer to this specific MeshBlock within the pack; using +m ensures
+    // each LogicalLocation maps to a unique MeshBlock instance
+    MeshBlock *pmb = pmb_pack->pmb + m;
+
     // Insert into the appropriate level map
-    // Note: In actual use, will need to find the specific MeshBlock by gid
     location_maps_[level][loc] = pmb;
   }
 }
@@ -713,26 +712,8 @@ void Mesh::BuildLocationMaps() {
 //! coarse face values to the corresponding fine faces
 
 void Mesh::ApplyFaceFieldCorrection() {
-#if MPI_PARALLEL_ENABLED
-  // Only proceed if we have MHD and AMR
-  if (pmb_pack->pmhd == nullptr || !adaptive) return;
-  
-  mhd::MHD *pmhd = pmb_pack->pmhd;
-  MeshRefinement *pmr = this->pmr;
-  MeshBlock* pmb = pmb_pack->pmb;
-  
-  // Create host mirrors for magnetic field arrays
-  auto b0_x1f_host = Kokkos::create_mirror_view(pmhd->b0.x1f);
-  auto b0_x2f_host = Kokkos::create_mirror_view(pmhd->b0.x2f);
-  auto b0_x3f_host = Kokkos::create_mirror_view(pmhd->b0.x3f);
-  
-  // Copy device data to host for packing
-  Kokkos::deep_copy(b0_x1f_host, pmhd->b0.x1f);
-  Kokkos::deep_copy(b0_x2f_host, pmhd->b0.x2f);
-  Kokkos::deep_copy(b0_x3f_host, pmhd->b0.x3f);
-  
-  // Helper lambda to determine face type from neighbor index
-  auto get_face_info = [](int n, bool &is_x1, bool &is_x2, bool &is_x3, bool &is_inner) {
+  auto get_face_info = [](int n, bool &is_x1, bool &is_x2, bool &is_x3,
+                          bool &is_inner) {
     is_x1 = (n >= 0 && n <= 7);
     is_x2 = (n >= 8 && n <= 15);
     is_x3 = (n >= 24 && n <= 31);
@@ -746,182 +727,158 @@ void Mesh::ApplyFaceFieldCorrection() {
     }
   };
   
+  // Only proceed if we have MHD and AMR
+#if MPI_PARALLEL_ENABLED
+  if (pmb_pack->pmhd == nullptr || !adaptive) return;
+
+  mhd::MHD *pmhd = pmb_pack->pmhd;
+  MeshRefinement *pmr = this->pmr;
+  MeshBlock *pmb = pmb_pack->pmb;
+
   // Clear previous buffers and requests
   pmr->ffc_recv_buf.clear();
   pmr->ffc_send_buf.clear();
   pmr->ffc_recv_req.clear();
   pmr->ffc_send_req.clear();
-  
+
+  // Track which receive buffer corresponds to which block/neighbor/face
+  struct RecvInfo {
+    int m;
+    int n;
+    bool is_x1, is_x2, is_x3;
+    bool is_inner;
+  };
+  std::vector<RecvInfo> recv_info;
+
   // Phase 1: Post receives on fine blocks for face data from coarse neighbors
   for (int m = 0; m < nmb_thisrank; ++m) {
-    // Only process newly created (refined) blocks
     if (!pmb->newly_created.h_view(m)) continue;
-    
-    // Get this block's logical location
+
     int gid = pmb->mb_gid.h_view(m);
     LogicalLocation loc = lloc_eachmb[gid];
-    
-    // Check all neighbors
+
     for (int n = 0; n < pmb->nnghbr; ++n) {
       NeighborBlock &nb = pmb->nghbr.h_view(m, n);
-      
-      // Skip if neighbor is not coarser (we only receive from coarse neighbors)
       if (nb.lev >= loc.level) continue;
-      
-      // Determine face type and calculate buffer size
+
       bool is_x1, is_x2, is_x3, is_inner;
       get_face_info(n, is_x1, is_x2, is_x3, is_inner);
-      
-      // Skip edges and corners - only process faces
       if (!is_x1 && !is_x2 && !is_x3) continue;
-      
+
       int buf_size = 0;
       if (is_x1) {
-        // X1 face: need (ny * nz) values from coarse block
-        // Coarse block has half the resolution
-        buf_size = (mb_indcs.nx2/2) * (mb_indcs.nx3/2);
+        int ny = (mb_indcs.nx2 > 1) ? mb_indcs.nx2/2 : 1;
+        int nz = (mb_indcs.nx3 > 1) ? mb_indcs.nx3/2 : 1;
+        buf_size = ny*nz;
       } else if (is_x2) {
-        // X2 face: need (nx * nz) values from coarse block
-        buf_size = (mb_indcs.nx1/2) * (mb_indcs.nx3/2);
+        int nx = (mb_indcs.nx1 > 1) ? mb_indcs.nx1/2 : 1;
+        int nz = (mb_indcs.nx3 > 1) ? mb_indcs.nx3/2 : 1;
+        buf_size = nx*nz;
       } else if (is_x3) {
-        // X3 face: need (nx * ny) values from coarse block
-        buf_size = (mb_indcs.nx1/2) * (mb_indcs.nx2/2);
+        int nx = (mb_indcs.nx1 > 1) ? mb_indcs.nx1/2 : 1;
+        int ny = (mb_indcs.nx2 > 1) ? mb_indcs.nx2/2 : 1;
+        buf_size = nx*ny;
       }
-      
-      // Handle 2D case
-      if (mb_indcs.nx3 == 1) {
-        if (is_x1) buf_size = mb_indcs.nx2/2;
-        else if (is_x2) buf_size = mb_indcs.nx1/2;
-      }
-      
+
       if (buf_size > 0) {
-        // Allocate receive buffer
         pmr->ffc_recv_buf.emplace_back(buf_size);
-        
-        // Post non-blocking receive
         MPI_Request req;
         MPI_Irecv(pmr->ffc_recv_buf.back().data(), buf_size, MPI_ATHENA_REAL,
                   nb.rank, MeshRefinement::ffc_tag + gid, MPI_COMM_WORLD, &req);
         pmr->ffc_recv_req.push_back(req);
+        recv_info.push_back({m, n, is_x1, is_x2, is_x3, is_inner});
       }
     }
   }
   
   // Phase 2: Pack and send face data from coarse blocks to fine neighbors
   for (int m = 0; m < nmb_thisrank; ++m) {
-    // Get this block's logical location
     int gid = pmb->mb_gid.h_view(m);
     LogicalLocation loc = lloc_eachmb[gid];
-    
-    // Get cell indices for this block
+
     int is = mb_indcs.is, ie = mb_indcs.ie;
     int js = mb_indcs.js, je = mb_indcs.je;
     int ks = mb_indcs.ks, ke = mb_indcs.ke;
-    
-    // Check all neighbors
+
     for (int n = 0; n < pmb->nnghbr; ++n) {
       NeighborBlock &nb = pmb->nghbr.h_view(m, n);
-      
-      // Skip if neighbor is not finer (we only send to fine neighbors)
       if (nb.lev <= loc.level) continue;
-      
-      // Determine face type
+
       bool is_x1, is_x2, is_x3, is_inner;
       get_face_info(n, is_x1, is_x2, is_x3, is_inner);
-      
-      // Skip edges and corners - only process faces
       if (!is_x1 && !is_x2 && !is_x3) continue;
-      
-      // Allocate send buffer and pack face data
+
       if (is_x1) {
-        // X1 face: pack b0.x1f data
-        int i_face = is_inner ? is : ie+1;
-        int buf_size = (je-js+1) * (ke-ks+1);
-        pmr->ffc_send_buf.emplace_back(buf_size);
-        
-        int idx = 0;
-        for (int k = ks; k <= ke; ++k) {
-          for (int j = js; j <= je; ++j) {
-            pmr->ffc_send_buf.back()[idx++] = b0_x1f_host(m, k, j, i_face);
-          }
-        }
-        
-        // Send to fine neighbor
+        int i_face = is_inner ? is : ie + 1;
+        int ny_half = (mb_indcs.nx2 > 1) ? (je-js+1)/2 : 1;
+        int nz_half = (mb_indcs.nx3 > 1) ? (ke-ks+1)/2 : 1;
+        int sub = is_inner ? n : n-4;
+        int j_half = sub % 2;
+        int k_half = sub / 2;
+        int j_start = js + j_half*ny_half;
+        int k_start = ks + k_half*nz_half;
+        pmr->ffc_send_buf.emplace_back(ny_half*nz_half);
+        auto face_dev = Kokkos::subview(pmhd->b0.x1f, m,
+                                        Kokkos::make_pair(k_start, k_start+nz_half),
+                                        Kokkos::make_pair(j_start, j_start+ny_half),
+                                        i_face);
+        Kokkos::View<Real **, Kokkos::LayoutRight, HostMemSpace,
+                     Kokkos::MemoryTraits<Kokkos::Unmanaged>> buf_host(
+            pmr->ffc_send_buf.back().data(), nz_half, ny_half);
+        Kokkos::deep_copy(buf_host, face_dev);
         MPI_Request req;
-        MPI_Isend(pmr->ffc_send_buf.back().data(), buf_size, MPI_ATHENA_REAL,
-                  nb.rank, MeshRefinement::ffc_tag + nb.gid, MPI_COMM_WORLD, &req);
+        MPI_Isend(pmr->ffc_send_buf.back().data(), ny_half*nz_half,
+                  MPI_ATHENA_REAL, nb.rank,
+                  MeshRefinement::ffc_tag + nb.gid, MPI_COMM_WORLD, &req);
         pmr->ffc_send_req.push_back(req);
-        
+
       } else if (is_x2) {
-        // X2 face: pack b0.x2f data
-        int j_face = is_inner ? js : je+1;
-        int buf_size = (ie-is+1) * (ke-ks+1);
-        pmr->ffc_send_buf.emplace_back(buf_size);
-        
-        int idx = 0;
-        for (int k = ks; k <= ke; ++k) {
-          for (int i = is; i <= ie; ++i) {
-            pmr->ffc_send_buf.back()[idx++] = b0_x2f_host(m, k, j_face, i);
-          }
-        }
-        
-        // Send to fine neighbor
+        int j_face = is_inner ? js : je + 1;
+        int nx_half = (mb_indcs.nx1 > 1) ? (ie-is+1)/2 : 1;
+        int nz_half = (mb_indcs.nx3 > 1) ? (ke-ks+1)/2 : 1;
+        int sub = is_inner ? (n-8) : (n-12);
+        int i_half = sub % 2;
+        int k_half = sub / 2;
+        int i_start = is + i_half*nx_half;
+        int k_start = ks + k_half*nz_half;
+        pmr->ffc_send_buf.emplace_back(nx_half*nz_half);
+        auto face_dev = Kokkos::subview(pmhd->b0.x2f, m,
+                                        Kokkos::make_pair(k_start, k_start+nz_half),
+                                        j_face,
+                                        Kokkos::make_pair(i_start, i_start+nx_half));
+        Kokkos::View<Real **, Kokkos::LayoutRight, HostMemSpace,
+                     Kokkos::MemoryTraits<Kokkos::Unmanaged>> buf_host(
+            pmr->ffc_send_buf.back().data(), nz_half, nx_half);
+        Kokkos::deep_copy(buf_host, face_dev);
         MPI_Request req;
-        MPI_Isend(pmr->ffc_send_buf.back().data(), buf_size, MPI_ATHENA_REAL,
-                  nb.rank, MeshRefinement::ffc_tag + nb.gid, MPI_COMM_WORLD, &req);
+        MPI_Isend(pmr->ffc_send_buf.back().data(), nx_half*nz_half,
+                  MPI_ATHENA_REAL, nb.rank,
+                  MeshRefinement::ffc_tag + nb.gid, MPI_COMM_WORLD, &req);
         pmr->ffc_send_req.push_back(req);
-        
+
       } else if (is_x3) {
-        // X3 face: pack b0.x3f data
-        int k_face = is_inner ? ks : ke+1;
-        int buf_size = (ie-is+1) * (je-js+1);
-        pmr->ffc_send_buf.emplace_back(buf_size);
-        
-        int idx = 0;
-        for (int j = js; j <= je; ++j) {
-          for (int i = is; i <= ie; ++i) {
-            pmr->ffc_send_buf.back()[idx++] = b0_x3f_host(m, k_face, j, i);
-          }
-        }
-        
-        // Send to fine neighbor
+        int k_face = is_inner ? ks : ke + 1;
+        int nx_half = (mb_indcs.nx1 > 1) ? (ie-is+1)/2 : 1;
+        int ny_half = (mb_indcs.nx2 > 1) ? (je-js+1)/2 : 1;
+        int sub = is_inner ? (n-24) : (n-28);
+        int i_half = sub % 2;
+        int j_half = sub / 2;
+        int i_start = is + i_half*nx_half;
+        int j_start = js + j_half*ny_half;
+        pmr->ffc_send_buf.emplace_back(nx_half*ny_half);
+        auto face_dev = Kokkos::subview(pmhd->b0.x3f, m,
+                                        k_face,
+                                        Kokkos::make_pair(j_start, j_start+ny_half),
+                                        Kokkos::make_pair(i_start, i_start+nx_half));
+        Kokkos::View<Real **, Kokkos::LayoutRight, HostMemSpace,
+                     Kokkos::MemoryTraits<Kokkos::Unmanaged>> buf_host(
+            pmr->ffc_send_buf.back().data(), ny_half, nx_half);
+        Kokkos::deep_copy(buf_host, face_dev);
         MPI_Request req;
-        MPI_Isend(pmr->ffc_send_buf.back().data(), buf_size, MPI_ATHENA_REAL,
-                  nb.rank, MeshRefinement::ffc_tag + nb.gid, MPI_COMM_WORLD, &req);
+        MPI_Isend(pmr->ffc_send_buf.back().data(), nx_half*ny_half,
+                  MPI_ATHENA_REAL, nb.rank,
+                  MeshRefinement::ffc_tag + nb.gid, MPI_COMM_WORLD, &req);
         pmr->ffc_send_req.push_back(req);
-      }
-    }
-  }
-  
-  // Track which receive buffer corresponds to which block/neighbor/face
-  struct RecvInfo {
-    int m;          // MeshBlock index
-    int n;          // Neighbor index
-    bool is_x1, is_x2, is_x3;
-    bool is_inner;
-  };
-  std::vector<RecvInfo> recv_info;
-  
-  // Store recv_info during Phase 1 (need to go back and add this)
-  // For now, rebuild the information
-  int recv_idx = 0;
-  for (int m = 0; m < nmb_thisrank; ++m) {
-    if (!pmb->newly_created.h_view(m)) continue;
-    int gid = pmb->mb_gid.h_view(m);
-    LogicalLocation loc = lloc_eachmb[gid];
-    
-    for (int n = 0; n < pmb->nnghbr; ++n) {
-      NeighborBlock &nb = pmb->nghbr.h_view(m, n);
-      if (nb.lev >= loc.level) continue;
-      
-      bool is_x1, is_x2, is_x3, is_inner;
-      get_face_info(n, is_x1, is_x2, is_x3, is_inner);
-      if (!is_x1 && !is_x2 && !is_x3) continue;
-      
-      // This matches a receive buffer
-      if (recv_idx < pmr->ffc_recv_req.size()) {
-        recv_info.push_back({m, n, is_x1, is_x2, is_x3, is_inner});
-        recv_idx++;
       }
     }
   }
@@ -930,98 +887,251 @@ void Mesh::ApplyFaceFieldCorrection() {
   int is = mb_indcs.is, ie = mb_indcs.ie;
   int js = mb_indcs.js, je = mb_indcs.je;
   int ks = mb_indcs.ks, ke = mb_indcs.ke;
-  
+
   for (size_t i = 0; i < pmr->ffc_recv_req.size(); ++i) {
     MPI_Status status;
     MPI_Wait(&pmr->ffc_recv_req[i], &status);
-    
-    // Get info about this receive
+
     RecvInfo &info = recv_info[i];
-    Real* buf = pmr->ffc_recv_buf[i].data();
-    
-    // Apply 2x2 replication pattern based on face type
+    Real *buf = pmr->ffc_recv_buf[i].data();
+
     if (info.is_x1) {
-      // X1 face: unpack with 2x2 replication
-      int i_face = info.is_inner ? is : ie+1;
-      int ny_coarse = (je-js+1)/2;
-      int nz_coarse = (ke-ks+1)/2;
-      
-      for (int k_coarse = 0; k_coarse < nz_coarse; ++k_coarse) {
-        for (int j_coarse = 0; j_coarse < ny_coarse; ++j_coarse) {
-          Real coarse_val = buf[k_coarse*ny_coarse + j_coarse];
-          // Map to 2x2 fine faces
-          int j_fine = js + 2*j_coarse;
-          int k_fine = ks + 2*k_coarse;
-          b0_x1f_host(info.m, k_fine,   j_fine,   i_face) = coarse_val;
-          b0_x1f_host(info.m, k_fine,   j_fine+1, i_face) = coarse_val;
-          b0_x1f_host(info.m, k_fine+1, j_fine,   i_face) = coarse_val;
-          b0_x1f_host(info.m, k_fine+1, j_fine+1, i_face) = coarse_val;
-        }
-      }
-      
+      int i_face = info.is_inner ? is : ie + 1;
+      int ny_coarse = (mb_indcs.nx2 > 1) ? (je - js + 1) / 2 : 1;
+      int nz_coarse = (mb_indcs.nx3 > 1) ? (ke - ks + 1) / 2 : 1;
+      auto face_dev = Kokkos::subview(pmhd->b0.x1f, info.m,
+                                      Kokkos::ALL, Kokkos::ALL, i_face);
+      Kokkos::View<Real **, Kokkos::LayoutRight, HostMemSpace,
+                   Kokkos::MemoryTraits<Kokkos::Unmanaged>> buf_host(
+          buf, nz_coarse, ny_coarse);
+      Kokkos::View<Real **, Kokkos::LayoutRight, DevMemSpace> buf_dev(
+          "ffc_x1_buf", nz_coarse, ny_coarse);
+      Kokkos::deep_copy(buf_dev, buf_host);
+      auto face = face_dev;
+      bool has_y = (mb_indcs.nx2 > 1);
+      bool has_z = (mb_indcs.nx3 > 1);
+      Kokkos::MDRangePolicy<DevExeSpace, Kokkos::Rank<2>> policy({0, 0},
+                                                                {nz_coarse,
+                                                                 ny_coarse});
+      Kokkos::parallel_for(
+          "apply_ffc_x1", policy, KOKKOS_LAMBDA(const int k, const int j) {
+            Real val = buf_dev(k, j);
+            int j_f = 2 * j;
+            int k_f = 2 * k;
+            face(k_f, j_f) = val;
+            if (has_y) face(k_f, j_f + 1) = val;
+            if (has_z) face(k_f + 1, j_f) = val;
+            if (has_y && has_z) face(k_f + 1, j_f + 1) = val;
+          });
     } else if (info.is_x2) {
-      // X2 face: unpack with 2x2 replication
-      int j_face = info.is_inner ? js : je+1;
-      int nx_coarse = (ie-is+1)/2;
-      int nz_coarse = (ke-ks+1)/2;
-      
-      for (int k_coarse = 0; k_coarse < nz_coarse; ++k_coarse) {
-        for (int i_coarse = 0; i_coarse < nx_coarse; ++i_coarse) {
-          Real coarse_val = buf[k_coarse*nx_coarse + i_coarse];
-          // Map to 2x2 fine faces
-          int i_fine = is + 2*i_coarse;
-          int k_fine = ks + 2*k_coarse;
-          b0_x2f_host(info.m, k_fine,   j_face, i_fine  ) = coarse_val;
-          b0_x2f_host(info.m, k_fine,   j_face, i_fine+1) = coarse_val;
-          b0_x2f_host(info.m, k_fine+1, j_face, i_fine  ) = coarse_val;
-          b0_x2f_host(info.m, k_fine+1, j_face, i_fine+1) = coarse_val;
-        }
-      }
-      
+      int j_face = info.is_inner ? js : je + 1;
+      int nx_coarse = (mb_indcs.nx1 > 1) ? (ie - is + 1) / 2 : 1;
+      int nz_coarse = (mb_indcs.nx3 > 1) ? (ke - ks + 1) / 2 : 1;
+      auto face_dev = Kokkos::subview(pmhd->b0.x2f, info.m,
+                                      Kokkos::ALL, j_face, Kokkos::ALL);
+      Kokkos::View<Real **, Kokkos::LayoutRight, HostMemSpace,
+                   Kokkos::MemoryTraits<Kokkos::Unmanaged>> buf_host(
+          buf, nz_coarse, nx_coarse);
+      Kokkos::View<Real **, Kokkos::LayoutRight, DevMemSpace> buf_dev(
+          "ffc_x2_buf", nz_coarse, nx_coarse);
+      Kokkos::deep_copy(buf_dev, buf_host);
+      auto face = face_dev;
+      bool has_x = (mb_indcs.nx1 > 1);
+      bool has_z = (mb_indcs.nx3 > 1);
+      Kokkos::MDRangePolicy<DevExeSpace, Kokkos::Rank<2>> policy({0, 0},
+                                                                {nz_coarse,
+                                                                 nx_coarse});
+      Kokkos::parallel_for(
+          "apply_ffc_x2", policy, KOKKOS_LAMBDA(const int k, const int i) {
+            Real val = buf_dev(k, i);
+            int i_f = 2 * i;
+            int k_f = 2 * k;
+            face(k_f, i_f) = val;
+            if (has_x) face(k_f, i_f + 1) = val;
+            if (has_z) face(k_f + 1, i_f) = val;
+            if (has_x && has_z) face(k_f + 1, i_f + 1) = val;
+          });
     } else if (info.is_x3) {
-      // X3 face: unpack with 2x2 replication
-      int k_face = info.is_inner ? ks : ke+1;
-      int nx_coarse = (ie-is+1)/2;
-      int ny_coarse = (je-js+1)/2;
-      
-      for (int j_coarse = 0; j_coarse < ny_coarse; ++j_coarse) {
-        for (int i_coarse = 0; i_coarse < nx_coarse; ++i_coarse) {
-          Real coarse_val = buf[j_coarse*nx_coarse + i_coarse];
-          // Map to 2x2 fine faces
-          int i_fine = is + 2*i_coarse;
-          int j_fine = js + 2*j_coarse;
-          b0_x3f_host(info.m, k_face, j_fine,   i_fine  ) = coarse_val;
-          b0_x3f_host(info.m, k_face, j_fine,   i_fine+1) = coarse_val;
-          b0_x3f_host(info.m, k_face, j_fine+1, i_fine  ) = coarse_val;
-          b0_x3f_host(info.m, k_face, j_fine+1, i_fine+1) = coarse_val;
-        }
-      }
+      int k_face = info.is_inner ? ks : ke + 1;
+      int nx_coarse = (mb_indcs.nx1 > 1) ? (ie - is + 1) / 2 : 1;
+      int ny_coarse = (mb_indcs.nx2 > 1) ? (je - js + 1) / 2 : 1;
+      auto face_dev = Kokkos::subview(pmhd->b0.x3f, info.m,
+                                      k_face, Kokkos::ALL, Kokkos::ALL);
+      Kokkos::View<Real **, Kokkos::LayoutRight, HostMemSpace,
+                   Kokkos::MemoryTraits<Kokkos::Unmanaged>> buf_host(
+          buf, ny_coarse, nx_coarse);
+      Kokkos::View<Real **, Kokkos::LayoutRight, DevMemSpace> buf_dev(
+          "ffc_x3_buf", ny_coarse, nx_coarse);
+      Kokkos::deep_copy(buf_dev, buf_host);
+      auto face = face_dev;
+      bool has_x = (mb_indcs.nx1 > 1);
+      bool has_y = (mb_indcs.nx2 > 1);
+      Kokkos::MDRangePolicy<DevExeSpace, Kokkos::Rank<2>> policy({0, 0},
+                                                                {ny_coarse,
+                                                                 nx_coarse});
+      Kokkos::parallel_for(
+          "apply_ffc_x3", policy, KOKKOS_LAMBDA(const int j, const int i) {
+            Real val = buf_dev(j, i);
+            int i_f = 2 * i;
+            int j_f = 2 * j;
+            face(j_f, i_f) = val;
+            if (has_x) face(j_f, i_f + 1) = val;
+            if (has_y) face(j_f + 1, i_f) = val;
+            if (has_x && has_y) face(j_f + 1, i_f + 1) = val;
+          });
     }
   }
-  
-  // Copy updated face fields back to device
-  Kokkos::deep_copy(pmhd->b0.x1f, b0_x1f_host);
-  Kokkos::deep_copy(pmhd->b0.x2f, b0_x2f_host);
-  Kokkos::deep_copy(pmhd->b0.x3f, b0_x3f_host);
   
   // Wait for all sends to complete
   for (size_t i = 0; i < pmr->ffc_send_req.size(); ++i) {
     MPI_Status status;
     MPI_Wait(&pmr->ffc_send_req[i], &status);
   }
+
+  // Reset newly_created flags after correction
+  for (int m = 0; m < nmb_thisrank; ++m) {
+    pmb->newly_created.h_view(m) = false;
+  }
+  pmb->newly_created.template modify<HostMemSpace>();
+  pmb->newly_created.template sync<DevMemSpace>();
 #else
   // Non-MPI version for single-process runs
   // Still need to handle local coarse-fine interfaces
   if (pmb_pack->pmhd == nullptr || !adaptive) return;
   
-  MeshBlock* pmb = pmb_pack->pmb;
-  
-  // Simplified local version - copy face values directly between blocks
+  MeshBlock *pmb = pmb_pack->pmb;
+  mhd::MHD *pmhd = pmb_pack->pmhd;
+
   for (int m = 0; m < nmb_thisrank; ++m) {
     if (!pmb->newly_created.h_view(m)) continue;
-    
-    // Process local neighbors only
-    // Implementation would copy face field values directly
+    int gid = pmb->mb_gid.h_view(m);
+    LogicalLocation loc = lloc_eachmb[gid];
+
+    for (int n = 0; n < pmb->nnghbr; ++n) {
+      NeighborBlock &nb = pmb->nghbr.h_view(m, n);
+      if (nb.lev >= loc.level) continue;  // need coarse neighbor
+
+      bool is_x1, is_x2, is_x3, is_inner;
+      get_face_info(n, is_x1, is_x2, is_x3, is_inner);
+      if (!is_x1 && !is_x2 && !is_x3) continue;
+
+      int cm = FindMeshBlockIndex(nb.gid);
+      if (cm < 0) continue;
+
+      int is = mb_indcs.is, ie = mb_indcs.ie;
+      int js = mb_indcs.js, je = mb_indcs.je;
+      int ks = mb_indcs.ks, ke = mb_indcs.ke;
+
+      if (is_x1) {
+        int i_face_coarse = is_inner ? ie + 1 : is;
+        int i_face_fine = is_inner ? is : ie + 1;
+        int ny_half = (mb_indcs.nx2 > 1) ? (je - js + 1) / 2 : 1;
+        int nz_half = (mb_indcs.nx3 > 1) ? (ke - ks + 1) / 2 : 1;
+        int sub = is_inner ? n : n - 4;
+        int j_half = sub % 2;
+        int k_half = sub / 2;
+        int j_start = js + j_half * ny_half;
+        int k_start = ks + k_half * nz_half;
+        auto coarse_dev = Kokkos::subview(pmhd->b0.x1f, cm,
+                               Kokkos::make_pair(k_start, k_start + nz_half),
+                               Kokkos::make_pair(j_start, j_start + ny_half),
+                               i_face_coarse);
+        auto fine_dev = Kokkos::subview(pmhd->b0.x1f, m,
+                              Kokkos::ALL, Kokkos::ALL, i_face_fine);
+        auto coarse = coarse_dev;
+        auto fine = fine_dev;
+        bool has_y = (mb_indcs.nx2 > 1);
+        bool has_z = (mb_indcs.nx3 > 1);
+        Kokkos::MDRangePolicy<DevExeSpace, Kokkos::Rank<2>> policy({0, 0},
+                                                                  {nz_half,
+                                                                   ny_half});
+        Kokkos::parallel_for(
+            "ffc_local_x1", policy, KOKKOS_LAMBDA(const int k, const int j) {
+              Real val = coarse(k, j);
+              int j_f = 2 * j;
+              int k_f = 2 * k;
+              fine(k_f, j_f) = val;
+              if (has_y) fine(k_f, j_f + 1) = val;
+              if (has_z) fine(k_f + 1, j_f) = val;
+              if (has_y && has_z) fine(k_f + 1, j_f + 1) = val;
+            });
+
+      } else if (is_x2) {
+        int j_face_coarse = is_inner ? je + 1 : js;
+        int j_face_fine = is_inner ? js : je + 1;
+        int nx_half = (mb_indcs.nx1 > 1) ? (ie - is + 1) / 2 : 1;
+        int nz_half = (mb_indcs.nx3 > 1) ? (ke - ks + 1) / 2 : 1;
+        int sub = is_inner ? (n - 8) : (n - 12);
+        int i_half = sub % 2;
+        int k_half = sub / 2;
+        int i_start = is + i_half * nx_half;
+        int k_start = ks + k_half * nz_half;
+        auto coarse_dev = Kokkos::subview(pmhd->b0.x2f, cm,
+                               Kokkos::make_pair(k_start, k_start + nz_half),
+                               j_face_coarse,
+                               Kokkos::make_pair(i_start, i_start + nx_half));
+        auto fine_dev = Kokkos::subview(pmhd->b0.x2f, m,
+                              Kokkos::ALL, j_face_fine, Kokkos::ALL);
+        auto coarse = coarse_dev;
+        auto fine = fine_dev;
+        bool has_x = (mb_indcs.nx1 > 1);
+        bool has_z = (mb_indcs.nx3 > 1);
+        Kokkos::MDRangePolicy<DevExeSpace, Kokkos::Rank<2>> policy({0, 0},
+                                                                  {nz_half,
+                                                                   nx_half});
+        Kokkos::parallel_for(
+            "ffc_local_x2", policy, KOKKOS_LAMBDA(const int k, const int i) {
+              Real val = coarse(k, i);
+              int i_f = 2 * i;
+              int k_f = 2 * k;
+              fine(k_f, i_f) = val;
+              if (has_x) fine(k_f, i_f + 1) = val;
+              if (has_z) fine(k_f + 1, i_f) = val;
+              if (has_x && has_z) fine(k_f + 1, i_f + 1) = val;
+            });
+
+      } else if (is_x3) {
+        int k_face_coarse = is_inner ? ke + 1 : ks;
+        int k_face_fine = is_inner ? ks : ke + 1;
+        int nx_half = (mb_indcs.nx1 > 1) ? (ie - is + 1) / 2 : 1;
+        int ny_half = (mb_indcs.nx2 > 1) ? (je - js + 1) / 2 : 1;
+        int sub = is_inner ? (n - 24) : (n - 28);
+        int i_half = sub % 2;
+        int j_half = sub / 2;
+        int i_start = is + i_half * nx_half;
+        int j_start = js + j_half * ny_half;
+        auto coarse_dev = Kokkos::subview(pmhd->b0.x3f, cm,
+                               k_face_coarse,
+                               Kokkos::make_pair(j_start, j_start + ny_half),
+                               Kokkos::make_pair(i_start, i_start + nx_half));
+        auto fine_dev = Kokkos::subview(pmhd->b0.x3f, m,
+                              k_face_fine, Kokkos::ALL, Kokkos::ALL);
+        auto coarse = coarse_dev;
+        auto fine = fine_dev;
+        bool has_x = (mb_indcs.nx1 > 1);
+        bool has_y = (mb_indcs.nx2 > 1);
+        Kokkos::MDRangePolicy<DevExeSpace, Kokkos::Rank<2>> policy({0, 0},
+                                                                  {ny_half,
+                                                                   nx_half});
+        Kokkos::parallel_for(
+            "ffc_local_x3", policy, KOKKOS_LAMBDA(const int j, const int i) {
+              Real val = coarse(j, i);
+              int i_f = 2 * i;
+              int j_f = 2 * j;
+              fine(j_f, i_f) = val;
+              if (has_x) fine(j_f, i_f + 1) = val;
+              if (has_y) fine(j_f + 1, i_f) = val;
+              if (has_x && has_y) fine(j_f + 1, i_f + 1) = val;
+            });
+      }
+    }
   }
+
+  // Reset newly_created flags after correction
+  for (int m = 0; m < nmb_thisrank; ++m) {
+    pmb->newly_created.h_view(m) = false;
+  }
+  pmb->newly_created.template modify<HostMemSpace>();
+  pmb->newly_created.template sync<DevMemSpace>();
 #endif
 }

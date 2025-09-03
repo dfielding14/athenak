@@ -1153,20 +1153,82 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
   bool &three_d = pmy_mesh->three_d;
   auto &ngids_ = new_gids_eachrank[global_variable::my_rank];
 
+  // Determine which faces will be corrected by FFC so we can skip prolongation
+  auto get_face_info = [](int n, bool &is_x1, bool &is_x2, bool &is_x3,
+                          bool &is_inner) {
+    is_x1 = (n >= 0 && n <= 7);
+    is_x2 = (n >= 8 && n <= 15);
+    is_x3 = (n >= 24 && n <= 31);
+    if (is_x1) {
+      is_inner = (n >= 0 && n <= 3);
+    } else if (is_x2) {
+      is_inner = (n >= 8 && n <= 11);
+    } else if (is_x3) {
+      is_inner = (n >= 24 && n <= 27);
+    }
+  };
+
+  DualArray1D<int> skip_x1_in("skip_x1_in", new_nmb);
+  DualArray1D<int> skip_x1_out("skip_x1_out", new_nmb);
+  DualArray1D<int> skip_x2_in("skip_x2_in", new_nmb);
+  DualArray1D<int> skip_x2_out("skip_x2_out", new_nmb);
+  DualArray1D<int> skip_x3_in("skip_x3_in", new_nmb);
+  DualArray1D<int> skip_x3_out("skip_x3_out", new_nmb);
+
+  MeshBlock *pmb = pmy_mesh->pmb_pack->pmb;
+  for (int m = 0; m < new_nmb; ++m) {
+    skip_x1_in.h_view(m) = skip_x1_out.h_view(m) = 0;
+    skip_x2_in.h_view(m) = skip_x2_out.h_view(m) = 0;
+    skip_x3_in.h_view(m) = skip_x3_out.h_view(m) = 0;
+    if (refine_flag_.h_view(n2o.h_view(m+ngids_)) > 0) {
+      int gid = pmb->mb_gid.h_view(m);
+      LogicalLocation loc = pmy_mesh->lloc_eachmb[gid];
+      for (int n = 0; n < pmb->nnghbr; ++n) {
+        NeighborBlock &nb = pmb->nghbr.h_view(m, n);
+        if (nb.lev < loc.level) {
+          bool is_x1, is_x2, is_x3, is_inner;
+          get_face_info(n, is_x1, is_x2, is_x3, is_inner);
+          if (is_x1) {
+            if (is_inner) skip_x1_in.h_view(m) = 1;
+            else skip_x1_out.h_view(m) = 1;
+          } else if (is_x2) {
+            if (is_inner) skip_x2_in.h_view(m) = 1;
+            else skip_x2_out.h_view(m) = 1;
+          } else if (is_x3) {
+            if (is_inner) skip_x3_in.h_view(m) = 1;
+            else skip_x3_out.h_view(m) = 1;
+          }
+        }
+      }
+    }
+  }
+  skip_x1_in.template modify<HostMemSpace>();
+  skip_x1_in.template sync<DevExeSpace>();
+  skip_x1_out.template modify<HostMemSpace>();
+  skip_x1_out.template sync<DevExeSpace>();
+  skip_x2_in.template modify<HostMemSpace>();
+  skip_x2_in.template sync<DevExeSpace>();
+  skip_x2_out.template modify<HostMemSpace>();
+  skip_x2_out.template sync<DevExeSpace>();
+  skip_x3_in.template modify<HostMemSpace>();
+  skip_x3_in.template sync<DevExeSpace>();
+  skip_x3_out.template modify<HostMemSpace>();
+  skip_x3_out.template sync<DevExeSpace>();
+
   // Prolongate x1f
   par_for("RefineFC1",DevExeSpace(), 0,(new_nmb-1), cks,cke, cjs,cje, cis,cie+1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     if (refine_flag_.d_view(n2o.d_view(m+ngids_)) > 0) {
-      // fine indices refer to target array
-      int fi = (i - cis)*2 + is;                   // fine i
-      int fj = (multi_d)? ((j - cjs)*2 + js) : j;  // fine j
-      int fk = (three_d)? ((k - cks)*2 + ks) : k;  // fine k
-      
-      // During refinement, we don't skip faces - FFC is applied after refinement
-      // The face-field correction handles coarse-fine boundaries separately
+      int fi = (i - cis)*2 + is;
+      int fj = (multi_d)? ((j - cjs)*2 + js) : j;
+      int fk = (three_d)? ((k - cks)*2 + ks) : k;
+
       bool skip_ffc = false;
-      
-      ProlongFCSharedX1Face(m,k,j,i,fk,fj,fi,multi_d,three_d,cb.x1f,b.x1f,skip_ffc);
+      if (i == cis && skip_x1_in.d_view(m)) skip_ffc = true;
+      if (i == cie+1 && skip_x1_out.d_view(m)) skip_ffc = true;
+
+      ProlongFCSharedX1Face(m,k,j,i,fk,fj,fi,multi_d,three_d,
+                            cb.x1f,b.x1f,skip_ffc);
     }
   });
 
@@ -1174,14 +1236,14 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
   par_for("RefineFC2",DevExeSpace(), 0,(new_nmb-1), cks,cke, cjs,cje+1, cis,cie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     if (refine_flag_.d_view(n2o.d_view(m+ngids_)) > 0) {
-      // fine indices refer to target array
-      int fi = (i - cis)*2 + is;                   // fine i
-      int fj = (multi_d)? ((j - cjs)*2 + js) : j;  // fine j
-      int fk = (three_d)? ((k - cks)*2 + ks) : k;  // fine k
-      // During refinement, we don't skip faces - FFC is applied after refinement
+      int fi = (i - cis)*2 + is;
+      int fj = (multi_d)? ((j - cjs)*2 + js) : j;
+      int fk = (three_d)? ((k - cks)*2 + ks) : k;
       bool skip_ffc = false;
-      
-      ProlongFCSharedX2Face(m,k,j,i,fk,fj,fi,three_d,cb.x2f,b.x2f,skip_ffc);
+      if (j == cjs && skip_x2_in.d_view(m)) skip_ffc = true;
+      if (j == cje+1 && skip_x2_out.d_view(m)) skip_ffc = true;
+      ProlongFCSharedX2Face(m,k,j,i,fk,fj,fi,three_d,
+                            cb.x2f,b.x2f,skip_ffc);
     }
   });
 
@@ -1189,14 +1251,14 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
   par_for("RefineFC3",DevExeSpace(), 0,(new_nmb-1), cks,cke+1, cjs,cje, cis,cie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     if (refine_flag_.d_view(n2o.d_view(m+ngids_)) > 0) {
-      // fine indices refer to target array
-      int fi = (i - cis)*2 + is;                   // fine i
-      int fj = (multi_d)? ((j - cjs)*2 + js) : j;  // fine j
-      int fk = (three_d)? ((k - cks)*2 + ks) : k;  // fine k
-      // During refinement, we don't skip faces - FFC is applied after refinement
+      int fi = (i - cis)*2 + is;
+      int fj = (multi_d)? ((j - cjs)*2 + js) : j;
+      int fk = (three_d)? ((k - cks)*2 + ks) : k;
       bool skip_ffc = false;
-      
-      ProlongFCSharedX3Face(m,k,j,i,fk,fj,fi,multi_d,cb.x3f,b.x3f,skip_ffc);
+      if (k == cks && skip_x3_in.d_view(m)) skip_ffc = true;
+      if (k == cke+1 && skip_x3_out.d_view(m)) skip_ffc = true;
+      ProlongFCSharedX3Face(m,k,j,i,fk,fj,fi,multi_d,
+                            cb.x3f,b.x3f,skip_ffc);
     }
   });
 

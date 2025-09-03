@@ -186,6 +186,14 @@ class Mesh {
 
   // accessors
   int FindMeshBlockIndex(int tgid) {
+    if (!location_maps_.empty()) {
+      LogicalLocation loc = lloc_eachmb[tgid];
+      auto &map = location_maps_[loc.level];
+      auto it = map.find(loc);
+      if (it != map.end()) {
+        return static_cast<int>(it->second - pmb_pack->pmb);
+      }
+    }
     for (int m=0; m<pmb_pack->nmb_thispack; ++m) {
       if (pmb_pack->pmb->mb_gid.h_view(m) == tgid) return m;
     }
