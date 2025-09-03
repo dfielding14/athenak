@@ -693,11 +693,51 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   pm->pmb_pack->gide = pm->pmb_pack->gids + pm->nmb_eachrank[global_variable::my_rank]-1;
   pm->pmb_pack->nmb_thispack = pm->pmb_pack->gide - pm->pmb_pack->gids + 1;
 
+  // CRITICAL FIX: Save ALL physics module pointers before deleting MeshBlock
+  // These modules contain important state that must be preserved across AMR
+  auto saved_phydro = pm->pmb_pack->phydro;
+  auto saved_pmhd = pm->pmb_pack->pmhd;
+  auto saved_prad = pm->pmb_pack->prad;
+  auto saved_pz4c = pm->pmb_pack->pz4c;
+  auto saved_padm = pm->pmb_pack->padm;
+  auto saved_ptmunu = pm->pmb_pack->ptmunu;
+  auto saved_pdyngr = pm->pmb_pack->pdyngr;
+  auto saved_pnr = pm->pmb_pack->pnr;
+  auto saved_pturb = pm->pmb_pack->pturb;
+  auto saved_punit = pm->pmb_pack->punit;
+  auto saved_ppart = pm->pmb_pack->ppart;
+  
+  // Temporarily null out the pointers so they don't get deleted
+  pm->pmb_pack->phydro = nullptr;
+  pm->pmb_pack->pmhd = nullptr;
+  pm->pmb_pack->prad = nullptr;
+  pm->pmb_pack->pz4c = nullptr;
+  pm->pmb_pack->padm = nullptr;
+  pm->pmb_pack->ptmunu = nullptr;
+  pm->pmb_pack->pdyngr = nullptr;
+  pm->pmb_pack->pnr = nullptr;
+  pm->pmb_pack->pturb = nullptr;
+  pm->pmb_pack->punit = nullptr;
+  pm->pmb_pack->ppart = nullptr;
+
   delete (pm->pmb_pack->pmb);
   delete (pm->pmb_pack->pcoord);
   pm->pmb_pack->AddMeshBlocks(pin);
   pm->pmb_pack->AddCoordinates(pin);
   pm->pmb_pack->pmb->SetNeighbors(pm->ptree, pm->rank_eachmb);
+  
+  // Restore ALL the physics module pointers
+  pm->pmb_pack->phydro = saved_phydro;
+  pm->pmb_pack->pmhd = saved_pmhd;
+  pm->pmb_pack->prad = saved_prad;
+  pm->pmb_pack->pz4c = saved_pz4c;
+  pm->pmb_pack->padm = saved_padm;
+  pm->pmb_pack->ptmunu = saved_ptmunu;
+  pm->pmb_pack->pdyngr = saved_pdyngr;
+  pm->pmb_pack->pnr = saved_pnr;
+  pm->pmb_pack->pturb = saved_pturb;
+  pm->pmb_pack->punit = saved_punit;
+  pm->pmb_pack->ppart = saved_ppart;
   
   // TODO: Physics modules need their pmy_pack pointers updated after MeshBlockPack rebuild
   // Currently this causes issues because pmy_pack is private in each physics module
