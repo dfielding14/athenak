@@ -66,7 +66,15 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   nlow = pin->GetOrAddInteger("turb_driving", "nlow", 1);
   nhigh = pin->GetOrAddInteger("turb_driving", "nhigh", 3);
   // Peak of power when spectral form is parabolic, in units of 2*(PI/L)
-  kpeak = pin->GetOrAddReal("turb_driving", "kpeak", 4.0*M_PI);
+  // Support both npeak (wavenumber index) and kpeak (actual k value)
+  if (pin->DoesParameterExist("turb_driving", "npeak")) {
+    Real npeak = pin->GetReal("turb_driving", "npeak");
+    // Convert npeak to kpeak using fundamental wavenumber
+    Real dkfund = 2.0*M_PI; // Assuming box size = 1
+    kpeak = npeak * dkfund;
+  } else {
+    kpeak = pin->GetOrAddReal("turb_driving", "kpeak", 4.0*M_PI);
+  }
   // spect form - 1 for parabola, 2 for power-law
   spect_form = pin->GetOrAddInteger("turb_driving", "spect_form", 1);
   // driving type - 0 for 3D isotropic, 1 for xy plane
@@ -150,6 +158,13 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
         }
       }
     }
+  }
+
+  if (mode_count == 0) {
+    std::cout << "ERROR: mode_count is 0! Check turbulence driving parameters." << std::endl;
+    std::cout << "  nlow=" << nlow << ", nhigh=" << nhigh << std::endl;
+    std::cout << "  driving_type=" << driving_type << std::endl;
+    exit(EXIT_FAILURE);
   }
 
   Kokkos::realloc(aka, 3, mode_count); // Amplitude of real component
