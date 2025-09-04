@@ -370,4 +370,15 @@ void MHD::SetSaveWBcc() {
   wbcc_saved = true;
 }
 
+//----------------------------------------------------------------------------------------
+//! \fn void MHD::UpdateAfterAMR
+//! \brief Update MeshBlockPack pointer after AMR
+//! Arrays are already allocated for maximum size, so no resizing needed
+
+void MHD::UpdateAfterAMR(MeshBlockPack *new_pp) {
+  pmy_pack = new_pp;
+  // Arrays are already allocated for nmb_maxperrank, which is sufficient
+  // No resizing needed - just update the pointer
+}
+
 } // namespace mhd

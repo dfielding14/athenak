@@ -1,0 +1,101 @@
+=== Building AthenaK on Frontier with AMR turbulence ===
+=== Building AthenaK on Frontier with AMR turbulence ===
+=== Build started at Thu Sep  4 06:06:26 PM EDT 2025 ===
+=== Build started at Thu Sep  4 06:06:26 PM EDT 2025 ===
+Unloading the cpe module is insufficient to restore the system defaults.
+Please run 'source /opt/cray/pe/cpe/24.07/restore_lmod_system_defaults.[csh|sh]'.
+Running "module reset". Resetting modules to system default. The following $MODULEPATH directories have been removed: /opt/cray/pe/lmod/modulefiles/mpi/amd/4.0/ofi/1.0/cray-mpich/8.0
+
+Due to MODULEPATH changes, the following have been reloaded:
+  1) cray-mpich/8.1.30
+
+The following have been reloaded with a version change:
+  1) cray-libsci/24.11.0 => cray-libsci/24.07.0     2) craype/2.7.33 => craype/2.7.32
+
+
+Lmod is automatically replacing "cce/18.0.0" with "amd/6.2.4".
+
+
+Lmod is automatically replacing "PrgEnv-cray/8.5.0" with "PrgEnv-amd/8.6.0".
+
+
+Inactive Modules:
+  1) darshan-runtime
+
+Due to MODULEPATH changes, the following have been reloaded:
+  1) cray-mpich/8.1.30
+
+The following have been reloaded with a version change:
+  1) cray-libsci/24.07.0 => cray-libsci/24.11.0     2) craype/2.7.32 => craype/2.7.33
+
+=== Loaded modules ===
+craype-x86-trento
+libfabric/1.22.0
+craype-network-ofi
+xpmem/2.11.3-1.3_gdbda01a1eb3d
+Core/25.03
+tmux/3.4
+hsi/default
+lfs-wrapper/0.0.1
+DefApps
+cray-pmi/6.1.15.21
+perftools-base/24.07.0
+cpe/24.07
+craype/2.7.33
+cray-dsmml/0.3.0
+PrgEnv-amd/8.6.0
+craype-accel-amd-gfx90a
+amd/6.2.0
+cray-libsci/24.11.0
+cray-mpich/8.1.30
+rocm/6.2.0
+cmake/3.30.5
+cray-python/3.11.7
+emacs/29.4
+=== Setting up build directory ===
+Removing existing build directory...
+=== Configuring with CMake ===
+-- The C compiler identification is Clang 18.0.0
+-- The CXX compiler identification is Clang 18.0.0
+-- Cray Programming Environment 2.7.33 C
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /opt/cray/pe/craype/2.7.33/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Cray Programming Environment 2.7.33 CXX
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /opt/cray/pe/craype/2.7.33/bin/CC - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Setting build type to 'Release' as none was specified.
+-- Found MPI_CXX: /opt/cray/pe/craype/2.7.33/bin/CC (found version "3.1")
+-- Found MPI: TRUE (found version "3.1") found components: CXX
+-- Including user-specified problem generator file: turb_timed_amr
+-- Setting default Kokkos CXX standard to 17
+-- Kokkos version: 4.4.0
+-- The project name is: Kokkos
+-- Using internal gtest for testing
+-- Configured git information in /ccs/home/dfielding/athenak-df/build_turb/generated/Kokkos_Version_Info.cpp
+-- Compiler Version: 18.0.0
+-- SERIAL backend is being turned on to ensure there is at least one Host space. To change this, you must enable another host execution space and configure with -DKokkos_ENABLE_SERIAL=OFF or change CMakeCache.txt
+-- Using -std=c++17 for C++17 standard as feature
+-- Built-in Execution Spaces:
+--     Device Parallel: Kokkos::HIP
+--     Host Parallel: NoTypeDefined
+--       Host Serial: SERIAL
+-- 
+-- Architectures:
+--  ZEN3
+--  VEGA90A
+-- Found TPLLIBDL: /usr/include
+-- Found TPLROCM: /opt/rocm-6.2.0/lib/libamdhip64.so
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE
+-- Performing Test HIP_CLANG_SUPPORTS_PARALLEL_JOBS
+-- Performing Test HIP_CLANG_SUPPORTS_PARALLEL_JOBS - Success
+-- Using internal desul_atomics copy
+-- Experimental mdspan support is enabled
+-- Looking for C++ include experimental/mdspan

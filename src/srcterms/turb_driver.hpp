@@ -70,6 +70,9 @@ class TurbulenceDriver {
   TaskStatus AddForcing(Driver *pdrive, int stage);
   void Initialize();
   void ResizeArrays(int new_nmb);
+  
+  // Update the MeshBlockPack pointer after AMR
+  void UpdateMeshBlockPack(MeshBlockPack *new_pp) { pmy_pack = new_pp; }
 
  private:
   MeshBlockPack *pmy_pack;  // ptr to MeshBlockPack containing this TurbulenceDriver

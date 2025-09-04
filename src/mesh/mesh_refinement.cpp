@@ -26,6 +26,7 @@
 #include "radiation/radiation.hpp"
 #include "z4c/z4c.hpp"
 #include "z4c/z4c_amr.hpp"
+#include "srcterms/turb_driver.hpp"
 #include "prolongation.hpp"
 #include "restriction.hpp"
 #include "nghbr_index.hpp"
@@ -134,6 +135,7 @@ MeshRefinement::~MeshRefinement() {
 //! \brief Simple driver function for adaptive mesh refinement
 
 void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin) {
+  
   // first check refinement criteria
   CheckForRefinement(pmy_mesh->pmb_pack);
 
@@ -739,13 +741,21 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   pm->pmb_pack->punit = saved_punit;
   pm->pmb_pack->ppart = saved_ppart;
   
-  // TODO: Physics modules need their pmy_pack pointers updated after MeshBlockPack rebuild
+  // Update the pmy_pack pointer in physics modules after MeshBlockPack rebuild
+  if (saved_pturb != nullptr) {
+    saved_pturb->UpdateMeshBlockPack(pm->pmb_pack);
+  }
+  
+  if (saved_pmhd != nullptr) {
+    saved_pmhd->UpdateAfterAMR(pm->pmb_pack);
+  }
+  
+  // TODO: Other physics modules need their pmy_pack pointers updated after MeshBlockPack rebuild
   // Currently this causes issues because pmy_pack is private in each physics module
   // The proper fix would be to either:
-  // 1. Add a public UpdateMeshBlockPack() method to each physics module
+  // 1. Add a public UpdateMeshBlockPack() method to each physics module (done for turb)
   // 2. Make MeshRefinement a friend class of the physics modules
   // 3. Recreate the physics modules after AMR (expensive)
-  // For now, the turbulence driver's CheckResize should handle the mesh changes
   
   // Mark newly created blocks (those that were refined)
   // newtoold[n] contains old gid for new gid n
@@ -1225,12 +1235,40 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
   DualArray1D<int> skip_x3_in("skip_x3_in", new_nmb);
   DualArray1D<int> skip_x3_out("skip_x3_out", new_nmb);
 
+  if (pmy_mesh == nullptr) {
+    return;
+  }
+  if (pmy_mesh->pmb_pack == nullptr) {
+    return;
+  }
   MeshBlock *pmb = pmy_mesh->pmb_pack->pmb;
+  if (pmb == nullptr) {
+    return;
+  }
+  int old_nmb = pmb->mb_gid.extent_int(0);  // Get the OLD number of blocks
+  
   for (int m = 0; m < new_nmb; ++m) {
     skip_x1_in.h_view(m) = skip_x1_out.h_view(m) = 0;
     skip_x2_in.h_view(m) = skip_x2_out.h_view(m) = 0;
     skip_x3_in.h_view(m) = skip_x3_out.h_view(m) = 0;
-    if (refine_flag_.h_view(n2o.h_view(m+ngids_)) > 0) {
+    
+    // Skip neighbor checking for newly created blocks (they don't exist yet)
+    if (m >= old_nmb) {
+      continue;  // These blocks will be created during refinement
+    }
+    
+    // Check n2o bounds
+    int n2o_idx = m + ngids_;
+    if (n2o_idx >= n2o.extent_int(0)) {
+      continue;
+    }
+    int old_idx = n2o.h_view(n2o_idx);
+    if (old_idx >= refine_flag_.extent_int(0)) {
+      continue;
+    }
+    
+    if (refine_flag_.h_view(old_idx) > 0) {
+      // For existing blocks that are being refined, check neighbors
       int gid = pmb->mb_gid.h_view(m);
       LogicalLocation loc = pmy_mesh->lloc_eachmb[gid];
       for (int n = 0; n < pmb->nnghbr; ++n) {
@@ -1281,7 +1319,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
                             cb.x1f,b.x1f,skip_ffc);
     }
   });
-
+  
   // Prolongate x2f
   par_for("RefineFC2",DevExeSpace(), 0,(new_nmb-1), cks,cke, cjs,cje+1, cis,cie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -1296,7 +1334,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
                             cb.x2f,b.x2f,skip_ffc);
     }
   });
-
+  
   // Prolongate x3f
   par_for("RefineFC3",DevExeSpace(), 0,(new_nmb-1), cks,cke+1, cjs,cje, cis,cie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -1311,6 +1349,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
                             cb.x3f,b.x3f,skip_ffc);
     }
   });
+  
 
   // Second prolongate face-centered fields at internal faces of fine cells using
   // divergence-preserving operator of Toth & Roe (2002)
@@ -1332,6 +1371,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
       }
     }
   });
+  
 
   return;
 }
@@ -1583,6 +1623,12 @@ void MeshRefinement::InitInterpWghts() {
 
 void MeshRefinement::RefineParticles() {
   auto pmbp = pmy_mesh->pmb_pack;
+  
+  // Check if particles are enabled
+  if (pmbp->ppart == nullptr) {
+    return;
+  }
+  
   int nmb = pmbp->nmb_thispack;
   auto &mbsize = pmbp->pmb->mb_size;
   auto gids = pmbp->gids;

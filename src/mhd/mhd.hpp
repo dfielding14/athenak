@@ -195,6 +195,9 @@ class MHD {
   void FOFC(Driver *d, int stage);
 
   DvceArray5D<Real> utest, bcctest;  // scratch arrays for FOFC
+  
+  // Update the MeshBlockPack pointer and resize arrays after AMR
+  void UpdateAfterAMR(MeshBlockPack *new_pp);
 
  private:
   MeshBlockPack* pmy_pack;   // ptr to MeshBlockPack containing this MHD
