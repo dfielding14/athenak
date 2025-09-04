@@ -17,7 +17,7 @@ Complete documentation for all AthenaK modules, organized by category.
 |--------|-----------|-------------|---------------|
 | **Hydrodynamics** | `src/hydro/` | Euler equations solver | [hydro.md](hydro.md) |
 | **MHD** | `src/mhd/` | Magnetohydrodynamics with CT | [mhd.md](mhd.md) |
-| **Radiation** | `src/radiation/` | Radiation transport (M1 closure) | [radiation.md](radiation.md) |
+| **Radiation** | `src/radiation/` | Discrete ordinates radiation transport | [radiation.md](radiation.md) |
 | **Z4c** | `src/z4c/` | Numerical relativity (Einstein equations) | [z4c.md](z4c.md) |
 | **DynGRMHD** | `src/dyn_grmhd/` | GR MHD in dynamical spacetimes | [dyn_grmhd.md](dyn_grmhd.md) |
 | **Ion-Neutral** | `src/ion-neutral/` | Two-fluid ion-neutral MHD | [ion_neutral.md](ion_neutral.md) |

@@ -85,11 +85,12 @@ flowchart TD
 eos = ideal       # Equation of state
 gamma = 1.4       # Adiabatic index
 
-<mhd>             # Magnetohydrodynamics
-eos = ideal       # Equation of state
-
-<radiation>       # Radiation transport
+<radiation>       # Radiation transport (GR only)
 arad = 1.0        # Radiation constant
+kappa_a = 1.0     # Absorption opacity
+kappa_p = 1.0     # Planck mean opacity
+kappa_s = 0.0     # Scattering opacity
+nlevel = 1        # Angular resolution
 ```
 
 ### 2. Set Up Your Domain
@@ -141,7 +142,7 @@ x1max = 1.0
 | Fluid Dynamics | [Hydro](modules/hydro.md) | Shock capturing, multiple Riemann solvers |
 | MHD | [MHD](modules/mhd.md) | Constrained transport, div(B)=0 |
 | General Relativity | [Z4c](modules/z4c.md) | Black holes, neutron stars, gravitational waves |
-| Radiation | [Radiation](modules/radiation.md) | M1 closure, implicit solver |
+| Radiation | [Radiation](modules/radiation.md) | Discrete ordinates transport, implicit solver |
 | Particles | [Particles](modules/particles.md) | Lagrangian tracking, cosmic rays |
 
 ### 🔧 By Task

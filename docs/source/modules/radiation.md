@@ -1,7 +1,17 @@
 # Module: Radiation
 
 ## Overview
-The Radiation module implements radiation transport using the M1 closure scheme, supporting both optically thin and thick regimes with full special and general relativistic treatments.
+The Radiation module solves frequency-integrated radiative transport using a
+discrete ordinates ($S_n$) scheme on a geodesic angular grid.  Specific
+intensities are evolved along a set of directions and coupled to the fluid
+through implicit source terms.  Both special and general relativistic
+spacetimes are supported.
+
+**Limitations**
+
+- Requires a general relativistic coordinate system.
+- Adaptive mesh refinement is currently unsupported.
+- Only one of hydrodynamics or MHD may be enabled at a time.
 
 ## Source Location
 `src/radiation/`
@@ -10,26 +20,26 @@ The Radiation module implements radiation transport using the M1 closure scheme,
 
 | File | Purpose | Key Functions |
 |------|---------|---------------|
-| `radiation.hpp/cpp` | Core radiation class | Initialization, closures |
-| `radiation_fluxes.cpp` | Radiation flux calculation | `CalculateFluxes()` |
-| `radiation_source.cpp` | Source terms | Emission, absorption |
-| `radiation_update.cpp` | Implicit update | `ImplicitUpdate()` |
+| `radiation.hpp/cpp` | Core radiation class | Initialization, intensity evolution |
+| `radiation_fluxes.cpp` | Flux computation along angular directions | `CalculateFluxes()` |
+| `radiation_source.cpp` | Matter coupling | Emission, absorption, scattering |
+| `radiation_update.cpp` | Implicit update of intensities | `ImplicitUpdate()` |
 | `radiation_tetrad.hpp/cpp` | Tetrad formalism | Frame transformations |
 | `radiation_tasks.cpp` | Task management | Task registration |
 | `radiation_opacities.hpp` | Opacity models | κ calculations |
 
 ## Equations Solved
+For each geodesic direction $n^\mu$ the module evolves the specific intensity
+$I$:
 
-### M1 Radiation Transport
-$$\frac{\partial E_r}{\partial t} + \nabla \cdot \mathbf{F}_r = -\kappa_a(E_r - aT^4) - \kappa_s \cdot \mathbf{F}_r/c$$
-$$\frac{\partial \mathbf{F}_r}{\partial t} + \nabla \cdot \mathbf{P}_r = -\kappa_a \mathbf{F}_r - (\kappa_a + \kappa_s)\mathbf{F}_r/c$$
+\[
+\frac{1}{c}\frac{\partial I}{\partial t} + n^i \nabla_i I =
+-(\kappa_a+\kappa_s)I + \kappa_a B + \kappa_s J ,
+\]
 
-Where:
-- $E_r$: Radiation energy density
-- $\mathbf{F}_r$: Radiation flux
-- $\mathbf{P}_r$: Radiation pressure tensor
-- $\kappa_a$: Absorption opacity
-- $\kappa_s$: Scattering opacity
+where $B$ is the equilibrium intensity and $J$ is the angle-averaged
+intensity.  Moments such as radiation energy density and flux are computed from
+the intensities when needed for coupling to the fluid or for diagnostic output.
 
 ## Configuration Parameters
 
@@ -39,38 +49,19 @@ From `<radiation>` block:
 |-----------|------|---------|-------------|
 | `arad` | Real | required | Radiation constant |
 | `kappa_a` | Real | required | Absorption opacity |
+| `kappa_p` | Real | required | Planck mean opacity |
 | `kappa_s` | Real | required | Scattering opacity |
-| `power_opacity` | bool | false | Power-law opacity |
-| `compton` | bool | false | Compton scattering |
-| `beam_source` | bool | false | Beam source |
-| `affect_fluid` | bool | true | Radiation affects fluid |
-| `fixed_fluid` | bool | false | Fixed background |
-| `angular_fluxes` | bool | true | Angular flux transport |
-| `reconstruct` | string | plm | Reconstruction method |
+| `power_opacity` | bool | false | Use power-law opacity |
+| `compton` | bool | false | Enable Compton scattering (requires `<units>`) |
+| `beam_source` | bool | false | Collimated beam source |
+| `rad_source` | bool | true | Couple radiation to fluid |
+| `affect_fluid` | bool | true | Radiation acts back on fluid |
+| `fixed_fluid` | bool | false | Disable fluid evolution |
+| `nlevel` | int | required | Geodesic grid refinement level |
+| `rotate_geo` | bool | true | Rotate geodesic grid each step |
+| `angular_fluxes` | bool | true | Evolve angular flux terms |
+| `reconstruct` | string | plm | Spatial reconstruction method |
 | `n_0_floor` | Real | 0.1 | Flux limiter floor |
-
-## M1 Closure Relations
-
-### Eddington Tensor
-Closure function:
-$$\chi = \frac{3 + 4f^2}{5 + 2\sqrt{4-3f^2}}$$
-
-Where $f = |\mathbf{F}_r|/(cE_r)$ is the flux factor
-
-### Pressure Tensor
-$$P_{ij} = D_{ij} E_r$$
-$$D_{ij} = \frac{1-\chi}{2} \delta_{ij} + \frac{3\chi-1}{2} n_i n_j$$
-
-## Opacity Models
-
-### Constant Opacity
-$$\kappa = \kappa_0 = \text{const}$$
-
-### Power-Law Opacity
-$$\kappa = \kappa_0 \left(\frac{\rho}{\rho_0}\right)^a \left(\frac{T}{T_0}\right)^b$$
-
-### Rosseland Mean
-Pre-tabulated opacity tables supported
 
 ## Execution Flow
 
@@ -87,70 +78,31 @@ flowchart TD
 
 ## Tetrad Formalism (GR)
 
-### Tetrad Basis
-Orthonormal tetrad:
-- $e^\mu_0$: Timelike (fluid frame)
-- $e^\mu_1$: Spacelike (radial)
-- $e^\mu_2$: Spacelike (theta)
-- $e^\mu_3$: Spacelike (phi)
-
-### Frame Transformations
-Lab to fluid frame:
-$$E_{\text{fluid}} = \Lambda^0_0 E_{\text{lab}} - \Lambda^0_i F^i_{\text{lab}}$$
-$$F^i_{\text{fluid}} = \Lambda^i_0 E_{\text{lab}} - \Lambda^i_j F^j_{\text{lab}}$$
+The module constructs orthonormal tetrads to transform between coordinate and
+fluid frames.  These tetrads are used to compute moments and perform Lorentz
+transforms when coupling to the fluid.
 
 ## Implicit Solver
 
-### Newton-Raphson Iteration
-```cpp
-while (error > tolerance) {
-  // Jacobian matrix
-  // J = ∂R/∂U
-  
-  // Solve linear system
-  // ΔU = -J^(-1) * R
-  
-  // Update
-  // U_new = U_old + ΔU
-}
-```
-
-Update equations:
-$$\mathbf{J} = \frac{\partial \mathbf{R}}{\partial \mathbf{U}}$$
-$$\Delta \mathbf{U} = -\mathbf{J}^{-1} \cdot \mathbf{R}$$
-$$\mathbf{U}_{\text{new}} = \mathbf{U}_{\text{old}} + \Delta \mathbf{U}$$
-
-## Source Terms
-
-### Emission
-$$S_{\text{emit}} = \kappa_a \cdot a \cdot T^4$$
-
-### Absorption
-$$S_{\text{abs}} = -\kappa_a \cdot E_r$$
-
-### Scattering
-$$S_{\text{scat}} = -\kappa_s \cdot \mathbf{F}_r/c$$
-
-## Beam Sources
-
-For testing and laser applications:
-```cpp
-// Collimated beam
-F_beam = I_0 * exp(-r²/w²) * direction
-```
+Radiation–matter coupling is solved implicitly using a Newton–Raphson
+iteration.  The scheme forms a Jacobian of residuals with respect to the
+intensities and updates them until convergence.
 
 ## Variable Arrays
 
 ### Radiation Variables
-- `rad.er`: Radiation energy density
-- `rad.fr1`: Radiation flux x1
-- `rad.fr2`: Radiation flux x2
-- `rad.fr3`: Radiation flux x3
+- `i0`: specific intensity per angle
+- `i1`: reconstruction scratch array
+- `iflx`: face fluxes per angle
+- `divfa`: angular divergence terms
 
-### Radiation Pressure (computed)
-- `pr11, pr12, pr13`
-- `pr22, pr23`
-- `pr33`
+### Geometry and Coupling
+- `tet_c`, `tetcov_c`: tetrad and metric data
+- `na`: angular face areas
+- `norm_to_tet`: transformation from fluid velocity to tetrad frame
+
+Derived moments are available via the `rad_coord` (coordinate frame) and
+`rad_fluid` (fluid frame) derived variables.
 
 ## Common Test Problems
 
@@ -159,48 +111,33 @@ F_beam = I_0 * exp(-r²/w²) * direction
 <radiation>
 arad = 1.0
 kappa_a = 100.0  # Optically thick
+kappa_p = 100.0
 kappa_s = 0.0
+nlevel = 1
 ```
 
 ### Radiation Beam
 ```ini
 <radiation>
 beam_source = true
-kappa_a = 0.1  # Optically thin
-```
-
-### Radiation Shock
-```ini
-<radiation>
-arad = 1.0
-kappa_a = 1.0
-affect_fluid = true
+kappa_a = 0.1
+kappa_p = 0.1
+kappa_s = 0.0
+nlevel = 1
 ```
 
 ## Performance Considerations
 
-### Implicit Solver Cost
-- Dominates in optically thick regime
-- Use subcycling for efficiency
-- Consider reduced speed of light
-
-### Memory Usage
-- 4 variables (er, fr1, fr2, fr3)
-- Plus coupling terms
-- Jacobian storage for implicit
+- Implicit solves dominate cost in optically thick regimes.
+- Memory usage scales with the number of angular directions.
+- Reduce the Courant number when coupling is stiff.
 
 ## Common Issues
 
-### Convergence Problems
-- Reduce CFL for radiation
-- Adjust Newton-Raphson tolerance
-- Check opacity values
-
-### Negative Energy
-- Use flux limiters
-- Check reconstruction
-- Ensure proper floor values
+- Use sufficiently small time steps for convergence.
+- Ensure required opacities and `nlevel` are specified.
 
 ## See Also
 - [Hydro Module](hydro.md)
 - Source: `src/radiation/radiation.cpp`
+

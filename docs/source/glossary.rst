@@ -82,7 +82,7 @@ Glossary
       Available in Fourier and Spherical Fourier-Bessel modes.
 
    Outputs
-      Data output formats: VTK, HDF5, binary, restart files.
+      Data output formats: VTK, binary, restart files.
       See :doc:`modules/outputs`.
 
    Restart
@@ -110,7 +110,8 @@ Glossary
       See :doc:`modules/diffusion`.
 
    Radiation
-      Radiation transport module using M1 closure or other methods.
+      General relativistic radiation transport module using a discrete
+      ordinates scheme on a geodesic grid.
       See :doc:`modules/radiation`.
 
    Ion-Neutral

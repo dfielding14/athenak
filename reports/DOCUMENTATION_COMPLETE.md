@@ -23,7 +23,7 @@ All modules now have comprehensive documentation:
 #### Physics Modules (7)
 - ✅ Hydrodynamics - Euler equations solver
 - ✅ MHD - Magnetohydrodynamics with constrained transport
-- ✅ Radiation - M1 closure radiation transport
+- ✅ Radiation - Discrete ordinates radiation transport
 - ✅ Z4c - Numerical relativity (Einstein equations)
 - ✅ DynGRMHD - General relativistic MHD
 - ✅ Ion-Neutral - Two-fluid MHD
