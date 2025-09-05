@@ -135,7 +135,7 @@ MeshRefinement::~MeshRefinement() {
 //! \brief Simple driver function for adaptive mesh refinement
 
 void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin) {
-  
+
   // first check refinement criteria
   CheckForRefinement(pmy_mesh->pmb_pack);
 
@@ -146,18 +146,18 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
   // Refine/derefine mesh and evolved data, set boundary conditions/timestep on new mesh
   if (nnew != 0 || ndel != 0) { // at least one (de)refinement flagged
     RedistAndRefineMeshBlocks(pin, nnew, ndel);
-    
+
     // Build location maps for fast neighbor lookup
     pmy_mesh->BuildLocationMaps();
-    
-    // TODO: Fix ApplyFaceFieldCorrection after AMR - currently causes segfault
-    // because physics modules have stale pointers after MeshBlockPack rebuild
-    // Apply face-field correction for MHD to maintain div(B)=0
-    // if (pmy_mesh->pmb_pack->pmhd != nullptr) {
-    //   pmy_mesh->ApplyFaceFieldCorrection();
-    // }
-    
+
     pdriver->InitBoundaryValuesAndPrimitives(pmy_mesh);
+
+    // Apply face-field correction for MHD to maintain div(B)=0
+    // This must be done AFTER InitBoundaryValuesAndPrimitives to avoid being overwritten
+    // by ProlongateFC which is called during boundary initialization
+    if (pmy_mesh->pmb_pack->pmhd != nullptr) {
+      pmy_mesh->ApplyFaceFieldCorrection();
+    }
 
     MeshBlockPack* pmbp = pmy_mesh->pmb_pack;
     if (pmbp->phydro != nullptr) {
@@ -708,7 +708,7 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   auto saved_pturb = pm->pmb_pack->pturb;
   auto saved_punit = pm->pmb_pack->punit;
   auto saved_ppart = pm->pmb_pack->ppart;
-  
+
   // Temporarily null out the pointers so they don't get deleted
   pm->pmb_pack->phydro = nullptr;
   pm->pmb_pack->pmhd = nullptr;
@@ -727,7 +727,7 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   pm->pmb_pack->AddMeshBlocks(pin);
   pm->pmb_pack->AddCoordinates(pin);
   pm->pmb_pack->pmb->SetNeighbors(pm->ptree, pm->rank_eachmb);
-  
+
   // Restore ALL the physics module pointers
   pm->pmb_pack->phydro = saved_phydro;
   pm->pmb_pack->pmhd = saved_pmhd;
@@ -740,23 +740,23 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   pm->pmb_pack->pturb = saved_pturb;
   pm->pmb_pack->punit = saved_punit;
   pm->pmb_pack->ppart = saved_ppart;
-  
+
   // Update the pmy_pack pointer in physics modules after MeshBlockPack rebuild
   if (saved_pturb != nullptr) {
     saved_pturb->UpdateMeshBlockPack(pm->pmb_pack);
   }
-  
+
   if (saved_pmhd != nullptr) {
     saved_pmhd->UpdateAfterAMR(pm->pmb_pack);
   }
-  
+
   // TODO: Other physics modules need their pmy_pack pointers updated after MeshBlockPack rebuild
   // Currently this causes issues because pmy_pack is private in each physics module
   // The proper fix would be to either:
   // 1. Add a public UpdateMeshBlockPack() method to each physics module (done for turb)
   // 2. Make MeshRefinement a friend class of the physics modules
   // 3. Recreate the physics modules after AMR (expensive)
-  
+
   // Mark newly created blocks (those that were refined)
   // newtoold[n] contains old gid for new gid n
   // If newtoold[n] < 0, it means this is a newly refined block
@@ -769,6 +769,9 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
       pm->pmb_pack->pmb->newly_created.h_view(m) = false;
     }
   }
+  // Sync newly_created flags from host to device
+  pm->pmb_pack->pmb->newly_created.template modify<HostMemSpace>();
+  pm->pmb_pack->pmb->newly_created.template sync<DevMemSpace>();
 
   // clean-up and return
   delete [] newtoold;
@@ -1246,17 +1249,17 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
     return;
   }
   int old_nmb = pmb->mb_gid.extent_int(0);  // Get the OLD number of blocks
-  
+
   for (int m = 0; m < new_nmb; ++m) {
     skip_x1_in.h_view(m) = skip_x1_out.h_view(m) = 0;
     skip_x2_in.h_view(m) = skip_x2_out.h_view(m) = 0;
     skip_x3_in.h_view(m) = skip_x3_out.h_view(m) = 0;
-    
+
     // Skip neighbor checking for newly created blocks (they don't exist yet)
     if (m >= old_nmb) {
       continue;  // These blocks will be created during refinement
     }
-    
+
     // Check n2o bounds
     int n2o_idx = m + ngids_;
     if (n2o_idx >= n2o.extent_int(0)) {
@@ -1266,7 +1269,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
     if (old_idx >= refine_flag_.extent_int(0)) {
       continue;
     }
-    
+
     if (refine_flag_.h_view(old_idx) > 0) {
       // For existing blocks that are being refined, check neighbors
       int gid = pmb->mb_gid.h_view(m);
@@ -1319,7 +1322,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
                             cb.x1f,b.x1f,skip_ffc);
     }
   });
-  
+
   // Prolongate x2f
   par_for("RefineFC2",DevExeSpace(), 0,(new_nmb-1), cks,cke, cjs,cje+1, cis,cie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -1334,7 +1337,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
                             cb.x2f,b.x2f,skip_ffc);
     }
   });
-  
+
   // Prolongate x3f
   par_for("RefineFC3",DevExeSpace(), 0,(new_nmb-1), cks,cke+1, cjs,cje, cis,cie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -1349,7 +1352,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
                             cb.x3f,b.x3f,skip_ffc);
     }
   });
-  
+
 
   // Second prolongate face-centered fields at internal faces of fine cells using
   // divergence-preserving operator of Toth & Roe (2002)
@@ -1371,7 +1374,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
       }
     }
   });
-  
+
 
   return;
 }
@@ -1623,12 +1626,12 @@ void MeshRefinement::InitInterpWghts() {
 
 void MeshRefinement::RefineParticles() {
   auto pmbp = pmy_mesh->pmb_pack;
-  
+
   // Check if particles are enabled
   if (pmbp->ppart == nullptr) {
     return;
   }
-  
+
   int nmb = pmbp->nmb_thispack;
   auto &mbsize = pmbp->pmb->mb_size;
   auto gids = pmbp->gids;
@@ -1636,7 +1639,7 @@ void MeshRefinement::RefineParticles() {
   auto &pr = ppart->prtcl_rdata;
   auto &pi = ppart->prtcl_idata;
   int npart = ppart->nprtcl_thispack;
-  int nleaf = 2; 
+  int nleaf = 2;
   if (pmy_mesh->two_d) {nleaf = 4;}
   if (pmy_mesh->three_d) {nleaf = 8;}
 

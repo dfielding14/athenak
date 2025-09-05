@@ -899,8 +899,18 @@ void Mesh::ApplyFaceFieldCorrection() {
       int i_face = info.is_inner ? is : ie + 1;
       int ny_coarse = (mb_indcs.nx2 > 1) ? (je - js + 1) / 2 : 1;
       int nz_coarse = (mb_indcs.nx3 > 1) ? (ke - ks + 1) / 2 : 1;
+      
+      // Determine which quadrant/octant this coarse neighbor corresponds to
+      int sub = info.is_inner ? info.n : info.n - 4;
+      int j_half = sub % 2;
+      int k_half = sub / 2;
+      int j_offset = js + j_half * ny_coarse;
+      int k_offset = ks + k_half * nz_coarse;
+      
       auto face_dev = Kokkos::subview(pmhd->b0.x1f, info.m,
-                                      Kokkos::ALL, Kokkos::ALL, i_face);
+                                      Kokkos::make_pair(k_offset, k_offset + 2*nz_coarse),
+                                      Kokkos::make_pair(j_offset, j_offset + 2*ny_coarse), 
+                                      i_face);
       Kokkos::View<Real **, Kokkos::LayoutRight, HostMemSpace,
                    Kokkos::MemoryTraits<Kokkos::Unmanaged>> buf_host(
           buf, nz_coarse, ny_coarse);
@@ -927,8 +937,18 @@ void Mesh::ApplyFaceFieldCorrection() {
       int j_face = info.is_inner ? js : je + 1;
       int nx_coarse = (mb_indcs.nx1 > 1) ? (ie - is + 1) / 2 : 1;
       int nz_coarse = (mb_indcs.nx3 > 1) ? (ke - ks + 1) / 2 : 1;
+      
+      // Determine which quadrant/octant this coarse neighbor corresponds to
+      int sub = info.is_inner ? (info.n - 8) : (info.n - 12);
+      int i_half = sub % 2;
+      int k_half = sub / 2;
+      int i_offset = is + i_half * nx_coarse;
+      int k_offset = ks + k_half * nz_coarse;
+      
       auto face_dev = Kokkos::subview(pmhd->b0.x2f, info.m,
-                                      Kokkos::ALL, j_face, Kokkos::ALL);
+                                      Kokkos::make_pair(k_offset, k_offset + 2*nz_coarse),
+                                      j_face,
+                                      Kokkos::make_pair(i_offset, i_offset + 2*nx_coarse));
       Kokkos::View<Real **, Kokkos::LayoutRight, HostMemSpace,
                    Kokkos::MemoryTraits<Kokkos::Unmanaged>> buf_host(
           buf, nz_coarse, nx_coarse);
@@ -955,8 +975,18 @@ void Mesh::ApplyFaceFieldCorrection() {
       int k_face = info.is_inner ? ks : ke + 1;
       int nx_coarse = (mb_indcs.nx1 > 1) ? (ie - is + 1) / 2 : 1;
       int ny_coarse = (mb_indcs.nx2 > 1) ? (je - js + 1) / 2 : 1;
+      
+      // Determine which quadrant/octant this coarse neighbor corresponds to
+      int sub = info.is_inner ? (info.n - 24) : (info.n - 28);
+      int i_half = sub % 2;
+      int j_half = sub / 2;
+      int i_offset = is + i_half * nx_coarse;
+      int j_offset = js + j_half * ny_coarse;
+      
       auto face_dev = Kokkos::subview(pmhd->b0.x3f, info.m,
-                                      k_face, Kokkos::ALL, Kokkos::ALL);
+                                      k_face,
+                                      Kokkos::make_pair(j_offset, j_offset + 2*ny_coarse),
+                                      Kokkos::make_pair(i_offset, i_offset + 2*nx_coarse));
       Kokkos::View<Real **, Kokkos::LayoutRight, HostMemSpace,
                    Kokkos::MemoryTraits<Kokkos::Unmanaged>> buf_host(
           buf, ny_coarse, nx_coarse);
