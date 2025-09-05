@@ -65,7 +65,6 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
   pwall_clock_(ptimer),
   wall_time(wtlim),
   impl_src("ru",1,1,1,1,1,1) {
-  std::cout << "DEBUG: Driver constructor START" << std::endl;
   // set time-evolution option (no default)
   {
     std::string evolution_t = pin->GetString("time","evolution");
@@ -296,43 +295,23 @@ void Driver::ExecuteTaskList(Mesh *pm, std::string tl, int stage) {
 //  outputting ICs, and computing initial time step
 
 void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool res_flag) {
-  std::cout << "DEBUG: Driver::Initialize START, res_flag=" << res_flag << std::endl;
   //---- Step 1.  Set conserved variables in ghost zones for all physics
-  std::cout << "DEBUG: Driver::Initialize calling InitBoundaryValuesAndPrimitives" << std::endl;
   InitBoundaryValuesAndPrimitives(pmesh);
-  std::cout << "DEBUG: Driver::Initialize InitBoundaryValuesAndPrimitives complete" << std::endl;
 
   //---- Step 2.  Compute time step (if problem involves time evolution)
   // NOTE: For new simulations (!res_flag), the initial conditions haven't been set yet
   // by the ProblemGenerator, so we can't compute a proper timestep for MHD here.
   // The timestep will be computed properly on the first cycle.
-  std::cout << "DEBUG: Driver::Initialize Step 2 - Computing time step" << std::endl;
-  std::cout << "DEBUG: pmesh = " << pmesh << std::endl;
-  std::cout << "DEBUG: pmesh->pmb_pack = " << pmesh->pmb_pack << std::endl;
   hydro::Hydro *phydro = pmesh->pmb_pack->phydro;
-  std::cout << "DEBUG: phydro = " << phydro << std::endl;
   mhd::MHD *pmhd = pmesh->pmb_pack->pmhd;
-  std::cout << "DEBUG: pmhd = " << pmhd << std::endl;
   radiation::Radiation *prad = pmesh->pmb_pack->prad;
-  std::cout << "DEBUG: prad = " << prad << std::endl;
   z4c::Z4c *pz4c = pmesh->pmb_pack->pz4c;
-  std::cout << "DEBUG: pz4c = " << pz4c << std::endl;
-  std::cout << "DEBUG: time_evolution = " << static_cast<int>(time_evolution) << std::endl;
   if (time_evolution != TimeEvolution::tstatic) {
-    std::cout << "DEBUG: time_evolution is not static, computing timesteps" << std::endl;
     if (phydro != nullptr) {
-      std::cout << "DEBUG: Calling phydro->NewTimeStep" << std::endl;
       (void) pmesh->pmb_pack->phydro->NewTimeStep(this, nexp_stages);
-      std::cout << "DEBUG: phydro->NewTimeStep complete" << std::endl;
     }
     if (pmhd != nullptr) {
-      std::cout << "DEBUG: About to call pmhd->NewTimeStep" << std::endl;
-      std::cout << "DEBUG: this = " << this << std::endl;
-      std::cout << "DEBUG: nexp_stages = " << nexp_stages << std::endl;
-      std::cout << "DEBUG: pmesh->pmb_pack = " << pmesh->pmb_pack << std::endl;
-      std::cout << "DEBUG: pmesh->pmb_pack->pmhd = " << pmesh->pmb_pack->pmhd << std::endl;
       (void) pmesh->pmb_pack->pmhd->NewTimeStep(this, nexp_stages);
-      std::cout << "DEBUG: pmhd->NewTimeStep complete" << std::endl;
     }
     if (prad != nullptr) {
       (void) pmesh->pmb_pack->prad->NewTimeStep(this, nexp_stages);
@@ -345,7 +324,6 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   }
 
   //---- Step 3.  Cycle through output Types and load data / write files.
-  std::cout << "DEBUG: Driver::Initialize Step 3 - Outputs" << std::endl;
   if (!res_flag) { // only write outputs at the beginning of the run
     for (auto &out : pout->pout_list) {
       out->LoadOutputData(pmesh);
@@ -354,7 +332,6 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   }
 
   //---- Step 4.  Initialize various counters, timers, etc.
-  std::cout << "DEBUG: Driver::Initialize Step 4 - Initialize counters" << std::endl;
   run_time_.reset();
   nmb_updated_ = 0;
 
@@ -376,7 +353,6 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
     Kokkos::realloc(impl_src, nimp_stages, nmb, 8, ncells3, ncells2, ncells1);
   }
 
-  std::cout << "DEBUG: Driver::Initialize COMPLETE" << std::endl;
   return;
 }
 

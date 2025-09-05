@@ -200,6 +200,10 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
   }
 
   Particles *pt = this;
+  
+  // Create local copies to avoid GPU lambda capture warning
+  bool track_displacement_local = track_displacement;
+  const int nx3_local = indcs.nx3;  // avoid capturing host ref
 
   // Boris pusher algorithm
   par_for(
@@ -272,15 +276,15 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         // Store B-field at particle
         pr(IPBX, p) = Bx;
         pr(IPBY, p) = By;
-        if (indcs.nx3 > 1) {
+        if (nx3_local > 1) {
           pr(IPBZ, p) = Bz;
         }
 
         // Update displacement tracking if enabled
-        if (track_displacement) {
+        if (track_displacement_local) {
           pr(IPDX, p) += dt * vx;
           pr(IPDY, p) += dt * vy;
-          if (indcs.nx3 > 1) {
+          if (nx3_local > 1) {
             pr(IPDZ, p) += dt * vz;
           }
           // Parallel displacement

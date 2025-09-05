@@ -65,11 +65,10 @@ class TurbulenceDriver {
   void IncludeInitializeModesTask(std::shared_ptr<TaskList> tl, TaskID start);
   void IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskID start);
   TaskStatus InitializeModes(Driver *pdrive, int stage);
-  TaskStatus CheckResize(Driver *pdrive, int stage);
+  TaskStatus EnsureBasisSize(Driver *pdrive, int stage);
   TaskStatus UpdateForcing(Driver *pdrive, int stage);
   TaskStatus AddForcing(Driver *pdrive, int stage);
   void Initialize();
-  void ResizeArrays(int new_nmb);
   
   // Update the MeshBlockPack pointer after AMR
   void UpdateMeshBlockPack(MeshBlockPack *new_pp) { pmy_pack = new_pp; }

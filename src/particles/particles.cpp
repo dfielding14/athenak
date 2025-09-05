@@ -264,17 +264,27 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
   auto &pi = prtcl_idata;
   auto &pr = prtcl_rdata;
   int nmb = pmy_pack->nmb_thispack;
-  const int &gids = pmy_pack->gids;
+  const int gids_local = pmy_pack->gids;
 
   // Determine distribution type for initial positions
   std::string dist = pin->GetOrAddString("particles", "cr_distribution", "center");
-  bool random_dist = (dist.compare("random") == 0);
+  const bool random_dist = (dist.compare("random") == 0);
+  const bool track_disp_local = track_displacement;  // avoid capturing 'this'
+  const int nx3_local = indcs.nx3;                   // avoid capturing host ref
 
   // Avoid division by zero if there are fewer particles than meshblocks
   int particles_per_mb = std::max(1, (nprtcl_thispack + nmb - 1) / nmb);
 
   // Random number pool for optional random placement
-  Kokkos::Random_XorShift64_Pool<> rand_pool64(pmy_pack->gids);
+  Kokkos::Random_XorShift64_Pool<DevExeSpace> rand_pool64(pmy_pack->gids);
+  
+  // Create local copies to avoid GPU lambda capture warnings
+  int nspecies_local = nspecies;
+  auto species_charge_local = species_charge;
+  auto species_mass_local = species_mass;
+  // Make sure geometry is available on device
+  size.template sync<DevExeSpace>();
+  auto size_view = size; // capture handle by value; we'll use size_view.d_view(...) on device
 
   // Simple uniform distribution for now
   par_for("init_cr", DevExeSpace(), 0, nprtcl_thispack-1,
@@ -284,9 +294,9 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
     if (m >= nmb) m = nmb - 1;
 
     // Set GID and species
-    pi(PGID,p) = gids + m;
+    pi(PGID,p) = gids_local + m;
     pi(PTAG,p) = p;
-    pi(PSP,p) = p % nspecies;  // Round-robin species assignment
+    pi(PSP,p) = p % nspecies_local;  // Round-robin species assignment
 
     // Choose position within the mesh block
     Real rx = 0.5, ry = 0.5, rz = 0.5;
@@ -294,18 +304,22 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
       auto rand_gen = rand_pool64.get_state();
       rx = rand_gen.drand();
       ry = rand_gen.drand();
-      if (indcs.nx3 > 1) {
+      if (nx3_local > 1) {
         rz = rand_gen.drand();
       }
       rand_pool64.free_state(rand_gen);
     }
 
-    pr(IPX,p) = size.h_view(m).x1min + rx*(size.h_view(m).x1max - size.h_view(m).x1min);
-    pr(IPY,p) = size.h_view(m).x2min + ry*(size.h_view(m).x2max - size.h_view(m).x2min);
-    pr(IPZ,p) = 0.0;
-    if (indcs.nx3 > 1) {
-      pr(IPZ,p) = size.h_view(m).x3min + rz*(size.h_view(m).x3max - size.h_view(m).x3min);
-    }
+    const Real x1min = size_view.d_view(m).x1min;
+    const Real x1max = size_view.d_view(m).x1max;
+    const Real x2min = size_view.d_view(m).x2min;
+    const Real x2max = size_view.d_view(m).x2max;
+    const Real x3min = size_view.d_view(m).x3min;
+    const Real x3max = size_view.d_view(m).x3max;
+
+    pr(IPX,p) = x1min + rx*(x1max - x1min);
+    pr(IPY,p) = x2min + ry*(x2max - x2min);
+    pr(IPZ,p) = (nx3_local > 1) ? (x3min + rz*(x3max - x3min)) : 0.0;
 
     // Initialize velocity to zero
     pr(IPVX,p) = 0.0;
@@ -314,17 +328,17 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
 
     // Set mass/charge ratio
     int species = pi(PSP,p);
-    pr(IPM,p) = species_charge(species) / species_mass(species);
+    pr(IPM,p) = species_charge_local(species) / species_mass_local(species);
 
     // Initialize B-field components to zero
     pr(IPBX,p) = 0.0;
     pr(IPBY,p) = 0.0;
-    if (indcs.nx3 > 1) {
+    if (nx3_local > 1) {
       pr(IPBZ,p) = 0.0;
     }
 
     // Initialize displacement tracking if enabled
-    if (track_displacement) {
+    if (track_disp_local) {
       pr(IPDX,p) = 0.0;
       pr(IPDY,p) = 0.0;
       pr(IPDZ,p) = 0.0;
