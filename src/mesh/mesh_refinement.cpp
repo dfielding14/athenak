@@ -1238,60 +1238,16 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
   DualArray1D<int> skip_x3_in("skip_x3_in", new_nmb);
   DualArray1D<int> skip_x3_out("skip_x3_out", new_nmb);
 
-  if (pmy_mesh == nullptr) {
-    return;
-  }
-  if (pmy_mesh->pmb_pack == nullptr) {
-    return;
-  }
-  MeshBlock *pmb = pmy_mesh->pmb_pack->pmb;
-  if (pmb == nullptr) {
-    return;
-  }
-  int old_nmb = pmb->mb_gid.extent_int(0);  // Get the OLD number of blocks
-
+  // The MeshBlock neighbor metadata still reflects the pre-refinement mesh at this
+  // point in the workflow, so using it to decide which faces will be corrected by the
+  // subsequent face-field correction pass corrupts the first child MeshBlock that
+  // reuses its parent's slot.  Leave the skip masks set to zero so every face is
+  // prolongated here; face-field correction will overwrite the coarse-fine faces after
+  // the MeshBlockPack is rebuilt with the refined topology.
   for (int m = 0; m < new_nmb; ++m) {
     skip_x1_in.h_view(m) = skip_x1_out.h_view(m) = 0;
     skip_x2_in.h_view(m) = skip_x2_out.h_view(m) = 0;
     skip_x3_in.h_view(m) = skip_x3_out.h_view(m) = 0;
-
-    // Skip neighbor checking for newly created blocks (they don't exist yet)
-    if (m >= old_nmb) {
-      continue;  // These blocks will be created during refinement
-    }
-
-    // Check n2o bounds
-    int n2o_idx = m + ngids_;
-    if (n2o_idx >= n2o.extent_int(0)) {
-      continue;
-    }
-    int old_idx = n2o.h_view(n2o_idx);
-    if (old_idx >= refine_flag_.extent_int(0)) {
-      continue;
-    }
-
-    if (refine_flag_.h_view(old_idx) > 0) {
-      // For existing blocks that are being refined, check neighbors
-      int gid = pmb->mb_gid.h_view(m);
-      LogicalLocation loc = pmy_mesh->lloc_eachmb[gid];
-      for (int n = 0; n < pmb->nnghbr; ++n) {
-        NeighborBlock &nb = pmb->nghbr.h_view(m, n);
-        if (nb.lev < loc.level) {
-          bool is_x1, is_x2, is_x3, is_inner;
-          get_face_info(n, is_x1, is_x2, is_x3, is_inner);
-          if (is_x1) {
-            if (is_inner) skip_x1_in.h_view(m) = 1;
-            else skip_x1_out.h_view(m) = 1;
-          } else if (is_x2) {
-            if (is_inner) skip_x2_in.h_view(m) = 1;
-            else skip_x2_out.h_view(m) = 1;
-          } else if (is_x3) {
-            if (is_inner) skip_x3_in.h_view(m) = 1;
-            else skip_x3_out.h_view(m) = 1;
-          }
-        }
-      }
-    }
   }
   skip_x1_in.template modify<HostMemSpace>();
   skip_x1_in.template sync<DevExeSpace>();
