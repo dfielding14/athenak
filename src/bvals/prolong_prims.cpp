@@ -321,6 +321,16 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
   int &nmhd  = pmy_pack->pmhd->nmhd;
   int &nscal = pmy_pack->pmhd->nscalars;
 
+  const int bx1_kmax = b.x1f.extent_int(1) - 1;
+  const int bx1_jmax = b.x1f.extent_int(2) - 1;
+  const int bx1_imax = b.x1f.extent_int(3) - 1;
+  const int bx2_kmax = b.x2f.extent_int(1) - 1;
+  const int bx2_jmax = b.x2f.extent_int(2) - 1;
+  const int bx2_imax = b.x2f.extent_int(3) - 1;
+  const int bx3_kmax = b.x3f.extent_int(1) - 1;
+  const int bx3_jmax = b.x3f.extent_int(2) - 1;
+  const int bx3_imax = b.x3f.extent_int(3) - 1;
+
   // Outer loop over (# of MeshBlocks)*(# of buffers)
   Kokkos::TeamPolicy<> policy(DevExeSpace(), (nmb*nnghbr), Kokkos::AUTO);
   Kokkos::parallel_for("ProlCC", policy, KOKKOS_LAMBDA(TeamMember_t tmember) {
@@ -366,10 +376,51 @@ void MeshBoundaryValuesCC::ConsToPrimCoarseBndry(const DvceArray5D<Real> &cons,
         u.my = cons(m,IM2,k,j,i);
         u.mz = cons(m,IM3,k,j,i);
         u.e  = cons(m,IEN,k,j,i);
-        // use simple linear average of face-centered fields
-        u.bx = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
-        u.by = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
-        u.bz = 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i));
+        // use simple linear average of face-centered fields. Clamp index access to the
+        // valid extent of the coarse face arrays so that ghost cells at physical
+        // boundaries remain well defined even if neighbor metadata extends one cell
+        // beyond the allocated region.
+        int k0 = k;
+        if (k0 < 0) k0 = 0;
+        if (k0 > bx1_kmax) k0 = bx1_kmax;
+        int j0 = j;
+        if (j0 < 0) j0 = 0;
+        if (j0 > bx1_jmax) j0 = bx1_jmax;
+        int i0 = i;
+        if (i0 < 0) i0 = 0;
+        if (i0 > bx1_imax) i0 = bx1_imax;
+        int i1 = i + 1;
+        if (i1 < 0) i1 = 0;
+        if (i1 > bx1_imax) i1 = bx1_imax;
+        u.bx = 0.5*(b.x1f(m,k0,j0,i0) + b.x1f(m,k0,j0,i1));
+
+        int k1 = k;
+        if (k1 < 0) k1 = 0;
+        if (k1 > bx2_kmax) k1 = bx2_kmax;
+        int j1 = j;
+        if (j1 < 0) j1 = 0;
+        if (j1 > bx2_jmax) j1 = bx2_jmax;
+        int j2 = j + 1;
+        if (j2 < 0) j2 = 0;
+        if (j2 > bx2_jmax) j2 = bx2_jmax;
+        int i2 = i;
+        if (i2 < 0) i2 = 0;
+        if (i2 > bx2_imax) i2 = bx2_imax;
+        u.by = 0.5*(b.x2f(m,k1,j1,i2) + b.x2f(m,k1,j2,i2));
+
+        int k2 = k;
+        if (k2 < 0) k2 = 0;
+        if (k2 > bx3_kmax) k2 = bx3_kmax;
+        int k3 = k + 1;
+        if (k3 < 0) k3 = 0;
+        if (k3 > bx3_kmax) k3 = bx3_kmax;
+        int j3 = j;
+        if (j3 < 0) j3 = 0;
+        if (j3 > bx3_jmax) j3 = bx3_jmax;
+        int i3 = i;
+        if (i3 < 0) i3 = 0;
+        if (i3 > bx3_imax) i3 = bx3_imax;
+        u.bz = 0.5*(b.x3f(m,k2,j3,i3) + b.x3f(m,k3,j3,i3));
         HydPrim1D w;
 
         bool dfloor_used=false, efloor_used=false, tfloor_used=false;
