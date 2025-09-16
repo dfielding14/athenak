@@ -186,14 +186,6 @@ class Mesh {
 
   // accessors
   int FindMeshBlockIndex(int tgid) {
-    if (!location_maps_.empty()) {
-      LogicalLocation loc = lloc_eachmb[tgid];
-      auto &map = location_maps_[loc.level];
-      auto it = map.find(loc);
-      if (it != map.end()) {
-        return static_cast<int>(it->second - pmb_pack->pmb);
-      }
-    }
     for (int m=0; m<pmb_pack->nmb_thispack; ++m) {
       if (pmb_pack->pmb->mb_gid.h_view(m) == tgid) return m;
     }
@@ -203,15 +195,9 @@ class Mesh {
     return (mb_indcs.nx1)*(mb_indcs.nx2)*(mb_indcs.nx3);
   }
 
-  // Face-field correction methods for AMR
-  void BuildLocationMaps();
-  void ApplyFaceFieldCorrection();
 
  private:
   std::unique_ptr<MeshBlockTree> ptree;  // pointer to root node in binary/quad/oct-tree
-  
-  // Map of LogicalLocation -> MeshBlock* for each level (for fast neighbor lookup)
-  std::vector<std::unordered_map<LogicalLocation, MeshBlock*, LogicalLocationHash>> location_maps_;
   
   void LoadBalance(float *clist, int *rlist, int *slist, int *nlist, int nb);
 };

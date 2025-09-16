@@ -147,16 +147,6 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
   if (nnew != 0 || ndel != 0) { // at least one (de)refinement flagged
     RedistAndRefineMeshBlocks(pin, nnew, ndel);
     
-    // Build location maps for fast neighbor lookup
-    pmy_mesh->BuildLocationMaps();
-    
-    // TODO: Fix ApplyFaceFieldCorrection after AMR - currently causes segfault
-    // because physics modules have stale pointers after MeshBlockPack rebuild
-    // Apply face-field correction for MHD to maintain div(B)=0
-    // if (pmy_mesh->pmb_pack->pmhd != nullptr) {
-    //   pmy_mesh->ApplyFaceFieldCorrection();
-    // }
-    
     pdriver->InitBoundaryValuesAndPrimitives(pmy_mesh);
 
     MeshBlockPack* pmbp = pmy_mesh->pmb_pack;
@@ -1213,96 +1203,6 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
   bool &three_d = pmy_mesh->three_d;
   auto &ngids_ = new_gids_eachrank[global_variable::my_rank];
 
-  // Determine which faces will be corrected by FFC so we can skip prolongation
-  auto get_face_info = [](int n, bool &is_x1, bool &is_x2, bool &is_x3,
-                          bool &is_inner) {
-    is_x1 = (n >= 0 && n <= 7);
-    is_x2 = (n >= 8 && n <= 15);
-    is_x3 = (n >= 24 && n <= 31);
-    if (is_x1) {
-      is_inner = (n >= 0 && n <= 3);
-    } else if (is_x2) {
-      is_inner = (n >= 8 && n <= 11);
-    } else if (is_x3) {
-      is_inner = (n >= 24 && n <= 27);
-    }
-  };
-
-  DualArray1D<int> skip_x1_in("skip_x1_in", new_nmb);
-  DualArray1D<int> skip_x1_out("skip_x1_out", new_nmb);
-  DualArray1D<int> skip_x2_in("skip_x2_in", new_nmb);
-  DualArray1D<int> skip_x2_out("skip_x2_out", new_nmb);
-  DualArray1D<int> skip_x3_in("skip_x3_in", new_nmb);
-  DualArray1D<int> skip_x3_out("skip_x3_out", new_nmb);
-
-  if (pmy_mesh == nullptr) {
-    return;
-  }
-  if (pmy_mesh->pmb_pack == nullptr) {
-    return;
-  }
-  MeshBlock *pmb = pmy_mesh->pmb_pack->pmb;
-  if (pmb == nullptr) {
-    return;
-  }
-  int old_nmb = pmb->mb_gid.extent_int(0);  // Get the OLD number of blocks
-  
-  for (int m = 0; m < new_nmb; ++m) {
-    skip_x1_in.h_view(m) = skip_x1_out.h_view(m) = 0;
-    skip_x2_in.h_view(m) = skip_x2_out.h_view(m) = 0;
-    skip_x3_in.h_view(m) = skip_x3_out.h_view(m) = 0;
-    
-    // Skip neighbor checking for newly created blocks (they don't exist yet)
-    if (m >= old_nmb) {
-      continue;  // These blocks will be created during refinement
-    }
-    
-    // Check n2o bounds
-    int n2o_idx = m + ngids_;
-    if (n2o_idx >= n2o.extent_int(0)) {
-      continue;
-    }
-    int old_idx = n2o.h_view(n2o_idx);
-    if (old_idx >= refine_flag_.extent_int(0)) {
-      continue;
-    }
-    
-    if (refine_flag_.h_view(old_idx) > 0) {
-      // For existing blocks that are being refined, check neighbors
-      int gid = pmb->mb_gid.h_view(m);
-      LogicalLocation loc = pmy_mesh->lloc_eachmb[gid];
-      for (int n = 0; n < pmb->nnghbr; ++n) {
-        NeighborBlock &nb = pmb->nghbr.h_view(m, n);
-        if (nb.lev < loc.level) {
-          bool is_x1, is_x2, is_x3, is_inner;
-          get_face_info(n, is_x1, is_x2, is_x3, is_inner);
-          if (is_x1) {
-            if (is_inner) skip_x1_in.h_view(m) = 1;
-            else skip_x1_out.h_view(m) = 1;
-          } else if (is_x2) {
-            if (is_inner) skip_x2_in.h_view(m) = 1;
-            else skip_x2_out.h_view(m) = 1;
-          } else if (is_x3) {
-            if (is_inner) skip_x3_in.h_view(m) = 1;
-            else skip_x3_out.h_view(m) = 1;
-          }
-        }
-      }
-    }
-  }
-  skip_x1_in.template modify<HostMemSpace>();
-  skip_x1_in.template sync<DevExeSpace>();
-  skip_x1_out.template modify<HostMemSpace>();
-  skip_x1_out.template sync<DevExeSpace>();
-  skip_x2_in.template modify<HostMemSpace>();
-  skip_x2_in.template sync<DevExeSpace>();
-  skip_x2_out.template modify<HostMemSpace>();
-  skip_x2_out.template sync<DevExeSpace>();
-  skip_x3_in.template modify<HostMemSpace>();
-  skip_x3_in.template sync<DevExeSpace>();
-  skip_x3_out.template modify<HostMemSpace>();
-  skip_x3_out.template sync<DevExeSpace>();
-
   // Prolongate x1f
   par_for("RefineFC1",DevExeSpace(), 0,(new_nmb-1), cks,cke, cjs,cje, cis,cie+1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -1310,13 +1210,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
       int fi = (i - cis)*2 + is;
       int fj = (multi_d)? ((j - cjs)*2 + js) : j;
       int fk = (three_d)? ((k - cks)*2 + ks) : k;
-
-      bool skip_ffc = false;
-      if (i == cis && skip_x1_in.d_view(m)) skip_ffc = true;
-      if (i == cie+1 && skip_x1_out.d_view(m)) skip_ffc = true;
-
-      ProlongFCSharedX1Face(m,k,j,i,fk,fj,fi,multi_d,three_d,
-                            cb.x1f,b.x1f,skip_ffc);
+      ProlongFCSharedX1Face(m,k,j,i,fk,fj,fi,multi_d,three_d,cb.x1f,b.x1f);
     }
   });
   
@@ -1327,11 +1221,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
       int fi = (i - cis)*2 + is;
       int fj = (multi_d)? ((j - cjs)*2 + js) : j;
       int fk = (three_d)? ((k - cks)*2 + ks) : k;
-      bool skip_ffc = false;
-      if (j == cjs && skip_x2_in.d_view(m)) skip_ffc = true;
-      if (j == cje+1 && skip_x2_out.d_view(m)) skip_ffc = true;
-      ProlongFCSharedX2Face(m,k,j,i,fk,fj,fi,three_d,
-                            cb.x2f,b.x2f,skip_ffc);
+      ProlongFCSharedX2Face(m,k,j,i,fk,fj,fi,three_d,cb.x2f,b.x2f);
     }
   });
   
@@ -1342,11 +1232,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
       int fi = (i - cis)*2 + is;
       int fj = (multi_d)? ((j - cjs)*2 + js) : j;
       int fk = (three_d)? ((k - cks)*2 + ks) : k;
-      bool skip_ffc = false;
-      if (k == cks && skip_x3_in.d_view(m)) skip_ffc = true;
-      if (k == cke+1 && skip_x3_out.d_view(m)) skip_ffc = true;
-      ProlongFCSharedX3Face(m,k,j,i,fk,fj,fi,multi_d,
-                            cb.x3f,b.x3f,skip_ffc);
+      ProlongFCSharedX3Face(m,k,j,i,fk,fj,fi,multi_d,cb.x3f,b.x3f);
     }
   });
   
