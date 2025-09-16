@@ -163,6 +163,8 @@ void MeshBoundaryValuesCC::ProlongateCC(DvceArray5D<Real> &a, DvceArray5D<Real> 
 
     // only prolongate when neighbor exists and is at coarser level
     if ((nghbr.d_view(m,n).gid >= 0) && (nghbr.d_view(m,n).lev < mblev.d_view(m))) {
+      // NOTE: NeighborBlock::dest points to the buffer slot on the sending MeshBlock.
+      // When reading from recvbuf we must use the local neighbor index n.
       // loop over indices for prolongation on this buffer
       int il = rbuf[n].iprol[0].bis;
       int iu = rbuf[n].iprol[0].bie;
