@@ -31,6 +31,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   // Register the refinement condition function
   user_ref_func = RefinementCondition;
+  // enroll user history function
+  user_hist_func = TurbulentHistory;
 
   if (restart) {
     return;
@@ -45,9 +47,6 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
        << "<hydro> or <mhd> block in input file" << std::endl;
     exit(EXIT_FAILURE);
   }
-
-  // enroll user history function
-  user_hist_func = TurbulentHistory;
 
   // capture variables for kernel
   int &is = indcs.is; int &ie = indcs.ie;
