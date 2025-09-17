@@ -15,6 +15,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "athena.hpp"
 
@@ -71,11 +72,21 @@ struct LogicalLocation {
 struct LogicalLocationHash {
   std::size_t operator()(const LogicalLocation& loc) const noexcept {
     // Combine level and indices into hash using prime numbers for good distribution
-    return (static_cast<std::size_t>(loc.lx1) * 1315423911ULL) ^ 
+    return (static_cast<std::size_t>(loc.lx1) * 1315423911ULL) ^
            (static_cast<std::size_t>(loc.lx2) * 2654435761ULL) ^
-           (static_cast<std::size_t>(loc.lx3) * 97531ULL) ^ 
+           (static_cast<std::size_t>(loc.lx3) * 97531ULL) ^
            (static_cast<std::size_t>(loc.level) << 1);
   }
+};
+
+struct RestartMetaData {
+  bool single_file_per_rank = false;
+  std::string base_dir;
+  std::string file_name;
+  int original_nranks = 0;
+  std::vector<int> gids_eachrank;
+  std::vector<int> nmb_eachrank;
+  std::vector<int> rank_eachmb;
 };
 
 // Equality operator for LogicalLocation (needed for unordered_map)
@@ -171,6 +182,9 @@ class Mesh {
   void BuildTreeFromScratch(ParameterInput *pin);
   void BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                             bool single_file_per_rank=false);
+  void SetRestartFileInfo(const std::string &base_dir,
+                          const std::string &file_name,
+                          bool single_file_per_rank);
   void PrintMeshDiagnostics();
   void WriteMeshStructure();
   void NewTimeStep(const Real tlim);
@@ -178,6 +192,8 @@ class Mesh {
   void CountParticles();
   BoundaryFlag GetBoundaryFlag(const std::string& input_string);
   std::string GetBoundaryString(BoundaryFlag input_flag);
+
+  RestartMetaData restart_meta;
 
   // comparison function for sorting LogicalLocations based on level
   static bool GreaterLevel(const LogicalLocation & left, const LogicalLocation &right) {
