@@ -7,6 +7,7 @@
 //  \brief implementation of functions in TurbulenceDriver
 
 #include <algorithm>
+#include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -37,7 +38,7 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   force("force",1,1,1,1,1),
   force_tmp1("force_tmp1",1,1,1,1,1),
   force_tmp2("force_tmp2",1,1,1,1,1),
-  aka("aka",1,1),akb("akb",1,1),
+  aka("aka",1,1,1),akb("akb",1,1,1),
   kx_mode("kx_mode",1),ky_mode("ky_mode",1),kz_mode("kz_mode",1),
   xcos("xcos",1,1,1),xsin("xsin",1,1,1),ycos("ycos",1,1,1),
   ysin("ysin",1,1,1),zcos("zcos",1,1,1),zsin("zsin",1,1,1) {
@@ -114,6 +115,59 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   y_turb_center = pin->GetOrAddReal("turb_driving", "y_turb_center", 0.0);
   z_turb_center = pin->GetOrAddReal("turb_driving", "z_turb_center", 0.0);
 
+  // tiled driving configuration
+  tile_driving = pin->GetOrAddBoolean("turb_driving", "tile_driving", false);
+  int tile_factor = pin->GetOrAddInteger("turb_driving", "tile_factor", 1);
+  tile_nx = pin->GetOrAddInteger("turb_driving", "tile_nx", tile_factor);
+  tile_ny = pin->GetOrAddInteger("turb_driving", "tile_ny", tile_factor);
+  tile_nz = pin->GetOrAddInteger("turb_driving", "tile_nz", tile_factor);
+  if (!tile_driving) {
+    tile_nx = 1;
+    tile_ny = 1;
+    tile_nz = 1;
+  }
+
+  domain_x1min = pm->mesh_size.x1min;
+  domain_x2min = pm->mesh_size.x2min;
+  domain_x3min = pm->mesh_size.x3min;
+
+  auto &mesh_indcs_root = pm->mesh_indcs;
+  if (tile_nx < 1 || tile_ny < 1 || tile_nz < 1) {
+    std::cout << "### FATAL ERROR in turbulence driver: tile counts must be >= 1" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  if (mesh_indcs_root.nx1 % tile_nx != 0) {
+    std::cout << "### FATAL ERROR in turbulence driver: tile_nx must evenly divide nx1" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (mesh_indcs_root.nx2 <= 1) {
+    tile_ny = 1;
+  } else if (mesh_indcs_root.nx2 % tile_ny != 0) {
+    std::cout << "### FATAL ERROR in turbulence driver: tile_ny must evenly divide nx2" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (mesh_indcs_root.nx3 <= 1) {
+    tile_nz = 1;
+  } else if (mesh_indcs_root.nx3 % tile_nz != 0) {
+    std::cout << "### FATAL ERROR in turbulence driver: tile_nz must evenly divide nx3" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  Real lx_global = pm->mesh_size.x1max - pm->mesh_size.x1min;
+  Real ly_global = pm->mesh_size.x2max - pm->mesh_size.x2min;
+  Real lz_global = pm->mesh_size.x3max - pm->mesh_size.x3min;
+
+  tile_lx = lx_global / static_cast<Real>(tile_nx);
+  tile_ly = (tile_ny > 0) ? ly_global / static_cast<Real>(tile_ny) : ly_global;
+  tile_lz = (tile_nz > 0) ? lz_global / static_cast<Real>(tile_nz) : lz_global;
+
+  inv_tile_lx = (tile_lx > 0.0) ? 1.0/tile_lx : 0.0;
+  inv_tile_ly = (tile_ly > 0.0) ? 1.0/tile_ly : 0.0;
+  inv_tile_lz = (tile_lz > 0.0) ? 1.0/tile_lz : 0.0;
+
+  num_tiles = tile_nx * tile_ny * tile_nz;
+
   // decaying/constant energy injection - 1 for decaying, 2 continuously driven
   turb_flag = pin->GetOrAddInteger("turb_driving", "turb_flag", 2);
   if(turb_flag ==1) {
@@ -168,8 +222,8 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
     exit(EXIT_FAILURE);
   }
 
-  Kokkos::realloc(aka, 3, mode_count); // Amplitude of real component
-  Kokkos::realloc(akb, 3, mode_count); // Amplitude of imaginary component
+  Kokkos::realloc(aka, num_tiles, 3, mode_count); // Amplitude of real component per tile
+  Kokkos::realloc(akb, num_tiles, 3, mode_count); // Amplitude of imaginary component per tile
 
   // Allocate Cartesian mode arrays
   Kokkos::realloc(kx_mode, mode_count);
@@ -232,14 +286,28 @@ void TurbulenceDriver::Initialize() {
   auto zcos_ = zcos;
   auto zsin_ = zsin;
 
+  const bool tile_enabled = tile_driving;
+  const int tile_nx_local = tile_nx;
+  const int tile_ny_local = tile_ny;
+  const int tile_nz_local = tile_nz;
+  const Real tile_lx_local = tile_lx;
+  const Real tile_ly_local = tile_ly;
+  const Real tile_lz_local = tile_lz;
+  const Real inv_tile_lx_local = inv_tile_lx;
+  const Real inv_tile_ly_local = inv_tile_ly;
+  const Real inv_tile_lz_local = inv_tile_lz;
+  const Real domain_x1min_local = domain_x1min;
+  const Real domain_x2min_local = domain_x2min;
+  const Real domain_x3min_local = domain_x3min;
+
   // Cartesian plane-wave precomputations
   Real dkx, dky, dkz, kx, ky, kz;
-    Real lx = pm->mesh_size.x1max - pm->mesh_size.x1min;
-    Real ly = pm->mesh_size.x2max - pm->mesh_size.x2min;
-    Real lz = pm->mesh_size.x3max - pm->mesh_size.x3min;
-    dkx = 2.0*M_PI/lx;
-    dky = 2.0*M_PI/ly;
-    dkz = 2.0*M_PI/lz;
+    Real lx = tile_lx_local;
+    Real ly = tile_ly_local;
+    Real lz = tile_lz_local;
+    dkx = (lx > 0.0) ? 2.0*M_PI/lx : 0.0;
+    dky = (ly > 0.0) ? 2.0*M_PI/ly : 0.0;
+    dkz = (lz > 0.0) ? 2.0*M_PI/lz : 0.0;
 
     int nmode = 0;
     int nkx, nky, nkz;
@@ -295,8 +363,16 @@ void TurbulenceDriver::Initialize() {
     Real &x1max = size_view.d_view(m).x1max;
     Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
     Real k1v = kx_mode_.d_view(n);
-    xsin_(m,n,i) = sin(k1v*x1v);
-    xcos_(m,n,i) = cos(k1v*x1v);
+    Real arg = x1v;
+    if (tile_enabled && tile_nx_local > 1) {
+      Real rel = x1v - domain_x1min_local;
+      int tile_i = static_cast<int>(floor(rel * inv_tile_lx_local));
+      tile_i = (tile_i < 0) ? 0 : ((tile_i >= tile_nx_local) ? tile_nx_local - 1 : tile_i);
+      Real tile_origin = domain_x1min_local + tile_i * tile_lx_local;
+      arg = x1v - tile_origin;
+    }
+    xsin_(m,n,i) = sin(k1v*arg);
+    xcos_(m,n,i) = cos(k1v*arg);
   });
 
   par_for("ysin/ycos", DevExeSpace(),0,nmb-1,0,mode_count-1,js,je,
@@ -305,8 +381,16 @@ void TurbulenceDriver::Initialize() {
     Real &x2max = size_view.d_view(m).x2max;
     Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
     Real k2v = ky_mode_.d_view(n);
-    ysin_(m,n,j) = sin(k2v*x2v);
-    ycos_(m,n,j) = cos(k2v*x2v);
+    Real arg = x2v;
+    if (tile_enabled && tile_ny_local > 1) {
+      Real rel = x2v - domain_x2min_local;
+      int tile_j = static_cast<int>(floor(rel * inv_tile_ly_local));
+      tile_j = (tile_j < 0) ? 0 : ((tile_j >= tile_ny_local) ? tile_ny_local - 1 : tile_j);
+      Real tile_origin = domain_x2min_local + tile_j * tile_ly_local;
+      arg = x2v - tile_origin;
+    }
+    ysin_(m,n,j) = sin(k2v*arg);
+    ycos_(m,n,j) = cos(k2v*arg);
     if (ncells2-1 == 0) {
       ysin_(m,n,j) = 0.0;
       ycos_(m,n,j) = 1.0;
@@ -319,8 +403,16 @@ void TurbulenceDriver::Initialize() {
     Real &x3max = size_view.d_view(m).x3max;
     Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
     Real k3v = kz_mode_.d_view(n);
-    zsin_(m,n,k) = sin(k3v*x3v);
-    zcos_(m,n,k) = cos(k3v*x3v);
+    Real arg = x3v;
+    if (tile_enabled && tile_nz_local > 1) {
+      Real rel = x3v - domain_x3min_local;
+      int tile_k = static_cast<int>(floor(rel * inv_tile_lz_local));
+      tile_k = (tile_k < 0) ? 0 : ((tile_k >= tile_nz_local) ? tile_nz_local - 1 : tile_k);
+      Real tile_origin = domain_x3min_local + tile_k * tile_lz_local;
+      arg = x3v - tile_origin;
+    }
+    zsin_(m,n,k) = sin(k3v*arg);
+    zcos_(m,n,k) = cos(k3v*arg);
     if (ncells3-1 == 0 || (drivingtype == 1)) {
       zsin_(m,n,k) = 0.0;
       zcos_(m,n,k) = 1.0;
@@ -506,29 +598,31 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
                     norm = 0.0;
                   }
                 }
-                Real ka = 0.0;
-                Real kb = 0.0;
+                for (int tile_idx = 0; tile_idx < num_tiles; ++tile_idx) {
+                  Real ka = 0.0;
+                  Real kb = 0.0;
 
-                for (int dir = 0; dir < no_dir; dir ++){
-                  aka_.h_view(dir,nmode) = norm*RanGaussianSt(&(rstate));
-                  akb_.h_view(dir,nmode) = norm*RanGaussianSt(&(rstate));
+                  for (int dir = 0; dir < no_dir; dir ++) {
+                    Real aval = norm*RanGaussianSt(&(rstate));
+                    Real bval = norm*RanGaussianSt(&(rstate));
+                    aka_.h_view(tile_idx,dir,nmode) = aval;
+                    akb_.h_view(tile_idx,dir,nmode) = bval;
 
-                  // ka = ka + k[dir]*aka_.h_view(dir,nmode);
-                  // kb = kb + k[dir]*akb_.h_view(dir,nmode);
-                  ka = ka + k[dir]*akb_.h_view(dir,nmode);
-                  kb = kb + k[dir]*aka_.h_view(dir,nmode);
-                }
+                    ka += k[dir]*bval;
+                    kb += k[dir]*aval;
+                  }
 
-                // Now decompose into solenoidal/compressive modes
-                if(norm > 0.){
-                  for (int dir = 0; dir < no_dir; dir ++){
-                    Real diva = k[dir]*ka/SQR(kiso);
-                    Real divb = k[dir]*kb/SQR(kiso);
+                  // Now decompose into solenoidal/compressive modes
+                  if (norm > 0.) {
+                    for (int dir = 0; dir < no_dir; dir ++) {
+                      Real diva = k[dir]*ka/SQR(kiso);
+                      Real divb = k[dir]*kb/SQR(kiso);
 
-                    Real curla = aka_.h_view(dir,nmode) - divb;
-                    Real curlb = akb_.h_view(dir,nmode) - diva;
-                    aka_.h_view(dir,nmode) = sol_fraction*curla+(1.0-sol_fraction)*divb;
-                    akb_.h_view(dir,nmode) = sol_fraction*curlb+(1.0-sol_fraction)*diva;
+                      Real curla = aka_.h_view(tile_idx,dir,nmode) - divb;
+                      Real curlb = akb_.h_view(tile_idx,dir,nmode) - diva;
+                      aka_.h_view(tile_idx,dir,nmode) = sol_fraction*curla+(1.0-sol_fraction)*divb;
+                      akb_.h_view(tile_idx,dir,nmode) = sol_fraction*curlb+(1.0-sol_fraction)*diva;
+                    }
                   }
                 }
 
@@ -552,15 +646,49 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
       auto zsin_ = zsin;
 
       int mode_count_ = mode_count;
+      int num_tiles_local = num_tiles;
       par_for("force_compute", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        int tile_linear_index = 0;
+        if (tile_enabled && num_tiles_local > 1) {
+          int tile_i = 0;
+          int tile_j = 0;
+          int tile_k = 0;
+          if (tile_nx_local > 1) {
+            Real &x1min = size_view.d_view(m).x1min;
+            Real &x1max = size_view.d_view(m).x1max;
+            Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+            Real rel = x1v - domain_x1min_local;
+            tile_i = static_cast<int>(floor(rel * inv_tile_lx_local));
+            tile_i = (tile_i < 0) ? 0 : ((tile_i >= tile_nx_local) ? tile_nx_local - 1 : tile_i);
+          }
+          if (tile_ny_local > 1) {
+            Real &x2min = size_view.d_view(m).x2min;
+            Real &x2max = size_view.d_view(m).x2max;
+            Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+            Real rel = x2v - domain_x2min_local;
+            tile_j = static_cast<int>(floor(rel * inv_tile_ly_local));
+            tile_j = (tile_j < 0) ? 0 : ((tile_j >= tile_ny_local) ? tile_ny_local - 1 : tile_j);
+          }
+          if (tile_nz_local > 1) {
+            Real &x3min = size_view.d_view(m).x3min;
+            Real &x3max = size_view.d_view(m).x3max;
+            Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+            Real rel = x3v - domain_x3min_local;
+            tile_k = static_cast<int>(floor(rel * inv_tile_lz_local));
+            tile_k = (tile_k < 0) ? 0 : ((tile_k >= tile_nz_local) ? tile_nz_local - 1 : tile_k);
+          }
+          tile_linear_index = tile_i + tile_nx_local * (tile_j + tile_ny_local * tile_k);
+        }
+
         for (int n=0; n<mode_count_; ++n) {
           Real forc_real = ( xcos_(m,n,i)*ycos_(m,n,j) - xsin_(m,n,i)*ysin_(m,n,j) ) * zcos_(m,n,k) -
                           ( xsin_(m,n,i)*ycos_(m,n,j) + xcos_(m,n,i)*ysin_(m,n,j) ) * zsin_(m,n,k);
           Real forc_imag = ( ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k) ) * xcos_(m,n,i) +
                           ( ycos_(m,n,j)*zcos_(m,n,k) - ysin_(m,n,j)*zsin_(m,n,k) ) * xsin_(m,n,i);
           for (int dir = 0; dir < 3; dir ++){
-            force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real - akb_.d_view(dir,n)*forc_imag;
+            force_tmp2_(m,dir,k,j,i) += aka_.d_view(tile_linear_index,dir,n)*forc_real -
+                                        akb_.d_view(tile_linear_index,dir,n)*forc_imag;
           }
         }
       });
@@ -1221,6 +1349,11 @@ TaskStatus TurbulenceDriver::EnsureBasisSize(Driver *pdrive, int stage) {
   Mesh *pm = pmy_pack->pmesh;
   if (pm == nullptr) return TaskStatus::complete;
 
+  // Update cached domain offsets in case AMR has modified the root-grid geometry.
+  domain_x1min = pm->mesh_size.x1min;
+  domain_x2min = pm->mesh_size.x2min;
+  domain_x3min = pm->mesh_size.x3min;
+
   // --- change detection (idempotent) ---
   int nmb = pmy_pack->nmb_thispack;
   bool needs_resize = false;
@@ -1350,6 +1483,19 @@ TaskStatus TurbulenceDriver::EnsureBasisSize(Driver *pdrive, int stage) {
   size_view.template modify<HostMemSpace>();
   size_view.template sync<DevExeSpace>();
   const int drivingtype = driving_type;      // value, not reference
+  const bool tile_enabled = tile_driving;
+  const int tile_nx_local = tile_nx;
+  const int tile_ny_local = tile_ny;
+  const int tile_nz_local = tile_nz;
+  const Real tile_lx_local = tile_lx;
+  const Real tile_ly_local = tile_ly;
+  const Real tile_lz_local = tile_lz;
+  const Real inv_tile_lx_local = inv_tile_lx;
+  const Real inv_tile_ly_local = inv_tile_ly;
+  const Real inv_tile_lz_local = inv_tile_lz;
+  const Real domain_x1min_local = domain_x1min;
+  const Real domain_x2min_local = domain_x2min;
+  const Real domain_x3min_local = domain_x3min;
 
   // Recompute x-direction basis functions
   par_for("xsin/xcos_resize", DevExeSpace(), m_start, nmb-1, 0, mode_count-1, is, ie,
@@ -1358,8 +1504,16 @@ TaskStatus TurbulenceDriver::EnsureBasisSize(Driver *pdrive, int stage) {
     Real &x1max = size_view.d_view(m).x1max;
     Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
     Real k1v = kx_mode_.d_view(n);
-    xsin_(m,n,i) = sin(k1v*x1v);
-    xcos_(m,n,i) = cos(k1v*x1v);
+    Real arg = x1v;
+    if (tile_enabled && tile_nx_local > 1) {
+      Real rel = x1v - domain_x1min_local;
+      int tile_i = static_cast<int>(floor(rel * inv_tile_lx_local));
+      tile_i = (tile_i < 0) ? 0 : ((tile_i >= tile_nx_local) ? tile_nx_local - 1 : tile_i);
+      Real tile_origin = domain_x1min_local + tile_i * tile_lx_local;
+      arg = x1v - tile_origin;
+    }
+    xsin_(m,n,i) = sin(k1v*arg);
+    xcos_(m,n,i) = cos(k1v*arg);
   });
 
   // Recompute y-direction basis functions
@@ -1369,8 +1523,16 @@ TaskStatus TurbulenceDriver::EnsureBasisSize(Driver *pdrive, int stage) {
     Real &x2max = size_view.d_view(m).x2max;
     Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
     Real k2v = ky_mode_.d_view(n);
-    ysin_(m,n,j) = sin(k2v*x2v);
-    ycos_(m,n,j) = cos(k2v*x2v);
+    Real arg = x2v;
+    if (tile_enabled && tile_ny_local > 1) {
+      Real rel = x2v - domain_x2min_local;
+      int tile_j = static_cast<int>(floor(rel * inv_tile_ly_local));
+      tile_j = (tile_j < 0) ? 0 : ((tile_j >= tile_ny_local) ? tile_ny_local - 1 : tile_j);
+      Real tile_origin = domain_x2min_local + tile_j * tile_ly_local;
+      arg = x2v - tile_origin;
+    }
+    ysin_(m,n,j) = sin(k2v*arg);
+    ycos_(m,n,j) = cos(k2v*arg);
     if (ncells2-1 == 0) {
       ysin_(m,n,j) = 0.0;
       ycos_(m,n,j) = 1.0;
@@ -1384,8 +1546,16 @@ TaskStatus TurbulenceDriver::EnsureBasisSize(Driver *pdrive, int stage) {
     Real &x3max = size_view.d_view(m).x3max;
     Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
     Real k3v = kz_mode_.d_view(n);
-    zsin_(m,n,k) = sin(k3v*x3v);
-    zcos_(m,n,k) = cos(k3v*x3v);
+    Real arg = x3v;
+    if (tile_enabled && tile_nz_local > 1) {
+      Real rel = x3v - domain_x3min_local;
+      int tile_k = static_cast<int>(floor(rel * inv_tile_lz_local));
+      tile_k = (tile_k < 0) ? 0 : ((tile_k >= tile_nz_local) ? tile_nz_local - 1 : tile_k);
+      Real tile_origin = domain_x3min_local + tile_k * tile_lz_local;
+      arg = x3v - tile_origin;
+    }
+    zsin_(m,n,k) = sin(k3v*arg);
+    zcos_(m,n,k) = cos(k3v*arg);
     if (ncells3-1 == 0 || (drivingtype == 1)) {
       zsin_(m,n,k) = 0.0;
       zcos_(m,n,k) = 1.0;
@@ -1395,16 +1565,52 @@ TaskStatus TurbulenceDriver::EnsureBasisSize(Driver *pdrive, int stage) {
   // Recompute forcing field using PRESERVED mode amplitudes (aka_, akb_)
   auto aka_ = aka;
   auto akb_ = akb;
+  aka_.template sync<DevExeSpace>();
+  akb_.template sync<DevExeSpace>();
   int mode_count_ = mode_count;
+  int num_tiles_local = num_tiles;
   par_for("force_recalc_resize", DevExeSpace(), m_start, nmb-1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
+    int tile_linear_index = 0;
+    if (tile_enabled && num_tiles_local > 1) {
+      int tile_i = 0;
+      int tile_j = 0;
+      int tile_k = 0;
+      if (tile_nx_local > 1) {
+        Real &x1min = size_view.d_view(m).x1min;
+        Real &x1max = size_view.d_view(m).x1max;
+        Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+        Real rel = x1v - domain_x1min_local;
+        tile_i = static_cast<int>(floor(rel * inv_tile_lx_local));
+        tile_i = (tile_i < 0) ? 0 : ((tile_i >= tile_nx_local) ? tile_nx_local - 1 : tile_i);
+      }
+      if (tile_ny_local > 1) {
+        Real &x2min = size_view.d_view(m).x2min;
+        Real &x2max = size_view.d_view(m).x2max;
+        Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+        Real rel = x2v - domain_x2min_local;
+        tile_j = static_cast<int>(floor(rel * inv_tile_ly_local));
+        tile_j = (tile_j < 0) ? 0 : ((tile_j >= tile_ny_local) ? tile_ny_local - 1 : tile_j);
+      }
+      if (tile_nz_local > 1) {
+        Real &x3min = size_view.d_view(m).x3min;
+        Real &x3max = size_view.d_view(m).x3max;
+        Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+        Real rel = x3v - domain_x3min_local;
+        tile_k = static_cast<int>(floor(rel * inv_tile_lz_local));
+        tile_k = (tile_k < 0) ? 0 : ((tile_k >= tile_nz_local) ? tile_nz_local - 1 : tile_k);
+      }
+      tile_linear_index = tile_i + tile_nx_local * (tile_j + tile_ny_local * tile_k);
+    }
+
     for (int n = 0; n < mode_count_; n++) {
       Real forc_real = (xcos_(m,n,i)*ycos_(m,n,j) - xsin_(m,n,i)*ysin_(m,n,j)) * zcos_(m,n,k) -
                       (xsin_(m,n,i)*ycos_(m,n,j) + xcos_(m,n,i)*ysin_(m,n,j)) * zsin_(m,n,k);
       Real forc_imag = (ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k)) * xcos_(m,n,i) +
                       (ycos_(m,n,j)*zcos_(m,n,k) - ysin_(m,n,j)*zsin_(m,n,k)) * xsin_(m,n,i);
       for (int dir = 0; dir < 3; dir++) {
-        force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real - akb_.d_view(dir,n)*forc_imag;
+        force_tmp2_(m,dir,k,j,i) += aka_.d_view(tile_linear_index,dir,n)*forc_real -
+                                    akb_.d_view(tile_linear_index,dir,n)*forc_imag;
       }
     }
   });
