@@ -11,7 +11,7 @@ BuildDirectory: /ccs/home/dfielding/athenak-df/build_turb/kokkos
 CostDataFile: 
 
 # Site is something like machine.domain, i.e. pragmatic.crd
-Site: login13
+Site: login10
 
 # Build name is osname-revision-compiler, i.e. Linux-2.4.2-2smp-c++
 BuildName: Linux-CC

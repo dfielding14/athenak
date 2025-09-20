@@ -61,8 +61,8 @@ events:
     checks:
       - "Detecting C compiler ABI info"
     directories:
-      source: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-Pn8UeI"
-      binary: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-Pn8UeI"
+      source: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-AHVbuG"
+      binary: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-AHVbuG"
     cmakeVariables:
       CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
       CMAKE_C_FLAGS: ""
@@ -72,13 +72,13 @@ events:
       variable: "CMAKE_C_ABI_COMPILED"
       cached: true
       stdout: |
-        Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-Pn8UeI'
+        Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-AHVbuG'
         
-        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_c2dea/fast
-        /usr/bin/gmake  -f CMakeFiles/cmTC_c2dea.dir/build.make CMakeFiles/cmTC_c2dea.dir/build
-        gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-Pn8UeI'
-        Building C object CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o
-        /opt/cray/pe/craype/2.7.33/bin/cc   -v -MD -MT CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o -MF CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o.d -o CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o -c /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCCompilerABI.c
+        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_54759/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_54759.dir/build.make CMakeFiles/cmTC_54759.dir/build
+        gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-AHVbuG'
+        Building C object CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o
+        /opt/cray/pe/craype/2.7.33/bin/cc   -v -MD -MT CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o -MF CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o.d -o CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o -c /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCCompilerABI.c
         AMD clang version 18.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-6.2.0 24292 26466ce804ac523b398608f17388eb6d605a3f09)
         Target: x86_64-unknown-linux-gnu
         Thread model: posix
@@ -89,7 +89,7 @@ events:
         Selected multilib: .;@m64
         Found HIP installation: /opt/rocm-6.2.0/lib/llvm/bin/../../.., version 6.2.41133
          (in-process)
-         "/opt/rocm-6.2.0/lib/llvm/bin/clang-18" -cc1 -triple x86_64-unknown-linux-gnu -emit-obj -mrelax-all -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCCompilerABI.c -mrelocation-model static -mframe-pointer=all -fmath-errno -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu znver3 -debugger-tuning=gdb -fdebug-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-Pn8UeI -v -fcoverage-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-Pn8UeI -resource-dir /opt/rocm-6.2.0/lib/llvm/lib/clang/18 -dependency-file CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o.d -MT CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o -sys-header-deps -D __CRAY_X86_TRENTO -D __CRAY_AMD_GFX90A -D __CRAYXT_COMPUTE_LINUX_TARGET -D __HIP_PLATFORM_AMD__ -I /opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/include -I /opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/include -I /opt/rocm-6.2.0/include -I /opt/rocm-6.2.0/include/rocprofiler -I /opt/rocm-6.2.0/include/roctracer -I /opt/cray/pe/dsmml/0.3.0/dsmml//include -I /opt/cray/pe/pmi/6.1.15.21/include -c-isystem /opt/rocm-6.2.0/llvm/include -cxx-isystem /opt/rocm-6.2.0/llvm/include -internal-isystem /opt/rocm-6.2.0/lib/llvm/lib/clang/18/include -internal-isystem /usr/local/include -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/include -internal-externc-isystem /include -internal-externc-isystem /usr/include -ferror-limit 19 -fgnuc-version=4.2.1 -faddrsig -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o -x c /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCCompilerABI.c
+         "/opt/rocm-6.2.0/lib/llvm/bin/clang-18" -cc1 -triple x86_64-unknown-linux-gnu -emit-obj -mrelax-all -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCCompilerABI.c -mrelocation-model static -mframe-pointer=all -fmath-errno -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu znver3 -debugger-tuning=gdb -fdebug-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-AHVbuG -v -fcoverage-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-AHVbuG -resource-dir /opt/rocm-6.2.0/lib/llvm/lib/clang/18 -dependency-file CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o.d -MT CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o -sys-header-deps -D __CRAY_X86_TRENTO -D __CRAY_AMD_GFX90A -D __CRAYXT_COMPUTE_LINUX_TARGET -D __HIP_PLATFORM_AMD__ -I /opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/include -I /opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/include -I /opt/rocm-6.2.0/include -I /opt/rocm-6.2.0/include/rocprofiler -I /opt/rocm-6.2.0/include/roctracer -I /opt/cray/pe/dsmml/0.3.0/dsmml//include -I /opt/cray/pe/pmi/6.1.15.21/include -c-isystem /opt/rocm-6.2.0/llvm/include -cxx-isystem /opt/rocm-6.2.0/llvm/include -internal-isystem /opt/rocm-6.2.0/lib/llvm/lib/clang/18/include -internal-isystem /usr/local/include -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/include -internal-externc-isystem /include -internal-externc-isystem /usr/include -ferror-limit 19 -fgnuc-version=4.2.1 -faddrsig -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o -x c /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCCompilerABI.c
         clang -cc1 version 18.0.0git based upon LLVM 18.0.0git default target x86_64-unknown-linux-gnu
         ignoring nonexistent directory "/include"
         #include "..." search starts here:
@@ -107,9 +107,9 @@ events:
          /usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/include
          /usr/include
         End of search list.
-        Linking C executable cmTC_c2dea
-        /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_c2dea.dir/link.txt --verbose=1
-        /opt/cray/pe/craype/2.7.33/bin/cc -L/opt/rocm-6.2.0/lib -lamdhip64 -v -Wl,-v CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o -o cmTC_c2dea
+        Linking C executable cmTC_54759
+        /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_54759.dir/link.txt --verbose=1
+        /opt/cray/pe/craype/2.7.33/bin/cc -L/opt/rocm-6.2.0/lib -lamdhip64 -v -Wl,-v CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o -o cmTC_54759
         AMD clang version 18.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-6.2.0 24292 26466ce804ac523b398608f17388eb6d605a3f09)
         Target: x86_64-unknown-linux-gnu
         Thread model: posix
@@ -119,9 +119,9 @@ events:
         Candidate multilib: .;@m64
         Selected multilib: .;@m64
         Found HIP installation: /opt/rocm-6.2.0/lib/llvm/bin/../../.., version 6.2.41133
-         "/opt/rocm-6.2.0/lib/llvm/bin/ld.lld" --hash-style=gnu --eh-frame-hdr -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_c2dea /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crt1.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crti.o /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtbegin-x86_64.o -L/opt/rocm-6.2.0/lib -L/opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/lib -L/opt/cray/pe/mpich/8.1.30/gtl/lib -L/opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/lib -L/opt/rocm-6.2.0/lib -L/opt/rocm-6.2.0/lib/rocprofiler -L/opt/rocm-6.2.0/lib/roctracer -L/opt/cray/pe/dsmml/0.3.0/dsmml//lib -L/opt/cray/pe/pmi/6.1.15.21/lib -L/opt/rocm-6.2.0/lib/lib -L/opt/rocm-6.2.0/lib/lib64 -L/opt/rocm-6.2.0/lib/llvm/lib -L/usr/lib64/gcc/x86_64-suse-linux/13 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/lib -L/lib -L/usr/lib --enable-new-dtags -lamdhip64 -v CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o -lamdhip64 --as-needed -lsci_amd_mpi --no-as-needed --as-needed -lmpi_amd --no-as-needed -lmpi_gtl_hsa --as-needed -lsci_amd --no-as-needed -ldl --as-needed -ldsmml --no-as-needed --as-needed -lpmi --no-as-needed --as-needed -lpmi2 --no-as-needed -lxpmem --disable-new-dtags /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a --as-needed -lgcc_s --no-as-needed -lc /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a --as-needed -lgcc_s --no-as-needed /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtend-x86_64.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crtn.o
+         "/opt/rocm-6.2.0/lib/llvm/bin/ld.lld" --hash-style=gnu --eh-frame-hdr -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_54759 /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crt1.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crti.o /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtbegin-x86_64.o -L/opt/rocm-6.2.0/lib -L/opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/lib -L/opt/cray/pe/mpich/8.1.30/gtl/lib -L/opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/lib -L/opt/rocm-6.2.0/lib -L/opt/rocm-6.2.0/lib/rocprofiler -L/opt/rocm-6.2.0/lib/roctracer -L/opt/cray/pe/dsmml/0.3.0/dsmml//lib -L/opt/cray/pe/pmi/6.1.15.21/lib -L/opt/rocm-6.2.0/lib/lib -L/opt/rocm-6.2.0/lib/lib64 -L/opt/rocm-6.2.0/lib/llvm/lib -L/usr/lib64/gcc/x86_64-suse-linux/13 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/lib -L/lib -L/usr/lib --enable-new-dtags -lamdhip64 -v CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o -lamdhip64 --as-needed -lsci_amd_mpi --no-as-needed --as-needed -lmpi_amd --no-as-needed -lmpi_gtl_hsa --as-needed -lsci_amd --no-as-needed -ldl --as-needed -ldsmml --no-as-needed --as-needed -lpmi --no-as-needed --as-needed -lpmi2 --no-as-needed -lxpmem --disable-new-dtags /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a --as-needed -lgcc_s --no-as-needed -lc /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a --as-needed -lgcc_s --no-as-needed /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtend-x86_64.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crtn.o
         AMD LLD 18.0.0 (compatible with GNU linkers)
-        gmake[1]: Leaving directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-Pn8UeI'
+        gmake[1]: Leaving directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-AHVbuG'
         
       exitCode: 0
   -
@@ -172,13 +172,13 @@ events:
       Parsed C implicit link information:
         link line regex: [^( *|.*[/\\])(ld[0-9]*(\\.[a-z]+)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
         linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(\\.[a-z]+)?))("|,| |$)]
-        ignore line: [Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-Pn8UeI']
+        ignore line: [Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-AHVbuG']
         ignore line: []
-        ignore line: [Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_c2dea/fast]
-        ignore line: [/usr/bin/gmake  -f CMakeFiles/cmTC_c2dea.dir/build.make CMakeFiles/cmTC_c2dea.dir/build]
-        ignore line: [gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-Pn8UeI']
-        ignore line: [Building C object CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o]
-        ignore line: [/opt/cray/pe/craype/2.7.33/bin/cc   -v -MD -MT CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o -MF CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o.d -o CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o -c /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCCompilerABI.c]
+        ignore line: [Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_54759/fast]
+        ignore line: [/usr/bin/gmake  -f CMakeFiles/cmTC_54759.dir/build.make CMakeFiles/cmTC_54759.dir/build]
+        ignore line: [gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-AHVbuG']
+        ignore line: [Building C object CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o]
+        ignore line: [/opt/cray/pe/craype/2.7.33/bin/cc   -v -MD -MT CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o -MF CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o.d -o CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o -c /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCCompilerABI.c]
         ignore line: [AMD clang version 18.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-6.2.0 24292 26466ce804ac523b398608f17388eb6d605a3f09)]
         ignore line: [Target: x86_64-unknown-linux-gnu]
         ignore line: [Thread model: posix]
@@ -191,7 +191,7 @@ events:
         ignore line: [@m64]
         ignore line: [Found HIP installation: /opt/rocm-6.2.0/lib/llvm/bin/../../..  version 6.2.41133]
         ignore line: [ (in-process)]
-        ignore line: [ "/opt/rocm-6.2.0/lib/llvm/bin/clang-18" -cc1 -triple x86_64-unknown-linux-gnu -emit-obj -mrelax-all -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCCompilerABI.c -mrelocation-model static -mframe-pointer=all -fmath-errno -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu znver3 -debugger-tuning=gdb -fdebug-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-Pn8UeI -v -fcoverage-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-Pn8UeI -resource-dir /opt/rocm-6.2.0/lib/llvm/lib/clang/18 -dependency-file CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o.d -MT CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o -sys-header-deps -D __CRAY_X86_TRENTO -D __CRAY_AMD_GFX90A -D __CRAYXT_COMPUTE_LINUX_TARGET -D __HIP_PLATFORM_AMD__ -I /opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/include -I /opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/include -I /opt/rocm-6.2.0/include -I /opt/rocm-6.2.0/include/rocprofiler -I /opt/rocm-6.2.0/include/roctracer -I /opt/cray/pe/dsmml/0.3.0/dsmml//include -I /opt/cray/pe/pmi/6.1.15.21/include -c-isystem /opt/rocm-6.2.0/llvm/include -cxx-isystem /opt/rocm-6.2.0/llvm/include -internal-isystem /opt/rocm-6.2.0/lib/llvm/lib/clang/18/include -internal-isystem /usr/local/include -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/include -internal-externc-isystem /include -internal-externc-isystem /usr/include -ferror-limit 19 -fgnuc-version=4.2.1 -faddrsig -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o -x c /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCCompilerABI.c]
+        ignore line: [ "/opt/rocm-6.2.0/lib/llvm/bin/clang-18" -cc1 -triple x86_64-unknown-linux-gnu -emit-obj -mrelax-all -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCCompilerABI.c -mrelocation-model static -mframe-pointer=all -fmath-errno -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu znver3 -debugger-tuning=gdb -fdebug-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-AHVbuG -v -fcoverage-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-AHVbuG -resource-dir /opt/rocm-6.2.0/lib/llvm/lib/clang/18 -dependency-file CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o.d -MT CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o -sys-header-deps -D __CRAY_X86_TRENTO -D __CRAY_AMD_GFX90A -D __CRAYXT_COMPUTE_LINUX_TARGET -D __HIP_PLATFORM_AMD__ -I /opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/include -I /opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/include -I /opt/rocm-6.2.0/include -I /opt/rocm-6.2.0/include/rocprofiler -I /opt/rocm-6.2.0/include/roctracer -I /opt/cray/pe/dsmml/0.3.0/dsmml//include -I /opt/cray/pe/pmi/6.1.15.21/include -c-isystem /opt/rocm-6.2.0/llvm/include -cxx-isystem /opt/rocm-6.2.0/llvm/include -internal-isystem /opt/rocm-6.2.0/lib/llvm/lib/clang/18/include -internal-isystem /usr/local/include -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/include -internal-externc-isystem /include -internal-externc-isystem /usr/include -ferror-limit 19 -fgnuc-version=4.2.1 -faddrsig -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o -x c /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCCompilerABI.c]
         ignore line: [clang -cc1 version 18.0.0git based upon LLVM 18.0.0git default target x86_64-unknown-linux-gnu]
         ignore line: [ignoring nonexistent directory "/include"]
         ignore line: [#include "..." search starts here:]
@@ -209,9 +209,9 @@ events:
         ignore line: [ /usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/include]
         ignore line: [ /usr/include]
         ignore line: [End of search list.]
-        ignore line: [Linking C executable cmTC_c2dea]
-        ignore line: [/autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_c2dea.dir/link.txt --verbose=1]
-        ignore line: [/opt/cray/pe/craype/2.7.33/bin/cc -L/opt/rocm-6.2.0/lib -lamdhip64 -v -Wl -v CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o -o cmTC_c2dea]
+        ignore line: [Linking C executable cmTC_54759]
+        ignore line: [/autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_54759.dir/link.txt --verbose=1]
+        ignore line: [/opt/cray/pe/craype/2.7.33/bin/cc -L/opt/rocm-6.2.0/lib -lamdhip64 -v -Wl -v CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o -o cmTC_54759]
         ignore line: [AMD clang version 18.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-6.2.0 24292 26466ce804ac523b398608f17388eb6d605a3f09)]
         ignore line: [Target: x86_64-unknown-linux-gnu]
         ignore line: [Thread model: posix]
@@ -223,7 +223,7 @@ events:
         ignore line: [Selected multilib: .]
         ignore line: [@m64]
         ignore line: [Found HIP installation: /opt/rocm-6.2.0/lib/llvm/bin/../../..  version 6.2.41133]
-        link line: [ "/opt/rocm-6.2.0/lib/llvm/bin/ld.lld" --hash-style=gnu --eh-frame-hdr -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_c2dea /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crt1.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crti.o /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtbegin-x86_64.o -L/opt/rocm-6.2.0/lib -L/opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/lib -L/opt/cray/pe/mpich/8.1.30/gtl/lib -L/opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/lib -L/opt/rocm-6.2.0/lib -L/opt/rocm-6.2.0/lib/rocprofiler -L/opt/rocm-6.2.0/lib/roctracer -L/opt/cray/pe/dsmml/0.3.0/dsmml//lib -L/opt/cray/pe/pmi/6.1.15.21/lib -L/opt/rocm-6.2.0/lib/lib -L/opt/rocm-6.2.0/lib/lib64 -L/opt/rocm-6.2.0/lib/llvm/lib -L/usr/lib64/gcc/x86_64-suse-linux/13 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/lib -L/lib -L/usr/lib --enable-new-dtags -lamdhip64 -v CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o -lamdhip64 --as-needed -lsci_amd_mpi --no-as-needed --as-needed -lmpi_amd --no-as-needed -lmpi_gtl_hsa --as-needed -lsci_amd --no-as-needed -ldl --as-needed -ldsmml --no-as-needed --as-needed -lpmi --no-as-needed --as-needed -lpmi2 --no-as-needed -lxpmem --disable-new-dtags /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a --as-needed -lgcc_s --no-as-needed -lc /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a --as-needed -lgcc_s --no-as-needed /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtend-x86_64.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crtn.o]
+        link line: [ "/opt/rocm-6.2.0/lib/llvm/bin/ld.lld" --hash-style=gnu --eh-frame-hdr -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_54759 /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crt1.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crti.o /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtbegin-x86_64.o -L/opt/rocm-6.2.0/lib -L/opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/lib -L/opt/cray/pe/mpich/8.1.30/gtl/lib -L/opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/lib -L/opt/rocm-6.2.0/lib -L/opt/rocm-6.2.0/lib/rocprofiler -L/opt/rocm-6.2.0/lib/roctracer -L/opt/cray/pe/dsmml/0.3.0/dsmml//lib -L/opt/cray/pe/pmi/6.1.15.21/lib -L/opt/rocm-6.2.0/lib/lib -L/opt/rocm-6.2.0/lib/lib64 -L/opt/rocm-6.2.0/lib/llvm/lib -L/usr/lib64/gcc/x86_64-suse-linux/13 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/lib -L/lib -L/usr/lib --enable-new-dtags -lamdhip64 -v CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o -lamdhip64 --as-needed -lsci_amd_mpi --no-as-needed --as-needed -lmpi_amd --no-as-needed -lmpi_gtl_hsa --as-needed -lsci_amd --no-as-needed -ldl --as-needed -ldsmml --no-as-needed --as-needed -lpmi --no-as-needed --as-needed -lpmi2 --no-as-needed -lxpmem --disable-new-dtags /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a --as-needed -lgcc_s --no-as-needed -lc /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a --as-needed -lgcc_s --no-as-needed /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtend-x86_64.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crtn.o]
           arg [/opt/rocm-6.2.0/lib/llvm/bin/ld.lld] ==> ignore
           arg [--hash-style=gnu] ==> ignore
           arg [--eh-frame-hdr] ==> ignore
@@ -232,7 +232,7 @@ events:
           arg [-dynamic-linker] ==> ignore
           arg [/lib64/ld-linux-x86-64.so.2] ==> ignore
           arg [-o] ==> ignore
-          arg [cmTC_c2dea] ==> ignore
+          arg [cmTC_54759] ==> ignore
           arg [/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crt1.o] ==> obj [/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crt1.o]
           arg [/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crti.o] ==> obj [/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crti.o]
           arg [/opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtbegin-x86_64.o] ==> obj [/opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtbegin-x86_64.o]
@@ -258,7 +258,7 @@ events:
           arg [--enable-new-dtags] ==> ignore
           arg [-lamdhip64] ==> lib [amdhip64]
           arg [-v] ==> ignore
-          arg [CMakeFiles/cmTC_c2dea.dir/CMakeCCompilerABI.c.o] ==> ignore
+          arg [CMakeFiles/cmTC_54759.dir/CMakeCCompilerABI.c.o] ==> ignore
           arg [-lamdhip64] ==> lib [amdhip64]
           arg [--as-needed] ==> ignore
           arg [-lsci_amd_mpi] ==> lib [sci_amd_mpi]
@@ -343,8 +343,8 @@ events:
     checks:
       - "Detecting CXX compiler ABI info"
     directories:
-      source: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-bV4HOB"
-      binary: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-bV4HOB"
+      source: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-wTqyRT"
+      binary: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-wTqyRT"
     cmakeVariables:
       CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
       CMAKE_CXX_FLAGS: "-I/opt/rocm-6.2.0/include -munsafe-fp-atomics"
@@ -355,13 +355,13 @@ events:
       variable: "CMAKE_CXX_ABI_COMPILED"
       cached: true
       stdout: |
-        Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-bV4HOB'
+        Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-wTqyRT'
         
-        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_6f3b1/fast
-        /usr/bin/gmake  -f CMakeFiles/cmTC_6f3b1.dir/build.make CMakeFiles/cmTC_6f3b1.dir/build
-        gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-bV4HOB'
-        Building CXX object CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o
-        /opt/cray/pe/craype/2.7.33/bin/CC   -I/opt/rocm-6.2.0/include -munsafe-fp-atomics    -v -MD -MT CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o -c /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCXXCompilerABI.cpp
+        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_c3ea0/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_c3ea0.dir/build.make CMakeFiles/cmTC_c3ea0.dir/build
+        gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-wTqyRT'
+        Building CXX object CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o
+        /opt/cray/pe/craype/2.7.33/bin/CC   -I/opt/rocm-6.2.0/include -munsafe-fp-atomics    -v -MD -MT CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o -c /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCXXCompilerABI.cpp
         AMD clang version 18.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-6.2.0 24292 26466ce804ac523b398608f17388eb6d605a3f09)
         Target: x86_64-unknown-linux-gnu
         Thread model: posix
@@ -373,7 +373,7 @@ events:
         Found HIP installation: /opt/rocm-6.2.0/lib/llvm/bin/../../.., version 6.2.41133
         clang++: warning: argument unused during compilation: '-munsafe-fp-atomics' [-Wunused-command-line-argument]
          (in-process)
-         "/opt/rocm-6.2.0/lib/llvm/bin/clang-18" -cc1 -triple x86_64-unknown-linux-gnu -emit-obj -mrelax-all -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model static -mframe-pointer=all -fmath-errno -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu znver3 -debugger-tuning=gdb -fdebug-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-bV4HOB -v -fcoverage-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-bV4HOB -resource-dir /opt/rocm-6.2.0/lib/llvm/lib/clang/18 -dependency-file CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o.d -MT CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -D __CRAY_X86_TRENTO -D __CRAY_AMD_GFX90A -D __CRAYXT_COMPUTE_LINUX_TARGET -I /opt/rocm-6.2.0/include -D __HIP_PLATFORM_AMD__ -I /opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/include -I /opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/include -I /opt/rocm-6.2.0/include -I /opt/rocm-6.2.0/include/rocprofiler -I /opt/rocm-6.2.0/include/roctracer -I /opt/cray/pe/dsmml/0.3.0/dsmml//include -I /opt/cray/pe/pmi/6.1.15.21/include -c-isystem /opt/rocm-6.2.0/llvm/include -cxx-isystem /opt/rocm-6.2.0/llvm/include -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../include/c++/13 -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../include/c++/13/x86_64-suse-linux -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../include/c++/13/backward -internal-isystem /opt/rocm-6.2.0/lib/llvm/lib/clang/18/include -internal-isystem /usr/local/include -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/include -internal-externc-isystem /include -internal-externc-isystem /usr/include -fdeprecated-macro -ferror-limit 19 -fgnuc-version=4.2.1 -fcxx-exceptions -fexceptions -faddrsig -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o -x c++ /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCXXCompilerABI.cpp
+         "/opt/rocm-6.2.0/lib/llvm/bin/clang-18" -cc1 -triple x86_64-unknown-linux-gnu -emit-obj -mrelax-all -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model static -mframe-pointer=all -fmath-errno -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu znver3 -debugger-tuning=gdb -fdebug-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-wTqyRT -v -fcoverage-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-wTqyRT -resource-dir /opt/rocm-6.2.0/lib/llvm/lib/clang/18 -dependency-file CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o.d -MT CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -D __CRAY_X86_TRENTO -D __CRAY_AMD_GFX90A -D __CRAYXT_COMPUTE_LINUX_TARGET -I /opt/rocm-6.2.0/include -D __HIP_PLATFORM_AMD__ -I /opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/include -I /opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/include -I /opt/rocm-6.2.0/include -I /opt/rocm-6.2.0/include/rocprofiler -I /opt/rocm-6.2.0/include/roctracer -I /opt/cray/pe/dsmml/0.3.0/dsmml//include -I /opt/cray/pe/pmi/6.1.15.21/include -c-isystem /opt/rocm-6.2.0/llvm/include -cxx-isystem /opt/rocm-6.2.0/llvm/include -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../include/c++/13 -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../include/c++/13/x86_64-suse-linux -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../include/c++/13/backward -internal-isystem /opt/rocm-6.2.0/lib/llvm/lib/clang/18/include -internal-isystem /usr/local/include -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/include -internal-externc-isystem /include -internal-externc-isystem /usr/include -fdeprecated-macro -ferror-limit 19 -fgnuc-version=4.2.1 -fcxx-exceptions -fexceptions -faddrsig -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o -x c++ /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCXXCompilerABI.cpp
         clang -cc1 version 18.0.0git based upon LLVM 18.0.0git default target x86_64-unknown-linux-gnu
         ignoring nonexistent directory "/include"
         ignoring duplicate directory "/opt/rocm-6.2.0/include"
@@ -395,9 +395,9 @@ events:
          /usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/include
          /usr/include
         End of search list.
-        Linking CXX executable cmTC_6f3b1
-        /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_6f3b1.dir/link.txt --verbose=1
-        /opt/cray/pe/craype/2.7.33/bin/CC -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -L/opt/rocm-6.2.0/lib -lamdhip64 -v -Wl,-v CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_6f3b1
+        Linking CXX executable cmTC_c3ea0
+        /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_c3ea0.dir/link.txt --verbose=1
+        /opt/cray/pe/craype/2.7.33/bin/CC -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -L/opt/rocm-6.2.0/lib -lamdhip64 -v -Wl,-v CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_c3ea0
         AMD clang version 18.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-6.2.0 24292 26466ce804ac523b398608f17388eb6d605a3f09)
         Target: x86_64-unknown-linux-gnu
         Thread model: posix
@@ -407,9 +407,9 @@ events:
         Candidate multilib: .;@m64
         Selected multilib: .;@m64
         Found HIP installation: /opt/rocm-6.2.0/lib/llvm/bin/../../.., version 6.2.41133
-         "/opt/rocm-6.2.0/lib/llvm/bin/ld.lld" --hash-style=gnu --eh-frame-hdr -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_6f3b1 /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crt1.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crti.o /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtbegin-x86_64.o -L/opt/rocm-6.2.0/lib -L/opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/lib -L/opt/cray/pe/mpich/8.1.30/gtl/lib -L/opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/lib -L/opt/rocm-6.2.0/lib -L/opt/rocm-6.2.0/lib/rocprofiler -L/opt/rocm-6.2.0/lib/roctracer -L/opt/cray/pe/dsmml/0.3.0/dsmml//lib -L/opt/cray/pe/pmi/6.1.15.21/lib -L/opt/rocm-6.2.0/lib/lib -L/opt/rocm-6.2.0/lib/lib64 -L/opt/rocm-6.2.0/lib/llvm/lib -L/usr/lib64/gcc/x86_64-suse-linux/13 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/lib -L/lib -L/usr/lib --enable-new-dtags -lamdhip64 -v CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o -lamdhip64 --as-needed -lsci_amd_mpi --no-as-needed --as-needed -lmpi_amd --no-as-needed -lmpi_gtl_hsa --as-needed -lsci_amd --no-as-needed -ldl --as-needed -ldsmml --no-as-needed --as-needed -lpmi --no-as-needed --as-needed -lpmi2 --no-as-needed -lxpmem --disable-new-dtags -lstdc++ -lm /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a -lgcc_s -lc /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a -lgcc_s /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtend-x86_64.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crtn.o
+         "/opt/rocm-6.2.0/lib/llvm/bin/ld.lld" --hash-style=gnu --eh-frame-hdr -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_c3ea0 /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crt1.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crti.o /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtbegin-x86_64.o -L/opt/rocm-6.2.0/lib -L/opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/lib -L/opt/cray/pe/mpich/8.1.30/gtl/lib -L/opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/lib -L/opt/rocm-6.2.0/lib -L/opt/rocm-6.2.0/lib/rocprofiler -L/opt/rocm-6.2.0/lib/roctracer -L/opt/cray/pe/dsmml/0.3.0/dsmml//lib -L/opt/cray/pe/pmi/6.1.15.21/lib -L/opt/rocm-6.2.0/lib/lib -L/opt/rocm-6.2.0/lib/lib64 -L/opt/rocm-6.2.0/lib/llvm/lib -L/usr/lib64/gcc/x86_64-suse-linux/13 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/lib -L/lib -L/usr/lib --enable-new-dtags -lamdhip64 -v CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o -lamdhip64 --as-needed -lsci_amd_mpi --no-as-needed --as-needed -lmpi_amd --no-as-needed -lmpi_gtl_hsa --as-needed -lsci_amd --no-as-needed -ldl --as-needed -ldsmml --no-as-needed --as-needed -lpmi --no-as-needed --as-needed -lpmi2 --no-as-needed -lxpmem --disable-new-dtags -lstdc++ -lm /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a -lgcc_s -lc /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a -lgcc_s /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtend-x86_64.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crtn.o
         AMD LLD 18.0.0 (compatible with GNU linkers)
-        gmake[1]: Leaving directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-bV4HOB'
+        gmake[1]: Leaving directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-wTqyRT'
         
       exitCode: 0
   -
@@ -466,13 +466,13 @@ events:
       Parsed CXX implicit link information:
         link line regex: [^( *|.*[/\\])(ld[0-9]*(\\.[a-z]+)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
         linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(\\.[a-z]+)?))("|,| |$)]
-        ignore line: [Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-bV4HOB']
+        ignore line: [Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-wTqyRT']
         ignore line: []
-        ignore line: [Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_6f3b1/fast]
-        ignore line: [/usr/bin/gmake  -f CMakeFiles/cmTC_6f3b1.dir/build.make CMakeFiles/cmTC_6f3b1.dir/build]
-        ignore line: [gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-bV4HOB']
-        ignore line: [Building CXX object CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o]
-        ignore line: [/opt/cray/pe/craype/2.7.33/bin/CC   -I/opt/rocm-6.2.0/include -munsafe-fp-atomics    -v -MD -MT CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o -c /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_c3ea0/fast]
+        ignore line: [/usr/bin/gmake  -f CMakeFiles/cmTC_c3ea0.dir/build.make CMakeFiles/cmTC_c3ea0.dir/build]
+        ignore line: [gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-wTqyRT']
+        ignore line: [Building CXX object CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o]
+        ignore line: [/opt/cray/pe/craype/2.7.33/bin/CC   -I/opt/rocm-6.2.0/include -munsafe-fp-atomics    -v -MD -MT CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o -MF CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o.d -o CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o -c /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCXXCompilerABI.cpp]
         ignore line: [AMD clang version 18.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-6.2.0 24292 26466ce804ac523b398608f17388eb6d605a3f09)]
         ignore line: [Target: x86_64-unknown-linux-gnu]
         ignore line: [Thread model: posix]
@@ -486,7 +486,7 @@ events:
         ignore line: [Found HIP installation: /opt/rocm-6.2.0/lib/llvm/bin/../../..  version 6.2.41133]
         ignore line: [clang++: warning: argument unused during compilation: '-munsafe-fp-atomics' [-Wunused-command-line-argument]]
         ignore line: [ (in-process)]
-        ignore line: [ "/opt/rocm-6.2.0/lib/llvm/bin/clang-18" -cc1 -triple x86_64-unknown-linux-gnu -emit-obj -mrelax-all -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model static -mframe-pointer=all -fmath-errno -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu znver3 -debugger-tuning=gdb -fdebug-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-bV4HOB -v -fcoverage-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-bV4HOB -resource-dir /opt/rocm-6.2.0/lib/llvm/lib/clang/18 -dependency-file CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o.d -MT CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -D __CRAY_X86_TRENTO -D __CRAY_AMD_GFX90A -D __CRAYXT_COMPUTE_LINUX_TARGET -I /opt/rocm-6.2.0/include -D __HIP_PLATFORM_AMD__ -I /opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/include -I /opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/include -I /opt/rocm-6.2.0/include -I /opt/rocm-6.2.0/include/rocprofiler -I /opt/rocm-6.2.0/include/roctracer -I /opt/cray/pe/dsmml/0.3.0/dsmml//include -I /opt/cray/pe/pmi/6.1.15.21/include -c-isystem /opt/rocm-6.2.0/llvm/include -cxx-isystem /opt/rocm-6.2.0/llvm/include -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../include/c++/13 -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../include/c++/13/x86_64-suse-linux -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../include/c++/13/backward -internal-isystem /opt/rocm-6.2.0/lib/llvm/lib/clang/18/include -internal-isystem /usr/local/include -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/include -internal-externc-isystem /include -internal-externc-isystem /usr/include -fdeprecated-macro -ferror-limit 19 -fgnuc-version=4.2.1 -fcxx-exceptions -fexceptions -faddrsig -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o -x c++ /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [ "/opt/rocm-6.2.0/lib/llvm/bin/clang-18" -cc1 -triple x86_64-unknown-linux-gnu -emit-obj -mrelax-all -disable-free -clear-ast-before-backend -disable-llvm-verifier -discard-value-names -main-file-name CMakeCXXCompilerABI.cpp -mrelocation-model static -mframe-pointer=all -fmath-errno -ffp-contract=on -fno-rounding-math -mconstructor-aliases -funwind-tables=2 -target-cpu znver3 -debugger-tuning=gdb -fdebug-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-wTqyRT -v -fcoverage-compilation-dir=/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-wTqyRT -resource-dir /opt/rocm-6.2.0/lib/llvm/lib/clang/18 -dependency-file CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o.d -MT CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o -sys-header-deps -D __CRAY_X86_TRENTO -D __CRAY_AMD_GFX90A -D __CRAYXT_COMPUTE_LINUX_TARGET -I /opt/rocm-6.2.0/include -D __HIP_PLATFORM_AMD__ -I /opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/include -I /opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/include -I /opt/rocm-6.2.0/include -I /opt/rocm-6.2.0/include/rocprofiler -I /opt/rocm-6.2.0/include/roctracer -I /opt/cray/pe/dsmml/0.3.0/dsmml//include -I /opt/cray/pe/pmi/6.1.15.21/include -c-isystem /opt/rocm-6.2.0/llvm/include -cxx-isystem /opt/rocm-6.2.0/llvm/include -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../include/c++/13 -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../include/c++/13/x86_64-suse-linux -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../include/c++/13/backward -internal-isystem /opt/rocm-6.2.0/lib/llvm/lib/clang/18/include -internal-isystem /usr/local/include -internal-isystem /usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/include -internal-externc-isystem /include -internal-externc-isystem /usr/include -fdeprecated-macro -ferror-limit 19 -fgnuc-version=4.2.1 -fcxx-exceptions -fexceptions -faddrsig -D__GCC_HAVE_DWARF2_CFI_ASM=1 -o CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o -x c++ /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/share/cmake-3.30/Modules/CMakeCXXCompilerABI.cpp]
         ignore line: [clang -cc1 version 18.0.0git based upon LLVM 18.0.0git default target x86_64-unknown-linux-gnu]
         ignore line: [ignoring nonexistent directory "/include"]
         ignore line: [ignoring duplicate directory "/opt/rocm-6.2.0/include"]
@@ -508,9 +508,9 @@ events:
         ignore line: [ /usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/include]
         ignore line: [ /usr/include]
         ignore line: [End of search list.]
-        ignore line: [Linking CXX executable cmTC_6f3b1]
-        ignore line: [/autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_6f3b1.dir/link.txt --verbose=1]
-        ignore line: [/opt/cray/pe/craype/2.7.33/bin/CC -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -L/opt/rocm-6.2.0/lib -lamdhip64 -v -Wl -v CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_6f3b1]
+        ignore line: [Linking CXX executable cmTC_c3ea0]
+        ignore line: [/autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_c3ea0.dir/link.txt --verbose=1]
+        ignore line: [/opt/cray/pe/craype/2.7.33/bin/CC -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -L/opt/rocm-6.2.0/lib -lamdhip64 -v -Wl -v CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_c3ea0]
         ignore line: [AMD clang version 18.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-6.2.0 24292 26466ce804ac523b398608f17388eb6d605a3f09)]
         ignore line: [Target: x86_64-unknown-linux-gnu]
         ignore line: [Thread model: posix]
@@ -522,7 +522,7 @@ events:
         ignore line: [Selected multilib: .]
         ignore line: [@m64]
         ignore line: [Found HIP installation: /opt/rocm-6.2.0/lib/llvm/bin/../../..  version 6.2.41133]
-        link line: [ "/opt/rocm-6.2.0/lib/llvm/bin/ld.lld" --hash-style=gnu --eh-frame-hdr -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_6f3b1 /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crt1.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crti.o /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtbegin-x86_64.o -L/opt/rocm-6.2.0/lib -L/opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/lib -L/opt/cray/pe/mpich/8.1.30/gtl/lib -L/opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/lib -L/opt/rocm-6.2.0/lib -L/opt/rocm-6.2.0/lib/rocprofiler -L/opt/rocm-6.2.0/lib/roctracer -L/opt/cray/pe/dsmml/0.3.0/dsmml//lib -L/opt/cray/pe/pmi/6.1.15.21/lib -L/opt/rocm-6.2.0/lib/lib -L/opt/rocm-6.2.0/lib/lib64 -L/opt/rocm-6.2.0/lib/llvm/lib -L/usr/lib64/gcc/x86_64-suse-linux/13 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/lib -L/lib -L/usr/lib --enable-new-dtags -lamdhip64 -v CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o -lamdhip64 --as-needed -lsci_amd_mpi --no-as-needed --as-needed -lmpi_amd --no-as-needed -lmpi_gtl_hsa --as-needed -lsci_amd --no-as-needed -ldl --as-needed -ldsmml --no-as-needed --as-needed -lpmi --no-as-needed --as-needed -lpmi2 --no-as-needed -lxpmem --disable-new-dtags -lstdc++ -lm /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a -lgcc_s -lc /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a -lgcc_s /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtend-x86_64.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crtn.o]
+        link line: [ "/opt/rocm-6.2.0/lib/llvm/bin/ld.lld" --hash-style=gnu --eh-frame-hdr -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_c3ea0 /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crt1.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crti.o /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtbegin-x86_64.o -L/opt/rocm-6.2.0/lib -L/opt/cray/pe/mpich/8.1.30/ofi/amd/6.0/lib -L/opt/cray/pe/mpich/8.1.30/gtl/lib -L/opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/lib -L/opt/rocm-6.2.0/lib -L/opt/rocm-6.2.0/lib/rocprofiler -L/opt/rocm-6.2.0/lib/roctracer -L/opt/cray/pe/dsmml/0.3.0/dsmml//lib -L/opt/cray/pe/pmi/6.1.15.21/lib -L/opt/rocm-6.2.0/lib/lib -L/opt/rocm-6.2.0/lib/lib64 -L/opt/rocm-6.2.0/lib/llvm/lib -L/usr/lib64/gcc/x86_64-suse-linux/13 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/usr/lib64/gcc/x86_64-suse-linux/13/../../../../x86_64-suse-linux/lib -L/lib -L/usr/lib --enable-new-dtags -lamdhip64 -v CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o -lamdhip64 --as-needed -lsci_amd_mpi --no-as-needed --as-needed -lmpi_amd --no-as-needed -lmpi_gtl_hsa --as-needed -lsci_amd --no-as-needed -ldl --as-needed -ldsmml --no-as-needed --as-needed -lpmi --no-as-needed --as-needed -lpmi2 --no-as-needed -lxpmem --disable-new-dtags -lstdc++ -lm /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a -lgcc_s -lc /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/libclang_rt.builtins-x86_64.a -lgcc_s /opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtend-x86_64.o /usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crtn.o]
           arg [/opt/rocm-6.2.0/lib/llvm/bin/ld.lld] ==> ignore
           arg [--hash-style=gnu] ==> ignore
           arg [--eh-frame-hdr] ==> ignore
@@ -531,7 +531,7 @@ events:
           arg [-dynamic-linker] ==> ignore
           arg [/lib64/ld-linux-x86-64.so.2] ==> ignore
           arg [-o] ==> ignore
-          arg [cmTC_6f3b1] ==> ignore
+          arg [cmTC_c3ea0] ==> ignore
           arg [/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crt1.o] ==> obj [/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crt1.o]
           arg [/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crti.o] ==> obj [/usr/lib64/gcc/x86_64-suse-linux/13/../../../../lib64/crti.o]
           arg [/opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtbegin-x86_64.o] ==> obj [/opt/rocm-6.2.0/lib/llvm/lib/clang/18/lib/linux/clang_rt.crtbegin-x86_64.o]
@@ -557,7 +557,7 @@ events:
           arg [--enable-new-dtags] ==> ignore
           arg [-lamdhip64] ==> lib [amdhip64]
           arg [-v] ==> ignore
-          arg [CMakeFiles/cmTC_6f3b1.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
+          arg [CMakeFiles/cmTC_c3ea0.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
           arg [-lamdhip64] ==> lib [amdhip64]
           arg [--as-needed] ==> ignore
           arg [-lsci_amd_mpi] ==> lib [sci_amd_mpi]
@@ -639,8 +639,8 @@ events:
       - "CMakeLists.txt:51 (find_package)"
     description: "The MPI test test_mpi for CXX in mode MPICXX"
     directories:
-      source: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-fEXEvA"
-      binary: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-fEXEvA"
+      source: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-j5kO6X"
+      binary: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-j5kO6X"
     cmakeVariables:
       CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
       CMAKE_CXX_FLAGS: "-I/opt/rocm-6.2.0/include -munsafe-fp-atomics"
@@ -650,18 +650,18 @@ events:
       variable: "MPI_RESULT_CXX_test_mpi_MPICXX"
       cached: true
       stdout: |
-        Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-fEXEvA'
+        Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-j5kO6X'
         
-        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_7d20f/fast
-        /usr/bin/gmake  -f CMakeFiles/cmTC_7d20f.dir/build.make CMakeFiles/cmTC_7d20f.dir/build
-        gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-fEXEvA'
-        Building CXX object CMakeFiles/cmTC_7d20f.dir/test_mpi.cpp.o
-        /opt/cray/pe/craype/2.7.33/bin/CC   -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -std=c++17 -MD -MT CMakeFiles/cmTC_7d20f.dir/test_mpi.cpp.o -MF CMakeFiles/cmTC_7d20f.dir/test_mpi.cpp.o.d -o CMakeFiles/cmTC_7d20f.dir/test_mpi.cpp.o -c /ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-fEXEvA/test_mpi.cpp
+        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_92ede/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_92ede.dir/build.make CMakeFiles/cmTC_92ede.dir/build
+        gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-j5kO6X'
+        Building CXX object CMakeFiles/cmTC_92ede.dir/test_mpi.cpp.o
+        /opt/cray/pe/craype/2.7.33/bin/CC   -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -std=c++17 -MD -MT CMakeFiles/cmTC_92ede.dir/test_mpi.cpp.o -MF CMakeFiles/cmTC_92ede.dir/test_mpi.cpp.o.d -o CMakeFiles/cmTC_92ede.dir/test_mpi.cpp.o -c /ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-j5kO6X/test_mpi.cpp
         clang++: warning: argument unused during compilation: '-munsafe-fp-atomics' [-Wunused-command-line-argument]
-        Linking CXX executable cmTC_7d20f
-        /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_7d20f.dir/link.txt --verbose=1
-        /opt/cray/pe/craype/2.7.33/bin/CC -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -L/opt/rocm-6.2.0/lib -lamdhip64  CMakeFiles/cmTC_7d20f.dir/test_mpi.cpp.o -o cmTC_7d20f
-        gmake[1]: Leaving directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-fEXEvA'
+        Linking CXX executable cmTC_92ede
+        /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_92ede.dir/link.txt --verbose=1
+        /opt/cray/pe/craype/2.7.33/bin/CC -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -L/opt/rocm-6.2.0/lib -lamdhip64  CMakeFiles/cmTC_92ede.dir/test_mpi.cpp.o -o cmTC_92ede
+        gmake[1]: Leaving directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-j5kO6X'
         
       exitCode: 0
   -
@@ -685,15 +685,15 @@ events:
       stdout: |
         Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/kokkos/corner_cases/CMakeFiles/CMakeTmp'
         
-        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_db620/fast
-        /usr/bin/gmake  -f CMakeFiles/cmTC_db620.dir/build.make CMakeFiles/cmTC_db620.dir/build
+        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_53355/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_53355.dir/build.make CMakeFiles/cmTC_53355.dir/build
         gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/kokkos/corner_cases/CMakeFiles/CMakeTmp'
-        Building CXX object CMakeFiles/cmTC_db620.dir/cplusplus17.cpp.o
-        /opt/cray/pe/craype/2.7.33/bin/CC   -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -std=c++17 -MD -MT CMakeFiles/cmTC_db620.dir/cplusplus17.cpp.o -MF CMakeFiles/cmTC_db620.dir/cplusplus17.cpp.o.d -o CMakeFiles/cmTC_db620.dir/cplusplus17.cpp.o -c /ccs/home/dfielding/athenak-df/kokkos/cmake/compile_tests/cplusplus17.cpp
+        Building CXX object CMakeFiles/cmTC_53355.dir/cplusplus17.cpp.o
+        /opt/cray/pe/craype/2.7.33/bin/CC   -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -std=c++17 -MD -MT CMakeFiles/cmTC_53355.dir/cplusplus17.cpp.o -MF CMakeFiles/cmTC_53355.dir/cplusplus17.cpp.o.d -o CMakeFiles/cmTC_53355.dir/cplusplus17.cpp.o -c /ccs/home/dfielding/athenak-df/kokkos/cmake/compile_tests/cplusplus17.cpp
         clang++: warning: argument unused during compilation: '-munsafe-fp-atomics' [-Wunused-command-line-argument]
-        Linking CXX executable cmTC_db620
-        /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_db620.dir/link.txt --verbose=1
-        /opt/cray/pe/craype/2.7.33/bin/CC -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -L/opt/rocm-6.2.0/lib -lamdhip64  CMakeFiles/cmTC_db620.dir/cplusplus17.cpp.o -o cmTC_db620
+        Linking CXX executable cmTC_53355
+        /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_53355.dir/link.txt --verbose=1
+        /opt/cray/pe/craype/2.7.33/bin/CC -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -L/opt/rocm-6.2.0/lib -lamdhip64  CMakeFiles/cmTC_53355.dir/cplusplus17.cpp.o -o cmTC_53355
         gmake[1]: Leaving directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/kokkos/corner_cases/CMakeFiles/CMakeTmp'
         
       exitCode: 0
@@ -719,8 +719,8 @@ events:
     checks:
       - "Performing Test CMAKE_HAVE_LIBC_PTHREAD"
     directories:
-      source: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-HXg4b8"
-      binary: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-HXg4b8"
+      source: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-5BfTfN"
+      binary: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-5BfTfN"
     cmakeVariables:
       CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
       CMAKE_C_FLAGS: ""
@@ -731,17 +731,17 @@ events:
       variable: "CMAKE_HAVE_LIBC_PTHREAD"
       cached: true
       stdout: |
-        Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-HXg4b8'
+        Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-5BfTfN'
         
-        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_64b70/fast
-        /usr/bin/gmake  -f CMakeFiles/cmTC_64b70.dir/build.make CMakeFiles/cmTC_64b70.dir/build
-        gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-HXg4b8'
-        Building C object CMakeFiles/cmTC_64b70.dir/src.c.o
-        /opt/cray/pe/craype/2.7.33/bin/cc -DCMAKE_HAVE_LIBC_PTHREAD   -MD -MT CMakeFiles/cmTC_64b70.dir/src.c.o -MF CMakeFiles/cmTC_64b70.dir/src.c.o.d -o CMakeFiles/cmTC_64b70.dir/src.c.o -c /ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-HXg4b8/src.c
-        Linking C executable cmTC_64b70
-        /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_64b70.dir/link.txt --verbose=1
-        /opt/cray/pe/craype/2.7.33/bin/cc -L/opt/rocm-6.2.0/lib -lamdhip64  CMakeFiles/cmTC_64b70.dir/src.c.o -o cmTC_64b70
-        gmake[1]: Leaving directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-HXg4b8'
+        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_81b33/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_81b33.dir/build.make CMakeFiles/cmTC_81b33.dir/build
+        gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-5BfTfN'
+        Building C object CMakeFiles/cmTC_81b33.dir/src.c.o
+        /opt/cray/pe/craype/2.7.33/bin/cc -DCMAKE_HAVE_LIBC_PTHREAD   -MD -MT CMakeFiles/cmTC_81b33.dir/src.c.o -MF CMakeFiles/cmTC_81b33.dir/src.c.o.d -o CMakeFiles/cmTC_81b33.dir/src.c.o -c /ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-5BfTfN/src.c
+        Linking C executable cmTC_81b33
+        /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_81b33.dir/link.txt --verbose=1
+        /opt/cray/pe/craype/2.7.33/bin/cc -L/opt/rocm-6.2.0/lib -lamdhip64  CMakeFiles/cmTC_81b33.dir/src.c.o -o cmTC_81b33
+        gmake[1]: Leaving directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-5BfTfN'
         
       exitCode: 0
   -
@@ -764,8 +764,8 @@ events:
     checks:
       - "Performing Test HIP_CLANG_SUPPORTS_PARALLEL_JOBS"
     directories:
-      source: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-BJHeW0"
-      binary: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-BJHeW0"
+      source: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-EevWih"
+      binary: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-EevWih"
     cmakeVariables:
       CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
       CMAKE_CXX_FLAGS: "-I/opt/rocm-6.2.0/include -munsafe-fp-atomics"
@@ -776,18 +776,18 @@ events:
       variable: "HIP_CLANG_SUPPORTS_PARALLEL_JOBS"
       cached: true
       stdout: |
-        Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-BJHeW0'
+        Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-EevWih'
         
-        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_02127/fast
-        /usr/bin/gmake  -f CMakeFiles/cmTC_02127.dir/build.make CMakeFiles/cmTC_02127.dir/build
-        gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-BJHeW0'
-        Building CXX object CMakeFiles/cmTC_02127.dir/src.cxx.o
-        /opt/cray/pe/craype/2.7.33/bin/CC -DHIP_CLANG_SUPPORTS_PARALLEL_JOBS  -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -std=c++17   -parallel-jobs=1 -MD -MT CMakeFiles/cmTC_02127.dir/src.cxx.o -MF CMakeFiles/cmTC_02127.dir/src.cxx.o.d -o CMakeFiles/cmTC_02127.dir/src.cxx.o -c /ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-BJHeW0/src.cxx
+        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_699fd/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_699fd.dir/build.make CMakeFiles/cmTC_699fd.dir/build
+        gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-EevWih'
+        Building CXX object CMakeFiles/cmTC_699fd.dir/src.cxx.o
+        /opt/cray/pe/craype/2.7.33/bin/CC -DHIP_CLANG_SUPPORTS_PARALLEL_JOBS  -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -std=c++17   -parallel-jobs=1 -MD -MT CMakeFiles/cmTC_699fd.dir/src.cxx.o -MF CMakeFiles/cmTC_699fd.dir/src.cxx.o.d -o CMakeFiles/cmTC_699fd.dir/src.cxx.o -c /ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-EevWih/src.cxx
         clang++: warning: argument unused during compilation: '-munsafe-fp-atomics' [-Wunused-command-line-argument]
-        Linking CXX executable cmTC_02127
-        /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_02127.dir/link.txt --verbose=1
-        /opt/cray/pe/craype/2.7.33/bin/CC -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -L/opt/rocm-6.2.0/lib -lamdhip64  CMakeFiles/cmTC_02127.dir/src.cxx.o -o cmTC_02127
-        gmake[1]: Leaving directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-BJHeW0'
+        Linking CXX executable cmTC_699fd
+        /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E cmake_link_script CMakeFiles/cmTC_699fd.dir/link.txt --verbose=1
+        /opt/cray/pe/craype/2.7.33/bin/CC -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -L/opt/rocm-6.2.0/lib -lamdhip64  CMakeFiles/cmTC_699fd.dir/src.cxx.o -o cmTC_699fd
+        gmake[1]: Leaving directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-EevWih'
         
       exitCode: 0
   -
@@ -798,8 +798,8 @@ events:
     checks:
       - "Looking for C++ include experimental/mdspan"
     directories:
-      source: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-eAuVqn"
-      binary: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-eAuVqn"
+      source: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-as0aL4"
+      binary: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-as0aL4"
     cmakeVariables:
       CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
       CMAKE_CXX_FLAGS: "-I/opt/rocm-6.2.0/include -munsafe-fp-atomics"
@@ -810,21 +810,21 @@ events:
       variable: "KOKKOS_COMPILER_SUPPORTS_EXPERIMENTAL_MDSPAN"
       cached: true
       stdout: |
-        Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-eAuVqn'
+        Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-as0aL4'
         
-        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_e4879/fast
-        /usr/bin/gmake  -f CMakeFiles/cmTC_e4879.dir/build.make CMakeFiles/cmTC_e4879.dir/build
-        gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-eAuVqn'
-        Building CXX object CMakeFiles/cmTC_e4879.dir/CheckIncludeFile.cxx.o
-        /opt/cray/pe/craype/2.7.33/bin/CC   -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -std=c++17 -MD -MT CMakeFiles/cmTC_e4879.dir/CheckIncludeFile.cxx.o -MF CMakeFiles/cmTC_e4879.dir/CheckIncludeFile.cxx.o.d -o CMakeFiles/cmTC_e4879.dir/CheckIncludeFile.cxx.o -c /ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-eAuVqn/CheckIncludeFile.cxx
+        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_f552f/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_f552f.dir/build.make CMakeFiles/cmTC_f552f.dir/build
+        gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-as0aL4'
+        Building CXX object CMakeFiles/cmTC_f552f.dir/CheckIncludeFile.cxx.o
+        /opt/cray/pe/craype/2.7.33/bin/CC   -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -std=c++17 -MD -MT CMakeFiles/cmTC_f552f.dir/CheckIncludeFile.cxx.o -MF CMakeFiles/cmTC_f552f.dir/CheckIncludeFile.cxx.o.d -o CMakeFiles/cmTC_f552f.dir/CheckIncludeFile.cxx.o -c /ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-as0aL4/CheckIncludeFile.cxx
         clang++: warning: argument unused during compilation: '-munsafe-fp-atomics' [-Wunused-command-line-argument]
-        /ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-eAuVqn/CheckIncludeFile.cxx:1:10: fatal error: 'experimental/mdspan' file not found
+        /ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-as0aL4/CheckIncludeFile.cxx:1:10: fatal error: 'experimental/mdspan' file not found
             1 | #include <experimental/mdspan>
               |          ^~~~~~~~~~~~~~~~~~~~~
         1 error generated.
-        gmake[1]: *** [CMakeFiles/cmTC_e4879.dir/build.make:79: CMakeFiles/cmTC_e4879.dir/CheckIncludeFile.cxx.o] Error 1
-        gmake[1]: Leaving directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-eAuVqn'
-        gmake: *** [Makefile:127: cmTC_e4879/fast] Error 2
+        gmake[1]: *** [CMakeFiles/cmTC_f552f.dir/build.make:79: CMakeFiles/cmTC_f552f.dir/CheckIncludeFile.cxx.o] Error 1
+        gmake[1]: Leaving directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-as0aL4'
+        gmake: *** [Makefile:127: cmTC_f552f/fast] Error 2
         
       exitCode: 2
   -
@@ -835,8 +835,8 @@ events:
     checks:
       - "Looking for C++ include mdspan"
     directories:
-      source: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-tB0G6y"
-      binary: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-tB0G6y"
+      source: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-5r4ou6"
+      binary: "/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-5r4ou6"
     cmakeVariables:
       CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS: "CMAKE_CXX_COMPILER_CLANG_SCAN_DEPS-NOTFOUND"
       CMAKE_CXX_FLAGS: "-I/opt/rocm-6.2.0/include -munsafe-fp-atomics"
@@ -847,21 +847,21 @@ events:
       variable: "KOKKOS_COMPILER_SUPPORTS_MDSPAN"
       cached: true
       stdout: |
-        Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-tB0G6y'
+        Change Dir: '/ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-5r4ou6'
         
-        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_d5995/fast
-        /usr/bin/gmake  -f CMakeFiles/cmTC_d5995.dir/build.make CMakeFiles/cmTC_d5995.dir/build
-        gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-tB0G6y'
-        Building CXX object CMakeFiles/cmTC_d5995.dir/CheckIncludeFile.cxx.o
-        /opt/cray/pe/craype/2.7.33/bin/CC   -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -std=c++17 -MD -MT CMakeFiles/cmTC_d5995.dir/CheckIncludeFile.cxx.o -MF CMakeFiles/cmTC_d5995.dir/CheckIncludeFile.cxx.o.d -o CMakeFiles/cmTC_d5995.dir/CheckIncludeFile.cxx.o -c /ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-tB0G6y/CheckIncludeFile.cxx
+        Run Build Command(s): /autofs/nccs-svm1_sw/frontier/spack-envs/core-25.03/opt/gcc-13.2/cmake-3.30.5-3megaha56irdlal5or2bjkasn2zj5fvp/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_f4d86/fast
+        /usr/bin/gmake  -f CMakeFiles/cmTC_f4d86.dir/build.make CMakeFiles/cmTC_f4d86.dir/build
+        gmake[1]: Entering directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-5r4ou6'
+        Building CXX object CMakeFiles/cmTC_f4d86.dir/CheckIncludeFile.cxx.o
+        /opt/cray/pe/craype/2.7.33/bin/CC   -I/opt/rocm-6.2.0/include -munsafe-fp-atomics  -std=c++17 -MD -MT CMakeFiles/cmTC_f4d86.dir/CheckIncludeFile.cxx.o -MF CMakeFiles/cmTC_f4d86.dir/CheckIncludeFile.cxx.o.d -o CMakeFiles/cmTC_f4d86.dir/CheckIncludeFile.cxx.o -c /ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-5r4ou6/CheckIncludeFile.cxx
         clang++: warning: argument unused during compilation: '-munsafe-fp-atomics' [-Wunused-command-line-argument]
-        /ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-tB0G6y/CheckIncludeFile.cxx:1:10: fatal error: 'mdspan' file not found
+        /ccs/home/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-5r4ou6/CheckIncludeFile.cxx:1:10: fatal error: 'mdspan' file not found
             1 | #include <mdspan>
               |          ^~~~~~~~
         1 error generated.
-        gmake[1]: *** [CMakeFiles/cmTC_d5995.dir/build.make:79: CMakeFiles/cmTC_d5995.dir/CheckIncludeFile.cxx.o] Error 1
-        gmake[1]: Leaving directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-tB0G6y'
-        gmake: *** [Makefile:127: cmTC_d5995/fast] Error 2
+        gmake[1]: *** [CMakeFiles/cmTC_f4d86.dir/build.make:79: CMakeFiles/cmTC_f4d86.dir/CheckIncludeFile.cxx.o] Error 1
+        gmake[1]: Leaving directory '/autofs/nccs-svm1_home2/dfielding/athenak-df/build_turb/CMakeFiles/CMakeScratch/TryCompile-5r4ou6'
+        gmake: *** [Makefile:127: cmTC_f4d86/fast] Error 2
         
       exitCode: 2
 ...

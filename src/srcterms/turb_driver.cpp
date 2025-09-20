@@ -497,12 +497,12 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
   auto akb_ = akb;
 
   Real dkx, dky, dkz, kx, ky, kz;
-  Real lx = pm->mesh_size.x1max - pm->mesh_size.x1min;
-  Real ly = pm->mesh_size.x2max - pm->mesh_size.x2min;
-  Real lz = pm->mesh_size.x3max - pm->mesh_size.x3min;
-  dkx = 2.0*M_PI/lx;
-  dky = 2.0*M_PI/ly;
-  dkz = 2.0*M_PI/lz;
+  Real lx = tile_driving ? tile_lx : (pm->mesh_size.x1max - pm->mesh_size.x1min);
+  Real ly = tile_driving ? tile_ly : (pm->mesh_size.x2max - pm->mesh_size.x2min);
+  Real lz = tile_driving ? tile_lz : (pm->mesh_size.x3max - pm->mesh_size.x3min);
+  dkx = (lx > 0.0) ? 2.0*M_PI/lx : 0.0;
+  dky = (ly > 0.0) ? 2.0*M_PI/ly : 0.0;
+  dkz = (lz > 0.0) ? 2.0*M_PI/lz : 0.0;
 
   Real &ex = expo;
   Real &ex_prp = exp_prp;
@@ -644,6 +644,26 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
       auto ysin_ = ysin;
       auto zcos_ = zcos;
       auto zsin_ = zsin;
+
+      // Prepare variables for tile index calculation
+      int &nx1 = indcs.nx1;
+      int &nx2 = indcs.nx2;
+      int &nx3 = indcs.nx3;
+      
+      auto size_view = pmy_pack->pmb->mb_size;
+      size_view.template modify<HostMemSpace>();
+      size_view.template sync<DevExeSpace>();
+      
+      const bool tile_enabled = tile_driving;
+      const int tile_nx_local = tile_nx;
+      const int tile_ny_local = tile_ny;
+      const int tile_nz_local = tile_nz;
+      const Real inv_tile_lx_local = inv_tile_lx;
+      const Real inv_tile_ly_local = inv_tile_ly;
+      const Real inv_tile_lz_local = inv_tile_lz;
+      const Real domain_x1min_local = domain_x1min;
+      const Real domain_x2min_local = domain_x2min;
+      const Real domain_x3min_local = domain_x3min;
 
       int mode_count_ = mode_count;
       int num_tiles_local = num_tiles;

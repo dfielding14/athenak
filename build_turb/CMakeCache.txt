@@ -714,7 +714,7 @@ PKG_CONFIG_EXECUTABLE:FILEPATH=/usr/bin/pkg-config
 PROBLEM:STRING=turb_timed_amr
 
 //Name of the computer/site where compile is being run
-SITE:STRING=login13
+SITE:STRING=login10
 
 //The directory containing a CMake configuration file for amd_comgr.
 amd_comgr_DIR:PATH=/opt/rocm-6.2.0/lib/cmake/amd_comgr
