@@ -29,7 +29,7 @@ class TurbulenceDriver {
   DvceArray5D<Real> force, force_tmp1, force_tmp2;  // arrays used for turb forcing
   RNG_State rstate;                    // random state
 
-  DualArray3D<Real> aka, akb; //to store amplitude coefficients for each tile
+  DualArray2D<Real> aka, akb; //to store amplitude coefficients (same pattern repeated on all tiles)
   DualArray1D<Real> kx_mode, ky_mode, kz_mode;
   DvceArray3D<Real> xcos, xsin, ycos, ysin, zcos, zsin;
 
