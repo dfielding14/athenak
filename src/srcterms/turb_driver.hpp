@@ -29,7 +29,7 @@ class TurbulenceDriver {
   DvceArray5D<Real> force, force_tmp1, force_tmp2;  // arrays used for turb forcing
   RNG_State rstate;                    // random state
 
-  DualArray2D<Real> aka, akb; //to store amplitude coefficients
+  DualArray3D<Real> aka, akb; //to store amplitude coefficients for each tile
   DualArray1D<Real> kx_mode, ky_mode, kz_mode;
   DvceArray3D<Real> xcos, xsin, ycos, ysin, zcos, zsin;
 
@@ -59,6 +59,14 @@ class TurbulenceDriver {
   // spatially varying driving
   Real x_turb_scale_height, y_turb_scale_height, z_turb_scale_height;
   Real x_turb_center, y_turb_center, z_turb_center;
+
+  // tiled driving configuration
+  bool tile_driving;
+  int tile_nx, tile_ny, tile_nz;
+  int num_tiles;
+  Real tile_lx, tile_ly, tile_lz;
+  Real inv_tile_lx, inv_tile_ly, inv_tile_lz;
+  Real domain_x1min, domain_x2min, domain_x3min;
 
 
   // functions

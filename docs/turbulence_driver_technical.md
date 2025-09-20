@@ -298,7 +298,19 @@ rseed = -1        # -1 = time-based, >0 = fixed seed
 # Spatial windowing (optional)
 x_turb_scale_height = -1.0  # -1 = no windowing
 x_turb_center = 0.0
+
+# Tiled driving (optional)
+tile_driving = false    # Enable sub-domain tiling for high-k forcing
+tile_factor = 1         # Default tiling factor used for all directions
+tile_nx = 1             # Number of tiles along x1 (must divide mesh nx1)
+tile_ny = 1             # Number of tiles along x2 (must divide mesh nx2)
+tile_nz = 1             # Number of tiles along x3 (must divide mesh nx3)
 ```
+
+When `tile_driving = true`, the driver builds the random acceleration field on
+sub-domains with lengths `L_i/tile_ni` and independently randomizes the Fourier
+coefficients in each tile. The tiling counts must be integer factors of the root
+grid dimensions so that the pattern can be tiled without discontinuities.
 
 ### Example Problem Generator
 
@@ -325,7 +337,7 @@ void TurbulenceProblem(ParameterInput *pin, const bool restart) {
 
 Arrays use Kokkos Views with specific layouts:
 - **Force arrays**: `[nmb][3][nk][nj][ni]` - mesh block, component, spatial
-- **Amplitudes**: `[3][nmodes]` - component, mode index
+- **Amplitudes**: `[ntile][3][nmodes]` - tile, component, mode index
 - **Basis functions**: `[nmb][nmodes][ncells]` - mesh block, mode, spatial
 
 ### Performance Considerations
