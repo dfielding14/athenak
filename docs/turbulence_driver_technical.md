@@ -84,27 +84,19 @@ where:
 - `σ²` determines the forcing amplitude
 - `ξₙ(t)` is white noise
 
-The discrete update (for timestep `dt`) is:
+In the implementation the Ornstein-Uhlenbeck step is applied to the assembled forcing field (`force_tmp1`). The discrete update uses
 
 ```
-aₙ(t+dt) = f·aₙ(t) + g·ξₙ
+fcorr = exp(-Δt/τ),
+gcorr = sqrt(1 - fcorr²),
+force_new = fcorr · force_old + gcorr · force_noise,
 ```
 
-where:
-- `f = exp(-dt/τ)` (correlation factor)
-- `g = σ√(1-f²)` (noise amplitude)
+with the subsequent energy scaling (see above) ensuring the target `dedt`.
 
 ### 5. Energy Injection Rate
 
-The forcing amplitude is normalized to achieve target energy injection rate `dE/dt`:
-
-```
-σ = √(dE/dt × V / Σₙ Pₙ)
-```
-
-where:
-- `V` is the volume
-- `Pₙ` is the power spectrum weight for mode `n`
+After the stochastic field is assembled, AthenaK rescales it to match the requested power injection. The scaling factor `s` is obtained from the kinetic-energy balance in `UpdateForcing` (`src/srcterms/turb_driver.cpp:914-924`), guaranteeing that the input `dedt` is met without relying on a closed-form `σ`.
 
 ## Implementation Architecture
 
@@ -113,14 +105,11 @@ where:
 ```cpp
 class TurbulenceDriver {
   // Core data
-  DvceArray5D<Real> force, force_tmp1, force_tmp2;  // [nmb][3][nk][nj][ni]
-  DualArray2D<Real> aka, akb;                       // [3][nmodes] amplitudes
-  
-  // Basis functions
-  DvceArray3D<Real> xcos, xsin;  // [nmb][nmodes][ni]
-  DvceArray3D<Real> ycos, ysin;  // [nmb][nmodes][nj]
-  DvceArray3D<Real> zcos, zsin;  // [nmb][nmodes][nk]
-  
+  DvceArray5D<Real> force, force_tmp1, force_tmp2;  // Cell-centred forcing fields
+  DualArray2D<Real> aka, akb;                       // Real/imag Fourier amplitudes
+  DualArray1D<Real> kx_mode, ky_mode, kz_mode;      // Wavenumber catalog
+  DvceArray3D<Real> xcos, xsin, ycos, ysin, zcos, zsin; // Precomputed basis values
+ 
   // AMR tracking
   int current_nmb_;
   int last_nmb_created_, last_nmb_deleted_;
@@ -142,15 +131,15 @@ class TurbulenceDriver {
 2. **Mode Evolution** (`InitializeModes` + `UpdateForcing`)
    - Generate new random amplitudes via O-U process
    - Apply spectral weighting (power law or parabolic)
-   - Normalize to target energy injection rate
-   - Compute forcing field from modes
+   - Assemble the forcing field and apply Ornstein-Uhlenbeck updates
+   - Scale the field to satisfy the requested `dedt`
 
 3. **Force Application** (`AddForcing`)
    - Add forcing to momentum equations
    - Handle relativistic corrections if needed
    - Apply spatial windowing if configured
 
-4. **AMR Adaptation** (`CheckResize` + `ResizeArrays`)
+4. **AMR Adaptation** (`EnsureBasisSize`)
    - Detect mesh structure changes
    - Reallocate arrays for new mesh block count
    - **Preserve mode amplitudes** (critical!)
@@ -170,22 +159,12 @@ When AMR refines or coarsens the mesh:
 
 The key insight: **AMR is a numerical change, not a physical event**. The turbulence must continue evolving smoothly through the O-U process.
 
-#### Detection Phase (`CheckResize`)
-```cpp
-if (nmb != current_nmb_ ||
-    (pm->adaptive && pm->pmr != nullptr &&
-     (pm->pmr->nmb_created != last_nmb_created_ || 
-      pm->pmr->nmb_deleted != last_nmb_deleted_))) {
-  ResizeArrays(nmb);
-}
-```
-
-#### Preservation Phase (`ResizeArrays`)
-1. **Reallocate arrays** for new mesh block count
-2. **DO NOT call Initialize()** - this would reset the turbulence state!
-3. **Preserve `aka_` and `akb_`** - these contain the O-U process memory
-4. **Recompute basis functions** at new grid locations
-5. **Reconstruct forcing** using preserved amplitudes
+#### Reconciliation (`EnsureBasisSize`)
+`EnsureBasisSize` (queued ahead of `InitializeModes`) detects AMR activity with the cached mesh-block counters and then:
+1. **Reallocates arrays** when the MeshBlock count changes.
+2. **Preserves** the O-U state in `aka_`/`akb_`.
+3. **Recomputes** the basis functions using the updated block geometry.
+4. **Rebuilds** the forcing field with the preserved amplitudes.
 
 ```cpp
 // Critical: preserve mode amplitudes
@@ -226,9 +205,9 @@ The turbulence driver integrates with AthenaK's task-based execution model:
 ```cpp
 // In operator split task list (before time integration)
 void IncludeInitializeModesTask(TaskList *tl, TaskID start) {
-  auto id_init   = tl->AddTask(&InitializeModes, this, start);
-  auto id_resize = tl->AddTask(&CheckResize, this, id_init);
-  auto id_update = tl->AddTask(&UpdateForcing, this, id_resize);
+  auto id_resize = tl->AddTask(&EnsureBasisSize, this, start);
+  auto id_init   = tl->AddTask(&InitializeModes, this, id_resize);
+  auto id_update = tl->AddTask(&UpdateForcing, this, id_init);
 }
 
 // In stage task list (during RK stages)
@@ -248,8 +227,10 @@ class MeshBlockPack {
   TurbulenceDriver *pturb;  // Turbulence driver for this pack
   
   void AddPhysics(ParameterInput *pin) {
-    if (pin->GetOrAddBoolean("turb_driving", "turb_flag", false) > 0) {
+    if (pin->DoesBlockExist("turb_driving")) {
       pturb = new TurbulenceDriver(this, pin);
+      pturb->IncludeInitializeModesTask(tl_map["before_timeintegrator"], none);
+      pturb->IncludeAddForcingTask(tl_map["stagen"], none);
     }
   }
 };
@@ -307,10 +288,7 @@ tile_ny = 1             # Number of tiles along x2 (must divide mesh nx2)
 tile_nz = 1             # Number of tiles along x3 (must divide mesh nx3)
 ```
 
-When `tile_driving = true`, the driver builds the random acceleration field on
-sub-domains with lengths `L_i/tile_ni` and independently randomizes the Fourier
-coefficients in each tile. The tiling counts must be integer factors of the root
-grid dimensions so that the pattern can be tiled without discontinuities.
+When `tile_driving = true`, the basis functions are evaluated in tile-local coordinates so the forcing pattern repeats with period `L_i / tile_ni`. The Fourier coefficients themselves are shared across tiles; tiling alters the spatial periodicity without producing independent random realisations. Tile counts must evenly divide the root-grid dimensions.
 
 ### Example Problem Generator
 
@@ -336,9 +314,10 @@ void TurbulenceProblem(ParameterInput *pin, const bool restart) {
 ### Memory Layout
 
 Arrays use Kokkos Views with specific layouts:
-- **Force arrays**: `[nmb][3][nk][nj][ni]` - mesh block, component, spatial
-- **Amplitudes**: `[ntile][3][nmodes]` - tile, component, mode index
-- **Basis functions**: `[nmb][nmodes][ncells]` - mesh block, mode, spatial
+- **Force arrays**: `[nmb][3][nk][nj][ni]` — mesh block, component, spatial indices
+- **Amplitudes**: `[3][nmodes]` — direction × mode catalog stored as a DualView
+- **Basis functions**: `[nmb][nmodes][ncells]` — precomputed sines/cosines per block
+- **Mode wavenumbers**: `[nmodes]` — `kx_mode`, `ky_mode`, `kz_mode`
 
 ### Performance Considerations
 

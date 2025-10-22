@@ -1,0 +1,26 @@
+# AthenaK Documentation Audit Log
+
+This log records every documentation issue found during the current audit and how it was resolved. Each entry should capture:
+
+- **Location**: file name and section heading (or line reference when relevant)
+- **Issue**: what was wrong or misleading
+- **Fix**: summary of the change applied in the documentation and, when necessary, in the code
+- **Evidence**: brief pointer to the code (file:line) or runtime output used to verify the correction
+
+| Date | Location | Issue | Fix | Evidence |
+|------|----------|-------|-----|----------|
+| 2025-10-21 | `docs/documentation_audit_guide.md` | Added audit playbook with principles/process for future agents | Documented verification workflow, logging, escalation, and build checks | |
+| 2025-10-21 | `docs/source/examples/turbulence.md`, `docs/source/modules/pgen.md`, `docs/source/reference/input_parameters.md` | Documentation referenced removed SFB turbulence generator and nonexistent parameters | Eliminated SFB sections, updated parameter sources, and synced turbulence docs with current drivers | `src/pgen/turb.cpp:48`, `src/pgen/turb_timed_amr.cpp:57` |
+| 2025-10-21 | `docs/source/examples/turbulence.md` | Example required PROBLEM-specific builds and lacked context for basis_type | Updated build instructions to use default drivers and referenced SFB config details | `docs/source/examples/turbulence.md:38` |
+| 2025-10-21 | `docs/source/examples/blast_wave.md` | Example suggested PROBLEM-specific build and contained incomplete Sedov code | Updated to built-in build workflow, clarified AMR usage, and replaced Sedov section with actionable analytic comparison | `docs/source/examples/blast_wave.md:24` |
+| 2025-10-21 | `docs/source/examples/shock_tube.md` | Example still referenced PROBLEM=shock_tube builds and edit-in-place convergence steps | Switched to out-of-source build/run commands, clarified built-in pgen usage, and used CLI overrides for convergence sweeps | `docs/source/examples/shock_tube.md:36` |
+| 2025-10-21 | `docs/source/flowcharts/system_architecture.md` | Architecture diagram misrepresented module connections and execution order | Rebuilt diagrams to reflect driver/task relationships, physics dependencies, and driver-initialisation sequence | `docs/source/flowcharts/system_architecture.md:1` |
+| 2025-10-21 | `docs/source/flowcharts/runtime.md` | Runtime flow showed incorrect ordering (problem gen before driver) and lacked state preservation notes | Updated flowchart to match Driver initialization pipeline and documented task/AMR details | `docs/source/flowcharts/runtime.md:1` |
+| 2025-10-21 | `docs/source/overview.md` | Overview lacked driver/execution context and used outdated run paths plus empty performance table | Added driver/task pipeline, corrected run command, and removed placeholder perf section | `docs/source/overview.md:1` |
+| 2025-10-21 | `docs/source/troubleshooting.md` | Troubleshooting page listed vague tips and outdated environment variables | Rewrote with actionable build/runtime diagnostics, input validation, and profiling guidance reflecting current CLI/options | `docs/source/troubleshooting.md:1` |
+| 2025-10-21 | `docs/source/running.md` | Run guide assumed in-tree builds and mis-described CLI flags (e.g., -t as final time) | Revised for build tree paths, MPI/OpenMP requirements, correct option descriptions, and added troubleshooting/performance tips | `docs/source/running.md:1` |
+| 2025-10-21 | `docs/source/configuration.md` | Config guide lacked CLI overrides, module activation details, and up-to-date parameter lists | Rewrote to cover block semantics, key options, output streams, and runtime overrides aligned with current code | `docs/source/configuration.md:1` |
+| 2025-10-21 | `docs/source/building.md` | Build guide used in-tree builds, omitted submodule init, and gave incomplete MPI/GPU directives | Rewrote with out-of-source CMake workflow, submodule step, dedicated MPI/CUDA/HIP configs, and updated option table/troubleshooting | `docs/source/building.md:1` |
+| 2025-10-21 | `docs/source/quickstart.md` | Quickstart omitted submodule init, used in-tree build/run paths, and suggested MPI/GPU runs without matching builds | Added submodule step, out-of-source CMake workflow, clarified run paths, and documented required MPI/CUDA configuration | `docs/source/quickstart.md:6`, `docs/source/quickstart.md:44`
+| 2025-10-21 | `docs/turbulence_driver_technical.md` | Document referenced removed `CheckResize`/`ResizeArrays`, incorrect OU scaling, tile randomisation, and amplitude layouts | Updated to describe `EnsureBasisSize`, actual OU coefficients (`fcorr`, `gcorr`), tiling behaviour, MeshBlockPack wiring, and array shapes with dedt scaling | `src/srcterms/turb_driver.cpp:434`, `src/srcterms/turb_driver.cpp:1312`, `src/mesh/meshblock_pack.cpp:165`
+| 2025-10-21 | `docs/AMR_TURBULENCE_IMPLEMENTATION.md` | Document referenced obsolete `ResizeArrays`/`CheckResize` routines and mis-described basis rebuild behaviour (global coords only) | Rewrote implementation section to describe current `EnsureBasisSize` task, selective reallocation, tile-aware coordinate handling, and correct task wiring | `src/srcterms/turb_driver.cpp:1308`, `src/srcterms/turb_driver.cpp:434` |
