@@ -2,20 +2,18 @@
 
 Use the checkboxes below to track progress. Whenever you update a document, record the findings in `docs/documentation_audit_log.md` **before** checking the box.
 
-## Primary Markdown Docs
-
-- [x] `docs/AMR_TURBULENCE_IMPLEMENTATION.md` – AMR Turbulence Implementation (verified and updated implementation details)
-- [x] `docs/turbulence_driver_technical.md` – Turbulence Driver Technical Doc (EnsureBasisSize, OU scaling, tiling behaviour documented)
+## Urgent To Dos:
+- [ ] make sure that all math renders properly
 
 ## Sphinx Site (docs/build/html)
 
 - [ ] Landing Page — `docs/build/html/index.html` (`_sources/index.rst.txt`)
-- [x] Overview — `docs/build/html/overview.html` (`_sources/overview.md.txt`)
-- [x] Quickstart — `docs/build/html/quickstart.html` (`_sources/quickstart.md.txt`)
-- [x] Configuration Guide — `docs/build/html/configuration.html` (`_sources/configuration.md.txt`)
-- [x] Building Guide — `docs/build/html/building.html` (`_sources/building.md.txt`)
-- [x] Running Guide — `docs/build/html/running.html` (`_sources/running.md.txt`)
-- [x] Troubleshooting — `docs/build/html/troubleshooting.html` (`_sources/troubleshooting.md.txt`)
+- [ ] Overview — `docs/build/html/overview.html` (`_sources/overview.md.txt`)
+- [ ] Quickstart — `docs/build/html/quickstart.html` (`_sources/quickstart.md.txt`)
+- [ ] Configuration Guide — `docs/build/html/configuration.html` (`_sources/configuration.md.txt`)
+- [ ] Building Guide — `docs/build/html/building.html` (`_sources/building.md.txt`)
+- [ ] Running Guide — `docs/build/html/running.html` (`_sources/running.md.txt`)
+- [ ] Troubleshooting — `docs/build/html/troubleshooting.html` (`_sources/troubleshooting.md.txt`)
 - [ ] Kokkos Guide — `docs/build/html/kokkos_guide.html` (`_sources/kokkos_guide.md.txt`)
 - [ ] Contributing Docs — `docs/build/html/contributing_docs.html` (`_sources/contributing_docs.md.txt`)
 - [ ] Glossary — `docs/build/html/glossary.html` (`_sources/glossary.rst.txt`)
@@ -24,10 +22,10 @@ Use the checkboxes below to track progress. Whenever you update a document, reco
 ### Examples
 
 - [ ] Example: Binary Merger — `docs/build/html/examples/binary_merger.html`
-- [x] Example: Blast Wave — `docs/build/html/examples/blast_wave.html`
+- [ ] Example: Blast Wave — `docs/build/html/examples/blast_wave.html`
 - [ ] Example: MRI Turbulence — `docs/build/html/examples/mri_turbulence.html`
-- [x] Example: Shock Tube — `docs/build/html/examples/shock_tube.html`
-- [x] Example: Turbulence — `docs/build/html/examples/turbulence.html`
+- [ ] Example: Shock Tube — `docs/build/html/examples/shock_tube.html`
+- [ ] Example: Turbulence — `docs/build/html/examples/turbulence.html`
 
 ### Flowcharts
 
@@ -46,13 +44,13 @@ Use the checkboxes below to track progress. Whenever you update a document, reco
 - [ ] Coordinates Module — `docs/build/html/modules/coordinates.html`
 - [ ] Task List Module — `docs/build/html/modules/tasklist.html`
 - [ ] Driver Module — `docs/build/html/modules/driver.html`
-- [ ] Hydro Module — `docs/build/html/modules/hydro.html`
-- [ ] MHD Module — `docs/build/html/modules/mhd.html`
+- [x] Hydro Module — `docs/build/html/modules/hydro.html`
+- [x] MHD Module — `docs/build/html/modules/mhd.html`
 - [ ] Dyn GRMHD Module — `docs/build/html/modules/dyn_grmhd.html`
 - [ ] Ion-Neutral Module — `docs/build/html/modules/ion_neutral.html`
 - [ ] Shearing Box Module — `docs/build/html/modules/shearing_box.html`
 - [ ] Diffusion Module — `docs/build/html/modules/diffusion.html`
-- [ ] Source Terms Module — `docs/build/html/modules/srcterms.html`
+- [x] Source Terms Module — `docs/build/html/modules/srcterms.html`
 - [ ] Outputs Module — `docs/build/html/modules/outputs.html`
 - [ ] Particles Module — `docs/build/html/modules/particles.html`
 - [ ] Radiation Module — `docs/build/html/modules/radiation.html`

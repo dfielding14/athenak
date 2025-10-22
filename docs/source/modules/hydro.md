@@ -1,246 +1,118 @@
 # Module: Hydrodynamics
 
-## Overview
-The Hydro module solves the Euler equations for inviscid fluid dynamics, supporting both Newtonian and relativistic hydrodynamics with various equations of state.
+## Role in AthenaK
+The Hydrodynamics module advances the Euler equations for Newtonian, special-relativistic, and general-relativistic fluids. It owns the mesh-pack level state (`Hydro` in `src/hydro/hydro.{hpp,cpp}`), assembles the task lists that integrate the equations each Runge–Kutta stage (`src/hydro/hydro_tasks.cpp`), and coordinates optional diffusion, source-term, and shearing-box couplings.
 
-## Source Location
-`src/hydro/`
+## File Layout
 
-## Key Components
+| File | Purpose | Key Routines |
+|------|---------|--------------|
+| `hydro.hpp/cpp` | `Hydro` class, construction, data ownership | constructor, `AssembleHydroTasks`, accessors |
+| `hydro_tasks.cpp` | Task graph used by the integrator | `AssembleHydroTasks`, task wrappers (`Fluxes`, `RKUpdate`, …) |
+| `hydro_fluxes.cpp` | Template flux kernel per Riemann solver | `CalculateFluxes<Hydro_RSolver::*>` |
+| `hydro_newdt.cpp` | CFL and source-term timestep limiter | `Hydro::NewTimeStep` |
 
-| File | Purpose | Key Functions |
-|------|---------|---------------|
-| `hydro.hpp/cpp` | Core hydro class | Constructor, initialization |
-| `hydro_fluxes.cpp` | Flux calculations | `CalculateFluxes()` |
-| `hydro_update.cpp` | Conservative update | `Update()` |
-| `hydro_newdt.cpp` | Timestep calculation | `NewTimeStep()` |
-| `hydro_tasks.cpp` | Task registration | Task management |
-| `hydro_fofc.cpp` | First-order flux correction | FOFC implementation |
+## Runtime Overview
+`MeshBlockPack::AddPhysics` builds a single `Hydro` object per pack. During construction the class:
 
-## Equations Solved
+- Selects the equation of state and instantiates the appropriate EOS helper (`src/hydro/hydro.cpp:40`).
+- Allocates conservative/primitive arrays (and coarse-grid buffers when AMR is enabled).
+- Optionally enables viscosity (`diffusion/viscosity.hpp`) and thermal conduction (`diffusion/conduction.hpp`) if the corresponding coefficients appear in the `<hydro>` block.
+- Always creates a `SourceTerms` instance for hydro sources.
+- Registers all per-stage tasks via `Hydro::AssembleHydroTasks`, wiring MPI exchanges, flux calculations, updates, prolongation/restriction, and the cooling timestep evaluation (`src/hydro/hydro_tasks.cpp:36`).
 
-### Euler Equations (Conservative Form)
+### Stage Task Order
+For each integrator stage (`tl["stagen"]`) the tasks execute in the following sequence:
 
-$$\frac{\partial \rho}{\partial t} + \nabla \cdot (\rho \mathbf{v}) = 0$$
-$$\frac{\partial (\rho \mathbf{v})}{\partial t} + \nabla \cdot (\rho \mathbf{v} \mathbf{v} + P\mathbb{I}) = 0$$
-$$\frac{\partial E}{\partial t} + \nabla \cdot ((E+P)\mathbf{v}) = 0$$
+1. `CopyCons` – prepare stage registers (`u1`) for multi-stage schemes.
+2. `Fluxes` – reconstruct interface states, solve Riemann problems, and add diffusive fluxes.
+3. `SendFlux`/`RecvFlux` – exchange flux buffers when AMR is active.
+4. `RKUpdate` – apply Runge–Kutta increments to `u0`.
+5. `HydroSrcTerms` – inject source terms (links to `SourceTerms`).
+6. Communication and prolongation/restriction tasks (`SendU_*`, `RecvU_*`, `Prolongate`, `RestrictU`).
+7. `ConToPrim` – convert the updated conserved variables back to primitives.
+8. `NewTimeStep` – compute the hydro CFL limit and propagate diffusion/source limits (`src/hydro/hydro_newdt.cpp:21`).
 
-Where:
-- $\rho$: density
-- $\mathbf{v}$: velocity
-- $P$: pressure
-- $E$: total energy density
+Complementary task lists manage boundary posting/clearing before and after each stage.
 
-## Configuration Parameters
+## State Arrays
 
-From `<hydro>` block:
+| Array | Shape | Contents |
+|-------|-------|----------|
+| `u0` | `[nmb, nhydro+nscalars, nk, nj, ni]` | Cell-centered conserved variables. |
+| `w0` | `[nmb, nhydro+nscalars, nk, nj, ni]` | Cell-centered primitive variables. |
+| `u1` | Same as `u0` | Stage accumulation buffer (RK ≥ 2). |
+| `uflx.{x1f,x2f,x3f}` | `[nmb, nhydro+nscalars, nk, nj, ni]` | Face-centered fluxes. |
+| `coarse_{u0,w0}` | Coarse-grid analogues (allocated when `mesh/multilevel=true`). |
+| `fofc`, `utest` | Allocated only when FOFC is active to mark cells requiring first-order fluxes. |
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `eos` | string | required | Equation of state (ideal, isothermal) |
-| `reconstruct` | string | plm | Reconstruction (dc, plm, ppm4, ppmx, wenoz) |
-| `rsolver` | string | required | Riemann solver |
-| `gamma` | Real | - | Adiabatic index (ideal EOS) |
-| `iso_sound_speed` | Real | - | Sound speed (isothermal) |
-| `fofc` | bool | false | First-order flux correction |
-| `nscalars` | int | 0 | Number of passive scalars |
-| `viscosity` | Real | - | Kinematic viscosity coefficient |
-| `conductivity` | Real | - | Thermal conductivity coefficient |
+Passive scalars (`nscalars`) are stored immediately after the hydro primitives/conserved fields, guaranteeing consistent reconstruction and updates across all arrays.
 
-## Riemann Solvers
+## Input Parameters (`<hydro>` block)
 
-| Solver | Description | Speed | Accuracy |
-|--------|-------------|-------|----------|
-| `llf` | Local Lax-Friedrichs | Fast | Diffusive |
-| `hlle` | Harten-Lax-van Leer-Einfeldt | Medium | Good |
-| `hllc` | HLLE with Contact | Slow | Excellent |
-| `roe` | Roe's approximate solver | Medium | Very good |
-| `advect` | Pure advection (testing) | Fast | Limited |
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `eos` | – (required) | `ideal` or `isothermal`; SR/GR runs require `ideal`. |
+| `gamma` | – | Adiabatic index for the ideal EOS (read by the EOS helper). |
+| `iso_sound_speed` | – | Constant sound speed for isothermal runs. |
+| `nscalars` | `0` | Number of passively advected scalars. |
+| `reconstruct` | `plm` | Reconstruction scheme: `dc`, `plm`, `ppm4`, `ppmx`, or `wenoz`. |
+| `rsolver` | – (required) | Riemann solver (see compatibility table below). |
+| `fofc` | `false` | Enables first-order flux correction; requires additional ghost zones. |
+| `viscosity` | absent | Presence activates isotropic viscosity via `diffusion/viscosity.hpp`. |
+| `conductivity` / `tdep_conductivity` | absent | Presence activates thermal conduction (`diffusion/conduction.hpp`). |
 
-### Relativistic Solvers
-- `llf_sr`: Special relativistic LLF
-- `hlle_sr`: Special relativistic HLLE
-- `hllc_sr`: Special relativistic HLLC
-- `llf_gr`: General relativistic LLF
-- `hlle_gr`: General relativistic HLLE
+> The global `<time>` block controls `time/evolution`. Non-relativistic kinematic runs support only the linear advection solver.
 
-## Reconstruction Methods
+### Ghost-Zone Requirements
 
-| Method | Order | Description | Ghost Zones |
-|--------|-------|-------------|-------------|
-| `dc` | 1st | Donor cell (piecewise constant) | 2 |
-| `plm` | 2nd | Piecewise linear (minmod limiter) | 2 (3 with FOFC) |
-| `ppm4` | 4th | Piecewise parabolic (4th order) | 3 (4 with FOFC) |
-| `ppmx` | 4th | Extremum-preserving PPM | 3 (4 with FOFC) |
-| `wenoz` | 5th | Weighted ENO-Z | 3 (4 with FOFC) |
+| Reconstruction | Nominal Ghosts | With FOFC |
+|----------------|----------------|-----------|
+| `dc` | 2 | 2 |
+| `plm` | 2 | 3 |
+| `ppm4`, `ppmx`, `wenoz` | 3 | 4 |
 
-## Execution Flow
+Violating these limits triggers explicit fatal errors at construction (`src/hydro/hydro.cpp:147`).
 
-```{mermaid}
-flowchart TD
-    Start[Hydro Tasks] --> Recv[Start Boundary Recv]
-    Recv --> P2C[Primitive to Conservative]
-    P2C --> Recon[Reconstruction]
-    Recon --> Riemann[Riemann Solver]
-    Riemann --> Flux[Calculate Fluxes]
-    Flux --> Wait[Wait for Boundaries]
-    Wait --> Update[Conservative Update]
-    Update --> C2P[Conservative to Primitive]
-    C2P --> BC[Apply BCs]
-    BC --> Done[Task Complete]
-```
+### Riemann Solver Compatibility
 
-## Variable Arrays
+| Regime | Supported Keywords | Notes |
+|--------|-------------------|-------|
+| Non-relativistic dynamic | `llf`, `hlle`, `hllc` (ideal EOS only), `roe` | |
+| Non-relativistic kinematic | `advect` | Requires `<time>/evolution = kinematic`. |
+| Special relativistic dynamic | `llf`, `hlle`, `hllc` | Mapped internally to SR variants (`Hydro_RSolver::*_sr`). |
+| General relativistic dynamic | `llf`, `hlle` | Mapped to GR variants (`Hydro_RSolver::*_gr`). |
 
-### Conservative Variables (`cons`)
-- `cons(IDN)`: Density $\rho$
-- `cons(IM1)`: Momentum $\rho v_1$
-- `cons(IM2)`: Momentum $\rho v_2$
-- `cons(IM3)`: Momentum $\rho v_3$
-- `cons(IEN)`: Total energy $E$
+Invalid combinations (e.g., `hllc` with isothermal EOS or relativistic kinematic runs) raise fatal errors during construction (`src/hydro/hydro.cpp:189`).
 
-### Primitive Variables (`prim`)
-- `prim(IDN)`: Density $\rho$
-- `prim(IV1)`: Velocity $v_1$
-- `prim(IV2)`: Velocity $v_2$
-- `prim(IV3)`: Velocity $v_3$
-- `prim(IPR)`: Pressure $P$
+## Flux Calculation Pipeline
+`Hydro::Fluxes` dispatches to `CalculateFluxes<Hydro_RSolver::*>`, which reconstructs face states, solves the chosen Riemann problem, and fills `uflx` for all faces on every MeshBlock in the pack (`src/hydro/hydro_fluxes.cpp`). Diffusive contributions are added immediately afterwards:
 
-## Key Methods
+- `Viscosity::IsotropicViscousFlux` when `viscosity` is present (`src/hydro/hydro_tasks.cpp:115`).
+- `Conduction::AddHeatFlux` for conductive runs.
 
-### Flux Calculation
-```cpp
-// hydro_fluxes.cpp L100-200
-void Hydro::CalculateFluxes(MeshBlockPack *pmbp) {
-  // Reconstruct primitives at faces
-  Reconstruction(prim_left, prim_right);
-  
-  // Solve Riemann problem
-  RiemannSolver(prim_left, prim_right, flux);
-  
-  // Store fluxes for update
-  StoreFluxes(flux);
-}
-```
+FOFC is applied either when explicitly enabled or implicitly when a GR run excises cells (black-hole masks), clamping troubled cells to first-order updates (`src/hydro/hydro_tasks.cpp:121`).
 
-### Conservative Update
-```cpp
-// hydro_update.cpp L50-100
-void Hydro::Update(MeshBlockPack *pmbp, Real dt) {
-  // Update conserved variables
-  cons_new = cons_old - dt/dx * (flux_right - flux_left);
-}
-```
+## Source-Term Integration
+`Hydro::HydroSrcTerms` invokes the shared `SourceTerms` object to apply body forces, turbulence driving, cooling, etc. The same object also supplies the cooling timestep limit inside `Hydro::NewTimeStep`. Couplings to orbital advection and shearing-box boundaries are coordinated through additional tasks (`SendU_OA`, `RecvU_Shr`, …) and rely on the flags set by the `<shearing_box>` block (`src/hydro/hydro_tasks.cpp:52`).
 
-### Timestep Calculation
-```cpp
-// hydro_newdt.cpp L30-80
-Real Hydro::NewTimeStep() {
-  // CFL condition
-  // dt = cfl_number * min(dx/(|v|+cs));
-}
-```
+## Timestep Control
+`Hydro::NewTimeStep` executes only on the final stage. It evaluates:
 
-CFL condition:
+1. The hydrodynamic CFL (or pure advection limit for kinematic runs) using local wave speeds, including relativistic characteristic speeds where appropriate (`src/hydro/hydro_newdt.cpp:39`).
+2. Diffusion limits when thermal conduction is active.
+3. Source-term limits supplied by `SourceTerms::NewTimeStep`.
 
-$$\Delta t = \text{CFL} \cdot \min\left(\frac{\Delta x}{|v| + c_s}\right)$$
+The minimum value is stored in `dtnew` and reduced into the driver’s global timestep.
 
-## Equations of State
+## Performance Considerations
+- All heavy kernels (`CopyCons`, `CalculateFluxes`, `RKUpdate`, `ConToPrim`) are implemented as `Kokkos::parallel_for`, operating over the entire mesh-pack to maximise GPU occupancy.
+- Arrays are dimensioned to the maximum number of mesh blocks that can reside on the rank, avoiding reallocations during AMR operations.
+- When FOFC is enabled, additional storage (`fofc`, `utest`) is allocated only once and reused every step.
 
-### Ideal Gas
+## Common Pitfalls
+- `hllc` cannot be combined with the isothermal EOS; use `hlle` instead.
+- Ensure the mesh ghost-zone count satisfies the reconstruction plus FOFC requirements before enabling the option.
+- For kinematic runs, only `rsolver=advect` is valid—dynamic solvers expect conservative energy updates.
+- Viscosity and conduction must be declared in `<hydro>`; diffusion blocks elsewhere are not consulted by the hydro module.
 
-$$P = (\gamma - 1)\left(E - \frac{1}{2}\rho v^2\right)$$
-$$c_s = \sqrt{\frac{\gamma P}{\rho}}$$
-```
-
-### Isothermal
-```cpp
-P = cs² * ρ
-// No energy equation needed
-```
-
-## Boundary Conditions
-
-Standard boundary types:
-- `reflecting`: Zero normal velocity
-- `outflow`: Zero gradient
-- `periodic`: Periodic wrap
-- `user`: User-defined in problem generator
-
-## First-Order Flux Correction (FOFC)
-
-Ensures robustness near shocks:
-```cpp
-if (fofc && shock_detected) {
-  // Use first-order flux
-  flux = flux_first_order;
-}
-```
-
-## Performance Optimization
-
-### Vectorization
-- Reconstruction vectorized over i-direction
-- Riemann solver operates on pencils
-
-### GPU Optimization
-```cpp
-par_for("hydro_fluxes", DevExeSpace(),
-        0, nmb-1, ks, ke, js, je, is, ie+1,
-KOKKOS_LAMBDA(int m, int k, int j, int i) {
-  // Flux kernel
-});
-```
-
-## Common Issues and Solutions
-
-### Negative Pressure
-- Check CFL number (reduce if needed)
-- Enable FOFC for strong shocks
-- Check initial conditions
-
-### Carbuncle Instability
-- Use HLLC or Roe solver
-- Add small viscosity
-- Refine grid
-
-## Usage Examples
-
-### Shock Tube
-```ini
-<hydro>
-eos = ideal
-gamma = 1.4
-reconstruct = ppm
-rsolver = hllc
-```
-
-### Isothermal Turbulence
-```ini
-<hydro>
-eos = isothermal
-iso_sound_speed = 1.0
-reconstruct = plm
-rsolver = hlle
-```
-
-### Relativistic Flow
-```ini
-<hydro>
-eos = ideal
-gamma = 4.0/3.0
-rsolver = hlle_sr  # Special relativistic
-```
-
-## Testing
-
-Standard test problems in `src/pgen/tests/`:
-- `linear_wave.cpp`: Linear wave convergence
-- `shock_tube.cpp`: Sod shock tube
-- `lw_implode.cpp`: 2D implosion test
-
-## See Also
-- [MHD Module](mhd.md) - Magnetohydrodynamics
-- [EOS Module](eos.md) - Equations of state
-- [Riemann Solvers](riemann_solvers.md)
-- Source: `src/hydro/hydro.cpp`

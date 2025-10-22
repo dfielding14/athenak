@@ -1,213 +1,160 @@
 # Module: Source Terms
 
-## Overview
-The Source Terms module implements external sources and forcing including turbulence driving, cooling, gravity, rotation, and user-defined source terms.
+## Role in AthenaK
+The source terms module wires all non-conservative physics into the hydro, MHD, ion-neutral, and radiation solvers. Runtime source updates flow through two cooperating classes:
 
-## Source Location
-`src/srcterms/`
+- `SourceTerms` (`src/srcterms/srcterms.{hpp,cpp}`) owns cooling, gravity, rotation, and beam contributions. Instances are constructed by the hydro/MHD constructors and run inside the standard source-term task slots of each integrator stage.
+- `TurbulenceDriver` (`src/srcterms/turb_driver.{hpp,cpp}`) synthesises random acceleration fields used to stir turbulence. It is managed by `MeshBlockPack`, scheduled as its own set of tasks, and can operate on Hydro, MHD, or two-fluid (ion-neutral) states.
 
-## Key Components
+`SourceTerms::NewTimeStep` also supplies cooling-based timestep limits that feed into the global CFL reduction.
 
-| File | Purpose | Key Functions |
-|------|---------|---------------|
-| `srcterms.hpp/cpp` | Core source terms class | Management, registration |
-| `turb_driver.hpp/cpp` | Turbulence forcing | Fourier/SFB driving |
-| `srcterms_newdt.cpp` | Timestep constraints | Source term CFL |
-| `cooling_tables.hpp` | Cooling functions | Tabulated cooling |
-| `ismcooling.hpp` | ISM cooling curves | Temperature-dependent |
+## File Layout
 
-## Turbulence Driving
+| File | Purpose |
+|------|---------|
+| `srcterms.hpp/cpp` | Implements `SourceTerms` and the run-time selection logic for the physics terms enabled in the input file. |
+| `srcterms_newdt.cpp` | Computes timestep constraints contributed by cooling processes. |
+| `turb_driver.hpp/cpp` | Implements the Ornstein–Uhlenbeck turbulence driver and its AMR-aware basis management. |
+| `cooling_tables.hpp`, `ismcooling.hpp` | Tabulated and analytic cooling coefficients used by the CGM and ISM coolers. |
 
-### Configuration (`<turb_driving>` block)
+## Runtime Wiring
+1. `Hydro`, `MHD`, and `Radiation` constructors create one `SourceTerms` object per pack. Only the features whose flags appear in the corresponding block are activated.
+2. `MeshBlockPack::AddPhysics` instantiates a `TurbulenceDriver` when a `<turb_driving>` block is present. The driver registers two task chains:
+   - `before_timeintegrator`: `EnsureBasisSize → InitializeModes → UpdateForcing`
+   - `stagen`: inserts `AddForcing` between each solver’s reconstruction update and source-term application.
+3. On AMR updates the driver reruns `EnsureBasisSize`, which resizes device arrays, rebuilds basis functions, and preserves the accumulated OU state.
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `turb_flag` | int | 2 | 0=off, 1=initial, 2=continuous |
-| `dedt` | Real | 0.0 | Energy injection rate |
-| `tcorr` | Real | 0.0 | Correlation time |
-| `rseed` | int | -1 | Random seed |
-| `basis_type` | int | 0 | 0=Fourier, 1=SFB |
-| `driving_type` | int | 0 | 0=solenoidal, 1=compressive |
-| `nlow` | int | 1 | Min wavenumber |
-| `nhigh` | int | 3 | Max wavenumber |
+## Source Term Families
 
-### Fourier Driving
-Random phases in k-space:
-$$f(\mathbf{k}) = A(\mathbf{k}) \cdot \exp(i\phi(\mathbf{k}))$$
+### Constant Acceleration (`<hydro>` or `<mhd>`)
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `const_accel` | bool | Enables uniform acceleration. |
+| `const_accel_val` | real | Acceleration magnitude (code units). |
+| `const_accel_dir` | int | Component index (1, 2, or 3). |
 
-Force in real space:
-$$\mathbf{F}(\mathbf{x}) = \text{FFT}^{-1}[f(\mathbf{k})]$$
+The term acts on momentum and, for ideal gases, adds the corresponding kinetic work to energy.
 
-### Spherical Fourier-Bessel (SFB)
-For spherical geometries:
-$$f(r,\theta,\phi) = \sum_{nlm} A_{nlm} \cdot j_l\left(\frac{k_{ln} r}{r_0}\right) \cdot Y_{lm}(\theta,\phi)$$
+### ISM Cooling (`<hydro>`)
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `ism_cooling` | bool | Enables optically thin ISM cooling. |
+| `hrate` | real | Uniform heating rate used to offset cooling. |
 
-where $k_{ln} = x_{ln}/r_0^{\text{turb}}$ ($x_{ln}$ = spherical Bessel roots)
+The cooling coefficient `Λ(T)` stitches together three regimes:
 
-#### SFB-specific parameters:
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `lmax` | int | Maximum spherical harmonic degree |
-| `nmax` | int | Maximum radial mode index |
-| `r0_turb` | Real | Outer radius of driven region |
+- A Koyama & Inutsuka (2002) analytic fit below \(10^{4.2}\,\mathrm{K}\)
+- The Schure et al. (2009) SPEX table between \(10^{4.12}\) and \(10^{8.15}\,\mathrm{K}\) (stored in `lhd[102]`)
+- A CGOLS-inspired power-law tail above \(10^{8.15}\,\mathrm{K}\)
 
-### Implementation
-```cpp
-// In turb_driver.cpp
-void TurbulenceDriver::Generate() {
-  // Generate random amplitudes
-  // Apply projection (solenoidal/compressive)
-  // Normalize to target power
-}
-```
+`SourceTerms::NewTimeStep` limits the timestep using \( \Delta t = e / |\rho (\rho \Lambda - \Gamma)| \). The composite curve is illustrated below (generated by `scripts/plot_cooling_curves.py`):
 
-## Cooling Functions
+![ISM cooling coefficient](../_static/ism_cooling_curve.png)
 
-### ISM Cooling
-Temperature-dependent cooling:
-$$\Lambda(T) = \begin{cases}
-\Lambda_0 \left(\frac{T}{T_0}\right)^\alpha & \text{for } T < T_{\text{peak}} \\
-\Lambda_1 \left(\frac{T}{T_1}\right)^\beta & \text{for } T > T_{\text{peak}}
-\end{cases}$$
+### CGM Cooling (`<hydro>`)
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `cgm_cooling` | bool | Enables CGM cooling; mutually exclusive with `ism_cooling`. |
+| `hrate` | real | Base volumetric heating rate. |
+| `hscale_norm` | real | Density-normalisation factor. |
+| `hscale_height` | real | Vertical Gaussian scale height. |
+| `hscale_radius` | real | Radial exponential scale radius. |
+| `hscale_alpha` | real | Coupling between radius and vertical scale. |
+| `T_max` | real | Temperature ceiling in cgs units. |
 
-### Tabulated Cooling
-```cpp
-// From cooling_tables.hpp
-struct CoolingTable {
-  Real GetCoolingRate(T, n);
-  Real GetHeatingRate(T, n);
-};
-```
+The routine blends multiple ingredients:
 
-## Gravity
+- **Photo-ionisation equilibrium (PIE)** tables (`H_He_Cooling_ARR` and `Metal_Cooling_ARR`) indexed by log-temperature (`Tbins_ARR`) and log-density (`nHbins_ARR`)
+- **Collisional ionisation equilibrium (CIE)** tables for \(T \gtrsim 10^{4}\,\mathrm{K}\)
+- The same low-temperature analytic fit used by `ISMCoolFn`
+- A density- and height-dependent heating profile governed by the `hscale_*` parameters
+- Line-of-sight shielding derived from the local neutral fraction and cell-centred path length
 
-### Point Source
-$$\mathbf{F}_{\text{grav}} = -\frac{GM}{r^2} \hat{\mathbf{r}}$$
+Passive scalar zero is interpreted as metallicity; when absent, a default of \(Z = \tfrac{1}{3} Z_\odot\) is assumed. The figure summarises the tabulated PIE components for representative densities:
 
-### Uniform Field
-$$\mathbf{F}_{\text{grav}} = -g \hat{\mathbf{z}}$$
+![CGM cooling tables](../_static/cgm_cooling_curves.png)
 
-### NFW Potential
-$$\Phi = -\frac{GM}{r} \ln\left(1 + \frac{r}{r_s}\right)$$
+*Left: primordial (H+He) cooling. Right: metal-line cooling. Curves are reconstructed directly from `src/srcterms/cooling_tables.hpp` for \(n_H = 10^{-6}, 10^{-4}, 10^{-2}, 10^{0}\,\mathrm{cm^{-3}}\).*
 
-## Rotation (Coriolis/Centrifugal)
+### Relativistic Cooling (`<hydro>` or `<mhd>`)
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `rel_cooling` | bool | Enables relativistic cooling source. |
+| `crate_rel` | real | Cooling coefficient. |
+| `cpower_rel` | real | Power-law index applied to temperature. |
 
-### Rotating Frame
-$$\mathbf{F}_{\text{rot}} = -2\boldsymbol{\Omega} \times \mathbf{v} - \boldsymbol{\Omega} \times (\boldsymbol{\Omega} \times \mathbf{r})$$
+Momentum and energy losses scale with the fluid four-velocity to remain consistent with SR dynamics.
 
-### Shearing Box
-From `<shearing_box>` block:
-$$\mathbf{F}_{\text{shear}} = 2\Omega v_y \hat{\mathbf{x}} - 2\Omega v_x \hat{\mathbf{y}}$$
+### Radiation Beam Source (`<radiation>`)
+| Parameter | Type | Notes |
+|-----------|------|-------|
+| `beam_source` | bool | Adds beam intensity along pre-masked rays. |
+| `dii_dt` | real | Photon injection rate. |
 
-## User-Defined Sources
+The beam source multiplies the radiation mask stored on the pack and respects any excision regions.
 
-**Note**: User-defined source terms are implemented directly in problem generators, not through a registration mechanism.
+### Shearing Box Terms (`<shearing_box>`)
+If a `<shearing_box>` block exists, the module initialises Coriolis and tidal source terms using `qshear` and `omega0`. Separate hydro and MHD variants update momenta (and energy for ideal EOS). In 2-D runs, `ShearingBoxBoundary` can request the `r-φ` version via `SourceTerms::shearing_box_r_phi`.
 
-### Implementation
-```cpp
-// In problem generator, add source terms in the appropriate task
-void MyProblem::AddSources(MeshBlockPack *pmbp, Real dt) {
-  par_for("user_source", DevExeSpace(),
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    // Add custom source terms directly
-    cons(IEN,m,k,j,i) += dt * heating_rate;
-    cons(IM1,m,k,j,i) += dt * force_x;
-  });
-}
-```
+## Turbulence Driver
 
-## Timestep Constraints
+### Task Flow
+1. **EnsureBasisSize** detects changes in the mesh pack (AMR splits/merges or root-grid edits), resizes `force`, `force_tmp{1,2}`, and basis caches, and recomputes trigonometric basis functions per MeshBlock. Existing OU coefficients `aka/akb` are preserved.
+2. **InitializeModes** builds the mode catalogue for the selected wavenumber ranges, computes spectral weights, and generates random amplitudes using either a fixed seed (`rseed >= 0`) or a time-based seed.
+3. **UpdateForcing** copies the OU state into the working force array, applies optional Gaussian weighting (`*_scale_height` and `*_center`), removes net momentum, and rescales the field to match the requested energy injection `dedt`.
+4. **AddForcing** applies accelerations during each integrator stage. The kernel supports hydro-only, MHD, and two-fluid ion-neutral configurations. For relativistic runs it converts to/from conserved variables with the appropriate SR transformations.
 
-### Cooling Time
-$$\Delta t_{\text{cool}} = \frac{e}{|de/dt|_{\text{cooling}}}$$
+### Ornstein–Uhlenbeck Update
+- `dt_turb_update` controls how often the OU process is advanced. The OU coefficients are \( f_{\text{corr}} = \exp(-\Delta t/t_{\text{corr}}) \) and \( g_{\text{corr}} = \sqrt{1 - f_{\text{corr}}^2} \); in the white-noise limit (`tcorr <= 1e-6`) the new sample is used directly.
+- `turb_flag = 1` drives for a finite duration (`tdriv_duration`, default `tcorr`); `turb_flag = 2` drives continuously. Driving begins once `time >= tdriv_start`.
+- `constant_edot = true` (default) scales the field so the volumetric energy injection equals `dedt`. When `false`, the scaling instead keeps the instantaneous acceleration magnitude fixed.
+- Net linear momentum is removed every update and the solver guards against degenerate volume sums.
 
-### Orbital Time
-$$\Delta t_{\text{orbit}} = \frac{2\pi}{\Omega}$$
+### Tiling and Spatial Weighting
+- `tile_driving` repeats the forcing pattern over `tile_nx × tile_ny × tile_nz` tiles. Each tile must evenly divide the corresponding root-grid dimension; 1-D or 2-D meshes force unused tile counts to 1.
+- Optional Gaussian envelopes in each coordinate (`x/y/z_turb_scale_height` with associated `_center`) weight the forcing amplitude during `UpdateForcing`.
+- `sol_fraction` blends solenoidal and compressive components when projecting the random field in Fourier space.
 
-## Execution Flow
+### Configuration Reference (`<turb_driving>`)
 
-```{mermaid}
-flowchart TD
-    Start[Source Terms] --> Check{Which Sources?}
-    Check -->|Turbulence| Turb[Generate Forcing]
-    Check -->|Cooling| Cool[Apply Cooling]
-    Check -->|Gravity| Grav[Add Gravity]
-    Check -->|User| User[User Sources]
-    
-    Turb --> Apply[Apply to Momentum]
-    Cool --> Apply2[Apply to Energy]
-    Grav --> Apply
-    User --> Apply3[Apply to All]
-    
-    Apply --> Done[Update Complete]
-    Apply2 --> Done
-    Apply3 --> Done
-```
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `turb_flag` | `2` | 0=off, 1=drive for `tdriv_duration`, 2=continuous. |
+| `dedt` | `0.0` | Target energy injection rate (code units). |
+| `tcorr` | `0.0` | OU correlation time. |
+| `dt_turb_update` | `0.01` | Minimum cadence between OU refreshes. |
+| `driving_type` | `0` | 0=3-D isotropic, 1=planar driving. |
+| `nlow`, `nhigh` | `1`, `3` | Inclusive wavenumber bounds. |
+| `npeak` / `kpeak` | `kpeak=4π` | Spectrum peak, either as a mode index or explicit wavenumber. |
+| `spect_form` | `1` | 1=parabolic, 2=power-law weighting. |
+| `expo`, `exp_prp`, `exp_prl` | `5/3`, `5/3`, `0` | Spectral slopes (isotropic / perpendicular / parallel). |
+| `min_k*`, `max_k*` | `0` / `nhigh` | Cartesian mode limits per axis. |
+| `sol_fraction` | `1.0` | Fraction of power in solenoidal modes. |
+| `rseed` | `-1` | RNG seed; negative uses wall clock. |
+| `constant_edot` | `true` | Switch between fixed `dedt` and fixed acceleration. |
+| `tile_driving` | `false` | Enable spatial tiling. |
+| `tile_factor` / `tile_nx,ny,nz` | `1` | Tile replication counts. |
+| `x/y/z_turb_scale_height` | `-1.0` | Gaussian half-widths; negative disables weighting. |
+| `x/y/z_turb_center` | `0.0` | Gaussian centres (code units). |
+| `tdriv_start` | `0.0` | Simulation time when driving begins. |
+| `tdriv_duration` | `tcorr` | Duration when `turb_flag=1`. |
 
-## Common Applications
+### Compatibility Notes
+- When both hydro and MHD modules are active (ion-neutral mode), the forcing is applied to each fluid with shared accelerations.
+- Relativistic integrations invoke the SR conservative-to-primitive and primitive-to-conservative transforms after applying forces.
+- `EnsureBasisSize` is idempotent and inexpensive when no mesh change is detected.
 
-### Driven Turbulence
-```ini
-<turb_driving>
-turb_flag = 2       # Continuous driving
-dedt = 1.0          # Power input
-tcorr = 0.5         # Correlation time
-driving_type = 0    # Solenoidal
-```
+## Cooling Timestep Constraint
+`SourceTerms::NewTimeStep` scans the mesh pack for ISM and CGM cooling cells and stores the minimum stable timestep in `dtnew`. The driver reduces the global timestep against this value before advancing.
 
-### Cooling Flow
-```ini
-<problem>
-cooling_type = ism  # ISM cooling curve
-T_floor = 1e4       # Temperature floor
-```
+## Operational Tips
+- Monitor the scalar `dt_turb_update` against the hydrodynamic timestep. Large `dt` jumps can cause multiple OU updates in a single call; the driver loops until the elapsed time is caught up.
+- When using tiling, double-check that each tile dimension divides the root-grid extent; the constructor exits with a fatal error otherwise.
+- For CGM cooling, provide passive scalar metallicity or the code assumes a fixed `Z=1/3 Z⊙`.
+- To disable turbulence mid-run, set `turb_flag=0` or advance past `tdriv_start + tdriv_duration` when using burst mode.
+- Use `scripts/plot_cooling_curves.py` (one-off helper) to regenerate the cooling visualisations or inspect new tables; outputs are written to `docs/source/_static`.
 
-### Gravitational Collapse
-```ini
-<problem>
-grav_type = point_mass
-GM = 1.0
-softening = 0.1
-```
-
-## Performance Considerations
-
-### Turbulence Driving
-- FFT operations expensive
-- Cache forcing patterns
-- Update every N timesteps
-
-### Cooling
-- Table lookups can be slow
-- Use interpolation
-- Subcycle if needed
-
-## Common Issues
-
-### Energy Conservation
-- Source terms can violate conservation
-- Monitor total energy
-- Use conservative formulation
-
-### Stiff Cooling
-- Cooling time << dynamical time
-- Use implicit integration
-- Apply temperature floor
-
-### Force Imbalance
-- Check force normalization
-- Verify momentum conservation
-- Monitor angular momentum
-
-## Testing
-
-Source term tests:
-- Energy injection rate
-- Cooling equilibrium
-- Orbital dynamics
-
-## See Also
-- [Hydro Module](hydro.md)
-- [MHD Module](mhd.md)
-- [Shearing Box Module](shearing_box.md)
-- Source: `src/srcterms/srcterms.cpp`
+## Related Modules
+- `hydro` and `mhd` task lists (`src/hydro/hydro_tasks.cpp`, `src/mhd/mhd_tasks.cpp`) for where source terms sit within the integrator.
+- Shearing box boundary handling in `src/shearing_box/`.
+- Ion-neutral coupling in `src/ion-neutral/` when two-fluid forcing is active.

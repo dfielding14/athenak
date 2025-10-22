@@ -1,189 +1,118 @@
 # AthenaK Runtime Flow
 
-This interactive flowchart shows the complete execution flow of an AthenaK simulation from startup to completion. Click on any node to navigate to detailed documentation.
+The runtime sequence below mirrors the control flow in `src/main.cpp` and the driver implementation. Nodes link to the relevant documentation for deeper inspection.
 
-## Main Execution Flow
+## Main Program Sequence
 
 ```{mermaid}
-flowchart TD
-    Start([Start]) --> InitMPI[Initialize MPI (if enabled)]
-    InitMPI --> InitKokkos[Initialize Kokkos]
-    InitKokkos --> ParseArgs[Parse Command Line]
-    ParseArgs --> ReadInput[Read .athinput (ParameterInput)]
+flowchart TB
+    classDef setup fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#0d47a1;
+    classDef io fill:#ede7f6,stroke:#512da8,stroke-width:2px,color:#311b92;
+    classDef mesh fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#1b5e20;
+    classDef sim fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#e65100;
+    classDef output fill:#fce4ec,stroke:#ad1457,stroke-width:2px,color:#880e4f;
 
-    ReadInput --> BuildMesh[Construct Mesh & MeshBlocks]
-    BuildMesh --> BuildPacks[Assemble MeshBlockPacks]
-    BuildPacks --> AddPhysics{Register Physics Modules}
+    START([Start]):::setup --> MPI_INIT["Initialize MPI (if enabled)"]:::setup
+    MPI_INIT --> KOKKOS_INIT["Initialize Kokkos"]:::setup
+    KOKKOS_INIT --> PARSE["Parse CLI arguments"]:::setup
+    PARSE --> VALIDATE{"Input or restart specified?"}:::io
+    VALIDATE -->|No| ERROR["Abort: missing -i or -r"]:::io
+    VALIDATE -->|Yes| LOAD_RST{"Restart file supplied?"}:::io
+    LOAD_RST -->|Yes| LOAD_RESTART["Load restart header\n(ParameterInput::LoadFromFile)"]:::io
+    LOAD_RST -->|No| SKIP_RST["Skip restart load"]:::io
+    LOAD_RESTART --> LOAD_INPUT
+    SKIP_RST --> LOAD_INPUT["Load athinput\n(ParameterInput::LoadFromFile)"]:::io
+    LOAD_INPUT --> OVERRIDES["Apply CLI overrides\n(ModifyFromCmdline)"]:::io
+    OVERRIDES --> DUMP_CHECK{"-n requested?"}:::io
+    DUMP_CHECK -->|Yes| PAR_DUMP["Dump parameters and exit"]:::io
+    DUMP_CHECK -->|No| MESH_STEP["Construct Mesh"]:::mesh
 
-    AddPhysics --> |Hydro| AddHydro[Attach Hydro]
-    AddPhysics --> |MHD| AddMHD[Attach MHD]
-    AddPhysics --> |Radiation| AddRad[Attach Radiation]
-    AddPhysics --> |Particles| AddPart[Attach Particles]
-    AddPhysics --> |GR| AddGR[Attach Z4c / Dyn GR]
+    MESH_STEP --> TREE_BUILD{"Restart run?"}:::mesh
+    TREE_BUILD -->|No| BUILD_SCRATCH["Build tree from scratch"]:::mesh
+    TREE_BUILD -->|Yes| BUILD_RESTART["Build tree from restart"]:::mesh
+    BUILD_SCRATCH --> MESH_POST
+    BUILD_RESTART --> MESH_POST["Set restart metadata"]:::mesh
 
-    AddHydro --> CreateDriver
-    AddMHD --> CreateDriver
-    AddRad --> CreateDriver
-    AddPart --> CreateDriver
-    AddGR --> CreateDriver
+    MESH_POST --> MESH_OPTION{"-m requested?"}:::mesh
+    MESH_OPTION -->|Yes| WRITE_MESH["Write mesh structure and exit"]:::mesh
+    MESH_OPTION -->|No| ADD_PHYS["Mesh::AddCoordinatesAndPhysics"]:::mesh
 
-    CreateDriver[Create Driver & Outputs] --> DriverInit[Driver::Initialize]
-    DriverInit --> ProblemInit[Problem Generator Sets ICs]
-    DriverInit --> BuildTaskList[Build Task Lists]
+    ADD_PHYS --> PROBLEM_INIT["Construct ProblemGenerator\n(ICs or restart)"]:::sim
+    PROBLEM_INIT --> DRIVER_BUILD["Create Driver"]:::sim
+    PROBLEM_INIT --> OUTPUT_BUILD["Create Outputs manager"]:::output
+    DRIVER_BUILD --> INITIALIZE["Driver::Initialize"]:::sim
+    INITIALIZE --> EXECUTE["Driver::Execute"]:::sim
+    EXECUTE --> FINALIZE["Driver::Finalize"]:::sim
+    FINALIZE --> CLEANUP["Destroy Driver/Outputs/Mesh/ParameterInput"]:::sim
+    CLEANUP --> KOKKOS_FINI["Finalize Kokkos"]:::setup
+    KOKKOS_FINI --> MPI_FINI["Finalize MPI"]:::setup
+    MPI_FINI --> END([End]):::setup
 
-    BuildTaskList --> TimeLoop{Time Evolution Loop}
-
-    TimeLoop --> CheckTime{t < tlim?}
-    CheckTime --> |Yes| ExecuteTasks[Execute Task Lists]
-    CheckTime --> |No| Finalize[Finalize]
-
-    ExecuteTasks --> UpdateDt[New Timestep]
-    UpdateDt --> AMRCheck{AMR Triggered?}
-
-    AMRCheck --> |Yes| RefineGrid[Refine / Derefine Grid]
-    AMRCheck --> |No| OutputCheck
-    RefineGrid --> Redistribute[Load Balance]
-    Redistribute --> OutputCheck
-
-    OutputCheck{Output due?}
-    OutputCheck --> |Yes| WriteOutput[Write Outputs / Restart]
-    OutputCheck --> |No| TimeLoop
-    WriteOutput --> TimeLoop
-
-    Finalize --> CleanupKokkos[Finalize Kokkos]
-    CleanupKokkos --> CleanupMPI[Finalize MPI]
-    CleanupMPI --> End([End])
-
-    click BuildMesh "../modules/mesh.html" "Go to Mesh Module"
-    click BuildPacks "../modules/mesh.html" "Go to Mesh Module"
-    click AddHydro "../modules/hydro.html" "Go to Hydro Module"
-    click AddMHD "../modules/mhd.html" "Go to MHD Module"
-    click AddRad "../modules/radiation.html" "Go to Radiation Module"
-    click AddPart "../modules/particles.html" "Go to Particles Module"
-    click AddGR "../modules/z4c.html" "Go to Z4c Module"
-    click CreateDriver "../modules/driver.html" "Go to Driver Module"
-    click DriverInit "../modules/driver.html" "Go to Driver Module"
-    click BuildTaskList "../modules/tasklist.html" "Go to TaskList Module"
-    click ExecuteTasks "../modules/tasklist.html" "Go to TaskList Module"
-    click RefineGrid "../modules/mesh.html" "Go to Mesh Module"
-    click WriteOutput "../modules/outputs.html" "Go to Outputs Module"
+    click LOAD_RESTART "../modules/mesh.html" "Mesh restart handling"
+    click LOAD_INPUT "../configuration.html" "Configuration guide"
+    click MESH_STEP "../modules/mesh.html" "Mesh module"
+    click ADD_PHYS "../modules/tasklist.html#assembly" "Coordinates and physics assembly"
+    click PROBLEM_INIT "../modules/pgen.html" "Problem generator"
+    click DRIVER_BUILD "../modules/driver.html" "Driver overview"
+    click OUTPUT_BUILD "../modules/outputs.html" "Outputs manager"
 ```
 
-
-## Task Execution Detail
+## Driver Time Integration
 
 ```{mermaid}
 flowchart LR
-    subgraph TaskList[Task List Execution]
-        Start2([Start Tasks]) --> CheckDep{Check Dependencies}
-        CheckDep --> |Ready| Launch[Launch Kernel]
-        CheckDep --> |Waiting| Wait[Wait]
-        
-        Launch --> Kernel{Kernel Type}
-        Kernel --> |Hydro| HydroKernel[Hydro Update]
-        Kernel --> |MHD| MHDKernel[MHD Update]
-        Kernel --> |BC| BCKernel[Apply BCs]
-        Kernel --> |Flux| FluxKernel[Compute Fluxes]
-        
-        HydroKernel --> Complete
-        MHDKernel --> Complete
-        BCKernel --> Complete
-        FluxKernel --> Complete
-        
-        Complete[Mark Complete] --> UpdateDep[Update Dependencies]
-        UpdateDep --> NextTask{More Tasks?}
-        NextTask --> |Yes| CheckDep
-        NextTask --> |No| EndTasks([End Tasks])
-        
-        Wait --> CheckDep
-    end
-    
-    click HydroKernel "../modules/hydro.html" "Go to Hydro Module"
-    click MHDKernel "../modules/mhd.html" "Go to MHD Module"
-    click BCKernel "../modules/boundaries.html" "Go to Boundaries Module"
+    classDef loop fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#e65100;
+    classDef stage fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,color:#4a148c;
+    classDef check fill:#ede7f6,stroke:#512da8,stroke-width:2px,color:#311b92;
+
+    INIT["Driver::Initialize"]:::loop --> CYCLE{"Cycle loop\n(t < tlim, n < nlim)"}:::loop
+    CYCLE -->|No| DONE(["Driver::Finalize"]):::loop
+    CYCLE -->|Yes| STAGE_LOOP{"For each RK/IMEX stage"}:::loop
+
+    STAGE_LOOP --> POST_RECV["Post boundary receives"]:::stage
+    POST_RECV --> DO_TASKS["Execute TaskList stage\n(module kernels)"]:::stage
+    DO_TASKS --> POST_UPDATE["Update state & apply BCs"]:::stage
+    POST_UPDATE --> NEWDT["Hydro/MHD/Radiation dt estimates"]:::stage
+    NEWDT --> StageNext{"More stages?"}:::stage
+    StageNext -->|Yes| STAGE_LOOP
+    StageNext -->|No| OUTPUT_CHECK{"Output due?"}:::check
+
+    OUTPUT_CHECK -->|Yes| WRITE["Outputs::MakeOutputs"]:::check
+    OUTPUT_CHECK -->|No| AMR_CHECK{"Adaptive refinement triggered?"}:::check
+    WRITE --> AMR_CHECK
+    AMR_CHECK -->|Yes| ADAPT["Mesh::AdaptiveRefinement\n+ load balance"]:::check
+    AMR_CHECK -->|No| ADVANCE
+    ADAPT --> ADVANCE["Advance time & counters"]:::loop
+    ADVANCE --> CYCLE
+
+    click DO_TASKS "../modules/tasklist.html" "Task scheduling"
+    click NEWDT "../modules/hydro.html#timestep-control" "Timestep control"
+    click WRITE "../modules/outputs.html" "Outputs"
+    click ADAPT "../modules/mesh.html#adaptive-mesh-refinement" "AMR workflow"
 ```
 
-## AMR Workflow
+## AMR Workflow Snapshot
 
 ```{mermaid}
-flowchart TD
-    subgraph AMR[Adaptive Mesh Refinement]
-        StartAMR([Check Refinement]) --> EvalCrit[Evaluate Criteria]
-        EvalCrit --> MarkBlocks[Mark Blocks]
-        
-        MarkBlocks --> Refine{Action?}
-        Refine --> |Refine| SplitBlock[Split MeshBlock]
-        Refine --> |Derefine| MergeBlock[Merge MeshBlocks]
-        Refine --> |None| Skip[Skip]
-        
-        SplitBlock --> Prolongate[Prolongate Data]
-        MergeBlock --> Restrict[Restrict Data]
-        
-        Prolongate --> UpdateTree
-        Restrict --> UpdateTree
-        Skip --> UpdateTree
-        
-        UpdateTree[Update Tree] --> UpdateNeighbors[Update Neighbors]
-        UpdateNeighbors --> LoadBalance[Redistribute Blocks]
-        LoadBalance --> EndAMR([AMR Complete])
-    end
-    
-    click SplitBlock "../modules/mesh.html" "Go to Mesh Module"
-    click MergeBlock "../modules/mesh.html" "Go to Mesh Module"
-    click LoadBalance "../modules/mesh.html" "Go to Mesh Module"
+flowchart TB
+    classDef amr fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#1b5e20;
+
+    START_AMR[["AMR trigger"]]:::amr --> EVAL["Evaluate criteria\n(MeshRefinement::Evaluate)"]:::amr
+    EVAL --> MARK["Mark MeshBlocks\n(refine / derefine)"]:::amr
+    MARK --> ACTION{"Action"}:::amr
+    ACTION -->|Refine| SPLIT["Split block\n(MeshBlockTree::Refine)"]:::amr
+    ACTION -->|Derefine| MERGE["Merge blocks\n(MeshBlockTree::Derefine)"]:::amr
+    ACTION -->|None| SKIP[["No change"]]:::amr
+    SPLIT --> PROLONG["Prolongate data\n(module-specific operators)"]:::amr
+    MERGE --> RESTRICT["Restrict data"]:::amr
+    PROLONG --> SYNC_NGHBR[Update neighbour metadata]:::amr
+    RESTRICT --> SYNC_NGHBR
+    SKIP --> SYNC_NGHBR
+    SYNC_NGHBR --> LB[Load balance / redistribute packs]:::amr
+    LB --> AMR_DONE[[Return to Driver loop]]:::amr
+
+    click PROLONG "../modules/mesh.html#prolongation" "Prolongation operators"
+    click RESTRICT "../modules/mesh.html#restriction" "Restriction operators"
 ```
 
-## Key Components
-
-### Initialization Phase
-- **MPI**: Sets up parallel communication infrastructure
-- **Kokkos**: Initializes performance-portable execution space
-- **Parameter Input**: Reads configuration from `.athinput` files
-- **Mesh Construction**: Builds domain decomposition and AMR tree
-
-### Physics Modules
-Each physics module adds its own:
-- Conserved and primitive variables
-- Flux computation routines
-- Source terms
-- Boundary conditions
-- Task dependencies
-
-### Time Evolution
-The main time loop uses a task-based execution model:
-1. Build task list with dependencies
-2. Execute ready tasks in parallel
-3. Update dependencies as tasks complete
-4. Synchronize at stage boundaries
-
-### Output System
-Multiple output formats supported:
-- VTK for visualization (ParaView/VisIt)
-- Binary for efficient native I/O
-- Restart files for checkpointing
-- History for time series diagnostics
-- Particle outputs (pvtk, trk, ppd)
-- Coarsened binary for reduced data
-
-### Adaptive Mesh Refinement
-Dynamic mesh adaptation:
-- User-defined refinement criteria
-- Prolongation/restriction operators
-- Load balancing across MPI ranks
-- Flux correction at interfaces
-
-## Performance Considerations
-
-The runtime is optimized for:
-- **GPU Efficiency**: MeshBlockPacks group blocks for coalesced access
-- **Task Parallelism**: Overlapping computation and communication
-- **Memory Locality**: Data structures optimized for cache/GPU memory
-- **Load Balance**: Dynamic redistribution of MeshBlocks
-- **State Preservation**: AMR rebuilds use module-specific hooks (e.g., `EnsureBasisSize` in the turbulence driver) to resize without reinitialising physics state
-
-## See Also
-
-- [Task System Module](../modules/tasklist.md)
-- [Mesh Module](../modules/mesh.md)
-- [Output Module - I/O](../modules/outputs.md)
-- [Back to Documentation Home](../index.md)
+The main loop diagram follows the logic in `Driver::Execute`, while the AMR snapshot corresponds to the refinement helpers in `Mesh` and associated module hooks. Together with the system architecture overview, these charts provide a complete, code-accurate picture of how AthenaK evolves a simulation.

@@ -1,465 +1,257 @@
 # AthenaK System Architecture
 
-## Complete System Overview
+The diagrams below mirror the control flow in `src/main.cpp`, `src/mesh/meshblock_pack.cpp`, and the physics constructors. Nodes link directly to the relevant documentation pages so you can drill into the implementation.
+
+## Layered Overview
 
 ```{mermaid}
-flowchart TD
-    subgraph INPUT[Input Layer]
-        direction LR
-        ATHINPUT[athinput file]
-        RESTART[restart file]
-        EXTDATA[external data]
+flowchart LR
+    classDef input fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#0d47a1;
+    classDef boot fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#e65100;
+    classDef pack fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#1b5e20;
+    classDef physics fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,color:#4a148c;
+    classDef support fill:#fce4ec,stroke:#ad1457,stroke-width:2px,color:#880e4f;
+    classDef output fill:#ede7f6,stroke:#4527a0,stroke-width:2px,color:#311b92;
+
+    subgraph INPUT["Input sources"]
+        CLI["CLI flags (-i, -r, -t, ...)"]
+        ATHINPUT["athinput file"]
+        RESTART["Restart dataset"]
+        XDATA["Problem-specific data"]
     end
+    class CLI,ATHINPUT,RESTART,XDATA input
 
-    subgraph CORE[Core Infrastructure]
-        MAIN[main.cpp - Entry Point]
-        MESH[Mesh Module - Domain Decomposition]
-        DRIVER[Driver Module - Time Integration]
-        TASKS[TaskList - Execution Manager]
-        COORDS[Coordinates - Geometry]
+    subgraph BOOT["Boot sequence"]
+        MAIN["main.cpp"]
+        PARAMS["ParameterInput"]
+        MESH["Mesh & MeshBlockTree"]
     end
+    class MAIN,PARAMS,MESH boot
 
-    subgraph PHYSICS1[Physics Modules - Primary]
-        direction LR
-        HYDRO[Hydrodynamics - Euler Equations]
-        MHD[MHD - Maxwell+Fluid]
-        RAD[Radiation - Transport]
+    subgraph PACKLAYER["MeshBlockPack::AddCoordinatesAndPhysics"]
+        COORDS["Coordinates"]
+        PACK["MeshBlockPack"]
     end
+    class PACK,COORDS pack
 
-    subgraph PHYSICS2[Physics Modules - Advanced]
-        direction LR
-        Z4C[Z4c - Relativity]
-        GRMHD[DynGRMHD - Relativistic MHD]
-        PARTICLES[Particles - Lagrangian]
-        IONNEUTRAL[Ion-Neutral - Two-Fluid]
+    subgraph PHYS["Physics modules"]
+        HYDRO["Hydro"]
+        MHD["MHD"]
+        ION["Ion-neutral\n(requires Hydro + MHD)"]
+        RAD["Radiation"]
+        Z4C["Z4c"]
+        ADM["ADM"]
+        GRMHD["Dyn GRMHD"]
+        PARTICLES["Particles"]
+        TURB["Turbulence driver"]
     end
+    class HYDRO,MHD,ION,RAD,Z4C,ADM,GRMHD,PARTICLES,TURB physics
 
-    subgraph NUMERICAL[Numerical Methods]
-        direction LR
-        RECON[Reconstruction - PLM/PPM/WENOZ]
-        RIEMANN[Riemann - Solvers]
-        EOS[EOS - Thermodynamics]
-        DIFF[Diffusion - Viscosity/Resistivity]
+    subgraph SUPPORTS["Shared services"]
+        SRCTERMS["Source terms"]
+        DIFF["Diffusion\n(viscosity / resistivity / conduction)"]
+        BVALS["Boundary exchange"]
+        TASKS["TaskList map"]
+        PGEN["Problem generator"]
     end
+    class SRCTERMS,DIFF,BVALS,TASKS,PGEN support
 
-    subgraph SUPPORT[Support Systems]
-        direction LR
-        BVALS[Boundaries - MPI Comm]
-        OUTPUTS[Outputs - I/O Manager]
-        SRCTERMS[Source Terms - Forces/Cooling]
-        SHEARBOX[Shearing Box - Disks]
-        PGEN[Problem - Generators]
+    subgraph OUTPUTLAYER["Outputs"]
+        DRIVER["Driver"]
+        OUTPUTS["Outputs manager"]
+        HIST["History"]
+        RST["Restart writer"]
+        VTK["VTK / pvtk"]
+        BIN["Binary / coarsened"]
     end
+    class DRIVER,OUTPUTS,HIST,RST,VTK,BIN output
 
-    subgraph OUTPUT[Output Layer]
-        direction LR
-        VTK[VTK - Visualization]
-        BIN[Binary - Analysis]
-        RST[Restart - Checkpoints]
-        HST[History - Time Series]
-        PART[Particle - Tracking]
-    end
+    CLI --> MAIN
+    ATHINPUT --> PARAMS
+    RESTART --> PARAMS
+    XDATA --> PGEN
 
-    %% Core pipeline
-    ATHINPUT --> MAIN
-    RESTART --> MAIN
-    MAIN --> MESH
-    MESH --> DRIVER
-    DRIVER --> TASKS
-    DRIVER --> OUTPUTS
+    MAIN --> PARAMS
+    PARAMS --> MESH
+    MESH --> PACK
 
-    %% Physics execution via task lists
-    TASKS --> HYDRO
-    TASKS --> MHD
-    TASKS --> RAD
-    TASKS --> Z4C
-    TASKS --> GRMHD
-    TASKS --> PARTICLES
-    TASKS --> IONNEUTRAL
+    PACK --> COORDS
+    PACK --> HYDRO
+    PACK --> MHD
+    PACK --> ION
+    PACK --> RAD
+    PACK --> Z4C
+    PACK --> ADM
+    PACK --> GRMHD
+    PACK --> PARTICLES
+    PACK --> TURB
 
-    HYDRO --> RECON
-    HYDRO --> RIEMANN
-    HYDRO --> EOS
-    MHD --> RECON
-    MHD --> RIEMANN
+    HYDRO --> SRCTERMS
+    HYDRO --> DIFF
+    MHD --> SRCTERMS
     MHD --> DIFF
-    RAD --> EOS
-    GRMHD --> RECON
-    GRMHD --> RIEMANN
+    RAD --> TASKS
+    TURB --> TASKS
+    Z4C --> GRMHD
 
-    %% Support interactions
-    MESH -.-> COORDS
-    COORDS -.-> HYDRO
-    COORDS -.-> MHD
-    COORDS -.-> RAD
-    COORDS -.-> GRMHD
-
-    TASKS -.-> BVALS
-    MHD -.-> SRCTERMS
-    MHD -.-> SHEARBOX
-    MESH -.-> PGEN
-    EXTDATA -.-> PGEN
+    MESH --> PGEN
     PGEN --> HYDRO
     PGEN --> MHD
     PGEN --> RAD
     PGEN --> PARTICLES
 
+    HYDRO --> TASKS
+    MHD --> TASKS
+    ION --> TASKS
+    RAD --> TASKS
+    GRMHD --> TASKS
+    PARTICLES --> TASKS
+    Z4C --> TASKS
+    ADM --> TASKS
+
+    TASKS --> DRIVER
+    DRIVER --> OUTPUTS
+    OUTPUTS --> HIST
+    OUTPUTS --> RST
     OUTPUTS --> VTK
     OUTPUTS --> BIN
-    OUTPUTS --> RST
-    OUTPUTS --> HST
-    OUTPUTS --> PART
 
-    %% Click handlers
-    click MESH "../modules/mesh.html"
-    click DRIVER "../modules/driver.html"
-    click TASKS "../modules/tasklist.html"
-    click COORDS "../modules/coordinates.html"
-    click HYDRO "../modules/hydro.html"
-    click MHD "../modules/mhd.html"
-    click RAD "../modules/radiation.html"
-    click Z4C "../modules/z4c.html"
-    click GRMHD "../modules/dyn_grmhd.html"
-    click PARTICLES "../modules/particles.html"
-    click IONNEUTRAL "../modules/ion_neutral.html"
-    click RECON "../modules/reconstruction.html"
-    click RIEMANN "../modules/riemann_solvers.html"
-    click EOS "../modules/eos.html"
-    click DIFF "../modules/diffusion.html"
-    click BVALS "../modules/boundaries.html"
-    click OUTPUTS "../modules/outputs.html"
-    click SRCTERMS "../modules/srcterms.html"
-    click SHEARBOX "../modules/shearing_box.html"
-    click PGEN "../modules/pgen.html"
-
-    %% Styling
-    classDef input fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-    classDef core fill:#fff3e0,stroke:#e65100,stroke-width:3px
-    classDef physics fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    classDef numerical fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
-    classDef support fill:#fce4ec,stroke:#880e4f,stroke-width:2px
-    classDef output fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-
-    class ATHINPUT,RESTART,EXTDATA input
-    class MAIN,MESH,DRIVER,TASKS,COORDS core
-    class HYDRO,MHD,RAD,Z4C,GRMHD,PARTICLES,IONNEUTRAL physics
-    class RECON,RIEMANN,EOS,DIFF numerical
-    class BVALS,OUTPUTS,SRCTERMS,SHEARBOX,PGEN support
-    class VTK,BIN,RST,HST,PART output
-
+    click HYDRO "../modules/hydro.html" "Hydrodynamics module"
+    click MHD "../modules/mhd.html" "MHD module"
+    click ION "../modules/ion_neutral.html" "Ion-neutral driver"
+    click RAD "../modules/radiation.html" "Radiation module"
+    click Z4C "../modules/z4c.html" "Z4c metric"
+    click GRMHD "../modules/dyn_grmhd.html" "Dynamical GRMHD"
+    click PARTICLES "../modules/particles.html" "Particles module"
+    click TURB "../modules/srcterms.html#turbulence-driver" "Turbulence driver"
+    click COORDS "../modules/coordinates.html" "Coordinates system"
+    click TASKS "../modules/tasklist.html" "TaskList system"
+    click SRCTERMS "../modules/srcterms.html" "Source terms overview"
+    click DIFF "../modules/diffusion.html" "Diffusion and resistivity"
+    click BVALS "../modules/boundaries.html" "Boundary exchange"
+    click PGEN "../modules/pgen.html" "Problem generators"
+    click DRIVER "../modules/driver.html" "Driver lifecycle"
+    click OUTPUTS "../modules/outputs.html" "Outputs manager"
 ```
 
-## Execution Flow
+Ion-neutral MHD is instantiated only when both `<hydro>` and `<mhd>` blocks exist; otherwise the constructor aborts (`src/mesh/meshblock_pack.cpp:138`). Dynamical spacetime modules (`<z4c>` or `<adm>`) are mutually exclusive with Hydro but may pair with MHD (`src/mesh/meshblock_pack.cpp:156`).
 
-```{mermaid}
-flowchart TD
-    subgraph INIT[Initialization Phase]
-        START([Start Program])
-        PARSE[Parse Input - Read .athinput]
-        BUILD[Build Mesh - Create Grid]
-        DECOMP[Domain Decomposition - MPI Distribution]
-        DRIVER_INIT[Create Driver & Outputs]
-        PGEN_INIT[Problem Generator - Set Initial Conditions]
-        TASK_INIT[Assemble Task Lists]
-        
-        START --> PARSE
-        PARSE --> BUILD
-        BUILD --> DECOMP
-        DECOMP --> DRIVER_INIT
-        DRIVER_INIT --> PGEN_INIT
-        DRIVER_INIT --> TASK_INIT
-        PGEN_INIT --> TASK_INIT
-    end
+## Task Contributors
 
-    subgraph EVOLUTION[Main Evolution Loop]
-        LOOP{Time less than tlim?}
-        
-        subgraph TIMESTEP[Time Step]
-            STAGE[RK Stage - Integration]
-            TASKS_EXEC[Execute Tasks - Physics Modules]
-            UPDATE[Update Variables - Conservative to Primitive]
-            NEWDT[Calculate dt - CFL Condition]
-        end
-        
-        subgraph CHECKS[Periodic Checks]
-            OUTPUT_CHECK{Output Time?}
-            WRITE[Write Files - VTK/Binary/History]
-            AMR_CHECK{Refine Mesh?}
-            REFINE[Mesh Refinement - AMR Operations]
-        end
-        
-        TASK_INIT --> LOOP
-        LOOP -->|Yes| STAGE
-        STAGE --> TASKS_EXEC
-        TASKS_EXEC --> UPDATE
-        UPDATE --> NEWDT
-        NEWDT --> OUTPUT_CHECK
-        OUTPUT_CHECK -->|Yes| WRITE
-        OUTPUT_CHECK -->|No| AMR_CHECK
-        WRITE --> AMR_CHECK
-        AMR_CHECK -->|Yes| REFINE
-        AMR_CHECK -->|No| LOOP
-        REFINE --> LOOP
-    end
-
-    subgraph FINALIZE[Finalization]
-        FINAL_OUT[Final Output - Save Results]
-        CLEANUP[Cleanup - Free Memory]
-        END([End Program])
-        
-        LOOP -->|No| FINAL_OUT
-        FINAL_OUT --> CLEANUP
-        CLEANUP --> END
-    end
-
-    style INIT fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
-    style EVOLUTION fill:#fff9c4,stroke:#f57c00,stroke-width:2px
-    style TIMESTEP fill:#ffffff,stroke:#666,stroke-width:1px
-    style CHECKS fill:#ffffff,stroke:#666,stroke-width:1px
-    style FINALIZE fill:#efebe9,stroke:#5d4037,stroke-width:2px
-    
-    click BUILD "../modules/mesh.html"
-    click DRIVER_INIT "../modules/driver.html"
-    click PGEN_INIT "../modules/pgen.html"
-    click TASK_INIT "../modules/tasklist.html"
-    click TASKS_EXEC "../modules/tasklist.html"
-    click WRITE "../modules/outputs.html"
-    click REFINE "../modules/mesh.html"
-```
-
-## Task Execution Detail
-
-```{mermaid}
-flowchart TD
-    subgraph TaskStage[Single RK Stage]
-        START_STAGE[Stage Start] --> RECV[Start MPI Recv]
-        
-        subgraph PhysicsTasks[Physics Tasks - Parallel]
-            RECV --> HYDRO_TASK[Hydro Tasks]
-            RECV --> MHD_TASK[MHD Tasks]
-            RECV --> RAD_TASK[Radiation Tasks]
-            
-            HYDRO_TASK --> FLUX_H[Calculate Fluxes]
-            MHD_TASK --> FLUX_M[Calculate Fluxes]
-            MHD_TASK --> CT[Constrained Transport]
-            RAD_TASK --> FLUX_R[Calculate Fluxes]
-        end
-        
-        FLUX_H --> WAIT[Wait for MPI]
-        FLUX_M --> WAIT
-        FLUX_R --> WAIT
-        CT --> WAIT
-        
-        WAIT --> UPDATE_ALL[Update All Variables]
-        UPDATE_ALL --> BC[Apply BCs]
-        BC --> STAGE_END[Stage Complete]
-    end
-    
-    style PhysicsTasks fill:#c8e6c9
-    
-    click HYDRO_TASK "../modules/hydro.html"
-    click MHD_TASK "../modules/mhd.html"
-    click RAD_TASK "../modules/radiation.html"
-    click CT "../modules/mhd.html"
-    click BC "../modules/boundaries.html"
-```
-
-## Data Flow
+The `TaskList` map inside each `MeshBlockPack` aggregates stage tasks from every active module. The diagram below highlights the main contributors and their dependencies.
 
 ```{mermaid}
 flowchart LR
-    subgraph MeshBlock[MeshBlock Data]
-        CONS[Conservative Variables]
-        PRIM[Primitive Variables]
-        BFIELD[Magnetic Field]
-        METRIC[Metric Data]
-    end
+    classDef core fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#bf360c;
+    classDef phys fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,color:#4a148c;
+    classDef support fill:#fce4ec,stroke:#ad1457,stroke-width:2px,color:#880e4f;
 
-    subgraph Computation[Computation]
-        C2P[Cons to Prim]
-        RECONSTRUCT[Reconstruction]
-        RIEMANN_SOLVE[Riemann Solver]
-        FLUXES[Fluxes]
-    end
+    TL["TaskList scheduler\n(before/stage/after)"]:::core
+    HYDRO_TASKS["Hydro tasks\n(AssembleHydroTasks)"]:::phys
+    MHD_TASKS["MHD tasks\n(AssembleMHDTasks)"]:::phys
+    ION_TASKS["Ion-neutral tasks\n(AssembleIonNeutralTasks)"]:::phys
+    RAD_TASKS["Radiation tasks"]:::phys
+    NUMREL["Numerical relativity tasks"]:::phys
+    PART["Particle tasks"]:::phys
+    TURB_TASKS["Turbulence driver tasks\n(EnsureBasisSize, AddForcing)"]:::phys
 
-    subgraph Communication[MPI Communication]
-        PACK[Pack Buffers]
-        SEND[MPI Send/Recv]
-        UNPACK[Unpack Buffers]
-    end
+    BVAL_TASKS["Boundary exchange tasks"]:::support
+    DIFF_TASKS["Diffusion / resistivity"]:::support
+    SRC_TASKS["Source terms (Hydro/MHD)"]:::support
 
-    CONS --> C2P
-    C2P --> PRIM
-    PRIM --> RECONSTRUCT
-    RECONSTRUCT --> RIEMANN_SOLVE
-    RIEMANN_SOLVE --> FLUXES
-    FLUXES --> CONS
+    TL --> HYDRO_TASKS
+    TL --> MHD_TASKS
+    TL --> ION_TASKS
+    TL --> RAD_TASKS
+    TL --> NUMREL
+    TL --> PART
+    TL --> TURB_TASKS
+    HYDRO_TASKS --> SRC_TASKS
+    HYDRO_TASKS --> BVAL_TASKS
+    HYDRO_TASKS --> DIFF_TASKS
+    MHD_TASKS --> SRC_TASKS
+    MHD_TASKS --> BVAL_TASKS
+    MHD_TASKS --> DIFF_TASKS
+    ION_TASKS --> MHD_TASKS
+    NUMREL --> MHD_TASKS
+    RAD_TASKS --> BVAL_TASKS
+    PART --> BVAL_TASKS
+    TURB_TASKS --> HYDRO_TASKS
+    TURB_TASKS --> MHD_TASKS
 
-    PRIM --> PACK
-    PACK --> SEND
-    SEND --> UNPACK
-    UNPACK --> PRIM
+    class HYDRO_TASKS,MHD_TASKS,ION_TASKS,RAD_TASKS,NUMREL,PART,TURB_TASKS phys
+    class BVAL_TASKS,DIFF_TASKS,SRC_TASKS support
 
-    style MeshBlock fill:#ffecb3
-    style Computation fill:#b2dfdb
-    style Communication fill:#d1c4e9
-    
-    click RECONSTRUCT "../modules/reconstruction.html"
-    click RIEMANN_SOLVE "../modules/riemann_solvers.html"
-    click PACK "../modules/boundaries.html"
-    click SEND "../modules/boundaries.html"
+    click TL "../modules/tasklist.html"
+    click HYDRO_TASKS "../modules/hydro.html"
+    click MHD_TASKS "../modules/mhd.html"
+    click ION_TASKS "../modules/ion_neutral.html"
+    click RAD_TASKS "../modules/radiation.html"
+    click NUMREL "../modules/dyn_grmhd.html"
+    click PART "../modules/particles.html"
+    click TURB_TASKS "../modules/srcterms.html#turbulence-driver"
+    click BVAL_TASKS "../modules/boundaries.html"
+    click DIFF_TASKS "../modules/diffusion.html"
+    click SRC_TASKS "../modules/srcterms.html"
 ```
 
-## Memory Layout
+## MeshBlock Data Flow
 
-```{mermaid}
-flowchart TD
-    subgraph Global[Global Memory]
-        MESH_TREE[Mesh Tree]
-        TASK_LIST[Task List]
-        PARAMS[Parameters]
-    end
-
-    subgraph PerRank[Per MPI Rank]
-        MB_PACK[MeshBlockPack]
-        
-        subgraph PerBlock[Per MeshBlock]
-            COORDS_DATA[Coordinates]
-            CONS_VARS[Conservative Vars]
-            PRIM_VARS[Primitive Vars]
-            FLUX_ARRAYS[Flux Arrays]
-            SCRATCH[Scratch Space]
-        end
-        
-        MPI_BUFFERS[MPI Buffers]
-        OUTPUT_BUFFERS[Output Buffers]
-    end
-
-    subgraph Device[Device Memory - GPU]
-        KOKKOS_VIEWS[Kokkos Views]
-        KERNELS[Compute Kernels]
-    end
-
-    MESH_TREE --> MB_PACK
-    MB_PACK --> PerBlock
-    PerBlock --> KOKKOS_VIEWS
-    KOKKOS_VIEWS --> KERNELS
-
-    style Global fill:#e1bee7
-    style PerRank fill:#c5cae9
-    style Device fill:#b3e5fc
-    
-    click MESH_TREE "../modules/mesh.html"
-    click TASK_LIST "../modules/tasklist.html"
-    click COORDS_DATA "../modules/coordinates.html"
-```
-
-## Module Dependencies
-
-```{mermaid}
-graph TD
-    MAIN[main.cpp] --> MESH[Mesh]
-    MESH --> COORDS[Coordinates]
-    MESH --> BVALS[Boundaries]
-    MESH --> DRIVER[Driver]
-    
-    DRIVER --> TASKS[TaskList]
-    DRIVER --> OUTPUTS[Outputs]
-    
-    TASKS --> HYDRO[Hydro]
-    TASKS --> MHD[MHD]
-    TASKS --> RAD[Radiation]
-    TASKS --> Z4C[Z4c]
-    TASKS --> PARTICLES[Particles]
-    
-    HYDRO --> EOS[EOS]
-    HYDRO --> RECON[Reconstruction]
-    HYDRO --> RIEMANN[Riemann]
-    
-    MHD --> EOS
-    MHD --> RECON
-    MHD --> RIEMANN
-    MHD --> DIFF[Diffusion]
-    
-    Z4C --> GRMHD[DynGRMHD]
-    GRMHD --> EOS
-    
-    HYDRO --> SRCTERMS[Source Terms]
-    MHD --> SRCTERMS
-    MHD --> SHEARBOX[Shearing Box]
-    
-    MESH --> PGEN[Problem Generator]
-    PGEN --> HYDRO
-    PGEN --> MHD
-
-    style MAIN fill:#ffcdd2,stroke:#b71c1c,stroke-width:3px
-    style DRIVER fill:#fff3e0,stroke:#e65100,stroke-width:2px
-    style MESH fill:#fff3e0,stroke:#e65100,stroke-width:2px
-    
-    click MESH "../modules/mesh.html"
-    click COORDS "../modules/coordinates.html"
-    click BVALS "../modules/boundaries.html"
-    click DRIVER "../modules/driver.html"
-    click TASKS "../modules/tasklist.html"
-    click OUTPUTS "../modules/outputs.html"
-    click HYDRO "../modules/hydro.html"
-    click MHD "../modules/mhd.html"
-    click RAD "../modules/radiation.html"
-    click Z4C "../modules/z4c.html"
-    click PARTICLES "../modules/particles.html"
-    click EOS "../modules/eos.html"
-    click RECON "../modules/reconstruction.html"
-    click RIEMANN "../modules/riemann_solvers.html"
-    click DIFF "../modules/diffusion.html"
-    click GRMHD "../modules/dyn_grmhd.html"
-    click SRCTERMS "../modules/srcterms.html"
-    click SHEARBOX "../modules/shearing_box.html"
-    click PGEN "../modules/pgen.html"
-```
-
-## Performance Scaling
+The following diagram summarises the major arrays owned by each `MeshBlockPack` and how they feed the physics kernels. It reflects the data layout used by Hydro/MHD and the boundary system (`src/hydro/hydro.cpp`, `src/mhd/mhd.cpp`, `src/bvals`).
 
 ```{mermaid}
 flowchart LR
-    subgraph Hardware[Hardware Detection]
-        CPU[CPU Cores]
-        GPU[GPU Available?]
-        MPI[MPI Ranks]
+    classDef data fill:#fffde7,stroke:#f9a825,stroke-width:2px,color:#f57f17;
+    classDef compute fill:#c8e6c9,stroke:#388e3c,stroke-width:2px,color:#1b5e20;
+    classDef comm fill:#d1c4e9,stroke:#4527a0,stroke-width:2px,color:#311b92;
+
+    subgraph PACKDATA[Per MeshBlockPack]
+        U0["u0 (conserved)"]
+        W0["w0 (primitive)"]
+        BFACE["b0.{x1f,x2f,x3f}"]
+        BCC["bcc0"]
+        SCALARS["Passive scalars"]
     end
+    class U0,W0,BFACE,BCC,SCALARS data
 
-    subgraph Execution[Execution Strategy]
-        SERIAL[Serial]
-        OPENMP[OpenMP]
-        CUDA[CUDA]
-        MPI_EXEC[MPI Parallel]
+    subgraph COMPUTE[Local computation]
+        C2P[Conservative → Primitive]
+        RECON[Reconstruction]
+        RIEMANN[Riemann solvers]
+        UPDATE[RK update]
+        CT[Constrained transport]
     end
+    class C2P,RECON,RIEMANN,UPDATE,CT compute
 
-    subgraph Optimization[Optimizations]
-        VECTOR[Vectorization]
-        CACHE[Cache Blocking]
-        OVERLAP[Comm/Comp Overlap]
-        LOAD_BAL[Load Balance]
+    subgraph COMM[MPI / boundary exchange]
+        PACKBUF["Pack buffers"]
+        EXCHANGE["Send and receive"]
+        UNPACK["Unpack buffers"]
     end
+    class PACKBUF,EXCHANGE,UNPACK comm
 
-    CPU --> OPENMP
-    GPU -->|Yes| CUDA
-    GPU -->|No| OPENMP
-    MPI --> MPI_EXEC
+    U0 --> C2P
+    C2P --> W0
+    W0 --> RECON
+    RECON --> RIEMANN
+    RIEMANN --> UPDATE
+    UPDATE --> U0
+    BFACE --> CT
+    CT --> BFACE
+    CT --> BCC
+    BCC --> RECON
 
-    OPENMP --> VECTOR
-    CUDA --> CACHE
-    MPI_EXEC --> OVERLAP
-    MPI_EXEC --> LOAD_BAL
+    W0 --> PACKBUF
+    BFACE --> PACKBUF
+    PACKBUF --> EXCHANGE
+    EXCHANGE --> UNPACK
+    UNPACK --> W0
+    UNPACK --> BFACE
 
-    style Hardware fill:#e8eaf6
-    style Execution fill:#c5e1a5
-    style Optimization fill:#ffe0b2
-    
-    click MPI_EXEC "../modules/boundaries.html"
-    click LOAD_BAL "../modules/mesh.html"
+    click RECON "../modules/reconstruction.html"
+    click RIEMANN "../modules/riemann_solvers.html"
+    click CT "../modules/mhd.html#constrained-transport"
+    click EXCHANGE "../modules/boundaries.html"
 ```
 
-## See Also
-- [Module Index](../modules/index.md)
-- [Configuration Guide](../configuration.md)
-- [Running Simulations](../running.md)
+These diagrams collectively describe how the bootstrap code wires physics modules into the task scheduler and how state flows during integration. For the temporal evolution of those tasks, see the runtime flowchart.

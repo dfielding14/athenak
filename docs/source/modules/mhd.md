@@ -1,203 +1,117 @@
-# Module: MHD
+# Module: Magnetohydrodynamics
 
-## Overview
-The MHD module solves the ideal magnetohydrodynamics equations using constrained transport (CT) to maintain the divergence-free constraint $\nabla \cdot \mathbf{B} = 0$.
+## Role in AthenaK
+The Magnetohydrodynamics (MHD) module extends the hydrodynamics integrator to evolve ideal MHD, special relativistic MHD (SRMHD), or general relativistic MHD (GRMHD). It owns face-centred magnetic fields, applies constrained transport, and coordinates optional diffusion modules. The implementation lives in `src/mhd/`.
 
-## Source Location
-`src/mhd/`
+## File Layout
 
-## Key Components
+| File | Purpose | Key Routines |
+|------|---------|--------------|
+| `mhd.hpp/cpp` | `MHD` class, construction, data ownership | constructor, `AssembleMHDTasks`, accessors |
+| `mhd_tasks.cpp` | Task graph for RK stages | wrapper tasks (`Fluxes`, `CornerE`, `CT`, …) |
+| `mhd_fluxes.cpp` | Template flux kernel per MHD Riemann solver | `CalculateFluxes<MHD_RSolver::*>` |
+| `mhd_corner_e.cpp` | Corner electric field computation | `CornerE` |
+| `mhd_ct.cpp` | Constrained transport update | `CT` |
+| `mhd_newdt.cpp` | CFL and diffusion/source timestep limit | `MHD::NewTimeStep` |
+| `mhd_fofc.cpp` | First-order flux correction driver | `FOFC` |
 
-| File | Purpose | Key Functions |
-|------|---------|---------------|
-| `mhd.hpp/cpp` | Core MHD class | Constructor, initialization |
-| `mhd_fluxes.cpp` | Flux calculations | `CalculateFluxes()` |
-| `mhd_ct.cpp` | Constrained transport | `CT()` |
-| `mhd_corner_e.cpp` | Corner electric fields | `CornerE()` |
-| `mhd_update.cpp` | Conservative update | `Update()` |
-| `mhd_newdt.cpp` | Timestep calculation | `NewTimeStep()` |
-| `mhd_tasks.cpp` | Task registration | Task management |
-| `mhd_fofc.cpp` | First-order flux correction | FOFC implementation |
+## Task Flow
+`MeshBlockPack::AddPhysics` instantiates the `MHD` object when `<mhd>` exists. If no other fluid modules (Hydro, Radiation, ADM/Z4c) are present, `AssembleMHDTasks` inserts the module’s tasks into the integrator pipeline. For two-fluid runs (`<ion-neutral>`), the ion-neutral driver assembles its own task list that embeds the MHD operations.
 
-## Equations Solved
+Per-stage task ordering (`tl["stagen"]`):
 
-### Ideal MHD Equations (Conservative Form)
-$$\frac{\partial \rho}{\partial t} + \nabla \cdot (\rho \mathbf{v}) = 0$$
-$$\frac{\partial (\rho \mathbf{v})}{\partial t} + \nabla \cdot \left(\rho \mathbf{v}\mathbf{v} - \mathbf{B}\mathbf{B} + \left(p + \frac{B^2}{8\pi}\right)\mathbb{I}\right) = 0$$
-$$\frac{\partial E}{\partial t} + \nabla \cdot \left(\left(E + p + \frac{B^2}{8\pi}\right)\mathbf{v} - \frac{\mathbf{B}(\mathbf{B} \cdot \mathbf{v})}{4\pi}\right) = 0$$
-$$\frac{\partial \mathbf{B}}{\partial t} - \nabla \times (\mathbf{v} \times \mathbf{B}) = 0$$
+1. `CopyCons` – stage register setup for higher-order integrators.
+2. `Fluxes` – reconstruct interface states, run the chosen MHD Riemann solver, add viscosity, resistivity, and conduction fluxes.
+3. `SendFlux` / `RecvFlux` – AMR flux exchange.
+4. `RKUpdate` – conserved-variable update.
+5. `HydroSrcTerms` equivalent – applies shared `SourceTerms` to the MHD state.
+6. Communication tasks for face-centred fields (`SendU`, `RecvU`, `SendB`, `RecvB`, etc.).
+7. `CornerE` – compute edge-centred electric fields.
+8. `CT` – constrained transport update of face-centred `B`.
+9. `ConToPrim` – update primitive variables (`w0`/`bcc0`).
+10. `NewTimeStep` – evaluate the CFL limit and diffusion/source contributions.
 
-Where:
-- $\rho$: density
-- $\mathbf{v}$: velocity
-- $\mathbf{B}$: magnetic field
-- $p$: gas pressure
-- $E$: total energy density = $\rho\varepsilon + \frac{\rho v^2}{2} + \frac{B^2}{8\pi}$
+Boundary posting and clearing live in the `before_stagen` / `after_stagen` lists.
 
-## Configuration Parameters
+## State Arrays
 
-From `<mhd>` block:
+| Array | Shape | Contents |
+|-------|-------|----------|
+| `u0`, `u1` | `[nmb, nmhd+nscalars, nk, nj, ni]` | Conserved variables + passive scalars. |
+| `w0` | Same as `u0` | Primitive variables (density, velocity, pressure). |
+| `b0.{x1f,x2f,x3f}` | `[nmb, nk, nj, ni±1]` | Face-centred magnetic fluxes. |
+| `bcc0` | `[nmb, 3, nk, nj, ni]` | Cell-centred magnetic fields for primitive reconstruction. |
+| `efld.{x1f,x2f,x3f}` / `e*` | Edge-centred electric fields used by CT. |
+| `coarse_*` | Coarse-grid analogues allocated when AMR is enabled. |
+| `fofc`, `utest`, `bcctest`, `wsaved`, `bccsaved` | Optional buffers used by FOFC and CT safeguard logic. |
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `eos` | string | required | Equation of state (ideal only) |
-| `gamma` | Real | - | Adiabatic index |
-| `reconstruct` | string | plm | Reconstruction (dc, plm, ppm4, ppmx, wenoz) |
-| `rsolver` | string | required | Riemann solver |
-| `fofc` | bool | false | First-order flux correction |
-| `nscalars` | int | 0 | Number of passive scalars |
-| `resistivity` | Real | - | Ohmic resistivity coefficient |
-| `viscosity` | Real | - | Kinematic viscosity coefficient |
-| `conductivity` | Real | - | Thermal conductivity coefficient |
+Passive scalars are appended to hydro variables in both `u0` and `w0`, ensuring consistent reconstruction and updates.
 
-## Riemann Solvers
+## Input Parameters (`<mhd>` block)
 
-### Non-Relativistic MHD
-| Solver | Description | Waves | Speed | Accuracy |
-|--------|-------------|-------|-------|----------|
-| `llf` | Local Lax-Friedrichs | All | Fast | Diffusive |
-| `hlle` | Harten-Lax-van Leer-Einfeldt | 2 | Medium | Good |
-| `hlld` | HLLE with all discontinuities | 7 | Slow | Excellent |
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `eos` | – (required) | `ideal` or `isothermal` (SR/GR require `ideal`). |
+| `gamma` | – | Adiabatic index for ideal EOS. |
+| `iso_sound_speed` | – | Constant sound speed for isothermal runs. |
+| `nscalars` | `0` | Number of passively advected scalars. |
+| `reconstruct` | `plm` | Reconstruction method (`dc`, `plm`, `ppm4`, `ppmx`, `wenoz`). |
+| `rsolver` | – (required) | Riemann solver keyword (see below). |
+| `fofc` | `false` | Enable first-order flux correction. |
+| `viscosity` | absent | Enables isotropic viscosity (diffusion module). |
+| `ohmic_resistivity` | absent | Enables resistive diffusion. |
+| `conductivity` / `tdep_conductivity` | absent | Enables thermal conduction. |
 
-### Relativistic MHD
-- `llf_sr`: Special relativistic LLF
-- `hlle_sr`: Special relativistic HLLE  
-- `llf_gr`: General relativistic LLF
-- `hlle_gr`: General relativistic HLLE
+The constructor enforces EOS/solver compatibility and throws fatal errors for unsupported combinations (`src/mhd/mhd.cpp:36`).
 
-**Note**: Roe solver is not yet implemented for MHD (commented out in code).
+### Ghost-Zone Requirements
 
-## Reconstruction Methods
+| Reconstruction | Nominal | With FOFC |
+|----------------|---------|-----------|
+| `dc` | 2 | 2 |
+| `plm` | 2 | 3 |
+| `ppm4`, `ppmx`, `wenoz` | 3 | 4 |
 
-| Method | Order | Description | Ghost Zones |
-|--------|-------|-------------|-------------|
-| `dc` | 1st | Donor cell (piecewise constant) | 2 |
-| `plm` | 2nd | Piecewise linear (minmod limiter) | 2 (3 with FOFC) |
-| `ppm4` | 4th | Piecewise parabolic (4th order) | 3 (4 with FOFC) |
-| `ppmx` | 4th | Extremum-preserving PPM | 3 (4 with FOFC) |
-| `wenoz` | 5th | Weighted ENO-Z | 3 (4 with FOFC) |
+(Identical to the Hydro module; see checks in `src/mhd/mhd.cpp:104`.)
+
+### Riemann Solver Compatibility
+
+| Regime | Supported keywords | Notes |
+|--------|-------------------|-------|
+| Non-relativistic dynamic | `llf`, `hlle`, `hlld` | HLLD available only with `ideal` EOS. |
+| Special relativistic dynamic | `llf`, `hlle` | Mapped to `MHD_RSolver::*_sr`. |
+| General relativistic dynamic | `llf`, `hlle` | Mapped to `MHD_RSolver::*_gr`. |
+
+No Roe solver is implemented for MHD; specifying it raises a fatal error.
+
+## Diffusion & Source Coupling
+- Viscosity, resistivity, and conduction modules are instantiated only when the corresponding coefficients appear in `<mhd>`. Their fluxes are added immediately after the Riemann solver inside `MHD::Fluxes` (`src/mhd/mhd_tasks.cpp:121`).
+- `SourceTerms("mhd", …)` applies body forces, turbulence driving, etc., and contributes to the timestep limiter.
+- Orbital advection and shearing-box boundary handlers (`OrbitalAdvection{CC,FC}`, `ShearingBoxBoundary{CC,FC}`) are constructed when `<shearing_box>` exists.
 
 ## Constrained Transport (CT)
+`CornerE` computes edge-centred electric fields using the current fluxes and velocities. `CT` updates each face-centred `B` component via the curl of these EMFs, preserving $\nabla \cdot \mathbf{B} = 0` to machine precision (`src/mhd/mhd_ct.cpp`). Cell-centred fields (`bcc0`) are then refreshed by averaging the face values.
 
-The CT algorithm maintains $\nabla \cdot \mathbf{B} = 0$ to machine precision:
+## Timestep Control
+`MHD::NewTimeStep` executes on the final stage and evaluates:
 
-### Key Features
-1. **Face-centered B-fields**: Magnetic field components stored at cell faces
-2. **Edge-centered E-fields**: Electric fields computed at cell edges
-3. **Stokes theorem update**: Magnetic flux through faces updated via line integral
+1. Fast-magnetosonic CFL speed (or relativistic characteristic speeds if SR/GR is active).
+2. Diffusion limits from resistivity and conduction.
+3. Source-term limits from the shared `SourceTerms` instance.
 
-### CT Algorithm Flow
-```cpp
-// 1. Compute edge-centered electric fields
-CornerE(bcc, e3x1f, e1x2f, e2x3f);
+The tightest value is stored in `dtnew` (`src/mhd/mhd_newdt.cpp`).
 
-// 2. Update face-centered magnetic fields using Stokes theorem
-// b1f_new = b1f_old - dt/dy*(e3_upper - e3_lower);
-// b2f_new = b2f_old - dt/dz*(e1_upper - e1_lower);  
-// b3f_new = b3f_old - dt/dx*(e2_upper - e2_lower);
+## Compatibility & Couplings
+- If both `<hydro>` and `<mhd>` blocks are present, `<ion-neutral>` must also be specified; otherwise construction aborts (`src/mesh/meshblock_pack.cpp:138`).
+- Radiation and relativistic metric modules can co-exist; task assembly is handled conditionally in `MeshBlockPack::AddPhysics`.
+- Turbulence driving applies to the MHD pack when `<turb_driving>` is present.
 
-// 3. Average to cell centers for primitive variables
-// bcc = 0.5*(b_face_left + b_face_right);
-```
+## Operational Notes
+- For SR/GR runs, only dynamic evolution is supported (`<time>/evolution = dynamic`).
+- HLLD requires an ideal EOS; use HLLE otherwise.
+- FOFC is automatically enabled in excision regions when running GRMHD with black hole masks (`src/mhd/mhd_tasks.cpp:127`).
+- Allocate sufficient ghost zones before enabling higher-order reconstruction plus FOFC.
 
-Update equations:
-$$B^{n+1}_{1,f} = B^n_{1,f} - \frac{\Delta t}{\Delta y}(E_{3,\text{upper}} - E_{3,\text{lower}})$$
-$$B^{n+1}_{2,f} = B^n_{2,f} - \frac{\Delta t}{\Delta z}(E_{1,\text{upper}} - E_{1,\text{lower}})$$
-$$B^{n+1}_{3,f} = B^n_{3,f} - \frac{\Delta t}{\Delta x}(E_{2,\text{upper}} - E_{2,\text{lower}})$$
-
-## Variable Arrays
-
-### Conservative Variables (`cons`)
-- `cons(IDN)`: Density $\rho$
-- `cons(IM1,IM2,IM3)`: Momentum $\rho\mathbf{v}$
-- `cons(IEN)`: Total energy $E$
-- Face-centered B-field arrays
-
-### Primitive Variables (`prim`)
-- `prim(IDN)`: Density $\rho$
-- `prim(IVX,IVY,IVZ)`: Velocity $\mathbf{v}$
-- `prim(IPR)`: Gas pressure $p$
-- `prim(IBX,IBY,IBZ)`: Magnetic field $\mathbf{B}$ (cell-centered)
-
-### Face-Centered Fields
-- `b1f`: $B_1$ at x1-faces
-- `b2f`: $B_2$ at x2-faces
-- `b3f`: $B_3$ at x3-faces
-
-## Execution Flow
-
-```{mermaid}
-flowchart TD
-    Start[MHD Tasks] --> Recv[Start Boundary Recv]
-    Recv --> FaceB[Face B to Cell B]
-    FaceB --> P2C[Primitive to Conservative]
-    P2C --> Recon[Reconstruction]
-    Recon --> Riemann[Riemann Solver]
-    Riemann --> EMF[Corner EMF]
-    EMF --> CT[Constrained Transport]
-    CT --> Wait[Wait for Boundaries]
-    Wait --> Update[Conservative Update]
-    Update --> C2P[Conservative to Primitive]
-    C2P --> BC[Apply BCs]
-    BC --> Done[Task Complete]
-```
-
-## AMR and div(B) Preservation
-
-### Recent Improvements (2024)
-The module includes fixes for maintaining $\nabla \cdot \mathbf{B} = 0$ with AMR:
-
-1. **Prolongation**: Uses divergence-preserving prolongation operators
-2. **Restriction**: Maintains magnetic flux conservation
-3. **Flux correction**: Ensures consistency at refinement boundaries
-
-From recent commits:
-- Fixed div(B) issues during AMR derefinement
-- Added comprehensive test suite (`tst/regression/mhd_amr_divb.py`)
-- Verified with field loop advection tests
-
-## First-Order Flux Correction (FOFC)
-
-For strong shocks and to maintain positivity:
-```cpp
-if (fofc && shock_detected) {
-  // Use first-order fluxes
-  flux = flux_first_order;
-}
-```
-
-## Common Test Problems
-
-### 1D Tests
-- **Brio-Wu shock tube**: Standard MHD Riemann problem
-- **Ryu-Jones tests**: Suite of 1D MHD shocks
-
-### 2D Tests  
-- **Orszag-Tang vortex**: MHD turbulence and reconnection
-- **Field loop advection**: Tests $\nabla \cdot \mathbf{B}$ preservation
-- **MHD rotor**: Strong torsional Alfvén waves
-
-### 3D Tests
-- **MHD blast wave**: Spherical explosion in magnetized medium
-- **Turbulence**: Driven MHD turbulence
-
-## Performance Considerations
-
-### GPU Optimization
-- Face-centered fields require careful indexing
-- CT electric field calculation vectorized
-- MeshBlockPacks for coalesced memory access
-
-### Typical Performance
-- ~3-5×10⁶ zone-cycles/sec on V100 GPU
-- ~80% efficiency compared to hydro
-
-## Common Issues and Solutions
-
-### Negative Pressure
-- Reduce CFL number (typically 0.4 for MHD)
-- Enable FOFC for strong shocks
-- Check initial magnetic field strength
 
 ### $\nabla \cdot \mathbf{B}$ Growth
 - Ensure using CT (always enabled in AthenaK)
