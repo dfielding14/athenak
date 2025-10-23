@@ -6,7 +6,7 @@ AthenaK is a performance-portable astrophysical simulation framework that target
 1. **Configuration and Input Parsing** – `src/main.cpp` bootstraps MPI/Kokkos, parses command-line arguments, and loads runtime parameters through `ParameterInput`.【F:src/main.cpp†L23-L140】【F:src/parameter_input.hpp†L14-L117】
 2. **Mesh Construction** – A `Mesh` object owns the domain decomposition, adaptive mesh refinement (AMR) hierarchy, boundary conditions, and mesh block metadata. It instantiates `MeshBlockPack` containers that aggregate `MeshBlock` patches for GPU-friendly execution and register the active physics modules.【F:src/mesh/mesh.hpp†L61-L170】【F:src/mesh/meshblock_pack.hpp†L1-L99】
 3. **Driver Execution** – The `Driver` orchestrates time integration, choosing explicit or implicit-explicit Runge–Kutta schemes, coordinating task lists, and invoking physics packages for updates. It also tracks diagnostics and wall-clock limits.【F:src/driver/driver.cpp†L1-L120】【F:src/driver/driver.hpp†L1-L73】
-4. **Output and Finalization** – `Outputs` manages periodic diagnostics, restart dumps, and mesh/particle visualization products, while the driver handles teardown of physics modules and MPI/Kokkos resources.【F:src/outputs/outputs.hpp†L1-L104】
+4. **Output and Finalization** – `Outputs` manages periodic diagnostics, restart dumps, and mesh/particle visualization products, the driver invokes the final output pass and problem hooks, and ownership of physics objects is released when `MeshBlockPack`/`Mesh` instances are destroyed before `main.cpp` finalizes MPI/Kokkos.【F:src/outputs/outputs.hpp†L1-L109】【F:src/driver/driver.cpp†L446-L500】【F:src/mesh/meshblock_pack.cpp†L53-L67】【F:src/main.cpp†L347-L374】
 
 Key compile-time types, enums, and memory abstractions live in `athena.hpp`, providing aliases for Kokkos array layouts, physics variable indices, and numerical settings shared across the codebase.【F:src/athena.hpp†L1-L129】 Global MPI rank metadata is centralized in `globals.cpp`/`globals.hpp` for lightweight access by subsystems.【F:src/globals.cpp†L1-L18】
 
@@ -39,7 +39,7 @@ AthenaK enables multiple physics disciplines through modular namespaces that att
 - **Particles (`src/particles`)** – Lagrangian particle infrastructure, including data layouts, pushers, and mesh-based interaction tasks for tracers, cosmic rays, and star particles.【F:src/particles/particles.hpp†L1-L26】
 - **Units (`src/units`)** – Converts between simulation code units and physical (cgs) units to support cooling tables and diagnostics.【F:src/units/units.hpp†L1-L17】
 
-Physics activation is dynamic: `MeshBlockPack::AddPhysics` inspects the input deck and constructs only requested modules, enabling hybrid simulations that mix hydrodynamics, relativity, radiation, and particle dynamics.【F:src/mesh/meshblock_pack.hpp†L57-L94】
+Physics activation is dynamic: `MeshBlockPack::AddPhysics` inspects the input deck and constructs only requested modules, enabling multi-physics runs so long as compatibility guards are satisfied (e.g., dynamical relativity requires MHD and aborts if only hydro is enabled).【F:src/mesh/meshblock_pack.hpp†L57-L94】【F:src/mesh/meshblock_pack.cpp†L120-L218】
 
 ### Coordinate Systems and Geometry (`src/coordinates`)
 Coordinate classes provide metric tensors, Christoffel symbols, face areas, and Jacobians for different geometries (Cartesian, spherical, Kerr–Schild, etc.). The ADM helper handles background metric data for relativity runs.【F:src/coordinates/coordinates.hpp†L1-L24】 Excision utilities manage interior boundary conditions near compact objects.
