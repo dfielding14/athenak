@@ -132,16 +132,16 @@ x1max = 1.0
 1. **Startup** (`src/main.cpp`)
    - Parses command-line arguments (`-i`, overrides, restart flags)
    - Loads the `.athinput` via `ParameterInput`
-   - Constructs the global `Mesh` and its `MeshBlockPack`
+   - Constructs the global `Mesh` and its `MeshBlockPack`; `Mesh::AddCoordinatesAndPhysics` only instantiates compatible physics combinations (e.g., dynamical relativity requires MHD and aborts if only hydro is present) before handing control to the driver (`src/mesh/meshblock_pack.cpp:120-218`)
 2. **Driver Initialisation** (`Driver::Initialize`)
    - Each enabled physics module (`hydro`, `mhd`, `radiation`, etc.) attaches to the MeshBlockPack and registers tasks
    - Output streams are configured from `<output*>` blocks
 3. **Time Loop** (`Driver::Execute`)
    - For every stage: execute task lists (communication, fluxes, source terms, AMR restriction/prolongation)
    - Update diagnostics, wall-clock checks, and AMR triggers
-4. **Outputs / Restart** (`outputs/` modules)
-   - Streams write according to their cadence (`dt`, `ncycle`, `ndump`)
-   - Restart dumps (`file_type = rst`) capture the full MeshBlock state for `-r` restarts
+4. **Outputs / Finalisation** (`Driver::Finalize`, `src/main.cpp`)
+   - The driver walks every configured output, writes the final datasets, and runs any problem-specific teardown hooks (`src/driver/driver.cpp:446-500`)
+   - After the driver returns, `main.cpp` deletes the mesh/physics objects—releasing Kokkos resources on destruction—before calling `Kokkos::finalize()` / `MPI_Finalize()` so the runtime shuts down cleanly (`src/mesh/meshblock_pack.cpp:53-67`, `src/main.cpp:347-374`)
 
 ## Where to Go Next
 
