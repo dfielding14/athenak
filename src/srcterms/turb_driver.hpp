@@ -9,8 +9,9 @@
 //  \brief defines turbulence driver class, which implements data and functions for
 //  randomly forced turbulence which evolves via an Ornstein-Uhlenbeck stochastic process
 
-#include <memory>
 #include <cmath>
+#include <memory>
+#include <string>
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
@@ -23,7 +24,8 @@
 
 class TurbulenceDriver {
  public:
-  TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin);
+  TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin,
+                   const std::string &block_name = "turb_driving");
   ~TurbulenceDriver();
 
   DvceArray5D<Real> force, force_tmp1, force_tmp2;  // arrays used for turb forcing
@@ -77,12 +79,15 @@ class TurbulenceDriver {
   TaskStatus UpdateForcing(Driver *pdrive, int stage);
   TaskStatus AddForcing(Driver *pdrive, int stage);
   void Initialize();
+  void ApplyImpulse(Real kick_dt);
   
   // Update the MeshBlockPack pointer after AMR
   void UpdateMeshBlockPack(MeshBlockPack *new_pp) { pmy_pack = new_pp; }
 
  private:
+  void ApplyForcingWithStep(Real bdt);
   MeshBlockPack *pmy_pack;  // ptr to MeshBlockPack containing this TurbulenceDriver
+  const std::string block_name_;
 };
 
 

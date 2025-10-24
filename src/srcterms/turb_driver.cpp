@@ -33,8 +33,10 @@
 //----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
 
-TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
+TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin,
+                                   const std::string &block_name) :
   pmy_pack(pp),
+  block_name_(block_name),
   force("force",1,1,1,1,1),
   force_tmp1("force_tmp1",1,1,1,1,1),
   force_tmp2("force_tmp2",1,1,1,1,1),
@@ -65,62 +67,62 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   Kokkos::realloc(force_tmp2, nmb, 3, ncells3, ncells2, ncells1);
 
   // range of modes including, corresponding to kmin and kmax
-  nlow = pin->GetOrAddInteger("turb_driving", "nlow", 1);
-  nhigh = pin->GetOrAddInteger("turb_driving", "nhigh", 3);
+  nlow = pin->GetOrAddInteger(block_name_, "nlow", 1);
+  nhigh = pin->GetOrAddInteger(block_name_, "nhigh", 3);
   // Peak of power when spectral form is parabolic, in units of 2*(PI/L)
   // Support both npeak (wavenumber index) and kpeak (actual k value)
-  if (pin->DoesParameterExist("turb_driving", "npeak")) {
-    Real npeak = pin->GetReal("turb_driving", "npeak");
+  if (pin->DoesParameterExist(block_name_, "npeak")) {
+    Real npeak = pin->GetReal(block_name_, "npeak");
     // Convert npeak to kpeak using fundamental wavenumber
     Real dkfund = 2.0*M_PI; // Assuming box size = 1
     kpeak = npeak * dkfund;
   } else {
-    kpeak = pin->GetOrAddReal("turb_driving", "kpeak", 4.0*M_PI);
+    kpeak = pin->GetOrAddReal(block_name_, "kpeak", 4.0*M_PI);
   }
   // spect form - 1 for parabola, 2 for power-law
-  spect_form = pin->GetOrAddInteger("turb_driving", "spect_form", 1);
+  spect_form = pin->GetOrAddInteger(block_name_, "spect_form", 1);
   // driving type - 0 for 3D isotropic, 1 for xy plane
-  driving_type = pin->GetOrAddInteger("turb_driving", "driving_type", 0);
+  driving_type = pin->GetOrAddInteger(block_name_, "driving_type", 0);
   // min kz zero should be 0 for including kz modes and 1 for not including
-  min_kz = pin->GetOrAddInteger("turb_driving", "min_kz", 0);
-  max_kz = pin->GetOrAddInteger("turb_driving", "max_kz", nhigh);
-  min_kx = pin->GetOrAddInteger("turb_driving", "min_kx", 0);
-  max_kx = pin->GetOrAddInteger("turb_driving", "max_kx", nhigh);
-  min_ky = pin->GetOrAddInteger("turb_driving", "min_ky", 0);
-  max_ky = pin->GetOrAddInteger("turb_driving", "max_ky", nhigh);
+  min_kz = pin->GetOrAddInteger(block_name_, "min_kz", 0);
+  max_kz = pin->GetOrAddInteger(block_name_, "max_kz", nhigh);
+  min_kx = pin->GetOrAddInteger(block_name_, "min_kx", 0);
+  max_kx = pin->GetOrAddInteger(block_name_, "max_kx", nhigh);
+  min_ky = pin->GetOrAddInteger(block_name_, "min_ky", 0);
+  max_ky = pin->GetOrAddInteger(block_name_, "max_ky", nhigh);
   // power-law exponent for isotropic driving
-  expo = pin->GetOrAddReal("turb_driving", "expo", 5.0/3.0);
-  exp_prp = pin->GetOrAddReal("turb_driving", "exp_prp", 5.0/3.0);
-  exp_prl = pin->GetOrAddReal("turb_driving", "exp_prl", 0.0);
+  expo = pin->GetOrAddReal(block_name_, "expo", 5.0/3.0);
+  exp_prp = pin->GetOrAddReal(block_name_, "exp_prp", 5.0/3.0);
+  exp_prl = pin->GetOrAddReal(block_name_, "exp_prl", 0.0);
   // energy injection rate
-  dedt = pin->GetOrAddReal("turb_driving", "dedt", 0.0);
+  dedt = pin->GetOrAddReal(block_name_, "dedt", 0.0);
   // correlation time
-  tcorr = pin->GetOrAddReal("turb_driving", "tcorr", 0.0);
+  tcorr = pin->GetOrAddReal(block_name_, "tcorr", 0.0);
   // update time for the turbulence driver
-  dt_turb_update=pin->GetOrAddReal("turb_driving","dt_turb_update",0.01);
+  dt_turb_update = pin->GetOrAddReal(block_name_, "dt_turb_update", 0.01);
   // To store fraction of energy in solenoidal modes
-  sol_fraction=pin->GetOrAddReal("turb_driving","sol_fraction",1.0);
+  sol_fraction = pin->GetOrAddReal(block_name_, "sol_fraction", 1.0);
 
   // random seed for turbulence driving (-1 = use time-based seed)
-  rseed = pin->GetOrAddInteger("turb_driving", "rseed", -1);
+  rseed = pin->GetOrAddInteger(block_name_, "rseed", -1);
 
   // drive with constant edot or constant acceleration
-  constant_edot = pin->GetOrAddBoolean("turb_driving", "constant_edot", true);
+  constant_edot = pin->GetOrAddBoolean(block_name_, "constant_edot", true);
 
   // spatially varying driving
-  x_turb_scale_height = pin->GetOrAddReal("turb_driving", "x_turb_scale_height", -1.0);
-  y_turb_scale_height = pin->GetOrAddReal("turb_driving", "y_turb_scale_height", -1.0);
-  z_turb_scale_height = pin->GetOrAddReal("turb_driving", "z_turb_scale_height", -1.0);
-  x_turb_center = pin->GetOrAddReal("turb_driving", "x_turb_center", 0.0);
-  y_turb_center = pin->GetOrAddReal("turb_driving", "y_turb_center", 0.0);
-  z_turb_center = pin->GetOrAddReal("turb_driving", "z_turb_center", 0.0);
+  x_turb_scale_height = pin->GetOrAddReal(block_name_, "x_turb_scale_height", -1.0);
+  y_turb_scale_height = pin->GetOrAddReal(block_name_, "y_turb_scale_height", -1.0);
+  z_turb_scale_height = pin->GetOrAddReal(block_name_, "z_turb_scale_height", -1.0);
+  x_turb_center = pin->GetOrAddReal(block_name_, "x_turb_center", 0.0);
+  y_turb_center = pin->GetOrAddReal(block_name_, "y_turb_center", 0.0);
+  z_turb_center = pin->GetOrAddReal(block_name_, "z_turb_center", 0.0);
 
   // tiled driving configuration
-  tile_driving = pin->GetOrAddBoolean("turb_driving", "tile_driving", false);
-  int tile_factor = pin->GetOrAddInteger("turb_driving", "tile_factor", 1);
-  tile_nx = pin->GetOrAddInteger("turb_driving", "tile_nx", tile_factor);
-  tile_ny = pin->GetOrAddInteger("turb_driving", "tile_ny", tile_factor);
-  tile_nz = pin->GetOrAddInteger("turb_driving", "tile_nz", tile_factor);
+  tile_driving = pin->GetOrAddBoolean(block_name_, "tile_driving", false);
+  int tile_factor = pin->GetOrAddInteger(block_name_, "tile_factor", 1);
+  tile_nx = pin->GetOrAddInteger(block_name_, "tile_nx", tile_factor);
+  tile_ny = pin->GetOrAddInteger(block_name_, "tile_ny", tile_factor);
+  tile_nz = pin->GetOrAddInteger(block_name_, "tile_nz", tile_factor);
   if (!tile_driving) {
     tile_nx = 1;
     tile_ny = 1;
@@ -169,14 +171,24 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   num_tiles = tile_nx * tile_ny * tile_nz;
 
   // decaying/constant energy injection - 1 for decaying, 2 continuously driven
-  turb_flag = pin->GetOrAddInteger("turb_driving", "turb_flag", 2);
+  turb_flag = pin->GetOrAddInteger(block_name_, "turb_flag", 2);
   if(turb_flag ==1) {
-    tdriv_duration = pin->GetOrAddReal("turb_driving", "tdriv_duration", tcorr); // If not specified, drive for one correlation time
+    tdriv_duration = pin->GetOrAddReal(block_name_, "tdriv_duration", tcorr); // If not specified, drive for one correlation time
   }
   else {
     tdriv_duration = static_cast<Real>(std::numeric_limits<float>::max()); // For constantly stirred turbulence, set this to float max
   }
-  tdriv_start = pin->GetOrAddReal("turb_driving", "tdriv_start", 0.); // If not specified, start driving at t=0
+  tdriv_start = pin->GetOrAddReal(block_name_, "tdriv_start", 0.); // If not specified, start driving at t=0
+
+  if (block_name_ == "initial_turb") {
+    turb_flag = 1;
+    Real fallback = (dt_turb_update > 0.0) ? dt_turb_update : 1.0;
+    Real desired_duration = fallback;
+    if (pin->DoesParameterExist(block_name_, "tdriv_duration")) {
+      desired_duration = pin->GetReal(block_name_, "tdriv_duration");
+    }
+    tdriv_duration = (desired_duration > 0.0) ? desired_duration : fallback;
+  }
   if (global_variable::my_rank == 0){
     std::cout << "Initialising turbulence driving module" << std::endl <<
     " dedt = " << dedt << " tcorr = " << tcorr << " dt_turb_update = " << dt_turb_update << std::endl;
@@ -964,15 +976,15 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
 // 2. Handles relativistic transformations if required.
 //
 
-TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
+void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
 
   if (pmy_pack == nullptr) {
-    return TaskStatus::complete;
+    return;
   }
 
   Mesh *pm = pmy_pack->pmesh;
   if (pm == nullptr) {
-    return TaskStatus::complete;
+    return;
   }
 
   auto &indcs = pmy_pack->pmesh->mb_indcs;
@@ -986,7 +998,6 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
 
 
   Real dt = pm->dt;
-  Real bdt = (pdrive->beta[stage-1])*dt;
   Real current_time=pm->time;
   Real t_since_start = current_time - tdriv_start;
 
@@ -1301,7 +1312,50 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
     } // end relativistic case
 
   }
+  return;
+}
+
+TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
+  if (pmy_pack == nullptr) {
+    return TaskStatus::complete;
+  }
+
+  Mesh *pm = pmy_pack->pmesh;
+  if (pm == nullptr) {
+    return TaskStatus::complete;
+  }
+
+  Real dt = pm->dt;
+  Real bdt = dt;
+  if (pdrive != nullptr && stage > 0) {
+    bdt = (pdrive->beta[stage-1]) * dt;
+  }
+
+  ApplyForcingWithStep(bdt);
   return TaskStatus::complete;
+}
+
+void TurbulenceDriver::ApplyImpulse(Real kick_dt) {
+  if (kick_dt <= 0.0) {
+    return;
+  }
+
+  if (pmy_pack == nullptr) {
+    return;
+  }
+  Mesh *pm = pmy_pack->pmesh;
+  if (pm == nullptr) {
+    return;
+  }
+
+  Real saved_dt = pm->dt;
+  if (saved_dt != kick_dt) {
+    pm->dt = kick_dt;
+    ApplyForcingWithStep(kick_dt);
+    pm->dt = saved_dt;
+  } else {
+    ApplyForcingWithStep(kick_dt);
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -1567,4 +1621,3 @@ TaskStatus TurbulenceDriver::EnsureBasisSize(Driver *pdrive, int stage) {
 
   return TaskStatus::complete;
 }
-

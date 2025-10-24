@@ -144,6 +144,39 @@ If a `<shearing_box>` block exists, the module initialises Coriolis and tidal so
 - Relativistic integrations invoke the SR conservative-to-primitive and primitive-to-conservative transforms after applying forces.
 - `EnsureBasisSize` is idempotent and inexpensive when no mesh change is detected.
 
+#### Initial Turbulence Kick (`<initial_turb>`)
+- Optional block that applies a single impulsive Ornstein–Uhlenbeck update immediately after problem setup.
+- Uses the same keys as `<turb_driving>`; the block is forced to `turb_flag = 1` and executes once with its own RNG seed.
+- The kick is applied before the first timestep, after which the temporary driver is destroyed and does not participate in restarts.
+- `dt_turb_update` (or `tdriv_duration` when provided) controls the effective impulse duration used to scale the kick.
+- Executed only on brand-new runs (not restarts). The kick honours `tdriv_start` when it is less than or equal to the initial simulation time; otherwise the start time is clamped to the current time, so prefer `tdriv_start = 0` for pure initial-condition kicks.
+- Because the impulse operates through the same forcing kernels as the sustained driver, set `dedt`, spectra, and `sol_fraction` just as you would for a continuous run. Use a unique `rseed` when you need deterministic reproducibility distinct from the main driver.
+
+##### Example: Initial Kick + Sustained OU Driving
+
+```ini
+[initial_turb]
+dedt            = 5.0e-3   # one-off energy injection
+dt_turb_update  = 0.02     # width of the impulse
+kmin            = 1
+kmax            = 3
+sol_fraction    = 1.0
+rseed           = 314159
+
+[turb_driving]
+dedt            = 1.0e-4   # continuous driving level
+tcorr           = 0.5
+dt_turb_update  = 0.02
+kmin            = 1
+kmax            = 3
+sol_fraction    = 0.7
+rseed           = 271828
+tdriv_start     = 0.0
+turb_flag       = 2        # leave continuous forcing enabled
+```
+
+With this configuration the mesh receives a single kick before the first timestep, after which the steady OU driver takes over using its own seed and parameters. Restart files only preserve the continuous driver state, so rerunning from a checkpoint will not repeat the initial impulse.
+
 ## Cooling Timestep Constraint
 `SourceTerms::NewTimeStep` scans the mesh pack for ISM and CGM cooling cells and stores the minimum stable timestep in `dtnew`. The driver reduces the global timestep against this value before advancing.
 

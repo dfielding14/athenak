@@ -24,6 +24,7 @@
 //========================================================================================
 
 // C/C++ headers
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -39,6 +40,7 @@
 #include "mesh/mesh.hpp"
 #include "outputs/outputs.hpp"
 #include "driver/driver.hpp"
+#include "srcterms/turb_driver.hpp"
 
 // MPI/OpenMP headers
 #if MPI_PARALLEL_ENABLED
@@ -56,6 +58,58 @@
 //----------------------------------------------------------------------------------------
 //! \fn int main(int argc, char *argv[])
 //! \brief Athena main program
+
+namespace {
+
+void ApplyInitialTurbulenceKick(Mesh *pm, ParameterInput *pin) {
+  if (pm == nullptr || pin == nullptr) {
+    return;
+  }
+  if (!pin->DoesBlockExist("initial_turb")) {
+    return;
+  }
+
+  MeshBlockPack *pack = pm->pmb_pack;
+  if (pack == nullptr) {
+    return;
+  }
+  if (pack->phydro == nullptr && pack->pmhd == nullptr && pack->pionn == nullptr) {
+    return;
+  }
+
+  TurbulenceDriver init_driver(pack, pin, "initial_turb");
+
+  Real kick_dt = init_driver.dt_turb_update;
+  if (kick_dt <= 0.0) {
+    kick_dt = init_driver.tdriv_duration;
+  }
+  if (kick_dt <= 0.0) {
+    kick_dt = 1.0;
+  }
+
+  Real saved_time = pm->time;
+  Real saved_dt = pm->dt;
+  int saved_cycle = pm->ncycle;
+
+  if (pm->ncycle < 1) {
+    pm->ncycle = 1;
+  }
+  if (pm->time < init_driver.tdriv_start) {
+    pm->time = init_driver.tdriv_start;
+  }
+
+  pm->dt = kick_dt;
+  init_driver.InitializeModes(nullptr, 0);
+  init_driver.UpdateForcing(nullptr, 0);
+  init_driver.ApplyImpulse(kick_dt);
+  Kokkos::fence();
+
+  pm->dt = saved_dt;
+  pm->time = saved_time;
+  pm->ncycle = saved_cycle;
+}
+
+}  // namespace
 
 int main(int argc, char *argv[]) {
   std::string input_file, restart_file, run_dir;
@@ -332,6 +386,7 @@ int main(int argc, char *argv[]) {
   if (!res_flag) {
     // set ICs using ProblemGenerator constructor for new runs
     pmesh->pgen = std::make_unique<ProblemGenerator>(pinput, pmesh);
+    ApplyInitialTurbulenceKick(pmesh, pinput);
   } else {
     // read ICs from restart file using ProblemGenerator constructor for restarts
     pmesh->pgen = std::make_unique<ProblemGenerator>(pinput,
