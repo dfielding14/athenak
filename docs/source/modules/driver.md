@@ -1,169 +1,124 @@
 # Module: Driver
 
-## Overview
-The Driver module controls the main time evolution loop, managing time integration schemes and coordinating task execution.
+## Role in AthenaK
+The Driver owns AthenaK’s top-level time-integration loop. It decides whether the run is
+static or time-evolving, configures the Runge–Kutta/ImEx coefficients, schedules the
+shared task lists each stage, coordinates adaptive mesh refinement, and emits diagnostics
+and outputs. Its responsibilities are split across `Initialize`, `Execute`, and `Finalize`,
+each invoked from `main.cpp` after the mesh and physics modules have been constructed
+([src/main.cpp:320], [src/driver/driver.hpp:22]).
 
-## Source Location
-`src/driver/`
+## Source Layout
+| File | Responsibility | Key APIs |
+|------|----------------|----------|
+| `driver.hpp` | Driver class declaration; integrator state, timers, counters | `Driver`, `ExecuteTaskList` |
+| `driver.cpp` | Construction, lifecycle methods, scheduler, wall-clock handling | `Driver::Initialize`, `Driver::Execute`, `Driver::Finalize` |
 
-## Key Components
+## Execution Lifecycle
+### Initialization
+1. **Boundary priming** – `InitBoundaryValuesAndPrimitives` walks every enabled physics
+   module, forcing the boundary communication tasks to run once with sentinel stage values
+   (e.g., `stage = -1` suppresses flux receives, `stage = -4` clears shear buffers)
+   ([src/driver/driver.cpp:549]).
+2. **Module-specific timestep prep** – Any active hydro, MHD, radiation, or Z4c module is
+   asked to compute its stage-local limit via `NewTimeStep(this, nexp_stages)`
+   ([src/driver/driver.cpp:305]).
+3. **Global timestep** – The mesh reduces those stage limits alongside diffusion and
+   particle constraints in `Mesh::NewTimeStep`, clamping the first cycle to `tlim`
+   ([src/mesh/mesh.cpp:580]).
+4. **Initial outputs** – For fresh runs, every configured output writes once so the initial
+   state is captured ([src/driver/driver.cpp:326]).
+5. **ImEx scratch allocation** – If the ion-neutral module is present, the driver allocates
+   `impl_src` and enforces that an ImEx integrator was selected ([src/driver/driver.cpp:340]).
 
-| File | Purpose | Key Classes/Functions |
-|------|---------|----------------------|
-| `driver.hpp` | Driver class definition | `Driver` class |
-| `driver.cpp` | Main evolution loop | `Execute()`, `ExecuteTaskList()` |
+### Main Loop
+`Driver::Execute` exits early for static runs (currently a TODO) and otherwise advances
+while time, cycle count, and optional wall-clock limits permit
+([src/driver/driver.cpp:371]). Each cycle:
+- Prints diagnostic timing every `ndiag` steps ([src/driver/driver.cpp:378]).
+- Runs the shared task lists in order:
+  `before_timeintegrator` @ stage 0, then for each explicit stage
+  `before_stagen`, `stagen`, `after_stagen`, and finally
+  `after_timeintegrator` @ stage 1 ([src/driver/driver.cpp:384]).
+- Updates conserved time/cycle counters and the running meshblock / particle statistics
+  ([src/driver/driver.cpp:396]).
+- Triggers outputs when either their cadence `dt` or `dcycle` threshold is met
+  ([src/driver/driver.cpp:413]).
+- Invokes AMR (if enabled) and recomputes the next global timestep after refinement
+  ([src/driver/driver.cpp:428]).
+- Synchronises the wall-clock timer across ranks when a limit was provided
+  ([src/driver/driver.cpp:374], [src/driver/driver.cpp:533]).
 
-## Time Integration Schemes
+### Finalization
+After the loop the driver flushes all outputs, calls any problem-specific final hook, and
+prints aggregate performance metrics (zone-cycles, particle updates, AMR statistics). The
+diagnostics are only emitted on rank 0 and include the reason for termination
+([src/driver/driver.cpp:446]).
 
-Configured via `integrator` parameter in `<time>` block:
+## Time Integration Options
+The `<time>/integrator` string determines the explicit/implicit stage counts and CFL bound
+([src/driver/driver.cpp:86]).
 
-| Integrator | Order | Stages | Description | Lines in driver.cpp |
-|------------|-------|--------|-------------|---------------------|
-| `rk1` | 1st | 1 | Forward Euler | L97-105 |
-| `rk2` | 2nd | 2 | Heun's method (SSPRK2, default) | L105-118 |
-| `rk3` | 3rd | 3 | Strong stability preserving (SSPRK3) | L118-135 |
-| `rk4` | 4th | 4 | RK4()4[2S] from Ketcheson (2010) | L135-167 |
-| `imex2` | 2nd | 3 | IMEX-SSP2(3,2,2) Pareschi & Russo | L167-194 |
-| `imex3` | 3rd | 4 | IMEX-SSP3(4,3,3) Pareschi & Russo | L194-236 |
-| `imex+` | 2nd | 3 | IMEX(2,3,2) Krapp et al. (2024) | L236-263 |
+| Keyword | Order | Explicit stages (`nexp_stages`) | Implicit stages (`nimp_stages`) | CFL limit | Notes |
+|---------|-------|---------------------------------|----------------------------------|-----------|-------|
+| `rk1` | 1 | 1 | 0 | 1.0 | Forward Euler baseline ([src/driver/driver.cpp:91]). |
+| `rk2` | 2 | 2 | 0 | 1.0 | SSPRK(2,2) Heun scheme ([src/driver/driver.cpp:99]). |
+| `rk3` | 3 | 3 | 0 | 1.0 | SSPRK(3,3) ([src/driver/driver.cpp:112]). |
+| `rk4` | 4 | 4 | 0 | 1.3925 | Low-storage RK4()4[2S]; uses `delta` weights for register updates ([src/driver/driver.cpp:129]). |
+| `imex2` | 2 | 2 | 3 | 1.0 | Pareschi & Russo IMEX-SSP2; explicit leg matches RK2 ([src/driver/driver.cpp:162]). |
+| `imex3` | 3 | 3 | 4 | 1.0 | IMEX-SSP3 with RK3 explicit leg ([src/driver/driver.cpp:188]). |
+| `imex+` | 2 | 3 | 2 | 1.0 | Krapp et al. (2024) IMEX(2,3,2); explicit stages have non-RK2 weights ([src/driver/driver.cpp:230]). |
 
-**Note**: Error message at L267 incorrectly lists only `[rk1,rk2,rk3,imex2,imex3]` but `rk4` and `imex+` are implemented.
+> The fatal error message printed for unknown integrators omits `rk4` and `imex+`; be aware
+> the warning is stale ([src/driver/driver.cpp:258]).
 
-## Configuration Parameters
+## Driver Configuration
+| Setting | Source | Default | Effect |
+|---------|--------|---------|--------|
+| `time/evolution` | input file | – (required) | Chooses `static`, `kinematic`, or `dynamic` evolution; anything else aborts ([src/driver/driver.cpp:68]). |
+| `time/integrator` | input file | `rk2` | Only read for non-static runs; selects table entry above ([src/driver/driver.cpp:86]). |
+| `time/tlim` | input file | – (required) | Simulation end time tested by the main loop ([src/driver/driver.cpp:274], [src/driver/driver.cpp:378]). |
+| `time/nlim` | input file | `-1` | Maximum cycles; negative keeps running indefinitely ([src/driver/driver.cpp:88]). |
+| `time/ndiag` | input file | `1` | Frequency for `OutputCycleDiagnostics` prints ([src/driver/driver.cpp:89], [src/driver/driver.cpp:513]). |
+| `time/cfl_number` | input file | – (required) | Stored on the mesh and applied when reducing module timesteps ([src/mesh/build_tree.cpp:304], [src/mesh/mesh.cpp:586]). |
+| `-t hh:mm:ss` | CLI flag | unset | Optional wall-clock limit broadcast each loop ([src/main.cpp:172], [src/driver/driver.cpp:374]). |
 
-### Time Block (`<time>`)
+Static mode currently short-circuits without executing any task lists (marked TODO)
+([src/driver/driver.cpp:371]).
 
-| Parameter | Type | Default | Description | Set in |
-|-----------|------|---------|-------------|--------|
-| `evolution` | string | required | Evolution type (static/kinematic/dynamic) | driver.cpp |
-| `integrator` | string | rk2 | Time integration scheme | driver.cpp |
-| `cfl_number` | Real | required | CFL stability factor | build_tree.cpp L306, L502 |
-| `tlim` | Real | required | Simulation end time | driver.cpp |
-| `nlim` | int | -1 | Maximum cycles (-1 = unlimited) | driver.cpp |
-| `ndiag` | int | 1 | Cycles between diagnostics | driver.cpp |
+## Task Scheduling Mechanics
+`ExecuteTaskList` wraps each shared `TaskList`, clearing completion flags, running tasks
+until dependencies are satisfied, and marking the pack complete before moving on
+([src/driver/driver.cpp:273]). Every task sees the stage index that triggered it, which is
+why physics modules use the integer to distinguish first/final stages or special sentinels.
+The driver does not attempt to interleave task lists across packs; concurrency is provided
+inside each task via Kokkos kernels.
 
-**Note**: `cfl_number` is read in `mesh/build_tree.cpp`, not in `driver.cpp`. There is no fixed `dt` parameter.
+## Boundary Priming Helper
+`InitBoundaryValuesAndPrimitives` mirrors the actions performed during a live stage,
+calling the same task wrappers with sentinel stages so that ghost zones, AMR restriction,
+and shearing-box buffers start in a consistent state ([src/driver/driver.cpp:549]). The
+routine is also reused by mesh refinement to seed newly created blocks.
 
-## Evolution Types
+## Diagnostics and Performance Counters
+- `OutputCycleDiagnostics` prints the elapsed wall time, cycle, simulation time, and `dt`
+  every `ndiag` cycles ([src/driver/driver.cpp:513]).
+- `Execute` tallies meshblock and particle updates each cycle, then reports aggregate
+  zone-cycles/second and particle updates/second during `Finalize`
+  ([src/driver/driver.cpp:400], [src/driver/driver.cpp:493]).
+- When AMR is enabled, `Finalize` also reports created/deleted meshblocks and the average
+  load-balancing efficiency ([src/driver/driver.cpp:483]).
 
-Set via `evolution` parameter:
-
-| Type | Description | Enum Value |
-|------|-------------|------------|
-| `static` | Single evaluation, no time integration | TimeEvolution::tstatic |
-| `kinematic` | Fixed velocity field, passive evolution | TimeEvolution::tkinematic |
-| `dynamic` | Full time-dependent evolution | TimeEvolution::tevolve |
-
-## Key Methods
-
-### Main Evolution Loop
-```cpp
-// driver.cpp L375
-void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
-  // Main time evolution loop
-  while (pmesh->time < pmesh->tlim && 
-         pmesh->ncycle < pmesh->nlim) {
-    // Execute stages
-    for (int stage = 1; stage <= nstages; ++stage) {
-      ExecuteTaskList(pmesh, tl_name, stage);
-    }
-    // Update time
-    pmesh->time += pmesh->dt;
-    pmesh->ncycle++;
-  }
-}
-```
-
-### Task List Execution
-```cpp
-// driver.cpp L279
-void Driver::ExecuteTaskList(Mesh *pm, std::string tl, int stage) {
-  // Execute task list for given stage
-  pm->pmb_pack->tl_map[tl]->Execute(pm, stage);
-}
-```
-
-## Task Execution Stages
-
-For each integration stage, the following task lists are executed:
-
-1. `before_timeintegrator` - Prepare for time integration
-2. `before_stageN` - Stage-specific preparation (N = stage number)
-3. `stageN` - Main stage computation
-4. `after_stageN` - Stage cleanup
-5. `after_timeintegrator` - Finalize timestep
-
-## Time Step Calculation
-
-New timestep is calculated in `Mesh::NewTimeStep()` (mesh.cpp L571-621):
-```cpp
-dt = cfl_no * min(dt_hydro, dt_mhd, dt_z4c, dt_rad, ...);
-```
-
-## Performance Monitoring
-
-The driver tracks (driver.cpp L440-500):
-- Wall clock time per cycle
-- Zone-cycles per second  
-- Time spent in MPI communication
-- Diagnostic output interval
-
-## Integration with Other Modules
-
-- **Mesh**: Provides spatial discretization and stores `cfl_no`, `dt`, `time`
-- **TaskList**: Manages and executes computational tasks
-- **Physics Modules**: Register tasks with task lists
-- **Outputs**: Called by driver at specified intervals
-- **AMR**: Mesh refinement checked between cycles
-
-## Example Usage
-
-### Standard Evolution
-```ini
-<time>
-evolution = dynamic   # Full time evolution
-integrator = rk2      # 2nd order Heun's method
-cfl_number = 0.4      # CFL factor
-tlim = 10.0          # Run to t=10
-nlim = -1            # No cycle limit
-ndiag = 10           # Diagnostics every 10 cycles
-```
-
-### Higher-Order Integration
-```ini
-<time>
-evolution = dynamic
-integrator = rk3      # 3rd order SSP-RK
-cfl_number = 0.3     # More conservative CFL for higher order
-tlim = 1.0
-```
-
-### Static Problem (No Evolution)
-```ini
-<time>
-evolution = static    # Single evaluation only
-tlim = 0.0           # Not used but required
-cfl_number = 1.0     # Not used but required
-```
-
-## Common Issues
-
-### Timestep Too Small
-- CFL number may be too large for the problem
-- Check for unresolved features or shocks
-- Consider enabling FOFC in physics modules
-
-### Integration Instability
-- Reduce `cfl_number` (typical: 0.4 for RK2, 0.3 for RK3)
-- Use SSP integrators (rk2, rk3) for problems with shocks
-- Check boundary conditions
-
-### Performance
-- Adjust MeshBlock size for better GPU utilization
-- Monitor load balance with `ndiag` diagnostics
-- Consider lower-order integrator if accuracy permits
+## Limitations & Notes
+- Static runs (`time/evolution = static`) currently perform initialization and finalization
+  but skip any analysis in `Execute` because the branch is still a placeholder
+  ([src/driver/driver.cpp:371]).
+- Ion-neutral two-fluid runs *must* use an ImEx integrator; the driver enforces this during
+  initialization before allocating implicit scratch space ([src/driver/driver.cpp:340]).
+- The global CFL number is read during mesh construction, so ensure `<time>/cfl_number` is
+  present even if only the driver section is being edited ([src/mesh/build_tree.cpp:304]).
 
 ## See Also
-- [TaskList Module](tasklist.md) - Task management system
-- [Mesh Module](mesh.md) - Timestep calculation
-- Source: `src/driver/driver.cpp`
+- [TaskList Module](tasklist.md) – scheduler internals referenced by the driver.
+- [Mesh Module](mesh.md) – timestep reduction, AMR, and mesh-wide counters.
+- [Hydrodynamics Module](hydro.md) – example of per-stage task registration used by the driver.

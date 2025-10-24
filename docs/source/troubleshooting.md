@@ -48,16 +48,16 @@ This parses the file, applies overrides, and prints any warnings without startin
 - Enable first-order flux correction (FOFC) in problematic regions.
 
 ### MHD `div(B)` growth
-- Confirm `<mhd>` enables constrained transport (`mhd:ct = true` by default).
-- Enable FOFC (`hydro/fofc = true`) on troublesome AMR levels.
+- Confirm `<mhd>` is enabled (constrained transport is always active for MHD runs).
+- Enable FOFC (`hydro/fofc = true` or `mhd/fofc = true`) on troublesome AMR levels.
 - Check prolongation settings in `<mesh_refinement>` to ensure divergence-free interpolation.
 
 ### Parallel job hangs or underperforms
 - Verify each executable was built with matching MPI/OpenMP settings.
 - Use `mpirun --bind-to core --map-by socket` (OpenMPI) or equivalent binding flags.
-- Enable Kokkos profiling to spot load imbalance:
+- Enable Kokkos profiling to spot load imbalance (adjust the library path to your tool installation):
   ```bash
-  export KOKKOS_PROFILE_LIBRARY=${PWD}/kokkos/tools/libkokkos-tools.so
+  export KOKKOS_PROFILE_LIBRARY=/path/to/libkokkos-tools.so
   ./build/src/athena -i input.athinput
   ```
 

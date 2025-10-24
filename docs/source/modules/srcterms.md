@@ -100,7 +100,7 @@ If a `<shearing_box>` block exists, the module initialises Coriolis and tidal so
 
 ### Task Flow
 1. **EnsureBasisSize** detects changes in the mesh pack (AMR splits/merges or root-grid edits), resizes `force`, `force_tmp{1,2}`, and basis caches, and recomputes trigonometric basis functions per MeshBlock. Existing OU coefficients `aka/akb` are preserved.
-2. **InitializeModes** builds the mode catalogue for the selected wavenumber ranges, computes spectral weights, and generates random amplitudes using either a fixed seed (`rseed >= 0`) or a time-based seed.
+2. **InitializeModes** builds the mode catalogue for the selected wavenumber ranges, computes spectral weights, and generates random amplitudes using the configured seed (`rseed >= 0`). Negative seeds fall back to the built-in Numerical Recipes sequence (equivalent to seeding with `1`).
 3. **UpdateForcing** copies the OU state into the working force array, applies optional Gaussian weighting (`*_scale_height` and `*_center`), removes net momentum, and rescales the field to match the requested energy injection `dedt`.
 4. **AddForcing** applies accelerations during each integrator stage. The kernel supports hydro-only, MHD, and two-fluid ion-neutral configurations. For relativistic runs it converts to/from conserved variables with the appropriate SR transformations.
 
@@ -130,7 +130,7 @@ If a `<shearing_box>` block exists, the module initialises Coriolis and tidal so
 | `expo`, `exp_prp`, `exp_prl` | `5/3`, `5/3`, `0` | Spectral slopes (isotropic / perpendicular / parallel). |
 | `min_k*`, `max_k*` | `0` / `nhigh` | Cartesian mode limits per axis. |
 | `sol_fraction` | `1.0` | Fraction of power in solenoidal modes. |
-| `rseed` | `-1` | RNG seed; negative uses wall clock. |
+| `rseed` | `-1` | RNG seed for the OU process. Non-negative values give reproducible sequences; negative values fall back to the internal default (seed = 1). |
 | `constant_edot` | `true` | Switch between fixed `dedt` and fixed acceleration. |
 | `tile_driving` | `false` | Enable spatial tiling. |
 | `tile_factor` / `tile_nx,ny,nz` | `1` | Tile replication counts. |

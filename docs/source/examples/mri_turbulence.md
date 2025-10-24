@@ -9,7 +9,6 @@ Magnetorotational instability (MRI) in a shearing box - the fundamental mechanis
 ## Available Input Files
 - **2D Setup**: `inputs/mhd/mri2d.athinput`
 - **3D Setup**: `inputs/mhd/mri3d.athinput`
-- **High Resolution**: `inputs/mhd/mri3d_hires.athinput`
 
 ## Physics
 
@@ -21,11 +20,11 @@ The MRI occurs when a weak magnetic field destabilizes a differentially rotating
 ## Running the Simulation
 
 ```bash
-# Build with MRI problem
-cmake -B build -DPROBLEM=mri3d
-make -C build -j8
+# Build once (MRI problems are part of the built-in set)
+cmake -S . -B build
+cmake --build build -j $(sysctl -n hw.ncpu 2>/dev/null || nproc)
 
-# Run 3D MRI
+# Run 3D MRI shearing box
 ./build/src/athena -i inputs/mhd/mri3d.athinput
 ```
 

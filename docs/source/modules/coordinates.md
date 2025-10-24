@@ -1,203 +1,167 @@
 # Module: Coordinates
 
 ## Overview
-The Coordinates module handles coordinate systems and metrics for Cartesian and general relativistic spacetimes. **Note: AthenaK currently only supports Cartesian coordinates and Kerr-Schild coordinates for black hole spacetimes. Spherical polar and cylindrical coordinates are NOT implemented.**
 
-## Source Location
+The Coordinates module owns the geometry metadata needed by every MeshBlockPack.
+AthenaK currently supports
+
+* **Flat Cartesian** coordinates (default for Newtonian and SR runs).
+* **Cartesian Kerr–Schild** coordinates for general-relativistic problems (either
+  static background metrics or fully dynamical evolutions with ADM/Z4c).
+
+Curvilinear grids (spherical, cylindrical, etc.) are not implemented in this branch.
+
+## Source Layout
+
 `src/coordinates/`
 
-## Key Components
+| File | Role | Notes |
+| --- | --- | --- |
+| `coordinates.hpp/.cpp` | Core `Coordinates` class, relativistic flags, source terms | Exposes the `CoordSrcTerms` overloads used by hydro/MHD |
+| `cartesian_ks.hpp` | Metric helpers for Minkowski / Kerr–Schild space-times | Provides `ComputeMetricAndInverse` and derivatives |
+| `adm.hpp/.cpp` | ADM helper class for dynamic GR runs | Populates metric slices for the Z4c/ADM modules |
+| `excision.cpp` | Builds excision masks around BH horizons | Used when `coord_data.bh_excise` is true |
+| `cell_locations.hpp` | Static utilities for cell/face locations | Used widely by problem generators/tasks |
 
-| File | Purpose | Key Classes/Functions |
-|------|---------|----------------------|
-| `coordinates.hpp` | Base coordinate class | `Coordinates` |
-| `coordinates.cpp` | Coordinate implementations | `CoordSrcTerms` |
-| `cartesian_ks.hpp` | Kerr-Schild coordinates | `ComputeMetricAndInverse` |
-| `adm.hpp/cpp` | ADM formalism for GR | `ADM` class |
-| `excision.cpp` | Black hole excision | `SetExcisionMasks` |
-| `cell_locations.hpp` | Cell position utilities | `CellCenterX`, `FaceX` |
+## Relativistic Modes
 
-## Supported Coordinate Systems
+The constructor inspects the input deck and sets:
 
-### 1. Cartesian (Default)
-- Standard flat space coordinates (x, y, z)
-- Uniform grid spacing
-- Used for all non-relativistic simulations
-- No coordinate singularities
+- `is_special_relativistic` – `<coord>/special_rel = true`.
+- `is_general_relativistic` – `<coord>/general_rel = true` (static metric).
+- `is_dynamical_relativistic` – automatically enabled when either `<adm>` or `<z4c>`
+  blocks are present alongside `<hydro>`/`<mhd>`.
 
-### 2. Kerr-Schild (General Relativity Only)
-- Used for black hole spacetimes
-- Horizon-penetrating coordinates
-- Requires `general_rel = true` or dynamic GR (Z4c/ADM)
-- Supports spinning black holes via spin parameter `a`
+If both SR and GR flags are requested simultaneously the code aborts.
 
-## Configuration Parameters
+When GR or dynamical GR is active, the module loads additional parameters into
+`coord_data`:
 
-From `<coord>` block:
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `minkowski` | `false` | Treat metric as flat even in GR mode |
+| `a` | — | Dimensionless BH spin (|a|<1); ignored for Minkowski |
+| `excise` | `true` (if `minkowski = false`) | Enable excision masks near the horizon |
+| `dexcise`, `pexcise` | — | Density/pressure floors applied inside the excision region |
+| `flux_excise_r` | `1.0` (or horizon radius when radiation is enabled) | Radius inside which FOFC is forced |
+| `excision_scheme` | `"fixed"` (dynamic GR only) | `"fixed"` builds masks once; `"lapse"` recomputes masks from the lapse |
+| `excise_lapse` | `0.25` | Lapse threshold for the `"lapse"` scheme (dynamic GR only) |
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `special_rel` | bool | false | Enable special relativity |
-| `general_rel` | bool | false | Enable general relativity |
-| `minkowski` | bool | false | Use flat Minkowski spacetime (GR mode) |
-| `a` | Real | - | Black hole spin parameter (-1 < a < 1) |
-| `excise` | bool | true | Enable excision inside black hole |
-| `dexcise` | Real | - | Density floor in excision region |
-| `pexcise` | Real | - | Pressure floor in excision region |
-| `excision_scheme` | string | "fixed" | Excision method: "fixed" or "lapse" |
-| `excise_lapse` | Real | 0.25 | Lapse threshold for excision (lapse method) |
+`flux_excise_r` and `rexcise` default to the horizon radius when the radiation
+module is active; otherwise users must specify appropriate values.
+
+## Coordinate Source Terms
+
+`Coordinates::CoordSrcTerms` is overloaded:
+
+```cpp
+void CoordSrcTerms(const DvceArray5D<Real> &prim,
+                   const EOS_Data &eos,
+                   Real dt,
+                   DvceArray5D<Real> &cons);
+
+void CoordSrcTerms(const DvceArray5D<Real> &prim,
+                   const DvceArray5D<Real> &bcc,
+                   const EOS_Data &eos,
+                   Real dt,
+                   DvceArray5D<Real> &cons);
+```
+
+These routines rebuild the ADM 4‑metric (via `ComputeMetricAndInverse`), compute
+Christoffel derivatives, and add the geometric source terms to the conserved
+variables. They are invoked from the hydro/MHD task lists whenever SR/GR is active.
+
+## Excision Support
+
+When `coord_data.bh_excise` is true the constructor allocates two boolean masks:
+
+```cpp
+DvceArray4D<bool> excision_floor;  // mark cells to floor primitives
+DvceArray4D<bool> excision_flux;   // mark cells to force FOFC
+```
+
+For fixed excision the masks are filled once via `SetExcisionMasks`.  For lapse-based
+excision the masks are recomputed each cycle through `UpdateExcisionMasks()` using
+the current Z4c lapse.
+
+Cells flagged in `excision_floor` are reset to `(dexcise, pexcise, v=0)` during
+primitive recovery.  The flux mask forces first-order fluxes (`FOFC`) inside
+`flux_excise_r` to stabilize the solution near the horizon.
 
 ## Cell Location Utilities
 
-### Getting Cell Positions
-```cpp
-// From cell_locations.hpp
-Real x1v = CellCenterX(i-is, nx1, x1min, x1max);  // Cell center in x1
-Real x1f = FaceX(i-is, nx1, x1min, x1max);        // Cell face in x1
-```
-
-### Index Calculations
-```cpp
-// Linear spacing assumed
-Real dx = (x1max - x1min) / nx1;
-Real x_center = x1min + (i + 0.5) * dx;
-Real x_face = x1min + i * dx;
-```
-
-## General Relativistic Coordinates
-
-### Kerr-Schild Metric
-For black holes, AthenaK uses Kerr-Schild coordinates which are regular at the horizon:
+`cell_locations.hpp` provides grid-spacing helpers; the coordinate module uses these
+to evaluate metrics, and problem generators frequently call them directly:
 
 ```cpp
-// From cartesian_ks.hpp
-ComputeMetricAndInverse(x1, x2, x3, is_minkowski, spin, glower, gupper);
+Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+Real x1f = FaceX(i-is, nx1, x1min, x1max);
 ```
 
-The metric components include:
-- Lapse function α
-- Shift vector βⁱ
-- Spatial metric γᵢⱼ
-- Full 4-metric gμν
-
-### Coordinate Source Terms
-For relativistic hydrodynamics/MHD, geometric source terms are computed:
-
-```cpp
-// From coordinates.cpp
-void CoordSrcTerms(prim, eos, dt, cons);
-```
-
-These account for:
-- Christoffel symbols
-- Metric derivatives
-- Curved spacetime effects
-
-## Excision for Black Holes
-
-### Excision Region
-Inside the black hole horizon, cells are excised (masked) from computation:
-
-```cpp
-// Check if inside excision region
-if (excision_floor(m,k,j,i)) {
-  // Reset to floor values
-  prim(m,IDN,k,j,i) = dexcise;
-  prim(m,IEN,k,j,i) = pexcise;
-  prim(m,IVX,k,j,i) = 0.0;
-  // ...
-}
-```
-
-### Excision Methods
-1. **Fixed**: Excise at fixed coordinate radius
-2. **Lapse**: Excise where lapse α < threshold
+All grids are currently uniform Cartesian; non-uniform spacing is not supported.
 
 ## Usage Examples
 
-### Basic Cartesian Setup
+### Cartesian / Newtonian (default)
+
 ```ini
-# Default - no coordinate block needed
 <mesh>
 nx1 = 256
 x1min = -1.0
-x1max = 1.0
-# Automatically uses Cartesian coordinates
+x1max =  1.0
+# No <coord> block required.
 ```
 
-### Special Relativity
+### Special Relativistic Hydro/MHD
+
 ```ini
 <coord>
-special_rel = true  # Enables SR
+special_rel = true
 
 <hydro>
-gamma_max = 10.0   # Lorentz factor limit
+gamma_max = 10.0
 ```
 
-### Kerr Black Hole
+### Static Kerr–Schild Background
+
 ```ini
 <coord>
 general_rel = true
-a = 0.9           # Dimensionless spin
-excise = true
-dexcise = 1.0e-8  # Floor density
-pexcise = 1.0e-10 # Floor pressure
-excision_scheme = lapse
-excise_lapse = 0.2
+minkowski  = false
+a          = 0.7
+excise     = true
+dexcise    = 1.0e-8
+pexcise    = 1.0e-10
+flux_excise_r = 1.0   # optional; defaults to horizon radius
 ```
 
-### Dynamic GR (with Z4c)
+### Dynamical GR with Z4c/ADM
+
 ```ini
 <z4c>
-# Enables dynamic spacetime evolution
+# dynamic spacetime blocks automatically set is_dynamical_relativistic
 
 <coord>
-# general_rel automatically set by z4c
-a = 0.7           # Initial black hole spin
+a = 0.5
 excise = true
+excision_scheme = lapse
+excise_lapse    = 0.2
 ```
 
-## Integration with Physics Modules
+## Limitations & Recommendations
 
-### Hydro/MHD
-- Provides metric for covariant equations
-- Computes geometric source terms
-- Handles Lorentz factor calculations
+- Only Cartesian grids are available.  Spherical or cylindrical coordinates are not
+  implemented; mimic spherical problems by embedding them in a Cartesian domain.
+- Make sure `dexcise`/`pexcise` floors are compatible with the EOS used around the
+  horizon.
+- When enabling GR without excision (`excise = false`), ensure the mesh resolves the
+  horizon to avoid C2P failures.
 
-### Z4c/ADM
-- Uses ADM decomposition of spacetime
-- Evolves metric components dynamically
-- Coordinates module provides initial metric
+## Related Modules
 
-## Important Limitations
-
-### No Curvilinear Coordinates
-- **Spherical polar coordinates NOT available**
-- **Cylindrical coordinates NOT available**  
-- All simulations use Cartesian grid
-- For spherical problems, use Cartesian with appropriate domain
-
-### Workarounds for Spherical Problems
-```ini
-# Simulate sphere in Cartesian coordinates
-<mesh>
-nx1 = 128
-x1min = -1.0
-x1max = 1.0
-nx2 = 128  
-x2min = -1.0
-x2max = 1.0
-nx3 = 128
-x3min = -1.0
-x3max = 1.0
-
-# Apply spherical initial conditions in problem generator
-```
-
-## Common Issues
-
-### Black Hole Excision
-- Must have sufficient resolution near horizon
+- [Z4c Module](z4c.md) – time-evolves the dynamical metric (hands the lapse/shift to the coordinates module).
+- [Dyn GRMHD Module](dyn_grmhd.md) – couples fluid evolution to the evolving space-time.
+- [Mesh Module](mesh.md) – describes MeshBlockPack layout and AMR integration.
 - Ghost zones must extend beyond excision region
 - Use appropriate boundary conditions
 

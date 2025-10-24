@@ -8,13 +8,9 @@ Compressible turbulence with continuous Fourier forcing. This example demonstrat
 
 ## Available Input Files
 
-### Hydrodynamic Turbulence
-- **Basic**: `inputs/hydro/turb.athinput`
-- **With AMR**: `inputs/hydro/turb_amr_demo.athinput`
-
-### MHD Turbulence
-- **With AMR**: `inputs/mhd/turb_mhd_amr_wave.athinput`
-- **div(B) Test**: `inputs/mhd/test_divb_minimal.athinput`
+- **Hydro (baseline)**: `inputs/hydro/turb.athinput`
+- **Hydro with staged AMR demo**: `inputs/hydro/turb_amr_demo.athinput`
+- **MHD staged refinement (part 1)**: `inputs/turb_timed_amr_stage1.athinput`
 
 ## Physics
 
@@ -123,20 +119,17 @@ rho0        = 1.0      # Mean density
 press0      = 1.0      # Mean pressure
 
 <turb_driving>
-# Turbulence forcing parameters
-turb_flag   = 2        # Continuous driving
-dedt        = 1.0      # Energy injection rate
-tcorr       = 0.5      # Correlation time
-nlow        = 2        # Min wavenumber
-nhigh       = 4        # Max wavenumber
-spect_form  = 1        # Power spectrum shape
-driving_type = 0       # 0=solenoidal, 1=compressive
-rseed       = 42       # Random seed
-
-# Recent AMR fixes
-constant_edot = true   # Maintain constant energy injection
-dt_turb_update = 0.01  # Update interval
-sol_fraction = 1.0     # Purely solenoidal
+turb_flag        = 2      # 1=finite-length forcing, 2=continuous
+dedt             = 1.0    # Energy injection rate
+tcorr            = 0.5    # Correlation time
+nlow             = 2      # Minimum forced wavenumber
+nhigh            = 4      # Maximum forced wavenumber
+spect_form       = 1      # Spectrum shape
+driving_type     = 0      # 0=solenoidal, 1=compressive
+sol_fraction     = 1.0    # Solenoidal fraction
+constant_edot    = true   # Maintain constant energy injection
+dt_turb_update   = 0.01   # Update interval
+rseed            = 42     # Random seed
 
 <output1>
 file_type  = hst       # History file
@@ -151,6 +144,14 @@ dt         = 0.1
 file_type  = vtk
 variable   = turb_force  # Output forcing field
 dt         = 0.5
+
+### MHD Staged AMR Run
+
+The input `inputs/turb_timed_amr_stage1.athinput` evolves an isothermal MHD
+cubic domain with diffusion coefficients and FOFC enabled. It is intended as
+the first leg of a multi-stage refinement workflow: stage 1 runs to `t=2`, writes
+restart and diagnostic outputs, and subsequent stages (not included here) can be
+started from the generated checkpoint.
 ```
 
 ## MHD Turbulence with div(B) Preservation

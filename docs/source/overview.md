@@ -80,16 +80,35 @@ flowchart TD
 
 ### 1. Choose Your Physics
 ```ini
-# In your .athinput file
-<hydro>           # Fluid dynamics
-eos = ideal       # Equation of state
-gamma = 1.4       # Adiabatic index
+# Minimal hydrodynamics setup
+<hydro>
+eos      = ideal
+gamma    = 1.4
+reconstruct = plm
+rsolver  = hlle
+```
 
-<mhd>             # Magnetohydrodynamics
-eos = ideal       # Equation of state
+```ini
+# Magnetohydrodynamics requires its own block.
+# Do NOT enable <hydro> at the same time unless you also add <ion-neutral>.
+<mhd>
+eos      = ideal
+gamma    = 1.3333333333333
+reconstruct = plm
+rsolver  = hlld
+```
 
-<radiation>       # Radiation transport
-arad = 1.0        # Radiation constant
+```ini
+# Optional: Radiation transport couples to either hydro or MHD.
+<radiation>
+arad   = 1.0
+coord  = fluid
+closure = m1
+```
+
+```{admonition} Compatibility guard
+:class: warning
+`MeshBlockPack::AddPhysics` aborts if `<hydro>` and `<mhd>` are both active without `<ion-neutral>` (`src/mesh/meshblock_pack.cpp:137-155`). Hydrodynamics + radiation is fine. Full GR (Z4c/dyn_grmhd) must pair with `<mhd>` and omits `<hydro>`.
 ```
 
 ### 2. Set Up Your Domain
@@ -108,7 +127,7 @@ x1max = 1.0
 ## Core Concepts
 
 ### MeshBlocks - The Fundamental Unit
-- Each MeshBlock is a small 3D grid (e.g., 16³ cells)
+- Each MeshBlock is a 3D patch whose resolution defaults to the global mesh size (`<meshblock>/nx{1,2,3}` fall back to `<mesh>/nx{1,2,3}`) so domain decomposition is controlled via the input deck (`docs/source/reference/input_parameters.md`).
 - Distributed across MPI ranks for parallel execution
 - Grouped into MeshBlockPacks for GPU efficiency
 

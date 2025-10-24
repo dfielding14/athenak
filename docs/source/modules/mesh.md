@@ -1,202 +1,168 @@
 # Module: Mesh
 
 ## Overview
-The Mesh module provides the fundamental spatial discretization framework for AthenaK, implementing block-structured adaptive mesh refinement (AMR) with MPI domain decomposition.
 
-## Source Location
+The mesh package turns user input into a block-structured AMR hierarchy.  It
+constructs the space-filling curve, distributes MeshBlocks across MPI ranks,
+creates GPU-friendly MeshBlockPacks, and manages refinement/coarsening through
+`MeshRefinement`.
+
+All heavy data (hydro, MHD, GR state) lives in the physics modules; the mesh layer
+primarily tracks topology and geometry.
+
+## Source Layout
+
 `src/mesh/`
 
-## Key Components
+| File | Role |
+| --- | --- |
+| `mesh.hpp/.cpp` | Public `Mesh` class and high-level driver hooks |
+| `meshblock.hpp/.cpp` | Lightweight per-block metadata |
+| `meshblock_pack.hpp/.cpp` | Pack container and physics module wiring |
+| `meshblock_tree.hpp/.cpp` | Octree used for AMR bookkeeping |
+| `mesh_refinement.hpp/.cpp` | Refinement criteria, prolongation/restriction |
+| `build_tree.cpp` | Root grid construction and MPI partitioning |
+| `load_balance.cpp` | Space-filling-curve load balancing |
+| `prolongation.hpp`, `restriction.hpp` | Inter-grid transfer operators |
 
-| File | Purpose | Key Classes/Functions |
-|------|---------|----------------------|
-| `mesh.hpp/cpp` | Global mesh management | `Mesh` class |
-| `meshblock.hpp/cpp` | Individual mesh block data | `MeshBlock` class |
-| `meshblock_pack.hpp/cpp` | GPU-optimized block container | `MeshBlockPack` class |
-| `meshblock_tree.hpp/cpp` | Octree structure for AMR | `MeshBlockTree` class |
-| `mesh_refinement.hpp/cpp` | Refinement/derefinement logic | `MeshRefinement` class |
-| `build_tree.cpp` | Tree construction | `BuildTreeFromScratch()`, `BuildTreeFromRestart()` |
-| `load_balance.cpp` | MPI load balancing | `LoadBalance()` |
-| `prolongation.hpp` | Coarse-to-fine interpolation | Prolongation operators |
-| `restriction.hpp` | Fine-to-coarse averaging | Restriction operators |
+## Mesh Class (selected fields)
 
-## Data Structures
-
-### Mesh Class
 ```cpp
 class Mesh {
-  // Core data members (from mesh.hpp)
-  RegionSize mesh_size;      // Physical size of mesh
-  RegionIndcs mesh_indcs;     // Cell indices
-  RegionIndcs mb_indcs;       // MeshBlock cell indices
-  BoundaryFlag mesh_bcs[6];   // Boundary conditions
-  
-  int nmb_total;             // Total MeshBlocks across all ranks
-  int nmb_thisrank;          // MeshBlocks on this rank
-  int nmb_maxperrank;        // Max MBs per device (memory limit)
-  
-  float *cost_eachmb;        // Cost of each MeshBlock
-  int *rank_eachmb;          // Rank of each MeshBlock
-  LogicalLocation *lloc_eachmb; // Logical locations
-  
-  MeshBlockPack* pmb_pack;   // Container for MeshBlocks
-  MeshRefinement *pmr;        // AMR data/functions (if enabled)
+  RegionSize  mesh_size;    // physical size of the root grid
+  RegionIndcs mesh_indcs;   // cell indices on the root grid
+  RegionIndcs mb_indcs;     // indices including ghost zones for each MeshBlock
+  BoundaryFlag mesh_bcs[6]; // physical boundary conditions
+
+  int nmb_total;            // total MeshBlocks across all ranks
+  int nmb_thisrank;         // MeshBlocks owned by this rank
+  int nmb_maxperrank;       // AMR safety limit (input-controlled)
+
+  float *cost_eachmb;       // per-block weighting used by LoadBalance
+  int   *rank_eachmb;       // owning rank for each block
+  LogicalLocation *lloc_eachmb; // logical coordinates in the AMR tree
+
+  MeshBlockPack *pmb_pack;  // primary pack for this rank
+  MeshRefinement *pmr;      // optional AMR controller
 };
 ```
 
-### MeshBlock Class
+`BuildTreeFromScratch()` (or the restart variant) allocates these buffers, creates
+the initial pack, and fills neighbor metadata via `MeshBlock::SetNeighbors`.
+
+## MeshBlock & MeshBlockPack
+
 ```cpp
 class MeshBlock {
-  // Lightweight data structure (from meshblock.hpp)
-  DualArray1D<int> mb_gid;           // Global ID
-  DualArray1D<int> mb_lev;           // Logical level
-  DualArray1D<RegionSize> mb_size;   // Physical size
-  DualArray2D<BoundaryFlag> mb_bcs;  // Boundary conditions
-  DualArray2D<NeighborBlock> nghbr;  // Neighbor data
-  
-  // Note: Field data (u, w) stored in physics modules
-  // e.g., phydro->u0, pmhd->u0, etc.
+ public:
+  DualArray1D<int>          mb_gid;    // global ID
+  DualArray1D<int>          mb_lev;    // logical AMR level
+  DualArray1D<RegionSize>   mb_size;   // physical extents
+  DualArray2D<BoundaryFlag> mb_bcs;    // boundary flags (6 faces)
+  DualArray2D<NeighborBlock> nghbr;    // neighbor descriptors (up to 56)
+  DualArray1D<bool>         newly_created; // true for blocks created this cycle
+  int nnghbr;                          // max neighbors per block (cached)
 };
-```
 
-### MeshBlockPack Class
-```cpp
 class MeshBlockPack {
-  Mesh *pmesh;               // Pointer to parent Mesh
-  int nmb_thispack;          // Number of MBs in this pack
-  
-  MeshBlock* pmb;            // MeshBlocks in this pack
-  Coordinates* pcoord;       // Coordinate system
-  
-  // Physics modules (allocated as needed)
-  hydro::Hydro *phydro;
-  mhd::MHD *pmhd;
-  z4c::Z4c *pz4c;
-  particles::Particles *ppart;
-  // ... etc
+ public:
+  Mesh *pmesh;
+  int nmb_thispack;
+  MeshBlock     *pmb;
+  Coordinates   *pcoord;
+  hydro::Hydro  *phydro;
+  mhd::MHD      *pmhd;
+  z4c::Z4c      *pz4c;
+  adm::ADM      *padm;
+  numrel::NumericalRelativity *pnr;
+  // ... other optional physics modules (particles, radiation, source terms, etc.)
 };
 ```
 
-## Configuration Parameters
+Physics modules are allocated on demand inside `MeshBlockPack::AddPhysics()` based
+on the presence of blocks in the input deck.
 
-### Mesh Block (`<mesh>`)
+## Input Blocks
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `nx1, nx2, nx3` | int | required | Number of cells in domain |
-| `x1min, x1max` | Real | required | x1 domain boundaries |
-| `x2min, x2max` | Real | required | x2 domain boundaries |
-| `x3min, x3max` | Real | required | x3 domain boundaries |
-| `ix1_bc, ox1_bc` | string | required | Inner/outer x1 boundary conditions |
-| `ix2_bc, ox2_bc` | string | required | Inner/outer x2 boundary conditions |
-| `ix3_bc, ox3_bc` | string | required | Inner/outer x3 boundary conditions |
+### `<mesh>`
 
-### MeshBlock Block (`<meshblock>`)
+Required for every run.
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `nx1, nx2, nx3` | int | required | Cells per MeshBlock |
+| Parameter | Description |
+| --- | --- |
+| `nx1`, `nx2`, `nx3` | active cell counts on the root grid |
+| `nghost` | ghost-zone depth (default 2) |
+| `x#min`, `x#max` | domain extents |
+| `i#_bc`, `o#_bc` | boundary conditions (`periodic`, `outflow`, `reflect`, `inflow`, `vacuum`, `shear_periodic`, `user`) |
 
-### Mesh Refinement Block (`<mesh_refinement>`)
+### `<meshblock>`
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `refinement` | string | "none" | "none", "static", or "adaptive" |
-| `num_levels` | int | 1 | Maximum number of refinement levels |
-| `ncycle_check` | int | 1 | Cycles between AMR checks |
-| `refinement_interval` | int | 5 | Cycles between successive refinements |
+Optional override of the block resolution. When omitted, each MeshBlock inherits
+the root-grid resolution (`nx#`).  Values must evenly divide the corresponding
+root-grid counts.
 
-## Key Functions
+### `<mesh_refinement>`
 
-### Tree Construction
-```cpp
-// From build_tree.cpp
-void Mesh::BuildTreeFromScratch(ParameterInput *pin);
-void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile, 
-                                bool single_file_per_rank);
-```
-**Note**: No generic `BuildTree()` function exists.
+Controls AMR.
 
-### Load Balancing
-```cpp
-// From mesh.hpp (private member)
-void LoadBalance(float *clist, int *rlist, int *slist, int *nlist, int nb);
-```
-Redistributes MeshBlocks across MPI ranks using a space-filling curve.
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `refinement` | `"none"` | `"none"`, `"static"`, or `"adaptive"` |
+| `num_levels` | 1 | Maximum AMR level (root level + `num_levels` - 1) |
+| `max_nmb_per_rank` | required for AMR | Upper bound on blocks per rank (avoids GPU OOM) |
+| `ncycle_check` | 1 | Cycles between refinement checks |
+| `refinement_interval` | 5 | Minimum cycles between successive refinements |
+| `prolong_primitives` | false | When true, prolong primitive variables instead of conserved |
+| `dens_max`, `ddens_max`, `dpres_max`, `dvel_max` | optional thresholds | Trigger flags for density/gradient-based refinement |
 
-### MeshBlockPack Creation
-```cpp
-// Created in mesh.cpp constructor
-MeshBlockPack(Mesh *pm, int igids, int igide);
-```
-Groups MeshBlocks for GPU efficiency. Pack size typically 1-32 blocks.
+Problem generators set `MeshRefinement::refine_flag` and `derefine_flag`
+directly—there is no Athena++-style `UserRefinementCondition`.
 
-## AMR Operations
+## AMR Workflow
 
-### Refinement Control
-AMR is controlled through problem generators, not a user-defined function:
+1. **Flagging:** problem generators populate `pmr->refine_flag.h_view(m)` (1 =
+   refine, -1 = derefine). Convenience helpers such as
+   `MeshRefinement::CheckRefinementCondition` exist in individual generators.
+2. **Sync:** flags are mirrored to the device and evaluated every `ncycle_check`
+   cycles (respecting `refinement_interval`).
+3. **Tree Update:** `MeshRefinement::Apply` creates/destroys blocks, updates
+   `newly_created`, and repacks MeshBlockPack.
+4. **Load Balance:** `LoadBalance` adjusts the space-filling curve when the cost
+   distribution changes significantly.
+5. **Transfer Operators:** `prolongation.hpp` and `restriction.hpp` perform
+   conservative interpolation/averaging; AMR-aware constrained transport is handled
+   inside the MHD module.
 
-```cpp
-// In problem generator (pgen/*.cpp)
-// Set refinement flags during initialization or evolution
-if (need_refinement) {
-  pmb->pmr->refine_flag.h_view(m) = 1;  // Flag for refinement
-}
-```
+## Load Balancing
 
-**Note**: There is NO `UserRefinementCondition()` function in AthenaK.
+`float *cost_eachmb` stores a user-adjustable cost for each block (default 1).  The
+`LoadBalance` helper computes a prefix sum along the space-filling curve and
+assigns contiguous segments to ranks, ensuring `max_nmb_per_rank` is respected.
 
-### Prolongation and Restriction
-- **Prolongation**: Conservative linear interpolation (in `prolongation.hpp`)
-- **Restriction**: Volume-weighted averaging (in `restriction.hpp`)
-- Both operators preserve conservation
+## Memory / Performance Notes
 
-### Recent AMR + div(B) Improvements (2024)
-
-#### MHD AMR div(B) Preservation
-1. **Constrained Transport**: Extended to AMR interfaces
-2. **Face-centered field prolongation**: Preserves divergence
-3. **Test files verified to exist**:
-   - `inputs/mhd/test_divb_minimal.athinput`
-   - `inputs/mhd/test_divb_ranks.athinput`
-
-## Memory Layout
-
-### Array Layout
-- **Kokkos Views**: All arrays use LayoutRight for GPU efficiency
-- **Field arrays**: `(nmb, nvar, nk, nj, ni)` where:
-  - nmb: MeshBlock index within pack
-  - nvar: Variable index
-  - nk, nj, ni: z, y, x indices
-
-### MeshBlockPack Optimization
-- Groups multiple MeshBlocks for coalesced GPU memory access
-- Typical size: 1-32 blocks per pack
-- All blocks in pack execute same kernels
+- All field arrays live in Kokkos `View`s with layout `(nmb, nvar, nk, nj, ni)` so
+  the `i` index is fastest varying.
+- Pack size is determined automatically from the space-filling curve segment; GPU
+  performance is best with several blocks per pack (8–32 typical).
+- Ghost-zone exchange uses nonblocking MPI and overlaps with compute via the task
+  system.
 
 ## Boundary Conditions
 
-Supported types (from `mesh.cpp` GetBoundaryFlag()):
-- `periodic`: Periodic boundary
-- `outflow`: Zero gradient
-- `reflecting`: Reflecting (symmetry)
-- `inflow`: Fixed inflow values
-- `vacuum`: Vacuum boundary
-- `user`: User-defined in problem generator
+`Mesh::GetBoundaryFlag()` recognizes: `periodic`, `outflow`, `reflecting`,
+`inflow`, `shear_periodic`, `vacuum`, and `user`. Custom boundary logic is
+implemented inside the physics modules or problem generators via the boundary
+value package in `src/bvals/`.
 
-## Performance Considerations
+## Practical Tips
 
-### GPU Optimization
-- MeshBlockPacks provide coalesced memory access
-- Pack size tuned for GPU occupancy
-- Shared coordinate arrays within packs
-
-### MPI Communication
-- Non-blocking MPI for neighbor exchange
-- Load balancing via space-filling curve
-- Ghost cell exchange overlapped with computation
-
-## Common Issues
+- Always specify `max_nmb_per_rank` when AMR is enabled—AthenaK enforces this at
+  runtime.
+- If you shrink `<meshblock>` sizes, ensure they still divide the global counts and
+  that each pack maintains enough work for the GPU.
+- Use the event log (`outputs/eventlog.cpp`) to monitor `nfofc` and other counters
+  that originate in the mesh/refinement layer.
 
 ### Ghost Cells
 - Default is 2 ghost cells (`nghost=2`)

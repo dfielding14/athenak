@@ -27,23 +27,41 @@ cd build/src
 ./athena -i ../../inputs/hydro/sod.athinput
 ```
 
-## Step 3: View the Output (1 minute)
+## Step 3: Inspect the Output (1 minute)
 
 ```bash
 # List output files
-ls *.vtk
+ls Sod.*
 
-# Output will be:
-# shock.block0.out1.00000.vtk
-# shock.block0.out1.00001.vtk
-# ...
+# Typical files:
+# Sod.block0.out1.00000.tab   (slice of primitive variables)
+# Sod.block0.out2.00000.hst   (history diagnostics)
+
+# Peek at the tabular output
+head Sod.block0.out1.00000.tab
 ```
 
 ## Step 4: Visualize (1 minute)
 
-Open the VTK files in ParaView or VisIt:
+The default Sod problem writes tabular and history data. To view spatial fields:
+
+```bash
+# Option A: plot the tab output with your favourite tool (Python/gnuplot)
+python - <<'PY'
+import numpy as np
+data = np.loadtxt("Sod.block0.out1.00000.tab")
+print("Columns:", data.shape[1])
+print("Density head:", data[:5,0])
+PY
+
+# Option B: run a deck that emits VTK files
+./athena -i ../../inputs/mhd/field_loop.athinput
+ls Loop*.vtk
+```
+
+Then open the generated VTK files in ParaView or VisIt:
 1. Open ParaView
-2. File → Open → Select all `*.vtk` files
+2. File → Open → Select all `*.vtk` files (either from the optional run above or your own deck)
 3. Click Apply
 4. Choose variable to visualize (density, pressure, etc.)
 
@@ -120,17 +138,20 @@ cmake --build build-cuda -j $(sysctl -n hw.ncpu 2>/dev/null || nproc)
 ### Restart from Checkpoint
 ```bash
 # Create restart file
-./athena -i input.athinput
+./athena -i ../../inputs/hydro/sod.athinput
 
-# Restart from last checkpoint
-./athena -r shock.00010.rst
+# Restart from last checkpoint (replace with the filename written in your run dir)
+./athena -r Sod.00010.rst
 ```
 
 ### Change Problem Type
 ```bash
-# Build with different problem generator
-cmake -DPROBLEM=blast ..
-make -j8
+# Run a different built-in problem without rebuilding
+./athena -i ../../inputs/hydro/blast.athinput
+
+# Need a custom problem generator? Configure a fresh build directory:
+cmake -S . -B build-blast -DPROBLEM=blast
+cmake --build build-blast -j $(sysctl -n hw.ncpu 2>/dev/null || nproc)
 ```
 
 ## Quick Input File Reference

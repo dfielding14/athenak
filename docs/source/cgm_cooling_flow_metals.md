@@ -137,36 +137,29 @@ The timing follows three phases:
 2. **Late core-collapse** (7-44 Myr): Declining rate  
 3. **Type Ia** (>44 Myr): Low constant rate
 
-#### Energy and Mass Parameters (lines 131-136)
+#### Energy and Mass Parameters (`src/pgen/cgm_cooling_flow_amr_metals.cpp:129`)
 ```cpp
-// Line 133: Injection volume
 const Real sphere_vol = (4.0/3.0)*M_PI*std::pow(r_inj,3);
-// Line 135: Energy density (default 10^51 ergs per SN)
-e_sn = E_def*pmbp->punit->erg()/sphere_vol;
-// Line 136: Mass density (default 8.4 solar masses per SN)
-m_ej = M_def*pmbp->punit->msun()/sphere_vol;
+e_sn = E_def*pmbp->punit->erg()/sphere_vol;     // Default 10^51 erg per SN
+m_ej = M_def*pmbp->punit->msun()/sphere_vol;    // Default 8.4 M☉ per SN
 ```
 
 #### Injection Process (lines 605-642)
-**Current Implementation Status**: Incomplete - only energy injection is active.
-
 For each cell within injection radius:
 ```cpp
-// Lines 628-633: Calculate distance from SN center
+// Lines 626-639: Distance and injection
 Real dx = x1v - sn_x;
 Real dy = x2v - sn_y;
 Real dz = x3v - sn_z;
 Real r = sqrt(dx*dx + dy*dy + dz*dz);
 
-// Lines 635-639: Current injection (incomplete)
 if (r <= dr) {
-  // u0(m,IDN,k,j,i) += m_ej_;           // Mass injection - COMMENTED OUT
-  u0(m,IEN,k,j,i) += e_sn_;              // Energy injection - ACTIVE
-  // u0(m,nhydro,k,j,i) += m_ej_;        // Metal injection - NOT IMPLEMENTED
+  u0(m,IDN,k,j,i) += m_ej_;   // Mass injection
+  u0(m,IEN,k,j,i) += e_sn_;   // Energy injection
 }
 ```
 
-**Implementation Status**: Currently only energy injection is active. Mass and metal injection are planned features (TODO) for the next version. The infrastructure for metal tracking exists (metallicity scalar field) and the code reads `M_ej` from input, but SNe do not yet enrich the gas with mass or metals.
+**Implementation Status**: Energy and mass are injected; metal enrichment is currently limited to resetting the scalar field to the background value (`Z_ * Zsol`) rather than adding ejecta metals.
 
 ### 5. AMR Refinement (`RefinementCondition`, lines 793-839)
 

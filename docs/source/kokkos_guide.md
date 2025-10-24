@@ -25,9 +25,10 @@ Kokkos::HIPSpace       // AMD GPU memory
 
 In AthenaK, we use aliases:
 ```cpp
-using DevExeSpace = Kokkos::DefaultExecutionSpace;  // GPU if available, else CPU
-using HostExeSpace = Kokkos::Serial;               // Always CPU
-using DevMemSpace = DevExeSpace::memory_space;     // Matches execution space
+using DevExeSpace = Kokkos::DefaultExecutionSpace;  // GPU if configured, CPU otherwise
+using HostExeSpace = Kokkos::DefaultHostExecutionSpace;
+using DevMemSpace = DevExeSpace::memory_space;
+using HostMemSpace = HostExeSpace::memory_space;
 ```
 
 ### 2. Kokkos Views (Arrays)
@@ -75,7 +76,7 @@ for (int k=0; k<nz; k++) {
 Kokkos::deep_copy(device_data, host_data);
 
 // Process on device
-par_for("process", DevExeSpace(), 0, nx,
+Kokkos::parallel_for("process", Kokkos::RangePolicy<DevExeSpace>(0, nx),
   KOKKOS_LAMBDA(int i) {
     device_data(0,0,i) *= 2.0;
   });
@@ -88,7 +89,7 @@ Kokkos::deep_copy(host_data, device_data);
 
 ### 4. Parallel Patterns
 
-AthenaK uses Kokkos parallel patterns extensively:
+AthenaK wraps Kokkos execution policies in helper functions declared in `src/athena.hpp`; the `par_for`/`par_reduce` helpers expand to the appropriate `Kokkos::parallel_*` calls with labelled multi-dimensional ranges.
 
 #### Parallel For
 Most common pattern for independent iterations:
@@ -331,19 +332,13 @@ for (int i=is; i<=ie; i++) {
 
 ## Debugging Tips
 
-### 1. Test on CPU First
-```bash
-# Build for CPU only
-cmake -DKokkos_ENABLE_OPENMP=ON -DKokkos_ENABLE_CUDA=OFF ..
-```
-
-### 2. Use Bounds Checking
+### 1. Use Bounds Checking
 ```bash
 # Enable bounds checking
 cmake -DKokkos_ENABLE_DEBUG_BOUNDS_CHECK=ON ..
 ```
 
-### 3. Add Fences for Debugging
+### 2. Add Fences for Debugging
 ```cpp
 par_for("kernel1", ...);
 Kokkos::fence();  // Force synchronization
@@ -351,7 +346,7 @@ Kokkos::fence();  // Force synchronization
 par_for("kernel2", ...);
 ```
 
-### 4. Print from Limited Threads
+### 3. Print from Limited Threads
 ```cpp
 KOKKOS_LAMBDA(int i) {
   if (i == 0) {  // Only thread 0 prints

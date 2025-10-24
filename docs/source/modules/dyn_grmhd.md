@@ -1,222 +1,124 @@
-# Module: DynGRMHD (Dynamical General Relativistic MHD)
+# Module: DynGRMHD (Dynamical GR MHD)
 
-## Overview
-The DynGRMHD module couples magnetohydrodynamics with dynamical spacetimes from the Z4c module, enabling simulations of neutron star mergers, black hole accretion, and other strong-gravity phenomena.
+## Role in AthenaK
+DynGRMHD augments the standard MHD update with curvature source terms and
+stress–energy feedback so that a dynamical spacetime (Z4c/ADM) and the fluid evolve
+consistently. The module is instantiated only when a simulation enables both `<mhd>` and a
+general-relativistic metric block; otherwise the standard MHD pipeline is used
+([src/mesh/meshblock_pack.cpp:190]).
 
-## Source Location
-`src/dyn_grmhd/`
+## Prerequisites
+- `<z4c>` or `<adm>` **and** `<mhd>` must be present in the input deck; attempting to pair
+  dynamical metrics with `<hydro>` is rejected ([src/mesh/meshblock_pack.cpp:206]).
+- When DynGRMHD is enabled the mesh pack also owns a `Tmunu` accumulator that receives the
+  fluid stress–energy tensor prior to the Z4c update ([src/mesh/meshblock_pack.cpp:214]).
 
-## Key Components
+## Source Layout
+| File | Responsibility | Key APIs |
+|------|----------------|----------|
+| `dyn_grmhd.hpp` | Class interfaces, task IDs, policy enums | `DynGRMHD`, `DynGRMHDPS`, `BuildDynGRMHD` |
+| `dyn_grmhd.cpp` | Object construction, task registration, primitive recovery, stress–energy | `QueueDynGRMHDTasks`, `ConToPrim`, `SetTmunu` |
+| `dyn_grmhd_fluxes.cpp` | Reconstruction, GR Riemann solvers, FOFC trigger | `CalcFluxes<T>` |
+| `dyn_grmhd_fofc.cpp` | First-order flux correction and excision handling | `FOFC<T>` |
+| `dyn_grmhd_util.hpp` | Helper routines used by flux/FOFC paths | `ExtractPrimitives`, `InsertFluxes` |
+| `dyn_grmhd/rsolvers/*` | Characteristic estimates for LLF/HLLE in curved spacetime | `LLF_DYNGR`, `HLLE_DYNGR` |
 
-| File | Purpose | Key Functions |
-|------|---------|---------------|
-| `dyn_grmhd.hpp/cpp` | Core GRMHD class | System initialization |
-| `dyn_grmhd_fluxes.cpp` | GRMHD flux calculation | `CalculateFluxes()` |
-| `dyn_grmhd_fofc.cpp` | First-order flux correction | Robustness near horizons |
-| `dyn_grmhd_util.hpp` | Utility functions | Metric operations |
+## Task Graph Integration
+DynGRMHD does not create its own task lists; instead it extends the Numerical Relativity
+queue so the fluid and spacetime stay synchronized. `QueueDynGRMHDTasks` wires the
+standard MHD sequence while substituting GR-aware pieces where needed
+([src/dyn_grmhd/dyn_grmhd.cpp:130]). The stage ordering is:
 
-## Evolution Variables
+- Post/post-process communications with the existing `mhd::MHD` methods.
+- Insert the GR-aware flux task (`CalcFluxes`) before Z4c updates the metric so fluxes see
+  the latest spacetime ([src/dyn_grmhd/dyn_grmhd.cpp:145]).
+- If a Z4c object exists, queue `SetTmunu` before the Runge–Kutta update so the metric
+  driver has access to the stress–energy source computed from the current primitives
+  ([src/dyn_grmhd/dyn_grmhd.cpp:160]).
+- Run the usual MHD stages (RK update, CT, prolongation) and finally convert the updated
+  conserved variables back to primitives using the GR primitive solver; the task is marked
+  optional for excised cells via `Z4c_Excise` dependency
+  ([src/dyn_grmhd/dyn_grmhd.cpp:191]).
 
-### Conservative Variables
-$$D = \sqrt{\gamma} \cdot \rho \cdot W$$ (Conserved density)
-$$S_i = \sqrt{\gamma} \cdot \rho h^* \cdot W^2 v_i$$ (Conserved momentum)
-$$\tau = \sqrt{\gamma} \cdot (\rho h^* W^2 - P - D)$$ (Conserved energy)
-$$B^i = \sqrt{\gamma} \cdot B^i$$ (Magnetic field)
+Coordinate source terms are added from inside `MHD::MHDSrcTerms`. For dynamical metrics
+the MHD source routine calls back into DynGRMHD to accumulate the metric-derivative terms
+([src/mhd/mhd_tasks.cpp:251], [src/mhd/mhd_tasks.cpp:262]).
 
-Where:
-- $W$: Lorentz factor
-- $h^*$: Specific enthalpy including magnetic
-- $\gamma$: Determinant of spatial metric
+## Equation of State & Primitive Recovery
+`BuildDynGRMHD` instantiates a `DynGRMHDPS` template that wraps
+`PrimitiveSolverHydro<EOSPolicy, ErrorPolicy>` using the EOS named by `<mhd>/dyn_eos`
+(`ideal`, `piecewise_poly`, or `compose`). The only supported error policy today is
+`reset_floor`, meaning the primitive solver falls back to floor values when recovery
+fails ([src/dyn_grmhd/dyn_grmhd.cpp:56]).
 
-## Configuration Parameters
+`DynGRMHDPS` implements the full conversion pipeline:
+- `ConToPrim` runs the Valencia recovery on the entire pack each stage
+  ([src/dyn_grmhd/dyn_grmhd.cpp:247]).
+- `ConToPrimBC`/`PrimToConInit` are used to convert ghost layers before/after boundary
+  conditions are applied ([src/dyn_grmhd/dyn_grmhd.cpp:267],
+  [src/dyn_grmhd/dyn_grmhd.cpp:300]).
+- `ConvertInternalEnergyToPressure` recomputes pressure from the temperature supplied by
+  the EOS (important for CompOSE tables) ([src/dyn_grmhd/dyn_grmhd.cpp:220]).
 
-From `<mhd>` block:
+Setting `<mhd>/fixed = true` skips the GR-specific updates—fluxes, C2P, coordinate source
+terms, and stress–energy all short-circuit—so the run can operate in the Cowling
+approximation without touching the spacetime ([src/dyn_grmhd/dyn_grmhd.cpp:123],
+[src/dyn_grmhd/dyn_grmhd.cpp:248], [src/dyn_grmhd/dyn_grmhd.cpp:358]).
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `dyn_eos` | string | required | EOS type (ideal, compose) |
-| `dyn_error` | string | required | Error handling policy |
-| `rsolver` | string | required | Riemann solver (llf, hlle) |
-| `fofc` | bool | false | First-order flux correction |
-| `fofc_method` | string | llf | FOFC Riemann solver |
-| `dmp_M` | Real | 1.2 | Density floor multiplier |
-| `enforce_maximum` | bool | true | Enforce ceilings |
-| `fixed` | bool | false | Fixed metric (Cowling) |
+## Fluxes, Riemann Solvers, and FOFC
+`CalcFluxes<T>` reuses the MHD reconstruction choice (DC/PLM/PPM/WENOZ) and swaps in GR
+characteristic speeds when invoking either the LLF or HLLE solver selected by
+`<mhd>/rsolver` ([src/dyn_grmhd/dyn_grmhd_fluxes.cpp:20]). The `dyn_scratch` integer tunes
+the amount of shared memory reserved for these kernels
+([src/dyn_grmhd/dyn_grmhd.cpp:120], [src/dyn_grmhd/dyn_grmhd_fluxes.cpp:58]).
 
-## Conservative to Primitive Conversion
+After the high-order fluxes are computed, DynGRMHD optionally re-evaluates the step with a
+first-order flux correction. FOFC is triggered when either `<mhd>/fofc = true` or the
+coordinate system marks faces for black-hole excision
+([src/dyn_grmhd/dyn_grmhd_fluxes.cpp:386]). The detection pass predicts the updated
+conserved state, enforces a discrete maximum principle using `enforce_maximum` and `dmp_M`,
+and attempts a trial primitive recovery to flag troubled cells
+([src/dyn_grmhd/dyn_grmhd_fofc.cpp:63]). Flagged faces (or excised regions) are then
+recomputed with a first-order LLF/HLLE flux using the same solver family as the primary
+update ([src/dyn_grmhd/dyn_grmhd_fofc.cpp:167]).
 
-### Valencia Formulation
-Iterative solver for primitives:
-- Given: $D$, $S_i$, $\tau$, $B^i$
-- Find: $\rho$, $v^i$, $P$
+`<mhd>/fofc_method` is parsed and stored for compatibility, but the current implementation
+always reuses the main solver choice when rebuilding fluxes.
 
-2D Newton-Raphson in $(W, P)$:
-$$f_1 = S^2 - (D+\tau+P)^2W^2 + P^2$$
-$$f_2 = \tau + D - \rho h W^2 + P$$
+## Metric Coupling and Stress–Energy Feedback
+- `AddCoordTermsEOS` evaluates ADM Christoffel symbols, lapse/shift gradients, and injects
+  the curvature source terms into the conservative update. It is dispatched with the
+  appropriate ghost-zone width from `MHD::MHDSrcTerms`
+  ([src/dyn_grmhd/dyn_grmhd.cpp:422]).
+- `SetTmunu` populates the energy density, momentum, and stress tensor that Z4c consumes in
+  the subsequent stage. The routine is only scheduled when a Z4c object is present and is
+  skipped entirely when `fixed` is enabled ([src/dyn_grmhd/dyn_grmhd.cpp:160],
+  [src/dyn_grmhd/dyn_grmhd.cpp:353]).
 
-Iterate until convergence
+## Configuration
+All parameters live in the `<mhd>` block unless stated otherwise.
 
-### Recovery Policies
-- `reset_floor`: Reset to floor values
-- `reset_prim`: Keep previous primitives
-- `kill_zone`: Set to vacuum
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| `dyn_eos` | – | Required; choose `ideal`, `piecewise_poly`, or `compose` ([src/dyn_grmhd/dyn_grmhd.cpp:62]). |
+| `dyn_error` | – | Must be `reset_floor`; other values abort at startup ([src/dyn_grmhd/dyn_grmhd.cpp:74]). |
+| `rsolver` | – | `llf` or `hlle` for both the primary flux update and FOFC fallback ([src/dyn_grmhd/dyn_grmhd.cpp:97]). |
+| `fofc_method` | `llf` | Parsed for future use; flux correction currently follows `rsolver` ([src/dyn_grmhd/dyn_grmhd.cpp:109]). |
+| `dyn_scratch` | `0` | Controls the KokkoS scratch level used by `CalcFluxes` ([src/dyn_grmhd/dyn_grmhd.cpp:120]). |
+| `enforce_maximum` | `true` | Enables the discrete maximum principle inside FOFC ([src/dyn_grmhd/dyn_grmhd.cpp:121]). |
+| `dmp_M` | `1.2` | Multiplier used when evaluating the maximum-principle bounds ([src/dyn_grmhd/dyn_grmhd.cpp:122]). |
+| `fixed` | `false` | Freezes MHD updates for Cowling runs ([src/dyn_grmhd/dyn_grmhd.cpp:124]). |
+| `fofc` | `false` | Global FOFC toggle inherited from the base MHD module ([src/mhd/mhd.cpp:176]). |
 
-## Metric Coupling
-
-### From Z4c Module
-- Lapse function: $\alpha = \text{z4c.alpha}$
-- Shift vector: $\beta^i = \text{z4c.beta}^i$
-- Spatial metric: $\gamma_{ij} = \text{z4c.gamma}_{ij}$
-- Extrinsic curvature: $K_{ij} = \text{z4c.K}_{ij}$
-
-### Stress-Energy Tensor
-Feedback to spacetime:
-$$T^{\mu\nu} = (\rho h + b^2)u^\mu u^\nu + Pg^{\mu\nu} - b^\mu b^\nu$$
-
-Source for Z4c:
-$$S_{\text{Z4c}} = -8\pi\sqrt{\gamma} T^{\mu\nu}$$
-
-## Execution Flow
-
-```{mermaid}
-flowchart TD
-    Start[DynGRMHD Tasks] --> Metric[Get Metric from Z4c]
-    Metric --> C2P[Conservative to Primitive]
-    C2P --> Check{C2P Success?}
-    Check -->|Yes| Flux[Calculate Fluxes]
-    Check -->|No| Recovery[Apply Recovery]
-    Recovery --> Flux
-    Flux --> FOFC{FOFC Needed?}
-    FOFC -->|Yes| FirstOrder[First-Order Flux]
-    FOFC -->|No| Update[Conservative Update]
-    FirstOrder --> Update
-    Update --> Source[Add Source Terms]
-    Source --> Tmunu[Calculate T^μν]
-    Tmunu --> Feedback[Feedback to Z4c]
-```
-
-## Riemann Solvers
-
-### Local Lax-Friedrichs (LLF)
-Simple, robust:
-$$\mathbf{F} = \frac{1}{2}(\mathbf{F}_L + \mathbf{F}_R - \lambda_{\text{max}}(\mathbf{U}_R - \mathbf{U}_L))$$
-
-### HLLE
-Better accuracy:
-$$\mathbf{F} = \begin{cases}
-\mathbf{F}_L & \text{if } 0 < S_L \\
-\mathbf{F}_R & \text{if } S_R < 0 \\
-\frac{S_R\mathbf{F}_L - S_L\mathbf{F}_R + S_LS_R(\mathbf{U}_R-\mathbf{U}_L)}{S_R-S_L} & \text{otherwise}
-\end{cases}$$
-
-## First-Order Flux Correction
-
-### Shock Detection
-Detect troubled cells:
-$$\text{use\_fofc} = \begin{cases}
-\text{true} & \text{if } \frac{|\nabla P|}{P} > \text{threshold} \text{ or } W > W_{\text{max}} \\
-\text{false} & \text{otherwise}
-\end{cases}$$
-
-### FOFC Application
-```cpp
-if (use_fofc) {
-  // Use first-order flux
-  flux = LLF_flux(U_L, U_R);
-}
-```
-
-## Floor and Ceiling Values
-
-### Atmosphere Treatment
-```cpp
-ρ_atm = ρ_floor * r^(-power)
-P_atm = P_floor * r^(-power)
-```
-
-### Velocity Ceiling
-```cpp
-if (W > W_max) {
-  // Reduce velocity
-  v = v * sqrt(1 - 1/W_max²)/|v|;
-}
-```
-
-## Common Applications
-
-### Binary Neutron Star Merger
-```ini
-<mhd>
-dyn_eos = compose  # Nuclear EOS
-rsolver = hlle
-fofc = true
-dmp_M = 1.5
-```
-
-### Black Hole Accretion
-```ini
-<mhd>
-dyn_eos = ideal
-gamma = 4.0/3.0
-rsolver = llf
-enforce_maximum = true
-```
-
-### Magnetar Formation
-```ini
-<mhd>
-dyn_eos = compose
-fixed = false  # Dynamical spacetime
-fofc = true
-```
-
-## Performance Considerations
-
-### C2P Iterations
-- Most expensive operation
-- Cache converged values
-- Use good initial guesses
-
-### GPU Optimization
-```cpp
-// All kernels GPU-ready
-par_for("dyngrmhd_c2p", DevExeSpace(),
-KOKKOS_LAMBDA(int m, int k, int j, int i) {
-  // C2P kernel
-});
-```
-
-## Common Issues
-
-### C2P Failures
-- Near black hole horizons
-- In low-density regions
-- At refinement boundaries
-
-**Solutions:**
-- Apply appropriate floors
-- Use recovery policies
-- Enable FOFC
-
-### Constraint Violations
-- Monitor Hamiltonian constraint
-- Check momentum constraint
-- Verify div(B) = 0
-
-### Instabilities
-- Reduce CFL factor
-- Increase resolution
-- Check boundary conditions
-
-## Testing
-
-Test problems:
-- TOV star (equilibrium)
-- BNS merger (dynamics)
-- Black hole accretion
+## Notes and Limitations
+- Only the `reset_floor` primitive-recovery policy is wired in at present; alternative
+  policies would require new template instantiations.
+- `ApplyPhysicalBCs` exists for completeness but the default task wiring continues to use
+  the standard MHD boundary routines ([src/dyn_grmhd/dyn_grmhd.cpp:187]).
+- When `fixed = true`, no stress–energy tensor is written back to Z4c, so the spacetime
+  evolves independently of the MHD state ([src/dyn_grmhd/dyn_grmhd.cpp:358]).
 
 ## See Also
-- [Z4c Module](z4c.md) - Spacetime evolution
-- [MHD Module](mhd.md) - Magnetohydrodynamics
-- [EOS Module](eos.md) - Equations of state
-- Source: `src/dyn_grmhd/dyn_grmhd.cpp`
+- [MHD Module](mhd.md) – array ownership, reconstruction choices, and the base FOFC flag.
+- [Z4c Module](z4c.md) – evolution of the spacetime that consumes `T^{\mu\nu}`.
+- [TaskList Module](tasklist.md) – details on how the Numerical Relativity queue executes.

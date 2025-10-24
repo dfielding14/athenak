@@ -38,6 +38,8 @@ cmake --build build -j $(sysctl -n hw.ncpu 2>/dev/null || nproc)
 
 # Run standard Sod test
 ./build/src/athena -i inputs/hydro/sod.athinput
+
+# Output: Sod.block0.out1.000*.tab (primitive slice) and Sod.block0.out2.000*.hst
 ```
 
 ### Complete Input File
@@ -102,9 +104,14 @@ pr         = 0.1
 ur         = 0.0
 
 <output1>
-file_type  = vtk
-variable   = prim      # output primitive variables
-dt         = 0.025     # output interval
+file_type  = tab       # tabular slice of primitive variables
+dt         = 0.01
+slice_x2   = 0.0
+slice_x3   = 0.0
+
+<output2>
+file_type  = hst       # history diagnostics
+dt         = 0.01
 ```
 
 ## MHD Version (Brio-Wu)
@@ -140,15 +147,13 @@ Key differences:
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Load VTK output
-data = load_vtk("sod.block0.out1.00010.vtk")
+# Load the tabular output (columns: x, rho, vx, vy, vz, pressure, ...)
+import numpy as np
+data = np.loadtxt("Sod.block0.out1.00025.tab")
 
 # Plot density profile
 plt.figure(figsize=(10, 6))
-plt.plot(data.x, data.density, 'b-', label='Density')
-plt.axvline(x=-0.3, color='r', linestyle='--', label='Rarefaction')
-plt.axvline(x=0.0, color='g', linestyle='--', label='Contact')
-plt.axvline(x=0.2, color='m', linestyle='--', label='Shock')
+plt.plot(data[:,0], data[:,1], 'b-', label='Density')
 plt.xlabel('Position')
 plt.ylabel('Density')
 plt.legend()

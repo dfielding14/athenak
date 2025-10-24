@@ -8,10 +8,9 @@ AthenaK reads runtime parameters from `.athinput` files. Each file consists of l
 # Minimal hydrodynamic setup
 <job>
 basename = simulation_name   # Prefix for output files
-problem_id = sod             # Optional: friendly identifier
 
 <mesh>
-nx1 = 256                   # Cells in x1
+nx1 = 256                    # Cells in x1
 x1min = 0.0                  # Domain bounds
 x1max = 1.0
 ix1_bc = periodic            # Inner boundary condition
@@ -20,10 +19,10 @@ ox1_bc = periodic            # Outer boundary condition
 <time>
 cfl_number = 0.4             # Courant number
 tlim = 10.0                  # Stop time
-integrator = rk2             # Time integrator (rk1/rk2/rk3/rk4)
+integrator = rk2             # Time integrator (rk1/rk2/rk3/rk4/imex*)
 
 <hydro>
-gamma = 1.4                 # Equation of state
+gamma = 1.4                  # Equation of state
 reconstruct = plm            # Reconstruction scheme
 rsolver = hllc               # Riemann solver
 ```
@@ -34,10 +33,10 @@ Parameters can be overridden from the command line using the `block/name=value` 
 
 | Block | Purpose | Notes |
 |-------|---------|-------|
-| `<job>`  | Naming, metadata | `basename`, `problem_id`, `maxout` |
-| `<mesh>` | Grid setup | `nx[1-3]`, physical extents, `nghost`, boundary flags |
-| `<time>` | Time integration | `cfl_number`, `tlim`, `dt`, `integrator`, `nlim`, `dt_start` |
-| `<output#>` | Diagnostics/output | `file_type`, `dt`, `variable`, `single_file_per_rank`, `data_format` |
+| `<job>`  | Naming, metadata | `basename` prefixes every output file |
+| `<mesh>` | Grid setup | `nx[1-3]`, physical extents, `nghost`, boundary flags; combine with `<meshblock>` to control per-block resolution |
+| `<time>` | Time integration | `cfl_number`, `tlim`, `dt`, `integrator`, `nlim`; CLI flag `-t hh:mm:ss` sets a wall-clock limit |
+| `<output#>` | Diagnostics/output | `file_type`, cadence (`dt`/`ncycle`/`ndump`), `variable`, `single_file_per_rank`, `data_format` |
 | `<hydro>` / `<mhd>` | Enable fluid/MHD modules | Presence of the block activates the module |
 | `<radiation>`, `<z4c>`, ... | Additional physics | Include only when the corresponding physics is needed |
 
@@ -48,13 +47,15 @@ Parameters can be overridden from the command line using the `block/name=value` 
 - `x1min`, `x1max`, etc.: Physical domain limits.
 - Boundary flags (`ix1_bc`, `ox1_bc`, ...): `periodic`, `outflow`, `reflect`, `inflow`, `diode`, `vacuum`, `shear_periodic`, or `user`.
 
+- `<meshblock>/nx{1,2,3}` controls per-block resolution. When omitted, each mesh block defaults to the global `nx` values (`docs/source/reference/input_parameters.md`).
+
 ### Time Integration
 
 - `cfl_number`: 0.1–0.4 for stability (module dependent).
 - `tlim` / `nlim`: Stop conditions by time or cycle count.
 - `dt`: Fixed timestep (omit for adaptive CFL stepping).
 - `integrator`: `rk1`, `rk2`, `rk3`, `rk4`, or ImEx variants (`imex2`, `imex3`).
-- `wtlim`: Optional wall-clock limit; triggers a final restart dump before exit.
+- Wall-clock limits are supplied via `./athena -t hh:mm:ss`.
 
 ### Hydrodynamics / MHD
 
@@ -67,7 +68,8 @@ Presence of `<hydro>` enables the non-relativistic solver, `<mhd>` enables MHD (
 | `reconstruct` | `dc`, `plm`, `ppm4`, `ppmx`, `wenoz` | Spatial reconstruction |
 | `rsolver` (hydro) | `llf`, `hlle`, `hllc`, `roe`, `advect` | Riemann solver |
 | `rsolver` (MHD) | `llf`, `hlle`, `hlld`, `advect` | MHD flux solver |
-| `diff_resist`, `viscosity`, `conductivity` | float | Optional diffusion coefficients |
+| `viscosity`, `conductivity` | float | Optional hydro diffusion coefficients |
+| `ohmic_resistivity`, `viscosity`, `conductivity` | float | Optional MHD diffusion coefficients |
 
 Relativistic or GR modules (`<dyn_grmhd>`, `<z4c>`, `<radiation>`) follow the same pattern: adding the block activates the module, and each block documents its specific parameters.
 
