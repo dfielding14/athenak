@@ -16,6 +16,8 @@
 #include "mhd/mhd.hpp"
 #include "pgen.hpp"
 
+#include <Kokkos_Random.hpp>
+
 void UserSource(Mesh* pm, const Real bdt);
 
 //----------------------------------------------------------------------------------------
@@ -47,6 +49,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Real den = 1.0;
   Real temp = 1.0;
 
+  Kokkos::Random_XorShift64_Pool<> rand_pool64(pmbp->gids);
   // Set initial conditions
   par_for("pgen_turb", DevExeSpace(),0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -75,16 +78,21 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
        0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
        SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
     
-    Real dye_conc = 0.0;
-    if (R2 < 0.1) { // RHS should be r^2
-      dye_conc = 1.0;
-    }
+    Real dye_conc = 0.501; //0.0;
+    //if (R2 < 0.1) { // RHS should be r^2
+    //  dye_conc = 1.0;
+    //}
+
+    auto rand_gen = rand_pool64.get_state();  // get random number state this thread
+    Real r = 2.0*static_cast<Real>(rand_gen.frand()) - 1.0;
+    dye_conc += 0.05 * r;
+    rand_pool64.free_state(rand_gen);  // free state for use by other threads	
 
     u0(m, nhydro  , k, j, i) = dye_conc * den; // first scalar
     u0(m, nhydro+1, k, j, i) = dye_conc * den; // second scalar
     u0(m, nhydro+2, k, j, i) = dye_conc * den; // third scalar
     u0(m, nhydro+3, k, j, i) = dye_conc * den; // fourth scalar
-    u0(m, nhydro+4, k, j, i) = 0.5 * den;      // fifth scalar - mean gradient forcing
+    u0(m, nhydro+4, k, j, i) = dye_conc * den; // fifth scalar - mean gradient forcing
   });
 
   return;
@@ -129,11 +137,11 @@ void UserSource(Mesh* pm, const Real bdt) {
     Real scalar_conc_4 = w0(m, nhydro+3, k, j, i);
 
     // Apply heating to first scalar
-    Real new_scalar_conc_1 = heatStep(scalar_conc_1, 0.0, bdt);
+    Real new_scalar_conc_1 = heatStep(scalar_conc_1, 0.25, bdt);
     u0(m, nhydro  , k, j, i) += (new_scalar_conc_1 - scalar_conc_1) * density;
 
     // Apply heating to second scalar
-    Real new_scalar_conc_2 = heatStep(scalar_conc_2, 0.1, bdt);
+    Real new_scalar_conc_2 = heatStep(scalar_conc_2, 0.5, bdt);
     u0(m, nhydro+1, k, j, i) += (new_scalar_conc_2 - scalar_conc_2) * density;
 
     // Apply heating to third scalar
@@ -141,7 +149,7 @@ void UserSource(Mesh* pm, const Real bdt) {
     u0(m, nhydro+2, k, j, i) += (new_scalar_conc_3 - scalar_conc_3) * density;
 
     // Apply heating to fourth scalar
-    Real new_scalar_conc_4 = heatStep(scalar_conc_4, 10.0, bdt);
+    Real new_scalar_conc_4 = heatStep(scalar_conc_4, 2.0, bdt);
     u0(m, nhydro+3, k, j, i) += (new_scalar_conc_4 - scalar_conc_4) * density;
 
     // Appy Mean Gradient Forcing to fifth scalar
