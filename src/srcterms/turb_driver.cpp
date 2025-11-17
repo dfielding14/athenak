@@ -40,7 +40,7 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin,
   force("force",1,1,1,1,1),
   force_tmp1("force_tmp1",1,1,1,1,1),
   force_tmp2("force_tmp2",1,1,1,1,1),
-  aka("aka",1,1),akb("akb",1,1),
+  mode_amp_real("mode_amp_real",1,1),mode_amp_imag("mode_amp_imag",1,1),
   kx_mode("kx_mode",1),ky_mode("ky_mode",1),kz_mode("kz_mode",1),
   xcos("xcos",1,1,1),xsin("xsin",1,1,1),ycos("ycos",1,1,1),
   ysin("ysin",1,1,1),zcos("zcos",1,1,1),zsin("zsin",1,1,1) {
@@ -81,8 +81,13 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin,
   }
   // spect form - 1 for parabola, 2 for power-law
   spect_form = pin->GetOrAddInteger(block_name_, "spect_form", 1);
-  // driving type - 0 for 3D isotropic, 1 for xy plane
+  // driving type - 0 for 3D isotropic, 1 for planar (xy) driving
   driving_type = pin->GetOrAddInteger(block_name_, "driving_type", 0);
+  if (driving_type == 1 && global_variable::my_rank == 0) {
+    std::cout << "WARNING: driving_type=1 (planar driving) is currently "
+              << "experimental and may leave the z-component of the forcing "
+              << "amplitudes uninitialized." << std::endl;
+  }
   // min kz zero should be 0 for including kz modes and 1 for not including
   min_kz = pin->GetOrAddInteger(block_name_, "min_kz", 0);
   max_kz = pin->GetOrAddInteger(block_name_, "max_kz", nhigh);
@@ -103,7 +108,9 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin,
   // To store fraction of energy in solenoidal modes
   sol_fraction = pin->GetOrAddReal(block_name_, "sol_fraction", 1.0);
 
-  // random seed for turbulence driving (-1 = use time-based seed)
+  // random seed for turbulence driving
+  // Non-negative values give reproducible sequences; negative values fall back
+  // to the internal default (seed = 1).
   rseed = pin->GetOrAddInteger(block_name_, "rseed", -1);
 
   // drive with constant edot or constant acceleration
@@ -234,8 +241,8 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin,
     exit(EXIT_FAILURE);
   }
 
-  Kokkos::realloc(aka, 3, mode_count); // Amplitude of real component (repeated on all tiles)
-  Kokkos::realloc(akb, 3, mode_count); // Amplitude of imaginary component (repeated on all tiles)
+  Kokkos::realloc(mode_amp_real, 3, mode_count); // Amplitude of real component (repeated on all tiles)
+  Kokkos::realloc(mode_amp_imag, 3, mode_count); // Amplitude of imaginary component (repeated on all tiles)
 
   // Allocate Cartesian mode arrays
   Kokkos::realloc(kx_mode, mode_count);
@@ -285,7 +292,17 @@ void TurbulenceDriver::Initialize() {
     force_tmp2_(m,n,k,j,i) = 0.0;
   });
 
-  rstate.idum = rseed;
+  // Initialize RNG state for the Ornstein-Uhlenbeck forcing. Use a negative
+  // idum so that RanSt() takes the initialization branch on first use.
+  if (rseed >= 0) {
+    // Non-negative seeds give reproducible sequences; treat 0 as 1.
+    int seed = (rseed > 0) ? rseed : 1;
+    rstate.idum = -static_cast<long long>(seed);
+  } else {
+    // Negative rseed falls back to internal default seed = 1.
+    rstate.idum = -1;
+  }
+  rstate.iset = 0;
 
   auto kx_mode_ = kx_mode;
   auto ky_mode_ = ky_mode;
@@ -505,8 +522,8 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
   int nhigh_sqr = SQR(nhigh);
   auto mode_count_ = mode_count;
 
-  auto aka_ = aka;
-  auto akb_ = akb;
+  auto mode_amp_real_ = mode_amp_real;
+  auto mode_amp_imag_ = mode_amp_imag;
 
   Real dkx, dky, dkz, kx, ky, kz;
   Real lx = tile_driving ? tile_lx : (pm->mesh_size.x1max - pm->mesh_size.x1min);
@@ -610,30 +627,43 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
                     norm = 0.0;
                   }
                 }
-                // Generate coefficients once (same pattern repeated on all tiles)
-                Real ka = 0.0;
-                Real kb = 0.0;
+                // Generate complex Fourier amplitudes for this mode:
+                //   amp_real_dir (real part) and amp_imag_dir (imaginary part),
+                // scaled by norm. Also accumulate k·Re(A) and k·Im(A) to construct
+                // solenoidal/compressive projections below.
+                Real k_dot_amp_imag = 0.0;
+                Real k_dot_amp_real = 0.0;
 
                 for (int dir = 0; dir < no_dir; dir ++) {
-                  Real aval = norm*RanGaussianSt(&(rstate));
-                  Real bval = norm*RanGaussianSt(&(rstate));
-                  aka_.h_view(dir,nmode) = aval;
-                  akb_.h_view(dir,nmode) = bval;
+                  Real amp_real_dir = norm*RanGaussianSt(&(rstate));
+                  Real amp_imag_dir = norm*RanGaussianSt(&(rstate));
+                  mode_amp_real_.h_view(dir,nmode) = amp_real_dir;
+                  mode_amp_imag_.h_view(dir,nmode) = amp_imag_dir;
 
-                  ka += k[dir]*bval;
-                  kb += k[dir]*aval;
+                  k_dot_amp_imag += k[dir]*amp_imag_dir;  // k·Im(A)
+                  k_dot_amp_real += k[dir]*amp_real_dir;  // k·Re(A)
                 }
 
-                // Now decompose into solenoidal/compressive modes
+                // Now decompose into solenoidal/compressive modes.
                 if (norm > 0.) {
                   for (int dir = 0; dir < no_dir; dir ++) {
-                    Real diva = k[dir]*ka/SQR(kiso);
-                    Real divb = k[dir]*kb/SQR(kiso);
+                    // Compressible (longitudinal) projections:
+                    //   A_div = k (k·Re(A)) / |k|^2,  B_div = k (k·Im(A)) / |k|^2
+                    Real A_div = k[dir]*k_dot_amp_real/SQR(kiso);
+                    Real B_div = k[dir]*k_dot_amp_imag/SQR(kiso);
 
-                    Real curla = aka_.h_view(dir,nmode) - divb;
-                    Real curlb = akb_.h_view(dir,nmode) - diva;
-                    aka_.h_view(dir,nmode) = sol_fraction*curla+(1.0-sol_fraction)*divb;
-                    akb_.h_view(dir,nmode) = sol_fraction*curlb+(1.0-sol_fraction)*diva;
+                    // Solenoidal parts (divergence-free):
+                    //   A_sol = A - A_div,  B_sol = B - B_div
+                    Real A_sol = mode_amp_real_.h_view(dir,nmode) - A_div;
+                    Real B_sol = mode_amp_imag_.h_view(dir,nmode) - B_div;
+
+                    // Blend in amplitude-space:
+                    //   sol_fraction = 1.0 -> purely solenoidal,
+                    //   sol_fraction = 0.0 -> purely compressive.
+                    mode_amp_real_.h_view(dir,nmode) =
+                        sol_fraction*A_sol + (1.0 - sol_fraction)*A_div;
+                    mode_amp_imag_.h_view(dir,nmode) =
+                        sol_fraction*B_sol + (1.0 - sol_fraction)*B_div;
                   }
                 }
 
@@ -643,10 +673,10 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
           }
         }
 
-      aka_.template modify<HostMemSpace>();
-      aka_.template sync<DevExeSpace>();
-      akb_.template modify<HostMemSpace>();
-      akb_.template sync<DevExeSpace>();
+      mode_amp_real_.template modify<HostMemSpace>();
+      mode_amp_real_.template sync<DevExeSpace>();
+      mode_amp_imag_.template modify<HostMemSpace>();
+      mode_amp_imag_.template sync<DevExeSpace>();
 
       // if (global_variable::my_rank == 0) std::cout << "Sines and cosines updated on device" << std::endl;
       auto xcos_ = xcos;
@@ -668,8 +698,8 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
           Real forc_imag = ( ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k) ) * xcos_(m,n,i) +
                           ( ycos_(m,n,j)*zcos_(m,n,k) - ysin_(m,n,j)*zsin_(m,n,k) ) * xsin_(m,n,i);
           for (int dir = 0; dir < 3; dir ++){
-            force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real -
-                                        akb_.d_view(dir,n)*forc_imag;
+            force_tmp2_(m,dir,k,j,i) += mode_amp_real_.d_view(dir,n)*forc_real -
+                                        mode_amp_imag_.d_view(dir,n)*forc_imag;
           }
         }
       });
@@ -1472,7 +1502,7 @@ TaskStatus TurbulenceDriver::EnsureBasisSize(Driver *pdrive, int stage) {
   }
 
   // CRITICAL: Do NOT call Initialize() which would reset the turbulence state
-  // Instead, recompute basis functions while preserving mode amplitudes (aka_, akb_)
+  // Instead, recompute basis functions while preserving mode amplitudes (mode_amp_real_, mode_amp_imag_)
 
 
   // Zero out force arrays for all blocks; we will rebuild everywhere
@@ -1585,11 +1615,11 @@ TaskStatus TurbulenceDriver::EnsureBasisSize(Driver *pdrive, int stage) {
     }
   });
 
-  // Recompute forcing field using PRESERVED mode amplitudes (aka_, akb_)
-  auto aka_ = aka;
-  auto akb_ = akb;
-  aka_.template sync<DevExeSpace>();
-  akb_.template sync<DevExeSpace>();
+  // Recompute forcing field using PRESERVED mode amplitudes (mode_amp_real_, mode_amp_imag_)
+  auto mode_amp_real_ = mode_amp_real;
+  auto mode_amp_imag_ = mode_amp_imag;
+  mode_amp_real_.template sync<DevExeSpace>();
+  mode_amp_imag_.template sync<DevExeSpace>();
   int mode_count_ = mode_count;
   par_for("force_recalc_resize", DevExeSpace(), m_start, nmb-1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -1601,8 +1631,8 @@ TaskStatus TurbulenceDriver::EnsureBasisSize(Driver *pdrive, int stage) {
       Real forc_imag = (ycos_(m,n,j)*zsin_(m,n,k) + ysin_(m,n,j)*zcos_(m,n,k)) * xcos_(m,n,i) +
                       (ycos_(m,n,j)*zcos_(m,n,k) - ysin_(m,n,j)*zsin_(m,n,k)) * xsin_(m,n,i);
       for (int dir = 0; dir < 3; dir++) {
-        force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real -
-                                    akb_.d_view(dir,n)*forc_imag;
+        force_tmp2_(m,dir,k,j,i) += mode_amp_real_.d_view(dir,n)*forc_real -
+                                    mode_amp_imag_.d_view(dir,n)*forc_imag;
       }
     }
   });

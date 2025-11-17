@@ -106,7 +106,7 @@ After the stochastic field is assembled, AthenaK rescales it to match the reques
 class TurbulenceDriver {
   // Core data
   DvceArray5D<Real> force, force_tmp1, force_tmp2;  // Cell-centred forcing fields
-  DualArray2D<Real> aka, akb;                       // Real/imag Fourier amplitudes
+  DualArray2D<Real> mode_amp_real, mode_amp_imag;   // Real/imag Fourier amplitudes
   DualArray1D<Real> kx_mode, ky_mode, kz_mode;      // Wavenumber catalog
   DvceArray3D<Real> xcos, xsin, ycos, ysin, zcos, zsin; // Precomputed basis values
  
@@ -162,14 +162,14 @@ The key insight: **AMR is a numerical change, not a physical event**. The turbul
 #### Reconciliation (`EnsureBasisSize`)
 `EnsureBasisSize` (queued ahead of `InitializeModes`) detects AMR activity with the cached mesh-block counters and then:
 1. **Reallocates arrays** when the MeshBlock count changes.
-2. **Preserves** the O-U state in `aka_`/`akb_`.
+2. **Preserves** the O-U state in `mode_amp_real_`/`mode_amp_imag_`.
 3. **Recomputes** the basis functions using the updated block geometry.
 4. **Rebuilds** the forcing field with the preserved amplitudes.
 
 ```cpp
 // Critical: preserve mode amplitudes
-auto aka_ = aka;  // These contain the turbulence "state"
-auto akb_ = akb;  // Must NOT be reset!
+auto mode_amp_real_ = mode_amp_real;  // These contain the turbulence "state"
+auto mode_amp_imag_ = mode_amp_imag;  // Must NOT be reset!
 
 // Recompute basis at new locations
 par_for("xsin/xcos_resize", ..., KOKKOS_LAMBDA(int m, int n, int i) {
@@ -181,9 +181,9 @@ par_for("xsin/xcos_resize", ..., KOKKOS_LAMBDA(int m, int n, int i) {
 // Reconstruct forcing with preserved amplitudes
 for (int n = 0; n < mode_count; n++) {
   par_for(..., KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    // Use EXISTING aka_, akb_ values
-    force_tmp2_(m,dir,k,j,i) += aka_.d_view(dir,n)*forc_real 
-                               - akb_.d_view(dir,n)*forc_imag;
+    // Use EXISTING mode_amp_real_, mode_amp_imag_ values
+    force_tmp2_(m,dir,k,j,i) += mode_amp_real_.d_view(dir,n)*forc_real 
+                               - mode_amp_imag_.d_view(dir,n)*forc_imag;
   });
 }
 ```
@@ -271,10 +271,10 @@ expo = 2.0        # Power law exponent (if spect_form=2)
 # Forcing type
 turb_flag = 2     # 1=decaying turbulence, 2=continuously driven
 driving_type = 0  # 0=3D isotropic, 1=2D (x-y plane)
-sol_fraction = 1.0 # Fraction of solenoidal modes (1.0 = incompressible)
+sol_fraction = 1.0 # Amplitude-space blend between solenoidal and compressive parts (1.0 = purely solenoidal)
 
 # Random seed
-rseed = -1        # -1 = time-based, >0 = fixed seed
+rseed = -1        # non-negative = reproducible, negative = internal default seed (1)
 
 # Spatial windowing (optional)
 x_turb_scale_height = -1.0  # -1 = no windowing
@@ -396,7 +396,7 @@ Real dedt_current = dedt * (1.0 + 0.5*sin(2*PI*time/T_period));
 
 ### Issue: Turbulence dies after AMR
 **Cause**: Mode amplitudes being reset  
-**Solution**: Ensure `ResizeArrays()` preserves `aka_` and `akb_`
+**Solution**: Ensure `ResizeArrays()` preserves `mode_amp_real_` and `mode_amp_imag_`
 
 ### Issue: Energy injection rate incorrect
 **Cause**: Volume calculation or normalization error  

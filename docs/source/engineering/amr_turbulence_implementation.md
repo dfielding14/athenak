@@ -65,7 +65,7 @@ By default the basis functions use the physical (global) cell centers, ensuring 
 ### 4. Force Preservation During Refinement
 
 The implementation preserves forcing continuity across refinement by:
-1. **Preserving mode amplitudes**: The `aka` and `akb` arrays (Fourier amplitudes) are NOT resized or modified
+1. **Preserving mode amplitudes**: The `mode_amp_real` and `mode_amp_imag` arrays (Fourier amplitudes) are NOT resized or modified
 2. **Recomputing with same amplitudes**: After rebuilding the basis, forces are recomputed with the unchanged amplitudes (see `force_recalc_resize` loop)
 3. **Maintaining temporal coherence**: The Ornstein-Uhlenbeck evolution continues uninterrupted
 
@@ -127,7 +127,7 @@ The driver uses Cartesian Fourier modes with wavenumbers `(kx, ky, kz)`. Mode co
 **Rationale**: Simpler than complex reindexing schemes, minimal performance impact
 
 ### 3. Force Amplitude Preservation
-**Decision**: Keep `aka` and `akb` arrays unchanged during refinement
+**Decision**: Keep `mode_amp_real` and `mode_amp_imag` arrays unchanged during refinement
 **Rationale**: Maintains forcing statistics and temporal evolution
 
 ### 4. Refinement Detection Method

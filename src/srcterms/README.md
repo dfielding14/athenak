@@ -45,8 +45,8 @@ where:
 - `turb_flag`: 1=decaying turbulence, 2=continuously driven
 - `dedt`: Energy injection rate (energy/time/volume)
 - `tcorr`: Correlation time for amplitude evolution
-- `rseed`: Random seed for reproducibility (-1 for time-based)
-- `sol_fraction`: Fraction of solenoidal modes (1.0 = incompressible)
+- `rseed`: RNG seed for the OU process (non-negative values give reproducible sequences; negative values fall back to the internal default seed = 1).
+- `sol_fraction`: Amplitude-space blend between solenoidal (divergence-free) and compressive components of each Fourier mode (`1.0` = purely solenoidal, `0.0` = purely compressive).
 
 ### Spectral Parameters
 - `nlow`, `nhigh`: Minimum and maximum |k| for mode selection

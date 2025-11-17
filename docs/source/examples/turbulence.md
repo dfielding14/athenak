@@ -125,7 +125,7 @@ tcorr            = 0.5    # Correlation time
 nlow             = 2      # Minimum forced wavenumber
 nhigh            = 4      # Maximum forced wavenumber
 spect_form       = 1      # Spectrum shape
-driving_type     = 0      # 0=solenoidal, 1=compressive
+driving_type     = 0      # 0=3-D isotropic, 1=planar driving
 sol_fraction     = 1.0    # Solenoidal fraction
 constant_edot    = true   # Maintain constant energy injection
 dt_turb_update   = 0.01   # Update interval
