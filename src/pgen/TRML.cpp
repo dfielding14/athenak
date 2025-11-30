@@ -99,9 +99,9 @@
 #include "srcterms/ismcooling.hpp"
 #include "globals.hpp"
 #include "units/units.hpp"
+#include "utils/marching_cubes.hpp"  // Marching cubes algorithm for isosurface area calculations
 #include "utils/random.hpp"
 #include "srcterms/turb_driver.hpp"
-// Note: marching_cubes.hpp was removed as it is not used in this problem generator
 // #include "turb_init.hpp"
 // #include "srcterms/TurbGen.h"
 
