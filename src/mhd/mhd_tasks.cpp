@@ -26,6 +26,7 @@
 #include "shearing_box/shearing_box.hpp"
 #include "mhd/mhd.hpp"
 #include "dyn_grmhd/dyn_grmhd.hpp"
+#include "pgen/pgen.hpp"  // Required for user_work_in_loop_func access
 
 namespace mhd {
 //----------------------------------------------------------------------------------------
@@ -79,6 +80,15 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   // although RecvFlux/U/E/B functions check that all recvs complete, add ClearRecv to
   // task list anyways to catch potential bugs in MPI communication logic
   id.crecv = tl["after_stagen"]->AddTask(&MHD::ClearRecv, this, id.csend);
+
+  // assemble "after_timeintegrator" task list
+  // WorkInLoop: User-defined operations to execute after each complete time integration
+  // cycle. This allows problem generators to perform post-timestep work such as:
+  //   - Frame tracking (applying Galilean velocity shifts to keep features centered)
+  //   - Periodic diagnostic output (min/max values, mass tracking, etc.)
+  //   - Any other custom modifications that need to happen once per cycle
+  // The task has no dependencies (none) since it runs after all integration is complete.
+  id.workinloop = tl["after_timeintegrator"]->AddTask(&MHD::WorkInLoop, this, none);
 
   return;
 }
@@ -647,6 +657,47 @@ TaskStatus MHD::RestrictB(Driver *pdrive, int stage) {
   if (pmy_pack->pmesh->multilevel) {
     pmy_pack->pmesh->pmr->RestrictFC(b0, coarse_b0);
   }
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::WorkInLoop
+//! \brief Wrapper task list function that executes user-defined work after each complete
+//!        time integration cycle.
+//!
+//! This function serves as the hook for problem generators to perform custom operations
+//! that should occur once per timestep, after the time integrator has completed. Common
+//! use cases include:
+//!
+//!   1. Frame Tracking: Apply Galilean velocity shifts to keep features (e.g., a mixing
+//!      layer interface) centered in the domain, preventing them from drifting into
+//!      boundary regions.
+//!
+//!   2. Diagnostic Output: Compute and print summary statistics like min/max temperature,
+//!      total mass, cooling rates, etc. at regular intervals (controlled by ndiag in the
+//!      problem generator).
+//!
+//!   3. Custom Modifications: Any other physics or data modifications that need to happen
+//!      once per cycle rather than at each RK stage.
+//!
+//! The actual work to be performed is defined by the user_work_in_loop_func function
+//! pointer, which is set by the problem generator (e.g., TRML.cpp sets this to call
+//! Diagnostic() and FrameTracking() functions).
+//!
+//! Note: This function is called from the "after_timeintegrator" task list, meaning it
+//! executes once per full time step, not once per RK stage.
+
+TaskStatus MHD::WorkInLoop(Driver *pdrive, int stage) {
+  // Check if the problem generator has registered a user work-in-loop function.
+  // The user_work_in_loop flag is set to true in pgen.cpp if the input file contains
+  // "user_work_in_loop = true" in the <problem> block, and the problem generator
+  // has enrolled a function via user_work_in_loop_func.
+  if (pmy_pack->pmesh->pgen->user_work_in_loop) {
+    // Call the user-defined function, passing the Mesh pointer so the function
+    // has access to all mesh data, MeshBlockPack, and physics modules.
+    (pmy_pack->pmesh->pgen->user_work_in_loop_func)(pmy_pack->pmesh);
+  }
+
   return TaskStatus::complete;
 }
 

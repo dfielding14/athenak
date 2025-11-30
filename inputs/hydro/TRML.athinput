@@ -1,0 +1,177 @@
+# AthenaXXX input file for hydro TRML setup
+
+<comment>
+problem   = TRML
+
+<job>
+basename  = TRML        # problem ID: basename of output filenames
+
+<mesh>
+nghost    = 3         # Number of ghost cells
+nx1       = 128       # Number of zones in X1-direction
+x1min     = -0.5      # minimum value of X1
+x1max     = 0.5       # maximum value of X1
+ix1_bc    = periodic  # Inner-X1 boundary condition flag
+ox1_bc    = periodic  # Outer-X1 boundary condition flag
+
+nx2       = 128       # Number of zones in X2-direction
+x2min     = -0.5      # minimum value of X2
+x2max     = 0.5       # maximum value of X2
+ix2_bc    = periodic  # Inner-X2 boundary condition flag
+ox2_bc    = periodic  # Outer-X2 boundary condition flag
+
+nx3       = 192       # Number of zones in X3-direction
+x3min     = -0.5      # minimum value of X3
+x3max     = 1.0       # maximum value of X3
+ix3_bc    = outflow   # Inner-X3 boundary condition flag
+ox3_bc    = outflow   # Outer-X3 boundary condition flag
+
+<meshblock>
+nx1       = 64        # Number of cells in each MeshBlock, X1-dir
+nx2       = 64        # Number of cells in each MeshBlock, X2-dir
+nx3       = 96        # Number of cells in each MeshBlock, X3-dir
+
+<time>
+evolution  = dynamic  # dynamic/kinematic/static
+integrator = rk2      # time integration algorithm
+cfl_number = 0.3      # The Courant, Friedrichs, & Lewy (CFL) Number
+tlim       = 50       # time limit
+ndiag      = 10       # cycles between diagostic output
+# nlim       = 100      # cycle limit
+
+<hydro>
+eos         = ideal   # EOS type
+reconstruct = plm     # spatial reconstruction method
+rsolver     = hllc    # Riemann-solver to be used
+gamma       = 1.66666666667   # gamma = C_p/C_v
+nscalars    = 1       # number of passive scalars in hydro
+ism_cooling = false   # turn on ism cooling
+hrate       = 0.      # ism heating rate
+fofc        = true    # first-order flux correction
+dfloor = 1.0e-3
+pfloor = 1.0e-4
+#conductivity = 0.0    # isotropic thermal conductivity, 9.68e4 in cgs
+#viscosity   = 0.0     # isotropic kinematic shear viscosity
+#cond_ceiling = 1e10 #ceiling of conductivity
+#sat_hflux   = false     # saturation of heat flux
+# tfloor      = 2.28e-3    # temperature floor in code units, = 10^1.2 K, scales with v0_cgs**2 - for 1.0 kpc and 100 Myr
+
+
+<turb_driving>
+turb_flag  = 1     # 1 for decaying or 2 for driven turbulence
+dedt       = 0.1   # Energy injection rate (for driven) or Total energy (for decaying)
+nlow       = 11    # cut-off wavenumber at low-k
+nhigh      = 32    # cut-off wavenumber at high-k
+spect_form = 2     # 2 for power-law driving
+expo       = 0     # power-law exponent
+tdriv_duration    = 1   # time for which turbulence is driven
+tcorr      = 1.
+dt_turb_update = 0.1
+sol_fraction = 1.0
+z_turb_scale_height = 0.1 
+z_turb_center       = 0.0
+
+<units>
+length_cgs  = 1.0
+mass_cgs    = 1.0
+time_cgs    = 1.0
+# length_cgs  = 3.0856775809623245e+21 # kpc
+# mass_cgs    = 3.036951775493658e+39  # number density 0.1 cm^-3 when box size is 1 kpc
+# time_cgs    = 3.15576e+15            # 100 Myr
+mu          = 0.6000317               # mean molecular weight
+
+<problem>
+rho_0              = 1.0
+pgas_0             = 1.0
+
+smoothing_thickness  = 0.0025 # must be very small for rapid cooling 
+                              # probably should vary with resolution
+density_contrast     = 100.000000
+velocity             = 1.0
+z_interface          = 0.0
+t_cool_start         = 0.0
+dt_cutoff            = 1.0e-4
+cfl_cool             = 0.25
+T_floor_over_T_cold  = 0.25
+T_peak_over_T_cold   = 4.641588833612778
+T_cutoff_over_T_hot  = 0.85  # must be < 0.95 for rapid cooling
+beta_lo              = -2.0
+beta_hi              = 3.0
+xi                   = 1.
+t_cool_0             = 0.001
+
+user_srcs            = true # turn on user source terms
+user_dt              = true  # use user-defined time-step function (in this case it accounts for cooling updates)
+user_hist            = true # user history output
+ndiag                = 10    # user diagnostic output
+# explicit diffusion coefficients
+# nu_iso      = 0.0
+# nu_aniso    = 0.0
+# kappa_iso   = 0.0
+# kappa_aniso = 0.0
+
+user_work_in_loop      = true  # turn on user work in loop
+use_frame_tracking     = true  # switch on/off frame tracking so that gas close to T_peak stays close to the center
+t_frame_tracking_start = 0.1   # time after which we switch on frame-tracking
+n_frame_track          = 10    # number of cycles between frame-tracking velocity shifts
+max_vz_frame_tracking  = 0.00645497 # maximum velocity shift allowed by frame-tracking
+ft_use_uppzlim         = true  # use upper z-limit on gas for which we are frame-tracking
+ft_uppzlim             = 0.8   # upper z-limit on gas for which we are frame-tracking
+
+# T_ft_lo_over_T_cold  = 1.0   # lower temperature limit for frame-tracking
+# T_ft_hi_over_T_cold  = 5.0   # upper temperature limit for frame-tracking
+# ft_use_lowzlim       = true  # use lower z-limit on gas for which we are frame-tracking
+# ft_lowzlim           = 0.1   # lower z-limit on gas for which we are frame-tracking
+
+# prestart_file = no_rst/prst/TRML.00004.prtclrst # prestart file
+
+<particles>
+particle_type = lagrangian_mc # cosmic_ray or lagrangian_mc
+target_count  = 100000 # target number of particles
+pusher = lagrangian_mc # drift, boris, or lagrangian_mc
+
+<output1>
+file_type   = log           # diagnostic data
+dcycle      = 1             # cycle increment between outputs
+
+<output2>
+file_type   = hst           # history data dump
+data_format = %12.15e       # Optional data format string
+dt          = 0.005         # time increment between outputs
+#dcycle      = 1            # cycle increment between outputs
+
+<output3>
+file_type   = bin           # binary data dump
+variable    = hydro_w       # variables to be output
+# dcycle      = 100         # cycle increment between outputs
+dt          = 0.5           # time increment between outputs
+
+<output4>
+file_type   = rst           # restart data dump
+# dt        = 27.977904
+dcycle      = 300000        # cycle increment between outputs
+dt_wall     = 3600          # wall-time interval between outputs
+
+<output5>
+file_type  = bin            # Binary data dump
+slice_x1   = 0.0            # slice in X1 plane
+id         = slice_x1       # output id tag
+variable   = hydro_w        # variables to be output
+dt         = 0.05           # time increment between outputs
+
+<output6>
+file_type  = bin            # Binary data dump
+slice_x2   = 0.0            # slice in X2 plane
+id         = slice_x2       # output id tag
+variable   = hydro_w        # variables to be output
+dt         = 0.05           # time increment between outputs
+
+<output7>
+file_type   = pbin          # Particle binary data dump
+variable    = hydro_w       # variables to be output
+dt          = 0.05          # time increment between outputs
+
+<output8> # particle restart output
+file_type   = prst          # Particle restart binary format
+dcycle      = 300000        # cycle increment between outputs
+dt_wall     = 3600          # wall-time interval between outputs

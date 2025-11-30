@@ -78,6 +78,10 @@ struct MHDTaskIDs {
   TaskID newdt;
   TaskID csend;
   TaskID crecv;
+  // Task ID for user-defined work executed after each time integration cycle.
+  // This enables problem generators to perform custom operations (e.g., frame tracking,
+  // diagnostics, or other post-timestep modifications) via the user_work_in_loop_func.
+  TaskID workinloop;
 };
 
 namespace mhd {
@@ -186,6 +190,15 @@ class MHD {
   // ...in "after_stagen_tl" task list
   TaskStatus ClearSend(Driver *d, int stage);
   TaskStatus ClearRecv(Driver *d, int stage);  // also in Driver::Initialize
+
+  // ...in "after_timeintegrator" task list
+  // WorkInLoop: Executes user-defined operations after each complete time integration.
+  // This is the hook for problem generators to perform post-timestep work such as:
+  //   - Frame tracking (Galilean velocity shifts to keep features centered)
+  //   - Diagnostic output (min/max values, mass tracking, etc.)
+  //   - Any other custom modifications that should occur once per cycle
+  // The actual work is defined by user_work_in_loop_func in the problem generator.
+  TaskStatus WorkInLoop(Driver *pdrive, int stage);
 
   // CalculateFluxes function templated over Riemann Solvers
   template <MHD_RSolver T>

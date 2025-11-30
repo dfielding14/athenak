@@ -19,6 +19,7 @@
 #include "hydro.hpp"
 #include "diffusion/conduction.hpp"
 #include "srcterms/srcterms.hpp"
+#include "pgen/pgen.hpp"  // Required for user_time_step_func access
 
 namespace hydro {
 
@@ -129,6 +130,24 @@ TaskStatus Hydro::NewTimeStep(Driver *pdrive, int stage) {
   }
   // compute source terms timestep
   psrc->NewTimeStep(w0, peos->eos_data);
+
+  // Compute user-defined timestep constraint.
+  // This allows problem generators to impose additional timestep limits beyond the
+  // standard CFL condition. Common use cases include:
+  //   - Cooling CFL: Limit dt so that temperature changes by at most a fraction
+  //     (e.g., cfl_cool) per timestep when radiative cooling is active.
+  //   - Other physics-specific constraints that depend on the problem setup.
+  //
+  // The user_dt flag is set to true in pgen.cpp if "user_dt = true" appears in the
+  // <problem> block of the input file, and the problem generator has enrolled a
+  // user_time_step_func function.
+  //
+  // The user function should compute its timestep constraint and store it in
+  // pmy_pack->pmesh->pgen->dtnew. The Driver will then take the minimum of all
+  // dtnew values across all physics modules.
+  if (pmy_pack->pmesh->pgen->user_dt) {
+    (pmy_pack->pmesh->pgen->user_time_step_func)(pmy_pack->pmesh);
+  }
 
   return TaskStatus::complete;
 }
