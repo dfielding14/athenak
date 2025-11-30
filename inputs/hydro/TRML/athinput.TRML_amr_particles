@@ -1,0 +1,263 @@
+# ====================================================================================
+# AthenaK Input File: Turbulent Radiative Mixing Layer (TRML) - AMR + Tracer Particles
+# ====================================================================================
+#
+# This is the full-featured TRML setup including:
+# - Adaptive Mesh Refinement (AMR) for interface resolution
+# - Monte-Carlo Lagrangian Tracer Particles (Genel+ 2013 algorithm)
+#
+# The tracer particles follow the flow using flux-based stochastic transport,
+# accurately tracking mass transport through the mixing layer.
+#
+# Physical Setup:
+# - Hot diffuse gas shearing past cold dense gas
+# - Radiative cooling drives thermal instability
+# - Kelvin-Helmholtz instability at the interface
+#
+# Key dimensionless parameters:
+# - chi = 100 (temperature/density contrast)
+# - mach_rel_hot = 0.5 (Mach number in hot phase)
+# - xi = 100 (shear time / cooling time ratio -> mixing dominated)
+#
+# AMR Strategy:
+# - Refinement based on density gradients and temperature thresholds
+# - Focus resolution on the mixing interface where T_cold < T < T_hot
+# - Up to 2 additional levels of refinement (4x resolution at interface)
+#
+# Particle Tracking:
+# - Monte-Carlo Lagrangian tracers follow mass-weighted flow
+# - Initialized uniformly in cold gas region
+# - Track entrainment and mixing of cold gas into hot phase
+#
+# ====================================================================================
+
+<comment>
+problem = TRML (Turbulent Radiative Mixing Layer) - AMR + Tracer Particles
+author  = Based on Fielding et al. setup, AthenaK implementation
+
+<job>
+basename = TRML_amr_prtcl    # Output file basename
+
+# ====================================================================================
+# MESH CONFIGURATION
+# ====================================================================================
+# Domain: periodic in x,y; outflow/user BCs in z
+# The z-direction spans the hot-cold interface
+# Base resolution: 64x64x192, AMR adds 2 levels for effective 256x256x768
+# ====================================================================================
+
+<mesh>
+nghost    = 3             # Number of ghost zones (3 required for PLM)
+
+# X1 direction (periodic, along interface)
+nx1       = 64            # Number of zones in X1 (base level)
+x1min     = -0.5          # Domain minimum in X1
+x1max     = 0.5           # Domain maximum in X1
+ix1_bc    = periodic      # Inner-X1 boundary condition
+ox1_bc    = periodic      # Outer-X1 boundary condition
+
+# X2 direction (periodic, along interface)
+nx2       = 64            # Number of zones in X2 (base level)
+x2min     = -0.5          # Domain minimum in X2
+x2max     = 0.5           # Domain maximum in X2
+ix2_bc    = periodic      # Inner-X2 boundary condition
+ox2_bc    = periodic      # Outer-X2 boundary condition
+
+# X3 direction (z - across interface, hot gas at top, cold at bottom)
+nx3       = 192           # Number of zones in X3 (base level)
+x3min     = -0.5          # Domain minimum in X3
+x3max     = 1.0           # Domain maximum in X3
+ix3_bc    = outflow       # Inner-X3 boundary (outflow for cold gas)
+ox3_bc    = user          # Outer-X3 boundary (user-defined hot gas reservoir)
+
+<meshblock>
+nx1       = 32            # Cells per MeshBlock in X1 (smaller for AMR flexibility)
+nx2       = 32            # Cells per MeshBlock in X2
+nx3       = 32            # Cells per MeshBlock in X3
+
+# ====================================================================================
+# ADAPTIVE MESH REFINEMENT
+# ====================================================================================
+# Enables dynamic refinement based on physical criteria
+# Refinement triggers on density gradients and temperature thresholds
+# See <problem> block for threshold values
+# ====================================================================================
+
+<mesh_refinement>
+refinement        = adaptive   # Enable adaptive mesh refinement
+num_levels        = 2          # 2 additional levels (4x resolution gain)
+max_nmb_per_rank  = 1000       # Maximum MeshBlocks per MPI rank
+ncycle_check      = 5          # Check refinement every 5 cycles
+refinement_interval = 10       # Min cycles between refine/derefine events
+prolong_primitives = true      # Use primitive variable prolongation (more accurate)
+
+# ====================================================================================
+# TIME EVOLUTION
+# ====================================================================================
+
+<time>
+evolution  = dynamic      # Dynamic time evolution
+integrator = rk3          # Third-order Runge-Kutta integrator
+cfl_number = 0.3          # CFL number for stability
+tlim       = 100.0        # Stop time (in code units ~ shear times)
+ndiag      = 100          # Cycles between built-in diagnostic output
+
+# ====================================================================================
+# HYDRODYNAMICS
+# ====================================================================================
+
+<hydro>
+eos         = ideal       # Ideal gas equation of state
+reconstruct = plm         # Piecewise Linear Method reconstruction
+rsolver     = hllc        # HLLC Riemann solver (good for contact discontinuities)
+gamma       = 1.666666667 # Adiabatic index (5/3 for monatomic gas)
+nscalars    = 1           # Number of passive scalars (tracks cold gas mass fraction)
+fofc        = true        # First-order flux correction (prevents negative densities)
+dfloor      = 1.0e-4      # Density floor (relative to rho_0)
+pfloor      = 1.0e-5      # Pressure floor (relative to pgas_0)
+
+# ====================================================================================
+# MONTE-CARLO LAGRANGIAN TRACER PARTICLES
+# ====================================================================================
+# Particles follow the mass-weighted flow using the Genel+ 2013 algorithm.
+# Movement is stochastic based on density fluxes across cell faces.
+# Particles are initialized in the cold gas region to track entrainment.
+# ====================================================================================
+
+<particles>
+type           = lagrangian_mc   # Monte-Carlo Lagrangian tracers
+pusher         = lagrangian_mc   # Flux-based stochastic pusher
+target_count   = 100000          # Target number of particles
+pos_init_seed  = 280496          # Random seed for initial positions
+random_seed    = 12345           # Random seed for stochastic transport
+min_radius     = 0.0             # Minimum radius for particle initialization
+
+# ====================================================================================
+# UNITS (Code units = CGS in this simple setup)
+# ====================================================================================
+
+<units>
+# For physical units, uncomment and set these appropriately:
+# length_cgs = 3.0856775809623245e+21  # 1 kpc
+# mass_cgs   = 3.036951775493658e+39   # Gives n=0.1 cm^-3 for 1 kpc box
+# time_cgs   = 3.15576e+15             # 100 Myr
+length_cgs  = 1.0         # Code units = CGS
+mass_cgs    = 1.0
+time_cgs    = 1.0
+mu          = 0.6         # Mean molecular weight
+
+# ====================================================================================
+# PROBLEM-SPECIFIC PARAMETERS
+# ====================================================================================
+
+<problem>
+# --- Initial Conditions (Hot Phase) ---
+rho_0     = 1.0           # Hot phase density (code units)
+pgas_0    = 1.0           # Hot phase pressure (code units)
+# Note: T_hot = pgas_0 / rho_0 = 1.0 in code units
+
+# --- Temperature/Density Structure ---
+# chi = density_contrast = T_hot/T_cold = 100
+# Cold phase: rho_cold = chi * rho_0, T_cold = T_hot/chi
+density_contrast = 100.0  # chi = 100
+
+# --- Velocity (Shear Flow) ---
+# mach_rel_hot = velocity / cs_hot = 0.5
+# cs_hot = sqrt(gamma * P / rho) = sqrt(5/3) ~ 1.29
+# velocity = 0.5 * 1.29 ~ 0.645
+velocity  = 0.645         # Shear velocity (hot gas moves +x, cold gas moves -x)
+
+# --- Interface Geometry ---
+z_interface = 0.0         # Initial z-position of hot-cold interface
+smoothing_thickness = 0.01  # Width of tanh transition (sharp interface)
+
+# --- Cooling Function Parameters ---
+# Power-law cooling: Lambda(T) ~ T^beta with different slopes above/below T_peak
+# T_peak is where cooling is strongest
+beta_lo   = -2.0          # Cooling slope for T < T_peak
+beta_hi   = 3.0           # Cooling slope for T > T_peak
+T_peak_over_T_cold = 4.64 # T_peak/T_cold ~ sqrt(chi) region
+T_cutoff_over_T_hot = 0.85  # Turn off cooling above this T (prevents hot gas cooling)
+T_floor   = 0.1           # Minimum temperature (fraction of T_cold)
+
+# --- Dimensionless Cooling Parameter ---
+# xi = t_shear / t_cool = L / (v * t_cool) = 100
+# This sets the cooling rate amplitude
+xi        = 100.0         # Mixing-dominated regime (xi > 1)
+
+# Optional: directly set t_cool_0 instead of using xi
+# t_cool_0 = 0.001        # Cooling time at T_peak (uncomment to override xi)
+
+# --- Cooling Control ---
+t_cool_start = 0.0        # Time to start cooling (0 = immediately)
+dt_cutoff    = 1.0e-4     # Minimum allowed timestep
+cfl_cool     = 0.1        # Cooling CFL: max dT/T per timestep
+
+# --- User Functions ---
+user_srcs = true          # Enable custom source terms (cooling/heating)
+user_dt   = true          # Enable cooling-limited timestep
+user_hist = true          # Enable custom history output
+ndiag     = 100           # Cycles between diagnostic output
+
+# --- Frame Tracking (keeps interface centered) ---
+user_work_in_loop = true  # Enable work-in-loop for frame tracking
+use_frame_tracking = true # Apply velocity shifts to keep interface centered
+t_frame_tracking_start = 1.0  # Start frame tracking after this time
+n_frame_track = 10        # Apply frame tracking every N cycles
+max_vz_frame_tracking = 0.01  # Maximum velocity shift per tracking event
+
+# --- Perturbations (optional) ---
+seed_perturb = 12345      # Random seed for velocity perturbations
+sigma_perturb = 0.01      # Amplitude of velocity perturbations (fraction of velocity)
+
+# --- AMR Refinement Thresholds ---
+# These control where the mesh is refined
+# Refine if: density_gradient > density_ratio_threshold AND T_min < T < T_max
+density_ratio_threshold = 0.3  # Refine if |grad(rho)|/rho > 0.3
+T_min_threshold = 0.015        # Refine if T > T_min (1.5 * T_cold)
+T_max_threshold = 0.8          # Refine if T < T_max (0.8 * T_hot)
+# This focuses refinement on the mixing layer where T_cold < T < T_hot
+
+# ====================================================================================
+# OUTPUT CONFIGURATION
+# ====================================================================================
+
+<output1>
+file_type   = log         # Log file
+dcycle      = 1           # Output every cycle
+
+<output2>
+file_type   = hst         # History file (integrated quantities)
+data_format = %12.6e      # Output format
+dcycle      = 10          # Output every 10 cycles
+
+<output3>
+file_type   = bin         # Binary dump (full 3D data)
+variable    = hydro_w     # Primitive variables
+dt          = 10.0        # Output every 10 time units
+
+<output4>
+file_type   = rst         # Restart file
+dcycle      = 10000       # Output every 10000 cycles
+dt_wall     = 3600        # Also output every hour of wall time
+
+<output5>
+file_type   = bin         # 2D slice output
+slice_x2    = 0.0         # Slice through y=0
+id          = slice_y     # Output ID
+variable    = hydro_w     # Primitive variables
+dt          = 1.0         # Output every 1 time unit
+
+# --- Particle Outputs ---
+
+<output6>
+file_type   = prtcl_bin   # Binary particle output
+id          = prtcl       # Output ID
+dt          = 1.0         # Output every 1 time unit
+
+<output7>
+file_type   = prtcl_trk   # Particle tracking output (subset of particles)
+id          = trk         # Output ID
+dt          = 0.1         # Output every 0.1 time units (more frequent for tracks)
+ntrack      = 1000        # Number of particles to track
+

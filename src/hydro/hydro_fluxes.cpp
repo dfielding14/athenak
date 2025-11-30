@@ -344,6 +344,80 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   return;
 }
 
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Hydro::SaveFlux
+//! \brief Save density fluxes for lagrangian_mc tracer particles.
+//! Accumulates density flux (IDN component) over both RK stages.
+//! Fluxes are normalized by cell width and weighted by dt/nstages.
+
+TaskStatus Hydro::SaveFlux(Driver *pdrive, int stage) {
+  if (!uflxidn_saved) {
+    return TaskStatus::complete;
+  }
+
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+
+  auto &mbsize = pmy_pack->pmb->mb_size;
+  bool &multi_d = pmy_pack->pmesh->multi_d;
+  bool &three_d = pmy_pack->pmesh->three_d;
+
+  // Get flux arrays
+  auto flx1 = uflx.x1f;
+  auto flx2 = uflx.x2f;
+  auto flx3 = uflx.x3f;
+  auto flxidn1 = uflxidnsaved.x1f;
+  auto flxidn2 = uflxidnsaved.x2f;
+  auto flxidn3 = uflxidnsaved.x3f;
+
+  // Time factor: accumulate over stages. For 2-stage RK, each stage contributes dt/2.
+  int nstages = pdrive->nexp_stages;
+  Real dt = pmy_pack->pmesh->dt;
+  Real dtfactor = dt / static_cast<Real>(nstages);
+
+  // Save x1-face fluxes
+  par_for("save_flx1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real dx1 = mbsize.d_view(m).dx1;
+    if (stage == 1) {
+      flxidn1(m,k,j,i) = flx1(m,IDN,k,j,i) / dx1 * dtfactor;
+    } else {
+      flxidn1(m,k,j,i) += flx1(m,IDN,k,j,i) / dx1 * dtfactor;
+    }
+  });
+
+  // Save x2-face fluxes (if multi-dimensional)
+  if (multi_d) {
+    par_for("save_flx2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      Real dx2 = mbsize.d_view(m).dx2;
+      if (stage == 1) {
+        flxidn2(m,k,j,i) = flx2(m,IDN,k,j,i) / dx2 * dtfactor;
+      } else {
+        flxidn2(m,k,j,i) += flx2(m,IDN,k,j,i) / dx2 * dtfactor;
+      }
+    });
+  }
+
+  // Save x3-face fluxes (if 3D)
+  if (three_d) {
+    par_for("save_flx3", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      Real dx3 = mbsize.d_view(m).dx3;
+      if (stage == 1) {
+        flxidn3(m,k,j,i) = flx3(m,IDN,k,j,i) / dx3 * dtfactor;
+      } else {
+        flxidn3(m,k,j,i) += flx3(m,IDN,k,j,i) / dx3 * dtfactor;
+      }
+    });
+  }
+
+  return TaskStatus::complete;
+}
+
 // function definitions for each template parameter
 template void Hydro::CalculateFluxes<Hydro_RSolver::advect>(Driver *pdriver, int stage);
 template void Hydro::CalculateFluxes<Hydro_RSolver::llf>(Driver *pdriver, int stage);

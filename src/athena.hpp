@@ -67,6 +67,19 @@ enum StarParticlesIndex {IPT_CREATE=6, IPMASS=7, IPT_NEXT_SN=8};
 // integer data indices for particle types
 enum ParticleIntegerIndex {PSP=2, NSN=2};
 
+// Lagrangian MC tracer particle indices (compact layout, no velocities)
+// Integer data: PGID=0, PTAG=1 (shared), then MC-specific:
+enum LagrangianMCIntIndex {
+  PLASTMOVE=2,    // Last move info: -1=frozen, >=0=parity+direction encoding
+  PLASTLEVEL=3    // Refinement level of last cell (for AMR)
+};
+// Real data: compact position-only layout
+enum LagrangianMCRealIndex {
+  LMCX=0,   // X-position
+  LMCY=1,   // Y-position
+  LMCZ=2    // Z-position
+};
+
 // integer constants to specify spatial reconstruction methods
 enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz};
 

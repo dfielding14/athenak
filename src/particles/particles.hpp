@@ -31,7 +31,7 @@ enum class ParticlesPusher {
 };
 
 // constants that enumerate ParticleTypes
-enum class ParticleType { cosmic_ray, star };
+enum class ParticleType { cosmic_ray, star, lagrangian_mc };
 
 //----------------------------------------------------------------------------------------
 //! \struct ParticlesTaskIDs
@@ -46,6 +46,7 @@ struct ParticlesTaskIDs {
   TaskID recvp;
   TaskID csend;
   TaskID crecv;
+  TaskID mradj;  // Mesh refinement adjustment for lagrangian_mc (AMR)
 };
 
 namespace particles {
@@ -71,6 +72,10 @@ public:
   Real dtnew;
 
   ParticlesPusher pusher;
+
+  // Lagrangian MC tracer particle specific
+  int64_t random_seed;  // Base seed for deterministic RNG
+  Real min_radius;      // Particles within this radius won't be updated (-1 = disabled)
 
   // Cosmic ray specific
   int nspecies;                     // number of CR species
@@ -111,6 +116,11 @@ public:
   TaskStatus PushDrift(Driver *pdriver, int stage);
   TaskStatus PushCosmicRays(Driver *pdriver, int stage);
   TaskStatus PushStars(Driver *pdriver, int stage);
+
+  // Lagrangian MC tracer particle methods
+  void ReallocateParticles(int new_count);
+  TaskStatus PushLagrangianMC(Driver *pdriver, int stage);
+  TaskStatus AdjustMeshRefinement(Driver *pdriver, int stage);
 
   // Field interpolation methods
   KOKKOS_INLINE_FUNCTION

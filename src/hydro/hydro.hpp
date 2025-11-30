@@ -57,6 +57,7 @@ struct HydroTaskIDs {
   TaskID newdt;
   TaskID csend;
   TaskID crecv;
+  TaskID saveflx;  // Save density flux for lagrangian_mc particles
   // Task ID for user-defined work executed after each time integration cycle.
   // This enables problem generators to perform custom operations (e.g., frame tracking,
   // diagnostics, or other post-timestep modifications) via the user_work_in_loop_func.
@@ -108,6 +109,11 @@ class Hydro {
   bool use_fofc = false;   // flag to enable FOFC
   DvceArray5D<Real> utest;  // scratch array for FOFC
 
+  // Saved density fluxes for lagrangian_mc tracer particles
+  // These are accumulated over RK stages and used by particles after time integration
+  bool uflxidn_saved = false;
+  DvceFaceFld4D<Real> uflxidnsaved;
+
   // container to hold names of TaskIDs
   HydroTaskIDs id;
 
@@ -152,6 +158,10 @@ class Hydro {
 
   // first-order flux correction
   void FOFC(Driver *d, int stage);
+
+  // Lagrangian MC tracer particle support
+  void SetSaveUFlxIdn();  // Allocate flux storage for particles
+  TaskStatus SaveFlux(Driver *d, int stage);  // Save density flux each RK stage
 
  private:
   MeshBlockPack* pmy_pack;  // ptr to MeshBlockPack containing this Hydro

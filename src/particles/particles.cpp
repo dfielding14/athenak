@@ -10,11 +10,14 @@
 #include <string>
 #include <algorithm>
 #include <fstream>
+#include <limits>
 #include <Kokkos_Random.hpp>
 #include "athena.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
+#include "hydro/hydro.hpp"
+#include "mhd/mhd.hpp"
 #include "bvals/bvals.hpp"
 #include "particles.hpp"
 #include "units/units.hpp"
@@ -96,8 +99,29 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       nprtcl_thispack = particle_list.size(); 
 
       // Print number of particles loaded
-      std::cout << "Loaded " << nprtcl_thispack 
+      std::cout << "Loaded " << nprtcl_thispack
 	        << " star particles from file " << particle_file << std::endl;
+
+    } else if (ptype.compare("lagrangian_mc") == 0) {
+      particle_type = ParticleType::lagrangian_mc;
+
+      // read random seed for particle random number generation
+      random_seed = pin->GetOrAddInteger("particles","random_seed",-1 - pmy_pack->gids);
+
+      // read number of particles per cell, and calculate number of particles this pack
+      Real ppc = pin->GetOrAddReal("particles","ppc",1.0);
+
+      // compute number of particles as real number, since ppc can be < 1
+      auto &indcs = pmy_pack->pmesh->mb_indcs;
+      int ncells = indcs.nx1*indcs.nx2*indcs.nx3;
+      Real r_npart = ppc*static_cast<Real>((pmy_pack->nmb_thispack)*ncells);
+      nprtcl_thispack = static_cast<int>(r_npart); // then cast to integer
+
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Particle type = '" << ptype << "' not recognized"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
     }
   }
 
@@ -121,6 +145,22 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       pusher = ParticlesPusher::boris_lin;
     } else if (ppush.compare("boris_tsc") == 0) {
       pusher = ParticlesPusher::boris_tsc;
+    } else if (ppush.compare("lagrangian_mc") == 0) {
+      // force driver to inherit timestep from fluid by setting particle dt to max value
+      dtnew = std::numeric_limits<float>::max();
+      pusher = ParticlesPusher::lagrangian_mc;
+      if (particle_type != ParticleType::lagrangian_mc) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'lagrangian_mc' requires "
+                  << "particle_type='lagrangian_mc'" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      // Enable flux saving on the fluid module
+      if (ppack->pmhd != nullptr) {
+        ppack->pmhd->SetSaveUFlxIdn();
+      } else if (ppack->phydro != nullptr) {
+        ppack->phydro->SetSaveUFlxIdn();
+      }
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle pusher must be specified in <particles> block"
@@ -165,6 +205,12 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
         nidata = 3;
         break;
       }
+    case ParticleType::lagrangian_mc:
+      {
+        nrdata = 3;  // LMCX, LMCY, LMCZ (position only)
+        nidata = 4;  // PGID, PTAG, PLASTMOVE, PLASTLEVEL
+        break;
+      }
     default:
       break;
   }
@@ -173,6 +219,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
 
   // allocate boundary object
+  min_radius = -1;  // default: no min_radius restriction (for lagrangian_mc)
   pbval_part = new ParticlesBoundaryValues(this, pin);
 
   // Initialize particles based on type
@@ -392,6 +439,17 @@ void Particles::CreateParticleTags(ParameterInput *pin) {
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
+}
+
+//----------------------------------------------------------------------------------------
+// ReallocateParticles()
+// Update particle arrays and update internal particle count data for new number of
+// particles in this pack. This method does not preserve any existing particle data
+
+void Particles::ReallocateParticles(int new_nprtcl_thispack) {
+  nprtcl_thispack = new_nprtcl_thispack;
+  Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
+  Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
 }
 
 } // namespace particles

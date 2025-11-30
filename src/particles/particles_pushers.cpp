@@ -12,9 +12,11 @@
 #include "athena.hpp"
 #include "driver/driver.hpp"
 #include "mesh/mesh.hpp"
+#include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "particles.hpp"
 #include "units/units.hpp"
+#include "globals.hpp"
 
 namespace particles {
 KOKKOS_INLINE_FUNCTION
@@ -34,6 +36,8 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
   case ParticlesPusher::boris_lin:
   case ParticlesPusher::boris_tsc:
     return PushCosmicRays(pdriver, stage);
+  case ParticlesPusher::lagrangian_mc:
+    return PushLagrangianMC(pdriver, stage);
   default:
     return TaskStatus::fail;
   }
@@ -457,6 +461,410 @@ Real GravPot(Real x1, Real x2, Real x3, Real G, Real r_s, Real rho_s,
   Real phi = phi_NFW + phi_MN + phi_Outer;
 
   return phi;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Particles::PushLagrangianMC
+//! \brief push with Lagrangian Monte Carlo method (Genel+ 2013, MNRAS.435.1426G)
+//!        WARNING: this implementation may not work well with AMR
+
+TaskStatus Particles::PushLagrangianMC(Driver *pdriver, int stage) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is;
+  int js = indcs.js;
+  int ks = indcs.ks;
+  bool &multi_d = pmy_pack->pmesh->multi_d;
+  bool &three_d = pmy_pack->pmesh->three_d;
+  auto &mbsize = pmy_pack->pmb->mb_size;
+  auto &pi = prtcl_idata;
+  auto &pr = prtcl_rdata;
+  auto &gids = pmy_pack->gids;
+  auto &mblev = pmy_pack->pmb->mb_lev;
+
+  auto &u1_ = (pmy_pack->phydro != nullptr)?pmy_pack->phydro->u1:pmy_pack->pmhd->u1;
+  auto &uflxidn_ = (pmy_pack->phydro != nullptr)?
+                    pmy_pack->phydro->uflxidnsaved:pmy_pack->pmhd->uflxidnsaved;
+  auto &flx1_ = uflxidn_.x1f;
+  auto &flx2_ = uflxidn_.x2f;
+  auto &flx3_ = uflxidn_.x3f;
+
+  int ncycle = pmy_pack->pmesh->ncycle;
+  int64_t rseed = random_seed;  // Capture random_seed to avoid implicit 'this' capture
+
+  int nmb = pmy_pack->nmb_thispack;
+
+  par_for("part_update",DevExeSpace(),0,(nprtcl_thispack-1),
+  KOKKOS_LAMBDA(const int p) {
+    if (pi(PLASTMOVE,p) >= 0) {
+      // only update particles that are not frozen or marked for deletion
+
+      int m = pi(PGID,p) - gids;
+
+      // Bounds check: ensure m is valid for this rank
+      if (m < 0 || m >= nmb) {
+        pi(PLASTMOVE,p) = -1;  // Mark as frozen
+        return;
+      }
+
+      int ip = (pr(LMCX,p) - mbsize.d_view(m).x1min)/mbsize.d_view(m).dx1 + is;
+      int jp = js;
+      int kp = ks;
+
+      if (multi_d) {
+        jp = (pr(LMCY,p) - mbsize.d_view(m).x2min)/mbsize.d_view(m).dx2 + js;
+      }
+
+      if (three_d) {
+        kp = (pr(LMCZ,p) - mbsize.d_view(m).x3min)/mbsize.d_view(m).dx3 + ks;
+      }
+
+      // Minimal bounds check to prevent out-of-bounds flux array access
+      int ie = is + indcs.nx1;
+      int je = js + indcs.nx2;
+      int ke = ks + indcs.nx3;
+
+      if (ip < is || ip >= ie || jp < js || jp >= je || kp < ks || kp >= ke) {
+        // Particle is outside active zone - skip this timestep
+        return;
+      }
+
+      // get normalized fluxes based on local density
+      Real mass = u1_(m,IDN,kp,jp,ip);
+
+      // by convention, these values will be positive when there is outflow
+      // with respect to the current particle's cell
+      Real flx1_left = -flx1_(m,kp,jp,ip) / mass;
+      Real flx1_right = flx1_(m,kp,jp,ip+1) / mass;
+      Real flx2_left = (multi_d) ? -flx2_(m,kp,jp,ip) / mass : 0.;
+      Real flx2_right = (multi_d) ? flx2_(m,kp,jp+1,ip) / mass : 0.;
+      Real flx3_left = (three_d) ? -flx3_(m,kp,jp,ip) / mass : 0.;
+      Real flx3_right = (three_d) ? flx3_(m,kp+1,jp,ip) / mass : 0.;
+
+      flx1_left = flx1_left < 0 ? 0 : flx1_left;
+      flx1_right = flx1_right < 0 ? 0 : flx1_right;
+      flx2_left = flx2_left < 0 ? 0 : flx2_left;
+      flx2_right = flx2_right < 0 ? 0 : flx2_right;
+      flx3_left = flx3_left < 0 ? 0 : flx3_left;
+      flx3_right = flx3_right < 0 ? 0 : flx3_right;
+
+      // Deterministic random seed: tag * prime1 + ncycle * prime2 + input_seed
+      // Using large primes to avoid correlations: 7919 and 104729
+      int64_t det_seed = pi(PTAG,p) * 7919 + ncycle * 104729 + rseed;
+
+      // Hash-based pseudo-random number generation (splitmix64 algorithm)
+      // Fast, stateless, device-compatible alternative to Kokkos random pool
+      uint64_t z = static_cast<uint64_t>(det_seed);
+      z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+      z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+      z = z ^ (z >> 31);
+      Real rand = static_cast<Real>(z & 0x7FFFFFFFULL) / static_cast<Real>(0x80000000ULL);
+
+      // save refinement level of current zone
+      pi(PLASTLEVEL,p) = mblev.d_view(m);
+
+      // save parity of current zone stored as (i_isodd,j_isodd,k_isodd) * 8
+      pi(PLASTMOVE,p) = 32 * (ip % 2) + 16 * (jp % 2) + 8 * (kp % 2);
+
+      if (rand < flx1_left) {
+        pr(LMCX,p) -= mbsize.d_view(m).dx1;
+        pi(PLASTMOVE,p) += 1;
+      } else if (rand < flx1_left + flx1_right) {
+        pr(LMCX,p) += mbsize.d_view(m).dx1;
+        pi(PLASTMOVE,p) += 2;
+      } else if (multi_d && rand < flx1_left + flx1_right + flx2_left) {
+        pr(LMCY,p) -= mbsize.d_view(m).dx2;
+        pi(PLASTMOVE,p) += 3;
+      } else if (multi_d && rand < flx1_left + flx1_right + flx2_left + flx2_right) {
+        pr(LMCY,p) += mbsize.d_view(m).dx2;
+        pi(PLASTMOVE,p) += 4;
+      } else if (three_d && rand < flx1_left + flx1_right + flx2_left + flx2_right
+                                + flx3_left) {
+        pr(LMCZ,p) -= mbsize.d_view(m).dx3;
+        pi(PLASTMOVE,p) += 5;
+      } else if (three_d && rand < flx1_left + flx1_right + flx2_left + flx2_right
+                                + flx3_left + flx3_right) {
+        pr(LMCZ,p) += mbsize.d_view(m).dx3;
+        pi(PLASTMOVE,p) += 6;
+      }
+    }
+  });
+
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Particles::AdjustMeshRefinement
+//! \brief update locations of particles that enter meshblocks with new refinement levels
+
+TaskStatus Particles::AdjustMeshRefinement(Driver *pdriver, int stage) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is;
+  int js = indcs.js;
+  int ks = indcs.ks;
+  auto &pi = prtcl_idata;
+  auto &pr = prtcl_rdata;
+  auto &gids = pmy_pack->gids;
+  auto &mblev = pmy_pack->pmb->mb_lev;
+  bool &multi_d = pmy_pack->pmesh->multi_d;
+  bool &three_d = pmy_pack->pmesh->three_d;
+  auto &mbsize = pmy_pack->pmb->mb_size;
+
+  auto &uflxidn_ = (pmy_pack->phydro != nullptr)?
+                   pmy_pack->phydro->uflxidnsaved:pmy_pack->pmhd->uflxidnsaved;
+  auto &flx1_ = uflxidn_.x1f;
+  auto &flx2_ = uflxidn_.x2f;
+  auto &flx3_ = uflxidn_.x3f;
+
+  int ncycle = pmy_pack->pmesh->ncycle;
+  int64_t rseed = random_seed;  // Capture random_seed to avoid implicit 'this' capture
+  int nmb = pmy_pack->nmb_thispack;
+
+  par_for("particle_meshshift",DevExeSpace(),0,(nprtcl_thispack-1),
+  KOKKOS_LAMBDA(const int p) {
+    if (pi(PLASTMOVE,p) >= 0) {
+      // only update particles that are not frozen or marked for deletion
+
+      int m = pi(PGID,p) - gids;
+
+      // Bounds check: ensure m is valid for this rank
+      if (m < 0 || m >= nmb) {
+        pi(PLASTMOVE,p) = -1;  // Mark as frozen
+        return;
+      }
+
+      int level = mblev.d_view(m);
+
+      int lastlevel = pi(PLASTLEVEL,p);
+      int lastmove = pi(PLASTMOVE,p);
+
+      // oddness of the last cell that the particle lived in
+      int i_parity = lastmove / 32;
+      int j_parity = (lastmove % 32) / 16;
+      int k_parity = (lastmove % 16) / 8;
+
+      // direction of last move:
+      //   1 -> "left" x1 face was chosen
+      //   2 -> "right" x1 face was chosen
+      //   3 -> "left" x2 face was chosen
+      //   4 -> "right" x2 face was chosen
+      //   5 -> "left" x3 face was chosen
+      //   6 -> "right" x3 face was chosen
+      lastmove = lastmove % 8;
+
+      Real dx1 = mbsize.d_view(m).dx1;
+      Real dx2 = multi_d ? mbsize.d_view(m).dx2 : 0.;
+      Real dx3 = three_d ? mbsize.d_view(m).dx3 : 0.;
+
+      if (level > lastlevel) {
+        // this is a higher refinement level, i.e., the zones are smaller now
+
+        if (lastmove == 1) {
+          // came from zone to right (dx--)
+          pr(LMCX,p) += dx1/2;
+
+          pr(LMCY,p) -= dx2/2;
+          pr(LMCZ,p) -= dx3/2;
+        } else if (lastmove == 2) {
+          // came from zone to left (dx++)
+          pr(LMCX,p) -= dx1/2;
+
+          pr(LMCY,p) -= dx2/2;
+          pr(LMCZ,p) -= dx3/2;
+        } else if (multi_d && lastmove == 3) {
+          // came from zone above (dy--)
+          pr(LMCY,p) += dx2/2;
+
+          pr(LMCX,p) -= dx1/2;
+          pr(LMCZ,p) -= dx3/2;
+        } else if (multi_d && lastmove == 4) {
+          // came from zone below (dy++)
+          pr(LMCY,p) -= dx2/2;
+
+          pr(LMCX,p) -= dx1/2;
+          pr(LMCZ,p) -= dx3/2;
+        } else if (three_d && lastmove == 5) {
+          // came from zone in front (dz--)
+          pr(LMCZ,p) += dx3/2;
+
+          pr(LMCX,p) -= dx1/2;
+          pr(LMCY,p) -= dx2/2;
+        } else if (three_d && lastmove == 6) {
+          // came from zone behind (dz++)
+          pr(LMCZ,p) -= dx3/2;
+
+          pr(LMCX,p) -= dx1/2;
+          pr(LMCY,p) -= dx2/2;
+        }
+
+        int ip = (pr(LMCX,p) - mbsize.d_view(m).x1min)/mbsize.d_view(m).dx1 + is;
+        int jp = js;
+        int kp = ks;
+
+        if (multi_d) {
+          jp = (pr(LMCY,p) - mbsize.d_view(m).x2min)/mbsize.d_view(m).dx2 + js;
+        }
+
+        if (three_d) {
+          kp = (pr(LMCZ,p) - mbsize.d_view(m).x3min)/mbsize.d_view(m).dx3 + ks;
+        }
+
+        // get fluxes into the four zones that the particle could have ended up in
+        Real flx1 = 0.;
+        Real flx2 = 0.;
+        Real flx3 = 0.;
+        Real flx4 = 0.;
+
+        if (lastmove == 1) {
+          // came from zone to the right
+          flx1 = -flx1_(m,kp,jp,ip+1);
+          flx2 = (multi_d) ? -flx1_(m,kp,jp+1,ip+1) : 0.;
+          flx3 = (three_d) ? -flx1_(m,kp+1,jp,ip+1) : 0.;
+          flx4 = (multi_d && three_d) ? -flx1_(m,kp+1,jp+1,ip+1) : 0.;
+        } else if (lastmove == 2) {
+          // came from zone to the left
+          flx1 = flx1_(m,kp,jp,ip);
+          flx2 = (multi_d) ? flx1_(m,kp,jp+1,ip) : 0.;
+          flx3 = (three_d) ? flx1_(m,kp+1,jp,ip) : 0.;
+          flx4 = (multi_d && three_d) ? flx1_(m,kp+1,jp+1,ip) : 0.;
+        } else if (lastmove == 3) {
+          // came from zone above. is at least multi_d
+          flx1 = -flx2_(m,kp,jp+1,ip);
+          flx2 = -flx2_(m,kp,jp+1,ip+1);
+          flx3 = (three_d) ? -flx2_(m,kp+1,jp+1,ip) : 0.;
+          flx4 = (three_d) ? -flx2_(m,kp+1,jp+1,ip+1) : 0.;
+        } else if (lastmove == 4) {
+          // came from zone below. is at least multi_d
+          flx1 = flx2_(m,kp,jp,ip);
+          flx2 = flx2_(m,kp,jp,ip+1);
+          flx3 = (three_d) ? flx2_(m,kp+1,jp,ip) : 0.;
+          flx4 = (three_d) ? flx2_(m,kp+1,jp,ip+1) : 0.;
+        } else if (lastmove == 5) {
+          // came from zone in front. is three_d
+          flx1 = -flx3_(m,kp+1,jp,ip);
+          flx2 = -flx3_(m,kp+1,jp,ip+1);
+          flx3 = -flx3_(m,kp+1,jp+1,ip);
+          flx4 = -flx3_(m,kp+1,jp+1,ip+1);
+        } else if (lastmove == 6) {
+          // came from zone behind. is three_d
+          flx1 = flx3_(m,kp,jp,ip);
+          flx2 = flx3_(m,kp,jp,ip+1);
+          flx3 = flx3_(m,kp,jp+1,ip);
+          flx4 = flx3_(m,kp,jp+1,ip+1);
+        }
+
+        flx1 = (flx1 < 0) ? 0. : flx1;
+        flx2 = (flx2 < 0) ? 0. : flx2;
+        flx3 = (flx3 < 0) ? 0. : flx3;
+        flx4 = (flx4 < 0) ? 0. : flx4;
+
+        Real flx_total = flx1 + flx2 + flx3 + flx4;
+        flx_total = (flx_total > 0) ? flx_total : 1.e-10;
+
+        flx1 /= flx_total;
+        flx2 /= flx_total;
+        flx3 /= flx_total;
+        flx4 /= flx_total;
+
+        // Deterministic random seed: tag * prime1 + ncycle * prime2 + input_seed
+        // Using large primes to avoid correlations: 7919 and 104729
+        // Add 1 to differentiate from the seed used in PushLagrangianMC
+        int64_t det_seed = pi(PTAG,p) * 7919 + ncycle * 104729 + rseed + 1;
+
+        // Hash-based pseudo-random number generation (splitmix64 algorithm)
+        // Fast, stateless, device-compatible alternative to Kokkos random pool
+        uint64_t z = static_cast<uint64_t>(det_seed);
+        z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+        z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+        z = z ^ (z >> 31);
+        Real rand = static_cast<Real>(z & 0x7FFFFFFFULL) / static_cast<Real>(0x80000000ULL);
+
+        int target_zone = 4;
+        if (rand < flx1) {
+          target_zone = 1;
+        } else if (rand < flx1 + flx2) {
+          target_zone = 2;
+        } else if (rand < flx1 + flx2 + flx3) {
+          target_zone = 3;
+        }
+
+        if (lastmove == 1 || lastmove == 2) {
+          if (target_zone == 2) {
+            pr(LMCY,p) += mbsize.d_view(m).dx2;
+          } else if (target_zone == 3) {
+            pr(LMCZ,p) += mbsize.d_view(m).dx3;
+          } else if (target_zone == 4) {
+            pr(LMCY,p) += mbsize.d_view(m).dx2;
+            pr(LMCZ,p) += mbsize.d_view(m).dx3;
+          }
+        } else if (lastmove == 3 || lastmove == 4) {
+          if (target_zone == 2) {
+            pr(LMCX,p) += mbsize.d_view(m).dx1;
+          } else if (target_zone == 3) {
+            pr(LMCZ,p) += mbsize.d_view(m).dx3;
+          } else if (target_zone == 4) {
+            pr(LMCX,p) += mbsize.d_view(m).dx1;
+            pr(LMCZ,p) += mbsize.d_view(m).dx3;
+          }
+        } else if (lastmove == 5 || lastmove == 6) {
+          if (target_zone == 2) {
+            pr(LMCX,p) += mbsize.d_view(m).dx1;
+          } else if (target_zone == 3) {
+            pr(LMCY,p) += mbsize.d_view(m).dx2;
+          } else if (target_zone == 4) {
+            pr(LMCX,p) += mbsize.d_view(m).dx1;
+            pr(LMCY,p) += mbsize.d_view(m).dx2;
+          }
+        }
+
+      } else if (level < lastlevel) {
+        // this is a lower refinement level, i.e., the zones are larger now,
+        // there's nothing special to do other than to move the particle to
+        // the center of the new zone
+
+        if (i_parity) {
+          pr(LMCX,p) -= mbsize.d_view(m).dx1/4;
+        } else {
+          pr(LMCX,p) += mbsize.d_view(m).dx1/4;
+        }
+        if (multi_d) {
+          if (j_parity) {
+            pr(LMCY,p) -= mbsize.d_view(m).dx2/4;
+          } else {
+            pr(LMCY,p) += mbsize.d_view(m).dx2/4;
+          }
+        }
+        if (three_d) {
+          if (k_parity) {
+            pr(LMCZ,p) -= mbsize.d_view(m).dx3/4;
+          } else {
+            pr(LMCZ,p) += mbsize.d_view(m).dx3/4;
+          }
+        }
+
+        if (lastmove == 1) {
+          // came from zone to right (dx--)
+          pr(LMCX,p) -= mbsize.d_view(m).dx1/2;
+        } else if (lastmove == 2) {
+          // came from zone to left (dx++)
+          pr(LMCX,p) += mbsize.d_view(m).dx1/2;
+        } else if (lastmove == 3) {
+          // came from zone above (dy--)
+          pr(LMCY,p) -= mbsize.d_view(m).dx2/2;
+        } else if (lastmove == 4) {
+          // came from zone below (dy++)
+          pr(LMCY,p) += mbsize.d_view(m).dx2/2;
+        } else if (lastmove == 5) {
+          // came from zone in front (dz--)
+          pr(LMCZ,p) -= mbsize.d_view(m).dx3/2;
+        } else if (lastmove == 6) {
+          // came from zone behind (dz++)
+          pr(LMCZ,p) += mbsize.d_view(m).dx3/2;
+        }
+      }
+    }
+  });
+
+  return TaskStatus::complete;
 }
 
 } // namespace particles

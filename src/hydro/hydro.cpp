@@ -34,7 +34,8 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     u1("cons1",1,1,1,1,1),
     uflx("uflx",1,1,1,1,1),
     utest("utest",1,1,1,1,1),
-    fofc("fofc",1,1,1,1) {
+    fofc("fofc",1,1,1,1),
+    uflxidnsaved("uflxidnsaved",1,1,1,1) {
   // Total number of MeshBlocks on this rank to be used in array dimensioning
   int nmb = std::max((ppack->nmb_thispack), (ppack->pmesh->nmb_maxperrank));
 
@@ -284,6 +285,24 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       }
     }
   }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Hydro::SetSaveUFlxIdn
+//! \brief Allocate storage for density fluxes used by lagrangian_mc particles.
+//! Called when lagrangian_mc particles are enabled. Fluxes are accumulated over RK stages.
+
+void Hydro::SetSaveUFlxIdn() {
+  int nmb = std::max((pmy_pack->nmb_thispack), (pmy_pack->pmesh->nmb_maxperrank));
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int ncells1 = indcs.nx1 + 2*(indcs.ng);
+  int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
+  int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
+
+  Kokkos::realloc(uflxidnsaved.x1f, nmb, ncells3, ncells2, ncells1+1);
+  Kokkos::realloc(uflxidnsaved.x2f, nmb, ncells3, ncells2+1, ncells1);
+  Kokkos::realloc(uflxidnsaved.x3f, nmb, ncells3+1, ncells2, ncells1);
+  uflxidn_saved = true;
 }
 
 //----------------------------------------------------------------------------------------

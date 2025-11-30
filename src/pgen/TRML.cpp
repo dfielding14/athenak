@@ -647,14 +647,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     }
 
     // Initialize particles - within Hydro/MHD block check
-    // NOTE: Particle initialization is currently disabled because the athenak-DF
-    // particle implementation differs from athenak-RM. Specifically:
-    //   - ReallocateParticles() function does not exist
-    //   - PLASTLEVEL particle integer index does not exist
-    // To enable particles, the initialization code below needs to be adapted to the
-    // athenak-DF particle API.
-    #if 0  // DISABLED: Particle initialization needs adaptation for athenak-DF
-    if (pmbp->ppart != nullptr) {
+    // Only runs for lagrangian_mc particle type (tracer particles)
+    if (pmbp->ppart != nullptr &&
+        pmbp->ppart->particle_type == ParticleType::lagrangian_mc) {
       // captures for the kernel
       auto &mblev = pmbp->pmb->mb_lev;
       auto gids = pmbp->gids;
@@ -803,19 +798,19 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
           pi(PGID,pidx) = gids + m;
           pi(PLASTLEVEL,pidx) = mblev.d_view(m);
+          pi(PLASTMOVE,pidx) = 0;  // not frozen, no previous move
 
-          // set particle to zone center
-          pr(IPX,pidx) = CellCenterX(i-is, nx1, size.d_view(m).x1min,
+          // set particle to zone center (using lagrangian_mc indices)
+          pr(LMCX,pidx) = CellCenterX(i-is, nx1, size.d_view(m).x1min,
                                     size.d_view(m).x1max);
-          pr(IPY,pidx) = CellCenterX(j-js, nx2, size.d_view(m).x2min,
+          pr(LMCY,pidx) = CellCenterX(j-js, nx2, size.d_view(m).x2min,
                                     size.d_view(m).x2max);
-          pr(IPZ,pidx) = CellCenterX(k-ks, nx3, size.d_view(m).x3min,
+          pr(LMCZ,pidx) = CellCenterX(k-ks, nx3, size.d_view(m).x3min,
                                     size.d_view(m).x3max) -
                         size.d_view(m).dx3/2;
         }
       });
     }
-    #endif  // DISABLED: Particle initialization needs adaptation for athenak-DF
   }
   return;
 }
