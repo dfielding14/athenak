@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AthenaK Fluid Simulation</title>
+    <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; background-color: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        canvas { display: block; max-width: 100vw; max-height: 100vh; background: #fff; }
+        #controls {
+            position: fixed;
+            top: 8px;
+            right: 8px;
+            background: #fff;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: system-ui, sans-serif;
+            font-size: 13px;
+            min-width: 220px;
+            z-index: 100;
+        }
+        #controls.collapsed { padding: 0; min-width: auto; border: none; background: transparent; }
+        #controls.collapsed .sliders { display: none; }
+        #toggleBtn {
+            width: 24px;
+            height: 24px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 20px;
+            line-height: 24px;
+            text-align: center;
+            color: #888;
+            display: none;
+        }
+        #controls.collapsed #toggleBtn { display: block; }
+        #controls:not(.collapsed) #toggleBtn { display: none; }
+        #controlsHeader {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        #controls.collapsed #controlsHeader { display: none; }
+        #controlsHeader span { font-weight: 600; font-size: 13px; }
+        #closeBtn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            color: #666;
+            padding: 0 4px;
+        }
+        .slider-row {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+        }
+        .slider-row label {
+            flex: 0 0 90px;
+            color: #333;
+        }
+        .slider-row input[type="range"] {
+            flex: 1;
+            margin: 0 8px;
+        }
+        .slider-row .value {
+            flex: 0 0 45px;
+            text-align: right;
+            font-family: monospace;
+            color: #666;
+        }
+        #resetBtn {
+            margin-top: 10px;
+            padding: 6px 12px;
+            cursor: pointer;
+            background: #eee;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 100%;
+        }
+        #resetBtn:hover { background: #ddd; }
+    </style>
+</head>
+<body>
+    <canvas id="sim"></canvas>
+
+    <div id="controls" class="collapsed">
+        <button id="toggleBtn" onclick="toggleControls()">+</button>
+        <div id="controlsHeader">
+            <span>Controls</span>
+            <button id="closeBtn" onclick="toggleControls()">&times;</button>
+        </div>
+        <div class="sliders">
+            <div class="slider-row">
+                <label>Viscosity</label>
+                <input type="range" id="viscosity" min="0" max="2" step="0.01" value="0.5">
+                <span class="value" id="viscosityVal">0.50</span>
+            </div>
+            <div class="slider-row">
+                <label>Force</label>
+                <input type="range" id="force" min="5" max="200" step="5" value="60">
+                <span class="value" id="forceVal">60</span>
+            </div>
+            <div class="slider-row">
+                <label>Growth</label>
+                <input type="range" id="growth" min="0" max="3" step="0.05" value="0.8">
+                <span class="value" id="growthVal">0.80</span>
+            </div>
+            <div class="slider-row">
+                <label>Decay</label>
+                <input type="range" id="decay" min="0" max="2" step="0.05" value="0.3">
+                <span class="value" id="decayVal">0.30</span>
+            </div>
+            <div class="slider-row">
+                <label>Resolution</label>
+                <input type="range" id="resolution" min="64" max="2048" step="64" value="256">
+                <span class="value" id="resolutionVal">256</span>
+            </div>
+            <div class="slider-row">
+                <label>Cursor Size</label>
+                <input type="range" id="cursorRadius" min="0.002" max="0.05" step="0.002" value="0.01">
+                <span class="value" id="cursorRadiusVal">0.010</span>
+            </div>
+            <div class="slider-row">
+                <label>Boundaries</label>
+                <select id="boundaries" style="flex:1; margin:0 8px;">
+                    <option value="periodic" selected>Periodic</option>
+                    <option value="walls">Solid Walls</option>
+                </select>
+            </div>
+            <button id="resetBtn" onclick="resetSimulation()">Reset Simulation</button>
+        </div>
+    </div>
+
+<script>
+/**
+ * 2D Incompressible Navier-Stokes with Passive Scalar
+ *
+ * Velocity equation: ∂v/∂t + (v·∇)v = -∇p + ν∇²v + f
+ * Incompressibility: ∇·v = 0
+ * Passive scalar: ∂ρ/∂t + (v·∇)ρ = S(x) where S>0 inside letters, S<0 outside
+ */
+const CONFIG = {
+    SIM_RESOLUTION: 256,      // Velocity grid resolution (height)
+    DYE_RESOLUTION: 512,      // Passive scalar resolution (height)
+    DOMAIN_ASPECT: 3.0,       // Domain width/height ratio
+    PERIODIC: true,           // Periodic (true) or solid wall (false) boundaries
+    VISCOSITY: 0.5,           // Kinematic viscosity (diffusion)
+    PRESSURE_ITERATIONS: 40,  // Poisson solver iterations
+    FORCE_STRENGTH: 60,       // Mouse forcing magnitude
+    FORCE_RADIUS: 0.003,      // Mouse forcing radius
+    CURSOR_RADIUS: 0.01,      // Visual cursor radius
+    GROWTH_RATE: 0.8,         // Scalar growth rate inside letters
+    DECAY_RATE: 0.3,          // Scalar decay rate outside letters
+    BASE_TEXT_SIZE: 320,      // Base font size at 512 resolution
+    TEXT_FONT: '"SF Mono", Menlo, Monaco, monospace',  // System monospace font
+    DT: 1/60                  // Fixed timestep
+};
+
+// UI Controls
+function toggleControls() {
+    document.getElementById('controls').classList.toggle('collapsed');
+}
+
+const canvas = document.getElementById('sim');
+// Set canvas to match domain aspect ratio, fitting within viewport
+function resizeCanvas() {
+    const viewW = window.innerWidth;
+    const viewH = window.innerHeight;
+    const domainAspect = CONFIG.DOMAIN_ASPECT;
+
+    if (viewW / viewH > domainAspect) {
+        // Viewport is wider than domain - fit to height
+        canvas.height = viewH;
+        canvas.width = Math.round(viewH * domainAspect);
+    } else {
+        // Viewport is taller than domain - fit to width
+        canvas.width = viewW;
+        canvas.height = Math.round(viewW / domainAspect);
+    }
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+const gl = canvas.getContext('webgl2', { alpha: false });
+if (!gl) alert("WebGL2 not supported");
+gl.getExtension('EXT_color_buffer_float');
+gl.getExtension('OES_texture_float_linear');
+
+// ============================================================================
+// SHADERS
+// ============================================================================
+
+const baseVS = `#version 300 es
+in vec2 aPosition;
+out vec2 vUv;
+void main() {
+    vUv = aPosition * 0.5 + 0.5;
+    gl_Position = vec4(aPosition, 0.0, 1.0);
+}`;
+
+// Advection: Semi-Lagrangian back-trace
+const advectFS = `#version 300 es
+precision highp float;
+precision highp sampler2D;
+uniform sampler2D uVelocity;
+uniform sampler2D uQuantity;
+uniform float uDt;
+uniform float uDissipation;
+in vec2 vUv;
+out vec4 fragColor;
+
+void main() {
+    vec2 vel = texture(uVelocity, vUv).xy;
+    // Back-trace in UV coordinates (velocity is in UV units per second)
+    vec2 pos = vUv - uDt * vel;
+    fragColor = uDissipation * texture(uQuantity, pos);
+}`;
+
+// Diffusion (Jacobi iteration for implicit viscosity): ∇²v = (v - v0) / (ν*dt)
+const diffuseFS = `#version 300 es
+precision highp float;
+precision highp sampler2D;
+uniform sampler2D uVelocity;
+uniform sampler2D uVelocity0;
+uniform vec2 uTexelSize;
+uniform float uAlpha;  // (dx)² / (ν * dt)
+uniform float uRBeta;  // 1 / (4 + alpha)
+in vec2 vUv;
+out vec4 fragColor;
+
+void main() {
+    vec4 L = texture(uVelocity, vUv - vec2(uTexelSize.x, 0.0));
+    vec4 R = texture(uVelocity, vUv + vec2(uTexelSize.x, 0.0));
+    vec4 B = texture(uVelocity, vUv - vec2(0.0, uTexelSize.y));
+    vec4 T = texture(uVelocity, vUv + vec2(0.0, uTexelSize.y));
+    vec4 v0 = texture(uVelocity0, vUv);
+
+    fragColor = (L + R + B + T + uAlpha * v0) * uRBeta;
+}`;
+
+// Divergence: ∇·v
+const divergenceFS = `#version 300 es
+precision highp float;
+precision highp sampler2D;
+uniform sampler2D uVelocity;
+uniform vec2 uTexelSize;
+in vec2 vUv;
+out vec4 fragColor;
+
+void main() {
+    float L = texture(uVelocity, vUv - vec2(uTexelSize.x, 0.0)).x;
+    float R = texture(uVelocity, vUv + vec2(uTexelSize.x, 0.0)).x;
+    float B = texture(uVelocity, vUv - vec2(0.0, uTexelSize.y)).y;
+    float T = texture(uVelocity, vUv + vec2(0.0, uTexelSize.y)).y;
+
+    float div = 0.5 * (R - L + T - B);
+    fragColor = vec4(div, 0.0, 0.0, 1.0);
+}`;
+
+// Pressure Poisson solver (Jacobi): ∇²p = ∇·v
+const pressureFS = `#version 300 es
+precision highp float;
+precision highp sampler2D;
+uniform sampler2D uPressure;
+uniform sampler2D uDivergence;
+uniform vec2 uTexelSize;
+in vec2 vUv;
+out vec4 fragColor;
+
+void main() {
+    float L = texture(uPressure, vUv - vec2(uTexelSize.x, 0.0)).x;
+    float R = texture(uPressure, vUv + vec2(uTexelSize.x, 0.0)).x;
+    float B = texture(uPressure, vUv - vec2(0.0, uTexelSize.y)).x;
+    float T = texture(uPressure, vUv + vec2(0.0, uTexelSize.y)).x;
+    float div = texture(uDivergence, vUv).x;
+
+    float p = (L + R + B + T - div) * 0.25;
+    fragColor = vec4(p, 0.0, 0.0, 1.0);
+}`;
+
+// Projection: v = v - ∇p (makes velocity divergence-free)
+const projectFS = `#version 300 es
+precision highp float;
+precision highp sampler2D;
+uniform sampler2D uVelocity;
+uniform sampler2D uPressure;
+uniform vec2 uTexelSize;
+in vec2 vUv;
+out vec4 fragColor;
+
+void main() {
+    float L = texture(uPressure, vUv - vec2(uTexelSize.x, 0.0)).x;
+    float R = texture(uPressure, vUv + vec2(uTexelSize.x, 0.0)).x;
+    float B = texture(uPressure, vUv - vec2(0.0, uTexelSize.y)).x;
+    float T = texture(uPressure, vUv + vec2(0.0, uTexelSize.y)).x;
+
+    vec2 v = texture(uVelocity, vUv).xy;
+    v -= 0.5 * vec2(R - L, T - B);
+    fragColor = vec4(v, 0.0, 1.0);
+}`;
+
+// Force splat: Add velocity from mouse
+const splatFS = `#version 300 es
+precision highp float;
+precision highp sampler2D;
+uniform sampler2D uTarget;
+uniform vec2 uPoint;
+uniform vec3 uValue;
+uniform float uRadius;
+uniform float uAspect;
+in vec2 vUv;
+out vec4 fragColor;
+
+void main() {
+    vec2 p = vUv - uPoint;
+    p.x *= uAspect;
+    float d = exp(-dot(p, p) / uRadius);
+    vec3 base = texture(uTarget, vUv).xyz;
+    fragColor = vec4(base + d * uValue, 1.0);
+}`;
+
+// Passive scalar source/sink: grows inside letters, decays outside
+const scalarSourceFS = `#version 300 es
+precision highp float;
+precision highp sampler2D;
+uniform sampler2D uScalar;
+uniform sampler2D uMask;
+uniform float uGrowthRate;
+uniform float uDecayRate;
+uniform float uDt;
+in vec2 vUv;
+out vec4 fragColor;
+
+void main() {
+    float s = texture(uScalar, vUv).r;
+    // Flip Y for mask (canvas coords vs WebGL coords)
+    float mask = texture(uMask, vec2(vUv.x, 1.0 - vUv.y)).r;
+
+    // Source term: positive inside letters, negative outside
+    // Inside (mask > 0.5): grow toward 1
+    // Outside (mask < 0.5): decay toward 0
+    float source;
+    if (mask > 0.5) {
+        source = uGrowthRate * (1.0 - s);  // Grows faster when s is small
+    } else {
+        source = -uDecayRate * s;  // Decays proportional to s
+    }
+
+    float newS = s + source * uDt;
+    fragColor = vec4(clamp(newS, 0.0, 1.0), 0.0, 0.0, 1.0);
+}`;
+
+// Boundary enforcement for solid walls (zero normal velocity)
+const boundaryFS = `#version 300 es
+precision highp float;
+precision highp sampler2D;
+uniform sampler2D uVelocity;
+uniform vec2 uTexelSize;
+in vec2 vUv;
+out vec4 fragColor;
+
+void main() {
+    vec2 v = texture(uVelocity, vUv).xy;
+
+    // Zero normal velocity at boundaries
+    // Left boundary: v.x >= 0 (no flow out)
+    if (vUv.x < uTexelSize.x * 1.5) {
+        v.x = max(0.0, v.x);
+    }
+    // Right boundary: v.x <= 0
+    if (vUv.x > 1.0 - uTexelSize.x * 1.5) {
+        v.x = min(0.0, v.x);
+    }
+    // Bottom boundary: v.y >= 0
+    if (vUv.y < uTexelSize.y * 1.5) {
+        v.y = max(0.0, v.y);
+    }
+    // Top boundary: v.y <= 0
+    if (vUv.y > 1.0 - uTexelSize.y * 1.5) {
+        v.y = min(0.0, v.y);
+    }
+
+    fragColor = vec4(v, 0.0, 1.0);
+}`;
+
+// Display with velocity-based rainbow colormap
+const displayFS = `#version 300 es
+precision highp float;
+precision highp sampler2D;
+uniform sampler2D uTexture;
+uniform sampler2D uVelocity;
+uniform vec2 uMouse;
+uniform float uAspect;
+uniform float uCursorRadius;
+uniform float uVelScale;
+in vec2 vUv;
+out vec4 fragColor;
+
+// Rainbow colormap: dark blue -> teal -> green -> yellow -> orange -> red -> magenta
+vec3 rainbow(float t) {
+    t = clamp(t, 0.0, 1.0);
+    // Key colors (7 stops, 6 segments)
+    vec3 c0 = vec3(0.1, 0.15, 0.4);  // dark blue (t=0)
+    vec3 c1 = vec3(0.1, 0.5, 0.5);   // teal (t=0.167)
+    vec3 c2 = vec3(0.2, 0.8, 0.3);   // green (t=0.333)
+    vec3 c3 = vec3(0.95, 0.9, 0.2);  // yellow (t=0.5)
+    vec3 c4 = vec3(1.0, 0.5, 0.0);   // orange (t=0.667)
+    vec3 c5 = vec3(0.9, 0.1, 0.1);   // red (t=0.833)
+    vec3 c6 = vec3(0.8, 0.2, 0.8);   // magenta (t=1)
+
+    float s = 1.0 / 6.0;
+    if (t < s)     return mix(c0, c1, t / s);
+    if (t < 2.0*s) return mix(c1, c2, (t - s) / s);
+    if (t < 3.0*s) return mix(c2, c3, (t - 2.0*s) / s);
+    if (t < 4.0*s) return mix(c3, c4, (t - 3.0*s) / s);
+    if (t < 5.0*s) return mix(c4, c5, (t - 4.0*s) / s);
+    return mix(c5, c6, (t - 5.0*s) / s);
+}
+
+void main() {
+    float c = texture(uTexture, vUv).r;
+    c = smoothstep(0.0, 0.6, c);  // Contrast enhancement
+
+    // Get velocity magnitude
+    vec2 vel = texture(uVelocity, vUv).xy;
+    float speed = length(vel) * uVelScale;
+
+    // Map velocity to rainbow color
+    vec3 fluidColor = rainbow(speed);
+
+    // White background, colored fluid
+    vec3 color = mix(vec3(1.0), fluidColor, c);
+
+    // Simple circle cursor
+    vec2 p = vUv - uMouse;
+    p.x *= uAspect;
+    float dist = length(p);
+    float ring = smoothstep(uCursorRadius - 0.001, uCursorRadius, dist)
+               - smoothstep(uCursorRadius, uCursorRadius + 0.001, dist);
+    color -= vec3(0.25) * ring;
+
+    fragColor = vec4(color, 1.0);
+}`;
+
+// ============================================================================
+// WEBGL UTILITIES
+// ============================================================================
+
+function compileShader(type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.error(gl.getShaderInfoLog(shader));
+        throw new Error('Shader compile failed');
+    }
+    return shader;
+}
+
+function createProgram(vs, fs) {
+    const program = gl.createProgram();
+    gl.attachShader(program, compileShader(gl.VERTEX_SHADER, vs));
+    gl.attachShader(program, compileShader(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        throw new Error('Program link failed');
+    }
+
+    // Cache uniform locations
+    const uniforms = {};
+    const n = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) {
+        const info = gl.getActiveUniform(program, i);
+        uniforms[info.name] = gl.getUniformLocation(program, info.name);
+    }
+
+    return { program, uniforms };
+}
+
+function createFBO(w, h) {
+    const wrapMode = CONFIG.PERIODIC ? gl.REPEAT : gl.CLAMP_TO_EDGE;
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapMode);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapMode);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+
+    return {
+        texture, fbo, width: w, height: h,
+        attach(unit) {
+            gl.activeTexture(gl.TEXTURE0 + unit);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            return unit;
+        }
+    };
+}
+
+function createDoubleFBO(w, h) {
+    let fbo1 = createFBO(w, h);
+    let fbo2 = createFBO(w, h);
+    return {
+        get read() { return fbo1; },
+        get write() { return fbo2; },
+        swap() { [fbo1, fbo2] = [fbo2, fbo1]; }
+    };
+}
+
+function createTextMask(text) {
+    const height = dyeH || CONFIG.DYE_RESOLUTION;
+    const width = Math.round(height * CONFIG.DOMAIN_ASPECT);
+    const c = document.createElement('canvas');
+    c.width = width;
+    c.height = height;
+    const ctx = c.getContext('2d');
+
+    // Scale text size with resolution (base size is for 512 height)
+    const textSize = Math.round(CONFIG.BASE_TEXT_SIZE * (height / 512));
+
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = 'white';
+    ctx.font = `bold ${textSize}px ${CONFIG.TEXT_FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, width/2, height/2);
+
+    const wrapMode = CONFIG.PERIODIC ? gl.REPEAT : gl.CLAMP_TO_EDGE;
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapMode);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapMode);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+
+    return texture;
+}
+
+// ============================================================================
+// SETUP
+// ============================================================================
+
+const progs = {
+    advect: createProgram(baseVS, advectFS),
+    diffuse: createProgram(baseVS, diffuseFS),
+    divergence: createProgram(baseVS, divergenceFS),
+    pressure: createProgram(baseVS, pressureFS),
+    project: createProgram(baseVS, projectFS),
+    boundary: createProgram(baseVS, boundaryFS),
+    splat: createProgram(baseVS, splatFS),
+    scalarSource: createProgram(baseVS, scalarSourceFS),
+    display: createProgram(baseVS, displayFS)
+};
+
+let simH = CONFIG.SIM_RESOLUTION;
+let simW = Math.round(simH * CONFIG.DOMAIN_ASPECT);
+let dyeH = CONFIG.DYE_RESOLUTION;
+let dyeW = Math.round(dyeH * CONFIG.DOMAIN_ASPECT);
+let texelSizeSim = [1.0 / simW, 1.0 / simH];
+let texelSizeDye = [1.0 / dyeW, 1.0 / dyeH];
+
+let velocity = createDoubleFBO(simW, simH);
+let velocity0 = createFBO(simW, simH);  // For diffusion
+let pressure = createDoubleFBO(simW, simH);
+let divergence = createFBO(simW, simH);
+let scalar = createDoubleFBO(dyeW, dyeH);
+let maskTexture = createTextMask("AthenaK");
+
+function recreateFBOs() {
+    simH = CONFIG.SIM_RESOLUTION;
+    simW = Math.round(simH * CONFIG.DOMAIN_ASPECT);
+    dyeH = CONFIG.DYE_RESOLUTION;
+    dyeW = Math.round(dyeH * CONFIG.DOMAIN_ASPECT);
+    texelSizeSim = [1.0 / simW, 1.0 / simH];
+    texelSizeDye = [1.0 / dyeW, 1.0 / dyeH];
+
+    velocity = createDoubleFBO(simW, simH);
+    velocity0 = createFBO(simW, simH);
+    pressure = createDoubleFBO(simW, simH);
+    divergence = createFBO(simW, simH);
+    scalar = createDoubleFBO(dyeW, dyeH);
+    maskTexture = createTextMask("AthenaK");
+}
+
+function resetSimulation() {
+    recreateFBOs();
+}
+
+// Fullscreen quad
+gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, -1,1, 1,1, 1,-1]), gl.STATIC_DRAW);
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0,1,2, 0,2,3]), gl.STATIC_DRAW);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+gl.enableVertexAttribArray(0);
+
+function blit(target) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fbo : null);
+    gl.viewport(0, 0, target ? target.width : canvas.width, target ? target.height : canvas.height);
+    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+}
+
+// ============================================================================
+// INPUT
+// ============================================================================
+
+const pointer = { x: 0.5, y: 0.5, dx: 0, dy: 0, dirX: 1, dirY: 0, moved: false };
+
+canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = 1.0 - (e.clientY - rect.top) / rect.height;
+    pointer.dx = x - pointer.x;
+    pointer.dy = y - pointer.y;
+    // Update direction (smoothed)
+    const len = Math.sqrt(pointer.dx * pointer.dx + pointer.dy * pointer.dy);
+    if (len > 0.001) {
+        pointer.dirX = pointer.dirX * 0.8 + (pointer.dx / len) * 0.2;
+        pointer.dirY = pointer.dirY * 0.8 + (pointer.dy / len) * 0.2;
+    }
+    pointer.x = x;
+    pointer.y = y;
+    pointer.moved = true;
+});
+
+canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const t = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const x = (t.clientX - rect.left) / rect.width;
+    const y = 1.0 - (t.clientY - rect.top) / rect.height;
+    pointer.dx = x - pointer.x;
+    pointer.dy = y - pointer.y;
+    pointer.x = x;
+    pointer.y = y;
+    pointer.moved = true;
+}, { passive: false });
+
+// ============================================================================
+// SIMULATION LOOP
+// ============================================================================
+
+function step(dt) {
+    // 1. ADD FORCES (mouse input)
+    if (pointer.moved && (Math.abs(pointer.dx) > 0.0001 || Math.abs(pointer.dy) > 0.0001)) {
+        gl.useProgram(progs.splat.program);
+        gl.uniform1i(progs.splat.uniforms.uTarget, velocity.read.attach(0));
+        gl.uniform2f(progs.splat.uniforms.uPoint, pointer.x, pointer.y);
+        gl.uniform3f(progs.splat.uniforms.uValue,
+            pointer.dx * CONFIG.FORCE_STRENGTH,
+            pointer.dy * CONFIG.FORCE_STRENGTH,
+            0.0);
+        gl.uniform1f(progs.splat.uniforms.uRadius, CONFIG.FORCE_RADIUS);
+        gl.uniform1f(progs.splat.uniforms.uAspect, CONFIG.DOMAIN_ASPECT);
+        blit(velocity.write);
+        velocity.swap();
+
+        pointer.moved = false;
+    }
+
+    // 2. DIFFUSE VELOCITY (implicit viscosity via Jacobi iteration)
+    if (CONFIG.VISCOSITY > 0) {
+        const alpha = 1.0 / (CONFIG.VISCOSITY * dt);
+        const rBeta = 1.0 / (4.0 + alpha);
+
+        // Copy current velocity to velocity0
+        gl.useProgram(progs.advect.program);
+        gl.uniform1i(progs.advect.uniforms.uVelocity, velocity.read.attach(0));
+        gl.uniform1i(progs.advect.uniforms.uQuantity, velocity.read.attach(0));
+        gl.uniform1f(progs.advect.uniforms.uDt, 0.0);  // No advection, just copy
+        gl.uniform1f(progs.advect.uniforms.uDissipation, 1.0);
+        blit(velocity0);
+
+        gl.useProgram(progs.diffuse.program);
+        gl.uniform2fv(progs.diffuse.uniforms.uTexelSize, texelSizeSim);
+        gl.uniform1f(progs.diffuse.uniforms.uAlpha, alpha);
+        gl.uniform1f(progs.diffuse.uniforms.uRBeta, rBeta);
+        gl.uniform1i(progs.diffuse.uniforms.uVelocity0, velocity0.attach(1));
+
+        for (let i = 0; i < 20; i++) {
+            gl.uniform1i(progs.diffuse.uniforms.uVelocity, velocity.read.attach(0));
+            blit(velocity.write);
+            velocity.swap();
+        }
+    }
+
+    // 3. ADVECT VELOCITY
+    gl.useProgram(progs.advect.program);
+    gl.uniform1i(progs.advect.uniforms.uVelocity, velocity.read.attach(0));
+    gl.uniform1i(progs.advect.uniforms.uQuantity, velocity.read.attach(0));
+    gl.uniform1f(progs.advect.uniforms.uDt, dt);
+    gl.uniform1f(progs.advect.uniforms.uDissipation, 0.99);
+    blit(velocity.write);
+    velocity.swap();
+
+    // 4. PRESSURE PROJECTION (enforce incompressibility)
+    // 4a. Compute divergence
+    gl.useProgram(progs.divergence.program);
+    gl.uniform1i(progs.divergence.uniforms.uVelocity, velocity.read.attach(0));
+    gl.uniform2fv(progs.divergence.uniforms.uTexelSize, texelSizeSim);
+    blit(divergence);
+
+    // 4b. Clear pressure
+    gl.bindFramebuffer(gl.FRAMEBUFFER, pressure.read.fbo);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, pressure.write.fbo);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    // 4c. Solve pressure Poisson equation
+    gl.useProgram(progs.pressure.program);
+    gl.uniform1i(progs.pressure.uniforms.uDivergence, divergence.attach(1));
+    gl.uniform2fv(progs.pressure.uniforms.uTexelSize, texelSizeSim);
+    for (let i = 0; i < CONFIG.PRESSURE_ITERATIONS; i++) {
+        gl.uniform1i(progs.pressure.uniforms.uPressure, pressure.read.attach(0));
+        blit(pressure.write);
+        pressure.swap();
+    }
+
+    // 4d. Project velocity (subtract pressure gradient)
+    gl.useProgram(progs.project.program);
+    gl.uniform1i(progs.project.uniforms.uVelocity, velocity.read.attach(0));
+    gl.uniform1i(progs.project.uniforms.uPressure, pressure.read.attach(1));
+    gl.uniform2fv(progs.project.uniforms.uTexelSize, texelSizeSim);
+    blit(velocity.write);
+    velocity.swap();
+
+    // 4e. Enforce solid wall boundaries (if not periodic)
+    if (!CONFIG.PERIODIC) {
+        gl.useProgram(progs.boundary.program);
+        gl.uniform1i(progs.boundary.uniforms.uVelocity, velocity.read.attach(0));
+        gl.uniform2fv(progs.boundary.uniforms.uTexelSize, texelSizeSim);
+        blit(velocity.write);
+        velocity.swap();
+    }
+
+    // 5. ADVECT PASSIVE SCALAR
+    gl.useProgram(progs.advect.program);
+    gl.uniform1i(progs.advect.uniforms.uVelocity, velocity.read.attach(0));
+    gl.uniform1i(progs.advect.uniforms.uQuantity, scalar.read.attach(1));
+    gl.uniform1f(progs.advect.uniforms.uDt, dt);
+    gl.uniform1f(progs.advect.uniforms.uDissipation, 1.0);  // No dissipation for scalar
+    blit(scalar.write);
+    scalar.swap();
+
+    // 6. SCALAR SOURCE/SINK (grow inside letters, decay outside)
+    gl.useProgram(progs.scalarSource.program);
+    gl.uniform1i(progs.scalarSource.uniforms.uScalar, scalar.read.attach(0));
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, maskTexture);
+    gl.uniform1i(progs.scalarSource.uniforms.uMask, 1);
+    gl.uniform1f(progs.scalarSource.uniforms.uGrowthRate, CONFIG.GROWTH_RATE);
+    gl.uniform1f(progs.scalarSource.uniforms.uDecayRate, CONFIG.DECAY_RATE);
+    gl.uniform1f(progs.scalarSource.uniforms.uDt, dt);
+    blit(scalar.write);
+    scalar.swap();
+}
+
+function render() {
+    gl.useProgram(progs.display.program);
+    gl.uniform1i(progs.display.uniforms.uTexture, scalar.read.attach(0));
+    gl.uniform1i(progs.display.uniforms.uVelocity, velocity.read.attach(1));
+    gl.uniform2f(progs.display.uniforms.uMouse, pointer.x, pointer.y);
+    gl.uniform1f(progs.display.uniforms.uAspect, CONFIG.DOMAIN_ASPECT);
+    gl.uniform1f(progs.display.uniforms.uCursorRadius, CONFIG.CURSOR_RADIUS);
+    gl.uniform1f(progs.display.uniforms.uVelScale, 5.0);  // Scale velocity for colormap (lower = more range)
+    blit(null);
+}
+
+function update() {
+    step(CONFIG.DT);
+    render();
+    requestAnimationFrame(update);
+}
+
+// ============================================================================
+// SLIDER EVENT HANDLERS
+// ============================================================================
+
+document.getElementById('viscosity').addEventListener('input', e => {
+    CONFIG.VISCOSITY = parseFloat(e.target.value);
+    document.getElementById('viscosityVal').textContent = CONFIG.VISCOSITY.toFixed(2);
+});
+
+document.getElementById('force').addEventListener('input', e => {
+    CONFIG.FORCE_STRENGTH = parseFloat(e.target.value);
+    document.getElementById('forceVal').textContent = CONFIG.FORCE_STRENGTH.toFixed(0);
+});
+
+document.getElementById('growth').addEventListener('input', e => {
+    CONFIG.GROWTH_RATE = parseFloat(e.target.value);
+    document.getElementById('growthVal').textContent = CONFIG.GROWTH_RATE.toFixed(2);
+});
+
+document.getElementById('decay').addEventListener('input', e => {
+    CONFIG.DECAY_RATE = parseFloat(e.target.value);
+    document.getElementById('decayVal').textContent = CONFIG.DECAY_RATE.toFixed(2);
+});
+
+document.getElementById('resolution').addEventListener('input', e => {
+    const newRes = parseInt(e.target.value);
+    document.getElementById('resolutionVal').textContent = newRes;
+    CONFIG.SIM_RESOLUTION = newRes;
+    CONFIG.DYE_RESOLUTION = newRes * 2;
+    recreateFBOs();
+});
+
+document.getElementById('cursorRadius').addEventListener('input', e => {
+    CONFIG.CURSOR_RADIUS = parseFloat(e.target.value);
+    // Scale force radius with cursor size (quadratic since Gaussian uses r²)
+    CONFIG.FORCE_RADIUS = CONFIG.CURSOR_RADIUS * CONFIG.CURSOR_RADIUS * 30.0;
+    document.getElementById('cursorRadiusVal').textContent = CONFIG.CURSOR_RADIUS.toFixed(3);
+});
+
+document.getElementById('boundaries').addEventListener('change', e => {
+    CONFIG.PERIODIC = (e.target.value === 'periodic');
+    recreateFBOs();
+});
+
+// Start simulation
+update();
+</script>
+</body>
+</html>
