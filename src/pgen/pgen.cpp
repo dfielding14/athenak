@@ -371,6 +371,8 @@ void LoadSingleFileRestartData(Mesh *pm,
 ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     user_bcs(false),
     user_srcs(false),
+    user_dt(false),
+    user_work_in_loop(false),
     user_hist(false),
     pmy_mesh_(pm) {
   // check for user-defined boundary conditions
@@ -381,6 +383,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
   }
 
   user_srcs = pin->GetOrAddBoolean("problem","user_srcs",false);
+  user_dt = pin->GetOrAddBoolean("problem","user_dt",false);
+  user_work_in_loop = pin->GetOrAddBoolean("problem","user_work_in_loop",false);
   user_hist = pin->GetOrAddBoolean("problem","user_hist",false);
 
 #if USER_PROBLEM_ENABLED
@@ -472,6 +476,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                                    bool single_file_per_rank) :
     user_bcs(false),
     user_srcs(false),
+    user_dt(false),
+    user_work_in_loop(false),
     user_hist(false),
     pmy_mesh_(pm) {
   // check for user-defined boundary conditions
@@ -481,6 +487,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     }
   }
   user_srcs = pin->GetOrAddBoolean("problem","user_srcs",false);
+  user_dt = pin->GetOrAddBoolean("problem","user_dt",false);
+  user_work_in_loop = pin->GetOrAddBoolean("problem","user_work_in_loop",false);
   user_hist = pin->GetOrAddBoolean("problem","user_hist",false);
 
   // get spatial dimensions of arrays, including ghost zones

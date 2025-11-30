@@ -647,6 +647,13 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     }
 
     // Initialize particles - within Hydro/MHD block check
+    // NOTE: Particle initialization is currently disabled because the athenak-DF
+    // particle implementation differs from athenak-RM. Specifically:
+    //   - ReallocateParticles() function does not exist
+    //   - PLASTLEVEL particle integer index does not exist
+    // To enable particles, the initialization code below needs to be adapted to the
+    // athenak-DF particle API.
+    #if 0  // DISABLED: Particle initialization needs adaptation for athenak-DF
     if (pmbp->ppart != nullptr) {
       // captures for the kernel
       auto &mblev = pmbp->pmb->mb_lev;
@@ -808,6 +815,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
         }
       });
     }
+    #endif  // DISABLED: Particle initialization needs adaptation for athenak-DF
   }
   return;
 }
