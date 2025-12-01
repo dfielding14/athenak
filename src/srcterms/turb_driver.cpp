@@ -934,7 +934,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
         sum_t0 += den*0.5*(a1*a1 + a2*a2 + a3*a3)*dt*vol;
         sum_t1 += (mom1*a1 + mom2*a2 + mom3*a3)*vol;
       } else {
-        sum_t0 += 0.5*(a1*a1 + a2*a2 + a3*a3)*dt*vol;
+        sum_t0 += 0.5*(a1*a1 + a2*a2 + a3*a3)*vol;
         sum_t1 += 0.0;
       }
       totvol_ += vol;
