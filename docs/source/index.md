@@ -4,6 +4,15 @@
 <iframe src="_static/athenak_fluid_sim.html" style="width: 100%; aspect-ratio: 3/1; border: none;"></iframe>
 </div>
 
+<details style="margin-top: 0.5em; font-size: 0.85em;">
+<summary style="cursor: pointer; font-style: italic; color: #666;">More on this simulation...</summary>
+<p style="max-width: 700px; margin: 0.5em 0; color: #444;">
+This is a real-time 2D incompressible Navier-Stokes simulation running in WebGL2. The velocity field is evolved by tracing fluid parcels backward in time to find where they originated (semi-Lagrangian advection), then smoothing the velocity to model viscous drag (implicit diffusion solves for the smoothed state directly, which is numerically stable). Pressure projection via Jacobi iteration enforces the divergence-free constraint, ensuring mass conservation. A passive scalar field (the visible "dye") is carried along by the flow and subject to source/sink terms: it grows where the underlying "AthenaK" text mask is defined and decays elsewhere, causing the letters to continuously reform after being disturbed.
+</p>
+</details>
+
+<div style="margin-top: 2em;"></div>
+
 Welcome to the AthenaK knowledge base. Use this hub to launch simulations quickly, explore the architecture, or deep-dive into physics modules and engineering notes.
 
 ```{admonition} New to AthenaK?
