@@ -8,9 +8,11 @@
 //! \file particles.hpp
 //  \brief definitions for Particles class
 
+#include <array>
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "athena.hpp"
 #include "bvals/bvals.hpp"
@@ -108,6 +110,7 @@ public:
 
   // Cosmic ray specific methods
   void InitializeCosmicRays(ParameterInput *pin);
+  void InitializeStars(std::vector<std::array<Real, 9>> &particle_list);
   TaskStatus PushDrift(Driver *pdriver, int stage);
   TaskStatus PushCosmicRays(Driver *pdriver, int stage);
   TaskStatus PushStars(Driver *pdriver, int stage);

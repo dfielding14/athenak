@@ -179,50 +179,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   if (particle_type == ParticleType::cosmic_ray) {
     InitializeCosmicRays(pin);
   } else if (particle_type == ParticleType::star) {
-      // Loop over mesh blocks in this pack
-      int nmb = pmy_pack->nmb_thispack;
-      auto &size = pmy_pack->pmb->mb_size;
-      const int &gids = pmy_pack->gids;
-      
-      // Copy to device-accessible arrays
-      // First create and populate a host view
-      HostArray2D<Real> host_pos("host_positions", 9, nprtcl_thispack);
-      for (size_t i = 0; i < nprtcl_thispack; ++i) {
-	for (size_t j = 0; j < 9; ++j) {
-          host_pos(j, i) = particle_list[i][j];
-	}
-      }
-
-      // Then create the device view and copy data
-      auto pos_data = Kokkos::create_mirror_view_and_copy(DevExeSpace(), host_pos);
-
-      auto &pi = prtcl_idata;
-      auto &pr = prtcl_rdata;
-      Real unit_time = pmy_pack->punit->time_cgs();
-
-      // Initialize particles
-      par_for("star_par", DevExeSpace(), 0, nprtcl_thispack-1,
-      KOKKOS_LAMBDA(const int p) {   
-        int m = static_cast<int>(pos_data(8, p));  
-        pi(PGID,p) = gids + m;
-        pi(NSN,p) = 0; // track number of SNe for star particle
-        pr(IPX,p)  = pos_data(0, p);
-        pr(IPY,p)  = pos_data(1, p);
-        pr(IPZ,p)  = pos_data(2, p);
-        pr(IPVX,p) = pos_data(3, p);
-        pr(IPVY,p) = pos_data(4, p);
-        pr(IPVZ,p) = pos_data(5, p);
-        pr(IPT_CREATE, p) = pos_data(6, p); // creation time of star particle
-        pr(IPMASS, p)     = pos_data(7, p); // mass of star particle
-        pr(IPT_NEXT_SN,p) = GetNthSNTime(pr(IPMASS,p), pr(IPT_CREATE,p), unit_time, 0);
-
-        // Print particle initialization
-        // Kokkos::printf("Initialized star particle %d in GID %d at position (%.2f, %.2f, %.2f)\n",
-        //          p, gids + m, pos_data(0, p), pos_data(1, p), pos_data(2, p));
-      });
-    
-      dtnew = std::min(size.h_view(0).dx1, size.h_view(0).dx2);
-      dtnew = std::min(dtnew, size.h_view(0).dx3);
+    InitializeStars(particle_list);
   }
 }
 
@@ -352,6 +309,51 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
   if (indcs.nx3 > 1) {
     dtnew = std::min(dtnew, dx.dx3);
   }
+}
+
+//----------------------------------------------------------------------------------------
+// InitializeStars()
+// Initializes star particles from pre-loaded particle list
+
+void Particles::InitializeStars(std::vector<std::array<Real, 9>> &particle_list) {
+  auto &size = pmy_pack->pmb->mb_size;
+  const int &gids = pmy_pack->gids;
+
+  // Copy to device-accessible arrays
+  // First create and populate a host view
+  HostArray2D<Real> host_pos("host_positions", 9, nprtcl_thispack);
+  for (size_t i = 0; i < nprtcl_thispack; ++i) {
+    for (size_t j = 0; j < 9; ++j) {
+      host_pos(j, i) = particle_list[i][j];
+    }
+  }
+
+  // Then create the device view and copy data
+  auto pos_data = Kokkos::create_mirror_view_and_copy(DevExeSpace(), host_pos);
+
+  auto &pi = prtcl_idata;
+  auto &pr = prtcl_rdata;
+  Real unit_time = pmy_pack->punit->time_cgs();
+
+  // Initialize particles
+  par_for("star_par", DevExeSpace(), 0, nprtcl_thispack-1,
+  KOKKOS_LAMBDA(const int p) {
+    int m = static_cast<int>(pos_data(8, p));
+    pi(PGID,p) = gids + m;
+    pi(NSN,p) = 0;  // track number of SNe for star particle
+    pr(IPX,p)  = pos_data(0, p);
+    pr(IPY,p)  = pos_data(1, p);
+    pr(IPZ,p)  = pos_data(2, p);
+    pr(IPVX,p) = pos_data(3, p);
+    pr(IPVY,p) = pos_data(4, p);
+    pr(IPVZ,p) = pos_data(5, p);
+    pr(IPT_CREATE, p) = pos_data(6, p);  // creation time of star particle
+    pr(IPMASS, p)     = pos_data(7, p);  // mass of star particle
+    pr(IPT_NEXT_SN,p) = GetNthSNTime(pr(IPMASS,p), pr(IPT_CREATE,p), unit_time, 0);
+  });
+
+  dtnew = std::min(size.h_view(0).dx1, size.h_view(0).dx2);
+  dtnew = std::min(dtnew, size.h_view(0).dx3);
 }
 
 //----------------------------------------------------------------------------------------
