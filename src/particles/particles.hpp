@@ -113,6 +113,7 @@ public:
 
   // Cosmic ray specific methods
   void InitializeCosmicRays(ParameterInput *pin);
+  void InitializeStars(ParameterInput *pin);
   TaskStatus PushDrift(Driver *pdriver, int stage);
   TaskStatus PushCosmicRays(Driver *pdriver, int stage);
   TaskStatus PushStars(Driver *pdriver, int stage);

@@ -36,9 +36,6 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
 
-  // initialize vector for star particles
-  std::vector<std::array<Real, 9>> particle_list;
-
   // select particle type
   {
     std::string ptype = pin->GetString("particles","particle_type");
@@ -58,49 +55,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     } else if (ptype.compare("star") == 0) {
 
       particle_type = ParticleType::star;
-      nprtcl_thispack = 0; // initialize to zero
-
-      // Load particles from file
-      std::string particle_file = pin->GetString("particles","star_particle_file");
-      std::ifstream infile(particle_file);
-      if (!infile) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Unable to open particle file: " << particle_file
-                  << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-
-      // Read particle positions from file
-      int nmb = pmy_pack->nmb_thispack;
-      auto &size = pmy_pack->pmb->mb_size;
-
-      // Skip header comments
-      while (infile.peek() == '#') {
-        infile.ignore(1000, '\n');
-      }
-
-      std::array<Real, 8> p;
-      while (infile >> p[0] >> p[1] >> p[2] >> p[3] >>
-		       p[4] >> p[5] >> p[6] >> p[7]) {
-        for (int m=0; m<nmb; ++m) {
-          // Loop over particles to see which are in this meshblock
-          if (p[0] > size.h_view(m).x1min && p[0] <= size.h_view(m).x1max &&
-              p[1] > size.h_view(m).x2min && p[1] <= size.h_view(m).x2max &&
-              p[2] > size.h_view(m).x3min && p[2] <= size.h_view(m).x3max) {
-            // Add particle to the list if it is within the mesh block bounds
-            std::array<Real, 9> new_particle = {p[0], p[1], p[2], 
-		                                p[3], p[4], p[5], 
-						p[6], p[7], static_cast<Real>(m)};
-            particle_list.push_back(new_particle);
-          }
-        }
-      }
-      infile.close();
-      nprtcl_thispack = particle_list.size(); 
-
-      // Print number of particles loaded
-      std::cout << "Loaded " << nprtcl_thispack
-	        << " star particles from file " << particle_file << std::endl;
+      nprtcl_thispack = 0;
 
     } else if (ptype.compare("lagrangian_mc") == 0) {
       particle_type = ParticleType::lagrangian_mc;
@@ -226,50 +181,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   if (particle_type == ParticleType::cosmic_ray) {
     InitializeCosmicRays(pin);
   } else if (particle_type == ParticleType::star) {
-      // Loop over mesh blocks in this pack
-      int nmb = pmy_pack->nmb_thispack;
-      auto &size = pmy_pack->pmb->mb_size;
-      const int &gids = pmy_pack->gids;
-      
-      // Copy to device-accessible arrays
-      // First create and populate a host view
-      HostArray2D<Real> host_pos("host_positions", 9, nprtcl_thispack);
-      for (size_t i = 0; i < nprtcl_thispack; ++i) {
-	for (size_t j = 0; j < 9; ++j) {
-          host_pos(j, i) = particle_list[i][j];
-	}
-      }
-
-      // Then create the device view and copy data
-      auto pos_data = Kokkos::create_mirror_view_and_copy(DevExeSpace(), host_pos);
-
-      auto &pi = prtcl_idata;
-      auto &pr = prtcl_rdata;
-      Real unit_time = pmy_pack->punit->time_cgs();
-
-      // Initialize particles
-      par_for("star_par", DevExeSpace(), 0, nprtcl_thispack-1,
-      KOKKOS_LAMBDA(const int p) {   
-        int m = static_cast<int>(pos_data(8, p));  
-        pi(PGID,p) = gids + m;
-        pi(NSN,p) = 0; // track number of SNe for star particle
-        pr(IPX,p)  = pos_data(0, p);
-        pr(IPY,p)  = pos_data(1, p);
-        pr(IPZ,p)  = pos_data(2, p);
-        pr(IPVX,p) = pos_data(3, p);
-        pr(IPVY,p) = pos_data(4, p);
-        pr(IPVZ,p) = pos_data(5, p);
-        pr(IPT_CREATE, p) = pos_data(6, p); // creation time of star particle
-        pr(IPMASS, p)     = pos_data(7, p); // mass of star particle
-        pr(IPT_NEXT_SN,p) = GetNthSNTime(pr(IPMASS,p), pr(IPT_CREATE,p), unit_time, 0);
-
-        // Print particle initialization
-        // Kokkos::printf("Initialized star particle %d in GID %d at position (%.2f, %.2f, %.2f)\n",
-        //          p, gids + m, pos_data(0, p), pos_data(1, p), pos_data(2, p));
-      });
-    
-      dtnew = std::min(size.h_view(0).dx1, size.h_view(0).dx2);
-      dtnew = std::min(dtnew, size.h_view(0).dx3);
+    InitializeStars(pin);
   }
 }
 
@@ -399,6 +311,91 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
   if (indcs.nx3 > 1) {
     dtnew = std::min(dtnew, dx.dx3);
   }
+}
+
+//----------------------------------------------------------------------------------------
+// InitializeStars()
+// Initializes star particles by reading from file
+
+void Particles::InitializeStars(ParameterInput *pin) {
+  // Load particles from file
+  std::string particle_file = pin->GetString("particles","star_particle_file");
+  std::ifstream infile(particle_file);
+  if (!infile) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Unable to open particle file: " << particle_file
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  // Read particle positions from file
+  int nmb = pmy_pack->nmb_thispack;
+  auto &size = pmy_pack->pmb->mb_size;
+
+  // Skip header comments
+  while (infile.peek() == '#') {
+    infile.ignore(1000, '\n');
+  }
+
+  // Build particle list for particles in this pack's meshblocks
+  std::vector<std::array<Real, 9>> particle_list;
+  std::array<Real, 8> p;
+  while (infile >> p[0] >> p[1] >> p[2] >> p[3] >>
+                   p[4] >> p[5] >> p[6] >> p[7]) {
+    for (int m=0; m<nmb; ++m) {
+      if (p[0] > size.h_view(m).x1min && p[0] <= size.h_view(m).x1max &&
+          p[1] > size.h_view(m).x2min && p[1] <= size.h_view(m).x2max &&
+          p[2] > size.h_view(m).x3min && p[2] <= size.h_view(m).x3max) {
+        std::array<Real, 9> new_particle = {p[0], p[1], p[2],
+                                            p[3], p[4], p[5],
+                                            p[6], p[7], static_cast<Real>(m)};
+        particle_list.push_back(new_particle);
+      }
+    }
+  }
+  infile.close();
+
+  // Set particle count and allocate arrays
+  nprtcl_thispack = particle_list.size();
+  Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
+  Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
+
+  std::cout << "Loaded " << nprtcl_thispack
+            << " star particles from file " << particle_file << std::endl;
+
+  // Copy to device-accessible arrays
+  HostArray2D<Real> host_pos("host_positions", 9, nprtcl_thispack);
+  for (size_t i = 0; i < nprtcl_thispack; ++i) {
+    for (size_t j = 0; j < 9; ++j) {
+      host_pos(j, i) = particle_list[i][j];
+    }
+  }
+  auto pos_data = Kokkos::create_mirror_view_and_copy(DevExeSpace(), host_pos);
+
+  const int &gids = pmy_pack->gids;
+  auto &pi = prtcl_idata;
+  auto &pr = prtcl_rdata;
+  Real unit_time = pmy_pack->punit->time_cgs();
+
+  // Initialize particles on device
+  par_for("star_par", DevExeSpace(), 0, nprtcl_thispack-1,
+  KOKKOS_LAMBDA(const int p) {
+    int m = static_cast<int>(pos_data(8, p));
+    pi(PGID,p) = gids + m;
+    pi(NSN,p) = 0;
+    pr(IPX,p)  = pos_data(0, p);
+    pr(IPY,p)  = pos_data(1, p);
+    pr(IPZ,p)  = pos_data(2, p);
+    pr(IPVX,p) = pos_data(3, p);
+    pr(IPVY,p) = pos_data(4, p);
+    pr(IPVZ,p) = pos_data(5, p);
+    pr(IPT_CREATE, p) = pos_data(6, p);
+    pr(IPMASS, p)     = pos_data(7, p);
+    pr(IPT_NEXT_SN,p) = GetNthSNTime(pr(IPMASS,p), pr(IPT_CREATE,p), unit_time, 0);
+  });
+
+  dtnew = std::min(size.h_view(0).dx1, size.h_view(0).dx2);
+  dtnew = std::min(dtnew, size.h_view(0).dx3);
 }
 
 //----------------------------------------------------------------------------------------
