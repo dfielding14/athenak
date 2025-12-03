@@ -80,12 +80,12 @@ class TurbulenceDriver {
   TaskStatus AddForcing(Driver *pdrive, int stage);
   void Initialize();
   void ApplyImpulse(Real kick_dt);
-  
+  void ApplyForcingWithStep(Real bdt);
+
   // Update the MeshBlockPack pointer after AMR
   void UpdateMeshBlockPack(MeshBlockPack *new_pp) { pmy_pack = new_pp; }
 
  private:
-  void ApplyForcingWithStep(Real bdt);
   MeshBlockPack *pmy_pack;  // ptr to MeshBlockPack containing this TurbulenceDriver
   const std::string block_name_;
 };
