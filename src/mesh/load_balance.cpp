@@ -1201,7 +1201,6 @@ void MeshRefinement::UnpackAMRBuffersParticles() {
     auto &irecvbuf = prtcl_irecvbuf;
     int nprtcl_send_ = nprtcl_send;
     auto &sendlist_ = prtcl_sendlist;
-    auto &gid_start = pmy_mesh->pmb_pack->gids;
 
     par_for("amr_punpack",DevExeSpace(),0,(nprtcl_recv-1), KOKKOS_LAMBDA(const int n) {
       int p;
@@ -1347,7 +1346,6 @@ void MeshRefinement::CreateParticleLists() {
 
   nprtcl_send = 0;
 
-  auto &pr = ppart->prtcl_rdata;
   auto &pi = ppart->prtcl_idata;
   int npart = ppart->nprtcl_thispack;
   int myrank = global_variable::my_rank;

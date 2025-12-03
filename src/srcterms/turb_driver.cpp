@@ -270,7 +270,6 @@ TurbulenceDriver::~TurbulenceDriver() {
 //  \brief Function to initialize the driver
 
 void TurbulenceDriver::Initialize() {
-  Mesh *pm = pmy_pack->pmesh;
   int nmb = pmy_pack->nmb_thispack;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
@@ -520,7 +519,6 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 
   int nlow_sqr = SQR(nlow);
   int nhigh_sqr = SQR(nhigh);
-  auto mode_count_ = mode_count;
 
   auto mode_amp_real_ = mode_amp_real;
   auto mode_amp_imag_ = mode_amp_imag;
@@ -1026,8 +1024,6 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
   int &nx2 = indcs.nx2;
   int &nx3 = indcs.nx3;
 
-
-  Real dt = pm->dt;
   Real current_time=pm->time;
   Real t_since_start = current_time - tdriv_start;
 

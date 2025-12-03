@@ -1594,7 +1594,6 @@ void FrameTracking(Mesh *pm) {
 
   Real ft_uppzlim = ptrml->ft_uppzlim; // Maximum allowed z-value of frame tracked gas (used when ft_use_uppzlim is true)
   Real ft_lowzlim = ptrml->ft_lowzlim; // Minimum allowed z-value of frame tracked gas (used when ft_use_lowzlim is true)
-  Real mean_z_frame_tracking = ptrml->z_interface; // We'll try to keep the interface near the initial value
   Real max_vz_frame_tracking = ptrml->max_vz_frame_tracking; // Maximum velocity that we impart to the domain during frame-tracking
 
   auto &u0 = (is_mhd) ? pmbp->pmhd->u0 : pmbp->phydro->u0;
@@ -1608,15 +1607,13 @@ void FrameTracking(Mesh *pm) {
     int i = (idx - m*nkji - k*nji - j*nx1) + is;
     k += ks;
     j += js;
-    Real dens=1.0, temp = 1.0, eint = 1.0;
+    Real dens=1.0, temp = 1.0;
     dens = w0(m,IDN,k,j,i);
     Real dvol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
     if (use_e) {
       temp = w0(m,IEN,k,j,i)/dens*gm1;
-      eint = w0(m,IEN,k,j,i);
     } else {
       temp = w0(m,ITM,k,j,i);
-      eint = w0(m,ITM,k,j,i)*dens/gm1;
     }
 
     Real &x3min = size.d_view(m).x3min;
@@ -1847,7 +1844,7 @@ void Diagnostic(Mesh *pm) {
   auto *pcond = (is_mhd) ? pmbp->pmhd->pcond : pmbp->phydro->pcond;
   Real dt_cond = FLT_MAX;
   if (pcond != nullptr) {
-    Real dt_cond = (is_mhd) ? pmbp->pmhd->pcond->dtnew : pmbp->phydro->pcond->dtnew;
+    dt_cond = (is_mhd) ? pmbp->pmhd->pcond->dtnew : pmbp->phydro->pcond->dtnew;
   }
   Real dt_src  = FLT_MAX;
   auto *psrc = (is_mhd) ? pmbp->pmhd->psrc : pmbp->phydro->psrc;

@@ -96,7 +96,6 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
  
   if (cgm_cooling) {
     auto &size = pmy_pack->pmb->mb_size;
-    int nmb1 = pmy_pack->nmb_thispack - 1;
 
     Real use_e = eos_data.use_e;
     Real gamma = eos_data.gamma;

@@ -577,7 +577,6 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   hydro::Hydro* phydro = pm->pmb_pack->phydro;
   mhd::MHD* pmhd = pm->pmb_pack->pmhd;
   z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
-  auto ppart = pm->pmb_pack->ppart;
   // derefine (if needed)
   if (ndel > 0) {
     if (phydro != nullptr) {
@@ -1514,8 +1513,7 @@ void MeshRefinement::RefineParticles() {
   if (pmbp->ppart == nullptr) {
     return;
   }
-  
-  int nmb = pmbp->nmb_thispack;
+
   auto &mbsize = pmbp->pmb->mb_size;
   auto gids = pmbp->gids;
   auto *ppart = pmbp->ppart;

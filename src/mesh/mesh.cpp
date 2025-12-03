@@ -669,7 +669,6 @@ void Mesh::AddCoordinatesAndPhysics(ParameterInput *pinput) {
 
 void Mesh::CountParticles() {
   // Determine total number of particles across all ranks
-  particles::Particles *ppart = pmb_pack->ppart;
   nprtcl_thisrank = 0.0;
   for (int n=0; n<nmb_packs_thisrank; ++n) {
     nprtcl_thisrank += pmb_pack->ppart->nprtcl_thispack;
