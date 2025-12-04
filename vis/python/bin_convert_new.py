@@ -315,12 +315,16 @@ def _find_rank_files(rank0_filename: str) -> List[str]:
     )
     rank_files = sorted(glob.glob(pattern))
 
-    # Filter out smaller files (e.g., slice outputs with single_file_per_rank=True)
+    # Filter out empty files (e.g., slice outputs where rank has no intersecting meshblocks)
+    # We check if files have any meshblock data by comparing to a minimum header size
+    # A file with just headers and no meshblocks will be small (~few KB)
+    MIN_DATA_SIZE = 1024  # Files smaller than this likely have no meshblock data
     file_sizes = np.array([os.path.getsize(f) for f in rank_files])
-    if len(np.unique(file_sizes)) > 1:
-        print("Warning: Files are not the same size! Filtering to largest files only.")
-        max_size = file_sizes.max()
-        rank_files = [f for f, s in zip(rank_files, file_sizes) if s == max_size]
+    small_files = file_sizes < MIN_DATA_SIZE
+    if np.any(small_files) and not np.all(small_files):
+        n_filtered = np.sum(small_files)
+        rank_files = [f for f, is_small in zip(rank_files, small_files) if not is_small]
+        print(f"Note: Filtered out {n_filtered} empty rank file(s) (slice output with no data)")
 
     return rank_files
 
