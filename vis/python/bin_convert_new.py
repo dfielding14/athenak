@@ -524,9 +524,6 @@ def _organize_as_athdf(
         for q in quantities:
             data[q].fill(0.0)
 
-    if not subsample and not fast_restrict and max_level > level:
-        restricted_data = np.zeros((lx3, lx2, lx1), dtype=bool)
-
     # Process each MeshBlock
     for block_num in range(filedata['n_mbs']):
         block_level = levels[block_num]
@@ -577,6 +574,8 @@ def _organize_as_athdf(
 
         else:
             # Restriction case: block is finer than requested level
+            # By default, skip finer blocks (matches original behavior).
+            # Use subsample=True or fast_restrict=True to include them.
             if subsample:
                 # Simple subsampling: take every s-th cell
                 s = 2 ** (block_level - level)
@@ -655,112 +654,7 @@ def _organize_as_athdf(
 
                     if return_levels:
                         data['Levels'][kl_d:ku_d, jl_d:ju_d, il_d:iu_d] = block_level
-
-            else:
-                # Volume-weighted restriction (most accurate)
-                s = 2 ** (block_level - level)
-                loc1_coarse = block_location[0] // s
-                loc2_coarse = block_location[1] // s
-                loc3_coarse = block_location[2] // s
-
-                il_d = loc1_coarse * block_size[0] if nx1 > 1 else 0
-                jl_d = loc2_coarse * block_size[1] if nx2 > 1 else 0
-                kl_d = loc3_coarse * block_size[2] if nx3 > 1 else 0
-                iu_d = il_d + block_size[0] if nx1 > 1 else 1
-                ju_d = jl_d + block_size[1] if nx2 > 1 else 1
-                ku_d = kl_d + block_size[2] if nx3 > 1 else 1
-
-                # Mark this coarse block as having restricted data
-                if lx1 > 0 and lx2 > 0 and lx3 > 0:
-                    restricted_data[loc3_coarse, loc2_coarse, loc1_coarse] = True
-
-                # Compute fine cell indices within this coarse block
-                sub_loc1 = block_location[0] % s
-                sub_loc2 = block_location[1] % s
-                sub_loc3 = block_location[2] % s
-
-                for q in quantities:
-                    block_data = filedata['mb_data'][q][block_num]
-                    nk_fine, nj_fine, ni_fine = block_data.shape
-
-                    # For each fine cell, add volume-weighted contribution
-                    for kf in range(nk_fine):
-                        kc = kl_d + (sub_loc3 * nk_fine + kf) // s
-                        if kc < k_min or kc >= k_max:
-                            continue
-                        kc_out = kc - k_min
-
-                        for jf in range(nj_fine):
-                            jc = jl_d + (sub_loc2 * nj_fine + jf) // s
-                            if jc < j_min or jc >= j_max:
-                                continue
-                            jc_out = jc - j_min
-
-                            for if_ in range(ni_fine):
-                                ic = il_d + (sub_loc1 * ni_fine + if_) // s
-                                if ic < i_min or ic >= i_max:
-                                    continue
-                                ic_out = ic - i_min
-
-                                # Get fine cell bounds
-                                dx1 = (data['x1f'][ic + 1] - data['x1f'][ic]) / s
-                                dx2 = (data['x2f'][jc + 1] - data['x2f'][jc]) / s
-                                dx3 = (data['x3f'][kc + 1] - data['x3f'][kc]) / s
-
-                                x1m = data['x1f'][ic] + (sub_loc1 * ni_fine + if_) % s * dx1
-                                x1p = x1m + dx1
-                                x2m = data['x2f'][jc] + (sub_loc2 * nj_fine + jf) % s * dx2
-                                x2p = x2m + dx2
-                                x3m = data['x3f'][kc] + (sub_loc3 * nk_fine + kf) % s * dx3
-                                x3p = x3m + dx3
-
-                                vol = vol_func(x1m, x1p, x2m, x2p, x3m, x3p)
-                                data[q][kc_out, jc_out, ic_out] += \
-                                    block_data[kf, jf, if_] * vol
-
-                if return_levels:
-                    for kc in range(kl_d, iu_d):
-                        if kc < k_min or kc >= k_max:
-                            continue
-                        for jc in range(jl_d, ju_d):
-                            if jc < j_min or jc >= j_max:
-                                continue
-                            for ic in range(il_d, iu_d):
-                                if ic < i_min or ic >= i_max:
-                                    continue
-                                data['Levels'][kc - k_min, jc - j_min, ic - i_min] = level
-
-    # Finalize volume-weighted restriction by dividing out volumes
-    if level < max_level and not subsample and not fast_restrict:
-        for loc3 in range(lx3):
-            for loc2 in range(lx2):
-                for loc1 in range(lx1):
-                    if restricted_data[loc3, loc2, loc1]:
-                        il = loc1 * block_size[0]
-                        jl = loc2 * block_size[1]
-                        kl = loc3 * block_size[2]
-                        iu = il + block_size[0]
-                        ju = jl + block_size[1]
-                        ku = kl + block_size[2]
-                        il = max(il, i_min) - i_min
-                        jl = max(jl, j_min) - j_min
-                        kl = max(kl, k_min) - k_min
-                        iu = min(iu, i_max) - i_min
-                        ju = min(ju, j_max) - j_min
-                        ku = min(ku, k_max) - k_min
-
-                        # Vectorized volume calculation
-                        x1m = data['x1f'][il:iu][None, None, :]
-                        x1p = data['x1f'][il + 1:iu + 1][None, None, :]
-                        x2m = data['x2f'][jl:ju][None, :, None]
-                        x2p = data['x2f'][jl + 1:ju + 1][None, :, None]
-                        x3m = data['x3f'][kl:ku][:, None, None]
-                        x3p = data['x3f'][kl + 1:ku + 1][:, None, None]
-
-                        vol = vol_func(x1m, x1p, x2m, x2p, x3m, x3p)
-
-                        for q in quantities:
-                            data[q][kl:ku, jl:ju, il:iu] /= vol
+            # else: skip finer blocks (default behavior)
 
     # Add metadata
     data['Time'] = filedata['time']
