@@ -70,6 +70,7 @@ PDFOutput::PDFOutput(ParameterInput *pin, Mesh *pm, OutputParameters op) :
 void PDFOutput::LoadOutputData(Mesh *pm) {
   // Compute derived variables for all PDF dimensions
   if (out_params.contains_derived) {
+    out_params.i_derived = 0;
     for (int d = 0; d < out_params.pdf_ndim; ++d) {
       ComputeDerivedVariable(out_params.pdf_variables[d], pm);
     }

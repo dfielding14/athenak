@@ -289,7 +289,8 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     if (variable.compare("temperature") == 0) {
       out_params.contains_derived = true;
       out_params.n_derived += 1;
-      outvars.emplace_back("temperature",0,&(derived_var));
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("temperature",i_derived,&(derived_var));
     }
 
     // hydro v moments
@@ -573,15 +574,16 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       pm->pmb_pack->pmhd->SetSaveWBcc();
       out_params.contains_derived = true;
       out_params.n_derived += 1;
-      outvars.emplace_back("curv_alt",0,&(derived_var));
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("curv_alt",i_derived,&(derived_var));
     }
 
     // mhd v-B moments
     if (variable.compare("mhd_v_B_moments") == 0) {
       pm->pmb_pack->pmhd->SetSaveWBcc();
       out_params.contains_derived = true;
-      out_params.n_derived += 12;
-      for (int i=0; i<12; ++i) {
+      out_params.n_derived += 8;
+      for (int i=0; i<8; ++i) {
         std::string variable_name;
         variable_name.assign("v_B_moment_");
         variable_name.append(std::to_string(i+1));
@@ -605,8 +607,8 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     // Hydro SGS tensor
     if (variable.compare("hydro_sgs") == 0) {
       out_params.contains_derived = true;
-      // emplace all 23 components of the SGS tensor
-      for (int i=0; i<23; ++i) {
+      // emplace all 14 components of the SGS tensor
+      for (int i=0; i<14; ++i) {
           std::string variable_name;
           variable_name.assign("hydro_sgs_");
           variable_name.append(std::to_string(i+1));
@@ -618,8 +620,8 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     // Mhd SGS tensor
     if (variable.compare("mhd_sgs") == 0) {
       out_params.contains_derived = true;
-      // emplace all 59 components of the SGS tensor
-      for (int i=0; i<59; ++i) {
+      // emplace all 35 components of the SGS tensor
+      for (int i=0; i<35; ++i) {
           std::string variable_name;
           variable_name.assign("mhd_sgs_");
           variable_name.append(std::to_string(i+1));
@@ -741,7 +743,9 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
   // particle density binned to mesh
   if (out_params.variable.compare("prtcl_d") == 0) {
     out_params.contains_derived = true;
-    outvars.emplace_back("pdens",0,&(derived_var));
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("pdens",i_derived,&(derived_var));
   }
 
   // Coordinate variables for PDF binning (Cartesian)

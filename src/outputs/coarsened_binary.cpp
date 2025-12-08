@@ -167,6 +167,7 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
 
   // Calculate derived variables, if required
   if (out_params.contains_derived) {
+    out_params.i_derived = 0;
     ComputeDerivedVariable(out_params.variable, pm);
   }
 

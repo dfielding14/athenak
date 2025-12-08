@@ -705,7 +705,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
 // get all moments terms for |v| and |B|
   if (name.compare("mhd_v_B_moments") == 0) {
     int n_moments = 8;
-    Kokkos::realloc(derived_var, n_moments, 1, n3, n2, n1);
+    Kokkos::realloc(derived_var, nmb, n_moments, n3, n2, n1);
     auto dv = derived_var;
     auto &w0_ = pm->pmb_pack->pmhd->w0;
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
