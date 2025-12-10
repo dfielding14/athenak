@@ -1,0 +1,65 @@
+# Visualization test: Turbulent scalar advection
+# 64^3 domain, frozen velocity, scalar_only mode
+
+<comment>
+problem   = turbulent scalar visualization
+reference = autonomous scalar implementation
+
+<job>
+problem_id = turb_scalar_vis
+basename   = turb_scalar
+
+<time>
+evolution  = dynamic
+cfl_number = 0.4
+tlim       = 2.0
+nlim       = -1
+
+<mesh>
+nghost = 2
+nx1    = 64
+x1min  = 0.0
+x1max  = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2    = 64
+x2min  = 0.0
+x2max  = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3    = 64
+x3min  = 0.0
+x3max  = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 64
+nx2 = 64
+nx3 = 64
+
+<hydro>
+eos             = ideal
+gamma           = 1.6666666666667
+reconstruct     = plm
+rsolver         = hllc
+nscalars        = 1
+scalar_only     = true
+
+<problem>
+rho0           = 1.0
+temp0          = 1.0
+turb_vel_init  = true
+turb_v_rms     = 1.0
+turb_nlow      = 1
+turb_nhigh     = 32
+turb_expo      = 1.6666667
+turb_sol_frac  = 1.0
+turb_rseed     = 12345
+
+<output1>
+file_type  = bin
+variable   = hydro_w
+dt         = 0.5

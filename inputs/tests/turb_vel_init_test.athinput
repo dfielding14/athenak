@@ -1,0 +1,65 @@
+# Test input for turbulent velocity initialization
+# Tests power-law spectrum with scalar_only mode
+
+<comment>
+problem   = turbulent velocity initialization test
+reference = autonomous scalar implementation Phase 3
+
+<job>
+problem_id = turb_vel_test
+basename   = turb_vel
+
+<time>
+evolution  = dynamic
+cfl_number = 0.4
+tlim       = 0.1
+nlim       = 5
+
+<mesh>
+nghost = 2
+nx1    = 32
+x1min  = 0.0
+x1max  = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2    = 32
+x2min  = 0.0
+x2max  = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3    = 32
+x3min  = 0.0
+x3max  = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 32
+nx2 = 32
+nx3 = 32
+
+<hydro>
+eos             = ideal
+gamma           = 1.6666666666667
+reconstruct     = plm
+rsolver         = hllc
+nscalars        = 1
+scalar_only     = true
+
+<problem>
+rho0           = 1.0
+temp0          = 1.0
+turb_vel_init  = true
+turb_v_rms     = 1.0
+turb_nlow      = 1
+turb_nhigh     = 4
+turb_expo      = 1.6666667
+turb_sol_frac  = 1.0
+turb_rseed     = 12345
+
+<output1>
+file_type  = bin
+variable   = hydro_w
+dt         = 0.05

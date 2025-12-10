@@ -51,7 +51,9 @@ TaskStatus Hydro::NewTimeStep(Driver *pdrive, int stage) {
   const int nkji = nx3*nx2*nx1;
   const int nji  = nx2*nx1;
 
-  if (pdrive->time_evolution == TimeEvolution::kinematic) {
+  // Use velocity-only CFL when kinematic evolution or scalar_only mode
+  // (sound speed irrelevant when hydro vars are frozen)
+  if (pdrive->time_evolution == TimeEvolution::kinematic || scalar_only) {
     // find smallest (dx/v) in each direction for advection problems
     Kokkos::parallel_reduce("HydroNudt1",Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
     KOKKOS_LAMBDA(const int &idx, Real &min_dt1, Real &min_dt2, Real &min_dt3) {

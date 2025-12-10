@@ -70,6 +70,7 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // (2) Initialize scalars, diffusion, source terms
   nscalars = pin->GetOrAddInteger("hydro","nscalars",0);
+  scalar_only = pin->GetOrAddBoolean("hydro","scalar_only",false);
 
   // Viscosity (if requested in input file)
   if (pin->DoesParameterExist("hydro","viscosity")) {

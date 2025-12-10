@@ -3,14 +3,13 @@
 // Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
-//! \file turbulent_box.cpp
-//  \brief Problem generator for a turbulent box with optional frozen velocity field
+//! \file scalar_mixing.cpp
+//  \brief Problem generator for scalar mixing in frozen turbulent velocity field
 //
-//  Supports two velocity initialization modes:
-//  1. Uniform velocity: vx0, vy0, vz0 parameters
-//  2. Turbulent velocity: Power-law spectrum E(k) ~ k^{-expo} with random phases
+//  Single passive scalar with mean gradient forcing: ds/dt = G * v_x
+//  This simulates mixing of a background scalar gradient by turbulence.
 //
-//  When scalar_only=true in <hydro>, velocity is frozen and only scalars evolve.
+//  When scalar_only=true in <hydro>, velocity is frozen and only the scalar evolves.
 
 #include <iostream>
 #include <cmath>
@@ -22,7 +21,6 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
-#include "mhd/mhd.hpp"
 #include "pgen.hpp"
 #include "globals.hpp"
 #include "utils/random.hpp"
@@ -33,27 +31,17 @@
 #include <mpi.h>
 #endif
 
-void UserSource(Mesh* pm, const Real bdt);
+// Function declarations
+void MeanGradientForcing(Mesh* pm, const Real bdt);
+
+// Store mean gradient parameter (read in ProblemGenerator, used in source term)
+namespace {
+  Real mean_gradient_G = 1.0;
+}
 
 //----------------------------------------------------------------------------------------
 //! \fn InitTurbulentVelocity
 //  \brief Initialize a turbulent velocity field with specified power-law spectrum.
-//
-//  Parameters (read from <problem> block):
-//    turb_v_rms      - target velocity dispersion (default 1.0)
-//    turb_nlow       - minimum wavenumber index (default 1)
-//    turb_nhigh      - maximum wavenumber index (default 4)
-//    turb_expo       - power-law exponent for E(k)~k^{-expo} (default 5/3)
-//    turb_sol_frac   - solenoidal fraction, 1.0 = divergence-free (default 1.0)
-//    turb_rseed      - random seed for reproducibility (default 12345)
-//
-//  Algorithm:
-//    1. Generate Fourier modes with k in [nlow, nhigh]
-//    2. Set amplitude |û(k)| ~ k^{-(expo+2)/2} so E(k) ~ k^{-expo}
-//    3. Apply solenoidal projection if sol_frac > 0
-//    4. Sum modes to real-space velocity
-//    5. Subtract mean momentum (MPI-safe)
-//    6. Scale to target v_rms
 
 void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
   Mesh *pm = pmbp->pmesh;
@@ -89,7 +77,6 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
   int nhigh_sqr = nhigh*nhigh;
   int mode_count = 0;
 
-  // First pass: count modes
   for (int nkx = 0; nkx <= nhigh; nkx++) {
     for (int nky = (multi_d ? -nhigh : 0); nky <= (multi_d ? nhigh : 0); nky++) {
       for (int nkz = (three_d ? -nhigh : 0); nkz <= (three_d ? nhigh : 0); nkz++) {
@@ -116,16 +103,15 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
   }
 
   // Allocate arrays for Fourier coefficients
-  // aka[dir][mode] = real part, akb[dir][mode] = imaginary part
   std::vector<Real> kx_arr(mode_count), ky_arr(mode_count), kz_arr(mode_count);
   std::vector<Real> aka0(mode_count), aka1(mode_count), aka2(mode_count);
   std::vector<Real> akb0(mode_count), akb1(mode_count), akb2(mode_count);
 
   // Initialize RNG
   RNG_State rstate;
-  rstate.idum = -rseed;  // Negative to initialize
+  rstate.idum = -rseed;
 
-  // Second pass: generate mode amplitudes and phases
+  // Generate mode amplitudes and phases
   int nmode = 0;
   for (int nkx = 0; nkx <= nhigh; nkx++) {
     for (int nky = (multi_d ? -nhigh : 0); nky <= (multi_d ? nhigh : 0); nky++) {
@@ -143,7 +129,6 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
           kz_arr[nmode] = kz;
 
           // Amplitude scaling for E(k) ~ k^{-expo}
-          // |û(k)| ~ k^{-(expo+2)/2}
           Real norm = (kiso > 1e-16) ? 1.0/pow(kiso, (expo+2.0)/2.0) : 0.0;
 
           // Generate random Fourier coefficients
@@ -158,9 +143,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
             kb += k[dir] * a[dir];
           }
 
-          // Apply solenoidal/compressive decomposition
-          // Solenoidal: subtract gradient component
-          // Compressive: keep only gradient component
+          // Apply solenoidal projection
           Real kiso_sqr = kiso*kiso;
           for (int dir = 0; dir < 3; dir++) {
             Real diva = k[dir]*ka/kiso_sqr;
@@ -210,13 +193,11 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
   Kokkos::deep_copy(d_akb1, h_akb1);
   Kokkos::deep_copy(d_akb2, h_akb2);
 
-  // Get mesh size info and u0 array
   auto &size = pmbp->pmb->mb_size;
   auto &u0 = pmbp->phydro->u0;
   int mode_count_ = mode_count;
 
   // Compute velocity field by summing Fourier modes
-  // v(x) = sum_k [ a_k * cos(k.x) - b_k * sin(k.x) ]
   par_for("turb_vel_init", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
     Real &x1min = size.d_view(m).x1min;
@@ -237,13 +218,11 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
       Real cosk = cos(kdotx);
       Real sink = sin(kdotx);
 
-      // Real part: a*cos(k.x), Imaginary part: -b*sin(k.x)
       vx += d_aka0(n)*cosk - d_akb0(n)*sink;
       vy += d_aka1(n)*cosk - d_akb1(n)*sink;
       vz += d_aka2(n)*cosk - d_akb2(n)*sink;
     }
 
-    // Store as momentum (will normalize later)
     u0(m,IM1,k,j,i) = den * vx;
     u0(m,IM2,k,j,i) = den * vy;
     u0(m,IM3,k,j,i) = den * vz;
@@ -290,17 +269,14 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
   sum_vsqr = global_sums[4];
 #endif
 
-  // Mean velocity to subtract
   Real vmean1 = sum_mom1 / sum_mass;
   Real vmean2 = sum_mom2 / sum_mass;
   Real vmean3 = sum_mom3 / sum_mass;
 
-  // Current v_rms (after mean subtraction)
-  Real totvol = sum_mass / den;  // Assuming uniform density
+  Real totvol = sum_mass / den;
   Real current_vsqr = sum_vsqr / totvol - (vmean1*vmean1 + vmean2*vmean2 + vmean3*vmean3);
   Real current_vrms = sqrt(current_vsqr);
 
-  // Scale factor to achieve target v_rms
   Real scale = (current_vrms > 1e-16) ? v_rms / current_vrms : 0.0;
 
   if (global_variable::my_rank == 0) {
@@ -319,11 +295,11 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
 }
 
 //----------------------------------------------------------------------------------------
-//! \brief Problem Generator for turbulent box
+//! \brief Problem Generator for scalar mixing
 //
-//  Initializes density, velocity, and passive scalars.
-//  If turb_vel_init=true, generates turbulent velocity with specified spectrum.
-//  Otherwise uses uniform velocity (vx0, vy0, vz0).
+//  Initializes density, turbulent velocity, and a single passive scalar.
+//  Scalar is initialized to scalar_init (default 0.5) to allow symmetric fluctuations.
+//  Mean gradient forcing ds/dt = G*v_x is applied via UserSourceTerm.
 
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
@@ -333,8 +309,11 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   int nscalars = pmbp->phydro->nscalars;
   int nhydro = pmbp->phydro->nhydro;
 
-  // Enroll user functions
-  user_srcs_func = UserSource;
+  // Read mean gradient parameter
+  mean_gradient_G = pin->GetOrAddReal("problem", "mean_gradient", 1.0);
+
+  // Enroll user source term
+  user_srcs_func = MeanGradientForcing;
 
   if (restart) return;
 
@@ -344,20 +323,26 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   int &ks = indcs.ks; int &ke = indcs.ke;
   int nx1 = indcs.nx1, nx2 = indcs.nx2, nx3 = indcs.nx3;
 
-  // Initialize Hydro variables -------------------------------
   auto &u0 = pmbp->phydro->u0;
   EOS_Data &eos = pmbp->phydro->peos->eos_data;
   Real gm1 = eos.gamma - 1.0;
 
-  // Read initial conditions from input file
+  // Read initial conditions
   Real den = pin->GetOrAddReal("problem", "rho0", 1.0);
   Real temp = pin->GetOrAddReal("problem", "temp0", 1.0);
-  bool turb_vel_init = pin->GetOrAddBoolean("problem", "turb_vel_init", false);
+  Real scalar_init = pin->GetOrAddReal("problem", "scalar_init", 0.5);
 
   int nmb = pmbp->nmb_thispack;
 
-  // First, initialize density and energy (velocity set to zero initially)
-  par_for("pgen_turb_init", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
+  if (global_variable::my_rank == 0) {
+    std::cout << "Scalar mixing problem:" << std::endl
+              << "  mean_gradient G = " << mean_gradient_G << std::endl
+              << "  scalar_init = " << scalar_init << std::endl
+              << "  nscalars = " << nscalars << std::endl;
+  }
+
+  // Initialize density and energy
+  par_for("pgen_init", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
     u0(m,IDN,k,j,i) = den;
     u0(m,IM1,k,j,i) = 0.0;
@@ -366,110 +351,57 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     u0(m,IEN,k,j,i) = den * temp / gm1;
   });
 
-  // Initialize velocity field
-  if (turb_vel_init) {
-    // Turbulent velocity initialization
-    InitTurbulentVelocity(pmbp, pin, den);
+  // Initialize turbulent velocity field
+  InitTurbulentVelocity(pmbp, pin, den);
 
-    // Update energy with kinetic energy
-    par_for("pgen_turb_energy", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      Real ke = 0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
-                     SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
-      u0(m,IEN,k,j,i) += ke;
-    });
-  } else {
-    // Uniform velocity initialization
-    Real vx0 = pin->GetOrAddReal("problem", "vx0", 0.0);
-    Real vy0 = pin->GetOrAddReal("problem", "vy0", 0.0);
-    Real vz0 = pin->GetOrAddReal("problem", "vz0", 0.0);
-
-    par_for("pgen_turb_uniform", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      u0(m,IM1,k,j,i) = den * vx0;
-      u0(m,IM2,k,j,i) = den * vy0;
-      u0(m,IM3,k,j,i) = den * vz0;
-      u0(m,IEN,k,j,i) += 0.5*den*(vx0*vx0 + vy0*vy0 + vz0*vz0);
-    });
-  }
-
-  // Initialize passive scalars
-  Kokkos::Random_XorShift64_Pool<> rand_pool64(pmbp->gids);
-  par_for("pgen_turb_scalars", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
+  // Update energy with kinetic energy
+  par_for("pgen_energy", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    Real dye_conc = 0.501;
+    Real ke = 0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
+                   SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
+    u0(m,IEN,k,j,i) += ke;
+  });
 
-    auto rand_gen = rand_pool64.get_state();
-    Real r = 2.0*static_cast<Real>(rand_gen.frand()) - 1.0;
-    dye_conc += 0.05 * r;
-    rand_pool64.free_state(rand_gen);
-
-    Real rho = u0(m,IDN,k,j,i);
+  // Initialize passive scalar to offset value (allows symmetric fluctuations)
+  par_for("pgen_scalar", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(int m, int k, int j, int i) {
+    Real rho = u0(m, IDN, k, j, i);
     for (int ns = 0; ns < nscalars; ns++) {
-      u0(m, nhydro+ns, k, j, i) = dye_conc * rho;
+      u0(m, nhydro+ns, k, j, i) = rho * scalar_init;
     }
   });
 
   return;
 }
 
-KOKKOS_INLINE_FUNCTION
-Real heatStep(Real x, Real amplitude, Real dt) {
-  x = Kokkos::clamp(x, 0.0, 1.0);
-  Real rate = amplitude * -1.0 * sin(x*2*Kokkos::numbers::pi);
-  Real x_new = x + rate * dt;
-  if (x_new > 1.0) x_new = 1.0;
-  return x_new;
-}
+//----------------------------------------------------------------------------------------
+//! \fn MeanGradientForcing
+//  \brief Apply mean gradient forcing to passive scalar: ds/dt = G * v_x
+//
+//  This simulates the effect of a background mean scalar gradient in the x-direction.
+//  Turbulence mixes this gradient, creating scalar fluctuations correlated with velocity.
 
-void UserSource(Mesh* pm, const Real bdt) {
+void MeanGradientForcing(Mesh* pm, const Real bdt) {
   MeshBlockPack *pmbp = pm->pmb_pack;
   auto &indcs = pm->mb_indcs;
-  auto &size = pmbp->pmb->mb_size;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
   int ks = indcs.ks, ke = indcs.ke;
   int nmb1 = pmbp->nmb_thispack - 1;
   auto &u0 = pmbp->phydro->u0;
   auto &w0 = pmbp->phydro->w0;
-  int nscalars = pmbp->phydro->nscalars;
   int nhydro = pmbp->phydro->nhydro;
 
-  par_for("user_source", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+  Real G = mean_gradient_G;
+
+  par_for("mean_grad_forcing", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     Real density = w0(m, IDN, k, j, i);
-    Real scalar_conc_1 = w0(m, nhydro  , k, j, i);
-    Real scalar_conc_2 = w0(m, nhydro+1, k, j, i);
-    Real scalar_conc_3 = w0(m, nhydro+2, k, j, i);
-    Real scalar_conc_4 = w0(m, nhydro+3, k, j, i);
-
-    // Apply heating to first scalar
-    Real new_scalar_conc_1 = heatStep(scalar_conc_1, 0.25, bdt);
-    u0(m, nhydro  , k, j, i) += (new_scalar_conc_1 - scalar_conc_1) * density;
-
-    // Apply heating to second scalar
-    Real new_scalar_conc_2 = heatStep(scalar_conc_2, 0.5, bdt);
-    u0(m, nhydro+1, k, j, i) += (new_scalar_conc_2 - scalar_conc_2) * density;
-
-    // Apply heating to third scalar
-    Real new_scalar_conc_3 = heatStep(scalar_conc_3, 1.0, bdt);
-    u0(m, nhydro+2, k, j, i) += (new_scalar_conc_3 - scalar_conc_3) * density;
-
-    // Apply heating to fourth scalar
-    Real new_scalar_conc_4 = heatStep(scalar_conc_4, 2.0, bdt);
-    u0(m, nhydro+3, k, j, i) += (new_scalar_conc_4 - scalar_conc_4) * density;
-
-    // Apply Mean Gradient Forcing to fifth scalar
-    Real G = 0.5;
     Real vx = w0(m, IVX, k, j, i);
-    u0(m, nhydro+4, k, j, i) += vx * G * bdt;
 
-    // Clamp scalars to valid range
-    u0(m, nhydro  , k, j, i) = Kokkos::clamp(u0(m, nhydro  , k, j, i), 0.0, u0(m,IDN,k,j,i));
-    u0(m, nhydro+1, k, j, i) = Kokkos::clamp(u0(m, nhydro+1, k, j, i), 0.0, u0(m,IDN,k,j,i));
-    u0(m, nhydro+2, k, j, i) = Kokkos::clamp(u0(m, nhydro+2, k, j, i), 0.0, u0(m,IDN,k,j,i));
-    u0(m, nhydro+3, k, j, i) = Kokkos::clamp(u0(m, nhydro+3, k, j, i), 0.0, u0(m,IDN,k,j,i));
-    u0(m, nhydro+4, k, j, i) = Kokkos::clamp(u0(m, nhydro+4, k, j, i), 0.0, u0(m,IDN,k,j,i));
+    // Mean gradient forcing: ds/dt = G * v_x
+    // In conservative form: d(rho*s)/dt = rho * G * v_x
+    u0(m, nhydro, k, j, i) += density * G * vx * bdt;
   });
 
   return;
