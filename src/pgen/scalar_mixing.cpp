@@ -42,6 +42,14 @@ namespace {
 //----------------------------------------------------------------------------------------
 //! \fn InitTurbulentVelocity
 //  \brief Initialize a turbulent velocity field with specified power-law spectrum.
+//
+//  Uses importance sampling to efficiently represent the spectrum with limited modes:
+//  - Modes with |k| < k_crit are always kept (100% acceptance)
+//  - Modes with |k| >= k_crit are kept with probability P = (k_crit/|k|)^2
+//  - Kept modes are amplitude-boosted by 1/sqrt(P) to preserve spectral energy
+//
+//  For nkx=0 plane, only half the modes are included to avoid double-counting
+//  the conjugate pairs that arise from the cos/sin representation.
 
 void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
   Mesh *pm = pmbp->pmesh;
@@ -58,7 +66,8 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
   int nhigh = pin->GetOrAddInteger("problem", "turb_nhigh", 4);
   Real expo = pin->GetOrAddReal("problem", "turb_expo", 5.0/3.0);
   Real sol_frac = pin->GetOrAddReal("problem", "turb_sol_frac", 1.0);
-  int rseed = pin->GetOrAddInteger("problem", "turb_rseed", 12345);
+  int rseed = pin->GetOrAddInteger("problem", "turb_seed", 12345);
+  Real k_crit = pin->GetOrAddReal("problem", "turb_k_crit", 16.0);
 
   // Domain size for computing wavenumbers
   Real lx = pm->mesh_size.x1max - pm->mesh_size.x1min;
@@ -68,29 +77,75 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
   Real dky = (nx2 > 1) ? 2.0*M_PI/ly : 0.0;
   Real dkz = (nx3 > 1) ? 2.0*M_PI/lz : 0.0;
 
+  // Critical wavenumber magnitude for importance sampling transition
+  Real k_crit_mag = k_crit * dkx;  // Convert from mode number to wavenumber
+
   // Determine dimensionality
   bool multi_d = (nx2 > 1);
   bool three_d = (nx3 > 1);
 
-  // Count modes within [nlow, nhigh]
+  // Initialize RNG (before any random calls to ensure determinism)
+  RNG_State rstate;
+  rstate.idum = -rseed;
+
+  // Count modes within [nlow, nhigh] and determine which to keep via importance sampling
   int nlow_sqr = nlow*nlow;
   int nhigh_sqr = nhigh*nhigh;
-  int mode_count = 0;
+  int total_modes = 0;
+  int kept_modes = 0;
+
+  // First pass: count total modes (with kx=0 fix) and determine kept modes
+  // We need deterministic enumeration, so we pre-compute acceptance for all modes
+  std::vector<int> nkx_arr, nky_arr, nkz_arr;
+  std::vector<Real> prob_arr;  // Acceptance probability for spectral boosting
 
   for (int nkx = 0; nkx <= nhigh; nkx++) {
     for (int nky = (multi_d ? -nhigh : 0); nky <= (multi_d ? nhigh : 0); nky++) {
       for (int nkz = (three_d ? -nhigh : 0); nkz <= (three_d ? nhigh : 0); nkz++) {
+        // Skip zero mode
         if (nkx == 0 && nky == 0 && nkz == 0) continue;
+
+        // For nkx=0, skip conjugate half to avoid double-counting
+        // Keep only: (nky > 0) OR (nky == 0 AND nkz > 0)
+        if (nkx == 0) {
+          if (nky < 0) continue;
+          if (nky == 0 && nkz <= 0) continue;
+        }
+
         int nsqr = nkx*nkx + nky*nky + nkz*nkz;
-        if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr) {
-          mode_count++;
+        if (nsqr < nlow_sqr || nsqr > nhigh_sqr) continue;
+
+        total_modes++;
+
+        // Compute wavenumber magnitude
+        Real kx = dkx*nkx;
+        Real ky = dky*nky;
+        Real kz = dkz*nkz;
+        Real kiso = sqrt(kx*kx + ky*ky + kz*kz);
+
+        // Importance sampling: compute acceptance probability
+        Real P_accept;
+        if (kiso < k_crit_mag) {
+          P_accept = 1.0;  // Always keep low-k modes
+        } else {
+          P_accept = (k_crit_mag * k_crit_mag) / (kiso * kiso);  // P = (k_crit/|k|)^2
+        }
+
+        // Draw random number to decide acceptance
+        Real rand_val = RanSt(&rstate);
+        if (rand_val < P_accept) {
+          nkx_arr.push_back(nkx);
+          nky_arr.push_back(nky);
+          nkz_arr.push_back(nkz);
+          prob_arr.push_back(P_accept);
+          kept_modes++;
         }
       }
     }
   }
 
-  if (mode_count == 0) {
-    std::cout << "### WARNING: No turbulent modes in range [" << nlow << ", " << nhigh
+  if (kept_modes == 0) {
+    std::cout << "### WARNING: No turbulent modes kept in range [" << nlow << ", " << nhigh
               << "]. Using zero velocity." << std::endl;
     return;
   }
@@ -99,73 +154,72 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
     std::cout << "Initializing turbulent velocity field:" << std::endl
               << "  v_rms=" << v_rms << ", nlow=" << nlow << ", nhigh=" << nhigh
               << ", expo=" << expo << ", sol_frac=" << sol_frac << std::endl
-              << "  mode_count=" << mode_count << std::endl;
+              << "  k_crit=" << k_crit << " (wavenumber=" << k_crit_mag << ")" << std::endl
+              << "  total_modes_in_shell=" << total_modes
+              << ", kept_via_importance_sampling=" << kept_modes << std::endl;
   }
 
   // Allocate arrays for Fourier coefficients
-  std::vector<Real> kx_arr(mode_count), ky_arr(mode_count), kz_arr(mode_count);
-  std::vector<Real> aka0(mode_count), aka1(mode_count), aka2(mode_count);
-  std::vector<Real> akb0(mode_count), akb1(mode_count), akb2(mode_count);
+  std::vector<Real> kx_arr(kept_modes), ky_arr(kept_modes), kz_arr(kept_modes);
+  std::vector<Real> aka0(kept_modes), aka1(kept_modes), aka2(kept_modes);
+  std::vector<Real> akb0(kept_modes), akb1(kept_modes), akb2(kept_modes);
 
-  // Initialize RNG
-  RNG_State rstate;
-  rstate.idum = -rseed;
+  // Generate mode amplitudes with spectral boosting
+  for (int n = 0; n < kept_modes; n++) {
+    Real kx = dkx * nkx_arr[n];
+    Real ky = dky * nky_arr[n];
+    Real kz = dkz * nkz_arr[n];
+    Real kiso = sqrt(kx*kx + ky*ky + kz*kz);
 
-  // Generate mode amplitudes and phases
-  int nmode = 0;
-  for (int nkx = 0; nkx <= nhigh; nkx++) {
-    for (int nky = (multi_d ? -nhigh : 0); nky <= (multi_d ? nhigh : 0); nky++) {
-      for (int nkz = (three_d ? -nhigh : 0); nkz <= (three_d ? nhigh : 0); nkz++) {
-        if (nkx == 0 && nky == 0 && nkz == 0) continue;
-        int nsqr = nkx*nkx + nky*nky + nkz*nkz;
-        if (nsqr >= nlow_sqr && nsqr <= nhigh_sqr) {
-          Real kx = dkx*nkx;
-          Real ky = dky*nky;
-          Real kz = dkz*nkz;
-          Real kiso = sqrt(kx*kx + ky*ky + kz*kz);
+    kx_arr[n] = kx;
+    ky_arr[n] = ky;
+    kz_arr[n] = kz;
 
-          kx_arr[nmode] = kx;
-          ky_arr[nmode] = ky;
-          kz_arr[nmode] = kz;
+    // Amplitude scaling for E(k) ~ k^{-expo}
+    // The spectral energy density in a shell of radius k scales as k^{-expo}
+    // For random phases, amplitude ~ k^{-(expo+2)/2}
+    Real norm = (kiso > 1e-16) ? 1.0/pow(kiso, (expo+2.0)/2.0) : 0.0;
 
-          // Amplitude scaling for E(k) ~ k^{-expo}
-          Real norm = (kiso > 1e-16) ? 1.0/pow(kiso, (expo+2.0)/2.0) : 0.0;
+    // Spectral boosting: compensate for subsampling by 1/sqrt(P)
+    // This preserves the expected spectral energy
+    Real boost = 1.0 / sqrt(prob_arr[n]);
+    norm *= boost;
 
-          // Generate random Fourier coefficients
-          Real k[3] = {kx, ky, kz};
-          Real a[3], b[3];
-          Real ka = 0.0, kb = 0.0;
+    // Generate random Fourier coefficients
+    Real k_vec[3] = {kx, ky, kz};
+    Real a[3], b[3];
 
-          for (int dir = 0; dir < 3; dir++) {
-            a[dir] = norm * RanGaussianSt(&rstate);
-            b[dir] = norm * RanGaussianSt(&rstate);
-            ka += k[dir] * b[dir];
-            kb += k[dir] * a[dir];
-          }
-
-          // Apply solenoidal projection
-          Real kiso_sqr = kiso*kiso;
-          for (int dir = 0; dir < 3; dir++) {
-            Real diva = k[dir]*ka/kiso_sqr;
-            Real divb = k[dir]*kb/kiso_sqr;
-            Real curla = a[dir] - divb;
-            Real curlb = b[dir] - diva;
-            a[dir] = sol_frac*curla + (1.0-sol_frac)*divb;
-            b[dir] = sol_frac*curlb + (1.0-sol_frac)*diva;
-          }
-
-          aka0[nmode] = a[0]; aka1[nmode] = a[1]; aka2[nmode] = a[2];
-          akb0[nmode] = b[0]; akb1[nmode] = b[1]; akb2[nmode] = b[2];
-          nmode++;
-        }
-      }
+    for (int dir = 0; dir < 3; dir++) {
+      a[dir] = norm * RanGaussianSt(&rstate);
+      b[dir] = norm * RanGaussianSt(&rstate);
     }
+
+    // Apply solenoidal projection: a_new = a - k(k·a)/|k|^2
+    // This ensures k·a_new = 0, so div(v) = 0 for each mode
+    Real kiso_sqr = kiso*kiso;
+    Real k_dot_a = k_vec[0]*a[0] + k_vec[1]*a[1] + k_vec[2]*a[2];
+    Real k_dot_b = k_vec[0]*b[0] + k_vec[1]*b[1] + k_vec[2]*b[2];
+
+    for (int dir = 0; dir < 3; dir++) {
+      Real a_sol = a[dir] - k_vec[dir] * k_dot_a / kiso_sqr;
+      Real b_sol = b[dir] - k_vec[dir] * k_dot_b / kiso_sqr;
+      Real a_div = k_vec[dir] * k_dot_a / kiso_sqr;
+      Real b_div = k_vec[dir] * k_dot_b / kiso_sqr;
+      // Blend solenoidal and compressive based on sol_frac
+      a[dir] = sol_frac * a_sol + (1.0 - sol_frac) * a_div;
+      b[dir] = sol_frac * b_sol + (1.0 - sol_frac) * b_div;
+    }
+
+    aka0[n] = a[0]; aka1[n] = a[1]; aka2[n] = a[2];
+    akb0[n] = b[0]; akb1[n] = b[1]; akb2[n] = b[2];
   }
 
+  int actual_modes = kept_modes;
+
   // Copy coefficients to device
-  DvceArray1D<Real> d_kx("kx", mode_count), d_ky("ky", mode_count), d_kz("kz", mode_count);
-  DvceArray1D<Real> d_aka0("aka0", mode_count), d_aka1("aka1", mode_count), d_aka2("aka2", mode_count);
-  DvceArray1D<Real> d_akb0("akb0", mode_count), d_akb1("akb1", mode_count), d_akb2("akb2", mode_count);
+  DvceArray1D<Real> d_kx("kx", actual_modes), d_ky("ky", actual_modes), d_kz("kz", actual_modes);
+  DvceArray1D<Real> d_aka0("aka0", actual_modes), d_aka1("aka1", actual_modes), d_aka2("aka2", actual_modes);
+  DvceArray1D<Real> d_akb0("akb0", actual_modes), d_akb1("akb1", actual_modes), d_akb2("akb2", actual_modes);
 
   auto h_kx = Kokkos::create_mirror_view(d_kx);
   auto h_ky = Kokkos::create_mirror_view(d_ky);
@@ -177,7 +231,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
   auto h_akb1 = Kokkos::create_mirror_view(d_akb1);
   auto h_akb2 = Kokkos::create_mirror_view(d_akb2);
 
-  for (int n = 0; n < mode_count; n++) {
+  for (int n = 0; n < actual_modes; n++) {
     h_kx(n) = kx_arr[n]; h_ky(n) = ky_arr[n]; h_kz(n) = kz_arr[n];
     h_aka0(n) = aka0[n]; h_aka1(n) = aka1[n]; h_aka2(n) = aka2[n];
     h_akb0(n) = akb0[n]; h_akb1(n) = akb1[n]; h_akb2(n) = akb2[n];
@@ -195,7 +249,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
 
   auto &size = pmbp->pmb->mb_size;
   auto &u0 = pmbp->phydro->u0;
-  int mode_count_ = mode_count;
+  int mode_count_ = actual_modes;
 
   // Compute velocity field by summing Fourier modes
   par_for("turb_vel_init", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
@@ -228,14 +282,15 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
     u0(m,IM3,k,j,i) = den * vz;
   });
 
-  // Compute mean momentum and v_rms for normalization
+  // Compute mean momentum and RMS of each component for isotropic normalization
   const int nmkji = nmb*nx3*nx2*nx1;
   const int nkji = nx3*nx2*nx1;
   const int nji = nx2*nx1;
 
-  Real sum_mass = 0.0, sum_mom1 = 0.0, sum_mom2 = 0.0, sum_mom3 = 0.0, sum_vsqr = 0.0;
-  Kokkos::parallel_reduce("turb_vel_stats", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-  KOKKOS_LAMBDA(const int &idx, Real &s_mass, Real &s_mom1, Real &s_mom2, Real &s_mom3, Real &s_vsqr) {
+  // First pass: compute mean velocities
+  Real sum_mass = 0.0, sum_mom1 = 0.0, sum_mom2 = 0.0, sum_mom3 = 0.0;
+  Kokkos::parallel_reduce("turb_vel_mean", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int &idx, Real &s_mass, Real &s_mom1, Real &s_mom2, Real &s_mom3) {
     int m = idx/nkji;
     int k = (idx - m*nkji)/nji;
     int j = (idx - m*nkji - k*nji)/nx1;
@@ -253,44 +308,90 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
     s_mom1 += mom1 * vol;
     s_mom2 += mom2 * vol;
     s_mom3 += mom3 * vol;
-    s_vsqr += (mom1*mom1 + mom2*mom2 + mom3*mom3)/rho * vol;
   }, Kokkos::Sum<Real>(sum_mass), Kokkos::Sum<Real>(sum_mom1),
-     Kokkos::Sum<Real>(sum_mom2), Kokkos::Sum<Real>(sum_mom3),
-     Kokkos::Sum<Real>(sum_vsqr));
+     Kokkos::Sum<Real>(sum_mom2), Kokkos::Sum<Real>(sum_mom3));
 
 #if MPI_PARALLEL_ENABLED
-  Real local_sums[5] = {sum_mass, sum_mom1, sum_mom2, sum_mom3, sum_vsqr};
-  Real global_sums[5];
-  MPI_Allreduce(local_sums, global_sums, 5, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-  sum_mass = global_sums[0];
-  sum_mom1 = global_sums[1];
-  sum_mom2 = global_sums[2];
-  sum_mom3 = global_sums[3];
-  sum_vsqr = global_sums[4];
+  Real local_mean[4] = {sum_mass, sum_mom1, sum_mom2, sum_mom3};
+  Real global_mean[4];
+  MPI_Allreduce(local_mean, global_mean, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  sum_mass = global_mean[0];
+  sum_mom1 = global_mean[1];
+  sum_mom2 = global_mean[2];
+  sum_mom3 = global_mean[3];
 #endif
 
   Real vmean1 = sum_mom1 / sum_mass;
   Real vmean2 = sum_mom2 / sum_mass;
   Real vmean3 = sum_mom3 / sum_mass;
 
-  Real totvol = sum_mass / den;
-  Real current_vsqr = sum_vsqr / totvol - (vmean1*vmean1 + vmean2*vmean2 + vmean3*vmean3);
-  Real current_vrms = sqrt(current_vsqr);
+  // Subtract mean velocity
+  par_for("turb_vel_submean", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(int m, int k, int j, int i) {
+    Real rho = u0(m,IDN,k,j,i);
+    u0(m,IM1,k,j,i) -= rho * vmean1;
+    u0(m,IM2,k,j,i) -= rho * vmean2;
+    u0(m,IM3,k,j,i) -= rho * vmean3;
+  });
 
+  // Second pass: compute RMS of each component separately for isotropic normalization
+  Real sum_v1sqr = 0.0, sum_v2sqr = 0.0, sum_v3sqr = 0.0, sum_vol = 0.0;
+  Kokkos::parallel_reduce("turb_vel_rms", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int &idx, Real &s_v1sqr, Real &s_v2sqr, Real &s_v3sqr, Real &s_vol) {
+    int m = idx/nkji;
+    int k = (idx - m*nkji)/nji;
+    int j = (idx - m*nkji - k*nji)/nx1;
+    int i = (idx - m*nkji - k*nji - j*nx1) + is;
+    k += ks;
+    j += js;
+
+    Real vol = size.d_view(m).dx1 * size.d_view(m).dx2 * size.d_view(m).dx3;
+    Real rho = u0(m,IDN,k,j,i);
+    Real v1 = u0(m,IM1,k,j,i)/rho;
+    Real v2 = u0(m,IM2,k,j,i)/rho;
+    Real v3 = u0(m,IM3,k,j,i)/rho;
+
+    s_v1sqr += v1*v1 * vol;
+    s_v2sqr += v2*v2 * vol;
+    s_v3sqr += v3*v3 * vol;
+    s_vol += vol;
+  }, Kokkos::Sum<Real>(sum_v1sqr), Kokkos::Sum<Real>(sum_v2sqr),
+     Kokkos::Sum<Real>(sum_v3sqr), Kokkos::Sum<Real>(sum_vol));
+
+#if MPI_PARALLEL_ENABLED
+  Real local_rms[4] = {sum_v1sqr, sum_v2sqr, sum_v3sqr, sum_vol};
+  Real global_rms[4];
+  MPI_Allreduce(local_rms, global_rms, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  sum_v1sqr = global_rms[0];
+  sum_v2sqr = global_rms[1];
+  sum_v3sqr = global_rms[2];
+  sum_vol = global_rms[3];
+#endif
+
+  Real v1_rms = sqrt(sum_v1sqr / sum_vol);
+  Real v2_rms = sqrt(sum_v2sqr / sum_vol);
+  Real v3_rms = sqrt(sum_v3sqr / sum_vol);
+  Real current_vrms = sqrt(v1_rms*v1_rms + v2_rms*v2_rms + v3_rms*v3_rms);
+
+  // Use UNIFORM scaling to preserve div(v)=0 (solenoidal property)
+  // Per-component scaling breaks solenoidality and creates spurious compressibility
   Real scale = (current_vrms > 1e-16) ? v_rms / current_vrms : 0.0;
 
   if (global_variable::my_rank == 0) {
     std::cout << "  vmean = (" << vmean1 << ", " << vmean2 << ", " << vmean3 << ")" << std::endl
-              << "  current_vrms = " << current_vrms << ", scale = " << scale << std::endl;
+              << "  component RMS before: (" << v1_rms << ", " << v2_rms << ", " << v3_rms
+              << "), total = " << current_vrms << std::endl
+              << "  uniform scale factor = " << scale << " (target v_rms = " << v_rms << ")" << std::endl
+              << "  component RMS after: (" << v1_rms*scale << ", " << v2_rms*scale << ", "
+              << v3_rms*scale << ")" << std::endl;
   }
 
-  // Apply mean subtraction and v_rms scaling
+  // Apply UNIFORM scaling to all components (preserves div(v)=0)
   par_for("turb_vel_normalize", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    Real rho = u0(m,IDN,k,j,i);
-    u0(m,IM1,k,j,i) = rho * scale * (u0(m,IM1,k,j,i)/rho - vmean1);
-    u0(m,IM2,k,j,i) = rho * scale * (u0(m,IM2,k,j,i)/rho - vmean2);
-    u0(m,IM3,k,j,i) = rho * scale * (u0(m,IM3,k,j,i)/rho - vmean3);
+    u0(m,IM1,k,j,i) *= scale;
+    u0(m,IM2,k,j,i) *= scale;
+    u0(m,IM3,k,j,i) *= scale;
   });
 }
 
