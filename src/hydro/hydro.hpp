@@ -22,6 +22,7 @@ class EquationOfState;
 class Coordinates;
 class Viscosity;
 class Conduction;
+class ScalarDiffusion;
 class SourceTerms;
 class OrbitalAdvectionCC;
 class ShearingBoxBoundaryCC;
@@ -90,9 +91,10 @@ class Hydro {
   OrbitalAdvectionCC *porb_u = nullptr;
   ShearingBoxBoundaryCC *psbox_u = nullptr;
 
-  // Object(s) for extra physics (viscosity, thermal conduction, srcterms)
+  // Object(s) for extra physics (viscosity, thermal conduction, scalar diffusion, srcterms)
   Viscosity *pvisc = nullptr;
   Conduction *pcond = nullptr;
+  ScalarDiffusion *pscalar_diff = nullptr;
   SourceTerms *psrc = nullptr;
 
   // following only used for time-evolving flow

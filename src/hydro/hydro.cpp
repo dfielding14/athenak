@@ -16,6 +16,7 @@
 #include "eos/eos.hpp"
 #include "diffusion/viscosity.hpp"
 #include "diffusion/conduction.hpp"
+#include "diffusion/scalar_diffusion.hpp"
 #include "srcterms/srcterms.hpp"
 #include "shearing_box/shearing_box.hpp"
 #include "bvals/bvals.hpp"
@@ -85,6 +86,18 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     pcond = new Conduction("hydro", ppack, pin);
   } else {
     pcond = nullptr;
+  }
+
+  // Scalar diffusion (if requested in input file)
+  if (pin->DoesParameterExist("hydro","scalar_diffusivity")) {
+    if (nscalars > 0) {
+      pscalar_diff = new ScalarDiffusion("hydro", ppack, pin);
+    } else {
+      std::cout << "### WARNING: scalar_diffusivity specified but nscalars=0" << std::endl;
+      pscalar_diff = nullptr;
+    }
+  } else {
+    pscalar_diff = nullptr;
   }
 
   // Source terms (constructor parses input file to initialize only srcterms needed)
@@ -295,6 +308,7 @@ Hydro::~Hydro() {
   delete pbval_u;
   if (pvisc != nullptr) {delete pvisc;}
   if (pcond != nullptr) {delete pcond;}
+  if (pscalar_diff != nullptr) {delete pscalar_diff;}
   if (psrc != nullptr) {delete psrc;}
 }
 

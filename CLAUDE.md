@@ -72,6 +72,11 @@ cmake -B build -DPROBLEM=your_problem_name
 cd build && make -j8
 ```
 
+### Additional CMake Options
+- `-DAthena_SINGLE_PRECISION=ON` - Build with single precision floats
+- `-DAthena_ENABLE_OPENMP=ON` - Enable OpenMP parallelism
+- `-DKokkos_ENABLE_DEBUG_BOUNDS_CHECK=ON` - Enable array bounds checking (useful for debugging)
+
 ## Test Commands
 
 ### Run All Tests
@@ -168,6 +173,23 @@ When creating a new problem generator:
    });
    ```
 5. Build with `-DPROBLEM=my_problem`
+
+### Kokkos Type Aliases
+Key types defined in `athena.hpp`:
+- `Real` - Floating point type (double or float depending on precision build)
+- `DevExeSpace` - Default Kokkos execution space (CPU or GPU)
+- `DevMemSpace` - Default memory space for device
+- `DvceArray5D<Real>`, `DvceArray4D<Real>`, etc. - Multi-dimensional Kokkos views on device
+- `HostArray5D<Real>`, etc. - Host-side arrays
+- `par_for(...)` - Wrapper for `Kokkos::parallel_for`
+
+### Variable Index Conventions
+From `athena.hpp`:
+- `IDN=0` - Density
+- `IM1=1, IM2=2, IM3=3` - Momentum components (or `IVX, IVY, IVZ` for velocity)
+- `IEN=4` - Total energy
+- `IBX=0, IBY=1, IBZ=2` - Magnetic field components
+
 ### Input File Structure
 Input files use the `.athinput` format with parameter blocks:
 ```

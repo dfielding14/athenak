@@ -20,6 +20,7 @@
 #include "eos/eos.hpp"
 #include "diffusion/viscosity.hpp"
 #include "diffusion/conduction.hpp"
+#include "diffusion/scalar_diffusion.hpp"
 #include "srcterms/srcterms.hpp"
 #include "bvals/bvals.hpp"
 #include "shearing_box/shearing_box.hpp"
@@ -176,12 +177,15 @@ TaskStatus Hydro::Fluxes(Driver *pdrive, int stage) {
     CalculateFluxes<Hydro_RSolver::hlle_gr>(pdrive, stage);
   }
 
-  // Add viscous, heat-flux, etc fluxes
+  // Add viscous, heat-flux, scalar diffusion fluxes
   if (pvisc != nullptr) {
     pvisc->IsotropicViscousFlux(w0, pvisc->nu_iso, peos->eos_data, uflx);
   }
   if (pcond != nullptr) {
     pcond->AddHeatFlux(w0, peos->eos_data, uflx);
+  }
+  if (pscalar_diff != nullptr) {
+    pscalar_diff->AddScalarDiffusionFlux(w0, nhydro, nscalars, uflx);
   }
 
   // call FOFC if necessary

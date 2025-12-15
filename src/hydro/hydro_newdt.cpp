@@ -18,6 +18,7 @@
 #include "eos/eos.hpp"
 #include "hydro.hpp"
 #include "diffusion/conduction.hpp"
+#include "diffusion/scalar_diffusion.hpp"
 #include "srcterms/srcterms.hpp"
 
 namespace hydro {
@@ -128,6 +129,9 @@ TaskStatus Hydro::NewTimeStep(Driver *pdrive, int stage) {
   // compute timestep for diffusion
   if (pcond != nullptr) {
     pcond->NewTimeStep(w0, peos->eos_data);
+  }
+  if (pscalar_diff != nullptr) {
+    pscalar_diff->NewTimeStep(w0, nhydro, nscalars);
   }
   // compute source terms timestep
   psrc->NewTimeStep(w0, peos->eos_data);

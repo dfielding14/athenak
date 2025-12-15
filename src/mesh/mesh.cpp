@@ -24,6 +24,7 @@
 #include "diffusion/viscosity.hpp"
 #include "diffusion/resistivity.hpp"
 #include "diffusion/conduction.hpp"
+#include "diffusion/scalar_diffusion.hpp"
 #include "radiation/radiation.hpp"
 #include "particles/particles.hpp"
 #include "srcterms/srcterms.hpp"
@@ -599,6 +600,10 @@ void Mesh::NewTimeStep(const Real tlim) {
     // thermal conduction timestep
     if (pmb_pack->phydro->pcond != nullptr) {
       dt = std::min(dt, (cfl_no)*(pmb_pack->phydro->pcond->dtnew) );
+    }
+    // scalar diffusion timestep
+    if (pmb_pack->phydro->pscalar_diff != nullptr) {
+      dt = std::min(dt, (cfl_no)*(pmb_pack->phydro->pscalar_diff->dtnew) );
     }
     // source terms timestep
     dt = std::min(dt, (cfl_no)*(pmb_pack->phydro->psrc->dtnew) );
