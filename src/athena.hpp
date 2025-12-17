@@ -61,7 +61,7 @@ enum ParticlesIndex {PGID=0, PTAG=1, IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5
 // additional indices for cosmic ray particles
 enum CRParticlesIndex {IPM=6, IPBX=7, IPBY=8, IPBZ=9, IPDX=10, IPDY=11, IPDZ=12, IPDB=13};
 
-// additional indices for star particles  
+// additional indices for star particles
 enum StarParticlesIndex {IPT_CREATE=6, IPMASS=7, IPT_NEXT_SN=8};
 
 // integer data indices for particle types
@@ -450,7 +450,7 @@ KOKKOS_INLINE_FUNCTION void par_for_inner(TeamMember_t tmember, const int il,con
   Kokkos::parallel_for(Kokkos::TeamVectorRange(tmember, il, iu+1), function);
 }
 
-#define NREDUCTION_VARIABLES 20
+#define NREDUCTION_VARIABLES 40
 //----------------------------------------------------------------------------------------
 //! \struct summed_array_type
 // Following code is copied from Kokkos wiki pages on building custom reducers.  It allows

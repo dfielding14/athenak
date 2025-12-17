@@ -32,7 +32,7 @@ basename = TRML_simple     # Output file basename
 # ====================================================================================
 
 <mesh>
-nghost    = 3             # Number of ghost zones (3 required for PLM)
+nghost    = 4             # Number of ghost zones (3 required for PLM)
 
 # X1 direction (periodic, along interface)
 nx1       = 64            # Number of zones in X1

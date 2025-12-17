@@ -205,8 +205,8 @@ struct pgen_trml {
   // ====================================================================================
   // DIAGNOSTIC TRACKING VARIABLES
   // ====================================================================================
-  Real tot_mass;               //!< Total mass in domain (for conservation tracking)
-  Real tot_coolrate;           //!< Total cooling rate (energy loss per unit time)
+  Real tot_mass = 0.0;         //!< Total mass in domain (for conservation tracking)
+  Real tot_coolrate = 0.0;     //!< Total cooling rate (energy loss per unit time)
 
   // ====================================================================================
   // FRAME TRACKING PARAMETERS
@@ -340,13 +340,13 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Real pgas_0              = pin->GetReal("problem", "pgas_0");
   ptrml->pgas_0            = pgas_0;
   // In MHD case with scaled B-field, temperature and density contrast are different.
-  // In this notation, we use contrast to denote the temperature contrast 
-  // and calculate the density contrast from the temperature contrast 
+  // In this notation, we use contrast to denote the temperature contrast
+  // and calculate the density contrast from the temperature contrast
   // by equating the total (magnetic+thermal) pressure in the initial state.
   Real contrast            = pin->DoesParameterExist("problem", "density_contrast") ?
-                             pin->GetReal("problem", "density_contrast") : 
+                             pin->GetReal("problem", "density_contrast") :
                              pin->GetReal("problem", "contrast");
-  ptrml->contrast          = contrast; 
+  ptrml->contrast          = contrast;
   Real velocity            = pin->GetReal("problem", "velocity");
   ptrml->velocity          = velocity;
   ptrml->t_shear           = 1.0/velocity;
@@ -415,7 +415,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   ptrml->t_frame_tracking_start = pin->GetOrAddReal("problem","t_frame_tracking_start", ptrml->t_cool_start); // time after which we switch on frame-tracking
   ptrml->n_frame_track = pin->GetOrAddInteger("problem","n_frame_track", 20); // perform frame-tracking every n_frame_track time steps
   // Temperature limits for frame tracking
-  ptrml->T_ft_lo = T_cold * pin->GetOrAddReal("problem", "T_ft_lo_over_T_cold", 1.0); 
+  ptrml->T_ft_lo = T_cold * pin->GetOrAddReal("problem", "T_ft_lo_over_T_cold", 1.0);
   ptrml->T_ft_hi = T_cold * pin->GetOrAddReal("problem", "T_ft_hi_over_T_cold", ptrml->T_peak_hi/T_cold);
   ptrml->ft_use_uppzlim   = pin->GetOrAddBoolean("problem", "ft_use_uppzlim", false);
   ptrml->ft_uppzlim       = pin->GetOrAddReal("problem", "ft_uppzlim", (z_interface+0.8*(lz_max-z_interface)));
@@ -568,9 +568,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       Real B_z_lowboundary = pin->GetOrAddReal("problem", "B_z_lowboundary", lz_min+4.*smoothing_thickness);
       int B_direction = pin->GetOrAddInteger("problem", "B_direction", 1); // 0 = x, 1 = y, 2 = z
       // parameter to scale the initial magnetic field according to the compression ratio
-      bool B_dens_ratio = pin->GetOrAddBoolean("problem", "B_dens_ratio", false); 
+      bool B_dens_ratio = pin->GetOrAddBoolean("problem", "B_dens_ratio", false);
       Real alpha_magdens = ptrml->alpha_magdens;  // power-law index for B-field scaling with density profile in cold gas
-      
+
       // Print MHD initialization parameters
       if (global_variable::my_rank == 0) {
         std::cout << std::setprecision(16);
@@ -586,7 +586,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
         std::cout << "  B_dens_ratio = " << (B_dens_ratio ? "true" : "false") << "\n";
         std::cout << "  alpha_magdens = " << alpha_magdens << "\n";
       }
-      
+
       par_for("pgen_set_bfield", DevExeSpace(),0,nmb1,ks,ke,js,je,is,ie,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
         Real &x3min = size.d_view(m).x3min;
@@ -650,13 +650,18 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     // Only runs for lagrangian_mc particle type (tracer particles)
     if (pmbp->ppart != nullptr &&
         pmbp->ppart->particle_type == ParticleType::lagrangian_mc) {
+
+      if (global_variable::my_rank == 0) {
+        std::cout << "Initializing Particles" << "\n";
+      }
+
       // captures for the kernel
       auto &mblev = pmbp->pmb->mb_lev;
       auto gids = pmbp->gids;
 
       // Get fixed seed for reproducibility - will be offset by MeshBlock ID
       int64_t pos_init_seed = pin->GetOrAddInteger("particles","pos_init_seed",280496);
-      
+
       // Get distribution type: false = by mass (default), true = uniform by volume
       bool uniform_by_volume = pin->GetOrAddBoolean("particles","uniform_by_volume",true);
 
@@ -706,12 +711,12 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
         int i = (idx - m*nkji - k*nji - j*indcs.nx1) + is;
         k += ks;
         j += js;
-        
+
         // Create deterministic pseudo-random number using hash function
         // This ensures same particle count for same zone regardless of MPI decomposition
         int64_t mb_gid = gids + m;  // Global MeshBlock ID
         int64_t zone_seed = pos_init_seed + mb_gid * 999983 + i * 7919 + j * 104729 + k * 524287;
-        
+
         // Simple hash-based pseudo-random number generation (device-compatible)
         // Using a variant of the splitmix64 algorithm
         uint64_t z = static_cast<uint64_t>(zone_seed);
@@ -719,9 +724,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
         z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
         z = z ^ (z >> 31);
         Real rand_val = static_cast<Real>(z & 0x7FFFFFFFULL) / static_cast<Real>(0x80000000ULL);
-        
+
         Real vol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
-        
+
         // Calculate number of particles per zone based on distribution type
         Real nppc;
         if (uniform_by_volume) {
@@ -731,7 +736,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
           // Mass-weighted distribution: zones get particles proportional to mass
           nppc = u0(m,IDN,k,j,i) * vol / mass_per_particle;
         }
-        
+
         int nparticles = static_cast<int>(nppc);
         nppc = fabs(fmod(nppc, 1.0));
         if (rand_val < nppc) {
@@ -811,6 +816,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
         }
       });
     }
+  }
+  if (global_variable::my_rank == 0) {
+    std::cout << "Full initialization done" << "\n";
   }
   return;
 }
@@ -948,7 +956,7 @@ void UserZBoundaryConditions(Mesh *pm) {
       }
     });
   }
-  // PrimToCons on x3 ghost zones 
+  // PrimToCons on x3 ghost zones
   if (is_hydro) {
     pmbp->phydro->peos->PrimToCons(w0_,u0_,0,(n1-1),0,(n2-1),ks-ng,ks-1);
     pmbp->phydro->peos->PrimToCons(w0_,u0_,0,(n1-1),0,(n2-1),ke+1,ke+ng);
@@ -1021,8 +1029,8 @@ void UserZBoundaryConditions(Mesh *pm) {
   //       min_z_peak_ = fmin(x3v,min_z_peak_);
   //       max_z_peak_ = fmax(x3v,max_z_peak_);
   //     }
-      
-  //   }, Kokkos::Sum<Real>(mass_peak), 
+
+  //   }, Kokkos::Sum<Real>(mass_peak),
   //     Kokkos::Sum<Real>(mean_z_peak),
   //     Kokkos::Sum<Real>(mean_velz_peak),
   //     Kokkos::Min<Real>(min_z_peak),
@@ -1052,9 +1060,9 @@ void UserZBoundaryConditions(Mesh *pm) {
   //     // If some gas goes too close to the upper boundary we apply a negative shift
   //     if((max_z_peak+z_shift) > max_z_frame_tracking) z_shift = max_z_frame_tracking - max_z_peak;
   //     // If some gas goes too close to the bottom boundary we add a positive shift
-  //     if((min_z_peak+z_shift) < min_z_frame_tracking) z_shift = min_z_frame_tracking - min_z_peak; 
+  //     if((min_z_peak+z_shift) < min_z_frame_tracking) z_shift = min_z_frame_tracking - min_z_peak;
 
-  //     // Now update vel_z_shift after applying these conditions 
+  //     // Now update vel_z_shift after applying these conditions
   //     vel_z_shift = z_shift/pm->dt;
   //     // We set a maximum velocity that the frame-tracking can impart
   //     if(fabs(vel_z_shift) > fabs(max_vz_frame_tracking)) vel_z_shift = vel_z_shift * fabs(max_vz_frame_tracking/vel_z_shift);
@@ -1078,7 +1086,7 @@ void UserZBoundaryConditions(Mesh *pm) {
   //       u0_(m,IEN,k,j,i) += denergy;
   //     });
   //   }
-  //   // Now PrimToCons 
+  //   // Now PrimToCons
   //   // if (is_hydro) {
   //   //   pmbp->phydro->peos->PrimToCons(w0_,u0_,0,(n1-1),0,(n2-1),0,(n3-1));
   //   // } else if (is_mhd) {
@@ -1317,7 +1325,6 @@ void ApplyTempCeiling(Mesh *pm, const Real bdt, DvceArray5D<Real> &u0,
   Real use_e = eos_data.use_e;
   Real gamma = eos_data.gamma;
   Real gm1 = gamma - 1.0;
-  Real temp_unit = pmbp->punit->temperature_cgs();
   int nceiling_count=0;
   Real T_ceiling_ = ptrml->T_ceiling;
   Kokkos::parallel_reduce("Temp_ceiling", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
@@ -1388,7 +1395,6 @@ void AdjustTempTFloor(Mesh *pm, const Real bdt, DvceArray5D<Real> &u0,
   Real use_e = eos_data.use_e;
   Real gamma = eos_data.gamma;
   Real gm1 = gamma - 1.0;
-  Real temp_unit = pmbp->punit->temperature_cgs();
   int nfloor_count=0;
   Real T_floor_ = ptrml->T_floor;
   Kokkos::parallel_reduce("Temp_floor", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
@@ -1628,8 +1634,8 @@ void FrameTracking(Mesh *pm) {
       min_z_ft_ = fmin(x3v,min_z_ft_);
       max_z_ft_ = fmax(x3v,max_z_ft_);
     }
-    
-  }, Kokkos::Sum<Real>(mass_ft), 
+
+  }, Kokkos::Sum<Real>(mass_ft),
     Kokkos::Sum<Real>(mean_z_ft),
     Kokkos::Sum<Real>(mean_velz_ft),
     Kokkos::Min<Real>(min_z_ft),
@@ -1655,10 +1661,10 @@ void FrameTracking(Mesh *pm) {
     if(ptrml->ft_use_uppzlim || ptrml->ft_use_lowzlim) {
       Real z_shift = vel_z_shift*pm->dt;
       // If some gas goes too close to the bottom boundary we add a positive shift
-      if(ptrml->ft_use_lowzlim && (min_z_ft+z_shift) < ft_lowzlim) z_shift = ft_lowzlim - min_z_ft; 
+      if(ptrml->ft_use_lowzlim && (min_z_ft+z_shift) < ft_lowzlim) z_shift = ft_lowzlim - min_z_ft;
       // If some gas goes too close to the upper boundary we apply a negative shift
       if(ptrml->ft_use_uppzlim && (max_z_ft+z_shift) > ft_uppzlim) z_shift = ft_uppzlim - max_z_ft;
-      // Now update vel_z_shift after applying these conditions 
+      // Now update vel_z_shift after applying these conditions
       vel_z_shift = z_shift/pm->dt;
     }
     // We set a maximum velocity that the frame-tracking can impart
@@ -1676,7 +1682,7 @@ void FrameTracking(Mesh *pm) {
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
       w0(m,IVZ,k,j,i) += vel_z_shift;
     });
-    // Now PrimToCons 
+    // Now PrimToCons
     if (is_hydro) {
       pmbp->phydro->peos->PrimToCons(w0,u0,0,(n1-1),0,(n2-1),0,(n3-1));
     } else if (is_mhd) {
@@ -1745,7 +1751,6 @@ void Diagnostic(Mesh *pm) {
   Real min_z_vely = 10.0;
   Real max_z_vely = -10.0;
 
-  auto force_ = pmbp->pturb->force;
   // find smallest (e/cooling_rate) in each cell
   Kokkos::parallel_reduce("diagnostic", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
   KOKKOS_LAMBDA(const int &idx, Real &min_dt, Real &min_d, Real &min_v, Real &min_t,
@@ -1932,7 +1937,7 @@ void UserHistOutput(HistoryData *pdata, Mesh *pm) {
   int &nfluid = (is_mhd) ? pmbp->pmhd->nmhd : pmbp->phydro->nhydro;
   int nsum = 30;
   // Store nsum0 in the first array and rest in the second array
-  int nsum0 = 18; 
+  int nsum0 = 18;
   if (nscalars>0) nsum = nsum+2;
   int nsum1 = nsum-nsum0;
   int nother_hist = 7; // history variables that are not global sums
@@ -2005,6 +2010,10 @@ void UserHistOutput(HistoryData *pdata, Mesh *pm) {
   int is = indcs.is; int nx1 = indcs.nx1;
   int js = indcs.js; int nx2 = indcs.nx2;
   int ks = indcs.ks; int nx3 = indcs.nx3;
+  int ng = indcs.ng;
+  int n1_tot = nx1 + 2*ng;
+  int n2_tot = (nx2 > 1) ? (nx2 + 2*ng) : 1;
+  int n3_tot = (nx3 > 1) ? (nx3 + 2*ng) : 1;
 
   // Get the extent of the boxes along z
   Real lxmax3 = pm->mesh_size.x3max;
@@ -2025,8 +2034,6 @@ void UserHistOutput(HistoryData *pdata, Mesh *pm) {
 
   Real min_z_vely = 10.0;
   Real max_z_vely = -10.0;
-
-  auto force_ = pmbp->pturb->force;
 
   const int nmkji = (pmbp->nmb_thispack)*nx3*nx2*nx1;
   const int nkji = nx3*nx2*nx1;
@@ -2124,7 +2131,7 @@ void UserHistOutput(HistoryData *pdata, Mesh *pm) {
       hvars0.the_array[16] = SQR(vely)*vol; // rms y velocity below T_hot
       hvars0.the_array[17] = vol; // volume below T_hot
     }
-    
+
     // Get the area contributed by the surface above and to the right
     // of the current cell
     // Initialize Cube to store relative data
@@ -2132,27 +2139,29 @@ void UserHistOutput(HistoryData *pdata, Mesh *pm) {
     Real iso = log10(T_peak);
     int ns = 0;
     for (int s = 1; s<8; s*=2) {
-      if (use_e) {
-        v0 = log10(gm1*w0(m,IEN,k  ,j  ,i  )/w0(m,IDN,k  ,j  ,i  )) - iso;
-        v1 = log10(gm1*w0(m,IEN,k  ,j  ,i+s)/w0(m,IDN,k  ,j  ,i+s)) - iso;
-        v2 = log10(gm1*w0(m,IEN,k  ,j+s,i+s)/w0(m,IDN,k  ,j+s,i+s)) - iso;
-        v3 = log10(gm1*w0(m,IEN,k  ,j+s,i  )/w0(m,IDN,k  ,j+s,i  )) - iso;
-        v4 = log10(gm1*w0(m,IEN,k+s,j  ,i  )/w0(m,IDN,k+s,j  ,i  )) - iso;
-        v5 = log10(gm1*w0(m,IEN,k+s,j  ,i+s)/w0(m,IDN,k+s,j  ,i+s)) - iso;
-        v6 = log10(gm1*w0(m,IEN,k+s,j+s,i+s)/w0(m,IDN,k+s,j+s,i+s)) - iso;
-        v7 = log10(gm1*w0(m,IEN,k+s,j+s,i  )/w0(m,IDN,k+s,j+s,i  )) - iso;
-      } else {
-        v0 = log10(w0(m,ITM,k  ,j  ,i  )) - iso;
-        v1 = log10(w0(m,ITM,k  ,j  ,i+s)) - iso;
-        v2 = log10(w0(m,ITM,k  ,j+s,i+s)) - iso;
-        v3 = log10(w0(m,ITM,k  ,j+s,i  )) - iso;
-        v4 = log10(w0(m,ITM,k+s,j  ,i  )) - iso;
-        v5 = log10(w0(m,ITM,k+s,j  ,i+s)) - iso;
-        v6 = log10(w0(m,ITM,k+s,j+s,i+s)) - iso;
-        v7 = log10(w0(m,ITM,k+s,j+s,i  )) - iso;
+      if ((i + s < n1_tot) && (j + s < n2_tot) && (k + s < n3_tot)) {
+        if (use_e) {
+          v0 = log10(gm1*w0(m,IEN,k  ,j  ,i  )/w0(m,IDN,k  ,j  ,i  )) - iso;
+          v1 = log10(gm1*w0(m,IEN,k  ,j  ,i+s)/w0(m,IDN,k  ,j  ,i+s)) - iso;
+          v2 = log10(gm1*w0(m,IEN,k  ,j+s,i+s)/w0(m,IDN,k  ,j+s,i+s)) - iso;
+          v3 = log10(gm1*w0(m,IEN,k  ,j+s,i  )/w0(m,IDN,k  ,j+s,i  )) - iso;
+          v4 = log10(gm1*w0(m,IEN,k+s,j  ,i  )/w0(m,IDN,k+s,j  ,i  )) - iso;
+          v5 = log10(gm1*w0(m,IEN,k+s,j  ,i+s)/w0(m,IDN,k+s,j  ,i+s)) - iso;
+          v6 = log10(gm1*w0(m,IEN,k+s,j+s,i+s)/w0(m,IDN,k+s,j+s,i+s)) - iso;
+          v7 = log10(gm1*w0(m,IEN,k+s,j+s,i  )/w0(m,IDN,k+s,j+s,i  )) - iso;
+        } else {
+          v0 = log10(w0(m,ITM,k  ,j  ,i  )) - iso;
+          v1 = log10(w0(m,ITM,k  ,j  ,i+s)) - iso;
+          v2 = log10(w0(m,ITM,k  ,j+s,i+s)) - iso;
+          v3 = log10(w0(m,ITM,k  ,j+s,i  )) - iso;
+          v4 = log10(w0(m,ITM,k+s,j  ,i  )) - iso;
+          v5 = log10(w0(m,ITM,k+s,j  ,i+s)) - iso;
+          v6 = log10(w0(m,ITM,k+s,j+s,i+s)) - iso;
+          v7 = log10(w0(m,ITM,k+s,j+s,i  )) - iso;
+        }
+        Cube c = Cube(v0, v1, v2, v3, v4, v5, v6, v7);
+        hvars1.the_array[ns] = process_cube(c)*dA;
       }
-      Cube c = Cube(v0, v1, v2, v3, v4, v5, v6, v7);
-      hvars1.the_array[ns] = process_cube(c)*dA;
       ns++;
     }
     // get small scale diffusion velocity for gas selected to
@@ -2172,12 +2181,13 @@ void UserHistOutput(HistoryData *pdata, Mesh *pm) {
         gradTz = (w0(m,ITM,k+1,j,i)-w0(m,ITM,k-1,j,i))/(2.0*size.d_view(m).dx3);
       }
       Real gradT = sqrt(SQR(gradTx)+SQR(gradTy)+SQR(gradTz));
-      // define temperature scale height
-      Real ell_T = w0(m,ITM,k,j,i)/gradT;
-      // get normal vector defined by temperature gradient
-      Real nx = gradTx/gradT;
-      Real ny = gradTy/gradT;
-      Real nz = gradTz/gradT;
+      if (gradT > 0.0) {
+        // define temperature scale height
+        Real ell_T = temp/gradT;
+        // get normal vector defined by temperature gradient
+        Real nx = gradTx/gradT;
+        Real ny = gradTy/gradT;
+        Real nz = gradTz/gradT;
 
       // get velocity components in direction of temperature gradient
       // defined in the local region
@@ -2188,23 +2198,24 @@ void UserHistOutput(HistoryData *pdata, Mesh *pm) {
       Real vin_im1 = w0(m,IVX,k,j,i-1)*nx + w0(m,IVY,k,j,i-1)*ny + w0(m,IVZ,k,j,i-1)*nz;
       Real vin_ip1 = w0(m,IVX,k,j,i+1)*nx + w0(m,IVY,k,j,i+1)*ny + w0(m,IVZ,k,j,i+1)*nz;
 
-      Real vin_gradx = (vin_ip1-vin_im1)/(2.0*size.d_view(m).dx1);
-      Real vin_grady = (vin_jp1-vin_jm1)/(2.0*size.d_view(m).dx2);
-      Real vin_gradz = (vin_kp1-vin_km1)/(2.0*size.d_view(m).dx3);
-      Real vin = -1*ell_T*(vin_gradx*nx + vin_grady*ny + vin_gradz*nz);
-      Real vin_dx = -2*size.d_view(m).dx1*(vin_gradx*nx + vin_grady*ny + vin_gradz*nz);
-      if ((temp<T_peak_hi) && (temp>T_peak_lo)){
-        hvars1.the_array[3] = vin*vol; // the small scale diffusive velocity near the cooling surface
-        hvars1.the_array[4] = vin_dx*vol; // different measurement of vdiff
-        hvars1.the_array[5] = ell_T*vol; // the temperature scale height near the cooling surface
-      } else if (temp < T_peak_lo) {
-        hvars1.the_array[6] = vin*vol; // vdiff in slightly colder gas
-        hvars1.the_array[7] = vin_dx*vol; // vdiff in slightly colder gas
-        hvars1.the_array[8] = ell_T*vol; // ell_T in slightly colder gas
-      } else {
-        hvars1.the_array[9] = vin*vol; // vdiff in slightly hotter gas
-        hvars1.the_array[10] = vin_dx*vol; // vdiff in slightly hotter gas
-        hvars1.the_array[11] = ell_T*vol; // ell_T in slightly hotter gas
+        Real vin_gradx = (vin_ip1-vin_im1)/(2.0*size.d_view(m).dx1);
+        Real vin_grady = (vin_jp1-vin_jm1)/(2.0*size.d_view(m).dx2);
+        Real vin_gradz = (vin_kp1-vin_km1)/(2.0*size.d_view(m).dx3);
+        Real vin = -1*ell_T*(vin_gradx*nx + vin_grady*ny + vin_gradz*nz);
+        Real vin_dx = -2*size.d_view(m).dx1*(vin_gradx*nx + vin_grady*ny + vin_gradz*nz);
+        if ((temp<T_peak_hi) && (temp>T_peak_lo)){
+          hvars1.the_array[3] = vin*vol; // the small scale diffusive velocity near the cooling surface
+          hvars1.the_array[4] = vin_dx*vol; // different measurement of vdiff
+          hvars1.the_array[5] = ell_T*vol; // the temperature scale height near the cooling surface
+        } else if (temp < T_peak_lo) {
+          hvars1.the_array[6] = vin*vol; // vdiff in slightly colder gas
+          hvars1.the_array[7] = vin_dx*vol; // vdiff in slightly colder gas
+          hvars1.the_array[8] = ell_T*vol; // ell_T in slightly colder gas
+        } else {
+          hvars1.the_array[9] = vin*vol; // vdiff in slightly hotter gas
+          hvars1.the_array[10] = vin_dx*vol; // vdiff in slightly hotter gas
+          hvars1.the_array[11] = ell_T*vol; // ell_T in slightly hotter gas
+        }
       }
     }
 
@@ -2313,7 +2324,7 @@ Real density_equation_derivative(Real rho, Real rho_hot, Real beta_hot, Real con
 
 KOKKOS_INLINE_FUNCTION
 // Newton-Raphson solver for density equation
-Real newton_density_solver(Real rho_guess, const Real rho_hot, const Real beta_hot, const Real contrast, 
+Real newton_density_solver(Real rho_guess, const Real rho_hot, const Real beta_hot, const Real contrast,
   Real alpha_magdens, Real tol=1e-8, int max_iter=100) {
   Real rho = rho_guess;
 
@@ -2338,7 +2349,7 @@ Real newton_density_solver(Real rho_guess, const Real rho_hot, const Real beta_h
 return rho; // Return last value if max_iter reached
 }
 
-KOKKOS_INLINE_FUNCTION 
+KOKKOS_INLINE_FUNCTION
 Real solve_density_profile_NR(const Real z, const Real rho_hot, const Real beta_hot,
   const Real contrast, Real alpha_magdens) {
   return newton_density_solver(rho_hot, rho_hot, beta_hot, contrast, alpha_magdens);
