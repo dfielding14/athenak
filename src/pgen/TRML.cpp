@@ -80,7 +80,6 @@
 #include <fstream>
 #include <string>
 #include <cstring>
-#include <random>
 #include <iomanip>
 
 #include "athena.hpp"
@@ -100,8 +99,6 @@
 #include "globals.hpp"
 #include "units/units.hpp"
 #include "utils/marching_cubes.hpp"  // Marching cubes algorithm for isosurface area calculations
-#include "utils/random.hpp"
-#include "srcterms/turb_driver.hpp"
 // #include "turb_init.hpp"
 // #include "srcterms/TurbGen.h"
 
@@ -147,6 +144,7 @@ struct pgen_trml {
   Real beta_hi;                //!< Power-law slope of cooling function above T_peak
   Real alpha_heat;             //!< Derived heating coefficient exponent
   Real heat_coefficient;       //!< Derived heating amplitude coefficient
+  bool balanced_heating;       //!< Use legacy heating normalization when true
   Real dt_cutoff;              //!< Minimum allowed timestep (prevents runaway)
   Real cfl_cool;               //!< Cooling CFL number (limits dT/T per timestep)
 
@@ -183,6 +181,7 @@ struct pgen_trml {
   // ====================================================================================
   // ADAPTIVE MESH REFINEMENT THRESHOLDS
   // ====================================================================================
+  Real t_start_refine;          //!< Start applying refinement only after this time
   Real density_ratio_threshold; //!< Refine if density gradient exceeds this
   Real vel2_rms_threshold;      //!< Refine if velocity RMS exceeds this
   Real T_max_threshold;         //!< Refine if T_max in block exceeds this
@@ -376,8 +375,16 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   ptrml->beta_hi           = beta_hi;
   ptrml->alpha_magdens     = pin->GetOrAddReal("problem", "alpha_magdens", 1.0/2.0);
   ptrml->xi                = pin->GetReal("problem", "xi");
-  ptrml->alpha_heat        = (beta_lo-beta_hi) * (std::log(T_cold/T_peak) / std::log(contrast)) - beta_hi;
-  ptrml->heat_coefficient  = pow(T_cold/T_peak, (beta_hi-beta_lo) * (std::log(T_cold/T_peak) / std::log(contrast) + 1));
+  ptrml->balanced_heating  = pin->GetOrAddBoolean("problem", "balanced_heating", true);
+  if (ptrml->balanced_heating) {
+    ptrml->alpha_heat = (beta_lo-beta_hi) * (std::log(T_cold/T_peak) / std::log(contrast)) - beta_hi;
+    ptrml->heat_coefficient = pow(T_cold/T_peak,
+                                  (beta_hi-beta_lo) *
+                                  (std::log(T_cold/T_peak) / std::log(contrast) + 1));
+  } else {
+    ptrml->alpha_heat = -2-beta_hi;
+    ptrml->heat_coefficient = pow(T_cold/T_peak, -beta_lo - ptrml->alpha_heat);
+  }
   ptrml->epsilon_T         = pin->GetOrAddReal("problem", "epsilon_T", 0.05);
 
   // get ztop and bottom
@@ -450,9 +457,6 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   int n2m1 = (nx2 > 1)? (nx2 + 2*ng - 1) : 0;
   int n3m1 = (nx3 > 1)? (nx3 + 2*ng - 1) : 0;
 
-  int64_t seed_perturb = pin->GetOrAddInteger("problem","seed_perturb",-1);
-  Real sigma_perturb = pin->GetOrAddReal("problem","sigma_perturb",0.0);
-
   // Print info
   if (global_variable::my_rank == 0) {
     std::cout << std::setprecision(16) << "rho_0 = " << rho_0 << "\n";
@@ -481,7 +485,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   // End print info
 
   auto adaptive = pmy_mesh_->adaptive;
+  ptrml->t_start_refine = 0.0;
   if (adaptive){
+    ptrml->t_start_refine = pin->GetOrAddReal("problem", "t_start_refine", 0.0);
     ptrml->density_ratio_threshold = pin->GetOrAddReal("problem", "density_ratio_threshold", 0.0);
     ptrml->vel2_rms_threshold = pin->GetOrAddReal("problem", "vel2_rms_threshold", 0.0);
     ptrml->T_min_threshold = pin->GetOrAddReal("problem", "T_min_threshold", 0.0);
@@ -1178,7 +1184,10 @@ void UserTimeStep(Mesh *pm){
       Edot_cool *= (temp<T_peak) ? pow(temp/T_peak, -beta_lo):pow(temp/T_peak, -beta_hi);
 
       Real Edot_heat = 1.5 * xi * pgas_0/t_shear * heat_coefficient * SQR(pres/pgas_0);
-      Edot_heat *= (temp<(1+epsilon_T)*T_hot) ? pow((temp/T_peak),alpha_heat) : pow(((1+epsilon_T)*T_hot/T_peak),alpha_heat) * pow( (temp/((1+epsilon_T)*T_hot)),(-beta_hi-0.5));
+      Edot_heat *= (temp<(1+epsilon_T)*T_hot) ?
+          pow((temp/T_peak),alpha_heat) :
+          pow(((1+epsilon_T)*T_hot/T_peak),alpha_heat) *
+          pow((temp/((1+epsilon_T)*T_hot)),(-beta_hi-0.5));
 
       cooling_heating=FLT_MIN+Edot_cool-Edot_heat;
     }
@@ -1284,7 +1293,10 @@ void AddCoolingHeating(Mesh *pm, const Real bdt, DvceArray5D<Real> &u0,
       net_cooling += Edot_cool*dvol;
 
       Real Edot_heat = 1.5 * xi * pgas_0/t_shear * heat_coefficient * SQR(pres/pgas_0);
-      Edot_heat *= (temp<(1+epsilon_T)*T_hot) ? pow((temp/T_peak),alpha_heat) : pow(((1+epsilon_T)*T_hot/T_peak),alpha_heat) * pow( (temp/((1+epsilon_T)*T_hot)),(-beta_hi-0.5));
+      Edot_heat *= (temp<(1+epsilon_T)*T_hot) ?
+          pow((temp/T_peak),alpha_heat) :
+          pow(((1+epsilon_T)*T_hot/T_peak),alpha_heat) *
+          pow((temp/((1+epsilon_T)*T_hot)),(-beta_hi-0.5));
       net_heating += Edot_heat*dvol;
 
       cooling_heating=Edot_cool-Edot_heat;
@@ -1464,6 +1476,9 @@ void AdjustTempTFloor(Mesh *pm, const Real bdt, DvceArray5D<Real> &u0,
 void UserRefine(MeshBlockPack* pmbp) {
   // capture variables for kernels
   Mesh *pm = pmbp->pmesh;
+  if (pm->time < ptrml->t_start_refine) {
+    return;
+  }
   auto &indcs = pm->mb_indcs;
   int &is = indcs.is, nx1 = indcs.nx1;
   int &js = indcs.js, nx2 = indcs.nx2;

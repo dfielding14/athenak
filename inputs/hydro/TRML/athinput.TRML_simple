@@ -22,7 +22,7 @@ problem = TRML (Turbulent Radiative Mixing Layer) - Simple Version
 author  = Based on Fielding et al. setup, AthenaK implementation
 
 <job>
-basename = TRML_simple     # Output file basename
+basename = TRML     # Output file basename
 
 # ====================================================================================
 # MESH CONFIGURATION
@@ -51,14 +51,14 @@ ox2_bc    = periodic      # Outer-X2 boundary condition
 # X3 direction (z - across interface, hot gas at top, cold at bottom)
 nx3       = 192           # Number of zones in X3 (more zones to resolve interface)
 x3min     = -0.5          # Domain minimum in X3
-x3max     = 1.0           # Domain maximum in X3
+x3max     =  1.0          # Domain maximum in X3
 ix3_bc    = outflow       # Inner-X3 boundary (outflow for cold gas)
 ox3_bc    = user          # Outer-X3 boundary (user-defined hot gas reservoir)
 
 <meshblock>
-nx1       = 64            # Cells per MeshBlock in X1
-nx2       = 64            # Cells per MeshBlock in X2
-nx3       = 64            # Cells per MeshBlock in X3
+nx1       = 32            # Cells per MeshBlock in X1
+nx2       = 32            # Cells per MeshBlock in X2
+nx3       = 48            # Cells per MeshBlock in X3
 
 # ====================================================================================
 # TIME EVOLUTION
@@ -69,7 +69,7 @@ evolution  = dynamic      # Dynamic time evolution
 integrator = rk3          # Third-order Runge-Kutta integrator
 cfl_number = 0.3          # CFL number for stability
 tlim       = 100.0        # Stop time (in code units ~ shear times)
-ndiag      = 100          # Cycles between built-in diagnostic output
+ndiag      = 1            # Cycles between built-in diagnostic output
 
 # ====================================================================================
 # HYDRODYNAMICS
@@ -110,9 +110,9 @@ pgas_0    = 1.0           # Hot phase pressure (code units)
 # Note: T_hot = pgas_0 / rho_0 = 1.0 in code units
 
 # --- Temperature/Density Structure ---
-# chi = density_contrast = T_hot/T_cold = 100
+# chi = density_contrast = T_hot/T_cold
 # Cold phase: rho_cold = chi * rho_0, T_cold = T_hot/chi
-density_contrast = 100.0  # chi = 100
+density_contrast = 56.234132519 # 10^1.75
 
 # --- Velocity (Shear Flow) ---
 # mach_rel_hot = velocity / cs_hot = 0.5
@@ -127,16 +127,17 @@ smoothing_thickness = 0.01  # Width of tanh transition (sharp interface)
 # --- Cooling Function Parameters ---
 # Power-law cooling: Lambda(T) ~ T^beta with different slopes above/below T_peak
 # T_peak is where cooling is strongest
-beta_lo   = -2.0          # Cooling slope for T < T_peak
-beta_hi   = 3.0           # Cooling slope for T > T_peak
-T_peak_over_T_cold = 4.64 # T_peak/T_cold ~ sqrt(chi) region
+beta_lo   = -2.0            # Cooling slope for T < T_peak
+beta_hi   = 3.0             # Cooling slope for T > T_peak
+T_peak_over_T_cold = 4.64   # T_peak = (T_cold^2 T_hot)^(1/3)
 T_cutoff_over_T_hot = 0.85  # Turn off cooling above this T (prevents hot gas cooling)
-T_floor   = 0.1           # Minimum temperature (fraction of T_cold)
+T_floor   = 0.1             # Minimum temperature (fraction of T_cold)
+balanced_heating = false
 
 # --- Dimensionless Cooling Parameter ---
-# xi = t_shear / t_cool = L / (v * t_cool) = 100
+# xi = t_shear / t_cool = L / (v * t_cool)
 # This sets the cooling rate amplitude
-xi        = 100.0         # Mixing-dominated regime (xi > 1)
+xi        = 20.0         # Mixing-dominated regime (xi > 1)
 
 # Optional: directly set t_cool_0 instead of using xi
 # t_cool_0 = 0.001        # Cooling time at T_peak (uncomment to override xi)
@@ -153,15 +154,34 @@ user_hist = true          # Enable custom history output
 ndiag     = 100           # Cycles between diagnostic output
 
 # --- Frame Tracking (keeps interface centered) ---
-user_work_in_loop = true  # Enable work-in-loop for frame tracking
-use_frame_tracking = true # Apply velocity shifts to keep interface centered
+user_work_in_loop = true      # Enable work-in-loop for frame tracking
+use_frame_tracking = true     # Apply velocity shifts to keep interface centered
 t_frame_tracking_start = 1.0  # Start frame tracking after this time
-n_frame_track = 10        # Apply frame tracking every N cycles
-max_vz_frame_tracking = 0.01  # Maximum velocity shift per tracking event
+n_frame_track = 10            # Apply frame tracking every N cycles
+max_vz_frame_tracking = 0.1  # Maximum velocity shift per tracking event
+T_ft_lo_over_T_cold = 1.01
+T_ft_hi_over_T_cold = 1.1
 
-# --- Perturbations (optional) ---
-seed_perturb = 12345      # Random seed for velocity perturbations
-sigma_perturb = 0.01      # Amplitude of velocity perturbations (fraction of velocity)
+
+
+# ====================================================================================
+# Turbulent Driving for initial perturbations
+# ====================================================================================
+
+<initial_turb>
+turb_flag           = 1
+tcorr               = 1.0       # ~ L / 2 pi urms
+dt_turb_update      = 1.0       # update driving pattern
+dedt                = 1.0       # ~ urms^3 / 2 L
+spect_form          = 2
+expo                = 0
+nlow                = 2         # smallest wave number
+nhigh               = 16        # largest wave number
+sol_fraction        = 1.0       # solenoidal fraction
+rseed               = -914
+constant_edot       = false     # false = constant acceleration field
+z_turb_scale_height = 0.1       #
+z_turb_center       = 0.0       #
 
 # ====================================================================================
 # OUTPUT CONFIGURATION
@@ -188,7 +208,21 @@ dt_wall     = 3600        # Also output every hour of wall time
 
 <output5>
 file_type   = bin         # 2D slice output
+slice_x1    = 0.0         # Slice through y=0
+id          = slice_x     # Output ID
+variable    = hydro_w     # Primitive variables
+dt          = 1.0         # Output every 1 time unit
+
+<output6>
+file_type   = bin         # 2D slice output
 slice_x2    = 0.0         # Slice through y=0
 id          = slice_y     # Output ID
+variable    = hydro_w     # Primitive variables
+dt          = 1.0         # Output every 1 time unit
+
+<output7>
+file_type   = bin         # 2D slice output
+slice_x3    = 0.0         # Slice through y=0
+id          = slice_z     # Output ID
 variable    = hydro_w     # Primitive variables
 dt          = 1.0         # Output every 1 time unit

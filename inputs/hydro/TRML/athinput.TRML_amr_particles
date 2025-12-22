@@ -206,17 +206,31 @@ t_frame_tracking_start = 1.0  # Start frame tracking after this time
 n_frame_track = 10        # Apply frame tracking every N cycles
 max_vz_frame_tracking = 0.01  # Maximum velocity shift per tracking event
 
-# --- Perturbations (optional) ---
-seed_perturb = 12345      # Random seed for velocity perturbations
-sigma_perturb = 0.01      # Amplitude of velocity perturbations (fraction of velocity)
-
 # --- AMR Refinement Thresholds ---
 # These control where the mesh is refined
 # Refine if: density_gradient > density_ratio_threshold AND T_min < T < T_max
+t_start_refine = 0.0         # Time to start applying refinement criteria
 density_ratio_threshold = 0.3  # Refine if |grad(rho)|/rho > 0.3
 T_min_threshold = 0.015        # Refine if T > T_min (1.5 * T_cold)
 T_max_threshold = 0.8          # Refine if T < T_max (0.8 * T_hot)
 # This focuses refinement on the mixing layer where T_cold < T < T_hot
+
+# ====================================================================================
+# Turbulent Driving for initial perturbations
+# ====================================================================================
+
+<initial_turb>
+turb_flag = 1
+tcorr = 0.01               # ~ L / 2 pi urms
+dt_turb_update = 0.01      # update driving pattern
+dedt  = 0.1                # ~ urms^3 / 2 L
+spect_form = 1
+npeak = 2
+nlow  = 1                  # smallest wave number
+nhigh = 3                  # largest wave number
+sol_fraction = 1.0         # solenoidal fraction
+rseed = -914
+constant_edot = false      # false = constant acceleration field
 
 # ====================================================================================
 # OUTPUT CONFIGURATION
@@ -260,4 +274,3 @@ file_type   = prtcl_trk   # Particle tracking output (subset of particles)
 id          = trk         # Output ID
 dt          = 0.1         # Output every 0.1 time units (more frequent for tracks)
 ntrack      = 1000        # Number of particles to track
-
