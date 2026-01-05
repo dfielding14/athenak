@@ -90,6 +90,11 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     Real p0 = rho0*cs*cs/eos.gamma;
     Real B0 = cs*std::sqrt(2.0*p0/beta);
 
+    // Option for tilted magnetic field along (1,1,1) direction
+    bool tilted_field = pin->GetOrAddBoolean("problem", "tilted_field", false);
+    Real Bx_val = tilted_field ? B0 / std::sqrt(3.0) : 0.0;
+    Real By_val = tilted_field ? B0 / std::sqrt(3.0) : 0.0;
+    Real Bz_val = tilted_field ? B0 / std::sqrt(3.0) : B0;
 
     // Set initial conditions
     par_for("pgen_turb", DevExeSpace(),0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
@@ -100,12 +105,12 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       u0(m,IM3,k,j,i) = 0.0;
 
       // initialize B
-      b0.x1f(m,k,j,i) = 0.0;
-      b0.x2f(m,k,j,i) = 0.0;
-      b0.x3f(m,k,j,i) = B0;
-      if (i==ie) {b0.x1f(m,k,j,i+1) = 0.0;}
-      if (j==je) {b0.x2f(m,k,j+1,i) = 0.0;}
-      if (k==ke) {b0.x3f(m,k+1,j,i) = B0;}
+      b0.x1f(m,k,j,i) = Bx_val;
+      b0.x2f(m,k,j,i) = By_val;
+      b0.x3f(m,k,j,i) = Bz_val;
+      if (i==ie) {b0.x1f(m,k,j,i+1) = Bx_val;}
+      if (j==je) {b0.x2f(m,k,j+1,i) = By_val;}
+      if (k==ke) {b0.x3f(m,k+1,j,i) = Bz_val;}
 
       if (eos.is_ideal) {
         u0(m,IEN,k,j,i) = p0/gm1 + 0.5*B0*B0 +

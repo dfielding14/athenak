@@ -165,6 +165,8 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
   // although maybe not optimal -- should probably have a way to
   // know beforehand which needs to be computed
   if (out_params.contains_derived) {
+    // Reset derived variable index before computing to ensure proper indexing
+    out_params.i_derived = 0;
     ComputeDerivedVariable(out_params.variable, pm);
     ComputeDerivedVariable(out_params.variable_2, pm);
   }
@@ -208,12 +210,16 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
   int nx3 = indcs.nx3 + 2*indcs.ng;
 
   // Copy MeshBlock data from host to device
+  // Use explicit ranges for ALL dimensions because:
+  // 1. Physics arrays may be allocated with more meshblocks than nmb_thispack
+  // 2. Need to ensure source and target shapes match exactly for deep_copy
   DvceArray5D<Real> outvars_device("outvars_device", outvars.size(), nmb, nx3, nx2, nx1);
   for (std::size_t i = 0; i < outvars.size(); ++i) {
       auto d_slice = Kokkos::subview(*(outvars[i].data_ptr),
-      Kokkos::ALL(), outvars[i].data_index, Kokkos::ALL(), Kokkos::ALL(), Kokkos::ALL());
+          Kokkos::make_pair(0, nmb), outvars[i].data_index,
+          Kokkos::make_pair(0, nx3), Kokkos::make_pair(0, nx2), Kokkos::make_pair(0, nx1));
       auto d_target_slice = Kokkos::subview(outvars_device, i,
-      Kokkos::ALL(), Kokkos::ALL(), Kokkos::ALL(), Kokkos::ALL());
+          Kokkos::ALL(), Kokkos::ALL(), Kokkos::ALL(), Kokkos::ALL());
       Kokkos::deep_copy(d_target_slice, d_slice);
   }
   Kokkos::fence();

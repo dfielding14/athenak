@@ -1,5 +1,7 @@
 # build directories
 build/
+build_*/
+build*/
 docs/build/
 
 # Athena output files

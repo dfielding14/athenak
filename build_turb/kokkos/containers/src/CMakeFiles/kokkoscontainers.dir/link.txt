@@ -1,2 +1,0 @@
-/usr/bin/ar qc libkokkoscontainers.a CMakeFiles/kokkoscontainers.dir/impl/Kokkos_UnorderedMap_impl.cpp.o
-/usr/bin/ranlib libkokkoscontainers.a

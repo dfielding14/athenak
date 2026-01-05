@@ -1,2 +1,0 @@
-/usr/bin/ar qc libkokkossimd.a CMakeFiles/kokkossimd.dir/Kokkos_SIMD_dummy.cpp.o
-/usr/bin/ranlib libkokkossimd.a
