@@ -54,6 +54,8 @@ class SourceTerms {
   Real hscale_height; // Gaussian Scale Height
   Real hscale_radius; // Exponential Scale Radius
   Real hscale_alpha;  // Scale coefficient
+  Real cooling_dt_factor;
+  Real t_start_ism_cooling;
 
   // CGM cooling tables
   DualArray1D<Real> Tbins, nHbins;

@@ -31,7 +31,7 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
   int is = indcs.is, nx1 = indcs.nx1;
   int js = indcs.js, nx2 = indcs.nx2;
   int ks = indcs.ks, nx3 = indcs.nx3;
-  
+
   // Get nscalars and nhydro/nmhd from the appropriate physics module
   int nscalars = 0;
   int nhydro = 0;
@@ -46,8 +46,10 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
   const int nkji = nx3*nx2*nx1;
   const int nji  = nx2*nx1;
   dtnew = static_cast<Real>(std::numeric_limits<float>::max());
+  bool apply_cooling_dt_factor = false;
+  Real time = pmy_pack->pmesh->time;
 
-  if (ism_cooling) {
+  if (ism_cooling && time >= t_start_ism_cooling) {
     Real use_e = eos_data.use_e;
     Real gamma = eos_data.gamma;
     Real gm1 = gamma - 1.0;
@@ -92,8 +94,9 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
 
       min_dt = fmin((eint/cooling_heating), min_dt);
     }, Kokkos::Min<Real>(dtnew));
+    apply_cooling_dt_factor = true;
   }
- 
+
   if (cgm_cooling) {
     auto &size = pmy_pack->pmb->mb_size;
     int nmb1 = pmy_pack->nmb_thispack - 1;
@@ -178,7 +181,7 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
 
       // Caculate PIE cooling
       // WiersmaCooling at redshift z = 0 taken from Wiersma et al (2009)
-      Real lambda_cooling_PIE = 0.0;     
+      Real lambda_cooling_PIE = 0.0;
       // Ensure we are in range of cooling table
       if (temp > Tfloor && temp < Tceil && nH > nHfloor && nH < nHceil) {
         // Convert input values to log space
@@ -187,7 +190,7 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
 
         // Locate indices in Tbins and nHbins
         int i = 0, j = 0;
-        while (i < Tbins_DIM_0 - 2 && log10(Tbins_(i + 1)) < log_temp) ++i; 
+        while (i < Tbins_DIM_0 - 2 && log10(Tbins_(i + 1)) < log_temp) ++i;
         while (j < nHbins_DIM_0 - 2 && log10(nHbins_(j + 1)) < log_density) ++j;
 
         // Logarithms of the Tbins and nHbins bounding the point
@@ -199,13 +202,13 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
         // Compute weights for bilinear interpolation
         Real t = (log_temp - log_T0) / (log_T1 - log_T0);
         Real u = (log_density - log_nH0) / (log_nH1 - log_nH0);
-    
+
         // Corner values in log space from the H_He cooling grid
         Real C00 = H_He_Cooling_(i, j);
         Real C10 = H_He_Cooling_(i + 1, j);
         Real C01 = H_He_Cooling_(i, j + 1);
         Real C11 = H_He_Cooling_(i + 1, j + 1);
-  
+
         // Corner values in log space from the Metal cooling grid
         Real M00 = Metal_Cooling_(i, j);
         Real M10 = Metal_Cooling_(i + 1, j);
@@ -223,12 +226,12 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
             t * (1 - u) * M10 +
             (1 - t) * u * M01 +
             t * u * M11;
-  
+
         lambda_cooling_PIE = prim_cooling + Z * metal_cooling;
-      } 
-      
+      }
+
       // Caculate CIE cooling
-      Real lambda_cooling_CIE = 0.0;  
+      Real lambda_cooling_CIE = 0.0;
       if (temp > Tfloor && temp < Tceil) {
         // Convert input values to log space
         Real log_temp = log10(temp);
@@ -255,7 +258,7 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
         // Linear Interpolation
         Real prim_cooling = C0 + t * (C1 - C0);
         Real metal_cooling = M0 + t * (M1 - M0);
-        
+
         lambda_cooling_CIE = prim_cooling + Z * metal_cooling;
       }
       else if (temp < Tfloor) {
@@ -284,7 +287,8 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
 
       min_dt = fmin((eint/cooling_heating), min_dt);
     }, Kokkos::Min<Real>(dtnew));
-    
+    apply_cooling_dt_factor = true;
+
   }
 
   if (rel_cooling) {
@@ -331,6 +335,11 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
 
       min_dt = fmin((eint/cooling_heating), min_dt);
     }, Kokkos::Min<Real>(dtnew));
+    apply_cooling_dt_factor = true;
+  }
+
+  if (apply_cooling_dt_factor) {
+    dtnew *= cooling_dt_factor;
   }
 
   return;

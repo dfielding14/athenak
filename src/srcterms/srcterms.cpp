@@ -51,6 +51,18 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
   }
 
   // (2) Optically thin (ISM) cooling
+  cooling_dt_factor = pin->GetOrAddReal(block, "cooling_dt_factor", 1.0);
+  if (cooling_dt_factor <= 0.0) {
+    std::cout << "### FATAL ERROR in "<< __FILE__ <<" at line " << __LINE__ << std::endl
+              << "cooling_dt_factor must be > 0" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  t_start_ism_cooling = pin->GetOrAddReal(block, "t_start_ism_cooling", 0.0);
+  if (t_start_ism_cooling < 0.0) {
+    std::cout << "### FATAL ERROR in "<< __FILE__ <<" at line " << __LINE__ << std::endl
+              << "t_start_ism_cooling must be >= 0" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   ism_cooling = pin->GetOrAddBoolean(block, "ism_cooling", false);
   if (ism_cooling) {
     hrate = pin->GetReal(block, "hrate");
@@ -194,6 +206,9 @@ void SourceTerms::ConstantAccel(const DvceArray5D<Real> &w0, const EOS_Data &eos
 
 void SourceTerms::ISMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_data,
                              const Real bdt, DvceArray5D<Real> &u0) {
+  if (pmy_pack->pmesh->time < t_start_ism_cooling) {
+    return;
+  }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;

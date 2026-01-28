@@ -41,6 +41,9 @@
 #include "outputs/outputs.hpp"
 #include "driver/driver.hpp"
 #include "srcterms/turb_driver.hpp"
+#include "hydro/hydro.hpp"
+#include "mhd/mhd.hpp"
+#include "eos/eos.hpp"
 
 // MPI/OpenMP headers
 #if MPI_PARALLEL_ENABLED
@@ -61,6 +64,32 @@
 
 namespace {
 
+void InitializePrimitivesForKick(Mesh *pm) {
+  if (pm == nullptr) {
+    return;
+  }
+
+  MeshBlockPack *pack = pm->pmb_pack;
+  if (pack == nullptr) {
+    return;
+  }
+
+  auto &indcs = pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+
+  if (pack->phydro != nullptr) {
+    pack->phydro->peos->ConsToPrim(pack->phydro->u0, pack->phydro->w0, false,
+                                   is, ie, js, je, ks, ke);
+  }
+  if (pack->pmhd != nullptr) {
+    pack->pmhd->peos->ConsToPrim(pack->pmhd->u0, pack->pmhd->b0,
+                                 pack->pmhd->w0, pack->pmhd->bcc0, false,
+                                 is, ie, js, je, ks, ke);
+  }
+}
+
 void ApplyInitialTurbulenceKick(Mesh *pm, ParameterInput *pin) {
   if (pm == nullptr || pin == nullptr) {
     return;
@@ -76,6 +105,9 @@ void ApplyInitialTurbulenceKick(Mesh *pm, ParameterInput *pin) {
   if (pack->phydro == nullptr && pack->pmhd == nullptr && pack->pionn == nullptr) {
     return;
   }
+
+  // Initialize primitives from ICs so the kick sees valid densities/velocities.
+  InitializePrimitivesForKick(pm);
 
   TurbulenceDriver init_driver(pack, pin, "initial_turb");
 
