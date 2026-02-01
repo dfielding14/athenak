@@ -107,7 +107,7 @@ bash check_athena_cpp_style.sh
 ```
 
 Key style requirements:
-- No tabs (spaces only)  
+- No tabs (spaces only)
 - Line length limit: 90 characters
 - Single closing brace per line
 - No trailing whitespace
@@ -204,7 +204,7 @@ x1min = -0.5
 x1max = 0.5
 
 <hydro>
-gamma = 1.4
+gamma = 1.6666667
 
 <problem>
 # Problem-specific parameters
