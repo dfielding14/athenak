@@ -1,0 +1,78 @@
+# AGENTS.md
+
+## Purpose
+This directory holds AthenaK runtime input decks (plain-text `.athinput` files)
+used for examples, problem setups, and regression tests. Files here are consumed
+by `ParameterInput` and passed to the executable via `-i` in `src/main.cpp`.
+
+---
+
+## Directory Map (Current)
+- `dyngr/`: dynamical GRMHD input decks.
+- `grhydro/`: GR hydrodynamics input decks.
+- `grmhd/`: GRMHD input decks.
+- `hydro/`: Newtonian hydro input decks.
+- `ion-neutral/`: two-fluid ion-neutral input decks.
+- `mhd/`: Newtonian MHD input decks.
+- `particles/`: particle-module input decks.
+- `radiation/`: radiation input decks.
+- `shearing_box/`: shearing-box input decks.
+- `srhydro/`: special-relativistic hydro input decks.
+- `srmhd/`: special-relativistic MHD input decks.
+- `tests/`: regression-test input decks referenced by the test harness.
+- `z4c/`: Z4c numerical-relativity input decks.
+- `turb_timed_amr_stage1.athinput`: top-level standalone input deck.
+
+---
+
+## Input File Format (ParameterInput)
+Format rules are enforced by `src/parameter_input.cpp`:
+
+- **Blocks**: `<blockname>` must appear on its own line (after leading spaces).
+  The parser reads until the first `>`; missing `>` is fatal.
+- **Parameters**: `name = value` (spaces around `=` are optional). Each parameter
+  must be on a single line. The parser assumes `=` is present.
+- **Comments**: `#` starts a comment. Lines whose first non-space character is
+  `#` are ignored. Inline comments after `#` are stripped from the value.
+- **Whitespace**: tabs are stripped; blank/whitespace-only lines are ignored.
+- **Ordering**: any `name=value` line before the first block is a fatal error.
+- **Duplicates**: repeated block names are merged; repeated parameter names in a
+  block overwrite earlier values.
+- **Terminator**: `<par_end>` stops parsing early (used when reading restarts).
+- **Case**: block/parameter names are case-sensitive string matches.
+
+---
+
+## Parameter Access Semantics
+- All values are stored as strings and converted on demand by `Get*` functions.
+- `GetInteger/GetReal/GetBoolean/GetString` require the block and parameter to
+  exist; missing entries are fatal.
+- `GetOrAdd*` inserts a default if the parameter is missing.
+- Boolean parsing accepts `0/1` or `true/false` (case-insensitive).
+- There is no global schema validation; extra parameters are stored and ignored
+  unless a module explicitly reads them.
+
+---
+
+## Command-Line Overrides and Restarts
+- `src/main.cpp` loads input files via `-i <file>` and restarts via `-r <file>`.
+- If both `-r` and `-i` are provided, the input file is loaded *after* the
+  restart header and overrides its parameters.
+- `ParameterInput::ModifyFromCmdline` accepts overrides of the form
+  `block/param=value` and applies them after file loading. The block and
+  parameter must already exist or the code aborts.
+
+---
+
+## Tests and Tooling
+- The test harness (`tst/scripts/utils/athena.py`) constructs paths as
+  `inputs/<filename>`, so tests assume files live under this directory. Renaming
+  or moving input decks requires updating the test scripts.
+
+---
+
+## Extension Points
+- Add new input decks for problem generators or regression tests in the
+  appropriate subdirectory.
+- Keep new parameter names aligned with the modules that read them (use
+  `GetOrAdd*` for optional values and `Get*` for required ones).

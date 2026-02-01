@@ -1,0 +1,155 @@
+# AGENTS.md
+
+## Purpose
+This directory implements the particle module: data storage for particle arrays,
+particle initialization, pushers (drift, RK4 gravity, Boris), and integration with
+particle boundary exchange handled in `src/bvals`.
+See `../../AGENTS.md` for repository-wide conventions and workflow.
+
+---
+
+## Key Files and Responsibilities
+
+### Core class and setup
+- `particles.hpp`: `particles::Particles` class definition, pusher/type enums, task IDs.
+- `particles.cpp`: constructor, input parsing, initialization for cosmic rays and stars,
+  tag assignment, species setup, and allocation of particle arrays.
+
+### Pushers and field interpolation
+- `particles_pushers.cpp`: pusher implementations (drift, RK4 gravity, Boris) plus
+  `InterpolateLinear` and `InterpolateTSC` for B-field sampling.
+
+### Task list wiring
+- `particles_tasks.cpp`: inserts particle tasks into the `before_timeintegrator`
+  task list and provides wrappers for boundary exchange steps.
+
+### Data structs
+- `particles_data_structs.hpp`: `ParticleLocationData` and `ParticleMessageData` used
+  by particle MPI exchange in `src/bvals/bvals_part.cpp`.
+
+---
+
+## Data Layout and Indices
+Particles store two Kokkos 2D arrays with index order `(var, particle)`:
+- `prtcl_rdata` (Real): continuous particle properties
+- `prtcl_idata` (int): integer properties
+
+Index constants are defined in `athena.hpp`:
+- **Integer indices** (for `prtcl_idata`):
+  - `PGID`: owning MeshBlock global ID
+  - `PTAG`: unique tag
+  - `PSP` (cosmic rays) or `NSN` (stars): species or SN count (same index value)
+- **Real indices** (for `prtcl_rdata`):
+  - `IPX, IPVX, IPY, IPVY, IPZ, IPVZ`: position and velocity
+  - Cosmic rays (`CRParticlesIndex`): `IPM` (q/m), `IPBX/IPBY/IPBZ` (sampled B),
+    `IPDX/IPDY/IPDZ` (displacement), `IPDB` (parallel displacement)
+  - Stars (`StarParticlesIndex`): `IPT_CREATE`, `IPMASS`, `IPT_NEXT_SN`
+
+The number of real slots (`nrdata`) is chosen at construction time:
+- Cosmic rays:
+  - If `track_displacement` is true, `nrdata = IPDB + 1` (includes B and displacement).
+  - Else if 3D, `nrdata = IPBZ + 1`; otherwise `nrdata = IPBY + 1`.
+- Stars: `nrdata = 9` (positions, velocities, and three star fields).
+
+`nidata` is always 3 (`PGID`, `PTAG`, and `PSP` or `NSN`).
+
+---
+
+## Particle Types
+
+### Cosmic rays (`particle_type = cosmic_ray`)
+- Particle count: `ppc` (particles per cell). Total per pack is
+  `ppc * nmb_thispack * nx1 * nx2 * nx3` truncated to an integer.
+- Species:
+  - `nspecies` in `<particles>` block.
+  - Species properties in blocks `species0`, `species1`, ... with `mass` and `charge`.
+  - `IPM` stores charge-to-mass ratio for each particle.
+- Initialization:
+  - `cr_distribution = center` (default) places particles at block centers.
+  - `cr_distribution = random` uses Kokkos RNG to place uniformly in each block.
+- Optional displacement tracking via `track_displacement` updates `IPD*` and `IPDB`.
+- Requires MHD if using Boris pushers (needs `bcc0` for B interpolation).
+
+### Stars (`particle_type = star`)
+- **3D only**. Constructor aborts if `three_d` is false.
+- Particles are loaded from `star_particle_file` with 8 columns per line:
+  `x y z vx vy vz t_create mass` (comments starting with `#` are skipped).
+- Each rank reads the file and keeps only particles inside its local MeshBlocks.
+- Additional fields:
+  - `NSN` (integer) counts supernovae for that particle.
+  - `IPT_NEXT_SN` is initialized via `GetNthSNTime` from `utils/sn_scheduler.hpp`.
+
+---
+
+## Pushers and Interpolation
+
+### Pusher selection (`<particles>` block)
+Supported strings in code:
+- `drift` -> `PushDrift`
+- `rk4_gravity` -> `PushStars`
+- `boris_lin` -> `PushCosmicRays` with linear interpolation
+- `boris_tsc` -> `PushCosmicRays` with TSC interpolation
+
+Note: the enum also lists `leap_frog`, `lagrangian_tracer`, and `lagrangian_mc`,
+but these are not wired in the constructor.
+
+### Pushers
+- **Drift**: updates positions with velocities using `mesh->dt`.
+- **RK4 gravity** (stars): integrates in an analytic potential using finite-difference
+  gradients of `GravPot`. Parameters are read from the `<potential>` block:
+  `r_scale`, `rho_scale`, `mass_gal`, `scale_gal`, `z_gal`, `r_200`, `rho_mean`.
+  Step size uses `particles:grav_dx` (default `1e-6`).
+- **Boris** (cosmic rays): advances velocities in B only (E=0). B is interpolated
+  from cell-centered `bcc0` with linear or TSC weighting.
+
+### Field interpolation
+- `InterpolateLinear`: trilinear (or bilinear in 2D) interpolation of `bcc0`.
+- `InterpolateTSC`: triangular-shaped cloud weighting over a 3x3x3 stencil.
+
+---
+
+## Boundary Exchange (MPI)
+Particle communication is implemented in `src/bvals/bvals_part.cpp` via
+`ParticlesBoundaryValues`, but is driven by particle tasks in this directory.
+
+High-level flow:
+1. **Push**: advance particle positions/velocities.
+2. **NewGID**: detect boundary crossings, update `PGID`, and build send/destroy lists.
+3. **Count**: share send counts across ranks.
+4. **InitRecv**: post non-blocking receives for particle buffers.
+5. **SendP**: pack and send particle data (real + int buffers).
+6. **RecvP**: unpack received particles, fill holes, destroy out-of-domain particles.
+7. **ClearRecv/ClearSend**: finalize MPI requests.
+
+Notes from `bvals_part.cpp`:
+- `BoundaryFlag::user` on a face marks particles for destruction.
+- Periodic boundaries wrap positions back into the global domain.
+- Arrays are resized when receives exceed sends, and compacted after destruction.
+- `mesh->CountParticles()` is called after exchanges to update global counts.
+
+---
+
+## Task List Integration
+`Particles::AssembleTasks` inserts tasks into `before_timeintegrator`:
+`Push -> NewGID -> SendCnt -> InitRecv -> SendP -> RecvP -> ClearRecv -> ClearSend`.
+
+---
+
+## Outputs and Diagnostics (references)
+- `outputs/vtk_prtcl.cpp` and `outputs/track_prtcl.cpp` consume `prtcl_rdata` and
+  `prtcl_idata` for particle dumps and tracked particles.
+- Derived variable `prtcl_d` (in `outputs/derived_variables.cpp`) bins particle
+  counts onto the mesh.
+
+---
+
+## Extension Points and Cautions
+- Any new particle type or pusher must update:
+  - enum(s) and constructor parsing in `particles.cpp`.
+  - data layout decisions for `nrdata` and `nidata`.
+  - push logic in `particles_pushers.cpp`.
+- Boris pushers assume MHD is enabled; they error out if `pmhd` is null.
+- Star particles assume 3D and use an external file for initialization; keep the
+  file format consistent.
+- Particle boundary exchange relies on `PGID` and the neighbor index scheme; keep
+  GID updates and periodic wrapping consistent with mesh BCs.
