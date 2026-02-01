@@ -51,10 +51,20 @@ The list above matches the registration in `Outputs::Outputs` (`outputs.cpp`).
 ## Configuration Notes
 - `<output[n]>` blocks are discovered by name in `Outputs::Outputs`.
 - `file_type` is required; `dt` or `dcycle` is required to schedule outputs.
-- `variable` is required for all file types except `hst`, `log`, `rst`, and `trk`.
+- `variable` is required for all file types except `hst`, `log`, and `rst`.
+  `trk` still parses `variable` in `Outputs::Outputs` (even though it is unused in
+  `TrackedParticleOutput`), so include it to avoid parser errors.
 - Only one `hst`, `log`, and `rst` block is allowed.
 - Output-specific parameters (e.g., `single_file_per_rank`, `coarsen_factor`, PDF
   bin settings) are parsed in `outputs.cpp` and individual writers.
+- `pdf` parameters are 1D/2D only: `bin_min`, `bin_max`, `nbin`, and `logscale` always
+  apply; `variable_2` plus `bin2_*`, `nbin2`, `logscale2` enable 2D (dimension is
+  `nbin2 == 0 ? 1 : 2` in `PDFOutput`).
+- `pdf` rejects variable groups (`hydro_u`, `hydro_w`, `mhd_u`, `mhd_w`) in
+  `Outputs::Outputs`; only scalar names from `var_choice` are accepted.
+- `pdf` supports `mass_weighted` (cell volume times density from hydro/MHD/Z4c).
+- `cbin` supports `compute_moments`; when true, each variable outputs 4 moments
+  (mean, mean^2, mean^3, mean^4) over the coarsened cell volume.
 
 ---
 
@@ -77,7 +87,8 @@ The list above matches the registration in `Outputs::Outputs` (`outputs.cpp`).
 Constructors create format-specific directories, e.g.:
 - `vtk/`, `pvtk/`, `bin/`, `rst/`, `trk/`, `tab/`
 - `cbin_<file_id>_<coarsen_factor>/`
-- `pdf_<file_id>` (with a second variable suffix for 2D PDFs)
+- `pdf_<file_id>` (with a second variable suffix for 2D PDFs); writes
+  `<basename>.bins.pdf` once and `<basename>.#####.pdf` per output time
 Rank-specific subdirectories are created when `single_file_per_rank` is enabled.
 
 ---
