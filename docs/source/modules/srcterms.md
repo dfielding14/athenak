@@ -40,6 +40,8 @@ The term acts on momentum and, for ideal gases, adds the corresponding kinetic w
 |-----------|------|-------|
 | `ism_cooling` | bool | Enables optically thin ISM cooling. |
 | `hrate` | real | Uniform heating rate used to offset cooling. |
+| `cooling_dt_factor` | real | Scales the cooling timestep limit (`dtnew *= factor`) before the global CFL multiplier. |
+| `t_start_ism_cooling` | real | Simulation time (code units) when ISM cooling begins; before that, ISM cooling is skipped. |
 
 The cooling coefficient `Λ(T)` stitches together three regimes:
 
@@ -56,6 +58,7 @@ The cooling coefficient `Λ(T)` stitches together three regimes:
 |-----------|------|-------|
 | `cgm_cooling` | bool | Enables CGM cooling; mutually exclusive with `ism_cooling`. |
 | `hrate` | real | Base volumetric heating rate. |
+| `cooling_dt_factor` | real | Scales the cooling timestep limit (`dtnew *= factor`) before the global CFL multiplier. |
 | `hscale_norm` | real | Density-normalisation factor. |
 | `hscale_height` | real | Vertical Gaussian scale height. |
 | `hscale_radius` | real | Radial exponential scale radius. |

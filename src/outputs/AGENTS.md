@@ -1,0 +1,88 @@
+# AGENTS.md
+
+## Purpose
+This directory implements AthenaK's output system. It parses `<output[n]>` blocks,
+selects variables, assembles host-side buffers, and writes mesh/particle/diagnostic
+files in multiple formats.
+See `../../AGENTS.md` for repository-wide conventions and workflow.
+
+---
+
+## Key Entry Points
+
+### Core types
+- `outputs.hpp`: `OutputParameters`, `BaseTypeOutput`, and `Outputs` definitions plus
+  `var_choice` (the canonical list of selectable output variables).
+- `outputs.cpp`: parses `<output[n]>` blocks and registers each output type.
+- `basetype_output.cpp`: validates requested variables against enabled physics and
+  builds the per-output variable list.
+- `derived_variables.cpp`: computes derived variables into `BaseTypeOutput::derived_var`.
+
+### I/O abstraction
+- `io_wrapper.hpp` / `io_wrapper.cpp`: `IOWrapper` provides MPI-IO vs stdio wrappers
+  used by several output writers.
+
+---
+
+## Output Types (file_type → implementation)
+
+Mesh data:
+- `vtk` → `vtk_mesh.cpp` (`MeshVTKOutput`)
+- `bin` → `binary.cpp` (`MeshBinaryOutput`)
+- `cbin` → `coarsened_binary.cpp` (`CoarsenedBinaryOutput`)
+
+Particles:
+- `pvtk` → `vtk_prtcl.cpp` (`ParticleVTKOutput`)
+- `trk` → `track_prtcl.cpp` (`TrackedParticleOutput`)
+
+Diagnostics:
+- `hst` → `history.cpp` (`HistoryOutput`)
+- `log` → `eventlog.cpp` (`EventLogOutput`)
+- `tab` → `formatted_table.cpp` (`FormattedTableOutput`)
+- `pdf` → `pdf.cpp` (`PDFOutput`)
+
+Restart:
+- `rst` → `restart.cpp` (`RestartOutput`)
+
+The list above matches the registration in `Outputs::Outputs` (`outputs.cpp`).
+
+---
+
+## Configuration Notes
+- `<output[n]>` blocks are discovered by name in `Outputs::Outputs`.
+- `file_type` is required; `dt` or `dcycle` is required to schedule outputs.
+- `variable` is required for all file types except `hst`, `log`, `rst`, and `trk`.
+- Only one `hst`, `log`, and `rst` block is allowed.
+- Output-specific parameters (e.g., `single_file_per_rank`, `coarsen_factor`, PDF
+  bin settings) are parsed in `outputs.cpp` and individual writers.
+
+---
+
+## Extension Points
+
+### Add a new output variable
+- Update `NOUTPUT_CHOICES` and `var_choice` in `outputs.hpp`.
+- Map the new variable to data in `BaseTypeOutput` (constructor in
+  `basetype_output.cpp`).
+- Add derived computation in `derived_variables.cpp` if needed.
+
+### Add a new output format
+- Implement a `BaseTypeOutput` subclass with `WriteOutputFile` (and `LoadOutputData`
+  if needed).
+- Register the new type in `Outputs::Outputs` in `outputs.cpp`.
+
+---
+
+## Observed Output Directories
+Constructors create format-specific directories, e.g.:
+- `vtk/`, `pvtk/`, `bin/`, `rst/`, `trk/`, `tab/`
+- `cbin_<file_id>_<coarsen_factor>/`
+- `pdf_<file_id>` (with a second variable suffix for 2D PDFs)
+Rank-specific subdirectories are created when `single_file_per_rank` is enabled.
+
+---
+
+## Cautions
+- `FormattedTableOutput` enforces 1D slices (fails on 2D/3D without slice planes).
+- Derived variables in `derived_variables.cpp` operate on active zones only.
+- Keep Kokkos data layout conventions intact when adding outputs or variables.

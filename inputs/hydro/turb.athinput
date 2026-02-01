@@ -43,16 +43,32 @@ ndiag      = 1        # cycles between diagostic output
 eos         = ideal   # EOS type
 reconstruct = plm     # spatial reconstruction method
 rsolver     = hllc    # Riemann-solver to be used
-gamma       = 1.4   # gamma = C_p/C_v
+gamma       = 1.666667 # gamma = C_p/C_v
+ism_cooling = true    # enable ISM cooling
+hrate       = 0.0     # no uniform heating
+tfloor      = 0.54    # 0.9e4 K with units below
+
+<units>
+length_cgs = 3.0856776e18   # 1 pc (Lbox = 1 pc)
+mass_cgs   = 4.9141614e31   # n=1 cm^-3 when d_n=1 and mu=1
+time_cgs   = 2.6307735e12   # sets T_unit=1.6667e4 K for T_init=1e4 K
+mu         = 1.0
 
 <problem>
+d_n = 1.0
 
 <turb_driving>
-type = hydro
-tcorr = 0.5           # ~ L / 2 pi urms 
-dedt  = 0.1           # ~ urms^3 / 2 L
-nlow = 1
-nhigh = 2
+turb_flag = 2
+tcorr = 0.5                # ~ L / 2 pi v_rms
+dedt  = 1.0                # ~ v_rms^3 / 2 (L_box / npeak)
+spect_form = 1
+npeak = 2
+nlow  = 1                  # smallest wave number
+nhigh = 3                  # largest wave number
+sol_fraction = 1.0         # solenoidal fraction
+dt_turb_update = 0.01      # update driving pattern
+rseed = -914
+constant_edot = false      # false = constant acceleration field
 
 <output1>
 file_type = hst

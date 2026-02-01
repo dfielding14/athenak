@@ -1,6 +1,7 @@
 #include <cmath>
 #include <iostream>
 
+#include "athena.hpp"
 #include "parameter_input.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
@@ -16,18 +17,22 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm);
 // User-defined refinement condition
 void RefinementCondition(MeshBlockPack* pmbp);
 
-// Static variable to store refinement time
+// Static variables to store refinement parameters
 static Real t_refine = -1.0;
+static Real bstd_refine = 0.5;
+static Real bstd_derefine = -1.0;
+static Real bstd_mean_floor = 1.0e-20;
 
 //----------------------------------------------------------------------------------------
 //! \fn void ProblemGenerator::UserProblem()
-//  \brief Problem Generator for turbulence with time-dependent AMR
+//  \brief Problem Generator for turbulence with B-std AMR criterion
 
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
-  // Read refinement time from input (default to a large value if not specified)
-  // Add to input file: <problem> t_refine = <time_value>
-  // Set to a large value to disable refinement
-  t_refine = pin->GetOrAddReal("problem","t_refine",1.0e10);
+  // Read refinement controls (t_refine < 0 means active immediately)
+  t_refine = pin->GetOrAddReal("problem","t_refine",-1.0);
+  bstd_refine = pin->GetOrAddReal("problem","bstd_refine",0.5);
+  bstd_derefine = pin->GetOrAddReal("problem","bstd_derefine",-1.0);
+  bstd_mean_floor = pin->GetOrAddReal("problem","bstd_mean_floor",1.0e-20);
 
   // Register the refinement condition function
   user_ref_func = RefinementCondition;
@@ -90,11 +95,6 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     Real p0 = rho0*cs*cs/eos.gamma;
     Real B0 = cs*std::sqrt(2.0*p0/beta);
 
-    // Option for tilted magnetic field along (1,1,1) direction
-    bool tilted_field = pin->GetOrAddBoolean("problem", "tilted_field", false);
-    Real Bx_val = tilted_field ? B0 / std::sqrt(3.0) : 0.0;
-    Real By_val = tilted_field ? B0 / std::sqrt(3.0) : 0.0;
-    Real Bz_val = tilted_field ? B0 / std::sqrt(3.0) : B0;
 
     // Set initial conditions
     par_for("pgen_turb", DevExeSpace(),0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
@@ -105,12 +105,12 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       u0(m,IM3,k,j,i) = 0.0;
 
       // initialize B
-      b0.x1f(m,k,j,i) = Bx_val;
-      b0.x2f(m,k,j,i) = By_val;
-      b0.x3f(m,k,j,i) = Bz_val;
-      if (i==ie) {b0.x1f(m,k,j,i+1) = Bx_val;}
-      if (j==je) {b0.x2f(m,k,j+1,i) = By_val;}
-      if (k==ke) {b0.x3f(m,k+1,j,i) = Bz_val;}
+      b0.x1f(m,k,j,i) = 0.0;
+      b0.x2f(m,k,j,i) = 0.0;
+      b0.x3f(m,k,j,i) = B0;
+      if (i==ie) {b0.x1f(m,k,j,i+1) = 0.0;}
+      if (j==je) {b0.x2f(m,k,j+1,i) = 0.0;}
+      if (k==ke) {b0.x3f(m,k+1,j,i) = B0;}
 
       if (eos.is_ideal) {
         u0(m,IEN,k,j,i) = p0/gm1 + 0.5*B0*B0 +
@@ -125,8 +125,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
 //----------------------------------------------------------------------------------------
 //! \fn void RefinementCondition()
-//  \brief Simple time-dependent refinement condition
-//  Refines everywhere when t > t_refine
+//  \brief Refinement based on the per-block B std/mean ratio
 
 void RefinementCondition(MeshBlockPack* pmbp) {
   Mesh *pmesh       = pmbp->pmesh;
@@ -134,28 +133,81 @@ void RefinementCondition(MeshBlockPack* pmbp) {
   int mbs           = pmesh->gids_eachrank[global_variable::my_rank];
   auto &refine_flag = pmesh->pmr->refine_flag;
 
-  // Get current simulation time
+  if (pmbp->pmhd == nullptr) {
+    return;
+  }
+
+  auto &indcs = pmesh->mb_indcs;
+  int &is = indcs.is, nx1 = indcs.nx1;
+  int &js = indcs.js, nx2 = indcs.nx2;
+  int &ks = indcs.ks, nx3 = indcs.nx3;
+  const int nkji = nx3 * nx2 * nx1;
+  const int nji  = nx2 * nx1;
+
+  auto &bcc = pmbp->pmhd->bcc0;
+
   Real time = pmesh->time;
-  Real t_ref = t_refine;  // Capture for lambda
+  Real t_ref = t_refine;
+  Real refine_thresh = bstd_refine;
+  Real derefine_thresh = bstd_derefine;
+  Real mean_floor = bstd_mean_floor;
 
-  // Diagnostic output when refinement is about to trigger
-  static bool refinement_triggered = false;
-  if (time > t_ref && !refinement_triggered && global_variable::my_rank == 0) {
-    std::cout << "### REFINEMENT TRIGGERED at t=" << time
-              << " (t_refine=" << t_ref << "), nmb=" << nmb << std::endl;
-    refinement_triggered = true;
+  if (t_ref >= 0.0 && time < t_ref) {
+    return;
   }
 
-  // Simple time-based refinement: refine all blocks when t > t_refine
-  if (time > t_ref) {
-    // Use host-side loop to avoid potential GPU memory issues
-    for (int m = 0; m < nmb; m++) {
-      refine_flag.h_view(m+mbs) = 1;  // Flag for refinement
+  par_for_outer("UserRefineCondBstd",DevExeSpace(), 0, 0, 0, (nmb-1),
+  KOKKOS_LAMBDA(TeamMember_t tmember, const int m) {
+    Real sum_b = 0.0;
+    Real sum_b2 = 0.0;
+
+    Kokkos::parallel_reduce(Kokkos::TeamThreadRange(tmember, nkji),
+    [=](const int idx, Real &local_sum) {
+      int k = (idx)/nji;
+      int j = (idx - k*nji)/nx1;
+      int i = (idx - k*nji - j*nx1) + is;
+      j += js;
+      k += ks;
+
+      Real bx = bcc(m,IBX,k,j,i);
+      Real by = bcc(m,IBY,k,j,i);
+      Real bz = bcc(m,IBZ,k,j,i);
+      Real bmag = sqrt(bx*bx + by*by + bz*bz);
+      local_sum += bmag;
+    },Kokkos::Sum<Real>(sum_b));
+
+    Kokkos::parallel_reduce(Kokkos::TeamThreadRange(tmember, nkji),
+    [=](const int idx, Real &local_sum) {
+      int k = (idx)/nji;
+      int j = (idx - k*nji)/nx1;
+      int i = (idx - k*nji - j*nx1) + is;
+      j += js;
+      k += ks;
+
+      Real bx = bcc(m,IBX,k,j,i);
+      Real by = bcc(m,IBY,k,j,i);
+      Real bz = bcc(m,IBZ,k,j,i);
+      Real bmag = sqrt(bx*bx + by*by + bz*bz);
+      local_sum += bmag*bmag;
+    },Kokkos::Sum<Real>(sum_b2));
+
+    Real inv_ncells = 1.0/static_cast<Real>(nkji);
+    Real bmean = sum_b * inv_ncells;
+    Real bvar = sum_b2 * inv_ncells - bmean*bmean;
+    if (bvar < 0.0) bvar = 0.0;
+    Real bstd = sqrt(bvar);
+    Real denom = bmean + mean_floor;
+    Real ratio = (denom > 0.0) ? (bstd/denom) : 0.0;
+
+    if (refine_thresh > 0.0 && ratio > refine_thresh) {
+      refine_flag.d_view(m+mbs) = 1;
+    } else if (derefine_thresh >= 0.0 && ratio < derefine_thresh) {
+      refine_flag.d_view(m+mbs) = -1;
     }
-    // Mark as modified on host and sync to device
-    refine_flag.template modify<HostMemSpace>();
-    refine_flag.template sync<DevExeSpace>();
-  }
+  });
+
+  refine_flag.template modify<DevExeSpace>();
+  refine_flag.template sync<HostMemSpace>();
 }
 
 //----------------------------------------------------------------------------------------

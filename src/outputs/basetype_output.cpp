@@ -597,6 +597,63 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       outvars.emplace_back("bmag",i_derived,&(derived_var));
     }
 
+    // mhd magnitude of Alfven Velocity
+    if (variable.compare("mhd_vA_mag") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("vA_mag",i_derived,&(derived_var));
+    }
+
+    // ratio of curvature to magnetic field strength
+    if (variable.compare("mhd_curv_B_ratio") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("curv_B_ratio",i_derived,&(derived_var));
+    }
+
+    // cos(theta) between J and B
+    if (variable.compare("mhd_theta_jb") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("costheta_jb",i_derived,&(derived_var));
+    }
+
+    // cos(theta) between v and B
+    if (variable.compare("mhd_theta_vb") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("costheta_vb",i_derived,&(derived_var));
+    }
+
+    // cos(theta) between J and grad(rho)
+    if (variable.compare("mhd_theta_jdrho") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("costheta_jdrho",i_derived,&(derived_var));
+    }
+
+    // cos(theta) between B and grad(rho)
+    if (variable.compare("mhd_theta_bdrho") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("costheta_bdrho",i_derived,&(derived_var));
+    }
+
+    // hydro/mhd magnitude of viscous heating
+    if (variable.compare("hydro_visc_heat") == 0 ||
+        variable.compare("mhd_visc_heat") == 0) {
+      out_params.contains_derived = true;
+      out_params.n_derived += 1;
+      int i_derived = out_params.n_derived - 1;
+      outvars.emplace_back("visc_heat",i_derived,&(derived_var));
+    }
+
     // mhd divergence of B
     if (variable.compare("mhd_divb") == 0) {
       out_params.contains_derived = true;
@@ -673,7 +730,7 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
           variable_name.assign("mhd_sgs_");
           variable_name.append(std::to_string(i+1));
           out_params.n_derived += 1;
-          outvars.emplace_back(variable_name.c_str(),i,&(derived_var));
+          outvars.emplace_back(variable_name,i,&(derived_var));
       }
     }
 
