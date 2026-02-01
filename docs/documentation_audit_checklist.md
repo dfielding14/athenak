@@ -48,7 +48,7 @@ Use the checkboxes below to track progress. Whenever you update a document, reco
 - [ ] Shearing Box Module — `docs/build/html/modules/shearing_box.html`
 - [ ] Diffusion Module — `docs/build/html/modules/diffusion.html`
 - [x] Source Terms Module — `docs/build/html/modules/srcterms.html`
-- [ ] Outputs Module — `docs/build/html/modules/outputs.html`
+- [x] Outputs Module — `docs/build/html/modules/outputs.html`
 - [ ] Particles Module — `docs/build/html/modules/particles.html`
 - [ ] Radiation Module — `docs/build/html/modules/radiation.html`
 - [ ] Reconstruction Module — `docs/build/html/modules/reconstruction.html`
