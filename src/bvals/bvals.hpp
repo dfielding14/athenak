@@ -19,6 +19,12 @@ enum BoundaryFace {undef=-1, inner_x1, outer_x1, inner_x2, outer_x2, inner_x3, o
 enum class BoundaryFlag {undef=-1,block, reflect, inflow, outflow, diode, user, periodic,
                          shear_periodic, vacuum};
 
+// communication mode for cell-centered boundary exchanges
+enum class CCCommMode {ghost_fill, synchronize};
+
+// receive operation for unpack of cell-centered boundary exchanges
+enum class CCRecvOp {assign, accumulate};
+
 #include <algorithm>
 #include <vector>
 
@@ -157,7 +163,8 @@ class MeshBoundaryValues {
 
 class MeshBoundaryValuesCC : public MeshBoundaryValues {
  public:
-  MeshBoundaryValuesCC(MeshBlockPack *ppack, ParameterInput *pin, bool z4c);
+  MeshBoundaryValuesCC(MeshBlockPack *ppack, ParameterInput *pin, bool z4c,
+                       CCCommMode mode=CCCommMode::ghost_fill);
 
   //functions
   void InitSendIndices(MeshBoundaryBuffer &b,int o1,int o2,int o3,int f1,int f2) override;
@@ -166,7 +173,8 @@ class MeshBoundaryValuesCC : public MeshBoundaryValues {
 
   // functions to communicate CC data
   TaskStatus PackAndSendCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca);
-  TaskStatus RecvAndUnpackCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca);
+  TaskStatus RecvAndUnpackCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca,
+                             CCRecvOp op=CCRecvOp::assign);
   // functions to communicate fluxes of CC data
   TaskStatus PackAndSendFluxCC(DvceFaceFld5D<Real> &flx);
   TaskStatus RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx);
@@ -181,6 +189,9 @@ class MeshBoundaryValuesCC : public MeshBoundaryValues {
                              DvceArray5D<Real> &prim);
   void PrimToConsFineBndry(const DvceArray5D<Real> &prim, const DvceFaceFld4D<Real> &b,
                            DvceArray5D<Real> &cons);
+
+ private:
+  CCCommMode comm_mode_;
 };
 
 //----------------------------------------------------------------------------------------

@@ -48,6 +48,14 @@ struct ParticlesTaskIDs {
   TaskID recvp;
   TaskID csend;
   TaskID crecv;
+  TaskID save_old;
+  TaskID zero_mom;
+  TaskID irecv_mom;
+  TaskID dep_mom;
+  TaskID send_mom;
+  TaskID recv_mom;
+  TaskID crecv_mom;
+  TaskID csend_mom;
 };
 
 namespace particles {
@@ -79,6 +87,17 @@ public:
   bool track_displacement;          // enable displacement tracking
   DvceArray1D<Real> species_mass;   // mass per species
   DvceArray1D<Real> species_charge; // charge per species
+  bool deposit_moments = false;     // enable particle moment deposition
+  int deposit_order = 1;            // deposition shape order
+  Real deposit_qscale = 1.0;        // scaling of particle macro-charge
+  static constexpr int NMOM = 4;
+  static constexpr int IMOM_RHO = 0;
+  static constexpr int IMOM_JX  = 1;
+  static constexpr int IMOM_JY  = 2;
+  static constexpr int IMOM_JZ  = 3;
+  DvceArray5D<Real> moments;
+  DvceArray5D<Real> coarse_moments;
+  DvceArray1D<Real> x1_old, x2_old, x3_old;
 
   // Constants for rk4_gravity pusher
   Real r_scale;
@@ -92,6 +111,7 @@ public:
 
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
+  MeshBoundaryValuesCC *pbval_mom = nullptr;
 
   // container to hold names of TaskIDs
   ParticlesTaskIDs id;
@@ -107,6 +127,14 @@ public:
   TaskStatus RecvP(Driver *pdriver, int stage);
   TaskStatus ClearSend(Driver *pdriver, int stage);
   TaskStatus ClearRecv(Driver *pdriver, int stage);
+  TaskStatus SaveOldPositions(Driver *pdriver, int stage);
+  TaskStatus ZeroMoments(Driver *pdriver, int stage);
+  TaskStatus InitRecvMoments(Driver *pdriver, int stage);
+  TaskStatus DepositMoments(Driver *pdriver, int stage);
+  TaskStatus SendMoments(Driver *pdriver, int stage);
+  TaskStatus RecvMoments(Driver *pdriver, int stage);
+  TaskStatus ClearRecvMoments(Driver *pdriver, int stage);
+  TaskStatus ClearSendMoments(Driver *pdriver, int stage);
 
   // Cosmic ray specific methods
   void InitializeCosmicRays(ParameterInput *pin);

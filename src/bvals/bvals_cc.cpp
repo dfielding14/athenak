@@ -22,8 +22,9 @@
 // BValCC constructor:
 
 MeshBoundaryValuesCC::MeshBoundaryValuesCC(MeshBlockPack *pp, ParameterInput *pin,
-                                           bool z4c) :
-  MeshBoundaryValues(pp, pin, z4c) {
+                                           bool z4c, CCCommMode mode) :
+  MeshBoundaryValues(pp, pin, z4c),
+  comm_mode_(mode) {
 }
 
 //----------------------------------------------------------------------------------------
@@ -261,7 +262,9 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
 // \brief Unpack boundary buffers
 
 TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
-                                                 DvceArray5D<Real> &ca) {
+                                                 DvceArray5D<Real> &ca,
+                                                 CCRecvOp op) {
+  (void)op;
   // create local references for variables in kernel
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
