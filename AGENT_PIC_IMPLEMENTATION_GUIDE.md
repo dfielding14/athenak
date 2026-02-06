@@ -151,6 +151,27 @@ For every non-trivial function:
   - keep WS-E scope limited to test deck and regression scripts
   - keep tests deterministic and decomposition-aware.
 
+### WS-F (PR1 closeout and merge readiness)
+- Primary AthenaK templates:
+  - `tst/run_tests.py` (targeted/package regression invocation)
+  - `tst/scripts/style/check_athena_cpp_style_changed.sh` (C++ changed-file style gate)
+  - `tst/scripts/style/check_python_style_changed.sh` (Python changed-file style gate)
+  - existing `tst/scripts/particles/*.py` (PIC regression evidence format)
+- Required WS-F checklist:
+  - keep WS-F scope to validation hardening and closeout evidence only
+  - do not add PR2 coupling or new PIC runtime features in WS-F
+  - re-run MPI-enabled targeted PIC tests:
+    `particles/pic_deposit_conservation` and
+    `particles/pic_decomp_invariance`
+  - re-run MPI-enabled `particles` package
+  - run at least one non-MPI sanity execution path so serial behavior remains
+    validated
+  - run changed-file C++/Python style gates; fix only PR1-introduced issues
+  - preserve deterministic pass/fail thresholds for global deposited `Q/J`
+    integrals and guard-failure checks
+  - produce a concise closeout summary with commands, outcomes, and residual
+    risks carried to PR2/PR3
+
 ## 7. What Not To Do
 
 1. Do not rewrite large existing subsystems to "clean up" style.
@@ -172,6 +193,11 @@ In each PR/patch description include:
    - serial and MPI run evidence
    - measured global deposited `Q/J` values and tolerance checks
    - decomposition-invariance comparison output.
+7. For WS-F specifically:
+   - repeated MPI evidence for targeted tests and package run
+   - non-MPI sanity evidence
+   - style gate outputs
+   - explicit statement that no PR2-coupling files were changed
 
 ## 9. Definition of Done (per workstream)
 

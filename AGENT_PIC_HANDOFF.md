@@ -624,10 +624,56 @@ Run after Step E edits:
 4. Full PR1 matrix/stability pass:
    `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF/tst && python run_tests.py --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
 
-### 9.7 Next Serial Steps After E
+### 9.7 Step F (WS-F): PR1 Closeout and Merge Readiness
 
-1. Run full style checks and resolve only Step-E-introduced issues.
-2. Prepare PR1 summary with A/B/C/D/E evidence and residual risks.
+Goal:
+- finalize PR1 with reproducible validation evidence from A/B/C/D/E, without
+  expanding runtime scope or introducing PR2 coupling.
+
+Step F implementation checklist:
+
+1. Re-run WS-E targeted regression scripts on an MPI-enabled build to confirm
+   deterministic conservation/decomposition behavior still passes.
+2. Re-run the full `particles` regression package with MPI enabled.
+3. Re-run one non-MPI sanity check for deposited-moment observability and guard
+   behavior so serial-only environments still have clear pass/fail semantics.
+4. Run changed-file style/lint gates so PR1 is not blocked by unrelated
+   repository-wide style debt, and fix only issues introduced by PIC PR1:
+   - `tst/scripts/style/check_athena_cpp_style_changed.sh`
+   - `tst/scripts/style/check_python_style_changed.sh`
+5. Capture key diagnostics for closeout:
+   - measured global `Q/Jx/Jy/Jz` values from conservation analysis
+   - absolute/relative error metrics used for pass/fail
+   - explicit evidence that negative guard checks still fail as intended
+6. Verify scope lock:
+   - no edits to MHD source-coupling paths
+   - no AMR/restart/non-periodic extension work folded into PR1
+7. Prepare the PR1 closeout summary:
+   - completed steps A/B/C/D/E/F
+   - commands executed and outcomes
+   - known residual risks carried into PR2/PR3.
+
+### 9.8 Step F Validation Commands
+
+Run after Step F edits (or during Step F revalidation):
+
+1. MPI-enabled targeted conservation test:
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF/tst && python run_tests.py particles/pic_deposit_conservation --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+2. MPI-enabled decomposition invariance test:
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF/tst && python run_tests.py particles/pic_decomp_invariance --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+3. Package-level particle regression run:
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF/tst && python run_tests.py particles --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+4. Non-MPI guard/observability sanity run:
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF/tst && python run_tests.py particles/pic_deposit_conservation`
+5. C++ style gate (changed-file scope):
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF && bash tst/scripts/style/check_athena_cpp_style_changed.sh`
+6. Python style gate (changed-file scope):
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF && bash tst/scripts/style/check_python_style_changed.sh`
+
+### 9.9 Next Serial Step After F
+
+1. If Step F passes cleanly, start PR2 planning and implement Phase-1 coupling
+   work from Section 5 in a new scoped step sequence.
 
 ## 10. AGENTS Review Index
 

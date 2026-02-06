@@ -26,6 +26,16 @@ def _athena_input_path():
     return '../../' + athena.athena_rel_path + 'inputs/' + _INPUT_DECK
 
 
+def _athena_mpi_enabled():
+    command = ['./athena', '-c']
+    proc = subprocess.run(command, cwd=_athena_exe_dir(),
+                          capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError('Unable to query Athena configuration with -c')
+    output = (proc.stdout or '') + (proc.stderr or '')
+    return 'MPI parallelism:            ON' in output
+
+
 def _deck_path_for_python():
     return os.path.join('..', 'inputs', _INPUT_DECK)
 
@@ -172,13 +182,16 @@ def run(**kwargs):
             'nproc': 1,
             'args': ['job/basename=pic_dep_cons_serial'],
         },
-        {
+    ]
+    if _athena_mpi_enabled():
+        positive_cases.append({
             'name': 'mpi2',
             'basename': 'pic_dep_cons_mpi2',
             'nproc': 2,
             'args': ['job/basename=pic_dep_cons_mpi2'],
-        },
-    ]
+        })
+    else:
+        logger.info('Skipping mpi2 case: Athena build has MPI parallelism OFF')
 
     for case in positive_cases:
         _remove_outputs(case['basename'])
@@ -216,6 +229,8 @@ def analyze():
     ok = True
 
     for case_name in ['serial', 'mpi2']:
+        if case_name not in _POSITIVE_RESULTS:
+            continue
         result = _POSITIVE_RESULTS[case_name]
         measured = result['measured']
         expected = result['expected']
@@ -230,16 +245,19 @@ def analyze():
         ok = _check_with_tolerance(case_name + ':npart', measured['npart'],
                                    expected['npart'], 1.0e-6, 1.0e-8) and ok
 
-    serial = _POSITIVE_RESULTS['serial']['measured']
-    mpi2 = _POSITIVE_RESULTS['mpi2']['measured']
-    ok = _check_with_tolerance('serial_vs_mpi2:Q', mpi2['Q'], serial['Q'],
-                               1.0e-6, 1.0e-8) and ok
-    ok = _check_with_tolerance('serial_vs_mpi2:Jx', mpi2['Jx'], serial['Jx'],
-                               1.0e-6, 1.0e-8) and ok
-    ok = _check_with_tolerance('serial_vs_mpi2:Jy', mpi2['Jy'], serial['Jy'],
-                               1.0e-6, 1.0e-8) and ok
-    ok = _check_with_tolerance('serial_vs_mpi2:Jz', mpi2['Jz'], serial['Jz'],
-                               1.0e-6, 1.0e-8) and ok
+    if 'mpi2' in _POSITIVE_RESULTS:
+        serial = _POSITIVE_RESULTS['serial']['measured']
+        mpi2 = _POSITIVE_RESULTS['mpi2']['measured']
+        ok = _check_with_tolerance('serial_vs_mpi2:Q', mpi2['Q'], serial['Q'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2:Jx', mpi2['Jx'], serial['Jx'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2:Jy', mpi2['Jy'], serial['Jy'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2:Jz', mpi2['Jz'], serial['Jz'],
+                                   1.0e-6, 1.0e-8) and ok
+    else:
+        logger.info('No MPI run requested: serial-only non-MPI sanity path')
 
     ok = len(_NEGATIVE_RESULTS) == 3 and ok
     if len(_NEGATIVE_RESULTS) != 3:
