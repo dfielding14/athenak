@@ -283,20 +283,28 @@ Deliverables:
 8. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/CMakeLists.txt`
 - Register new particle moments source file.
 
-9. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/outputs/derived_variables.cpp`
-- Add derived variables: `prtcl_rho`, `prtcl_jx`, `prtcl_jy`, `prtcl_jz`
-  mapped to deposited moment arrays.
+9. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/outputs/outputs.hpp`
+- Add output choices: `prtcl_rho`, `prtcl_jx`, `prtcl_jy`, `prtcl_jz`.
+- Update `NOUTPUT_CHOICES` accordingly.
 
-10. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_deposit_conservation.athinput` (new)
+10. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/outputs/basetype_output.cpp`
+- Register the four new derived output variables in `BaseTypeOutput`.
+- Enforce runtime guard: these variables require `deposit_moments=true`.
+
+11. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/outputs/derived_variables.cpp`
+- Add derived-variable compute paths for `prtcl_rho`, `prtcl_jx`, `prtcl_jy`,
+  `prtcl_jz`, mapped to deposited moment arrays.
+
+12. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_deposit_conservation.athinput` (new)
 - Minimal periodic input deck enabling deposited moment outputs.
 
-11. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/__init__.py` (new)
+13. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/__init__.py` (new)
 - Enable test discovery in particles test namespace.
 
-12. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_deposit_conservation.py` (new)
+14. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_deposit_conservation.py` (new)
 - Validate global deposited charge/current invariants.
 
-13. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_deposit_decomp_invariance.py` (new)
+15. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_deposit_decomp_invariance.py` (new)
 - Validate decomposition/rank invariance.
 
 ### 6.1 Concrete Method Signatures for PR1
@@ -433,7 +441,8 @@ Recommended validation commands:
    `particles.hpp` -> `particles.cpp`.
 3. Implement deposition and wrappers in `particles_moments.cpp`.
 4. Wire task DAG in `particles_tasks.cpp` with recv-before-send clear ordering.
-5. Add output observability in `derived_variables.cpp`.
+5. Add output observability in output stack:
+   `outputs.hpp` -> `basetype_output.cpp` -> `derived_variables.cpp`.
 6. Add tests (`inputs/tests` + `tst/scripts/particles`) and verify guard paths.
 7. Only then begin PR2 coupling into MHD source tasks.
 
@@ -449,8 +458,9 @@ Current merged state:
 1. Interface freeze merged.
 2. `WS-A` merged (CC synchronize communication core).
 3. `WS-B` merged (particle scaffolding and runtime guards).
+4. `WS-C` merged (deposition kernel/task DAG wiring).
 
-### 9.1 Step C (WS-C): Implement Now
+### 9.1 Step C (WS-C): Completed
 
 Goal:
 - implement deposition kernels and task DAG wiring, using A/B infrastructure.
@@ -505,13 +515,119 @@ Run after Step C edits:
 1. `cmake -S /Users/dbf75/Work/Research/AthenaK/athenak-DF -B /Users/dbf75/Work/Research/AthenaK/athenak-DF/build`
 2. `cmake --build /Users/dbf75/Work/Research/AthenaK/athenak-DF/build -j8`
 
-### 9.3 Next Serial Steps After C
+### 9.3 Step D (WS-D): Execute Next
 
-1. Step D: output observability wiring
-   (`outputs.hpp`, `basetype_output.cpp`, `derived_variables.cpp`).
-2. Step E: regression tests and input deck
-   (`inputs/tests` + `tst/scripts/particles`).
-3. Run full PR1 validation matrix and style checks.
+Goal:
+- expose deposited particle moments as deterministic mesh output variables:
+  `prtcl_rho`, `prtcl_jx`, `prtcl_jy`, `prtcl_jz`.
+
+Files for Step D:
+
+1. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/outputs/outputs.hpp`
+2. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/outputs/basetype_output.cpp`
+3. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/outputs/derived_variables.cpp`
+
+Step D implementation checklist:
+
+1. In `outputs.hpp`, append four new choices in `var_choice`:
+   `prtcl_rho`, `prtcl_jx`, `prtcl_jy`, `prtcl_jz`.
+2. Increase `NOUTPUT_CHOICES` by 4 to match the expanded list.
+3. In `basetype_output.cpp`, add registration blocks mirroring `prtcl_d`:
+   each of the four names must set `contains_derived=true`, increment
+   `n_derived` by 1, and append one `outvars.emplace_back(...)`.
+4. Use stable labels in `outvars` matching variable semantics:
+   `prtcl_rho`, `prtcl_jx`, `prtcl_jy`, `prtcl_jz`.
+5. Add constructor-time guard in `basetype_output.cpp`:
+   if one of these four variables is requested and
+   `pm->pmb_pack->ppart->deposit_moments == false`, fail with explicit message.
+6. In `derived_variables.cpp`, add four compute branches in
+   `ComputeDerivedVariable()` that map each name to one component of
+   `pm->pmb_pack->ppart->moments`:
+   `Particles::IMOM_RHO`, `Particles::IMOM_JX`, `Particles::IMOM_JY`,
+   `Particles::IMOM_JZ`.
+7. Match existing AthenaK derived-variable pattern:
+   - ensure `derived_var` capacity
+   - write active zones only (`ks:ke`, `js:je`, `is:ie`)
+   - increment `i_dv` once per scalar output.
+8. Do not modify existing `prtcl_d` behavior; keep it as particle-count binning.
+9. Keep all non-particle outputs behavior-identical.
+
+### 9.4 Step D Validation Commands
+
+Run after Step D edits:
+
+1. `cmake -S /Users/dbf75/Work/Research/AthenaK/athenak-DF -B /Users/dbf75/Work/Research/AthenaK/athenak-DF/build`
+2. `cmake --build /Users/dbf75/Work/Research/AthenaK/athenak-DF/build -j8`
+3. Parse-only check for new variable acceptance:
+   `/Users/dbf75/Work/Research/AthenaK/athenak-DF/build/src/athena -n -i /Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/linear_wave_hydro.athinput output1/file_type=vtk output1/variable=prtcl_rho`
+4. Runtime guard check (`deposit_moments=false` + `prtcl_rho`) should fail
+   with clear message.
+5. Runtime smoke (`deposit_moments=true` + `prtcl_rho`/`prtcl_j*`) should run.
+
+### 9.5 Step E (WS-E): Execute Next
+
+Goal:
+- add deterministic regression coverage and a stable input deck for PR1
+  deposited-moment observability and invariants.
+
+Files for Step E:
+
+1. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_deposit_conservation.athinput` (new)
+2. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/__init__.py` (new)
+3. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_deposit_conservation.py` (new)
+4. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_decomp_invariance.py` (new)
+
+Step E implementation checklist:
+
+1. Input deck must stay inside PR1 runtime envelope:
+   - `particle_type=cosmic_ray`
+   - `deposit_moments=true`
+   - `deposit_order=1`
+   - strictly periodic boundaries
+   - no AMR/multilevel/shearing-box
+2. Use a built-in problem generator (`pgen_name=linear_wave`) so tests do not
+   depend on user-problem compile flags.
+3. Configure mesh output variables needed for analysis:
+   `prtcl_rho`, `prtcl_jx`, `prtcl_jy`, `prtcl_jz`, and `prtcl_d`.
+4. Prefer `file_type=bin` for test observability and parse outputs with
+   `/Users/dbf75/Work/Research/AthenaK/athenak-DF/vis/python/bin_convert_new.py`
+   in the analysis scripts.
+5. In `pic_deposit_conservation.py`, run:
+   - a serial case (`nproc=1`)
+   - an MPI case (`nproc=2`) for true communication-path coverage
+6. In `pic_deposit_conservation.py` analysis, compute global volume integrals:
+   - `Q = \int prtcl_rho dV`
+   - `Jx/Jy/Jz = \int prtcl_j* dV`
+   and compare against expected deposited totals from the configured particle
+   charge and velocity initialization.
+7. In `pic_decomp_invariance.py`, run at least two decomposition variants for
+   the same physics setup and compare global `Q/J` integrals within tolerance.
+8. Include explicit negative checks for guard behavior:
+   - `deposit_moments=false` + `prtcl_rho` output request fails
+   - unsupported deposition order fails
+   - non-periodic boundaries with deposition fail
+9. Keep pass/fail criteria strict and deterministic:
+   - all checks are scalar integral comparisons
+   - log measured values and absolute/relative errors in analysis output
+10. Keep Step E scope to tests and test inputs only (no PR2 coupling edits).
+
+### 9.6 Step E Validation Commands
+
+Run after Step E edits:
+
+1. MPI-enabled targeted conservation test:
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF/tst && python run_tests.py particles/pic_deposit_conservation --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+2. MPI-enabled decomposition invariance test:
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF/tst && python run_tests.py particles/pic_decomp_invariance --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+3. Package-level particle regression run:
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF/tst && python run_tests.py particles --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+4. Full PR1 matrix/stability pass:
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF/tst && python run_tests.py --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+
+### 9.7 Next Serial Steps After E
+
+1. Run full style checks and resolve only Step-E-introduced issues.
+2. Prepare PR1 summary with A/B/C/D/E evidence and residual risks.
 
 ## 10. AGENTS Review Index
 

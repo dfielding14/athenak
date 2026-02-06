@@ -111,12 +111,45 @@ For every non-trivial function:
   - `src/outputs/basetype_output.cpp` (derived var registration pattern)
   - `src/outputs/derived_variables.cpp` (derived var computation pattern)
   - `src/outputs/outputs.hpp` (valid variable names list)
+- Required WS-D checklist:
+  - update `NOUTPUT_CHOICES` and append
+    `prtcl_rho/prtcl_jx/prtcl_jy/prtcl_jz` in `src/outputs/outputs.hpp`
+  - add one derived registration block per new variable in
+    `src/outputs/basetype_output.cpp`
+  - enforce guard in `BaseTypeOutput`: these outputs require
+    `particles/deposit_moments=true`
+  - implement one `ComputeDerivedVariable()` branch per new variable in
+    `src/outputs/derived_variables.cpp`
+  - map each branch directly to `Particles::moments` component indices
+    (`IMOM_RHO/JX/JY/JZ`)
+  - keep `prtcl_d` unchanged and avoid refactoring unrelated output logic
 
 ### WS-E (tests and inputs)
 - Primary AthenaK templates:
   - `tst/scripts/mhd/divb_amr.py` (run/analyze structure)
   - `tst/run_tests.py` discovery expectations
-- Keep tests deterministic and decomposition-aware.
+- Required WS-E checklist:
+  - add `inputs/tests/pic_deposit_conservation.athinput` with a built-in
+    problem generator (`pgen_name=linear_wave`) and PR1-supported particle
+    deposition settings (`deposit_moments=true`, `deposit_order=1`,
+    periodic boundaries, no AMR/multilevel/shearing-box)
+  - include output variables `prtcl_rho`, `prtcl_jx`, `prtcl_jy`, `prtcl_jz`,
+    and `prtcl_d` in the test deck
+  - add `tst/scripts/particles/__init__.py` for test discovery
+  - add `tst/scripts/particles/pic_deposit_conservation.py`:
+    `run()` executes serial and MPI cases, `analyze()` validates global
+    deposited `Q/J` integrals against expected charge/current invariants
+  - add `tst/scripts/particles/pic_decomp_invariance.py`:
+    compare global deposited `Q/J` integrals across at least two decomposition
+    choices (and at least one MPI configuration)
+  - parse mesh outputs in analysis using
+    `vis/python/bin_convert_new.py` helpers for binary files
+  - include explicit negative guard checks for unsupported configuration paths
+    required by PR1 guardrails
+  - ensure deterministic thresholds and clear logger diagnostics for measured
+    values and errors
+  - keep WS-E scope limited to test deck and regression scripts
+  - keep tests deterministic and decomposition-aware.
 
 ## 7. What Not To Do
 
@@ -135,6 +168,10 @@ In each PR/patch description include:
 3. Entity source semantics mirrored (if applicable).
 4. Behavior preserved vs behavior intentionally changed.
 5. Compile/test commands run and outcome.
+6. For WS-E specifically:
+   - serial and MPI run evidence
+   - measured global deposited `Q/J` values and tolerance checks
+   - decomposition-invariance comparison output.
 
 ## 9. Definition of Done (per workstream)
 
