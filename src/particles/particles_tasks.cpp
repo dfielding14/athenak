@@ -29,8 +29,26 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   TaskID none(0);
 
   // particle integration done in "before_timeintegrator" task list
-  id.push   = tl["before_timeintegrator"]->AddTask(&Particles::Push, this, none);
-  id.newgid = tl["before_timeintegrator"]->AddTask(&Particles::NewGID, this, id.push);
+  id.save_old = tl["before_timeintegrator"]->AddTask(&Particles::SaveOldPositions,
+                                                      this, none);
+  id.push = tl["before_timeintegrator"]->AddTask(&Particles::Push, this, id.save_old);
+  id.zero_mom = tl["before_timeintegrator"]->AddTask(&Particles::ZeroMoments, this,
+                                                      id.push);
+  id.irecv_mom = tl["before_timeintegrator"]->AddTask(&Particles::InitRecvMoments,
+                                                       this, id.zero_mom);
+  id.dep_mom = tl["before_timeintegrator"]->AddTask(&Particles::DepositMoments, this,
+                                                     id.irecv_mom);
+  id.send_mom = tl["before_timeintegrator"]->AddTask(&Particles::SendMoments, this,
+                                                      id.dep_mom);
+  id.recv_mom = tl["before_timeintegrator"]->AddTask(&Particles::RecvMoments, this,
+                                                      id.send_mom);
+  id.crecv_mom = tl["before_timeintegrator"]->AddTask(&Particles::ClearRecvMoments,
+                                                       this, id.recv_mom);
+  id.csend_mom = tl["before_timeintegrator"]->AddTask(&Particles::ClearSendMoments,
+                                                       this, id.crecv_mom);
+
+  id.newgid = tl["before_timeintegrator"]->AddTask(&Particles::NewGID, this,
+                                                    id.csend_mom);
   id.count  = tl["before_timeintegrator"]->AddTask(&Particles::SendCnt, this, id.newgid);
   id.irecv  = tl["before_timeintegrator"]->AddTask(&Particles::InitRecv, this, id.count);
   id.sendp  = tl["before_timeintegrator"]->AddTask(&Particles::SendP, this, id.irecv);

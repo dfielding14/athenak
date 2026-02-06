@@ -99,6 +99,7 @@ add_executable(
         outputs/vtk_prtcl.cpp
 
         particles/particles.cpp
+        particles/particles_moments.cpp
         particles/particles_pushers.cpp
         particles/particles_tasks.cpp
         outputs/pdf.cpp
