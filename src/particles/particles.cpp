@@ -168,12 +168,74 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     default:
       break;
   }
+
+  // PR1 deposition controls
+  deposit_moments = pin->GetOrAddBoolean("particles", "deposit_moments", false);
+  deposit_order = pin->GetOrAddInteger("particles", "deposit_order", 1);
+  deposit_qscale = pin->GetOrAddReal("particles", "deposit_qscale", 1.0);
+
+  // PR1 runtime scope guard for moment deposition
+  if (deposit_moments) {
+    if (particle_type != ParticleType::cosmic_ray) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<particles>/deposit_moments=true requires "
+                << "<particles>/particle_type=cosmic_ray" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (deposit_order != 1) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<particles>/deposit_order=" << deposit_order
+                << " is not supported in PR1 (only deposit_order=1)"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (!(pmy_pack->pmesh->strictly_periodic)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<particles>/deposit_moments=true requires "
+                << "strictly periodic boundaries in PR1" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (pmy_pack->pmesh->adaptive) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<particles>/deposit_moments=true does not support "
+                << "adaptive mesh refinement in PR1" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (pmy_pack->pmesh->multilevel) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<particles>/deposit_moments=true does not support "
+                << "multilevel mesh refinement in PR1" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (pin->DoesBlockExist("shearing_box")) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<particles>/deposit_moments=true does not support "
+                << "<shearing_box> in PR1" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
   
   Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
   Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
 
   // allocate boundary object
   pbval_part = new ParticlesBoundaryValues(this, pin);
+
+  if (deposit_moments) {
+    auto &indcs = pmy_pack->pmesh->mb_indcs;
+    int nmb = std::max((ppack->nmb_thispack), (ppack->pmesh->nmb_maxperrank));
+    int ncells1 = indcs.nx1 + 2*(indcs.ng);
+    int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
+    int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
+    Kokkos::realloc(moments, nmb, NMOM, ncells3, ncells2, ncells1);
+
+    Kokkos::realloc(x1_old, nprtcl_thispack);
+    Kokkos::realloc(x2_old, nprtcl_thispack);
+    Kokkos::realloc(x3_old, nprtcl_thispack);
+
+    pbval_mom = new MeshBoundaryValuesCC(ppack, pin, false, CCCommMode::synchronize);
+    pbval_mom->InitializeBuffers(NMOM);
+  }
 
   // Initialize particles based on type
   if (particle_type == ParticleType::cosmic_ray) {
@@ -188,6 +250,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
 Particles::~Particles() {
   delete pbval_part;
+  if (pbval_mom != nullptr) {
+    delete pbval_mom;
+  }
 }
 
 //----------------------------------------------------------------------------------------
