@@ -35,12 +35,45 @@ void MeshBoundaryValuesCC::InitSendIndices(MeshBoundaryBuffer &buf,
   // Formulae taken from LoadBoundaryBufferSameLevel() in src/bvals/cc/bvals_cc.cpp
   if ((f1 == 0) && (f2 == 0)) {  // this buffer used for same level (e.g. #0,4,8,12,...)
     auto &isame = buf.isame[0];    // indices of buffer for neighbor same level
-    isame.bis = (ox1 > 0) ? (mb_indcs.ie - ng1) : mb_indcs.is;
-    isame.bie = (ox1 < 0) ? (mb_indcs.is + ng1) : mb_indcs.ie;
-    isame.bjs = (ox2 > 0) ? (mb_indcs.je - ng1) : mb_indcs.js;
-    isame.bje = (ox2 < 0) ? (mb_indcs.js + ng1) : mb_indcs.je;
-    isame.bks = (ox3 > 0) ? (mb_indcs.ke - ng1) : mb_indcs.ks;
-    isame.bke = (ox3 < 0) ? (mb_indcs.ks + ng1) : mb_indcs.ke;
+    if (comm_mode_ == CCCommMode::synchronize) {
+      if (ox1 == 0) {
+        isame.bis = mb_indcs.is - ng;
+        isame.bie = mb_indcs.ie + ng;
+      } else if (ox1 > 0) {
+        isame.bis = mb_indcs.ie - ng1;
+        isame.bie = mb_indcs.ie + ng;
+      } else {
+        isame.bis = mb_indcs.is - ng;
+        isame.bie = mb_indcs.is + ng1;
+      }
+      if (ox2 == 0) {
+        isame.bjs = mb_indcs.js - ng;
+        isame.bje = mb_indcs.je + ng;
+      } else if (ox2 > 0) {
+        isame.bjs = mb_indcs.je - ng1;
+        isame.bje = mb_indcs.je + ng;
+      } else {
+        isame.bjs = mb_indcs.js - ng;
+        isame.bje = mb_indcs.js + ng1;
+      }
+      if (ox3 == 0) {
+        isame.bks = mb_indcs.ks - ng;
+        isame.bke = mb_indcs.ke + ng;
+      } else if (ox3 > 0) {
+        isame.bks = mb_indcs.ke - ng1;
+        isame.bke = mb_indcs.ke + ng;
+      } else {
+        isame.bks = mb_indcs.ks - ng;
+        isame.bke = mb_indcs.ks + ng1;
+      }
+    } else {
+      isame.bis = (ox1 > 0) ? (mb_indcs.ie - ng1) : mb_indcs.is;
+      isame.bie = (ox1 < 0) ? (mb_indcs.is + ng1) : mb_indcs.ie;
+      isame.bjs = (ox2 > 0) ? (mb_indcs.je - ng1) : mb_indcs.js;
+      isame.bje = (ox2 < 0) ? (mb_indcs.js + ng1) : mb_indcs.je;
+      isame.bks = (ox3 > 0) ? (mb_indcs.ke - ng1) : mb_indcs.ks;
+      isame.bke = (ox3 < 0) ? (mb_indcs.ks + ng1) : mb_indcs.ke;
+    }
     buf.isame_ndat = (isame.bie - isame.bis + 1)*(isame.bje - isame.bjs + 1)*
                      (isame.bke - isame.bks + 1);
   }
@@ -48,12 +81,45 @@ void MeshBoundaryValuesCC::InitSendIndices(MeshBoundaryBuffer &buf,
   // set indices for sends of COARSE data to neighbors on SAME level (needed for Z4c)
   if ((f1 == 0) && (f2 == 0)) {  // this buffer used for same level (e.g. #0,4,8,12,...)
     auto &isame = buf.isame_z4c;
-    isame.bis = (ox1 > 0) ? (mb_indcs.cie - ng1) : mb_indcs.cis;
-    isame.bie = (ox1 < 0) ? (mb_indcs.cis + ng1) : mb_indcs.cie;
-    isame.bjs = (ox2 > 0) ? (mb_indcs.cje - ng1) : mb_indcs.cjs;
-    isame.bje = (ox2 < 0) ? (mb_indcs.cjs + ng1) : mb_indcs.cje;
-    isame.bks = (ox3 > 0) ? (mb_indcs.cke - ng1) : mb_indcs.cks;
-    isame.bke = (ox3 < 0) ? (mb_indcs.cks + ng1) : mb_indcs.cke;
+    if (comm_mode_ == CCCommMode::synchronize) {
+      if (ox1 == 0) {
+        isame.bis = mb_indcs.cis - ng;
+        isame.bie = mb_indcs.cie + ng;
+      } else if (ox1 > 0) {
+        isame.bis = mb_indcs.cie - ng1;
+        isame.bie = mb_indcs.cie + ng;
+      } else {
+        isame.bis = mb_indcs.cis - ng;
+        isame.bie = mb_indcs.cis + ng1;
+      }
+      if (ox2 == 0) {
+        isame.bjs = mb_indcs.cjs - ng;
+        isame.bje = mb_indcs.cje + ng;
+      } else if (ox2 > 0) {
+        isame.bjs = mb_indcs.cje - ng1;
+        isame.bje = mb_indcs.cje + ng;
+      } else {
+        isame.bjs = mb_indcs.cjs - ng;
+        isame.bje = mb_indcs.cjs + ng1;
+      }
+      if (ox3 == 0) {
+        isame.bks = mb_indcs.cks - ng;
+        isame.bke = mb_indcs.cke + ng;
+      } else if (ox3 > 0) {
+        isame.bks = mb_indcs.cke - ng1;
+        isame.bke = mb_indcs.cke + ng;
+      } else {
+        isame.bks = mb_indcs.cks - ng;
+        isame.bke = mb_indcs.cks + ng1;
+      }
+    } else {
+      isame.bis = (ox1 > 0) ? (mb_indcs.cie - ng1) : mb_indcs.cis;
+      isame.bie = (ox1 < 0) ? (mb_indcs.cis + ng1) : mb_indcs.cie;
+      isame.bjs = (ox2 > 0) ? (mb_indcs.cje - ng1) : mb_indcs.cjs;
+      isame.bje = (ox2 < 0) ? (mb_indcs.cjs + ng1) : mb_indcs.cje;
+      isame.bks = (ox3 > 0) ? (mb_indcs.cke - ng1) : mb_indcs.cks;
+      isame.bke = (ox3 < 0) ? (mb_indcs.cks + ng1) : mb_indcs.cke;
+    }
     buf.isame_z4c_ndat = buf.isame_ndat +
       (isame.bie - isame.bis + 1)*(isame.bje - isame.bjs + 1)*(isame.bke - isame.bks + 1);
   }
@@ -165,33 +231,69 @@ void MeshBoundaryValuesCC::InitRecvIndices(MeshBoundaryBuffer &buf,
                                            int ox1, int ox2, int ox3, int f1, int f2) {
   auto &mb_indcs  = pmy_pack->pmesh->mb_indcs;
   int ng = mb_indcs.ng;
+  int ng1 = ng - 1;
 
   // set indices for receives from neighbors on SAME level
   // Formulae taken from SetBoundarySameLevel() in src/bvals/cc/bvals_cc.cpp
   if ((f1 == 0) && (f2 == 0)) {  // this buffer used for same level (e.g. #0,4,8,12,...)
     auto &isame = buf.isame[0];    // indices of buffer for neighbor same level
-    if (ox1 == 0) {
-      isame.bis = mb_indcs.is;          isame.bie = mb_indcs.ie;
-    } else if (ox1 > 0) {
-      isame.bis = mb_indcs.ie + 1;      isame.bie = mb_indcs.ie + ng;
-    } else {
-      isame.bis = mb_indcs.is - ng;     isame.bie = mb_indcs.is - 1;
-    }
+    if (comm_mode_ == CCCommMode::synchronize) {
+      if (ox1 == 0) {
+        isame.bis = mb_indcs.is - ng;
+        isame.bie = mb_indcs.ie + ng;
+      } else if (ox1 > 0) {
+        isame.bis = mb_indcs.ie - ng1;
+        isame.bie = mb_indcs.ie + ng;
+      } else {
+        isame.bis = mb_indcs.is - ng;
+        isame.bie = mb_indcs.is + ng1;
+      }
 
-    if (ox2 == 0) {
-      isame.bjs = mb_indcs.js;          isame.bje = mb_indcs.je;
-    } else if (ox2 > 0) {
-      isame.bjs = mb_indcs.je + 1;      isame.bje = mb_indcs.je + ng;
-    } else {
-      isame.bjs = mb_indcs.js - ng;     isame.bje = mb_indcs.js - 1;
-    }
+      if (ox2 == 0) {
+        isame.bjs = mb_indcs.js - ng;
+        isame.bje = mb_indcs.je + ng;
+      } else if (ox2 > 0) {
+        isame.bjs = mb_indcs.je - ng1;
+        isame.bje = mb_indcs.je + ng;
+      } else {
+        isame.bjs = mb_indcs.js - ng;
+        isame.bje = mb_indcs.js + ng1;
+      }
 
-    if (ox3 == 0) {
-      isame.bks = mb_indcs.ks;          isame.bke = mb_indcs.ke;
-    } else if (ox3 > 0) {
-      isame.bks = mb_indcs.ke + 1;      isame.bke = mb_indcs.ke + ng;
+      if (ox3 == 0) {
+        isame.bks = mb_indcs.ks - ng;
+        isame.bke = mb_indcs.ke + ng;
+      } else if (ox3 > 0) {
+        isame.bks = mb_indcs.ke - ng1;
+        isame.bke = mb_indcs.ke + ng;
+      } else {
+        isame.bks = mb_indcs.ks - ng;
+        isame.bke = mb_indcs.ks + ng1;
+      }
     } else {
-      isame.bks = mb_indcs.ks - ng;     isame.bke = mb_indcs.ks - 1;
+      if (ox1 == 0) {
+        isame.bis = mb_indcs.is;          isame.bie = mb_indcs.ie;
+      } else if (ox1 > 0) {
+        isame.bis = mb_indcs.ie + 1;      isame.bie = mb_indcs.ie + ng;
+      } else {
+        isame.bis = mb_indcs.is - ng;     isame.bie = mb_indcs.is - 1;
+      }
+
+      if (ox2 == 0) {
+        isame.bjs = mb_indcs.js;          isame.bje = mb_indcs.je;
+      } else if (ox2 > 0) {
+        isame.bjs = mb_indcs.je + 1;      isame.bje = mb_indcs.je + ng;
+      } else {
+        isame.bjs = mb_indcs.js - ng;     isame.bje = mb_indcs.js - 1;
+      }
+
+      if (ox3 == 0) {
+        isame.bks = mb_indcs.ks;          isame.bke = mb_indcs.ke;
+      } else if (ox3 > 0) {
+        isame.bks = mb_indcs.ke + 1;      isame.bke = mb_indcs.ke + ng;
+      } else {
+        isame.bks = mb_indcs.ks - ng;     isame.bke = mb_indcs.ks - 1;
+      }
     }
     buf.isame_ndat = (isame.bie - isame.bis + 1)*(isame.bje - isame.bjs + 1)*
                      (isame.bke - isame.bks + 1);
@@ -201,28 +303,63 @@ void MeshBoundaryValuesCC::InitRecvIndices(MeshBoundaryBuffer &buf,
   // Needed for Z4c with higher-order prolongation/restriction
   if ((f1 == 0) && (f2 == 0)) {  // this buffer used for same level (e.g. #0,4,8,12,...)
     auto &isame = buf.isame_z4c;
-    if (ox1 == 0) {
-      isame.bis = mb_indcs.cis;          isame.bie = mb_indcs.cie;
-    } else if (ox1 > 0) {
-      isame.bis = mb_indcs.cie + 1;      isame.bie = mb_indcs.cie + ng;
-    } else {
-      isame.bis = mb_indcs.cis - ng;     isame.bie = mb_indcs.cis - 1;
-    }
+    if (comm_mode_ == CCCommMode::synchronize) {
+      if (ox1 == 0) {
+        isame.bis = mb_indcs.cis - ng;
+        isame.bie = mb_indcs.cie + ng;
+      } else if (ox1 > 0) {
+        isame.bis = mb_indcs.cie - ng1;
+        isame.bie = mb_indcs.cie + ng;
+      } else {
+        isame.bis = mb_indcs.cis - ng;
+        isame.bie = mb_indcs.cis + ng1;
+      }
 
-    if (ox2 == 0) {
-      isame.bjs = mb_indcs.cjs;          isame.bje = mb_indcs.cje;
-    } else if (ox2 > 0) {
-      isame.bjs = mb_indcs.cje + 1;      isame.bje = mb_indcs.cje + ng;
-    } else {
-      isame.bjs = mb_indcs.cjs - ng;     isame.bje = mb_indcs.cjs - 1;
-    }
+      if (ox2 == 0) {
+        isame.bjs = mb_indcs.cjs - ng;
+        isame.bje = mb_indcs.cje + ng;
+      } else if (ox2 > 0) {
+        isame.bjs = mb_indcs.cje - ng1;
+        isame.bje = mb_indcs.cje + ng;
+      } else {
+        isame.bjs = mb_indcs.cjs - ng;
+        isame.bje = mb_indcs.cjs + ng1;
+      }
 
-    if (ox3 == 0) {
-      isame.bks = mb_indcs.cks;          isame.bke = mb_indcs.cke;
-    } else if (ox3 > 0) {
-      isame.bks = mb_indcs.cke + 1;      isame.bke = mb_indcs.cke + ng;
+      if (ox3 == 0) {
+        isame.bks = mb_indcs.cks - ng;
+        isame.bke = mb_indcs.cke + ng;
+      } else if (ox3 > 0) {
+        isame.bks = mb_indcs.cke - ng1;
+        isame.bke = mb_indcs.cke + ng;
+      } else {
+        isame.bks = mb_indcs.cks - ng;
+        isame.bke = mb_indcs.cks + ng1;
+      }
     } else {
-      isame.bks = mb_indcs.cks - ng;     isame.bke = mb_indcs.cks - 1;
+      if (ox1 == 0) {
+        isame.bis = mb_indcs.cis;          isame.bie = mb_indcs.cie;
+      } else if (ox1 > 0) {
+        isame.bis = mb_indcs.cie + 1;      isame.bie = mb_indcs.cie + ng;
+      } else {
+        isame.bis = mb_indcs.cis - ng;     isame.bie = mb_indcs.cis - 1;
+      }
+
+      if (ox2 == 0) {
+        isame.bjs = mb_indcs.cjs;          isame.bje = mb_indcs.cje;
+      } else if (ox2 > 0) {
+        isame.bjs = mb_indcs.cje + 1;      isame.bje = mb_indcs.cje + ng;
+      } else {
+        isame.bjs = mb_indcs.cjs - ng;     isame.bje = mb_indcs.cjs - 1;
+      }
+
+      if (ox3 == 0) {
+        isame.bks = mb_indcs.cks;          isame.bke = mb_indcs.cke;
+      } else if (ox3 > 0) {
+        isame.bks = mb_indcs.cke + 1;      isame.bke = mb_indcs.cke + ng;
+      } else {
+        isame.bks = mb_indcs.cks - ng;     isame.bke = mb_indcs.cks - 1;
+      }
     }
     buf.isame_z4c_ndat = buf.isame_ndat +
       (isame.bie - isame.bis + 1)*(isame.bje - isame.bjs + 1)*(isame.bke - isame.bks + 1);

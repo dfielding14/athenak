@@ -264,7 +264,7 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendCC(DvceArray5D<Real> &a,
 TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
                                                  DvceArray5D<Real> &ca,
                                                  CCRecvOp op) {
-  (void)op;
+  const bool accumulate = (op == CCRecvOp::accumulate);
   // create local references for variables in kernel
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
@@ -357,14 +357,24 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
         if (nghbr.d_view(m,n).lev >= mblev.d_view(m)) {
           Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
           [&](const int i) {
-            a(m,v,k,j,i) = rbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) );
+            Real recv = rbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) );
+            if (accumulate) {
+              Kokkos::atomic_add(&(a(m,v,k,j,i)), recv);
+            } else {
+              a(m,v,k,j,i) = recv;
+            }
           });
 	  tmember.team_barrier();
         // if neighbor is at coarser level, load data into coarse_u0
         } else {
           Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
           [&](const int i) {
-            ca(m,v,k,j,i) = rbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) );
+            Real recv = rbuf[n].vars(m, (i-il + ni*(j-jl + nj*(k-kl + nk*v))) );
+            if (accumulate) {
+              Kokkos::atomic_add(&(ca(m,v,k,j,i)), recv);
+            } else {
+              ca(m,v,k,j,i) = recv;
+            }
           });
 	  tmember.team_barrier();
         }
@@ -404,7 +414,12 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackCC(DvceArray5D<Real> &a,
           // load data into coarse_u0
           Kokkos::parallel_for(Kokkos::ThreadVectorRange(tmember,il,iu+1),
           [&](const int i) {
-            ca(m,v,k,j,i) = rbuf[n].vars(m,ndat + (i-il + ni*(j-jl + nj*(k-kl + nk*v))) );
+            Real recv = rbuf[n].vars(m,ndat + (i-il + ni*(j-jl + nj*(k-kl + nk*v))) );
+            if (accumulate) {
+              Kokkos::atomic_add(&(ca(m,v,k,j,i)), recv);
+            } else {
+              ca(m,v,k,j,i) = recv;
+            }
           });
 	  tmember.team_barrier();
         });
