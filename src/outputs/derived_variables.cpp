@@ -2570,6 +2570,54 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     i_dv += 1;
   }
 
+  if (name.compare("prtcl_rho") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto mom = pm->pmb_pack->ppart->moments;
+    par_for("prtcl_rho", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      dv(m,i_dv,k,j,i) = mom(m,particles::Particles::IMOM_RHO,k,j,i);
+    });
+    i_dv += 1;
+  }
+
+  if (name.compare("prtcl_jx") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto mom = pm->pmb_pack->ppart->moments;
+    par_for("prtcl_jx", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      dv(m,i_dv,k,j,i) = mom(m,particles::Particles::IMOM_JX,k,j,i);
+    });
+    i_dv += 1;
+  }
+
+  if (name.compare("prtcl_jy") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto mom = pm->pmb_pack->ppart->moments;
+    par_for("prtcl_jy", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      dv(m,i_dv,k,j,i) = mom(m,particles::Particles::IMOM_JY,k,j,i);
+    });
+    i_dv += 1;
+  }
+
+  if (name.compare("prtcl_jz") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto mom = pm->pmb_pack->ppart->moments;
+    par_for("prtcl_jz", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      dv(m,i_dv,k,j,i) = mom(m,particles::Particles::IMOM_JZ,k,j,i);
+    });
+    i_dv += 1;
+  }
+
   // Particle density binned to mesh.
   if (name.compare("prtcl_d") == 0) {
     if (derived_var.extent(4) <= 1)

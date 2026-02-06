@@ -22,6 +22,7 @@
 #include "globals.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "particles/particles.hpp"
 #include "coordinates/adm.hpp"
 #include "z4c/tmunu.hpp"
 #include "z4c/z4c.hpp"
@@ -89,6 +90,9 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     const bool needs_con = (variable == "con") || starts_with(variable, "con_");
     const bool needs_tmunu = (variable == "tmunu") || starts_with(variable, "tmunu_");
     const bool needs_prtcl = starts_with(variable, "prtcl_");
+    const bool needs_prtcl_moments =
+        (variable == "prtcl_rho" || variable == "prtcl_jx" ||
+         variable == "prtcl_jy" || variable == "prtcl_jz");
     const bool needs_turb = (variable == "turb_force");
     const bool needs_hydro_or_mhd =
         (variable == "temperature" || starts_with(variable, "mdot_") ||
@@ -187,6 +191,13 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
          << "Output of particles requested in <output> block '"
          << out_params.block_name << "' but particle object not constructed."
          << std::endl << "Input file is likely missing corresponding block" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (needs_prtcl_moments && !(pm->pmb_pack->ppart->deposit_moments)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+         << "Output variable '" << variable << "' in <output> block '"
+         << out_params.block_name << "' requires <particles>/deposit_moments=true"
+         << std::endl;
       exit(EXIT_FAILURE);
     }
   };
@@ -849,6 +860,31 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     out_params.n_derived += 1;
     int i_derived = out_params.n_derived - 1;
     outvars.emplace_back("pdens",i_derived,&(derived_var));
+  }
+
+  if (variable.compare("prtcl_rho") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_rho",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_jx") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_jx",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_jy") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_jy",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_jz") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_jz",i_derived,&(derived_var));
   }
 
   // Coordinate variables for PDF binning (Cartesian)
