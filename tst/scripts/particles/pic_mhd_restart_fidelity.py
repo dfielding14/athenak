@@ -263,6 +263,7 @@ def run(**kwargs):
             'single_file_per_rank restart files.',
             'MPI_File_get_position',
             'MPI_ERR_INTERN',
+            'Restart data chunk size mismatch, restart file is broken.',
         ),
         restart_file=per_rank_rst_path)
 
