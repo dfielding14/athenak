@@ -7,9 +7,9 @@ and synchronization semantics.
 
 ## 1. Provenance and Scope
 
-- Date: 2026-02-05
+- Date: 2026-02-07
 - AthenaK workspace: `/Users/dbf75/Work/Research/AthenaK/athenak-DF`
-- Active branch context: `codex/dev/PIC`
+- Active branch context: `dev/PIC`
 - Reference codebase: `/Users/dbf75/Work/Research/AthenaK/entity`
 - Inputs reviewed for this revision:
   - All 26 AthenaK `AGENTS.md` files.
@@ -228,17 +228,17 @@ Deliverables:
    stage-level parity with MHD task flow.
 4. Extend tests for coupled field evolution behavior.
 
-### Phase 2 (PR3): robustness and feature expansion
+### Phase 2 (PR3): robustness split into three small PRs
 
 Goal:
 - Remove phase-0 guardrails and support production configurations.
 
 Deliverables:
-1. AMR-safe deposited moments (restrict/prolong/sync policy).
-2. Restart serialization of particles + PIC moments.
-3. Boundary policy for non-periodic runs.
-4. Optional filtering/performance improvements (atomics vs scatter strategy,
-   profiling-based tuning).
+1. PR3a: restart fidelity for coupled moment/edge-current state.
+2. PR3b: AMR/multilevel-safe deposited-moment handling.
+3. PR3c: non-periodic boundary policy for deposited moments/currents.
+4. Keep each PR mergeable and correctness-gated on its own; do not combine
+   these scopes into one patch.
 
 ## 6. File-Level Edit Plan (Phase 0)
 
@@ -909,7 +909,7 @@ Definition of done for the remediation queue:
 4. Documentation and error messages explicitly describe remaining deferred
    ordering parity work.
 
-### 9.14 WS-G Partial-Address Notes (Post-Patch)
+### 9.14 WS-G Partial-Address Notes (Historical, Post-Patch)
 
 This section is a concise state snapshot after implementing the WS-G follow-up
 items from Section 9.13.
@@ -924,17 +924,18 @@ items from Section 9.13.
 - WS-G tests now include zero-current invariance, linearity, and integrator
   coverage checks.
 
-2. Intentionally partial/deferred:
+2. Intentionally partial/deferred at WS-G time:
 - Entity staggered-current representation/conversion parity is still not fully
   implemented in AthenaK WS-G; PR2 currently uses cell-centered deposited `J`
   mapped additively into edge `E` with an explicit coefficient.
 - Full Entity ordering parity (deposit/filter before particle communication) is
   still deferred to Step H as documented in Section 9.13 item 6.
 
-3. Remaining deferred items are only the two major parity items above
-   (staggered representation/conversion and full ordering parity).
+3. Historical note:
+- This section records WS-G state only. Current as-built status after WS-H/WS-I
+  is captured in Section 9.17.
 
-### 9.15 WS-H Status Snapshot (PR2 Step H, Partial)
+### 9.15 WS-H Status Snapshot (Historical, PR2 Step H)
 
 This section captures WS-H scope implemented after WS-G lock-ins.
 
@@ -983,6 +984,388 @@ Scope lock for this step:
 - Add deterministic cell-centered to edge-current conversion for coupled mode.
 - Wire conversion immediately before `MHD::EFieldSrc`.
 - Keep full Entity charge-conserving staggered deposition as deferred follow-up.
+
+### 9.17 PR2 As-Built Audit (2026-02-07, commit `cdcac9e5`)
+
+This section audits actual code state and test coverage after WS-G/WS-H/WS-I.
+
+1. Runtime coupling controls and guardrails are in place.
+- `couple_moments_to_mhd`, `couple_j_to_efield_coeff`,
+  `couple_j_to_efield_representation`, `couple_fluid_feedback_order`,
+  momentum/energy feedback knobs, and deterministic CR init knobs:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:168`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:216`.
+- PR1+PR2 composition/runtime guards:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:218`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:332`.
+- Edge-current arrays allocated only when needed:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:355`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:364`.
+
+2. Coupled ordering and insertion are implemented with deterministic dependencies.
+- Coupled particle migration moves to `after_timeintegrator`:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:52`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:63`.
+- Insertion anchor follows fluid-feedback order:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:76`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:85`.
+- Full `InsertTask` chain has per-step failure checks:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:93`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:156`.
+- Edge conversion is inserted before `EFieldSrc` and depends on both
+  `CornerE` and wrapper completion:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:158`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:180`.
+
+3. Stage gating and conversion kernels are implemented.
+- Stage gating rule (`stage==1` when coupled):
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:16`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:25`.
+- Edge-current zeroing follows moment zero lifecycle:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:73`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:83`.
+- Deterministic CC->edge conversion is present in 1D/2D/3D paths:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:239`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:329`.
+
+4. MHD coupling paths are implemented and split by runtime order.
+- Momentum/energy feedback in `MHDSrcTerms` when order is `mhd_src_terms`:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mhd/mhd_tasks.cpp:275`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mhd/mhd_tasks.cpp:326`.
+- E-field source coupling with representation branch and coefficient:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mhd/mhd_tasks.cpp:427`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mhd/mhd_tasks.cpp:513`.
+- Feedback execution in `EFieldSrc` when order is `efield_src`:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mhd/mhd_tasks.cpp:515`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mhd/mhd_tasks.cpp:566`.
+
+5. PR2 regression coverage is broad and deterministic.
+- Main coupled regression spans default/opt-in, both representations,
+  momentum/energy toggles, both feedback orders, guard negatives, and
+  linearity/integrator checks:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:235`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:760`.
+- Decomposition invariance sweeps both representation and order:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:245`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:364`.
+- Base input defaults preserve uncoupled behavior:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_mhd_current_coupling.athinput:57`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_mhd_current_coupling.athinput:67`.
+
+6. Entity parity audit outcome.
+- Ordering invariant reference:
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/AGENTS.md:99`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/AGENTS.md:124`.
+- Entity current-coupling coefficient path:
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:563`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:612`
+  and
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/ampere_mink.hpp:142`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/ampere_mink.hpp:205`.
+- Conclusion: no unplanned divergence was found in ordering/coefficient control.
+  Remaining differences are intentional and documented in deferred items.
+
+### 9.18 Deferred Items After PR2 Closeout
+
+1. Full charge-conserving staggered deposition parity remains deferred.
+- Current AthenaK edge path is CC deposit plus deterministic conversion, not
+  trajectory-based direct staggered deposition:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:239`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:329`.
+
+2. PR3 robustness scope remains deferred.
+- Delivery is explicitly split into three small PRs:
+  - PR3a: restart fidelity for coupled moment/edge-current state.
+  - PR3b: AMR/multilevel-safe deposited-moment handling.
+  - PR3c: non-periodic boundary policy for deposited moments/currents.
+
+3. No additional PR2 critical defects were identified in audit.
+
+### 9.19 Next-Step Plan (PR3a/PR3b/PR3c) With Physics/Numerics Control
+
+This plan is intentionally detailed and includes implementation controls,
+numerics controls, and program controls to prevent scope drift.
+
+#### 9.19.1 Split Contract and Sequencing
+
+PR3 is split into three small PRs with strict scope isolation:
+
+In scope:
+1. PR3a: restart fidelity for coupled moment/edge-current state only.
+2. PR3b: AMR/multilevel-safe deposited-moment handling only.
+3. PR3c: non-periodic boundary policy for deposited moments/currents only.
+
+Out of scope for each PR3x slice:
+1. No direct staggered-deposition algorithm rewrite in PR3x.
+2. No mixed-scope batching across PR3a/PR3b/PR3c.
+3. No performance refactor before correctness gates pass.
+
+#### 9.19.2 Control Plane (How Work Stays On Track)
+
+1. Baseline freeze gate (before first code edit)
+- Record baseline values for:
+  - global `Q/J` invariants
+  - coupled-field deltas
+  - decomposition invariance tolerances
+  - wall-clock performance on reference decks.
+- Baseline commands:
+  - `python run_tests.py particles/pic_mhd_current_coupling --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+  - `python run_tests.py particles/pic_mhd_coupling_decomp --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+
+2. Design review gate (before kernel implementation)
+- Freeze discrete equations/sign conventions in document form.
+- Freeze normalization mapping to AthenaK units:
+  - coefficient placement
+  - whether `J` is normalized by particle count / metric factors.
+- Cross-check against Entity references and current AthenaK semantics.
+
+3. Incremental delivery gates
+- Every sub-step must satisfy:
+  - compile pass
+  - targeted regression pass
+  - no default-path behavior changes
+  - documented code-reference delta.
+- No multi-step batching for correctness-critical kernels.
+
+4. Physics acceptance gate
+- Reject merge if any of the following fail:
+  - charge continuity residual target
+  - symmetry checks (axis/permutation)
+  - sign sanity checks (`JxB` directionality and energy work sign)
+  - coefficient linearity checks.
+
+5. Numerics acceptance gate
+- Reject merge if:
+  - decomposition invariance drifts beyond tolerance
+  - expected order/linearity trends are broken
+  - restart/AMR/boundary baselines regress for the active PR3x slice.
+
+6. Documentation/traceability gate
+- Every new runtime knob, guard, and equation path must be mapped in both:
+  - this handoff
+  - `AGENT_PIC_IMPLEMENTATION_GUIDE.md`.
+
+#### 9.19.3 Shared Physics Contracts To Freeze Before Coding
+
+1. Discrete current/E coupling convention
+- Define and lock:
+  - whether AthenaK continues additive `E += coeff * J`
+  - dimensional/normalization interpretation of `coeff`
+  - relationship to Entity `coeff = -dt * q0 / (B0 * V0)` style path.
+
+2. Momentum/energy feedback sign convention
+- Keep and re-validate:
+  - momentum source sign from `-(J x B)`
+  - energy source sign from `J dot B`.
+- Add one deterministic sign-check deck with analytic expected direction.
+
+3. Continuity equation target
+- Introduce explicit diagnostic for
+  `d(rho)/dt + div(J) = 0` residual at discrete level.
+- Define acceptance thresholds for serial and MPI.
+
+4. Representation handling contract
+- Preserve current PR2 representation behavior unless explicitly expanded in a
+  dedicated follow-on track.
+
+#### 9.19.4 Shared Numerics Contracts To Freeze Before Coding
+
+1. Determinism contract
+- Same initial condition must produce invariant integrated diagnostics across:
+  - 1 rank, 2 ranks, 4 ranks
+  - at least two meshblock decompositions.
+
+2. Linearity contract
+- Doubling source scaling (`deposit_qscale` or deterministic velocity) must
+  double measured current integrals and first-order field response.
+
+3. Zero-source invariance contract
+- Zero-current setup must keep coupled and uncoupled fields equivalent within
+  strict tolerance.
+
+4. Stability contract
+- No NaNs/Infs and no new floor-trigger path under baseline decks.
+
+#### 9.19.5 PR3a Plan: Restart Fidelity for Coupled Moment/Edge-Current State
+
+PR3a objective:
+1. Ensure restart A/B equivalence for coupled runs using both
+   `cell_centered` and `edge_staggered` representation modes.
+
+PR3a work packages:
+1. PR3a-1 state inventory and contract.
+- Enumerate coupled state required for restart-equivalent evolution.
+- Explicitly classify each field as:
+  - persisted in restart
+  - reconstructed deterministically after restart.
+2. PR3a-2 restart write/read wiring.
+- Add serialization for any required coupled moment/edge-current state.
+- Add strict restart compatibility checks for representation/coupling knobs.
+3. PR3a-3 restart validation tests.
+- Add deterministic A/B tests:
+  - uninterrupted run vs restart-continued run
+  - both `cell_centered` and `edge_staggered`
+  - serial and MPI variants.
+- Validate `Q/J`, field norms, and fluid conserved deltas match tolerance.
+4. PR3a-4 backward compatibility guard.
+- Confirm uncoupled/default restart behavior is unchanged.
+
+PR3a merge gate:
+1. Restart equivalence passes in serial and MPI.
+2. No default-path regressions.
+3. Changed-file style gates are clean.
+
+#### 9.19.6 PR3b As-Built Review (Current Branch)
+
+PR3b objective status:
+1. Multilevel-safe deposited-moment handling is now implemented in the active
+   branch for the coupled and uncoupled task flows.
+
+As-built implementation summary:
+1. New moment multilevel wrappers are present in particle API/task IDs:
+   - `src/particles/particles.hpp` (`rest_mom`, `prol_mom`,
+     `RestrictMoments`, `ProlongateMoments`).
+2. Deposited moments allocate coarse mirrors when `mesh->multilevel` is active:
+   - `src/particles/particles.cpp` (`coarse_moments` allocation path).
+3. Multilevel wrapper sequence is integrated in both task paths:
+   - baseline chain and coupled inserted `stagen` chain now include
+     `RestrictMoments` and `ProlongateMoments`.
+4. Restriction/prolongation implementation follows AthenaK CC multilevel
+   patterns:
+   - `pmr->RestrictCC(...)`
+   - `FillCoarseInBndryCC(...)`
+   - `ProlongateCC(...)`
+   - implemented in `src/particles/particles_moments.cpp`.
+5. Deterministic multilevel regression exists:
+   - deck: `inputs/tests/pic_mhd_coupling_multilevel.athinput`
+   - test: `tst/scripts/particles/pic_mhd_coupling_multilevel.py`
+   - covers both representations, both feedback-order modes, and serial/MPI
+     decomposition invariance.
+
+PR3b residual risk to track:
+1. Adaptive AMR-specific stress coverage is still lighter than static multilevel
+   coverage and should be expanded if PR3c touches boundary+refinement
+   interactions.
+
+#### 9.19.7 PR3c Detailed Plan: Non-Periodic Boundary Policy for Deposited Moments/Currents
+
+PR3c objective:
+1. Define and implement explicit, test-backed non-periodic boundary behavior
+   for deposited `rho/J` and coupled current consumption.
+
+PR3c phase plan:
+1. PR3c-0 scope lock + readiness report (before edits).
+- Produce exact `file:line` map for:
+  - current periodic guard location
+  - moment communication/prolongation path
+  - coupled source-consumption sites (`MHDSrcTerms`, `EFieldSrc`).
+- Freeze unsupported scope:
+  - no restart-format work (PR3a)
+  - no new AMR algorithm work beyond PR3b baseline.
+2. PR3c-1 boundary policy matrix (physics contract first).
+- Define supported non-periodic boundary classes for this slice.
+- For each class, define:
+  - policy for deposited `rho`
+  - policy for deposited CC `J`
+  - policy for converted edge `J` when `edge_staggered` is active.
+- Explicitly list unsupported classes and fail-fast behavior.
+3. PR3c-2 ordering and numerics contract lock-in.
+- Keep ordering invariant:
+  - deposition -> synchronization -> boundary policy application ->
+    conversion (if edge mode) -> MHD consumption.
+- Preserve existing PR2 coefficient/sign contracts:
+  - `E += coeff * J` coupling form
+  - fluid feedback signs unchanged.
+4. PR3c-3 implementation slices.
+- Replace strict periodic-only constructor guard with policy-gated acceptance.
+- Implement boundary-policy branches in deposited-moment path using AthenaK
+  boundary-value patterns.
+- Ensure both representation modes observe equivalent boundary intent.
+- Add explicit diagnostics for rejected boundary configurations.
+5. PR3c-4 regression suite and invariance checks.
+- Add deterministic non-periodic decks targeting boundary-adjacent deposition.
+- Validate serial and MPI decomposition invariance for supported classes.
+- Add zero-current and linearity checks with non-periodic BCs.
+- Preserve existing PR2/PR3a/PR3b baselines unchanged.
+6. PR3c-5 Entity alignment checkpoint.
+- Re-verify sequencing against:
+  - `entity/src/engines/srpic.hpp`
+  - `entity/src/engines/AGENTS.md`
+- Require semantic parity for step ordering (deposit/sync/boundary/use), but do
+  not force Entity boundary taxonomy when AthenaK framework semantics differ.
+
+PR3c numerics-control checklist (must run every implementation slice):
+1. Continuity sanity monitor near boundaries:
+- track global and boundary-layer `rho/J` consistency trends.
+2. No spurious global source generation:
+- ensure boundary handling does not create artificial net current/charge.
+3. Coupled-response sanity:
+- verify expected directionality/sign in coupled field and fluid responses.
+4. Determinism:
+- identical setup must remain invariant across rank decompositions.
+
+PR3c merge gate:
+1. Policy matrix is fully mapped to implementation branches.
+2. Supported non-periodic boundary tests pass in serial and MPI.
+3. Unsupported boundary classes fail with explicit diagnostics.
+4. PR2 + PR3a + PR3b baseline suites remain green.
+
+#### 9.19.8 Verification Matrix (Required for PR3x Merge Readiness)
+
+1. PR3a required checks
+- restart equivalence (`Q/J`, `bcc`, fluid conserved norms)
+- coupled representation parity across restart (`cell_centered`, `edge_staggered`)
+- unchanged default-off behavior.
+
+2. PR3b required checks
+- multilevel/AMR conservation checks for deposited `rho/J`
+- decomposition invariance at multiple rank counts
+- explicit guard-path coverage for unsupported AMR branches.
+
+3. PR3c required checks
+- boundary policy behavior checks per boundary class
+- no spurious global-current generation from boundary treatment
+- decomposition invariance in non-periodic runs.
+
+#### 9.19.9 Risks and Active Mitigations
+
+1. Risk: hidden sign/normalization mismatch vs Entity.
+- Mitigation:
+  - freeze coefficient/sign contract before coding
+  - add explicit sign-probe tests and report.
+
+2. Risk: decomposition-sensitive race behavior in new deposition kernels.
+- Mitigation:
+  - deterministic kernels first
+  - enforce MPI decomposition invariance in each PR3x slice.
+
+3. Risk: schedule drift due to mixed correctness/performance goals.
+- Mitigation:
+  - keep PR3a, PR3b, PR3c scope-separated and merge independently.
+
+4. Risk: stealth default-path regressions.
+- Mitigation:
+  - mandatory default-off comparison (`couple_moments_to_mhd=false`).
 
 ## 10. AGENTS Review Index
 

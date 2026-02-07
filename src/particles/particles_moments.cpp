@@ -181,6 +181,23 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn TaskStatus Particles::RestrictMoments()
+//! \brief Restrict deposited moments to coarse storage in multilevel runs.
+
+TaskStatus Particles::RestrictMoments(Driver *pdriver, int stage) {
+  (void)pdriver;
+  if (!deposit_moments) return TaskStatus::complete;
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+    return TaskStatus::complete;
+  }
+  if (!(pmy_pack->pmesh->multilevel)) return TaskStatus::complete;
+  if (coarse_moments.size() == 0) return TaskStatus::complete;
+
+  pmy_pack->pmesh->pmr->RestrictCC(moments, coarse_moments);
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn TaskStatus Particles::SendMoments()
 //! \brief Pack and send deposited moments to neighbors.
 
@@ -230,6 +247,24 @@ TaskStatus Particles::ClearSendMoments(Driver *pdriver, int stage) {
     return TaskStatus::complete;
   }
   return pbval_mom->ClearSend();
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Particles::ProlongateMoments()
+//! \brief Fill coarse boundary state and prolongate to fine moment ghosts with AMR/SMR.
+
+TaskStatus Particles::ProlongateMoments(Driver *pdriver, int stage) {
+  (void)pdriver;
+  if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+    return TaskStatus::complete;
+  }
+  if (!(pmy_pack->pmesh->multilevel)) return TaskStatus::complete;
+  if (coarse_moments.size() == 0) return TaskStatus::complete;
+
+  pbval_mom->FillCoarseInBndryCC(moments, coarse_moments);
+  pbval_mom->ProlongateCC(moments, coarse_moments);
+  return TaskStatus::complete;
 }
 
 //----------------------------------------------------------------------------------------

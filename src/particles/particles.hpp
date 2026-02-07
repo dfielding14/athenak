@@ -56,10 +56,12 @@ struct ParticlesTaskIDs {
   TaskID zero_mom;
   TaskID irecv_mom;
   TaskID dep_mom;
+  TaskID rest_mom;
   TaskID send_mom;
   TaskID recv_mom;
   TaskID crecv_mom;
   TaskID csend_mom;
+  TaskID prol_mom;
   TaskID convert_j_edge;
 };
 
@@ -150,10 +152,12 @@ class Particles {
   TaskStatus ZeroMoments(Driver *pdriver, int stage);
   TaskStatus InitRecvMoments(Driver *pdriver, int stage);
   TaskStatus DepositMoments(Driver *pdriver, int stage);
+  TaskStatus RestrictMoments(Driver *pdriver, int stage);
   TaskStatus SendMoments(Driver *pdriver, int stage);
   TaskStatus RecvMoments(Driver *pdriver, int stage);
   TaskStatus ClearRecvMoments(Driver *pdriver, int stage);
   TaskStatus ClearSendMoments(Driver *pdriver, int stage);
+  TaskStatus ProlongateMoments(Driver *pdriver, int stage);
   TaskStatus ConvertCoupledCurrentRepresentation(Driver *pdriver, int stage);
 
   // Cosmic ray specific methods

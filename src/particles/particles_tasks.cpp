@@ -28,6 +28,8 @@ namespace particles {
 
 void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) {
   TaskID none(0);
+  id.rest_mom = none;
+  id.prol_mom = none;
   id.convert_j_edge = none;
 
   // particle integration done in "before_timeintegrator" task list
@@ -40,19 +42,23 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
                                                        this, id.zero_mom);
   id.dep_mom = tl["before_timeintegrator"]->AddTask(&Particles::DepositMoments, this,
                                                      id.irecv_mom);
-  id.send_mom = tl["before_timeintegrator"]->AddTask(&Particles::SendMoments, this,
+  id.rest_mom = tl["before_timeintegrator"]->AddTask(&Particles::RestrictMoments, this,
                                                       id.dep_mom);
+  id.send_mom = tl["before_timeintegrator"]->AddTask(&Particles::SendMoments, this,
+                                                      id.rest_mom);
   id.recv_mom = tl["before_timeintegrator"]->AddTask(&Particles::RecvMoments, this,
                                                       id.send_mom);
   id.crecv_mom = tl["before_timeintegrator"]->AddTask(&Particles::ClearRecvMoments,
                                                        this, id.recv_mom);
   id.csend_mom = tl["before_timeintegrator"]->AddTask(&Particles::ClearSendMoments,
                                                        this, id.crecv_mom);
+  id.prol_mom = tl["before_timeintegrator"]->AddTask(&Particles::ProlongateMoments, this,
+                                                      id.csend_mom);
 
   // WS-H: in coupled mode, move particle migration/communication after field updates.
   auto comm_tl = (couple_moments_to_mhd ? tl["after_timeintegrator"] :
                                           tl["before_timeintegrator"]);
-  TaskID comm_dep = (couple_moments_to_mhd ? none : id.csend_mom);
+  TaskID comm_dep = (couple_moments_to_mhd ? none : id.prol_mom);
   id.newgid = comm_tl->AddTask(&Particles::NewGID, this, comm_dep);
   id.count  = comm_tl->AddTask(&Particles::SendCnt, this, id.newgid);
   id.irecv  = comm_tl->AddTask(&Particles::InitRecv, this, id.count);
@@ -123,6 +129,14 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
       std::exit(EXIT_FAILURE);
     }
 
+    sid = stagen_tl->InsertTask(&Particles::RestrictMoments, this, sid, insert_loc);
+    if (sid == TaskID(0)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Failed to insert Particles::RestrictMoments before "
+                << insert_name << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+
     sid = stagen_tl->InsertTask(&Particles::SendMoments, this, sid, insert_loc);
     if (sid == TaskID(0)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -151,6 +165,14 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     if (sid == TaskID(0)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Failed to insert Particles::ClearSendMoments before "
+                << insert_name << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+
+    sid = stagen_tl->InsertTask(&Particles::ProlongateMoments, this, sid, insert_loc);
+    if (sid == TaskID(0)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Failed to insert Particles::ProlongateMoments before "
                 << insert_name << std::endl;
       std::exit(EXIT_FAILURE);
     }

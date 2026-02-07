@@ -236,18 +236,6 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                 << "strictly periodic boundaries in PR1" << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if (pmy_pack->pmesh->adaptive) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "<particles>/deposit_moments=true does not support "
-                << "adaptive mesh refinement in PR1" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    if (pmy_pack->pmesh->multilevel) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "<particles>/deposit_moments=true does not support "
-                << "multilevel mesh refinement in PR1" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
     if (pin->DoesBlockExist("shearing_box")) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "<particles>/deposit_moments=true does not support "
@@ -344,6 +332,13 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
     int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
     Kokkos::realloc(moments, nmb, NMOM, ncells3, ncells2, ncells1);
+    if (ppack->pmesh->multilevel) {
+      int n_ccells1 = indcs.cnx1 + 2*(indcs.ng);
+      int n_ccells2 = (indcs.cnx2 > 1)? (indcs.cnx2 + 2*(indcs.ng)) : 1;
+      int n_ccells3 = (indcs.cnx3 > 1)? (indcs.cnx3 + 2*(indcs.ng)) : 1;
+      Kokkos::realloc(coarse_moments, nmb, NMOM, n_ccells3, n_ccells2, n_ccells1);
+      Kokkos::deep_copy(coarse_moments, static_cast<Real>(0.0));
+    }
 
     Kokkos::realloc(x1_old, nprtcl_thispack);
     Kokkos::realloc(x2_old, nprtcl_thispack);
