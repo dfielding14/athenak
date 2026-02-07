@@ -262,6 +262,19 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << j_repr << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  std::string j_deposit_mode = pin->GetOrAddString(
+      "particles", "couple_j_deposition_mode", "cc_convert");
+  if (j_deposit_mode.compare("cc_convert") == 0) {
+    couple_j_deposition_mode = CoupledCurrentDepositionMode::cc_convert;
+  } else if (j_deposit_mode.compare("direct_staggered") == 0) {
+    couple_j_deposition_mode = CoupledCurrentDepositionMode::direct_staggered;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/couple_j_deposition_mode: "
+              << j_deposit_mode << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   std::string feedback_order = pin->GetOrAddString("particles",
                                                     "couple_fluid_feedback_order",
                                                     "mhd_src_terms");
@@ -367,6 +380,14 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                   << "<mhd>/eos=ideal" << std::endl;
         std::exit(EXIT_FAILURE);
       }
+    }
+    if (couple_j_deposition_mode ==
+        CoupledCurrentDepositionMode::direct_staggered) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/couple_j_deposition_mode=direct_staggered is not "
+                << "implemented in AthenaK PR4a" << std::endl;
+      std::exit(EXIT_FAILURE);
     }
     if (couple_j_to_efield_representation == CoupledCurrentRepresentation::edge_staggered
         && (pmy_pack->pcoord->is_special_relativistic ||

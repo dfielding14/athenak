@@ -530,6 +530,16 @@ def run(**kwargs):
     )
 
     _run_command(
+        'guard_direct_staggered_deposition_unimplemented',
+        1,
+        ['time/nlim=0',
+         'particles/couple_moments_to_mhd=true',
+         'particles/couple_j_deposition_mode=direct_staggered'],
+        expect_fail=True,
+        expected_message='not implemented in AthenaK PR4a',
+    )
+
+    _run_command(
         'guard_nonperiodic_unsupported_boundary',
         1,
         ['time/nlim=0'],
@@ -799,8 +809,8 @@ def analyze():
                                    mpi2_edge['bcc3_l2'], coupled_edge['bcc3_l2'],
                                    1.0e-6, 1.0e-8) and ok
 
-    ok = len(_NEGATIVE_RESULTS) == 10 and ok
-    if len(_NEGATIVE_RESULTS) != 10:
-        logger.warning('Expected 10 negative checks, got %d', len(_NEGATIVE_RESULTS))
+    ok = len(_NEGATIVE_RESULTS) == 11 and ok
+    if len(_NEGATIVE_RESULTS) != 11:
+        logger.warning('Expected 11 negative checks, got %d', len(_NEGATIVE_RESULTS))
 
     return ok
