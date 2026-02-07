@@ -25,6 +25,7 @@ _NONPERIODIC_UNSUPPORTED_GUARD_DECK = (
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
 _POSITIVE_RESULTS = {}
 _NEGATIVE_RESULTS = {}
+_CONTINUITY_RESULTS = {}
 
 
 def _athena_exe_dir():
@@ -120,6 +121,108 @@ def _latest_output_file(basename, file_id):
     if len(matches) == 0:
         raise RuntimeError('No output files found for pattern: ' + pattern)
     return matches[-1]
+
+
+def _output_files(basename, file_id):
+    pattern = os.path.join(_athena_exe_dir(), 'bin',
+                           f'{basename}.{file_id}.*.bin')
+    matches = sorted(glob.glob(pattern))
+    if len(matches) == 0:
+        raise RuntimeError('No output files found for pattern: ' + pattern)
+    return matches
+
+
+def _volume_weights(dataset):
+    dx1 = np.diff(dataset['x1f'])
+    dx2 = np.diff(dataset['x2f'])
+    dx3 = np.diff(dataset['x3f'])
+    return dx3[:, None, None] * dx2[None, :, None] * dx1[None, None, :]
+
+
+def _weighted_l2(field, dvol):
+    return float(np.sqrt(np.sum(field * field * dvol)))
+
+
+def _compute_divergence_from_cc_current(jx, jy, jz, x1f, x2f, x3f):
+    div = np.zeros_like(jx)
+    dx1 = np.diff(x1f)
+    dx2 = np.diff(x2f)
+    dx3 = np.diff(x3f)
+
+    if dx1.size > 1:
+        jx_face = 0.5 * (jx + np.roll(jx, -1, axis=2))
+        div += (jx_face - np.roll(jx_face, 1, axis=2)) / dx1[None, None, :]
+    if dx2.size > 1:
+        jy_face = 0.5 * (jy + np.roll(jy, -1, axis=1))
+        div += (jy_face - np.roll(jy_face, 1, axis=1)) / dx2[None, :, None]
+    if dx3.size > 1:
+        jz_face = 0.5 * (jz + np.roll(jz, -1, axis=0))
+        div += (jz_face - np.roll(jz_face, 1, axis=0)) / dx3[:, None, None]
+
+    return div
+
+
+def _measure_continuity_residual(basename):
+    rho_files = _output_files(basename, 'prtcl_rho')
+    jx_files = _output_files(basename, 'prtcl_jx')
+    jy_files = _output_files(basename, 'prtcl_jy')
+    jz_files = _output_files(basename, 'prtcl_jz')
+
+    nfiles = min(len(rho_files), len(jx_files), len(jy_files), len(jz_files))
+    if nfiles < 2:
+        raise RuntimeError('Continuity residual requires at least two outputs: ' +
+                           basename)
+
+    curr_idx = nfiles - 1
+    rho_curr = bin_convert.read_binary_as_athdf(rho_files[curr_idx])
+
+    rho_prev = None
+    prev_idx = curr_idx - 1
+    while prev_idx >= 0:
+        candidate = bin_convert.read_binary_as_athdf(rho_files[prev_idx])
+        if (float(rho_curr['NumCycles']) > float(candidate['NumCycles']) or
+                float(rho_curr['Time']) > float(candidate['Time']) + 1.0e-30):
+            rho_prev = candidate
+            break
+        prev_idx -= 1
+    if rho_prev is None:
+        raise RuntimeError('Unable to find previous output with earlier time: ' +
+                           basename)
+
+    jx_curr = bin_convert.read_binary_as_athdf(jx_files[curr_idx])
+    jy_curr = bin_convert.read_binary_as_athdf(jy_files[curr_idx])
+    jz_curr = bin_convert.read_binary_as_athdf(jz_files[curr_idx])
+
+    dt = float(rho_curr['Time'] - rho_prev['Time'])
+    if (not np.isfinite(dt)) or dt <= 0.0:
+        raise RuntimeError('Non-positive dt in continuity residual for ' + basename)
+
+    drhodt = (rho_curr['prtcl_rho'] - rho_prev['prtcl_rho']) / dt
+    divj = _compute_divergence_from_cc_current(jx_curr['prtcl_jx'],
+                                               jy_curr['prtcl_jy'],
+                                               jz_curr['prtcl_jz'],
+                                               rho_curr['x1f'],
+                                               rho_curr['x2f'],
+                                               rho_curr['x3f'])
+    residual = drhodt + divj
+    dvol = _volume_weights(rho_curr)
+
+    l2_drhodt = _weighted_l2(drhodt, dvol)
+    l2_divj = _weighted_l2(divj, dvol)
+    l2_residual = _weighted_l2(residual, dvol)
+    linf_residual = float(np.max(np.abs(residual)))
+    rel_residual = l2_residual / max(l2_drhodt + l2_divj, 1.0e-30)
+    cycle_delta = float(rho_curr['NumCycles'] - rho_prev['NumCycles'])
+
+    return {
+        'dt': dt,
+        'cycle_delta': cycle_delta,
+        'l2_drhodt': l2_drhodt,
+        'l2_divj': l2_divj,
+        'l2_residual': l2_residual,
+        'linf_residual': linf_residual,
+        'rel_residual': rel_residual,
+    }
 
 
 def _integrate_quantity(dataset, quantity):
@@ -499,6 +602,78 @@ def run(**kwargs):
             'expected': _expected_totals(case['args']),
         }
 
+    continuity_cases = [
+        {
+            'name': 'serial_continuity_cc',
+            'basename': 'pic_mhd_cont_cc',
+            'nproc': 1,
+            'args': ['job/basename=pic_mhd_cont_cc',
+                     'time/nlim=2',
+                     'particles/couple_moments_to_mhd=true'] + common_args,
+        },
+        {
+            'name': 'serial_continuity_edge',
+            'basename': 'pic_mhd_cont_edge',
+            'nproc': 1,
+            'args': ['job/basename=pic_mhd_cont_edge',
+                     'time/nlim=2',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_j_to_efield_representation=edge_staggered'] +
+                    common_args,
+        },
+        {
+            'name': 'serial_continuity_edge_direct',
+            'basename': 'pic_mhd_cont_edge_direct',
+            'nproc': 1,
+            'args': ['job/basename=pic_mhd_cont_edge_direct',
+                     'time/nlim=2',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_j_to_efield_representation=edge_staggered',
+                     'particles/couple_j_deposition_mode=direct_staggered'] +
+                    common_args,
+        },
+    ]
+
+    if _athena_mpi_enabled():
+        continuity_cases.extend([
+            {
+                'name': 'mpi2_continuity_cc',
+                'basename': 'pic_mhd_cont_cc_mpi2',
+                'nproc': 2,
+                'args': ['job/basename=pic_mhd_cont_cc_mpi2',
+                         'time/nlim=2',
+                         'particles/couple_moments_to_mhd=true'] + common_args,
+            },
+            {
+                'name': 'mpi2_continuity_edge',
+                'basename': 'pic_mhd_cont_edge_mpi2',
+                'nproc': 2,
+                'args': ['job/basename=pic_mhd_cont_edge_mpi2',
+                         'time/nlim=2',
+                         'particles/couple_moments_to_mhd=true',
+                         'particles/couple_j_to_efield_representation='
+                         'edge_staggered'] + common_args,
+            },
+            {
+                'name': 'mpi2_continuity_edge_direct',
+                'basename': 'pic_mhd_cont_edge_direct_mpi2',
+                'nproc': 2,
+                'args': ['job/basename=pic_mhd_cont_edge_direct_mpi2',
+                         'time/nlim=2',
+                         'particles/couple_moments_to_mhd=true',
+                         'particles/couple_j_to_efield_representation='
+                         'edge_staggered',
+                         'particles/couple_j_deposition_mode=direct_staggered'] +
+                        common_args,
+            },
+        ])
+
+    for case in continuity_cases:
+        _remove_outputs(case['basename'])
+        _run_command(case['name'], case['nproc'], case['args'])
+        _CONTINUITY_RESULTS[case['name']] = (
+            _measure_continuity_residual(case['basename']))
+
     _run_command(
         'guard_deposit_moments_false',
         1,
@@ -693,6 +868,47 @@ def analyze():
         ok = _check_with_tolerance('edge_staggered_vs_direct_staggered:' + quantity,
                                    coupled_edge_direct[quantity], coupled_edge[quantity],
                                    1.0e-6, 1.0e-8) and ok
+
+    required_cont_cases = [
+        'serial_continuity_cc',
+        'serial_continuity_edge',
+        'serial_continuity_edge_direct',
+    ]
+    for case_name in required_cont_cases:
+        if case_name not in _CONTINUITY_RESULTS:
+            logger.warning('Missing continuity-oracle case %s', case_name)
+            return False
+
+    cont_cc = _CONTINUITY_RESULTS['serial_continuity_cc']
+    cont_edge = _CONTINUITY_RESULTS['serial_continuity_edge']
+    cont_direct = _CONTINUITY_RESULTS['serial_continuity_edge_direct']
+    continuity_sets = [('cc', cont_cc), ('edge', cont_edge),
+                       ('edge_direct', cont_direct)]
+    for label, cont in continuity_sets:
+        logger.info('continuity_%s dt=% .8e cycle_delta=% .8e l2_drhodt=% .8e '
+                    'l2_divj=% .8e l2_res=% .8e linf_res=% .8e rel=% .8e',
+                    label, cont['dt'], cont['cycle_delta'], cont['l2_drhodt'],
+                    cont['l2_divj'], cont['l2_residual'], cont['linf_residual'],
+                    cont['rel_residual'])
+        if (not np.isfinite(cont['l2_residual']) or
+                not np.isfinite(cont['linf_residual']) or
+                not np.isfinite(cont['rel_residual'])):
+            logger.warning('Non-finite continuity metric for %s', label)
+            ok = False
+        if cont['dt'] <= 0.0 or cont['cycle_delta'] < 1.0:
+            logger.warning('Invalid continuity time metadata for %s', label)
+            ok = False
+
+    if cont_edge['rel_residual'] > 0.0:
+        direct_vs_edge_rel = cont_direct['rel_residual'] / cont_edge['rel_residual']
+        logger.info('continuity_direct_vs_edge_rel_ratio=% .8e', direct_vs_edge_rel)
+        if direct_vs_edge_rel > 1.25:
+            logger.warning('Direct-edge continuity residual regressed vs edge mode')
+            ok = False
+    else:
+        ok = _check_with_tolerance('continuity_edge_rel_zero',
+                                   cont_direct['rel_residual'], 0.0,
+                                   1.0e-12, 1.0e-12) and ok
 
     coupled_m1 = _measure_dataset('pic_mhd_coupled', 'mhd_u_m1')
     coupled_m2 = _measure_dataset('pic_mhd_coupled', 'mhd_u_m2')
@@ -946,6 +1162,25 @@ def analyze():
                                    mpi2_edge_direct['bcc3_l2'],
                                    coupled_edge_direct['bcc3_l2'],
                                    1.0e-6, 1.0e-8) and ok
+
+    if ('mpi2_continuity_cc' in _CONTINUITY_RESULTS and
+            'mpi2_continuity_edge' in _CONTINUITY_RESULTS and
+            'mpi2_continuity_edge_direct' in _CONTINUITY_RESULTS):
+        for rep_tag in ['cc', 'edge', 'edge_direct']:
+            serial = _CONTINUITY_RESULTS['serial_continuity_' + rep_tag]
+            mpi2 = _CONTINUITY_RESULTS['mpi2_continuity_' + rep_tag]
+            ok = _check_with_tolerance('continuity_serial_vs_mpi2:' + rep_tag +
+                                       ':l2_residual',
+                                       mpi2['l2_residual'], serial['l2_residual'],
+                                       1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance('continuity_serial_vs_mpi2:' + rep_tag +
+                                       ':linf_residual',
+                                       mpi2['linf_residual'], serial['linf_residual'],
+                                       1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance('continuity_serial_vs_mpi2:' + rep_tag +
+                                       ':rel_residual',
+                                       mpi2['rel_residual'], serial['rel_residual'],
+                                       1.0e-6, 1.0e-8) and ok
 
     ok = len(_NEGATIVE_RESULTS) == 12 and ok
     if len(_NEGATIVE_RESULTS) != 12:

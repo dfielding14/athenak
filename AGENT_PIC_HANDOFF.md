@@ -1212,16 +1212,18 @@ This section audits actual code state and test coverage after WS-G/WS-H/WS-I.
     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mhd/mhd_tasks.cpp:476`.
 - PR4 test coverage now includes direct mode:
   - coupled serial/MPI direct cases + guards + parity checks:
-    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:289`,
-    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:482`,
-    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:586`,
-    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:599`,
-    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:674`,
-    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:693`
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:392`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:585`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:761`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:774`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:868`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:1141`
   - decomposition matrix includes `edge_direct`:
-    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:22`,
-    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:258`,
-    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:359`
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:23`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:26`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:362`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:512`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:526`
   - multilevel matrix includes `edge_direct`:
     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:21`,
     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:148`,
@@ -1234,10 +1236,26 @@ This section audits actual code state and test coverage after WS-G/WS-H/WS-I.
     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_mhd_restart_fidelity.athinput:60`
     and
     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_mhd_coupling_multilevel.athinput:72`.
+  - continuity-residual oracle (`d(rho)/dt + div(J)`) is implemented in
+    coupled and decomposition suites, including duplicate-final-output-safe
+    time-delta selection:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:28`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:165`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:176`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:605`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:872`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:1172`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:18`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:164`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:388`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:543`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:590`.
 
-7. Remaining deferred items after PR4a-PR4d
-- Continuity-residual oracle (`d(rho)/dt + div(J)`) is not yet implemented in
-  AthenaK test analysis.
+7. Remaining deferred items after PR4a-PR4d + PR4e continuity hardening
+- Direct-vs-conversion closeout checks in multilevel and restart suites remain
+  to be added.
+- Compatibility-policy closeout is still pending (`cc_convert` retained vs
+  retired as default workflow).
 - Direct mode is currently restricted to strictly periodic boundaries (guarded in
   `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:394`).
 - Higher-order Entity-style shape-order direct current deposition (beyond current
@@ -1271,17 +1289,29 @@ decision (`cc_convert` retained vs retired).
   (higher-order deferred reference).
 
 #### 9.19.3 Implementation Steps
-1. Add continuity residual analysis to direct-mode tests.
-- Primary insertion points:
-  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:620`
+1. Completed: add continuity residual analysis to direct-mode tests.
+- As-built anchors:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:28`,
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:165`,
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:605`,
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:872`,
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:1172`,
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:18`,
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:164`,
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:388`,
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:543`,
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:590`.
+- Duplicate terminal-output guard for robust `dt` extraction:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:176`
   and
-  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:285`.
-2. Add explicit direct-vs-conversion closeout checks on multilevel + restart suites.
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:175`.
+2. Remaining: add explicit direct-vs-conversion closeout checks on multilevel +
+   restart suites.
 - Existing direct coverage anchor points:
   `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:203`
   and
   `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:253`.
-3. Decide compatibility policy and codify in docs.
+3. Remaining: decide compatibility policy and codify in docs.
 - If `cc_convert` retained: keep default unchanged and document rationale.
 - If retired: change defaults/guards, then rebaseline all PR2/PR3/PR4 suites.
 
