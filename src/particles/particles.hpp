@@ -92,6 +92,10 @@ class Particles {
   Real deposit_qscale = 1.0;        // scaling of particle macro-charge
   bool couple_moments_to_mhd = false;  // PR2 opt-in current coupling to MHD
   Real couple_j_to_efield_coeff = 1.0; // PR2 current-to-E coupling coefficient
+  bool couple_moments_momentum_to_mhd = false;  // PR2 opt-in momentum feedback
+  bool couple_moments_energy_to_mhd = false;    // PR2 opt-in energy feedback
+  Real couple_moments_momentum_coeff = 1.0;     // momentum feedback coefficient
+  Real couple_moments_energy_coeff = 1.0;       // energy feedback coefficient
   Real cr_vx0 = 0.0;                // deterministic CR vx initialization
   Real cr_vy0 = 0.0;                // deterministic CR vy initialization
   Real cr_vz0 = 0.0;                // deterministic CR vz initialization

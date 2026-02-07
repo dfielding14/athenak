@@ -141,6 +141,14 @@ def _measure_case(basename):
         _latest_output_file(basename, 'prtcl_d'))
     bcc_data = bin_convert.read_binary_as_athdf(
         _latest_output_file(basename, 'mhd_bcc'))
+    m1_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'mhd_u_m1'))
+    m2_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'mhd_u_m2'))
+    m3_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'mhd_u_m3'))
+    e_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'mhd_u_e'))
 
     return {
         'Q': _integrate_quantity(rho_data, 'prtcl_rho'),
@@ -151,6 +159,10 @@ def _measure_case(basename):
         'bcc1_l2': _l2_quantity(bcc_data, 'bcc1'),
         'bcc2_l2': _l2_quantity(bcc_data, 'bcc2'),
         'bcc3_l2': _l2_quantity(bcc_data, 'bcc3'),
+        'mom1': _integrate_quantity(m1_data, 'mom1'),
+        'mom2': _integrate_quantity(m2_data, 'mom2'),
+        'mom3': _integrate_quantity(m3_data, 'mom3'),
+        'ener': _integrate_quantity(e_data, 'ener'),
     }
 
 
@@ -179,6 +191,10 @@ def run(**kwargs):
 
     common_args = [
         'particles/couple_moments_to_mhd=true',
+        'particles/couple_moments_momentum_to_mhd=true',
+        'particles/couple_moments_energy_to_mhd=true',
+        'particles/couple_moments_momentum_coeff=1.0',
+        'particles/couple_moments_energy_coeff=10.0',
         'particles/cr_vx0=0.50',
         'particles/cr_vy0=-0.25',
         'particles/cr_vz0=0.125',
@@ -281,6 +297,18 @@ def analyze():
                                    1.0e-6, 1.0e-8) and ok
         ok = _check_with_tolerance(case_name + ':bcc3_l2_vs_serial',
                                    measured['bcc3_l2'], baseline['bcc3_l2'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance(case_name + ':mom1_vs_serial',
+                                   measured['mom1'], baseline['mom1'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance(case_name + ':mom2_vs_serial',
+                                   measured['mom2'], baseline['mom2'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance(case_name + ':mom3_vs_serial',
+                                   measured['mom3'], baseline['mom3'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance(case_name + ':ener_vs_serial',
+                                   measured['ener'], baseline['ener'],
                                    1.0e-6, 1.0e-8) and ok
 
     return ok

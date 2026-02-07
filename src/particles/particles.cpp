@@ -173,9 +173,19 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                                                "couple_moments_to_mhd", false);
   couple_j_to_efield_coeff = pin->GetOrAddReal("particles",
                                                 "couple_j_to_efield_coeff", 1.0);
+  couple_moments_momentum_to_mhd = pin->GetOrAddBoolean(
+      "particles", "couple_moments_momentum_to_mhd", false);
+  couple_moments_energy_to_mhd = pin->GetOrAddBoolean(
+      "particles", "couple_moments_energy_to_mhd", false);
+  couple_moments_momentum_coeff = pin->GetOrAddReal(
+      "particles", "couple_moments_momentum_coeff", 1.0);
+  couple_moments_energy_coeff = pin->GetOrAddReal(
+      "particles", "couple_moments_energy_coeff", 1.0);
   cr_vx0 = pin->GetOrAddReal("particles", "cr_vx0", 0.0);
   cr_vy0 = pin->GetOrAddReal("particles", "cr_vy0", 0.0);
   cr_vz0 = pin->GetOrAddReal("particles", "cr_vz0", 0.0);
+  const bool use_fluid_feedback = (couple_moments_momentum_to_mhd ||
+                                   couple_moments_energy_to_mhd);
 
   // PR1 runtime scope guard for moment deposition
   if (deposit_moments) {
@@ -219,6 +229,13 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   }
 
   // PR2 runtime scope guard for current coupling
+  if (use_fluid_feedback && !couple_moments_to_mhd) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Fluid feedback coupling requires "
+              << "<particles>/couple_moments_to_mhd=true" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   if (couple_moments_to_mhd) {
     if (!deposit_moments) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -255,6 +272,25 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                 << "numerical relativity task paths in PR2" << std::endl;
       std::exit(EXIT_FAILURE);
     }
+    if (couple_moments_energy_to_mhd) {
+      std::string mhd_eos = pin->GetString("mhd", "eos");
+      if (mhd_eos == "isothermal") {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "<particles>/couple_moments_energy_to_mhd=true requires "
+                  << "<mhd>/eos=ideal" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+  }
+  if (use_fluid_feedback &&
+      (pmy_pack->pcoord->is_special_relativistic ||
+       pmy_pack->pcoord->is_general_relativistic)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Fluid momentum/energy feedback is limited to non-relativistic "
+              << "MHD in PR2" << std::endl;
+    std::exit(EXIT_FAILURE);
   }
 
   Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);

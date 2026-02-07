@@ -40,7 +40,8 @@ tlim       = 1.0       # time limit
 ndiag      = 1         # cycles between diagnostic output
 
 <mhd>
-eos         = ideal
+eos         = isothermal
+iso_sound_speed = 1.0
 reconstruct = plm
 rsolver     = llf
 gamma       = 1.66666666667
@@ -54,10 +55,10 @@ cr_distribution         = center
 deposit_moments         = true
 deposit_order           = 1
 deposit_qscale          = 1.0
-couple_moments_to_mhd   = false
+couple_moments_to_mhd   = true
 couple_j_to_efield_coeff = 1.0
 couple_moments_momentum_to_mhd = false
-couple_moments_energy_to_mhd   = false
+couple_moments_energy_to_mhd   = true
 couple_moments_momentum_coeff  = 1.0
 couple_moments_energy_coeff    = 1.0
 cr_vx0                  = 0.0

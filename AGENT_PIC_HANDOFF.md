@@ -934,6 +934,35 @@ items from Section 9.13.
 3. Remaining deferred items are only the two major parity items above
    (staggered representation/conversion and full ordering parity).
 
+### 9.15 WS-H Status Snapshot (PR2 Step H, Partial)
+
+This section captures WS-H scope implemented after WS-G lock-ins.
+
+1. Added opt-in fluid feedback split controls:
+- `particles/couple_moments_momentum_to_mhd` (default `false`)
+- `particles/couple_moments_energy_to_mhd` (default `false`)
+- `particles/couple_moments_momentum_coeff` (default `1.0`)
+- `particles/couple_moments_energy_coeff` (default `1.0`)
+
+2. Coupled ordering moved toward Entity without changing defaults:
+- For coupled mode only, particle migration/communication now runs in
+  `after_timeintegrator` so it executes after stage-level field updates.
+- Uncoupled/default task ordering is unchanged.
+
+3. Added fluid source feedback path in MHD:
+- Momentum feedback uses deposited current and `bcc0` (`JxB` form) and is
+  applied in `MHD::MHDSrcTerms` when momentum feedback is enabled.
+- Energy feedback is independently opt-in and applied in the same source path.
+
+4. Added WS-H guardrails:
+- fluid feedback requires `couple_moments_to_mhd=true`
+- energy feedback requires ideal MHD EOS
+- fluid feedback path is guarded to non-relativistic MHD composition in PR2.
+
+5. Still deferred after WS-H:
+- full Entity staggered-current representation/conversion parity
+- PR3 scope (AMR/restart/non-periodic deposition support).
+
 ## 10. AGENTS Review Index
 
 ### 10.1 AthenaK AGENTS.md files reviewed

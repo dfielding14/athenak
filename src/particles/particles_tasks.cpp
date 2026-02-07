@@ -48,14 +48,17 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   id.csend_mom = tl["before_timeintegrator"]->AddTask(&Particles::ClearSendMoments,
                                                        this, id.crecv_mom);
 
-  id.newgid = tl["before_timeintegrator"]->AddTask(&Particles::NewGID, this,
-                                                    id.csend_mom);
-  id.count  = tl["before_timeintegrator"]->AddTask(&Particles::SendCnt, this, id.newgid);
-  id.irecv  = tl["before_timeintegrator"]->AddTask(&Particles::InitRecv, this, id.count);
-  id.sendp  = tl["before_timeintegrator"]->AddTask(&Particles::SendP, this, id.irecv);
-  id.recvp  = tl["before_timeintegrator"]->AddTask(&Particles::RecvP, this, id.sendp);
-  id.crecv  = tl["before_timeintegrator"]->AddTask(&Particles::ClearRecv, this, id.recvp);
-  id.csend  = tl["before_timeintegrator"]->AddTask(&Particles::ClearSend, this, id.crecv);
+  // WS-H: in coupled mode, move particle migration/communication after field updates.
+  auto comm_tl = (couple_moments_to_mhd ? tl["after_timeintegrator"] :
+                                          tl["before_timeintegrator"]);
+  TaskID comm_dep = (couple_moments_to_mhd ? none : id.csend_mom);
+  id.newgid = comm_tl->AddTask(&Particles::NewGID, this, comm_dep);
+  id.count  = comm_tl->AddTask(&Particles::SendCnt, this, id.newgid);
+  id.irecv  = comm_tl->AddTask(&Particles::InitRecv, this, id.count);
+  id.sendp  = comm_tl->AddTask(&Particles::SendP, this, id.irecv);
+  id.recvp  = comm_tl->AddTask(&Particles::RecvP, this, id.sendp);
+  id.crecv  = comm_tl->AddTask(&Particles::ClearRecv, this, id.recvp);
+  id.csend  = comm_tl->AddTask(&Particles::ClearSend, this, id.crecv);
 
   // PR2: optionally insert moment deposition wrappers immediately before MHD::EFieldSrc.
   if (couple_moments_to_mhd) {
@@ -69,8 +72,12 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
       std::exit(EXIT_FAILURE);
     }
 
-    TaskID insert_dep = pmhd->id.efld;
-    TaskID insert_loc = pmhd->id.efldsrc;
+    const bool use_fluid_feedback = (couple_moments_momentum_to_mhd ||
+                                     couple_moments_energy_to_mhd);
+    TaskID insert_dep = (use_fluid_feedback ? pmhd->id.rkupdt : pmhd->id.efld);
+    TaskID insert_loc = (use_fluid_feedback ? pmhd->id.srctrms : pmhd->id.efldsrc);
+    const char *insert_name = (use_fluid_feedback ? "MHD::MHDSrcTerms" :
+                                                    "MHD::EFieldSrc");
     if ((insert_dep == TaskID(0)) || (insert_loc == TaskID(0))) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
@@ -84,7 +91,7 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     if (sid == TaskID(0)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Failed to insert Particles::SaveOldPositions before "
-                << "MHD::EFieldSrc" << std::endl;
+                << insert_name << std::endl;
       std::exit(EXIT_FAILURE);
     }
 
@@ -92,7 +99,7 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     if (sid == TaskID(0)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Failed to insert Particles::ZeroMoments before "
-                << "MHD::EFieldSrc" << std::endl;
+                << insert_name << std::endl;
       std::exit(EXIT_FAILURE);
     }
 
@@ -100,7 +107,7 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     if (sid == TaskID(0)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Failed to insert Particles::InitRecvMoments before "
-                << "MHD::EFieldSrc" << std::endl;
+                << insert_name << std::endl;
       std::exit(EXIT_FAILURE);
     }
 
@@ -108,7 +115,7 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     if (sid == TaskID(0)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Failed to insert Particles::DepositMoments before "
-                << "MHD::EFieldSrc" << std::endl;
+                << insert_name << std::endl;
       std::exit(EXIT_FAILURE);
     }
 
@@ -116,7 +123,7 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     if (sid == TaskID(0)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Failed to insert Particles::SendMoments before "
-                << "MHD::EFieldSrc" << std::endl;
+                << insert_name << std::endl;
       std::exit(EXIT_FAILURE);
     }
 
@@ -124,7 +131,7 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     if (sid == TaskID(0)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Failed to insert Particles::RecvMoments before "
-                << "MHD::EFieldSrc" << std::endl;
+                << insert_name << std::endl;
       std::exit(EXIT_FAILURE);
     }
 
@@ -132,7 +139,7 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     if (sid == TaskID(0)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Failed to insert Particles::ClearRecvMoments before "
-                << "MHD::EFieldSrc" << std::endl;
+                << insert_name << std::endl;
       std::exit(EXIT_FAILURE);
     }
 
@@ -140,7 +147,7 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     if (sid == TaskID(0)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Failed to insert Particles::ClearSendMoments before "
-                << "MHD::EFieldSrc" << std::endl;
+                << insert_name << std::endl;
       std::exit(EXIT_FAILURE);
     }
   }

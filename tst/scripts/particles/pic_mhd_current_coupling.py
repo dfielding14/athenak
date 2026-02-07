@@ -17,6 +17,7 @@ _UNSUPPORTED_INPUT_DECK = 'tests/pic_deposit_conservation.athinput'
 _RADIATION_GUARD_DECK = 'tests/pic_mhd_coupling_guard_radiation.athinput'
 _NR_GUARD_DECK = 'tests/pic_mhd_coupling_guard_nr.athinput'
 _HYDRO_GUARD_DECK = 'tests/pic_mhd_coupling_guard_hydro.athinput'
+_ISOTHERMAL_GUARD_DECK = 'tests/pic_mhd_coupling_guard_isothermal.athinput'
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
 _POSITIVE_RESULTS = {}
 _NEGATIVE_RESULTS = {}
@@ -142,8 +143,12 @@ def _l2_difference_quantity(dataset_a, dataset_b, quantity):
     return float(np.sqrt(np.sum(diff * diff * dvol)))
 
 
+def _measure_dataset(basename, file_id):
+    return bin_convert.read_binary_as_athdf(_latest_output_file(basename, file_id))
+
+
 def _measure_bcc_dataset(basename):
-    return bin_convert.read_binary_as_athdf(_latest_output_file(basename, 'mhd_bcc'))
+    return _measure_dataset(basename, 'mhd_bcc')
 
 
 def _measure_case(basename):
@@ -159,6 +164,14 @@ def _measure_case(basename):
         _latest_output_file(basename, 'prtcl_d'))
     bcc_data = bin_convert.read_binary_as_athdf(
         _latest_output_file(basename, 'mhd_bcc'))
+    m1_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'mhd_u_m1'))
+    m2_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'mhd_u_m2'))
+    m3_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'mhd_u_m3'))
+    e_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'mhd_u_e'))
 
     return {
         'Q': _integrate_quantity(rho_data, 'prtcl_rho'),
@@ -169,6 +182,10 @@ def _measure_case(basename):
         'bcc1_l2': _l2_quantity(bcc_data, 'bcc1'),
         'bcc2_l2': _l2_quantity(bcc_data, 'bcc2'),
         'bcc3_l2': _l2_quantity(bcc_data, 'bcc3'),
+        'mom1': _integrate_quantity(m1_data, 'mom1'),
+        'mom2': _integrate_quantity(m2_data, 'mom2'),
+        'mom3': _integrate_quantity(m3_data, 'mom3'),
+        'ener': _integrate_quantity(e_data, 'ener'),
     }
 
 
@@ -234,6 +251,35 @@ def run(**kwargs):
             'nproc': 1,
             'args': ['job/basename=pic_mhd_coupled',
                      'particles/couple_moments_to_mhd=true'] + common_args,
+        },
+        {
+            'name': 'serial_feedback_momentum',
+            'basename': 'pic_mhd_feedback_momentum',
+            'nproc': 1,
+            'args': ['job/basename=pic_mhd_feedback_momentum',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_moments_momentum_to_mhd=true',
+                     'particles/couple_moments_momentum_coeff=1.0'] + common_args,
+        },
+        {
+            'name': 'serial_feedback_energy',
+            'basename': 'pic_mhd_feedback_energy',
+            'nproc': 1,
+            'args': ['job/basename=pic_mhd_feedback_energy',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_moments_energy_to_mhd=true',
+                     'particles/couple_moments_energy_coeff=10.0'] + common_args,
+        },
+        {
+            'name': 'serial_feedback_both',
+            'basename': 'pic_mhd_feedback_both',
+            'nproc': 1,
+            'args': ['job/basename=pic_mhd_feedback_both',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_moments_momentum_to_mhd=true',
+                     'particles/couple_moments_energy_to_mhd=true',
+                     'particles/couple_moments_momentum_coeff=1.0',
+                     'particles/couple_moments_energy_coeff=10.0'] + common_args,
         },
         {
             'name': 'serial_zero_uncoupled',
@@ -398,6 +444,25 @@ def run(**kwargs):
         input_deck=_HYDRO_GUARD_DECK,
     )
 
+    _run_command(
+        'guard_feedback_requires_coupled_mode',
+        1,
+        ['particles/couple_moments_to_mhd=false',
+         'particles/couple_moments_momentum_to_mhd=true',
+         'time/nlim=0'],
+        expect_fail=True,
+        expected_message='requires <particles>/couple_moments_to_mhd=true',
+    )
+
+    _run_command(
+        'guard_energy_feedback_requires_ideal_eos',
+        1,
+        ['time/nlim=0'],
+        expect_fail=True,
+        expected_message='requires <mhd>/eos=ideal',
+        input_deck=_ISOTHERMAL_GUARD_DECK,
+    )
+
 
 def analyze():
     logger.debug('Analyzing test ' + __name__)
@@ -438,6 +503,47 @@ def analyze():
                 delta_b1, delta_b2, delta_b3, max_delta)
     if max_delta <= 1.0e-12:
         logger.warning('Coupled and uncoupled B-field norms are too similar')
+        ok = False
+
+    coupled_m1 = _measure_dataset('pic_mhd_coupled', 'mhd_u_m1')
+    coupled_m2 = _measure_dataset('pic_mhd_coupled', 'mhd_u_m2')
+    coupled_m3 = _measure_dataset('pic_mhd_coupled', 'mhd_u_m3')
+    coupled_e = _measure_dataset('pic_mhd_coupled', 'mhd_u_e')
+    fb_mom_m1 = _measure_dataset('pic_mhd_feedback_momentum', 'mhd_u_m1')
+    fb_mom_m2 = _measure_dataset('pic_mhd_feedback_momentum', 'mhd_u_m2')
+    fb_mom_m3 = _measure_dataset('pic_mhd_feedback_momentum', 'mhd_u_m3')
+    fb_eng_e = _measure_dataset('pic_mhd_feedback_energy', 'mhd_u_e')
+    fb_both_m1 = _measure_dataset('pic_mhd_feedback_both', 'mhd_u_m1')
+    fb_both_m2 = _measure_dataset('pic_mhd_feedback_both', 'mhd_u_m2')
+    fb_both_m3 = _measure_dataset('pic_mhd_feedback_both', 'mhd_u_m3')
+    fb_both_e = _measure_dataset('pic_mhd_feedback_both', 'mhd_u_e')
+
+    delta_mom_m1 = _l2_difference_quantity(fb_mom_m1, coupled_m1, 'mom1')
+    delta_mom_m2 = _l2_difference_quantity(fb_mom_m2, coupled_m2, 'mom2')
+    delta_mom_m3 = _l2_difference_quantity(fb_mom_m3, coupled_m3, 'mom3')
+    delta_mom = float(np.sqrt(delta_mom_m1 * delta_mom_m1 +
+                              delta_mom_m2 * delta_mom_m2 +
+                              delta_mom_m3 * delta_mom_m3))
+    delta_eng = _l2_difference_quantity(fb_eng_e, coupled_e, 'ener')
+
+    delta_both_m1 = _l2_difference_quantity(fb_both_m1, coupled_m1, 'mom1')
+    delta_both_m2 = _l2_difference_quantity(fb_both_m2, coupled_m2, 'mom2')
+    delta_both_m3 = _l2_difference_quantity(fb_both_m3, coupled_m3, 'mom3')
+    delta_both_mom = float(np.sqrt(delta_both_m1 * delta_both_m1 +
+                                   delta_both_m2 * delta_both_m2 +
+                                   delta_both_m3 * delta_both_m3))
+    delta_both_eng = _l2_difference_quantity(fb_both_e, coupled_e, 'ener')
+    logger.info('feedback_delta momentum_only=% .8e energy_only=% .8e '
+                'both_mom=% .8e both_eng=% .8e',
+                delta_mom, delta_eng, delta_both_mom, delta_both_eng)
+    if delta_mom <= 1.0e-12:
+        logger.warning('Momentum-feedback branch did not change fluid momentum')
+        ok = False
+    if delta_eng <= 1.0e-12:
+        logger.warning('Energy-feedback branch did not change fluid energy')
+        ok = False
+    if delta_both_mom <= 1.0e-12 or delta_both_eng <= 1.0e-12:
+        logger.warning('Combined feedback branch did not affect both targets')
         ok = False
 
     zero_uncoupled = _POSITIVE_RESULTS['serial_zero_uncoupled']['measured']
@@ -529,8 +635,8 @@ def analyze():
                                    mpi2['bcc3_l2'], coupled['bcc3_l2'],
                                    1.0e-6, 1.0e-8) and ok
 
-    ok = len(_NEGATIVE_RESULTS) == 5 and ok
-    if len(_NEGATIVE_RESULTS) != 5:
-        logger.warning('Expected 5 negative checks, got %d', len(_NEGATIVE_RESULTS))
+    ok = len(_NEGATIVE_RESULTS) == 7 and ok
+    if len(_NEGATIVE_RESULTS) != 7:
+        logger.warning('Expected 7 negative checks, got %d', len(_NEGATIVE_RESULTS))
 
     return ok
