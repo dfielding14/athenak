@@ -146,6 +146,26 @@ def _l2_difference_quantity(dataset_a, dataset_b, quantity):
     return float(np.sqrt(np.sum(diff * diff * dvol)))
 
 
+def _l2_sum_difference_quantity(dataset_a, dataset_ref, dataset_b, quantity):
+    dx1 = np.diff(dataset_a['x1f'])
+    dx2 = np.diff(dataset_a['x2f'])
+    dx3 = np.diff(dataset_a['x3f'])
+    dvol = dx3[:, None, None] * dx2[None, :, None] * dx1[None, None, :]
+    sum_diff = (dataset_a[quantity] - dataset_ref[quantity] +
+                dataset_b[quantity] - dataset_ref[quantity])
+    return float(np.sqrt(np.sum(sum_diff * sum_diff * dvol)))
+
+
+def _dot_difference_quantity(dataset_a, dataset_ref, dataset_b, quantity):
+    dx1 = np.diff(dataset_a['x1f'])
+    dx2 = np.diff(dataset_a['x2f'])
+    dx3 = np.diff(dataset_a['x3f'])
+    dvol = dx3[:, None, None] * dx2[None, :, None] * dx1[None, None, :]
+    diff_a = dataset_a[quantity] - dataset_ref[quantity]
+    diff_b = dataset_b[quantity] - dataset_ref[quantity]
+    return float(np.sum(diff_a * diff_b * dvol))
+
+
 def _measure_dataset(basename, file_id):
     return bin_convert.read_binary_as_athdf(_latest_output_file(basename, file_id))
 
@@ -358,6 +378,18 @@ def run(**kwargs):
             'args': ['job/basename=pic_mhd_lin_lo_coupled',
                      'particles/couple_moments_to_mhd=true',
                      'particles/deposit_qscale=1.0',
+                     'particles/cr_vx0=0.01',
+                     'particles/cr_vy0=0.0',
+                     'particles/cr_vz0=0.0'],
+        },
+        {
+            'name': 'serial_lin_lo_coupled_neg',
+            'basename': 'pic_mhd_lin_lo_neg_coupled',
+            'nproc': 1,
+            'args': ['job/basename=pic_mhd_lin_lo_neg_coupled',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/deposit_qscale=1.0',
+                     'particles/couple_j_to_efield_coeff=-1.0',
                      'particles/cr_vx0=0.01',
                      'particles/cr_vy0=0.0',
                      'particles/cr_vz0=0.0'],
@@ -710,6 +742,7 @@ def analyze():
 
     lin_lo_unc_bcc = _measure_bcc_dataset('pic_mhd_lin_lo_uncoupled')
     lin_lo_cpl_bcc = _measure_bcc_dataset('pic_mhd_lin_lo_coupled')
+    lin_lo_neg_cpl_bcc = _measure_bcc_dataset('pic_mhd_lin_lo_neg_coupled')
     lin_hi_unc_bcc = _measure_bcc_dataset('pic_mhd_lin_hi_uncoupled')
     lin_hi_cpl_bcc = _measure_bcc_dataset('pic_mhd_lin_hi_coupled')
 
@@ -739,6 +772,29 @@ def analyze():
                     ratio, expected_ratio, ratio_abs_err)
         if ratio_abs_err > 2.0e-1:
             logger.warning('Linearity ratio is outside tolerance')
+            ok = False
+
+    for quantity in ['bcc1', 'bcc2', 'bcc3']:
+        delta_pos = _l2_difference_quantity(lin_lo_cpl_bcc, lin_lo_unc_bcc, quantity)
+        delta_neg = _l2_difference_quantity(lin_lo_neg_cpl_bcc,
+                                            lin_lo_unc_bcc, quantity)
+        anti_delta = _l2_sum_difference_quantity(lin_lo_cpl_bcc, lin_lo_unc_bcc,
+                                                 lin_lo_neg_cpl_bcc, quantity)
+        dot = _dot_difference_quantity(lin_lo_cpl_bcc, lin_lo_unc_bcc,
+                                       lin_lo_neg_cpl_bcc, quantity)
+        if delta_pos <= 1.0e-12 or delta_neg <= 1.0e-12:
+            logger.warning('Sign oracle deltas are too small for %s', quantity)
+            ok = False
+            continue
+        cosine = dot / (delta_pos * delta_neg)
+        anti_rel = anti_delta / max(delta_pos, delta_neg)
+        logger.info('sign_oracle_%s cos=% .8e anti_rel=% .8e',
+                    quantity, cosine, anti_rel)
+        if cosine >= -9.5e-1:
+            logger.warning('Sign oracle cosine check failed for %s', quantity)
+            ok = False
+        if anti_rel >= 2.5e-1:
+            logger.warning('Sign oracle anti-symmetry check failed for %s', quantity)
             ok = False
 
     rk1_unc = _POSITIVE_RESULTS['serial_rk1_uncoupled']['measured']

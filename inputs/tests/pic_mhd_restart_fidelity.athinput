@@ -153,3 +153,4 @@ ghost_zones = false
 file_type   = rst
 id          = rst
 dcycle      = 1
+single_file_per_rank = false

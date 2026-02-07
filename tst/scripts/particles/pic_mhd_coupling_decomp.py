@@ -15,6 +15,10 @@ logger = logging.getLogger('athena' + __name__[7:])
 _INPUT_DECK = 'tests/pic_mhd_current_coupling.athinput'
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
 _RESULTS = {}
+_MESHBLOCK_CONFIGS = [
+    ('mb444', 4, 4, 4),
+    ('mb844', 8, 4, 4),
+]
 
 
 def _athena_exe_dir():
@@ -200,45 +204,46 @@ def run(**kwargs):
         'particles/cr_vz0=0.125',
     ]
 
-    base_cases = [
-        {
-            'name': 'serial_mb444',
-            'basename': 'pic_mhd_decomp_serial',
+    base_cases = []
+    for mb_tag, mbx1, mbx2, mbx3 in _MESHBLOCK_CONFIGS:
+        base_cases.append({
+            'name': 'serial_' + mb_tag,
+            'basename': 'pic_mhd_decomp_serial_' + mb_tag,
             'nproc': 1,
             'args': [
-                'job/basename=pic_mhd_decomp_serial',
-                'meshblock/nx1=4',
-                'meshblock/nx2=4',
-                'meshblock/nx3=4',
+                'job/basename=pic_mhd_decomp_serial_' + mb_tag,
+                'meshblock/nx1=' + str(mbx1),
+                'meshblock/nx2=' + str(mbx2),
+                'meshblock/nx3=' + str(mbx3),
             ],
-        },
-    ]
+        })
 
     if _athena_mpi_enabled():
-        base_cases.extend([
-            {
-                'name': 'mpi2_mb444',
-                'basename': 'pic_mhd_decomp_mpi2_same_mb',
-                'nproc': 2,
-                'args': [
-                    'job/basename=pic_mhd_decomp_mpi2_same_mb',
-                    'meshblock/nx1=4',
-                    'meshblock/nx2=4',
-                    'meshblock/nx3=4',
-                ],
-            },
-            {
-                'name': 'mpi4_mb444',
-                'basename': 'pic_mhd_decomp_mpi4_same_mb',
-                'nproc': 4,
-                'args': [
-                    'job/basename=pic_mhd_decomp_mpi4_same_mb',
-                    'meshblock/nx1=4',
-                    'meshblock/nx2=4',
-                    'meshblock/nx3=4',
-                ],
-            },
-        ])
+        for mb_tag, mbx1, mbx2, mbx3 in _MESHBLOCK_CONFIGS:
+            base_cases.extend([
+                {
+                    'name': 'mpi2_' + mb_tag,
+                    'basename': 'pic_mhd_decomp_mpi2_' + mb_tag,
+                    'nproc': 2,
+                    'args': [
+                        'job/basename=pic_mhd_decomp_mpi2_' + mb_tag,
+                        'meshblock/nx1=' + str(mbx1),
+                        'meshblock/nx2=' + str(mbx2),
+                        'meshblock/nx3=' + str(mbx3),
+                    ],
+                },
+                {
+                    'name': 'mpi4_' + mb_tag,
+                    'basename': 'pic_mhd_decomp_mpi4_' + mb_tag,
+                    'nproc': 4,
+                    'args': [
+                        'job/basename=pic_mhd_decomp_mpi4_' + mb_tag,
+                        'meshblock/nx1=' + str(mbx1),
+                        'meshblock/nx2=' + str(mbx2),
+                        'meshblock/nx3=' + str(mbx3),
+                    ],
+                },
+            ])
     else:
         logger.info('MPI disabled: running serial-only decomposition baseline')
 
@@ -288,77 +293,82 @@ def analyze():
         ok = _check_with_tolerance(case_name + ':npart', measured['npart'],
                                    expected['npart'], 1.0e-6, 1.0e-8) and ok
 
-    for order_tag in ['mhd', 'efield']:
+    for mb_tag, _, _, _ in _MESHBLOCK_CONFIGS:
+        for order_tag in ['mhd', 'efield']:
+            for rep_tag in ['cc', 'edge']:
+                serial_case = 'serial_' + mb_tag + '_' + rep_tag + '_' + order_tag
+                if serial_case not in _RESULTS:
+                    logger.warning('Missing serial baseline result for %s %s %s',
+                                   mb_tag, rep_tag, order_tag)
+                    return False
+
+                baseline = _RESULTS[serial_case]['measured']
+                for case_name in ['mpi2_' + mb_tag + '_' + rep_tag + '_' + order_tag,
+                                  'mpi4_' + mb_tag + '_' + rep_tag + '_' + order_tag]:
+                    if case_name not in _RESULTS:
+                        continue
+                    measured = _RESULTS[case_name]['measured']
+                    ok = _check_with_tolerance(case_name + ':Q_vs_serial',
+                                               measured['Q'], baseline['Q'],
+                                               1.0e-6, 1.0e-8) and ok
+                    ok = _check_with_tolerance(case_name + ':Jx_vs_serial',
+                                               measured['Jx'], baseline['Jx'],
+                                               1.0e-6, 1.0e-8) and ok
+                    ok = _check_with_tolerance(case_name + ':Jy_vs_serial',
+                                               measured['Jy'], baseline['Jy'],
+                                               1.0e-6, 1.0e-8) and ok
+                    ok = _check_with_tolerance(case_name + ':Jz_vs_serial',
+                                               measured['Jz'], baseline['Jz'],
+                                               1.0e-6, 1.0e-8) and ok
+                    ok = _check_with_tolerance(case_name + ':npart_vs_serial',
+                                               measured['npart'], baseline['npart'],
+                                               1.0e-6, 1.0e-8) and ok
+                    ok = _check_with_tolerance(case_name + ':bcc1_l2_vs_serial',
+                                               measured['bcc1_l2'], baseline['bcc1_l2'],
+                                               1.0e-6, 1.0e-8) and ok
+                    ok = _check_with_tolerance(case_name + ':bcc2_l2_vs_serial',
+                                               measured['bcc2_l2'], baseline['bcc2_l2'],
+                                               1.0e-6, 1.0e-8) and ok
+                    ok = _check_with_tolerance(case_name + ':bcc3_l2_vs_serial',
+                                               measured['bcc3_l2'], baseline['bcc3_l2'],
+                                               1.0e-6, 1.0e-8) and ok
+                    ok = _check_with_tolerance(case_name + ':mom1_vs_serial',
+                                               measured['mom1'], baseline['mom1'],
+                                               1.0e-6, 1.0e-8) and ok
+                    ok = _check_with_tolerance(case_name + ':mom2_vs_serial',
+                                               measured['mom2'], baseline['mom2'],
+                                               1.0e-6, 1.0e-8) and ok
+                    ok = _check_with_tolerance(case_name + ':mom3_vs_serial',
+                                               measured['mom3'], baseline['mom3'],
+                                               1.0e-6, 1.0e-8) and ok
+                    ok = _check_with_tolerance(case_name + ':ener_vs_serial',
+                                               measured['ener'], baseline['ener'],
+                                               1.0e-6, 1.0e-8) and ok
+
+    for mb_tag, _, _, _ in _MESHBLOCK_CONFIGS:
+        for order_tag in ['mhd', 'efield']:
+            serial_cc = 'serial_' + mb_tag + '_cc_' + order_tag
+            serial_edge = 'serial_' + mb_tag + '_edge_' + order_tag
+            if serial_cc in _RESULTS and serial_edge in _RESULTS:
+                cc = _RESULTS[serial_cc]['measured']
+                edge = _RESULTS[serial_edge]['measured']
+                for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
+                    ok = _check_with_tolerance(mb_tag + ':' + order_tag +
+                                               ':cc_vs_edge:' + quantity,
+                                               cc[quantity], edge[quantity],
+                                               1.0e-6, 1.0e-8) and ok
+
+    for mb_tag, _, _, _ in _MESHBLOCK_CONFIGS:
         for rep_tag in ['cc', 'edge']:
-            serial_case = 'serial_mb444_' + rep_tag + '_' + order_tag
-            if serial_case not in _RESULTS:
-                logger.warning('Missing serial baseline result for %s %s',
-                               rep_tag, order_tag)
-                return False
-
-            baseline = _RESULTS[serial_case]['measured']
-            for case_name in ['mpi2_mb444_' + rep_tag + '_' + order_tag,
-                              'mpi4_mb444_' + rep_tag + '_' + order_tag]:
-                if case_name not in _RESULTS:
-                    continue
-                measured = _RESULTS[case_name]['measured']
-                ok = _check_with_tolerance(case_name + ':Q_vs_serial',
-                                           measured['Q'], baseline['Q'],
-                                           1.0e-6, 1.0e-8) and ok
-                ok = _check_with_tolerance(case_name + ':Jx_vs_serial',
-                                           measured['Jx'], baseline['Jx'],
-                                           1.0e-6, 1.0e-8) and ok
-                ok = _check_with_tolerance(case_name + ':Jy_vs_serial',
-                                           measured['Jy'], baseline['Jy'],
-                                           1.0e-6, 1.0e-8) and ok
-                ok = _check_with_tolerance(case_name + ':Jz_vs_serial',
-                                           measured['Jz'], baseline['Jz'],
-                                           1.0e-6, 1.0e-8) and ok
-                ok = _check_with_tolerance(case_name + ':npart_vs_serial',
-                                           measured['npart'], baseline['npart'],
-                                           1.0e-6, 1.0e-8) and ok
-                ok = _check_with_tolerance(case_name + ':bcc1_l2_vs_serial',
-                                           measured['bcc1_l2'], baseline['bcc1_l2'],
-                                           1.0e-6, 1.0e-8) and ok
-                ok = _check_with_tolerance(case_name + ':bcc2_l2_vs_serial',
-                                           measured['bcc2_l2'], baseline['bcc2_l2'],
-                                           1.0e-6, 1.0e-8) and ok
-                ok = _check_with_tolerance(case_name + ':bcc3_l2_vs_serial',
-                                           measured['bcc3_l2'], baseline['bcc3_l2'],
-                                           1.0e-6, 1.0e-8) and ok
-                ok = _check_with_tolerance(case_name + ':mom1_vs_serial',
-                                           measured['mom1'], baseline['mom1'],
-                                           1.0e-6, 1.0e-8) and ok
-                ok = _check_with_tolerance(case_name + ':mom2_vs_serial',
-                                           measured['mom2'], baseline['mom2'],
-                                           1.0e-6, 1.0e-8) and ok
-                ok = _check_with_tolerance(case_name + ':mom3_vs_serial',
-                                           measured['mom3'], baseline['mom3'],
-                                           1.0e-6, 1.0e-8) and ok
-                ok = _check_with_tolerance(case_name + ':ener_vs_serial',
-                                           measured['ener'], baseline['ener'],
-                                           1.0e-6, 1.0e-8) and ok
-
-    for order_tag in ['mhd', 'efield']:
-        serial_cc = 'serial_mb444_cc_' + order_tag
-        serial_edge = 'serial_mb444_edge_' + order_tag
-        if serial_cc in _RESULTS and serial_edge in _RESULTS:
-            cc = _RESULTS[serial_cc]['measured']
-            edge = _RESULTS[serial_edge]['measured']
-            for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
-                ok = _check_with_tolerance(order_tag + ':cc_vs_edge:' + quantity,
-                                           cc[quantity], edge[quantity],
-                                           1.0e-6, 1.0e-8) and ok
-
-    for rep_tag in ['cc', 'edge']:
-        serial_mhd = 'serial_mb444_' + rep_tag + '_mhd'
-        serial_efield = 'serial_mb444_' + rep_tag + '_efield'
-        if serial_mhd in _RESULTS and serial_efield in _RESULTS:
-            mhd = _RESULTS[serial_mhd]['measured']
-            efield = _RESULTS[serial_efield]['measured']
-            for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
-                ok = _check_with_tolerance(rep_tag + ':mhd_vs_efield:' + quantity,
-                                           mhd[quantity], efield[quantity],
-                                           1.0e-6, 1.0e-8) and ok
+            serial_mhd = 'serial_' + mb_tag + '_' + rep_tag + '_mhd'
+            serial_efield = 'serial_' + mb_tag + '_' + rep_tag + '_efield'
+            if serial_mhd in _RESULTS and serial_efield in _RESULTS:
+                mhd = _RESULTS[serial_mhd]['measured']
+                efield = _RESULTS[serial_efield]['measured']
+                for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
+                    ok = _check_with_tolerance(mb_tag + ':' + rep_tag +
+                                               ':mhd_vs_efield:' + quantity,
+                                               mhd[quantity], efield[quantity],
+                                               1.0e-6, 1.0e-8) and ok
 
     return ok

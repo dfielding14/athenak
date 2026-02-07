@@ -15,6 +15,7 @@ logger = logging.getLogger('athena' + __name__[7:])
 _INPUT_DECK = 'tests/pic_mhd_restart_fidelity.athinput'
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
 _RESULTS = {}
+_NEGATIVE_RESULTS = {}
 
 
 def _athena_exe_dir():
@@ -38,7 +39,8 @@ def _remove_outputs(basename):
     exe_dir = _athena_exe_dir()
     for pattern in [
             os.path.join(exe_dir, 'bin', basename + '.*.bin'),
-            os.path.join(exe_dir, 'rst', basename + '.*.rst')]:
+            os.path.join(exe_dir, 'rst', basename + '.*.rst'),
+            os.path.join(exe_dir, 'rst', 'rank_*', basename + '.*.rst')]:
         for fname in glob.glob(pattern):
             os.remove(fname)
 
@@ -119,9 +121,33 @@ def _run_athena(label, nproc, arguments, restart_file=None):
     logger.info('Executing %s: %s', label, ' '.join(command))
     proc = subprocess.run(command, cwd=_athena_exe_dir(),
                           capture_output=True, text=True)
+    output = (proc.stdout or '') + (proc.stderr or '')
     if proc.returncode != 0:
-        output = (proc.stdout or '') + (proc.stderr or '')
         raise RuntimeError('Command failed for ' + label + '\n' + output)
+
+
+def _run_athena_expect_fail(label, nproc, arguments, expected_message=None,
+                            restart_file=None):
+    command = ['./athena']
+    if restart_file is None:
+        command += ['-i', _athena_input_path()]
+    else:
+        command += ['-r', restart_file]
+    command += list(arguments)
+    if nproc > 1:
+        command = [_MPIEXEC, '-n', str(nproc)] + command
+
+    logger.info('Executing %s (expect-fail): %s', label, ' '.join(command))
+    proc = subprocess.run(command, cwd=_athena_exe_dir(),
+                          capture_output=True, text=True)
+    output = (proc.stdout or '') + (proc.stderr or '')
+    if proc.returncode == 0:
+        raise RuntimeError('Expected failure for ' + label + ', but run succeeded')
+    if expected_message is not None and expected_message not in output:
+        raise RuntimeError('Expected message not found for ' + label +
+                           ': "' + expected_message + '"\n' + output)
+    _NEGATIVE_RESULTS[label] = {'matched_message': expected_message}
+    logger.info('Expected failure observed for %s', label)
 
 
 def _check_with_tolerance(label, measured, expected, abs_tol, rel_tol):
@@ -186,6 +212,36 @@ def run(**kwargs):
                 'restart': rst_measured,
             }
 
+    # PR3a guard hardening: per-rank restart files are intentionally unsupported for
+    # coupled restore and should fail deterministically.
+    per_rank_base = 'pic_mhd_rst_per_rank_guard'
+    per_rank_seg = per_rank_base + '_seg'
+    per_rank_rst = per_rank_base + '_rst'
+    _remove_outputs(per_rank_seg)
+    _remove_outputs(per_rank_rst)
+    _run_athena('per_rank_seg_run', 1,
+                ['job/basename=' + per_rank_seg,
+                 'time/nlim=1',
+                 'output11/single_file_per_rank=true',
+                 'particles/couple_moments_to_mhd=true',
+                 'particles/couple_j_to_efield_representation=cell_centered',
+                 'particles/cr_vx0=0.50',
+                 'particles/cr_vy0=-0.25',
+                 'particles/cr_vz0=0.125'])
+    per_rank_rst_path = os.path.join('rst', 'rank_00000000',
+                                     per_rank_seg + '.00000.rst')
+    full_per_rank_rst_path = os.path.join(_athena_exe_dir(), per_rank_rst_path)
+    if not os.path.exists(full_per_rank_rst_path):
+        raise RuntimeError('Expected restart file not found: ' + full_per_rank_rst_path)
+    _run_athena_expect_fail(
+        'guard_restart_single_file_per_rank_unimplemented',
+        1,
+        ['job/basename=' + per_rank_rst,
+         'time/nlim=2',
+         'particles/couple_moments_to_mhd=true',
+         'particles/couple_j_to_efield_representation=cell_centered'],
+        restart_file=per_rank_rst_path)
+
 
 def analyze():
     logger.debug('Analyzing test ' + __name__)
@@ -205,5 +261,9 @@ def analyze():
             ok = _check_with_tolerance(case_name + ':' + quantity,
                                        rst[quantity], full[quantity],
                                        abs_tol, rel_tol) and ok
+
+    ok = (len(_NEGATIVE_RESULTS) == 1) and ok
+    if len(_NEGATIVE_RESULTS) != 1:
+        logger.warning('Expected 1 negative check, got %d', len(_NEGATIVE_RESULTS))
 
     return ok

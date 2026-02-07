@@ -293,6 +293,20 @@ def run(**kwargs):
         expect_fail=True,
         expected_message='does not support mesh/ix2_bc=inflow',
     )
+    _run_command(
+        'guard_unsupported_boundary_vacuum',
+        1,
+        ['mesh/ix3_bc=vacuum', 'mesh/ox3_bc=vacuum', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='does not support mesh/ix3_bc=vacuum',
+    )
+    _run_command(
+        'guard_unsupported_boundary_user',
+        1,
+        ['mesh/ix1_bc=user', 'mesh/ox1_bc=user', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='does not support mesh/ix1_bc=user',
+    )
 
 
 def analyze():
@@ -362,8 +376,8 @@ def analyze():
                                        mpi_edge[quantity], cpl_edge[quantity],
                                        1.0e-6, 1.0e-8) and ok
 
-    ok = len(_NEGATIVE_RESULTS) == 2 and ok
-    if len(_NEGATIVE_RESULTS) != 2:
-        logger.warning('Expected 2 negative checks, got %d', len(_NEGATIVE_RESULTS))
+    ok = len(_NEGATIVE_RESULTS) == 4 and ok
+    if len(_NEGATIVE_RESULTS) != 4:
+        logger.warning('Expected 4 negative checks, got %d', len(_NEGATIVE_RESULTS))
 
     return ok
