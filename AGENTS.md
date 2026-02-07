@@ -82,6 +82,22 @@ efficiently on CPUs and GPUs.
   changing behavior or documentation.
 - If editing docs, follow the audit workflow in `docs/AGENT_PRIMER.md`.
 
+### PIC PR2 Coupling Status (Current)
+- PR2 particle-to-MHD coupling is runtime opt-in under the `<particles>` block.
+- Defaults preserve legacy behavior:
+  - `couple_moments_to_mhd = false`
+  - `couple_j_to_efield_representation = cell_centered`
+  - fluid feedback toggles remain off by default.
+- Coupled ordering now follows a staged split:
+  - particle push/deposition wrappers are inserted in `stagen` (stage 1 only)
+  - particle migration communication runs in `after_timeintegrator` when coupled.
+- PR2 guards remain strict:
+  - coupling is limited to single-fluid MHD task paths
+  - radiation+MHD, hydro/ion-neutral, and NR (`adm`/`z4c`) compositions are
+    fatal in coupled mode
+  - `edge_staggered` current representation and fluid momentum/energy feedback
+    are limited to non-relativistic MHD paths.
+
 ---
 
 ## Build, Test, and Style

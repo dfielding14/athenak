@@ -21,7 +21,10 @@ See `../../AGENTS.md` for repository-wide conventions and workflow.
 
 ### Task list wiring
 - `particles_tasks.cpp`: inserts particle tasks into the `before_timeintegrator`
-  task list and provides wrappers for boundary exchange steps.
+  and `after_timeintegrator` task lists, and wires coupled-stage insertion points.
+- `particles_moments.cpp`: moment deposition/communication wrappers and the
+  deterministic cell-centered to edge-current conversion task used by PR2
+  `edge_staggered` coupling mode.
 
 ### Data structs
 - `particles_data_structs.hpp`: `ParticleLocationData` and `ParticleMessageData` used
@@ -108,6 +111,43 @@ but these are not wired in the constructor.
 
 ---
 
+## Moment Deposition and PR2 Coupling Controls
+
+### Deposition controls
+- `deposit_moments` (default `false`): enables `rho/J` deposition.
+- `deposit_order` (currently only `1` supported).
+- `deposit_qscale`: macro-charge scaling.
+
+### PR2 E-field coupling controls
+- `couple_moments_to_mhd` (default `false`): opt-in particle-to-MHD coupling.
+- `couple_j_to_efield_coeff` (default `1.0`): explicit current-to-E coupling
+  coefficient applied in MHD `EFieldSrc`.
+- `couple_j_to_efield_representation`:
+  - `cell_centered` (default): uses deposited CC current directly.
+  - `edge_staggered`: runs deterministic CC->edge conversion before `EFieldSrc`.
+
+### PR2 fluid feedback controls
+- `couple_moments_momentum_to_mhd` (default `false`)
+- `couple_moments_energy_to_mhd` (default `false`)
+- `couple_moments_momentum_coeff` / `couple_moments_energy_coeff`
+- `couple_fluid_feedback_order`:
+  - `mhd_src_terms` (default)
+  - `efield_src` (parity experiment mode).
+
+### Deterministic CR initialization knobs
+- `cr_vx0`, `cr_vy0`, `cr_vz0` default to `0.0` and are used by PR2 regression
+  tests to make integrated current expectations deterministic.
+
+### Runtime guards (constructor)
+- Coupling requires `deposit_moments=true` and an active `<mhd>` block.
+- Coupled mode is rejected for `radiation+MHD`, hydro/ion-neutral, and
+  numerical-relativity (`adm`/`z4c`) compositions.
+- Energy feedback requires ideal MHD EOS.
+- `edge_staggered` and fluid feedback branches are restricted to
+  non-relativistic MHD in PR2.
+
+---
+
 ## Boundary Exchange (MPI)
 Particle communication is implemented in `src/bvals/bvals_part.cpp` via
 `ParticlesBoundaryValues`, but is driven by particle tasks in this directory.
@@ -130,8 +170,22 @@ Notes from `bvals_part.cpp`:
 ---
 
 ## Task List Integration
-`Particles::AssembleTasks` inserts tasks into `before_timeintegrator`:
-`Push -> NewGID -> SendCnt -> InitRecv -> SendP -> RecvP -> ClearRecv -> ClearSend`.
+`Particles::AssembleTasks` always wires:
+- `before_timeintegrator` push/deposition chain:
+  `SaveOldPositions -> Push -> ZeroMoments -> InitRecvMoments -> DepositMoments ->
+  SendMoments -> RecvMoments -> ClearRecvMoments -> ClearSendMoments`
+
+Particle migration communication depends on coupling mode:
+- uncoupled/default: `NewGID -> SendCnt -> InitRecv -> SendP -> RecvP ->
+  ClearRecv -> ClearSend` in `before_timeintegrator`
+- coupled: same migration chain moved to `after_timeintegrator`.
+
+In coupled mode, moment wrappers are also inserted into `stagen` on stage 1:
+- insertion anchor is selected by `couple_fluid_feedback_order`
+  (`MHD::MHDSrcTerms` vs `MHD::EFieldSrc`)
+- if `couple_j_to_efield_representation=edge_staggered`, conversion task
+  `ConvertCoupledCurrentRepresentation` is inserted immediately before
+  `MHD::EFieldSrc` and depends on both `CornerE` and wrapper completion.
 
 ---
 

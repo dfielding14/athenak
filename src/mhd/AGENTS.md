@@ -128,6 +128,22 @@ When assembled, it wires tasks into `MeshBlockPack` task lists:
 - **Timestep**: `NewTimeStep` uses fast magnetosonic speeds in Newtonian/SR, but
   clamps characteristic speeds to 1.0 in GR/dynamical GR.
 
+### PR2 Particle Coupling Hooks
+- `MHD::EFieldSrc` keeps shearing-box behavior and adds an optional particle term:
+  - enabled only when `<particles>/couple_moments_to_mhd=true`
+  - additive update to edge-centered `efld` using
+    `<particles>/couple_j_to_efield_coeff`
+  - representation branch:
+    - `cell_centered`: reads deposited moments directly
+    - `edge_staggered`: reads converted edge-current arrays from particles.
+- Optional fluid momentum/energy feedback is split from E-coupling:
+  - `couple_fluid_feedback_order=mhd_src_terms`: feedback applied in
+    `MHD::MHDSrcTerms`
+  - `couple_fluid_feedback_order=efield_src`: feedback applied in `MHD::EFieldSrc`
+  - both paths are stage-1-only and gated by per-target toggles
+    (`couple_moments_momentum_to_mhd`,
+    `couple_moments_energy_to_mhd`).
+
 ---
 
 ## Extension Points

@@ -69,6 +69,25 @@ Format rules are enforced by `src/parameter_input.cpp`:
   `inputs/<filename>`, so tests assume files live under this directory. Renaming
   or moving input decks requires updating the test scripts.
 
+### PR2 PIC Coupling Regression Decks
+- Main coupled deck:
+  - `inputs/tests/pic_mhd_current_coupling.athinput`
+- Guard decks used for fatal-path validation:
+  - `inputs/tests/pic_mhd_coupling_guard_radiation.athinput`
+  - `inputs/tests/pic_mhd_coupling_guard_nr.athinput`
+  - `inputs/tests/pic_mhd_coupling_guard_hydro.athinput`
+  - `inputs/tests/pic_mhd_coupling_guard_isothermal.athinput`
+  - `inputs/tests/pic_mhd_coupling_guard_edge_relativistic.athinput`
+- PR2 coupling-sensitive overrides commonly used by tests:
+  - `particles/couple_moments_to_mhd`
+  - `particles/couple_j_to_efield_coeff`
+  - `particles/couple_j_to_efield_representation`
+  - `particles/couple_moments_momentum_to_mhd`
+  - `particles/couple_moments_energy_to_mhd`
+  - `particles/couple_fluid_feedback_order`
+  - deterministic CR init knobs: `particles/cr_vx0`, `particles/cr_vy0`,
+    `particles/cr_vz0`.
+
 ---
 
 ## Extension Points

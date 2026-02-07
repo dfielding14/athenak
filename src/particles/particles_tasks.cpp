@@ -75,10 +75,13 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
 
     const bool use_fluid_feedback = (couple_moments_momentum_to_mhd ||
                                      couple_moments_energy_to_mhd);
-    TaskID insert_dep = (use_fluid_feedback ? pmhd->id.rkupdt : pmhd->id.efld);
-    TaskID insert_loc = (use_fluid_feedback ? pmhd->id.srctrms : pmhd->id.efldsrc);
-    const char *insert_name = (use_fluid_feedback ? "MHD::MHDSrcTerms" :
-                                                    "MHD::EFieldSrc");
+    const bool feedback_in_mhd_src =
+        use_fluid_feedback &&
+        (couple_fluid_feedback_order == CoupledFluidFeedbackOrder::mhd_src_terms);
+    TaskID insert_dep = (feedback_in_mhd_src ? pmhd->id.rkupdt : pmhd->id.efld);
+    TaskID insert_loc = (feedback_in_mhd_src ? pmhd->id.srctrms : pmhd->id.efldsrc);
+    const char *insert_name = (feedback_in_mhd_src ? "MHD::MHDSrcTerms" :
+                                                       "MHD::EFieldSrc");
     if ((insert_dep == TaskID(0)) || (insert_loc == TaskID(0))) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
@@ -156,7 +159,8 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     // before EFieldSrc.
     if (couple_j_to_efield_representation ==
         CoupledCurrentRepresentation::edge_staggered) {
-      TaskID conv_dep = pmhd->id.efld;
+      // Keep conversion after both CornerE and deposited-moment wrappers.
+      TaskID conv_dep = sid | pmhd->id.efld;
       TaskID conv_loc = pmhd->id.efldsrc;
       if ((conv_dep == TaskID(0)) || (conv_loc == TaskID(0))) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
