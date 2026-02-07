@@ -59,6 +59,7 @@ couple_j_to_efield_coeff = 1.0
 couple_j_to_efield_representation = cell_centered
 couple_moments_momentum_to_mhd = false
 couple_moments_energy_to_mhd   = false
+couple_fluid_feedback_order    = mhd_src_terms
 couple_moments_momentum_coeff  = 1.0
 couple_moments_energy_coeff    = 1.0
 cr_vx0                  = 0.0

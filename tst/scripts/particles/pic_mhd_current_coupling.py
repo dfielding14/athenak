@@ -292,6 +292,33 @@ def run(**kwargs):
                      'particles/couple_moments_energy_coeff=10.0'] + common_args,
         },
         {
+            'name': 'serial_feedback_both_efield_order',
+            'basename': 'pic_mhd_feedback_both_efield',
+            'nproc': 1,
+            'args': ['job/basename=pic_mhd_feedback_both_efield',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_moments_momentum_to_mhd=true',
+                     'particles/couple_moments_energy_to_mhd=true',
+                     'particles/couple_moments_momentum_coeff=1.0',
+                     'particles/couple_moments_energy_coeff=10.0',
+                     'particles/couple_fluid_feedback_order=efield_src'] +
+                    common_args,
+        },
+        {
+            'name': 'serial_feedback_both_efield_order_edge_staggered',
+            'basename': 'pic_mhd_feedback_both_efield_edge',
+            'nproc': 1,
+            'args': ['job/basename=pic_mhd_feedback_both_efield_edge',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_j_to_efield_representation=edge_staggered',
+                     'particles/couple_moments_momentum_to_mhd=true',
+                     'particles/couple_moments_energy_to_mhd=true',
+                     'particles/couple_moments_momentum_coeff=1.0',
+                     'particles/couple_moments_energy_coeff=10.0',
+                     'particles/couple_fluid_feedback_order=efield_src'] +
+                    common_args,
+        },
+        {
             'name': 'serial_zero_uncoupled',
             'basename': 'pic_mhd_zero_uncoupled',
             'nproc': 1,
@@ -491,6 +518,15 @@ def run(**kwargs):
         input_deck=_EDGE_REPR_REL_GUARD_DECK,
     )
 
+    _run_command(
+        'guard_invalid_feedback_order',
+        1,
+        ['time/nlim=0', 'particles/couple_fluid_feedback_order=bad_order'],
+        expect_fail=True,
+        expected_message='Unsupported value for <particles>/'
+                         'couple_fluid_feedback_order: bad_order',
+    )
+
 
 def analyze():
     logger.debug('Analyzing test ' + __name__)
@@ -555,6 +591,10 @@ def analyze():
     coupled_m2 = _measure_dataset('pic_mhd_coupled', 'mhd_u_m2')
     coupled_m3 = _measure_dataset('pic_mhd_coupled', 'mhd_u_m3')
     coupled_e = _measure_dataset('pic_mhd_coupled', 'mhd_u_e')
+    coupled_edge_m1 = _measure_dataset('pic_mhd_coupled_edge', 'mhd_u_m1')
+    coupled_edge_m2 = _measure_dataset('pic_mhd_coupled_edge', 'mhd_u_m2')
+    coupled_edge_m3 = _measure_dataset('pic_mhd_coupled_edge', 'mhd_u_m3')
+    coupled_edge_e = _measure_dataset('pic_mhd_coupled_edge', 'mhd_u_e')
     fb_mom_m1 = _measure_dataset('pic_mhd_feedback_momentum', 'mhd_u_m1')
     fb_mom_m2 = _measure_dataset('pic_mhd_feedback_momentum', 'mhd_u_m2')
     fb_mom_m3 = _measure_dataset('pic_mhd_feedback_momentum', 'mhd_u_m3')
@@ -563,6 +603,18 @@ def analyze():
     fb_both_m2 = _measure_dataset('pic_mhd_feedback_both', 'mhd_u_m2')
     fb_both_m3 = _measure_dataset('pic_mhd_feedback_both', 'mhd_u_m3')
     fb_both_e = _measure_dataset('pic_mhd_feedback_both', 'mhd_u_e')
+    fb_both_ef_m1 = _measure_dataset('pic_mhd_feedback_both_efield', 'mhd_u_m1')
+    fb_both_ef_m2 = _measure_dataset('pic_mhd_feedback_both_efield', 'mhd_u_m2')
+    fb_both_ef_m3 = _measure_dataset('pic_mhd_feedback_both_efield', 'mhd_u_m3')
+    fb_both_ef_e = _measure_dataset('pic_mhd_feedback_both_efield', 'mhd_u_e')
+    fb_both_ef_edge_m1 = _measure_dataset('pic_mhd_feedback_both_efield_edge',
+                                          'mhd_u_m1')
+    fb_both_ef_edge_m2 = _measure_dataset('pic_mhd_feedback_both_efield_edge',
+                                          'mhd_u_m2')
+    fb_both_ef_edge_m3 = _measure_dataset('pic_mhd_feedback_both_efield_edge',
+                                          'mhd_u_m3')
+    fb_both_ef_edge_e = _measure_dataset('pic_mhd_feedback_both_efield_edge',
+                                         'mhd_u_e')
 
     delta_mom_m1 = _l2_difference_quantity(fb_mom_m1, coupled_m1, 'mom1')
     delta_mom_m2 = _l2_difference_quantity(fb_mom_m2, coupled_m2, 'mom2')
@@ -579,9 +631,32 @@ def analyze():
                                    delta_both_m2 * delta_both_m2 +
                                    delta_both_m3 * delta_both_m3))
     delta_both_eng = _l2_difference_quantity(fb_both_e, coupled_e, 'ener')
+    delta_both_ef_m1 = _l2_difference_quantity(fb_both_ef_m1, coupled_m1, 'mom1')
+    delta_both_ef_m2 = _l2_difference_quantity(fb_both_ef_m2, coupled_m2, 'mom2')
+    delta_both_ef_m3 = _l2_difference_quantity(fb_both_ef_m3, coupled_m3, 'mom3')
+    delta_both_ef_mom = float(np.sqrt(delta_both_ef_m1 * delta_both_ef_m1 +
+                                      delta_both_ef_m2 * delta_both_ef_m2 +
+                                      delta_both_ef_m3 * delta_both_ef_m3))
+    delta_both_ef_eng = _l2_difference_quantity(fb_both_ef_e, coupled_e, 'ener')
+    delta_both_ef_edge_m1 = _l2_difference_quantity(fb_both_ef_edge_m1,
+                                                    coupled_edge_m1, 'mom1')
+    delta_both_ef_edge_m2 = _l2_difference_quantity(fb_both_ef_edge_m2,
+                                                    coupled_edge_m2, 'mom2')
+    delta_both_ef_edge_m3 = _l2_difference_quantity(fb_both_ef_edge_m3,
+                                                    coupled_edge_m3, 'mom3')
+    delta_both_ef_edge_mom = float(np.sqrt(
+        delta_both_ef_edge_m1 * delta_both_ef_edge_m1 +
+        delta_both_ef_edge_m2 * delta_both_ef_edge_m2 +
+        delta_both_ef_edge_m3 * delta_both_ef_edge_m3))
+    delta_both_ef_edge_eng = _l2_difference_quantity(fb_both_ef_edge_e,
+                                                     coupled_edge_e, 'ener')
     logger.info('feedback_delta momentum_only=% .8e energy_only=% .8e '
-                'both_mom=% .8e both_eng=% .8e',
-                delta_mom, delta_eng, delta_both_mom, delta_both_eng)
+                'both_mom=% .8e both_eng=% .8e '
+                'both_ef_mom=% .8e both_ef_eng=% .8e '
+                'both_ef_edge_mom=% .8e both_ef_edge_eng=% .8e',
+                delta_mom, delta_eng, delta_both_mom, delta_both_eng,
+                delta_both_ef_mom, delta_both_ef_eng,
+                delta_both_ef_edge_mom, delta_both_ef_edge_eng)
     if delta_mom <= 1.0e-12:
         logger.warning('Momentum-feedback branch did not change fluid momentum')
         ok = False
@@ -590,6 +665,14 @@ def analyze():
         ok = False
     if delta_both_mom <= 1.0e-12 or delta_both_eng <= 1.0e-12:
         logger.warning('Combined feedback branch did not affect both targets')
+        ok = False
+    if delta_both_ef_mom <= 1.0e-12 or delta_both_ef_eng <= 1.0e-12:
+        logger.warning('EField-ordered combined feedback branch did not affect both '
+                       'targets')
+        ok = False
+    if delta_both_ef_edge_mom <= 1.0e-12 or delta_both_ef_edge_eng <= 1.0e-12:
+        logger.warning('EField-ordered edge-staggered feedback branch did not affect '
+                       'both targets')
         ok = False
 
     zero_uncoupled = _POSITIVE_RESULTS['serial_zero_uncoupled']['measured']
@@ -705,8 +788,8 @@ def analyze():
                                    mpi2_edge['bcc3_l2'], coupled_edge['bcc3_l2'],
                                    1.0e-6, 1.0e-8) and ok
 
-    ok = len(_NEGATIVE_RESULTS) == 8 and ok
-    if len(_NEGATIVE_RESULTS) != 8:
-        logger.warning('Expected 8 negative checks, got %d', len(_NEGATIVE_RESULTS))
+    ok = len(_NEGATIVE_RESULTS) == 9 and ok
+    if len(_NEGATIVE_RESULTS) != 9:
+        logger.warning('Expected 9 negative checks, got %d', len(_NEGATIVE_RESULTS))
 
     return ok

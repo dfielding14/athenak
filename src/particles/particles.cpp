@@ -187,6 +187,20 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << j_repr << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  std::string feedback_order = pin->GetOrAddString("particles",
+                                                    "couple_fluid_feedback_order",
+                                                    "mhd_src_terms");
+  if (feedback_order.compare("mhd_src_terms") == 0) {
+    couple_fluid_feedback_order = CoupledFluidFeedbackOrder::mhd_src_terms;
+  } else if (feedback_order.compare("efield_src") == 0) {
+    couple_fluid_feedback_order = CoupledFluidFeedbackOrder::efield_src;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/couple_fluid_feedback_order: "
+              << feedback_order << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   couple_moments_momentum_to_mhd = pin->GetOrAddBoolean(
       "particles", "couple_moments_momentum_to_mhd", false);
   couple_moments_energy_to_mhd = pin->GetOrAddBoolean(

@@ -277,7 +277,9 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
   if ((ppart != nullptr) && ppart->couple_moments_to_mhd && (stage == 1)) {
     const bool add_mom = ppart->couple_moments_momentum_to_mhd;
     const bool add_eng = ppart->couple_moments_energy_to_mhd;
-    if (add_mom || add_eng) {
+    const bool apply_feedback_here = (ppart->couple_fluid_feedback_order ==
+                                      CoupledFluidFeedbackOrder::mhd_src_terms);
+    if ((add_mom || add_eng) && apply_feedback_here) {
       if (add_eng && (nmhd <= IEN)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
@@ -507,6 +509,59 @@ TaskStatus MHD::EFieldSrc(Driver *pdrive, int stage) {
           e3(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, k, j, i);
         });
       }
+    }
+  }
+
+  // PR2 step II: optional fluid-feedback ordering mode for parity experiments.
+  if ((ppart != nullptr) && ppart->couple_moments_to_mhd && (stage == 1) &&
+      (ppart->couple_fluid_feedback_order == CoupledFluidFeedbackOrder::efield_src)) {
+    const bool add_mom = ppart->couple_moments_momentum_to_mhd;
+    const bool add_eng = ppart->couple_moments_energy_to_mhd;
+    if (add_mom || add_eng) {
+      if (add_eng && (nmhd <= IEN)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Particle energy feedback requires an ideal-MHD energy variable"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+
+      Real beta_dt = (pdrive->beta[stage-1])*(pmy_pack->pmesh->dt);
+      auto &indcs = pmy_pack->pmesh->mb_indcs;
+      int is = indcs.is, ie = indcs.ie;
+      int js = indcs.js, je = indcs.je;
+      int ks = indcs.ks, ke = indcs.ke;
+      int nmb1 = pmy_pack->nmb_thispack - 1;
+      const Real mom_coef = ppart->couple_moments_momentum_coeff;
+      const Real eng_coef = ppart->couple_moments_energy_coeff;
+      auto mom = ppart->moments;
+      auto bcc = bcc0;
+      auto u = u0;
+
+      par_for("prtcl_fluid_feedback_src_efield", DevExeSpace(), 0, nmb1,
+              ks, ke, js, je, is, ie,
+      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+        Real jx = mom(m, particles::Particles::IMOM_JX, k, j, i);
+        Real jy = mom(m, particles::Particles::IMOM_JY, k, j, i);
+        Real jz = mom(m, particles::Particles::IMOM_JZ, k, j, i);
+
+        Real bx = bcc(m, IBX, k, j, i);
+        Real by = bcc(m, IBY, k, j, i);
+        Real bz = bcc(m, IBZ, k, j, i);
+
+        Real fx = -(jy*bz - jz*by);
+        Real fy = -(jz*bx - jx*bz);
+        Real fz = -(jx*by - jy*bx);
+
+        if (add_mom) {
+          u(m, IM1, k, j, i) += beta_dt*mom_coef*fx;
+          u(m, IM2, k, j, i) += beta_dt*mom_coef*fy;
+          u(m, IM3, k, j, i) += beta_dt*mom_coef*fz;
+        }
+        if (add_eng) {
+          u(m, IEN, k, j, i) += beta_dt*eng_coef*(jx*bx + jy*by + jz*bz);
+        }
+      });
     }
   }
 

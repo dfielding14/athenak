@@ -37,6 +37,7 @@ enum class ParticleType { cosmic_ray, star };
 
 // constants for PR2 current representation used by coupled E-field source updates
 enum class CoupledCurrentRepresentation { cell_centered, edge_staggered };
+enum class CoupledFluidFeedbackOrder { mhd_src_terms, efield_src };
 
 //----------------------------------------------------------------------------------------
 //! \struct ParticlesTaskIDs
@@ -98,6 +99,8 @@ class Particles {
   Real couple_j_to_efield_coeff = 1.0; // PR2 current-to-E coupling coefficient
   CoupledCurrentRepresentation couple_j_to_efield_representation =
       CoupledCurrentRepresentation::cell_centered;
+  CoupledFluidFeedbackOrder couple_fluid_feedback_order =
+      CoupledFluidFeedbackOrder::mhd_src_terms;
   bool couple_moments_momentum_to_mhd = false;  // PR2 opt-in momentum feedback
   bool couple_moments_energy_to_mhd = false;    // PR2 opt-in energy feedback
   Real couple_moments_momentum_coeff = 1.0;     // momentum feedback coefficient
