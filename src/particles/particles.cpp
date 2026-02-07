@@ -8,6 +8,7 @@
 
 #include <iostream>
 #include <string>
+#include <array>
 #include <algorithm>
 #include <fstream>
 #include <vector>
@@ -22,6 +23,80 @@
 #include "utils/sn_scheduler.hpp"
 
 namespace particles {
+namespace {
+
+const char *BoundaryFaceName(BoundaryFace face) {
+  switch (face) {
+    case BoundaryFace::inner_x1:
+      return "mesh/ix1_bc";
+    case BoundaryFace::outer_x1:
+      return "mesh/ox1_bc";
+    case BoundaryFace::inner_x2:
+      return "mesh/ix2_bc";
+    case BoundaryFace::outer_x2:
+      return "mesh/ox2_bc";
+    case BoundaryFace::inner_x3:
+      return "mesh/ix3_bc";
+    case BoundaryFace::outer_x3:
+      return "mesh/ox3_bc";
+    default:
+      return "mesh/?_bc";
+  }
+}
+
+const char *BoundaryFlagName(BoundaryFlag flag) {
+  switch (flag) {
+    case BoundaryFlag::reflect:
+      return "reflect";
+    case BoundaryFlag::inflow:
+      return "inflow";
+    case BoundaryFlag::outflow:
+      return "outflow";
+    case BoundaryFlag::diode:
+      return "diode";
+    case BoundaryFlag::user:
+      return "user";
+    case BoundaryFlag::periodic:
+      return "periodic";
+    case BoundaryFlag::shear_periodic:
+      return "shear_periodic";
+    case BoundaryFlag::vacuum:
+      return "vacuum";
+    case BoundaryFlag::block:
+      return "block";
+    default:
+      return "undef";
+  }
+}
+
+bool MomentBoundaryFlagSupported(BoundaryFlag flag) {
+  return ((flag == BoundaryFlag::periodic) ||
+          (flag == BoundaryFlag::outflow) ||
+          (flag == BoundaryFlag::reflect));
+}
+
+void ValidateMomentBoundaryPolicy(Mesh *pmesh) {
+  const std::array<BoundaryFace, 6> faces = {
+      BoundaryFace::inner_x1, BoundaryFace::outer_x1,
+      BoundaryFace::inner_x2, BoundaryFace::outer_x2,
+      BoundaryFace::inner_x3, BoundaryFace::outer_x3};
+
+  for (const auto face : faces) {
+    BoundaryFlag flag = pmesh->mesh_bcs[face];
+    if (!MomentBoundaryFlagSupported(flag)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/deposit_moments=true does not support "
+                << BoundaryFaceName(face) << "=" << BoundaryFlagName(flag)
+                << " in PR3c (supported: periodic/outflow/reflect)"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+}
+
+}  // namespace
+
 //----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
 
@@ -230,12 +305,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if (!(pmy_pack->pmesh->strictly_periodic)) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "<particles>/deposit_moments=true requires "
-                << "strictly periodic boundaries in PR1" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
+    ValidateMomentBoundaryPolicy(pmy_pack->pmesh);
     if (pin->DoesBlockExist("shearing_box")) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "<particles>/deposit_moments=true does not support "

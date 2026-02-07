@@ -216,11 +216,11 @@ def run(**kwargs):
         expected_message='only deposit_order=1',
     )
     _run_command(
-        'guard_nonperiodic_boundaries',
+        'guard_unsupported_boundary_class',
         1,
-        ['mesh/ix1_bc=outflow', 'mesh/ox1_bc=outflow', 'time/nlim=0'],
+        ['mesh/ix1_bc=diode', 'mesh/ox1_bc=diode', 'time/nlim=0'],
         expect_fail=True,
-        expected_message='requires strictly periodic boundaries in PR1',
+        expected_message='does not support mesh/ix1_bc=diode',
     )
 
 

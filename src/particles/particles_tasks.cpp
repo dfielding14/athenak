@@ -29,6 +29,7 @@ namespace particles {
 void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) {
   TaskID none(0);
   id.rest_mom = none;
+  id.bcs_mom = none;
   id.prol_mom = none;
   id.convert_j_edge = none;
 
@@ -52,8 +53,10 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
                                                        this, id.recv_mom);
   id.csend_mom = tl["before_timeintegrator"]->AddTask(&Particles::ClearSendMoments,
                                                        this, id.crecv_mom);
+  id.bcs_mom = tl["before_timeintegrator"]->AddTask(&Particles::ApplyMomentPhysicalBCs,
+                                                     this, id.csend_mom);
   id.prol_mom = tl["before_timeintegrator"]->AddTask(&Particles::ProlongateMoments, this,
-                                                      id.csend_mom);
+                                                      id.bcs_mom);
 
   // WS-H: in coupled mode, move particle migration/communication after field updates.
   auto comm_tl = (couple_moments_to_mhd ? tl["after_timeintegrator"] :
@@ -165,6 +168,16 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
     if (sid == TaskID(0)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Failed to insert Particles::ClearSendMoments before "
+                << insert_name << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+
+    sid = stagen_tl->InsertTask(&Particles::ApplyMomentPhysicalBCs, this, sid,
+                                insert_loc);
+    if (sid == TaskID(0)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Failed to insert Particles::ApplyMomentPhysicalBCs before "
                 << insert_name << std::endl;
       std::exit(EXIT_FAILURE);
     }

@@ -1,4 +1,4 @@
-# AthenaK PIC PR1-PR2 Agent Implementation Guide
+# AthenaK PIC PR1-PR4 Agent Implementation Guide
 
 This guide is a companion to:
 - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/AGENTS.md`
@@ -8,12 +8,12 @@ This guide is a companion to:
 
 1. Always follow `/Users/dbf75/Work/Research/AthenaK/athenak-DF/AGENTS.md`.
 2. Use `/Users/dbf75/Work/Research/AthenaK/athenak-DF/AGENT_PIC_HANDOFF.md`
-   as the active PR1/PR2 scope/spec.
+   as the active PIC scope/spec.
 3. Use this guide for implementation style and source-selection policy.
 
 If this guide conflicts with root `AGENTS.md`, root `AGENTS.md` wins.
 
-## 1.1 Current Audit Snapshot (As-Built, `cdcac9e5`)
+## 1.1 Current Audit Snapshot (As-Built, 2026-02-07 Working Tree)
 
 This section records the audited implementation state from source, not intent.
 
@@ -390,103 +390,133 @@ For every non-trivial function:
      - `mhd_src_terms` and `efield_src`
      - serial vs MPI decomposition invariance.
 
-### Detailed PR3c Plan (Non-Periodic Boundary Policy)
-1. Scope lock and invariants freeze
-   - Keep PR3c limited to non-periodic boundary behavior for deposited
-     `rho/J` and coupling paths.
-   - No restart format changes (PR3a) and no AMR algorithm expansion (PR3b).
-   - Keep default PR2 behavior unchanged unless non-periodic BCs are explicitly
-     used with deposition/coupling.
-2. Boundary policy matrix (must be written before coding)
-   - Define per-boundary behavior for:
-     - outflow
-     - reflecting
-     - fixed/inflow (if supported in MHD path)
-     - user-defined/custom.
-   - For each boundary class, define independent policy for:
-     - deposited charge density `rho`
-     - deposited current `J`
-     - converted edge-current storage (`edge_staggered` path).
-3. Ordering contract for policy application
-   - Preserve existing coupled ordering guarantees:
-     - deposit/sync wrappers complete before MHD consumers (`MHDSrcTerms` or
-       `EFieldSrc`)
-     - conversion remains immediately before `EFieldSrc` in edge mode.
-   - Boundary handling for moments/currents must occur after communication of
-     deposited data and before any consuming source-term application.
-4. Implementation slices
-   - PR3c-1: replace current strict-periodic constructor guard with a
-     boundary-policy gate that accepts only policy-covered BC combinations.
-   - PR3c-2: implement boundary handling branch(es) in deposited moment path
-     using existing AthenaK boundary-data structures and patterns.
-   - PR3c-3: add explicit fail-fast diagnostics for uncovered BC combinations.
-   - PR3c-4: ensure representation parity:
-     - both `cell_centered` and `edge_staggered` obey the same boundary policy
-       intent.
-5. Physics and numerics validation contract
-   - Physics checks:
-     - no spurious global charge/current creation from boundary treatment
-     - momentum/energy feedback sign remains unchanged (`-(J x B)`, `J dot B`).
-   - Numerics checks:
-     - decomposition invariance for supported non-periodic decks
-     - zero-current invariance near boundaries
-     - linear scaling of response with `deposit_qscale` in boundary-adjacent runs.
-6. Entity alignment checkpoint (policy-level, not code-port)
-   - Re-check Entity boundary sequencing in:
-     - `entity/src/engines/srpic.hpp`
-     - `entity/src/engines/AGENTS.md`
-   - Keep semantic alignment on ordering:
-     - deposit -> communicate/synchronize -> boundary handling -> field source use.
-   - Do not force Entity boundary taxonomy onto AthenaK when framework semantics
-     differ; document intentional differences explicitly.
-7. PR3c merge gate
-   - Supported non-periodic boundary classes have deterministic serial+MPI tests.
-   - Unsupported classes fail with explicit diagnostics and are listed in docs.
-   - All PR2/PR3a/PR3b baselines remain green.
-   - Changed-file style checks pass.
+### PR3c As-Built Snapshot (Current Branch State)
+1. Scope completion
+   - PR3c is implemented as a non-periodic boundary-policy extension for deposited
+     moments/currents only.
+   - No restart-format expansion (PR3a scope) and no AMR algorithm expansion
+     (PR3b scope) were added in this slice.
+2. Implemented boundary policy and insertion points
+   - Constructor policy guard implementation:
+     - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:28`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:96`
+     - invocation in constructor guard path:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:308`
+   - Supported BC classes for deposited moments:
+     - `periodic`
+     - `outflow`
+     - `reflect`
+   - Unsupported BC classes fail fast with explicit face/flag diagnostics.
+3. Implemented ordering contract
+   - Added physical-BC wrapper:
+     - declaration/task IDs:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:64`
+       and
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:161`
+     - implementation:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:253`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:265`
+     - baseline/coupled task wiring:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:56`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:59`
+       and
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:175`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:183`
+   - Effective coupled ordering is:
+     deposit/restrict/send/recv/clear -> apply moment BCs -> prolongate ->
+     convert (edge mode) -> MHD source consumption.
+4. Representation parity status
+   - `cell_centered` and `edge_staggered` coupled modes run under the same
+     boundary-policy contract.
+   - Unsupported boundary classes are rejected before advance.
+5. Regression evidence
+   - New tests/decks:
+     - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_mhd_coupling_nonperiodic.athinput`
+     - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_mhd_coupling_guard_nonperiodic_unsupported.athinput`
+     - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_nonperiodic.py`
+   - Updated guards:
+     - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py`
+     - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_deposit_conservation.py`
+   - Focused review runs passed:
+     - `python run_tests.py particles/pic_mhd_current_coupling --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+     - `python run_tests.py particles/pic_mhd_coupling_nonperiodic --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+6. Entity alignment status
+   - Sequencing parity remains aligned with Entity invariants:
+     - `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/AGENTS.md:210`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/AGENTS.md:219`
+     - `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:114`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:127`
+   - Boundary taxonomy remains intentionally AthenaK-native.
 
-### PR4 Plan: Entity-Style Direct Staggered Charge-Conserving Deposition
-1. Preconditions
-   - PR3a, PR3b, and PR3c must be merged and green before PR4 starts.
-   - PR2 regression baselines (`pic_mhd_current_coupling`,
-     `pic_mhd_coupling_decomp`) must be frozen before first PR4 edit.
-2. Scope lock
-   - Replace the current CC-deposit-plus-conversion coupling path with an
-     opt-in direct staggered, trajectory-based charge-conserving deposition
-     path.
-   - Keep existing `cell_centered` and `edge_staggered` modes available while
-     PR4 validation is in progress.
-   - Do not change default runtime behavior until PR4 validation gates pass.
-3. Primary copy/adapt targets
-   - `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp`
-     (`CurrentsDeposit` call path and ordering expectations).
-   - `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp`
-     (Esirkepov-style direct current deposition structure).
-   - `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp`
-     (shape-function stencils and index-window handling).
-4. Planned AthenaK implementation slices
-   - PR4a: add direct-deposition representation selector and guardrails
-     (non-relativistic Cartesian first, explicit unsupported-path failures).
-   - PR4b: implement direct staggered deposition kernels using old/new particle
-     trajectory state; wire to particle-owned edge-current arrays.
-   - PR4c: integrate direct edge currents into `MHD::EFieldSrc` while keeping
-     existing representations for A/B validation.
-   - PR4d: add diagnostics and tests for discrete continuity residual,
-     decomposition invariance, and coupled-field linearity.
-   - PR4e: when correctness is green, compare performance and decide whether to
-     keep or retire CC->edge conversion as a compatibility/debug mode.
-5. Physics/numerics acceptance gates
-   - Discrete continuity residual (`d(rho)/dt + div(J)`) stays below threshold
-     in serial and MPI runs.
-   - No unphysical sign flips in momentum/energy feedback diagnostics.
-   - Decomposition invariance and baseline coupled-field trends are preserved.
-   - Direct-deposition mode and converted-edge mode agree within tolerance on
-     small-amplitude reference decks.
-6. Exit criteria for PR4 closeout
+### PR4 Detailed Plan: Entity-Style Direct Staggered Charge-Conserving Deposition
+1. Goal and compatibility contract
+   - Add an opt-in direct staggered trajectory-based deposition mode.
+   - Keep current default behavior unchanged while PR4 validation is active.
+   - Keep CC and CC->edge paths available for A/B comparison until closeout.
+2. Entity references to copy/adapt
+   - Deposition ordering and species loop wiring:
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:521`
+     through
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:560`
+   - Trajectory-based kernel inputs and update structure:
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:33`
+     through
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:104`
+     and
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:406`
+     through
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:530`
+   - Shape/stencil window handling:
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp:906`
+     through
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp:997`
+3. Implementation slices (mergeable)
+   - PR4a: runtime selector and guards
+     - add direct-deposition mode knob with default to existing behavior
+     - fail-fast unsupported geometry/composition paths.
+   - PR4b: dataflow and kernel scaffolding
+     - wire required old/new trajectory data and edge-current targets
+     - preserve existing array ownership and allocation lifetimes.
+   - PR4c: direct deposition kernel rollout
+     - implement deterministic first-order direct-staggered deposition
+     - keep atomics/scatter semantics decomposition-safe.
+   - PR4d: coupling integration and A/B parity
+     - consume direct edge currents in `MHD::EFieldSrc`
+     - run direct vs CC->edge parity checks on shared decks.
+   - PR4e: closeout decision
+     - choose compatibility policy (keep/remove CC->edge fallback)
+     - update defaults only after all correctness gates pass.
+4. Physics and numerics control requirements
+   - continuity control:
+     - track `d(rho)/dt + div(J)` residual in serial and MPI
+   - sign/normalization control:
+     - preserve `E += coeff * J`, `-(J x B)`, and `J dot B` conventions
+   - invariance control:
+     - decomposition invariance
+     - zero-current coupled/uncoupled invariance
+     - first-order linearity with `deposit_qscale`/deterministic velocity knobs.
+5. Required validation gates per PR4 slice
+   - baseline suites remain green:
+     - `particles/pic_mhd_current_coupling`
+     - `particles/pic_mhd_coupling_decomp`
+     - `particles/pic_mhd_restart_fidelity`
+     - `particles/pic_mhd_coupling_multilevel`
+     - `particles/pic_mhd_coupling_nonperiodic`
+   - new PR4 suites:
+     - direct-mode continuity residual checks
+     - direct vs converted-edge A/B parity checks
+     - unsupported direct-mode guard coverage.
+6. Exit criteria
+   - Direct mode is stable and decomposition-invariant.
+   - Continuity residual and coupling-sign diagnostics stay within limits.
    - Default behavior decision is explicit and documented.
-   - Restart/AMR/non-periodic tests pass with direct-deposition mode enabled.
-   - Handoff and implementation guide are updated with as-built file:line
-     references and residual risks.
+   - Handoff + implementation guide are updated with as-built file:line refs.
 
 ## 7. What Not To Do
 

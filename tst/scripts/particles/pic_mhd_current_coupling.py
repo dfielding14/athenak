@@ -19,6 +19,8 @@ _NR_GUARD_DECK = 'tests/pic_mhd_coupling_guard_nr.athinput'
 _HYDRO_GUARD_DECK = 'tests/pic_mhd_coupling_guard_hydro.athinput'
 _ISOTHERMAL_GUARD_DECK = 'tests/pic_mhd_coupling_guard_isothermal.athinput'
 _EDGE_REPR_REL_GUARD_DECK = 'tests/pic_mhd_coupling_guard_edge_relativistic.athinput'
+_NONPERIODIC_UNSUPPORTED_GUARD_DECK = (
+    'tests/pic_mhd_coupling_guard_nonperiodic_unsupported.athinput')
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
 _POSITIVE_RESULTS = {}
 _NEGATIVE_RESULTS = {}
@@ -527,6 +529,15 @@ def run(**kwargs):
                          'couple_fluid_feedback_order: bad_order',
     )
 
+    _run_command(
+        'guard_nonperiodic_unsupported_boundary',
+        1,
+        ['time/nlim=0'],
+        expect_fail=True,
+        expected_message='does not support mesh/ix1_bc=diode',
+        input_deck=_NONPERIODIC_UNSUPPORTED_GUARD_DECK,
+    )
+
 
 def analyze():
     logger.debug('Analyzing test ' + __name__)
@@ -788,8 +799,8 @@ def analyze():
                                    mpi2_edge['bcc3_l2'], coupled_edge['bcc3_l2'],
                                    1.0e-6, 1.0e-8) and ok
 
-    ok = len(_NEGATIVE_RESULTS) == 9 and ok
-    if len(_NEGATIVE_RESULTS) != 9:
-        logger.warning('Expected 9 negative checks, got %d', len(_NEGATIVE_RESULTS))
+    ok = len(_NEGATIVE_RESULTS) == 10 and ok
+    if len(_NEGATIVE_RESULTS) != 10:
+        logger.warning('Expected 10 negative checks, got %d', len(_NEGATIVE_RESULTS))
 
     return ok

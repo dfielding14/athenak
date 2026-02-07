@@ -250,6 +250,21 @@ TaskStatus Particles::ClearSendMoments(Driver *pdriver, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn TaskStatus Particles::ApplyMomentPhysicalBCs()
+//! \brief Apply physical BCs to deposited rho/J moments at mesh boundaries.
+
+TaskStatus Particles::ApplyMomentPhysicalBCs(Driver *pdriver, int stage) {
+  (void)pdriver;
+  if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+    return TaskStatus::complete;
+  }
+
+  MeshBoundaryValues::HydroBCs(pmy_pack, pbval_mom->u_in, moments);
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn TaskStatus Particles::ProlongateMoments()
 //! \brief Fill coarse boundary state and prolongate to fine moment ghosts with AMR/SMR.
 
