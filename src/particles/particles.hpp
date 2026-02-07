@@ -64,6 +64,11 @@ struct ParticlesTaskIDs {
   TaskID csend_mom;
   TaskID bcs_mom;
   TaskID prol_mom;
+  TaskID irecv_jedge;
+  TaskID send_jedge;
+  TaskID recv_jedge;
+  TaskID crecv_jedge;
+  TaskID csend_jedge;
   TaskID convert_j_edge;
 };
 
@@ -137,6 +142,7 @@ class Particles {
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
   MeshBoundaryValuesCC *pbval_mom = nullptr;
+  MeshBoundaryValuesFC *pbval_jedge = nullptr;
 
   // container to hold names of TaskIDs
   ParticlesTaskIDs id;
@@ -163,6 +169,11 @@ class Particles {
   TaskStatus ClearSendMoments(Driver *pdriver, int stage);
   TaskStatus ApplyMomentPhysicalBCs(Driver *pdriver, int stage);
   TaskStatus ProlongateMoments(Driver *pdriver, int stage);
+  TaskStatus InitRecvEdgeCurrents(Driver *pdriver, int stage);
+  TaskStatus SendEdgeCurrents(Driver *pdriver, int stage);
+  TaskStatus RecvEdgeCurrents(Driver *pdriver, int stage);
+  TaskStatus ClearRecvEdgeCurrents(Driver *pdriver, int stage);
+  TaskStatus ClearSendEdgeCurrents(Driver *pdriver, int stage);
   TaskStatus ConvertCoupledCurrentRepresentation(Driver *pdriver, int stage);
 
   // Cosmic ray specific methods

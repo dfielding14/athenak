@@ -19,6 +19,7 @@ _NR_GUARD_DECK = 'tests/pic_mhd_coupling_guard_nr.athinput'
 _HYDRO_GUARD_DECK = 'tests/pic_mhd_coupling_guard_hydro.athinput'
 _ISOTHERMAL_GUARD_DECK = 'tests/pic_mhd_coupling_guard_isothermal.athinput'
 _EDGE_REPR_REL_GUARD_DECK = 'tests/pic_mhd_coupling_guard_edge_relativistic.athinput'
+_NONPERIODIC_SUPPORTED_DECK = 'tests/pic_mhd_coupling_nonperiodic.athinput'
 _NONPERIODIC_UNSUPPORTED_GUARD_DECK = (
     'tests/pic_mhd_coupling_guard_nonperiodic_unsupported.athinput')
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
@@ -285,6 +286,16 @@ def run(**kwargs):
                     common_args,
         },
         {
+            'name': 'serial_coupled_edge_direct_staggered',
+            'basename': 'pic_mhd_coupled_edge_direct',
+            'nproc': 1,
+            'args': ['job/basename=pic_mhd_coupled_edge_direct',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_j_to_efield_representation=edge_staggered',
+                     'particles/couple_j_deposition_mode=direct_staggered'] +
+                    common_args,
+        },
+        {
             'name': 'serial_feedback_momentum',
             'basename': 'pic_mhd_feedback_momentum',
             'nproc': 1,
@@ -467,6 +478,16 @@ def run(**kwargs):
                      'particles/couple_j_to_efield_representation=edge_staggered'] +
                     common_args,
         })
+        positive_cases.append({
+            'name': 'mpi2_coupled_edge_direct_staggered',
+            'basename': 'pic_mhd_coupled_edge_direct_mpi2',
+            'nproc': 2,
+            'args': ['job/basename=pic_mhd_coupled_edge_direct_mpi2',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_j_to_efield_representation=edge_staggered',
+                     'particles/couple_j_deposition_mode=direct_staggered'] +
+                    common_args,
+        })
     else:
         logger.info('Skipping mpi2_coupled case: Athena build has MPI parallelism OFF')
 
@@ -562,13 +583,28 @@ def run(**kwargs):
     )
 
     _run_command(
-        'guard_direct_staggered_deposition_unimplemented',
+        'guard_direct_staggered_requires_edge_representation',
         1,
         ['time/nlim=0',
          'particles/couple_moments_to_mhd=true',
+         'particles/couple_j_to_efield_representation=cell_centered',
          'particles/couple_j_deposition_mode=direct_staggered'],
         expect_fail=True,
-        expected_message='not implemented in AthenaK PR4a',
+        expected_message=('requires '
+                          '<particles>/couple_j_to_efield_representation='
+                          'edge_staggered'),
+    )
+
+    _run_command(
+        'guard_direct_staggered_requires_periodic_boundaries',
+        1,
+        ['time/nlim=0',
+         'particles/couple_moments_to_mhd=true',
+         'particles/couple_j_to_efield_representation=edge_staggered',
+         'particles/couple_j_deposition_mode=direct_staggered'],
+        expect_fail=True,
+        expected_message='### FATAL ERROR',
+        input_deck=_NONPERIODIC_SUPPORTED_DECK,
     )
 
     _run_command(
@@ -635,9 +671,27 @@ def analyze():
                        'similar')
         ok = False
 
+    coupled_edge_direct = _POSITIVE_RESULTS[
+        'serial_coupled_edge_direct_staggered']['measured']
+    delta_direct_b1 = abs(coupled_edge_direct['bcc1_l2'] - default_case['bcc1_l2'])
+    delta_direct_b2 = abs(coupled_edge_direct['bcc2_l2'] - default_case['bcc2_l2'])
+    delta_direct_b3 = abs(coupled_edge_direct['bcc3_l2'] - default_case['bcc3_l2'])
+    max_delta_direct = max(delta_direct_b1, delta_direct_b2, delta_direct_b3)
+    logger.info('direct_edge_coupled_field_delta bcc1=% .8e bcc2=% .8e '
+                'bcc3=% .8e max=% .8e',
+                delta_direct_b1, delta_direct_b2, delta_direct_b3,
+                max_delta_direct)
+    if max_delta_direct <= 1.0e-12:
+        logger.warning('Direct-edge coupled and uncoupled B-field norms are too '
+                       'similar')
+        ok = False
+
     for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
         ok = _check_with_tolerance('cell_centered_vs_edge_staggered:' + quantity,
                                    coupled_edge[quantity], coupled[quantity],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('edge_staggered_vs_direct_staggered:' + quantity,
+                                   coupled_edge_direct[quantity], coupled_edge[quantity],
                                    1.0e-6, 1.0e-8) and ok
 
     coupled_m1 = _measure_dataset('pic_mhd_coupled', 'mhd_u_m1')
@@ -865,8 +919,36 @@ def analyze():
                                    mpi2_edge['bcc3_l2'], coupled_edge['bcc3_l2'],
                                    1.0e-6, 1.0e-8) and ok
 
-    ok = len(_NEGATIVE_RESULTS) == 11 and ok
-    if len(_NEGATIVE_RESULTS) != 11:
-        logger.warning('Expected 11 negative checks, got %d', len(_NEGATIVE_RESULTS))
+    if 'mpi2_coupled_edge_direct_staggered' in _POSITIVE_RESULTS:
+        mpi2_edge_direct = _POSITIVE_RESULTS[
+            'mpi2_coupled_edge_direct_staggered']['measured']
+        ok = _check_with_tolerance('serial_vs_mpi2_direct_staggered:Q',
+                                   mpi2_edge_direct['Q'], coupled_edge_direct['Q'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_direct_staggered:Jx',
+                                   mpi2_edge_direct['Jx'], coupled_edge_direct['Jx'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_direct_staggered:Jy',
+                                   mpi2_edge_direct['Jy'], coupled_edge_direct['Jy'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_direct_staggered:Jz',
+                                   mpi2_edge_direct['Jz'], coupled_edge_direct['Jz'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_direct_staggered:bcc1_l2',
+                                   mpi2_edge_direct['bcc1_l2'],
+                                   coupled_edge_direct['bcc1_l2'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_direct_staggered:bcc2_l2',
+                                   mpi2_edge_direct['bcc2_l2'],
+                                   coupled_edge_direct['bcc2_l2'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_direct_staggered:bcc3_l2',
+                                   mpi2_edge_direct['bcc3_l2'],
+                                   coupled_edge_direct['bcc3_l2'],
+                                   1.0e-6, 1.0e-8) and ok
+
+    ok = len(_NEGATIVE_RESULTS) == 12 and ok
+    if len(_NEGATIVE_RESULTS) != 12:
+        logger.warning('Expected 12 negative checks, got %d', len(_NEGATIVE_RESULTS))
 
     return ok

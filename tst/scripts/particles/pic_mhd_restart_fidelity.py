@@ -16,6 +16,11 @@ _INPUT_DECK = 'tests/pic_mhd_restart_fidelity.athinput'
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
 _RESULTS = {}
 _NEGATIVE_RESULTS = {}
+_REPRESENTATIONS = [
+    ('cc', 'cell_centered', None),
+    ('edge', 'edge_staggered', 'cc_convert'),
+    ('edge_direct', 'edge_staggered', 'direct_staggered'),
+]
 
 
 def _athena_exe_dir():
@@ -167,10 +172,8 @@ def run(**kwargs):
     else:
         logger.info('MPI disabled: running serial-only restart fidelity checks')
 
-    reps = [('cc', 'cell_centered'), ('edge', 'edge_staggered')]
-
     for case_tag, nproc in base_cases:
-        for rep_tag, rep_value in reps:
+        for rep_tag, rep_value, dep_mode in _REPRESENTATIONS:
             base = f'pic_mhd_rst_{case_tag}_{rep_tag}'
             base_full = base + '_full'
             base_seg = base + '_seg'
@@ -186,6 +189,8 @@ def run(**kwargs):
                 'particles/cr_vy0=-0.25',
                 'particles/cr_vz0=0.125',
             ]
+            if dep_mode is not None:
+                common_args.append('particles/couple_j_deposition_mode=' + dep_mode)
 
             _run_athena(base + '_full_run', nproc,
                         ['job/basename=' + base_full, 'time/nlim=2'] + common_args)
@@ -203,7 +208,9 @@ def run(**kwargs):
                         ['job/basename=' + base_rst,
                          'time/nlim=2',
                          'particles/couple_moments_to_mhd=true',
-                         'particles/couple_j_to_efield_representation=' + rep_value],
+                         'particles/couple_j_to_efield_representation=' + rep_value] +
+                        ([] if dep_mode is None else
+                         ['particles/couple_j_deposition_mode=' + dep_mode]),
                         restart_file=rst_path)
             rst_measured = _measure_case(base_rst)
 

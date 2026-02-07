@@ -1140,145 +1140,165 @@ This section audits actual code state and test coverage after WS-G/WS-H/WS-I.
     through
     `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:127`.
 
-6. Remaining deferred item
-- Full Entity-style trajectory-based direct staggered current deposition is not
-  yet implemented. AthenaK still uses CC deposition + deterministic CC->edge
-  conversion.
+6. PR4 as-built status (2026-02-07)
+- PR4a selector/guards are implemented:
+  - runtime enum and default:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:40`
+    and
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:111`
+  - input parsing for `couple_j_deposition_mode`:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:265`
+    through
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:277`
+  - direct-mode guard requires edge representation:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:384`
+    through
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:392`
+  - direct-mode guard requires strictly periodic mesh:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:394`
+    through
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:400`.
+- PR4b particle dataflow wiring is implemented:
+  - edge-current comm object declaration:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:145`
+  - edge-current comm task IDs:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:67`
+    through
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:71`
+  - `pbval_jedge` allocation/destruction:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:460`
+    through
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:463`
+    and
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:483`
+    through
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:484`
+  - direct-mode old-position stage gate:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:82`
+    through
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:92`
+    and call site
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:102`.
+- PR4c direct deposition kernel is implemented:
+  - direct trajectory deposit kernel launch:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:263`
+  - first-order zig-zag style `x_old -> x_new` weighting and atomic edge-current
+    accumulation in 1D/2D/3D:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:300`
+    through
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:588`.
+- PR4d coupling integration is implemented:
+  - direct edge-current sync inserted immediately before `MHD::EFieldSrc`:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:198`
+    through
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:265`
+  - edge-current recv path uses additive `SumBoundaryFluxes` (same-level +
+    multilevel) without averaging:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:748`
+    through
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:751`
+  - CC->edge conversion path remains available and is explicitly gated to
+    `cc_convert`:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:267`
+    through
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:291`
+    and
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:799`
+    through
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:800`
+  - `MHD::EFieldSrc` edge-branch consumption remains the coupling consumer:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mhd/mhd_tasks.cpp:437`
+    through
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mhd/mhd_tasks.cpp:476`.
+- PR4 test coverage now includes direct mode:
+  - coupled serial/MPI direct cases + guards + parity checks:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:289`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:482`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:586`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:599`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:674`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:693`
+  - decomposition matrix includes `edge_direct`:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:22`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:258`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:359`
+  - multilevel matrix includes `edge_direct`:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:21`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:148`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:231`
+  - restart fidelity matrix includes `edge_direct`:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:19`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:176`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:207`
+  - input decks now expose the new deposition knob for command-line overrides:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_mhd_restart_fidelity.athinput:60`
+    and
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_mhd_coupling_multilevel.athinput:72`.
 
-### 9.19 Next-Step Plan: PR4 Entity-Style Direct Staggered Deposition
+7. Remaining deferred items after PR4a-PR4d
+- Continuity-residual oracle (`d(rho)/dt + div(J)`) is not yet implemented in
+  AthenaK test analysis.
+- Direct mode is currently restricted to strictly periodic boundaries (guarded in
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:394`).
+- Higher-order Entity-style shape-order direct current deposition (beyond current
+  first-order path) remains deferred.
 
-#### 9.19.1 PR4 Goal and Scope Contract
+### 9.19 PR4e Closeout Plan (Remaining Work)
 
-PR4 objective:
-1. Add an opt-in, trajectory-based direct staggered current deposition path
-   aligned with Entity deposition semantics.
+#### 9.19.1 Objective
+Close PR4 with quantitative correctness gates and explicit compatibility-policy
+decision (`cc_convert` retained vs retired).
 
-Non-negotiable scope rules:
-1. Preserve existing default behavior (`cell_centered` and CC->edge conversion)
-   until PR4 validation gates are green.
-2. No mixed-scope restarts/AMR/non-periodic redesign in PR4 beyond compatibility
-   required by the direct-deposition mode.
-3. No silent coefficient/sign changes in MHD coupling.
-
-#### 9.19.2 Entity References To Mirror
-
-1. Step ordering and comm/BC invariants:
+#### 9.19.2 Entity Alignment Baseline for Closeout
+1. Ordering invariants:
 - `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/AGENTS.md:210`
   through
   `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/AGENTS.md:219`
 - `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:114`
   through
   `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:132`.
-
-2. Trajectory-based current deposition inputs:
+2. Direct trajectory deposition semantics:
 - `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:521`
   through
   `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:560`
-  (uses current and previous particle indices/offsets).
-
-3. Kernel-level deposition semantics and shape stencils:
-- `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:33`
+- `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:170`
   through
-  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:104`
-- `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:406`
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:404`
+  (first-order path) and
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:406`
   through
-  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:473`
-- `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp:906`
-  through
-  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp:997`.
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:560`
+  (higher-order deferred reference).
 
-#### 9.19.3 PR4 Execution Slices
+#### 9.19.3 Implementation Steps
+1. Add continuity residual analysis to direct-mode tests.
+- Primary insertion points:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:620`
+  and
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:285`.
+2. Add explicit direct-vs-conversion closeout checks on multilevel + restart suites.
+- Existing direct coverage anchor points:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:203`
+  and
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:253`.
+3. Decide compatibility policy and codify in docs.
+- If `cc_convert` retained: keep default unchanged and document rationale.
+- If retired: change defaults/guards, then rebaseline all PR2/PR3/PR4 suites.
 
-1. PR4a: Runtime selector + guards
-- Add explicit deposition-mode selector (default stays current AthenaK path).
-- Guard initial PR4 mode to supported configurations first:
-  non-relativistic Cartesian + current supported compositions.
-- Add fail-fast diagnostics for unsupported geometry/compositions.
-
-2. PR4b: Particle-side data and API wiring
-- Reuse existing old-position state already captured in AthenaK particle wrappers.
-- Add any additional per-particle/per-cell scratch required by direct staggered
-  deposition without changing existing CC-moment ownership paths.
-- Keep memory allocation and zeroing patterns consistent with AthenaK/Kokkos.
-
-3. PR4c: Direct deposition kernel implementation
-- Implement direct staggered current deposition from old/new trajectory state.
-- Start with first-order kernel parity to current supported deposition order.
-- Keep deterministic parallel reduction semantics (scatter/atomic patterns) and
-  decomposition invariance requirements.
-
-4. PR4d: Integration into coupling path
-- Feed direct staggered currents into existing `MHD::EFieldSrc` coupling branch.
-- Keep CC and CC->edge conversion modes available for A/B comparison.
-- Preserve existing `couple_j_to_efield_coeff` usage and sign convention.
-
-5. PR4e: Compatibility closeout decision
-- Compare direct mode against CC->edge mode on shared deterministic decks.
-- If parity is confirmed and risk is acceptable, decide whether to:
-  - keep CC->edge as debug/compatibility mode, or
-  - retire it from default coupled workflows.
-
-#### 9.19.4 Physics/Numerics Control Loop (Must Run Every Slice)
-
-1. Discrete continuity control
-- Add and track `d(rho)/dt + div(J)` residual diagnostics.
-- Require stable residual bounds across serial and MPI decompositions.
-
-2. Coupling-sign control
-- Re-check direction/sign of:
-  - `E += coeff * J`
-  - momentum source `-(J x B)`
-  - energy source `J dot B`.
-
-3. Invariance control
-- Preserve:
-  - decomposition invariance
-  - zero-current coupled/uncoupled invariance
-  - linear scaling with `deposit_qscale` and deterministic velocity controls.
-
-4. Regression control
-- Keep existing PR2/PR3 suites green in all PR4 slices before merge.
-
-#### 9.19.5 PR4 Test Matrix and Merge Gates
-
-Required tests for each mergeable PR4 slice:
-1. Existing baselines:
+#### 9.19.4 Merge Gates for PR4e
+1. All of the following pass with MPI build:
 - `particles/pic_mhd_current_coupling`
 - `particles/pic_mhd_coupling_decomp`
 - `particles/pic_mhd_restart_fidelity`
 - `particles/pic_mhd_coupling_multilevel`
 - `particles/pic_mhd_coupling_nonperiodic`.
-
-2. New PR4 tests:
-- Direct-mode continuity residual check.
-- Direct-mode serial vs MPI decomposition invariance.
-- Direct-mode vs CC->edge A/B parity deck(s).
-- Guard tests for unsupported direct-mode configurations.
-
-3. Style and static gates:
+2. Changed-file style gates pass:
 - `bash tst/scripts/style/check_athena_cpp_style_changed.sh`
-- `bash tst/scripts/style/check_python_style_changed.sh`
-- direct `flake8` on any new untracked Python scripts.
-
-PR4 slice merge gate:
-1. All above tests pass.
-2. Default behavior unchanged unless explicitly opted into direct mode.
-3. Entity alignment statement updated with exact file:line references.
-
-#### 9.19.6 PR4 Risks and Mitigations
-
-1. Risk: hidden continuity error at boundaries/AMR interfaces.
-- Mitigation: continuity residual diagnostics + targeted boundary/multilevel decks.
-
-2. Risk: decomposition-dependent race behavior in new kernel.
-- Mitigation: deterministic accumulation pattern + 1/2/4-rank invariance checks.
-
-3. Risk: unintentional default-path regression.
-- Mitigation: mandatory default-off comparison in every PR4 slice.
-
-4. Risk: scope drift into broad performance refactor.
-- Mitigation: correctness-first mergeable slices; no broad refactor until
-  correctness gate passes.
+- `bash tst/scripts/style/check_python_style_changed.sh`.
+3. Final docs state:
+- exact as-built source/test anchors
+- explicit default behavior
+- explicit compatibility-mode decision.
 
 ## 10. AGENTS Review Index
 

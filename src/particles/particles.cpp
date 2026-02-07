@@ -381,12 +381,22 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
         std::exit(EXIT_FAILURE);
       }
     }
-    if (couple_j_deposition_mode ==
-        CoupledCurrentDepositionMode::direct_staggered) {
+    if ((couple_j_deposition_mode == CoupledCurrentDepositionMode::direct_staggered) &&
+        (couple_j_to_efield_representation !=
+         CoupledCurrentRepresentation::edge_staggered)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "<particles>/couple_j_deposition_mode=direct_staggered is not "
-                << "implemented in AthenaK PR4a" << std::endl;
+                << "<particles>/couple_j_deposition_mode=direct_staggered requires "
+                << "<particles>/couple_j_to_efield_representation=edge_staggered"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if ((couple_j_deposition_mode == CoupledCurrentDepositionMode::direct_staggered) &&
+        !(pmy_pack->pmesh->strictly_periodic)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/couple_j_deposition_mode=direct_staggered requires "
+                << "strictly periodic mesh boundaries in PR4" << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if (couple_j_to_efield_representation == CoupledCurrentRepresentation::edge_staggered
@@ -447,6 +457,10 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       Kokkos::deep_copy(j_edge_x1e, static_cast<Real>(0.0));
       Kokkos::deep_copy(j_edge_x2e, static_cast<Real>(0.0));
       Kokkos::deep_copy(j_edge_x3e, static_cast<Real>(0.0));
+      if (couple_j_deposition_mode == CoupledCurrentDepositionMode::direct_staggered) {
+        pbval_jedge = new MeshBoundaryValuesFC(ppack, pin);
+        pbval_jedge->InitializeBuffers(3);
+      }
     }
   }
 
@@ -465,6 +479,9 @@ Particles::~Particles() {
   delete pbval_part;
   if (pbval_mom != nullptr) {
     delete pbval_mom;
+  }
+  if (pbval_jedge != nullptr) {
+    delete pbval_jedge;
   }
 }
 

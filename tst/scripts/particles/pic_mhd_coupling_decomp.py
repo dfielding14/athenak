@@ -19,6 +19,11 @@ _MESHBLOCK_CONFIGS = [
     ('mb444', 4, 4, 4),
     ('mb844', 8, 4, 4),
 ]
+_REPRESENTATION_CASES = [
+    ('cc', 'cell_centered', None),
+    ('edge', 'edge_staggered', 'cc_convert'),
+    ('edge_direct', 'edge_staggered', 'direct_staggered'),
+]
 
 
 def _athena_exe_dir():
@@ -248,21 +253,23 @@ def run(**kwargs):
         logger.info('MPI disabled: running serial-only decomposition baseline')
 
     cases = []
-    representations = [('cc', 'cell_centered'), ('edge', 'edge_staggered')]
     feedback_orders = [('mhd', 'mhd_src_terms'), ('efield', 'efield_src')]
     for order_tag, order_value in feedback_orders:
-        for rep_tag, rep_value in representations:
+        for rep_tag, rep_value, dep_mode in _REPRESENTATION_CASES:
             for base_case in base_cases:
                 combo_tag = rep_tag + '_' + order_tag
                 rep_basename = base_case['basename'] + '_' + combo_tag
+                rep_args = ['particles/couple_j_to_efield_representation=' + rep_value,
+                            'particles/couple_fluid_feedback_order=' + order_value]
+                if dep_mode is not None:
+                    rep_args.append('particles/couple_j_deposition_mode=' + dep_mode)
                 cases.append({
                     'name': base_case['name'] + '_' + combo_tag,
                     'basename': rep_basename,
                     'nproc': base_case['nproc'],
                     'args': (['job/basename=' + rep_basename] +
                              list(base_case['args'][1:]) +
-                             ['particles/couple_j_to_efield_representation=' + rep_value,
-                              'particles/couple_fluid_feedback_order=' + order_value] +
+                             rep_args +
                              common_args),
                 })
 
@@ -295,7 +302,7 @@ def analyze():
 
     for mb_tag, _, _, _ in _MESHBLOCK_CONFIGS:
         for order_tag in ['mhd', 'efield']:
-            for rep_tag in ['cc', 'edge']:
+            for rep_tag, _, _ in _REPRESENTATION_CASES:
                 serial_case = 'serial_' + mb_tag + '_' + rep_tag + '_' + order_tag
                 if serial_case not in _RESULTS:
                     logger.warning('Missing serial baseline result for %s %s %s',
@@ -349,6 +356,7 @@ def analyze():
         for order_tag in ['mhd', 'efield']:
             serial_cc = 'serial_' + mb_tag + '_cc_' + order_tag
             serial_edge = 'serial_' + mb_tag + '_edge_' + order_tag
+            serial_edge_direct = 'serial_' + mb_tag + '_edge_direct_' + order_tag
             if serial_cc in _RESULTS and serial_edge in _RESULTS:
                 cc = _RESULTS[serial_cc]['measured']
                 edge = _RESULTS[serial_edge]['measured']
@@ -357,9 +365,17 @@ def analyze():
                                                ':cc_vs_edge:' + quantity,
                                                cc[quantity], edge[quantity],
                                                1.0e-6, 1.0e-8) and ok
+            if serial_edge in _RESULTS and serial_edge_direct in _RESULTS:
+                edge = _RESULTS[serial_edge]['measured']
+                edge_direct = _RESULTS[serial_edge_direct]['measured']
+                for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
+                    ok = _check_with_tolerance(mb_tag + ':' + order_tag +
+                                               ':edge_vs_edge_direct:' + quantity,
+                                               edge[quantity], edge_direct[quantity],
+                                               1.0e-6, 1.0e-8) and ok
 
     for mb_tag, _, _, _ in _MESHBLOCK_CONFIGS:
-        for rep_tag in ['cc', 'edge']:
+        for rep_tag, _, _ in _REPRESENTATION_CASES:
             serial_mhd = 'serial_' + mb_tag + '_' + rep_tag + '_mhd'
             serial_efield = 'serial_' + mb_tag + '_' + rep_tag + '_efield'
             if serial_mhd in _RESULTS and serial_efield in _RESULTS:

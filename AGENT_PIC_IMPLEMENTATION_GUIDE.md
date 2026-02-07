@@ -454,69 +454,146 @@ For every non-trivial function:
        `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:127`
    - Boundary taxonomy remains intentionally AthenaK-native.
 
-### PR4 Detailed Plan: Entity-Style Direct Staggered Charge-Conserving Deposition
-1. Goal and compatibility contract
-   - Add an opt-in direct staggered trajectory-based deposition mode.
-   - Keep current default behavior unchanged while PR4 validation is active.
-   - Keep CC and CC->edge paths available for A/B comparison until closeout.
-2. Entity references to copy/adapt
-   - Deposition ordering and species loop wiring:
+### PR4 As-Built Status and PR4e Closeout Plan
+1. As-built implementation status (`PR4a` through `PR4d`)
+   - Runtime selector and defaults:
+     - deposition-mode enum/default:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:40`
+       and
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:111`
+     - parser wiring:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:265`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:277`
+   - Guardrails:
+     - `direct_staggered` requires `edge_staggered`:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:384`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:392`
+     - `direct_staggered` requires strictly periodic boundaries:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:394`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:400`
+   - Dataflow and comm objects:
+     - edge-comm pointer and task IDs:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:67`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:71`
+       and
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:145`
+     - allocation/destruction:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:460`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:463`
+       and
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:483`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:484`
+   - Stage ordering and direct trajectory use:
+     - direct mode old-position capture stage gate:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:82`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:104`
+     - direct edge-current sync insertion before `MHD::EFieldSrc`:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:198`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:265`
+   - Direct deposition kernel:
+     - kernel entry:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:263`
+     - first-order zig-zag style weighting and edge-current atomics:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:300`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:588`
+   - Comm semantics and coupling integration:
+     - additive edge-current exchange via `SumBoundaryFluxes`:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:748`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:751`
+     - conversion path retained and gated to `cc_convert`:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:267`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:291`
+       and
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:799`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:800`
+     - MHD consumer path unchanged:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mhd/mhd_tasks.cpp:437`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mhd/mhd_tasks.cpp:476`.
+2. As-built PR4 validation coverage
+   - coupled direct-mode positive and guard coverage:
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:289`,
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:482`,
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:586`,
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:599`,
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:674`,
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:693`
+   - decomposition parity now includes `edge_direct`:
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:22`,
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:258`,
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:359`
+   - multilevel parity now includes `edge_direct`:
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:21`,
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:148`,
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:231`
+   - restart fidelity now includes `edge_direct`:
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:19`,
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:176`,
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:207`
+   - deck defaults expose deposition-mode knob for CLI overrides:
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_mhd_restart_fidelity.athinput:60`
+     and
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_mhd_coupling_multilevel.athinput:72`.
+3. Entity-reference contract for PR4 closeout
+   - ordering and pipeline references:
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/AGENTS.md:210`
+     through
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/AGENTS.md:219`
+     and
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:114`
+     through
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:132`
+   - direct trajectory deposition references:
      `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:521`
      through
      `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:560`
-   - Trajectory-based kernel inputs and update structure:
-     `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:33`
-     through
-     `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:104`
      and
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:170`
+     through
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:404`
+   - deferred higher-order reference surface:
      `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:406`
      through
-     `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:530`
-   - Shape/stencil window handling:
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:560`
+     and
      `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp:906`
      through
-     `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp:997`
-3. Implementation slices (mergeable)
-   - PR4a: runtime selector and guards
-     - add direct-deposition mode knob with default to existing behavior
-     - fail-fast unsupported geometry/composition paths.
-   - PR4b: dataflow and kernel scaffolding
-     - wire required old/new trajectory data and edge-current targets
-     - preserve existing array ownership and allocation lifetimes.
-   - PR4c: direct deposition kernel rollout
-     - implement deterministic first-order direct-staggered deposition
-     - keep atomics/scatter semantics decomposition-safe.
-   - PR4d: coupling integration and A/B parity
-     - consume direct edge currents in `MHD::EFieldSrc`
-     - run direct vs CC->edge parity checks on shared decks.
-   - PR4e: closeout decision
-     - choose compatibility policy (keep/remove CC->edge fallback)
-     - update defaults only after all correctness gates pass.
-4. Physics and numerics control requirements
-   - continuity control:
-     - track `d(rho)/dt + div(J)` residual in serial and MPI
-   - sign/normalization control:
-     - preserve `E += coeff * J`, `-(J x B)`, and `J dot B` conventions
-   - invariance control:
-     - decomposition invariance
-     - zero-current coupled/uncoupled invariance
-     - first-order linearity with `deposit_qscale`/deterministic velocity knobs.
-5. Required validation gates per PR4 slice
-   - baseline suites remain green:
+     `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp:997`.
+4. PR4e remaining work
+   - Add direct-mode continuity residual oracle (`d(rho)/dt + div(J)`) in:
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:620`
+     and
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:285`
+   - Final compatibility decision:
+     - retain `cc_convert` as compatibility/debug mode, or
+     - retire `cc_convert` from default workflows after full rebaseline.
+   - Explicitly document current direct-mode boundary restriction at:
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:394`
+     through
+     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:400`.
+5. PR4e exit criteria
+   - All coupled suites pass with MPI:
      - `particles/pic_mhd_current_coupling`
      - `particles/pic_mhd_coupling_decomp`
      - `particles/pic_mhd_restart_fidelity`
      - `particles/pic_mhd_coupling_multilevel`
      - `particles/pic_mhd_coupling_nonperiodic`
-   - new PR4 suites:
-     - direct-mode continuity residual checks
-     - direct vs converted-edge A/B parity checks
-     - unsupported direct-mode guard coverage.
-6. Exit criteria
-   - Direct mode is stable and decomposition-invariant.
-   - Continuity residual and coupling-sign diagnostics stay within limits.
-   - Default behavior decision is explicit and documented.
-   - Handoff + implementation guide are updated with as-built file:line refs.
+   - style gates pass:
+     - `bash tst/scripts/style/check_athena_cpp_style_changed.sh`
+     - `bash tst/scripts/style/check_python_style_changed.sh`
+   - handoff/docs contain as-built anchors and explicit compatibility-policy outcome.
 
 ## 7. What Not To Do
 

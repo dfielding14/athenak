@@ -18,6 +18,11 @@ _RESULTS = {}
 _VX0 = 0.5
 _VY0 = -0.25
 _VZ0 = 0.125
+_REPRESENTATIONS = [
+    ('cc', 'cell_centered', None),
+    ('edge', 'edge_staggered', 'cc_convert'),
+    ('edge_direct', 'edge_staggered', 'direct_staggered'),
+]
 
 
 def _athena_exe_dir():
@@ -130,7 +135,6 @@ def _check_with_tolerance(label, measured, expected, abs_tol, rel_tol):
 def run(**kwargs):
     logger.debug('Running test ' + __name__)
 
-    reps = [('cc', 'cell_centered'), ('edge', 'edge_staggered')]
     orders = [('mhd', 'mhd_src_terms'), ('efield', 'efield_src')]
     common = [
         'particles/cr_vx0=0.50',
@@ -141,7 +145,7 @@ def run(**kwargs):
     ]
 
     cases = []
-    for rep_tag, rep_value in reps:
+    for rep_tag, rep_value, dep_mode in _REPRESENTATIONS:
         base = 'pic_mhd_ml_serial_' + rep_tag + '_uncoupled'
         args = [
             'job/basename=' + base,
@@ -150,11 +154,13 @@ def run(**kwargs):
             'particles/couple_moments_energy_to_mhd=false',
             'particles/couple_j_to_efield_representation=' + rep_value,
         ] + common
+        if dep_mode is not None:
+            args.append('particles/couple_j_deposition_mode=' + dep_mode)
         cases.append({'name': 'serial_' + rep_tag + '_uncoupled',
                       'basename': base, 'nproc': 1, 'args': args})
 
     for order_tag, order_value in orders:
-        for rep_tag, rep_value in reps:
+        for rep_tag, rep_value, dep_mode in _REPRESENTATIONS:
             base = 'pic_mhd_ml_serial_' + rep_tag + '_' + order_tag
             args = [
                 'job/basename=' + base,
@@ -164,12 +170,14 @@ def run(**kwargs):
                 'particles/couple_j_to_efield_representation=' + rep_value,
                 'particles/couple_fluid_feedback_order=' + order_value,
             ] + common
+            if dep_mode is not None:
+                args.append('particles/couple_j_deposition_mode=' + dep_mode)
             cases.append({'name': 'serial_' + rep_tag + '_' + order_tag,
                           'basename': base, 'nproc': 1, 'args': args})
 
     if _athena_mpi_enabled():
         for order_tag, order_value in orders:
-            for rep_tag, rep_value in reps:
+            for rep_tag, rep_value, dep_mode in _REPRESENTATIONS:
                 base = 'pic_mhd_ml_mpi2_' + rep_tag + '_' + order_tag
                 args = [
                     'job/basename=' + base,
@@ -179,6 +187,8 @@ def run(**kwargs):
                     'particles/couple_j_to_efield_representation=' + rep_value,
                     'particles/couple_fluid_feedback_order=' + order_value,
                 ] + common
+                if dep_mode is not None:
+                    args.append('particles/couple_j_deposition_mode=' + dep_mode)
                 cases.append({'name': 'mpi2_' + rep_tag + '_' + order_tag,
                               'basename': base, 'nproc': 2, 'args': args})
     else:
@@ -218,6 +228,7 @@ def analyze():
     for order_tag in ['mhd', 'efield']:
         cc_name = 'serial_cc_' + order_tag
         edge_name = 'serial_edge_' + order_tag
+        edge_direct_name = 'serial_edge_direct_' + order_tag
         if cc_name in _RESULTS and edge_name in _RESULTS:
             cc = _RESULTS[cc_name]['measured']
             edge = _RESULTS[edge_name]['measured']
@@ -225,8 +236,16 @@ def analyze():
                 ok = _check_with_tolerance(order_tag + ':cc_vs_edge:' + quantity,
                                            cc[quantity], edge[quantity],
                                            1.0e-6, 1.0e-8) and ok
+        if edge_name in _RESULTS and edge_direct_name in _RESULTS:
+            edge = _RESULTS[edge_name]['measured']
+            edge_direct = _RESULTS[edge_direct_name]['measured']
+            for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
+                ok = _check_with_tolerance(
+                    order_tag + ':edge_vs_edge_direct:' + quantity,
+                    edge[quantity], edge_direct[quantity],
+                    1.0e-6, 1.0e-8) and ok
 
-    for rep_tag in ['cc', 'edge']:
+    for rep_tag, _, _ in _REPRESENTATIONS:
         mhd_name = 'serial_' + rep_tag + '_mhd'
         ef_name = 'serial_' + rep_tag + '_efield'
         if mhd_name in _RESULTS and ef_name in _RESULTS:
@@ -237,7 +256,7 @@ def analyze():
                                            mhd[quantity], efield[quantity],
                                            1.0e-6, 1.0e-8) and ok
 
-    for rep_tag in ['cc', 'edge']:
+    for rep_tag, _, _ in _REPRESENTATIONS:
         unc_name = 'serial_' + rep_tag + '_uncoupled'
         for order_tag in ['mhd', 'efield']:
             coupled_name = 'serial_' + rep_tag + '_' + order_tag
@@ -259,7 +278,7 @@ def analyze():
                 ok = False
 
     for order_tag in ['mhd', 'efield']:
-        for rep_tag in ['cc', 'edge']:
+        for rep_tag, _, _ in _REPRESENTATIONS:
             serial_name = 'serial_' + rep_tag + '_' + order_tag
             mpi_name = 'mpi2_' + rep_tag + '_' + order_tag
             if serial_name not in _RESULTS or mpi_name not in _RESULTS:

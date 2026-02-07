@@ -31,6 +31,11 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   id.rest_mom = none;
   id.bcs_mom = none;
   id.prol_mom = none;
+  id.irecv_jedge = none;
+  id.send_jedge = none;
+  id.recv_jedge = none;
+  id.crecv_jedge = none;
+  id.csend_jedge = none;
   id.convert_j_edge = none;
 
   // particle integration done in "before_timeintegrator" task list
@@ -190,10 +195,80 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
       std::exit(EXIT_FAILURE);
     }
 
+    // PR4 direct mode: synchronize deposited edge-currents before EFieldSrc.
+    if ((couple_j_to_efield_representation ==
+         CoupledCurrentRepresentation::edge_staggered) &&
+        (couple_j_deposition_mode ==
+         CoupledCurrentDepositionMode::direct_staggered)) {
+      TaskID direct_dep = sid | pmhd->id.efld;
+      TaskID direct_loc = pmhd->id.efldsrc;
+      if ((direct_dep == TaskID(0)) || (direct_loc == TaskID(0))) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Failed to locate MHD::EFieldSrc insertion point for "
+                  << "direct edge-current synchronization" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+
+      sid = stagen_tl->InsertTask(&Particles::InitRecvEdgeCurrents, this,
+                                  direct_dep, direct_loc);
+      if (sid == TaskID(0)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Failed to insert Particles::InitRecvEdgeCurrents before "
+                  << "MHD::EFieldSrc" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      id.irecv_jedge = sid;
+
+      sid = stagen_tl->InsertTask(&Particles::SendEdgeCurrents, this, sid, direct_loc);
+      if (sid == TaskID(0)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Failed to insert Particles::SendEdgeCurrents before "
+                  << "MHD::EFieldSrc" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      id.send_jedge = sid;
+
+      sid = stagen_tl->InsertTask(&Particles::RecvEdgeCurrents, this, sid, direct_loc);
+      if (sid == TaskID(0)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Failed to insert Particles::RecvEdgeCurrents before "
+                  << "MHD::EFieldSrc" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      id.recv_jedge = sid;
+
+      sid = stagen_tl->InsertTask(&Particles::ClearRecvEdgeCurrents, this,
+                                  sid, direct_loc);
+      if (sid == TaskID(0)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Failed to insert Particles::ClearRecvEdgeCurrents before "
+                  << "MHD::EFieldSrc" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      id.crecv_jedge = sid;
+
+      sid = stagen_tl->InsertTask(&Particles::ClearSendEdgeCurrents, this,
+                                  sid, direct_loc);
+      if (sid == TaskID(0)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Failed to insert Particles::ClearSendEdgeCurrents before "
+                  << "MHD::EFieldSrc" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      id.csend_jedge = sid;
+    }
+
     // Step I: convert cell-centered deposited J into edge representation
     // before EFieldSrc.
-    if (couple_j_to_efield_representation ==
-        CoupledCurrentRepresentation::edge_staggered) {
+    if ((couple_j_to_efield_representation ==
+         CoupledCurrentRepresentation::edge_staggered) &&
+        (couple_j_deposition_mode == CoupledCurrentDepositionMode::cc_convert)) {
       // Keep conversion after both CornerE and deposited-moment wrappers.
       TaskID conv_dep = sid | pmhd->id.efld;
       TaskID conv_loc = pmhd->id.efldsrc;
