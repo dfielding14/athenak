@@ -200,7 +200,7 @@ def run(**kwargs):
         'particles/cr_vz0=0.125',
     ]
 
-    cases = [
+    base_cases = [
         {
             'name': 'serial_mb444',
             'basename': 'pic_mhd_decomp_serial',
@@ -210,12 +210,12 @@ def run(**kwargs):
                 'meshblock/nx1=4',
                 'meshblock/nx2=4',
                 'meshblock/nx3=4',
-            ] + common_args,
+            ],
         },
     ]
 
     if _athena_mpi_enabled():
-        cases.extend([
+        base_cases.extend([
             {
                 'name': 'mpi2_mb444',
                 'basename': 'pic_mhd_decomp_mpi2_same_mb',
@@ -225,7 +225,7 @@ def run(**kwargs):
                     'meshblock/nx1=4',
                     'meshblock/nx2=4',
                     'meshblock/nx3=4',
-                ] + common_args,
+                ],
             },
             {
                 'name': 'mpi4_mb444',
@@ -236,11 +236,27 @@ def run(**kwargs):
                     'meshblock/nx1=4',
                     'meshblock/nx2=4',
                     'meshblock/nx3=4',
-                ] + common_args,
+                ],
             },
         ])
     else:
         logger.info('MPI disabled: running serial-only decomposition baseline')
+
+    cases = []
+    representations = [('cc', 'cell_centered'),
+                       ('edge', 'edge_staggered')]
+    for rep_tag, rep_value in representations:
+        for base_case in base_cases:
+            rep_basename = base_case['basename'] + '_' + rep_tag
+            cases.append({
+                'name': base_case['name'] + '_' + rep_tag,
+                'basename': rep_basename,
+                'nproc': base_case['nproc'],
+                'args': (['job/basename=' + rep_basename] +
+                         list(base_case['args'][1:]) +
+                         ['particles/couple_j_to_efield_representation=' + rep_value] +
+                         common_args),
+            })
 
     for case in cases:
         _remove_outputs(case['basename'])
@@ -269,46 +285,60 @@ def analyze():
         ok = _check_with_tolerance(case_name + ':npart', measured['npart'],
                                    expected['npart'], 1.0e-6, 1.0e-8) and ok
 
-    if 'serial_mb444' not in _RESULTS:
-        logger.warning('Missing serial baseline result')
-        return False
+    for rep_tag in ['cc', 'edge']:
+        serial_case = 'serial_mb444_' + rep_tag
+        if serial_case not in _RESULTS:
+            logger.warning('Missing serial baseline result for %s', rep_tag)
+            return False
 
-    baseline = _RESULTS['serial_mb444']['measured']
-    for case_name in ['mpi2_mb444', 'mpi4_mb444']:
-        if case_name not in _RESULTS:
-            continue
-        measured = _RESULTS[case_name]['measured']
-        ok = _check_with_tolerance(case_name + ':Q_vs_serial',
-                                   measured['Q'], baseline['Q'], 1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':Jx_vs_serial',
-                                   measured['Jx'], baseline['Jx'], 1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':Jy_vs_serial',
-                                   measured['Jy'], baseline['Jy'], 1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':Jz_vs_serial',
-                                   measured['Jz'], baseline['Jz'], 1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':npart_vs_serial',
-                                   measured['npart'], baseline['npart'],
-                                   1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':bcc1_l2_vs_serial',
-                                   measured['bcc1_l2'], baseline['bcc1_l2'],
-                                   1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':bcc2_l2_vs_serial',
-                                   measured['bcc2_l2'], baseline['bcc2_l2'],
-                                   1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':bcc3_l2_vs_serial',
-                                   measured['bcc3_l2'], baseline['bcc3_l2'],
-                                   1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':mom1_vs_serial',
-                                   measured['mom1'], baseline['mom1'],
-                                   1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':mom2_vs_serial',
-                                   measured['mom2'], baseline['mom2'],
-                                   1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':mom3_vs_serial',
-                                   measured['mom3'], baseline['mom3'],
-                                   1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':ener_vs_serial',
-                                   measured['ener'], baseline['ener'],
-                                   1.0e-6, 1.0e-8) and ok
+        baseline = _RESULTS[serial_case]['measured']
+        for case_name in ['mpi2_mb444_' + rep_tag, 'mpi4_mb444_' + rep_tag]:
+            if case_name not in _RESULTS:
+                continue
+            measured = _RESULTS[case_name]['measured']
+            ok = _check_with_tolerance(case_name + ':Q_vs_serial',
+                                       measured['Q'], baseline['Q'],
+                                       1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':Jx_vs_serial',
+                                       measured['Jx'], baseline['Jx'],
+                                       1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':Jy_vs_serial',
+                                       measured['Jy'], baseline['Jy'],
+                                       1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':Jz_vs_serial',
+                                       measured['Jz'], baseline['Jz'],
+                                       1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':npart_vs_serial',
+                                       measured['npart'], baseline['npart'],
+                                       1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':bcc1_l2_vs_serial',
+                                       measured['bcc1_l2'], baseline['bcc1_l2'],
+                                       1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':bcc2_l2_vs_serial',
+                                       measured['bcc2_l2'], baseline['bcc2_l2'],
+                                       1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':bcc3_l2_vs_serial',
+                                       measured['bcc3_l2'], baseline['bcc3_l2'],
+                                       1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':mom1_vs_serial',
+                                       measured['mom1'], baseline['mom1'],
+                                       1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':mom2_vs_serial',
+                                       measured['mom2'], baseline['mom2'],
+                                       1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':mom3_vs_serial',
+                                       measured['mom3'], baseline['mom3'],
+                                       1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':ener_vs_serial',
+                                       measured['ener'], baseline['ener'],
+                                       1.0e-6, 1.0e-8) and ok
+
+    if 'serial_mb444_cc' in _RESULTS and 'serial_mb444_edge' in _RESULTS:
+        cc = _RESULTS['serial_mb444_cc']['measured']
+        edge = _RESULTS['serial_mb444_edge']['measured']
+        for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
+            ok = _check_with_tolerance('cc_vs_edge:' + quantity,
+                                       cc[quantity], edge[quantity],
+                                       1.0e-6, 1.0e-8) and ok
 
     return ok

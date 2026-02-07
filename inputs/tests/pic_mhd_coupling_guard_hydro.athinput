@@ -65,6 +65,7 @@ deposit_order           = 1
 deposit_qscale          = 1.0
 couple_moments_to_mhd   = true
 couple_j_to_efield_coeff = 1.0
+couple_j_to_efield_representation = cell_centered
 cr_vx0                  = 0.5
 cr_vy0                  = -0.25
 cr_vz0                  = 0.125

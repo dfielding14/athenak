@@ -173,6 +173,20 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                                                "couple_moments_to_mhd", false);
   couple_j_to_efield_coeff = pin->GetOrAddReal("particles",
                                                 "couple_j_to_efield_coeff", 1.0);
+  std::string j_repr = pin->GetOrAddString("particles",
+                                           "couple_j_to_efield_representation",
+                                           "cell_centered");
+  if (j_repr.compare("cell_centered") == 0) {
+    couple_j_to_efield_representation = CoupledCurrentRepresentation::cell_centered;
+  } else if (j_repr.compare("edge_staggered") == 0) {
+    couple_j_to_efield_representation = CoupledCurrentRepresentation::edge_staggered;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/couple_j_to_efield_representation: "
+              << j_repr << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   couple_moments_momentum_to_mhd = pin->GetOrAddBoolean(
       "particles", "couple_moments_momentum_to_mhd", false);
   couple_moments_energy_to_mhd = pin->GetOrAddBoolean(
@@ -282,6 +296,16 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
         std::exit(EXIT_FAILURE);
       }
     }
+    if (couple_j_to_efield_representation == CoupledCurrentRepresentation::edge_staggered
+        && (pmy_pack->pcoord->is_special_relativistic ||
+            pmy_pack->pcoord->is_general_relativistic ||
+            pmy_pack->pcoord->is_dynamical_relativistic)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/couple_j_to_efield_representation=edge_staggered "
+                << "requires non-relativistic Cartesian MHD in PR2" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
   }
   if (use_fluid_feedback &&
       (pmy_pack->pcoord->is_special_relativistic ||
@@ -313,6 +337,17 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
     pbval_mom = new MeshBoundaryValuesCC(ppack, pin, false, CCCommMode::synchronize);
     pbval_mom->InitializeBuffers(NMOM);
+
+    if (couple_moments_to_mhd &&
+        (couple_j_to_efield_representation ==
+         CoupledCurrentRepresentation::edge_staggered)) {
+      Kokkos::realloc(j_edge_x1e, nmb, ncells3+1, ncells2+1, ncells1);
+      Kokkos::realloc(j_edge_x2e, nmb, ncells3+1, ncells2, ncells1+1);
+      Kokkos::realloc(j_edge_x3e, nmb, ncells3, ncells2+1, ncells1+1);
+      Kokkos::deep_copy(j_edge_x1e, static_cast<Real>(0.0));
+      Kokkos::deep_copy(j_edge_x2e, static_cast<Real>(0.0));
+      Kokkos::deep_copy(j_edge_x3e, static_cast<Real>(0.0));
+    }
   }
 
   // Initialize particles based on type

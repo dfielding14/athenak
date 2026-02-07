@@ -1,10 +1,10 @@
-# AthenaXXX input file for WS-G numerical relativity guard validation
+# AthenaXXX input file for edge-staggered representation relativistic guard
 
 <comment>
-problem   = PIC current coupling numerical-relativity composition guard
+problem   = PIC current coupling edge representation relativistic guard
 
 <job>
-basename  = pic_mhd_guard_nr
+basename  = pic_mhd_guard_edge_rel
 
 <mesh>
 nghost    = 2
@@ -40,19 +40,13 @@ tlim       = 1.0
 ndiag      = 1
 
 <coord>
-general_rel = true
-minkowski   = true
+special_rel = true
 
 <mhd>
 eos         = ideal
 reconstruct = plm
 rsolver     = llf
 gamma       = 1.66666666667
-dyn_eos     = ideal
-dyn_error   = reset_floor
-
-<adm>
-# empty block is sufficient to activate ADM path
 
 <particles>
 particle_type           = cosmic_ray
@@ -65,7 +59,7 @@ deposit_order           = 1
 deposit_qscale          = 1.0
 couple_moments_to_mhd   = true
 couple_j_to_efield_coeff = 1.0
-couple_j_to_efield_representation = cell_centered
+couple_j_to_efield_representation = edge_staggered
 cr_vx0                  = 0.5
 cr_vy0                  = -0.25
 cr_vz0                  = 0.125

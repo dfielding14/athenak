@@ -963,6 +963,27 @@ This section captures WS-H scope implemented after WS-G lock-ins.
 - full Entity staggered-current representation/conversion parity
 - PR3 scope (AMR/restart/non-periodic deposition support).
 
+### 9.16 PR2 Step I Lock-In (Staggered Representation Parity Slice)
+
+Scope lock for this step:
+
+1. Runtime compatibility contract
+- New behavior is opt-in only through
+  `<particles>/couple_j_to_efield_representation`.
+- Default remains `cell_centered`; existing WS-G/WS-H defaults are unchanged.
+- `edge_staggered` only affects coupled E-field source updates and does not alter
+  uncoupled/default runs.
+
+2. Implementation boundary
+- No PR3 expansion in this step (no AMR, restart, or non-periodic support work).
+- No rework of existing fluid momentum/energy feedback split semantics.
+- Keep current PR2 coefficient path (`couple_j_to_efield_coeff`) unchanged.
+
+3. Parity goal for this step
+- Add deterministic cell-centered to edge-current conversion for coupled mode.
+- Wire conversion immediately before `MHD::EFieldSrc`.
+- Keep full Entity charge-conserving staggered deposition as deferred follow-up.
+
 ## 10. AGENTS Review Index
 
 ### 10.1 AthenaK AGENTS.md files reviewed

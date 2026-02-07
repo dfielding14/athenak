@@ -28,6 +28,7 @@ namespace particles {
 
 void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) {
   TaskID none(0);
+  id.convert_j_edge = none;
 
   // particle integration done in "before_timeintegrator" task list
   id.save_old = tl["before_timeintegrator"]->AddTask(&Particles::SaveOldPositions,
@@ -149,6 +150,30 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
                 << std::endl << "Failed to insert Particles::ClearSendMoments before "
                 << insert_name << std::endl;
       std::exit(EXIT_FAILURE);
+    }
+
+    // Step I: convert cell-centered deposited J into edge representation
+    // before EFieldSrc.
+    if (couple_j_to_efield_representation ==
+        CoupledCurrentRepresentation::edge_staggered) {
+      TaskID conv_dep = pmhd->id.efld;
+      TaskID conv_loc = pmhd->id.efldsrc;
+      if ((conv_dep == TaskID(0)) || (conv_loc == TaskID(0))) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Failed to locate MHD::EFieldSrc insertion point for "
+                  << "Particles::ConvertCoupledCurrentRepresentation" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      id.convert_j_edge = stagen_tl->InsertTask(
+          &Particles::ConvertCoupledCurrentRepresentation, this, conv_dep, conv_loc);
+      if (id.convert_j_edge == TaskID(0)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Failed to insert Particles::ConvertCoupledCurrentRepresentation "
+                  << "before MHD::EFieldSrc" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
     }
   }
 

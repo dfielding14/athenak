@@ -430,41 +430,83 @@ TaskStatus MHD::EFieldSrc(Driver *pdrive, int stage) {
     int js = indcs.js, je = indcs.je;
     int ks = indcs.ks, ke = indcs.ke;
     int nmb1 = pmy_pack->nmb_thispack - 1;
-    auto mom = ppart->moments;
     const Real jcoef = ppart->couple_j_to_efield_coeff;
 
-    if (pmy_pack->pmesh->one_d) {
-      auto e2 = efld.x2e;
-      auto e3 = efld.x3e;
-      par_for("prtcl_efldsrc_1d", DevExeSpace(), 0, nmb1, is, ie+1,
-      KOKKOS_LAMBDA(const int m, const int i) {
-        e2(m,ks  ,js  ,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, js, i);
-        e2(m,ke+1,js  ,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, js, i);
-        e3(m,ks  ,js  ,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, ks, js, i);
-        e3(m,ks  ,je+1,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, ks, js, i);
-      });
-    } else if (pmy_pack->pmesh->two_d) {
-      auto e1 = efld.x1e;
-      auto e2 = efld.x2e;
-      auto e3 = efld.x3e;
-      par_for("prtcl_efldsrc_2d", DevExeSpace(), 0, nmb1, js, je+1, is, ie+1,
-      KOKKOS_LAMBDA(const int m, const int j, const int i) {
-        e1(m,ks  ,j,i) += jcoef*mom(m, particles::Particles::IMOM_JX, ks, j, i);
-        e1(m,ke+1,j,i) += jcoef*mom(m, particles::Particles::IMOM_JX, ks, j, i);
-        e2(m,ks  ,j,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, j, i);
-        e2(m,ke+1,j,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, j, i);
-        e3(m,ks  ,j,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, ks, j, i);
-      });
+    if (ppart->couple_j_to_efield_representation ==
+        CoupledCurrentRepresentation::edge_staggered) {
+      auto jx_e = ppart->j_edge_x1e;
+      auto jy_e = ppart->j_edge_x2e;
+      auto jz_e = ppart->j_edge_x3e;
+
+      if (pmy_pack->pmesh->one_d) {
+        auto e2 = efld.x2e;
+        auto e3 = efld.x3e;
+        par_for("prtcl_efldsrc_edge_1d", DevExeSpace(), 0, nmb1, is, ie+1,
+        KOKKOS_LAMBDA(const int m, const int i) {
+          e2(m,ks  ,js  ,i) += jcoef*jy_e(m,ks  ,js,i);
+          e2(m,ke+1,js  ,i) += jcoef*jy_e(m,ke+1,js,i);
+          e3(m,ks  ,js  ,i) += jcoef*jz_e(m,ks,js  ,i);
+          e3(m,ks  ,je+1,i) += jcoef*jz_e(m,ks,je+1,i);
+        });
+      } else if (pmy_pack->pmesh->two_d) {
+        auto e1 = efld.x1e;
+        auto e2 = efld.x2e;
+        auto e3 = efld.x3e;
+        par_for("prtcl_efldsrc_edge_2d", DevExeSpace(), 0, nmb1, js, je+1, is, ie+1,
+        KOKKOS_LAMBDA(const int m, const int j, const int i) {
+          e1(m,ks  ,j,i) += jcoef*jx_e(m,ks  ,j,i);
+          e1(m,ke+1,j,i) += jcoef*jx_e(m,ke+1,j,i);
+          e2(m,ks  ,j,i) += jcoef*jy_e(m,ks  ,j,i);
+          e2(m,ke+1,j,i) += jcoef*jy_e(m,ke+1,j,i);
+          e3(m,ks  ,j,i) += jcoef*jz_e(m,ks,j,i);
+        });
+      } else {
+        auto e1 = efld.x1e;
+        auto e2 = efld.x2e;
+        auto e3 = efld.x3e;
+        par_for("prtcl_efldsrc_edge_3d", DevExeSpace(), 0, nmb1, ks, ke+1, js, je+1,
+                is, ie+1,
+        KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+          e1(m,k,j,i) += jcoef*jx_e(m,k,j,i);
+          e2(m,k,j,i) += jcoef*jy_e(m,k,j,i);
+          e3(m,k,j,i) += jcoef*jz_e(m,k,j,i);
+        });
+      }
     } else {
-      auto e1 = efld.x1e;
-      auto e2 = efld.x2e;
-      auto e3 = efld.x3e;
-      par_for("prtcl_efldsrc_3d", DevExeSpace(), 0, nmb1, ks, ke+1, js, je+1, is, ie+1,
-      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-        e1(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JX, k, j, i);
-        e2(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JY, k, j, i);
-        e3(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, k, j, i);
-      });
+      auto mom = ppart->moments;
+      if (pmy_pack->pmesh->one_d) {
+        auto e2 = efld.x2e;
+        auto e3 = efld.x3e;
+        par_for("prtcl_efldsrc_1d", DevExeSpace(), 0, nmb1, is, ie+1,
+        KOKKOS_LAMBDA(const int m, const int i) {
+          e2(m,ks  ,js  ,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, js, i);
+          e2(m,ke+1,js  ,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, js, i);
+          e3(m,ks  ,js  ,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, ks, js, i);
+          e3(m,ks  ,je+1,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, ks, js, i);
+        });
+      } else if (pmy_pack->pmesh->two_d) {
+        auto e1 = efld.x1e;
+        auto e2 = efld.x2e;
+        auto e3 = efld.x3e;
+        par_for("prtcl_efldsrc_2d", DevExeSpace(), 0, nmb1, js, je+1, is, ie+1,
+        KOKKOS_LAMBDA(const int m, const int j, const int i) {
+          e1(m,ks  ,j,i) += jcoef*mom(m, particles::Particles::IMOM_JX, ks, j, i);
+          e1(m,ke+1,j,i) += jcoef*mom(m, particles::Particles::IMOM_JX, ks, j, i);
+          e2(m,ks  ,j,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, j, i);
+          e2(m,ke+1,j,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, j, i);
+          e3(m,ks  ,j,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, ks, j, i);
+        });
+      } else {
+        auto e1 = efld.x1e;
+        auto e2 = efld.x2e;
+        auto e3 = efld.x3e;
+        par_for("prtcl_efldsrc_3d", DevExeSpace(), 0, nmb1, ks, ke+1, js, je+1, is, ie+1,
+        KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+          e1(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JX, k, j, i);
+          e2(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JY, k, j, i);
+          e3(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, k, j, i);
+        });
+      }
     }
   }
 

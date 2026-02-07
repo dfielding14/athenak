@@ -35,6 +35,9 @@ enum class ParticlesPusher {
 // constants that enumerate ParticleTypes
 enum class ParticleType { cosmic_ray, star };
 
+// constants for PR2 current representation used by coupled E-field source updates
+enum class CoupledCurrentRepresentation { cell_centered, edge_staggered };
+
 //----------------------------------------------------------------------------------------
 //! \struct ParticlesTaskIDs
 //  \brief container to hold TaskIDs of all particles tasks
@@ -56,6 +59,7 @@ struct ParticlesTaskIDs {
   TaskID recv_mom;
   TaskID crecv_mom;
   TaskID csend_mom;
+  TaskID convert_j_edge;
 };
 
 namespace particles {
@@ -92,6 +96,8 @@ class Particles {
   Real deposit_qscale = 1.0;        // scaling of particle macro-charge
   bool couple_moments_to_mhd = false;  // PR2 opt-in current coupling to MHD
   Real couple_j_to_efield_coeff = 1.0; // PR2 current-to-E coupling coefficient
+  CoupledCurrentRepresentation couple_j_to_efield_representation =
+      CoupledCurrentRepresentation::cell_centered;
   bool couple_moments_momentum_to_mhd = false;  // PR2 opt-in momentum feedback
   bool couple_moments_energy_to_mhd = false;    // PR2 opt-in energy feedback
   Real couple_moments_momentum_coeff = 1.0;     // momentum feedback coefficient
@@ -106,6 +112,7 @@ class Particles {
   static constexpr int IMOM_JZ  = 3;
   DvceArray5D<Real> moments;
   DvceArray5D<Real> coarse_moments;
+  DvceArray4D<Real> j_edge_x1e, j_edge_x2e, j_edge_x3e;
   DvceArray1D<Real> x1_old, x2_old, x3_old;
 
   // Constants for rk4_gravity pusher
@@ -144,6 +151,7 @@ class Particles {
   TaskStatus RecvMoments(Driver *pdriver, int stage);
   TaskStatus ClearRecvMoments(Driver *pdriver, int stage);
   TaskStatus ClearSendMoments(Driver *pdriver, int stage);
+  TaskStatus ConvertCoupledCurrentRepresentation(Driver *pdriver, int stage);
 
   // Cosmic ray specific methods
   void InitializeCosmicRays(ParameterInput *pin);

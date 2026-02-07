@@ -74,6 +74,13 @@ TaskStatus Particles::ZeroMoments(Driver *pdriver, int stage) {
   if (coarse_moments.size() > 0) {
     Kokkos::deep_copy(coarse_moments, static_cast<Real>(0.0));
   }
+  if (couple_moments_to_mhd &&
+      couple_j_to_efield_representation == CoupledCurrentRepresentation::edge_staggered &&
+      (j_edge_x1e.size() > 0)) {
+    Kokkos::deep_copy(j_edge_x1e, static_cast<Real>(0.0));
+    Kokkos::deep_copy(j_edge_x2e, static_cast<Real>(0.0));
+    Kokkos::deep_copy(j_edge_x3e, static_cast<Real>(0.0));
+  }
   return TaskStatus::complete;
 }
 
@@ -223,6 +230,103 @@ TaskStatus Particles::ClearSendMoments(Driver *pdriver, int stage) {
     return TaskStatus::complete;
   }
   return pbval_mom->ClearSend();
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Particles::ConvertCoupledCurrentRepresentation()
+//! \brief Convert deposited cell-centered J to edge-centered J for coupled E updates.
+
+TaskStatus Particles::ConvertCoupledCurrentRepresentation(Driver *pdriver, int stage) {
+  (void)pdriver;
+  if (!deposit_moments) return TaskStatus::complete;
+  if (!couple_moments_to_mhd) return TaskStatus::complete;
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+    return TaskStatus::complete;
+  }
+  if (couple_j_to_efield_representation != CoupledCurrentRepresentation::edge_staggered) {
+    return TaskStatus::complete;
+  }
+
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is;
+  int ie = indcs.ie;
+  int js = indcs.js;
+  int je = indcs.je;
+  int ks = indcs.ks;
+  int ke = indcs.ke;
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  auto mom = moments;
+  auto jx_e = j_edge_x1e;
+  auto jy_e = j_edge_x2e;
+  auto jz_e = j_edge_x3e;
+
+  if (pmy_pack->pmesh->one_d) {
+    par_for("convert_jy_cc_to_edge_1d", DevExeSpace(), 0, nmb1, is, ie+1,
+    KOKKOS_LAMBDA(const int m, const int i) {
+      Real jedge = mom(m, IMOM_JY, ks, js, i);
+      jy_e(m,ks  ,js,i) = jedge;
+      jy_e(m,ke+1,js,i) = jedge;
+    });
+
+    par_for("convert_jz_cc_to_edge_1d", DevExeSpace(), 0, nmb1, is, ie+1,
+    KOKKOS_LAMBDA(const int m, const int i) {
+      Real jedge = mom(m, IMOM_JZ, ks, js, i);
+      jz_e(m,ks,js  ,i) = jedge;
+      jz_e(m,ks,je+1,i) = jedge;
+    });
+    return TaskStatus::complete;
+  }
+
+  if (pmy_pack->pmesh->two_d) {
+    par_for("convert_jx_cc_to_edge_2d", DevExeSpace(), 0, nmb1, js, je+1, is, ie,
+    KOKKOS_LAMBDA(const int m, const int j, const int i) {
+      Real jedge = 0.5*(mom(m, IMOM_JX, ks, j-1, i) + mom(m, IMOM_JX, ks, j, i));
+      jx_e(m,ks  ,j,i) = jedge;
+      jx_e(m,ke+1,j,i) = jedge;
+    });
+
+    par_for("convert_jy_cc_to_edge_2d", DevExeSpace(), 0, nmb1, js, je, is, ie+1,
+    KOKKOS_LAMBDA(const int m, const int j, const int i) {
+      Real jedge = 0.5*(mom(m, IMOM_JY, ks, j, i-1) + mom(m, IMOM_JY, ks, j, i));
+      jy_e(m,ks  ,j,i) = jedge;
+      jy_e(m,ke+1,j,i) = jedge;
+    });
+
+    par_for("convert_jz_cc_to_edge_2d", DevExeSpace(), 0, nmb1, js, je+1, is, ie+1,
+    KOKKOS_LAMBDA(const int m, const int j, const int i) {
+      jz_e(m,ks,j,i) = 0.25*(mom(m, IMOM_JZ, ks, j-1, i-1) +
+                             mom(m, IMOM_JZ, ks, j-1, i  ) +
+                             mom(m, IMOM_JZ, ks, j,   i-1) +
+                             mom(m, IMOM_JZ, ks, j,   i  ));
+    });
+    return TaskStatus::complete;
+  }
+
+  par_for("convert_jx_cc_to_edge_3d", DevExeSpace(), 0, nmb1, ks, ke+1, js, je+1, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    jx_e(m,k,j,i) = 0.25*(mom(m, IMOM_JX, k-1, j-1, i) +
+                          mom(m, IMOM_JX, k-1, j,   i) +
+                          mom(m, IMOM_JX, k,   j-1, i) +
+                          mom(m, IMOM_JX, k,   j,   i));
+  });
+
+  par_for("convert_jy_cc_to_edge_3d", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie+1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    jy_e(m,k,j,i) = 0.25*(mom(m, IMOM_JY, k-1, j, i-1) +
+                          mom(m, IMOM_JY, k-1, j, i  ) +
+                          mom(m, IMOM_JY, k,   j, i-1) +
+                          mom(m, IMOM_JY, k,   j, i  ));
+  });
+
+  par_for("convert_jz_cc_to_edge_3d", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie+1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    jz_e(m,k,j,i) = 0.25*(mom(m, IMOM_JZ, k, j-1, i-1) +
+                          mom(m, IMOM_JZ, k, j-1, i  ) +
+                          mom(m, IMOM_JZ, k, j,   i-1) +
+                          mom(m, IMOM_JZ, k, j,   i  ));
+  });
+
+  return TaskStatus::complete;
 }
 
 } // namespace particles
