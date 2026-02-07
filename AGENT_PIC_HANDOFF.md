@@ -450,7 +450,7 @@ Recommended validation commands:
 
 Parallel worktrees/branches were retired. PR1 work now proceeds serially on:
 
-- branch: `codex/dev/PIC`
+- branch: `dev/PIC`
 - path: `/Users/dbf75/Work/Research/AthenaK/athenak-DF`
 
 Current merged state:
@@ -459,6 +459,9 @@ Current merged state:
 2. `WS-A` merged (CC synchronize communication core).
 3. `WS-B` merged (particle scaffolding and runtime guards).
 4. `WS-C` merged (deposition kernel/task DAG wiring).
+5. `WS-D` merged (deposited-moment output observability).
+6. `WS-E` merged (deterministic PIC regression tests and inputs).
+7. `WS-F` merged (PR1 closeout validation hardening).
 
 ### 9.1 Step C (WS-C): Completed
 
@@ -670,10 +673,266 @@ Run after Step F edits (or during Step F revalidation):
 6. Python style gate (changed-file scope):
    `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF && bash tst/scripts/style/check_python_style_changed.sh`
 
-### 9.9 Next Serial Step After F
+### 9.9 Step G (WS-G, PR2): Execute Next
 
-1. If Step F passes cleanly, start PR2 planning and implement Phase-1 coupling
-   work from Section 5 in a new scoped step sequence.
+Goal:
+- implement Phase-1 coupling by feeding deposited particle current into the MHD
+  edge-centered electric-field source path, while preserving PR1 defaults and
+  tests.
+
+Files for Step G:
+
+1. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp`
+2. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp`
+3. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp`
+4. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp`
+5. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mhd/mhd_tasks.cpp`
+6. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_mhd_current_coupling.athinput` (new)
+7. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py` (new)
+8. `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py` (new)
+
+Step G implementation checklist:
+
+1. Add explicit runtime knob `particles/couple_moments_to_mhd` (default `false`)
+   so PR1 behavior remains unchanged unless coupling is requested.
+2. Guard coupling mode strictly:
+   - require `deposit_moments=true`
+   - require `<mhd>` active
+   - fail fast for unsupported composed paths in PR2 scope
+     (notably radiation+MHD and ion-neutral paths).
+3. Add deterministic CR velocity initialization knobs for tests:
+   `particles/cr_vx0`, `particles/cr_vy0`, `particles/cr_vz0`
+   (defaults `0.0`) so PR1 observability tests remain unchanged by default.
+4. Keep particle push/migration semantics unchanged in
+   `before_timeintegrator`; do not alter existing communication clear ordering.
+5. Move moment deposition scheduling toward stage parity when coupling is
+   enabled:
+   - insert moment workflow tasks into `stagen` immediately before
+     `MHD::EFieldSrc` using existing `TaskList::InsertTask` pattern
+   - preserve deterministic execution by running deposited-moment wrappers on
+     stage 1 only in PR2.
+6. In `MHD::EFieldSrc`, add particle-current contribution from
+   `ppart->moments(IMOM_JX/IMOM_JY/IMOM_JZ)` to `efld`, following existing
+   edge-field additive conventions (same style as Ohmic addition).
+7. Preserve existing shearing-box source behavior in `EFieldSrc`; particle
+   coupling must be additive and not replace existing terms.
+8. Keep PR2 split explicit:
+   - include only E-field coupling in Step G
+   - do not add fluid momentum/energy feedback source updates yet.
+9. Add PR2 coupling tests/inputs:
+   - one deterministic conservation/coupling-effect test covering serial + MPI
+   - one decomposition-invariance test with MPI coverage.
+10. Extend negative checks for coupling guard paths:
+    - coupling requested with `deposit_moments=false` fails clearly
+    - coupling requested in unsupported module composition fails clearly.
+11. Keep Step G scope locked to PR2 current-to-E coupling and tests only.
+    Do not include PR3 AMR/restart/non-periodic expansion work.
+
+### 9.10 Step G Validation Commands
+
+Run after Step G edits:
+
+1. MPI-enabled PR2 coupling test:
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF/tst && python run_tests.py particles/pic_mhd_current_coupling --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+2. MPI-enabled PR2 decomposition invariance test:
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF/tst && python run_tests.py particles/pic_mhd_coupling_decomp --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+3. Re-run existing PR1 particle package with MPI enabled:
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF/tst && python run_tests.py particles --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+4. Non-MPI sanity path for PR2 coupling test:
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF/tst && python run_tests.py particles/pic_mhd_current_coupling`
+5. C++ style gate (changed-file scope):
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF && bash tst/scripts/style/check_athena_cpp_style_changed.sh`
+6. Python style gate (changed-file scope):
+   `cd /Users/dbf75/Work/Research/AthenaK/athenak-DF && bash tst/scripts/style/check_python_style_changed.sh`
+
+### 9.11 Next Serial Step After G
+
+1. If Step G passes cleanly, proceed to PR2 Step H for momentum/energy feedback
+   split-point implementation and coupled-fluid regression extensions.
+
+### 9.12 WS-G Post-Review Decision Record (2026-02-06)
+
+This section records unresolved WS-G technical debt and the selected direction
+for follow-up work. It is intentionally explicit so later agents do not need to
+reconstruct context.
+
+Open findings with exact references:
+
+1. Coupling coefficient/normalization is currently implicit unit coupling.
+- AthenaK currently applies raw deposited current directly into `efld`:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mhd/mhd_tasks.cpp:374`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mhd/mhd_tasks.cpp:415`.
+- No explicit WS-G current-to-E coefficient exists in particles runtime knobs:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:90`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:96`,
+  and
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:168`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:176`.
+- Entity reference path applies explicit coefficient/normalization in current
+  Ampere coupling:
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:563`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:612`,
+  and
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/ampere_sr.hpp:132`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/ampere_sr.hpp:203`.
+
+2. PR2 ordering is a transitional divergence from Entity pipeline ordering.
+- AthenaK keeps particle migration in `before_timeintegrator`:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:33`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:58`.
+- Coupled deposition wrappers are additionally inserted in `stagen` before
+  `MHD::EFieldSrc`:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:82`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:97`,
+  with stage gating in
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:17`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:24`.
+- Entity ordering requirement keeps particle comm after deposit/filter:
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:114`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:133`,
+  and guidance:
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/AGENTS.md:210`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/AGENTS.md:213`.
+
+3. `InsertTask` chain checks are not per-insertion.
+- WS-G chain validates first insertion and final state, but not each inserted
+  task:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:82`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:103`.
+- `TaskList::InsertTask` explicitly returns `TaskID(0)` on failure:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/tasklist/task_list.hpp:199`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/tasklist/task_list.hpp:220`.
+
+4. WS-G guard tests do not cover all new fatal branches.
+- Guard branches exist for `radiation`, `ion-neutral/hydro`, and `adm/z4c`:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:235`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:255`.
+- Existing WS-G negative tests only exercise `deposit_moments=false` and missing
+  `<mhd>`:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:243`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:260`.
+
+Selected decisions:
+
+1. Add an explicit current-to-E coupling coefficient now (default `1.0`).
+- Rationale: closest to Entity’s explicit coefficient path, while preserving
+  existing WS-G behavior with default settings.
+
+2. Keep WS-G transitional ordering in PR2, and defer full ordering parity.
+- Rationale: aligns with current PR2 scope lock (current-to-E only) and avoids
+  broad particle-communication pipeline rework in this patch set.
+
+3. Require expanded negative and determinism tests in the next WS-G follow-up.
+- Rationale: keeps runtime guards trustworthy and makes ordering/scaling changes
+  safe to iterate.
+
+### 9.13 WS-G Remediation Plan (Detailed, Deferred Patch Queue)
+
+Execution order is mandatory; each step is scoped to one logical change group.
+
+1. Step G.1: explicit coupling coefficient in runtime/config plumbing.
+- Files:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp`,
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp`,
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mhd/mhd_tasks.cpp`.
+- Add `particles/couple_j_to_efield_coeff` (or equivalent explicit name),
+  default `1.0`.
+- Apply multiplicatively in `MHD::EFieldSrc` only when
+  `couple_moments_to_mhd=true`.
+- Preserve additive shearing-box behavior and all PR1 defaults.
+- Validation:
+  confirm existing WS-G tests still pass unchanged with coefficient `1.0`.
+
+2. Step G.2: harden `InsertTask` chain failure handling.
+- File:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp`.
+- After every `InsertTask` in the WS-G inserted chain, fail immediately with a
+  precise task name in the error message if returned ID is `TaskID(0)`.
+- Validation:
+  build-only sanity plus WS-G test run to ensure no DAG regressions.
+
+3. Step G.3: complete WS-G negative guard coverage.
+- File:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py`.
+- Add explicit negative cases for:
+  `radiation+MHD`, `adm/z4c`, and `ion-neutral/hydro` unsupported paths.
+- Use deterministic `time/nlim=0` guard probes and assert specific fatal
+  message substrings from each branch.
+- Validation:
+  WS-G coupling test must report all expected negative checks and exact count.
+
+4. Step G.4: add determinism/linearity tests that should have been in WS-G.
+- New files:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_linearity.py`
+  (or equivalent), plus optional dedicated input if needed.
+- Minimum checks:
+  coupled=true with `cr_v*=0` yields no measurable B-field delta vs uncoupled;
+  doubling `cr_v*` doubles measured integrated `J*` and increases field response
+  consistently; optional `deposit_qscale` sweep enforces same linear trend.
+- Validation:
+  run serial and MPI variants with strict scalar tolerances.
+
+5. Step G.5: integrator coverage sanity for coupled mode.
+- Reuse
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_mhd_current_coupling.athinput`
+  with runtime overrides for `time/integrator={rk1,rk2,rk3}`.
+- Validate no crash, deterministic `Q/J` invariants, and non-zero coupled-field
+  delta for non-zero `cr_v*`.
+- This is intended as regression hardening, not a physics-accuracy claim.
+
+6. Step H candidate (deferred): ordering parity with Entity.
+- Move particle migration communication so coupled pipeline respects:
+  push -> deposit -> synchronize/filter -> field update -> particle comm.
+- This is explicitly deferred until PR2 Step H because it touches scheduling
+  beyond WS-G current-to-E coupling.
+- Precondition: G.1 through G.5 merged and stable.
+
+Definition of done for the remediation queue:
+
+1. All WS-G and PR1 particle tests pass in serial and MPI.
+2. New negative tests cover every WS-G fatal-guard branch.
+3. Coupling coefficient defaults preserve current behavior.
+4. Documentation and error messages explicitly describe remaining deferred
+   ordering parity work.
+
+### 9.14 WS-G Partial-Address Notes (Post-Patch)
+
+This section is a concise state snapshot after implementing the WS-G follow-up
+items from Section 9.13.
+
+1. Fully addressed in this patch set:
+- explicit `particles/couple_j_to_efield_coeff` runtime knob (default `1.0`)
+  was added and applied multiplicatively in `MHD::EFieldSrc`
+- stage insertion chain now checks every `InsertTask` return value with
+  task-specific fatal messages
+- WS-G tests now include explicit negative checks for radiation+MHD and
+  numerical-relativity compositions
+- WS-G tests now include zero-current invariance, linearity, and integrator
+  coverage checks.
+
+2. Intentionally partial/deferred:
+- Entity staggered-current representation/conversion parity is still not fully
+  implemented in AthenaK WS-G; PR2 currently uses cell-centered deposited `J`
+  mapped additively into edge `E` with an explicit coefficient.
+- Full Entity ordering parity (deposit/filter before particle communication) is
+  still deferred to Step H as documented in Section 9.13 item 6.
+
+3. Remaining deferred items are only the two major parity items above
+   (staggered representation/conversion and full ordering parity).
 
 ## 10. AGENTS Review Index
 

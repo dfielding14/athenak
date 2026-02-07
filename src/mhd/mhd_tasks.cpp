@@ -26,6 +26,7 @@
 #include "shearing_box/shearing_box.hpp"
 #include "mhd/mhd.hpp"
 #include "dyn_grmhd/dyn_grmhd.hpp"
+#include "particles/particles.hpp"
 
 namespace mhd {
 //----------------------------------------------------------------------------------------
@@ -369,6 +370,53 @@ TaskStatus MHD::EFieldSrc(Driver *pdrive, int stage) {
   if ((psrc->shearing_box) && (pmy_pack->pmesh->two_d)) {
     psrc->SBoxEField(b0, efld);
   }
+
+  // PR2: add deposited particle current to edge-centered electric fields.
+  auto *ppart = pmy_pack->ppart;
+  if ((ppart != nullptr) && ppart->couple_moments_to_mhd) {
+    auto &indcs = pmy_pack->pmesh->mb_indcs;
+    int is = indcs.is, ie = indcs.ie;
+    int js = indcs.js, je = indcs.je;
+    int ks = indcs.ks, ke = indcs.ke;
+    int nmb1 = pmy_pack->nmb_thispack - 1;
+    auto mom = ppart->moments;
+    const Real jcoef = ppart->couple_j_to_efield_coeff;
+
+    if (pmy_pack->pmesh->one_d) {
+      auto e2 = efld.x2e;
+      auto e3 = efld.x3e;
+      par_for("prtcl_efldsrc_1d", DevExeSpace(), 0, nmb1, is, ie+1,
+      KOKKOS_LAMBDA(const int m, const int i) {
+        e2(m,ks  ,js  ,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, js, i);
+        e2(m,ke+1,js  ,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, js, i);
+        e3(m,ks  ,js  ,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, ks, js, i);
+        e3(m,ks  ,je+1,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, ks, js, i);
+      });
+    } else if (pmy_pack->pmesh->two_d) {
+      auto e1 = efld.x1e;
+      auto e2 = efld.x2e;
+      auto e3 = efld.x3e;
+      par_for("prtcl_efldsrc_2d", DevExeSpace(), 0, nmb1, js, je+1, is, ie+1,
+      KOKKOS_LAMBDA(const int m, const int j, const int i) {
+        e1(m,ks  ,j,i) += jcoef*mom(m, particles::Particles::IMOM_JX, ks, j, i);
+        e1(m,ke+1,j,i) += jcoef*mom(m, particles::Particles::IMOM_JX, ks, j, i);
+        e2(m,ks  ,j,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, j, i);
+        e2(m,ke+1,j,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, j, i);
+        e3(m,ks  ,j,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, ks, j, i);
+      });
+    } else {
+      auto e1 = efld.x1e;
+      auto e2 = efld.x2e;
+      auto e3 = efld.x3e;
+      par_for("prtcl_efldsrc_3d", DevExeSpace(), 0, nmb1, ks, ke+1, js, je+1, is, ie+1,
+      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+        e1(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JX, k, j, i);
+        e2(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JY, k, j, i);
+        e3(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, k, j, i);
+      });
+    }
+  }
+
   return TaskStatus::complete;
 }
 

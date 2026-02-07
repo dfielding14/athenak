@@ -66,7 +66,7 @@ namespace particles {
 class Particles {
   friend class ParticlesBoundaryValues;
 
-public:
+ public:
   Particles(MeshBlockPack *ppack, ParameterInput *pin);
   ~Particles();
 
@@ -90,6 +90,11 @@ public:
   bool deposit_moments = false;     // enable particle moment deposition
   int deposit_order = 1;            // deposition shape order
   Real deposit_qscale = 1.0;        // scaling of particle macro-charge
+  bool couple_moments_to_mhd = false;  // PR2 opt-in current coupling to MHD
+  Real couple_j_to_efield_coeff = 1.0; // PR2 current-to-E coupling coefficient
+  Real cr_vx0 = 0.0;                // deterministic CR vx initialization
+  Real cr_vy0 = 0.0;                // deterministic CR vy initialization
+  Real cr_vz0 = 0.0;                // deterministic CR vz initialization
   static constexpr int NMOM = 4;
   static constexpr int IMOM_RHO = 0;
   static constexpr int IMOM_JX  = 1;
@@ -151,7 +156,7 @@ public:
   void InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By,
                       Real &Bz) const;
 
-private:
+ private:
   MeshBlockPack *pmy_pack; // ptr to MeshBlockPack containing this Particles
 };
 

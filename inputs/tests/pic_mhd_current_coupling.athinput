@@ -1,10 +1,10 @@
-# AthenaXXX input file for PIC deposited-moment conservation tests
+# AthenaXXX input file for PIC current-to-MHD coupling tests
 
 <comment>
-problem   = PIC deposited-moment conservation
+problem   = PIC current coupling into MHD electric field
 
 <job>
-basename  = pic_deposit
+basename  = pic_mhd_coupling
 
 <mesh>
 nghost    = 2          # Number of ghost cells
@@ -39,25 +39,26 @@ nlim       = 1         # cycle limit
 tlim       = 1.0       # time limit
 ndiag      = 1         # cycles between diagnostic output
 
-<hydro>
+<mhd>
 eos         = ideal
 reconstruct = plm
 rsolver     = llf
 gamma       = 1.66666666667
 
 <particles>
-particle_type      = cosmic_ray
-ppc                = 1.0
-pusher             = drift
-nspecies           = 1
-cr_distribution    = center
-deposit_moments    = true
-deposit_order      = 1
-deposit_qscale     = 1.0
-couple_moments_to_mhd = false
-cr_vx0             = 0.0
-cr_vy0             = 0.0
-cr_vz0             = 0.0
+particle_type           = cosmic_ray
+ppc                     = 1.0
+pusher                  = drift
+nspecies                = 1
+cr_distribution         = center
+deposit_moments         = true
+deposit_order           = 1
+deposit_qscale          = 1.0
+couple_moments_to_mhd   = false
+couple_j_to_efield_coeff = 1.0
+cr_vx0                  = 0.0
+cr_vy0                  = 0.0
+cr_vz0                  = 0.0
 
 <species0>
 mass   = 1.0
@@ -101,6 +102,13 @@ dcycle      = 1
 ghost_zones = false
 
 <output5>
+file_type   = bin
+variable    = mhd_bcc
+id          = mhd_bcc
+dcycle      = 1
+ghost_zones = false
+
+<output6>
 file_type   = bin
 variable    = prtcl_d
 id          = prtcl_d

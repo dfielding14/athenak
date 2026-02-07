@@ -10,6 +10,7 @@
 #include <string>
 #include <algorithm>
 #include <fstream>
+#include <vector>
 #include <Kokkos_Random.hpp>
 #include "athena.hpp"
 #include "globals.hpp"
@@ -40,20 +41,15 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   {
     std::string ptype = pin->GetString("particles","particle_type");
     if (ptype.compare("cosmic_ray") == 0) {
-
       particle_type = ParticleType::cosmic_ray;
-
       // read number of particles per cell, and calculate number of particles this pack
       Real ppc = pin->GetOrAddReal("particles","ppc",1.0);
-
       // compute number of particles as real number, since ppc can be < 1
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       int ncells = indcs.nx1*indcs.nx2*indcs.nx3;
       Real r_npart = ppc*static_cast<Real>((pmy_pack->nmb_thispack)*ncells);
       nprtcl_thispack = static_cast<int>(r_npart); // then cast to integer
-						   
     } else if (ptype.compare("star") == 0) {
-
       particle_type = ParticleType::star;
       nprtcl_thispack = 0; // initialize to zero
 
@@ -78,26 +74,26 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
       std::array<Real, 8> p;
       while (infile >> p[0] >> p[1] >> p[2] >> p[3] >>
-		       p[4] >> p[5] >> p[6] >> p[7]) {
+             p[4] >> p[5] >> p[6] >> p[7]) {
         for (int m=0; m<nmb; ++m) {
           // Loop over particles to see which are in this meshblock
           if (p[0] > size.h_view(m).x1min && p[0] <= size.h_view(m).x1max &&
               p[1] > size.h_view(m).x2min && p[1] <= size.h_view(m).x2max &&
               p[2] > size.h_view(m).x3min && p[2] <= size.h_view(m).x3max) {
             // Add particle to the list if it is within the mesh block bounds
-            std::array<Real, 9> new_particle = {p[0], p[1], p[2], 
-		                                p[3], p[4], p[5], 
-						p[6], p[7], static_cast<Real>(m)};
+            std::array<Real, 9> new_particle = {p[0], p[1], p[2],
+                                                p[3], p[4], p[5],
+                                                p[6], p[7], static_cast<Real>(m)};
             particle_list.push_back(new_particle);
           }
         }
       }
       infile.close();
-      nprtcl_thispack = particle_list.size(); 
+      nprtcl_thispack = particle_list.size();
 
       // Print number of particles loaded
-      std::cout << "Loaded " << nprtcl_thispack 
-	        << " star particles from file " << particle_file << std::endl;
+      std::cout << "Loaded " << nprtcl_thispack
+                << " star particles from file " << particle_file << std::endl;
     }
   }
 
@@ -137,7 +133,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   }
 
   // stars must be 3D
-  if (particle_type == ParticleType::star and not pmy_pack->pmesh->three_d) {
+  if (particle_type == ParticleType::star && !pmy_pack->pmesh->three_d) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
               << "Star particles only work in 3D" <<std::endl;
     std::exit(EXIT_FAILURE);
@@ -173,6 +169,13 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   deposit_moments = pin->GetOrAddBoolean("particles", "deposit_moments", false);
   deposit_order = pin->GetOrAddInteger("particles", "deposit_order", 1);
   deposit_qscale = pin->GetOrAddReal("particles", "deposit_qscale", 1.0);
+  couple_moments_to_mhd = pin->GetOrAddBoolean("particles",
+                                               "couple_moments_to_mhd", false);
+  couple_j_to_efield_coeff = pin->GetOrAddReal("particles",
+                                                "couple_j_to_efield_coeff", 1.0);
+  cr_vx0 = pin->GetOrAddReal("particles", "cr_vx0", 0.0);
+  cr_vy0 = pin->GetOrAddReal("particles", "cr_vy0", 0.0);
+  cr_vz0 = pin->GetOrAddReal("particles", "cr_vz0", 0.0);
 
   // PR1 runtime scope guard for moment deposition
   if (deposit_moments) {
@@ -214,7 +217,46 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
   }
-  
+
+  // PR2 runtime scope guard for current coupling
+  if (couple_moments_to_mhd) {
+    if (!deposit_moments) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/couple_moments_to_mhd=true requires "
+                << "<particles>/deposit_moments=true" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (!(pin->DoesBlockExist("mhd"))) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/couple_moments_to_mhd=true requires an active "
+                << "<mhd> block in PR2" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (pin->DoesBlockExist("radiation")) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/couple_moments_to_mhd=true does not support "
+                << "radiation+MHD compositions in PR2" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (pin->DoesBlockExist("ion-neutral") || pin->DoesBlockExist("hydro")) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/couple_moments_to_mhd=true does not support "
+                << "ion-neutral/two-fluid compositions in PR2" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (pin->DoesBlockExist("adm") || pin->DoesBlockExist("z4c")) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/couple_moments_to_mhd=true does not support "
+                << "numerical relativity task paths in PR2" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
   Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
   Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
 
@@ -262,24 +304,24 @@ Particles::~Particles() {
 void Particles::InitializeCosmicRays(ParameterInput *pin) {
   // Read number of species
   nspecies = pin->GetOrAddInteger("particles","nspecies",1);
-  
+
   // Allocate species arrays
   Kokkos::realloc(species_mass, nspecies);
   Kokkos::realloc(species_charge, nspecies);
-  
+
   // Read species properties
   auto h_mass = Kokkos::create_mirror_view(species_mass);
   auto h_charge = Kokkos::create_mirror_view(species_charge);
-  
+
   for (int s=0; s<nspecies; ++s) {
     std::string block = "species" + std::to_string(s);
     h_mass(s) = pin->GetOrAddReal(block,"mass",1.0);
     h_charge(s) = pin->GetOrAddReal(block,"charge",1.0);
   }
-  
+
   Kokkos::deep_copy(species_mass, h_mass);
   Kokkos::deep_copy(species_charge, h_charge);
-  
+
   // Initialize particle positions and velocities
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   auto &size = pmy_pack->pmb->mb_size;
@@ -299,14 +341,18 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
 
   // Random number pool for optional random placement
   Kokkos::Random_XorShift64_Pool<DevExeSpace> rand_pool64(pmy_pack->gids);
-  
+
   // Create local copies to avoid GPU lambda capture warnings
   int nspecies_local = nspecies;
   auto species_charge_local = species_charge;
   auto species_mass_local = species_mass;
+  const Real cr_vx0_local = cr_vx0;
+  const Real cr_vy0_local = cr_vy0;
+  const Real cr_vz0_local = cr_vz0;
   // Make sure geometry is available on device
   size.template sync<DevExeSpace>();
-  auto size_view = size; // capture handle by value; we'll use size_view.d_view(...) on device
+  auto size_view = size;
+  // Capture handle by value for use as size_view.d_view(...) on device.
 
   // Simple uniform distribution for now
   par_for("init_cr", DevExeSpace(), 0, nprtcl_thispack-1,
@@ -343,10 +389,10 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
     pr(IPY,p) = x2min + ry*(x2max - x2min);
     pr(IPZ,p) = (nx3_local > 1) ? (x3min + rz*(x3max - x3min)) : 0.0;
 
-    // Initialize velocity to zero
-    pr(IPVX,p) = 0.0;
-    pr(IPVY,p) = 0.0;
-    pr(IPVZ,p) = 0.0;
+    // Initialize velocity with deterministic CR controls
+    pr(IPVX,p) = cr_vx0_local;
+    pr(IPVY,p) = cr_vy0_local;
+    pr(IPVZ,p) = cr_vz0_local;
 
     // Set mass/charge ratio
     int species = pi(PSP,p);
@@ -367,7 +413,7 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
       pr(IPDB,p) = 0.0;
     }
   });
-  
+
   // Set timestep
   auto &dx = size.h_view(0);
   dtnew = std::min(dx.dx1, dx.dx2);

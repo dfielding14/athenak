@@ -1,0 +1,83 @@
+# AthenaXXX input file for WS-G numerical relativity guard validation
+
+<comment>
+problem   = PIC current coupling numerical-relativity composition guard
+
+<job>
+basename  = pic_mhd_guard_nr
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = 0.0
+x1max     = 8.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 4
+x2min     = 0.0
+x2max     = 4.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 4
+x3min     = 0.0
+x3max     = 4.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 4
+nx2       = 4
+nx3       = 4
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 0
+tlim       = 1.0
+ndiag      = 1
+
+<coord>
+general_rel = true
+minkowski   = true
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+dyn_eos     = ideal
+dyn_error   = reset_floor
+
+<adm>
+# empty block is sufficient to activate ADM path
+
+<particles>
+particle_type           = cosmic_ray
+ppc                     = 1.0
+pusher                  = drift
+nspecies                = 1
+cr_distribution         = center
+deposit_moments         = true
+deposit_order           = 1
+deposit_qscale          = 1.0
+couple_moments_to_mhd   = true
+couple_j_to_efield_coeff = 1.0
+cr_vx0                  = 0.5
+cr_vy0                  = -0.25
+cr_vz0                  = 0.125
+
+<species0>
+mass   = 1.0
+charge = 1.0
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp       = 1.0e-6
+vflow     = 0.0
+along_x1  = true
+along_x2  = false
+along_x3  = false

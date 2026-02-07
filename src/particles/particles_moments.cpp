@@ -12,14 +12,28 @@
 #include "particles.hpp"
 
 namespace particles {
+
+namespace {
+// PR2 coupling inserts wrappers into stagen; keep PR1 default in before_timeintegrator.
+KOKKOS_INLINE_FUNCTION
+bool RunMomentWrappersAtStage(const bool couple_to_mhd, const int stage) {
+  if (couple_to_mhd) {
+    return (stage == 1);
+  }
+  return (stage == 0);
+}
+}  // namespace
+
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus Particles::SaveOldPositions()
 //! \brief Store particle positions before pushing.
 
 TaskStatus Particles::SaveOldPositions(Driver *pdriver, int stage) {
   (void)pdriver;
-  (void)stage;
   if (!deposit_moments) return TaskStatus::complete;
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+    return TaskStatus::complete;
+  }
 
   int npart = nprtcl_thispack;
   if (npart <= 0) return TaskStatus::complete;
@@ -51,8 +65,10 @@ TaskStatus Particles::SaveOldPositions(Driver *pdriver, int stage) {
 
 TaskStatus Particles::ZeroMoments(Driver *pdriver, int stage) {
   (void)pdriver;
-  (void)stage;
   if (!deposit_moments) return TaskStatus::complete;
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+    return TaskStatus::complete;
+  }
 
   Kokkos::deep_copy(moments, static_cast<Real>(0.0));
   if (coarse_moments.size() > 0) {
@@ -67,8 +83,10 @@ TaskStatus Particles::ZeroMoments(Driver *pdriver, int stage) {
 
 TaskStatus Particles::InitRecvMoments(Driver *pdriver, int stage) {
   (void)pdriver;
-  (void)stage;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+    return TaskStatus::complete;
+  }
   return pbval_mom->InitRecv(NMOM);
 }
 
@@ -78,8 +96,10 @@ TaskStatus Particles::InitRecvMoments(Driver *pdriver, int stage) {
 
 TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
   (void)pdriver;
-  (void)stage;
   if (!deposit_moments) return TaskStatus::complete;
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+    return TaskStatus::complete;
+  }
 
   int npart = nprtcl_thispack;
   if (npart <= 0) return TaskStatus::complete;
@@ -159,8 +179,10 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
 
 TaskStatus Particles::SendMoments(Driver *pdriver, int stage) {
   (void)pdriver;
-  (void)stage;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+    return TaskStatus::complete;
+  }
   return pbval_mom->PackAndSendCC(moments, coarse_moments);
 }
 
@@ -170,8 +192,10 @@ TaskStatus Particles::SendMoments(Driver *pdriver, int stage) {
 
 TaskStatus Particles::RecvMoments(Driver *pdriver, int stage) {
   (void)pdriver;
-  (void)stage;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+    return TaskStatus::complete;
+  }
   return pbval_mom->RecvAndUnpackCC(moments, coarse_moments, CCRecvOp::accumulate);
 }
 
@@ -181,8 +205,10 @@ TaskStatus Particles::RecvMoments(Driver *pdriver, int stage) {
 
 TaskStatus Particles::ClearRecvMoments(Driver *pdriver, int stage) {
   (void)pdriver;
-  (void)stage;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+    return TaskStatus::complete;
+  }
   return pbval_mom->ClearRecv();
 }
 
@@ -192,8 +218,10 @@ TaskStatus Particles::ClearRecvMoments(Driver *pdriver, int stage) {
 
 TaskStatus Particles::ClearSendMoments(Driver *pdriver, int stage) {
   (void)pdriver;
-  (void)stage;
   if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
+  if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
+    return TaskStatus::complete;
+  }
   return pbval_mom->ClearSend();
 }
 

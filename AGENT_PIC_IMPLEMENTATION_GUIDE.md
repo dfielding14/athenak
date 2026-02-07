@@ -172,6 +172,54 @@ For every non-trivial function:
   - produce a concise closeout summary with commands, outcomes, and residual
     risks carried to PR2/PR3
 
+### WS-G (PR2 current-to-MHD coupling)
+- Primary AthenaK templates:
+  - `src/mhd/mhd_tasks.cpp` (`MHD::EFieldSrc` integration point)
+  - `src/diffusion/resistivity.cpp` (edge-centered additive E-field loops)
+  - `src/srcterms/turb_driver.cpp` (`TaskList::InsertTask` usage pattern)
+  - `src/particles/particles_tasks.cpp` (task-chain wiring conventions)
+  - `src/particles/particles_moments.cpp` (moment wrappers + guards)
+- Required WS-G checklist:
+  - keep coupling runtime-opt-in only with
+    `particles/couple_moments_to_mhd=false` default behavior preserved
+  - require `deposit_moments=true` for coupling mode and fail early otherwise
+  - keep PR1 defaults unchanged for non-coupled runs and existing WS-E/WS-F tests
+  - move moment scheduling toward stage-level parity by inserting moment tasks
+    in `stagen` immediately before `MHD::EFieldSrc`
+  - preserve deterministic PR2 behavior by executing stage-inserted moment
+    deposition on stage 1 only
+  - add particle-current contribution in `MHD::EFieldSrc` by mapping deposited
+    `IMOM_JX/IMOM_JY/IMOM_JZ` into additive updates of `efld`
+  - preserve existing shearing-box `EFieldSrc` behavior; particle term is
+    additive, not a replacement
+  - keep PR2 split explicit: no fluid momentum/energy feedback terms in WS-G
+  - add deterministic test controls for non-zero current (e.g. CR velocity init
+    knobs with zero defaults) to support coupled-field regression checks
+  - add new regression deck/scripts for coupled-field behavior plus
+    decomposition invariance with MPI coverage
+  - include explicit negative checks for unsupported coupling configurations
+  - keep WS-G scope limited to PR2 current-to-E coupling and tests only
+    (no PR3 AMR/restart/non-periodic expansion).
+
+### WS-G Post-Review Lock-Ins (2026-02-06)
+- Add an explicit current-to-E coupling coefficient runtime knob in PR2 follow-up
+  work, with default `1.0` so current behavior is preserved.
+- Keep current WS-G ordering as a transitional PR2 state; defer full Entity-style
+  particle-communication ordering parity to Step H.
+- Expand WS-G negative tests to cover all guard branches
+  (`radiation+MHD`, `ion-neutral/hydro`, and `adm/z4c`).
+- Harden stage insertion by checking every `TaskList::InsertTask` return value,
+  not only first/final insertions.
+- Add determinism/linearity regression coverage for coupled mode (`cr_v*` and
+  optional `deposit_qscale` sweeps).
+- Canonical follow-up details live in
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/AGENT_PIC_HANDOFF.md` sections
+  `9.12` and `9.13`.
+- Post-patch status note:
+  explicit coupling coefficient and expanded WS-G tests are implemented, while
+  full Entity ordering parity and staggered-representation parity remain
+  deferred as documented in handoff section `9.14`.
+
 ## 7. What Not To Do
 
 1. Do not rewrite large existing subsystems to "clean up" style.
@@ -198,6 +246,13 @@ In each PR/patch description include:
    - non-MPI sanity evidence
    - style gate outputs
    - explicit statement that no PR2-coupling files were changed
+8. For WS-G specifically:
+   - explicit evidence that coupling is opt-in and defaults are unchanged
+   - serial and MPI coupled-field test evidence
+   - decomposition-invariance evidence for coupled runs
+   - measured `Q/J` diagnostics and coupled-field deltas used for pass/fail
+   - explicit statement that fluid momentum/energy feedback was not added
+     in WS-G.
 
 ## 9. Definition of Done (per workstream)
 
