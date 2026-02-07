@@ -787,7 +787,7 @@ def run(**kwargs):
          'particles/couple_j_to_efield_representation=edge_staggered',
          'particles/couple_j_deposition_mode=direct_staggered'],
         expect_fail=True,
-        expected_message='### FATAL ERROR',
+        expected_message=('requires strictly periodic mesh boundaries in PR4'),
         input_deck=_NONPERIODIC_SUPPORTED_DECK,
     )
 

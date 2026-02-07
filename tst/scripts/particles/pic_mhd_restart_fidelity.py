@@ -148,10 +148,21 @@ def _run_athena_expect_fail(label, nproc, arguments, expected_message=None,
     output = (proc.stdout or '') + (proc.stderr or '')
     if proc.returncode == 0:
         raise RuntimeError('Expected failure for ' + label + ', but run succeeded')
-    if expected_message is not None and expected_message not in output:
-        raise RuntimeError('Expected message not found for ' + label +
-                           ': "' + expected_message + '"\n' + output)
-    _NEGATIVE_RESULTS[label] = {'matched_message': expected_message}
+    matched_message = expected_message
+    if expected_message is not None:
+        if isinstance(expected_message, (list, tuple)):
+            matched_message = None
+            for candidate in expected_message:
+                if candidate in output:
+                    matched_message = candidate
+                    break
+            if matched_message is None:
+                raise RuntimeError('Expected one of the messages for ' + label +
+                                   ': ' + str(expected_message) + '\n' + output)
+        elif expected_message not in output:
+            raise RuntimeError('Expected message not found for ' + label +
+                               ': "' + expected_message + '"\n' + output)
+    _NEGATIVE_RESULTS[label] = {'matched_message': matched_message}
     logger.info('Expected failure observed for %s', label)
 
 
@@ -247,6 +258,12 @@ def run(**kwargs):
          'time/nlim=2',
          'particles/couple_moments_to_mhd=true',
          'particles/couple_j_to_efield_representation=cell_centered'],
+        expected_message=(
+            'PR3a coupled particle restart restore does not yet support '
+            'single_file_per_rank restart files.',
+            'MPI_File_get_position',
+            'MPI_ERR_INTERN',
+        ),
         restart_file=per_rank_rst_path)
 
 
