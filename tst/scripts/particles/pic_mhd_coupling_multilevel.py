@@ -132,6 +132,12 @@ def _check_with_tolerance(label, measured, expected, abs_tol, rel_tol):
     return abs_err <= abs_tol or rel_err <= rel_tol
 
 
+def _momentum_norm(case):
+    return float(np.sqrt(case['mom1'] * case['mom1'] +
+                         case['mom2'] * case['mom2'] +
+                         case['mom3'] * case['mom3']))
+
+
 def run(**kwargs):
     logger.debug('Running test ' + __name__)
 
@@ -203,6 +209,7 @@ def run(**kwargs):
 def analyze():
     logger.debug('Analyzing test ' + __name__)
     ok = True
+    coupled_response = {}
 
     for name, result in _RESULTS.items():
         measured = result['measured']
@@ -267,14 +274,57 @@ def analyze():
             delta1 = abs(coupled['bcc1_l2'] - unc['bcc1_l2'])
             delta2 = abs(coupled['bcc2_l2'] - unc['bcc2_l2'])
             delta3 = abs(coupled['bcc3_l2'] - unc['bcc3_l2'])
-            delta = max(delta1, delta2, delta3)
+            field_delta = max(delta1, delta2, delta3)
+            mom_delta = abs(_momentum_norm(coupled) - _momentum_norm(unc))
+            ener_delta = abs(coupled['ener'] - unc['ener'])
+            coupled_response[(rep_tag, order_tag)] = {
+                'field': field_delta,
+                'mom': mom_delta,
+                'ener': ener_delta,
+            }
             logger.info(
-                '%s coupled_field_delta bcc1=% .8e bcc2=% .8e bcc3=% .8e max=% .8e',
-                coupled_name, delta1, delta2, delta3, delta)
-            if delta <= 1.0e-8:
+                '%s coupled_response_delta bcc1=% .8e bcc2=% .8e '
+                'bcc3=% .8e field=% .8e mom=% .8e ener=% .8e',
+                coupled_name, delta1, delta2, delta3,
+                field_delta, mom_delta, ener_delta)
+            if field_delta <= 1.0e-8:
                 logger.error(
                     '%s expected nonzero coupled-field response on multilevel mesh',
                     coupled_name)
+                ok = False
+            if mom_delta <= 1.0e-8:
+                logger.error(
+                    '%s expected nonzero coupled-momentum response on multilevel mesh',
+                    coupled_name)
+                ok = False
+            if ener_delta <= 1.0e-8:
+                logger.error(
+                    '%s expected nonzero coupled-energy response on multilevel mesh',
+                    coupled_name)
+                ok = False
+
+    for order_tag in ['mhd', 'efield']:
+        edge_key = ('edge', order_tag)
+        direct_key = ('edge_direct', order_tag)
+        if edge_key not in coupled_response or direct_key not in coupled_response:
+            continue
+        edge = coupled_response[edge_key]
+        direct = coupled_response[direct_key]
+        for metric in ['field', 'mom', 'ener']:
+            edge_metric = edge[metric]
+            direct_metric = direct[metric]
+            ratio = direct_metric / max(edge_metric, 1.0e-300)
+            logger.info('%s edge_direct_vs_edge_%s_ratio=% .8e direct=% .8e '
+                        'edge=% .8e',
+                        order_tag, metric, ratio, direct_metric, edge_metric)
+            if not np.isfinite(ratio):
+                logger.error('%s %s direct/edge ratio is non-finite',
+                             order_tag, metric)
+                ok = False
+                continue
+            if ratio < 2.0e-1 or ratio > 1.0e1:
+                logger.error('%s %s direct/edge ratio out of expected envelope',
+                             order_tag, metric)
                 ok = False
 
     for order_tag in ['mhd', 'efield']:

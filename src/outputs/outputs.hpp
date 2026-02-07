@@ -21,7 +21,7 @@
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif
 
-#define NOUTPUT_CHOICES 199
+#define NOUTPUT_CHOICES 202
 // choices for output variables used in <ouput> blocks in input file
 // TO ADD MORE CHOICES:
 //   - add more strings to array below, change NOUTPUT_CHOICES above appropriately
@@ -100,6 +100,7 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
 
   // Particles
   "prtcl_all", "prtcl_d", "prtcl_rho", "prtcl_jx", "prtcl_jy", "prtcl_jz",
+  "prtcl_jx_edge", "prtcl_jy_edge", "prtcl_jz_edge",
 
   // Coordinate variables for PDF binning (158-166)
   "coord_x", "coord_y", "coord_z",
@@ -171,7 +172,8 @@ struct OutputParameters {
   Real pdf_bin_max[PDF_MAX_DIM] = {1, 1, 1, 1};  // bin maximum for each dimension
   bool pdf_logscale[PDF_MAX_DIM] = {false, false, false, false};  // log scale flag
   std::string pdf_weight = "volume";            // volume, mass, or variable
-  std::string pdf_weight_variable;              // weight variable when pdf_weight=variable
+  std::string pdf_weight_variable;
+  // weight variable when pdf_weight=variable
 };
 
 //----------------------------------------------------------------------------------------

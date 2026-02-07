@@ -91,9 +91,11 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
       pm->pmb_pack->phydro->w0 : pm->pmb_pack->pmhd->w0;
     par_for("vorz", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      dv(m,i_dv,k,j,i) = (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      dv(m,i_dv,k,j,i) = (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1)) /
+                         (2.0*size.d_view(m).dx1);
       if (multi_d) {
-        dv(m,i_dv,k,j,i) -=(w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        dv(m,i_dv,k,j,i) -= (w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i)) /
+                            (2.0*size.d_view(m).dx2);
       }
     });
     i_dv += 1; // increment derived variable index
@@ -136,9 +138,11 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("jz", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      dv(m,i_dv,k,j,i) = (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      dv(m,i_dv,k,j,i) = (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1)) /
+                         (2.0*size.d_view(m).dx1);
       if (multi_d) {
-        dv(m,i_dv,k,j,i) -=(bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        dv(m,i_dv,k,j,i) -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i)) /
+                            (2.0*size.d_view(m).dx2);
       }
     });
     i_dv += 1; // increment derived variable index
@@ -487,7 +491,8 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
 //
 // NOTATION:
 //   Let an overbar (e.g., <f>) denote the volume average (the value saved in this file).
-//   Let a tilde (e.g., {f}) denote the density-weighted Favre average: {f} = <rho * f> / <rho>.
+//   Let a tilde (e.g., {f}) denote the density-weighted Favre average:
+//   {f} = <rho * f> / <rho>.
 //
 //   Variables available in standard 'cons' output (Coarse Grid):
 //     <rho>  : Density
@@ -502,7 +507,8 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
 //
 // A. MOMENTUM EQUATION (SGS Stress Tensor)
 //    The SGS stress tensor tau_ij accounts for unresolved momentum transport.
-//    Formula: tau_ij = ( <rho*v_i*v_j> - <rho>*{v_i}*{v_j} ) - ( <B_i*B_j> - <B_i>*<B_j> )
+//    Formula:
+//    tau_ij = (<rho*v_i*v_j> - <rho>*{v_i}*{v_j}) - (<B_i*B_j> - <B_i>*<B_j>)
 //
 //    Reconstruction steps:
 //      1. Hydro Stress (Reynolds):
@@ -525,7 +531,8 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
 //    Formula: E_sgs = < v x B > - ( {v} x <B> )
 //
 //    Reconstruction steps:
-//      1. Construct the averaged cross product <v x B> using the full tensor terms (indices 20-28).
+//      1. Construct the averaged cross product <v x B> using the full tensor
+//         terms (indices 20-28).
 //         Example (x-component): <(v x B)_x> = <vy*Bz> (idx 25) - <vz*By> (idx 27).
 //      2. Calculate the mean field cross product: ({v} x <B>).
 //      3. Subtract: E_sgs_x = (dv[25] - dv[27]) - ({vy}*<Bz> - {vz}*<By>).
@@ -1767,7 +1774,8 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   if (name.compare("vel_sph_theta") == 0) {
     if (pm->pmb_pack->phydro == nullptr && pm->pmb_pack->pmhd == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "vel_sph_theta requires a hydro or MHD module" << std::endl;
+                << std::endl << "vel_sph_theta requires a hydro or MHD "
+                << "module" << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if (derived_var.extent(4) <= 1)
@@ -1900,7 +1908,8 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // Spherical: v_r = (vx*x + vy*y + vz*z) / r, B_r = (Bx*x + By*y + Bz*z) / r
   // Vertical: outward direction = v_z * sign(z)
   // Energy flux: F_E,r = (enthalpy_plus_ke + B²) * v_r - (v·B) * B_r
-  //   where enthalpy_plus_ke = 0.5*ρ*v² + γ*eint (KE + enthalpy), eint = E - 0.5*ρ*v² - 0.5*B²
+  //   where enthalpy_plus_ke = 0.5*ρ*v² + γ*eint (KE + enthalpy),
+  //   eint = E - 0.5*ρ*v² - 0.5*B²
   // ==========================================================================================
 
   // Spherical radial mass flux: ρ * v_r
@@ -1942,7 +1951,8 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   if (name.compare("mdot_sph_out") == 0) {
     if (pm->pmb_pack->phydro == nullptr && pm->pmb_pack->pmhd == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "mdot_sph_out requires a hydro or MHD module" << std::endl;
+                << std::endl << "mdot_sph_out requires a hydro or MHD "
+                << "module" << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if (derived_var.extent(4) <= 1)
@@ -2074,7 +2084,8 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   if (name.compare("edot_sph_out") == 0) {
     if (pm->pmb_pack->phydro == nullptr && pm->pmb_pack->pmhd == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "edot_sph_out requires a hydro or MHD module" << std::endl;
+                << std::endl << "edot_sph_out requires a hydro or MHD "
+                << "module" << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if (derived_var.extent(4) <= 1)
@@ -2194,7 +2205,8 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   if (name.compare("edot_sph_kin") == 0) {
     if (pm->pmb_pack->phydro == nullptr && pm->pmb_pack->pmhd == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "edot_sph_kin requires a hydro or MHD module" << std::endl;
+                << std::endl << "edot_sph_kin requires a hydro or MHD "
+                << "module" << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if (derived_var.extent(4) <= 1)
@@ -2354,7 +2366,8 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   if (name.compare("mdot_vert_out") == 0) {
     if (pm->pmb_pack->phydro == nullptr && pm->pmb_pack->pmhd == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "mdot_vert_out requires a hydro or MHD module" << std::endl;
+                << std::endl << "mdot_vert_out requires a hydro or MHD "
+                << "module" << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if (derived_var.extent(4) <= 1)
@@ -2383,7 +2396,8 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   if (name.compare("mdot_vert_in") == 0) {
     if (pm->pmb_pack->phydro == nullptr && pm->pmb_pack->pmhd == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "mdot_vert_in requires a hydro or MHD module" << std::endl;
+                << std::endl << "mdot_vert_in requires a hydro or MHD "
+                << "module" << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if (derived_var.extent(4) <= 1)
@@ -2466,7 +2480,8 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   if (name.compare("edot_vert_out") == 0) {
     if (pm->pmb_pack->phydro == nullptr && pm->pmb_pack->pmhd == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "edot_vert_out requires a hydro or MHD module" << std::endl;
+                << std::endl << "edot_vert_out requires a hydro or MHD "
+                << "module" << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if (derived_var.extent(4) <= 1)
@@ -2520,7 +2535,8 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   if (name.compare("edot_vert_in") == 0) {
     if (pm->pmb_pack->phydro == nullptr && pm->pmb_pack->pmhd == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "edot_vert_in requires a hydro or MHD module" << std::endl;
+                << std::endl << "edot_vert_in requires a hydro or MHD "
+                << "module" << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if (derived_var.extent(4) <= 1)
@@ -2615,6 +2631,86 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       dv(m,i_dv,k,j,i) = mom(m,particles::Particles::IMOM_JZ,k,j,i);
     });
+    i_dv += 1;
+  }
+
+  if (name.compare("prtcl_jx_edge") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto mom = pm->pmb_pack->ppart->moments;
+    auto jx_e = pm->pmb_pack->ppart->j_edge_x1e;
+    if (jx_e.size() > 0 && multi_d) {
+      par_for("prtcl_jx_edge", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        dv(m,i_dv,k,j,i) = 0.25*(jx_e(m,k,j,i) + jx_e(m,k+1,j,i) +
+                                 jx_e(m,k,j+1,i) + jx_e(m,k+1,j+1,i));
+      });
+    } else {
+      par_for("prtcl_jx_edge_fallback", DevExeSpace(), 0, (nmb-1), ks, ke, js, je,
+              is, ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        dv(m,i_dv,k,j,i) = mom(m,particles::Particles::IMOM_JX,k,j,i);
+      });
+    }
+    i_dv += 1;
+  }
+
+  if (name.compare("prtcl_jy_edge") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto mom = pm->pmb_pack->ppart->moments;
+    auto jy_e = pm->pmb_pack->ppart->j_edge_x2e;
+    if (jy_e.size() > 0) {
+      if (multi_d) {
+        par_for("prtcl_jy_edge", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          dv(m,i_dv,k,j,i) = 0.25*(jy_e(m,k,j,i) + jy_e(m,k+1,j,i) +
+                                   jy_e(m,k,j,i+1) + jy_e(m,k+1,j,i+1));
+        });
+      } else {
+        par_for("prtcl_jy_edge_1d", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          dv(m,i_dv,k,j,i) = 0.5*(jy_e(m,k,j,i) + jy_e(m,k+1,j,i));
+        });
+      }
+    } else {
+      par_for("prtcl_jy_edge_fallback", DevExeSpace(), 0, (nmb-1), ks, ke, js, je,
+              is, ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        dv(m,i_dv,k,j,i) = mom(m,particles::Particles::IMOM_JY,k,j,i);
+      });
+    }
+    i_dv += 1;
+  }
+
+  if (name.compare("prtcl_jz_edge") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto mom = pm->pmb_pack->ppart->moments;
+    auto jz_e = pm->pmb_pack->ppart->j_edge_x3e;
+    if (jz_e.size() > 0) {
+      if (multi_d) {
+        par_for("prtcl_jz_edge", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          dv(m,i_dv,k,j,i) = 0.25*(jz_e(m,k,j,i) + jz_e(m,k,j+1,i) +
+                                   jz_e(m,k,j,i+1) + jz_e(m,k,j+1,i+1));
+        });
+      } else {
+        par_for("prtcl_jz_edge_1d", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          dv(m,i_dv,k,j,i) = 0.5*(jz_e(m,k,j,i) + jz_e(m,k,j+1,i));
+        });
+      }
+    } else {
+      par_for("prtcl_jz_edge_fallback", DevExeSpace(), 0, (nmb-1), ks, ke, js, je,
+              is, ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        dv(m,i_dv,k,j,i) = mom(m,particles::Particles::IMOM_JZ,k,j,i);
+      });
+    }
     i_dv += 1;
   }
 

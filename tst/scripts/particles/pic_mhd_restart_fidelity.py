@@ -269,6 +269,63 @@ def analyze():
                                        rst[quantity], full[quantity],
                                        abs_tol, rel_tol) and ok
 
+    rep_groups = {}
+    for case_name, case_data in _RESULTS.items():
+        prefix = 'pic_mhd_rst_'
+        if not case_name.startswith(prefix):
+            continue
+        suffix = case_name[len(prefix):]
+        if suffix.startswith('serial_'):
+            case_tag = 'serial'
+            rep_tag = suffix[len('serial_'):]
+        elif suffix.startswith('mpi2_'):
+            case_tag = 'mpi2'
+            rep_tag = suffix[len('mpi2_'):]
+        else:
+            continue
+        rep_groups.setdefault(case_tag, {})[rep_tag] = case_data
+
+    for case_tag, reps in rep_groups.items():
+        if 'edge' not in reps or 'edge_direct' not in reps:
+            continue
+        edge = reps['edge']
+        direct = reps['edge_direct']
+
+        for state in ['full', 'restart']:
+            edge_state = edge[state]
+            direct_state = direct[state]
+            for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
+                ok = _check_with_tolerance(
+                    case_tag + ':' + state + ':edge_vs_edge_direct:' + quantity,
+                    direct_state[quantity], edge_state[quantity],
+                    1.0e-6, 1.0e-8) and ok
+
+        for quantity in ['bcc1_l2', 'bcc2_l2', 'bcc3_l2',
+                         'mom1', 'mom2', 'mom3', 'ener']:
+            edge_full = edge['full'][quantity]
+            edge_rst = edge['restart'][quantity]
+            direct_full = direct['full'][quantity]
+            direct_rst = direct['restart'][quantity]
+            if max(abs(edge_full), abs(edge_rst)) <= 1.0e-12:
+                logger.info('%s:%s edge baseline near zero; skipping direct/edge ratio',
+                            case_tag, quantity)
+                ok = _check_with_tolerance(
+                    case_tag + ':direct_restart_vs_full:' + quantity,
+                    direct_rst, direct_full, abs_tol, rel_tol) and ok
+                continue
+            full_ratio = direct_full / max(abs(edge_full), 1.0e-300)
+            rst_ratio = direct_rst / max(abs(edge_rst), 1.0e-300)
+            logger.info('%s:%s edge_direct_vs_edge ratio full=% .8e restart=% .8e',
+                        case_tag, quantity, full_ratio, rst_ratio)
+            if not np.isfinite(full_ratio) or not np.isfinite(rst_ratio):
+                logger.error('%s:%s non-finite edge_direct/edge ratio',
+                             case_tag, quantity)
+                ok = False
+                continue
+            ok = _check_with_tolerance(
+                case_tag + ':ratio_restart_vs_full:edge_direct_vs_edge:' + quantity,
+                rst_ratio, full_ratio, 1.0e-8, 1.0e-8) and ok
+
     ok = (len(_NEGATIVE_RESULTS) == 1) and ok
     if len(_NEGATIVE_RESULTS) != 1:
         logger.warning('Expected 1 negative check, got %d', len(_NEGATIVE_RESULTS))

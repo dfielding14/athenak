@@ -26,6 +26,8 @@ _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
 _POSITIVE_RESULTS = {}
 _NEGATIVE_RESULTS = {}
 _CONTINUITY_RESULTS = {}
+_CC_CURRENT_IDS = ('prtcl_jx', 'prtcl_jy', 'prtcl_jz')
+_EDGE_CURRENT_IDS = ('prtcl_jx_edge', 'prtcl_jy_edge', 'prtcl_jz_edge')
 
 
 def _athena_exe_dir():
@@ -162,11 +164,12 @@ def _compute_divergence_from_cc_current(jx, jy, jz, x1f, x2f, x3f):
     return div
 
 
-def _measure_continuity_residual(basename):
+def _measure_continuity_residual(basename, current_ids):
+    jx_id, jy_id, jz_id = current_ids
     rho_files = _output_files(basename, 'prtcl_rho')
-    jx_files = _output_files(basename, 'prtcl_jx')
-    jy_files = _output_files(basename, 'prtcl_jy')
-    jz_files = _output_files(basename, 'prtcl_jz')
+    jx_files = _output_files(basename, jx_id)
+    jy_files = _output_files(basename, jy_id)
+    jz_files = _output_files(basename, jz_id)
 
     nfiles = min(len(rho_files), len(jx_files), len(jy_files), len(jz_files))
     if nfiles < 2:
@@ -198,9 +201,9 @@ def _measure_continuity_residual(basename):
         raise RuntimeError('Non-positive dt in continuity residual for ' + basename)
 
     drhodt = (rho_curr['prtcl_rho'] - rho_prev['prtcl_rho']) / dt
-    divj = _compute_divergence_from_cc_current(jx_curr['prtcl_jx'],
-                                               jy_curr['prtcl_jy'],
-                                               jz_curr['prtcl_jz'],
+    divj = _compute_divergence_from_cc_current(jx_curr[jx_id],
+                                               jy_curr[jy_id],
+                                               jz_curr[jz_id],
                                                rho_curr['x1f'],
                                                rho_curr['x2f'],
                                                rho_curr['x3f'])
@@ -607,6 +610,7 @@ def run(**kwargs):
             'name': 'serial_continuity_cc',
             'basename': 'pic_mhd_cont_cc',
             'nproc': 1,
+            'current_ids': _CC_CURRENT_IDS,
             'args': ['job/basename=pic_mhd_cont_cc',
                      'time/nlim=2',
                      'particles/couple_moments_to_mhd=true'] + common_args,
@@ -615,6 +619,7 @@ def run(**kwargs):
             'name': 'serial_continuity_edge',
             'basename': 'pic_mhd_cont_edge',
             'nproc': 1,
+            'current_ids': _EDGE_CURRENT_IDS,
             'args': ['job/basename=pic_mhd_cont_edge',
                      'time/nlim=2',
                      'particles/couple_moments_to_mhd=true',
@@ -625,6 +630,7 @@ def run(**kwargs):
             'name': 'serial_continuity_edge_direct',
             'basename': 'pic_mhd_cont_edge_direct',
             'nproc': 1,
+            'current_ids': _EDGE_CURRENT_IDS,
             'args': ['job/basename=pic_mhd_cont_edge_direct',
                      'time/nlim=2',
                      'particles/couple_moments_to_mhd=true',
@@ -640,6 +646,7 @@ def run(**kwargs):
                 'name': 'mpi2_continuity_cc',
                 'basename': 'pic_mhd_cont_cc_mpi2',
                 'nproc': 2,
+                'current_ids': _CC_CURRENT_IDS,
                 'args': ['job/basename=pic_mhd_cont_cc_mpi2',
                          'time/nlim=2',
                          'particles/couple_moments_to_mhd=true'] + common_args,
@@ -648,6 +655,7 @@ def run(**kwargs):
                 'name': 'mpi2_continuity_edge',
                 'basename': 'pic_mhd_cont_edge_mpi2',
                 'nproc': 2,
+                'current_ids': _EDGE_CURRENT_IDS,
                 'args': ['job/basename=pic_mhd_cont_edge_mpi2',
                          'time/nlim=2',
                          'particles/couple_moments_to_mhd=true',
@@ -658,6 +666,7 @@ def run(**kwargs):
                 'name': 'mpi2_continuity_edge_direct',
                 'basename': 'pic_mhd_cont_edge_direct_mpi2',
                 'nproc': 2,
+                'current_ids': _EDGE_CURRENT_IDS,
                 'args': ['job/basename=pic_mhd_cont_edge_direct_mpi2',
                          'time/nlim=2',
                          'particles/couple_moments_to_mhd=true',
@@ -672,7 +681,7 @@ def run(**kwargs):
         _remove_outputs(case['basename'])
         _run_command(case['name'], case['nproc'], case['args'])
         _CONTINUITY_RESULTS[case['name']] = (
-            _measure_continuity_residual(case['basename']))
+            _measure_continuity_residual(case['basename'], case['current_ids']))
 
     _run_command(
         'guard_deposit_moments_false',

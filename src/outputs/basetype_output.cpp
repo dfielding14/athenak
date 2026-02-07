@@ -62,9 +62,11 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       if (variable.compare(var_choice[i]) == 0) {ivar = i;}
     }
     if (ivar < 0) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-         << "Variable '" << variable << "' in block '" << out_params.block_name
-         << "' in input file is not a valid choice" << std::endl;
+      std::cout << "### FATAL ERROR in " << __FILE__
+                << " at line " << __LINE__ << std::endl
+                << "Variable '" << variable << "' in block '"
+                << out_params.block_name
+                << "' in input file is not a valid choice" << std::endl;
       std::exit(EXIT_FAILURE);
     }
 
@@ -92,7 +94,9 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     const bool needs_prtcl = starts_with(variable, "prtcl_");
     const bool needs_prtcl_moments =
         (variable == "prtcl_rho" || variable == "prtcl_jx" ||
-         variable == "prtcl_jy" || variable == "prtcl_jz");
+         variable == "prtcl_jy" || variable == "prtcl_jz" ||
+         variable == "prtcl_jx_edge" || variable == "prtcl_jy_edge" ||
+         variable == "prtcl_jz_edge");
     const bool needs_turb = (variable == "turb_force");
     const bool needs_hydro_or_mhd =
         (variable == "temperature" || starts_with(variable, "mdot_") ||
@@ -100,104 +104,132 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     const bool needs_mhd_only = (variable == "edot_sph_mag");
 
     if (needs_mhd_only && !has_mhd) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-         << "Output of MHD-only variable requested in <output> block '"
-         << out_params.block_name << "' but no MHD object has been constructed."
-         << std::endl << "Input file is likely missing a <mhd> block" << std::endl;
+      std::cout << "### FATAL ERROR in " << __FILE__
+                << " at line " << __LINE__ << std::endl
+                << "Output of MHD-only variable requested in <output> block '"
+                << out_params.block_name
+                << "' but no MHD object has been constructed." << std::endl
+                << "Input file is likely missing a <mhd> block" << std::endl;
       exit(EXIT_FAILURE);
     }
 
     if (needs_hydro && !has_hydro) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-         << "Output of Hydro variable requested in <output> block '"
-         << out_params.block_name << "' but no Hydro object has been constructed."
-         << std::endl << "Input file is likely missing a <hydro> block" << std::endl;
+      std::cout << "### FATAL ERROR in " << __FILE__
+                << " at line " << __LINE__ << std::endl
+                << "Output of Hydro variable requested in <output> block '"
+                << out_params.block_name
+                << "' but no Hydro object has been constructed." << std::endl
+                << "Input file is likely missing a <hydro> block" << std::endl;
       exit(EXIT_FAILURE);
     }
     if (needs_mhd && !has_mhd) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-         << "Output of MHD variable requested in <output> block '"
-         << out_params.block_name << "' but no MHD object has been constructed."
-         << std::endl << "Input file is likely missing a <mhd> block" << std::endl;
+      std::cout << "### FATAL ERROR in " << __FILE__
+                << " at line " << __LINE__ << std::endl
+                << "Output of MHD variable requested in <output> block '"
+                << out_params.block_name
+                << "' but no MHD object has been constructed." << std::endl
+                << "Input file is likely missing a <mhd> block" << std::endl;
       exit(EXIT_FAILURE);
     }
     if (needs_hydro_or_mhd && !(has_hydro || has_mhd)) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-         << "Output of fluid variable requested in <output> block '"
-         << out_params.block_name << "' but neither Hydro nor MHD objects exist."
-         << std::endl << "Input file is likely missing a <hydro> or <mhd> block"
-         << std::endl;
+      std::cout << "### FATAL ERROR in " << __FILE__
+                << " at line " << __LINE__ << std::endl
+                << "Output of fluid variable requested in <output> block '"
+                << out_params.block_name
+                << "' but neither Hydro nor MHD objects exist." << std::endl
+                << "Input file is likely missing a <hydro> or <mhd> block"
+                << std::endl;
       exit(EXIT_FAILURE);
     }
     if (needs_turb && !has_turb) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-         << "Output of Force variable requested in <output> block '"
-         << out_params.block_name << "' but no Force object has been constructed."
-         << std::endl << "Input file is likely missing a <forcing> block" << std::endl;
+      std::cout << "### FATAL ERROR in " << __FILE__
+                << " at line " << __LINE__ << std::endl
+                << "Output of Force variable requested in <output> block '"
+                << out_params.block_name
+                << "' but no Force object has been constructed." << std::endl
+                << "Input file is likely missing a <forcing> block" << std::endl;
       exit(EXIT_FAILURE);
     }
     if (needs_rad && !has_rad) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-         << "Output of Radiation variable requested in <output> block '"
-         << out_params.block_name << "' but no Radiation object has been constructed."
-         << std::endl << "Input file is likely missing a <radiation> block" << std::endl;
+      std::cout << "### FATAL ERROR in " << __FILE__
+                << " at line " << __LINE__ << std::endl
+                << "Output of Radiation variable requested in <output> block '"
+                << out_params.block_name
+                << "' but no Radiation object has been constructed."
+                << std::endl
+                << "Input file is likely missing a <radiation> block" << std::endl;
       exit(EXIT_FAILURE);
     }
     if (needs_rad_hydro && !has_hydro) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-         << "Output of Radiation Hydro variables requested in <output> block '"
-         << out_params.block_name << "' but Hydro object not constructed."
-         << std::endl << "Input file is likely missing a <hydro> block" << std::endl;
+      std::cout << "### FATAL ERROR in " << __FILE__
+                << " at line " << __LINE__ << std::endl
+                << "Output of Radiation Hydro variables requested in <output> "
+                << "block '" << out_params.block_name
+                << "' but Hydro object not constructed." << std::endl
+                << "Input file is likely missing a <hydro> block" << std::endl;
       exit(EXIT_FAILURE);
     }
     if (needs_rad_mhd && !has_mhd) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-         << "Output of Radiation MHD variables requested in <output> block '"
-         << out_params.block_name << "' but MHD object not constructed."
-         << std::endl << "Input file is likely missing a <mhd> block" << std::endl;
+      std::cout << "### FATAL ERROR in " << __FILE__
+                << " at line " << __LINE__ << std::endl
+                << "Output of Radiation MHD variables requested in <output> "
+                << "block '" << out_params.block_name
+                << "' but MHD object not constructed." << std::endl
+                << "Input file is likely missing a <mhd> block" << std::endl;
       exit(EXIT_FAILURE);
     }
     if (needs_rad_fluid && !(has_hydro || has_mhd)) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-         << "Output of Fluid Frame Radiation moments requested in <output> block '"
-         << out_params.block_name << "' but neither Hydro nor MHD objects exist."
-         << std::endl << "Input file is likely missing a <hydro> or <mhd> block"
-         << std::endl;
+      std::cout << "### FATAL ERROR in " << __FILE__
+                << " at line " << __LINE__ << std::endl
+                << "Output of Fluid Frame Radiation moments requested in <output> "
+                << "block '" << out_params.block_name
+                << "' but neither Hydro nor MHD objects exist." << std::endl
+                << "Input file is likely missing a <hydro> or <mhd> block"
+                << std::endl;
       exit(EXIT_FAILURE);
     }
     if (needs_adm && !has_adm) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-         << "Output of ADM variable requested in <output> block '"
-         << out_params.block_name << "' but ADM object not constructed."
-         << std::endl << "Input file is likely missing corresponding block" << std::endl;
+      std::cout << "### FATAL ERROR in " << __FILE__
+                << " at line " << __LINE__ << std::endl
+                << "Output of ADM variable requested in <output> block '"
+                << out_params.block_name << "' but ADM object not constructed."
+                << std::endl
+                << "Input file is likely missing corresponding block" << std::endl;
       exit(EXIT_FAILURE);
     }
     if ((needs_z4c || needs_weyl || needs_con) && !has_z4c) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-         << "Output of Z4c/Weyl/constraint variable requested in <output> block '"
-         << out_params.block_name << "' but Z4c object not constructed."
-         << std::endl << "Input file is likely missing corresponding block" << std::endl;
+      std::cout << "### FATAL ERROR in " << __FILE__
+                << " at line " << __LINE__ << std::endl
+                << "Output of Z4c/Weyl/constraint variable requested in <output> "
+                << "block '" << out_params.block_name
+                << "' but Z4c object not constructed." << std::endl
+                << "Input file is likely missing corresponding block" << std::endl;
       exit(EXIT_FAILURE);
     }
     if (needs_tmunu && !has_tmunu) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-         << "Output of Tmunu variable requested in <output> block '"
-         << out_params.block_name << "' but no Tmunu object has been constructed."
-         << std::endl << "Input file is likely missing a <adm> block" << std::endl;
+      std::cout << "### FATAL ERROR in " << __FILE__
+                << " at line " << __LINE__ << std::endl
+                << "Output of Tmunu variable requested in <output> block '"
+                << out_params.block_name
+                << "' but no Tmunu object has been constructed." << std::endl
+                << "Input file is likely missing a <adm> block" << std::endl;
       exit(EXIT_FAILURE);
     }
     if (needs_prtcl && !has_prtcl) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-         << "Output of particles requested in <output> block '"
-         << out_params.block_name << "' but particle object not constructed."
-         << std::endl << "Input file is likely missing corresponding block" << std::endl;
+      std::cout << "### FATAL ERROR in " << __FILE__
+                << " at line " << __LINE__ << std::endl
+                << "Output of particles requested in <output> block '"
+                << out_params.block_name
+                << "' but particle object not constructed." << std::endl
+                << "Input file is likely missing corresponding block" << std::endl;
       exit(EXIT_FAILURE);
     }
     if (needs_prtcl_moments && !(pm->pmb_pack->ppart->deposit_moments)) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-         << "Output variable '" << variable << "' in <output> block '"
-         << out_params.block_name << "' requires <particles>/deposit_moments=true"
-         << std::endl;
+      std::cout << "### FATAL ERROR in " << __FILE__
+                << " at line " << __LINE__ << std::endl
+                << "Output variable '" << variable << "' in <output> block '"
+                << out_params.block_name
+                << "' requires <particles>/deposit_moments=true" << std::endl;
       exit(EXIT_FAILURE);
     }
   };
@@ -885,6 +917,24 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     out_params.n_derived += 1;
     int i_derived = out_params.n_derived - 1;
     outvars.emplace_back("prtcl_jz",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_jx_edge") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_jx_edge",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_jy_edge") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_jy_edge",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_jz_edge") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_jz_edge",i_derived,&(derived_var));
   }
 
   // Coordinate variables for PDF binning (Cartesian)

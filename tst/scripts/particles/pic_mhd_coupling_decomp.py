@@ -25,6 +25,8 @@ _REPRESENTATION_CASES = [
     ('edge', 'edge_staggered', 'cc_convert'),
     ('edge_direct', 'edge_staggered', 'direct_staggered'),
 ]
+_CC_CURRENT_IDS = ('prtcl_jx', 'prtcl_jy', 'prtcl_jz')
+_EDGE_CURRENT_IDS = ('prtcl_jx_edge', 'prtcl_jy_edge', 'prtcl_jz_edge')
 
 
 def _athena_exe_dir():
@@ -161,11 +163,12 @@ def _compute_divergence_from_cc_current(jx, jy, jz, x1f, x2f, x3f):
     return div
 
 
-def _measure_continuity_residual(basename):
+def _measure_continuity_residual(basename, current_ids):
+    jx_id, jy_id, jz_id = current_ids
     rho_files = _output_files(basename, 'prtcl_rho')
-    jx_files = _output_files(basename, 'prtcl_jx')
-    jy_files = _output_files(basename, 'prtcl_jy')
-    jz_files = _output_files(basename, 'prtcl_jz')
+    jx_files = _output_files(basename, jx_id)
+    jy_files = _output_files(basename, jy_id)
+    jz_files = _output_files(basename, jz_id)
 
     nfiles = min(len(rho_files), len(jx_files), len(jy_files), len(jz_files))
     if nfiles < 2:
@@ -197,9 +200,9 @@ def _measure_continuity_residual(basename):
         raise RuntimeError('Non-positive dt in continuity residual for ' + basename)
 
     drhodt = (rho_curr['prtcl_rho'] - rho_prev['prtcl_rho']) / dt
-    divj = _compute_divergence_from_cc_current(jx_curr['prtcl_jx'],
-                                               jy_curr['prtcl_jy'],
-                                               jz_curr['prtcl_jz'],
+    divj = _compute_divergence_from_cc_current(jx_curr[jx_id],
+                                               jy_curr[jy_id],
+                                               jz_curr[jz_id],
                                                rho_curr['x1f'],
                                                rho_curr['x2f'],
                                                rho_curr['x3f'])
@@ -398,6 +401,8 @@ def run(**kwargs):
             'name': 'serial_continuity_' + rep_tag,
             'basename': serial_basename,
             'nproc': 1,
+            'current_ids': (_CC_CURRENT_IDS if rep_tag == 'cc'
+                            else _EDGE_CURRENT_IDS),
             'args': ['job/basename=' + serial_basename,
                      'time/nlim=2',
                      'meshblock/nx1=' + str(cont_mbx1),
@@ -418,6 +423,8 @@ def run(**kwargs):
                     'name': mpi_tag + '_continuity_' + rep_tag,
                     'basename': mpi_basename,
                     'nproc': nproc,
+                    'current_ids': (_CC_CURRENT_IDS if rep_tag == 'cc'
+                                    else _EDGE_CURRENT_IDS),
                     'args': (
                         ['job/basename=' + mpi_basename,
                          'time/nlim=2',
@@ -432,7 +439,7 @@ def run(**kwargs):
         _remove_outputs(case['basename'])
         _run_command(case['name'], case['nproc'], case['args'])
         _CONTINUITY_RESULTS[case['name']] = (
-            _measure_continuity_residual(case['basename']))
+            _measure_continuity_residual(case['basename'], case['current_ids']))
 
 
 def analyze():

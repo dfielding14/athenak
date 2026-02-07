@@ -1227,11 +1227,15 @@ This section audits actual code state and test coverage after WS-G/WS-H/WS-I.
   - multilevel matrix includes `edge_direct`:
     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:21`,
     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:148`,
-    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:231`
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:231`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:266`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:306`
   - restart fidelity matrix includes `edge_direct`:
     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:19`,
     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:176`,
-    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:207`
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:207`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:272`,
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:288`
   - input decks now expose the new deposition knob for command-line overrides:
     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/inputs/tests/pic_mhd_restart_fidelity.athinput:60`
     and
@@ -1251,11 +1255,10 @@ This section audits actual code state and test coverage after WS-G/WS-H/WS-I.
     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:543`,
     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:590`.
 
-7. Remaining deferred items after PR4a-PR4d + PR4e continuity hardening
-- Direct-vs-conversion closeout checks in multilevel and restart suites remain
-  to be added.
-- Compatibility-policy closeout is still pending (`cc_convert` retained vs
-  retired as default workflow).
+7. Remaining deferred items after PR4a-PR4d + PR4e/PR4f hardening
+- Compatibility-policy decision is now explicit:
+  retain `cc_convert` as the default compatibility/debug workflow and keep
+  `direct_staggered` opt-in.
 - Direct mode is currently restricted to strictly periodic boundaries (guarded in
   `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:394`).
 - Higher-order Entity-style shape-order direct current deposition (beyond current
@@ -1265,7 +1268,7 @@ This section audits actual code state and test coverage after WS-G/WS-H/WS-I.
 
 #### 9.19.1 Objective
 Close PR4 with quantitative correctness gates and explicit compatibility-policy
-decision (`cc_convert` retained vs retired).
+outcome documentation.
 
 #### 9.19.2 Entity Alignment Baseline for Closeout
 1. Ordering invariants:
@@ -1305,15 +1308,18 @@ decision (`cc_convert` retained vs retired).
   `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:176`
   and
   `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_decomp.py:175`.
-2. Remaining: add explicit direct-vs-conversion closeout checks on multilevel +
+2. Completed: add explicit direct-vs-conversion closeout checks on multilevel +
    restart suites.
-- Existing direct coverage anchor points:
-  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:203`
-  and
-  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:253`.
-3. Remaining: decide compatibility policy and codify in docs.
-- If `cc_convert` retained: keep default unchanged and document rationale.
-- If retired: change defaults/guards, then rebaseline all PR2/PR3/PR4 suites.
+- As-built anchors:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:266`,
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_multilevel.py:306`,
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:272`,
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:288`.
+3. Completed: compatibility policy is codified.
+- `cc_convert` remains the default compatibility/debug mode.
+- `direct_staggered` remains runtime opt-in under strict periodic-boundary
+  constraints until higher-order direct deposition and broader boundary support
+  are added and rebaselined.
 
 #### 9.19.4 Merge Gates for PR4e
 1. All of the following pass with MPI build:
