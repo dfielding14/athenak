@@ -62,7 +62,12 @@ PIC behavior can be validated without significant MHD back-reaction.
 - Step 18 (`Add Full MPI Matrix and Decomposition Robustness Gates`): complete
   at current working tree state with evidence in
   `tst/.codex/pic_entity_suite/step18_mpi_matrix/STEP18_MPI_MATRIX_REPORT.md`.
-- Step 19 onward: pending.
+- Step 19 (`Restart and Safety Guard Coverage`): complete at current working
+  tree state with evidence in
+  `tst/.codex/pic_entity_suite/step19_restart_safety/STEP19_RESTART_SAFETY_REPORT.md`.
+- Step 20 (`Documentation and Integration Closeout`): complete at current
+  working tree state (this document, root/subdirectory `AGENTS.md`, and
+  PIC handoff/implementation guides updated to reflect as-built behavior).
 
 ## 1. Scope and Goal
 
@@ -613,6 +618,35 @@ Actions:
 Completion gate:
 - Documentation reflects as-built behavior and exact test commands.
 
+### Final Status Matrix
+
+| Step | Title | Status | Validation State |
+| --- | --- | --- | --- |
+| 0 | Baseline lock and harness setup | implemented | validated |
+| 1 | Runtime isolation knob | implemented | validated |
+| 2 | `passive_mhd` mode | implemented | validated |
+| 3 | `no_mhd` mode | implemented | validated |
+| 4 | Section-2 E+B midpoint-Boris push | implemented | validated |
+| 5 | PIC diagnostics for analytic validation | implemented | validated |
+| 6 | Deposit parity layer finalize | implemented | validated |
+| 7 | EM vacuum wave anchor | implemented | validated |
+| 8 | Langmuir frequency proxy | implemented | validated |
+| 9 | Two-stream proxy | implemented | validated |
+| 10 | Weibel proxy | implemented | validated |
+| 11 | Bell proxy | implemented | validated |
+| 12 | Multi-species oscillation parity | implemented | validated |
+| 13 | CRSI `delta f` proxy | implemented | validated |
+| 14 | CRPAI polarization proxy | implemented | validated |
+| 15 | Expanding/compressing-box proxy | implemented | validated |
+| 16 | Refinement-boundary characterization | implemented | validated |
+| 17 | AMR shock/load-balance smoke | implemented | validated |
+| 18 | MPI/decomposition robustness matrix | implemented | validated |
+| 19 | Restart/safety guard coverage | implemented | validated |
+| 20 | Documentation/integration closeout | implemented | validated |
+
+Deferred:
+- none in this execution plan scope.
+
 ## 4. Validation Command Matrix (Required)
 
 Run all new tests via AthenaK harness with MPI enabled build when required.
@@ -654,7 +688,5 @@ Required final gate before declaring complete:
 
 ## 7. Immediate Next Action
 
-Start with Step 0 and Step 1 on the current branch, then implement Step 2
-(`passive_mhd`), Step 4 (Section 2 midpoint E+B Boris path), and Step 5
-(diagnostics), then establish the first analytic anchors with Step 12 and
-Step 13 before the longer expanding-box and AMR-shock workflows.
+Plan complete. Any further work is a follow-on scope (for example, additional
+analytic PIC anchors beyond this 20-step ladder).

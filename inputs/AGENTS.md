@@ -178,6 +178,11 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - Reduced-size shock-rich Orszag-Tang AMR smoke deck used with runtime
     overrides for accelerated AMR triggering and MPI load-balance telemetry
     characterization in the PR5 entity-mirroring ladder.
+- `inputs/tests/pic_restart_safety_guards.athinput`
+  - Restart/safety coverage deck used by
+    `particles/pic_restart_safety_guards` for restart A/B equivalence across
+    `no_mhd`, `passive_mhd`, and `coupled_edge_direct` runtime modes, plus
+    deterministic unsupported-combination guard checks.
 
 ---
 

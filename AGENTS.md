@@ -167,6 +167,11 @@ efficiently on CPUs and GPUs.
     `pic_amr_shock_lb_smoke`) with explicit `np=1/2/4` parity checks, plus
     alternate-meshblock decomposition checks for refinement-boundary and AMR
     smoke workflows.
+  - Step-19 restart/safety coverage is present as
+    `particles/pic_restart_safety_guards`, with restart A/B parity checks for
+    `no_mhd`, `passive_mhd`, and `coupled_edge_direct` modes, deterministic
+    reason-string checks for unsupported mode combinations, and a retained
+    per-rank restart behavior watch probe for coupled direct mode.
   - Cosmic-ray initialization now supports optional per-species drifts in each
     `speciesN` block (`vx0`, `vy0`, `vz0`) with fallback to
     `<particles>/cr_vx0`, `cr_vy0`, `cr_vz0`.

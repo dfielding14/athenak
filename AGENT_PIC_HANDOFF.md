@@ -1459,7 +1459,7 @@ PR5-D: default-mode decision gate
       `/tmp/pr5_closeout_matrix_20260207_212254.log`
     - key checks captured in matrix log:
       continuity residuals, direct-vs-convert deltas, non-periodic boundary
-      guard failures, and per-rank restart guard failure.
+      guard failures, and per-rank restart behavior probe.
     - quick runtime sanity (serial micro-runs): no material regression between
       `cc_convert`, `direct_staggered`, and `direct_staggered+deposit_order=2`.
 - [x] If any criterion fails, keep `cc_convert` default and retain
@@ -1480,7 +1480,7 @@ PR5-D: default-mode decision gate
 | Additive inter-block edge-current communication | aligned | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:1125` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:1146` | `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:121` through `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:123` | Both use post-deposit synchronization/communication semantics for J; API shape differs by framework. |
 | Non-periodic direct-edge boundary handling (`reflect`, `outflow`) | intentional divergence | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:1181` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:1573` | `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:114` through `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:123` | AthenaK adds explicit edge-current physical BC task before `MHD::EFieldSrc`. |
 | Boundary policy guardrail for unsupported flags | intentional divergence | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:72` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:95` | `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:114` through `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:123` | AthenaK keeps PR3c safety envelope: `periodic/outflow/reflect` only. |
-| Per-rank restart restore for coupled PIC data | intentional divergence (watch item) | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/pgen/pgen.cpp:383` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/pgen/pgen.cpp:388`; `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:233` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:268` | N/A in PR5 current-deposition anchors | Deterministic fatal guard remains by design; keep watch item for future restore support. |
+| Per-rank restart restore for coupled PIC data | watch item (supported in baseline) | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/pgen/pgen.cpp:72` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/pgen/pgen.cpp:350`; `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py`; `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_restart_safety_guards.py` | N/A in PR5 current-deposition anchors | MPI `np=2` per-rank restart probe is green in current baseline. Keep watch item for broader coupled topologies/workflows and future restore-message regressions. |
 
 No unplanned parity divergence was found in the audited PR5 axes above.
 
@@ -1496,7 +1496,14 @@ No unplanned parity divergence was found in the audited PR5 axes above.
   - direct-vs-convert ratio baseline (full and restart match):
     `bcc1=1.00761627`, `bcc2=1.01282933`, `bcc3=1.04716454`,
     `mom1=2.00000000`, `ener=1.05235981`.
-  - Per-rank restart guard remains deterministic with the same fatal reason.
+  - Per-rank restart probe is supported in current baseline (`np=2` direct-edge
+    cases pass full-vs-restart parity).
+- Restart/safety matrix (`particles/pic_restart_safety_guards`, MPI enabled):
+  - restart A/B parity is exact at script tolerances for
+    `no_mhd`, `passive_mhd`, and `coupled_edge_direct` in `np=1,2`.
+  - deterministic negative-guard reason strings are validated for unsupported
+    runtime combinations.
+  - per-rank restart probe status is currently `supported`; watch item retained.
 - Multilevel behavior (`particles/pic_mhd_coupling_multilevel`, MPI enabled):
   - direct-vs-convert coupled response ratio baseline:
     `field_ratio_mhd=5.00677983`, `field_ratio_efield=5.00668588`.
@@ -1535,6 +1542,7 @@ No unplanned parity divergence was found in the audited PR5 axes above.
 - `particles/pic_mhd_current_coupling`
 - `particles/pic_mhd_coupling_decomp`
 - `particles/pic_mhd_restart_fidelity`
+- `particles/pic_restart_safety_guards`
 - `particles/pic_mhd_coupling_multilevel`
 - `particles/pic_mhd_coupling_nonperiodic`
 2. Changed-file style checks pass:

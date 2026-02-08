@@ -686,7 +686,7 @@ For every non-trivial function:
      - [x] Extend direct-mode coverage (higher-order and non-periodic) in:
        `pic_mhd_current_coupling.py`, `pic_mhd_coupling_decomp.py`,
        `pic_mhd_coupling_multilevel.py`, `pic_mhd_restart_fidelity.py`,
-       `pic_mhd_coupling_nonperiodic.py`.
+       `pic_mhd_coupling_nonperiodic.py`, `pic_restart_safety_guards.py`.
        - Status (2026-02-08, commit `f8d2642d`): non-periodic direct
          `direct_staggered` + `deposit_order=2` cases added in
          `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_nonperiodic.py:227`
@@ -726,6 +726,7 @@ For every non-trivial function:
      - `particles/pic_mhd_current_coupling`
      - `particles/pic_mhd_coupling_decomp`
      - `particles/pic_mhd_restart_fidelity`
+     - `particles/pic_restart_safety_guards`
      - `particles/pic_mhd_coupling_multilevel`
      - `particles/pic_mhd_coupling_nonperiodic`
    - Changed-file style checks pass:
@@ -737,6 +738,8 @@ For every non-trivial function:
      - explicit default-mode decision outcome with evidence.
      - latest matrix log reference:
        `/tmp/pr5_closeout_matrix_20260207_212254.log`.
+     - restart+safety closeout evidence:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/.codex/pic_entity_suite/step19_restart_safety/STEP19_RESTART_SAFETY_REPORT.md`.
 
 ## 7. What Not To Do
 
