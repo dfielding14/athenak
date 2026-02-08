@@ -107,6 +107,9 @@ efficiently on CPUs and GPUs.
   - `pic_background_mode=no_mhd` is active and uses a particle-owned magnetic
     field carrier (`pic_no_mhd_bx/by/bz`) for Boris pushers when no `<mhd>`
     block is present.
+  - Boris CR pushers now use a midpoint E+B sequence (`cE = -u x B`) and
+    store per-step particle delta channels used by coupled fluid feedback in
+    `MHDSrcTerms`/`EFieldSrc` when `pic_feedback_mode=coupled`.
   Other staged controls remain parse/validation hooks until their
   corresponding implementation steps.
 

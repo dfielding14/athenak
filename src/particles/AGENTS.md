@@ -45,13 +45,16 @@ Index constants are defined in `athena.hpp`:
 - **Real indices** (for `prtcl_rdata`):
   - `IPX, IPVX, IPY, IPVY, IPZ, IPVZ`: position and velocity
   - Cosmic rays (`CRParticlesIndex`): `IPM` (q/m), `IPBX/IPBY/IPBZ` (sampled B),
-    `IPDX/IPDY/IPDZ` (displacement), `IPDB` (parallel displacement)
+    `IPDX/IPDY/IPDZ` (displacement), `IPDB` (parallel displacement),
+    `IPEX/IPEY/IPEZ` (sampled midpoint `cE`), `IPDPX/IPDPY/IPDPZ` (per-step
+    momentum-rate feedback channels), `IPDE` (per-step energy-rate channel),
+    `IPEBDOT` (midpoint frozen-in orthogonality diagnostic `cE dot B`)
   - Stars (`StarParticlesIndex`): `IPT_CREATE`, `IPMASS`, `IPT_NEXT_SN`
 
 The number of real slots (`nrdata`) is chosen at construction time:
 - Cosmic rays:
-  - If `track_displacement` is true, `nrdata = IPDB + 1` (includes B and displacement).
-  - Else if 3D, `nrdata = IPBZ + 1`; otherwise `nrdata = IPBY + 1`.
+  - Always provisioned as `nrdata = IPEBDOT + 1` so midpoint E+B and coupled
+    feedback diagnostics are available in all staged PIC modes.
 - Stars: `nrdata = 9` (positions, velocities, and three star fields).
 
 `nidata` is always 3 (`PGID`, `PTAG`, and `PSP` or `NSN`).
@@ -71,7 +74,8 @@ The number of real slots (`nrdata`) is chosen at construction time:
   - `cr_distribution = center` (default) places particles at block centers.
   - `cr_distribution = random` uses Kokkos RNG to place uniformly in each block.
 - Optional displacement tracking via `track_displacement` updates `IPD*` and `IPDB`.
-- Requires MHD if using Boris pushers (needs `bcc0` for B interpolation).
+- Boris pushers support both MHD-carried fields (`coupled` / `passive_mhd`) and
+  particle-owned no-MHD carriers (`pic_background_mode=no_mhd`).
 
 ### Stars (`particle_type = star`)
 - **3D only**. Constructor aborts if `three_d` is false.
@@ -102,19 +106,26 @@ but these are not wired in the constructor.
   gradients of `GravPot`. Parameters are read from the `<potential>` block:
   `r_scale`, `rho_scale`, `mass_gal`, `scale_gal`, `z_gal`, `r_200`, `rho_mean`.
   Step size uses `particles:grav_dx` (default `1e-6`).
-- **Boris** (cosmic rays): advances velocities in B only (E=0). B is interpolated
-  from cell-centered `bcc0` with linear or TSC weighting.
+- **Boris** (cosmic rays): midpoint E+B Boris sequence:
+  first drift by `dt/2`, interpolate midpoint `u` and `B`, compute
+  `cE = -u x B`, apply full-step Boris momentum update, then second drift by
+  `dt/2`. Per-step `dp/dt`, `dE/dt`, and `cE dot B` diagnostics are stored in
+  the CR payload for deposition and regression checks.
 
 ### Field interpolation
-- `InterpolateLinear`: trilinear (or bilinear in 2D) interpolation of `bcc0`.
-- `InterpolateTSC`: triangular-shaped cloud weighting over a 3x3x3 stencil.
+- `InterpolateLinear`: trilinear (or bilinear in 2D) interpolation of midpoint
+  carrier fields (`B` and fluid velocity `u`).
+- `InterpolateTSC`: triangular-shaped cloud weighting over a 3x3x3 stencil for
+  midpoint carrier fields (`B` and fluid velocity `u`).
 
 ---
 
 ## Moment Deposition and PR2 Coupling Controls
 
 ### Deposition controls
-- `deposit_moments` (default `false`): enables `rho/J` deposition.
+- `deposit_moments` (default `false`): enables particle moment deposition.
+  In Boris CR paths this includes `rho/J` and midpoint diagnostics channels
+  (`E dot B`, and in coupled mode `dp/dt`, `dE/dt`).
 - `deposit_order`:
   - default and all non-direct paths: `1` only
   - coupled `direct_staggered` path: `1` and `2` supported
@@ -140,7 +151,7 @@ but these are not wired in the constructor.
 - `cr_vx0`, `cr_vy0`, `cr_vz0` default to `0.0` and are used by PR2 regression
   tests to make integrated current expectations deterministic.
 
-### Staged PIC runtime controls (Step 1/2 status)
+### Staged PIC runtime controls (Step 1-4 status)
 - `pic_background_mode`: `coupled` (default), `passive_mhd`, `no_mhd`.
 - `pic_feedback_mode`:
   - default `coupled` for `pic_background_mode=coupled`
@@ -237,7 +248,8 @@ In coupled mode, moment wrappers are also inserted into `stagen` on stage 1:
   - enum(s) and constructor parsing in `particles.cpp`.
   - data layout decisions for `nrdata` and `nidata`.
   - push logic in `particles_pushers.cpp`.
-- Boris pushers assume MHD is enabled; they error out if `pmhd` is null.
+- Boris pushers support no-MHD mode only through the explicit
+  `pic_background_mode=no_mhd` carrier path; keep constructor guards strict.
 - Star particles assume 3D and use an external file for initialization; keep the
   file format consistent.
 - Particle boundary exchange relies on `PGID` and the neighbor index scheme; keep

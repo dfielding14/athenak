@@ -1,0 +1,158 @@
+# AthenaXXX input file for midpoint E+B Boris and feedback tests
+
+<comment>
+problem   = PIC midpoint E+B Boris verification
+
+<job>
+basename  = pic_boris_midpoint_eb
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = 0.0
+x1max     = 8.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 4
+x2min     = 0.0
+x2max     = 4.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 4
+x3min     = 0.0
+x3max     = 4.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 4
+nx2       = 4
+nx3       = 4
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.1
+nlim       = 1
+tlim       = 1.0
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<particles>
+particle_type           = cosmic_ray
+ppc                     = 1.0
+pusher                  = boris_tsc
+nspecies                = 1
+cr_distribution         = center
+deposit_moments         = true
+deposit_order           = 1
+deposit_qscale          = 1.0
+couple_moments_to_mhd   = false
+couple_j_to_efield_coeff = 1.0
+couple_j_to_efield_representation = cell_centered
+couple_j_deposition_mode = cc_convert
+couple_moments_momentum_to_mhd = false
+couple_moments_energy_to_mhd   = false
+couple_fluid_feedback_order    = mhd_src_terms
+couple_moments_momentum_coeff  = 1.0
+couple_moments_energy_coeff    = 1.0
+cr_vx0                  = 0.2
+cr_vy0                  = 0.1
+cr_vz0                  = 0.0
+pic_background_mode     = passive_mhd
+pic_feedback_mode       = test_particle
+pic_interp_scheme       = tsc
+pic_cr_light_speed      = 1.0
+pic_max_cell_cross      = 2
+pic_theta_max           = 0.3
+pic_deltaf_mode         = off
+pic_deltaf_f0           =
+pic_sort_interval       = 0
+pic_intermediate_arrays = auto
+pic_expanding_box_mode  = off
+pic_expansion_rate_x1   = 0.0
+pic_expansion_rate_x2   = 0.0
+pic_expansion_rate_x3   = 0.0
+
+<species0>
+mass   = 1.0
+charge = 1.0
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp       = 0.0
+vflow     = 0.0
+along_x1  = true
+along_x2  = false
+along_x3  = false
+
+<output1>
+file_type   = bin
+variable    = prtcl_rho
+id          = prtcl_rho
+dcycle      = 1
+ghost_zones = false
+
+<output2>
+file_type   = bin
+variable    = prtcl_jx
+id          = prtcl_jx
+dcycle      = 1
+ghost_zones = false
+
+<output3>
+file_type   = bin
+variable    = prtcl_jy
+id          = prtcl_jy
+dcycle      = 1
+ghost_zones = false
+
+<output4>
+file_type   = bin
+variable    = prtcl_jz
+id          = prtcl_jz
+dcycle      = 1
+ghost_zones = false
+
+<output5>
+file_type   = bin
+variable    = mhd_u_m1
+id          = mhd_u_m1
+dcycle      = 1
+ghost_zones = false
+
+<output6>
+file_type   = bin
+variable    = mhd_u_m2
+id          = mhd_u_m2
+dcycle      = 1
+ghost_zones = false
+
+<output7>
+file_type   = bin
+variable    = mhd_u_m3
+id          = mhd_u_m3
+dcycle      = 1
+ghost_zones = false
+
+<output8>
+file_type   = bin
+variable    = mhd_u_e
+id          = mhd_u_e
+dcycle      = 1
+ghost_zones = false
+
+<output9>
+file_type   = bin
+variable    = prtcl_d
+id          = prtcl_d
+dcycle      = 1
+ghost_zones = false

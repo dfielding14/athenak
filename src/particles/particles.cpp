@@ -217,15 +217,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   switch (particle_type) {
     case ParticleType::cosmic_ray:
       {
-        // Determine number of real data slots based on dimensionality and options
+        // CR payload now always carries sampled B/cE and per-step feedback deltas.
         track_displacement = pin->GetOrAddBoolean("particles","track_displacement",false);
-        if (track_displacement) {
-          nrdata = IPDB + 1;  // includes displacement indices
-        } else if (pmy_pack->pmesh->three_d) {
-          nrdata = IPBZ + 1;  // up to Bz
-        } else {
-          nrdata = IPBY + 1;  // up to By in 2D
-        }
+        nrdata = IPEBDOT + 1;
 
         nidata = 3;  // PGID, PTAG, PSP (species)
         break;
@@ -809,9 +803,15 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
     // Initialize B-field components to zero
     pr(IPBX,p) = 0.0;
     pr(IPBY,p) = 0.0;
-    if (nx3_local > 1) {
-      pr(IPBZ,p) = 0.0;
-    }
+    pr(IPBZ,p) = 0.0;
+    pr(IPEX,p) = 0.0;
+    pr(IPEY,p) = 0.0;
+    pr(IPEZ,p) = 0.0;
+    pr(IPDPX,p) = 0.0;
+    pr(IPDPY,p) = 0.0;
+    pr(IPDPZ,p) = 0.0;
+    pr(IPDE,p) = 0.0;
+    pr(IPEBDOT,p) = 0.0;
 
     // Initialize displacement tracking if enabled
     if (track_disp_local) {

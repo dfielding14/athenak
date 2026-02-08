@@ -209,7 +209,12 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
   bool track_displacement_local = track_displacement;
   const int nx3_local = indcs.nx3;  // avoid capturing host ref
 
-  // Boris pusher algorithm
+  const Real qscale = deposit_qscale;
+  auto mspecies = species_mass;
+  const int nspecies_local = nspecies;
+  const Real inv_dt = (dt > 0.0) ? (1.0/dt) : 0.0;
+
+  // Midpoint E+B Boris pusher
   par_for(
       "push_cr", DevExeSpace(), 0, nprtcl_thispack - 1,
       KOKKOS_LAMBDA(const int p) {
@@ -221,80 +226,104 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         Real vx = pr(IPVX, p);
         Real vy = pr(IPVY, p);
         Real vz = (indcs.nx3 > 1) ? pr(IPVZ, p) : 0.0;
+        Real vx_old = vx;
+        Real vy_old = vy;
+        Real vz_old = vz;
         Real q_over_m = pr(IPM, p);
+        int sp = pi(PSP, p);
+        if (sp < 0 || sp >= nspecies_local) return;
+        Real m_macro = qscale*mspecies(sp);
 
-        // Interpolate B-field to particle position
+        // Drift to midpoint with old velocity.
+        Real dt_half = 0.5*dt;
+        Real x_mid = x + dt_half*vx;
+        Real y_mid = y + dt_half*vy;
+        Real z_mid = z + dt_half*vz;
+
+        // Interpolate midpoint B and fluid velocity for frozen-in cE = -u x B.
         Real Bx = 0.0, By = 0.0, Bz = 0.0;
+        Real Ux = 0.0, Uy = 0.0, Uz = 0.0;
         if (use_tsc) {
-          pt->InterpolateTSC(m, x, y, z, Bx, By, Bz);
+          pt->InterpolateTSC(m, x_mid, y_mid, z_mid, Bx, By, Bz, Ux, Uy, Uz);
         } else {
-          pt->InterpolateLinear(m, x, y, z, Bx, By, Bz);
+          pt->InterpolateLinear(m, x_mid, y_mid, z_mid, Bx, By, Bz, Ux, Uy, Uz);
+        }
+        if (nx3_local == 1) {
+          Bz = 0.0;
+          Uz = 0.0;
         }
 
-        // Boris algorithm
-        Real dt_half = 0.5 * dt;
-        Real qdt_2m = q_over_m * dt_half;
+        Real cEx = -(Uy*Bz - Uz*By);
+        Real cEy = -(Uz*Bx - Ux*Bz);
+        Real cEz = -(Ux*By - Uy*Bx);
+        if (nx3_local == 1) cEz = 0.0;
 
-        // No electric field for now
-        Real Ex = 0.0, Ey = 0.0, Ez = 0.0;
+        Real v_old_sq = vx_old*vx_old + vy_old*vy_old + vz_old*vz_old;
 
         // Half electric acceleration
-        vx += qdt_2m * Ex;
-        vy += qdt_2m * Ey;
-        vz += qdt_2m * Ez;
+        Real qdt_2m = q_over_m*dt_half;
+        vx += qdt_2m*cEx;
+        vy += qdt_2m*cEy;
+        vz += qdt_2m*cEz;
 
         // Magnetic rotation
-        Real tx = qdt_2m * Bx;
-        Real ty = qdt_2m * By;
-        Real tz = qdt_2m * Bz;
-        Real t2 = tx * tx + ty * ty + tz * tz;
-        Real s = 2.0 / (1.0 + t2);
+        Real tx = qdt_2m*Bx;
+        Real ty = qdt_2m*By;
+        Real tz = qdt_2m*Bz;
+        Real t2 = tx*tx + ty*ty + tz*tz;
+        Real sx = 2.0*tx/(1.0 + t2);
+        Real sy = 2.0*ty/(1.0 + t2);
+        Real sz = 2.0*tz/(1.0 + t2);
 
-        Real vx1 = vx + vy * tz - vz * ty;
-        Real vy1 = vy + vz * tx - vx * tz;
-        Real vz1 = vz + vx * ty - vy * tx;
+        Real vpx = vx + (vy*tz - vz*ty);
+        Real vpy = vy + (vz*tx - vx*tz);
+        Real vpz = vz + (vx*ty - vy*tx);
 
-        vx += s * (vy1 * tz - vz1 * ty);
-        vy += s * (vz1 * tx - vx1 * tz);
-        vz += s * (vx1 * ty - vy1 * tx);
+        vx += vpy*sz - vpz*sy;
+        vy += vpz*sx - vpx*sz;
+        vz += vpx*sy - vpy*sx;
 
         // Half electric acceleration
-        vx += qdt_2m * Ex;
-        vy += qdt_2m * Ey;
-        vz += qdt_2m * Ez;
+        vx += qdt_2m*cEx;
+        vy += qdt_2m*cEy;
+        vz += qdt_2m*cEz;
 
-        // Update position
-        pr(IPX, p) += dt * vx;
-        pr(IPY, p) += dt * vy;
-        if (indcs.nx3 > 1) {
-          pr(IPZ, p) += dt * vz;
-        }
+        // Complete drift from midpoint to full-step position.
+        pr(IPX, p) = x_mid + dt_half*vx;
+        pr(IPY, p) = y_mid + dt_half*vy;
+        pr(IPZ, p) = (nx3_local > 1) ? (z_mid + dt_half*vz) : 0.0;
 
         // Store updated velocity
         pr(IPVX, p) = vx;
         pr(IPVY, p) = vy;
-        if (indcs.nx3 > 1) {
-          pr(IPVZ, p) = vz;
-        }
+        pr(IPVZ, p) = (nx3_local > 1) ? vz : 0.0;
 
-        // Store B-field at particle
+        // Store sampled midpoint EM fields at particle.
         pr(IPBX, p) = Bx;
         pr(IPBY, p) = By;
-        if (nx3_local > 1) {
-          pr(IPBZ, p) = Bz;
-        }
+        pr(IPBZ, p) = (nx3_local > 1) ? Bz : 0.0;
+        pr(IPEX, p) = cEx;
+        pr(IPEY, p) = cEy;
+        pr(IPEZ, p) = (nx3_local > 1) ? cEz : 0.0;
+
+        Real v_new_sq = vx*vx + vy*vy + vz*vz;
+        pr(IPDPX, p) = m_macro*(vx - vx_old)*inv_dt;
+        pr(IPDPY, p) = m_macro*(vy - vy_old)*inv_dt;
+        pr(IPDPZ, p) = m_macro*(vz - vz_old)*inv_dt;
+        pr(IPDE, p) = 0.5*m_macro*(v_new_sq - v_old_sq)*inv_dt;
+        pr(IPEBDOT, p) = cEx*Bx + cEy*By + cEz*Bz;
 
         // Update displacement tracking if enabled
         if (track_displacement_local) {
-          pr(IPDX, p) += dt * vx;
-          pr(IPDY, p) += dt * vy;
+          pr(IPDX, p) += dt*vx;
+          pr(IPDY, p) += dt*vy;
           if (nx3_local > 1) {
-            pr(IPDZ, p) += dt * vz;
+            pr(IPDZ, p) += dt*vz;
           }
           // Parallel displacement
-          Real B_mag = sqrt(Bx * Bx + By * By + Bz * Bz);
+          Real B_mag = sqrt(Bx*Bx + By*By + Bz*Bz);
           if (B_mag > 0.0) {
-            pr(IPDB, p) += dt * (vx * Bx + vy * By + vz * Bz) / B_mag;
+            pr(IPDB, p) += dt*(vx*Bx + vy*By + vz*Bz)/B_mag;
           }
         }
       });
@@ -304,13 +333,15 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
 
 KOKKOS_INLINE_FUNCTION
 void Particles::InterpolateLinear(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                                  Real &Bz) const {
+                                  Real &Bz, Real &Ux, Real &Uy, Real &Uz) const {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   auto &size = pmy_pack->pmb->mb_size;
   const bool use_no_mhd_bcc =
       (pic_background_mode == PICBackgroundMode::no_mhd) ||
       (pmy_pack->pmhd == nullptr);
   auto bcc = use_no_mhd_bcc ? pic_no_mhd_bcc0 : pmy_pack->pmhd->bcc0;
+  auto w0 = (use_no_mhd_bcc || pmy_pack->pmhd == nullptr) ?
+            DvceArray5D<Real>() : pmy_pack->pmhd->w0;
 
   Real dx1 = size.d_view(m).dx1;
   Real dx2 = size.d_view(m).dx2;
@@ -337,6 +368,7 @@ void Particles::InterpolateLinear(int m, Real x, Real y, Real z, Real &Bx, Real 
   Real wz = (indcs.nx3 > 1) ? fz - floor(fz) : 0.0;
 
   Bx = By = Bz = 0.0;
+  Ux = Uy = Uz = 0.0;
 
   for (int dk = 0; dk <= (indcs.nx3 > 1 ? 1 : 0); ++dk) {
     Real wk = (indcs.nx3 > 1) ? (dk == 0 ? (1.0 - wz) : wz) : 1.0;
@@ -350,6 +382,11 @@ void Particles::InterpolateLinear(int m, Real x, Real y, Real z, Real &Bx, Real 
         Real w = wi * wj * wk;
         Bx += w * bcc(m, IBX, kk, jj, ii);
         By += w * bcc(m, IBY, kk, jj, ii);
+        if (!use_no_mhd_bcc && pmy_pack->pmhd != nullptr) {
+          Ux += w*w0(m, IVX, kk, jj, ii);
+          Uy += w*w0(m, IVY, kk, jj, ii);
+          Uz += w*w0(m, IVZ, kk, jj, ii);
+        }
         if (indcs.nx3 > 1) {
           Bz += w * bcc(m, IBZ, kk, jj, ii);
         }
@@ -358,18 +395,21 @@ void Particles::InterpolateLinear(int m, Real x, Real y, Real z, Real &Bx, Real 
   }
   if (indcs.nx3 == 1) {
     Bz = 0.0;
+    Uz = 0.0;
   }
 }
 
 KOKKOS_INLINE_FUNCTION
 void Particles::InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                               Real &Bz) const {
+                               Real &Bz, Real &Ux, Real &Uy, Real &Uz) const {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   auto &size = pmy_pack->pmb->mb_size;
   const bool use_no_mhd_bcc =
       (pic_background_mode == PICBackgroundMode::no_mhd) ||
       (pmy_pack->pmhd == nullptr);
   auto bcc = use_no_mhd_bcc ? pic_no_mhd_bcc0 : pmy_pack->pmhd->bcc0;
+  auto w0 = (use_no_mhd_bcc || pmy_pack->pmhd == nullptr) ?
+            DvceArray5D<Real>() : pmy_pack->pmhd->w0;
 
   Real dx1 = size.d_view(m).dx1;
   Real dx2 = size.d_view(m).dx2;
@@ -421,6 +461,7 @@ void Particles::InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By
   }
 
   Bx = By = Bz = 0.0;
+  Ux = Uy = Uz = 0.0;
   int nk = (indcs.nx3 > 1) ? 3 : 1;
   for (int kk = 0; kk < nk; ++kk) {
     for (int jj = 0; jj < 3; ++jj) {
@@ -428,6 +469,11 @@ void Particles::InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By
         Real w = wx[ii] * wy[jj] * wz[kk];
         Bx += w * bcc(m, IBX, kz[kk], iy[jj], ix[ii]);
         By += w * bcc(m, IBY, kz[kk], iy[jj], ix[ii]);
+        if (!use_no_mhd_bcc && pmy_pack->pmhd != nullptr) {
+          Ux += w*w0(m, IVX, kz[kk], iy[jj], ix[ii]);
+          Uy += w*w0(m, IVY, kz[kk], iy[jj], ix[ii]);
+          Uz += w*w0(m, IVZ, kz[kk], iy[jj], ix[ii]);
+        }
         if (indcs.nx3 > 1) {
           Bz += w * bcc(m, IBZ, kz[kk], iy[jj], ix[ii]);
         }
@@ -436,6 +482,7 @@ void Particles::InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By
   }
   if (indcs.nx3 == 1) {
     Bz = 0.0;
+    Uz = 0.0;
   }
 }
 

@@ -143,6 +143,10 @@ When assembled, it wires tasks into `MeshBlockPack` task lists:
   - both paths are stage-1-only and gated by per-target toggles
     (`couple_moments_momentum_to_mhd`,
     `couple_moments_energy_to_mhd`).
+  - for Boris + `pic_feedback_mode=coupled`, both feedback locations consume
+    deposited per-step particle deltas (`dp/dt`, `dE/dt`) with opposite sign
+    for conservative exchange; non-Boris paths retain legacy `J x B` / `J dot B`
+    source handling.
 
 ### PR5 Step 2 Passive-MHD Isolation Hook
 - When `<particles>/pic_background_mode=passive_mhd` is active, MHD fluid

@@ -295,6 +295,14 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
   const int gids = pmy_pack->gids;
   const int nspecies_local = nspecies;
   const Real qscale = deposit_qscale;
+  const bool is_boris_pusher =
+      (pusher == ParticlesPusher::boris_lin) ||
+      (pusher == ParticlesPusher::boris_tsc);
+  const bool use_delta_feedback =
+      (is_boris_pusher &&
+       (pic_feedback_mode == PICFeedbackMode::coupled) &&
+       couple_moments_to_mhd &&
+       (couple_moments_momentum_to_mhd || couple_moments_energy_to_mhd));
 
   auto &size = pmy_pack->pmb->mb_size;
   auto &pr = prtcl_rdata;
@@ -340,6 +348,15 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
     Kokkos::atomic_add(&mom(m, IMOM_JX,  kp, jp, ip), q_macro*pr(IPVX,p));
     Kokkos::atomic_add(&mom(m, IMOM_JY,  kp, jp, ip), q_macro*pr(IPVY,p));
     Kokkos::atomic_add(&mom(m, IMOM_JZ,  kp, jp, ip), q_macro*pr(IPVZ,p));
+    if (is_boris_pusher) {
+      Kokkos::atomic_add(&mom(m, IMOM_EBDOT, kp, jp, ip), pr(IPEBDOT, p));
+      if (use_delta_feedback) {
+        Kokkos::atomic_add(&mom(m, IMOM_DPXDT, kp, jp, ip), pr(IPDPX, p));
+        Kokkos::atomic_add(&mom(m, IMOM_DPYDT, kp, jp, ip), pr(IPDPY, p));
+        Kokkos::atomic_add(&mom(m, IMOM_DPZDT, kp, jp, ip), pr(IPDPZ, p));
+        Kokkos::atomic_add(&mom(m, IMOM_DEDT, kp, jp, ip), pr(IPDE, p));
+      }
+    }
   });
 
   if (!UseDirectEdgeCurrentDeposit(deposit_moments, couple_moments_to_mhd,

@@ -147,11 +147,16 @@ class Particles {
   Real cr_vx0 = 0.0;                // deterministic CR vx initialization
   Real cr_vy0 = 0.0;                // deterministic CR vy initialization
   Real cr_vz0 = 0.0;                // deterministic CR vz initialization
-  static constexpr int NMOM = 4;
+  static constexpr int NMOM = 9;
   static constexpr int IMOM_RHO = 0;
   static constexpr int IMOM_JX  = 1;
   static constexpr int IMOM_JY  = 2;
   static constexpr int IMOM_JZ  = 3;
+  static constexpr int IMOM_DPXDT = 4;
+  static constexpr int IMOM_DPYDT = 5;
+  static constexpr int IMOM_DPZDT = 6;
+  static constexpr int IMOM_DEDT = 7;
+  static constexpr int IMOM_EBDOT = 8;
   DvceArray5D<Real> moments;
   DvceArray5D<Real> coarse_moments;
   DvceArray4D<Real> j_edge_x1e, j_edge_x2e, j_edge_x3e;
@@ -215,10 +220,10 @@ class Particles {
   // Field interpolation methods
   KOKKOS_INLINE_FUNCTION
   void InterpolateLinear(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                         Real &Bz) const;
+                         Real &Bz, Real &Ux, Real &Uy, Real &Uz) const;
   KOKKOS_INLINE_FUNCTION
   void InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                      Real &Bz) const;
+                      Real &Bz, Real &Ux, Real &Uy, Real &Uz) const;
 
  private:
   MeshBlockPack *pmy_pack; // ptr to MeshBlockPack containing this Particles

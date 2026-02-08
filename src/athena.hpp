@@ -59,9 +59,15 @@ enum MetricIndex {I00=0, I01=1, I02=2, I03=3, I11=4, I12=5, I13=6, I22=7, I23=8,
 enum ParticlesIndex {PGID=0, PTAG=1, IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5};
 
 // additional indices for cosmic ray particles
-enum CRParticlesIndex {IPM=6, IPBX=7, IPBY=8, IPBZ=9, IPDX=10, IPDY=11, IPDZ=12, IPDB=13};
+enum CRParticlesIndex {
+  IPM=6,
+  IPBX=7,  IPBY=8,  IPBZ=9,
+  IPDX=10, IPDY=11, IPDZ=12, IPDB=13,
+  IPEX=14, IPEY=15, IPEZ=16,
+  IPDPX=17, IPDPY=18, IPDPZ=19, IPDE=20, IPEBDOT=21
+};
 
-// additional indices for star particles  
+// additional indices for star particles
 enum StarParticlesIndex {IPT_CREATE=6, IPMASS=7, IPT_NEXT_SN=8};
 
 // integer data indices for particle types
@@ -486,4 +492,3 @@ struct reduction_identity< array_sum::GlobalSum > {
 }
 
 #endif // ATHENA_HPP_
-

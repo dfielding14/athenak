@@ -283,6 +283,10 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
     const bool add_eng = ppart->couple_moments_energy_to_mhd;
     const bool apply_feedback_here = (ppart->couple_fluid_feedback_order ==
                                       CoupledFluidFeedbackOrder::mhd_src_terms);
+    const bool use_delta_feedback =
+        ((ppart->pusher == ParticlesPusher::boris_lin) ||
+         (ppart->pusher == ParticlesPusher::boris_tsc)) &&
+        (ppart->pic_feedback_mode == PICFeedbackMode::coupled);
     if ((add_mom || add_eng) && apply_feedback_here) {
       if (add_eng && (nmhd <= IEN)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -305,25 +309,40 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
 
       par_for("prtcl_fluid_feedback_src", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-        Real jx = mom(m, particles::Particles::IMOM_JX, k, j, i);
-        Real jy = mom(m, particles::Particles::IMOM_JY, k, j, i);
-        Real jz = mom(m, particles::Particles::IMOM_JZ, k, j, i);
+        if (use_delta_feedback) {
+          if (add_mom) {
+            u(m, IM1, k, j, i) -= beta_dt*mom_coef*
+                                  mom(m, particles::Particles::IMOM_DPXDT, k, j, i);
+            u(m, IM2, k, j, i) -= beta_dt*mom_coef*
+                                  mom(m, particles::Particles::IMOM_DPYDT, k, j, i);
+            u(m, IM3, k, j, i) -= beta_dt*mom_coef*
+                                  mom(m, particles::Particles::IMOM_DPZDT, k, j, i);
+          }
+          if (add_eng) {
+            u(m, IEN, k, j, i) -= beta_dt*eng_coef*
+                                  mom(m, particles::Particles::IMOM_DEDT, k, j, i);
+          }
+        } else {
+          Real jx = mom(m, particles::Particles::IMOM_JX, k, j, i);
+          Real jy = mom(m, particles::Particles::IMOM_JY, k, j, i);
+          Real jz = mom(m, particles::Particles::IMOM_JZ, k, j, i);
 
-        Real bx = bcc(m, IBX, k, j, i);
-        Real by = bcc(m, IBY, k, j, i);
-        Real bz = bcc(m, IBZ, k, j, i);
+          Real bx = bcc(m, IBX, k, j, i);
+          Real by = bcc(m, IBY, k, j, i);
+          Real bz = bcc(m, IBZ, k, j, i);
 
-        Real fx = -(jy*bz - jz*by);
-        Real fy = -(jz*bx - jx*bz);
-        Real fz = -(jx*by - jy*bx);
+          Real fx = -(jy*bz - jz*by);
+          Real fy = -(jz*bx - jx*bz);
+          Real fz = -(jx*by - jy*bx);
 
-        if (add_mom) {
-          u(m, IM1, k, j, i) += beta_dt*mom_coef*fx;
-          u(m, IM2, k, j, i) += beta_dt*mom_coef*fy;
-          u(m, IM3, k, j, i) += beta_dt*mom_coef*fz;
-        }
-        if (add_eng) {
-          u(m, IEN, k, j, i) += beta_dt*eng_coef*(jx*bx + jy*by + jz*bz);
+          if (add_mom) {
+            u(m, IM1, k, j, i) += beta_dt*mom_coef*fx;
+            u(m, IM2, k, j, i) += beta_dt*mom_coef*fy;
+            u(m, IM3, k, j, i) += beta_dt*mom_coef*fz;
+          }
+          if (add_eng) {
+            u(m, IEN, k, j, i) += beta_dt*eng_coef*(jx*bx + jy*by + jz*bz);
+          }
         }
       });
     }
@@ -521,6 +540,10 @@ TaskStatus MHD::EFieldSrc(Driver *pdrive, int stage) {
       (ppart->couple_fluid_feedback_order == CoupledFluidFeedbackOrder::efield_src)) {
     const bool add_mom = ppart->couple_moments_momentum_to_mhd;
     const bool add_eng = ppart->couple_moments_energy_to_mhd;
+    const bool use_delta_feedback =
+        ((ppart->pusher == ParticlesPusher::boris_lin) ||
+         (ppart->pusher == ParticlesPusher::boris_tsc)) &&
+        (ppart->pic_feedback_mode == PICFeedbackMode::coupled);
     if (add_mom || add_eng) {
       if (add_eng && (nmhd <= IEN)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -545,25 +568,40 @@ TaskStatus MHD::EFieldSrc(Driver *pdrive, int stage) {
       par_for("prtcl_fluid_feedback_src_efield", DevExeSpace(), 0, nmb1,
               ks, ke, js, je, is, ie,
       KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-        Real jx = mom(m, particles::Particles::IMOM_JX, k, j, i);
-        Real jy = mom(m, particles::Particles::IMOM_JY, k, j, i);
-        Real jz = mom(m, particles::Particles::IMOM_JZ, k, j, i);
+        if (use_delta_feedback) {
+          if (add_mom) {
+            u(m, IM1, k, j, i) -= beta_dt*mom_coef*
+                                  mom(m, particles::Particles::IMOM_DPXDT, k, j, i);
+            u(m, IM2, k, j, i) -= beta_dt*mom_coef*
+                                  mom(m, particles::Particles::IMOM_DPYDT, k, j, i);
+            u(m, IM3, k, j, i) -= beta_dt*mom_coef*
+                                  mom(m, particles::Particles::IMOM_DPZDT, k, j, i);
+          }
+          if (add_eng) {
+            u(m, IEN, k, j, i) -= beta_dt*eng_coef*
+                                  mom(m, particles::Particles::IMOM_DEDT, k, j, i);
+          }
+        } else {
+          Real jx = mom(m, particles::Particles::IMOM_JX, k, j, i);
+          Real jy = mom(m, particles::Particles::IMOM_JY, k, j, i);
+          Real jz = mom(m, particles::Particles::IMOM_JZ, k, j, i);
 
-        Real bx = bcc(m, IBX, k, j, i);
-        Real by = bcc(m, IBY, k, j, i);
-        Real bz = bcc(m, IBZ, k, j, i);
+          Real bx = bcc(m, IBX, k, j, i);
+          Real by = bcc(m, IBY, k, j, i);
+          Real bz = bcc(m, IBZ, k, j, i);
 
-        Real fx = -(jy*bz - jz*by);
-        Real fy = -(jz*bx - jx*bz);
-        Real fz = -(jx*by - jy*bx);
+          Real fx = -(jy*bz - jz*by);
+          Real fy = -(jz*bx - jx*bz);
+          Real fz = -(jx*by - jy*bx);
 
-        if (add_mom) {
-          u(m, IM1, k, j, i) += beta_dt*mom_coef*fx;
-          u(m, IM2, k, j, i) += beta_dt*mom_coef*fy;
-          u(m, IM3, k, j, i) += beta_dt*mom_coef*fz;
-        }
-        if (add_eng) {
-          u(m, IEN, k, j, i) += beta_dt*eng_coef*(jx*bx + jy*by + jz*bz);
+          if (add_mom) {
+            u(m, IM1, k, j, i) += beta_dt*mom_coef*fx;
+            u(m, IM2, k, j, i) += beta_dt*mom_coef*fy;
+            u(m, IM3, k, j, i) += beta_dt*mom_coef*fz;
+          }
+          if (add_eng) {
+            u(m, IEN, k, j, i) += beta_dt*eng_coef*(jx*bx + jy*by + jz*bz);
+          }
         }
       });
     }
