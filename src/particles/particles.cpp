@@ -323,7 +323,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   }
 
   const char *pic_feedback_mode_default =
-      (pic_background_mode == PICBackgroundMode::passive_mhd) ?
+      ((pic_background_mode == PICBackgroundMode::passive_mhd) ||
+       (pic_background_mode == PICBackgroundMode::no_mhd)) ?
       "test_particle" : "coupled";
   std::string pic_feedback_mode_str = pin->GetOrAddString(
       "particles", "pic_feedback_mode", pic_feedback_mode_default);
@@ -438,6 +439,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   pic_expansion_rate_x1 = pin->GetOrAddReal("particles", "pic_expansion_rate_x1", 0.0);
   pic_expansion_rate_x2 = pin->GetOrAddReal("particles", "pic_expansion_rate_x2", 0.0);
   pic_expansion_rate_x3 = pin->GetOrAddReal("particles", "pic_expansion_rate_x3", 0.0);
+  pic_no_mhd_bx = pin->GetOrAddReal("particles", "pic_no_mhd_bx", 0.0);
+  pic_no_mhd_by = pin->GetOrAddReal("particles", "pic_no_mhd_by", 0.0);
+  pic_no_mhd_bz = pin->GetOrAddReal("particles", "pic_no_mhd_bz", 0.0);
   if ((pic_expanding_box_mode == PICExpandingBoxMode::off) &&
       ((pic_expansion_rate_x1 != 0.0) ||
        (pic_expansion_rate_x2 != 0.0) ||
@@ -476,6 +480,15 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                 << "<particles>/pic_feedback_mode=test_particle unless coupled "
                 << "feedback is explicitly implemented for this mode"
                 << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+  if (pic_background_mode == PICBackgroundMode::no_mhd) {
+    if (pic_feedback_mode != PICFeedbackMode::test_particle) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_background_mode=no_mhd requires "
+                << "<particles>/pic_feedback_mode=test_particle" << std::endl;
       std::exit(EXIT_FAILURE);
     }
   }
@@ -590,6 +603,13 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
   }
+  if (pic_background_mode == PICBackgroundMode::no_mhd && pin->DoesBlockExist("mhd")) {
+    std::cout << "### WARNING in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_background_mode=no_mhd is active while an <mhd> "
+              << "block is present; no_mhd particle field carrier will be used"
+              << std::endl;
+  }
   if (use_fluid_feedback &&
       (pmy_pack->pcoord->is_special_relativistic ||
        pmy_pack->pcoord->is_general_relativistic)) {
@@ -642,6 +662,26 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
         pbval_jedge->InitializeBuffers(3);
       }
     }
+  }
+
+  if (pic_background_mode == PICBackgroundMode::no_mhd) {
+    auto &indcs = pmy_pack->pmesh->mb_indcs;
+    int nmb = ppack->nmb_thispack;
+    int ncells1 = indcs.nx1 + 2*(indcs.ng);
+    int ncells2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*(indcs.ng)) : 1;
+    int ncells3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*(indcs.ng)) : 1;
+    Kokkos::realloc(pic_no_mhd_bcc0, nmb, NMAG, ncells3, ncells2, ncells1);
+    auto bcc = pic_no_mhd_bcc0;
+    const Real bx = pic_no_mhd_bx;
+    const Real by = pic_no_mhd_by;
+    const Real bz = pic_no_mhd_bz;
+    par_for("pic_no_mhd_bcc_init", DevExeSpace(), 0, nmb - 1,
+            0, ncells3 - 1, 0, ncells2 - 1, 0, ncells1 - 1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      bcc(m, IBX, k, j, i) = bx;
+      bcc(m, IBY, k, j, i) = by;
+      bcc(m, IBZ, k, j, i) = bz;
+    });
   }
 
   // Initialize particles based on type

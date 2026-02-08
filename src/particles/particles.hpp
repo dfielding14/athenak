@@ -139,7 +139,11 @@ class Particles {
   Real pic_expansion_rate_x1 = 0.0;
   Real pic_expansion_rate_x2 = 0.0;
   Real pic_expansion_rate_x3 = 0.0;
+  Real pic_no_mhd_bx = 0.0;
+  Real pic_no_mhd_by = 0.0;
+  Real pic_no_mhd_bz = 0.0;
   std::string pic_deltaf_f0 = "";
+  DvceArray5D<Real> pic_no_mhd_bcc0;
   Real cr_vx0 = 0.0;                // deterministic CR vx initialization
   Real cr_vy0 = 0.0;                // deterministic CR vy initialization
   Real cr_vz0 = 0.0;                // deterministic CR vz initialization

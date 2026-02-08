@@ -156,11 +156,18 @@ but these are not wired in the constructor.
 - `pic_expanding_box_mode`: `off` (default) or `on`.
 - `pic_expansion_rate_x1/x2/x3` default to `0.0`; non-zero expansion rates
   require `pic_expanding_box_mode=on`.
+- `pic_no_mhd_bx`, `pic_no_mhd_by`, `pic_no_mhd_bz` define uniform no-MHD
+  Boris background fields for the particle-owned carrier.
 - `passive_mhd` currently requires:
   - active `<mhd>` block
   - `pic_feedback_mode=test_particle`
   - coupling toggles disabled (`couple_moments_to_mhd`,
     `couple_moments_momentum_to_mhd`, `couple_moments_energy_to_mhd`).
+- `no_mhd` currently requires:
+  - `pic_feedback_mode=test_particle`
+  - coupling toggles disabled (`couple_moments_to_mhd`,
+    `couple_moments_momentum_to_mhd`, `couple_moments_energy_to_mhd`)
+  - Boris pushers use `pic_no_mhd_bcc0` instead of `pmhd->bcc0`.
 
 ### Runtime guards (constructor)
 - Coupling requires `deposit_moments=true` and an active `<mhd>` block.
@@ -171,6 +178,8 @@ but these are not wired in the constructor.
   non-relativistic MHD in PR2.
 - `pic_feedback_mode=test_particle` explicitly rejects particle-to-MHD coupling
   toggles in the current staged implementation.
+- Boris pushers now require either active MHD fields or
+  `pic_background_mode=no_mhd` with a valid no-MHD carrier path.
 
 ---
 

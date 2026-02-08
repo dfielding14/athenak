@@ -7,6 +7,7 @@
 //  \brief
 
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
 
 #include "athena.hpp"
@@ -191,16 +192,19 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
   int gids = pmy_pack->gids;
   bool use_tsc = (pusher == ParticlesPusher::boris_tsc);
 
-  // Access MHD fields if available
-  bool has_mhd = (pmy_pack->pmhd != nullptr);
-  if (!has_mhd) {
-    std::cout << "### FATAL ERROR in Particles::PushCosmicRays: "
-              << "Boris pushers require MHD fields" << std::endl;
-    return TaskStatus::fail;
+  const bool no_mhd_mode = (pic_background_mode == PICBackgroundMode::no_mhd);
+  const bool has_field_carrier = (pmy_pack->pmhd != nullptr) || no_mhd_mode;
+  if (!has_field_carrier) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Boris pushers require MHD fields, or "
+              << "<particles>/pic_background_mode=no_mhd with "
+              << "pic_no_mhd_bx/by/bz" << std::endl;
+    std::exit(EXIT_FAILURE);
   }
 
   Particles *pt = this;
-  
+
   // Create local copies to avoid GPU lambda capture warning
   bool track_displacement_local = track_displacement;
   const int nx3_local = indcs.nx3;  // avoid capturing host ref
@@ -303,7 +307,10 @@ void Particles::InterpolateLinear(int m, Real x, Real y, Real z, Real &Bx, Real 
                                   Real &Bz) const {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   auto &size = pmy_pack->pmb->mb_size;
-  auto bcc = pmy_pack->pmhd->bcc0;
+  const bool use_no_mhd_bcc =
+      (pic_background_mode == PICBackgroundMode::no_mhd) ||
+      (pmy_pack->pmhd == nullptr);
+  auto bcc = use_no_mhd_bcc ? pic_no_mhd_bcc0 : pmy_pack->pmhd->bcc0;
 
   Real dx1 = size.d_view(m).dx1;
   Real dx2 = size.d_view(m).dx2;
@@ -359,7 +366,10 @@ void Particles::InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By
                                Real &Bz) const {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   auto &size = pmy_pack->pmb->mb_size;
-  auto bcc = pmy_pack->pmhd->bcc0;
+  const bool use_no_mhd_bcc =
+      (pic_background_mode == PICBackgroundMode::no_mhd) ||
+      (pmy_pack->pmhd == nullptr);
+  auto bcc = use_no_mhd_bcc ? pic_no_mhd_bcc0 : pmy_pack->pmhd->bcc0;
 
   Real dx1 = size.d_view(m).dx1;
   Real dx2 = size.d_view(m).dx2;

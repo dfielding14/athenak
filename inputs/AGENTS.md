@@ -74,6 +74,8 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - `inputs/tests/pic_mhd_current_coupling.athinput`
 - Passive-background isolation deck:
   - `inputs/tests/pic_mhd_passive_mode.athinput`
+- No-MHD Boris isolation deck:
+  - `inputs/tests/pic_no_mhd_boris.athinput`
 - Guard decks used for fatal-path validation:
   - `inputs/tests/pic_mhd_coupling_guard_radiation.athinput`
   - `inputs/tests/pic_mhd_coupling_guard_nr.athinput`
@@ -104,6 +106,11 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - `particles/pic_background_mode = coupled|passive_mhd|no_mhd`
   - `particles/pic_feedback_mode = test_particle`
   - `particles/couple_moments_to_mhd` (rejected in passive mode)
+- No-MHD guard overrides used by regressions:
+  - `particles/pic_background_mode = no_mhd|coupled`
+  - `particles/pic_feedback_mode = test_particle|coupled`
+  - `particles/pic_no_mhd_bx`, `particles/pic_no_mhd_by`,
+    `particles/pic_no_mhd_bz`
 
 ### Entity-Mirroring PIC Regression Decks
 - `inputs/tests/pic_entity_deposit_mink.athinput`

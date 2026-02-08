@@ -15,7 +15,9 @@ PIC behavior can be validated without significant MHD back-reaction.
 - Step 2 (`Implement passive_mhd mode`): complete at current working tree state
   with evidence in
   `tst/.codex/pic_entity_suite/step2_passive_mhd/STEP2_PASSIVE_MHD_REPORT.md`.
-- Step 3 onward: pending.
+- Step 3 (`Implement no_mhd mode`): complete at current working tree state with
+  evidence in `tst/.codex/pic_entity_suite/step3_no_mhd/STEP3_NO_MHD_REPORT.md`.
+- Step 4 onward: pending.
 
 ## 1. Scope and Goal
 

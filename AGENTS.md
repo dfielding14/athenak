@@ -100,10 +100,15 @@ efficiently on CPUs and GPUs.
 - Staged PIC runtime controls are now parsed under `<particles>` for the
   PR5 test-suite expansion path (`pic_background_mode`, `pic_feedback_mode`,
   `pic_deltaf_mode`, `pic_expanding_box_mode`, and related guard knobs). In
-  the current stage, `pic_background_mode=passive_mhd` is active and freezes
-  fluid evolution in MHD update/source/CT tasks while preserving MHD state
-  containers for PIC test-particle workflows. Other staged controls remain
-  parse/validation hooks until their corresponding implementation steps.
+  the current stage:
+  - `pic_background_mode=passive_mhd` is active and freezes fluid evolution in
+    MHD update/source/CT tasks while preserving MHD state containers for PIC
+    test-particle workflows.
+  - `pic_background_mode=no_mhd` is active and uses a particle-owned magnetic
+    field carrier (`pic_no_mhd_bx/by/bz`) for Boris pushers when no `<mhd>`
+    block is present.
+  Other staged controls remain parse/validation hooks until their
+  corresponding implementation steps.
 
 ---
 
