@@ -126,6 +126,10 @@ Format rules are enforced by `src/parameter_input.cpp`:
 - `inputs/tests/pic_em_vacuum_wave.athinput`
   - EM-vacuum-style convergence anchor using `linear_wave` in strict
     test-particle mode for current AthenaK architecture.
+- `inputs/tests/pic_langmuir_frequency_proxy.athinput`
+  - Frequency-accuracy proxy in `pic_background_mode=no_mhd` using a uniform
+    `Bz` Boris orbit; regression extracts dominant frequency from deposited
+    `prtcl_jx/prtcl_jy` time series.
 
 ---
 

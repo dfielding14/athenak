@@ -117,6 +117,10 @@ efficiently on CPUs and GPUs.
     `particles/pic_entity_deposit_reflect` with serial/MPI decomposition checks.
   - An EM-vacuum-style analytic convergence anchor is present as
     `particles/pic_em_vacuum_wave` (linear-wave adaptation in test-particle mode).
+  - A frequency-accuracy proxy anchor is present as
+    `particles/pic_langmuir_frequency_proxy` (no-MHD uniform-`Bz` Boris run,
+    validating dominant oscillation frequency against `1/(2*pi)` with
+    serial/MPI parity checks).
   Other staged controls remain parse/validation hooks until their
   corresponding implementation steps.
 

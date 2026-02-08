@@ -1,0 +1,93 @@
+# AthenaXXX input file for PIC frequency proxy (gyro-frequency anchor)
+
+<comment>
+problem   = PIC frequency proxy in no-MHD mode (gyro-frequency check)
+
+<job>
+basename  = pic_langmuir_frequency_proxy
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = 0.0
+x1max     = 8.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 4
+x2min     = 0.0
+x2max     = 4.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 4
+x3min     = 0.0
+x3max     = 4.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 4
+nx2       = 4
+nx3       = 4
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.1
+nlim       = 80
+tlim       = 20.0
+ndiag      = 1
+
+<particles>
+particle_type         = cosmic_ray
+ppc                   = 1.0
+pusher                = boris_tsc
+nspecies              = 1
+cr_distribution       = center
+deposit_moments       = true
+deposit_order         = 1
+deposit_qscale        = 1.0
+couple_moments_to_mhd = false
+cr_vx0                = 0.2
+cr_vy0                = 0.0
+cr_vz0                = 0.0
+pic_background_mode   = no_mhd
+pic_feedback_mode     = test_particle
+pic_no_mhd_bx         = 0.0
+pic_no_mhd_by         = 0.0
+pic_no_mhd_bz         = 1.0
+
+<species0>
+mass   = 1.0
+charge = 1.0
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp       = 0.0
+vflow     = 0.0
+along_x1  = true
+along_x2  = false
+along_x3  = false
+
+<output1>
+file_type   = bin
+variable    = prtcl_rho
+id          = prtcl_rho
+dcycle      = 1
+ghost_zones = false
+
+<output2>
+file_type   = bin
+variable    = prtcl_jx
+id          = prtcl_jx
+dcycle      = 1
+ghost_zones = false
+
+<output3>
+file_type   = bin
+variable    = prtcl_jy
+id          = prtcl_jy
+dcycle      = 1
+ghost_zones = false

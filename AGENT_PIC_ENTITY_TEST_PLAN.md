@@ -29,7 +29,10 @@ PIC behavior can be validated without significant MHD back-reaction.
 - Step 7 (`Implement EM Vacuum Wave Analytic Test`): complete at current
   working tree state with evidence in
   `tst/.codex/pic_entity_suite/step7_em_vacuum/STEP7_EM_VACUUM_REPORT.md`.
-- Step 8 onward: pending.
+- Step 8 (`Implement Langmuir Test (Frequency Accuracy)`): complete at current
+  working tree state with evidence in
+  `tst/.codex/pic_entity_suite/step8_langmuir_proxy/STEP8_LANGMUIR_PROXY_REPORT.md`.
+- Step 9 onward: pending.
 
 ## 1. Scope and Goal
 
