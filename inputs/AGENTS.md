@@ -167,6 +167,13 @@ Format rules are enforced by `src/parameter_input.cpp`:
 - `inputs/tests/pic_compressing_box_proxy.athinput`
   - Driven compressing-box anisotropy proxy paired with the expanding deck
     using negative `pic_expansion_rate_x1`.
+- `inputs/tests/pic_refinement_boundary_smr_proxy.athinput`
+  - Static-refinement SMR proxy for coarse/fine boundary homogeneity and
+    conservation-characterization metrics using deterministic `delta f` quiet
+    initialization.
+- `inputs/tests/pic_refinement_boundary_amr_proxy.athinput`
+  - Nested static-refinement AMR-style proxy paired with SMR to gate bounded
+    boundary smoothness/conservation metrics and serial/MPI parity.
 
 ---
 

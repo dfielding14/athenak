@@ -152,6 +152,10 @@ efficiently on CPUs and GPUs.
   - A driven expanding/compressing-box anisotropy anchor is present as
     `particles/pic_expanding_box_anisotropy_proxy` using paired proxy decks
     with opposite anisotropy-slope sign gates and serial/MPI slope parity.
+  - A refinement-boundary characterization anchor is present as
+    `particles/pic_refinement_boundary_characterization` using SMR and
+    nested AMR proxy decks with bounded homogeneity/smoothness and
+    conservation-characterization gates plus serial/MPI parity checks.
   - Cosmic-ray initialization now supports optional per-species drifts in each
     `speciesN` block (`vx0`, `vy0`, `vz0`) with fallback to
     `<particles>/cr_vx0`, `cr_vy0`, `cr_vz0`.
