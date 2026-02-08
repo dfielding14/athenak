@@ -710,19 +710,31 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
   // Allocate species arrays
   Kokkos::realloc(species_mass, nspecies);
   Kokkos::realloc(species_charge, nspecies);
+  Kokkos::realloc(species_vx0, nspecies);
+  Kokkos::realloc(species_vy0, nspecies);
+  Kokkos::realloc(species_vz0, nspecies);
 
   // Read species properties
   auto h_mass = Kokkos::create_mirror_view(species_mass);
   auto h_charge = Kokkos::create_mirror_view(species_charge);
+  auto h_vx0 = Kokkos::create_mirror_view(species_vx0);
+  auto h_vy0 = Kokkos::create_mirror_view(species_vy0);
+  auto h_vz0 = Kokkos::create_mirror_view(species_vz0);
 
   for (int s=0; s<nspecies; ++s) {
     std::string block = "species" + std::to_string(s);
     h_mass(s) = pin->GetOrAddReal(block,"mass",1.0);
     h_charge(s) = pin->GetOrAddReal(block,"charge",1.0);
+    h_vx0(s) = pin->GetOrAddReal(block, "vx0", cr_vx0);
+    h_vy0(s) = pin->GetOrAddReal(block, "vy0", cr_vy0);
+    h_vz0(s) = pin->GetOrAddReal(block, "vz0", cr_vz0);
   }
 
   Kokkos::deep_copy(species_mass, h_mass);
   Kokkos::deep_copy(species_charge, h_charge);
+  Kokkos::deep_copy(species_vx0, h_vx0);
+  Kokkos::deep_copy(species_vy0, h_vy0);
+  Kokkos::deep_copy(species_vz0, h_vz0);
 
   // Initialize particle positions and velocities
   auto &indcs = pmy_pack->pmesh->mb_indcs;
@@ -748,9 +760,9 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
   int nspecies_local = nspecies;
   auto species_charge_local = species_charge;
   auto species_mass_local = species_mass;
-  const Real cr_vx0_local = cr_vx0;
-  const Real cr_vy0_local = cr_vy0;
-  const Real cr_vz0_local = cr_vz0;
+  auto species_vx0_local = species_vx0;
+  auto species_vy0_local = species_vy0;
+  auto species_vz0_local = species_vz0;
   // Make sure geometry is available on device
   size.template sync<DevExeSpace>();
   auto size_view = size;
@@ -791,13 +803,11 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
     pr(IPY,p) = x2min + ry*(x2max - x2min);
     pr(IPZ,p) = (nx3_local > 1) ? (x3min + rz*(x3max - x3min)) : 0.0;
 
-    // Initialize velocity with deterministic CR controls
-    pr(IPVX,p) = cr_vx0_local;
-    pr(IPVY,p) = cr_vy0_local;
-    pr(IPVZ,p) = cr_vz0_local;
-
-    // Set mass/charge ratio
+    // Set species-dependent initialization values
     int species = pi(PSP,p);
+    pr(IPVX,p) = species_vx0_local(species);
+    pr(IPVY,p) = species_vy0_local(species);
+    pr(IPVZ,p) = species_vz0_local(species);
     pr(IPM,p) = species_charge_local(species) / species_mass_local(species);
 
     // Initialize B-field components to zero

@@ -121,6 +121,13 @@ efficiently on CPUs and GPUs.
     `particles/pic_langmuir_frequency_proxy` (no-MHD uniform-`Bz` Boris run,
     validating dominant oscillation frequency against `1/(2*pi)` with
     serial/MPI parity checks).
+  - A counter-streaming growth proxy anchor is present as
+    `particles/pic_two_stream_growth_proxy` (AthenaK-adapted two-stream control
+    that enforces no positive exponential growth in no-MHD counter-beam mode
+    and checks serial/MPI growth-rate parity).
+  - Cosmic-ray initialization now supports optional per-species drifts in each
+    `speciesN` block (`vx0`, `vy0`, `vz0`) with fallback to
+    `<particles>/cr_vx0`, `cr_vy0`, `cr_vz0`.
   Other staged controls remain parse/validation hooks until their
   corresponding implementation steps.
 

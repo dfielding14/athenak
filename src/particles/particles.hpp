@@ -110,6 +110,9 @@ class Particles {
   bool track_displacement;          // enable displacement tracking
   DvceArray1D<Real> species_mass;   // mass per species
   DvceArray1D<Real> species_charge; // charge per species
+  DvceArray1D<Real> species_vx0;    // optional per-species vx initializer
+  DvceArray1D<Real> species_vy0;    // optional per-species vy initializer
+  DvceArray1D<Real> species_vz0;    // optional per-species vz initializer
   bool deposit_moments = false;     // enable particle moment deposition
   int deposit_order = 1;            // deposition shape order
   Real deposit_qscale = 1.0;        // scaling of particle macro-charge

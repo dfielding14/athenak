@@ -95,6 +95,9 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - `particles/couple_fluid_feedback_order`
   - deterministic CR init knobs: `particles/cr_vx0`, `particles/cr_vy0`,
     `particles/cr_vz0`.
+  - optional per-species drift overrides:
+    `speciesN/vx0`, `speciesN/vy0`, `speciesN/vz0` (fallback to global
+    `particles/cr_v*0` when omitted).
 - Staged PIC runtime-control overrides (parse/guard stage):
   - `particles/pic_background_mode = coupled|passive_mhd|no_mhd`
   - `particles/pic_feedback_mode = coupled|test_particle`
@@ -130,6 +133,10 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - Frequency-accuracy proxy in `pic_background_mode=no_mhd` using a uniform
     `Bz` Boris orbit; regression extracts dominant frequency from deposited
     `prtcl_jx/prtcl_jy` time series.
+- `inputs/tests/pic_two_stream_growth_proxy.athinput`
+  - Counter-streaming no-MHD proxy with two species and opposite `vx0` drifts;
+    regression fits the dominant density-mode growth rate and gates out
+    positive exponential growth.
 
 ---
 

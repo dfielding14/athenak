@@ -32,7 +32,10 @@ PIC behavior can be validated without significant MHD back-reaction.
 - Step 8 (`Implement Langmuir Test (Frequency Accuracy)`): complete at current
   working tree state with evidence in
   `tst/.codex/pic_entity_suite/step8_langmuir_proxy/STEP8_LANGMUIR_PROXY_REPORT.md`.
-- Step 9 onward: pending.
+- Step 9 (`Implement Two-Stream Instability Test (Growth Rate)`): complete at
+  current working tree state with evidence in
+  `tst/.codex/pic_entity_suite/step9_two_stream/STEP9_TWO_STREAM_REPORT.md`.
+- Step 10 onward: pending.
 
 ## 1. Scope and Goal
 
