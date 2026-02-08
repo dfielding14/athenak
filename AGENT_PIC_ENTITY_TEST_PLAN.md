@@ -56,7 +56,10 @@ PIC behavior can be validated without significant MHD back-reaction.
 - Step 16 (`Add Refinement-Boundary Characterization Tests`): complete at
   current working tree state with evidence in
   `tst/.codex/pic_entity_suite/step16_refinement_boundary/STEP16_REFINEMENT_BOUNDARY_REPORT.md`.
-- Step 17 onward: pending.
+- Step 17 (`Add Reduced-Size AMR Shock + Load-Balancing Smoke Test`): complete
+  at current working tree state with evidence in
+  `tst/.codex/pic_entity_suite/step17_amr_shock_lb/STEP17_AMR_SHOCK_LB_REPORT.md`.
+- Step 18 onward: pending.
 
 ## 1. Scope and Goal
 

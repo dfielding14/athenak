@@ -174,6 +174,10 @@ Format rules are enforced by `src/parameter_input.cpp`:
 - `inputs/tests/pic_refinement_boundary_amr_proxy.athinput`
   - Nested static-refinement AMR-style proxy paired with SMR to gate bounded
     boundary smoothness/conservation metrics and serial/MPI parity.
+- `inputs/tests/pic_amr_shock_lb_smoke.athinput`
+  - Reduced-size shock-rich Orszag-Tang AMR smoke deck used with runtime
+    overrides for accelerated AMR triggering and MPI load-balance telemetry
+    characterization in the PR5 entity-mirroring ladder.
 
 ---
 

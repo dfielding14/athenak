@@ -156,6 +156,10 @@ efficiently on CPUs and GPUs.
     `particles/pic_refinement_boundary_characterization` using SMR and
     nested AMR proxy decks with bounded homogeneity/smoothness and
     conservation-characterization gates plus serial/MPI parity checks.
+  - A reduced-size AMR shock/load-balancing smoke anchor is present as
+    `particles/pic_amr_shock_lb_smoke` using a shock-rich Orszag-Tang proxy
+    with explicit AMR growth, field-structure trend checks, non-thermal tail
+    proxy growth, and MPI (`np=4`) load-balancing telemetry gates.
   - Cosmic-ray initialization now supports optional per-species drifts in each
     `speciesN` block (`vx0`, `vy0`, `vz0`) with fallback to
     `<particles>/cr_vx0`, `cr_vy0`, `cr_vz0`.

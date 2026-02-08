@@ -1,0 +1,104 @@
+# AthenaXXX input file for reduced AMR shock-rich O-T + PIC load-balance smoke
+
+<comment>
+problem   = reduced AMR Orszag-Tang shock-rich + PIC load-balance smoke proxy
+
+<job>
+basename  = pic_amr_shock_lb_smoke
+
+<mesh>
+nghost    = 2
+nx1       = 32
+x1min     = -0.5
+x1max     = 0.5
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 32
+x2min     = -0.5
+x2max     = 0.5
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 8
+x3min     = -0.5
+x3max     = 0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 8
+nx2       = 8
+nx3       = 4
+
+<mesh_refinement>
+refinement           = adaptive
+num_levels           = 2
+ddens_max            = 0.18
+ncycle_check         = 1
+refinement_interval  = 2
+max_nmb_per_rank     = 1024
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 40
+tlim       = 0.30
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.666666667
+
+<particles>
+particle_type                 = cosmic_ray
+ppc                           = 2.0
+pusher                        = boris_tsc
+nspecies                      = 1
+cr_distribution               = random
+deposit_moments               = true
+deposit_order                 = 1
+deposit_qscale                = 1.0
+couple_moments_to_mhd         = false
+couple_j_to_efield_representation = cell_centered
+couple_moments_momentum_to_mhd = false
+couple_moments_energy_to_mhd  = false
+cr_vx0                        = 0.4
+cr_vy0                        = 0.0
+cr_vz0                        = 0.0
+pic_background_mode           = coupled
+pic_feedback_mode             = test_particle
+
+<species0>
+mass   = 1.0
+charge = 1.0
+
+<problem>
+pgen_name    = orszag_tang
+
+<output1>
+file_type   = bin
+variable    = mhd_bcc
+dcycle      = 1
+ghost_zones = false
+
+<output2>
+file_type   = bin
+variable    = prtcl_jx
+dcycle      = 1
+ghost_zones = false
+
+<output3>
+file_type   = bin
+variable    = prtcl_jy
+dcycle      = 1
+ghost_zones = false
+
+<output4>
+file_type   = bin
+variable    = prtcl_jz
+dcycle      = 1
+ghost_zones = false
