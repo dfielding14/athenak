@@ -47,7 +47,10 @@ PIC behavior can be validated without significant MHD back-reaction.
 - Step 13 (`Implement CRSI Linear-Dispersion Test with delta f`): complete at
   current working tree state with evidence in
   `tst/.codex/pic_entity_suite/step13_crsi_deltaf_proxy/STEP13_CRSI_DELTAF_PROXY_REPORT.md`.
-- Step 14 onward: pending.
+- Step 14 (`Implement CRPAI Linear-Dispersion Test`): complete at current
+  working tree state with evidence in
+  `tst/.codex/pic_entity_suite/step14_crpai_proxy/STEP14_CRPAI_PROXY_REPORT.md`.
+- Step 15 onward: pending.
 
 ## 1. Scope and Goal
 

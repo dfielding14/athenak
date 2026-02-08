@@ -143,6 +143,9 @@ efficiently on CPUs and GPUs.
   - A CRSI-style delta-f proxy anchor is present as
     `particles/pic_crsi_deltaf_proxy` with polarization-resolved growth
     metrics, delta-f on/off noise comparison, and serial/MPI stability gates.
+  - A CRPAI-style branch-selectivity anchor is present as
+    `particles/pic_crpai_polarization_proxy` using prolate/oblate proxy decks
+    with opposite dominant-polarization branch gating and serial/MPI checks.
   - Cosmic-ray initialization now supports optional per-species drifts in each
     `speciesN` block (`vx0`, `vy0`, `vz0`) with fallback to
     `<particles>/cr_vx0`, `cr_vy0`, `cr_vz0`.

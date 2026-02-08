@@ -155,6 +155,12 @@ Format rules are enforced by `src/parameter_input.cpp`:
 - `inputs/tests/pic_crsi_deltaf_proxy.athinput`
   - Coupled-MHD CRSI-style proxy deck used with `pic_deltaf_mode=off|on` to
     gate polarization-resolved growth metrics and delta-f noise behavior.
+- `inputs/tests/pic_crpai_prolate_proxy.athinput`
+  - CRPAI-style prolate branch-selection proxy (`cr_vx0 > 0`) used with
+    polarization-resolved growth diagnostics.
+- `inputs/tests/pic_crpai_oblate_proxy.athinput`
+  - CRPAI-style oblate branch-selection proxy (`cr_vx0 < 0`) paired with the
+    prolate deck for opposite-branch gating.
 
 ---
 
