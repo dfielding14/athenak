@@ -23,7 +23,10 @@ PIC behavior can be validated without significant MHD back-reaction.
 - Step 5 (`Add PIC Diagnostics Needed for Analytic Validation`): complete at
   current working tree state with evidence in
   `tst/.codex/pic_entity_suite/step5_diagnostics/STEP5_DIAGNOSTICS_REPORT.md`.
-- Step 6 onward: pending.
+- Step 6 (`Finalize Deposit Parity Layer`): complete at current working tree
+  state with evidence in
+  `tst/.codex/pic_entity_suite/step6_entity_parity/STEP6_ENTITY_PARITY_REPORT.md`.
+- Step 7 onward: pending.
 
 ## 1. Scope and Goal
 

@@ -112,6 +112,9 @@ efficiently on CPUs and GPUs.
     `MHDSrcTerms`/`EFieldSrc` when `pic_feedback_mode=coupled`.
   - Step-5 diagnostics outputs are available for midpoint/feedback checks:
     `prtcl_dpxdt`, `prtcl_dpydt`, `prtcl_dpzdt`, `prtcl_dedt`, `prtcl_ebdot`.
+  - Entity-mirroring deposit parity tests are now present in
+    `particles/pic_entity_deposit_mink` and
+    `particles/pic_entity_deposit_reflect` with serial/MPI decomposition checks.
   Other staged controls remain parse/validation hooks until their
   corresponding implementation steps.
 
