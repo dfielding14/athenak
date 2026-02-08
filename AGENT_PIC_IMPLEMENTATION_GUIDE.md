@@ -667,9 +667,11 @@ For every non-trivial function:
        - Status (2026-02-08, commit `56244bc9`): runtime guards permit
          `deposit_order={1,2}` only for coupled `direct_staggered`; other
          unsupported combinations remain fatal.
-     - [ ] Document exact AthenaK-to-Entity mapping for kernel primitives
+     - [x] Document exact AthenaK-to-Entity mapping for kernel primitives
        (weights, trajectory split, current accumulation).
-       - Pending for PR5-A closeout documentation update.
+       - Status (2026-02-08, baseline `4d2236be`): completed in
+         `/Users/dbf75/Work/Research/AthenaK/athenak-DF/AGENT_PIC_HANDOFF.md`
+         Section 9.20.3.3.
    - PR5-B: boundary-policy expansion for direct mode
      - [x] Implement conservation-safe direct trajectory handling for supported
        non-periodic policies (`reflect`, `outflow`).
@@ -706,7 +708,7 @@ For every non-trivial function:
    - PR5-D: default-mode decision gate
      - [x] Evaluate switching default from `cc_convert` to
        `direct_staggered` only after PR5-A/B/C pass.
-       - Status (2026-02-08, post-`6d679378` working tree): adopt a
+       - Status (2026-02-08, baseline `4d2236be`): adopt a
          context-aware default in
          `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:265`
          through
@@ -733,7 +735,8 @@ For every non-trivial function:
      - completed checklist state
      - explicit Entity-parity matrix
      - explicit default-mode decision outcome with evidence.
-     - latest matrix log reference: `/tmp/pr5d_mpi_matrix.log`.
+     - latest matrix log reference:
+       `/tmp/pr5_closeout_matrix_20260207_212254.log`.
 
 ## 7. What Not To Do
 

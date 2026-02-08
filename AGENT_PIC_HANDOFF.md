@@ -1388,9 +1388,10 @@ PR5-A: higher-order direct deposition kernel parity (periodic baseline)
   - Status (2026-02-08, commit `56244bc9`): constructor/runtime guards allow
     `deposit_order={1,2}` only for coupled `direct_staggered`; unsupported
     orders remain fatal.
-- [ ] Document exact AthenaK vs Entity mapping for each kernel primitive used
+- [x] Document exact AthenaK vs Entity mapping for each kernel primitive used
   in the port (weights, trajectory split, current accumulation).
-  - Pending for PR5-A closeout narrative/report update.
+  - Status (2026-02-08, baseline `4d2236be`):
+    mapping table completed in Section 9.20.3.3.
 
 PR5-B: boundary-policy expansion for direct mode
 - [x] Implement boundary-safe direct trajectory handling for supported
@@ -1440,7 +1441,7 @@ PR5-C: test and parity hardening
 PR5-D: default-mode decision gate
 - [x] Evaluate whether `direct_staggered` should replace `cc_convert` as the
   default only after PR5-A/B/C are green.
-  - Status (2026-02-08, post-`6d679378` working tree):
+  - Status (2026-02-08, baseline `4d2236be`):
     - context-aware default policy implemented in
       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:265`
       through
@@ -1455,10 +1456,10 @@ PR5-D: default-mode decision gate
   - acceptable performance/regression profile
   - Evidence:
     - matrix log:
-      `/tmp/pr5d_mpi_matrix.log`
-    - targeted logs:
-      `/tmp/current_coupling_mpi.log`,
-      `/tmp/nonperiodic_mpi.log`
+      `/tmp/pr5_closeout_matrix_20260207_212254.log`
+    - key checks captured in matrix log:
+      continuity residuals, direct-vs-convert deltas, non-periodic boundary
+      guard failures, and per-rank restart guard failure.
     - quick runtime sanity (serial micro-runs): no material regression between
       `cc_convert`, `direct_staggered`, and `direct_staggered+deposit_order=2`.
 - [x] If any criterion fails, keep `cc_convert` default and retain
@@ -1469,7 +1470,7 @@ PR5-D: default-mode decision gate
 
 #### 9.20.3 PR5-C Parity Matrix and Numeric Envelopes
 
-##### 9.20.3.1 Entity-Parity Matrix (HEAD `f8d2642d`)
+##### 9.20.3.1 Entity-Parity Matrix (baseline `4d2236be`)
 
 | Axis | Classification | AthenaK Evidence | Entity Evidence | Notes |
 | --- | --- | --- | --- | --- |
@@ -1483,7 +1484,7 @@ PR5-D: default-mode decision gate
 
 No unplanned parity divergence was found in the audited PR5 axes above.
 
-##### 9.20.3.2 Baseline Numeric Envelopes (HEAD `f8d2642d`)
+##### 9.20.3.2 Baseline Numeric Envelopes (baseline `4d2236be`)
 
 - Decomposition invariance (`particles/pic_mhd_coupling_decomp`, MPI enabled):
   - All serial-vs-MPI2/MPI4 checks passed at script tolerances (`rtol=1e-6`,
@@ -1514,6 +1515,20 @@ No unplanned parity divergence was found in the audited PR5 axes above.
     `delta_direct=2.29066086e+00`, `delta_direct_o2=1.17373657e+00`,
     `default_edge_mode_delta_vs_cc=7.53393173e-01`.
 
+##### 9.20.3.3 AthenaK vs Entity Primitive Mapping (baseline `4d2236be`)
+
+| Primitive | AthenaK Evidence | Entity Evidence | Classification | Notes |
+| --- | --- | --- | --- | --- |
+| Trajectory state split (old/new positions) used by deposit | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:175` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:223`; `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:380` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:387` | `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:175` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:193`; `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:414` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:421` | aligned | Both compute current from previous and current trajectory endpoints. |
+| Shape stencil window for moving particle | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:114` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:152` | `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp:906` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp:995` | aligned | Same asymmetric window logic with `O+2` shape arrays and zero-padded endpoint. |
+| Charge/current coefficient policy (`q*dt^{-1}` and `q*v`) | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:368` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:370`; `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:698` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:700` | `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:168`; `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:440` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:443` | aligned | AthenaK `q_macro*inv_dt` and `q_macro*v` match Entity coefficient structure. |
+| 2D higher-order weight tensors (`Wx1/Wx2/Wx3`) | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:777` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:784` | `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:503` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:509` | aligned | Same Esirkepov-form weight construction for O>=1 in 2D. |
+| 3D higher-order weight tensors (`Wx1/Wx2/Wx3`) | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:864` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:879` | `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:625` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:636` | aligned | AthenaK O2 formulas are a direct specialization of Entity O>=1 formulas. |
+| Prefix accumulation for edge current contributions | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:745` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:748`; `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:794` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:808`; `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:892` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:928` | `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:445` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:449`; `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:525` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:547`; `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:657` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:708` | aligned | Both use cumulative prefix updates along each dimension before scatter/update. |
+| Stencil update extents for `Jx/Jy/Jz` | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:816` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:847`; `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:936` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:974` | `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:565` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:580`; `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:730` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:749` | aligned | Loop bounds and component-specific stencil extents match Entity update rules. |
+| Parallel accumulation primitive | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:414` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:684`; `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:823` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:974` | `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:461` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:580`; `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:728` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:749` | intentional divergence | AthenaK uses explicit `Kokkos::atomic_add` on edge views; Entity uses its scatter-access abstraction. Numerical intent is the same. |
+| Supported direct higher-order surface | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:689` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:985` | `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:406` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:760` | intentional divergence | AthenaK currently supports O={1,2}; Entity templated path supports O=0..11. PR5 requires O2 parity and keeps higher O as future scope. |
+
 #### 9.20.4 PR5 Merge Gates
 1. Required MPI tests pass (existing five, plus any new higher-order/direct
    non-periodic additions):
@@ -1529,7 +1544,8 @@ No unplanned parity divergence was found in the audited PR5 axes above.
 - completed checklist state for each item above
 - explicit Entity-parity matrix
 - explicit default-mode decision outcome with evidence
-- latest matrix evidence log reference (`/tmp/pr5d_mpi_matrix.log`)
+- latest matrix evidence log reference
+  (`/tmp/pr5_closeout_matrix_20260207_212254.log`)
 
 ## 10. AGENTS Review Index
 
