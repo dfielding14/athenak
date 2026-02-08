@@ -140,9 +140,12 @@ but these are not wired in the constructor.
 - `cr_vx0`, `cr_vy0`, `cr_vz0` default to `0.0` and are used by PR2 regression
   tests to make integrated current expectations deterministic.
 
-### Staged PIC runtime controls (Step 1 parse/guard stage)
+### Staged PIC runtime controls (Step 1/2 status)
 - `pic_background_mode`: `coupled` (default), `passive_mhd`, `no_mhd`.
-- `pic_feedback_mode`: `coupled` (default) or `test_particle`.
+- `pic_feedback_mode`:
+  - default `coupled` for `pic_background_mode=coupled`
+  - default `test_particle` for `pic_background_mode=passive_mhd`
+  - accepted values: `coupled`, `test_particle`
 - `pic_interp_scheme`: `tsc` (default and currently only valid value).
 - `pic_cr_light_speed` (default `1.0`), `pic_max_cell_cross` (default `2`),
   `pic_theta_max` (default `0.3`) with positivity guards.
@@ -153,6 +156,11 @@ but these are not wired in the constructor.
 - `pic_expanding_box_mode`: `off` (default) or `on`.
 - `pic_expansion_rate_x1/x2/x3` default to `0.0`; non-zero expansion rates
   require `pic_expanding_box_mode=on`.
+- `passive_mhd` currently requires:
+  - active `<mhd>` block
+  - `pic_feedback_mode=test_particle`
+  - coupling toggles disabled (`couple_moments_to_mhd`,
+    `couple_moments_momentum_to_mhd`, `couple_moments_energy_to_mhd`).
 
 ### Runtime guards (constructor)
 - Coupling requires `deposit_moments=true` and an active `<mhd>` block.
@@ -161,6 +169,8 @@ but these are not wired in the constructor.
 - Energy feedback requires ideal MHD EOS.
 - `edge_staggered` and fluid feedback branches are restricted to
   non-relativistic MHD in PR2.
+- `pic_feedback_mode=test_particle` explicitly rejects particle-to-MHD coupling
+  toggles in the current staged implementation.
 
 ---
 

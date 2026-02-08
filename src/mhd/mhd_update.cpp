@@ -13,6 +13,7 @@
 #include "mesh/mesh.hpp"
 #include "driver/driver.hpp"
 #include "eos/eos.hpp"
+#include "particles/particles.hpp"
 #include "mhd.hpp"
 #include "dyn_grmhd/dyn_grmhd.hpp"
 
@@ -22,6 +23,12 @@ namespace mhd {
 //  \brief Explicit RK update including flux divergence terms
 
 TaskStatus MHD::RKUpdate(Driver *pdriver, int stage) {
+  auto *ppart = pmy_pack->ppart;
+  if ((ppart != nullptr) &&
+      (ppart->pic_background_mode == PICBackgroundMode::passive_mhd)) {
+    return TaskStatus::complete;
+  }
+
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;

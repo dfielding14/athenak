@@ -1,10 +1,10 @@
-# AthenaXXX input file for PIC current-to-MHD coupling tests
+# AthenaXXX input file for passive-MHD PIC isolation tests
 
 <comment>
-problem   = PIC current coupling into MHD electric field
+problem   = PIC passive-MHD isolation mode
 
 <job>
-basename  = pic_mhd_coupling
+basename  = pic_mhd_passive
 
 <mesh>
 nghost    = 2          # Number of ghost cells
@@ -35,7 +35,7 @@ nx3       = 4          # Number of cells in each MeshBlock, X3-dir
 evolution  = dynamic   # dynamic/kinematic/static
 integrator = rk2       # time integration algorithm
 cfl_number = 0.3       # Courant number
-nlim       = 1         # cycle limit
+nlim       = 2         # cycle limit
 tlim       = 1.0       # time limit
 ndiag      = 1         # cycles between diagnostic output
 
@@ -63,11 +63,10 @@ couple_moments_energy_to_mhd   = false
 couple_fluid_feedback_order    = mhd_src_terms
 couple_moments_momentum_coeff  = 1.0
 couple_moments_energy_coeff    = 1.0
-cr_vx0                  = 0.0
-cr_vy0                  = 0.0
-cr_vz0                  = 0.0
-pic_background_mode     = coupled
-pic_feedback_mode       = coupled
+cr_vx0                  = 0.50
+cr_vy0                  = -0.25
+cr_vz0                  = 0.125
+pic_background_mode     = passive_mhd
 pic_interp_scheme       = tsc
 pic_cr_light_speed      = 1.0
 pic_max_cell_cross      = 2
@@ -161,26 +160,5 @@ ghost_zones = false
 file_type   = bin
 variable    = mhd_u_e
 id          = mhd_u_e
-dcycle      = 1
-ghost_zones = false
-
-<output11>
-file_type   = bin
-variable    = prtcl_jx_edge
-id          = prtcl_jx_edge
-dcycle      = 1
-ghost_zones = false
-
-<output12>
-file_type   = bin
-variable    = prtcl_jy_edge
-id          = prtcl_jy_edge
-dcycle      = 1
-ghost_zones = false
-
-<output13>
-file_type   = bin
-variable    = prtcl_jz_edge
-id          = prtcl_jz_edge
 dcycle      = 1
 ghost_zones = false

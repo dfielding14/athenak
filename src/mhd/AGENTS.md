@@ -144,6 +144,15 @@ When assembled, it wires tasks into `MeshBlockPack` task lists:
     (`couple_moments_momentum_to_mhd`,
     `couple_moments_energy_to_mhd`).
 
+### PR5 Step 2 Passive-MHD Isolation Hook
+- When `<particles>/pic_background_mode=passive_mhd` is active, MHD fluid
+  evolution is frozen by short-circuiting:
+  - `MHD::RKUpdate`
+  - `MHD::MHDSrcTerms`
+  - `MHD::CT`
+- Task-list structure and MHD state containers remain present so PIC push and
+  deposited-moment diagnostics can run against stable background fields.
+
 ---
 
 ## Extension Points

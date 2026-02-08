@@ -251,6 +251,11 @@ TaskStatus MHD::RecvFlux(Driver *pdrive, int stage) {
 
 TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
   Real beta_dt = (pdrive->beta[stage-1])*(pmy_pack->pmesh->dt);
+  auto *ppart = pmy_pack->ppart;
+  if ((ppart != nullptr) &&
+      (ppart->pic_background_mode == PICBackgroundMode::passive_mhd)) {
+    return TaskStatus::complete;
+  }
 
   // Add source terms for various physics
   if (psrc->const_accel)  psrc->ConstantAccel(w0, peos->eos_data, beta_dt, u0);
@@ -273,7 +278,6 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
   }
 
   // WS-H: optional particle-feedback source split for fluid momentum/energy.
-  auto *ppart = pmy_pack->ppart;
   if ((ppart != nullptr) && ppart->couple_moments_to_mhd && (stage == 1)) {
     const bool add_mom = ppart->couple_moments_momentum_to_mhd;
     const bool add_eng = ppart->couple_moments_energy_to_mhd;

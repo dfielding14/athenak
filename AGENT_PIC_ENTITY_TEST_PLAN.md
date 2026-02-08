@@ -12,7 +12,10 @@ PIC behavior can be validated without significant MHD back-reaction.
 - Step 1 (`Add PIC Runtime Isolation Mode Knob`): complete at current working
   tree state with evidence in
   `tst/.codex/pic_entity_suite/step1_runtime_knobs/STEP1_RUNTIME_KNOBS_REPORT.md`.
-- Step 2 onward: pending.
+- Step 2 (`Implement passive_mhd mode`): complete at current working tree state
+  with evidence in
+  `tst/.codex/pic_entity_suite/step2_passive_mhd/STEP2_PASSIVE_MHD_REPORT.md`.
+- Step 3 onward: pending.
 
 ## 1. Scope and Goal
 

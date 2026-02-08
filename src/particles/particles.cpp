@@ -322,8 +322,11 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
 
+  const char *pic_feedback_mode_default =
+      (pic_background_mode == PICBackgroundMode::passive_mhd) ?
+      "test_particle" : "coupled";
   std::string pic_feedback_mode_str = pin->GetOrAddString(
-      "particles", "pic_feedback_mode", "coupled");
+      "particles", "pic_feedback_mode", pic_feedback_mode_default);
   if (pic_feedback_mode_str.compare("coupled") == 0) {
     pic_feedback_mode = PICFeedbackMode::coupled;
   } else if (pic_feedback_mode_str.compare("test_particle") == 0) {
@@ -444,6 +447,37 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << "<particles>/pic_expansion_rate_x1/x2/x3 require "
               << "<particles>/pic_expanding_box_mode=on" << std::endl;
     std::exit(EXIT_FAILURE);
+  }
+
+  if ((pic_feedback_mode == PICFeedbackMode::test_particle) &&
+      (couple_moments_to_mhd || couple_moments_momentum_to_mhd ||
+       couple_moments_energy_to_mhd)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_feedback_mode=test_particle does not support "
+              << "particle-to-MHD coupling toggles "
+              << "(couple_moments_to_mhd and momentum/energy feedback)"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  if (pic_background_mode == PICBackgroundMode::passive_mhd) {
+    if (!(pin->DoesBlockExist("mhd"))) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_background_mode=passive_mhd requires an active "
+                << "<mhd> block" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (pic_feedback_mode != PICFeedbackMode::test_particle) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_background_mode=passive_mhd requires "
+                << "<particles>/pic_feedback_mode=test_particle unless coupled "
+                << "feedback is explicitly implemented for this mode"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
   }
 
   const bool use_fluid_feedback = (couple_moments_momentum_to_mhd ||

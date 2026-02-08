@@ -72,6 +72,8 @@ Format rules are enforced by `src/parameter_input.cpp`:
 ### PR2 PIC Coupling Regression Decks
 - Main coupled deck:
   - `inputs/tests/pic_mhd_current_coupling.athinput`
+- Passive-background isolation deck:
+  - `inputs/tests/pic_mhd_passive_mode.athinput`
 - Guard decks used for fatal-path validation:
   - `inputs/tests/pic_mhd_coupling_guard_radiation.athinput`
   - `inputs/tests/pic_mhd_coupling_guard_nr.athinput`
@@ -98,6 +100,10 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - `particles/pic_intermediate_arrays = auto|off`
   - `particles/pic_expanding_box_mode = off|on`
   - `particles/pic_expansion_rate_x1/x2/x3` (require expanding-box mode on)
+- Passive-mode guard overrides used by regressions:
+  - `particles/pic_background_mode = coupled|passive_mhd|no_mhd`
+  - `particles/pic_feedback_mode = test_particle`
+  - `particles/couple_moments_to_mhd` (rejected in passive mode)
 
 ### Entity-Mirroring PIC Regression Decks
 - `inputs/tests/pic_entity_deposit_mink.athinput`
