@@ -1178,6 +1178,371 @@ TaskStatus Particles::ClearSendEdgeCurrents(Driver *pdriver, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn TaskStatus Particles::ApplyEdgeCurrentPhysicalBCs()
+//! \brief Apply physical BCs to direct edge-current state before EFieldSrc.
+
+TaskStatus Particles::ApplyEdgeCurrentPhysicalBCs(Driver *pdriver, int stage) {
+  (void)pdriver;
+  if (pbval_jedge == nullptr) return TaskStatus::complete;
+  if (!RunEdgeCurrentWrappersAtStage(deposit_moments, couple_moments_to_mhd,
+                                     couple_j_to_efield_representation,
+                                     couple_j_deposition_mode, stage)) {
+    return TaskStatus::complete;
+  }
+
+  auto &pm = pmy_pack->pmesh;
+  if (pm->strictly_periodic) return TaskStatus::complete;
+
+  auto &indcs = pm->mb_indcs;
+  int ng = indcs.ng;
+  if (ng <= 0) return TaskStatus::complete;
+
+  int is = indcs.is;
+  int ie = indcs.ie;
+  int js = indcs.js;
+  int je = indcs.je;
+  int ks = indcs.ks;
+  int ke = indcs.ke;
+  int n1 = indcs.nx1 + 2*ng;
+  int n2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*ng) : 1;
+  int n3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*ng) : 1;
+  int nmb = pmy_pack->nmb_thispack;
+  if (nmb <= 0) return TaskStatus::complete;
+
+  auto &mb_bcs = pmy_pack->pmb->mb_bcs;
+  auto jx_e = j_edge_x1e;
+  auto jy_e = j_edge_x2e;
+  auto jz_e = j_edge_x3e;
+
+  if (pm->mesh_bcs[BoundaryFace::inner_x1] != BoundaryFlag::periodic) {
+    par_for("prtcl_jedge_bc_x1_jx", DevExeSpace(), 0, nmb - 1, 0, n3, 0, n2,
+    KOKKOS_LAMBDA(const int m, const int k, const int j) {
+      BoundaryFlag bix = mb_bcs.d_view(m, BoundaryFace::inner_x1);
+      switch (bix) {
+        case BoundaryFlag::reflect:
+          for (int i = 0; i < ng; ++i) {
+            jx_e(m, k, j, is - i - 1) = -jx_e(m, k, j, is + i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int i = 0; i < ng; ++i) {
+            jx_e(m, k, j, is - i - 1) = jx_e(m, k, j, is);
+          }
+          break;
+        default:
+          break;
+      }
+
+      BoundaryFlag box = mb_bcs.d_view(m, BoundaryFace::outer_x1);
+      switch (box) {
+        case BoundaryFlag::reflect:
+          for (int i = 0; i < ng; ++i) {
+            jx_e(m, k, j, ie + i + 1) = -jx_e(m, k, j, ie - i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int i = 0; i < ng; ++i) {
+            jx_e(m, k, j, ie + i + 1) = jx_e(m, k, j, ie);
+          }
+          break;
+        default:
+          break;
+      }
+    });
+
+    par_for("prtcl_jedge_bc_x1_jy", DevExeSpace(), 0, nmb - 1, 0, n3, 0, n2 - 1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j) {
+      BoundaryFlag bix = mb_bcs.d_view(m, BoundaryFace::inner_x1);
+      switch (bix) {
+        case BoundaryFlag::reflect:
+          for (int i = 0; i < ng; ++i) {
+            jy_e(m, k, j, is - i - 1) = jy_e(m, k, j, is + i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int i = 0; i < ng; ++i) {
+            jy_e(m, k, j, is - i - 1) = jy_e(m, k, j, is);
+          }
+          break;
+        default:
+          break;
+      }
+
+      BoundaryFlag box = mb_bcs.d_view(m, BoundaryFace::outer_x1);
+      switch (box) {
+        case BoundaryFlag::reflect:
+          for (int i = 0; i < ng; ++i) {
+            jy_e(m, k, j, ie + i + 2) = jy_e(m, k, j, ie - i + 1);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int i = 0; i < ng; ++i) {
+            jy_e(m, k, j, ie + i + 2) = jy_e(m, k, j, ie + 1);
+          }
+          break;
+        default:
+          break;
+      }
+    });
+
+    par_for("prtcl_jedge_bc_x1_jz", DevExeSpace(), 0, nmb - 1, 0, n3 - 1, 0, n2,
+    KOKKOS_LAMBDA(const int m, const int k, const int j) {
+      BoundaryFlag bix = mb_bcs.d_view(m, BoundaryFace::inner_x1);
+      switch (bix) {
+        case BoundaryFlag::reflect:
+          for (int i = 0; i < ng; ++i) {
+            jz_e(m, k, j, is - i - 1) = jz_e(m, k, j, is + i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int i = 0; i < ng; ++i) {
+            jz_e(m, k, j, is - i - 1) = jz_e(m, k, j, is);
+          }
+          break;
+        default:
+          break;
+      }
+
+      BoundaryFlag box = mb_bcs.d_view(m, BoundaryFace::outer_x1);
+      switch (box) {
+        case BoundaryFlag::reflect:
+          for (int i = 0; i < ng; ++i) {
+            jz_e(m, k, j, ie + i + 2) = jz_e(m, k, j, ie - i + 1);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int i = 0; i < ng; ++i) {
+            jz_e(m, k, j, ie + i + 2) = jz_e(m, k, j, ie + 1);
+          }
+          break;
+        default:
+          break;
+      }
+    });
+  }
+
+  if (pm->one_d) return TaskStatus::complete;
+
+  if (pm->mesh_bcs[BoundaryFace::inner_x2] != BoundaryFlag::periodic) {
+    par_for("prtcl_jedge_bc_x2_jx", DevExeSpace(), 0, nmb - 1, 0, n3, 0, n1 - 1,
+    KOKKOS_LAMBDA(const int m, const int k, const int i) {
+      BoundaryFlag biy = mb_bcs.d_view(m, BoundaryFace::inner_x2);
+      switch (biy) {
+        case BoundaryFlag::reflect:
+          for (int j = 0; j < ng; ++j) {
+            jx_e(m, k, js - j - 1, i) = jx_e(m, k, js + j, i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int j = 0; j < ng; ++j) {
+            jx_e(m, k, js - j - 1, i) = jx_e(m, k, js, i);
+          }
+          break;
+        default:
+          break;
+      }
+
+      BoundaryFlag boy = mb_bcs.d_view(m, BoundaryFace::outer_x2);
+      switch (boy) {
+        case BoundaryFlag::reflect:
+          for (int j = 0; j < ng; ++j) {
+            jx_e(m, k, je + j + 2, i) = jx_e(m, k, je - j + 1, i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int j = 0; j < ng; ++j) {
+            jx_e(m, k, je + j + 2, i) = jx_e(m, k, je + 1, i);
+          }
+          break;
+        default:
+          break;
+      }
+    });
+
+    par_for("prtcl_jedge_bc_x2_jy", DevExeSpace(), 0, nmb - 1, 0, n3, 0, n1,
+    KOKKOS_LAMBDA(const int m, const int k, const int i) {
+      BoundaryFlag biy = mb_bcs.d_view(m, BoundaryFace::inner_x2);
+      switch (biy) {
+        case BoundaryFlag::reflect:
+          for (int j = 0; j < ng; ++j) {
+            jy_e(m, k, js - j - 1, i) = -jy_e(m, k, js + j, i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int j = 0; j < ng; ++j) {
+            jy_e(m, k, js - j - 1, i) = jy_e(m, k, js, i);
+          }
+          break;
+        default:
+          break;
+      }
+
+      BoundaryFlag boy = mb_bcs.d_view(m, BoundaryFace::outer_x2);
+      switch (boy) {
+        case BoundaryFlag::reflect:
+          for (int j = 0; j < ng; ++j) {
+            jy_e(m, k, je + j + 1, i) = -jy_e(m, k, je - j, i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int j = 0; j < ng; ++j) {
+            jy_e(m, k, je + j + 1, i) = jy_e(m, k, je, i);
+          }
+          break;
+        default:
+          break;
+      }
+    });
+
+    par_for("prtcl_jedge_bc_x2_jz", DevExeSpace(), 0, nmb - 1, 0, n3 - 1, 0, n1,
+    KOKKOS_LAMBDA(const int m, const int k, const int i) {
+      BoundaryFlag biy = mb_bcs.d_view(m, BoundaryFace::inner_x2);
+      switch (biy) {
+        case BoundaryFlag::reflect:
+          for (int j = 0; j < ng; ++j) {
+            jz_e(m, k, js - j - 1, i) = jz_e(m, k, js + j, i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int j = 0; j < ng; ++j) {
+            jz_e(m, k, js - j - 1, i) = jz_e(m, k, js, i);
+          }
+          break;
+        default:
+          break;
+      }
+
+      BoundaryFlag boy = mb_bcs.d_view(m, BoundaryFace::outer_x2);
+      switch (boy) {
+        case BoundaryFlag::reflect:
+          for (int j = 0; j < ng; ++j) {
+            jz_e(m, k, je + j + 2, i) = jz_e(m, k, je - j + 1, i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int j = 0; j < ng; ++j) {
+            jz_e(m, k, je + j + 2, i) = jz_e(m, k, je + 1, i);
+          }
+          break;
+        default:
+          break;
+      }
+    });
+  }
+
+  if (pm->two_d) return TaskStatus::complete;
+
+  if (pm->mesh_bcs[BoundaryFace::inner_x3] != BoundaryFlag::periodic) {
+    par_for("prtcl_jedge_bc_x3_jx", DevExeSpace(), 0, nmb - 1, 0, n2, 0, n1 - 1,
+    KOKKOS_LAMBDA(const int m, const int j, const int i) {
+      BoundaryFlag biz = mb_bcs.d_view(m, BoundaryFace::inner_x3);
+      switch (biz) {
+        case BoundaryFlag::reflect:
+          for (int k = 0; k < ng; ++k) {
+            jx_e(m, ks - k - 1, j, i) = jx_e(m, ks + k, j, i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int k = 0; k < ng; ++k) {
+            jx_e(m, ks - k - 1, j, i) = jx_e(m, ks, j, i);
+          }
+          break;
+        default:
+          break;
+      }
+
+      BoundaryFlag boz = mb_bcs.d_view(m, BoundaryFace::outer_x3);
+      switch (boz) {
+        case BoundaryFlag::reflect:
+          for (int k = 0; k < ng; ++k) {
+            jx_e(m, ke + k + 2, j, i) = jx_e(m, ke - k + 1, j, i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int k = 0; k < ng; ++k) {
+            jx_e(m, ke + k + 2, j, i) = jx_e(m, ke + 1, j, i);
+          }
+          break;
+        default:
+          break;
+      }
+    });
+
+    par_for("prtcl_jedge_bc_x3_jy", DevExeSpace(), 0, nmb - 1, 0, n2 - 1, 0, n1,
+    KOKKOS_LAMBDA(const int m, const int j, const int i) {
+      BoundaryFlag biz = mb_bcs.d_view(m, BoundaryFace::inner_x3);
+      switch (biz) {
+        case BoundaryFlag::reflect:
+          for (int k = 0; k < ng; ++k) {
+            jy_e(m, ks - k - 1, j, i) = jy_e(m, ks + k, j, i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int k = 0; k < ng; ++k) {
+            jy_e(m, ks - k - 1, j, i) = jy_e(m, ks, j, i);
+          }
+          break;
+        default:
+          break;
+      }
+
+      BoundaryFlag boz = mb_bcs.d_view(m, BoundaryFace::outer_x3);
+      switch (boz) {
+        case BoundaryFlag::reflect:
+          for (int k = 0; k < ng; ++k) {
+            jy_e(m, ke + k + 2, j, i) = jy_e(m, ke - k + 1, j, i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int k = 0; k < ng; ++k) {
+            jy_e(m, ke + k + 2, j, i) = jy_e(m, ke + 1, j, i);
+          }
+          break;
+        default:
+          break;
+      }
+    });
+
+    par_for("prtcl_jedge_bc_x3_jz", DevExeSpace(), 0, nmb - 1, 0, n2, 0, n1,
+    KOKKOS_LAMBDA(const int m, const int j, const int i) {
+      BoundaryFlag biz = mb_bcs.d_view(m, BoundaryFace::inner_x3);
+      switch (biz) {
+        case BoundaryFlag::reflect:
+          for (int k = 0; k < ng; ++k) {
+            jz_e(m, ks - k - 1, j, i) = -jz_e(m, ks + k, j, i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int k = 0; k < ng; ++k) {
+            jz_e(m, ks - k - 1, j, i) = jz_e(m, ks, j, i);
+          }
+          break;
+        default:
+          break;
+      }
+
+      BoundaryFlag boz = mb_bcs.d_view(m, BoundaryFace::outer_x3);
+      switch (boz) {
+        case BoundaryFlag::reflect:
+          for (int k = 0; k < ng; ++k) {
+            jz_e(m, ke + k + 1, j, i) = -jz_e(m, ke - k, j, i);
+          }
+          break;
+        case BoundaryFlag::outflow:
+          for (int k = 0; k < ng; ++k) {
+            jz_e(m, ke + k + 1, j, i) = jz_e(m, ke, j, i);
+          }
+          break;
+        default:
+          break;
+      }
+    });
+  }
+
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn TaskStatus Particles::ConvertCoupledCurrentRepresentation()
 //! \brief Convert deposited cell-centered J to edge-centered J for coupled E updates.
 

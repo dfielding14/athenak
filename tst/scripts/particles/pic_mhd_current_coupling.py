@@ -19,7 +19,6 @@ _NR_GUARD_DECK = 'tests/pic_mhd_coupling_guard_nr.athinput'
 _HYDRO_GUARD_DECK = 'tests/pic_mhd_coupling_guard_hydro.athinput'
 _ISOTHERMAL_GUARD_DECK = 'tests/pic_mhd_coupling_guard_isothermal.athinput'
 _EDGE_REPR_REL_GUARD_DECK = 'tests/pic_mhd_coupling_guard_edge_relativistic.athinput'
-_NONPERIODIC_SUPPORTED_DECK = 'tests/pic_mhd_coupling_nonperiodic.athinput'
 _NONPERIODIC_UNSUPPORTED_GUARD_DECK = (
     'tests/pic_mhd_coupling_guard_nonperiodic_unsupported.athinput')
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
@@ -825,18 +824,6 @@ def run(**kwargs):
     )
 
     _run_command(
-        'guard_direct_staggered_requires_periodic_boundaries',
-        1,
-        ['time/nlim=0',
-         'particles/couple_moments_to_mhd=true',
-         'particles/couple_j_to_efield_representation=edge_staggered',
-         'particles/couple_j_deposition_mode=direct_staggered'],
-        expect_fail=True,
-        expected_message=('requires strictly periodic mesh boundaries in PR4'),
-        input_deck=_NONPERIODIC_SUPPORTED_DECK,
-    )
-
-    _run_command(
         'guard_nonperiodic_unsupported_boundary',
         1,
         ['time/nlim=0'],
@@ -1287,8 +1274,8 @@ def analyze():
                                        mpi2['rel_residual'], serial['rel_residual'],
                                        1.0e-6, 1.0e-8) and ok
 
-    ok = len(_NEGATIVE_RESULTS) == 12 and ok
-    if len(_NEGATIVE_RESULTS) != 12:
-        logger.warning('Expected 12 negative checks, got %d', len(_NEGATIVE_RESULTS))
+    ok = len(_NEGATIVE_RESULTS) == 11 and ok
+    if len(_NEGATIVE_RESULTS) != 11:
+        logger.warning('Expected 11 negative checks, got %d', len(_NEGATIVE_RESULTS))
 
     return ok

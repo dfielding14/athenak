@@ -225,6 +225,26 @@ def run(**kwargs):
                     common_args,
         },
         {
+            'name': 'serial_coupled_edge_direct',
+            'basename': 'pic_mhd_np_coupled_edge_direct',
+            'nproc': 1,
+            'args': ['job/basename=pic_mhd_np_coupled_edge_direct',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_j_to_efield_representation=edge_staggered',
+                     'particles/couple_j_deposition_mode=direct_staggered'] +
+                    common_args,
+        },
+        {
+            'name': 'serial_coupled_edge_direct_o2',
+            'basename': 'pic_mhd_np_coupled_edge_direct_o2',
+            'nproc': 1,
+            'args': ['job/basename=pic_mhd_np_coupled_edge_direct_o2',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_j_to_efield_representation=edge_staggered',
+                     'particles/couple_j_deposition_mode=direct_staggered',
+                     'particles/deposit_order=2'] + common_args,
+        },
+        {
             'name': 'serial_zero_uncoupled',
             'basename': 'pic_mhd_np_zero_uncoupled',
             'nproc': 1,
@@ -265,6 +285,26 @@ def run(**kwargs):
                          'particles/couple_moments_to_mhd=true',
                          'particles/couple_j_to_efield_representation=edge_staggered'] +
                         common_args,
+            },
+            {
+                'name': 'mpi2_coupled_edge_direct',
+                'basename': 'pic_mhd_np_coupled_edge_direct_mpi2',
+                'nproc': 2,
+                'args': ['job/basename=pic_mhd_np_coupled_edge_direct_mpi2',
+                         'particles/couple_moments_to_mhd=true',
+                         'particles/couple_j_to_efield_representation=edge_staggered',
+                         'particles/couple_j_deposition_mode=direct_staggered'] +
+                        common_args,
+            },
+            {
+                'name': 'mpi2_coupled_edge_direct_o2',
+                'basename': 'pic_mhd_np_coupled_edge_direct_o2_mpi2',
+                'nproc': 2,
+                'args': ['job/basename=pic_mhd_np_coupled_edge_direct_o2_mpi2',
+                         'particles/couple_moments_to_mhd=true',
+                         'particles/couple_j_to_efield_representation=edge_staggered',
+                         'particles/couple_j_deposition_mode=direct_staggered',
+                         'particles/deposit_order=2'] + common_args,
             },
         ])
     else:
@@ -330,6 +370,8 @@ def analyze():
     unc = _RESULTS['serial_uncoupled']['measured']
     cpl_cc = _RESULTS['serial_coupled_cc']['measured']
     cpl_edge = _RESULTS['serial_coupled_edge']['measured']
+    cpl_direct = _RESULTS['serial_coupled_edge_direct']['measured']
+    cpl_direct_o2 = _RESULTS['serial_coupled_edge_direct_o2']['measured']
 
     delta_cc = max(abs(cpl_cc['bcc1_l2'] - unc['bcc1_l2']),
                    abs(cpl_cc['bcc2_l2'] - unc['bcc2_l2']),
@@ -337,15 +379,29 @@ def analyze():
     delta_edge = max(abs(cpl_edge['bcc1_l2'] - unc['bcc1_l2']),
                      abs(cpl_edge['bcc2_l2'] - unc['bcc2_l2']),
                      abs(cpl_edge['bcc3_l2'] - unc['bcc3_l2']))
-    logger.info('nonperiodic_coupled_delta cc=% .8e edge=% .8e',
-                delta_cc, delta_edge)
-    if delta_cc <= 1.0e-12 or delta_edge <= 1.0e-12:
+    delta_direct = max(abs(cpl_direct['bcc1_l2'] - unc['bcc1_l2']),
+                       abs(cpl_direct['bcc2_l2'] - unc['bcc2_l2']),
+                       abs(cpl_direct['bcc3_l2'] - unc['bcc3_l2']))
+    delta_direct_o2 = max(abs(cpl_direct_o2['bcc1_l2'] - unc['bcc1_l2']),
+                          abs(cpl_direct_o2['bcc2_l2'] - unc['bcc2_l2']),
+                          abs(cpl_direct_o2['bcc3_l2'] - unc['bcc3_l2']))
+    logger.info('nonperiodic_coupled_delta cc=% .8e edge=% .8e direct=% .8e '
+                'direct_o2=% .8e',
+                delta_cc, delta_edge, delta_direct, delta_direct_o2)
+    if (delta_cc <= 1.0e-12 or delta_edge <= 1.0e-12 or
+            delta_direct <= 1.0e-12 or delta_direct_o2 <= 1.0e-12):
         logger.warning('Expected nonzero coupled-field response in non-periodic run')
         ok = False
 
     for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
         ok = _check_with_tolerance('nonperiodic_cc_vs_edge:' + quantity,
                                    cpl_cc[quantity], cpl_edge[quantity],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('nonperiodic_cc_vs_direct:' + quantity,
+                                   cpl_cc[quantity], cpl_direct[quantity],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('nonperiodic_cc_vs_direct_o2:' + quantity,
+                                   cpl_cc[quantity], cpl_direct_o2[quantity],
                                    1.0e-6, 1.0e-8) and ok
 
     zero_unc = _RESULTS['serial_zero_uncoupled']['measured']
@@ -376,7 +432,24 @@ def analyze():
                                        mpi_edge[quantity], cpl_edge[quantity],
                                        1.0e-6, 1.0e-8) and ok
 
-    ok = len(_NEGATIVE_RESULTS) == 4 and ok
+    if 'mpi2_coupled_edge_direct' in _RESULTS:
+        mpi_direct = _RESULTS['mpi2_coupled_edge_direct']['measured']
+        for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart',
+                         'bcc1_l2', 'bcc2_l2', 'bcc3_l2']:
+            ok = _check_with_tolerance('nonperiodic_mpi_direct:' + quantity,
+                                       mpi_direct[quantity], cpl_direct[quantity],
+                                       1.0e-6, 1.0e-8) and ok
+
+    if 'mpi2_coupled_edge_direct_o2' in _RESULTS:
+        mpi_direct_o2 = _RESULTS['mpi2_coupled_edge_direct_o2']['measured']
+        for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart',
+                         'bcc1_l2', 'bcc2_l2', 'bcc3_l2']:
+            ok = _check_with_tolerance('nonperiodic_mpi_direct_o2:' + quantity,
+                                       mpi_direct_o2[quantity],
+                                       cpl_direct_o2[quantity],
+                                       1.0e-6, 1.0e-8) and ok
+
+    ok = (len(_NEGATIVE_RESULTS) == 4) and ok
     if len(_NEGATIVE_RESULTS) != 4:
         logger.warning('Expected 4 negative checks, got %d', len(_NEGATIVE_RESULTS))
 

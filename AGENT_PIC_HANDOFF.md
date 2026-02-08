@@ -1154,10 +1154,11 @@ This section audits actual code state and test coverage after WS-G/WS-H/WS-I.
     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:384`
     through
     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:392`
-  - direct-mode guard requires strictly periodic mesh:
-    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:394`
-    through
-    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:400`.
+  - PR5-B removes the strict-periodic constructor guard and applies explicit
+    direct edge-current BCs before `MHD::EFieldSrc`:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:267`
+    and
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:1181`.
 - PR4b particle dataflow wiring is implemented:
   - edge-current comm object declaration:
     `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:145`
@@ -1259,8 +1260,9 @@ This section audits actual code state and test coverage after WS-G/WS-H/WS-I.
 - Compatibility-policy decision is now explicit:
   retain `cc_convert` as the default compatibility/debug workflow and keep
   `direct_staggered` opt-in.
-- Direct mode is currently restricted to strictly periodic boundaries (guarded in
-  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:394`).
+- PR5-B expands direct mode to the supported non-periodic boundary policy
+  (`periodic/outflow/reflect`) with explicit edge-current physical-BC handling
+  before `MHD::EFieldSrc`.
 - Higher-order Entity-style shape-order direct current deposition (beyond current
   first-order path) remains deferred.
 
@@ -1317,9 +1319,9 @@ outcome documentation.
   `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:288`.
 3. Completed: compatibility policy is codified.
 - `cc_convert` remains the default compatibility/debug mode.
-- `direct_staggered` remains runtime opt-in under strict periodic-boundary
-  constraints until higher-order direct deposition and broader boundary support
-  are added and rebaselined.
+- `direct_staggered` remains runtime opt-in.
+- PR5-B removes the strict-periodic-only limitation and supports
+  `periodic/outflow/reflect` with explicit direct edge-current BC handling.
 
 #### 9.19.4 Merge Gates for PR4e
 1. All of the following pass with MPI build:
@@ -1335,6 +1337,126 @@ outcome documentation.
 - exact as-built source/test anchors
 - explicit default behavior
 - explicit compatibility-mode decision.
+
+### 9.20 PR5 Entity-Parity Plan (Tracked Checklist)
+
+#### 9.20.1 Objective and Contract
+PR5 extends direct edge-current deposition beyond first-order and follows the
+Entity approach as closely as AthenaK architecture allows.
+
+Entity-parity contract for PR5:
+- Preserve Entity ordering semantics, trajectory-deposition semantics, and
+  coupling semantics unless divergence is explicitly documented and justified.
+- Prefer direct reuse/port of Entity logic over AthenaK-specific reinvention.
+- Keep any temporary divergence behind runtime guards and tracked checklist
+  items below.
+
+Primary Entity references for PR5:
+- ordering and integration context:
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:114`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:132`
+- direct trajectory deposition core:
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:521`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:560`
+- first-order reference (already implemented in PR4):
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:170`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:404`
+- higher-order target surface for PR5:
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:406`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:560`
+  and
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp:906`
+  through
+  `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp:997`
+
+#### 9.20.2 Tracked PR5 Checklist
+
+PR5-A: higher-order direct deposition kernel parity (periodic baseline)
+- [x] Port higher-order Entity-style trajectory deposition into AthenaK direct
+  path (do not alter PR4 first-order behavior).
+  - Status (2026-02-08, commit `56244bc9`): periodic baseline now supports
+    `direct_staggered` with `deposit_order=2`.
+- [x] Keep direct order-1 path as explicit regression baseline and parity oracle.
+  - Status (2026-02-08, commit `56244bc9`): order-1 direct kernel path is
+    retained unchanged; order-2 is a separate branch.
+- [x] Add runtime deposition-order support for direct mode beyond order-1, with
+  clear fatal guards for unsupported combinations.
+  - Status (2026-02-08, commit `56244bc9`): constructor/runtime guards allow
+    `deposit_order={1,2}` only for coupled `direct_staggered`; unsupported
+    orders remain fatal.
+- [ ] Document exact AthenaK vs Entity mapping for each kernel primitive used
+  in the port (weights, trajectory split, current accumulation).
+  - Pending for PR5-A closeout narrative/report update.
+
+PR5-B: boundary-policy expansion for direct mode
+- [x] Implement boundary-safe direct trajectory handling for supported
+  non-periodic policies (`reflect`, `outflow`) without violating conservation.
+- [x] Add explicit boundary communication/physical-BC handling for direct
+  edge-current state where needed.
+- [x] Remove the strict-periodic direct-mode guard after PR5-B validation.
+  - Status (2026-02-08, working tree):
+    - strict-periodic guard removed from constructor/runtime coupling guards:
+      `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp`
+    - new direct edge-current physical-BC task:
+      `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:1181`
+    - stage insertion before `MHD::EFieldSrc`:
+      `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:267`
+    - non-periodic direct coverage added:
+      `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_nonperiodic.py:227`
+      and
+      `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_nonperiodic.py:370`
+    - obsolete periodic-only guard check removed:
+      `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:827`
+    - validated MPI matrix commands (all pass):
+      - `python run_tests.py particles/pic_mhd_current_coupling --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+      - `python run_tests.py particles/pic_mhd_coupling_nonperiodic --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+      - `python run_tests.py particles/pic_mhd_coupling_decomp --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+      - `python run_tests.py particles/pic_mhd_restart_fidelity --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+      - `python run_tests.py particles/pic_mhd_coupling_multilevel --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+
+PR5-C: test and parity hardening
+- [x] Extend direct-mode coverage to include higher-order and non-periodic
+  cases in:
+  `pic_mhd_current_coupling.py`, `pic_mhd_coupling_decomp.py`,
+  `pic_mhd_coupling_multilevel.py`, `pic_mhd_restart_fidelity.py`,
+  `pic_mhd_coupling_nonperiodic.py`.
+- [x] Keep continuity-residual oracle (`d(rho)/dt + div(J)`) as a required gate
+  for new direct modes.
+- [ ] Add explicit Entity-parity checks that classify each axis as aligned,
+  intentional divergence, or unplanned divergence.
+- [ ] Record baseline numeric envelopes for decomposition invariance, restart
+  fidelity, multilevel behavior, and direct-vs-conversion deltas.
+
+PR5-D: default-mode decision gate
+- [ ] Evaluate whether `direct_staggered` should replace `cc_convert` as the
+  default only after PR5-A/B/C are green.
+- [ ] Default switch criteria (all required):
+  - no blocking parity divergences vs Entity
+  - full MPI matrix green for direct higher-order + non-periodic modes
+  - stable restart/multilevel/decomposition behavior
+  - acceptable performance/regression profile
+- [ ] If any criterion fails, keep `cc_convert` default and retain
+  `direct_staggered` as opt-in with documented rationale.
+
+#### 9.20.3 PR5 Merge Gates
+1. Required MPI tests pass (existing five, plus any new higher-order/direct
+   non-periodic additions):
+- `particles/pic_mhd_current_coupling`
+- `particles/pic_mhd_coupling_decomp`
+- `particles/pic_mhd_restart_fidelity`
+- `particles/pic_mhd_coupling_multilevel`
+- `particles/pic_mhd_coupling_nonperiodic`
+2. Changed-file style checks pass:
+- `bash tst/scripts/style/check_athena_cpp_style_changed.sh`
+- `bash tst/scripts/style/check_python_style_changed.sh`
+3. PR5 closeout docs include:
+- completed checklist state for each item above
+- explicit Entity-parity matrix
+- explicit default-mode decision outcome with evidence
 
 ## 10. AGENTS Review Index
 

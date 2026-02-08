@@ -36,6 +36,7 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   id.recv_jedge = none;
   id.crecv_jedge = none;
   id.csend_jedge = none;
+  id.bcs_jedge = none;
   id.convert_j_edge = none;
 
   // particle integration done in "before_timeintegrator" task list
@@ -262,6 +263,17 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
         std::exit(EXIT_FAILURE);
       }
       id.csend_jedge = sid;
+
+      sid = stagen_tl->InsertTask(&Particles::ApplyEdgeCurrentPhysicalBCs, this,
+                                  sid, direct_loc);
+      if (sid == TaskID(0)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Failed to insert Particles::ApplyEdgeCurrentPhysicalBCs before "
+                  << "MHD::EFieldSrc" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      id.bcs_jedge = sid;
     }
 
     // Step I: convert cell-centered deposited J into edge representation

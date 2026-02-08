@@ -69,6 +69,7 @@ struct ParticlesTaskIDs {
   TaskID recv_jedge;
   TaskID crecv_jedge;
   TaskID csend_jedge;
+  TaskID bcs_jedge;
   TaskID convert_j_edge;
 };
 
@@ -174,6 +175,7 @@ class Particles {
   TaskStatus RecvEdgeCurrents(Driver *pdriver, int stage);
   TaskStatus ClearRecvEdgeCurrents(Driver *pdriver, int stage);
   TaskStatus ClearSendEdgeCurrents(Driver *pdriver, int stage);
+  TaskStatus ApplyEdgeCurrentPhysicalBCs(Driver *pdriver, int stage);
   TaskStatus ConvertCoupledCurrentRepresentation(Driver *pdriver, int stage);
 
   // Cosmic ray specific methods

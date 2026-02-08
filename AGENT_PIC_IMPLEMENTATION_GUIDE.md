@@ -1,8 +1,9 @@
-# AthenaK PIC PR1-PR4 Agent Implementation Guide
+# AthenaK PIC PR1-PR5 Agent Implementation Guide
 
 This guide is a companion to:
 - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/AGENTS.md`
 - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/AGENT_PIC_HANDOFF.md`
+- `/Users/dbf75/Work/Research/AthenaK/athenak-DF/AGENT_PIC_PR4_REVIEW_BRIEF.md`
 
 ## 1. Instruction Priority
 
@@ -470,10 +471,11 @@ For every non-trivial function:
        `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:384`
        through
        `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:392`
-     - `direct_staggered` requires strictly periodic boundaries:
-       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:394`
-       through
-       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:400`
+     - PR5-B removes the strict-periodic-only guard and applies explicit
+       direct edge-current physical BCs before `MHD::EFieldSrc`:
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:267`
+       and
+       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:1181`
    - Dataflow and comm objects:
      - edge-comm pointer and task IDs:
        `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.hpp:67`
@@ -629,6 +631,90 @@ For every non-trivial function:
      - `bash tst/scripts/style/check_athena_cpp_style_changed.sh`
      - `bash tst/scripts/style/check_python_style_changed.sh`
    - handoff/docs contain as-built anchors and explicit compatibility-policy outcome.
+
+### PR5 Entity-Parity Plan (Tracked Checklist)
+
+1. Objective and contract
+   - PR5 extends direct edge-current deposition beyond first-order and follows
+     Entity behavior as closely as AthenaK architecture allows.
+   - Preserve ordering, trajectory-deposition, and coupling semantics unless
+     divergence is explicitly documented and justified.
+   - Keep temporary divergences behind runtime guards and tracked checklist
+     items.
+   - Entity references:
+     - `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:114`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:132`
+     - `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:521`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:560`
+     - `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:406`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:560`
+       and
+       `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp:906`
+       through
+       `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp:997`
+
+2. Tracked checklist
+   - PR5-A: higher-order direct deposition kernel parity
+     - [x] Port higher-order Entity-style trajectory deposition into AthenaK
+       direct path without changing PR4 first-order behavior.
+       - Status (2026-02-08, commit `56244bc9`): periodic direct mode supports
+         `deposit_order=2`.
+     - [x] Add runtime support for direct-mode deposition orders beyond order-1
+       with clear fatal guards for unsupported combinations.
+       - Status (2026-02-08, commit `56244bc9`): runtime guards permit
+         `deposit_order={1,2}` only for coupled `direct_staggered`; other
+         unsupported combinations remain fatal.
+     - [ ] Document exact AthenaK-to-Entity mapping for kernel primitives
+       (weights, trajectory split, current accumulation).
+       - Pending for PR5-A closeout documentation update.
+   - PR5-B: boundary-policy expansion for direct mode
+     - [x] Implement conservation-safe direct trajectory handling for supported
+       non-periodic policies (`reflect`, `outflow`).
+     - [x] Remove strict-periodic direct-mode guard after PR5-B validation is
+       green.
+       - Status (2026-02-08, working tree): constructor periodic guard removed;
+         direct edge-current BC task added in
+         `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:1181`
+         and inserted before `MHD::EFieldSrc` in
+         `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:267`.
+   - PR5-C: test and parity hardening
+     - [x] Extend direct-mode coverage (higher-order and non-periodic) in:
+       `pic_mhd_current_coupling.py`, `pic_mhd_coupling_decomp.py`,
+       `pic_mhd_coupling_multilevel.py`, `pic_mhd_restart_fidelity.py`,
+       `pic_mhd_coupling_nonperiodic.py`.
+       - Status (2026-02-08, working tree): non-periodic direct
+         `direct_staggered` + `deposit_order=2` cases added in
+         `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_nonperiodic.py:227`
+         and
+         `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_nonperiodic.py:290`;
+         obsolete periodic-only guard removed in
+         `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:827`.
+     - [x] Keep continuity-residual oracle (`d(rho)/dt + div(J)`) as required.
+     - [ ] Add explicit Entity parity classification per axis: aligned,
+       intentional divergence, unplanned divergence.
+   - PR5-D: default-mode decision gate
+     - [ ] Evaluate switching default from `cc_convert` to
+       `direct_staggered` only after PR5-A/B/C pass.
+     - [ ] If any parity/stability/performance gate fails, keep `cc_convert`
+       default and retain `direct_staggered` as opt-in with explicit rationale.
+
+3. PR5 merge gates
+   - Required MPI tests (existing five plus new PR5 additions) pass:
+     - `particles/pic_mhd_current_coupling`
+     - `particles/pic_mhd_coupling_decomp`
+     - `particles/pic_mhd_restart_fidelity`
+     - `particles/pic_mhd_coupling_multilevel`
+     - `particles/pic_mhd_coupling_nonperiodic`
+   - Changed-file style checks pass:
+     - `bash tst/scripts/style/check_athena_cpp_style_changed.sh`
+     - `bash tst/scripts/style/check_python_style_changed.sh`
+   - PR5 closeout docs contain:
+     - completed checklist state
+     - explicit Entity-parity matrix
+     - explicit default-mode decision outcome with evidence.
 
 ## 7. What Not To Do
 

@@ -399,14 +399,6 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if ((couple_j_deposition_mode == CoupledCurrentDepositionMode::direct_staggered) &&
-        !(pmy_pack->pmesh->strictly_periodic)) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl
-                << "<particles>/couple_j_deposition_mode=direct_staggered requires "
-                << "strictly periodic mesh boundaries in PR4" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
     if (couple_j_to_efield_representation == CoupledCurrentRepresentation::edge_staggered
         && (pmy_pack->pcoord->is_special_relativistic ||
             pmy_pack->pcoord->is_general_relativistic ||
