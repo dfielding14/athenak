@@ -133,6 +133,10 @@ efficiently on CPUs and GPUs.
     `particles/pic_bell_growth_proxy` (coupled vs uncoupled comparison that
     requires positive transverse magnetic growth only in coupled mode with
     serial/MPI growth-rate parity).
+  - A multi-species coupled oscillation parity anchor is present as
+    `particles/pic_multispecies_backreaction_oscillation` using uniform, SMR,
+    and nested-refinement AMR-style proxy decks with frequency-window, energy-
+    drift, and serial/MPI parity gates.
   - Cosmic-ray initialization now supports optional per-species drifts in each
     `speciesN` block (`vx0`, `vy0`, `vz0`) with fallback to
     `<particles>/cr_vx0`, `cr_vy0`, `cr_vz0`.

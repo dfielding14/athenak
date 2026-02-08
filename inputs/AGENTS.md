@@ -143,8 +143,15 @@ Format rules are enforced by `src/parameter_input.cpp`:
     and gates out positive exponential growth.
 - `inputs/tests/pic_bell_growth_proxy.athinput`
   - Coupled-MHD Bell-like proxy that compares uncoupled vs coupled runs for
-    transverse magnetic growth and enforces positive growth only in coupled
-    mode with serial/MPI parity.
+  transverse magnetic growth and enforces positive growth only in coupled
+  mode with serial/MPI parity.
+- `inputs/tests/pic_multispecies_osc_uniform.athinput`
+  - Multi-species (`q=+/-1`) coupled oscillation baseline on a uniform mesh.
+- `inputs/tests/pic_multispecies_osc_smr.athinput`
+  - Same oscillation setup with one static refinement level (SMR parity case).
+- `inputs/tests/pic_multispecies_osc_amr_proxy.athinput`
+  - Same oscillation setup with nested static refinement (AMR-style proxy for
+    uniform/SMR/AMR parity gating in current AthenaK harness limits).
 
 ---
 
