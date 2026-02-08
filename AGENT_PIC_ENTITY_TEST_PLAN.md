@@ -26,7 +26,10 @@ PIC behavior can be validated without significant MHD back-reaction.
 - Step 6 (`Finalize Deposit Parity Layer`): complete at current working tree
   state with evidence in
   `tst/.codex/pic_entity_suite/step6_entity_parity/STEP6_ENTITY_PARITY_REPORT.md`.
-- Step 7 onward: pending.
+- Step 7 (`Implement EM Vacuum Wave Analytic Test`): complete at current
+  working tree state with evidence in
+  `tst/.codex/pic_entity_suite/step7_em_vacuum/STEP7_EM_VACUUM_REPORT.md`.
+- Step 8 onward: pending.
 
 ## 1. Scope and Goal
 

@@ -123,6 +123,9 @@ Format rules are enforced by `src/parameter_input.cpp`:
 - `inputs/tests/pic_entity_deposit_reflect.athinput`
   - Pair-species reflect-boundary deposit case used for non-periodic
     decomposition/neutrality checks.
+- `inputs/tests/pic_em_vacuum_wave.athinput`
+  - EM-vacuum-style convergence anchor using `linear_wave` in strict
+    test-particle mode for current AthenaK architecture.
 
 ---
 

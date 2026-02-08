@@ -115,6 +115,8 @@ efficiently on CPUs and GPUs.
   - Entity-mirroring deposit parity tests are now present in
     `particles/pic_entity_deposit_mink` and
     `particles/pic_entity_deposit_reflect` with serial/MPI decomposition checks.
+  - An EM-vacuum-style analytic convergence anchor is present as
+    `particles/pic_em_vacuum_wave` (linear-wave adaptation in test-particle mode).
   Other staged controls remain parse/validation hooks until their
   corresponding implementation steps.
 
