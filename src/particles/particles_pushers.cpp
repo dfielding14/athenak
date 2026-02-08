@@ -213,6 +213,11 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
   auto mspecies = species_mass;
   const int nspecies_local = nspecies;
   const Real inv_dt = (dt > 0.0) ? (1.0/dt) : 0.0;
+  const bool expanding_box_local =
+      (pic_expanding_box_mode == PICExpandingBoxMode::on);
+  const Real exp_rate_x1_local = pic_expansion_rate_x1;
+  const Real exp_rate_x2_local = pic_expansion_rate_x2;
+  const Real exp_rate_x3_local = pic_expansion_rate_x3;
 
   // Midpoint E+B Boris pusher
   par_for(
@@ -233,6 +238,18 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         int sp = pi(PSP, p);
         if (sp < 0 || sp >= nspecies_local) return;
         Real m_macro = qscale*mspecies(sp);
+
+        if (expanding_box_local) {
+          // Apply half-step expansion/compression source update around Boris.
+          Real sx = exp(-0.5*dt*exp_rate_x1_local);
+          Real sy = exp(-0.5*dt*exp_rate_x2_local);
+          Real sz = exp(-0.5*dt*exp_rate_x3_local);
+          vx *= sx;
+          vy *= sy;
+          if (nx3_local > 1) {
+            vz *= sz;
+          }
+        }
 
         // Drift to midpoint with old velocity.
         Real dt_half = 0.5*dt;
@@ -287,6 +304,17 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         vx += qdt_2m*cEx;
         vy += qdt_2m*cEy;
         vz += qdt_2m*cEz;
+
+        if (expanding_box_local) {
+          Real sx = exp(-0.5*dt*exp_rate_x1_local);
+          Real sy = exp(-0.5*dt*exp_rate_x2_local);
+          Real sz = exp(-0.5*dt*exp_rate_x3_local);
+          vx *= sx;
+          vy *= sy;
+          if (nx3_local > 1) {
+            vz *= sz;
+          }
+        }
 
         // Complete drift from midpoint to full-step position.
         pr(IPX, p) = x_mid + dt_half*vx;

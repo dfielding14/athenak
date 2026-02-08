@@ -113,6 +113,9 @@ efficiently on CPUs and GPUs.
   - In staged `pic_deltaf_mode=on` runs with `cr_distribution=random`,
     initialization uses a deterministic low-discrepancy quiet start to reduce
     sampling noise in proxy growth checks.
+  - In staged `pic_expanding_box_mode=on` runs, CR Boris pushers apply a
+    half-step expansion/compression source update around the Boris advance
+    using `pic_expansion_rate_x1/x2/x3`.
   - Step-5 diagnostics outputs are available for midpoint/feedback checks:
     `prtcl_dpxdt`, `prtcl_dpydt`, `prtcl_dpzdt`, `prtcl_dedt`, `prtcl_ebdot`.
   - Entity-mirroring deposit parity tests are now present in
@@ -146,6 +149,9 @@ efficiently on CPUs and GPUs.
   - A CRPAI-style branch-selectivity anchor is present as
     `particles/pic_crpai_polarization_proxy` using prolate/oblate proxy decks
     with opposite dominant-polarization branch gating and serial/MPI checks.
+  - A driven expanding/compressing-box anisotropy anchor is present as
+    `particles/pic_expanding_box_anisotropy_proxy` using paired proxy decks
+    with opposite anisotropy-slope sign gates and serial/MPI slope parity.
   - Cosmic-ray initialization now supports optional per-species drifts in each
     `speciesN` block (`vx0`, `vy0`, `vz0`) with fallback to
     `<particles>/cr_vx0`, `cr_vy0`, `cr_vz0`.

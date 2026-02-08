@@ -176,6 +176,9 @@ but these are not wired in the constructor.
 - `pic_expanding_box_mode`: `off` (default) or `on`.
 - `pic_expansion_rate_x1/x2/x3` default to `0.0`; non-zero expansion rates
   require `pic_expanding_box_mode=on`.
+  - staged behavior: when expanding-box mode is on, Boris pushers apply
+    per-component half-step source scaling around the Boris update using
+    `exp(-0.5*dt*pic_expansion_rate_xi)`.
 - `pic_no_mhd_bx`, `pic_no_mhd_by`, `pic_no_mhd_bz` define uniform no-MHD
   Boris background fields for the particle-owned carrier.
 - `passive_mhd` currently requires:

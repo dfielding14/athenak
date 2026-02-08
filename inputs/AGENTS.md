@@ -161,6 +161,12 @@ Format rules are enforced by `src/parameter_input.cpp`:
 - `inputs/tests/pic_crpai_oblate_proxy.athinput`
   - CRPAI-style oblate branch-selection proxy (`cr_vx0 < 0`) paired with the
     prolate deck for opposite-branch gating.
+- `inputs/tests/pic_expanding_box_proxy.athinput`
+  - Driven expanding-box anisotropy proxy using `pic_expanding_box_mode=on`
+    and positive `pic_expansion_rate_x1`.
+- `inputs/tests/pic_compressing_box_proxy.athinput`
+  - Driven compressing-box anisotropy proxy paired with the expanding deck
+    using negative `pic_expansion_rate_x1`.
 
 ---
 

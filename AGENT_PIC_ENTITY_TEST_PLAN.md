@@ -50,7 +50,10 @@ PIC behavior can be validated without significant MHD back-reaction.
 - Step 14 (`Implement CRPAI Linear-Dispersion Test`): complete at current
   working tree state with evidence in
   `tst/.codex/pic_entity_suite/step14_crpai_proxy/STEP14_CRPAI_PROXY_REPORT.md`.
-- Step 15 onward: pending.
+- Step 15 (`Implement Driven CRPAI in Expanding/Compressing Box`): complete at
+  current working tree state with evidence in
+  `tst/.codex/pic_entity_suite/step15_expanding_box_proxy/STEP15_EXPANDING_BOX_PROXY_REPORT.md`.
+- Step 16 onward: pending.
 
 ## 1. Scope and Goal
 
