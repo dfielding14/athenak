@@ -747,6 +747,8 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
   // Determine distribution type for initial positions
   std::string dist = pin->GetOrAddString("particles", "cr_distribution", "center");
   const bool random_dist = (dist.compare("random") == 0);
+  const bool deltaf_quiet_start =
+      (random_dist && pic_deltaf_mode == PICDeltaFMode::on);
   const bool track_disp_local = track_displacement;  // avoid capturing 'this'
   const int nx3_local = indcs.nx3;                   // avoid capturing host ref
 
@@ -763,6 +765,7 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
   auto species_vx0_local = species_vx0;
   auto species_vy0_local = species_vy0;
   auto species_vz0_local = species_vz0;
+  const bool deltaf_quiet_start_local = deltaf_quiet_start;
   // Make sure geometry is available on device
   size.template sync<DevExeSpace>();
   auto size_view = size;
@@ -783,13 +786,45 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
     // Choose position within the mesh block
     Real rx = 0.5, ry = 0.5, rz = 0.5;
     if (random_dist) {
-      auto rand_gen = rand_pool64.get_state();
-      rx = rand_gen.drand();
-      ry = rand_gen.drand();
-      if (nx3_local > 1) {
-        rz = rand_gen.drand();
+      if (deltaf_quiet_start_local) {
+        // Quiet-start low-discrepancy placement for staged delta-f noise control.
+        int n2 = p + 1;
+        Real w2 = 0.5;
+        rx = 0.0;
+        while (n2 > 0) {
+          rx += w2*static_cast<Real>(n2 % 2);
+          n2 /= 2;
+          w2 *= 0.5;
+        }
+
+        int n3 = p + 1;
+        Real w3 = 1.0/3.0;
+        ry = 0.0;
+        while (n3 > 0) {
+          ry += w3*static_cast<Real>(n3 % 3);
+          n3 /= 3;
+          w3 *= 1.0/3.0;
+        }
+
+        if (nx3_local > 1) {
+          int n5 = p + 1;
+          Real w5 = 0.2;
+          rz = 0.0;
+          while (n5 > 0) {
+            rz += w5*static_cast<Real>(n5 % 5);
+            n5 /= 5;
+            w5 *= 0.2;
+          }
+        }
+      } else {
+        auto rand_gen = rand_pool64.get_state();
+        rx = rand_gen.drand();
+        ry = rand_gen.drand();
+        if (nx3_local > 1) {
+          rz = rand_gen.drand();
+        }
+        rand_pool64.free_state(rand_gen);
       }
-      rand_pool64.free_state(rand_gen);
     }
 
     const Real x1min = size_view.d_view(m).x1min;

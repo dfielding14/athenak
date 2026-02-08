@@ -152,6 +152,9 @@ Format rules are enforced by `src/parameter_input.cpp`:
 - `inputs/tests/pic_multispecies_osc_amr_proxy.athinput`
   - Same oscillation setup with nested static refinement (AMR-style proxy for
     uniform/SMR/AMR parity gating in current AthenaK harness limits).
+- `inputs/tests/pic_crsi_deltaf_proxy.athinput`
+  - Coupled-MHD CRSI-style proxy deck used with `pic_deltaf_mode=off|on` to
+    gate polarization-resolved growth metrics and delta-f noise behavior.
 
 ---
 

@@ -110,6 +110,9 @@ efficiently on CPUs and GPUs.
   - Boris CR pushers now use a midpoint E+B sequence (`cE = -u x B`) and
     store per-step particle delta channels used by coupled fluid feedback in
     `MHDSrcTerms`/`EFieldSrc` when `pic_feedback_mode=coupled`.
+  - In staged `pic_deltaf_mode=on` runs with `cr_distribution=random`,
+    initialization uses a deterministic low-discrepancy quiet start to reduce
+    sampling noise in proxy growth checks.
   - Step-5 diagnostics outputs are available for midpoint/feedback checks:
     `prtcl_dpxdt`, `prtcl_dpydt`, `prtcl_dpzdt`, `prtcl_dedt`, `prtcl_ebdot`.
   - Entity-mirroring deposit parity tests are now present in
@@ -137,6 +140,9 @@ efficiently on CPUs and GPUs.
     `particles/pic_multispecies_backreaction_oscillation` using uniform, SMR,
     and nested-refinement AMR-style proxy decks with frequency-window, energy-
     drift, and serial/MPI parity gates.
+  - A CRSI-style delta-f proxy anchor is present as
+    `particles/pic_crsi_deltaf_proxy` with polarization-resolved growth
+    metrics, delta-f on/off noise comparison, and serial/MPI stability gates.
   - Cosmic-ray initialization now supports optional per-species drifts in each
     `speciesN` block (`vx0`, `vy0`, `vz0`) with fallback to
     `<particles>/cr_vx0`, `cr_vy0`, `cr_vz0`.

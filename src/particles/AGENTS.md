@@ -168,6 +168,9 @@ but these are not wired in the constructor.
   `pic_theta_max` (default `0.3`) with positivity guards.
 - `pic_deltaf_mode`: `off` (default) or `on`; `on` requires
   `pic_deltaf_f0` to be explicitly set.
+  - staged behavior: with `cr_distribution=random`, `pic_deltaf_mode=on`
+    applies deterministic low-discrepancy quiet-start particle placement for
+    reduced sampling noise in proxy instability tests.
 - `pic_sort_interval` (default `0`, must be `>= 0`).
 - `pic_intermediate_arrays`: `auto` (default) or `off`.
 - `pic_expanding_box_mode`: `off` (default) or `on`.
