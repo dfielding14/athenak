@@ -141,6 +141,10 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - Transverse-anisotropy no-MHD proxy with two species and opposite `vy0`
     drifts; regression fits the dominant transverse-current mode growth rate
     and gates out positive exponential growth.
+- `inputs/tests/pic_bell_growth_proxy.athinput`
+  - Coupled-MHD Bell-like proxy that compares uncoupled vs coupled runs for
+    transverse magnetic growth and enforces positive growth only in coupled
+    mode with serial/MPI parity.
 
 ---
 

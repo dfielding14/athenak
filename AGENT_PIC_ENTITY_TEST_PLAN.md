@@ -38,7 +38,10 @@ PIC behavior can be validated without significant MHD back-reaction.
 - Step 10 (`Implement Weibel Instability Test (Growth Rate)`): complete at
   current working tree state with evidence in
   `tst/.codex/pic_entity_suite/step10_weibel/STEP10_WEIBEL_REPORT.md`.
-- Step 11 onward: pending.
+- Step 11 (`Implement Bell Test (Current-Driven Instability)`): complete at
+  current working tree state with evidence in
+  `tst/.codex/pic_entity_suite/step11_bell/STEP11_BELL_REPORT.md`.
+- Step 12 onward: pending.
 
 ## 1. Scope and Goal
 
