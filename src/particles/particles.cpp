@@ -311,10 +311,18 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                 << "<particles>/particle_type=cosmic_ray" << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    if (deposit_order != 1) {
+    const bool direct_edge_mode =
+        (couple_moments_to_mhd &&
+         couple_j_deposition_mode ==
+         CoupledCurrentDepositionMode::direct_staggered);
+    const bool valid_direct_order = (deposit_order == 1 || deposit_order == 2);
+    if ((!direct_edge_mode && deposit_order != 1) ||
+        (direct_edge_mode && !valid_direct_order)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "<particles>/deposit_order=" << deposit_order
-                << " is not supported in PR1 (only deposit_order=1)"
+                << " is not supported (only deposit_order=1, or "
+                << "deposit_order={1,2} with coupled "
+                << "couple_j_deposition_mode=direct_staggered)"
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }

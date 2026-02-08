@@ -115,7 +115,9 @@ but these are not wired in the constructor.
 
 ### Deposition controls
 - `deposit_moments` (default `false`): enables `rho/J` deposition.
-- `deposit_order` (currently only `1` supported).
+- `deposit_order`:
+  - default and all non-direct paths: `1` only
+  - coupled `direct_staggered` path: `1` and `2` supported
 - `deposit_qscale`: macro-charge scaling.
 
 ### PR2 E-field coupling controls

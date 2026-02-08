@@ -402,6 +402,16 @@ def run(**kwargs):
                     common_args,
         },
         {
+            'name': 'serial_coupled_edge_direct_staggered_o2',
+            'basename': 'pic_mhd_coupled_edge_direct_o2',
+            'nproc': 1,
+            'args': ['job/basename=pic_mhd_coupled_edge_direct_o2',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_j_to_efield_representation=edge_staggered',
+                     'particles/couple_j_deposition_mode=direct_staggered',
+                     'particles/deposit_order=2'] + common_args,
+        },
+        {
             'name': 'serial_feedback_momentum',
             'basename': 'pic_mhd_feedback_momentum',
             'nproc': 1,
@@ -594,6 +604,16 @@ def run(**kwargs):
                      'particles/couple_j_deposition_mode=direct_staggered'] +
                     common_args,
         })
+        positive_cases.append({
+            'name': 'mpi2_coupled_edge_direct_staggered_o2',
+            'basename': 'pic_mhd_coupled_edge_direct_o2_mpi2',
+            'nproc': 2,
+            'args': ['job/basename=pic_mhd_coupled_edge_direct_o2_mpi2',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_j_to_efield_representation=edge_staggered',
+                     'particles/couple_j_deposition_mode=direct_staggered',
+                     'particles/deposit_order=2'] + common_args,
+        })
     else:
         logger.info('Skipping mpi2_coupled case: Athena build has MPI parallelism OFF')
 
@@ -638,6 +658,18 @@ def run(**kwargs):
                      'particles/couple_j_deposition_mode=direct_staggered'] +
                     common_args,
         },
+        {
+            'name': 'serial_continuity_edge_direct_o2',
+            'basename': 'pic_mhd_cont_edge_direct_o2',
+            'nproc': 1,
+            'current_ids': _EDGE_CURRENT_IDS,
+            'args': ['job/basename=pic_mhd_cont_edge_direct_o2',
+                     'time/nlim=2',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_j_to_efield_representation=edge_staggered',
+                     'particles/couple_j_deposition_mode=direct_staggered',
+                     'particles/deposit_order=2'] + common_args,
+        },
     ]
 
     if _athena_mpi_enabled():
@@ -674,6 +706,19 @@ def run(**kwargs):
                          'edge_staggered',
                          'particles/couple_j_deposition_mode=direct_staggered'] +
                         common_args,
+            },
+            {
+                'name': 'mpi2_continuity_edge_direct_o2',
+                'basename': 'pic_mhd_cont_edge_direct_o2_mpi2',
+                'nproc': 2,
+                'current_ids': _EDGE_CURRENT_IDS,
+                'args': ['job/basename=pic_mhd_cont_edge_direct_o2_mpi2',
+                         'time/nlim=2',
+                         'particles/couple_moments_to_mhd=true',
+                         'particles/couple_j_to_efield_representation='
+                         'edge_staggered',
+                         'particles/couple_j_deposition_mode=direct_staggered',
+                         'particles/deposit_order=2'] + common_args,
             },
         ])
 
@@ -857,6 +902,8 @@ def analyze():
 
     coupled_edge_direct = _POSITIVE_RESULTS[
         'serial_coupled_edge_direct_staggered']['measured']
+    coupled_edge_direct_o2 = _POSITIVE_RESULTS[
+        'serial_coupled_edge_direct_staggered_o2']['measured']
     delta_direct_b1 = abs(coupled_edge_direct['bcc1_l2'] - default_case['bcc1_l2'])
     delta_direct_b2 = abs(coupled_edge_direct['bcc2_l2'] - default_case['bcc2_l2'])
     delta_direct_b3 = abs(coupled_edge_direct['bcc3_l2'] - default_case['bcc3_l2'])
@@ -877,11 +924,17 @@ def analyze():
         ok = _check_with_tolerance('edge_staggered_vs_direct_staggered:' + quantity,
                                    coupled_edge_direct[quantity], coupled_edge[quantity],
                                    1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('edge_staggered_vs_direct_staggered_o2:' +
+                                   quantity,
+                                   coupled_edge_direct_o2[quantity],
+                                   coupled_edge[quantity],
+                                   1.0e-6, 1.0e-8) and ok
 
     required_cont_cases = [
         'serial_continuity_cc',
         'serial_continuity_edge',
         'serial_continuity_edge_direct',
+        'serial_continuity_edge_direct_o2',
     ]
     for case_name in required_cont_cases:
         if case_name not in _CONTINUITY_RESULTS:
@@ -891,8 +944,10 @@ def analyze():
     cont_cc = _CONTINUITY_RESULTS['serial_continuity_cc']
     cont_edge = _CONTINUITY_RESULTS['serial_continuity_edge']
     cont_direct = _CONTINUITY_RESULTS['serial_continuity_edge_direct']
+    cont_direct_o2 = _CONTINUITY_RESULTS['serial_continuity_edge_direct_o2']
     continuity_sets = [('cc', cont_cc), ('edge', cont_edge),
-                       ('edge_direct', cont_direct)]
+                       ('edge_direct', cont_direct),
+                       ('edge_direct_o2', cont_direct_o2)]
     for label, cont in continuity_sets:
         logger.info('continuity_%s dt=% .8e cycle_delta=% .8e l2_drhodt=% .8e '
                     'l2_divj=% .8e l2_res=% .8e linf_res=% .8e rel=% .8e',
@@ -918,6 +973,15 @@ def analyze():
         ok = _check_with_tolerance('continuity_edge_rel_zero',
                                    cont_direct['rel_residual'], 0.0,
                                    1.0e-12, 1.0e-12) and ok
+    if cont_direct['rel_residual'] > 0.0:
+        direct_o2_vs_direct_rel = (cont_direct_o2['rel_residual'] /
+                                   cont_direct['rel_residual'])
+        logger.info('continuity_direct_o2_vs_direct_rel_ratio=% .8e',
+                    direct_o2_vs_direct_rel)
+        if direct_o2_vs_direct_rel > 2.0:
+            logger.warning('Direct-edge order-2 continuity residual regressed '
+                           'vs direct order-1')
+            ok = False
 
     coupled_m1 = _measure_dataset('pic_mhd_coupled', 'mhd_u_m1')
     coupled_m2 = _measure_dataset('pic_mhd_coupled', 'mhd_u_m2')
@@ -1171,11 +1235,43 @@ def analyze():
                                    mpi2_edge_direct['bcc3_l2'],
                                    coupled_edge_direct['bcc3_l2'],
                                    1.0e-6, 1.0e-8) and ok
+    if 'mpi2_coupled_edge_direct_staggered_o2' in _POSITIVE_RESULTS:
+        mpi2_edge_direct_o2 = _POSITIVE_RESULTS[
+            'mpi2_coupled_edge_direct_staggered_o2']['measured']
+        ok = _check_with_tolerance('serial_vs_mpi2_direct_staggered_o2:Q',
+                                   mpi2_edge_direct_o2['Q'],
+                                   coupled_edge_direct_o2['Q'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_direct_staggered_o2:Jx',
+                                   mpi2_edge_direct_o2['Jx'],
+                                   coupled_edge_direct_o2['Jx'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_direct_staggered_o2:Jy',
+                                   mpi2_edge_direct_o2['Jy'],
+                                   coupled_edge_direct_o2['Jy'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_direct_staggered_o2:Jz',
+                                   mpi2_edge_direct_o2['Jz'],
+                                   coupled_edge_direct_o2['Jz'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_direct_staggered_o2:bcc1_l2',
+                                   mpi2_edge_direct_o2['bcc1_l2'],
+                                   coupled_edge_direct_o2['bcc1_l2'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_direct_staggered_o2:bcc2_l2',
+                                   mpi2_edge_direct_o2['bcc2_l2'],
+                                   coupled_edge_direct_o2['bcc2_l2'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_direct_staggered_o2:bcc3_l2',
+                                   mpi2_edge_direct_o2['bcc3_l2'],
+                                   coupled_edge_direct_o2['bcc3_l2'],
+                                   1.0e-6, 1.0e-8) and ok
 
     if ('mpi2_continuity_cc' in _CONTINUITY_RESULTS and
             'mpi2_continuity_edge' in _CONTINUITY_RESULTS and
-            'mpi2_continuity_edge_direct' in _CONTINUITY_RESULTS):
-        for rep_tag in ['cc', 'edge', 'edge_direct']:
+            'mpi2_continuity_edge_direct' in _CONTINUITY_RESULTS and
+            'mpi2_continuity_edge_direct_o2' in _CONTINUITY_RESULTS):
+        for rep_tag in ['cc', 'edge', 'edge_direct', 'edge_direct_o2']:
             serial = _CONTINUITY_RESULTS['serial_continuity_' + rep_tag]
             mpi2 = _CONTINUITY_RESULTS['mpi2_continuity_' + rep_tag]
             ok = _check_with_tolerance('continuity_serial_vs_mpi2:' + rep_tag +

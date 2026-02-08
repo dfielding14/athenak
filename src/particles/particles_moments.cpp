@@ -7,6 +7,7 @@
 //! \brief task wrappers and kernels for particle moment deposition/communication
 
 #include <cmath>
+#include <iostream>
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
@@ -53,6 +54,101 @@ void PosToCellAndFrac(const Real x, const Real xmin, const Real dx, const int is
   if (frac < static_cast<Real>(0.0)) frac = static_cast<Real>(0.0);
   if (frac > static_cast<Real>(1.0)) frac = static_cast<Real>(1.0);
   icell = ClampCellIndex(iloc, imin, imax);
+}
+
+KOKKOS_INLINE_FUNCTION
+bool InBoundsInclusive(const int i, const int imin, const int imax) {
+  return (i >= imin && i <= imax);
+}
+
+template <bool STAGGERED, int O>
+KOKKOS_INLINE_FUNCTION
+void ShapeOrder(const int i, const Real di, int &i_min, Real S[O + 1]) {
+  static_assert((O == 1 || O == 2),
+                "ShapeOrder currently supports only O=1 and O=2");
+  if constexpr (O == 1) {
+    if constexpr (!STAGGERED) {
+      i_min = i;
+      S[0] = static_cast<Real>(1.0) - di;
+      S[1] = di;
+    } else {
+      if (di < static_cast<Real>(0.5)) {
+        i_min = i - 1;
+        S[0] = static_cast<Real>(0.5) - di;
+        S[1] = static_cast<Real>(1.0) - S[0];
+      } else {
+        i_min = i;
+        S[0] = static_cast<Real>(1.5) - di;
+        S[1] = static_cast<Real>(1.0) - S[0];
+      }
+    }
+  } else {
+    if constexpr (!STAGGERED) {
+      if (di < static_cast<Real>(0.5)) {
+        i_min = i - 1;
+        S[0] = static_cast<Real>(0.5) *
+               (static_cast<Real>(0.5) - di) *
+               (static_cast<Real>(0.5) - di);
+        S[1] = static_cast<Real>(0.75) - di*di;
+        S[2] = static_cast<Real>(1.0) - S[0] - S[1];
+      } else {
+        i_min = i;
+        S[0] = static_cast<Real>(0.5) *
+               (static_cast<Real>(1.5) - di) *
+               (static_cast<Real>(1.5) - di);
+        Real d1 = static_cast<Real>(1.0) - di;
+        S[1] = static_cast<Real>(0.75) - d1*d1;
+        S[2] = static_cast<Real>(1.0) - S[0] - S[1];
+      }
+    } else {
+      i_min = i - 1;
+      S[0] = static_cast<Real>(0.5) *
+             (static_cast<Real>(1.0) - di) *
+             (static_cast<Real>(1.0) - di);
+      S[2] = static_cast<Real>(0.5)*di*di;
+      S[1] = static_cast<Real>(1.0) - S[0] - S[2];
+    }
+  }
+}
+
+template <int O>
+KOKKOS_INLINE_FUNCTION
+void ShapeForDeposit(const int i_init, const Real di_init,
+                     const int i_fin, const Real di_fin,
+                     int &i_min, int &i_max,
+                     Real iS[O + 2], Real fS[O + 2]) {
+  static_assert((O == 1 || O == 2),
+                "ShapeForDeposit currently supports only O=1 and O=2");
+  int i_init_min = 0;
+  int i_fin_min = 0;
+  Real iS_local[O + 1];
+  Real fS_local[O + 1];
+
+  ShapeOrder<false, O>(i_init, di_init, i_init_min, iS_local);
+  ShapeOrder<false, O>(i_fin, di_fin, i_fin_min, fS_local);
+
+  if (i_init_min < i_fin_min) {
+    i_min = i_init_min;
+    i_max = i_min + O + 1;
+    for (int j = 0; j < O + 1; ++j) iS[j] = iS_local[j];
+    iS[O + 1] = static_cast<Real>(0.0);
+    fS[0] = static_cast<Real>(0.0);
+    for (int j = 0; j < O + 1; ++j) fS[j + 1] = fS_local[j];
+  } else if (i_init_min > i_fin_min) {
+    i_min = i_fin_min;
+    i_max = i_min + O + 1;
+    iS[0] = static_cast<Real>(0.0);
+    for (int j = 0; j < O + 1; ++j) iS[j + 1] = iS_local[j];
+    for (int j = 0; j < O + 1; ++j) fS[j] = fS_local[j];
+    fS[O + 1] = static_cast<Real>(0.0);
+  } else {
+    i_min = i_init_min;
+    i_max = i_min + O;
+    for (int j = 0; j < O + 1; ++j) iS[j] = iS_local[j];
+    iS[O + 1] = static_cast<Real>(0.0);
+    for (int j = 0; j < O + 1; ++j) fS[j] = fS_local[j];
+    fS[O + 1] = static_cast<Real>(0.0);
+  }
 }
 
 inline DvceEdgeFld4D<Real> MakeEdgeCurrentAlias(const DvceArray4D<Real> &x1e,
@@ -260,8 +356,9 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
   auto &jy_e = j_edge_x2e;
   auto &jz_e = j_edge_x3e;
 
-  par_for("deposit_direct_edge_currents", DevExeSpace(), 0, npart-1,
-  KOKKOS_LAMBDA(const int p) {
+  if (deposit_order == 1) {
+    par_for("deposit_direct_edge_currents", DevExeSpace(), 0, npart-1,
+    KOKKOS_LAMBDA(const int p) {
     int m = pi(PGID,p) - gids;
     if (m < 0 || m >= nmb) return;
 
@@ -585,9 +682,307 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
         (i1 + 1) >= i_min && (i1 + 1) <= (i_max + 1)) {
       Kokkos::atomic_add(&jz_e(m, k1, j1+1, i1+1), fx3_2*wx1_2*wx2_2);
     }
-  });
+    });
+    return TaskStatus::complete;
+  }
 
-  return TaskStatus::complete;
+  if (deposit_order == 2) {
+    par_for("deposit_direct_edge_currents_o2", DevExeSpace(), 0, npart-1,
+    KOKKOS_LAMBDA(const int p) {
+      int m = pi(PGID,p) - gids;
+      if (m < 0 || m >= nmb) return;
+
+      int sp = pi(PSP,p);
+      if (sp < 0 || sp >= nspecies_local) return;
+
+      Real q_macro = qscale*qspecies(sp);
+      Real coeff = q_macro*inv_dt;
+
+      Real x1min = size.d_view(m).x1min;
+      Real x2min = size.d_view(m).x2min;
+      Real x3min = size.d_view(m).x3min;
+      Real dx1 = size.d_view(m).dx1;
+      Real dx2 = size.d_view(m).dx2;
+      Real dx3 = size.d_view(m).dx3;
+
+      int i0, i1, j0, j1, k0, k1;
+      Real dxo, dxn, dyo, dyn, dzo, dzn;
+      PosToCellAndFrac(x1prev(p), x1min, dx1, is, i_min, i_max, i0, dxo);
+      PosToCellAndFrac(pr(IPX,p), x1min, dx1, is, i_min, i_max, i1, dxn);
+      PosToCellAndFrac(x2prev(p), x2min, dx2, js, j_min, j_max, j0, dyo);
+      PosToCellAndFrac(pr(IPY,p), x2min, dx2, js, j_min, j_max, j1, dyn);
+      if (three_d) {
+        PosToCellAndFrac(x3prev(p), x3min, dx3, ks, k_min, k_max, k0, dzo);
+        PosToCellAndFrac(pr(IPZ,p), x3min, dx3, ks, k_min, k_max, k1, dzn);
+      } else {
+        k0 = ks;
+        k1 = ks;
+        dzo = static_cast<Real>(0.0);
+        dzn = static_cast<Real>(0.0);
+      }
+
+      Real vy = pr(IPVY,p);
+      Real vz = pr(IPVZ,p);
+
+      Real iS_x1[4];
+      Real fS_x1[4];
+      int i1_min = 0;
+      int i1_max = 0;
+      ShapeForDeposit<2>(i0, dxo, i1, dxn, i1_min, i1_max, iS_x1, fS_x1);
+
+      if (pmy_pack->pmesh->one_d) {
+        Real wx1[4];
+        Real wx23[4];
+        for (int i = 0; i < 4; ++i) {
+          wx1[i] = fS_x1[i] - iS_x1[i];
+          wx23[i] = static_cast<Real>(0.5)*(fS_x1[i] + iS_x1[i]);
+        }
+
+        Real jx1_contrib[4];
+        Real qdx1dt = coeff;
+        Real qvy = q_macro*vy;
+        Real qvz = q_macro*vz;
+        jx1_contrib[0] = -qdx1dt*wx1[0];
+        for (int i = 1; i < 4; ++i) {
+          jx1_contrib[i] = jx1_contrib[i-1] - qdx1dt*wx1[i];
+        }
+
+        const int di_x1 = i1_max - i1_min;
+        for (int i = 0; i <= di_x1; ++i) {
+          int ii = i1_min + i;
+          if (InBoundsInclusive(ii, i_min, i_max + 1)) {
+            Real jy_val = qvy*wx23[i];
+            Real jz_val = qvz*wx23[i];
+            Kokkos::atomic_add(&jy_e(m, ks, js, ii), jy_val);
+            Kokkos::atomic_add(&jy_e(m, ke+1, js, ii), jy_val);
+            Kokkos::atomic_add(&jz_e(m, ks, js, ii), jz_val);
+            Kokkos::atomic_add(&jz_e(m, ks, je+1, ii), jz_val);
+          }
+        }
+        return;
+      }
+
+      Real iS_x2[4];
+      Real fS_x2[4];
+      int i2_min = 0;
+      int i2_max = 0;
+      ShapeForDeposit<2>(j0, dyo, j1, dyn, i2_min, i2_max, iS_x2, fS_x2);
+
+      if (pmy_pack->pmesh->two_d) {
+        Real wx1[4][4];
+        Real wx2[4][4];
+        Real wx3[4][4];
+        for (int i = 0; i < 4; ++i) {
+          for (int j = 0; j < 4; ++j) {
+            wx1[i][j] = static_cast<Real>(0.5)*(fS_x1[i] - iS_x1[i])*
+                        (fS_x2[j] + iS_x2[j]);
+            wx2[i][j] = static_cast<Real>(0.5)*(fS_x1[i] + iS_x1[i])*
+                        (fS_x2[j] - iS_x2[j]);
+            wx3[i][j] = static_cast<Real>(1.0/3.0)*
+                        (fS_x2[j]*(static_cast<Real>(0.5)*iS_x1[i] + fS_x1[i]) +
+                         iS_x2[j]*(static_cast<Real>(0.5)*fS_x1[i] + iS_x1[i]));
+          }
+        }
+
+        Real jx1_contrib[4][4];
+        Real jy1_contrib[4][4];
+        Real qdx1dt = coeff;
+        Real qdx2dt = coeff;
+        Real qvz = q_macro*vz;
+
+        for (int j = 0; j < 4; ++j) {
+          jx1_contrib[0][j] = -qdx1dt*wx1[0][j];
+        }
+        for (int i = 1; i < 4; ++i) {
+          for (int j = 0; j < 4; ++j) {
+            jx1_contrib[i][j] = jx1_contrib[i-1][j] - qdx1dt*wx1[i][j];
+          }
+        }
+
+        for (int i = 0; i < 4; ++i) {
+          jy1_contrib[i][0] = -qdx2dt*wx2[i][0];
+        }
+        for (int j = 1; j < 4; ++j) {
+          for (int i = 0; i < 4; ++i) {
+            jy1_contrib[i][j] = jy1_contrib[i][j-1] - qdx2dt*wx2[i][j];
+          }
+        }
+
+        int di_x1 = i1_max - i1_min;
+        int di_x2 = i2_max - i2_min;
+        int kf = ks;
+        int kf2 = ke + 1;
+
+        for (int i = 0; i < di_x1; ++i) {
+          int ii = i1_min + i;
+          if (!InBoundsInclusive(ii, i_min, i_max)) continue;
+          for (int j = 0; j <= di_x2; ++j) {
+            int jj = i2_min + j;
+            if (!InBoundsInclusive(jj, j_min, j_max + 1)) continue;
+            Real val = jx1_contrib[i][j];
+            Kokkos::atomic_add(&jx_e(m, kf, jj, ii), val);
+            Kokkos::atomic_add(&jx_e(m, kf2, jj, ii), val);
+          }
+        }
+
+        for (int i = 0; i <= di_x1; ++i) {
+          int ii = i1_min + i;
+          if (!InBoundsInclusive(ii, i_min, i_max + 1)) continue;
+          for (int j = 0; j < di_x2; ++j) {
+            int jj = i2_min + j;
+            if (!InBoundsInclusive(jj, j_min, j_max)) continue;
+            Real val = jy1_contrib[i][j];
+            Kokkos::atomic_add(&jy_e(m, kf, jj, ii), val);
+            Kokkos::atomic_add(&jy_e(m, kf2, jj, ii), val);
+          }
+        }
+
+        for (int i = 0; i <= di_x1; ++i) {
+          int ii = i1_min + i;
+          if (!InBoundsInclusive(ii, i_min, i_max + 1)) continue;
+          for (int j = 0; j <= di_x2; ++j) {
+            int jj = i2_min + j;
+            if (!InBoundsInclusive(jj, j_min, j_max + 1)) continue;
+            Kokkos::atomic_add(&jz_e(m, ks, jj, ii), qvz*wx3[i][j]);
+          }
+        }
+        return;
+      }
+
+      Real iS_x3[4];
+      Real fS_x3[4];
+      int i3_min = 0;
+      int i3_max = 0;
+      ShapeForDeposit<2>(k0, dzo, k1, dzn, i3_min, i3_max, iS_x3, fS_x3);
+
+      Real wx1[4][4][4];
+      Real wx2[4][4][4];
+      Real wx3[4][4][4];
+      for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+          for (int k = 0; k < 4; ++k) {
+            wx1[i][j][k] = static_cast<Real>(1.0/3.0)*
+                           (fS_x1[i] - iS_x1[i])*
+                           ((iS_x2[j]*iS_x3[k] + fS_x2[j]*fS_x3[k]) +
+                            static_cast<Real>(0.5)*
+                            (iS_x3[k]*fS_x2[j] + iS_x2[j]*fS_x3[k]));
+            wx2[i][j][k] = static_cast<Real>(1.0/3.0)*
+                           (fS_x2[j] - iS_x2[j])*
+                           ((iS_x1[i]*iS_x3[k] + fS_x1[i]*fS_x3[k]) +
+                            static_cast<Real>(0.5)*
+                            (iS_x3[k]*fS_x1[i] + iS_x1[i]*fS_x3[k]));
+            wx3[i][j][k] = static_cast<Real>(1.0/3.0)*
+                           (fS_x3[k] - iS_x3[k])*
+                           ((iS_x1[i]*iS_x2[j] + fS_x1[i]*fS_x2[j]) +
+                            static_cast<Real>(0.5)*
+                            (iS_x1[i]*fS_x2[j] + iS_x2[j]*fS_x1[i]));
+          }
+        }
+      }
+
+      Real jx1_contrib[4][4][4];
+      Real jy1_contrib[4][4][4];
+      Real jz1_contrib[4][4][4];
+      Real qdx1dt = coeff;
+      Real qdx2dt = coeff;
+      Real qdx3dt = coeff;
+
+      for (int j = 0; j < 4; ++j) {
+        for (int k = 0; k < 4; ++k) {
+          jx1_contrib[0][j][k] = -qdx1dt*wx1[0][j][k];
+        }
+      }
+      for (int i = 1; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+          for (int k = 0; k < 4; ++k) {
+            jx1_contrib[i][j][k] =
+                jx1_contrib[i-1][j][k] - qdx1dt*wx1[i][j][k];
+          }
+        }
+      }
+
+      for (int i = 0; i < 4; ++i) {
+        for (int k = 0; k < 4; ++k) {
+          jy1_contrib[i][0][k] = -qdx2dt*wx2[i][0][k];
+        }
+      }
+      for (int i = 0; i < 4; ++i) {
+        for (int j = 1; j < 4; ++j) {
+          for (int k = 0; k < 4; ++k) {
+            jy1_contrib[i][j][k] =
+                jy1_contrib[i][j-1][k] - qdx2dt*wx2[i][j][k];
+          }
+        }
+      }
+
+      for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+          jz1_contrib[i][j][0] = -qdx3dt*wx3[i][j][0];
+        }
+      }
+      for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+          for (int k = 1; k < 4; ++k) {
+            jz1_contrib[i][j][k] =
+                jz1_contrib[i][j][k-1] - qdx3dt*wx3[i][j][k];
+          }
+        }
+      }
+
+      int di_x1 = i1_max - i1_min;
+      int di_x2 = i2_max - i2_min;
+      int di_x3 = i3_max - i3_min;
+
+      for (int i = 0; i < di_x1; ++i) {
+        int ii = i1_min + i;
+        if (!InBoundsInclusive(ii, i_min, i_max)) continue;
+        for (int j = 0; j <= di_x2; ++j) {
+          int jj = i2_min + j;
+          if (!InBoundsInclusive(jj, j_min, j_max + 1)) continue;
+          for (int k = 0; k <= di_x3; ++k) {
+            int kk = i3_min + k;
+            if (!InBoundsInclusive(kk, k_min, k_max + 1)) continue;
+            Kokkos::atomic_add(&jx_e(m, kk, jj, ii), jx1_contrib[i][j][k]);
+          }
+        }
+      }
+
+      for (int i = 0; i <= di_x1; ++i) {
+        int ii = i1_min + i;
+        if (!InBoundsInclusive(ii, i_min, i_max + 1)) continue;
+        for (int j = 0; j < di_x2; ++j) {
+          int jj = i2_min + j;
+          if (!InBoundsInclusive(jj, j_min, j_max)) continue;
+          for (int k = 0; k <= di_x3; ++k) {
+            int kk = i3_min + k;
+            if (!InBoundsInclusive(kk, k_min, k_max + 1)) continue;
+            Kokkos::atomic_add(&jy_e(m, kk, jj, ii), jy1_contrib[i][j][k]);
+          }
+        }
+      }
+
+      for (int i = 0; i <= di_x1; ++i) {
+        int ii = i1_min + i;
+        if (!InBoundsInclusive(ii, i_min, i_max + 1)) continue;
+        for (int j = 0; j <= di_x2; ++j) {
+          int jj = i2_min + j;
+          if (!InBoundsInclusive(jj, j_min, j_max + 1)) continue;
+          for (int k = 0; k < di_x3; ++k) {
+            int kk = i3_min + k;
+            if (!InBoundsInclusive(kk, k_min, k_max)) continue;
+            Kokkos::atomic_add(&jz_e(m, kk, jj, ii), jz1_contrib[i][j][k]);
+          }
+        }
+      }
+    });
+    return TaskStatus::complete;
+  }
+
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << "Unsupported deposit_order=" << deposit_order
+            << " for direct edge-current deposition (supported: 1, 2)"
+            << std::endl;
+  std::exit(EXIT_FAILURE);
 }
 
 //----------------------------------------------------------------------------------------
