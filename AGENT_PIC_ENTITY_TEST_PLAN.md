@@ -4,6 +4,16 @@ This document defines the full sequential plan to implement an Entity-mirroring
 PIC test suite in AthenaK, including the required runtime isolation modes so
 PIC behavior can be validated without significant MHD back-reaction.
 
+## Execution Status
+
+- Step 0 (`Baseline Lock and Test Harness Setup`): complete at commit
+  `e997aa2a` with baseline evidence in
+  `tst/.codex/pic_entity_suite_baseline/STEP0_BASELINE_REPORT.md`.
+- Step 1 (`Add PIC Runtime Isolation Mode Knob`): complete at current working
+  tree state with evidence in
+  `tst/.codex/pic_entity_suite/step1_runtime_knobs/STEP1_RUNTIME_KNOBS_REPORT.md`.
+- Step 2 onward: pending.
+
 ## 1. Scope and Goal
 
 Goal:

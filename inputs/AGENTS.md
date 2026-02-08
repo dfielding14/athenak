@@ -87,6 +87,25 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - `particles/couple_fluid_feedback_order`
   - deterministic CR init knobs: `particles/cr_vx0`, `particles/cr_vy0`,
     `particles/cr_vz0`.
+- Staged PIC runtime-control overrides (parse/guard stage):
+  - `particles/pic_background_mode = coupled|passive_mhd|no_mhd`
+  - `particles/pic_feedback_mode = coupled|test_particle`
+  - `particles/pic_interp_scheme = tsc`
+  - `particles/pic_cr_light_speed`, `particles/pic_max_cell_cross`,
+    `particles/pic_theta_max`
+  - `particles/pic_deltaf_mode = off|on` (with `particles/pic_deltaf_f0`)
+  - `particles/pic_sort_interval`
+  - `particles/pic_intermediate_arrays = auto|off`
+  - `particles/pic_expanding_box_mode = off|on`
+  - `particles/pic_expansion_rate_x1/x2/x3` (require expanding-box mode on)
+
+### Entity-Mirroring PIC Regression Decks
+- `inputs/tests/pic_entity_deposit_mink.athinput`
+  - Pair-species (`q=-1,+1`) periodic deposit case used for decomposition
+    invariance checks across MPI partitionings.
+- `inputs/tests/pic_entity_deposit_reflect.athinput`
+  - Pair-species reflect-boundary deposit case used for non-periodic
+    decomposition/neutrality checks.
 
 ---
 

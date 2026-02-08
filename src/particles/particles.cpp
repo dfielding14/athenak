@@ -304,6 +304,148 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   cr_vx0 = pin->GetOrAddReal("particles", "cr_vx0", 0.0);
   cr_vy0 = pin->GetOrAddReal("particles", "cr_vy0", 0.0);
   cr_vz0 = pin->GetOrAddReal("particles", "cr_vz0", 0.0);
+
+  // Staged PR5+ PIC runtime controls (parse + validation only at this step)
+  std::string pic_background_mode_str = pin->GetOrAddString(
+      "particles", "pic_background_mode", "coupled");
+  if (pic_background_mode_str.compare("coupled") == 0) {
+    pic_background_mode = PICBackgroundMode::coupled;
+  } else if (pic_background_mode_str.compare("passive_mhd") == 0) {
+    pic_background_mode = PICBackgroundMode::passive_mhd;
+  } else if (pic_background_mode_str.compare("no_mhd") == 0) {
+    pic_background_mode = PICBackgroundMode::no_mhd;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/pic_background_mode: "
+              << pic_background_mode_str << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  std::string pic_feedback_mode_str = pin->GetOrAddString(
+      "particles", "pic_feedback_mode", "coupled");
+  if (pic_feedback_mode_str.compare("coupled") == 0) {
+    pic_feedback_mode = PICFeedbackMode::coupled;
+  } else if (pic_feedback_mode_str.compare("test_particle") == 0) {
+    pic_feedback_mode = PICFeedbackMode::test_particle;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/pic_feedback_mode: "
+              << pic_feedback_mode_str << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  std::string pic_interp_scheme_str = pin->GetOrAddString(
+      "particles", "pic_interp_scheme", "tsc");
+  if (pic_interp_scheme_str.compare("tsc") == 0) {
+    pic_interp_scheme = PICInterpolationScheme::tsc;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/pic_interp_scheme: "
+              << pic_interp_scheme_str << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  pic_cr_light_speed = pin->GetOrAddReal("particles", "pic_cr_light_speed", 1.0);
+  if (pic_cr_light_speed <= 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_cr_light_speed must be > 0" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  pic_max_cell_cross = pin->GetOrAddInteger("particles", "pic_max_cell_cross", 2);
+  if (pic_max_cell_cross <= 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_max_cell_cross must be > 0" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  pic_theta_max = pin->GetOrAddReal("particles", "pic_theta_max", 0.3);
+  if (pic_theta_max <= 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_theta_max must be > 0" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  std::string pic_deltaf_mode_str = pin->GetOrAddString(
+      "particles", "pic_deltaf_mode", "off");
+  if (pic_deltaf_mode_str.compare("off") == 0) {
+    pic_deltaf_mode = PICDeltaFMode::off;
+  } else if (pic_deltaf_mode_str.compare("on") == 0) {
+    pic_deltaf_mode = PICDeltaFMode::on;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/pic_deltaf_mode: "
+              << pic_deltaf_mode_str << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  pic_deltaf_f0 = pin->GetOrAddString("particles", "pic_deltaf_f0", "");
+  if ((pic_deltaf_mode == PICDeltaFMode::on) && pic_deltaf_f0.empty()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_deltaf_mode=on requires "
+              << "<particles>/pic_deltaf_f0 to define background f0"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  pic_sort_interval = pin->GetOrAddInteger("particles", "pic_sort_interval", 0);
+  if (pic_sort_interval < 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_sort_interval must be >= 0" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  std::string pic_intermediate_arrays_mode_str = pin->GetOrAddString(
+      "particles", "pic_intermediate_arrays", "auto");
+  if (pic_intermediate_arrays_mode_str.compare("auto") == 0) {
+    pic_intermediate_arrays_mode = PICIntermediateArraysMode::auto_mode;
+  } else if (pic_intermediate_arrays_mode_str.compare("off") == 0) {
+    pic_intermediate_arrays_mode = PICIntermediateArraysMode::off;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/pic_intermediate_arrays: "
+              << pic_intermediate_arrays_mode_str << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  std::string pic_expanding_box_mode_str = pin->GetOrAddString(
+      "particles", "pic_expanding_box_mode", "off");
+  if (pic_expanding_box_mode_str.compare("off") == 0) {
+    pic_expanding_box_mode = PICExpandingBoxMode::off;
+  } else if (pic_expanding_box_mode_str.compare("on") == 0) {
+    pic_expanding_box_mode = PICExpandingBoxMode::on;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/pic_expanding_box_mode: "
+              << pic_expanding_box_mode_str << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  pic_expansion_rate_x1 = pin->GetOrAddReal("particles", "pic_expansion_rate_x1", 0.0);
+  pic_expansion_rate_x2 = pin->GetOrAddReal("particles", "pic_expansion_rate_x2", 0.0);
+  pic_expansion_rate_x3 = pin->GetOrAddReal("particles", "pic_expansion_rate_x3", 0.0);
+  if ((pic_expanding_box_mode == PICExpandingBoxMode::off) &&
+      ((pic_expansion_rate_x1 != 0.0) ||
+       (pic_expansion_rate_x2 != 0.0) ||
+       (pic_expansion_rate_x3 != 0.0))) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_expansion_rate_x1/x2/x3 require "
+              << "<particles>/pic_expanding_box_mode=on" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
   const bool use_fluid_feedback = (couple_moments_momentum_to_mhd ||
                                    couple_moments_energy_to_mhd);
 

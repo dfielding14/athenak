@@ -222,6 +222,62 @@ def run(**kwargs):
         expect_fail=True,
         expected_message='does not support mesh/ix1_bc=diode',
     )
+    _run_command(
+        'guard_invalid_pic_background_mode',
+        1,
+        ['particles/pic_background_mode=bad_mode', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='Unsupported value for <particles>/pic_background_mode',
+    )
+    _run_command(
+        'guard_invalid_pic_feedback_mode',
+        1,
+        ['particles/pic_feedback_mode=bad_mode', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='Unsupported value for <particles>/pic_feedback_mode',
+    )
+    _run_command(
+        'guard_invalid_pic_interp_scheme',
+        1,
+        ['particles/pic_interp_scheme=linear', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='Unsupported value for <particles>/pic_interp_scheme',
+    )
+    _run_command(
+        'guard_invalid_pic_deltaf_mode',
+        1,
+        ['particles/pic_deltaf_mode=bad_mode', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='Unsupported value for <particles>/pic_deltaf_mode',
+    )
+    _run_command(
+        'guard_invalid_pic_intermediate_arrays',
+        1,
+        ['particles/pic_intermediate_arrays=bad_mode', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='Unsupported value for <particles>/pic_intermediate_arrays',
+    )
+    _run_command(
+        'guard_invalid_pic_expanding_box_mode',
+        1,
+        ['particles/pic_expanding_box_mode=bad_mode', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='Unsupported value for <particles>/pic_expanding_box_mode',
+    )
+    _run_command(
+        'guard_pic_deltaf_requires_f0',
+        1,
+        ['particles/pic_deltaf_mode=on', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='requires <particles>/pic_deltaf_f0',
+    )
+    _run_command(
+        'guard_pic_expansion_rate_requires_mode',
+        1,
+        ['particles/pic_expansion_rate_x1=1.0', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='require <particles>/pic_expanding_box_mode=on',
+    )
 
 
 def analyze():
@@ -259,8 +315,9 @@ def analyze():
     else:
         logger.info('No MPI run requested: serial-only non-MPI sanity path')
 
-    ok = len(_NEGATIVE_RESULTS) == 3 and ok
-    if len(_NEGATIVE_RESULTS) != 3:
-        logger.warning('Expected 3 negative checks, got %d', len(_NEGATIVE_RESULTS))
+    ok = len(_NEGATIVE_RESULTS) == 11 and ok
+    if len(_NEGATIVE_RESULTS) != 11:
+        logger.warning('Expected 11 negative checks, got %d',
+                       len(_NEGATIVE_RESULTS))
 
     return ok

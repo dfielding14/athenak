@@ -40,6 +40,14 @@ enum class CoupledCurrentRepresentation { cell_centered, edge_staggered };
 enum class CoupledCurrentDepositionMode { cc_convert, direct_staggered };
 enum class CoupledFluidFeedbackOrder { mhd_src_terms, efield_src };
 
+// constants for staged PIC runtime controls used by PR5+ test-suite expansion
+enum class PICBackgroundMode { coupled, passive_mhd, no_mhd };
+enum class PICFeedbackMode { coupled, test_particle };
+enum class PICInterpolationScheme { tsc };
+enum class PICDeltaFMode { off, on };
+enum class PICIntermediateArraysMode { auto_mode, off };
+enum class PICExpandingBoxMode { off, on };
+
 //----------------------------------------------------------------------------------------
 //! \struct ParticlesTaskIDs
 //  \brief container to hold TaskIDs of all particles tasks
@@ -117,6 +125,21 @@ class Particles {
   bool couple_moments_energy_to_mhd = false;    // PR2 opt-in energy feedback
   Real couple_moments_momentum_coeff = 1.0;     // momentum feedback coefficient
   Real couple_moments_energy_coeff = 1.0;       // energy feedback coefficient
+  PICBackgroundMode pic_background_mode = PICBackgroundMode::coupled;
+  PICFeedbackMode pic_feedback_mode = PICFeedbackMode::coupled;
+  PICInterpolationScheme pic_interp_scheme = PICInterpolationScheme::tsc;
+  PICDeltaFMode pic_deltaf_mode = PICDeltaFMode::off;
+  PICIntermediateArraysMode pic_intermediate_arrays_mode =
+      PICIntermediateArraysMode::auto_mode;
+  PICExpandingBoxMode pic_expanding_box_mode = PICExpandingBoxMode::off;
+  Real pic_cr_light_speed = 1.0;  // artificial particle light speed (staged use)
+  int pic_max_cell_cross = 2;     // staged guard control (cells per step)
+  Real pic_theta_max = 0.3;       // staged guard control (gyro angle per step)
+  int pic_sort_interval = 0;      // staged sorting cadence (0 disables re-sorting)
+  Real pic_expansion_rate_x1 = 0.0;
+  Real pic_expansion_rate_x2 = 0.0;
+  Real pic_expansion_rate_x3 = 0.0;
+  std::string pic_deltaf_f0 = "";
   Real cr_vx0 = 0.0;                // deterministic CR vx initialization
   Real cr_vy0 = 0.0;                // deterministic CR vy initialization
   Real cr_vz0 = 0.0;                // deterministic CR vz initialization

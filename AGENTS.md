@@ -97,6 +97,11 @@ efficiently on CPUs and GPUs.
     fatal in coupled mode
   - `edge_staggered` current representation and fluid momentum/energy feedback
     are limited to non-relativistic MHD paths.
+- Staged PIC runtime controls are now parsed under `<particles>` for the
+  PR5 test-suite expansion path (`pic_background_mode`, `pic_feedback_mode`,
+  `pic_deltaf_mode`, `pic_expanding_box_mode`, and related guard knobs). In
+  the current stage these are parse/validation controls and do not yet change
+  integration ordering by themselves.
 
 ---
 

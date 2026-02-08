@@ -140,6 +140,20 @@ but these are not wired in the constructor.
 - `cr_vx0`, `cr_vy0`, `cr_vz0` default to `0.0` and are used by PR2 regression
   tests to make integrated current expectations deterministic.
 
+### Staged PIC runtime controls (Step 1 parse/guard stage)
+- `pic_background_mode`: `coupled` (default), `passive_mhd`, `no_mhd`.
+- `pic_feedback_mode`: `coupled` (default) or `test_particle`.
+- `pic_interp_scheme`: `tsc` (default and currently only valid value).
+- `pic_cr_light_speed` (default `1.0`), `pic_max_cell_cross` (default `2`),
+  `pic_theta_max` (default `0.3`) with positivity guards.
+- `pic_deltaf_mode`: `off` (default) or `on`; `on` requires
+  `pic_deltaf_f0` to be explicitly set.
+- `pic_sort_interval` (default `0`, must be `>= 0`).
+- `pic_intermediate_arrays`: `auto` (default) or `off`.
+- `pic_expanding_box_mode`: `off` (default) or `on`.
+- `pic_expansion_rate_x1/x2/x3` default to `0.0`; non-zero expansion rates
+  require `pic_expanding_box_mode=on`.
+
 ### Runtime guards (constructor)
 - Coupling requires `deposit_moments=true` and an active `<mhd>` block.
 - Coupled mode is rejected for `radiation+MHD`, hydro/ion-neutral, and
