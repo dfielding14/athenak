@@ -262,8 +262,12 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << j_repr << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  const std::string j_deposit_default =
+      (couple_j_to_efield_representation == CoupledCurrentRepresentation::edge_staggered)
+          ? "direct_staggered"
+          : "cc_convert";
   std::string j_deposit_mode = pin->GetOrAddString(
-      "particles", "couple_j_deposition_mode", "cc_convert");
+      "particles", "couple_j_deposition_mode", j_deposit_default);
   if (j_deposit_mode.compare("cc_convert") == 0) {
     couple_j_deposition_mode = CoupledCurrentDepositionMode::cc_convert;
   } else if (j_deposit_mode.compare("direct_staggered") == 0) {

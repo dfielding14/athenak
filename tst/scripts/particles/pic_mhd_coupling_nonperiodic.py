@@ -13,6 +13,8 @@ import bin_convert_new as bin_convert  # noqa
 logger = logging.getLogger('athena' + __name__[7:])
 
 _INPUT_DECK = 'tests/pic_mhd_coupling_nonperiodic.athinput'
+_DEFAULT_MODE_INPUT_DECK = (
+    'tests/pic_mhd_coupling_nonperiodic_default_mode.athinput')
 _UNSUPPORTED_DECK = 'tests/pic_mhd_coupling_guard_nonperiodic_unsupported.athinput'
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
 _RESULTS = {}
@@ -221,6 +223,17 @@ def run(**kwargs):
             'nproc': 1,
             'args': ['job/basename=pic_mhd_np_coupled_edge',
                      'particles/couple_moments_to_mhd=true',
+                     'particles/couple_j_to_efield_representation=edge_staggered',
+                     'particles/couple_j_deposition_mode=cc_convert'] +
+                    common_args,
+        },
+        {
+            'name': 'serial_coupled_edge_default_mode',
+            'basename': 'pic_mhd_np_coupled_edge_default',
+            'nproc': 1,
+            'input_deck': _DEFAULT_MODE_INPUT_DECK,
+            'args': ['job/basename=pic_mhd_np_coupled_edge_default',
+                     'particles/couple_moments_to_mhd=true',
                      'particles/couple_j_to_efield_representation=edge_staggered'] +
                     common_args,
         },
@@ -283,6 +296,17 @@ def run(**kwargs):
                 'nproc': 2,
                 'args': ['job/basename=pic_mhd_np_coupled_edge_mpi2',
                          'particles/couple_moments_to_mhd=true',
+                         'particles/couple_j_to_efield_representation=edge_staggered',
+                         'particles/couple_j_deposition_mode=cc_convert'] +
+                        common_args,
+            },
+            {
+                'name': 'mpi2_coupled_edge_default_mode',
+                'basename': 'pic_mhd_np_coupled_edge_default_mpi2',
+                'nproc': 2,
+                'input_deck': _DEFAULT_MODE_INPUT_DECK,
+                'args': ['job/basename=pic_mhd_np_coupled_edge_default_mpi2',
+                         'particles/couple_moments_to_mhd=true',
                          'particles/couple_j_to_efield_representation=edge_staggered'] +
                         common_args,
             },
@@ -312,7 +336,8 @@ def run(**kwargs):
 
     for case in cases:
         _remove_outputs(case['basename'])
-        _run_command(case['name'], case['nproc'], case['args'])
+        _run_command(case['name'], case['nproc'], case['args'],
+                     input_deck=case.get('input_deck', _INPUT_DECK))
         _RESULTS[case['name']] = {
             'measured': _measure_case(case['basename']),
             'expected': _expected_totals(case['args']),
@@ -370,6 +395,7 @@ def analyze():
     unc = _RESULTS['serial_uncoupled']['measured']
     cpl_cc = _RESULTS['serial_coupled_cc']['measured']
     cpl_edge = _RESULTS['serial_coupled_edge']['measured']
+    cpl_edge_default = _RESULTS['serial_coupled_edge_default_mode']['measured']
     cpl_direct = _RESULTS['serial_coupled_edge_direct']['measured']
     cpl_direct_o2 = _RESULTS['serial_coupled_edge_direct_o2']['measured']
 
@@ -394,6 +420,9 @@ def analyze():
         ok = False
 
     for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
+        ok = _check_with_tolerance('nonperiodic_default_mode_vs_direct:' + quantity,
+                                   cpl_edge_default[quantity], cpl_direct[quantity],
+                                   1.0e-6, 1.0e-8) and ok
         ok = _check_with_tolerance('nonperiodic_cc_vs_edge:' + quantity,
                                    cpl_cc[quantity], cpl_edge[quantity],
                                    1.0e-6, 1.0e-8) and ok
@@ -403,6 +432,20 @@ def analyze():
         ok = _check_with_tolerance('nonperiodic_cc_vs_direct_o2:' + quantity,
                                    cpl_cc[quantity], cpl_direct_o2[quantity],
                                    1.0e-6, 1.0e-8) and ok
+    for quantity in ['bcc1_l2', 'bcc2_l2', 'bcc3_l2']:
+        ok = _check_with_tolerance('nonperiodic_default_mode_vs_direct:' + quantity,
+                                   cpl_edge_default[quantity], cpl_direct[quantity],
+                                   1.0e-6, 1.0e-8) and ok
+    default_vs_convert_delta = max(
+        abs(cpl_edge_default['bcc1_l2'] - cpl_edge['bcc1_l2']),
+        abs(cpl_edge_default['bcc2_l2'] - cpl_edge['bcc2_l2']),
+        abs(cpl_edge_default['bcc3_l2'] - cpl_edge['bcc3_l2']))
+    logger.info('nonperiodic_default_edge_mode_delta_vs_cc max=% .8e',
+                default_vs_convert_delta)
+    if default_vs_convert_delta <= 1.0e-12:
+        logger.warning('Default edge deposition mode appears identical to '
+                       'cc_convert baseline')
+        ok = False
 
     zero_unc = _RESULTS['serial_zero_uncoupled']['measured']
     zero_cpl = _RESULTS['serial_zero_coupled']['measured']
@@ -430,6 +473,15 @@ def analyze():
                          'bcc1_l2', 'bcc2_l2', 'bcc3_l2']:
             ok = _check_with_tolerance('nonperiodic_mpi_edge:' + quantity,
                                        mpi_edge[quantity], cpl_edge[quantity],
+                                       1.0e-6, 1.0e-8) and ok
+
+    if 'mpi2_coupled_edge_default_mode' in _RESULTS:
+        mpi_edge_default = _RESULTS['mpi2_coupled_edge_default_mode']['measured']
+        for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart',
+                         'bcc1_l2', 'bcc2_l2', 'bcc3_l2']:
+            ok = _check_with_tolerance('nonperiodic_mpi_default_mode:' + quantity,
+                                       mpi_edge_default[quantity],
+                                       cpl_edge_default[quantity],
                                        1.0e-6, 1.0e-8) and ok
 
     if 'mpi2_coupled_edge_direct' in _RESULTS:

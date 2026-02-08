@@ -1438,15 +1438,34 @@ PR5-C: test and parity hardening
     Section 9.20.3.
 
 PR5-D: default-mode decision gate
-- [ ] Evaluate whether `direct_staggered` should replace `cc_convert` as the
+- [x] Evaluate whether `direct_staggered` should replace `cc_convert` as the
   default only after PR5-A/B/C are green.
-- [ ] Default switch criteria (all required):
+  - Status (2026-02-08, post-`6d679378` working tree):
+    - context-aware default policy implemented in
+      `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:265`
+      through
+      `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:274`
+    - edge-staggered runs default to `direct_staggered`
+    - cell-centered runs default to `cc_convert` to preserve coupled
+      compatibility when users do not set deposition mode explicitly.
+- [x] Default switch criteria (all required):
   - no blocking parity divergences vs Entity
   - full MPI matrix green for direct higher-order + non-periodic modes
   - stable restart/multilevel/decomposition behavior
   - acceptable performance/regression profile
-- [ ] If any criterion fails, keep `cc_convert` default and retain
+  - Evidence:
+    - matrix log:
+      `/tmp/pr5d_mpi_matrix.log`
+    - targeted logs:
+      `/tmp/current_coupling_mpi.log`,
+      `/tmp/nonperiodic_mpi.log`
+    - quick runtime sanity (serial micro-runs): no material regression between
+      `cc_convert`, `direct_staggered`, and `direct_staggered+deposit_order=2`.
+- [x] If any criterion fails, keep `cc_convert` default and retain
   `direct_staggered` as opt-in with documented rationale.
+  - Decision outcome: full global default replacement was rejected for
+    `cell_centered` compatibility; adopted context-aware default
+    (`edge_staggered -> direct_staggered`, `cell_centered -> cc_convert`).
 
 #### 9.20.3 PR5-C Parity Matrix and Numeric Envelopes
 
@@ -1488,10 +1507,12 @@ No unplanned parity divergence was found in the audited PR5 axes above.
   - `particles/pic_mhd_current_coupling`:
     `direct_field_delta_max=2.41390419e+00`,
     `continuity_l2_direct=5.60143051e+01`,
-    `continuity_l2_direct_o2=2.90964584e+01`.
+    `continuity_l2_direct_o2=2.90964584e+01`,
+    `default_edge_mode_delta_vs_cc_convert=8.64877701e-01`.
   - `particles/pic_mhd_coupling_nonperiodic`:
     `delta_cc=2.56842422e+00`, `delta_edge=1.53726768e+00`,
-    `delta_direct=2.29066086e+00`, `delta_direct_o2=1.17373657e+00`.
+    `delta_direct=2.29066086e+00`, `delta_direct_o2=1.17373657e+00`,
+    `default_edge_mode_delta_vs_cc=7.53393173e-01`.
 
 #### 9.20.4 PR5 Merge Gates
 1. Required MPI tests pass (existing five, plus any new higher-order/direct
@@ -1508,6 +1529,7 @@ No unplanned parity divergence was found in the audited PR5 axes above.
 - completed checklist state for each item above
 - explicit Entity-parity matrix
 - explicit default-mode decision outcome with evidence
+- latest matrix evidence log reference (`/tmp/pr5d_mpi_matrix.log`)
 
 ## 10. AGENTS Review Index
 

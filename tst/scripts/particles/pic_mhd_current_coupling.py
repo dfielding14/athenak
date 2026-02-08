@@ -13,6 +13,7 @@ import bin_convert_new as bin_convert  # noqa
 logger = logging.getLogger('athena' + __name__[7:])
 
 _INPUT_DECK = 'tests/pic_mhd_current_coupling.athinput'
+_DEFAULT_MODE_INPUT_DECK = 'tests/pic_mhd_current_coupling_default_mode.athinput'
 _UNSUPPORTED_INPUT_DECK = 'tests/pic_deposit_conservation.athinput'
 _RADIATION_GUARD_DECK = 'tests/pic_mhd_coupling_guard_radiation.athinput'
 _NR_GUARD_DECK = 'tests/pic_mhd_coupling_guard_nr.athinput'
@@ -387,6 +388,17 @@ def run(**kwargs):
             'nproc': 1,
             'args': ['job/basename=pic_mhd_coupled_edge',
                      'particles/couple_moments_to_mhd=true',
+                     'particles/couple_j_to_efield_representation=edge_staggered',
+                     'particles/couple_j_deposition_mode=cc_convert'] +
+                    common_args,
+        },
+        {
+            'name': 'serial_coupled_edge_default_mode',
+            'basename': 'pic_mhd_coupled_edge_default',
+            'nproc': 1,
+            'input_deck': _DEFAULT_MODE_INPUT_DECK,
+            'args': ['job/basename=pic_mhd_coupled_edge_default',
+                     'particles/couple_moments_to_mhd=true',
                      'particles/couple_j_to_efield_representation=edge_staggered'] +
                     common_args,
         },
@@ -459,6 +471,7 @@ def run(**kwargs):
             'args': ['job/basename=pic_mhd_feedback_both_efield_edge',
                      'particles/couple_moments_to_mhd=true',
                      'particles/couple_j_to_efield_representation=edge_staggered',
+                     'particles/couple_j_deposition_mode=cc_convert',
                      'particles/couple_moments_momentum_to_mhd=true',
                      'particles/couple_moments_energy_to_mhd=true',
                      'particles/couple_moments_momentum_coeff=1.0',
@@ -590,6 +603,17 @@ def run(**kwargs):
             'nproc': 2,
             'args': ['job/basename=pic_mhd_coupled_edge_mpi2',
                      'particles/couple_moments_to_mhd=true',
+                     'particles/couple_j_to_efield_representation=edge_staggered',
+                     'particles/couple_j_deposition_mode=cc_convert'] +
+                    common_args,
+        })
+        positive_cases.append({
+            'name': 'mpi2_coupled_edge_default_mode',
+            'basename': 'pic_mhd_coupled_edge_default_mpi2',
+            'nproc': 2,
+            'input_deck': _DEFAULT_MODE_INPUT_DECK,
+            'args': ['job/basename=pic_mhd_coupled_edge_default_mpi2',
+                     'particles/couple_moments_to_mhd=true',
                      'particles/couple_j_to_efield_representation=edge_staggered'] +
                     common_args,
         })
@@ -618,7 +642,8 @@ def run(**kwargs):
 
     for case in positive_cases:
         _remove_outputs(case['basename'])
-        _run_command(case['name'], case['nproc'], case['args'])
+        _run_command(case['name'], case['nproc'], case['args'],
+                     input_deck=case.get('input_deck', _INPUT_DECK))
         _POSITIVE_RESULTS[case['name']] = {
             'measured': _measure_case(case['basename']),
             'expected': _expected_totals(case['args']),
@@ -642,7 +667,8 @@ def run(**kwargs):
             'args': ['job/basename=pic_mhd_cont_edge',
                      'time/nlim=2',
                      'particles/couple_moments_to_mhd=true',
-                     'particles/couple_j_to_efield_representation=edge_staggered'] +
+                     'particles/couple_j_to_efield_representation=edge_staggered',
+                     'particles/couple_j_deposition_mode=cc_convert'] +
                     common_args,
         },
         {
@@ -691,7 +717,9 @@ def run(**kwargs):
                          'time/nlim=2',
                          'particles/couple_moments_to_mhd=true',
                          'particles/couple_j_to_efield_representation='
-                         'edge_staggered'] + common_args,
+                         'edge_staggered',
+                         'particles/couple_j_deposition_mode=cc_convert'] +
+                        common_args,
             },
             {
                 'name': 'mpi2_continuity_edge_direct',
@@ -875,6 +903,8 @@ def analyze():
         ok = False
 
     coupled_edge = _POSITIVE_RESULTS['serial_coupled_edge_staggered']['measured']
+    coupled_edge_default = _POSITIVE_RESULTS[
+        'serial_coupled_edge_default_mode']['measured']
     delta_edge_b1 = abs(coupled_edge['bcc1_l2'] - default_case['bcc1_l2'])
     delta_edge_b2 = abs(coupled_edge['bcc2_l2'] - default_case['bcc2_l2'])
     delta_edge_b3 = abs(coupled_edge['bcc3_l2'] - default_case['bcc3_l2'])
@@ -905,6 +935,11 @@ def analyze():
         ok = False
 
     for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
+        ok = _check_with_tolerance('default_edge_mode_vs_direct_staggered:' +
+                                   quantity,
+                                   coupled_edge_default[quantity],
+                                   coupled_edge_direct[quantity],
+                                   1.0e-6, 1.0e-8) and ok
         ok = _check_with_tolerance('cell_centered_vs_edge_staggered:' + quantity,
                                    coupled_edge[quantity], coupled[quantity],
                                    1.0e-6, 1.0e-8) and ok
@@ -916,6 +951,22 @@ def analyze():
                                    coupled_edge_direct_o2[quantity],
                                    coupled_edge[quantity],
                                    1.0e-6, 1.0e-8) and ok
+    for quantity in ['bcc1_l2', 'bcc2_l2', 'bcc3_l2']:
+        ok = _check_with_tolerance('default_edge_mode_vs_direct_staggered:' +
+                                   quantity,
+                                   coupled_edge_default[quantity],
+                                   coupled_edge_direct[quantity],
+                                   1.0e-6, 1.0e-8) and ok
+    default_vs_convert_delta = max(
+        abs(coupled_edge_default['bcc1_l2'] - coupled_edge['bcc1_l2']),
+        abs(coupled_edge_default['bcc2_l2'] - coupled_edge['bcc2_l2']),
+        abs(coupled_edge_default['bcc3_l2'] - coupled_edge['bcc3_l2']))
+    logger.info('default_edge_mode_delta_vs_cc_convert max=% .8e',
+                default_vs_convert_delta)
+    if default_vs_convert_delta <= 1.0e-12:
+        logger.warning('Default edge deposition mode appears identical to '
+                       'cc_convert baseline')
+        ok = False
 
     required_cont_cases = [
         'serial_continuity_cc',
@@ -1193,6 +1244,38 @@ def analyze():
                                    1.0e-6, 1.0e-8) and ok
         ok = _check_with_tolerance('serial_vs_mpi2_edge_staggered:bcc3_l2',
                                    mpi2_edge['bcc3_l2'], coupled_edge['bcc3_l2'],
+                                   1.0e-6, 1.0e-8) and ok
+
+    if 'mpi2_coupled_edge_default_mode' in _POSITIVE_RESULTS:
+        mpi2_edge_default = _POSITIVE_RESULTS[
+            'mpi2_coupled_edge_default_mode']['measured']
+        ok = _check_with_tolerance('serial_vs_mpi2_edge_default_mode:Q',
+                                   mpi2_edge_default['Q'],
+                                   coupled_edge_default['Q'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_edge_default_mode:Jx',
+                                   mpi2_edge_default['Jx'],
+                                   coupled_edge_default['Jx'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_edge_default_mode:Jy',
+                                   mpi2_edge_default['Jy'],
+                                   coupled_edge_default['Jy'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_edge_default_mode:Jz',
+                                   mpi2_edge_default['Jz'],
+                                   coupled_edge_default['Jz'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_edge_default_mode:bcc1_l2',
+                                   mpi2_edge_default['bcc1_l2'],
+                                   coupled_edge_default['bcc1_l2'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_edge_default_mode:bcc2_l2',
+                                   mpi2_edge_default['bcc2_l2'],
+                                   coupled_edge_default['bcc2_l2'],
+                                   1.0e-6, 1.0e-8) and ok
+        ok = _check_with_tolerance('serial_vs_mpi2_edge_default_mode:bcc3_l2',
+                                   mpi2_edge_default['bcc3_l2'],
+                                   coupled_edge_default['bcc3_l2'],
                                    1.0e-6, 1.0e-8) and ok
 
     if 'mpi2_coupled_edge_direct_staggered' in _POSITIVE_RESULTS:
