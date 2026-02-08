@@ -70,6 +70,15 @@ The list above matches the registration in `Outputs::Outputs` (`outputs.cpp`).
 
 ## Extension Points
 
+### PIC diagnostic derived outputs (current)
+- Particle moment outputs include:
+  - `prtcl_rho`, `prtcl_jx`, `prtcl_jy`, `prtcl_jz`
+  - `prtcl_dpxdt`, `prtcl_dpydt`, `prtcl_dpzdt`, `prtcl_dedt`
+  - `prtcl_ebdot`
+  - `prtcl_jx_edge`, `prtcl_jy_edge`, `prtcl_jz_edge`
+- All of the above require `<particles>/deposit_moments=true`; validation is
+  enforced in `BaseTypeOutput` before output object construction.
+
 ### Add a new output variable
 - Update `NOUTPUT_CHOICES` and `var_choice` in `outputs.hpp`.
 - Map the new variable to data in `BaseTypeOutput` (constructor in

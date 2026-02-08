@@ -21,7 +21,7 @@
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif
 
-#define NOUTPUT_CHOICES 202
+#define NOUTPUT_CHOICES 207
 // choices for output variables used in <ouput> blocks in input file
 // TO ADD MORE CHOICES:
 //   - add more strings to array below, change NOUTPUT_CHOICES above appropriately
@@ -100,6 +100,7 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
 
   // Particles
   "prtcl_all", "prtcl_d", "prtcl_rho", "prtcl_jx", "prtcl_jy", "prtcl_jz",
+  "prtcl_dpxdt", "prtcl_dpydt", "prtcl_dpzdt", "prtcl_dedt", "prtcl_ebdot",
   "prtcl_jx_edge", "prtcl_jy_edge", "prtcl_jz_edge",
 
   // Coordinate variables for PDF binning (158-166)

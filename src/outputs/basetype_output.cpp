@@ -95,6 +95,9 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     const bool needs_prtcl_moments =
         (variable == "prtcl_rho" || variable == "prtcl_jx" ||
          variable == "prtcl_jy" || variable == "prtcl_jz" ||
+         variable == "prtcl_dpxdt" || variable == "prtcl_dpydt" ||
+         variable == "prtcl_dpzdt" || variable == "prtcl_dedt" ||
+         variable == "prtcl_ebdot" ||
          variable == "prtcl_jx_edge" || variable == "prtcl_jy_edge" ||
          variable == "prtcl_jz_edge");
     const bool needs_turb = (variable == "turb_force");
@@ -917,6 +920,36 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     out_params.n_derived += 1;
     int i_derived = out_params.n_derived - 1;
     outvars.emplace_back("prtcl_jz",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_dpxdt") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_dpxdt",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_dpydt") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_dpydt",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_dpzdt") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_dpzdt",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_dedt") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_dedt",i_derived,&(derived_var));
+  }
+  if (variable.compare("prtcl_ebdot") == 0) {
+    out_params.contains_derived = true;
+    out_params.n_derived += 1;
+    int i_derived = out_params.n_derived - 1;
+    outvars.emplace_back("prtcl_ebdot",i_derived,&(derived_var));
   }
   if (variable.compare("prtcl_jx_edge") == 0) {
     out_params.contains_derived = true;

@@ -156,3 +156,38 @@ variable    = prtcl_d
 id          = prtcl_d
 dcycle      = 1
 ghost_zones = false
+
+<output10>
+file_type   = bin
+variable    = prtcl_dpxdt
+id          = prtcl_dpxdt
+dcycle      = 1
+ghost_zones = false
+
+<output11>
+file_type   = bin
+variable    = prtcl_dpydt
+id          = prtcl_dpydt
+dcycle      = 1
+ghost_zones = false
+
+<output12>
+file_type   = bin
+variable    = prtcl_dpzdt
+id          = prtcl_dpzdt
+dcycle      = 1
+ghost_zones = false
+
+<output13>
+file_type   = bin
+variable    = prtcl_dedt
+id          = prtcl_dedt
+dcycle      = 1
+ghost_zones = false
+
+<output14>
+file_type   = bin
+variable    = prtcl_ebdot
+id          = prtcl_ebdot
+dcycle      = 1
+ghost_zones = false

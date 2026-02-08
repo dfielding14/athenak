@@ -110,6 +110,8 @@ efficiently on CPUs and GPUs.
   - Boris CR pushers now use a midpoint E+B sequence (`cE = -u x B`) and
     store per-step particle delta channels used by coupled fluid feedback in
     `MHDSrcTerms`/`EFieldSrc` when `pic_feedback_mode=coupled`.
+  - Step-5 diagnostics outputs are available for midpoint/feedback checks:
+    `prtcl_dpxdt`, `prtcl_dpydt`, `prtcl_dpzdt`, `prtcl_dedt`, `prtcl_ebdot`.
   Other staged controls remain parse/validation hooks until their
   corresponding implementation steps.
 

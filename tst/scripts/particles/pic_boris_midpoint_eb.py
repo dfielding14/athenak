@@ -95,6 +95,16 @@ def _measure_case(basename):
         _latest_output_file(basename, 'prtcl_jz'))
     d_data = bin_convert.read_binary_as_athdf(
         _latest_output_file(basename, 'prtcl_d'))
+    dpxdt_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'prtcl_dpxdt'))
+    dpydt_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'prtcl_dpydt'))
+    dpzdt_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'prtcl_dpzdt'))
+    dedt_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'prtcl_dedt'))
+    ebdot_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'prtcl_ebdot'))
     m1_data = bin_convert.read_binary_as_athdf(
         _latest_output_file(basename, 'mhd_u_m1'))
     m2_data = bin_convert.read_binary_as_athdf(
@@ -112,7 +122,9 @@ def _measure_case(basename):
     ])
     npart = _integrate_quantity(d_data, 'pdens')
     if abs(qtot) < 1.0e-14:
-        raise RuntimeError('Integrated particle charge is too small for velocity recovery')
+        raise RuntimeError(
+            'Integrated particle charge is too small for velocity recovery'
+        )
 
     vavg = jtot / qtot
     pke = 0.5 * npart * np.dot(vavg, vavg)
@@ -121,6 +133,13 @@ def _measure_case(basename):
         'time': float(rho_data['Time']),
         'qtot': qtot,
         'jtot': jtot,
+        'dpdt_tot': np.array([
+            _integrate_quantity(dpxdt_data, 'prtcl_dpxdt'),
+            _integrate_quantity(dpydt_data, 'prtcl_dpydt'),
+            _integrate_quantity(dpzdt_data, 'prtcl_dpzdt'),
+        ]),
+        'dedt_tot': _integrate_quantity(dedt_data, 'prtcl_dedt'),
+        'ebdot_tot': _integrate_quantity(ebdot_data, 'prtcl_ebdot'),
         'vavg': vavg,
         'npart': npart,
         'pke': pke,
@@ -279,6 +298,9 @@ def analyze():
     c_e = -np.cross(np.array([0.3, 0.0, 0.0]), _B0)
     ok = _check_close_scalar('frozen_in_cE_dot_B', float(np.dot(c_e, _B0)),
                              0.0, 1.0e-14) and ok
+    ok = _check_close_scalar('frozen_in_ebdot_output',
+                             _RESULTS['passive_flow']['ebdot_tot'], 0.0,
+                             1.0e-12) and ok
 
     unc = _RESULTS['coupled_uncoupled']
     cpl = _RESULTS['coupled_feedback']
@@ -290,12 +312,20 @@ def analyze():
                           d_gas_mom + beta_split * d_particle_mom,
                           np.zeros(3), 1.0e-5) and ok
 
+    dt_cpl = cpl['time']
+    ok = _check_close_vec('coupled_momentum_exchange_diag',
+                          d_gas_mom + beta_split * dt_cpl * cpl['dpdt_tot'],
+                          np.zeros(3), 1.0e-5) and ok
+
     ke0 = 0.5 * unc['npart'] * np.dot(_V0, _V0)
     d_particle_ke = unc['pke'] - ke0
     d_gas_e = cpl['gas_e'] - unc['gas_e']
     ok = _check_close_scalar('coupled_energy_exchange',
                              d_gas_e + beta_split * d_particle_ke, 0.0,
                              1.0e-5) and ok
+    ok = _check_close_scalar('coupled_energy_exchange_diag',
+                             d_gas_e + beta_split * dt_cpl * cpl['dedt_tot'],
+                             0.0, 1.0e-5) and ok
 
     if 'passive_flow_mpi2' in _RESULTS:
         ok = _check_close_vec('serial_vs_mpi2:passive_flow_vavg',

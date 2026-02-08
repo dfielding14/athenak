@@ -78,6 +78,8 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - `inputs/tests/pic_no_mhd_boris.athinput`
 - Midpoint E+B Boris verification deck:
   - `inputs/tests/pic_boris_midpoint_eb.athinput`
+  - includes diagnostics outputs for `prtcl_dpxdt/dpydt/dpzdt`, `prtcl_dedt`,
+    and `prtcl_ebdot` to validate midpoint-frozen-in and feedback bookkeeping.
 - Guard decks used for fatal-path validation:
   - `inputs/tests/pic_mhd_coupling_guard_radiation.athinput`
   - `inputs/tests/pic_mhd_coupling_guard_nr.athinput`

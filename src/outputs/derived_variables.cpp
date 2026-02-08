@@ -2634,6 +2634,66 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     i_dv += 1;
   }
 
+  if (name.compare("prtcl_dpxdt") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto mom = pm->pmb_pack->ppart->moments;
+    par_for("prtcl_dpxdt", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      dv(m,i_dv,k,j,i) = mom(m,particles::Particles::IMOM_DPXDT,k,j,i);
+    });
+    i_dv += 1;
+  }
+
+  if (name.compare("prtcl_dpydt") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto mom = pm->pmb_pack->ppart->moments;
+    par_for("prtcl_dpydt", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      dv(m,i_dv,k,j,i) = mom(m,particles::Particles::IMOM_DPYDT,k,j,i);
+    });
+    i_dv += 1;
+  }
+
+  if (name.compare("prtcl_dpzdt") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto mom = pm->pmb_pack->ppart->moments;
+    par_for("prtcl_dpzdt", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      dv(m,i_dv,k,j,i) = mom(m,particles::Particles::IMOM_DPZDT,k,j,i);
+    });
+    i_dv += 1;
+  }
+
+  if (name.compare("prtcl_dedt") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto mom = pm->pmb_pack->ppart->moments;
+    par_for("prtcl_dedt", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      dv(m,i_dv,k,j,i) = mom(m,particles::Particles::IMOM_DEDT,k,j,i);
+    });
+    i_dv += 1;
+  }
+
+  if (name.compare("prtcl_ebdot") == 0) {
+    if (derived_var.extent(4) <= 1)
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    auto dv = derived_var;
+    auto mom = pm->pmb_pack->ppart->moments;
+    par_for("prtcl_ebdot", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      dv(m,i_dv,k,j,i) = mom(m,particles::Particles::IMOM_EBDOT,k,j,i);
+    });
+    i_dv += 1;
+  }
+
   if (name.compare("prtcl_jx_edge") == 0) {
     if (derived_var.extent(4) <= 1)
       Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);

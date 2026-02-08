@@ -20,7 +20,10 @@ PIC behavior can be validated without significant MHD back-reaction.
 - Step 4 (`Upgrade Particle Pusher to Section 2 E+B Midpoint-Boris`): complete
   at current working tree state with evidence in
   `tst/.codex/pic_entity_suite/step4_midpoint_eb/STEP4_MIDPOINT_EB_REPORT.md`.
-- Step 5 onward: pending.
+- Step 5 (`Add PIC Diagnostics Needed for Analytic Validation`): complete at
+  current working tree state with evidence in
+  `tst/.codex/pic_entity_suite/step5_diagnostics/STEP5_DIAGNOSTICS_REPORT.md`.
+- Step 6 onward: pending.
 
 ## 1. Scope and Goal
 
