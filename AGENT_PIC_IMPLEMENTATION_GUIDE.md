@@ -675,7 +675,7 @@ For every non-trivial function:
        non-periodic policies (`reflect`, `outflow`).
      - [x] Remove strict-periodic direct-mode guard after PR5-B validation is
        green.
-       - Status (2026-02-08, working tree): constructor periodic guard removed;
+       - Status (2026-02-08, commit `f8d2642d`): constructor periodic guard removed;
          direct edge-current BC task added in
          `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:1181`
          and inserted before `MHD::EFieldSrc` in
@@ -685,7 +685,7 @@ For every non-trivial function:
        `pic_mhd_current_coupling.py`, `pic_mhd_coupling_decomp.py`,
        `pic_mhd_coupling_multilevel.py`, `pic_mhd_restart_fidelity.py`,
        `pic_mhd_coupling_nonperiodic.py`.
-       - Status (2026-02-08, working tree): non-periodic direct
+       - Status (2026-02-08, commit `f8d2642d`): non-periodic direct
          `direct_staggered` + `deposit_order=2` cases added in
          `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_coupling_nonperiodic.py:227`
          and
@@ -693,8 +693,16 @@ For every non-trivial function:
          obsolete periodic-only guard removed in
          `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_current_coupling.py:827`.
      - [x] Keep continuity-residual oracle (`d(rho)/dt + div(J)`) as required.
-     - [ ] Add explicit Entity parity classification per axis: aligned,
+     - [x] Add explicit Entity parity classification per axis: aligned,
        intentional divergence, unplanned divergence.
+       - Status (2026-02-08, commit `f8d2642d`): matrix recorded in
+         `/Users/dbf75/Work/Research/AthenaK/athenak-DF/AGENT_PIC_HANDOFF.md`
+         Section 9.20.3.1; no unplanned divergence found in audited PR5 axes.
+     - [x] Record baseline numeric envelopes for decomposition, restart,
+       multilevel, and direct-vs-conversion deltas.
+       - Status (2026-02-08, commit `f8d2642d`): envelope values recorded in
+         `/Users/dbf75/Work/Research/AthenaK/athenak-DF/AGENT_PIC_HANDOFF.md`
+         Section 9.20.3.2.
    - PR5-D: default-mode decision gate
      - [ ] Evaluate switching default from `cc_convert` to
        `direct_staggered` only after PR5-A/B/C pass.

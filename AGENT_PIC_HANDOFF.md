@@ -1398,7 +1398,7 @@ PR5-B: boundary-policy expansion for direct mode
 - [x] Add explicit boundary communication/physical-BC handling for direct
   edge-current state where needed.
 - [x] Remove the strict-periodic direct-mode guard after PR5-B validation.
-  - Status (2026-02-08, working tree):
+  - Status (2026-02-08, commit `f8d2642d`):
     - strict-periodic guard removed from constructor/runtime coupling guards:
       `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp`
     - new direct edge-current physical-BC task:
@@ -1417,6 +1417,8 @@ PR5-B: boundary-policy expansion for direct mode
       - `python run_tests.py particles/pic_mhd_coupling_decomp --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
       - `python run_tests.py particles/pic_mhd_restart_fidelity --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
       - `python run_tests.py particles/pic_mhd_coupling_multilevel --cmake=-DAthena_ENABLE_MPI=ON --cmake=-DCMAKE_CXX_COMPILER=/opt/homebrew/bin/mpicxx`
+    - refreshed matrix log (decomp + restart + multilevel):
+      `/tmp/pr5c_matrix_20260207_203447.log`
 
 PR5-C: test and parity hardening
 - [x] Extend direct-mode coverage to include higher-order and non-periodic
@@ -1426,10 +1428,14 @@ PR5-C: test and parity hardening
   `pic_mhd_coupling_nonperiodic.py`.
 - [x] Keep continuity-residual oracle (`d(rho)/dt + div(J)`) as a required gate
   for new direct modes.
-- [ ] Add explicit Entity-parity checks that classify each axis as aligned,
+- [x] Add explicit Entity-parity checks that classify each axis as aligned,
   intentional divergence, or unplanned divergence.
-- [ ] Record baseline numeric envelopes for decomposition invariance, restart
+  - Status (2026-02-08, commit `f8d2642d`): classification matrix recorded in
+    Section 9.20.3.
+- [x] Record baseline numeric envelopes for decomposition invariance, restart
   fidelity, multilevel behavior, and direct-vs-conversion deltas.
+  - Status (2026-02-08, commit `f8d2642d`): envelope values recorded in
+    Section 9.20.3.
 
 PR5-D: default-mode decision gate
 - [ ] Evaluate whether `direct_staggered` should replace `cc_convert` as the
@@ -1442,7 +1448,52 @@ PR5-D: default-mode decision gate
 - [ ] If any criterion fails, keep `cc_convert` default and retain
   `direct_staggered` as opt-in with documented rationale.
 
-#### 9.20.3 PR5 Merge Gates
+#### 9.20.3 PR5-C Parity Matrix and Numeric Envelopes
+
+##### 9.20.3.1 Entity-Parity Matrix (HEAD `f8d2642d`)
+
+| Axis | Classification | AthenaK Evidence | Entity Evidence | Notes |
+| --- | --- | --- | --- | --- |
+| Stage ordering for current deposition and synchronization before field update | aligned | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:225` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_tasks.cpp:303` | `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:114` through `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:123` | Both paths place current deposit+comm before field update that consumes J. |
+| First-order trajectory current deposition kernel | aligned | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:359` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:687` | `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:170` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:404` | Same Esirkepov-style split and prefix accumulation structure. |
+| Higher-order trajectory deposition with moving stencil | aligned | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:689` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:979`; `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:116` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:152` | `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:406` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/currents_deposit.hpp:570`; `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp:906` through `/Users/dbf75/Work/Research/AthenaK/entity/src/kernels/particle_shapes.hpp:997` | AthenaK O2 formulas mirror Entity O>=1 machinery with fixed O=2 support. |
+| Additive inter-block edge-current communication | aligned | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:1125` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:1146` | `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:121` through `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:123` | Both use post-deposit synchronization/communication semantics for J; API shape differs by framework. |
+| Non-periodic direct-edge boundary handling (`reflect`, `outflow`) | intentional divergence | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:1181` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles_moments.cpp:1573` | `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:114` through `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:123` | AthenaK adds explicit edge-current physical BC task before `MHD::EFieldSrc`. |
+| Boundary policy guardrail for unsupported flags | intentional divergence | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:72` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/particles/particles.cpp:95` | `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:114` through `/Users/dbf75/Work/Research/AthenaK/entity/src/engines/srpic.hpp:123` | AthenaK keeps PR3c safety envelope: `periodic/outflow/reflect` only. |
+| Per-rank restart restore for coupled PIC data | intentional divergence (watch item) | `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/pgen/pgen.cpp:383` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/pgen/pgen.cpp:388`; `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:233` through `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/scripts/particles/pic_mhd_restart_fidelity.py:268` | N/A in PR5 current-deposition anchors | Deterministic fatal guard remains by design; keep watch item for future restore support. |
+
+No unplanned parity divergence was found in the audited PR5 axes above.
+
+##### 9.20.3.2 Baseline Numeric Envelopes (HEAD `f8d2642d`)
+
+- Decomposition invariance (`particles/pic_mhd_coupling_decomp`, MPI enabled):
+  - All serial-vs-MPI2/MPI4 checks passed at script tolerances (`rtol=1e-6`,
+    `atol=1e-8`) for `Q/Jx/Jy/Jz/npart/bcc*/mom*/ener`.
+  - Continuity residual baseline:
+    `cc_l2=1.03691849e+02`, `edge_l2=3.88844452e+01`,
+    `direct_l2=5.66258698e+01`; all `rel=1.0`.
+- Restart fidelity (`particles/pic_mhd_restart_fidelity`, MPI enabled):
+  - direct-vs-convert ratio baseline (full and restart match):
+    `bcc1=1.00761627`, `bcc2=1.01282933`, `bcc3=1.04716454`,
+    `mom1=2.00000000`, `ener=1.05235981`.
+  - Per-rank restart guard remains deterministic with the same fatal reason.
+- Multilevel behavior (`particles/pic_mhd_coupling_multilevel`, MPI enabled):
+  - direct-vs-convert coupled response ratio baseline:
+    `field_ratio_mhd=5.00677983`, `field_ratio_efield=5.00668588`.
+  - Momentum response ratio remains near unity:
+    `mom_ratio_mhd=9.99999813e-01`, `mom_ratio_efield=9.99933228e-01`.
+  - Energy response ratio baseline:
+    `ener_ratio_mhd=6.10976165`, `ener_ratio_efield=6.11285356`.
+- Direct-vs-conversion and nonperiodic deltas:
+  - `particles/pic_mhd_current_coupling`:
+    `direct_field_delta_max=2.41390419e+00`,
+    `continuity_l2_direct=5.60143051e+01`,
+    `continuity_l2_direct_o2=2.90964584e+01`.
+  - `particles/pic_mhd_coupling_nonperiodic`:
+    `delta_cc=2.56842422e+00`, `delta_edge=1.53726768e+00`,
+    `delta_direct=2.29066086e+00`, `delta_direct_o2=1.17373657e+00`.
+
+#### 9.20.4 PR5 Merge Gates
 1. Required MPI tests pass (existing five, plus any new higher-order/direct
    non-periodic additions):
 - `particles/pic_mhd_current_coupling`
