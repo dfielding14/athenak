@@ -84,7 +84,9 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
 
   // Create device-side counter
   Kokkos::View<int> atom_count("atom_count");
-  Kokkos::View<int> atom_d_count("atom_d_count"); 
+  Kokkos::View<int> atom_d_count("atom_d_count");
+  Kokkos::deep_copy(atom_count, 0);
+  Kokkos::deep_copy(atom_d_count, 0);
 
   Kokkos::realloc(sendlist, static_cast<int>(npart));
   Kokkos::realloc(destroylist, static_cast<int>(npart));
@@ -171,12 +173,11 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
       if (check_boundary) {
         MarkForDestruction(&atom_d_count(), pdestroyl, p);
       } else {
-	if (iz == 0) {
+        if (iz == 0) {
           if (iy == 0) {
             // x1 face
             indx = NeighborIndex(ix,0,0,0,0);           // neighbor at same level
             if (nghbr.d_view(m,indx).lev > mylevel) {       // neighbor at finer level
-
               indx = NeighborIndex(ix,0,0,fy,fz);
             }
             while (nghbr.d_view(m,indx).gid < 0) {indx++;}  // neighbor at coarser level
@@ -244,7 +245,7 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
               }
             }
             UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, &atom_count(), psendl, p);
-	  }
+          }
         } else {
           if (ix == 0) {
             // x2x3 edge
@@ -307,13 +308,13 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
       }
     }
   });
-  
+
   Kokkos::fence();
   Kokkos::deep_copy(nprtcl_destroy, atom_d_count);
   Kokkos::deep_copy(nprtcl_send, atom_count);
   Kokkos::resize(sendlist, nprtcl_send);
   Kokkos::resize(destroylist, nprtcl_destroy);
-  
+
   // sync sendlist device array with host
   sendlist.template modify<DevExeSpace>();
   sendlist.template sync<HostMemSpace>();
@@ -644,7 +645,8 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
         // place particles in holes created by destroy
         p = destroylist_.d_view(n-nprtcl_send_).prtcl_indx;
       } else {
-        p = npart + (n - nprtcl_send_ - nprtcl_destroy_);     // place particle at end of arrays
+        // Place particles at end of arrays if no send/destroy hole is available.
+        p = npart + (n - nprtcl_send_ - nprtcl_destroy_);
       }
       for (int i=0; i<nidata; ++i) {
         pi(i,p) = irecvbuf(nidata*n + i);

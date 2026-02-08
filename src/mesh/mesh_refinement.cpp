@@ -11,6 +11,7 @@
 
 #include <cstdint>   // int32_t
 #include <iostream>
+#include <cstdio>    // printf
 #include <cmath>     // abs
 #include <algorithm> // sort
 #include <utility>   // pair
@@ -77,7 +78,7 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
       check_cons_ = true;
     }
     if (pin->DoesParameterExist("mesh_refinement", "dvel_max")) {
-      dd_threshold_ = pin->GetReal("mesh_refinement", "dvel_max");
+      dv_threshold_ = pin->GetReal("mesh_refinement", "dvel_max");
       check_cons_ = true;
     }
   }
@@ -135,7 +136,6 @@ MeshRefinement::~MeshRefinement() {
 //! \brief Simple driver function for adaptive mesh refinement
 
 void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin) {
-  
   // first check refinement criteria
   CheckForRefinement(pmy_mesh->pmb_pack);
 
@@ -146,7 +146,7 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
   // Refine/derefine mesh and evolved data, set boundary conditions/timestep on new mesh
   if (nnew != 0 || ndel != 0) { // at least one (de)refinement flagged
     RedistAndRefineMeshBlocks(pin, nnew, ndel);
-    
+
     pdriver->InitBoundaryValuesAndPrimitives(pmy_mesh);
 
     MeshBlockPack* pmbp = pmy_mesh->pmb_pack;
@@ -213,6 +213,7 @@ void MeshRefinement::CheckForRefinement(MeshBlockPack* pmbp) {
   auto &dens_thresh  = d_threshold_;
   auto &ddens_thresh = dd_threshold_;
   auto &dpres_thresh = dp_threshold_;
+  auto &dvel_thresh  = dv_threshold_;
   int nmb = pmbp->nmb_thispack;
   int mbs = pmy_mesh->gids_eachrank[global_variable::my_rank];
   if (((pmbp->phydro != nullptr) || (pmbp->pmhd != nullptr)) && check_cons_) {
@@ -276,6 +277,39 @@ void MeshRefinement::CheckForRefinement(MeshBlockPack* pmbp) {
 
         if (team_dpmax > dpres_thresh) {refine_flag_.d_view(m+mbs) = 1;}
         if (team_dpmax < 0.25*dpres_thresh) {refine_flag_.d_view(m+mbs) = -1;}
+      }
+
+      // velocity gradient threshold
+      if (dvel_thresh != 0.0) {
+        Real team_dvmax;
+        Kokkos::parallel_reduce(Kokkos::TeamThreadRange(tmember, nkji),
+        [=](const int idx, Real& dvmax) {
+          int k = (idx)/nji;
+          int j = (idx - k*nji)/nx1;
+          int i = (idx - k*nji - j*nx1) + is;
+          j += js;
+          k += ks;
+          Real dv2 = SQR(w0(m,IVX,k,j,i+1) - w0(m,IVX,k,j,i-1))
+                   + SQR(w0(m,IVY,k,j,i+1) - w0(m,IVY,k,j,i-1))
+                   + SQR(w0(m,IVZ,k,j,i+1) - w0(m,IVZ,k,j,i-1));
+          if (multi_d) {
+            dv2 += SQR(w0(m,IVX,k,j+1,i) - w0(m,IVX,k,j-1,i))
+                 + SQR(w0(m,IVY,k,j+1,i) - w0(m,IVY,k,j-1,i))
+                 + SQR(w0(m,IVZ,k,j+1,i) - w0(m,IVZ,k,j-1,i));
+          }
+          if (three_d) {
+            dv2 += SQR(w0(m,IVX,k+1,j,i) - w0(m,IVX,k-1,j,i))
+                 + SQR(w0(m,IVY,k+1,j,i) - w0(m,IVY,k-1,j,i))
+                 + SQR(w0(m,IVZ,k+1,j,i) - w0(m,IVZ,k-1,j,i));
+          }
+          Real vmag = sqrt(SQR(w0(m,IVX,k,j,i)) + SQR(w0(m,IVY,k,j,i))
+                           + SQR(w0(m,IVZ,k,j,i)));
+          Real denom = fmax(vmag, static_cast<Real>(1.0e-12));
+          dvmax = fmax((sqrt(dv2)/denom), dvmax);
+        },Kokkos::Max<Real>(team_dvmax));
+
+        if (team_dvmax > dvel_thresh) {refine_flag_.d_view(m+mbs) = 1;}
+        if (team_dvmax < 0.25*dvel_thresh) {refine_flag_.d_view(m+mbs) = -1;}
       }
     });
   }
@@ -698,7 +732,7 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   auto saved_pturb = pm->pmb_pack->pturb;
   auto saved_punit = pm->pmb_pack->punit;
   auto saved_ppart = pm->pmb_pack->ppart;
-  
+
   // Temporarily null out the pointers so they don't get deleted
   pm->pmb_pack->phydro = nullptr;
   pm->pmb_pack->pmhd = nullptr;
@@ -717,7 +751,7 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   pm->pmb_pack->AddMeshBlocks(pin);
   pm->pmb_pack->AddCoordinates(pin);
   pm->pmb_pack->pmb->SetNeighbors(pm->ptree, pm->rank_eachmb);
-  
+
   // Restore ALL the physics module pointers
   pm->pmb_pack->phydro = saved_phydro;
   pm->pmb_pack->pmhd = saved_pmhd;
@@ -730,23 +764,23 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   pm->pmb_pack->pturb = saved_pturb;
   pm->pmb_pack->punit = saved_punit;
   pm->pmb_pack->ppart = saved_ppart;
-  
+
   // Update the pmy_pack pointer in physics modules after MeshBlockPack rebuild
   if (saved_pturb != nullptr) {
     saved_pturb->UpdateMeshBlockPack(pm->pmb_pack);
   }
-  
+
   if (saved_pmhd != nullptr) {
     saved_pmhd->UpdateAfterAMR(pm->pmb_pack);
   }
-  
-  // TODO: Other physics modules need their pmy_pack pointers updated after MeshBlockPack rebuild
+
+  // TODO(dbf75): Update all module pack pointers after MeshBlockPack rebuild.
   // Currently this causes issues because pmy_pack is private in each physics module
   // The proper fix would be to either:
   // 1. Add a public UpdateMeshBlockPack() method to each physics module (done for turb)
   // 2. Make MeshRefinement a friend class of the physics modules
   // 3. Recreate the physics modules after AMR (expensive)
-  
+
   // Mark newly created blocks (those that were refined)
   // newtoold[n] contains old gid for new gid n
   // If newtoold[n] < 0, it means this is a newly refined block
@@ -1213,7 +1247,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
       ProlongFCSharedX1Face(m,k,j,i,fk,fj,fi,multi_d,three_d,cb.x1f,b.x1f);
     }
   });
-  
+
   // Prolongate x2f
   par_for("RefineFC2",DevExeSpace(), 0,(new_nmb-1), cks,cke, cjs,cje+1, cis,cie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -1224,7 +1258,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
       ProlongFCSharedX2Face(m,k,j,i,fk,fj,fi,three_d,cb.x2f,b.x2f);
     }
   });
-  
+
   // Prolongate x3f
   par_for("RefineFC3",DevExeSpace(), 0,(new_nmb-1), cks,cke+1, cjs,cje, cis,cie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -1235,7 +1269,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
       ProlongFCSharedX3Face(m,k,j,i,fk,fj,fi,multi_d,cb.x3f,b.x3f);
     }
   });
-  
+
 
   // Second prolongate face-centered fields at internal faces of fine cells using
   // divergence-preserving operator of Toth & Roe (2002)
@@ -1257,7 +1291,7 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
       }
     }
   });
-  
+
 
   return;
 }
@@ -1509,12 +1543,12 @@ void MeshRefinement::InitInterpWghts() {
 
 void MeshRefinement::RefineParticles() {
   auto pmbp = pmy_mesh->pmb_pack;
-  
+
   // Check if particles are enabled
   if (pmbp->ppart == nullptr) {
     return;
   }
-  
+
   int nmb = pmbp->nmb_thispack;
   auto &mbsize = pmbp->pmb->mb_size;
   auto gids = pmbp->gids;
@@ -1522,7 +1556,7 @@ void MeshRefinement::RefineParticles() {
   auto &pr = ppart->prtcl_rdata;
   auto &pi = ppart->prtcl_idata;
   int npart = ppart->nprtcl_thispack;
-  int nleaf = 2; 
+  int nleaf = 2;
   if (pmy_mesh->two_d) {nleaf = 4;}
   if (pmy_mesh->three_d) {nleaf = 8;}
 
@@ -1537,7 +1571,7 @@ void MeshRefinement::RefineParticles() {
         x3 >= mbsize.d_view(m).x3min && x3 < mbsize.d_view(m).x3max) {
         in_place = true;
     }
-    if (not in_place) {
+    if (!in_place) {
       int newm;
       for (int n = 1; n < nleaf; ++n) {
         newm = m + n;
@@ -1546,17 +1580,15 @@ void MeshRefinement::RefineParticles() {
             x3 >= mbsize.d_view(newm).x3min && x3 < mbsize.d_view(newm).x3max) {
           pi(PGID, p) = gids + m;
           in_place = true;
-	  break;
+          break;
         }
       }
     }
-    if (not in_place) {
+    if (!in_place) {
       Kokkos::printf("Error: particle orphaned!\n");
     }
   });
 
   return;
 }
-
-
 

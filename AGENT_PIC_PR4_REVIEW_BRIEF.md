@@ -1,4 +1,4 @@
-# AthenaK PIC PR4 Review Brief (PR4a-PR4f)
+# AthenaK PIC PR4 Review Brief and Deliverable (PR4a-PR4f)
 
 ## 1) Mission
 You are a review-focused agent.
@@ -183,3 +183,67 @@ Return one review report with:
 2. Do not use destructive git commands.
 3. Do not commit unless explicitly asked.
 4. Keep conclusions tied to source and tests, not docs alone.
+
+## 11) Refreshed Review Deliverable (2026-02-07)
+
+### Baseline Verification Snapshot
+- Actual branch: `dev/PIC`
+- Actual HEAD: `a83091c0`
+- Snapshot artifact:
+  `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/.codex/pr4_review_20260207/mpi_matrix/baseline_snapshot.txt`
+- Note: this differs from Section 2 expected HEAD (`bb07aa58`); review evidence
+  below is for current HEAD `a83091c0`.
+
+### Executive Verdict
+Healthy. No blocking findings for PR4a through PR4f at current HEAD
+`a83091c0`. Required MPI matrix and style gates are green, and PR4 anchor
+evidence remains intact with the same behavior/ordering contracts.
+
+### Findings (By Severity)
+No blocking findings (P0/P1/P2).
+
+### PR4a→PR4f Status Table (Current HEAD)
+Anchors are unchanged in intent; evidence below is refreshed to current
+file:line and MPI log outputs.
+
+| PR | Scope Intent | As-Built Status | Code Evidence (Current HEAD) | Refreshed Validation Evidence | Risk |
+| --- | --- | --- | --- | --- | --- |
+| PR4a | Runtime selector/default/guards | Complete | `src/particles/particles.hpp:39`, `src/particles/particles.hpp:111`, `src/particles/particles.cpp:265`, `src/particles/particles.cpp:384`, `src/particles/particles.cpp:394` | `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_current_coupling.log:245`, `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_current_coupling.log:265`, `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_current_coupling.log:465` | Low |
+| PR4b | Direct edge-current plumbing + task IDs | Complete | `src/particles/particles.hpp:67`, `src/particles/particles.hpp:145`, `src/particles/particles.cpp:460`, `src/particles/particles_moments.cpp:82`, `src/particles/particles_moments.cpp:102` | `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_coupling_decomp.log:826` | Low |
+| PR4c | Direct staggered deposition kernel | Complete | `src/particles/particles_moments.cpp:249`, `src/particles/particles_moments.cpp:263`, `src/particles/particles_moments.cpp:300` | `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_current_coupling.log:408`, `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_coupling_decomp.log:801` | Low |
+| PR4d | Coupling integration before `MHD::EFieldSrc` + additive comm | Complete | `src/particles/particles_tasks.cpp:198`, `src/particles/particles_tasks.cpp:269`, `src/particles/particles_moments.cpp:748`, `src/mhd/mhd_tasks.cpp:437` | `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_current_coupling.log:465`, `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_coupling_decomp.log:826` | Low |
+| PR4e | Continuity/decomposition hardening + guards | Complete | `tst/scripts/particles/pic_mhd_current_coupling.py:864`, `tst/scripts/particles/pic_mhd_current_coupling.py:913`, `tst/scripts/particles/pic_mhd_coupling_decomp.py:582` | `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_current_coupling.log:408`, `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_current_coupling.log:414`, `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_coupling_decomp.log:801` | Low |
+| PR4f | Multilevel/restart direct-vs-conversion closeout | Complete | `tst/scripts/particles/pic_mhd_coupling_multilevel.py:266`, `tst/scripts/particles/pic_mhd_coupling_multilevel.py:306`, `tst/scripts/particles/pic_mhd_restart_fidelity.py:254`, `tst/scripts/particles/pic_mhd_restart_fidelity.py:344` | `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_coupling_multilevel.log:316`, `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_coupling_multilevel.log:319`, `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_restart_fidelity.log:331`, `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_restart_fidelity.log:355`, `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_restart_fidelity.log:362` | Low |
+
+### Validation Evidence (Required Matrix, Refreshed)
+Commands re-run exactly from Section 8 with MPI enabled and
+`/opt/homebrew/bin/mpicxx`, plus style gates.
+
+- `particles/pic_mhd_current_coupling`:
+  `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_current_coupling.log:465`
+  (`Summary: 1 out of 1 test passed`)
+- `particles/pic_mhd_coupling_decomp`:
+  `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_coupling_decomp.log:826`
+  (`Summary: 1 out of 1 test passed`)
+- `particles/pic_mhd_restart_fidelity`:
+  `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_restart_fidelity.log:362`
+  (`Summary: 1 out of 1 test passed`)
+- `particles/pic_mhd_coupling_multilevel`:
+  `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_coupling_multilevel.log:400`
+  (`Summary: 1 out of 1 test passed`)
+- `particles/pic_mhd_coupling_nonperiodic`:
+  `tst/.codex/pr4_review_20260207/mpi_matrix/pic_mhd_coupling_nonperiodic.log:296`
+  (`Summary: 1 out of 1 test passed`)
+- `check_athena_cpp_style_changed.sh`: clean
+- `check_python_style_changed.sh`: clean
+
+### Merge Gate Note
+Merge recommendation: pass.
+
+- Gate status: no blocking findings.
+- Required matrix status: all required MPI tests and style gates are green.
+- Watch item (non-blocking):
+  per-rank restart unsupported-path fatal text can vary by backend/runtime; keep
+  the negative guard in
+  `tst/scripts/particles/pic_mhd_restart_fidelity.py:254` under observation for
+  future message variants while preserving strict fail-path intent.
