@@ -37,6 +37,502 @@ struct RestartBlockRequest {
   int global_id;
 };
 
+struct CoupledRestartSectionMeta {
+  int version = -1;
+  int nmb_section = 0;
+  int nrdata = 0;
+  int nidata = 0;
+  int rst_nout1 = 0;
+  int rst_nout2 = 0;
+  int rst_nout3 = 0;
+  int has_moments = 0;
+  int has_edge = 0;
+  int moment_cnt = 0;
+  int edge1_cnt = 0;
+  int edge2_cnt = 0;
+  int edge3_cnt = 0;
+  IOWrapperSizeT npart_section = 0;
+  IOWrapperSizeT pr_real_offset = 0;
+  IOWrapperSizeT pr_int_offset = 0;
+  IOWrapperSizeT moments_offset = 0;
+  IOWrapperSizeT edge1_offset = 0;
+  IOWrapperSizeT edge2_offset = 0;
+  IOWrapperSizeT edge3_offset = 0;
+  std::vector<int> mb_counts;
+  std::vector<IOWrapperSizeT> mb_offsets;
+};
+
+void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
+                                              IOWrapperSizeT headeroffset,
+                                              IOWrapperSizeT data_stride,
+                                              int nout1, int nout2, int nout3) {
+  auto *ppart = pm->pmb_pack->ppart;
+  const bool read_coupled_state = (ppart != nullptr) &&
+                                  ppart->couple_moments_to_mhd &&
+                                  ppart->deposit_moments;
+  if (!read_coupled_state) return;
+
+  constexpr std::uint64_t kPicMagic = 0x5049435253543031ULL;
+  constexpr int kPicVersion = 1;
+
+  const RestartMetaData &meta = pm->restart_meta;
+  if (meta.file_name.empty()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Restart metadata missing file name for single-file restart."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (meta.rank_eachmb.size() != static_cast<std::size_t>(pm->nmb_total)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Restart metadata inconsistent with MeshBlock count."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (meta.original_nranks <= 0 ||
+      meta.gids_eachrank.size() != static_cast<std::size_t>(meta.original_nranks) ||
+      meta.nmb_eachrank.size() != static_cast<std::size_t>(meta.original_nranks)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Restart metadata missing original rank layout."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  MeshBlockPack *pack = pm->pmb_pack;
+  const int nmb_local = pack->nmb_thispack;
+  const int nrdata = ppart->nrdata;
+  const int nidata = ppart->nidata;
+  const int expected_moment_cnt = particles::Particles::NMOM*nout3*nout2*nout1;
+  const int expected_edge1_cnt = (nout3 + 1)*(nout2 + 1)*nout1;
+  const int expected_edge2_cnt = (nout3 + 1)*nout2*(nout1 + 1);
+  const int expected_edge3_cnt = nout3*(nout2 + 1)*(nout1 + 1);
+
+  std::vector<std::vector<RestartBlockRequest>> requests(meta.original_nranks);
+  for (int m=0; m<nmb_local; ++m) {
+    int gid = pack->pmb->mb_gid.h_view(m);
+    if (gid < 0 || gid >= pm->nmb_total) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Invalid MeshBlock gid encountered during restart."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    int src_rank = meta.rank_eachmb[gid];
+    if (src_rank < 0 || src_rank >= meta.original_nranks) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Restart metadata contains invalid rank assignments."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    requests[src_rank].push_back({m, gid});
+  }
+
+  std::vector<std::string> rank_paths(meta.original_nranks);
+  for (int r=0; r<meta.original_nranks; ++r) {
+    char rank_dir[20];
+    std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d", r);
+    if (!meta.base_dir.empty()) {
+      rank_paths[r] = meta.base_dir + "/" + rank_dir + "/" + meta.file_name;
+    } else {
+      rank_paths[r] = std::string(rank_dir) + "/" + meta.file_name;
+    }
+  }
+
+  std::vector<int> local_mb_counts(nmb_local, 0);
+  std::vector<CoupledRestartSectionMeta> src_meta(meta.original_nranks);
+  std::vector<bool> src_used(meta.original_nranks, false);
+  int ref_has_moments = -1;
+  int ref_has_edge = -1;
+  int ref_moment_cnt = 0;
+  int ref_edge1_cnt = 0;
+  int ref_edge2_cnt = 0;
+  int ref_edge3_cnt = 0;
+
+  for (int r=0; r<meta.original_nranks; ++r) {
+    auto &reqs = requests[r];
+    if (reqs.empty()) continue;
+
+    IOWrapper srcfile;
+    srcfile.Open(rank_paths[r].c_str(), IOWrapper::FileMode::read, true);
+
+    IOWrapperSizeT section_offset = headeroffset +
+      data_stride*static_cast<IOWrapperSizeT>(meta.nmb_eachrank[r]);
+
+    std::uint64_t pic_magic = 0;
+    if (srcfile.Read_bytes_at(&pic_magic, 1, sizeof(std::uint64_t), section_offset,
+                              true) != sizeof(std::uint64_t)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Coupled particle restart state is missing from source restart "
+                << "file '" << rank_paths[r] << "'." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (pic_magic != kPicMagic) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Source restart file '" << rank_paths[r]
+                << "' has an unknown coupled particle restart marker."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+
+    CoupledRestartSectionMeta sm;
+    IOWrapperSizeT rd_offset = section_offset + sizeof(std::uint64_t);
+    auto read_int_meta = [&](int &val, const char *name) {
+      if (srcfile.Read_bytes_at(&val, sizeof(int), 1, rd_offset, true) != 1) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Failed to read coupled restart metadata field '" << name
+                  << "' from source restart file '" << rank_paths[r] << "'."
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      rd_offset += sizeof(int);
+    };
+
+    read_int_meta(sm.version, "version");
+    read_int_meta(sm.nmb_section, "nmb_section");
+    read_int_meta(sm.nrdata, "nrdata");
+    read_int_meta(sm.nidata, "nidata");
+    read_int_meta(sm.rst_nout1, "nout1");
+    read_int_meta(sm.rst_nout2, "nout2");
+    read_int_meta(sm.rst_nout3, "nout3");
+    read_int_meta(sm.has_moments, "has_moments");
+    read_int_meta(sm.has_edge, "has_edge");
+    read_int_meta(sm.moment_cnt, "moment_cnt");
+    read_int_meta(sm.edge1_cnt, "edge1_cnt");
+    read_int_meta(sm.edge2_cnt, "edge2_cnt");
+    read_int_meta(sm.edge3_cnt, "edge3_cnt");
+
+    if (srcfile.Read_bytes_at(&sm.npart_section, sizeof(IOWrapperSizeT), 1, rd_offset,
+                              true) != 1) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Failed to read coupled particle-count metadata from source "
+                << "restart file '" << rank_paths[r] << "'." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    rd_offset += sizeof(IOWrapperSizeT);
+
+    if (sm.version != kPicVersion) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Unsupported coupled particle restart version " << sm.version
+                << " in source restart file '" << rank_paths[r] << "'."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (sm.nmb_section != meta.nmb_eachrank[r]) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Coupled restart MeshBlock count mismatch in source restart file '"
+                << rank_paths[r] << "' (file=" << sm.nmb_section << ", metadata="
+                << meta.nmb_eachrank[r] << ")." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (sm.nrdata != nrdata || sm.nidata != nidata) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Coupled restart particle data layout mismatch in source restart "
+                << "file '" << rank_paths[r] << "'." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (sm.rst_nout1 != nout1 || sm.rst_nout2 != nout2 || sm.rst_nout3 != nout3) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Coupled restart mesh extents mismatch in source restart file '"
+                << rank_paths[r] << "'." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (sm.moment_cnt != expected_moment_cnt) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Coupled restart moment size mismatch in source restart file '"
+                << rank_paths[r] << "'." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (sm.has_edge != 0 &&
+        (sm.edge1_cnt != expected_edge1_cnt || sm.edge2_cnt != expected_edge2_cnt ||
+         sm.edge3_cnt != expected_edge3_cnt)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Coupled restart edge-current size mismatch in source restart file '"
+                << rank_paths[r] << "'." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+
+    if (ref_has_moments < 0) {
+      ref_has_moments = sm.has_moments;
+      ref_has_edge = sm.has_edge;
+      ref_moment_cnt = sm.moment_cnt;
+      ref_edge1_cnt = sm.edge1_cnt;
+      ref_edge2_cnt = sm.edge2_cnt;
+      ref_edge3_cnt = sm.edge3_cnt;
+    } else if (sm.has_moments != ref_has_moments ||
+               sm.has_edge != ref_has_edge ||
+               sm.moment_cnt != ref_moment_cnt ||
+               sm.edge1_cnt != ref_edge1_cnt ||
+               sm.edge2_cnt != ref_edge2_cnt ||
+               sm.edge3_cnt != ref_edge3_cnt) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Coupled restart metadata is inconsistent across source restart "
+                << "files." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+
+    sm.mb_counts.assign(sm.nmb_section, 0);
+    if (sm.nmb_section > 0) {
+      if (srcfile.Read_bytes_at(sm.mb_counts.data(), sizeof(int), sm.nmb_section,
+                                rd_offset, true) !=
+          static_cast<std::size_t>(sm.nmb_section)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Failed to read coupled restart MeshBlock counts from source "
+                  << "restart file '" << rank_paths[r] << "'." << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+    rd_offset += static_cast<IOWrapperSizeT>(sm.nmb_section)*sizeof(int);
+
+    sm.mb_offsets.assign(sm.nmb_section + 1, 0);
+    for (int m=0; m<sm.nmb_section; ++m) {
+      sm.mb_offsets[m + 1] = sm.mb_offsets[m] +
+                             static_cast<IOWrapperSizeT>(sm.mb_counts[m]);
+    }
+    if (sm.mb_offsets[sm.nmb_section] != sm.npart_section) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Coupled restart particle-count table is inconsistent in source "
+                << "restart file '" << rank_paths[r] << "'." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+
+    sm.pr_real_offset = rd_offset;
+    rd_offset += sm.npart_section*sm.nrdata*sizeof(Real);
+    sm.pr_int_offset = rd_offset;
+    rd_offset += sm.npart_section*sm.nidata*sizeof(int);
+    sm.moments_offset = rd_offset;
+    if (sm.has_moments != 0) {
+      rd_offset += static_cast<IOWrapperSizeT>(sm.nmb_section)*sm.moment_cnt*
+                   sizeof(Real);
+    }
+    sm.edge1_offset = rd_offset;
+    if (sm.has_edge != 0) {
+      rd_offset += static_cast<IOWrapperSizeT>(sm.nmb_section)*sm.edge1_cnt*
+                   sizeof(Real);
+    }
+    sm.edge2_offset = rd_offset;
+    if (sm.has_edge != 0) {
+      rd_offset += static_cast<IOWrapperSizeT>(sm.nmb_section)*sm.edge2_cnt*
+                   sizeof(Real);
+    }
+    sm.edge3_offset = rd_offset;
+
+    for (const auto &req : reqs) {
+      const int src_local = req.global_id - meta.gids_eachrank[r];
+      if (src_local < 0 || src_local >= sm.nmb_section) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Restart metadata is inconsistent with coupled particle section "
+                  << "layout in source restart file '" << rank_paths[r] << "'."
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      local_mb_counts[req.local_index] = sm.mb_counts[src_local];
+    }
+
+    src_meta[r] = std::move(sm);
+    src_used[r] = true;
+    srcfile.Close(true);
+  }
+
+  std::vector<IOWrapperSizeT> local_mb_offsets(nmb_local + 1, 0);
+  for (int m=0; m<nmb_local; ++m) {
+    local_mb_offsets[m + 1] = local_mb_offsets[m] +
+                              static_cast<IOWrapperSizeT>(local_mb_counts[m]);
+  }
+  const int local_npart = static_cast<int>(local_mb_offsets[nmb_local]);
+  ppart->nprtcl_thispack = local_npart;
+  Kokkos::realloc(ppart->prtcl_rdata, nrdata, local_npart);
+  Kokkos::realloc(ppart->prtcl_idata, nidata, local_npart);
+
+  std::vector<Real> packed_pr(static_cast<std::size_t>(local_npart)*nrdata, 0.0);
+  std::vector<int> packed_pi(static_cast<std::size_t>(local_npart)*nidata, 0);
+
+  const bool has_moments = (ref_has_moments > 0);
+  const bool has_edge = (ref_has_edge > 0);
+
+  HostArray5D<Real> h_mom("rst_mom", 1, 1, 1, 1, 1);
+  if (has_moments) {
+    if (ppart->moments.size() == 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Restart expects coupled moments, but moments are not allocated."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    h_mom = Kokkos::create_mirror_view(ppart->moments);
+  }
+
+  HostArray4D<Real> h_x1e("rst_jx1e", 1, 1, 1, 1);
+  HostArray4D<Real> h_x2e("rst_jx2e", 1, 1, 1, 1);
+  HostArray4D<Real> h_x3e("rst_jx3e", 1, 1, 1, 1);
+  if (has_edge) {
+    if (ppart->j_edge_x1e.size() == 0 || ppart->j_edge_x2e.size() == 0 ||
+        ppart->j_edge_x3e.size() == 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Restart expects edge-current state, but edge arrays are not "
+                << "allocated." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    h_x1e = Kokkos::create_mirror_view(ppart->j_edge_x1e);
+    h_x2e = Kokkos::create_mirror_view(ppart->j_edge_x2e);
+    h_x3e = Kokkos::create_mirror_view(ppart->j_edge_x3e);
+  }
+
+  for (int r=0; r<meta.original_nranks; ++r) {
+    auto &reqs = requests[r];
+    if (reqs.empty() || !src_used[r]) continue;
+
+    auto &sm = src_meta[r];
+    IOWrapper srcfile;
+    srcfile.Open(rank_paths[r].c_str(), IOWrapper::FileMode::read, true);
+
+    for (const auto &req : reqs) {
+      const int src_local = req.global_id - meta.gids_eachrank[r];
+      if (src_local < 0 || src_local >= sm.nmb_section) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Restart metadata is inconsistent with source restart data in "
+                  << "file '" << rank_paths[r] << "'." << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+
+      const int cnt = local_mb_counts[req.local_index];
+      const IOWrapperSizeT gstart = sm.mb_offsets[src_local];
+      const IOWrapperSizeT lstart = local_mb_offsets[req.local_index];
+      const IOWrapperSizeT pr_off = sm.pr_real_offset + gstart*nrdata*sizeof(Real);
+      const IOWrapperSizeT pi_off = sm.pr_int_offset + gstart*nidata*sizeof(int);
+
+      if (cnt > 0) {
+        if (srcfile.Read_Reals_at(&(packed_pr[lstart*nrdata]), cnt*nrdata, pr_off,
+                                  true) != static_cast<std::size_t>(cnt*nrdata)) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl
+                    << "Failed to read coupled restart particle real data from "
+                    << "source restart file '" << rank_paths[r] << "'."
+                    << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        if (srcfile.Read_bytes_at(&(packed_pi[lstart*nidata]), sizeof(int), cnt*nidata,
+                                  pi_off, true) !=
+            static_cast<std::size_t>(cnt*nidata)) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl
+                    << "Failed to read coupled restart particle integer data from "
+                    << "source restart file '" << rank_paths[r] << "'."
+                    << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+      }
+
+      if (has_moments) {
+        auto mom_mb = Kokkos::subview(h_mom, req.local_index, Kokkos::ALL, Kokkos::ALL,
+                                      Kokkos::ALL, Kokkos::ALL);
+        const IOWrapperSizeT moff = sm.moments_offset +
+                                    static_cast<IOWrapperSizeT>(src_local)*
+                                    sm.moment_cnt*sizeof(Real);
+        if (srcfile.Read_Reals_at(mom_mb.data(), sm.moment_cnt, moff, true) !=
+            static_cast<std::size_t>(sm.moment_cnt)) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl
+                    << "Failed to read coupled moment restart data from source "
+                    << "restart file '" << rank_paths[r] << "'." << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+      }
+
+      if (has_edge) {
+        auto x1_mb = Kokkos::subview(h_x1e, req.local_index, Kokkos::ALL, Kokkos::ALL,
+                                     Kokkos::ALL);
+        auto x2_mb = Kokkos::subview(h_x2e, req.local_index, Kokkos::ALL, Kokkos::ALL,
+                                     Kokkos::ALL);
+        auto x3_mb = Kokkos::subview(h_x3e, req.local_index, Kokkos::ALL, Kokkos::ALL,
+                                     Kokkos::ALL);
+        const IOWrapperSizeT x1off = sm.edge1_offset +
+                                     static_cast<IOWrapperSizeT>(src_local)*
+                                     sm.edge1_cnt*sizeof(Real);
+        const IOWrapperSizeT x2off = sm.edge2_offset +
+                                     static_cast<IOWrapperSizeT>(src_local)*
+                                     sm.edge2_cnt*sizeof(Real);
+        const IOWrapperSizeT x3off = sm.edge3_offset +
+                                     static_cast<IOWrapperSizeT>(src_local)*
+                                     sm.edge3_cnt*sizeof(Real);
+        if (srcfile.Read_Reals_at(x1_mb.data(), sm.edge1_cnt, x1off, true) !=
+              static_cast<std::size_t>(sm.edge1_cnt) ||
+            srcfile.Read_Reals_at(x2_mb.data(), sm.edge2_cnt, x2off, true) !=
+              static_cast<std::size_t>(sm.edge2_cnt) ||
+            srcfile.Read_Reals_at(x3_mb.data(), sm.edge3_cnt, x3off, true) !=
+              static_cast<std::size_t>(sm.edge3_cnt)) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl
+                    << "Failed to read coupled edge-current restart data from "
+                    << "source restart file '" << rank_paths[r] << "'."
+                    << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+      }
+    }
+
+    srcfile.Close(true);
+  }
+
+  HostArray2D<Real> h_pr("rst_pr", nrdata, local_npart);
+  HostArray2D<int> h_pi("rst_pi", nidata, local_npart);
+  const int gids_local = pm->gids_eachrank[global_variable::my_rank];
+  for (int p=0; p<local_npart; ++p) {
+    for (int n=0; n<nrdata; ++n) {
+      h_pr(n, p) = packed_pr[p*nrdata + n];
+    }
+    for (int n=0; n<nidata; ++n) {
+      h_pi(n, p) = packed_pi[p*nidata + n];
+    }
+    const int gid = h_pi(PGID, p);
+    if (gid < gids_local || gid >= (gids_local + nmb_local)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Restarted particle gid is not local after restore (gid="
+                << gid << ")." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+  Kokkos::deep_copy(ppart->prtcl_rdata, h_pr);
+  Kokkos::deep_copy(ppart->prtcl_idata, h_pi);
+
+  if (has_moments) {
+    Kokkos::deep_copy(ppart->moments, h_mom);
+  } else if (ppart->moments.size() > 0) {
+    Kokkos::deep_copy(ppart->moments, static_cast<Real>(0.0));
+  }
+
+  if (has_edge) {
+    Kokkos::deep_copy(ppart->j_edge_x1e, h_x1e);
+    Kokkos::deep_copy(ppart->j_edge_x2e, h_x2e);
+    Kokkos::deep_copy(ppart->j_edge_x3e, h_x3e);
+  } else if (ppart->j_edge_x1e.size() > 0) {
+    Kokkos::deep_copy(ppart->j_edge_x1e, static_cast<Real>(0.0));
+    Kokkos::deep_copy(ppart->j_edge_x2e, static_cast<Real>(0.0));
+    Kokkos::deep_copy(ppart->j_edge_x3e, static_cast<Real>(0.0));
+  }
+
+  pm->CountParticles();
+}
+
 void LoadSingleFileRestartData(Mesh *pm,
                                IOWrapperSizeT headeroffset,
                                IOWrapperSizeT data_stride,
@@ -122,7 +618,9 @@ void LoadSingleFileRestartData(Mesh *pm,
   const IOWrapperSizeT rad_offset = chunk_offset;
   chunk_offset += nout1*nout2*nout3*nrad*sizeof(Real);
   const IOWrapperSizeT turb_offset = chunk_offset;
-  chunk_offset += nout1*nout2*nout3*nforce*sizeof(Real);
+  if (pturb != nullptr && nforce > 0) {
+    chunk_offset += nout1*nout2*nout3*nforce*sizeof(Real);
+  }
   const IOWrapperSizeT z4c_adm_offset = chunk_offset;
   if (pz4c != nullptr) {
     chunk_offset += nout1*nout2*nout3*nz4c*sizeof(Real);
@@ -381,11 +879,9 @@ void LoadCoupledParticleRestartData(Mesh *pm,
   if (!read_coupled_state) return;
 
   if (single_file_per_rank) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "PR3a coupled particle restart restore does not yet support "
-              << "single_file_per_rank restart files." << std::endl;
-    std::exit(EXIT_FAILURE);
+    LoadCoupledParticleRestartDataSingleFile(pm, headeroffset, data_stride,
+                                             nout1, nout2, nout3);
+    return;
   }
 
   constexpr std::uint64_t kPicMagic = 0x5049435253543031ULL;

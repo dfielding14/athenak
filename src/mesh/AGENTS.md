@@ -51,6 +51,12 @@ See `../../AGENTS.md` for repository-wide conventions and workflow.
 `Mesh::BuildTreeFromRestart` rehydrates mesh metadata from the restart file, rebuilds
 the logical tree, assigns MeshBlocks to ranks, and then follows the same pack/block
 construction path.
+- For `single_file_per_rank` restarts, pass the mode flag through all `IOWrapper`
+  calls (including `GetPosition(single_file_per_rank)`), otherwise MPI-enabled
+  builds can hit MPI-IO position errors while reading rank-local files.
+- Restart metadata (`rank_eachmb`, `gids_eachrank`, `nmb_eachrank`) is consumed
+  downstream by `src/pgen/pgen.cpp` to remap source-rank data when restoring
+  per-rank restart files onto a possibly different runtime rank layout.
 
 ---
 

@@ -161,6 +161,12 @@ These are the only problems selectable with `problem/pgen_name` when
   edges (`i==ie`, `j==je`, `k==ke`).
 - Restart behavior: `UserProblem(..., true)` is called after restart read; most
   pgens early-return to avoid reinitializing state but still re-enroll callbacks.
+- Coupled PIC restart section: when `couple_moments_to_mhd=true` and
+  `deposit_moments=true`, `pgen.cpp` restores particle real/int arrays, moments,
+  and optional edge-current state from the PR3a section for both single-file and
+  `single_file_per_rank` restarts. The per-rank path uses restart metadata
+  (`rank_eachmb`, `gids_eachrank`, `nmb_eachrank`) to remap each local
+  MeshBlock's source file/offset before loading.
 
 ---
 
@@ -171,3 +177,6 @@ These are the only problems selectable with `problem/pgen_name` when
 - Many GR/BNS pgens depend on optional external libraries (Elliptica, LORENE,
   SGRID, TwoPunctures, SpECTRE). Keep their includes and data-loading paths
   intact.
+- Coupled PIC restart load now hard-validates section marker/version, array
+  dimensions, and per-MeshBlock particle-count tables before copying data into
+  Kokkos views; any mismatch aborts with a fatal error.

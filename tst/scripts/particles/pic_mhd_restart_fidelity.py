@@ -15,7 +15,6 @@ logger = logging.getLogger('athena' + __name__[7:])
 _INPUT_DECK = 'tests/pic_mhd_restart_fidelity.athinput'
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
 _RESULTS = {}
-_NEGATIVE_RESULTS = {}
 _REPRESENTATIONS = [
     ('cc', 'cell_centered', None),
     ('edge', 'edge_staggered', 'cc_convert'),
@@ -131,41 +130,6 @@ def _run_athena(label, nproc, arguments, restart_file=None):
         raise RuntimeError('Command failed for ' + label + '\n' + output)
 
 
-def _run_athena_expect_fail(label, nproc, arguments, expected_message=None,
-                            restart_file=None):
-    command = ['./athena']
-    if restart_file is None:
-        command += ['-i', _athena_input_path()]
-    else:
-        command += ['-r', restart_file]
-    command += list(arguments)
-    if nproc > 1:
-        command = [_MPIEXEC, '-n', str(nproc)] + command
-
-    logger.info('Executing %s (expect-fail): %s', label, ' '.join(command))
-    proc = subprocess.run(command, cwd=_athena_exe_dir(),
-                          capture_output=True, text=True)
-    output = (proc.stdout or '') + (proc.stderr or '')
-    if proc.returncode == 0:
-        raise RuntimeError('Expected failure for ' + label + ', but run succeeded')
-    matched_message = expected_message
-    if expected_message is not None:
-        if isinstance(expected_message, (list, tuple)):
-            matched_message = None
-            for candidate in expected_message:
-                if candidate in output:
-                    matched_message = candidate
-                    break
-            if matched_message is None:
-                raise RuntimeError('Expected one of the messages for ' + label +
-                                   ': ' + str(expected_message) + '\n' + output)
-        elif expected_message not in output:
-            raise RuntimeError('Expected message not found for ' + label +
-                               ': "' + expected_message + '"\n' + output)
-    _NEGATIVE_RESULTS[label] = {'matched_message': matched_message}
-    logger.info('Expected failure observed for %s', label)
-
-
 def _check_with_tolerance(label, measured, expected, abs_tol, rel_tol):
     abs_err = abs(measured - expected)
     rel_err = abs_err / max(abs(expected), 1.0)
@@ -230,42 +194,53 @@ def run(**kwargs):
                 'restart': rst_measured,
             }
 
-    # PR3a guard hardening: per-rank restart files are intentionally unsupported for
-    # coupled restore and should fail deterministically.
-    per_rank_base = 'pic_mhd_rst_per_rank_guard'
-    per_rank_seg = per_rank_base + '_seg'
-    per_rank_rst = per_rank_base + '_rst'
-    _remove_outputs(per_rank_seg)
-    _remove_outputs(per_rank_rst)
-    _run_athena('per_rank_seg_run', 1,
-                ['job/basename=' + per_rank_seg,
-                 'time/nlim=1',
-                 'output11/single_file_per_rank=true',
-                 'particles/couple_moments_to_mhd=true',
-                 'particles/couple_j_to_efield_representation=cell_centered',
-                 'particles/cr_vx0=0.50',
-                 'particles/cr_vy0=-0.25',
-                 'particles/cr_vz0=0.125'])
-    per_rank_rst_path = os.path.join('rst', 'rank_00000000',
-                                     per_rank_seg + '.00000.rst')
-    full_per_rank_rst_path = os.path.join(_athena_exe_dir(), per_rank_rst_path)
-    if not os.path.exists(full_per_rank_rst_path):
-        raise RuntimeError('Expected restart file not found: ' + full_per_rank_rst_path)
-    _run_athena_expect_fail(
-        'guard_restart_single_file_per_rank_unimplemented',
-        1,
-        ['job/basename=' + per_rank_rst,
-         'time/nlim=2',
-         'particles/couple_moments_to_mhd=true',
-         'particles/couple_j_to_efield_representation=cell_centered'],
-        expected_message=(
-            'PR3a coupled particle restart restore does not yet support '
-            'single_file_per_rank restart files.',
-            'MPI_File_get_position',
-            'MPI_ERR_INTERN',
-            'Restart data chunk size mismatch, restart file is broken.',
-        ),
-        restart_file=per_rank_rst_path)
+    for case_tag, nproc in base_cases:
+        for rep_tag, rep_value, dep_mode in _REPRESENTATIONS:
+            base = f'pic_mhd_rst_per_rank_{case_tag}_{rep_tag}'
+            base_full = base + '_full'
+            base_seg = base + '_seg'
+            base_rst = base + '_rst'
+
+            for name in [base_full, base_seg, base_rst]:
+                _remove_outputs(name)
+
+            common_args = [
+                'particles/couple_moments_to_mhd=true',
+                'particles/couple_j_to_efield_representation=' + rep_value,
+                'particles/cr_vx0=0.50',
+                'particles/cr_vy0=-0.25',
+                'particles/cr_vz0=0.125',
+                'output11/single_file_per_rank=true',
+            ]
+            if dep_mode is not None:
+                common_args.append('particles/couple_j_deposition_mode=' + dep_mode)
+
+            _run_athena(base + '_full_run', nproc,
+                        ['job/basename=' + base_full, 'time/nlim=2'] + common_args)
+            full_measured = _measure_case(base_full)
+
+            _run_athena(base + '_seg_run', nproc,
+                        ['job/basename=' + base_seg, 'time/nlim=1'] + common_args)
+
+            rst_path = os.path.join('rst', 'rank_00000000', base_seg + '.00000.rst')
+            full_rst_path = os.path.join(_athena_exe_dir(), rst_path)
+            if not os.path.exists(full_rst_path):
+                raise RuntimeError('Expected restart file not found: ' + full_rst_path)
+
+            _run_athena(base + '_restart_run', nproc,
+                        ['job/basename=' + base_rst,
+                         'time/nlim=2',
+                         'particles/couple_moments_to_mhd=true',
+                         'particles/couple_j_to_efield_representation=' + rep_value] +
+                        ([] if dep_mode is None else
+                         ['particles/couple_j_deposition_mode=' + dep_mode]),
+                        restart_file=rst_path)
+            rst_measured = _measure_case(base_rst)
+
+            _RESULTS[base] = {
+                'full': full_measured,
+                'restart': rst_measured,
+            }
 
 
 def analyze():
@@ -343,9 +318,5 @@ def analyze():
             ok = _check_with_tolerance(
                 case_tag + ':ratio_restart_vs_full:edge_direct_vs_edge:' + quantity,
                 rst_ratio, full_ratio, 1.0e-8, 1.0e-8) and ok
-
-    ok = (len(_NEGATIVE_RESULTS) == 1) and ok
-    if len(_NEGATIVE_RESULTS) != 1:
-        logger.warning('Expected 1 negative check, got %d', len(_NEGATIVE_RESULTS))
 
     return ok

@@ -320,7 +320,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                                                      bool single_file_per_rank) {
   // At this point, the restartfile is already open and the ParameterInput (input file)
   // data has already been read in main(). Thus the file pointer is set to after <par_end>
-  IOWrapperSizeT headeroffset = resfile.GetPosition();
+  IOWrapperSizeT headeroffset = resfile.GetPosition(single_file_per_rank);
 
   // following must be identical to calculation of headeroffset (excluding size of
   // ParameterInput data) in restart.cpp
@@ -379,7 +379,9 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
 
   if (restart_meta.original_nranks < 0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Number of ranks stored in restart file is invalid." << std::endl;
+              << std::endl
+              << "Number of ranks stored in restart file is invalid."
+              << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -492,7 +494,8 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                              restart_meta.original_nranks, single_file_per_rank)
           != static_cast<unsigned int>(restart_meta.original_nranks)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Rank MeshBlock count read from restart file is incorrect,"
+                  << std::endl
+                  << "Rank MeshBlock count read from restart file is incorrect,"
                   << " restart file is broken." << std::endl;
         std::exit(EXIT_FAILURE);
       }
