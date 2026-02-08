@@ -137,6 +137,10 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - Counter-streaming no-MHD proxy with two species and opposite `vx0` drifts;
     regression fits the dominant density-mode growth rate and gates out
     positive exponential growth.
+- `inputs/tests/pic_weibel_growth_proxy.athinput`
+  - Transverse-anisotropy no-MHD proxy with two species and opposite `vy0`
+    drifts; regression fits the dominant transverse-current mode growth rate
+    and gates out positive exponential growth.
 
 ---
 

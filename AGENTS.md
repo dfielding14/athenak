@@ -125,6 +125,10 @@ efficiently on CPUs and GPUs.
     `particles/pic_two_stream_growth_proxy` (AthenaK-adapted two-stream control
     that enforces no positive exponential growth in no-MHD counter-beam mode
     and checks serial/MPI growth-rate parity).
+  - A transverse-anisotropy growth proxy anchor is present as
+    `particles/pic_weibel_growth_proxy` (AthenaK-adapted Weibel control using
+    no-MHD counter-`vy` beams, with non-positive growth and serial/MPI parity
+    gates on the dominant transverse-current mode).
   - Cosmic-ray initialization now supports optional per-species drifts in each
     `speciesN` block (`vx0`, `vy0`, `vz0`) with fallback to
     `<particles>/cr_vx0`, `cr_vy0`, `cr_vz0`.

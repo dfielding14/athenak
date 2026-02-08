@@ -1,0 +1,95 @@
+# AthenaXXX input file for PIC Weibel growth proxy test
+
+<comment>
+problem   = Anisotropic transverse-current growth proxy in no-MHD mode
+
+<job>
+basename  = pic_weibel_growth_proxy
+
+<mesh>
+nghost    = 2
+nx1       = 16
+x1min     = 0.0
+x1max     = 16.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 8
+x2min     = 0.0
+x2max     = 8.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 4
+x3min     = 0.0
+x3max     = 4.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 4
+nx2       = 4
+nx3       = 4
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.2
+nlim       = 120
+tlim       = 12.0
+ndiag      = 1
+
+<hydro>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<particles>
+particle_type           = cosmic_ray
+ppc                     = 8.0
+pusher                  = boris_tsc
+nspecies                = 2
+cr_distribution         = random
+deposit_moments         = true
+deposit_order           = 1
+deposit_qscale          = 1.0
+couple_moments_to_mhd   = false
+cr_vx0                  = 0.0
+cr_vy0                  = 0.0
+cr_vz0                  = 0.0
+pic_background_mode     = no_mhd
+pic_feedback_mode       = test_particle
+pic_no_mhd_bx           = 0.0
+pic_no_mhd_by           = 0.0
+pic_no_mhd_bz           = 0.0
+
+<species0>
+mass   = 1.0
+charge = -1.0
+vx0    = 0.0
+vy0    = 0.25
+vz0    = 0.0
+
+<species1>
+mass   = 1.0
+charge = -1.0
+vx0    = 0.0
+vy0    = -0.25
+vz0    = 0.0
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp       = 0.0
+vflow     = 0.0
+along_x1  = true
+along_x2  = false
+along_x3  = false
+
+<output1>
+file_type   = bin
+variable    = prtcl_jy
+id          = prtcl_jy
+dcycle      = 2
+ghost_zones = false
