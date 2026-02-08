@@ -170,11 +170,22 @@ def run(**kwargs):
         'time/tlim=0.08',
         'mesh_refinement/ddens_max=0.05',
     ]
+    alt_decomp_args = common_args + [
+        'meshblock/nx1=4',
+        'meshblock/nx2=8',
+        'meshblock/nx3=4',
+    ]
 
     _remove_outputs('pic_amr_shock_lb_serial')
     _run_case('serial', 'pic_amr_shock_lb_serial', 1, common_args)
 
+    _remove_outputs('pic_amr_shock_lb_serial_alt')
+    _run_case('serial_alt', 'pic_amr_shock_lb_serial_alt', 1, alt_decomp_args)
+
     if _athena_mpi_enabled():
+        _remove_outputs('pic_amr_shock_lb_mpi2')
+        _run_case('mpi2', 'pic_amr_shock_lb_mpi2', 2, common_args)
+
         _remove_outputs('pic_amr_shock_lb_mpi4')
         _run_case('mpi4', 'pic_amr_shock_lb_mpi4', 4, common_args)
 
@@ -191,6 +202,28 @@ def analyze():
     ok = _check_lower('serial:tail_peak', serial['tail_peak'], 1.5) and ok
     ok = _check_lower('serial:tail_delta', serial['tail_delta'], 0.0) and ok
     ok = _check_lower('serial:n_created', serial['n_created'], 1.0) and ok
+
+    serial_alt = _RESULTS['serial_alt']
+    ok = _check_log_ratio('serial_vs_serial_alt:b1_std_peak_amp',
+                          serial_alt['b1_std_peak_amp'], serial['b1_std_peak_amp'],
+                          5.0e-2) and ok
+    ok = _check_log_ratio('serial_vs_serial_alt:tail_peak',
+                          serial_alt['tail_peak'], serial['tail_peak'], 3.0e-1) and ok
+
+    if 'mpi2' in _RESULTS:
+        mpi2 = _RESULTS['mpi2']
+        ok = _check_lower('mpi2:n_samples', mpi2['n_samples'], 8.0) and ok
+        ok = _check_lower('mpi2:b1_std_final_amp', mpi2['b1_std_final_amp'], 1.002) and ok
+        ok = _check_lower('mpi2:b1_std_peak_amp', mpi2['b1_std_peak_amp'], 1.002) and ok
+        ok = _check_lower('mpi2:jrms_peak', mpi2['jrms_peak'], 1.0e-6) and ok
+        ok = _check_lower('mpi2:tail_peak', mpi2['tail_peak'], 1.5) and ok
+        ok = _check_lower('mpi2:tail_delta', mpi2['tail_delta'], 0.0) and ok
+        ok = _check_lower('mpi2:n_created', mpi2['n_created'], 1.0) and ok
+        ok = _check_log_ratio('serial_vs_mpi2:b1_std_peak_amp',
+                              mpi2['b1_std_peak_amp'], serial['b1_std_peak_amp'],
+                              1.0e-3) and ok
+        ok = _check_log_ratio('serial_vs_mpi2:tail_peak',
+                              mpi2['tail_peak'], serial['tail_peak'], 0.2) and ok
 
     if 'mpi4' in _RESULTS:
         mpi4 = _RESULTS['mpi4']
@@ -210,5 +243,13 @@ def analyze():
                               1.0e-3) and ok
         ok = _check_log_ratio('serial_vs_mpi4:tail_peak',
                               mpi4['tail_peak'], serial['tail_peak'], 0.2) and ok
+
+    if 'mpi2' in _RESULTS and 'mpi4' in _RESULTS:
+        ok = _check_log_ratio('mpi2_vs_mpi4:b1_std_peak_amp',
+                              _RESULTS['mpi4']['b1_std_peak_amp'],
+                              _RESULTS['mpi2']['b1_std_peak_amp'], 1.0e-3) and ok
+        ok = _check_log_ratio('mpi2_vs_mpi4:tail_peak',
+                              _RESULTS['mpi4']['tail_peak'],
+                              _RESULTS['mpi2']['tail_peak'], 0.2) and ok
 
     return ok

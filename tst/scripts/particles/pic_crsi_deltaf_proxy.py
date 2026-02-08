@@ -190,6 +190,10 @@ def run(**kwargs):
         _run_case('mpi2_on', 'pic_crsi_deltaf_mpi2_on', 2, True)
         _RESULTS['mpi2_on'] = _load_growth_metrics('pic_crsi_deltaf_mpi2_on')
 
+        _remove_outputs('pic_crsi_deltaf_mpi4_on')
+        _run_case('mpi4_on', 'pic_crsi_deltaf_mpi4_on', 4, True)
+        _RESULTS['mpi4_on'] = _load_growth_metrics('pic_crsi_deltaf_mpi4_on')
+
 
 def analyze():
     logger.debug('Analyzing test ' + __name__)
@@ -215,5 +219,18 @@ def analyze():
         ok = _check_lower('mpi2_on:dom_r2_lower', mpi['dom_r2'], 0.20) and ok
         ok = _check_log_ratio_close('serial_vs_mpi2:on_dom_gamma',
                                     mpi['dom_gamma'], on['dom_gamma'], 1.2) and ok
+
+    if 'mpi4_on' in _RESULTS:
+        mpi = _RESULTS['mpi4_on']
+        ok = _check_lower('mpi4_on:dom_ratio_lower', mpi['dom_ratio'], 10.0) and ok
+        ok = _check_lower('mpi4_on:dom_gamma_lower', mpi['dom_gamma'], 2.0e-1) and ok
+        ok = _check_lower('mpi4_on:dom_r2_lower', mpi['dom_r2'], 0.10) and ok
+        ok = _check_log_ratio_close('serial_vs_mpi4:on_dom_gamma',
+                                    mpi['dom_gamma'], on['dom_gamma'], 1.2) and ok
+
+    if 'mpi2_on' in _RESULTS and 'mpi4_on' in _RESULTS:
+        ok = _check_log_ratio_close('mpi2_vs_mpi4:on_dom_gamma',
+                                    _RESULTS['mpi4_on']['dom_gamma'],
+                                    _RESULTS['mpi2_on']['dom_gamma'], 1.2) and ok
 
     return ok

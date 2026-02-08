@@ -167,6 +167,12 @@ def run(**kwargs):
             _run_case(label + '_mpi2', 2, input_rel, base)
             _RESULTS[label + '_np2'] = _load_growth_metrics(base)
 
+        for label, input_rel in _CASES.items():
+            base = 'pic_crpai_' + label + '_np4'
+            _remove_outputs(base)
+            _run_case(label + '_mpi4', 4, input_rel, base)
+            _RESULTS[label + '_np4'] = _load_growth_metrics(base)
+
 
 def analyze():
     logger.debug('Analyzing test ' + __name__)
@@ -197,5 +203,22 @@ def analyze():
             ok = _check_lower(label + ':dom_r2_np2', np2['dom_r2'], 0.20) and ok
             ok = _check_log_ratio_close(label + ':dom_gamma_np1_vs_np2',
                                         np2['dom_gamma'], np1['dom_gamma'], 1.2) and ok
+
+    if 'prolate_np4' in _RESULTS:
+        for label in _CASES:
+            np1 = _RESULTS[label + '_np1']
+            np4 = _RESULTS[label + '_np4']
+            ok = _check_lower(label + ':dom_ratio_np4', np4['dom_ratio'], 10.0) and ok
+            ok = _check_lower(label + ':dom_gamma_np4', np4['dom_gamma'], 2.0e-1) and ok
+            ok = _check_lower(label + ':dom_r2_np4', np4['dom_r2'], 0.20) and ok
+            ok = _check_log_ratio_close(label + ':dom_gamma_np1_vs_np4',
+                                        np4['dom_gamma'], np1['dom_gamma'], 1.5) and ok
+
+    if 'prolate_np2' in _RESULTS and 'prolate_np4' in _RESULTS:
+        for label in _CASES:
+            np2 = _RESULTS[label + '_np2']
+            np4 = _RESULTS[label + '_np4']
+            ok = _check_log_ratio_close(label + ':dom_gamma_np2_vs_np4',
+                                        np4['dom_gamma'], np2['dom_gamma'], 1.5) and ok
 
     return ok

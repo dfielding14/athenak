@@ -143,6 +143,12 @@ def run(**kwargs):
             _run_case(label + '_mpi2', 2, input_rel, base)
             _RESULTS[label + '_np2'] = _load_series(base)
 
+        for label, input_rel in _CASES.items():
+            base = 'pic_box_' + label + '_np4'
+            _remove_outputs(base)
+            _run_case(label + '_mpi4', 4, input_rel, base)
+            _RESULTS[label + '_np4'] = _load_series(base)
+
 
 def analyze():
     logger.debug('Analyzing test ' + __name__)
@@ -167,5 +173,25 @@ def analyze():
                           abs(exp2['slope'] - exp1['slope']), 2.0e-2) and ok
         ok = _check_upper('compressing_np1_vs_np2:slope_abs_diff',
                           abs(cmp2['slope'] - cmp1['slope']), 2.0e-2) and ok
+
+    if 'expanding_np4' in _RESULTS:
+        exp4 = _RESULTS['expanding_np4']
+        cmp4 = _RESULTS['compressing_np4']
+
+        ok = _check_sign('expanding_np4:slope_sign', exp4['slope'], False) and ok
+        ok = _check_sign('compressing_np4:slope_sign', cmp4['slope'], True) and ok
+
+        ok = _check_upper('expanding_np1_vs_np4:slope_abs_diff',
+                          abs(exp4['slope'] - exp1['slope']), 2.0e-2) and ok
+        ok = _check_upper('compressing_np1_vs_np4:slope_abs_diff',
+                          abs(cmp4['slope'] - cmp1['slope']), 2.0e-2) and ok
+
+    if 'expanding_np2' in _RESULTS and 'expanding_np4' in _RESULTS:
+        ok = _check_upper('expanding_np2_vs_np4:slope_abs_diff',
+                          abs(_RESULTS['expanding_np4']['slope'] -
+                              _RESULTS['expanding_np2']['slope']), 2.0e-2) and ok
+        ok = _check_upper('compressing_np2_vs_np4:slope_abs_diff',
+                          abs(_RESULTS['compressing_np4']['slope'] -
+                              _RESULTS['compressing_np2']['slope']), 2.0e-2) and ok
 
     return ok

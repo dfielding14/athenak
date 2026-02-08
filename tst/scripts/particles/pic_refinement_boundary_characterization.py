@@ -94,8 +94,10 @@ def _load_metrics(basename):
     }
 
 
-def _run_case(label, nproc, input_rel, basename):
+def _run_case(label, nproc, input_rel, basename, extra_args=None):
     args = ['job/basename=' + basename]
+    if extra_args is not None:
+        args.extend(extra_args)
     command = ['./athena', '-i', _athena_input_path(input_rel)] + args
     if nproc > 1:
         command = [_MPIEXEC, '-n', str(nproc)] + command
@@ -124,6 +126,11 @@ def _check_close(label, measured, expected, abs_tol, rel_tol):
 
 def run(**kwargs):
     logger.debug('Running test ' + __name__)
+    alt_decomp_args = [
+        'meshblock/nx1=8',
+        'meshblock/nx2=4',
+        'meshblock/nx3=4',
+    ]
 
     for case, input_rel in _CASES.items():
         base = 'pic_ref_boundary_' + case + '_np1'
@@ -131,12 +138,22 @@ def run(**kwargs):
         _run_case(case + '_serial', 1, input_rel, base)
         _RESULTS[case + '_np1'] = _load_metrics(base)
 
+        base_alt = 'pic_ref_boundary_' + case + '_np1_alt'
+        _remove_outputs(base_alt)
+        _run_case(case + '_serial_alt', 1, input_rel, base_alt, alt_decomp_args)
+        _RESULTS[case + '_np1_alt'] = _load_metrics(base_alt)
+
     if _athena_mpi_enabled():
         for case, input_rel in _CASES.items():
             base = 'pic_ref_boundary_' + case + '_np2'
             _remove_outputs(base)
             _run_case(case + '_mpi2', 2, input_rel, base)
             _RESULTS[case + '_np2'] = _load_metrics(base)
+
+            base = 'pic_ref_boundary_' + case + '_np4'
+            _remove_outputs(base)
+            _run_case(case + '_mpi4', 4, input_rel, base)
+            _RESULTS[case + '_np4'] = _load_metrics(base)
 
 
 def analyze():
@@ -169,5 +186,36 @@ def analyze():
                               1.0e-1, 0.0) and ok
             ok = _check_close(case + ':jump_np1_vs_np2', np2['jump'], np1['jump'],
                               2.0e-1, 0.0) and ok
+
+    for case in _CASES:
+        alt = _RESULTS[case + '_np1_alt']
+        ok = _check_upper(case + ':q_drift_np1_alt', alt['q_drift'], 3.0e4) and ok
+        ok = _check_upper(case + ':cv_np1_alt', alt['cv'], 1.2) and ok
+        ok = _check_upper(case + ':jump_np1_alt', alt['jump'], 6.0) and ok
+
+    if 'smr_np4' in _RESULTS:
+        for case in _CASES:
+            np1 = _RESULTS[case + '_np1']
+            np4 = _RESULTS[case + '_np4']
+            ok = _check_upper(case + ':q_drift_np4', np4['q_drift'], 3.0e4) and ok
+            ok = _check_upper(case + ':cv_np4', np4['cv'], 1.2) and ok
+            ok = _check_upper(case + ':jump_np4', np4['jump'], 6.0) and ok
+            ok = _check_close(case + ':q_drift_np1_vs_np4', np4['q_drift'],
+                              np1['q_drift'], 1.5e3, 5.0e-2) and ok
+            ok = _check_close(case + ':cv_np1_vs_np4', np4['cv'], np1['cv'],
+                              1.5e-1, 0.0) and ok
+            ok = _check_close(case + ':jump_np1_vs_np4', np4['jump'], np1['jump'],
+                              3.0e-1, 0.0) and ok
+
+    if 'smr_np2' in _RESULTS and 'smr_np4' in _RESULTS:
+        for case in _CASES:
+            np2 = _RESULTS[case + '_np2']
+            np4 = _RESULTS[case + '_np4']
+            ok = _check_close(case + ':q_drift_np2_vs_np4', np4['q_drift'],
+                              np2['q_drift'], 1.5e3, 5.0e-2) and ok
+            ok = _check_close(case + ':cv_np2_vs_np4', np4['cv'], np2['cv'],
+                              1.5e-1, 0.0) and ok
+            ok = _check_close(case + ':jump_np2_vs_np4', np4['jump'], np2['jump'],
+                              3.0e-1, 0.0) and ok
 
     return ok

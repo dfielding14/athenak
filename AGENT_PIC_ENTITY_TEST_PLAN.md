@@ -59,7 +59,10 @@ PIC behavior can be validated without significant MHD back-reaction.
 - Step 17 (`Add Reduced-Size AMR Shock + Load-Balancing Smoke Test`): complete
   at current working tree state with evidence in
   `tst/.codex/pic_entity_suite/step17_amr_shock_lb/STEP17_AMR_SHOCK_LB_REPORT.md`.
-- Step 18 onward: pending.
+- Step 18 (`Add Full MPI Matrix and Decomposition Robustness Gates`): complete
+  at current working tree state with evidence in
+  `tst/.codex/pic_entity_suite/step18_mpi_matrix/STEP18_MPI_MATRIX_REPORT.md`.
+- Step 19 onward: pending.
 
 ## 1. Scope and Goal
 

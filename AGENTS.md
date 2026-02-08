@@ -160,6 +160,13 @@ efficiently on CPUs and GPUs.
     `particles/pic_amr_shock_lb_smoke` using a shock-rich Orszag-Tang proxy
     with explicit AMR growth, field-structure trend checks, non-thermal tail
     proxy growth, and MPI (`np=4`) load-balancing telemetry gates.
+  - Step-18 decomposition/MPI robustness gates now extend key late-stage
+    proxies (`pic_crsi_deltaf_proxy`, `pic_crpai_polarization_proxy`,
+    `pic_expanding_box_anisotropy_proxy`,
+    `pic_refinement_boundary_characterization`,
+    `pic_amr_shock_lb_smoke`) with explicit `np=1/2/4` parity checks, plus
+    alternate-meshblock decomposition checks for refinement-boundary and AMR
+    smoke workflows.
   - Cosmic-ray initialization now supports optional per-species drifts in each
     `speciesN` block (`vx0`, `vy0`, `vz0`) with fallback to
     `<particles>/cr_vx0`, `cr_vy0`, `cr_vz0`.
