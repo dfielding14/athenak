@@ -331,3 +331,46 @@
 - Controlled stress probes (`eta` up to `10x`, `u0=10`) showed only modest change
   at this resolution/time window, indicating the remaining limitation is now mostly
   physics-signal scale (not frame-tracking mechanics).
+
+## Post-Plan Extension: Explicit Seed Noise Control
+
+### Motivation
+- Add a user-facing knob to seed larger initial transverse perturbations and
+  accelerate instability onset studies.
+
+### Implemented controls
+- New `<problem>` parameters in `pic_parallel_shock`:
+  - `ps_seed_noise_amp` (default `0.0`): relative amplitude of seeded transverse
+    magnetic perturbations as a fraction of `B0`.
+  - `ps_seed_noise_seed` (default `1234`): deterministic phase seed.
+
+### Implementation details
+- File:
+  - `src/pgen/tests/pic_parallel_shock.cpp`
+- The initial-state builder now adds deterministic multi-mode perturbations to
+  transverse fields (`By`, `Bz`) as functions of `x` only.
+- This preserves discrete divergence consistency in the 2D benchmark geometry
+  (`Bx` remains uniform, `By/Bz = By/Bz(x)`).
+- Perturbations are included before total-energy initialization, so magnetic
+  energy bookkeeping remains consistent.
+
+### Deck updates
+- Added documented defaults to:
+  - `inputs/tests/pic_parallel_shock_fine_uniform.athinput`
+  - `inputs/tests/pic_parallel_shock_coarse_uniform.athinput`
+  - `inputs/tests/pic_parallel_shock_amr_fiducial.athinput`
+
+### Validation (8 CPUs)
+- Build gate:
+  - `cmake --build /Users/dbf75/Work/Research/AthenaK/athenak-DF/tst/build -j8`
+- Smoke comparisons:
+  - `ps_seed_noise_amp=0.0` vs `0.10` with `nlim=1`.
+  - Output artifact root:
+    - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/seed_noise_validation`
+  - Observed:
+    - seeded run shows higher initial `|B|` variance and broader high-percentile tail.
+- Coupled+recenter compatibility smoke:
+  - `nlim=200`, `np=8`, coupled recenter + `ps_seed_noise_amp=0.10`.
+  - Run artifact:
+    - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/seed_noise_validation/coupled_recenter_noise`
+  - Completed without MPI/runtime errors.

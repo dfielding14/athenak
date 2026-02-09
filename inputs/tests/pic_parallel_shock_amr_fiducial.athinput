@@ -104,6 +104,9 @@ ps_rho_floor_frac             = 1.0e-6
 ps_p_floor_frac               = 1.0e-8
 ps_inject_species             = 0
 ps_inject_seed                = 1234
+# Optional explicit transverse seed noise in initial B (fraction of B0).
+ps_seed_noise_amp             = 0.0
+ps_seed_noise_seed            = 1234
 # Moving-frame controls (guarded to uniform grids by default):
 ps_enable_frame_tracking      = false
 ps_frame_mode                 = velocity

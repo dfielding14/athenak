@@ -16,6 +16,7 @@
 //! - AMR refinement based on density/pressure curvature metrics.
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
@@ -76,6 +77,10 @@ Real ps_xshock0 = 0.0;
 Real ps_inject_half_width_cells = 0.5;
 Real ps_inject_t_start = 0.0;
 Real ps_inject_t_stop = 1.0e99;
+Real ps_seed_noise_amp = 0.0;
+int ps_seed_noise_seed = 1234;
+std::array<Real, 4> ps_seed_noise_phase_by = {{0.0, 0.0, 0.0, 0.0}};
+std::array<Real, 4> ps_seed_noise_phase_bz = {{0.0, 0.0, 0.0, 0.0}};
 Real ps_refine_curv = 1.0;
 Real ps_derefine_curv = 0.1;
 Real ps_rho_floor_frac = 1.0e-6;
@@ -188,6 +193,28 @@ inline Real RecenterDisplacement(const Real t) {
 
 inline Real ShockSurfaceModelX1(const Real t) {
   return ShockSurfaceUnshiftedX1(t) - RecenterDisplacement(t);
+}
+
+inline std::uint64_t SplitMix64(std::uint64_t x) {
+  x += 0x9e3779b97f4a7c15ULL;
+  x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+  x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+  return x ^ (x >> 31);
+}
+
+inline Real UniformFromUint64(std::uint64_t x) {
+  constexpr Real inv = 1.0/static_cast<Real>(std::numeric_limits<std::uint64_t>::max());
+  return static_cast<Real>(x)*inv;
+}
+
+inline void ConfigureSeedNoisePhases() {
+  std::uint64_t state = static_cast<std::uint64_t>(ps_seed_noise_seed);
+  for (int n = 0; n < 4; ++n) {
+    state = SplitMix64(state + 0x9e3779b97f4a7c15ULL);
+    ps_seed_noise_phase_by[n] = 2.0*M_PI*UniformFromUint64(state);
+    state = SplitMix64(state + 0xbf58476d1ce4e5b9ULL);
+    ps_seed_noise_phase_bz[n] = 2.0*M_PI*UniformFromUint64(state);
+  }
 }
 
 inline Real EstimateShockSpeed(const Real gamma, const Real rho0, const Real p0,
@@ -960,6 +987,8 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       "problem", "ps_inject_half_width_cells", 0.5);
   ps_inject_t_start = pin->GetOrAddReal("problem", "ps_inject_t_start", 0.0);
   ps_inject_t_stop = pin->GetOrAddReal("problem", "ps_inject_t_stop", 1.0e99);
+  ps_seed_noise_amp = pin->GetOrAddReal("problem", "ps_seed_noise_amp", 0.0);
+  ps_seed_noise_seed = pin->GetOrAddInteger("problem", "ps_seed_noise_seed", 1234);
   ps_refine_curv = pin->GetOrAddReal("problem", "ps_refine_curv", 1.0);
   ps_derefine_curv = pin->GetOrAddReal("problem", "ps_derefine_curv", 0.1);
   ps_rho_floor_frac = pin->GetOrAddReal("problem", "ps_rho_floor_frac", 1.0e-6);
@@ -999,6 +1028,13 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << std::endl
               << "pic_parallel_shock parameters ps_rho0/ps_p0/ps_u0/ps_b0 must be > 0 "
               << "and ps_eta must be >= 0." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (ps_seed_noise_amp < 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock requires ps_seed_noise_amp >= 0."
+              << std::endl;
     std::exit(EXIT_FAILURE);
   }
   if (ps_frame_t_ramp < 0.0 || ps_frame_vfrac < 0.0 || ps_frame_dv_max < 0.0) {
@@ -1066,6 +1102,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   ps_mass_reservoir_local = 0.0;
   ps_tag_seeded = false;
   ps_next_tag = 0;
+  ConfigureSeedNoisePhases();
 
   if (ps_enable_frame_tracking && ps_frame_require_uniform &&
       (pmy_mesh_->adaptive || pmy_mesh_->multilevel)) {
@@ -1136,6 +1173,19 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   auto &b0 = pmbp->pmhd->b0;
   auto &size = pmbp->pmb->mb_size;
   Real gm1 = gamma - 1.0;
+  const bool add_seed_noise = (ps_seed_noise_amp > 0.0);
+  const Real seed_noise_amp = ps_seed_noise_amp*ps_b0;
+  const Real x1min_global = pmy_mesh_->mesh_size.x1min;
+  const Real lx_global = pmy_mesh_->mesh_size.x1max - pmy_mesh_->mesh_size.x1min;
+  const Real seed_noise_norm = 1.0/1.875;
+  const Real ph_by_1 = ps_seed_noise_phase_by[0];
+  const Real ph_by_2 = ps_seed_noise_phase_by[1];
+  const Real ph_by_3 = ps_seed_noise_phase_by[2];
+  const Real ph_by_4 = ps_seed_noise_phase_by[3];
+  const Real ph_bz_1 = ps_seed_noise_phase_bz[0];
+  const Real ph_bz_2 = ps_seed_noise_phase_bz[1];
+  const Real ph_bz_3 = ps_seed_noise_phase_bz[2];
+  const Real ph_bz_4 = ps_seed_noise_phase_bz[3];
 
   // Set uniform upstream state (flow toward the reflecting wall).
   par_for("pgen_pic_parallel_shock", DevExeSpace(), 0, pmbp->nmb_thispack - 1,
@@ -1146,12 +1196,32 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     u0(m, IM2, k, j, i) = 0.0;
     u0(m, IM3, k, j, i) = 0.0;
 
+    Real dby = 0.0;
+    Real dbz = 0.0;
+    if (add_seed_noise) {
+      const Real x1c = size.d_view(m).x1min +
+          (static_cast<Real>(i - is) + 0.5)*size.d_view(m).dx1;
+      const Real xfrac = (x1c - x1min_global)/lx_global;
+      const Real xphase = 2.0*M_PI*xfrac;
+
+      const Real nby = sin(1.0*xphase + ph_by_1) +
+                       0.5*sin(2.0*xphase + ph_by_2) +
+                       0.25*sin(4.0*xphase + ph_by_3) +
+                       0.125*sin(8.0*xphase + ph_by_4);
+      const Real nbz = sin(1.0*xphase + ph_bz_1) +
+                       0.5*sin(2.0*xphase + ph_bz_2) +
+                       0.25*sin(4.0*xphase + ph_bz_3) +
+                       0.125*sin(8.0*xphase + ph_bz_4);
+      dby = seed_noise_amp*seed_noise_norm*nby;
+      dbz = seed_noise_amp*seed_noise_norm*nbz;
+    }
+
     b0.x1f(m, k, j, i) = ps_b0;
-    b0.x2f(m, k, j, i) = 0.0;
-    b0.x3f(m, k, j, i) = 0.0;
+    b0.x2f(m, k, j, i) = dby;
+    b0.x3f(m, k, j, i) = dbz;
     if (i == ie) b0.x1f(m, k, j, i + 1) = ps_b0;
-    if (j == je) b0.x2f(m, k, j + 1, i) = 0.0;
-    if (k == ke) b0.x3f(m, k + 1, j, i) = 0.0;
+    if (j == je) b0.x2f(m, k, j + 1, i) = dby;
+    if (k == ke) b0.x3f(m, k + 1, j, i) = dbz;
   });
 
   par_for("pgen_pic_parallel_shock_e", DevExeSpace(), 0, pmbp->nmb_thispack - 1,
