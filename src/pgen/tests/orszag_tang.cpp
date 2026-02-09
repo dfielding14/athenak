@@ -50,10 +50,18 @@ void ProblemGenerator::OrszagTang(ParameterInput *pin, const bool restart) {
     exit(EXIT_FAILURE);
   }
 
-  Real B0 = 1.0/std::sqrt(4.0*M_PI);
-  Real d0 = 25.0/(36.0*M_PI);
-  Real v0 = 1.0;
-  Real p0 = 5.0/(12.0*M_PI);
+  Real B0 = pin->GetOrAddReal("problem", "ot_B0", 1.0/std::sqrt(4.0*M_PI));
+  Real d0 = pin->GetOrAddReal("problem", "ot_d0", 25.0/(36.0*M_PI));
+  Real p0 = pin->GetOrAddReal("problem", "ot_p0", 5.0/(12.0*M_PI));
+  Real v0 = pin->GetOrAddReal("problem", "ot_v0", 1.0);
+  Real mach = pin->GetOrAddReal("problem", "ot_mach", -1.0);
+  if (B0 <= 0.0 || d0 <= 0.0 || p0 <= 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Orszag-Tang parameters ot_B0, ot_d0, and ot_p0 must be > 0"
+              << std::endl;
+    exit(EXIT_FAILURE);
+  }
 
   // capture variables for kernel
   auto &indcs = pmy_mesh_->mb_indcs;
@@ -62,6 +70,10 @@ void ProblemGenerator::OrszagTang(ParameterInput *pin, const bool restart) {
   int &ks = indcs.ks; int &ke = indcs.ke;
 
   EOS_Data &eos = pmbp->pmhd->peos->eos_data;
+  if (mach > 0.0) {
+    Real cs0 = std::sqrt(eos.gamma*p0/d0);
+    v0 = mach*cs0;
+  }
   Real gm1 = eos.gamma - 1.0;
   auto &u0 = pmbp->pmhd->u0;
   auto &b0 = pmbp->pmhd->b0;

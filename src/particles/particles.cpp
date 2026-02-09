@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <fstream>
 #include <vector>
+#include <cstdlib>
 #include <Kokkos_Random.hpp>
 #include "athena.hpp"
 #include "globals.hpp"
@@ -71,24 +72,29 @@ const char *BoundaryFlagName(BoundaryFlag flag) {
 
 bool MomentBoundaryFlagSupported(BoundaryFlag flag) {
   return ((flag == BoundaryFlag::periodic) ||
+          (flag == BoundaryFlag::inflow) ||
           (flag == BoundaryFlag::outflow) ||
           (flag == BoundaryFlag::reflect));
 }
 
 void ValidateMomentBoundaryPolicy(Mesh *pmesh) {
-  const std::array<BoundaryFace, 6> faces = {
+  std::array<BoundaryFace, 6> faces = {
       BoundaryFace::inner_x1, BoundaryFace::outer_x1,
       BoundaryFace::inner_x2, BoundaryFace::outer_x2,
       BoundaryFace::inner_x3, BoundaryFace::outer_x3};
+  int nfaces = 2;
+  if (pmesh->multi_d) nfaces += 2;
+  if (pmesh->three_d) nfaces += 2;
 
-  for (const auto face : faces) {
+  for (int n = 0; n < nfaces; ++n) {
+    const auto face = faces[n];
     BoundaryFlag flag = pmesh->mesh_bcs[face];
     if (!MomentBoundaryFlagSupported(flag)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "<particles>/deposit_moments=true does not support "
                 << BoundaryFaceName(face) << "=" << BoundaryFlagName(flag)
-                << " in PR3c (supported: periodic/outflow/reflect)"
+                << " in PR3c (supported: periodic/inflow/outflow/reflect)"
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -641,6 +647,14 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
     pbval_mom = new MeshBoundaryValuesCC(ppack, pin, false, CCCommMode::synchronize);
     pbval_mom->InitializeBuffers(NMOM);
+    if (!(pmy_pack->pmesh->strictly_periodic) &&
+        (std::getenv("ATHENA_SKIP_MOM_INFLOW_ZERO") == nullptr)) {
+      // Use zero-valued inflow moments unless a problem callback overwrites them.
+      // This keeps coupled inflow boundaries well-defined.
+      Kokkos::deep_copy(pbval_mom->u_in.d_view, static_cast<Real>(0.0));
+      pbval_mom->u_in.template modify<DevExeSpace>();
+      pbval_mom->u_in.template sync<HostMemSpace>();
+    }
 
     if (couple_moments_to_mhd &&
         (couple_j_to_efield_representation ==

@@ -246,6 +246,7 @@ particles::ParticlesBoundaryValues::ParticlesBoundaryValues(
 
   // create unique communicator for particles
   MPI_Comm_dup(MPI_COMM_WORLD, &mpi_comm_part);
+  MPI_Comm_set_errhandler(mpi_comm_part, MPI_ERRORS_RETURN);
 #endif
 }
 

@@ -1,0 +1,177 @@
+# AthenaXXX input file for publication-HPC AMR shock-rich O-T + coupled PIC
+
+<comment>
+problem   = publication hpc profile (long-duration/high-dynamic-range, cluster-GPU)
+
+<job>
+basename  = pic_amr_shock_pub_hpc
+
+<mesh>
+nghost    = 2
+nx1       = 384
+x1min     = -0.5
+x1max     = 0.5
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 384
+x2min     = -0.5
+x2max     = 0.5
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 96
+x3min     = -0.5
+x3max     = 0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 16
+nx2       = 16
+nx3       = 8
+
+<mesh_refinement>
+refinement           = adaptive
+num_levels           = 4
+ddens_max            = 0.03
+ncycle_check         = 4
+refinement_interval  = 2
+max_nmb_per_rank     = 8192
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 4000
+tlim       = 10.0
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.666666667
+
+<particles>
+particle_type                 = cosmic_ray
+ppc                           = 16.0
+pusher                        = boris_tsc
+nspecies                      = 1
+cr_distribution               = random
+deposit_moments               = true
+deposit_order                 = 1
+deposit_qscale                = 1.0
+couple_moments_to_mhd         = true
+couple_j_to_efield_representation = cell_centered
+couple_moments_momentum_to_mhd = false
+couple_moments_energy_to_mhd  = false
+cr_vx0                        = 0.6
+cr_vy0                        = 0.0
+cr_vz0                        = 0.0
+pic_background_mode           = coupled
+pic_feedback_mode             = coupled
+pic_sort_interval             = 4
+pic_intermediate_arrays       = auto
+
+<species0>
+mass   = 1.0
+charge = 1.0
+
+<problem>
+pgen_name    = orszag_tang
+ot_mach      = 1.20
+
+<output1>
+file_type   = bin
+variable    = mhd_w_d
+id          = rho
+dcycle      = 80
+ghost_zones = false
+
+<output2>
+file_type   = bin
+variable    = mhd_bmag
+id          = bmag
+dcycle      = 80
+ghost_zones = false
+
+<output3>
+file_type   = bin
+variable    = mhd_j2
+id          = j2
+dcycle      = 80
+ghost_zones = false
+
+<output4>
+file_type   = bin
+variable    = prtcl_rho
+id          = prtcl_rho
+dcycle      = 80
+ghost_zones = false
+
+<output5>
+file_type   = bin
+variable    = prtcl_jx
+id          = prtcl_jx
+dcycle      = 80
+ghost_zones = false
+
+<output6>
+file_type   = bin
+variable    = prtcl_jy
+id          = prtcl_jy
+dcycle      = 80
+ghost_zones = false
+
+<output7>
+file_type   = bin
+variable    = prtcl_jz
+id          = prtcl_jz
+dcycle      = 80
+ghost_zones = false
+
+<output8>
+file_type   = bin
+variable    = prtcl_dedt
+id          = prtcl_dedt
+dcycle      = 80
+ghost_zones = false
+
+<output9>
+file_type   = bin
+variable    = prtcl_dpxdt
+id          = prtcl_dpxdt
+dcycle      = 80
+ghost_zones = false
+
+<output10>
+file_type   = bin
+variable    = prtcl_dpydt
+id          = prtcl_dpydt
+dcycle      = 80
+ghost_zones = false
+
+<output11>
+file_type   = bin
+variable    = prtcl_dpzdt
+id          = prtcl_dpzdt
+dcycle      = 80
+ghost_zones = false
+
+<output12>
+file_type   = bin
+variable    = prtcl_ebdot
+id          = prtcl_ebdot
+dcycle      = 80
+ghost_zones = false
+
+<output13>
+file_type   = pvtk
+variable    = prtcl_all
+id          = prtcl_all
+dcycle      = 160
+
+<output14>
+file_type   = rst
+dcycle      = 400

@@ -212,6 +212,7 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
   const Real qscale = deposit_qscale;
   auto mspecies = species_mass;
   const int nspecies_local = nspecies;
+  const int nmb_local = pmy_pack->nmb_thispack;
   const Real inv_dt = (dt > 0.0) ? (1.0/dt) : 0.0;
   const bool expanding_box_local =
       (pic_expanding_box_mode == PICExpandingBoxMode::on);
@@ -225,6 +226,7 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
       KOKKOS_LAMBDA(const int p) {
         // Get particle properties
         int m = pi(PGID, p) - gids;
+        if (m < 0 || m >= nmb_local) return;
         Real x = pr(IPX, p);
         Real y = pr(IPY, p);
         Real z = (indcs.nx3 > 1) ? pr(IPZ, p) : 0.0;

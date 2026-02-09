@@ -26,6 +26,24 @@
 #include "particles/particles.hpp"
 #include "outputs.hpp"
 
+namespace {
+
+std::string ParticleIntFieldName(const particles::Particles *pp, const int n) {
+  if (n == static_cast<int>(PGID)) return "gid";
+  if (n == static_cast<int>(PTAG)) return "ptag";
+  if (pp->particle_type == ParticleType::cosmic_ray &&
+      n == static_cast<int>(PSP)) {
+    return "species";
+  }
+  if (pp->particle_type == ParticleType::star &&
+      n == static_cast<int>(NSN)) {
+    return "sn_id";
+  }
+  return "idata_" + std::to_string(n);
+}
+
+}  // namespace
+
 //----------------------------------------------------------------------------------------
 // ctor: also calls BaseTypeOutput base class constructor
 // Checks compatibility options for VTK outputs
@@ -183,9 +201,10 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
   // Write Part 6: scalar particle data
   bool have_written_pointdata_header = false;
+  auto *pp = pm->pmb_pack->ppart;
 
-  // Write gid of points
-  for (int n=0; n<(pm->pmb_pack->ppart->nidata); ++n) {
+  // Write integer particle attributes
+  for (int n=0; n<(pp->nidata); ++n) {
     std::stringstream msg;
 
     if (!have_written_pointdata_header) {
@@ -193,13 +212,9 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       msg << std::endl << std::endl << "POINT_DATA " << npout_total << std::endl;
     }
 
-    if (n == static_cast<int>(PGID)) {
-      msg << std::endl << "SCALARS gid float" << std::endl
-          << "LOOKUP_TABLE default" << std::endl;
-    } else if (n == static_cast<int>(PTAG)) {
-      msg << std::endl << "SCALARS ptag float" << std::endl
-          << "LOOKUP_TABLE default" << std::endl;
-    }
+    msg << std::endl << "SCALARS " << ParticleIntFieldName(pp, n)
+        << " float" << std::endl
+        << "LOOKUP_TABLE default" << std::endl;
 
     if (global_variable::my_rank == 0) {
       partfile.Write_any_type_at(msg.str().c_str(),msg.str().size(),header_offset,"byte");
@@ -242,9 +257,48 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     header_offset += pm->nprtcl_total*datasize;
   }
 
-  // Add output of vectors here with header:
-  // VECTORS vectors float
-  // [then binary vx,vy,vz data .... ]
+  // Write particle velocity vectors
+  {
+    std::stringstream msg;
+    msg << std::endl << "VECTORS vel float" << std::endl;
+    if (global_variable::my_rank == 0) {
+      partfile.Write_any_type_at(msg.str().c_str(), msg.str().size(),
+                                 header_offset, "byte");
+    }
+    header_offset += msg.str().size();
+
+    for (int p=0; p<npout_thisrank; ++p) {
+      data[3*p] = static_cast<float>(outpart_rdata(IPVX,p));
+      data[(3*p)+1] = static_cast<float>((pm->multi_d) ? outpart_rdata(IPVY,p) : 0.0);
+      data[(3*p)+2] = static_cast<float>((pm->three_d) ? outpart_rdata(IPVZ,p) : 0.0);
+    }
+    if (!big_end) {
+      for (int i=0; i<(3*npout_thisrank); ++i) { Swap4Bytes(&data[i]); }
+    }
+
+    std::size_t datasize = sizeof(float);
+    std::size_t myoffset = header_offset +
+      3*rank_offset[global_variable::my_rank]*datasize;
+    if (partfile.Write_any_type_at_all(&(data[0]),3*npout_min,myoffset,"float")
+          != 3*npout_min) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "particle data not written correctly to vtk particle file, "
+          << "vtk file is broken." << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    myoffset += datasize*3*npout_min;
+    int nremain = pm->nprtcl_thisrank - npout_min;
+    if (nremain > 0) {
+      if (partfile.Write_any_type_at(&(data[3*npout_min]),3*nremain,myoffset,"float")
+            != 3*nremain) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << "particle data not written correctly to vtk particle file, "
+            << "vtk file is broken." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
+    header_offset += 3*pm->nprtcl_total*datasize;
+  }
 
   // close the output file and clean up
   partfile.Close();

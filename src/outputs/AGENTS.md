@@ -102,6 +102,18 @@ Rank-specific subdirectories are created when `single_file_per_rank` is enabled.
 
 ---
 
+## Particle VTK Content Notes
+- `pvtk` outputs include:
+  - `POINTS` coordinates for all particles,
+  - integer scalar attributes with explicit names (`gid`, `ptag`, plus
+    `species` for CR particles or `sn_id` for star particles; fallback names
+    use `idata_<n>`),
+  - velocity vectors (`VECTORS vel`).
+- This is the preferred path for publication-style particle phase-space
+  diagnostics without parsing restart files.
+
+---
+
 ## Cautions
 - `FormattedTableOutput` enforces 1D slices (fails on 2D/3D without slice planes).
 - Derived variables in `derived_variables.cpp` operate on active zones only.

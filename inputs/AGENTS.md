@@ -178,11 +178,38 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - Reduced-size shock-rich Orszag-Tang AMR smoke deck used with runtime
     overrides for accelerated AMR triggering and MPI load-balance telemetry
     characterization in the PR5 entity-mirroring ladder.
+- `inputs/tests/pic_amr_shock_lb_publication_local.athinput`
+  - Publication-oriented local/GPU shock deck with richer field outputs
+    (`rho`, `|B|`, `J^2`, particle moments) and `pvtk` particle dumps for
+    phase-space and spectrum diagnostics.
+- `inputs/tests/pic_amr_shock_lb_publication_hpc.athinput`
+  - Heavy production shock deck intended for cluster campaigns; keeps the same
+    diagnostics schema as the local publication deck but at larger scale.
+- `inputs/tests/pic_parallel_shock_coarse_uniform.athinput`
+  - Section 5.4-aligned parallel-shock benchmark baseline at coarse uniform
+    resolution (8-rank laptop gate deck).
+- `inputs/tests/pic_parallel_shock_fine_uniform.athinput`
+  - Higher-resolution uniform reference paired with coarse and AMR runs for
+    trend comparison.
+- `inputs/tests/pic_parallel_shock_amr_fiducial.athinput`
+  - Curvature-AMR fiducial parallel-shock benchmark using user refinement
+    criteria from `pic_parallel_shock` (`g_rho`, `g_P` thresholds).
 - `inputs/tests/pic_restart_safety_guards.athinput`
   - Restart/safety coverage deck used by
     `particles/pic_restart_safety_guards` for restart A/B equivalence across
     `no_mhd`, `passive_mhd`, and `coupled_edge_direct` runtime modes, plus
     deterministic unsupported-combination guard checks.
+
+### Orszag-Tang Problem Controls Used by Shock Campaigns
+- Built-in `pgen_name=orszag_tang` now accepts optional `<problem>` knobs:
+  - `ot_mach` (if > 0, sets velocity amplitude from `Mach * sqrt(gamma*p0/d0)`)
+  - `ot_v0` (direct velocity amplitude, used when `ot_mach <= 0`)
+  - `ot_p0`, `ot_d0`, `ot_B0` (pressure, density, and magnetic-scale controls)
+- Defaults preserve historical Orszag-Tang initialization when these knobs are
+  omitted.
+- Orszag-Tang publication/smoke decks remain pipeline checks; parallel-shock
+  benchmark decks above are the physics-benchmark path and should be evaluated
+  separately.
 
 ---
 

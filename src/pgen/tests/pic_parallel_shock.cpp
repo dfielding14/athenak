@@ -1,0 +1,694 @@
+//========================================================================================
+// AthenaXXX astrophysical plasma code
+// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
+// Licensed under the 3-clause BSD License (the "LICENSE")
+//========================================================================================
+//! \file pic_parallel_shock.cpp
+//! \brief Parallel-shock MHD-PIC benchmark problem generator.
+//!
+//! Minimal AthenaK adaptation of the Section 5.4 parallel-shock setup in:
+//!   Sun & Bai (2022), "The MHD-PIC Module in Athena++"
+//! using:
+//! - reflecting wall at inner x1
+//! - inflow at outer x1
+//! - background field B0 parallel to x
+//! - eta-based shock-surface CR injection with conservative gas subtraction
+//! - AMR refinement based on density/pressure curvature metrics.
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <iostream>
+#include <limits>
+#include <map>
+#include <random>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <vector>
+
+#include "athena.hpp"
+#include "globals.hpp"
+#include "parameter_input.hpp"
+#include "mesh/mesh.hpp"
+#include "eos/eos.hpp"
+#include "mhd/mhd.hpp"
+#include "particles/particles.hpp"
+#include "pgen/pgen.hpp"
+
+namespace {
+
+struct ShockCell {
+  int m, k, j, i;
+  int gid;
+  Real x1c, x2c, x3c;
+  Real dx1, dx2, dx3;
+  Real area;
+  Real vol;
+};
+
+struct InjectedParticle {
+  int gid;
+  int m, k, j, i;
+  Real vol;
+  Real x1, x2, x3;
+  Real vx, vy, vz;
+};
+
+struct GasDelta {
+  int m, k, j, i;
+  Real dm;
+  Real dmx;
+  Real dmy;
+  Real dmz;
+  Real de;
+};
+
+// Runtime controls populated by ProblemGenerator::PICParallelShock().
+Real ps_rho0 = 1.0;
+Real ps_p0 = 1.0;
+Real ps_u0 = 10.0;
+Real ps_b0 = 1.0;
+Real ps_eta = 1.0e-3;
+Real ps_vinj_over_u0 = std::sqrt(10.0);
+Real ps_shock_speed = 0.0;
+Real ps_xshock0 = 0.0;
+Real ps_inject_half_width_cells = 0.5;
+Real ps_inject_t_start = 0.0;
+Real ps_inject_t_stop = 1.0e99;
+Real ps_refine_curv = 1.0;
+Real ps_derefine_curv = 0.1;
+Real ps_rho_floor_frac = 1.0e-6;
+Real ps_p_floor_frac = 1.0e-8;
+bool ps_enable_injection = true;
+bool ps_enable_subtraction = true;
+bool ps_enable_curvature_amr = true;
+int ps_inject_species = 0;
+int ps_inject_seed = 1234;
+Real ps_particle_mass = 1.0;
+Real ps_particle_charge = 1.0;
+Real ps_particle_q_over_m = 1.0;
+Real ps_particle_macro_mass = 1.0;
+Real ps_mass_reservoir_local = 0.0;
+bool ps_tag_seeded = false;
+std::int64_t ps_next_tag = 0;
+
+inline Real Uniform01(std::mt19937_64 &rng) {
+  static std::uniform_real_distribution<Real> uni(0.0, 1.0);
+  return uni(rng);
+}
+
+inline Real ClampInsideDomain(const Real x, const Real xmin, const Real xmax) {
+  const Real span = xmax - xmin;
+  const Real eps = std::max(static_cast<Real>(1.0e-12)*span,
+                            static_cast<Real>(1.0e-14));
+  return std::min(std::max(x, xmin + eps), xmax - eps);
+}
+
+void SeedNextTag(particles::Particles *ppart) {
+  if (ps_tag_seeded) return;
+
+  int local_max = -1;
+  int npart = ppart->nprtcl_thispack;
+  if (npart > 0) {
+    auto h_pi = Kokkos::create_mirror_view_and_copy(HostMemSpace(), ppart->prtcl_idata);
+    for (int p = 0; p < npart; ++p) {
+      local_max = std::max(local_max, h_pi(PTAG, p));
+    }
+  }
+
+#if MPI_PARALLEL_ENABLED
+  int global_max = -1;
+  MPI_Allreduce(&local_max, &global_max, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+#else
+  int global_max = local_max;
+#endif
+
+  const std::int64_t start = static_cast<std::int64_t>(global_max) + 1;
+  const std::int64_t nranks = static_cast<std::int64_t>(global_variable::nranks);
+  std::int64_t rem = start % nranks;
+  if (rem < 0) rem += nranks;
+  std::int64_t shift = static_cast<std::int64_t>(global_variable::my_rank) - rem;
+  if (shift < 0) shift += nranks;
+  ps_next_tag = start + shift;
+  ps_tag_seeded = true;
+}
+
+void ParallelShockSource(Mesh *pm, const Real bdt) {
+  if (!ps_enable_injection) return;
+  if (bdt <= 0.0) return;
+  if (pm->time < ps_inject_t_start || pm->time > ps_inject_t_stop) return;
+
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp == nullptr || pmbp->pmhd == nullptr || pmbp->ppart == nullptr) return;
+
+  auto *pmhd = pmbp->pmhd;
+  auto *ppart = pmbp->ppart;
+  SeedNextTag(ppart);
+  auto &indcs = pm->mb_indcs;
+  const int is = indcs.is;
+  const int ie = indcs.ie;
+  const int js = indcs.js;
+  const int je = indcs.je;
+  const int ks = indcs.ks;
+  const int ke = indcs.ke;
+  const bool three_d = pm->three_d;
+
+  auto &mb_size = pmbp->pmb->mb_size;
+  auto &mb_gid = pmbp->pmb->mb_gid;
+  mb_size.template sync<HostMemSpace>();
+  mb_gid.template sync<HostMemSpace>();
+
+  const Real xshock = ps_xshock0 + ps_shock_speed*pm->time;
+  std::vector<ShockCell> cells;
+  cells.reserve(static_cast<std::size_t>(pmbp->nmb_thispack)*indcs.nx2*indcs.nx3);
+
+  Real area_total = 0.0;
+  for (int m = 0; m < pmbp->nmb_thispack; ++m) {
+    const Real x1min = mb_size.h_view(m).x1min;
+    const Real x2min = mb_size.h_view(m).x2min;
+    const Real x3min = mb_size.h_view(m).x3min;
+    const Real dx1 = mb_size.h_view(m).dx1;
+    const Real dx2 = mb_size.h_view(m).dx2;
+    const Real dx3 = mb_size.h_view(m).dx3;
+    const Real half_width = ps_inject_half_width_cells*dx1;
+
+    for (int k = ks; k <= ke; ++k) {
+      Real x3c = x3min + (static_cast<Real>(k - ks) + 0.5)*dx3;
+      if (!three_d) x3c = 0.0;
+      for (int j = js; j <= je; ++j) {
+        const Real x2c = x2min + (static_cast<Real>(j - js) + 0.5)*dx2;
+        for (int i = is; i <= ie; ++i) {
+          const Real x1c = x1min + (static_cast<Real>(i - is) + 0.5)*dx1;
+          if (std::abs(x1c - xshock) > half_width) continue;
+
+          ShockCell cell;
+          cell.m = m;
+          cell.k = k;
+          cell.j = j;
+          cell.i = i;
+          cell.gid = mb_gid.h_view(m);
+          cell.x1c = x1c;
+          cell.x2c = x2c;
+          cell.x3c = x3c;
+          cell.dx1 = dx1;
+          cell.dx2 = dx2;
+          cell.dx3 = dx3;
+          cell.area = dx2*dx3;
+          cell.vol = dx1*dx2*dx3;
+          area_total += cell.area;
+          cells.push_back(cell);
+        }
+      }
+    }
+  }
+
+  int ninj = 0;
+  if (!cells.empty() && area_total > 0.0) {
+    const Real swept_mass = ps_eta*ps_rho0*ps_shock_speed*bdt*area_total;
+    const Real mass_budget = ps_mass_reservoir_local + swept_mass;
+    if (mass_budget > 0.0) {
+      ninj = static_cast<int>(std::floor(mass_budget/ps_particle_macro_mass));
+      ps_mass_reservoir_local = mass_budget -
+          static_cast<Real>(ninj)*ps_particle_macro_mass;
+    }
+  }
+
+  int ninj_global = ninj;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(&ninj, &ninj_global, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+#endif
+  if (ninj_global <= 0) return;
+
+  if (ninj <= 0) {
+    pm->CountParticles();
+    return;
+  }
+
+  std::vector<Real> area_prefix(cells.size(), 0.0);
+  Real running = 0.0;
+  for (std::size_t n = 0; n < cells.size(); ++n) {
+    running += cells[n].area;
+    area_prefix[n] = running;
+  }
+
+  std::map<std::tuple<int, int, int, int>, GasDelta> gas_deltas;
+  std::vector<InjectedParticle> injected;
+  injected.reserve(static_cast<std::size_t>(ninj));
+
+  const std::uint64_t seed =
+      static_cast<std::uint64_t>(ps_inject_seed) ^
+      (static_cast<std::uint64_t>(global_variable::my_rank + 1) * 1315423911ull) ^
+      (static_cast<std::uint64_t>(pm->ncycle + 1) * 2654435761ull);
+  std::mt19937_64 rng(seed);
+
+  const Real vinj = ps_vinj_over_u0*ps_u0;
+  const auto &mesh_size = pm->mesh_size;
+  const Real x1min = mesh_size.x1min;
+  const Real x1max = mesh_size.x1max;
+  const Real x2min = mesh_size.x2min;
+  const Real x2max = mesh_size.x2max;
+  const Real x3min = mesh_size.x3min;
+  const Real x3max = mesh_size.x3max;
+  for (int n = 0; n < ninj; ++n) {
+    const Real draw = Uniform01(rng)*running;
+    auto it = std::lower_bound(area_prefix.begin(), area_prefix.end(), draw);
+    std::size_t idx = static_cast<std::size_t>(std::distance(area_prefix.begin(), it));
+    if (idx >= cells.size()) idx = cells.size() - 1;
+    const ShockCell &cell = cells[idx];
+
+    Real dirx = 0.0;
+    Real diry = 0.0;
+    Real dirz = 0.0;
+    if (three_d) {
+      // Half-space isotropy toward +x keeps injected particles away from the
+      // reflecting wall in this minimal benchmark implementation.
+      const Real mu = Uniform01(rng);
+      const Real phi = 2.0*M_PI*Uniform01(rng);
+      const Real st = std::sqrt(std::max(static_cast<Real>(0.0), 1.0 - mu*mu));
+      dirx = mu;
+      diry = st*std::cos(phi);
+      dirz = st*std::sin(phi);
+    } else {
+      const Real phi = M_PI*(Uniform01(rng) - 0.5);
+      dirx = std::cos(phi);
+      diry = std::sin(phi);
+      dirz = 0.0;
+    }
+
+    InjectedParticle part;
+    part.gid = cell.gid;
+    part.m = cell.m;
+    part.k = cell.k;
+    part.j = cell.j;
+    part.i = cell.i;
+    part.vol = cell.vol;
+    part.x1 = cell.x1c + (Uniform01(rng) - 0.5)*cell.dx1;
+    part.x2 = cell.x2c + (Uniform01(rng) - 0.5)*cell.dx2;
+    part.x3 = three_d ? (cell.x3c + (Uniform01(rng) - 0.5)*cell.dx3) : 0.0;
+    part.x1 = ClampInsideDomain(part.x1, x1min, x1max);
+    part.x2 = ClampInsideDomain(part.x2, x2min, x2max);
+    if (three_d) part.x3 = ClampInsideDomain(part.x3, x3min, x3max);
+    part.vx = ps_shock_speed + vinj*dirx;
+    part.vy = vinj*diry;
+    part.vz = vinj*dirz;
+    injected.push_back(part);
+
+    if (!ps_enable_subtraction) continue;
+    const auto key = std::make_tuple(cell.m, cell.k, cell.j, cell.i);
+    auto dit = gas_deltas.find(key);
+    if (dit == gas_deltas.end()) {
+      GasDelta delta;
+      delta.m = cell.m;
+      delta.k = cell.k;
+      delta.j = cell.j;
+      delta.i = cell.i;
+      delta.dm = 0.0;
+      delta.dmx = 0.0;
+      delta.dmy = 0.0;
+      delta.dmz = 0.0;
+      delta.de = 0.0;
+      dit = gas_deltas.emplace(key, delta).first;
+    }
+    const Real inv_vol = 1.0/part.vol;
+    const Real mass_rho = ps_particle_macro_mass*inv_vol;
+    dit->second.dm += mass_rho;
+    dit->second.dmx += mass_rho*part.vx;
+    dit->second.dmy += mass_rho*part.vy;
+    dit->second.dmz += mass_rho*part.vz;
+    dit->second.de += 0.5*mass_rho*(SQR(part.vx) + SQR(part.vy) + SQR(part.vz));
+  }
+
+  const std::int64_t nranks_ll = static_cast<std::int64_t>(global_variable::nranks);
+  const std::int64_t nreq = nranks_ll*static_cast<std::int64_t>(injected.size() + 1);
+  if (ps_next_tag >
+      static_cast<std::int64_t>(std::numeric_limits<int>::max()) - nreq) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Particle tag range exhausted during pic_parallel_shock injection."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  const int old_npart = ppart->nprtcl_thispack;
+  const int ninject = static_cast<int>(injected.size());
+  const int new_npart = old_npart + ninject;
+  if (ninject <= 0) return;
+
+  HostArray2D<int> h_pi_new("ps_pi_new", ppart->nidata, ninject);
+  HostArray2D<Real> h_pr_new("ps_pr_new", ppart->nrdata, ninject);
+  for (int n = 0; n < ninject; ++n) {
+    for (int q = 0; q < ppart->nidata; ++q) h_pi_new(q, n) = 0;
+    for (int q = 0; q < ppart->nrdata; ++q) h_pr_new(q, n) = 0.0;
+  }
+
+  for (int n = 0; n < ninject; ++n) {
+    h_pi_new(PGID, n) = injected[n].gid;
+    h_pi_new(PSP, n) = ps_inject_species;
+    h_pi_new(PTAG, n) = static_cast<int>(ps_next_tag);
+    ps_next_tag += nranks_ll;
+
+    h_pr_new(IPX, n) = injected[n].x1;
+    h_pr_new(IPY, n) = injected[n].x2;
+    h_pr_new(IPZ, n) = injected[n].x3;
+    h_pr_new(IPVX, n) = injected[n].vx;
+    h_pr_new(IPVY, n) = injected[n].vy;
+    h_pr_new(IPVZ, n) = injected[n].vz;
+    h_pr_new(IPM, n) = ps_particle_q_over_m;
+  }
+
+  Kokkos::resize(ppart->prtcl_idata, ppart->nidata, new_npart);
+  Kokkos::resize(ppart->prtcl_rdata, ppart->nrdata, new_npart);
+  auto idata_new = Kokkos::subview(ppart->prtcl_idata, Kokkos::ALL,
+                                   std::make_pair(old_npart, new_npart));
+  auto rdata_new = Kokkos::subview(ppart->prtcl_rdata, Kokkos::ALL,
+                                   std::make_pair(old_npart, new_npart));
+  Kokkos::deep_copy(idata_new, h_pi_new);
+  Kokkos::deep_copy(rdata_new, h_pr_new);
+  ppart->nprtcl_thispack = new_npart;
+  pm->CountParticles();
+
+  if (!ps_enable_subtraction || gas_deltas.empty()) return;
+
+  const int nsub = static_cast<int>(gas_deltas.size());
+  HostArray1D<int> h_m("ps_m", nsub);
+  HostArray1D<int> h_k("ps_k", nsub);
+  HostArray1D<int> h_j("ps_j", nsub);
+  HostArray1D<int> h_i("ps_i", nsub);
+  HostArray1D<Real> h_dm("ps_dm", nsub);
+  HostArray1D<Real> h_dmx("ps_dmx", nsub);
+  HostArray1D<Real> h_dmy("ps_dmy", nsub);
+  HostArray1D<Real> h_dmz("ps_dmz", nsub);
+  HostArray1D<Real> h_de("ps_de", nsub);
+  int idx_sub = 0;
+  for (const auto &kv : gas_deltas) {
+    const GasDelta &d = kv.second;
+    h_m(idx_sub) = d.m;
+    h_k(idx_sub) = d.k;
+    h_j(idx_sub) = d.j;
+    h_i(idx_sub) = d.i;
+    h_dm(idx_sub) = d.dm;
+    h_dmx(idx_sub) = d.dmx;
+    h_dmy(idx_sub) = d.dmy;
+    h_dmz(idx_sub) = d.dmz;
+    h_de(idx_sub) = d.de;
+    ++idx_sub;
+  }
+
+  auto d_m = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_m);
+  auto d_k = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_k);
+  auto d_j = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_j);
+  auto d_i = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_i);
+  auto d_dm = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dm);
+  auto d_dmx = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dmx);
+  auto d_dmy = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dmy);
+  auto d_dmz = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_dmz);
+  auto d_de = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_de);
+
+  auto &u0 = pmhd->u0;
+  auto &b0 = pmhd->b0;
+  const Real rho_floor = ps_rho_floor_frac*ps_rho0;
+  const Real p_floor = ps_p_floor_frac*ps_p0;
+  const Real gm1 = pmhd->peos->eos_data.gamma - 1.0;
+  par_for("ps_gas_subtract", DevExeSpace(), 0, nsub - 1,
+  KOKKOS_LAMBDA(const int n) {
+    const int m = d_m(n);
+    const int k = d_k(n);
+    const int j = d_j(n);
+    const int i = d_i(n);
+    const Real dm = d_dm(n);
+    if (dm <= 0.0) return;
+
+    const Real rho_old = u0(m, IDN, k, j, i);
+    Real dm_eff = dm;
+    if (rho_old - dm_eff < rho_floor) {
+      dm_eff = fmax(rho_old - rho_floor, static_cast<Real>(0.0));
+    }
+    if (dm_eff <= 0.0) return;
+
+    const Real frac = dm_eff/dm;
+    u0(m, IDN, k, j, i) = rho_old - dm_eff;
+    u0(m, IM1, k, j, i) -= frac*d_dmx(n);
+    u0(m, IM2, k, j, i) -= frac*d_dmy(n);
+    u0(m, IM3, k, j, i) -= frac*d_dmz(n);
+    u0(m, IEN, k, j, i) -= frac*d_de(n);
+
+    Real bx = 0.5*(b0.x1f(m, k, j, i) + b0.x1f(m, k, j, i + 1));
+    Real by = 0.5*(b0.x2f(m, k, j, i) + b0.x2f(m, k, j + 1, i));
+    Real bz = 0.5*(b0.x3f(m, k, j, i) + b0.x3f(m, k + 1, j, i));
+    Real emag = 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+    Real kin = 0.5*(SQR(u0(m, IM1, k, j, i)) +
+                    SQR(u0(m, IM2, k, j, i)) +
+                    SQR(u0(m, IM3, k, j, i)))/fmax(u0(m, IDN, k, j, i), rho_floor);
+    Real efloor = p_floor/gm1 + kin + emag;
+    if (u0(m, IEN, k, j, i) < efloor) {
+      u0(m, IEN, k, j, i) = efloor;
+    }
+  });
+}
+
+void ParallelShockRefinement(MeshBlockPack *pmbp) {
+  if (!ps_enable_curvature_amr) return;
+  if (pmbp == nullptr || pmbp->pmhd == nullptr) return;
+  if (!pmbp->pmesh->multilevel) return;
+  if (!pmbp->pmesh->multi_d) return;
+
+  auto &indcs = pmbp->pmesh->mb_indcs;
+  const int is = indcs.is;
+  const int ie = indcs.ie;
+  const int js = indcs.js;
+  const int je = indcs.je;
+  const int ks = indcs.ks;
+  const int ke = indcs.ke;
+  auto &w0 = pmbp->pmhd->w0;
+  auto &refine_flag = pmbp->pmesh->pmr->refine_flag;
+  const int mbs = pmbp->pmesh->gids_eachrank[global_variable::my_rank];
+  const Real refine_thresh = ps_refine_curv;
+  const Real deref_thresh = ps_derefine_curv;
+  const Real tiny = 1.0e-30;
+
+  par_for("ps_curvature_amr", DevExeSpace(), 0, pmbp->nmb_thispack - 1,
+  KOKKOS_LAMBDA(const int m) {
+    Real max_grho = 0.0;
+    Real max_gprs = 0.0;
+    for (int k = ks; k <= ke; ++k) {
+      for (int j = js; j <= je; ++j) {
+        for (int i = is; i <= ie; ++i) {
+          Real rho = fmax(w0(m, IDN, k, j, i), tiny);
+          Real prs = fmax(w0(m, IEN, k, j, i), tiny);
+
+          Real gx_rho = fabs((w0(m, IDN, k, j, i + 1) +
+                              w0(m, IDN, k, j, i - 1))/rho - 2.0);
+          Real gy_rho = fabs((w0(m, IDN, k, j + 1, i) +
+                              w0(m, IDN, k, j - 1, i))/rho - 2.0);
+          Real gx_prs = fabs((w0(m, IEN, k, j, i + 1) +
+                              w0(m, IEN, k, j, i - 1))/prs - 2.0);
+          Real gy_prs = fabs((w0(m, IEN, k, j + 1, i) +
+                              w0(m, IEN, k, j - 1, i))/prs - 2.0);
+
+          Real grho = gx_rho + gy_rho;
+          Real gprs = gx_prs + gy_prs;
+          max_grho = fmax(max_grho, grho);
+          max_gprs = fmax(max_gprs, gprs);
+        }
+      }
+    }
+
+    if (fmax(max_grho, max_gprs) > refine_thresh) {
+      refine_flag.d_view(m + mbs) = 1;
+    } else if (max_grho < deref_thresh && max_gprs < deref_thresh) {
+      refine_flag.d_view(m + mbs) = -1;
+    }
+  });
+}
+
+}  // namespace
+
+//----------------------------------------------------------------------------------------
+//! \fn void ProblemGenerator::PICParallelShock()
+//! \brief Parallel-shock MHD-PIC benchmark setup.
+
+void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart) {
+  MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
+  if (pmbp->pmhd == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock requires an active <mhd> block." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (pmbp->ppart == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock requires an active <particles> block."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (pmbp->phydro != nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock is MHD-only; do not enable <hydro>."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (!pmbp->pmhd->peos->eos_data.is_ideal) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock requires ideal MHD EOS." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (pmy_mesh_->mesh_bcs[BoundaryFace::inner_x1] != BoundaryFlag::reflect) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock expects <mesh>/ix1_bc=reflect." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  const BoundaryFlag ox1_bc = pmy_mesh_->mesh_bcs[BoundaryFace::outer_x1];
+  if (!(ox1_bc == BoundaryFlag::inflow || ox1_bc == BoundaryFlag::outflow)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock expects <mesh>/ox1_bc=inflow or outflow."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (pmy_mesh_->mesh_bcs[BoundaryFace::inner_x2] != BoundaryFlag::periodic ||
+      pmy_mesh_->mesh_bcs[BoundaryFace::outer_x2] != BoundaryFlag::periodic) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock expects periodic y boundaries." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  // Parse runtime controls.
+  ps_rho0 = pin->GetOrAddReal("problem", "ps_rho0", 1.0);
+  ps_p0 = pin->GetOrAddReal("problem", "ps_p0", 1.0);
+  ps_u0 = pin->GetOrAddReal("problem", "ps_u0", 30.0);
+  ps_b0 = pin->GetOrAddReal("problem", "ps_b0", 1.0);
+  ps_eta = pin->GetOrAddReal("problem", "ps_eta", 1.0e-3);
+  ps_vinj_over_u0 = pin->GetOrAddReal("problem", "ps_vinj_over_u0", std::sqrt(10.0));
+  ps_inject_half_width_cells = pin->GetOrAddReal(
+      "problem", "ps_inject_half_width_cells", 0.5);
+  ps_inject_t_start = pin->GetOrAddReal("problem", "ps_inject_t_start", 0.0);
+  ps_inject_t_stop = pin->GetOrAddReal("problem", "ps_inject_t_stop", 1.0e99);
+  ps_refine_curv = pin->GetOrAddReal("problem", "ps_refine_curv", 1.0);
+  ps_derefine_curv = pin->GetOrAddReal("problem", "ps_derefine_curv", 0.1);
+  ps_rho_floor_frac = pin->GetOrAddReal("problem", "ps_rho_floor_frac", 1.0e-6);
+  ps_p_floor_frac = pin->GetOrAddReal("problem", "ps_p_floor_frac", 1.0e-8);
+  ps_enable_injection = pin->GetOrAddBoolean("problem", "ps_enable_injection", true);
+  ps_enable_subtraction = pin->GetOrAddBoolean(
+      "problem", "ps_enable_gas_subtraction", true);
+  ps_enable_curvature_amr = pin->GetOrAddBoolean(
+      "problem", "ps_enable_curvature_amr", true);
+  ps_inject_species = pin->GetOrAddInteger("problem", "ps_inject_species", 0);
+  ps_inject_seed = pin->GetOrAddInteger("problem", "ps_inject_seed", 1234);
+
+  if (ps_rho0 <= 0.0 || ps_p0 <= 0.0 || ps_u0 <= 0.0 || ps_b0 <= 0.0 || ps_eta < 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock parameters ps_rho0/ps_p0/ps_u0/ps_b0 must be > 0 "
+              << "and ps_eta must be >= 0." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  const int nspecies = pmbp->ppart->nspecies;
+  if (ps_inject_species < 0 || ps_inject_species >= nspecies) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "ps_inject_species is out of range for configured species."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  std::string species_block = "species" + std::to_string(ps_inject_species);
+  ps_particle_mass = pin->GetOrAddReal(species_block, "mass", 1.0);
+  ps_particle_charge = pin->GetOrAddReal(species_block, "charge", 1.0);
+  if (ps_particle_mass <= 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Injected species mass must be > 0." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  ps_particle_q_over_m = ps_particle_charge/ps_particle_mass;
+  Real qscale = pin->GetOrAddReal("particles", "deposit_qscale", 1.0);
+  ps_particle_macro_mass = qscale*ps_particle_mass;
+  if (ps_particle_macro_mass <= 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Computed injected macro-mass must be > 0." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  // Section 5.4 ideal shock speed for gamma-law gas.
+  Real gamma = pmbp->pmhd->peos->eos_data.gamma;
+  ps_shock_speed = 0.5*(gamma - 1.0)*ps_u0;
+  ps_xshock0 = pmy_mesh_->mesh_size.x1min;
+  ps_mass_reservoir_local = 0.0;
+  ps_tag_seeded = false;
+  ps_next_tag = 0;
+
+  // Enroll benchmark callbacks.
+  user_srcs = true;
+  user_srcs_func = ParallelShockSource;
+  user_ref_func = ParallelShockRefinement;
+
+  if (restart) return;
+
+  auto &indcs = pmy_mesh_->mb_indcs;
+  int is = indcs.is;
+  int ie = indcs.ie;
+  int js = indcs.js;
+  int je = indcs.je;
+  int ks = indcs.ks;
+  int ke = indcs.ke;
+  auto &u0 = pmbp->pmhd->u0;
+  auto &b0 = pmbp->pmhd->b0;
+  auto &size = pmbp->pmb->mb_size;
+  Real gm1 = gamma - 1.0;
+
+  // Set uniform upstream state (flow toward the reflecting wall).
+  par_for("pgen_pic_parallel_shock", DevExeSpace(), 0, pmbp->nmb_thispack - 1,
+          ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    u0(m, IDN, k, j, i) = ps_rho0;
+    u0(m, IM1, k, j, i) = -ps_rho0*ps_u0;
+    u0(m, IM2, k, j, i) = 0.0;
+    u0(m, IM3, k, j, i) = 0.0;
+
+    b0.x1f(m, k, j, i) = ps_b0;
+    b0.x2f(m, k, j, i) = 0.0;
+    b0.x3f(m, k, j, i) = 0.0;
+    if (i == ie) b0.x1f(m, k, j, i + 1) = ps_b0;
+    if (j == je) b0.x2f(m, k, j + 1, i) = 0.0;
+    if (k == ke) b0.x3f(m, k + 1, j, i) = 0.0;
+  });
+
+  par_for("pgen_pic_parallel_shock_e", DevExeSpace(), 0, pmbp->nmb_thispack - 1,
+          ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real bx = 0.5*(b0.x1f(m, k, j, i) + b0.x1f(m, k, j, i + 1));
+    Real by = 0.5*(b0.x2f(m, k, j, i) + b0.x2f(m, k, j + 1, i));
+    Real bz = 0.5*(b0.x3f(m, k, j, i) + b0.x3f(m, k + 1, j, i));
+    Real ekin = 0.5*(SQR(u0(m, IM1, k, j, i)) +
+                     SQR(u0(m, IM2, k, j, i)) +
+                     SQR(u0(m, IM3, k, j, i)))/u0(m, IDN, k, j, i);
+    Real emag = 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+    u0(m, IEN, k, j, i) = ps_p0/gm1 + ekin + emag;
+  });
+
+  // Outer x1 inflow reservoir set to upstream state.
+  auto u_in = pmbp->pmhd->pbval_u->u_in;
+  auto b_in = pmbp->pmhd->pbval_b->b_in;
+  const Real ein = ps_p0/gm1 + 0.5*ps_rho0*SQR(ps_u0) + 0.5*SQR(ps_b0);
+  u_in.h_view(IDN, BoundaryFace::outer_x1) = ps_rho0;
+  u_in.h_view(IM1, BoundaryFace::outer_x1) = -ps_rho0*ps_u0;
+  u_in.h_view(IM2, BoundaryFace::outer_x1) = 0.0;
+  u_in.h_view(IM3, BoundaryFace::outer_x1) = 0.0;
+  u_in.h_view(IEN, BoundaryFace::outer_x1) = ein;
+  b_in.h_view(IBX, BoundaryFace::outer_x1) = ps_b0;
+  b_in.h_view(IBY, BoundaryFace::outer_x1) = 0.0;
+  b_in.h_view(IBZ, BoundaryFace::outer_x1) = 0.0;
+  u_in.template modify<HostMemSpace>();
+  u_in.template sync<DevExeSpace>();
+  b_in.template modify<HostMemSpace>();
+  b_in.template sync<DevExeSpace>();
+
+  // Keep size data synced for host-side injection cell selection.
+  size.template modify<HostMemSpace>();
+  size.template sync<DevExeSpace>();
+}

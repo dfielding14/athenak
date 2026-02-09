@@ -8,7 +8,6 @@
 //! Mesh variables.
 //! Prolongation of CC variables  occurs in ProlongateCC() function called from task list
 
-#include <cstdlib>
 #include <iostream>
 #include <utility>
 

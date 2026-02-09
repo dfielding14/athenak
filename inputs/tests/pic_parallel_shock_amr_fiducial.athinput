@@ -1,0 +1,130 @@
+# AthenaXXX input file: PIC parallel shock benchmark (AMR fiducial)
+
+<comment>
+problem   = pic_parallel_shock AMR fiducial benchmark (Section 5.4 style curvature AMR)
+
+<job>
+basename  = pic_parallel_shock_amr
+
+<mesh>
+nghost    = 2
+# HPC scaling knobs: increase nx1/nx2, num_levels, and rank/GPU counts for
+# production campaigns while preserving this pgen and analysis workflow.
+nx1       = 128
+x1min     = 0.0
+x1max     = 4.0
+ix1_bc    = reflect
+ox1_bc    = inflow
+
+nx2       = 64
+x2min     = 0.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 16
+nx2       = 16
+nx3       = 1
+
+<mesh_refinement>
+refinement           = adaptive
+num_levels           = 2
+# built-in refinement gradients disabled; user curvature callback drives AMR
+ddens_max            = 0.0
+dpres_max            = 0.0
+dvel_max             = 0.0
+ncycle_check         = 1
+refinement_interval  = 1
+max_nmb_per_rank     = 8192
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+# Laptop gate values; raise nlim/tlim for production runs.
+nlim       = 12
+tlim       = 0.02
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.666666667
+
+<particles>
+particle_type                 = cosmic_ray
+ppc                           = 0.0
+pusher                        = boris_tsc
+nspecies                      = 1
+cr_distribution               = random
+deposit_moments               = false
+deposit_order                 = 1
+deposit_qscale                = 1.0e-6
+couple_moments_to_mhd         = false
+couple_j_to_efield_representation = cell_centered
+couple_moments_momentum_to_mhd = false
+couple_moments_energy_to_mhd  = false
+cr_vx0                        = 0.0
+cr_vy0                        = 0.0
+cr_vz0                        = 0.0
+pic_background_mode           = coupled
+pic_feedback_mode             = test_particle
+pic_sort_interval             = 16
+pic_intermediate_arrays       = auto
+
+<species0>
+mass   = 1.0
+charge = 1.0
+
+<problem>
+pgen_name                     = pic_parallel_shock
+ps_rho0                       = 1.0
+ps_p0                         = 0.10
+ps_u0                         = 3.0
+ps_b0                         = 1.0
+ps_eta                        = 3.0e-3
+ps_vinj_over_u0               = 3.16227766017
+ps_inject_half_width_cells    = 0.5
+ps_inject_t_start             = 3.0e-3
+ps_inject_t_stop              = 1.0e9
+ps_enable_injection           = true
+ps_enable_gas_subtraction     = true
+ps_enable_curvature_amr       = true
+ps_refine_curv                = 1.0
+ps_derefine_curv              = 0.1
+ps_rho_floor_frac             = 1.0e-6
+ps_p_floor_frac               = 1.0e-8
+ps_inject_species             = 0
+ps_inject_seed                = 1234
+
+<output1>
+file_type   = bin
+variable    = mhd_w_d
+id          = rho
+dcycle      = 2
+ghost_zones = false
+
+<output2>
+file_type   = bin
+variable    = mhd_bmag
+id          = bmag
+dcycle      = 2
+ghost_zones = false
+
+<output3>
+file_type   = pvtk
+variable    = prtcl_all
+id          = prtcl_all
+dcycle      = 2
+
+<output4>
+file_type   = rst
+dcycle      = 12

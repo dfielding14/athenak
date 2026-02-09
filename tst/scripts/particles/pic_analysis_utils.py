@@ -77,6 +77,74 @@ def fit_exponential_growth(
     return gamma, intercept, float(r2)
 
 
+def fit_exponential_growth_windowed(
+    time: np.ndarray,
+    amplitude: np.ndarray,
+    min_points: int = 6,
+    floor: float = 1.0e-30,
+    min_growth_factor: float = 1.0,
+) -> dict[str, float]:
+    """Find the best positive-growth exponential fit over all time windows.
+
+    The selected window maximizes ``gamma * max(r2, 0)`` subject to:
+    1. at least ``min_points`` samples in the fit window,
+    2. positive growth rate,
+    3. end/start amplitude ratio >= ``min_growth_factor``.
+    """
+    t = np.asarray(time, dtype=float)
+    a = np.asarray(amplitude, dtype=float)
+    if t.size != a.size or t.size < min_points:
+        raise ValueError('time and amplitude must have matching length >= min_points')
+
+    best = None
+    for i0 in range(0, t.size - min_points + 1):
+        for i1 in range(i0 + min_points, t.size + 1):
+            tx = t[i0:i1]
+            ax = np.maximum(a[i0:i1], floor)
+            growth_factor = float(ax[-1] / max(ax[0], floor))
+            if growth_factor < min_growth_factor:
+                continue
+
+            gamma, intercept, r2 = fit_exponential_growth(
+                tx, ax, float(tx[0]), float(tx[-1]), floor=floor
+            )
+            if gamma <= 0.0:
+                continue
+
+            score = float(gamma * max(r2, 0.0))
+            if best is None or score > best['score']:
+                best = {
+                    'score': score,
+                    'gamma': float(gamma),
+                    'intercept': float(intercept),
+                    'r2': float(r2),
+                    'tmin': float(tx[0]),
+                    'tmax': float(tx[-1]),
+                    'npts': float(tx.size),
+                    'growth_factor': growth_factor,
+                }
+
+    if best is None:
+        gamma, intercept, r2 = fit_exponential_growth(
+            t, np.maximum(a, floor), float(t[0]), float(t[-1]), floor=floor
+        )
+        growth_factor = float(
+            np.maximum(a[-1], floor) / max(np.maximum(a[0], floor), floor)
+        )
+        best = {
+            'score': float(gamma * max(r2, 0.0)),
+            'gamma': float(gamma),
+            'intercept': float(intercept),
+            'r2': float(r2),
+            'tmin': float(t[0]),
+            'tmax': float(t[-1]),
+            'npts': float(t.size),
+            'growth_factor': growth_factor,
+        }
+
+    return best
+
+
 def polarization_split(
     by_mode: np.ndarray,
     bz_mode: np.ndarray,

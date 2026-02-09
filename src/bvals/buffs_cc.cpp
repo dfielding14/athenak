@@ -47,8 +47,13 @@ void MeshBoundaryValuesCC::InitSendIndices(MeshBoundaryBuffer &buf,
         isame.bie = mb_indcs.is + ng1;
       }
       if (ox2 == 0) {
-        isame.bjs = mb_indcs.js - ng;
-        isame.bje = mb_indcs.je + ng;
+        if (mb_indcs.nx2 > 1) {
+          isame.bjs = mb_indcs.js - ng;
+          isame.bje = mb_indcs.je + ng;
+        } else {
+          isame.bjs = mb_indcs.js;
+          isame.bje = mb_indcs.je;
+        }
       } else if (ox2 > 0) {
         isame.bjs = mb_indcs.je - ng1;
         isame.bje = mb_indcs.je + ng;
@@ -57,8 +62,13 @@ void MeshBoundaryValuesCC::InitSendIndices(MeshBoundaryBuffer &buf,
         isame.bje = mb_indcs.js + ng1;
       }
       if (ox3 == 0) {
-        isame.bks = mb_indcs.ks - ng;
-        isame.bke = mb_indcs.ke + ng;
+        if (mb_indcs.nx3 > 1) {
+          isame.bks = mb_indcs.ks - ng;
+          isame.bke = mb_indcs.ke + ng;
+        } else {
+          isame.bks = mb_indcs.ks;
+          isame.bke = mb_indcs.ke;
+        }
       } else if (ox3 > 0) {
         isame.bks = mb_indcs.ke - ng1;
         isame.bke = mb_indcs.ke + ng;
@@ -93,8 +103,13 @@ void MeshBoundaryValuesCC::InitSendIndices(MeshBoundaryBuffer &buf,
         isame.bie = mb_indcs.cis + ng1;
       }
       if (ox2 == 0) {
-        isame.bjs = mb_indcs.cjs - ng;
-        isame.bje = mb_indcs.cje + ng;
+        if (mb_indcs.cnx2 > 1) {
+          isame.bjs = mb_indcs.cjs - ng;
+          isame.bje = mb_indcs.cje + ng;
+        } else {
+          isame.bjs = mb_indcs.cjs;
+          isame.bje = mb_indcs.cje;
+        }
       } else if (ox2 > 0) {
         isame.bjs = mb_indcs.cje - ng1;
         isame.bje = mb_indcs.cje + ng;
@@ -103,8 +118,13 @@ void MeshBoundaryValuesCC::InitSendIndices(MeshBoundaryBuffer &buf,
         isame.bje = mb_indcs.cjs + ng1;
       }
       if (ox3 == 0) {
-        isame.bks = mb_indcs.cks - ng;
-        isame.bke = mb_indcs.cke + ng;
+        if (mb_indcs.cnx3 > 1) {
+          isame.bks = mb_indcs.cks - ng;
+          isame.bke = mb_indcs.cke + ng;
+        } else {
+          isame.bks = mb_indcs.cks;
+          isame.bke = mb_indcs.cke;
+        }
       } else if (ox3 > 0) {
         isame.bks = mb_indcs.cke - ng1;
         isame.bke = mb_indcs.cke + ng;
@@ -250,8 +270,13 @@ void MeshBoundaryValuesCC::InitRecvIndices(MeshBoundaryBuffer &buf,
       }
 
       if (ox2 == 0) {
-        isame.bjs = mb_indcs.js - ng;
-        isame.bje = mb_indcs.je + ng;
+        if (mb_indcs.nx2 > 1) {
+          isame.bjs = mb_indcs.js - ng;
+          isame.bje = mb_indcs.je + ng;
+        } else {
+          isame.bjs = mb_indcs.js;
+          isame.bje = mb_indcs.je;
+        }
       } else if (ox2 > 0) {
         isame.bjs = mb_indcs.je - ng1;
         isame.bje = mb_indcs.je + ng;
@@ -261,8 +286,13 @@ void MeshBoundaryValuesCC::InitRecvIndices(MeshBoundaryBuffer &buf,
       }
 
       if (ox3 == 0) {
-        isame.bks = mb_indcs.ks - ng;
-        isame.bke = mb_indcs.ke + ng;
+        if (mb_indcs.nx3 > 1) {
+          isame.bks = mb_indcs.ks - ng;
+          isame.bke = mb_indcs.ke + ng;
+        } else {
+          isame.bks = mb_indcs.ks;
+          isame.bke = mb_indcs.ke;
+        }
       } else if (ox3 > 0) {
         isame.bks = mb_indcs.ke - ng1;
         isame.bke = mb_indcs.ke + ng;
@@ -316,8 +346,13 @@ void MeshBoundaryValuesCC::InitRecvIndices(MeshBoundaryBuffer &buf,
       }
 
       if (ox2 == 0) {
-        isame.bjs = mb_indcs.cjs - ng;
-        isame.bje = mb_indcs.cje + ng;
+        if (mb_indcs.cnx2 > 1) {
+          isame.bjs = mb_indcs.cjs - ng;
+          isame.bje = mb_indcs.cje + ng;
+        } else {
+          isame.bjs = mb_indcs.cjs;
+          isame.bje = mb_indcs.cje;
+        }
       } else if (ox2 > 0) {
         isame.bjs = mb_indcs.cje - ng1;
         isame.bje = mb_indcs.cje + ng;
@@ -327,8 +362,13 @@ void MeshBoundaryValuesCC::InitRecvIndices(MeshBoundaryBuffer &buf,
       }
 
       if (ox3 == 0) {
-        isame.bks = mb_indcs.cks - ng;
-        isame.bke = mb_indcs.cke + ng;
+        if (mb_indcs.cnx3 > 1) {
+          isame.bks = mb_indcs.cks - ng;
+          isame.bke = mb_indcs.cke + ng;
+        } else {
+          isame.bks = mb_indcs.cks;
+          isame.bke = mb_indcs.cke;
+        }
       } else if (ox3 > 0) {
         isame.bks = mb_indcs.cke - ng1;
         isame.bke = mb_indcs.cke + ng;

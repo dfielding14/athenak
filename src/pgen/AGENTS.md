@@ -45,6 +45,8 @@ These are the only problems selectable with `problem/pgen_name` when
 - `implode` -> `tests/lw_implode.cpp` (`ProblemGenerator::LWImplode`)
 - `gr_monopole` -> `tests/gr_monopole.cpp` (`ProblemGenerator::Monopole`)
 - `orszag_tang` -> `tests/orszag_tang.cpp` (`ProblemGenerator::OrszagTang`)
+- `pic_parallel_shock` -> `tests/pic_parallel_shock.cpp`
+  (`ProblemGenerator::PICParallelShock`)
 - `rad_linear_wave` -> `tests/rad_linear_wave.cpp`
   (`ProblemGenerator::RadiationLinearWave`)
 - `shock_tube` -> `tests/shock_tube.cpp` (`ProblemGenerator::ShockTube`)
@@ -154,6 +156,10 @@ These are the only problems selectable with `problem/pgen_name` when
 ## Implementation Notes
 - Kokkos-first initialization: ICs are set with `par_for` on device. Keep new
   ICs device-resident unless external readers require host loops.
+- Orszag-Tang scan controls: `tests/orszag_tang.cpp` now accepts optional
+  `<problem>` knobs `ot_B0`, `ot_d0`, `ot_p0`, `ot_v0`, and `ot_mach`.
+  When `ot_mach > 0`, velocity amplitude is derived from
+  `Mach * sqrt(gamma * p0 / d0)`; defaults preserve historical ICs.
 - Callback enrollment: if `problem/user_srcs` or `problem/user_hist` is set,
   `UserProblem` must set `user_srcs_func` / `user_hist_func`, or the constructor
   will abort. User BCs must be set when any mesh face uses `BoundaryFlag::user`.
@@ -167,6 +173,10 @@ These are the only problems selectable with `problem/pgen_name` when
   `single_file_per_rank` restarts. The per-rank path uses restart metadata
   (`rank_eachmb`, `gids_eachrank`, `nmb_eachrank`) to remap each local
   MeshBlock's source file/offset before loading.
+- `tests/pic_parallel_shock.cpp` is the physics-benchmark pgen for Section 5.4
+  style parallel-shock studies (reflecting wall, `B0 || x`, eta injection,
+  conservative gas subtraction, and curvature AMR via `g_rho`/`g_P`).
+  Keep this benchmark path separate from Orszag-Tang smoke/pipeline workflows.
 
 ---
 
