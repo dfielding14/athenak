@@ -393,6 +393,18 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       // Work after time integrator indicated by "1" in stage
       ExecuteTaskList(pmesh, "after_timeintegrator", 1);
 
+      // User-defined once-per-cycle callback outside task lists.
+      if (pmesh->pgen->user_work_in_loop) {
+        if (pmesh->pgen->user_work_in_loop_func == nullptr) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl
+                    << "problem/user_work_in_loop is true, but callback is not "
+                    << "enrolled." << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        (pmesh->pgen->user_work_in_loop_func)(pmesh);
+      }
+
       // Work outside of TaskLists:
       // increment time, ncycle, etc.
       pmesh->time = pmesh->time + pmesh->dt;

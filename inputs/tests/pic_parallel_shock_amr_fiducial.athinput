@@ -104,6 +104,21 @@ ps_rho_floor_frac             = 1.0e-6
 ps_p_floor_frac               = 1.0e-8
 ps_inject_species             = 0
 ps_inject_seed                = 1234
+# Moving-frame controls (guarded to uniform grids by default):
+ps_enable_frame_tracking      = false
+ps_frame_mode                 = velocity
+ps_frame_t_start              = 1.0
+ps_frame_t_ramp               = 0.5
+ps_frame_vfrac                = 0.99
+ps_frame_dv_max               = 1.0e99
+ps_frame_apply_to_particles   = true
+ps_frame_apply_to_inflow      = true
+ps_frame_require_uniform      = true
+ps_frame_diag_dcycle          = 200
+ps_recenter_x_target          = 2.0
+ps_recenter_x_trigger         = 3.0
+ps_recenter_shift_cells       = 2
+ps_recenter_vshock_model      = -1.0
 
 <output1>
 file_type   = bin

@@ -83,6 +83,22 @@ Real ps_p_floor_frac = 1.0e-8;
 bool ps_enable_injection = true;
 bool ps_enable_subtraction = true;
 bool ps_enable_curvature_amr = true;
+bool ps_enable_frame_tracking = false;
+enum class PSFrameMode { velocity, recenter };
+PSFrameMode ps_frame_mode = PSFrameMode::velocity;
+Real ps_frame_t_start = 0.0;
+Real ps_frame_t_ramp = 0.0;
+Real ps_frame_vfrac = 1.0;
+Real ps_frame_dv_max = 1.0e99;
+bool ps_frame_apply_to_particles = true;
+bool ps_frame_apply_to_inflow = true;
+bool ps_frame_require_uniform = true;
+int ps_frame_diag_dcycle = 200;
+Real ps_recenter_x_target = 2.0;
+Real ps_recenter_x_trigger = 3.0;
+Real ps_recenter_dx1 = 0.0;
+int ps_recenter_shift_cells = 2;
+Real ps_recenter_vshock_model = -1.0;
 int ps_inject_species = 0;
 int ps_inject_seed = 1234;
 Real ps_particle_mass = 1.0;
@@ -92,6 +108,315 @@ Real ps_particle_macro_mass = 1.0;
 Real ps_mass_reservoir_local = 0.0;
 bool ps_tag_seeded = false;
 std::int64_t ps_next_tag = 0;
+
+inline bool FrameModeVelocity() {
+  return ps_frame_mode == PSFrameMode::velocity;
+}
+
+inline bool FrameModeRecenter() {
+  return ps_frame_mode == PSFrameMode::recenter;
+}
+
+inline Real FrameRampFactor(const Real t) {
+  if (!FrameModeVelocity()) return 0.0;
+  if (!ps_enable_frame_tracking) return 0.0;
+  if (t <= ps_frame_t_start) return 0.0;
+  if (ps_frame_t_ramp <= 0.0) return 1.0;
+
+  const Real s = (t - ps_frame_t_start)/ps_frame_t_ramp;
+  if (s >= 1.0) return 1.0;
+  if (s <= 0.0) return 0.0;
+  return 0.5*(1.0 - std::cos(M_PI*s));
+}
+
+inline Real FrameVelocityOffset(const Real t) {
+  if (!FrameModeVelocity()) return 0.0;
+  const Real vfollow = ps_frame_vfrac*ps_shock_speed;
+  return -vfollow*FrameRampFactor(t);
+}
+
+inline Real FrameOffsetDisplacement(const Real t) {
+  if (!FrameModeVelocity()) return 0.0;
+  if (!ps_enable_frame_tracking) return 0.0;
+  if (t <= ps_frame_t_start) return 0.0;
+
+  const Real vfollow = ps_frame_vfrac*ps_shock_speed;
+  if (ps_frame_t_ramp <= 0.0) {
+    return -vfollow*(t - ps_frame_t_start);
+  }
+
+  const Real tr = ps_frame_t_ramp;
+  const Real dt = t - ps_frame_t_start;
+  if (dt >= tr) {
+    const Real iramp = 0.5*tr;
+    const Real itail = dt - tr;
+    return -vfollow*(iramp + itail);
+  }
+
+  const Real s = dt/tr;
+  const Real iramp = tr*(0.5*s - std::sin(M_PI*s)/(2.0*M_PI));
+  return -vfollow*iramp;
+}
+
+inline Real ShockSurfaceUnshiftedX1(const Real t) {
+  if (FrameModeRecenter()) {
+    Real vmodel = ps_shock_speed;
+    if (ps_recenter_vshock_model > 0.0) vmodel = ps_recenter_vshock_model;
+    return ps_xshock0 + vmodel*t;
+  }
+  return ps_xshock0 + ps_shock_speed*t + FrameOffsetDisplacement(t);
+}
+
+inline int RecenterEventCount(const Real t) {
+  if (!ps_enable_frame_tracking) return 0;
+  if (!FrameModeRecenter()) return 0;
+  if (ps_recenter_shift_cells < 1 || ps_recenter_dx1 <= 0.0) return 0;
+
+  const Real xu = ShockSurfaceUnshiftedX1(t);
+  const Real dx_shift = ps_recenter_shift_cells*ps_recenter_dx1;
+  const Real trigger = ps_recenter_x_trigger;
+  if (xu <= trigger) return 0;
+  return static_cast<int>(std::floor((xu - trigger)/dx_shift)) + 1;
+}
+
+inline Real RecenterDisplacement(const Real t) {
+  if (!ps_enable_frame_tracking) return 0.0;
+  if (!FrameModeRecenter()) return 0.0;
+  const int nevents = RecenterEventCount(t);
+  return static_cast<Real>(nevents*ps_recenter_shift_cells)*ps_recenter_dx1;
+}
+
+inline Real ShockSurfaceModelX1(const Real t) {
+  return ShockSurfaceUnshiftedX1(t) - RecenterDisplacement(t);
+}
+
+inline Real EstimateShockSpeed(const Real gamma, const Real rho0, const Real p0,
+                               const Real u0) {
+  // Finite-Mach hydrodynamic estimate for a piston-driven shock reflected off
+  // the inner wall. For B parallel to shock normal (Bx-only), magnetic terms
+  // do not change the 1D compression ratio in this minimal setup.
+  const Real cs2 = gamma*p0/rho0;
+  if (cs2 <= 0.0) return 0.0;
+  const Real ms2 = SQR(u0)/cs2;
+  if (ms2 <= 1.0) return 0.0;
+  const Real r = ((gamma + 1.0)*ms2)/((gamma - 1.0)*ms2 + 2.0);
+  if (r <= 1.0) return 0.0;
+  return u0/(r - 1.0);
+}
+
+void ApplyFrameShiftToFluid(Mesh *pm, const Real dvx) {
+  if (dvx == 0.0) return;
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp == nullptr || pmbp->pmhd == nullptr) return;
+
+  auto &indcs = pm->mb_indcs;
+  const int is = indcs.is;
+  const int ie = indcs.ie;
+  const int js = indcs.js;
+  const int je = indcs.je;
+  const int ks = indcs.ks;
+  const int ke = indcs.ke;
+  auto *pmhd = pmbp->pmhd;
+  auto &u0 = pmhd->u0;
+  auto &w0 = pmhd->w0;
+  auto &b0 = pmhd->b0;
+  auto &bcc0 = pmhd->bcc0;
+
+  pmhd->peos->ConsToPrim(u0, b0, w0, bcc0, false, is, ie, js, je, ks, ke);
+  par_for("ps_frame_shift_w0", DevExeSpace(), 0, pmbp->nmb_thispack - 1,
+          ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    w0(m, IVX, k, j, i) += dvx;
+  });
+  pmhd->peos->PrimToCons(w0, bcc0, u0, is, ie, js, je, ks, ke);
+}
+
+void ApplyFrameShiftToParticles(Mesh *pm, const Real dvx) {
+  if (dvx == 0.0) return;
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp == nullptr || pmbp->ppart == nullptr) return;
+
+  auto *ppart = pmbp->ppart;
+  if (ppart->nprtcl_thispack <= 0) return;
+  auto &prtcl_rdata = ppart->prtcl_rdata;
+  par_for("ps_frame_shift_particles", DevExeSpace(), 0, ppart->nprtcl_thispack - 1,
+  KOKKOS_LAMBDA(const int p) {
+    prtcl_rdata(IPVX, p) += dvx;
+  });
+}
+
+void UpdateOuterInflowState(Mesh *pm, const Real frame_vx) {
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp == nullptr || pmbp->pmhd == nullptr) return;
+  auto &u_in = pmbp->pmhd->pbval_u->u_in;
+  auto &b_in = pmbp->pmhd->pbval_b->b_in;
+  const Real gamma = pmbp->pmhd->peos->eos_data.gamma;
+  const Real gm1 = gamma - 1.0;
+  const Real vin = -ps_u0 + frame_vx;
+  const Real ein = ps_p0/gm1 + 0.5*ps_rho0*SQR(vin) + 0.5*SQR(ps_b0);
+
+  u_in.h_view(IDN, BoundaryFace::outer_x1) = ps_rho0;
+  u_in.h_view(IM1, BoundaryFace::outer_x1) = ps_rho0*vin;
+  u_in.h_view(IM2, BoundaryFace::outer_x1) = 0.0;
+  u_in.h_view(IM3, BoundaryFace::outer_x1) = 0.0;
+  u_in.h_view(IEN, BoundaryFace::outer_x1) = ein;
+  b_in.h_view(IBX, BoundaryFace::outer_x1) = ps_b0;
+  b_in.h_view(IBY, BoundaryFace::outer_x1) = 0.0;
+  b_in.h_view(IBZ, BoundaryFace::outer_x1) = 0.0;
+  u_in.template modify<HostMemSpace>();
+  u_in.template sync<DevExeSpace>();
+  b_in.template modify<HostMemSpace>();
+  b_in.template sync<DevExeSpace>();
+}
+
+void ApplyRecenteringShiftToParticles(Mesh *pm, const Real xshift) {
+  if (xshift <= 0.0) return;
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp == nullptr || pmbp->ppart == nullptr) return;
+
+  auto *ppart = pmbp->ppart;
+  const int np_old = ppart->nprtcl_thispack;
+  if (np_old <= 0) return;
+
+  const int nr = ppart->nrdata;
+  const int ni = ppart->nidata;
+  auto h_pr_old = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
+                                                       ppart->prtcl_rdata);
+  auto h_pi_old = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
+                                                       ppart->prtcl_idata);
+  HostArray2D<Real> h_pr_new("ps_pr_recent", nr, np_old);
+  HostArray2D<int> h_pi_new("ps_pi_recent", ni, np_old);
+
+  const Real xmin = pm->mesh_size.x1min;
+  const Real xmax = pm->mesh_size.x1max;
+  int np_new = 0;
+  for (int p = 0; p < np_old; ++p) {
+    const Real xnew = h_pr_old(IPX, p) - xshift;
+    if (!(xnew > xmin && xnew < xmax)) continue;
+
+    for (int q = 0; q < nr; ++q) h_pr_new(q, np_new) = h_pr_old(q, p);
+    for (int q = 0; q < ni; ++q) h_pi_new(q, np_new) = h_pi_old(q, p);
+    h_pr_new(IPX, np_new) = xnew;
+    ++np_new;
+  }
+
+  Kokkos::resize(ppart->prtcl_rdata, nr, np_new);
+  Kokkos::resize(ppart->prtcl_idata, ni, np_new);
+  if (np_new > 0) {
+    auto r_sub = Kokkos::subview(ppart->prtcl_rdata, Kokkos::ALL,
+                                 std::make_pair(0, np_new));
+    auto i_sub = Kokkos::subview(ppart->prtcl_idata, Kokkos::ALL,
+                                 std::make_pair(0, np_new));
+    auto r_src = Kokkos::subview(h_pr_new, Kokkos::ALL,
+                                 std::make_pair(0, np_new));
+    auto i_src = Kokkos::subview(h_pi_new, Kokkos::ALL,
+                                 std::make_pair(0, np_new));
+    Kokkos::deep_copy(r_sub, r_src);
+    Kokkos::deep_copy(i_sub, i_src);
+  }
+  ppart->nprtcl_thispack = np_new;
+}
+
+void ApplyRecenteringShift(Mesh *pm, const int nshift) {
+  if (nshift <= 0) return;
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp == nullptr || pmbp->pmhd == nullptr) return;
+
+  auto &indcs = pm->mb_indcs;
+  const int is = indcs.is;
+  const int ie = indcs.ie;
+  const int js = indcs.js;
+  const int je = indcs.je;
+  const int ks = indcs.ks;
+  const int ke = indcs.ke;
+  const int ng = indcs.ng;
+  if (nshift > ng) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock recenter shift must be <= nghost."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  auto *pmhd = pmbp->pmhd;
+  auto h_u0 = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pmhd->u0);
+  auto h_x1f = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pmhd->b0.x1f);
+  auto h_x2f = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pmhd->b0.x2f);
+  auto h_x3f = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pmhd->b0.x3f);
+  const int nvar = static_cast<int>(pmhd->u0.extent_int(1));
+  const Real vin = -ps_u0 + FrameVelocityOffset(pm->time + pm->dt);
+  const Real gm1 = pmhd->peos->eos_data.gamma - 1.0;
+  const Real ein = ps_p0/gm1 + 0.5*ps_rho0*SQR(vin) + 0.5*SQR(ps_b0);
+
+  for (int m = 0; m < pmbp->nmb_thispack; ++m) {
+    for (int k = ks; k <= ke; ++k) {
+      for (int j = js; j <= je; ++j) {
+        for (int i = is; i <= ie; ++i) {
+          const int src = i + nshift;
+          if (src <= ie + ng) {
+            for (int n = 0; n < nvar; ++n) {
+              h_u0(m, n, k, j, i) = h_u0(m, n, k, j, src);
+            }
+          } else {
+            for (int n = 0; n < nvar; ++n) {
+              h_u0(m, n, k, j, i) = h_u0(m, n, k, j, ie);
+            }
+            h_u0(m, IDN, k, j, i) = ps_rho0;
+            h_u0(m, IM1, k, j, i) = ps_rho0*vin;
+            h_u0(m, IM2, k, j, i) = 0.0;
+            h_u0(m, IM3, k, j, i) = 0.0;
+            h_u0(m, IEN, k, j, i) = ein;
+          }
+        }
+      }
+    }
+  }
+
+  for (int m = 0; m < pmbp->nmb_thispack; ++m) {
+    for (int k = ks; k <= ke; ++k) {
+      for (int j = js; j <= je; ++j) {
+        for (int i = is; i <= ie + 1; ++i) {
+          const int src = i + nshift;
+          h_x1f(m, k, j, i) = (src <= ie + 1 + ng) ?
+              h_x1f(m, k, j, src) : ps_b0;
+        }
+      }
+    }
+    for (int k = ks; k <= ke; ++k) {
+      for (int j = js; j <= je + 1; ++j) {
+        for (int i = is; i <= ie; ++i) {
+          const int src = i + nshift;
+          h_x2f(m, k, j, i) = (src <= ie + ng) ? h_x2f(m, k, j, src) : 0.0;
+        }
+      }
+    }
+    for (int k = ks; k <= ke + 1; ++k) {
+      for (int j = js; j <= je; ++j) {
+        for (int i = is; i <= ie; ++i) {
+          const int src = i + nshift;
+          h_x3f(m, k, j, i) = (src <= ie + ng) ? h_x3f(m, k, j, src) : 0.0;
+        }
+      }
+    }
+  }
+
+  Kokkos::deep_copy(pmhd->u0, h_u0);
+  Kokkos::deep_copy(pmhd->b0.x1f, h_x1f);
+  Kokkos::deep_copy(pmhd->b0.x2f, h_x2f);
+  Kokkos::deep_copy(pmhd->b0.x3f, h_x3f);
+
+  auto &u0 = pmhd->u0;
+  auto &b0 = pmhd->b0;
+  auto &w0 = pmhd->w0;
+  auto &bcc0 = pmhd->bcc0;
+  pmhd->peos->ConsToPrim(u0, b0, w0, bcc0, false, is, ie, js, je, ks, ke);
+
+  if (ps_frame_apply_to_particles) {
+    const Real xshift = static_cast<Real>(nshift)*ps_recenter_dx1;
+    ApplyRecenteringShiftToParticles(pm, xshift);
+    pm->CountParticles();
+  }
+}
 
 inline Real Uniform01(std::mt19937_64 &rng) {
   static std::uniform_real_distribution<Real> uni(0.0, 1.0);
@@ -159,7 +484,7 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
   mb_size.template sync<HostMemSpace>();
   mb_gid.template sync<HostMemSpace>();
 
-  const Real xshock = ps_xshock0 + ps_shock_speed*pm->time;
+  const Real xshock = ShockSurfaceModelX1(pm->time);
   std::vector<ShockCell> cells;
   cells.reserve(static_cast<std::size_t>(pmbp->nmb_thispack)*indcs.nx2*indcs.nx3);
 
@@ -242,6 +567,7 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
       (static_cast<std::uint64_t>(pm->ncycle + 1) * 2654435761ull);
   std::mt19937_64 rng(seed);
 
+  const Real frame_vx = FrameVelocityOffset(pm->time);
   const Real vinj = ps_vinj_over_u0*ps_u0;
   const auto &mesh_size = pm->mesh_size;
   const Real x1min = mesh_size.x1min;
@@ -289,7 +615,7 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
     part.x1 = ClampInsideDomain(part.x1, x1min, x1max);
     part.x2 = ClampInsideDomain(part.x2, x2min, x2max);
     if (three_d) part.x3 = ClampInsideDomain(part.x3, x3min, x3max);
-    part.vx = ps_shock_speed + vinj*dirx;
+    part.vx = ps_shock_speed + frame_vx + vinj*dirx;
     part.vy = vinj*diry;
     part.vz = vinj*dirz;
     injected.push_back(part);
@@ -502,6 +828,71 @@ void ParallelShockRefinement(MeshBlockPack *pmbp) {
   });
 }
 
+void ParallelShockWorkInLoop(Mesh *pm) {
+  if (!ps_enable_frame_tracking) return;
+  if (pm == nullptr || pm->dt <= 0.0) return;
+  if (ps_frame_diag_dcycle < 1) ps_frame_diag_dcycle = 1;
+
+  if (FrameModeVelocity()) {
+    const Real v_now = FrameVelocityOffset(pm->time);
+    const Real v_next_target = FrameVelocityOffset(pm->time + pm->dt);
+    Real dv = v_next_target - v_now;
+    const bool clipped = (ps_frame_dv_max > 0.0 && std::abs(dv) > ps_frame_dv_max);
+    if (ps_frame_dv_max > 0.0 && std::abs(dv) > ps_frame_dv_max) {
+      dv = std::copysign(ps_frame_dv_max, dv);
+    }
+    if (std::abs(dv) <= 1.0e-15) return;
+
+    ApplyFrameShiftToFluid(pm, dv);
+    if (ps_frame_apply_to_particles) {
+      ApplyFrameShiftToParticles(pm, dv);
+    }
+    if (ps_frame_apply_to_inflow) {
+      UpdateOuterInflowState(pm, v_next_target);
+    }
+
+    if (global_variable::my_rank == 0 &&
+        ((pm->ncycle % ps_frame_diag_dcycle) == 0)) {
+      const Real x_model = ShockSurfaceModelX1(pm->time + pm->dt);
+      std::cout << "pic_parallel_shock frame(velocity): cycle=" << pm->ncycle
+                << " time=" << pm->time
+                << " v_now=" << v_now
+                << " v_target=" << v_next_target
+                << " dv=" << dv
+                << " clipped=" << (clipped ? 1 : 0)
+                << " xshock_model=" << x_model << std::endl;
+    }
+    return;
+  }
+
+  if (FrameModeRecenter()) {
+    const int ev_now = RecenterEventCount(pm->time);
+    const int ev_next = RecenterEventCount(pm->time + pm->dt);
+    const int dev = ev_next - ev_now;
+    int nshift = 0;
+    if (dev > 0) {
+      for (int n = 0; n < dev; ++n) {
+        ApplyRecenteringShift(pm, ps_recenter_shift_cells);
+      }
+      nshift = dev*ps_recenter_shift_cells;
+    }
+
+    if (global_variable::my_rank == 0 &&
+        ((pm->ncycle % ps_frame_diag_dcycle) == 0 || dev > 0)) {
+      const Real x_model = ShockSurfaceModelX1(pm->time + pm->dt);
+      const Real xshift = static_cast<Real>(nshift)*ps_recenter_dx1;
+      std::cout << "pic_parallel_shock frame(recenter): cycle=" << pm->ncycle
+                << " time=" << pm->time
+                << " ev_now=" << ev_now
+                << " ev_next=" << ev_next
+                << " dev=" << dev
+                << " nshift=" << nshift
+                << " xshift=" << xshift
+                << " xshock_model=" << x_model << std::endl;
+    }
+  }
+}
+
 }  // namespace
 
 //----------------------------------------------------------------------------------------
@@ -578,6 +969,28 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       "problem", "ps_enable_gas_subtraction", true);
   ps_enable_curvature_amr = pin->GetOrAddBoolean(
       "problem", "ps_enable_curvature_amr", true);
+  ps_enable_frame_tracking = pin->GetOrAddBoolean(
+      "problem", "ps_enable_frame_tracking", false);
+  std::string frame_mode = pin->GetOrAddString("problem", "ps_frame_mode",
+                                                "velocity");
+  ps_frame_t_start = pin->GetOrAddReal("problem", "ps_frame_t_start", 0.0);
+  ps_frame_t_ramp = pin->GetOrAddReal("problem", "ps_frame_t_ramp", 0.0);
+  ps_frame_vfrac = pin->GetOrAddReal("problem", "ps_frame_vfrac", 1.0);
+  ps_frame_dv_max = pin->GetOrAddReal("problem", "ps_frame_dv_max", 1.0e99);
+  ps_frame_apply_to_particles = pin->GetOrAddBoolean(
+      "problem", "ps_frame_apply_to_particles", true);
+  ps_frame_apply_to_inflow = pin->GetOrAddBoolean(
+      "problem", "ps_frame_apply_to_inflow", true);
+  ps_frame_require_uniform = pin->GetOrAddBoolean(
+      "problem", "ps_frame_require_uniform", true);
+  ps_frame_diag_dcycle = pin->GetOrAddInteger(
+      "problem", "ps_frame_diag_dcycle", 200);
+  ps_recenter_x_target = pin->GetOrAddReal("problem", "ps_recenter_x_target", 2.0);
+  ps_recenter_x_trigger = pin->GetOrAddReal("problem", "ps_recenter_x_trigger", 3.0);
+  ps_recenter_shift_cells = pin->GetOrAddInteger("problem",
+                                                  "ps_recenter_shift_cells", 2);
+  ps_recenter_vshock_model = pin->GetOrAddReal("problem",
+                                                "ps_recenter_vshock_model", -1.0);
   ps_inject_species = pin->GetOrAddInteger("problem", "ps_inject_species", 0);
   ps_inject_seed = pin->GetOrAddInteger("problem", "ps_inject_seed", 1234);
 
@@ -586,6 +999,30 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
               << std::endl
               << "pic_parallel_shock parameters ps_rho0/ps_p0/ps_u0/ps_b0 must be > 0 "
               << "and ps_eta must be >= 0." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (ps_frame_t_ramp < 0.0 || ps_frame_vfrac < 0.0 || ps_frame_dv_max < 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock frame controls require ps_frame_t_ramp >= 0, "
+              << "ps_frame_vfrac >= 0, and ps_frame_dv_max >= 0." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (ps_frame_diag_dcycle < 1) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock requires ps_frame_diag_dcycle >= 1."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (frame_mode == "velocity") {
+    ps_frame_mode = PSFrameMode::velocity;
+  } else if (frame_mode == "recenter") {
+    ps_frame_mode = PSFrameMode::recenter;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "ps_frame_mode must be 'velocity' or 'recenter'." << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -614,18 +1051,77 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     std::exit(EXIT_FAILURE);
   }
 
-  // Section 5.4 ideal shock speed for gamma-law gas.
+  // Analytic finite-Mach shock-speed estimate in the reflecting-wall frame.
   Real gamma = pmbp->pmhd->peos->eos_data.gamma;
-  ps_shock_speed = 0.5*(gamma - 1.0)*ps_u0;
+  ps_shock_speed = EstimateShockSpeed(gamma, ps_rho0, ps_p0, ps_u0);
+  if (ps_shock_speed <= 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock requires supersonic inflow with positive "
+              << "finite-Mach shock-speed estimate." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   ps_xshock0 = pmy_mesh_->mesh_size.x1min;
+  ps_recenter_dx1 = pmy_mesh_->mesh_size.dx1;
   ps_mass_reservoir_local = 0.0;
   ps_tag_seeded = false;
   ps_next_tag = 0;
+
+  if (ps_enable_frame_tracking && ps_frame_require_uniform &&
+      (pmy_mesh_->adaptive || pmy_mesh_->multilevel)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock frame tracking currently supports uniform grids "
+              << "only (no AMR/SMR)." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (ps_enable_frame_tracking && FrameModeRecenter()) {
+    if (!(ps_recenter_x_trigger > pmy_mesh_->mesh_size.x1min)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "ps_recenter_x_trigger must be greater than x1min."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (ps_recenter_dx1 <= 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock recentering requires positive mesh dx1."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (ps_recenter_shift_cells < 1) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "ps_recenter_shift_cells must be >= 1 in recenter mode."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (ps_recenter_shift_cells > pmy_mesh_->mb_indcs.ng) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "ps_recenter_shift_cells must be <= nghost in recenter mode."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    const Real vmodel = ps_recenter_vshock_model;
+    const bool use_default = std::abs(vmodel + 1.0) < 1.0e-12;
+    const bool use_override = vmodel > 0.0;
+    if (!(use_default || use_override)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "ps_recenter_vshock_model must be > 0 or left at default -1."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
 
   // Enroll benchmark callbacks.
   user_srcs = true;
   user_srcs_func = ParallelShockSource;
   user_ref_func = ParallelShockRefinement;
+  user_work_in_loop = true;
+  user_work_in_loop_func = ParallelShockWorkInLoop;
 
   if (restart) return;
 
@@ -672,21 +1168,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   });
 
   // Outer x1 inflow reservoir set to upstream state.
-  auto u_in = pmbp->pmhd->pbval_u->u_in;
-  auto b_in = pmbp->pmhd->pbval_b->b_in;
-  const Real ein = ps_p0/gm1 + 0.5*ps_rho0*SQR(ps_u0) + 0.5*SQR(ps_b0);
-  u_in.h_view(IDN, BoundaryFace::outer_x1) = ps_rho0;
-  u_in.h_view(IM1, BoundaryFace::outer_x1) = -ps_rho0*ps_u0;
-  u_in.h_view(IM2, BoundaryFace::outer_x1) = 0.0;
-  u_in.h_view(IM3, BoundaryFace::outer_x1) = 0.0;
-  u_in.h_view(IEN, BoundaryFace::outer_x1) = ein;
-  b_in.h_view(IBX, BoundaryFace::outer_x1) = ps_b0;
-  b_in.h_view(IBY, BoundaryFace::outer_x1) = 0.0;
-  b_in.h_view(IBZ, BoundaryFace::outer_x1) = 0.0;
-  u_in.template modify<HostMemSpace>();
-  u_in.template sync<DevExeSpace>();
-  b_in.template modify<HostMemSpace>();
-  b_in.template sync<DevExeSpace>();
+  UpdateOuterInflowState(pmy_mesh_, FrameVelocityOffset(pmy_mesh_->time));
 
   // Keep size data synced for host-side injection cell selection.
   size.template modify<HostMemSpace>();
