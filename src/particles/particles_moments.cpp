@@ -329,6 +329,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
     Real dx1 = size.d_view(m).dx1;
     Real dx2 = size.d_view(m).dx2;
     Real dx3 = size.d_view(m).dx3;
+    const Real inv_cell_vol = 1.0/(dx1*dx2*dx3);
 
     int ip = static_cast<int>((x - x1min)/dx1) + is;
     int jp = static_cast<int>((y - x2min)/dx2) + js;
@@ -351,10 +352,12 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
     if (is_boris_pusher) {
       Kokkos::atomic_add(&mom(m, IMOM_EBDOT, kp, jp, ip), pr(IPEBDOT, p));
       if (use_delta_feedback) {
-        Kokkos::atomic_add(&mom(m, IMOM_DPXDT, kp, jp, ip), pr(IPDPX, p));
-        Kokkos::atomic_add(&mom(m, IMOM_DPYDT, kp, jp, ip), pr(IPDPY, p));
-        Kokkos::atomic_add(&mom(m, IMOM_DPZDT, kp, jp, ip), pr(IPDPZ, p));
-        Kokkos::atomic_add(&mom(m, IMOM_DEDT, kp, jp, ip), pr(IPDE, p));
+        // Convert particle-integrated delta channels to conservative-density
+        // source rates before MHD source-term application.
+        Kokkos::atomic_add(&mom(m, IMOM_DPXDT, kp, jp, ip), pr(IPDPX, p)*inv_cell_vol);
+        Kokkos::atomic_add(&mom(m, IMOM_DPYDT, kp, jp, ip), pr(IPDPY, p)*inv_cell_vol);
+        Kokkos::atomic_add(&mom(m, IMOM_DPZDT, kp, jp, ip), pr(IPDPZ, p)*inv_cell_vol);
+        Kokkos::atomic_add(&mom(m, IMOM_DEDT, kp, jp, ip), pr(IPDE, p)*inv_cell_vol);
       }
     }
   });

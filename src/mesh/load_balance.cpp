@@ -17,6 +17,7 @@
 #include "athena.hpp"
 #include "globals.hpp"
 #include "mesh.hpp"
+#include "coordinates/cell_locations.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "z4c/z4c.hpp"
@@ -25,6 +26,56 @@
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
 #endif
+
+namespace {
+
+KOKKOS_INLINE_FUNCTION
+bool ParticleInLogicalBlock(const LogicalLocation &lloc, const bool multi_d,
+                            const bool three_d, const int root_level,
+                            const int nmb_rootx1, const int nmb_rootx2,
+                            const int nmb_rootx3, const RegionSize &ms,
+                            const Real x1, const Real x2, const Real x3) {
+  const int lev = lloc.level;
+
+  const int nmbx1 = nmb_rootx1 << (lev - root_level);
+  const Real x1min = (lloc.lx1 == 0) ? ms.x1min
+                                      : LeftEdgeX(lloc.lx1, nmbx1, ms.x1min, ms.x1max);
+  const Real x1max = (lloc.lx1 == (nmbx1 - 1)) ? ms.x1max
+                                      : LeftEdgeX(lloc.lx1 + 1, nmbx1, ms.x1min, ms.x1max);
+  const bool in_x1 = (x1 >= x1min) &&
+                     ((lloc.lx1 == (nmbx1 - 1)) ? (x1 <= x1max) : (x1 < x1max));
+  if (!in_x1) return false;
+
+  Real x2min = ms.x2min;
+  Real x2max = ms.x2max;
+  bool x2_top = true;
+  if (multi_d) {
+    const int nmbx2 = nmb_rootx2 << (lev - root_level);
+    x2min = (lloc.lx2 == 0) ? ms.x2min
+                            : LeftEdgeX(lloc.lx2, nmbx2, ms.x2min, ms.x2max);
+    x2max = (lloc.lx2 == (nmbx2 - 1)) ? ms.x2max
+                            : LeftEdgeX(lloc.lx2 + 1, nmbx2, ms.x2min, ms.x2max);
+    x2_top = (lloc.lx2 == (nmbx2 - 1));
+  }
+  const bool in_x2 = (x2 >= x2min) && ((x2_top || !multi_d) ? (x2 <= x2max)
+                                                              : (x2 < x2max));
+  if (!in_x2) return false;
+
+  Real x3min = ms.x3min;
+  Real x3max = ms.x3max;
+  bool x3_top = true;
+  if (three_d) {
+    const int nmbx3 = nmb_rootx3 << (lev - root_level);
+    x3min = (lloc.lx3 == 0) ? ms.x3min
+                            : LeftEdgeX(lloc.lx3, nmbx3, ms.x3min, ms.x3max);
+    x3max = (lloc.lx3 == (nmbx3 - 1)) ? ms.x3max
+                            : LeftEdgeX(lloc.lx3 + 1, nmbx3, ms.x3min, ms.x3max);
+    x3_top = (lloc.lx3 == (nmbx3 - 1));
+  }
+  return (x3 >= x3min) && ((x3_top || !three_d) ? (x3 <= x3max) : (x3 < x3max));
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 //! \fn void Mesh::LoadBalance(double *clist, int *rlist, int *slist, int *nlist, int nb)
@@ -1351,6 +1402,14 @@ void MeshRefinement::CreateParticleLists() {
   auto &pi = ppart->prtcl_idata;
   int npart = ppart->nprtcl_thispack;
   int myrank = global_variable::my_rank;
+  const int old_gids_thisrank = pmy_mesh->gids_eachrank[myrank];
+  const int old_gide_thisrank = old_gids_thisrank + pmy_mesh->nmb_eachrank[myrank] - 1;
+  const bool multi_d = pmy_mesh->multi_d;
+  const bool three_d = pmy_mesh->three_d;
+  auto &old_mbsize = pmy_mesh->pmb_pack->pmb->mb_size;
+  int nleaf = 2;
+  if (multi_d) nleaf = 4;
+  if (three_d) nleaf = 8;
 
   // Create device copy of arrays needed for mapping
   int old_nmb = pmy_mesh->nmb_total; 
@@ -1361,19 +1420,87 @@ void MeshRefinement::CreateParticleLists() {
     new_nmb += new_nmb_eachrank[n];
   }
   
-  DualArray1D<int> old_to_new("oldtonew_device", old_nmb);
-  for (int i = 0; i < old_nmb; i++) {
-    old_to_new.h_view(i) = oldtonew[i];
-  }
-  old_to_new.template modify<HostMemSpace>();
-  old_to_new.template sync<DevExeSpace>();
-
   DualArray1D<int> new_rank("new_rank_device", new_nmb);
   for (int i = 0; i < new_nmb; i++) {
     new_rank.h_view(i) = new_rank_eachmb[i];
   }
   new_rank.template modify<HostMemSpace>();
   new_rank.template sync<DevExeSpace>();
+  DualArray1D<LogicalLocation> new_lloc("new_lloc_device", new_nmb);
+  for (int i = 0; i < new_nmb; ++i) {
+    new_lloc.h_view(i) = new_lloc_eachmb[i];
+  }
+  new_lloc.template modify<HostMemSpace>();
+  new_lloc.template sync<DevExeSpace>();
+
+  // Build robust geometric mapping between old and new gids using logical locations.
+  std::unordered_map<LogicalLocation, int, LogicalLocationHash> new_gid_by_lloc;
+  new_gid_by_lloc.reserve(static_cast<std::size_t>(new_nmb)*2);
+  for (int newm = 0; newm < new_nmb; ++newm) {
+    new_gid_by_lloc[new_lloc_eachmb[newm]] = newm;
+  }
+
+  DualArray1D<int> old_to_new("oldtonew_device", old_nmb);
+  DualArray1D<int> old_refined("old_refined_device", old_nmb);
+  DualArray2D<int> old_child_gid("old_child_gid_device", old_nmb, nleaf);
+  for (int oldm = 0; oldm < old_nmb; ++oldm) {
+    old_to_new.h_view(oldm) = oldtonew[oldm];
+    old_refined.h_view(oldm) = 0;
+    for (int n = 0; n < nleaf; ++n) {
+      old_child_gid.h_view(oldm, n) = -1;
+    }
+    const auto &old_loc = pmy_mesh->lloc_eachmb[oldm];
+
+    // 1) same-level mapping
+    auto same_it = new_gid_by_lloc.find(old_loc);
+    if (same_it != new_gid_by_lloc.end()) {
+      old_to_new.h_view(oldm) = same_it->second;
+      continue;
+    }
+
+    // 2) derefinement mapping: old child -> new parent
+    if (old_loc.level > 0) {
+      LogicalLocation parent_loc;
+      parent_loc.level = old_loc.level - 1;
+      parent_loc.lx1 = old_loc.lx1 >> 1;
+      parent_loc.lx2 = old_loc.lx2 >> 1;
+      parent_loc.lx3 = old_loc.lx3 >> 1;
+      auto parent_it = new_gid_by_lloc.find(parent_loc);
+      if (parent_it != new_gid_by_lloc.end()) {
+        old_to_new.h_view(oldm) = parent_it->second;
+        continue;
+      }
+    }
+
+    // 3) refinement mapping: old parent -> nleaf children
+    int nchild_found = 0;
+    for (int ox3 = 0; ox3 <= (three_d ? 1 : 0); ++ox3) {
+      for (int ox2 = 0; ox2 <= (multi_d ? 1 : 0); ++ox2) {
+        for (int ox1 = 0; ox1 <= 1; ++ox1) {
+          LogicalLocation child_loc;
+          child_loc.level = old_loc.level + 1;
+          child_loc.lx1 = (old_loc.lx1 << 1) + ox1;
+          child_loc.lx2 = (old_loc.lx2 << 1) + ox2;
+          child_loc.lx3 = (old_loc.lx3 << 1) + ox3;
+          auto child_it = new_gid_by_lloc.find(child_loc);
+          if (child_it == new_gid_by_lloc.end()) continue;
+          const int child_offset = ox1 + (ox2 << 1) + (ox3 << 2);
+          old_child_gid.h_view(oldm, child_offset) = child_it->second;
+          old_to_new.h_view(oldm) = child_it->second;
+          ++nchild_found;
+        }
+      }
+    }
+    if (nchild_found > 0) {
+      old_refined.h_view(oldm) = 1;
+    }
+  }
+  old_to_new.template modify<HostMemSpace>();
+  old_to_new.template sync<DevExeSpace>();
+  old_refined.template modify<HostMemSpace>();
+  old_refined.template sync<DevExeSpace>();
+  old_child_gid.template modify<HostMemSpace>();
+  old_child_gid.template sync<DevExeSpace>();
  
   // Set particle sendlist to maximum length first
   Kokkos::realloc(prtcl_sendlist, npart);
@@ -1382,12 +1509,88 @@ void MeshRefinement::CreateParticleLists() {
   int counter = 0;
   Kokkos::View<int> atom_count("atom_count");
   Kokkos::deep_copy(atom_count, counter);
+  Kokkos::View<int> unresolved_count("unresolved_count");
+  Kokkos::deep_copy(unresolved_count, 0);
+
+  const auto ms = pmy_mesh->mesh_size;
+  const int nmb_rootx1 = pmy_mesh->nmb_rootx1;
+  const int nmb_rootx2 = pmy_mesh->nmb_rootx2;
+  const int nmb_rootx3 = pmy_mesh->nmb_rootx3;
+  const int root_level = pmy_mesh->root_level;
+  const int old_nmb_local = old_nmb;
 
   par_for("create_part_list", DevExeSpace(), 0, (npart-1),
           KOKKOS_LAMBDA(const int p) {
     
     int old_gid  = pi(PGID, p); 
     int new_gid  = old_to_new.d_view(old_gid);
+
+    // If this old block was refined, map particle to the correct child block using
+    // its position within the old parent MeshBlock (child order: i + 2*j + 4*k).
+    if (old_refined.d_view(old_gid) > 0 &&
+        old_gid >= old_gids_thisrank && old_gid <= old_gide_thisrank) {
+      const int old_m = old_gid - old_gids_thisrank;
+      const Real x1mid = 0.5*(old_mbsize.d_view(old_m).x1min +
+                              old_mbsize.d_view(old_m).x1max);
+      const int ox1 = (pr(IPX, p) >= x1mid) ? 1 : 0;
+
+      int ox2 = 0;
+      if (multi_d) {
+        const Real x2mid = 0.5*(old_mbsize.d_view(old_m).x2min +
+                                old_mbsize.d_view(old_m).x2max);
+        ox2 = (pr(IPY, p) >= x2mid) ? 1 : 0;
+      }
+
+      int ox3 = 0;
+      if (three_d) {
+        const Real x3mid = 0.5*(old_mbsize.d_view(old_m).x3min +
+                                old_mbsize.d_view(old_m).x3max);
+        ox3 = (pr(IPZ, p) >= x3mid) ? 1 : 0;
+      }
+
+      const int child_offset = ox1 + (ox2 << 1) + (ox3 << 2);
+      const int candidate_gid = old_child_gid.d_view(old_gid, child_offset);
+      if (candidate_gid >= 0 && candidate_gid < new_nmb) {
+        new_gid = candidate_gid;
+      }
+    }
+    const Real x1 = pr(IPX, p);
+    const Real x2 = pr(IPY, p);
+    const Real x3 = pr(IPZ, p);
+
+    bool in_candidate = false;
+    if (new_gid >= 0 && new_gid < new_nmb) {
+      in_candidate = ParticleInLogicalBlock(new_lloc.d_view(new_gid), multi_d, three_d,
+                                            root_level, nmb_rootx1, nmb_rootx2,
+                                            nmb_rootx3, ms, x1, x2, x3);
+    }
+
+    // Validate destination by geometry. This catches stale/ambiguous old->new mappings
+    // near refinement boundaries and rank reshuffles.
+    if (!in_candidate) {
+      int found_gid = -1;
+      for (int gid = 0; gid < new_nmb; ++gid) {
+        if (ParticleInLogicalBlock(new_lloc.d_view(gid), multi_d, three_d, root_level,
+                                   nmb_rootx1, nmb_rootx2, nmb_rootx3, ms, x1, x2, x3)) {
+          found_gid = gid;
+          break;
+        }
+      }
+      if (found_gid >= 0) {
+        new_gid = found_gid;
+      } else {
+        int fallback_gid = 0;
+        if (old_gid >= 0 && old_gid < old_nmb_local) {
+          fallback_gid = old_to_new.d_view(old_gid);
+        }
+        if (fallback_gid < 0 || fallback_gid >= new_nmb) {
+          fallback_gid = 0;
+        }
+        new_gid = fallback_gid;
+        Kokkos::atomic_fetch_add(&unresolved_count(), 1);
+      }
+    }
+
     int dest_rank = new_rank.d_view(new_gid);
 
     // Update particle's GID to new value
@@ -1404,6 +1607,13 @@ void MeshRefinement::CreateParticleLists() {
 
   Kokkos::deep_copy(counter, atom_count);
   nprtcl_send = counter;
+  int unresolved = 0;
+  Kokkos::deep_copy(unresolved, unresolved_count);
+  if (unresolved > 0) {
+    std::cout << "WARNING in " << __FILE__ << " at line " << __LINE__
+              << ": unresolved AMR particle destination for " << unresolved
+              << " particles during CreateParticleLists()" << std::endl;
+  }
   Kokkos::resize(prtcl_sendlist, nprtcl_send);
 
   prtcl_sendlist.template modify<DevExeSpace>();

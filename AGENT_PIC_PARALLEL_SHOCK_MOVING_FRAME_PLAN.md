@@ -374,3 +374,171 @@
   - Run artifact:
     - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/seed_noise_validation/coupled_recenter_noise`
   - Completed without MPI/runtime errors.
+
+## Post-Plan Audit (No-Amplification Root Cause Pass)
+
+### Finding 1: 2D PIC path was effectively 2D2V (major implementation gap)
+- Root cause:
+  - In `src/particles/particles_pushers.cpp`, the Boris path previously forced
+    `vz=0`, `Bz=0`, `Uz=0`, and `cEz=0` whenever `nx3==1`.
+  - `src/pgen/tests/pic_parallel_shock.cpp` also forced injected `dirz=0` in 2D.
+- Impact:
+  - Upstream deposited `Jz` channel was suppressed in 2D runs, removing a key
+    transverse coupling path expected for Bell-like amplification behavior.
+- Fix implemented:
+  - Added runtime flag `<particles>/pic_enable_2d3v` (default `false`) in:
+    - `src/particles/particles.hpp`
+    - `src/particles/particles.cpp`
+  - When enabled in 2D:
+    - Boris path keeps `vz/Bz/Uz/cEz` active.
+    - interpolation no longer hard-zeros `Bz/Uz`.
+    - `pic_parallel_shock` injection samples nonzero `dirz`.
+  - Enabled for parallel-shock benchmark decks:
+    - `inputs/tests/pic_parallel_shock_fine_uniform.athinput`
+    - `inputs/tests/pic_parallel_shock_coarse_uniform.athinput`
+    - `inputs/tests/pic_parallel_shock_amr_fiducial.athinput`
+
+### Validation of Finding 1 (`np=8`)
+- A/B short gate (`t=1`, coupled, recenter):
+  - off:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/audit_2d3v/ab_t1/off`
+  - on:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/audit_2d3v/ab_t1/on`
+  - metrics:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/audit_2d3v/ab_t1/ab_metrics.json`
+  - result:
+    - `pic_enable_2d3v=false`: `Jz_up_rms = 0.0`
+    - `pic_enable_2d3v=true`: `Jz_up_rms = 2.735e-06`
+
+### Finding 2: even after 2D3V restoration, growth remains weak in local deck
+- Long diagnostic run (`np=8`, coupled recenter, `t=20`, seed noise on):
+  - run:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/audit_2d3v/diag_t20`
+  - metrics:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/audit_2d3v/diag_t20/diag_currents_metrics.json`
+- Comparison against prior no-2D3V audit:
+  - old:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/audit_no_amp/diag_t20/diag_currents_metrics.json`
+  - `Jz` channel is now active, but `B` growth is still weak over local runtime
+    windows.
+
+### Finding 3: setup-physics mismatch vs Section 5.4 target is still large
+- Section 5.4 reference (`athena++_MHD-PIC.pdf`, Sec. 5.4):
+  - high Alfvén Mach (`M_A=30`), `eta=1e-3`, and a much larger 2D box.
+- Current local benchmark deck intentionally trades physical scale for laptop cost:
+  - `u0=3`, `B0=1` (`M_A~3`), compact domain, low runtime window.
+- Consequence:
+  - the local deck remains a correctness/pipe-validation setup, not yet a strong
+    amplification reproduction setup.
+
+## Critical Gap: Feedback Off/On Invariance (Essential)
+
+### Current status
+- This plan did not yet include a hard acceptance gate that requires measurable
+  divergence between:
+  - `couple_moments_momentum_to_mhd=false`, `couple_moments_energy_to_mhd=false`
+  - `couple_moments_momentum_to_mhd=true`,  `couple_moments_energy_to_mhd=true`
+- New explicit A/B checks (same seed, same mesh, `np=8`) still show near machine
+  precision off/on deltas for local stress levels:
+  - `t=10` A/B metrics:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/audit_feedback_ab_2d3v/feedback_ab_t10_metrics.json`
+  - boosted short A/B (`deposit_qscale=1e-4`, `t=1`) metrics:
+    `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/audit_feedback_ab_2d3v/boosted/feedback_ab_t1_qscale1e-4_metrics.json`
+- Diagnostic source-channel outputs in a coupled run are currently zero at dump
+  times:
+  - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/audit_feedback_ab_2d3v/diag_fb_fields_metrics.json`
+  - `prtcl_dpxdt`, `prtcl_dpydt`, `prtcl_dpzdt`, `prtcl_dedt`, `prtcl_ebdot` all
+    report zero in the sampled outputs.
+
+### Interpretation
+- The essential requirement ("feedback on/off must produce a detectable
+  difference") is not satisfied yet in this benchmark path.
+- With current evidence, this is either:
+  - a scheduling/plumbing issue in when/where feedback moments are consumed, or
+  - a diagnostics-timing issue that hides nonzero sources at output time, while
+    source impact remains too weak in current local parameters.
+
+### Required follow-up gates (must pass before physics claims)
+1. Add an automated `feedback_sensitivity_ab` regression:
+   - fixed seed; identical run pairs; only feedback toggles differ.
+   - enforce nonzero threshold on at least one fluid delta metric
+     (for example, downstream `B` or momentum norm change above tolerance).
+2. Add cycle-local instrumentation around feedback application:
+   - pre/post `MHD::MHDSrcTerms` (or `EFieldSrc`, per order) norms for
+     `IM1/IM2/IM3/IEN`.
+   - per-cycle norms of deposited `IMOM_DPXDT/DPYDT/DPZDT/DEDT`.
+3. Confirm output observability:
+   - write diagnostics at a point guaranteed after deposition and before zeroing,
+     or emit explicit history scalars.
+4. Only after (1)-(3), rerun long moving-frame benchmarks and reassess magnetic
+   amplification and off/on divergence trends.
+
+## Post-Plan Continuation (Latest)
+
+### Fix D: `boris_tsc` 2D interpolation bug (hard blocker)
+- Problem:
+  - In 2D runs, `InterpolateTSC()` used `wz={0,1,0}` while iterating only one
+    z-sample (`nk=1`), so effective z-weight was always zero.
+  - This forced sampled particle fields to near-zero in 2D and collapsed
+    per-particle delta channels (`IPDP*`, `IPDE`) to zero even when coupled mode
+    was enabled.
+- Fix:
+  - In `src/particles/particles_pushers.cpp`, set 2D TSC weights to
+    `wz={1,0,0}` for the collapsed-z path.
+  - Kept 3D branch unchanged.
+- Validation (`np=8`):
+  - Run: `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/diag_2d3v/on/run.log`
+  - `pr_b_rms` and `pr_dpdt_rms` become nonzero after injection starts.
+  - Deposited `IMOM_DPXDT/DPYDT/DPZDT/DEDT` channels become nonzero.
+
+### Fix E: recenter target was parsed but unused
+- Problem:
+  - `ps_recenter_x_target` was never used in the event-count law, so shock stayed
+    near trigger (`~2.9-3.0`) instead of target (`2.0`).
+- Fix:
+  - In `src/pgen/tests/pic_parallel_shock.cpp`, recenter event count now uses
+    target-based overshoot:
+    - `events = ceil((x_unshifted - x_target)/dx_shift)` when `x_unshifted > trigger`.
+  - Added domain validation for `ps_recenter_x_target` and trigger upper bound.
+- Validation (`np=8`, `t=5`):
+  - Run: `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/recenter_target_check`
+  - Measured shock position stabilizes near `x~1.89-1.95` after formation.
+
+### Fix F: delta-feedback density normalization
+- Problem:
+  - Boris delta channels were deposited as particle-integrated rates, but consumed
+    by MHD as conservative density source rates.
+- Fix:
+  - In `src/particles/particles_moments.cpp`, normalize deposited
+    `IMOM_DPXDT/DPYDT/DPZDT/DEDT` by local cell volume.
+- Validation (`np=8`):
+  - Run: `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/diag_after_volnorm/run.log`
+  - Source-channel magnitudes increase from near-zero to finite physically-active
+    levels (`step_mom_l1`, `step_eng_l1` nonzero and sustained).
+
+### Updated A/B sensitivity status
+- Short-moderate coupled A/B remains clearly nonzero:
+  - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/postvol_ab/metrics_t2.json`
+  - `b_l2 ~ 2.53e-02`, `rho_l2 ~ 4.63e-02`.
+- High-drive target-centered A/B at `t=5` still shows weak downstream-mean
+  divergence (small relative delta), indicating coupling is active but not yet in
+  a strong-growth regime at local laptop scale.
+
+### Long-run outcome after fixes
+- Corrected moderate run to `t=100` (`np=8`) remains stable:
+  - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/postfix_long/t100_on`
+  - Trend: `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/postfix_long/t100_on/bmag_trend.json`
+- Section-5.4 style figures regenerated from corrected runs:
+  - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/postfix_long/t100_on/pic_parallel_shock_section54_t100.png`
+  - `/Users/dbf75/Work/Research/AthenaK/athenak-DF/tmp/scan_growth/case4/pic_parallel_shock_section54_case4_t20.png`
+
+### Current conclusion
+- The major implementation blockers are resolved:
+  1. 2D TSC field sampling bug fixed.
+  2. recenter target logic fixed.
+  3. delta feedback normalization fixed.
+- The pipeline is now physically and numerically consistent enough to scale to
+  larger domains/ranks. On this laptop-scale grid/time budget, amplification is
+  detectable but still modest; stronger Section-5.4-like growth will require HPC
+  scale-up (larger upstream extent, longer runtime, and finer transverse
+  resolution) using the same corrected code path.

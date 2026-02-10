@@ -351,6 +351,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << pic_interp_scheme_str << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  pic_enable_2d3v = pin->GetOrAddBoolean("particles", "pic_enable_2d3v", false);
 
   pic_cr_light_speed = pin->GetOrAddReal("particles", "pic_cr_light_speed", 1.0);
   if (pic_cr_light_speed <= 0.0) {

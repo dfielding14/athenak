@@ -19,6 +19,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <map>
@@ -89,6 +90,7 @@ bool ps_enable_injection = true;
 bool ps_enable_subtraction = true;
 bool ps_enable_curvature_amr = true;
 bool ps_enable_frame_tracking = false;
+bool ps_use_2d3v = false;
 enum class PSFrameMode { velocity, recenter };
 PSFrameMode ps_frame_mode = PSFrameMode::velocity;
 Real ps_frame_t_start = 0.0;
@@ -99,6 +101,7 @@ bool ps_frame_apply_to_particles = true;
 bool ps_frame_apply_to_inflow = true;
 bool ps_frame_require_uniform = true;
 int ps_frame_diag_dcycle = 200;
+int ps_feedback_diag_dcycle = 0;
 Real ps_recenter_x_target = 2.0;
 Real ps_recenter_x_trigger = 3.0;
 Real ps_recenter_dx1 = 0.0;
@@ -180,8 +183,11 @@ inline int RecenterEventCount(const Real t) {
   const Real xu = ShockSurfaceUnshiftedX1(t);
   const Real dx_shift = ps_recenter_shift_cells*ps_recenter_dx1;
   const Real trigger = ps_recenter_x_trigger;
+  const Real target = ps_recenter_x_target;
   if (xu <= trigger) return 0;
-  return static_cast<int>(std::floor((xu - trigger)/dx_shift)) + 1;
+  const Real overshoot = xu - target;
+  if (overshoot <= 0.0) return 0;
+  return static_cast<int>(std::ceil(overshoot/dx_shift));
 }
 
 inline Real RecenterDisplacement(const Real t) {
@@ -613,7 +619,7 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
     Real dirx = 0.0;
     Real diry = 0.0;
     Real dirz = 0.0;
-    if (three_d) {
+    if (three_d || ps_use_2d3v) {
       // Half-space isotropy toward +x keeps injected particles away from the
       // reflecting wall in this minimal benchmark implementation.
       const Real mu = Uniform01(rng);
@@ -855,10 +861,194 @@ void ParallelShockRefinement(MeshBlockPack *pmbp) {
   });
 }
 
+void MaybePrintFeedbackDiagnostics(Mesh *pm) {
+  if (pm == nullptr) return;
+  if (ps_feedback_diag_dcycle < 1) return;
+  if ((pm->ncycle % ps_feedback_diag_dcycle) != 0) return;
+
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp == nullptr || pmbp->ppart == nullptr) return;
+  auto *ppart = pmbp->ppart;
+  if (!ppart->deposit_moments) return;
+
+  auto &indcs = pm->mb_indcs;
+  const int is = indcs.is;
+  const int ie = indcs.ie;
+  const int js = indcs.js;
+  const int je = indcs.je;
+  const int ks = indcs.ks;
+  const int ke = indcs.ke;
+  constexpr int nfield = 8;
+  const int idx[nfield] = {
+      particles::Particles::IMOM_JX,
+      particles::Particles::IMOM_JY,
+      particles::Particles::IMOM_JZ,
+      particles::Particles::IMOM_DPXDT,
+      particles::Particles::IMOM_DPYDT,
+      particles::Particles::IMOM_DPZDT,
+      particles::Particles::IMOM_DEDT,
+      particles::Particles::IMOM_EBDOT,
+  };
+
+  Real sum_abs_local[nfield] = {0.0};
+  Real sum_sq_local[nfield] = {0.0};
+  Real max_abs_local[nfield] = {0.0};
+  std::int64_t ncell_local = 0;
+  constexpr int nprt_field = 8;
+  const int pr_idx[nprt_field] = {
+      IPDPX, IPDPY, IPDPZ, IPDE, IPEBDOT, IPBX, IPBY, IPBZ};
+  Real pr_sum_abs_local[nprt_field] = {0.0};
+  Real pr_sum_sq_local[nprt_field] = {0.0};
+  Real pr_max_abs_local[nprt_field] = {0.0};
+
+  auto h_mom = Kokkos::create_mirror_view_and_copy(HostMemSpace(), ppart->moments);
+  for (int m = 0; m < pmbp->nmb_thispack; ++m) {
+    for (int k = ks; k <= ke; ++k) {
+      for (int j = js; j <= je; ++j) {
+        for (int i = is; i <= ie; ++i) {
+          for (int n = 0; n < nfield; ++n) {
+            const Real v = h_mom(m, idx[n], k, j, i);
+            const Real av = std::abs(v);
+            sum_abs_local[n] += av;
+            sum_sq_local[n] += v*v;
+            if (av > max_abs_local[n]) max_abs_local[n] = av;
+          }
+          ncell_local += 1;
+        }
+      }
+    }
+  }
+  auto h_pr = Kokkos::create_mirror_view_and_copy(HostMemSpace(), ppart->prtcl_rdata);
+  for (int p = 0; p < ppart->nprtcl_thispack; ++p) {
+    for (int n = 0; n < nprt_field; ++n) {
+      const Real v = h_pr(pr_idx[n], p);
+      const Real av = std::abs(v);
+      pr_sum_abs_local[n] += av;
+      pr_sum_sq_local[n] += v*v;
+      if (av > pr_max_abs_local[n]) pr_max_abs_local[n] = av;
+    }
+  }
+
+  std::int64_t npart_local = static_cast<std::int64_t>(ppart->nprtcl_thispack);
+  std::int64_t npart_global = npart_local;
+  std::int64_t ncell_global = ncell_local;
+  Real sum_abs_global[nfield] = {0.0};
+  Real sum_sq_global[nfield] = {0.0};
+  Real max_abs_global[nfield] = {0.0};
+  Real pr_sum_abs_global[nprt_field] = {0.0};
+  Real pr_sum_sq_global[nprt_field] = {0.0};
+  Real pr_max_abs_global[nprt_field] = {0.0};
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(sum_abs_local, sum_abs_global, nfield, MPI_ATHENA_REAL,
+                MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(sum_sq_local, sum_sq_global, nfield, MPI_ATHENA_REAL,
+                MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(max_abs_local, max_abs_global, nfield, MPI_ATHENA_REAL,
+                MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(pr_sum_abs_local, pr_sum_abs_global, nprt_field, MPI_ATHENA_REAL,
+                MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(pr_sum_sq_local, pr_sum_sq_global, nprt_field, MPI_ATHENA_REAL,
+                MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(pr_max_abs_local, pr_max_abs_global, nprt_field, MPI_ATHENA_REAL,
+                MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(&ncell_local, &ncell_global, 1, MPI_LONG_LONG_INT,
+                MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(&npart_local, &npart_global, 1, MPI_LONG_LONG_INT,
+                MPI_SUM, MPI_COMM_WORLD);
+#else
+  for (int n = 0; n < nfield; ++n) {
+    sum_abs_global[n] = sum_abs_local[n];
+    sum_sq_global[n] = sum_sq_local[n];
+    max_abs_global[n] = max_abs_local[n];
+  }
+  for (int n = 0; n < nprt_field; ++n) {
+    pr_sum_abs_global[n] = pr_sum_abs_local[n];
+    pr_sum_sq_global[n] = pr_sum_sq_local[n];
+    pr_max_abs_global[n] = pr_max_abs_local[n];
+  }
+#endif
+
+  if (global_variable::my_rank != 0) return;
+  const Real inv_ncell = (ncell_global > 0) ?
+      1.0/static_cast<Real>(ncell_global) : 0.0;
+  Real rms[nfield];
+  for (int n = 0; n < nfield; ++n) {
+    rms[n] = std::sqrt(std::max(sum_sq_global[n]*inv_ncell, 0.0));
+  }
+  const Real inv_npart = (npart_global > 0) ?
+      1.0/static_cast<Real>(npart_global) : 0.0;
+  Real pr_rms[nprt_field];
+  for (int n = 0; n < nprt_field; ++n) {
+    pr_rms[n] = std::sqrt(std::max(pr_sum_sq_global[n]*inv_npart, 0.0));
+  }
+
+  static bool printed_header = false;
+  if (!printed_header) {
+    const bool is_boris =
+        (ppart->pusher == ParticlesPusher::boris_lin) ||
+        (ppart->pusher == ParticlesPusher::boris_tsc);
+    const bool use_delta_feedback =
+        (is_boris &&
+         (ppart->pic_feedback_mode == PICFeedbackMode::coupled) &&
+         ppart->couple_moments_to_mhd &&
+         (ppart->couple_moments_momentum_to_mhd || ppart->couple_moments_energy_to_mhd));
+    std::cout << "pic_parallel_shock feedback_diag_cfg: "
+              << "pusher=" << static_cast<int>(ppart->pusher)
+              << " pic_feedback_mode=" << static_cast<int>(ppart->pic_feedback_mode)
+              << " couple_moments_to_mhd=" << (ppart->couple_moments_to_mhd ? 1 : 0)
+              << " mom_feedback=" << (ppart->couple_moments_momentum_to_mhd ? 1 : 0)
+              << " eng_feedback=" << (ppart->couple_moments_energy_to_mhd ? 1 : 0)
+              << " pic_enable_2d3v=" << (ppart->pic_enable_2d3v ? 1 : 0)
+              << " use_delta_feedback=" << (use_delta_feedback ? 1 : 0)
+              << std::endl;
+    printed_header = true;
+  }
+
+  const Real step_mom_l1 = pm->dt*ppart->couple_moments_momentum_coeff*
+      (sum_abs_global[3] + sum_abs_global[4] + sum_abs_global[5]);
+  const Real step_eng_l1 = pm->dt*ppart->couple_moments_energy_coeff*
+      sum_abs_global[6];
+  auto old_flags = std::cout.flags();
+  auto old_prec = std::cout.precision();
+  std::cout << std::scientific << std::setprecision(12);
+  std::cout << "pic_parallel_shock feedback_diag: cycle=" << pm->ncycle
+            << " time=" << pm->time
+            << " npart=" << npart_global
+            << " ncell=" << ncell_global
+            << " j_rms=(" << rms[0] << "," << rms[1] << "," << rms[2] << ")"
+            << " dpdt_rms=(" << rms[3] << "," << rms[4] << "," << rms[5] << ")"
+            << " dedt_rms=" << rms[6]
+            << " ebdot_rms=" << rms[7]
+            << " dpdt_l1=(" << sum_abs_global[3] << ","
+            << sum_abs_global[4] << "," << sum_abs_global[5] << ")"
+            << " dedt_l1=" << sum_abs_global[6]
+            << " step_mom_l1=" << step_mom_l1
+            << " step_eng_l1=" << step_eng_l1
+            << " max_abs_dpdt=(" << max_abs_global[3] << ","
+            << max_abs_global[4] << "," << max_abs_global[5] << ")"
+            << " pr_dpdt_rms=(" << pr_rms[0] << "," << pr_rms[1] << ","
+            << pr_rms[2] << ")"
+            << " pr_dedt_rms=" << pr_rms[3]
+            << " pr_ebdot_rms=" << pr_rms[4]
+            << " pr_b_rms=(" << pr_rms[5] << "," << pr_rms[6] << ","
+            << pr_rms[7] << ")"
+            << " pr_dpdt_l1=(" << pr_sum_abs_global[0] << ","
+            << pr_sum_abs_global[1] << "," << pr_sum_abs_global[2] << ")"
+            << " pr_max_abs_dpdt=(" << pr_max_abs_global[0] << ","
+            << pr_max_abs_global[1] << "," << pr_max_abs_global[2] << ")"
+            << std::endl;
+  std::cout.flags(old_flags);
+  std::cout.precision(old_prec);
+}
+
 void ParallelShockWorkInLoop(Mesh *pm) {
-  if (!ps_enable_frame_tracking) return;
   if (pm == nullptr || pm->dt <= 0.0) return;
   if (ps_frame_diag_dcycle < 1) ps_frame_diag_dcycle = 1;
+
+  if (!ps_enable_frame_tracking) {
+    MaybePrintFeedbackDiagnostics(pm);
+    return;
+  }
 
   if (FrameModeVelocity()) {
     const Real v_now = FrameVelocityOffset(pm->time);
@@ -889,6 +1079,7 @@ void ParallelShockWorkInLoop(Mesh *pm) {
                 << " clipped=" << (clipped ? 1 : 0)
                 << " xshock_model=" << x_model << std::endl;
     }
+    MaybePrintFeedbackDiagnostics(pm);
     return;
   }
 
@@ -918,6 +1109,7 @@ void ParallelShockWorkInLoop(Mesh *pm) {
                 << " xshock_model=" << x_model << std::endl;
     }
   }
+  MaybePrintFeedbackDiagnostics(pm);
 }
 
 }  // namespace
@@ -1014,6 +1206,8 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       "problem", "ps_frame_require_uniform", true);
   ps_frame_diag_dcycle = pin->GetOrAddInteger(
       "problem", "ps_frame_diag_dcycle", 200);
+  ps_feedback_diag_dcycle = pin->GetOrAddInteger(
+      "problem", "ps_feedback_diag_dcycle", 0);
   ps_recenter_x_target = pin->GetOrAddReal("problem", "ps_recenter_x_target", 2.0);
   ps_recenter_x_trigger = pin->GetOrAddReal("problem", "ps_recenter_x_trigger", 3.0);
   ps_recenter_shift_cells = pin->GetOrAddInteger("problem",
@@ -1048,6 +1242,13 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock requires ps_frame_diag_dcycle >= 1."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (ps_feedback_diag_dcycle < 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock requires ps_feedback_diag_dcycle >= 0."
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
@@ -1099,6 +1300,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   }
   ps_xshock0 = pmy_mesh_->mesh_size.x1min;
   ps_recenter_dx1 = pmy_mesh_->mesh_size.dx1;
+  ps_use_2d3v = (pmy_mesh_->two_d && pmbp->ppart->pic_enable_2d3v);
   ps_mass_reservoir_local = 0.0;
   ps_tag_seeded = false;
   ps_next_tag = 0;
@@ -1113,10 +1315,25 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     std::exit(EXIT_FAILURE);
   }
   if (ps_enable_frame_tracking && FrameModeRecenter()) {
+    if (!(ps_recenter_x_target > pmy_mesh_->mesh_size.x1min &&
+          ps_recenter_x_target < pmy_mesh_->mesh_size.x1max)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "ps_recenter_x_target must lie strictly inside the x1 domain."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     if (!(ps_recenter_x_trigger > pmy_mesh_->mesh_size.x1min)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "ps_recenter_x_trigger must be greater than x1min."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (!(ps_recenter_x_trigger < pmy_mesh_->mesh_size.x1max)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "ps_recenter_x_trigger must be less than x1max."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }

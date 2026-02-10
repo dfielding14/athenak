@@ -208,6 +208,8 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
   // Create local copies to avoid GPU lambda capture warning
   bool track_displacement_local = track_displacement;
   const int nx3_local = indcs.nx3;  // avoid capturing host ref
+  const bool allow_2d3v_local = (pic_enable_2d3v && (nx3_local == 1));
+  const bool use_vz_component = (nx3_local > 1) || allow_2d3v_local;
 
   const Real qscale = deposit_qscale;
   auto mspecies = species_mass;
@@ -232,7 +234,7 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         Real z = (indcs.nx3 > 1) ? pr(IPZ, p) : 0.0;
         Real vx = pr(IPVX, p);
         Real vy = pr(IPVY, p);
-        Real vz = (indcs.nx3 > 1) ? pr(IPVZ, p) : 0.0;
+        Real vz = use_vz_component ? pr(IPVZ, p) : 0.0;
         Real vx_old = vx;
         Real vy_old = vy;
         Real vz_old = vz;
@@ -248,7 +250,7 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
           Real sz = exp(-0.5*dt*exp_rate_x3_local);
           vx *= sx;
           vy *= sy;
-          if (nx3_local > 1) {
+          if (use_vz_component) {
             vz *= sz;
           }
         }
@@ -263,11 +265,13 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         Real Bx = 0.0, By = 0.0, Bz = 0.0;
         Real Ux = 0.0, Uy = 0.0, Uz = 0.0;
         if (use_tsc) {
-          pt->InterpolateTSC(m, x_mid, y_mid, z_mid, Bx, By, Bz, Ux, Uy, Uz);
+          pt->InterpolateTSC(
+              m, x_mid, y_mid, z_mid, Bx, By, Bz, Ux, Uy, Uz, allow_2d3v_local);
         } else {
-          pt->InterpolateLinear(m, x_mid, y_mid, z_mid, Bx, By, Bz, Ux, Uy, Uz);
+          pt->InterpolateLinear(
+              m, x_mid, y_mid, z_mid, Bx, By, Bz, Ux, Uy, Uz, allow_2d3v_local);
         }
-        if (nx3_local == 1) {
+        if (!use_vz_component) {
           Bz = 0.0;
           Uz = 0.0;
         }
@@ -275,7 +279,7 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         Real cEx = -(Uy*Bz - Uz*By);
         Real cEy = -(Uz*Bx - Ux*Bz);
         Real cEz = -(Ux*By - Uy*Bx);
-        if (nx3_local == 1) cEz = 0.0;
+        if (!use_vz_component) cEz = 0.0;
 
         Real v_old_sq = vx_old*vx_old + vy_old*vy_old + vz_old*vz_old;
 
@@ -313,7 +317,7 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
           Real sz = exp(-0.5*dt*exp_rate_x3_local);
           vx *= sx;
           vy *= sy;
-          if (nx3_local > 1) {
+          if (use_vz_component) {
             vz *= sz;
           }
         }
@@ -326,15 +330,15 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         // Store updated velocity
         pr(IPVX, p) = vx;
         pr(IPVY, p) = vy;
-        pr(IPVZ, p) = (nx3_local > 1) ? vz : 0.0;
+        pr(IPVZ, p) = use_vz_component ? vz : 0.0;
 
         // Store sampled midpoint EM fields at particle.
         pr(IPBX, p) = Bx;
         pr(IPBY, p) = By;
-        pr(IPBZ, p) = (nx3_local > 1) ? Bz : 0.0;
+        pr(IPBZ, p) = use_vz_component ? Bz : 0.0;
         pr(IPEX, p) = cEx;
         pr(IPEY, p) = cEy;
-        pr(IPEZ, p) = (nx3_local > 1) ? cEz : 0.0;
+        pr(IPEZ, p) = use_vz_component ? cEz : 0.0;
 
         Real v_new_sq = vx*vx + vy*vy + vz*vz;
         pr(IPDPX, p) = m_macro*(vx - vx_old)*inv_dt;
@@ -347,7 +351,7 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         if (track_displacement_local) {
           pr(IPDX, p) += dt*vx;
           pr(IPDY, p) += dt*vy;
-          if (nx3_local > 1) {
+          if (use_vz_component) {
             pr(IPDZ, p) += dt*vz;
           }
           // Parallel displacement
@@ -363,7 +367,8 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
 
 KOKKOS_INLINE_FUNCTION
 void Particles::InterpolateLinear(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                                  Real &Bz, Real &Ux, Real &Uy, Real &Uz) const {
+                                  Real &Bz, Real &Ux, Real &Uy, Real &Uz,
+                                  bool allow_2d3v) const {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   auto &size = pmy_pack->pmb->mb_size;
   const bool use_no_mhd_bcc =
@@ -373,6 +378,7 @@ void Particles::InterpolateLinear(int m, Real x, Real y, Real z, Real &Bx, Real 
   auto w0 = (use_no_mhd_bcc || pmy_pack->pmhd == nullptr) ?
             DvceArray5D<Real>() : pmy_pack->pmhd->w0;
 
+  const bool use_bz_channel = (indcs.nx3 > 1) || allow_2d3v;
   Real dx1 = size.d_view(m).dx1;
   Real dx2 = size.d_view(m).dx2;
   Real dx3 = (indcs.nx3 > 1) ? size.d_view(m).dx3 : 1.0;
@@ -417,13 +423,13 @@ void Particles::InterpolateLinear(int m, Real x, Real y, Real z, Real &Bx, Real 
           Uy += w*w0(m, IVY, kk, jj, ii);
           Uz += w*w0(m, IVZ, kk, jj, ii);
         }
-        if (indcs.nx3 > 1) {
+        if (use_bz_channel) {
           Bz += w * bcc(m, IBZ, kk, jj, ii);
         }
       }
     }
   }
-  if (indcs.nx3 == 1) {
+  if (!use_bz_channel) {
     Bz = 0.0;
     Uz = 0.0;
   }
@@ -431,7 +437,8 @@ void Particles::InterpolateLinear(int m, Real x, Real y, Real z, Real &Bx, Real 
 
 KOKKOS_INLINE_FUNCTION
 void Particles::InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                               Real &Bz, Real &Ux, Real &Uy, Real &Uz) const {
+                               Real &Bz, Real &Ux, Real &Uy, Real &Uz,
+                               bool allow_2d3v) const {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   auto &size = pmy_pack->pmb->mb_size;
   const bool use_no_mhd_bcc =
@@ -441,6 +448,7 @@ void Particles::InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By
   auto w0 = (use_no_mhd_bcc || pmy_pack->pmhd == nullptr) ?
             DvceArray5D<Real>() : pmy_pack->pmhd->w0;
 
+  const bool use_bz_channel = (indcs.nx3 > 1) || allow_2d3v;
   Real dx1 = size.d_view(m).dx1;
   Real dx2 = size.d_view(m).dx2;
   Real dx3 = (indcs.nx3 > 1) ? size.d_view(m).dx3 : 1.0;
@@ -469,7 +477,8 @@ void Particles::InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By
 
   Real wx[3] = {weight(di + 1.0), weight(di), weight(di - 1.0)};
   Real wy[3] = {weight(dj + 1.0), weight(dj), weight(dj - 1.0)};
-  Real wz[3] = {0.0, 1.0, 0.0};
+  // In 2D, collapse TSC to a single in-plane sample with unit z-weight.
+  Real wz[3] = {1.0, 0.0, 0.0};
   int kz[3] = {kc, kc, kc};
   if (indcs.nx3 > 1) {
     wz[0] = weight(dk + 1.0);
@@ -504,13 +513,13 @@ void Particles::InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By
           Uy += w*w0(m, IVY, kz[kk], iy[jj], ix[ii]);
           Uz += w*w0(m, IVZ, kz[kk], iy[jj], ix[ii]);
         }
-        if (indcs.nx3 > 1) {
+        if (use_bz_channel) {
           Bz += w * bcc(m, IBZ, kz[kk], iy[jj], ix[ii]);
         }
       }
     }
   }
-  if (indcs.nx3 == 1) {
+  if (!use_bz_channel) {
     Bz = 0.0;
     Uz = 0.0;
   }

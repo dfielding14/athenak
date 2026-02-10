@@ -131,6 +131,7 @@ class Particles {
   PICBackgroundMode pic_background_mode = PICBackgroundMode::coupled;
   PICFeedbackMode pic_feedback_mode = PICFeedbackMode::coupled;
   PICInterpolationScheme pic_interp_scheme = PICInterpolationScheme::tsc;
+  bool pic_enable_2d3v = false;    // keep vz/Bz channels active when nx3==1
   PICDeltaFMode pic_deltaf_mode = PICDeltaFMode::off;
   PICIntermediateArraysMode pic_intermediate_arrays_mode =
       PICIntermediateArraysMode::auto_mode;
@@ -223,10 +224,12 @@ class Particles {
   // Field interpolation methods
   KOKKOS_INLINE_FUNCTION
   void InterpolateLinear(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                         Real &Bz, Real &Ux, Real &Uy, Real &Uz) const;
+                         Real &Bz, Real &Ux, Real &Uy, Real &Uz,
+                         bool allow_2d3v = false) const;
   KOKKOS_INLINE_FUNCTION
   void InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                      Real &Bz, Real &Ux, Real &Uy, Real &Uz) const;
+                      Real &Bz, Real &Ux, Real &Uy, Real &Uz,
+                      bool allow_2d3v = false) const;
 
  private:
   MeshBlockPack *pmy_pack; // ptr to MeshBlockPack containing this Particles

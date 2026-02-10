@@ -1578,7 +1578,20 @@ void MeshRefinement::RefineParticles() {
         if (x1 >= mbsize.d_view(newm).x1min && x1 < mbsize.d_view(newm).x1max &&
             x2 >= mbsize.d_view(newm).x2min && x2 < mbsize.d_view(newm).x2max &&
             x3 >= mbsize.d_view(newm).x3min && x3 < mbsize.d_view(newm).x3max) {
-          pi(PGID, p) = gids + m;
+          pi(PGID, p) = gids + newm;
+          in_place = true;
+          break;
+        }
+      }
+    }
+    // Rare fallback: if sibling remap is insufficient (e.g., rank reassignment and AMR
+    // transitions), search all local blocks before flagging particle as orphaned.
+    if (!in_place) {
+      for (int newm = 0; newm < nmb; ++newm) {
+        if (x1 >= mbsize.d_view(newm).x1min && x1 < mbsize.d_view(newm).x1max &&
+            x2 >= mbsize.d_view(newm).x2min && x2 < mbsize.d_view(newm).x2max &&
+            x3 >= mbsize.d_view(newm).x3min && x3 < mbsize.d_view(newm).x3max) {
+          pi(PGID, p) = gids + newm;
           in_place = true;
           break;
         }
@@ -1591,4 +1604,3 @@ void MeshRefinement::RefineParticles() {
 
   return;
 }
-
