@@ -49,6 +49,8 @@ gamma       = 1.66666666667
 particle_type           = cosmic_ray
 ppc                     = 1.0
 pusher                  = drift
+# Boris energy-feedback coverage for this regression is exercised with
+# inputs/tests/pic_boris_midpoint_eb.athinput from the same script.
 nspecies                = 1
 cr_distribution         = center
 deposit_moments         = true

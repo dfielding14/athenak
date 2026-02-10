@@ -191,3 +191,10 @@ variable    = prtcl_ebdot
 id          = prtcl_ebdot
 dcycle      = 1
 ghost_zones = false
+
+<output15>
+file_type   = bin
+variable    = mhd_bcc
+id          = mhd_bcc
+dcycle      = 1
+ghost_zones = false

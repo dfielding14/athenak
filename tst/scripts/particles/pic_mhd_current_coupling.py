@@ -14,6 +14,7 @@ logger = logging.getLogger('athena' + __name__[7:])
 
 _INPUT_DECK = 'tests/pic_mhd_current_coupling.athinput'
 _DEFAULT_MODE_INPUT_DECK = 'tests/pic_mhd_current_coupling_default_mode.athinput'
+_BORIS_INPUT_DECK = 'tests/pic_boris_midpoint_eb.athinput'
 _UNSUPPORTED_INPUT_DECK = 'tests/pic_deposit_conservation.athinput'
 _RADIATION_GUARD_DECK = 'tests/pic_mhd_coupling_guard_radiation.athinput'
 _NR_GUARD_DECK = 'tests/pic_mhd_coupling_guard_nr.athinput'
@@ -82,8 +83,8 @@ def _apply_overrides(config, arguments):
         config[block][param] = _parse_override_value(rhs)
 
 
-def _expected_totals(arguments):
-    config = bin_convert.athinput(_deck_path_for_python(_INPUT_DECK))
+def _expected_totals(arguments, input_deck=_INPUT_DECK):
+    config = bin_convert.athinput(_deck_path_for_python(input_deck))
     _apply_overrides(config, arguments)
 
     mesh = config['mesh']
@@ -360,6 +361,11 @@ def run(**kwargs):
         'particles/cr_vy0=-0.25',
         'particles/cr_vz0=0.125',
     ]
+    boris_args = [
+        'problem/vflow=0.3',
+        'particles/pic_background_mode=coupled',
+        'particles/pic_feedback_mode=coupled',
+    ]
 
     positive_cases = [
         {
@@ -478,6 +484,41 @@ def run(**kwargs):
                      'particles/couple_moments_energy_coeff=10.0',
                      'particles/couple_fluid_feedback_order=efield_src'] +
                     common_args,
+        },
+        {
+            'name': 'serial_boris_coupled',
+            'basename': 'pic_mhd_boris_coupled',
+            'nproc': 1,
+            'input_deck': _BORIS_INPUT_DECK,
+            'args': ['job/basename=pic_mhd_boris_coupled',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_moments_momentum_to_mhd=false',
+                     'particles/couple_moments_energy_to_mhd=false'] +
+                    boris_args,
+        },
+        {
+            'name': 'serial_boris_feedback_energy',
+            'basename': 'pic_mhd_boris_feedback_energy',
+            'nproc': 1,
+            'input_deck': _BORIS_INPUT_DECK,
+            'args': ['job/basename=pic_mhd_boris_feedback_energy',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_moments_momentum_to_mhd=false',
+                     'particles/couple_moments_energy_to_mhd=true',
+                     'particles/couple_moments_energy_coeff=1.0'] +
+                    boris_args,
+        },
+        {
+            'name': 'serial_boris_feedback_energy_x2',
+            'basename': 'pic_mhd_boris_feedback_energy_x2',
+            'nproc': 1,
+            'input_deck': _BORIS_INPUT_DECK,
+            'args': ['job/basename=pic_mhd_boris_feedback_energy_x2',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_moments_momentum_to_mhd=false',
+                     'particles/couple_moments_energy_to_mhd=true',
+                     'particles/couple_moments_energy_coeff=2.0'] +
+                    boris_args,
         },
         {
             'name': 'serial_zero_uncoupled',
@@ -646,7 +687,8 @@ def run(**kwargs):
                      input_deck=case.get('input_deck', _INPUT_DECK))
         _POSITIVE_RESULTS[case['name']] = {
             'measured': _measure_case(case['basename']),
-            'expected': _expected_totals(case['args']),
+            'expected': _expected_totals(
+                case['args'], case.get('input_deck', _INPUT_DECK)),
         }
 
     continuity_cases = [
@@ -868,14 +910,16 @@ def analyze():
     for case_name, result in _POSITIVE_RESULTS.items():
         measured = result['measured']
         expected = result['expected']
+        is_boris_case = case_name.startswith('serial_boris_')
         ok = _check_with_tolerance(case_name + ':Q', measured['Q'], expected['Q'],
                                    1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':Jx', measured['Jx'], expected['Jx'],
-                                   1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':Jy', measured['Jy'], expected['Jy'],
-                                   1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':Jz', measured['Jz'], expected['Jz'],
-                                   1.0e-6, 1.0e-8) and ok
+        if not is_boris_case:
+            ok = _check_with_tolerance(case_name + ':Jx', measured['Jx'],
+                                       expected['Jx'], 1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':Jy', measured['Jy'],
+                                       expected['Jy'], 1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':Jz', measured['Jz'],
+                                       expected['Jz'], 1.0e-6, 1.0e-8) and ok
         ok = _check_with_tolerance(case_name + ':npart', measured['npart'],
                                    expected['npart'], 1.0e-6, 1.0e-8) and ok
 
@@ -1049,6 +1093,10 @@ def analyze():
                                           'mhd_u_m3')
     fb_both_ef_edge_e = _measure_dataset('pic_mhd_feedback_both_efield_edge',
                                          'mhd_u_e')
+    boris_coupled_e = _measure_dataset('pic_mhd_boris_coupled', 'mhd_u_e')
+    boris_fb_eng_e = _measure_dataset('pic_mhd_boris_feedback_energy', 'mhd_u_e')
+    boris_fb_eng_x2_e = _measure_dataset('pic_mhd_boris_feedback_energy_x2',
+                                         'mhd_u_e')
 
     delta_mom_m1 = _l2_difference_quantity(fb_mom_m1, coupled_m1, 'mom1')
     delta_mom_m2 = _l2_difference_quantity(fb_mom_m2, coupled_m2, 'mom2')
@@ -1108,6 +1156,28 @@ def analyze():
         logger.warning('EField-ordered edge-staggered feedback branch did not affect '
                        'both targets')
         ok = False
+
+    boris_delta_eng = _l2_difference_quantity(boris_fb_eng_e, boris_coupled_e,
+                                              'ener')
+    boris_delta_eng_x2 = _l2_difference_quantity(boris_fb_eng_x2_e,
+                                                 boris_coupled_e, 'ener')
+    logger.info('boris_feedback_delta energy_coeff1=% .8e energy_coeff2=% .8e',
+                boris_delta_eng, boris_delta_eng_x2)
+    if boris_delta_eng <= 1.0e-12:
+        logger.warning('Boris energy-feedback branch did not change fluid energy')
+        ok = False
+    if boris_delta_eng_x2 <= 1.0e-12:
+        logger.warning('Boris energy-feedback coeff=2 branch did not change fluid '
+                       'energy')
+        ok = False
+    if boris_delta_eng > 1.0e-12 and boris_delta_eng_x2 > 1.0e-12:
+        boris_coeff_ratio = boris_delta_eng_x2 / boris_delta_eng
+        logger.info('boris_feedback_coeff_ratio measured=% .8e expected=% .8e',
+                    boris_coeff_ratio, 2.0)
+        if boris_coeff_ratio < 1.5 or boris_coeff_ratio > 2.5:
+            logger.warning('Boris energy-feedback coefficient sensitivity is outside '
+                           'expected range')
+            ok = False
 
     zero_uncoupled = _POSITIVE_RESULTS['serial_zero_uncoupled']['measured']
     zero_coupled = _POSITIVE_RESULTS['serial_zero_coupled']['measured']
