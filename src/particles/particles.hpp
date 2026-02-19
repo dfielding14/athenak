@@ -221,16 +221,6 @@ class Particles {
   TaskStatus PushCosmicRays(Driver *pdriver, int stage);
   TaskStatus PushStars(Driver *pdriver, int stage);
 
-  // Field interpolation methods
-  KOKKOS_INLINE_FUNCTION
-  void InterpolateLinear(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                         Real &Bz, Real &Ux, Real &Uy, Real &Uz,
-                         bool allow_2d3v = false) const;
-  KOKKOS_INLINE_FUNCTION
-  void InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                      Real &Bz, Real &Ux, Real &Uy, Real &Uz,
-                      bool allow_2d3v = false) const;
-
  private:
   MeshBlockPack *pmy_pack; // ptr to MeshBlockPack containing this Particles
 };

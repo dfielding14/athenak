@@ -3,8 +3,13 @@
 # Exit on any error
 set -e
 
+# Parallel-shock pgen selection.
+# pic_parallel_shock is a built-in test pgen, so CMake must use built_in_pgens.
+pgen_name="pic_parallel_shock"
+cmake_problem="built_in_pgens"
+
 # Create log file with timestamp
-log_file="build_frontier_turb_$(date +%Y%m%d_%H%M%S).log"
+log_file="build_frontier_pic_parallel_shock_$(date +%Y%m%d_%H%M%S).log"
 echo "Build log will be saved to: ${log_file}"
 
 # Function to echo to both stdout and log file
@@ -16,9 +21,10 @@ log_echo() {
 exec > >(tee -a "${log_file}")
 exec 2>&1
 
-# Frontier-optimized build script for AthenaK with AMR turbulence
-log_echo "=== Building AthenaK on Frontier with AMR turbulence ==="
+# Frontier-optimized build script for AthenaK with PIC parallel shock pgen enabled
+log_echo "=== Building AthenaK on Frontier for ${pgen_name} ==="
 log_echo "=== Build started at $(date) ==="
+log_echo "=== CMake PROBLEM target: ${cmake_problem} ==="
 
 # Load optimal modules for Frontier
 module restore
@@ -35,7 +41,7 @@ export LD_LIBRARY_PATH=${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH}
 
 # Define paths
 athenak_dir='/ccs/home/dfielding/athenak-df'
-build_dir="${athenak_dir}/build_turb"
+build_dir="${athenak_dir}/build_pic_parallel_shock"
 
 # Clean and create build directory
 echo "=== Setting up build directory ==="
@@ -58,7 +64,7 @@ cmake -B"${build_dir}" \
       -DCMAKE_CXX_COMPILER=CC \
       -DCMAKE_CXX_FLAGS="-I${ROCM_PATH}/include -munsafe-fp-atomics" \
       -DCMAKE_EXE_LINKER_FLAGS="-L${ROCM_PATH}/lib -lamdhip64" \
-      -DPROBLEM=turb_timed_amr
+      -DPROBLEM="${cmake_problem}"
 
 # Build
 echo "=== Building AthenaK ==="

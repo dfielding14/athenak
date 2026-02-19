@@ -12,12 +12,202 @@
 
 #include "athena.hpp"
 #include "driver/driver.hpp"
+#include "globals.hpp"
 #include "mesh/mesh.hpp"
 #include "mhd/mhd.hpp"
 #include "particles.hpp"
 #include "units/units.hpp"
 
 namespace particles {
+namespace {
+
+bool PushValidationEnabled() {
+  static int enabled = []() -> int {
+    const char *env = std::getenv("ATHENA_PIC_VALIDATE_PUSH");
+    if (env == nullptr) return 0;
+    return (std::atoi(env) != 0) ? 1 : 0;
+  }();
+  return (enabled != 0);
+}
+
+enum PushValidateCounter {
+  kBadGID = 0,
+  kBadSpecies = 1,
+  kBadX = 2,
+  kBadY = 3,
+  kBadZ = 4,
+  kBadVx = 5,
+  kBadVy = 6,
+  kBadVz = 7,
+  kBadQOverM = 8,
+  kNumPushValidateCounters = 9
+};
+
+KOKKOS_INLINE_FUNCTION
+Real TSCWeight(const Real d) {
+  const Real ad = fabs(d);
+  if (ad < static_cast<Real>(0.5)) return static_cast<Real>(0.75) - ad*ad;
+  if (ad < static_cast<Real>(1.5)) {
+    const Real t = static_cast<Real>(1.5) - ad;
+    return static_cast<Real>(0.5)*t*t;
+  }
+  return static_cast<Real>(0.0);
+}
+
+template <typename SizeViewType>
+KOKKOS_INLINE_FUNCTION
+void InterpolateLinearDevice(const SizeViewType &size_d, const DvceArray5D<Real> &bcc,
+                             const DvceArray5D<Real> &w0, const bool use_no_mhd_bcc,
+                             const int m, const Real x, const Real y, const Real z,
+                             const int is, const int ie, const int js, const int je,
+                             const int ks, const int ke, const int nx3,
+                             const bool allow_2d3v, Real &Bx, Real &By,
+                             Real &Bz, Real &Ux, Real &Uy, Real &Uz) {
+  const bool use_bz_channel = (nx3 > 1) || allow_2d3v;
+  const Real dx1 = size_d(m).dx1;
+  const Real dx2 = size_d(m).dx2;
+  const Real dx3 = (nx3 > 1) ? size_d(m).dx3 : static_cast<Real>(1.0);
+
+  const Real fx = (x - size_d(m).x1min)/dx1;
+  const Real fy = (y - size_d(m).x2min)/dx2;
+  const Real fz = (nx3 > 1) ? (z - size_d(m).x3min)/dx3 : static_cast<Real>(0.0);
+
+  int i0 = static_cast<int>(floor(fx)) + is;
+  int j0 = static_cast<int>(floor(fy)) + js;
+  int k0 = (nx3 > 1) ? static_cast<int>(floor(fz)) + ks : ks;
+
+  i0 = (i0 < is) ? is : ((i0 > ie - 1) ? ie - 1 : i0);
+  j0 = (j0 < js) ? js : ((j0 > je - 1) ? je - 1 : j0);
+  k0 = (k0 < ks) ? ks : ((k0 > ke - 1) ? ke - 1 : k0);
+
+  const int i1 = i0 + 1;
+  const int j1 = j0 + 1;
+  const int k1 = (nx3 > 1) ? k0 + 1 : k0;
+
+  const Real wx = fx - floor(fx);
+  const Real wy = fy - floor(fy);
+  const Real wz = (nx3 > 1) ? fz - floor(fz) : static_cast<Real>(0.0);
+
+  Bx = By = Bz = static_cast<Real>(0.0);
+  Ux = Uy = Uz = static_cast<Real>(0.0);
+
+  const int nk = (nx3 > 1) ? 2 : 1;
+  for (int dk = 0; dk < nk; ++dk) {
+    const Real wk = (nx3 > 1) ? ((dk == 0) ? (static_cast<Real>(1.0) - wz) : wz)
+                               : static_cast<Real>(1.0);
+    const int kk = (dk == 0) ? k0 : k1;
+    for (int dj = 0; dj <= 1; ++dj) {
+      const Real wj = (dj == 0) ? (static_cast<Real>(1.0) - wy) : wy;
+      const int jj = (dj == 0) ? j0 : j1;
+      for (int di = 0; di <= 1; ++di) {
+        const Real wi = (di == 0) ? (static_cast<Real>(1.0) - wx) : wx;
+        const int ii = (di == 0) ? i0 : i1;
+        const Real w = wi*wj*wk;
+        Bx += w*bcc(m, IBX, kk, jj, ii);
+        By += w*bcc(m, IBY, kk, jj, ii);
+        if (!use_no_mhd_bcc) {
+          Ux += w*w0(m, IVX, kk, jj, ii);
+          Uy += w*w0(m, IVY, kk, jj, ii);
+          Uz += w*w0(m, IVZ, kk, jj, ii);
+        }
+        if (use_bz_channel) {
+          Bz += w*bcc(m, IBZ, kk, jj, ii);
+        }
+      }
+    }
+  }
+  if (!use_bz_channel) {
+    Bz = static_cast<Real>(0.0);
+    Uz = static_cast<Real>(0.0);
+  }
+}
+
+template <typename SizeViewType>
+KOKKOS_INLINE_FUNCTION
+void InterpolateTSCDevice(const SizeViewType &size_d, const DvceArray5D<Real> &bcc,
+                          const DvceArray5D<Real> &w0, const bool use_no_mhd_bcc,
+                          const int m, const Real x, const Real y, const Real z,
+                          const int is, const int ie, const int js, const int je,
+                          const int ks, const int ke, const int nx3,
+                          const bool allow_2d3v, Real &Bx, Real &By,
+                          Real &Bz, Real &Ux, Real &Uy, Real &Uz) {
+  const bool use_bz_channel = (nx3 > 1) || allow_2d3v;
+  const Real dx1 = size_d(m).dx1;
+  const Real dx2 = size_d(m).dx2;
+  const Real dx3 = (nx3 > 1) ? size_d(m).dx3 : static_cast<Real>(1.0);
+
+  const Real fx = (x - size_d(m).x1min)/dx1 - static_cast<Real>(0.5);
+  const Real fy = (y - size_d(m).x2min)/dx2 - static_cast<Real>(0.5);
+  const Real fz = (nx3 > 1)
+                      ? (z - size_d(m).x3min)/dx3 - static_cast<Real>(0.5)
+                      : static_cast<Real>(0.0);
+
+  const int ic = static_cast<int>(floor(fx)) + is;
+  const int jc = static_cast<int>(floor(fy)) + js;
+  const int kc = (nx3 > 1) ? static_cast<int>(floor(fz)) + ks : ks;
+
+  const Real di = fx - floor(fx);
+  const Real dj = fy - floor(fy);
+  const Real dk = (nx3 > 1) ? fz - floor(fz) : static_cast<Real>(0.0);
+
+  const Real wx[3] = {TSCWeight(di + static_cast<Real>(1.0)),
+                      TSCWeight(di),
+                      TSCWeight(di - static_cast<Real>(1.0))};
+  const Real wy[3] = {TSCWeight(dj + static_cast<Real>(1.0)),
+                      TSCWeight(dj),
+                      TSCWeight(dj - static_cast<Real>(1.0))};
+
+  Real wz[3] = {static_cast<Real>(1.0), static_cast<Real>(0.0),
+                static_cast<Real>(0.0)};
+  int kz[3] = {kc, kc, kc};
+  if (nx3 > 1) {
+    wz[0] = TSCWeight(dk + static_cast<Real>(1.0));
+    wz[1] = TSCWeight(dk);
+    wz[2] = TSCWeight(dk - static_cast<Real>(1.0));
+    kz[0] = kc - 1;
+    kz[1] = kc;
+    kz[2] = kc + 1;
+  }
+
+  int ix[3] = {ic - 1, ic, ic + 1};
+  int iy[3] = {jc - 1, jc, jc + 1};
+  for (int n = 0; n < 3; ++n) {
+    ix[n] = (ix[n] < is) ? is : ((ix[n] > ie) ? ie : ix[n]);
+    iy[n] = (iy[n] < js) ? js : ((iy[n] > je) ? je : iy[n]);
+    if (nx3 > 1) {
+      kz[n] = (kz[n] < ks) ? ks : ((kz[n] > ke) ? ke : kz[n]);
+    }
+  }
+
+  Bx = By = Bz = static_cast<Real>(0.0);
+  Ux = Uy = Uz = static_cast<Real>(0.0);
+
+  const int nk = (nx3 > 1) ? 3 : 1;
+  for (int kk = 0; kk < nk; ++kk) {
+    for (int jj = 0; jj < 3; ++jj) {
+      for (int ii = 0; ii < 3; ++ii) {
+        const Real w = wx[ii]*wy[jj]*wz[kk];
+        Bx += w*bcc(m, IBX, kz[kk], iy[jj], ix[ii]);
+        By += w*bcc(m, IBY, kz[kk], iy[jj], ix[ii]);
+        if (!use_no_mhd_bcc) {
+          Ux += w*w0(m, IVX, kz[kk], iy[jj], ix[ii]);
+          Uy += w*w0(m, IVY, kz[kk], iy[jj], ix[ii]);
+          Uz += w*w0(m, IVZ, kz[kk], iy[jj], ix[ii]);
+        }
+        if (use_bz_channel) {
+          Bz += w*bcc(m, IBZ, kz[kk], iy[jj], ix[ii]);
+        }
+      }
+    }
+  }
+  if (!use_bz_channel) {
+    Bz = static_cast<Real>(0.0);
+    Uz = static_cast<Real>(0.0);
+  }
+}
+
+}  // namespace
+
 KOKKOS_INLINE_FUNCTION
 Real GravPot(Real x1, Real x2, Real x3, Real G, Real r_s, Real rho_s,
              Real M_gal, Real a_gal, Real z_gal, Real R200, Real rho_mean);
@@ -185,12 +375,15 @@ TaskStatus Particles::PushStars(Driver *pdriver, int stage) {
 //  \brief Boris pusher for cosmic ray particles in electromagnetic fields
 
 TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
+  (void)pdriver;
+  (void)stage;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
+  auto &size = pmy_pack->pmb->mb_size;
   auto &pi = prtcl_idata;
   auto &pr = prtcl_rdata;
-  Real dt = pmy_pack->pmesh->dt;
-  int gids = pmy_pack->gids;
-  bool use_tsc = (pusher == ParticlesPusher::boris_tsc);
+  const Real dt = pmy_pack->pmesh->dt;
+  const int gids = pmy_pack->gids;
+  const bool use_tsc = (pusher == ParticlesPusher::boris_tsc);
 
   const bool no_mhd_mode = (pic_background_mode == PICBackgroundMode::no_mhd);
   const bool has_field_carrier = (pmy_pack->pmhd != nullptr) || no_mhd_mode;
@@ -203,11 +396,23 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
     std::exit(EXIT_FAILURE);
   }
 
-  Particles *pt = this;
+  const bool use_no_mhd_bcc =
+      (pic_background_mode == PICBackgroundMode::no_mhd) ||
+      (pmy_pack->pmhd == nullptr);
+  auto bcc = use_no_mhd_bcc ? pic_no_mhd_bcc0 : pmy_pack->pmhd->bcc0;
+  auto w0 = (use_no_mhd_bcc || pmy_pack->pmhd == nullptr) ?
+            DvceArray5D<Real>() : pmy_pack->pmhd->w0;
 
   // Create local copies to avoid GPU lambda capture warning
-  bool track_displacement_local = track_displacement;
+  const bool track_displacement_local = track_displacement;
   const int nx3_local = indcs.nx3;  // avoid capturing host ref
+  const int is = indcs.is;
+  const int ie = indcs.ie;
+  const int js = indcs.js;
+  const int je = indcs.je;
+  const int ks = indcs.ks;
+  const int ke = indcs.ke;
+  auto size_d = size.d_view;
   const bool allow_2d3v_local = (pic_enable_2d3v && (nx3_local == 1));
   const bool use_vz_component = (nx3_local > 1) || allow_2d3v_local;
 
@@ -222,6 +427,164 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
   const Real exp_rate_x2_local = pic_expansion_rate_x2;
   const Real exp_rate_x3_local = pic_expansion_rate_x3;
 
+  if (PushValidationEnabled()) {
+    Kokkos::View<int*> bad_counts("push_validate_bad_counts",
+                                  kNumPushValidateCounters);
+    Kokkos::deep_copy(bad_counts, 0);
+    Kokkos::View<int> first_bad_idx("push_validate_first_bad_idx");
+    Kokkos::deep_copy(first_bad_idx, -1);
+    Kokkos::View<int*> first_bad_i("push_validate_first_bad_i", 2);
+    Kokkos::deep_copy(first_bad_i, -1);
+    Kokkos::View<Real*> first_bad_r("push_validate_first_bad_r", 7);
+    Kokkos::deep_copy(first_bad_r, static_cast<Real>(0.0));
+
+    const int npart_local = nprtcl_thispack;
+    if (npart_local > 0) {
+      par_for("push_validate_particles", DevExeSpace(), 0, npart_local - 1,
+      KOKKOS_LAMBDA(const int p) {
+        const int gid = pi(PGID, p);
+        const int sp = pi(PSP, p);
+        const Real x = pr(IPX, p);
+        const Real y = pr(IPY, p);
+        const Real z = pr(IPZ, p);
+        const Real vx = pr(IPVX, p);
+        const Real vy = pr(IPVY, p);
+        const Real vz = pr(IPVZ, p);
+        const Real qom = pr(IPM, p);
+
+        bool bad = false;
+        if (gid < gids || gid >= (gids + nmb_local)) {
+          Kokkos::atomic_add(&bad_counts(kBadGID), 1);
+          bad = true;
+        }
+        if (sp < 0 || sp >= nspecies_local) {
+          Kokkos::atomic_add(&bad_counts(kBadSpecies), 1);
+          bad = true;
+        }
+        if (!isfinite(x)) {
+          Kokkos::atomic_add(&bad_counts(kBadX), 1);
+          bad = true;
+        }
+        if (!isfinite(y)) {
+          Kokkos::atomic_add(&bad_counts(kBadY), 1);
+          bad = true;
+        }
+        if (!isfinite(z)) {
+          Kokkos::atomic_add(&bad_counts(kBadZ), 1);
+          bad = true;
+        }
+        if (!isfinite(vx)) {
+          Kokkos::atomic_add(&bad_counts(kBadVx), 1);
+          bad = true;
+        }
+        if (!isfinite(vy)) {
+          Kokkos::atomic_add(&bad_counts(kBadVy), 1);
+          bad = true;
+        }
+        if (!isfinite(vz)) {
+          Kokkos::atomic_add(&bad_counts(kBadVz), 1);
+          bad = true;
+        }
+        if (!isfinite(qom)) {
+          Kokkos::atomic_add(&bad_counts(kBadQOverM), 1);
+          bad = true;
+        }
+
+        if (bad) {
+          const int prev = Kokkos::atomic_compare_exchange(&first_bad_idx(), -1, p);
+          if (prev == -1) {
+            first_bad_i(0) = gid;
+            first_bad_i(1) = sp;
+            first_bad_r(0) = x;
+            first_bad_r(1) = y;
+            first_bad_r(2) = z;
+            first_bad_r(3) = vx;
+            first_bad_r(4) = vy;
+            first_bad_r(5) = vz;
+            first_bad_r(6) = qom;
+          }
+        }
+      });
+    }
+    Kokkos::fence();
+
+    auto h_bad_counts = Kokkos::create_mirror_view_and_copy(HostMemSpace(), bad_counts);
+    int local_counts[kNumPushValidateCounters];
+    int global_counts[kNumPushValidateCounters];
+    int local_bad_total = 0;
+    for (int n = 0; n < kNumPushValidateCounters; ++n) {
+      local_counts[n] = h_bad_counts(n);
+      global_counts[n] = local_counts[n];
+      local_bad_total += local_counts[n];
+    }
+
+#if MPI_PARALLEL_ENABLED
+    MPI_Allreduce(local_counts, global_counts, kNumPushValidateCounters,
+                  MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+#endif
+
+    int global_bad_total = 0;
+    for (int n = 0; n < kNumPushValidateCounters; ++n) {
+      global_bad_total += global_counts[n];
+    }
+
+    if (global_bad_total > 0) {
+      int h_first_bad_idx = -1;
+      Kokkos::deep_copy(h_first_bad_idx, first_bad_idx);
+      if (local_bad_total > 0) {
+        auto h_first_bad_i =
+            Kokkos::create_mirror_view_and_copy(HostMemSpace(), first_bad_i);
+        auto h_first_bad_r =
+            Kokkos::create_mirror_view_and_copy(HostMemSpace(), first_bad_r);
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "ATHENA_PIC_VALIDATE_PUSH detected invalid particle state."
+                  << std::endl
+                  << "rank=" << global_variable::my_rank
+                  << " cycle=" << pmy_pack->pmesh->ncycle
+                  << " time=" << pmy_pack->pmesh->time
+                  << " local_counts(gid,species,x,y,z,vx,vy,vz,q_over_m)=("
+                  << local_counts[kBadGID] << ","
+                  << local_counts[kBadSpecies] << ","
+                  << local_counts[kBadX] << ","
+                  << local_counts[kBadY] << ","
+                  << local_counts[kBadZ] << ","
+                  << local_counts[kBadVx] << ","
+                  << local_counts[kBadVy] << ","
+                  << local_counts[kBadVz] << ","
+                  << local_counts[kBadQOverM] << ")"
+                  << std::endl;
+        if (h_first_bad_idx >= 0) {
+          std::cout << "first_bad_particle: p=" << h_first_bad_idx
+                    << " gid=" << h_first_bad_i(0)
+                    << " sp=" << h_first_bad_i(1)
+                    << " x=(" << h_first_bad_r(0) << ","
+                    << h_first_bad_r(1) << ","
+                    << h_first_bad_r(2) << ")"
+                    << " v=(" << h_first_bad_r(3) << ","
+                    << h_first_bad_r(4) << ","
+                    << h_first_bad_r(5) << ")"
+                    << " q_over_m=" << h_first_bad_r(6)
+                    << std::endl;
+        }
+      }
+      if (global_variable::my_rank == 0) {
+        std::cout << "push_validate global_counts(gid,species,x,y,z,vx,vy,vz,q_over_m)=("
+                  << global_counts[kBadGID] << ","
+                  << global_counts[kBadSpecies] << ","
+                  << global_counts[kBadX] << ","
+                  << global_counts[kBadY] << ","
+                  << global_counts[kBadZ] << ","
+                  << global_counts[kBadVx] << ","
+                  << global_counts[kBadVy] << ","
+                  << global_counts[kBadVz] << ","
+                  << global_counts[kBadQOverM] << ")"
+                  << std::endl;
+      }
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
   // Midpoint E+B Boris pusher
   par_for(
       "push_cr", DevExeSpace(), 0, nprtcl_thispack - 1,
@@ -231,7 +594,7 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         if (m < 0 || m >= nmb_local) return;
         Real x = pr(IPX, p);
         Real y = pr(IPY, p);
-        Real z = (indcs.nx3 > 1) ? pr(IPZ, p) : 0.0;
+        Real z = (nx3_local > 1) ? pr(IPZ, p) : 0.0;
         Real vx = pr(IPVX, p);
         Real vy = pr(IPVY, p);
         Real vz = use_vz_component ? pr(IPVZ, p) : 0.0;
@@ -265,11 +628,15 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         Real Bx = 0.0, By = 0.0, Bz = 0.0;
         Real Ux = 0.0, Uy = 0.0, Uz = 0.0;
         if (use_tsc) {
-          pt->InterpolateTSC(
-              m, x_mid, y_mid, z_mid, Bx, By, Bz, Ux, Uy, Uz, allow_2d3v_local);
+          InterpolateTSCDevice(size_d, bcc, w0, use_no_mhd_bcc, m,
+                               x_mid, y_mid, z_mid,
+                               is, ie, js, je, ks, ke, nx3_local,
+                               allow_2d3v_local, Bx, By, Bz, Ux, Uy, Uz);
         } else {
-          pt->InterpolateLinear(
-              m, x_mid, y_mid, z_mid, Bx, By, Bz, Ux, Uy, Uz, allow_2d3v_local);
+          InterpolateLinearDevice(size_d, bcc, w0, use_no_mhd_bcc, m,
+                                  x_mid, y_mid, z_mid,
+                                  is, ie, js, je, ks, ke, nx3_local,
+                                  allow_2d3v_local, Bx, By, Bz, Ux, Uy, Uz);
         }
         if (!use_vz_component) {
           Bz = 0.0;
@@ -363,166 +730,6 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
       });
 
   return TaskStatus::complete;
-}
-
-KOKKOS_INLINE_FUNCTION
-void Particles::InterpolateLinear(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                                  Real &Bz, Real &Ux, Real &Uy, Real &Uz,
-                                  bool allow_2d3v) const {
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
-  auto &size = pmy_pack->pmb->mb_size;
-  const bool use_no_mhd_bcc =
-      (pic_background_mode == PICBackgroundMode::no_mhd) ||
-      (pmy_pack->pmhd == nullptr);
-  auto bcc = use_no_mhd_bcc ? pic_no_mhd_bcc0 : pmy_pack->pmhd->bcc0;
-  auto w0 = (use_no_mhd_bcc || pmy_pack->pmhd == nullptr) ?
-            DvceArray5D<Real>() : pmy_pack->pmhd->w0;
-
-  const bool use_bz_channel = (indcs.nx3 > 1) || allow_2d3v;
-  Real dx1 = size.d_view(m).dx1;
-  Real dx2 = size.d_view(m).dx2;
-  Real dx3 = (indcs.nx3 > 1) ? size.d_view(m).dx3 : 1.0;
-
-  Real fx = (x - size.d_view(m).x1min) / dx1;
-  Real fy = (y - size.d_view(m).x2min) / dx2;
-  Real fz = (indcs.nx3 > 1) ? (z - size.d_view(m).x3min) / dx3 : 0.0;
-
-  int i0 = static_cast<int>(floor(fx)) + indcs.is;
-  int j0 = static_cast<int>(floor(fy)) + indcs.js;
-  int k0 = (indcs.nx3 > 1) ? static_cast<int>(floor(fz)) + indcs.ks : indcs.ks;
-
-  i0 = (i0 < indcs.is) ? indcs.is : ((i0 > indcs.ie - 1) ? indcs.ie - 1 : i0);
-  j0 = (j0 < indcs.js) ? indcs.js : ((j0 > indcs.je - 1) ? indcs.je - 1 : j0);
-  k0 = (k0 < indcs.ks) ? indcs.ks : ((k0 > indcs.ke - 1) ? indcs.ke - 1 : k0);
-
-  int i1 = i0 + 1;
-  int j1 = j0 + 1;
-  int k1 = (indcs.nx3 > 1) ? k0 + 1 : k0;
-
-  Real wx = fx - floor(fx);
-  Real wy = fy - floor(fy);
-  Real wz = (indcs.nx3 > 1) ? fz - floor(fz) : 0.0;
-
-  Bx = By = Bz = 0.0;
-  Ux = Uy = Uz = 0.0;
-
-  for (int dk = 0; dk <= (indcs.nx3 > 1 ? 1 : 0); ++dk) {
-    Real wk = (indcs.nx3 > 1) ? (dk == 0 ? (1.0 - wz) : wz) : 1.0;
-    int kk = (dk == 0) ? k0 : k1;
-    for (int dj = 0; dj <= 1; ++dj) {
-      Real wj = (dj == 0) ? (1.0 - wy) : wy;
-      int jj = (dj == 0) ? j0 : j1;
-      for (int di = 0; di <= 1; ++di) {
-        Real wi = (di == 0) ? (1.0 - wx) : wx;
-        int ii = (di == 0) ? i0 : i1;
-        Real w = wi * wj * wk;
-        Bx += w * bcc(m, IBX, kk, jj, ii);
-        By += w * bcc(m, IBY, kk, jj, ii);
-        if (!use_no_mhd_bcc && pmy_pack->pmhd != nullptr) {
-          Ux += w*w0(m, IVX, kk, jj, ii);
-          Uy += w*w0(m, IVY, kk, jj, ii);
-          Uz += w*w0(m, IVZ, kk, jj, ii);
-        }
-        if (use_bz_channel) {
-          Bz += w * bcc(m, IBZ, kk, jj, ii);
-        }
-      }
-    }
-  }
-  if (!use_bz_channel) {
-    Bz = 0.0;
-    Uz = 0.0;
-  }
-}
-
-KOKKOS_INLINE_FUNCTION
-void Particles::InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                               Real &Bz, Real &Ux, Real &Uy, Real &Uz,
-                               bool allow_2d3v) const {
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
-  auto &size = pmy_pack->pmb->mb_size;
-  const bool use_no_mhd_bcc =
-      (pic_background_mode == PICBackgroundMode::no_mhd) ||
-      (pmy_pack->pmhd == nullptr);
-  auto bcc = use_no_mhd_bcc ? pic_no_mhd_bcc0 : pmy_pack->pmhd->bcc0;
-  auto w0 = (use_no_mhd_bcc || pmy_pack->pmhd == nullptr) ?
-            DvceArray5D<Real>() : pmy_pack->pmhd->w0;
-
-  const bool use_bz_channel = (indcs.nx3 > 1) || allow_2d3v;
-  Real dx1 = size.d_view(m).dx1;
-  Real dx2 = size.d_view(m).dx2;
-  Real dx3 = (indcs.nx3 > 1) ? size.d_view(m).dx3 : 1.0;
-
-  Real fx = (x - size.d_view(m).x1min) / dx1 - 0.5;
-  Real fy = (y - size.d_view(m).x2min) / dx2 - 0.5;
-  Real fz = (indcs.nx3 > 1) ? (z - size.d_view(m).x3min) / dx3 - 0.5 : 0.0;
-
-  int ic = static_cast<int>(floor(fx)) + indcs.is;
-  int jc = static_cast<int>(floor(fy)) + indcs.js;
-  int kc = (indcs.nx3 > 1) ? static_cast<int>(floor(fz)) + indcs.ks : indcs.ks;
-
-  Real di = fx - floor(fx);
-  Real dj = fy - floor(fy);
-  Real dk = (indcs.nx3 > 1) ? fz - floor(fz) : 0.0;
-
-  auto weight = [](Real d) {
-    Real ad = fabs(d);
-    if (ad < 0.5) return 0.75 - ad * ad;
-    if (ad < 1.5) {
-      Real t = 1.5 - ad;
-      return 0.5 * t * t;
-    }
-    return 0.0;
-  };
-
-  Real wx[3] = {weight(di + 1.0), weight(di), weight(di - 1.0)};
-  Real wy[3] = {weight(dj + 1.0), weight(dj), weight(dj - 1.0)};
-  // In 2D, collapse TSC to a single in-plane sample with unit z-weight.
-  Real wz[3] = {1.0, 0.0, 0.0};
-  int kz[3] = {kc, kc, kc};
-  if (indcs.nx3 > 1) {
-    wz[0] = weight(dk + 1.0);
-    wz[1] = weight(dk);
-    wz[2] = weight(dk - 1.0);
-    kz[0] = kc - 1;
-    kz[1] = kc;
-    kz[2] = kc + 1;
-  }
-
-  int ix[3] = {ic - 1, ic, ic + 1};
-  int iy[3] = {jc - 1, jc, jc + 1};
-  for (int n = 0; n < 3; ++n) {
-    ix[n] = (ix[n] < indcs.is) ? indcs.is : ((ix[n] > indcs.ie) ? indcs.ie : ix[n]);
-    iy[n] = (iy[n] < indcs.js) ? indcs.js : ((iy[n] > indcs.je) ? indcs.je : iy[n]);
-    if (indcs.nx3 > 1) {
-      kz[n] = (kz[n] < indcs.ks) ? indcs.ks : ((kz[n] > indcs.ke) ? indcs.ke : kz[n]);
-    }
-  }
-
-  Bx = By = Bz = 0.0;
-  Ux = Uy = Uz = 0.0;
-  int nk = (indcs.nx3 > 1) ? 3 : 1;
-  for (int kk = 0; kk < nk; ++kk) {
-    for (int jj = 0; jj < 3; ++jj) {
-      for (int ii = 0; ii < 3; ++ii) {
-        Real w = wx[ii] * wy[jj] * wz[kk];
-        Bx += w * bcc(m, IBX, kz[kk], iy[jj], ix[ii]);
-        By += w * bcc(m, IBY, kz[kk], iy[jj], ix[ii]);
-        if (!use_no_mhd_bcc && pmy_pack->pmhd != nullptr) {
-          Ux += w*w0(m, IVX, kz[kk], iy[jj], ix[ii]);
-          Uy += w*w0(m, IVY, kz[kk], iy[jj], ix[ii]);
-          Uz += w*w0(m, IVZ, kz[kk], iy[jj], ix[ii]);
-        }
-        if (use_bz_channel) {
-          Bz += w * bcc(m, IBZ, kz[kk], iy[jj], ix[ii]);
-        }
-      }
-    }
-  }
-  if (!use_bz_channel) {
-    Bz = 0.0;
-    Uz = 0.0;
-  }
 }
 
 KOKKOS_INLINE_FUNCTION
