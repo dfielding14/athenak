@@ -34,10 +34,6 @@ class CaseSpec:
     basename: str
 
 
-class MissingOutputsError(RuntimeError):
-    """Raised when expected benchmark artifacts are missing for analysis."""
-
-
 def _timestamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -76,13 +72,8 @@ def _compute_case_metrics(bin_dir: Path, pvtk_dir: Path, case: CaseSpec) -> dict
     bmag_map = _files_by_cycle(bin_dir, case.basename, "bmag")
     shared = sorted(set(rho_map) & set(bmag_map))
     if len(shared) < 2:
-        raise MissingOutputsError(
-                f"case={case.label}: need >=2 shared rho/bmag outputs, got {len(shared)}\n"
-                f"  searched bin_dir={bin_dir}\n"
-                f"  expected patterns:\n"
-                f"    {case.basename}.rho.*.bin\n"
-                f"    {case.basename}.bmag.*.bin\n"
-                f"  found: rho={len(rho_map)} bmag={len(bmag_map)} shared={len(shared)}"
+        raise RuntimeError(
+                f"case={case.label}: need >=2 shared rho/bmag outputs, got {len(shared)}"
         )
 
     b0 = np.asarray(
@@ -243,12 +234,6 @@ def main() -> int:
     parser.add_argument("--pinj", type=float, default=3.16227766017 * 3.0)
     args = parser.parse_args()
 
-    if not args.run and not args.run_id:
-        parser.error(
-                "--run-id is required when --run is not set "
-                "(analyze-only mode uses existing artifacts)."
-        )
-
     run_id = args.run_id if args.run_id else f"pic_parallel_shock_bench_{_timestamp()}"
     out_dir = (REPO_ROOT / args.output_root / run_id / "reviews" / "benchmark").resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -309,24 +294,8 @@ def main() -> int:
                 raise RuntimeError(f"case failed: {case.label}")
 
     summary_rows: list[dict] = []
-    try:
-        for case in cases:
-            summary_rows.append(_compute_case_metrics(bin_dir, pvtk_dir, case))
-    except MissingOutputsError as exc:
-        print("ERROR: missing benchmark artifacts for analysis.", file=sys.stderr)
-        print(str(exc), file=sys.stderr)
-        if args.run:
-            print(
-                    "Hint: this --run invocation did not produce the expected outputs.",
-                    file=sys.stderr,
-            )
-        else:
-            print(
-                    "Hint: use --run to generate artifacts, or pass --run-id for an "
-                    "existing run in the Athena bin/pvtk outputs.",
-                    file=sys.stderr,
-            )
-        return 2
+    for case in cases:
+        summary_rows.append(_compute_case_metrics(bin_dir, pvtk_dir, case))
 
     compare = {
             "run_id": run_id,

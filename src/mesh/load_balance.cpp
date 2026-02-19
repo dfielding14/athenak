@@ -1517,6 +1517,7 @@ void MeshRefinement::CreateParticleLists() {
   const int nmb_rootx2 = pmy_mesh->nmb_rootx2;
   const int nmb_rootx3 = pmy_mesh->nmb_rootx3;
   const int root_level = pmy_mesh->root_level;
+  const int old_nmb_local = old_nmb;
 
   par_for("create_part_list", DevExeSpace(), 0, (npart-1),
           KOKKOS_LAMBDA(const int p) {
@@ -1578,8 +1579,15 @@ void MeshRefinement::CreateParticleLists() {
       if (found_gid >= 0) {
         new_gid = found_gid;
       } else {
+        int fallback_gid = 0;
+        if (old_gid >= 0 && old_gid < old_nmb_local) {
+          fallback_gid = old_to_new.d_view(old_gid);
+        }
+        if (fallback_gid < 0 || fallback_gid >= new_nmb) {
+          fallback_gid = 0;
+        }
+        new_gid = fallback_gid;
         Kokkos::atomic_fetch_add(&unresolved_count(), 1);
-        return;
       }
     }
 
@@ -1599,19 +1607,12 @@ void MeshRefinement::CreateParticleLists() {
 
   Kokkos::deep_copy(counter, atom_count);
   nprtcl_send = counter;
-  int unresolved_local = 0;
-  int unresolved_global = 0;
-  Kokkos::deep_copy(unresolved_local, unresolved_count);
-  MPI_Allreduce(&unresolved_local, &unresolved_global, 1, MPI_INT, MPI_SUM, par_comm);
-  if (unresolved_global > 0) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "Unresolved AMR particle destination(s) in "
-              << "MeshRefinement::CreateParticleLists()."
-              << std::endl
-              << "local_unresolved=" << unresolved_local
-              << " global_unresolved=" << unresolved_global << std::endl;
-    std::exit(EXIT_FAILURE);
+  int unresolved = 0;
+  Kokkos::deep_copy(unresolved, unresolved_count);
+  if (unresolved > 0) {
+    std::cout << "WARNING in " << __FILE__ << " at line " << __LINE__
+              << ": unresolved AMR particle destination for " << unresolved
+              << " particles during CreateParticleLists()" << std::endl;
   }
   Kokkos::resize(prtcl_sendlist, nprtcl_send);
 

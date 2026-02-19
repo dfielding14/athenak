@@ -7,7 +7,6 @@
 //! \brief task wrappers and kernels for particle moment deposition/communication
 
 #include <cmath>
-#include <cstdlib>
 #include <iostream>
 
 #include "athena.hpp"
@@ -194,20 +193,15 @@ bool RunSaveOldPositionsAtStage(const bool couple_to_mhd,
 //! \brief Store particle positions before pushing.
 
 TaskStatus Particles::SaveOldPositions(Driver *pdriver, int stage) {
-  (void)stage;
-  auto finish = [&](TaskStatus status) -> TaskStatus {
-    return status;
-  };
-
   (void)pdriver;
-  if (!deposit_moments) return finish(TaskStatus::complete);
+  if (!deposit_moments) return TaskStatus::complete;
   if (!RunSaveOldPositionsAtStage(couple_moments_to_mhd, couple_j_deposition_mode,
                                   stage)) {
-    return finish(TaskStatus::complete);
+    return TaskStatus::complete;
   }
 
   int npart = nprtcl_thispack;
-  if (npart <= 0) return finish(TaskStatus::complete);
+  if (npart <= 0) return TaskStatus::complete;
 
   if (x1_old.extent_int(0) < npart) {
     Kokkos::resize(x1_old, npart);
@@ -227,7 +221,7 @@ TaskStatus Particles::SaveOldPositions(Driver *pdriver, int stage) {
     x3(p) = pr(IPZ,p);
   });
 
-  return finish(TaskStatus::complete);
+  return TaskStatus::complete;
 }
 
 //----------------------------------------------------------------------------------------
@@ -235,15 +229,10 @@ TaskStatus Particles::SaveOldPositions(Driver *pdriver, int stage) {
 //! \brief Zero particle moment arrays before local deposition.
 
 TaskStatus Particles::ZeroMoments(Driver *pdriver, int stage) {
-  (void)stage;
-  auto finish = [&](TaskStatus status) -> TaskStatus {
-    return status;
-  };
-
   (void)pdriver;
-  if (!deposit_moments) return finish(TaskStatus::complete);
+  if (!deposit_moments) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
-    return finish(TaskStatus::complete);
+    return TaskStatus::complete;
   }
 
   Kokkos::deep_copy(moments, static_cast<Real>(0.0));
@@ -257,7 +246,7 @@ TaskStatus Particles::ZeroMoments(Driver *pdriver, int stage) {
     Kokkos::deep_copy(j_edge_x2e, static_cast<Real>(0.0));
     Kokkos::deep_copy(j_edge_x3e, static_cast<Real>(0.0));
   }
-  return finish(TaskStatus::complete);
+  return TaskStatus::complete;
 }
 
 //----------------------------------------------------------------------------------------
@@ -265,17 +254,12 @@ TaskStatus Particles::ZeroMoments(Driver *pdriver, int stage) {
 //! \brief Post non-blocking receives for deposited moments.
 
 TaskStatus Particles::InitRecvMoments(Driver *pdriver, int stage) {
-  (void)stage;
-  auto finish = [&](TaskStatus status) -> TaskStatus {
-    return status;
-  };
-
   (void)pdriver;
-  if (!(deposit_moments) || pbval_mom == nullptr) return finish(TaskStatus::complete);
+  if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
-    return finish(TaskStatus::complete);
+    return TaskStatus::complete;
   }
-  return finish(pbval_mom->InitRecv(NMOM));
+  return pbval_mom->InitRecv(NMOM);
 }
 
 //----------------------------------------------------------------------------------------
@@ -283,19 +267,14 @@ TaskStatus Particles::InitRecvMoments(Driver *pdriver, int stage) {
 //! \brief Deposit rho/J moments to mesh cells.
 
 TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
-  (void)stage;
-  auto finish = [&](TaskStatus status) -> TaskStatus {
-    return status;
-  };
-
   (void)pdriver;
-  if (!deposit_moments) return finish(TaskStatus::complete);
+  if (!deposit_moments) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
-    return finish(TaskStatus::complete);
+    return TaskStatus::complete;
   }
 
   int npart = nprtcl_thispack;
-  if (npart <= 0) return finish(TaskStatus::complete);
+  if (npart <= 0) return TaskStatus::complete;
 
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int is = indcs.is;
@@ -311,8 +290,6 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
   const int j_max = je + ng;
   const int k_min = ks - ng;
   const int k_max = ke + ng;
-  const bool one_d = pmy_pack->pmesh->one_d;
-  const bool two_d = pmy_pack->pmesh->two_d;
   const bool three_d = pmy_pack->pmesh->three_d;
   const int nmb = pmy_pack->nmb_thispack;
   const int gids = pmy_pack->gids;
@@ -388,7 +365,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
   if (!UseDirectEdgeCurrentDeposit(deposit_moments, couple_moments_to_mhd,
                                    couple_j_to_efield_representation,
                                    couple_j_deposition_mode)) {
-    return finish(TaskStatus::complete);
+    return TaskStatus::complete;
   }
 
   const Real inv_dt = static_cast<Real>(1.0) / pmy_pack->pmesh->dt;
@@ -447,7 +424,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
     Real fx1_2 = (static_cast<Real>(i1 - i0 - static_cast<int>(i1 > i0)) +
                   dxn - dxp1)*coeff;
 
-    if (one_d) {
+    if (pmy_pack->pmesh->one_d) {
       Real fx2_1 = static_cast<Real>(0.5)*vy*q_macro;
       Real fx2_2 = static_cast<Real>(0.5)*vy*q_macro;
       Real fx3_1 = static_cast<Real>(0.5)*vz*q_macro;
@@ -494,7 +471,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
     Real fx2_2 = (static_cast<Real>(j1 - j0 - static_cast<int>(j1 > j0)) +
                   dyn - dxp2)*coeff;
 
-    if (two_d) {
+    if (pmy_pack->pmesh->two_d) {
       Real fx3_1 = static_cast<Real>(0.5)*vz*q_macro;
       Real fx3_2 = static_cast<Real>(0.5)*vz*q_macro;
       int kf = ks;
@@ -726,7 +703,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
       Kokkos::atomic_add(&jz_e(m, k1, j1+1, i1+1), fx3_2*wx1_2*wx2_2);
     }
     });
-    return finish(TaskStatus::complete);
+    return TaskStatus::complete;
   }
 
   if (deposit_order == 2) {
@@ -773,7 +750,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
       int i1_max = 0;
       ShapeForDeposit<2>(i0, dxo, i1, dxn, i1_min, i1_max, iS_x1, fS_x1);
 
-      if (one_d) {
+      if (pmy_pack->pmesh->one_d) {
         Real wx1[4];
         Real wx23[4];
         for (int i = 0; i < 4; ++i) {
@@ -811,7 +788,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
       int i2_max = 0;
       ShapeForDeposit<2>(j0, dyo, j1, dyn, i2_min, i2_max, iS_x2, fS_x2);
 
-      if (two_d) {
+      if (pmy_pack->pmesh->two_d) {
         Real wx1[4][4];
         Real wx2[4][4];
         Real wx3[4][4];
@@ -1018,7 +995,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
         }
       }
     });
-    return finish(TaskStatus::complete);
+    return TaskStatus::complete;
   }
 
   std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1033,21 +1010,16 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
 //! \brief Restrict deposited moments to coarse storage in multilevel runs.
 
 TaskStatus Particles::RestrictMoments(Driver *pdriver, int stage) {
-  (void)stage;
-  auto finish = [&](TaskStatus status) -> TaskStatus {
-    return status;
-  };
-
   (void)pdriver;
-  if (!deposit_moments) return finish(TaskStatus::complete);
+  if (!deposit_moments) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
-    return finish(TaskStatus::complete);
+    return TaskStatus::complete;
   }
-  if (!(pmy_pack->pmesh->multilevel)) return finish(TaskStatus::complete);
-  if (coarse_moments.size() == 0) return finish(TaskStatus::complete);
+  if (!(pmy_pack->pmesh->multilevel)) return TaskStatus::complete;
+  if (coarse_moments.size() == 0) return TaskStatus::complete;
 
   pmy_pack->pmesh->pmr->RestrictCC(moments, coarse_moments);
-  return finish(TaskStatus::complete);
+  return TaskStatus::complete;
 }
 
 //----------------------------------------------------------------------------------------
@@ -1055,17 +1027,12 @@ TaskStatus Particles::RestrictMoments(Driver *pdriver, int stage) {
 //! \brief Pack and send deposited moments to neighbors.
 
 TaskStatus Particles::SendMoments(Driver *pdriver, int stage) {
-  (void)stage;
-  auto finish = [&](TaskStatus status) -> TaskStatus {
-    return status;
-  };
-
   (void)pdriver;
-  if (!(deposit_moments) || pbval_mom == nullptr) return finish(TaskStatus::complete);
+  if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
-    return finish(TaskStatus::complete);
+    return TaskStatus::complete;
   }
-  return finish(pbval_mom->PackAndSendCC(moments, coarse_moments));
+  return pbval_mom->PackAndSendCC(moments, coarse_moments);
 }
 
 //----------------------------------------------------------------------------------------
@@ -1073,18 +1040,12 @@ TaskStatus Particles::SendMoments(Driver *pdriver, int stage) {
 //! \brief Receive and unpack deposited moments with additive accumulation.
 
 TaskStatus Particles::RecvMoments(Driver *pdriver, int stage) {
-  (void)stage;
-  auto finish = [&](TaskStatus status) -> TaskStatus {
-    return status;
-  };
-
   (void)pdriver;
-  if (!(deposit_moments) || pbval_mom == nullptr) return finish(TaskStatus::complete);
+  if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
-    return finish(TaskStatus::complete);
+    return TaskStatus::complete;
   }
-  return finish(pbval_mom->RecvAndUnpackCC(
-      moments, coarse_moments, CCRecvOp::accumulate));
+  return pbval_mom->RecvAndUnpackCC(moments, coarse_moments, CCRecvOp::accumulate);
 }
 
 //----------------------------------------------------------------------------------------
@@ -1092,17 +1053,12 @@ TaskStatus Particles::RecvMoments(Driver *pdriver, int stage) {
 //! \brief Wait for moment receive completion.
 
 TaskStatus Particles::ClearRecvMoments(Driver *pdriver, int stage) {
-  (void)stage;
-  auto finish = [&](TaskStatus status) -> TaskStatus {
-    return status;
-  };
-
   (void)pdriver;
-  if (!(deposit_moments) || pbval_mom == nullptr) return finish(TaskStatus::complete);
+  if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
-    return finish(TaskStatus::complete);
+    return TaskStatus::complete;
   }
-  return finish(pbval_mom->ClearRecv());
+  return pbval_mom->ClearRecv();
 }
 
 //----------------------------------------------------------------------------------------
@@ -1110,17 +1066,12 @@ TaskStatus Particles::ClearRecvMoments(Driver *pdriver, int stage) {
 //! \brief Wait for moment send completion.
 
 TaskStatus Particles::ClearSendMoments(Driver *pdriver, int stage) {
-  (void)stage;
-  auto finish = [&](TaskStatus status) -> TaskStatus {
-    return status;
-  };
-
   (void)pdriver;
-  if (!(deposit_moments) || pbval_mom == nullptr) return finish(TaskStatus::complete);
+  if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
-    return finish(TaskStatus::complete);
+    return TaskStatus::complete;
   }
-  return finish(pbval_mom->ClearSend());
+  return pbval_mom->ClearSend();
 }
 
 //----------------------------------------------------------------------------------------
@@ -1128,19 +1079,14 @@ TaskStatus Particles::ClearSendMoments(Driver *pdriver, int stage) {
 //! \brief Apply physical BCs to deposited rho/J moments at mesh boundaries.
 
 TaskStatus Particles::ApplyMomentPhysicalBCs(Driver *pdriver, int stage) {
-  (void)stage;
-  auto finish = [&](TaskStatus status) -> TaskStatus {
-    return status;
-  };
-
   (void)pdriver;
-  if (!(deposit_moments) || pbval_mom == nullptr) return finish(TaskStatus::complete);
+  if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
-    return finish(TaskStatus::complete);
+    return TaskStatus::complete;
   }
 
   MeshBoundaryValues::HydroBCs(pmy_pack, pbval_mom->u_in, moments);
-  return finish(TaskStatus::complete);
+  return TaskStatus::complete;
 }
 
 //----------------------------------------------------------------------------------------
@@ -1148,22 +1094,17 @@ TaskStatus Particles::ApplyMomentPhysicalBCs(Driver *pdriver, int stage) {
 //! \brief Fill coarse boundary state and prolongate to fine moment ghosts with AMR/SMR.
 
 TaskStatus Particles::ProlongateMoments(Driver *pdriver, int stage) {
-  (void)stage;
-  auto finish = [&](TaskStatus status) -> TaskStatus {
-    return status;
-  };
-
   (void)pdriver;
-  if (!(deposit_moments) || pbval_mom == nullptr) return finish(TaskStatus::complete);
+  if (!(deposit_moments) || pbval_mom == nullptr) return TaskStatus::complete;
   if (!RunMomentWrappersAtStage(couple_moments_to_mhd, stage)) {
-    return finish(TaskStatus::complete);
+    return TaskStatus::complete;
   }
-  if (!(pmy_pack->pmesh->multilevel)) return finish(TaskStatus::complete);
-  if (coarse_moments.size() == 0) return finish(TaskStatus::complete);
+  if (!(pmy_pack->pmesh->multilevel)) return TaskStatus::complete;
+  if (coarse_moments.size() == 0) return TaskStatus::complete;
 
   pbval_mom->FillCoarseInBndryCC(moments, coarse_moments);
   pbval_mom->ProlongateCC(moments, coarse_moments);
-  return finish(TaskStatus::complete);
+  return TaskStatus::complete;
 }
 
 //----------------------------------------------------------------------------------------

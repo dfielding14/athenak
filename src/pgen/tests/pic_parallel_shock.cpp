@@ -109,7 +109,6 @@ int ps_recenter_shift_cells = 2;
 Real ps_recenter_vshock_model = -1.0;
 int ps_inject_species = 0;
 int ps_inject_seed = 1234;
-int ps_inject_debug_dcycle = 0;
 Real ps_particle_mass = 1.0;
 Real ps_particle_charge = 1.0;
 Real ps_particle_q_over_m = 1.0;
@@ -303,275 +302,52 @@ void UpdateOuterInflowState(Mesh *pm, const Real frame_vx) {
   b_in.template sync<DevExeSpace>();
 }
 
-void CheckTaskStatusOrFatal(const TaskStatus tstat, const char *label) {
-  if (tstat == TaskStatus::complete) return;
-  const char *status = (tstat == TaskStatus::incomplete) ? "incomplete" : "fail";
-  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-            << std::endl
-            << "pic_parallel_shock recenter helper step '" << label
-            << "' returned TaskStatus::" << status << "." << std::endl;
-  std::exit(EXIT_FAILURE);
-}
-
-void SynchronizeRecenteringSourceState(Mesh *pm) {
-  MeshBlockPack *pmbp = pm->pmb_pack;
-  if (pmbp == nullptr || pmbp->pmhd == nullptr) return;
-  auto *pmhd = pmbp->pmhd;
-  if (pmhd->pbval_u == nullptr || pmhd->pbval_b == nullptr) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "pic_parallel_shock recentering requires active MHD boundary objects."
-              << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-
-  if (pm->multilevel) {
-    pm->pmr->RestrictCC(pmhd->u0, pmhd->coarse_u0);
-    pm->pmr->RestrictFC(pmhd->b0, pmhd->coarse_b0);
-  }
-
-  CheckTaskStatusOrFatal(pmhd->pbval_u->InitRecv(pmhd->nmhd + pmhd->nscalars),
-                         "mhd_u_initrecv");
-  CheckTaskStatusOrFatal(pmhd->pbval_b->InitRecv(3), "mhd_b_initrecv");
-  CheckTaskStatusOrFatal(pmhd->pbval_u->PackAndSendCC(pmhd->u0, pmhd->coarse_u0),
-                         "mhd_u_pack_send");
-  CheckTaskStatusOrFatal(pmhd->pbval_b->PackAndSendFC(pmhd->b0, pmhd->coarse_b0),
-                         "mhd_b_pack_send");
-
-  bool recv_u_done = false;
-  bool recv_b_done = false;
-  int npoll = 0;
-  constexpr int max_polls = 10000000;
-  while (!(recv_u_done && recv_b_done)) {
-    if (!recv_u_done) {
-      TaskStatus tstat = pmhd->pbval_u->RecvAndUnpackCC(pmhd->u0, pmhd->coarse_u0);
-      if (tstat == TaskStatus::fail) {
-        CheckTaskStatusOrFatal(tstat, "mhd_u_recv_unpack");
-      }
-      recv_u_done = (tstat == TaskStatus::complete);
-    }
-    if (!recv_b_done) {
-      TaskStatus tstat = pmhd->pbval_b->RecvAndUnpackFC(pmhd->b0, pmhd->coarse_b0);
-      if (tstat == TaskStatus::fail) {
-        CheckTaskStatusOrFatal(tstat, "mhd_b_recv_unpack");
-      }
-      recv_b_done = (tstat == TaskStatus::complete);
-    }
-    if (!(recv_u_done && recv_b_done)) {
-      ++npoll;
-      if (npoll > max_polls) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl
-                  << "pic_parallel_shock recenter helper exceeded recv polling limit."
-                  << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-    }
-  }
-
-  CheckTaskStatusOrFatal(pmhd->pbval_u->ClearSend(), "mhd_u_clear_send");
-  CheckTaskStatusOrFatal(pmhd->pbval_b->ClearSend(), "mhd_b_clear_send");
-  CheckTaskStatusOrFatal(pmhd->pbval_u->ClearRecv(), "mhd_u_clear_recv");
-  CheckTaskStatusOrFatal(pmhd->pbval_b->ClearRecv(), "mhd_b_clear_recv");
-
-  pmhd->pbval_u->HydroBCs((pmbp), (pmhd->pbval_u->u_in), pmhd->u0);
-  pmhd->pbval_b->BFieldBCs((pmbp), (pmhd->pbval_b->b_in), pmhd->b0);
-}
-
-void MigrateRecenteringParticles(Mesh *pm) {
-  MeshBlockPack *pmbp = pm->pmb_pack;
-  if (pmbp == nullptr || pmbp->ppart == nullptr) return;
-  auto *ppart = pmbp->ppart;
-  if (ppart->pbval_part == nullptr) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "pic_parallel_shock recentering requires particle boundary objects."
-              << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-
-  CheckTaskStatusOrFatal(ppart->pbval_part->SetNewPrtclGID(), "prtcl_set_new_gid");
-  CheckTaskStatusOrFatal(ppart->pbval_part->CountSendsAndRecvs(), "prtcl_count_send_recv");
-  CheckTaskStatusOrFatal(ppart->pbval_part->InitPrtclRecv(), "prtcl_init_recv");
-  CheckTaskStatusOrFatal(ppart->pbval_part->PackAndSendPrtcls(), "prtcl_pack_send");
-
-  bool recv_done = false;
-  int npoll = 0;
-  constexpr int max_polls = 10000000;
-  while (!recv_done) {
-    TaskStatus tstat = ppart->pbval_part->RecvAndUnpackPrtcls();
-    if (tstat == TaskStatus::fail) {
-      CheckTaskStatusOrFatal(tstat, "prtcl_recv_unpack");
-    }
-    recv_done = (tstat == TaskStatus::complete);
-    if (!recv_done) {
-      ++npoll;
-      if (npoll > max_polls) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl
-                  << "pic_parallel_shock recenter particle migration exceeded recv "
-                  << "polling limit." << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-    }
-  }
-
-  CheckTaskStatusOrFatal(ppart->pbval_part->ClearPrtclSend(), "prtcl_clear_send");
-  CheckTaskStatusOrFatal(ppart->pbval_part->ClearPrtclRecv(), "prtcl_clear_recv");
-}
-
-void CheckRecenteringParticleOwnership(Mesh *pm) {
-  MeshBlockPack *pmbp = pm->pmb_pack;
-  if (pmbp == nullptr || pmbp->ppart == nullptr) return;
-  auto *ppart = pmbp->ppart;
-  if (ppart->nprtcl_thispack <= 0) return;
-
-  auto &mb_size = pmbp->pmb->mb_size;
-  mb_size.template sync<HostMemSpace>();
-  auto h_pr = Kokkos::create_mirror_view_and_copy(HostMemSpace(), ppart->prtcl_rdata);
-  auto h_pi = Kokkos::create_mirror_view_and_copy(HostMemSpace(), ppart->prtcl_idata);
-
-  int bad_gid_local = 0;
-  int bad_bounds_local = 0;
-  bool have_example = false;
-  int example_kind = 0;
-  int example_p = -1;
-  int example_gid = -1;
-  int example_m = -1;
-  Real example_x1 = 0.0;
-  Real example_x2 = 0.0;
-  Real example_x3 = 0.0;
-  Real example_x1min = 0.0;
-  Real example_x1max = 0.0;
-  Real example_x2min = 0.0;
-  Real example_x2max = 0.0;
-  Real example_x3min = 0.0;
-  Real example_x3max = 0.0;
-
-  for (int p = 0; p < ppart->nprtcl_thispack; ++p) {
-    const int gid = h_pi(PGID, p);
-    if (gid < pmbp->gids || gid > pmbp->gide) {
-      ++bad_gid_local;
-      if (!have_example) {
-        have_example = true;
-        example_kind = 1;
-        example_p = p;
-        example_gid = gid;
-        example_x1 = h_pr(IPX, p);
-        example_x2 = h_pr(IPY, p);
-        example_x3 = h_pr(IPZ, p);
-      }
-      continue;
-    }
-
-    const int m = gid - pmbp->gids;
-    if (m < 0 || m >= pmbp->nmb_thispack) {
-      ++bad_gid_local;
-      if (!have_example) {
-        have_example = true;
-        example_kind = 1;
-        example_p = p;
-        example_gid = gid;
-        example_m = m;
-        example_x1 = h_pr(IPX, p);
-        example_x2 = h_pr(IPY, p);
-        example_x3 = h_pr(IPZ, p);
-      }
-      continue;
-    }
-
-    const Real x1 = h_pr(IPX, p);
-    const Real x2 = h_pr(IPY, p);
-    const Real x3 = h_pr(IPZ, p);
-    const auto &size = mb_size.h_view(m);
-    const Real eps1 = std::max(static_cast<Real>(1.0e-12)*(size.x1max - size.x1min),
-                               static_cast<Real>(1.0e-14));
-    const Real eps2 = std::max(static_cast<Real>(1.0e-12)*(size.x2max - size.x2min),
-                               static_cast<Real>(1.0e-14));
-    const Real eps3 = std::max(static_cast<Real>(1.0e-12)*(size.x3max - size.x3min),
-                               static_cast<Real>(1.0e-14));
-    const bool in_x1 = (x1 >= size.x1min - eps1) && (x1 < size.x1max + eps1);
-    const bool in_x2 = (!pm->multi_d) || ((x2 >= size.x2min - eps2) &&
-                                           (x2 < size.x2max + eps2));
-    const bool in_x3 = (!pm->three_d) || ((x3 >= size.x3min - eps3) &&
-                                          (x3 < size.x3max + eps3));
-    if (!(in_x1 && in_x2 && in_x3)) {
-      ++bad_bounds_local;
-      if (!have_example) {
-        have_example = true;
-        example_kind = 2;
-        example_p = p;
-        example_gid = gid;
-        example_m = m;
-        example_x1 = x1;
-        example_x2 = x2;
-        example_x3 = x3;
-        example_x1min = size.x1min;
-        example_x1max = size.x1max;
-        example_x2min = size.x2min;
-        example_x2max = size.x2max;
-        example_x3min = size.x3min;
-        example_x3max = size.x3max;
-      }
-    }
-  }
-
-  int bad_gid_global = bad_gid_local;
-  int bad_bounds_global = bad_bounds_local;
-#if MPI_PARALLEL_ENABLED
-  MPI_Allreduce(&bad_gid_local, &bad_gid_global, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-  MPI_Allreduce(&bad_bounds_local, &bad_bounds_global, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-#endif
-  if ((bad_gid_global > 0) || (bad_bounds_global > 0)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "pic_parallel_shock recenter particle ownership invariant failure."
-              << std::endl
-              << "local_bad_gid=" << bad_gid_local
-              << " local_bad_bounds=" << bad_bounds_local
-              << " global_bad_gid=" << bad_gid_global
-              << " global_bad_bounds=" << bad_bounds_global << std::endl;
-    if (have_example) {
-      if (example_kind == 1) {
-        std::cout << "example(kind=gid) p=" << example_p
-                  << " gid=" << example_gid
-                  << " m=" << example_m
-                  << " gids=[" << pmbp->gids << "," << pmbp->gide << "]"
-                  << " pos=(" << example_x1 << "," << example_x2 << ","
-                  << example_x3 << ")" << std::endl;
-      } else {
-        std::cout << "example(kind=bounds) p=" << example_p
-                  << " gid=" << example_gid
-                  << " m=" << example_m
-                  << " pos=(" << example_x1 << "," << example_x2 << ","
-                  << example_x3 << ")"
-                  << " block_x1=[" << example_x1min << "," << example_x1max << "]"
-                  << " block_x2=[" << example_x2min << "," << example_x2max << "]"
-                  << " block_x3=[" << example_x3min << "," << example_x3max << "]"
-                  << std::endl;
-      }
-    }
-    std::exit(EXIT_FAILURE);
-  }
-}
-
 void ApplyRecenteringShiftToParticles(Mesh *pm, const Real xshift) {
   if (xshift <= 0.0) return;
   MeshBlockPack *pmbp = pm->pmb_pack;
   if (pmbp == nullptr || pmbp->ppart == nullptr) return;
 
   auto *ppart = pmbp->ppart;
-  const int npart = ppart->nprtcl_thispack;
-  if (npart <= 0) return;
+  const int np_old = ppart->nprtcl_thispack;
+  if (np_old <= 0) return;
 
-  auto &prtcl_rdata = ppart->prtcl_rdata;
-  par_for("ps_recenter_shift_particles", DevExeSpace(), 0, npart - 1,
-  KOKKOS_LAMBDA(const int p) {
-    prtcl_rdata(IPX, p) -= xshift;
-  });
+  const int nr = ppart->nrdata;
+  const int ni = ppart->nidata;
+  auto h_pr_old = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
+                                                       ppart->prtcl_rdata);
+  auto h_pi_old = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
+                                                       ppart->prtcl_idata);
+  HostArray2D<Real> h_pr_new("ps_pr_recent", nr, np_old);
+  HostArray2D<int> h_pi_new("ps_pi_recent", ni, np_old);
 
-  MigrateRecenteringParticles(pm);
-  CheckRecenteringParticleOwnership(pm);
+  const Real xmin = pm->mesh_size.x1min;
+  const Real xmax = pm->mesh_size.x1max;
+  int np_new = 0;
+  for (int p = 0; p < np_old; ++p) {
+    const Real xnew = h_pr_old(IPX, p) - xshift;
+    if (!(xnew > xmin && xnew < xmax)) continue;
+
+    for (int q = 0; q < nr; ++q) h_pr_new(q, np_new) = h_pr_old(q, p);
+    for (int q = 0; q < ni; ++q) h_pi_new(q, np_new) = h_pi_old(q, p);
+    h_pr_new(IPX, np_new) = xnew;
+    ++np_new;
+  }
+
+  Kokkos::resize(ppart->prtcl_rdata, nr, np_new);
+  Kokkos::resize(ppart->prtcl_idata, ni, np_new);
+  if (np_new > 0) {
+    auto r_sub = Kokkos::subview(ppart->prtcl_rdata, Kokkos::ALL,
+                                 std::make_pair(0, np_new));
+    auto i_sub = Kokkos::subview(ppart->prtcl_idata, Kokkos::ALL,
+                                 std::make_pair(0, np_new));
+    auto r_src = Kokkos::subview(h_pr_new, Kokkos::ALL,
+                                 std::make_pair(0, np_new));
+    auto i_src = Kokkos::subview(h_pi_new, Kokkos::ALL,
+                                 std::make_pair(0, np_new));
+    Kokkos::deep_copy(r_sub, r_src);
+    Kokkos::deep_copy(i_sub, i_src);
+  }
+  ppart->nprtcl_thispack = np_new;
 }
 
 void ApplyRecenteringShift(Mesh *pm, const int nshift) {
@@ -596,29 +372,33 @@ void ApplyRecenteringShift(Mesh *pm, const int nshift) {
   }
 
   auto *pmhd = pmbp->pmhd;
-  SynchronizeRecenteringSourceState(pm);
-
-  auto h_u0_src = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pmhd->u0);
-  auto h_x1f_src = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pmhd->b0.x1f);
-  auto h_x2f_src = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pmhd->b0.x2f);
-  auto h_x3f_src = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pmhd->b0.x3f);
-  auto h_u0_new = Kokkos::create_mirror_view(HostMemSpace(), pmhd->u0);
-  auto h_x1f_new = Kokkos::create_mirror_view(HostMemSpace(), pmhd->b0.x1f);
-  auto h_x2f_new = Kokkos::create_mirror_view(HostMemSpace(), pmhd->b0.x2f);
-  auto h_x3f_new = Kokkos::create_mirror_view(HostMemSpace(), pmhd->b0.x3f);
-  Kokkos::deep_copy(h_u0_new, h_u0_src);
-  Kokkos::deep_copy(h_x1f_new, h_x1f_src);
-  Kokkos::deep_copy(h_x2f_new, h_x2f_src);
-  Kokkos::deep_copy(h_x3f_new, h_x3f_src);
+  auto h_u0 = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pmhd->u0);
+  auto h_x1f = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pmhd->b0.x1f);
+  auto h_x2f = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pmhd->b0.x2f);
+  auto h_x3f = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pmhd->b0.x3f);
   const int nvar = static_cast<int>(pmhd->u0.extent_int(1));
+  const Real vin = -ps_u0 + FrameVelocityOffset(pm->time + pm->dt);
+  const Real gm1 = pmhd->peos->eos_data.gamma - 1.0;
+  const Real ein = ps_p0/gm1 + 0.5*ps_rho0*SQR(vin) + 0.5*SQR(ps_b0);
 
   for (int m = 0; m < pmbp->nmb_thispack; ++m) {
     for (int k = ks; k <= ke; ++k) {
       for (int j = js; j <= je; ++j) {
         for (int i = is; i <= ie; ++i) {
           const int src = i + nshift;
-          for (int n = 0; n < nvar; ++n) {
-            h_u0_new(m, n, k, j, i) = h_u0_src(m, n, k, j, src);
+          if (src <= ie + ng) {
+            for (int n = 0; n < nvar; ++n) {
+              h_u0(m, n, k, j, i) = h_u0(m, n, k, j, src);
+            }
+          } else {
+            for (int n = 0; n < nvar; ++n) {
+              h_u0(m, n, k, j, i) = h_u0(m, n, k, j, ie);
+            }
+            h_u0(m, IDN, k, j, i) = ps_rho0;
+            h_u0(m, IM1, k, j, i) = ps_rho0*vin;
+            h_u0(m, IM2, k, j, i) = 0.0;
+            h_u0(m, IM3, k, j, i) = 0.0;
+            h_u0(m, IEN, k, j, i) = ein;
           }
         }
       }
@@ -630,7 +410,8 @@ void ApplyRecenteringShift(Mesh *pm, const int nshift) {
       for (int j = js; j <= je; ++j) {
         for (int i = is; i <= ie + 1; ++i) {
           const int src = i + nshift;
-          h_x1f_new(m, k, j, i) = h_x1f_src(m, k, j, src);
+          h_x1f(m, k, j, i) = (src <= ie + 1 + ng) ?
+              h_x1f(m, k, j, src) : ps_b0;
         }
       }
     }
@@ -638,7 +419,7 @@ void ApplyRecenteringShift(Mesh *pm, const int nshift) {
       for (int j = js; j <= je + 1; ++j) {
         for (int i = is; i <= ie; ++i) {
           const int src = i + nshift;
-          h_x2f_new(m, k, j, i) = h_x2f_src(m, k, j, src);
+          h_x2f(m, k, j, i) = (src <= ie + ng) ? h_x2f(m, k, j, src) : 0.0;
         }
       }
     }
@@ -646,16 +427,16 @@ void ApplyRecenteringShift(Mesh *pm, const int nshift) {
       for (int j = js; j <= je; ++j) {
         for (int i = is; i <= ie; ++i) {
           const int src = i + nshift;
-          h_x3f_new(m, k, j, i) = h_x3f_src(m, k, j, src);
+          h_x3f(m, k, j, i) = (src <= ie + ng) ? h_x3f(m, k, j, src) : 0.0;
         }
       }
     }
   }
 
-  Kokkos::deep_copy(pmhd->u0, h_u0_new);
-  Kokkos::deep_copy(pmhd->b0.x1f, h_x1f_new);
-  Kokkos::deep_copy(pmhd->b0.x2f, h_x2f_new);
-  Kokkos::deep_copy(pmhd->b0.x3f, h_x3f_new);
+  Kokkos::deep_copy(pmhd->u0, h_u0);
+  Kokkos::deep_copy(pmhd->b0.x1f, h_x1f);
+  Kokkos::deep_copy(pmhd->b0.x2f, h_x2f);
+  Kokkos::deep_copy(pmhd->b0.x3f, h_x3f);
 
   auto &u0 = pmhd->u0;
   auto &b0 = pmhd->b0;
@@ -913,8 +694,6 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
   const int new_npart = old_npart + ninject;
   if (ninject <= 0) return;
 
-  Kokkos::fence();
-
   HostArray2D<int> h_pi_new("ps_pi_new", ppart->nidata, ninject);
   HostArray2D<Real> h_pr_new("ps_pr_new", ppart->nrdata, ninject);
   for (int n = 0; n < ninject; ++n) {
@@ -939,42 +718,12 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
 
   Kokkos::resize(ppart->prtcl_idata, ppart->nidata, new_npart);
   Kokkos::resize(ppart->prtcl_rdata, ppart->nrdata, new_npart);
-  if (ppart->deposit_moments) {
-    Kokkos::resize(ppart->x1_old, new_npart);
-    Kokkos::resize(ppart->x2_old, new_npart);
-    Kokkos::resize(ppart->x3_old, new_npart);
-  }
-  auto &pi = ppart->prtcl_idata;
-  auto &pr = ppart->prtcl_rdata;
-  auto d_pi_new = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_pi_new);
-  auto d_pr_new = Kokkos::create_mirror_view_and_copy(DevExeSpace(), h_pr_new);
-  const int ncopy_i = ppart->nidata*ninject;
-  par_for("ps_copy_injected_idata", DevExeSpace(), 0, ncopy_i - 1,
-  KOKKOS_LAMBDA(const int idx) {
-    const int q = idx/ninject;
-    const int n = idx - q*ninject;
-    pi(q, old_npart + n) = d_pi_new(q, n);
-  });
-  const int ncopy_r = ppart->nrdata*ninject;
-  par_for("ps_copy_injected_rdata", DevExeSpace(), 0, ncopy_r - 1,
-  KOKKOS_LAMBDA(const int idx) {
-    const int q = idx/ninject;
-    const int n = idx - q*ninject;
-    pr(q, old_npart + n) = d_pr_new(q, n);
-  });
-  if (ppart->deposit_moments) {
-    auto x1_old = ppart->x1_old;
-    auto x2_old = ppart->x2_old;
-    auto x3_old = ppart->x3_old;
-    par_for("ps_init_injected_xold", DevExeSpace(), 0, ninject - 1,
-    KOKKOS_LAMBDA(const int n) {
-      const int p = old_npart + n;
-      x1_old(p) = d_pr_new(IPX, n);
-      x2_old(p) = d_pr_new(IPY, n);
-      x3_old(p) = d_pr_new(IPZ, n);
-    });
-  }
-  Kokkos::fence();
+  auto idata_new = Kokkos::subview(ppart->prtcl_idata, Kokkos::ALL,
+                                   std::make_pair(old_npart, new_npart));
+  auto rdata_new = Kokkos::subview(ppart->prtcl_rdata, Kokkos::ALL,
+                                   std::make_pair(old_npart, new_npart));
+  Kokkos::deep_copy(idata_new, h_pi_new);
+  Kokkos::deep_copy(rdata_new, h_pr_new);
   ppart->nprtcl_thispack = new_npart;
   pm->CountParticles();
 
@@ -1055,7 +804,6 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
       u0(m, IEN, k, j, i) = efloor;
     }
   });
-  Kokkos::fence();
 }
 
 void ParallelShockRefinement(MeshBlockPack *pmbp) {
@@ -1468,8 +1216,6 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
                                                 "ps_recenter_vshock_model", -1.0);
   ps_inject_species = pin->GetOrAddInteger("problem", "ps_inject_species", 0);
   ps_inject_seed = pin->GetOrAddInteger("problem", "ps_inject_seed", 1234);
-  ps_inject_debug_dcycle = pin->GetOrAddInteger(
-      "problem", "ps_inject_debug_dcycle", 0);
 
   if (ps_rho0 <= 0.0 || ps_p0 <= 0.0 || ps_u0 <= 0.0 || ps_b0 <= 0.0 || ps_eta < 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1503,13 +1249,6 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "pic_parallel_shock requires ps_feedback_diag_dcycle >= 0."
-              << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  if (ps_inject_debug_dcycle < 0) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "pic_parallel_shock requires ps_inject_debug_dcycle >= 0."
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
@@ -1651,10 +1390,6 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   auto &b0 = pmbp->pmhd->b0;
   auto &size = pmbp->pmb->mb_size;
   Real gm1 = gamma - 1.0;
-  const Real rho0 = ps_rho0;
-  const Real u0_in = ps_u0;
-  const Real b0_x = ps_b0;
-  const Real p0 = ps_p0;
   const bool add_seed_noise = (ps_seed_noise_amp > 0.0);
   const Real seed_noise_amp = ps_seed_noise_amp*ps_b0;
   const Real x1min_global = pmy_mesh_->mesh_size.x1min;
@@ -1673,8 +1408,8 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   par_for("pgen_pic_parallel_shock", DevExeSpace(), 0, pmbp->nmb_thispack - 1,
           ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    u0(m, IDN, k, j, i) = rho0;
-    u0(m, IM1, k, j, i) = -rho0*u0_in;
+    u0(m, IDN, k, j, i) = ps_rho0;
+    u0(m, IM1, k, j, i) = -ps_rho0*ps_u0;
     u0(m, IM2, k, j, i) = 0.0;
     u0(m, IM3, k, j, i) = 0.0;
 
@@ -1698,10 +1433,10 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
       dbz = seed_noise_amp*seed_noise_norm*nbz;
     }
 
-    b0.x1f(m, k, j, i) = b0_x;
+    b0.x1f(m, k, j, i) = ps_b0;
     b0.x2f(m, k, j, i) = dby;
     b0.x3f(m, k, j, i) = dbz;
-    if (i == ie) b0.x1f(m, k, j, i + 1) = b0_x;
+    if (i == ie) b0.x1f(m, k, j, i + 1) = ps_b0;
     if (j == je) b0.x2f(m, k, j + 1, i) = dby;
     if (k == ke) b0.x3f(m, k + 1, j, i) = dbz;
   });
@@ -1716,7 +1451,7 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
                      SQR(u0(m, IM2, k, j, i)) +
                      SQR(u0(m, IM3, k, j, i)))/u0(m, IDN, k, j, i);
     Real emag = 0.5*(SQR(bx) + SQR(by) + SQR(bz));
-    u0(m, IEN, k, j, i) = p0/gm1 + ekin + emag;
+    u0(m, IEN, k, j, i) = ps_p0/gm1 + ekin + emag;
   });
 
   // Outer x1 inflow reservoir set to upstream state.
