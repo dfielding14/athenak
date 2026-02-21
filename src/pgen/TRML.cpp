@@ -224,24 +224,13 @@ struct pgen_trml {
   // ====================================================================================
   bool use_frame_tracking;     //!< Enable frame tracking
   Real t_frame_tracking_start; //!< Time at which to start frame tracking
-  int  n_frame_track;          //!< Apply frame tracking every n_frame_track timesteps
+  int  boost_every;            //!< Apply frame tracking every boost_every timesteps
   Real max_vz_frame_tracking;  //!< Maximum velocity shift allowed per application
+  Real ft_shift_smooth_beta;   //!< Applied-shift smoothing factor in [0,1]
   Real T_ft_lo;                //!< Lower temperature bound for tracking (track gas in this range)
   Real T_ft_hi;                //!< Upper temperature bound for tracking
-  bool ft_use_uppzlim;         //!< Enable upper z-limit for frame tracking
-  Real ft_uppzlim;             //!< Upper z-limit (shift velocities if interface above this)
-  bool ft_use_lowzlim;         //!< Enable lower z-limit for frame tracking
-  Real ft_lowzlim;             //!< Lower z-limit (shift velocities if interface below this)
-  int  ft_mode;                //!< 0=velocity, 1=position, 2=PD
-  int  ft_weight_mode;         //!< 0=temp-band, 1=tracer-mix
-  int  ft_dir;                 //!< Interface-normal direction index (0=x,1=y,2=z)
-  int  ft_history_length;      //!< Number of timesteps in local history ring buffer
-  Real ft_z_target;            //!< Target interface location for position-control mode
-  Real ft_alpha_z;             //!< Dimensionless position gain per boost interval
-  Real ft_alpha_v;             //!< Dimensionless velocity gain (velocity mode + PD damping term)
-  Real ft_weight_floor;        //!< Minimum global weight to apply a boost
-  Real ft_max_boost_change;    //!< Limit on step-to-step change in applied boost
-  bool ft_apply_boost;         //!< Apply boost to fluid conserved variables
+  int  history_len;            //!< Number of timesteps in local history ring buffer
+  Real min_tracked_mass;       //!< Minimum tracked mass needed for a valid sample
 
   // Frame-tracking diagnostics
   Real ft_last_boost = 0.0;         //!< Last applied boost velocity
@@ -249,18 +238,13 @@ struct pgen_trml {
   Real ft_last_mean_z = 0.0;        //!< Last global weighted mean z
   Real ft_last_mean_vz = 0.0;       //!< Last global weighted mean vz
   Real ft_last_global_weight = 0.0; //!< Last global interface weight
-  Real ft_last_update_time = -1.0;  //!< Time of last frame-tracking update event
 
-  // Local history state (host-side)
+  // Rank-local history state (host-side)
   int ft_hist_idx = 0;          //!< Ring-buffer write index
   int ft_hist_filled = 0;       //!< Number of valid history entries
-  int ft_hist_nmb = 0;          //!< MeshBlock count used to size buffers
-  std::vector<Real> ft_w_hist;   //!< Per-block W history   [nmb * N]
-  std::vector<Real> ft_wz_hist;  //!< Per-block Wz history  [nmb * N]
-  std::vector<Real> ft_wvz_hist; //!< Per-block Wvz history [nmb * N]
-  std::vector<Real> ft_w_run;    //!< Per-block running sum of W over history window
-  std::vector<Real> ft_wz_run;   //!< Per-block running sum of Wz over history window
-  std::vector<Real> ft_wvz_run;  //!< Per-block running sum of Wvz over history window
+  std::vector<Real> ft_t_hist;  //!< Sample times
+  std::vector<Real> ft_m_hist;  //!< Rank-local tracked mass history
+  std::vector<Real> ft_z_hist;  //!< Rank-local tracked z-moment history
 };
 
 // Global pointer to the TRML parameters structure.
@@ -288,12 +272,6 @@ std::string TrimCopy(const std::string &input) {
     }
   }
   return trimmed;
-}
-
-std::string ToLowerCopy(std::string input) {
-  std::transform(input.begin(), input.end(), input.begin(),
-                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-  return input;
 }
 
 void ParseRefineLevelSchedule(const std::string &schedule,
@@ -427,8 +405,8 @@ void AddCoolingHeating(Mesh *pm, const Real bdt, DvceArray5D<Real> &u0,
 //! Dispatches to Diagnostic() and FrameTracking() as needed.
 void UserWorkInLoop(Mesh *pm);
 
-//! \brief Reset local frame-tracking history buffers for current MeshBlock count.
-void ResetFrameTrackingHistoryState(const int nmb);
+//! \brief Reset local frame-tracking history buffers.
+void ResetFrameTrackingHistoryState();
 
 //! \brief Sample interface moments and update local history (no MPI reduction).
 void SampleFrameTrackingMoments(Mesh *pm);
@@ -475,19 +453,13 @@ Real solve_density_profile_NR(const Real z, const Real rho_hot, const Real beta_
 } // namespace
 
 namespace {
-void ResetFrameTrackingHistoryState(const int nmb) {
-  const int nhist = std::max(ptrml->ft_history_length, 1);
-  const int nmb_safe = std::max(nmb, 0);
-  const std::size_t nhist_size = static_cast<std::size_t>(nmb_safe) * nhist;
-  ptrml->ft_hist_nmb = nmb_safe;
+void ResetFrameTrackingHistoryState() {
+  const int nhist = std::max(ptrml->history_len, 1);
   ptrml->ft_hist_idx = 0;
   ptrml->ft_hist_filled = 0;
-  ptrml->ft_w_hist.assign(nhist_size, 0.0);
-  ptrml->ft_wz_hist.assign(nhist_size, 0.0);
-  ptrml->ft_wvz_hist.assign(nhist_size, 0.0);
-  ptrml->ft_w_run.assign(nmb_safe, 0.0);
-  ptrml->ft_wz_run.assign(nmb_safe, 0.0);
-  ptrml->ft_wvz_run.assign(nmb_safe, 0.0);
+  ptrml->ft_t_hist.assign(nhist, 0.0);
+  ptrml->ft_m_hist.assign(nhist, 0.0);
+  ptrml->ft_z_hist.assign(nhist, 0.0);
 }
 
 void SampleFrameTrackingMoments(Mesh *pm) {
@@ -500,17 +472,7 @@ void SampleFrameTrackingMoments(Mesh *pm) {
   if (nmb <= 0) {
     return;
   }
-  const int nhist = std::max(ptrml->ft_history_length, 1);
-  const std::size_t hist_size_expected = static_cast<std::size_t>(nmb) * nhist;
-  if (ptrml->ft_hist_nmb != nmb ||
-      ptrml->ft_w_hist.size() != hist_size_expected ||
-      ptrml->ft_wz_hist.size() != hist_size_expected ||
-      ptrml->ft_wvz_hist.size() != hist_size_expected ||
-      ptrml->ft_w_run.size() != static_cast<std::size_t>(nmb) ||
-      ptrml->ft_wz_run.size() != static_cast<std::size_t>(nmb) ||
-      ptrml->ft_wvz_run.size() != static_cast<std::size_t>(nmb)) {
-    ResetFrameTrackingHistoryState(nmb);
-  }
+  const int nhist = std::max(ptrml->history_len, 1);
 
   const int nmkji = nmb*nx3*nx2*nx1;
   const int nkji = nx3*nx2*nx1;
@@ -519,17 +481,13 @@ void SampleFrameTrackingMoments(Mesh *pm) {
   auto &w0 = (is_mhd) ? pmbp->pmhd->w0 : pmbp->phydro->w0;
   EOS_Data &eos = (is_mhd) ?
                   pmbp->pmhd->peos->eos_data : pmbp->phydro->peos->eos_data;
-  const int nscalars = (is_mhd) ? pmbp->pmhd->nscalars : pmbp->phydro->nscalars;
-  const int nfluid = (is_mhd) ? pmbp->pmhd->nmhd : pmbp->phydro->nhydro;
   Real use_e = eos.use_e;
   Real gm1 = eos.gamma - 1.0;
   auto &size = pmbp->pmb->mb_size;
-  const int ft_weight_mode = ptrml->ft_weight_mode;
-  const bool use_tracer_mix = (ft_weight_mode == 1) && (nscalars > 0);
   const Real T_ft_lo = ptrml->T_ft_lo;
   const Real T_ft_hi = ptrml->T_ft_hi;
-  DvceArray2D<Real> mb_moments("ft_mb_moments", nmb, 3);
-  Kokkos::deep_copy(DevExeSpace(), mb_moments, 0.0);
+  DvceArray1D<Real> rank_moments("ft_rank_moments", 2);
+  Kokkos::deep_copy(DevExeSpace(), rank_moments, 0.0);
 
   Kokkos::parallel_for("ft_moment_sample", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
   KOKKOS_LAMBDA(const int idx) {
@@ -544,23 +502,13 @@ void SampleFrameTrackingMoments(Mesh *pm) {
       return;
     }
 
-    Real weight = 0.0;
-    if (use_tracer_mix) {
-      Real f = w0(m,nfluid,k,j,i);
-      f = fmin(1.0, fmax(0.0, f));
-      weight = dens*f*(1.0 - f);
+    Real temp = 0.0;
+    if (use_e) {
+      temp = w0(m,IEN,k,j,i)/dens*gm1;
     } else {
-      Real temp = 0.0;
-      if (use_e) {
-        temp = w0(m,IEN,k,j,i)/dens*gm1;
-      } else {
-        temp = w0(m,ITM,k,j,i);
-      }
-      if ((temp < T_ft_hi) && (temp > T_ft_lo)) {
-        weight = dens;
-      }
+      temp = w0(m,ITM,k,j,i);
     }
-    if (weight <= 0.0) {
+    if (temp < T_ft_lo || temp > T_ft_hi) {
       return;
     }
 
@@ -569,32 +517,18 @@ void SampleFrameTrackingMoments(Mesh *pm) {
     Real &x3max = size.d_view(m).x3max;
     int nx3_ = indcs.nx3;
     Real x3v = CellCenterX(k-ks, nx3_, x3min, x3max);
-    Real weighted_dvol = weight*dvol;
-    Kokkos::atomic_add(&(mb_moments(m,0)), weighted_dvol);
-    Kokkos::atomic_add(&(mb_moments(m,1)), weighted_dvol*x3v);
-    Kokkos::atomic_add(&(mb_moments(m,2)), weighted_dvol*w0(m,IVZ,k,j,i));
+    Real weighted_dvol = dens*dvol;
+    Kokkos::atomic_add(&(rank_moments(0)), weighted_dvol);
+    Kokkos::atomic_add(&(rank_moments(1)), weighted_dvol*x3v);
   });
 
-  auto mb_moments_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), mb_moments);
+  auto rank_moments_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), rank_moments);
 
   const int slot = ptrml->ft_hist_idx;
-  const bool hist_full = (ptrml->ft_hist_filled >= nhist);
-  for (int m = 0; m < nmb; ++m) {
-    const std::size_t idx = static_cast<std::size_t>(m)*nhist + slot;
-    if (hist_full) {
-      ptrml->ft_w_run[m] -= ptrml->ft_w_hist[idx];
-      ptrml->ft_wz_run[m] -= ptrml->ft_wz_hist[idx];
-      ptrml->ft_wvz_run[m] -= ptrml->ft_wvz_hist[idx];
-    }
-
-    ptrml->ft_w_hist[idx] = mb_moments_h(m,0);
-    ptrml->ft_wz_hist[idx] = mb_moments_h(m,1);
-    ptrml->ft_wvz_hist[idx] = mb_moments_h(m,2);
-    ptrml->ft_w_run[m] += ptrml->ft_w_hist[idx];
-    ptrml->ft_wz_run[m] += ptrml->ft_wz_hist[idx];
-    ptrml->ft_wvz_run[m] += ptrml->ft_wvz_hist[idx];
-  }
-  if (!hist_full) {
+  ptrml->ft_t_hist[slot] = pm->time;
+  ptrml->ft_m_hist[slot] = rank_moments_h(0);
+  ptrml->ft_z_hist[slot] = rank_moments_h(1);
+  if (ptrml->ft_hist_filled < nhist) {
     ptrml->ft_hist_filled++;
   }
   ptrml->ft_hist_idx = (slot + 1)%nhist;
@@ -725,89 +659,26 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   ptrml->use_frame_tracking = pin->GetOrAddBoolean("problem","use_frame_tracking", false); // switch on/off frame tracking so that gas close to T_peak stays close to the center
   ptrml->t_frame_tracking_start = pin->GetOrAddReal("problem","t_frame_tracking_start", ptrml->t_cool_start); // time after which we switch on frame-tracking
-  ptrml->n_frame_track = std::max(1, pin->GetOrAddInteger("problem","n_frame_track", 20)); // perform frame-tracking every n_frame_track time steps
-  ptrml->ft_history_length = std::max(1, pin->GetOrAddInteger("problem", "ft_history_length", 1));
+  ptrml->boost_every = std::max(1, pin->GetOrAddInteger("problem","boost_every", 20));
+  ptrml->history_len = std::max(1, pin->GetOrAddInteger("problem", "history_len", 1));
   ptrml->max_vz_frame_tracking = pin->GetOrAddReal("problem","max_vz_frame_tracking", 0.01*velocity); // Maximum velocity that we impart to the domain during frame-tracking
-  ptrml->max_vz_frame_tracking = pin->GetOrAddReal("problem","ft_max_abs_boost", ptrml->max_vz_frame_tracking);
-  // Temperature limits for frame tracking
-  ptrml->T_ft_lo = T_cold * pin->GetOrAddReal("problem", "T_ft_lo_over_T_cold", 1.0);
-  ptrml->T_ft_hi = T_cold * pin->GetOrAddReal("problem", "T_ft_hi_over_T_cold", ptrml->T_peak_hi/T_cold);
-  ptrml->ft_use_uppzlim   = pin->GetOrAddBoolean("problem", "ft_use_uppzlim", false);
-  ptrml->ft_uppzlim       = pin->GetOrAddReal("problem", "ft_uppzlim", (z_interface+0.8*(lz_max-z_interface)));
-  ptrml->ft_use_lowzlim   = pin->GetOrAddBoolean("problem", "ft_use_lowzlim", false);
-  ptrml->ft_lowzlim       = pin->GetOrAddReal("problem", "ft_lowzlim", (lz_min+0.2*(z_interface-lz_min)));
-  ptrml->ft_z_target      = pin->GetOrAddReal("problem", "ft_z_target", 0.0);
-  ptrml->ft_alpha_z       = pin->GetOrAddReal("problem", "ft_alpha_z", 0.0);
-  ptrml->ft_alpha_v       = pin->GetOrAddReal("problem", "ft_alpha_v", 1.0);
-  ptrml->ft_weight_floor = pin->GetOrAddReal("problem", "ft_weight_floor", 1.0e-20);
-  ptrml->ft_max_boost_change = pin->GetOrAddReal("problem", "ft_max_boost_change", FLT_MAX);
-  ptrml->ft_dir = pin->GetOrAddInteger("problem", "ft_dir", 2);
-  if (ptrml->ft_dir != 2) {
-    if (global_variable::my_rank == 0) {
-      std::cout << "WARNING: ft_dir currently supports only z-direction (2) in TRML. "
-                   "Setting ft_dir=2." << std::endl;
-    }
-    ptrml->ft_dir = 2;
+  ptrml->ft_shift_smooth_beta = pin->GetOrAddReal("problem", "shift_smooth_beta", 1.0);
+  ptrml->ft_shift_smooth_beta = std::max(static_cast<Real>(0.0),
+                                         std::min(static_cast<Real>(1.0),
+                                                  ptrml->ft_shift_smooth_beta));
+  ptrml->T_ft_lo = pin->GetOrAddReal("problem", "T_lo", T_cold);
+  ptrml->T_ft_hi = pin->GetOrAddReal("problem", "T_hi", ptrml->T_peak_hi);
+  if (ptrml->T_ft_hi < ptrml->T_ft_lo) {
+    std::swap(ptrml->T_ft_lo, ptrml->T_ft_hi);
   }
-
-  std::string ft_mode = ToLowerCopy(TrimCopy(pin->GetOrAddString("problem", "ft_mode", "velocity")));
-  if (ft_mode == "position") {
-    ptrml->ft_mode = 1;
-  } else if (ft_mode == "pd") {
-    ptrml->ft_mode = 2;
-  } else {
-    ptrml->ft_mode = 0;
-    if (ft_mode != "velocity" && global_variable::my_rank == 0) {
-      std::cout << "WARNING: Unknown ft_mode='" << ft_mode
-                << "'. Falling back to velocity mode." << std::endl;
-    }
-  }
-
-  std::string ft_weight_mode = ToLowerCopy(TrimCopy(pin->GetOrAddString("problem", "ft_weight_mode", "temp_band")));
-  if (ft_weight_mode == "tracer_mix") {
-    ptrml->ft_weight_mode = 1;
-  } else {
-    ptrml->ft_weight_mode = 0;
-    if (ft_weight_mode != "temp_band" && global_variable::my_rank == 0) {
-      std::cout << "WARNING: Unknown ft_weight_mode='" << ft_weight_mode
-                << "'. Falling back to temp_band." << std::endl;
-    }
-  }
-  int nscalars_total = (is_mhd) ? pmbp->pmhd->nscalars : pmbp->phydro->nscalars;
-  if (ptrml->ft_weight_mode == 1 && nscalars_total <= 0) {
-    if (global_variable::my_rank == 0) {
-      std::cout << "WARNING: ft_weight_mode=tracer_mix requested but nscalars=0. "
-                   "Falling back to temp_band." << std::endl;
-    }
-    ptrml->ft_weight_mode = 0;
-  }
-
-  std::string ft_apply_to = ToLowerCopy(TrimCopy(pin->GetOrAddString("problem", "ft_apply_to", "hydro")));
-  ptrml->ft_apply_boost = (ft_apply_to == "hydro" || ft_apply_to == "hydro+mhd" ||
-                           ft_apply_to == "hydro+radiation");
-  if (!ptrml->ft_apply_boost && global_variable::my_rank == 0) {
-    std::cout << "WARNING: ft_apply_to='" << ft_apply_to
-              << "' is unsupported in TRML. Boost application disabled." << std::endl;
-  }
+  ptrml->min_tracked_mass = pin->GetOrAddReal("problem", "min_tracked_mass", 1.0e-20);
 
   ptrml->ft_last_boost = 0.0;
   ptrml->ft_cumulative_boost = 0.0;
   ptrml->ft_last_mean_z = 0.0;
   ptrml->ft_last_mean_vz = 0.0;
   ptrml->ft_last_global_weight = 0.0;
-  ptrml->ft_last_update_time = -1.0;
-  ptrml->ft_hist_idx = 0;
-  ptrml->ft_hist_filled = 0;
-  ptrml->ft_hist_nmb = 0;
-  ptrml->ft_w_hist.clear();
-  ptrml->ft_wz_hist.clear();
-  ptrml->ft_wvz_hist.clear();
-  ptrml->ft_w_run.clear();
-  ptrml->ft_wz_run.clear();
-  ptrml->ft_wvz_run.clear();
-  if (ptrml->use_frame_tracking) {
-    ResetFrameTrackingHistoryState(pmbp->nmb_thispack);
-  }
+  ResetFrameTrackingHistoryState();
 
 
   // Print info
@@ -857,14 +728,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     std::cout << std::setprecision(16) << "T_peak_hi = " << ptrml->T_peak_hi << "\n";
     std::cout << std::setprecision(16) << "T_ft_lo = " << ptrml->T_ft_lo << "\n";
     std::cout << std::setprecision(16) << "T_ft_hi = " << ptrml->T_ft_hi << "\n";
-    std::cout << std::setprecision(16) << "ft_mode = " << ptrml->ft_mode << "\n";
-    std::cout << std::setprecision(16) << "ft_weight_mode = " << ptrml->ft_weight_mode << "\n";
-    std::cout << std::setprecision(16) << "n_frame_track = " << ptrml->n_frame_track << "\n";
-    std::cout << std::setprecision(16) << "ft_history_length = " << ptrml->ft_history_length << "\n";
-    std::cout << std::setprecision(16) << "ft_alpha_z = " << ptrml->ft_alpha_z << "\n";
-    std::cout << std::setprecision(16) << "ft_alpha_v = " << ptrml->ft_alpha_v << "\n";
-    std::cout << std::setprecision(16) << "ft_z_target = " << ptrml->ft_z_target << "\n";
-    std::cout << std::setprecision(16) << "ft_weight_floor = " << ptrml->ft_weight_floor << "\n";
+    std::cout << std::setprecision(16) << "boost_every = " << ptrml->boost_every << "\n";
+    std::cout << std::setprecision(16) << "history_len = " << ptrml->history_len << "\n";
+    std::cout << std::setprecision(16) << "shift_smooth_beta = " << ptrml->ft_shift_smooth_beta << "\n";
+    std::cout << std::setprecision(16) << "min_tracked_mass = " << ptrml->min_tracked_mass << "\n";
     std::cout << std::setprecision(16) << "max_vz_frame_tracking = " << ptrml->max_vz_frame_tracking << "\n";
     std::cout << std::setprecision(16) << "T_cold_hi = " << ptrml->T_cold_hi << "\n";
     std::cout << std::setprecision(16) << "T_hot_lo = " << ptrml->T_hot_lo << "\n";
@@ -1386,7 +1253,7 @@ void UserZBoundaryConditions(Mesh *pm) {
   // Perform a Galilean shift such that the interface stays close to the center and does not interact with the boundaries.
   // int nmb1 = pmbp->nmb_thispack - 1;
 
-  // if (ptrml->use_frame_tracking && pm->time > ptrml->t_frame_tracking_start && pm->ncycle % ptrml->n_frame_track == 0) {
+  // if (ptrml->use_frame_tracking && pm->time > ptrml->t_frame_tracking_start && pm->ncycle % ptrml->boost_every == 0) {
 
   //   // if (is_hydro) {
   //   //   pmbp->phydro->peos->ConsToPrim(u0_,w0_,false,0,(n1-1),0,(n2-1),0,(n3-1));
@@ -1637,7 +1504,7 @@ void AddUserSrcs(Mesh *pm, const Real bdt) {
   if (pm->time > ptrml->t_cool_start) {
     AddCoolingHeating(pm,bdt,u0,w0,eos_data);
   }
-  // if (ptrml->use_frame_tracking && pm->time > ptrml->t_frame_tracking_start && pm->ncycle % ptrml->n_frame_track == 0) FrameTracking(pm,bdt,u0,w0,eos_data);
+  // if (ptrml->use_frame_tracking && pm->time > ptrml->t_frame_tracking_start && pm->ncycle % ptrml->boost_every == 0) FrameTracking(pm,bdt,u0,w0,eos_data);
   if (ptrml->use_temp_ceiling) ApplyTempCeiling(pm,bdt,u0,w0,eos_data);
   return;
 }
@@ -2005,7 +1872,7 @@ void UserWorkInLoop(Mesh *pm) {
   }
   if (ptrml->use_frame_tracking && pm->time > ptrml->t_frame_tracking_start) {
     SampleFrameTrackingMoments(pm);
-    if (pm->ncycle % ptrml->n_frame_track == 0) {
+    if (pm->ncycle % ptrml->boost_every == 0) {
       FrameTracking(pm);
     }
   }
@@ -2022,116 +1889,109 @@ void FrameTracking(Mesh *pm) {
   int n1 = indcs.nx1 + 2*ng;
   int n2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng) : 1;
   int n3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng) : 1;
-  int nmb = pmbp->nmb_thispack;
-  int nmb1 = nmb - 1;
+  int nmb1 = pmbp->nmb_thispack - 1;
   bool is_mhd = (pmbp->pmhd != nullptr) ? true : false;
+  auto &u0 = (is_mhd) ? pmbp->pmhd->u0 : pmbp->phydro->u0;
+  auto &w0 = (is_mhd) ? pmbp->pmhd->w0 : pmbp->phydro->w0;
   EOS_Data &eos = (is_mhd) ?
                   pmbp->pmhd->peos->eos_data : pmbp->phydro->peos->eos_data;
-  if (nmb <= 0 || ptrml->ft_hist_filled <= 0) {
+
+  const int nhist = std::max(ptrml->history_len, 1);
+  const int filled = ptrml->ft_hist_filled;
+  if (filled < 2) {
     return;
   }
-  if (ptrml->ft_hist_nmb != nmb ||
-      ptrml->ft_w_run.size() != static_cast<std::size_t>(nmb) ||
-      ptrml->ft_wz_run.size() != static_cast<std::size_t>(nmb) ||
-      ptrml->ft_wvz_run.size() != static_cast<std::size_t>(nmb)) {
-    ResetFrameTrackingHistoryState(nmb);
-    return;
+  std::vector<Real> t_local(filled);
+  std::vector<Real> m_local(filled);
+  std::vector<Real> z_local(filled);
+  const int start = (filled < nhist) ? 0 : ptrml->ft_hist_idx;
+  for (int s = 0; s < filled; ++s) {
+    int idx = (start + s) % nhist;
+    t_local[s] = ptrml->ft_t_hist[idx];
+    m_local[s] = ptrml->ft_m_hist[idx];
+    z_local[s] = ptrml->ft_z_hist[idx];
   }
-  Real W_rank = 0.0;
-  Real Wz_rank = 0.0;
-  Real Wvz_rank = 0.0;
-  for (int m = 0; m < nmb; ++m) {
-    W_rank += ptrml->ft_w_run[m];
-    Wz_rank += ptrml->ft_wz_run[m];
-    Wvz_rank += ptrml->ft_wvz_run[m];
-  }
-  Real local_hist[3] = {W_rank, Wz_rank, Wvz_rank};
-  Real global_hist[3] = {W_rank, Wz_rank, Wvz_rank};
+
+  std::vector<Real> m_global = m_local;
+  std::vector<Real> z_global = z_local;
 #if MPI_PARALLEL_ENABLED
-  MPI_Allreduce(local_hist, global_hist, 3, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(m_local.data(), m_global.data(), filled, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(z_local.data(), z_global.data(), filled, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
 #endif
-  Real W_global = global_hist[0];
-  Real Wz_global = global_hist[1];
-  Real Wvz_global = global_hist[2];
 
-  Real dt_boost = 0.0;
-  if (ptrml->ft_last_update_time >= 0.0) {
-    dt_boost = pm->time - ptrml->ft_last_update_time;
-  } else {
-    dt_boost = static_cast<Real>(ptrml->n_frame_track)*pm->dt;
+  int nvalid = 0;
+  Real t_sum = 0.0;
+  Real z_sum = 0.0;
+  Real M_global = 0.0;
+  Real mean_z_ft = 0.0;
+  for (int k = 0; k < filled; ++k) {
+    if (m_global[k] <= ptrml->min_tracked_mass) continue;
+    Real zbar = z_global[k]/m_global[k];
+    t_sum += t_local[k];
+    z_sum += zbar;
+    ++nvalid;
+    M_global = m_global[k];
+    mean_z_ft = zbar;
   }
-  if (dt_boost <= 0.0) {
-    dt_boost = (pm->dt > 0.0) ? pm->dt : 1.0;
-  }
-  ptrml->ft_last_update_time = pm->time;
-
-  ptrml->ft_last_global_weight = W_global;
-  if (W_global <= ptrml->ft_weight_floor) {
-    ptrml->ft_last_mean_z = 0.0;
+  ptrml->ft_last_global_weight = M_global;
+  ptrml->ft_last_mean_z = mean_z_ft;
+  if (nvalid < 2) {
     ptrml->ft_last_mean_vz = 0.0;
     ptrml->ft_last_boost = 0.0;
     if (global_variable::my_rank == 0 && ptrml->ndiag > 0 &&
         pm->ncycle % ptrml->ndiag == 0) {
-      std::cout << "FrameTracking skipped: W_global=" << W_global << std::endl;
+      std::cout << "FrameTracking skipped: insufficient valid history points" << std::endl;
     }
     return;
   }
 
-  auto &u0 = (is_mhd) ? pmbp->pmhd->u0 : pmbp->phydro->u0;
-  auto &w0 = (is_mhd) ? pmbp->pmhd->w0 : pmbp->phydro->w0;
-  Real mean_z_ft = Wz_global/W_global;
-  Real mean_velz_ft = Wvz_global/W_global;
-  ptrml->ft_last_mean_z = mean_z_ft;
+  Real t_bar = t_sum/static_cast<Real>(nvalid);
+  Real z_bar = z_sum/static_cast<Real>(nvalid);
+  Real numerator = 0.0;
+  Real denominator = 0.0;
+  for (int k = 0; k < filled; ++k) {
+    if (m_global[k] <= ptrml->min_tracked_mass) continue;
+    Real zbar = z_global[k]/m_global[k];
+    Real dt = t_local[k] - t_bar;
+    numerator += dt*(zbar - z_bar);
+    denominator += dt*dt;
+  }
+  if (denominator <= 0.0) {
+    ptrml->ft_last_mean_vz = 0.0;
+    ptrml->ft_last_boost = 0.0;
+    return;
+  }
+
+  Real mean_velz_ft = numerator/denominator;
   ptrml->ft_last_mean_vz = mean_velz_ft;
-
-  Real vel_z_shift = 0.0;
-  Real z_err = mean_z_ft - ptrml->ft_z_target;
-  if (ptrml->ft_mode == 1) {
-    vel_z_shift = -ptrml->ft_alpha_z*z_err/dt_boost;
-  } else if (ptrml->ft_mode == 2) {
-    vel_z_shift = -ptrml->ft_alpha_z*z_err/dt_boost - ptrml->ft_alpha_v*mean_velz_ft;
-  } else {
-    vel_z_shift = -ptrml->ft_alpha_v*mean_velz_ft;
+  Real vel_z_cmd = -mean_velz_ft;
+  if (fabs(vel_z_cmd) > fabs(ptrml->max_vz_frame_tracking) &&
+      ptrml->max_vz_frame_tracking > 0.0) {
+    vel_z_cmd = vel_z_cmd*fabs(ptrml->max_vz_frame_tracking/vel_z_cmd);
   }
 
-  if (dt_boost > 0.0 && (ptrml->ft_use_uppzlim || ptrml->ft_use_lowzlim)) {
-    Real z_shift = vel_z_shift*dt_boost;
-    if(ptrml->ft_use_lowzlim && (mean_z_ft + z_shift) < ptrml->ft_lowzlim) {
-      z_shift = ptrml->ft_lowzlim - mean_z_ft;
-    }
-    if(ptrml->ft_use_uppzlim && (mean_z_ft + z_shift) > ptrml->ft_uppzlim) {
-      z_shift = ptrml->ft_uppzlim - mean_z_ft;
-    }
-    vel_z_shift = z_shift/dt_boost;
-  }
+  Real vel_z_shift = (1.0 - ptrml->ft_shift_smooth_beta)*ptrml->ft_last_boost +
+                     ptrml->ft_shift_smooth_beta*vel_z_cmd;
   if (fabs(vel_z_shift) > fabs(ptrml->max_vz_frame_tracking) &&
       ptrml->max_vz_frame_tracking > 0.0) {
     vel_z_shift = vel_z_shift*fabs(ptrml->max_vz_frame_tracking/vel_z_shift);
   }
-  if (ptrml->ft_max_boost_change < FLT_MAX) {
-    Real dvel = vel_z_shift - ptrml->ft_last_boost;
-    if (fabs(dvel) > ptrml->ft_max_boost_change && ptrml->ft_max_boost_change > 0.0) {
-      vel_z_shift = ptrml->ft_last_boost +
-                    std::copysign(ptrml->ft_max_boost_change, dvel);
-    }
-  }
 
   if (global_variable::my_rank == 0 && ptrml->ndiag > 0 &&
       pm->ncycle % ptrml->ndiag == 0) {
-    std::cout << " W_global=" << W_global << std::endl;
+    std::cout << " W_global=" << M_global << std::endl;
     std::cout << " mean_z_ft=" << mean_z_ft << std::endl;
     std::cout << " mean_velz_ft=" << mean_velz_ft << std::endl;
+    std::cout << " vel_z_cmd=" << vel_z_cmd << std::endl;
     std::cout << " vel_z_shift=" << vel_z_shift << std::endl;
   }
-  if (!ptrml->ft_apply_boost || vel_z_shift == 0.0) {
+  if (vel_z_shift == 0.0) {
     ptrml->ft_last_boost = 0.0;
     return;
   }
   ptrml->ft_last_boost = vel_z_shift;
   ptrml->ft_cumulative_boost += vel_z_shift;
 
-  const int vel_idx = (ptrml->ft_dir == 0) ? IVX : ((ptrml->ft_dir == 1) ? IVY : IVZ);
-  const int mom_idx = (ptrml->ft_dir == 0) ? IM1 : ((ptrml->ft_dir == 1) ? IM2 : IM3);
   const bool use_energy = eos.is_ideal;
   par_for("velzframetracking", DevExeSpace(), 0, nmb1, 0, n3-1, 0, n2-1, 0, n1-1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -2139,14 +1999,13 @@ void FrameTracking(Mesh *pm) {
     if (rho <= 0.0) {
       return;
     }
-    Real mom_old = u0(m,mom_idx,k,j,i);
-    w0(m,vel_idx,k,j,i) += vel_z_shift;
-    u0(m,mom_idx,k,j,i) += rho*vel_z_shift;
+    Real mom_old = u0(m,IM3,k,j,i);
+    w0(m,IVZ,k,j,i) += vel_z_shift;
+    u0(m,IM3,k,j,i) += rho*vel_z_shift;
     if (use_energy) {
       u0(m,IEN,k,j,i) += mom_old*vel_z_shift + 0.5*rho*SQR(vel_z_shift);
     }
   });
-
   return;
 }
 
