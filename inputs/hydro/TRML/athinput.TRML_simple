@@ -157,10 +157,17 @@ ndiag     = 100           # Cycles between diagnostic output
 user_work_in_loop = true      # Enable work-in-loop for frame tracking
 use_frame_tracking = true     # Apply velocity shifts to keep interface centered
 t_frame_tracking_start = 1.0  # Start frame tracking after this time
-n_frame_track = 10            # Apply frame tracking every N cycles
-max_vz_frame_tracking = 0.1  # Maximum velocity shift per tracking event
-T_ft_lo_over_T_cold = 1.01
-T_ft_hi_over_T_cold = 1.1
+ft_apply_every = 10           # Apply frame tracking every N cycles
+ft_mode = pd                  # velocity | position | pd
+ft_position_signal = blend    # centroid | band_midpoint | blend
+ft_position_blend = 0.7       # Blend weight when ft_position_signal=blend
+ft_max_abs_boost = 0.1        # Maximum absolute velocity shift per tracking event
+ft_tau_int = 12.0             # Integral timescale (<=0 disables integral term)
+ft_int_max_abs = 0.0015       # Clamp on integral contribution to command velocity
+ft_int_leak_tau = 8.0         # Leak timescale for integral memory
+ft_int_unsat_only = true      # Anti-windup: integrate only when pre-clamp command unsaturated
+ft_temp_lo = 0.0101           # 1.01 * T_cold for this setup
+ft_temp_hi = 0.011            # 1.10 * T_cold for this setup
 
 
 

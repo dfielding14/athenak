@@ -1,0 +1,230 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{booktabs}
+\usepackage{microtype}
+\usepackage{hyperref}
+
+\title{A Galilean Frame-Tracking Method for TRML Simulations}
+\author{AthenaK TRML Technical Note}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This document describes the frame-tracking method implemented in
+\texttt{src/pgen/TRML.cpp} for TRML simulations. The method is a cadence-gated,
+temperature-filtered, Galilean control loop that combines proportional,
+derivative, and optional integral feedback. The controller is designed to keep
+the interface near a user-defined target while preserving conservative
+hydrodynamic updates, limiting transient over-correction, and maintaining robust
+runtime behavior in turbulent flows.
+\end{abstract}
+
+\section{Purpose and design constraints}
+TRML runs can develop long-time vertical drift of the thermally selected
+interface. Left uncontrolled, drift can push the interface toward domain
+boundaries and degrade physical interpretability. The implemented strategy
+applies a \emph{uniform Galilean velocity shift} $\Delta v_z$ at discrete
+actuation times. Two constraints drive the design:
+\begin{enumerate}
+  \item Control authority must act on a physically meaningful interface
+  observable, not on instantaneous local fluctuations.
+  \item The update must remain conservative in momentum and (for ideal EOS)
+  total energy, and avoid impulsive forcing.
+\end{enumerate}
+The method therefore uses filtered global moments, optional bias cancellation,
+and explicit safety conditioning prior to each shift.
+
+\section{Measurement model}
+At each actuation event, cells are filtered by temperature:
+\begin{equation}
+T_{\mathrm{lo}} \le T_i \le T_{\mathrm{hi}},
+\end{equation}
+where $T_{\mathrm{lo}}=\texttt{ft\_temp\_lo}$ and
+$T_{\mathrm{hi}}=\texttt{ft\_temp\_hi}$. Over the filtered set, the code forms
+density-weighted moments
+\begin{align}
+W   &= \sum_i \rho_i \Delta V_i, \\
+W_z &= \sum_i \rho_i z_i \Delta V_i, \\
+W_v &= \sum_i \rho_i v_{z,i}\Delta V_i.
+\end{align}
+The associated observables are
+\begin{equation}
+z_c=\frac{W_z}{W},\qquad v_c=\frac{W_v}{W}.
+\end{equation}
+The vertical extent of the same filtered set is also measured:
+\begin{align}
+z_{\min}&=\min_i z_i,\nonumber\\
+z_{\max}&=\max_i z_i,\nonumber\\
+z_m&=\frac{z_{\min}+z_{\max}}{2}.
+\end{align}
+
+MPI reductions are performed on $(W,W_z,W_v,z_{\min},z_{\max})$ at actuation
+cadence only. Control is skipped when no filtered cells are present or when
+$W\le \texttt{ft\_weight\_floor}$.
+
+\section{Control observable and filtering}
+The position signal used by the controller is selected by
+\texttt{ft\_position\_signal}:
+\begin{equation}
+z_{\mathrm{ctrl}} =
+\begin{cases}
+z_c, & \texttt{centroid},\\
+z_m, & \texttt{band\_midpoint},\\
+(1-b)z_c + b z_m, & \texttt{blend},
+\end{cases}
+\end{equation}
+with $b=\texttt{ft\_position\_blend}\in[0,1]$.
+
+Actuation is attempted every \texttt{ft\_apply\_every} cycles after
+\texttt{t\_frame\_tracking\_start}. Let
+$\Delta t_k=t_k-t_{k-1}$ be the elapsed time since the previous control event.
+An exponential moving average (EMA) is applied:
+\begin{align}
+\alpha_k &= 1-\exp(-\Delta t_k/\tau_{\mathrm{avg}}),\\
+z_f &\leftarrow z_f + \alpha_k(z_{\mathrm{ctrl}}-z_f),\\
+v_f &\leftarrow v_f + \alpha_k(v_c-v_f),
+\end{align}
+where $\tau_{\mathrm{avg}}=\texttt{ft\_tau\_avg}$.
+
+Implementation detail: the first valid event initializes $(z_f,v_f)$ and
+returns without actuation, preventing a startup impulse from uninitialized
+filter state.
+
+\section{Feedback law}
+Define tracking error relative to the target
+$z_\star=\texttt{z\_interface}$:
+\begin{equation}
+e_z = z_f-z_\star.
+\end{equation}
+
+The preconditioned command uses proportional, derivative, and optional integral
+terms:
+\begin{equation}
+v_{\mathrm{pre}} = v_P + v_D + v_I.
+\end{equation}
+
+Proportional term (\texttt{position} and \texttt{pd} modes):
+\begin{equation}
+v_P = -\frac{e_z}{\tau_{\mathrm{relax}}},
+\qquad
+\tau_{\mathrm{relax}}=\texttt{ft\_tau\_relax}.
+\end{equation}
+
+Derivative/velocity term:
+\begin{equation}
+v_D =
+\begin{cases}
+-v_f, & \texttt{velocity},\\
+0, & \texttt{position},\\
+-\left(1-e^{-\Delta t_k/\tau_{\mathrm{vel}}}\right)v_f, & \texttt{pd},
+\end{cases}
+\end{equation}
+with $\tau_{\mathrm{vel}}=\texttt{ft\_tau\_vel}$.
+
+Optional integral bias-cancellation is enabled only when
+\texttt{ft\_tau\_int}$>0$ and \texttt{ft\_int\_max\_abs}$>0$:
+\begin{align}
+v_I &\leftarrow v_I \exp(-\Delta t_k/\tau_{\mathrm{leak}}),\\
+v_I &\leftarrow v_I - \frac{\Delta t_k}{\tau_{\mathrm{int}}}e_z
+\quad \text{(if accumulation is allowed)},\\
+|v_I| &\le v_{I,\max},
+\end{align}
+where
+$\tau_{\mathrm{int}}=\texttt{ft\_tau\_int}$,
+$\tau_{\mathrm{leak}}=\texttt{ft\_int\_leak\_tau}$, and
+$v_{I,\max}=\texttt{ft\_int\_max\_abs}$.
+If \texttt{ft\_int\_unsat\_only=true}, accumulation is skipped when the
+pre-accumulation command magnitude already reaches the absolute boost cap,
+providing anti-windup behavior.
+
+\section{Safety conditioning and final command}
+The safety sequence is applied in fixed order:
+\begin{enumerate}
+  \item Absolute cap:
+  \begin{equation}
+  |v|\le v_{\max},\qquad v_{\max}=\texttt{ft\_max\_abs\_boost}.
+  \end{equation}
+  \item Optional predicted-position clamp using
+  \begin{equation}
+  z_{\mathrm{pred}}=z_f + v\Delta t_k
+  \end{equation}
+  and bounds
+  $[\texttt{ft\_lowzlim},\texttt{ft\_uppzlim}]$ if enabled.
+  \item Slew-rate cap:
+  \begin{equation}
+  |v-v_{\mathrm{prev}}|\le \Delta v_{\max},
+  \end{equation}
+  where $\Delta v_{\max}=\texttt{ft\_max\_boost\_change}$.
+  \item Re-apply absolute cap as a final guarantee.
+\end{enumerate}
+The resulting command is the applied shift $\Delta v_z$.
+
+\section{Galilean state update}
+For each cell with density $\rho$, the shift is applied uniformly:
+\begin{align}
+v_z' &= v_z + \Delta v_z,\\
+m_z' &= m_z + \rho\Delta v_z.
+\end{align}
+For ideal EOS runs, total energy is updated conservatively:
+\begin{equation}
+E' = E + m_{z,\mathrm{old}}\Delta v_z + \frac{1}{2}\rho(\Delta v_z)^2.
+\end{equation}
+This preserves consistency with a frame-velocity translation rather than a
+source-term acceleration model.
+
+\section{Runtime interface}
+The implementation is \emph{modern-only}. Frame tracking is configured with
+\texttt{use\_frame\_tracking}, \texttt{t\_frame\_tracking\_start},
+\texttt{z\_interface}, and the \texttt{ft\_*} parameters. Legacy keys are
+explicitly rejected at startup with a migration error to prevent mixed-schema
+configurations.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Core control parameters.}
+\begin{tabular}{@{}p{0.43\columnwidth}p{0.50\columnwidth}@{}}
+\toprule
+Parameter & Role \\
+\midrule
+\texttt{ft\_apply\_every} & Actuation cadence in cycles \\
+\texttt{ft\_mode} & \texttt{velocity}, \texttt{position}, or \texttt{pd} \\
+\texttt{ft\_tau\_avg} & EMA timescale for measured signals \\
+\texttt{ft\_tau\_relax} & Proportional timescale \\
+\texttt{ft\_tau\_vel} & Derivative timescale \\
+\texttt{ft\_tau\_int} & Integral timescale (\(\le 0\) disables) \\
+\texttt{ft\_temp\_lo/hi} & Temperature band for measurement \\
+\texttt{ft\_weight\_floor} & Minimum tracked mass to actuate \\
+\texttt{ft\_max\_abs\_boost} & Absolute command cap \\
+\texttt{ft\_max\_boost\_change} & Slew-rate cap \\
+\texttt{ft\_position\_signal} & Position-signal selector \\
+\texttt{ft\_position\_blend} & Blend weight in \texttt{blend} mode \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Diagnostics and interpretation}
+At diagnostic cadence, rank 0 logs:
+\begin{itemize}
+  \item measured and filtered observables:
+  \texttt{W\_global}, \texttt{mean\_z\_ft}, \texttt{mean\_velz\_ft},
+  \texttt{z\_filt}, \texttt{vz\_filt};
+  \item control decomposition:
+  \texttt{v\_p}, \texttt{v\_d}, \texttt{v\_i};
+  \item command outputs:
+  \texttt{vel\_z\_cmd\_pre}, \texttt{vel\_z\_cmd}, \texttt{vel\_z\_shift}.
+\end{itemize}
+Together these fields identify lag, bias, saturation, and
+observable-selection mismatch without additional instrumentation.
+
+\section{Summary}
+The TRML frame tracker is a discrete-time, globally measured Galilean controller
+with explicit smoothing, optional integral bias cancellation, and ordered safety
+limits. Its architecture is tuned for turbulent multiphase flows where raw
+interface measurements are noisy and controller robustness must coexist with
+conservative fluid updates.
+
+\end{document}
