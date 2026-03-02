@@ -49,7 +49,7 @@ ix2_bc    = periodic      # Inner-X2 boundary condition
 ox2_bc    = periodic      # Outer-X2 boundary condition
 
 # X3 direction (z - across interface, hot gas at top, cold at bottom)
-nx3       = 192           # Number of zones in X3 (more zones to resolve interface)
+nx3       = 96           # Number of zones in X3 (more zones to resolve interface)
 x3min     = -0.5          # Domain minimum in X3
 x3max     =  1.0          # Domain maximum in X3
 ix3_bc    = outflow       # Inner-X3 boundary (outflow for cold gas)
