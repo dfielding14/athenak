@@ -78,6 +78,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <limits>
 #include <sstream>
 #include <fstream>
 #include <string>
@@ -163,6 +164,7 @@ struct pgen_trml {
   bool balanced_heating;       //!< Use legacy heating normalization when true
   Real dt_cutoff;              //!< Minimum allowed timestep (prevents runaway)
   Real cfl_cool;               //!< Cooling CFL number (limits dT/T per timestep)
+  Real dt_min_terminate;       //!< Graceful early-stop threshold on global dt (<=0 disables)
 
   // ====================================================================================
   // TEMPERATURE THRESHOLDS
@@ -228,6 +230,9 @@ struct pgen_trml {
   // ====================================================================================
   Real tot_mass = 0.0;         //!< Total mass in domain (for conservation tracking)
   Real tot_coolrate = 0.0;     //!< Total cooling rate (energy loss per unit time)
+  Real hist_shear_vel_frac;    //!< Shear-band selector: require |v_x| < frac*velocity
+  Real hist_vy_vel_frac;       //!< v_y selector: require |v_y| > frac*velocity
+  bool hist_gate_temp_band;    //!< Gate shear/v_y extrema to T_peak diagnostic temperature band
 
   // ====================================================================================
   // FRAME TRACKING PARAMETERS
@@ -675,6 +680,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   ptrml->t_cool_start      = pin->GetOrAddReal("problem", "t_cool_start", 0.0);
   ptrml->dt_cutoff         = pin->GetOrAddReal("problem", "dt_cutoff", 3.0e-5);
   ptrml->cfl_cool          = pin->GetOrAddReal("problem", "cfl_cool", 0.1);
+  ptrml->dt_min_terminate  = pin->GetOrAddReal("problem", "dt_min_terminate", -1.0);
+  min_dt_terminate = ptrml->dt_min_terminate;
+  early_stop_requested = false;
+  early_stop_reason.clear();
   Real T_cold              = pgas_0/rho_0 / contrast;
   ptrml->T_cold            = T_cold;
   Real T_hot               = pgas_0/rho_0;
@@ -746,6 +755,11 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   }
   ptrml->ndiag = pin->GetOrAddInteger("problem","ndiag",-1);
 
+  // History diagnostics controls (z-range extrema)
+  ptrml->hist_shear_vel_frac = pin->GetOrAddReal("problem", "hist_shear_vel_frac", 0.25);
+  ptrml->hist_vy_vel_frac = pin->GetOrAddReal("problem", "hist_vy_vel_frac", 0.08);
+  ptrml->hist_gate_temp_band = pin->GetOrAddBoolean("problem", "hist_gate_temp_band", true);
+
   // Frame-tracking controls: modern-only ft_* schema
   const std::array<const char*, 20> legacy_ft_keys = {
       "boost_every", "history_len", "shift_smooth_beta", "T_lo", "T_hi",
@@ -813,6 +827,18 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Require ft_apply_every >= 1, got "
               << ptrml->ft_apply_every << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (ptrml->hist_shear_vel_frac <= 0.0 || ptrml->hist_shear_vel_frac >= 1.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Require 0 < hist_shear_vel_frac < 1, got "
+              << ptrml->hist_shear_vel_frac << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (ptrml->hist_vy_vel_frac < 0.0 || ptrml->hist_vy_vel_frac >= 1.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Require 0 <= hist_vy_vel_frac < 1, got "
+              << ptrml->hist_vy_vel_frac << std::endl;
     std::exit(EXIT_FAILURE);
   }
   if (ptrml->ft_tau_avg <= 0.0 || ptrml->ft_tau_relax <= 0.0 || ptrml->ft_tau_vel <= 0.0) {
@@ -922,6 +948,14 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     std::cout << std::setprecision(16) << "T_cutoff = " << ptrml->T_cutoff << "\n";
     std::cout << std::setprecision(16) << "T_peak_lo = " << ptrml->T_peak_lo << "\n";
     std::cout << std::setprecision(16) << "T_peak_hi = " << ptrml->T_peak_hi << "\n";
+    std::cout << std::setprecision(16) << "dt_min_terminate = "
+              << ptrml->dt_min_terminate << "\n";
+    std::cout << std::setprecision(16) << "hist_shear_vel_frac = "
+              << ptrml->hist_shear_vel_frac << "\n";
+    std::cout << std::setprecision(16) << "hist_vy_vel_frac = "
+              << ptrml->hist_vy_vel_frac << "\n";
+    std::cout << std::setprecision(16) << "hist_gate_temp_band = "
+              << ptrml->hist_gate_temp_band << "\n";
     std::cout << std::setprecision(16) << "ft_apply_every = " << ptrml->ft_apply_every << "\n";
     std::cout << std::setprecision(16) << "ft_mode = "
               << FrameTrackingModeToString(ptrml->ft_mode) << "\n";
@@ -2202,6 +2236,11 @@ void Diagnostic(Mesh *pm) {
   Real T_peak_lo = ptrml->T_peak_lo;
   Real T_peak_hi = ptrml->T_peak_hi;
   Real velocity  = ptrml->velocity;
+  Real hist_shear_vel_frac = ptrml->hist_shear_vel_frac;
+  Real hist_vy_vel_frac = ptrml->hist_vy_vel_frac;
+  bool hist_gate_temp_band = ptrml->hist_gate_temp_band;
+  Real shear_abs_thresh = hist_shear_vel_frac * velocity;
+  Real vy_abs_thresh = hist_vy_vel_frac * velocity;
 
   // For calculating cooling rate
 
@@ -2225,14 +2264,17 @@ void Diagnostic(Mesh *pm) {
   Real tot_bsq = 0.0;
   Real tot_vol = 0.0;
 
-  Real min_z_peak = 10.0;
-  Real max_z_peak = -10.0;
+  Real min_z_peak = std::numeric_limits<Real>::max();
+  Real max_z_peak = -std::numeric_limits<Real>::max();
 
-  Real min_z_shear = 10.0;
-  Real max_z_shear = -10.0;
+  Real min_z_shear = std::numeric_limits<Real>::max();
+  Real max_z_shear = -std::numeric_limits<Real>::max();
 
-  Real min_z_vely = 10.0;
-  Real max_z_vely = -10.0;
+  Real min_z_vely = std::numeric_limits<Real>::max();
+  Real max_z_vely = -std::numeric_limits<Real>::max();
+  int cnt_z_peak = 0;
+  int cnt_z_shear = 0;
+  int cnt_z_vely = 0;
 
   // find smallest (e/cooling_rate) in each cell
   Kokkos::parallel_reduce("diagnostic", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
@@ -2240,7 +2282,8 @@ void Diagnostic(Mesh *pm) {
   Real &min_e, Real &max_d, Real &max_v, Real &max_t, Real &max_e, Real &tot_m,
   Real &tot_e, Real &totvol_, Real &totvsq_, Real &totbsq_,
   Real &min_z_peak_, Real &max_z_peak_, Real &min_z_shear_, Real &max_z_shear_,
-  Real &min_z_vely_, Real &max_z_vely_) {
+  Real &min_z_vely_, Real &max_z_vely_, int &cnt_z_peak_, int &cnt_z_shear_,
+  int &cnt_z_vely_) {
     // compute m,k,j,i indices of thread and call function
     int m = (idx)/nkji;
     int k = (idx - m*nkji)/nji;
@@ -2291,22 +2334,25 @@ void Diagnostic(Mesh *pm) {
       totbsq_ += vol*(SQR(bcc0(m,IBX,k,j,i))+SQR(bcc0(m,IBY,k,j,i))+SQR(bcc0(m,IBZ,k,j,i)));
     }
 
-    if ((temp<T_peak_hi) && (temp>T_peak_lo)){
+    bool in_temp_band = ((temp < T_peak_hi) && (temp > T_peak_lo));
+    bool use_for_shear_vy = (!hist_gate_temp_band) || in_temp_band;
+
+    if (in_temp_band){
       min_z_peak_ = fmin(x3v,min_z_peak_);
       max_z_peak_ = fmax(x3v,max_z_peak_);
+      cnt_z_peak_ += 1;
     }
 
-    if (velx > -0.45 * velocity) {
-      min_z_shear_ = fmin(x3v,min_z_shear_); // minimum height of gas with v_x > -0.45 velocity
+    if (use_for_shear_vy && fabs(velx) < shear_abs_thresh) {
+      min_z_shear_ = fmin(x3v,min_z_shear_);
+      max_z_shear_ = fmax(x3v,max_z_shear_);
+      cnt_z_shear_ += 1;
     }
 
-    if (velx < 0.45 * velocity) {
-      max_z_shear_ = fmax(x3v,max_z_shear_); // maximum height of gas with v_x < 0.45 velocity
-    }
-
-    if (vely > 5e-2 * velocity){
+    if (use_for_shear_vy && fabs(vely) > vy_abs_thresh){
       min_z_vely_ = fmin(x3v, min_z_vely_);
       max_z_vely_ = fmax(x3v, max_z_vely_);
+      cnt_z_vely_ += 1;
     }
   }, Kokkos::Min<Real>(dtnew),
      Kokkos::Min<Real>(min_dens),
@@ -2327,7 +2373,10 @@ void Diagnostic(Mesh *pm) {
      Kokkos::Min<Real>(min_z_shear),
      Kokkos::Max<Real>(max_z_shear),
      Kokkos::Min<Real>(min_z_vely),
-     Kokkos::Max<Real>(max_z_vely));
+     Kokkos::Max<Real>(max_z_vely),
+     Kokkos::Sum<int>(cnt_z_peak),
+     Kokkos::Sum<int>(cnt_z_shear),
+     Kokkos::Sum<int>(cnt_z_vely));
   Real dt_hyd  = (is_mhd) ? pmbp->pmhd->dtnew        : pmbp->phydro->dtnew;
   auto *pcond = (is_mhd) ? pmbp->pmhd->pcond : pmbp->phydro->pcond;
   Real dt_cond = FLT_MAX;
@@ -2348,6 +2397,8 @@ void Diagnostic(Mesh *pm) {
   Real m_max[7] = {max_dens,max_vtot,max_temp,max_eint,max_z_peak,max_z_shear,max_z_vely};
   Real gm_min[12];
   Real gm_max[7];
+  int loc_counts[3] = {cnt_z_peak, cnt_z_shear, cnt_z_vely};
+  int glob_counts[3] = {0, 0, 0};
   Real loc_sum[5] = {tot_mass,tot_eint,tot_vol,tot_vsq,tot_bsq};
   Real glob_sum[5];
   for(int index=0; index<5; index++){
@@ -2356,6 +2407,7 @@ void Diagnostic(Mesh *pm) {
   //MPI_Allreduce(MPI_IN_PLACE, &dtnew, 1, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
   MPI_Allreduce(m_min, gm_min, 12, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
   MPI_Allreduce(m_max, gm_max, 7, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(loc_counts, glob_counts, 3, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
   MPI_Allreduce(loc_sum, glob_sum, 5, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
   dtnew = gm_min[0];
   min_dens = gm_min[1];
@@ -2376,6 +2428,9 @@ void Diagnostic(Mesh *pm) {
   max_z_peak=gm_max[4];
   max_z_shear=gm_max[5];
   max_z_vely=gm_max[6];
+  cnt_z_peak = glob_counts[0];
+  cnt_z_shear = glob_counts[1];
+  cnt_z_vely = glob_counts[2];
 
   tot_mass = glob_sum[0];
   tot_eint = glob_sum[1];
@@ -2383,6 +2438,19 @@ void Diagnostic(Mesh *pm) {
   tot_vsq = glob_sum[3];
   tot_bsq = glob_sum[4];
 #endif
+  const Real nan = std::numeric_limits<Real>::quiet_NaN();
+  if (cnt_z_peak <= 0) {
+    min_z_peak = nan;
+    max_z_peak = nan;
+  }
+  if (cnt_z_shear <= 0) {
+    min_z_shear = nan;
+    max_z_shear = nan;
+  }
+  if (cnt_z_vely <= 0) {
+    min_z_vely = nan;
+    max_z_vely = nan;
+  }
   Real totcoolrate = ptrml->tot_coolrate;
   ptrml->tot_mass = tot_mass;
   // ptrml->tot_coolrate = totcoolrate;
@@ -2508,15 +2576,23 @@ void UserHistOutput(HistoryData *pdata, Mesh *pm) {
   Real T_cold_hi = ptrml->T_cold_hi;
   Real T_hot_lo  = ptrml->T_hot_lo;
   Real velocity  = ptrml->velocity;
+  Real hist_shear_vel_frac = ptrml->hist_shear_vel_frac;
+  Real hist_vy_vel_frac = ptrml->hist_vy_vel_frac;
+  bool hist_gate_temp_band = ptrml->hist_gate_temp_band;
+  Real shear_abs_thresh = hist_shear_vel_frac * velocity;
+  Real vy_abs_thresh = hist_vy_vel_frac * velocity;
 
-  Real min_z_peak = 10.0;
-  Real max_z_peak = -10.0;
+  Real min_z_peak = std::numeric_limits<Real>::max();
+  Real max_z_peak = -std::numeric_limits<Real>::max();
 
-  Real min_z_shear = 10.0;
-  Real max_z_shear = -10.0;
+  Real min_z_shear = std::numeric_limits<Real>::max();
+  Real max_z_shear = -std::numeric_limits<Real>::max();
 
-  Real min_z_vely = 10.0;
-  Real max_z_vely = -10.0;
+  Real min_z_vely = std::numeric_limits<Real>::max();
+  Real max_z_vely = -std::numeric_limits<Real>::max();
+  int cnt_z_peak = 0;
+  int cnt_z_shear = 0;
+  int cnt_z_vely = 0;
 
   const int nmkji = (pmbp->nmb_thispack)*nx3*nx2*nx1;
   const int nkji = nx3*nx2*nx1;
@@ -2532,7 +2608,8 @@ void UserHistOutput(HistoryData *pdata, Mesh *pm) {
   Kokkos::parallel_reduce("UserHistSums",Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
   KOKKOS_LAMBDA(const int &idx, array_sum::GlobalSum &mb_sum0, array_sum::GlobalSum &mb_sum1,
   Real &min_z_peak_, Real &max_z_peak_, Real &min_z_shear_, Real &max_z_shear_,
-  Real &min_z_vely_, Real &max_z_vely_) {
+  Real &min_z_vely_, Real &max_z_vely_, int &cnt_z_peak_, int &cnt_z_shear_,
+  int &cnt_z_vely_) {
     // compute n,k,j,i indices of thread
     int m = (idx)/nkji;
     int k = (idx - m*nkji)/nji;
@@ -2583,12 +2660,16 @@ void UserHistOutput(HistoryData *pdata, Mesh *pm) {
     else if (fabs(x3v-lxmin3) < dz) {
       hvars0.the_array[2] = dens*dA*velz; // mass flux bottom
     }
-    if ((temp<T_peak_hi) && (temp>T_peak_lo)){
+    bool in_temp_band = ((temp < T_peak_hi) && (temp > T_peak_lo));
+    bool use_for_shear_vy = (!hist_gate_temp_band) || in_temp_band;
+
+    if (in_temp_band){
       hvars0.the_array[3] = SQR(vely)*vol; // rms y velocity near T_peak
       hvars0.the_array[4] = vol; // volume near T_peak
       hvars0.the_array[5] = x3v*vol;// average height of gas near T_peak
       min_z_peak_ = fmin(x3v,min_z_peak_);
       max_z_peak_ = fmax(x3v,max_z_peak_);
+      cnt_z_peak_ += 1;
     }
 
     if ((temp<T_cold_hi)){
@@ -2722,17 +2803,16 @@ void UserHistOutput(HistoryData *pdata, Mesh *pm) {
     mb_sum0 += hvars0;
     mb_sum1 += hvars1;
 
-    if (velx > -0.45 * velocity) {
-      min_z_shear_ = fmin(x3v,min_z_shear_); // minimum height of gas with v_x > -0.45 velocity
+    if (use_for_shear_vy && fabs(velx) < shear_abs_thresh) {
+      min_z_shear_ = fmin(x3v,min_z_shear_);
+      max_z_shear_ = fmax(x3v,max_z_shear_);
+      cnt_z_shear_ += 1;
     }
 
-    if (velx < 0.45 * velocity) {
-      max_z_shear_ = fmax(x3v,max_z_shear_); // maximum height of gas with v_x < 0.45 velocity
-    }
-
-    if (vely > 5e-2 * velocity){
+    if (use_for_shear_vy && fabs(vely) > vy_abs_thresh){
       min_z_vely_ = fmin(x3v, min_z_vely_);
       max_z_vely_ = fmax(x3v, max_z_vely_);
+      cnt_z_vely_ += 1;
     }
   }, Kokkos::Sum<array_sum::GlobalSum>(sum_this_mb0),
      Kokkos::Sum<array_sum::GlobalSum>(sum_this_mb1),
@@ -2741,23 +2821,45 @@ void UserHistOutput(HistoryData *pdata, Mesh *pm) {
      Kokkos::Min<Real>(min_z_shear),
      Kokkos::Max<Real>(max_z_shear),
      Kokkos::Min<Real>(min_z_vely),
-     Kokkos::Max<Real>(max_z_vely));
+     Kokkos::Max<Real>(max_z_vely),
+     Kokkos::Sum<int>(cnt_z_peak),
+     Kokkos::Sum<int>(cnt_z_shear),
+     Kokkos::Sum<int>(cnt_z_vely));
 
   #if MPI_PARALLEL_ENABLED
   Real m_min[3] = {min_z_peak,min_z_shear,min_z_vely};
   Real m_max[3] = {max_z_peak,max_z_shear,max_z_vely};
   Real gm_min[3];
   Real gm_max[3];
+  int loc_counts[3] = {cnt_z_peak, cnt_z_shear, cnt_z_vely};
+  int glob_counts[3] = {0, 0, 0};
   //MPI_Allreduce(MPI_IN_PLACE, &dtnew, 1, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
   MPI_Allreduce(m_min, gm_min, 3, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
   MPI_Allreduce(m_max, gm_max, 3, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(loc_counts, glob_counts, 3, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
   min_z_peak  = gm_min[0];
   min_z_shear = gm_min[1];
   min_z_vely  = gm_min[2];
   max_z_peak  = gm_max[0];
   max_z_shear = gm_max[1];
   max_z_vely  = gm_max[2];
+  cnt_z_peak = glob_counts[0];
+  cnt_z_shear = glob_counts[1];
+  cnt_z_vely = glob_counts[2];
 #endif
+  const Real nan = std::numeric_limits<Real>::quiet_NaN();
+  if (cnt_z_peak <= 0) {
+    min_z_peak = nan;
+    max_z_peak = nan;
+  }
+  if (cnt_z_shear <= 0) {
+    min_z_shear = nan;
+    max_z_shear = nan;
+  }
+  if (cnt_z_vely <= 0) {
+    min_z_vely = nan;
+    max_z_vely = nan;
+  }
 
   // store data into hdata array
   for (int n=0; n<nsum; ++n) {

@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "geodesic-grid/spherical_grid.hpp"
@@ -45,6 +46,11 @@ class ProblemGenerator {
   bool user_dt;
   // store user_dt in dtnew here
   Real dtnew = 1e10;
+  // optional global minimum timestep threshold for graceful early termination
+  Real min_dt_terminate = -1.0;
+  // set by runtime checks (e.g., dt below minimum) to request graceful stop
+  bool early_stop_requested = false;
+  std::string early_stop_reason = "";
 
   // true if user workinloop is specified
   bool user_work_in_loop;

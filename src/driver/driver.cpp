@@ -371,6 +371,33 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   if (time_evolution == TimeEvolution::tstatic) {
     // TODO(@user): add work for time static problems here
   } else {
+    pmesh->pgen->early_stop_requested = false;
+    pmesh->pgen->early_stop_reason.clear();
+    auto check_min_dt_terminate = [&]() -> bool {
+      if (pmesh->pgen->min_dt_terminate <= 0.0) {
+        return false;
+      }
+      if ((pmesh->time + pmesh->dt) >= tlim) {
+        return false;
+      }
+      if (pmesh->dt >= pmesh->pgen->min_dt_terminate) {
+        return false;
+      }
+      pmesh->pgen->early_stop_requested = true;
+      pmesh->pgen->early_stop_reason =
+          "dt dropped below problem dt_min_terminate threshold";
+      if (global_variable::my_rank == 0) {
+        std::cout << "Early-stop request: " << pmesh->pgen->early_stop_reason
+                  << " (dt=" << pmesh->dt
+                  << ", dt_min_terminate=" << pmesh->pgen->min_dt_terminate
+                  << ", time=" << pmesh->time
+                  << ", cycle=" << pmesh->ncycle << ")" << std::endl;
+      }
+      return true;
+    };
+    if (check_min_dt_terminate()) {
+      return;
+    }
     Real elapsed_time = -1.;
     if (wall_time > 0.) {
       elapsed_time = UpdateWallClock();
@@ -428,6 +455,9 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       if (pmesh->adaptive) {pmesh->pmr->AdaptiveMeshRefinement(this, pin);}
       // compute new timestep AFTER all Meshblocks refined/derefined
       pmesh->NewTimeStep(tlim);
+      if (check_min_dt_terminate()) {
+        break;
+      }
 
       // Update wall clock time if needed.
       if (wall_time > 0.) {
@@ -469,7 +499,12 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
     if (global_variable::my_rank == 0) {
       // Print diagnostic messages related to the end of the simulation
       OutputCycleDiagnostics(pmesh);
-      if (pmesh->ncycle == nlim) {
+      if (pmesh->pgen->early_stop_requested) {
+        std::cout << std::endl << "Terminating on user minimum-dt threshold" << std::endl;
+        if (!pmesh->pgen->early_stop_reason.empty()) {
+          std::cout << pmesh->pgen->early_stop_reason << std::endl;
+        }
+      } else if (pmesh->ncycle == nlim) {
         std::cout << std::endl << "Terminating on cycle limit" << std::endl;
       } else if (pmesh->time >= tlim) {
         std::cout << std::endl << "Terminating on time limit" << std::endl;
