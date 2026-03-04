@@ -1,0 +1,167 @@
+# ====================================================================================
+# AthenaK Input File: TRML with Calibrated Frame Tracking + Top-Hat Cooling Cutoff
+# ====================================================================================
+#
+# This setup captures the production frame-tracking configuration selected from
+# the 2026-03-02 and 2026-03-03 calibration campaigns.
+#
+# Key targets:
+# - xi = 100
+# - T_peak_over_T_cold = 10^0.5
+# - top-hat style cooling cutoff: T_cutoff_over_T_hot = T_peak_over_T_cold / chi
+#
+# ====================================================================================
+
+<comment>
+problem = TRML with calibrated frame tracking and top-hat cooling cutoff
+
+<job>
+basename = TRML
+
+<mesh>
+nghost = 4
+
+nx1 = 128
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 128
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 192
+x3min = -1.0
+x3max = 0.5
+ix3_bc = outflow
+ox3_bc = user
+
+<meshblock>
+nx1 = 64
+nx2 = 64
+nx3 = 96
+
+<time>
+evolution = dynamic
+integrator = rk3
+cfl_number = 0.3
+tlim = 150.0
+ndiag = 1
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = hllc
+gamma = 1.666666667
+nscalars = 1
+fofc = true
+dfloor = 1.0e-4
+pfloor = 1.0e-5
+
+<units>
+length_cgs = 1.0
+mass_cgs = 1.0
+time_cgs = 1.0
+mu = 0.6
+
+<problem>
+rho_0 = 1.0
+pgas_0 = 1.0
+density_contrast = 56.234132519          # chi = 10^1.75
+velocity = 0.645
+z_interface = 0.0
+smoothing_thickness = 0.01
+
+beta_lo = 0.0
+beta_hi = 3.0
+T_peak_over_T_cold = 3.16227766017       # 10^0.5
+T_cutoff_over_T_hot = 0.05623413252      # top-hat cutoff = T_peak_over_T_cold / chi
+T_floor = 0.5
+balanced_heating = false
+heating_on = false
+cooling_below_T_cold = false
+
+xi = 100.0
+
+t_cool_start = 0.0
+dt_cutoff = 1.0e-4
+cfl_cool = 0.5
+dt_min_terminate = 1.0e-5
+
+user_srcs = true
+user_dt = true
+user_hist = true
+ndiag = 100
+
+# ------------------------------------------------------------------------------------
+# Frame tracking: tuned production choice from paired xi=100/1000 campaigns
+# ------------------------------------------------------------------------------------
+user_work_in_loop = true
+use_frame_tracking = true
+t_frame_tracking_start = 1.0
+
+ft_apply_every = 2            # Best quality/cost compromise; 3-4 degraded centering strongly
+ft_mode = pd                  # Most robust mode across xi=100 and xi=1000
+ft_tau_avg = 0.04             # Filtering timescale to suppress turbulence jitter
+ft_tau_relax = 2.6            # Slightly more conservative than baseline 2.5
+ft_tau_vel = 0.09             # Damping term tuned to reduce overshoot
+
+ft_temp_lo = 0.050            # Tracks interface thermal band near T_cold/T_hot transition
+ft_temp_hi = 0.066
+ft_weight_floor = 1.0e-6
+
+ft_max_abs_boost = 0.012      # Keep Galilean shifts modest and physically conservative
+ft_max_boost_change = 0.002   # Tight slew cap to avoid abrupt command jumps
+
+ft_use_lowzlim = false
+ft_use_uppzlim = false
+ft_position_signal = blend
+ft_position_blend = 0.7
+
+ft_tau_int = 12.0             # Slow integral correction for long-time bias cancellation
+ft_int_max_abs = 0.0015       # Anti-runaway cap on integral contribution
+ft_int_leak_tau = 8.0         # Leak memory to avoid windup
+ft_int_unsat_only = true      # Integrate only when unsaturated
+
+<initial_turb>
+turb_flag = 1
+tcorr = 1.0
+dt_turb_update = 1.0
+dedt = 1.0
+spect_form = 2
+expo = 0
+nlow = 2
+nhigh = 16
+sol_fraction = 1.0
+rseed = -914
+constant_edot = false
+z_turb_scale_height = 0.1
+z_turb_center = 0.0
+
+<output1>
+file_type = log
+dcycle = 1
+
+<output2>
+file_type = hst
+dcycle = 10
+
+<output3>
+file_type = bin
+variable = hydro_w
+dt = 25.0
+
+<output4>
+file_type = rst
+dcycle = 200000
+dt_wall = 3600
+
+<output5>
+file_type = bin
+slice_x2 = 0.0
+id = slice_y
+variable = hydro_w
+dt = 5.0
