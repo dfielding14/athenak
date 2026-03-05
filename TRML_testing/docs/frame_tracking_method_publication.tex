@@ -13,7 +13,7 @@
 \maketitle
 
 \begin{abstract}
-Long-duration turbulent radiative mixing-layer (TRML) calculations are often limited by slow, cumulative interface drift rather than by local numerical instability. We present a conservative Galilean frame-tracking strategy that stabilizes the thermally selected interface without introducing non-conservative source forcing. The controller combines filtered global measurements with cadence-gated proportional--derivative feedback, optional integral bias cancellation, and explicit command limiting. A two-stage supercomputer campaign (96 production runs) was used to calibrate operating parameters across $\xi=100$ and $\xi=1000$. The resulting configuration improves centering and robustness relative to baseline while preserving practical computational cost. We report the recommended parameter set, summarize the empirical ranking criteria, and document the tradeoff between aggressive centering and conservative boundary behavior.
+Long-duration turbulent radiative mixing-layer (TRML) calculations are often limited by slow, cumulative interface drift rather than by local numerical instability. We present a conservative Galilean frame-tracking strategy that stabilizes the thermally selected interface without introducing non-conservative source forcing. The controller combines filtered global measurements with cadence-gated proportional--derivative feedback, optional integral bias cancellation, and explicit command limiting. A two-stage supercomputer campaign (96 production runs) was used to calibrate operating parameters across $\xi=100$ and $\xi=1000$, followed by a resolution-scaling campaign spanning $dx=1/64$ to $1/512$. The resulting configuration improves centering and robustness relative to baseline while preserving practical computational cost. We report the recommended parameter set, summarize the empirical ranking criteria, and provide practical production guidance on cadence scaling with resolution and vertical-domain headroom at low $\xi$.
 \end{abstract}
 
 \section{Introduction}
@@ -58,7 +58,7 @@ The lowest raw quality score in the follow-up set corresponded to a more aggress
 Relative to the follow-up baseline, the selected point reduced paired quality-max by 16.0\% and paired quality-mean by 5.2\%, while improving the conservative edge-contact timing metric by 52.4\%.
 
 \section{Recommended Operating Point}
-Table~\ref{tab:best} reports the recommended production configuration.
+Table~\ref{tab:best} reports the recommended conservative production controller shape.
 
 \begin{table}[t]
 \centering
@@ -85,6 +85,31 @@ Parameter & Value \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\section{Resolution and Domain Guidance}
+The control-law shape in Table~\ref{tab:best} is retained across tested resolutions, while cadence is scaled with spatial resolution. The empirically stable mapping is summarized in Table~\ref{tab:res}.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Resolution-dependent cadence recommendation.}
+\label{tab:res}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Resolution & Recommended cadence \\
+\midrule
+$dx = 1/128$ & \texttt{ft\_apply\_every = 2} \\
+$dx = 1/256$ & \texttt{ft\_apply\_every = 4} \\
+$dx = 1/512$ & \texttt{ft\_apply\_every = 8} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At low cooling-time ratio ($\xi \lesssim 10$), boundary contact risk is dominated by finite vertical headroom rather than by controller instability alone. We therefore recommend a symmetric vertical domain,
+\begin{equation}
+z \in [-1,\,1],
+\end{equation}
+as the production default for low-$\xi$ runs. In our campaign evidence, this domain choice materially reduced early top-boundary interactions relative to truncated upper domains.
 
 \section{Cadence-Cost Tradeoff}
 A frequent practical question is whether much larger actuation cadence can be used to reduce cost. The campaign data do not support this for production quality. Moving from \texttt{ft\_apply\_every}=2 to 3--4 reduced measured runtime only modestly, but degraded ranking quality metrics strongly (about 34--76\%, depending on statistic and $\xi$). This pattern indicates that very sparse actuation is a false economy for long-time statistical studies.

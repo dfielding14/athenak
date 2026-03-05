@@ -23,26 +23,26 @@ basename = TRML
 <mesh>
 nghost = 4
 
-nx1 = 128
+nx1 = 256
 x1min = -0.5
 x1max = 0.5
 ix1_bc = periodic
 ox1_bc = periodic
 
-nx2 = 128
+nx2 = 256
 x2min = -0.5
 x2max = 0.5
 ix2_bc = periodic
 ox2_bc = periodic
 
-nx3 = 256
+nx3 = 512
 x3min = -1.0
 x3max = 1.0
 ix3_bc = outflow
 ox3_bc = user
 
 <meshblock>
-nx1 = 64
+nx1 = 128
 nx2 = 64
 nx3 = 128
 
@@ -105,7 +105,7 @@ user_work_in_loop = true
 use_frame_tracking = true
 t_frame_tracking_start = 1.0
 
-ft_apply_every = 2
+ft_apply_every = 4
 ft_mode = pd
 ft_tau_avg = 0.04
 ft_tau_relax = 2.6
