@@ -1,4 +1,5 @@
 \documentclass[twocolumn]{aastex7}
+\usepackage{graphicx}
 \usepackage{xspace}
 
 \newcommand{\code}[1]{\texttt{#1}}
@@ -139,6 +140,31 @@ First, \SO does not decouple passive-scalar transport from hydro numerics. If th
 Second, the use of the hydro mass flux is nevertheless a coherent conservative design. The discrete scalar update advances $q_n = \rho s_n$ using the same face mass transport used by the hydro subsystem. For a passive scalar this is the natural conservative formulation, and it guarantees that the scalar is transported consistently with the mass flux seen by the reconstruction and Riemann solve.
 
 Third, the post-fix semantics make the phrase ``frozen hydro'' materially correct for built-in engine behavior. In a one-step scalar-mixing verification run on this branch, the maximum absolute change in density, each velocity component, and internal energy between the initial and final binary outputs was zero to machine precision, while the passive scalar changed by a finite amount. That is the intended invariant.
+
+\section{Advection-Diffusion Verification Problem}
+The frozen-background interpretation of \SO can be checked cleanly with the dedicated user problem \code{scalar\_mixing\_test}. This problem initializes a uniform hydrodynamic background with constant density, constant temperature, and a coherent diagonal velocity field. The first passive scalar is set to a top-hat blob: a disk in true 2D and a sphere in 3D. The reference runs use \code{hydro/scalar\_only=true}, periodic boundaries in each active direction, a crossing time of unity, and explicit scalar diffusion with \code{scalar\_diffusivity}=1/128. In the true-2D configuration the mesh is collapsed in $x_3$ with reflecting $x_3$ boundaries, so $v_z=0$ identically and only in-plane transport remains.
+
+This problem has a convenient analytic target. Because the velocity field is spatially uniform, the solution is simply periodic advection of the initial blob combined with diffusive broadening. The post-processing verifier starts from the exact AthenaK cell-centered initial scalar field, transforms that discrete state into periodic Fourier modes, and evolves each mode analytically. The result is a direct test of the actual \SO transport operator, including the hydro-derived face mass flux, scalar diffusion, and the true-2D branch where the out-of-plane velocity is suppressed.
+
+Figure~\ref{fig:scalar-mixing-test-slices} shows the scalar field at the initial, midpoint, and final outputs for the shipped 2D and 3D reference cases. With the discrete AthenaK initial condition used on both sides of the comparison, the numerical and analytic fields agree to roundoff at the initial output. In both geometries the blob is then advected diagonally by one box length over one crossing time and diffuses substantially while the background hydro state remains fixed. Figure~\ref{fig:scalar-mixing-test-convergence} shows the corresponding final-time error trends with resolution. In 2D the $L_1$ error decreases from $9.27\times10^{-4}$ at $64^2$ to $1.96\times10^{-4}$ at $128^2$ and $4.65\times10^{-5}$ at $256^2$, while the relative mass error remains at the level of $10^{-10}$. In 3D the calibrated stable sequence gives $L_1 = 6.17\times10^{-4}$ at $48^3$, $1.93\times10^{-4}$ at $64^3$, and $1.18\times10^{-4}$ at $80^3$, again with relative mass errors of order $10^{-10}$. These results show that the scalar field evolves as the intended advection-diffusion problem in both true 2D and 3D, and they provide a regression target that is more informative than a single scalar norm alone.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.49\textwidth]{figures/scalar_mixing_test/scalar_mixing_blob_diffusion_2d_time_slices.png}
+\hfill
+\includegraphics[width=0.49\textwidth]{figures/scalar_mixing_test/scalar_mixing_blob_diffusion_3d_time_slices.png}
+\caption{Time-evolution slices from the \code{scalar\_mixing\_test} verification problem. Left: true-2D reference run with a disk-shaped initial blob. Right: 3D reference run, shown as a representative $x_3$ slice through the blob. In both cases the scalar patch advects diagonally across the periodic domain while explicit diffusion broadens the profile. The bottom row in each panel shows the absolute difference from the analytic periodic advection-diffusion solution.}
+\label{fig:scalar-mixing-test-slices}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.49\textwidth]{figures/scalar_mixing_test/scalar_mixing_test_convergence_2d_t1p0.png}
+\hfill
+\includegraphics[width=0.49\textwidth]{figures/scalar_mixing_test/scalar_mixing_test_convergence_3d_t1p0.png}
+\caption{Final-time error trends for the \code{scalar\_mixing\_test} benchmark at $t=1$. The left panel shows the true-2D sequence and the right panel shows the 3D sequence. Field errors decrease monotonically with resolution in both geometries, while the blob centroid, diffusive width, and total scalar mass remain well controlled.}
+\label{fig:scalar-mixing-test-convergence}
+\end{figure*}
 
 \section{Caveats}
 This note describes the corrected post-fix behavior. It does not describe the older implementation in which the hydro Runge--Kutta update skipped hydro variables but built-in hydro source terms could still modify the hydro state.
