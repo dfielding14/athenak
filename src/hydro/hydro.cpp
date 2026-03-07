@@ -107,6 +107,28 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
   // Then initialize memory and algorithms for reconstruction and Riemann solvers
   std::string evolution_t = pin->GetString("time","evolution");
 
+  if (scalar_only) {
+    if (nscalars == 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+                << "<hydro>/scalar_only = true requires <hydro>/nscalars > 0" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (psrc->const_accel || psrc->ism_cooling || psrc->cgm_cooling || psrc->rel_cooling) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+                << "<hydro>/scalar_only = true is incompatible with built-in hydro source "
+                << "terms (const_accel, ism_cooling, cgm_cooling, rel_cooling)"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (psrc->shearing_box) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+                << "<hydro>/scalar_only = true is incompatible with shearing_box because "
+                << "the built-in shearing source/remap updates hydro conserved variables"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
   // allocate memory for conserved and primitive variables
   // With AMR, maximum size of Views are limited by total device memory through an input
   // parameter, which in turn limits max number of MBs that can be created.
