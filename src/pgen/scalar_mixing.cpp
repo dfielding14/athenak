@@ -13,6 +13,7 @@
 
 #include <iostream>
 #include <cmath>
+#include <string>
 #include <vector>
 
 #include "athena.hpp"
@@ -37,6 +38,23 @@ void MeanGradientForcing(Mesh* pm, const Real bdt);
 // Store mean gradient parameter (read in ProblemGenerator, used in source term)
 namespace {
   Real mean_gradient_G = 1.0;
+
+  bool UseTrue2DVelocity(ParameterInput *pin, Mesh *pm) {
+    if (!pm->two_d) return false;
+    if (!(pin->DoesParameterExist("mesh", "ix3_bc") &&
+          pin->DoesParameterExist("mesh", "ox3_bc"))) {
+      return false;
+    }
+    return (pin->GetString("mesh", "ix3_bc") == "reflect" &&
+            pin->GetString("mesh", "ox3_bc") == "reflect");
+  }
+
+  int GetTurbulenceSeed(ParameterInput *pin) {
+    if (pin->DoesParameterExist("problem", "turb_rseed")) {
+      return pin->GetInteger("problem", "turb_rseed");
+    }
+    return pin->GetOrAddInteger("problem", "turb_seed", 12345);
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -51,7 +69,8 @@ namespace {
 //  For nkx=0 plane, only half the modes are included to avoid double-counting
 //  the conjugate pairs that arise from the cos/sin representation.
 
-void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
+void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
+                           bool true_2d) {
   Mesh *pm = pmbp->pmesh;
   auto &indcs = pm->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
@@ -66,7 +85,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
   int nhigh = pin->GetOrAddInteger("problem", "turb_nhigh", 4);
   Real expo = pin->GetOrAddReal("problem", "turb_expo", 5.0/3.0);
   Real sol_frac = pin->GetOrAddReal("problem", "turb_sol_frac", 1.0);
-  int rseed = pin->GetOrAddInteger("problem", "turb_seed", 12345);
+  int rseed = GetTurbulenceSeed(pin);
   Real k_crit = pin->GetOrAddReal("problem", "turb_k_crit", 16.0);
 
   // Domain size for computing wavenumbers
@@ -83,6 +102,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
   // Determine dimensionality
   bool multi_d = (nx2 > 1);
   bool three_d = (nx3 > 1);
+  bool active_v3 = !true_2d;
 
   // Initialize RNG (before any random calls to ensure determinism)
   RNG_State rstate;
@@ -154,6 +174,8 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
     std::cout << "Initializing turbulent velocity field:" << std::endl
               << "  v_rms=" << v_rms << ", nlow=" << nlow << ", nhigh=" << nhigh
               << ", expo=" << expo << ", sol_frac=" << sol_frac << std::endl
+              << "  true_2d=" << (true_2d ? "true" : "false")
+              << ", active_velocity_components=" << (active_v3 ? 3 : 2) << std::endl
               << "  k_crit=" << k_crit << " (wavenumber=" << k_crit_mag << ")" << std::endl
               << "  total_modes_in_shell=" << total_modes
               << ", kept_via_importance_sampling=" << kept_modes << std::endl;
@@ -175,10 +197,12 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
     ky_arr[n] = ky;
     kz_arr[n] = kz;
 
-    // Amplitude scaling for E(k) ~ k^{-expo}
-    // The spectral energy density in a shell of radius k scales as k^{-expo}
-    // For random phases, amplitude ~ k^{-(expo+2)/2}
-    Real norm = (kiso > 1e-16) ? 1.0/pow(kiso, (expo+2.0)/2.0) : 0.0;
+    // Amplitude scaling for E(k) ~ k^{-expo}.
+    // In N dimensions, shell multiplicity contributes k^(N-1), so
+    // E(k) ~ k^(N-1) |u_hat(k)|^2 and |u_hat(k)| ~ k^{-(expo+N-1)/2}.
+    Real spectral_ndim = active_v3 ? 3.0 : 2.0;
+    Real norm_exp = 0.5 * (expo + spectral_ndim - 1.0);
+    Real norm = (kiso > 1e-16) ? 1.0/pow(kiso, norm_exp) : 0.0;
 
     // Spectral boosting: compensate for subsampling by 1/sqrt(P)
     // This preserves the expected spectral energy
@@ -190,8 +214,13 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
     Real a[3], b[3];
 
     for (int dir = 0; dir < 3; dir++) {
-      a[dir] = norm * RanGaussianSt(&rstate);
-      b[dir] = norm * RanGaussianSt(&rstate);
+      if (dir == 2 && !active_v3) {
+        a[dir] = 0.0;
+        b[dir] = 0.0;
+      } else {
+        a[dir] = norm * RanGaussianSt(&rstate);
+        b[dir] = norm * RanGaussianSt(&rstate);
+      }
     }
 
     // Apply solenoidal projection: a_new = a - k(k·a)/|k|^2
@@ -279,7 +308,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
 
     u0(m,IM1,k,j,i) = den * vx;
     u0(m,IM2,k,j,i) = den * vy;
-    u0(m,IM3,k,j,i) = den * vz;
+    u0(m,IM3,k,j,i) = active_v3 ? den * vz : 0.0;
   });
 
   // Compute mean momentum and RMS of each component for isotropic normalization
@@ -323,7 +352,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
 
   Real vmean1 = sum_mom1 / sum_mass;
   Real vmean2 = sum_mom2 / sum_mass;
-  Real vmean3 = sum_mom3 / sum_mass;
+  Real vmean3 = active_v3 ? sum_mom3 / sum_mass : 0.0;
 
   // Subtract mean velocity
   par_for("turb_vel_submean", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
@@ -349,7 +378,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
     Real rho = u0(m,IDN,k,j,i);
     Real v1 = u0(m,IM1,k,j,i)/rho;
     Real v2 = u0(m,IM2,k,j,i)/rho;
-    Real v3 = u0(m,IM3,k,j,i)/rho;
+    Real v3 = active_v3 ? u0(m,IM3,k,j,i)/rho : 0.0;
 
     s_v1sqr += v1*v1 * vol;
     s_v2sqr += v2*v2 * vol;
@@ -391,7 +420,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den) {
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
     u0(m,IM1,k,j,i) *= scale;
     u0(m,IM2,k,j,i) *= scale;
-    u0(m,IM3,k,j,i) *= scale;
+    u0(m,IM3,k,j,i) = active_v3 ? u0(m,IM3,k,j,i) * scale : 0.0;
   });
 }
 
@@ -409,6 +438,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   int nscalars = pmbp->phydro->nscalars;
   int nhydro = pmbp->phydro->nhydro;
+  bool true_2d = UseTrue2DVelocity(pin, pmy_mesh_);
 
   // Read mean gradient parameter
   mean_gradient_G = pin->GetOrAddReal("problem", "mean_gradient", 1.0);
@@ -439,6 +469,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     std::cout << "Scalar mixing problem:" << std::endl
               << "  mean_gradient G = " << mean_gradient_G << std::endl
               << "  scalar_init = " << scalar_init << std::endl
+              << "  true_2d = " << (true_2d ? "true" : "false") << std::endl
               << "  nscalars = " << nscalars << std::endl;
   }
 
@@ -453,7 +484,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   });
 
   // Initialize turbulent velocity field
-  InitTurbulentVelocity(pmbp, pin, den);
+  InitTurbulentVelocity(pmbp, pin, den, true_2d);
 
   // Update energy with kinetic energy
   par_for("pgen_energy", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
