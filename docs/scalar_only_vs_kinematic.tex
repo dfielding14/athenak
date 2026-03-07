@@ -1,0 +1,159 @@
+\documentclass[twocolumn]{aastex7}
+\usepackage{xspace}
+
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\SO}{\code{scalar\_only}\xspace}
+\newcommand{\kin}{\code{kinematic}\xspace}
+\newcommand{\dyn}{\code{dynamic}\xspace}
+
+\begin{document}
+
+\title{Frozen-Hydrodynamic Passive-Scalar Evolution in AthenaK: \texorpdfstring{$\SO$}{scalar\_only} Versus \texorpdfstring{$\kin$}{kinematic} Time Evolution}
+
+\begin{abstract}
+AthenaK currently supports passive-scalar evolution in a prescribed hydrodynamic background through the hydro flag \SO. That capability is easily conflated with \code{time/evolution=kinematic}, but the two configurations are numerically distinct. In this note we document the post-fix implementation of \SO at the level of the discrete update actually executed by the code. The essential result is that \SO freezes the engine-managed evolution of density, momentum, and total energy, while still reconstructing the full primitive state and still computing the face mass flux delivered by the selected hydro reconstruction and Riemann solver. Passive scalars are then advanced conservatively through the flux relation $F_q = s F_{\rho}$, augmented by explicit scalar diffusion when \code{scalar\_diffusivity} is enabled. By contrast, \kin is a driver-level evolution mode in which hydrodynamic variables continue to evolve and the hydro module is restricted to the \code{advect} solver. We therefore conclude that \SO is the appropriate mechanism for frozen-background scalar transport, whereas \kin defines a different advection problem with a different discrete operator.
+\end{abstract}
+
+\section{Method}
+This note describes the present hydro implementation in AthenaK after tightening the semantics of \SO. The target use case is the one relevant to scalar mixing studies: a problem generator prescribes a velocity field, density field, and thermodynamic state, and only the passive scalar content is intended to evolve under advection, explicit scalar diffusion, and optional user-defined scalar source terms.
+
+The discussion below is restricted to hydro. MHD and radiation are outside the present scope.
+
+\subsection{Controlling runtime switches}
+Three input choices control the behavior discussed here.
+
+First, \code{time/evolution} selects the driver-level time-evolution mode. In the present code this option is parsed into the three states \code{static}, \code{kinematic}, and \code{dynamic}. Second, \code{hydro/rsolver} selects the hydro Riemann solver. Third, \code{hydro/scalar\_only} modifies how the hydro module applies the resulting fluxes and source terms.
+
+The important point is that \SO is not itself a time-evolution mode. It is a hydro-side modifier applied within an otherwise time-evolving hydro solve. The corresponding engine-level contract is now the following:
+\begin{equation}
+U_h \equiv \left(\rho,\rho v_x,\rho v_y,\rho v_z,E\right)
+\end{equation}
+remains fixed under all built-in hydro evolution operators when \code{hydro/scalar\_only=true}. Here $E$ denotes total energy for the ideal-gas hydro system. Passive scalars may still evolve.
+
+This contract is enforced at setup in two ways. The hydro constructor now rejects \SO with \code{nscalars=0}, rejects \SO with built-in hydro source terms such as \code{const\_accel} or cooling, and rejects \SO in the presence of a shearing-box configuration because the shearing source and remap both modify hydro conserved variables. These checks convert ambiguous mixed configurations into explicit setup errors.
+
+\begin{table*}[t]
+\centering
+\small
+\caption{Configuration logic relevant to frozen-background scalar transport.}
+\begin{tabular}{llll}
+\hline
+Setting & What it controls & Allowed hydro solver choices & Consequence for hydro state \\
+\hline
+\code{time/evolution=dynamic} & Driver evolution mode & \code{llf}, \code{hlle}, \code{hllc}, \code{roe} (NR) & Hydro normally evolves \\
+\code{time/evolution=kinematic} & Driver evolution mode & \code{advect} only (NR hydro) & Hydro still evolves \\
+\code{hydro/scalar\_only=true} & Hydro update semantics & Inherits the chosen hydro solver & Built-in hydro evolution is frozen \\
+\hline
+\end{tabular}
+\end{table*}
+
+\subsection{Discrete operator under \texorpdfstring{$\SO$}{scalar\_only}}
+Let $s_n$ denote a passive-scalar concentration and let
+\begin{equation}
+q_n \equiv \rho s_n
+\end{equation}
+be the corresponding conserved scalar variable stored in the hydro state vector. The implementation under \SO is conservative in $q_n$, not in $s_n$ directly.
+
+At each explicit Runge--Kutta stage the hydro module still reconstructs the full primitive state \code{w0} and still solves the selected hydro Riemann problem on each face. In particular, the code still computes the face mass flux $F_{\rho}$ using the chosen hydro reconstruction and Riemann solver. What changes under \SO is not flux construction, but which conserved components are actually updated by the flux divergence.
+
+The stage update may be written schematically as
+\begin{equation}
+U^{(\ell)} = \gamma_0 U^{n} + \gamma_1 U^{(\ell-1)} - \beta_{\ell} \Delta t \, \nabla \cdot F^{(\ell-1)} + \beta_{\ell} \Delta t \, S^{(\ell-1)} .
+\end{equation}
+Under \SO, the hydro update loop begins at the first scalar index rather than at the density index. Equivalently,
+\begin{equation}
+U_h^{(\ell)} = U_h^n,
+\end{equation}
+while the passive-scalar components continue to receive their conservative flux-divergence update. This is the core freezing operation.
+
+The advective scalar flux is formed from the hydro face mass flux according to
+\begin{equation}
+F_{q_n}^{\rm adv} = s_n^{\rm up} F_{\rho},
+\end{equation}
+where $s_n^{\rm up}$ is the upwind reconstructed scalar state. In other words, the code first computes $F_{\rho}$ from the hydro Riemann problem and then transports each scalar with that same face mass flux. This is the reason that the scalar advection operator under \SO continues to depend on the hydro reconstruction and hydro Riemann solver even though hydro itself is frozen.
+
+If scalar diffusion is enabled, the diffusive contribution is added directly to the scalar face fluxes:
+\begin{equation}
+F_{q_n}^{\rm diff} = -\kappa \, \rho_f \, \nabla s_n,
+\end{equation}
+with face density $\rho_f$ obtained by arithmetic averaging of neighboring cell-centered densities. The total scalar flux is therefore
+\begin{equation}
+F_{q_n} = F_{q_n}^{\rm adv} + F_{q_n}^{\rm diff}.
+\end{equation}
+No dedicated scalar solver is introduced by \SO; the passive-scalar transport operator is built on top of the existing hydro flux machinery.
+
+After flux application, the code still performs the usual communication, boundary-value, prolongation, and conserved-to-primitive steps. Consequently the scalar primitive $s_n$ used at the next stage is consistent with the updated conserved scalar $q_n$, while the hydro primitives remain tied to the frozen hydro conserved state.
+
+\subsection{Built-in source terms and what is now frozen}
+The post-fix implementation suppresses all built-in hydro source terms inside the hydro task list when \SO is enabled. This includes constant acceleration, cooling source terms, shearing-box source terms, and general-relativistic coordinate source terms. User-enrolled source terms are still executed. This is a deliberate asymmetry: the engine enforces a frozen-hydro contract for built-in hydro evolution, but user callbacks remain trusted problem-specific code.
+
+This distinction matters numerically. The frozen-background guarantee now means that the code itself will not modify $\rho$, $\rho \mathbf{v}$, or $E$ through any built-in hydro source or update path. It does \emph{not} mean that user-defined source terms are prevented from doing so. For scalar-mixing applications this is acceptable, because the user source usually acts only on the scalar variable.
+
+\subsection{Timestep selection under \texorpdfstring{$\SO$}{scalar\_only}}
+Because the hydro state is frozen, the hydro module uses a velocity-only CFL estimate under \SO, namely
+\begin{equation}
+\Delta t_{\rm adv} = C_{\rm CFL} \min_d \left(\frac{\Delta x_d}{|v_d|}\right),
+\end{equation}
+rather than the usual acoustic estimate based on $|v|+c_s$. This is the same CFL branch used by \kin. If scalar diffusion is enabled, the diffusion module contributes the explicit stability constraint
+\begin{equation}
+\Delta t_{\rm diff} = f_d \min_d \left(\frac{\Delta x_d^2}{\kappa}\right),
+\end{equation}
+with $f_d = 1/2$ in one dimension, $1/4$ in two dimensions, and $1/6$ in three dimensions. The operative timestep is then the minimum over the active constraints.
+
+\section{Comparison with Kinematic Evolution}
+The discrete meaning of \kin is different. The driver interprets \code{time/evolution=kinematic} as a separate evolution mode. In non-relativistic hydro, that choice restricts \code{hydro/rsolver} to \code{advect}. It does not freeze hydro conserved variables.
+
+The \code{advect} solver is a pure upwind advection flux for the hydro variables. In the current source it is documented as an advection solver for isothermal hydro, and its face fluxes are built directly from the sign of the face-normal velocity. The density equation, and therefore the face mass flux, continue to evolve. Since the hydro Runge--Kutta update still acts on the density and momentum components in \kin, the background flow is not frozen.
+
+This difference is fundamental. If a user supplies a divergence-free velocity field in the continuum sense, it is tempting to argue that evolving density under \kin should be harmless because a uniform density field ought to remain uniform. That statement is only conditionally true in the discrete scheme. What the code actually preserves is determined by the discrete mass-flux divergence generated by the chosen reconstruction and solver, not by the continuum condition $\nabla \cdot \mathbf{v} = 0$ alone. Under \kin, the density field and momenta still participate in the discrete update. Under \SO, they do not.
+
+The consequence is that \kin is not equivalent to a prescribed-velocity scalar solve. It defines a different numerical problem: hydro advection with the \code{advect} solver, plus passive-scalar transport built from the resulting evolving mass flux. By contrast, \SO defines a frozen-hydrodynamic background together with passive-scalar transport built from hydro face fluxes evaluated on that frozen background.
+
+\begin{table*}[t]
+\centering
+\small
+\caption{Discrete evolution under \SO and \kin for hydro.}
+\begin{tabular}{lll}
+\hline
+Quantity or operator & \code{scalar\_only=true} & \code{time/evolution=kinematic} \\
+\hline
+Density update & frozen & evolved \\
+Momentum update & frozen & evolved \\
+Energy update & frozen & evolved if present \\
+Passive-scalar RK update & evolved & evolved \\
+Hydro reconstruction and Riemann solve & still executed & executed \\
+Face mass flux $F_{\rho}$ & computed from chosen hydro solver & computed by \code{advect} solver \\
+Scalar advective flux & $F_q = s^{\rm up} F_{\rho}$ & $F_q = s^{\rm up} F_{\rho}$ \\
+Scalar diffusion & active if requested & active if requested \\
+Built-in hydro source terms & suppressed & active if configured \\
+Velocity-only CFL branch & yes & yes \\
+\hline
+\end{tabular}
+\end{table*}
+
+\section{Numerical Implications}
+Several numerical consequences follow directly from the preceding construction.
+
+First, \SO does not decouple passive-scalar transport from hydro numerics. If the run uses \dyn with \code{hllc}, then the scalar advection operator inherits the HLLC mass flux. If the run instead uses \kin together with \code{advect} and \SO, then the scalar advection operator inherits the upwind advection mass flux. The scalar evolution therefore depends on the hydro solver choice even when hydro itself is frozen.
+
+Second, the use of the hydro mass flux is nevertheless a coherent conservative design. The discrete scalar update advances $q_n = \rho s_n$ using the same face mass transport used by the hydro subsystem. For a passive scalar this is the natural conservative formulation, and it guarantees that the scalar is transported consistently with the mass flux seen by the reconstruction and Riemann solve.
+
+Third, the post-fix semantics make the phrase ``frozen hydro'' materially correct for built-in engine behavior. In a one-step scalar-mixing verification run on this branch, the maximum absolute change in density, each velocity component, and internal energy between the initial and final binary outputs was zero to machine precision, while the passive scalar changed by a finite amount. That is the intended invariant.
+
+\section{Caveats}
+This note describes the corrected post-fix behavior. It does not describe the older implementation in which the hydro Runge--Kutta update skipped hydro variables but built-in hydro source terms could still modify the hydro state.
+
+Two caveats remain important.
+
+First, user source terms still run under \SO. The engine assumes that these callbacks are problem-specific and trusted. A user callback that modifies density, momentum, or energy can therefore violate the frozen-background interpretation by design.
+
+Second, \SO is presently a hydro-side modifier rather than a standalone scalar-transport module. The scalar flux continues to be mediated by the hydro reconstruction and hydro Riemann solver. That design is numerically consistent, but it is not solver-independent.
+
+\section{Future Work}
+A cleaner long-term design for prescribed-velocity scalar transport would be a dedicated scalar module that reconstructs the prescribed face velocity directly and computes
+\begin{equation}
+F_{q_n}^{\rm presc} = \rho_f s_n^{\rm up} v_{n,f} - \kappa \, \rho_f \, \nabla s_n,
+\end{equation}
+without passing through the hydro Riemann solver. Such a design would remove the present dependence of the scalar operator on the hydro EOS and hydro solver choice, while retaining a conservative update for $q_n$. That is not the current implementation, but it provides a clear target if the scalar-mixing capability is later separated from hydro more completely.
+
+\end{document}
