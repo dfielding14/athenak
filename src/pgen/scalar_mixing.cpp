@@ -1157,7 +1157,8 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
 //! \brief Problem Generator for scalar mixing
 //
 //  Initializes density, turbulent velocity, and a single passive scalar.
-//  Scalar is initialized to scalar_init (default 0.5) to allow symmetric fluctuations.
+//  Scalar is initialized either to scalar_init (default 0.5) or to an optional
+//  left/right x1 step profile.
 //  Mean gradient forcing ds/dt = G*v_x is applied via UserSourceTerm.
 
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
@@ -1183,21 +1184,33 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   int &je = indcs.je;
   int &ks = indcs.ks;
   int &ke = indcs.ke;
+  const int nx1 = indcs.nx1;
   const auto &u0 = pmbp->phydro->u0;
   EOS_Data &eos = pmbp->phydro->peos->eos_data;
   const Real gm1 = eos.gamma - 1.0;
+  auto &size = pmbp->pmb->mb_size;
 
   // Read initial conditions
   const Real den = pin->GetOrAddReal("problem", "rho0", 1.0);
   const Real temp = pin->GetOrAddReal("problem", "temp0", 1.0);
   const Real scalar_init = pin->GetOrAddReal("problem", "scalar_init", 0.5);
+  const bool scalar_use_x1_step =
+      pin->GetOrAddBoolean("problem", "scalar_use_x1_step", false);
+  const Real scalar_step_x1 = pin->GetOrAddReal("problem", "scalar_step_x1", 0.0);
+  const Real scalar_left = pin->GetOrAddReal("problem", "scalar_left", 0.0);
+  const Real scalar_right = pin->GetOrAddReal("problem", "scalar_right", 1.0);
 
   const int nmb = pmbp->nmb_thispack;
 
   if (global_variable::my_rank == 0) {
     std::cout << "Scalar mixing problem:" << std::endl
               << "  mean_gradient G = " << mean_gradient_G << std::endl
+              << "  scalar_ic = "
+              << (scalar_use_x1_step ? "x1_step" : "uniform") << std::endl
               << "  scalar_init = " << scalar_init << std::endl
+              << "  scalar_left = " << scalar_left << std::endl
+              << "  scalar_right = " << scalar_right << std::endl
+              << "  scalar_step_x1 = " << scalar_step_x1 << std::endl
               << "  true_2d = " << (true_2d ? "true" : "false") << std::endl
               << "  nscalars = " << nscalars << std::endl;
   }
@@ -1227,8 +1240,15 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   par_for("scalar_mix_pgen_scalar", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
     const Real rho = u0(m, IDN, k, j, i);
+    Real scalar_value = scalar_init;
+    if (scalar_use_x1_step) {
+      Real &x1min = size.d_view(m).x1min;
+      Real &x1max = size.d_view(m).x1max;
+      const Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+      scalar_value = (x1v < scalar_step_x1) ? scalar_left : scalar_right;
+    }
     for (int ns = 0; ns < nscalars; ++ns) {
-      u0(m, nhydro+ns, k, j, i) = rho * scalar_init;
+      u0(m, nhydro+ns, k, j, i) = rho * scalar_value;
     }
   });
 }
