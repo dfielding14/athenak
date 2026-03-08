@@ -55,6 +55,11 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   auto &size_ = pmy_pack->pmb->mb_size;
   auto &coord_ = pmy_pack->pcoord->coord_data;
   auto &w0_ = w0;
+  bool use_sface = scalar_only && use_scalar_face_velocity && (scalar_vface != nullptr) &&
+                   (nscalars > 0);
+  auto sface_x1f = use_sface ? scalar_vface->x1f : DvceArray4D<Real>();
+  auto sface_x2f = use_sface ? scalar_vface->x2f : DvceArray4D<Real>();
+  auto sface_x3f = use_sface ? scalar_vface->x3f : DvceArray4D<Real>();
 
   //--------------------------------------------------------------------------------------
   // i-direction
@@ -134,10 +139,19 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
     if (nvars > nhyd_) {
       for (int n=nhyd_; n<nvars; ++n) {
         par_for_inner(member, is, ie+1, [&](const int i) {
-          if (flx1_(m,IDN,k,j,i) >= 0.0) {
-            flx1_(m,n,k,j,i) = flx1_(m,IDN,k,j,i)*wl(n,i);
+          if (use_sface) {
+            Real vn = sface_x1f(m,k,j,i);
+            if (vn >= 0.0) {
+              flx1_(m,n,k,j,i) = vn * wl(IDN,i) * wl(n,i);
+            } else {
+              flx1_(m,n,k,j,i) = vn * wr(IDN,i) * wr(n,i);
+            }
           } else {
-            flx1_(m,n,k,j,i) = flx1_(m,IDN,k,j,i)*wr(n,i);
+            if (flx1_(m,IDN,k,j,i) >= 0.0) {
+              flx1_(m,n,k,j,i) = flx1_(m,IDN,k,j,i)*wl(n,i);
+            } else {
+              flx1_(m,n,k,j,i) = flx1_(m,IDN,k,j,i)*wr(n,i);
+            }
           }
         });
       }
@@ -234,10 +248,19 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
         if (nvars > nhyd_) {
           for (int n=nhyd_; n<nvars; ++n) {
             par_for_inner(member, is, ie, [&](const int i) {
-              if (flx2_(m,IDN,k,j,i) >= 0.0) {
-                flx2_(m,n,k,j,i) = flx2_(m,IDN,k,j,i)*wl(n,i);
+              if (use_sface) {
+                Real vn = sface_x2f(m,k,j,i);
+                if (vn >= 0.0) {
+                  flx2_(m,n,k,j,i) = vn * wl(IDN,i) * wl(n,i);
+                } else {
+                  flx2_(m,n,k,j,i) = vn * wr(IDN,i) * wr(n,i);
+                }
               } else {
-                flx2_(m,n,k,j,i) = flx2_(m,IDN,k,j,i)*wr(n,i);
+                if (flx2_(m,IDN,k,j,i) >= 0.0) {
+                  flx2_(m,n,k,j,i) = flx2_(m,IDN,k,j,i)*wl(n,i);
+                } else {
+                  flx2_(m,n,k,j,i) = flx2_(m,IDN,k,j,i)*wr(n,i);
+                }
               }
             });
           }
@@ -329,10 +352,19 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
         if (nvars > nhyd_) {
           for (int n=nhyd_; n<nvars; ++n) {
             par_for_inner(member, is, ie, [&](const int i) {
-              if (flx3_(m,IDN,k,j,i) >= 0.0) {
-                flx3_(m,n,k,j,i) = flx3_(m,IDN,k,j,i)*wl(n,i);
+              if (use_sface) {
+                Real vn = sface_x3f(m,k,j,i);
+                if (vn >= 0.0) {
+                  flx3_(m,n,k,j,i) = vn * wl(IDN,i) * wl(n,i);
+                } else {
+                  flx3_(m,n,k,j,i) = vn * wr(IDN,i) * wr(n,i);
+                }
               } else {
-                flx3_(m,n,k,j,i) = flx3_(m,IDN,k,j,i)*wr(n,i);
+                if (flx3_(m,IDN,k,j,i) >= 0.0) {
+                  flx3_(m,n,k,j,i) = flx3_(m,IDN,k,j,i)*wl(n,i);
+                } else {
+                  flx3_(m,n,k,j,i) = flx3_(m,IDN,k,j,i)*wr(n,i);
+                }
               }
             });
           }

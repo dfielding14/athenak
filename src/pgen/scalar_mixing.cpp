@@ -6,15 +6,16 @@
 //! \file scalar_mixing.cpp
 //  \brief Problem generator for scalar mixing in frozen turbulent velocity field
 //
-//  Single passive scalar with mean gradient forcing: ds/dt = G * v_x
-//  This simulates mixing of a background scalar gradient by turbulence.
+//  Passive scalars with selectable source terms (mean gradient, reaction, sponge).
+//  This simulates mixing of background gradients and/or reactive reservoirs by turbulence.
 //
-//  When scalar_only=true in <hydro>, velocity is frozen and only the scalar evolves.
+//  When scalar_only=true in <hydro>, velocity is frozen and only the scalars evolve.
 
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -35,7 +36,8 @@
 #endif
 
 // Function declarations
-void MeanGradientForcing(Mesh* pm, const Real bdt);
+void ScalarForcingSource(Mesh* pm, const Real bdt);
+void ScalarMixingHistory(HistoryData *pdata, Mesh *pm);
 
 namespace {
 
@@ -62,6 +64,7 @@ struct TurbulenceConfig {
   bool projection_true_2d = false;
   bool stream_2d = false;
   bool active_v3 = false;
+  bool divfree_scalar_flux = false;
 
   Real lx = 1.0;
   Real ly = 1.0;
@@ -113,8 +116,49 @@ struct ShellFitResult {
   bool converged = false;
 };
 
-// Store mean gradient parameter (read in ProblemGenerator, used in source term)
-Real mean_gradient_G = 1.0;
+struct VelocityStats {
+  Real vmean1 = 0.0;
+  Real vmean2 = 0.0;
+  Real vmean3 = 0.0;
+  Real scale = 1.0;
+};
+
+enum ScalarForcingMode {
+  kScalarNone = 0,
+  kScalarMeanGradient = 1,
+  kScalarMassConservingAC = 2,
+  kScalarSponge = 3,
+  kScalarSpongeReaction = 4
+};
+
+enum ReactionType {
+  kReactionKpp = 1,
+  kReactionBistable = 2
+};
+
+struct ScalarForcingConfig {
+  int mode = kScalarNone;
+  Real G = 1.0;
+  Real tau = 1.0;
+  Real theta1 = 1.0e-6;
+  Real theta2 = 0.5;
+  Real theta3 = 1.0;
+  Real a = 0.5;
+  Real chiL0 = 1.0;
+  Real chiR0 = 1.0;
+  Real thetaL = 1.0e-6;
+  Real thetaR = 1.0;
+  Real xL0 = 0.0;
+  Real xL1 = 0.0;
+  Real xR0 = 0.0;
+  Real xR1 = 0.0;
+  Real mask_w = 0.0;
+  int reaction_type = kReactionBistable;
+  Real theta_floor = 1.0e-6;
+  bool clip_reaction_interval = true;
+};
+
+std::vector<ScalarForcingConfig> scalar_forcing_cfg;
 
 bool UseTrue2DVelocity(ParameterInput *pin, Mesh *pm) {
   if (!pm->two_d) return false;
@@ -155,6 +199,27 @@ Real TargetShellEnergy(int shell, Real expo) {
   return 1.0 / std::pow(static_cast<Real>(shell), expo);
 }
 
+KOKKOS_INLINE_FUNCTION
+Real SmoothTopHat(Real x, Real x0, Real x1, Real w) {
+  if (w <= 0.0) {
+    return (x >= x0 && x <= x1) ? 1.0 : 0.0;
+  }
+  return 0.5 * (tanh((x - x0) / w) - tanh((x - x1) / w));
+}
+
+KOKKOS_INLINE_FUNCTION
+Real BistableReaction(Real theta, Real tau, Real t1, Real t2, Real t3) {
+  const Real inv_tau = (tau != 0.0) ? 1.0 / tau : 0.0;
+  return -inv_tau * (theta - t1) * (theta - t2) * (theta - t3);
+}
+
+KOKKOS_INLINE_FUNCTION
+Real KppReaction(Real theta, Real tau, Real t1, Real t3) {
+  const Real denom = t3 - t1;
+  const Real inv = (tau != 0.0 && denom != 0.0) ? 1.0 / (tau * denom) : 0.0;
+  return inv * (theta - t1) * (t3 - theta);
+}
+
 TurbulenceConfig ReadTurbulenceConfig(ParameterInput *pin, Mesh *pm,
                                       bool projection_true_2d) {
   TurbulenceConfig cfg;
@@ -169,6 +234,7 @@ TurbulenceConfig ReadTurbulenceConfig(ParameterInput *pin, Mesh *pm,
   cfg.sol_frac = pin->GetOrAddReal("problem", "turb_sol_frac", 1.0);
   cfg.rseed = GetTurbulenceSeed(pin);
   cfg.k_crit = pin->GetOrAddReal("problem", "turb_k_crit", 16.0);
+  cfg.divfree_scalar_flux = pin->GetOrAddBoolean("problem", "divfree_scalar_flux", false);
 
   cfg.nx1 = pm->mb_indcs.nx1;
   cfg.nx2 = pm->mb_indcs.nx2;
@@ -385,6 +451,97 @@ VectorCoefficients ConvertPsiToVelocityCoefficients(const ModeCatalog &catalog,
   return coeffs;
 }
 
+VectorCoefficients ConvertVelocityToVectorPotentialCoefficients(
+    const ModeCatalog &catalog, const VectorCoefficients &vel_coeffs) {
+  VectorCoefficients coeffs;
+  const int nmodes = catalog.KeptModes();
+  coeffs.aka0.resize(nmodes);
+  coeffs.aka1.resize(nmodes);
+  coeffs.aka2.resize(nmodes);
+  coeffs.akb0.resize(nmodes);
+  coeffs.akb1.resize(nmodes);
+  coeffs.akb2.resize(nmodes);
+
+  for (int n = 0; n < nmodes; ++n) {
+    const Real kx = catalog.kx[n];
+    const Real ky = catalog.ky[n];
+    const Real kz = catalog.kz[n];
+    const Real k2 = kx*kx + ky*ky + kz*kz;
+    if (k2 <= kTiny) {
+      coeffs.aka0[n] = 0.0;
+      coeffs.aka1[n] = 0.0;
+      coeffs.aka2[n] = 0.0;
+      coeffs.akb0[n] = 0.0;
+      coeffs.akb1[n] = 0.0;
+      coeffs.akb2[n] = 0.0;
+      continue;
+    }
+
+    coeffs.aka0[n] = -(ky*vel_coeffs.akb2[n] - kz*vel_coeffs.akb1[n]) / k2;
+    coeffs.aka1[n] = -(kz*vel_coeffs.akb0[n] - kx*vel_coeffs.akb2[n]) / k2;
+    coeffs.aka2[n] = -(kx*vel_coeffs.akb1[n] - ky*vel_coeffs.akb0[n]) / k2;
+    coeffs.akb0[n] =  (ky*vel_coeffs.aka2[n] - kz*vel_coeffs.aka1[n]) / k2;
+    coeffs.akb1[n] =  (kz*vel_coeffs.aka0[n] - kx*vel_coeffs.aka2[n]) / k2;
+    coeffs.akb2[n] =  (kx*vel_coeffs.aka1[n] - ky*vel_coeffs.aka0[n]) / k2;
+  }
+
+  return coeffs;
+}
+
+KOKKOS_INLINE_FUNCTION
+void AccumulateVelocityFromVectorPotential(
+    const DvceArray1D<Real> &d_kx, const DvceArray1D<Real> &d_ky,
+    const DvceArray1D<Real> &d_kz, const DvceArray1D<Real> &d_aA0,
+    const DvceArray1D<Real> &d_aA1, const DvceArray1D<Real> &d_aA2,
+    const DvceArray1D<Real> &d_bA0, const DvceArray1D<Real> &d_bA1,
+    const DvceArray1D<Real> &d_bA2, int mode_count, Real x1v, Real x2v, Real x3v,
+    Real dx1, Real dx2, Real dx3, bool multi_d, bool three_d,
+    Real &vx, Real &vy, Real &vz) {
+  for (int n = 0; n < mode_count; ++n) {
+    const Real kx = d_kx(n);
+    const Real ky = d_ky(n);
+    const Real kz = d_kz(n);
+
+    const Real kx_eff = (dx1 > 0.0) ? (2.0/dx1) * sin(0.5*kx*dx1) : 0.0;
+    const Real ky_eff = (multi_d && dx2 > 0.0) ? (2.0/dx2) * sin(0.5*ky*dx2) : 0.0;
+    const Real kz_eff = (three_d && dx3 > 0.0) ? (2.0/dx3) * sin(0.5*kz*dx3) : 0.0;
+    const Real keff2 = kx_eff*kx_eff + ky_eff*ky_eff + kz_eff*kz_eff;
+    if (keff2 <= kTiny) continue;
+
+    Real aAx = d_aA0(n);
+    Real aAy = d_aA1(n);
+    Real aAz = d_aA2(n);
+    Real bAx = d_bA0(n);
+    Real bAy = d_bA1(n);
+    Real bAz = d_bA2(n);
+
+    const Real inv_keff2 = 1.0 / keff2;
+    const Real k_dot_a = kx_eff*aAx + ky_eff*aAy + kz_eff*aAz;
+    const Real k_dot_b = kx_eff*bAx + ky_eff*bAy + kz_eff*bAz;
+    aAx -= kx_eff * k_dot_a * inv_keff2;
+    aAy -= ky_eff * k_dot_a * inv_keff2;
+    aAz -= kz_eff * k_dot_a * inv_keff2;
+    bAx -= kx_eff * k_dot_b * inv_keff2;
+    bAy -= ky_eff * k_dot_b * inv_keff2;
+    bAz -= kz_eff * k_dot_b * inv_keff2;
+
+    const Real aVx = -(ky_eff*bAz - kz_eff*bAy);
+    const Real aVy = -(kz_eff*bAx - kx_eff*bAz);
+    const Real aVz = -(kx_eff*bAy - ky_eff*bAx);
+    const Real bVx =  (ky_eff*aAz - kz_eff*aAy);
+    const Real bVy =  (kz_eff*aAx - kx_eff*aAz);
+    const Real bVz =  (kx_eff*aAy - ky_eff*aAx);
+
+    const Real phase = kx*x1v + ky*x2v + kz*x3v;
+    const Real cosk = cos(phase);
+    const Real sink = sin(phase);
+
+    vx += aVx*cosk - bVx*sink;
+    vy += aVy*cosk - bVy*sink;
+    vz += aVz*cosk - bVz*sink;
+  }
+}
+
 void SynthesizeVelocityFromVectorModes(MeshBlockPack *pmbp, const TurbulenceConfig &cfg,
                                        Real den, const ModeCatalog &catalog,
                                        const VectorCoefficients &coeffs) {
@@ -482,7 +639,7 @@ void SynthesizeVelocityFromVectorModes(MeshBlockPack *pmbp, const TurbulenceConf
   });
 }
 
-void NormalizeVelocityField(MeshBlockPack *pmbp, const TurbulenceConfig &cfg) {
+VelocityStats NormalizeVelocityField(MeshBlockPack *pmbp, const TurbulenceConfig &cfg) {
   Mesh *pm = pmbp->pmesh;
   auto &indcs = pm->mb_indcs;
   const int is = indcs.is;
@@ -612,6 +769,419 @@ void NormalizeVelocityField(MeshBlockPack *pmbp, const TurbulenceConfig &cfg) {
     u0(m,IM2,k,j,i) *= scale;
     u0(m,IM3,k,j,i) = active_v3 ? u0(m,IM3,k,j,i) * scale : 0.0;
   });
+
+  return {vmean1, vmean2, vmean3, scale};
+}
+
+void PopulateScalarFaceVelocitiesFromVectorPotential(
+    MeshBlockPack *pmbp, const TurbulenceConfig &cfg, const ModeCatalog &catalog,
+    const VectorCoefficients &apot_coeffs, const VelocityStats &stats) {
+  auto &indcs = pmbp->pmesh->mb_indcs;
+  const int is = indcs.is;
+  const int ie = indcs.ie;
+  const int js = indcs.js;
+  const int je = indcs.je;
+  const int ks = indcs.ks;
+  const int ke = indcs.ke;
+  const int nx1 = indcs.nx1;
+  const int nx2 = indcs.nx2;
+  const int nx3 = indcs.nx3;
+  const int ng = indcs.ng;
+  const int nmb = pmbp->nmb_thispack;
+  const bool multi_d = cfg.mesh_multi_d;
+  const bool three_d = cfg.mesh_three_d;
+  const int nmodes = catalog.KeptModes();
+
+  if (nmodes == 0) return;
+
+  auto &hydro = *pmbp->phydro;
+  const int ncells1 = nx1 + 2*ng;
+  const int ncells2 = multi_d ? nx2 + 2*ng : 1;
+  const int ncells3 = three_d ? nx3 + 2*ng : 1;
+  if (!hydro.scalar_vface) {
+    hydro.scalar_vface = std::make_unique<DvceFaceFld4D<Real>>(
+        "scalar_vface", nmb, ncells3, ncells2, ncells1);
+  }
+  hydro.use_scalar_face_velocity = true;
+
+  DvceArray1D<Real> d_kx("scalar_face_kx", nmodes);
+  DvceArray1D<Real> d_ky("scalar_face_ky", nmodes);
+  DvceArray1D<Real> d_kz("scalar_face_kz", nmodes);
+  DvceArray1D<Real> d_aA0("scalar_face_aA0", nmodes);
+  DvceArray1D<Real> d_aA1("scalar_face_aA1", nmodes);
+  DvceArray1D<Real> d_aA2("scalar_face_aA2", nmodes);
+  DvceArray1D<Real> d_bA0("scalar_face_bA0", nmodes);
+  DvceArray1D<Real> d_bA1("scalar_face_bA1", nmodes);
+  DvceArray1D<Real> d_bA2("scalar_face_bA2", nmodes);
+
+  auto h_kx = Kokkos::create_mirror_view(d_kx);
+  auto h_ky = Kokkos::create_mirror_view(d_ky);
+  auto h_kz = Kokkos::create_mirror_view(d_kz);
+  auto h_aA0 = Kokkos::create_mirror_view(d_aA0);
+  auto h_aA1 = Kokkos::create_mirror_view(d_aA1);
+  auto h_aA2 = Kokkos::create_mirror_view(d_aA2);
+  auto h_bA0 = Kokkos::create_mirror_view(d_bA0);
+  auto h_bA1 = Kokkos::create_mirror_view(d_bA1);
+  auto h_bA2 = Kokkos::create_mirror_view(d_bA2);
+
+  for (int n = 0; n < nmodes; ++n) {
+    h_kx(n) = catalog.kx[n];
+    h_ky(n) = catalog.ky[n];
+    h_kz(n) = catalog.kz[n];
+    h_aA0(n) = apot_coeffs.aka0[n];
+    h_aA1(n) = apot_coeffs.aka1[n];
+    h_aA2(n) = apot_coeffs.aka2[n];
+    h_bA0(n) = apot_coeffs.akb0[n];
+    h_bA1(n) = apot_coeffs.akb1[n];
+    h_bA2(n) = apot_coeffs.akb2[n];
+  }
+
+  Kokkos::deep_copy(d_kx, h_kx);
+  Kokkos::deep_copy(d_ky, h_ky);
+  Kokkos::deep_copy(d_kz, h_kz);
+  Kokkos::deep_copy(d_aA0, h_aA0);
+  Kokkos::deep_copy(d_aA1, h_aA1);
+  Kokkos::deep_copy(d_aA2, h_aA2);
+  Kokkos::deep_copy(d_bA0, h_bA0);
+  Kokkos::deep_copy(d_bA1, h_bA1);
+  Kokkos::deep_copy(d_bA2, h_bA2);
+
+  auto &size = pmbp->pmb->mb_size;
+  auto sface_x1f = hydro.scalar_vface->x1f;
+  auto sface_x2f = hydro.scalar_vface->x2f;
+  auto sface_x3f = hydro.scalar_vface->x3f;
+
+  int il = is - ng;
+  int iu = ie + ng + 1;
+  int jl = multi_d ? js - ng : js;
+  int ju = multi_d ? je + ng : je;
+  int kl = three_d ? ks - ng : ks;
+  int ku = three_d ? ke + ng : ke;
+  par_for("scalar_face_x1", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
+  KOKKOS_LAMBDA(int m, int k, int j, int i) {
+    Real &x1min = size.d_view(m).x1min;
+    Real &x1max = size.d_view(m).x1max;
+    const Real x1v = LeftEdgeX(i-is, nx1, x1min, x1max);
+
+    Real x2v = 0.0;
+    if (multi_d) {
+      Real &x2min = size.d_view(m).x2min;
+      Real &x2max = size.d_view(m).x2max;
+      x2v = CellCenterX(j-js, nx2, x2min, x2max);
+    }
+
+    Real x3v = 0.0;
+    if (three_d) {
+      Real &x3min = size.d_view(m).x3min;
+      Real &x3max = size.d_view(m).x3max;
+      x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+    }
+
+    Real vx = 0.0;
+    Real vy = 0.0;
+    Real vz = 0.0;
+    AccumulateVelocityFromVectorPotential(
+        d_kx, d_ky, d_kz, d_aA0, d_aA1, d_aA2, d_bA0, d_bA1, d_bA2, nmodes,
+        x1v, x2v, x3v, size.d_view(m).dx1, size.d_view(m).dx2, size.d_view(m).dx3,
+        multi_d, three_d, vx, vy, vz);
+    sface_x1f(m,k,j,i) = (vx - stats.vmean1) * stats.scale;
+  });
+
+  if (multi_d) {
+    il = is - ng;
+    iu = ie + ng;
+    jl = js - ng;
+    ju = je + ng + 1;
+    kl = three_d ? ks - ng : ks;
+    ku = three_d ? ke + ng : ke;
+    par_for("scalar_face_x2", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real &x1min = size.d_view(m).x1min;
+      Real &x1max = size.d_view(m).x1max;
+      const Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+
+      Real &x2min = size.d_view(m).x2min;
+      Real &x2max = size.d_view(m).x2max;
+      const Real x2v = LeftEdgeX(j-js, nx2, x2min, x2max);
+
+      Real x3v = 0.0;
+      if (three_d) {
+        Real &x3min = size.d_view(m).x3min;
+        Real &x3max = size.d_view(m).x3max;
+        x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+      }
+
+      Real vx = 0.0;
+      Real vy = 0.0;
+      Real vz = 0.0;
+      AccumulateVelocityFromVectorPotential(
+          d_kx, d_ky, d_kz, d_aA0, d_aA1, d_aA2, d_bA0, d_bA1, d_bA2, nmodes,
+          x1v, x2v, x3v, size.d_view(m).dx1, size.d_view(m).dx2, size.d_view(m).dx3,
+          multi_d, three_d, vx, vy, vz);
+      sface_x2f(m,k,j,i) = (vy - stats.vmean2) * stats.scale;
+    });
+  }
+
+  if (three_d) {
+    il = is - ng;
+    iu = ie + ng;
+    jl = js - ng;
+    ju = je + ng;
+    kl = ks - ng;
+    ku = ke + ng + 1;
+    par_for("scalar_face_x3", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      if (!cfg.active_v3) {
+        sface_x3f(m,k,j,i) = 0.0;
+        return;
+      }
+
+      Real &x1min = size.d_view(m).x1min;
+      Real &x1max = size.d_view(m).x1max;
+      const Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+
+      Real &x2min = size.d_view(m).x2min;
+      Real &x2max = size.d_view(m).x2max;
+      const Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+
+      Real &x3min = size.d_view(m).x3min;
+      Real &x3max = size.d_view(m).x3max;
+      const Real x3v = LeftEdgeX(k-ks, nx3, x3min, x3max);
+
+      Real vx = 0.0;
+      Real vy = 0.0;
+      Real vz = 0.0;
+      AccumulateVelocityFromVectorPotential(
+          d_kx, d_ky, d_kz, d_aA0, d_aA1, d_aA2, d_bA0, d_bA1, d_bA2, nmodes,
+          x1v, x2v, x3v, size.d_view(m).dx1, size.d_view(m).dx2, size.d_view(m).dx3,
+          multi_d, three_d, vx, vy, vz);
+      sface_x3f(m,k,j,i) = (vz - stats.vmean3) * stats.scale;
+    });
+  }
+}
+
+void PopulateScalarFaceVelocitiesFromClebsch(
+    MeshBlockPack *pmbp, const TurbulenceConfig &cfg,
+    const ModeCatalog &catalog1, const ScalarCoefficients &phi1_coeffs,
+    const ModeCatalog &catalog2, const ScalarCoefficients &phi2_coeffs,
+    const VelocityStats &stats) {
+  auto &indcs = pmbp->pmesh->mb_indcs;
+  const int is = indcs.is;
+  const int ie = indcs.ie;
+  const int js = indcs.js;
+  const int je = indcs.je;
+  const int ks = indcs.ks;
+  const int ke = indcs.ke;
+  const int nx1 = indcs.nx1;
+  const int nx2 = indcs.nx2;
+  const int nx3 = indcs.nx3;
+  const int ng = indcs.ng;
+  const int nmb = pmbp->nmb_thispack;
+  const bool multi_d = cfg.mesh_multi_d;
+  const bool three_d = cfg.mesh_three_d;
+
+  const int nmodes1 = catalog1.KeptModes();
+  const int nmodes2 = catalog2.KeptModes();
+  if (nmodes1 == 0 || nmodes2 == 0) return;
+
+  auto &hydro = *pmbp->phydro;
+  const int ncells1 = nx1 + 2*ng;
+  const int ncells2 = multi_d ? nx2 + 2*ng : 1;
+  const int ncells3 = three_d ? nx3 + 2*ng : 1;
+  if (!hydro.scalar_vface) {
+    hydro.scalar_vface = std::make_unique<DvceFaceFld4D<Real>>(
+        "scalar_vface", nmb, ncells3, ncells2, ncells1);
+  }
+  hydro.use_scalar_face_velocity = true;
+
+  DvceArray1D<Real> d_kx1("scalar_face_stream_kx1", nmodes1);
+  DvceArray1D<Real> d_ky1("scalar_face_stream_ky1", nmodes1);
+  DvceArray1D<Real> d_kz1("scalar_face_stream_kz1", nmodes1);
+  DvceArray1D<Real> d_a1("scalar_face_stream_a1", nmodes1);
+  DvceArray1D<Real> d_b1("scalar_face_stream_b1", nmodes1);
+  DvceArray1D<Real> d_kx2("scalar_face_stream_kx2", nmodes2);
+  DvceArray1D<Real> d_ky2("scalar_face_stream_ky2", nmodes2);
+  DvceArray1D<Real> d_kz2("scalar_face_stream_kz2", nmodes2);
+  DvceArray1D<Real> d_a2("scalar_face_stream_a2", nmodes2);
+  DvceArray1D<Real> d_b2("scalar_face_stream_b2", nmodes2);
+
+  auto h_kx1 = Kokkos::create_mirror_view(d_kx1);
+  auto h_ky1 = Kokkos::create_mirror_view(d_ky1);
+  auto h_kz1 = Kokkos::create_mirror_view(d_kz1);
+  auto h_a1 = Kokkos::create_mirror_view(d_a1);
+  auto h_b1 = Kokkos::create_mirror_view(d_b1);
+  auto h_kx2 = Kokkos::create_mirror_view(d_kx2);
+  auto h_ky2 = Kokkos::create_mirror_view(d_ky2);
+  auto h_kz2 = Kokkos::create_mirror_view(d_kz2);
+  auto h_a2 = Kokkos::create_mirror_view(d_a2);
+  auto h_b2 = Kokkos::create_mirror_view(d_b2);
+
+  for (int n = 0; n < nmodes1; ++n) {
+    h_kx1(n) = catalog1.kx[n];
+    h_ky1(n) = catalog1.ky[n];
+    h_kz1(n) = catalog1.kz[n];
+    h_a1(n) = phi1_coeffs.aka[n];
+    h_b1(n) = phi1_coeffs.akb[n];
+  }
+  for (int n = 0; n < nmodes2; ++n) {
+    h_kx2(n) = catalog2.kx[n];
+    h_ky2(n) = catalog2.ky[n];
+    h_kz2(n) = catalog2.kz[n];
+    h_a2(n) = phi2_coeffs.aka[n];
+    h_b2(n) = phi2_coeffs.akb[n];
+  }
+
+  Kokkos::deep_copy(d_kx1, h_kx1);
+  Kokkos::deep_copy(d_ky1, h_ky1);
+  Kokkos::deep_copy(d_kz1, h_kz1);
+  Kokkos::deep_copy(d_a1, h_a1);
+  Kokkos::deep_copy(d_b1, h_b1);
+  Kokkos::deep_copy(d_kx2, h_kx2);
+  Kokkos::deep_copy(d_ky2, h_ky2);
+  Kokkos::deep_copy(d_kz2, h_kz2);
+  Kokkos::deep_copy(d_a2, h_a2);
+  Kokkos::deep_copy(d_b2, h_b2);
+
+  auto &size = pmbp->pmb->mb_size;
+  auto sface_x1f = hydro.scalar_vface->x1f;
+  auto sface_x2f = hydro.scalar_vface->x2f;
+  auto sface_x3f = hydro.scalar_vface->x3f;
+
+  int il = is - ng;
+  int iu = ie + ng + 1;
+  int jl = multi_d ? js - ng : js;
+  int ju = multi_d ? je + ng : je;
+  int kl = three_d ? ks - ng : ks;
+  int ku = three_d ? ke + ng : ke;
+  par_for("scalar_face_stream_x1", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
+  KOKKOS_LAMBDA(int m, int k, int j, int i) {
+    Real &x1min = size.d_view(m).x1min;
+    Real &x1max = size.d_view(m).x1max;
+    const Real x1v = LeftEdgeX(i-is, nx1, x1min, x1max);
+
+    Real x2v = 0.0;
+    if (multi_d) {
+      Real &x2min = size.d_view(m).x2min;
+      Real &x2max = size.d_view(m).x2max;
+      x2v = CellCenterX(j-js, nx2, x2min, x2max);
+    }
+
+    Real x3v = 0.0;
+    if (three_d) {
+      Real &x3min = size.d_view(m).x3min;
+      Real &x3max = size.d_view(m).x3max;
+      x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+    }
+
+    Real g1x = 0.0, g1y = 0.0, g1z = 0.0;
+    Real g2x = 0.0, g2y = 0.0, g2z = 0.0;
+    for (int n = 0; n < nmodes1; ++n) {
+      const Real phase = d_kx1(n)*x1v + d_ky1(n)*x2v + d_kz1(n)*x3v;
+      const Real basis = d_a1(n)*sin(phase) + d_b1(n)*cos(phase);
+      g1x -= d_kx1(n) * basis;
+      g1y -= d_ky1(n) * basis;
+      g1z -= d_kz1(n) * basis;
+    }
+    for (int n = 0; n < nmodes2; ++n) {
+      const Real phase = d_kx2(n)*x1v + d_ky2(n)*x2v + d_kz2(n)*x3v;
+      const Real basis = d_a2(n)*sin(phase) + d_b2(n)*cos(phase);
+      g2x -= d_kx2(n) * basis;
+      g2y -= d_ky2(n) * basis;
+      g2z -= d_kz2(n) * basis;
+    }
+
+    const Real vx = g1y*g2z - g1z*g2y;
+    sface_x1f(m,k,j,i) = (vx - stats.vmean1) * stats.scale;
+  });
+
+  if (multi_d) {
+    il = is - ng;
+    iu = ie + ng;
+    jl = js - ng;
+    ju = je + ng + 1;
+    kl = three_d ? ks - ng : ks;
+    ku = three_d ? ke + ng : ke;
+    par_for("scalar_face_stream_x2", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real &x1min = size.d_view(m).x1min;
+      Real &x1max = size.d_view(m).x1max;
+      const Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+
+      Real &x2min = size.d_view(m).x2min;
+      Real &x2max = size.d_view(m).x2max;
+      const Real x2v = LeftEdgeX(j-js, nx2, x2min, x2max);
+
+      Real x3v = 0.0;
+      if (three_d) {
+        Real &x3min = size.d_view(m).x3min;
+        Real &x3max = size.d_view(m).x3max;
+        x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+      }
+
+      Real g1x = 0.0, g1y = 0.0, g1z = 0.0;
+      Real g2x = 0.0, g2y = 0.0, g2z = 0.0;
+      for (int n = 0; n < nmodes1; ++n) {
+        const Real phase = d_kx1(n)*x1v + d_ky1(n)*x2v + d_kz1(n)*x3v;
+        const Real basis = d_a1(n)*sin(phase) + d_b1(n)*cos(phase);
+        g1x -= d_kx1(n) * basis;
+        g1y -= d_ky1(n) * basis;
+        g1z -= d_kz1(n) * basis;
+      }
+      for (int n = 0; n < nmodes2; ++n) {
+        const Real phase = d_kx2(n)*x1v + d_ky2(n)*x2v + d_kz2(n)*x3v;
+        const Real basis = d_a2(n)*sin(phase) + d_b2(n)*cos(phase);
+        g2x -= d_kx2(n) * basis;
+        g2y -= d_ky2(n) * basis;
+        g2z -= d_kz2(n) * basis;
+      }
+
+      const Real vy = g1z*g2x - g1x*g2z;
+      sface_x2f(m,k,j,i) = (vy - stats.vmean2) * stats.scale;
+    });
+  }
+
+  if (three_d) {
+    il = is - ng;
+    iu = ie + ng;
+    jl = js - ng;
+    ju = je + ng;
+    kl = ks - ng;
+    ku = ke + ng + 1;
+    par_for("scalar_face_stream_x3", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real &x1min = size.d_view(m).x1min;
+      Real &x1max = size.d_view(m).x1max;
+      const Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+
+      Real &x2min = size.d_view(m).x2min;
+      Real &x2max = size.d_view(m).x2max;
+      const Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+
+      Real &x3min = size.d_view(m).x3min;
+      Real &x3max = size.d_view(m).x3max;
+      const Real x3v = LeftEdgeX(k-ks, nx3, x3min, x3max);
+
+      Real g1x = 0.0, g1y = 0.0, g1z = 0.0;
+      Real g2x = 0.0, g2y = 0.0, g2z = 0.0;
+      for (int n = 0; n < nmodes1; ++n) {
+        const Real phase = d_kx1(n)*x1v + d_ky1(n)*x2v + d_kz1(n)*x3v;
+        const Real basis = d_a1(n)*sin(phase) + d_b1(n)*cos(phase);
+        g1x -= d_kx1(n) * basis;
+        g1y -= d_ky1(n) * basis;
+        g1z -= d_kz1(n) * basis;
+      }
+      for (int n = 0; n < nmodes2; ++n) {
+        const Real phase = d_kx2(n)*x1v + d_ky2(n)*x2v + d_kz2(n)*x3v;
+        const Real basis = d_a2(n)*sin(phase) + d_b2(n)*cos(phase);
+        g2x -= d_kx2(n) * basis;
+        g2y -= d_ky2(n) * basis;
+        g2z -= d_kz2(n) * basis;
+      }
+
+      const Real vz = g1x*g2y - g1y*g2x;
+      sface_x3f(m,k,j,i) = (vz - stats.vmean3) * stats.scale;
+    });
+  }
 }
 
 std::vector<int> CountModesPerShell(const ModeCatalog &catalog, int nhigh) {
@@ -1033,6 +1603,17 @@ void LogModeSummary(const TurbulenceConfig &cfg, const ModeCatalog &catalog,
 void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
                            bool projection_true_2d) {
   const TurbulenceConfig cfg = ReadTurbulenceConfig(pin, pmbp->pmesh, projection_true_2d);
+  auto &hydro = *pmbp->phydro;
+  hydro.use_scalar_face_velocity = false;
+  hydro.scalar_vface.reset();
+  const bool face_requested = cfg.divfree_scalar_flux;
+  const bool face_scalar_ok = hydro.scalar_only && (hydro.nscalars > 0);
+
+  if (face_requested && !hydro.scalar_only && global_variable::my_rank == 0) {
+    std::cout << "  NOTE: divfree_scalar_flux ignored (scalar_only=false)." << std::endl;
+  } else if (face_requested && hydro.nscalars == 0 && global_variable::my_rank == 0) {
+    std::cout << "  NOTE: divfree_scalar_flux ignored (nscalars=0)." << std::endl;
+  }
 
   if (cfg.method == VelocityMethod::Projection) {
     RNG_State rstate;
@@ -1061,7 +1642,23 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
 
     const VectorCoefficients coeffs = GenerateProjectionCoefficients(cfg, catalog, &rstate);
     SynthesizeVelocityFromVectorModes(pmbp, cfg, den, catalog, coeffs);
-    NormalizeVelocityField(pmbp, cfg);
+    const VelocityStats stats = NormalizeVelocityField(pmbp, cfg);
+    bool use_face_velocity = face_requested && face_scalar_ok;
+    if (use_face_velocity && cfg.sol_frac < 1.0) {
+      use_face_velocity = false;
+      if (global_variable::my_rank == 0) {
+        std::cout << "  NOTE: divfree_scalar_flux ignored when turb_sol_frac < 1 in "
+                  << "projection mode." << std::endl;
+      }
+    }
+    if (use_face_velocity) {
+      if (global_variable::my_rank == 0) {
+        std::cout << "  using divergence-free face velocity for scalar fluxes" << std::endl;
+      }
+      const VectorCoefficients apot_coeffs =
+          ConvertVelocityToVectorPotentialCoefficients(catalog, coeffs);
+      PopulateScalarFaceVelocitiesFromVectorPotential(pmbp, cfg, catalog, apot_coeffs, stats);
+    }
     return;
   }
 
@@ -1097,7 +1694,15 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
                                                                           &rstate);
     const VectorCoefficients vel_coeffs = ConvertPsiToVelocityCoefficients(catalog, psi_coeffs);
     SynthesizeVelocityFromVectorModes(pmbp, cfg, den, catalog, vel_coeffs);
-    NormalizeVelocityField(pmbp, cfg);
+    const VelocityStats stats = NormalizeVelocityField(pmbp, cfg);
+    if (face_requested && face_scalar_ok) {
+      if (global_variable::my_rank == 0) {
+        std::cout << "  using divergence-free face velocity for scalar fluxes" << std::endl;
+      }
+      const VectorCoefficients apot_coeffs =
+          ConvertVelocityToVectorPotentialCoefficients(catalog, vel_coeffs);
+      PopulateScalarFaceVelocitiesFromVectorPotential(pmbp, cfg, catalog, apot_coeffs, stats);
+    }
     return;
   }
 
@@ -1148,7 +1753,14 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
   const ScalarCoefficients phi2_coeffs =
       GenerateShellWeightedScalarCoefficients(catalog2, fit.shell_amp, &rstate2);
   SynthesizeClebschVelocity(pmbp, cfg, den, catalog1, phi1_coeffs, catalog2, phi2_coeffs);
-  NormalizeVelocityField(pmbp, cfg);
+  const VelocityStats stats = NormalizeVelocityField(pmbp, cfg);
+  if (face_requested && face_scalar_ok) {
+    if (global_variable::my_rank == 0) {
+      std::cout << "  using divergence-free face velocity for scalar fluxes" << std::endl;
+    }
+    PopulateScalarFaceVelocitiesFromClebsch(
+        pmbp, cfg, catalog1, phi1_coeffs, catalog2, phi2_coeffs, stats);
+  }
 }
 
 }  // namespace
@@ -1156,26 +1768,99 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
 //----------------------------------------------------------------------------------------
 //! \brief Problem Generator for scalar mixing
 //
-//  Initializes density, turbulent velocity, and a single passive scalar.
-//  Scalar is initialized either to scalar_init (default 0.5) or to an optional
-//  left/right x1 step profile.
-//  Mean gradient forcing ds/dt = G*v_x is applied via UserSourceTerm.
+//  Initializes density, turbulent velocity, and passive scalars.
+//  Scalars can be initialized from a shared x1 step profile or per-scalar uniform offsets.
 
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   auto &indcs = pmy_mesh_->mb_indcs;
+  auto &size = pmbp->pmb->mb_size;
 
   const int nscalars = pmbp->phydro->nscalars;
   const int nhydro = pmbp->phydro->nhydro;
   const bool true_2d = UseTrue2DVelocity(pin, pmy_mesh_);
 
-  // Read mean gradient parameter
-  mean_gradient_G = pin->GetOrAddReal("problem", "mean_gradient", 1.0);
+  if (nscalars == 0) {
+    FatalProblemSetup("Scalar mixing requires nscalars > 0.");
+  }
 
-  // Enroll user source term
-  user_srcs_func = MeanGradientForcing;
+  const Real legacy_G = pin->GetOrAddReal("problem", "mean_gradient", 1.0);
+  const Real scalar_init_default = pin->GetOrAddReal("problem", "scalar_init", 0.5);
+  const bool scalar_use_x1_step =
+      pin->GetOrAddBoolean("problem", "scalar_use_x1_step", false);
+  const Real scalar_step_x1 = pin->GetOrAddReal("problem", "scalar_step_x1", 0.0);
+  const Real scalar_left = pin->GetOrAddReal("problem", "scalar_left", 0.0);
+  const Real scalar_right = pin->GetOrAddReal("problem", "scalar_right", 1.0);
+  const Real x1min = pmy_mesh_->mesh_size.x1min;
+  const Real x1max = pmy_mesh_->mesh_size.x1max;
+  const Real lx = x1max - x1min;
 
-  if (restart) return;
+  scalar_forcing_cfg.resize(nscalars);
+  std::vector<Real> scalar_init(nscalars, scalar_init_default);
+  const Real scalar_noise_default = pin->GetOrAddReal("problem", "scalar_noise", 0.0);
+  std::vector<Real> scalar_noise(nscalars, scalar_noise_default);
+  bool clipped_inits = false;
+  bool clipped_noise = false;
+  bool noise_enabled = (scalar_noise_default > 0.0);
+
+  for (int ns = 0; ns < nscalars; ++ns) {
+    ScalarForcingConfig cfg;
+    const std::string prefix = "scalar" + std::to_string(ns) + "_";
+    const int default_mode = (ns == 0) ? kScalarMeanGradient : kScalarNone;
+    const Real default_G = (ns == 0) ? legacy_G : 1.0;
+
+    cfg.mode = pin->GetOrAddInteger("problem", prefix + "mode", default_mode);
+    cfg.G = pin->GetOrAddReal("problem", prefix + "mean_gradient", default_G);
+    cfg.tau = pin->GetOrAddReal("problem", prefix + "tau", 1.0);
+    cfg.theta1 = pin->GetOrAddReal("problem", prefix + "theta1", 1.0e-6);
+    cfg.theta3 = pin->GetOrAddReal("problem", prefix + "theta3", 1.0);
+    cfg.a = pin->GetOrAddReal("problem", prefix + "a", 0.5);
+    if (pin->DoesParameterExist("problem", prefix + "theta2")) {
+      cfg.theta2 = pin->GetReal("problem", prefix + "theta2");
+    } else {
+      cfg.theta2 = cfg.theta1 + cfg.a * (cfg.theta3 - cfg.theta1);
+    }
+    cfg.chiL0 = pin->GetOrAddReal("problem", prefix + "chiL0", 1.0);
+    cfg.chiR0 = pin->GetOrAddReal("problem", prefix + "chiR0", 1.0);
+    cfg.thetaL = pin->GetOrAddReal("problem", prefix + "thetaL", cfg.theta1);
+    cfg.thetaR = pin->GetOrAddReal("problem", prefix + "thetaR", cfg.theta3);
+    cfg.xL0 = pin->GetOrAddReal("problem", prefix + "xL0", x1min + 0.20 * lx);
+    cfg.xL1 = pin->GetOrAddReal("problem", prefix + "xL1", x1min + 0.30 * lx);
+    cfg.xR0 = pin->GetOrAddReal("problem", prefix + "xR0", x1min + 0.70 * lx);
+    cfg.xR1 = pin->GetOrAddReal("problem", prefix + "xR1", x1min + 0.80 * lx);
+    cfg.mask_w = pin->GetOrAddReal("problem", prefix + "mask_w", 0.02 * lx);
+    cfg.reaction_type = pin->GetOrAddInteger("problem", prefix + "reaction_type",
+                                             kReactionBistable);
+    cfg.theta_floor = pin->GetOrAddReal("problem", prefix + "theta_floor", cfg.theta1);
+    cfg.clip_reaction_interval =
+        pin->GetOrAddBoolean("problem", prefix + "clip_reaction_interval", true);
+
+    scalar_forcing_cfg[ns] = cfg;
+
+    Real init = pin->GetOrAddReal("problem", prefix + "init", scalar_init_default);
+    if (init < cfg.theta_floor) {
+      init = cfg.theta_floor;
+      clipped_inits = true;
+    }
+    scalar_init[ns] = init;
+
+    Real noise = pin->GetOrAddReal("problem", prefix + "noise", scalar_noise_default);
+    if (noise < 0.0) {
+      noise = 0.0;
+      clipped_noise = true;
+    }
+    scalar_noise[ns] = noise;
+    if (noise > 0.0) {
+      noise_enabled = true;
+    }
+  }
+
+  user_srcs_func = ScalarForcingSource;
+  user_hist_func = ScalarMixingHistory;
+
+  if (restart) {
+    return;
+  }
 
   // Capture variables for kernel
   int &is = indcs.is;
@@ -1185,34 +1870,38 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   int &ks = indcs.ks;
   int &ke = indcs.ke;
   const int nx1 = indcs.nx1;
-  const auto &u0 = pmbp->phydro->u0;
+  auto &u0 = pmbp->phydro->u0;
   EOS_Data &eos = pmbp->phydro->peos->eos_data;
   const Real gm1 = eos.gamma - 1.0;
-  auto &size = pmbp->pmb->mb_size;
 
   // Read initial conditions
   const Real den = pin->GetOrAddReal("problem", "rho0", 1.0);
   const Real temp = pin->GetOrAddReal("problem", "temp0", 1.0);
-  const Real scalar_init = pin->GetOrAddReal("problem", "scalar_init", 0.5);
-  const bool scalar_use_x1_step =
-      pin->GetOrAddBoolean("problem", "scalar_use_x1_step", false);
-  const Real scalar_step_x1 = pin->GetOrAddReal("problem", "scalar_step_x1", 0.0);
-  const Real scalar_left = pin->GetOrAddReal("problem", "scalar_left", 0.0);
-  const Real scalar_right = pin->GetOrAddReal("problem", "scalar_right", 1.0);
-
   const int nmb = pmbp->nmb_thispack;
 
   if (global_variable::my_rank == 0) {
     std::cout << "Scalar mixing problem:" << std::endl
-              << "  mean_gradient G = " << mean_gradient_G << std::endl
               << "  scalar_ic = "
               << (scalar_use_x1_step ? "x1_step" : "uniform") << std::endl
-              << "  scalar_init = " << scalar_init << std::endl
-              << "  scalar_left = " << scalar_left << std::endl
-              << "  scalar_right = " << scalar_right << std::endl
-              << "  scalar_step_x1 = " << scalar_step_x1 << std::endl
               << "  true_2d = " << (true_2d ? "true" : "false") << std::endl
-              << "  nscalars = " << nscalars << std::endl;
+              << "  nscalars = " << nscalars << std::endl
+              << "  scalar_init (default) = " << scalar_init_default << std::endl
+              << "  scalar0_mode = " << scalar_forcing_cfg[0].mode << std::endl
+              << "  scalar0_mean_gradient = " << scalar_forcing_cfg[0].G << std::endl;
+    if (scalar_use_x1_step) {
+      std::cout << "  scalar_left = " << scalar_left << std::endl
+                << "  scalar_right = " << scalar_right << std::endl
+                << "  scalar_step_x1 = " << scalar_step_x1 << std::endl;
+    }
+    if (clipped_inits) {
+      std::cout << "  NOTE: scalar_init clipped to theta_floor for positivity." << std::endl;
+    }
+    if (noise_enabled) {
+      std::cout << "  scalar_noise default = " << scalar_noise_default << std::endl;
+    }
+    if (clipped_noise) {
+      std::cout << "  NOTE: negative scalar_noise values clipped to 0." << std::endl;
+    }
   }
 
   // Initialize density and energy
@@ -1236,31 +1925,41 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     u0(m,IEN,k,j,i) += ke_cell;
   });
 
-  // Initialize passive scalar to offset value (allows symmetric fluctuations)
-  par_for("scalar_mix_pgen_scalar", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    const Real rho = u0(m, IDN, k, j, i);
-    Real scalar_value = scalar_init;
-    if (scalar_use_x1_step) {
-      Real &x1min = size.d_view(m).x1min;
-      Real &x1max = size.d_view(m).x1max;
-      const Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
-      scalar_value = (x1v < scalar_step_x1) ? scalar_left : scalar_right;
-    }
-    for (int ns = 0; ns < nscalars; ++ns) {
-      u0(m, nhydro+ns, k, j, i) = rho * scalar_value;
-    }
-  });
+  Kokkos::Random_XorShift64_Pool<> rand_pool64(pmbp->gids);
+  for (int ns = 0; ns < nscalars; ++ns) {
+    const Real init = scalar_init[ns];
+    const Real noise = scalar_noise[ns];
+    const Real theta_floor = scalar_forcing_cfg[ns].theta_floor;
+    const std::string label = "scalar_mix_pgen_scalar_" + std::to_string(ns);
+    par_for(label, DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      const Real rho = u0(m, IDN, k, j, i);
+      Real theta = init;
+      if (scalar_use_x1_step) {
+        Real &x1min_ = size.d_view(m).x1min;
+        Real &x1max_ = size.d_view(m).x1max;
+        const Real x1v = CellCenterX(i-is, nx1, x1min_, x1max_);
+        theta = (x1v < scalar_step_x1) ? scalar_left : scalar_right;
+      }
+      if (noise > 0.0) {
+        auto rand_gen = rand_pool64.get_state();
+        const Real r = 2.0*static_cast<Real>(rand_gen.frand()) - 1.0;
+        rand_pool64.free_state(rand_gen);
+        theta += noise * r;
+      }
+      if (theta < theta_floor) {
+        theta = theta_floor;
+      }
+      u0(m, nhydro + ns, k, j, i) = rho * theta;
+    });
+  }
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn MeanGradientForcing
-//  \brief Apply mean gradient forcing to passive scalar: ds/dt = G * v_x
-//
-//  This simulates the effect of a background mean scalar gradient in the x-direction.
-//  Turbulence mixes this gradient, creating scalar fluctuations correlated with velocity.
+//! \fn ScalarForcingSource
+//  \brief Apply per-scalar source terms (mean gradient, reaction, and/or sponge).
 
-void MeanGradientForcing(Mesh* pm, const Real bdt) {
+void ScalarForcingSource(Mesh* pm, const Real bdt) {
   MeshBlockPack *pmbp = pm->pmb_pack;
   auto &indcs = pm->mb_indcs;
   const int is = indcs.is;
@@ -1270,15 +1969,200 @@ void MeanGradientForcing(Mesh* pm, const Real bdt) {
   const int ks = indcs.ks;
   const int ke = indcs.ke;
   const int nmb1 = pmbp->nmb_thispack - 1;
+  const int nx1 = indcs.nx1;
+  const int nx2 = indcs.nx2;
+  const int nx3 = indcs.nx3;
   auto &u0 = pmbp->phydro->u0;
   auto &w0 = pmbp->phydro->w0;
+  auto &size = pmbp->pmb->mb_size;
   const int nhydro = pmbp->phydro->nhydro;
-  const Real G = mean_gradient_G;
+  const int nscalars = pmbp->phydro->nscalars;
 
-  par_for("scalar_mix_mean_grad_forcing", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
-  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    const Real density = w0(m, IDN, k, j, i);
-    const Real vx = w0(m, IVX, k, j, i);
-    u0(m, nhydro, k, j, i) += density * G * vx * bdt;
-  });
+  if (nscalars == 0 || scalar_forcing_cfg.size() < static_cast<size_t>(nscalars)) {
+    return;
+  }
+
+  const int nmkji = pmbp->nmb_thispack * nx3 * nx2 * nx1;
+  const int nkji = nx3 * nx2 * nx1;
+  const int nji = nx2 * nx1;
+
+  for (int ns = 0; ns < nscalars; ++ns) {
+    const ScalarForcingConfig cfg = scalar_forcing_cfg[ns];
+    if (cfg.mode == kScalarNone) {
+      continue;
+    }
+
+    if (cfg.mode == kScalarMeanGradient) {
+      const std::string label = "scalar_mean_grad_" + std::to_string(ns);
+      par_for(label, DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+        const Real density = w0(m, IDN, k, j, i);
+        const Real vx = w0(m, IVX, k, j, i);
+        u0(m, nhydro + ns, k, j, i) += density * cfg.G * vx * bdt;
+      });
+      continue;
+    }
+
+    if (cfg.mode == kScalarMassConservingAC) {
+      Real num_local = 0.0;
+      Real den_local = 0.0;
+      const std::string reduce_label = "scalar_mc_ac_reduce_" + std::to_string(ns);
+      Kokkos::parallel_reduce(reduce_label, Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+      KOKKOS_LAMBDA(const int &idx, Real &s_num, Real &s_den) {
+        const int m = idx / nkji;
+        int k = (idx - m * nkji) / nji;
+        int j = (idx - m * nkji - k * nji) / nx1;
+        int i = (idx - m * nkji - k * nji - j * nx1) + is;
+        k += ks;
+        j += js;
+
+        const Real rho = w0(m, IDN, k, j, i);
+        const Real theta = w0(m, nhydro + ns, k, j, i);
+        const Real vol = size.d_view(m).dx1 * size.d_view(m).dx2 * size.d_view(m).dx3;
+        const Real reaction = BistableReaction(theta, cfg.tau, cfg.theta1, cfg.theta2,
+                                               cfg.theta3);
+        s_num += rho * reaction * vol;
+        s_den += rho * vol;
+      }, Kokkos::Sum<Real>(num_local), Kokkos::Sum<Real>(den_local));
+
+#if MPI_PARALLEL_ENABLED
+      Real local_sum[2] = {num_local, den_local};
+      Real global_sum[2] = {0.0, 0.0};
+      MPI_Allreduce(local_sum, global_sum, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      num_local = global_sum[0];
+      den_local = global_sum[1];
+#endif
+      const Real rbar = (den_local > 0.0) ? num_local / den_local : 0.0;
+      const std::string update_label = "scalar_mc_ac_update_" + std::to_string(ns);
+      par_for(update_label, DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+        const Real rho = w0(m, IDN, k, j, i);
+        const Real theta = w0(m, nhydro + ns, k, j, i);
+        const Real reaction = BistableReaction(theta, cfg.tau, cfg.theta1, cfg.theta2,
+                                               cfg.theta3);
+        u0(m, nhydro + ns, k, j, i) += rho * (reaction - rbar) * bdt;
+      });
+      continue;
+    }
+
+    if (cfg.mode == kScalarSponge || cfg.mode == kScalarSpongeReaction) {
+      const std::string label = (cfg.mode == kScalarSponge)
+                                    ? "scalar_sponge_" + std::to_string(ns)
+                                    : "scalar_sponge_react_" + std::to_string(ns);
+      par_for(label, DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+      KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+        const Real rho = w0(m, IDN, k, j, i);
+        const Real theta = w0(m, nhydro + ns, k, j, i);
+        Real &x1min_ = size.d_view(m).x1min;
+        Real &x1max_ = size.d_view(m).x1max;
+        const Real x = CellCenterX(i - is, nx1, x1min_, x1max_);
+
+        const Real chiL = cfg.chiL0 * SmoothTopHat(x, cfg.xL0, cfg.xL1, cfg.mask_w);
+        const Real chiR = cfg.chiR0 * SmoothTopHat(x, cfg.xR0, cfg.xR1, cfg.mask_w);
+        const Real sponge = -chiL * (theta - cfg.thetaL) - chiR * (theta - cfg.thetaR);
+
+        Real reaction = 0.0;
+        if (cfg.mode == kScalarSpongeReaction) {
+          if (cfg.reaction_type == kReactionKpp) {
+            Real theta_eff = theta;
+            if (cfg.clip_reaction_interval) {
+              if (theta_eff < cfg.theta1) theta_eff = cfg.theta1;
+              if (theta_eff > cfg.theta3) theta_eff = cfg.theta3;
+            }
+            reaction = KppReaction(theta_eff, cfg.tau, cfg.theta1, cfg.theta3);
+          } else {
+            reaction = BistableReaction(theta, cfg.tau, cfg.theta1, cfg.theta2, cfg.theta3);
+          }
+        }
+
+        u0(m, nhydro + ns, k, j, i) += rho * (sponge + reaction) * bdt;
+      });
+    }
+  }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn ScalarMixingHistory
+//  \brief User history outputs: volume-integrated |grad theta_s|^2 for each scalar.
+
+void ScalarMixingHistory(HistoryData *pdata, Mesh *pm) {
+  auto *phydro = pm->pmb_pack->phydro;
+  if (phydro == nullptr || phydro->nscalars == 0) {
+    pdata->nhist = 0;
+    for (int n = 0; n < NHISTORY_VARIABLES; ++n) {
+      pdata->hdata[n] = 0.0;
+    }
+    return;
+  }
+
+  if (phydro->nscalars > NHISTORY_VARIABLES) {
+    FatalProblemSetup("ScalarMixingHistory requires NHISTORY_VARIABLES >= nscalars.");
+  }
+
+  pdata->nhist = phydro->nscalars;
+  for (int n = 0; n < pdata->nhist; ++n) {
+    pdata->label[n] = "gradth2_s" + std::to_string(n);
+  }
+
+  auto &w0 = phydro->w0;
+  auto &size = pm->pmb_pack->pmb->mb_size;
+  const int nhist = pdata->nhist;
+  const int nhydro = phydro->nhydro;
+  const bool multi_d = pm->multi_d;
+  const bool three_d = pm->three_d;
+
+  auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
+  const int is = indcs.is;
+  const int nx1 = indcs.nx1;
+  const int js = indcs.js;
+  const int nx2 = indcs.nx2;
+  const int ks = indcs.ks;
+  const int nx3 = indcs.nx3;
+  const int nmkji = pm->pmb_pack->nmb_thispack * nx3 * nx2 * nx1;
+  const int nkji = nx3 * nx2 * nx1;
+  const int nji = nx2 * nx1;
+  array_sum::GlobalSum sum_this_mb;
+  Kokkos::parallel_reduce("scalar_hist_grad2",
+  Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int &idx, array_sum::GlobalSum &mb_sum) {
+    const int m = idx / nkji;
+    int k = (idx - m*nkji) / nji;
+    int j = (idx - m*nkji - k*nji) / nx1;
+    int i = (idx - m*nkji - k*nji - j*nx1) + is;
+    k += ks;
+    j += js;
+
+    const Real dx1 = size.d_view(m).dx1;
+    const Real dx2 = size.d_view(m).dx2;
+    const Real dx3 = size.d_view(m).dx3;
+    const Real vol = dx1 * dx2 * dx3;
+
+    array_sum::GlobalSum hvars;
+    for (int ns = 0; ns < nhist; ++ns) {
+      const Real dtheta_dx =
+          (w0(m, nhydro + ns, k, j, i+1) - w0(m, nhydro + ns, k, j, i-1)) / (2.0 * dx1);
+      Real dtheta_dy = 0.0;
+      Real dtheta_dz = 0.0;
+      if (multi_d) {
+        dtheta_dy =
+            (w0(m, nhydro + ns, k, j+1, i) - w0(m, nhydro + ns, k, j-1, i)) / (2.0 * dx2);
+      }
+      if (three_d) {
+        dtheta_dz =
+            (w0(m, nhydro + ns, k+1, j, i) - w0(m, nhydro + ns, k-1, j, i)) / (2.0 * dx3);
+      }
+      const Real grad2 = dtheta_dx*dtheta_dx + dtheta_dy*dtheta_dy + dtheta_dz*dtheta_dz;
+      hvars.the_array[ns] = grad2 * vol;
+    }
+
+    for (int n = nhist; n < NHISTORY_VARIABLES; ++n) {
+      hvars.the_array[n] = 0.0;
+    }
+
+    mb_sum += hvars;
+  }, Kokkos::Sum<array_sum::GlobalSum>(sum_this_mb));
+
+  for (int n = 0; n < pdata->nhist; ++n) {
+    pdata->hdata[n] = sum_this_mb.the_array[n];
+  }
 }

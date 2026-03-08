@@ -102,6 +102,9 @@ class Hydro {
   DvceFaceFld5D<Real> uflx;   // fluxes of conserved quantities on cell faces
   Real dtnew;
 
+  bool use_scalar_face_velocity = false;
+  std::unique_ptr<DvceFaceFld4D<Real>> scalar_vface;
+
   // following used for FOFC
   DvceArray4D<bool> fofc;  // flag for each cell to indicate if FOFC is needed
   bool use_fofc = false;   // flag to enable FOFC
