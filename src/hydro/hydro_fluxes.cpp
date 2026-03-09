@@ -60,12 +60,23 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
   auto sface_x1f = use_sface ? scalar_vface->x1f : DvceArray4D<Real>();
   auto sface_x2f = use_sface ? scalar_vface->x2f : DvceArray4D<Real>();
   auto sface_x3f = use_sface ? scalar_vface->x3f : DvceArray4D<Real>();
+  auto flux_scratch_level = [](size_t scratch_bytes) {
+    int level = 0;
+#if defined(KOKKOS_ENABLE_HIP)
+    // Large per-team LDS allocations can make HIP team sizing fail for wide meshblocks.
+    constexpr size_t hip_fast_scratch_limit = 64 * 1024;
+    if (scratch_bytes > hip_fast_scratch_limit) {
+      level = 1;
+    }
+#endif
+    return level;
+  };
 
   //--------------------------------------------------------------------------------------
   // i-direction
 
   size_t scr_size = ScrArray2D<Real>::shmem_size(nvars, ncells1) * 2;
-  int scr_level = 0;
+  int scr_level = flux_scratch_level(scr_size);
   auto &flx1_ = uflx.x1f;
 
   // set the loop limits for 1D/2D/3D problems
@@ -163,6 +174,7 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
 
   if (pmy_pack->pmesh->multi_d) {
     scr_size = ScrArray2D<Real>::shmem_size(nvars, ncells1) * 3;
+    scr_level = flux_scratch_level(scr_size);
     auto &flx2_ = uflx.x2f;
 
     // set the loop limits for 1D/2D/3D problems
@@ -274,6 +286,7 @@ void Hydro::CalculateFluxes(Driver *pdriver, int stage) {
 
   if (pmy_pack->pmesh->three_d) {
     scr_size = ScrArray2D<Real>::shmem_size(nvars, ncells1) * 3;
+    scr_level = flux_scratch_level(scr_size);
     auto &flx3_ = uflx.x3f;
 
     // set the loop limits
