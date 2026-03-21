@@ -1,5 +1,8 @@
 # build directories
 build/
+build-*/
+tmp/
+logs/
 
 # Athena output files
 *.tab
@@ -12,6 +15,16 @@ build/
 # Mac OS metadata
 .DS_Store
 .vscode
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local preview artifacts
+docs/.codex_preview/
 
 # editor temp files
 *~
