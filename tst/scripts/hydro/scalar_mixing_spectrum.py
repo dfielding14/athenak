@@ -10,6 +10,7 @@
 # performed on an ensemble average over a fixed seed set.
 
 import glob
+import json
 import logging
 import os
 import sys
@@ -39,6 +40,7 @@ _CASES = [
         'expect_vz_zero': True,
         'check_leakage': False,
         'slope_tol': 0.2,
+        'check_exact_k_slope': True,
     },
     {
         'name': 'projection_3d',
@@ -52,6 +54,7 @@ _CASES = [
         'expect_vz_zero': False,
         'check_leakage': False,
         'slope_tol': 0.2,
+        'check_exact_k_slope': True,
     },
     {
         'name': 'stream_2d',
@@ -65,19 +68,21 @@ _CASES = [
         'expect_vz_zero': True,
         'check_leakage': False,
         'slope_tol': 0.2,
+        'check_exact_k_slope': True,
     },
     {
         'name': 'stream_3d',
         'input': 'tests/scalar_mixing_stream_3d_regression.athinput',
         'basename': 'scalar_mix_stream_3d',
         'nlow': 2,
-        'nhigh': 6,
+        'nhigh': 10,
         'expo': 1.6666667,
         'vrms': 1.0,
         'spectral_ndim': 3,
         'expect_vz_zero': False,
         'check_leakage': True,
         'slope_tol': 0.5,
+        'check_exact_k_slope': False,
     },
 ]
 
@@ -107,12 +112,29 @@ def _output_path(case, seed):
     return matches[-1]
 
 
+def _diag_path(case, seed):
+    return os.path.join('build', 'src',
+                        _run_basename(case, seed) + '.turb_init_diag.json')
+
+
 def _clear_old_outputs(case):
     for seed in _SEEDS:
         pattern = os.path.join('build', 'src', 'bin',
                                _run_basename(case, seed) + '.hydro_w.*.bin')
         for path in glob.glob(pattern):
             os.remove(path)
+        diag_path = _diag_path(case, seed)
+        if os.path.exists(diag_path):
+            os.remove(diag_path)
+
+
+def _load_diag(case, seed):
+    diag_path = _diag_path(case, seed)
+    if not os.path.exists(diag_path):
+        raise RuntimeError('No diagnostics JSON found for '
+                           + case['name'] + f' seed={seed}: {diag_path}')
+    with open(diag_path, 'r', encoding='utf-8') as fobj:
+        return json.load(fobj)
 
 
 def _shell_bins(shape):
@@ -214,6 +236,9 @@ def analyze():
     analyze_status = True
     for case in _CASES:
         per_seed = [_analyze_output(case, seed) for seed in _SEEDS]
+        diag_per_seed = []
+        if case['name'] == 'stream_3d':
+            diag_per_seed = [_load_diag(case, seed) for seed in _SEEDS]
         grouped_mode_means = {}
         for metrics in per_seed:
             for kval, mean_energy in metrics['grouped_mode_means'].items():
@@ -249,11 +274,12 @@ def analyze():
                            case['name'], max_div_ratio)
             analyze_status = False
 
-        slope_err = abs(exact_k_slope - target_mode_slope)
-        if not np.isfinite(exact_k_slope) or slope_err > case['slope_tol']:
-            logger.warning('%s exact-k slope mismatch: slope %.6f target %.6f',
-                           case['name'], exact_k_slope, target_mode_slope)
-            analyze_status = False
+        if case['check_exact_k_slope']:
+            slope_err = abs(exact_k_slope - target_mode_slope)
+            if not np.isfinite(exact_k_slope) or slope_err > case['slope_tol']:
+                logger.warning('%s exact-k slope mismatch: slope %.6f target %.6f',
+                               case['name'], exact_k_slope, target_mode_slope)
+                analyze_status = False
 
         if case['expect_vz_zero']:
             max_vz = max(metrics['vz_max'] for metrics in per_seed)
@@ -268,5 +294,38 @@ def analyze():
                 logger.warning('%s leakage too large across seeds: %.3e',
                                case['name'], max_leakage)
                 analyze_status = False
+
+        if case['name'] == 'stream_3d':
+            for seed, diag in zip(_SEEDS, diag_per_seed):
+                fit = diag.get('fit', {})
+                quality_gate = diag.get('quality_gate', {})
+                sector_response = diag.get('sector_response', {})
+                spectra = diag.get('spectra', {})
+
+                if not quality_gate.get('pass', False):
+                    logger.warning('%s diagnostics quality gate failed for seed=%d',
+                                   case['name'], seed)
+                    analyze_status = False
+                if quality_gate.get('forced_continue', False):
+                    logger.warning('%s diagnostics forced continue for seed=%d',
+                                   case['name'], seed)
+                    analyze_status = False
+                if 'fit_starts' not in fit or len(fit['fit_starts']) < 3:
+                    logger.warning('%s missing fit_starts diagnostics for seed=%d',
+                                   case['name'], seed)
+                    analyze_status = False
+                if 'seed_model_chosen' not in fit:
+                    logger.warning('%s missing seed_model_chosen for seed=%d',
+                                   case['name'], seed)
+                    analyze_status = False
+                if 'phi_shell_max_used' not in spectra:
+                    logger.warning('%s missing phi_shell_max_used for seed=%d',
+                                   case['name'], seed)
+                    analyze_status = False
+                if ('raw_tensor' not in sector_response or
+                        'fitted_response' not in sector_response):
+                    logger.warning('%s missing sector_response diagnostics for seed=%d',
+                                   case['name'], seed)
+                    analyze_status = False
 
     return analyze_status

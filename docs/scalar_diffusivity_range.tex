@@ -1,0 +1,64 @@
+\documentclass{article}
+\usepackage{amsmath}
+
+\begin{document}
+
+\section*{Page 1}
+
+\textbf{Diffusive Cutoff scale:}
+\begin{align*}
+t_{\text{diff}}(l) &= \frac{l^{2}}{D} \\
+t_{\text{adv}}(l) &= \frac{l}{\delta v(l)}
+\end{align*}
+
+To find $\eta_D$, set $t_{\text{diff}}(\eta_D) = t_{\text{adv}}(\eta_D)$:
+\begin{align*}
+\frac{\eta_{D}^{2}}{D} &= \frac{L}{U_{\text{rms}}}\left(\frac{\eta_{D}}{L}\right)^{1-\alpha} \\
+\left(\frac{\eta_{D}}{L}\right)^{2-(1-\alpha)} &= \frac{D}{L U_{\text{rms}}} \\
+\frac{\eta_{D}}{L} &= \left(\frac{D}{L U_{\text{rms}}}\right)^{\frac{1}{1+\alpha}}
+\end{align*}
+
+Relating to the spectral exponent $\left(\zeta = 2\alpha + 1 \implies \alpha = \frac{\zeta - 1}{2}\right)$:
+\[ \alpha + 1 = \frac{\zeta + 1}{2} \]
+
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+\section*{Page 2}
+
+Energy spectrum $E_{v}(k) \propto k^{-\zeta}$:
+\begin{align*}
+k_{\text{min}} &= 2, \quad k_{\text{max}} \\
+k &= \frac{1}{l}, \quad L = \frac{1}{2} \\
+l_{\text{min}} &= \frac{1}{k_{\text{max}}}
+\end{align*}
+
+We should only consider $D$ such that:
+\[ l_{\text{min}} \ll \eta_{D} \ll L \]
+
+Maximum Diffusivity:
+\[ D_{\text{max}} \sim L U_{\text{rms}} \quad (\text{i.e., } \text{Pe}=1) \]
+
+Minimum Diffusivity ($D_{\text{min}}$):
+\begin{align*}
+\frac{l_{\text{min}}}{L} &= \left(\frac{D_{\text{min}}}{L U_{\text{rms}}}\right)^{\frac{1}{1+\alpha}} \\
+D_{\text{min}} &= L U_{\text{rms}}\left(\frac{l_{\text{min}}}{L}\right)^{1+\alpha}
+\end{align*}
+
+In simulations, $\frac{l_{\text{min}}}{L} \sim 10^{-3}$.
+
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+\section*{Page 3}
+
+Evaluating $D_{\text{min}}$ limits (with $D_{\text{max}} \sim L U_{\text{rms}}$):
+\begin{itemize}
+    \item For $\alpha = 0$, $D_{\text{min}} \sim 10^{-3}$.
+    \item For $\alpha = 1/3$, $D_{\text{min}} \sim 10^{-4}$.
+    \item For $\alpha = 1$, $D_{\text{min}} \sim 10^{-6}$.
+\end{itemize}
+
+\end{document}

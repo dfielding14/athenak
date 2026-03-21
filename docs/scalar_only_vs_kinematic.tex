@@ -9,177 +9,328 @@
 
 \begin{document}
 
-\title{Frozen-Hydrodynamic Passive-Scalar Evolution in AthenaK: \texorpdfstring{$\SO$}{scalar\_only} Versus \texorpdfstring{$\kin$}{kinematic} Time Evolution}
+\title{Prescribed-Velocity Scalar Mixing in AthenaK:\\
+Frozen-Hydrodynamic Transport and Spectral Velocity Generation}
 
 \begin{abstract}
-AthenaK currently supports passive-scalar evolution in a prescribed hydrodynamic background through the hydro flag \SO. That capability is easily conflated with \code{time/evolution=kinematic}, but the two configurations are numerically distinct. In this note we document the post-fix implementation of \SO at the level of the discrete update actually executed by the code. The essential result is that \SO freezes the engine-managed evolution of density, momentum, and total energy, while still reconstructing the full primitive state and still computing the face mass flux delivered by the selected hydro reconstruction and Riemann solver. Passive scalars are then advanced conservatively through the flux relation $F_q = s F_{\rho}$, augmented by explicit scalar diffusion when \code{scalar\_diffusivity} is enabled. By contrast, \kin is a driver-level evolution mode in which hydrodynamic variables continue to evolve and the hydro module is restricted to the \code{advect} solver. We therefore conclude that \SO is the appropriate mechanism for frozen-background scalar transport, whereas \kin defines a different advection problem with a different discrete operator.
+Prescribed-velocity scalar mixing is only as well posed numerically as the two operators that define it. The first is the frozen-hydrodynamic transport operator that advances passive scalars while holding the background density, momentum, and energy fixed. The second is the velocity generator that supplies the prescribed flow while respecting the desired solenoidal structure and shell-integrated power spectrum. In AthenaK both ingredients are now implemented explicitly in the \code{scalar\_mixing} problem, but they resolve different uncertainties. The hydro-side uncertainty is whether \SO is in fact equivalent to \code{time/evolution=kinematic}; it is not. The spectral uncertainty is how to realize the same target velocity spectrum with either projection-based or stream-based constructions in two and three dimensions. In this note we document both operators in the form actually executed by the code. We show that \SO freezes the built-in evolution of the hydro conserved state while still transporting each scalar conservatively with the hydro face mass flux and optional explicit scalar diffusion. We then derive the four implemented divergence-free velocity generators: 2D projection, 2D stream function, 3D projection, and 3D Clebsch stream initialization with $\mathbf{u}=\nabla \phi_1 \times \nabla \phi_2$. The common control parameters are the driving band $\left[k_{\min},k_{\max}\right]$, the target shell-integrated slope $E_u(k)\propto k^{-\mathrm{expo}}$, the rms normalization, and the retained-mode importance sampling above \code{turb\_k\_crit}. A dedicated diagnostics export now records the retained mode catalogs, coefficients, latent stream fields, and fitted 3D shell weights. In the reference campaign presented here the initialized fields match the target rms speed to better than $10^{-10}$ relative accuracy, remain divergence-free at the level of ${\sim}10^{-7}$ in the spectral norm, and recover the requested $-5/3$ velocity slope to good accuracy in all four modes, while the 3D stream construction no longer exhibits the pathological high-$k$ spike that motivated the present rewrite.
 \end{abstract}
 
-\section{Method}
-This note describes the present hydro implementation in AthenaK after tightening the semantics of \SO. The target use case is the one relevant to scalar mixing studies: a problem generator prescribes a velocity field, density field, and thermodynamic state, and only the passive scalar content is intended to evolve under advection, explicit scalar diffusion, and optional user-defined scalar source terms.
+\section{Introduction}
+Prescribed-velocity scalar transport is attractive because it isolates a physically clean uncertainty. If the objective is to understand how a passive scalar responds to a chosen flow, then one would like the scalar transport operator to be conservative and stable, while the prescribed velocity itself should realize a well defined spectrum, geometry, and amplitude. In practice those two requirements are easy to conflate. A user can specify a velocity field that is divergence-free in the continuum sense and still obtain the wrong discrete transport problem if the hydro variables are not actually frozen. Conversely, one can freeze the hydro update but still generate a velocity field whose shell-integrated spectrum differs from the slope encoded in the input file.
 
-The discussion below is restricted to hydro. MHD and radiation are outside the present scope.
+The present \code{scalar\_mixing} implementation in AthenaK addresses both issues, but they live in different parts of the algorithm. On the hydro side, \SO defines a frozen-background scalar operator that is distinct from \kin. On the problem-generator side, the user may now choose between projection-based and stream-based solenoidal velocity initialization through \code{problem/turb\_use\_stream\_function}. In two dimensions the stream construction is the familiar
+\begin{equation}
+\mathbf{u} = \left(\partial_y \psi,\,-\partial_x \psi,\,0\right),
+\end{equation}
+whereas in three dimensions it is the Clebsch form
+\begin{equation}
+\mathbf{u} = \nabla \phi_1 \times \nabla \phi_2.
+\end{equation}
+These choices do not merely decorate the same random field. They determine which latent scalar potentials exist, how the velocity coefficients are assembled, and what shell-amplitude law is needed to realize a target velocity spectrum.
 
-\subsection{Controlling runtime switches}
-Three input choices control the behavior discussed here.
+The central purpose of this note is therefore to remove two different ambiguities. The first is the discrete meaning of frozen-hydrodynamic scalar transport. The second is the spectral meaning of the user inputs \code{turb\_nlow}, \code{turb\_nhigh}, \code{turb\_expo}, \code{turb\_v\_rms}, and \code{turb\_k\_crit} across all four implemented velocity-generation modes. We proceed in that order. Section~\ref{sec:transport} compresses the hydro-side operator to the essential distinction between \SO and \kin. Section~\ref{sec:spectral-framework} introduces the common spectral framework. Sections~\ref{sec:2d} and \ref{sec:3d} derive the two-dimensional and three-dimensional generators. Section~\ref{sec:validation} validates the resulting fields and the reproducibility-facing diagnostics export. Section~\ref{sec:discussion} closes with practical recommendations for users. An appendix then provides a per-mode diagnostic atlas.
 
-First, \code{time/evolution} selects the driver-level time-evolution mode. In the present code this option is parsed into the three states \code{static}, \code{kinematic}, and \code{dynamic}. Second, \code{hydro/rsolver} selects the hydro Riemann solver. Third, \code{hydro/scalar\_only} modifies how the hydro module applies the resulting fluxes and source terms.
+\section{Frozen-Hydrodynamic Scalar Transport}
+\label{sec:transport}
+The first uncertainty this note resolves is whether AthenaK already contains a coherent discrete operator for prescribed-velocity scalar transport. It does, but it is \SO rather than \kin. The distinction matters because the passive scalars are stored in conservative form,
+\begin{equation}
+q_n \equiv \rho s_n,
+\end{equation}
+and therefore inherit whatever face mass flux the hydro subsystem actually computes.
 
-The important point is that \SO is not itself a time-evolution mode. It is a hydro-side modifier applied within an otherwise time-evolving hydro solve. The corresponding engine-level contract is now the following:
+\subsection{What \texorpdfstring{$\SO$}{scalar\_only} freezes}
+Let
 \begin{equation}
 U_h \equiv \left(\rho,\rho v_x,\rho v_y,\rho v_z,E\right)
 \end{equation}
-remains fixed under all built-in hydro evolution operators when \code{hydro/scalar\_only=true}. Here $E$ denotes total energy for the ideal-gas hydro system. Passive scalars may still evolve.
-
-This contract is enforced at setup in two ways. The hydro constructor now rejects \SO with \code{nscalars=0}, rejects \SO with built-in hydro source terms such as \code{const\_accel} or cooling, and rejects \SO in the presence of a shearing-box configuration because the shearing source and remap both modify hydro conserved variables. These checks convert ambiguous mixed configurations into explicit setup errors.
-
-\begin{table*}[t]
-\centering
-\small
-\caption{Configuration logic relevant to frozen-background scalar transport.}
-\begin{tabular}{llll}
-\hline
-Setting & What it controls & Allowed hydro solver choices & Consequence for hydro state \\
-\hline
-\code{time/evolution=dynamic} & Driver evolution mode & \code{llf}, \code{hlle}, \code{hllc}, \code{roe} (NR) & Hydro normally evolves \\
-\code{time/evolution=kinematic} & Driver evolution mode & \code{advect} only (NR hydro) & Hydro still evolves \\
-\code{hydro/scalar\_only=true} & Hydro update semantics & Inherits the chosen hydro solver & Built-in hydro evolution is frozen \\
-\hline
-\end{tabular}
-\end{table*}
-
-\subsection{Discrete operator under \texorpdfstring{$\SO$}{scalar\_only}}
-Let $s_n$ denote a passive-scalar concentration and let
+denote the hydro conserved state. The Runge--Kutta stage update has the schematic form
 \begin{equation}
-q_n \equiv \rho s_n
+U^{(\ell)} = \gamma_0 U^n + \gamma_1 U^{(\ell-1)}
+  - \beta_\ell \Delta t \nabla\cdot F^{(\ell-1)}
+  + \beta_\ell \Delta t S^{(\ell-1)}.
 \end{equation}
-be the corresponding conserved scalar variable stored in the hydro state vector. The implementation under \SO is conservative in $q_n$, not in $s_n$ directly.
-
-At each explicit Runge--Kutta stage the hydro module still reconstructs the full primitive state \code{w0} and still solves the selected hydro Riemann problem on each face. In particular, the code still computes the face mass flux $F_{\rho}$ using the chosen hydro reconstruction and Riemann solver. What changes under \SO is not flux construction, but which conserved components are actually updated by the flux divergence.
-
-The stage update may be written schematically as
-\begin{equation}
-U^{(\ell)} = \gamma_0 U^{n} + \gamma_1 U^{(\ell-1)} - \beta_{\ell} \Delta t \, \nabla \cdot F^{(\ell-1)} + \beta_{\ell} \Delta t \, S^{(\ell-1)} .
-\end{equation}
-Under \SO, the hydro update loop begins at the first scalar index rather than at the density index. Equivalently,
+Under \SO, AthenaK still reconstructs the primitive state, still solves the chosen hydro Riemann problem, and still computes the face mass flux $F_\rho$. What changes is the index range of the conservative update: the hydro loop begins at the first scalar component instead of at density. Equivalently,
 \begin{equation}
 U_h^{(\ell)} = U_h^n,
 \end{equation}
-while the passive-scalar components continue to receive their conservative flux-divergence update. This is the core freezing operation.
+while the passive scalars continue to receive their conservative flux-divergence update. This is the discrete statement of a frozen hydrodynamic background.
 
-The advective scalar flux is formed from the hydro face mass flux according to
+The scalar advection operator is then
 \begin{equation}
-F_{q_n}^{\rm adv} = s_n^{\rm up} F_{\rho},
+F_{q_n}^{\rm adv} = s_n^{\rm up} F_\rho,
 \end{equation}
-where $s_n^{\rm up}$ is the upwind reconstructed scalar state. In other words, the code first computes $F_{\rho}$ from the hydro Riemann problem and then transports each scalar with that same face mass flux. This is the reason that the scalar advection operator under \SO continues to depend on the hydro reconstruction and hydro Riemann solver even though hydro itself is frozen.
-
-If scalar diffusion is enabled, the diffusive contribution is added directly to the scalar face fluxes:
+with an optional explicit diffusive contribution
 \begin{equation}
-F_{q_n}^{\rm diff} = -\kappa \, \rho_f \, \nabla s_n,
+F_{q_n}^{\rm diff} = -\kappa \rho_f \nabla s_n.
 \end{equation}
-with face density $\rho_f$ obtained by arithmetic averaging of neighboring cell-centered densities. The total scalar flux is therefore
-\begin{equation}
-F_{q_n} = F_{q_n}^{\rm adv} + F_{q_n}^{\rm diff}.
-\end{equation}
-No dedicated scalar solver is introduced by \SO; the passive-scalar transport operator is built on top of the existing hydro flux machinery.
+The total scalar flux is $F_{q_n}=F_{q_n}^{\rm adv}+F_{q_n}^{\rm diff}$. Physically, this means that \SO does \emph{not} define a separate scalar transport solver. It defines a conservative scalar operator built on top of the hydro face mass flux, while suppressing the built-in evolution of the hydro conserved state itself.
 
-After flux application, the code still performs the usual communication, boundary-value, prolongation, and conserved-to-primitive steps. Consequently the scalar primitive $s_n$ used at the next stage is consistent with the updated conserved scalar $q_n$, while the hydro primitives remain tied to the frozen hydro conserved state.
-
-\subsection{Built-in source terms and what is now frozen}
-The post-fix implementation suppresses all built-in hydro source terms inside the hydro task list when \SO is enabled. This includes constant acceleration, cooling source terms, shearing-box source terms, and general-relativistic coordinate source terms. User-enrolled source terms are still executed. This is a deliberate asymmetry: the engine enforces a frozen-hydro contract for built-in hydro evolution, but user callbacks remain trusted problem-specific code.
-
-This distinction matters numerically. The frozen-background guarantee now means that the code itself will not modify $\rho$, $\rho \mathbf{v}$, or $E$ through any built-in hydro source or update path. It does \emph{not} mean that user-defined source terms are prevented from doing so. For scalar-mixing applications this is acceptable, because the user source usually acts only on the scalar variable.
-
-\subsection{Timestep selection under \texorpdfstring{$\SO$}{scalar\_only}}
-Because the hydro state is frozen, the hydro module uses a velocity-only CFL estimate under \SO, namely
-\begin{equation}
-\Delta t_{\rm adv} = C_{\rm CFL} \min_d \left(\frac{\Delta x_d}{|v_d|}\right),
-\end{equation}
-rather than the usual acoustic estimate based on $|v|+c_s$. This is the same CFL branch used by \kin. If scalar diffusion is enabled, the diffusion module contributes the explicit stability constraint
-\begin{equation}
-\Delta t_{\rm diff} = f_d \min_d \left(\frac{\Delta x_d^2}{\kappa}\right),
-\end{equation}
-with $f_d = 1/2$ in one dimension, $1/4$ in two dimensions, and $1/6$ in three dimensions. The operative timestep is then the minimum over the active constraints.
-
-\section{Comparison with Kinematic Evolution}
-The discrete meaning of \kin is different. The driver interprets \code{time/evolution=kinematic} as a separate evolution mode. In non-relativistic hydro, that choice restricts \code{hydro/rsolver} to \code{advect}. It does not freeze hydro conserved variables.
-
-The \code{advect} solver is a pure upwind advection flux for the hydro variables. In the current source it is documented as an advection solver for isothermal hydro, and its face fluxes are built directly from the sign of the face-normal velocity. The density equation, and therefore the face mass flux, continue to evolve. Since the hydro Runge--Kutta update still acts on the density and momentum components in \kin, the background flow is not frozen.
-
-This difference is fundamental. If a user supplies a divergence-free velocity field in the continuum sense, it is tempting to argue that evolving density under \kin should be harmless because a uniform density field ought to remain uniform. That statement is only conditionally true in the discrete scheme. What the code actually preserves is determined by the discrete mass-flux divergence generated by the chosen reconstruction and solver, not by the continuum condition $\nabla \cdot \mathbf{v} = 0$ alone. Under \kin, the density field and momenta still participate in the discrete update. Under \SO, they do not.
-
-The consequence is that \kin is not equivalent to a prescribed-velocity scalar solve. It defines a different numerical problem: hydro advection with the \code{advect} solver, plus passive-scalar transport built from the resulting evolving mass flux. By contrast, \SO defines a frozen-hydrodynamic background together with passive-scalar transport built from hydro face fluxes evaluated on that frozen background.
+\subsection{Why this is not kinematic evolution}
+The ambiguity arises because \kin also uses a velocity-only CFL branch. That superficial similarity is not enough. In non-relativistic hydro, \code{time/evolution=kinematic} restricts the solver choice to \code{advect}, but the density and momentum equations are still advanced. The hydro state therefore continues to evolve under the discrete mass-flux divergence generated by the advection solver. A continuum statement such as $\nabla\cdot\mathbf{u}=0$ does not by itself imply that a discrete upwind density update vanishes identically. Under \SO, the built-in hydro update does vanish identically. Under \kin, it does not.
 
 \begin{table*}[t]
 \centering
 \small
-\caption{Discrete evolution under \SO and \kin for hydro.}
+\caption{Discrete transport semantics relevant to prescribed-velocity scalar mixing. The essential point is that \SO freezes the hydro update while \kin does not, even though both branches use a velocity-based advective timestep.}
 \begin{tabular}{lll}
 \hline
-Quantity or operator & \code{scalar\_only=true} & \code{time/evolution=kinematic} \\
+Quantity or operator & \code{hydro/scalar\_only=true} & \code{time/evolution=kinematic} \\
 \hline
-Density update & frozen & evolved \\
-Momentum update & frozen & evolved \\
-Energy update & frozen & evolved if present \\
-Passive-scalar RK update & evolved & evolved \\
-Hydro reconstruction and Riemann solve & still executed & executed \\
-Face mass flux $F_{\rho}$ & computed from chosen hydro solver & computed by \code{advect} solver \\
-Scalar advective flux & $F_q = s^{\rm up} F_{\rho}$ & $F_q = s^{\rm up} F_{\rho}$ \\
-Scalar diffusion & active if requested & active if requested \\
+Density, momentum, and energy update & frozen & evolved \\
+Hydro reconstruction and face mass flux & still executed & executed \\
+Scalar conservative update & evolved & evolved \\
+Scalar advective flux & $F_q=s^{\rm up}F_\rho$ & $F_q=s^{\rm up}F_\rho$ \\
+Explicit scalar diffusion & active if requested & active if requested \\
 Built-in hydro source terms & suppressed & active if configured \\
-Velocity-only CFL branch & yes & yes \\
+Velocity-based CFL branch & yes & yes \\
 \hline
 \end{tabular}
+\label{tab:transport}
 \end{table*}
 
-\section{Numerical Implications}
-Several numerical consequences follow directly from the preceding construction.
+This distinction is more than bookkeeping. For scalar-mixing studies the prescribed-velocity problem is only clean if the code itself does not alter the hydrodynamic background through built-in update paths. That is the problem solved by \SO. The present scalar-mixing verification suite confirms that behavior: the hydro state remains fixed to machine precision while the passive scalar evolves under advection and diffusion. We return to that verification in Section~\ref{sec:validation}.
 
-First, \SO does not decouple passive-scalar transport from hydro numerics. If the run uses \dyn with \code{hllc}, then the scalar advection operator inherits the HLLC mass flux. If the run instead uses \kin together with \code{advect} and \SO, then the scalar advection operator inherits the upwind advection mass flux. The scalar evolution therefore depends on the hydro solver choice even when hydro itself is frozen.
+\section{Common Spectral Framework}
+\label{sec:spectral-framework}
+The second uncertainty concerns the meaning of the user-specified turbulent spectrum. AthenaK now interprets the relevant input parameters in terms of the \emph{velocity field} irrespective of whether the field is generated by direct projection or by stream potentials. The common target is a shell-integrated velocity spectrum
+\begin{equation}
+E_u(K) \propto K^{-\mathrm{expo}},
+\label{eq:target-spectrum}
+\end{equation}
+within the driving band
+\begin{equation}
+K \in \left[\code{turb\_nlow},\,\code{turb\_nhigh}\right].
+\end{equation}
+Here $K$ denotes the integer shell index associated with the dimensionless mode number $|\mathbf{n}|$.
 
-Second, the use of the hydro mass flux is nevertheless a coherent conservative design. The discrete scalar update advances $q_n = \rho s_n$ using the same face mass transport used by the hydro subsystem. For a passive scalar this is the natural conservative formulation, and it guarantees that the scalar is transported consistently with the mass flux seen by the reconstruction and Riemann solve.
+We write the real initialized field as a retained half-space sum
+\begin{equation}
+\mathbf{u}(\mathbf{x}) = \sum_{\mathbf{n}\in\mathcal{H}_{\rm kept}}
+\left[\mathbf{a}_{\mathbf{n}}\cos\left(\mathbf{k}_{\mathbf{n}}\cdot\mathbf{x}\right)
+- \mathbf{b}_{\mathbf{n}}\sin\left(\mathbf{k}_{\mathbf{n}}\cdot\mathbf{x}\right)\right].
+\label{eq:real-series}
+\end{equation}
+The half-space $\mathcal{H}_{\rm kept}$ contains exactly one representative of each implicit complex-conjugate pair so that the initialized field is real by construction. The isotropic shell index is
+\begin{equation}
+K = \left\lceil |\mathbf{n}| - 10^{-12}\right\rceil,
+\end{equation}
+and the corresponding physical wave vector is $\mathbf{k}_{\mathbf{n}} = 2\pi (n_x/L_x,n_y/L_y,n_z/L_z)$.
 
-Third, the post-fix semantics make the phrase ``frozen hydro'' materially correct for built-in engine behavior. In a one-step scalar-mixing verification run on this branch, the maximum absolute change in density, each velocity component, and internal energy between the initial and final binary outputs was zero to machine precision, while the passive scalar changed by a finite amount. That is the intended invariant.
+The retained catalog is produced in two steps. First, AthenaK enumerates every admissible half-space mode in the band of interest. Second, it performs importance sampling above the user scale \code{turb\_k\_crit}. The acceptance probability is
+\begin{equation}
+p_{\rm acc}(k) =
+\left\{
+\begin{array}{ll}
+1, & k < k_{\rm crit}, \\
+\left(k_{\rm crit}/k\right)^2, & k \ge k_{\rm crit},
+\end{array}
+\right.
+\label{eq:importance-sampling}
+\end{equation}
+and each retained mode is multiplied by $p_{\rm acc}^{-1/2}$ so that the shell-integrated variance remains unbiased. This matters primarily in 3D, where the full mode count grows quickly with $k_{\max}$.
 
-\section{Advection-Diffusion Verification Problem}
-The frozen-background interpretation of \SO can be checked cleanly with the dedicated user problem \code{scalar\_mixing\_test}. This problem initializes a uniform hydrodynamic background with constant density, constant temperature, and a coherent diagonal velocity field. The first passive scalar is set to a top-hat blob: a disk in true 2D and a sphere in 3D. The reference runs use \code{hydro/scalar\_only=true}, periodic boundaries in each active direction, a crossing time of unity, and explicit scalar diffusion with \code{scalar\_diffusivity}=1/128. In the true-2D configuration the mesh is collapsed in $x_3$ with reflecting $x_3$ boundaries, so $v_z=0$ identically and only in-plane transport remains.
+Once the coefficients are synthesized, AthenaK removes any residual volume-averaged velocity and applies a uniform rescaling so that the final field satisfies the requested rms speed \code{turb\_v\_rms}. The meaning of the input parameters is therefore common across all methods:
+\begin{enumerate}
+\item \code{turb\_nlow} and \code{turb\_nhigh} define the \emph{velocity} band;
+\item \code{turb\_expo} defines the target shell-integrated velocity slope in that band;
+\item \code{turb\_v\_rms} fixes the final global rms speed after initialization;
+\item \code{turb\_k\_crit} controls retained-mode importance sampling, not the physical driving band.
+\end{enumerate}
 
-This problem has a convenient analytic target. Because the velocity field is spatially uniform, the solution is simply periodic advection of the initial blob combined with diffusive broadening. The post-processing verifier starts from the exact AthenaK cell-centered initial scalar field, transforms that discrete state into periodic Fourier modes, and evolves each mode analytically. The result is a direct test of the actual \SO transport operator, including the hydro-derived face mass flux, scalar diffusion, and the true-2D branch where the out-of-plane velocity is suppressed.
+To make those choices reproducible, the problem generator now accepts
+\begin{equation}
+\code{problem/turb\_dump\_generator\_diagnostics} = \code{false}
+\end{equation}
+by default. When enabled, AthenaK writes a sidecar JSON file \code{basename.turb\_init\_diag.json} containing the retained mode catalogs, coefficients, shell spectra, and latent stream fields required to reproduce the figures below.
 
-Figure~\ref{fig:scalar-mixing-test-slices} shows the scalar field at the initial, midpoint, and final outputs for the shipped 2D and 3D reference cases. With the discrete AthenaK initial condition used on both sides of the comparison, the numerical and analytic fields agree to roundoff at the initial output. In both geometries the blob is then advected diagonally by one box length over one crossing time and diffuses substantially while the background hydro state remains fixed. Figure~\ref{fig:scalar-mixing-test-convergence} shows the corresponding final-time error trends with resolution. In 2D the $L_1$ error decreases from $9.27\times10^{-4}$ at $64^2$ to $1.96\times10^{-4}$ at $128^2$ and $4.65\times10^{-5}$ at $256^2$, while the relative mass error remains at the level of $10^{-10}$. In 3D the calibrated stable sequence gives $L_1 = 6.17\times10^{-4}$ at $48^3$, $1.93\times10^{-4}$ at $64^3$, and $1.18\times10^{-4}$ at $80^3$, again with relative mass errors of order $10^{-10}$. These results show that the scalar field evolves as the intended advection-diffusion problem in both true 2D and 3D, and they provide a regression target that is more informative than a single scalar norm alone.
+\section{Two-Dimensional Velocity Generators}
+\label{sec:2d}
+The two-dimensional problem resolves a simpler uncertainty: how should a target velocity spectrum be realized when one can either project a random vector field or differentiate a stream function? The answer is that both routes are possible, but their coefficient scalings differ because the stream function carries one extra power of $k^{-1}$ relative to the velocity.
+
+\subsection{Projection in 2D}
+In 2D projection mode AthenaK first draws Gaussian vector coefficients in the plane and then removes the component parallel to $\mathbf{k}$. For a retained mode with isotropic magnitude $k$ the projected coefficient must scale as
+\begin{equation}
+|\mathbf{u}_{\mathbf{k}}| \propto k^{-(\mathrm{expo}+1)/2}
+\label{eq:2d-projection-law}
+\end{equation}
+in order for the shell-integrated velocity spectrum to follow Equation~(\ref{eq:target-spectrum}). The extra $+1$ in the exponent is the shell-count correction appropriate to two dimensions, where the number of available modes per shell grows linearly with $k$.
+
+This construction is spectrally direct: the stored coefficients are already velocity coefficients. It is therefore the simplest route when the user wants a prescribed 2D solenoidal velocity field but does not need an underlying scalar potential. Because the initialized field is built mode by mode and then projected, \code{turb\_sol\_frac} remains meaningful in projection mode.
+
+\subsection{Stream function in 2D}
+In 2D stream mode AthenaK instead initializes a scalar stream function
+\begin{equation}
+\psi(\mathbf{x}) = \sum_{\mathbf{n}\in\mathcal{H}_{\rm kept}}
+\left[a_{\mathbf{n}}^\psi \cos\left(\mathbf{k}_{\mathbf{n}}\cdot\mathbf{x}\right)
+- b_{\mathbf{n}}^\psi \sin\left(\mathbf{k}_{\mathbf{n}}\cdot\mathbf{x}\right)\right]
+\end{equation}
+and defines the velocity by
+\begin{equation}
+\mathbf{u} = \left(\partial_y\psi,\,-\partial_x\psi,\,0\right).
+\label{eq:2d-stream}
+\end{equation}
+Because each derivative contributes one power of $k$, the stream-function coefficients must satisfy
+\begin{equation}
+|\psi_{\mathbf{k}}| \propto k^{-(\mathrm{expo}+3)/2}.
+\label{eq:2d-psi-law}
+\end{equation}
+This extra factor of $k^{-1}$ is the entire point of the stream construction: the user controls the \emph{velocity} spectrum while AthenaK determines the compatible stream-function spectrum automatically.
+
+Figure~\ref{fig:methods-2d} shows both 2D generators for the common reference setup $(512^2,\ k_{\min}=2,\ k_{\max}=128,\ \mathrm{expo}=5/3)$. The projection and stream realizations differ visibly in their latent representation but not in their intended velocity-band control. The stream-function map is smooth at large scales because $\psi$ carries the additional low-pass weighting implied by Equation~(\ref{eq:2d-psi-law}), while the velocity field retains the target $-5/3$ shell slope.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/methods_2d.png}
+\caption{Two-dimensional velocity generators in the common reference setup. Top row: projection mode, showing the speed map, the scalar vorticity, and the shape-normalized velocity spectrum. Bottom row: stream mode, showing the speed map, the latent stream function $\psi$, and both the velocity spectrum and the inferred stream-function spectrum. The projection and stream constructions realize the same target velocity slope, but the latent field in stream mode is substantially steeper because $\mathbf{u}$ is obtained by differentiating $\psi$.}
+\label{fig:methods-2d}
+\end{figure*}
+
+\section{Three-Dimensional Velocity Generators}
+\label{sec:3d}
+The three-dimensional problem is subtler because the stream construction is nonlinear. A 3D projection field is still a linear projection of Gaussian vector coefficients. A 3D stream field is a Clebsch product of two independently synthesized scalar potentials. The uncertainty is therefore no longer just an exponent shift. One must determine which shell weights of $\phi_1$ and $\phi_2$ realize the requested \emph{velocity} spectrum after the cross product is taken.
+
+\subsection{Projection in 3D}
+The 3D projection construction is the direct generalization of the 2D method. Random vector coefficients are drawn in three dimensions, projected perpendicular to $\mathbf{k}$, and then synthesized. Because the shell occupancy now grows as $k^2$, the appropriate coefficient law is
+\begin{equation}
+|\mathbf{u}_{\mathbf{k}}| \propto k^{-(\mathrm{expo}+2)/2}.
+\label{eq:3d-projection-law}
+\end{equation}
+This is the same amplitude law AthenaK already used in 3D projection mode; the present implementation retains it.
+
+\subsection{Clebsch stream construction in 3D}
+In 3D stream mode the initialized field is
+\begin{equation}
+\mathbf{u} = \nabla \phi_1 \times \nabla \phi_2,
+\label{eq:clebsch}
+\end{equation}
+where $\phi_1$ and $\phi_2$ are two independent scalar potentials. In Fourier space the retained velocity coefficients satisfy
+\begin{equation}
+\hat{\mathbf{u}}(\mathbf{r}) =
+-\sum_{\mathbf{p}+\mathbf{q}=\mathbf{r}}
+\left(\mathbf{p}\times\mathbf{q}\right)
+\hat{\phi}_1(\mathbf{p})\hat{\phi}_2(\mathbf{q}).
+\label{eq:clebsch-convolution}
+\end{equation}
+Equation~(\ref{eq:clebsch-convolution}) shows immediately why the 3D stream problem differs from the linear projection problem. The velocity spectrum is now a quadratic functional of the potential coefficients.
+
+AthenaK therefore builds a deterministic shell-response tensor,
+\begin{equation}
+E_u(K) = \sum_{s,t} T_{Kst} P^{(1)}_s P^{(2)}_t,
+\label{eq:shell-response}
+\end{equation}
+where $P^{(1)}_s$ and $P^{(2)}_t$ are the shell powers of the two potentials. The tensor $T_{Kst}$ is evaluated on the retained output velocity catalog itself, including the importance-sampling boost factors, so the fitted response targets the exact spectral representation that is later synthesized onto the grid. AthenaK then solves for nonnegative shell amplitudes $A_s^{(1)}=\sqrt{P_s^{(1)}}$ and $A_s^{(2)}=\sqrt{P_s^{(2)}}$ that minimize the mismatch between the predicted velocity spectrum and the target $K^{-\mathrm{expo}}$ law in the requested band while penalizing leakage outside that band.
+
+Two points are important physically. First, the shell weights are fitted to realize a \emph{velocity} spectrum. They do not imply that $\phi_1$ and $\phi_2$ possess a unique universal power law of their own. Second, AthenaK now treats the shell fit as a fail-closed diagnostic problem: it records sector-resolved response fractions, compares multiple provisional seeds internally, and aborts by default if either the deterministic fit or the selected realization falls outside the slope and leakage tolerances. The explicit escape hatch is \code{problem/turb\_stream\_allow\_poor\_fit=true}, which converts the abort into a loud warning. The initialized velocity field is then synthesized directly from those retained Clebsch-generated velocity coefficients, so the fitted shell model, the selected realization, and the actual initialized field all refer to the same representation.
+
+Figures~\ref{fig:methods-3d}--\ref{fig:stream3d-production-audit} summarize the resulting 3D behavior. The projection field provides the most direct route to the target spectrum. The stream field introduces the latent potentials $\phi_1$ and $\phi_2$, whose spectra are steeper and asymmetric because AthenaK is fitting the \emph{product} needed to realize the target velocity field. The high-$k$ spike that motivated the recent rewrite is absent in the present retained-mode implementation; what remains is the more benign realization noise visible in the high-$k$ tail of the initialized spectrum and quantified explicitly by the multi-seed production audit.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/methods_3d.png}
+\caption{Three-dimensional velocity generators in the common reference setup $(256^3,\ k_{\min}=2,\ k_{\max}=128,\ \mathrm{expo}=5/3)$. The projection construction is shown through a midplane speed slice, a representative $v_z$ slice, and its velocity spectrum. The stream construction is shown through a midplane speed slice, the two latent Clebsch potentials $\phi_1$ and $\phi_2$, and their accompanying spectra. The potentials do not follow a unique universal slope because they are fitted only insofar as their gradients and cross product realize the requested velocity spectrum.}
+\label{fig:methods-3d}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/stream3d_realization.png}
+\caption{Representative single-seed diagnostics of the 3D Clebsch stream construction. The upper-left panel shows the fitted shell weights for the two potentials. The upper-right panel compares the deterministic shell-fit prediction, the selected retained-mode realization, the raw retained-mode spectrum, and the FFT of the initialized field. The lower-left panel shows the sector fractions of the fitted shell response, and the lower-right panel shows the compensated velocity response and the high-$k$ tail band used to monitor residual roughness. The dominant qualitative result is that the retained-mode implementation removes the catastrophic high-$k$ spike present in earlier direct-sampling attempts while exposing the exact discrete response behind the fit.}
+\label{fig:stream3d-realization}
+\end{figure*}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/stream3d_production_audit.png}
+\caption{Multi-seed production audit of the 3D Clebsch stream construction at $256^3$. The upper panel compares deterministic and realized retained-mode spectra across the audited seeds, while the bold curves show the seed averages. The lower panel shows the realized-to-deterministic ratio. The mean deterministic slope is $-1.639$, the mean realized slope is $-1.695$, and all audited seeds pass the fail-closed quality gate with zero realized leakage.}
+\label{fig:stream3d-production-audit}
+\end{figure*}
+
+\section{Validation and Diagnostics}
+\label{sec:validation}
+The figure campaign used to validate the present implementation adopts a single reference setup so that the method comparison is not obscured by varying resolution or forcing parameters. The 2D cases use a $512^2$ domain with \code{turb\_k\_crit}=128. The 3D cases use a $256^3$ domain with \code{turb\_k\_crit}=2. All four runs share
+\begin{equation}
+\code{turb\_nlow}=2,\qquad
+\code{turb\_nhigh}=128,\qquad
+\code{turb\_expo}=5/3,\qquad
+\code{turb\_v\_rms}=1,
+\end{equation}
+and a common random seed. Figure~\ref{fig:overview} provides the high-level comparison.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/overview.png}
+\caption{Overview of the four implemented velocity generators. The left block shows representative 2D slices of the initialized speed field for 2D projection, 2D stream, 3D projection, and 3D stream. The right panel shows the corresponding shape-normalized velocity spectra together with the target $k^{-5/3}$ law. The titles report the measured initialization time and the spectral divergence norm for each case.}
+\label{fig:overview}
+\end{figure*}
+
+The initialized fields satisfy the requested rms normalization to better than $10^{-10}$ in all four runs. The spectral divergence norm,
+\begin{equation}
+\left[\frac{\sum_{\mathbf{k}} |\mathbf{k}\cdot\hat{\mathbf{u}}|^2}
+{\sum_{\mathbf{k}} k^2 |\hat{\mathbf{u}}|^2}\right]^{1/2},
+\end{equation}
+is $1.61\times10^{-7}$ for 2D projection, $1.81\times10^{-7}$ for 2D stream, $8.72\times10^{-8}$ for 3D projection, and $8.58\times10^{-8}$ for 3D stream. The fitted in-band shell slopes are $-1.649$, $-1.681$, $-1.660$, and $-1.722$, respectively, for the representative common-seed figure campaign. The first three values are close to the requested $-5/3$ law. The representative 3D stream slope is somewhat steeper, which is visible in Figures~\ref{fig:overview} and \ref{fig:stream3d-realization}, but that steepening is qualitatively different from the earlier failure mode: the spectrum decays smoothly and no isolated high-$k$ spike remains.
+
+Because the 3D stream construction is stochastic, the single-seed figure campaign is supplemented by the production audit in Figure~\ref{fig:stream3d-production-audit}. Across three independent $256^3$ seeds, the mean deterministic shell-fit slope is $-1.639$ and the mean realized slope is $-1.695$, with zero realized leakage in every audited seed. This is the stronger validation result: the current implementation is not merely producing one good-looking realization, it is producing consistently acceptable retained-mode fits and realized spectra at production scale.
+
+The diagnostics export itself is accurate enough to support a figure-first workflow. For the projection cases, the shell spectra reconstructed from the dumped velocity coefficients agree with the FFT-based spectra of the initialized field at the level of a few parts in $10^{-9}$ in the log-rms sense over $k=2$--$128$. For the stream cases, the latent fields dumped in the JSON sidecar reproduce independently reconstructed slices to machine precision: the maximum absolute reconstruction error is $6.2\times10^{-16}$ for the 2D $\psi$ slice, $2.6\times10^{-15}$ for the 3D $\phi_1$ slice, and $3.4\times10^{-15}$ for the 3D $\phi_2$ slice. This matters because the stream potentials are not present in the standard hydro output; without the sidecar they could only be inferred indirectly.
+
+The transport operator itself is validated independently of the velocity-generator comparison by the dedicated \code{scalar\_mixing\_test} benchmark. In that problem AthenaK advects and diffuses a passive-scalar blob in a uniform prescribed velocity field while the hydro state remains fixed. Figure~\ref{fig:transport-verification} summarizes the result: the initialized hydro background is preserved, while the scalar evolution converges toward the analytic advection-diffusion solution. This is the correct discrete problem for prescribed-velocity scalar mixing, and it is the hydro-side foundation on which the velocity-generator study rests.
 
 \begin{figure*}[t]
 \centering
 \includegraphics[width=0.49\textwidth]{figures/scalar_mixing_test/scalar_mixing_blob_diffusion_2d_time_slices.png}
 \hfill
 \includegraphics[width=0.49\textwidth]{figures/scalar_mixing_test/scalar_mixing_blob_diffusion_3d_time_slices.png}
-\caption{Time-evolution slices from the \code{scalar\_mixing\_test} verification problem. Left: true-2D reference run with a disk-shaped initial blob. Right: 3D reference run, shown as a representative $x_3$ slice through the blob. In both cases the scalar patch advects diagonally across the periodic domain while explicit diffusion broadens the profile. The bottom row in each panel shows the absolute difference from the analytic periodic advection-diffusion solution.}
-\label{fig:scalar-mixing-test-slices}
+\caption{Frozen-hydrodynamic transport verification from the dedicated \code{scalar\_mixing\_test} problem. In both the true-2D and 3D reference runs the passive scalar advects and diffuses as expected while the prescribed hydro background remains fixed. This benchmark validates the transport operator documented in Section~\ref{sec:transport}; the present methods note then adds the spectral velocity generators used to supply the prescribed flow.}
+\label{fig:transport-verification}
 \end{figure*}
 
-\begin{figure*}[t]
+\section{Discussion and Practical Guidance}
+\label{sec:discussion}
+The results above support four practical conclusions.
+
+First, \SO is the correct mechanism for a frozen-background scalar problem. It retains the conservative scalar flux tied to the hydro face mass flux, but it does not evolve the hydro conserved variables through built-in update paths. \kin is a different numerical problem and should not be used as a synonym for prescribed-velocity scalar transport.
+
+Second, projection mode is the most direct route when the primary objective is faithful control of the initialized velocity spectrum. In both 2D and 3D it maps the user inputs almost transparently onto velocity coefficients, and in the present reference campaign it recovers the requested $-5/3$ slope with the smallest ambiguity.
+
+Third, stream mode should be chosen when the latent scalar potential is physically or diagnostically important. In 2D that latent object is the familiar stream function $\psi$, which yields a particularly clean relation between the velocity and vorticity structure. In 3D the latent objects are the Clebsch potentials $\phi_1$ and $\phi_2$, which provide a structured route to a solenoidal field but require a fitted shell model because the velocity is quadratic in the potentials.
+
+Fourth, the 3D stream construction should be understood as an approximate spectral matching procedure rather than an exact one-shot transform from the user slope to a pair of potential slopes. AthenaK now fits the shell response directly on the retained velocity catalog, chooses among multiple realizations, and synthesizes the initialized field from those retained Clebsch-generated velocity modes. That is the correct architecture. The price is that the realized field still exhibits some finite-sample roughness at high $k$, visible in Figure~\ref{fig:stream3d-realization}, even though the prior catastrophic spike is gone.
+
+The implementation is now in a regime where the remaining tradeoffs are interpretable. The hydro-side semantics are clear. The common spectral inputs mean the same thing across all four modes. The latent fields can be inspected directly. That is a substantially better basis for prescribed-velocity scalar-mixing studies than the combination of ambiguous frozen-hydro semantics and opaque stream-function initialization that existed before this rewrite.
+
+\appendix
+
+\section{Diagnostic Atlas}
+The appendix collects one figure per velocity-generation mode. These figures are deliberately more diagnostic and less compressed than the main-text panels. They include Parseval-consistent spectra, compensated spectra, retained-mode occupancy summaries, and latent-field maps where such latent fields exist. Projection cases explicitly have no scalar stream potential; stream cases do.
+
+\begin{figure*}[p]
 \centering
-\includegraphics[width=0.49\textwidth]{figures/scalar_mixing_test/scalar_mixing_test_convergence_2d_t1p0.png}
-\hfill
-\includegraphics[width=0.49\textwidth]{figures/scalar_mixing_test/scalar_mixing_test_convergence_3d_t1p0.png}
-\caption{Final-time error trends for the \code{scalar\_mixing\_test} benchmark at $t=1$. The left panel shows the true-2D sequence and the right panel shows the 3D sequence. Field errors decrease monotonically with resolution in both geometries, while the blob centroid, diffusive width, and total scalar mass remain well controlled.}
-\label{fig:scalar-mixing-test-convergence}
+\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/atlas_2d_projection.png}
+\caption{Diagnostic atlas for 2D projection mode. The top row shows the speed map together with the two in-plane velocity components. The bottom row shows the Parseval-consistent velocity spectrum, its compensated form, and the retained half-space mode occupancy colored by coefficient amplitude. This is the most direct 2D route from user inputs to the initialized velocity field because the stored coefficients are already velocity coefficients.}
+\label{fig:atlas-2d-projection}
 \end{figure*}
 
-\section{Caveats}
-This note describes the corrected post-fix behavior. It does not describe the older implementation in which the hydro Runge--Kutta update skipped hydro variables but built-in hydro source terms could still modify the hydro state.
+\begin{figure*}[p]
+\centering
+\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/atlas_2d_stream.png}
+\caption{Diagnostic atlas for 2D stream mode. In addition to the speed map and vorticity, the latent stream function $\psi$ is available explicitly. The lower-middle panel overlays the expected $E_\psi(k)\propto k^{-(\mathrm{expo}+2)}$ guide, which is the shell-integrated form compatible with Equation~(\ref{eq:2d-psi-law}). The occupancy panel shows the retained stream-function modes rather than velocity modes, because $\psi$ is the primary initialized object in this construction.}
+\label{fig:atlas-2d-stream}
+\end{figure*}
 
-Two caveats remain important.
+\begin{figure*}[p]
+\centering
+\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/atlas_3d_projection.png}
+\caption{Diagnostic atlas for 3D projection mode. The midplane component maps emphasize that the initialized field is fully three-dimensional even though only one representative slice is plotted. The lower-left and lower-middle panels show the Parseval-consistent velocity spectrum and its compensated form, while the lower-right panel reports the retained velocity-mode counts by shell after importance sampling.}
+\label{fig:atlas-3d-projection}
+\end{figure*}
 
-First, user source terms still run under \SO. The engine assumes that these callbacks are problem-specific and trusted. A user callback that modifies density, momentum, or energy can therefore violate the frozen-background interpretation by design.
-
-Second, \SO is presently a hydro-side modifier rather than a standalone scalar-transport module. The scalar flux continues to be mediated by the hydro reconstruction and hydro Riemann solver. That design is numerically consistent, but it is not solver-independent.
-
-\section{Future Work}
-A cleaner long-term design for prescribed-velocity scalar transport would be a dedicated scalar module that reconstructs the prescribed face velocity directly and computes
-\begin{equation}
-F_{q_n}^{\rm presc} = \rho_f s_n^{\rm up} v_{n,f} - \kappa \, \rho_f \, \nabla s_n,
-\end{equation}
-without passing through the hydro Riemann solver. Such a design would remove the present dependence of the scalar operator on the hydro EOS and hydro solver choice, while retaining a conservative update for $q_n$. That is not the current implementation, but it provides a clear target if the scalar-mixing capability is later separated from hydro more completely.
+\begin{figure*}[p]
+\centering
+\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/atlas_3d_stream.png}
+\caption{Diagnostic atlas for 3D stream mode. The top row shows the initialized speed slice together with the two latent Clebsch potentials. The lower-left panel shows the realized Parseval-consistent velocity spectrum, the lower-middle panel shows the fitted sector fractions of the shell response, and the lower-right panel shows the fitted shell weights. These quantities are exactly the ones exported by the diagnostics sidecar when \code{turb\_dump\_generator\_diagnostics=true}.}
+\label{fig:atlas-3d-stream}
+\end{figure*}
 
 \end{document}

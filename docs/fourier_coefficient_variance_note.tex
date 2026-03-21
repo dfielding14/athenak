@@ -1,0 +1,495 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,booktabs}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\mathrm{Var}}
+\newcommand{\kk}{\mathbf{k}}
+\newcommand{\pp}{\mathbf{p}}
+\newcommand{\qq}{\mathbf{q}}
+\newcommand{\xii}{\boldsymbol{\xi}}
+\newcommand{\uu}{\mathbf{u}}
+\newcommand{\T}{\mathbb{T}}
+\newcommand{\code}[1]{\texttt{#1}}
+
+\title{A Short Note on Fourier-Coefficient Variances for\\
+Prescribed Velocity, Stream Function, and Clebsch Potentials}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Purpose}
+This note records the variance laws for the Fourier coefficients of the fields that appear in the AthenaK \texttt{scalar\_mixing} initial conditions:
+\begin{enumerate}
+\item the velocity field $\uu$ in projection mode,
+\item the 2D stream function $\psi$,
+\item the 3D Clebsch potentials $\phi_1$ and $\phi_2$.
+\end{enumerate}
+
+The goal is to translate cleanly between two common languages:
+\begin{itemize}
+\item \textbf{physics language:} ``the shell-integrated spectrum scales like $E(k)\propto k^{-\zeta}$,'' and
+\item \textbf{mathematics language:} ``the Fourier modes have covariance (or variance) of size $|\kk|^{-m}$.'' 
+\end{itemize}
+
+Throughout, we write
+\begin{equation}
+\zeta = \texttt{turb\_expo}.
+\end{equation}
+
+\section{Fourier convention and the real-valued half-space representation}
+Let $f$ be a real-valued field on a periodic box, which we identify with a torus $\T^d$. We write its complex Fourier series as
+\begin{equation}
+f(x) = \sum_{\kk \in \Lambda} \hat{f}(\kk)e^{i\kk\cdot x},
+\qquad
+\hat{f}(-\kk)=\overline{\hat{f}(\kk)},
+\end{equation}
+where $\Lambda$ is the reciprocal lattice.
+
+In the code, one keeps only a half-space of modes and writes the same field as
+\begin{equation}
+f(x)=\sum_{\kk\in\mathcal{H}}
+\left[a_{\kk}\cos(\kk\cdot x)-b_{\kk}\sin(\kk\cdot x)\right].
+\label{eq:real-half-space}
+\end{equation}
+The corresponding complex coefficient is
+\begin{equation}
+\hat{f}(\kk)=\frac{a_{\kk}+ib_{\kk}}{2},
+\qquad \kk\in\mathcal{H}.
+\label{eq:complex-vs-real}
+\end{equation}
+
+If $a_{\kk}$ and $b_{\kk}$ are centered independent Gaussians with the same variance $\sigma_f^2(\kk)$, then
+\begin{equation}
+\Var\!\left(\hat{f}(\kk)\right)
+= \E |\hat{f}(\kk)|^2
+= \frac{\sigma_f^2(\kk)}{2}.
+\label{eq:basic-variance-identity}
+\end{equation}
+This is the first bridge between the two languages. In code, one often specifies the variance of the real cosine and sine coefficients. In analysis, one often states the variance of the complex Fourier mode. They differ only by the factor $2$ in \eqref{eq:basic-variance-identity}.
+
+\section{From mode variance to shell spectrum}
+Fix an integer shell index $K$ and let
+\begin{equation}
+S_K = \left\{\kk : K-\tfrac12 < |\kk| \le K+\tfrac12\right\}.
+\end{equation}
+The shell-integrated spectrum is
+\begin{equation}
+E_f(K)=\sum_{\kk\in S_K}\E |\hat{f}(\kk)|^2.
+\label{eq:shell-spectrum}
+\end{equation}
+
+If the field is isotropic, then $\E |\hat{f}(\kk)|^2$ depends only on $|\kk|$, and the shell spectrum is approximately
+\begin{equation}
+E_f(K)\sim N_d(K)\,\E |\hat{f}(\kk)|^2,
+\qquad |\kk|\approx K,
+\end{equation}
+where $N_d(K)$ is the number of modes in shell $K$. The large-$K$ scaling is
+\begin{equation}
+N_d(K)\sim K^{d-1}.
+\end{equation}
+Therefore, if
+\begin{equation}
+\E |\hat{f}(\kk)|^2 \sim |\kk|^{-m},
+\end{equation}
+then
+\begin{equation}
+E_f(K)\sim K^{d-1-m}.
+\label{eq:shell-vs-mode}
+\end{equation}
+
+Equation \eqref{eq:shell-vs-mode} is the basic translation rule:
+\begin{equation}
+\boxed{
+E_f(K)\propto K^{-\beta}
+\quad\Longleftrightarrow\quad
+\E |\hat{f}(\kk)|^2 \propto |\kk|^{-(\beta+d-1)}.
+}
+\label{eq:translation-rule}
+\end{equation}
+
+For the prescribed velocity field, the target is
+\begin{equation}
+E_u(K)\propto K^{-\zeta}.
+\label{eq:velocity-target}
+\end{equation}
+
+\section{Velocity coefficients in projection mode}
+\subsection{General principle}
+In projection mode, AthenaK first samples a Gaussian vector mode and then projects it onto the divergence-free subspace. In mathematical language, the covariance tensor is
+\begin{equation}
+\E\!\left[\hat{u}_i(\kk)\overline{\hat{u}_j(\kk)}\right]
+\propto \sigma_u^2(|\kk|)
+\left(\delta_{ij}-\frac{k_i k_j}{|\kk|^2}\right),
+\label{eq:projection-covariance}
+\end{equation}
+where the matrix in parentheses is the Leray projector onto $\kk^\perp$.
+
+In physics language, one usually ignores the tensor structure and asks only for the shell-integrated energy spectrum \eqref{eq:velocity-target}. Then \eqref{eq:translation-rule} gives the variance law immediately.
+
+\subsection{2D projection}
+In two dimensions,
+\begin{equation}
+E_u(K)\propto K^{-\zeta}
+\quad\Longrightarrow\quad
+\E |\hat{\uu}(\kk)|^2 \propto |\kk|^{-(\zeta+1)}.
+\label{eq:2d-velocity-variance}
+\end{equation}
+Equivalently, in the real half-space form \eqref{eq:real-half-space},
+\begin{equation}
+\Var(a_{\kk}^{u})\sim \Var(b_{\kk}^{u})\sim |\kk|^{-(\zeta+1)}.
+\end{equation}
+Thus the coefficient \emph{amplitude} scales like
+\begin{equation}
+|a_{\kk}^{u}|,\ |b_{\kk}^{u}| \sim |\kk|^{-(\zeta+1)/2}.
+\end{equation}
+
+\subsection{3D projection}
+In three dimensions,
+\begin{equation}
+E_u(K)\propto K^{-\zeta}
+\quad\Longrightarrow\quad
+\E |\hat{\uu}(\kk)|^2 \propto |\kk|^{-(\zeta+2)}.
+\label{eq:3d-velocity-variance}
+\end{equation}
+Equivalently,
+\begin{equation}
+\Var(a_{\kk}^{u})\sim \Var(b_{\kk}^{u})\sim |\kk|^{-(\zeta+2)},
+\end{equation}
+so the coefficient amplitude scales like
+\begin{equation}
+|a_{\kk}^{u}|,\ |b_{\kk}^{u}| \sim |\kk|^{-(\zeta+2)/2}.
+\end{equation}
+
+The difference between \eqref{eq:2d-velocity-variance} and \eqref{eq:3d-velocity-variance} is purely geometric. It reflects the fact that the number of available modes per shell grows like $K$ in 2D and like $K^2$ in 3D.
+
+\section{The 2D stream function \texorpdfstring{$\psi$}{psi}}
+In 2D stream mode,
+\begin{equation}
+\uu = (\partial_y\psi,\,-\partial_x\psi,\,0).
+\label{eq:stream-definition}
+\end{equation}
+On Fourier modes this becomes
+\begin{equation}
+\hat{\uu}(\kk)=i(k_y,-k_x,0)\hat{\psi}(\kk),
+\end{equation}
+and therefore
+\begin{equation}
+|\hat{\uu}(\kk)|^2 = |\kk|^2 |\hat{\psi}(\kk)|^2.
+\label{eq:psi-to-u}
+\end{equation}
+
+Since the target is still \eqref{eq:velocity-target}, we combine
+\eqref{eq:2d-velocity-variance} and \eqref{eq:psi-to-u} to obtain
+\begin{equation}
+\E |\hat{\psi}(\kk)|^2
+\propto |\kk|^{-2}\E |\hat{\uu}(\kk)|^2
+\propto |\kk|^{-(\zeta+3)}.
+\label{eq:psi-variance}
+\end{equation}
+Equivalently,
+\begin{equation}
+\Var(a_{\kk}^{\psi})\sim \Var(b_{\kk}^{\psi})\sim |\kk|^{-(\zeta+3)},
+\end{equation}
+so the stream-function coefficient amplitude scales like
+\begin{equation}
+|a_{\kk}^{\psi}|,\ |b_{\kk}^{\psi}| \sim |\kk|^{-(\zeta+3)/2}.
+\end{equation}
+
+In shell language, \eqref{eq:translation-rule} with $d=2$ gives
+\begin{equation}
+E_{\psi}(K)\propto K^{-(\zeta+2)}.
+\end{equation}
+This is the second bridge between the two languages:
+\begin{itemize}
+\item the \emph{velocity} spectrum is $K^{-\zeta}$,
+\item the \emph{stream-function} spectrum is steeper, namely $K^{-(\zeta+2)}$,
+\item the extra factor comes from the derivative in \eqref{eq:stream-definition}.
+\end{itemize}
+
+\section{The 3D Clebsch potentials \texorpdfstring{$\phi_1,\phi_2$}{phi1, phi2}}
+In 3D stream mode,
+\begin{equation}
+\uu = \nabla\phi_1\times \nabla\phi_2.
+\label{eq:clebsch-definition}
+\end{equation}
+In Fourier space,
+\begin{equation}
+\hat{\uu}(\xii)=
+-\sum_{\pp+\qq=\xii}
+(\pp\times \qq)\,\hat{\phi}_1(\pp)\hat{\phi}_2(\qq).
+\label{eq:clebsch-fourier}
+\end{equation}
+
+Equation \eqref{eq:clebsch-fourier} is qualitatively different from the 2D stream relation \eqref{eq:psi-to-u}. The velocity coefficient is no longer a single derivative of one scalar coefficient. It is a \emph{convolution} of two scalar fields. As a result, there is no unique universal variance law for $\hat{\phi}_1$ and $\hat{\phi}_2$ separately.
+
+\subsection{Exact variance identity}
+Assume that $\phi_1$ and $\phi_2$ are independent, centered, isotropic Gaussian fields. Then the variance of a single velocity coefficient is
+\begin{equation}
+\E |\hat{\uu}(\xii)|^2
+=
+\sum_{\pp+\qq=\xii}
+|\pp\times\qq|^2\,
+\E |\hat{\phi}_1(\pp)|^2\,
+\E |\hat{\phi}_2(\qq)|^2.
+\label{eq:clebsch-variance-identity}
+\end{equation}
+This is the exact bridge between the mathematics language and the physics language for the 3D stream construction. In code, the shell-response tensor is a discretized version of \eqref{eq:clebsch-variance-identity}.
+
+\subsection{Sector decomposition and heuristic status}
+For heuristic discussion it is more useful to separate \eqref{eq:clebsch-variance-identity} into interaction sectors than to impose a single scale-local law. At fixed output shell $K$, the convolution naturally includes:
+\begin{itemize}
+\item local-local interactions, where both input shells are comparable to $K$;
+\item low-high and high-low interactions, where one factor lies well below $K$ and the other remains comparable to $K$;
+\item high-high interactions whose sum lands back in shell $K$ only through near-cancellation.
+\end{itemize}
+
+In the current AthenaK diagnostics this discussion is made discrete rather than asymptotic. For each output shell $K$, a contribution is labeled \emph{high-high cancel} if both input shells exceed $K$, \emph{low-high} or \emph{high-low} if one input shell lies below $\lceil K/2\rceil$ while the other lies at or above it, and \emph{local-local} otherwise. The point of that classifier is not to prove a theorem. It is to expose which sectors actually dominate the retained tensor used by the production generator.
+
+This matters because the exact discrete tensor used in AthenaK includes \emph{all} retained pairs. No locality assumption is built into the production generator. The earlier scale-local balance
+\[
+m_1+m_2=\zeta+8
+\]
+is therefore no longer treated in this note as an established continuum law. It is, at best, one provisional heuristic for initializing the numerical fit.
+
+Camillo's objection is that the low-high and high-low sectors may dominate the asymptotics instead of the local-local sector. Under a symmetric continuum ansatz this would suggest a different guide, namely
+\[
+m_1=m_2=\zeta+4,
+\qquad
+|\hat{\phi}_j(\kk)| \sim |\kk|^{-(\zeta+4)/2}.
+\]
+At present AthenaK does \emph{not} elevate either continuum guide to production truth. The code records the exact discrete tensor, measures sector-resolved shell contributions, and fits shell weights directly against the desired retained-mode velocity spectrum.
+
+The point is not merely that the split is non-unique in the continuum. The actual initialized field is produced on a finite discrete mode set, over a finite band, with explicit half-space bookkeeping and optional importance sampling. For that finite-dimensional problem, AthenaK does not prescribe a universal closed-form spectrum for $\phi_1$ and $\phi_2$. Instead it fits shell weights directly against the desired discrete velocity spectrum and treats any continuum power-law seed as provisional.
+
+\subsection{How the AthenaK fit is posed}
+The code works with shell powers rather than with a single continuum exponent. Let
+\begin{equation}
+P_s^{(1)} \approx \E |\hat{\phi}_1(\kk)|^2
+\quad\text{for}\quad |\kk|\in \text{shell } s,
+\qquad
+P_t^{(2)} \approx \E |\hat{\phi}_2(\kk)|^2
+\quad\text{for}\quad |\kk|\in \text{shell } t.
+\end{equation}
+The unknowns are therefore the two nonnegative shell-power sequences
+\begin{equation}
+\left\{P_s^{(1)}\right\}_{s=1}^{S},
+\qquad
+\left\{P_t^{(2)}\right\}_{t=1}^{S},
+\end{equation}
+where $S$ is the largest shell kept for the potentials.
+
+The first step is to discretize the exact variance identity \eqref{eq:clebsch-variance-identity} on the retained mode catalogs. AthenaK builds a shell-response tensor
+\begin{equation}
+\widehat{E}_u(K)
+=
+\sum_{s=1}^{S}\sum_{t=1}^{S}
+T_{Kst}\,P_s^{(1)}P_t^{(2)},
+\label{eq:discrete-shell-response}
+\end{equation}
+for output shells $K=1,\dots,K_{\max}$. To define $T_{Kst}$ explicitly, let $\mathcal{V}_K$ be the retained velocity half-space modes in shell $K$, and let $\mathcal{P}_s$ and $\mathcal{Q}_t$ be the signed retained potential modes in shells $s$ and $t$. If $b_u(\xii)$ denotes the output importance-sampling boost and
+\begin{equation}
+w_1(\pp)=\frac{1}{2}b_1(\pp)^2,
+\qquad
+w_2(\qq)=\frac{1}{2}b_2(\qq)^2
+\end{equation}
+are the signed-mode variance weights induced by the half-space representation for the two potentials, then the response tensor is
+\begin{equation}
+T_{Kst}
+=
+\sum_{\xii\in\mathcal{V}_K}
+\sum_{\substack{\pp\in\mathcal{P}_s,\ \qq\in\mathcal{Q}_t\\ \pp+\qq=\xii}}
+2\,b_u(\xii)^2\,w_1(\pp)\,w_2(\qq)\,|\pp\times\qq|^2.
+\label{eq:TKst-definition}
+\end{equation}
+The factor of $2$ is the standard conversion from a retained half-space coefficient to the energy of the corresponding real Fourier pair. In other words, \eqref{eq:discrete-shell-response} is not a phenomenological model. It is the exact second-moment response of the discrete retained representation used later in the initialization.
+
+The fit is then posed as a finite-dimensional optimization problem: choose nonnegative shell powers so that $\widehat{E}_u(K)$ matches the target
+\begin{equation}
+E_{\mathrm{tar}}(K) = K^{-\zeta}
+\end{equation}
+on the driving band $K\in[k_{\min},k_{\max}]$, while keeping leakage outside that band small and suppressing shell-to-shell oscillations in the potential spectra. In the implementation this is encoded by the loss
+\begin{align}
+\mathcal{L}(P^{(1)},P^{(2)}) &=
+\sum_{K=k_{\min}}^{k_{\max}}
+\left[\log \widehat{E}_u(K)-\log E_{\mathrm{tar}}(K)\right]^2
+\nonumber\\
+&\quad
++ \lambda_{\mathrm{low}}
+\sum_{K<k_{\min}}
+\left[\frac{\widehat{E}_u(K)}{E_{\mathrm{tar}}(k_{\min})}\right]^2
++ \lambda_{\mathrm{high}}
+\sum_{K>k_{\max}}
+\left[\frac{\widehat{E}_u(K)}{E_{\mathrm{tar}}(k_{\max})}\right]^2
+\nonumber\\
+&\quad
++ \eta\sum_{s=2}^{S}
+\left[\log P_s^{(1)}-\log P_{s-1}^{(1)}\right]^2
++ \eta\sum_{t=2}^{S}
+\left[\log P_t^{(2)}-\log P_{t-1}^{(2)}\right]^2.
+\label{eq:clebsch-loss}
+\end{align}
+In the present code the leakage weights are $\lambda_{\mathrm{low}}=4$, $\lambda_{\mathrm{high}}=6$, and the logarithmic smoothness penalty is $\eta=10^{-2}$.
+
+For a mathematical reader it is useful to isolate the structure. Equation \eqref{eq:discrete-shell-response} defines a bilinear map
+\begin{equation}
+\mathcal{B}:\mathbb{R}_+^{S}\times \mathbb{R}_+^{S}\to \mathbb{R}_+^{K_{\max}},
+\qquad
+\mathcal{B}(P^{(1)},P^{(2)})_K
+=
+\sum_{s,t} T_{Kst}P_s^{(1)}P_t^{(2)}.
+\end{equation}
+The numerical task is therefore a nonconvex inverse problem on the positive cone: find $(P^{(1)},P^{(2)})$ such that $\mathcal{B}(P^{(1)},P^{(2)})$ lies as close as possible to the target profile $K\mapsto K^{-\zeta}$ on the prescribed band. The nonconvexity is mild in the sense that the map is bilinear rather than fully general, but it is still genuine: one is effectively seeking a nonnegative factorization of the target spectrum through the response tensor $T_{Kst}$.
+
+Several structural features of the optimization are worth stating explicitly.
+
+First, the map \eqref{eq:discrete-shell-response} is bilinear in the shell powers. The fit is therefore nonlinear, even before one takes logarithms in the misfit.
+
+Second, there is an exact rescaling symmetry:
+\begin{equation}
+P^{(1)} \mapsto c\,P^{(1)},
+\qquad
+P^{(2)} \mapsto c^{-1}P^{(2)},
+\end{equation}
+which leaves $\widehat{E}_u(K)$ unchanged. AthenaK removes this degeneracy by
+balancing the two shell-power sequences at a reference shell. The reference shell
+is chosen to be the first shell in the target band.
+
+Third, the code separates spectral shape from overall amplitude. During the multiplicative sweep, and once again after the log-space refinement has terminated, it rescales both shell-power sequences by a common factor so that the mean predicted energy over the target band matches the mean target energy there. This prevents the fit from drifting in a trivial amplitude direction while leaving the gauge symmetry between $P^{(1)}$ and $P^{(2)}$ to be handled by the reference-shell balance.
+
+The optimizer itself is a two-stage procedure.
+
+\paragraph{Stage 1: multiplicative sweep.}
+AthenaK now treats the initial shell powers as a multi-start problem rather than a derived theorem. The current implementation tries three starts:
+\begin{itemize}
+\item the older local-triad guide,
+\item Camillo's symmetric guide,
+\item and a flat shell-power start balanced at the reference shell.
+\end{itemize}
+For each start AthenaK performs repeated multiplicative shell updates of the form
+\begin{equation}
+P_s^{(1)}
+\leftarrow
+P_s^{(1)}
+\frac{\sum_{K=k_{\min}}^{k_{\max}}
+\mathcal{K}^{(1)}_s(K;P^{(2)})\,E_{\rm tar}(K)\,\widehat{E}_u(K)^{-1}}
+{\sum_{K=k_{\min}}^{k_{\max}}
+\mathcal{K}^{(1)}_s(K;P^{(2)})},
+\end{equation}
+where
+\begin{equation}
+\mathcal{K}^{(1)}_s(K;P^{(2)})
+=
+\sum_{t=1}^{S} T_{Kst}P_t^{(2)}.
+\end{equation}
+The update for $P_t^{(2)}$ is the analogous formula with
+\begin{equation}
+\mathcal{K}^{(2)}_t(K;P^{(1)})
+=
+\sum_{s=1}^{S} T_{Kst}P_s^{(1)}.
+\end{equation}
+In effect, this is a diagonalized fixed-point sweep for the shell powers. After each sweep the code clamps the powers to a finite dynamic range, applies a local logarithmic smoothing step, rebalances the reference shell, and rescales the mean in-band amplitude. The smoothing is not ad hoc in physical space; it is a short-range averaging in the shell index applied to $\log P_s$, so it acts as a weak regularization against grid-scale oscillations in the discrete shell weights.
+
+\paragraph{Stage 2: log-space refinement.}
+Starting from the best multiplicative iterate, AthenaK computes the exact gradient of the discrete loss \eqref{eq:clebsch-loss} with respect to the shell powers and then converts it to a gradient in the logarithmic variables
+\begin{equation}
+X_s^{(1)} = \log P_s^{(1)},
+\qquad
+X_t^{(2)} = \log P_t^{(2)}.
+\end{equation}
+It then performs a backtracked descent in these log variables. This enforces positivity automatically and is numerically natural because the target is a power law. Each trial step is followed by reference-shell balancing, and the step is accepted only if it decreases the loss. After the log-space refinement terminates, the code applies one final common rescaling so that the mean predicted energy on the target band matches the mean target energy there. In other words, the refinement stage optimizes the shape at fixed gauge, and the overall amplitude is normalized only at the end.
+
+At the end of this process AthenaK stores shell amplitudes
+\begin{equation}
+A_s^{(1)} = \sqrt{P_s^{(1)}},
+\qquad
+A_t^{(2)} = \sqrt{P_t^{(2)}},
+\end{equation}
+and uses them to generate actual Gaussian coefficients for $\phi_1$ and $\phi_2$.
+
+\subsection{Why the code also fits over realizations}
+Even after the shell powers are fixed, the initialized field is still one random realization. AthenaK therefore generates a small ensemble of candidate realizations, computes the retained-mode Clebsch velocity spectrum for each one, rescales that realized spectrum to the target-band mean, and evaluates the same shape-loss functional on that realized retained spectrum. The realization with the smallest loss is kept.
+
+This final step is important mathematically. The shell-power fit determines the \emph{expected} second-moment response of the retained representation. The realization selection then chooses, among a small number of Gaussian samples consistent with that expectation, the one whose actual discrete spectrum lies closest to the target. Thus the code first solves an inverse problem at the level of second moments, and only afterward chooses a concrete random field.
+
+The code does not stop there. After the deterministic shell fit and after the realized-spectrum selection, AthenaK applies a quality gate to both objects. In the current implementation the fit must converge, the deterministic and realized slopes must both lie within $0.5$ of the requested $-\zeta$, and the deterministic and realized leakage fractions must both stay below $0.05$. If any of those checks fail, the 3D stream initialization aborts by default. The only override is the expert input \code{problem/turb\_stream\_allow\_poor\_fit=true}, which converts the abort into a loud warning while preserving the diagnostics record.
+
+\section{Summary table}
+The main translation rules are collected in Table~\ref{tab:summary}.
+
+\begin{table}[h]
+\centering
+\caption{Mode-variance laws or fitted shell models corresponding to the target velocity spectrum $E_u(K)\propto K^{-\zeta}$.}
+\label{tab:summary}
+\begin{tabular}{@{}lll@{}}
+\toprule
+Field & Complex-mode variance & Coefficient amplitude \\
+\midrule
+2D velocity $\hat{\uu}(\kk)$
+& $\E |\hat{\uu}(\kk)|^2 \propto |\kk|^{-(\zeta+1)}$
+& $|\kk|^{-(\zeta+1)/2}$ \\
+3D velocity $\hat{\uu}(\kk)$
+& $\E |\hat{\uu}(\kk)|^2 \propto |\kk|^{-(\zeta+2)}$
+& $|\kk|^{-(\zeta+2)/2}$ \\
+2D stream $\hat{\psi}(\kk)$
+& $\E |\hat{\psi}(\kk)|^2 \propto |\kk|^{-(\zeta+3)}$
+& $|\kk|^{-(\zeta+3)/2}$ \\
+3D Clebsch $\hat{\phi}_1,\hat{\phi}_2$
+& no settled universal continuum law;
+  AthenaK fits discrete shell powers $P_s^{(j)}$
+& multi-start numerical fit against the exact tensor \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{A short dictionary}
+It is useful to end with a direct translation dictionary.
+
+\paragraph{Physics statement.}
+``The velocity spectrum is $E_u(K)\propto K^{-\zeta}$.'' 
+
+\paragraph{Mathematics statement.}
+``The covariance of the Fourier modes satisfies
+\[
+\E |\hat{\uu}(\kk)|^2 \propto |\kk|^{-(\zeta+d-1)}
+\]
+in $d$ dimensions, after imposing the divergence-free constraint.''
+
+\paragraph{Physics statement.}
+``The inertial-range slope is $-\zeta$, so the velocity increments should scale like
+\[
+\delta u(r)\sim r^{(\zeta-1)/2}.
+\]
+''
+
+\paragraph{Mathematics statement.}
+``Under the usual isotropy and second-order random-field assumptions, if $1<\zeta<3$ then the second-order structure function satisfies
+\[
+\E |u(x+h)-u(x)|^2 \propto |h|^{\zeta-1}.
+\]
+Equivalently, the field has heuristic H\"older exponent
+\[
+\alpha = \frac{\zeta-1}{2},
+\]
+more precisely one expects sample paths to lie in $C^{\alpha}$ for every $\alpha<(\zeta-1)/2$.'' 
+
+\paragraph{Physics statement.}
+``In 2D stream mode, $\psi$ must be steeper than $\uu$ by one derivative.''
+
+\paragraph{Mathematics statement.}
+``Because $\hat{\uu}(\kk)=ik^\perp\hat{\psi}(\kk)$, one has
+\[
+\E |\hat{\psi}(\kk)|^2 = |\kk|^{-2}\E |\hat{\uu}(\kk)|^2.
+\]
+''
+
+\paragraph{Physics statement.}
+``In 3D Clebsch mode there is no unique spectrum for $\phi_1$ and $\phi_2$.''
+
+\paragraph{Mathematics statement.}
+``Because $\hat{\uu}$ is a quadratic convolution in $\hat{\phi}_1$ and $\hat{\phi}_2$, the exact second-moment identity is known but the dominant continuum interaction sector is not yet settled. In AthenaK the separate shell powers are therefore fitted directly as part of the construction.''
+
+\end{document}

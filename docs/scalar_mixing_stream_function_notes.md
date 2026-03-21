@@ -35,14 +35,17 @@ response tensor `T[K,s,t]` from the actually accepted mode catalogs. This means
 the fit includes the retained `turb_k_crit` importance sampling and spectral
 boosting used during mode selection.
 
-The initial guess uses the local-triad asymptotic scaling:
+The code no longer treats any single continuum asymptotic law as authoritative
+for the 3D Clebsch fit. Instead it:
 
-- the number of contributing pairs at fixed output shell grows like `k^2`
-- `|p x q|^2` contributes another `k^4`
-- with `|phi_k| ~ k^{-beta}`, this gives `E_u(k) ~ k^{8 - 4 beta}`
-
-Matching `E_u(k) ~ k^{-expo}` then suggests
-`beta ~= (expo + 8) / 4`, which seeds the nonlinear shell fit.
+- builds the exact retained-mode shell-response tensor;
+- records sector-resolved contributions (`local_local`, `low_high`,
+  `high_low`, `high_high_cancel`);
+- tries three provisional seed families internally:
+  - the older local-triad guide,
+  - a symmetric Camillo-style guide,
+  - and a flat shell-power start;
+- chooses the best fit by final loss, leakage, and in-band slope error.
 
 ## Leakage Definition
 
@@ -53,14 +56,24 @@ For the 3D Clebsch fit, out-of-band leakage is reported as
 The solver penalizes leakage outside `[turb_nlow, turb_nhigh]` while matching
 the requested in-band slope.
 
-For regression on small boxes, low integer shell sums are noisy and can distort
-the apparent slope even when the retained Fourier coefficients follow the
-requested law. The added regression therefore fits ensemble-averaged mode
-energy versus the exact discrete `|k|` values inside the requested band.
+The 3D stream path now also applies a quality gate:
+
+- deterministic fit must converge, have `abs(fitted_slope + expo) <= 0.5`, and
+  leakage `<= 0.05`;
+- the chosen realized spectrum must satisfy the same slope and leakage limits;
+- if either check fails, initialization aborts unless
+  `turb_stream_allow_poor_fit = true`.
+
+The regression now relies on this diagnostics gate rather than on an exact-`|k|`
+mode-slope fit for 3D Clebsch, because small discrete boxes can have strong
+radius-by-radius nulls even when the shell-integrated retained response is
+acceptable.
 
 ## Input Contract
 
 - `turb_sol_frac` is ignored in stream-function mode because the construction is
   intrinsically solenoidal.
+- `turb_stream_allow_poor_fit` is an expert escape hatch for audits. The default
+  remains fail-closed.
 - On `nx3 = 1` meshes, stream-function mode always uses the 2D construction and
   forces `v3 = 0`, regardless of x3 boundary flags.

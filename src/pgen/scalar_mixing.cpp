@@ -11,12 +11,19 @@
 //
 //  When scalar_only=true in <hydro>, velocity is frozen and only the scalars evolve.
 
+#include <array>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <complex>
+#include <cstdint>
 #include <cstdlib>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "athena.hpp"
@@ -58,6 +65,9 @@ struct TurbulenceConfig {
   int nx1 = 1;
   int nx2 = 1;
   int nx3 = 1;
+  int global_nx1 = 1;
+  int global_nx2 = 1;
+  int global_nx3 = 1;
 
   bool mesh_multi_d = false;
   bool mesh_three_d = false;
@@ -65,14 +75,23 @@ struct TurbulenceConfig {
   bool stream_2d = false;
   bool active_v3 = false;
   bool divfree_scalar_flux = false;
+  bool dump_generator_diagnostics = false;
+  bool stream_allow_poor_fit = false;
 
   Real lx = 1.0;
   Real ly = 1.0;
   Real lz = 1.0;
+  Real x1min = 0.0;
+  Real x1max = 1.0;
+  Real x2min = 0.0;
+  Real x2max = 1.0;
+  Real x3min = 0.0;
+  Real x3max = 1.0;
   Real dkx = 0.0;
   Real dky = 0.0;
   Real dkz = 0.0;
   Real k_crit_mag = 0.0;
+  std::string basename;
 };
 
 struct ModeCatalog {
@@ -91,6 +110,113 @@ struct VectorCoefficients {
 
 struct ScalarCoefficients {
   std::vector<Real> aka, akb;
+};
+
+struct SignedMode {
+  int nkx, nky, nkz;
+  int shell;
+  Real kx, ky, kz;
+  Real weight;
+};
+
+struct SignedScalarCoeffMode {
+  int nkx, nky, nkz;
+  int shell;
+  Real kx, ky, kz;
+  std::complex<Real> coeff;
+};
+
+struct AccumulatedVelocityMode {
+  int shell = 0;
+  std::array<std::complex<Real>, 3> coeff = {
+      std::complex<Real>(0.0, 0.0), std::complex<Real>(0.0, 0.0),
+      std::complex<Real>(0.0, 0.0)};
+};
+
+struct ShellFitEval {
+  std::vector<Real> pred;
+  std::vector<Real> grad1;
+  std::vector<Real> grad2;
+  Real loss = 0.0;
+};
+
+enum class ClebschSeedModel { LocalTriad, CamilloSymmetric, Flat };
+
+enum class ClebschSector {
+  LocalLocal = 0,
+  LowHigh = 1,
+  HighLow = 2,
+  HighHighCancel = 3
+};
+
+constexpr int kClebschSectorCount = 4;
+
+struct ShellFitStartSummary {
+  ClebschSeedModel seed_model = ClebschSeedModel::LocalTriad;
+  Real initial_loss = 0.0;
+  Real final_loss = 0.0;
+  Real fitted_slope = 0.0;
+  Real leakage_fraction = 0.0;
+  bool converged = false;
+  bool chosen = false;
+};
+
+struct ShellFitResult {
+  std::vector<Real> shell_amp1;
+  std::vector<Real> shell_amp2;
+  std::vector<Real> shell_power1;
+  std::vector<Real> shell_power2;
+  std::vector<Real> predicted_shell_energy;
+  std::vector<ShellFitStartSummary> fit_starts;
+  Real initial_loss = 0.0;
+  Real final_loss = 0.0;
+  Real leakage_fraction = 0.0;
+  Real fitted_slope = 0.0;
+  bool converged = false;
+  ClebschSeedModel chosen_seed_model = ClebschSeedModel::LocalTriad;
+};
+
+struct RealizedSpectrumSummary {
+  std::vector<Real> shell_energy;
+  Real loss = 0.0;
+  Real leakage_fraction = 0.0;
+  Real fitted_slope = 0.0;
+};
+
+struct ClebschRealization {
+  ScalarCoefficients phi1_coeffs;
+  ScalarCoefficients phi2_coeffs;
+  RealizedSpectrumSummary summary;
+  int trial_index = 0;
+  int trial_count = 1;
+};
+
+struct ClebschVelocityModes {
+  VectorCoefficients coeffs;
+  std::vector<Real> shell_energy;
+};
+
+struct ClebschSectorResponse {
+  std::array<std::vector<Real>, kClebschSectorCount> raw_shell_energy;
+  std::array<std::vector<Real>, kClebschSectorCount> fitted_shell_energy;
+  std::array<Real, kClebschSectorCount> raw_total = {0.0, 0.0, 0.0, 0.0};
+  std::array<Real, kClebschSectorCount> fitted_total = {0.0, 0.0, 0.0, 0.0};
+};
+
+struct ClebschQualityGate {
+  Real deterministic_slope_tolerance = 0.5;
+  Real realized_slope_tolerance = 0.5;
+  Real leakage_tolerance = 0.05;
+  bool deterministic_converged = false;
+  bool deterministic_slope_ok = false;
+  bool deterministic_leakage_ok = false;
+  bool deterministic_pass = false;
+  bool realized_slope_ok = false;
+  bool realized_leakage_ok = false;
+  bool realized_pass = false;
+  bool pass = false;
+  bool allow_poor_fit = false;
+  bool forced_continue = false;
 };
 
 struct VelocityStats {
@@ -172,6 +298,712 @@ int ShellFromIndexSqr(int nsqr) {
   return static_cast<int>(std::ceil(std::sqrt(static_cast<Real>(nsqr)) - 1.0e-12));
 }
 
+Real TargetShellEnergy(int shell, Real expo) {
+  return 1.0 / std::pow(static_cast<Real>(shell), expo);
+}
+
+using WallClock = std::chrono::steady_clock;
+using WallTimePoint = WallClock::time_point;
+
+Real ElapsedWallSeconds(const WallTimePoint &start_time) {
+  return std::chrono::duration<Real>(WallClock::now() - start_time).count();
+}
+
+Real GlobalMaxReal(Real local_value) {
+#if MPI_PARALLEL_ENABLED
+  Real global_value = 0.0;
+  MPI_Allreduce(&local_value, &global_value, 1, MPI_ATHENA_REAL, MPI_MAX,
+                MPI_COMM_WORLD);
+  return global_value;
+#else
+  return local_value;
+#endif
+}
+
+const char *VelocityMethodName(VelocityMethod method) {
+  return (method == VelocityMethod::Projection) ? "projection" : "stream_function";
+}
+
+const char *ClebschSeedModelName(ClebschSeedModel model) {
+  switch (model) {
+    case ClebschSeedModel::LocalTriad:
+      return "local_triad";
+    case ClebschSeedModel::CamilloSymmetric:
+      return "camillo_symmetric";
+    case ClebschSeedModel::Flat:
+      return "flat";
+  }
+  return "unknown";
+}
+
+const char *ClebschSectorName(ClebschSector sector) {
+  switch (sector) {
+    case ClebschSector::LocalLocal:
+      return "local_local";
+    case ClebschSector::LowHigh:
+      return "low_high";
+    case ClebschSector::HighLow:
+      return "high_low";
+    case ClebschSector::HighHighCancel:
+      return "high_high_cancel";
+  }
+  return "unknown";
+}
+
+Real UniformCellCenter(int index, int ncell, Real xmin, Real xmax) {
+  if (ncell <= 0) return 0.5 * (xmin + xmax);
+  return xmin + (static_cast<Real>(index) + 0.5) * (xmax - xmin) / static_cast<Real>(ncell);
+}
+
+std::vector<Real> ComputeScalarShellEnergy(const ModeCatalog &catalog,
+                                           const ScalarCoefficients &coeffs,
+                                           int nshell_max) {
+  std::vector<Real> shell_energy(nshell_max + 1, 0.0);
+  for (int n = 0; n < catalog.KeptModes(); ++n) {
+    const int shell = catalog.shell[n];
+    if (shell < 0 || shell > nshell_max) continue;
+    shell_energy[shell] += 0.5 * (coeffs.aka[n] * coeffs.aka[n] +
+                                  coeffs.akb[n] * coeffs.akb[n]);
+  }
+  return shell_energy;
+}
+
+std::vector<Real> ComputeVectorShellEnergy(const ModeCatalog &catalog,
+                                           const VectorCoefficients &coeffs,
+                                           int nshell_max) {
+  std::vector<Real> shell_energy(nshell_max + 1, 0.0);
+  for (int n = 0; n < catalog.KeptModes(); ++n) {
+    const int shell = catalog.shell[n];
+    if (shell < 0 || shell > nshell_max) continue;
+    shell_energy[shell] += 0.5 * (
+        coeffs.aka0[n] * coeffs.aka0[n] + coeffs.akb0[n] * coeffs.akb0[n] +
+        coeffs.aka1[n] * coeffs.aka1[n] + coeffs.akb1[n] * coeffs.akb1[n] +
+        coeffs.aka2[n] * coeffs.aka2[n] + coeffs.akb2[n] * coeffs.akb2[n]);
+  }
+  return shell_energy;
+}
+
+std::vector<Real> SampleScalarFieldXY(const TurbulenceConfig &cfg,
+                                      const ModeCatalog &catalog,
+                                      const ScalarCoefficients &coeffs,
+                                      int nx, int ny, Real x3_slice) {
+  std::vector<Real> field(static_cast<std::size_t>(nx) * static_cast<std::size_t>(ny), 0.0);
+  for (int j = 0; j < ny; ++j) {
+    const Real x2 = UniformCellCenter(j, ny, cfg.x2min, cfg.x2max);
+    for (int i = 0; i < nx; ++i) {
+      const Real x1 = UniformCellCenter(i, nx, cfg.x1min, cfg.x1max);
+      Real value = 0.0;
+      for (int n = 0; n < catalog.KeptModes(); ++n) {
+        const Real phase = catalog.kx[n] * x1 + catalog.ky[n] * x2 + catalog.kz[n] * x3_slice;
+        value += coeffs.aka[n] * std::cos(phase) - coeffs.akb[n] * std::sin(phase);
+      }
+      field[static_cast<std::size_t>(j) * static_cast<std::size_t>(nx) + i] = value;
+    }
+  }
+  return field;
+}
+
+std::string JsonEscape(const std::string &value) {
+  std::string escaped;
+  escaped.reserve(value.size() + 8);
+  for (char ch : value) {
+    switch (ch) {
+      case '\\':
+        escaped += "\\\\";
+        break;
+      case '"':
+        escaped += "\\\"";
+        break;
+      case '\n':
+        escaped += "\\n";
+        break;
+      case '\r':
+        escaped += "\\r";
+        break;
+      case '\t':
+        escaped += "\\t";
+        break;
+      default:
+        escaped += ch;
+        break;
+    }
+  }
+  return escaped;
+}
+
+void WriteIndent(std::ostream &os, int indent) {
+  os << std::string(indent, ' ');
+}
+
+template <typename T>
+void WriteJsonNumericArray(std::ostream &os, const std::vector<T> &values) {
+  os << "[";
+  for (std::size_t n = 0; n < values.size(); ++n) {
+    if (n > 0) os << ", ";
+    os << values[n];
+  }
+  os << "]";
+}
+
+void WriteJsonModeCatalog(std::ostream &os, const ModeCatalog &catalog, int indent) {
+  WriteIndent(os, indent);
+  os << "{\n";
+  WriteIndent(os, indent + 2);
+  os << "\"total_modes\": " << catalog.total_modes << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"kept_modes\": " << catalog.KeptModes() << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"nkx\": ";
+  WriteJsonNumericArray(os, catalog.nkx);
+  os << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"nky\": ";
+  WriteJsonNumericArray(os, catalog.nky);
+  os << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"nkz\": ";
+  WriteJsonNumericArray(os, catalog.nkz);
+  os << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"shell\": ";
+  WriteJsonNumericArray(os, catalog.shell);
+  os << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"prob\": ";
+  WriteJsonNumericArray(os, catalog.prob);
+  os << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"boost\": ";
+  WriteJsonNumericArray(os, catalog.boost);
+  os << "\n";
+  WriteIndent(os, indent);
+  os << "}";
+}
+
+void WriteJsonScalarCoefficients(std::ostream &os, const ScalarCoefficients &coeffs,
+                                 int indent) {
+  WriteIndent(os, indent);
+  os << "{\n";
+  WriteIndent(os, indent + 2);
+  os << "\"aka\": ";
+  WriteJsonNumericArray(os, coeffs.aka);
+  os << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"akb\": ";
+  WriteJsonNumericArray(os, coeffs.akb);
+  os << "\n";
+  WriteIndent(os, indent);
+  os << "}";
+}
+
+void WriteJsonVectorCoefficients(std::ostream &os, const VectorCoefficients &coeffs,
+                                 int indent) {
+  WriteIndent(os, indent);
+  os << "{\n";
+  WriteIndent(os, indent + 2);
+  os << "\"aka0\": ";
+  WriteJsonNumericArray(os, coeffs.aka0);
+  os << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"aka1\": ";
+  WriteJsonNumericArray(os, coeffs.aka1);
+  os << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"aka2\": ";
+  WriteJsonNumericArray(os, coeffs.aka2);
+  os << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"akb0\": ";
+  WriteJsonNumericArray(os, coeffs.akb0);
+  os << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"akb1\": ";
+  WriteJsonNumericArray(os, coeffs.akb1);
+  os << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"akb2\": ";
+  WriteJsonNumericArray(os, coeffs.akb2);
+  os << "\n";
+  WriteIndent(os, indent);
+  os << "}";
+}
+
+void WriteJsonField2D(std::ostream &os, const std::vector<Real> &field,
+                      int nx, int ny, Real x3_slice, int indent) {
+  WriteIndent(os, indent);
+  os << "{\n";
+  WriteIndent(os, indent + 2);
+  os << "\"shape\": [" << ny << ", " << nx << "],\n";
+  WriteIndent(os, indent + 2);
+  os << "\"x3_slice\": " << x3_slice << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"data\": ";
+  WriteJsonNumericArray(os, field);
+  os << "\n";
+  WriteIndent(os, indent);
+  os << "}";
+}
+
+void WriteJsonClebschFitStarts(std::ostream &os,
+                               const std::vector<ShellFitStartSummary> &starts,
+                               int indent) {
+  WriteIndent(os, indent);
+  os << "[\n";
+  for (std::size_t idx = 0; idx < starts.size(); ++idx) {
+    const auto &start = starts[idx];
+    WriteIndent(os, indent + 2);
+    os << "{\n";
+    WriteIndent(os, indent + 4);
+    os << "\"seed_model\": \"" << ClebschSeedModelName(start.seed_model) << "\",\n";
+    WriteIndent(os, indent + 4);
+    os << "\"initial_loss\": " << start.initial_loss << ",\n";
+    WriteIndent(os, indent + 4);
+    os << "\"final_loss\": " << start.final_loss << ",\n";
+    WriteIndent(os, indent + 4);
+    os << "\"fitted_slope\": " << start.fitted_slope << ",\n";
+    WriteIndent(os, indent + 4);
+    os << "\"estimated_out_of_band_leakage\": " << start.leakage_fraction << ",\n";
+    WriteIndent(os, indent + 4);
+    os << "\"converged\": " << (start.converged ? "true" : "false") << ",\n";
+    WriteIndent(os, indent + 4);
+    os << "\"chosen\": " << (start.chosen ? "true" : "false") << "\n";
+    WriteIndent(os, indent + 2);
+    os << "}";
+    if (idx + 1 < starts.size()) os << ",";
+    os << "\n";
+  }
+  WriteIndent(os, indent);
+  os << "]";
+}
+
+void WriteJsonClebschSectorBreakdown(std::ostream &os,
+                                     const std::array<std::vector<Real>, kClebschSectorCount> &shells,
+                                     const std::array<Real, kClebschSectorCount> &totals,
+                                     int indent) {
+  WriteIndent(os, indent);
+  os << "{\n";
+  for (int sector_idx = 0; sector_idx < kClebschSectorCount; ++sector_idx) {
+    const ClebschSector sector = static_cast<ClebschSector>(sector_idx);
+    WriteIndent(os, indent + 2);
+    os << "\"" << ClebschSectorName(sector) << "\": {\n";
+    WriteIndent(os, indent + 4);
+    os << "\"shell_energy\": ";
+    WriteJsonNumericArray(os, shells[sector_idx]);
+    os << ",\n";
+    WriteIndent(os, indent + 4);
+    os << "\"total\": " << totals[sector_idx] << "\n";
+    WriteIndent(os, indent + 2);
+    os << "}";
+    if (sector_idx + 1 < kClebschSectorCount) os << ",";
+    os << "\n";
+  }
+  WriteIndent(os, indent);
+  os << "}";
+}
+
+void WriteDiagnosticsMetadata(std::ostream &os, const TurbulenceConfig &cfg,
+                              const std::string &construction,
+                              const VelocityStats &stats,
+                              Real init_wall_seconds, int indent) {
+  WriteIndent(os, indent);
+  os << "{\n";
+  WriteIndent(os, indent + 2);
+  os << "\"basename\": \"" << JsonEscape(cfg.basename) << "\",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"velocity_method\": \"" << VelocityMethodName(cfg.method) << "\",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"construction\": \"" << construction << "\",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"active_velocity_components\": " << (cfg.active_v3 ? 3 : 2) << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"projection_true_2d\": " << (cfg.projection_true_2d ? "true" : "false") << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"stream_2d\": " << (cfg.stream_2d ? "true" : "false") << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"divfree_scalar_flux\": " << (cfg.divfree_scalar_flux ? "true" : "false") << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"init_wall_seconds\": " << init_wall_seconds << ",\n";
+  WriteIndent(os, indent + 2);
+  os << "\"mesh\": {\n";
+  WriteIndent(os, indent + 4);
+  os << "\"global_nx1\": " << cfg.global_nx1 << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"global_nx2\": " << cfg.global_nx2 << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"global_nx3\": " << cfg.global_nx3 << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"x1min\": " << cfg.x1min << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"x1max\": " << cfg.x1max << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"x2min\": " << cfg.x2min << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"x2max\": " << cfg.x2max << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"x3min\": " << cfg.x3min << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"x3max\": " << cfg.x3max << "\n";
+  WriteIndent(os, indent + 2);
+  os << "},\n";
+  WriteIndent(os, indent + 2);
+  os << "\"target\": {\n";
+  WriteIndent(os, indent + 4);
+  os << "\"v_rms\": " << cfg.v_rms << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"nlow\": " << cfg.nlow << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"nhigh\": " << cfg.nhigh << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"expo\": " << cfg.expo << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"sol_frac\": " << cfg.sol_frac << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"rseed\": " << cfg.rseed << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"k_crit\": " << cfg.k_crit << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"k_crit_mag\": " << cfg.k_crit_mag << ",\n";
+  WriteIndent(os, indent + 4);
+  os << "\"turb_stream_allow_poor_fit\": "
+     << (cfg.stream_allow_poor_fit ? "true" : "false") << "\n";
+  WriteIndent(os, indent + 2);
+  os << "},\n";
+  WriteIndent(os, indent + 2);
+  os << "\"normalization\": {\n";
+  WriteIndent(os, indent + 4);
+  os << "\"vmean\": [" << stats.vmean1 << ", " << stats.vmean2 << ", "
+     << stats.vmean3 << "],\n";
+  WriteIndent(os, indent + 4);
+  os << "\"scale\": " << stats.scale << "\n";
+  WriteIndent(os, indent + 2);
+  os << "}\n";
+  WriteIndent(os, indent);
+  os << "}";
+}
+
+std::string DiagnosticsPath(const TurbulenceConfig &cfg) {
+  return cfg.basename + ".turb_init_diag.json";
+}
+
+void WriteProjectionDiagnostics(const TurbulenceConfig &cfg,
+                                const ModeCatalog &catalog,
+                                const VectorCoefficients &coeffs,
+                                const VelocityStats &stats,
+                                Real init_wall_seconds) {
+  if (global_variable::my_rank != 0 || !cfg.dump_generator_diagnostics) return;
+
+  std::ofstream os(DiagnosticsPath(cfg));
+  os << std::setprecision(17);
+  const std::vector<Real> velocity_shell =
+      ComputeVectorShellEnergy(catalog, coeffs, cfg.nhigh);
+
+  os << "{\n";
+  WriteIndent(os, 2);
+  os << "\"metadata\": ";
+  WriteDiagnosticsMetadata(os, cfg,
+                           cfg.projection_true_2d ? "projection_2d" : "projection_3d",
+                           stats, init_wall_seconds, 2);
+  os << ",\n";
+  WriteIndent(os, 2);
+  os << "\"catalogs\": {\n";
+  WriteIndent(os, 4);
+  os << "\"velocity\": ";
+  WriteJsonModeCatalog(os, catalog, 4);
+  os << "\n";
+  WriteIndent(os, 2);
+  os << "},\n";
+  WriteIndent(os, 2);
+  os << "\"coefficients\": {\n";
+  WriteIndent(os, 4);
+  os << "\"velocity\": ";
+  WriteJsonVectorCoefficients(os, coeffs, 4);
+  os << "\n";
+  WriteIndent(os, 2);
+  os << "},\n";
+  WriteIndent(os, 2);
+  os << "\"spectra\": {\n";
+  WriteIndent(os, 4);
+  os << "\"velocity_shell_energy\": ";
+  WriteJsonNumericArray(os, velocity_shell);
+  os << "\n";
+  WriteIndent(os, 2);
+  os << "},\n";
+  WriteIndent(os, 2);
+  os << "\"slices\": {}\n";
+  os << "}\n";
+}
+
+void WriteStream2DDiagnostics(const TurbulenceConfig &cfg,
+                              const ModeCatalog &catalog,
+                              const ScalarCoefficients &psi_coeffs,
+                              const VectorCoefficients &vel_coeffs,
+                              const VelocityStats &stats,
+                              Real init_wall_seconds) {
+  if (global_variable::my_rank != 0 || !cfg.dump_generator_diagnostics) return;
+
+  const std::vector<Real> psi_field =
+      SampleScalarFieldXY(cfg, catalog, psi_coeffs, cfg.global_nx1, cfg.global_nx2,
+                          UniformCellCenter(0, 1, cfg.x3min, cfg.x3max));
+  const std::vector<Real> psi_shell =
+      ComputeScalarShellEnergy(catalog, psi_coeffs, cfg.nhigh);
+  const std::vector<Real> velocity_shell =
+      ComputeVectorShellEnergy(catalog, vel_coeffs, cfg.nhigh);
+
+  std::ofstream os(DiagnosticsPath(cfg));
+  os << std::setprecision(17);
+  os << "{\n";
+  WriteIndent(os, 2);
+  os << "\"metadata\": ";
+  WriteDiagnosticsMetadata(os, cfg, "stream_2d", stats, init_wall_seconds, 2);
+  os << ",\n";
+  WriteIndent(os, 2);
+  os << "\"catalogs\": {\n";
+  WriteIndent(os, 4);
+  os << "\"psi\": ";
+  WriteJsonModeCatalog(os, catalog, 4);
+  os << "\n";
+  WriteIndent(os, 2);
+  os << "},\n";
+  WriteIndent(os, 2);
+  os << "\"coefficients\": {\n";
+  WriteIndent(os, 4);
+  os << "\"psi\": ";
+  WriteJsonScalarCoefficients(os, psi_coeffs, 4);
+  os << ",\n";
+  WriteIndent(os, 4);
+  os << "\"velocity\": ";
+  WriteJsonVectorCoefficients(os, vel_coeffs, 4);
+  os << "\n";
+  WriteIndent(os, 2);
+  os << "},\n";
+  WriteIndent(os, 2);
+  os << "\"spectra\": {\n";
+  WriteIndent(os, 4);
+  os << "\"psi_shell_energy\": ";
+  WriteJsonNumericArray(os, psi_shell);
+  os << ",\n";
+  WriteIndent(os, 4);
+  os << "\"velocity_shell_energy\": ";
+  WriteJsonNumericArray(os, velocity_shell);
+  os << "\n";
+  WriteIndent(os, 2);
+  os << "},\n";
+  WriteIndent(os, 2);
+  os << "\"slices\": {\n";
+  WriteIndent(os, 4);
+  os << "\"psi_xy\": ";
+  WriteJsonField2D(os, psi_field, cfg.global_nx1, cfg.global_nx2,
+                   UniformCellCenter(0, 1, cfg.x3min, cfg.x3max), 4);
+  os << "\n";
+  WriteIndent(os, 2);
+  os << "}\n";
+  os << "}\n";
+}
+
+void WriteStream3DDiagnostics(const TurbulenceConfig &cfg,
+                              const ModeCatalog &catalog1,
+                              const ScalarCoefficients &phi1_coeffs,
+                              const ModeCatalog &catalog2,
+                              const ScalarCoefficients &phi2_coeffs,
+                              const ModeCatalog &velocity_catalog,
+                              const ShellFitResult &fit,
+                              const ClebschRealization &realization,
+                              const ClebschVelocityModes &velocity_modes,
+                              const ClebschSectorResponse &sector_response,
+                              const ClebschQualityGate &quality_gate,
+                              int phi_nhigh,
+                              const VelocityStats &stats,
+                              Real init_wall_seconds) {
+  if (global_variable::my_rank != 0 || !cfg.dump_generator_diagnostics) return;
+
+  const int slice_k = cfg.global_nx3 / 2;
+  const Real x3_slice = UniformCellCenter(slice_k, cfg.global_nx3, cfg.x3min, cfg.x3max);
+  const std::vector<Real> phi1_xy =
+      SampleScalarFieldXY(cfg, catalog1, phi1_coeffs, cfg.global_nx1, cfg.global_nx2, x3_slice);
+  const std::vector<Real> phi2_xy =
+      SampleScalarFieldXY(cfg, catalog2, phi2_coeffs, cfg.global_nx1, cfg.global_nx2, x3_slice);
+  const std::vector<Real> phi1_shell =
+      ComputeScalarShellEnergy(catalog1, phi1_coeffs, phi_nhigh);
+  const std::vector<Real> phi2_shell =
+      ComputeScalarShellEnergy(catalog2, phi2_coeffs, phi_nhigh);
+
+  std::ofstream os(DiagnosticsPath(cfg));
+  os << std::setprecision(17);
+  os << "{\n";
+  WriteIndent(os, 2);
+  os << "\"metadata\": ";
+  WriteDiagnosticsMetadata(os, cfg, "stream_3d", stats, init_wall_seconds, 2);
+  os << ",\n";
+  WriteIndent(os, 2);
+  os << "\"catalogs\": {\n";
+  WriteIndent(os, 4);
+  os << "\"phi1\": ";
+  WriteJsonModeCatalog(os, catalog1, 4);
+  os << ",\n";
+  WriteIndent(os, 4);
+  os << "\"phi2\": ";
+  WriteJsonModeCatalog(os, catalog2, 4);
+  os << ",\n";
+  WriteIndent(os, 4);
+  os << "\"velocity\": ";
+  WriteJsonModeCatalog(os, velocity_catalog, 4);
+  os << "\n";
+  WriteIndent(os, 2);
+  os << "},\n";
+  WriteIndent(os, 2);
+  os << "\"coefficients\": {\n";
+  WriteIndent(os, 4);
+  os << "\"phi1\": ";
+  WriteJsonScalarCoefficients(os, phi1_coeffs, 4);
+  os << ",\n";
+  WriteIndent(os, 4);
+  os << "\"phi2\": ";
+  WriteJsonScalarCoefficients(os, phi2_coeffs, 4);
+  os << "\n";
+  WriteIndent(os, 2);
+  os << "},\n";
+  WriteIndent(os, 2);
+  os << "\"spectra\": {\n";
+  WriteIndent(os, 4);
+  os << "\"phi_shell_max\": " << phi_nhigh << ",\n";
+  WriteIndent(os, 4);
+  os << "\"phi_shell_max_used\": " << phi_nhigh << ",\n";
+  WriteIndent(os, 4);
+  os << "\"phi1_shell_energy\": ";
+  WriteJsonNumericArray(os, phi1_shell);
+  os << ",\n";
+  WriteIndent(os, 4);
+  os << "\"phi2_shell_energy\": ";
+  WriteJsonNumericArray(os, phi2_shell);
+  os << ",\n";
+  WriteIndent(os, 4);
+  os << "\"shell_weights_phi1\": ";
+  WriteJsonNumericArray(os, fit.shell_amp1);
+  os << ",\n";
+  WriteIndent(os, 4);
+  os << "\"shell_weights_phi2\": ";
+  WriteJsonNumericArray(os, fit.shell_amp2);
+  os << ",\n";
+  WriteIndent(os, 4);
+  os << "\"predicted_velocity_shell_energy\": ";
+  WriteJsonNumericArray(os, fit.predicted_shell_energy);
+  os << ",\n";
+  WriteIndent(os, 4);
+  os << "\"realized_retained_velocity_shell_energy\": ";
+  WriteJsonNumericArray(os, realization.summary.shell_energy);
+  os << ",\n";
+  WriteIndent(os, 4);
+  os << "\"realized_retained_velocity_shell_energy_raw\": ";
+  WriteJsonNumericArray(os, velocity_modes.shell_energy);
+  os << "\n";
+  WriteIndent(os, 2);
+  os << "},\n";
+  WriteIndent(os, 2);
+  os << "\"fit\": {\n";
+  WriteIndent(os, 4);
+  os << "\"initial_loss\": " << fit.initial_loss << ",\n";
+  WriteIndent(os, 4);
+  os << "\"final_loss\": " << fit.final_loss << ",\n";
+  WriteIndent(os, 4);
+  os << "\"fitted_slope\": " << fit.fitted_slope << ",\n";
+  WriteIndent(os, 4);
+  os << "\"estimated_out_of_band_leakage\": " << fit.leakage_fraction << ",\n";
+  WriteIndent(os, 4);
+  os << "\"converged\": " << (fit.converged ? "true" : "false") << ",\n";
+  WriteIndent(os, 4);
+  os << "\"seed_model_chosen\": \"" << ClebschSeedModelName(fit.chosen_seed_model)
+     << "\",\n";
+  WriteIndent(os, 4);
+  os << "\"fit_starts\": ";
+  WriteJsonClebschFitStarts(os, fit.fit_starts, 4);
+  os << ",\n";
+  WriteIndent(os, 4);
+  os << "\"trial_count\": " << realization.trial_count << ",\n";
+  WriteIndent(os, 4);
+  os << "\"quality_gate_pass\": " << (quality_gate.pass ? "true" : "false") << ",\n";
+  WriteIndent(os, 4);
+  os << "\"quality_gate_forced_continue\": "
+     << (quality_gate.forced_continue ? "true" : "false") << ",\n";
+  WriteIndent(os, 4);
+  os << "\"chosen_trial\": " << realization.trial_index << ",\n";
+  WriteIndent(os, 4);
+  os << "\"realized_loss\": " << realization.summary.loss << ",\n";
+  WriteIndent(os, 4);
+  os << "\"realized_slope\": " << realization.summary.fitted_slope << ",\n";
+  WriteIndent(os, 4);
+  os << "\"realized_out_of_band_leakage\": " << realization.summary.leakage_fraction << "\n";
+  WriteIndent(os, 2);
+  os << "},\n";
+  WriteIndent(os, 2);
+  os << "\"sector_response\": {\n";
+  WriteIndent(os, 4);
+  os << "\"raw_tensor\": ";
+  WriteJsonClebschSectorBreakdown(os, sector_response.raw_shell_energy,
+                                  sector_response.raw_total, 4);
+  os << ",\n";
+  WriteIndent(os, 4);
+  os << "\"fitted_response\": ";
+  WriteJsonClebschSectorBreakdown(os, sector_response.fitted_shell_energy,
+                                  sector_response.fitted_total, 4);
+  os << "\n";
+  WriteIndent(os, 2);
+  os << "},\n";
+  WriteIndent(os, 2);
+  os << "\"quality_gate\": {\n";
+  WriteIndent(os, 4);
+  os << "\"deterministic_slope_tolerance\": "
+     << quality_gate.deterministic_slope_tolerance << ",\n";
+  WriteIndent(os, 4);
+  os << "\"realized_slope_tolerance\": "
+     << quality_gate.realized_slope_tolerance << ",\n";
+  WriteIndent(os, 4);
+  os << "\"leakage_tolerance\": " << quality_gate.leakage_tolerance << ",\n";
+  WriteIndent(os, 4);
+  os << "\"deterministic_converged\": "
+     << (quality_gate.deterministic_converged ? "true" : "false") << ",\n";
+  WriteIndent(os, 4);
+  os << "\"deterministic_slope_ok\": "
+     << (quality_gate.deterministic_slope_ok ? "true" : "false") << ",\n";
+  WriteIndent(os, 4);
+  os << "\"deterministic_leakage_ok\": "
+     << (quality_gate.deterministic_leakage_ok ? "true" : "false") << ",\n";
+  WriteIndent(os, 4);
+  os << "\"deterministic_pass\": "
+     << (quality_gate.deterministic_pass ? "true" : "false") << ",\n";
+  WriteIndent(os, 4);
+  os << "\"realized_slope_ok\": "
+     << (quality_gate.realized_slope_ok ? "true" : "false") << ",\n";
+  WriteIndent(os, 4);
+  os << "\"realized_leakage_ok\": "
+     << (quality_gate.realized_leakage_ok ? "true" : "false") << ",\n";
+  WriteIndent(os, 4);
+  os << "\"realized_pass\": "
+     << (quality_gate.realized_pass ? "true" : "false") << ",\n";
+  WriteIndent(os, 4);
+  os << "\"allow_poor_fit\": "
+     << (quality_gate.allow_poor_fit ? "true" : "false") << ",\n";
+  WriteIndent(os, 4);
+  os << "\"forced_continue\": "
+     << (quality_gate.forced_continue ? "true" : "false") << ",\n";
+  WriteIndent(os, 4);
+  os << "\"pass\": " << (quality_gate.pass ? "true" : "false") << "\n";
+  WriteIndent(os, 2);
+  os << "},\n";
+  WriteIndent(os, 2);
+  os << "\"slices\": {\n";
+  WriteIndent(os, 4);
+  os << "\"phi1_xy_mid\": ";
+  WriteJsonField2D(os, phi1_xy, cfg.global_nx1, cfg.global_nx2, x3_slice, 4);
+  os << ",\n";
+  WriteIndent(os, 4);
+  os << "\"phi2_xy_mid\": ";
+  WriteJsonField2D(os, phi2_xy, cfg.global_nx1, cfg.global_nx2, x3_slice, 4);
+  os << "\n";
+  WriteIndent(os, 2);
+  os << "}\n";
+  os << "}\n";
+}
+
 KOKKOS_INLINE_FUNCTION
 Real SmoothTopHat(Real x, Real x0, Real x1, Real w) {
   if (w <= 0.0) {
@@ -208,6 +1040,11 @@ TurbulenceConfig ReadTurbulenceConfig(ParameterInput *pin, Mesh *pm,
   cfg.rseed = GetTurbulenceSeed(pin);
   cfg.k_crit = pin->GetOrAddReal("problem", "turb_k_crit", 16.0);
   cfg.divfree_scalar_flux = pin->GetOrAddBoolean("problem", "divfree_scalar_flux", false);
+  cfg.dump_generator_diagnostics =
+      pin->GetOrAddBoolean("problem", "turb_dump_generator_diagnostics", false);
+  cfg.stream_allow_poor_fit =
+      pin->GetOrAddBoolean("problem", "turb_stream_allow_poor_fit", false);
+  cfg.basename = pin->GetString("job", "basename");
 
   cfg.nx1 = pm->mb_indcs.nx1;
   cfg.nx2 = pm->mb_indcs.nx2;
@@ -239,6 +1076,19 @@ TurbulenceConfig ReadTurbulenceConfig(ParameterInput *pin, Mesh *pm,
   cfg.lx = pm->mesh_size.x1max - pm->mesh_size.x1min;
   cfg.ly = pm->mesh_size.x2max - pm->mesh_size.x2min;
   cfg.lz = pm->mesh_size.x3max - pm->mesh_size.x3min;
+  cfg.x1min = pm->mesh_size.x1min;
+  cfg.x1max = pm->mesh_size.x1max;
+  cfg.x2min = pm->mesh_size.x2min;
+  cfg.x2max = pm->mesh_size.x2max;
+  cfg.x3min = pm->mesh_size.x3min;
+  cfg.x3max = pm->mesh_size.x3max;
+  cfg.global_nx1 = std::max(1, static_cast<int>(std::llround(cfg.lx / pm->mesh_size.dx1)));
+  cfg.global_nx2 = (cfg.mesh_multi_d && pm->mesh_size.dx2 > 0.0)
+                       ? std::max(1, static_cast<int>(std::llround(cfg.ly / pm->mesh_size.dx2)))
+                       : 1;
+  cfg.global_nx3 = (cfg.mesh_three_d && pm->mesh_size.dx3 > 0.0)
+                       ? std::max(1, static_cast<int>(std::llround(cfg.lz / pm->mesh_size.dx3)))
+                       : 1;
   cfg.dkx = 2.0*M_PI/cfg.lx;
   cfg.dky = (cfg.nx2 > 1) ? 2.0*M_PI/cfg.ly : 0.0;
   cfg.dkz = (cfg.nx3 > 1) ? 2.0*M_PI/cfg.lz : 0.0;
@@ -252,16 +1102,25 @@ Real ModeAcceptanceProbability(const TurbulenceConfig &cfg, Real kiso) {
   return (cfg.k_crit_mag * cfg.k_crit_mag) / (kiso * kiso);
 }
 
-ModeCatalog BuildModeCatalog(const TurbulenceConfig &cfg, RNG_State *rstate) {
-  ModeCatalog catalog;
-  const int nlow_sqr = cfg.nlow * cfg.nlow;
-  const int nhigh_sqr = cfg.nhigh * cfg.nhigh;
+bool IsHalfSpaceMode(int nkx, int nky, int nkz) {
+  if (nkx == 0) {
+    if (nky < 0) return false;
+    if (nky == 0 && nkz <= 0) return false;
+  }
+  return !(nkx == 0 && nky == 0 && nkz == 0);
+}
 
-  for (int nkx = 0; nkx <= cfg.nhigh; ++nkx) {
-    for (int nky = (cfg.mesh_multi_d ? -cfg.nhigh : 0);
-         nky <= (cfg.mesh_multi_d ? cfg.nhigh : 0); ++nky) {
-      for (int nkz = (cfg.mesh_three_d ? -cfg.nhigh : 0);
-           nkz <= (cfg.mesh_three_d ? cfg.nhigh : 0); ++nkz) {
+ModeCatalog BuildModeCatalog(const TurbulenceConfig &cfg, int nlow, int nhigh,
+                             RNG_State *rstate) {
+  ModeCatalog catalog;
+  const int nlow_sqr = nlow * nlow;
+  const int nhigh_sqr = nhigh * nhigh;
+
+  for (int nkx = 0; nkx <= nhigh; ++nkx) {
+    for (int nky = (cfg.mesh_multi_d ? -nhigh : 0);
+         nky <= (cfg.mesh_multi_d ? nhigh : 0); ++nky) {
+      for (int nkz = (cfg.mesh_three_d ? -nhigh : 0);
+           nkz <= (cfg.mesh_three_d ? nhigh : 0); ++nkz) {
         if (nkx == 0 && nky == 0 && nkz == 0) continue;
 
         // Keep half of the kx=0 plane to avoid double-counting the implicit conjugates.
@@ -297,6 +1156,10 @@ ModeCatalog BuildModeCatalog(const TurbulenceConfig &cfg, RNG_State *rstate) {
   }
 
   return catalog;
+}
+
+ModeCatalog BuildModeCatalog(const TurbulenceConfig &cfg, RNG_State *rstate) {
+  return BuildModeCatalog(cfg, cfg.nlow, cfg.nhigh, rstate);
 }
 
 Real ProjectionAmplitudeNorm(const TurbulenceConfig &cfg, Real kiso) {
@@ -378,20 +1241,17 @@ ScalarCoefficients GenerateStream2DPsiCoefficients(const TurbulenceConfig &cfg,
   return coeffs;
 }
 
-ScalarCoefficients GenerateStream3DPhiCoefficients(const TurbulenceConfig &cfg,
-                                                   const ModeCatalog &catalog,
-                                                   RNG_State *rstate) {
+ScalarCoefficients GenerateShellWeightedScalarCoefficients(const ModeCatalog &catalog,
+                                                           const std::vector<Real> &shell_amp,
+                                                           RNG_State *rstate) {
   ScalarCoefficients coeffs;
   const int nmodes = catalog.KeptModes();
   coeffs.aka.resize(nmodes);
   coeffs.akb.resize(nmodes);
-  const Real beta = 0.25 * (cfg.expo + 8.0);
 
   for (int n = 0; n < nmodes; ++n) {
-    const Real kiso = catalog.kiso[n];
-    const Real norm = (kiso > kTiny)
-                          ? catalog.boost[n] / std::pow(kiso, beta)
-                          : 0.0;
+    const int shell = catalog.shell[n];
+    const Real norm = shell_amp[shell] * catalog.boost[n];
     coeffs.aka[n] = norm * RanGaussianSt(rstate);
     coeffs.akb[n] = norm * RanGaussianSt(rstate);
   }
@@ -664,7 +1524,7 @@ VelocityStats NormalizeVelocityField(MeshBlockPack *pmbp, const TurbulenceConfig
 #if MPI_PARALLEL_ENABLED
   Real local_mean[4] = {sum_mass, sum_mom1, sum_mom2, sum_mom3};
   Real global_mean[4];
-  MPI_Allreduce(local_mean, global_mean, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(local_mean, global_mean, 4, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
   sum_mass = global_mean[0];
   sum_mom1 = global_mean[1];
   sum_mom2 = global_mean[2];
@@ -714,7 +1574,7 @@ VelocityStats NormalizeVelocityField(MeshBlockPack *pmbp, const TurbulenceConfig
 #if MPI_PARALLEL_ENABLED
   Real local_rms[4] = {sum_v1sqr, sum_v2sqr, sum_v3sqr, sum_vol};
   Real global_rms[4];
-  MPI_Allreduce(local_rms, global_rms, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(local_rms, global_rms, 4, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
   sum_v1sqr = global_rms[0];
   sum_v2sqr = global_rms[1];
   sum_v3sqr = global_rms[2];
@@ -936,343 +1796,853 @@ void PopulateScalarFaceVelocitiesFromVectorPotential(
   }
 }
 
-void PopulateScalarFaceVelocitiesFromClebsch(
-    MeshBlockPack *pmbp, const TurbulenceConfig &cfg,
-    const ModeCatalog &catalog1, const ScalarCoefficients &phi1_coeffs,
-    const ModeCatalog &catalog2, const ScalarCoefficients &phi2_coeffs,
-    const VelocityStats &stats) {
-  auto &indcs = pmbp->pmesh->mb_indcs;
-  const int is = indcs.is;
-  const int ie = indcs.ie;
-  const int js = indcs.js;
-  const int je = indcs.je;
-  const int ks = indcs.ks;
-  const int ke = indcs.ke;
-  const int nx1 = indcs.nx1;
-  const int nx2 = indcs.nx2;
-  const int nx3 = indcs.nx3;
-  const int ng = indcs.ng;
-  const int nmb = pmbp->nmb_thispack;
-  const bool multi_d = cfg.mesh_multi_d;
-  const bool three_d = cfg.mesh_three_d;
-
-  const int nmodes1 = catalog1.KeptModes();
-  const int nmodes2 = catalog2.KeptModes();
-  if (nmodes1 == 0 || nmodes2 == 0) return;
-
-  auto &hydro = *pmbp->phydro;
-  const int ncells1 = nx1 + 2*ng;
-  const int ncells2 = multi_d ? nx2 + 2*ng : 1;
-  const int ncells3 = three_d ? nx3 + 2*ng : 1;
-  if (!hydro.scalar_vface) {
-    hydro.scalar_vface = std::make_unique<DvceFaceFld4D<Real>>(
-        "scalar_vface", nmb, ncells3, ncells2, ncells1);
+std::vector<int> CountModesPerShell(const ModeCatalog &catalog, int nhigh) {
+  std::vector<int> counts(nhigh + 1, 0);
+  for (int shell : catalog.shell) {
+    if (shell >= 1 && shell <= nhigh) ++counts[shell];
   }
-  hydro.use_scalar_face_velocity = true;
+  return counts;
+}
 
-  DvceArray1D<Real> d_kx1("scalar_face_stream_kx1", nmodes1);
-  DvceArray1D<Real> d_ky1("scalar_face_stream_ky1", nmodes1);
-  DvceArray1D<Real> d_kz1("scalar_face_stream_kz1", nmodes1);
-  DvceArray1D<Real> d_a1("scalar_face_stream_a1", nmodes1);
-  DvceArray1D<Real> d_b1("scalar_face_stream_b1", nmodes1);
-  DvceArray1D<Real> d_kx2("scalar_face_stream_kx2", nmodes2);
-  DvceArray1D<Real> d_ky2("scalar_face_stream_ky2", nmodes2);
-  DvceArray1D<Real> d_kz2("scalar_face_stream_kz2", nmodes2);
-  DvceArray1D<Real> d_a2("scalar_face_stream_a2", nmodes2);
-  DvceArray1D<Real> d_b2("scalar_face_stream_b2", nmodes2);
-
-  auto h_kx1 = Kokkos::create_mirror_view(d_kx1);
-  auto h_ky1 = Kokkos::create_mirror_view(d_ky1);
-  auto h_kz1 = Kokkos::create_mirror_view(d_kz1);
-  auto h_a1 = Kokkos::create_mirror_view(d_a1);
-  auto h_b1 = Kokkos::create_mirror_view(d_b1);
-  auto h_kx2 = Kokkos::create_mirror_view(d_kx2);
-  auto h_ky2 = Kokkos::create_mirror_view(d_ky2);
-  auto h_kz2 = Kokkos::create_mirror_view(d_kz2);
-  auto h_a2 = Kokkos::create_mirror_view(d_a2);
-  auto h_b2 = Kokkos::create_mirror_view(d_b2);
-
-  for (int n = 0; n < nmodes1; ++n) {
-    h_kx1(n) = catalog1.kx[n];
-    h_ky1(n) = catalog1.ky[n];
-    h_kz1(n) = catalog1.kz[n];
-    h_a1(n) = phi1_coeffs.aka[n];
-    h_b1(n) = phi1_coeffs.akb[n];
-  }
-  for (int n = 0; n < nmodes2; ++n) {
-    h_kx2(n) = catalog2.kx[n];
-    h_ky2(n) = catalog2.ky[n];
-    h_kz2(n) = catalog2.kz[n];
-    h_a2(n) = phi2_coeffs.aka[n];
-    h_b2(n) = phi2_coeffs.akb[n];
-  }
-
-  Kokkos::deep_copy(d_kx1, h_kx1);
-  Kokkos::deep_copy(d_ky1, h_ky1);
-  Kokkos::deep_copy(d_kz1, h_kz1);
-  Kokkos::deep_copy(d_a1, h_a1);
-  Kokkos::deep_copy(d_b1, h_b1);
-  Kokkos::deep_copy(d_kx2, h_kx2);
-  Kokkos::deep_copy(d_ky2, h_ky2);
-  Kokkos::deep_copy(d_kz2, h_kz2);
-  Kokkos::deep_copy(d_a2, h_a2);
-  Kokkos::deep_copy(d_b2, h_b2);
-
-  auto &size = pmbp->pmb->mb_size;
-  auto sface_x1f = hydro.scalar_vface->x1f;
-  auto sface_x2f = hydro.scalar_vface->x2f;
-  auto sface_x3f = hydro.scalar_vface->x3f;
-
-  int il = is - ng;
-  int iu = ie + ng + 1;
-  int jl = multi_d ? js - ng : js;
-  int ju = multi_d ? je + ng : je;
-  int kl = three_d ? ks - ng : ks;
-  int ku = three_d ? ke + ng : ke;
-  par_for("scalar_face_stream_x1", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    Real &x1min = size.d_view(m).x1min;
-    Real &x1max = size.d_view(m).x1max;
-    const Real x1v = LeftEdgeX(i-is, nx1, x1min, x1max);
-
-    Real x2v = 0.0;
-    if (multi_d) {
-      Real &x2min = size.d_view(m).x2min;
-      Real &x2max = size.d_view(m).x2max;
-      x2v = CellCenterX(j-js, nx2, x2min, x2max);
+void EnsureShellCoverage(const std::vector<int> &counts, int shell_lo, int shell_hi,
+                         const std::string &label) {
+  for (int shell = shell_lo; shell <= shell_hi; ++shell) {
+    if (counts[shell] == 0) {
+      FatalProblemSetup("Stream-function mode has no accepted modes in shell "
+                        + std::to_string(shell) + " for " + label + ".");
     }
-
-    Real x3v = 0.0;
-    if (three_d) {
-      Real &x3min = size.d_view(m).x3min;
-      Real &x3max = size.d_view(m).x3max;
-      x3v = CellCenterX(k-ks, nx3, x3min, x3max);
-    }
-
-    Real g1x = 0.0, g1y = 0.0, g1z = 0.0;
-    Real g2x = 0.0, g2y = 0.0, g2z = 0.0;
-    for (int n = 0; n < nmodes1; ++n) {
-      const Real phase = d_kx1(n)*x1v + d_ky1(n)*x2v + d_kz1(n)*x3v;
-      const Real basis = d_a1(n)*sin(phase) + d_b1(n)*cos(phase);
-      g1x -= d_kx1(n) * basis;
-      g1y -= d_ky1(n) * basis;
-      g1z -= d_kz1(n) * basis;
-    }
-    for (int n = 0; n < nmodes2; ++n) {
-      const Real phase = d_kx2(n)*x1v + d_ky2(n)*x2v + d_kz2(n)*x3v;
-      const Real basis = d_a2(n)*sin(phase) + d_b2(n)*cos(phase);
-      g2x -= d_kx2(n) * basis;
-      g2y -= d_ky2(n) * basis;
-      g2z -= d_kz2(n) * basis;
-    }
-
-    const Real vx = g1y*g2z - g1z*g2y;
-    sface_x1f(m,k,j,i) = (vx - stats.vmean1) * stats.scale;
-  });
-
-  if (multi_d) {
-    il = is - ng;
-    iu = ie + ng;
-    jl = js - ng;
-    ju = je + ng + 1;
-    kl = three_d ? ks - ng : ks;
-    ku = three_d ? ke + ng : ke;
-    par_for("scalar_face_stream_x2", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      Real &x1min = size.d_view(m).x1min;
-      Real &x1max = size.d_view(m).x1max;
-      const Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
-
-      Real &x2min = size.d_view(m).x2min;
-      Real &x2max = size.d_view(m).x2max;
-      const Real x2v = LeftEdgeX(j-js, nx2, x2min, x2max);
-
-      Real x3v = 0.0;
-      if (three_d) {
-        Real &x3min = size.d_view(m).x3min;
-        Real &x3max = size.d_view(m).x3max;
-        x3v = CellCenterX(k-ks, nx3, x3min, x3max);
-      }
-
-      Real g1x = 0.0, g1y = 0.0, g1z = 0.0;
-      Real g2x = 0.0, g2y = 0.0, g2z = 0.0;
-      for (int n = 0; n < nmodes1; ++n) {
-        const Real phase = d_kx1(n)*x1v + d_ky1(n)*x2v + d_kz1(n)*x3v;
-        const Real basis = d_a1(n)*sin(phase) + d_b1(n)*cos(phase);
-        g1x -= d_kx1(n) * basis;
-        g1y -= d_ky1(n) * basis;
-        g1z -= d_kz1(n) * basis;
-      }
-      for (int n = 0; n < nmodes2; ++n) {
-        const Real phase = d_kx2(n)*x1v + d_ky2(n)*x2v + d_kz2(n)*x3v;
-        const Real basis = d_a2(n)*sin(phase) + d_b2(n)*cos(phase);
-        g2x -= d_kx2(n) * basis;
-        g2y -= d_ky2(n) * basis;
-        g2z -= d_kz2(n) * basis;
-      }
-
-      const Real vy = g1z*g2x - g1x*g2z;
-      sface_x2f(m,k,j,i) = (vy - stats.vmean2) * stats.scale;
-    });
-  }
-
-  if (three_d) {
-    il = is - ng;
-    iu = ie + ng;
-    jl = js - ng;
-    ju = je + ng;
-    kl = ks - ng;
-    ku = ke + ng + 1;
-    par_for("scalar_face_stream_x3", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
-    KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      Real &x1min = size.d_view(m).x1min;
-      Real &x1max = size.d_view(m).x1max;
-      const Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
-
-      Real &x2min = size.d_view(m).x2min;
-      Real &x2max = size.d_view(m).x2max;
-      const Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
-
-      Real &x3min = size.d_view(m).x3min;
-      Real &x3max = size.d_view(m).x3max;
-      const Real x3v = LeftEdgeX(k-ks, nx3, x3min, x3max);
-
-      Real g1x = 0.0, g1y = 0.0, g1z = 0.0;
-      Real g2x = 0.0, g2y = 0.0, g2z = 0.0;
-      for (int n = 0; n < nmodes1; ++n) {
-        const Real phase = d_kx1(n)*x1v + d_ky1(n)*x2v + d_kz1(n)*x3v;
-        const Real basis = d_a1(n)*sin(phase) + d_b1(n)*cos(phase);
-        g1x -= d_kx1(n) * basis;
-        g1y -= d_ky1(n) * basis;
-        g1z -= d_kz1(n) * basis;
-      }
-      for (int n = 0; n < nmodes2; ++n) {
-        const Real phase = d_kx2(n)*x1v + d_ky2(n)*x2v + d_kz2(n)*x3v;
-        const Real basis = d_a2(n)*sin(phase) + d_b2(n)*cos(phase);
-        g2x -= d_kx2(n) * basis;
-        g2y -= d_ky2(n) * basis;
-        g2z -= d_kz2(n) * basis;
-      }
-
-      const Real vz = g1x*g2y - g1y*g2x;
-      sface_x3f(m,k,j,i) = (vz - stats.vmean3) * stats.scale;
-    });
   }
 }
 
-void SynthesizeClebschVelocity(MeshBlockPack *pmbp, const TurbulenceConfig &cfg,
-                               Real den, const ModeCatalog &catalog1,
-                               const ScalarCoefficients &phi1_coeffs,
-                               const ModeCatalog &catalog2,
-                               const ScalarCoefficients &phi2_coeffs) {
-  Mesh *pm = pmbp->pmesh;
-  auto &indcs = pm->mb_indcs;
-  const int is = indcs.is;
-  const int ie = indcs.ie;
-  const int js = indcs.js;
-  const int je = indcs.je;
-  const int ks = indcs.ks;
-  const int ke = indcs.ke;
-  const int nx1 = indcs.nx1;
-  const int nx2 = indcs.nx2;
-  const int nx3 = indcs.nx3;
-  const int nmb = pmbp->nmb_thispack;
+std::vector<SignedMode> BuildSignedModes(const ModeCatalog &catalog) {
+  std::vector<SignedMode> signed_modes;
+  signed_modes.reserve(2 * catalog.KeptModes());
 
-  const int nmodes1 = catalog1.KeptModes();
-  const int nmodes2 = catalog2.KeptModes();
-  if (nmodes1 == 0 || nmodes2 == 0) return;
-
-  DvceArray1D<Real> d_kx1("scalar_mix_stream_kx1", nmodes1);
-  DvceArray1D<Real> d_ky1("scalar_mix_stream_ky1", nmodes1);
-  DvceArray1D<Real> d_kz1("scalar_mix_stream_kz1", nmodes1);
-  DvceArray1D<Real> d_a1("scalar_mix_stream_a1", nmodes1);
-  DvceArray1D<Real> d_b1("scalar_mix_stream_b1", nmodes1);
-  DvceArray1D<Real> d_kx2("scalar_mix_stream_kx2", nmodes2);
-  DvceArray1D<Real> d_ky2("scalar_mix_stream_ky2", nmodes2);
-  DvceArray1D<Real> d_kz2("scalar_mix_stream_kz2", nmodes2);
-  DvceArray1D<Real> d_a2("scalar_mix_stream_a2", nmodes2);
-  DvceArray1D<Real> d_b2("scalar_mix_stream_b2", nmodes2);
-
-  auto h_kx1 = Kokkos::create_mirror_view(d_kx1);
-  auto h_ky1 = Kokkos::create_mirror_view(d_ky1);
-  auto h_kz1 = Kokkos::create_mirror_view(d_kz1);
-  auto h_a1 = Kokkos::create_mirror_view(d_a1);
-  auto h_b1 = Kokkos::create_mirror_view(d_b1);
-  auto h_kx2 = Kokkos::create_mirror_view(d_kx2);
-  auto h_ky2 = Kokkos::create_mirror_view(d_ky2);
-  auto h_kz2 = Kokkos::create_mirror_view(d_kz2);
-  auto h_a2 = Kokkos::create_mirror_view(d_a2);
-  auto h_b2 = Kokkos::create_mirror_view(d_b2);
-
-  for (int n = 0; n < nmodes1; ++n) {
-    h_kx1(n) = catalog1.kx[n];
-    h_ky1(n) = catalog1.ky[n];
-    h_kz1(n) = catalog1.kz[n];
-    h_a1(n) = phi1_coeffs.aka[n];
-    h_b1(n) = phi1_coeffs.akb[n];
-  }
-  for (int n = 0; n < nmodes2; ++n) {
-    h_kx2(n) = catalog2.kx[n];
-    h_ky2(n) = catalog2.ky[n];
-    h_kz2(n) = catalog2.kz[n];
-    h_a2(n) = phi2_coeffs.aka[n];
-    h_b2(n) = phi2_coeffs.akb[n];
+  for (int n = 0; n < catalog.KeptModes(); ++n) {
+    const Real variance_weight = 0.5 * catalog.boost[n] * catalog.boost[n];
+    signed_modes.push_back({catalog.nkx[n], catalog.nky[n], catalog.nkz[n], catalog.shell[n],
+                            catalog.kx[n], catalog.ky[n], catalog.kz[n], variance_weight});
+    signed_modes.push_back({-catalog.nkx[n], -catalog.nky[n], -catalog.nkz[n],
+                            catalog.shell[n], -catalog.kx[n], -catalog.ky[n],
+                            -catalog.kz[n], variance_weight});
   }
 
-  Kokkos::deep_copy(d_kx1, h_kx1);
-  Kokkos::deep_copy(d_ky1, h_ky1);
-  Kokkos::deep_copy(d_kz1, h_kz1);
-  Kokkos::deep_copy(d_a1, h_a1);
-  Kokkos::deep_copy(d_b1, h_b1);
-  Kokkos::deep_copy(d_kx2, h_kx2);
-  Kokkos::deep_copy(d_ky2, h_ky2);
-  Kokkos::deep_copy(d_kz2, h_kz2);
-  Kokkos::deep_copy(d_a2, h_a2);
-  Kokkos::deep_copy(d_b2, h_b2);
+  return signed_modes;
+}
 
-  auto &size = pmbp->pmb->mb_size;
-  auto &u0 = pmbp->phydro->u0;
+std::vector<SignedScalarCoeffMode> BuildSignedScalarCoeffModes(
+    const ModeCatalog &catalog, const ScalarCoefficients &coeffs) {
+  std::vector<SignedScalarCoeffMode> signed_modes;
+  signed_modes.reserve(2 * catalog.KeptModes());
 
-  par_for("scalar_mix_stream3d_init", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
-  KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    Real &x1min = size.d_view(m).x1min;
-    Real &x1max = size.d_view(m).x1max;
-    const Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+  for (int n = 0; n < catalog.KeptModes(); ++n) {
+    const std::complex<Real> ck(0.5 * coeffs.aka[n], 0.5 * coeffs.akb[n]);
+    signed_modes.push_back({catalog.nkx[n], catalog.nky[n], catalog.nkz[n], catalog.shell[n],
+                            catalog.kx[n], catalog.ky[n], catalog.kz[n], ck});
+    signed_modes.push_back({-catalog.nkx[n], -catalog.nky[n], -catalog.nkz[n],
+                            catalog.shell[n], -catalog.kx[n], -catalog.ky[n],
+                            -catalog.kz[n], std::conj(ck)});
+  }
 
-    Real &x2min = size.d_view(m).x2min;
-    Real &x2max = size.d_view(m).x2max;
-    const Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+  return signed_modes;
+}
 
-    Real &x3min = size.d_view(m).x3min;
-    Real &x3max = size.d_view(m).x3max;
-    const Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+Real FitLogSlope(const std::vector<Real> &spectrum, int nlow, int nhigh);
+Real LeakageFraction(const std::vector<Real> &spectrum, const TurbulenceConfig &cfg,
+                     int nkout);
 
-    Real g1x = 0.0, g1y = 0.0, g1z = 0.0;
-    Real g2x = 0.0, g2y = 0.0, g2z = 0.0;
+Real SpectrumShapeLoss(const std::vector<Real> &spectrum, const TurbulenceConfig &cfg,
+                       int nkout) {
+  const Real leak_ref_low = TargetShellEnergy(std::max(cfg.nlow, 1), cfg.expo);
+  const Real leak_ref_high = TargetShellEnergy(cfg.nhigh, cfg.expo);
+  const Real smooth_weight = 1.0e-2;
+  Real loss = 0.0;
 
-    for (int n = 0; n < nmodes1; ++n) {
-      const Real phase = d_kx1(n)*x1v + d_ky1(n)*x2v + d_kz1(n)*x3v;
-      const Real basis = d_a1(n)*sin(phase) + d_b1(n)*cos(phase);
-      g1x -= d_kx1(n) * basis;
-      g1y -= d_ky1(n) * basis;
-      g1z -= d_kz1(n) * basis;
+  for (int shell = 1; shell <= nkout; ++shell) {
+    const Real pred = std::max(spectrum[shell], kTiny);
+    if (shell >= cfg.nlow && shell <= cfg.nhigh) {
+      const Real target = TargetShellEnergy(shell, cfg.expo);
+      const Real resid = std::log(pred) - std::log(target);
+      loss += resid * resid;
+    } else {
+      const bool low_leak = (shell < cfg.nlow);
+      const Real leak_weight = low_leak ? 4.0 : 6.0;
+      const Real leak_ref = low_leak ? leak_ref_low : leak_ref_high;
+      const Real scaled = pred / leak_ref;
+      loss += leak_weight * scaled * scaled;
     }
-    for (int n = 0; n < nmodes2; ++n) {
-      const Real phase = d_kx2(n)*x1v + d_ky2(n)*x2v + d_kz2(n)*x3v;
-      const Real basis = d_a2(n)*sin(phase) + d_b2(n)*cos(phase);
-      g2x -= d_kx2(n) * basis;
-      g2y -= d_ky2(n) * basis;
-      g2z -= d_kz2(n) * basis;
+  }
+
+  for (int shell = 2; shell <= nkout; ++shell) {
+    const Real prev = std::max(spectrum[shell - 1], kTiny);
+    const Real curr = std::max(spectrum[shell], kTiny);
+    const Real diff = std::log(curr) - std::log(prev);
+    loss += smooth_weight * diff * diff;
+  }
+
+  return loss;
+}
+
+RealizedSpectrumSummary SummarizeRealizedSpectrum(std::vector<Real> shell_energy,
+                                                 const TurbulenceConfig &cfg,
+                                                 int nkout) {
+  RealizedSpectrumSummary summary;
+  summary.shell_energy = std::move(shell_energy);
+
+  Real pred_mean = 0.0;
+  Real target_mean = 0.0;
+  int nband = 0;
+  for (int shell = cfg.nlow; shell <= cfg.nhigh; ++shell) {
+    pred_mean += summary.shell_energy[shell];
+    target_mean += TargetShellEnergy(shell, cfg.expo);
+    ++nband;
+  }
+  if (pred_mean > kTiny && nband > 0) {
+    const Real scale = target_mean / pred_mean;
+    for (int shell = 1; shell <= nkout; ++shell) summary.shell_energy[shell] *= scale;
+  }
+
+  summary.loss = SpectrumShapeLoss(summary.shell_energy, cfg, nkout);
+  summary.leakage_fraction = LeakageFraction(summary.shell_energy, cfg, nkout);
+  summary.fitted_slope = FitLogSlope(summary.shell_energy, cfg.nlow, cfg.nhigh);
+  return summary;
+}
+
+std::uint64_t EncodeSignedModeKey(int nkx, int nky, int nkz, int offset, int span) {
+  const std::uint64_t x = static_cast<std::uint64_t>(nkx + offset);
+  const std::uint64_t y = static_cast<std::uint64_t>(nky + offset);
+  const std::uint64_t z = static_cast<std::uint64_t>(nkz + offset);
+  const std::uint64_t stride = static_cast<std::uint64_t>(span);
+  return (x * stride + y) * stride + z;
+}
+
+bool SignedModeInBounds(int nkx, int nky, int nkz, int max_n) {
+  return (nkx >= -max_n && nkx <= max_n &&
+          nky >= -max_n && nky <= max_n &&
+          nkz >= -max_n && nkz <= max_n);
+}
+
+std::unordered_map<std::uint64_t, int> BuildSignedModeLookup(
+    const std::vector<SignedMode> &signed_modes, int max_n) {
+  const int offset = max_n;
+  const int span = 2 * offset + 1;
+  std::unordered_map<std::uint64_t, int> lookup;
+  lookup.reserve(2 * signed_modes.size());
+  for (int n = 0; n < static_cast<int>(signed_modes.size()); ++n) {
+    lookup.emplace(EncodeSignedModeKey(signed_modes[n].nkx, signed_modes[n].nky,
+                                       signed_modes[n].nkz, offset, span), n);
+  }
+  return lookup;
+}
+
+std::unordered_map<std::uint64_t, int> BuildSignedModeLookup(
+    const std::vector<SignedScalarCoeffMode> &signed_modes, int max_n) {
+  const int offset = max_n;
+  const int span = 2 * offset + 1;
+  std::unordered_map<std::uint64_t, int> lookup;
+  lookup.reserve(2 * signed_modes.size());
+  for (int n = 0; n < static_cast<int>(signed_modes.size()); ++n) {
+    lookup.emplace(EncodeSignedModeKey(signed_modes[n].nkx, signed_modes[n].nky,
+                                       signed_modes[n].nkz, offset, span), n);
+  }
+  return lookup;
+}
+
+ClebschVelocityModes BuildClebschVelocityModes(
+    const ModeCatalog &velocity_catalog, const ModeCatalog &catalog1,
+    const ScalarCoefficients &phi1_coeffs, const ModeCatalog &catalog2,
+    const ScalarCoefficients &phi2_coeffs, int npot_shells, int nkout) {
+  ClebschVelocityModes result;
+  const int nmodes = velocity_catalog.KeptModes();
+  result.coeffs.aka0.assign(nmodes, 0.0);
+  result.coeffs.aka1.assign(nmodes, 0.0);
+  result.coeffs.aka2.assign(nmodes, 0.0);
+  result.coeffs.akb0.assign(nmodes, 0.0);
+  result.coeffs.akb1.assign(nmodes, 0.0);
+  result.coeffs.akb2.assign(nmodes, 0.0);
+  result.shell_energy.assign(nkout + 1, 0.0);
+
+  const auto signed1 = BuildSignedScalarCoeffModes(catalog1, phi1_coeffs);
+  const auto signed2 = BuildSignedScalarCoeffModes(catalog2, phi2_coeffs);
+  const auto lookup2 = BuildSignedModeLookup(signed2, npot_shells);
+  const int offset = npot_shells;
+  const int span = 2 * offset + 1;
+
+  for (int n = 0; n < nmodes; ++n) {
+    const int rx = velocity_catalog.nkx[n];
+    const int ry = velocity_catalog.nky[n];
+    const int rz = velocity_catalog.nkz[n];
+    std::array<std::complex<Real>, 3> accum = {
+        std::complex<Real>(0.0, 0.0), std::complex<Real>(0.0, 0.0),
+        std::complex<Real>(0.0, 0.0)};
+
+    for (const auto &mode_p : signed1) {
+      const int qx = rx - mode_p.nkx;
+      const int qy = ry - mode_p.nky;
+      const int qz = rz - mode_p.nkz;
+      if (!SignedModeInBounds(qx, qy, qz, npot_shells)) continue;
+
+      const auto it = lookup2.find(EncodeSignedModeKey(qx, qy, qz, offset, span));
+      if (it == lookup2.end()) continue;
+      const auto &mode_q = signed2[it->second];
+
+      const Real cx = mode_p.ky*mode_q.kz - mode_p.kz*mode_q.ky;
+      const Real cy = mode_p.kz*mode_q.kx - mode_p.kx*mode_q.kz;
+      const Real cz = mode_p.kx*mode_q.ky - mode_p.ky*mode_q.kx;
+      if ((cx*cx + cy*cy + cz*cz) <= kTiny) continue;
+
+      const std::complex<Real> amp = -(mode_p.coeff * mode_q.coeff);
+      accum[0] += amp * cx;
+      accum[1] += amp * cy;
+      accum[2] += amp * cz;
     }
 
-    const Real vx = g1y*g2z - g1z*g2y;
-    const Real vy = g1z*g2x - g1x*g2z;
-    const Real vz = g1x*g2y - g1y*g2x;
+    const std::complex<Real> ux = velocity_catalog.boost[n] * accum[0];
+    const std::complex<Real> uy = velocity_catalog.boost[n] * accum[1];
+    const std::complex<Real> uz = velocity_catalog.boost[n] * accum[2];
+    result.coeffs.aka0[n] = 2.0 * ux.real();
+    result.coeffs.akb0[n] = 2.0 * ux.imag();
+    result.coeffs.aka1[n] = 2.0 * uy.real();
+    result.coeffs.akb1[n] = 2.0 * uy.imag();
+    result.coeffs.aka2[n] = 2.0 * uz.real();
+    result.coeffs.akb2[n] = 2.0 * uz.imag();
+    result.shell_energy[velocity_catalog.shell[n]] +=
+        2.0 * (std::norm(ux) + std::norm(uy) + std::norm(uz));
+  }
 
-    u0(m,IM1,k,j,i) = den * vx;
-    u0(m,IM2,k,j,i) = den * vy;
-    u0(m,IM3,k,j,i) = den * vz;
-  });
+  return result;
+}
+
+RealizedSpectrumSummary EvaluateClebschRealizationSpectrum(
+    const ModeCatalog &velocity_catalog, const ModeCatalog &catalog1,
+    const ScalarCoefficients &phi1_coeffs, const ModeCatalog &catalog2,
+    const ScalarCoefficients &phi2_coeffs, const TurbulenceConfig &cfg,
+    int npot_shells) {
+  const ClebschVelocityModes velocity_modes =
+      BuildClebschVelocityModes(velocity_catalog, catalog1, phi1_coeffs,
+                                catalog2, phi2_coeffs, npot_shells, cfg.nhigh);
+  return SummarizeRealizedSpectrum(velocity_modes.shell_energy, cfg, cfg.nhigh);
+}
+
+int ClebschRealizationTrials(const TurbulenceConfig &cfg) {
+  if (cfg.k_crit >= cfg.nhigh) return 1;
+  if (cfg.k_crit >= 8.0) return 2;
+  if (cfg.k_crit >= 4.0) return 4;
+  return 8;
+}
+
+ClebschRealization SelectClebschRealization(const TurbulenceConfig &cfg,
+                                            const ModeCatalog &velocity_catalog,
+                                            const ModeCatalog &catalog1,
+                                            const ModeCatalog &catalog2,
+                                            const std::vector<Real> &shell_amp1,
+                                            const std::vector<Real> &shell_amp2,
+                                            int npot_shells) {
+  ClebschRealization best;
+  best.trial_count = ClebschRealizationTrials(cfg);
+  bool have_best = false;
+
+  for (int trial = 0; trial < best.trial_count; ++trial) {
+    RNG_State rstate1;
+    RNG_State rstate2;
+    rstate1.idum = -MixSeed(cfg.rseed, 1000 + 2*trial);
+    rstate2.idum = -MixSeed(cfg.rseed, 1001 + 2*trial);
+
+    ClebschRealization candidate;
+    candidate.phi1_coeffs =
+        GenerateShellWeightedScalarCoefficients(catalog1, shell_amp1, &rstate1);
+    candidate.phi2_coeffs =
+        GenerateShellWeightedScalarCoefficients(catalog2, shell_amp2, &rstate2);
+    candidate.summary = EvaluateClebschRealizationSpectrum(
+        velocity_catalog, catalog1, candidate.phi1_coeffs, catalog2,
+        candidate.phi2_coeffs, cfg, npot_shells);
+    candidate.trial_index = trial;
+    candidate.trial_count = best.trial_count;
+
+    if (!have_best || candidate.summary.loss < best.summary.loss) {
+      best = std::move(candidate);
+      have_best = true;
+    }
+  }
+
+  return best;
+}
+
+int TensorIndex(int kout, int s, int t, int npot_shells) {
+  const int ns = npot_shells + 1;
+  return (kout * ns + s) * ns + t;
+}
+
+int Stream3DPotentialNHigh(const TurbulenceConfig &cfg) {
+  int max_supported_shell = cfg.global_nx1 / 2;
+  if (cfg.mesh_multi_d) {
+    max_supported_shell = std::min(max_supported_shell, cfg.global_nx2 / 2);
+  }
+  if (cfg.mesh_three_d) {
+    max_supported_shell = std::min(max_supported_shell, cfg.global_nx3 / 2);
+  }
+  return std::max(1, std::min(cfg.nhigh, max_supported_shell));
+}
+
+std::vector<Real> BuildClebschShellResponseTensor(const ModeCatalog &velocity_catalog,
+                                                  const ModeCatalog &catalog1,
+                                                  const ModeCatalog &catalog2,
+                                                  int npot_shells, int nkout) {
+  std::vector<Real> tensor((nkout + 1) * (npot_shells + 1) * (npot_shells + 1), 0.0);
+
+  // For phi_j(x) = Re[sum_p c_j(p) exp(i p·x)], the Clebsch field satisfies
+  // u_hat(r) = -sum_{p+q=r} (p x q) c_1(p) c_2(q). Averaging over independent
+  // Gaussian coefficients gives the shell response
+  // E_u(K) = sum_{s,t} T[K,s,t] P_s P_t, where P_s is the scalar-power weight
+  // in shell s. In 3D stream mode we evaluate that response on the retained
+  // output velocity catalog directly, including the output importance-sampling
+  // boost, so the shell fit targets the exact spectral representation that is
+  // later synthesized into the grid.
+  const auto signed1 = BuildSignedModes(catalog1);
+  const auto signed2 = BuildSignedModes(catalog2);
+  const auto lookup2 = BuildSignedModeLookup(signed2, npot_shells);
+  const int offset = npot_shells;
+  const int span = 2 * offset + 1;
+
+  for (int n = 0; n < velocity_catalog.KeptModes(); ++n) {
+    const int rx = velocity_catalog.nkx[n];
+    const int ry = velocity_catalog.nky[n];
+    const int rz = velocity_catalog.nkz[n];
+    const int out_shell = velocity_catalog.shell[n];
+    const Real out_weight = 2.0 * velocity_catalog.boost[n] * velocity_catalog.boost[n];
+
+    for (const auto &mode_p : signed1) {
+      const int qx = rx - mode_p.nkx;
+      const int qy = ry - mode_p.nky;
+      const int qz = rz - mode_p.nkz;
+      if (!SignedModeInBounds(qx, qy, qz, npot_shells)) continue;
+
+      const auto it = lookup2.find(EncodeSignedModeKey(qx, qy, qz, offset, span));
+      if (it == lookup2.end()) continue;
+      const auto &mode_q = signed2[it->second];
+
+      const Real cx = mode_p.ky*mode_q.kz - mode_p.kz*mode_q.ky;
+      const Real cy = mode_p.kz*mode_q.kx - mode_p.kx*mode_q.kz;
+      const Real cz = mode_p.kx*mode_q.ky - mode_p.ky*mode_q.kx;
+      const Real geom = cx*cx + cy*cy + cz*cz;
+      if (geom <= kTiny) continue;
+
+      tensor[TensorIndex(out_shell, mode_p.shell, mode_q.shell, npot_shells)] +=
+          out_weight * mode_p.weight * mode_q.weight * geom;
+    }
+  }
+
+  return tensor;
+}
+
+void SymmetrizeClebschTensor(std::vector<Real> *tensor, int npot_shells, int nkout) {
+  for (int kout = 1; kout <= nkout; ++kout) {
+    for (int s = 1; s <= npot_shells; ++s) {
+      for (int t = s + 1; t <= npot_shells; ++t) {
+        const int idx_st = TensorIndex(kout, s, t, npot_shells);
+        const int idx_ts = TensorIndex(kout, t, s, npot_shells);
+        const Real avg = 0.5 * ((*tensor)[idx_st] + (*tensor)[idx_ts]);
+        (*tensor)[idx_st] = avg;
+        (*tensor)[idx_ts] = avg;
+      }
+    }
+  }
+}
+
+void EnsureReachableTargetBand(const std::vector<Real> &tensor, const TurbulenceConfig &cfg,
+                               int npot_shells) {
+  for (int kout = cfg.nlow; kout <= cfg.nhigh; ++kout) {
+    Real shell_sum = 0.0;
+    for (int s = 1; s <= npot_shells; ++s) {
+      for (int t = 1; t <= npot_shells; ++t) {
+        shell_sum += tensor[TensorIndex(kout, s, t, npot_shells)];
+      }
+    }
+    if (shell_sum <= kTiny) {
+      FatalProblemSetup("3D stream-function shell response has zero support in target shell "
+                        + std::to_string(kout) + ".");
+    }
+  }
+}
+
+ClebschSector ClassifyClebschSector(int kout, int s, int t) {
+  if (s > kout && t > kout) return ClebschSector::HighHighCancel;
+  const int half_shell = (kout + 1) / 2;
+  if (s < half_shell && t >= half_shell) return ClebschSector::LowHigh;
+  if (t < half_shell && s >= half_shell) return ClebschSector::HighLow;
+  return ClebschSector::LocalLocal;
+}
+
+ClebschSectorResponse ComputeClebschSectorResponse(
+    const std::vector<Real> &tensor, int npot_shells, int nkout,
+    const std::vector<Real> *shell_power1 = nullptr,
+    const std::vector<Real> *shell_power2 = nullptr) {
+  ClebschSectorResponse response;
+  for (int sector_idx = 0; sector_idx < kClebschSectorCount; ++sector_idx) {
+    response.raw_shell_energy[sector_idx].assign(nkout + 1, 0.0);
+    response.fitted_shell_energy[sector_idx].assign(nkout + 1, 0.0);
+  }
+
+  for (int kout = 1; kout <= nkout; ++kout) {
+    for (int s = 1; s <= npot_shells; ++s) {
+      for (int t = 1; t <= npot_shells; ++t) {
+        const Real raw_value = tensor[TensorIndex(kout, s, t, npot_shells)];
+        if (raw_value <= kTiny) continue;
+        const int sector_idx = static_cast<int>(ClassifyClebschSector(kout, s, t));
+        response.raw_shell_energy[sector_idx][kout] += raw_value;
+        response.raw_total[sector_idx] += raw_value;
+
+        if (shell_power1 != nullptr && shell_power2 != nullptr) {
+          const Real fitted_value = raw_value * (*shell_power1)[s] * (*shell_power2)[t];
+          response.fitted_shell_energy[sector_idx][kout] += fitted_value;
+          response.fitted_total[sector_idx] += fitted_value;
+        }
+      }
+    }
+  }
+
+  return response;
+}
+
+ShellFitEval EvaluateClebschShellFit(const std::vector<Real> &tensor,
+                                     const TurbulenceConfig &cfg,
+                                     int npot_shells,
+                                     const std::vector<Real> &shell_power1,
+                                     const std::vector<Real> &shell_power2) {
+  const int nkout = cfg.nhigh;
+  const int ns = npot_shells + 1;
+  const Real leak_ref_low = TargetShellEnergy(std::max(cfg.nlow, 1), cfg.expo);
+  const Real leak_ref_high = TargetShellEnergy(cfg.nhigh, cfg.expo);
+  const Real smooth_weight = 1.0e-2;
+
+  ShellFitEval eval;
+  eval.pred.assign(nkout + 1, 0.0);
+  eval.grad1.assign(npot_shells + 1, 0.0);
+  eval.grad2.assign(npot_shells + 1, 0.0);
+
+  std::vector<Real> kernel1((nkout + 1) * ns, 0.0);
+  std::vector<Real> kernel2((nkout + 1) * ns, 0.0);
+  for (int kout = 1; kout <= nkout; ++kout) {
+    for (int s = 1; s <= npot_shells; ++s) {
+      Real accum = 0.0;
+      for (int t = 1; t <= npot_shells; ++t) {
+        accum += tensor[TensorIndex(kout, s, t, npot_shells)] * shell_power2[t];
+      }
+      kernel1[kout * ns + s] = accum;
+      eval.pred[kout] += shell_power1[s] * accum;
+    }
+    for (int t = 1; t <= npot_shells; ++t) {
+      Real accum = 0.0;
+      for (int s = 1; s <= npot_shells; ++s) {
+        accum += tensor[TensorIndex(kout, s, t, npot_shells)] * shell_power1[s];
+      }
+      kernel2[kout * ns + t] = accum;
+    }
+  }
+
+  for (int kout = 1; kout <= nkout; ++kout) {
+    const Real pred = std::max(eval.pred[kout], kTiny);
+    Real dloss_dpred = 0.0;
+
+    if (kout >= cfg.nlow && kout <= cfg.nhigh) {
+      const Real target = TargetShellEnergy(kout, cfg.expo);
+      const Real resid = std::log(pred) - std::log(target);
+      eval.loss += resid * resid;
+      dloss_dpred = 2.0 * resid / pred;
+    } else {
+      const bool low_leak = (kout < cfg.nlow);
+      const Real leak_weight = low_leak ? 4.0 : 6.0;
+      const Real leak_ref = low_leak ? leak_ref_low : leak_ref_high;
+      const Real scaled = pred / leak_ref;
+      eval.loss += leak_weight * scaled * scaled;
+      dloss_dpred = 2.0 * leak_weight * scaled / leak_ref;
+    }
+
+    for (int s = 1; s <= npot_shells; ++s) {
+      eval.grad1[s] += dloss_dpred * kernel1[kout * ns + s];
+      eval.grad2[s] += dloss_dpred * kernel2[kout * ns + s];
+    }
+  }
+
+  for (int s = 2; s <= npot_shells; ++s) {
+    const Real prev = std::max(shell_power1[s-1], kTiny);
+    const Real curr = std::max(shell_power1[s], kTiny);
+    const Real diff = std::log(curr) - std::log(prev);
+    eval.loss += smooth_weight * diff * diff;
+    eval.grad1[s] += 2.0 * smooth_weight * diff / curr;
+    eval.grad1[s-1] -= 2.0 * smooth_weight * diff / prev;
+  }
+  for (int s = 2; s <= npot_shells; ++s) {
+    const Real prev = std::max(shell_power2[s-1], kTiny);
+    const Real curr = std::max(shell_power2[s], kTiny);
+    const Real diff = std::log(curr) - std::log(prev);
+    eval.loss += smooth_weight * diff * diff;
+    eval.grad2[s] += 2.0 * smooth_weight * diff / curr;
+    eval.grad2[s-1] -= 2.0 * smooth_weight * diff / prev;
+  }
+
+  return eval;
+}
+
+Real FitLogSlope(const std::vector<Real> &spectrum, int nlow, int nhigh) {
+  Real sx = 0.0, sy = 0.0, sxx = 0.0, sxy = 0.0;
+  int npts = 0;
+  for (int shell = nlow; shell <= nhigh; ++shell) {
+    if (spectrum[shell] <= kTiny) continue;
+    const Real x = std::log(static_cast<Real>(shell));
+    const Real y = std::log(spectrum[shell]);
+    sx += x;
+    sy += y;
+    sxx += x*x;
+    sxy += x*y;
+    ++npts;
+  }
+  if (npts < 2) return 0.0;
+  const Real denom = npts * sxx - sx*sx;
+  if (std::abs(denom) <= kTiny) return 0.0;
+  return (npts * sxy - sx * sy) / denom;
+}
+
+Real LeakageFraction(const std::vector<Real> &spectrum, const TurbulenceConfig &cfg,
+                     int nkout) {
+  Real in_band = 0.0;
+  Real out_band = 0.0;
+  for (int shell = 1; shell <= nkout; ++shell) {
+    if (shell >= cfg.nlow && shell <= cfg.nhigh) {
+      in_band += spectrum[shell];
+    } else {
+      out_band += spectrum[shell];
+    }
+  }
+  const Real total = in_band + out_band;
+  return (total > kTiny) ? out_band / total : 0.0;
+}
+
+void InitializeClebschSeedPowers(ClebschSeedModel seed_model,
+                                 const TurbulenceConfig &cfg, int npot_shells,
+                                 std::vector<Real> *power1,
+                                 std::vector<Real> *power2) {
+  power1->assign(npot_shells + 1, 0.0);
+  power2->assign(npot_shells + 1, 0.0);
+
+  if (seed_model == ClebschSeedModel::Flat) {
+    for (int shell = 1; shell <= npot_shells; ++shell) {
+      (*power1)[shell] = 1.0;
+      (*power2)[shell] = 1.0;
+    }
+    return;
+  }
+
+  const Real beta = (seed_model == ClebschSeedModel::LocalTriad)
+                        ? 0.25 * (cfg.expo + 8.0)
+                        : 0.5 * (cfg.expo + 4.0);
+  const Real delta = (seed_model == ClebschSeedModel::LocalTriad) ? 0.5 : 0.0;
+  for (int shell = 1; shell <= npot_shells; ++shell) {
+    (*power1)[shell] = std::pow(static_cast<Real>(shell), -2.0 * (beta - delta));
+    (*power2)[shell] = std::pow(static_cast<Real>(shell), -2.0 * (beta + delta));
+  }
+}
+
+bool ClebschFitBeats(const ShellFitResult &candidate, const ShellFitResult &current_best,
+                     const TurbulenceConfig &cfg) {
+  constexpr Real eps = 1.0e-12;
+  if (candidate.final_loss < current_best.final_loss - eps) return true;
+  if (candidate.final_loss > current_best.final_loss + eps) return false;
+
+  if (candidate.leakage_fraction < current_best.leakage_fraction - eps) return true;
+  if (candidate.leakage_fraction > current_best.leakage_fraction + eps) return false;
+
+  const Real candidate_slope_err = std::abs(candidate.fitted_slope + cfg.expo);
+  const Real current_slope_err = std::abs(current_best.fitted_slope + cfg.expo);
+  return candidate_slope_err < current_slope_err;
+}
+
+ShellFitResult FitClebschShellWeightsFromStart(
+    const std::vector<Real> &tensor, const TurbulenceConfig &cfg, int npot_shells,
+    const std::vector<Real> &start_power1, const std::vector<Real> &start_power2,
+    ClebschSeedModel seed_model) {
+  ShellFitResult result;
+  result.shell_amp1.assign(npot_shells + 1, 0.0);
+  result.shell_amp2.assign(npot_shells + 1, 0.0);
+  result.shell_power1.assign(npot_shells + 1, 0.0);
+  result.shell_power2.assign(npot_shells + 1, 0.0);
+  result.chosen_seed_model = seed_model;
+
+  std::vector<Real> shell_power1 = start_power1;
+  std::vector<Real> shell_power2 = start_power2;
+  const int ref_shell = std::min(std::max(cfg.nlow, 1), npot_shells);
+  const Real ref = shell_power1[ref_shell];
+  if (ref > kTiny) {
+    for (int shell = 1; shell <= npot_shells; ++shell) {
+      shell_power1[shell] /= ref;
+      shell_power2[shell] /= ref;
+    }
+  }
+
+  auto balance_reference_shell = [&](std::vector<Real> *power1, std::vector<Real> *power2) {
+    const Real ref1 = std::max((*power1)[ref_shell], kTiny);
+    const Real ref2 = std::max((*power2)[ref_shell], kTiny);
+    const Real scale = std::sqrt(ref2 / ref1);
+    for (int shell = 1; shell <= npot_shells; ++shell) {
+      (*power1)[shell] *= scale;
+      (*power2)[shell] /= scale;
+    }
+  };
+  balance_reference_shell(&shell_power1, &shell_power2);
+
+  ShellFitEval current = EvaluateClebschShellFit(tensor, cfg, npot_shells,
+                                                 shell_power1, shell_power2);
+  result.initial_loss = current.loss;
+  std::vector<Real> best_power1 = shell_power1;
+  std::vector<Real> best_power2 = shell_power2;
+  ShellFitEval best_eval = current;
+  auto rescale_band_mean = [&](std::vector<Real> *power1, std::vector<Real> *power2) {
+    ShellFitEval scaled = EvaluateClebschShellFit(tensor, cfg, npot_shells, *power1, *power2);
+    Real pred_mean = 0.0;
+    Real target_mean = 0.0;
+    for (int shell = cfg.nlow; shell <= cfg.nhigh; ++shell) {
+      pred_mean += scaled.pred[shell];
+      target_mean += TargetShellEnergy(shell, cfg.expo);
+    }
+    if (pred_mean <= kTiny) return;
+    const Real scale_sqrt = std::sqrt(target_mean / pred_mean);
+    for (int shell = 1; shell <= npot_shells; ++shell) {
+      (*power1)[shell] *= scale_sqrt;
+      (*power2)[shell] *= scale_sqrt;
+    }
+  };
+  auto multiplicative_sweep = [&](std::vector<Real> *power1, std::vector<Real> *power2) {
+    const int nkout = cfg.nhigh;
+    const int ns = npot_shells + 1;
+    std::vector<Real> pred(nkout + 1, 0.0);
+    std::vector<Real> kernel1((nkout + 1) * ns, 0.0);
+    std::vector<Real> kernel2((nkout + 1) * ns, 0.0);
+
+    for (int kout = cfg.nlow; kout <= cfg.nhigh; ++kout) {
+      for (int s = 1; s <= npot_shells; ++s) {
+        Real accum = 0.0;
+        for (int t = 1; t <= npot_shells; ++t) {
+          accum += tensor[TensorIndex(kout, s, t, npot_shells)] * (*power2)[t];
+        }
+        kernel1[kout * ns + s] = accum;
+        pred[kout] += (*power1)[s] * accum;
+      }
+      for (int t = 1; t <= npot_shells; ++t) {
+        Real accum = 0.0;
+        for (int s = 1; s <= npot_shells; ++s) {
+          accum += tensor[TensorIndex(kout, s, t, npot_shells)] * (*power1)[s];
+        }
+        kernel2[kout * ns + t] = accum;
+      }
+    }
+
+    std::vector<Real> next1 = *power1;
+    std::vector<Real> next2 = *power2;
+    for (int shell = 1; shell <= npot_shells; ++shell) {
+      Real num1 = 0.0;
+      Real den1 = 0.0;
+      Real num2 = 0.0;
+      Real den2 = 0.0;
+      for (int kout = cfg.nlow; kout <= cfg.nhigh; ++kout) {
+        const Real target = TargetShellEnergy(kout, cfg.expo);
+        const Real inv_pred = 1.0 / std::max(pred[kout], kTiny);
+        num1 += kernel1[kout * ns + shell] * target * inv_pred;
+        den1 += kernel1[kout * ns + shell];
+        num2 += kernel2[kout * ns + shell] * target * inv_pred;
+        den2 += kernel2[kout * ns + shell];
+      }
+      if (den1 > kTiny) {
+        next1[shell] *= num1 / den1;
+      }
+      if (den2 > kTiny) {
+        next2[shell] *= num2 / den2;
+      }
+      next1[shell] = std::min(1.0e30, std::max(1.0e-30, next1[shell]));
+      next2[shell] = std::min(1.0e30, std::max(1.0e-30, next2[shell]));
+    }
+
+    for (int shell = 2; shell < npot_shells; ++shell) {
+      const Real smooth1 = std::exp((std::log(next1[shell - 1]) + std::log(next1[shell]) +
+                                     std::log(next1[shell + 1])) / 3.0);
+      const Real smooth2 = std::exp((std::log(next2[shell - 1]) + std::log(next2[shell]) +
+                                     std::log(next2[shell + 1])) / 3.0);
+      next1[shell] = std::pow(next1[shell], 0.8) * std::pow(smooth1, 0.2);
+      next2[shell] = std::pow(next2[shell], 0.8) * std::pow(smooth2, 0.2);
+    }
+
+    *power1 = std::move(next1);
+    *power2 = std::move(next2);
+    balance_reference_shell(power1, power2);
+    rescale_band_mean(power1, power2);
+  };
+
+  int stalled_sweeps = 0;
+  for (int iter = 0; iter < 400; ++iter) {
+    multiplicative_sweep(&shell_power1, &shell_power2);
+    current = EvaluateClebschShellFit(tensor, cfg, npot_shells, shell_power1, shell_power2);
+    if (current.loss < best_eval.loss) {
+      best_power1 = shell_power1;
+      best_power2 = shell_power2;
+      best_eval = current;
+      stalled_sweeps = 0;
+    } else {
+      ++stalled_sweeps;
+      if (stalled_sweeps >= 50) break;
+    }
+  }
+
+  shell_power1 = best_power1;
+  shell_power2 = best_power2;
+  current = best_eval;
+  Real step_scale = 0.1;
+
+  for (int iter = 0; iter < 250; ++iter) {
+    std::vector<Real> grad_log1(npot_shells + 1, 0.0);
+    std::vector<Real> grad_log2(npot_shells + 1, 0.0);
+    Real max_grad = 0.0;
+    for (int shell = 1; shell <= npot_shells; ++shell) {
+      grad_log1[shell] = shell_power1[shell] * current.grad1[shell];
+      grad_log2[shell] = shell_power2[shell] * current.grad2[shell];
+      max_grad = std::max(max_grad, std::abs(grad_log1[shell]));
+      max_grad = std::max(max_grad, std::abs(grad_log2[shell]));
+    }
+    if (max_grad < 1.0e-10) break;
+
+    Real step = step_scale / max_grad;
+    bool accepted = false;
+    for (int trial = 0; trial < 10; ++trial) {
+      std::vector<Real> trial_power1(npot_shells + 1, 0.0);
+      std::vector<Real> trial_power2(npot_shells + 1, 0.0);
+      for (int shell = 1; shell <= npot_shells; ++shell) {
+        Real log_power1 = std::log(std::max(shell_power1[shell], kTiny));
+        log_power1 -= step * grad_log1[shell];
+        log_power1 = std::min(30.0, std::max(-30.0, log_power1));
+        trial_power1[shell] = std::exp(log_power1);
+
+        Real log_power2 = std::log(std::max(shell_power2[shell], kTiny));
+        log_power2 -= step * grad_log2[shell];
+        log_power2 = std::min(30.0, std::max(-30.0, log_power2));
+        trial_power2[shell] = std::exp(log_power2);
+      }
+      balance_reference_shell(&trial_power1, &trial_power2);
+
+      ShellFitEval trial_eval = EvaluateClebschShellFit(tensor, cfg, npot_shells,
+                                                        trial_power1, trial_power2);
+      if (trial_eval.loss < current.loss) {
+        shell_power1 = std::move(trial_power1);
+        shell_power2 = std::move(trial_power2);
+        current = std::move(trial_eval);
+        if (current.loss < best_eval.loss) {
+          best_power1 = shell_power1;
+          best_power2 = shell_power2;
+          best_eval = current;
+        }
+        step_scale = std::min(step_scale * 1.2, 2.0);
+        accepted = true;
+        break;
+      }
+
+      step *= 0.5;
+    }
+
+    if (!accepted) {
+      step_scale *= 0.5;
+      if (step_scale < 1.0e-6) break;
+    }
+  }
+
+  shell_power1 = best_power1;
+  shell_power2 = best_power2;
+  current = best_eval;
+
+  Real pred_mean = 0.0;
+  Real target_mean = 0.0;
+  int nband = 0;
+  for (int shell = cfg.nlow; shell <= cfg.nhigh; ++shell) {
+    pred_mean += current.pred[shell];
+    target_mean += TargetShellEnergy(shell, cfg.expo);
+    ++nband;
+  }
+  if (pred_mean > kTiny && nband > 0) {
+    const Real scale = target_mean / pred_mean;
+    const Real scale_sqrt = std::sqrt(scale);
+    for (int shell = 1; shell <= npot_shells; ++shell) {
+      shell_power1[shell] *= scale_sqrt;
+      shell_power2[shell] *= scale_sqrt;
+    }
+    current = EvaluateClebschShellFit(tensor, cfg, npot_shells,
+                                      shell_power1, shell_power2);
+  }
+
+  for (int shell = 1; shell <= npot_shells; ++shell) {
+    result.shell_amp1[shell] = std::sqrt(std::max(shell_power1[shell], 0.0));
+    result.shell_amp2[shell] = std::sqrt(std::max(shell_power2[shell], 0.0));
+  }
+  result.shell_power1 = shell_power1;
+  result.shell_power2 = shell_power2;
+  result.predicted_shell_energy = current.pred;
+  result.final_loss = current.loss;
+  result.leakage_fraction = LeakageFraction(current.pred, cfg, cfg.nhigh);
+  result.fitted_slope = FitLogSlope(current.pred, cfg.nlow, cfg.nhigh);
+  result.converged = (result.final_loss <= result.initial_loss);
+
+  return result;
+}
+
+ShellFitResult FitClebschShellWeights(const std::vector<Real> &tensor,
+                                      const TurbulenceConfig &cfg,
+                                      int npot_shells) {
+  const std::array<ClebschSeedModel, 3> seed_models = {
+      ClebschSeedModel::LocalTriad,
+      ClebschSeedModel::CamilloSymmetric,
+      ClebschSeedModel::Flat};
+  std::vector<ShellFitStartSummary> fit_starts;
+  fit_starts.reserve(seed_models.size());
+
+  ShellFitResult best_result;
+  bool have_best = false;
+  std::size_t best_start_index = 0;
+  for (std::size_t seed_idx = 0; seed_idx < seed_models.size(); ++seed_idx) {
+    std::vector<Real> start_power1;
+    std::vector<Real> start_power2;
+    InitializeClebschSeedPowers(seed_models[seed_idx], cfg, npot_shells,
+                                &start_power1, &start_power2);
+    ShellFitResult candidate = FitClebschShellWeightsFromStart(
+        tensor, cfg, npot_shells, start_power1, start_power2, seed_models[seed_idx]);
+    fit_starts.push_back({seed_models[seed_idx], candidate.initial_loss, candidate.final_loss,
+                          candidate.fitted_slope, candidate.leakage_fraction,
+                          candidate.converged, false});
+    if (!have_best || ClebschFitBeats(candidate, best_result, cfg)) {
+      best_result = std::move(candidate);
+      best_start_index = seed_idx;
+      have_best = true;
+    }
+  }
+
+  fit_starts[best_start_index].chosen = true;
+  best_result.fit_starts = std::move(fit_starts);
+  return best_result;
+}
+
+ClebschQualityGate EvaluateClebschQualityGate(const ShellFitResult &fit,
+                                              const RealizedSpectrumSummary &realization,
+                                              const TurbulenceConfig &cfg) {
+  ClebschQualityGate gate;
+  gate.allow_poor_fit = cfg.stream_allow_poor_fit;
+  gate.deterministic_converged = fit.converged;
+  gate.deterministic_slope_ok =
+      (std::abs(fit.fitted_slope + cfg.expo) <= gate.deterministic_slope_tolerance);
+  gate.deterministic_leakage_ok = (fit.leakage_fraction <= gate.leakage_tolerance);
+  gate.deterministic_pass = gate.deterministic_converged &&
+                            gate.deterministic_slope_ok &&
+                            gate.deterministic_leakage_ok;
+  gate.realized_slope_ok =
+      (std::abs(realization.fitted_slope + cfg.expo) <= gate.realized_slope_tolerance);
+  gate.realized_leakage_ok = (realization.leakage_fraction <= gate.leakage_tolerance);
+  gate.realized_pass = gate.realized_slope_ok && gate.realized_leakage_ok;
+  gate.pass = gate.deterministic_pass && gate.realized_pass;
+  gate.forced_continue = gate.allow_poor_fit && !gate.pass;
+  return gate;
 }
 
 void LogModeSummary(const TurbulenceConfig &cfg, const ModeCatalog &catalog,
@@ -1287,6 +2657,17 @@ void LogModeSummary(const TurbulenceConfig &cfg, const ModeCatalog &catalog,
 
 void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
                            bool projection_true_2d) {
+  const WallTimePoint init_start_time = WallClock::now();
+  Real recorded_init_wall_seconds = -1.0;
+  auto log_init_time = [&init_start_time, &recorded_init_wall_seconds]() {
+    const Real wall_seconds = (recorded_init_wall_seconds > 0.0)
+                                  ? recorded_init_wall_seconds
+                                  : GlobalMaxReal(ElapsedWallSeconds(init_start_time));
+    if (global_variable::my_rank == 0) {
+      std::cout << "  velocity_init_wall_seconds=" << wall_seconds << std::endl;
+    }
+  };
+
   const TurbulenceConfig cfg = ReadTurbulenceConfig(pin, pmbp->pmesh, projection_true_2d);
   auto &hydro = *pmbp->phydro;
   hydro.use_scalar_face_velocity = false;
@@ -1308,6 +2689,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
     if (catalog.KeptModes() == 0) {
       std::cout << "### WARNING: No turbulent modes kept in range [" << cfg.nlow << ", "
                 << cfg.nhigh << "]. Using zero velocity." << std::endl;
+      log_init_time();
       return;
     }
 
@@ -1344,6 +2726,10 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
           ConvertVelocityToVectorPotentialCoefficients(catalog, coeffs);
       PopulateScalarFaceVelocitiesFromVectorPotential(pmbp, cfg, catalog, apot_coeffs, stats);
     }
+    const Real init_wall_seconds = GlobalMaxReal(ElapsedWallSeconds(init_start_time));
+    recorded_init_wall_seconds = init_wall_seconds;
+    WriteProjectionDiagnostics(cfg, catalog, coeffs, stats, init_wall_seconds);
+    log_init_time();
     return;
   }
 
@@ -1367,6 +2753,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
     if (catalog.KeptModes() == 0) {
       std::cout << "### WARNING: No turbulent modes kept in range [" << cfg.nlow << ", "
                 << cfg.nhigh << "]. Using zero velocity." << std::endl;
+      log_init_time();
       return;
     }
 
@@ -1388,46 +2775,155 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
           ConvertVelocityToVectorPotentialCoefficients(catalog, vel_coeffs);
       PopulateScalarFaceVelocitiesFromVectorPotential(pmbp, cfg, catalog, apot_coeffs, stats);
     }
+    const Real init_wall_seconds = GlobalMaxReal(ElapsedWallSeconds(init_start_time));
+    recorded_init_wall_seconds = init_wall_seconds;
+    WriteStream2DDiagnostics(cfg, catalog, psi_coeffs, vel_coeffs, stats, init_wall_seconds);
+    log_init_time();
     return;
   }
 
   RNG_State rstate1;
   RNG_State rstate2;
+  RNG_State rstatev;
   rstate1.idum = -MixSeed(cfg.rseed, 1);
   rstate2.idum = -MixSeed(cfg.rseed, 2);
+  rstatev.idum = -MixSeed(cfg.rseed, 3);
 
-  const ModeCatalog catalog1 = BuildModeCatalog(cfg, &rstate1);
-  const ModeCatalog catalog2 = BuildModeCatalog(cfg, &rstate2);
+  const int phi_nhigh = Stream3DPotentialNHigh(cfg);
+  if (phi_nhigh < cfg.nhigh) {
+    FatalProblemSetup("3D stream-function mode requires potential support through "
+                      "<problem>/turb_nhigh on the current mesh. Increase the grid size "
+                      "or lower <problem>/turb_nhigh.");
+  }
+
+  const ModeCatalog catalog1 = BuildModeCatalog(cfg, 1, phi_nhigh, &rstate1);
+  const ModeCatalog catalog2 = BuildModeCatalog(cfg, 1, phi_nhigh, &rstate2);
+  const ModeCatalog velocity_catalog = BuildModeCatalog(cfg, &rstatev);
   if (catalog1.KeptModes() == 0 || catalog2.KeptModes() == 0) {
     std::cout << "### WARNING: No turbulent modes kept in range [" << cfg.nlow << ", "
               << cfg.nhigh << "] for 3D stream-function initialization. Using zero velocity."
               << std::endl;
+    log_init_time();
+    return;
+  }
+  if (velocity_catalog.KeptModes() == 0) {
+    std::cout << "### WARNING: No output velocity modes kept in range [" << cfg.nlow << ", "
+              << cfg.nhigh << "] for 3D stream-function initialization. Using zero velocity."
+              << std::endl;
+    log_init_time();
     return;
   }
 
+  const std::vector<int> shell_counts1 = CountModesPerShell(catalog1, phi_nhigh);
+  const std::vector<int> shell_counts2 = CountModesPerShell(catalog2, phi_nhigh);
+  const std::vector<int> velocity_shell_counts = CountModesPerShell(velocity_catalog, cfg.nhigh);
+  EnsureShellCoverage(shell_counts1, 1, phi_nhigh, "phi_1");
+  EnsureShellCoverage(shell_counts2, 1, phi_nhigh, "phi_2");
+  EnsureShellCoverage(velocity_shell_counts, cfg.nlow, cfg.nhigh, "velocity");
+
+  std::vector<Real> tensor = BuildClebschShellResponseTensor(
+      velocity_catalog, catalog1, catalog2, phi_nhigh, cfg.nhigh);
+  SymmetrizeClebschTensor(&tensor, phi_nhigh, cfg.nhigh);
+  EnsureReachableTargetBand(tensor, cfg, phi_nhigh);
+  const ShellFitResult fit = FitClebschShellWeights(tensor, cfg, phi_nhigh);
+  const ClebschSectorResponse sector_response =
+      ComputeClebschSectorResponse(tensor, phi_nhigh, cfg.nhigh,
+                                   &fit.shell_power1, &fit.shell_power2);
+
   if (global_variable::my_rank == 0) {
-    const Real beta = 0.25 * (cfg.expo + 8.0);
-    std::cout << "  stream_geometry=3D direct-sampled Clebsch "
-                 "(v = grad(phi1) x grad(phi2))"
+    std::cout << "  stream_geometry=3D (Clebsch form v = grad(phi1) x grad(phi2))"
               << std::endl;
+    std::cout << "  phi_shell_max=" << phi_nhigh
+              << " (target velocity shells extend to " << cfg.nhigh << ")" << std::endl;
     LogModeSummary(cfg, catalog1, "phi_1");
     LogModeSummary(cfg, catalog2, "phi_2");
-    std::cout << "  phi_amplitude_norm = k^(-beta), beta=" << beta << std::endl;
+    LogModeSummary(cfg, velocity_catalog, "velocity");
+    std::cout << "  3D stream shell fit:"
+              << " initial_loss=" << fit.initial_loss
+              << ", final_loss=" << fit.final_loss
+              << ", fitted_in_band_slope=" << fit.fitted_slope
+              << ", estimated_out_of_band_leakage=" << fit.leakage_fraction
+              << ", seed_model=" << ClebschSeedModelName(fit.chosen_seed_model)
+              << std::endl;
+    for (const auto &start : fit.fit_starts) {
+      std::cout << "    fit_start[" << ClebschSeedModelName(start.seed_model) << "]:"
+                << " initial_loss=" << start.initial_loss
+                << ", final_loss=" << start.final_loss
+                << ", fitted_slope=" << start.fitted_slope
+                << ", estimated_out_of_band_leakage=" << start.leakage_fraction
+                << (start.chosen ? " <- chosen" : "") << std::endl;
+    }
+    if (!fit.converged || std::abs(fit.fitted_slope + cfg.expo) > 0.5 ||
+        fit.leakage_fraction > 0.05) {
+      std::cout << "  WARNING: 3D stream-function shell fit only matches the requested "
+                << "velocity spectrum approximately for this band/seed." << std::endl;
+    }
   }
 
-  const ScalarCoefficients phi1_coeffs =
-      GenerateStream3DPhiCoefficients(cfg, catalog1, &rstate1);
-  const ScalarCoefficients phi2_coeffs =
-      GenerateStream3DPhiCoefficients(cfg, catalog2, &rstate2);
-  SynthesizeClebschVelocity(pmbp, cfg, den, catalog1, phi1_coeffs, catalog2, phi2_coeffs);
+  const ClebschRealization realization =
+      SelectClebschRealization(cfg, velocity_catalog, catalog1, catalog2,
+                               fit.shell_amp1, fit.shell_amp2, phi_nhigh);
+  if (global_variable::my_rank == 0) {
+    std::cout << "  3D stream realization selection:"
+              << " trials=" << realization.trial_count
+              << ", chosen_trial=" << realization.trial_index
+              << ", realized_in_band_slope=" << realization.summary.fitted_slope
+              << ", realized_out_of_band_leakage="
+              << realization.summary.leakage_fraction
+              << ", realized_loss=" << realization.summary.loss << std::endl;
+  }
+
+  const ClebschQualityGate quality_gate =
+      EvaluateClebschQualityGate(fit, realization.summary, cfg);
+  if (global_variable::my_rank == 0) {
+    std::cout << "  3D stream quality gate:"
+              << " deterministic_pass="
+              << (quality_gate.deterministic_pass ? "true" : "false")
+              << ", realized_pass=" << (quality_gate.realized_pass ? "true" : "false")
+              << ", overall_pass=" << (quality_gate.pass ? "true" : "false")
+              << std::endl;
+  }
+  if (!quality_gate.pass) {
+    const std::string gate_msg =
+        "3D stream-function fit failed quality gate: deterministic_converged="
+        + std::string(quality_gate.deterministic_converged ? "true" : "false")
+        + ", deterministic_slope=" + std::to_string(fit.fitted_slope)
+        + ", deterministic_leakage=" + std::to_string(fit.leakage_fraction)
+        + ", realized_slope=" + std::to_string(realization.summary.fitted_slope)
+        + ", realized_leakage=" + std::to_string(realization.summary.leakage_fraction)
+        + ". Set <problem>/turb_stream_allow_poor_fit=true to continue anyway.";
+    if (!cfg.stream_allow_poor_fit) {
+      FatalProblemSetup(gate_msg);
+    }
+    if (global_variable::my_rank == 0) {
+      std::cout << "  WARNING: forcing 3D stream-function initialization despite failed "
+                   "quality gate because turb_stream_allow_poor_fit=true."
+                << std::endl;
+      std::cout << "  WARNING: " << gate_msg << std::endl;
+    }
+  }
+
+  const ClebschVelocityModes velocity_modes =
+      BuildClebschVelocityModes(velocity_catalog, catalog1, realization.phi1_coeffs,
+                                catalog2, realization.phi2_coeffs, phi_nhigh, cfg.nhigh);
+  SynthesizeVelocityFromVectorModes(pmbp, cfg, den, velocity_catalog, velocity_modes.coeffs);
   const VelocityStats stats = NormalizeVelocityField(pmbp, cfg);
   if (face_requested && face_scalar_ok) {
     if (global_variable::my_rank == 0) {
       std::cout << "  using divergence-free face velocity for scalar fluxes" << std::endl;
     }
-    PopulateScalarFaceVelocitiesFromClebsch(
-        pmbp, cfg, catalog1, phi1_coeffs, catalog2, phi2_coeffs, stats);
+    const VectorCoefficients apot_coeffs =
+        ConvertVelocityToVectorPotentialCoefficients(velocity_catalog, velocity_modes.coeffs);
+    PopulateScalarFaceVelocitiesFromVectorPotential(pmbp, cfg, velocity_catalog,
+                                                    apot_coeffs, stats);
   }
+  const Real init_wall_seconds = GlobalMaxReal(ElapsedWallSeconds(init_start_time));
+  recorded_init_wall_seconds = init_wall_seconds;
+  WriteStream3DDiagnostics(cfg, catalog1, realization.phi1_coeffs, catalog2,
+                           realization.phi2_coeffs, velocity_catalog, fit,
+                           realization, velocity_modes, sector_response,
+                           quality_gate, phi_nhigh, stats, init_wall_seconds);
+  log_init_time();
 }
 
 }  // namespace
@@ -1695,7 +3191,7 @@ void ScalarForcingSource(Mesh* pm, const Real bdt) {
 #if MPI_PARALLEL_ENABLED
       Real local_sum[2] = {num_local, den_local};
       Real global_sum[2] = {0.0, 0.0};
-      MPI_Allreduce(local_sum, global_sum, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      MPI_Allreduce(local_sum, global_sum, 2, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
       num_local = global_sum[0];
       den_local = global_sum[1];
 #endif

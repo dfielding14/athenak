@@ -11,18 +11,18 @@ basename   = scalar_mix_gallery_2d
 <time>
 evolution  = dynamic
 cfl_number = 0.4
-tlim       = 1.0e-6
+tlim       = 0.0
 nlim       = -1
 
 <mesh>
 nghost = 2
-nx1    = 256
+nx1    = 512
 x1min  = 0.0
 x1max  = 1.0
 ix1_bc = periodic
 ox1_bc = periodic
 
-nx2    = 256
+nx2    = 512
 x2min  = 0.0
 x2max  = 1.0
 ix2_bc = periodic
@@ -35,8 +35,8 @@ ix3_bc = reflect
 ox3_bc = reflect
 
 <meshblock>
-nx1 = 128
-nx2 = 128
+nx1 = 256
+nx2 = 256
 nx3 = 1
 
 <hydro>
@@ -55,14 +55,15 @@ user_srcs      = false
 mean_gradient  = 0.0
 turb_v_rms     = 1.0
 turb_nlow      = 2
-turb_nhigh     = 64
+turb_nhigh     = 256
 turb_expo      = 1.6666667
 turb_use_stream_function = false
 turb_sol_frac  = 1.0
 turb_rseed     = 12345
-turb_k_crit    = 64.0
+turb_k_crit    = 256.0
+divfree_scalar_flux = false
 
 <output1>
 file_type  = bin
 variable   = hydro_w
-dt         = 1.0e-6
+dt         = 1.0

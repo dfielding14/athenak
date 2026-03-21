@@ -56,11 +56,12 @@ mean_gradient            = 0.0
 turb_use_stream_function = true
 turb_v_rms               = 1.0
 turb_nlow                = 2
-turb_nhigh               = 6
+turb_nhigh               = 10
 turb_expo                = 1.6666667
 turb_sol_frac            = 1.0
 turb_rseed               = 12345
-turb_k_crit              = 16.0
+turb_k_crit              = 2.0
+turb_dump_generator_diagnostics = true
 
 <output1>
 file_type  = bin

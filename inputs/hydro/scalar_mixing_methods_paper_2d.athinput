@@ -1,12 +1,12 @@
-# Scalar-mixing gallery example: 3D frozen turbulence initialization
+# Scalar-mixing methods note: 2D prescribed velocity initialization
 
 <comment>
-problem   = scalar mixing velocity gallery in 3D
-reference = projection and stream-function slice gallery
+problem   = scalar mixing methods note in 2D
+reference = projection and stream-function initialization diagnostics
 
 <job>
 problem_id = scalar_mixing
-basename   = scalar_mix_gallery_3d
+basename   = scalar_mix_methods_2d
 
 <time>
 evolution  = dynamic
@@ -28,16 +28,16 @@ x2max  = 1.0
 ix2_bc = periodic
 ox2_bc = periodic
 
-nx3    = 512
+nx3    = 1
 x3min  = 0.0
 x3max  = 1.0
-ix3_bc = periodic
-ox3_bc = periodic
+ix3_bc = reflect
+ox3_bc = reflect
 
 <meshblock>
 nx1 = 256
 nx2 = 256
-nx3 = 256
+nx3 = 1
 
 <hydro>
 eos             = ideal
@@ -55,12 +55,13 @@ user_srcs      = false
 mean_gradient  = 0.0
 turb_v_rms     = 1.0
 turb_nlow      = 2
-turb_nhigh     = 256
+turb_nhigh     = 128
 turb_expo      = 1.6666667
 turb_use_stream_function = false
 turb_sol_frac  = 1.0
-turb_rseed     = 12345
-turb_k_crit    = 2.0
+turb_rseed     = 24680
+turb_k_crit    = 128.0
+turb_dump_generator_diagnostics = true
 divfree_scalar_flux = false
 
 <output1>
