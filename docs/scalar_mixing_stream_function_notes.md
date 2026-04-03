@@ -1,9 +1,15 @@
-# Scalar Mixing Stream-Function Notes
+# Scalar Mixing Velocity-Method Notes
 
-`scalar_mixing` now supports two divergence-free velocity initialization methods:
+`scalar_mixing` now supports three divergence-free velocity initialization
+methods:
 
-- `turb_use_stream_function = false`: projection of random vector Fourier modes
-- `turb_use_stream_function = true`: stream-function construction
+- `turb_velocity_method = projection`: projection of random vector Fourier modes
+- `turb_velocity_method = stream_2d`: 2D stream-function construction
+- `turb_velocity_method = clebsch`: 3D Clebsch construction
+
+The older boolean alias `turb_use_stream_function` is still accepted for
+backward compatibility, but it is deprecated. On `nx3 = 1` meshes it maps to
+`stream_2d`; on 3D meshes it maps to `clebsch`.
 
 ## 2D Convention
 
@@ -21,7 +27,7 @@ stream-function initialization on `nx3 = 1` meshes.
 
 ## 3D Clebsch Model
 
-In 3D, the stream-function path uses a Clebsch representation
+In 3D, the Clebsch path uses
 
 `u = grad(phi1) x grad(phi2)`.
 
@@ -29,38 +35,44 @@ For Fourier modes `p` and `q`, the exact velocity coefficient is
 
 `u_hat(p + q) = (p x q) phi1_hat(p) phi2_hat(q)`.
 
-The implementation fits nonnegative shell weights `A_s` for the scalar
-potentials, with shells `s = 1..turb_nhigh`, by building a deterministic shell
-response tensor `T[K,s,t]` from the actually accepted mode catalogs. This means
-the fit includes the retained `turb_k_crit` importance sampling and spectral
-boosting used during mode selection.
+The implementation now mirrors the retained-mode notebook construction rather
+than solving a separate shell-fit problem. The user specifies `turb_alpha`, and
+AthenaK converts that to
 
-The initial guess uses the local-triad asymptotic scaling:
+- `s_phi = 3 + 2*alpha` for `alpha >= 0`
+- `s_phi = 3 + alpha` for `alpha < 0`
+- target velocity shell slope `s_u = 2*alpha + 1`
 
-- the number of contributing pairs at fixed output shell grows like `k^2`
-- `|p x q|^2` contributes another `k^4`
-- with `|phi_k| ~ k^{-beta}`, this gives `E_u(k) ~ k^{8 - 4 beta}`
+It then:
 
-Matching `E_u(k) ~ k^{-expo}` then suggests
-`beta ~= (expo + 8) / 4`, which seeds the nonlinear shell fit.
+- builds two independent retained scalar catalogs over `[turb_nlow, turb_nhigh]`
+- draws Gaussian scalar coefficients shell by shell
+- rescales each retained shell so `E_phi(k) ~ k^{-s_phi}` is exact up to roundoff
+- forms the retained Clebsch velocity coefficients directly
+- normalizes the realized velocity field to zero mean and the requested `turb_v_rms`
+
+Because the velocity is a quadratic function of the two scalar fields and the
+retained catalog is thinned by `turb_k_crit`, the realized velocity slope is
+only approximate in practice.
 
 ## Leakage Definition
 
-For the 3D Clebsch fit, out-of-band leakage is reported as
+For the 3D Clebsch generator, out-of-band leakage is reported as
 
 `sum_{K < nlow or K > nhigh} E_u(K) / sum_{K >= 1} E_u(K)`.
 
-The solver penalizes leakage outside `[turb_nlow, turb_nhigh]` while matching
-the requested in-band slope.
-
-For regression on small boxes, low integer shell sums are noisy and can distort
-the apparent slope even when the retained Fourier coefficients follow the
-requested law. The added regression therefore fits ensemble-averaged mode
-energy versus the exact discrete `|k|` values inside the requested band.
+The code does not run a separate quality gate anymore. Instead the diagnostics
+sidecar exports the retained scalar shell spectra, the retained velocity shell
+spectrum, the latent scalar slices, and the normalization metadata needed to
+audit the realization directly.
 
 ## Input Contract
 
-- `turb_sol_frac` is ignored in stream-function mode because the construction is
-  intrinsically solenoidal.
-- On `nx3 = 1` meshes, stream-function mode always uses the 2D construction and
-  forces `v3 = 0`, regardless of x3 boundary flags.
+- `turb_sol_frac` is ignored in `stream_2d` and `clebsch` mode because both
+  constructions are intrinsically solenoidal.
+- On `nx3 = 1` meshes, `stream_2d` always uses the 2D construction and forces
+  `v3 = 0`, regardless of x3 boundary flags.
+- The 3D Clebsch sidecar keeps `phi1`, `phi2`, their shell spectra, the retained
+  velocity shell spectrum, and the normalization metadata. It no longer records
+  fit starts, sector responses, or quality-gate state because those objects no
+  longer exist.

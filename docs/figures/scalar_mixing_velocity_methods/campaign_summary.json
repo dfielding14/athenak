@@ -1,0 +1,90 @@
+{
+  "proj2d": {
+    "name": "2D Projection",
+    "init_seconds": 7.57481,
+    "v_rms": 0.9999999999556921,
+    "target_v_rms": 1.0,
+    "v_rms_rel_error": 4.430789068976537e-11,
+    "divergence_ratio": 1.6120284557847682e-07,
+    "slope": -1.6489990829299015,
+    "velocity_diag_match_rms": 2.4525017212181762e-09
+  },
+  "stream2d": {
+    "name": "2D Stream",
+    "init_seconds": 7.53717,
+    "v_rms": 0.9999999999853945,
+    "target_v_rms": 1.0,
+    "v_rms_rel_error": 1.4605539000456247e-11,
+    "divergence_ratio": 1.8089716557951561e-07,
+    "slope": -1.680770809090726,
+    "velocity_diag_match_rms": 2.4377933737184916e-09,
+    "psi_reconstruct_max_abs": 6.210310043996969e-16
+  },
+  "proj3d": {
+    "name": "3D Projection",
+    "init_seconds": 120.319,
+    "v_rms": 0.999999999997116,
+    "target_v_rms": 1.0,
+    "v_rms_rel_error": 2.884026351068769e-12,
+    "divergence_ratio": 8.715762141428542e-08,
+    "slope": -1.660460391307111,
+    "velocity_diag_match_rms": 2.901958126664842e-10
+  },
+  "stream3d": {
+    "name": "3D Stream",
+    "init_seconds": 94.4029,
+    "v_rms": 1.0000000000118219,
+    "target_v_rms": 1.0,
+    "v_rms_rel_error": 1.1821876810813592e-11,
+    "divergence_ratio": 8.577503356200481e-08,
+    "slope": -1.72192223587899,
+    "velocity_diag_match_rms": 3.2243490782592233e-10,
+    "phi1_reconstruct_max_abs": 2.609024107869118e-15,
+    "phi2_reconstruct_max_abs": 3.4416913763379853e-15,
+    "tail_smoothness": 15.198916724941663,
+    "fit": {
+      "initial_loss": 65677.37906924043,
+      "final_loss": 28.52189524524917,
+      "fitted_slope": -1.6387326297893439,
+      "estimated_out_of_band_leakage": 0,
+      "converged": true,
+      "seed_model_chosen": "local_triad",
+      "fit_starts": [
+        {
+          "seed_model": "local_triad",
+          "initial_loss": 65677.37906924043,
+          "final_loss": 28.52189524524917,
+          "fitted_slope": -1.6387326297893439,
+          "estimated_out_of_band_leakage": 0,
+          "converged": true,
+          "chosen": true
+        },
+        {
+          "seed_model": "camillo_symmetric",
+          "initial_loss": 45708.23318965504,
+          "final_loss": 32.524289083719026,
+          "fitted_slope": -1.6574650643933961,
+          "estimated_out_of_band_leakage": 0,
+          "converged": true,
+          "chosen": false
+        },
+        {
+          "seed_model": "flat",
+          "initial_loss": 382546.5582500246,
+          "final_loss": 834.2596874214248,
+          "fitted_slope": 0.3136727269750625,
+          "estimated_out_of_band_leakage": 0,
+          "converged": true,
+          "chosen": false
+        }
+      ],
+      "trial_count": 8,
+      "quality_gate_pass": true,
+      "quality_gate_forced_continue": false,
+      "chosen_trial": 6,
+      "realized_loss": 80.83852354168074,
+      "realized_slope": -1.7219222359106987,
+      "realized_out_of_band_leakage": 0
+    }
+  }
+}

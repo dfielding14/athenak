@@ -1,6 +1,6 @@
-# Reproducing the 1024^2 scalar-mixing stream-function run
+# Reproducing the 1024^2 scalar-mixing stream run
 
-This note records the exact setup used for the 2D stream-function scalar-mixing
+This note records the exact setup used for the 2D stream scalar-mixing
 production run with a left/right scalar step.
 
 ## Build
@@ -27,7 +27,7 @@ The committed input file uses:
 
 - `1024 x 1024` cells on `[-0.5, 0.5]^2`
 - `2 x 2` meshblocks of size `512 x 512`
-- `turb_use_stream_function = true`
+- `turb_velocity_method = stream_2d`
 - target velocity slope `-5/3`
 - `turb_nlow = 2`, `turb_nhigh = 512`
 - left/right scalar step: `theta = 0` for `x < 0`, `theta = 1` for `x >= 0`

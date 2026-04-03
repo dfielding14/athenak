@@ -1,0 +1,157 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+
+\newtheorem{problem}{Problem}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\T}{\mathbb{T}}
+\newcommand{\uu}{\mathbf{u}}
+
+\title{Problem Statement for Passive-Scalar Dissipation:\\
+Mathematical and Physical Formulations}
+\author{}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Purpose}
+The central uncertainty is whether passive-scalar dissipation persists in the vanishing-diffusivity limit when the advecting velocity field is rough, divergence-free, random, and frozen in time. The AthenaK calculations address this question for four prescribed velocity ensembles:
+\begin{enumerate}
+\item a two-dimensional projected divergence-free field,
+\item a two-dimensional stream-function field $\uu=\nabla^\perp \psi$,
+\item a three-dimensional projected divergence-free field,
+\item a three-dimensional Clebsch field $\uu=\nabla \phi_1\times \nabla \phi_2$.
+\end{enumerate}
+
+The same scientific question can be posed in two complementary languages. Mathematicians prefer a statement in terms of random fields, regularity classes, and asymptotic limits. Physicists prefer a statement in terms of power spectra, mixing efficiency, and finite-time dissipation. The purpose of this note is to state the same problem cleanly in both languages.
+
+\section{Common Setup}
+Let $\theta=\theta(x,t)$ solve the passive-scalar advection--diffusion equation
+\begin{equation}
+\partial_t \theta + \uu\cdot \nabla \theta = D\Delta \theta,
+\qquad
+\nabla\cdot \uu = 0,
+\label{eq:scalar}
+\end{equation}
+on the periodic box $\T^d$, with $d\in\{2,3\}$, scalar diffusivity $D>0$, and prescribed initial data $\theta_0$. The velocity field $\uu=\uu(x)$ is random but autonomous: one realization is drawn at $t=0$ and is then held fixed for the duration of the scalar evolution.
+
+The main observable is the finite-time scalar dissipation
+\begin{equation}
+\chi_D(T)
+:=
+D\int_0^T \int_{\T^d} |\nabla \theta(x,t)|^2\,dx\,dt.
+\label{eq:chi}
+\end{equation}
+We are interested in the scaling of $\chi_D(T)$ as $D\to 0$ at fixed observation time $T$. Since the velocity field is frozen rather than dynamically evolving, the natural finite time is an advective time of order $L/U$, or a few such times, rather than an asymptotic long-time limit in which the scalar simply relaxes to its mean.
+
+For the velocity roughness there are again two equivalent languages. In spectral language one prescribes a velocity shell spectrum
+\begin{equation}
+E_u(k)\propto k^{-\zeta}
+\label{eq:velocity-spectrum}
+\end{equation}
+on a finite forcing band. In regularity language one introduces a roughness index $\alpha$. The basic dictionary is
+\begin{equation}
+\alpha = \frac{\zeta-1}{2},
+\label{eq:alpha-zeta}
+\end{equation}
+but the interpretation of $\alpha$ depends on the spectral regime. For
+\begin{equation}
+1<\zeta<3
+\qquad\Longleftrightarrow\qquad
+0<\alpha<1,
+\end{equation}
+the usual second-order increment argument gives
+\[
+\E |\uu(x+h)-\uu(x)|^2 \sim |h|^{2\alpha},
+\]
+so $\alpha$ may be read as a classical H\"older exponent. By contrast, for
+\begin{equation}
+-1\le \zeta \le 1
+\qquad\Longleftrightarrow\qquad
+-1\le \alpha \le 0,
+\end{equation}
+the field is too rough for such a pointwise interpretation in the continuum limit. In that regime, $\alpha$ should instead be understood as a distributional regularity index, for example in a Sobolev or H\"older--Besov sense. Equivalently, one may regard $\alpha$ as the critical Sobolev index suggested by the shell sum
+\[
+\sum_k k^{2s}E_u(k),
+\]
+which becomes marginal at $s=\alpha$. Thus the same formula \eqref{eq:alpha-zeta} can be used throughout the full range $\alpha\in[-1,1]$, provided one remembers that it means classical H\"older regularity only for $\alpha>0$ and negative regularity for $\alpha\le 0$.
+
+This distinction matters for the numerics. At any fixed cutoff the AthenaK generator produces a smooth trigonometric polynomial, so the regime $\alpha\le 0$ is accessed only through a sequence of ultraviolet-truncated approximations with increasing $k_{\max}$. The numerical study is naturally posed in terms of $\zeta$ and finite forcing bands, while the analytical question is often stated in terms of the regularity index $\alpha$.
+
+\section{Problem Statement for Mathematicians}
+The mathematical question is to understand the vanishing-diffusivity limit of \eqref{eq:scalar} for stationary random divergence-free coefficient fields subject to structural constraints.
+
+\begin{problem}[Mathematical formulation]
+Fix one of the four velocity ensembles listed above, and let $\{\uu^{(\lambda)}\}$ be a family of autonomous random divergence-free fields on $\T^d$ indexed by a roughness parameter $\lambda$, interpreted either as a regularity index $\alpha$ or, equivalently through \eqref{eq:alpha-zeta}, as a spectral slope $\zeta$. For each $D>0$, let $\theta_D$ solve
+\[
+\partial_t \theta_D + \uu^{(\lambda)}\cdot \nabla \theta_D = D\Delta \theta_D
+\]
+with fixed initial data $\theta_0$, and define $\chi_D(T)$ by \eqref{eq:chi}. The problem is to determine:
+\begin{enumerate}
+\item whether there exists a nontrivial finite-time anomalous-dissipation regime, in the sense that
+\[
+\liminf_{D\to 0}\E[\chi_D(T)] > 0
+\]
+for fixed $T>0$ of advective order;
+\item whether there is a critical roughness threshold $\lambda_c$ separating a regime in which $\E[\chi_D(T)]\to 0$ from one in which the limit inferior above is strictly positive;
+\item how that threshold depends on the structural class of the velocity field, in particular on the distinctions between projected, stream-function, and Clebsch ensembles;
+\item what regularity is inherited by the scalar field, for example in the form of second-order increment bounds
+\[
+\E|\theta_D(x+h,t)-\theta_D(x,t)|^2 \lesssim |h|^{2\beta},
+\]
+or the corresponding Besov/H\"older interpretation, and how the resulting exponent $\beta$ depends on $\lambda$;
+\item whether the phenomenological relation
+\[
+\alpha + 2\beta = 1
+\]
+emerges in any asymptotic regime, and if so whether its onset coincides with the onset of anomalous dissipation.
+\end{enumerate}
+\end{problem}
+
+This formulation isolates the inverse question that matters mathematically: how much roughness, and of what geometric type, is needed for the advection term to maintain order-unity scalar-gradient production as $D\to 0$ over finite advective times?
+
+\section{Problem Statement for Physicists}
+The physical question is to determine when a frozen rough velocity field mixes strongly enough that scalar dissipation does not collapse with diffusivity.
+
+\begin{problem}[Physical formulation]
+Generate a random incompressible velocity field with prescribed rms speed, prescribed spectral slope $E_u(k)\propto k^{-\zeta}$, and one of four geometric constructions: 2D projection, 2D stream function, 3D projection, or 3D Clebsch. Evolve a passive scalar with diffusivity $D$ according to \eqref{eq:scalar} from a fixed large-scale initial condition. Measure the finite-time dissipation
+\[
+\chi_D(T)=D\int_0^T\int |\nabla \theta|^2\,dx\,dt
+\]
+over one to a few advective crossing times. The problem is to determine:
+\begin{enumerate}
+\item whether $\chi_D(T)$ tends to zero with $D$, or instead remains of order unity after ensemble averaging as $D\to 0$;
+\item what spectral slope $\zeta_c$ marks the transition between weak-mixing and anomalous-dissipation regimes;
+\item whether the transition depends only on the roughness of the velocity spectrum or also on the geometric way incompressibility is realized, namely projection versus stream/Clebsch structure;
+\item how the scalar spectrum and scalar increment statistics change across that transition;
+\item whether the observed scalar roughness is consistent with the Yaglom-type prediction $\alpha+2\beta=1$, with $\alpha$ interpreted through \eqref{eq:alpha-zeta} as a regularity index rather than a classical H\"older exponent when $\alpha\le 0$.
+\end{enumerate}
+\end{problem}
+
+In physics language, the issue is not simply whether the velocity is divergence-free. The sharper question is whether different divergence-free constructions with the same nominal spectral slope produce the same scalar cascade. The 2D stream and 3D Clebsch fields impose additional geometry beyond incompressibility, while the projection ensembles are more general. The comparison therefore probes whether anomalous scalar dissipation is controlled only by roughness, or also by the topology of the advecting field.
+
+\section{Translation Between the Two Statements}
+The two formulations differ in emphasis rather than substance.
+
+The mathematician asks for a statement about the limit $D\to 0$, the positivity
+of the finite-time anomalous-dissipation indicator
+\[
+\liminf_{D\to 0}\E[\chi_D(T)],
+\]
+and the scalar regularity exponent $\beta$.
+
+The physicist asks for the critical spectral slope, the persistence of mixing at
+finite time, and the dependence of the scalar cascade on velocity geometry.
+
+The bridge between the two is the roughness relation \eqref{eq:alpha-zeta}: the
+spectral slope $\zeta$ used to generate the field is the physical proxy for the
+regularity index $\alpha$ used to state the analytical problem. For $\alpha>0$
+this is the usual H\"older exponent; for $\alpha\le 0$ it is a negative
+regularity index in a distributional sense.
+
+The scientific program is therefore the same in both languages: identify the critical roughness threshold for anomalous scalar dissipation, determine whether that threshold depends on the structural realization of incompressibility, and test whether the associated scalar regularity is consistent with Yaglom-type scaling.
+
+\end{document}

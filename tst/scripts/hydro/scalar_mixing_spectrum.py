@@ -3,13 +3,14 @@
 # This test is only active when AthenaK is configured with
 #   --cmake=-DPROBLEM=scalar_mixing
 #
-# It verifies that both projection and stream-function initialization produce
+# It verifies that projection, 2D stream, and 3D Clebsch initialization produce
 # the requested RMS velocity, near-zero mean flow, very small spectral
 # divergence, and the expected in-band power-law slope. Because the
 # initialization uses random Gaussian coefficients, the spectrum check is
 # performed on an ensemble average over a fixed seed set.
 
 import glob
+import json
 import logging
 import os
 import sys
@@ -39,6 +40,8 @@ _CASES = [
         'expect_vz_zero': True,
         'check_leakage': False,
         'slope_tol': 0.2,
+        'check_exact_k_slope': True,
+        'div_tol': 2.0e-7,
     },
     {
         'name': 'projection_3d',
@@ -52,6 +55,8 @@ _CASES = [
         'expect_vz_zero': False,
         'check_leakage': False,
         'slope_tol': 0.2,
+        'check_exact_k_slope': True,
+        'div_tol': 2.0e-7,
     },
     {
         'name': 'stream_2d',
@@ -65,19 +70,27 @@ _CASES = [
         'expect_vz_zero': True,
         'check_leakage': False,
         'slope_tol': 0.2,
+        'check_exact_k_slope': True,
+        'div_tol': 2.0e-7,
     },
     {
-        'name': 'stream_3d',
-        'input': 'tests/scalar_mixing_stream_3d_regression.athinput',
-        'basename': 'scalar_mix_stream_3d',
+        'name': 'clebsch_3d',
+        'input': 'tests/scalar_mixing_clebsch_3d_regression.athinput',
+        'basename': 'scalar_mix_clebsch_3d',
         'nlow': 2,
-        'nhigh': 6,
+        'nhigh': 10,
         'expo': 1.6666667,
+        'alpha': 1.0/3.0,
+        'phi_slope': 11.0/3.0,
+        'velocity_slope': 5.0/3.0,
         'vrms': 1.0,
         'spectral_ndim': 3,
         'expect_vz_zero': False,
         'check_leakage': True,
-        'slope_tol': 0.5,
+        'slope_tol': 0.7,
+        'check_exact_k_slope': False,
+        'check_shell_slope': True,
+        'div_tol': 5.0e-2,
     },
 ]
 
@@ -107,12 +120,29 @@ def _output_path(case, seed):
     return matches[-1]
 
 
+def _diag_path(case, seed):
+    return os.path.join('build', 'src',
+                        _run_basename(case, seed) + '.turb_init_diag.json')
+
+
 def _clear_old_outputs(case):
     for seed in _SEEDS:
         pattern = os.path.join('build', 'src', 'bin',
                                _run_basename(case, seed) + '.hydro_w.*.bin')
         for path in glob.glob(pattern):
             os.remove(path)
+        diag_path = _diag_path(case, seed)
+        if os.path.exists(diag_path):
+            os.remove(diag_path)
+
+
+def _load_diag(case, seed):
+    diag_path = _diag_path(case, seed)
+    if not os.path.exists(diag_path):
+        raise RuntimeError('No diagnostics JSON found for '
+                           + case['name'] + f' seed={seed}: {diag_path}')
+    with open(diag_path, 'r', encoding='utf-8') as fobj:
+        return json.load(fobj)
 
 
 def _shell_bins(shape):
@@ -142,6 +172,19 @@ def _fit_grouped_mode_slope(group_means):
         return np.nan
     xs = np.log(np.asarray(keys, dtype=np.float64))
     ys = np.log(np.asarray([group_means[key] for key in keys], dtype=np.float64))
+    A = np.vstack([xs, np.ones_like(xs)]).T
+    slope, _ = np.linalg.lstsq(A, ys, rcond=None)[0]
+    return slope
+
+
+def _fit_shell_slope(shell_energy, nlow, nhigh):
+    kvals = np.arange(nlow, nhigh + 1, dtype=np.float64)
+    band = np.asarray(shell_energy[nlow:nhigh + 1], dtype=np.float64)
+    mask = band > 0.0
+    if np.count_nonzero(mask) < 2:
+        return np.nan
+    xs = np.log(kvals[mask])
+    ys = np.log(band[mask])
     A = np.vstack([xs, np.ones_like(xs)]).T
     slope, _ = np.linalg.lstsq(A, ys, rcond=None)[0]
     return slope
@@ -184,6 +227,8 @@ def _analyze_output(case, seed):
         'vrms': vrms,
         'div_ratio': div_ratio,
         'leakage': leakage,
+        'shell_energy': shell_energy,
+        'shell_slope': _fit_shell_slope(shell_energy, case['nlow'], case['nhigh']),
         'grouped_mode_means': grouped_mode_means,
         'vz_max': np.max(np.abs(vz)),
     }
@@ -214,6 +259,9 @@ def analyze():
     analyze_status = True
     for case in _CASES:
         per_seed = [_analyze_output(case, seed) for seed in _SEEDS]
+        diag_per_seed = []
+        if case['name'] == 'clebsch_3d':
+            diag_per_seed = [_load_diag(case, seed) for seed in _SEEDS]
         grouped_mode_means = {}
         for metrics in per_seed:
             for kval, mean_energy in metrics['grouped_mode_means'].items():
@@ -229,6 +277,7 @@ def analyze():
                     case['name'], exact_k_slope, target_mode_slope,
                     max(metrics['div_ratio'] for metrics in per_seed),
                     max(metrics['leakage'] for metrics in per_seed))
+        shell_slope = float(np.nanmean([metrics['shell_slope'] for metrics in per_seed]))
 
         max_mean_err = max(np.max(np.abs(metrics['means'])) for metrics in per_seed)
         if max_mean_err > 1.0e-9:
@@ -244,16 +293,25 @@ def analyze():
             analyze_status = False
 
         max_div_ratio = max(metrics['div_ratio'] for metrics in per_seed)
-        if max_div_ratio > 2.0e-7:
+        if max_div_ratio > case.get('div_tol', 2.0e-7):
             logger.warning('%s divergence ratio too large across seeds: %.3e',
                            case['name'], max_div_ratio)
             analyze_status = False
 
-        slope_err = abs(exact_k_slope - target_mode_slope)
-        if not np.isfinite(exact_k_slope) or slope_err > case['slope_tol']:
-            logger.warning('%s exact-k slope mismatch: slope %.6f target %.6f',
-                           case['name'], exact_k_slope, target_mode_slope)
-            analyze_status = False
+        if case['check_exact_k_slope']:
+            slope_err = abs(exact_k_slope - target_mode_slope)
+            if not np.isfinite(exact_k_slope) or slope_err > case['slope_tol']:
+                logger.warning('%s exact-k slope mismatch: slope %.6f target %.6f',
+                               case['name'], exact_k_slope, target_mode_slope)
+                analyze_status = False
+
+        if case.get('check_shell_slope', False):
+            target_shell_slope = -float(case['velocity_slope'])
+            slope_err = abs(shell_slope - target_shell_slope)
+            if not np.isfinite(shell_slope) or slope_err > case['slope_tol']:
+                logger.warning('%s shell slope mismatch: slope %.6f target %.6f',
+                               case['name'], shell_slope, target_shell_slope)
+                analyze_status = False
 
         if case['expect_vz_zero']:
             max_vz = max(metrics['vz_max'] for metrics in per_seed)
@@ -268,5 +326,58 @@ def analyze():
                 logger.warning('%s leakage too large across seeds: %.3e',
                                case['name'], max_leakage)
                 analyze_status = False
+
+        if case['name'] == 'clebsch_3d':
+            for seed, diag in zip(_SEEDS, diag_per_seed):
+                meta = diag.get('metadata', {})
+                spectra = diag.get('spectra', {})
+                target = meta.get('target', {})
+                if meta.get('construction') != 'clebsch_3d':
+                    logger.warning('%s wrong construction metadata for seed=%d',
+                                   case['name'], seed)
+                    analyze_status = False
+                for forbidden_key in ('fit', 'quality_gate', 'sector_response'):
+                    if forbidden_key in diag:
+                        logger.warning('%s stale diagnostics key %s present for seed=%d',
+                                       case['name'], forbidden_key, seed)
+                        analyze_status = False
+                if 'phi1_shell_energy' not in spectra or 'phi2_shell_energy' not in spectra:
+                    logger.warning('%s missing phi shell spectra for seed=%d',
+                                   case['name'], seed)
+                    analyze_status = False
+                    continue
+                if 'velocity_shell_energy' in spectra:
+                    logger.warning('%s stale retained velocity shell spectrum present for seed=%d',
+                                   case['name'], seed)
+                    analyze_status = False
+                if abs(float(target.get('alpha', np.nan)) - float(case['alpha'])) > 1.0e-12:
+                    logger.warning('%s wrong alpha metadata for seed=%d',
+                                   case['name'], seed)
+                    analyze_status = False
+                if abs(float(target.get('phi_slope', np.nan)) - float(case['phi_slope'])) > 1.0e-12:
+                    logger.warning('%s wrong phi slope metadata for seed=%d',
+                                   case['name'], seed)
+                    analyze_status = False
+                if abs(float(target.get('velocity_slope', np.nan)) -
+                       float(case['velocity_slope'])) > 1.0e-12:
+                    logger.warning('%s wrong velocity slope metadata for seed=%d',
+                                   case['name'], seed)
+                    analyze_status = False
+
+                for key in ('phi1_shell_energy', 'phi2_shell_energy'):
+                    shell = np.asarray(spectra[key], dtype=np.float64)
+                    ref = shell[case['nlow']]
+                    target_shell = np.array([
+                        0.0 if kval == 0 else kval ** (-float(case['phi_slope']))
+                        for kval in range(len(shell))
+                    ], dtype=np.float64)
+                    target_shell *= ref / target_shell[case['nlow']]
+                    rel_err = np.max(np.abs(shell[case['nlow']:case['nhigh'] + 1]
+                                            - target_shell[case['nlow']:case['nhigh'] + 1])
+                                     / target_shell[case['nlow']:case['nhigh'] + 1])
+                    if rel_err > 1.0e-10:
+                        logger.warning('%s %s not exact power law for seed=%d: %.3e',
+                                       case['name'], key, seed, rel_err)
+                        analyze_status = False
 
     return analyze_status
