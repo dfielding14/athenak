@@ -28,6 +28,8 @@ SPECTRUM_NBINS = 32
 SCALAR_MAP_LIMIT = 1.5
 SCALAR_MAP_DPI = 600
 SCALAR_MAP_MAX_PIXELS = 4096
+THREED_SPECTRUM_SLICE_FRACTIONS = (0.25, 0.5, 0.75)
+THREED_MAP_SERIES_MAX_SNAPSHOTS = 9
 
 
 def _warn(message: str) -> None:
@@ -117,6 +119,83 @@ def _velocity_spectrum_2d(vx: np.ndarray, vy: np.ndarray, vz: np.ndarray) -> tup
     return kvals, spectrum[1:]
 
 
+def _slice_indices(size: int) -> list[int]:
+    indices = []
+    for fraction in THREED_SPECTRUM_SLICE_FRACTIONS:
+        index = int(round(fraction * (size - 1)))
+        index = min(size - 1, max(0, index))
+        if index not in indices:
+            indices.append(index)
+    return indices
+
+
+def _average_raw_spectra(
+    spectra: list[tuple[np.ndarray, np.ndarray]],
+) -> tuple[np.ndarray, np.ndarray]:
+    if not spectra:
+        raise ValueError("No slice spectra available for averaging.")
+
+    common_length = min(len(spec) for _, spec in spectra)
+    raw_k = np.arange(1, common_length + 1, dtype=np.float64)
+    raw_spec = np.mean(
+        np.vstack([np.asarray(spec[:common_length], dtype=np.float64) for _, spec in spectra]),
+        axis=0,
+    )
+    return raw_k, raw_spec
+
+
+def _slice_averaged_theta_entry(
+    field: np.ndarray,
+    time_value: float,
+    *,
+    kmax: int,
+    nbins: int,
+) -> dict[str, np.ndarray | float | int | str]:
+    array = _canonical_field(field)
+    slice_spectra = []
+    for axis in range(array.ndim):
+        for index in _slice_indices(array.shape[axis]):
+            plane = np.take(array, indices=index, axis=axis)
+            kvals, spec, _ = _theta_spectrum(plane)
+            slice_spectra.append((kvals, spec))
+
+    entry = _build_rebinned_entry(
+        time_value,
+        *_average_raw_spectra(slice_spectra),
+        kmax=kmax,
+        nbins=nbins,
+    )
+    entry["method"] = "3d_slice_average_2dfft"
+    entry["slice_count"] = len(slice_spectra)
+    return entry
+
+
+def _slice_averaged_velocity_curve(
+    vx: np.ndarray,
+    vy: np.ndarray,
+    vz: np.ndarray,
+    *,
+    kmax: int,
+    nbins: int,
+) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray], int, str]:
+    vx3d = _canonical_field(vx)
+    vy3d = _canonical_field(vy)
+    vz3d = _canonical_field(vz)
+
+    slice_spectra = []
+    for axis in range(vx3d.ndim):
+        for index in _slice_indices(vx3d.shape[axis]):
+            plane_x = np.take(vx3d, indices=index, axis=axis)
+            plane_y = np.take(vy3d, indices=index, axis=axis)
+            plane_z = np.take(vz3d, indices=index, axis=axis)
+            kvals, spec = _velocity_spectrum_2d(plane_x, plane_y, plane_z)
+            slice_spectra.append((kvals, spec))
+
+    raw_curve = _average_raw_spectra(slice_spectra)
+    rebinned_curve = _log_rebin_spectrum(raw_curve[0], raw_curve[1], kmax=kmax, nbins=nbins)
+    return raw_curve, rebinned_curve, len(slice_spectra), "3d_slice_average_2dfft"
+
+
 def _log_rebin_spectrum(
     kvals: np.ndarray,
     spectrum: np.ndarray,
@@ -174,6 +253,53 @@ def _save_theta_spectrum_npz(
         turb_expo=np.float64(float(metadata.get("turb_expo", 0.0))),
         scalar_diffusivity=np.float64(float(metadata.get("scalar_diffusivity", 0.0))),
         turb_rseed=np.int64(int(metadata.get("turb_rseed", 0))),
+        spectrum_method=np.asarray(str(metadata.get("spectrum_method", ""))),
+        spectrum_slice_count=np.int64(int(metadata.get("spectrum_slice_count", 0))),
+        case_name=np.asarray(str(metadata.get("case_name", ""))),
+        analyzed_dump=np.asarray(str(metadata.get("analyzed_dump", ""))),
+    )
+
+
+def _save_theta_series_npz(
+    output_path: Path,
+    metadata: dict[str, object],
+    dump_paths: list[Path],
+    grid_shape: tuple[int, ...],
+    spectra: list[dict[str, np.ndarray | float]],
+    velocity_raw: tuple[np.ndarray, np.ndarray],
+    velocity_rebinned: tuple[np.ndarray, np.ndarray],
+    *,
+    kmax: int,
+    nbins: int,
+) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(
+        output_path,
+        times=np.asarray([float(entry["time"]) for entry in spectra], dtype=np.float64),
+        dump_paths=np.asarray([str(path) for path in dump_paths]),
+        theta_k_raw=np.asarray(spectra[0]["k_raw"], dtype=np.float64),
+        theta_spectrum_raw=np.vstack(
+            [np.asarray(entry["spec_raw"], dtype=np.float64) for entry in spectra]
+        ),
+        theta_k_rebinned=np.asarray(spectra[0]["k_rebinned"], dtype=np.float64),
+        theta_spectrum_rebinned=np.vstack(
+            [np.asarray(entry["spec_rebinned"], dtype=np.float64) for entry in spectra]
+        ),
+        velocity_k_raw=np.asarray(velocity_raw[0], dtype=np.float64),
+        velocity_spectrum_raw=np.asarray(velocity_raw[1], dtype=np.float64),
+        velocity_k_rebinned=np.asarray(velocity_rebinned[0], dtype=np.float64),
+        velocity_spectrum_rebinned=np.asarray(velocity_rebinned[1], dtype=np.float64),
+        kmax=np.int64(kmax),
+        nbins=np.int64(nbins),
+        dim=np.asarray(str(metadata.get("dim", ""))),
+        grid_dim=np.int64(int(metadata.get("grid_dim", 0))),
+        grid_shape=np.asarray(grid_shape, dtype=np.int64),
+        method=np.asarray(str(metadata.get("method", ""))),
+        turb_expo=np.float64(float(metadata.get("turb_expo", 0.0))),
+        scalar_diffusivity=np.float64(float(metadata.get("scalar_diffusivity", 0.0))),
+        turb_rseed=np.int64(int(metadata.get("turb_rseed", 0))),
+        spectrum_method=np.asarray(str(metadata.get("spectrum_method", ""))),
+        spectrum_slice_count=np.int64(int(metadata.get("spectrum_slice_count", 0))),
         case_name=np.asarray(str(metadata.get("case_name", ""))),
         analyzed_dump=np.asarray(str(metadata.get("analyzed_dump", ""))),
     )
@@ -384,6 +510,90 @@ def _plot_scalar_midplanes(snapshot: dict[str, np.ndarray | float], output: Path
     plt.close(fig)
 
 
+def _select_series_paths(paths: list[Path], max_snapshots: int) -> list[Path]:
+    if len(paths) <= max_snapshots:
+        return list(paths)
+    indices = []
+    for value in np.linspace(0, len(paths) - 1, max_snapshots):
+        index = int(round(float(value)))
+        index = min(len(paths) - 1, max(0, index))
+        if index not in indices:
+            indices.append(index)
+    return [paths[index] for index in indices]
+
+
+def _downsample_plane(plane: np.ndarray) -> np.ndarray:
+    stride_y = max(1, math.ceil(plane.shape[0] / SCALAR_MAP_MAX_PIXELS))
+    stride_x = max(1, math.ceil(plane.shape[1] / SCALAR_MAP_MAX_PIXELS))
+    return plane[::stride_y, ::stride_x]
+
+
+def _plot_scalar_midplanes_series(paths: list[Path], output: Path) -> None:
+    selected_paths = _select_series_paths(paths, THREED_MAP_SERIES_MAX_SNAPSHOTS)
+    prepared_rows = []
+    theta_absmax = THETA_LINTHRESH
+
+    for path in selected_paths:
+        snapshot = _read_snapshot(path, ["s_00"])
+        scalar = _canonical_field(np.asarray(snapshot["scalar"]))
+        centered = scalar - float(np.mean(scalar))
+
+        x = np.asarray(snapshot["x1v"])
+        y = np.asarray(snapshot["x2v"])
+        z = np.asarray(snapshot["x3v"])
+        iz = centered.shape[0] // 2
+        iy = centered.shape[1] // 2
+        ix = centered.shape[2] // 2
+
+        slices = [
+            ("x-y midplane", _downsample_plane(centered[iz, :, :]), [x[0], x[-1], y[0], y[-1]], "x", "y"),
+            ("x-z midplane", _downsample_plane(centered[:, iy, :]), [x[0], x[-1], z[0], z[-1]], "x", "z"),
+            ("y-z midplane", _downsample_plane(centered[:, :, ix]), [y[0], y[-1], z[0], z[-1]], "y", "z"),
+        ]
+
+        for _, plane, _, _, _ in slices:
+            theta_absmax = max(theta_absmax, float(np.max(np.abs(plane))))
+        prepared_rows.append((float(snapshot["time"]), slices))
+
+    norm = colors.SymLogNorm(
+        linthresh=THETA_LINTHRESH,
+        vmin=-theta_absmax,
+        vmax=theta_absmax,
+        base=10.0,
+    )
+
+    nrows = len(prepared_rows)
+    fig, axes = plt.subplots(
+        nrows,
+        3,
+        figsize=(17, max(4.0 * nrows, 5.2)),
+        squeeze=False,
+    )
+    image = None
+    for row_axes, (time_value, slices) in zip(axes, prepared_rows, strict=True):
+        for ax, (title, plane, extent, xlabel, ylabel) in zip(row_axes, slices, strict=True):
+            image = ax.imshow(
+                plane,
+                origin="lower",
+                cmap=SCALAR_CMAP,
+                extent=extent,
+                norm=norm,
+                aspect="equal",
+            )
+            ax.set_title(f"{title}\nt = {time_value:.3f}")
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(ylabel)
+
+    if image is not None:
+        cbar = fig.colorbar(image, ax=axes.ravel().tolist(), fraction=0.025, pad=0.02)
+        cbar.set_label(r"$\theta - \langle \theta \rangle$")
+
+    fig.suptitle("Scalar midplane slices across time", fontsize=15)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output, dpi=220, bbox_inches="tight")
+    plt.close(fig)
+
+
 def _case_metadata_from_args(case_name: str, dump_path: Path) -> dict[str, object]:
     return {
         "case_name": case_name,
@@ -433,29 +643,133 @@ def _analyze_case(
 
     analysis_dir.mkdir(parents=True, exist_ok=True)
     selected_paths = [dump_paths[-1]] if latest_only else dump_paths
+    file_tag = f"_{case_name}"
 
     latest_snapshot = _read_snapshot(selected_paths[-1], ["s_00"])
     scalar_field = _canonical_field(np.asarray(latest_snapshot["scalar"]))
     dim = _grid_dim(scalar_field)
     spectrum_kmax = _spectrum_kmax_from_field(scalar_field)
 
-    latest_k, latest_spec, _ = _theta_spectrum(scalar_field)
-    latest_entry = _build_rebinned_entry(
-        float(latest_snapshot["time"]),
-        latest_k,
-        latest_spec,
-        kmax=spectrum_kmax,
-        nbins=SPECTRUM_NBINS,
-    )
-
     meta = dict(metadata)
     meta["case_name"] = case_name
+    meta["dim"] = f"{dim}d"
     meta["grid_dim"] = dim
     meta["analyzed_dump"] = str(selected_paths[-1])
+    meta["spectrum_method"] = "2d_full_fft" if dim == 2 else "3d_slice_average_2dfft"
+    meta["spectrum_slice_count"] = 1 if dim == 2 else len(THREED_SPECTRUM_SLICE_FRACTIONS) * dim
 
-    if save_spectrum_npz:
+    if dim == 2:
+        latest_k, latest_spec, _ = _theta_spectrum(scalar_field)
+        latest_entry = _build_rebinned_entry(
+            float(latest_snapshot["time"]),
+            latest_k,
+            latest_spec,
+            kmax=spectrum_kmax,
+            nbins=SPECTRUM_NBINS,
+        )
+    else:
+        _warn(
+            "3D spectra use averaged 2D FFTs from multiple orthogonal slices "
+            "instead of a full 3D FFT."
+        )
+        latest_entry = _slice_averaged_theta_entry(
+            scalar_field,
+            float(latest_snapshot["time"]),
+            kmax=spectrum_kmax,
+            nbins=SPECTRUM_NBINS,
+        )
+
+    if not latest_only:
+        spectra = []
+        for path in selected_paths:
+            snapshot = _read_snapshot(path, ["s_00"])
+            if dim == 2:
+                kvals, spec, _ = _theta_spectrum(snapshot["scalar"])
+                spectra.append(
+                    _build_rebinned_entry(
+                        float(snapshot["time"]),
+                        kvals,
+                        spec,
+                        kmax=spectrum_kmax,
+                        nbins=SPECTRUM_NBINS,
+                    )
+                )
+            else:
+                spectra.append(
+                    _slice_averaged_theta_entry(
+                        snapshot["scalar"],
+                        float(snapshot["time"]),
+                        kmax=spectrum_kmax,
+                        nbins=SPECTRUM_NBINS,
+                    )
+                )
+
+        velocity_snapshot = _read_snapshot(selected_paths[0], ["velx", "vely", "velz"])
+        if dim == 2:
+            kvals_v, spec_v = _velocity_spectrum_2d(
+                velocity_snapshot["velx"],
+                velocity_snapshot["vely"],
+                velocity_snapshot["velz"],
+            )
+            velocity_raw_curve = (kvals_v, spec_v)
+            velocity_curve = _log_rebin_spectrum(
+                kvals_v,
+                spec_v,
+                kmax=spectrum_kmax,
+                nbins=SPECTRUM_NBINS,
+            )
+        else:
+            velocity_raw_curve, velocity_curve, velocity_slice_count, velocity_method = (
+                _slice_averaged_velocity_curve(
+                    velocity_snapshot["velx"],
+                    velocity_snapshot["vely"],
+                    velocity_snapshot["velz"],
+                    kmax=spectrum_kmax,
+                    nbins=SPECTRUM_NBINS,
+                )
+            )
+            meta["spectrum_method"] = velocity_method
+            meta["spectrum_slice_count"] = velocity_slice_count
+
+        _save_theta_series_npz(
+            analysis_dir / f"scalar_velocity_spectra{file_tag}.npz",
+            meta,
+            selected_paths,
+            tuple(int(v) for v in scalar_field.shape),
+            spectra,
+            velocity_raw_curve,
+            velocity_curve,
+            kmax=spectrum_kmax,
+            nbins=SPECTRUM_NBINS,
+        )
+        _plot_theta_spectrum(
+            analysis_dir / f"scalar_velocity_spectra{file_tag}.png",
+            (
+                "Scalar Power Spectra and Frozen Velocity Spectrum"
+                if dim == 2
+                else "Slice-Averaged Scalar Power Spectra and Frozen Velocity Spectrum"
+            ),
+            spectra,
+            velocity_curve=velocity_curve,
+            kmax=spectrum_kmax,
+        )
+        if dim == 2:
+            _plot_scalar_map_series(
+                selected_paths,
+                analysis_dir / f"scalar_maps_redshift{file_tag}.png",
+            )
+        else:
+            _plot_scalar_midplanes(
+                latest_snapshot,
+                analysis_dir / f"scalar_midplanes{file_tag}.png",
+            )
+            _plot_scalar_midplanes_series(
+                selected_paths,
+                analysis_dir / f"scalar_midplanes_series{file_tag}.png",
+            )
+    else:
         _save_theta_spectrum_npz(
-            analysis_dir / "theta_power_spectrum.npz",
+            analysis_dir / f"theta_power_spectrum{file_tag}.npz",
             meta,
             float(latest_snapshot["time"]),
             tuple(int(v) for v in scalar_field.shape),
@@ -464,54 +778,30 @@ def _analyze_case(
             latest_entry["k_rebinned"],
             latest_entry["spec_rebinned"],
         )
-
-    if dim == 2 and not latest_only:
-        spectra = []
-        for path in selected_paths:
-            snapshot = _read_snapshot(path, ["s_00"])
-            kvals, spec, _ = _theta_spectrum(snapshot["scalar"])
-            spectra.append(
-                _build_rebinned_entry(
-                    float(snapshot["time"]),
-                    kvals,
-                    spec,
-                    kmax=spectrum_kmax,
-                    nbins=SPECTRUM_NBINS,
-                )
+        title = (
+            f"{case_name} theta power spectrum at t = {float(latest_snapshot['time']):.3f}"
+            if dim == 2
+            else (
+                f"{case_name} slice-averaged theta power spectrum at "
+                f"t = {float(latest_snapshot['time']):.3f}"
             )
-
-        velocity_snapshot = _read_snapshot(selected_paths[0], ["velx", "vely", "velz"])
-        kvals_v, spec_v = _velocity_spectrum_2d(
-            velocity_snapshot["velx"],
-            velocity_snapshot["vely"],
-            velocity_snapshot["velz"],
-        )
-        velocity_curve = _log_rebin_spectrum(
-            kvals_v,
-            spec_v,
-            kmax=spectrum_kmax,
-            nbins=SPECTRUM_NBINS,
         )
         _plot_theta_spectrum(
-            analysis_dir / "scalar_velocity_spectra.png",
-            "Scalar Power Spectra and Frozen Velocity Spectrum",
-            spectra,
-            velocity_curve=velocity_curve,
-            kmax=spectrum_kmax,
-        )
-        _plot_scalar_map_series(selected_paths, analysis_dir / "scalar_maps_redshift.png")
-    else:
-        title = f"{case_name} theta power spectrum at t = {float(latest_snapshot['time']):.3f}"
-        _plot_theta_spectrum(
-            analysis_dir / "theta_power_spectrum.png",
+            analysis_dir / f"theta_power_spectrum{file_tag}.png",
             title,
             [latest_entry],
             kmax=spectrum_kmax,
         )
         if dim == 2:
-            _plot_scalar_map_latest(latest_snapshot, analysis_dir / "scalar_map.png")
+            _plot_scalar_map_latest(
+                latest_snapshot,
+                analysis_dir / f"scalar_map{file_tag}.png",
+            )
         else:
-            _plot_scalar_midplanes(latest_snapshot, analysis_dir / "scalar_midplanes.png")
+            _plot_scalar_midplanes(
+                latest_snapshot,
+                analysis_dir / f"scalar_midplanes{file_tag}.png",
+            )
 
     return {
         "case_name": case_name,
@@ -607,7 +897,7 @@ def main() -> None:
     parser.add_argument(
         "--save-spectrum-npz",
         action="store_true",
-        help="Save theta power spectrum arrays and metadata as NPZ.",
+        help="Deprecated: spectrum NPZ files are now saved automatically.",
     )
     args = parser.parse_args()
 

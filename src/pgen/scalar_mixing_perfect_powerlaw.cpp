@@ -3,8 +3,8 @@
 // Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
-//! \file scalar_mixing.cpp
-//  \brief Problem generator for scalar mixing in frozen turbulent velocity field
+//! \file scalar_mixing_perfect_powerlaw.cpp
+//  \brief Scalar mixing with exact centered-shell velocity power-law initialization
 //
 //  Passive scalars with selectable source terms (mean gradient, reaction, sponge).
 //  This simulates mixing of background gradients and/or reactive reservoirs by turbulence.
@@ -43,7 +43,8 @@ namespace {
 
 constexpr Real kTiny = 1.0e-16;
 constexpr Real kPi = 3.141592653589793238462643383279502884L;
-constexpr Real kCheckerboardMode = 4.0 * kPi;
+constexpr Real kDefaultScalar0WavelengthsPerBox = 1.0;
+constexpr Real kDefaultScalar1WavelengthsPerBox = 2.0;
 
 enum class VelocityMethod { Projection, StreamFunction };
 
@@ -56,6 +57,7 @@ struct TurbulenceConfig {
   Real sol_frac = 1.0;
   int rseed = 12345;
   Real k_crit = 16.0;
+  std::string spectrum_contract = "exact_shell";
 
   int nx1 = 1;
   int nx2 = 1;
@@ -75,6 +77,8 @@ struct TurbulenceConfig {
   Real dky = 0.0;
   Real dkz = 0.0;
   Real k_crit_mag = 0.0;
+
+  bool exact_shell_contract = true;
 };
 
 struct ModeCatalog {
@@ -93,6 +97,18 @@ struct VectorCoefficients {
 
 struct ScalarCoefficients {
   std::vector<Real> aka, akb;
+};
+
+struct CandidateMode {
+  int nkx = 0;
+  int nky = 0;
+  int nkz = 0;
+  int shell = 0;
+  Real kx = 0.0;
+  Real ky = 0.0;
+  Real kz = 0.0;
+  Real kiso = 0.0;
+  Real p_accept = 1.0;
 };
 
 struct SignedMode {
@@ -194,7 +210,7 @@ int MixSeed(int seed, int salt) {
 
 int ShellFromIndexSqr(int nsqr) {
   if (nsqr <= 0) return 0;
-  return static_cast<int>(std::ceil(std::sqrt(static_cast<Real>(nsqr)) - 1.0e-12));
+  return static_cast<int>(std::floor(std::sqrt(static_cast<Real>(nsqr)) + 0.5 - 1.0e-12));
 }
 
 Real FitLogSlope(const std::vector<Real> &spectrum, int nlow, int nhigh) {
@@ -248,22 +264,33 @@ Real NormalizeBoxCoordinate(Real x, Real xmin, Real xmax) {
 }
 
 KOKKOS_INLINE_FUNCTION
-Real CheckerboardScalarIC(Real x1v, Real x2v, Real x3v,
-                          Real x1min, Real x1max,
-                          Real x2min, Real x2max,
-                          Real x3min, Real x3max,
-                          bool multi_d, bool three_d) {
+Real SineScalarIC1D(Real x1v,
+                    Real x1min, Real x1max,
+                    Real wavelengths_per_box) {
+  const Real mode = 2.0 * kPi * wavelengths_per_box;
   const Real xi1 = NormalizeBoxCoordinate(x1v, x1min, x1max);
-  Real pattern = sin(kCheckerboardMode * xi1);
+  return 0.5 * (1.0 + sin(mode * xi1));
+}
+
+KOKKOS_INLINE_FUNCTION
+Real SineScalarIC(Real x1v, Real x2v, Real x3v,
+                  Real x1min, Real x1max,
+                  Real x2min, Real x2max,
+                  Real x3min, Real x3max,
+                  Real wavelengths_per_box,
+                  bool multi_d, bool three_d) {
+  const Real mode = 2.0 * kPi * wavelengths_per_box;
+  const Real xi1 = NormalizeBoxCoordinate(x1v, x1min, x1max);
+  Real pattern = sin(mode * xi1);
   if (multi_d) {
     const Real xi2 = NormalizeBoxCoordinate(x2v, x2min, x2max);
-    pattern *= sin(kCheckerboardMode * xi2);
+    pattern *= sin(mode * xi2);
   }
   if (three_d) {
     const Real xi3 = NormalizeBoxCoordinate(x3v, x3min, x3max);
-    pattern *= sin(kCheckerboardMode * xi3);
+    pattern *= sin(mode * xi3);
   }
-  return (pattern >= 0.0) ? 1.0 : 0.0;
+  return 0.5 * (1.0 + pattern);
 }
 
 TurbulenceConfig ReadTurbulenceConfig(ParameterInput *pin, Mesh *pm,
@@ -280,6 +307,8 @@ TurbulenceConfig ReadTurbulenceConfig(ParameterInput *pin, Mesh *pm,
   cfg.sol_frac = pin->GetOrAddReal("problem", "turb_sol_frac", 1.0);
   cfg.rseed = GetTurbulenceSeed(pin);
   cfg.k_crit = pin->GetOrAddReal("problem", "turb_k_crit", 16.0);
+  cfg.spectrum_contract =
+      pin->GetOrAddString("problem", "turb_spectrum_contract", "exact_shell");
   cfg.divfree_scalar_flux = pin->GetOrAddBoolean("problem", "divfree_scalar_flux", false);
 
   cfg.nx1 = pm->mb_indcs.nx1;
@@ -316,6 +345,11 @@ TurbulenceConfig ReadTurbulenceConfig(ParameterInput *pin, Mesh *pm,
   cfg.dky = (cfg.nx2 > 1) ? 2.0*M_PI/cfg.ly : 0.0;
   cfg.dkz = (cfg.nx3 > 1) ? 2.0*M_PI/cfg.lz : 0.0;
   cfg.k_crit_mag = cfg.k_crit * cfg.dkx;
+  cfg.exact_shell_contract = (cfg.spectrum_contract == "exact_shell");
+
+  if (!(cfg.spectrum_contract == "exact_shell" || cfg.spectrum_contract == "statistical")) {
+    FatalProblemSetup("<problem>/turb_spectrum_contract must be 'exact_shell' or 'statistical'.");
+  }
 
   return cfg;
 }
@@ -325,7 +359,135 @@ Real ModeAcceptanceProbability(const TurbulenceConfig &cfg, Real kiso) {
   return (cfg.k_crit_mag * cfg.k_crit_mag) / (kiso * kiso);
 }
 
+bool SupportsExactShellContract(const TurbulenceConfig &cfg) {
+  if (cfg.method == VelocityMethod::StreamFunction) return cfg.stream_2d;
+  if (cfg.method == VelocityMethod::Projection) {
+    return cfg.mesh_three_d && cfg.active_v3 && std::abs(cfg.sol_frac - 1.0) <= 1.0e-12;
+  }
+  return false;
+}
+
+void ValidateExactShellContract(const TurbulenceConfig &cfg) {
+  if (!cfg.exact_shell_contract) return;
+  if (SupportsExactShellContract(cfg)) return;
+
+  if (cfg.method == VelocityMethod::StreamFunction) {
+    FatalProblemSetup("exact_shell is only supported for 2D stream-function initialization.");
+  }
+  FatalProblemSetup(
+      "exact_shell is only supported for 3D projection initialization with turb_sol_frac=1.");
+}
+
+void AppendCandidateMode(const CandidateMode &candidate, ModeCatalog &catalog) {
+  catalog.nkx.push_back(candidate.nkx);
+  catalog.nky.push_back(candidate.nky);
+  catalog.nkz.push_back(candidate.nkz);
+  catalog.shell.push_back(candidate.shell);
+  catalog.prob.push_back(candidate.p_accept);
+  catalog.boost.push_back(1.0);
+  catalog.kx.push_back(candidate.kx);
+  catalog.ky.push_back(candidate.ky);
+  catalog.kz.push_back(candidate.kz);
+  catalog.kiso.push_back(candidate.kiso);
+}
+
+ModeCatalog BuildExactShellModeCatalog(const TurbulenceConfig &cfg, RNG_State *rstate) {
+  ModeCatalog catalog;
+  std::vector<std::vector<CandidateMode>> shell_candidates(cfg.nhigh + 1);
+
+  for (int nkx = 0; nkx <= cfg.nhigh; ++nkx) {
+    for (int nky = (cfg.mesh_multi_d ? -cfg.nhigh : 0);
+         nky <= (cfg.mesh_multi_d ? cfg.nhigh : 0); ++nky) {
+      for (int nkz = (cfg.mesh_three_d ? -cfg.nhigh : 0);
+           nkz <= (cfg.mesh_three_d ? cfg.nhigh : 0); ++nkz) {
+        if (nkx == 0 && nky == 0 && nkz == 0) continue;
+
+        // Keep half of the kx=0 plane to avoid double-counting the implicit conjugates.
+        if (nkx == 0) {
+          if (nky < 0) continue;
+          if (nky == 0 && nkz <= 0) continue;
+        }
+
+        const int nsqr = nkx*nkx + nky*nky + nkz*nkz;
+        const int shell = ShellFromIndexSqr(nsqr);
+        if (shell < cfg.nlow || shell > cfg.nhigh) continue;
+
+        const CandidateMode candidate{
+            nkx, nky, nkz, shell, cfg.dkx * nkx, cfg.dky * nky, cfg.dkz * nkz,
+            std::sqrt((cfg.dkx * nkx)*(cfg.dkx * nkx) +
+                      (cfg.dky * nky)*(cfg.dky * nky) +
+                      (cfg.dkz * nkz)*(cfg.dkz * nkz)),
+            1.0};
+        shell_candidates[shell].push_back(candidate);
+      }
+    }
+  }
+
+  for (int shell = cfg.nlow; shell <= cfg.nhigh; ++shell) {
+    auto &candidates = shell_candidates[shell];
+    if (candidates.empty()) {
+      FatalProblemSetup("exact_shell requires at least one Fourier mode in every in-band shell.");
+    }
+    catalog.total_modes += static_cast<int>(candidates.size());
+    for (auto &candidate : candidates) {
+      candidate.p_accept = ModeAcceptanceProbability(cfg, candidate.kiso);
+    }
+
+    Real expected_count = 0.0;
+    for (const auto &candidate : candidates) {
+      expected_count += candidate.p_accept;
+    }
+    const int quota = std::min(static_cast<int>(candidates.size()),
+                               std::max(1, static_cast<int>(std::llround(expected_count))));
+
+    if (quota >= static_cast<int>(candidates.size())) {
+      std::sort(candidates.begin(), candidates.end(),
+                [](const CandidateMode &lhs, const CandidateMode &rhs) {
+                  if (lhs.nkx != rhs.nkx) return lhs.nkx < rhs.nkx;
+                  if (lhs.nky != rhs.nky) return lhs.nky < rhs.nky;
+                  return lhs.nkz < rhs.nkz;
+                });
+      for (const auto &candidate : candidates) {
+        AppendCandidateMode(candidate, catalog);
+      }
+      continue;
+    }
+
+    std::vector<std::pair<Real, int>> weighted_keys;
+    weighted_keys.reserve(candidates.size());
+    for (int idx = 0; idx < static_cast<int>(candidates.size()); ++idx) {
+      const Real u = std::max(RanSt(rstate), 1.0e-12);
+      weighted_keys.emplace_back(std::log(u) / candidates[idx].p_accept, idx);
+    }
+    std::sort(weighted_keys.begin(), weighted_keys.end(),
+              [](const std::pair<Real, int> &lhs, const std::pair<Real, int> &rhs) {
+                return lhs.first > rhs.first;
+              });
+
+    std::vector<CandidateMode> selected;
+    selected.reserve(quota);
+    for (int idx = 0; idx < quota; ++idx) {
+      selected.push_back(candidates[weighted_keys[idx].second]);
+    }
+    std::sort(selected.begin(), selected.end(),
+              [](const CandidateMode &lhs, const CandidateMode &rhs) {
+                if (lhs.nkx != rhs.nkx) return lhs.nkx < rhs.nkx;
+                if (lhs.nky != rhs.nky) return lhs.nky < rhs.nky;
+                return lhs.nkz < rhs.nkz;
+              });
+    for (const auto &candidate : selected) {
+      AppendCandidateMode(candidate, catalog);
+    }
+  }
+
+  return catalog;
+}
+
 ModeCatalog BuildModeCatalog(const TurbulenceConfig &cfg, RNG_State *rstate) {
+  if (cfg.exact_shell_contract) {
+    return BuildExactShellModeCatalog(cfg, rstate);
+  }
+
   ModeCatalog catalog;
   const int nlow_sqr = cfg.nlow * cfg.nlow;
   const int nhigh_sqr = cfg.nhigh * cfg.nhigh;
@@ -394,6 +556,75 @@ VectorCoefficients GenerateProjectionCoefficients(const TurbulenceConfig &cfg,
   coeffs.akb1.resize(nmodes);
   coeffs.akb2.resize(nmodes);
 
+  if (cfg.exact_shell_contract) {
+    std::vector<std::vector<int>> shell_members(cfg.nhigh + 1);
+    for (int n = 0; n < nmodes; ++n) {
+      shell_members[catalog.shell[n]].push_back(n);
+    }
+
+    for (int shell = cfg.nlow; shell <= cfg.nhigh; ++shell) {
+      const auto &members = shell_members[shell];
+      if (members.empty()) continue;
+
+      std::vector<Real> weights(members.size(), 0.0);
+      Real weight_sum = 0.0;
+      for (int idx = 0; idx < static_cast<int>(members.size()); ++idx) {
+        const int n = members[idx];
+        const Real weight = 1.0 / std::pow(catalog.kiso[n], cfg.expo + 2.0);
+        weights[idx] = weight;
+        weight_sum += weight;
+
+        const Real k_vec[3] = {catalog.kx[n], catalog.ky[n], catalog.kz[n]};
+        Real a[3] = {0.0, 0.0, 0.0};
+        Real b[3] = {0.0, 0.0, 0.0};
+        Real mode_energy = 0.0;
+
+        for (int attempt = 0; attempt < 64; ++attempt) {
+          for (int dir = 0; dir < 3; ++dir) {
+            a[dir] = RanGaussianSt(rstate);
+            b[dir] = RanGaussianSt(rstate);
+          }
+          const Real kiso_sqr = catalog.kiso[n] * catalog.kiso[n];
+          const Real k_dot_a = k_vec[0]*a[0] + k_vec[1]*a[1] + k_vec[2]*a[2];
+          const Real k_dot_b = k_vec[0]*b[0] + k_vec[1]*b[1] + k_vec[2]*b[2];
+          for (int dir = 0; dir < 3; ++dir) {
+            a[dir] -= k_vec[dir] * k_dot_a / kiso_sqr;
+            b[dir] -= k_vec[dir] * k_dot_b / kiso_sqr;
+          }
+          mode_energy = 0.5 * (a[0]*a[0] + a[1]*a[1] + a[2]*a[2] +
+                               b[0]*b[0] + b[1]*b[1] + b[2]*b[2]);
+          if (mode_energy > kTiny) break;
+        }
+        if (mode_energy <= kTiny) {
+          FatalProblemSetup("Failed to draw a non-degenerate solenoidal projection mode.");
+        }
+
+        const Real inv_norm = 1.0 / std::sqrt(mode_energy);
+        coeffs.aka0[n] = a[0] * inv_norm;
+        coeffs.aka1[n] = a[1] * inv_norm;
+        coeffs.aka2[n] = a[2] * inv_norm;
+        coeffs.akb0[n] = b[0] * inv_norm;
+        coeffs.akb1[n] = b[1] * inv_norm;
+        coeffs.akb2[n] = b[2] * inv_norm;
+      }
+
+      const Real shell_target = std::pow(static_cast<Real>(shell), -cfg.expo);
+      for (int idx = 0; idx < static_cast<int>(members.size()); ++idx) {
+        const int n = members[idx];
+        const Real mode_target = shell_target * weights[idx] / weight_sum;
+        const Real scale = std::sqrt(mode_target);
+        coeffs.aka0[n] *= scale;
+        coeffs.aka1[n] *= scale;
+        coeffs.aka2[n] *= scale;
+        coeffs.akb0[n] *= scale;
+        coeffs.akb1[n] *= scale;
+        coeffs.akb2[n] *= scale;
+      }
+    }
+
+    return coeffs;
+  }
+
   for (int n = 0; n < nmodes; ++n) {
     const Real kiso = catalog.kiso[n];
     const Real norm = ProjectionAmplitudeNorm(cfg, kiso) * catalog.boost[n];
@@ -441,6 +672,39 @@ ScalarCoefficients GenerateStream2DPsiCoefficients(const TurbulenceConfig &cfg,
   const int nmodes = catalog.KeptModes();
   coeffs.aka.resize(nmodes);
   coeffs.akb.resize(nmodes);
+
+  if (cfg.exact_shell_contract) {
+    std::vector<std::vector<int>> shell_members(cfg.nhigh + 1);
+    for (int n = 0; n < nmodes; ++n) {
+      shell_members[catalog.shell[n]].push_back(n);
+    }
+
+    for (int shell = cfg.nlow; shell <= cfg.nhigh; ++shell) {
+      const auto &members = shell_members[shell];
+      if (members.empty()) continue;
+
+      std::vector<Real> weights(members.size(), 0.0);
+      Real weight_sum = 0.0;
+      for (int idx = 0; idx < static_cast<int>(members.size()); ++idx) {
+        const int n = members[idx];
+        const Real weight = 1.0 / std::pow(catalog.kiso[n], cfg.expo + 1.0);
+        weights[idx] = weight;
+        weight_sum += weight;
+      }
+
+      const Real shell_target = std::pow(static_cast<Real>(shell), -cfg.expo);
+      for (int idx = 0; idx < static_cast<int>(members.size()); ++idx) {
+        const int n = members[idx];
+        const Real mode_target = shell_target * weights[idx] / weight_sum;
+        const Real amplitude = std::sqrt(2.0 * mode_target) / catalog.kiso[n];
+        const Real phase = 2.0 * kPi * RanSt(rstate);
+        coeffs.aka[n] = amplitude * std::cos(phase);
+        coeffs.akb[n] = amplitude * std::sin(phase);
+      }
+    }
+
+    return coeffs;
+  }
 
   for (int n = 0; n < nmodes; ++n) {
     const Real norm = Stream2DPsiAmplitudeNorm(cfg, catalog.kiso[n]) * catalog.boost[n];
@@ -1529,17 +1793,27 @@ void SynthesizeClebschVelocity(MeshBlockPack *pmbp, const TurbulenceConfig &cfg,
 
 void LogModeSummary(const TurbulenceConfig &cfg, const ModeCatalog &catalog,
                     const std::string &label) {
-  std::cout << "  " << label << ": total_modes_in_shell=" << catalog.total_modes
-            << ", kept_via_importance_sampling=" << catalog.KeptModes() << std::endl;
+  std::cout << "  " << label << ": total_modes_in_shell=" << catalog.total_modes;
+  if (cfg.exact_shell_contract) {
+    std::cout << ", kept_via_shell_quota=" << catalog.KeptModes();
+  } else {
+    std::cout << ", kept_via_importance_sampling=" << catalog.KeptModes();
+  }
+  std::cout << std::endl;
   if (cfg.method == VelocityMethod::StreamFunction && cfg.stream_2d) {
     std::cout << "  " << label << ": stream-function coefficients preserve "
               << "E_u(k) ~ k^(-expo) through |psi_k| ~ k^{-(expo+3)/2}" << std::endl;
+  }
+  if (cfg.exact_shell_contract) {
+    std::cout << "  " << label << ": exact_shell enforces raw centered-shell energy "
+              << "E(k_shell) ~ k_shell^(-expo)" << std::endl;
   }
 }
 
 void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
                            bool projection_true_2d) {
   const TurbulenceConfig cfg = ReadTurbulenceConfig(pin, pmbp->pmesh, projection_true_2d);
+  ValidateExactShellContract(cfg);
   auto &hydro = *pmbp->phydro;
   hydro.use_scalar_face_velocity = false;
   hydro.scalar_vface.reset();
@@ -1569,6 +1843,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
                 << "  v_rms=" << cfg.v_rms << ", nlow=" << cfg.nlow
                 << ", nhigh=" << cfg.nhigh << ", expo=" << cfg.expo
                 << ", sol_frac=" << cfg.sol_frac << std::endl
+                << "  spectrum_contract=" << cfg.spectrum_contract << std::endl
                 << "  true_2d=" << (cfg.projection_true_2d ? "true" : "false")
                 << ", active_velocity_components=" << (cfg.active_v3 ? 3 : 2)
                 << std::endl
@@ -1605,6 +1880,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
               << "  v_rms=" << cfg.v_rms << ", nlow=" << cfg.nlow
               << ", nhigh=" << cfg.nhigh << ", expo=" << cfg.expo
               << ", sol_frac=" << cfg.sol_frac << std::endl
+              << "  spectrum_contract=" << cfg.spectrum_contract << std::endl
               << "  active_velocity_components=" << (cfg.active_v3 ? 3 : 2) << std::endl
               << "  k_crit=" << cfg.k_crit
               << " (wavenumber=" << cfg.k_crit_mag << ")" << std::endl
@@ -1641,6 +1917,10 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
       PopulateScalarFaceVelocitiesFromVectorPotential(pmbp, cfg, catalog, apot_coeffs, stats);
     }
     return;
+  }
+
+  if (cfg.exact_shell_contract) {
+    FatalProblemSetup("exact_shell does not support 3D stream-function initialization.");
   }
 
   RNG_State rstate1;
@@ -1694,7 +1974,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
 //
 //  Initializes density, turbulent velocity, and passive scalars.
 //  Scalar 0 uses the existing uniform/step initialization path, while scalar 1
-//  is initialized to a 4x4 (2D) or 4x4x4 (3D) checkerboard if it is present.
+//  is initialized to a smooth sinusoidal product if it is present.
 
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
@@ -1706,7 +1986,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   const bool true_2d = UseTrue2DVelocity(pin, pmy_mesh_);
   const bool multi_d = pmy_mesh_->multi_d;
   const bool three_d = pmy_mesh_->three_d;
-  const bool has_checkerboard_scalar = (nscalars > 1);
+  const bool has_sine_scalar = (nscalars > 1);
 
   if (nscalars == 0) {
     FatalProblemSetup("Scalar mixing requires nscalars > 0.");
@@ -1714,13 +1994,31 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   const Real legacy_G = pin->GetOrAddReal("problem", "mean_gradient", 1.0);
   const Real scalar_init_default = pin->GetOrAddReal("problem", "scalar_init", 0.5);
+  const bool scalar0_use_sine_x1 =
+      pin->GetOrAddBoolean("problem", "scalar0_use_sine_x1", true);
+  const Real scalar0_wavelengths_per_box =
+      pin->GetOrAddReal("problem", "scalar0_wavelengths_per_box",
+                        kDefaultScalar0WavelengthsPerBox);
+  if (scalar0_wavelengths_per_box <= 0.0) {
+    FatalProblemSetup("problem/scalar0_wavelengths_per_box must be > 0.");
+  }
   const bool scalar_use_x1_step =
       pin->GetOrAddBoolean("problem", "scalar_use_x1_step", false);
   const Real scalar_step_x1 = pin->GetOrAddReal("problem", "scalar_step_x1", 0.0);
   const Real scalar_left = pin->GetOrAddReal("problem", "scalar_left", 0.0);
   const Real scalar_right = pin->GetOrAddReal("problem", "scalar_right", 1.0);
+  const Real scalar1_wavelengths_per_box =
+      pin->GetOrAddReal("problem", "scalar1_wavelengths_per_box",
+                        kDefaultScalar1WavelengthsPerBox);
+  if (scalar1_wavelengths_per_box <= 0.0) {
+    FatalProblemSetup("problem/scalar1_wavelengths_per_box must be > 0.");
+  }
   const Real x1min = pmy_mesh_->mesh_size.x1min;
   const Real x1max = pmy_mesh_->mesh_size.x1max;
+  const Real x2min = pmy_mesh_->mesh_size.x2min;
+  const Real x2max = pmy_mesh_->mesh_size.x2max;
+  const Real x3min = pmy_mesh_->mesh_size.x3min;
+  const Real x3max = pmy_mesh_->mesh_size.x3max;
   const Real lx = x1max - x1min;
 
   scalar_forcing_cfg.resize(nscalars);
@@ -1811,17 +2109,23 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   if (global_variable::my_rank == 0) {
     std::cout << "Scalar mixing problem:" << std::endl
-              << "  scalar_ic = "
-              << (scalar_use_x1_step ? "x1_step" : "uniform") << std::endl
+              << "  scalar0_ic = "
+              << (scalar0_use_sine_x1 ? "sine_x1_global"
+                                      : (scalar_use_x1_step ? "x1_step" : "uniform"))
+              << std::endl
               << "  true_2d = " << (true_2d ? "true" : "false") << std::endl
               << "  nscalars = " << nscalars << std::endl
               << "  scalar_init (default) = " << scalar_init_default << std::endl
+              << "  scalar0_wavelengths_per_box = " << scalar0_wavelengths_per_box
+              << std::endl
               << "  scalar1_ic = "
-              << (has_checkerboard_scalar
-                      ? (three_d ? "checkerboard_4x4x4"
-                                 : (multi_d ? "checkerboard_4x4"
-                                            : "x1_stripes_4"))
+              << (has_sine_scalar
+                      ? (three_d ? "sine_product_3d"
+                                 : (multi_d ? "sine_product_2d"
+                                            : "sine_x1"))
                       : "disabled (set nscalars >= 2)")
+              << std::endl
+              << "  scalar1_wavelengths_per_box = " << scalar1_wavelengths_per_box
               << std::endl
               << "  scalar0_mode = " << scalar_forcing_cfg[0].mode << std::endl
               << "  scalar0_mean_gradient = " << scalar_forcing_cfg[0].G << std::endl;
@@ -1867,37 +2171,39 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     const Real init = scalar_init[ns];
     const Real noise = scalar_noise[ns];
     const Real theta_floor = scalar_forcing_cfg[ns].theta_floor;
-    const bool checkerboard_scalar = (ns == 1);
+    const bool sine_scalar = (ns == 1);
     const std::string label = "scalar_mix_pgen_scalar_" + std::to_string(ns);
     par_for(label, DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       const Real rho = u0(m, IDN, k, j, i);
       Real theta = init;
-      if (checkerboard_scalar) {
-        Real &x1min_ = size.d_view(m).x1min;
-        Real &x1max_ = size.d_view(m).x1max;
-        const Real x1v = CellCenterX(i-is, nx1, x1min_, x1max_);
+      if (ns == 0 && scalar0_use_sine_x1) {
+        Real &mb_x1min = size.d_view(m).x1min;
+        Real &mb_x1max = size.d_view(m).x1max;
+        const Real x1v = CellCenterX(i-is, nx1, mb_x1min, mb_x1max);
+        theta = SineScalarIC1D(x1v, x1min, x1max, scalar0_wavelengths_per_box);
+      } else if (sine_scalar) {
+        Real &mb_x1min = size.d_view(m).x1min;
+        Real &mb_x1max = size.d_view(m).x1max;
+        const Real x1v = CellCenterX(i-is, nx1, mb_x1min, mb_x1max);
         Real x2v = 0.0;
         Real x3v = 0.0;
-        Real x2min_ = 0.0;
-        Real x2max_ = 1.0;
-        Real x3min_ = 0.0;
-        Real x3max_ = 1.0;
         if (multi_d) {
-          x2min_ = size.d_view(m).x2min;
-          x2max_ = size.d_view(m).x2max;
-          x2v = CellCenterX(j-js, nx2, x2min_, x2max_);
+          Real &mb_x2min = size.d_view(m).x2min;
+          Real &mb_x2max = size.d_view(m).x2max;
+          x2v = CellCenterX(j-js, nx2, mb_x2min, mb_x2max);
         }
         if (three_d) {
-          x3min_ = size.d_view(m).x3min;
-          x3max_ = size.d_view(m).x3max;
-          x3v = CellCenterX(k-ks, nx3, x3min_, x3max_);
+          Real &mb_x3min = size.d_view(m).x3min;
+          Real &mb_x3max = size.d_view(m).x3max;
+          x3v = CellCenterX(k-ks, nx3, mb_x3min, mb_x3max);
         }
-        theta = CheckerboardScalarIC(x1v, x2v, x3v,
-                                     x1min_, x1max_,
-                                     x2min_, x2max_,
-                                     x3min_, x3max_,
-                                     multi_d, three_d);
+        theta = SineScalarIC(x1v, x2v, x3v,
+                             x1min, x1max,
+                             x2min, x2max,
+                             x3min, x3max,
+                             scalar1_wavelengths_per_box,
+                             multi_d, three_d);
       } else if (scalar_use_x1_step) {
         Real &x1min_ = size.d_view(m).x1min;
         Real &x1max_ = size.d_view(m).x1max;

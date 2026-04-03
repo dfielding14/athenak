@@ -1,0 +1,151 @@
+
+\paragraph{State variable.}
+For each passive scalar $s=0,\dots,N_s-1$ we evolve the conservative tracer
+\[
+q_s \;\equiv\; \rho\,\theta_s,
+\qquad \theta_s = q_s/\rho,
+\]
+with triply periodic boundary conditions. In \texttt{scalar\_only=true} runs, $\rho(\mathbf{x})$ and $\mathbf{u}(\mathbf{x})$ are frozen (and typically $\nabla\!\cdot\mathbf{u}=0$).
+
+\paragraph{Generic evolution equation.}
+The scalar update can be written schematically as
+\begin{equation}
+\partial_t q_s + \nabla\cdot(q_s\,\mathbf{u})
+= \nabla\cdot(\rho\,\kappa\,\nabla \theta_s) + \rho\,S_s(\mathbf{x},\theta_s),
+\label{eq:generic}
+\end{equation}
+where the user selects $S_s$ independently for each scalar via \texttt{scalar<s>\_mode}. The code adds the source in conservative form:
+\[
+q_s \leftarrow q_s + \rho\,S_s(\mathbf{x},\theta_s)\,\Delta t.
+\]
+
+\section*{Auxiliary definitions (used by multiple modes)}
+
+\paragraph{Smooth slab mask (``top-hat'').}
+For $x\in\mathbb{R}$ and slab endpoints $x_0<x_1$ with smoothing width $w\ge 0$,
+\begin{equation}
+W(x;x_0,x_1,w) \;=\;
+\begin{cases}
+\mathbf{1}_{[x_0,x_1]}(x), & w=0,\\[2mm]
+\dfrac{1}{2}\left[\tanh\!\left(\dfrac{x-x_0}{w}\right) - \tanh\!\left(\dfrac{x-x_1}{w}\right)\right], & w>0,
+\end{cases}
+\label{eq:tophat}
+\end{equation}
+so that $W\approx 1$ inside the slab and $W\approx 0$ outside.
+
+\paragraph{Bistable cubic reaction (Allen--Cahn type, shifted).}
+Choose $\theta_1>0$ and $\theta_1<\theta_2<\theta_3$. The local reaction is
+\begin{equation}
+R_{\mathrm{bi}}(\theta)
+= -\frac{1}{\tau}\,(\theta-\theta_1)(\theta-\theta_2)(\theta-\theta_3).
+\label{eq:bistable}
+\end{equation}
+In the ODE $\dot\theta=R_{\mathrm{bi}}(\theta)$, $\theta=\theta_1$ and $\theta=\theta_3$ are stable equilibria and $\theta=\theta_2$ is unstable. In the input, $\theta_2$ may be given directly; otherwise it is set by
+\[
+\theta_2 = \theta_1 + a(\theta_3-\theta_1), \qquad 0<a<1.
+\]
+
+\paragraph{KPP/logistic reaction on $[\theta_1,\theta_3]$.}
+With $\theta_3>\theta_1>0$,
+\begin{equation}
+R_{\mathrm{KPP}}(\theta)
+= \frac{1}{\tau(\theta_3-\theta_1)}(\theta-\theta_1)(\theta_3-\theta).
+\label{eq:kpp}
+\end{equation}
+Optionally, the implementation may \emph{clip} $\theta$ into $[\theta_1,\theta_3]$ when evaluating $R_{\mathrm{KPP}}$:
+\[
+\theta_{\mathrm{eff}} = \min\big(\max(\theta,\theta_1),\theta_3\big),
+\qquad
+R_{\mathrm{KPP}}(\theta)\ \mapsto\ R_{\mathrm{KPP}}(\theta_{\mathrm{eff}}),
+\]
+to prevent the reaction from driving $\theta$ below $\theta_1$.
+
+\section*{Mode 1: Mean-gradient forcing (\texttt{mode = 1})}
+
+This represents mixing of a prescribed mean scalar gradient in the $x$ direction.
+The source term is
+\begin{equation}
+S_s(\mathbf{x},\theta_s) = G_s\,u_x(\mathbf{x}),
+\label{eq:meangrad}
+\end{equation}
+so that in conservative form $\partial_t(\rho\theta_s)=\rho\,G_s\,u_x$.
+
+\section*{Mode 2: Mass-conserving Allen--Cahn (\texttt{mode = 2})}
+
+This is a bistable reaction \eqref{eq:bistable} with an added spatially uniform correction that enforces conservation of total tracer mass $\int q_s\,dV$ in a periodic domain.
+
+\paragraph{Local reaction.}
+\[
+R_s(\theta) = R_{\mathrm{bi}}(\theta)
+= -\frac{1}{\tau_s}(\theta-\theta_{1,s})(\theta-\theta_{2,s})(\theta-\theta_{3,s}).
+\]
+
+\paragraph{Mass-weighted mean reaction.}
+\begin{equation}
+\langle R_s\rangle_\rho \;\equiv\;
+\frac{\displaystyle \int \rho(\mathbf{x})\,R_s(\theta_s(\mathbf{x}))\,dV}
+{\displaystyle \int \rho(\mathbf{x})\,dV}.
+\label{eq:rbar}
+\end{equation}
+
+\paragraph{Source term.}
+\begin{equation}
+S_s(\mathbf{x},\theta_s) = R_s(\theta_s) - \langle R_s\rangle_\rho.
+\label{eq:mcac}
+\end{equation}
+
+\paragraph{Conservation property (periodic BCs).}
+Assuming the diffusion term is written in conservative form and $\mathbf{u}$ is divergence-free (or periodic advection is conservative),
+\[
+\frac{d}{dt}\int q_s\,dV
+= \int \rho\big(R_s - \langle R_s\rangle_\rho\big)\,dV
+= \int \rho R_s\,dV - \langle R_s\rangle_\rho\int \rho\,dV
+= 0.
+\]
+
+\section*{Mode 3: Two-reservoir sponge (\texttt{mode = 3})}
+
+Two thin slabs (``left'' and ``right'' reservoirs) in $x$ relax $\theta_s$ toward prescribed positive values $\theta_{L,s}$ and $\theta_{R,s}$.
+
+\paragraph{Masks.}
+\[
+\chi_{L,s}(x)=\chi_{L0,s}\,W(x;x_{L0,s},x_{L1,s},w_s),
+\qquad
+\chi_{R,s}(x)=\chi_{R0,s}\,W(x;x_{R0,s},x_{R1,s},w_s),
+\]
+where $W$ is \eqref{eq:tophat}.
+
+\paragraph{Source term.}
+\begin{equation}
+S_s(\mathbf{x},\theta_s)
+= -\chi_{L,s}(x)\big(\theta_s-\theta_{L,s}\big)
+  -\chi_{R,s}(x)\big(\theta_s-\theta_{R,s}\big).
+\label{eq:sponge}
+\end{equation}
+
+\section*{Mode 4: Sponge + reaction (\texttt{mode = 4})}
+
+This combines the reservoir forcing \eqref{eq:sponge} with a local reaction term (either KPP or bistable).
+
+\paragraph{Source term.}
+\begin{equation}
+S_s(\mathbf{x},\theta_s)
+= -\chi_{L,s}(x)\big(\theta_s-\theta_{L,s}\big)
+  -\chi_{R,s}(x)\big(\theta_s-\theta_{R,s}\big)
+  + R_s(\theta_s).
+\label{eq:sponge_react}
+\end{equation}
+
+\paragraph{Reaction choices.}
+\[
+R_s(\theta) =
+\begin{cases}
+R_{\mathrm{KPP}}(\theta) \text{ from \eqref{eq:kpp}} \quad (\texttt{reaction\_type = 1}),\\[1mm]
+R_{\mathrm{bi}}(\theta) \text{ from \eqref{eq:bistable}} \quad (\texttt{reaction\_type = 2}).
+\end{cases}
+\]
+Optionally, the KPP reaction may be evaluated with $\theta$ clipped into $[\theta_{1,s},\theta_{3,s}]$.
+
+\vspace{2mm}
+\noindent\textbf{Positivity note.}
+All configurations are intended for $\theta_s>0$. In particular, the bistable form \eqref{eq:bistable} places the lower stable state at $\theta_{1,s}>0$.

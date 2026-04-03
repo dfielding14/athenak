@@ -1,0 +1,74 @@
+# Scalar-mixing production run: 1024^2 frozen stream-function turbulence with exact shells
+
+<comment>
+problem   = scalar mixing perfect-powerlaw stream-function run with left-right scalar step
+reference = user-requested 1024^2 2D stream exact-shell initialization
+
+<job>
+problem_id = scalar_mixing_perfect_powerlaw
+basename   = scalar_mix_stream_1024_step_perfect_powerlaw
+
+<time>
+evolution  = dynamic
+cfl_number = 0.4
+tlim       = 10.0
+nlim       = -1
+
+<mesh>
+nghost = 2
+nx1    = 1024
+x1min  = -0.5
+x1max  = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2    = 1024
+x2min  = -0.5
+x2max  = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3    = 1
+x3min  = 0.0
+x3max  = 1.0
+ix3_bc = reflect
+ox3_bc = reflect
+
+<meshblock>
+nx1 = 512
+nx2 = 512
+nx3 = 1
+
+<hydro>
+eos                = ideal
+gamma              = 1.6666666666667
+reconstruct        = plm
+rsolver            = hllc
+nscalars           = 1
+scalar_only        = true
+scalar_diffusivity = 1.0e-3
+
+<problem>
+rho0                     = 1.0
+temp0                    = 1.0
+scalar_init              = 0.5
+scalar_use_x1_step       = true
+scalar_step_x1           = 0.0
+scalar_left              = 0.0
+scalar_right             = 1.0
+user_srcs                = false
+mean_gradient            = 0.0
+turb_use_stream_function = true
+turb_v_rms               = 1.0
+turb_nlow                = 2
+turb_nhigh               = 512
+turb_expo                = 1.6666666666667
+turb_sol_frac            = 1.0
+turb_rseed               = 12345
+turb_k_crit              = 16.0
+turb_spectrum_contract   = exact_shell
+
+<output1>
+file_type  = bin
+variable   = hydro_w
+dt         = 1.0

@@ -1,0 +1,69 @@
+# Scalar-mixing regression: perfect-powerlaw stream-function velocity in 2D
+
+<comment>
+problem   = scalar mixing perfect-powerlaw stream-function regression in 2D
+reference = scalar_mixing exact-shell stream 2D spectrum regression
+
+<job>
+problem_id = scalar_mixing_perfect_powerlaw
+basename   = scalar_mix_stream_2d_perfect_powerlaw
+
+<time>
+evolution  = dynamic
+cfl_number = 0.4
+tlim       = 0.05
+nlim       = -1
+
+<mesh>
+nghost = 2
+nx1    = 48
+x1min  = 0.0
+x1max  = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2    = 48
+x2min  = 0.0
+x2max  = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3    = 1
+x3min  = 0.0
+x3max  = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 48
+nx2 = 48
+nx3 = 1
+
+<hydro>
+eos             = ideal
+gamma           = 1.6666666666667
+reconstruct     = plm
+rsolver         = hllc
+nscalars        = 1
+scalar_only     = true
+
+<problem>
+rho0                     = 1.0
+temp0                    = 1.0
+scalar_init              = 0.5
+user_srcs                = false
+mean_gradient            = 0.0
+turb_use_stream_function = true
+turb_v_rms               = 1.0
+turb_nlow                = 2
+turb_nhigh               = 6
+turb_expo                = 1.6666667
+turb_sol_frac            = 1.0
+turb_rseed               = 12345
+turb_k_crit              = 16.0
+turb_spectrum_contract   = exact_shell
+
+<output1>
+file_type  = bin
+variable   = hydro_w
+dt         = 0.05
