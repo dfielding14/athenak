@@ -3,9 +3,9 @@
 
 The figure contains:
 1. 2D projection-method slice
-2. 2D stream-function slice
+2. 2D stream-method slice
 3. 3D projection-method midplane slice
-4. 3D stream-function midplane slice
+4. 3D Clebsch midplane slice
 5. Radial velocity power spectra with the requested k^(-5/3) reference law
 
 The 3D examples use aggressive importance sampling (`turb_k_crit = 2`) so the
@@ -69,7 +69,7 @@ def _case_specs() -> list[dict[str, object]]:
             "name": "2D Stream",
             "basename": "scalar_mix_gallery_stream_2d",
             "input": "inputs/hydro/scalar_mixing_gallery_2d.athinput",
-            "overrides": ["problem/turb_use_stream_function=true"],
+            "overrides": ["problem/turb_velocity_method=stream_2d"],
             "slice_kind": "2d",
             "line_color": "#bd632f",
             "launcher": "mpirun -np 4",
@@ -84,10 +84,13 @@ def _case_specs() -> list[dict[str, object]]:
             "launcher": "mpirun -np 8",
         },
         {
-            "name": "3D Stream",
-            "basename": "scalar_mix_gallery_stream_3d",
+            "name": "3D Clebsch",
+            "basename": "scalar_mix_gallery_clebsch_3d",
             "input": "inputs/hydro/scalar_mixing_gallery_3d.athinput",
-            "overrides": ["problem/turb_use_stream_function=true"],
+            "overrides": [
+                "problem/turb_velocity_method=clebsch",
+                "problem/turb_alpha=0.3333333333333333",
+            ],
             "slice_kind": "3d",
             "line_color": "#8b3fb3",
             "launcher": "mpirun -np 8",

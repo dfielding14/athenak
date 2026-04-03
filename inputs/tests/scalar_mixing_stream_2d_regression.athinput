@@ -1,7 +1,7 @@
-# Scalar-mixing regression: stream-function velocity in 2D
+# Scalar-mixing regression: stream velocity in 2D
 
 <comment>
-problem   = scalar mixing stream-function regression in 2D
+problem   = scalar mixing stream regression in 2D
 reference = scalar_mixing stream 2D spectrum regression
 
 <job>
@@ -52,15 +52,15 @@ rho0                     = 1.0
 temp0                    = 1.0
 scalar_init              = 0.5
 user_srcs                = false
-mean_gradient            = 0.0
-turb_use_stream_function = true
-turb_v_rms               = 1.0
-turb_nlow                = 2
-turb_nhigh               = 6
-turb_expo                = 1.6666667
-turb_sol_frac            = 1.0
-turb_rseed               = 12345
-turb_k_crit              = 16.0
+mean_gradient        = 0.0
+turb_velocity_method = stream_2d
+turb_v_rms           = 1.0
+turb_nlow            = 2
+turb_nhigh           = 6
+turb_expo            = 1.6666667
+turb_sol_frac        = 1.0
+turb_rseed           = 12345
+turb_k_crit          = 16.0
 
 <output1>
 file_type  = bin

@@ -1,7 +1,7 @@
-# Scalar-mixing production run: 1024^2 frozen stream-function turbulence
+# Scalar-mixing production run: 1024^2 frozen stream turbulence
 
 <comment>
-problem   = scalar mixing stream-function run with left-right scalar step
+problem   = scalar mixing stream run with left-right scalar step
 reference = user-requested 1024^2 2D stream initialization
 
 <job>
@@ -57,15 +57,15 @@ scalar_step_x1           = 0.0
 scalar_left              = 0.0
 scalar_right             = 1.0
 user_srcs                = false
-mean_gradient            = 0.0
-turb_use_stream_function = true
-turb_v_rms               = 1.0
-turb_nlow                = 2
-turb_nhigh               = 512
-turb_expo                = 1.6666666666667
-turb_sol_frac            = 1.0
-turb_rseed               = 12345
-turb_k_crit              = 16.0
+mean_gradient        = 0.0
+turb_velocity_method = stream_2d
+turb_v_rms           = 1.0
+turb_nlow            = 2
+turb_nhigh           = 512
+turb_expo            = 1.6666666666667
+turb_sol_frac        = 1.0
+turb_rseed           = 12345
+turb_k_crit          = 16.0
 
 <output1>
 file_type  = bin

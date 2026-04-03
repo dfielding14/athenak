@@ -1,17 +1,17 @@
-# Scalar-mixing Clebsch audit: init-only 3D stream run with diagnostics forced on
+# Scalar-mixing regression: Clebsch velocity in 3D
 
 <comment>
-problem   = scalar mixing Clebsch audit in 3D
-reference = sector and seed sensitivity audit for 3D stream initialization
+problem   = scalar mixing Clebsch regression in 3D
+reference = scalar_mixing Clebsch 3D spectrum regression
 
 <job>
 problem_id = scalar_mixing
-basename   = scalar_mix_stream_3d_audit
+basename   = scalar_mix_clebsch_3d
 
 <time>
 evolution  = dynamic
 cfl_number = 0.4
-tlim       = 0.0
+tlim       = 0.05
 nlim       = -1
 
 <mesh>
@@ -53,13 +53,18 @@ temp0                         = 1.0
 scalar_init                   = 0.5
 user_srcs                     = false
 mean_gradient                 = 0.0
-turb_use_stream_function      = true
+turb_velocity_method          = clebsch
+turb_alpha                    = 0.3333333333333333
 turb_v_rms                    = 1.0
 turb_nlow                     = 2
-turb_nhigh                    = 6
+turb_nhigh                    = 10
 turb_expo                     = 1.6666667
 turb_sol_frac                 = 1.0
 turb_rseed                    = 12345
-turb_k_crit                   = 2.0
+turb_k_crit                   = 16.0
 turb_dump_generator_diagnostics = true
-turb_stream_allow_poor_fit    = true
+
+<output1>
+file_type  = bin
+variable   = hydro_w
+dt         = 0.05

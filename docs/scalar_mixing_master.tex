@@ -231,28 +231,57 @@ In Fourier space,
 (\pp\times\qq)\,\hat{\phi}_1(\pp)\hat{\phi}_2(\qq).
 \label{eq:clebsch-convolution}
 \end{equation}
-The velocity spectrum is therefore a quadratic functional of the two potentials. There is no unique universal slope for $\phi_1$ and $\phi_2$ individually, and this note no longer treats any single continuum asymptotic balance as settled. The production code fits the exact retained-mode shell-response tensor and records which interaction sectors dominate that discrete response.
-
-AthenaK resolves that nonuniqueness by fitting shell weights numerically. If $P^{(1)}_s$ and $P^{(2)}_t$ denote shell powers for the two potentials, then the discrete retained representation satisfies
+The velocity spectrum is therefore a quadratic functional of the two potentials.
+The current AthenaK implementation no longer tries to solve an inverse shell-fit
+problem for $\phi_1$ and $\phi_2$. Instead it mirrors the retained-mode
+construction used in the companion notebook: the user specifies
+\code{problem/turb\_velocity\_method=clebsch} together with a desired velocity
+roughness parameter \code{problem/turb\_alpha}, AthenaK converts that to a
+target shell slope for the scalar potentials,
 \begin{equation}
-\widehat{E}_u(K)=\sum_{s,t} T_{Kst}P^{(1)}_sP^{(2)}_t,
-\label{eq:response}
+s_\phi =
+\begin{cases}
+3 + 2\alpha, & \alpha \ge 0,\\
+3 + \alpha, & \alpha < 0,
+\end{cases}
+\qquad
+s_u = 2\alpha + 1,
 \end{equation}
-where $T_{Kst}$ is the shell-response tensor evaluated on the retained output catalog itself, including importance-sampling weights. The code solves this finite-dimensional inverse problem in two stages. It first performs multiplicative shell sweeps to obtain a smooth nonnegative approximation, then refines the result by log-space gradient descent. Finally, it generates several Gaussian realizations consistent with the fitted shell amplitudes and keeps the one whose realized retained-mode velocity spectrum best matches the target. The initialized 3D stream field is then synthesized directly from those retained Clebsch-generated velocity coefficients.
+draws Gaussian scalar coefficients on the retained mode catalog, rescales each
+retained shell so that $E_{\phi_1}(k)$ and $E_{\phi_2}(k)$ are exact
+$k^{-s_\phi}$ laws on the accepted shell band, forms the retained Clebsch
+velocity coefficients from Equation~(\ref{eq:clebsch-convolution}), and finally
+normalizes the realized velocity field to zero mean and the requested rms
+amplitude.
 
-The 3D stream path is also fail-closed. By default AthenaK aborts unless both the deterministic shell fit and the selected realization satisfy the slope and leakage tolerances recorded in the diagnostics sidecar. The only override is the expert input \code{problem/turb\_stream\_allow\_poor\_fit=true}, which converts the failure into a loud warning rather than silently continuing.
-
-This setup is more complicated than projection mode, but it is also more faithful to what the user actually requests. The fit is performed against the desired \emph{velocity} spectrum, not against an assumed universal spectrum of the potentials themselves.
+This means the latent scalar spectra are now simple, explicit auxiliary objects
+rather than outputs of a separate optimizer. The user-facing caveat is equally
+simple: because the initialized velocity is built on the retained mode catalog
+and the Clebsch map is quadratic, the resulting velocity slope is only
+approximate in practice, especially when \code{turb\_k\_crit} is small enough to
+thin the high-$k$ catalog aggressively.
 
 \section{Velocity Setup Tests}
 The velocity generator is tested first, before any scalar problem is run on top of it. The reference campaign uses a common target slope $\zeta=5/3$, band $k\in[2,128]$, and unit rms speed. The 2D cases use $512^2$ with \code{turb\_k\_crit}=128. The 3D cases use $256^3$ with \code{turb\_k\_crit}=2.
 
-Figure~\ref{fig:overview} gives the global comparison. All four initialized fields match the requested rms speed to better than $10^{-10}$ relative accuracy. The spectral divergence norm remains between $8.6\times10^{-8}$ and $1.8\times10^{-7}$, and the fitted velocity slopes are $-1.649$ (2D projection), $-1.681$ (2D stream), $-1.660$ (3D projection), and $-1.722$ (3D stream). The first three agree closely with the requested $-5/3$ law. The 3D stream field is somewhat steeper, but the earlier catastrophic high-$k$ spike is gone.
+Figure~\ref{fig:overview} gives the global comparison. All four initialized
+fields are normalized to the requested rms speed and remain spectrally
+divergence-free to roundoff-level accuracy. The two projection methods are
+still the most direct route to a target velocity spectrum. The 3D Clebsch field
+is now easier to interpret: the latent scalar spectra are exact retained-shell
+power laws by construction, while the realized velocity spectrum follows the
+requested slope only approximately because the Clebsch map is quadratic and the
+3D retained catalog is importance-sampled.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/overview.png}
-\caption{Overview of the four implemented velocity generators. The slice panels show representative initialized speed fields for 2D projection, 2D stream, 3D projection, and 3D stream. The spectrum panel shows the corresponding shape-normalized velocity spectra together with the target $k^{-5/3}$ law. The titles report the measured initialization time and the spectral divergence norm.}
+\caption{Overview of the four implemented velocity generators. The slice panels
+show representative initialized speed fields for 2D projection, 2D stream, 3D
+projection, and 3D Clebsch. The spectrum panel shows the corresponding
+shape-normalized velocity spectra together with the target $k^{-5/3}$ law. The
+titles report the measured initialization time and the spectral divergence
+norm.}
 \label{fig:overview}
 \end{figure}
 
@@ -265,34 +294,66 @@ The method-specific figures clarify what the overview compresses. In 2D, project
 \label{fig:methods-2d}
 \end{figure}
 
-In 3D the distinction is stronger. Projection mode is still a linear spectral construction. Stream mode introduces two latent potentials whose shell weights must be fitted so that their gradients and cross product realize the desired velocity spectrum. The latent spectra are therefore not universal invariants; they are fitted auxiliary objects.
+In 3D the distinction is stronger. Projection mode is still a linear spectral
+construction. Clebsch mode introduces two latent potentials whose retained shell
+spectra are prescribed explicitly from the user-selected $\alpha$. The latent
+spectra are therefore easy to interpret, while the velocity spectrum remains an
+approximate consequence of the quadratic Clebsch product.
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/methods_3d.png}
-\caption{Three-dimensional generator diagnostics. Projection mode is shown through a midplane speed slice, a representative velocity-component slice, and the velocity spectrum. Stream mode is shown through a midplane speed slice, the latent potentials $\phi_1$ and $\phi_2$, and the associated spectra.}
+\caption{Three-dimensional generator diagnostics. Projection mode is shown
+through a midplane speed slice, a representative velocity-component slice, the
+velocity spectrum, and the retained mode counts. Clebsch mode is shown through
+a midplane speed slice, the latent potentials $\phi_1$ and $\phi_2$, and the
+associated scalar and velocity spectra.}
 \label{fig:methods-3d}
 \end{figure}
 
-The detailed 3D stream diagnostics are especially important because this was the fragile part of the original implementation. The shell-fit figure now reports fitted shell weights, predicted versus realized spectra, and sector-resolved response fractions from the exact retained tensor for one representative production-seed run. The pathological high-$k$ spike that motivated the rewrite is absent, and poor fits are no longer allowed to pass silently.
+The detailed 3D Clebsch diagnostics are especially important because this
+remains the least direct mapping from user inputs to a realized velocity field.
+The single-seed figure now emphasizes the quantities that actually exist in the
+current implementation: the latent midplane slices, the exact retained scalar
+shell laws, and the retained-versus-FFT velocity spectra for one representative
+production-seed run.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/stream3d_realization.png}
-\caption{Representative single-seed diagnostics of the 3D Clebsch stream construction. The panels show fitted shell weights, predicted versus realized retained-mode spectra, sector fractions of the fitted shell response, and a compensated high-$k$ view. The important point is not that the realized field is perfectly noise-free, but that the retained-mode shell fit and realization selection eliminate the earlier catastrophic high-$k$ spike while exposing the exact discrete response behind the fit.}
-\label{fig:stream3d-realization}
+\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/clebsch3d_realization.png}
+\caption{Representative single-seed diagnostics of the 3D Clebsch
+construction. The top row shows the two latent potentials on the midplane. The
+lower-left panel shows their exact retained-shell spectra, and the lower-right
+panel compares the retained Clebsch velocity spectrum with the FFT of the
+initialized field. The important point is that the latent scalar spectra are
+now explicit and exact on the retained shell band, while the realized velocity
+spectrum remains a controlled approximation to the requested slope.}
+\label{fig:clebsch3d-realization}
 \end{figure}
 
-Because the 3D stream construction is stochastic, one representative realization is not sufficient on its own. Figure~\ref{fig:stream3d-production-audit} summarizes the dedicated production audit at $256^3$ over three independent seeds. The mean deterministic fitted slope is $-1.639$, the mean realized slope is $-1.695$, and the realized leakage is zero in every audited seed. The raw retained tensor is not purely local, but the fitted and realized spectra remain controlled and all audited seeds pass the quality gate.
+Because the 3D Clebsch construction is stochastic, one representative
+realization is not sufficient on its own. Figure~\ref{fig:clebsch3d-seed-audit}
+summarizes the dedicated multi-seed audit. The upper panel overlays the
+retained Clebsch spectra across seeds and audit cases, while the lower panel
+tracks the mean retained slope and leakage. This is the scale-validation
+counterpart to Figure~\ref{fig:clebsch3d-realization}.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/stream3d_production_audit.png}
-\caption{Multi-seed production audit of the 3D Clebsch stream construction at $256^3$. The upper panel compares the deterministic retained-mode spectrum and the realized retained-mode spectrum across the audited seeds, with bold curves showing the seed average. The lower panel shows the realized-to-deterministic ratio. This figure is the scale-validation counterpart to Figure~\ref{fig:stream3d-realization}: it demonstrates that the stochastic realization noise stays controlled across seeds and that the production path passes the fail-closed quality gate in every audited case.}
-\label{fig:stream3d-production-audit}
+\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/clebsch3d_seed_audit.png}
+\caption{Multi-seed audit of the 3D Clebsch construction. The upper panel shows
+retained velocity spectra across seeds and audit cases, with bold curves for
+the case means. The lower panel summarizes the mean retained slope magnitude
+and leakage. This makes the retained-mode variability explicit without relying
+on the deleted shell-fit or quality-gate machinery.}
+\label{fig:clebsch3d-seed-audit}
 \end{figure}
 
-Taken together, the representative figures and the multi-seed production audit justify the velocity initialization as a standalone piece of the scalar-mixing problem. The field that the scalar sees is divergence-free, has the requested band and rms normalization, and follows the intended velocity slope to good accuracy in all four implemented modes.
+Taken together, the representative figures and the multi-seed audit justify the
+velocity initialization as a standalone piece of the scalar-mixing problem. The
+field that the scalar sees is divergence-free, has the requested band and rms
+normalization, and follows the intended velocity slope to useful accuracy in
+all four implemented modes.
 
 \section{Scalar Advection--Diffusion Tests}
 Once the velocity field is prescribed, the scalar problem is only meaningful if the transport operator itself is the right one. In AthenaK that operator is \SO rather than \kin. The difference is essential. Under \SO the built-in hydrodynamic update is frozen, but the passive scalars still evolve conservatively using the hydro face mass flux and optional explicit scalar diffusion. Under \kin the density and momentum equations are still advanced, so the hydro state is not actually frozen.
