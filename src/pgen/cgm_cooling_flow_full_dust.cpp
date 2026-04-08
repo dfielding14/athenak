@@ -1005,6 +1005,11 @@ void UserBoundary(Mesh* pm) {
   auto &mb_bcs = pm->pmb_pack->pmb->mb_bcs;
   int nhydro = pmbp->phydro->nhydro;
 
+  int IZS = nhydro; // index of passive scalar for metallicity
+  int IDS = nhydro+1; // index of passive scalar for small dust
+  int IDL = nhydro+2; // index of passive scalar for large dust
+
+
   auto &u0 = pmbp->phydro->u0;
   auto &eos = pmbp->phydro->peos->eos_data;
   Real gm1 = eos.gamma - 1.0;
@@ -1016,6 +1021,7 @@ void UserBoundary(Mesh* pm) {
 
   Real Zsol = 0.02;
   Real Z_ = Z;
+  Real dz_init = d_z_init;
 
   // Handle X1 boundaries
   par_for("static_x1", DevExeSpace(), 0, nmb1, 0, (n3-1), 0, (n2-1), 0, (ng-1),
@@ -1036,7 +1042,9 @@ void UserBoundary(Mesh* pm) {
       
       SetCoolingFlowState(u0, m, k, j, i, x1v, x2v, x3v, gm1, profile);
       SetRotation(u0, m, k, j, i, x1v, x2v, x3v, r_c, v_c);
-      u0(m, nhydro, k, j, i) = Z_ * Zsol * u0(m, IDN, k, j, i);
+      u0(m, IZS, k, j, i) = (1. - dz_init) * Z_ * Zsol * u0(m, IDN, k, j, i);
+      u0(m, IDS, k, j, i) = 0.5 * dz_init * Z_ * Zsol * u0(m, IDN, k, j, i);
+      u0(m, IDL, k, j, i) = 0.5 * dz_init * Z_ * Zsol * u0(m, IDN, k, j, i);
     }
   
     // Outer X1 boundary
@@ -1046,7 +1054,9 @@ void UserBoundary(Mesh* pm) {
       
       SetCoolingFlowState(u0, m, k, j, i_out, x1v, x2v, x3v, gm1, profile);
       SetRotation(u0, m, k, j, i_out, x1v, x2v, x3v, r_c, v_c);
-      u0(m, nhydro, k, j, i_out) = Z_ * Zsol * u0(m, IDN, k, j, i_out);
+      u0(m, IZS, k, j, i_out) = (1. - dz_init) * Z_ * Zsol * u0(m, IDN, k, j, i_out);
+      u0(m, IDS, k, j, i_out) = 0.5 * dz_init * Z_ * Zsol * u0(m, IDN, k, j, i_out);
+      u0(m, IDL, k, j, i_out) = 0.5 * dz_init * Z_ * Zsol * u0(m, IDN, k, j, i_out);
     }
   });
   
@@ -1069,7 +1079,9 @@ void UserBoundary(Mesh* pm) {
       
       SetCoolingFlowState(u0, m, k, j, i, x1v, x2v, x3v, gm1, profile);
       SetRotation(u0, m, k, j, i, x1v, x2v, x3v, r_c, v_c);
-      u0(m, nhydro, k, j, i) = Z_ * Zsol * u0(m, IDN, k, j, i);
+      u0(m, IZS, k, j, i) = (1. - dz_init) * Z_ * Zsol * u0(m, IDN, k, j, i);
+      u0(m, IDS, k, j, i) = 0.5 * dz_init * Z_ * Zsol * u0(m, IDN, k, j, i);
+      u0(m, IDL, k, j, i) = 0.5 * dz_init * Z_ * Zsol * u0(m, IDN, k, j, i);
     }
   
     // Outer X2 boundary
@@ -1079,7 +1091,9 @@ void UserBoundary(Mesh* pm) {
       
       SetCoolingFlowState(u0, m, k, j_out, i, x1v, x2v, x3v, gm1, profile);
       SetRotation(u0, m, k, j_out, i, x1v, x2v, x3v, r_c, v_c);
-      u0(m, nhydro, k, j_out, i) = Z_ * Zsol * u0(m, IDN, k, j_out, i);
+      u0(m, IZS, k, j_out, i) = (1. - dz_init) * Z_ * Zsol * u0(m, IDN, k, j_out, i);
+      u0(m, IDS, k, j_out, i) = 0.5 * dz_init * Z_ * Zsol * u0(m, IDN, k, j_out, i);
+      u0(m, IDL, k, j_out, i) = 0.5 * dz_init * Z_ * Zsol * u0(m, IDN, k, j_out, i);
     }
   });
   
@@ -1102,7 +1116,9 @@ void UserBoundary(Mesh* pm) {
       
       SetCoolingFlowState(u0, m, k, j, i, x1v, x2v, x3v, gm1, profile);
       SetRotation(u0, m, k, j, i, x1v, x2v, x3v, r_c, v_c);
-      u0(m, nhydro, k, j, i) = Z_ * Zsol * u0(m, IDN, k, j, i);
+      u0(m, IZS, k, j, i) = (1. - dz_init) * Z_ * Zsol * u0(m, IDN, k, j, i);
+      u0(m, IDS, k, j, i) = 0.5 * dz_init * Z_ * Zsol * u0(m, IDN, k, j, i);
+      u0(m, IDL, k, j, i) = 0.5 * dz_init * Z_ * Zsol * u0(m, IDN, k, j, i);
     }
     
     // Outer X3 boundary
@@ -1112,7 +1128,9 @@ void UserBoundary(Mesh* pm) {
       
       SetCoolingFlowState(u0, m, k_out, j, i, x1v, x2v, x3v, gm1, profile);
       SetRotation(u0, m, k_out, j, i, x1v, x2v, x3v, r_c, v_c);
-      u0(m, nhydro, k_out, j, i) = Z_ * Zsol * u0(m, IDN, k_out, j, i);
+      u0(m, IZS, k_out, j, i) = (1. - dz_init) * Z_ * Zsol * u0(m, IDN, k_out, j, i);
+      u0(m, IDS, k_out, j, i) = 0.5 * dz_init * Z_ * Zsol * u0(m, IDN, k_out, j, i);
+      u0(m, IDL, k_out, j, i) = 0.5 * dz_init * Z_ * Zsol * u0(m, IDN, k_out, j, i);
     }
   });
   
