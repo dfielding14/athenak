@@ -352,6 +352,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   Real Zsol = Z_solar;
   Real Z_ = Z;
+  Real dz_init = d_z_init;
 
   // Use loaded profiles
   par_for("pgen_ic", DevExeSpace(), 0, (pmbp->nmb_thispack-1), ks, ke, js, je, is, ie,
@@ -382,10 +383,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
                         m_g, a_g, z_g, r_m, rho_m, gm1, disk_profile);
     
     // uniformly set metallicity
-    u0(m, IZS, k, j, i) = (1.-d_z_init) * Z_  * Zsol * u0(m, IDN, k, j, i);
+    u0(m, IZS, k, j, i) = (1.-dz_init) * Z_  * Zsol * u0(m, IDN, k, j, i);
     // uniformly set dust, assuming equal masses in small and large grains
-    u0(m, IDS, k, j, i) = 0.5 * d_z_init * Z_ * Zsol * u0(m, IDN, k, j, i);
-    u0(m, IDL, k, j, i) = 0.5 * d_z_init * Z_ * Zsol * u0(m, IDN, k, j, i);
+    u0(m, IDS, k, j, i) = 0.5 * dz_init * Z_ * Zsol * u0(m, IDN, k, j, i);
+    u0(m, IDL, k, j, i) = 0.5 * dz_init * Z_ * Zsol * u0(m, IDN, k, j, i);
 
     // Compute turbulent velocities by summing Fourier modes
     Real vx = 0.0, vy = 0.0, vz = 0.0;
@@ -820,9 +821,9 @@ void SNSource(Mesh* pm, const Real bdt) {
         if (r <= dr) {
           u0(m,IDN,k,j,i) += m_ej_;
           u0(m,IEN,k,j,i) += e_sn_;
-          u0(m, IZS, k, j, i) += (1.-d_z_sn) * Z_ej_ * m_ej_;
-          u0(m, IDS, k, j, i) += 0.5 * d_z_sn * Z_ej_ * m_ej_;
-          u0(m, IDL, k, j, i) += 0.5 * d_z_sn * Z_ej_ * m_ej_;
+          u0(m, IZS, k, j, i) += (1.-dz_sn) * Z_ej_ * m_ej_;
+          u0(m, IDS, k, j, i) += 0.5 * dz_sn * Z_ej_ * m_ej_;
+          u0(m, IDL, k, j, i) += 0.5 * dz_sn * Z_ej_ * m_ej_;
         }
       }
 
@@ -843,7 +844,8 @@ void DustSource(Mesh* pm, const Real bdt) {
   auto &size = pmbp->pmb->mb_size;
   int nhydro = pmbp->phydro->nhydro;
 
-  Real gamma = eos_data.gamma;
+  EOS_Data &eos = pmbp->phydro->peos->eos_data;
+  Real gamma = eos.gamma;
   Real gm1 = gamma - 1.0;
 
   int IZS = nhydro; // index of passive scalar for metallicity
@@ -907,7 +909,7 @@ void DustSource(Mesh* pm, const Real bdt) {
 
     tmp_rate_s = -d_s / (t_sp * a_s);
     tmp_rate_l = -d_l / (t_sp * a_l);
-    rate_Z += -tmp_rate_s - tmp_rate_l;
+    rate_z += -tmp_rate_s - tmp_rate_l;
 
     rate_s += tmp_rate_s;
     rate_l += tmp_rate_l;
@@ -921,16 +923,13 @@ void DustSource(Mesh* pm, const Real bdt) {
 
     tmp_rate_s = d_s / (t_ac * a_s);
     tmp_rate_l = d_l / (t_ac * a_l);
-    rate_Z += -tmp_rate_s - tmp_rate_l;
+    rate_z += -tmp_rate_s - tmp_rate_l;
 
     rate_s += tmp_rate_s;
     rate_l += tmp_rate_l;
 
-    // Convert rate_Z to metal mass
-    rate_Z *= 1.0;  //! Assuming Z_dust ~ 1
-
-    // ! Need to decide if we should keep the coagulation
-    // ! And need to add the code to calculate the sound speed
+    // Convert rate_z to metal mass
+    rate_z *= 1.0;  //! Assuming Z_dust ~ 1
 
     //* Shattering large grains, into small ones
     // From Dubois 2024
@@ -959,7 +958,7 @@ void DustSource(Mesh* pm, const Real bdt) {
 
     //* Update metallicity and dust scalars with source terms
     //! These are w0 * dens
-    u0(m, IZS, k, j, i) += bdt * rate_Z;
+    u0(m, IZS, k, j, i) += bdt * rate_z;
 
     Real d_mass = 0.0;
     u0(m, IDS, k, j, i) += bdt * rate_s;
@@ -973,11 +972,12 @@ void DustSource(Mesh* pm, const Real bdt) {
     // Clamp total dust-to-gas ratio to [0,1]
     // Dust to metal ratio is not clamped, as all of gas metals can be locked in dust
     // Also dust might have been created in a metal-rich area and moved...
-    clamp_d_mass = Kokkos::clamp(d_mass, 0.0, dens)/d_mass;
+    Real clamp_d_mass = (d_mass > 0.0) ?
+                        Kokkos::clamp(d_mass, 0.0, dens) / d_mass : 1.0;
 
     // Scaled to sum to clamp_dust_tot 
     u0(m, IDS, k, j, i) *= clamp_d_mass;
-    u0(m, IDS, k, j, i) *= clamp_d_mass;
+    u0(m, IDL, k, j, i) *= clamp_d_mass;
   });
   
   return;
