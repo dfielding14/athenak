@@ -903,22 +903,24 @@ void DustSource(Mesh* pm, const Real bdt) {
     Real tmp_rate_s = 0.0, tmp_rate_l = 0.0;
       
     //* Thermal sputtering
-    Real t_sp = 70.0; // in Myr
+    // Tsai & Mathews 1995, McKinnon et al 2017
+    Real t_sp = 102.0; // in Myr
     t_sp *= (1.e-3/dens);
     t_sp *= 1. + pow((temp/2.0e6), -2.5);
 
-    tmp_rate_s = -d_s / (t_sp * a_s);
-    tmp_rate_l = -d_l / (t_sp * a_l);
+    tmp_rate_s = -3. * d_s / (t_sp * a_s);
+    tmp_rate_l = -3. * d_l / (t_sp * a_l);
     rate_z += -tmp_rate_s - tmp_rate_l;
 
     rate_s += tmp_rate_s;
     rate_l += tmp_rate_l;
 
     //* Accretion
-    Real t_ac = 200.0; // in Myr
+    // Popping 2017
+    Real t_ac = 75.0; // in Myr
     t_ac *= (20.0/dens);
     t_ac *= pow((50.0/temp), 0.5);
-    t_ac *= Zloc/Zsol; // in Z_sol 
+    t_ac *= Zsol/Zloc; // in Z_sol 
     t_ac /= 1.-(d_tot/Zloc);
 
     tmp_rate_s = d_s / (t_ac * a_s);
