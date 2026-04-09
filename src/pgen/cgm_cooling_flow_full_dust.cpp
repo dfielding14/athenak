@@ -70,6 +70,7 @@ namespace {
 
   // Constant for metallicity
   Real Z;
+  Real zfloor;
 
   // Constants for SN
   Real r_inj;
@@ -108,6 +109,15 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   auto &indcs = pmy_mesh_->mb_indcs;
 
+  if (pmbp->phydro->nscalars != 3) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Problem generator 'cgm_cooling_flow_full_dust' requires "
+              << "<hydro>/nscalars = 3, but got " << pmbp->phydro->nscalars
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
   // Enroll user functions 
   user_srcs_func  = UserSource;
   user_bcs_func   = UserBoundary;
@@ -143,6 +153,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   r_circ    = pin->GetReal("problem", "r_circ");
   v_circ    = pin->GetReal("problem", "v_circ");
   Z         = pin->GetOrAddReal("problem", "metallicity", 1.0/3);
+  zfloor    = pin->GetOrAddReal("problem", "zfloor", 1.0e-20);
 
   // Read in SN injection radius and compute energy and mass injection densities
   r_inj = pin->GetReal("SN","r_inj"); // Input in code unis
@@ -875,7 +886,7 @@ void DustSource(Mesh* pm, const Real bdt) {
   Real v_co = 0.1; // km/s, relative velocity for coagulation timescale
 
   // To prevent NaNs
-  Real Z_tol = 1e-20; 
+  Real Z_tol = zfloor; 
   Real clamp_dust_tot = 1.0; // tmp var used for clamping later
 
   Real cs_unit = sqrt(gamma) / KM_S;
@@ -893,8 +904,9 @@ void DustSource(Mesh* pm, const Real bdt) {
     Real Zloc = Kokkos::max(Z_tol, w0(m,IZS,k,j,i));
 
     // current dust amount in the bin
-    Real d_s = Kokkos::max(Z_tol, w0(m,IDS,k,j,i));
-    Real d_l = Kokkos::max(Z_tol, w0(m,IDL,k,j,i));
+    Real d_s = Kokkos::max(0.5 * Z_tol, w0(m,IDS,k,j,i));
+    Real d_l = Kokkos::max(0.5 * Z_tol, w0(m,IDL,k,j,i));
+
     Real d_tot = d_s + d_l;
     d_s *= dens;
     d_l *= dens;
@@ -961,21 +973,23 @@ void DustSource(Mesh* pm, const Real bdt) {
     //* Update metallicity and dust scalars with source terms
     //! These are w0 * dens
     u0(m, IZS, k, j, i) += bdt * rate_z;
-
-    Real d_mass = 0.0;
     u0(m, IDS, k, j, i) += bdt * rate_s;
     u0(m, IDL, k, j, i) += bdt * rate_l;
 
-    d_mass = u0(m, IDS, k, j, i) + u0(m, IDL, k, j, i); // for later
+    // Check the tolerance to prevent NaNs and negative values
+    u0(m, IZS, k, j, i) = Kokkos::max(Z_tol * dens, u0(m, IZS, k, j, i));
+    u0(m, IDS, k, j, i) = Kokkos::max(0.5 * Z_tol * dens, u0(m, IDS, k, j, i));
+    u0(m, IDL, k, j, i) = Kokkos::max(0.5 * Z_tol * dens, u0(m, IDL, k, j, i));
 
-    // We should check that scalars are guaranteed to be in [0,1] after all source terms are added.
+    Real d_mass = u0(m, IDS, k, j, i) + u0(m, IDL, k, j, i); // for later
+
+    // We check that scalars are guaranteed to be in [0,1] after all source terms are added.
     // Clamp metallicity 
     u0(m, IZS, k, j, i) = Kokkos::clamp(u0(m, IZS, k, j, i), 0.0, dens);
     // Clamp total dust-to-gas ratio to [0,1]
     // Dust to metal ratio is not clamped, as all of gas metals can be locked in dust
     // Also dust might have been created in a metal-rich area and moved...
-    Real clamp_d_mass = (d_mass > 0.0) ?
-                        Kokkos::clamp(d_mass, 0.0, dens) / d_mass : 1.0;
+    Real clamp_d_mass = Kokkos::clamp(d_mass, 0.0, dens) / d_mass;
 
     // Scaled to sum to clamp_dust_tot 
     u0(m, IDS, k, j, i) *= clamp_d_mass;
