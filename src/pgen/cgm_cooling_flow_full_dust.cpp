@@ -990,11 +990,6 @@ void DustSource(Mesh* pm, const Real bdt) {
     u0(m, IDS, k, j, i) += bdt * rate_s;
     u0(m, IDL, k, j, i) += bdt * rate_l;
 
-    // // Check the tolerance to prevent NaNs and negative values
-    // u0(m, IZS, k, j, i) = Kokkos::max(Z_tol * dens, u0(m, IZS, k, j, i));
-    // u0(m, IDS, k, j, i) = Kokkos::max(0.5 * Z_tol * dens, u0(m, IDS, k, j, i));
-    // u0(m, IDL, k, j, i) = Kokkos::max(0.5 * Z_tol * dens, u0(m, IDL, k, j, i));
-
     Real d_mass = u0(m, IDS, k, j, i) + u0(m, IDL, k, j, i); // for later
 
     // We check that scalars are guaranteed to be in [0,1] after all source terms are added.
