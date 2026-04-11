@@ -50,14 +50,12 @@ scalar_only     = true
 <problem>
 rho0           = 1.0
 temp0          = 1.0
-scalar_init    = 10.0
 user_srcs      = true
 mean_gradient  = 1.0
 turb_v_rms     = 1.0
 turb_nlow      = 1
 turb_nhigh     = 16
 turb_expo      = 1.6666667
-turb_sol_frac  = 1.0
 turb_rseed     = 12345
 
 <output1>

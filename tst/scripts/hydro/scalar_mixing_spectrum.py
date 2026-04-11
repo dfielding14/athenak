@@ -4,10 +4,11 @@
 #   --cmake=-DPROBLEM=scalar_mixing
 #
 # It verifies that projection, 2D stream, and 3D Clebsch initialization produce
-# the requested RMS velocity, near-zero mean flow, very small spectral
-# divergence, and the expected in-band power-law slope. Because the
-# initialization uses random Gaussian coefficients, the spectrum check is
-# performed on an ensemble average over a fixed seed set.
+# the requested RMS velocity, near-zero mean flow, a discretely divergence-free
+# staggered face transport field, and the expected in-band power-law slope.
+# Because u0 is reconstructed from that face field by cell-centering averages,
+# its FFT-based divergence is small but no longer roundoff-level. The spectrum
+# check is performed on an ensemble average over a fixed seed set.
 
 import glob
 import json
@@ -41,7 +42,8 @@ _CASES = [
         'check_leakage': False,
         'slope_tol': 0.2,
         'check_exact_k_slope': True,
-        'div_tol': 2.0e-7,
+        'div_tol': 2.0e-2,
+        'face_div_tol': 1.0e-10,
     },
     {
         'name': 'projection_3d',
@@ -56,7 +58,8 @@ _CASES = [
         'check_leakage': False,
         'slope_tol': 0.2,
         'check_exact_k_slope': True,
-        'div_tol': 2.0e-7,
+        'div_tol': 2.0e-2,
+        'face_div_tol': 1.0e-10,
     },
     {
         'name': 'stream_2d',
@@ -71,7 +74,8 @@ _CASES = [
         'check_leakage': False,
         'slope_tol': 0.2,
         'check_exact_k_slope': True,
-        'div_tol': 2.0e-7,
+        'div_tol': 2.0e-2,
+        'face_div_tol': 1.0e-10,
     },
     {
         'name': 'clebsch_3d',
@@ -91,6 +95,7 @@ _CASES = [
         'check_exact_k_slope': False,
         'check_shell_slope': True,
         'div_tol': 5.0e-2,
+        'face_div_tol': 1.0e-10,
     },
 ]
 
@@ -259,9 +264,7 @@ def analyze():
     analyze_status = True
     for case in _CASES:
         per_seed = [_analyze_output(case, seed) for seed in _SEEDS]
-        diag_per_seed = []
-        if case['name'] == 'clebsch_3d':
-            diag_per_seed = [_load_diag(case, seed) for seed in _SEEDS]
+        diag_per_seed = [_load_diag(case, seed) for seed in _SEEDS]
         grouped_mode_means = {}
         for metrics in per_seed:
             for kval, mean_energy in metrics['grouped_mode_means'].items():
@@ -327,57 +330,73 @@ def analyze():
                                case['name'], max_leakage)
                 analyze_status = False
 
-        if case['name'] == 'clebsch_3d':
-            for seed, diag in zip(_SEEDS, diag_per_seed):
-                meta = diag.get('metadata', {})
-                spectra = diag.get('spectra', {})
-                target = meta.get('target', {})
-                if meta.get('construction') != 'clebsch_3d':
-                    logger.warning('%s wrong construction metadata for seed=%d',
-                                   case['name'], seed)
+        max_face_div = 0.0
+        for seed, diag in zip(_SEEDS, diag_per_seed):
+            meta = diag.get('metadata', {})
+            spectra = diag.get('spectra', {})
+            target = meta.get('target', {})
+            if meta.get('construction') != case['name']:
+                logger.warning('%s wrong construction metadata for seed=%d',
+                               case['name'], seed)
+                analyze_status = False
+            if meta.get('scalar_face_velocity') is not True:
+                logger.warning('%s missing scalar_face_velocity=true for seed=%d',
+                               case['name'], seed)
+                analyze_status = False
+            face_div = float(meta.get('face_divergence_ratio', np.inf))
+            max_face_div = max(max_face_div, face_div)
+            if not np.isfinite(face_div) or face_div > case['face_div_tol']:
+                logger.warning('%s face divergence ratio too large for seed=%d: %.3e',
+                               case['name'], seed, face_div)
+                analyze_status = False
+
+            if case['name'] != 'clebsch_3d':
+                continue
+
+            for forbidden_key in ('fit', 'quality_gate', 'sector_response'):
+                if forbidden_key in diag:
+                    logger.warning('%s stale diagnostics key %s present for seed=%d',
+                                   case['name'], forbidden_key, seed)
                     analyze_status = False
-                for forbidden_key in ('fit', 'quality_gate', 'sector_response'):
-                    if forbidden_key in diag:
-                        logger.warning('%s stale diagnostics key %s present for seed=%d',
-                                       case['name'], forbidden_key, seed)
-                        analyze_status = False
-                if 'phi1_shell_energy' not in spectra or 'phi2_shell_energy' not in spectra:
-                    logger.warning('%s missing phi shell spectra for seed=%d',
-                                   case['name'], seed)
-                    analyze_status = False
-                    continue
-                if 'velocity_shell_energy' in spectra:
-                    logger.warning('%s stale retained velocity shell spectrum present for seed=%d',
-                                   case['name'], seed)
-                    analyze_status = False
-                if abs(float(target.get('alpha', np.nan)) - float(case['alpha'])) > 1.0e-12:
-                    logger.warning('%s wrong alpha metadata for seed=%d',
-                                   case['name'], seed)
-                    analyze_status = False
-                if abs(float(target.get('phi_slope', np.nan)) - float(case['phi_slope'])) > 1.0e-12:
-                    logger.warning('%s wrong phi slope metadata for seed=%d',
-                                   case['name'], seed)
-                    analyze_status = False
-                if abs(float(target.get('velocity_slope', np.nan)) -
-                       float(case['velocity_slope'])) > 1.0e-12:
-                    logger.warning('%s wrong velocity slope metadata for seed=%d',
-                                   case['name'], seed)
+            if 'phi1_shell_energy' not in spectra or 'phi2_shell_energy' not in spectra:
+                logger.warning('%s missing phi shell spectra for seed=%d',
+                               case['name'], seed)
+                analyze_status = False
+                continue
+            if 'velocity_shell_energy' in spectra:
+                logger.warning('%s stale retained velocity shell spectrum present for seed=%d',
+                               case['name'], seed)
+                analyze_status = False
+            if abs(float(target.get('alpha', np.nan)) - float(case['alpha'])) > 1.0e-12:
+                logger.warning('%s wrong alpha metadata for seed=%d',
+                               case['name'], seed)
+                analyze_status = False
+            if abs(float(target.get('phi_slope', np.nan)) - float(case['phi_slope'])) > 1.0e-12:
+                logger.warning('%s wrong phi slope metadata for seed=%d',
+                               case['name'], seed)
+                analyze_status = False
+            if abs(float(target.get('velocity_slope', np.nan)) -
+                   float(case['velocity_slope'])) > 1.0e-12:
+                logger.warning('%s wrong velocity slope metadata for seed=%d',
+                               case['name'], seed)
+                analyze_status = False
+
+            for key in ('phi1_shell_energy', 'phi2_shell_energy'):
+                shell = np.asarray(spectra[key], dtype=np.float64)
+                ref = shell[case['nlow']]
+                target_shell = np.array([
+                    0.0 if kval == 0 else kval ** (-float(case['phi_slope']))
+                    for kval in range(len(shell))
+                ], dtype=np.float64)
+                target_shell *= ref / target_shell[case['nlow']]
+                rel_err = np.max(np.abs(shell[case['nlow']:case['nhigh'] + 1]
+                                        - target_shell[case['nlow']:case['nhigh'] + 1])
+                                 / target_shell[case['nlow']:case['nhigh'] + 1])
+                if rel_err > 1.0e-10:
+                    logger.warning('%s %s not exact power law for seed=%d: %.3e',
+                                   case['name'], key, seed, rel_err)
                     analyze_status = False
 
-                for key in ('phi1_shell_energy', 'phi2_shell_energy'):
-                    shell = np.asarray(spectra[key], dtype=np.float64)
-                    ref = shell[case['nlow']]
-                    target_shell = np.array([
-                        0.0 if kval == 0 else kval ** (-float(case['phi_slope']))
-                        for kval in range(len(shell))
-                    ], dtype=np.float64)
-                    target_shell *= ref / target_shell[case['nlow']]
-                    rel_err = np.max(np.abs(shell[case['nlow']:case['nhigh'] + 1]
-                                            - target_shell[case['nlow']:case['nhigh'] + 1])
-                                     / target_shell[case['nlow']:case['nhigh'] + 1])
-                    if rel_err > 1.0e-10:
-                        logger.warning('%s %s not exact power law for seed=%d: %.3e',
-                                       case['name'], key, seed, rel_err)
-                        analyze_status = False
+        logger.info('%s: max_face_div=%.3e', case['name'], max_face_div)
 
     return analyze_status

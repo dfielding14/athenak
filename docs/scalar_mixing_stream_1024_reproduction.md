@@ -1,7 +1,7 @@
 # Reproducing the 1024^2 scalar-mixing stream run
 
 This note records the exact setup used for the 2D stream scalar-mixing
-production run with a left/right scalar step.
+production run with the fixed box-scale `x1` sine scalar profile.
 
 ## Build
 
@@ -30,7 +30,8 @@ The committed input file uses:
 - `turb_velocity_method = stream_2d`
 - target velocity slope `-5/3`
 - `turb_nlow = 2`, `turb_nhigh = 512`
-- left/right scalar step: `theta = 0` for `x < 0`, `theta = 1` for `x >= 0`
+- scalar base state:
+  `theta(x) = 0.5 * (1 - cos(2*pi*(x - x1min)/Lx))`
 - `scalar_diffusivity = 1e-3`
 - `tlim = 10`
 - binary `hydro_w` outputs every `dt = 1`

@@ -51,11 +51,6 @@ scalar_diffusivity = 1.0e-3
 <problem>
 rho0                     = 1.0
 temp0                    = 1.0
-scalar_init              = 0.5
-scalar_use_x1_step       = true
-scalar_step_x1           = 0.0
-scalar_left              = 0.0
-scalar_right             = 1.0
 user_srcs                = false
 mean_gradient        = 0.0
 turb_velocity_method = stream_2d
@@ -63,7 +58,6 @@ turb_v_rms           = 1.0
 turb_nlow            = 2
 turb_nhigh           = 512
 turb_expo            = 1.6666666666667
-turb_sol_frac        = 1.0
 turb_rseed           = 12345
 turb_k_crit          = 16.0
 
