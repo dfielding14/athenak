@@ -59,6 +59,27 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
   // loop over input block names.  Find those that start with "output", read parameters,
   // and add to linked list of BaseTypeOutputs.
 
+  auto parse_file_shard_mode = [&](const std::string &block_name) {
+    bool single_file_per_rank = pin->GetOrAddBoolean(block_name, "single_file_per_rank",
+                                                     false);
+    bool single_file_per_node = pin->GetOrAddBoolean(block_name, "single_file_per_node",
+                                                     false);
+    if (single_file_per_rank && single_file_per_node) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Output block '" << block_name
+                << "' cannot set both single_file_per_rank=true and "
+                << "single_file_per_node=true" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (single_file_per_rank) {
+      return FileShardMode::per_rank;
+    }
+    if (single_file_per_node) {
+      return FileShardMode::per_node;
+    }
+    return FileShardMode::shared;
+  };
+
   int num_hst=0, num_rst=0, num_log=0; // count # of hst,rst,log outputs
   for (auto it = pin->block.begin(); it != pin->block.end(); ++it) {
     if (it->block_name.compare(0, 6, "output") == 0) {
@@ -242,8 +263,7 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
         pnode = new TrackedParticleOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("cbin") == 0) {
-        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,
-          "single_file_per_rank", false);
+        opar.file_shard_mode = parse_file_shard_mode(opar.block_name);
         opar.coarsen_factor = pin->GetInteger(opar.block_name,"coarsen_factor");
         opar.compute_moments = pin->GetOrAddBoolean(opar.block_name,
           "compute_moments", false);
@@ -269,18 +289,17 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
           opar.nbin2 = 0;
           opar.logscale2 = true;
         }
+        opar.file_shard_mode = parse_file_shard_mode(opar.block_name);
         pnode = new PDFOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("bin") == 0) {
-        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,
-          "single_file_per_rank", false);
+        opar.file_shard_mode = parse_file_shard_mode(opar.block_name);
         pnode = new MeshBinaryOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("rst") == 0) {
       // Add restarts to the tail end of BaseTypeOutput list, so file counters for other
       // output types are up-to-date in restart file
-        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,
-          "single_file_per_rank", false);
+        opar.file_shard_mode = parse_file_shard_mode(opar.block_name);
         pnode = new RestartOutput(pin,pm,opar);
         pout_list.push_back(pnode);
         num_rst++;

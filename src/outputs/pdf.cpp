@@ -28,6 +28,7 @@
 #include <string>
 
 #include "athena.hpp"
+#include "file_sharding.hpp"
 #include "globals.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
@@ -55,6 +56,10 @@ PDFOutput::PDFOutput(ParameterInput *pin, Mesh *pm, OutputParameters op) :
     dir_name.append(op.variable_2);
   }
   mkdir(dir_name.c_str(),0775);
+  if (op.file_shard_mode != FileShardMode::shared) {
+    std::string shard_dir = dir_name + "/" + ShardDirectoryName(op.file_shard_mode);
+    mkdir(shard_dir.c_str(), 0775);
+  }
 
   pdf_data.mass_weighted = op.mass_weighted;
   pdf_data.logscale = op.logscale;
@@ -291,14 +296,26 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
   // Kokkos::Experimental::contribute(result.KokkosView(), scatter);
   Kokkos::fence(); // May not be required
 
-  // Now reduce over ranks
+  // Now reduce over ranks in the active output shard.
 #if MPI_PARALLEL_ENABLED
-  if (global_variable::my_rank == 0) {
-    MPI_Reduce(MPI_IN_PLACE, result.data(), result.size(),
-                                   MPI_ATHENA_REAL, MPI_SUM, 0, MPI_COMM_WORLD);
-  } else {
-    MPI_Reduce(result.data(), result.data(), result.size(),
-                                   MPI_ATHENA_REAL, MPI_SUM, 0, MPI_COMM_WORLD);
+  if (out_params.file_shard_mode == FileShardMode::shared) {
+    if (global_variable::my_rank == 0) {
+      MPI_Reduce(MPI_IN_PLACE, result.data(), result.size(),
+                                     MPI_ATHENA_REAL, MPI_SUM, 0, MPI_COMM_WORLD);
+    } else {
+      MPI_Reduce(result.data(), result.data(), result.size(),
+                                     MPI_ATHENA_REAL, MPI_SUM, 0, MPI_COMM_WORLD);
+    }
+  } else if (out_params.file_shard_mode == FileShardMode::per_node) {
+    if (global_variable::rank_in_node == 0) {
+      MPI_Reduce(MPI_IN_PLACE, result.data(), result.size(),
+                                     MPI_ATHENA_REAL, MPI_SUM, 0,
+                                     global_variable::node_comm);
+    } else {
+      MPI_Reduce(result.data(), result.data(), result.size(),
+                                     MPI_ATHENA_REAL, MPI_SUM, 0,
+                                     global_variable::node_comm);
+    }
   }
 #endif
 }
@@ -308,19 +325,26 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
 //  \brief Cycles through hist_data vector and writes history file for each component
 
 void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
-  // only the master rank writes the file
-  if (global_variable::my_rank == 0) {
+  FileShardMode shard_mode = out_params.file_shard_mode;
+
+  if (IsShardWriter(shard_mode)) {
+    std::string path_prefix;
+    path_prefix.assign("pdf_");
+    path_prefix.append(out_params.file_id);
+    if (pdf_data.pdf_dimension == 2) {
+      path_prefix.append("_");
+      path_prefix.append(out_params.variable_2);
+    }
+    path_prefix.append("/");
+    if (shard_mode != FileShardMode::shared) {
+      path_prefix.append(ShardDirectoryName(shard_mode));
+    }
+
     // Write header, if it has not been written already
     if (!(pdf_data.bins_written)) {
       // create filename: "pdf_"+"file_id"/file_basename" + ".bins.pdf"
       std::string fname;
-      fname.assign("pdf_");
-      fname.append(out_params.file_id);
-      if (pdf_data.pdf_dimension == 2) {
-        fname.append("_");
-        fname.append(out_params.variable_2);
-      }
-      fname.append("/");
+      fname.assign(path_prefix);
       fname.append(out_params.file_basename);
       fname.append(".bins.pdf");
 
@@ -367,13 +391,7 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::string fname;
     char number[6];
     std::snprintf(number, sizeof(number), "%05d", out_params.file_number);
-    fname.assign("pdf_");
-    fname.append(out_params.file_id);
-    if (pdf_data.pdf_dimension == 2) {
-      fname.append("_");
-      fname.append(out_params.variable_2);
-    }
-    fname.append("/");
+    fname.assign(path_prefix);
     fname.append(out_params.file_basename);
     fname.append(".");
     fname.append(number);

@@ -353,10 +353,10 @@ Mesh::~Mesh() {
 
 void Mesh::SetRestartFileInfo(const std::string &base_dir,
                               const std::string &file_name,
-                              bool single_file_per_rank) {
+                              FileShardMode shard_mode) {
   restart_meta.base_dir = base_dir;
   restart_meta.file_name = file_name;
-  restart_meta.single_file_per_rank = single_file_per_rank;
+  restart_meta.file_shard_mode = shard_mode;
 }
 
 //----------------------------------------------------------------------------------------
