@@ -560,8 +560,8 @@ void SetDustScalars(const DvceArray5D<Real> &u0,
   Real Z_total = Z * Zsol * rho;
 
   u0(m, IZS, k, j, i) = Z_total;
-  u0(m, IDS, k, j, i) = 0.5 * dz * Z_total;
-  u0(m, IDL, k, j, i) = 0.5 * dz * Z_total;
+  u0(m, IDS, k, j, i) = 0.5 * (dz / (1.0 - dz)) * Z_total;
+  u0(m, IDL, k, j, i) = 0.5 * (dz / (1.0 - dz)) * Z_total;
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -659,8 +659,8 @@ void SetEquilibriumState(const DvceArray5D<Real> &u0,
 
     // Update metals/dust from disk material
     u0(m, IZS, k, j, i) += Z * Zsol * rho;
-    u0(m, IDS, k, j, i) += 0.5 * dz * Z * Zsol * rho;
-    u0(m, IDL, k, j, i) += 0.5 * dz * Z * Zsol * rho;
+    u0(m, IDS, k, j, i) += 0.5 * (dz / (1.0 - dz)) * Z * Zsol * rho;
+    u0(m, IDL, k, j, i) += 0.5 * (dz / (1.0 - dz)) * Z * Zsol * rho;
 }
 
 //===========================================================================//
@@ -881,9 +881,9 @@ void SNSource(Mesh* pm, const Real bdt) {
         if (r <= dr) {
 	  u0(m,IDN,k,j,i) += m_ej_;
           u0(m,IEN,k,j,i) += e_sn_;
-	  u0(m, IZS, k, j, i) += (1.-dz_sn) * Z_ej_ * m_ej_;
-          u0(m, IDS, k, j, i) += 0.5 * dz_sn * Z_ej_ * m_ej_;
-          u0(m, IDL, k, j, i) += 0.5 * dz_sn * Z_ej_ * m_ej_;
+	  u0(m, IZS, k, j, i) += Z_ej_ * m_ej_;
+          u0(m, IDS, k, j, i) += 0.5 * (dz_sn / (1.0 - dz_sn)) * Z_ej_ * m_ej_;
+          u0(m, IDL, k, j, i) += 0.5 * (dz_sn / (1.0 - dz_sn)) * Z_ej_ * m_ej_;
 	}
       }
 
