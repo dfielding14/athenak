@@ -558,7 +558,8 @@ void SetDustScalars(const DvceArray5D<Real> &u0,
                     Real dz, Real Z, Real Zsol) {
   Real rho = u0(m, IDN, k, j, i);
   Real Z_total = Z * Zsol * rho;
-  u0(m, IZS, k, j, i) = (1.0 - dz) * Z_total;
+
+  u0(m, IZS, k, j, i) = Z_total;
   u0(m, IDS, k, j, i) = 0.5 * dz * Z_total;
   u0(m, IDL, k, j, i) = 0.5 * dz * Z_total;
 }
@@ -656,8 +657,8 @@ void SetEquilibriumState(const DvceArray5D<Real> &u0,
     u0(m, IM3, k, j, i) = mom3_tot;
     u0(m, IEN, k, j, i) = Eth_cgm + (rho * temp)/gm1 + KE_tot;
 
-    // Update dust only with disk material
-    u0(m, IZS, k, j, i) += (1.0 - dz) * Z * Zsol * rho;
+    // Update metals/dust from disk material
+    u0(m, IZS, k, j, i) += Z * Zsol * rho;
     u0(m, IDS, k, j, i) += 0.5 * dz * Z * Zsol * rho;
     u0(m, IDL, k, j, i) += 0.5 * dz * Z * Zsol * rho;
 }
