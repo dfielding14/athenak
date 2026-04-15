@@ -356,6 +356,7 @@ void Mesh::SetRestartFileInfo(const std::string &base_dir,
                               FileShardMode shard_mode) {
   restart_meta.base_dir = base_dir;
   restart_meta.file_name = file_name;
+  restart_meta.payload_stride = 0;
   restart_meta.file_shard_mode = shard_mode;
 }
 
