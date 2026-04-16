@@ -107,12 +107,17 @@
 // #include "turb_init.hpp"
 // #include "srcterms/TurbGen.h"
 
+#ifndef TRML_ALLOW_ZERO_SHEAR
+#define TRML_ALLOW_ZERO_SHEAR 0
+#endif
 
 // Number of slabs for z-direction decomposition in parallel reductions.
 // Used for computing mean quantities across the mixing layer.
 #define NREDUCTION_SLAB 24
 
 namespace {
+
+constexpr bool kTrmlAllowZeroShear = (TRML_ALLOW_ZERO_SHEAR != 0);
 
 enum FrameTrackingMode {
   kFTVelocity = 0,
@@ -154,13 +159,14 @@ struct pgen_trml {
   Real pgas_0;                 //!< Reference pressure (initial pressure, uniform)
   Real contrast;               //!< Temperature contrast ratio (T_hot/T_cold = rho_cold/rho_hot)
   Real velocity;               //!< Shear velocity amplitude (hot phase moves at +v, cold at -v)
-  Real t_shear;                //!< Shear timescale = 1/velocity (eddy turnover time)
+  Real t_shear;                //!< Shear timescale = 1/|velocity| (infinite when no shear)
 
   // ====================================================================================
   // COOLING FUNCTION PARAMETERS
   // ====================================================================================
   Real xi;                     //!< Dimensionless ratio t_shear/t_cool (key parameter!)
                                //!< Controls whether cooling or mixing dominates
+  Real t_cool_0;               //!< Explicit cooling time at T_peak used to normalize cooling
   Real t_cool_start;           //!< Simulation time at which to turn on radiative cooling
   Real beta_lo;                //!< Power-law slope of cooling function below T_peak
   Real beta_hi;                //!< Power-law slope of cooling function above T_peak
@@ -709,8 +715,21 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
                              pin->GetReal("problem", "contrast");
   ptrml->contrast          = contrast;
   Real velocity            = pin->GetReal("problem", "velocity");
+  Real velocity_abs        = std::fabs(velocity);
   ptrml->velocity          = velocity;
-  ptrml->t_shear           = 1.0/velocity;
+  if (velocity_abs > 0.0) {
+    ptrml->t_shear = 1.0/velocity_abs;
+  } else {
+    ptrml->t_shear = std::numeric_limits<Real>::infinity();
+    if (!kTrmlAllowZeroShear) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "TRML requires non-zero <problem>/velocity because cooling is "
+                << "normalized to the shear time. Use PROBLEM=TRML_no_shear to run "
+                << "with velocity=0 and an explicit t_cool_0." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
 
   // Read cooling-table-related parameters from input file
   ptrml->t_cool_start      = pin->GetOrAddReal("problem", "t_cool_start", 0.0);
@@ -740,7 +759,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Real beta_hi            = pin->GetReal("problem", "beta_hi");
   ptrml->beta_hi           = beta_hi;
   ptrml->alpha_magdens     = pin->GetOrAddReal("problem", "alpha_magdens", 1.0/2.0);
-  ptrml->xi                = pin->GetReal("problem", "xi");
+  bool have_xi             = pin->DoesParameterExist("problem", "xi");
+  Real xi_input            = pin->GetOrAddReal("problem", "xi", -1.0);
+  ptrml->xi                = xi_input;
   ptrml->heating_on        = pin->GetOrAddBoolean("problem", "heating_on", true);
   ptrml->cooling_below_T_cold =
       pin->GetOrAddBoolean("problem", "cooling_below_T_cold", true);
@@ -771,7 +792,33 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   Real z_interface              = pin->GetOrAddReal("problem", "z_interface", 0.0);
   ptrml->z_interface       = z_interface;
-  Real t_cool_0            = pin->GetOrAddReal("problem", "t_cool_0", -1.0);
+  Real t_cool_0_input      = pin->GetOrAddReal("problem", "t_cool_0", -1.0);
+
+  if (t_cool_0_input > 0.0) {
+    ptrml->t_cool_0 = t_cool_0_input;
+    if (std::isfinite(ptrml->t_shear)) {
+      ptrml->xi = ptrml->t_shear/ptrml->t_cool_0;
+    } else {
+      ptrml->xi = std::numeric_limits<Real>::infinity();
+    }
+  } else if (std::isfinite(ptrml->t_shear)) {
+    if (!have_xi || xi_input <= 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Require either a positive xi or a positive t_cool_0 under "
+                << "<problem>." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    ptrml->t_cool_0 = ptrml->t_shear/xi_input;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "TRML_no_shear requires a positive explicit t_cool_0 when "
+              << "<problem>/velocity = 0." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  Real frame_time_ref = std::isfinite(ptrml->t_shear) ? ptrml->t_shear : ptrml->t_cool_0;
 
   ptrml->use_temp_floor_cool = pin->GetOrAddBoolean("problem","use_temp_floor_cool", false);
   if (ptrml->use_temp_floor_cool) ptrml->T_floor_cool = pin->GetOrAddReal("problem","temp_floor_cool", 2e4)/pmbp->punit->temperature_cgs();
@@ -842,13 +889,14 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
                                                     ptrml->t_cool_start);
   ptrml->ft_apply_every = pin->GetOrAddInteger("problem", "ft_apply_every", 10);
   ptrml->ft_mode = ParseFrameTrackingMode(pin->GetOrAddString("problem", "ft_mode", "pd"));
-  ptrml->ft_tau_avg = pin->GetOrAddReal("problem", "ft_tau_avg", 0.05*ptrml->t_shear);
-  ptrml->ft_tau_relax = pin->GetOrAddReal("problem", "ft_tau_relax", 1.0*ptrml->t_shear);
-  ptrml->ft_tau_vel = pin->GetOrAddReal("problem", "ft_tau_vel", 0.25*ptrml->t_shear);
+  ptrml->ft_tau_avg = pin->GetOrAddReal("problem", "ft_tau_avg", 0.05*frame_time_ref);
+  ptrml->ft_tau_relax = pin->GetOrAddReal("problem", "ft_tau_relax", 1.0*frame_time_ref);
+  ptrml->ft_tau_vel = pin->GetOrAddReal("problem", "ft_tau_vel", 0.25*frame_time_ref);
   ptrml->ft_temp_lo = pin->GetOrAddReal("problem", "ft_temp_lo", T_cold);
   ptrml->ft_temp_hi = pin->GetOrAddReal("problem", "ft_temp_hi", ptrml->T_peak_hi);
   ptrml->ft_weight_floor = pin->GetOrAddReal("problem", "ft_weight_floor", 1.0e-6);
-  ptrml->ft_max_abs_boost = pin->GetOrAddReal("problem", "ft_max_abs_boost", 0.01*velocity);
+  ptrml->ft_max_abs_boost = pin->GetOrAddReal("problem", "ft_max_abs_boost",
+                                              0.01*velocity_abs);
   ptrml->ft_max_boost_change = pin->GetOrAddReal("problem", "ft_max_boost_change",
                                                   ptrml->ft_max_abs_boost);
   ptrml->ft_max_boost_change_mode = ParseFrameTrackingBoostChangeMode(
@@ -999,19 +1047,6 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   ptrml->ft_last_skip_flag = false;
   ptrml->ft_last_slew_limited = false;
   ptrml->ft_filter_initialized = false;
-
-
-  // Print info
-  if (t_cool_0 > 0){
-    if (global_variable::my_rank == 0) {
-      std::cout << "xi was = " << ptrml->xi << "\n";
-      std::cout << "setting t_cool_0 = " << t_cool_0 << "\n";
-      ptrml->xi = ptrml->t_shear / t_cool_0;
-      std::cout << "xi is now = " << ptrml->xi << "\n";
-    }
-    ptrml->xi = ptrml->t_shear / t_cool_0;
-  }
-
   // capture variables for kernel
   auto &indcs = pmy_mesh_->mb_indcs;
   int &is = indcs.is; int &ie = indcs.ie;
@@ -1038,6 +1073,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     std::cout << std::setprecision(16) << "beta_lo = " << beta_lo << "\n";
     std::cout << std::setprecision(16) << "alpha_magdens = " << ptrml->alpha_magdens << "\n";
     std::cout << std::setprecision(16) << "xi = " << ptrml->xi << "\n";
+    std::cout << std::setprecision(16) << "t_cool_0 = " << ptrml->t_cool_0 << "\n";
     std::cout << std::setprecision(16) << "t_shear = " << ptrml->t_shear << "\n";
     std::cout << std::setprecision(16) << "z_interface = " << ptrml->z_interface << "\n";
     std::cout << std::setprecision(16) << "smoothing_thickness = " << ptrml->smoothing_thickness << "\n";
@@ -1645,9 +1681,8 @@ void UserTimeStep(Mesh *pm){
   Real T_cold = ptrml->T_cold;
   Real T_peak = ptrml->T_peak;
   Real epsilon_T = ptrml->epsilon_T;
-  Real xi = ptrml->xi;
   Real pgas_0 = ptrml->pgas_0;
-  Real t_shear = ptrml->t_shear;
+  Real t_cool_0 = ptrml->t_cool_0;
   Real beta_lo = ptrml->beta_lo;
   Real beta_hi = ptrml->beta_hi;
   Real heat_coefficient = ptrml->heat_coefficient;
@@ -1694,7 +1729,7 @@ void UserTimeStep(Mesh *pm){
       // If density is above ceiling, we set cooling/heating to zero
       cooling_heating = FLT_MIN;
     } else {
-      Real Edot_cool = 1.5 * xi * pgas_0/t_shear * SQR(pres/pgas_0);
+      Real Edot_cool = 1.5 * pgas_0/t_cool_0 * SQR(pres/pgas_0);
       Edot_cool *= (temp<T_peak) ? pow(temp/T_peak, -beta_lo) : pow(temp/T_peak, -beta_hi);
       if (!cooling_below_T_cold && temp < T_cold) {
         Edot_cool = 0.0;
@@ -1702,7 +1737,7 @@ void UserTimeStep(Mesh *pm){
 
       Real Edot_heat = 0.0;
       if (heating_on) {
-        Edot_heat = 1.5 * xi * pgas_0/t_shear * heat_coefficient * SQR(pres/pgas_0);
+        Edot_heat = 1.5 * pgas_0/t_cool_0 * heat_coefficient * SQR(pres/pgas_0);
         Edot_heat *= (temp<(1+epsilon_T)*T_hot) ?
             pow((temp/T_peak),alpha_heat) :
             pow(((1+epsilon_T)*T_hot/T_peak),alpha_heat) *
@@ -1768,9 +1803,8 @@ void AddCoolingHeating(Mesh *pm, const Real bdt, DvceArray5D<Real> &u0,
   Real T_cold = ptrml->T_cold;
   Real T_peak = ptrml->T_peak;
   Real epsilon_T = ptrml->epsilon_T;
-  Real xi = ptrml->xi;
   Real pgas_0 = ptrml->pgas_0;
-  Real t_shear = ptrml->t_shear;
+  Real t_cool_0 = ptrml->t_cool_0;
   Real beta_lo = ptrml->beta_lo;
   Real beta_hi = ptrml->beta_hi;
   Real heat_coefficient = ptrml->heat_coefficient;
@@ -1810,7 +1844,7 @@ void AddCoolingHeating(Mesh *pm, const Real bdt, DvceArray5D<Real> &u0,
     } else if (use_dens_ceiling && dens > dens_ceiling) {
       cooling_heating = FLT_MIN; // No cooling/heating if density exceeds ceiling
     } else {
-      Real Edot_cool = 1.5 * xi * pgas_0/t_shear * SQR(pres/pgas_0);
+      Real Edot_cool = 1.5 * pgas_0/t_cool_0 * SQR(pres/pgas_0);
       Edot_cool *= (temp<T_peak) ? pow(temp/T_peak, -beta_lo) : pow(temp/T_peak, -beta_hi);
       if (!cooling_below_T_cold && temp < T_cold) {
         Edot_cool = 0.0;
@@ -1819,7 +1853,7 @@ void AddCoolingHeating(Mesh *pm, const Real bdt, DvceArray5D<Real> &u0,
 
       Real Edot_heat = 0.0;
       if (heating_on) {
-        Edot_heat = 1.5 * xi * pgas_0/t_shear * heat_coefficient * SQR(pres/pgas_0);
+        Edot_heat = 1.5 * pgas_0/t_cool_0 * heat_coefficient * SQR(pres/pgas_0);
         Edot_heat *= (temp<(1+epsilon_T)*T_hot) ?
             pow((temp/T_peak),alpha_heat) :
             pow(((1+epsilon_T)*T_hot/T_peak),alpha_heat) *
