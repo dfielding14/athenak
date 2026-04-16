@@ -113,8 +113,8 @@ delay = 10.0
 <dust>
 d_z_init = 0.3     # Initial dust-to-metal ratio
 d_z_sn   = 0.3     # SN dust-to-metal ratio
-a_gr_s   = 0.005   # Min dust size
-a_gr_l   = 0.1     # Max dust size
+a_gr_s   = 0.003   # Small-bin radius [um], PAH-like / ultrasmall carbonaceous
+a_gr_l   = 0.1     # Large-bin radius [um]
 rho_gr   = 3       # Dust grain density in g/cc
 D_floor  = 1e-7
 
