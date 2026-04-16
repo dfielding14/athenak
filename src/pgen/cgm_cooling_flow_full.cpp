@@ -1005,24 +1005,31 @@ void DustSource(Mesh* pm, const Real bdt) {
     }
  
     // =================================================================
-    //  2.  GAS-PHASE ACCRETION  (gas-phase metals → dust)
-    //      Popping (2017); Asano et al. (2013)
+    //  2.  GAS-PHASE ACCRETION  (refactory gas-phase metals → dust)
+    //      Popping (2017); Asano et al. (2013); Dubios et al. (2024)
     //
+    //      Z_acc = f_ref × Z_gas
+    //      α_LB(T) = [1 + 10^-4 T^(3/2)]^-1 (Le Bourlot sticking)
     //      τ_acc = 150 Myr × (100 / n_H) × √(50 K / T)
-    //                      × (Z_sol / Z_gas) 
-    //                      / [1 - Z_gas / (Z_gas + D_total)]
+    //                      × (Z_sol / Z_acc) 
+    //                      / α_LB(T)
+    //                      / [1 - Z_gas / (Z_acc + D_total)]
     //
     //      Δρ_D = +dt × ρ_D / (τ_acc × a)
     // =================================================================
     {
+      const Real acc_f_ref = 0.1;
+      const Real Z_acc = acc_f_ref * Z_gas;
+
       Real tau_acc_Myr = 150.0;
       tau_acc_Myr *= (100.0 / nH);
       tau_acc_Myr *= sqrt(50.0 / T_K);
-      tau_acc_Myr *= (Z_solar / Z_gas);
-      tau_acc_Myr /= 1.0 - (D_total / (Z_gas + D_total));
+      tau_acc_Myr *= (Z_solar / Z_acc);
+      tau_acc_Myr *= (1.0 + 1.0e-4 * T_K * sqrt(T_K));
+      tau_acc_Myr /= 1.0 - (D_total / (Z_acc + D_total));
 
       Real accr_small = 0.0, accr_large = 0.0;
-      if (Z_gas > D_floor) {
+      if (Z_gas > D_floor && nH <= 1e3) {
         if (D_small > D_floor)
           accr_small = dt_Myr * rho_Ds / (tau_acc_Myr * a_small);
         if (D_large > D_floor)
