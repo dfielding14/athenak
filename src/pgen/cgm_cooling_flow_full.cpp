@@ -1018,7 +1018,7 @@ void DustSource(Mesh* pm, const Real bdt) {
     //      Δρ_D = +dt × ρ_D / (τ_acc × a)
     // =================================================================
     {
-      const Real acc_f_ref = 0.1;
+      const Real acc_f_ref = 0.35;
       const Real Z_acc = acc_f_ref * Z_gas;
 
       Real tau_acc_Myr = 150.0;
