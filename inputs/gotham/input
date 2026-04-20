@@ -124,8 +124,8 @@ turb_flag           = 2 # driven
 dt_turb_update      = 0.001
 tcorr               = 0.02
 dedt                = 2500
-x_turb_scale_height = 8.0
-y_turb_scale_height = 8.0
+x_turb_scale_height = 1.0
+y_turb_scale_height = 1.0
 z_turb_scale_height = 0.1
 nlow                = 8
 nhigh               = 10
@@ -295,11 +295,11 @@ slice_r   = 8.0
 ntheta    = 512
 nphi      = 512
 
-<output20>
-file_type  = trk
-variable   = prtcl_all
-nparticles = 100
-dt         = 0.01
+#<output20>
+#file_type  = trk
+#variable   = prtcl_all
+#nparticles = 100
+#dt         = 0.01
 
 <output21>
 file_type  = rst

@@ -477,6 +477,15 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   Mesh* pm = pmy_mesh;
   int old_nmb = pm->nmb_total;
   int new_nmb = old_nmb + nnew - ndel;
+  if (new_nmb < global_variable::nranks) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+        << "Total number of MeshBlocks on new tree = " << new_nmb
+        << " is less than number of MPI ranks = " << global_variable::nranks
+        << ". Derefinement would leave one or more ranks with zero MeshBlocks, which "
+        << "LoadBalance cannot handle. Reduce the number of ranks, relax derefinement "
+        << "criteria, or reduce <mesh_refinement>/num_levels." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   // compute nleaf = number of leaf MeshBlocks per refined block
   int nleaf = 2;
   if (pm->two_d) nleaf = 4;
