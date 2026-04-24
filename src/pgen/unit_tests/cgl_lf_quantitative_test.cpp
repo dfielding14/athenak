@@ -30,8 +30,10 @@ enum class TestMode {
   parallel_decay,
   perp_decay,
   grad_b,
+  flux_limiter,
   limiter_stress,
-  field_aligned_wave
+  field_aligned_wave,
+  paper_oblique_wave
 };
 
 struct Projection {
@@ -74,10 +76,12 @@ TestMode ParseMode(ParameterInput *pin) {
   if (mode == "parallel_decay") return TestMode::parallel_decay;
   if (mode == "perp_decay") return TestMode::perp_decay;
   if (mode == "grad_b") return TestMode::grad_b;
+  if (mode == "flux_limiter") return TestMode::flux_limiter;
   if (mode == "limiter_stress") return TestMode::limiter_stress;
   if (mode == "field_aligned_wave") return TestMode::field_aligned_wave;
+  if (mode == "paper_oblique_wave") return TestMode::paper_oblique_wave;
   Fail("<problem>/test_mode must be parallel_decay, perp_decay, grad_b, "
-       "limiter_stress, or field_aligned_wave");
+       "flux_limiter, limiter_stress, field_aligned_wave, or paper_oblique_wave");
 }
 
 const char *ModeName(const TestMode mode) {
@@ -85,8 +89,10 @@ const char *ModeName(const TestMode mode) {
     case TestMode::parallel_decay: return "parallel_decay";
     case TestMode::perp_decay: return "perp_decay";
     case TestMode::grad_b: return "grad_b";
+    case TestMode::flux_limiter: return "flux_limiter";
     case TestMode::limiter_stress: return "limiter_stress";
     case TestMode::field_aligned_wave: return "field_aligned_wave";
+    case TestMode::paper_oblique_wave: return "paper_oblique_wave";
   }
   return "unknown";
 }
@@ -170,6 +176,35 @@ Projection ProjectPrimitive(const HostView &w, ParameterInput *pin, Mesh *pm,
   return p;
 }
 
+template <typename HostView>
+Projection ProjectCellField(const HostView &bcc, ParameterInput *pin, Mesh *pm,
+                            const int idx) {
+  RequireOneDimensionalSingleBlock(pm);
+  const int is = pm->mb_indcs.is;
+  const int js = pm->mb_indcs.js;
+  const int ks = pm->mb_indcs.ks;
+  const int nx1 = pm->mb_indcs.nx1;
+  const Real k_wave = Wavenumber(pin, pm);
+  const Real xmin = pm->mesh_size.x1min;
+
+  Projection p;
+  for (int q = 0; q < nx1; ++q) {
+    p.mean += bcc(0,idx,ks,js,is + q);
+  }
+  p.mean /= static_cast<Real>(nx1);
+
+  for (int q = 0; q < nx1; ++q) {
+    const Real x = XCenter(pm, q);
+    const Real phase = k_wave*(x - xmin);
+    const Real value = bcc(0,idx,ks,js,is + q) - p.mean;
+    p.sin_amp += value*std::sin(phase);
+    p.cos_amp += value*std::cos(phase);
+  }
+  p.sin_amp *= 2.0/static_cast<Real>(nx1);
+  p.cos_amp *= 2.0/static_cast<Real>(nx1);
+  return p;
+}
+
 Complex ProjectionToComplex(const Projection &p) {
   return Complex(p.cos_amp, -p.sin_amp);
 }
@@ -185,6 +220,13 @@ Real BMagCell(ParameterInput *pin, Mesh *pm, const int q) {
   const Real bx0 = pin->GetOrAddReal("problem", "b0", 1.0);
   const Real by = ByCell(pin, pm, q);
   return std::sqrt(SQR(bx0) + SQR(by));
+}
+
+Real LimitedHeatFlux(const Real q_unlimited, const Real q_max) {
+  if (q_max <= 0.0) {
+    return 0.0;
+  }
+  return q_unlimited*q_max/(q_max + std::abs(q_unlimited));
 }
 
 Real GradBMomentFlux(ParameterInput *pin, Mesh *pm, const int face) {
@@ -203,7 +245,8 @@ Real GradBMomentFlux(ParameterInput *pin, Mesh *pm, const int face) {
   const Real cpar0 = pin->GetOrAddReal("mhd", "lf_c_parallel0", 1.0);
   const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
   const Real chi_perp = kSqrtTwoOverPi*cpar0/lf_k;
-  const Real qperp = -chi_perp*(-pperp*(1.0 - pperp/ppar)*gradpar_b/bmag_face);
+  const Real qperp_l = -chi_perp*(-pperp*(1.0 - pperp/ppar)*gradpar_b/bmag_face);
+  const Real qperp = LimitedHeatFlux(qperp_l, kSqrtTwoOverPi*cpar0*pperp);
   return bhx*qperp/bmag_face;
 }
 
@@ -271,6 +314,86 @@ void CheckGradB(ParameterInput *pin, Mesh *pm) {
   Require(rel_err <= rel_tol, "grad_b response magnitude is outside tolerance");
   Require(dot > 0.0, "grad_b response has the wrong sign");
   std::cout << "CGL LF grad_b passed: rms_rel_err=" << rel_err << std::endl;
+}
+
+Real InitialParallelPressure(ParameterInput *pin, Mesh *pm, const int q) {
+  const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
+  const Real amp = pin->GetOrAddReal("problem", "amp", 0.5);
+  const Real k_wave = Wavenumber(pin, pm);
+  const Real xmin = pm->mesh_size.x1min;
+  return ppar0*(1.0 + amp*std::sin(k_wave*(XCenter(pm, q) - xmin)));
+}
+
+Real LimitedParallelHeatFlux(ParameterInput *pin, Mesh *pm, const int face,
+                             Real &q_unlimited, Real &q_max) {
+  const int nx1 = pm->mb_indcs.nx1;
+  const Real dx = (pm->mesh_size.x1max - pm->mesh_size.x1min)/static_cast<Real>(nx1);
+  const int left = (face - 1 + nx1)%nx1;
+  const int right = face%nx1;
+  const Real rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
+  const Real cpar0 = pin->GetOrAddReal("mhd", "lf_c_parallel0", 1.0);
+  const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
+  const Real ppar_l = InitialParallelPressure(pin, pm, left);
+  const Real ppar_r = InitialParallelPressure(pin, pm, right);
+  const Real ppar_face = std::max(static_cast<Real>(0.5)*(ppar_l + ppar_r),
+                                  static_cast<Real>(1.0e-30));
+  const Real grad_tpar = (ppar_r/rho0 - ppar_l/rho0)/dx;
+  q_unlimited = -(kSqrtEightOverPi*cpar0/lf_k)*rho0*grad_tpar;
+  q_max = kSqrtEightOverPi*cpar0*ppar_face;
+  return LimitedHeatFlux(q_unlimited, q_max);
+}
+
+void CheckFluxLimiter(ParameterInput *pin, Mesh *pm) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  auto w = HostCopy(pmhd->w0);
+  const int is = pm->mb_indcs.is;
+  const int js = pm->mb_indcs.js;
+  const int ks = pm->mb_indcs.ks;
+  const int nx1 = pm->mb_indcs.nx1;
+  const Real dx = (pm->mesh_size.x1max - pm->mesh_size.x1min)/static_cast<Real>(nx1);
+  const Real rel_tol = pin->GetOrAddReal("problem", "flux_limiter_rel_tol", 2.0e-1);
+  const Real min_unlimited_ratio =
+      pin->GetOrAddReal("problem", "flux_limiter_min_unlimited_ratio", 10.0);
+
+  Real err2 = 0.0;
+  Real ref2 = 0.0;
+  Real max_ratio = 0.0;
+  for (int face = 0; face <= nx1; ++face) {
+    Real q_l = 0.0, q_max = 0.0;
+    const Real q = LimitedParallelHeatFlux(pin, pm, face, q_l, q_max);
+    max_ratio = std::max(max_ratio, std::abs(q_l)/std::max(q_max,
+                         static_cast<Real>(1.0e-30)));
+    Require(std::abs(q) <= q_max*(1.0 + 1.0e-12),
+            "limited heat flux exceeds q_max");
+    if (q_l != 0.0) {
+      Require(q*q_l > 0.0, "limited heat flux changed sign");
+    }
+  }
+
+  for (int q = 0; q < nx1; ++q) {
+    const int i = is + q;
+    Real q_r_l = 0.0, q_r_max = 0.0;
+    Real q_l_l = 0.0, q_l_max = 0.0;
+    const Real flux_r = LimitedParallelHeatFlux(pin, pm, q + 1, q_r_l, q_r_max);
+    const Real flux_l = LimitedParallelHeatFlux(pin, pm, q, q_l_l, q_l_max);
+    const Real expected_ppar = InitialParallelPressure(pin, pm, q)
+                             + pm->time*(-(flux_r - flux_l)/dx);
+    const Real measured_ppar = w(0,IPR,ks,js,i);
+    err2 += SQR(measured_ppar - expected_ppar);
+    ref2 += SQR(expected_ppar - InitialParallelPressure(pin, pm, q));
+  }
+
+  Require(max_ratio >= min_unlimited_ratio,
+          "test did not enter the strongly limited heat-flux regime");
+  Require(ref2 > 0.0, "flux limiter reference response is zero");
+  const Real rel_err = std::sqrt(err2/ref2);
+  if (rel_err > rel_tol) {
+    std::cout << "flux_limiter rel_err=" << rel_err << " rel_tol=" << rel_tol
+              << std::endl;
+    Fail("flux limiter update is outside tolerance");
+  }
+  std::cout << "CGL LF flux_limiter passed: rms_rel_err=" << rel_err
+            << " max_unlimited_over_qmax=" << max_ratio << std::endl;
 }
 
 void CheckLimiterStress(ParameterInput *pin, Mesh *pm) {
@@ -396,6 +519,125 @@ void CheckFieldAlignedWave(ParameterInput *pin, Mesh *pm) {
             << std::endl;
 }
 
+struct PaperWaveState {
+  Complex rho;
+  Complex vx;
+  Complex vy;
+  Complex vz;
+  Complex by;
+  Complex bz;
+  Complex ppar;
+  Complex pperp;
+};
+
+PaperWaveState operator+(const PaperWaveState &a, const PaperWaveState &b) {
+  return {a.rho + b.rho, a.vx + b.vx, a.vy + b.vy, a.vz + b.vz,
+          a.by + b.by, a.bz + b.bz, a.ppar + b.ppar, a.pperp + b.pperp};
+}
+
+PaperWaveState operator*(const Real c, const PaperWaveState &a) {
+  return {c*a.rho, c*a.vx, c*a.vy, c*a.vz, c*a.by, c*a.bz,
+          c*a.ppar, c*a.pperp};
+}
+
+PaperWaveState PaperWaveRHS(const PaperWaveState &s, const Real rho0,
+                            const Real p0, const Real bx0, const Real by0,
+                            const Real bz0, const Real k_wave,
+                            const Real chi_parallel, const Real chi_perp) {
+  const Complex ik(0.0, k_wave);
+  const Real bmag0 = std::sqrt(SQR(bx0) + SQR(by0) + SQR(bz0));
+  const Real bhx = bx0/bmag0;
+  const Real bhy = by0/bmag0;
+  const Real bhz = bz0/bmag0;
+  const Complex delta_p = s.pperp - s.ppar;
+  const Complex flux_x = s.pperp + delta_p*bhx*bhx + by0*s.by + bz0*s.bz;
+  const Complex flux_y = delta_p*bhx*bhy - bx0*s.by;
+  const Complex flux_z = delta_p*bhx*bhz - bx0*s.bz;
+
+  PaperWaveState rhs;
+  rhs.rho = -ik*rho0*s.vx;
+  rhs.vx = -ik*flux_x/rho0;
+  rhs.vy = -ik*flux_y/rho0;
+  rhs.vz = -ik*flux_z/rho0;
+  rhs.by = -ik*(by0*s.vx - bx0*s.vy);
+  rhs.bz = -ik*(bz0*s.vx - bx0*s.vz);
+
+  const Complex dbmag_dt = bhy*rhs.by + bhz*rhs.bz;
+  rhs.ppar = p0*(static_cast<Real>(3.0)*rhs.rho/rho0 -
+                 static_cast<Real>(2.0)*dbmag_dt/bmag0);
+  rhs.pperp = p0*(rhs.rho/rho0 + dbmag_dt/bmag0);
+
+  const Complex q_parallel =
+      -chi_parallel*ik*bhx*(s.ppar - (p0/rho0)*s.rho);
+  const Complex q_perp =
+      -chi_perp*ik*bhx*(s.pperp - (p0/rho0)*s.rho);
+  rhs.ppar += -ik*bhx*q_parallel;
+  rhs.pperp += -ik*bhx*q_perp;
+  return rhs;
+}
+
+PaperWaveState IntegratePaperWaveReference(ParameterInput *pin, Mesh *pm) {
+  const Real rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
+  const Real p0 = pin->GetOrAddReal("problem", "ppar0", 5.0);
+  const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-5);
+  const Real bx0 = pin->GetOrAddReal("problem", "b0", 1.0);
+  const Real by0 = pin->GetOrAddReal("problem", "by0", std::sqrt(2.0));
+  const Real bz0 = pin->GetOrAddReal("problem", "bz0", 0.5);
+  const Real k_wave = Wavenumber(pin, pm);
+  Real chi_parallel = 0.0;
+  Real chi_perp = 0.0;
+  if (pin->DoesParameterExist("mhd", "cgl_heat_flux")) {
+    const Real cpar0 = pin->GetOrAddReal("mhd", "lf_c_parallel0", std::sqrt(p0/rho0));
+    const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
+    chi_parallel = kSqrtEightOverPi*cpar0/lf_k;
+    chi_perp = kSqrtTwoOverPi*cpar0/lf_k;
+  }
+
+  PaperWaveState s{Complex(0.0, 0.0),
+                   Complex(0.0, 0.0),
+                   Complex(0.0, -amp),
+                   Complex(0.0, 0.0),
+                   Complex(0.0, 0.0),
+                   Complex(0.0, 0.0),
+                   Complex(0.0, 0.0),
+                   Complex(0.0, 0.0)};
+  const int nsteps = pin->GetOrAddInteger("problem", "reference_steps", 20000);
+  const Real dt = pm->time/static_cast<Real>(std::max(nsteps, 1));
+  for (int n = 0; n < nsteps; ++n) {
+    const PaperWaveState k1 = PaperWaveRHS(s, rho0, p0, bx0, by0, bz0, k_wave,
+                                           chi_parallel, chi_perp);
+    const PaperWaveState k2 = PaperWaveRHS(s + 0.5*dt*k1, rho0, p0, bx0, by0,
+                                           bz0, k_wave, chi_parallel, chi_perp);
+    const PaperWaveState k3 = PaperWaveRHS(s + 0.5*dt*k2, rho0, p0, bx0, by0,
+                                           bz0, k_wave, chi_parallel, chi_perp);
+    const PaperWaveState k4 = PaperWaveRHS(s + dt*k3, rho0, p0, bx0, by0, bz0,
+                                           k_wave, chi_parallel, chi_perp);
+    s = s + (dt/6.0)*(k1 + 2.0*k2 + 2.0*k3 + k4);
+  }
+  return s;
+}
+
+void CheckPaperObliqueWave(ParameterInput *pin, Mesh *pm) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  auto w = HostCopy(pmhd->w0);
+  auto bcc = HostCopy(pmhd->bcc0);
+  const PaperWaveState ref = IntegratePaperWaveReference(pin, pm);
+  const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-5);
+  const Real p0 = pin->GetOrAddReal("problem", "ppar0", 5.0);
+  const Real wave_tol = pin->GetOrAddReal("problem", "wave_rel_tol", 4.0e-1);
+
+  RequireComplexRelative("paper_oblique_wave vy", ProjectionToComplex(
+                         ProjectPrimitive(w, pin, pm, IVY)), ref.vy, amp, wave_tol);
+  RequireComplexRelative("paper_oblique_wave By", ProjectionToComplex(
+                         ProjectCellField(bcc, pin, pm, IBY)), ref.by, amp, wave_tol);
+  RequireComplexRelative("paper_oblique_wave p_parallel", ProjectionToComplex(
+                         ProjectPrimitive(w, pin, pm, IPR)), ref.ppar, p0*amp, wave_tol);
+  RequireComplexRelative("paper_oblique_wave p_perp", ProjectionToComplex(
+                         ProjectPrimitive(w, pin, pm, IPP)), ref.pperp, p0*amp, wave_tol);
+  std::cout << "CGL LF paper_oblique_wave passed against linear oblique reference"
+            << std::endl;
+}
+
 void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
   auto *pmhd = pm->pmb_pack->pmhd;
   Require(pmhd != nullptr && pmhd->peos->eos_data.is_cgl,
@@ -406,10 +648,14 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     CheckDecay(pin, pm, mode);
   } else if (mode == TestMode::grad_b) {
     CheckGradB(pin, pm);
+  } else if (mode == TestMode::flux_limiter) {
+    CheckFluxLimiter(pin, pm);
   } else if (mode == TestMode::limiter_stress) {
     CheckLimiterStress(pin, pm);
   } else if (mode == TestMode::field_aligned_wave) {
     CheckFieldAlignedWave(pin, pm);
+  } else if (mode == TestMode::paper_oblique_wave) {
+    CheckPaperObliqueWave(pin, pm);
   }
 }
 
@@ -432,6 +678,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
   const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-4);
   const Real bx0 = pin->GetOrAddReal("problem", "b0", 1.0);
+  const Real by0 = pin->GetOrAddReal("problem", "by0", 0.0);
+  const Real bz0 = pin->GetOrAddReal("problem", "bz0", 0.0);
   const Real by_amp = pin->GetOrAddReal("problem", "by_amp", 0.0);
   const Real k_wave = Wavenumber(pin, pmy_mesh_);
   const Real xmin = pmy_mesh_->mesh_size.x1min;
@@ -463,7 +711,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     Real ppar = ppar0;
     Real pperp = pperp0;
 
-    if (mode == TestMode::parallel_decay) {
+    if (mode == TestMode::parallel_decay || mode == TestMode::flux_limiter) {
       ppar = ppar0*(1.0 + amp*s);
     } else if (mode == TestMode::perp_decay) {
       pperp = pperp0*(1.0 + amp*s);
@@ -481,17 +729,19 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       vx = c_cgl*amp*s;
       ppar = ppar0*(1.0 + 3.0*amp*s);
       pperp = pperp0*(1.0 + amp*s);
+    } else if (mode == TestMode::paper_oblique_wave) {
+      vx = 0.0;
     }
 
     w0(m,IDN,k,j,i) = rho;
     w0(m,IVX,k,j,i) = vx;
-    w0(m,IVY,k,j,i) = 0.0;
+    w0(m,IVY,k,j,i) = (mode == TestMode::paper_oblique_wave) ? amp*s : 0.0;
     w0(m,IVZ,k,j,i) = 0.0;
     w0(m,IPR,k,j,i) = ppar;
     w0(m,IPP,k,j,i) = pperp;
     bcc0(m,IBX,k,j,i) = bx0;
-    bcc0(m,IBY,k,j,i) = (mode == TestMode::grad_b) ? by_amp*s : 0.0;
-    bcc0(m,IBZ,k,j,i) = 0.0;
+    bcc0(m,IBY,k,j,i) = (mode == TestMode::grad_b) ? by_amp*s : by0;
+    bcc0(m,IBZ,k,j,i) = bz0;
   });
 
   par_for("cgl_lf_quant_init_b1", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie + 1,
@@ -503,11 +753,11 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     const int q = i - is;
     const Real x = CellCenterX(q, indcs.nx1, xmin, xmax);
     const Real s = sin(k_wave*(x - xmin));
-    b0.x2f(m,k,j,i) = (mode == TestMode::grad_b) ? by_amp*s : 0.0;
+    b0.x2f(m,k,j,i) = (mode == TestMode::grad_b) ? by_amp*s : by0;
   });
   par_for("cgl_lf_quant_init_b3", DevExeSpace(), 0, nmb - 1, ks, ke + 1, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    b0.x3f(m,k,j,i) = 0.0;
+    b0.x3f(m,k,j,i) = bz0;
   });
 
   pmhd->peos->PrimToCons(w0, bcc0, pmhd->u0, is, ie, js, je, ks, ke);

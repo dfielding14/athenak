@@ -15,6 +15,7 @@
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "tasklist/task_list.hpp"
+#include "driver/driver.hpp"
 #include "mesh/mesh.hpp"
 #include "coordinates/coordinates.hpp"
 #include "eos/eos.hpp"
@@ -592,6 +593,10 @@ TaskStatus MHD::ConToPrim(Driver *pdrive, int stage) {
   int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
   int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
   peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+  if (cgl_lf_admissibility_check && pdrive->sts.enabled &&
+      pdrive->sts.sweep != Driver::STSSweep::none) {
+    return CheckCGLLFAdmissibility(pdrive, stage);
+  }
   return TaskStatus::complete;
 }
 

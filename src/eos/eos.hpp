@@ -260,6 +260,16 @@ class EquationOfState {
   virtual void Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                           DvceArray5D<Real> &cons, const int il, const int iu,
                           const int jl, const int ju, const int kl, const int ku);
+  virtual void CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
+                                             const DvceArray5D<Real> &bcc,
+                                             const int il, const int iu,
+                                             const int jl, const int ju,
+                                             const int kl, const int ku);
+  virtual void CGLMagneticMomentToAnisotropy(DvceArray5D<Real> &cons,
+                                             const DvceArray5D<Real> &bcc,
+                                             const int il, const int iu,
+                                             const int jl, const int ju,
+                                             const int kl, const int ku);
 };
 
 //----------------------------------------------------------------------------------------
@@ -407,6 +417,16 @@ class CGLMHD : public EquationOfState {
   void Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                   DvceArray5D<Real> &cons, const int il, const int iu,
                   const int jl, const int ju, const int kl, const int ku) override;
+  void CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
+                                     const DvceArray5D<Real> &bcc,
+                                     const int il, const int iu,
+                                     const int jl, const int ju,
+                                     const int kl, const int ku) override;
+  void CGLMagneticMomentToAnisotropy(DvceArray5D<Real> &cons,
+                                     const DvceArray5D<Real> &bcc,
+                                     const int il, const int iu,
+                                     const int jl, const int ju,
+                                     const int kl, const int ku) override;
 };
 
 //----------------------------------------------------------------------------------------

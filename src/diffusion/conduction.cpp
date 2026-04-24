@@ -67,6 +67,14 @@ Real CGLBMag(const Real bx, const Real by, const Real bz) {
 }
 
 KOKKOS_INLINE_FUNCTION
+Real CGLLimitedHeatFlux(const Real q_unlimited, const Real q_max) {
+  if (q_max <= 0.0) {
+    return 0.0;
+  }
+  return q_unlimited*q_max/(q_max + fabs(q_unlimited));
+}
+
+KOKKOS_INLINE_FUNCTION
 void CGLLandauFluidFaceFlux(const Real rho_l, const Real rho_r,
                             const Real ppar_l, const Real ppar_r,
                             const Real pperp_l, const Real pperp_r,
@@ -108,9 +116,16 @@ void CGLLandauFluidFaceFlux(const Real rho_l, const Real rho_r,
   const Real gradpar_tpar = bhx*grad_tpar_x + bhy*grad_tpar_y + bhz*grad_tpar_z;
   const Real gradpar_tperp = bhx*grad_tperp_x + bhy*grad_tperp_y + bhz*grad_tperp_z;
   const Real gradpar_bmag = bhx*grad_bmag_x + bhy*grad_bmag_y + bhz*grad_bmag_z;
-  const Real q_parallel = -chi_parallel*rho*gradpar_tpar;
-  const Real q_perp = -chi_perp*(rho*gradpar_tperp -
-                                 pperp*(1.0 - pperp/ppar)*gradpar_bmag/bmag);
+  const Real q_parallel_l = -chi_parallel*rho*gradpar_tpar;
+  const Real q_perp_l = -chi_perp*(rho*gradpar_tperp -
+                                   pperp*(1.0 - pperp/ppar)*gradpar_bmag/bmag);
+  const Real q_parallel_max = static_cast<Real>(1.5957691216057308)*cpar*ppar;
+  const Real q_perp_max = static_cast<Real>(0.7978845608028654)*cpar*pperp;
+
+  // Squire et al. (2023), eqs. 3.1-3.2. Collision-frequency suppression of chi
+  // can be added here later once that model is threaded through the CGL EOS state.
+  const Real q_parallel = CGLLimitedHeatFlux(q_parallel_l, q_parallel_max);
+  const Real q_perp = CGLLimitedHeatFlux(q_perp_l, q_perp_max);
 
   energy_flux = bh_dir*(q_perp + 0.5*q_parallel);
   moment_flux = bh_dir*q_perp/bmag;

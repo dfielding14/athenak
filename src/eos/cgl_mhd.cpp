@@ -243,6 +243,71 @@ void CGLMHD::PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &
 }
 
 //----------------------------------------------------------------------------------------
+//! \!fn void CGLAnisotropyToMagneticMoment()
+//! \brief Temporarily reinterpret the CGL IAN slot as mu_B = p_perp/|B| for LF STS.
+
+void CGLMHD::CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
+                                            const DvceArray5D<Real> &bcc,
+                                            const int il, const int iu,
+                                            const int jl, const int ju,
+                                            const int kl, const int ku) {
+  int &nmb = pmy_pack->nmb_thispack;
+  const Real pfloor = eos_data.pfloor;
+  const Real bfloor = eos_data.bfloor;
+
+  par_for("mhd_cgl_anis_to_mub", DevExeSpace(), 0, (nmb-1), kl, ku, jl, ju, il, iu,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    cons(m,IAN,k,j,i) =
+        CGLConservedAnisotropyToMagneticMoment(cons(m,IDN,k,j,i),
+                                               cons(m,IM1,k,j,i),
+                                               cons(m,IM2,k,j,i),
+                                               cons(m,IM3,k,j,i),
+                                               cons(m,IEN,k,j,i),
+                                               cons(m,IAN,k,j,i),
+                                               bcc(m,IBX,k,j,i),
+                                               bcc(m,IBY,k,j,i),
+                                               bcc(m,IBZ,k,j,i),
+                                               bfloor, pfloor);
+  });
+
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \!fn void CGLMagneticMomentToAnisotropy()
+//! \brief Convert the temporary LF STS mu_B slot back to conserved anisotropy A.
+
+void CGLMHD::CGLMagneticMomentToAnisotropy(DvceArray5D<Real> &cons,
+                                            const DvceArray5D<Real> &bcc,
+                                            const int il, const int iu,
+                                            const int jl, const int ju,
+                                            const int kl, const int ku) {
+  int &nmb = pmy_pack->nmb_thispack;
+  const Real pfloor = eos_data.pfloor;
+  const Real bfloor = eos_data.bfloor;
+
+  par_for("mhd_cgl_mub_to_anis", DevExeSpace(), 0, (nmb-1), kl, ku, jl, ju, il, iu,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real total_energy = cons(m,IEN,k,j,i);
+    Real anisotropy = 0.0;
+    CGLMagneticMomentToConservedAnisotropy(cons(m,IDN,k,j,i),
+                                           cons(m,IM1,k,j,i),
+                                           cons(m,IM2,k,j,i),
+                                           cons(m,IM3,k,j,i),
+                                           bcc(m,IBX,k,j,i),
+                                           bcc(m,IBY,k,j,i),
+                                           bcc(m,IBZ,k,j,i),
+                                           bfloor, pfloor,
+                                           cons(m,IAN,k,j,i),
+                                           total_energy, anisotropy);
+    cons(m,IEN,k,j,i) = total_energy;
+    cons(m,IAN,k,j,i) = anisotropy;
+  });
+
+  return;
+}
+
+//----------------------------------------------------------------------------------------
 //! \!fn void Collisions()
 //! \brief Decays pressure anisotropy according to scattering rate. Operates over range of cells
 //! given in argument list.

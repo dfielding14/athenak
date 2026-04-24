@@ -41,10 +41,6 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     u_sts1("cons_sts1",1,1,1,1,1),
     u_sts2("cons_sts2",1,1,1,1,1),
     u_sts_rhs("cons_sts_rhs",1,1,1,1,1),
-    cgl_p_sts0("cgl_lf_sts0",1,1,1,1,1),
-    cgl_p_sts1("cgl_lf_sts1",1,1,1,1,1),
-    cgl_p_sts2("cgl_lf_sts2",1,1,1,1,1),
-    cgl_p_sts_rhs("cgl_lf_sts_rhs",1,1,1,1,1),
     b1("B_fc1",1,1,1,1),
     b_sts0("B_sts0",1,1,1,1),
     b_sts1("B_sts1",1,1,1,1),
@@ -436,12 +432,6 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       Kokkos::realloc(u_sts1, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
       Kokkos::realloc(u_sts2, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
       Kokkos::realloc(u_sts_rhs, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
-      if (peos->eos_data.is_cgl && has_sts_conduction) {
-        Kokkos::realloc(cgl_p_sts0, nmb, 2, ncells3, ncells2, ncells1);
-        Kokkos::realloc(cgl_p_sts1, nmb, 2, ncells3, ncells2, ncells1);
-        Kokkos::realloc(cgl_p_sts2, nmb, 2, ncells3, ncells2, ncells1);
-        Kokkos::realloc(cgl_p_sts_rhs, nmb, 2, ncells3, ncells2, ncells1);
-      }
       Kokkos::realloc(b1.x1f, nmb, ncells3, ncells2, ncells1+1);
       Kokkos::realloc(b1.x2f, nmb, ncells3, ncells2+1, ncells1);
       Kokkos::realloc(b1.x3f, nmb, ncells3+1, ncells2, ncells1);

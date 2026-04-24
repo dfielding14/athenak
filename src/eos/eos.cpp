@@ -80,3 +80,25 @@ void EquationOfState::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real
                                  DvceArray5D<Real> &cons, const int il, const int iu,
                                  const int jl, const int ju, const int kl, const int ku) {
 }
+
+//-----------------------------------------------------------------------------------------
+//! \fn void CGLAnisotropyToMagneticMoment()
+//! \brief No-Op versions of CGL-only conserved-variable transforms.
+
+void EquationOfState::CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
+                                                    const DvceArray5D<Real> &bcc,
+                                                    const int il, const int iu,
+                                                    const int jl, const int ju,
+                                                    const int kl, const int ku) {
+  Kokkos::abort("NoOp CGLAnisotropyToMagneticMoment called.\n"
+                "  This transform is only defined for the CGL MHD EOS.\n");
+}
+
+void EquationOfState::CGLMagneticMomentToAnisotropy(DvceArray5D<Real> &cons,
+                                                    const DvceArray5D<Real> &bcc,
+                                                    const int il, const int iu,
+                                                    const int jl, const int ju,
+                                                    const int kl, const int ku) {
+  Kokkos::abort("NoOp CGLMagneticMomentToAnisotropy called.\n"
+                "  This transform is only defined for the CGL MHD EOS.\n");
+}

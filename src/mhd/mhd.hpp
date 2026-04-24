@@ -129,10 +129,6 @@ class MHD {
   DvceArray5D<Real> u_sts1;   // previous STS stage state
   DvceArray5D<Real> u_sts2;   // second previous STS stage state
   DvceArray5D<Real> u_sts_rhs;  // cached stage-1 RKL2 operator contribution
-  DvceArray5D<Real> cgl_p_sts0;   // CGL LF STS total-energy/magnetic-moment sweep start
-  DvceArray5D<Real> cgl_p_sts1;   // previous CGL LF STS energy/magnetic-moment state
-  DvceArray5D<Real> cgl_p_sts2;   // second previous CGL LF STS energy/moment state
-  DvceArray5D<Real> cgl_p_sts_rhs;  // cached stage-1 CGL LF energy/moment contribution
   DvceFaceFld4D<Real> b1;     // face-centered magnetic fields, second register
   DvceFaceFld4D<Real> b_sts0;   // face-centered magnetic fields at start of STS sweep
   DvceFaceFld4D<Real> b_sts1;   // previous STS stage magnetic state
@@ -212,7 +208,6 @@ class MHD {
   TaskStatus STSFluxes(Driver *d, int stage);
   TaskStatus STSEField(Driver *d, int stage);
   TaskStatus STSUpdateU(Driver *d, int stage);
-  TaskStatus STSUpdateCGLHeatFlux(Driver *d, int stage);
   TaskStatus CheckCGLLFAdmissibility(Driver *d, int stage);
   TaskStatus STSUpdateB(Driver *d, int stage);
   TaskStatus STSPostSweepCGLCollisions(Driver *d, int stage);
