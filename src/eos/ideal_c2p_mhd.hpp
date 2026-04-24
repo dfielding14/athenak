@@ -84,6 +84,118 @@ void SingleP2C_IdealMHD(const MHDPrim1D &w, HydCons1D &u) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn Real CGLConservedAnisotropy()
+//! \brief Return the CGL conserved anisotropy variable stored in the IAN/legacy IMU slot.
+
+KOKKOS_INLINE_FUNCTION
+Real CGLConservedAnisotropy(const Real rho, const Real p_parallel,
+                            const Real p_perp, const Real bmag) {
+  return rho*log(p_perp/p_parallel*SQR(rho)/(bmag*SQR(bmag)));
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void CGLRecoverPressuresFromInternalEnergyAndAnisotropy()
+//! \brief Recover CGL pressures from internal energy density and conserved anisotropy A.
+
+KOKKOS_INLINE_FUNCTION
+void CGLRecoverPressuresFromInternalEnergyAndAnisotropy(const Real rho,
+                                                        const Real eint,
+                                                        const Real anisotropy,
+                                                        const Real bmag,
+                                                        Real &p_parallel,
+                                                        Real &p_perp) {
+  const Real di = 1.0/rho;
+  const Real p_ratio = bmag*SQR(bmag)*SQR(di)*exp(anisotropy*di);
+  p_parallel = eint/(0.5 + p_ratio);
+  p_perp = p_parallel*p_ratio;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void CGLRecoverPressuresFromTotalEnergyAndAnisotropy()
+//! \brief Recover CGL pressures from total energy and A, using the adiabatic fallback
+//! below the magnetic-field floor.
+
+KOKKOS_INLINE_FUNCTION
+void CGLRecoverPressuresFromTotalEnergyAndAnisotropy(const Real rho, const Real mx,
+                                                     const Real my, const Real mz,
+                                                     const Real total_energy,
+                                                     const Real anisotropy,
+                                                     const Real bx, const Real by,
+                                                     const Real bz, const Real bfloor,
+                                                     Real &p_parallel,
+                                                     Real &p_perp) {
+  const Real di = 1.0/rho;
+  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
+  const Real bmag = sqrt(bsqr);
+  const Real e_k = 0.5*di*(SQR(mx) + SQR(my) + SQR(mz));
+  const Real e_m = 0.5*bsqr;
+  const Real eint = total_energy - e_k - e_m;
+  if (bmag > bfloor) {
+    CGLRecoverPressuresFromInternalEnergyAndAnisotropy(rho, eint, anisotropy, bmag,
+                                                       p_parallel, p_perp);
+  } else {
+    p_parallel = TWO_3RDS*eint;
+    p_perp = p_parallel;
+  }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn Real CGLConservedAnisotropyToMagneticMoment()
+//! \brief Convert the IAN/legacy IMU slot from conserved anisotropy A to magnetic moment p_perp/|B|.
+
+KOKKOS_INLINE_FUNCTION
+Real CGLConservedAnisotropyToMagneticMoment(const Real rho, const Real mx,
+                                            const Real my, const Real mz,
+                                            const Real total_energy,
+                                            const Real anisotropy,
+                                            const Real bx, const Real by,
+                                            const Real bz, const Real bfloor,
+                                            const Real pfloor) {
+  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
+  const Real bmag = sqrt(bsqr);
+  const Real bmag_inv = (bmag > bfloor) ? bmag : bfloor;
+  Real p_parallel, p_perp;
+  CGLRecoverPressuresFromTotalEnergyAndAnisotropy(rho, mx, my, mz, total_energy,
+                                                  anisotropy, bx, by, bz, bfloor,
+                                                  p_parallel, p_perp);
+  return fmax(p_perp, pfloor)/bmag_inv;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void CGLMagneticMomentToConservedAnisotropy()
+//! \brief Convert magnetic moment p_perp/|B| back to conserved anisotropy A.
+
+KOKKOS_INLINE_FUNCTION
+void CGLMagneticMomentToConservedAnisotropy(const Real rho, const Real mx,
+                                            const Real my, const Real mz,
+                                            const Real bx, const Real by,
+                                            const Real bz, const Real bfloor,
+                                            const Real pfloor,
+                                            const Real magnetic_moment,
+                                            Real &total_energy,
+                                            Real &anisotropy) {
+  const Real di = 1.0/rho;
+  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
+  const Real bmag = sqrt(bsqr);
+  const Real bmag_inv = (bmag > bfloor) ? bmag : bfloor;
+  const Real e_k = 0.5*di*(SQR(mx) + SQR(my) + SQR(mz));
+  const Real e_m = 0.5*bsqr;
+  const Real eint = total_energy - e_k - e_m;
+
+  Real p_perp = magnetic_moment*bmag_inv;
+  Real p_parallel = 2.0*(eint - p_perp);
+  if (bmag <= bfloor) {
+    p_parallel = TWO_3RDS*eint;
+    p_perp = p_parallel;
+  }
+
+  p_parallel = fmax(p_parallel, pfloor);
+  p_perp = fmax(p_perp, pfloor);
+  total_energy = 0.5*p_parallel + p_perp + e_k + e_m;
+  anisotropy = CGLConservedAnisotropy(rho, p_parallel, p_perp, bmag_inv);
+}
+
+//----------------------------------------------------------------------------------------
 //! \!fn void SingleC2P_CGLMHD()
 //! \brief Converts conserved into primitive variables.  Operates over range of cells
 //! given in argument list.  Note input CONSERVED state contains cell-centered magnetic
@@ -94,10 +206,7 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
                         HydPrim1D &w,
                         bool &dfloor_used, bool &efloor_used, bool &tfloor_used, bool &bfloor_used) {
   const Real &dfloor_ = eos.dfloor;
-  Real efloor = 1.5*eos.pfloor;
   Real pfloor = eos.pfloor;
-  Real tfloor = eos.tfloor;
-  Real sfloor = eos.sfloor;
   Real bfloor = eos.bfloor;
 
   // apply density floor, without changing momentum or energy
@@ -142,15 +251,10 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
   Real e_k = 0.5*di*(SQR(u.mx) + SQR(u.my) + SQR(u.mz));
   Real e_m = 0.5*bsqr;
   Real eint = (u.e - e_k - e_m);
-  Real bcube_dsq_exp = bmag*bsqr*SQR(di) * exp(u.mu*di);
-  
-  w.e = (u.e - e_k - e_m) / (0.5 + bcube_dsq_exp);
-  w.pp = w.e * bcube_dsq_exp;
-  
   if (bmag>bfloor) {
     // Standard CGL EOS
-    w.e = (u.e - e_k - e_m) / (0.5 + bcube_dsq_exp);
-    w.pp = w.e * bcube_dsq_exp;
+    CGLRecoverPressuresFromInternalEnergyAndAnisotropy(w.d, eint, u.mu, bmag,
+                                                       w.e, w.pp);
   } else {
     // If field goes to zero, CGL is invalid. Revert to (adiabatic) EOS with
     // pprp=pprl=(2/3*pprp+1/3*pprl).
@@ -177,9 +281,9 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
     efloor_used = true;
   }
   
-  //check if bfloor then reset mu assuming pprl=pprp
+  // The IAN/legacy IMU slot stores A. If bfloor is active, reset A assuming pprl=pprp.
   if (bfloor_used) {
-    u.mu =  w.d*log(SQR(w.d)/(bfloor*SQR(bfloor)));
+    u.mu = CGLConservedAnisotropy(w.d, w.e, w.pp, bfloor);
   }
   
   return;
@@ -202,22 +306,19 @@ void SingleP2C_CGLMHD(const MHDPrim1D &w, const Real &bfloor, HydCons1D &u) {
   u.mz = w.d*w.vz;
   //u.e  = w.e + 0.5*(w.d*(SQR(w.vx) + SQR(w.vy) + SQR(w.vz)) +
   //                      (SQR(w.bx) + SQR(w.by) + SQR(w.bz)) );
-  //u.mu = w.pp;
+  // The IAN/legacy IMU slot stores conserved anisotropy A, not true magnetic moment.
   
-  u.e  = w.pp + 0.5*w.e + 0.5*(w.d*(SQR(w.vx) + SQR(w.vy) + SQR(w.vz)) + bsqr );
-  u.mu = w.d * log(w.pp / w.e * SQR(w.d)/(bmag*SQR(bmag)) ) ;
-  
-  //bfloor to reset u.mu assuming pprp=pprl
+  // bfloor resets A assuming pprp=pprl.
   if (bmag>bfloor) {
     // Standard CGL EOS
     u.e  = w.pp + 0.5*w.e + 0.5*(w.d*(SQR(w.vx) + SQR(w.vy) + SQR(w.vz)) + bsqr );
-    u.mu = w.d * log(w.pp / w.e * SQR(w.d)/(bmag*SQR(bmag)) ) ;
+    u.mu = CGLConservedAnisotropy(w.d, w.e, w.pp, bmag);
   } else {
     // If field goes to zero, CGL is invalid. Revert to (adiabatic) EOS with
-    // pprp=pprl=(2/3*pprp+1/3*pprl). mu has no dynamical effect (in RS) but
-    // is updated to pprp/Bmin
+    // pprp=pprl=(2/3*pprp+1/3*pprl). A has no dynamical effect in this limit.
+    const Real p_iso = TWO_3RDS*w.pp + ONE_3RD*w.e;
     u.e  = 0.5*w.e + w.pp + 0.5*(w.d*(SQR(w.vx) + SQR(w.vy) + SQR(w.vz)) + bsqr );
-    u.mu = w.d * log(SQR(w.d)/(bfloor*SQR(bfloor)));
+    u.mu = CGLConservedAnisotropy(w.d, p_iso, p_iso, bfloor);
   }
   return;
 }

@@ -1,0 +1,68 @@
+# Paper-like 1D field-aligned wave with CGL Landau-fluid STS.
+# lf_k_parallel is tied to the initialized mode and is a wavenumber, not conductivity.
+
+<job>
+basename = cgl_lf_field_wave
+
+<mesh>
+nghost = 2
+nx1 = 64
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 1
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 64
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+sts_integrator = rkl2
+sts_max_dt_ratio = -1.0
+cfl_number = 0.2
+nlim = -1
+tlim = 0.005
+ndiag = 1
+
+<mhd>
+eos = cgl
+passive = false
+cgl_heat_flux = landau_fluid
+conductivity_integrator = sts
+lf_k_parallel = 6.283185307179586
+lf_coefficient_mode = background
+lf_c_parallel0 = 1.0
+cgl_lf_admissibility_check = true
+reconstruct = plm
+rsolver = hlle
+gamma = 1.666666666666667
+dfloor = 1.0e-12
+pfloor = 1.0e-12
+tfloor = 1.0e-12
+sfloor = 1.0e-12
+bfloor = 1.0e-10
+
+<problem>
+pgen_name = unit_tests/cgl_lf_quantitative_test
+test_mode = field_aligned_wave
+mode_number = 1
+rho0 = 1.0
+ppar0 = 1.0
+pperp0 = 1.0
+b0 = 1.0
+amp = 1.0e-5
+reference_steps = 20000
+wave_rel_tol = 2.5e-1

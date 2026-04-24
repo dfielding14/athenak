@@ -8,6 +8,7 @@
 
 #include <iostream>
 #include <sstream>
+#include <string>
 
 #include "athena.hpp"
 #include "parameter_input.hpp"
@@ -30,7 +31,23 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Real amp   = pin->GetReal("problem","amp");
   Real pp0    = pin->GetOrAddReal("problem","pp0",1.0);         //background pressure
   Real pr0  = pin->GetOrAddReal("problem","pr0",1.0);         //background pressure anisotropy
+  Real by_amp = pin->GetOrAddReal("problem","by_amp",0.0);
+  std::string cgl_lf_mode = pin->GetOrAddString("problem","cgl_lf_mode","parallel");
   std::string eq_state = pin->GetString("mhd","eos");
+  if (eq_state.compare("cgl") == 0 &&
+      cgl_lf_mode.compare("parallel") != 0 &&
+      cgl_lf_mode.compare("perp") != 0 &&
+      cgl_lf_mode.compare("grad_b") != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "<problem>/cgl_lf_mode must be parallel, perp, or grad_b" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  int cgl_lf_mode_id = 0;
+  if (cgl_lf_mode.compare("perp") == 0) {
+    cgl_lf_mode_id = 1;
+  } else if (cgl_lf_mode.compare("grad_b") == 0) {
+    cgl_lf_mode_id = 2;
+  }
 
   // capture variables for kernel
   auto &indcs = pmy_mesh_->mb_indcs;
@@ -87,8 +104,16 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     w0_(m,IVY,k,j,i) = u00*vy;
     w0_(m,IVZ,k,j,i) = u00*vz;
     if (eq_state.compare("cgl") == 0) {
-      w0_(m,IPP,k,j,i) = pp0;
-      w0_(m,IPR,k,j,i) = pr0*(1+amp*sin(2.*M_PI*x1v));
+      if (cgl_lf_mode_id == 1) {
+        w0_(m,IPR,k,j,i) = pr0;
+        w0_(m,IPP,k,j,i) = pp0*(1+amp*sin(2.*M_PI*x1v));
+      } else if (cgl_lf_mode_id == 2) {
+        w0_(m,IPR,k,j,i) = pr0;
+        w0_(m,IPP,k,j,i) = pp0;
+      } else {
+        w0_(m,IPR,k,j,i) = pr0*(1+amp*sin(2.*M_PI*x1v));
+        w0_(m,IPP,k,j,i) = pp0;
+      }
     }  else {
       w0_(m,IPR,k,j,i) = pr0*(1+amp*sin(2.*M_PI*x1v));
     }
@@ -104,15 +129,17 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     int nx1 = indcs.nx1;
     Real x1f    = LeftEdgeX  (i-is, nx1, x1min, x1max);
     Real x1v    = CellCenterX(i-is, nx1, x1min, x1max);
+    Real by_f = (cgl_lf_mode_id == 2) ? by_amp*sin(2.*M_PI*x1f) : 0.0;
+    Real by_c = (cgl_lf_mode_id == 2) ? by_amp*sin(2.*M_PI*x1v) : 0.0;
       
     b0.x1f(m,k,j,i) = 1.0;
-    b0.x2f(m,k,j,i) = 0.0;
+    b0.x2f(m,k,j,i) = by_f;
     b0.x3f(m,k,j,i) = 0.0;
     if (i==ie) b0.x1f(m,k,j,i+1) = 1.0;
-    if (j==je) b0.x2f(m,k,j+1,i) = 0.0;
+    if (j==je) b0.x2f(m,k,j+1,i) = by_f;
     if (k==ke) b0.x3f(m,k+1,j,i) = 0.0;
     bcc0(m,IBX,k,j,i) = 1.0;
-    bcc0(m,IBY,k,j,i) = 0.0;
+    bcc0(m,IBY,k,j,i) = by_c;
     bcc0(m,IBZ,k,j,i) = 0.0;
   });
   

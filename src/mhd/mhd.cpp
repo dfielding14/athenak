@@ -41,10 +41,10 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     u_sts1("cons_sts1",1,1,1,1,1),
     u_sts2("cons_sts2",1,1,1,1,1),
     u_sts_rhs("cons_sts_rhs",1,1,1,1,1),
-    cgl_p_sts0("cgl_p_sts0",1,1,1,1,1),
-    cgl_p_sts1("cgl_p_sts1",1,1,1,1,1),
-    cgl_p_sts2("cgl_p_sts2",1,1,1,1,1),
-    cgl_p_sts_rhs("cgl_p_sts_rhs",1,1,1,1,1),
+    cgl_p_sts0("cgl_lf_sts0",1,1,1,1,1),
+    cgl_p_sts1("cgl_lf_sts1",1,1,1,1,1),
+    cgl_p_sts2("cgl_lf_sts2",1,1,1,1,1),
+    cgl_p_sts_rhs("cgl_lf_sts_rhs",1,1,1,1,1),
     b1("B_fc1",1,1,1,1),
     b_sts0("B_sts0",1,1,1,1),
     b_sts1("B_sts1",1,1,1,1),
@@ -150,14 +150,49 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     presist = nullptr;
   }
 
-  // Thermal conduction (only constructed if needed)
-  if (pin->DoesParameterExist("mhd","isotropic_conduction")) {
+  // Thermal conduction / CGL Landau-fluid heat flux (only constructed if needed)
+  const bool has_isotropic_conduction = pin->DoesParameterExist("mhd","isotropic_conduction");
+  const bool has_cgl_heat_flux = pin->DoesParameterExist("mhd","cgl_heat_flux");
+  if (has_cgl_heat_flux && !peos->eos_data.is_cgl) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<mhd>/cgl_heat_flux requires <mhd>/eos = cgl" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (peos->eos_data.is_cgl && has_isotropic_conduction) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Ordinary <mhd>/isotropic_conduction is not a CGL Landau-fluid "
+              << "heat flux and is disabled for <mhd>/eos = cgl. Use "
+              << "<mhd>/cgl_heat_flux = landau_fluid with "
+              << "<mhd>/conductivity_integrator = sts." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (has_isotropic_conduction || has_cgl_heat_flux) {
     if (peos->eos_data.is_ideal || peos->eos_data.is_cgl) {
       pcond = new Conduction("mhd", ppack, pin);
+      if (peos->eos_data.is_cgl && !pcond->IsCGLLandauFluidHeatFlux()) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "CGL heat flux must be requested with "
+                  << "<mhd>/cgl_heat_flux = landau_fluid." << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (pcond->IsCGLLandauFluidHeatFlux() &&
+          pcond->mode != parabolic::ParabolicIntegratorMode::sts) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "CGL Landau-fluid heat flux is STS-only. Set "
+                  << "<mhd>/conductivity_integrator = sts and "
+                  << "<time>/sts_integrator = rkl2." << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
       has_sts_conduction = (pcond->mode == parabolic::ParabolicIntegratorMode::sts);
       has_explicit_conduction =
           (pcond->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
-      ppack->RegisterParabolicProcess({"mhd/isotropic_conduction",
+      std::string process_name = pcond->IsCGLLandauFluidHeatFlux() ?
+                                 "mhd/cgl_heat_flux" : "mhd/isotropic_conduction";
+      ppack->RegisterParabolicProcess({process_name,
                                        parabolic::ParabolicProcessOwner::mhd,
                                        pcond->mode,
                                        parabolic::ParabolicUpdateShape::cell_centered,
@@ -180,6 +215,17 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   has_any_sts_cell_update = (has_sts_viscosity || has_sts_conduction ||
                              (has_sts_resistivity && peos->eos_data.is_ideal));
   has_any_sts_field_update = has_sts_resistivity;
+  cgl_lf_admissibility_check =
+      pin->GetOrAddBoolean("mhd", "cgl_lf_admissibility_check", false);
+  if (cgl_lf_admissibility_check &&
+      (!peos->eos_data.is_cgl || !has_sts_conduction ||
+       pcond == nullptr || !pcond->IsCGLLandauFluidHeatFlux())) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<mhd>/cgl_lf_admissibility_check requires CGL Landau-fluid "
+              << "heat flux with STS." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
   // (3) read time-evolution option [already error checked in driver constructor]
   // Then initialize memory and algorithms for reconstruction and Riemann solvers

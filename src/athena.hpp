@@ -55,7 +55,10 @@ using Real = double;
 
 // constants that determine array index of Hydro/MHD variables
 // array indices for conserved: density, momemtum, total energy
-enum VariableIndex {IDN=0, IM1=1, IVX=1, IM2=2, IVY=2, IM3=3, IVZ=3, IEN=4, IPR=4, IMU=5, IPP=5, IYF=6};
+// For CGL conserved arrays, IAN aliases the legacy IMU slot and stores anisotropy A.
+// For CGL primitive arrays, IPP aliases the same slot index and stores p_perpendicular.
+enum VariableIndex {IDN=0, IM1=1, IVX=1, IM2=2, IVY=2, IM3=3, IVZ=3,
+                    IEN=4, IPR=4, IMU=5, IAN=IMU, IPP=5, IYF=6};
 // array indices for components of magnetic field
 enum BFieldIndex {IBX=0, IBY=1, IBZ=2, NMAG=3};
 // array indices for metric matrices in GR
@@ -84,13 +87,13 @@ struct HydPrim1D {
   Real d, vx, vy, vz, e, pp;
 };
 struct HydCons1D {
-  Real d, mx, my, mz, e, mu;
+  Real d, mx, my, mz, e, mu;  // For CGL, mu stores conserved anisotropy A.
 };
 struct MHDPrim1D {
   Real d, vx, vy, vz, e, pp, bx, by, bz;
 };
 struct MHDCons1D {
-  Real d, mx, my, mz, e, mu, bx, by, bz;
+  Real d, mx, my, mz, e, mu, bx, by, bz;  // For CGL, mu stores conserved anisotropy A.
 };
 
 //----------------------------------------------------------------------------------------

@@ -26,14 +26,23 @@ class Conduction {
 
   // data
   Real dtnew;
-  std::string iso_cond_type; // "constant", "spitzer", or "spitzer_limited"
-  Real kappa_iso;            // isotropic thermal conductivity
-  Real kappa_iso_limit;      // limit to isotropic thermal conductivity
+  std::string iso_cond_type = "none";       // "constant", "spitzer", or "spitzer_limited"
+  std::string cgl_heat_flux_type = "none";  // "landau_fluid" for CGL LF heat flux
+  Real kappa_iso = 0.0;                      // isotropic thermal conductivity
+  Real kappa_iso_limit = 0.0;                // limit to isotropic thermal conductivity
+  Real lf_k_parallel = 0.0;                  // CGL LF |k_parallel| from the closure
+  bool lf_coeff_local = true;                // true: local c_parallel; false: background
+  Real lf_c_parallel0 = 0.0;                 // background c_parallel for LF coefficients
   parabolic::ParabolicIntegratorMode mode = parabolic::ParabolicIntegratorMode::explicit_mode;
 
   // functions
+  bool IsCGLLandauFluidHeatFlux() const { return cgl_heat_flux_type == "landau_fluid"; }
   void AddHeatFluxes(const DvceArray5D<Real> &w, const EOS_Data &eos,
                      DvceFaceFld5D<Real> &f);
+  void AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w,
+                                   const DvceArray5D<Real> &bcc,
+                                   const EOS_Data &eos,
+                                   DvceFaceFld5D<Real> &f);
   void AddIsotropicHeatFluxConstCond(const DvceArray5D<Real> &w, const EOS_Data &eos,
                                      DvceFaceFld5D<Real> &f);
   void AddIsotropicHeatFluxSpitzerCond(const DvceArray5D<Real> &w, const EOS_Data &eos,

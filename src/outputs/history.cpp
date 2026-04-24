@@ -294,7 +294,7 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     pdata->label[IEN] = "tot-E";
   }
   if (eos_data.is_cgl) {
-    pdata->label[IMU] = "aam-D"; //average absolute mean pressure anisotropy
+    pdata->label[IAN] = "aam-D"; // CGL conserved anisotropy A, legacy column label
   }
   pdata->label[nmhd_  ] = "1-KE";
   pdata->label[nmhd_+1] = "2-KE";
@@ -348,7 +348,7 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
       hvars.the_array[IEN] = vol*u0_(m,IEN,k,j,i);
     }
     if (eos_data.is_cgl) {
-      hvars.the_array[IMU] = vol*u0_(m,IMU,k,j,i); //change to aam pressure anisotropy later
+      hvars.the_array[IAN] = vol*u0_(m,IAN,k,j,i);
     }
 
     // MHD KE

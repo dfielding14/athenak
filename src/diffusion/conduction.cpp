@@ -10,6 +10,7 @@
 
 #include <float.h>
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <limits>
 #include <string>
@@ -60,6 +61,61 @@ Real VLL4State(const Real a, const Real b, const Real c, const Real d) {
   return VLL2State(VLL2State(a,b), VLL2State(c,d));
 }
 
+KOKKOS_INLINE_FUNCTION
+Real CGLBMag(const Real bx, const Real by, const Real bz) {
+  return sqrt(SQR(bx) + SQR(by) + SQR(bz));
+}
+
+KOKKOS_INLINE_FUNCTION
+void CGLLandauFluidFaceFlux(const Real rho_l, const Real rho_r,
+                            const Real ppar_l, const Real ppar_r,
+                            const Real pperp_l, const Real pperp_r,
+                            const Real bx, const Real by, const Real bz,
+                            const Real bh_dir,
+                            const Real grad_tpar_x, const Real grad_tpar_y,
+                            const Real grad_tpar_z,
+                            const Real grad_tperp_x, const Real grad_tperp_y,
+                            const Real grad_tperp_z,
+                            const Real grad_bmag_x, const Real grad_bmag_y,
+                            const Real grad_bmag_z,
+                            const Real lf_k_parallel,
+                            const bool lf_coeff_local,
+                            const Real lf_c_parallel0,
+                            const Real dfloor,
+                            const Real pfloor,
+                            const Real tfloor,
+                            const Real bfloor,
+                            Real &energy_flux,
+                            Real &moment_flux) {
+  energy_flux = 0.0;
+  moment_flux = 0.0;
+
+  const Real bmag = CGLBMag(bx, by, bz);
+  if (bmag <= bfloor || lf_k_parallel <= 0.0) {
+    return;
+  }
+
+  const Real bhx = bx/bmag;
+  const Real bhy = by/bmag;
+  const Real bhz = bz/bmag;
+  const Real rho = fmax(0.5*(rho_l + rho_r), dfloor);
+  const Real ppar = fmax(0.5*(ppar_l + ppar_r), pfloor);
+  const Real pperp = fmax(0.5*(pperp_l + pperp_r), pfloor);
+  const Real cpar = lf_coeff_local ? sqrt(fmax(ppar/rho, tfloor)) : lf_c_parallel0;
+  const Real chi_perp = static_cast<Real>(0.7978845608028654)*cpar/lf_k_parallel;
+  const Real chi_parallel = static_cast<Real>(1.5957691216057308)*cpar/lf_k_parallel;
+
+  const Real gradpar_tpar = bhx*grad_tpar_x + bhy*grad_tpar_y + bhz*grad_tpar_z;
+  const Real gradpar_tperp = bhx*grad_tperp_x + bhy*grad_tperp_y + bhz*grad_tperp_z;
+  const Real gradpar_bmag = bhx*grad_bmag_x + bhy*grad_bmag_y + bhz*grad_bmag_z;
+  const Real q_parallel = -chi_parallel*rho*gradpar_tpar;
+  const Real q_perp = -chi_perp*(rho*gradpar_tperp -
+                                 pperp*(1.0 - pperp/ppar)*gradpar_bmag/bmag);
+
+  energy_flux = bh_dir*(q_perp + 0.5*q_parallel);
+  moment_flux = bh_dir*q_perp/bmag;
+}
+
 //----------------------------------------------------------------------------------------
 //! \fn Real TempDepKappa()
 //! \brief Temperature-dependent conductivity given by Parker (1953) and Spitzer (1962)
@@ -83,8 +139,19 @@ Real TempDepKappa(Real temp, Real limit) {
 
 Conduction::Conduction(std::string block, MeshBlockPack *pp, ParameterInput *pin) :
     pmy_pack(pp) {
+  const bool has_iso_conduction = pin->DoesParameterExist(block,"isotropic_conduction");
+  const bool has_cgl_heat_flux = pin->DoesParameterExist(block,"cgl_heat_flux");
+
+  if (has_iso_conduction && has_cgl_heat_flux) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<" << block << "> cannot set both isotropic_conduction and "
+              << "cgl_heat_flux" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
   // Read parameters for isotropic thermal conduction (if any)
-  if (pin->DoesParameterExist(block,"isotropic_conduction")) {
+  if (has_iso_conduction) {
     iso_cond_type = pin->GetString(block,"isotropic_conduction");
     // Check for valid type
     if ((iso_cond_type.compare("constant") != 0) &&
@@ -102,6 +169,51 @@ Conduction::Conduction(std::string block, MeshBlockPack *pp, ParameterInput *pin
                       static_cast<Real>(std::numeric_limits<float>::max()));
     mode = ParseConductivityIntegrator(block, pin);
   }
+
+  // Read parameters for CGL Landau-fluid heat flux (if any). This mode is intentionally
+  // separate from ordinary isotropic conduction because the flux is field-aligned and
+  // updates total energy plus magnetic moment during the STS sweep.
+  if (has_cgl_heat_flux) {
+    cgl_heat_flux_type = pin->GetString(block,"cgl_heat_flux");
+    if (cgl_heat_flux_type.compare("landau_fluid") != 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Invalid choice for CGL heat flux: " << cgl_heat_flux_type
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    lf_k_parallel = pin->GetReal(block,"lf_k_parallel");
+    if (lf_k_parallel <= 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<" << block << ">/lf_k_parallel must be positive and is interpreted "
+                << "as the Landau-fluid |k_parallel|"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    const std::string coeff_mode = pin->GetOrAddString(block, "lf_coefficient_mode",
+                                                       "local");
+    if (coeff_mode == "local") {
+      lf_coeff_local = true;
+    } else if (coeff_mode == "background") {
+      lf_coeff_local = false;
+      lf_c_parallel0 = pin->GetReal(block, "lf_c_parallel0");
+      if (lf_c_parallel0 <= 0.0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "<" << block << ">/lf_c_parallel0 must be positive when "
+                  << "lf_coefficient_mode = background" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<" << block << ">/lf_coefficient_mode = '" << coeff_mode
+                << "' must be 'local' or 'background'" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    mode = ParseConductivityIntegrator(block, pin);
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -117,12 +229,326 @@ Conduction::~Conduction() {
 
 void Conduction::AddHeatFluxes(const DvceArray5D<Real> &w0, const EOS_Data &eos,
     DvceFaceFld5D<Real> &flx) {
+  if (IsCGLLandauFluidHeatFlux()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "CGL Landau-fluid heat flux requires cell-centered magnetic fields. "
+              << "Call AddCGLLandauFluidHeatFluxes." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   if (iso_cond_type.compare("constant") == 0) {
     AddIsotropicHeatFluxConstCond(w0, eos, flx);
   } else if ((iso_cond_type.compare("spitzer") == 0) ||
              (iso_cond_type.compare("spitzer_limited") == 0)) {
     AddIsotropicHeatFluxSpitzerCond(w0, eos, flx);
   }
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void AddCGLLandauFluidHeatFluxes()
+//! \brief Adds field-aligned CGL Landau-fluid heat fluxes to total energy and magnetic
+//! moment fluxes. The IAN slot is interpreted as p_perp/|B| only during the CGL STS
+//! update; the hyperbolic solve continues to store conserved anisotropy A there.
+
+void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
+    const DvceArray5D<Real> &bcc, const EOS_Data &eos, DvceFaceFld5D<Real> &flx) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  auto size = pmy_pack->pmb->mb_size;
+  bool multi_d = pmy_pack->pmesh->multi_d;
+  bool three_d = pmy_pack->pmesh->three_d;
+  Real lf_k_parallel_ = lf_k_parallel;
+  bool lf_coeff_local_ = lf_coeff_local;
+  Real lf_c_parallel0_ = lf_c_parallel0;
+  Real dfloor_ = eos.dfloor;
+  Real pfloor_ = eos.pfloor;
+  Real tfloor_ = eos.tfloor;
+  Real bfloor_ = eos.bfloor;
+
+  if (lf_k_parallel_ <= 0.0) {
+    return;
+  }
+
+  // fluxes in x1-direction
+  auto &flx1 = flx.x1f;
+  par_for("cgl_lf_hflux1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const Real tpl_l = w0(m,IPR,k,j,i-1)/w0(m,IDN,k,j,i-1);
+    const Real tpl_r = w0(m,IPR,k,j,i  )/w0(m,IDN,k,j,i  );
+    const Real tpp_l = w0(m,IPP,k,j,i-1)/w0(m,IDN,k,j,i-1);
+    const Real tpp_r = w0(m,IPP,k,j,i  )/w0(m,IDN,k,j,i  );
+    const Real bmag_l = CGLBMag(bcc(m,IBX,k,j,i-1), bcc(m,IBY,k,j,i-1),
+                                bcc(m,IBZ,k,j,i-1));
+    const Real bmag_r = CGLBMag(bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i),
+                                bcc(m,IBZ,k,j,i));
+    Real grad_pl_x = (tpl_r - tpl_l)/size.d_view(m).dx1;
+    Real grad_pp_x = (tpp_r - tpp_l)/size.d_view(m).dx1;
+    Real grad_b_x = (bmag_r - bmag_l)/size.d_view(m).dx1;
+    Real grad_pl_y = 0.0, grad_pp_y = 0.0;
+    Real grad_pl_z = 0.0, grad_pp_z = 0.0;
+    Real grad_b_y = 0.0, grad_b_z = 0.0;
+
+    if (multi_d) {
+      const Real tpl_ju_i   = w0(m,IPR,k,j+1,i  )/w0(m,IDN,k,j+1,i  );
+      const Real tpl_jl_i   = w0(m,IPR,k,j-1,i  )/w0(m,IDN,k,j-1,i  );
+      const Real tpl_ju_im1 = w0(m,IPR,k,j+1,i-1)/w0(m,IDN,k,j+1,i-1);
+      const Real tpl_jl_im1 = w0(m,IPR,k,j-1,i-1)/w0(m,IDN,k,j-1,i-1);
+      const Real tpp_ju_i   = w0(m,IPP,k,j+1,i  )/w0(m,IDN,k,j+1,i  );
+      const Real tpp_jl_i   = w0(m,IPP,k,j-1,i  )/w0(m,IDN,k,j-1,i  );
+      const Real tpp_ju_im1 = w0(m,IPP,k,j+1,i-1)/w0(m,IDN,k,j+1,i-1);
+      const Real tpp_jl_im1 = w0(m,IPP,k,j-1,i-1)/w0(m,IDN,k,j-1,i-1);
+      const Real b_ju_i = CGLBMag(bcc(m,IBX,k,j+1,i), bcc(m,IBY,k,j+1,i),
+                                  bcc(m,IBZ,k,j+1,i));
+      const Real b_jl_i = CGLBMag(bcc(m,IBX,k,j-1,i), bcc(m,IBY,k,j-1,i),
+                                  bcc(m,IBZ,k,j-1,i));
+      const Real b_ju_im1 = CGLBMag(bcc(m,IBX,k,j+1,i-1),
+                                    bcc(m,IBY,k,j+1,i-1),
+                                    bcc(m,IBZ,k,j+1,i-1));
+      const Real b_jl_im1 = CGLBMag(bcc(m,IBX,k,j-1,i-1),
+                                    bcc(m,IBY,k,j-1,i-1),
+                                    bcc(m,IBZ,k,j-1,i-1));
+      grad_pl_y = 0.25*((tpl_ju_i - tpl_jl_i) + (tpl_ju_im1 - tpl_jl_im1))/
+                  size.d_view(m).dx2;
+      grad_pp_y = 0.25*((tpp_ju_i - tpp_jl_i) + (tpp_ju_im1 - tpp_jl_im1))/
+                  size.d_view(m).dx2;
+      grad_b_y = 0.25*((b_ju_i - b_jl_i) + (b_ju_im1 - b_jl_im1))/
+                 size.d_view(m).dx2;
+    }
+
+    if (three_d) {
+      const Real tpl_ku_i   = w0(m,IPR,k+1,j,i  )/w0(m,IDN,k+1,j,i  );
+      const Real tpl_kl_i   = w0(m,IPR,k-1,j,i  )/w0(m,IDN,k-1,j,i  );
+      const Real tpl_ku_im1 = w0(m,IPR,k+1,j,i-1)/w0(m,IDN,k+1,j,i-1);
+      const Real tpl_kl_im1 = w0(m,IPR,k-1,j,i-1)/w0(m,IDN,k-1,j,i-1);
+      const Real tpp_ku_i   = w0(m,IPP,k+1,j,i  )/w0(m,IDN,k+1,j,i  );
+      const Real tpp_kl_i   = w0(m,IPP,k-1,j,i  )/w0(m,IDN,k-1,j,i  );
+      const Real tpp_ku_im1 = w0(m,IPP,k+1,j,i-1)/w0(m,IDN,k+1,j,i-1);
+      const Real tpp_kl_im1 = w0(m,IPP,k-1,j,i-1)/w0(m,IDN,k-1,j,i-1);
+      const Real b_ku_i = CGLBMag(bcc(m,IBX,k+1,j,i), bcc(m,IBY,k+1,j,i),
+                                  bcc(m,IBZ,k+1,j,i));
+      const Real b_kl_i = CGLBMag(bcc(m,IBX,k-1,j,i), bcc(m,IBY,k-1,j,i),
+                                  bcc(m,IBZ,k-1,j,i));
+      const Real b_ku_im1 = CGLBMag(bcc(m,IBX,k+1,j,i-1),
+                                    bcc(m,IBY,k+1,j,i-1),
+                                    bcc(m,IBZ,k+1,j,i-1));
+      const Real b_kl_im1 = CGLBMag(bcc(m,IBX,k-1,j,i-1),
+                                    bcc(m,IBY,k-1,j,i-1),
+                                    bcc(m,IBZ,k-1,j,i-1));
+      grad_pl_z = 0.25*((tpl_ku_i - tpl_kl_i) + (tpl_ku_im1 - tpl_kl_im1))/
+                  size.d_view(m).dx3;
+      grad_pp_z = 0.25*((tpp_ku_i - tpp_kl_i) + (tpp_ku_im1 - tpp_kl_im1))/
+                  size.d_view(m).dx3;
+      grad_b_z = 0.25*((b_ku_i - b_kl_i) + (b_ku_im1 - b_kl_im1))/
+                 size.d_view(m).dx3;
+    }
+
+    const Real bx = 0.5*(bcc(m,IBX,k,j,i-1) + bcc(m,IBX,k,j,i));
+    const Real by = 0.5*(bcc(m,IBY,k,j,i-1) + bcc(m,IBY,k,j,i));
+    const Real bz = 0.5*(bcc(m,IBZ,k,j,i-1) + bcc(m,IBZ,k,j,i));
+    const Real bmag = CGLBMag(bx, by, bz);
+    const Real bhx = (bmag > bfloor_) ? bx/bmag : 0.0;
+    Real energy_flux = 0.0, moment_flux = 0.0;
+    CGLLandauFluidFaceFlux(w0(m,IDN,k,j,i-1), w0(m,IDN,k,j,i),
+                           w0(m,IPR,k,j,i-1), w0(m,IPR,k,j,i),
+                           w0(m,IPP,k,j,i-1), w0(m,IPP,k,j,i),
+                           bx, by, bz, bhx,
+                           grad_pl_x, grad_pl_y, grad_pl_z,
+                           grad_pp_x, grad_pp_y, grad_pp_z,
+                           grad_b_x, grad_b_y, grad_b_z,
+                           lf_k_parallel_, lf_coeff_local_, lf_c_parallel0_,
+                           dfloor_, pfloor_, tfloor_, bfloor_,
+                           energy_flux, moment_flux);
+    flx1(m,IEN,k,j,i) += energy_flux;
+    flx1(m,IAN,k,j,i) += moment_flux;
+  });
+  if (pmy_pack->pmesh->one_d) {return;}
+
+  // fluxes in x2-direction
+  auto &flx2 = flx.x2f;
+  par_for("cgl_lf_hflux2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const Real tpl_l = w0(m,IPR,k,j-1,i)/w0(m,IDN,k,j-1,i);
+    const Real tpl_r = w0(m,IPR,k,j  ,i)/w0(m,IDN,k,j  ,i);
+    const Real tpp_l = w0(m,IPP,k,j-1,i)/w0(m,IDN,k,j-1,i);
+    const Real tpp_r = w0(m,IPP,k,j  ,i)/w0(m,IDN,k,j  ,i);
+    const Real bmag_l = CGLBMag(bcc(m,IBX,k,j-1,i), bcc(m,IBY,k,j-1,i),
+                                bcc(m,IBZ,k,j-1,i));
+    const Real bmag_r = CGLBMag(bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i),
+                                bcc(m,IBZ,k,j,i));
+    Real grad_pl_x = 0.0, grad_pp_x = 0.0;
+    Real grad_pl_y = (tpl_r - tpl_l)/size.d_view(m).dx2;
+    Real grad_pp_y = (tpp_r - tpp_l)/size.d_view(m).dx2;
+    Real grad_b_y = (bmag_r - bmag_l)/size.d_view(m).dx2;
+    Real grad_pl_z = 0.0, grad_pp_z = 0.0;
+    Real grad_b_x = 0.0, grad_b_z = 0.0;
+
+    const Real tpl_j_iup = w0(m,IPR,k,j  ,i+1)/w0(m,IDN,k,j  ,i+1);
+    const Real tpl_j_i   = w0(m,IPR,k,j  ,i-1)/w0(m,IDN,k,j  ,i-1);
+    const Real tpl_jm_iup = w0(m,IPR,k,j-1,i+1)/w0(m,IDN,k,j-1,i+1);
+    const Real tpl_jm_i   = w0(m,IPR,k,j-1,i-1)/w0(m,IDN,k,j-1,i-1);
+    const Real tpp_j_iup = w0(m,IPP,k,j  ,i+1)/w0(m,IDN,k,j  ,i+1);
+    const Real tpp_j_i   = w0(m,IPP,k,j  ,i-1)/w0(m,IDN,k,j  ,i-1);
+    const Real tpp_jm_iup = w0(m,IPP,k,j-1,i+1)/w0(m,IDN,k,j-1,i+1);
+    const Real tpp_jm_i   = w0(m,IPP,k,j-1,i-1)/w0(m,IDN,k,j-1,i-1);
+    const Real b_j_iup = CGLBMag(bcc(m,IBX,k,j,i+1), bcc(m,IBY,k,j,i+1),
+                                 bcc(m,IBZ,k,j,i+1));
+    const Real b_j_i = CGLBMag(bcc(m,IBX,k,j,i-1), bcc(m,IBY,k,j,i-1),
+                               bcc(m,IBZ,k,j,i-1));
+    const Real b_jm_iup = CGLBMag(bcc(m,IBX,k,j-1,i+1),
+                                  bcc(m,IBY,k,j-1,i+1),
+                                  bcc(m,IBZ,k,j-1,i+1));
+    const Real b_jm_i = CGLBMag(bcc(m,IBX,k,j-1,i-1),
+                                bcc(m,IBY,k,j-1,i-1),
+                                bcc(m,IBZ,k,j-1,i-1));
+    grad_pl_x = 0.25*((tpl_j_iup - tpl_j_i) + (tpl_jm_iup - tpl_jm_i))/
+                size.d_view(m).dx1;
+    grad_pp_x = 0.25*((tpp_j_iup - tpp_j_i) + (tpp_jm_iup - tpp_jm_i))/
+                size.d_view(m).dx1;
+    grad_b_x = 0.25*((b_j_iup - b_j_i) + (b_jm_iup - b_jm_i))/
+               size.d_view(m).dx1;
+
+    if (three_d) {
+      const Real tpl_ku_j   = w0(m,IPR,k+1,j  ,i)/w0(m,IDN,k+1,j  ,i);
+      const Real tpl_kl_j   = w0(m,IPR,k-1,j  ,i)/w0(m,IDN,k-1,j  ,i);
+      const Real tpl_ku_jm1 = w0(m,IPR,k+1,j-1,i)/w0(m,IDN,k+1,j-1,i);
+      const Real tpl_kl_jm1 = w0(m,IPR,k-1,j-1,i)/w0(m,IDN,k-1,j-1,i);
+      const Real tpp_ku_j   = w0(m,IPP,k+1,j  ,i)/w0(m,IDN,k+1,j  ,i);
+      const Real tpp_kl_j   = w0(m,IPP,k-1,j  ,i)/w0(m,IDN,k-1,j  ,i);
+      const Real tpp_ku_jm1 = w0(m,IPP,k+1,j-1,i)/w0(m,IDN,k+1,j-1,i);
+      const Real tpp_kl_jm1 = w0(m,IPP,k-1,j-1,i)/w0(m,IDN,k-1,j-1,i);
+      const Real b_ku_j = CGLBMag(bcc(m,IBX,k+1,j,i), bcc(m,IBY,k+1,j,i),
+                                  bcc(m,IBZ,k+1,j,i));
+      const Real b_kl_j = CGLBMag(bcc(m,IBX,k-1,j,i), bcc(m,IBY,k-1,j,i),
+                                  bcc(m,IBZ,k-1,j,i));
+      const Real b_ku_jm1 = CGLBMag(bcc(m,IBX,k+1,j-1,i),
+                                    bcc(m,IBY,k+1,j-1,i),
+                                    bcc(m,IBZ,k+1,j-1,i));
+      const Real b_kl_jm1 = CGLBMag(bcc(m,IBX,k-1,j-1,i),
+                                    bcc(m,IBY,k-1,j-1,i),
+                                    bcc(m,IBZ,k-1,j-1,i));
+      grad_pl_z = 0.25*((tpl_ku_j - tpl_kl_j) + (tpl_ku_jm1 - tpl_kl_jm1))/
+                  size.d_view(m).dx3;
+      grad_pp_z = 0.25*((tpp_ku_j - tpp_kl_j) + (tpp_ku_jm1 - tpp_kl_jm1))/
+                  size.d_view(m).dx3;
+      grad_b_z = 0.25*((b_ku_j - b_kl_j) + (b_ku_jm1 - b_kl_jm1))/
+                 size.d_view(m).dx3;
+    }
+
+    const Real bx = 0.5*(bcc(m,IBX,k,j-1,i) + bcc(m,IBX,k,j,i));
+    const Real by = 0.5*(bcc(m,IBY,k,j-1,i) + bcc(m,IBY,k,j,i));
+    const Real bz = 0.5*(bcc(m,IBZ,k,j-1,i) + bcc(m,IBZ,k,j,i));
+    const Real bmag = CGLBMag(bx, by, bz);
+    const Real bhy = (bmag > bfloor_) ? by/bmag : 0.0;
+    Real energy_flux = 0.0, moment_flux = 0.0;
+    CGLLandauFluidFaceFlux(w0(m,IDN,k,j-1,i), w0(m,IDN,k,j,i),
+                           w0(m,IPR,k,j-1,i), w0(m,IPR,k,j,i),
+                           w0(m,IPP,k,j-1,i), w0(m,IPP,k,j,i),
+                           bx, by, bz, bhy,
+                           grad_pl_x, grad_pl_y, grad_pl_z,
+                           grad_pp_x, grad_pp_y, grad_pp_z,
+                           grad_b_x, grad_b_y, grad_b_z,
+                           lf_k_parallel_, lf_coeff_local_, lf_c_parallel0_,
+                           dfloor_, pfloor_, tfloor_, bfloor_,
+                           energy_flux, moment_flux);
+    flx2(m,IEN,k,j,i) += energy_flux;
+    flx2(m,IAN,k,j,i) += moment_flux;
+  });
+  if (pmy_pack->pmesh->two_d) {return;}
+
+  // fluxes in x3-direction
+  auto &flx3 = flx.x3f;
+  par_for("cgl_lf_hflux3", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const Real tpl_l = w0(m,IPR,k-1,j,i)/w0(m,IDN,k-1,j,i);
+    const Real tpl_r = w0(m,IPR,k  ,j,i)/w0(m,IDN,k  ,j,i);
+    const Real tpp_l = w0(m,IPP,k-1,j,i)/w0(m,IDN,k-1,j,i);
+    const Real tpp_r = w0(m,IPP,k  ,j,i)/w0(m,IDN,k  ,j,i);
+    const Real bmag_l = CGLBMag(bcc(m,IBX,k-1,j,i), bcc(m,IBY,k-1,j,i),
+                                bcc(m,IBZ,k-1,j,i));
+    const Real bmag_r = CGLBMag(bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i),
+                                bcc(m,IBZ,k,j,i));
+    Real grad_pl_x = 0.0, grad_pp_x = 0.0;
+    Real grad_pl_y = 0.0, grad_pp_y = 0.0;
+    Real grad_pl_z = (tpl_r - tpl_l)/size.d_view(m).dx3;
+    Real grad_pp_z = (tpp_r - tpp_l)/size.d_view(m).dx3;
+    Real grad_b_z = (bmag_r - bmag_l)/size.d_view(m).dx3;
+    Real grad_b_x = 0.0, grad_b_y = 0.0;
+
+    const Real tpl_k_iup = w0(m,IPR,k  ,j,i+1)/w0(m,IDN,k  ,j,i+1);
+    const Real tpl_k_i   = w0(m,IPR,k  ,j,i-1)/w0(m,IDN,k  ,j,i-1);
+    const Real tpl_km_iup = w0(m,IPR,k-1,j,i+1)/w0(m,IDN,k-1,j,i+1);
+    const Real tpl_km_i   = w0(m,IPR,k-1,j,i-1)/w0(m,IDN,k-1,j,i-1);
+    const Real tpp_k_iup = w0(m,IPP,k  ,j,i+1)/w0(m,IDN,k  ,j,i+1);
+    const Real tpp_k_i   = w0(m,IPP,k  ,j,i-1)/w0(m,IDN,k  ,j,i-1);
+    const Real tpp_km_iup = w0(m,IPP,k-1,j,i+1)/w0(m,IDN,k-1,j,i+1);
+    const Real tpp_km_i   = w0(m,IPP,k-1,j,i-1)/w0(m,IDN,k-1,j,i-1);
+    const Real b_k_iup = CGLBMag(bcc(m,IBX,k,j,i+1), bcc(m,IBY,k,j,i+1),
+                                 bcc(m,IBZ,k,j,i+1));
+    const Real b_k_i = CGLBMag(bcc(m,IBX,k,j,i-1), bcc(m,IBY,k,j,i-1),
+                               bcc(m,IBZ,k,j,i-1));
+    const Real b_km_iup = CGLBMag(bcc(m,IBX,k-1,j,i+1),
+                                  bcc(m,IBY,k-1,j,i+1),
+                                  bcc(m,IBZ,k-1,j,i+1));
+    const Real b_km_i = CGLBMag(bcc(m,IBX,k-1,j,i-1),
+                                bcc(m,IBY,k-1,j,i-1),
+                                bcc(m,IBZ,k-1,j,i-1));
+    grad_pl_x = 0.25*((tpl_k_iup - tpl_k_i) + (tpl_km_iup - tpl_km_i))/
+                size.d_view(m).dx1;
+    grad_pp_x = 0.25*((tpp_k_iup - tpp_k_i) + (tpp_km_iup - tpp_km_i))/
+                size.d_view(m).dx1;
+    grad_b_x = 0.25*((b_k_iup - b_k_i) + (b_km_iup - b_km_i))/
+               size.d_view(m).dx1;
+
+    if (multi_d) {
+      const Real tpl_k_ju = w0(m,IPR,k  ,j+1,i)/w0(m,IDN,k  ,j+1,i);
+      const Real tpl_k_jl = w0(m,IPR,k  ,j-1,i)/w0(m,IDN,k  ,j-1,i);
+      const Real tpl_km_ju = w0(m,IPR,k-1,j+1,i)/w0(m,IDN,k-1,j+1,i);
+      const Real tpl_km_jl = w0(m,IPR,k-1,j-1,i)/w0(m,IDN,k-1,j-1,i);
+      const Real tpp_k_ju = w0(m,IPP,k  ,j+1,i)/w0(m,IDN,k  ,j+1,i);
+      const Real tpp_k_jl = w0(m,IPP,k  ,j-1,i)/w0(m,IDN,k  ,j-1,i);
+      const Real tpp_km_ju = w0(m,IPP,k-1,j+1,i)/w0(m,IDN,k-1,j+1,i);
+      const Real tpp_km_jl = w0(m,IPP,k-1,j-1,i)/w0(m,IDN,k-1,j-1,i);
+      const Real b_k_ju = CGLBMag(bcc(m,IBX,k,j+1,i), bcc(m,IBY,k,j+1,i),
+                                  bcc(m,IBZ,k,j+1,i));
+      const Real b_k_jl = CGLBMag(bcc(m,IBX,k,j-1,i), bcc(m,IBY,k,j-1,i),
+                                  bcc(m,IBZ,k,j-1,i));
+      const Real b_km_ju = CGLBMag(bcc(m,IBX,k-1,j+1,i),
+                                   bcc(m,IBY,k-1,j+1,i),
+                                   bcc(m,IBZ,k-1,j+1,i));
+      const Real b_km_jl = CGLBMag(bcc(m,IBX,k-1,j-1,i),
+                                   bcc(m,IBY,k-1,j-1,i),
+                                   bcc(m,IBZ,k-1,j-1,i));
+      grad_pl_y = 0.25*((tpl_k_ju - tpl_k_jl) + (tpl_km_ju - tpl_km_jl))/
+                  size.d_view(m).dx2;
+      grad_pp_y = 0.25*((tpp_k_ju - tpp_k_jl) + (tpp_km_ju - tpp_km_jl))/
+                  size.d_view(m).dx2;
+      grad_b_y = 0.25*((b_k_ju - b_k_jl) + (b_km_ju - b_km_jl))/
+                 size.d_view(m).dx2;
+    }
+
+    const Real bx = 0.5*(bcc(m,IBX,k-1,j,i) + bcc(m,IBX,k,j,i));
+    const Real by = 0.5*(bcc(m,IBY,k-1,j,i) + bcc(m,IBY,k,j,i));
+    const Real bz = 0.5*(bcc(m,IBZ,k-1,j,i) + bcc(m,IBZ,k,j,i));
+    const Real bmag = CGLBMag(bx, by, bz);
+    const Real bhz = (bmag > bfloor_) ? bz/bmag : 0.0;
+    Real energy_flux = 0.0, moment_flux = 0.0;
+    CGLLandauFluidFaceFlux(w0(m,IDN,k-1,j,i), w0(m,IDN,k,j,i),
+                           w0(m,IPR,k-1,j,i), w0(m,IPR,k,j,i),
+                           w0(m,IPP,k-1,j,i), w0(m,IPP,k,j,i),
+                           bx, by, bz, bhz,
+                           grad_pl_x, grad_pl_y, grad_pl_z,
+                           grad_pp_x, grad_pp_y, grad_pp_z,
+                           grad_b_x, grad_b_y, grad_b_z,
+                           lf_k_parallel_, lf_coeff_local_, lf_c_parallel0_,
+                           dfloor_, pfloor_, tfloor_, bfloor_,
+                           energy_flux, moment_flux);
+    flx3(m,IEN,k,j,i) += energy_flux;
+    flx3(m,IAN,k,j,i) += moment_flux;
+  });
   return;
 }
 
@@ -148,6 +574,8 @@ void Conduction::AddIsotropicHeatFluxConstCond(const DvceArray5D<Real> &w0,
   par_for("conduct1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     if (cgl) {
+      // Legacy scalar pressure-temperature prototype. The MHD constructor fences this
+      // path for CGL so it is not confused with Landau-fluid heat flux.
       Real dtempdxprl = (w0(m,IPR,k,j,i)/w0(m,IDN,k,j,i) -
                          w0(m,IPR,k,j,i-1)/w0(m,IDN,k,j,i-1)) / size.d_view(m).dx1;
       Real dtempdxprp = (w0(m,IPP,k,j,i)/w0(m,IDN,k,j,i) -
@@ -168,6 +596,7 @@ void Conduction::AddIsotropicHeatFluxConstCond(const DvceArray5D<Real> &w0,
   par_for("conduct2",DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     if (cgl) {
+      // Legacy scalar pressure-temperature prototype; fenced for CGL at runtime.
       Real dtempdxprl = (w0(m,IPR,k,j,i)/w0(m,IDN,k,j,i) -
                          w0(m,IPR,k,j-1,i)/w0(m,IDN,k,j-1,i)) / size.d_view(m).dx2;
       Real dtempdxprp = (w0(m,IPP,k,j,i)/w0(m,IDN,k,j,i) -
@@ -188,6 +617,7 @@ void Conduction::AddIsotropicHeatFluxConstCond(const DvceArray5D<Real> &w0,
   par_for("conduct3",DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     if (cgl) {
+      // Legacy scalar pressure-temperature prototype; fenced for CGL at runtime.
       Real dtempdxprl = (w0(m,IPR,k,j,i)/w0(m,IDN,k,j,i) -
                          w0(m,IPR,k-1,j,i)/w0(m,IDN,k-1,j,i)) / size.d_view(m).dx3;
       Real dtempdxprp = (w0(m,IPP,k,j,i)/w0(m,IDN,k,j,i) -
@@ -372,8 +802,9 @@ void Conduction::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
 
   // set flag for Spitzer conductivity
   bool spitzer = false;
-  if ((iso_cond_type.compare("spitzer") == 0) ||
-      (iso_cond_type.compare("spitzer_limited") == 0)) {
+  if (!IsCGLLandauFluidHeatFlux() &&
+      (iso_cond_type.compare("spitzer") == 0 ||
+       iso_cond_type.compare("spitzer_limited") == 0)) {
     spitzer = true;
   }
   Real limit_ = kappa_iso_limit;
@@ -397,9 +828,50 @@ void Conduction::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
   auto &multi_d = pmy_pack->pmesh->multi_d;
   auto &three_d = pmy_pack->pmesh->three_d;
   auto &size = pmy_pack->pmb->mb_size;
+
+  if (IsCGLLandauFluidHeatFlux()) {
+    Real lf_k_parallel_ = lf_k_parallel;
+    bool lf_coeff_local_ = lf_coeff_local;
+    Real lf_c_parallel0_ = lf_c_parallel0;
+    Real tfloor_ = eos_data.tfloor;
+    if (lf_k_parallel_ <= 0.0) {
+      return;
+    }
+    Kokkos::parallel_reduce("cgl_lf_newdt", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    KOKKOS_LAMBDA(const int &idx, Real &min_dt) {
+      int m = (idx)/nkji;
+      int k = (idx - m*nkji)/nji;
+      int j = (idx - m*nkji - k*nji)/nx1;
+      int i = (idx - m*nkji - k*nji - j*nx1) + is;
+      k += ks;
+      j += js;
+
+      const Real cpar = lf_coeff_local_ ?
+                        sqrt(fmax(w0_(m,IPR,k,j,i)/w0_(m,IDN,k,j,i), tfloor_)) :
+                        lf_c_parallel0_;
+      const Real chi = static_cast<Real>(1.5957691216057308)*cpar/lf_k_parallel_;
+      if (chi <= 0.0) {
+        return;
+      }
+      min_dt = fmin(min_dt, SQR(size.d_view(m).dx1)/chi);
+      if (multi_d) {
+        min_dt = fmin(min_dt, SQR(size.d_view(m).dx2)/chi);
+      }
+      if (three_d) {
+        min_dt = fmin(min_dt, SQR(size.d_view(m).dx3)/chi);
+      }
+    }, Kokkos::Min<Real>(dtnew));
+    dtnew *= fac;
+    return;
+  }
+
   Real gm1 = eos_data.gamma-1.0;
   Real pressure_to_temperature = (eos_data.is_cgl) ? 1.0 : gm1;
   Real kappa0 = kappa_iso;
+
+  if (kappa0 <= 0.0) {
+    return;
+  }
 
   // find smallest timestep for thermal conduction in each cell
   // Note loop over all cells needed even for constant conductivity

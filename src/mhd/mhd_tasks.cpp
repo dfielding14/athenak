@@ -106,7 +106,9 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
     TaskID pbcs = tl["parabolic_stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this, precvb);
     TaskID pprol = tl["parabolic_stagen"]->AddTask(&MHD::Prolongate, this, pbcs);
     TaskID pc2p = tl["parabolic_stagen"]->AddTask(&MHD::ConToPrim, this, pprol);
-    (void) tl["parabolic_stagen"]->AddTask(&MHD::STSRefreshTimeStep, this, pc2p);
+    TaskID pcglcoll = tl["parabolic_stagen"]->AddTask(
+        &MHD::STSPostSweepCGLCollisions, this, pc2p);
+    (void) tl["parabolic_stagen"]->AddTask(&MHD::STSRefreshTimeStep, this, pcglcoll);
 
     TaskID pcsend = tl["after_parabolic_stagen"]->AddTask(&MHD::ClearSend, this, none);
     (void) tl["after_parabolic_stagen"]->AddTask(&MHD::ClearRecv, this, pcsend);
@@ -737,7 +739,6 @@ TaskStatus MHD::CGLCollisions(Driver *pdrive, int stage) { //need to ensure this
   int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
   
   if (peos->eos_data.coll) {
-    std::cout << "In the collisions block" << std::endl;
     peos->Collisions(w0, bcc0, u0, 0, n1m1, 0, n2m1, 0, n3m1);
   }
   return TaskStatus::complete;

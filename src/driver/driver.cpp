@@ -381,11 +381,11 @@ void Driver::ValidateSTSConfiguration(Mesh *pm) {
                          "viscosity_integrator = sts and ohmic_resistivity_integrator = sts "
                          "for <mhd>/eos = cgl.");
       }
-      if (pmhd->has_sts_conduction && pmhd->pcond != nullptr &&
-          pmhd->pcond->iso_cond_type != "constant") {
+      if (pmhd->has_sts_conduction &&
+          (pmhd->pcond == nullptr || !pmhd->pcond->IsCGLLandauFluidHeatFlux())) {
         DriverFatalError(__FILE__, __LINE__,
-                         "CGL heat-flux STS currently supports only "
-                         "<mhd>/isotropic_conduction = constant.");
+                         "CGL heat-flux STS requires "
+                         "<mhd>/cgl_heat_flux = landau_fluid.");
       }
     }
     if (pmhd->porb_u != nullptr || pmhd->porb_b != nullptr ||

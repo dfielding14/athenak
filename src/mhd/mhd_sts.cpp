@@ -6,10 +6,14 @@
 //! \file mhd_sts.cpp
 //! \brief MHD-owned helpers and task wrappers for super time stepping.
 
+#include <cstdlib>
+#include <iostream>
+
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
 #include "driver/driver.hpp"
 #include "eos/eos.hpp"
+#include "eos/ideal_c2p_mhd.hpp"
 #include "diffusion/conduction.hpp"
 #include "diffusion/resistivity.hpp"
 #include "diffusion/viscosity.hpp"
@@ -30,8 +34,8 @@ bool UpdateSTSMHDVariable(const int n, const bool update_momentum,
 }
 
 KOKKOS_INLINE_FUNCTION
-int CGLPressureVariable(const int n) {
-  return (n == 0) ? IPR : IPP;
+int CGLLandauFluidVariable(const int n) {
+  return (n == 0) ? IEN : IAN;
 }
 
 } // namespace
@@ -60,7 +64,11 @@ void MHD::AddSelectedDiffusionFluxes(DiffusionSelection selection) {
     presist->AddResistiveFluxes(b0, uflx);
   }
   if (add_conduction && pcond != nullptr) {
-    pcond->AddHeatFluxes(w0, peos->eos_data, uflx);
+    if (pcond->IsCGLLandauFluidHeatFlux()) {
+      pcond->AddCGLLandauFluidHeatFluxes(w0, bcc0, peos->eos_data, uflx);
+    } else {
+      pcond->AddHeatFluxes(w0, peos->eos_data, uflx);
+    }
   }
 }
 
@@ -232,7 +240,8 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
 
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::STSUpdateCGLHeatFlux()
-//! \brief Apply one CGL heat-flux RKL2 stage to parallel/perpendicular pressures.
+//! \brief Apply one CGL Landau-fluid heat-flux RKL2 stage in total-energy/magnetic-
+//! moment variables, then convert IAN back to conserved anisotropy A.
 
 TaskStatus MHD::STSUpdateCGLHeatFlux(Driver *pdrive, int stage) {
   if (!has_sts_conduction || !(pdrive->sts.enabled)) {
@@ -252,70 +261,185 @@ TaskStatus MHD::STSUpdateCGLHeatFlux(Driver *pdrive, int stage) {
   int nmb1 = pmy_pack->nmb_thispack - 1;
   Real dt_sweep = pdrive->sts.dt_sweep;
   Real pfloor = peos->eos_data.pfloor;
+  Real bfloor = peos->eos_data.bfloor;
   auto coeffs = pdrive->sts.coeffs;
-  auto w0_ = w0;
-  auto p_sts0_ = cgl_p_sts0;
-  auto p_sts1_ = cgl_p_sts1;
-  auto p_sts2_ = cgl_p_sts2;
-  auto p_sts_rhs_ = cgl_p_sts_rhs;
+  auto u0_ = u0;
+  auto bcc0_ = bcc0;
+  auto lf_sts0_ = cgl_p_sts0;
+  auto lf_sts1_ = cgl_p_sts1;
+  auto lf_sts2_ = cgl_p_sts2;
+  auto lf_sts_rhs_ = cgl_p_sts_rhs;
   auto flx1 = uflx.x1f;
   auto flx2 = uflx.x2f;
   auto flx3 = uflx.x3f;
   auto &mbsize = pmy_pack->pmb->mb_size;
 
+  par_for("mhd_cgl_lf_sts_state", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    const Real rho = u0_(m,IDN,k,j,i);
+    const Real mx = u0_(m,IM1,k,j,i);
+    const Real my = u0_(m,IM2,k,j,i);
+    const Real mz = u0_(m,IM3,k,j,i);
+    const Real total_energy = u0_(m,IEN,k,j,i);
+    const Real anisotropy = u0_(m,IAN,k,j,i);
+    const Real bx = bcc0_(m,IBX,k,j,i);
+    const Real by = bcc0_(m,IBY,k,j,i);
+    const Real bz = bcc0_(m,IBZ,k,j,i);
+    const Real magnetic_moment =
+        CGLConservedAnisotropyToMagneticMoment(rho, mx, my, mz, total_energy,
+                                               anisotropy, bx, by, bz, bfloor, pfloor);
+    lf_sts1_(m,0,k,j,i) = total_energy;
+    lf_sts1_(m,1,k,j,i) = magnetic_moment;
+    if (stage == 1) {
+      lf_sts0_(m,0,k,j,i) = total_energy;
+      lf_sts0_(m,1,k,j,i) = magnetic_moment;
+    }
+  });
+
   int scr_level = 0;
   size_t scr_size = ScrArray1D<Real>::shmem_size(ncells1);
 
-  par_for_outer("mhd_cgl_sts_update_p", DevExeSpace(), scr_size, scr_level, 0, nmb1,
+  par_for_outer("mhd_cgl_lf_sts_update", DevExeSpace(), scr_size, scr_level, 0, nmb1,
                 0, 1, ks, ke, js, je,
   KOKKOS_LAMBDA(TeamMember_t member, const int m, const int n, const int k, const int j) {
     ScrArray1D<Real> divf(member.team_scratch(scr_level), ncells1);
-    const int pressure_index = CGLPressureVariable(n);
+    const int cgl_lf_index = CGLLandauFluidVariable(n);
 
     par_for_inner(member, is, ie, [&](const int i) {
-      divf(i) = (flx1(m,pressure_index,k,j,i+1) -
-                 flx1(m,pressure_index,k,j,i))/mbsize.d_view(m).dx1;
+      divf(i) = (flx1(m,cgl_lf_index,k,j,i+1) -
+                 flx1(m,cgl_lf_index,k,j,i))/mbsize.d_view(m).dx1;
     });
     member.team_barrier();
 
     if (multi_d) {
       par_for_inner(member, is, ie, [&](const int i) {
-        divf(i) += (flx2(m,pressure_index,k,j+1,i) -
-                    flx2(m,pressure_index,k,j,i))/mbsize.d_view(m).dx2;
+        divf(i) += (flx2(m,cgl_lf_index,k,j+1,i) -
+                    flx2(m,cgl_lf_index,k,j,i))/mbsize.d_view(m).dx2;
       });
       member.team_barrier();
     }
 
     if (three_d) {
       par_for_inner(member, is, ie, [&](const int i) {
-        divf(i) += (flx3(m,pressure_index,k+1,j,i) -
-                    flx3(m,pressure_index,k,j,i))/mbsize.d_view(m).dx3;
+        divf(i) += (flx3(m,cgl_lf_index,k+1,j,i) -
+                    flx3(m,cgl_lf_index,k,j,i))/mbsize.d_view(m).dx3;
       });
       member.team_barrier();
     }
 
     par_for_inner(member, is, ie, [&](const int i) {
-      const Real pressure_current = w0_(m,pressure_index,k,j,i);
+      const Real delta_u = -dt_sweep*divf(i);
+      const Real next = coeffs.muj*lf_sts1_(m,n,k,j,i)
+                      + coeffs.nuj*lf_sts2_(m,n,k,j,i)
+                      + (1.0 - coeffs.muj - coeffs.nuj)*lf_sts0_(m,n,k,j,i)
+                      + coeffs.gammaj_tilde*lf_sts_rhs_(m,n,k,j,i)
+                      + coeffs.muj_tilde*delta_u;
+      u0_(m,cgl_lf_index,k,j,i) = next;
       if (stage == 1) {
-        p_sts0_(m,n,k,j,i) = pressure_current;
-      }
-      p_sts1_(m,n,k,j,i) = pressure_current;
-
-      const Real delta_p = -dt_sweep*divf(i);
-      Real pressure_next = coeffs.muj*pressure_current
-                         + coeffs.nuj*p_sts2_(m,n,k,j,i)
-                         + (1.0 - coeffs.muj - coeffs.nuj)*p_sts0_(m,n,k,j,i)
-                         + coeffs.gammaj_tilde*p_sts_rhs_(m,n,k,j,i)
-                         + coeffs.muj_tilde*delta_p;
-      pressure_next = fmax(pressure_next, pfloor);
-      w0_(m,pressure_index,k,j,i) = pressure_next;
-      if (stage == 1) {
-        p_sts_rhs_(m,n,k,j,i) = delta_p;
+        lf_sts_rhs_(m,n,k,j,i) = delta_u;
       }
     });
   });
 
-  peos->PrimToCons(w0, bcc0, u0, is, ie, js, je, ks, ke);
+  par_for("mhd_cgl_lf_sts_to_anisotropy", DevExeSpace(), 0, nmb1, ks, ke, js, je,
+          is, ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    Real total_energy = u0_(m,IEN,k,j,i);
+    Real anisotropy = 0.0;
+    CGLMagneticMomentToConservedAnisotropy(u0_(m,IDN,k,j,i),
+                                           u0_(m,IM1,k,j,i),
+                                           u0_(m,IM2,k,j,i),
+                                           u0_(m,IM3,k,j,i),
+                                           bcc0_(m,IBX,k,j,i),
+                                           bcc0_(m,IBY,k,j,i),
+                                           bcc0_(m,IBZ,k,j,i),
+                                           bfloor, pfloor,
+                                           u0_(m,IAN,k,j,i),
+                                           total_energy, anisotropy);
+    u0_(m,IEN,k,j,i) = total_energy;
+    u0_(m,IAN,k,j,i) = anisotropy;
+  });
+
+  peos->ConsToPrim(u0, b0, w0, bcc0, false, is, ie, js, je, ks, ke);
+  if (cgl_lf_admissibility_check) {
+    return CheckCGLLFAdmissibility(pdrive, stage);
+  }
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::CheckCGLLFAdmissibility()
+//! \brief Test-only CGL LF STS stage check for finite positive states and backup bounds.
+
+TaskStatus MHD::CheckCGLLFAdmissibility(Driver *pdrive, int stage) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, nx1 = indcs.nx1;
+  int js = indcs.js, nx2 = indcs.nx2;
+  int ks = indcs.ks, nx3 = indcs.nx3;
+  const int nmkji = (pmy_pack->nmb_thispack)*nx3*nx2*nx1;
+  const int nkji = nx3*nx2*nx1;
+  const int nji  = nx2*nx1;
+
+  auto u0_ = u0;
+  auto w0_ = w0;
+  auto bcc0_ = bcc0;
+  EOS_Data eos = peos->eos_data;
+  Real backup_tol = static_cast<Real>(1.0 + 1.0e-10);
+  int bad_count = 0;
+  Kokkos::parallel_reduce("mhd_cgl_lf_admissibility",
+  Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int &idx, int &sum) {
+    int m = (idx)/nkji;
+    int k = (idx - m*nkji)/nji;
+    int j = (idx - m*nkji - k*nji)/nx1;
+    int i = (idx - m*nkji - k*nji - j*nx1) + is;
+    k += ks;
+    j += js;
+
+    const Real rho = w0_(m,IDN,k,j,i);
+    const Real ppar = w0_(m,IPR,k,j,i);
+    const Real pperp = w0_(m,IPP,k,j,i);
+    const Real bx = bcc0_(m,IBX,k,j,i);
+    const Real by = bcc0_(m,IBY,k,j,i);
+    const Real bz = bcc0_(m,IBZ,k,j,i);
+    const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
+    bool bad = false;
+
+    bad = bad || !Kokkos::isfinite(u0_(m,IDN,k,j,i));
+    bad = bad || !Kokkos::isfinite(u0_(m,IM1,k,j,i));
+    bad = bad || !Kokkos::isfinite(u0_(m,IM2,k,j,i));
+    bad = bad || !Kokkos::isfinite(u0_(m,IM3,k,j,i));
+    bad = bad || !Kokkos::isfinite(u0_(m,IEN,k,j,i));
+    bad = bad || !Kokkos::isfinite(u0_(m,IAN,k,j,i));
+    bad = bad || !Kokkos::isfinite(rho) || !Kokkos::isfinite(ppar);
+    bad = bad || !Kokkos::isfinite(pperp) || !Kokkos::isfinite(bsqr);
+    bad = bad || rho <= eos.dfloor || ppar <= eos.pfloor || pperp <= eos.pfloor;
+
+    if (eos.backup_lim) {
+      const Real paniso = pperp - ppar;
+      if (eos.mlim) {
+        bad = bad || paniso > backup_tol*bsqr;
+      }
+      if (eos.flim) {
+        bad = bad || paniso < -backup_tol*bsqr;
+      }
+    }
+    if (bad) {
+      sum += 1;
+    }
+  }, bad_count);
+
+  if (bad_count > 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "CGL LF STS admissibility check failed in sweep "
+              << static_cast<int>(pdrive->sts.sweep)
+              << ", stage " << stage << ": " << bad_count
+              << " active cells are nonfinite, nonpositive, or beyond enabled backup "
+              << "mirror/firehose bounds." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
   return TaskStatus::complete;
 }
 
@@ -421,6 +545,20 @@ TaskStatus MHD::STSUpdateB(Driver *pdrive, int stage) {
     }
   });
 
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::STSPostSweepCGLCollisions()
+//! \brief Run physical CGL collisions/limiters once after the final post-STS sweep.
+
+TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
+  if (!(pdrive->sts.enabled) || !peos->eos_data.is_cgl || !(peos->eos_data.coll)) {
+    return TaskStatus::complete;
+  }
+  if (pdrive->sts.sweep == Driver::STSSweep::post && stage == pdrive->sts.nstages) {
+    return CGLCollisions(pdrive, stage);
+  }
   return TaskStatus::complete;
 }
 

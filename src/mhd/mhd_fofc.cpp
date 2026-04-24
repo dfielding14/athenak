@@ -207,7 +207,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx1(m,IM2,k,j,i) = flux.my;
         flx1(m,IM3,k,j,i) = flux.mz;
         if (eos.is_ideal) {flx1(m,IEN,k,j,i) = flux.e;}
-        if (eos.is_cgl) {flx1(m,IMU,k,j,i) = flux.mu;}
+        if (eos.is_cgl) {flx1(m,IAN,k,j,i) = flux.mu;}
         e3x1_(m,k,j,i) = flux.by;
         e2x1_(m,k,j,i) = flux.bz;
       }
@@ -275,7 +275,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx2(m,IM3,k,j,i) = flux.my;
         flx2(m,IM1,k,j,i) = flux.mz;
         if (eos.is_ideal) {flx2(m,IEN,k,j,i) = flux.e;}
-        if (eos.is_cgl) {flx2(m,IMU,k,j,i) = flux.mu;}
+        if (eos.is_cgl) {flx2(m,IAN,k,j,i) = flux.mu;}
         e1x2_(m,k,j,i) = flux.by;
         e3x2_(m,k,j,i) = flux.bz;
       }
@@ -343,7 +343,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx3(m,IM1,k,j,i) = flux.my;
         flx3(m,IM2,k,j,i) = flux.mz;
         if (eos.is_ideal) {flx3(m,IEN,k,j,i) = flux.e;}
-        if (eos.is_cgl) {flx3(m,IMU,k,j,i) = flux.mu;}
+        if (eos.is_cgl) {flx3(m,IAN,k,j,i) = flux.mu;}
         e2x3_(m,k,j,i) = flux.by;
         e1x3_(m,k,j,i) = flux.bz;
       }
@@ -429,7 +429,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx1(m,IM2,k,j,i+1) = flux.my;
         flx1(m,IM3,k,j,i+1) = flux.mz;
         if (eos.is_ideal) {flx1(m,IEN,k,j,i+1) = flux.e;}
-        if (eos.is_cgl) {flx1(m,IMU,k,j,i+1) = flux.mu;}
+        if (eos.is_cgl) {flx1(m,IAN,k,j,i+1) = flux.mu;}
         e3x1_(m,k,j,i+1) = flux.by;
         e2x1_(m,k,j,i+1) = flux.bz;
       }
@@ -497,7 +497,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx2(m,IM3,k,j+1,i) = flux.my;
         flx2(m,IM1,k,j+1,i) = flux.mz;
         if (eos.is_ideal) {flx2(m,IEN,k,j+1,i) = flux.e;}
-        if (eos.is_cgl) {flx2(m,IMU,k,j+1,i) = flux.mu;}
+        if (eos.is_cgl) {flx2(m,IAN,k,j+1,i) = flux.mu;}
         e1x2_(m,k,j+1,i) = flux.by;
         e3x2_(m,k,j+1,i) = flux.bz;
       }
@@ -565,7 +565,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx3(m,IM1,k+1,j,i) = flux.my;
         flx3(m,IM2,k+1,j,i) = flux.mz;
         if (eos.is_ideal) {flx3(m,IEN,k+1,j,i) = flux.e;}
-        if (eos.is_cgl) {flx3(m,IMU,k+1,j,i) = flux.mu;}
+        if (eos.is_cgl) {flx3(m,IAN,k+1,j,i) = flux.mu;}
         e2x3_(m,k+1,j,i) = flux.by;
         e1x3_(m,k+1,j,i) = flux.bz;
       }

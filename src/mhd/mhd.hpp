@@ -129,10 +129,10 @@ class MHD {
   DvceArray5D<Real> u_sts1;   // previous STS stage state
   DvceArray5D<Real> u_sts2;   // second previous STS stage state
   DvceArray5D<Real> u_sts_rhs;  // cached stage-1 RKL2 operator contribution
-  DvceArray5D<Real> cgl_p_sts0;   // CGL pressures at start of heat-flux STS sweep
-  DvceArray5D<Real> cgl_p_sts1;   // previous CGL heat-flux STS pressure state
-  DvceArray5D<Real> cgl_p_sts2;   // second previous CGL heat-flux STS pressure state
-  DvceArray5D<Real> cgl_p_sts_rhs;  // cached stage-1 CGL heat-flux contribution
+  DvceArray5D<Real> cgl_p_sts0;   // CGL LF STS total-energy/magnetic-moment sweep start
+  DvceArray5D<Real> cgl_p_sts1;   // previous CGL LF STS energy/magnetic-moment state
+  DvceArray5D<Real> cgl_p_sts2;   // second previous CGL LF STS energy/moment state
+  DvceArray5D<Real> cgl_p_sts_rhs;  // cached stage-1 CGL LF energy/moment contribution
   DvceFaceFld4D<Real> b1;     // face-centered magnetic fields, second register
   DvceFaceFld4D<Real> b_sts0;   // face-centered magnetic fields at start of STS sweep
   DvceFaceFld4D<Real> b_sts1;   // previous STS stage magnetic state
@@ -164,6 +164,7 @@ class MHD {
   bool has_any_sts_diffusion = false;
   bool has_any_sts_cell_update = false;
   bool has_any_sts_field_update = false;
+  bool cgl_lf_admissibility_check = false;
 
   // container to hold names of TaskIDs
   MHDTaskIDs id;
@@ -212,7 +213,9 @@ class MHD {
   TaskStatus STSEField(Driver *d, int stage);
   TaskStatus STSUpdateU(Driver *d, int stage);
   TaskStatus STSUpdateCGLHeatFlux(Driver *d, int stage);
+  TaskStatus CheckCGLLFAdmissibility(Driver *d, int stage);
   TaskStatus STSUpdateB(Driver *d, int stage);
+  TaskStatus STSPostSweepCGLCollisions(Driver *d, int stage);
   TaskStatus STSRefreshTimeStep(Driver *d, int stage);
   // ...in "after_stagen_tl" task list
   TaskStatus ClearSend(Driver *d, int stage);
