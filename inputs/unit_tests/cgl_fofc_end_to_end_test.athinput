@@ -1,0 +1,52 @@
+# AthenaK input for CGL FOFC end-to-end flux mutation test.
+
+<job>
+basename = cgl_fofc_end_to_end_test
+
+<mesh>
+nghost = 3
+nx1 = 4
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 4
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 4
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 4
+nx2 = 4
+nx3 = 4
+
+<time>
+evolution = dynamic
+integrator = rk1
+cfl_number = 0.4
+nlim = 1
+tlim = 1.0e-4
+ndiag = 1
+
+<mhd>
+eos = cgl
+passive = false
+fofc = true
+reconstruct = plm
+rsolver = hlle
+gamma = 1.666666666666667
+dfloor = 1.0e-12
+pfloor = 1.0e-12
+tfloor = 1.0e-12
+sfloor = 1.0e-12
+bfloor = 1.0e-10
+
+<problem>
+pgen_name = cgl_fofc_end_to_end_test
+user_srcs = true
