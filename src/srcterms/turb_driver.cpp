@@ -7,6 +7,7 @@
 //  \brief implementation of functions in TurbulenceDriver
 
 #include <algorithm>
+#include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -56,6 +57,12 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   nhigh = pin->GetOrAddInteger("turb_driving", "nhigh", 2);
   // driving type
   driving_type = pin->GetOrAddInteger("turb_driving", "driving_type", 0);
+  if (driving_type < 0 || driving_type > 2) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<turb_driving>/driving_type must be 0, 1, or 2" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   // power-law exponent for isotropic driving
   expo = pin->GetOrAddReal("turb_driving", "expo", 5.0/3.0);
   exp_prp = pin->GetOrAddReal("turb_driving", "exp_prp", 5.0/3.0);
@@ -79,6 +86,8 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
         nsqr = 0.0;
         bool flag_prl = true;
         if (driving_type == 0) {
+          nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
+        } else if (driving_type == 2) {
           nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
         } else if (driving_type == 1) {
           nsqr = SQR(nkx) + SQR(nky);
@@ -201,6 +210,8 @@ void TurbulenceDriver::Initialize() {
         nsqr = 0.0;
         bool flag_prl = true;
         if (driving_type == 0) {
+          nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
+        } else if (driving_type == 2) {
           nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
         } else if (driving_type == 1) {
           nsqr = SQR(nkx) + SQR(nky);
@@ -508,6 +519,45 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
               xcss_.h_view(nmode) = 0.0;
               xsss_.h_view(nmode) = 0.0;
             }
+          } else if (driving_type == 2) {
+            kiso = sqrt(SQR(kx) + SQR(ky) + SQR(kz));
+            if (kiso > 1e-16) {
+              norm = 1.0/pow(kiso,(ex+2.0)/2.0);
+            } else {
+              norm = 0.0;
+            }
+            auto rand_coeff = [&](bool sx, bool sy, bool sz) {
+              if ((sx && nkx == 0) || (sy && nky == 0) || (sz && nkz == 0)) {
+                return 0.0;
+              }
+              return RanGaussianSt(&(rstate));
+            };
+            xccc_.h_view(nmode) = rand_coeff(false, false, false);
+            xccs_.h_view(nmode) = rand_coeff(false, false, true);
+            xcsc_.h_view(nmode) = rand_coeff(false, true, false);
+            xcss_.h_view(nmode) = rand_coeff(false, true, true);
+            xscc_.h_view(nmode) = rand_coeff(true, false, false);
+            xscs_.h_view(nmode) = rand_coeff(true, false, true);
+            xssc_.h_view(nmode) = rand_coeff(true, true, false);
+            xsss_.h_view(nmode) = rand_coeff(true, true, true);
+
+            yccc_.h_view(nmode) = rand_coeff(false, false, false);
+            yccs_.h_view(nmode) = rand_coeff(false, false, true);
+            ycsc_.h_view(nmode) = rand_coeff(false, true, false);
+            ycss_.h_view(nmode) = rand_coeff(false, true, true);
+            yscc_.h_view(nmode) = rand_coeff(true, false, false);
+            yscs_.h_view(nmode) = rand_coeff(true, false, true);
+            yssc_.h_view(nmode) = rand_coeff(true, true, false);
+            ysss_.h_view(nmode) = rand_coeff(true, true, true);
+
+            zccc_.h_view(nmode) = rand_coeff(false, false, false);
+            zccs_.h_view(nmode) = rand_coeff(false, false, true);
+            zcsc_.h_view(nmode) = rand_coeff(false, true, false);
+            zcss_.h_view(nmode) = rand_coeff(false, true, true);
+            zscc_.h_view(nmode) = rand_coeff(true, false, false);
+            zscs_.h_view(nmode) = rand_coeff(true, false, true);
+            zssc_.h_view(nmode) = rand_coeff(true, true, false);
+            zsss_.h_view(nmode) = rand_coeff(true, true, true);
           } else if (driving_type == 1) {
             kprl = sqrt(SQR(kx));
             kprp = sqrt(SQR(ky) + SQR(kz));

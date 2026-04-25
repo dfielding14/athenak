@@ -1,0 +1,79 @@
+# Majeski-style oblique ion-acoustic-wave cold-electron analogue.
+
+<job>
+basename = cgl_lf_paper_oblique_iaw
+
+<mesh>
+nghost = 2
+nx1 = 64
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 4
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 128
+x3min = -1.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 32
+nx2 = 4
+nx3 = 64
+
+<time>
+evolution = dynamic
+integrator = rk2
+sts_integrator = rkl2
+sts_max_dt_ratio = 1000.0
+cfl_number = 0.25
+nlim = -1
+tlim = 0.5
+ndiag = 1
+
+<mhd>
+eos = cgl
+passive = false
+nu_coll = 0.0
+mirror_limiter = true
+firehose_limiter = true
+limiter_nu_coll = 1.0e10
+backup_limiters = true
+cgl_heat_flux = landau_fluid
+conductivity_integrator = sts
+lf_k_parallel = 6.283185307179586
+lf_coefficient_mode = local
+reconstruct = plm
+rsolver = hlle
+gamma = 1.666666666666667
+dfloor = 1.0e-10
+pfloor = 1.0e-10
+tfloor = 1.0e-10
+sfloor = 1.0e-12
+bfloor = 1.0e-10
+
+<problem>
+mode = oblique_iaw
+user_hist = true
+rho0 = 1.0
+B0 = 1.0
+beta0 = 16.0
+amp = 0.0625
+velocity_amp = 0.0625
+k_parallel_mode = 1.0
+k_perp_over_k_parallel = 4.0
+
+<output1>
+file_type = hst
+data_format = %18.10e
+dt = 0.01
+
+<output2>
+file_type = vtk
+variable = mhd_w_bcc
+dt = 0.1

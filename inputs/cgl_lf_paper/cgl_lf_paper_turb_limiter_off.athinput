@@ -1,0 +1,81 @@
+# CGL-LF turbulence control with mirror/firehose limiter scattering disabled.
+
+<job>
+basename = cgl_lf_paper_turb_limiter_off
+
+<mesh>
+nghost = 2
+nx1 = 48
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 48
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 96
+x3min = -1.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 24
+nx2 = 24
+nx3 = 48
+
+<time>
+evolution = dynamic
+integrator = rk2
+sts_integrator = rkl2
+sts_max_dt_ratio = 1000.0
+cfl_number = 0.3
+nlim = -1
+tlim = 1.0
+ndiag = 1
+
+<mhd>
+eos = cgl
+passive = false
+nu_coll = 0.0
+cgl_heat_flux = landau_fluid
+conductivity_integrator = sts
+lf_k_parallel = 6.283185307179586
+lf_coefficient_mode = local
+reconstruct = plm
+rsolver = hlle
+gamma = 1.666666666666667
+dfloor = 1.0e-10
+pfloor = 1.0e-10
+tfloor = 1.0e-10
+sfloor = 1.0e-12
+bfloor = 1.0e-10
+
+<problem>
+mode = turbulence
+forcing_mode = alfvenic
+user_hist = true
+rho0 = 1.0
+B0 = 1.0
+beta0 = 10.0
+
+<turb_driving>
+driving_type = 1
+tcorr = 1.0
+dedt = 0.02
+nlow = 1
+nhigh = 2
+exp_prp = 1.666666666666667
+exp_prl = 0.0
+
+<output1>
+file_type = hst
+data_format = %18.10e
+dt = 0.05
+
+<output2>
+file_type = vtk
+variable = mhd_w_bcc
+dt = 0.5
