@@ -10,11 +10,16 @@
 #include <cmath>
 #include <complex>
 #include <cstdlib>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
+#include <sys/stat.h>
 
 #include "athena.hpp"
 #include "coordinates/cell_locations.hpp"
+#include "globals.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "mhd/mhd.hpp"
@@ -58,6 +63,45 @@ void Require(bool condition, const std::string &msg) {
   if (!condition) {
     Fail(msg);
   }
+}
+
+void EnsureDirectory(const std::string &dir) {
+  std::string partial;
+  for (const char c : dir) {
+    partial.push_back(c);
+    if (c == '/' && partial.size() > 1) {
+      mkdir(partial.c_str(), 0775);
+    }
+  }
+  mkdir(dir.c_str(), 0775);
+}
+
+std::ofstream OpenValidationDataFile(ParameterInput *pin, const std::string &suffix) {
+  std::ofstream out;
+  const bool enabled = pin->GetOrAddBoolean("problem", "validation_output", false);
+  if (!enabled || global_variable::my_rank != 0) {
+    return out;
+  }
+  const std::string dir =
+      pin->GetOrAddString("problem", "validation_output_dir", "docs/figures/data");
+  EnsureDirectory(dir);
+  std::ostringstream fname;
+  fname << dir << "/" << pin->GetString("job", "basename") << "." << suffix << ".csv";
+  out.open(fname.str());
+  if (!out) {
+    Fail("could not open validation output file " + fname.str());
+  }
+  out << std::setprecision(17);
+  return out;
+}
+
+Real RelativeError(const Real got, const Real expected) {
+  const Real scale = std::max(std::abs(expected), static_cast<Real>(1.0e-30));
+  return std::abs(got - expected)/scale;
+}
+
+Real ComplexRelativeError(const Complex got, const Complex expected, const Real scale) {
+  return std::abs(got - expected)/std::max(scale, static_cast<Real>(1.0e-30));
 }
 
 void RequireRelative(const std::string &label, const Real got, const Real expected,
@@ -270,13 +314,36 @@ void CheckDecay(ParameterInput *pin, Mesh *pm, const TestMode mode) {
                                                        kSqrtTwoOverPi)*cpar0/lf_k;
   const Real initial_amp = (p0/rho0)*amp;
   const Real expected_amp = initial_amp*std::exp(-chi*SQR(k_wave)*pm->time);
+  const Real measured_amp = std::abs(projection.sin_amp);
+  const Real rel_err = RelativeError(measured_amp, expected_amp);
+  const Real cos_limit = phase_tol*std::abs(initial_amp);
 
   RequireRelative(std::string(ModeName(mode)) + " Fourier amplitude",
-                  std::abs(projection.sin_amp), expected_amp, rel_tol);
-  Require(std::abs(projection.cos_amp) <= phase_tol*std::abs(initial_amp),
+                  measured_amp, expected_amp, rel_tol);
+  Require(std::abs(projection.cos_amp) <= cos_limit,
           std::string(ModeName(mode)) + " developed an unexpected cosine component");
+
+  auto out = OpenValidationDataFile(pin, "decay");
+  if (out) {
+    out << "metric,value\n"
+        << "time," << pm->time << "\n"
+        << "initial_amp," << initial_amp << "\n"
+        << "measured_amp," << measured_amp << "\n"
+        << "measured_sin_amp," << projection.sin_amp << "\n"
+        << "measured_cos_amp," << projection.cos_amp << "\n"
+        << "expected_amp," << expected_amp << "\n"
+        << "chi," << chi << "\n"
+        << "k_wave," << k_wave << "\n"
+        << "rel_err," << rel_err << "\n"
+        << "rel_tol," << rel_tol << "\n"
+        << "cos_limit," << cos_limit << "\n";
+  }
+
   std::cout << "CGL LF " << ModeName(mode) << " passed: measured_amp="
-            << projection.sin_amp << " expected_amp=" << expected_amp << std::endl;
+            << measured_amp << " expected_amp=" << expected_amp
+            << " rel_err=" << rel_err << " rel_tol=" << rel_tol
+            << " cos_amp=" << projection.cos_amp << " cos_limit=" << cos_limit
+            << std::endl;
 }
 
 void CheckGradB(ParameterInput *pin, Mesh *pm) {
@@ -290,6 +357,10 @@ void CheckGradB(ParameterInput *pin, Mesh *pm) {
   const Real dx = (pm->mesh_size.x1max - pm->mesh_size.x1min)/static_cast<Real>(nx1);
   const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.2);
   const Real rel_tol = pin->GetOrAddReal("problem", "grad_b_rel_tol", 1.0e-1);
+  auto out = OpenValidationDataFile(pin, "grad_b");
+  if (out) {
+    out << "x,measured_delta,expected_delta,bmag_initial,bmag_final\n";
+  }
 
   Real err2 = 0.0;
   Real ref2 = 0.0;
@@ -307,13 +378,18 @@ void CheckGradB(ParameterInput *pin, Mesh *pm) {
     err2 += SQR(measured_delta - expected_delta);
     ref2 += SQR(expected_delta);
     dot += measured_delta*expected_delta;
+    if (out) {
+      out << XCenter(pm, q) << "," << measured_delta << "," << expected_delta << ","
+          << bmag_initial << "," << bmag_final << "\n";
+    }
   }
 
   Require(ref2 > 0.0, "grad_b reference response is zero");
   const Real rel_err = std::sqrt(err2/ref2);
   Require(rel_err <= rel_tol, "grad_b response magnitude is outside tolerance");
   Require(dot > 0.0, "grad_b response has the wrong sign");
-  std::cout << "CGL LF grad_b passed: rms_rel_err=" << rel_err << std::endl;
+  std::cout << "CGL LF grad_b passed: rms_rel_err=" << rel_err
+            << " rel_tol=" << rel_tol << std::endl;
 }
 
 Real InitialParallelPressure(ParameterInput *pin, Mesh *pm, const int q) {
@@ -354,6 +430,14 @@ void CheckFluxLimiter(ParameterInput *pin, Mesh *pm) {
   const Real rel_tol = pin->GetOrAddReal("problem", "flux_limiter_rel_tol", 2.0e-1);
   const Real min_unlimited_ratio =
       pin->GetOrAddReal("problem", "flux_limiter_min_unlimited_ratio", 10.0);
+  auto face_out = OpenValidationDataFile(pin, "flux_limiter_faces");
+  if (face_out) {
+    face_out << "x_face,q_unlimited,q_limited,q_max\n";
+  }
+  auto cell_out = OpenValidationDataFile(pin, "flux_limiter_cells");
+  if (cell_out) {
+    cell_out << "x,measured_ppar,expected_ppar,initial_ppar\n";
+  }
 
   Real err2 = 0.0;
   Real ref2 = 0.0;
@@ -363,6 +447,10 @@ void CheckFluxLimiter(ParameterInput *pin, Mesh *pm) {
     const Real q = LimitedParallelHeatFlux(pin, pm, face, q_l, q_max);
     max_ratio = std::max(max_ratio, std::abs(q_l)/std::max(q_max,
                          static_cast<Real>(1.0e-30)));
+    if (face_out) {
+      const Real x_face = pm->mesh_size.x1min + static_cast<Real>(face)*dx;
+      face_out << x_face << "," << q_l << "," << q << "," << q_max << "\n";
+    }
     Require(std::abs(q) <= q_max*(1.0 + 1.0e-12),
             "limited heat flux exceeds q_max");
     if (q_l != 0.0) {
@@ -381,6 +469,10 @@ void CheckFluxLimiter(ParameterInput *pin, Mesh *pm) {
     const Real measured_ppar = w(0,IPR,ks,js,i);
     err2 += SQR(measured_ppar - expected_ppar);
     ref2 += SQR(expected_ppar - InitialParallelPressure(pin, pm, q));
+    if (cell_out) {
+      cell_out << XCenter(pm, q) << "," << measured_ppar << "," << expected_ppar
+               << "," << InitialParallelPressure(pin, pm, q) << "\n";
+    }
   }
 
   Require(max_ratio >= min_unlimited_ratio,
@@ -393,7 +485,9 @@ void CheckFluxLimiter(ParameterInput *pin, Mesh *pm) {
     Fail("flux limiter update is outside tolerance");
   }
   std::cout << "CGL LF flux_limiter passed: rms_rel_err=" << rel_err
-            << " max_unlimited_over_qmax=" << max_ratio << std::endl;
+            << " rel_tol=" << rel_tol
+            << " max_unlimited_over_qmax=" << max_ratio
+            << " min_unlimited_over_qmax=" << min_unlimited_ratio << std::endl;
 }
 
 void CheckLimiterStress(ParameterInput *pin, Mesh *pm) {
@@ -508,15 +602,38 @@ void CheckFieldAlignedWave(ParameterInput *pin, Mesh *pm) {
   const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-5);
   const Real wave_tol = pin->GetOrAddReal("problem", "wave_rel_tol", 2.5e-1);
   const Real c_cgl = std::sqrt(3.0*ppar0/rho0);
+  const Complex rho_m = ProjectionToComplex(rho_p);
+  const Complex vx_m = ProjectionToComplex(vx_p);
+  const Complex ppar_m = ProjectionToComplex(ppar_p);
 
-  RequireComplexRelative("field_aligned_wave rho", ProjectionToComplex(rho_p), ref.rho,
-                         rho0*amp, wave_tol);
-  RequireComplexRelative("field_aligned_wave vx", ProjectionToComplex(vx_p), ref.vx,
-                         c_cgl*amp, wave_tol);
-  RequireComplexRelative("field_aligned_wave p_parallel", ProjectionToComplex(ppar_p),
-                         ref.ppar, 3.0*ppar0*amp, wave_tol);
+  RequireComplexRelative("field_aligned_wave rho", rho_m, ref.rho, rho0*amp, wave_tol);
+  RequireComplexRelative("field_aligned_wave vx", vx_m, ref.vx, c_cgl*amp, wave_tol);
+  RequireComplexRelative("field_aligned_wave p_parallel", ppar_m, ref.ppar,
+                         3.0*ppar0*amp, wave_tol);
+  auto out = OpenValidationDataFile(pin, "field_aligned_wave");
+  if (out) {
+    out << "variable,measured_real,measured_imag,reference_real,reference_imag,"
+        << "scale,rel_err,rel_tol\n";
+    out << "rho," << std::real(rho_m) << "," << std::imag(rho_m) << ","
+        << std::real(ref.rho) << "," << std::imag(ref.rho) << ","
+        << rho0*amp << "," << ComplexRelativeError(rho_m, ref.rho, rho0*amp)
+        << "," << wave_tol << "\n";
+    out << "vx," << std::real(vx_m) << "," << std::imag(vx_m) << ","
+        << std::real(ref.vx) << "," << std::imag(ref.vx) << ","
+        << c_cgl*amp << "," << ComplexRelativeError(vx_m, ref.vx, c_cgl*amp)
+        << "," << wave_tol << "\n";
+    out << "p_parallel," << std::real(ppar_m) << "," << std::imag(ppar_m) << ","
+        << std::real(ref.ppar) << "," << std::imag(ref.ppar) << ","
+        << 3.0*ppar0*amp << ","
+        << ComplexRelativeError(ppar_m, ref.ppar, 3.0*ppar0*amp)
+        << "," << wave_tol << "\n";
+  }
   std::cout << "CGL LF field_aligned_wave passed against linear Fourier reference"
-            << std::endl;
+            << ": rho_rel_err=" << ComplexRelativeError(rho_m, ref.rho, rho0*amp)
+            << " vx_rel_err=" << ComplexRelativeError(vx_m, ref.vx, c_cgl*amp)
+            << " p_parallel_rel_err="
+            << ComplexRelativeError(ppar_m, ref.ppar, 3.0*ppar0*amp)
+            << " rel_tol=" << wave_tol << std::endl;
 }
 
 struct PaperWaveState {
@@ -625,17 +742,46 @@ void CheckPaperObliqueWave(ParameterInput *pin, Mesh *pm) {
   const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-5);
   const Real p0 = pin->GetOrAddReal("problem", "ppar0", 5.0);
   const Real wave_tol = pin->GetOrAddReal("problem", "wave_rel_tol", 4.0e-1);
+  const Complex vy_m = ProjectionToComplex(ProjectPrimitive(w, pin, pm, IVY));
+  const Complex by_m = ProjectionToComplex(ProjectCellField(bcc, pin, pm, IBY));
+  const Complex ppar_m = ProjectionToComplex(ProjectPrimitive(w, pin, pm, IPR));
+  const Complex pperp_m = ProjectionToComplex(ProjectPrimitive(w, pin, pm, IPP));
 
-  RequireComplexRelative("paper_oblique_wave vy", ProjectionToComplex(
-                         ProjectPrimitive(w, pin, pm, IVY)), ref.vy, amp, wave_tol);
-  RequireComplexRelative("paper_oblique_wave By", ProjectionToComplex(
-                         ProjectCellField(bcc, pin, pm, IBY)), ref.by, amp, wave_tol);
-  RequireComplexRelative("paper_oblique_wave p_parallel", ProjectionToComplex(
-                         ProjectPrimitive(w, pin, pm, IPR)), ref.ppar, p0*amp, wave_tol);
-  RequireComplexRelative("paper_oblique_wave p_perp", ProjectionToComplex(
-                         ProjectPrimitive(w, pin, pm, IPP)), ref.pperp, p0*amp, wave_tol);
-  std::cout << "CGL LF paper_oblique_wave passed against linear oblique reference"
-            << std::endl;
+  RequireComplexRelative("paper_oblique_wave vy", vy_m, ref.vy, amp, wave_tol);
+  RequireComplexRelative("paper_oblique_wave By", by_m, ref.by, amp, wave_tol);
+  RequireComplexRelative("paper_oblique_wave p_parallel", ppar_m, ref.ppar,
+                         p0*amp, wave_tol);
+  RequireComplexRelative("paper_oblique_wave p_perp", pperp_m, ref.pperp,
+                         p0*amp, wave_tol);
+  auto out = OpenValidationDataFile(pin, "paper_oblique_wave");
+  if (out) {
+    out << "variable,measured_real,measured_imag,reference_real,reference_imag,"
+        << "scale,rel_err,rel_tol\n";
+    out << "vy," << std::real(vy_m) << "," << std::imag(vy_m) << ","
+        << std::real(ref.vy) << "," << std::imag(ref.vy) << ","
+        << amp << "," << ComplexRelativeError(vy_m, ref.vy, amp)
+        << "," << wave_tol << "\n";
+    out << "By," << std::real(by_m) << "," << std::imag(by_m) << ","
+        << std::real(ref.by) << "," << std::imag(ref.by) << ","
+        << amp << "," << ComplexRelativeError(by_m, ref.by, amp)
+        << "," << wave_tol << "\n";
+    out << "p_parallel," << std::real(ppar_m) << "," << std::imag(ppar_m) << ","
+        << std::real(ref.ppar) << "," << std::imag(ref.ppar) << ","
+        << p0*amp << "," << ComplexRelativeError(ppar_m, ref.ppar, p0*amp)
+        << "," << wave_tol << "\n";
+    out << "p_perp," << std::real(pperp_m) << "," << std::imag(pperp_m) << ","
+        << std::real(ref.pperp) << "," << std::imag(ref.pperp) << ","
+        << p0*amp << "," << ComplexRelativeError(pperp_m, ref.pperp, p0*amp)
+        << "," << wave_tol << "\n";
+  }
+  const char *closure = pin->DoesParameterExist("mhd", "cgl_heat_flux") ?
+                        "CGL LF" : "pure CGL";
+  std::cout << closure << " paper_oblique_wave passed against linear oblique reference"
+            << ": vy_rel_err=" << ComplexRelativeError(vy_m, ref.vy, amp)
+            << " By_rel_err=" << ComplexRelativeError(by_m, ref.by, amp)
+            << " p_parallel_rel_err=" << ComplexRelativeError(ppar_m, ref.ppar, p0*amp)
+            << " p_perp_rel_err=" << ComplexRelativeError(pperp_m, ref.pperp, p0*amp)
+            << " rel_tol=" << wave_tol << std::endl;
 }
 
 void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {

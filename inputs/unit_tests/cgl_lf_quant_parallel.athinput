@@ -67,3 +67,5 @@ b0 = 1.0
 amp = 1.0e-4
 decay_rel_tol = 5.0e-2
 phase_rel_tol = 2.0e-2
+validation_output = false
+validation_output_dir = docs/figures/data

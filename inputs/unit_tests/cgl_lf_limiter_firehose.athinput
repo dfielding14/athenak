@@ -69,3 +69,5 @@ pperp0 = 0.9
 b0 = 1.0
 amp = 0.1
 backup_bound_tol = 1.02
+validation_output = false
+validation_output_dir = docs/figures/data

@@ -66,3 +66,5 @@ b0 = 1.0
 amp = 0.5
 flux_limiter_rel_tol = 2.0e-1
 flux_limiter_min_unlimited_ratio = 10.0
+validation_output = false
+validation_output_dir = docs/figures/data

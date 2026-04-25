@@ -13,6 +13,15 @@ build*/
 .DS_Store
 .vscode
 
+# LaTeX intermediates
+docs/*.aux
+docs/*.log
+docs/*.out
+
+# Generated CGL-LF validation run artifacts
+docs/figures/data/
+docs/figures/logs/
+
 # editor temp files
 *~
 *.swp

@@ -60,3 +60,5 @@ bz0 = 0.5
 amp = 1.0e-5
 reference_steps = 20000
 wave_rel_tol = 4.0e-1
+validation_output = false
+validation_output_dir = docs/figures/data
