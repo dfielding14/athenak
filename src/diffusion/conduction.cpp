@@ -11,6 +11,7 @@
 #include <float.h>
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdlib>
 #include <limits>
 #include <string>
@@ -76,11 +77,10 @@ Real CGLLimitedHeatFlux(const Real q_unlimited, const Real q_max) {
 
 KOKKOS_INLINE_FUNCTION
 Real CGLLimiterCollisionRate(const Real ppar, const Real pperp,
-                             const Real bx, const Real by, const Real bz,
+                             const Real bsqr,
                              const Real lim_coll, const bool mlim,
                              const bool flim, const bool backup_lim) {
   const Real paniso = pperp - ppar;
-  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
   const Real limiter_nu = fmax(lim_coll, static_cast<Real>(0.0));
   const Real backup_nu = static_cast<Real>(1.0e10);
   Real nu_eff = 0.0;
@@ -132,67 +132,86 @@ Real CGLChiParallel(const Real cpar, const Real lf_k_parallel, const Real nu_eff
   return static_cast<Real>(8.0)*SQR(cpar)/denom;
 }
 
+struct CGLLandauFluidFaceState {
+  Real rho, ppar, pperp;
+  Real bmag, bhx, bhy, bhz, bh_dir;
+  Real cpar, chi_perp, chi_parallel;
+};
+
 KOKKOS_INLINE_FUNCTION
-void CGLLandauFluidFaceFlux(const Real rho_l, const Real rho_r,
-                            const Real ppar_l, const Real ppar_r,
-                            const Real pperp_l, const Real pperp_r,
-                            const Real bx, const Real by, const Real bz,
-                            const Real bh_dir,
+bool CGLBuildLandauFluidFaceState(const Real rho_l, const Real rho_r,
+                                  const Real ppar_l, const Real ppar_r,
+                                  const Real pperp_l, const Real pperp_r,
+                                  const Real bx, const Real by, const Real bz,
+                                  const int dir,
+                                  const Real lf_k_parallel,
+                                  const bool lf_coeff_local,
+                                  const Real lf_c_parallel0,
+                                  const Real nu_coll,
+                                  const Real lim_coll,
+                                  const bool mlim,
+                                  const bool flim,
+                                  const bool backup_lim,
+                                  const Real dfloor,
+                                  const Real pfloor,
+                                  const Real tfloor,
+                                  const Real bfloor,
+                                  CGLLandauFluidFaceState &face) {
+  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
+  const Real bmag = sqrt(bsqr);
+  if (bmag <= bfloor || lf_k_parallel <= 0.0) {
+    return false;
+  }
+
+  face.rho = fmax(0.5*(rho_l + rho_r), dfloor);
+  face.ppar = fmax(0.5*(ppar_l + ppar_r), pfloor);
+  face.pperp = fmax(0.5*(pperp_l + pperp_r), pfloor);
+  face.bmag = bmag;
+  face.bhx = bx/bmag;
+  face.bhy = by/bmag;
+  face.bhz = bz/bmag;
+  face.bh_dir = (dir == 0) ? face.bhx : ((dir == 1) ? face.bhy : face.bhz);
+  face.cpar = lf_coeff_local ? sqrt(fmax(face.ppar/face.rho, tfloor)) :
+                               lf_c_parallel0;
+  const Real nu_eff = fmax(nu_coll, static_cast<Real>(0.0)) +
+      CGLLimiterCollisionRate(face.ppar, face.pperp, bsqr, lim_coll, mlim, flim,
+                              backup_lim);
+  face.chi_perp = CGLChiPerp(face.cpar, lf_k_parallel, nu_eff);
+  face.chi_parallel = CGLChiParallel(face.cpar, lf_k_parallel, nu_eff);
+  return true;
+}
+
+KOKKOS_INLINE_FUNCTION
+void CGLLandauFluidFaceFlux(const CGLLandauFluidFaceState &face,
                             const Real grad_tpar_x, const Real grad_tpar_y,
                             const Real grad_tpar_z,
                             const Real grad_tperp_x, const Real grad_tperp_y,
                             const Real grad_tperp_z,
                             const Real grad_bmag_x, const Real grad_bmag_y,
                             const Real grad_bmag_z,
-                            const Real lf_k_parallel,
-                            const bool lf_coeff_local,
-                            const Real lf_c_parallel0,
-                            const Real nu_coll,
-                            const Real lim_coll,
-                            const bool mlim,
-                            const bool flim,
-                            const bool backup_lim,
-                            const Real dfloor,
-                            const Real pfloor,
-                            const Real tfloor,
-                            const Real bfloor,
                             Real &energy_flux,
                             Real &moment_flux) {
   energy_flux = 0.0;
   moment_flux = 0.0;
 
-  const Real bmag = CGLBMag(bx, by, bz);
-  if (bmag <= bfloor || lf_k_parallel <= 0.0) {
-    return;
-  }
-
-  const Real bhx = bx/bmag;
-  const Real bhy = by/bmag;
-  const Real bhz = bz/bmag;
-  const Real rho = fmax(0.5*(rho_l + rho_r), dfloor);
-  const Real ppar = fmax(0.5*(ppar_l + ppar_r), pfloor);
-  const Real pperp = fmax(0.5*(pperp_l + pperp_r), pfloor);
-  const Real cpar = lf_coeff_local ? sqrt(fmax(ppar/rho, tfloor)) : lf_c_parallel0;
-  const Real nu_eff = fmax(nu_coll, static_cast<Real>(0.0)) +
-      CGLLimiterCollisionRate(ppar, pperp, bx, by, bz, lim_coll, mlim, flim, backup_lim);
-  const Real chi_perp = CGLChiPerp(cpar, lf_k_parallel, nu_eff);
-  const Real chi_parallel = CGLChiParallel(cpar, lf_k_parallel, nu_eff);
-
-  const Real gradpar_tpar = bhx*grad_tpar_x + bhy*grad_tpar_y + bhz*grad_tpar_z;
-  const Real gradpar_tperp = bhx*grad_tperp_x + bhy*grad_tperp_y + bhz*grad_tperp_z;
-  const Real gradpar_bmag = bhx*grad_bmag_x + bhy*grad_bmag_y + bhz*grad_bmag_z;
-  const Real q_parallel_l = -chi_parallel*rho*gradpar_tpar;
-  const Real q_perp_l = -chi_perp*(rho*gradpar_tperp -
-                                   pperp*(1.0 - pperp/ppar)*gradpar_bmag/bmag);
-  const Real q_parallel_max = static_cast<Real>(1.5957691216057308)*cpar*ppar;
-  const Real q_perp_max = static_cast<Real>(0.7978845608028654)*cpar*pperp;
+  const Real gradpar_tpar = face.bhx*grad_tpar_x + face.bhy*grad_tpar_y +
+                            face.bhz*grad_tpar_z;
+  const Real gradpar_tperp = face.bhx*grad_tperp_x + face.bhy*grad_tperp_y +
+                             face.bhz*grad_tperp_z;
+  const Real gradpar_bmag = face.bhx*grad_bmag_x + face.bhy*grad_bmag_y +
+                            face.bhz*grad_bmag_z;
+  const Real q_parallel_l = -face.chi_parallel*face.rho*gradpar_tpar;
+  const Real q_perp_l = -face.chi_perp*(face.rho*gradpar_tperp -
+      face.pperp*(1.0 - face.pperp/face.ppar)*gradpar_bmag/face.bmag);
+  const Real q_parallel_max = static_cast<Real>(1.5957691216057308)*face.cpar*face.ppar;
+  const Real q_perp_max = static_cast<Real>(0.7978845608028654)*face.cpar*face.pperp;
 
   // Squire et al. (2023), eqs. 3.1-3.2.
   const Real q_parallel = CGLLimitedHeatFlux(q_parallel_l, q_parallel_max);
   const Real q_perp = CGLLimitedHeatFlux(q_perp_l, q_perp_max);
 
-  energy_flux = bh_dir*(q_perp + 0.5*q_parallel);
-  moment_flux = bh_dir*q_perp/bmag;
+  energy_flux = face.bh_dir*(q_perp + 0.5*q_parallel);
+  moment_flux = face.bh_dir*q_perp/face.bmag;
 }
 
 //----------------------------------------------------------------------------------------
@@ -217,7 +236,10 @@ Real TempDepKappa(Real temp, Real limit) {
 // not diffusivity. This is different from the coefficient used in Athena++.
 
 Conduction::Conduction(std::string block, MeshBlockPack *pp, ParameterInput *pin) :
-    pmy_pack(pp) {
+    pmy_pack(pp),
+    cgl_lf_tpar("cgl_lf_tpar", 1, 1, 1, 1),
+    cgl_lf_tperp("cgl_lf_tperp", 1, 1, 1, 1),
+    cgl_lf_bmag("cgl_lf_bmag", 1, 1, 1, 1) {
   const bool has_iso_conduction = pin->DoesParameterExist(block,"isotropic_conduction");
   const bool has_cgl_heat_flux = pin->DoesParameterExist(block,"cgl_heat_flux");
 
@@ -357,18 +379,40 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
     return;
   }
 
+  const int ncells1 = indcs.nx1 + 2*indcs.ng;
+  const int ncells2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*indcs.ng) : 1;
+  const int ncells3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*indcs.ng) : 1;
+  if (cgl_lf_tpar.extent(0) != static_cast<std::size_t>(pmy_pack->nmb_thispack) ||
+      cgl_lf_tpar.extent(1) != static_cast<std::size_t>(ncells3) ||
+      cgl_lf_tpar.extent(2) != static_cast<std::size_t>(ncells2) ||
+      cgl_lf_tpar.extent(3) != static_cast<std::size_t>(ncells1)) {
+    Kokkos::realloc(cgl_lf_tpar, pmy_pack->nmb_thispack, ncells3, ncells2, ncells1);
+    Kokkos::realloc(cgl_lf_tperp, pmy_pack->nmb_thispack, ncells3, ncells2, ncells1);
+    Kokkos::realloc(cgl_lf_bmag, pmy_pack->nmb_thispack, ncells3, ncells2, ncells1);
+  }
+
+  auto tpar = cgl_lf_tpar;
+  auto tperp = cgl_lf_tperp;
+  auto bmag_cc = cgl_lf_bmag;
+  par_for("cgl_lf_precompute", DevExeSpace(), 0, nmb1, 0, ncells3 - 1,
+  0, ncells2 - 1, 0, ncells1 - 1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    tpar(m,k,j,i) = w0(m,IPR,k,j,i)/w0(m,IDN,k,j,i);
+    tperp(m,k,j,i) = w0(m,IPP,k,j,i)/w0(m,IDN,k,j,i);
+    bmag_cc(m,k,j,i) = CGLBMag(bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i),
+                               bcc(m,IBZ,k,j,i));
+  });
+
   // fluxes in x1-direction
   auto &flx1 = flx.x1f;
   par_for("cgl_lf_hflux1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    const Real tpl_l = w0(m,IPR,k,j,i-1)/w0(m,IDN,k,j,i-1);
-    const Real tpl_r = w0(m,IPR,k,j,i  )/w0(m,IDN,k,j,i  );
-    const Real tpp_l = w0(m,IPP,k,j,i-1)/w0(m,IDN,k,j,i-1);
-    const Real tpp_r = w0(m,IPP,k,j,i  )/w0(m,IDN,k,j,i  );
-    const Real bmag_l = CGLBMag(bcc(m,IBX,k,j,i-1), bcc(m,IBY,k,j,i-1),
-                                bcc(m,IBZ,k,j,i-1));
-    const Real bmag_r = CGLBMag(bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i),
-                                bcc(m,IBZ,k,j,i));
+    const Real tpl_l = tpar(m,k,j,i-1);
+    const Real tpl_r = tpar(m,k,j,i);
+    const Real tpp_l = tperp(m,k,j,i-1);
+    const Real tpp_r = tperp(m,k,j,i);
+    const Real bmag_l = bmag_cc(m,k,j,i-1);
+    const Real bmag_r = bmag_cc(m,k,j,i);
     Real grad_pl_x = (tpl_r - tpl_l)/size.d_view(m).dx1;
     Real grad_pp_x = (tpp_r - tpp_l)/size.d_view(m).dx1;
     Real grad_b_x = (bmag_r - bmag_l)/size.d_view(m).dx1;
@@ -377,24 +421,18 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
     Real grad_b_y = 0.0, grad_b_z = 0.0;
 
     if (multi_d) {
-      const Real tpl_ju_i   = w0(m,IPR,k,j+1,i  )/w0(m,IDN,k,j+1,i  );
-      const Real tpl_jl_i   = w0(m,IPR,k,j-1,i  )/w0(m,IDN,k,j-1,i  );
-      const Real tpl_ju_im1 = w0(m,IPR,k,j+1,i-1)/w0(m,IDN,k,j+1,i-1);
-      const Real tpl_jl_im1 = w0(m,IPR,k,j-1,i-1)/w0(m,IDN,k,j-1,i-1);
-      const Real tpp_ju_i   = w0(m,IPP,k,j+1,i  )/w0(m,IDN,k,j+1,i  );
-      const Real tpp_jl_i   = w0(m,IPP,k,j-1,i  )/w0(m,IDN,k,j-1,i  );
-      const Real tpp_ju_im1 = w0(m,IPP,k,j+1,i-1)/w0(m,IDN,k,j+1,i-1);
-      const Real tpp_jl_im1 = w0(m,IPP,k,j-1,i-1)/w0(m,IDN,k,j-1,i-1);
-      const Real b_ju_i = CGLBMag(bcc(m,IBX,k,j+1,i), bcc(m,IBY,k,j+1,i),
-                                  bcc(m,IBZ,k,j+1,i));
-      const Real b_jl_i = CGLBMag(bcc(m,IBX,k,j-1,i), bcc(m,IBY,k,j-1,i),
-                                  bcc(m,IBZ,k,j-1,i));
-      const Real b_ju_im1 = CGLBMag(bcc(m,IBX,k,j+1,i-1),
-                                    bcc(m,IBY,k,j+1,i-1),
-                                    bcc(m,IBZ,k,j+1,i-1));
-      const Real b_jl_im1 = CGLBMag(bcc(m,IBX,k,j-1,i-1),
-                                    bcc(m,IBY,k,j-1,i-1),
-                                    bcc(m,IBZ,k,j-1,i-1));
+      const Real tpl_ju_i   = tpar(m,k,j+1,i);
+      const Real tpl_jl_i   = tpar(m,k,j-1,i);
+      const Real tpl_ju_im1 = tpar(m,k,j+1,i-1);
+      const Real tpl_jl_im1 = tpar(m,k,j-1,i-1);
+      const Real tpp_ju_i   = tperp(m,k,j+1,i);
+      const Real tpp_jl_i   = tperp(m,k,j-1,i);
+      const Real tpp_ju_im1 = tperp(m,k,j+1,i-1);
+      const Real tpp_jl_im1 = tperp(m,k,j-1,i-1);
+      const Real b_ju_i = bmag_cc(m,k,j+1,i);
+      const Real b_jl_i = bmag_cc(m,k,j-1,i);
+      const Real b_ju_im1 = bmag_cc(m,k,j+1,i-1);
+      const Real b_jl_im1 = bmag_cc(m,k,j-1,i-1);
       grad_pl_y = 0.25*((tpl_ju_i - tpl_jl_i) + (tpl_ju_im1 - tpl_jl_im1))/
                   size.d_view(m).dx2;
       grad_pp_y = 0.25*((tpp_ju_i - tpp_jl_i) + (tpp_ju_im1 - tpp_jl_im1))/
@@ -404,24 +442,18 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
     }
 
     if (three_d) {
-      const Real tpl_ku_i   = w0(m,IPR,k+1,j,i  )/w0(m,IDN,k+1,j,i  );
-      const Real tpl_kl_i   = w0(m,IPR,k-1,j,i  )/w0(m,IDN,k-1,j,i  );
-      const Real tpl_ku_im1 = w0(m,IPR,k+1,j,i-1)/w0(m,IDN,k+1,j,i-1);
-      const Real tpl_kl_im1 = w0(m,IPR,k-1,j,i-1)/w0(m,IDN,k-1,j,i-1);
-      const Real tpp_ku_i   = w0(m,IPP,k+1,j,i  )/w0(m,IDN,k+1,j,i  );
-      const Real tpp_kl_i   = w0(m,IPP,k-1,j,i  )/w0(m,IDN,k-1,j,i  );
-      const Real tpp_ku_im1 = w0(m,IPP,k+1,j,i-1)/w0(m,IDN,k+1,j,i-1);
-      const Real tpp_kl_im1 = w0(m,IPP,k-1,j,i-1)/w0(m,IDN,k-1,j,i-1);
-      const Real b_ku_i = CGLBMag(bcc(m,IBX,k+1,j,i), bcc(m,IBY,k+1,j,i),
-                                  bcc(m,IBZ,k+1,j,i));
-      const Real b_kl_i = CGLBMag(bcc(m,IBX,k-1,j,i), bcc(m,IBY,k-1,j,i),
-                                  bcc(m,IBZ,k-1,j,i));
-      const Real b_ku_im1 = CGLBMag(bcc(m,IBX,k+1,j,i-1),
-                                    bcc(m,IBY,k+1,j,i-1),
-                                    bcc(m,IBZ,k+1,j,i-1));
-      const Real b_kl_im1 = CGLBMag(bcc(m,IBX,k-1,j,i-1),
-                                    bcc(m,IBY,k-1,j,i-1),
-                                    bcc(m,IBZ,k-1,j,i-1));
+      const Real tpl_ku_i   = tpar(m,k+1,j,i);
+      const Real tpl_kl_i   = tpar(m,k-1,j,i);
+      const Real tpl_ku_im1 = tpar(m,k+1,j,i-1);
+      const Real tpl_kl_im1 = tpar(m,k-1,j,i-1);
+      const Real tpp_ku_i   = tperp(m,k+1,j,i);
+      const Real tpp_kl_i   = tperp(m,k-1,j,i);
+      const Real tpp_ku_im1 = tperp(m,k+1,j,i-1);
+      const Real tpp_kl_im1 = tperp(m,k-1,j,i-1);
+      const Real b_ku_i = bmag_cc(m,k+1,j,i);
+      const Real b_kl_i = bmag_cc(m,k-1,j,i);
+      const Real b_ku_im1 = bmag_cc(m,k+1,j,i-1);
+      const Real b_kl_im1 = bmag_cc(m,k-1,j,i-1);
       grad_pl_z = 0.25*((tpl_ku_i - tpl_kl_i) + (tpl_ku_im1 - tpl_kl_im1))/
                   size.d_view(m).dx3;
       grad_pp_z = 0.25*((tpp_ku_i - tpp_kl_i) + (tpp_ku_im1 - tpp_kl_im1))/
@@ -433,20 +465,20 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
     const Real bx = 0.5*(bcc(m,IBX,k,j,i-1) + bcc(m,IBX,k,j,i));
     const Real by = 0.5*(bcc(m,IBY,k,j,i-1) + bcc(m,IBY,k,j,i));
     const Real bz = 0.5*(bcc(m,IBZ,k,j,i-1) + bcc(m,IBZ,k,j,i));
-    const Real bmag = CGLBMag(bx, by, bz);
-    const Real bhx = (bmag > bfloor_) ? bx/bmag : 0.0;
     Real energy_flux = 0.0, moment_flux = 0.0;
-    CGLLandauFluidFaceFlux(w0(m,IDN,k,j,i-1), w0(m,IDN,k,j,i),
-                           w0(m,IPR,k,j,i-1), w0(m,IPR,k,j,i),
-                           w0(m,IPP,k,j,i-1), w0(m,IPP,k,j,i),
-                           bx, by, bz, bhx,
-                           grad_pl_x, grad_pl_y, grad_pl_z,
-                           grad_pp_x, grad_pp_y, grad_pp_z,
-                           grad_b_x, grad_b_y, grad_b_z,
-                           lf_k_parallel_, lf_coeff_local_, lf_c_parallel0_,
-                           nu_coll_, lim_coll_, mlim_, flim_, backup_lim_,
-                           dfloor_, pfloor_, tfloor_, bfloor_,
-                           energy_flux, moment_flux);
+    CGLLandauFluidFaceState face;
+    if (CGLBuildLandauFluidFaceState(w0(m,IDN,k,j,i-1), w0(m,IDN,k,j,i),
+                                     w0(m,IPR,k,j,i-1), w0(m,IPR,k,j,i),
+                                     w0(m,IPP,k,j,i-1), w0(m,IPP,k,j,i),
+                                     bx, by, bz, 0, lf_k_parallel_,
+                                     lf_coeff_local_, lf_c_parallel0_, nu_coll_,
+                                     lim_coll_, mlim_, flim_, backup_lim_, dfloor_,
+                                     pfloor_, tfloor_, bfloor_, face)) {
+      CGLLandauFluidFaceFlux(face, grad_pl_x, grad_pl_y, grad_pl_z,
+                             grad_pp_x, grad_pp_y, grad_pp_z,
+                             grad_b_x, grad_b_y, grad_b_z,
+                             energy_flux, moment_flux);
+    }
     flx1(m,IEN,k,j,i) += energy_flux;
     flx1(m,IAN,k,j,i) += moment_flux;
   });
@@ -456,14 +488,12 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
   auto &flx2 = flx.x2f;
   par_for("cgl_lf_hflux2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    const Real tpl_l = w0(m,IPR,k,j-1,i)/w0(m,IDN,k,j-1,i);
-    const Real tpl_r = w0(m,IPR,k,j  ,i)/w0(m,IDN,k,j  ,i);
-    const Real tpp_l = w0(m,IPP,k,j-1,i)/w0(m,IDN,k,j-1,i);
-    const Real tpp_r = w0(m,IPP,k,j  ,i)/w0(m,IDN,k,j  ,i);
-    const Real bmag_l = CGLBMag(bcc(m,IBX,k,j-1,i), bcc(m,IBY,k,j-1,i),
-                                bcc(m,IBZ,k,j-1,i));
-    const Real bmag_r = CGLBMag(bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i),
-                                bcc(m,IBZ,k,j,i));
+    const Real tpl_l = tpar(m,k,j-1,i);
+    const Real tpl_r = tpar(m,k,j,i);
+    const Real tpp_l = tperp(m,k,j-1,i);
+    const Real tpp_r = tperp(m,k,j,i);
+    const Real bmag_l = bmag_cc(m,k,j-1,i);
+    const Real bmag_r = bmag_cc(m,k,j,i);
     Real grad_pl_x = 0.0, grad_pp_x = 0.0;
     Real grad_pl_y = (tpl_r - tpl_l)/size.d_view(m).dx2;
     Real grad_pp_y = (tpp_r - tpp_l)/size.d_view(m).dx2;
@@ -471,24 +501,18 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
     Real grad_pl_z = 0.0, grad_pp_z = 0.0;
     Real grad_b_x = 0.0, grad_b_z = 0.0;
 
-    const Real tpl_j_iup = w0(m,IPR,k,j  ,i+1)/w0(m,IDN,k,j  ,i+1);
-    const Real tpl_j_i   = w0(m,IPR,k,j  ,i-1)/w0(m,IDN,k,j  ,i-1);
-    const Real tpl_jm_iup = w0(m,IPR,k,j-1,i+1)/w0(m,IDN,k,j-1,i+1);
-    const Real tpl_jm_i   = w0(m,IPR,k,j-1,i-1)/w0(m,IDN,k,j-1,i-1);
-    const Real tpp_j_iup = w0(m,IPP,k,j  ,i+1)/w0(m,IDN,k,j  ,i+1);
-    const Real tpp_j_i   = w0(m,IPP,k,j  ,i-1)/w0(m,IDN,k,j  ,i-1);
-    const Real tpp_jm_iup = w0(m,IPP,k,j-1,i+1)/w0(m,IDN,k,j-1,i+1);
-    const Real tpp_jm_i   = w0(m,IPP,k,j-1,i-1)/w0(m,IDN,k,j-1,i-1);
-    const Real b_j_iup = CGLBMag(bcc(m,IBX,k,j,i+1), bcc(m,IBY,k,j,i+1),
-                                 bcc(m,IBZ,k,j,i+1));
-    const Real b_j_i = CGLBMag(bcc(m,IBX,k,j,i-1), bcc(m,IBY,k,j,i-1),
-                               bcc(m,IBZ,k,j,i-1));
-    const Real b_jm_iup = CGLBMag(bcc(m,IBX,k,j-1,i+1),
-                                  bcc(m,IBY,k,j-1,i+1),
-                                  bcc(m,IBZ,k,j-1,i+1));
-    const Real b_jm_i = CGLBMag(bcc(m,IBX,k,j-1,i-1),
-                                bcc(m,IBY,k,j-1,i-1),
-                                bcc(m,IBZ,k,j-1,i-1));
+    const Real tpl_j_iup = tpar(m,k,j,i+1);
+    const Real tpl_j_i = tpar(m,k,j,i-1);
+    const Real tpl_jm_iup = tpar(m,k,j-1,i+1);
+    const Real tpl_jm_i = tpar(m,k,j-1,i-1);
+    const Real tpp_j_iup = tperp(m,k,j,i+1);
+    const Real tpp_j_i = tperp(m,k,j,i-1);
+    const Real tpp_jm_iup = tperp(m,k,j-1,i+1);
+    const Real tpp_jm_i = tperp(m,k,j-1,i-1);
+    const Real b_j_iup = bmag_cc(m,k,j,i+1);
+    const Real b_j_i = bmag_cc(m,k,j,i-1);
+    const Real b_jm_iup = bmag_cc(m,k,j-1,i+1);
+    const Real b_jm_i = bmag_cc(m,k,j-1,i-1);
     grad_pl_x = 0.25*((tpl_j_iup - tpl_j_i) + (tpl_jm_iup - tpl_jm_i))/
                 size.d_view(m).dx1;
     grad_pp_x = 0.25*((tpp_j_iup - tpp_j_i) + (tpp_jm_iup - tpp_jm_i))/
@@ -497,24 +521,18 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
                size.d_view(m).dx1;
 
     if (three_d) {
-      const Real tpl_ku_j   = w0(m,IPR,k+1,j  ,i)/w0(m,IDN,k+1,j  ,i);
-      const Real tpl_kl_j   = w0(m,IPR,k-1,j  ,i)/w0(m,IDN,k-1,j  ,i);
-      const Real tpl_ku_jm1 = w0(m,IPR,k+1,j-1,i)/w0(m,IDN,k+1,j-1,i);
-      const Real tpl_kl_jm1 = w0(m,IPR,k-1,j-1,i)/w0(m,IDN,k-1,j-1,i);
-      const Real tpp_ku_j   = w0(m,IPP,k+1,j  ,i)/w0(m,IDN,k+1,j  ,i);
-      const Real tpp_kl_j   = w0(m,IPP,k-1,j  ,i)/w0(m,IDN,k-1,j  ,i);
-      const Real tpp_ku_jm1 = w0(m,IPP,k+1,j-1,i)/w0(m,IDN,k+1,j-1,i);
-      const Real tpp_kl_jm1 = w0(m,IPP,k-1,j-1,i)/w0(m,IDN,k-1,j-1,i);
-      const Real b_ku_j = CGLBMag(bcc(m,IBX,k+1,j,i), bcc(m,IBY,k+1,j,i),
-                                  bcc(m,IBZ,k+1,j,i));
-      const Real b_kl_j = CGLBMag(bcc(m,IBX,k-1,j,i), bcc(m,IBY,k-1,j,i),
-                                  bcc(m,IBZ,k-1,j,i));
-      const Real b_ku_jm1 = CGLBMag(bcc(m,IBX,k+1,j-1,i),
-                                    bcc(m,IBY,k+1,j-1,i),
-                                    bcc(m,IBZ,k+1,j-1,i));
-      const Real b_kl_jm1 = CGLBMag(bcc(m,IBX,k-1,j-1,i),
-                                    bcc(m,IBY,k-1,j-1,i),
-                                    bcc(m,IBZ,k-1,j-1,i));
+      const Real tpl_ku_j   = tpar(m,k+1,j,i);
+      const Real tpl_kl_j   = tpar(m,k-1,j,i);
+      const Real tpl_ku_jm1 = tpar(m,k+1,j-1,i);
+      const Real tpl_kl_jm1 = tpar(m,k-1,j-1,i);
+      const Real tpp_ku_j   = tperp(m,k+1,j,i);
+      const Real tpp_kl_j   = tperp(m,k-1,j,i);
+      const Real tpp_ku_jm1 = tperp(m,k+1,j-1,i);
+      const Real tpp_kl_jm1 = tperp(m,k-1,j-1,i);
+      const Real b_ku_j = bmag_cc(m,k+1,j,i);
+      const Real b_kl_j = bmag_cc(m,k-1,j,i);
+      const Real b_ku_jm1 = bmag_cc(m,k+1,j-1,i);
+      const Real b_kl_jm1 = bmag_cc(m,k-1,j-1,i);
       grad_pl_z = 0.25*((tpl_ku_j - tpl_kl_j) + (tpl_ku_jm1 - tpl_kl_jm1))/
                   size.d_view(m).dx3;
       grad_pp_z = 0.25*((tpp_ku_j - tpp_kl_j) + (tpp_ku_jm1 - tpp_kl_jm1))/
@@ -526,20 +544,20 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
     const Real bx = 0.5*(bcc(m,IBX,k,j-1,i) + bcc(m,IBX,k,j,i));
     const Real by = 0.5*(bcc(m,IBY,k,j-1,i) + bcc(m,IBY,k,j,i));
     const Real bz = 0.5*(bcc(m,IBZ,k,j-1,i) + bcc(m,IBZ,k,j,i));
-    const Real bmag = CGLBMag(bx, by, bz);
-    const Real bhy = (bmag > bfloor_) ? by/bmag : 0.0;
     Real energy_flux = 0.0, moment_flux = 0.0;
-    CGLLandauFluidFaceFlux(w0(m,IDN,k,j-1,i), w0(m,IDN,k,j,i),
-                           w0(m,IPR,k,j-1,i), w0(m,IPR,k,j,i),
-                           w0(m,IPP,k,j-1,i), w0(m,IPP,k,j,i),
-                           bx, by, bz, bhy,
-                           grad_pl_x, grad_pl_y, grad_pl_z,
-                           grad_pp_x, grad_pp_y, grad_pp_z,
-                           grad_b_x, grad_b_y, grad_b_z,
-                           lf_k_parallel_, lf_coeff_local_, lf_c_parallel0_,
-                           nu_coll_, lim_coll_, mlim_, flim_, backup_lim_,
-                           dfloor_, pfloor_, tfloor_, bfloor_,
-                           energy_flux, moment_flux);
+    CGLLandauFluidFaceState face;
+    if (CGLBuildLandauFluidFaceState(w0(m,IDN,k,j-1,i), w0(m,IDN,k,j,i),
+                                     w0(m,IPR,k,j-1,i), w0(m,IPR,k,j,i),
+                                     w0(m,IPP,k,j-1,i), w0(m,IPP,k,j,i),
+                                     bx, by, bz, 1, lf_k_parallel_,
+                                     lf_coeff_local_, lf_c_parallel0_, nu_coll_,
+                                     lim_coll_, mlim_, flim_, backup_lim_, dfloor_,
+                                     pfloor_, tfloor_, bfloor_, face)) {
+      CGLLandauFluidFaceFlux(face, grad_pl_x, grad_pl_y, grad_pl_z,
+                             grad_pp_x, grad_pp_y, grad_pp_z,
+                             grad_b_x, grad_b_y, grad_b_z,
+                             energy_flux, moment_flux);
+    }
     flx2(m,IEN,k,j,i) += energy_flux;
     flx2(m,IAN,k,j,i) += moment_flux;
   });
@@ -549,14 +567,12 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
   auto &flx3 = flx.x3f;
   par_for("cgl_lf_hflux3", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    const Real tpl_l = w0(m,IPR,k-1,j,i)/w0(m,IDN,k-1,j,i);
-    const Real tpl_r = w0(m,IPR,k  ,j,i)/w0(m,IDN,k  ,j,i);
-    const Real tpp_l = w0(m,IPP,k-1,j,i)/w0(m,IDN,k-1,j,i);
-    const Real tpp_r = w0(m,IPP,k  ,j,i)/w0(m,IDN,k  ,j,i);
-    const Real bmag_l = CGLBMag(bcc(m,IBX,k-1,j,i), bcc(m,IBY,k-1,j,i),
-                                bcc(m,IBZ,k-1,j,i));
-    const Real bmag_r = CGLBMag(bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i),
-                                bcc(m,IBZ,k,j,i));
+    const Real tpl_l = tpar(m,k-1,j,i);
+    const Real tpl_r = tpar(m,k,j,i);
+    const Real tpp_l = tperp(m,k-1,j,i);
+    const Real tpp_r = tperp(m,k,j,i);
+    const Real bmag_l = bmag_cc(m,k-1,j,i);
+    const Real bmag_r = bmag_cc(m,k,j,i);
     Real grad_pl_x = 0.0, grad_pp_x = 0.0;
     Real grad_pl_y = 0.0, grad_pp_y = 0.0;
     Real grad_pl_z = (tpl_r - tpl_l)/size.d_view(m).dx3;
@@ -564,24 +580,18 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
     Real grad_b_z = (bmag_r - bmag_l)/size.d_view(m).dx3;
     Real grad_b_x = 0.0, grad_b_y = 0.0;
 
-    const Real tpl_k_iup = w0(m,IPR,k  ,j,i+1)/w0(m,IDN,k  ,j,i+1);
-    const Real tpl_k_i   = w0(m,IPR,k  ,j,i-1)/w0(m,IDN,k  ,j,i-1);
-    const Real tpl_km_iup = w0(m,IPR,k-1,j,i+1)/w0(m,IDN,k-1,j,i+1);
-    const Real tpl_km_i   = w0(m,IPR,k-1,j,i-1)/w0(m,IDN,k-1,j,i-1);
-    const Real tpp_k_iup = w0(m,IPP,k  ,j,i+1)/w0(m,IDN,k  ,j,i+1);
-    const Real tpp_k_i   = w0(m,IPP,k  ,j,i-1)/w0(m,IDN,k  ,j,i-1);
-    const Real tpp_km_iup = w0(m,IPP,k-1,j,i+1)/w0(m,IDN,k-1,j,i+1);
-    const Real tpp_km_i   = w0(m,IPP,k-1,j,i-1)/w0(m,IDN,k-1,j,i-1);
-    const Real b_k_iup = CGLBMag(bcc(m,IBX,k,j,i+1), bcc(m,IBY,k,j,i+1),
-                                 bcc(m,IBZ,k,j,i+1));
-    const Real b_k_i = CGLBMag(bcc(m,IBX,k,j,i-1), bcc(m,IBY,k,j,i-1),
-                               bcc(m,IBZ,k,j,i-1));
-    const Real b_km_iup = CGLBMag(bcc(m,IBX,k-1,j,i+1),
-                                  bcc(m,IBY,k-1,j,i+1),
-                                  bcc(m,IBZ,k-1,j,i+1));
-    const Real b_km_i = CGLBMag(bcc(m,IBX,k-1,j,i-1),
-                                bcc(m,IBY,k-1,j,i-1),
-                                bcc(m,IBZ,k-1,j,i-1));
+    const Real tpl_k_iup = tpar(m,k,j,i+1);
+    const Real tpl_k_i = tpar(m,k,j,i-1);
+    const Real tpl_km_iup = tpar(m,k-1,j,i+1);
+    const Real tpl_km_i = tpar(m,k-1,j,i-1);
+    const Real tpp_k_iup = tperp(m,k,j,i+1);
+    const Real tpp_k_i = tperp(m,k,j,i-1);
+    const Real tpp_km_iup = tperp(m,k-1,j,i+1);
+    const Real tpp_km_i = tperp(m,k-1,j,i-1);
+    const Real b_k_iup = bmag_cc(m,k,j,i+1);
+    const Real b_k_i = bmag_cc(m,k,j,i-1);
+    const Real b_km_iup = bmag_cc(m,k-1,j,i+1);
+    const Real b_km_i = bmag_cc(m,k-1,j,i-1);
     grad_pl_x = 0.25*((tpl_k_iup - tpl_k_i) + (tpl_km_iup - tpl_km_i))/
                 size.d_view(m).dx1;
     grad_pp_x = 0.25*((tpp_k_iup - tpp_k_i) + (tpp_km_iup - tpp_km_i))/
@@ -590,24 +600,18 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
                size.d_view(m).dx1;
 
     if (multi_d) {
-      const Real tpl_k_ju = w0(m,IPR,k  ,j+1,i)/w0(m,IDN,k  ,j+1,i);
-      const Real tpl_k_jl = w0(m,IPR,k  ,j-1,i)/w0(m,IDN,k  ,j-1,i);
-      const Real tpl_km_ju = w0(m,IPR,k-1,j+1,i)/w0(m,IDN,k-1,j+1,i);
-      const Real tpl_km_jl = w0(m,IPR,k-1,j-1,i)/w0(m,IDN,k-1,j-1,i);
-      const Real tpp_k_ju = w0(m,IPP,k  ,j+1,i)/w0(m,IDN,k  ,j+1,i);
-      const Real tpp_k_jl = w0(m,IPP,k  ,j-1,i)/w0(m,IDN,k  ,j-1,i);
-      const Real tpp_km_ju = w0(m,IPP,k-1,j+1,i)/w0(m,IDN,k-1,j+1,i);
-      const Real tpp_km_jl = w0(m,IPP,k-1,j-1,i)/w0(m,IDN,k-1,j-1,i);
-      const Real b_k_ju = CGLBMag(bcc(m,IBX,k,j+1,i), bcc(m,IBY,k,j+1,i),
-                                  bcc(m,IBZ,k,j+1,i));
-      const Real b_k_jl = CGLBMag(bcc(m,IBX,k,j-1,i), bcc(m,IBY,k,j-1,i),
-                                  bcc(m,IBZ,k,j-1,i));
-      const Real b_km_ju = CGLBMag(bcc(m,IBX,k-1,j+1,i),
-                                   bcc(m,IBY,k-1,j+1,i),
-                                   bcc(m,IBZ,k-1,j+1,i));
-      const Real b_km_jl = CGLBMag(bcc(m,IBX,k-1,j-1,i),
-                                   bcc(m,IBY,k-1,j-1,i),
-                                   bcc(m,IBZ,k-1,j-1,i));
+      const Real tpl_k_ju = tpar(m,k,j+1,i);
+      const Real tpl_k_jl = tpar(m,k,j-1,i);
+      const Real tpl_km_ju = tpar(m,k-1,j+1,i);
+      const Real tpl_km_jl = tpar(m,k-1,j-1,i);
+      const Real tpp_k_ju = tperp(m,k,j+1,i);
+      const Real tpp_k_jl = tperp(m,k,j-1,i);
+      const Real tpp_km_ju = tperp(m,k-1,j+1,i);
+      const Real tpp_km_jl = tperp(m,k-1,j-1,i);
+      const Real b_k_ju = bmag_cc(m,k,j+1,i);
+      const Real b_k_jl = bmag_cc(m,k,j-1,i);
+      const Real b_km_ju = bmag_cc(m,k-1,j+1,i);
+      const Real b_km_jl = bmag_cc(m,k-1,j-1,i);
       grad_pl_y = 0.25*((tpl_k_ju - tpl_k_jl) + (tpl_km_ju - tpl_km_jl))/
                   size.d_view(m).dx2;
       grad_pp_y = 0.25*((tpp_k_ju - tpp_k_jl) + (tpp_km_ju - tpp_km_jl))/
@@ -619,20 +623,20 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
     const Real bx = 0.5*(bcc(m,IBX,k-1,j,i) + bcc(m,IBX,k,j,i));
     const Real by = 0.5*(bcc(m,IBY,k-1,j,i) + bcc(m,IBY,k,j,i));
     const Real bz = 0.5*(bcc(m,IBZ,k-1,j,i) + bcc(m,IBZ,k,j,i));
-    const Real bmag = CGLBMag(bx, by, bz);
-    const Real bhz = (bmag > bfloor_) ? bz/bmag : 0.0;
     Real energy_flux = 0.0, moment_flux = 0.0;
-    CGLLandauFluidFaceFlux(w0(m,IDN,k-1,j,i), w0(m,IDN,k,j,i),
-                           w0(m,IPR,k-1,j,i), w0(m,IPR,k,j,i),
-                           w0(m,IPP,k-1,j,i), w0(m,IPP,k,j,i),
-                           bx, by, bz, bhz,
-                           grad_pl_x, grad_pl_y, grad_pl_z,
-                           grad_pp_x, grad_pp_y, grad_pp_z,
-                           grad_b_x, grad_b_y, grad_b_z,
-                           lf_k_parallel_, lf_coeff_local_, lf_c_parallel0_,
-                           nu_coll_, lim_coll_, mlim_, flim_, backup_lim_,
-                           dfloor_, pfloor_, tfloor_, bfloor_,
-                           energy_flux, moment_flux);
+    CGLLandauFluidFaceState face;
+    if (CGLBuildLandauFluidFaceState(w0(m,IDN,k-1,j,i), w0(m,IDN,k,j,i),
+                                     w0(m,IPR,k-1,j,i), w0(m,IPR,k,j,i),
+                                     w0(m,IPP,k-1,j,i), w0(m,IPP,k,j,i),
+                                     bx, by, bz, 2, lf_k_parallel_,
+                                     lf_coeff_local_, lf_c_parallel0_, nu_coll_,
+                                     lim_coll_, mlim_, flim_, backup_lim_, dfloor_,
+                                     pfloor_, tfloor_, bfloor_, face)) {
+      CGLLandauFluidFaceFlux(face, grad_pl_x, grad_pl_y, grad_pl_z,
+                             grad_pp_x, grad_pp_y, grad_pp_z,
+                             grad_b_x, grad_b_y, grad_b_z,
+                             energy_flux, moment_flux);
+    }
     flx3(m,IEN,k,j,i) += energy_flux;
     flx3(m,IAN,k,j,i) += moment_flux;
   });

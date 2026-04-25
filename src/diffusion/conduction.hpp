@@ -51,5 +51,6 @@ class Conduction {
 
  private:
   MeshBlockPack* pmy_pack;
+  DvceArray4D<Real> cgl_lf_tpar, cgl_lf_tperp, cgl_lf_bmag;
 };
 #endif // DIFFUSION_CONDUCTION_HPP_
