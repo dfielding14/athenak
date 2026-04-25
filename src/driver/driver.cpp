@@ -375,17 +375,11 @@ void Driver::ValidateSTSConfiguration(Mesh *pm) {
                        "MHD STS was requested, but no MHD module is active.");
     }
     if (pmhd->peos->eos_data.is_cgl) {
-      if (pmhd->has_sts_viscosity || pmhd->has_sts_resistivity) {
+      if (pmhd->has_sts_viscosity || pmhd->has_sts_resistivity ||
+          pmhd->has_sts_conduction) {
         DriverFatalError(__FILE__, __LINE__,
-                         "CGL STS currently supports heat flux only. Disable "
-                         "viscosity_integrator = sts and ohmic_resistivity_integrator = sts "
-                         "for <mhd>/eos = cgl.");
-      }
-      if (pmhd->has_sts_conduction && pmhd->pcond != nullptr &&
-          pmhd->pcond->iso_cond_type != "constant") {
-        DriverFatalError(__FILE__, __LINE__,
-                         "CGL heat-flux STS currently supports only "
-                         "<mhd>/isotropic_conduction = constant.");
+                         "CGL MHD STS operators are disabled on this branch. Ordinary "
+                         "CGL heat flux is not a conserved-variable Landau-fluid update.");
       }
     }
     if (pmhd->porb_u != nullptr || pmhd->porb_b != nullptr ||

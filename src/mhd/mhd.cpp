@@ -41,10 +41,6 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     u_sts1("cons_sts1",1,1,1,1,1),
     u_sts2("cons_sts2",1,1,1,1,1),
     u_sts_rhs("cons_sts_rhs",1,1,1,1,1),
-    cgl_p_sts0("cgl_p_sts0",1,1,1,1,1),
-    cgl_p_sts1("cgl_p_sts1",1,1,1,1,1),
-    cgl_p_sts2("cgl_p_sts2",1,1,1,1,1),
-    cgl_p_sts_rhs("cgl_p_sts_rhs",1,1,1,1,1),
     b1("B_fc1",1,1,1,1),
     b_sts0("B_sts0",1,1,1,1),
     b_sts1("B_sts1",1,1,1,1),
@@ -150,9 +146,20 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     presist = nullptr;
   }
 
-  // Thermal conduction (only constructed if needed)
+  // Thermal conduction (only constructed if needed). The CGL pressure-space
+  // conduction prototype is disabled on this branch because its IPR/IPP fluxes are
+  // not conserved-variable LF fluxes.
   if (pin->DoesParameterExist("mhd","isotropic_conduction")) {
-    if (peos->eos_data.is_ideal || peos->eos_data.is_cgl) {
+    if (peos->eos_data.is_cgl) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Ordinary <mhd>/isotropic_conduction is disabled for "
+                << "<mhd>/eos = cgl. The current CGL pressure-space conduction "
+                << "prototype is not a conserved-variable Landau-fluid heat flux."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (peos->eos_data.is_ideal) {
       pcond = new Conduction("mhd", ppack, pin);
       has_sts_conduction = (pcond->mode == parabolic::ParabolicIntegratorMode::sts);
       has_explicit_conduction =
@@ -164,7 +171,7 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
                                        &(pcond->dtnew)});
     } else {
       std::cout << "### FATAL ERROR in "<< __FILE__ <<" at line " << __LINE__ << std::endl
-                << "Thermal conduction in MHD requires ideal gas or CGL EOS" << std::endl;
+                << "Thermal conduction in MHD requires ideal gas EOS" << std::endl;
       std::exit(EXIT_FAILURE);
     }
   } else {
@@ -390,12 +397,6 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       Kokkos::realloc(u_sts1, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
       Kokkos::realloc(u_sts2, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
       Kokkos::realloc(u_sts_rhs, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
-      if (peos->eos_data.is_cgl && has_sts_conduction) {
-        Kokkos::realloc(cgl_p_sts0, nmb, 2, ncells3, ncells2, ncells1);
-        Kokkos::realloc(cgl_p_sts1, nmb, 2, ncells3, ncells2, ncells1);
-        Kokkos::realloc(cgl_p_sts2, nmb, 2, ncells3, ncells2, ncells1);
-        Kokkos::realloc(cgl_p_sts_rhs, nmb, 2, ncells3, ncells2, ncells1);
-      }
       Kokkos::realloc(b1.x1f, nmb, ncells3, ncells2, ncells1+1);
       Kokkos::realloc(b1.x2f, nmb, ncells3, ncells2+1, ncells1);
       Kokkos::realloc(b1.x3f, nmb, ncells3+1, ncells2, ncells1);

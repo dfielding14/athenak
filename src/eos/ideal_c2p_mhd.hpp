@@ -177,7 +177,7 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
     efloor_used = true;
   }
   
-  //check if bfloor then reset mu assuming pprl=pprp
+  // If bfloor was used, reset conserved anisotropy A assuming pprl=pprp.
   if (bfloor_used) {
     u.mu =  w.d*log(SQR(w.d)/(bfloor*SQR(bfloor)));
   }
@@ -202,20 +202,20 @@ void SingleP2C_CGLMHD(const MHDPrim1D &w, const Real &bfloor, HydCons1D &u) {
   u.mz = w.d*w.vz;
   //u.e  = w.e + 0.5*(w.d*(SQR(w.vx) + SQR(w.vy) + SQR(w.vz)) +
   //                      (SQR(w.bx) + SQR(w.by) + SQR(w.bz)) );
-  //u.mu = w.pp;
+  // u.mu stores conserved anisotropy A for CGL.
   
   u.e  = w.pp + 0.5*w.e + 0.5*(w.d*(SQR(w.vx) + SQR(w.vy) + SQR(w.vz)) + bsqr );
   u.mu = w.d * log(w.pp / w.e * SQR(w.d)/(bmag*SQR(bmag)) ) ;
   
-  //bfloor to reset u.mu assuming pprp=pprl
+  // If below bfloor, reset conserved anisotropy A assuming pprp=pprl.
   if (bmag>bfloor) {
     // Standard CGL EOS
     u.e  = w.pp + 0.5*w.e + 0.5*(w.d*(SQR(w.vx) + SQR(w.vy) + SQR(w.vz)) + bsqr );
     u.mu = w.d * log(w.pp / w.e * SQR(w.d)/(bmag*SQR(bmag)) ) ;
   } else {
     // If field goes to zero, CGL is invalid. Revert to (adiabatic) EOS with
-    // pprp=pprl=(2/3*pprp+1/3*pprl). mu has no dynamical effect (in RS) but
-    // is updated to pprp/Bmin
+    // pprp=pprl=(2/3*pprp+1/3*pprl). A has no dynamical effect in this limit,
+    // but is reset to a finite value.
     u.e  = 0.5*w.e + w.pp + 0.5*(w.d*(SQR(w.vx) + SQR(w.vy) + SQR(w.vz)) + bsqr );
     u.mu = w.d * log(SQR(w.d)/(bfloor*SQR(bfloor)));
   }

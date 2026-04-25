@@ -139,6 +139,8 @@ void Conduction::AddIsotropicHeatFluxConstCond(const DvceArray5D<Real> &w0,
   int ks = indcs.ks, ke = indcs.ke;
   int nmb1 = pmy_pack->nmb_thispack - 1;
   auto size = pmy_pack->pmb->mb_size;
+  // CGL use of this pressure-space prototype is fenced in MHD::MHD. It is not a
+  // Landau-fluid heat flux and must not be consumed as a conserved-variable update.
   bool cgl = eos.is_cgl;
   Real gm1 = eos.gamma-1.0;
   Real &kappa_ = kappa_iso;

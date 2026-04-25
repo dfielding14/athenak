@@ -110,7 +110,7 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
     u.my = cons(m,IM2,k,j,i);
     u.mz = cons(m,IM3,k,j,i);
     u.e  = cons(m,IEN,k,j,i);
-    u.mu = cons(m,IMU,k,j,i);
+    u.mu = cons(m,IAN,k,j,i);
 
     // load cell-centered fields into conserved state
     // use input CC fields if only testing floors with FOFC
@@ -148,7 +148,7 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
         sume++;
       }
       if (bfloor_used) {
-        cons(m,IMU,k,j,i) = u.mu;
+        cons(m,IAN,k,j,i) = u.mu;
       }
       
       //if (tfloor_used) {
@@ -231,7 +231,7 @@ void CGLMHD::PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &
     cons(m,IM2,k,j,i) = u.my;
     cons(m,IM3,k,j,i) = u.mz;
     cons(m,IEN,k,j,i) = u.e;
-    cons(m,IMU,k,j,i) = u.mu;
+    cons(m,IAN,k,j,i) = u.mu;
 
     // convert scalars (if any), always stored at end of cons and prim arrays.
     for (int n=nmhd; n<(nmhd+nscal); ++n) {
@@ -286,8 +286,8 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
     SingleColl_CGLMHD(w, nu_coll, lim_coll, dtc, mlim, flim, backup);
     SingleP2C_CGLMHD(w, bfloor, u);
 
-    // Correct conserved anisotropy variable
-    cons(m,IMU,k,j,i) = u.mu;
+    // Correct conserved anisotropy variable.
+    cons(m,IAN,k,j,i) = u.mu;
     
     // Correct pressures
     prim(m,IPR,k,j,i) = w.e;

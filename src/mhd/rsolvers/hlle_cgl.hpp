@@ -61,7 +61,7 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
     
     Real bxi = bx(m,k,j,i);
     
-    //get mu variable specifically for passive advection later 
+    // Compute the conserved anisotropy A stored in the IAN slot.
     Real pbl = 0.5*(bxi*bxi + SQR(wl_iby) + SQR(wl_ibz));
     Real pbr = 0.5*(bxi*bxi + SQR(wr_iby) + SQR(wr_ibz));
     Real bmagl = sqrt(2.*pbl);
@@ -71,20 +71,21 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
     Real fhl = 1. + (wl_ipp - wl_ipr)/(2.*pbl);
     Real fhr = 1. + (wr_ipp - wr_ipr)/(2.*pbr);
     
-    Real mul = wl_idn * log(wl_ipp / wl_ipr * SQR(wl_idn)/(bmagl*SQR(bmagl)) );
-    Real mur = wr_idn * log(wr_ipp / wr_ipr * SQR(wr_idn)/(bmagr*SQR(bmagr)) );
+    Real anis_l = wl_idn * log(wl_ipp / wl_ipr * SQR(wl_idn)/(bmagl*SQR(bmagl)) );
+    Real anis_r = wr_idn * log(wr_ipp / wr_ipr * SQR(wr_idn)/(bmagr*SQR(bmagr)) );
     
     Real el = 0.5*wl_ipr + wl_ipp + 0.5*wl_idn*(SQR(wl_ivx)+SQR(wl_ivy)+SQR(wl_ivz)) + pbl;
     Real er = 0.5*wr_ipr + wr_ipp + 0.5*wr_idn*(SQR(wr_ivx)+SQR(wr_ivy)+SQR(wr_ivz)) + pbr;
 
     //--- Step 2. Apply floor to magnetic field if necessary
     
-    //involves resetting the pprp and pprl each to 1/3pprl+2/3pprp, and resetting mu assuming pprp=pprl w/ bfloor as field
+    // Involves resetting pprp and pprl each to 1/3*pprl+2/3*pprp, and
+    // resetting A assuming pprp=pprl with bfloor as the field.
     
     if ( bmagl < bfloor || bmagr < bfloor ){
       // Revert to (adiabatic) MHD EOS if B < bmag_floor
       // In this case, we calculate flux of E as if in adiabatic MHD, while the
-      // conserved variable mu does nothing. We set pprp = pprl = 2/3*(E - pb - ke)
+      // conserved variable A does nothing. We set pprp = pprl = 2/3*(E - pb - ke)
       // in ConservedToPrimitive, which is like setting both to (2/3*pprp+1/3*pprl)
       fhl = 1.;
       fhr = 1.;
@@ -93,9 +94,9 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
       wl_ipp = wl_ipr;
       wr_ipr = TWO_3RDS*wr_ipp + ONE_3RD*wr_ipr;
       wr_ipp = wr_ipr;
-      // Although mu is not used (it's reset in ConservedToPrimitive) better to stop it becoming NaN
-      mul = wl_idn * log( SQR(wl_idn)/(bfloor*SQR(bfloor)) );
-      mur = wr_idn * log( SQR(wr_idn)/(bfloor*SQR(bfloor)) );
+      // Although A is not used here, avoid producing NaNs before ConsToPrim resets it.
+      anis_l = wl_idn * log( SQR(wl_idn)/(bfloor*SQR(bfloor)) );
+      anis_r = wr_idn * log( SQR(wr_idn)/(bfloor*SQR(bfloor)) );
     }
 
     
@@ -230,9 +231,9 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
     //fl.e  -= bxi*(wl_iby*wl_ivy + wl_ibz*wl_ivz);
     //fr.e  -= bxi*(wr_iby*wr_ivy + wr_ibz*wr_ivz);
     
-    //Mu fluxes
-    fl.mu = mul*vxl;
-    fr.mu = mur*vxr;
+    // Conserved-anisotropy fluxes.
+    fl.mu = anis_l*vxl;
+    fr.mu = anis_r*vxr;
     
     //B/E field fluxes for CT  
     fl.by = wl_iby*vxl - bxi*wl_ivy;
@@ -246,18 +247,18 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
     Real tmp=0.0;
     if (bp != bm) tmp = 0.5*(bp + bm)/(bp - bm);
     
-    //treat mu as passive scalar, flux is given by mass_flx*rl or mass_flx*rr
+    // Treat A/rho as the advected scalar, flux is mass_flx*A/rho from upwind side.
     Real fdtmp = 0.5*(fl.d  + fr.d ) + (fl.d  - fr.d )*tmp;
-    mul /= wl_idn;
-    mur /= wr_idn;
-    Real fmutmp = ( fdtmp >= 0.0 ) ? fdtmp*mul : fdtmp*mur;
+    anis_l /= wl_idn;
+    anis_r /= wr_idn;
+    Real fmutmp = ( fdtmp >= 0.0 ) ? fdtmp*anis_l : fdtmp*anis_r;
     
     flx(m,IDN,k,j,i) = fdtmp;
     flx(m,ivx,k,j,i) = 0.5*(fl.mx + fr.mx) + (fl.mx - fr.mx)*tmp;
     flx(m,ivy,k,j,i) = 0.5*(fl.my + fr.my) + (fl.my - fr.my)*tmp;
     flx(m,ivz,k,j,i) = 0.5*(fl.mz + fr.mz) + (fl.mz - fr.mz)*tmp;
     flx(m,IEN,k,j,i) = 0.5*(fl.e + fr.e ) + (fl.e - fr.e)*tmp;
-    flx(m,IMU,k,j,i) = fmutmp;
+    flx(m,IAN,k,j,i) = fmutmp;
     ey(m,k,j,i) = -0.5*(fl.by + fr.by) - (fl.by - fr.by)*tmp;
     ez(m,k,j,i) =  0.5*(fl.bz + fr.bz) + (fl.bz - fr.bz)*tmp;
   });
