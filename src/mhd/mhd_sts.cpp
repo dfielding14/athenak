@@ -98,53 +98,6 @@ TaskStatus MHD::ClearSTSFlux(Driver *pdrive, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn TaskStatus MHD::ClearCGLLandauFluidSTSFlux()
-//! \brief Zero only the CGL LF energy and magnetic-moment flux scratch.
-
-TaskStatus MHD::ClearCGLLandauFluidSTSFlux(Driver *pdrive, int stage) {
-  (void) pdrive;
-  (void) stage;
-
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
-  int is = indcs.is, ie = indcs.ie;
-  int js = indcs.js, je = indcs.je;
-  int ks = indcs.ks, ke = indcs.ke;
-  int nmb1 = pmy_pack->nmb_thispack - 1;
-  const bool multi_d = pmy_pack->pmesh->multi_d;
-  const bool three_d = pmy_pack->pmesh->three_d;
-  auto flx1 = uflx.x1f;
-  auto flx2 = uflx.x2f;
-  auto flx3 = uflx.x3f;
-
-  par_for("mhd_cgl_lf_clear_sts_flux1", DevExeSpace(), 0, nmb1, ks, ke, js, je,
-          is, ie+1,
-  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    flx1(m,IEN,k,j,i) = 0.0;
-    flx1(m,IAN,k,j,i) = 0.0;
-  });
-
-  if (multi_d) {
-    par_for("mhd_cgl_lf_clear_sts_flux2", DevExeSpace(), 0, nmb1, ks, ke,
-            js, je+1, is, ie,
-    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-      flx2(m,IEN,k,j,i) = 0.0;
-      flx2(m,IAN,k,j,i) = 0.0;
-    });
-  }
-
-  if (three_d) {
-    par_for("mhd_cgl_lf_clear_sts_flux3", DevExeSpace(), 0, nmb1, ks, ke+1,
-            js, je, is, ie,
-    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-      flx3(m,IEN,k,j,i) = 0.0;
-      flx3(m,IAN,k,j,i) = 0.0;
-    });
-  }
-
-  return TaskStatus::complete;
-}
-
-//----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::ClearSTSEField()
 //! \brief Zero the MHD electric-field scratch before one STS stage.
 

@@ -479,8 +479,8 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
                              grad_b_x, grad_b_y, grad_b_z,
                              energy_flux, moment_flux);
     }
-    flx1(m,IEN,k,j,i) += energy_flux;
-    flx1(m,IAN,k,j,i) += moment_flux;
+    flx1(m,IEN,k,j,i) = energy_flux;
+    flx1(m,IAN,k,j,i) = moment_flux;
   });
   if (pmy_pack->pmesh->one_d) {return;}
 
@@ -558,8 +558,8 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
                              grad_b_x, grad_b_y, grad_b_z,
                              energy_flux, moment_flux);
     }
-    flx2(m,IEN,k,j,i) += energy_flux;
-    flx2(m,IAN,k,j,i) += moment_flux;
+    flx2(m,IEN,k,j,i) = energy_flux;
+    flx2(m,IAN,k,j,i) = moment_flux;
   });
   if (pmy_pack->pmesh->two_d) {return;}
 
@@ -637,8 +637,8 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
                              grad_b_x, grad_b_y, grad_b_z,
                              energy_flux, moment_flux);
     }
-    flx3(m,IEN,k,j,i) += energy_flux;
-    flx3(m,IAN,k,j,i) += moment_flux;
+    flx3(m,IEN,k,j,i) = energy_flux;
+    flx3(m,IAN,k,j,i) = moment_flux;
   });
   return;
 }
