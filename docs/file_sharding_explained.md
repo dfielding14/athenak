@@ -8,6 +8,21 @@ This note explains the three file-layout modes in simple terms:
 
 The goal is to describe the computational idea, not every implementation detail.
 
+## Short Version
+
+`single_file_per_node` treats each compute node as the natural I/O team. The simulation
+still decomposes the physics by MPI rank, but ranks that live on the same node cooperate
+to write one node-local shard. That keeps the file count close to the number of nodes
+instead of the number of ranks, while avoiding a single global file that every rank has
+to touch at once.
+
+For large AMR runs, this is especially useful because planar slices can be sparse and
+uneven: some ranks on a node may own slice data while others own none. The robust pattern
+is for every rank in the node shard to stay in the collective MPI-IO call, even if its
+local contribution is zero bytes. Nodes that own no slice data at all can skip the shard
+entirely. This avoids both per-rank metadata storms and independent writers racing inside
+one node file.
+
 ## The Basic Tradeoff
 
 Every output or restart dump has two jobs:

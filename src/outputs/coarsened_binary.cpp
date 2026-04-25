@@ -27,6 +27,49 @@
 #include "mesh/mesh.hpp"
 #include "outputs.hpp"
 
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
+
+namespace {
+
+bool OutputIOStatsEnabled() {
+  const char *env = std::getenv("ATHENAK_OUTPUT_IO_STATS");
+  return (env != nullptr && env[0] != '\0' && env[0] != '0');
+}
+
+void PrintBinaryOutputStats(const char *type, FileShardMode mode, bool slice,
+                            bool skipped_empty_shard, double open_time,
+                            double header_time, double payload_time, double close_time) {
+  if (!OutputIOStatsEnabled()) {
+    return;
+  }
+
+  double local_times[4] = {open_time, header_time, payload_time, close_time};
+  double max_times[4] = {open_time, header_time, payload_time, close_time};
+  int local_skipped = skipped_empty_shard ? 1 : 0;
+  int skipped_ranks = local_skipped;
+#if MPI_PARALLEL_ENABLED
+  MPI_Reduce(local_times, max_times, 4, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&local_skipped, &skipped_ranks, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+  if (global_variable::my_rank != 0) {
+    return;
+  }
+#endif
+
+  std::cout << "[output-io] type=" << type
+            << " mode=" << ShardDistributionName(mode)
+            << " slice=" << (slice ? 1 : 0)
+            << " skipped_empty_shard_ranks=" << skipped_ranks
+            << " open=" << max_times[0]
+            << " header=" << max_times[1]
+            << " payload=" << max_times[2]
+            << " close=" << max_times[3]
+            << std::endl;
+}
+
+}  // namespace
+
 //----------------------------------------------------------------------------------------
 // Constructor: also calls BaseTypeOutput base class constructor
 
@@ -295,12 +338,42 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
 
 void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   // check if slicing
-  bool bin_slice = (out_params.slice1 || out_params.slice2 || out_params.slice3);
+  bool bin_slice = (out_params.slice1 || out_params.slice2 || out_params.slice3 ||
+                    out_params.gid >= 0);
+  auto AdvanceOutputCounters = [&]() {
+    out_params.file_number++;
+    if (out_params.last_time < 0.0) {
+      out_params.last_time = pm->time;
+    } else {
+      out_params.last_time += out_params.dt;
+    }
+    pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
+    pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
+  };
 
   // create filename: "cbin_"+"file_id"+"_"+"coarsening_factor"+"/file_basename"
   // + "." + "file_id" + "." + XXXXX + ".cbin"
   // where XXXXX = 5-digit file_number
   FileShardMode shard_mode = out_params.file_shard_mode;
+  std::vector<int> slice_shard_counts;
+  bool skip_empty_slice_shard = false;
+  if (bin_slice) {
+    slice_shard_counts = GatherShardCounts(static_cast<int>(outmbs.size()), shard_mode);
+    int slice_shard_total = std::accumulate(slice_shard_counts.begin(),
+                                            slice_shard_counts.end(), 0);
+    skip_empty_slice_shard = (shard_mode == FileShardMode::per_node &&
+                              slice_shard_total == 0);
+    if (skip_empty_slice_shard) {
+      PrintBinaryOutputStats("cbin", shard_mode, bin_slice, true, 0.0, 0.0, 0.0, 0.0);
+      AdvanceOutputCounters();
+      return;
+    }
+  }
+
+  double open_time = 0.0;
+  double header_time = 0.0;
+  double payload_time = 0.0;
+  double close_time = 0.0;
 
   std::string fname;
   char number[6];
@@ -329,7 +402,9 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
 #endif
   bool use_serial_io = UsesSerialIO(shard_mode);
+  Kokkos::Timer phase_timer;
   cbinfile.Open(fname.c_str(), IOWrapper::FileMode::write, use_serial_io);
+  open_time = phase_timer.seconds();
 
   int number_of_moments = 1;
   if (out_params.compute_moments) {
@@ -341,6 +416,7 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   // 2. Current time
   // 3. List of variables in the file
   // 4. Header (input file information)
+  phase_timer.reset();
   {std::stringstream msg;
   msg << "Athena binary output version=1.1" << std::endl
       // preheader size includes "size of preheader" line up to "number of variables"
@@ -385,6 +461,7 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
   header_offset += sbuf.size()*sizeof(char);
   header_offset += msg.str().size();}
+  header_time = phase_timer.seconds();
 
   //  5. Data.  An arbitrary number of scalars and vectors can be written (every node
   //  in the OutputData doubly linked lists), all in binary floats format
@@ -394,9 +471,14 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     nout_vars *= 4;
   }
   int nout_mbs = outmbs.size();
-  int nout1 = ((outmbs[0].oie - outmbs[0].ois + 1)/out_params.coarsen_factor);
-  int nout2 = ((outmbs[0].oje - outmbs[0].ojs + 1)/out_params.coarsen_factor);
-  int nout3 = ((outmbs[0].oke - outmbs[0].oks + 1)/out_params.coarsen_factor);
+  int nout1 = 0;
+  int nout2 = 0;
+  int nout3 = 0;
+  if (nout_mbs > 0) {
+    nout1 = ((outmbs[0].oie - outmbs[0].ois + 1)/out_params.coarsen_factor);
+    nout2 = ((outmbs[0].oje - outmbs[0].ojs + 1)/out_params.coarsen_factor);
+    nout3 = ((outmbs[0].oke - outmbs[0].oks + 1)/out_params.coarsen_factor);
+  }
   int cells = nout1*nout2*nout3;
 
 
@@ -502,21 +584,12 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
 
   // now write Coarsenedbinary data
+  phase_timer.reset();
   if (bin_slice) {
-    std::vector<int> shard_counts = GatherShardCounts(nout_mbs, shard_mode);
-    int shard_prefix = PrefixCountBeforeMe(shard_counts, shard_mode);
-    int shard_min = *std::min_element(shard_counts.begin(), shard_counts.end());
+    int shard_prefix = PrefixCountBeforeMe(slice_shard_counts, shard_mode);
     std::size_t myoffset = header_offset + data_size*shard_prefix;
-
-    if (shard_min > 0) {
-      cbinfile.Write_any_type_at_all(data,(data_size*nout_mbs),myoffset,"byte",
-                                     use_serial_io);
-    } else {
-      if (nout_mbs > 0) {
-        cbinfile.Write_any_type_at(data,(data_size*nout_mbs),myoffset,"byte",
+    cbinfile.Write_any_type_at_all(data,(data_size*nout_mbs),myoffset,"byte",
                                    use_serial_io);
-      }
-    }
   } else {
     std::vector<int> shard_counts = GatherShardCounts(nb_mbs, shard_mode);
     int shard_prefix = PrefixCountBeforeMe(shard_counts, shard_mode);
@@ -556,21 +629,20 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       }
     }
   }
+  payload_time = phase_timer.seconds();
 
   // close the output file and clean up ptrs to data
+  phase_timer.reset();
   cbinfile.Close(use_serial_io);
+  close_time = phase_timer.seconds();
   delete [] data;
   delete [] single_data;
 
   // increment counters
-  out_params.file_number++;
-  if (out_params.last_time < 0.0) {
-    out_params.last_time = pm->time;
-  } else {
-    out_params.last_time += out_params.dt;
-  }
-  pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
-  pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
+  AdvanceOutputCounters();
+
+  PrintBinaryOutputStats("cbin", shard_mode, bin_slice, false, open_time, header_time,
+                         payload_time, close_time);
 
   return;
 }
