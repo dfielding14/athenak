@@ -24,7 +24,7 @@
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif
 
-#define NOUTPUT_CHOICES 218
+#define NOUTPUT_CHOICES 225
 // choices for output variables used in <ouput> blocks in input file
 // TO ADD MORE CHOICES:
 //   - add more strings to array below, change NOUTPUT_CHOICES above appropriately
@@ -43,19 +43,19 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "mhd_w_d",   "mhd_w_vx",   "mhd_w_vy",   "mhd_w_vz",   "mhd_w_e",       "mhd_w",
   "mhd_u_s",   "mhd_w_s",    "mhd_wz",     "mhd_w2",
   "mhd_bcc1",  "mhd_bcc2",   "mhd_bcc3",   "mhd_bcc",    "mhd_u_bcc",     "mhd_w_bcc",
-  // MHD derived variables (41-58)
+  // MHD derived variables
   "mhd_jz",    "mhd_j2",     "mhd_curv",   "mhd_k_jxb",  "mhd_curv_perp", "mhd_bmag",
   "mhd_divb", "mhd_jcon",   "mhd_curv_alt", "mhd_v_B_moments", "mhd_vi_Bi_moments",
   "mhd_vA_mag", "mhd_curv_B_ratio",
   "mhd_theta_jb", "mhd_theta_vb", "mhd_theta_jdrho", "mhd_theta_bdrho",
-  "mhd_visc_heat",
-  // useful for coarsened binary output (59-60)
+  "mhd_visc_heat", "mhd_beta",
+  // useful for coarsened binary output
   "hydro_sgs", "mhd_sgs",
-  // dynamo wavenumber scales (61)
+  // dynamo wavenumber scales
   "mhd_dynamo_ks",
-  // turbulence (62)
+  // turbulence
   "turb_force",
-  // radiation (63-65 coord, 66-79 hydro, 80-99 mhd)
+  // radiation variables
   "rad_coord",     "rad_fluid",      "rad_coord_fluid",
   "rad_hydro_u_d", "rad_hydro_u_m1", "rad_hydro_u_m2", "rad_hydro_u_m3", "rad_hydro_u_e",
   "rad_hydro_u",   "rad_hydro_w_d",  "rad_hydro_w_vx", "rad_hydro_w_vy", "rad_hydro_w_vz",
@@ -65,14 +65,14 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "rad_mhd_w_e",   "rad_mhd_w",      "rad_mhd_u_s",    "rad_mhd_w_s",    "rad_mhd_bcc1",
   "rad_mhd_bcc2",  "rad_mhd_bcc3",   "rad_mhd_bcc",    "rad_mhd_u_bcc",  "rad_mhd_w_bcc",
 
-  // ADM (100-117)
+  // ADM variables
   "adm_gxx", "adm_gxy", "adm_gxz", "adm_gyy", "adm_gyz", "adm_gzz",
   "adm_Kxx", "adm_Kxy", "adm_Kxz", "adm_Kyy", "adm_Kyz", "adm_Kzz",
   "adm_psi4",
   "adm_alpha", "adm_betax", "adm_betay", "adm_betaz",
   "adm",
 
-  // Z4c (118-140)
+  // Z4c variables
   "z4c_chi",
   "z4c_gxx", "z4c_gxy", "z4c_gxz", "z4c_gyy", "z4c_gyz", "z4c_gzz",
   "z4c_Khat",
@@ -83,11 +83,11 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "z4c_betax", "z4c_betay", "z4c_betaz",
   "z4c",
 
-  // Weyl (141-143)
+  // Weyl variables
   "weyl_rpsi4", "weyl_ipsi4",
   "weyl",
 
-  // ADM constraints (144-151)
+  // ADM constraints
   "con_C",
   "con_H",
   "con_M",
@@ -95,42 +95,44 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "con_Mx", "con_My", "con_Mz",
   "con",
 
-  // Tmunu (152-162)
+  // Tmunu variables
   "tmunu_Sxx", "tmunu_Sxy", "tmunu_Sxz", "tmunu_Syy", "tmunu_Syz", "tmunu_Szz",
   "tmunu_E",
   "tmunu_Sx", "tmunu_Sy", "tmunu_Sz",
   "tmunu",
 
-  // Particles (163-164)
+  // Particles
   "prtcl_all", "prtcl_d",
 
-  // Coordinate variables for PDF binning (165-175)
+  // Coordinate variables for PDF binning
   "coord_x", "coord_y", "coord_z",
   "coord_r", "coord_theta", "coord_phi",
   "coord_cyl_R", "coord_cyl_phi", "coord_cyl_z",
   "coord_costheta", "coord_abscostheta",
 
-  // Mass and energy flux derived variables (176-187)
+  // Mass and energy flux derived variables
   "mdot_sph", "mdot_sph_out", "mdot_sph_in",
   "edot_sph", "edot_sph_out", "edot_sph_in",
   "mdot_vert", "mdot_vert_out", "mdot_vert_in",
   "edot_vert", "edot_vert_out", "edot_vert_in",
 
-  // Spherical/cylindrical velocity components and energy flux components (188-195)
+  // Spherical/cylindrical velocity components and energy flux components
   "vel_sph_r", "vel_sph_theta", "vel_sph_phi",
   "vel_cyl_R", "vel_cyl_phi",
   "edot_sph_kin", "edot_sph_th", "edot_sph_mag",
+  "edot_sph_out_kin", "edot_sph_out_th", "edot_sph_out_mag",
+  "edot_vert_kin", "edot_vert_th", "edot_vert_mag",
 
-  // Cooling time (196)
+  // Cooling time
   "cooling_time",
 
-  // Individual hydro passive scalars (197-206)
+  // Individual hydro passive scalars
   "hydro_u_s_00", "hydro_u_s_01", "hydro_u_s_02", "hydro_u_s_03", "hydro_u_s_04",
   "hydro_w_s_00", "hydro_w_s_01", "hydro_w_s_02", "hydro_w_s_03", "hydro_w_s_04",
-  // Individual mhd passive scalars (207-216)
+  // Individual mhd passive scalars
   "mhd_u_s_00", "mhd_u_s_01", "mhd_u_s_02", "mhd_u_s_03", "mhd_u_s_04",
   "mhd_w_s_00", "mhd_w_s_01", "mhd_w_s_02", "mhd_w_s_03", "mhd_w_s_04",
-  // Hydro-only derived variables (217)
+  // Hydro-only derived variables
   "hydro_visc_heat",
 };
 

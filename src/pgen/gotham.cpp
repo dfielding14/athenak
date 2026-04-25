@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cmath>
+#include <string>
 #include "athena.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
@@ -7,6 +8,7 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
+#include "mhd/mhd.hpp"
 #include "pgen.hpp"
 #include "units/units.hpp"
 #include "utils/profile_reader.hpp"
@@ -58,6 +60,17 @@ Real LimitDustTransfer(const Real requested,
                        const Real donor_mass,
                        const Real dust_donor_cap_frac);
 
+KOKKOS_INLINE_FUNCTION
+Real ToroidalVectorPotential(const Real x1, const Real x2, const Real b0,
+                             const Real r_soft);
+
+KOKKOS_INLINE_FUNCTION
+Real TangledVectorPotential(const int dir, const Real x1, const Real x2,
+                            const Real x3, const int nmodes,
+                            const DvceArray2D<Real> &k_modes,
+                            const DvceArray2D<Real> &aka,
+                            const DvceArray2D<Real> &akb);
+
 void UserSource(Mesh* pm, const Real bdt);
 void GravitySource(Mesh* pm, const Real bdt);
 void SNSource(Mesh* pm, const Real bdt);
@@ -65,8 +78,17 @@ void DustSource(Mesh* pm, const Real bdt);
 void UserBoundary(Mesh* pm);
 void FreeProfile(ParameterInput *pin, Mesh *pm);
 void RefinementCondition(MeshBlockPack* pmbp);
+Real ReferenceMagneticField(const ProfileReader &profile, const Real r_ref,
+                            const Real beta);
+void InitializeMagneticField(ParameterInput *pin, MeshBlockPack *pmbp,
+                             const std::string &bfield_type,
+                             const Real b_ref);
+void ApplyUserMagneticBoundary(Mesh *pm);
+void AddUserBoundaryMagneticEnergy(Mesh *pm);
 
 namespace {
+  enum class MagneticFieldType { none, vertical, toroidal, tangled };
+
   // Constants for gravitational potential
   Real r_scale;
   Real rho_scale;
@@ -123,6 +145,23 @@ namespace {
   int scalar_IZS;  // metallicity
   int scalar_IDS;  // small dust
   int scalar_IDL;  // large dust
+
+  MagneticFieldType ParseMagneticFieldType(const std::string &name) {
+    if (name == "none") return MagneticFieldType::none;
+    if (name == "vertical") return MagneticFieldType::vertical;
+    if (name == "toroidal") return MagneticFieldType::toroidal;
+    if (name == "tangled") return MagneticFieldType::tangled;
+
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<problem>/bfield_type must be none, vertical, toroidal, or tangled."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  bool UsesMagneticField(const MagneticFieldType type) {
+    return type != MagneticFieldType::none;
+  }
 }
 
 //===========================================================================//
@@ -180,16 +219,25 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   sn_delay = pin->GetOrAddReal("SN","delay",0.0);
 
   // Set passive scalar indices
-  if (pmbp->phydro->nscalars != 3) {
+  const bool use_mhd = (pmbp->pmhd != nullptr);
+  if (!use_mhd && pmbp->phydro == nullptr) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "Dust requires <hydro>/nscalars = 3, but got "
-              << pmbp->phydro->nscalars << std::endl;
+              << "Gotham requires either <hydro> or <mhd>." << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  scalar_IZS = pmbp->phydro->nhydro;
-  scalar_IDS = pmbp->phydro->nhydro + 1;
-  scalar_IDL = pmbp->phydro->nhydro + 2;
+  const int nscalars = use_mhd ? pmbp->pmhd->nscalars : pmbp->phydro->nscalars;
+  const int nfluid = use_mhd ? pmbp->pmhd->nmhd : pmbp->phydro->nhydro;
+  if (nscalars != 3) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Dust requires the active gas module to have nscalars = 3, but got "
+              << nscalars << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  scalar_IZS = nfluid;
+  scalar_IDS = nfluid + 1;
+  scalar_IDL = nfluid + 2;
 
   // Read in dust model parameters
   d_z_init = pin->GetReal("dust","d_z_init");
@@ -295,6 +343,44 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   if (global_variable::my_rank==0) {
     std::cout << "Successfully loaded disk profiles from "
 	      << disk_profile_file << std::endl;
+  }
+
+  std::string bfield_type = pin->GetOrAddString("problem", "bfield_type", "none");
+  MagneticFieldType bfield = ParseMagneticFieldType(bfield_type);
+  Real b_ref = 0.0;
+  if (UsesMagneticField(bfield)) {
+    if (pmbp->pmhd == nullptr) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<problem>/bfield_type != none requires an <mhd> block."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (!pin->DoesParameterExist("problem", "beta")) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<problem>/beta is required when bfield_type != none."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    const Real beta = pin->GetReal("problem", "beta");
+    const Real beta_r_ref = pin->GetOrAddReal("problem", "beta_r_ref", 250.0);
+    if (beta <= 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<problem>/beta must be > 0." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    b_ref = ReferenceMagneticField(profile_reader, beta_r_ref, beta);
+    if (global_variable::my_rank == 0) {
+      std::cout << "==============================================" << std::endl;
+      std::cout << "Magnetic Field Parameters                     " << std::endl;
+      std::cout << "==============================================" << std::endl;
+      std::cout << "bfield_type         : " << bfield_type          << std::endl;
+      std::cout << "beta                : " << beta                 << std::endl;
+      std::cout << "beta_r_ref          : " << beta_r_ref           << std::endl;
+      std::cout << "B_ref               : " << b_ref                << std::endl;
+      std::cout << std::endl;
+    }
   }
 
   // Count total particles and initialize SN centers buffer
@@ -404,14 +490,14 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   int &js = indcs.js; int &je = indcs.je;
   int &ks = indcs.ks; int &ke = indcs.ke;
   auto &size = pmbp->pmb->mb_size;
-  int nhydro = pmbp->phydro->nhydro;
 
   int IZS = scalar_IZS;
   int IDS = scalar_IDS;
   int IDL = scalar_IDL;
 
-  auto &u0 = pmbp->phydro->u0;
-  EOS_Data &eos = pmbp->phydro->peos->eos_data;
+  auto &u0 = (pmbp->pmhd != nullptr) ? pmbp->pmhd->u0 : pmbp->phydro->u0;
+  EOS_Data &eos = (pmbp->pmhd != nullptr) ? pmbp->pmhd->peos->eos_data :
+                                            pmbp->phydro->peos->eos_data;
   Real gm1 = eos.gamma - 1.0;
 
   auto &profile = profile_reader;
@@ -504,7 +590,378 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     std::cout << "Successfully initialized grid!" << std::endl;
   }
 
+  if (pmbp->pmhd != nullptr) {
+    InitializeMagneticField(pin, pmbp, bfield_type, b_ref);
+  }
+
   return;
+}
+
+Real ReferenceMagneticField(const ProfileReader &profile, const Real r_ref,
+                            const Real beta) {
+  DvceArray1D<Real> b_ref("gotham_b_ref", 1);
+  Kokkos::parallel_for("gotham_b_ref", Kokkos::RangePolicy<>(DevExeSpace(), 0, 1),
+  KOKKOS_LAMBDA(const int n) {
+    const Real pressure = profile.GetDensity(r_ref)*profile.GetTemperature(r_ref);
+    b_ref(n) = sqrt(2.0*pressure/beta);
+  });
+  DevExeSpace().fence();
+
+  auto h_b_ref = Kokkos::create_mirror_view(b_ref);
+  Kokkos::deep_copy(h_b_ref, b_ref);
+  return h_b_ref(0);
+}
+
+KOKKOS_INLINE_FUNCTION
+Real ToroidalVectorPotential(const Real x1, const Real x2, const Real b0,
+                             const Real r_soft) {
+  return -b0*sqrt(x1*x1 + x2*x2 + r_soft*r_soft);
+}
+
+KOKKOS_INLINE_FUNCTION
+Real TangledVectorPotential(const int dir, const Real x1, const Real x2,
+                            const Real x3, const int nmodes,
+                            const DvceArray2D<Real> &k_modes,
+                            const DvceArray2D<Real> &aka,
+                            const DvceArray2D<Real> &akb) {
+  Real avec = 0.0;
+  for (int n = 0; n < nmodes; ++n) {
+    const Real phase = k_modes(0,n)*x1 + k_modes(1,n)*x2 + k_modes(2,n)*x3;
+    avec += aka(dir,n)*cos(phase) - akb(dir,n)*sin(phase);
+  }
+  return avec;
+}
+
+void InitializeMagneticField(ParameterInput *pin, MeshBlockPack *pmbp,
+                             const std::string &bfield_type,
+                             const Real b_ref) {
+  auto bfield = ParseMagneticFieldType(bfield_type);
+  auto &indcs = pmbp->pmesh->mb_indcs;
+  int &is = indcs.is; int &ie = indcs.ie;
+  int &js = indcs.js; int &je = indcs.je;
+  int &ks = indcs.ks; int &ke = indcs.ke;
+  int nmb = pmbp->nmb_thispack;
+  auto &size = pmbp->pmb->mb_size;
+  auto &b0 = pmbp->pmhd->b0;
+  auto &bcc0 = pmbp->pmhd->bcc0;
+  auto &u0 = pmbp->pmhd->u0;
+
+  const bool use_tangled = (bfield == MagneticFieldType::tangled);
+  const bool use_toroidal = (bfield == MagneticFieldType::toroidal);
+  const bool use_vertical = (bfield == MagneticFieldType::vertical);
+
+  if (bfield == MagneticFieldType::none || use_vertical) {
+    par_for("gotham_b_vertical", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      b0.x1f(m,k,j,i) = 0.0;
+      b0.x2f(m,k,j,i) = 0.0;
+      b0.x3f(m,k,j,i) = use_vertical ? b_ref : 0.0;
+      if (i == ie) b0.x1f(m,k,j,i+1) = 0.0;
+      if (j == je) b0.x2f(m,k,j+1,i) = 0.0;
+      if (k == ke) b0.x3f(m,k+1,j,i) = use_vertical ? b_ref : 0.0;
+    });
+  } else {
+    int ncells1 = indcs.nx1 + 2*(indcs.ng);
+    int ncells2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*(indcs.ng)) : 2;
+    int ncells3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*(indcs.ng)) : 2;
+    DvceArray4D<Real> a1, a2, a3;
+    Kokkos::realloc(a1, nmb, ncells3, ncells2, ncells1);
+    Kokkos::realloc(a2, nmb, ncells3, ncells2, ncells1);
+    Kokkos::realloc(a3, nmb, ncells3, ncells2, ncells1);
+
+    int nmodes = 0;
+    DualArray2D<Real> k_modes, aka, akb;
+    if (use_tangled) {
+      const int nlow = pin->GetOrAddInteger("problem", "bfield_tangled_nlow", 1);
+      const int nhigh = pin->GetOrAddInteger("problem", "bfield_tangled_nhigh", 8);
+      const Real expo = pin->GetOrAddReal("problem", "bfield_tangled_expo", 5.0/3.0);
+      const int seed = pin->GetOrAddInteger("problem", "bfield_tangled_seed", -1);
+      const Real lx = pmbp->pmesh->mesh_size.x1max - pmbp->pmesh->mesh_size.x1min;
+      const Real ly = pmbp->pmesh->mesh_size.x2max - pmbp->pmesh->mesh_size.x2min;
+      const Real lz = pmbp->pmesh->mesh_size.x3max - pmbp->pmesh->mesh_size.x3min;
+      const Real dkx = 2.0*M_PI/lx;
+      const Real dky = 2.0*M_PI/ly;
+      const Real dkz = 2.0*M_PI/lz;
+
+      for (int nkx = -nhigh; nkx <= nhigh; ++nkx) {
+        for (int nky = -nhigh; nky <= nhigh; ++nky) {
+          for (int nkz = -nhigh; nkz <= nhigh; ++nkz) {
+            if (nkx == 0 && nky == 0 && nkz == 0) continue;
+            const int nsqr = nkx*nkx + nky*nky + nkz*nkz;
+            if (nsqr >= nlow*nlow && nsqr <= nhigh*nhigh) ++nmodes;
+          }
+        }
+      }
+      if (nmodes == 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Tangled magnetic field requested with zero Fourier modes."
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+
+      Kokkos::realloc(k_modes, 3, nmodes);
+      Kokkos::realloc(aka, 3, nmodes);
+      Kokkos::realloc(akb, 3, nmodes);
+
+      RNG_State rstate;
+      rstate.idum = (seed > 0) ? -seed : seed;
+      if (rstate.idum == 0) rstate.idum = -1;
+      int nmode = 0;
+      for (int nkx = -nhigh; nkx <= nhigh; ++nkx) {
+        for (int nky = -nhigh; nky <= nhigh; ++nky) {
+          for (int nkz = -nhigh; nkz <= nhigh; ++nkz) {
+            if (nkx == 0 && nky == 0 && nkz == 0) continue;
+            const int nsqr = nkx*nkx + nky*nky + nkz*nkz;
+            if (nsqr < nlow*nlow || nsqr > nhigh*nhigh) continue;
+
+            const Real kx = dkx*nkx;
+            const Real ky = dky*nky;
+            const Real kz = dkz*nkz;
+            const Real kiso = sqrt(kx*kx + ky*ky + kz*kz);
+            const Real norm = 1.0/pow(kiso, 0.5*(expo + 4.0));
+
+            k_modes.h_view(0,nmode) = kx;
+            k_modes.h_view(1,nmode) = ky;
+            k_modes.h_view(2,nmode) = kz;
+            for (int dir = 0; dir < 3; ++dir) {
+              aka.h_view(dir,nmode) = norm*RanGaussianSt(&rstate);
+              akb.h_view(dir,nmode) = norm*RanGaussianSt(&rstate);
+            }
+            ++nmode;
+          }
+        }
+      }
+      k_modes.template modify<HostMemSpace>();
+      k_modes.template sync<DevExeSpace>();
+      aka.template modify<HostMemSpace>();
+      aka.template sync<DevExeSpace>();
+      akb.template modify<HostMemSpace>();
+      akb.template sync<DevExeSpace>();
+    }
+
+    auto k_modes_d = k_modes.d_view;
+    auto aka_d = aka.d_view;
+    auto akb_d = akb.d_view;
+    auto &nghbr = pmbp->pmb->nghbr;
+    auto &mblev = pmbp->pmb->mb_lev;
+    const Real r_soft = pin->GetOrAddReal("problem", "bfield_toroidal_r_soft", 0.0);
+
+    par_for("gotham_vector_potential", DevExeSpace(), 0, nmb-1, ks, ke+1, js, je+1,
+            is, ie+1, KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real &x1min = size.d_view(m).x1min;
+      Real &x1max = size.d_view(m).x1max;
+      Real &x2min = size.d_view(m).x2min;
+      Real &x2max = size.d_view(m).x2max;
+      Real &x3min = size.d_view(m).x3min;
+      Real &x3max = size.d_view(m).x3max;
+
+      const int nx1 = indcs.nx1;
+      const int nx2 = indcs.nx2;
+      const int nx3 = indcs.nx3;
+      const Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+      const Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+      const Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+      const Real x1f = LeftEdgeX(i-is, nx1, x1min, x1max);
+      const Real x2f = LeftEdgeX(j-js, nx2, x2min, x2max);
+      const Real x3f = LeftEdgeX(k-ks, nx3, x3min, x3max);
+      const Real dx1 = size.d_view(m).dx1;
+      const Real dx2 = size.d_view(m).dx2;
+      const Real dx3 = size.d_view(m).dx3;
+
+      a1(m,k,j,i) = use_tangled ?
+          TangledVectorPotential(0, x1v, x2f, x3f, nmodes, k_modes_d, aka_d, akb_d) : 0.0;
+      a2(m,k,j,i) = use_tangled ?
+          TangledVectorPotential(1, x1f, x2v, x3f, nmodes, k_modes_d, aka_d, akb_d) : 0.0;
+      a3(m,k,j,i) = use_toroidal ?
+          ToroidalVectorPotential(x1f, x2f, b_ref, r_soft) :
+          TangledVectorPotential(2, x1f, x2f, x3v, nmodes, k_modes_d, aka_d, akb_d);
+
+      if (use_tangled &&
+          ((nghbr.d_view(m,8 ).lev > mblev.d_view(m) && j==js) ||
+           (nghbr.d_view(m,9 ).lev > mblev.d_view(m) && j==js) ||
+           (nghbr.d_view(m,10).lev > mblev.d_view(m) && j==js) ||
+           (nghbr.d_view(m,11).lev > mblev.d_view(m) && j==js) ||
+           (nghbr.d_view(m,12).lev > mblev.d_view(m) && j==je+1) ||
+           (nghbr.d_view(m,13).lev > mblev.d_view(m) && j==je+1) ||
+           (nghbr.d_view(m,14).lev > mblev.d_view(m) && j==je+1) ||
+           (nghbr.d_view(m,15).lev > mblev.d_view(m) && j==je+1) ||
+           (nghbr.d_view(m,24).lev > mblev.d_view(m) && k==ks) ||
+           (nghbr.d_view(m,25).lev > mblev.d_view(m) && k==ks) ||
+           (nghbr.d_view(m,26).lev > mblev.d_view(m) && k==ks) ||
+           (nghbr.d_view(m,27).lev > mblev.d_view(m) && k==ks) ||
+           (nghbr.d_view(m,28).lev > mblev.d_view(m) && k==ke+1) ||
+           (nghbr.d_view(m,29).lev > mblev.d_view(m) && k==ke+1) ||
+           (nghbr.d_view(m,30).lev > mblev.d_view(m) && k==ke+1) ||
+           (nghbr.d_view(m,31).lev > mblev.d_view(m) && k==ke+1) ||
+           (nghbr.d_view(m,40).lev > mblev.d_view(m) && j==js && k==ks) ||
+           (nghbr.d_view(m,41).lev > mblev.d_view(m) && j==js && k==ks) ||
+           (nghbr.d_view(m,42).lev > mblev.d_view(m) && j==je+1 && k==ks) ||
+           (nghbr.d_view(m,43).lev > mblev.d_view(m) && j==je+1 && k==ks) ||
+           (nghbr.d_view(m,44).lev > mblev.d_view(m) && j==js && k==ke+1) ||
+           (nghbr.d_view(m,45).lev > mblev.d_view(m) && j==js && k==ke+1) ||
+           (nghbr.d_view(m,46).lev > mblev.d_view(m) && j==je+1 && k==ke+1) ||
+           (nghbr.d_view(m,47).lev > mblev.d_view(m) && j==je+1 && k==ke+1))) {
+        const Real xl = x1v + 0.25*dx1;
+        const Real xr = x1v - 0.25*dx1;
+        a1(m,k,j,i) = 0.5*(
+            TangledVectorPotential(0, xl, x2f, x3f, nmodes, k_modes_d, aka_d, akb_d) +
+            TangledVectorPotential(0, xr, x2f, x3f, nmodes, k_modes_d, aka_d, akb_d));
+      }
+
+      if (use_tangled &&
+          ((nghbr.d_view(m,0 ).lev > mblev.d_view(m) && i==is) ||
+           (nghbr.d_view(m,1 ).lev > mblev.d_view(m) && i==is) ||
+           (nghbr.d_view(m,2 ).lev > mblev.d_view(m) && i==is) ||
+           (nghbr.d_view(m,3 ).lev > mblev.d_view(m) && i==is) ||
+           (nghbr.d_view(m,4 ).lev > mblev.d_view(m) && i==ie+1) ||
+           (nghbr.d_view(m,5 ).lev > mblev.d_view(m) && i==ie+1) ||
+           (nghbr.d_view(m,6 ).lev > mblev.d_view(m) && i==ie+1) ||
+           (nghbr.d_view(m,7 ).lev > mblev.d_view(m) && i==ie+1) ||
+           (nghbr.d_view(m,24).lev > mblev.d_view(m) && k==ks) ||
+           (nghbr.d_view(m,25).lev > mblev.d_view(m) && k==ks) ||
+           (nghbr.d_view(m,26).lev > mblev.d_view(m) && k==ks) ||
+           (nghbr.d_view(m,27).lev > mblev.d_view(m) && k==ks) ||
+           (nghbr.d_view(m,28).lev > mblev.d_view(m) && k==ke+1) ||
+           (nghbr.d_view(m,29).lev > mblev.d_view(m) && k==ke+1) ||
+           (nghbr.d_view(m,30).lev > mblev.d_view(m) && k==ke+1) ||
+           (nghbr.d_view(m,31).lev > mblev.d_view(m) && k==ke+1) ||
+           (nghbr.d_view(m,32).lev > mblev.d_view(m) && i==is && k==ks) ||
+           (nghbr.d_view(m,33).lev > mblev.d_view(m) && i==is && k==ks) ||
+           (nghbr.d_view(m,34).lev > mblev.d_view(m) && i==ie+1 && k==ks) ||
+           (nghbr.d_view(m,35).lev > mblev.d_view(m) && i==ie+1 && k==ks) ||
+           (nghbr.d_view(m,36).lev > mblev.d_view(m) && i==is && k==ke+1) ||
+           (nghbr.d_view(m,37).lev > mblev.d_view(m) && i==is && k==ke+1) ||
+           (nghbr.d_view(m,38).lev > mblev.d_view(m) && i==ie+1 && k==ke+1) ||
+           (nghbr.d_view(m,39).lev > mblev.d_view(m) && i==ie+1 && k==ke+1))) {
+        const Real xl = x2v + 0.25*dx2;
+        const Real xr = x2v - 0.25*dx2;
+        a2(m,k,j,i) = 0.5*(
+            TangledVectorPotential(1, x1f, xl, x3f, nmodes, k_modes_d, aka_d, akb_d) +
+            TangledVectorPotential(1, x1f, xr, x3f, nmodes, k_modes_d, aka_d, akb_d));
+      }
+
+      if ((nghbr.d_view(m,0 ).lev > mblev.d_view(m) && i==is) ||
+          (nghbr.d_view(m,1 ).lev > mblev.d_view(m) && i==is) ||
+          (nghbr.d_view(m,2 ).lev > mblev.d_view(m) && i==is) ||
+          (nghbr.d_view(m,3 ).lev > mblev.d_view(m) && i==is) ||
+          (nghbr.d_view(m,4 ).lev > mblev.d_view(m) && i==ie+1) ||
+          (nghbr.d_view(m,5 ).lev > mblev.d_view(m) && i==ie+1) ||
+          (nghbr.d_view(m,6 ).lev > mblev.d_view(m) && i==ie+1) ||
+          (nghbr.d_view(m,7 ).lev > mblev.d_view(m) && i==ie+1) ||
+          (nghbr.d_view(m,8 ).lev > mblev.d_view(m) && j==js) ||
+          (nghbr.d_view(m,9 ).lev > mblev.d_view(m) && j==js) ||
+          (nghbr.d_view(m,10).lev > mblev.d_view(m) && j==js) ||
+          (nghbr.d_view(m,11).lev > mblev.d_view(m) && j==js) ||
+          (nghbr.d_view(m,12).lev > mblev.d_view(m) && j==je+1) ||
+          (nghbr.d_view(m,13).lev > mblev.d_view(m) && j==je+1) ||
+          (nghbr.d_view(m,14).lev > mblev.d_view(m) && j==je+1) ||
+          (nghbr.d_view(m,15).lev > mblev.d_view(m) && j==je+1) ||
+          (nghbr.d_view(m,16).lev > mblev.d_view(m) && i==is && j==js) ||
+          (nghbr.d_view(m,17).lev > mblev.d_view(m) && i==is && j==js) ||
+          (nghbr.d_view(m,18).lev > mblev.d_view(m) && i==ie+1 && j==js) ||
+          (nghbr.d_view(m,19).lev > mblev.d_view(m) && i==ie+1 && j==js) ||
+          (nghbr.d_view(m,20).lev > mblev.d_view(m) && i==is && j==je+1) ||
+          (nghbr.d_view(m,21).lev > mblev.d_view(m) && i==is && j==je+1) ||
+          (nghbr.d_view(m,22).lev > mblev.d_view(m) && i==ie+1 && j==je+1) ||
+          (nghbr.d_view(m,23).lev > mblev.d_view(m) && i==ie+1 && j==je+1)) {
+        const Real xl = x3v + 0.25*dx3;
+        const Real xr = x3v - 0.25*dx3;
+        a3(m,k,j,i) = use_toroidal ?
+            ToroidalVectorPotential(x1f, x2f, b_ref, r_soft) :
+            0.5*(TangledVectorPotential(2, x1f, x2f, xl, nmodes, k_modes_d, aka_d, akb_d) +
+                 TangledVectorPotential(2, x1f, x2f, xr, nmodes, k_modes_d, aka_d, akb_d));
+      }
+    });
+
+    par_for("gotham_b_curl", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      const Real dx1 = size.d_view(m).dx1;
+      const Real dx2 = size.d_view(m).dx2;
+      const Real dx3 = size.d_view(m).dx3;
+
+      b0.x1f(m,k,j,i) = ((a3(m,k,j+1,i) - a3(m,k,j,i))/dx2 -
+                         (a2(m,k+1,j,i) - a2(m,k,j,i))/dx3);
+      b0.x2f(m,k,j,i) = ((a1(m,k+1,j,i) - a1(m,k,j,i))/dx3 -
+                         (a3(m,k,j,i+1) - a3(m,k,j,i))/dx1);
+      b0.x3f(m,k,j,i) = ((a2(m,k,j,i+1) - a2(m,k,j,i))/dx1 -
+                         (a1(m,k,j+1,i) - a1(m,k,j,i))/dx2);
+
+      if (i == ie) {
+        b0.x1f(m,k,j,i+1) = ((a3(m,k,j+1,i+1) - a3(m,k,j,i+1))/dx2 -
+                             (a2(m,k+1,j,i+1) - a2(m,k,j,i+1))/dx3);
+      }
+      if (j == je) {
+        b0.x2f(m,k,j+1,i) = ((a1(m,k+1,j+1,i) - a1(m,k,j+1,i))/dx3 -
+                             (a3(m,k,j+1,i+1) - a3(m,k,j+1,i))/dx1);
+      }
+      if (k == ke) {
+        b0.x3f(m,k+1,j,i) = ((a2(m,k+1,j,i+1) - a2(m,k+1,j,i))/dx1 -
+                             (a1(m,k+1,j+1,i) - a1(m,k+1,j,i))/dx2);
+      }
+    });
+
+    if (use_tangled) {
+      const int nx1 = indcs.nx1;
+      const int nx2 = indcs.nx2;
+      const int nx3 = indcs.nx3;
+      const int nmkji = nmb*nx3*nx2*nx1;
+      const int nkji = nx3*nx2*nx1;
+      const int nji = nx2*nx1;
+      Real b2_sum = 0.0;
+      Real vol_sum = 0.0;
+      Kokkos::parallel_reduce("gotham_b_rms", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+      KOKKOS_LAMBDA(const int idx, Real &b2_total, Real &vol_total) {
+        int m = idx/nkji;
+        int k = (idx - m*nkji)/nji;
+        int j = (idx - m*nkji - k*nji)/nx1;
+        int i = (idx - m*nkji - k*nji - j*nx1) + is;
+        k += ks;
+        j += js;
+        const Real bx = 0.5*(b0.x1f(m,k,j,i) + b0.x1f(m,k,j,i+1));
+        const Real by = 0.5*(b0.x2f(m,k,j,i) + b0.x2f(m,k,j+1,i));
+        const Real bz = 0.5*(b0.x3f(m,k,j,i) + b0.x3f(m,k+1,j,i));
+        const Real vol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
+        b2_total += (bx*bx + by*by + bz*bz)*vol;
+        vol_total += vol;
+      }, Kokkos::Sum<Real>(b2_sum), Kokkos::Sum<Real>(vol_sum));
+
+#if MPI_PARALLEL_ENABLED
+      Real local[2] = {b2_sum, vol_sum};
+      Real global[2];
+      MPI_Allreduce(local, global, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+      b2_sum = global[0];
+      vol_sum = global[1];
+#endif
+
+      const Real b_rms = sqrt(b2_sum/vol_sum);
+      const Real b_scale = (b_rms > 0.0) ? b_ref/b_rms : 0.0;
+      par_for("gotham_b_scale", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        b0.x1f(m,k,j,i) *= b_scale;
+        b0.x2f(m,k,j,i) *= b_scale;
+        b0.x3f(m,k,j,i) *= b_scale;
+        if (i == ie) b0.x1f(m,k,j,i+1) *= b_scale;
+        if (j == je) b0.x2f(m,k,j+1,i) *= b_scale;
+        if (k == ke) b0.x3f(m,k+1,j,i) *= b_scale;
+      });
+    }
+  }
+
+  par_for("gotham_bcc_energy", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
+  KOKKOS_LAMBDA(int m, int k, int j, int i) {
+    const Real bx = 0.5*(b0.x1f(m,k,j,i) + b0.x1f(m,k,j,i+1));
+    const Real by = 0.5*(b0.x2f(m,k,j,i) + b0.x2f(m,k,j+1,i));
+    const Real bz = 0.5*(b0.x3f(m,k,j,i) + b0.x3f(m,k+1,j,i));
+    bcc0(m,IBX,k,j,i) = bx;
+    bcc0(m,IBY,k,j,i) = by;
+    bcc0(m,IBZ,k,j,i) = bz;
+    u0(m,IEN,k,j,i) += 0.5*(bx*bx + by*by + bz*bz);
+  });
+
+  if (global_variable::my_rank == 0) {
+    std::cout << "Successfully initialized magnetic field!" << std::endl;
+  }
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -719,8 +1176,8 @@ void GravitySource(Mesh* pm, const Real bdt) {
   int nx1 = indcs.nx1, nx2 = indcs.nx2, nx3 = indcs.nx3;
   int nmb1 = pmbp->nmb_thispack - 1;
   auto &size = pmbp->pmb->mb_size;
-  auto &u0 = pmbp->phydro->u0;
-  auto &w0 = pmbp->phydro->w0;
+  auto &u0 = (pmbp->pmhd != nullptr) ? pmbp->pmhd->u0 : pmbp->phydro->u0;
+  auto &w0 = (pmbp->pmhd != nullptr) ? pmbp->pmhd->w0 : pmbp->phydro->w0;
 
   Real G = pmbp->punit->grav_constant();
   Real r_s = r_scale;
@@ -813,14 +1270,12 @@ void SNSource(Mesh* pm, const Real bdt) {
   int nx1 = indcs.nx1, nx2 = indcs.nx2, nx3 = indcs.nx3;
   int nmb1 = pmbp->nmb_thispack - 1;
   auto &size = pmbp->pmb->mb_size;
-  int nhydro = pmbp->phydro->nhydro;
-
   int IZS = scalar_IZS;
   int IDS = scalar_IDS;
   int IDL = scalar_IDL;
 
-  auto &u0 = pmbp->phydro->u0;
-  auto &w0 = pmbp->phydro->w0;
+  auto &u0 = (pmbp->pmhd != nullptr) ? pmbp->pmhd->u0 : pmbp->phydro->u0;
+  auto &w0 = (pmbp->pmhd != nullptr) ? pmbp->pmhd->w0 : pmbp->phydro->w0;
 
   Real dr = r_inj;
   Real dz_sn = d_z_sn;
@@ -948,7 +1403,8 @@ void DustSource(Mesh* pm, const Real bdt) {
   int ks = indcs.ks, ke = indcs.ke;
   int nmb1 = pmbp->nmb_thispack - 1;
 
-  EOS_Data &eos = pmbp->phydro->peos->eos_data;
+  EOS_Data &eos = (pmbp->pmhd != nullptr) ? pmbp->pmhd->peos->eos_data :
+                                            pmbp->phydro->peos->eos_data;
   Real gamma = eos.gamma;
   Real gm1 = gamma - 1.0;
 
@@ -956,8 +1412,8 @@ void DustSource(Mesh* pm, const Real bdt) {
   int IDS = scalar_IDS;
   int IDL = scalar_IDL;
 
-  auto &u0 = pmbp->phydro->u0;
-  auto &w0 = pmbp->phydro->w0;
+  auto &u0 = (pmbp->pmhd != nullptr) ? pmbp->pmhd->u0 : pmbp->phydro->u0;
+  auto &w0 = (pmbp->pmhd != nullptr) ? pmbp->pmhd->w0 : pmbp->phydro->w0;
 
   // --- grain parameters (from input deck) --------------------------------
   // Representative bin radii used by all dust processes.
@@ -1181,6 +1637,135 @@ void DustSource(Mesh* pm, const Real bdt) {
   return;
 }
 
+void ApplyUserMagneticBoundary(Mesh *pm) {
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp->pmhd == nullptr) return;
+
+  auto &indcs = pm->mb_indcs;
+  int &ng = indcs.ng;
+  int n1 = indcs.nx1 + 2*ng;
+  int n2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*ng) : 1;
+  int n3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*ng) : 1;
+  int &is = indcs.is; int &ie = indcs.ie;
+  int &js = indcs.js; int &je = indcs.je;
+  int &ks = indcs.ks; int &ke = indcs.ke;
+  int nmb1 = pmbp->nmb_thispack - 1;
+  auto &mb_bcs = pmbp->pmb->mb_bcs;
+  auto &b0 = pmbp->pmhd->b0;
+
+  if (pm->mesh_bcs[BoundaryFace::inner_x1] != BoundaryFlag::periodic) {
+    par_for("gotham_b_user_x1", DevExeSpace(), 0, nmb1, 0, (n3-1), 0, (n2-1),
+    KOKKOS_LAMBDA(int m, int k, int j) {
+      if (mb_bcs.d_view(m, BoundaryFace::inner_x1) == BoundaryFlag::user) {
+        for (int i = 0; i < ng; ++i) {
+          b0.x1f(m,k,j,is-i-1) = b0.x1f(m,k,j,is);
+          b0.x2f(m,k,j,is-i-1) = b0.x2f(m,k,j,is);
+          if (j == n2-1) b0.x2f(m,k,j+1,is-i-1) = b0.x2f(m,k,j+1,is);
+          b0.x3f(m,k,j,is-i-1) = b0.x3f(m,k,j,is);
+          if (k == n3-1) b0.x3f(m,k+1,j,is-i-1) = b0.x3f(m,k+1,j,is);
+        }
+      }
+      if (mb_bcs.d_view(m, BoundaryFace::outer_x1) == BoundaryFlag::user) {
+        for (int i = 0; i < ng; ++i) {
+          b0.x1f(m,k,j,ie+i+2) = b0.x1f(m,k,j,ie+1);
+          b0.x2f(m,k,j,ie+i+1) = b0.x2f(m,k,j,ie);
+          if (j == n2-1) b0.x2f(m,k,j+1,ie+i+1) = b0.x2f(m,k,j+1,ie);
+          b0.x3f(m,k,j,ie+i+1) = b0.x3f(m,k,j,ie);
+          if (k == n3-1) b0.x3f(m,k+1,j,ie+i+1) = b0.x3f(m,k+1,j,ie);
+        }
+      }
+    });
+  }
+  if (pm->one_d) return;
+
+  if (pm->mesh_bcs[BoundaryFace::inner_x2] != BoundaryFlag::periodic) {
+    par_for("gotham_b_user_x2", DevExeSpace(), 0, nmb1, 0, (n3-1), 0, (n1-1),
+    KOKKOS_LAMBDA(int m, int k, int i) {
+      if (mb_bcs.d_view(m, BoundaryFace::inner_x2) == BoundaryFlag::user) {
+        for (int j = 0; j < ng; ++j) {
+          b0.x1f(m,k,js-j-1,i) = b0.x1f(m,k,js,i);
+          if (i == n1-1) b0.x1f(m,k,js-j-1,i+1) = b0.x1f(m,k,js,i+1);
+          b0.x2f(m,k,js-j-1,i) = b0.x2f(m,k,js,i);
+          b0.x3f(m,k,js-j-1,i) = b0.x3f(m,k,js,i);
+          if (k == n3-1) b0.x3f(m,k+1,js-j-1,i) = b0.x3f(m,k+1,js,i);
+        }
+      }
+      if (mb_bcs.d_view(m, BoundaryFace::outer_x2) == BoundaryFlag::user) {
+        for (int j = 0; j < ng; ++j) {
+          b0.x1f(m,k,je+j+1,i) = b0.x1f(m,k,je,i);
+          if (i == n1-1) b0.x1f(m,k,je+j+1,i+1) = b0.x1f(m,k,je,i+1);
+          b0.x2f(m,k,je+j+2,i) = b0.x2f(m,k,je+1,i);
+          b0.x3f(m,k,je+j+1,i) = b0.x3f(m,k,je,i);
+          if (k == n3-1) b0.x3f(m,k+1,je+j+1,i) = b0.x3f(m,k+1,je,i);
+        }
+      }
+    });
+  }
+  if (pm->two_d) return;
+
+  if (pm->mesh_bcs[BoundaryFace::inner_x3] != BoundaryFlag::periodic) {
+    par_for("gotham_b_user_x3", DevExeSpace(), 0, nmb1, 0, (n2-1), 0, (n1-1),
+    KOKKOS_LAMBDA(int m, int j, int i) {
+      if (mb_bcs.d_view(m, BoundaryFace::inner_x3) == BoundaryFlag::user) {
+        for (int k = 0; k < ng; ++k) {
+          b0.x1f(m,ks-k-1,j,i) = b0.x1f(m,ks,j,i);
+          if (i == n1-1) b0.x1f(m,ks-k-1,j,i+1) = b0.x1f(m,ks,j,i+1);
+          b0.x2f(m,ks-k-1,j,i) = b0.x2f(m,ks,j,i);
+          if (j == n2-1) b0.x2f(m,ks-k-1,j+1,i) = b0.x2f(m,ks,j+1,i);
+          b0.x3f(m,ks-k-1,j,i) = b0.x3f(m,ks,j,i);
+        }
+      }
+      if (mb_bcs.d_view(m, BoundaryFace::outer_x3) == BoundaryFlag::user) {
+        for (int k = 0; k < ng; ++k) {
+          b0.x1f(m,ke+k+1,j,i) = b0.x1f(m,ke,j,i);
+          if (i == n1-1) b0.x1f(m,ke+k+1,j,i+1) = b0.x1f(m,ke,j,i+1);
+          b0.x2f(m,ke+k+1,j,i) = b0.x2f(m,ke,j,i);
+          if (j == n2-1) b0.x2f(m,ke+k+1,j+1,i) = b0.x2f(m,ke,j+1,i);
+          b0.x3f(m,ke+k+2,j,i) = b0.x3f(m,ke+1,j,i);
+        }
+      }
+    });
+  }
+}
+
+void AddUserBoundaryMagneticEnergy(Mesh *pm) {
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp->pmhd == nullptr) return;
+
+  auto &indcs = pm->mb_indcs;
+  int &ng = indcs.ng;
+  int n1 = indcs.nx1 + 2*ng;
+  int n2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*ng) : 1;
+  int n3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*ng) : 1;
+  int &is = indcs.is; int &ie = indcs.ie;
+  int &js = indcs.js; int &je = indcs.je;
+  int &ks = indcs.ks; int &ke = indcs.ke;
+  int nmb1 = pmbp->nmb_thispack - 1;
+  auto &mb_bcs = pmbp->pmb->mb_bcs;
+  auto &u0 = pmbp->pmhd->u0;
+  auto &b0 = pmbp->pmhd->b0;
+
+  par_for("gotham_user_b_energy", DevExeSpace(), 0, nmb1, 0, (n3-1), 0, (n2-1),
+          0, (n1-1), KOKKOS_LAMBDA(int m, int k, int j, int i) {
+    const bool user_x1 = ((i < is) &&
+        (mb_bcs.d_view(m, BoundaryFace::inner_x1) == BoundaryFlag::user)) ||
+        ((i > ie) && (mb_bcs.d_view(m, BoundaryFace::outer_x1) == BoundaryFlag::user));
+    const bool user_x2 = ((j < js) &&
+        (mb_bcs.d_view(m, BoundaryFace::inner_x2) == BoundaryFlag::user)) ||
+        ((j > je) && (mb_bcs.d_view(m, BoundaryFace::outer_x2) == BoundaryFlag::user));
+    const bool user_x3 = ((k < ks) &&
+        (mb_bcs.d_view(m, BoundaryFace::inner_x3) == BoundaryFlag::user)) ||
+        ((k > ke) && (mb_bcs.d_view(m, BoundaryFace::outer_x3) == BoundaryFlag::user));
+
+    if (user_x1 || user_x2 || user_x3) {
+      const Real bx = 0.5*(b0.x1f(m,k,j,i) + b0.x1f(m,k,j,i+1));
+      const Real by = 0.5*(b0.x2f(m,k,j,i) + b0.x2f(m,k,j+1,i));
+      const Real bz = 0.5*(b0.x3f(m,k,j,i) + b0.x3f(m,k+1,j,i));
+      u0(m,IEN,k,j,i) += 0.5*(bx*bx + by*by + bz*bz);
+    }
+  });
+}
+
 //===========================================================================//
 //                             User Boundary                                 //
 //===========================================================================//
@@ -1199,14 +1784,14 @@ void UserBoundary(Mesh* pm) {
   int nmb1 = pmbp->nmb_thispack - 1;
   auto &size = pmbp->pmb->mb_size;
   auto &mb_bcs = pm->pmb_pack->pmb->mb_bcs;
-  int nhydro = pmbp->phydro->nhydro;
 
   int IZS = scalar_IZS;
   int IDS = scalar_IDS;
   int IDL = scalar_IDL;
 
-  auto &u0 = pmbp->phydro->u0;
-  auto &eos = pmbp->phydro->peos->eos_data;
+  auto &u0 = (pmbp->pmhd != nullptr) ? pmbp->pmhd->u0 : pmbp->phydro->u0;
+  auto &eos = (pmbp->pmhd != nullptr) ? pmbp->pmhd->peos->eos_data :
+                                        pmbp->phydro->peos->eos_data;
   Real gm1 = eos.gamma - 1.0;
 
   auto &profile = profile_reader;
@@ -1218,6 +1803,10 @@ void UserBoundary(Mesh* pm) {
   Real Z_ = Z;
   Real dz_init = d_z_init;
   Real min_df = min_dust_frac;
+
+  if (pmbp->pmhd != nullptr) {
+    ApplyUserMagneticBoundary(pm);
+  }
 
   // Handle X1 boundaries
   par_for("static_x1", DevExeSpace(), 0, nmb1, 0, (n3-1), 0, (n2-1), 0, (ng-1),
@@ -1318,6 +1907,10 @@ void UserBoundary(Mesh* pm) {
     }
   });
 
+  if (pmbp->pmhd != nullptr) {
+    AddUserBoundaryMagneticEnergy(pm);
+  }
+
 }
 
 //===========================================================================//
@@ -1336,8 +1929,8 @@ void RefinementCondition(MeshBlockPack* pmbp) {
   int &ks = indcs.ks, nx3 = indcs.nx3;
   const int nkji = nx3 * nx2 * nx1;
   const int nji  = nx2 * nx1;
-  auto &u0       = pmbp->phydro->u0;
-  auto &w0       = pmbp->phydro->w0;
+  auto &u0       = (pmbp->pmhd != nullptr) ? pmbp->pmhd->u0 : pmbp->phydro->u0;
+  auto &w0       = (pmbp->pmhd != nullptr) ? pmbp->pmhd->w0 : pmbp->phydro->w0;
 
   auto &ddens_thresh = ddens_threshold;
 

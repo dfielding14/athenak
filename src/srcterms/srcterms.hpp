@@ -37,6 +37,7 @@ class SourceTerms {
   bool const_accel;
   bool ism_cooling;
   bool cgm_cooling;
+  bool cgm_cooling_limit_dt;
   bool rel_cooling;
   bool beam;
   bool shearing_box, shearing_box_r_phi;
@@ -53,6 +54,8 @@ class SourceTerms {
   Real hscale_norm;
   Real hscale_height; // Gaussian Scale Height
   Real hscale_radius; // Exponential Scale Radius
+  Real cgm_cooling_dt_frac;
+  int cgm_fluid_vars;
 
   // CGM cooling tables
   DualArray1D<Real> Tbins, nHbins;
