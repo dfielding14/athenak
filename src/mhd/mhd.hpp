@@ -212,7 +212,7 @@ class MHD {
   TaskStatus BeginCGLLandauFluidSTSSweep(Driver *d, int stage);
   TaskStatus STSUpdateU(Driver *d, int stage);
   TaskStatus CGLLandauFluidSTSUpdateU(Driver *d, int stage);
-  TaskStatus CGLLandauFluidConToPrim(Driver *d, int stage);
+  TaskStatus CGLLandauFluidPrimitiveRefresh(Driver *d, int stage);
   TaskStatus EndCGLLandauFluidSTSSweep(Driver *d, int stage);
   TaskStatus CheckCGLLFAdmissibility(Driver *d, int stage);
   TaskStatus STSUpdateB(Driver *d, int stage);

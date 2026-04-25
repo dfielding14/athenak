@@ -127,7 +127,7 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
       TaskID pc2p(0);
       if (cgl_lf_two_var_sts) {
         pc2p = tl["parabolic_stagen"]->AddTask(
-            &MHD::CGLLandauFluidConToPrim, this, pprol);
+            &MHD::CGLLandauFluidPrimitiveRefresh, this, pprol);
       } else {
         pc2p = tl["parabolic_stagen"]->AddTask(&MHD::ConToPrim, this, pprol);
       }
@@ -679,16 +679,16 @@ TaskStatus MHD::ConToPrim(Driver *pdrive, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn TaskStatus MHD::CGLLandauFluidConToPrim
-//! \brief CGL LF STS primitive recovery while IAN stores magnetic moment.
+//! \fn TaskStatus MHD::CGLLandauFluidPrimitiveRefresh
+//! \brief Lightweight CGL LF STS primitive refresh while IAN stores magnetic moment.
 
-TaskStatus MHD::CGLLandauFluidConToPrim(Driver *pdrive, int stage) {
+TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int &ng = indcs.ng;
   int n1m1 = indcs.nx1 + 2*ng - 1;
   int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
   int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
-  peos->CGLMagneticMomentToPrim(u0, b0, w0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
+  peos->CGLRefreshPrimFromMagneticMoment(u0, bcc0, w0, 0, n1m1, 0, n2m1, 0, n3m1);
   if (cgl_lf_admissibility_check && pdrive->sts.enabled &&
       pdrive->sts.sweep != Driver::STSSweep::none) {
     return CheckCGLLFAdmissibility(pdrive, stage);

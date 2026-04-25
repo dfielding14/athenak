@@ -277,6 +277,12 @@ class EquationOfState {
                                        const int il, const int iu,
                                        const int jl, const int ju,
                                        const int kl, const int ku);
+  virtual void CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
+                                                const DvceArray5D<Real> &bcc,
+                                                DvceArray5D<Real> &prim,
+                                                const int il, const int iu,
+                                                const int jl, const int ju,
+                                                const int kl, const int ku);
 };
 
 //----------------------------------------------------------------------------------------
@@ -441,6 +447,12 @@ class CGLMHD : public EquationOfState {
                                const int il, const int iu,
                                const int jl, const int ju,
                                const int kl, const int ku) override;
+  void CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
+                                        const DvceArray5D<Real> &bcc,
+                                        DvceArray5D<Real> &prim,
+                                        const int il, const int iu,
+                                        const int jl, const int ju,
+                                        const int kl, const int ku) override;
 };
 
 //----------------------------------------------------------------------------------------

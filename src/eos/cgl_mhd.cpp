@@ -298,6 +298,86 @@ void CGLMHD::CGLMagneticMomentToPrim(DvceArray5D<Real> &cons,
 }
 
 //----------------------------------------------------------------------------------------
+//! \!fn void CGLRefreshPrimFromMagneticMoment()
+//! \brief Lightweight primitive refresh for CGL LF STS stages.
+//!
+//! During a pure CGL Landau-fluid STS sweep, only total energy and the temporary
+//! magnetic-moment slot change.  The face-centered and cell-centered magnetic fields are
+//! fixed, so this refresh reuses bcc and avoids the full face-to-cell magnetic-field
+//! average and scalar primitive conversion done by CGLMagneticMomentToPrim().
+
+void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
+                                              const DvceArray5D<Real> &bcc,
+                                              DvceArray5D<Real> &prim,
+                                              const int il, const int iu,
+                                              const int jl, const int ju,
+                                              const int kl, const int ku) {
+  int &nmb = pmy_pack->nmb_thispack;
+  auto &eos = eos_data;
+
+  const int ni   = (iu - il + 1);
+  const int nji  = (ju - jl + 1)*ni;
+  const int nkji = (ku - kl + 1)*nji;
+  const int nmkji = nmb*nkji;
+
+  int nfloord_=0, nfloore_=0, nfloort_=0;
+  Kokkos::parallel_reduce("mhd_cgl_lf_refresh_prim",
+  Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumt) {
+    int m = (idx)/nkji;
+    int k = (idx - m*nkji)/nji;
+    int j = (idx - m*nkji - k*nji)/ni;
+    int i = (idx - m*nkji - k*nji - j*ni) + il;
+    j += jl;
+    k += kl;
+
+    MHDCons1D u;
+    u.d  = cons(m,IDN,k,j,i);
+    u.mx = cons(m,IM1,k,j,i);
+    u.my = cons(m,IM2,k,j,i);
+    u.mz = cons(m,IM3,k,j,i);
+    u.e  = cons(m,IEN,k,j,i);
+    u.mu = cons(m,IAN,k,j,i);
+    u.bx = bcc(m,IBX,k,j,i);
+    u.by = bcc(m,IBY,k,j,i);
+    u.bz = bcc(m,IBZ,k,j,i);
+
+    HydPrim1D w;
+    bool dfloor_used=false, efloor_used=false, tfloor_used=false, bfloor_used=false;
+    SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
+                                       tfloor_used, bfloor_used);
+
+    if (dfloor_used) {
+      cons(m,IDN,k,j,i) = u.d;
+      sumd++;
+    }
+    if (efloor_used) {
+      cons(m,IEN,k,j,i) = u.e;
+      cons(m,IAN,k,j,i) = u.mu;
+      sume++;
+    }
+    if (bfloor_used) {
+      cons(m,IAN,k,j,i) = u.mu;
+    }
+
+    prim(m,IDN,k,j,i) = w.d;
+    prim(m,IVX,k,j,i) = w.vx;
+    prim(m,IVY,k,j,i) = w.vy;
+    prim(m,IVZ,k,j,i) = w.vz;
+    prim(m,IEN,k,j,i) = w.e;
+    prim(m,IPP,k,j,i) = w.pp;
+
+    (void) sumt;
+  }, Kokkos::Sum<int>(nfloord_), Kokkos::Sum<int>(nfloore_), Kokkos::Sum<int>(nfloort_));
+
+  pmy_pack->pmesh->ecounter.neos_dfloor += nfloord_;
+  pmy_pack->pmesh->ecounter.neos_efloor += nfloore_;
+  pmy_pack->pmesh->ecounter.neos_tfloor += nfloort_;
+
+  return;
+}
+
+//----------------------------------------------------------------------------------------
 //! \!fn void PrimToCons()
 //! \brief Converts conserved into primitive variables.  Operates over range of cells
 //! given in argument list.  Does not change cell- or face-centered magnetic fields.
