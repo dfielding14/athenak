@@ -53,8 +53,9 @@ class MeshRefinement {
   int refinement_interval;   // # of cycles between allowing successive ref/derefinement
   bool prolong_prims;        // flag to enable prolongation of primitive vars
 
-  // following 2x Views are dimensioned [nmb_total]
+  // following Views are dimensioned [nmb_total]
   DualArray1D<int> refine_flag;    // refinement flag for each MeshBlock
+  DualArray1D<int> fc_amr_repair;  // marks level-changed MBs needing FC interior repair
   HostArray1D<int> ncyc_since_ref; // # of cycles since MB last refined/derefined
 
   // following 4x arrays allocated with length [nranks] only with AMR
@@ -128,6 +129,7 @@ class MeshRefinement {
   void RefineCC(DualArray1D<int> &n2o, DvceArray5D<Real> &a, DvceArray5D<Real> &ca,
                 bool is_z4c=false);
   void RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b, DvceFaceFld4D<Real> &cb);
+  void RepairRefinedFC(DvceFaceFld4D<Real> &b);
 
   void RestrictCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca, bool is_z4c=false);
   void RestrictFC(DvceFaceFld4D<Real> &b, DvceFaceFld4D<Real> &cb);

@@ -22,6 +22,7 @@
 #include "mesh_refinement.hpp"
 
 #include "hydro/hydro.hpp"
+#include "dyn_grmhd/dyn_grmhd.hpp"
 #include "mhd/mhd.hpp"
 #include "radiation/radiation.hpp"
 #include "z4c/z4c.hpp"
@@ -41,6 +42,7 @@
 MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
   pmy_mesh(pm),
   refine_flag("rflag",pm->nmb_total),
+  fc_amr_repair("fc_amr_repair",pm->nmb_total),
   ncyc_since_ref("cyc_since_ref",pm->nmb_total),
   nmb_created(0),
   nmb_deleted(0),
@@ -90,10 +92,13 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
   // be sure Views are initialized to zero
   for (int m=0; m<(pm->nmb_total); ++m) {
     refine_flag.h_view(m) = 0;
+    fc_amr_repair.h_view(m) = 0;
     ncyc_since_ref(m) = 0;
   }
   refine_flag.template modify<HostMemSpace>();
   refine_flag.template sync<DevExeSpace>();
+  fc_amr_repair.template modify<HostMemSpace>();
+  fc_amr_repair.template sync<DevExeSpace>();
 
   // initialize interpolation weights for prolongation and restriction
   InitInterpWghts();
@@ -146,6 +151,17 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
     pdriver->InitBoundaryValuesAndPrimitives(pmy_mesh);
 
     MeshBlockPack* pmbp = pmy_mesh->pmb_pack;
+    if (pmbp->pmhd != nullptr) {
+      RepairRefinedFC(pmbp->pmhd->b0);
+      if (pmbp->pdyngr == nullptr) {
+        (void) pmbp->pmhd->ConToPrim(pdriver, 0);
+      } else {
+        if (pmbp->pz4c != nullptr) {
+          (void) pmbp->pz4c->ConvertZ4cToADM(pdriver, 0);
+        }
+        (void) pmbp->pdyngr->ConToPrim(pdriver, 0);
+      }
+    }
     if (pmbp->phydro != nullptr) {
       (void) pmbp->phydro->NewTimeStep(pdriver, pdriver->nexp_stages);
     }
@@ -663,6 +679,13 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   Kokkos::realloc(ncyc_since_ref, new_nmb_total);
   Kokkos::deep_copy(ncyc_since_ref, new_ncyc_since_ref);
 
+  Kokkos::realloc(fc_amr_repair, new_nmb_total);
+  for (int m=0; m<new_nmb_total; ++m) {
+    fc_amr_repair.h_view(m) = (refine_flag.h_view(newtoold[m]) != 0) ? 1 : 0;
+  }
+  fc_amr_repair.template modify<HostMemSpace>();
+  fc_amr_repair.template sync<DevExeSpace>();
+
   // Step 10.
   // Update data in Mesh/MeshBlockPack/MeshBlock classes with new grid properties
   delete [] pm->lloc_eachmb;
@@ -1173,6 +1196,47 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
   par_for("RefineFC-int",DevExeSpace(), 0,(new_nmb-1), cks,cke, cjs,cje, cis,cie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     if (refine_flag_.d_view(n2o.d_view(m+ngids_)) > 0) {
+      // fine indices refer to target array
+      int fi = (i - cis)*2 + is;   // fine i
+      int fj = (j - cjs)*2 + js;   // fine j
+      int fk = (k - cks)*2 + ks;   // fine k
+
+      if (one_d) {
+        // In 1D, interior face field is trivial
+        b.x1f(m,fk,fj,fi+1) = 0.5*(b.x1f(m,fk,fj,fi) + b.x1f(m,fk,fj,fi+2));
+      } else {
+        // in multi-D call inlined prolongation operator for FC fields at internal faces
+        ProlongFCInternal(m,fk,fj,fi,three_d,b);
+      }
+    }
+  });
+
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MeshRefinement::RepairRefinedFC
+//! \brief Recompute internal face-centered fields in level-changed MeshBlocks after
+//! exterior faces have been finalized by boundary exchange/prolongation.
+
+void MeshRefinement::RepairRefinedFC(DvceFaceFld4D<Real> &b) {
+  auto &indcs = pmy_mesh->mb_indcs;
+  auto &is = indcs.is;
+  auto &js = indcs.js;
+  auto &ks = indcs.ks;
+  auto &cis = indcs.cis, &cie = indcs.cie;
+  auto &cjs = indcs.cjs, &cje = indcs.cje;
+  auto &cks = indcs.cks, &cke = indcs.cke;
+
+  const int nmb = pmy_mesh->pmb_pack->nmb_thispack;
+  const int mbs = pmy_mesh->gids_eachrank[global_variable::my_rank];
+  bool &one_d = pmy_mesh->one_d;
+  bool &three_d = pmy_mesh->three_d;
+  auto &repair = fc_amr_repair;
+
+  par_for("RepairRefinedFC",DevExeSpace(), 0,(nmb-1), cks,cke, cjs,cje, cis,cie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    if (repair.d_view(m + mbs) != 0) {
       // fine indices refer to target array
       int fi = (i - cis)*2 + is;   // fine i
       int fj = (j - cjs)*2 + js;   // fine j
