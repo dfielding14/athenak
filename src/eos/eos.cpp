@@ -102,3 +102,14 @@ void EquationOfState::CGLMagneticMomentToAnisotropy(DvceArray5D<Real> &cons,
   Kokkos::abort("NoOp CGLMagneticMomentToAnisotropy called.\n"
                 "  This transform is only defined for the CGL MHD EOS.\n");
 }
+
+void EquationOfState::CGLMagneticMomentToPrim(DvceArray5D<Real> &cons,
+                                              const DvceFaceFld4D<Real> &b,
+                                              DvceArray5D<Real> &prim,
+                                              DvceArray5D<Real> &bcc,
+                                              const int il, const int iu,
+                                              const int jl, const int ju,
+                                              const int kl, const int ku) {
+  Kokkos::abort("NoOp CGLMagneticMomentToPrim called.\n"
+                "  This transform is only defined for the CGL MHD EOS.\n");
+}

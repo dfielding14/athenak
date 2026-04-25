@@ -86,33 +86,95 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.cglcoll = tl["after_timeintegrator"]->AddTask(&MHD::CGLCollisions, this, none);
 
   if (has_any_sts_diffusion) {
-    tl["before_parabolic_stagen"]->AddTask(&MHD::InitRecvParabolic, this, none);
+    const bool cgl_lf_cell_centered_sts =
+        peos->eos_data.is_cgl && has_sts_conduction && !has_sts_viscosity &&
+        !has_sts_resistivity && pcond != nullptr && pcond->IsCGLLandauFluidHeatFlux();
+    // Fine/coarse flux correction still packs full conserved-flux arrays, so keep
+    // multilevel CGL LF runs on the full variable clear/update path for now.
+    const bool cgl_lf_two_var_sts =
+        cgl_lf_cell_centered_sts && !(pmy_pack->pmesh->multilevel);
 
-    TaskID pclearf = tl["parabolic_stagen"]->AddTask(&MHD::ClearSTSFlux, this, none);
-    TaskID pflux = tl["parabolic_stagen"]->AddTask(&MHD::STSFluxes, this, pclearf);
-    TaskID psendf = tl["parabolic_stagen"]->AddTask(&MHD::SendFlux, this, pflux);
-    TaskID precvf = tl["parabolic_stagen"]->AddTask(&MHD::RecvFlux, this, psendf);
-    TaskID pcleare = tl["parabolic_stagen"]->AddTask(&MHD::ClearSTSEField, this, precvf);
-    TaskID pefld = tl["parabolic_stagen"]->AddTask(&MHD::STSEField, this, pcleare);
-    TaskID psende = tl["parabolic_stagen"]->AddTask(&MHD::SendE, this, pefld);
-    TaskID precve = tl["parabolic_stagen"]->AddTask(&MHD::RecvE, this, psende);
-    TaskID pupdt = tl["parabolic_stagen"]->AddTask(&MHD::STSUpdateU, this, precve);
-    TaskID pbstage = tl["parabolic_stagen"]->AddTask(&MHD::STSUpdateB, this, pupdt);
-    TaskID prestu = tl["parabolic_stagen"]->AddTask(&MHD::RestrictU, this, pbstage);
-    TaskID psendu = tl["parabolic_stagen"]->AddTask(&MHD::SendU, this, prestu);
-    TaskID precvu = tl["parabolic_stagen"]->AddTask(&MHD::RecvU, this, psendu);
-    TaskID prestb = tl["parabolic_stagen"]->AddTask(&MHD::RestrictB, this, precvu);
-    TaskID psendb = tl["parabolic_stagen"]->AddTask(&MHD::SendB, this, prestb);
-    TaskID precvb = tl["parabolic_stagen"]->AddTask(&MHD::RecvB, this, psendb);
-    TaskID pbcs = tl["parabolic_stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this, precvb);
-    TaskID pprol = tl["parabolic_stagen"]->AddTask(&MHD::Prolongate, this, pbcs);
-    TaskID pc2p = tl["parabolic_stagen"]->AddTask(&MHD::ConToPrim, this, pprol);
-    TaskID pcglcoll = tl["parabolic_stagen"]->AddTask(
-        &MHD::STSPostSweepCGLCollisions, this, pc2p);
-    (void) tl["parabolic_stagen"]->AddTask(&MHD::STSRefreshTimeStep, this, pcglcoll);
+    if (cgl_lf_cell_centered_sts) {
+      TaskID pinit = tl["before_parabolic_stagen"]->AddTask(
+          &MHD::InitRecvParabolicCellCentered, this, none);
+      if (cgl_lf_two_var_sts) {
+        (void) tl["before_parabolic_stagen"]->AddTask(
+            &MHD::BeginCGLLandauFluidSTSSweep, this, pinit);
+      }
 
-    TaskID pcsend = tl["after_parabolic_stagen"]->AddTask(&MHD::ClearSend, this, none);
-    (void) tl["after_parabolic_stagen"]->AddTask(&MHD::ClearRecv, this, pcsend);
+      TaskID pclearf(0);
+      if (cgl_lf_two_var_sts) {
+        pclearf = tl["parabolic_stagen"]->AddTask(
+            &MHD::ClearCGLLandauFluidSTSFlux, this, none);
+      } else {
+        pclearf = tl["parabolic_stagen"]->AddTask(&MHD::ClearSTSFlux, this, none);
+      }
+      TaskID pflux = tl["parabolic_stagen"]->AddTask(&MHD::STSFluxes, this, pclearf);
+      TaskID psendf = tl["parabolic_stagen"]->AddTask(&MHD::SendFlux, this, pflux);
+      TaskID precvf = tl["parabolic_stagen"]->AddTask(&MHD::RecvFlux, this, psendf);
+      TaskID pupdt(0);
+      if (cgl_lf_two_var_sts) {
+        pupdt = tl["parabolic_stagen"]->AddTask(
+            &MHD::CGLLandauFluidSTSUpdateU, this, precvf);
+      } else {
+        pupdt = tl["parabolic_stagen"]->AddTask(&MHD::STSUpdateU, this, precvf);
+      }
+      TaskID prestu = tl["parabolic_stagen"]->AddTask(&MHD::RestrictU, this, pupdt);
+      TaskID psendu = tl["parabolic_stagen"]->AddTask(&MHD::SendU, this, prestu);
+      TaskID precvu = tl["parabolic_stagen"]->AddTask(&MHD::RecvU, this, psendu);
+      TaskID pbcs = tl["parabolic_stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this, precvu);
+      TaskID pprol = tl["parabolic_stagen"]->AddTask(&MHD::Prolongate, this, pbcs);
+      TaskID pc2p(0);
+      if (cgl_lf_two_var_sts) {
+        pc2p = tl["parabolic_stagen"]->AddTask(
+            &MHD::CGLLandauFluidConToPrim, this, pprol);
+      } else {
+        pc2p = tl["parabolic_stagen"]->AddTask(&MHD::ConToPrim, this, pprol);
+      }
+      TaskID pend(0);
+      if (cgl_lf_two_var_sts) {
+        pend = tl["parabolic_stagen"]->AddTask(
+            &MHD::EndCGLLandauFluidSTSSweep, this, pc2p);
+      } else {
+        pend = pc2p;
+      }
+      TaskID pcglcoll = tl["parabolic_stagen"]->AddTask(
+          &MHD::STSPostSweepCGLCollisions, this, pend);
+      (void) tl["parabolic_stagen"]->AddTask(&MHD::STSRefreshTimeStep, this, pcglcoll);
+
+      TaskID pcsend = tl["after_parabolic_stagen"]->AddTask(
+          &MHD::ClearSendParabolicCellCentered, this, none);
+      (void) tl["after_parabolic_stagen"]->AddTask(
+          &MHD::ClearRecvParabolicCellCentered, this, pcsend);
+    } else {
+      tl["before_parabolic_stagen"]->AddTask(&MHD::InitRecvParabolic, this, none);
+
+      TaskID pclearf = tl["parabolic_stagen"]->AddTask(&MHD::ClearSTSFlux, this, none);
+      TaskID pflux = tl["parabolic_stagen"]->AddTask(&MHD::STSFluxes, this, pclearf);
+      TaskID psendf = tl["parabolic_stagen"]->AddTask(&MHD::SendFlux, this, pflux);
+      TaskID precvf = tl["parabolic_stagen"]->AddTask(&MHD::RecvFlux, this, psendf);
+      TaskID pcleare = tl["parabolic_stagen"]->AddTask(&MHD::ClearSTSEField, this, precvf);
+      TaskID pefld = tl["parabolic_stagen"]->AddTask(&MHD::STSEField, this, pcleare);
+      TaskID psende = tl["parabolic_stagen"]->AddTask(&MHD::SendE, this, pefld);
+      TaskID precve = tl["parabolic_stagen"]->AddTask(&MHD::RecvE, this, psende);
+      TaskID pupdt = tl["parabolic_stagen"]->AddTask(&MHD::STSUpdateU, this, precve);
+      TaskID pbstage = tl["parabolic_stagen"]->AddTask(&MHD::STSUpdateB, this, pupdt);
+      TaskID prestu = tl["parabolic_stagen"]->AddTask(&MHD::RestrictU, this, pbstage);
+      TaskID psendu = tl["parabolic_stagen"]->AddTask(&MHD::SendU, this, prestu);
+      TaskID precvu = tl["parabolic_stagen"]->AddTask(&MHD::RecvU, this, psendu);
+      TaskID prestb = tl["parabolic_stagen"]->AddTask(&MHD::RestrictB, this, precvu);
+      TaskID psendb = tl["parabolic_stagen"]->AddTask(&MHD::SendB, this, prestb);
+      TaskID precvb = tl["parabolic_stagen"]->AddTask(&MHD::RecvB, this, psendb);
+      TaskID pbcs = tl["parabolic_stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this, precvb);
+      TaskID pprol = tl["parabolic_stagen"]->AddTask(&MHD::Prolongate, this, pbcs);
+      TaskID pc2p = tl["parabolic_stagen"]->AddTask(&MHD::ConToPrim, this, pprol);
+      TaskID pcglcoll = tl["parabolic_stagen"]->AddTask(
+          &MHD::STSPostSweepCGLCollisions, this, pc2p);
+      (void) tl["parabolic_stagen"]->AddTask(&MHD::STSRefreshTimeStep, this, pcglcoll);
+
+      TaskID pcsend = tl["after_parabolic_stagen"]->AddTask(&MHD::ClearSend, this, none);
+      (void) tl["after_parabolic_stagen"]->AddTask(&MHD::ClearRecv, this, pcsend);
+    }
   }
   
   return;
@@ -205,6 +267,22 @@ TaskStatus MHD::InitRecvParabolic(Driver *pdrive, int stage) {
     if (tstat != TaskStatus::complete) return tstat;
   }
   tstat = pbval_b->InitFluxRecv(3);
+  return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::InitRecvParabolicCellCentered
+//! \brief Post receives for a parabolic stage that updates only cell-centered variables.
+
+TaskStatus MHD::InitRecvParabolicCellCentered(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  TaskStatus tstat = pbval_u->InitRecv(nmhd+nscalars);
+  if (tstat != TaskStatus::complete) return tstat;
+
+  if (pmy_pack->pmesh->multilevel) {
+    tstat = pbval_u->InitFluxRecv(nmhd+nscalars);
+  }
   return tstat;
 }
 
@@ -601,6 +679,24 @@ TaskStatus MHD::ConToPrim(Driver *pdrive, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::CGLLandauFluidConToPrim
+//! \brief CGL LF STS primitive recovery while IAN stores magnetic moment.
+
+TaskStatus MHD::CGLLandauFluidConToPrim(Driver *pdrive, int stage) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int &ng = indcs.ng;
+  int n1m1 = indcs.nx1 + 2*ng - 1;
+  int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
+  int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
+  peos->CGLMagneticMomentToPrim(u0, b0, w0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
+  if (cgl_lf_admissibility_check && pdrive->sts.enabled &&
+      pdrive->sts.sweep != Driver::STSSweep::none) {
+    return CheckCGLLFAdmissibility(pdrive, stage);
+  }
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::ClearSend
 //! \brief Wrapper task list function that checks all MPI sends have completed. Used in
 //! TaskList and in Driver::InitBoundaryValuesAndPrimitives()
@@ -717,6 +813,40 @@ TaskStatus MHD::ClearRecv(Driver *pdrive, int stage) {
     }
   }
 
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::ClearSendParabolicCellCentered
+//! \brief Clear sends for a parabolic stage that updates only cell-centered variables.
+
+TaskStatus MHD::ClearSendParabolicCellCentered(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  TaskStatus tstat = pbval_u->ClearSend();
+  if (tstat != TaskStatus::complete) return tstat;
+
+  if (pmy_pack->pmesh->multilevel) {
+    tstat = pbval_u->ClearFluxSend();
+    if (tstat != TaskStatus::complete) return tstat;
+  }
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::ClearRecvParabolicCellCentered
+//! \brief Clear receives for a parabolic stage that updates only cell-centered variables.
+
+TaskStatus MHD::ClearRecvParabolicCellCentered(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  TaskStatus tstat = pbval_u->ClearRecv();
+  if (tstat != TaskStatus::complete) return tstat;
+
+  if (pmy_pack->pmesh->multilevel) {
+    tstat = pbval_u->ClearFluxRecv();
+    if (tstat != TaskStatus::complete) return tstat;
+  }
   return TaskStatus::complete;
 }
 

@@ -98,6 +98,53 @@ TaskStatus MHD::ClearSTSFlux(Driver *pdrive, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::ClearCGLLandauFluidSTSFlux()
+//! \brief Zero only the CGL LF energy and magnetic-moment flux scratch.
+
+TaskStatus MHD::ClearCGLLandauFluidSTSFlux(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  const bool multi_d = pmy_pack->pmesh->multi_d;
+  const bool three_d = pmy_pack->pmesh->three_d;
+  auto flx1 = uflx.x1f;
+  auto flx2 = uflx.x2f;
+  auto flx3 = uflx.x3f;
+
+  par_for("mhd_cgl_lf_clear_sts_flux1", DevExeSpace(), 0, nmb1, ks, ke, js, je,
+          is, ie+1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    flx1(m,IEN,k,j,i) = 0.0;
+    flx1(m,IAN,k,j,i) = 0.0;
+  });
+
+  if (multi_d) {
+    par_for("mhd_cgl_lf_clear_sts_flux2", DevExeSpace(), 0, nmb1, ks, ke,
+            js, je+1, is, ie,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      flx2(m,IEN,k,j,i) = 0.0;
+      flx2(m,IAN,k,j,i) = 0.0;
+    });
+  }
+
+  if (three_d) {
+    par_for("mhd_cgl_lf_clear_sts_flux3", DevExeSpace(), 0, nmb1, ks, ke+1,
+            js, je, is, ie,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      flx3(m,IEN,k,j,i) = 0.0;
+      flx3(m,IAN,k,j,i) = 0.0;
+    });
+  }
+
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::ClearSTSEField()
 //! \brief Zero the MHD electric-field scratch before one STS stage.
 
@@ -137,6 +184,32 @@ TaskStatus MHD::STSEField(Driver *pdrive, int stage) {
   }
 
   AddSelectedDiffusionEMF(DiffusionSelection::sts_only);
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::BeginCGLLandauFluidSTSSweep()
+//! \brief Convert CGL anisotropy to magnetic moment once at the start of an LF STS sweep.
+
+TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
+  if (!(pdrive->sts.enabled) || pdrive->sts.sweep == Driver::STSSweep::none ||
+      stage != 1) {
+    return TaskStatus::complete;
+  }
+  const bool cgl_lf_update =
+      peos->eos_data.is_cgl && has_sts_conduction && !has_sts_viscosity &&
+      !has_sts_resistivity && pcond != nullptr && pcond->IsCGLLandauFluidHeatFlux();
+  if (!cgl_lf_update) {
+    return TaskStatus::complete;
+  }
+
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int &ng = indcs.ng;
+  int n1m1 = indcs.nx1 + 2*ng - 1;
+  int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
+  int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
+  peos->CGLAnisotropyToMagneticMoment(u0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
+
   return TaskStatus::complete;
 }
 
@@ -242,6 +315,121 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
   if (update_cgl_anisotropy) {
     peos->CGLMagneticMomentToAnisotropy(u0, bcc0, is, ie, js, je, ks, ke);
   }
+
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::CGLLandauFluidSTSUpdateU()
+//! \brief Apply one CGL LF RKL2 STS stage to total energy and magnetic moment only.
+
+TaskStatus MHD::CGLLandauFluidSTSUpdateU(Driver *pdrive, int stage) {
+  if (!has_any_sts_cell_update || !(pdrive->sts.enabled)) {
+    return TaskStatus::complete;
+  }
+
+  const bool cgl_lf_update =
+      peos->eos_data.is_cgl && has_sts_conduction && !has_sts_viscosity &&
+      !has_sts_resistivity && pcond != nullptr && pcond->IsCGLLandauFluidHeatFlux();
+  if (!cgl_lf_update) {
+    return STSUpdateU(pdrive, stage);
+  }
+
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
+  int ncells1 = indcs.nx1 + 2*(indcs.ng);
+
+  const bool multi_d = pmy_pack->pmesh->multi_d;
+  const bool three_d = pmy_pack->pmesh->three_d;
+  int nmb1 = pmy_pack->nmb_thispack - 1;
+  Real dt_sweep = pdrive->sts.dt_sweep;
+  auto coeffs = pdrive->sts.coeffs;
+  auto u0_ = u0;
+  auto u_sts0_ = u_sts0;
+  auto u_sts1_ = u_sts1;
+  auto u_sts2_ = u_sts2;
+  auto u_sts_rhs_ = u_sts_rhs;
+  auto flx1 = uflx.x1f;
+  auto flx2 = uflx.x2f;
+  auto flx3 = uflx.x3f;
+  auto &mbsize = pmy_pack->pmb->mb_size;
+
+  int scr_level = 0;
+  size_t scr_size = ScrArray1D<Real>::shmem_size(ncells1);
+
+  par_for_outer("mhd_cgl_lf_sts_update_u", DevExeSpace(), scr_size, scr_level,
+                0, nmb1, 0, 1, ks, ke, js, je,
+  KOKKOS_LAMBDA(TeamMember_t member, const int m, const int ivar,
+                const int k, const int j) {
+    const int n = (ivar == 0) ? IEN : IAN;
+    ScrArray1D<Real> divf(member.team_scratch(scr_level), ncells1);
+
+    par_for_inner(member, is, ie, [&](const int i) {
+      const Real current = u0_(m,n,k,j,i);
+      const Real previous_stage = u_sts1_(m,n,k,j,i);
+      if (stage == 1) {
+        u_sts0_(m,n,k,j,i) = current;
+      }
+      u_sts2_(m,n,k,j,i) = previous_stage;
+      u_sts1_(m,n,k,j,i) = current;
+      divf(i) = (flx1(m,n,k,j,i+1) - flx1(m,n,k,j,i))/mbsize.d_view(m).dx1;
+    });
+    member.team_barrier();
+
+    if (multi_d) {
+      par_for_inner(member, is, ie, [&](const int i) {
+        divf(i) += (flx2(m,n,k,j+1,i) - flx2(m,n,k,j,i))/mbsize.d_view(m).dx2;
+      });
+      member.team_barrier();
+    }
+
+    if (three_d) {
+      par_for_inner(member, is, ie, [&](const int i) {
+        divf(i) += (flx3(m,n,k+1,j,i) - flx3(m,n,k,j,i))/mbsize.d_view(m).dx3;
+      });
+      member.team_barrier();
+    }
+
+    par_for_inner(member, is, ie, [&](const int i) {
+      const Real delta_u = -dt_sweep*divf(i);
+      u0_(m,n,k,j,i) = coeffs.muj*u_sts1_(m,n,k,j,i)
+                     + coeffs.nuj*u_sts2_(m,n,k,j,i)
+                     + (1.0 - coeffs.muj - coeffs.nuj)*u_sts0_(m,n,k,j,i)
+                     + coeffs.gammaj_tilde*u_sts_rhs_(m,n,k,j,i)
+                     + coeffs.muj_tilde*delta_u;
+      if (stage == 1) {
+        u_sts_rhs_(m,n,k,j,i) = delta_u;
+      }
+    });
+  });
+
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::EndCGLLandauFluidSTSSweep()
+//! \brief Convert magnetic moment back to CGL anisotropy after the final LF STS stage.
+
+TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
+  if (!(pdrive->sts.enabled) || pdrive->sts.sweep == Driver::STSSweep::none ||
+      stage != pdrive->sts.nstages) {
+    return TaskStatus::complete;
+  }
+  const bool cgl_lf_update =
+      peos->eos_data.is_cgl && has_sts_conduction && !has_sts_viscosity &&
+      !has_sts_resistivity && pcond != nullptr && pcond->IsCGLLandauFluidHeatFlux();
+  if (!cgl_lf_update) {
+    return TaskStatus::complete;
+  }
+
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int &ng = indcs.ng;
+  int n1m1 = indcs.nx1 + 2*ng - 1;
+  int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
+  int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
+  peos->CGLMagneticMomentToAnisotropy(u0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
 
   return TaskStatus::complete;
 }

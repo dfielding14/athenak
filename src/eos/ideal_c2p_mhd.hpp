@@ -196,6 +196,71 @@ void CGLMagneticMomentToConservedAnisotropy(const Real rho, const Real mx,
 }
 
 //----------------------------------------------------------------------------------------
+//! \!fn void SingleC2P_CGLMHDFromMagneticMoment()
+//! \brief Converts conserved variables to primitives when the IAN/legacy IMU slot is
+//! temporarily storing magnetic moment p_perp/|B| during a CGL LF STS sweep.
+
+KOKKOS_INLINE_FUNCTION
+void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
+                                        HydPrim1D &w, bool &dfloor_used,
+                                        bool &efloor_used, bool &tfloor_used,
+                                        bool &bfloor_used) {
+  const Real &dfloor_ = eos.dfloor;
+  Real pfloor = eos.pfloor;
+  Real bfloor = eos.bfloor;
+
+  if (u.d < dfloor_) {
+    u.d = dfloor_;
+    dfloor_used = true;
+  }
+  w.d = u.d;
+
+  Real di = 1.0/u.d;
+  w.vx = di*u.mx;
+  w.vy = di*u.my;
+  w.vz = di*u.mz;
+
+  Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+  Real bmag = sqrt(bsqr);
+  Real bmag_inv = (bmag > bfloor) ? bmag : bfloor;
+  Real e_k = 0.5*di*(SQR(u.mx) + SQR(u.my) + SQR(u.mz));
+  Real e_m = 0.5*bsqr;
+  Real eint = u.e - e_k - e_m;
+
+  if (bmag > bfloor) {
+    w.pp = u.mu*bmag_inv;
+    w.e = 2.0*(eint - w.pp);
+  } else {
+    w.e = TWO_3RDS*eint;
+    w.pp = w.e;
+    u.mu = w.pp/bmag_inv;
+    bfloor_used = true;
+  }
+
+  if (w.e < pfloor && w.pp < pfloor) {
+    w.e = pfloor;
+    w.pp = pfloor;
+    u.e = 1.5*pfloor + e_k + e_m;
+    u.mu = pfloor/bmag_inv;
+    efloor_used = true;
+  }
+  if (w.e < pfloor) {
+    w.e = pfloor;
+    u.e = 0.5*pfloor + w.pp + e_k + e_m;
+    efloor_used = true;
+  }
+  if (w.pp < pfloor) {
+    w.pp = pfloor;
+    u.e = 0.5*w.e + pfloor + e_k + e_m;
+    u.mu = pfloor/bmag_inv;
+    efloor_used = true;
+  }
+
+  (void) tfloor_used;
+  return;
+}
+
+//----------------------------------------------------------------------------------------
 //! \!fn void SingleC2P_CGLMHD()
 //! \brief Converts conserved into primitive variables.  Operates over range of cells
 //! given in argument list.  Note input CONSERVED state contains cell-centered magnetic

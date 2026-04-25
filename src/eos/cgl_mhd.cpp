@@ -211,6 +211,93 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
 }
 
 //----------------------------------------------------------------------------------------
+//! \!fn void CGLMagneticMomentToPrim()
+//! \brief Converts conserved variables to primitives while IAN stores p_perp/|B| during
+//! a CGL Landau-fluid STS sweep.
+
+void CGLMHD::CGLMagneticMomentToPrim(DvceArray5D<Real> &cons,
+                                     const DvceFaceFld4D<Real> &b,
+                                     DvceArray5D<Real> &prim,
+                                     DvceArray5D<Real> &bcc,
+                                     const int il, const int iu,
+                                     const int jl, const int ju,
+                                     const int kl, const int ku) {
+  int &nmhd  = pmy_pack->pmhd->nmhd;
+  int &nscal = pmy_pack->pmhd->nscalars;
+  int &nmb = pmy_pack->nmb_thispack;
+  auto &eos = eos_data;
+
+  const int ni   = (iu - il + 1);
+  const int nji  = (ju - jl + 1)*ni;
+  const int nkji = (ku - kl + 1)*nji;
+  const int nmkji = nmb*nkji;
+
+  int nfloord_=0, nfloore_=0, nfloort_=0;
+  Kokkos::parallel_reduce("mhd_cgl_mub_to_prim",
+  Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumt) {
+    int m = (idx)/nkji;
+    int k = (idx - m*nkji)/nji;
+    int j = (idx - m*nkji - k*nji)/ni;
+    int i = (idx - m*nkji - k*nji - j*ni) + il;
+    j += jl;
+    k += kl;
+
+    MHDCons1D u;
+    u.d  = cons(m,IDN,k,j,i);
+    u.mx = cons(m,IM1,k,j,i);
+    u.my = cons(m,IM2,k,j,i);
+    u.mz = cons(m,IM3,k,j,i);
+    u.e  = cons(m,IEN,k,j,i);
+    u.mu = cons(m,IAN,k,j,i);
+    u.bx = 0.5*(b.x1f(m,k,j,i) + b.x1f(m,k,j,i+1));
+    u.by = 0.5*(b.x2f(m,k,j,i) + b.x2f(m,k,j+1,i));
+    u.bz = 0.5*(b.x3f(m,k,j,i) + b.x3f(m,k+1,j,i));
+
+    HydPrim1D w;
+    bool dfloor_used=false, efloor_used=false, tfloor_used=false, bfloor_used=false;
+    SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
+                                       tfloor_used, bfloor_used);
+
+    if (dfloor_used) {
+      cons(m,IDN,k,j,i) = u.d;
+      sumd++;
+    }
+    if (efloor_used) {
+      cons(m,IEN,k,j,i) = u.e;
+      cons(m,IAN,k,j,i) = u.mu;
+      sume++;
+    }
+    if (bfloor_used) {
+      cons(m,IAN,k,j,i) = u.mu;
+    }
+
+    prim(m,IDN,k,j,i) = w.d;
+    prim(m,IVX,k,j,i) = w.vx;
+    prim(m,IVY,k,j,i) = w.vy;
+    prim(m,IVZ,k,j,i) = w.vz;
+    prim(m,IEN,k,j,i) = w.e;
+    prim(m,IPP,k,j,i) = w.pp;
+    bcc(m,IBX,k,j,i) = u.bx;
+    bcc(m,IBY,k,j,i) = u.by;
+    bcc(m,IBZ,k,j,i) = u.bz;
+
+    for (int n=nmhd; n<(nmhd+nscal); ++n) {
+      if (cons(m,n,k,j,i) < 0.0) {
+        cons(m,n,k,j,i) = 0.0;
+      }
+      prim(m,n,k,j,i) = cons(m,n,k,j,i)/u.d;
+    }
+  }, Kokkos::Sum<int>(nfloord_), Kokkos::Sum<int>(nfloore_), Kokkos::Sum<int>(nfloort_));
+
+  pmy_pack->pmesh->ecounter.neos_dfloor += nfloord_;
+  pmy_pack->pmesh->ecounter.neos_efloor += nfloore_;
+  pmy_pack->pmesh->ecounter.neos_tfloor += nfloort_;
+
+  return;
+}
+
+//----------------------------------------------------------------------------------------
 //! \!fn void PrimToCons()
 //! \brief Converts conserved into primitive variables.  Operates over range of cells
 //! given in argument list.  Does not change cell- or face-centered magnetic fields.

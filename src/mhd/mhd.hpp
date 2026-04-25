@@ -173,6 +173,7 @@ class MHD {
   // ...in "before_stagen_tl" task list
   TaskStatus InitRecv(Driver *d, int stage);
   TaskStatus InitRecvParabolic(Driver *d, int stage);
+  TaskStatus InitRecvParabolicCellCentered(Driver *d, int stage);
   // ...in "stagen_tl" task list
   TaskStatus CopyCons(Driver *d, int stage);
   TaskStatus Fluxes(Driver *d, int stage);
@@ -204,10 +205,15 @@ class MHD {
   TaskStatus ConToPrim(Driver *d, int stage);
   TaskStatus NewTimeStep(Driver *d, int stage);
   TaskStatus ClearSTSFlux(Driver *d, int stage);
+  TaskStatus ClearCGLLandauFluidSTSFlux(Driver *d, int stage);
   TaskStatus ClearSTSEField(Driver *d, int stage);
   TaskStatus STSFluxes(Driver *d, int stage);
   TaskStatus STSEField(Driver *d, int stage);
+  TaskStatus BeginCGLLandauFluidSTSSweep(Driver *d, int stage);
   TaskStatus STSUpdateU(Driver *d, int stage);
+  TaskStatus CGLLandauFluidSTSUpdateU(Driver *d, int stage);
+  TaskStatus CGLLandauFluidConToPrim(Driver *d, int stage);
+  TaskStatus EndCGLLandauFluidSTSSweep(Driver *d, int stage);
   TaskStatus CheckCGLLFAdmissibility(Driver *d, int stage);
   TaskStatus STSUpdateB(Driver *d, int stage);
   TaskStatus STSPostSweepCGLCollisions(Driver *d, int stage);
@@ -215,6 +221,8 @@ class MHD {
   // ...in "after_stagen_tl" task list
   TaskStatus ClearSend(Driver *d, int stage);
   TaskStatus ClearRecv(Driver *d, int stage);  // also in Driver::Initialize
+  TaskStatus ClearSendParabolicCellCentered(Driver *d, int stage);
+  TaskStatus ClearRecvParabolicCellCentered(Driver *d, int stage);
   TaskStatus CGLCollisions(Driver *d, int stage);
 
   // CalculateFluxes function templated over Riemann Solvers
