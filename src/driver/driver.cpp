@@ -29,6 +29,20 @@
 #include <mpi.h>
 #endif
 
+namespace {
+
+double GlobalMaxOutputTime(double local_time) {
+#if MPI_PARALLEL_ENABLED
+  double max_time = local_time;
+  MPI_Reduce(&local_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+  return max_time;
+#else
+  return local_time;
+#endif
+}
+
+}  // namespace
+
 //----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
 //
@@ -326,18 +340,30 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   //---- Step 3.  Cycle through output Types and load data / write files.
   if (!res_flag) { // only write outputs at the beginning of the run
     Kokkos::fence();
-    Kokkos::Timer out_timer;
+    double load_time = 0.0;
+    double write_time = 0.0;
 
     for (auto &out : pout->pout_list) {
+      Kokkos::Timer load_timer;
       out->LoadOutputData(pmesh);
+      Kokkos::fence();
+      load_time += load_timer.seconds();
+      Kokkos::Timer write_timer;
       out->WriteOutputFile(pmesh, pin);
+      Kokkos::fence();
+      write_time += write_timer.seconds();
     }
-  
-    Kokkos::fence();
-    float out_time = out_timer.seconds();
+
+    double out_time = load_time + write_time;
+    double max_load_time = GlobalMaxOutputTime(load_time);
+    double max_write_time = GlobalMaxOutputTime(write_time);
+    double max_out_time = GlobalMaxOutputTime(out_time);
     if (global_variable::my_rank == 0) {
       std::cout << "Total Outputs Time: "
-                << out_time << " s" << std::endl;
+                << max_out_time << " s"
+                << " (load=" << max_load_time
+                << " s, write=" << max_write_time << " s)"
+                << std::endl;
     }
   }
 
@@ -430,16 +456,26 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
         if (((out->out_params.dt > 0.0) && ((time_32 >= next_32) && (time_32<tlim_32))) ||
             ((dcycle_ > 0) && ((pmesh->ncycle)%(dcycle_) == 0)) ) {
           Kokkos::fence();
-          Kokkos::Timer out_timer;
+          Kokkos::Timer load_timer;
           out->LoadOutputData(pmesh);
+          Kokkos::fence();
+          double load_time = load_timer.seconds();
+          Kokkos::Timer write_timer;
           out->WriteOutputFile(pmesh, pin);
-	  Kokkos::fence();
-	  float out_time = out_timer.seconds();
+          Kokkos::fence();
+          double write_time = write_timer.seconds();
+          double out_time = load_time + write_time;
+          double max_load_time = GlobalMaxOutputTime(load_time);
+          double max_write_time = GlobalMaxOutputTime(write_time);
+          double max_out_time = GlobalMaxOutputTime(out_time);
           if (global_variable::my_rank == 0) {
             std::cout << out->out_params.block_name
                       << " (" << out->out_params.file_type << "): "
-                      << out_time << " s" << std::endl;
-	  }
+                      << max_out_time << " s"
+                      << " (load=" << max_load_time
+                      << " s, write=" << max_write_time << " s)"
+                      << std::endl;
+          }
         }
       }
 
@@ -467,18 +503,30 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   // cycle through output Types and load data / write files
   //  This design allows for asynchronous outputs to implemented in the future.
   Kokkos::fence();
-  Kokkos::Timer out_timer;
+  double load_time = 0.0;
+  double write_time = 0.0;
 
   for (auto &out : pout->pout_list) {
+    Kokkos::Timer load_timer;
     out->LoadOutputData(pmesh);
+    Kokkos::fence();
+    load_time += load_timer.seconds();
+    Kokkos::Timer write_timer;
     out->WriteOutputFile(pmesh, pin);
+    Kokkos::fence();
+    write_time += write_timer.seconds();
   }
 
-  Kokkos::fence();
-  float out_time = out_timer.seconds();
+  double out_time = load_time + write_time;
+  double max_load_time = GlobalMaxOutputTime(load_time);
+  double max_write_time = GlobalMaxOutputTime(write_time);
+  double max_out_time = GlobalMaxOutputTime(out_time);
   if (global_variable::my_rank == 0) {
-    std::cout << "Total Outputs Time: " 
-              << out_time << " s" << std::endl;
+    std::cout << "Total Outputs Time: "
+              << max_out_time << " s"
+              << " (load=" << max_load_time
+              << " s, write=" << max_write_time << " s)"
+              << std::endl;
   }
 
   // call any problem specific functions to do work after main loop

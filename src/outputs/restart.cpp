@@ -32,6 +32,43 @@
 #include "srcterms/turb_driver.hpp"
 //#include "outputs.hpp"
 
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
+
+namespace {
+
+bool RestartIOStatsEnabled() {
+  const char *env = std::getenv("ATHENAK_RESTART_IO_STATS");
+  return (env != nullptr && env[0] != '\0' && env[0] != '0');
+}
+
+void PrintRestartWriteStats(FileShardMode mode, double open_time, double header_time,
+                            double payload_time, double close_time) {
+  if (!RestartIOStatsEnabled()) {
+    return;
+  }
+
+  double local_times[4] = {open_time, header_time, payload_time, close_time};
+  double max_times[4] = {open_time, header_time, payload_time, close_time};
+#if MPI_PARALLEL_ENABLED
+  MPI_Reduce(local_times, max_times, 4, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+  if (global_variable::my_rank != 0) {
+    return;
+  }
+#endif
+
+  std::cout << "[restart-io] phase=write"
+            << " mode=" << ShardDistributionName(mode)
+            << " open=" << max_times[0]
+            << " header=" << max_times[1]
+            << " payload=" << max_times[2]
+            << " close=" << max_times[3]
+            << std::endl;
+}
+
+}  // namespace
+
 //----------------------------------------------------------------------------------------
 // constructor: also calls BaseTypeOutput base class constructor
 
@@ -205,6 +242,11 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   // open file and  write the header; this part is serial
   IOWrapper resfile;
   IOWrapper manifestfile;
+  double open_time = 0.0;
+  double header_time = 0.0;
+  double payload_time = 0.0;
+  double close_time = 0.0;
+  Kokkos::Timer phase_timer;
 #if MPI_PARALLEL_ENABLED
   if (shard_mode == FileShardMode::per_node) {
     resfile.SetCommunicator(global_variable::node_comm);
@@ -218,7 +260,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   } else {
     resfile.Open(fname.c_str(), IOWrapper::FileMode::write, use_serial_io);
   }
+  open_time = phase_timer.seconds();
 
+  phase_timer.reset();
   bool write_manifest = split_per_node_manifest ? (global_variable::my_rank == 0)
                                                 : IsShardWriter(shard_mode);
   auto WriteMetadata = [&](const void *buf, IOWrapperSizeT count,
@@ -350,6 +394,8 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   offset_myrank += data_size*shard_prefix;
 
   IOWrapperSizeT myoffset = offset_myrank;
+  header_time = phase_timer.seconds();
+  phase_timer.reset();
 
   // write cell-centered variables, one MeshBlock at a time (but parallelized over all
   // ranks). MeshBlocks are written seperately to reduce number of data elements per write
@@ -661,7 +707,11 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
 
   // close file, clean up
+  payload_time = phase_timer.seconds();
+  phase_timer.reset();
   resfile.Close(use_serial_io);
+  close_time = phase_timer.seconds();
+  PrintRestartWriteStats(shard_mode, open_time, header_time, payload_time, close_time);
 
   return;
 }

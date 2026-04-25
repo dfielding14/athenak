@@ -346,7 +346,14 @@ int IOWrapper::Open(const char* fname, FileMode rw, bool use_serial_io) {
         break;
       case FileMode::write:
         mpi_mode = MPI_MODE_WRONLY | MPI_MODE_CREATE;
-        MPI_File_delete(fname, MPI_INFO_NULL); // truncation
+        {
+          int comm_rank;
+          MPI_Comm_rank(comm_, &comm_rank);
+          if (comm_rank == 0) {
+            MPI_File_delete(fname, MPI_INFO_NULL); // truncation
+          }
+          MPI_Barrier(comm_);
+        }
         break;
       case FileMode::append:
         mpi_mode = MPI_MODE_WRONLY | MPI_MODE_APPEND;
