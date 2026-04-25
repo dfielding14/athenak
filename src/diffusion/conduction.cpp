@@ -75,6 +75,64 @@ Real CGLLimitedHeatFlux(const Real q_unlimited, const Real q_max) {
 }
 
 KOKKOS_INLINE_FUNCTION
+Real CGLLimiterCollisionRate(const Real ppar, const Real pperp,
+                             const Real bx, const Real by, const Real bz,
+                             const Real lim_coll, const bool mlim,
+                             const bool flim, const bool backup_lim) {
+  const Real paniso = pperp - ppar;
+  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
+  const Real limiter_nu = fmax(lim_coll, static_cast<Real>(0.0));
+  const Real backup_nu = static_cast<Real>(1.0e10);
+  Real nu_eff = 0.0;
+
+  if (flim && backup_lim) {
+    if ((paniso <= static_cast<Real>(-0.7)*bsqr) && (paniso > -bsqr)) {
+      nu_eff = fmax(nu_eff, limiter_nu);
+    } else if (paniso <= -bsqr) {
+      nu_eff = fmax(nu_eff, backup_nu);
+    }
+  } else if (flim) {
+    if (paniso <= static_cast<Real>(-0.7)*bsqr) {
+      nu_eff = fmax(nu_eff, limiter_nu);
+    }
+  }
+
+  if (mlim && backup_lim) {
+    if ((paniso >= static_cast<Real>(0.5)*bsqr) && (paniso < bsqr)) {
+      nu_eff = fmax(nu_eff, limiter_nu);
+    } else if (paniso >= static_cast<Real>(0.5)*bsqr) {
+      nu_eff = fmax(nu_eff, backup_nu);
+    }
+  } else if (mlim) {
+    if (paniso >= static_cast<Real>(0.5)*bsqr) {
+      nu_eff = fmax(nu_eff, limiter_nu);
+    }
+  }
+
+  return nu_eff;
+}
+
+KOKKOS_INLINE_FUNCTION
+Real CGLChiPerp(const Real cpar, const Real lf_k_parallel, const Real nu_eff) {
+  const Real denom = static_cast<Real>(2.5066282746310002)*cpar*lf_k_parallel
+                   + nu_eff;
+  if (denom <= 0.0) {
+    return 0.0;
+  }
+  return static_cast<Real>(2.0)*SQR(cpar)/denom;
+}
+
+KOKKOS_INLINE_FUNCTION
+Real CGLChiParallel(const Real cpar, const Real lf_k_parallel, const Real nu_eff) {
+  const Real denom = static_cast<Real>(5.013256549262000)*cpar*lf_k_parallel
+                   + static_cast<Real>(1.4247779607693793)*nu_eff;
+  if (denom <= 0.0) {
+    return 0.0;
+  }
+  return static_cast<Real>(8.0)*SQR(cpar)/denom;
+}
+
+KOKKOS_INLINE_FUNCTION
 void CGLLandauFluidFaceFlux(const Real rho_l, const Real rho_r,
                             const Real ppar_l, const Real ppar_r,
                             const Real pperp_l, const Real pperp_r,
@@ -89,6 +147,11 @@ void CGLLandauFluidFaceFlux(const Real rho_l, const Real rho_r,
                             const Real lf_k_parallel,
                             const bool lf_coeff_local,
                             const Real lf_c_parallel0,
+                            const Real nu_coll,
+                            const Real lim_coll,
+                            const bool mlim,
+                            const bool flim,
+                            const bool backup_lim,
                             const Real dfloor,
                             const Real pfloor,
                             const Real tfloor,
@@ -110,8 +173,10 @@ void CGLLandauFluidFaceFlux(const Real rho_l, const Real rho_r,
   const Real ppar = fmax(0.5*(ppar_l + ppar_r), pfloor);
   const Real pperp = fmax(0.5*(pperp_l + pperp_r), pfloor);
   const Real cpar = lf_coeff_local ? sqrt(fmax(ppar/rho, tfloor)) : lf_c_parallel0;
-  const Real chi_perp = static_cast<Real>(0.7978845608028654)*cpar/lf_k_parallel;
-  const Real chi_parallel = static_cast<Real>(1.5957691216057308)*cpar/lf_k_parallel;
+  const Real nu_eff = fmax(nu_coll, static_cast<Real>(0.0)) +
+      CGLLimiterCollisionRate(ppar, pperp, bx, by, bz, lim_coll, mlim, flim, backup_lim);
+  const Real chi_perp = CGLChiPerp(cpar, lf_k_parallel, nu_eff);
+  const Real chi_parallel = CGLChiParallel(cpar, lf_k_parallel, nu_eff);
 
   const Real gradpar_tpar = bhx*grad_tpar_x + bhy*grad_tpar_y + bhz*grad_tpar_z;
   const Real gradpar_tperp = bhx*grad_tperp_x + bhy*grad_tperp_y + bhz*grad_tperp_z;
@@ -122,8 +187,7 @@ void CGLLandauFluidFaceFlux(const Real rho_l, const Real rho_r,
   const Real q_parallel_max = static_cast<Real>(1.5957691216057308)*cpar*ppar;
   const Real q_perp_max = static_cast<Real>(0.7978845608028654)*cpar*pperp;
 
-  // Squire et al. (2023), eqs. 3.1-3.2. Collision-frequency suppression of chi
-  // can be added here later once that model is threaded through the CGL EOS state.
+  // Squire et al. (2023), eqs. 3.1-3.2.
   const Real q_parallel = CGLLimitedHeatFlux(q_parallel_l, q_parallel_max);
   const Real q_perp = CGLLimitedHeatFlux(q_perp_l, q_perp_max);
 
@@ -283,6 +347,11 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
   Real pfloor_ = eos.pfloor;
   Real tfloor_ = eos.tfloor;
   Real bfloor_ = eos.bfloor;
+  Real nu_coll_ = eos.nu_coll;
+  Real lim_coll_ = eos.lim_coll;
+  bool mlim_ = eos.mlim;
+  bool flim_ = eos.flim;
+  bool backup_lim_ = eos.backup_lim;
 
   if (lf_k_parallel_ <= 0.0) {
     return;
@@ -375,6 +444,7 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
                            grad_pp_x, grad_pp_y, grad_pp_z,
                            grad_b_x, grad_b_y, grad_b_z,
                            lf_k_parallel_, lf_coeff_local_, lf_c_parallel0_,
+                           nu_coll_, lim_coll_, mlim_, flim_, backup_lim_,
                            dfloor_, pfloor_, tfloor_, bfloor_,
                            energy_flux, moment_flux);
     flx1(m,IEN,k,j,i) += energy_flux;
@@ -467,6 +537,7 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
                            grad_pp_x, grad_pp_y, grad_pp_z,
                            grad_b_x, grad_b_y, grad_b_z,
                            lf_k_parallel_, lf_coeff_local_, lf_c_parallel0_,
+                           nu_coll_, lim_coll_, mlim_, flim_, backup_lim_,
                            dfloor_, pfloor_, tfloor_, bfloor_,
                            energy_flux, moment_flux);
     flx2(m,IEN,k,j,i) += energy_flux;
@@ -559,6 +630,7 @@ void Conduction::AddCGLLandauFluidHeatFluxes(const DvceArray5D<Real> &w0,
                            grad_pp_x, grad_pp_y, grad_pp_z,
                            grad_b_x, grad_b_y, grad_b_z,
                            lf_k_parallel_, lf_coeff_local_, lf_c_parallel0_,
+                           nu_coll_, lim_coll_, mlim_, flim_, backup_lim_,
                            dfloor_, pfloor_, tfloor_, bfloor_,
                            energy_flux, moment_flux);
     flx3(m,IEN,k,j,i) += energy_flux;

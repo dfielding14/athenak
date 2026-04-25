@@ -19,9 +19,12 @@ mkdir -p "${DATA_DIR}" "${LOG_DIR}" "${FIGURE_DIR}"
 
 inputs=(
   inputs/unit_tests/cgl_lf_quant_parallel.athinput
+  inputs/unit_tests/cgl_lf_quant_parallel_collisional.athinput
   inputs/unit_tests/cgl_lf_quant_perp.athinput
+  inputs/unit_tests/cgl_lf_quant_perp_collisional.athinput
   inputs/unit_tests/cgl_lf_quant_grad_b.athinput
   inputs/unit_tests/cgl_lf_flux_limiter.athinput
+  inputs/unit_tests/cgl_lf_limiter_heat_flux_suppression.athinput
   inputs/unit_tests/cgl_lf_limiter_mirror.athinput
   inputs/unit_tests/cgl_lf_limiter_firehose.athinput
   inputs/unit_tests/cgl_lf_field_wave.athinput

@@ -6,10 +6,27 @@
 //! \file ideal_mhd.cpp
 //! \brief derived class that implements ideal gas EOS in nonrelativistic mhd
 
+#include <cstdlib>
+#include <iostream>
+#include <string>
+
 #include "athena.hpp"
 #include "mhd/mhd.hpp"
 #include "eos.hpp"
 #include "eos/ideal_c2p_mhd.hpp"
+
+namespace {
+
+void RequireNonnegativeCGLParameter(const char *name, const Real value) {
+  if (value < 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<mhd>/" << name << " must be nonnegative" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 // ctor: also calls EOS base class constructor
@@ -43,6 +60,7 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
   if (pin->DoesParameterExist("mhd","mirror_limiter")) {
     eos_data.mlim = pin->GetBoolean("mhd","mirror_limiter");
     eos_data.lim_coll = pin->GetReal("mhd","limiter_nu_coll");
+    RequireNonnegativeCGLParameter("limiter_nu_coll", eos_data.lim_coll);
     std::cout << "Mirror limiter turned on" << std::endl;
     eos_data.coll = true;
     //check for backup limiter
@@ -54,6 +72,7 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
   if (pin->DoesParameterExist("mhd","firehose_limiter")) {
     eos_data.flim = pin->GetBoolean("mhd","firehose_limiter");
     eos_data.lim_coll = pin->GetReal("mhd","limiter_nu_coll");
+    RequireNonnegativeCGLParameter("limiter_nu_coll", eos_data.lim_coll);
     std::cout << "Firehose limiter turned on" << std::endl;
     eos_data.coll = true;
     //check for backup limiter
@@ -66,6 +85,7 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
   //set collision frequencies
   if (pin->DoesParameterExist("mhd","nu_coll")) {    //collision frequency for CGL
     eos_data.nu_coll = pin->GetReal("mhd","nu_coll");
+    RequireNonnegativeCGLParameter("nu_coll", eos_data.nu_coll);
     std::cout << "Background collisions turned on" << std::endl;
     eos_data.coll = true;
   }

@@ -30,12 +30,17 @@ namespace {
 
 constexpr Real kSqrtTwoOverPi = 0.7978845608028654;
 constexpr Real kSqrtEightOverPi = 1.5957691216057308;
+constexpr Real kSqrtTwoPi = 2.5066282746310002;
+constexpr Real kSqrtEightPi = 5.013256549262000;
+constexpr Real kThreePiMinusEight = 1.4247779607693793;
+constexpr Real kCGLBackupCollisionRate = 1.0e10;
 
 enum class TestMode {
   parallel_decay,
   perp_decay,
   grad_b,
   flux_limiter,
+  limiter_heat_flux_suppression,
   limiter_stress,
   field_aligned_wave,
   paper_oblique_wave
@@ -121,11 +126,15 @@ TestMode ParseMode(ParameterInput *pin) {
   if (mode == "perp_decay") return TestMode::perp_decay;
   if (mode == "grad_b") return TestMode::grad_b;
   if (mode == "flux_limiter") return TestMode::flux_limiter;
+  if (mode == "limiter_heat_flux_suppression") {
+    return TestMode::limiter_heat_flux_suppression;
+  }
   if (mode == "limiter_stress") return TestMode::limiter_stress;
   if (mode == "field_aligned_wave") return TestMode::field_aligned_wave;
   if (mode == "paper_oblique_wave") return TestMode::paper_oblique_wave;
   Fail("<problem>/test_mode must be parallel_decay, perp_decay, grad_b, "
-       "flux_limiter, limiter_stress, field_aligned_wave, or paper_oblique_wave");
+       "flux_limiter, limiter_heat_flux_suppression, limiter_stress, "
+       "field_aligned_wave, or paper_oblique_wave");
 }
 
 const char *ModeName(const TestMode mode) {
@@ -134,6 +143,7 @@ const char *ModeName(const TestMode mode) {
     case TestMode::perp_decay: return "perp_decay";
     case TestMode::grad_b: return "grad_b";
     case TestMode::flux_limiter: return "flux_limiter";
+    case TestMode::limiter_heat_flux_suppression: return "limiter_heat_flux_suppression";
     case TestMode::limiter_stress: return "limiter_stress";
     case TestMode::field_aligned_wave: return "field_aligned_wave";
     case TestMode::paper_oblique_wave: return "paper_oblique_wave";
@@ -262,8 +272,9 @@ Real ByCell(ParameterInput *pin, Mesh *pm, const int q) {
 
 Real BMagCell(ParameterInput *pin, Mesh *pm, const int q) {
   const Real bx0 = pin->GetOrAddReal("problem", "b0", 1.0);
+  const Real bz0 = pin->GetOrAddReal("problem", "bz0", 0.0);
   const Real by = ByCell(pin, pm, q);
-  return std::sqrt(SQR(bx0) + SQR(by));
+  return std::sqrt(SQR(bx0) + SQR(by) + SQR(bz0));
 }
 
 Real LimitedHeatFlux(const Real q_unlimited, const Real q_max) {
@@ -273,25 +284,153 @@ Real LimitedHeatFlux(const Real q_unlimited, const Real q_max) {
   return q_unlimited*q_max/(q_max + std::abs(q_unlimited));
 }
 
+bool GetBooleanOrFalse(ParameterInput *pin, const std::string &block,
+                       const std::string &name) {
+  return pin->DoesParameterExist(block, name) ? pin->GetBoolean(block, name) : false;
+}
+
+Real GetRealOrZero(ParameterInput *pin, const std::string &block,
+                   const std::string &name) {
+  return pin->DoesParameterExist(block, name) ? pin->GetReal(block, name) : 0.0;
+}
+
+Real BackgroundCollisionFrequency(ParameterInput *pin) {
+  return GetRealOrZero(pin, "mhd", "nu_coll");
+}
+
+Real LimiterCollisionRate(ParameterInput *pin, const Real ppar, const Real pperp,
+                          const Real bx, const Real by, const Real bz) {
+  const bool mlim = GetBooleanOrFalse(pin, "mhd", "mirror_limiter");
+  const bool flim = GetBooleanOrFalse(pin, "mhd", "firehose_limiter");
+  const bool backup_lim = GetBooleanOrFalse(pin, "mhd", "backup_limiters");
+  const Real lim_coll = std::max(GetRealOrZero(pin, "mhd", "limiter_nu_coll"),
+                                 static_cast<Real>(0.0));
+  const Real paniso = pperp - ppar;
+  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
+  Real rate = 0.0;
+
+  if (flim && backup_lim) {
+    if ((paniso <= static_cast<Real>(-0.7)*bsqr) && (paniso > -bsqr)) {
+      rate = std::max(rate, lim_coll);
+    } else if (paniso <= -bsqr) {
+      rate = std::max(rate, kCGLBackupCollisionRate);
+    }
+  } else if (flim) {
+    if (paniso <= static_cast<Real>(-0.7)*bsqr) {
+      rate = std::max(rate, lim_coll);
+    }
+  }
+
+  if (mlim && backup_lim) {
+    if ((paniso >= static_cast<Real>(0.5)*bsqr) && (paniso < bsqr)) {
+      rate = std::max(rate, lim_coll);
+    } else if (paniso >= static_cast<Real>(0.5)*bsqr) {
+      rate = std::max(rate, kCGLBackupCollisionRate);
+    }
+  } else if (mlim) {
+    if (paniso >= static_cast<Real>(0.5)*bsqr) {
+      rate = std::max(rate, lim_coll);
+    }
+  }
+
+  return rate;
+}
+
+Real EffectiveCollisionFrequency(ParameterInput *pin, const Real ppar, const Real pperp,
+                                 const Real bx, const Real by, const Real bz) {
+  return std::max(BackgroundCollisionFrequency(pin), static_cast<Real>(0.0)) +
+         LimiterCollisionRate(pin, ppar, pperp, bx, by, bz);
+}
+
+Real FaceCParallel(ParameterInput *pin, const Real rho, const Real ppar) {
+  const std::string coeff_mode =
+      pin->GetOrAddString("mhd", "lf_coefficient_mode", "local");
+  if (coeff_mode == "background") {
+    return pin->GetOrAddReal("mhd", "lf_c_parallel0",
+                             std::sqrt(std::max(ppar/rho, static_cast<Real>(0.0))));
+  }
+  if (coeff_mode == "local") {
+    const Real tfloor = pin->GetOrAddReal("mhd", "tfloor", 1.0e-30);
+    return std::sqrt(std::max(ppar/rho, tfloor));
+  }
+  Fail("<mhd>/lf_coefficient_mode must be local or background");
+}
+
+Real ChiPerp(const Real cpar, const Real lf_k, const Real nu_eff) {
+  const Real denom = kSqrtTwoPi*cpar*lf_k + nu_eff;
+  return (denom > 0.0) ? static_cast<Real>(2.0)*SQR(cpar)/denom : 0.0;
+}
+
+Real ChiParallel(const Real cpar, const Real lf_k, const Real nu_eff) {
+  const Real denom = kSqrtEightPi*cpar*lf_k + kThreePiMinusEight*nu_eff;
+  return (denom > 0.0) ? static_cast<Real>(8.0)*SQR(cpar)/denom : 0.0;
+}
+
 Real GradBMomentFlux(ParameterInput *pin, Mesh *pm, const int face) {
   const int nx1 = pm->mb_indcs.nx1;
   const Real dx = (pm->mesh_size.x1max - pm->mesh_size.x1min)/static_cast<Real>(nx1);
   const int left = (face - 1 + nx1)%nx1;
   const int right = face%nx1;
   const Real bx = pin->GetOrAddReal("problem", "b0", 1.0);
+  const Real bz = pin->GetOrAddReal("problem", "bz0", 0.0);
   const Real by = 0.5*(ByCell(pin, pm, left) + ByCell(pin, pm, right));
-  const Real bmag_face = std::sqrt(SQR(bx) + SQR(by));
+  const Real bmag_face = std::sqrt(SQR(bx) + SQR(by) + SQR(bz));
   const Real bhx = bx/bmag_face;
   const Real grad_b_x = (BMagCell(pin, pm, right) - BMagCell(pin, pm, left))/dx;
   const Real gradpar_b = bhx*grad_b_x;
+  const Real rho = pin->GetOrAddReal("problem", "rho0", 1.0);
   const Real ppar = pin->GetOrAddReal("problem", "ppar0", 1.0);
   const Real pperp = pin->GetOrAddReal("problem", "pperp0", 1.2);
-  const Real cpar0 = pin->GetOrAddReal("mhd", "lf_c_parallel0", 1.0);
   const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
-  const Real chi_perp = kSqrtTwoOverPi*cpar0/lf_k;
+  const Real cpar = FaceCParallel(pin, rho, ppar);
+  const Real nu_eff = EffectiveCollisionFrequency(pin, ppar, pperp, bx, by, bz);
+  const Real chi_perp = ChiPerp(cpar, lf_k, nu_eff);
   const Real qperp_l = -chi_perp*(-pperp*(1.0 - pperp/ppar)*gradpar_b/bmag_face);
-  const Real qperp = LimitedHeatFlux(qperp_l, kSqrtTwoOverPi*cpar0*pperp);
+  const Real qperp = LimitedHeatFlux(qperp_l, kSqrtTwoOverPi*cpar*pperp);
   return bhx*qperp/bmag_face;
+}
+
+struct DecayState {
+  Real tpar;
+  Real tperp;
+};
+
+DecayState IntegrateDecayReference(ParameterInput *pin, Mesh *pm, const TestMode mode,
+                                   const Real chi_parallel, const Real chi_perp) {
+  const Real rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
+  const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
+  const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
+  const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-4);
+  const Real k_wave = Wavenumber(pin, pm);
+  const Real nu_coll = std::max(BackgroundCollisionFrequency(pin), static_cast<Real>(0.0));
+  DecayState s{0.0, 0.0};
+  if (mode == TestMode::parallel_decay) {
+    s.tpar = (ppar0/rho0)*amp;
+  } else {
+    s.tperp = (pperp0/rho0)*amp;
+  }
+
+  const auto apply_heat_flux = [=](DecayState state, const Real dt) {
+    state.tpar *= std::exp(-chi_parallel*SQR(k_wave)*dt);
+    state.tperp *= std::exp(-chi_perp*SQR(k_wave)*dt);
+    return state;
+  };
+  const auto apply_collision = [=](DecayState state, const Real dt) {
+    const Real piso = ONE_3RD*state.tpar + TWO_3RDS*state.tperp;
+    Real paniso = state.tperp - state.tpar;
+    paniso *= std::exp(-nu_coll*dt);
+    state.tpar = piso - TWO_3RDS*paniso;
+    state.tperp = piso + ONE_3RD*paniso;
+    return state;
+  };
+
+  // Driver order with STS enabled: pre half-sweep, CGL collision after the main
+  // integrator, post half-sweep, then the post-STS CGL collision.
+  s = apply_heat_flux(s, 0.5*pm->time);
+  s = apply_collision(s, pm->time);
+  s = apply_heat_flux(s, 0.5*pm->time);
+  s = apply_collision(s, pm->time);
+  return s;
 }
 
 void CheckDecay(ParameterInput *pin, Mesh *pm, const TestMode mode) {
@@ -307,13 +446,23 @@ void CheckDecay(ParameterInput *pin, Mesh *pm, const TestMode mode) {
   const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-4);
   const Real rel_tol = pin->GetOrAddReal("problem", "decay_rel_tol", 5.0e-2);
   const Real phase_tol = pin->GetOrAddReal("problem", "phase_rel_tol", 2.0e-2);
-  const Real cpar0 = pin->GetOrAddReal("mhd", "lf_c_parallel0", 1.0);
   const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
   const Real k_wave = Wavenumber(pin, pm);
-  const Real chi = (mode == TestMode::parallel_decay ? kSqrtEightOverPi :
-                                                       kSqrtTwoOverPi)*cpar0/lf_k;
+  const Real bx0 = pin->GetOrAddReal("problem", "b0", 1.0);
+  const Real by0 = pin->GetOrAddReal("problem", "by0", 0.0);
+  const Real bz0 = pin->GetOrAddReal("problem", "bz0", 0.0);
+  const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
+  const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
+  const Real cpar0 = FaceCParallel(pin, rho0, ppar0);
+  const Real nu_eff = EffectiveCollisionFrequency(pin, ppar0, pperp0, bx0, by0, bz0);
+  const Real chi_parallel = ChiParallel(cpar0, lf_k, nu_eff);
+  const Real chi_perp = ChiPerp(cpar0, lf_k, nu_eff);
+  const DecayState expected_state =
+      IntegrateDecayReference(pin, pm, mode, chi_parallel, chi_perp);
+  const Real expected_mode_amp = (mode == TestMode::parallel_decay) ?
+                                 expected_state.tpar : expected_state.tperp;
   const Real initial_amp = (p0/rho0)*amp;
-  const Real expected_amp = initial_amp*std::exp(-chi*SQR(k_wave)*pm->time);
+  const Real expected_amp = std::abs(expected_mode_amp);
   const Real measured_amp = std::abs(projection.sin_amp);
   const Real rel_err = RelativeError(measured_amp, expected_amp);
   const Real cos_limit = phase_tol*std::abs(initial_amp);
@@ -332,7 +481,12 @@ void CheckDecay(ParameterInput *pin, Mesh *pm, const TestMode mode) {
         << "measured_sin_amp," << projection.sin_amp << "\n"
         << "measured_cos_amp," << projection.cos_amp << "\n"
         << "expected_amp," << expected_amp << "\n"
-        << "chi," << chi << "\n"
+        << "expected_tpar_amp," << expected_state.tpar << "\n"
+        << "expected_tperp_amp," << expected_state.tperp << "\n"
+        << "chi_parallel," << chi_parallel << "\n"
+        << "chi_perp," << chi_perp << "\n"
+        << "nu_eff," << nu_eff << "\n"
+        << "nu_coll," << BackgroundCollisionFrequency(pin) << "\n"
         << "k_wave," << k_wave << "\n"
         << "rel_err," << rel_err << "\n"
         << "rel_tol," << rel_tol << "\n"
@@ -400,22 +554,71 @@ Real InitialParallelPressure(ParameterInput *pin, Mesh *pm, const int q) {
   return ppar0*(1.0 + amp*std::sin(k_wave*(XCenter(pm, q) - xmin)));
 }
 
+Real InitialPerpPressure(ParameterInput *pin, Mesh *pm, const int q) {
+  const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
+  const Real amp = pin->GetOrAddReal("problem", "amp", 0.5);
+  const Real k_wave = Wavenumber(pin, pm);
+  const Real xmin = pm->mesh_size.x1min;
+  return pperp0*(1.0 + amp*std::sin(k_wave*(XCenter(pm, q) - xmin)));
+}
+
 Real LimitedParallelHeatFlux(ParameterInput *pin, Mesh *pm, const int face,
-                             Real &q_unlimited, Real &q_max) {
+                             Real &q_unlimited, Real &q_max,
+                             const bool force_collisionless = false) {
   const int nx1 = pm->mb_indcs.nx1;
   const Real dx = (pm->mesh_size.x1max - pm->mesh_size.x1min)/static_cast<Real>(nx1);
   const int left = (face - 1 + nx1)%nx1;
   const int right = face%nx1;
   const Real rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
-  const Real cpar0 = pin->GetOrAddReal("mhd", "lf_c_parallel0", 1.0);
   const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
+  const Real bx = pin->GetOrAddReal("problem", "b0", 1.0);
+  const Real by = pin->GetOrAddReal("problem", "by0", 0.0);
+  const Real bz = pin->GetOrAddReal("problem", "bz0", 0.0);
   const Real ppar_l = InitialParallelPressure(pin, pm, left);
   const Real ppar_r = InitialParallelPressure(pin, pm, right);
+  const Real pperp_l = InitialPerpPressure(pin, pm, left);
+  const Real pperp_r = InitialPerpPressure(pin, pm, right);
   const Real ppar_face = std::max(static_cast<Real>(0.5)*(ppar_l + ppar_r),
                                   static_cast<Real>(1.0e-30));
+  const Real pperp_face = std::max(static_cast<Real>(0.5)*(pperp_l + pperp_r),
+                                   static_cast<Real>(1.0e-30));
+  const Real cpar = FaceCParallel(pin, rho0, ppar_face);
+  const Real nu_eff = force_collisionless ? 0.0 :
+      EffectiveCollisionFrequency(pin, ppar_face, pperp_face, bx, by, bz);
+  const Real chi_parallel = ChiParallel(cpar, lf_k, nu_eff);
   const Real grad_tpar = (ppar_r/rho0 - ppar_l/rho0)/dx;
-  q_unlimited = -(kSqrtEightOverPi*cpar0/lf_k)*rho0*grad_tpar;
-  q_max = kSqrtEightOverPi*cpar0*ppar_face;
+  q_unlimited = -chi_parallel*rho0*grad_tpar;
+  q_max = kSqrtEightOverPi*cpar*ppar_face;
+  return LimitedHeatFlux(q_unlimited, q_max);
+}
+
+Real LimitedPerpHeatFlux(ParameterInput *pin, Mesh *pm, const int face,
+                         Real &q_unlimited, Real &q_max,
+                         const bool force_collisionless = false) {
+  const int nx1 = pm->mb_indcs.nx1;
+  const Real dx = (pm->mesh_size.x1max - pm->mesh_size.x1min)/static_cast<Real>(nx1);
+  const int left = (face - 1 + nx1)%nx1;
+  const int right = face%nx1;
+  const Real rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
+  const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
+  const Real bx = pin->GetOrAddReal("problem", "b0", 1.0);
+  const Real by = pin->GetOrAddReal("problem", "by0", 0.0);
+  const Real bz = pin->GetOrAddReal("problem", "bz0", 0.0);
+  const Real ppar_l = InitialParallelPressure(pin, pm, left);
+  const Real ppar_r = InitialParallelPressure(pin, pm, right);
+  const Real pperp_l = InitialPerpPressure(pin, pm, left);
+  const Real pperp_r = InitialPerpPressure(pin, pm, right);
+  const Real ppar_face = std::max(static_cast<Real>(0.5)*(ppar_l + ppar_r),
+                                  static_cast<Real>(1.0e-30));
+  const Real pperp_face = std::max(static_cast<Real>(0.5)*(pperp_l + pperp_r),
+                                   static_cast<Real>(1.0e-30));
+  const Real cpar = FaceCParallel(pin, rho0, ppar_face);
+  const Real nu_eff = force_collisionless ? 0.0 :
+      EffectiveCollisionFrequency(pin, ppar_face, pperp_face, bx, by, bz);
+  const Real chi_perp = ChiPerp(cpar, lf_k, nu_eff);
+  const Real grad_tperp = (pperp_r/rho0 - pperp_l/rho0)/dx;
+  q_unlimited = -chi_perp*rho0*grad_tperp;
+  q_max = kSqrtTwoOverPi*cpar*pperp_face;
   return LimitedHeatFlux(q_unlimited, q_max);
 }
 
@@ -432,29 +635,42 @@ void CheckFluxLimiter(ParameterInput *pin, Mesh *pm) {
       pin->GetOrAddReal("problem", "flux_limiter_min_unlimited_ratio", 10.0);
   auto face_out = OpenValidationDataFile(pin, "flux_limiter_faces");
   if (face_out) {
-    face_out << "x_face,q_unlimited,q_limited,q_max\n";
+    face_out << "x_face,q_unlimited,q_limited,q_max,"
+             << "q_perp_unlimited,q_perp_limited,q_perp_max\n";
   }
   auto cell_out = OpenValidationDataFile(pin, "flux_limiter_cells");
   if (cell_out) {
-    cell_out << "x,measured_ppar,expected_ppar,initial_ppar\n";
+    cell_out << "x,measured_ppar,expected_ppar,initial_ppar,"
+             << "measured_pperp,expected_pperp,initial_pperp\n";
   }
 
   Real err2 = 0.0;
   Real ref2 = 0.0;
-  Real max_ratio = 0.0;
+  Real max_ratio_parallel = 0.0;
+  Real max_ratio_perp = 0.0;
   for (int face = 0; face <= nx1; ++face) {
-    Real q_l = 0.0, q_max = 0.0;
-    const Real q = LimitedParallelHeatFlux(pin, pm, face, q_l, q_max);
-    max_ratio = std::max(max_ratio, std::abs(q_l)/std::max(q_max,
-                         static_cast<Real>(1.0e-30)));
+    Real qpar_l = 0.0, qpar_max = 0.0;
+    const Real qpar = LimitedParallelHeatFlux(pin, pm, face, qpar_l, qpar_max);
+    Real qperp_l = 0.0, qperp_max = 0.0;
+    const Real qperp = LimitedPerpHeatFlux(pin, pm, face, qperp_l, qperp_max);
+    max_ratio_parallel = std::max(max_ratio_parallel,
+        std::abs(qpar_l)/std::max(qpar_max, static_cast<Real>(1.0e-30)));
+    max_ratio_perp = std::max(max_ratio_perp,
+        std::abs(qperp_l)/std::max(qperp_max, static_cast<Real>(1.0e-30)));
     if (face_out) {
       const Real x_face = pm->mesh_size.x1min + static_cast<Real>(face)*dx;
-      face_out << x_face << "," << q_l << "," << q << "," << q_max << "\n";
+      face_out << x_face << "," << qpar_l << "," << qpar << "," << qpar_max
+               << "," << qperp_l << "," << qperp << "," << qperp_max << "\n";
     }
-    Require(std::abs(q) <= q_max*(1.0 + 1.0e-12),
-            "limited heat flux exceeds q_max");
-    if (q_l != 0.0) {
-      Require(q*q_l > 0.0, "limited heat flux changed sign");
+    Require(std::abs(qpar) <= qpar_max*(1.0 + 1.0e-12),
+            "limited parallel heat flux exceeds q_max");
+    Require(std::abs(qperp) <= qperp_max*(1.0 + 1.0e-12),
+            "limited perpendicular heat flux exceeds q_max");
+    if (qpar_l != 0.0) {
+      Require(qpar*qpar_l > 0.0, "limited parallel heat flux changed sign");
+    }
+    if (qperp_l != 0.0) {
+      Require(qperp*qperp_l > 0.0, "limited perpendicular heat flux changed sign");
     }
   }
 
@@ -464,19 +680,34 @@ void CheckFluxLimiter(ParameterInput *pin, Mesh *pm) {
     Real q_l_l = 0.0, q_l_max = 0.0;
     const Real flux_r = LimitedParallelHeatFlux(pin, pm, q + 1, q_r_l, q_r_max);
     const Real flux_l = LimitedParallelHeatFlux(pin, pm, q, q_l_l, q_l_max);
+    Real qperp_r_l = 0.0, qperp_r_max = 0.0;
+    Real qperp_l_l = 0.0, qperp_l_max = 0.0;
+    const Real perp_flux_r = LimitedPerpHeatFlux(pin, pm, q + 1,
+                                                 qperp_r_l, qperp_r_max);
+    const Real perp_flux_l = LimitedPerpHeatFlux(pin, pm, q,
+                                                 qperp_l_l, qperp_l_max);
     const Real expected_ppar = InitialParallelPressure(pin, pm, q)
                              + pm->time*(-(flux_r - flux_l)/dx);
+    const Real expected_pperp = InitialPerpPressure(pin, pm, q)
+                              + pm->time*(-(perp_flux_r - perp_flux_l)/dx);
     const Real measured_ppar = w(0,IPR,ks,js,i);
-    err2 += SQR(measured_ppar - expected_ppar);
-    ref2 += SQR(expected_ppar - InitialParallelPressure(pin, pm, q));
+    const Real measured_pperp = w(0,IPP,ks,js,i);
+    err2 += SQR(measured_ppar - expected_ppar)
+          + SQR(measured_pperp - expected_pperp);
+    ref2 += SQR(expected_ppar - InitialParallelPressure(pin, pm, q))
+          + SQR(expected_pperp - InitialPerpPressure(pin, pm, q));
     if (cell_out) {
       cell_out << XCenter(pm, q) << "," << measured_ppar << "," << expected_ppar
-               << "," << InitialParallelPressure(pin, pm, q) << "\n";
+               << "," << InitialParallelPressure(pin, pm, q)
+               << "," << measured_pperp << "," << expected_pperp
+               << "," << InitialPerpPressure(pin, pm, q) << "\n";
     }
   }
 
-  Require(max_ratio >= min_unlimited_ratio,
-          "test did not enter the strongly limited heat-flux regime");
+  Require(max_ratio_parallel >= min_unlimited_ratio,
+          "test did not enter the strongly limited parallel heat-flux regime");
+  Require(max_ratio_perp >= min_unlimited_ratio,
+          "test did not enter the strongly limited perpendicular heat-flux regime");
   Require(ref2 > 0.0, "flux limiter reference response is zero");
   const Real rel_err = std::sqrt(err2/ref2);
   if (rel_err > rel_tol) {
@@ -486,8 +717,107 @@ void CheckFluxLimiter(ParameterInput *pin, Mesh *pm) {
   }
   std::cout << "CGL LF flux_limiter passed: rms_rel_err=" << rel_err
             << " rel_tol=" << rel_tol
-            << " max_unlimited_over_qmax=" << max_ratio
+            << " max_parallel_unlimited_over_qmax=" << max_ratio_parallel
+            << " max_perp_unlimited_over_qmax=" << max_ratio_perp
             << " min_unlimited_over_qmax=" << min_unlimited_ratio << std::endl;
+}
+
+void CheckLimiterHeatFluxSuppression(ParameterInput *pin, Mesh *pm) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  auto w = HostCopy(pmhd->w0);
+  const int is = pm->mb_indcs.is;
+  const int js = pm->mb_indcs.js;
+  const int ks = pm->mb_indcs.ks;
+  const int nx1 = pm->mb_indcs.nx1;
+  const Real dx = (pm->mesh_size.x1max - pm->mesh_size.x1min)/static_cast<Real>(nx1);
+  const Real max_suppression_ratio =
+      pin->GetOrAddReal("problem", "limiter_suppression_max_ratio", 5.0e-2);
+  const Real min_collisionless_ratio =
+      pin->GetOrAddReal("problem", "limiter_suppression_min_collisionless_ratio", 10.0);
+  auto face_out = OpenValidationDataFile(pin, "limiter_heat_flux_suppression_faces");
+  if (face_out) {
+    face_out << "x_face,qpar_unlimited,qpar_collisionless,qpar_limited,qpar_max,"
+             << "qperp_unlimited,qperp_collisionless,qperp_limited,qperp_max\n";
+  }
+
+  Real max_parallel_ratio = 0.0;
+  Real max_perp_ratio = 0.0;
+  Real max_parallel_collisionless_over_qmax = 0.0;
+  Real max_perp_collisionless_over_qmax = 0.0;
+  for (int face = 0; face <= nx1; ++face) {
+    Real qpar_l = 0.0, qpar_max = 0.0;
+    const Real qpar = LimitedParallelHeatFlux(pin, pm, face, qpar_l, qpar_max);
+    Real qpar_collisionless_l = 0.0, qpar_collisionless_max = 0.0;
+    (void)LimitedParallelHeatFlux(pin, pm, face, qpar_collisionless_l,
+                                  qpar_collisionless_max, true);
+    Real qperp_l = 0.0, qperp_max = 0.0;
+    const Real qperp = LimitedPerpHeatFlux(pin, pm, face, qperp_l, qperp_max);
+    Real qperp_collisionless_l = 0.0, qperp_collisionless_max = 0.0;
+    (void)LimitedPerpHeatFlux(pin, pm, face, qperp_collisionless_l,
+                              qperp_collisionless_max, true);
+
+    max_parallel_collisionless_over_qmax = std::max(
+        max_parallel_collisionless_over_qmax,
+        std::abs(qpar_collisionless_l)/std::max(qpar_max, static_cast<Real>(1.0e-30)));
+    max_perp_collisionless_over_qmax = std::max(
+        max_perp_collisionless_over_qmax,
+        std::abs(qperp_collisionless_l)/std::max(qperp_max, static_cast<Real>(1.0e-30)));
+    if (std::abs(qpar_collisionless_l) > 1.0e-30) {
+      max_parallel_ratio = std::max(max_parallel_ratio,
+                                    std::abs(qpar_l/qpar_collisionless_l));
+      Require(qpar_l*qpar_collisionless_l > 0.0,
+              "limiter-suppressed parallel heat flux changed sign");
+    }
+    if (std::abs(qperp_collisionless_l) > 1.0e-30) {
+      max_perp_ratio = std::max(max_perp_ratio,
+                                std::abs(qperp_l/qperp_collisionless_l));
+      Require(qperp_l*qperp_collisionless_l > 0.0,
+              "limiter-suppressed perpendicular heat flux changed sign");
+    }
+    Require(std::abs(qpar) <= qpar_max*(1.0 + 1.0e-12),
+            "limiter-suppressed parallel heat flux exceeds q_max");
+    Require(std::abs(qperp) <= qperp_max*(1.0 + 1.0e-12),
+            "limiter-suppressed perpendicular heat flux exceeds q_max");
+    if (qpar_l != 0.0) {
+      Require(qpar*qpar_l > 0.0, "limited parallel heat flux changed sign");
+    }
+    if (qperp_l != 0.0) {
+      Require(qperp*qperp_l > 0.0, "limited perpendicular heat flux changed sign");
+    }
+
+    if (face_out) {
+      const Real x_face = pm->mesh_size.x1min + static_cast<Real>(face)*dx;
+      face_out << x_face << "," << qpar_l << "," << qpar_collisionless_l
+               << "," << qpar << "," << qpar_max << ","
+               << qperp_l << "," << qperp_collisionless_l
+               << "," << qperp << "," << qperp_max << "\n";
+    }
+  }
+
+  for (int q = 0; q < nx1; ++q) {
+    const int i = is + q;
+    Require(std::isfinite(w(0,IDN,ks,js,i)) && std::isfinite(w(0,IPR,ks,js,i)) &&
+            std::isfinite(w(0,IPP,ks,js,i)),
+            "limiter heat-flux suppression produced a nonfinite primitive state");
+  }
+
+  Require(max_parallel_collisionless_over_qmax >= min_collisionless_ratio,
+          "parallel setup did not have collisionless |q_L| >> q_max");
+  Require(max_perp_collisionless_over_qmax >= min_collisionless_ratio,
+          "perpendicular setup did not have collisionless |q_L| >> q_max");
+  Require(max_parallel_ratio <= max_suppression_ratio,
+          "parallel limiter collisionality did not strongly suppress q_L");
+  Require(max_perp_ratio <= max_suppression_ratio,
+          "perpendicular limiter collisionality did not strongly suppress q_L");
+
+  std::cout << "CGL LF limiter_heat_flux_suppression passed: "
+            << "max_parallel_suppressed_over_collisionless=" << max_parallel_ratio
+            << " max_perp_suppressed_over_collisionless=" << max_perp_ratio
+            << " limit=" << max_suppression_ratio
+            << " max_parallel_collisionless_over_qmax="
+            << max_parallel_collisionless_over_qmax
+            << " max_perp_collisionless_over_qmax="
+            << max_perp_collisionless_over_qmax << std::endl;
 }
 
 void CheckLimiterStress(ParameterInput *pin, Mesh *pm) {
@@ -557,9 +887,14 @@ WaveState IntegrateWaveReference(ParameterInput *pin, Mesh *pm) {
   const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
   const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-5);
   const Real k_wave = Wavenumber(pin, pm);
-  const Real cpar0 = pin->GetOrAddReal("mhd", "lf_c_parallel0", std::sqrt(ppar0/rho0));
+  const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", ppar0);
+  const Real bx0 = pin->GetOrAddReal("problem", "b0", 1.0);
+  const Real by0 = pin->GetOrAddReal("problem", "by0", 0.0);
+  const Real bz0 = pin->GetOrAddReal("problem", "bz0", 0.0);
+  const Real cpar0 = FaceCParallel(pin, rho0, ppar0);
   const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
-  const Real chi_parallel = kSqrtEightOverPi*cpar0/lf_k;
+  const Real nu_eff = EffectiveCollisionFrequency(pin, ppar0, pperp0, bx0, by0, bz0);
+  const Real chi_parallel = ChiParallel(cpar0, lf_k, nu_eff);
   const Real c_cgl = std::sqrt(3.0*ppar0/rho0);
 
   WaveState s{Complex(0.0, -rho0*amp),
@@ -704,10 +1039,11 @@ PaperWaveState IntegratePaperWaveReference(ParameterInput *pin, Mesh *pm) {
   Real chi_parallel = 0.0;
   Real chi_perp = 0.0;
   if (pin->DoesParameterExist("mhd", "cgl_heat_flux")) {
-    const Real cpar0 = pin->GetOrAddReal("mhd", "lf_c_parallel0", std::sqrt(p0/rho0));
+    const Real cpar0 = FaceCParallel(pin, rho0, p0);
     const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
-    chi_parallel = kSqrtEightOverPi*cpar0/lf_k;
-    chi_perp = kSqrtTwoOverPi*cpar0/lf_k;
+    const Real nu_eff = EffectiveCollisionFrequency(pin, p0, p0, bx0, by0, bz0);
+    chi_parallel = ChiParallel(cpar0, lf_k, nu_eff);
+    chi_perp = ChiPerp(cpar0, lf_k, nu_eff);
   }
 
   PaperWaveState s{Complex(0.0, 0.0),
@@ -796,6 +1132,8 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     CheckGradB(pin, pm);
   } else if (mode == TestMode::flux_limiter) {
     CheckFluxLimiter(pin, pm);
+  } else if (mode == TestMode::limiter_heat_flux_suppression) {
+    CheckLimiterHeatFluxSuppression(pin, pm);
   } else if (mode == TestMode::limiter_stress) {
     CheckLimiterStress(pin, pm);
   } else if (mode == TestMode::field_aligned_wave) {
@@ -857,9 +1195,13 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     Real ppar = ppar0;
     Real pperp = pperp0;
 
-    if (mode == TestMode::parallel_decay || mode == TestMode::flux_limiter) {
+    if (mode == TestMode::parallel_decay) {
       ppar = ppar0*(1.0 + amp*s);
     } else if (mode == TestMode::perp_decay) {
+      pperp = pperp0*(1.0 + amp*s);
+    } else if (mode == TestMode::flux_limiter ||
+               mode == TestMode::limiter_heat_flux_suppression) {
+      ppar = ppar0*(1.0 + amp*s);
       pperp = pperp0*(1.0 + amp*s);
     } else if (mode == TestMode::limiter_stress) {
       if (limiter_kind_id == 0) {

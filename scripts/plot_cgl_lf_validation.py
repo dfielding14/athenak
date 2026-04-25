@@ -53,10 +53,12 @@ def plot_decay(data_dir: Path, figure_dir: Path) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(7.8, 3.0), sharey=False)
     for ax, (_, path, title, coeff_label) in zip(axes, cases):
         metrics = read_metrics(path)
+        chi_key = "chi_parallel" if "parallel" in path.name else "chi_perp"
+        chi = metrics.get("chi", metrics[chi_key])
         t_final = metrics["time"]
         time = np.linspace(0.0, t_final, 256)
         analytic = metrics["initial_amp"]*np.exp(
-            -metrics["chi"]*metrics["k_wave"]**2*time)
+            -chi*metrics["k_wave"]**2*time)
         ax.plot(time, analytic, color="#1f77b4", lw=2.0, label="analytic")
         ax.scatter([t_final], [metrics["measured_amp"]], color="#d62728",
                    zorder=3, label="AthenaK")

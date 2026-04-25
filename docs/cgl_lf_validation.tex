@@ -61,12 +61,22 @@ The implemented closure uses the Snyder--Hammett--Dorland 3+1 heat fluxes,
         \frac{\nabla_\parallel |B|}{|B|}
     \right],
 \end{align}
-with
+with the finite-collision Squire et al. coefficients
 \begin{equation}
-  \chi_\perp = \sqrt{\frac{2}{\pi}}\frac{c_\parallel}{|k_\parallel|},
+  \chi_\perp =
+    \frac{2c_\parallel^2}
+      {\sqrt{2\pi}\,c_\parallel |k_\parallel| + \nu_{\rm eff}},
   \qquad
-  \chi_\parallel = \sqrt{\frac{8}{\pi}}\frac{c_\parallel}{|k_\parallel|}.
+  \chi_\parallel =
+    \frac{8c_\parallel^2}
+      {\sqrt{8\pi}\,c_\parallel |k_\parallel|
+        + (3\pi-8)\nu_{\rm eff}} .
 \end{equation}
+Here \(\nu_{\rm eff}\) is the background collision frequency plus any active
+mirror/firehose limiter scattering at the face.  In the collisionless limit,
+these reduce to
+\(\chi_\perp=\sqrt{2/\pi}\,c_\parallel/|k_\parallel|\) and
+\(\chi_\parallel=\sqrt{8/\pi}\,c_\parallel/|k_\parallel|\).
 Here \texttt{lf\_k\_parallel} is the closure wavenumber \(|k_\parallel|\), not a
 conductivity.  In local mode, \(c_\parallel=\sqrt{p_\parallel/\rho}\) is computed
 from the live face state.  In background mode, only this prefactor is frozen to
@@ -92,8 +102,9 @@ The implemented caps are
   \qquad
   q_{\parallel,\max} = \sqrt{\frac{8}{\pi}} c_\parallel p_\parallel.
 \end{equation}
-Collision-frequency-dependent suppression of the coefficients is intentionally
-left for a later pass.
+The cap is applied after computing the unlimited flux with the collision-aware
+coefficient, so collisions and limiter scattering suppress the flux before the
+smooth free-streaming bound is applied.
 
 \section{Validation Workflow}
 
@@ -122,12 +133,18 @@ Input & Purpose & Assertion \\
   & pass \\
 \texttt{cgl\_lf\_quant\_parallel} & sinusoidal \(T_\parallel\) decay
   & final Fourier amplitude within 5\% of analytic decay \\
+\texttt{cgl\_lf\_quant\_parallel}\\\texttt{\_collisional} & sinusoidal \(T_\parallel\) decay with \(\nu_{\rm c}>0\)
+  & final Fourier amplitude within 7\% of finite-collision analytic decay \\
 \texttt{cgl\_lf\_quant\_perp} & sinusoidal \(T_\perp\) decay
   & final Fourier amplitude within 5\% of analytic decay \\
+\texttt{cgl\_lf\_quant\_perp}\\\texttt{\_collisional} & sinusoidal \(T_\perp\) decay with \(\nu_{\rm c}>0\)
+  & final Fourier amplitude within 7\% of finite-collision analytic decay \\
 \texttt{cgl\_lf\_quant\_grad\_b} & isolated \(\nabla_\parallel |B|\) term
   & RMS relative error below 10\%, positive response correlation \\
 \texttt{cgl\_lf\_flux\_limiter} & equation 3.2 heat-flux cap
   & \(|q|\le q_{\max}\), sign preserved, update within 20\% \\
+\texttt{cgl\_lf\_limiter}\\\texttt{\_heat\_flux\_suppression} & limiter-collision suppression of heat fluxes
+  & active limiter scattering reduces the unlimited LF flux by more than 20x \\
 \texttt{cgl\_lf\_limiter\_mirror} & mirror-biased admissibility stress
   & intermediate STS states finite, positive, and backup bounded \\
 \texttt{cgl\_lf\_limiter\_firehose} & firehose-biased admissibility stress
