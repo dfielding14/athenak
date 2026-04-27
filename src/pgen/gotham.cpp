@@ -133,8 +133,8 @@ namespace {
   // Refinment condition threshold
   Real ddens_threshold;
 
-  // SN injection persistent buffer
-  DvceArray2D<Real> sn_centers_buffer;
+  // SN injection persistent buffer: event position and host-particle velocity.
+  DvceArray2D<Real> sn_events_buffer;
   Kokkos::View<int> sn_counter;
 
   // SN injection flags
@@ -383,9 +383,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     }
   }
 
-  // Count total particles and initialize SN centers buffer
+  // Count total particles and initialize SN event buffer
   pmy_mesh_->CountParticles();
-  sn_centers_buffer = DvceArray2D<Real>("sn_centers_buffer", 3, pmy_mesh_->nprtcl_total);
+  sn_events_buffer = DvceArray2D<Real>("sn_events_buffer", 6, pmy_mesh_->nprtcl_total);
   sn_counter = Kokkos::View<int>("sn_counter");
   if (global_variable::my_rank==0) {
     std::cout << "Successfully initialized " << pmy_mesh_->nprtcl_total
@@ -1293,8 +1293,8 @@ void SNSource(Mesh* pm, const Real bdt) {
     int nrdata = pmbp->ppart->nrdata;
     Real unit_time = pmbp->punit->time_cgs();
 
-    // Array of positions where SNs go off at this timestep
-    auto &sn_centers = sn_centers_buffer;
+    // Array of SN event positions and host-particle velocities for this timestep.
+    auto &sn_events = sn_events_buffer;
     Kokkos::deep_copy(sn_counter, 0);
     auto d_counter = sn_counter;
 
@@ -1322,9 +1322,12 @@ void SNSource(Mesh* pm, const Real bdt) {
         Real x3min = size.d_view(m).x3min;
         Real x3max = size.d_view(m).x3max;
 
-        sn_centers(0, idx) = fmin(fmax(pr(IPX,p), x1min+dr), x1max-dr);
-        sn_centers(1, idx) = fmin(fmax(pr(IPY,p), x2min+dr), x2max-dr);
-        sn_centers(2, idx) = fmin(fmax(pr(IPZ,p), x3min+dr), x3max-dr);
+        sn_events(0, idx) = fmin(fmax(pr(IPX,p), x1min+dr), x1max-dr);
+        sn_events(1, idx) = fmin(fmax(pr(IPY,p), x2min+dr), x2max-dr);
+        sn_events(2, idx) = fmin(fmax(pr(IPZ,p), x3min+dr), x3max-dr);
+        sn_events(3, idx) = pr(IPVX,p);
+        sn_events(4, idx) = pr(IPVY,p);
+        sn_events(5, idx) = pr(IPVZ,p);
       }
     });
 
@@ -1340,7 +1343,7 @@ void SNSource(Mesh* pm, const Real bdt) {
     Real m_ej_ = m_ej * beta;
     Real Z_ej_ = Z_ej;
 
-    auto &sn_centers = sn_centers_buffer;
+    auto &sn_events = sn_events_buffer;
     int num_sn = num_sn_this_cycle;
 
     par_for("sn_injection", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
@@ -1358,9 +1361,12 @@ void SNSource(Mesh* pm, const Real bdt) {
       Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
 
       for (int sn = 0; sn < num_sn; ++sn) {
-        Real sn_x = sn_centers(0, sn);
-        Real sn_y = sn_centers(1, sn);
-        Real sn_z = sn_centers(2, sn);
+        Real sn_x = sn_events(0, sn);
+        Real sn_y = sn_events(1, sn);
+        Real sn_z = sn_events(2, sn);
+        Real sn_vx = sn_events(3, sn);
+        Real sn_vy = sn_events(4, sn);
+        Real sn_vz = sn_events(5, sn);
 
         // Calculate distance from SN center
         Real dx = x1v - sn_x;
@@ -1370,12 +1376,29 @@ void SNSource(Mesh* pm, const Real bdt) {
 
         // Inject if within injection radius
         if (r <= dr) {
-	  u0(m,IDN,k,j,i) += m_ej_;
-          u0(m,IEN,k,j,i) += e_sn_;
-	  u0(m, IZS, k, j, i) += (1.-dz_sn) * Z_ej_ * m_ej_;
+          const Real rho_old = u0(m,IDN,k,j,i);
+          const Real mx_old = u0(m,IM1,k,j,i);
+          const Real my_old = u0(m,IM2,k,j,i);
+          const Real mz_old = u0(m,IM3,k,j,i);
+          const Real rho_new = rho_old + m_ej_;
+          const Real mx_new = mx_old + m_ej_*sn_vx;
+          const Real my_new = my_old + m_ej_*sn_vy;
+          const Real mz_new = mz_old + m_ej_*sn_vz;
+          const Real ekin_old = 0.5*(mx_old*mx_old + my_old*my_old + mz_old*mz_old)/rho_old;
+          const Real ekin_new = 0.5*(mx_new*mx_new + my_new*my_new + mz_new*mz_new)/rho_new;
+          const Real ekin_ej = 0.5*m_ej_*(sn_vx*sn_vx + sn_vy*sn_vy + sn_vz*sn_vz);
+          // Unresolved inelastic mixing converts relative bulk kinetic energy to heat.
+          const Real inelastic_heat = ekin_old + ekin_ej - ekin_new;
+
+          u0(m,IDN,k,j,i) = rho_new;
+          u0(m,IM1,k,j,i) = mx_new;
+          u0(m,IM2,k,j,i) = my_new;
+          u0(m,IM3,k,j,i) = mz_new;
+          u0(m,IEN,k,j,i) += e_sn_ + (ekin_new - ekin_old) + inelastic_heat;
+          u0(m, IZS, k, j, i) += (1.-dz_sn) * Z_ej_ * m_ej_;
           u0(m, IDS, k, j, i) += 0.5 * dz_sn * Z_ej_ * m_ej_;
           u0(m, IDL, k, j, i) += 0.5 * dz_sn * Z_ej_ * m_ej_;
-	}
+        }
       }
 
     });
@@ -1650,9 +1673,14 @@ void ApplyUserMagneticBoundary(Mesh *pm) {
   int &js = indcs.js; int &je = indcs.je;
   int &ks = indcs.ks; int &ke = indcs.ke;
   int nmb1 = pmbp->nmb_thispack - 1;
+  const bool multi_d = !(pm->one_d);
+  const bool three_d = pm->three_d;
   auto &mb_bcs = pmbp->pmb->mb_bcs;
+  auto &size = pmbp->pmb->mb_size;
   auto &b0 = pmbp->pmhd->b0;
 
+  // Seed ghost faces with an outflow copy.  The off-domain normal faces are
+  // recomputed below from the discrete divergence constraint.
   if (pm->mesh_bcs[BoundaryFace::inner_x1] != BoundaryFlag::periodic) {
     par_for("gotham_b_user_x1", DevExeSpace(), 0, nmb1, 0, (n3-1), 0, (n2-1),
     KOKKOS_LAMBDA(int m, int k, int j) {
@@ -1676,9 +1704,8 @@ void ApplyUserMagneticBoundary(Mesh *pm) {
       }
     });
   }
-  if (pm->one_d) return;
 
-  if (pm->mesh_bcs[BoundaryFace::inner_x2] != BoundaryFlag::periodic) {
+  if (multi_d && pm->mesh_bcs[BoundaryFace::inner_x2] != BoundaryFlag::periodic) {
     par_for("gotham_b_user_x2", DevExeSpace(), 0, nmb1, 0, (n3-1), 0, (n1-1),
     KOKKOS_LAMBDA(int m, int k, int i) {
       if (mb_bcs.d_view(m, BoundaryFace::inner_x2) == BoundaryFlag::user) {
@@ -1701,9 +1728,8 @@ void ApplyUserMagneticBoundary(Mesh *pm) {
       }
     });
   }
-  if (pm->two_d) return;
 
-  if (pm->mesh_bcs[BoundaryFace::inner_x3] != BoundaryFlag::periodic) {
+  if (three_d && pm->mesh_bcs[BoundaryFace::inner_x3] != BoundaryFlag::periodic) {
     par_for("gotham_b_user_x3", DevExeSpace(), 0, nmb1, 0, (n2-1), 0, (n1-1),
     KOKKOS_LAMBDA(int m, int j, int i) {
       if (mb_bcs.d_view(m, BoundaryFace::inner_x3) == BoundaryFlag::user) {
@@ -1722,6 +1748,117 @@ void ApplyUserMagneticBoundary(Mesh *pm) {
           b0.x2f(m,ke+k+1,j,i) = b0.x2f(m,ke,j,i);
           if (j == n2-1) b0.x2f(m,ke+k+1,j+1,i) = b0.x2f(m,ke,j+1,i);
           b0.x3f(m,ke+k+2,j,i) = b0.x3f(m,ke+1,j,i);
+        }
+      }
+    });
+  }
+
+  // Repair only off-domain normal faces so every owned ghost cell satisfies the
+  // finite-volume div(B)=0 stencil while the physical boundary flux is preserved.
+  if (pm->mesh_bcs[BoundaryFace::inner_x1] != BoundaryFlag::periodic) {
+    par_for("gotham_b_user_ct_x1", DevExeSpace(), 0, nmb1, 0, (n3-1), 0, (n2-1),
+    KOKKOS_LAMBDA(int m, int k, int j) {
+      const Real dx1 = size.d_view(m).dx1;
+      const Real dx2 = size.d_view(m).dx2;
+      const Real dx3 = size.d_view(m).dx3;
+
+      if (mb_bcs.d_view(m, BoundaryFace::inner_x1) == BoundaryFlag::user) {
+        for (int q = 0; q < ng; ++q) {
+          const int i = is - q - 1;
+          Real divt = 0.0;
+          if (multi_d) {
+            divt += (b0.x2f(m,k,j+1,i) - b0.x2f(m,k,j,i))/dx2;
+          }
+          if (three_d) {
+            divt += (b0.x3f(m,k+1,j,i) - b0.x3f(m,k,j,i))/dx3;
+          }
+          b0.x1f(m,k,j,i) = b0.x1f(m,k,j,i+1) + dx1*divt;
+        }
+      }
+      if (mb_bcs.d_view(m, BoundaryFace::outer_x1) == BoundaryFlag::user) {
+        for (int q = 0; q < ng; ++q) {
+          const int i = ie + q + 1;
+          Real divt = 0.0;
+          if (multi_d) {
+            divt += (b0.x2f(m,k,j+1,i) - b0.x2f(m,k,j,i))/dx2;
+          }
+          if (three_d) {
+            divt += (b0.x3f(m,k+1,j,i) - b0.x3f(m,k,j,i))/dx3;
+          }
+          b0.x1f(m,k,j,i+1) = b0.x1f(m,k,j,i) - dx1*divt;
+        }
+      }
+    });
+  }
+  if (!multi_d) return;
+
+  if (pm->mesh_bcs[BoundaryFace::inner_x2] != BoundaryFlag::periodic) {
+    par_for("gotham_b_user_ct_x2", DevExeSpace(), 0, nmb1, 0, (n3-1), 0, (n1-1),
+    KOKKOS_LAMBDA(int m, int k, int i) {
+      const bool x1_owned = ((i < is) &&
+          (mb_bcs.d_view(m, BoundaryFace::inner_x1) == BoundaryFlag::user)) ||
+          ((i > ie) && (mb_bcs.d_view(m, BoundaryFace::outer_x1) == BoundaryFlag::user));
+      if (x1_owned) return;
+
+      const Real dx1 = size.d_view(m).dx1;
+      const Real dx2 = size.d_view(m).dx2;
+      const Real dx3 = size.d_view(m).dx3;
+
+      if (mb_bcs.d_view(m, BoundaryFace::inner_x2) == BoundaryFlag::user) {
+        for (int q = 0; q < ng; ++q) {
+          const int j = js - q - 1;
+          Real divt = (b0.x1f(m,k,j,i+1) - b0.x1f(m,k,j,i))/dx1;
+          if (three_d) {
+            divt += (b0.x3f(m,k+1,j,i) - b0.x3f(m,k,j,i))/dx3;
+          }
+          b0.x2f(m,k,j,i) = b0.x2f(m,k,j+1,i) + dx2*divt;
+        }
+      }
+      if (mb_bcs.d_view(m, BoundaryFace::outer_x2) == BoundaryFlag::user) {
+        for (int q = 0; q < ng; ++q) {
+          const int j = je + q + 1;
+          Real divt = (b0.x1f(m,k,j,i+1) - b0.x1f(m,k,j,i))/dx1;
+          if (three_d) {
+            divt += (b0.x3f(m,k+1,j,i) - b0.x3f(m,k,j,i))/dx3;
+          }
+          b0.x2f(m,k,j+1,i) = b0.x2f(m,k,j,i) - dx2*divt;
+        }
+      }
+    });
+  }
+  if (!three_d) return;
+
+  if (pm->mesh_bcs[BoundaryFace::inner_x3] != BoundaryFlag::periodic) {
+    par_for("gotham_b_user_ct_x3", DevExeSpace(), 0, nmb1, 0, (n2-1), 0, (n1-1),
+    KOKKOS_LAMBDA(int m, int j, int i) {
+      const bool x1_owned = ((i < is) &&
+          (mb_bcs.d_view(m, BoundaryFace::inner_x1) == BoundaryFlag::user)) ||
+          ((i > ie) && (mb_bcs.d_view(m, BoundaryFace::outer_x1) == BoundaryFlag::user));
+      const bool x2_owned = ((j < js) &&
+          (mb_bcs.d_view(m, BoundaryFace::inner_x2) == BoundaryFlag::user)) ||
+          ((j > je) && (mb_bcs.d_view(m, BoundaryFace::outer_x2) == BoundaryFlag::user));
+      if (x1_owned || x2_owned) return;
+
+      const Real dx1 = size.d_view(m).dx1;
+      const Real dx2 = size.d_view(m).dx2;
+      const Real dx3 = size.d_view(m).dx3;
+
+      if (mb_bcs.d_view(m, BoundaryFace::inner_x3) == BoundaryFlag::user) {
+        for (int q = 0; q < ng; ++q) {
+          const int k = ks - q - 1;
+          const Real divt =
+              (b0.x1f(m,k,j,i+1) - b0.x1f(m,k,j,i))/dx1 +
+              (b0.x2f(m,k,j+1,i) - b0.x2f(m,k,j,i))/dx2;
+          b0.x3f(m,k,j,i) = b0.x3f(m,k+1,j,i) + dx3*divt;
+        }
+      }
+      if (mb_bcs.d_view(m, BoundaryFace::outer_x3) == BoundaryFlag::user) {
+        for (int q = 0; q < ng; ++q) {
+          const int k = ke + q + 1;
+          const Real divt =
+              (b0.x1f(m,k,j,i+1) - b0.x1f(m,k,j,i))/dx1 +
+              (b0.x2f(m,k,j+1,i) - b0.x2f(m,k,j,i))/dx2;
+          b0.x3f(m,k+1,j,i) = b0.x3f(m,k,j,i) - dx3*divt;
         }
       }
     });
@@ -1803,10 +1940,6 @@ void UserBoundary(Mesh* pm) {
   Real Z_ = Z;
   Real dz_init = d_z_init;
   Real min_df = min_dust_frac;
-
-  if (pmbp->pmhd != nullptr) {
-    ApplyUserMagneticBoundary(pm);
-  }
 
   // Handle X1 boundaries
   par_for("static_x1", DevExeSpace(), 0, nmb1, 0, (n3-1), 0, (n2-1), 0, (ng-1),
@@ -1908,6 +2041,7 @@ void UserBoundary(Mesh* pm) {
   });
 
   if (pmbp->pmhd != nullptr) {
+    ApplyUserMagneticBoundary(pm);
     AddUserBoundaryMagneticEnergy(pm);
   }
 
@@ -1977,6 +2111,6 @@ void FreeProfile(ParameterInput *pin, Mesh *pm) {
   // Free Kokkos views before Kokkos::finalize is called
   profile_reader = ProfileReader();
   disk_profile_reader = ProfileReader();
-  sn_centers_buffer = DvceArray2D<Real>();
+  sn_events_buffer = DvceArray2D<Real>();
   sn_counter = Kokkos::View<int>();
 }
