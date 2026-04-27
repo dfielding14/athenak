@@ -1,7 +1,10 @@
-# AthenaK input file for AMR div(B) preservation in 3D
+# AthenaK diagnostic input for AMR div(B) preservation in 3D with turbulent driving.
+# This is intentionally heavier than the regression input: it writes both slice and
+# full-cube binary diagnostics for post-run analysis.  The runtime targets roughly
+# two forcing-scale eddy turnover times for the dedt=75, Mach~0.5 stress case.
 
 <job>
-basename  = DivBAMR3D
+basename  = DivBAMR3DTurbDiag
 
 <mesh>
 nghost    = 2
@@ -30,18 +33,18 @@ nx3       = 8
 
 <mesh_refinement>
 refinement          = adaptive
-num_levels          = 3
+num_levels          = 4
 ncycle_check        = 1
 refinement_interval = 1
-max_nmb_per_rank    = 2048
+max_nmb_per_rank    = 16384
 
 <time>
 evolution  = dynamic
 integrator = rk2
 cfl_number = 0.25
-nlim       = 12
-tlim       = 1.0
-ndiag      = 1
+nlim       = 100000
+tlim       = 0.16
+ndiag      = 100
 
 <mhd>
 eos         = ideal
@@ -49,10 +52,25 @@ reconstruct = plm
 rsolver     = hlld
 gamma       = 1.66666666667
 
+<turb_driving>
+type           = mhd
+turb_flag      = 2
+dt_turb_update = 2.5e-4
+tcorr          = 0.002
+dedt           = 75.0
+nlow           = 1
+nhigh          = 3
+spect_form     = 2
+expo           = 1.66666666667
+sol_fraction   = 0.5
+rseed          = -314159
+constant_edot  = true
+tile_driving   = false
+
 <problem>
 pgen_name     = divb_amr
 user_hist     = true
-refine_levels = 2
+refine_levels = 3
 rho0          = 1.0
 pgas0         = 10.0
 vx0           = 0.08
@@ -67,47 +85,65 @@ field_k       = 2.0
 <output1>
 file_type      = hst
 data_format    = %24.16e
-dcycle         = 1
+dcycle         = 10
 user_hist_only = true
 
 <output2>
 file_type = bin
 variable  = mhd_w_bcc
-dt        = 1.0e99
+dt        = 0.02
 slice_x3  = 0.5
 id        = bfield_slice_x3
 
 <output3>
 file_type = bin
 variable  = mhd_divb
-dt        = 1.0e99
+dt        = 0.02
 slice_x3  = 0.5
 id        = divb_slice_x3
 
 <output4>
 file_type = bin
 variable  = mhd_j2
-dt        = 1.0e99
+dt        = 0.02
 slice_x3  = 0.5
 id        = j2_slice_x3
 
 <output5>
 file_type = bin
 variable  = mhd_w_bcc
-dt        = 1.0e99
+dt        = 0.02
 slice_x2  = 0.5
 id        = bfield_slice_x2
 
 <output6>
 file_type = bin
 variable  = mhd_divb
-dt        = 1.0e99
+dt        = 0.02
 slice_x2  = 0.5
 id        = divb_slice_x2
 
 <output7>
 file_type = bin
 variable  = mhd_j2
-dt        = 1.0e99
+dt        = 0.02
 slice_x2  = 0.5
 id        = j2_slice_x2
+
+<output8>
+file_type = bin
+variable  = mhd_w_bcc
+dt        = 0.08
+id        = bfield_full
+
+<output9>
+file_type = bin
+variable  = mhd_divb
+dt        = 0.08
+id        = divb_full
+
+<output10>
+file_type = bin
+variable  = mhd_j2
+dt        = 0.08
+id        = j2_full

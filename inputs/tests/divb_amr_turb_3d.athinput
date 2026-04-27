@@ -1,7 +1,7 @@
-# AthenaK input file for AMR div(B) preservation in 3D
+# AthenaK input file for AMR div(B) preservation in 3D with turbulent driving
 
 <job>
-basename  = DivBAMR3D
+basename  = DivBAMR3DTurb
 
 <mesh>
 nghost    = 2
@@ -48,6 +48,21 @@ eos         = ideal
 reconstruct = plm
 rsolver     = hlld
 gamma       = 1.66666666667
+
+<turb_driving>
+type           = mhd
+turb_flag      = 2
+dt_turb_update = 2.5e-4
+tcorr          = 0.002
+dedt           = 5.0
+nlow           = 1
+nhigh          = 3
+spect_form     = 2
+expo           = 1.66666666667
+sol_fraction   = 0.5
+rseed          = -314159
+constant_edot  = true
+tile_driving   = false
 
 <problem>
 pgen_name     = divb_amr

@@ -152,7 +152,7 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
 
     MeshBlockPack* pmbp = pmy_mesh->pmb_pack;
     if (pmbp->pmhd != nullptr) {
-      RepairRefinedFC(pmbp->pmhd->b0);
+      RepairAMRFC(pmbp->pmhd->b0);
       if (pmbp->pdyngr == nullptr) {
         (void) pmbp->pmhd->ConToPrim(pdriver, 0);
       } else {
@@ -573,6 +573,15 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   refine_flag.template modify<HostMemSpace>();
   refine_flag.template sync<DevExeSpace>();
 
+  hydro::Hydro* phydro = pm->pmb_pack->phydro;
+  mhd::MHD* pmhd = pm->pmb_pack->pmhd;
+  z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
+  auto ppart = pm->pmb_pack->ppart;
+  if ((ndel > 0) && (pmhd != nullptr)) {
+    // Derefinement sends/copies coarse_b0, so refresh it before AMR buffers are packed.
+    RestrictFC(pmhd->b0, pmhd->coarse_b0);
+  }
+
   // Step 4.
   // Allocate send/recv buffers for load balancing, post receives.
   // Pack send buffers for load blancing and send data
@@ -586,10 +595,6 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   // De-refine (restrict) evolved physics variables for MeshBlocks within this rank.
   // Simply copies data from coarse arrays in source MBs to appropriate octant of fine
   // array in target MB.
-  hydro::Hydro* phydro = pm->pmb_pack->phydro;
-  mhd::MHD* pmhd = pm->pmb_pack->pmhd;
-  z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
-  auto ppart = pm->pmb_pack->ppart;
   // derefine (if needed)
   if (ndel > 0) {
     if (phydro != nullptr) {
@@ -679,13 +684,6 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   Kokkos::realloc(ncyc_since_ref, new_nmb_total);
   Kokkos::deep_copy(ncyc_since_ref, new_ncyc_since_ref);
 
-  Kokkos::realloc(fc_amr_repair, new_nmb_total);
-  for (int m=0; m<new_nmb_total; ++m) {
-    fc_amr_repair.h_view(m) = (refine_flag.h_view(newtoold[m]) != 0) ? 1 : 0;
-  }
-  fc_amr_repair.template modify<HostMemSpace>();
-  fc_amr_repair.template sync<DevExeSpace>();
-
   // Step 10.
   // Update data in Mesh/MeshBlockPack/MeshBlock classes with new grid properties
   delete [] pm->lloc_eachmb;
@@ -710,6 +708,28 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   pm->pmb_pack->AddMeshBlocks(pin);
   pm->pmb_pack->AddCoordinates(pin);
   pm->pmb_pack->pmb->SetNeighbors(pm->ptree, pm->rank_eachmb);
+
+  // Mark MeshBlocks that need their internal face-centered fields rebuilt after
+  // AMR boundary exchange has finalized exterior faces.
+  Kokkos::realloc(fc_amr_repair, new_nmb_total);
+  for (int m=0; m<new_nmb_total; ++m) {
+    fc_amr_repair.h_view(m) = (refine_flag.h_view(newtoold[m]) != 0) ? 1 : 0;
+  }
+  int mbs = pm->gids_eachrank[global_variable::my_rank];
+  int nmb = pm->nmb_eachrank[global_variable::my_rank];
+  int nnghbr = pm->pmb_pack->pmb->nnghbr;
+  auto &nghbr = pm->pmb_pack->pmb->nghbr;
+  for (int m=0; m<nmb; ++m) {
+    int gid = mbs + m;
+    for (int n=0; n<nnghbr; ++n) {
+      int ngid = nghbr.h_view(m,n).gid;
+      if ((ngid >= 0) && (refine_flag.h_view(newtoold[ngid]) != 0)) {
+        fc_amr_repair.h_view(gid) = 1;
+      }
+    }
+  }
+  fc_amr_repair.template modify<HostMemSpace>();
+  fc_amr_repair.template sync<DevExeSpace>();
 
   // clean-up and return
   delete [] newtoold;
@@ -751,6 +771,7 @@ void MeshRefinement::DerefineCCSameRank(DvceArray5D<Real> &a, DvceArray5D<Real> 
   for (int oldm=ombs; oldm<=ombe; ++oldm) {
     if (refine_flag.h_view(oldm) < -1) {  // only derefine if nleaf blocks flagged
       int newm = oldtonew[oldm];
+      if ((oldm > 0) && (oldtonew[oldm-1] == newm)) continue;
       // only copy data if target MB stays on this rank
       if (new_rank_eachmb[newm] == global_variable::my_rank) {
         for (int l=0; l<nleaf; l++) {
@@ -807,6 +828,7 @@ void MeshRefinement::DerefineFCSameRank(DvceFaceFld4D<Real> &b, DvceFaceFld4D<Re
   for (int oldm=ombs; oldm<=ombe; ++oldm) {
     if (refine_flag.h_view(oldm) < -1) {  // only derefine if nleaf blocks flagged
       int newm = oldtonew[oldm];
+      if ((oldm > 0) && (oldtonew[oldm-1] == newm)) continue;
       // only copy data if target MB stays on this rank
       if (new_rank_eachmb[newm] == global_variable::my_rank) {
         for (int l=0; l<nleaf; l++) {
@@ -1215,11 +1237,11 @@ void MeshRefinement::RefineFC(DualArray1D<int> &n2o, DvceFaceFld4D<Real> &b,
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn void MeshRefinement::RepairRefinedFC
-//! \brief Recompute internal face-centered fields in level-changed MeshBlocks after
+//! \fn void MeshRefinement::RepairAMRFC
+//! \brief Recompute internal face-centered fields in AMR-affected MeshBlocks after
 //! exterior faces have been finalized by boundary exchange/prolongation.
 
-void MeshRefinement::RepairRefinedFC(DvceFaceFld4D<Real> &b) {
+void MeshRefinement::RepairAMRFC(DvceFaceFld4D<Real> &b) {
   auto &indcs = pmy_mesh->mb_indcs;
   auto &is = indcs.is;
   auto &js = indcs.js;
@@ -1234,7 +1256,7 @@ void MeshRefinement::RepairRefinedFC(DvceFaceFld4D<Real> &b) {
   bool &three_d = pmy_mesh->three_d;
   auto &repair = fc_amr_repair;
 
-  par_for("RepairRefinedFC",DevExeSpace(), 0,(nmb-1), cks,cke, cjs,cje, cis,cie,
+  par_for("RepairAMRFC",DevExeSpace(), 0,(nmb-1), cks,cke, cjs,cje, cis,cie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     if (repair.d_view(m + mbs) != 0) {
       // fine indices refer to target array

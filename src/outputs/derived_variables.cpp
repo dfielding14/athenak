@@ -35,6 +35,45 @@
 #include "srcterms/cooling_tables.hpp"
 #include "units/units.hpp"
 
+KOKKOS_INLINE_FUNCTION
+Real OutputDerivativeX1(const DvceArray5D<Real> &a, const int n, const int m,
+                        const int k, const int j, const int i,
+                        const int is, const int ie, const Real dx1) {
+  if (i <= is) {
+    return (a(m,n,k,j,i+1) - a(m,n,k,j,i))/dx1;
+  } else if (i >= ie) {
+    return (a(m,n,k,j,i) - a(m,n,k,j,i-1))/dx1;
+  } else {
+    return (a(m,n,k,j,i+1) - a(m,n,k,j,i-1))/(2.0*dx1);
+  }
+}
+
+KOKKOS_INLINE_FUNCTION
+Real OutputDerivativeX2(const DvceArray5D<Real> &a, const int n, const int m,
+                        const int k, const int j, const int i,
+                        const int js, const int je, const Real dx2) {
+  if (j <= js) {
+    return (a(m,n,k,j+1,i) - a(m,n,k,j,i))/dx2;
+  } else if (j >= je) {
+    return (a(m,n,k,j,i) - a(m,n,k,j-1,i))/dx2;
+  } else {
+    return (a(m,n,k,j+1,i) - a(m,n,k,j-1,i))/(2.0*dx2);
+  }
+}
+
+KOKKOS_INLINE_FUNCTION
+Real OutputDerivativeX3(const DvceArray5D<Real> &a, const int n, const int m,
+                        const int k, const int j, const int i,
+                        const int ks, const int ke, const Real dx3) {
+  if (k <= ks) {
+    return (a(m,n,k+1,j,i) - a(m,n,k,j,i))/dx3;
+  } else if (k >= ke) {
+    return (a(m,n,k,j,i) - a(m,n,k-1,j,i))/dx3;
+  } else {
+    return (a(m,n,k+1,j,i) - a(m,n,k-1,j,i))/(2.0*dx3);
+  }
+}
+
 //----------------------------------------------------------------------------------------
 // BaseTypeOutput::ComputeDerivedVariable()
 
@@ -133,9 +172,11 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("jz", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      dv(m,i_dv,k,j,i) = (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      dv(m,i_dv,k,j,i) = OutputDerivativeX1(bcc, IBY, m,k,j,i, is,ie,
+                                             size.d_view(m).dx1);
       if (multi_d) {
-        dv(m,i_dv,k,j,i) -=(bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        dv(m,i_dv,k,j,i) -= OutputDerivativeX2(bcc, IBX, m,k,j,i, js,je,
+                                                size.d_view(m).dx2);
       }
     });
     i_dv += 1; // increment derived variable index
@@ -149,15 +190,15 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     par_for("j2", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real j1 = 0.0;
-      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real j2 = -OutputDerivativeX1(bcc, IBZ, m,k,j,i, is,ie, size.d_view(m).dx1);
+      Real j3 =  OutputDerivativeX1(bcc, IBY, m,k,j,i, is,ie, size.d_view(m).dx1);
       if (multi_d) {
-        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
-        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        j1 += OutputDerivativeX2(bcc, IBZ, m,k,j,i, js,je, size.d_view(m).dx2);
+        j3 -= OutputDerivativeX2(bcc, IBX, m,k,j,i, js,je, size.d_view(m).dx2);
       }
       if (three_d) {
-        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*size.d_view(m).dx3);
-        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*size.d_view(m).dx3);
+        j1 -= OutputDerivativeX3(bcc, IBY, m,k,j,i, ks,ke, size.d_view(m).dx3);
+        j2 += OutputDerivativeX3(bcc, IBX, m,k,j,i, ks,ke, size.d_view(m).dx3);
       }
       dv(m,i_dv,k,j,i) = j1*j1 + j2*j2 + j3*j3;
     });
@@ -841,15 +882,15 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       // calculate j
       Real j1 = 0.0;
-      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real j2 = -OutputDerivativeX1(bcc, IBZ, m,k,j,i, is,ie, size.d_view(m).dx1);
+      Real j3 =  OutputDerivativeX1(bcc, IBY, m,k,j,i, is,ie, size.d_view(m).dx1);
       if (multi_d) {
-        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
-        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        j1 += OutputDerivativeX2(bcc, IBZ, m,k,j,i, js,je, size.d_view(m).dx2);
+        j3 -= OutputDerivativeX2(bcc, IBX, m,k,j,i, js,je, size.d_view(m).dx2);
       }
       if (three_d) {
-        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*size.d_view(m).dx3);
-        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*size.d_view(m).dx3);
+        j1 -= OutputDerivativeX3(bcc, IBY, m,k,j,i, ks,ke, size.d_view(m).dx3);
+        j2 += OutputDerivativeX3(bcc, IBX, m,k,j,i, ks,ke, size.d_view(m).dx3);
       }
       // calculate B
       Real B_mag_sq =    bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
@@ -881,15 +922,15 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       // calculate j
       Real j1 = 0.0;
-      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real j2 = -OutputDerivativeX1(bcc, IBZ, m,k,j,i, is,ie, size.d_view(m).dx1);
+      Real j3 =  OutputDerivativeX1(bcc, IBY, m,k,j,i, is,ie, size.d_view(m).dx1);
       if (multi_d) {
-        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
-        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        j1 += OutputDerivativeX2(bcc, IBZ, m,k,j,i, js,je, size.d_view(m).dx2);
+        j3 -= OutputDerivativeX2(bcc, IBX, m,k,j,i, js,je, size.d_view(m).dx2);
       }
       if (three_d) {
-        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*size.d_view(m).dx3);
-        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*size.d_view(m).dx3);
+        j1 -= OutputDerivativeX3(bcc, IBY, m,k,j,i, ks,ke, size.d_view(m).dx3);
+        j2 += OutputDerivativeX3(bcc, IBX, m,k,j,i, ks,ke, size.d_view(m).dx3);
       }
       // calculate B
       Real B_mag_sq =    bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
@@ -1103,15 +1144,15 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       // calculate current
       Real j1 = 0.0;
-      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real j2 = -OutputDerivativeX1(bcc, IBZ, m,k,j,i, is,ie, size.d_view(m).dx1);
+      Real j3 =  OutputDerivativeX1(bcc, IBY, m,k,j,i, is,ie, size.d_view(m).dx1);
       if (multi_d) {
-        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
-        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        j1 += OutputDerivativeX2(bcc, IBZ, m,k,j,i, js,je, size.d_view(m).dx2);
+        j3 -= OutputDerivativeX2(bcc, IBX, m,k,j,i, js,je, size.d_view(m).dx2);
       }
       if (three_d) {
-        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*size.d_view(m).dx3);
-        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*size.d_view(m).dx3);
+        j1 -= OutputDerivativeX3(bcc, IBY, m,k,j,i, ks,ke, size.d_view(m).dx3);
+        j2 += OutputDerivativeX3(bcc, IBX, m,k,j,i, ks,ke, size.d_view(m).dx3);
       }
       Real J_mag = sqrt(j1*j1 + j2*j2 + j3*j3);
 
@@ -1159,15 +1200,15 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       // calculate current
       Real j1 = 0.0;
-      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
-      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real j2 = -OutputDerivativeX1(bcc, IBZ, m,k,j,i, is,ie, size.d_view(m).dx1);
+      Real j3 =  OutputDerivativeX1(bcc, IBY, m,k,j,i, is,ie, size.d_view(m).dx1);
       if (multi_d) {
-        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
-        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        j1 += OutputDerivativeX2(bcc, IBZ, m,k,j,i, js,je, size.d_view(m).dx2);
+        j3 -= OutputDerivativeX2(bcc, IBX, m,k,j,i, js,je, size.d_view(m).dx2);
       }
       if (three_d) {
-        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*size.d_view(m).dx3);
-        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*size.d_view(m).dx3);
+        j1 -= OutputDerivativeX3(bcc, IBY, m,k,j,i, ks,ke, size.d_view(m).dx3);
+        j2 += OutputDerivativeX3(bcc, IBX, m,k,j,i, ks,ke, size.d_view(m).dx3);
       }
       Real J_mag = sqrt(j1*j1 + j2*j2 + j3*j3);
 

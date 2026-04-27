@@ -69,3 +69,24 @@ file_type      = hst
 data_format    = %24.16e
 dcycle         = 1
 user_hist_only = true
+
+<output2>
+file_type = bin
+variable  = mhd_w_bcc
+dt        = 1.0e99
+slice_x3  = 0.5
+id        = bfield_slice_x3
+
+<output3>
+file_type = bin
+variable  = mhd_divb
+dt        = 1.0e99
+slice_x3  = 0.5
+id        = divb_slice_x3
+
+<output4>
+file_type = bin
+variable  = mhd_j2
+dt        = 1.0e99
+slice_x3  = 0.5
+id        = j2_slice_x3
