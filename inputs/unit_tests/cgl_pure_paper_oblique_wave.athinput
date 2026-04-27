@@ -1,5 +1,6 @@
-# Paper-style 1D oblique pure-CGL linear wave without Landau-fluid heat flux.
+# Paper-style 1D oblique pure-CGL linear initial-value check without LF heat flux.
 # Uses the same Figure 17 background as cgl_lf_paper_oblique_wave.athinput.
+# This seeds transverse velocity only; it is not an exact CGL eigenmode.
 
 <job>
 basename = cgl_pure_paper_oblique_wave

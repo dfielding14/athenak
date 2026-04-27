@@ -20,5 +20,13 @@ The resulting unlimited flux is then capped with the equation 3.2 form,
 `q = q_L*q_max/(q_max + abs(q_L))`.
 
 The `cgl_lf_paper_oblique_wave` and `cgl_pure_paper_oblique_wave` inputs use
-the Figure 17 background state from Squire et al. (2023) and compare against a
-linearized offline reference for the same initialized perturbation.
+the Figure 17 background state from Squire et al. (2023), initialize a
+transverse-velocity perturbation rather than a CGL eigenmode, and compare
+against a linearized offline initial-value reference for that same perturbation.
+
+The `cgl_*_paper_eigen_{alfven,slow,fast}` inputs initialize exact eigenvectors
+of the same linearized Figure 17 CGL system. Regenerate those inputs with
+`scripts/generate_cgl_lf_eigenmode_inputs.py`; the script computes the pure-CGL
+or CGL-LF linear matrix, identifies the Alfvén, slow-like, and fast-like
+positive-frequency branches, and writes the complex eigenvectors and
+eigenvalues into AthenaK input parameters.

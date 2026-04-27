@@ -513,9 +513,10 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
   auto &bfloor = eos_data.bfloor;
   auto &dtc = pmy_pack->pmesh->dt;
   
-  // Need state variable on grid for collisions that can be passed to the heat fluxes.
-  // May therefore need to consider having this go before time step in case heat flux
-  // oscillates? Or split before/after
+  // TODO(cgl-lf): If the limiter/collision closure becomes nonlocal or
+  // gradient-dependent, store nu_eff on the grid here and reconstruct it to LF
+  // faces instead of recomputing the present algebraic thresholds in conduction.
+  // The update ordering will then need a clear pre/post heat-flux split.
 
   par_for("mhd_coll", DevExeSpace(), 0, (nmb-1), kl, ku, jl, ju, il, iu,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {

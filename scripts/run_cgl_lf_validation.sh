@@ -30,6 +30,12 @@ inputs=(
   inputs/unit_tests/cgl_lf_field_wave.athinput
   inputs/unit_tests/cgl_lf_paper_oblique_wave.athinput
   inputs/unit_tests/cgl_pure_paper_oblique_wave.athinput
+  inputs/unit_tests/cgl_pure_paper_eigen_alfven.athinput
+  inputs/unit_tests/cgl_pure_paper_eigen_slow.athinput
+  inputs/unit_tests/cgl_pure_paper_eigen_fast.athinput
+  inputs/unit_tests/cgl_lf_paper_eigen_alfven.athinput
+  inputs/unit_tests/cgl_lf_paper_eigen_slow.athinput
+  inputs/unit_tests/cgl_lf_paper_eigen_fast.athinput
 )
 
 echo "Running CGL-LF validation tests with ${ATHENA_BIN}"

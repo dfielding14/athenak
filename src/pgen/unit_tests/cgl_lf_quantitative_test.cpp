@@ -43,7 +43,8 @@ enum class TestMode {
   limiter_heat_flux_suppression,
   limiter_stress,
   field_aligned_wave,
-  paper_oblique_wave
+  paper_oblique_wave,
+  paper_eigen_wave
 };
 
 struct Projection {
@@ -132,9 +133,10 @@ TestMode ParseMode(ParameterInput *pin) {
   if (mode == "limiter_stress") return TestMode::limiter_stress;
   if (mode == "field_aligned_wave") return TestMode::field_aligned_wave;
   if (mode == "paper_oblique_wave") return TestMode::paper_oblique_wave;
+  if (mode == "paper_eigen_wave") return TestMode::paper_eigen_wave;
   Fail("<problem>/test_mode must be parallel_decay, perp_decay, grad_b, "
        "flux_limiter, limiter_heat_flux_suppression, limiter_stress, "
-       "field_aligned_wave, or paper_oblique_wave");
+       "field_aligned_wave, paper_oblique_wave, or paper_eigen_wave");
 }
 
 const char *ModeName(const TestMode mode) {
@@ -147,6 +149,7 @@ const char *ModeName(const TestMode mode) {
     case TestMode::limiter_stress: return "limiter_stress";
     case TestMode::field_aligned_wave: return "field_aligned_wave";
     case TestMode::paper_oblique_wave: return "paper_oblique_wave";
+    case TestMode::paper_eigen_wave: return "paper_eigen_wave";
   }
   return "unknown";
 }
@@ -282,6 +285,12 @@ Real LimitedHeatFlux(const Real q_unlimited, const Real q_max) {
     return 0.0;
   }
   return q_unlimited*q_max/(q_max + std::abs(q_unlimited));
+}
+
+KOKKOS_INLINE_FUNCTION
+Real EigenRealSpacePerturbation(const Real amp, const Real re, const Real im,
+                                const Real c, const Real s) {
+  return amp*(re*c - im*s);
 }
 
 bool GetBooleanOrFalse(ParameterInput *pin, const std::string &block,
@@ -992,6 +1001,11 @@ PaperWaveState operator*(const Real c, const PaperWaveState &a) {
           c*a.ppar, c*a.pperp};
 }
 
+PaperWaveState operator*(const Complex c, const PaperWaveState &a) {
+  return {c*a.rho, c*a.vx, c*a.vy, c*a.vz, c*a.by, c*a.bz,
+          c*a.ppar, c*a.pperp};
+}
+
 PaperWaveState PaperWaveRHS(const PaperWaveState &s, const Real rho0,
                             const Real p0, const Real bx0, const Real by0,
                             const Real bz0, const Real k_wave,
@@ -1001,7 +1015,7 @@ PaperWaveState PaperWaveRHS(const PaperWaveState &s, const Real rho0,
   const Real bhx = bx0/bmag0;
   const Real bhy = by0/bmag0;
   const Real bhz = bz0/bmag0;
-  const Complex delta_p = s.pperp - s.ppar;
+  const Complex delta_p = s.ppar - s.pperp;
   const Complex flux_x = s.pperp + delta_p*bhx*bhx + by0*s.by + bz0*s.bz;
   const Complex flux_y = delta_p*bhx*bhy - bx0*s.by;
   const Complex flux_z = delta_p*bhx*bhz - bx0*s.bz;
@@ -1046,6 +1060,8 @@ PaperWaveState IntegratePaperWaveReference(ParameterInput *pin, Mesh *pm) {
     chi_perp = ChiPerp(cpar0, lf_k, nu_eff);
   }
 
+  // This deliberately follows the pgen's transverse-velocity initial value
+  // problem.  It is not an exact CGL eigenmode initialization.
   PaperWaveState s{Complex(0.0, 0.0),
                    Complex(0.0, 0.0),
                    Complex(0.0, -amp),
@@ -1068,6 +1084,22 @@ PaperWaveState IntegratePaperWaveReference(ParameterInput *pin, Mesh *pm) {
     s = s + (dt/6.0)*(k1 + 2.0*k2 + 2.0*k3 + k4);
   }
   return s;
+}
+
+Complex GetComplexParameter(ParameterInput *pin, const std::string &base) {
+  return Complex(pin->GetOrAddReal("problem", base + "_re", 0.0),
+                 pin->GetOrAddReal("problem", base + "_im", 0.0));
+}
+
+PaperWaveState ReadPaperEigenVector(ParameterInput *pin) {
+  return {GetComplexParameter(pin, "eigen_rho"),
+          GetComplexParameter(pin, "eigen_vx"),
+          GetComplexParameter(pin, "eigen_vy"),
+          GetComplexParameter(pin, "eigen_vz"),
+          GetComplexParameter(pin, "eigen_by"),
+          GetComplexParameter(pin, "eigen_bz"),
+          GetComplexParameter(pin, "eigen_ppar"),
+          GetComplexParameter(pin, "eigen_pperp")};
 }
 
 void CheckPaperObliqueWave(ParameterInput *pin, Mesh *pm) {
@@ -1112,12 +1144,93 @@ void CheckPaperObliqueWave(ParameterInput *pin, Mesh *pm) {
   }
   const char *closure = pin->DoesParameterExist("mhd", "cgl_heat_flux") ?
                         "CGL LF" : "pure CGL";
-  std::cout << closure << " paper_oblique_wave passed against linear oblique reference"
+  std::cout << closure << " paper_oblique_wave passed against linear oblique IVP reference"
             << ": vy_rel_err=" << ComplexRelativeError(vy_m, ref.vy, amp)
             << " By_rel_err=" << ComplexRelativeError(by_m, ref.by, amp)
             << " p_parallel_rel_err=" << ComplexRelativeError(ppar_m, ref.ppar, p0*amp)
             << " p_perp_rel_err=" << ComplexRelativeError(pperp_m, ref.pperp, p0*amp)
             << " rel_tol=" << wave_tol << std::endl;
+}
+
+void CheckPaperEigenWave(ParameterInput *pin, Mesh *pm) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  auto w = HostCopy(pmhd->w0);
+  auto bcc = HostCopy(pmhd->bcc0);
+  const PaperWaveState eigen = ReadPaperEigenVector(pin);
+  const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-5);
+  const Real wave_tol = pin->GetOrAddReal("problem", "eigen_wave_rel_tol", 7.5e-2);
+  const Real component_floor =
+      pin->GetOrAddReal("problem", "eigen_component_floor", 1.0e-4);
+  const Real zero_abs_tol =
+      pin->GetOrAddReal("problem", "eigen_zero_abs_tol", 1.0e-8);
+  const Complex lambda(pin->GetReal("problem", "eigen_lambda_re"),
+                       pin->GetReal("problem", "eigen_lambda_im"));
+  const Complex phase = std::exp(lambda*pm->time);
+  const PaperWaveState ref = (amp*phase)*eigen;
+
+  const PaperWaveState measured{
+      ProjectionToComplex(ProjectPrimitive(w, pin, pm, IDN)),
+      ProjectionToComplex(ProjectPrimitive(w, pin, pm, IVX)),
+      ProjectionToComplex(ProjectPrimitive(w, pin, pm, IVY)),
+      ProjectionToComplex(ProjectPrimitive(w, pin, pm, IVZ)),
+      ProjectionToComplex(ProjectCellField(bcc, pin, pm, IBY)),
+      ProjectionToComplex(ProjectCellField(bcc, pin, pm, IBZ)),
+      ProjectionToComplex(ProjectPrimitive(w, pin, pm, IPR)),
+      ProjectionToComplex(ProjectPrimitive(w, pin, pm, IPP))};
+
+  const std::string branch = pin->GetOrAddString("problem", "eigen_branch", "unknown");
+  auto out = OpenValidationDataFile(pin, "paper_eigen_wave");
+  if (out) {
+    out << "variable,measured_real,measured_imag,reference_real,reference_imag,"
+        << "eigen_real,eigen_imag,scale,rel_err,rel_tol,required\n";
+  }
+
+  const char *names[8] = {"rho", "vx", "vy", "vz", "By", "Bz", "p_parallel",
+                          "p_perp"};
+  const Complex measured_components[8] = {measured.rho, measured.vx, measured.vy,
+                                          measured.vz, measured.by, measured.bz,
+                                          measured.ppar, measured.pperp};
+  const Complex ref_components[8] = {ref.rho, ref.vx, ref.vy, ref.vz, ref.by, ref.bz,
+                                     ref.ppar, ref.pperp};
+  const Complex eigen_components[8] = {eigen.rho, eigen.vx, eigen.vy, eigen.vz,
+                                       eigen.by, eigen.bz, eigen.ppar, eigen.pperp};
+  Real max_rel_err = 0.0;
+  Real max_abs_err = 0.0;
+  for (int n = 0; n < 8; ++n) {
+    const Real component_amp = std::abs(eigen_components[n]);
+    const bool required = component_amp >= component_floor;
+    const Real scale = amp*std::max(component_amp, component_floor);
+    const Real rel_err = ComplexRelativeError(measured_components[n],
+                                              ref_components[n], scale);
+    const Real abs_err = std::abs(measured_components[n] - ref_components[n]);
+    max_rel_err = std::max(max_rel_err, rel_err);
+    max_abs_err = std::max(max_abs_err, abs_err);
+    if (out) {
+      out << names[n] << "," << std::real(measured_components[n]) << ","
+          << std::imag(measured_components[n]) << ","
+          << std::real(ref_components[n]) << "," << std::imag(ref_components[n]) << ","
+          << std::real(eigen_components[n]) << "," << std::imag(eigen_components[n])
+          << "," << scale << "," << rel_err << "," << wave_tol << ","
+          << (required ? 1 : 0) << "\n";
+    }
+    if (required) {
+      RequireComplexRelative(std::string("paper_eigen_wave ") + names[n],
+                             measured_components[n], ref_components[n], scale,
+                             wave_tol);
+    } else {
+      Require(abs_err <= zero_abs_tol,
+              std::string("paper_eigen_wave inactive component ") + names[n] +
+              " exceeded zero_abs_tol");
+    }
+  }
+
+  std::cout << "CGL paper_eigen_wave " << branch
+            << " passed against supplied eigenmode: lambda=("
+            << std::real(lambda) << "," << std::imag(lambda)
+            << ") max_rel_err=" << max_rel_err
+            << " rel_tol=" << wave_tol
+            << " max_abs_err=" << max_abs_err
+            << " zero_abs_tol=" << zero_abs_tol << std::endl;
 }
 
 void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
@@ -1140,6 +1253,8 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     CheckFieldAlignedWave(pin, pm);
   } else if (mode == TestMode::paper_oblique_wave) {
     CheckPaperObliqueWave(pin, pm);
+  } else if (mode == TestMode::paper_eigen_wave) {
+    CheckPaperEigenWave(pin, pm);
   }
 }
 
@@ -1165,6 +1280,22 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   const Real by0 = pin->GetOrAddReal("problem", "by0", 0.0);
   const Real bz0 = pin->GetOrAddReal("problem", "bz0", 0.0);
   const Real by_amp = pin->GetOrAddReal("problem", "by_amp", 0.0);
+  const Real eig_rho_re = pin->GetOrAddReal("problem", "eigen_rho_re", 0.0);
+  const Real eig_rho_im = pin->GetOrAddReal("problem", "eigen_rho_im", 0.0);
+  const Real eig_vx_re = pin->GetOrAddReal("problem", "eigen_vx_re", 0.0);
+  const Real eig_vx_im = pin->GetOrAddReal("problem", "eigen_vx_im", 0.0);
+  const Real eig_vy_re = pin->GetOrAddReal("problem", "eigen_vy_re", 0.0);
+  const Real eig_vy_im = pin->GetOrAddReal("problem", "eigen_vy_im", 0.0);
+  const Real eig_vz_re = pin->GetOrAddReal("problem", "eigen_vz_re", 0.0);
+  const Real eig_vz_im = pin->GetOrAddReal("problem", "eigen_vz_im", 0.0);
+  const Real eig_by_re = pin->GetOrAddReal("problem", "eigen_by_re", 0.0);
+  const Real eig_by_im = pin->GetOrAddReal("problem", "eigen_by_im", 0.0);
+  const Real eig_bz_re = pin->GetOrAddReal("problem", "eigen_bz_re", 0.0);
+  const Real eig_bz_im = pin->GetOrAddReal("problem", "eigen_bz_im", 0.0);
+  const Real eig_ppar_re = pin->GetOrAddReal("problem", "eigen_ppar_re", 0.0);
+  const Real eig_ppar_im = pin->GetOrAddReal("problem", "eigen_ppar_im", 0.0);
+  const Real eig_pperp_re = pin->GetOrAddReal("problem", "eigen_pperp_re", 0.0);
+  const Real eig_pperp_im = pin->GetOrAddReal("problem", "eigen_pperp_im", 0.0);
   const Real k_wave = Wavenumber(pin, pmy_mesh_);
   const Real xmin = pmy_mesh_->mesh_size.x1min;
   const Real xmax = pmy_mesh_->mesh_size.x1max;
@@ -1190,10 +1321,15 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     const int q = i - is;
     const Real x = CellCenterX(q, indcs.nx1, xmin, xmax);
     const Real s = sin(k_wave*(x - xmin));
+    const Real c = cos(k_wave*(x - xmin));
     Real rho = rho0;
     Real vx = 0.0;
+    Real vy = 0.0;
+    Real vz = 0.0;
     Real ppar = ppar0;
     Real pperp = pperp0;
+    Real by = (mode == TestMode::grad_b) ? by_amp*s : by0;
+    Real bz = bz0;
 
     if (mode == TestMode::parallel_decay) {
       ppar = ppar0*(1.0 + amp*s);
@@ -1219,17 +1355,28 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       pperp = pperp0*(1.0 + amp*s);
     } else if (mode == TestMode::paper_oblique_wave) {
       vx = 0.0;
+      vy = amp*s;
+    } else if (mode == TestMode::paper_eigen_wave) {
+      rho = rho0 + EigenRealSpacePerturbation(amp, eig_rho_re, eig_rho_im, c, s);
+      vx = EigenRealSpacePerturbation(amp, eig_vx_re, eig_vx_im, c, s);
+      vy = EigenRealSpacePerturbation(amp, eig_vy_re, eig_vy_im, c, s);
+      vz = EigenRealSpacePerturbation(amp, eig_vz_re, eig_vz_im, c, s);
+      ppar = ppar0 + EigenRealSpacePerturbation(amp, eig_ppar_re, eig_ppar_im, c, s);
+      pperp = pperp0 + EigenRealSpacePerturbation(amp, eig_pperp_re, eig_pperp_im,
+                                                  c, s);
+      by = by0 + EigenRealSpacePerturbation(amp, eig_by_re, eig_by_im, c, s);
+      bz = bz0 + EigenRealSpacePerturbation(amp, eig_bz_re, eig_bz_im, c, s);
     }
 
     w0(m,IDN,k,j,i) = rho;
     w0(m,IVX,k,j,i) = vx;
-    w0(m,IVY,k,j,i) = (mode == TestMode::paper_oblique_wave) ? amp*s : 0.0;
-    w0(m,IVZ,k,j,i) = 0.0;
+    w0(m,IVY,k,j,i) = vy;
+    w0(m,IVZ,k,j,i) = vz;
     w0(m,IPR,k,j,i) = ppar;
     w0(m,IPP,k,j,i) = pperp;
     bcc0(m,IBX,k,j,i) = bx0;
-    bcc0(m,IBY,k,j,i) = (mode == TestMode::grad_b) ? by_amp*s : by0;
-    bcc0(m,IBZ,k,j,i) = bz0;
+    bcc0(m,IBY,k,j,i) = by;
+    bcc0(m,IBZ,k,j,i) = bz;
   });
 
   par_for("cgl_lf_quant_init_b1", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie + 1,
@@ -1241,11 +1388,20 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     const int q = i - is;
     const Real x = CellCenterX(q, indcs.nx1, xmin, xmax);
     const Real s = sin(k_wave*(x - xmin));
-    b0.x2f(m,k,j,i) = (mode == TestMode::grad_b) ? by_amp*s : by0;
+    const Real c = cos(k_wave*(x - xmin));
+    b0.x2f(m,k,j,i) = (mode == TestMode::grad_b) ? by_amp*s :
+        by0 + ((mode == TestMode::paper_eigen_wave) ?
+               EigenRealSpacePerturbation(amp, eig_by_re, eig_by_im, c, s) : 0.0);
   });
   par_for("cgl_lf_quant_init_b3", DevExeSpace(), 0, nmb - 1, ks, ke + 1, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    b0.x3f(m,k,j,i) = bz0;
+    const int q = i - is;
+    const Real x = CellCenterX(q, indcs.nx1, xmin, xmax);
+    const Real s = sin(k_wave*(x - xmin));
+    const Real c = cos(k_wave*(x - xmin));
+    b0.x3f(m,k,j,i) = bz0 + ((mode == TestMode::paper_eigen_wave) ?
+                             EigenRealSpacePerturbation(amp, eig_bz_re, eig_bz_im,
+                                                        c, s) : 0.0);
   });
 
   pmhd->peos->PrimToCons(w0, bcc0, pmhd->u0, is, ie, js, je, ks, ke);

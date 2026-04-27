@@ -19,9 +19,9 @@
 This note documents the AthenaK CGL--Landau-fluid (CGL--LF) heat-flux update
 implemented on branch \texttt{CGL-STS-LF}.  The goal is not to reproduce the full
 nonlinear turbulence campaign of Squire et al. (2023), but to show that the
-implemented method follows the same finite-volume variable strategy and can
-reproduce the method-level checks, including a one-dimensional oblique
-linear-wave setup using the Figure 17 background state.
+implemented method follows the same finite-volume variable strategy and passes
+method-level checks, including a one-dimensional oblique linear initial-value
+problem using the Figure 17 background state.
 
 \section{Conserved Variables}
 
@@ -152,9 +152,13 @@ Input & Purpose & Assertion \\
 \texttt{cgl\_lf\_field\_wave} & field-aligned LF wave reference
   & complex Fourier mode within 25\% of offline reference \\
 \texttt{cgl\_lf\_paper\_oblique\_wave} & Figure 17 background, LF enabled
-  & complex Fourier mode within 40\% of offline reference \\
+  & guard tolerance 40\%; observed errors \(<3\times10^{-6}\) \\
 \texttt{cgl\_pure\_paper\_oblique\_wave} & Figure 17 background, no LF
-  & complex Fourier mode within 40\% of offline reference \\
+  & guard tolerance 40\%; observed errors \(<3\times10^{-6}\) \\
+\texttt{cgl\_pure\_paper\_eigen\_*} & exact pure-CGL Alfvén/slow/fast modes
+  & all tracked Fourier components within 7.5\% \\
+\texttt{cgl\_lf\_paper\_eigen\_*} & exact CGL--LF Alfvén/slow/fast modes
+  & all tracked Fourier components within 7.5\% \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -192,15 +196,15 @@ matches the offline finite-volume update.}
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.92\textwidth]{figures/cgl_lf_paper_oblique_wave.pdf}
-\caption{Figure 17-style oblique linear-wave check.  The plotted quantities are
+\caption{Figure 17-style oblique linear initial-value check.  The plotted quantities are
 the final complex Fourier amplitudes of \(u_y\), \(B_y\), \(p_\parallel\), and
 \(p_\perp\) for the pure-CGL and CGL--LF inputs, compared with the offline
-linearized reference used by the quantitative pgen.  The vertical phase-panel
+linearized initial-value reference used by the quantitative pgen.  The vertical phase-panel
 labels are per-variable relative errors.}
 \end{figure}
 \FloatBarrier
 
-\section{Figure 17-Style Linear Wave}
+\section{Figure 17-Style Linear Initial-Value Check}
 
 The paper-style inputs use the Figure 17 background
 \begin{equation}
@@ -208,14 +212,39 @@ The paper-style inputs use the Figure 17 background
   u_0=0,\quad B_0=(1,\sqrt{2},0.5),\quad k=2\pi \hat{x},
   \quad kL=|k|.
 \end{equation}
-The test initializes a small transverse velocity perturbation and compares the
+The test initializes a small transverse velocity perturbation, not a CGL
+eigenmode, and compares the
 final complex Fourier amplitudes of \(u_y\), \(B_y\), \(p_\parallel\), and
-\(p_\perp\) against an offline linearized CGL--LF reference integrated with the
+\(p_\perp\) against an offline linearized CGL--LF initial-value reference integrated with the
 same background state and closure coefficients.  Two inputs are provided: one
 with the LF heat flux enabled and one with pure CGL.  This checks the same
-method class as the Appendix A.2/Figure 17 linear-wave convergence problem,
-while leaving exact eigenmode initialization and full convergence scans for a
-follow-up once Steve/Jono provide canonical eigenvectors or damping rates.
+method class as the Appendix A.2/Figure 17 linear-wave convergence problem.
+
+\section{Figure 17-Style Eigenmode Checks}
+
+The validation suite now also includes exact eigenmode initializations for the
+Alfvén, slow-like, and fast-like positive-frequency branches of the same
+linearized Figure 17 system.  The script
+\texttt{scripts/generate\_cgl\_lf\_eigenmode\_inputs.py} constructs the
+linear CGL or CGL--LF matrix for the AthenaK variables
+\((\rho,u_x,u_y,u_z,B_y,B_z,p_\parallel,p_\perp)\), diagonalizes it, normalizes
+the selected eigenvectors, and writes their complex amplitudes and eigenvalues
+into AthenaK input files.  The pgen initializes
+\(\mathrm{Re}[\delta U_k \exp(ikx)]\) and compares the final Fourier mode with
+\(\delta U_k\exp(\lambda t)\), where \(\lambda\) is the supplied eigenvalue.
+These inputs are the direct replacement for using a single transverse-velocity
+seed as a proxy for the Squire/Jono linear-wave comparisons.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.92\textwidth]{figures/cgl_lf_paper_eigenmodes.pdf}
+\caption{Exact eigenmode checks on the Figure 17 background.  Each column is a
+pure-CGL or CGL--LF Alfvén, slow-like, or fast-like positive-frequency branch.
+The color scale shows the complex Fourier relative error in each primitive or
+magnetic component after a short AthenaK evolution compared with the supplied
+linear eigenmode prediction \(\delta U_k\exp(\lambda t)\).  The white numbers
+give the maximum tracked-component error in each branch.}
+\end{figure}
 
 \section{Build and Runtime Status}
 

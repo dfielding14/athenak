@@ -80,6 +80,10 @@ Real CGLLimiterCollisionRate(const Real ppar, const Real pperp,
                              const Real bsqr,
                              const Real lim_coll, const bool mlim,
                              const bool flim, const bool backup_lim) {
+  // TODO(cgl-lf): If limiter scattering becomes a nonlocal or gradient-dependent
+  // closure, compute nu_eff once in the CGL EOS collision state and reconstruct it
+  // to LF faces.  The present algebraic mirror/firehose thresholds are intentionally
+  // evaluated here so heat-flux suppression uses the same face state as the LF flux.
   const Real paniso = pperp - ppar;
   const Real limiter_nu = fmax(lim_coll, static_cast<Real>(0.0));
   const Real backup_nu = static_cast<Real>(1.0e10);

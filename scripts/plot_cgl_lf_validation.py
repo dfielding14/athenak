@@ -187,6 +187,44 @@ def plot_paper_oblique(data_dir: Path, figure_dir: Path) -> None:
     save(fig, figure_dir / "cgl_lf_paper_oblique_wave.pdf")
 
 
+def plot_paper_eigenmodes(data_dir: Path, figure_dir: Path) -> None:
+    cases = [
+        ("pure\nAlfven", data_dir / "cgl_pure_paper_eigen_alfven.paper_eigen_wave.csv"),
+        ("pure\nslow", data_dir / "cgl_pure_paper_eigen_slow.paper_eigen_wave.csv"),
+        ("pure\nfast", data_dir / "cgl_pure_paper_eigen_fast.paper_eigen_wave.csv"),
+        ("LF\nAlfven", data_dir / "cgl_lf_paper_eigen_alfven.paper_eigen_wave.csv"),
+        ("LF\nslow", data_dir / "cgl_lf_paper_eigen_slow.paper_eigen_wave.csv"),
+        ("LF\nfast", data_dir / "cgl_lf_paper_eigen_fast.paper_eigen_wave.csv"),
+    ]
+    rows0 = read_rows(cases[0][1])
+    labels = [row["variable"] for row in rows0]
+    errors = np.zeros((len(labels), len(cases)))
+    max_errors = []
+    for col, (_, path) in enumerate(cases):
+        rows = read_rows(path)
+        rel = column(rows, "rel_err")
+        errors[:, col] = rel
+        max_errors.append(np.max(rel))
+
+    fig, ax = plt.subplots(figsize=(7.8, 3.6))
+    log_errors = np.log10(np.maximum(errors, 1.0e-12))
+    image = ax.imshow(log_errors, origin="lower", aspect="auto", cmap="viridis",
+                      vmin=-7.0, vmax=-1.0)
+    ax.set_xticks(np.arange(len(cases)))
+    ax.set_xticklabels([label for label, _ in cases])
+    ax.set_yticks(np.arange(len(labels)))
+    ax.set_yticklabels(labels)
+    ax.set_title("Figure 17 eigenmode checks")
+    ax.set_xlabel("linear branch")
+    ax.set_ylabel("Fourier component")
+    for col, max_err in enumerate(max_errors):
+        ax.text(col, len(labels) - 0.25, f"{max_err:.1e}", ha="center", va="top",
+                fontsize=7, color="white")
+    cbar = fig.colorbar(image, ax=ax, pad=0.02)
+    cbar.set_label(r"$\log_{10}$ relative error")
+    save(fig, figure_dir / "cgl_lf_paper_eigenmodes.pdf")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", default="docs/figures/data", type=Path)
@@ -198,6 +236,7 @@ def main() -> None:
     plot_grad_b(args.data_dir, args.figure_dir)
     plot_flux_limiter(args.data_dir, args.figure_dir)
     plot_paper_oblique(args.data_dir, args.figure_dir)
+    plot_paper_eigenmodes(args.data_dir, args.figure_dir)
     print(f"Wrote CGL-LF validation figures to {args.figure_dir}")
 
 

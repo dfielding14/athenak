@@ -1,6 +1,7 @@
-# Paper-style 1D oblique CGL-LF linear wave.
+# Paper-style 1D oblique CGL-LF linear initial-value check.
 # Background follows Squire et al. 2023 Figure 17: rho=1, p_parallel=p_perp=5,
 # B0=(1,sqrt(2),0.5), k=2*pi xhat, and kL=|k|.
+# This seeds transverse velocity only; it is not an exact CGL eigenmode.
 
 <job>
 basename = cgl_lf_paper_oblique_wave

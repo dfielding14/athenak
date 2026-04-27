@@ -14,13 +14,18 @@ collision frequency, not directly on the magnetic pressure normalization.
 ## Local Runs Already Completed
 
 The current quantitative pgen already contains a Squire Figure 17-style oblique
-linear-wave setup. I reran the CGL-LF and pure-CGL variants with validation CSV
-output under `/tmp/athenak_cgl_lf_repro_data`.
+linear initial-value setup. It seeds a transverse velocity perturbation on the
+Figure 17 background and compares the result with an offline integration of the
+same linearized initial-value problem; it is not an eigenmode initialization.
+I reran the CGL-LF and pure-CGL variants with validation CSV output under
+`/tmp/athenak_cgl_lf_repro_data`.
 
 | Input | Result |
 | --- | --- |
-| `inputs/unit_tests/cgl_lf_paper_oblique_wave.athinput` | Passed against the linear oblique reference; `vy_rel_err=4.481739e-04`, `By_rel_err=2.483124e-06`, `p_parallel_rel_err=1.844407e-06`, `p_perp_rel_err=2.422315e-06`. |
-| `inputs/unit_tests/cgl_pure_paper_oblique_wave.athinput` | Passed against the pure-CGL linear reference; `vy_rel_err=4.498607e-04`, `By_rel_err=2.483610e-06`, `p_parallel_rel_err=1.864384e-06`, `p_perp_rel_err=2.428256e-06`. |
+| `inputs/unit_tests/cgl_lf_paper_oblique_wave.athinput` | Passed against the linear oblique IVP reference; `vy_rel_err=1.382402e-06`, `By_rel_err=2.483205e-06`, `p_parallel_rel_err=2.119553e-06`, `p_perp_rel_err=1.097882e-06`. |
+| `inputs/unit_tests/cgl_pure_paper_oblique_wave.athinput` | Passed against the pure-CGL linear IVP reference; `vy_rel_err=1.355613e-06`, `By_rel_err=2.483684e-06`, `p_parallel_rel_err=2.120868e-06`, `p_perp_rel_err=1.099899e-06`. |
+| `inputs/unit_tests/cgl_pure_paper_eigen_{alfven,slow,fast}.athinput` | Exact pure-CGL eigenvectors for the Figure 17 background; all three passed with maximum tracked-component relative errors below `2.2e-6`. |
+| `inputs/unit_tests/cgl_lf_paper_eigen_{alfven,slow,fast}.athinput` | Exact CGL-LF eigenvectors for the Figure 17 background; all three passed with maximum tracked-component relative errors below `2.9e-5`. |
 | `inputs/unit_tests/cgl_lf_quant_parallel_collisional.athinput` | Passed finite-collision `q_parallel` decay; relative error `1.564782e-04`. |
 | `inputs/unit_tests/cgl_lf_quant_perp_collisional.athinput` | Passed finite-collision `q_perp` decay; relative error `5.596518e-05`. |
 | `inputs/unit_tests/cgl_lf_flux_limiter.athinput` | Passed large-gradient heat-flux cap check; unlimited flux reached `3.622256e+02 q_max`. |
@@ -35,17 +40,19 @@ Reproduce Appendix A/Figure 17 at higher fidelity than the current smoke input.
 - Background: `rho0=1`, `p_parallel0=p_perp0=5`, `B0=(1,sqrt(2),0.5)`,
   `k=2*pi*xhat`, and `lf_k_parallel=|k|`.
 - Runs: pure CGL, collisionless CGL-LF, `nu_coll=10`, and `nu_coll=1e10`.
-- Modes: initialize the Alfvén, slow-like, fast-like, entropy-like, and
-  anisotropy-like eigenvectors rather than only a transverse-velocity seed.
+- Modes: Alfvén, slow-like, and fast-like eigenvector inputs are implemented for
+  pure CGL and CGL--LF.  Entropy-like and anisotropy-like eigenvectors remain
+  useful follow-up branches for a full Figure 17 scan.
 - Resolutions: `Nx=128,256,512,1024`.
 - Acceptance: recover the complex frequency from the time series and show the
   expected first- to second-order convergence trends by mode. Strongly damped
   LF modes may converge closer to first order because the heat-flux operator is
   split and limited.
 
-Implementation needed: extend `src/pgen/unit_tests/cgl_lf_quantitative_test.cpp`
-or add a dedicated paper-reproduction pgen that can initialize exact
-eigenvectors from the same offline dispersion matrix used for the reference.
+Implementation status: `src/pgen/unit_tests/cgl_lf_quantitative_test.cpp` now
+initializes supplied complex eigenvectors and compares against their
+\(\exp(\lambda t)\) evolution.  Regenerate the inputs with
+`scripts/generate_cgl_lf_eigenmode_inputs.py`.
 
 ### Driven Alfvénic Turbulence
 
@@ -198,8 +205,8 @@ These should become separate CI/smoke, nightly, and HPC-regression tiers.
 
 ## Implementation Slices
 
-1. Extend the linear quantitative pgen to initialize exact eigenvectors and
-   scan eigenbranches/resolution.
+1. Extend the current exact-eigenvector inputs to entropy-like and
+   anisotropy-like branches, then scan resolution.
 2. Add a CGL-specific turbulence pgen or extend `turb.cpp` so it initializes
    `p_parallel`, `p_perp`, total energy, and CGL diagnostics correctly.
 3. Add history diagnostics for anisotropy thresholds, heat-flux cap activity,
