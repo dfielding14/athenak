@@ -108,7 +108,7 @@ namespace {
   Real ddens_threshold;
 
   // SN injection persistent buffer
-  DvceArray2D<Real> sn_centers_buffer;
+  DvceArray2D<Real> sn_events_buffer;
   Kokkos::View<int> sn_counter;
 
   // SN injection flags
@@ -260,9 +260,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 	      << disk_profile_file << std::endl;
   }
 
-  // Count total particles and initialize SN centers buffer
+  // Count total particles and initialize SN event buffer
   pmy_mesh_->CountParticles();
-  sn_centers_buffer = DvceArray2D<Real>("sn_centers_buffer", 3, pmy_mesh_->nprtcl_total);
+  sn_events_buffer = DvceArray2D<Real>("sn_events_buffer", 6, pmy_mesh_->nprtcl_total);
   sn_counter = Kokkos::View<int>("sn_counter");
   if (global_variable::my_rank==0) {
     std::cout << "Successfully initialized " << pmy_mesh_->nprtcl_total
@@ -802,8 +802,8 @@ void SNSource(Mesh* pm, const Real bdt) {
     int nrdata = pmbp->ppart->nrdata;
     Real unit_time = pmbp->punit->time_cgs();
 
-    // Array of positions where SNs go off at this timestep
-    auto &sn_centers = sn_centers_buffer;
+    // Array of SN event positions and host-particle velocities for this timestep.
+    auto &sn_events = sn_events_buffer;
     Kokkos::deep_copy(sn_counter, 0);
     auto d_counter = sn_counter;
 
@@ -831,9 +831,12 @@ void SNSource(Mesh* pm, const Real bdt) {
         Real x3min = size.d_view(m).x3min;
         Real x3max = size.d_view(m).x3max;
 
-        sn_centers(0, idx) = min(max(pr(IPX,p), x1min+dr), x1max-dr);
-        sn_centers(1, idx) = min(max(pr(IPY,p), x2min+dr), x2max-dr);
-        sn_centers(2, idx) = min(max(pr(IPZ,p), x3min+dr), x3max-dr);
+        sn_events(0, idx) = min(max(pr(IPX,p), x1min+dr), x1max-dr);
+        sn_events(1, idx) = min(max(pr(IPY,p), x2min+dr), x2max-dr);
+        sn_events(2, idx) = min(max(pr(IPZ,p), x3min+dr), x3max-dr);
+	sn_events(3, idx) = pr(IPVX,p);
+        sn_events(4, idx) = pr(IPVY,p);
+        sn_events(5, idx) = pr(IPVZ,p);
       }
     });
 
@@ -849,7 +852,7 @@ void SNSource(Mesh* pm, const Real bdt) {
     Real m_ej_ = m_ej * beta;
     Real Z_ej_ = Z_ej;
 
-    auto &sn_centers = sn_centers_buffer;
+    auto &sn_events = sn_events_buffer;
     int num_sn = num_sn_this_cycle;
 
     par_for("sn_injection", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
@@ -867,9 +870,12 @@ void SNSource(Mesh* pm, const Real bdt) {
       Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
 
       for (int sn = 0; sn < num_sn; ++sn) {
-        Real sn_x = sn_centers(0, sn);
-        Real sn_y = sn_centers(1, sn);
-        Real sn_z = sn_centers(2, sn);
+        Real sn_x = sn_events(0, sn);
+        Real sn_y = sn_events(1, sn);
+        Real sn_z = sn_events(2, sn);
+	Real sn_vx = sn_events(3, sn);
+	Real sn_vy = sn_events(4, sn);
+	Real sn_vz = sn_events(5, sn);
               
         // Calculate distance from SN center
         Real dx = x1v - sn_x;
@@ -880,7 +886,11 @@ void SNSource(Mesh* pm, const Real bdt) {
         // Inject if within injection radius
         if (r <= dr) {
 	  u0(m,IDN,k,j,i) += m_ej_;
-          u0(m,IEN,k,j,i) += e_sn_;
+	  u0(m,IM1,k,j,i) += m_ej_ * sn_vx;
+	  u0(m,IM2,k,j,i) += m_ej_ * sn_vy;
+	  u0(m,IM3,k,j,i) += m_ej_ * sn_vz;
+          u0(m,IEN,k,j,i) += e_sn_
+		           + 0.5 * m_ej_ * (sn_vx*sn_vx + sn_vy*sn_vy + sn_vz*sn_vz);
 	  u0(m, IZS, k, j, i) += Z_ej_ * m_ej_;
           u0(m, IDS, k, j, i) += 0.5 * (dz_sn / (1.0 - dz_sn)) * Z_ej_ * m_ej_;
           u0(m, IDL, k, j, i) += 0.5 * (dz_sn / (1.0 - dz_sn)) * Z_ej_ * m_ej_;
@@ -1340,6 +1350,6 @@ void FreeProfile(ParameterInput *pin, Mesh *pm) {
   // Free Kokkos views before Kokkos::finalize is called
   profile_reader = ProfileReader();
   disk_profile_reader = ProfileReader();
-  sn_centers_buffer = DvceArray2D<Real>();
+  sn_events_buffer = DvceArray2D<Real>();
   sn_counter = Kokkos::View<int>();
 }

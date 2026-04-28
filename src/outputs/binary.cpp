@@ -56,6 +56,27 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   // where XXXXX = 5-digit file_number
 
   FileShardMode shard_mode = out_params.file_shard_mode;
+
+  // Skip empty per-node slice shards (avoids opening an empty file on nodes
+  // where no rank owns any data for this slice).
+  if (bin_slice && shard_mode == FileShardMode::per_node) {
+    int local = static_cast<int>(outmbs.size());
+    std::vector<int> counts = GatherShardCounts(local, shard_mode);
+    int total = std::accumulate(counts.begin(), counts.end(), 0);
+    if (total == 0) {
+      // advance counters so we don't retry next cycle
+      out_params.file_number++;
+      if (out_params.last_time < 0.0) {
+        out_params.last_time = pm->time;
+      } else {
+        out_params.last_time += out_params.dt;
+      }
+      pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
+      pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
+      return;
+    }
+  }
+
   std::string fname;
   char number[7];
   std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);

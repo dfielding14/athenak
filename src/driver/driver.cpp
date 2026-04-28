@@ -466,20 +466,20 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   // cycle through output Types and load data / write files
   //  This design allows for asynchronous outputs to implemented in the future.
-  Kokkos::fence();
-  Kokkos::Timer out_timer;
+  //Kokkos::fence();
+  //Kokkos::Timer out_timer;
 
-  for (auto &out : pout->pout_list) {
-    out->LoadOutputData(pmesh);
-    out->WriteOutputFile(pmesh, pin);
-  }
+  //for (auto &out : pout->pout_list) {
+  //  out->LoadOutputData(pmesh);
+  //  out->WriteOutputFile(pmesh, pin);
+  //}
 
-  Kokkos::fence();
-  float out_time = out_timer.seconds();
-  if (global_variable::my_rank == 0) {
-    std::cout << "Total Outputs Time: " 
-              << out_time << " s" << std::endl;
-  }
+  //Kokkos::fence();
+  //float out_time = out_timer.seconds();
+  //if (global_variable::my_rank == 0) {
+  //  std::cout << "Total Outputs Time: " 
+  //            << out_time << " s" << std::endl;
+  //}
 
   // call any problem specific functions to do work after main loop
   if (pmesh->pgen->pgen_final_func != nullptr) {
