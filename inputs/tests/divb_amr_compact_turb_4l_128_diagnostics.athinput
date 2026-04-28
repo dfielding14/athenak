@@ -1,0 +1,163 @@
+# AthenaK compact moving-box AMR div(B) diagnostic with turbulent driving.
+# This heavier stress case uses a 128^3 root grid, 16^3 MeshBlocks, and four
+# physical AMR refinement levels.  The compact pgen keeps the deepest refined
+# volume small while retaining the same divergence-free magnetic initialization
+# and turbulence driver as the three-box divb_amr diagnostic.
+
+<job>
+basename  = DivBAMRCompact4L128E75
+
+<mesh>
+nghost    = 2
+nx1       = 128
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 128
+x2min     = 0.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 128
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 16
+nx2       = 16
+nx3       = 16
+
+<mesh_refinement>
+refinement          = adaptive
+num_levels          = 5
+ncycle_check        = 1
+refinement_interval = 1
+max_nmb_per_rank    = 4096
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.25
+nlim       = 100000
+tlim       = 0.16
+ndiag      = 100
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = hlld
+gamma       = 1.66666666667
+
+<turb_driving>
+type           = mhd
+turb_flag      = 2
+dt_turb_update = 2.5e-4
+tcorr          = 0.002
+dedt           = 75.0
+nlow           = 1
+nhigh          = 3
+spect_form     = 2
+expo           = 1.66666666667
+sol_fraction   = 0.5
+rseed          = -314159
+constant_edot  = true
+tile_driving   = false
+
+<problem>
+pgen_name             = divb_amr_compact
+user_hist             = true
+refine_levels         = 4
+rho0                  = 1.0
+pgas0                 = 10.0
+vx0                   = 0.08
+vy0                   = 0.05
+vz0                   = 0.03
+guide_b1              = 0.7
+guide_b2              = 0.2
+guide_b3              = -0.15
+field_amp             = 0.25
+field_k               = 2.0
+compact_center_1      = 0.5
+compact_center_2      = 0.5
+compact_center_3      = 0.5
+compact_half_width_1  = 0.030
+compact_half_width_2  = 0.030
+compact_half_width_3  = 0.030
+compact_amp_1         = 0.20
+compact_amp_2         = 0.17
+compact_amp_3         = 0.13
+compact_motion_period = 0.08
+compact_mode_1        = 1
+compact_mode_2        = 2
+compact_mode_3        = 3
+
+<output1>
+file_type      = hst
+data_format    = %24.16e
+dcycle         = 10
+user_hist_only = true
+
+<output2>
+file_type = bin
+variable  = mhd_w_bcc
+dt        = 0.02
+slice_x3  = 0.5
+id        = bfield_slice_x3
+
+<output3>
+file_type = bin
+variable  = mhd_divb
+dt        = 0.02
+slice_x3  = 0.5
+id        = divb_slice_x3
+
+<output4>
+file_type = bin
+variable  = mhd_j2
+dt        = 0.02
+slice_x3  = 0.5
+id        = j2_slice_x3
+
+<output5>
+file_type = bin
+variable  = mhd_w_bcc
+dt        = 0.02
+slice_x2  = 0.5
+id        = bfield_slice_x2
+
+<output6>
+file_type = bin
+variable  = mhd_divb
+dt        = 0.02
+slice_x2  = 0.5
+id        = divb_slice_x2
+
+<output7>
+file_type = bin
+variable  = mhd_j2
+dt        = 0.02
+slice_x2  = 0.5
+id        = j2_slice_x2
+
+<output8>
+file_type = bin
+variable  = mhd_w_bcc
+dt        = 0.08
+id        = bfield_full
+
+<output9>
+file_type = bin
+variable  = mhd_divb
+dt        = 0.08
+id        = divb_full
+
+<output10>
+file_type = bin
+variable  = mhd_j2
+dt        = 0.08
+id        = j2_full

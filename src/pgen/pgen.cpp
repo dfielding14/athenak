@@ -892,6 +892,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     CheckOrthonormalTetrad(pin, false);
   } else if (pgen_fun_name.compare("divb_amr") == 0) {
     DivBAMR(pin, false);
+  } else if (pgen_fun_name.compare("divb_amr_compact") == 0) {
+    DivBAMRCompact(pin, false);
   } else if (pgen_fun_name.compare("hohlraum") == 0) {
     Hohlraum(pin, false);
   } else if (pgen_fun_name.compare("linear_wave") == 0) {
@@ -1513,6 +1515,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     CheckOrthonormalTetrad(pin, true);
   } else if (pgen_fun_name.compare("divb_amr") == 0) {
     DivBAMR(pin, true);
+  } else if (pgen_fun_name.compare("divb_amr_compact") == 0) {
+    DivBAMRCompact(pin, true);
   } else if (pgen_fun_name.compare("hohlraum") == 0) {
     Hohlraum(pin, true);
   } else if (pgen_fun_name.compare("linear_wave") == 0) {

@@ -19,10 +19,11 @@
 \newcommand{\Ndiv}{|\nabla\cdot\mathbf{B}|\Delta x/B_{\rm norm}}
 
 \input{figures/divb_amr_test_summary.tex}
+\input{figures/divb_amr_compact_summary.tex}
 
 \title{Deep-AMR Face-Centered \texorpdfstring{$\nabla\cdot B$}{divB} Bug Fix Guide}
 \author{AthenaK Gotham / MHD AMR validation notes}
-\date{April 27, 2026}
+\date{April 28, 2026}
 
 \begin{document}
 \maketitle
@@ -222,35 +223,23 @@ The driven case uses the same 3D AMR diagnostic with MHD turbulent driving:
   \item periodic boundaries, ideal MHD, PLM reconstruction, HLLD;
   \item \code{dedt = 75}, \code{tcorr = 0.002}, \code{nlow = 1},
     \code{nhigh = 3};
-  \item completed retained-output run to \(t=\TurbTimeFinal\).
+  \item completed retained-output Frontier run to \(t=\TurbTimeFinal\).
 \end{itemize}
 
-The retained binary figures are from a completed short diagnostic run.  That run
-wrote history every cycle, binary slices every 0.001 code time, and full-cube
-binary diagnostics every 0.002 code time.  It was executed with 8 MPI ranks
-using the current repaired code.  This run is useful as a driven-AMR stress
-check, but it should not be described as a two-eddy-turnover turbulence run.
+The completed two-eddy-turnover diagnostic used the diagnostic input under
+\code{inputs/tests} with basename \code{DivBAMR3DTurbE75L3\_2Teddy}.  It was run
+on one Frontier node with 8 MPI ranks and one GPU per rank.  The input wrote
+history every 10 cycles, binary slices every 0.02 code time, and full-cube
+binary diagnostics every 0.08 code time.  The run reached \(t=\TurbTimeFinal\)
+at cycle \(\TurbCyclesFinal\).
 
-A corrected longer diagnostic input under \code{inputs/tests} now targets
-\(t=0.16\), roughly two forcing-scale eddy turnover times for a Mach
-\(\sim0.5\) state in this unit box.  That input writes slices every 0.02 code
-time and full-cube diagnostics every 0.08 code time.  On the local laptop the
-attempted long run caused memory pressure and was stopped before completion, so
-the final long-run slice files were not retained.  The partial history that was
-visible before cleanup reached \(t\simeq\PartialLongTurbTime\) with peak
-\(\max(\Ndiv)\simeq\PartialLongTurbPeakMaxNdiv\), peak
-\(L_1\simeq\PartialLongTurbPeakLoneNdiv\), and peak
-\(L_2\simeq\PartialLongTurbPeakLtwoNdiv\).  This partial result is encouraging
-but is not a substitute for a completed two-eddy-turnover run on a machine with
-enough memory.
-
-The peak normalized divergences over the retained completed driven run were
+The peak normalized divergences over the completed driven run were
 \begin{align}
   \max(\Ndiv) &= \TurbPeakMaxNdiv,\\
   L_1(\Ndiv) &= \TurbPeakLoneNdiv,\\
   L_2(\Ndiv) &= \TurbPeakLtwoNdiv.
 \end{align}
-The final retained-output values were
+The final values were
 \begin{align}
   \max(\Ndiv) &= \TurbFinalMaxNdiv,\\
   L_1(\Ndiv) &= \TurbFinalLoneNdiv,\\
@@ -262,16 +251,16 @@ count was \(\TurbFinalNcell\).
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.86\linewidth]{figures/divb_amr_turb_edot75_l3_history.png}
-  \caption{Retained driven turbulence AMR history for \code{dedt = 75} and three
-  physical refinement levels.  The AMR hierarchy changes aggressively and the
-  divergence diagnostics remain at roundoff, but this retained run stops at
-  \(t=0.004\), not at two eddy turnover times.}
+  \caption{Driven turbulence AMR history for \code{dedt = 75} and three physical
+  refinement levels through \(t=\TurbTimeFinal\).  The AMR hierarchy changes
+  aggressively and the divergence diagnostics remain at roundoff throughout the
+  two-eddy-turnover run.}
   \label{fig:turb_history}
 \end{figure}
 
-The retained final full-cube visualization distribution is also clean.  On the
-uniformized retained final binary cube, the 50th, 95th, and 99th percentiles of
-\(\Ndiv\) are \(\FullGridNdivPfifty\), \(\FullGridNdivPninetyFive\), and
+The final full-cube visualization distribution is also clean.  On the
+uniformized final binary cube, the 50th, 95th, and 99th percentiles of \(\Ndiv\)
+are \(\FullGridNdivPfifty\), \(\FullGridNdivPninetyFive\), and
 \(\FullGridNdivPninetyNine\).  The maximum in the uniformized visualization cube
 is \(\FullGridNdivMax\).  The history file remains the authoritative
 finite-volume diagnostic because it is accumulated directly over the AMR mesh.
@@ -279,26 +268,113 @@ finite-volume diagnostic because it is accumulated directly over the AMR mesh.
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.74\linewidth]{figures/divb_amr_turb_edot75_l3_divb_distribution.png}
-  \caption{Retained short-run full-cube normalized-divergence distribution from
-  the driven turbulence diagnostic output.}
+  \caption{Final full-cube normalized-divergence distribution from the completed
+  driven turbulence diagnostic output.}
   \label{fig:turb_distribution}
 \end{figure}
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.98\linewidth]{figures/divb_amr_turb_edot75_l3_x3_slice.png}
-  \caption{Retained short-run \(x_3=0.5\) slice diagnostics from the driven
-  turbulence test. Magnetic-field structure, current density, and AMR level
-  boundaries are visible, while normalized \(\DivB\) remains at roundoff.}
+  \caption{Final \(x_3=0.5\) slice diagnostics from the driven turbulence test.
+  Magnetic-field structure, current density, and AMR level boundaries are
+  visible, while normalized \(\DivB\) remains at roundoff.}
   \label{fig:turb_x3}
 \end{figure}
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.98\linewidth]{figures/divb_amr_turb_edot75_l3_x2_slice.png}
-  \caption{Retained short-run \(x_2=0.5\) slice diagnostics from the same driven
-  turbulence test.}
+  \caption{Final \(x_2=0.5\) slice diagnostics from the same driven turbulence
+  test.}
   \label{fig:turb_x2}
+\end{figure}
+
+\subsection{Compact Moving-Box Four-Level Stress Test}
+
+The compact follow-up uses a separate built-in problem generator,
+\code{divb\_amr\_compact}.  It keeps the same discrete-vector-potential
+magnetic initialization and turbulence driving as the three-box driven test, but
+uses one moving periodic refinement box.  The diagnostic run used a \(128^3\)
+root grid, \(16^3\) MeshBlocks, four physical refinement levels, and
+\code{dedt = 75}.  The finest effective resolution is \(2048^3\), but the
+output analysis keeps full-cube divergence distributions on native AMR blocks
+rather than uniformizing to the finest grid.
+
+The completed run used basename
+\code{DivBAMRCompact4L128E75\_2Teddy} on four Frontier nodes with 32 MPI ranks
+and one GPU per rank.  It reached \(t=\CompactTimeFinal\) at cycle
+\(\CompactCyclesFinal\).  The peak normalized divergences were
+\begin{align}
+  \max(\Ndiv) &= \CompactPeakMaxNdiv,\\
+  L_1(\Ndiv) &= \CompactPeakLoneNdiv,\\
+  L_2(\Ndiv) &= \CompactPeakLtwoNdiv.
+\end{align}
+The final values were
+\begin{align}
+  \max(\Ndiv) &= \CompactFinalMaxNdiv,\\
+  L_1(\Ndiv) &= \CompactFinalLoneNdiv,\\
+  L_2(\Ndiv) &= \CompactFinalLtwoNdiv.
+\end{align}
+These are well below the strict divergence thresholds.
+
+The AMR-occupancy result also satisfies the compact-test intent.  The final
+level-zero volume fraction was \(\CompactFinalVolFracLzero\), comfortably above
+the relaxed requirement that more than half of the domain remain at level zero.
+The final finest-level volume fraction was \(\CompactFinalVolFracLfour\), inside
+the requested \(10^{-4}\)--\(10^{-3}\) band, and the peak active-cell count was
+\(\CompactMaxNcell\), below the \(1.2\times10^7\) cap.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Final and peak level occupancy for the compact four-level run.}
+  \small
+  \begin{tabular}{@{}rrrrr@{}}
+    \toprule
+    Level & Final volume fraction & Peak volume fraction & Final cells & Peak cells\\
+    \midrule
+    \CompactLevelRows
+    \bottomrule
+  \end{tabular}
+  \label{tab:compact_occupancy}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\linewidth]{figures/divb_amr_compact_l4_128_history.png}
+  \caption{Compact moving-box AMR history.  The divergence diagnostics remain
+  far below threshold, while the level-zero volume fraction remains above the
+  compact-test occupancy target.}
+  \label{fig:compact_history}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.98\linewidth]{figures/divb_amr_compact_l4_128_x3_slice.png}
+  \caption{Final \(x_3=0.5\) slice diagnostics from the compact four-level run.
+  The moving box returns to the domain center at the final time, so this slice
+  cuts through the refined region.}
+  \label{fig:compact_x3}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.98\linewidth]{figures/divb_amr_compact_l4_128_x2_slice.png}
+  \caption{Final \(x_2=0.5\) slice diagnostics from the compact four-level run.}
+  \label{fig:compact_x2}
+\end{figure}
+
+On the final native-AMR full output, the 50th, 95th, and 99th percentiles of
+\(\Ndiv\) were \(\CompactNativeNdivPfifty\),
+\(\CompactNativeNdivPninetyFive\), and \(\CompactNativeNdivPninetyNine\).  The
+maximum in the native AMR visualization output was \(\CompactNativeNdivMax\).
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.74\linewidth]{figures/divb_amr_compact_l4_128_divb_distribution.png}
+  \caption{Final native-AMR normalized-divergence distribution for the compact
+  four-level run.}
+  \label{fig:compact_distribution}
 \end{figure}
 
 \section{Runtime and Speed}
@@ -315,17 +391,29 @@ The current fixes are deliberately scoped to AMR and boundary work:
     code is built with that macro.
 \end{itemize}
 
-The retained short \code{dedt = 75} diagnostic run completed in 21.72 seconds of
-wall time on the local 8-rank test.  AthenaK reported 16157 MeshBlock-cycles,
-10.18 seconds of CPU time, and \(8.12\times10^5\) zone-cycles per CPU-second.
-For comparison, the static 3-level run with the same MeshBlock-cycle count
-reported 7.54 CPU seconds and \(1.10\times10^6\) zone-cycles per CPU-second.
-The driven run is expected to be slower because it includes turbulent driving
-and extra full-cube/slice diagnostic outputs.  The post-setup diagnostic-output
-time in the retained short run was only 0.099 seconds total, with 0.050 seconds
-spent in writes.  The attempted longer laptop run was memory-limited rather than
-diagnostically complete, so no speed conclusion should be drawn from that
-interrupted attempt.
+The completed \code{dedt = 75} diagnostic run used Slurm job 4468997 on one
+Frontier node.  Slurm reported 00:12:57 elapsed wall time.  AthenaK reported
+4,277,288 MeshBlock-cycles, 762.12 seconds of CPU time, and
+\(2.87\times10^6\) zone-cycles per CPU-second.  The maximum active-cell count
+was \(\TurbMaxNcell\), with \(\TurbFinalNcell\) active cells at the final
+history row.
+
+I/O was not limiting.  The final output flush reported 3.106 seconds total,
+with 0.375 seconds spent loading output buffers and 2.809 seconds spent writing.
+The retained run directory was about 141 MB.  History writes were millisecond-scale,
+slice writes were subsecond, and the full-cube binary writes were also subsecond
+per field.  Memory was not limiting: Slurm allocated 500 GB on the node and
+reported no out-of-memory condition; the AthenaK log also completed without
+memory warnings.
+
+The compact four-level run used Slurm job 4469201.  Slurm reported
+\CompactWallTime\ elapsed wall time, and AthenaK reported
+\CompactMeshblockCycles\ MeshBlock-cycles and
+\(\CompactZoneCyclesPerCpuSecond\) zone-cycles per CPU-second.  The final output
+flush took 3.348 seconds, with 0.105 seconds spent loading output buffers and
+3.292 seconds spent writing, so I/O was not limiting.  The log and Slurm state
+show no out-of-memory or abnormal-exit condition; memory did not appear to be a
+limiting factor for this completed run.
 
 I did not run a same-physics pre-fix versus post-fix performance A/B benchmark
 in this pass, because the pre-fix code fails the correctness test at three or
