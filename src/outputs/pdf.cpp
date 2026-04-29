@@ -292,7 +292,7 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
 //! \fn void PDFOutput::WriteOutputFile()
 //  \brief Writes N-D PDF to binary file with ASCII header
 
-void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   FileShardMode shard_mode = out_params.file_shard_mode;
 
   if (!IsShardWriter(shard_mode)) {

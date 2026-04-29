@@ -479,7 +479,7 @@ void SphericalSliceOutput::LoadOutputData(Mesh *pm) {
 //   per-rank mode:  <P int32 angle indices a> <nv * P float32 values>  (var-major)
 //                   recover (it, ip) via it = a/nphi, ip = a%nphi
 
-void SphericalSliceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void SphericalSliceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   int ntheta = psph->ntheta;
   int nphi = psph->nphi;
   Real radius = psph->radius;

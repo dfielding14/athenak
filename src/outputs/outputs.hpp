@@ -323,7 +323,7 @@ class BaseTypeOutput {
 
   // virtual functions may be over-ridden in derived classes
   virtual void LoadOutputData(Mesh *pm);
-  virtual void WriteOutputFile(Mesh *pm, ParameterInput *pin) = 0;
+  virtual void WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final = false) = 0;
 
   // Functions to detect big endian machine, and to byte-swap 32-bit words.  The vtk
   // legacy format requires data to be stored as big-endian.
@@ -365,7 +365,7 @@ class BaseTypeOutput {
 class FormattedTableOutput : public BaseTypeOutput {
  public:
   FormattedTableOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) override;
 };
 
 //----------------------------------------------------------------------------------------
@@ -383,7 +383,7 @@ class HistoryOutput : public BaseTypeOutput {
   void LoadHydroHistoryData(HistoryData *pdata, Mesh *pm);
   void LoadMHDHistoryData(HistoryData *pdata, Mesh *pm);
   void LoadZ4cHistoryData(HistoryData *pdata, Mesh *pm);
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) override;
 };
 
 //----------------------------------------------------------------------------------------
@@ -398,7 +398,7 @@ class CoarsenedBinaryOutput : public BaseTypeOutput {
   //                            DvceArray3D<Real>& coarsen_data,
   //                            const int coarsen_factor);
   void LoadOutputData(Mesh *pm) override;
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) override;
 };
 
 //----------------------------------------------------------------------------------------
@@ -524,7 +524,7 @@ class PDFOutput : public BaseTypeOutput {
   PDFData pdf_data;
 
   void LoadOutputData(Mesh *pm) override;
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) override;
 };
 
 //----------------------------------------------------------------------------------------
@@ -534,7 +534,7 @@ class PDFOutput : public BaseTypeOutput {
 class MeshVTKOutput : public BaseTypeOutput {
  public:
   MeshVTKOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) override;
 };
 
 //----------------------------------------------------------------------------------------
@@ -545,7 +545,7 @@ class ParticleVTKOutput : public BaseTypeOutput {
  public:
   ParticleVTKOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
   void LoadOutputData(Mesh *pm) override;
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) override;
  protected:
   int npout_thisrank;
   int npout_total;
@@ -559,7 +559,7 @@ class ParticleVTKOutput : public BaseTypeOutput {
 class MeshBinaryOutput : public BaseTypeOutput {
  public:
   MeshBinaryOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) override;
 };
 
 //----------------------------------------------------------------------------------------
@@ -575,7 +575,7 @@ class SphericalSliceOutput : public BaseTypeOutput {
   SphericalSliceOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
   ~SphericalSliceOutput() override;
   void LoadOutputData(Mesh *pm) override;
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) override;
  private:
   SphericalSlice *psph;
   std::vector<int32_t> shard_owned_angles;
@@ -590,7 +590,7 @@ class RestartOutput : public BaseTypeOutput {
  public:
   RestartOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
   void LoadOutputData(Mesh *pm) override;
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) override;
 };
 
 //----------------------------------------------------------------------------------------
@@ -606,7 +606,7 @@ class EventLogOutput : public BaseTypeOutput {
   bool no_output=true;
 
   void LoadOutputData(Mesh *pm) override;
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) override;
 };
 
 //----------------------------------------------------------------------------------------
@@ -617,7 +617,7 @@ class TrackedParticleOutput : public BaseTypeOutput {
  public:
   TrackedParticleOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
   void LoadOutputData(Mesh *pm) override;
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) override;
  protected:
   int ntrack;           // total number of tracked particles across all ranks
   int ntrack_thisrank;  // number of tracked particles this rank (guess)
@@ -635,7 +635,7 @@ class ParticleRestartOutput : public BaseTypeOutput {
  public:
   ParticleRestartOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
   void LoadOutputData(Mesh *pm) override;
-  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) override;
  protected:
   int nprtcl_thisrank;  // number of particles this rank
   int nrdata, nidata;   // dimensions of particle data arrays

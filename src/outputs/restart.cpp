@@ -135,7 +135,7 @@ void RestartOutput::LoadOutputData(Mesh *pm) {
 //! \fn void RestartOutput:::WriteOutputFile(Mesh *pm)
 //  \brief Cycles over all MeshBlocks and writes everything to a single restart file
 
-void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   // get spatial dimensions of arrays, including ghost zones
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
   int nout1 = indcs.nx1 + 2*(indcs.ng);
@@ -184,11 +184,13 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     fname = std::string("rst/") + out_params.file_basename + number + ".rst";
   }
   // increment counters now so values for *next* dump are stored in restart file
-  out_params.file_number++;
-  if (out_params.last_time < 0.0) {
-    out_params.last_time = pm->time;
-  } else {
-    out_params.last_time += out_params.dt;
+  if (!is_final) {
+    out_params.file_number++;
+    if (out_params.last_time < 0.0) {
+      out_params.last_time = pm->time;
+    } else {
+      out_params.last_time += out_params.dt;
+    }
   }
   pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
   pin->SetReal(out_params.block_name, "last_time", out_params.last_time);

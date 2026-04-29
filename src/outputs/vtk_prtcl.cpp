@@ -75,7 +75,7 @@ void ParticleVTKOutput::LoadOutputData(Mesh *pm) {
 //!  6. Arbitrary number of SCALARS data at each point (BINARY format)
 //!  7. Arbitrary number of VECTORS data at each point (BINARY format)
 
-void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   int big_end = IsBigEndian(); // =1 on big endian machine
 
   // create filename: "vtk/file_basename"."file_id"."XXXXX".part.vtk

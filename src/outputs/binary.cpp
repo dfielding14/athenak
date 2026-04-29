@@ -47,7 +47,7 @@ MeshBinaryOutput::MeshBinaryOutput(ParameterInput *pin, Mesh *pm, OutputParamete
 //  \brief Cycles over all MeshBlocks and writes OutputData in binary format
 //   All MeshBlocks are written to the same file.
 
-void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   // check if slicing
   bool bin_slice = (out_params.slice1 || out_params.slice2 || out_params.slice3 ||
                     out_params.gid >= 0);
@@ -63,7 +63,7 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     int local = static_cast<int>(outmbs.size());
     std::vector<int> counts = GatherShardCounts(local, shard_mode);
     int total = std::accumulate(counts.begin(), counts.end(), 0);
-    if (total == 0) {
+    if (total == 0  && global_variable::node_id != 0) {
       // advance counters so we don't retry next cycle
       out_params.file_number++;
       if (out_params.last_time < 0.0) {

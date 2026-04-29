@@ -79,17 +79,19 @@ void ParticleRestartOutput::LoadOutputData(Mesh *pm) {
 // ParticleRestartOutput::WriteOutputFile()
 // Writes particle restart file for this rank
 
-void ParticleRestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void ParticleRestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   std::string fname;
   char number[7];
   std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);
   fname = std::string("rst_prtcl/") + out_params.file_basename + number + ".rst_prtcl";         
   // increment counters for next output
-  out_params.file_number++;
-  if (out_params.last_time < 0.0) {
-    out_params.last_time = pm->time;
-  } else {
-    out_params.last_time += out_params.dt;
+  if (!is_final) {
+    out_params.file_number++;
+    if (out_params.last_time < 0.0) {
+      out_params.last_time = pm->time;
+    } else {
+      out_params.last_time += out_params.dt;
+    }
   }
   pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
   pin->SetReal(out_params.block_name, "last_time", out_params.last_time);

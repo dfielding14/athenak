@@ -56,7 +56,7 @@ FormattedTableOutput::FormattedTableOutput(ParameterInput *pin, Mesh *pm,
 //! \fn void FormattedTableOutput:::WriteOutputFile(Mesh *pm)
 //  \brief writes output_data_ to file in tabular format using C style std::fprintf
 
-void FormattedTableOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void FormattedTableOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   // create filename: "tab/file_basename" + "." + "file_id" + "." + XXXXX + ".tab"
   // where XXXXX = 5-digit file_number
   std::string fname;

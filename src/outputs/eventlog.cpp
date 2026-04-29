@@ -68,7 +68,7 @@ void EventLogOutput::LoadOutputData(Mesh *pm) {
 //! \fn void EventLogOutput::WriteOutputFile()
 //! \brief writes event counter data to log file
 
-void EventLogOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void EventLogOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   if (header_written && no_output) return;
 
   // only the master rank writes the file
