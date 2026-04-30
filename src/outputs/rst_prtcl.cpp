@@ -92,9 +92,9 @@ void ParticleRestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool 
     } else {
       out_params.last_time += out_params.dt;
     }
+    pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
+    pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
   }
-  pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
-  pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
 
   // Gather particle counts from all ranks
   std::vector<int> nprtcl_eachrank(global_variable::nranks);
@@ -138,6 +138,11 @@ void ParticleRestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool 
     
     std::fclose(pfile);
   }
+
+#if MPI_PARALLEL_ENABLED
+  MPI_Barrier(MPI_COMM_WORLD);   // ensure rank 0's header file exists before
+                                 // the collective MPI_File_open below
+#endif
 
   // All ranks open the file with IOWrapper in append mode
   if (total_particles > 0) {

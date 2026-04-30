@@ -296,15 +296,17 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   FileShardMode shard_mode = out_params.file_shard_mode;
 
   if (!IsShardWriter(shard_mode)) {
-    // Still need to update counters on all ranks
-    out_params.file_number++;
-    if (out_params.last_time < 0.0) {
-      out_params.last_time = pm->time;
-    } else {
-      out_params.last_time += out_params.dt;
+    if (!is_final) {
+      // Still need to update counters on all ranks
+      out_params.file_number++;
+      if (out_params.last_time < 0.0) {
+        out_params.last_time = pm->time;
+      } else {
+        out_params.last_time += out_params.dt;
+      }
+      pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
+      pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
     }
-    pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
-    pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
     return;
   }
 
@@ -433,12 +435,15 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   std::fclose(pfile);
   
   // Update counters
-  out_params.file_number++;
-  if (out_params.last_time < 0.0) {
-    out_params.last_time = pm->time;
-  } else {
-    out_params.last_time += out_params.dt;
+  if (!is_final) {
+    out_params.file_number++;
+    if (out_params.last_time < 0.0) {
+      out_params.last_time = pm->time;
+    } else {
+      out_params.last_time += out_params.dt;
+    }
+    pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
+    pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
   }
-  pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
-  pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
+
 }

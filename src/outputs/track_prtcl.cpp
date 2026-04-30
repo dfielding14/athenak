@@ -119,6 +119,11 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool 
     std::fclose(pfile);
   }
 
+#if MPI_PARALLEL_ENABLED
+  MPI_Barrier(MPI_COMM_WORLD);   // ensure rank 0's header file exists before
+                                 // the collective MPI_File_open below
+#endif
+
   // Now all ranks open file and append data
   IOWrapper partfile;
   partfile.Open(fname.c_str(), IOWrapper::FileMode::append);

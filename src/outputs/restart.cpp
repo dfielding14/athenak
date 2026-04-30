@@ -191,9 +191,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final
     } else {
       out_params.last_time += out_params.dt;
     }
+    pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
+    pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
   }
-  pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
-  pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
 
   // create string holding input parameters (copy of input file)
   std::stringstream ost;

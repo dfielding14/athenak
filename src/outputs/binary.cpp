@@ -64,15 +64,16 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_fi
     std::vector<int> counts = GatherShardCounts(local, shard_mode);
     int total = std::accumulate(counts.begin(), counts.end(), 0);
     if (total == 0  && global_variable::node_id != 0) {
-      // advance counters so we don't retry next cycle
-      out_params.file_number++;
-      if (out_params.last_time < 0.0) {
-        out_params.last_time = pm->time;
-      } else {
-        out_params.last_time += out_params.dt;
+      if (!is_final) {
+        out_params.file_number++;
+        if (out_params.last_time < 0.0) {
+          out_params.last_time = pm->time;
+        } else {
+          out_params.last_time += out_params.dt;
+        }
+        pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
+        pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
       }
-      pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
-      pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
       return;
     }
   }
@@ -314,14 +315,16 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_fi
   delete [] single_data;
 
   // increment counters
-  out_params.file_number++;
-  if (out_params.last_time < 0.0) {
-    out_params.last_time = pm->time;
-  } else {
-    out_params.last_time += out_params.dt;
+  if (!is_final) {
+    out_params.file_number++;
+    if (out_params.last_time < 0.0) {
+      out_params.last_time = pm->time;
+    } else {
+      out_params.last_time += out_params.dt;
+    }
+    pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
+    pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
   }
-  pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
-  pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
 
   return;
 }
