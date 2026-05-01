@@ -27,7 +27,7 @@ Velocity Construction, STS Diffusion, and Verification}
 \maketitle
 
 \begin{abstract}
-This document consolidates the scalar-mixing TeX notes in \code{./docs} into a single narrative. The organizing logic is the numerical problem itself. We begin with the passive-scalar question that motivates the calculations: whether a frozen, divergence-free, rough velocity field can sustain finite-time scalar dissipation as the diffusivity tends to zero, and how that transition depends on the geometry of the advecting field. We then translate between the two roughness languages used across the notes: the shell-integrated velocity spectrum $E_u(k)\propto k^{-\zeta}$ and the regularity index $\alpha$. That translation clarifies why $\alpha=(\zeta-1)/2$ is a classical H\"older exponent only when $1<\zeta<3$, while the regime $\alpha\le 0$ must be interpreted distributionally and approached numerically through ultraviolet-truncated approximations. With that dictionary in place, we document the four implemented solenoidal velocity generators in AthenaK: 2D projection, 2D stream function, 3D projection, and 3D Clebsch stream initialization. We then summarize the dedicated velocity-initialization tests and the independent scalar advection--diffusion verification problem, now including the \STS path used for parabolic scalar diffusion. The result is a single reference that starts from the scientific question, moves through the spectral and algorithmic setup, and ends with the tests that justify using the implementation for scalar-mixing studies.
+This document consolidates the scalar-mixing TeX notes in \code{./docs} into a single narrative. The organizing logic is the numerical problem itself. We begin with the passive-scalar question that motivates the calculations: whether a frozen, divergence-free, rough velocity field can sustain finite-time scalar dissipation as the diffusivity tends to zero, and how that transition depends on the geometry of the advecting field. We then translate between the two roughness languages used across the notes: the shell-integrated velocity spectrum $E_u(k)\propto k^{-\zeta}$ and the regularity index $\alpha$. That translation clarifies why $\alpha=(\zeta-1)/2$ is a classical H\"older exponent only when $1<\zeta<3$, while the regime $\alpha\le 0$ must be interpreted distributionally and approached numerically through ultraviolet-truncated approximations. With that dictionary in place, we document the velocity construction actually used by the current production campaign: the 3D Clebsch path in \code{scalar\_mixing\_perfect\_powerlaw.cpp}, run with divergence-free scalar face fluxes, the statistical spectrum contract, and RKL2 STS scalar diffusion. We then summarize the representative \code{clebsch\_1024} campaign setup and the independent scalar advection--diffusion verification problem, now including a dedicated \STS figure. The result is a single reference that starts from the scientific question, moves through the production spectral setup, and ends with the tests that justify using the implementation for scalar-mixing studies.
 \end{abstract}
 
 \section{Problem Statement}
@@ -64,14 +64,13 @@ and whether this exponent is related to the velocity roughness by the Yaglom-typ
 \end{equation}
 The practical objective is to identify a roughness threshold separating weak-mixing from anomalous-dissipation behavior, and then determine whether that threshold depends only on the nominal roughness of the velocity field or also on how incompressibility is realized.
 
-AthenaK now supports four prescribed velocity generators for this purpose:
-\begin{enumerate}
-\item 2D projection,
-\item 2D stream function, $\uu=\nabla^\perp\psi$,
-\item 3D projection,
-\item 3D Clebsch stream, $\uu=\nabla\phi_1\times\nabla\phi_2$.
-\end{enumerate}
-The scientific comparison is therefore not merely between dimensions. It is also between linear projection-based solenoidal fields and stream-based constructions that impose additional latent structure through one or two scalar potentials.
+AthenaK contains several prescribed velocity generators, but the production comparison described here is intentionally narrower. The runs in
+\path{/lustre/orion/ast207/proj-shared/dfielding/autonomous_scalars/clebsch_1024}
+use the 3D Clebsch stream construction in \path{scalar_mixing_perfect_powerlaw.cpp},
+\begin{equation}
+\uu=\nabla\phi_1\times\nabla\phi_2,
+\end{equation}
+with the scalar transported by a divergence-free staggered face velocity. The relevant scientific comparison is therefore the dependence on $\alpha$ and $D$ within this one autonomous Clebsch ensemble, not an older four-generator initialization campaign.
 
 \section{From H\"older Exponents to Power Spectra}
 The next step is to translate between the two roughness languages used across the notes. In physical language one prescribes a shell-integrated velocity spectrum
@@ -161,20 +160,21 @@ Field & Complex-mode variance & Amplitude law \\
 \end{table}
 
 \section{Velocity Field Setup}
-The implementation then turns the target spectrum into a concrete divergence-free realization. Across all four generators, the user-facing control parameters are interpreted in terms of the \emph{velocity field}: the driving band is set by \code{turb\_nlow} and \code{turb\_nhigh}, the shell-integrated slope by \code{turb\_expo}, the final amplitude by \code{turb\_v\_rms}, and the retained-mode thinning by \code{turb\_k\_crit}.
+The production velocity setup is the 3D Clebsch branch of
+\code{scalar\_mixing\_perfect\_powerlaw.cpp}. This section therefore documents
+that path only. The older four-mode comparison figures are useful historical
+checks, but they are not representative of the fixed-resolution
+\code{clebsch\_1024} simulations.
 
-\subsection{Common Spectral Framework}
-AthenaK writes the initialized field as a real retained half-space series,
+\subsection{Retained Clebsch Catalog}
+AthenaK first builds a retained half-space catalog of Fourier modes in the
+requested band. The current campaign fixes
 \begin{equation}
-\uu(\mathbf{x}) =
-\sum_{\mathbf{n}\in\mathcal{H}_{\rm kept}}
-\left[\mathbf{a}_{\mathbf{n}}\cos(\kk_{\mathbf{n}}\cdot\mathbf{x})
-- \mathbf{b}_{\mathbf{n}}\sin(\kk_{\mathbf{n}}\cdot\mathbf{x})\right],
-\label{eq:halfspace}
+k_{\min}=2,\qquad k_{\max}=\code{turb\_nhigh},
 \end{equation}
-where $\mathcal{H}_{\rm kept}$ contains exactly one representative of each implicit complex-conjugate pair. This makes the initialized field real by construction while still allowing the generator to work mode by mode in Fourier space.
-
-The kept catalog is built in two stages. First, the code enumerates all admissible half-space modes in the requested band. Second, it performs importance sampling above the user scale \code{turb\_k\_crit}. The acceptance probability is
+with \code{turb\_nhigh} chosen per case by the campaign generator and capped at
+256. Modes above \code{turb\_k\_crit=16} are thinned with the importance-sampling
+rule
 \begin{equation}
 p_{\rm acc}(k)=
 \left\{
@@ -184,43 +184,14 @@ p_{\rm acc}(k)=
 \end{array}
 \right.
 \end{equation}
-and each retained mode is multiplied by $p_{\rm acc}^{-1/2}$ so that shell-integrated variances remain unbiased. After synthesis, AthenaK removes any residual mean flow and applies a uniform rescaling so that the final field matches the requested rms speed. The problem generator can also dump a reproducibility sidecar, \code{basename.turb\_init\_diag.json}, containing retained mode catalogs, coefficients, shell spectra, and latent stream fields.
+and accepted modes are boosted by $p_{\rm acc}^{-1/2}$ so that the retained
+shell variances remain unbiased. The production inputs use
+\code{turb\_spectrum\_contract=statistical}, so the high-$k$ catalog is a
+statistical representation of the requested ensemble rather than an exact
+per-shell mode count.
 
-\subsection{Two-Dimensional Generators}
-In 2D projection mode the code draws Gaussian vector coefficients and then removes the component parallel to $\kk$. To recover the target shell spectrum, the velocity coefficient amplitude must scale as
-\begin{equation}
-|\uu_{\kk}| \propto k^{-(\zeta+1)/2}.
-\label{eq:2d-proj}
-\end{equation}
-This is the direct spectral route: the stored coefficients are already velocity coefficients.
-
-In 2D stream mode the code instead synthesizes
-\begin{equation}
-\psi(\mathbf{x}) = \sum_{\mathbf{n}\in\mathcal{H}_{\rm kept}}
-\left[a^\psi_{\mathbf{n}}\cos(\kk_{\mathbf{n}}\cdot\mathbf{x})
-- b^\psi_{\mathbf{n}}\sin(\kk_{\mathbf{n}}\cdot\mathbf{x})\right]
-\end{equation}
-and defines
-\begin{equation}
-\uu = (\partial_y\psi,\,-\partial_x\psi,\,0).
-\label{eq:2d-stream}
-\end{equation}
-Because differentiation contributes one power of $k$, the stream-function coefficients must scale one power steeper:
-\begin{equation}
-|\psi_{\kk}| \propto k^{-(\zeta+3)/2}.
-\label{eq:psi-law}
-\end{equation}
-The user still specifies the \emph{velocity} spectrum. AthenaK determines the compatible stream-function spectrum automatically.
-
-\subsection{Three-Dimensional Generators}
-The 3D projection construction is again linear. Random vector coefficients are drawn, projected perpendicular to $\kk$, and synthesized with amplitude law
-\begin{equation}
-|\uu_{\kk}| \propto k^{-(\zeta+2)/2},
-\label{eq:3d-proj}
-\end{equation}
-which is the correct shell-count correction for three dimensions.
-
-The 3D stream construction is qualitatively different. The initialized field is
+\subsection{Clebsch Potentials}
+The initialized velocity is
 \begin{equation}
 \uu = \nabla\phi_1\times\nabla\phi_2.
 \label{eq:clebsch}
@@ -232,13 +203,9 @@ In Fourier space,
 (\pp\times\qq)\,\hat{\phi}_1(\pp)\hat{\phi}_2(\qq).
 \label{eq:clebsch-convolution}
 \end{equation}
-The velocity spectrum is therefore a quadratic functional of the two potentials.
-The current AthenaK implementation no longer tries to solve an inverse shell-fit
-problem for $\phi_1$ and $\phi_2$. Instead it mirrors the retained-mode
-construction used in the companion notebook: the user specifies
-\code{problem/turb\_velocity\_method=clebsch} together with a desired velocity
-roughness parameter \code{problem/turb\_alpha}, AthenaK converts that to a
-target shell slope for the scalar potentials,
+The production code does not fit arbitrary shell weights for the two potentials.
+Instead the user specifies \code{problem/turb\_alpha}; the code sets the target
+potential shell slope to
 \begin{equation}
 s_\phi =
 \begin{cases}
@@ -248,113 +215,64 @@ s_\phi =
 \qquad
 s_u = 2\alpha + 1,
 \end{equation}
-draws Gaussian scalar coefficients on the retained mode catalog, rescales each
+draws Gaussian scalar coefficients on the retained catalog, rescales each
 retained shell so that $E_{\phi_1}(k)$ and $E_{\phi_2}(k)$ are exact
-$k^{-s_\phi}$ laws on the accepted shell band, forms the retained Clebsch
-velocity coefficients from Equation~(\ref{eq:clebsch-convolution}), and finally
-normalizes the realized velocity field to zero mean and the requested rms
-amplitude.
+$k^{-s_\phi}$ laws on that catalog, and then forms the Clebsch velocity through
+Equation~(\ref{eq:clebsch-convolution}). Finally it removes the mean velocity
+and normalizes the rms speed to \code{turb\_v\_rms=1}.
 
-This means the latent scalar spectra are now simple, explicit auxiliary objects
-rather than outputs of a separate optimizer. The user-facing caveat is equally
-simple: because the initialized velocity is built on the retained mode catalog
-and the Clebsch map is quadratic, the resulting velocity slope is only
-approximate in practice, especially when \code{turb\_k\_crit} is small enough to
-thin the high-$k$ catalog aggressively.
+This is the actual map used by the production inputs. The latent scalar spectra
+are exact retained-shell power laws by construction, while the realized velocity
+spectrum is the finite-catalog Clebsch product. The velocity slope should
+therefore be read as a controlled realized diagnostic, not as an analytically
+guaranteed exact shell law.
 
-\section{Velocity Setup Tests}
-The velocity generator is tested first, before any scalar problem is run on top of it. The reference campaign uses a common target slope $\zeta=5/3$, band $k\in[2,128]$, and unit rms speed. The 2D cases use $512^2$ with \code{turb\_k\_crit}=128. The 3D cases use $256^3$ with \code{turb\_k\_crit}=2.
+\subsection{Divergence-Free Scalar Face Velocity}
+The production inputs set \code{divfree\_scalar\_flux=true}. In this mode the
+problem generator installs a staggered scalar face velocity and uses that field
+for the conservative scalar fluxes. This is the discrete object that matters for
+scalar transport: a continuum Clebsch identity alone would not guarantee a
+zero-divergence upwind scalar flux on the mesh. The small regression input
+\path{inputs/tests/scalar_mixing_perfect_powerlaw_clebsch_divfree_scalar_flux.athinput}
+exercises this same path on a $32^3$ mesh with a constant scalar, while the
+production campaign uses the same controls at $1024^3$.
 
-Figure~\ref{fig:overview} gives the global comparison. All four initialized
-fields are normalized to the requested rms speed and remain spectrally
-divergence-free to roundoff-level accuracy. The two projection methods are
-still the most direct route to a target velocity spectrum. The 3D Clebsch field
-is now easier to interpret: the latent scalar spectra are exact retained-shell
-power laws by construction, while the realized velocity spectrum follows the
-requested slope only approximately because the Clebsch map is quadratic and the
-3D retained catalog is importance-sampled.
+\section{Production Velocity Setup}
+The representative campaign is staged in
+\path{/lustre/orion/ast207/proj-shared/dfielding/autonomous_scalars/clebsch_1024}.
+Every case uses \code{problem\_id=scalar\_mixing\_perfect\_powerlaw}, a
+$1024^3$ mesh with $256^3$ meshblocks, periodic boundaries, the fiducial seed
+51825, \code{scalar\_only=true}, \code{divfree\_scalar\_flux=true}, and
+\code{scalar\_diffusivity\_integrator=sts}. The scalar initial data are the
+production perfect-power-law pair: \code{s\_00} is the global $x_1$ sine mode,
+and \code{s\_01} is the second scalar field used by the perfect-power-law
+generator.
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/overview.png}
-\caption{Overview of the four implemented velocity generators. The slice panels
-show representative initialized speed fields for 2D projection, 2D stream, 3D
-projection, and 3D Clebsch. The spectrum panel shows the corresponding
-shape-normalized velocity spectra together with the target $k^{-5/3}$ law. The
-titles report the measured initialization time and the spectral divergence
-norm.}
-\label{fig:overview}
-\end{figure}
-
-The method-specific figures clarify what the overview compresses. In 2D, projection and stream initialization produce different latent objects but comparable velocity spectra. The stream-function field is smoother than the velocity because $\psi$ carries the extra low-pass factor implied by Equation~(\ref{eq:psi-law}).
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/methods_2d.png}
-\caption{Two-dimensional generator diagnostics. Projection mode is shown through speed, vorticity, and velocity spectrum. Stream mode is shown through speed, latent stream function $\psi$, and the corresponding velocity and stream-function spectra. The target velocity spectrum is the same in both cases, but the latent field is steeper in stream mode because the velocity is obtained by differentiating $\psi$.}
-\label{fig:methods-2d}
-\end{figure}
-
-In 3D the distinction is stronger. Projection mode is still a linear spectral
-construction. Clebsch mode introduces two latent potentials whose retained shell
-spectra are prescribed explicitly from the user-selected $\alpha$. The latent
-spectra are therefore easy to interpret, while the velocity spectrum remains an
-approximate consequence of the quadratic Clebsch product.
+Figure~\ref{fig:clebsch1024-setup} summarizes the generated sweep. The four
+roughness values are $\alpha=0,1/6,1/3,1/2$. The diffusivity grid is expressed as
+$\log_{10}(D^{-1})$, and the point color gives the protected \code{turb\_nhigh}
+chosen by the campaign generator. Low-diffusivity cases saturate the cap
+\code{turb\_nhigh=256}; higher-diffusivity cases use smaller retained velocity
+bands so the scalar diffusion scale remains protected relative to the imposed
+velocity cutoff.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/methods_3d.png}
-\caption{Three-dimensional generator diagnostics. Projection mode is shown
-through a midplane speed slice, a representative velocity-component slice, the
-velocity spectrum, and the retained mode counts. Clebsch mode is shown through
-a midplane speed slice, the latent potentials $\phi_1$ and $\phi_2$, and the
-associated scalar and velocity spectra.}
-\label{fig:methods-3d}
+\includegraphics[width=\textwidth]{figures/scalar_mixing_perfect_powerlaw/clebsch_1024_campaign_setup.png}
+\caption{Production Clebsch setup for the fixed $1024^3$ campaign. Each point is
+one generated athinput in \code{clebsch\_1024}; color shows the per-case
+\code{turb\_nhigh}. The right panel records the controls that make this setup
+representative of the simulations: \code{scalar\_mixing\_perfect\_powerlaw},
+3D Clebsch velocity, statistical spectrum contract, divergence-free scalar face
+fluxes, and RKL2 STS scalar diffusion with \code{sts\_max\_dt\_ratio=100}.}
+\label{fig:clebsch1024-setup}
 \end{figure}
 
-The detailed 3D Clebsch diagnostics are especially important because this
-remains the least direct mapping from user inputs to a realized velocity field.
-The single-seed figure now emphasizes the quantities that actually exist in the
-current implementation: the latent midplane slices, the exact retained scalar
-shell laws, and the retained-versus-FFT velocity spectra for one representative
-production-seed run.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/stream3d_realization.png}
-\caption{Representative single-seed diagnostics of the 3D Clebsch
-construction. The top row shows the two latent potentials on the midplane. The
-lower-left panel shows their exact retained-shell spectra, and the lower-right
-panel compares the retained Clebsch velocity spectrum with the FFT of the
-initialized field. The important point is that the latent scalar spectra are
-now explicit and exact on the retained shell band, while the realized velocity
-spectrum remains a controlled approximation to the requested slope.}
-\label{fig:clebsch3d-realization}
-\end{figure}
-
-Because the 3D Clebsch construction is stochastic, one representative
-realization is not sufficient on its own. Figure~\ref{fig:clebsch3d-seed-audit}
-summarizes the dedicated multi-seed audit. The upper panel overlays the
-retained Clebsch spectra across seeds and audit cases, while the lower panel
-tracks the mean retained slope and leakage. This is the scale-validation
-counterpart to Figure~\ref{fig:clebsch3d-realization}.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/stream3d_production_audit.png}
-\caption{Multi-seed audit of the 3D Clebsch construction. The upper panel shows
-retained velocity spectra across seeds and audit cases, with bold curves for
-the case means. The lower panel summarizes the mean retained slope magnitude
-and leakage. This makes the retained-mode variability explicit without relying
-on the deleted shell-fit or quality-gate machinery.}
-\label{fig:clebsch3d-seed-audit}
-\end{figure}
-
-Taken together, the representative figures and the multi-seed audit justify the
-velocity initialization as a standalone piece of the scalar-mixing problem. The
-field that the scalar sees is divergence-free, has the requested band and rms
-normalization, and follows the intended velocity slope to useful accuracy in
-all four implemented modes.
+This setup figure replaces the older four-generator velocity-test figures in
+this master note. Those older figures mixed \code{scalar\_mixing} and
+non-production projection/stream cases. The production question here is narrower:
+given this Clebsch ensemble and this scalar transport operator, how do the
+finite-time scalar statistics depend on $\alpha$ and $D$?
 
 \section{Scalar Advection--Diffusion and STS Tests}
 Once the velocity field is prescribed, the scalar problem is only meaningful if the transport operator itself is the right one. In AthenaK that operator is \SO rather than \kin. The difference is essential. Under \SO the built-in hydrodynamic update is frozen, but the passive scalars still evolve conservatively using the hydro face mass flux and optional scalar diffusion. That diffusion can be advanced by the legacy explicit RK path or by the new RKL2 STS parabolic path. Under \kin the density and momentum equations are still advanced, so the hydro state is not actually frozen.
@@ -399,6 +317,24 @@ Case & Integrator & Cycles & $L^1$ & $L^\infty$ & Mass rel. \\
 \label{tab:sts-blob-results-master}
 \end{table}
 
+Figure~\ref{fig:sts-summary} makes this comparison explicit. The left panel
+shows the cycle-count reduction from moving the parabolic update out of the
+ordinary RK loop. The middle panel shows that the STS and explicit solutions
+remain on the same analytic-error scale. The right panel shows that the STS
+path keeps the conservative scalar mass error at the same near-roundoff level
+as the explicit runs.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/scalar_mixing_test/scalar_mixing_sts_summary.png}
+\caption{Explicit RK and RKL2 STS comparison for the analytic scalar
+advection--diffusion blob benchmark. The cycle count is reduced substantially
+when scalar diffusion is advanced through STS, while the $L^1$ and
+$L^\infty$ field errors remain comparable to the explicit results and the
+relative scalar-mass error remains near roundoff.}
+\label{fig:sts-summary}
+\end{figure}
+
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.49\textwidth]{figures/scalar_mixing_test/scalar_mixing_test_convergence_2d_t1p0.png}\hfill
@@ -416,10 +352,21 @@ First, the scientific question should be stated in finite-time form. The relevan
 
 Second, the roughness dictionary must be handled carefully. The spectral slope $\zeta$ is the direct numerical input. The relation $\alpha=(\zeta-1)/2$ is a classical H\"older statement only when $1<\zeta<3$; for $\alpha\le 0$ it becomes a negative regularity index and must be interpreted distributionally.
 
-Third, the velocity setup now has a coherent four-mode structure. Projection mode is the cleanest path when direct control of the initialized velocity spectrum is the main goal. Stream mode should be used when the latent scalar potential is physically meaningful. In 2D that latent object is the stream function $\psi$. In 3D it is the pair of Clebsch potentials $\phi_1$ and $\phi_2$, whose shell weights must be fitted because the velocity depends on them quadratically.
+Third, the velocity setup documented here now matches the production
+\path{scalar_mixing_perfect_powerlaw.cpp} campaign. The representative
+configuration is the \code{clebsch\_1024} suite: a three-dimensional Clebsch
+velocity field with a statistical spectrum contract, divergence-free scalar
+face fluxes, scalar-only evolution, and an $\alpha$--$D$ sweep generated from a
+single retained-mode catalog.
 
-Fourth, the velocity generator and scalar transport operator have now both been tested in the form actually used by the code. The velocity campaign verifies spectral slope, divergence control, and latent-field diagnostics. The scalar verification problem confirms that \SO defines the correct frozen-hydrodynamic transport operator and that the scalar solution converges toward the analytic advection--diffusion reference. The same analytic benchmark now also confirms that RKL2 STS is a conservative and accurate primary path for scalar diffusion when the parabolic timestep would otherwise dominate the cost.
+Fourth, the scalar transport operator has now been tested in the form actually
+used by the code. The analytic verification problem confirms that \SO defines
+the correct frozen-hydrodynamic transport operator and that the scalar solution
+converges toward the analytic advection--diffusion reference. The same
+benchmark now also has an STS-specific figure and table showing that RKL2 STS
+is a conservative and accurate primary path for scalar diffusion when the
+parabolic timestep would otherwise dominate the cost.
 
-This is the sense in which the present document functions as a master note. It starts from the general scalar-mixing question, translates the roughness parameters, documents the velocity generators, and ends with the tests that justify using the implementation for actual scalar-advection studies.
+This is the sense in which the present document functions as a master note. It starts from the general scalar-mixing question, translates the roughness parameters, documents the production Clebsch velocity setup, and ends with the tests that justify using the implementation for actual scalar-advection studies.
 
 \end{document}
