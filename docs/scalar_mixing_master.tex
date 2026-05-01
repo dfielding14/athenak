@@ -15,10 +15,11 @@
 \newcommand{\code}[1]{\texttt{#1}}
 \newcommand{\SO}{\code{scalar\_only}\xspace}
 \newcommand{\kin}{\code{kinematic}\xspace}
+\newcommand{\STS}{RKL2 super-time-stepping\xspace}
 
 \title{Prescribed-Velocity Scalar Mixing in AthenaK:\\
 A Master Note on the Problem Statement, Spectral Roughness,\\
-Velocity Construction, and Verification}
+Velocity Construction, STS Diffusion, and Verification}
 \author{}
 \date{\today}
 
@@ -26,7 +27,7 @@ Velocity Construction, and Verification}
 \maketitle
 
 \begin{abstract}
-This document consolidates the scalar-mixing TeX notes in \code{./docs} into a single narrative. The organizing logic is the numerical problem itself. We begin with the passive-scalar question that motivates the calculations: whether a frozen, divergence-free, rough velocity field can sustain finite-time scalar dissipation as the diffusivity tends to zero, and how that transition depends on the geometry of the advecting field. We then translate between the two roughness languages used across the notes: the shell-integrated velocity spectrum $E_u(k)\propto k^{-\zeta}$ and the regularity index $\alpha$. That translation clarifies why $\alpha=(\zeta-1)/2$ is a classical H\"older exponent only when $1<\zeta<3$, while the regime $\alpha\le 0$ must be interpreted distributionally and approached numerically through ultraviolet-truncated approximations. With that dictionary in place, we document the four implemented solenoidal velocity generators in AthenaK: 2D projection, 2D stream function, 3D projection, and 3D Clebsch stream initialization. We then summarize the dedicated velocity-initialization tests and the independent scalar advection--diffusion verification problem. The result is a single reference that starts from the scientific question, moves through the spectral and algorithmic setup, and ends with the tests that justify using the implementation for scalar-mixing studies.
+This document consolidates the scalar-mixing TeX notes in \code{./docs} into a single narrative. The organizing logic is the numerical problem itself. We begin with the passive-scalar question that motivates the calculations: whether a frozen, divergence-free, rough velocity field can sustain finite-time scalar dissipation as the diffusivity tends to zero, and how that transition depends on the geometry of the advecting field. We then translate between the two roughness languages used across the notes: the shell-integrated velocity spectrum $E_u(k)\propto k^{-\zeta}$ and the regularity index $\alpha$. That translation clarifies why $\alpha=(\zeta-1)/2$ is a classical H\"older exponent only when $1<\zeta<3$, while the regime $\alpha\le 0$ must be interpreted distributionally and approached numerically through ultraviolet-truncated approximations. With that dictionary in place, we document the four implemented solenoidal velocity generators in AthenaK: 2D projection, 2D stream function, 3D projection, and 3D Clebsch stream initialization. We then summarize the dedicated velocity-initialization tests and the independent scalar advection--diffusion verification problem, now including the \STS path used for parabolic scalar diffusion. The result is a single reference that starts from the scientific question, moves through the spectral and algorithmic setup, and ends with the tests that justify using the implementation for scalar-mixing studies.
 \end{abstract}
 
 \section{Problem Statement}
@@ -320,7 +321,7 @@ production-seed run.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/clebsch3d_realization.png}
+\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/stream3d_realization.png}
 \caption{Representative single-seed diagnostics of the 3D Clebsch
 construction. The top row shows the two latent potentials on the midplane. The
 lower-left panel shows their exact retained-shell spectra, and the lower-right
@@ -340,7 +341,7 @@ counterpart to Figure~\ref{fig:clebsch3d-realization}.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/clebsch3d_seed_audit.png}
+\includegraphics[width=\textwidth]{figures/scalar_mixing_velocity_methods/stream3d_production_audit.png}
 \caption{Multi-seed audit of the 3D Clebsch construction. The upper panel shows
 retained velocity spectra across seeds and audit cases, with bold curves for
 the case means. The lower panel summarizes the mean retained slope magnitude
@@ -355,10 +356,17 @@ field that the scalar sees is divergence-free, has the requested band and rms
 normalization, and follows the intended velocity slope to useful accuracy in
 all four implemented modes.
 
-\section{Scalar Advection--Diffusion Tests}
-Once the velocity field is prescribed, the scalar problem is only meaningful if the transport operator itself is the right one. In AthenaK that operator is \SO rather than \kin. The difference is essential. Under \SO the built-in hydrodynamic update is frozen, but the passive scalars still evolve conservatively using the hydro face mass flux and optional explicit scalar diffusion. Under \kin the density and momentum equations are still advanced, so the hydro state is not actually frozen.
+\section{Scalar Advection--Diffusion and STS Tests}
+Once the velocity field is prescribed, the scalar problem is only meaningful if the transport operator itself is the right one. In AthenaK that operator is \SO rather than \kin. The difference is essential. Under \SO the built-in hydrodynamic update is frozen, but the passive scalars still evolve conservatively using the hydro face mass flux and optional scalar diffusion. That diffusion can be advanced by the legacy explicit RK path or by the new RKL2 STS parabolic path. Under \kin the density and momentum equations are still advanced, so the hydro state is not actually frozen.
 
 The scalar-side verification is handled by the dedicated \code{scalar\_mixing\_test} problem. In that test AthenaK advects and diffuses a passive-scalar blob in a uniform prescribed velocity field while the hydro background remains fixed. The analytic reference solution is computed from the exact AthenaK cell-centered initial condition by evolving its Fourier coefficients under uniform advection plus diffusion. This ensures that the comparison is aligned with the discrete initialization actually used by the code.
+
+The STS version of this benchmark is enabled with two input switches:
+\begin{center}
+\code{time/sts\_integrator=rkl2},\qquad
+\code{hydro/scalar\_diffusivity\_integrator=sts}.
+\end{center}
+The scalar diffusive flux is then omitted from the ordinary RK fluxes and advanced in parabolic pre- and post-sweeps, each over half of the cycle timestep. The explicit path remains the default when \code{scalar\_diffusivity\_integrator} is omitted. For the top-hat analytic tests the STS inputs set \code{hydro/sfloor=-1.0e100}, which disables scalar clipping so that the mass diagnostic measures the conservative update rather than mass added by clipping small undershoots near the diffusing discontinuity.
 
 Figure~\ref{fig:blob-slices} shows the time evolution in 2D and 3D. In both cases the scalar advects and diffuses as expected while the background velocity remains uniform and the hydro state stays fixed. This establishes the correct frozen-hydrodynamic transport semantics before the more complicated turbulent initializations are used.
 
@@ -371,6 +379,25 @@ Figure~\ref{fig:blob-slices} shows the time evolution in 2D and 3D. In both case
 \end{figure}
 
 The convergence plots show that this agreement is not merely visual. In the calibrated diffusive families at $t=1$ and $\kappa=1/128$, the 2D errors decrease cleanly with resolution, with the $L^1$ error dropping from $9.27\times10^{-4}$ at $64^2$ to $1.96\times10^{-4}$ at $128^2$ and $4.65\times10^{-5}$ at $256^2$. The stable 3D family also improves systematically, with the $L^1$ error decreasing from $6.17\times10^{-4}$ at $48^3$ to $1.93\times10^{-4}$ at $64^3$ and $1.18\times10^{-4}$ at $80^3$. In addition, pure-advection smoke tests at CFL $0.2$ retain mass to roughly $10^{-10}$ relative accuracy in both 2D and 3D.
+
+The STS regression uses the same final-time analytic checks rather than a separate looser standard. Table~\ref{tab:sts-blob-results-master} compares the explicit and STS paths on the shipped 2D and 3D diffusive blob inputs. Both STS runs pass the same field-error, mass, centroid, width, and velocity-uniformity thresholds as the explicit runs. The cycle counts also show the practical reason for making STS a primary scalar-diffusion mode: at these resolutions the 2D run drops from 1281 cycles to 320, and the 3D run drops from 271 cycles to 121.
+
+\begin{table}[t]
+\centering
+\small
+\caption{Analytic scalar advection--diffusion test results at $t=1$ and $\kappa=1/128$. All cases use \SO and the same Fourier-evolved reference solution.}
+\begin{tabular}{llrrrr}
+\hline
+Case & Integrator & Cycles & $L^1$ & $L^\infty$ & Mass rel. \\
+\hline
+2D $128^2$ & explicit RK & 1281 & $1.962\times10^{-4}$ & $1.851\times10^{-3}$ & $3.016\times10^{-10}$ \\
+2D $128^2$ & RKL2 STS & 320 & $2.778\times10^{-4}$ & $2.650\times10^{-3}$ & $1.633\times10^{-10}$ \\
+3D $48^3$ & explicit RK & 271 & $6.168\times10^{-4}$ & $2.451\times10^{-2}$ & $1.766\times10^{-10}$ \\
+3D $48^3$ & RKL2 STS & 121 & $4.931\times10^{-4}$ & $1.597\times10^{-2}$ & $1.081\times10^{-9}$ \\
+\hline
+\end{tabular}
+\label{tab:sts-blob-results-master}
+\end{table}
 
 \begin{figure}[t]
 \centering
@@ -391,7 +418,7 @@ Second, the roughness dictionary must be handled carefully. The spectral slope $
 
 Third, the velocity setup now has a coherent four-mode structure. Projection mode is the cleanest path when direct control of the initialized velocity spectrum is the main goal. Stream mode should be used when the latent scalar potential is physically meaningful. In 2D that latent object is the stream function $\psi$. In 3D it is the pair of Clebsch potentials $\phi_1$ and $\phi_2$, whose shell weights must be fitted because the velocity depends on them quadratically.
 
-Fourth, the velocity generator and scalar transport operator have now both been tested in the form actually used by the code. The velocity campaign verifies spectral slope, divergence control, and latent-field diagnostics. The scalar verification problem confirms that \SO defines the correct frozen-hydrodynamic transport operator and that the scalar solution converges toward the analytic advection--diffusion reference.
+Fourth, the velocity generator and scalar transport operator have now both been tested in the form actually used by the code. The velocity campaign verifies spectral slope, divergence control, and latent-field diagnostics. The scalar verification problem confirms that \SO defines the correct frozen-hydrodynamic transport operator and that the scalar solution converges toward the analytic advection--diffusion reference. The same analytic benchmark now also confirms that RKL2 STS is a conservative and accurate primary path for scalar diffusion when the parabolic timestep would otherwise dominate the cost.
 
 This is the sense in which the present document functions as a master note. It starts from the general scalar-mixing question, translates the roughness parameters, documents the velocity generators, and ends with the tests that justify using the implementation for actual scalar-advection studies.
 

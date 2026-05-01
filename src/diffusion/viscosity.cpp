@@ -9,6 +9,7 @@
 //  Viscosity may be added to Hydro and/or MHD independently.
 
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
 #include <iostream>
 #include <string> // string
@@ -19,6 +20,25 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "viscosity.hpp"
+
+namespace {
+
+parabolic::ParabolicIntegratorMode ParseViscosityIntegrator(std::string block,
+    ParameterInput *pin) {
+  std::string integrator = pin->GetOrAddString(block, "viscosity_integrator", "explicit");
+  if (integrator == "explicit") {
+    return parabolic::ParabolicIntegratorMode::explicit_mode;
+  } else if (integrator == "sts") {
+    return parabolic::ParabolicIntegratorMode::sts;
+  }
+
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+            << "<" << block << ">/viscosity_integrator = '" << integrator
+            << "' must be 'explicit' or 'sts'" << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 // ctor:
@@ -31,29 +51,43 @@ Viscosity::Viscosity(std::string block, MeshBlockPack *pp,
   pmy_pack(pp) {
   // Read coefficient of isotropic kinematic shear viscosity (must be present)
   nu_iso = pin->GetReal(block,"viscosity");
-
-  // viscous timestep on MeshBlock(s) in this pack
+  mode = ParseViscosityIntegrator(block, pin);
   dtnew = std::numeric_limits<float>::max();
-  auto size = pmy_pack->pmb->mb_size;
-  Real fac;
-  if (pp->pmesh->three_d) {
-    fac = 1.0/6.0;
-  } else if (pp->pmesh->two_d) {
-    fac = 0.25;
-  } else {
-    fac = 0.5;
-  }
-  for (int m=0; m<(pp->nmb_thispack); ++m) {
-    dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx1)/nu_iso);
-    if (pp->pmesh->multi_d) {dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx2)/nu_iso);}
-    if (pp->pmesh->three_d) {dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx3)/nu_iso);}
-  }
 }
 
 //----------------------------------------------------------------------------------------
 // Viscosity destructor
 
 Viscosity::~Viscosity() {
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Viscosity::NewTimeStep()
+//! \brief Compute new time step for viscosity.
+
+void Viscosity::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_data) {
+  (void)w0;
+  (void)eos_data;
+  dtnew = std::numeric_limits<float>::max();
+  auto size = pmy_pack->pmb->mb_size;
+  Real fac;
+  if (pmy_pack->pmesh->three_d) {
+    fac = 1.0/6.0;
+  } else if (pmy_pack->pmesh->two_d) {
+    fac = 0.25;
+  } else {
+    fac = 0.5;
+  }
+  for (int m=0; m<(pmy_pack->nmb_thispack); ++m) {
+    dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx1)/nu_iso);
+    if (pmy_pack->pmesh->multi_d) {
+      dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx2)/nu_iso);
+    }
+    if (pmy_pack->pmesh->three_d) {
+      dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx3)/nu_iso);
+    }
+  }
+  return;
 }
 
 //----------------------------------------------------------------------------------------

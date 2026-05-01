@@ -1,0 +1,64 @@
+# Passive-scalar advection-diffusion blob test in true 2D, using STS diffusion
+
+<comment>
+problem   = passive scalar blob advection-diffusion in 2D
+reference = scalar_mixing_test periodic analytic verification
+
+<job>
+problem_id = scalar_mixing_test
+basename   = scalar_blob_diff_2d_sts
+
+<time>
+evolution        = dynamic
+cfl_number       = 0.4
+tlim             = 1.0
+nlim             = -1
+sts_integrator   = rkl2
+sts_max_dt_ratio = -1.0
+
+<mesh>
+nghost = 2
+nx1    = 128
+x1min  = 0.0
+x1max  = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2    = 128
+x2min  = 0.0
+x2max  = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3    = 1
+x3min  = 0.0
+x3max  = 1.0
+ix3_bc = reflect
+ox3_bc = reflect
+
+<meshblock>
+nx1 = 128
+nx2 = 128
+nx3 = 1
+
+<hydro>
+eos                           = ideal
+gamma                         = 1.6666666666667
+sfloor                        = -1.0e100
+reconstruct                   = plm
+rsolver                       = hllc
+nscalars                      = 1
+scalar_only                   = true
+scalar_diffusivity            = 0.0078125
+scalar_diffusivity_integrator = sts
+
+<problem>
+rho0          = 1.0
+temp0         = 1.0
+crossing_time = 1.0
+user_srcs     = false
+
+<output1>
+file_type  = bin
+variable   = hydro_w
+dt         = 1.0

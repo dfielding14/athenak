@@ -114,8 +114,8 @@ void IdealMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
       // convert scalars (if any), always stored at end of cons and prim arrays.
       for (int n=nmhd; n<(nmhd+nscal); ++n) {
         // apply scalar floor
-        if (cons(m,n,k,j,i) < 0.0) {
-          cons(m,n,k,j,i) = 0.0;
+        if (cons(m,n,k,j,i) < eos.sfloor) {
+          cons(m,n,k,j,i) = eos.sfloor;
         }
         prim(m,n,k,j,i) = cons(m,n,k,j,i)/u.d;
       }

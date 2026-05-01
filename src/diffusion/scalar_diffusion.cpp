@@ -9,6 +9,8 @@
 //! negative local scalar gradient: F = -kappa * rho * grad(s)
 
 #include <algorithm>
+#include <cstdlib>
+#include <iostream>
 #include <limits>
 #include <string>
 
@@ -16,6 +18,26 @@
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "scalar_diffusion.hpp"
+
+namespace {
+
+parabolic::ParabolicIntegratorMode ParseScalarDiffusivityIntegrator(std::string block,
+    ParameterInput *pin) {
+  std::string integrator = pin->GetOrAddString(block, "scalar_diffusivity_integrator",
+                                               "explicit");
+  if (integrator == "explicit") {
+    return parabolic::ParabolicIntegratorMode::explicit_mode;
+  } else if (integrator == "sts") {
+    return parabolic::ParabolicIntegratorMode::sts;
+  }
+
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+            << "<" << block << ">/scalar_diffusivity_integrator = '" << integrator
+            << "' must be 'explicit' or 'sts'" << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 //! \brief ScalarDiffusion constructor
@@ -25,6 +47,7 @@ ScalarDiffusion::ScalarDiffusion(std::string block, MeshBlockPack *pp,
   pmy_pack(pp) {
   // Read scalar diffusivity coefficient
   kappa = pin->GetReal(block, "scalar_diffusivity");
+  mode = ParseScalarDiffusivityIntegrator(block, pin);
 
   // Compute diffusion timestep constraint
   dtnew = std::numeric_limits<float>::max();

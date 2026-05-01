@@ -147,6 +147,14 @@ struct VelocityStats {
   Real scale = 1.0;
 };
 
+struct FaceDivergenceStats {
+  bool valid = false;
+  Real rms = 0.0;
+  Real max_abs = 0.0;
+  Real normalized_rms = 0.0;
+  Real normalized_max_abs = 0.0;
+};
+
 enum ScalarForcingMode {
   kScalarNone = 0,
   kScalarMeanGradient = 1,
@@ -481,6 +489,7 @@ void WriteJsonField2D(std::ostream &os, const std::vector<Real> &field,
 void WriteDiagnosticsMetadata(std::ostream &os, const TurbulenceConfig &cfg,
                               const std::string &construction,
                               const VelocityStats &stats,
+                              const FaceDivergenceStats &face_div_stats,
                               Real init_wall_seconds, int indent) {
   WriteIndent(os, indent);
   os << "{\n";
@@ -564,7 +573,24 @@ void WriteDiagnosticsMetadata(std::ostream &os, const TurbulenceConfig &cfg,
   WriteIndent(os, indent + 4);
   os << "\"scale\": " << stats.scale << "\n";
   WriteIndent(os, indent + 2);
-  os << "}\n";
+  os << "}";
+  if (face_div_stats.valid) {
+    os << ",\n";
+    WriteIndent(os, indent + 2);
+    os << "\"scalar_face_divergence\": {\n";
+    WriteIndent(os, indent + 4);
+    os << "\"rms\": " << face_div_stats.rms << ",\n";
+    WriteIndent(os, indent + 4);
+    os << "\"max_abs\": " << face_div_stats.max_abs << ",\n";
+    WriteIndent(os, indent + 4);
+    os << "\"normalized_rms\": " << face_div_stats.normalized_rms << ",\n";
+    WriteIndent(os, indent + 4);
+    os << "\"normalized_max_abs\": " << face_div_stats.normalized_max_abs << "\n";
+    WriteIndent(os, indent + 2);
+    os << "}\n";
+  } else {
+    os << "\n";
+  }
   WriteIndent(os, indent);
   os << "}";
 }
@@ -577,6 +603,7 @@ void WriteProjectionDiagnostics(const TurbulenceConfig &cfg,
                                 const ModeCatalog &catalog,
                                 const VectorCoefficients &coeffs,
                                 const VelocityStats &stats,
+                                const FaceDivergenceStats &face_div_stats,
                                 Real init_wall_seconds) {
   if (global_variable::my_rank != 0 || !cfg.dump_generator_diagnostics) return;
 
@@ -590,7 +617,7 @@ void WriteProjectionDiagnostics(const TurbulenceConfig &cfg,
   os << "\"metadata\": ";
   WriteDiagnosticsMetadata(os, cfg,
                            cfg.projection_true_2d ? "projection_2d" : "projection_3d",
-                           stats, init_wall_seconds, 2);
+                           stats, face_div_stats, init_wall_seconds, 2);
   os << ",\n";
   WriteIndent(os, 2);
   os << "\"catalogs\": {\n";
@@ -626,6 +653,7 @@ void WriteStream2DDiagnostics(const TurbulenceConfig &cfg,
                               const ScalarCoefficients &psi_coeffs,
                               const VectorCoefficients &vel_coeffs,
                               const VelocityStats &stats,
+                              const FaceDivergenceStats &face_div_stats,
                               Real init_wall_seconds) {
   if (global_variable::my_rank != 0 || !cfg.dump_generator_diagnostics) return;
 
@@ -642,7 +670,8 @@ void WriteStream2DDiagnostics(const TurbulenceConfig &cfg,
   os << "{\n";
   WriteIndent(os, 2);
   os << "\"metadata\": ";
-  WriteDiagnosticsMetadata(os, cfg, "stream_2d", stats, init_wall_seconds, 2);
+  WriteDiagnosticsMetadata(os, cfg, "stream_2d", stats, face_div_stats,
+                           init_wall_seconds, 2);
   os << ",\n";
   WriteIndent(os, 2);
   os << "\"catalogs\": {\n";
@@ -693,6 +722,7 @@ void WriteClebsch3DDiagnostics(const TurbulenceConfig &cfg,
                                const ScalarCoefficients &phi1_coeffs,
                                const ScalarCoefficients &phi2_coeffs,
                                const VelocityStats &stats,
+                               const FaceDivergenceStats &face_div_stats,
                                Real init_wall_seconds) {
   if (global_variable::my_rank != 0 || !cfg.dump_generator_diagnostics) return;
 
@@ -712,7 +742,8 @@ void WriteClebsch3DDiagnostics(const TurbulenceConfig &cfg,
   os << "{\n";
   WriteIndent(os, 2);
   os << "\"metadata\": ";
-  WriteDiagnosticsMetadata(os, cfg, "clebsch_3d", stats, init_wall_seconds, 2);
+  WriteDiagnosticsMetadata(os, cfg, "clebsch_3d", stats, face_div_stats,
+                           init_wall_seconds, 2);
   os << ",\n";
   WriteIndent(os, 2);
   os << "\"catalogs\": {\n";
@@ -1421,6 +1452,33 @@ void AccumulateVelocityFromVectorPotential(
   }
 }
 
+KOKKOS_INLINE_FUNCTION
+void AccumulateClebschVectorPotential(
+    const DvceArray1D<Real> &d_kx, const DvceArray1D<Real> &d_ky,
+    const DvceArray1D<Real> &d_kz, const DvceArray1D<Real> &d_p1a,
+    const DvceArray1D<Real> &d_p1b, const DvceArray1D<Real> &d_g2a0,
+    const DvceArray1D<Real> &d_g2a1, const DvceArray1D<Real> &d_g2a2,
+    const DvceArray1D<Real> &d_g2b0, const DvceArray1D<Real> &d_g2b1,
+    const DvceArray1D<Real> &d_g2b2, int mode_count, Real x1v, Real x2v, Real x3v,
+    Real &ax, Real &ay, Real &az) {
+  Real phi1 = 0.0;
+  Real g2x = 0.0;
+  Real g2y = 0.0;
+  Real g2z = 0.0;
+  for (int n = 0; n < mode_count; ++n) {
+    const Real phase = d_kx(n)*x1v + d_ky(n)*x2v + d_kz(n)*x3v;
+    const Real cosk = cos(phase);
+    const Real sink = sin(phase);
+    phi1 += d_p1a(n)*cosk - d_p1b(n)*sink;
+    g2x += d_g2a0(n)*cosk - d_g2b0(n)*sink;
+    g2y += d_g2a1(n)*cosk - d_g2b1(n)*sink;
+    g2z += d_g2a2(n)*cosk - d_g2b2(n)*sink;
+  }
+  ax = phi1 * g2x;
+  ay = phi1 * g2y;
+  az = phi1 * g2z;
+}
+
 void SynthesizeVelocityFromVectorModes(MeshBlockPack *pmbp, const TurbulenceConfig &cfg,
                                        Real den, const ModeCatalog &catalog,
                                        const VectorCoefficients &coeffs) {
@@ -1971,6 +2029,362 @@ void PopulateScalarFaceVelocitiesFromVectorPotential(
   }
 }
 
+void PopulateScalarFaceVelocitiesFromClebsch(
+    MeshBlockPack *pmbp, const TurbulenceConfig &cfg, const ModeCatalog &catalog,
+    const ScalarCoefficients &phi1_coeffs, const VectorCoefficients &grad2_coeffs,
+    const VelocityStats &stats) {
+  auto &indcs = pmbp->pmesh->mb_indcs;
+  const int is = indcs.is;
+  const int ie = indcs.ie;
+  const int js = indcs.js;
+  const int je = indcs.je;
+  const int ks = indcs.ks;
+  const int ke = indcs.ke;
+  const int nx1 = indcs.nx1;
+  const int nx2 = indcs.nx2;
+  const int nx3 = indcs.nx3;
+  const int ng = indcs.ng;
+  const int nmb = pmbp->nmb_thispack;
+  const bool multi_d = cfg.mesh_multi_d;
+  const bool three_d = cfg.mesh_three_d;
+  const int nmodes = catalog.KeptModes();
+
+  if (nmodes == 0) return;
+
+  auto &hydro = *pmbp->phydro;
+  const int ncells1 = nx1 + 2*ng;
+  const int ncells2 = multi_d ? nx2 + 2*ng : 1;
+  const int ncells3 = three_d ? nx3 + 2*ng : 1;
+  if (!hydro.scalar_vface) {
+    hydro.scalar_vface = std::make_unique<DvceFaceFld4D<Real>>(
+        "scalar_vface", nmb, ncells3, ncells2, ncells1);
+  }
+  hydro.use_scalar_face_velocity = true;
+
+  DvceArray1D<Real> d_kx("scalar_face_clebsch_kx", nmodes);
+  DvceArray1D<Real> d_ky("scalar_face_clebsch_ky", nmodes);
+  DvceArray1D<Real> d_kz("scalar_face_clebsch_kz", nmodes);
+  DvceArray1D<Real> d_p1a("scalar_face_clebsch_p1a", nmodes);
+  DvceArray1D<Real> d_p1b("scalar_face_clebsch_p1b", nmodes);
+  DvceArray1D<Real> d_g2a0("scalar_face_clebsch_g2a0", nmodes);
+  DvceArray1D<Real> d_g2a1("scalar_face_clebsch_g2a1", nmodes);
+  DvceArray1D<Real> d_g2a2("scalar_face_clebsch_g2a2", nmodes);
+  DvceArray1D<Real> d_g2b0("scalar_face_clebsch_g2b0", nmodes);
+  DvceArray1D<Real> d_g2b1("scalar_face_clebsch_g2b1", nmodes);
+  DvceArray1D<Real> d_g2b2("scalar_face_clebsch_g2b2", nmodes);
+
+  auto h_kx = Kokkos::create_mirror_view(d_kx);
+  auto h_ky = Kokkos::create_mirror_view(d_ky);
+  auto h_kz = Kokkos::create_mirror_view(d_kz);
+  auto h_p1a = Kokkos::create_mirror_view(d_p1a);
+  auto h_p1b = Kokkos::create_mirror_view(d_p1b);
+  auto h_g2a0 = Kokkos::create_mirror_view(d_g2a0);
+  auto h_g2a1 = Kokkos::create_mirror_view(d_g2a1);
+  auto h_g2a2 = Kokkos::create_mirror_view(d_g2a2);
+  auto h_g2b0 = Kokkos::create_mirror_view(d_g2b0);
+  auto h_g2b1 = Kokkos::create_mirror_view(d_g2b1);
+  auto h_g2b2 = Kokkos::create_mirror_view(d_g2b2);
+
+  for (int n = 0; n < nmodes; ++n) {
+    h_kx(n) = catalog.kx[n];
+    h_ky(n) = catalog.ky[n];
+    h_kz(n) = catalog.kz[n];
+    h_p1a(n) = phi1_coeffs.aka[n];
+    h_p1b(n) = phi1_coeffs.akb[n];
+    h_g2a0(n) = grad2_coeffs.aka0[n];
+    h_g2a1(n) = grad2_coeffs.aka1[n];
+    h_g2a2(n) = grad2_coeffs.aka2[n];
+    h_g2b0(n) = grad2_coeffs.akb0[n];
+    h_g2b1(n) = grad2_coeffs.akb1[n];
+    h_g2b2(n) = grad2_coeffs.akb2[n];
+  }
+
+  Kokkos::deep_copy(d_kx, h_kx);
+  Kokkos::deep_copy(d_ky, h_ky);
+  Kokkos::deep_copy(d_kz, h_kz);
+  Kokkos::deep_copy(d_p1a, h_p1a);
+  Kokkos::deep_copy(d_p1b, h_p1b);
+  Kokkos::deep_copy(d_g2a0, h_g2a0);
+  Kokkos::deep_copy(d_g2a1, h_g2a1);
+  Kokkos::deep_copy(d_g2a2, h_g2a2);
+  Kokkos::deep_copy(d_g2b0, h_g2b0);
+  Kokkos::deep_copy(d_g2b1, h_g2b1);
+  Kokkos::deep_copy(d_g2b2, h_g2b2);
+
+  auto &size = pmbp->pmb->mb_size;
+  auto sface_x1f = hydro.scalar_vface->x1f;
+  auto sface_x2f = hydro.scalar_vface->x2f;
+  auto sface_x3f = hydro.scalar_vface->x3f;
+
+  int il = is - ng;
+  int iu = ie + ng + 1;
+  int jl = multi_d ? js - ng : js;
+  int ju = multi_d ? je + ng : je;
+  int kl = three_d ? ks - ng : ks;
+  int ku = three_d ? ke + ng : ke;
+  par_for("scalar_face_clebsch_x1", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
+  KOKKOS_LAMBDA(int m, int k, int j, int i) {
+    Real &x1min = size.d_view(m).x1min;
+    Real &x1max = size.d_view(m).x1max;
+    const Real x1v = LeftEdgeX(i-is, nx1, x1min, x1max);
+
+    Real vx = 0.0;
+    if (multi_d && three_d) {
+      Real &x2min = size.d_view(m).x2min;
+      Real &x2max = size.d_view(m).x2max;
+      const Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+      const Real x2m = LeftEdgeX(j-js, nx2, x2min, x2max);
+      const Real x2p = LeftEdgeX(j-js+1, nx2, x2min, x2max);
+
+      Real &x3min = size.d_view(m).x3min;
+      Real &x3max = size.d_view(m).x3max;
+      const Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+      const Real x3m = LeftEdgeX(k-ks, nx3, x3min, x3max);
+      const Real x3p = LeftEdgeX(k-ks+1, nx3, x3min, x3max);
+
+      Real ax_tmp = 0.0;
+      Real ay_tmp = 0.0;
+      Real az_yp = 0.0;
+      AccumulateClebschVectorPotential(
+          d_kx, d_ky, d_kz, d_p1a, d_p1b, d_g2a0, d_g2a1, d_g2a2,
+          d_g2b0, d_g2b1, d_g2b2, nmodes, x1v, x2p, x3v,
+          ax_tmp, ay_tmp, az_yp);
+      Real az_ym = 0.0;
+      AccumulateClebschVectorPotential(
+          d_kx, d_ky, d_kz, d_p1a, d_p1b, d_g2a0, d_g2a1, d_g2a2,
+          d_g2b0, d_g2b1, d_g2b2, nmodes, x1v, x2m, x3v,
+          ax_tmp, ay_tmp, az_ym);
+      Real ay_zp = 0.0;
+      Real az_tmp = 0.0;
+      AccumulateClebschVectorPotential(
+          d_kx, d_ky, d_kz, d_p1a, d_p1b, d_g2a0, d_g2a1, d_g2a2,
+          d_g2b0, d_g2b1, d_g2b2, nmodes, x1v, x2v, x3p,
+          ax_tmp, ay_zp, az_tmp);
+      Real ay_zm = 0.0;
+      AccumulateClebschVectorPotential(
+          d_kx, d_ky, d_kz, d_p1a, d_p1b, d_g2a0, d_g2a1, d_g2a2,
+          d_g2b0, d_g2b1, d_g2b2, nmodes, x1v, x2v, x3m,
+          ax_tmp, ay_zm, az_tmp);
+
+      vx = (az_yp - az_ym)/size.d_view(m).dx2 - (ay_zp - ay_zm)/size.d_view(m).dx3;
+    }
+    sface_x1f(m,k,j,i) = (vx - stats.vmean1) * stats.scale;
+  });
+
+  if (multi_d) {
+    il = is - ng;
+    iu = ie + ng;
+    jl = js - ng;
+    ju = je + ng + 1;
+    kl = three_d ? ks - ng : ks;
+    ku = three_d ? ke + ng : ke;
+    par_for("scalar_face_clebsch_x2", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real &x1min = size.d_view(m).x1min;
+      Real &x1max = size.d_view(m).x1max;
+      const Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+      const Real x1m = LeftEdgeX(i-is, nx1, x1min, x1max);
+      const Real x1p = LeftEdgeX(i-is+1, nx1, x1min, x1max);
+
+      Real &x2min = size.d_view(m).x2min;
+      Real &x2max = size.d_view(m).x2max;
+      const Real x2v = LeftEdgeX(j-js, nx2, x2min, x2max);
+
+      Real vy = 0.0;
+      if (three_d) {
+        Real &x3min = size.d_view(m).x3min;
+        Real &x3max = size.d_view(m).x3max;
+        const Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+        const Real x3m = LeftEdgeX(k-ks, nx3, x3min, x3max);
+        const Real x3p = LeftEdgeX(k-ks+1, nx3, x3min, x3max);
+
+        Real ax_zp = 0.0;
+        Real ay_tmp = 0.0;
+        Real az_tmp = 0.0;
+        AccumulateClebschVectorPotential(
+            d_kx, d_ky, d_kz, d_p1a, d_p1b, d_g2a0, d_g2a1, d_g2a2,
+            d_g2b0, d_g2b1, d_g2b2, nmodes, x1v, x2v, x3p,
+            ax_zp, ay_tmp, az_tmp);
+        Real ax_zm = 0.0;
+        AccumulateClebschVectorPotential(
+            d_kx, d_ky, d_kz, d_p1a, d_p1b, d_g2a0, d_g2a1, d_g2a2,
+            d_g2b0, d_g2b1, d_g2b2, nmodes, x1v, x2v, x3m,
+            ax_zm, ay_tmp, az_tmp);
+        Real ax_tmp = 0.0;
+        Real az_xp = 0.0;
+        AccumulateClebschVectorPotential(
+            d_kx, d_ky, d_kz, d_p1a, d_p1b, d_g2a0, d_g2a1, d_g2a2,
+            d_g2b0, d_g2b1, d_g2b2, nmodes, x1p, x2v, x3v,
+            ax_tmp, ay_tmp, az_xp);
+        Real az_xm = 0.0;
+        AccumulateClebschVectorPotential(
+            d_kx, d_ky, d_kz, d_p1a, d_p1b, d_g2a0, d_g2a1, d_g2a2,
+            d_g2b0, d_g2b1, d_g2b2, nmodes, x1m, x2v, x3v,
+            ax_tmp, ay_tmp, az_xm);
+
+        vy = (ax_zp - ax_zm)/size.d_view(m).dx3 - (az_xp - az_xm)/size.d_view(m).dx1;
+      }
+      sface_x2f(m,k,j,i) = (vy - stats.vmean2) * stats.scale;
+    });
+  }
+
+  if (three_d) {
+    il = is - ng;
+    iu = ie + ng;
+    jl = js - ng;
+    ju = je + ng;
+    kl = ks - ng;
+    ku = ke + ng + 1;
+    par_for("scalar_face_clebsch_x3", DevExeSpace(), 0, nmb-1, kl, ku, jl, ju, il, iu,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      if (!cfg.active_v3) {
+        sface_x3f(m,k,j,i) = 0.0;
+        return;
+      }
+
+      Real &x1min = size.d_view(m).x1min;
+      Real &x1max = size.d_view(m).x1max;
+      const Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+      const Real x1m = LeftEdgeX(i-is, nx1, x1min, x1max);
+      const Real x1p = LeftEdgeX(i-is+1, nx1, x1min, x1max);
+
+      Real &x2min = size.d_view(m).x2min;
+      Real &x2max = size.d_view(m).x2max;
+      const Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+      const Real x2m = LeftEdgeX(j-js, nx2, x2min, x2max);
+      const Real x2p = LeftEdgeX(j-js+1, nx2, x2min, x2max);
+
+      Real &x3min = size.d_view(m).x3min;
+      Real &x3max = size.d_view(m).x3max;
+      const Real x3v = LeftEdgeX(k-ks, nx3, x3min, x3max);
+
+      Real ax_tmp = 0.0;
+      Real ay_xp = 0.0;
+      Real az_tmp = 0.0;
+      AccumulateClebschVectorPotential(
+          d_kx, d_ky, d_kz, d_p1a, d_p1b, d_g2a0, d_g2a1, d_g2a2,
+          d_g2b0, d_g2b1, d_g2b2, nmodes, x1p, x2v, x3v,
+          ax_tmp, ay_xp, az_tmp);
+      Real ay_xm = 0.0;
+      AccumulateClebschVectorPotential(
+          d_kx, d_ky, d_kz, d_p1a, d_p1b, d_g2a0, d_g2a1, d_g2a2,
+          d_g2b0, d_g2b1, d_g2b2, nmodes, x1m, x2v, x3v,
+          ax_tmp, ay_xm, az_tmp);
+      Real ax_yp = 0.0;
+      Real ay_tmp = 0.0;
+      AccumulateClebschVectorPotential(
+          d_kx, d_ky, d_kz, d_p1a, d_p1b, d_g2a0, d_g2a1, d_g2a2,
+          d_g2b0, d_g2b1, d_g2b2, nmodes, x1v, x2p, x3v,
+          ax_yp, ay_tmp, az_tmp);
+      Real ax_ym = 0.0;
+      AccumulateClebschVectorPotential(
+          d_kx, d_ky, d_kz, d_p1a, d_p1b, d_g2a0, d_g2a1, d_g2a2,
+          d_g2b0, d_g2b1, d_g2b2, nmodes, x1v, x2m, x3v,
+          ax_ym, ay_tmp, az_tmp);
+
+      const Real vz = (ay_xp - ay_xm)/size.d_view(m).dx1
+                    - (ax_yp - ax_ym)/size.d_view(m).dx2;
+      sface_x3f(m,k,j,i) = (vz - stats.vmean3) * stats.scale;
+    });
+  }
+}
+
+FaceDivergenceStats ComputeScalarFaceDivergenceStats(MeshBlockPack *pmbp,
+                                                     const TurbulenceConfig &cfg) {
+  FaceDivergenceStats stats;
+  auto &hydro = *pmbp->phydro;
+  if (!hydro.scalar_vface) return stats;
+
+  auto &indcs = pmbp->pmesh->mb_indcs;
+  const int is = indcs.is;
+  const int ie = indcs.ie;
+  const int js = indcs.js;
+  const int je = indcs.je;
+  const int ks = indcs.ks;
+  const int ke = indcs.ke;
+  const int nx1 = indcs.nx1;
+  const int nx2 = indcs.nx2;
+  const int nx3 = indcs.nx3;
+  const int nmb = pmbp->nmb_thispack;
+  const bool multi_d = cfg.mesh_multi_d;
+  const bool three_d = cfg.mesh_three_d;
+
+  const int nmkji = nmb*nx3*nx2*nx1;
+  const int nkji = nx3*nx2*nx1;
+  const int nji = nx2*nx1;
+
+  auto &size = pmbp->pmb->mb_size;
+  auto sface_x1f = hydro.scalar_vface->x1f;
+  auto sface_x2f = hydro.scalar_vface->x2f;
+  auto sface_x3f = hydro.scalar_vface->x3f;
+
+  Real sum_div2_vol = 0.0;
+  Real sum_vol = 0.0;
+  Real max_abs = 0.0;
+  Kokkos::parallel_reduce("scalar_face_divergence",
+                          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int &idx, Real &s_div2_vol, Real &s_vol, Real &s_max_abs) {
+    const int m = idx/nkji;
+    int k = (idx - m*nkji)/nji;
+    int j = (idx - m*nkji - k*nji)/nx1;
+    int i = (idx - m*nkji - k*nji - j*nx1) + is;
+    k += ks;
+    j += js;
+
+    const Real dx1 = size.d_view(m).dx1;
+    const Real dx2 = size.d_view(m).dx2;
+    const Real dx3 = size.d_view(m).dx3;
+    const Real vol = dx1 * dx2 * dx3;
+    Real div = (sface_x1f(m,k,j,i+1) - sface_x1f(m,k,j,i)) / dx1;
+    if (multi_d) {
+      div += (sface_x2f(m,k,j+1,i) - sface_x2f(m,k,j,i)) / dx2;
+    }
+    if (three_d) {
+      div += (sface_x3f(m,k+1,j,i) - sface_x3f(m,k,j,i)) / dx3;
+    }
+    const Real abs_div = fabs(div);
+    s_div2_vol += div * div * vol;
+    s_vol += vol;
+    if (abs_div > s_max_abs) s_max_abs = abs_div;
+  }, Kokkos::Sum<Real>(sum_div2_vol), Kokkos::Sum<Real>(sum_vol),
+     Kokkos::Max<Real>(max_abs));
+
+#if MPI_PARALLEL_ENABLED
+  Real local_sum[2] = {sum_div2_vol, sum_vol};
+  Real global_sum[2] = {0.0, 0.0};
+  MPI_Allreduce(local_sum, global_sum, 2, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+  sum_div2_vol = global_sum[0];
+  sum_vol = global_sum[1];
+  Real global_max = 0.0;
+  MPI_Allreduce(&max_abs, &global_max, 1, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
+  max_abs = global_max;
+#endif
+
+  if (sum_vol <= 0.0) return stats;
+  stats.valid = true;
+  stats.rms = std::sqrt(sum_div2_vol / sum_vol);
+  stats.max_abs = max_abs;
+  Real dx_min = cfg.lx / static_cast<Real>(cfg.global_nx1);
+  if (multi_d) dx_min = std::min(dx_min, cfg.ly / static_cast<Real>(cfg.global_nx2));
+  if (three_d) dx_min = std::min(dx_min, cfg.lz / static_cast<Real>(cfg.global_nx3));
+  const Real norm = (dx_min > 0.0) ? cfg.v_rms / dx_min : 0.0;
+  if (norm > kTiny) {
+    stats.normalized_rms = stats.rms / norm;
+    stats.normalized_max_abs = stats.max_abs / norm;
+  }
+  return stats;
+}
+
+void PrintScalarFaceDivergenceStats(const FaceDivergenceStats &stats) {
+  if (!stats.valid || global_variable::my_rank != 0) return;
+  std::cout << "  scalar_vface_discrete_divergence:"
+            << " rms=" << stats.rms
+            << ", max_abs=" << stats.max_abs
+            << ", normalized_rms=" << stats.normalized_rms
+            << ", normalized_max_abs=" << stats.normalized_max_abs
+            << std::endl;
+}
+
 std::vector<int> CountModesPerShell(const ModeCatalog &catalog, int nhigh) {
   std::vector<int> counts(nhigh + 1, 0);
   for (int shell : catalog.shell) {
@@ -2070,6 +2484,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
     const VectorCoefficients coeffs = GenerateProjectionCoefficients(cfg, catalog, &rstate);
     SynthesizeVelocityFromVectorModes(pmbp, cfg, den, catalog, coeffs);
     const VelocityStats stats = NormalizeVelocityField(pmbp, cfg);
+    FaceDivergenceStats face_div_stats;
     bool use_face_velocity = face_requested && face_scalar_ok;
     if (use_face_velocity && cfg.sol_frac < 1.0) {
       use_face_velocity = false;
@@ -2085,10 +2500,13 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
       const VectorCoefficients apot_coeffs =
           ConvertVelocityToVectorPotentialCoefficients(catalog, coeffs);
       PopulateScalarFaceVelocitiesFromVectorPotential(pmbp, cfg, catalog, apot_coeffs, stats);
+      face_div_stats = ComputeScalarFaceDivergenceStats(pmbp, cfg);
+      PrintScalarFaceDivergenceStats(face_div_stats);
     }
     const Real init_wall_seconds = GlobalMaxReal(ElapsedWallSeconds(init_start_time));
     recorded_init_wall_seconds = init_wall_seconds;
-    WriteProjectionDiagnostics(cfg, catalog, coeffs, stats, init_wall_seconds);
+    WriteProjectionDiagnostics(cfg, catalog, coeffs, stats, face_div_stats,
+                               init_wall_seconds);
     log_init_time();
     return;
   }
@@ -2138,6 +2556,7 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
     const VectorCoefficients vel_coeffs = ConvertPsiToVelocityCoefficients(catalog, psi_coeffs);
     SynthesizeVelocityFromVectorModes(pmbp, cfg, den, catalog, vel_coeffs);
     const VelocityStats stats = NormalizeVelocityField(pmbp, cfg);
+    FaceDivergenceStats face_div_stats;
     if (face_requested && face_scalar_ok) {
       if (global_variable::my_rank == 0) {
         std::cout << "  using divergence-free face velocity for scalar fluxes" << std::endl;
@@ -2145,10 +2564,13 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
       const VectorCoefficients apot_coeffs =
           ConvertVelocityToVectorPotentialCoefficients(catalog, vel_coeffs);
       PopulateScalarFaceVelocitiesFromVectorPotential(pmbp, cfg, catalog, apot_coeffs, stats);
+      face_div_stats = ComputeScalarFaceDivergenceStats(pmbp, cfg);
+      PrintScalarFaceDivergenceStats(face_div_stats);
     }
     const Real init_wall_seconds = GlobalMaxReal(ElapsedWallSeconds(init_start_time));
     recorded_init_wall_seconds = init_wall_seconds;
-    WriteStream2DDiagnostics(cfg, catalog, psi_coeffs, vel_coeffs, stats, init_wall_seconds);
+    WriteStream2DDiagnostics(cfg, catalog, psi_coeffs, vel_coeffs, stats,
+                             face_div_stats, init_wall_seconds);
     log_init_time();
     return;
   }
@@ -2199,17 +2621,21 @@ void InitTurbulentVelocity(MeshBlockPack *pmbp, ParameterInput *pin, Real den,
   SynthesizeClebschVelocityFromGradientModes(pmbp, cfg, den, catalog,
                                              grad1_coeffs, grad2_coeffs);
   const VelocityStats stats = NormalizeVelocityField(pmbp, cfg);
+  FaceDivergenceStats face_div_stats;
   if (face_requested && face_scalar_ok) {
     if (global_variable::my_rank == 0) {
-      std::cout << "  NOTE: divfree_scalar_flux ignored in clebsch v1; exact "
-                   "divergence-free face velocities are deferred."
+      std::cout << "  using divergence-free face velocity for scalar fluxes"
                 << std::endl;
     }
+    PopulateScalarFaceVelocitiesFromClebsch(
+        pmbp, cfg, catalog, phi1_coeffs, grad2_coeffs, stats);
+    face_div_stats = ComputeScalarFaceDivergenceStats(pmbp, cfg);
+    PrintScalarFaceDivergenceStats(face_div_stats);
   }
   const Real init_wall_seconds = GlobalMaxReal(ElapsedWallSeconds(init_start_time));
   recorded_init_wall_seconds = init_wall_seconds;
   WriteClebsch3DDiagnostics(cfg, catalog, phi1_coeffs, phi2_coeffs,
-                            stats, init_wall_seconds);
+                            stats, face_div_stats, init_wall_seconds);
   log_init_time();
 }
 

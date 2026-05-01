@@ -10,6 +10,7 @@
 
 #include <float.h>
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
 #include <string>
 #include <iostream> // cout
@@ -23,6 +24,26 @@
 #include "eos/eos.hpp"
 #include "conduction.hpp"
 #include "units/units.hpp"
+
+namespace {
+
+parabolic::ParabolicIntegratorMode ParseConductivityIntegrator(std::string block,
+    ParameterInput *pin) {
+  std::string integrator = pin->GetOrAddString(block, "conductivity_integrator",
+                                               "explicit");
+  if (integrator == "explicit") {
+    return parabolic::ParabolicIntegratorMode::explicit_mode;
+  } else if (integrator == "sts") {
+    return parabolic::ParabolicIntegratorMode::sts;
+  }
+
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+            << "<" << block << ">/conductivity_integrator = '" << integrator
+            << "' must be 'explicit' or 'sts'" << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+} // namespace
 
 KOKKOS_INLINE_FUNCTION
 Real VanLeerLimiter(const Real a, const Real b) {
@@ -81,6 +102,8 @@ Conduction::Conduction(std::string block, MeshBlockPack *pp, ParameterInput *pin
   kappa_ceiling = pin->GetOrAddReal(block,"cond_ceiling",
                   static_cast<Real>(std::numeric_limits<float>::max()));
   sat_hflux = pin->GetOrAddBoolean(block,"sat_hflux",false);
+  mode = ParseConductivityIntegrator(block, pin);
+  dtnew = static_cast<Real>(std::numeric_limits<float>::max());
 }
 
 //----------------------------------------------------------------------------------------

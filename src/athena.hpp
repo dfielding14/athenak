@@ -64,6 +64,9 @@ enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz};
 // constants that enumerate time evolution options
 enum TimeEvolution {tstatic, kinematic, dynamic};
 
+// constants used to choose explicit or STS-only diffusion terms
+enum class DiffusionSelection {explicit_only, sts_only};
+
 // constants that enumerate Physics Modules implemented in code
 enum PhysicsModule {HydroDynamics, MagnetoHydroDynamics,
                     SpaceTimeDynamics, UserDefined}; //SpaceTimeDynamics = Z4c
@@ -477,4 +480,3 @@ struct reduction_identity< array_sum::GlobalSum > {
 }
 
 #endif // ATHENA_HPP_
-

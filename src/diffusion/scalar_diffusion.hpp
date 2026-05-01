@@ -12,6 +12,7 @@
 #include <string>
 
 #include "athena.hpp"
+#include "diffusion/sts_types.hpp"
 #include "parameter_input.hpp"
 
 //----------------------------------------------------------------------------------------
@@ -26,6 +27,7 @@ class ScalarDiffusion {
   // data
   Real dtnew;         // diffusion timestep constraint
   Real kappa;         // scalar diffusivity coefficient D
+  parabolic::ParabolicIntegratorMode mode = parabolic::ParabolicIntegratorMode::explicit_mode;
 
   // function to add scalar diffusion fluxes
   void AddScalarDiffusionFlux(const DvceArray5D<Real> &w, const int nhydro,

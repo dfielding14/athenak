@@ -10,8 +10,11 @@
 //  processes, such as Ohmic diffusion. TODO(@user): add ambipolar diffusion, Hall effect
 
 #include "athena.hpp"
+#include "diffusion/sts_types.hpp"
 #include "parameter_input.hpp"
 #include "mesh/meshblock.hpp"
+
+struct EOS_Data;
 
 //----------------------------------------------------------------------------------------
 //! \class Resistivity
@@ -25,10 +28,12 @@ class Resistivity {
   // data
   Real dtnew;
   Real eta_ohm;
+  parabolic::ParabolicIntegratorMode mode = parabolic::ParabolicIntegratorMode::explicit_mode;
 
   // functions to add resistive E-Field and energy flux
   void OhmicEField(const DvceFaceFld4D<Real> &b0, DvceEdgeFld4D<Real> &efld);
   void OhmicEnergyFlux(const DvceFaceFld4D<Real> &b, DvceFaceFld5D<Real> &flx);
+  void NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos_data);
 
  private:
   MeshBlockPack* pmy_pack;

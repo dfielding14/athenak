@@ -33,6 +33,10 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     coarse_u0("ccons",1,1,1,1,1),
     coarse_w0("cprim",1,1,1,1,1),
     u1("cons1",1,1,1,1,1),
+    u_sts0("u_sts0",1,1,1,1,1),
+    u_sts1("u_sts1",1,1,1,1,1),
+    u_sts2("u_sts2",1,1,1,1,1),
+    u_sts_rhs("u_sts_rhs",1,1,1,1,1),
     uflx("uflx",1,1,1,1,1),
     utest("utest",1,1,1,1,1),
     fofc("fofc",1,1,1,1) {
@@ -76,6 +80,14 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
   // Viscosity (if requested in input file)
   if (pin->DoesParameterExist("hydro","viscosity")) {
     pvisc = new Viscosity("hydro", ppack, pin);
+    has_sts_viscosity = (pvisc->mode == parabolic::ParabolicIntegratorMode::sts);
+    has_explicit_viscosity =
+        (pvisc->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
+    ppack->RegisterParabolicProcess({"hydro/viscosity",
+                                     parabolic::ParabolicProcessOwner::hydro,
+                                     pvisc->mode,
+                                     parabolic::ParabolicUpdateShape::cell_centered,
+                                     &(pvisc->dtnew)});
   } else {
     pvisc = nullptr;
   }
@@ -84,6 +96,18 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
   if (pin->DoesParameterExist("hydro","conductivity") ||
       pin->DoesParameterExist("hydro","tdep_conductivity")) {
     pcond = new Conduction("hydro", ppack, pin);
+    const bool active_conduction = (pcond->kappa > 0.0 || pcond->tdep_kappa);
+    has_sts_conduction = active_conduction &&
+        (pcond->mode == parabolic::ParabolicIntegratorMode::sts);
+    has_explicit_conduction = active_conduction &&
+        (pcond->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
+    if (active_conduction) {
+      ppack->RegisterParabolicProcess({"hydro/conductivity",
+                                       parabolic::ParabolicProcessOwner::hydro,
+                                       pcond->mode,
+                                       parabolic::ParabolicUpdateShape::cell_centered,
+                                       &(pcond->dtnew)});
+    }
   } else {
     pcond = nullptr;
   }
@@ -92,6 +116,18 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
   if (pin->DoesParameterExist("hydro","scalar_diffusivity")) {
     if (nscalars > 0) {
       pscalar_diff = new ScalarDiffusion("hydro", ppack, pin);
+      const bool active_scalar_diffusion = (pscalar_diff->kappa > 0.0);
+      has_sts_scalar_diffusion = active_scalar_diffusion &&
+          (pscalar_diff->mode == parabolic::ParabolicIntegratorMode::sts);
+      has_explicit_scalar_diffusion = active_scalar_diffusion &&
+          (pscalar_diff->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
+      if (active_scalar_diffusion) {
+        ppack->RegisterParabolicProcess({"hydro/scalar_diffusivity",
+                                         parabolic::ParabolicProcessOwner::hydro,
+                                         pscalar_diff->mode,
+                                         parabolic::ParabolicUpdateShape::cell_centered,
+                                         &(pscalar_diff->dtnew)});
+      }
     } else {
       std::cout << "### WARNING: scalar_diffusivity specified but nscalars=0" << std::endl;
       pscalar_diff = nullptr;
@@ -102,6 +138,9 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // Source terms (constructor parses input file to initialize only srcterms needed)
   psrc = new SourceTerms("hydro", ppack, pin);
+
+  has_any_sts_diffusion = (has_sts_viscosity || has_sts_conduction ||
+                           has_sts_scalar_diffusion);
 
   // (3) read time-evolution option [already error checked in driver constructor]
   // Then initialize memory and algorithms for reconstruction and Riemann solvers
@@ -309,6 +348,12 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
       int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
       int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
       Kokkos::realloc(u1,       nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+      if (has_any_sts_diffusion) {
+        Kokkos::realloc(u_sts0,    nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(u_sts1,    nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(u_sts2,    nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(u_sts_rhs, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
+      }
       Kokkos::realloc(uflx.x1f, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
       Kokkos::realloc(uflx.x2f, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
       Kokkos::realloc(uflx.x3f, nmb, (nhydro+nscalars), ncells3, ncells2, ncells1);
