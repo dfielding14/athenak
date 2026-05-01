@@ -473,7 +473,7 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
     if (out->out_params.file_type != "rst" && 
 	out->out_params.file_type != "rst_prtcl") continue; 
     out->LoadOutputData(pmesh);
-    out->WriteOutputFile(pmesh, pin, false);
+    out->WriteOutputFile(pmesh, pin, true);
   }
 
   Kokkos::fence();
