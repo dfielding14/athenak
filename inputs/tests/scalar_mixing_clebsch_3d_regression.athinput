@@ -50,7 +50,6 @@ scalar_only     = true
 <problem>
 rho0                          = 1.0
 temp0                         = 1.0
-scalar_init                   = 0.5
 user_srcs                     = false
 mean_gradient                 = 0.0
 turb_velocity_method          = clebsch
@@ -59,7 +58,6 @@ turb_v_rms                    = 1.0
 turb_nlow                     = 2
 turb_nhigh                    = 10
 turb_expo                     = 1.6666667
-turb_sol_frac                 = 1.0
 turb_rseed                    = 12345
 turb_k_crit                   = 16.0
 turb_dump_generator_diagnostics = true
