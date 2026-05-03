@@ -8,6 +8,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <vector>
 
 #include "athena.hpp"
 #include "driver/driver.hpp"
@@ -22,6 +23,21 @@ namespace particles {
 KOKKOS_INLINE_FUNCTION
 Real GravPot(Real x1, Real x2, Real x3, Real G, Real r_s, Real rho_s,
              Real M_gal, Real a_gal, Real z_gal, Real R200, Real rho_mean);
+
+KOKKOS_INLINE_FUNCTION
+Real HashToUnitReal(int64_t seed) {
+  uint64_t z = static_cast<uint64_t>(seed);
+  z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+  z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+  z = z ^ (z >> 31);
+  return static_cast<Real>(z & 0x7FFFFFFFULL) / static_cast<Real>(0x80000000ULL);
+}
+
+KOKKOS_INLINE_FUNCTION
+bool IsPhysicalInflowParticleBoundary(BoundaryFlag bc) {
+  return (bc != BoundaryFlag::block && bc != BoundaryFlag::periodic &&
+          bc != BoundaryFlag::shear_periodic && bc != BoundaryFlag::undef);
+}
 
 //----------------------------------------------------------------------------------------
 //! \fn void Particles::ParticlesPush
@@ -466,7 +482,7 @@ Real GravPot(Real x1, Real x2, Real x3, Real G, Real r_s, Real rho_s,
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus Particles::PushLagrangianMC
 //! \brief push with Lagrangian Monte Carlo method (Genel+ 2013, MNRAS.435.1426G)
-//!        WARNING: this implementation may not work well with AMR
+//!        AMR corrections are applied after particle communication and mesh refinement.
 
 TaskStatus Particles::PushLagrangianMC(Driver *pdriver, int stage) {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
@@ -588,6 +604,265 @@ TaskStatus Particles::PushLagrangianMC(Driver *pdriver, int stage) {
       }
     }
   });
+
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus Particles::InjectLagrangianMCInflow
+//! \brief add MC tracer particles through physical domain faces with inward mass flux
+
+TaskStatus Particles::InjectLagrangianMCInflow(Driver *pdriver, int stage) {
+  if (!lmc_inject_at_inflow || pusher != ParticlesPusher::lagrangian_mc ||
+      lmc_mass_per_particle <= 0.0) {
+    return TaskStatus::complete;
+  }
+
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is;
+  int ie = indcs.ie;
+  int js = indcs.js;
+  int je = indcs.je;
+  int ks = indcs.ks;
+  int ke = indcs.ke;
+  int nx1 = indcs.nx1;
+  int nx2 = indcs.nx2;
+  int nx3 = indcs.nx3;
+  bool multi_d = pmy_pack->pmesh->multi_d;
+  bool three_d = pmy_pack->pmesh->three_d;
+  int nmb = pmy_pack->nmb_thispack;
+
+  int x1_face_size = nx2*nx3;
+  int x2_face_size = nx1*nx3;
+  int x3_face_size = nx1*nx2;
+  int slots_per_mb = 2*x1_face_size;
+  if (multi_d) { slots_per_mb += 2*x2_face_size; }
+  if (three_d) { slots_per_mb += 2*x3_face_size; }
+  int nslots = nmb*slots_per_mb;
+  if (nslots <= 0) {
+    return TaskStatus::complete;
+  }
+
+  auto &mbsize = pmy_pack->pmb->mb_size;
+  auto &mb_bcs = pmy_pack->pmb->mb_bcs;
+  auto &uflxidn_ = (pmy_pack->phydro != nullptr)?
+                   pmy_pack->phydro->uflxidnsaved:pmy_pack->pmhd->uflxidnsaved;
+  auto &flx1_ = uflxidn_.x1f;
+  auto &flx2_ = uflxidn_.x2f;
+  auto &flx3_ = uflxidn_.x3f;
+  Real mass_per_particle = lmc_mass_per_particle;
+  int64_t seed = lmc_inject_seed;
+  int ncycle = pmy_pack->pmesh->ncycle;
+  int gids = pmy_pack->gids;
+
+  DualArray2D<int> inject_count("lmc_inflow_count", nslots, 2);
+  auto &count = inject_count;
+  par_for("lmc_inflow_count", DevExeSpace(), 0, nslots-1,
+  KOKKOS_LAMBDA(const int slot) {
+    int m = slot / slots_per_mb;
+    int rem = slot - m*slots_per_mb;
+    int face = BoundaryFace::inner_x1;
+    int i = is;
+    int j = js;
+    int k = ks;
+    Real signed_inflow = 0.0;
+
+    if (rem < x1_face_size) {
+      int q = rem;
+      k = ks + q/nx2;
+      j = js + (q - (q/nx2)*nx2);
+      i = is;
+      face = BoundaryFace::inner_x1;
+      signed_inflow = flx1_(m,k,j,is);
+    } else if (rem < 2*x1_face_size) {
+      int q = rem - x1_face_size;
+      k = ks + q/nx2;
+      j = js + (q - (q/nx2)*nx2);
+      i = ie;
+      face = BoundaryFace::outer_x1;
+      signed_inflow = -flx1_(m,k,j,ie+1);
+    } else if (multi_d && rem < 2*x1_face_size + x2_face_size) {
+      int q = rem - 2*x1_face_size;
+      k = ks + q/nx1;
+      i = is + (q - (q/nx1)*nx1);
+      j = js;
+      face = BoundaryFace::inner_x2;
+      signed_inflow = flx2_(m,k,js,i);
+    } else if (multi_d && rem < 2*x1_face_size + 2*x2_face_size) {
+      int q = rem - 2*x1_face_size - x2_face_size;
+      k = ks + q/nx1;
+      i = is + (q - (q/nx1)*nx1);
+      j = je;
+      face = BoundaryFace::outer_x2;
+      signed_inflow = -flx2_(m,k,je+1,i);
+    } else if (three_d && rem < 2*x1_face_size + 2*x2_face_size + x3_face_size) {
+      int q = rem - 2*x1_face_size - 2*x2_face_size;
+      j = js + q/nx1;
+      i = is + (q - (q/nx1)*nx1);
+      k = ks;
+      face = BoundaryFace::inner_x3;
+      signed_inflow = flx3_(m,ks,j,i);
+    } else {
+      int q = rem - 2*x1_face_size - 2*x2_face_size - x3_face_size;
+      j = js + q/nx1;
+      i = is + (q - (q/nx1)*nx1);
+      k = ke;
+      face = BoundaryFace::outer_x3;
+      signed_inflow = -flx3_(m,ke+1,j,i);
+    }
+
+    int np = 0;
+    if (IsPhysicalInflowParticleBoundary(mb_bcs.d_view(m,face))) {
+      Real vol = mbsize.d_view(m).dx1*mbsize.d_view(m).dx2*mbsize.d_view(m).dx3;
+      Real expected = fmax(signed_inflow, 0.0)*vol/mass_per_particle;
+      np = static_cast<int>(expected);
+      Real frac = expected - static_cast<Real>(np);
+      int64_t local_seed = seed + static_cast<int64_t>(gids + m)*999983LL +
+                           static_cast<int64_t>(face)*13007LL +
+                           static_cast<int64_t>(i)*7919LL +
+                           static_cast<int64_t>(j)*104729LL +
+                           static_cast<int64_t>(k)*524287LL +
+                           static_cast<int64_t>(ncycle)*15485863LL;
+      if (HashToUnitReal(local_seed) < frac) {
+        np += 1;
+      }
+    }
+    count.d_view(slot,0) = np;
+    count.d_view(slot,1) = 0;
+  });
+
+  inject_count.template modify<DevExeSpace>();
+  inject_count.template sync<HostMemSpace>();
+
+  int nnew = 0;
+  int remaining = lmc_max_inject_per_step;
+  for (int slot=0; slot<nslots; ++slot) {
+    int np = inject_count.h_view(slot,0);
+    if (lmc_max_inject_per_step >= 0) {
+      if (remaining <= 0) {
+        np = 0;
+      } else if (np > remaining) {
+        np = remaining;
+      }
+      remaining -= np;
+    }
+    inject_count.h_view(slot,0) = np;
+    inject_count.h_view(slot,1) = nnew;
+    nnew += np;
+  }
+
+  if (nnew <= 0) {
+    return TaskStatus::complete;
+  }
+
+  inject_count.template modify<HostMemSpace>();
+  inject_count.template sync<DevExeSpace>();
+
+  std::vector<int> nnew_eachrank(global_variable::nranks, 0);
+  nnew_eachrank[global_variable::my_rank] = nnew;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allgather(&nnew, 1, MPI_INT, nnew_eachrank.data(), 1, MPI_INT, MPI_COMM_WORLD);
+#endif
+  int tagstart = next_tag;
+  int nnew_total = 0;
+  for (int n=0; n<global_variable::nranks; ++n) {
+    if (n < global_variable::my_rank) {
+      tagstart += nnew_eachrank[n];
+    }
+    nnew_total += nnew_eachrank[n];
+  }
+  next_tag += nnew_total;
+
+  int old_npart = nprtcl_thispack;
+  int new_npart = old_npart + nnew;
+  DvceArray2D<Real> new_pr("lmc_inflow_rdata", nrdata, new_npart);
+  DvceArray2D<int> new_pi("lmc_inflow_idata", nidata, new_npart);
+  auto old_pr = prtcl_rdata;
+  auto old_pi = prtcl_idata;
+  auto &mblev = pmy_pack->pmb->mb_lev;
+  auto counts = inject_count;
+
+  if (old_npart > 0) {
+    par_for("lmc_inflow_copy", DevExeSpace(), 0, old_npart-1,
+    KOKKOS_LAMBDA(const int p) {
+      for (int n=0; n<nidata; ++n) {
+        new_pi(n,p) = old_pi(n,p);
+      }
+      for (int n=0; n<nrdata; ++n) {
+        new_pr(n,p) = old_pr(n,p);
+      }
+    });
+  }
+
+  par_for("lmc_inflow_fill", DevExeSpace(), 0, nslots-1,
+  KOKKOS_LAMBDA(const int slot) {
+    int np = counts.d_view(slot,0);
+    if (np <= 0) {
+      return;
+    }
+
+    int m = slot / slots_per_mb;
+    int rem = slot - m*slots_per_mb;
+    int i = is;
+    int j = js;
+    int k = ks;
+
+    if (rem < x1_face_size) {
+      int q = rem;
+      k = ks + q/nx2;
+      j = js + (q - (q/nx2)*nx2);
+      i = is;
+    } else if (rem < 2*x1_face_size) {
+      int q = rem - x1_face_size;
+      k = ks + q/nx2;
+      j = js + (q - (q/nx2)*nx2);
+      i = ie;
+    } else if (multi_d && rem < 2*x1_face_size + x2_face_size) {
+      int q = rem - 2*x1_face_size;
+      k = ks + q/nx1;
+      i = is + (q - (q/nx1)*nx1);
+      j = js;
+    } else if (multi_d && rem < 2*x1_face_size + 2*x2_face_size) {
+      int q = rem - 2*x1_face_size - x2_face_size;
+      k = ks + q/nx1;
+      i = is + (q - (q/nx1)*nx1);
+      j = je;
+    } else if (three_d && rem < 2*x1_face_size + 2*x2_face_size + x3_face_size) {
+      int q = rem - 2*x1_face_size - 2*x2_face_size;
+      j = js + q/nx1;
+      i = is + (q - (q/nx1)*nx1);
+      k = ks;
+    } else {
+      int q = rem - 2*x1_face_size - 2*x2_face_size - x3_face_size;
+      j = js + q/nx1;
+      i = is + (q - (q/nx1)*nx1);
+      k = ke;
+    }
+
+    Real x = mbsize.d_view(m).x1min +
+             (static_cast<Real>(i - is) + 0.5)*mbsize.d_view(m).dx1;
+    Real y = mbsize.d_view(m).x2min +
+             (static_cast<Real>(j - js) + 0.5)*mbsize.d_view(m).dx2;
+    Real z = mbsize.d_view(m).x3min +
+             (static_cast<Real>(k - ks) + 0.5)*mbsize.d_view(m).dx3;
+    int first = old_npart + counts.d_view(slot,1);
+    for (int n=0; n<np; ++n) {
+      int p = first + n;
+      new_pi(PGID,p) = gids + m;
+      new_pi(PTAG,p) = tagstart + counts.d_view(slot,1) + n;
+      new_pi(PLASTMOVE,p) = 0;
+      new_pi(PLASTLEVEL,p) = mblev.d_view(m);
+      new_pr(LMCX,p) = x;
+      new_pr(LMCY,p) = y;
+      new_pr(LMCZ,p) = z;
+    }
+  });
+  Kokkos::fence();
+
+  prtcl_rdata = new_pr;
+  prtcl_idata = new_pi;
+  nprtcl_thispack = new_npart;
+  pmy_pack->pmesh->CountParticles();
 
   return TaskStatus::complete;
 }

@@ -42,6 +42,7 @@ ParticleVTKOutput::ParticleVTKOutput(ParameterInput *pin, Mesh *pm, OutputParame
 
 void ParticleVTKOutput::LoadOutputData(Mesh *pm) {
   particles::Particles *pp = pm->pmb_pack->ppart;
+  pm->CountParticles();
   npout_thisrank = pm->nprtcl_thisrank;
   npout_total = pm->nprtcl_total;
   Kokkos::realloc(outpart_rdata, pp->nrdata, npout_thisrank);
@@ -128,16 +129,21 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
   // allocate 1D vector of floats used to convert and output particle data
   float *data = new float[3*npout_thisrank];
+  bool is_lagrangian_mc =
+      (pm->pmb_pack->ppart->particle_type == ParticleType::lagrangian_mc);
   // Loop over particles, load positions into data[]
   for (int p=0; p<npout_thisrank; ++p) {
-    data[3*p] = static_cast<float>(outpart_rdata(IPX,p));
+    data[3*p] = static_cast<float>(is_lagrangian_mc ?
+                                   outpart_rdata(LMCX,p) : outpart_rdata(IPX,p));
     if (pm->multi_d) {
-      data[(3*p)+1] = static_cast<float>(outpart_rdata(IPY,p));
+      data[(3*p)+1] = static_cast<float>(is_lagrangian_mc ?
+                                         outpart_rdata(LMCY,p) : outpart_rdata(IPY,p));
     } else {
       data[(3*p)+1] = static_cast<float>(pm->mesh_size.x2min);
     }
     if (pm->three_d) {
-      data[(3*p)+2] = static_cast<float>(outpart_rdata(IPZ,p));
+      data[(3*p)+2] = static_cast<float>(is_lagrangian_mc ?
+                                         outpart_rdata(LMCZ,p) : outpart_rdata(IPZ,p));
     } else {
       data[(3*p)+2] = static_cast<float>(pm->mesh_size.x3min);
     }
@@ -198,6 +204,15 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           << "LOOKUP_TABLE default" << std::endl;
     } else if (n == static_cast<int>(PTAG)) {
       msg << std::endl << "SCALARS ptag float" << std::endl
+          << "LOOKUP_TABLE default" << std::endl;
+    } else if (is_lagrangian_mc && n == static_cast<int>(PLASTMOVE)) {
+      msg << std::endl << "SCALARS plastmove float" << std::endl
+          << "LOOKUP_TABLE default" << std::endl;
+    } else if (is_lagrangian_mc && n == static_cast<int>(PLASTLEVEL)) {
+      msg << std::endl << "SCALARS plastlevel float" << std::endl
+          << "LOOKUP_TABLE default" << std::endl;
+    } else {
+      msg << std::endl << "SCALARS idata" << n << " float" << std::endl
           << "LOOKUP_TABLE default" << std::endl;
     }
 

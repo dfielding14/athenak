@@ -48,6 +48,7 @@
 #include <string>   // std::string, to_string()
 
 #include "athena.hpp"
+#include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "outputs.hpp"
@@ -235,10 +236,22 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
       } else if (opar.file_type.compare("vtk") == 0) {
         pnode = new MeshVTKOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
-      } else if (opar.file_type.compare("pvtk") == 0) {
+      } else if (opar.file_type.compare("pvtk") == 0 ||
+                 opar.file_type.compare("prtcl_bin") == 0) {
+        if (opar.file_type.compare("prtcl_bin") == 0 && global_variable::my_rank == 0) {
+          std::cout << "### WARNING in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "file_type='prtcl_bin' is deprecated; using "
+                    << "particle VTK output. Prefer file_type='pvtk'." << std::endl;
+        }
         pnode = new ParticleVTKOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
-      } else if (opar.file_type.compare("trk") == 0) {
+      } else if (opar.file_type.compare("trk") == 0 ||
+                 opar.file_type.compare("prtcl_trk") == 0) {
+        if (opar.file_type.compare("prtcl_trk") == 0 && global_variable::my_rank == 0) {
+          std::cout << "### WARNING in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "file_type='prtcl_trk' is deprecated; use "
+                    << "file_type='trk'." << std::endl;
+        }
         pnode = new TrackedParticleOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("cbin") == 0) {

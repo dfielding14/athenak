@@ -61,6 +61,17 @@ void MarkForDestruction(int *pcounter, DualArray1D<ParticleLocationData> dlist, 
   return;
 }
 
+KOKKOS_INLINE_FUNCTION
+bool IsPeriodicParticleBoundary(BoundaryFlag bc) {
+  return (bc == BoundaryFlag::periodic || bc == BoundaryFlag::shear_periodic);
+}
+
+KOKKOS_INLINE_FUNCTION
+bool IsPhysicalParticleBoundary(BoundaryFlag bc) {
+  return (bc != BoundaryFlag::block && bc != BoundaryFlag::periodic &&
+          bc != BoundaryFlag::shear_periodic && bc != BoundaryFlag::undef);
+}
+
 //----------------------------------------------------------------------------------------
 //! \fn void ParticlesBoundaryValues::SetNewGID()
 //! \brief
@@ -78,23 +89,37 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
   auto &nghbr = pmy_part->pmy_pack->pmb->nghbr;
   auto &psendl = sendlist;
   auto &pdestroyl = destroylist;
+  int nmb_thispack = pmy_part->pmy_pack->nmb_thispack;
   bool &multi_d = pmy_part->pmy_pack->pmesh->multi_d;
   bool &three_d = pmy_part->pmy_pack->pmesh->three_d;
   auto &mb_bcs = pmy_part->pmy_pack->pmb->mb_bcs;
+  bool is_lagrangian_mc = (pmy_part->particle_type == ParticleType::lagrangian_mc);
 
   // Create device-side counter
   Kokkos::View<int> atom_count("atom_count");
-  Kokkos::View<int> atom_d_count("atom_d_count"); 
+  Kokkos::View<int> atom_d_count("atom_d_count");
+  Kokkos::deep_copy(atom_count, 0);
+  Kokkos::deep_copy(atom_d_count, 0);
 
   Kokkos::realloc(sendlist, static_cast<int>(npart));
   Kokkos::realloc(destroylist, static_cast<int>(npart));
 
   par_for("part_update",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
+    if (is_lagrangian_mc && pi(PLASTMOVE,p) < 0) {
+      MarkForDestruction(&atom_d_count(), pdestroyl, p);
+      return;
+    }
+
     int m = pi(PGID,p) - gids;
+    if (m < 0 || m >= nmb_thispack) {
+      MarkForDestruction(&atom_d_count(), pdestroyl, p);
+      return;
+    }
+
     int mylevel = mblev.d_view(m);
-    Real x1 = pr(IPX,p);
-    Real x2 = pr(IPY,p);
-    Real x3 = pr(IPZ,p);
+    Real x1 = is_lagrangian_mc ? pr(LMCX,p) : pr(IPX,p);
+    Real x2 = is_lagrangian_mc ? pr(LMCY,p) : pr(IPY,p);
+    Real x3 = is_lagrangian_mc ? pr(LMCZ,p) : pr(IPZ,p);
 
     // length of MeshBlock in each direction
     Real lx = (mbsize.d_view(m).x1max - mbsize.d_view(m).x1min);
@@ -115,6 +140,19 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
 
     // only update particle GID if it has crossed MeshBlock boundary
     if (abs(ix) + abs(iy) + abs(iz) != 0) {
+      BoundaryFlag bc_ix = (ix < 0) ? mb_bcs.d_view(m,BoundaryFace::inner_x1) :
+                           (ix > 0) ? mb_bcs.d_view(m,BoundaryFace::outer_x1) :
+                                      BoundaryFlag::block;
+      BoundaryFlag bc_iy = (iy < 0) ? mb_bcs.d_view(m,BoundaryFace::inner_x2) :
+                           (iy > 0) ? mb_bcs.d_view(m,BoundaryFace::outer_x2) :
+                                      BoundaryFlag::block;
+      BoundaryFlag bc_iz = (iz < 0) ? mb_bcs.d_view(m,BoundaryFace::inner_x3) :
+                           (iz > 0) ? mb_bcs.d_view(m,BoundaryFace::outer_x3) :
+                                      BoundaryFlag::block;
+      bool check_boundary = IsPhysicalParticleBoundary(bc_ix) ||
+                            IsPhysicalParticleBoundary(bc_iy) ||
+                            IsPhysicalParticleBoundary(bc_iz);
+
       bool send_to_coarser = false;
       if (ix < 0) {
         // level might be initizialized to -1 on some neighbours
@@ -157,13 +195,6 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
         }
       }
       int indx = 0;
-      bool check_boundary =
-        ( mb_bcs.d_view(m,BoundaryFace::inner_x3) == BoundaryFlag::user && iz < 0)
-        || ( mb_bcs.d_view(m,BoundaryFace::outer_x3) == BoundaryFlag::user && iz > 0)
-        || ( mb_bcs.d_view(m,BoundaryFace::inner_x2) == BoundaryFlag::user && iy < 0)
-        || ( mb_bcs.d_view(m,BoundaryFace::outer_x2) == BoundaryFlag::user && iy > 0)
-        || ( mb_bcs.d_view(m,BoundaryFace::inner_x1) == BoundaryFlag::user && ix < 0)
-        || ( mb_bcs.d_view(m,BoundaryFace::outer_x1) == BoundaryFlag::user && ix > 0);
       // Add particle to destruction list
       // At the time of sending the particles that need to be destroyed
       // are treated like those that have been sent
@@ -289,20 +320,44 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
         }
 
         // reset x,y,z positions if particle crosses Mesh boundary using periodic BCs
-        if (x1 < meshsize.x1min) {
-          pr(IPX,p) += (meshsize.x1max - meshsize.x1min);
-        } else if (x1 > meshsize.x1max) {
-          pr(IPX,p) -= (meshsize.x1max - meshsize.x1min);
+        if (x1 < meshsize.x1min && IsPeriodicParticleBoundary(bc_ix)) {
+          if (is_lagrangian_mc) {
+            pr(LMCX,p) += (meshsize.x1max - meshsize.x1min);
+          } else {
+            pr(IPX,p) += (meshsize.x1max - meshsize.x1min);
+          }
+        } else if (x1 > meshsize.x1max && IsPeriodicParticleBoundary(bc_ix)) {
+          if (is_lagrangian_mc) {
+            pr(LMCX,p) -= (meshsize.x1max - meshsize.x1min);
+          } else {
+            pr(IPX,p) -= (meshsize.x1max - meshsize.x1min);
+          }
         }
-        if (x2 < meshsize.x2min) {
-          pr(IPY,p) += (meshsize.x2max - meshsize.x2min);
-        } else if (x2 > meshsize.x2max) {
-          pr(IPY,p) -= (meshsize.x2max - meshsize.x2min);
+        if (x2 < meshsize.x2min && IsPeriodicParticleBoundary(bc_iy)) {
+          if (is_lagrangian_mc) {
+            pr(LMCY,p) += (meshsize.x2max - meshsize.x2min);
+          } else {
+            pr(IPY,p) += (meshsize.x2max - meshsize.x2min);
+          }
+        } else if (x2 > meshsize.x2max && IsPeriodicParticleBoundary(bc_iy)) {
+          if (is_lagrangian_mc) {
+            pr(LMCY,p) -= (meshsize.x2max - meshsize.x2min);
+          } else {
+            pr(IPY,p) -= (meshsize.x2max - meshsize.x2min);
+          }
         }
-        if (x3 < meshsize.x3min) {
-          pr(IPZ,p) += (meshsize.x3max - meshsize.x3min);
-        } else if (x3 > meshsize.x3max) {
-          pr(IPZ,p) -= (meshsize.x3max - meshsize.x3min);
+        if (x3 < meshsize.x3min && IsPeriodicParticleBoundary(bc_iz)) {
+          if (is_lagrangian_mc) {
+            pr(LMCZ,p) += (meshsize.x3max - meshsize.x3min);
+          } else {
+            pr(IPZ,p) += (meshsize.x3max - meshsize.x3min);
+          }
+        } else if (x3 > meshsize.x3max && IsPeriodicParticleBoundary(bc_iz)) {
+          if (is_lagrangian_mc) {
+            pr(LMCZ,p) -= (meshsize.x3max - meshsize.x3min);
+          } else {
+            pr(IPZ,p) -= (meshsize.x3max - meshsize.x3min);
+          }
         }
       }
     }

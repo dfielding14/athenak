@@ -38,7 +38,22 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // select particle type
   {
-    std::string ptype = pin->GetString("particles","particle_type");
+    std::string ptype;
+    if (pin->DoesParameterExist("particles","particle_type")) {
+      ptype = pin->GetString("particles","particle_type");
+    } else if (pin->DoesParameterExist("particles","type")) {
+      ptype = pin->GetString("particles","type");
+      if (global_variable::my_rank == 0) {
+        std::cout << "### WARNING in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "<particles>/type is deprecated; use "
+                  << "<particles>/particle_type instead." << std::endl;
+      }
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Particle type must be specified with "
+                << "<particles>/particle_type" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     if (ptype.compare("cosmic_ray") == 0) {
 
       particle_type = ParticleType::cosmic_ray;
@@ -62,6 +77,15 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
       // read random seed for particle random number generation
       random_seed = pin->GetOrAddInteger("particles","random_seed",-1 - pmy_pack->gids);
+      lmc_inject_at_inflow =
+          pin->GetOrAddBoolean("particles","inject_at_inflow",false);
+      lmc_inject_seed =
+          pin->GetOrAddInteger("particles","inject_seed",random_seed + 104729);
+      lmc_max_inject_per_step =
+          pin->GetOrAddInteger("particles","max_inject_per_step",-1);
+      next_tag = 0;
+      lmc_mass_per_particle =
+          pin->GetOrAddReal("particles","mass_per_particle",-1.0);
 
       // read number of particles per cell, and calculate number of particles this pack
       Real ppc = pin->GetOrAddReal("particles","ppc",1.0);
@@ -175,6 +199,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
   // allocate boundary object
   min_radius = -1;  // default: no min_radius restriction (for lagrangian_mc)
+  if (particle_type == ParticleType::lagrangian_mc) {
+    min_radius = pin->GetOrAddReal("particles","min_radius",-1.0);
+  }
   pbval_part = new ParticlesBoundaryValues(this, pin);
 
   // Initialize particles based on type
@@ -405,12 +432,16 @@ void Particles::InitializeStars(ParameterInput *pin) {
 
 void Particles::CreateParticleTags(ParameterInput *pin) {
   std::string assign = pin->GetOrAddString("particles","assign_tag","index_order");
+  int max_tag_thisrank = -1;
 
   // tags are assigned sequentially within this rank, starting at 0 with rank=0
   if (assign.compare("index_order") == 0) {
     int tagstart = 0;
     for (int n=1; n<=global_variable::my_rank; ++n) {
       tagstart += pmy_pack->pmesh->nprtcl_eachrank[n-1];
+    }
+    if (nprtcl_thispack > 0) {
+      max_tag_thisrank = tagstart + nprtcl_thispack - 1;
     }
 
     auto &pi = prtcl_idata;
@@ -423,6 +454,9 @@ void Particles::CreateParticleTags(ParameterInput *pin) {
   } else if (assign.compare("rank_order") == 0) {
     int myrank = global_variable::my_rank;
     int nranks = global_variable::nranks;
+    if (nprtcl_thispack > 0) {
+      max_tag_thisrank = myrank + nranks*(nprtcl_thispack - 1);
+    }
     auto &pi = prtcl_idata;
     par_for("ptags",DevExeSpace(),0,(nprtcl_thispack-1),
     KOKKOS_LAMBDA(const int p) {
@@ -436,6 +470,12 @@ void Particles::CreateParticleTags(ParameterInput *pin) {
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
+
+  next_tag = max_tag_thisrank;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &next_tag, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+#endif
+  next_tag += 1;
 }
 
 //----------------------------------------------------------------------------------------

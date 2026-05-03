@@ -4,7 +4,8 @@ Read AthenaK tracked particle files (.trk)
 
 The .trk format appends data at each output time:
   - Text header line with metadata (time, nranks, cycle, ntracked_prtcls)
-  - Binary data: 6 floats per tracked particle (x, y, z, vx, vy, vz)
+  - Binary data: nvalues floats per tracked particle. New files include:
+    x, y, z, vx, vy, vz, rho, press, temp, eint, scalar0, gid, level, active
     ordered by particle tag (0 to ntracked_prtcls-1)
 
 This format allows tracking specific particles over time by their tag.
@@ -44,6 +45,7 @@ def read_tracked_particles(filename):
         - 'ntracked': number of tracked particles
         - 'positions': ndarray of shape (ntracked, 3) with (x,y,z)
         - 'velocities': ndarray of shape (ntracked, 3) with (vx,vy,vz)
+        - 'fields': dict of all variables present in the file
     """
     
     snapshots = []
@@ -81,29 +83,42 @@ def read_tracked_particles(filename):
                 
                 match = re.search(r'ntracked_prtcls=\s*(\d+)', line_str)
                 ntracked = int(match.group(1)) if match else None
+
+                match = re.search(r'nvalues=\s*(\d+)', line_str)
+                nvalues = int(match.group(1)) if match else 6
+
+                match = re.search(r'variables=\s*(.*)$', line_str)
+                if match:
+                    variables = match.group(1).split()
+                else:
+                    variables = ['x', 'y', 'z', 'vx', 'vy', 'vz']
+
+                if len(variables) != nvalues:
+                    variables = [f'value{i}' for i in range(nvalues)]
                 
                 if ntracked is None:
                     print(f"Warning: Could not parse ntracked_prtcls from header: {line_str}")
                     continue
                 
-                # Read binary data for this snapshot
-                # 6 floats per particle: x, y, z, vx, vy, vz
-                data = np.fromfile(f, dtype=np.float32, count=6*ntracked)
+                data = np.fromfile(f, dtype=np.float32, count=nvalues*ntracked)
                 
-                if len(data) < 6*ntracked:
-                    print(f"Warning: Expected {6*ntracked} values but got {len(data)}")
+                if len(data) < nvalues*ntracked:
+                    print(f"Warning: Expected {nvalues*ntracked} values but got {len(data)}")
                     break
                 
-                # Reshape into (ntracked, 6) array
-                data = data.reshape((ntracked, 6))
+                data = data.reshape((ntracked, nvalues))
+                fields = {name: data[:, i] for i, name in enumerate(variables)}
                 
                 snapshot = {
                     'time': time,
                     'nranks': nranks,
                     'cycle': cycle,
                     'ntracked': ntracked,
-                    'positions': data[:, 0:3],  # x, y, z
-                    'velocities': data[:, 3:6]  # vx, vy, vz
+                    'nvalues': nvalues,
+                    'variables': variables,
+                    'fields': fields,
+                    'positions': data[:, 0:3],
+                    'velocities': data[:, 3:6]
                 }
                 
                 snapshots.append(snapshot)
@@ -143,6 +158,7 @@ def print_tracked_summary(snapshots):
     print(f"  Tracked particles: {last['ntracked']}")
     
     print(f"\nTime coverage: {first['time']:.6e} to {last['time']:.6e}")
+    print(f"Variables: {' '.join(first.get('variables', []))}")
     
     # Show example particle trajectory
     if first['ntracked'] > 0:
@@ -181,13 +197,18 @@ if __name__ == "__main__":
             ntracked = snapshots[0]['ntracked']
             positions = np.array([s['positions'] for s in snapshots])
             velocities = np.array([s['velocities'] for s in snapshots])
+            field_arrays = {
+                name: np.array([s['fields'][name] for s in snapshots])
+                for name in snapshots[0].get('variables', [])
+            }
             
             np.savez(output_npz,
                      times=times,
                      cycles=cycles,
                      ntracked=ntracked,
                      positions=positions,
-                     velocities=velocities)
+                     velocities=velocities,
+                     **field_arrays)
             print(f"\nData saved to: {output_npz}")
         
     except Exception as e:

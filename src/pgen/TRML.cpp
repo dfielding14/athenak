@@ -1830,7 +1830,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       int64_t pos_init_seed = pin->GetOrAddInteger("particles","pos_init_seed",280496);
 
       // Get distribution type: false = by mass (default), true = uniform by volume
-      bool uniform_by_volume = pin->GetOrAddBoolean("particles","uniform_by_volume",true);
+      bool uniform_by_volume = pin->GetOrAddBoolean("particles","uniform_by_volume",false);
 
       // count total mass/volume across the domain
       Real total_mass = 0.0;
@@ -1867,6 +1867,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       Real target_nparticles = pin->GetOrAddReal("particles","target_count",100000.0);
       Real mass_per_particle = total_mass / target_nparticles;
       Real volume_per_particle = total_volume / target_nparticles;
+      pmbp->ppart->lmc_mass_per_particle = mass_per_particle;
+      pin->SetReal("particles","mass_per_particle",mass_per_particle);
 
       // create shared array to hold number of particles per zone
       DualArray2D<int> nparticles_per_zone("partperzone", nmkji,2);
@@ -1978,10 +1980,12 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
           pr(LMCY,pidx) = CellCenterX(j-js, nx2, size.d_view(m).x2min,
                                     size.d_view(m).x2max);
           pr(LMCZ,pidx) = CellCenterX(k-ks, nx3, size.d_view(m).x3min,
-                                    size.d_view(m).x3max) -
-                        size.d_view(m).dx3/2;
+                                    size.d_view(m).x3max);
         }
       });
+      Kokkos::fence();
+      pmbp->pmesh->CountParticles();
+      pmbp->ppart->CreateParticleTags(pin);
     }
   }
   if (global_variable::my_rank == 0) {

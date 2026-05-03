@@ -46,6 +46,7 @@ struct ParticlesTaskIDs {
   TaskID recvp;
   TaskID csend;
   TaskID crecv;
+  TaskID inject; // Lagrangian MC inflow particle injection
   TaskID mradj;  // Mesh refinement adjustment for lagrangian_mc (AMR)
 };
 
@@ -76,6 +77,11 @@ public:
   // Lagrangian MC tracer particle specific
   int64_t random_seed;  // Base seed for deterministic RNG
   Real min_radius;      // Particles within this radius won't be updated (-1 = disabled)
+  bool lmc_inject_at_inflow;  // Add new MC tracers through physical inflow faces
+  int64_t lmc_inject_seed;    // Base seed for deterministic inflow injection sampling
+  int lmc_max_inject_per_step;  // Optional per-rank cap; negative disables the cap
+  int next_tag;          // Next globally unique tag for newly injected particles
+  Real lmc_mass_per_particle;  // Mass represented by one MC tracer
 
   // Cosmic ray specific
   int nspecies;                     // number of CR species
@@ -121,6 +127,7 @@ public:
   // Lagrangian MC tracer particle methods
   void ReallocateParticles(int new_count);
   TaskStatus PushLagrangianMC(Driver *pdriver, int stage);
+  TaskStatus InjectLagrangianMCInflow(Driver *pdriver, int stage);
   TaskStatus AdjustMeshRefinement(Driver *pdriver, int stage);
 
   // Field interpolation methods

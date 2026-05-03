@@ -32,7 +32,9 @@ int IOWrapper::Open(const char* fname, FileMode rw, bool single_file_per_rank) {
       mode = "wb";
       break;
     case FileMode::append:
-      mode = "ab";
+      // Keep existing contents and allow explicit-offset writes after seeking.
+      // Plain append mode forces stdio writes to EOF and breaks Write_any_type_at().
+      mode = "r+b";
       break;
     default:
       return false;

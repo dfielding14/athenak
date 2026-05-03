@@ -26,8 +26,8 @@
 #
 # Particle Tracking:
 # - Monte-Carlo Lagrangian tracers follow mass-weighted flow
-# - Initialized uniformly in cold gas region
-# - Track entrainment and mixing of cold gas into hot phase
+# - Initialized by mass over the domain and replenished at physical inflow faces
+# - Track thermodynamic histories, entrainment, and mixing along tracer paths
 #
 # ====================================================================================
 
@@ -121,16 +121,20 @@ pfloor      = 1.0e-5      # Pressure floor (relative to pgas_0)
 # ====================================================================================
 # Particles follow the mass-weighted flow using the Genel+ 2013 algorithm.
 # Movement is stochastic based on density fluxes across cell faces.
-# Particles are initialized in the cold gas region to track entrainment.
+# Particles are initialized by mass and can be injected through physical inflow faces.
 # ====================================================================================
 
 <particles>
-type           = lagrangian_mc   # Monte-Carlo Lagrangian tracers
-pusher         = lagrangian_mc   # Flux-based stochastic pusher
-target_count   = 100000          # Target number of particles
-pos_init_seed  = 280496          # Random seed for initial positions
-random_seed    = 12345           # Random seed for stochastic transport
-min_radius     = 0.0             # Minimum radius for particle initialization
+particle_type       = lagrangian_mc   # Monte-Carlo Lagrangian tracers
+pusher              = lagrangian_mc   # Flux-based stochastic pusher
+target_count        = 100000          # Target number of particles
+uniform_by_volume   = false           # false = sample initial tracers by mass
+pos_init_seed       = 280496          # Random seed for initial positions
+random_seed         = 12345           # Random seed for stochastic transport
+min_radius          = 0.0             # Minimum radius for particle initialization
+inject_at_inflow    = true            # Add tracers when mass enters physical boundaries
+inject_seed         = 123456          # Random seed for inflow injection
+max_inject_per_step = -1              # Negative disables the per-rank injection cap
 
 # ====================================================================================
 # UNITS (Code units = CGS in this simple setup)
@@ -280,12 +284,14 @@ dt          = 1.0         # Output every 1 time unit
 # --- Particle Outputs ---
 
 <output6>
-file_type   = prtcl_bin   # Binary particle output
+file_type   = pvtk        # Particle VTK output
 id          = prtcl       # Output ID
+variable    = prtcl_all   # Particle positions and integer metadata
 dt          = 1.0         # Output every 1 time unit
 
 <output7>
-file_type   = prtcl_trk   # Particle tracking output (subset of particles)
+file_type   = trk         # Particle tracking output with thermodynamic histories
 id          = trk         # Output ID
+variable    = prtcl_all   # Required by base output parser; track columns are fixed
 dt          = 0.1         # Output every 0.1 time units (more frequent for tracks)
-ntrack      = 1000        # Number of particles to track
+nparticles  = 1000        # Number of particles to track

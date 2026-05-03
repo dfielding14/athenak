@@ -71,8 +71,10 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
                                                         this, id.recvp);
         id.csend  = tl["after_timeintegrator"]->AddTask(&Particles::ClearSend,
                                                         this, id.crecv);
-        id.mradj  = tl["after_timeintegrator"]->AddTask(&Particles::AdjustMeshRefinement,
+        id.inject = tl["after_timeintegrator"]->AddTask(&Particles::InjectLagrangianMCInflow,
                                                         this, id.csend);
+        id.mradj  = tl["after_timeintegrator"]->AddTask(&Particles::AdjustMeshRefinement,
+                                                        this, id.inject);
         break;
       }
 

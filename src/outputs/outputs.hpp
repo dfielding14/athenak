@@ -190,12 +190,16 @@ struct HistoryData {
 
 //----------------------------------------------------------------------------------------
 //! \struct TrackedParticleData
-//! \brief data (tag, pos, vel) output for tracked particles
+//! \brief data output for tracked particles
 
 struct TrackedParticleData {
   int tag;
+  int gid;
+  int level;
+  int active;
   Real x,y,z;
   Real vx,vy,vz;
+  Real rho, press, temp, eint, scalar0;
 };
 
 //----------------------------------------------------------------------------------------
