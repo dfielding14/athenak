@@ -27,6 +27,7 @@
 #include "radiation/radiation.hpp"
 #include "particles/particles.hpp"
 #include "srcterms/srcterms.hpp"
+#include "pgen/pgen.hpp"
 #include "outputs/io_wrapper.hpp"
 
 #if MPI_PARALLEL_ENABLED
@@ -634,6 +635,10 @@ void Mesh::NewTimeStep(const Real tlim) {
     dt = std::min(dt, (cfl_no)*(pmb_pack->ppart->dtnew) );
   }
 
+  if (pgen != nullptr && pgen->user_dt) {
+    dt = std::min(dt, pgen->dtnew);
+  }
+
 #if MPI_PARALLEL_ENABLED
   // get minimum dt over all MPI ranks
   MPI_Allreduce(MPI_IN_PLACE, &dt, 1, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
@@ -684,5 +689,4 @@ void Mesh::CountParticles() {
     nprtcl_total += nprtcl_eachrank[n];
   }
 }
-
 

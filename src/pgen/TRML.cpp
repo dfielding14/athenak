@@ -83,6 +83,7 @@
 #include <fstream>
 #include <string>
 #include <cstring>
+#include <cstdio>
 #include <iomanip>
 #include <vector>
 #include <utility>
@@ -126,9 +127,14 @@ enum FrameTrackingMode {
 };
 
 enum FrameTrackingPositionSignal {
-  kFTPosCentroid = 0,
-  kFTPosBandMidpoint = 1,
-  kFTPosBlend = 2
+  // The frame tracker can use several inexpensive observables.
+  // "auto" blends all valid signals with confidence weights.
+  kFTPosAuto = 0,
+  kFTPosCooling = 1,
+  kFTPosPeak = 2,
+  kFTPosShear = 3,
+  kFTPosScalar = 4,
+  kFTPosBlend = 5
 };
 
 enum FrameTrackingBoostChangeMode {
@@ -215,6 +221,9 @@ struct pgen_trml {
   Real vel2_rms_threshold;      //!< Refine if velocity RMS exceeds this
   Real T_max_threshold;         //!< Refine if T_max in block exceeds this
   Real T_min_threshold;         //!< Refine if T_min in block is below this
+  Real amr_derefine_factor;     //!< Hysteresis factor for derefinement thresholds
+  Real amr_min_temp_fraction;   //!< Minimum block fraction in the temperature band
+  Real amr_min_temp_cells;      //!< Minimum cell count in the temperature band
   std::vector<Real> refine_level_times; //!< Time-based max refinement schedule (t:num_levels)
   std::vector<int> refine_level_counts; //!< Num levels allowed at each scheduled time
   int max_num_levels_input;      //!< Max num_levels from input file
@@ -245,36 +254,69 @@ struct pgen_trml {
   Real hist_vy_vel_frac;       //!< v_y selector: require |v_y| > frac*velocity
 
   // ====================================================================================
-  // FRAME TRACKING PARAMETERS
-  // Frame tracking applies a Galilean velocity shift to keep the mixing layer
-  // interface centered in the domain. This prevents the interface from drifting
-  // into boundary regions over long simulation times.
+  // LIGHTWEIGHT ON-THE-FLY ANALYSIS
   // ====================================================================================
-  bool use_frame_tracking;     //!< Enable frame tracking
-  Real t_frame_tracking_start; //!< Time at which to start frame tracking
-  int  ft_apply_every;         //!< Apply frame correction every ft_apply_every timesteps
-  int  ft_mode;                //!< Frame tracking mode (velocity/position/PD)
-  Real ft_tau_avg;             //!< EMA smoothing timescale for sampled moments
-  Real ft_tau_relax;           //!< Position relaxation timescale
-  Real ft_tau_vel;             //!< Velocity damping timescale in PD mode
-  Real ft_temp_lo;             //!< Lower temperature bound for tracking
-  Real ft_temp_hi;             //!< Upper temperature bound for tracking
-  Real ft_weight_floor;        //!< Minimum global tracked mass needed for a valid sample
-  Real ft_max_abs_boost;       //!< Maximum absolute velocity shift per application
-  Real ft_max_boost_change;    //!< Maximum change in applied boost between updates
+  bool analysis_on;              //!< Write compact rank-0 diagnostics during the run
+  int  analysis_every;           //!< Diagnostic cadence in cycles
+  bool analysis_clobber;         //!< Truncate analysis file on non-restart initialization
+  bool analysis_header_written;  //!< Header state for rank-0 analysis file
+  std::string analysis_file;     //!< Rank-0 lightweight diagnostic file
+
+  // ====================================================================================
+  // FRAME TRACKING PARAMETERS
+  //
+  // The frame tracker is deliberately built from several cheap, redundant observables:
+  //   (i) cooling-weighted centroid,
+  //  (ii) log-T_peak-weighted centroid,
+  // (iii) shear-band midpoint/centroid,
+  //  (iv) passive-scalar interface, if available.
+  // This is much more robust than tracking a single narrow temperature band.  The
+  // controller then applies small Galilean boosts in z.
+  // ====================================================================================
+  bool use_frame_tracking;       //!< Enable frame tracking
+  Real t_frame_tracking_start;   //!< Time at which to start frame tracking
+  int  ft_apply_every;           //!< Apply frame correction every ft_apply_every timesteps
+  int  ft_mode;                  //!< velocity, position, or pd
+  int  ft_position_signal;       //!< auto/cooling/peak/shear/scalar/blend
+  Real ft_target_z;              //!< Desired interface position in the simulation box
+
+  // Observer construction
+  Real ft_temp_lo;               //!< Lower hard temperature bound for peak observer
+  Real ft_temp_hi;               //!< Upper hard temperature bound for peak observer
+  Real ft_logT_sigma;            //!< Gaussian width in ln(T/T_peak)
+  Real ft_shear_vel_frac;        //!< Shear-band condition |vx| < frac*|vrel|
+  Real ft_scalar_lo;             //!< Lower passive scalar interface band
+  Real ft_scalar_hi;             //!< Upper passive scalar interface band
+  Real ft_w_cooling;             //!< Auto-blend weight for cooling centroid
+  Real ft_w_peak;                //!< Auto-blend weight for peak-temperature centroid
+  Real ft_w_shear;               //!< Auto-blend weight for shear midpoint
+  Real ft_w_scalar;              //!< Auto-blend weight for scalar midpoint
+  Real ft_position_blend;        //!< Manual blend: z=(1-b)z_peak + b z_shear
+  Real ft_weight_floor;          //!< Minimum peak/signal weight for observability
+  Real ft_cool_weight_floor;     //!< Minimum cooling weight for cooling observer
+  Real ft_shear_weight_floor;    //!< Minimum shear-band volume for shear observer
+  Real ft_scalar_weight_floor;   //!< Minimum scalar-band volume for scalar observer
+  int  ft_min_signal_cells;      //!< Minimum cells required for sparse observers
+  Real ft_min_confidence;        //!< Minimum normalized observer confidence to actuate
+  Real ft_v_obs_blend;           //!< Blend of velocity moment with finite-difference dz/dt
+
+  // Controller and safety limits
+  Real ft_tau_avg;               //!< EMA smoothing timescale for sampled moments
+  Real ft_tau_relax;             //!< Position relaxation timescale
+  Real ft_tau_vel;               //!< Retained for input compatibility; velocity is EMA-smoothed
+  Real ft_tau_int;               //!< Integral bias-cancellation timescale (<=0 disables)
+  Real ft_int_max_abs;           //!< Clamp on integral contribution magnitude
+  Real ft_int_leak_tau;          //!< Leak timescale for integral memory
+  bool ft_int_unsat_only;        //!< Integrate only when pre-clamp command is unsaturated
+  Real ft_max_abs_boost;         //!< Maximum absolute Galilean boost per actuation
+  Real ft_max_boost_change;      //!< Maximum change in applied boost between updates
   int  ft_max_boost_change_mode; //!< Slew limit mode (per-apply or per-time)
   Real ft_max_boost_change_rate; //!< Slew limit rate when mode=per-time
-  bool ft_use_lowzlim;         //!< Enable lower bound protection on predicted centroid
-  Real ft_lowzlim;             //!< Lower z bound for predicted centroid
-  bool ft_use_uppzlim;         //!< Enable upper bound protection on predicted centroid
-  Real ft_uppzlim;             //!< Upper z bound for predicted centroid
-  int  ft_position_signal;     //!< Position observable used for control
-  Real ft_position_blend;      //!< Blend factor when ft_position_signal=blend
-  Real ft_tau_int;             //!< Integral bias-cancellation timescale (<=0 disables)
-  Real ft_int_max_abs;         //!< Clamp on integral contribution magnitude
-  Real ft_int_leak_tau;        //!< Leak timescale for integral memory
-  bool ft_int_unsat_only;      //!< Integrate only when pre-clamp command is unsaturated
-  Real ft_min_global_weight;   //!< Observability floor before declaring tracking miss
+  bool ft_use_lowzlim;           //!< Enable lower bound protection on predicted centroid
+  Real ft_lowzlim;               //!< Lower z bound for predicted centroid
+  bool ft_use_uppzlim;           //!< Enable upper bound protection on predicted centroid
+  Real ft_uppzlim;               //!< Upper z bound for predicted centroid
+  Real ft_min_global_weight;     //!< Deprecated alias for ft_weight_floor; retained in prints
   Real ft_reacquire_expand_factor; //!< Geometric widening factor during miss streaks
   Real ft_reacquire_max_expand;    //!< Max multiplicative widening of nominal band
   int  ft_reacquire_recover_updates; //!< Valid updates required to shrink one miss level
@@ -283,21 +325,31 @@ struct pgen_trml {
   int  ft_boundary_guard_cells;  //!< Guard-zone size in cells
   Real ft_boundary_guard_min_scale; //!< Minimum command scale inside guard zone
 
-  // Frame-tracking diagnostics
-  Real ft_last_boost = 0.0;           //!< Last applied boost velocity
-  Real ft_cumulative_boost = 0.0;     //!< Cumulative sum of applied boosts
-  Real ft_last_mean_z = 0.0;          //!< Last measured global mean z
-  Real ft_last_mean_vz = 0.0;         //!< Last measured global mean vz
-  Real ft_last_global_weight = 0.0;   //!< Last global interface weight
-  Real ft_last_filtered_z = 0.0;      //!< Last filtered mean z
-  Real ft_last_filtered_vz = 0.0;     //!< Last filtered mean vz
+  // Frame-tracking state and diagnostics
+  Real ft_last_boost = 0.0;           //!< Last Galilean boost applied to vz
+  Real ft_cumulative_boost = 0.0;     //!< Cumulative frame velocity relative to initial frame
+  Real ft_last_mean_z = 0.0;          //!< Last selected observer position
+  Real ft_last_mean_vz = 0.0;         //!< Last selected observer velocity
+  Real ft_last_global_weight = 0.0;   //!< Last total observer weight
+  Real ft_last_filtered_z = 0.0;      //!< Filtered control position
+  Real ft_last_filtered_vz = 0.0;     //!< Filtered control velocity
   Real ft_last_z_err = 0.0;           //!< Last filtered z error to target
   Real ft_last_vel_cmd_pre = 0.0;     //!< Unclamped command velocity
   Real ft_last_vel_cmd_post = 0.0;    //!< Clamped/slew-limited command velocity
   Real ft_last_apply_time = -1.0;     //!< Time of last frame-tracking application
-  Real ft_last_z_centroid = 0.0;      //!< Last centroid position estimate
-  Real ft_last_z_midpoint = 0.0;      //!< Last tracked-band midpoint estimate
+  Real ft_last_z_cooling = 0.0;       //!< Cooling-weighted centroid
+  Real ft_last_z_peak = 0.0;          //!< Peak-temperature centroid
+  Real ft_last_z_shear = 0.0;         //!< Shear-band position
+  Real ft_last_z_scalar = 0.0;        //!< Passive-scalar interface position
+  Real ft_last_z_centroid = 0.0;      //!< Alias: peak-temperature centroid
+  Real ft_last_z_midpoint = 0.0;      //!< Alias: shear-band position
   Real ft_last_z_ctrl = 0.0;          //!< Last selected control position signal
+  Real ft_last_confidence = 0.0;      //!< Normalized observer confidence
+  Real ft_last_vz_obs = 0.0;          //!< Raw observed velocity
+  Real ft_last_vz_posder = 0.0;       //!< Finite-difference position velocity
+  Real ft_prev_z_signal = 0.0;        //!< Previous raw selected position
+  Real ft_prev_z_signal_time = -1.0;  //!< Time of previous raw selected position
+  bool ft_have_prev_z_signal = false; //!< Is ft_prev_z_signal initialized?
   Real ft_i_term = 0.0;               //!< Integral contribution state (velocity units)
   Real ft_temp_lo_active = 0.0;       //!< Active lower tracking band bound (reacquire aware)
   Real ft_temp_hi_active = 0.0;       //!< Active upper tracking band bound (reacquire aware)
@@ -311,6 +363,58 @@ struct pgen_trml {
 // Global pointer to the TRML parameters structure.
 // Allocated in ProblemGenerator::UserProblem() and persists for the simulation lifetime.
 pgen_trml* ptrml = new pgen_trml();
+
+// Compact host-side containers used by the observer and light diagnostics.
+struct FrameObserver {
+  bool valid = false;
+  Real confidence = 0.0;
+  Real weight = 0.0;
+
+  Real z = 0.0;
+  Real vz = 0.0;
+  Real z_cooling = std::numeric_limits<Real>::quiet_NaN();
+  Real z_peak = std::numeric_limits<Real>::quiet_NaN();
+  Real z_shear = std::numeric_limits<Real>::quiet_NaN();
+  Real z_scalar = std::numeric_limits<Real>::quiet_NaN();
+
+  Real vz_cooling = 0.0;
+  Real vz_peak = 0.0;
+  Real vz_shear = 0.0;
+  Real vz_scalar = 0.0;
+
+  Real w_cooling = 0.0;
+  Real w_peak = 0.0;
+  Real w_shear = 0.0;
+  Real w_scalar = 0.0;
+
+  int n_cooling = 0;
+  int n_shear = 0;
+  int n_scalar = 0;
+};
+
+struct LightDiagnostics {
+  Real vbulk_cool = 0.0;
+  Real z_cool = std::numeric_limits<Real>::quiet_NaN();
+  Real z_peak = std::numeric_limits<Real>::quiet_NaN();
+
+  Real vol_mix = 0.0;
+  Real mass_mix = 0.0;
+  Real vyrms_mix = 0.0;
+  Real pressure_mix = std::numeric_limits<Real>::quiet_NaN();
+  Real rzz_mix = std::numeric_limits<Real>::quiet_NaN();
+
+  Real vol_peak = 0.0;
+  Real mass_peak = 0.0;
+  Real vyrms_peak = 0.0;
+  Real pressure_peak = std::numeric_limits<Real>::quiet_NaN();
+  Real rzz_peak = std::numeric_limits<Real>::quiet_NaN();
+
+  Real vol_cold = 0.0;
+  Real vol_hot = 0.0;
+  Real cool_pos = 0.0;
+  Real cool_net = 0.0;
+};
+
 
 std::string TrimCopy(const std::string &input) {
   const auto first = input.find_first_not_of(" \t\r\n");
@@ -361,18 +465,25 @@ const char* FrameTrackingModeToString(const int mode) {
 
 int ParseFrameTrackingPositionSignal(const std::string &signal_raw) {
   const std::string signal = ToLowerCopy(TrimCopy(signal_raw));
-  if (signal == "centroid") return kFTPosCentroid;
-  if (signal == "band_midpoint") return kFTPosBandMidpoint;
+  if (signal == "auto") return kFTPosAuto;
+  if (signal == "cooling" || signal == "cool") return kFTPosCooling;
+  if (signal == "peak" || signal == "centroid") return kFTPosPeak;
+  if (signal == "shear" || signal == "band_midpoint") return kFTPosShear;
+  if (signal == "scalar" || signal == "tracer") return kFTPosScalar;
   if (signal == "blend") return kFTPosBlend;
   std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
             << std::endl << "Invalid ft_position_signal '" << signal_raw
-            << "'. Expected one of: centroid, band_midpoint, blend." << std::endl;
+            << "'. Expected one of: auto, cooling, peak, shear, scalar, blend."
+            << std::endl;
   std::exit(EXIT_FAILURE);
 }
 
 const char* FrameTrackingPositionSignalToString(const int signal) {
-  if (signal == kFTPosCentroid) return "centroid";
-  if (signal == kFTPosBandMidpoint) return "band_midpoint";
+  if (signal == kFTPosAuto) return "auto";
+  if (signal == kFTPosCooling) return "cooling";
+  if (signal == kFTPosPeak) return "peak";
+  if (signal == kFTPosShear) return "shear";
+  if (signal == kFTPosScalar) return "scalar";
   if (signal == kFTPosBlend) return "blend";
   return "unknown";
 }
@@ -406,33 +517,56 @@ void ParseRefineLevelSchedule(const std::string &schedule,
   std::vector<std::pair<Real, int>> entries;
   std::stringstream ss(trimmed);
   std::string token;
+  bool saw_implicit_level = false;
+  bool saw_explicit_level = false;
   while (std::getline(ss, token, ',')) {
     token = TrimCopy(token);
     if (token.empty()) {
       continue;
     }
     const auto sep = token.find(':');
+    std::string t_str;
+    std::string l_str;
+    int level = 0;
     if (sep == std::string::npos) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Invalid refine_level_times entry: " << token << std::endl;
-      std::exit(EXIT_FAILURE);
+      t_str = token;
+      saw_implicit_level = true;
+    } else {
+      saw_explicit_level = true;
+      t_str = TrimCopy(token.substr(0, sep));
+      l_str = TrimCopy(token.substr(sep + 1));
+      if (l_str.empty()) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Invalid refine_level_times entry: " << token
+                  << std::endl
+                  << "Expected either time:num_levels or a bare time." << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
     }
-    const std::string t_str = TrimCopy(token.substr(0, sep));
-    const std::string l_str = TrimCopy(token.substr(sep + 1));
-    if (t_str.empty() || l_str.empty()) {
+    t_str = TrimCopy(t_str);
+    if (t_str.empty()) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Invalid refine_level_times entry: " << token << std::endl;
       std::exit(EXIT_FAILURE);
     }
     Real time = 0.0;
-    int level = 0;
     try {
       time = static_cast<Real>(std::stod(t_str));
-      level = std::stoi(l_str);
+      if (!l_str.empty()) {
+        level = std::stoi(l_str);
+      }
     } catch (const std::exception &err) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Invalid refine_level_times entry: " << token
                 << std::endl << "Parse error: " << err.what() << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (!std::isfinite(time) || time < 0.0 || (!l_str.empty() && level < 1)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Invalid refine_level_times entry: " << token
+                << std::endl
+                << "Times must be finite and non-negative; num_levels must be >= 1."
+                << std::endl;
       std::exit(EXIT_FAILURE);
     }
     entries.emplace_back(time, level);
@@ -441,8 +575,20 @@ void ParseRefineLevelSchedule(const std::string &schedule,
   if (entries.empty()) {
     return;
   }
+  if (saw_implicit_level && saw_explicit_level) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Invalid refine_level_times schedule: do not mix bare times with "
+              << "time:num_levels entries." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   std::sort(entries.begin(), entries.end(),
             [](const auto &a, const auto &b) { return a.first < b.first; });
+  if (saw_implicit_level) {
+    for (size_t i = 0; i < entries.size(); ++i) {
+      entries[i].second = static_cast<int>(i) + 1;
+    }
+  }
 
   for (const auto &entry : entries) {
     if (!times.empty() && entry.first == times.back()) {
@@ -476,9 +622,14 @@ void ApplyRefineLevelSchedule(Mesh *pm) {
     desired_num_levels = ptrml->max_num_levels_input;
   }
 
+  int current_level_floor = ptrml->max_level_floor;
+  for (int i = 0; i < pm->nmb_total; ++i) {
+    current_level_floor = std::max(current_level_floor, pm->lloc_eachmb[i].level);
+  }
+
   int desired_max_level = pm->root_level + desired_num_levels - 1;
-  if (desired_max_level < ptrml->max_level_floor) {
-    desired_max_level = ptrml->max_level_floor;
+  if (desired_max_level < current_level_floor) {
+    desired_max_level = current_level_floor;
   }
 
   if (desired_max_level != pm->max_level) {
@@ -524,10 +675,12 @@ void AddCoolingHeating(Mesh *pm, const Real bdt, DvceArray5D<Real> &u0,
 //! Dispatches to Diagnostic() and FrameTracking() as needed.
 void UserWorkInLoop(Mesh *pm);
 
-//! \brief Sample interface moments and compute global tracked moments.
-bool SampleFrameTrackingMoments(Mesh *pm, Real &global_mass, Real &mean_z, Real &mean_vz,
-                                Real &z_band_min, Real &z_band_max,
-                                Real temp_lo, Real temp_hi);
+//! \brief Build the robust multi-signal frame-tracking observer.
+bool SampleFrameTrackingObserver(Mesh *pm, FrameObserver &obs,
+                                 Real temp_lo, Real temp_hi);
+
+//! \brief Compute compact theory-oriented diagnostics and write a rank-0 table.
+void WriteLightDiagnostics(Mesh *pm);
 
 //! \brief Apply Galilean velocity shift to keep the mixing layer interface centered.
 //! Finds the mean position and velocity of gas near T_peak and shifts all velocities
@@ -571,104 +724,324 @@ Real solve_density_profile_NR(const Real z, const Real rho_hot, const Real beta_
 } // namespace
 
 namespace {
-bool SampleFrameTrackingMoments(Mesh *pm, Real &global_mass, Real &mean_z, Real &mean_vz,
-                                Real &z_band_min, Real &z_band_max,
-                                Real temp_lo, Real temp_hi) {
-  global_mass = 0.0;
-  mean_z = 0.0;
-  mean_vz = 0.0;
-  z_band_min = 0.0;
-  z_band_max = 0.0;
+
+// Cooling/heating helper with gamma supplied explicitly. Positive means net cooling.
+KOKKOS_INLINE_FUNCTION
+Real NetCoolingRateLocal(const Real dens, const Real temp, const Real eint,
+                         const Real gamma,
+                         const Real pgas_0, const Real t_cool_0,
+                         const Real T_peak, const Real T_hot, const Real T_cold,
+                         const Real T_cutoff, const Real epsilon_T,
+                         const Real beta_lo, const Real beta_hi,
+                         const Real heat_coefficient, const Real alpha_heat,
+                         const bool heating_on, const bool cooling_below_T_cold,
+                         const bool use_dens_ceiling, const Real dens_ceiling) {
+  if (temp <= 0.0 || temp > T_cutoff) return 0.0;
+  if (use_dens_ceiling && dens > dens_ceiling) return 0.0;
+
+  const Real gm1 = gamma - 1.0;
+  const Real pres = eint*gm1;
+  Real edot_cool = 1.5*pgas_0/t_cool_0*SQR(pres/pgas_0);
+  edot_cool *= (temp < T_peak) ? pow(temp/T_peak, -beta_lo)
+                                : pow(temp/T_peak, -beta_hi);
+  if (!cooling_below_T_cold && temp < T_cold) {
+    edot_cool = 0.0;
+  }
+
+  Real edot_heat = 0.0;
+  if (heating_on) {
+    edot_heat = 1.5*pgas_0/t_cool_0*heat_coefficient*SQR(pres/pgas_0);
+    edot_heat *= (temp < (1.0 + epsilon_T)*T_hot) ?
+        pow(temp/T_peak, alpha_heat) :
+        pow((1.0 + epsilon_T)*T_hot/T_peak, alpha_heat) *
+        pow(temp/((1.0 + epsilon_T)*T_hot), -beta_hi - 0.5);
+  }
+  return edot_cool - edot_heat;
+}
+
+bool SampleFrameTrackingObserver(Mesh *pm, FrameObserver &obs,
+                                 Real temp_lo, Real temp_hi) {
+  obs = FrameObserver();
+
   MeshBlockPack *pmbp = pm->pmb_pack;
   auto &indcs = pm->mb_indcs;
   int is = indcs.is, nx1 = indcs.nx1;
   int js = indcs.js, nx2 = indcs.nx2;
   int ks = indcs.ks, nx3 = indcs.nx3;
   int nmb = pmbp->nmb_thispack;
-  if (nmb <= 0) {
-    return false;
-  }
+  if (nmb <= 0) return false;
+
   const int nmkji = nmb*nx3*nx2*nx1;
   const int nkji = nx3*nx2*nx1;
   const int nji  = nx2*nx1;
-  bool is_mhd = (pmbp->pmhd != nullptr) ? true : false;
+  const bool is_mhd = (pmbp->pmhd != nullptr);
   auto &w0 = (is_mhd) ? pmbp->pmhd->w0 : pmbp->phydro->w0;
   EOS_Data &eos = (is_mhd) ?
                   pmbp->pmhd->peos->eos_data : pmbp->phydro->peos->eos_data;
-  Real use_e = eos.use_e;
-  Real gm1 = eos.gamma - 1.0;
+  const Real use_e = eos.use_e;
+  const Real gamma = eos.gamma;
+  const Real gm1 = gamma - 1.0;
   auto &size = pmbp->pmb->mb_size;
-  Real rank_mass = 0.0;
-  Real rank_weighted_z = 0.0;
-  Real rank_weighted_vz = 0.0;
-  Real rank_zmin = FLT_MAX;
-  Real rank_zmax = -FLT_MAX;
-  int rank_count = 0;
+  int nscalars = (is_mhd) ? pmbp->pmhd->nscalars : pmbp->phydro->nscalars;
+  int nfluid = (is_mhd) ? pmbp->pmhd->nmhd : pmbp->phydro->nhydro;
 
-  Kokkos::parallel_reduce("ft_moment_sample",
+  array_sum::GlobalSum local_sum;
+  for (int n=0; n<NREDUCTION_VARIABLES; ++n) local_sum.the_array[n] = 0.0;
+  Real z_shear_min = std::numeric_limits<Real>::max();
+  Real z_shear_max = -std::numeric_limits<Real>::max();
+  Real z_scalar_min = std::numeric_limits<Real>::max();
+  Real z_scalar_max = -std::numeric_limits<Real>::max();
+  int count_cooling = 0;
+  int count_shear = 0;
+  int count_scalar = 0;
+
+  const Real T_peak = ptrml->T_peak;
+  const Real T_hot = ptrml->T_hot;
+  const Real T_cold = ptrml->T_cold;
+  const Real T_cutoff = ptrml->T_cutoff;
+  const Real epsilon_T = ptrml->epsilon_T;
+  const Real pgas_0 = ptrml->pgas_0;
+  const Real t_cool_0 = ptrml->t_cool_0;
+  const Real beta_lo = ptrml->beta_lo;
+  const Real beta_hi = ptrml->beta_hi;
+  const Real heat_coefficient = ptrml->heat_coefficient;
+  const Real alpha_heat = ptrml->alpha_heat;
+  const bool heating_on = ptrml->heating_on;
+  const bool cooling_below_T_cold = ptrml->cooling_below_T_cold;
+  const bool use_dens_ceiling = ptrml->use_dens_ceiling;
+  const Real dens_ceiling = ptrml->dens_ceiling;
+
+  const Real sigma_logT = std::max(ptrml->ft_logT_sigma, static_cast<Real>(1.0e-6));
+  const Real vrel_abs = std::max(std::fabs(ptrml->velocity), static_cast<Real>(1.0e-30));
+  const Real shear_thresh = ptrml->ft_shear_vel_frac*vrel_abs;
+  const Real scalar_lo = ptrml->ft_scalar_lo;
+  const Real scalar_hi = ptrml->ft_scalar_hi;
+
+  Kokkos::parallel_reduce("trml_frame_observer",
   Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-  KOKKOS_LAMBDA(const int idx, Real &mass_, Real &weighted_z_, Real &weighted_vz_,
-                Real &zmin_, Real &zmax_, int &count_) {
-    int m = (idx)/nkji;
+  KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum &sum,
+                Real &shear_min, Real &shear_max,
+                Real &scalar_min, Real &scalar_max,
+                int &n_cooling, int &n_shear, int &n_scalar) {
+    int m = idx/nkji;
     int k = (idx - m*nkji)/nji;
     int j = (idx - m*nkji - k*nji)/nx1;
     int i = (idx - m*nkji - k*nji - j*nx1) + is;
     k += ks;
     j += js;
-    Real dens = w0(m,IDN,k,j,i);
-    if (dens <= 0.0) {
-      return;
-    }
+
+    const Real dens = w0(m,IDN,k,j,i);
+    if (dens <= 0.0) return;
 
     Real temp = 0.0;
+    Real eint = 0.0;
     if (use_e) {
       temp = w0(m,IEN,k,j,i)/dens*gm1;
+      eint = w0(m,IEN,k,j,i);
     } else {
       temp = w0(m,ITM,k,j,i);
+      eint = w0(m,ITM,k,j,i)*dens/gm1;
     }
-    if (temp < temp_lo || temp > temp_hi) {
-      return;
+    if (temp <= 0.0) return;
+
+    const Real dvol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
+    const Real x3v = CellCenterX(k-ks, nx3, size.d_view(m).x3min,
+                                 size.d_view(m).x3max);
+    const Real vz = w0(m,IVZ,k,j,i);
+    const Real vx = w0(m,IVX,k,j,i);
+
+    // 0--2: log-T_peak observer
+    if (temp >= temp_lo && temp <= temp_hi) {
+      const Real q = log(temp/T_peak);
+      const Real w_peak = dens*dvol*exp(-0.5*SQR(q/sigma_logT));
+      sum.the_array[0] += w_peak;
+      sum.the_array[1] += w_peak*x3v;
+      sum.the_array[2] += w_peak*vz;
     }
 
-    Real dvol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
-    Real x3min = size.d_view(m).x3min;
-    Real x3max = size.d_view(m).x3max;
-    int nx3_ = indcs.nx3;
-    Real x3v = CellCenterX(k-ks, nx3_, x3min, x3max);
-    Real weighted_dvol = dens*dvol;
-    mass_ += weighted_dvol;
-    weighted_z_ += weighted_dvol*x3v;
-    weighted_vz_ += weighted_dvol*w0(m,IVZ,k,j,i);
-    zmin_ = fmin(zmin_, x3v);
-    zmax_ = fmax(zmax_, x3v);
-    count_ += 1;
-  }, Kokkos::Sum<Real>(rank_mass),
-     Kokkos::Sum<Real>(rank_weighted_z),
-     Kokkos::Sum<Real>(rank_weighted_vz),
-     Kokkos::Min<Real>(rank_zmin),
-     Kokkos::Max<Real>(rank_zmax),
-     Kokkos::Sum<int>(rank_count));
+    // 3--5: cooling observer
+    const Real net_cool = NetCoolingRateLocal(dens, temp, eint, gamma, pgas_0, t_cool_0,
+                                              T_peak, T_hot, T_cold, T_cutoff, epsilon_T,
+                                              beta_lo, beta_hi, heat_coefficient, alpha_heat,
+                                              heating_on, cooling_below_T_cold,
+                                              use_dens_ceiling, dens_ceiling);
+    const Real w_cool = fmax(net_cool, static_cast<Real>(0.0))*dvol;
+    if (w_cool > 0.0) {
+      sum.the_array[3] += w_cool;
+      sum.the_array[4] += w_cool*x3v;
+      sum.the_array[5] += w_cool*vz;
+      n_cooling += 1;
+    }
 
-  Real global_sums[3] = {rank_mass, rank_weighted_z, rank_weighted_vz};
-  Real global_zmin = rank_zmin;
-  Real global_zmax = rank_zmax;
-  int global_count = rank_count;
+    // 6--8: shear-band observer.  The midpoint is used for position, but we also
+    // retain a centroid and velocity for diagnostics.
+    if (fabs(vx) < shear_thresh) {
+      const Real w_sh = dvol;
+      sum.the_array[6] += w_sh;
+      sum.the_array[7] += w_sh*x3v;
+      sum.the_array[8] += w_sh*vz;
+      shear_min = fmin(shear_min, x3v);
+      shear_max = fmax(shear_max, x3v);
+      n_shear += 1;
+    }
+
+    // 9--11: passive-scalar interface observer, if a scalar is present.
+    if (nscalars > 0) {
+      const Real sc = w0(m,nfluid,k,j,i);
+      if (sc >= scalar_lo && sc <= scalar_hi) {
+        const Real w_sc = dvol;
+        sum.the_array[9] += w_sc;
+        sum.the_array[10] += w_sc*x3v;
+        sum.the_array[11] += w_sc*vz;
+        scalar_min = fmin(scalar_min, x3v);
+        scalar_max = fmax(scalar_max, x3v);
+        n_scalar += 1;
+      }
+    }
+
+    // 12--13: global volume and mass, useful as sanity checks.
+    sum.the_array[12] += dvol;
+    sum.the_array[13] += dens*dvol;
+  }, Kokkos::Sum<array_sum::GlobalSum>(local_sum),
+     Kokkos::Min<Real>(z_shear_min),
+     Kokkos::Max<Real>(z_shear_max),
+     Kokkos::Min<Real>(z_scalar_min),
+     Kokkos::Max<Real>(z_scalar_max),
+     Kokkos::Sum<int>(count_cooling),
+     Kokkos::Sum<int>(count_shear),
+     Kokkos::Sum<int>(count_scalar));
+
 #if MPI_PARALLEL_ENABLED
-  MPI_Allreduce(MPI_IN_PLACE, global_sums, 3, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
-  MPI_Allreduce(MPI_IN_PLACE, &global_zmin, 1, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
-  MPI_Allreduce(MPI_IN_PLACE, &global_zmax, 1, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
-  MPI_Allreduce(MPI_IN_PLACE, &global_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  Real sum_arr[NREDUCTION_VARIABLES];
+  for (int n=0; n<NREDUCTION_VARIABLES; ++n) sum_arr[n] = local_sum.the_array[n];
+  MPI_Allreduce(MPI_IN_PLACE, sum_arr, NREDUCTION_VARIABLES, MPI_ATHENA_REAL,
+                MPI_SUM, MPI_COMM_WORLD);
+  for (int n=0; n<NREDUCTION_VARIABLES; ++n) local_sum.the_array[n] = sum_arr[n];
+  MPI_Allreduce(MPI_IN_PLACE, &z_shear_min, 1, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, &z_shear_max, 1, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, &z_scalar_min, 1, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, &z_scalar_max, 1, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, &count_cooling, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, &count_shear, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, &count_scalar, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 #endif
-  global_mass = global_sums[0];
-  if (global_mass <= 0.0 || global_count <= 0) {
-    return false;
+
+  const auto safe_ratio = [](Real num, Real den, Real fallback) -> Real {
+    return (den > 0.0) ? num/den : fallback;
+  };
+
+  obs.w_peak = local_sum.the_array[0];
+  obs.w_cooling = local_sum.the_array[3];
+  obs.w_shear = local_sum.the_array[6];
+  obs.w_scalar = local_sum.the_array[9];
+
+  const int min_signal_cells = std::max(1, ptrml->ft_min_signal_cells);
+  const bool have_peak = (obs.w_peak > ptrml->ft_weight_floor);
+  const bool have_cool = (count_cooling >= min_signal_cells &&
+                          obs.w_cooling > ptrml->ft_cool_weight_floor);
+  const bool have_shear = (count_shear >= min_signal_cells &&
+                           obs.w_shear > ptrml->ft_shear_weight_floor);
+  const bool have_scalar = (count_scalar >= min_signal_cells &&
+                            obs.w_scalar > ptrml->ft_scalar_weight_floor);
+
+  if (have_peak) {
+    obs.z_peak = local_sum.the_array[1]/obs.w_peak;
+    obs.vz_peak = local_sum.the_array[2]/obs.w_peak;
   }
-  mean_z = global_sums[1]/global_mass;
-  mean_vz = global_sums[2]/global_mass;
-  z_band_min = global_zmin;
-  z_band_max = global_zmax;
+  if (have_cool) {
+    obs.z_cooling = local_sum.the_array[4]/obs.w_cooling;
+    obs.vz_cooling = local_sum.the_array[5]/obs.w_cooling;
+    obs.n_cooling = count_cooling;
+  }
+  if (have_shear) {
+    obs.z_shear = 0.5*(z_shear_min + z_shear_max);
+    obs.vz_shear = safe_ratio(local_sum.the_array[8], obs.w_shear, 0.0);
+    obs.n_shear = count_shear;
+  }
+  if (have_scalar) {
+    obs.z_scalar = 0.5*(z_scalar_min + z_scalar_max);
+    obs.vz_scalar = safe_ratio(local_sum.the_array[11], obs.w_scalar, 0.0);
+    obs.n_scalar = count_scalar;
+  }
+
+  const Real conf_peak = have_peak ? obs.w_peak/(obs.w_peak + ptrml->ft_weight_floor) : 0.0;
+  const Real conf_cool = have_cool ? obs.w_cooling/(obs.w_cooling + ptrml->ft_cool_weight_floor) : 0.0;
+  const Real conf_shear = have_shear ? 1.0 : 0.0;
+  const Real conf_scalar = have_scalar ? 1.0 : 0.0;
+
+  auto add_signal = [](const bool ok, const Real z, const Real vz,
+                       const Real weight, const Real conf,
+                       Real &zsum, Real &vsum, Real &wsum,
+                       Real &conf_num, Real &conf_den) {
+    if (weight <= 0.0) return;
+    conf_den += weight;
+    if (!ok || conf <= 0.0 || !std::isfinite(z)) return;
+    const Real w = weight*conf;
+    zsum += w*z;
+    vsum += w*vz;
+    wsum += w;
+    conf_num += w;
+  };
+
+  Real zsum = 0.0, vsum = 0.0, wsum = 0.0;
+  Real conf_num = 0.0, conf_den = 0.0;
+
+  if (ptrml->ft_position_signal == kFTPosCooling) {
+    add_signal(have_cool, obs.z_cooling, obs.vz_cooling, 1.0, conf_cool,
+               zsum, vsum, wsum, conf_num, conf_den);
+  } else if (ptrml->ft_position_signal == kFTPosPeak) {
+    add_signal(have_peak, obs.z_peak, obs.vz_peak, 1.0, conf_peak,
+               zsum, vsum, wsum, conf_num, conf_den);
+  } else if (ptrml->ft_position_signal == kFTPosShear) {
+    add_signal(have_shear, obs.z_shear, obs.vz_shear, 1.0, conf_shear,
+               zsum, vsum, wsum, conf_num, conf_den);
+  } else if (ptrml->ft_position_signal == kFTPosScalar) {
+    add_signal(have_scalar, obs.z_scalar, obs.vz_scalar, 1.0, conf_scalar,
+               zsum, vsum, wsum, conf_num, conf_den);
+  } else if (ptrml->ft_position_signal == kFTPosBlend) {
+    const Real b = ptrml->ft_position_blend;
+    add_signal(have_peak, obs.z_peak, obs.vz_peak, 1.0-b, conf_peak,
+               zsum, vsum, wsum, conf_num, conf_den);
+    add_signal(have_shear, obs.z_shear, obs.vz_shear, b, conf_shear,
+               zsum, vsum, wsum, conf_num, conf_den);
+  } else {
+    add_signal(have_cool, obs.z_cooling, obs.vz_cooling, ptrml->ft_w_cooling, conf_cool,
+               zsum, vsum, wsum, conf_num, conf_den);
+    add_signal(have_peak, obs.z_peak, obs.vz_peak, ptrml->ft_w_peak, conf_peak,
+               zsum, vsum, wsum, conf_num, conf_den);
+    add_signal(have_shear, obs.z_shear, obs.vz_shear, ptrml->ft_w_shear, conf_shear,
+               zsum, vsum, wsum, conf_num, conf_den);
+    add_signal(have_scalar, obs.z_scalar, obs.vz_scalar, ptrml->ft_w_scalar, conf_scalar,
+               zsum, vsum, wsum, conf_num, conf_den);
+  }
+
+  // If the requested signal was unavailable, fall back to the auto blend.
+  if (wsum <= 0.0 && ptrml->ft_position_signal != kFTPosAuto) {
+    zsum = 0.0;
+    vsum = 0.0;
+    wsum = 0.0;
+    conf_num = 0.0;
+    conf_den = 0.0;
+    add_signal(have_cool, obs.z_cooling, obs.vz_cooling, ptrml->ft_w_cooling, conf_cool,
+               zsum, vsum, wsum, conf_num, conf_den);
+    add_signal(have_peak, obs.z_peak, obs.vz_peak, ptrml->ft_w_peak, conf_peak,
+               zsum, vsum, wsum, conf_num, conf_den);
+    add_signal(have_shear, obs.z_shear, obs.vz_shear, ptrml->ft_w_shear, conf_shear,
+               zsum, vsum, wsum, conf_num, conf_den);
+    add_signal(have_scalar, obs.z_scalar, obs.vz_scalar, ptrml->ft_w_scalar, conf_scalar,
+               zsum, vsum, wsum, conf_num, conf_den);
+  }
+
+  obs.valid = (wsum > 0.0);
+  if (!obs.valid) return false;
+
+  obs.z = zsum/wsum;
+  obs.vz = vsum/wsum;
+  obs.confidence = (conf_den > 0.0) ? conf_num/conf_den : 0.0;
+  obs.weight = obs.w_peak + obs.w_cooling + obs.w_shear + obs.w_scalar;
   return true;
 }
+
 } // namespace
 
 //----------------------------------------------------------------------------------------
@@ -842,7 +1215,27 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   ptrml->hist_shear_vel_frac = pin->GetOrAddReal("problem", "hist_shear_vel_frac", 0.45);
   ptrml->hist_vy_vel_frac = pin->GetOrAddReal("problem", "hist_vy_vel_frac", 0.08);
 
-  // Frame-tracking controls: modern-only ft_* schema
+  // Lightweight rank-0 diagnostics.  These are intentionally cheap: global
+  // reductions of volumes, phase moments, stresses, cooling centroid, and the
+  // current frame-tracking observer state.  Expensive SFs and spectra remain
+  // post-processing tasks.
+  ptrml->analysis_on = pin->GetOrAddBoolean("problem", "analysis_on", true);
+  ptrml->analysis_every = pin->GetOrAddInteger("problem", "analysis_every",
+                                                (ptrml->ndiag > 0 ? ptrml->ndiag : 100));
+  ptrml->analysis_file = pin->GetOrAddString("problem", "analysis_file",
+                                             "trml_lightdiag.dat");
+  ptrml->analysis_clobber = pin->GetOrAddBoolean("problem", "analysis_clobber", true);
+  ptrml->analysis_header_written = false;
+  if (!restart && ptrml->analysis_on && ptrml->analysis_clobber &&
+      global_variable::my_rank == 0) {
+    std::ofstream ofs(ptrml->analysis_file.c_str(), std::ios::out);
+    ofs.close();
+  }
+
+  // Frame-tracking controls.  The old frame tracker used a single narrow
+  // temperature-band centroid.  The new observer blends independent cheap
+  // signals: net-cooling centroid, peak-temperature centroid, shear-band
+  // midpoint, and passive-scalar interface if present.
   const std::array<const char*, 20> legacy_ft_keys = {
       "boost_every", "history_len", "shift_smooth_beta", "T_lo", "T_hi",
       "min_tracked_mass", "max_vz_frame_tracking", "n_frame_track",
@@ -869,17 +1262,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       if (i > 0) msg << ", ";
       msg << legacy_ft_found[i];
     }
-    msg << "\nModern-only frame-tracking schema is required. Use: "
-        << "ft_apply_every, ft_mode, ft_tau_avg, ft_tau_relax, ft_tau_vel, "
-        << "ft_temp_lo, ft_temp_hi, ft_weight_floor, ft_max_abs_boost, "
-        << "ft_max_boost_change, ft_use_lowzlim, ft_lowzlim, ft_use_uppzlim, ft_uppzlim, "
-        << "ft_position_signal, ft_position_blend, ft_tau_int, ft_int_max_abs, "
-        << "ft_int_leak_tau, ft_int_unsat_only, ft_max_boost_change_mode, "
-        << "ft_max_boost_change_rate, ft_min_global_weight, "
-        << "ft_reacquire_expand_factor, ft_reacquire_max_expand, "
-        << "ft_reacquire_recover_updates, ft_reacquire_leak_on_miss, "
-        << "ft_boundary_guard_enable, ft_boundary_guard_cells, "
-        << "ft_boundary_guard_min_scale.";
+    msg << "\nUse the streamlined ft_* schema: ft_apply_every, ft_mode, "
+        << "ft_position_signal, ft_target_z, ft_logT_sigma, ft_shear_vel_frac, "
+        << "ft_w_cooling, ft_w_peak, ft_w_shear, ft_w_scalar, ft_tau_avg, "
+        << "ft_tau_relax, ft_tau_int, and the safety limit parameters.";
     std::cout << msg.str() << std::endl;
     std::exit(EXIT_FAILURE);
   }
@@ -889,35 +1275,63 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
                                                     ptrml->t_cool_start);
   ptrml->ft_apply_every = pin->GetOrAddInteger("problem", "ft_apply_every", 10);
   ptrml->ft_mode = ParseFrameTrackingMode(pin->GetOrAddString("problem", "ft_mode", "pd"));
-  ptrml->ft_tau_avg = pin->GetOrAddReal("problem", "ft_tau_avg", 0.05*frame_time_ref);
-  ptrml->ft_tau_relax = pin->GetOrAddReal("problem", "ft_tau_relax", 1.0*frame_time_ref);
-  ptrml->ft_tau_vel = pin->GetOrAddReal("problem", "ft_tau_vel", 0.25*frame_time_ref);
+  ptrml->ft_position_signal = ParseFrameTrackingPositionSignal(
+      pin->GetOrAddString("problem", "ft_position_signal", "auto"));
+  ptrml->ft_target_z = pin->GetOrAddReal("problem", "ft_target_z", ptrml->z_interface);
+
   ptrml->ft_temp_lo = pin->GetOrAddReal("problem", "ft_temp_lo", T_cold);
   ptrml->ft_temp_hi = pin->GetOrAddReal("problem", "ft_temp_hi", ptrml->T_peak_hi);
-  ptrml->ft_weight_floor = pin->GetOrAddReal("problem", "ft_weight_floor", 1.0e-6);
+  ptrml->ft_logT_sigma = pin->GetOrAddReal("problem", "ft_logT_sigma", 0.30);
+  ptrml->ft_shear_vel_frac = pin->GetOrAddReal("problem", "ft_shear_vel_frac",
+                                               ptrml->hist_shear_vel_frac);
+  ptrml->ft_scalar_lo = pin->GetOrAddReal("problem", "ft_scalar_lo", 0.45);
+  ptrml->ft_scalar_hi = pin->GetOrAddReal("problem", "ft_scalar_hi", 0.55);
+  ptrml->ft_w_cooling = pin->GetOrAddReal("problem", "ft_w_cooling", 2.0);
+  ptrml->ft_w_peak = pin->GetOrAddReal("problem", "ft_w_peak", 1.0);
+  ptrml->ft_w_shear = pin->GetOrAddReal("problem", "ft_w_shear", 1.0);
+  ptrml->ft_w_scalar = pin->GetOrAddReal("problem", "ft_w_scalar", 1.0);
+  ptrml->ft_position_blend = pin->GetOrAddReal("problem", "ft_position_blend", 0.5);
+  const Real ft_weight_floor_input =
+      pin->GetOrAddReal("problem", "ft_weight_floor", 1.0e-10);
+  ptrml->ft_min_global_weight =
+      pin->GetOrAddReal("problem", "ft_min_global_weight", ft_weight_floor_input);
+  ptrml->ft_weight_floor = std::max(ft_weight_floor_input, ptrml->ft_min_global_weight);
+  ptrml->ft_cool_weight_floor =
+      pin->GetOrAddReal("problem", "ft_cool_weight_floor", ptrml->ft_weight_floor);
+  ptrml->ft_shear_weight_floor =
+      pin->GetOrAddReal("problem", "ft_shear_weight_floor", ptrml->ft_weight_floor);
+  ptrml->ft_scalar_weight_floor =
+      pin->GetOrAddReal("problem", "ft_scalar_weight_floor", ptrml->ft_weight_floor);
+  ptrml->ft_min_signal_cells = pin->GetOrAddInteger("problem", "ft_min_signal_cells", 4);
+  ptrml->ft_min_confidence = pin->GetOrAddReal("problem", "ft_min_confidence", 0.25);
+  ptrml->ft_v_obs_blend = pin->GetOrAddReal("problem", "ft_v_obs_blend", 0.25);
+
+  ptrml->ft_tau_avg = pin->GetOrAddReal("problem", "ft_tau_avg", 0.10*frame_time_ref);
+  ptrml->ft_tau_relax = pin->GetOrAddReal("problem", "ft_tau_relax", 1.0*frame_time_ref);
+  ptrml->ft_tau_vel = pin->GetOrAddReal("problem", "ft_tau_vel", 0.25*frame_time_ref);
+  ptrml->ft_tau_int = pin->GetOrAddReal("problem", "ft_tau_int", 0.0);
+  ptrml->ft_int_max_abs = pin->GetOrAddReal("problem", "ft_int_max_abs",
+                                            0.005*velocity_abs);
+  ptrml->ft_int_leak_tau = pin->GetOrAddReal("problem", "ft_int_leak_tau",
+                                             5.0*frame_time_ref);
+  ptrml->ft_int_unsat_only = pin->GetOrAddBoolean("problem", "ft_int_unsat_only", true);
+
   ptrml->ft_max_abs_boost = pin->GetOrAddReal("problem", "ft_max_abs_boost",
-                                              0.01*velocity_abs);
+                                              0.02*velocity_abs);
   ptrml->ft_max_boost_change = pin->GetOrAddReal("problem", "ft_max_boost_change",
                                                   ptrml->ft_max_abs_boost);
   ptrml->ft_max_boost_change_mode = ParseFrameTrackingBoostChangeMode(
       pin->GetOrAddString("problem", "ft_max_boost_change_mode", "per_apply"));
-  ptrml->ft_max_boost_change_rate = pin->GetOrAddReal("problem", "ft_max_boost_change_rate", -1.0);
+  ptrml->ft_max_boost_change_rate = pin->GetOrAddReal("problem",
+      "ft_max_boost_change_rate", -1.0);
   ptrml->ft_use_lowzlim = pin->GetOrAddBoolean("problem", "ft_use_lowzlim", false);
   ptrml->ft_lowzlim = pin->GetOrAddReal("problem", "ft_lowzlim", ptrml->zbot);
   ptrml->ft_use_uppzlim = pin->GetOrAddBoolean("problem", "ft_use_uppzlim", false);
   ptrml->ft_uppzlim = pin->GetOrAddReal("problem", "ft_uppzlim", ptrml->ztop);
-  ptrml->ft_position_signal = ParseFrameTrackingPositionSignal(
-      pin->GetOrAddString("problem", "ft_position_signal", "blend"));
-  ptrml->ft_position_blend = pin->GetOrAddReal("problem", "ft_position_blend", 0.7);
-  ptrml->ft_tau_int = pin->GetOrAddReal("problem", "ft_tau_int", 12.0);
-  ptrml->ft_int_max_abs = pin->GetOrAddReal("problem", "ft_int_max_abs", 1.5e-3);
-  ptrml->ft_int_leak_tau = pin->GetOrAddReal("problem", "ft_int_leak_tau", 8.0);
-  ptrml->ft_int_unsat_only = pin->GetOrAddBoolean("problem", "ft_int_unsat_only", true);
-  ptrml->ft_min_global_weight = pin->GetOrAddReal("problem", "ft_min_global_weight", 1.0e-4);
   ptrml->ft_reacquire_expand_factor =
       pin->GetOrAddReal("problem", "ft_reacquire_expand_factor", 1.35);
   ptrml->ft_reacquire_max_expand =
-      pin->GetOrAddReal("problem", "ft_reacquire_max_expand", 2.5);
+      pin->GetOrAddReal("problem", "ft_reacquire_max_expand", 3.0);
   ptrml->ft_reacquire_recover_updates =
       pin->GetOrAddInteger("problem", "ft_reacquire_recover_updates", 6);
   ptrml->ft_reacquire_leak_on_miss =
@@ -961,11 +1375,38 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
               << ptrml->ft_temp_lo << " and " << ptrml->ft_temp_hi << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  if (ptrml->analysis_every < 1) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Require analysis_every >= 1, got "
+              << ptrml->analysis_every << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (ptrml->ft_logT_sigma <= 0.0 || ptrml->ft_shear_vel_frac <= 0.0 ||
+      ptrml->ft_shear_vel_frac >= 1.0 || ptrml->ft_scalar_lo > ptrml->ft_scalar_hi ||
+      ptrml->ft_min_signal_cells < 1 || ptrml->ft_min_confidence < 0.0 ||
+      ptrml->ft_min_confidence > 1.0 || ptrml->ft_v_obs_blend < 0.0 ||
+      ptrml->ft_v_obs_blend > 1.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Invalid frame observer parameters: "
+              << "ft_logT_sigma=" << ptrml->ft_logT_sigma
+              << ", ft_shear_vel_frac=" << ptrml->ft_shear_vel_frac
+              << ", ft_scalar_lo=" << ptrml->ft_scalar_lo
+              << ", ft_scalar_hi=" << ptrml->ft_scalar_hi
+              << ", ft_min_signal_cells=" << ptrml->ft_min_signal_cells
+              << ", ft_min_confidence=" << ptrml->ft_min_confidence
+              << ", ft_v_obs_blend=" << ptrml->ft_v_obs_blend << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   if (ptrml->ft_weight_floor < 0.0 || ptrml->ft_max_abs_boost < 0.0 ||
-      ptrml->ft_max_boost_change < 0.0 || ptrml->ft_int_max_abs < 0.0) {
+      ptrml->ft_cool_weight_floor < 0.0 || ptrml->ft_shear_weight_floor < 0.0 ||
+      ptrml->ft_scalar_weight_floor < 0.0 || ptrml->ft_max_boost_change < 0.0 ||
+      ptrml->ft_int_max_abs < 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Frame-tracking limits must be non-negative: "
               << "ft_weight_floor=" << ptrml->ft_weight_floor
+              << ", ft_cool_weight_floor=" << ptrml->ft_cool_weight_floor
+              << ", ft_shear_weight_floor=" << ptrml->ft_shear_weight_floor
+              << ", ft_scalar_weight_floor=" << ptrml->ft_scalar_weight_floor
               << ", ft_max_abs_boost=" << ptrml->ft_max_abs_boost
               << ", ft_max_boost_change=" << ptrml->ft_max_boost_change
               << ", ft_int_max_abs=" << ptrml->ft_int_max_abs << std::endl;
@@ -1036,9 +1477,19 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   ptrml->ft_last_vel_cmd_pre = 0.0;
   ptrml->ft_last_vel_cmd_post = 0.0;
   ptrml->ft_last_apply_time = -1.0;
-  ptrml->ft_last_z_centroid = 0.0;
-  ptrml->ft_last_z_midpoint = 0.0;
+  ptrml->ft_last_z_cooling = std::numeric_limits<Real>::quiet_NaN();
+  ptrml->ft_last_z_peak = std::numeric_limits<Real>::quiet_NaN();
+  ptrml->ft_last_z_shear = std::numeric_limits<Real>::quiet_NaN();
+  ptrml->ft_last_z_scalar = std::numeric_limits<Real>::quiet_NaN();
+  ptrml->ft_last_z_centroid = std::numeric_limits<Real>::quiet_NaN();
+  ptrml->ft_last_z_midpoint = std::numeric_limits<Real>::quiet_NaN();
   ptrml->ft_last_z_ctrl = 0.0;
+  ptrml->ft_last_confidence = 0.0;
+  ptrml->ft_last_vz_obs = 0.0;
+  ptrml->ft_last_vz_posder = 0.0;
+  ptrml->ft_prev_z_signal = 0.0;
+  ptrml->ft_prev_z_signal_time = -1.0;
+  ptrml->ft_have_prev_z_signal = false;
   ptrml->ft_i_term = 0.0;
   ptrml->ft_temp_lo_active = ptrml->ft_temp_lo;
   ptrml->ft_temp_hi_active = ptrml->ft_temp_hi;
@@ -1097,6 +1548,16 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     std::cout << std::setprecision(16) << "ft_temp_lo = " << ptrml->ft_temp_lo << "\n";
     std::cout << std::setprecision(16) << "ft_temp_hi = " << ptrml->ft_temp_hi << "\n";
     std::cout << std::setprecision(16) << "ft_weight_floor = " << ptrml->ft_weight_floor << "\n";
+    std::cout << std::setprecision(16) << "ft_cool_weight_floor = "
+              << ptrml->ft_cool_weight_floor << "\n";
+    std::cout << std::setprecision(16) << "ft_shear_weight_floor = "
+              << ptrml->ft_shear_weight_floor << "\n";
+    std::cout << std::setprecision(16) << "ft_scalar_weight_floor = "
+              << ptrml->ft_scalar_weight_floor << "\n";
+    std::cout << std::setprecision(16) << "ft_min_signal_cells = "
+              << ptrml->ft_min_signal_cells << "\n";
+    std::cout << std::setprecision(16) << "ft_min_confidence = "
+              << ptrml->ft_min_confidence << "\n";
     std::cout << std::setprecision(16) << "ft_max_abs_boost = " << ptrml->ft_max_abs_boost << "\n";
     std::cout << std::setprecision(16) << "ft_max_boost_change = " << ptrml->ft_max_boost_change << "\n";
     std::cout << std::setprecision(16) << "ft_max_boost_change_mode = "
@@ -1145,12 +1606,36 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   ptrml->refine_level_times.clear();
   ptrml->refine_level_counts.clear();
   ptrml->t_start_refine = 0.0;
+  ptrml->density_ratio_threshold = 0.0;
+  ptrml->vel2_rms_threshold = 0.0;
+  ptrml->T_min_threshold = 0.0;
+  ptrml->T_max_threshold = 0.0;
+  ptrml->amr_derefine_factor = 0.25;
+  ptrml->amr_min_temp_fraction = 0.001;
+  ptrml->amr_min_temp_cells = 4.0;
   if (adaptive){
     ptrml->t_start_refine = pin->GetOrAddReal("problem", "t_start_refine", 0.0);
     ptrml->density_ratio_threshold = pin->GetOrAddReal("problem", "density_ratio_threshold", 0.0);
     ptrml->vel2_rms_threshold = pin->GetOrAddReal("problem", "vel2_rms_threshold", 0.0);
     ptrml->T_min_threshold = pin->GetOrAddReal("problem", "T_min_threshold", 0.0);
     ptrml->T_max_threshold = pin->GetOrAddReal("problem", "T_max_threshold", 0.0);
+    ptrml->amr_derefine_factor = pin->GetOrAddReal("problem", "amr_derefine_factor", 0.25);
+    ptrml->amr_min_temp_fraction =
+        pin->GetOrAddReal("problem", "amr_min_temp_fraction", 0.001);
+    ptrml->amr_min_temp_cells = pin->GetOrAddReal("problem", "amr_min_temp_cells", 4.0);
+    if (!std::isfinite(ptrml->amr_derefine_factor) ||
+        ptrml->amr_derefine_factor <= 0.0 || ptrml->amr_derefine_factor >= 1.0 ||
+        !std::isfinite(ptrml->amr_min_temp_fraction) ||
+        ptrml->amr_min_temp_fraction < 0.0 || ptrml->amr_min_temp_fraction > 1.0 ||
+        !std::isfinite(ptrml->amr_min_temp_cells) || ptrml->amr_min_temp_cells < 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Invalid TRML AMR support settings. Require "
+                << "0 < amr_derefine_factor < 1, "
+                << "0 <= amr_min_temp_fraction <= 1, and "
+                << "amr_min_temp_cells >= 0." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     ptrml->max_num_levels_input = pmy_mesh_->max_level - pmy_mesh_->root_level + 1;
     for (int i = 0; i < pmy_mesh_->nmb_total; ++i) {
       ptrml->max_level_floor = std::max(ptrml->max_level_floor, pmy_mesh_->lloc_eachmb[i].level);
@@ -2060,68 +2545,106 @@ void UserRefine(MeshBlockPack* pmbp) {
   Real use_e = eos.use_e;
   Real gm1 = eos.gamma - 1.0;
 
-  // maximum intercell density ratio
   Real density_ratio_threshold = ptrml->density_ratio_threshold;
   Real vel2_rms_threshold = ptrml->vel2_rms_threshold;
   Real T_max_threshold = ptrml->T_max_threshold;
   Real T_min_threshold = ptrml->T_min_threshold;
+  Real amr_derefine_factor = ptrml->amr_derefine_factor;
+  Real amr_min_temp_fraction = ptrml->amr_min_temp_fraction;
+  Real amr_min_temp_cells = ptrml->amr_min_temp_cells;
+  const bool density_active = (density_ratio_threshold > 0.0);
+  const bool velocity_active = (vel2_rms_threshold > 0.0);
+  const bool temp_gate_active = (T_max_threshold > T_min_threshold);
+  const bool any_feature_active = (density_active || velocity_active);
+  const bool any_amr_criterion_active = (any_feature_active || temp_gate_active);
+  if (!any_amr_criterion_active) {
+    return;
+  }
+  const Real density_derefine_threshold = amr_derefine_factor*density_ratio_threshold;
+  const Real velocity_derefine_threshold = amr_derefine_factor*vel2_rms_threshold;
+  const Real temp_cells_derefine_threshold = amr_derefine_factor*amr_min_temp_cells;
+  const Real temp_fraction_derefine_threshold = amr_derefine_factor*amr_min_temp_fraction;
+  const Real rho_floor = std::numeric_limits<Real>::min();
   if ((is_hydro) || (is_mhd)) {
     // if (global_variable::my_rank == 0) {printf("UserRefine\n");}
     auto &w0 = (is_hydro)? pmbp->phydro->w0 : pmbp->pmhd->w0;
     par_for_outer("RefineCond",DevExeSpace(), 0, 0, 0, (nmb-1),
     KOKKOS_LAMBDA(TeamMember_t tmember, const int m) {
-      // density ratio threshold between neighbouring cells
-      Real density_ratio_max = 1.0;
-      Real vel2_rms = 0.0;
+      Real density_jump_max = 0.0;
+      Real vel_rms = 0.0;
       Real counter = 0.0;
-      int trigger = 0;
+      int temp_count = 0;
       Kokkos::parallel_reduce(Kokkos::TeamThreadRange(tmember, nkji),
-      [=](const int idx, Real& dratio_max, Real &vel2_sq_sum, int &trigger_, Real &counter_) {
+      [=](const int idx, Real& djump_max, Real &vel_sq_sum, int &temp_count_,
+          Real &counter_) {
         int k = (idx)/nji;
         int j = (idx - k*nji)/nx1;
         int i = (idx - k*nji - j*nx1) + is;
         j += js;
         k += ks;
-        vel2_sq_sum += SQR(w0(m,IVY,k,j,i));
+        const Real rho = fmax(w0(m,IDN,k,j,i), rho_floor);
+        vel_sq_sum += SQR(w0(m,IVX,k,j,i)) + SQR(w0(m,IVY,k,j,i)) +
+                      SQR(w0(m,IVZ,k,j,i));
         counter_ += 1.0;
 
-        dratio_max = fmax(w0(m,IDN,k,j,i-1)/w0(m,IDN,k,j,i),1.0);
-        dratio_max = fmax(w0(m,IDN,k,j,i+1)/w0(m,IDN,k,j,i),dratio_max);
-        dratio_max = fmax(w0(m,IDN,k,j,i)/w0(m,IDN,k,j,i-1),dratio_max);
-        dratio_max = fmax(w0(m,IDN,k,j,i)/w0(m,IDN,k,j,i+1),dratio_max);
+        Real d2 = SQR(w0(m,IDN,k,j,i+1) - w0(m,IDN,k,j,i-1));
+        if (nx2 > 1) {
+          d2 += SQR(w0(m,IDN,k,j+1,i) - w0(m,IDN,k,j-1,i));
+        }
+        if (nx3 > 1) {
+          d2 += SQR(w0(m,IDN,k+1,j,i) - w0(m,IDN,k-1,j,i));
+        }
+        djump_max = fmax(sqrt(d2)/rho, djump_max);
 
-        if (nx2>1) {
-          dratio_max = fmax(w0(m,IDN,k,j-1,i)/w0(m,IDN,k,j,i),dratio_max);
-          dratio_max = fmax(w0(m,IDN,k,j+1,i)/w0(m,IDN,k,j,i),dratio_max);
-          dratio_max = fmax(w0(m,IDN,k,j,i)/w0(m,IDN,k,j-1,i),dratio_max);
-          dratio_max = fmax(w0(m,IDN,k,j,i)/w0(m,IDN,k,j+1,i),dratio_max);
-        }
-        if (nx3>1) {
-          dratio_max = fmax(w0(m,IDN,k-1,j,i)/w0(m,IDN,k,j,i),dratio_max);
-          dratio_max = fmax(w0(m,IDN,k+1,j,i)/w0(m,IDN,k,j,i),dratio_max);
-          dratio_max = fmax(w0(m,IDN,k,j,i)/w0(m,IDN,k-1,j,i),dratio_max);
-          dratio_max = fmax(w0(m,IDN,k,j,i)/w0(m,IDN,k+1,j,i),dratio_max);
-        }
-        Real temp=1.0;
+        Real temp = 1.0;
         if (use_e) {
-          temp = w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)*gm1;
+          temp = w0(m,IEN,k,j,i)/rho*gm1;
         } else {
           temp = w0(m,ITM,k,j,i);
         }
-        if ((temp < T_max_threshold) and (temp > T_min_threshold)) {
-          trigger_ += 1;
+        if (temp_gate_active && temp < T_max_threshold && temp > T_min_threshold) {
+          temp_count_ += 1;
         }
-        else trigger_ += 0;
 
-      },Kokkos::Max<Real>(density_ratio_max), Kokkos::Sum<Real>(vel2_rms)
-       , Kokkos::Sum<int>(trigger), Kokkos::Sum<Real>(counter));
+      },Kokkos::Max<Real>(density_jump_max), Kokkos::Sum<Real>(vel_rms),
+        Kokkos::Sum<int>(temp_count), Kokkos::Sum<Real>(counter));
 
-      vel2_rms = sqrt(vel2_rms/counter);
-      if ((density_ratio_max > density_ratio_threshold) || (vel2_rms>vel2_rms_threshold) || (trigger>0)) {
-        refine_flag_.d_view(m+mbs) = 1;
+      vel_rms = (counter > 0.0) ? sqrt(vel_rms/counter) : 0.0;
+      const Real temp_cells = static_cast<Real>(temp_count);
+      const Real temp_fraction = (counter > 0.0) ? temp_cells/counter : 0.0;
+      const bool temp_refine_ok =
+          !temp_gate_active ||
+          (((amr_min_temp_cells <= 0.0) || (temp_cells >= amr_min_temp_cells)) &&
+           ((amr_min_temp_fraction <= 0.0) || (temp_fraction >= amr_min_temp_fraction)));
+      const bool temp_derefine_ok =
+          !temp_gate_active ||
+          (((amr_min_temp_cells <= 0.0) ||
+            (temp_cells <= temp_cells_derefine_threshold)) &&
+           ((amr_min_temp_fraction <= 0.0) ||
+            (temp_fraction <= temp_fraction_derefine_threshold)));
+
+      bool feature_refine = !any_feature_active;
+      bool feature_derefine = true;
+      if (density_active) {
+        feature_refine = feature_refine || (density_jump_max > density_ratio_threshold);
+        feature_derefine = feature_derefine &&
+                           (density_jump_max < density_derefine_threshold);
       }
-      else if ((density_ratio_max < 0.25 * density_ratio_threshold) || ((vel2_rms < 0.25*vel2_rms_threshold)) || (trigger==0)) {
+      if (velocity_active) {
+        feature_refine = feature_refine || (vel_rms > vel2_rms_threshold);
+        feature_derefine = feature_derefine &&
+                           (vel_rms < velocity_derefine_threshold);
+      }
+
+      const bool want_refine = temp_refine_ok && feature_refine;
+      const bool want_derefine = temp_derefine_ok && feature_derefine;
+      const int prior_flag = refine_flag_.d_view(m+mbs);
+      if (want_refine) {
+        refine_flag_.d_view(m+mbs) = 1;
+      } else if (want_derefine && prior_flag <= 0) {
         refine_flag_.d_view(m+mbs) = -1;
+      } else if (prior_flag < 0) {
+        refine_flag_.d_view(m+mbs) = 0;
       }
     });
   }
@@ -2132,14 +2655,21 @@ void UserRefine(MeshBlockPack* pmbp) {
 // ! \fn void UserWorkInLoop()
 // ! \brief Function called in hydro or mhd tasks in "after_timeintegrator" stage
 void UserWorkInLoop(Mesh *pm) {
-  // Frame tracking
-
-  if (ptrml->ndiag>0 && pm->ncycle % ptrml->ndiag == 0) {
-    Diagnostic(pm);
-  }
+  // Keep the layer in a well-behaved frame first, then write diagnostics from
+  // the corrected frame.  The compact analysis file is separate from AthenaK's
+  // history stream so we are not limited by NHISTORY_VARIABLES.
   if (ptrml->use_frame_tracking && pm->time > ptrml->t_frame_tracking_start &&
       pm->ncycle % ptrml->ft_apply_every == 0) {
     FrameTracking(pm);
+  }
+
+  if (ptrml->ndiag > 0 && pm->ncycle % ptrml->ndiag == 0) {
+    Diagnostic(pm);
+  }
+
+  if (ptrml->analysis_on && ptrml->analysis_every > 0 &&
+      pm->ncycle % ptrml->analysis_every == 0) {
+    WriteLightDiagnostics(pm);
   }
 }
 
@@ -2155,7 +2685,7 @@ void FrameTracking(Mesh *pm) {
   int n2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng) : 1;
   int n3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng) : 1;
   int nmb1 = pmbp->nmb_thispack - 1;
-  bool is_mhd = (pmbp->pmhd != nullptr) ? true : false;
+  const bool is_mhd = (pmbp->pmhd != nullptr);
   auto &u0 = (is_mhd) ? pmbp->pmhd->u0 : pmbp->phydro->u0;
   auto &w0 = (is_mhd) ? pmbp->pmhd->w0 : pmbp->phydro->w0;
   EOS_Data &eos = (is_mhd) ?
@@ -2169,6 +2699,7 @@ void FrameTracking(Mesh *pm) {
     dt_boost = std::max(pm->dt, static_cast<Real>(1.0e-20));
   }
 
+  // Reacquisition only widens the hard temperature window used by the peak observer.
   const bool reacquire_enabled =
       (ptrml->ft_reacquire_expand_factor > 1.0) &&
       (ptrml->ft_reacquire_max_expand > 1.0);
@@ -2182,40 +2713,39 @@ void FrameTracking(Mesh *pm) {
                         static_cast<Real>(ptrml->ft_miss_streak));
       expand = std::min(expand, ptrml->ft_reacquire_max_expand);
     }
-    const Real log_peak = std::log10(safe_peak);
-    const Real log_lo = std::log10(safe_lo);
-    const Real log_hi = std::log10(safe_hi);
+    const Real log_peak = std::log(safe_peak);
+    const Real log_lo = std::log(safe_lo);
+    const Real log_hi = std::log(safe_hi);
     const Real dlog_lo = std::max(static_cast<Real>(0.0), log_peak - log_lo);
     const Real dlog_hi = std::max(static_cast<Real>(0.0), log_hi - log_peak);
-    ptrml->ft_temp_lo_active = std::pow(static_cast<Real>(10.0), log_peak - dlog_lo*expand);
-    ptrml->ft_temp_hi_active = std::pow(static_cast<Real>(10.0), log_peak + dlog_hi*expand);
+    ptrml->ft_temp_lo_active = std::exp(log_peak - dlog_lo*expand);
+    ptrml->ft_temp_hi_active = std::exp(log_peak + dlog_hi*expand);
     if (ptrml->ft_temp_hi_active < ptrml->ft_temp_lo_active) {
       std::swap(ptrml->ft_temp_lo_active, ptrml->ft_temp_hi_active);
     }
   };
   SetActiveTrackingBand();
 
-  Real W_global = 0.0;
-  Real z_centroid = 0.0;
-  Real vz_meas = 0.0;
-  Real z_band_min = 0.0;
-  Real z_band_max = 0.0;
-  const bool have_sample = SampleFrameTrackingMoments(
-      pm, W_global, z_centroid, vz_meas, z_band_min, z_band_max,
-      ptrml->ft_temp_lo_active, ptrml->ft_temp_hi_active);
-  const bool low_weight_floor = have_sample && (W_global <= ptrml->ft_weight_floor);
-  const bool low_weight_observable =
-      have_sample && (ptrml->ft_min_global_weight > 0.0) &&
-      (W_global < ptrml->ft_min_global_weight);
+  FrameObserver obs;
+  const bool have_sample = SampleFrameTrackingObserver(
+      pm, obs, ptrml->ft_temp_lo_active, ptrml->ft_temp_hi_active);
+  const bool observable = have_sample && obs.valid &&
+                          (obs.confidence >= ptrml->ft_min_confidence);
 
-  ptrml->ft_last_global_weight = (have_sample ? W_global : 0.0);
-  ptrml->ft_last_mean_z = z_centroid;
-  ptrml->ft_last_mean_vz = vz_meas;
-  ptrml->ft_last_z_centroid = z_centroid;
-  ptrml->ft_last_z_midpoint = 0.5*(z_band_min + z_band_max);
-  ptrml->ft_last_z_ctrl = z_centroid;
+  ptrml->ft_last_global_weight = have_sample ? obs.weight : 0.0;
+  ptrml->ft_last_confidence = have_sample ? obs.confidence : 0.0;
+  ptrml->ft_last_z_cooling = have_sample ? obs.z_cooling
+                                         : std::numeric_limits<Real>::quiet_NaN();
+  ptrml->ft_last_z_peak = have_sample ? obs.z_peak
+                                      : std::numeric_limits<Real>::quiet_NaN();
+  ptrml->ft_last_z_shear = have_sample ? obs.z_shear
+                                       : std::numeric_limits<Real>::quiet_NaN();
+  ptrml->ft_last_z_scalar = have_sample ? obs.z_scalar
+                                        : std::numeric_limits<Real>::quiet_NaN();
+  ptrml->ft_last_z_centroid = ptrml->ft_last_z_peak;
+  ptrml->ft_last_z_midpoint = ptrml->ft_last_z_shear;
 
-  if (!have_sample || low_weight_floor || low_weight_observable) {
+  if (!observable) {
     ptrml->ft_last_skip_flag = true;
     ptrml->ft_last_slew_limited = false;
     ptrml->ft_last_vel_cmd_pre = 0.0;
@@ -2223,26 +2753,27 @@ void FrameTracking(Mesh *pm) {
     ptrml->ft_miss_streak += 1;
     ptrml->ft_recover_streak = 0;
     SetActiveTrackingBand();
+
     if (ptrml->ft_reacquire_leak_on_miss && ptrml->ft_tau_int > 0.0 &&
         ptrml->ft_int_leak_tau > 0.0) {
       ptrml->ft_i_term *= std::exp(-dt_boost/ptrml->ft_int_leak_tau);
     }
+    ptrml->ft_have_prev_z_signal = false;
+    ptrml->ft_prev_z_signal_time = -1.0;
     ptrml->ft_last_apply_time = pm->time;
+
     if (global_variable::my_rank == 0 && ptrml->ndiag > 0 &&
         pm->ncycle % ptrml->ndiag == 0) {
-      if (!have_sample) {
-        std::cout << "FrameTracking skipped: no tracked gas in selected temperature band"
-                  << std::endl;
-      } else if (low_weight_floor) {
-        std::cout << "FrameTracking skipped: W_global <= ft_weight_floor (" << W_global
-                  << " <= " << ptrml->ft_weight_floor << ")" << std::endl;
-      } else {
-        std::cout << "FrameTracking skipped: W_global < ft_min_global_weight (" << W_global
-                  << " < " << ptrml->ft_min_global_weight << ")" << std::endl;
-      }
-      std::cout << " ft_miss_streak=" << ptrml->ft_miss_streak << std::endl;
-      std::cout << " ft_temp_lo_active=" << ptrml->ft_temp_lo_active << std::endl;
-      std::cout << " ft_temp_hi_active=" << ptrml->ft_temp_hi_active << std::endl;
+      std::cout << "FrameTracking skipped: observer not confident"
+                << " confidence=" << ptrml->ft_last_confidence
+                << " required=" << ptrml->ft_min_confidence
+                << " miss_streak=" << ptrml->ft_miss_streak << std::endl
+                << " z_cool=" << ptrml->ft_last_z_cooling
+                << " z_peak=" << ptrml->ft_last_z_peak
+                << " z_shear=" << ptrml->ft_last_z_shear
+                << " z_scalar=" << ptrml->ft_last_z_scalar << std::endl
+                << " ft_temp_lo_active=" << ptrml->ft_temp_lo_active
+                << " ft_temp_hi_active=" << ptrml->ft_temp_hi_active << std::endl;
     }
     return;
   }
@@ -2258,68 +2789,56 @@ void FrameTracking(Mesh *pm) {
   }
   SetActiveTrackingBand();
 
-  const Real z_midpoint = 0.5*(z_band_min + z_band_max);
-  Real z_ctrl = z_centroid;
-  if (ptrml->ft_position_signal == kFTPosBandMidpoint) {
-    z_ctrl = z_midpoint;
-  } else if (ptrml->ft_position_signal == kFTPosBlend) {
-    z_ctrl = (1.0 - ptrml->ft_position_blend)*z_centroid +
-             ptrml->ft_position_blend*z_midpoint;
+  Real vz_obs = obs.vz;
+  Real vz_posder = 0.0;
+  if (ptrml->ft_have_prev_z_signal && ptrml->ft_prev_z_signal_time >= 0.0) {
+    const Real dt_signal = pm->time - ptrml->ft_prev_z_signal_time;
+    if (dt_signal > 0.0) {
+      vz_posder = (obs.z - ptrml->ft_prev_z_signal)/dt_signal;
+      const Real b = std::max(static_cast<Real>(0.0),
+                              std::min(static_cast<Real>(1.0), ptrml->ft_v_obs_blend));
+      vz_obs = (1.0 - b)*obs.vz + b*vz_posder;
+    }
   }
+  ptrml->ft_prev_z_signal = obs.z;
+  ptrml->ft_prev_z_signal_time = pm->time;
+  ptrml->ft_have_prev_z_signal = true;
 
-  ptrml->ft_last_global_weight = W_global;
-  ptrml->ft_last_mean_z = z_centroid;
-  ptrml->ft_last_mean_vz = vz_meas;
-  ptrml->ft_last_z_centroid = z_centroid;
-  ptrml->ft_last_z_midpoint = z_midpoint;
-  ptrml->ft_last_z_ctrl = z_ctrl;
+  ptrml->ft_last_mean_z = obs.z;
+  ptrml->ft_last_mean_vz = vz_obs;
+  ptrml->ft_last_z_ctrl = obs.z;
+  ptrml->ft_last_vz_obs = obs.vz;
+  ptrml->ft_last_vz_posder = vz_posder;
   ptrml->ft_last_skip_flag = false;
 
   if (!ptrml->ft_filter_initialized) {
-    ptrml->ft_last_filtered_z = z_ctrl;
-    ptrml->ft_last_filtered_vz = vz_meas;
+    ptrml->ft_last_filtered_z = obs.z;
+    ptrml->ft_last_filtered_vz = vz_obs;
     ptrml->ft_filter_initialized = true;
-    ptrml->ft_last_z_err = ptrml->ft_last_filtered_z - ptrml->z_interface;
+    ptrml->ft_last_z_err = ptrml->ft_last_filtered_z - ptrml->ft_target_z;
     ptrml->ft_i_term = 0.0;
     ptrml->ft_last_vel_cmd_pre = 0.0;
     ptrml->ft_last_vel_cmd_post = 0.0;
     ptrml->ft_last_slew_limited = false;
     ptrml->ft_last_skip_flag = true;
     ptrml->ft_last_apply_time = pm->time;
+
     if (global_variable::my_rank == 0 && ptrml->ndiag > 0 &&
         pm->ncycle % ptrml->ndiag == 0) {
-      std::cout << "FrameTracking primed filter state; skipping first actuation" << std::endl;
-      std::cout << " W_global=" << W_global << std::endl;
-      std::cout << " mean_z_ft=" << z_centroid << std::endl;
-      std::cout << " mean_velz_ft=" << vz_meas << std::endl;
-      std::cout << " z_meas=" << z_centroid << std::endl;
-      std::cout << " vz_meas=" << vz_meas << std::endl;
-      std::cout << " z_centroid_ft=" << z_centroid << std::endl;
-      std::cout << " z_midpoint_ft=" << z_midpoint << std::endl;
-      std::cout << " z_ctrl_ft=" << z_ctrl << std::endl;
-      std::cout << " z_band_min_ft=" << z_band_min << std::endl;
-      std::cout << " z_band_max_ft=" << z_band_max << std::endl;
-      std::cout << " ft_temp_lo_active=" << ptrml->ft_temp_lo_active << std::endl;
-      std::cout << " ft_temp_hi_active=" << ptrml->ft_temp_hi_active << std::endl;
-      std::cout << " z_filt=" << ptrml->ft_last_filtered_z << std::endl;
-      std::cout << " vz_filt=" << ptrml->ft_last_filtered_vz << std::endl;
-      std::cout << " z_err=" << ptrml->ft_last_z_err << std::endl;
-      std::cout << " v_p=0" << std::endl;
-      std::cout << " v_d=0" << std::endl;
-      std::cout << " v_i=0" << std::endl;
-      std::cout << " vel_z_cmd_pre=0" << std::endl;
-      std::cout << " vel_z_cmd=0" << std::endl;
-      std::cout << " vel_z_shift=0" << std::endl;
+      std::cout << "FrameTracking primed observer/filter; skipping first actuation"
+                << " z_ctrl=" << obs.z
+                << " vz_obs=" << vz_obs
+                << " confidence=" << obs.confidence << std::endl;
     }
     return;
-  } else {
-    Real alpha = 1.0 - std::exp(-dt_boost/ptrml->ft_tau_avg);
-    alpha = std::max(static_cast<Real>(0.0), std::min(static_cast<Real>(1.0), alpha));
-    ptrml->ft_last_filtered_z += alpha*(z_ctrl - ptrml->ft_last_filtered_z);
-    ptrml->ft_last_filtered_vz += alpha*(vz_meas - ptrml->ft_last_filtered_vz);
   }
 
-  Real z_err = ptrml->ft_last_filtered_z - ptrml->z_interface;
+  Real alpha = 1.0 - std::exp(-dt_boost/ptrml->ft_tau_avg);
+  alpha = std::max(static_cast<Real>(0.0), std::min(static_cast<Real>(1.0), alpha));
+  ptrml->ft_last_filtered_z += alpha*(obs.z - ptrml->ft_last_filtered_z);
+  ptrml->ft_last_filtered_vz += alpha*(vz_obs - ptrml->ft_last_filtered_vz);
+
+  const Real z_err = ptrml->ft_last_filtered_z - ptrml->ft_target_z;
   ptrml->ft_last_z_err = z_err;
 
   const bool use_position_feedback = (ptrml->ft_mode != kFTVelocity);
@@ -2331,12 +2850,10 @@ void FrameTracking(Mesh *pm) {
   if (use_position_feedback) {
     v_p = -z_err/ptrml->ft_tau_relax;
   }
+
   Real v_d = 0.0;
-  if (ptrml->ft_mode == kFTVelocity) {
+  if (ptrml->ft_mode == kFTVelocity || ptrml->ft_mode == kFTPD) {
     v_d = -ptrml->ft_last_filtered_vz;
-  } else if (ptrml->ft_mode == kFTPD) {
-    Real vel_weight = 1.0 - std::exp(-dt_boost/ptrml->ft_tau_vel);
-    v_d = -vel_weight*ptrml->ft_last_filtered_vz;
   }
 
   if (!use_integral) {
@@ -2350,21 +2867,24 @@ void FrameTracking(Mesh *pm) {
       allow_integrate = false;
     }
     if (allow_integrate) {
-      ptrml->ft_i_term += -(dt_boost/ptrml->ft_tau_int)*z_err;
+      // Integral term has velocity units.  Accumulate the proportional velocity,
+      // not the raw position error.
+      ptrml->ft_i_term += -(dt_boost/ptrml->ft_tau_int)*(z_err/ptrml->ft_tau_relax);
     }
     if (fabs(ptrml->ft_i_term) > ptrml->ft_int_max_abs) {
       ptrml->ft_i_term = std::copysign(ptrml->ft_int_max_abs, ptrml->ft_i_term);
     }
   }
-  const Real v_i = (use_integral) ? ptrml->ft_i_term : 0.0;
+  const Real v_i = use_integral ? ptrml->ft_i_term : 0.0;
   Real vel_z_cmd_pre = v_p + v_d + v_i;
-
   Real vel_z_cmd = vel_z_cmd_pre;
+
   if (ptrml->ft_boundary_guard_enable && ptrml->ft_boundary_guard_cells > 0) {
     const Real domain_dz = (ptrml->ztop - ptrml->zbot) /
                            std::max(static_cast<Real>(1.0),
                                     static_cast<Real>(pm->mesh_indcs.nx3));
-    const Real guard_thickness = static_cast<Real>(ptrml->ft_boundary_guard_cells)*domain_dz;
+    const Real guard_thickness =
+        static_cast<Real>(ptrml->ft_boundary_guard_cells)*domain_dz;
     if (guard_thickness > 0.0) {
       const Real dist_to_lower = ptrml->ft_last_filtered_z - ptrml->zbot;
       const Real dist_to_upper = ptrml->ztop - ptrml->ft_last_filtered_z;
@@ -2373,10 +2893,8 @@ void FrameTracking(Mesh *pm) {
       if (dist_to_edge < guard_thickness) {
         Real frac = dist_to_edge/guard_thickness;
         frac = std::max(static_cast<Real>(0.0), std::min(static_cast<Real>(1.0), frac));
-        Real guard_scale = ptrml->ft_boundary_guard_min_scale +
-                           (1.0 - ptrml->ft_boundary_guard_min_scale)*frac;
-        guard_scale = std::max(ptrml->ft_boundary_guard_min_scale,
-                               std::min(static_cast<Real>(1.0), guard_scale));
+        const Real guard_scale = ptrml->ft_boundary_guard_min_scale +
+                                 (1.0 - ptrml->ft_boundary_guard_min_scale)*frac;
         vel_z_cmd *= guard_scale;
       }
     }
@@ -2388,7 +2906,7 @@ void FrameTracking(Mesh *pm) {
   }
 
   if (ptrml->ft_use_uppzlim || ptrml->ft_use_lowzlim) {
-    Real z_pred = ptrml->ft_last_filtered_z + vel_z_cmd*dt_boost;
+    const Real z_pred = ptrml->ft_last_filtered_z + vel_z_cmd*dt_boost;
     if (ptrml->ft_use_uppzlim && z_pred > ptrml->ft_uppzlim) {
       vel_z_cmd = (ptrml->ft_uppzlim - ptrml->ft_last_filtered_z)/dt_boost;
     }
@@ -2406,10 +2924,9 @@ void FrameTracking(Mesh *pm) {
     dv_allowed = ptrml->ft_max_boost_change_rate*dt_boost;
   }
   if (dv_allowed > 0.0) {
-    Real delta_boost = vel_z_cmd - ptrml->ft_last_boost;
+    const Real delta_boost = vel_z_cmd - ptrml->ft_last_boost;
     if (fabs(delta_boost) > dv_allowed) {
-      vel_z_cmd = ptrml->ft_last_boost +
-                  std::copysign(dv_allowed, delta_boost);
+      vel_z_cmd = ptrml->ft_last_boost + std::copysign(dv_allowed, delta_boost);
       ptrml->ft_last_slew_limited = true;
     }
   }
@@ -2418,7 +2935,7 @@ void FrameTracking(Mesh *pm) {
     vel_z_cmd = std::copysign(ptrml->ft_max_abs_boost, vel_z_cmd);
   }
 
-  Real vel_z_shift = vel_z_cmd;
+  const Real vel_z_shift = vel_z_cmd;
   ptrml->ft_last_vel_cmd_pre = vel_z_cmd_pre;
   ptrml->ft_last_vel_cmd_post = vel_z_shift;
   ptrml->ft_last_boost = vel_z_shift;
@@ -2426,13 +2943,11 @@ void FrameTracking(Mesh *pm) {
   ptrml->ft_last_apply_time = pm->time;
 
   const bool use_energy = eos.is_ideal;
-  par_for("velzframetracking", DevExeSpace(), 0, nmb1, 0, n3-1, 0, n2-1, 0, n1-1,
+  par_for("trml_frame_boost", DevExeSpace(), 0, nmb1, 0, n3-1, 0, n2-1, 0, n1-1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    Real rho = w0(m,IDN,k,j,i);
-    if (rho <= 0.0) {
-      return;
-    }
-    Real mom_old = u0(m,IM3,k,j,i);
+    const Real rho = w0(m,IDN,k,j,i);
+    if (rho <= 0.0) return;
+    const Real mom_old = u0(m,IM3,k,j,i);
     w0(m,IVZ,k,j,i) += vel_z_shift;
     u0(m,IM3,k,j,i) += rho*vel_z_shift;
     if (use_energy) {
@@ -2442,33 +2957,245 @@ void FrameTracking(Mesh *pm) {
 
   if (global_variable::my_rank == 0 && ptrml->ndiag > 0 &&
       pm->ncycle % ptrml->ndiag == 0) {
-    std::cout << " W_global=" << W_global << std::endl;
-    std::cout << " mean_z_ft=" << z_centroid << std::endl;
-    std::cout << " mean_velz_ft=" << vz_meas << std::endl;
-    std::cout << " z_meas=" << z_centroid << std::endl;
-    std::cout << " vz_meas=" << vz_meas << std::endl;
-    std::cout << " z_centroid_ft=" << z_centroid << std::endl;
-    std::cout << " z_midpoint_ft=" << z_midpoint << std::endl;
-    std::cout << " z_ctrl_ft=" << z_ctrl << std::endl;
-    std::cout << " z_band_min_ft=" << z_band_min << std::endl;
-    std::cout << " z_band_max_ft=" << z_band_max << std::endl;
-    std::cout << " ft_temp_lo_active=" << ptrml->ft_temp_lo_active << std::endl;
-    std::cout << " ft_temp_hi_active=" << ptrml->ft_temp_hi_active << std::endl;
-    std::cout << " ft_miss_streak=" << ptrml->ft_miss_streak << std::endl;
-    std::cout << " z_filt=" << ptrml->ft_last_filtered_z << std::endl;
-    std::cout << " vz_filt=" << ptrml->ft_last_filtered_vz << std::endl;
-    std::cout << " z_err=" << z_err << std::endl;
-    std::cout << " v_p=" << v_p << std::endl;
-    std::cout << " v_d=" << v_d << std::endl;
-    std::cout << " v_i=" << v_i << std::endl;
-    std::cout << " vel_z_cmd_pre=" << vel_z_cmd_pre << std::endl;
-    std::cout << " vel_z_cmd=" << vel_z_cmd << std::endl;
-    std::cout << " vel_z_shift=" << vel_z_shift << std::endl;
-    std::cout << " ft_slew_limited=" << ptrml->ft_last_slew_limited << std::endl;
+    std::cout << std::setprecision(16)
+              << " FrameTracking:"
+              << " z_ctrl=" << obs.z
+              << " z_cool=" << obs.z_cooling
+              << " z_peak=" << obs.z_peak
+              << " z_shear=" << obs.z_shear
+              << " z_scalar=" << obs.z_scalar
+              << " confidence=" << obs.confidence << std::endl
+              << " z_filt=" << ptrml->ft_last_filtered_z
+              << " vz_filt=" << ptrml->ft_last_filtered_vz
+              << " z_err=" << z_err
+              << " v_p=" << v_p
+              << " v_d=" << v_d
+              << " v_i=" << v_i << std::endl
+              << " vel_z_cmd_pre=" << vel_z_cmd_pre
+              << " vel_z_shift=" << vel_z_shift
+              << " cumulative_frame_vz=" << ptrml->ft_cumulative_boost
+              << " slew_limited=" << ptrml->ft_last_slew_limited << std::endl;
   }
   return;
 }
 
+
+
+void WriteLightDiagnostics(Mesh *pm) {
+  if (!ptrml->analysis_on) return;
+
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  auto &indcs = pm->mb_indcs;
+  int is = indcs.is, nx1 = indcs.nx1;
+  int js = indcs.js, nx2 = indcs.nx2;
+  int ks = indcs.ks, nx3 = indcs.nx3;
+  const int nmkji = (pmbp->nmb_thispack)*nx3*nx2*nx1;
+  const int nkji = nx3*nx2*nx1;
+  const int nji  = nx2*nx1;
+  const bool is_mhd = (pmbp->pmhd != nullptr);
+  auto &w0 = (is_mhd) ? pmbp->pmhd->w0 : pmbp->phydro->w0;
+  EOS_Data &eos = (is_mhd) ?
+                  pmbp->pmhd->peos->eos_data : pmbp->phydro->peos->eos_data;
+  const Real use_e = eos.use_e;
+  const Real gamma = eos.gamma;
+  const Real gm1 = gamma - 1.0;
+  auto &size = pmbp->pmb->mb_size;
+
+  const Real T_peak = ptrml->T_peak;
+  const Real T_peak_lo = ptrml->T_peak_lo;
+  const Real T_peak_hi = ptrml->T_peak_hi;
+  const Real T_cold = ptrml->T_cold;
+  const Real T_hot = ptrml->T_hot;
+  const Real T_cold_hi = ptrml->T_cold_hi;
+  const Real T_hot_lo = ptrml->T_hot_lo;
+  const Real T_cutoff = ptrml->T_cutoff;
+  const Real epsilon_T = ptrml->epsilon_T;
+  const Real pgas_0 = ptrml->pgas_0;
+  const Real t_cool_0 = ptrml->t_cool_0;
+  const Real beta_lo = ptrml->beta_lo;
+  const Real beta_hi = ptrml->beta_hi;
+  const Real heat_coefficient = ptrml->heat_coefficient;
+  const Real alpha_heat = ptrml->alpha_heat;
+  const bool heating_on = ptrml->heating_on;
+  const bool cooling_below_T_cold = ptrml->cooling_below_T_cold;
+  const bool use_dens_ceiling = ptrml->use_dens_ceiling;
+  const Real dens_ceiling = ptrml->dens_ceiling;
+
+  array_sum::GlobalSum loc;
+  for (int n=0; n<NREDUCTION_VARIABLES; ++n) loc.the_array[n] = 0.0;
+  Kokkos::parallel_reduce("trml_light_diag", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum &sum) {
+    int m = idx/nkji;
+    int k = (idx - m*nkji)/nji;
+    int j = (idx - m*nkji - k*nji)/nx1;
+    int i = (idx - m*nkji - k*nji - j*nx1) + is;
+    k += ks;
+    j += js;
+
+    const Real dens = w0(m,IDN,k,j,i);
+    if (dens <= 0.0) return;
+
+    Real temp = 0.0;
+    Real eint = 0.0;
+    if (use_e) {
+      temp = w0(m,IEN,k,j,i)/dens*gm1;
+      eint = w0(m,IEN,k,j,i);
+    } else {
+      temp = w0(m,ITM,k,j,i);
+      eint = w0(m,ITM,k,j,i)*dens/gm1;
+    }
+    if (temp <= 0.0) return;
+
+    const Real dvol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
+    const Real z = CellCenterX(k-ks, nx3, size.d_view(m).x3min, size.d_view(m).x3max);
+    const Real vx = w0(m,IVX,k,j,i);
+    const Real vy = w0(m,IVY,k,j,i);
+    const Real vz = w0(m,IVZ,k,j,i);
+    const Real pres = eint*gm1;
+    const Real net_cool = NetCoolingRateLocal(dens, temp, eint, gamma, pgas_0, t_cool_0,
+                                              T_peak, T_hot, T_cold, T_cutoff, epsilon_T,
+                                              beta_lo, beta_hi, heat_coefficient, alpha_heat,
+                                              heating_on, cooling_below_T_cold,
+                                              use_dens_ceiling, dens_ceiling);
+    const Real cool_pos = fmax(net_cool, static_cast<Real>(0.0))*dvol;
+
+    // 0--5: global and phase volumes/masses
+    sum.the_array[0] += dvol;
+    sum.the_array[1] += dens*dvol;
+    if (temp < T_cold_hi) sum.the_array[2] += dvol;
+    if (temp > T_hot_lo)  sum.the_array[3] += dvol;
+
+    const bool in_mix = (temp > T_cold_hi && temp < T_hot_lo);
+    const bool in_peak = (temp > T_peak_lo && temp < T_peak_hi);
+
+    if (in_mix) {
+      sum.the_array[4] += dvol;
+      sum.the_array[5] += dens*dvol;
+      sum.the_array[6] += SQR(vy)*dvol;
+      sum.the_array[7] += pres*dvol;
+      sum.the_array[8] += dens*vz*dvol;
+      sum.the_array[9] += dens*SQR(vz)*dvol;
+    }
+
+    if (in_peak) {
+      sum.the_array[10] += dvol;
+      sum.the_array[11] += dens*dvol;
+      sum.the_array[12] += SQR(vy)*dvol;
+      sum.the_array[13] += pres*dvol;
+      sum.the_array[14] += dens*vz*dvol;
+      sum.the_array[15] += dens*SQR(vz)*dvol;
+      sum.the_array[16] += z*dvol;
+    }
+
+    sum.the_array[17] += cool_pos;
+    sum.the_array[18] += cool_pos*z;
+    sum.the_array[19] += net_cool*dvol;
+  }, Kokkos::Sum<array_sum::GlobalSum>(loc));
+
+#if MPI_PARALLEL_ENABLED
+  Real arr[NREDUCTION_VARIABLES];
+  for (int n=0; n<NREDUCTION_VARIABLES; ++n) arr[n] = loc.the_array[n];
+  MPI_Allreduce(MPI_IN_PLACE, arr, NREDUCTION_VARIABLES, MPI_ATHENA_REAL,
+                MPI_SUM, MPI_COMM_WORLD);
+  for (int n=0; n<NREDUCTION_VARIABLES; ++n) loc.the_array[n] = arr[n];
+#endif
+
+  LightDiagnostics d;
+  d.vol_cold = loc.the_array[2];
+  d.vol_hot = loc.the_array[3];
+  d.vol_mix = loc.the_array[4];
+  d.mass_mix = loc.the_array[5];
+  d.vol_peak = loc.the_array[10];
+  d.mass_peak = loc.the_array[11];
+  d.cool_pos = loc.the_array[17];
+  d.cool_net = loc.the_array[19];
+
+  const Real nan = std::numeric_limits<Real>::quiet_NaN();
+  if (d.vol_mix > 0.0) {
+    d.vyrms_mix = sqrt(loc.the_array[6]/d.vol_mix);
+    d.pressure_mix = loc.the_array[7]/d.vol_mix;
+    const Real rho_bar = d.mass_mix/d.vol_mix;
+    const Real mom_bar = loc.the_array[8]/d.vol_mix;
+    d.rzz_mix = loc.the_array[9]/d.vol_mix - SQR(mom_bar)/std::max(rho_bar, static_cast<Real>(1.0e-30));
+  } else {
+    d.vyrms_mix = d.pressure_mix = d.rzz_mix = nan;
+  }
+
+  if (d.vol_peak > 0.0) {
+    d.vyrms_peak = sqrt(loc.the_array[12]/d.vol_peak);
+    d.pressure_peak = loc.the_array[13]/d.vol_peak;
+    d.z_peak = loc.the_array[16]/d.vol_peak;
+    const Real rho_bar = d.mass_peak/d.vol_peak;
+    const Real mom_bar = loc.the_array[14]/d.vol_peak;
+    d.rzz_peak = loc.the_array[15]/d.vol_peak - SQR(mom_bar)/std::max(rho_bar, static_cast<Real>(1.0e-30));
+  } else {
+    d.vyrms_peak = d.pressure_peak = d.rzz_peak = d.z_peak = nan;
+  }
+
+  if (d.cool_pos > 0.0) {
+    d.z_cool = loc.the_array[18]/d.cool_pos;
+  } else {
+    d.z_cool = nan;
+  }
+
+  const Real lx = pm->mesh_size.x1max - pm->mesh_size.x1min;
+  const Real ly = (pm->mesh_indcs.nx2 > 1) ?
+                  (pm->mesh_size.x2max - pm->mesh_size.x2min) :
+                  static_cast<Real>(1.0);
+  const Real area_xy = lx*ly;
+  d.vbulk_cool = (gamma - 1.0)/gamma * d.cool_net /
+                 std::max(pgas_0*area_xy, static_cast<Real>(1.0e-30));
+
+  if (global_variable::my_rank != 0) return;
+
+  std::ofstream ofs(ptrml->analysis_file.c_str(), std::ios::app);
+  if (!ofs.is_open()) return;
+
+  if (!ptrml->analysis_header_written) {
+    ofs << "# time cycle dt xi vbulk_cool cool_net cool_pos z_cool z_peak "
+        << "vol_cold vol_hot vol_mix mass_mix vyrms_mix pressure_mix rzz_mix "
+        << "vol_peak mass_peak vyrms_peak pressure_peak rzz_peak "
+        << "ft_z_ctrl ft_z_cooling ft_z_peak ft_z_shear ft_z_scalar ft_vz_obs "
+        << "ft_z_filt ft_vz_filt ft_z_err ft_boost ft_frame_vz ft_conf ft_skip\n";
+    ptrml->analysis_header_written = true;
+  }
+
+  ofs << std::setprecision(16)
+      << pm->time << " "
+      << pm->ncycle << " "
+      << pm->dt << " "
+      << ptrml->xi << " "
+      << d.vbulk_cool << " "
+      << d.cool_net << " "
+      << d.cool_pos << " "
+      << d.z_cool << " "
+      << d.z_peak << " "
+      << d.vol_cold << " "
+      << d.vol_hot << " "
+      << d.vol_mix << " "
+      << d.mass_mix << " "
+      << d.vyrms_mix << " "
+      << d.pressure_mix << " "
+      << d.rzz_mix << " "
+      << d.vol_peak << " "
+      << d.mass_peak << " "
+      << d.vyrms_peak << " "
+      << d.pressure_peak << " "
+      << d.rzz_peak << " "
+      << ptrml->ft_last_z_ctrl << " "
+      << ptrml->ft_last_z_cooling << " "
+      << ptrml->ft_last_z_peak << " "
+      << ptrml->ft_last_z_shear << " "
+      << ptrml->ft_last_z_scalar << " "
+      << ptrml->ft_last_mean_vz << " "
+      << ptrml->ft_last_filtered_z << " "
+      << ptrml->ft_last_filtered_vz << " "
+      << ptrml->ft_last_z_err << " "
+      << ptrml->ft_last_boost << " "
+      << ptrml->ft_cumulative_boost << " "
+      << ptrml->ft_last_confidence << " "
+      << (ptrml->ft_last_skip_flag ? 1 : 0) << "\n";
+}
 
 //----------------------------------------------------------------------------------------
 // ! \fn void UserWorkInLoop::Diagnostic()

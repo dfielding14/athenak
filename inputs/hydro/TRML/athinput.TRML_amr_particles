@@ -22,7 +22,7 @@
 # AMR Strategy:
 # - Refinement based on density gradients and temperature thresholds
 # - Focus resolution on the mixing interface where T_cold < T < T_hot
-# - Up to 2 additional levels of refinement (4x resolution at interface)
+# - Up to 2 additional levels of refinement, ramped in over time
 #
 # Particle Tracking:
 # - Monte-Carlo Lagrangian tracers follow mass-weighted flow
@@ -43,11 +43,11 @@ basename = TRML_amr_prtcl    # Output file basename
 # ====================================================================================
 # Domain: periodic in x,y; outflow/user BCs in z
 # The z-direction spans the hot-cold interface
-# Base resolution: 64x64x192, AMR adds 2 levels for effective 256x256x768
+# Base resolution: 64x64x192, AMR can add 2 levels for effective 256x256x768
 # ====================================================================================
 
 <mesh>
-nghost    = 3             # Number of ghost zones (3 required for PLM)
+nghost    = 4             # Even ghost-zone count required for AMR
 
 # X1 direction (periodic, along interface)
 nx1       = 64            # Number of zones in X1 (base level)
@@ -85,7 +85,7 @@ nx3       = 32            # Cells per MeshBlock in X3
 
 <mesh_refinement>
 refinement        = adaptive   # Enable adaptive mesh refinement
-num_levels        = 2          # 2 additional levels (4x resolution gain)
+num_levels        = 3          # Total levels: root + 2 refinements (4x resolution gain)
 max_nmb_per_rank  = 1000       # Maximum MeshBlocks per MPI rank
 ncycle_check      = 5          # Check refinement every 5 cycles
 refinement_interval = 10       # Min cycles between refine/derefine events
@@ -215,11 +215,19 @@ ft_int_unsat_only = true  # Anti-windup: integrate only when pre-clamp command u
 
 # --- AMR Refinement Thresholds ---
 # These control where the mesh is refined
-# Refine if: density_gradient > density_ratio_threshold AND T_min < T < T_max
+# Refine when enough cells are in the temperature band AND an active feature criterion fires.
+# Derefine only after all active criteria fall below amr_derefine_factor times their thresholds.
 t_start_refine = 0.0         # Time to start applying refinement criteria
-density_ratio_threshold = 0.3  # Refine if |grad(rho)|/rho > 0.3
+density_ratio_threshold = 0.3  # Refine if fractional density gradient > 0.3
+vel2_rms_threshold = 0.0       # Disabled unless > 0; uses three-component velocity RMS
 T_min_threshold = 0.015        # Refine if T > T_min (1.5 * T_cold)
 T_max_threshold = 0.8          # Refine if T < T_max (0.8 * T_hot)
+amr_min_temp_cells = 4         # Ignore one-cell/outlier temperature-band hits
+amr_min_temp_fraction = 0.001  # Require this fraction of cells in the T band
+amr_derefine_factor = 0.25     # Hysteresis factor for derefinement thresholds
+# refine_level_times accepts "time:num_levels" entries, capped by <mesh_refinement>/num_levels.
+# Bare times are also accepted and mean one more total level at each listed time.
+refine_level_times = 0.0:1, 0.5:2, 1.0:3
 # This focuses refinement on the mixing layer where T_cold < T < T_hot
 
 # ====================================================================================

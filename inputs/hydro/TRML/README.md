@@ -17,8 +17,8 @@ These setups model the interaction between hot diffuse gas and cold dense gas ph
 - Parameters: chi=100, mach_rel_hot=0.5, xi=100
 
 ### 2. `athinput.TRML_amr` - TRML with Adaptive Mesh Refinement
-- 2 levels of AMR (base + 1 refinement level)
-- Refinement based on density gradients and temperature range
+- Up to 3 total AMR levels (base + 2 refinement levels), staged with `refine_level_times`
+- Refinement based on supported temperature-band gas plus density-gradient or velocity criteria
 - Refines near the mixing layer interface (peak temperature gas)
 - Same physics parameters as simple version
 
@@ -50,9 +50,12 @@ centered in the domain. This prevents the interface from drifting into boundarie
 - Enable with `use_frame_tracking = true`
 
 ### AMR Refinement Criteria
-- `density_ratio_threshold`: Refine if density ratio between cells exceeds this
-- `T_min_threshold`, `T_max_threshold`: Refine blocks containing gas in this T range
-- `vel2_rms_threshold`: Refine if velocity variance is high
+- `density_ratio_threshold`: Refine if the fractional density gradient exceeds this
+- `T_min_threshold`, `T_max_threshold`: Temperature support gate for mixing-layer gas
+- `amr_min_temp_cells`, `amr_min_temp_fraction`: Minimum temperature-band support before refining
+- `vel2_rms_threshold`: Refine if the three-component velocity RMS exceeds this; disabled unless > 0
+- `amr_derefine_factor`: Hysteresis factor used before derefining
+- `refine_level_times`: Time schedule for the allowed total levels, e.g. `0.0:1, 0.5:2, 1.0:3`
 
 ## Running the Simulations
 
