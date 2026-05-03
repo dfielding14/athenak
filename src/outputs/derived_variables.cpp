@@ -1617,8 +1617,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
 
   // Spherical coordinate |cos(theta)| = |z|/r, range [0, 1]
   if (name.compare("coord_abscostheta") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     int nx1 = indcs.nx1;
     int nx2 = indcs.nx2;

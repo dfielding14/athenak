@@ -38,8 +38,6 @@ ParticleRestartOutput::ParticleRestartOutput(ParameterInput *pin, Mesh *pm,
     size_t last_period = prst_fname.rfind('.');
     std::string outnumber_str = prst_fname.substr(last_period-5,5);
     int outnumber = std::stoi(outnumber_str);
-    out_params.file_number = outnumber + 1;
-    out_params.last_time = pm->time;
   }
 
 }
