@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>      // fwrite(), fclose(), fopen(), fnprintf(), snprintf()
 #include <cstdlib>
 #include <iomanip>
@@ -25,12 +26,16 @@
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "particles/particles.hpp"
+#include "units/units.hpp"
 #include "outputs.hpp"
 
 namespace {
-constexpr int NTRACK_VALUES = 14;
+constexpr int NTRACK_VALUES = 31;
 const char *TRACK_VARIABLES =
-    "x y z vx vy vz rho press temp eint scalar0 gid level active";
+    "x y z vx vy vz rho press temp eint scalar0 gid level active "
+    "edot_cool edot_heat edot_net dedt_rad_mass dTdt_rad tcool "
+    "entropy ln_entropy divv dTdt_ad T_mix_scalar T_minus_T_mix_scalar "
+    "T_label_mix T_minus_T_label_mix gradT_mag grad_scalar_mag strain_mag";
 } // namespace
 
 //----------------------------------------------------------------------------------------
@@ -60,6 +65,77 @@ TrackedParticleOutput::TrackedParticleOutput(ParameterInput *pin, Mesh *pm,
   }
   // TODO(@user) improve guess below?
   ntrack_thisrank = ntrack;
+
+  auto has_problem = [&](const char *name) {
+    return pin->DoesParameterExist("problem", name);
+  };
+  const bool have_trml_cooling_inputs =
+      has_problem("rho_0") && has_problem("pgas_0") &&
+      (has_problem("density_contrast") || has_problem("contrast")) &&
+      has_problem("T_peak_over_T_cold") && has_problem("T_cutoff_over_T_hot") &&
+      has_problem("beta_lo") && has_problem("beta_hi");
+  if (have_trml_cooling_inputs) {
+    trml_rho_0 = pin->GetReal("problem", "rho_0");
+    trml_pgas_0 = pin->GetReal("problem", "pgas_0");
+    const Real contrast = has_problem("density_contrast") ?
+        pin->GetReal("problem", "density_contrast") :
+        pin->GetReal("problem", "contrast");
+    trml_T_cold = trml_pgas_0/trml_rho_0/contrast;
+    trml_T_hot = trml_pgas_0/trml_rho_0;
+    trml_T_peak = trml_T_cold*pin->GetReal("problem", "T_peak_over_T_cold");
+    trml_T_cutoff = trml_T_hot*pin->GetReal("problem", "T_cutoff_over_T_hot");
+    trml_beta_lo = pin->GetReal("problem", "beta_lo");
+    trml_beta_hi = pin->GetReal("problem", "beta_hi");
+    trml_t_cool_start = has_problem("t_cool_start") ?
+        pin->GetReal("problem", "t_cool_start") : 0.0;
+    trml_heating_on = has_problem("heating_on") ?
+        pin->GetBoolean("problem", "heating_on") : true;
+    trml_cooling_below_T_cold = has_problem("cooling_below_T_cold") ?
+        pin->GetBoolean("problem", "cooling_below_T_cold") : true;
+    trml_epsilon_T = has_problem("epsilon_T") ?
+        pin->GetReal("problem", "epsilon_T") : 0.05;
+
+    const bool balanced_heating = has_problem("balanced_heating") ?
+        pin->GetBoolean("problem", "balanced_heating") : true;
+    if (balanced_heating) {
+      trml_alpha_heat =
+          (trml_beta_lo - trml_beta_hi)*(std::log(trml_T_cold/trml_T_peak)/
+          std::log(contrast)) - trml_beta_hi;
+      trml_heat_coefficient =
+          std::pow(trml_T_cold/trml_T_peak,
+                   (trml_beta_hi - trml_beta_lo)*
+                   (std::log(trml_T_cold/trml_T_peak)/std::log(contrast) + 1.0));
+    } else {
+      trml_alpha_heat = -2.0 - trml_beta_hi;
+      trml_heat_coefficient =
+          std::pow(trml_T_cold/trml_T_peak, -trml_beta_lo - trml_alpha_heat);
+    }
+
+    const Real velocity = has_problem("velocity") ? pin->GetReal("problem", "velocity") : 0.0;
+    const Real velocity_abs = std::fabs(velocity);
+    const Real t_cool_0_input = has_problem("t_cool_0") ?
+        pin->GetReal("problem", "t_cool_0") : -1.0;
+    if (t_cool_0_input > 0.0) {
+      trml_t_cool_0 = t_cool_0_input;
+      trml_cooling_diagnostics = true;
+    } else if (velocity_abs > 0.0 && has_problem("xi")) {
+      const Real xi = pin->GetReal("problem", "xi");
+      if (xi > 0.0) {
+        trml_t_cool_0 = (1.0/velocity_abs)/xi;
+        trml_cooling_diagnostics = true;
+      }
+    }
+
+    trml_use_dens_ceiling = has_problem("use_dens_ceiling_cool") ?
+        pin->GetBoolean("problem", "use_dens_ceiling_cool") : false;
+    if (trml_use_dens_ceiling) {
+      const Real n0_ceiling = has_problem("n0_ceiling_cool") ?
+          pin->GetReal("problem", "n0_ceiling_cool") : 20.0;
+      trml_dens_ceiling = n0_ceiling*pm->pmb_pack->punit->mu()*
+          pm->pmb_pack->punit->atomic_mass_unit_cgs/
+          pm->pmb_pack->punit->density_cgs();
+    }
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -106,6 +182,24 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
     eos = pm->pmb_pack->pmhd->peos->eos_data;
   }
   const Real missing = -std::numeric_limits<Real>::max();
+  const bool trml_cooling_diagnostics_ = trml_cooling_diagnostics;
+  const bool trml_heating_on_ = trml_heating_on;
+  const bool trml_cooling_below_T_cold_ = trml_cooling_below_T_cold;
+  const bool trml_use_dens_ceiling_ = trml_use_dens_ceiling;
+  const Real trml_pgas_0_ = trml_pgas_0;
+  const Real trml_T_hot_ = trml_T_hot;
+  const Real trml_T_cold_ = trml_T_cold;
+  const Real trml_T_peak_ = trml_T_peak;
+  const Real trml_T_cutoff_ = trml_T_cutoff;
+  const Real trml_t_cool_0_ = trml_t_cool_0;
+  const Real trml_t_cool_start_ = trml_t_cool_start;
+  const Real trml_beta_lo_ = trml_beta_lo;
+  const Real trml_beta_hi_ = trml_beta_hi;
+  const Real trml_heat_coefficient_ = trml_heat_coefficient;
+  const Real trml_alpha_heat_ = trml_alpha_heat;
+  const Real trml_epsilon_T_ = trml_epsilon_T;
+  const Real trml_dens_ceiling_ = trml_dens_ceiling;
+  const Real time_ = pm->time;
 
   // Create device-side counter
   Kokkos::View<int> d_counter("counter");
@@ -137,6 +231,23 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
       tracked_prtcl.d_view(index).temp = missing;
       tracked_prtcl.d_view(index).eint = missing;
       tracked_prtcl.d_view(index).scalar0 = missing;
+      tracked_prtcl.d_view(index).edot_cool = missing;
+      tracked_prtcl.d_view(index).edot_heat = missing;
+      tracked_prtcl.d_view(index).edot_net = missing;
+      tracked_prtcl.d_view(index).dedt_rad_mass = missing;
+      tracked_prtcl.d_view(index).dTdt_rad = missing;
+      tracked_prtcl.d_view(index).tcool = missing;
+      tracked_prtcl.d_view(index).entropy = missing;
+      tracked_prtcl.d_view(index).ln_entropy = missing;
+      tracked_prtcl.d_view(index).divv = missing;
+      tracked_prtcl.d_view(index).dTdt_ad = missing;
+      tracked_prtcl.d_view(index).T_mix_scalar = missing;
+      tracked_prtcl.d_view(index).T_minus_T_mix_scalar = missing;
+      tracked_prtcl.d_view(index).T_label_mix = missing;
+      tracked_prtcl.d_view(index).T_minus_T_label_mix = missing;
+      tracked_prtcl.d_view(index).gradT_mag = missing;
+      tracked_prtcl.d_view(index).grad_scalar_mag = missing;
+      tracked_prtcl.d_view(index).strain_mag = missing;
 
       if (active) {
         int i = static_cast<int>((x - mbsize.d_view(m).x1min)/mbsize.d_view(m).dx1) + is;
@@ -152,23 +263,135 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
         j = (j < js) ? js : ((j > je) ? je : j);
         k = (k < ks) ? ks : ((k > ke) ? ke : k);
 
-        tracked_prtcl.d_view(index).vx = is_lagrangian_mc ? w0(m,IVX,k,j,i) : pr(IPVX,p);
-        tracked_prtcl.d_view(index).vy = is_lagrangian_mc ? w0(m,IVY,k,j,i) : pr(IPVY,p);
-        tracked_prtcl.d_view(index).vz = is_lagrangian_mc ? w0(m,IVZ,k,j,i) : pr(IPVZ,p);
-        tracked_prtcl.d_view(index).rho = w0(m,IDN,k,j,i);
+        const Real vx = is_lagrangian_mc ? w0(m,IVX,k,j,i) : pr(IPVX,p);
+        const Real vy = is_lagrangian_mc ? w0(m,IVY,k,j,i) : pr(IPVY,p);
+        const Real vz = is_lagrangian_mc ? w0(m,IVZ,k,j,i) : pr(IPVZ,p);
+        const Real rho = w0(m,IDN,k,j,i);
+        Real press = missing;
+        Real temp = missing;
+        Real eint = missing;
+        tracked_prtcl.d_view(index).vx = vx;
+        tracked_prtcl.d_view(index).vy = vy;
+        tracked_prtcl.d_view(index).vz = vz;
+        tracked_prtcl.d_view(index).rho = rho;
         if (eos.is_ideal) {
-          tracked_prtcl.d_view(index).eint = w0(m,IEN,k,j,i);
-          tracked_prtcl.d_view(index).press = eos.IdealGasPressure(w0(m,IEN,k,j,i));
-          tracked_prtcl.d_view(index).temp =
-              tracked_prtcl.d_view(index).press / tracked_prtcl.d_view(index).rho;
+          eint = w0(m,IEN,k,j,i);
+          press = eos.IdealGasPressure(eint);
+          temp = press/rho;
         } else {
-          tracked_prtcl.d_view(index).temp = eos.iso_cs*eos.iso_cs;
-          tracked_prtcl.d_view(index).press =
-              tracked_prtcl.d_view(index).rho * tracked_prtcl.d_view(index).temp;
-          tracked_prtcl.d_view(index).eint = missing;
+          temp = eos.iso_cs*eos.iso_cs;
+          press = rho*temp;
+          eint = missing;
         }
+        tracked_prtcl.d_view(index).press = press;
+        tracked_prtcl.d_view(index).temp = temp;
+        tracked_prtcl.d_view(index).eint = eint;
+
+        const int im = (i > is) ? i - 1 : i;
+        const int ip = (i < ie) ? i + 1 : i;
+        const int jm = (multi_d && j > js) ? j - 1 : j;
+        const int jp = (multi_d && j < je) ? j + 1 : j;
+        const int km = (three_d && k > ks) ? k - 1 : k;
+        const int kp = (three_d && k < ke) ? k + 1 : k;
+        const Real inv_dx = (ip > im) ? 1.0/((ip - im)*mbsize.d_view(m).dx1) : 0.0;
+        const Real inv_dy = (jp > jm) ? 1.0/((jp - jm)*mbsize.d_view(m).dx2) : 0.0;
+        const Real inv_dz = (kp > km) ? 1.0/((kp - km)*mbsize.d_view(m).dx3) : 0.0;
+
+        const Real dvx_dx = (w0(m,IVX,k,j,ip) - w0(m,IVX,k,j,im))*inv_dx;
+        const Real dvy_dx = (w0(m,IVY,k,j,ip) - w0(m,IVY,k,j,im))*inv_dx;
+        const Real dvz_dx = (w0(m,IVZ,k,j,ip) - w0(m,IVZ,k,j,im))*inv_dx;
+        const Real dvx_dy = (w0(m,IVX,k,jp,i) - w0(m,IVX,k,jm,i))*inv_dy;
+        const Real dvy_dy = (w0(m,IVY,k,jp,i) - w0(m,IVY,k,jm,i))*inv_dy;
+        const Real dvz_dy = (w0(m,IVZ,k,jp,i) - w0(m,IVZ,k,jm,i))*inv_dy;
+        const Real dvx_dz = (w0(m,IVX,kp,j,i) - w0(m,IVX,km,j,i))*inv_dz;
+        const Real dvy_dz = (w0(m,IVY,kp,j,i) - w0(m,IVY,km,j,i))*inv_dz;
+        const Real dvz_dz = (w0(m,IVZ,kp,j,i) - w0(m,IVZ,km,j,i))*inv_dz;
+        const Real divv = dvx_dx + dvy_dy + dvz_dz;
+        const Real sxx = dvx_dx;
+        const Real syy = dvy_dy;
+        const Real szz = dvz_dz;
+        const Real sxy = 0.5*(dvx_dy + dvy_dx);
+        const Real sxz = 0.5*(dvx_dz + dvz_dx);
+        const Real syz = 0.5*(dvy_dz + dvz_dy);
+        tracked_prtcl.d_view(index).divv = divv;
+        tracked_prtcl.d_view(index).strain_mag =
+            sqrt(2.0*(SQR(sxx) + SQR(syy) + SQR(szz) +
+                      2.0*(SQR(sxy) + SQR(sxz) + SQR(syz))));
+
+        if (eos.is_ideal && rho > 0.0 && press > 0.0 && temp > 0.0) {
+          const Real gamma = eos.gamma;
+          const Real gm1 = gamma - 1.0;
+          tracked_prtcl.d_view(index).entropy = press/pow(rho, gamma);
+          tracked_prtcl.d_view(index).ln_entropy = log(press) - gamma*log(rho);
+          tracked_prtcl.d_view(index).dTdt_ad = -gm1*temp*divv;
+
+          Real temp_im = eos.IdealGasPressure(w0(m,IEN,k,j,im))/w0(m,IDN,k,j,im);
+          Real temp_ip = eos.IdealGasPressure(w0(m,IEN,k,j,ip))/w0(m,IDN,k,j,ip);
+          Real temp_jm = eos.IdealGasPressure(w0(m,IEN,k,jm,i))/w0(m,IDN,k,jm,i);
+          Real temp_jp = eos.IdealGasPressure(w0(m,IEN,k,jp,i))/w0(m,IDN,k,jp,i);
+          Real temp_km = eos.IdealGasPressure(w0(m,IEN,km,j,i))/w0(m,IDN,km,j,i);
+          Real temp_kp = eos.IdealGasPressure(w0(m,IEN,kp,j,i))/w0(m,IDN,kp,j,i);
+          const Real dT_dx = (temp_ip - temp_im)*inv_dx;
+          const Real dT_dy = (temp_jp - temp_jm)*inv_dy;
+          const Real dT_dz = (temp_kp - temp_km)*inv_dz;
+          tracked_prtcl.d_view(index).gradT_mag =
+              sqrt(SQR(dT_dx) + SQR(dT_dy) + SQR(dT_dz));
+
+          if (trml_cooling_diagnostics_) {
+            Real edot_cool = 0.0;
+            Real edot_heat = 0.0;
+            if (time_ > trml_t_cool_start_ && temp <= trml_T_cutoff_ &&
+                !(trml_use_dens_ceiling_ && rho > trml_dens_ceiling_)) {
+              edot_cool = 1.5*trml_pgas_0_/trml_t_cool_0_*SQR(press/trml_pgas_0_);
+              edot_cool *= (temp < trml_T_peak_) ?
+                  pow(temp/trml_T_peak_, -trml_beta_lo_) :
+                  pow(temp/trml_T_peak_, -trml_beta_hi_);
+              if (!trml_cooling_below_T_cold_ && temp < trml_T_cold_) {
+                edot_cool = 0.0;
+              }
+              if (trml_heating_on_) {
+                edot_heat = 1.5*trml_pgas_0_/trml_t_cool_0_*
+                    trml_heat_coefficient_*SQR(press/trml_pgas_0_);
+                edot_heat *= (temp < (1.0 + trml_epsilon_T_)*trml_T_hot_) ?
+                    pow(temp/trml_T_peak_, trml_alpha_heat_) :
+                    pow((1.0 + trml_epsilon_T_)*trml_T_hot_/trml_T_peak_,
+                        trml_alpha_heat_) *
+                    pow(temp/((1.0 + trml_epsilon_T_)*trml_T_hot_),
+                        -trml_beta_hi_ - 0.5);
+              }
+            }
+            const Real edot_net = edot_cool - edot_heat;
+            tracked_prtcl.d_view(index).edot_cool = edot_cool;
+            tracked_prtcl.d_view(index).edot_heat = edot_heat;
+            tracked_prtcl.d_view(index).edot_net = edot_net;
+            tracked_prtcl.d_view(index).dedt_rad_mass = -edot_net/rho;
+            tracked_prtcl.d_view(index).dTdt_rad = -gm1*edot_net/rho;
+            if (edot_net > 0.0) {
+              tracked_prtcl.d_view(index).tcool = eint/edot_net;
+            }
+          }
+        }
+
         if (nscalars > 0) {
-          tracked_prtcl.d_view(index).scalar0 = w0(m,nfluid,k,j,i);
+          const Real scalar0 = w0(m,nfluid,k,j,i);
+          tracked_prtcl.d_view(index).scalar0 = scalar0;
+          if (trml_cooling_diagnostics_) {
+            const Real T_mix_scalar =
+                (1.0 - scalar0)*trml_T_hot_ + scalar0*trml_T_cold_;
+            tracked_prtcl.d_view(index).T_mix_scalar = T_mix_scalar;
+            tracked_prtcl.d_view(index).T_minus_T_mix_scalar = temp - T_mix_scalar;
+          }
+
+          const Real dsc_dx = (w0(m,nfluid,k,j,ip) - w0(m,nfluid,k,j,im))*inv_dx;
+          const Real dsc_dy = (w0(m,nfluid,k,jp,i) - w0(m,nfluid,k,jm,i))*inv_dy;
+          const Real dsc_dz = (w0(m,nfluid,kp,j,i) - w0(m,nfluid,km,j,i))*inv_dz;
+          tracked_prtcl.d_view(index).grad_scalar_mag =
+              sqrt(SQR(dsc_dx) + SQR(dsc_dy) + SQR(dsc_dz));
+        }
+        if (trml_cooling_diagnostics_ && nscalars > 1) {
+          const Real T_label_mix = w0(m,nfluid+1,k,j,i);
+          tracked_prtcl.d_view(index).T_label_mix = T_label_mix;
+          tracked_prtcl.d_view(index).T_minus_T_label_mix = temp - T_label_mix;
         }
       }
     }
@@ -260,6 +483,23 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     data[(NTRACK_VALUES*p) +11] = static_cast<float>(outpart(p).gid);
     data[(NTRACK_VALUES*p) +12] = static_cast<float>(outpart(p).level);
     data[(NTRACK_VALUES*p) +13] = static_cast<float>(outpart(p).active);
+    data[(NTRACK_VALUES*p) +14] = static_cast<float>(outpart(p).edot_cool);
+    data[(NTRACK_VALUES*p) +15] = static_cast<float>(outpart(p).edot_heat);
+    data[(NTRACK_VALUES*p) +16] = static_cast<float>(outpart(p).edot_net);
+    data[(NTRACK_VALUES*p) +17] = static_cast<float>(outpart(p).dedt_rad_mass);
+    data[(NTRACK_VALUES*p) +18] = static_cast<float>(outpart(p).dTdt_rad);
+    data[(NTRACK_VALUES*p) +19] = static_cast<float>(outpart(p).tcool);
+    data[(NTRACK_VALUES*p) +20] = static_cast<float>(outpart(p).entropy);
+    data[(NTRACK_VALUES*p) +21] = static_cast<float>(outpart(p).ln_entropy);
+    data[(NTRACK_VALUES*p) +22] = static_cast<float>(outpart(p).divv);
+    data[(NTRACK_VALUES*p) +23] = static_cast<float>(outpart(p).dTdt_ad);
+    data[(NTRACK_VALUES*p) +24] = static_cast<float>(outpart(p).T_mix_scalar);
+    data[(NTRACK_VALUES*p) +25] = static_cast<float>(outpart(p).T_minus_T_mix_scalar);
+    data[(NTRACK_VALUES*p) +26] = static_cast<float>(outpart(p).T_label_mix);
+    data[(NTRACK_VALUES*p) +27] = static_cast<float>(outpart(p).T_minus_T_label_mix);
+    data[(NTRACK_VALUES*p) +28] = static_cast<float>(outpart(p).gradT_mag);
+    data[(NTRACK_VALUES*p) +29] = static_cast<float>(outpart(p).grad_scalar_mag);
+    data[(NTRACK_VALUES*p) +30] = static_cast<float>(outpart(p).strain_mag);
   }
 
   // calculate local data offset

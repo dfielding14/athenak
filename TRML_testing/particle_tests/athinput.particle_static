@@ -1,0 +1,62 @@
+# Deterministic static thermodynamic-history test for lagrangian_mc tracks.
+
+<job>
+basename  = particle_static
+
+<mesh>
+nghost    = 2
+nx1       = 4
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 4
+x2min     = 0.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 4
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 4
+nx2       = 4
+nx3       = 4
+
+<time>
+evolution  = static
+cfl_number = 0.5
+nlim       = 0
+tlim       = 0.0
+ndiag      = 1
+
+<hydro>
+eos         = ideal
+reconstruct = dc
+rsolver     = advect
+gamma       = 1.6666666666666667
+nscalars    = 1
+
+<particles>
+particle_type = lagrangian_mc
+pusher        = lagrangian_mc
+ppc           = 0.0
+assign_tag    = index_order
+random_seed   = 12345
+
+<problem>
+test_mode       = static
+field_profile   = analytic
+particle_layout = cell_centers
+
+<output1>
+file_type   = trk
+id          = trk
+variable    = prtcl_all
+dt          = 1.0
+nparticles  = 64

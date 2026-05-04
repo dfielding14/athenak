@@ -200,6 +200,13 @@ struct TrackedParticleData {
   Real x,y,z;
   Real vx,vy,vz;
   Real rho, press, temp, eint, scalar0;
+  Real edot_cool, edot_heat, edot_net;
+  Real dedt_rad_mass, dTdt_rad, tcool;
+  Real entropy, ln_entropy;
+  Real divv, dTdt_ad;
+  Real T_mix_scalar, T_minus_T_mix_scalar;
+  Real T_label_mix, T_minus_T_label_mix;
+  Real gradT_mag, grad_scalar_mag, strain_mag;
 };
 
 //----------------------------------------------------------------------------------------
@@ -421,6 +428,24 @@ class TrackedParticleOutput : public BaseTypeOutput {
   bool header_written;
   std::vector<int> npout_eachrank;
   HostArray1D<TrackedParticleData> outpart;
+  bool trml_cooling_diagnostics=false;
+  bool trml_heating_on=true;
+  bool trml_cooling_below_T_cold=true;
+  bool trml_use_dens_ceiling=false;
+  Real trml_rho_0=1.0;
+  Real trml_pgas_0=1.0;
+  Real trml_T_hot=1.0;
+  Real trml_T_cold=1.0;
+  Real trml_T_peak=1.0;
+  Real trml_T_cutoff=1.0;
+  Real trml_t_cool_0=1.0;
+  Real trml_t_cool_start=0.0;
+  Real trml_beta_lo=0.0;
+  Real trml_beta_hi=0.0;
+  Real trml_heat_coefficient=0.0;
+  Real trml_alpha_heat=0.0;
+  Real trml_epsilon_T=0.05;
+  Real trml_dens_ceiling=0.0;
 };
 
 //----------------------------------------------------------------------------------------

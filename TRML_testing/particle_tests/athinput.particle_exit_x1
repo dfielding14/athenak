@@ -1,0 +1,72 @@
+# Deterministic non-periodic boundary-exit test for lagrangian_mc tracks.
+
+<job>
+basename  = particle_exit_x1
+
+<mesh>
+nghost    = 2
+nx1       = 4
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = outflow
+ox1_bc    = outflow
+
+nx2       = 4
+x2min     = 0.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 4
+nx2       = 4
+nx3       = 1
+
+<time>
+evolution  = kinematic
+integrator = rk1
+cfl_number = 1.0
+nlim       = 1
+tlim       = 1.0
+ndiag      = 1
+
+<hydro>
+eos         = ideal
+reconstruct = dc
+rsolver     = advect
+gamma       = 1.6666666666666667
+nscalars    = 1
+
+<particles>
+particle_type     = lagrangian_mc
+pusher            = lagrangian_mc
+ppc               = 0.0
+assign_tag        = index_order
+random_seed       = 12345
+inject_at_inflow  = false
+
+<problem>
+user_srcs         = true
+user_work_in_loop = true
+test_mode         = exit_x1
+field_profile     = uniform
+particle_layout   = outer_x1
+rho0              = 1.0
+temp0             = 2.0
+scalar0           = 0.25
+vx0               = 1.0
+vy0               = 0.0
+vz0               = 0.0
+
+<output1>
+file_type   = trk
+id          = trk
+variable    = prtcl_all
+dt          = 10.0
+nparticles  = 4

@@ -1695,6 +1695,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       if(nscalars>0){
         w0(m,nfluid,k,j,i) = 0.5 * (1.0+std::tanh((z_interface-x3v)/smoothing_thickness));
       }
+      if(nscalars>1){
+        w0(m,nfluid+1,k,j,i) = pgas_0/rho;
+      }
     });
     // Convert primitives to conserved
     if (is_hydro) {
@@ -1790,6 +1793,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
           w0(m,IDN,k,j,i) = rho_z;
           if (eos.is_ideal) {
             w0(m,IEN,k,j,i) = pgas_z/gm1;
+          }
+          if (nscalars > 1) {
+            w0(m,nfluid+1,k,j,i) = temp_z;
           }
         }
         b0_.x1f(m,k,j,i) = (B_direction == 0) ? z_weight*sqrt(2*pmag_z): 0.0;
@@ -2023,6 +2029,8 @@ void UserZBoundaryConditions(Mesh *pm) {
   EOS_Data &eos = (is_mhd) ?
                   pmbp->pmhd->peos->eos_data : pmbp->phydro->peos->eos_data;
   int nvar = u0_.extent_int(1);
+  int nfluid = (is_mhd) ? pmbp->pmhd->nmhd : pmbp->phydro->nhydro;
+  int nscalars = (is_mhd) ? pmbp->pmhd->nscalars : pmbp->phydro->nscalars;
 
   int ks = indcs.ks, ke = indcs.ke;
 
@@ -2075,6 +2083,12 @@ void UserZBoundaryConditions(Mesh *pm) {
         }
         else if (n == (IVX)){
           w0_(m,n,ke+k+1,j,i) = 0.5*velocity;
+        }
+        else if (nscalars > 0 && n == nfluid) {
+          w0_(m,n,ke+k+1,j,i) = 0.0;
+        }
+        else if (nscalars > 1 && n == nfluid + 1) {
+          w0_(m,n,ke+k+1,j,i) = pgas_0/rho_0;
         }
         else {
           w0_(m,n,ke+k+1,j,i) = w0_(m,n,ke,j,i);
