@@ -237,14 +237,17 @@ inline Setup ReadInputs(ParameterInput *pin, const units::Units *punit,
   if (p.cool_T_min < 0.0 || !(p.cool_T_min < p.cool_T_max)) {
     Fatal("Require 0 <= cool_T_min < cool_T_max.");
   }
-  if (p.T_peak < p.cool_T_min || p.T_peak > p.cool_T_max) {
+  const Real window_tol = 64.0*std::numeric_limits<Real>::epsilon()*
+      std::max(static_cast<Real>(1.0),
+               std::max(std::abs(p.T_peak),
+                        std::max(std::abs(p.cool_T_min), std::abs(p.cool_T_max))));
+  if (p.T_peak < p.cool_T_min - window_tol || p.T_peak > p.cool_T_max + window_tol) {
     Fatal("T_peak must lie inside the active cooling/heating temperature window.");
   }
   if (p.lambda_smooth_width <= 0.0) Fatal("lambda_smooth_width must be positive.");
   if (p.heat_gamma_T_ref <= 0.0) Fatal("heat_gamma_T_ref must be positive.");
-  if (p.lambda_slope_lo < 0.0 || p.lambda_slope_hi > 0.0 ||
-      (p.lambda_slope_lo == 0.0 && p.lambda_slope_hi == 0.0)) {
-    Fatal("Require lambda_slope_lo >= 0, lambda_slope_hi <= 0, and not both zero.");
+  if (p.lambda_slope_lo < 0.0 || p.lambda_slope_hi > 0.0) {
+    Fatal("Require lambda_slope_lo >= 0 and lambda_slope_hi <= 0.");
   }
 
   setup.direct_lambda = GetRealIfPresent(pin, "lambda_peak", p.lambda_peak);

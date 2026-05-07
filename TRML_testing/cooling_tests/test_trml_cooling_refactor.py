@@ -102,6 +102,18 @@ def test_curve_shape_and_gates() -> None:
     assert evaluate(params, 1.0, params["cool_T_max"] * 2.0) == (0.0, 0.0, 0.0)
 
 
+def test_flat_lambda_curve() -> None:
+    params = baseline_params()
+    params["lambda_slope_lo"] = 0.0
+    params["lambda_slope_hi"] = 0.0
+
+    for temp in (params["cool_T_min"], 0.5 * params["T_peak"], params["T_peak"],
+                 2.0 * params["T_peak"], params["cool_T_max"]):
+        assert math.isclose(cooling_lambda(params, temp), params["lambda_peak"],
+                            rel_tol=1.0e-14)
+        assert math.isclose(log_slope(params, temp), 0.0, abs_tol=1.0e-10)
+
+
 def test_balance_cold_and_xi_derivation() -> None:
     params = baseline_params()
     rho_0 = 1.0
@@ -501,6 +513,7 @@ heating_mode = off
 
 def main() -> None:
     test_curve_shape_and_gates()
+    test_flat_lambda_curve()
     test_balance_cold_and_xi_derivation()
     run_optional_smoke_tests()
     print("TRML cooling refactor checks passed.")

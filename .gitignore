@@ -9,6 +9,7 @@ docs/build/
 *.athdf*
 *.hst
 *.rst
+inputs/hydro/TRML/generated/
 
 # Mac OS metadata
 .DS_Store
