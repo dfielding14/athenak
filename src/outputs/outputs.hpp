@@ -15,6 +15,7 @@
 
 #include "athena.hpp"
 #include "io_wrapper.hpp"
+#include "utils/trml_cooling.hpp"
 
 #define NHISTORY_VARIABLES 39
 #if NHISTORY_VARIABLES > NREDUCTION_VARIABLES
@@ -429,23 +430,13 @@ class TrackedParticleOutput : public BaseTypeOutput {
   std::vector<int> npout_eachrank;
   HostArray1D<TrackedParticleData> outpart;
   bool trml_cooling_diagnostics=false;
-  bool trml_heating_on=true;
-  bool trml_cooling_below_T_cold=true;
-  bool trml_use_dens_ceiling=false;
   Real trml_rho_0=1.0;
   Real trml_pgas_0=1.0;
   Real trml_T_hot=1.0;
   Real trml_T_cold=1.0;
-  Real trml_T_peak=1.0;
-  Real trml_T_cutoff=1.0;
   Real trml_t_cool_0=1.0;
   Real trml_t_cool_start=0.0;
-  Real trml_beta_lo=0.0;
-  Real trml_beta_hi=0.0;
-  Real trml_heat_coefficient=0.0;
-  Real trml_alpha_heat=0.0;
-  Real trml_epsilon_T=0.05;
-  Real trml_dens_ceiling=0.0;
+  trml_cooling::Params trml_cooling_params;
 };
 
 //----------------------------------------------------------------------------------------

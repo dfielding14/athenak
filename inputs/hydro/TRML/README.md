@@ -39,10 +39,16 @@ These setups model the interaction between hot diffuse gas and cold dense gas ph
   - xi ~ 1: Balanced regime with shattering
 
 ### Cooling Function
-Uses a piecewise power-law cooling function:
-- `beta_lo = -2.0`: Low-temperature slope (below T_peak)
-- `beta_hi = 3.0`: High-temperature slope (above T_peak)
-- `T_peak_over_T_cold = 4.64`: Location of cooling peak relative to T_cold
+Uses an `n^2 Lambda(T) - n Gamma` cooling/heating law with a smooth peaked
+broken power-law cooling curve:
+- `lambda_slope_lo = 2.0`: Low-temperature asymptotic slope below `T_peak`
+- `lambda_slope_hi = -3.0`: High-temperature asymptotic slope above `T_peak`
+- `lambda_smooth_width = 0.05`: Smooth turnover width in `ln(T/T_peak)`
+- `T_peak_over_T_cold = 4.64`: Location of cooling peak relative to `T_cold`
+- `cool_T_min`, `cool_T_max`: Temperature window where cooling/heating are active
+- `heating_mode = off | direct | balance_cold`: Heating model selector
+- `heat_gamma_T_ref`, `heat_gamma_T_slope`: Optional power-law temperature dependence
+  of the heating coefficient, `Gamma(T) = heat_gamma * (T/heat_gamma_T_ref)^heat_gamma_T_slope`
 
 ### Frame Tracking
 The simulation can apply Galilean velocity shifts to keep the mixing layer

@@ -10,7 +10,7 @@
 # This file is configured for:
 # - xi = 100
 # - T_peak_over_T_cold = 10^0.5
-# - T_cutoff_over_T_hot = T_peak_over_T_cold / chi
+# - cool_T_max = T_peak_over_T_cold / chi
 #
 # ====================================================================================
 
@@ -77,14 +77,14 @@ velocity = 0.645
 z_interface = 0.0
 smoothing_thickness = 0.01
 
-beta_lo = 0.0
-beta_hi = 3.0
+lambda_slope_lo = 0.0
+lambda_slope_hi = -3.0
+lambda_smooth_width = 0.02
 T_peak_over_T_cold = 3.16227766017       # 10^0.5
-T_cutoff_over_T_hot = 0.05623413252      # top-hat cutoff = T_peak_over_T_cold / chi
+cool_T_min = 0.01778279410               # T_cold
+cool_T_max = 0.05623413252               # top-hat cutoff = T_peak_over_T_cold / chi
 T_floor = 0.5
-balanced_heating = false
-heating_on = false
-cooling_below_T_cold = false
+heating_mode = off
 
 xi = 100.0
 

@@ -71,9 +71,7 @@ TrackedParticleOutput::TrackedParticleOutput(ParameterInput *pin, Mesh *pm,
   };
   const bool have_trml_cooling_inputs =
       has_problem("rho_0") && has_problem("pgas_0") &&
-      (has_problem("density_contrast") || has_problem("contrast")) &&
-      has_problem("T_peak_over_T_cold") && has_problem("T_cutoff_over_T_hot") &&
-      has_problem("beta_lo") && has_problem("beta_hi");
+      (has_problem("density_contrast") || has_problem("contrast"));
   if (have_trml_cooling_inputs) {
     trml_rho_0 = pin->GetReal("problem", "rho_0");
     trml_pgas_0 = pin->GetReal("problem", "pgas_0");
@@ -82,58 +80,28 @@ TrackedParticleOutput::TrackedParticleOutput(ParameterInput *pin, Mesh *pm,
         pin->GetReal("problem", "contrast");
     trml_T_cold = trml_pgas_0/trml_rho_0/contrast;
     trml_T_hot = trml_pgas_0/trml_rho_0;
-    trml_T_peak = trml_T_cold*pin->GetReal("problem", "T_peak_over_T_cold");
-    trml_T_cutoff = trml_T_hot*pin->GetReal("problem", "T_cutoff_over_T_hot");
-    trml_beta_lo = pin->GetReal("problem", "beta_lo");
-    trml_beta_hi = pin->GetReal("problem", "beta_hi");
     trml_t_cool_start = has_problem("t_cool_start") ?
         pin->GetReal("problem", "t_cool_start") : 0.0;
-    trml_heating_on = has_problem("heating_on") ?
-        pin->GetBoolean("problem", "heating_on") : true;
-    trml_cooling_below_T_cold = has_problem("cooling_below_T_cold") ?
-        pin->GetBoolean("problem", "cooling_below_T_cold") : true;
-    trml_epsilon_T = has_problem("epsilon_T") ?
-        pin->GetReal("problem", "epsilon_T") : 0.05;
-
-    const bool balanced_heating = has_problem("balanced_heating") ?
-        pin->GetBoolean("problem", "balanced_heating") : true;
-    if (balanced_heating) {
-      trml_alpha_heat =
-          (trml_beta_lo - trml_beta_hi)*(std::log(trml_T_cold/trml_T_peak)/
-          std::log(contrast)) - trml_beta_hi;
-      trml_heat_coefficient =
-          std::pow(trml_T_cold/trml_T_peak,
-                   (trml_beta_hi - trml_beta_lo)*
-                   (std::log(trml_T_cold/trml_T_peak)/std::log(contrast) + 1.0));
-    } else {
-      trml_alpha_heat = -2.0 - trml_beta_hi;
-      trml_heat_coefficient =
-          std::pow(trml_T_cold/trml_T_peak, -trml_beta_lo - trml_alpha_heat);
-    }
 
     const Real velocity = has_problem("velocity") ? pin->GetReal("problem", "velocity") : 0.0;
     const Real velocity_abs = std::fabs(velocity);
-    const Real t_cool_0_input = has_problem("t_cool_0") ?
-        pin->GetReal("problem", "t_cool_0") : -1.0;
-    if (t_cool_0_input > 0.0) {
-      trml_t_cool_0 = t_cool_0_input;
+    const bool is_mhd = (pm->pmb_pack->pmhd != nullptr);
+    EOS_Data &eos = (is_mhd) ?
+        pm->pmb_pack->pmhd->peos->eos_data : pm->pmb_pack->phydro->peos->eos_data;
+    trml_cooling::ReferenceState ref;
+    ref.rho_0 = trml_rho_0;
+    ref.pgas_0 = trml_pgas_0;
+    ref.contrast = contrast;
+    ref.gamma = eos.gamma;
+    ref.t_shear = (velocity_abs > 0.0) ? 1.0/velocity_abs :
+                  std::numeric_limits<Real>::infinity();
+    ref.allow_zero_shear = true;
+    trml_cooling::Setup setup =
+        trml_cooling::ReadInputs(pin, pm->pmb_pack->punit, ref, false, false);
+    if (setup.valid) {
+      trml_cooling_params = setup.params;
+      trml_t_cool_0 = setup.t_cool_0;
       trml_cooling_diagnostics = true;
-    } else if (velocity_abs > 0.0 && has_problem("xi")) {
-      const Real xi = pin->GetReal("problem", "xi");
-      if (xi > 0.0) {
-        trml_t_cool_0 = (1.0/velocity_abs)/xi;
-        trml_cooling_diagnostics = true;
-      }
-    }
-
-    trml_use_dens_ceiling = has_problem("use_dens_ceiling_cool") ?
-        pin->GetBoolean("problem", "use_dens_ceiling_cool") : false;
-    if (trml_use_dens_ceiling) {
-      const Real n0_ceiling = has_problem("n0_ceiling_cool") ?
-          pin->GetReal("problem", "n0_ceiling_cool") : 20.0;
-      trml_dens_ceiling = n0_ceiling*pm->pmb_pack->punit->mu()*
-          pm->pmb_pack->punit->atomic_mass_unit_cgs/
-          pm->pmb_pack->punit->density_cgs();
     }
   }
 }
@@ -183,22 +151,10 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
   }
   const Real missing = -std::numeric_limits<Real>::max();
   const bool trml_cooling_diagnostics_ = trml_cooling_diagnostics;
-  const bool trml_heating_on_ = trml_heating_on;
-  const bool trml_cooling_below_T_cold_ = trml_cooling_below_T_cold;
-  const bool trml_use_dens_ceiling_ = trml_use_dens_ceiling;
-  const Real trml_pgas_0_ = trml_pgas_0;
+  const trml_cooling::Params trml_cooling_params_ = trml_cooling_params;
   const Real trml_T_hot_ = trml_T_hot;
   const Real trml_T_cold_ = trml_T_cold;
-  const Real trml_T_peak_ = trml_T_peak;
-  const Real trml_T_cutoff_ = trml_T_cutoff;
-  const Real trml_t_cool_0_ = trml_t_cool_0;
   const Real trml_t_cool_start_ = trml_t_cool_start;
-  const Real trml_beta_lo_ = trml_beta_lo;
-  const Real trml_beta_hi_ = trml_beta_hi;
-  const Real trml_heat_coefficient_ = trml_heat_coefficient;
-  const Real trml_alpha_heat_ = trml_alpha_heat;
-  const Real trml_epsilon_T_ = trml_epsilon_T;
-  const Real trml_dens_ceiling_ = trml_dens_ceiling;
   const Real time_ = pm->time;
 
   // Create device-side counter
@@ -338,36 +294,17 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
               sqrt(SQR(dT_dx) + SQR(dT_dy) + SQR(dT_dz));
 
           if (trml_cooling_diagnostics_) {
-            Real edot_cool = 0.0;
-            Real edot_heat = 0.0;
-            if (time_ > trml_t_cool_start_ && temp <= trml_T_cutoff_ &&
-                !(trml_use_dens_ceiling_ && rho > trml_dens_ceiling_)) {
-              edot_cool = 1.5*trml_pgas_0_/trml_t_cool_0_*SQR(press/trml_pgas_0_);
-              edot_cool *= (temp < trml_T_peak_) ?
-                  pow(temp/trml_T_peak_, -trml_beta_lo_) :
-                  pow(temp/trml_T_peak_, -trml_beta_hi_);
-              if (!trml_cooling_below_T_cold_ && temp < trml_T_cold_) {
-                edot_cool = 0.0;
-              }
-              if (trml_heating_on_) {
-                edot_heat = 1.5*trml_pgas_0_/trml_t_cool_0_*
-                    trml_heat_coefficient_*SQR(press/trml_pgas_0_);
-                edot_heat *= (temp < (1.0 + trml_epsilon_T_)*trml_T_hot_) ?
-                    pow(temp/trml_T_peak_, trml_alpha_heat_) :
-                    pow((1.0 + trml_epsilon_T_)*trml_T_hot_/trml_T_peak_,
-                        trml_alpha_heat_) *
-                    pow(temp/((1.0 + trml_epsilon_T_)*trml_T_hot_),
-                        -trml_beta_hi_ - 0.5);
-              }
+            trml_cooling::Rates rates;
+            if (time_ > trml_t_cool_start_) {
+              rates = trml_cooling::Evaluate(trml_cooling_params_, rho, temp, eint);
             }
-            const Real edot_net = edot_cool - edot_heat;
-            tracked_prtcl.d_view(index).edot_cool = edot_cool;
-            tracked_prtcl.d_view(index).edot_heat = edot_heat;
-            tracked_prtcl.d_view(index).edot_net = edot_net;
-            tracked_prtcl.d_view(index).dedt_rad_mass = -edot_net/rho;
-            tracked_prtcl.d_view(index).dTdt_rad = -gm1*edot_net/rho;
-            if (edot_net > 0.0) {
-              tracked_prtcl.d_view(index).tcool = eint/edot_net;
+            tracked_prtcl.d_view(index).edot_cool = rates.edot_cool;
+            tracked_prtcl.d_view(index).edot_heat = rates.edot_heat;
+            tracked_prtcl.d_view(index).edot_net = rates.edot_net;
+            tracked_prtcl.d_view(index).dedt_rad_mass = -rates.edot_net/rho;
+            tracked_prtcl.d_view(index).dTdt_rad = -gm1*rates.edot_net/rho;
+            if (rates.edot_net > 0.0) {
+              tracked_prtcl.d_view(index).tcool = eint/rates.edot_net;
             }
           }
         }

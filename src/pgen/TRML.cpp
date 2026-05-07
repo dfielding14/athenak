@@ -39,8 +39,9 @@
 //!     * xi >> 1: Mixing-dominated (cold gas destroyed)
 //!
 //! Cooling Function Parameters:
-//!   - beta_lo, beta_hi: Power-law slopes of cooling function at low/high T
-//!   - T_cutoff: Temperature above which cooling is turned off
+//!   - lambda_slope_lo, lambda_slope_hi: asymptotic slopes of Lambda(T)
+//!   - T_peak: exact peak of the smooth broken-power-law cooling curve
+//!   - cool_T_min, cool_T_max: temperature window for cooling and heating
 //!
 //! ================================ SPECIAL FEATURES ================================
 //!
@@ -101,10 +102,10 @@
 #include "particles/particles.hpp"
 #include "diffusion/conduction.hpp"
 #include "srcterms/srcterms.hpp"
-#include "srcterms/ismcooling.hpp"
 #include "globals.hpp"
 #include "units/units.hpp"
 #include "utils/marching_cubes.hpp"  // Marching cubes algorithm for isosurface area calculations
+#include "utils/trml_cooling.hpp"
 // #include "turb_init.hpp"
 // #include "srcterms/TurbGen.h"
 
@@ -174,11 +175,15 @@ struct pgen_trml {
                                //!< Controls whether cooling or mixing dominates
   Real t_cool_0;               //!< Explicit cooling time at T_peak used to normalize cooling
   Real t_cool_start;           //!< Simulation time at which to turn on radiative cooling
-  Real beta_lo;                //!< Power-law slope of cooling function below T_peak
-  Real beta_hi;                //!< Power-law slope of cooling function above T_peak
-  Real alpha_heat;             //!< Derived heating coefficient exponent
-  Real heat_coefficient;       //!< Derived heating amplitude coefficient
-  bool balanced_heating;       //!< Use legacy heating normalization when true
+  trml_cooling::Params cooling; //!< Shared n^2 Lambda - n Gamma cooling/heating model
+  Real lambda_slope_lo;        //!< Asymptotic cooling slope below T_peak
+  Real lambda_slope_hi;        //!< Asymptotic cooling slope above T_peak
+  Real lambda_smooth_width;    //!< Smooth transition width in ln(T/T_peak)
+  Real lambda_peak;            //!< Lambda(T_peak) in code units
+  Real heat_gamma;             //!< Heating coefficient Gamma at heat_gamma_T_ref
+  Real heat_gamma_T_ref;       //!< Reference temperature for heat_gamma
+  Real heat_gamma_T_slope;     //!< Power-law temperature slope for Gamma(T)
+  int heating_mode;            //!< off/direct/balance_cold
   Real dt_cutoff;              //!< Minimum allowed timestep (prevents runaway)
   Real cfl_cool;               //!< Cooling CFL number (limits dT/T per timestep)
   Real dt_min_terminate;       //!< Graceful early-stop threshold on global dt (<=0 disables)
@@ -189,9 +194,9 @@ struct pgen_trml {
   Real T_cold;                 //!< Cold phase temperature (= pgas_0/rho_0/contrast)
   Real T_hot;                  //!< Hot phase temperature (= pgas_0/rho_0)
   Real T_peak;                 //!< Peak cooling temperature (mixing layer forms here)
-  Real T_cutoff;               //!< Temperature above which cooling is turned off
+  Real cool_T_min;             //!< Temperature below which cooling/heating are off
+  Real cool_T_max;             //!< Temperature above which cooling/heating are off
   Real T_floor;                //!< Temperature floor for adjusting cold gas
-  Real epsilon_T;              //!< Temperature tolerance parameter
 
   //!< Temperature bands for phase classification (logarithmically spaced)
   Real T_peak_lo;              //!< Lower bound of T_peak band (for diagnostics)
@@ -233,12 +238,6 @@ struct pgen_trml {
   // COOLING CONTROL FLAGS AND PARAMETERS
   // ====================================================================================
   int  ndiag;                  //!< Output diagnostics every ndiag timesteps (-1 = off)
-  bool heating_on;             //!< Enable background heating
-  bool cooling_below_T_cold;   //!< Enable cooling for T < T_cold
-  bool cool_subc;              //!< Enable cooling subcycling (multiple cooling steps per hydro step)
-  Real cool_subfac;            //!< Subcycling factor (dt_cool = cool_subfac * t_cool)
-  bool use_temp_floor_cool;    //!< Enable temperature floor for cooling
-  Real T_floor_cool;           //!< Minimum temperature for cooling (cooling off below this)
   bool use_temp_ceiling;       //!< Enable maximum temperature cap
   Real T_ceiling;              //!< Maximum allowed temperature in simulation
   bool adjust_temp_floor;      //!< If T < T_floor, average with neighbors
@@ -667,7 +666,7 @@ void UserTimeStep(Mesh *pm);
 void Diagnostic(Mesh *pm);
 
 //! \brief Apply radiative cooling and background heating to the gas.
-//! Uses a power-law cooling function with parameters beta_lo, beta_hi, T_peak.
+//! Uses the shared n^2 Lambda(T) - n Gamma TRML cooling model.
 void AddCoolingHeating(Mesh *pm, const Real bdt, DvceArray5D<Real> &u0,
                    const DvceArray5D<Real> &w0, const EOS_Data &eos_data);
 
@@ -725,40 +724,6 @@ Real solve_density_profile_NR(const Real z, const Real rho_hot, const Real beta_
 
 namespace {
 
-// Cooling/heating helper with gamma supplied explicitly. Positive means net cooling.
-KOKKOS_INLINE_FUNCTION
-Real NetCoolingRateLocal(const Real dens, const Real temp, const Real eint,
-                         const Real gamma,
-                         const Real pgas_0, const Real t_cool_0,
-                         const Real T_peak, const Real T_hot, const Real T_cold,
-                         const Real T_cutoff, const Real epsilon_T,
-                         const Real beta_lo, const Real beta_hi,
-                         const Real heat_coefficient, const Real alpha_heat,
-                         const bool heating_on, const bool cooling_below_T_cold,
-                         const bool use_dens_ceiling, const Real dens_ceiling) {
-  if (temp <= 0.0 || temp > T_cutoff) return 0.0;
-  if (use_dens_ceiling && dens > dens_ceiling) return 0.0;
-
-  const Real gm1 = gamma - 1.0;
-  const Real pres = eint*gm1;
-  Real edot_cool = 1.5*pgas_0/t_cool_0*SQR(pres/pgas_0);
-  edot_cool *= (temp < T_peak) ? pow(temp/T_peak, -beta_lo)
-                                : pow(temp/T_peak, -beta_hi);
-  if (!cooling_below_T_cold && temp < T_cold) {
-    edot_cool = 0.0;
-  }
-
-  Real edot_heat = 0.0;
-  if (heating_on) {
-    edot_heat = 1.5*pgas_0/t_cool_0*heat_coefficient*SQR(pres/pgas_0);
-    edot_heat *= (temp < (1.0 + epsilon_T)*T_hot) ?
-        pow(temp/T_peak, alpha_heat) :
-        pow((1.0 + epsilon_T)*T_hot/T_peak, alpha_heat) *
-        pow(temp/((1.0 + epsilon_T)*T_hot), -beta_hi - 0.5);
-  }
-  return edot_cool - edot_heat;
-}
-
 bool SampleFrameTrackingObserver(Mesh *pm, FrameObserver &obs,
                                  Real temp_lo, Real temp_hi) {
   obs = FrameObserver();
@@ -796,20 +761,7 @@ bool SampleFrameTrackingObserver(Mesh *pm, FrameObserver &obs,
   int count_scalar = 0;
 
   const Real T_peak = ptrml->T_peak;
-  const Real T_hot = ptrml->T_hot;
-  const Real T_cold = ptrml->T_cold;
-  const Real T_cutoff = ptrml->T_cutoff;
-  const Real epsilon_T = ptrml->epsilon_T;
-  const Real pgas_0 = ptrml->pgas_0;
-  const Real t_cool_0 = ptrml->t_cool_0;
-  const Real beta_lo = ptrml->beta_lo;
-  const Real beta_hi = ptrml->beta_hi;
-  const Real heat_coefficient = ptrml->heat_coefficient;
-  const Real alpha_heat = ptrml->alpha_heat;
-  const bool heating_on = ptrml->heating_on;
-  const bool cooling_below_T_cold = ptrml->cooling_below_T_cold;
-  const bool use_dens_ceiling = ptrml->use_dens_ceiling;
-  const Real dens_ceiling = ptrml->dens_ceiling;
+  const trml_cooling::Params cooling = ptrml->cooling;
 
   const Real sigma_logT = std::max(ptrml->ft_logT_sigma, static_cast<Real>(1.0e-6));
   const Real vrel_abs = std::max(std::fabs(ptrml->velocity), static_cast<Real>(1.0e-30));
@@ -860,12 +812,8 @@ bool SampleFrameTrackingObserver(Mesh *pm, FrameObserver &obs,
     }
 
     // 3--5: cooling observer
-    const Real net_cool = NetCoolingRateLocal(dens, temp, eint, gamma, pgas_0, t_cool_0,
-                                              T_peak, T_hot, T_cold, T_cutoff, epsilon_T,
-                                              beta_lo, beta_hi, heat_coefficient, alpha_heat,
-                                              heating_on, cooling_below_T_cold,
-                                              use_dens_ceiling, dens_ceiling);
-    const Real w_cool = fmax(net_cool, static_cast<Real>(0.0))*dvol;
+    const trml_cooling::Rates rates = trml_cooling::Evaluate(cooling, dens, temp, eint);
+    const Real w_cool = fmax(rates.edot_net, static_cast<Real>(0.0))*dvol;
     if (w_cool > 0.0) {
       sum.the_array[3] += w_cool;
       sum.the_array[4] += w_cool*x3v;
@@ -1116,44 +1064,41 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   ptrml->T_cold            = T_cold;
   Real T_hot               = pgas_0/rho_0;
   ptrml->T_hot             = T_hot;
-  Real T_peak              = T_cold * pin->GetReal("problem", "T_peak_over_T_cold");
-  ptrml->T_peak            = T_peak;
-  ptrml->T_cutoff          = T_hot * pin->GetReal("problem", "T_cutoff_over_T_hot");
-  ptrml->adjust_temp_floor = pin->GetOrAddBoolean("problem", "adjust_temp_floor", false);
-  ptrml->T_floor           = T_cold * pin->GetOrAddReal("problem", "T_floor", 0.1);
-
-  ptrml->T_peak_lo         = pow(10., std::log10(T_peak) - std::log10(contrast)/20.);
-  ptrml->T_peak_hi         = pow(10., std::log10(T_peak) + std::log10(contrast)/20.);
-  ptrml->T_cold_hi         = pow(10., std::log10(T_cold) + 2 * std::log10(contrast)/20.);
-  ptrml->T_hot_lo          = pow(10., std::log10(T_hot) - 2 * std::log10(contrast)/20.);
-
-  Real beta_lo            = pin->GetReal("problem", "beta_lo");
-  ptrml->beta_lo           = beta_lo;
-  Real beta_hi            = pin->GetReal("problem", "beta_hi");
-  ptrml->beta_hi           = beta_hi;
   ptrml->alpha_magdens     = pin->GetOrAddReal("problem", "alpha_magdens", 1.0/2.0);
-  bool have_xi             = pin->DoesParameterExist("problem", "xi");
-  Real xi_input            = pin->GetOrAddReal("problem", "xi", -1.0);
-  ptrml->xi                = xi_input;
-  ptrml->heating_on        = pin->GetOrAddBoolean("problem", "heating_on", true);
-  ptrml->cooling_below_T_cold =
-      pin->GetOrAddBoolean("problem", "cooling_below_T_cold", true);
-  if (!ptrml->cooling_below_T_cold && ptrml->heating_on &&
-      global_variable::my_rank == 0) {
-    std::cout << "WARNING: cooling_below_T_cold=false should only be used with "
-                 "heating_on=false." << std::endl;
-  }
-  ptrml->balanced_heating  = pin->GetOrAddBoolean("problem", "balanced_heating", true);
-  if (ptrml->balanced_heating) {
-    ptrml->alpha_heat = (beta_lo-beta_hi) * (std::log(T_cold/T_peak) / std::log(contrast)) - beta_hi;
-    ptrml->heat_coefficient = pow(T_cold/T_peak,
-                                  (beta_hi-beta_lo) *
-                                  (std::log(T_cold/T_peak) / std::log(contrast) + 1));
-  } else {
-    ptrml->alpha_heat = -2-beta_hi;
-    ptrml->heat_coefficient = pow(T_cold/T_peak, -beta_lo - ptrml->alpha_heat);
-  }
-  ptrml->epsilon_T         = pin->GetOrAddReal("problem", "epsilon_T", 0.05);
+  trml_cooling::ReferenceState cooling_ref;
+  cooling_ref.rho_0 = rho_0;
+  cooling_ref.pgas_0 = pgas_0;
+  cooling_ref.contrast = contrast;
+  cooling_ref.gamma = eos.gamma;
+  cooling_ref.t_shear = ptrml->t_shear;
+  cooling_ref.allow_zero_shear = kTrmlAllowZeroShear;
+  const bool cooling_verbose = (global_variable::my_rank == 0);
+  trml_cooling::Setup cooling_setup =
+      trml_cooling::ReadInputs(pin, pmbp->punit, cooling_ref, true, cooling_verbose);
+  ptrml->cooling            = cooling_setup.params;
+  ptrml->T_peak             = ptrml->cooling.T_peak;
+  Real T_peak               = ptrml->T_peak;
+  ptrml->cool_T_min         = ptrml->cooling.cool_T_min;
+  ptrml->cool_T_max         = ptrml->cooling.cool_T_max;
+  ptrml->lambda_slope_lo    = ptrml->cooling.lambda_slope_lo;
+  ptrml->lambda_slope_hi    = ptrml->cooling.lambda_slope_hi;
+  ptrml->lambda_smooth_width = ptrml->cooling.lambda_smooth_width;
+  ptrml->lambda_peak        = ptrml->cooling.lambda_peak;
+  ptrml->heat_gamma         = ptrml->cooling.heat_gamma;
+  ptrml->heat_gamma_T_ref   = ptrml->cooling.heat_gamma_T_ref;
+  ptrml->heat_gamma_T_slope = ptrml->cooling.heat_gamma_T_slope;
+  ptrml->heating_mode       = cooling_setup.heating_mode;
+  ptrml->t_cool_0           = cooling_setup.t_cool_0;
+  ptrml->xi                 = cooling_setup.xi;
+  ptrml->use_dens_ceiling   = ptrml->cooling.use_dens_ceiling;
+  ptrml->dens_ceiling       = ptrml->cooling.dens_ceiling;
+  ptrml->adjust_temp_floor  = pin->GetOrAddBoolean("problem", "adjust_temp_floor", false);
+  ptrml->T_floor            = T_cold * pin->GetOrAddReal("problem", "T_floor", 0.1);
+
+  ptrml->T_peak_lo          = pow(10., std::log10(T_peak) - std::log10(contrast)/20.);
+  ptrml->T_peak_hi          = pow(10., std::log10(T_peak) + std::log10(contrast)/20.);
+  ptrml->T_cold_hi          = pow(10., std::log10(T_cold) + 2 * std::log10(contrast)/20.);
+  ptrml->T_hot_lo           = pow(10., std::log10(T_hot) - 2 * std::log10(contrast)/20.);
 
   // get ztop and bottom
   ptrml->ztop              = pin->GetReal("mesh", "x3max");
@@ -1165,50 +1110,11 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
   Real z_interface              = pin->GetOrAddReal("problem", "z_interface", 0.0);
   ptrml->z_interface       = z_interface;
-  Real t_cool_0_input      = pin->GetOrAddReal("problem", "t_cool_0", -1.0);
-
-  if (t_cool_0_input > 0.0) {
-    ptrml->t_cool_0 = t_cool_0_input;
-    if (std::isfinite(ptrml->t_shear)) {
-      ptrml->xi = ptrml->t_shear/ptrml->t_cool_0;
-    } else {
-      ptrml->xi = std::numeric_limits<Real>::infinity();
-    }
-  } else if (std::isfinite(ptrml->t_shear)) {
-    if (!have_xi || xi_input <= 0.0) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl
-                << "Require either a positive xi or a positive t_cool_0 under "
-                << "<problem>." << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    ptrml->t_cool_0 = ptrml->t_shear/xi_input;
-  } else {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "TRML_no_shear requires a positive explicit t_cool_0 when "
-              << "<problem>/velocity = 0." << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
 
   Real frame_time_ref = std::isfinite(ptrml->t_shear) ? ptrml->t_shear : ptrml->t_cool_0;
 
-  ptrml->use_temp_floor_cool = pin->GetOrAddBoolean("problem","use_temp_floor_cool", false);
-  if (ptrml->use_temp_floor_cool) ptrml->T_floor_cool = pin->GetOrAddReal("problem","temp_floor_cool", 2e4)/pmbp->punit->temperature_cgs();
-  else ptrml->T_floor_cool = eos.tfloor; // If user has not set a floor on the cooling, pass the eos floor
-
   ptrml->use_temp_ceiling = pin->GetOrAddBoolean("problem","use_temp_ceiling", false);
   if (ptrml->use_temp_ceiling) ptrml->T_ceiling = pin->GetOrAddReal("problem","temp_ceiling", 1e9)/pmbp->punit->temperature_cgs();
-  ptrml->cool_subc = pin->GetOrAddBoolean("problem","cool_subc",false);
-  ptrml->cool_subfac = pin->GetOrAddReal("problem","cool_subfac", 1.0);
-  ptrml->use_dens_ceiling = pin->GetOrAddBoolean("problem","use_dens_ceiling_cool", false);
-  if (ptrml->use_dens_ceiling){
-    Real n0_ceiling = pin->GetOrAddReal("problem","n0_ceiling_cool", 20.0);
-    ptrml->dens_ceiling = n0_ceiling*pmbp->punit->mu()*pmbp->punit->atomic_mass_unit_cgs/pmbp->punit->density_cgs();
-  }
-  else{
-    ptrml->dens_ceiling = FLT_MAX;
-  }
   ptrml->ndiag = pin->GetOrAddInteger("problem","ndiag",-1);
 
   // History diagnostics controls (z-range extrema)
@@ -1520,8 +1426,20 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     std::cout << std::setprecision(16) << "pgas_0 = " << pgas_0 << "\n";
     std::cout << std::setprecision(16) << "T_peak = " << T_peak << "\n";
     std::cout << std::setprecision(16) << "T_cold = " << T_cold << "\n";
-    std::cout << std::setprecision(16) << "beta_hi = " << beta_hi << "\n";
-    std::cout << std::setprecision(16) << "beta_lo = " << beta_lo << "\n";
+    std::cout << std::setprecision(16) << "lambda_peak = " << ptrml->lambda_peak << "\n";
+    std::cout << std::setprecision(16) << "lambda_slope_lo = "
+              << ptrml->lambda_slope_lo << "\n";
+    std::cout << std::setprecision(16) << "lambda_slope_hi = "
+              << ptrml->lambda_slope_hi << "\n";
+    std::cout << std::setprecision(16) << "lambda_smooth_width = "
+              << ptrml->lambda_smooth_width << "\n";
+    std::cout << std::setprecision(16) << "heating_mode = "
+              << trml_cooling::HeatingModeName(ptrml->heating_mode) << "\n";
+    std::cout << std::setprecision(16) << "heat_gamma = " << ptrml->heat_gamma << "\n";
+    std::cout << std::setprecision(16) << "heat_gamma_T_ref = "
+              << ptrml->heat_gamma_T_ref << "\n";
+    std::cout << std::setprecision(16) << "heat_gamma_T_slope = "
+              << ptrml->heat_gamma_T_slope << "\n";
     std::cout << std::setprecision(16) << "alpha_magdens = " << ptrml->alpha_magdens << "\n";
     std::cout << std::setprecision(16) << "xi = " << ptrml->xi << "\n";
     std::cout << std::setprecision(16) << "t_cool_0 = " << ptrml->t_cool_0 << "\n";
@@ -1530,7 +1448,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     std::cout << std::setprecision(16) << "smoothing_thickness = " << ptrml->smoothing_thickness << "\n";
     std::cout << std::setprecision(16) << "contrast = " << contrast << "\n";
     std::cout << std::setprecision(16) << "velocity = " << velocity << "\n";
-    std::cout << std::setprecision(16) << "T_cutoff = " << ptrml->T_cutoff << "\n";
+    std::cout << std::setprecision(16) << "cool_T_min = " << ptrml->cool_T_min << "\n";
+    std::cout << std::setprecision(16) << "cool_T_max = " << ptrml->cool_T_max << "\n";
     std::cout << std::setprecision(16) << "T_peak_lo = " << ptrml->T_peak_lo << "\n";
     std::cout << std::setprecision(16) << "T_peak_hi = " << ptrml->T_peak_hi << "\n";
     std::cout << std::setprecision(16) << "dt_min_terminate = "
@@ -2171,7 +2090,6 @@ void UserTimeStep(Mesh *pm){
 
   bool is_mhd = (pmbp->pmhd != nullptr) ? true : false;
 
-  auto u0 = (is_mhd) ? pmbp->pmhd->u0 : pmbp->phydro->u0;
   auto w0 = (is_mhd) ? pmbp->pmhd->w0 : pmbp->phydro->w0;
   EOS_Data &eos = (is_mhd) ?
                   pmbp->pmhd->peos->eos_data : pmbp->phydro->peos->eos_data;
@@ -2179,25 +2097,9 @@ void UserTimeStep(Mesh *pm){
   Real gamma = eos.gamma;
   Real gm1 = gamma - 1.0;
 
-  Real T_cutoff = ptrml->T_cutoff;
-  Real T_hot = ptrml->T_hot;
-  Real T_cold = ptrml->T_cold;
-  Real T_peak = ptrml->T_peak;
-  Real epsilon_T = ptrml->epsilon_T;
-  Real pgas_0 = ptrml->pgas_0;
-  Real t_cool_0 = ptrml->t_cool_0;
-  Real beta_lo = ptrml->beta_lo;
-  Real beta_hi = ptrml->beta_hi;
-  Real heat_coefficient = ptrml->heat_coefficient;
-  Real alpha_heat = ptrml->alpha_heat;
-  bool heating_on = ptrml->heating_on;
-  bool cooling_below_T_cold = ptrml->cooling_below_T_cold;
+  const trml_cooling::Params cooling = ptrml->cooling;
   Real dt_cutoff = ptrml->dt_cutoff;
   Real cfl_cool = ptrml->cfl_cool;
-
-  // For applying density ceiling
-  bool use_dens_ceiling = ptrml->use_dens_ceiling;
-  Real dens_ceiling = ptrml->dens_ceiling;
 
   // find smallest (e/cooling_rate) in each cell
   Kokkos::parallel_reduce("srcterms_cooling_newdt",
@@ -2211,44 +2113,19 @@ void UserTimeStep(Mesh *pm){
     k += ks;
     j += js;
 
-    // temperature in cgs unit
     Real temp = 1.0;
     Real eint = 1.0;
+    Real dens = w0(m,IDN,k,j,i);
     if (use_e) {
-      temp = w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)*gm1;
+      temp = w0(m,IEN,k,j,i)/dens*gm1;
       eint = w0(m,IEN,k,j,i);
     } else {
       temp = w0(m,ITM,k,j,i);
-      eint = w0(m,ITM,k,j,i)*w0(m,IDN,k,j,i)/gm1;
+      eint = w0(m,ITM,k,j,i)*dens/gm1;
     }
 
-    Real pres = eint*gm1;
-
-    Real cooling_heating = FLT_MIN;
-
-    if (temp>T_cutoff){
-      cooling_heating = FLT_MIN;
-    } else if (use_dens_ceiling && w0(m,IDN,k,j,i) > dens_ceiling) {
-      // If density is above ceiling, we set cooling/heating to zero
-      cooling_heating = FLT_MIN;
-    } else {
-      Real Edot_cool = 1.5 * pgas_0/t_cool_0 * SQR(pres/pgas_0);
-      Edot_cool *= (temp<T_peak) ? pow(temp/T_peak, -beta_lo) : pow(temp/T_peak, -beta_hi);
-      if (!cooling_below_T_cold && temp < T_cold) {
-        Edot_cool = 0.0;
-      }
-
-      Real Edot_heat = 0.0;
-      if (heating_on) {
-        Edot_heat = 1.5 * pgas_0/t_cool_0 * heat_coefficient * SQR(pres/pgas_0);
-        Edot_heat *= (temp<(1+epsilon_T)*T_hot) ?
-            pow((temp/T_peak),alpha_heat) :
-            pow(((1+epsilon_T)*T_hot/T_peak),alpha_heat) *
-            pow((temp/((1+epsilon_T)*T_hot)),(-beta_hi-0.5));
-      }
-
-      cooling_heating=FLT_MIN+Edot_cool-Edot_heat;
-    }
+    const trml_cooling::Rates rates = trml_cooling::Evaluate(cooling, dens, temp, eint);
+    const Real cooling_heating = FLT_MIN + fabs(rates.edot_net);
     Real dt_cool = cfl_cool * (eint/fabs(cooling_heating));
     dt_cool = fmax(dt_cool,dt_cutoff);
     min_dt = fmin(min_dt,dt_cool);
@@ -2300,24 +2177,7 @@ void AddCoolingHeating(Mesh *pm, const Real bdt, DvceArray5D<Real> &u0,
   Real use_e = eos_data.use_e;
   Real gamma = eos_data.gamma;
   Real gm1 = gamma - 1.0;
-
-  Real T_cutoff = ptrml->T_cutoff;
-  Real T_hot = ptrml->T_hot;
-  Real T_cold = ptrml->T_cold;
-  Real T_peak = ptrml->T_peak;
-  Real epsilon_T = ptrml->epsilon_T;
-  Real pgas_0 = ptrml->pgas_0;
-  Real t_cool_0 = ptrml->t_cool_0;
-  Real beta_lo = ptrml->beta_lo;
-  Real beta_hi = ptrml->beta_hi;
-  Real heat_coefficient = ptrml->heat_coefficient;
-  Real alpha_heat = ptrml->alpha_heat;
-  bool heating_on = ptrml->heating_on;
-  bool cooling_below_T_cold = ptrml->cooling_below_T_cold;
-
-  // For applying density ceiling
-  bool use_dens_ceiling = ptrml->use_dens_ceiling;
-  Real dens_ceiling = ptrml->dens_ceiling;
+  const trml_cooling::Params cooling = ptrml->cooling;
 
   Real net_cool=0.0, net_heat=0.0;
   Kokkos::parallel_reduce("coolingheating", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
@@ -2338,35 +2198,10 @@ void AddCoolingHeating(Mesh *pm, const Real bdt, DvceArray5D<Real> &u0,
       temp = w0(m,ITM,k,j,i);
       eint = w0(m,ITM,k,j,i)*dens/gm1;
     }
-    Real pres = eint*gm1;
-
-    Real cooling_heating=0.0;
-
-    if (temp>T_cutoff){
-      cooling_heating=  FLT_MIN; // No cooling/heating if temperature exceeds cutoff
-    } else if (use_dens_ceiling && dens > dens_ceiling) {
-      cooling_heating = FLT_MIN; // No cooling/heating if density exceeds ceiling
-    } else {
-      Real Edot_cool = 1.5 * pgas_0/t_cool_0 * SQR(pres/pgas_0);
-      Edot_cool *= (temp<T_peak) ? pow(temp/T_peak, -beta_lo) : pow(temp/T_peak, -beta_hi);
-      if (!cooling_below_T_cold && temp < T_cold) {
-        Edot_cool = 0.0;
-      }
-      net_cooling += Edot_cool*dvol;
-
-      Real Edot_heat = 0.0;
-      if (heating_on) {
-        Edot_heat = 1.5 * pgas_0/t_cool_0 * heat_coefficient * SQR(pres/pgas_0);
-        Edot_heat *= (temp<(1+epsilon_T)*T_hot) ?
-            pow((temp/T_peak),alpha_heat) :
-            pow(((1+epsilon_T)*T_hot/T_peak),alpha_heat) *
-            pow((temp/((1+epsilon_T)*T_hot)),(-beta_hi-0.5));
-      }
-      net_heating += Edot_heat*dvol;
-
-      cooling_heating=Edot_cool-Edot_heat;
-    }
-    u0(m,IEN,k,j,i) -= bdt * cooling_heating;
+    const trml_cooling::Rates rates = trml_cooling::Evaluate(cooling, dens, temp, eint);
+    net_cooling += rates.edot_cool*dvol;
+    net_heating += rates.edot_heat*dvol;
+    u0(m,IEN,k,j,i) -= bdt * rates.edot_net;
 
   }, Kokkos::Sum<Real>(net_cool), Kokkos::Sum<Real>(net_heat));
 #if MPI_PARALLEL_ENABLED
@@ -3026,18 +2861,8 @@ void WriteLightDiagnostics(Mesh *pm) {
   const Real T_hot = ptrml->T_hot;
   const Real T_cold_hi = ptrml->T_cold_hi;
   const Real T_hot_lo = ptrml->T_hot_lo;
-  const Real T_cutoff = ptrml->T_cutoff;
-  const Real epsilon_T = ptrml->epsilon_T;
   const Real pgas_0 = ptrml->pgas_0;
-  const Real t_cool_0 = ptrml->t_cool_0;
-  const Real beta_lo = ptrml->beta_lo;
-  const Real beta_hi = ptrml->beta_hi;
-  const Real heat_coefficient = ptrml->heat_coefficient;
-  const Real alpha_heat = ptrml->alpha_heat;
-  const bool heating_on = ptrml->heating_on;
-  const bool cooling_below_T_cold = ptrml->cooling_below_T_cold;
-  const bool use_dens_ceiling = ptrml->use_dens_ceiling;
-  const Real dens_ceiling = ptrml->dens_ceiling;
+  const trml_cooling::Params cooling = ptrml->cooling;
 
   array_sum::GlobalSum loc;
   for (int n=0; n<NREDUCTION_VARIABLES; ++n) loc.the_array[n] = 0.0;
@@ -3070,12 +2895,8 @@ void WriteLightDiagnostics(Mesh *pm) {
     const Real vy = w0(m,IVY,k,j,i);
     const Real vz = w0(m,IVZ,k,j,i);
     const Real pres = eint*gm1;
-    const Real net_cool = NetCoolingRateLocal(dens, temp, eint, gamma, pgas_0, t_cool_0,
-                                              T_peak, T_hot, T_cold, T_cutoff, epsilon_T,
-                                              beta_lo, beta_hi, heat_coefficient, alpha_heat,
-                                              heating_on, cooling_below_T_cold,
-                                              use_dens_ceiling, dens_ceiling);
-    const Real cool_pos = fmax(net_cool, static_cast<Real>(0.0))*dvol;
+    const trml_cooling::Rates rates = trml_cooling::Evaluate(cooling, dens, temp, eint);
+    const Real cool_pos = fmax(rates.edot_net, static_cast<Real>(0.0))*dvol;
 
     // 0--5: global and phase volumes/masses
     sum.the_array[0] += dvol;
@@ -3107,7 +2928,7 @@ void WriteLightDiagnostics(Mesh *pm) {
 
     sum.the_array[17] += cool_pos;
     sum.the_array[18] += cool_pos*z;
-    sum.the_array[19] += net_cool*dvol;
+    sum.the_array[19] += rates.edot_net*dvol;
   }, Kokkos::Sum<array_sum::GlobalSum>(loc));
 
 #if MPI_PARALLEL_ENABLED
@@ -3940,5 +3761,3 @@ Real solve_density_profile_NR(const Real z, const Real rho_hot, const Real beta_
 }
 
 } //namespace
-
-// Define a cooling function and a device cooling function
