@@ -1096,6 +1096,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     AlfvenWave(pin, false);
   } else if (pgen_fun_name.compare("gr_bondi") == 0) {
     BondiAccretion(pin, false);
+  } else if (pgen_fun_name.compare("divb_amr") == 0) {
+    DivBAMR(pin, false);
   } else if (pgen_fun_name.compare("linear_wave") == 0) {
     LinearWave(pin, false);
   } else if (pgen_fun_name.compare("implode") == 0) {
@@ -1713,6 +1715,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper &res
     AlfvenWave(pin, true);
   } else if (pgen_fun_name.compare("gr_bondi") == 0) {
     BondiAccretion(pin, true);
+  } else if (pgen_fun_name.compare("divb_amr") == 0) {
+    DivBAMR(pin, true);
   } else if (pgen_fun_name.compare("linear_wave") == 0) {
     LinearWave(pin, true);
   } else if (pgen_fun_name.compare("implode") == 0) {
