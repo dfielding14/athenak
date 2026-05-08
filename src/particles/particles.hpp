@@ -81,7 +81,16 @@ public:
   int64_t lmc_inject_seed;    // Base seed for deterministic inflow injection sampling
   int lmc_max_inject_per_step;  // Optional per-rank cap; negative disables the cap
   int next_tag;          // Next globally unique tag for newly injected particles
+  int lmc_initial_next_tag;  // First tag reserved for particles injected after initialization
   Real lmc_mass_per_particle;  // Mass represented by one MC tracer
+  bool lmc_scheduled_tracking;  // Select tracked particles into persistent PTRACK slots
+  int lmc_track_nparticles_total;  // Total number of .trk slots in scheduled mode
+  int lmc_track_ninitial;          // Number of initial particles assigned to slots
+  int lmc_track_next_injected_slot;  // Number of injected slots already filled
+  int lmc_track_face;             // Physical face eligible for injected tracking slots
+  Real lmc_track_initial_fraction;
+  Real lmc_track_inject_t_start;
+  Real lmc_track_inject_t_stop;
 
   // Cosmic ray specific
   int nspecies;                     // number of CR species

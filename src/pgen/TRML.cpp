@@ -1898,6 +1898,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
           pi(PGID,pidx) = gids + m;
           pi(PLASTLEVEL,pidx) = mblev.d_view(m);
           pi(PLASTMOVE,pidx) = 0;  // not frozen, no previous move
+          pi(PTRACK,pidx) = -1;
 
           // set particle to zone center (using lagrangian_mc indices)
           pr(LMCX,pidx) = CellCenterX(i-is, nx1, size.d_view(m).x1min,

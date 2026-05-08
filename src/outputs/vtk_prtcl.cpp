@@ -211,6 +211,9 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     } else if (is_lagrangian_mc && n == static_cast<int>(PLASTLEVEL)) {
       msg << std::endl << "SCALARS plastlevel float" << std::endl
           << "LOOKUP_TABLE default" << std::endl;
+    } else if (is_lagrangian_mc && n == static_cast<int>(PTRACK)) {
+      msg << std::endl << "SCALARS ptrack float" << std::endl
+          << "LOOKUP_TABLE default" << std::endl;
     } else {
       msg << std::endl << "SCALARS idata" << n << " float" << std::endl
           << "LOOKUP_TABLE default" << std::endl;

@@ -1,0 +1,82 @@
+# Scheduled top-boundary tracking test for lagrangian_mc tracks.
+
+<job>
+basename  = particle_scheduled_injection
+
+<mesh>
+nghost    = 2
+nx1       = 4
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = outflow
+ox1_bc    = outflow
+
+nx2       = 4
+x2min     = 0.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 4
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = outflow
+ox3_bc    = outflow
+
+<meshblock>
+nx1       = 4
+nx2       = 4
+nx3       = 4
+
+<time>
+evolution  = kinematic
+integrator = rk2
+cfl_number = 0.5
+nlim       = 8
+tlim       = 1.0
+ndiag      = 1
+
+<hydro>
+eos         = ideal
+reconstruct = dc
+rsolver     = advect
+gamma       = 1.6666666666666667
+nscalars    = 1
+
+<particles>
+particle_type             = lagrangian_mc
+pusher                    = lagrangian_mc
+ppc                       = 0.0
+assign_tag                = index_order
+random_seed               = 12345
+inject_at_inflow          = true
+inject_seed               = 123456
+mass_per_particle         = 0.015625
+max_inject_per_step       = -1
+track_selection           = scheduled_injection
+track_nparticles_total    = 4
+track_initial_fraction    = 0.0
+track_inject_t_start      = 0.1
+track_inject_t_stop       = 0.1
+track_inject_face         = outer_x3
+
+<problem>
+user_srcs         = true
+user_work_in_loop = true
+test_mode         = scheduled_injection
+field_profile     = uniform
+particle_layout   = none
+rho0              = 1.0
+temp0             = 2.0
+scalar0           = 0.25
+vx0               = 1.0
+vy0               = 0.0
+vz0               = -1.0
+top_inflow_start  = 0.3
+
+<output1>
+file_type   = trk
+id          = trk
+variable    = prtcl_all
+dt          = 0.25
+nparticles  = 4

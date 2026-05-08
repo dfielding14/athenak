@@ -54,7 +54,11 @@ class SuiteConfig:
     particle_max_inject_per_step: int
     particle_vtk_dt: float
     track_dt: float
-    tracked_particles: int
+    tracked_particles_total: int
+    track_initial_fraction: float
+    track_inject_t_start: float
+    track_inject_t_stop: float
+    track_inject_face: str
 
     rho_0: float = 1.0
     pgas_0: float = 1.0
@@ -155,6 +159,10 @@ def bool_token(value: bool) -> str:
     return "true" if value else "false"
 
 
+def scheduled_initial_count(config: SuiteConfig) -> int:
+    return int(math.floor(config.track_initial_fraction * config.tracked_particles_total + 0.5))
+
+
 def validate_config(config: SuiteConfig) -> None:
     if config.chi <= 1.0:
         raise ValueError("chi must be > 1")
@@ -178,8 +186,14 @@ def validate_config(config: SuiteConfig) -> None:
     if config.particles:
         if config.particle_target_count <= 0.0:
             raise ValueError("particle target count must be positive")
-        if config.tracked_particles <= 0:
-            raise ValueError("tracked particle count must be positive")
+        if config.tracked_particles_total <= 0:
+            raise ValueError("tracked particle slot count must be positive")
+        if not (0.0 <= config.track_initial_fraction <= 1.0):
+            raise ValueError("track initial fraction must be between 0 and 1")
+        if config.track_inject_t_stop >= 0.0 and (
+            config.track_inject_t_stop < config.track_inject_t_start
+        ):
+            raise ValueError("track injection stop time must be >= start time")
         if config.track_dt <= 0.0:
             raise ValueError("tracked-particle output dt must be positive")
         if config.particle_vtk_dt <= 0.0:
@@ -256,6 +270,12 @@ min_radius = {fnum(config.particle_min_radius)}
 inject_at_inflow = {bool_token(config.particle_inject_at_inflow)}
 inject_seed = {config.particle_inject_seed}
 max_inject_per_step = {config.particle_max_inject_per_step}
+track_selection = scheduled_injection
+track_nparticles_total = {config.tracked_particles_total}
+track_initial_fraction = {fnum(config.track_initial_fraction)}
+track_inject_t_start = {fnum(config.track_inject_t_start)}
+track_inject_t_stop = {fnum(config.track_inject_t_stop)}
+track_inject_face = {config.track_inject_face}
 """
         particle_output_block = f"""
 <output8>
@@ -269,7 +289,7 @@ file_type = trk
 id = trk
 variable = prtcl_all
 dt = {fnum(config.track_dt)}
-nparticles = {config.tracked_particles}
+nparticles = {config.tracked_particles_total}
 """
 
     return f"""# AthenaK Input File: TRML hot-cutoff cooling suite
@@ -460,6 +480,10 @@ def manifest_row(config: SuiteConfig, case: SuiteCase) -> dict[str, str]:
     x1min, x1max = x_bounds(config.domain_size[0])
     x2min, x2max = x_bounds(config.domain_size[1])
     x3min, x3max = x_bounds(config.domain_size[2])
+    ninitial_trk = scheduled_initial_count(config) if config.particles else 0
+    ninjected_trk = (
+        config.tracked_particles_total - ninitial_trk if config.particles else 0
+    )
 
     row = {
         "filename": case.filename,
@@ -518,7 +542,20 @@ def manifest_row(config: SuiteConfig, case: SuiteCase) -> dict[str, str]:
         ),
         "particle_vtk_dt": fnum(config.particle_vtk_dt) if config.particles else "",
         "track_dt": fnum(config.track_dt) if config.particles else "",
-        "tracked_particles": str(config.tracked_particles) if config.particles else "",
+        "track_selection": "scheduled_injection" if config.particles else "",
+        "N_total_trk": str(config.tracked_particles_total) if config.particles else "",
+        "N_initial_trk": str(ninitial_trk) if config.particles else "",
+        "N_injected_trk": str(ninjected_trk) if config.particles else "",
+        "track_initial_fraction": (
+            fnum(config.track_initial_fraction) if config.particles else ""
+        ),
+        "track_inject_t_start": (
+            fnum(config.track_inject_t_start) if config.particles else ""
+        ),
+        "track_inject_t_stop": (
+            fnum(config.track_inject_t_stop) if config.particles else ""
+        ),
+        "track_inject_face": config.track_inject_face if config.particles else "",
     }
     return row
 
@@ -563,8 +600,14 @@ def print_summary(config: SuiteConfig, cases: list[SuiteCase]) -> None:
     print(f"  Mach_rel: {fnum(config.mach_rel)}")
     print(f"  slopes: {', '.join(fnum(slope) for slope in config.slopes)}")
     if config.particles:
+        ninitial_trk = scheduled_initial_count(config)
+        ninjected_trk = config.tracked_particles_total - ninitial_trk
         print(f"  particles: lagrangian_mc target={fnum(config.particle_target_count)} "
-              f"tracked={config.tracked_particles} trk_dt={fnum(config.track_dt)}")
+              f"tracked_total={config.tracked_particles_total} "
+              f"tracked_initial={ninitial_trk} "
+              f"tracked_injected={ninjected_trk} "
+              f"track_face={config.track_inject_face} "
+              f"trk_dt={fnum(config.track_dt)}")
     else:
         print("  particles: disabled")
     print(f"  first: {first.filename}  T_hot_cut_off={fnum(first.t_hot_cut_off)}  "
@@ -615,7 +658,16 @@ def parse_args() -> SuiteConfig:
     parser.add_argument("--particle-max-inject-per-step", type=int, default=-1)
     parser.add_argument("--particle-vtk-dt", type=float, default=1.0)
     parser.add_argument("--track-dt", type=float, default=0.1)
-    parser.add_argument("--tracked-particles", type=int, default=1000)
+    parser.add_argument("--tracked-particles-total", type=int, default=2000,
+                        help="Total number of scheduled tracked-particle slots")
+    parser.add_argument("--track-initial-fraction", type=float, default=0.10,
+                        help="Fraction of tracked slots filled from initial particles")
+    parser.add_argument("--track-inject-t-start", type=float, default=0.0,
+                        help="Start time for scheduled injected tracked slots")
+    parser.add_argument("--track-inject-t-stop", type=float, default=-1.0,
+                        help="Stop time for scheduled injected tracked slots; -1 uses tlim")
+    parser.add_argument("--track-inject-face", default="outer_x3",
+                        help="Physical inflow face eligible for injected tracked slots")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -653,7 +705,11 @@ def parse_args() -> SuiteConfig:
         particle_max_inject_per_step=args.particle_max_inject_per_step,
         particle_vtk_dt=args.particle_vtk_dt,
         track_dt=args.track_dt,
-        tracked_particles=args.tracked_particles,
+        tracked_particles_total=args.tracked_particles_total,
+        track_initial_fraction=args.track_initial_fraction,
+        track_inject_t_start=args.track_inject_t_start,
+        track_inject_t_stop=args.track_inject_t_stop,
+        track_inject_face=args.track_inject_face,
     )
 
 

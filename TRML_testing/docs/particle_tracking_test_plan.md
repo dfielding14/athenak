@@ -18,19 +18,26 @@ The tests should verify these behaviors:
 3. Particles that cross non-periodic outflow boundaries are removed cleanly.
 4. New tracers can be injected through physical inflow boundaries without tag
    reuse or bad mesh ownership.
-5. AMR refinement and derefinement keep particle position, `gid`, and level
+5. Scheduled tracking can reserve stable `.trk` rows for a deterministic initial
+   sample plus later physical top-boundary injections.
+6. AMR refinement and derefinement keep particle position, `gid`, and level
    bookkeeping consistent.
-6. Restarted runs produce the same tracked-particle state as uninterrupted runs.
-7. Serial and MPI runs agree for the same deterministic setup.
+7. Restarted runs produce the same tracked-particle state as uninterrupted runs.
+8. Serial and MPI runs agree for the same deterministic setup.
 
 The current `.trk` record contains fixed columns:
 
 ```text
-x y z vx vy vz rho press temp eint scalar0 gid level active
+tag x y z vx vy vz rho press temp eint scalar0 gid level active
 edot_cool edot_heat edot_net dedt_rad_mass dTdt_rad tcool
 entropy ln_entropy divv dTdt_ad T_mix_scalar T_minus_T_mix_scalar
 T_label_mix T_minus_T_label_mix gradT_mag grad_scalar_mag strain_mag
 ```
+
+For legacy tracking, row number and `tag` both identify the low-tag particle.
+For `track_selection = scheduled_injection`, row number is the stable tracking
+slot and the `tag` column is the current physical particle identity. Unfilled
+scheduled slots must have `active = 0` and `tag = -1`.
 
 For TRML runs with `nscalars >= 2`, `scalar1` is initialized as the passive
 mixing-only thermal label sampled in the track file as `T_label_mix`.  It is
@@ -161,7 +168,29 @@ Assertions:
 This verifies both particle creation and track-output visibility for particles
 that did not exist at initialization.
 
-### 6. Restart Continuity
+### 6. Scheduled Top-Injection Tracking
+
+Setup:
+
+- Use `track_selection = scheduled_injection`.
+- Set `track_initial_fraction` to a small deterministic value or zero.
+- Schedule injected slots before a controlled top inflow begins.
+- Keep another physical inflow face active before the top inflow starts.
+
+Assertions:
+
+- Pre-scheduled slots remain `active = 0`, `tag = -1` before
+  `track_inject_t_start`.
+- Slots that become due while no eligible top particles exist remain inactive.
+- Non-selected inflow faces do not fill scheduled injected slots.
+- The first later physical particles injected through `track_inject_face` fill
+  the due slots, with stable row indices and visible non-negative tags.
+- Thermodynamic columns match the cells occupied by those tracked particles.
+
+This verifies that scheduled tracking follows physical top-boundary tracers
+without forcing diagnostic-only particles.
+
+### 7. Restart Continuity
 
 Setup:
 
@@ -179,7 +208,7 @@ Assertions:
 
 This test should fail if `next_tag` is not persisted or reconstructed correctly.
 
-### 7. MPI and Rank-Crossing Parity
+### 8. MPI and Rank-Crossing Parity
 
 Setup:
 

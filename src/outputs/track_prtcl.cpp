@@ -30,9 +30,11 @@
 #include "outputs.hpp"
 
 namespace {
-constexpr int NTRACK_VALUES = 31;
+constexpr int NTRACK_VALUES = 32;
+constexpr int TRACK_TAG_INDEX = 0;
+constexpr int TRACK_ACTIVE_INDEX = 14;
 const char *TRACK_VARIABLES =
-    "x y z vx vy vz rho press temp eint scalar0 gid level active "
+    "tag x y z vx vy vz rho press temp eint scalar0 gid level active "
     "edot_cool edot_heat edot_net dedt_rad_mass dTdt_rad tcool "
     "entropy ln_entropy divv dTdt_ad T_mix_scalar T_minus_T_mix_scalar "
     "T_label_mix T_minus_T_label_mix gradT_mag grad_scalar_mag strain_mag";
@@ -48,6 +50,10 @@ TrackedParticleOutput::TrackedParticleOutput(ParameterInput *pin, Mesh *pm,
   mkdir("trk",0775);
   // allocate arrays
   npout_eachrank.resize(global_variable::nranks);
+  const bool is_lagrangian_mc =
+      (pm->pmb_pack->ppart->particle_type == ParticleType::lagrangian_mc);
+  track_by_slot =
+      is_lagrangian_mc && pm->pmb_pack->ppart->lmc_scheduled_tracking;
   if (pin->DoesParameterExist(op.block_name,"nparticles")) {
     ntrack = pin->GetInteger(op.block_name,"nparticles");
   } else if (pin->DoesParameterExist(op.block_name,"ntrack")) {
@@ -61,6 +67,20 @@ TrackedParticleOutput::TrackedParticleOutput(ParameterInput *pin, Mesh *pm,
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Tracked particle output requires 'nparticles'"
               << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (ntrack <= 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Tracked particle output requires nparticles > 0"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (track_by_slot &&
+      ntrack != pm->pmb_pack->ppart->lmc_track_nparticles_total) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "scheduled_injection tracking requires <"
+              << op.block_name << ">/nparticles to equal "
+              << "<particles>/track_nparticles_total" << std::endl;
     std::exit(EXIT_FAILURE);
   }
   // TODO(@user) improve guess below?
@@ -119,6 +139,7 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
   auto &pr = pm->pmb_pack->ppart->prtcl_rdata;
   auto &pi = pm->pmb_pack->ppart->prtcl_idata;
   int ntrack_ = ntrack;
+  bool track_by_slot_ = track_by_slot;
   bool is_lagrangian_mc =
       (pm->pmb_pack->ppart->particle_type == ParticleType::lagrangian_mc);
   int gids = pm->pmb_pack->gids;
@@ -162,7 +183,14 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
   Kokkos::deep_copy(d_counter, 0);
 
   par_for("part_update",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
-    if (pi(PTAG,p) < ntrack_) {
+    const int tag = pi(PTAG,p);
+    int track_index = -1;
+    if (track_by_slot_) {
+      track_index = pi(PTRACK,p);
+    } else if (tag >= 0 && tag < ntrack_) {
+      track_index = tag;
+    }
+    if (track_index >= 0 && track_index < ntrack_) {
       int index = Kokkos::atomic_fetch_add(&d_counter(),1);
       int m = pi(PGID,p) - gids;
       bool active = (m >= 0 && m < nmb);
@@ -172,7 +200,8 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
       Real x = is_lagrangian_mc ? pr(LMCX,p) : pr(IPX,p);
       Real y = is_lagrangian_mc ? pr(LMCY,p) : pr(IPY,p);
       Real z = is_lagrangian_mc ? pr(LMCZ,p) : pr(IPZ,p);
-      tracked_prtcl.d_view(index).tag = pi(PTAG,p);
+      tracked_prtcl.d_view(index).track_index = track_index;
+      tracked_prtcl.d_view(index).tag = tag;
       tracked_prtcl.d_view(index).gid = pi(PGID,p);
       tracked_prtcl.d_view(index).level = active ? mblev.d_view(m) : -1;
       tracked_prtcl.d_view(index).active = active ? 1 : 0;
@@ -406,37 +435,38 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   float *data = new float[NTRACK_VALUES*npout];
   // Loop over particles, load positions into data[]
   for (int p=0; p<npout; ++p) {
-    data[(NTRACK_VALUES*p)    ] = static_cast<float>(outpart(p).x);
-    data[(NTRACK_VALUES*p) + 1] = static_cast<float>(outpart(p).y);
-    data[(NTRACK_VALUES*p) + 2] = static_cast<float>(outpart(p).z);
-    data[(NTRACK_VALUES*p) + 3] = static_cast<float>(outpart(p).vx);
-    data[(NTRACK_VALUES*p) + 4] = static_cast<float>(outpart(p).vy);
-    data[(NTRACK_VALUES*p) + 5] = static_cast<float>(outpart(p).vz);
-    data[(NTRACK_VALUES*p) + 6] = static_cast<float>(outpart(p).rho);
-    data[(NTRACK_VALUES*p) + 7] = static_cast<float>(outpart(p).press);
-    data[(NTRACK_VALUES*p) + 8] = static_cast<float>(outpart(p).temp);
-    data[(NTRACK_VALUES*p) + 9] = static_cast<float>(outpart(p).eint);
-    data[(NTRACK_VALUES*p) +10] = static_cast<float>(outpart(p).scalar0);
-    data[(NTRACK_VALUES*p) +11] = static_cast<float>(outpart(p).gid);
-    data[(NTRACK_VALUES*p) +12] = static_cast<float>(outpart(p).level);
-    data[(NTRACK_VALUES*p) +13] = static_cast<float>(outpart(p).active);
-    data[(NTRACK_VALUES*p) +14] = static_cast<float>(outpart(p).edot_cool);
-    data[(NTRACK_VALUES*p) +15] = static_cast<float>(outpart(p).edot_heat);
-    data[(NTRACK_VALUES*p) +16] = static_cast<float>(outpart(p).edot_net);
-    data[(NTRACK_VALUES*p) +17] = static_cast<float>(outpart(p).dedt_rad_mass);
-    data[(NTRACK_VALUES*p) +18] = static_cast<float>(outpart(p).dTdt_rad);
-    data[(NTRACK_VALUES*p) +19] = static_cast<float>(outpart(p).tcool);
-    data[(NTRACK_VALUES*p) +20] = static_cast<float>(outpart(p).entropy);
-    data[(NTRACK_VALUES*p) +21] = static_cast<float>(outpart(p).ln_entropy);
-    data[(NTRACK_VALUES*p) +22] = static_cast<float>(outpart(p).divv);
-    data[(NTRACK_VALUES*p) +23] = static_cast<float>(outpart(p).dTdt_ad);
-    data[(NTRACK_VALUES*p) +24] = static_cast<float>(outpart(p).T_mix_scalar);
-    data[(NTRACK_VALUES*p) +25] = static_cast<float>(outpart(p).T_minus_T_mix_scalar);
-    data[(NTRACK_VALUES*p) +26] = static_cast<float>(outpart(p).T_label_mix);
-    data[(NTRACK_VALUES*p) +27] = static_cast<float>(outpart(p).T_minus_T_label_mix);
-    data[(NTRACK_VALUES*p) +28] = static_cast<float>(outpart(p).gradT_mag);
-    data[(NTRACK_VALUES*p) +29] = static_cast<float>(outpart(p).grad_scalar_mag);
-    data[(NTRACK_VALUES*p) +30] = static_cast<float>(outpart(p).strain_mag);
+    data[(NTRACK_VALUES*p)    ] = static_cast<float>(outpart(p).tag);
+    data[(NTRACK_VALUES*p) + 1] = static_cast<float>(outpart(p).x);
+    data[(NTRACK_VALUES*p) + 2] = static_cast<float>(outpart(p).y);
+    data[(NTRACK_VALUES*p) + 3] = static_cast<float>(outpart(p).z);
+    data[(NTRACK_VALUES*p) + 4] = static_cast<float>(outpart(p).vx);
+    data[(NTRACK_VALUES*p) + 5] = static_cast<float>(outpart(p).vy);
+    data[(NTRACK_VALUES*p) + 6] = static_cast<float>(outpart(p).vz);
+    data[(NTRACK_VALUES*p) + 7] = static_cast<float>(outpart(p).rho);
+    data[(NTRACK_VALUES*p) + 8] = static_cast<float>(outpart(p).press);
+    data[(NTRACK_VALUES*p) + 9] = static_cast<float>(outpart(p).temp);
+    data[(NTRACK_VALUES*p) +10] = static_cast<float>(outpart(p).eint);
+    data[(NTRACK_VALUES*p) +11] = static_cast<float>(outpart(p).scalar0);
+    data[(NTRACK_VALUES*p) +12] = static_cast<float>(outpart(p).gid);
+    data[(NTRACK_VALUES*p) +13] = static_cast<float>(outpart(p).level);
+    data[(NTRACK_VALUES*p) +14] = static_cast<float>(outpart(p).active);
+    data[(NTRACK_VALUES*p) +15] = static_cast<float>(outpart(p).edot_cool);
+    data[(NTRACK_VALUES*p) +16] = static_cast<float>(outpart(p).edot_heat);
+    data[(NTRACK_VALUES*p) +17] = static_cast<float>(outpart(p).edot_net);
+    data[(NTRACK_VALUES*p) +18] = static_cast<float>(outpart(p).dedt_rad_mass);
+    data[(NTRACK_VALUES*p) +19] = static_cast<float>(outpart(p).dTdt_rad);
+    data[(NTRACK_VALUES*p) +20] = static_cast<float>(outpart(p).tcool);
+    data[(NTRACK_VALUES*p) +21] = static_cast<float>(outpart(p).entropy);
+    data[(NTRACK_VALUES*p) +22] = static_cast<float>(outpart(p).ln_entropy);
+    data[(NTRACK_VALUES*p) +23] = static_cast<float>(outpart(p).divv);
+    data[(NTRACK_VALUES*p) +24] = static_cast<float>(outpart(p).dTdt_ad);
+    data[(NTRACK_VALUES*p) +25] = static_cast<float>(outpart(p).T_mix_scalar);
+    data[(NTRACK_VALUES*p) +26] = static_cast<float>(outpart(p).T_minus_T_mix_scalar);
+    data[(NTRACK_VALUES*p) +27] = static_cast<float>(outpart(p).T_label_mix);
+    data[(NTRACK_VALUES*p) +28] = static_cast<float>(outpart(p).T_minus_T_label_mix);
+    data[(NTRACK_VALUES*p) +29] = static_cast<float>(outpart(p).gradT_mag);
+    data[(NTRACK_VALUES*p) +30] = static_cast<float>(outpart(p).grad_scalar_mag);
+    data[(NTRACK_VALUES*p) +31] = static_cast<float>(outpart(p).strain_mag);
   }
 
   // calculate local data offset
@@ -450,7 +480,9 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   if (global_variable::my_rank == 0) {
     std::vector<float> inactive(NTRACK_VALUES*ntrack, 0.0);
     for (int p=0; p<ntrack; ++p) {
-      inactive[(NTRACK_VALUES*p) + 13] = 0.0;
+      inactive[(NTRACK_VALUES*p) + TRACK_TAG_INDEX] =
+          track_by_slot ? -1.0f : static_cast<float>(p);
+      inactive[(NTRACK_VALUES*p) + TRACK_ACTIVE_INDEX] = 0.0;
     }
     if (partfile.Write_any_type_at(inactive.data(), inactive.size(), header_offset, "float")
         != static_cast<int>(inactive.size())) {
@@ -466,9 +498,8 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
   // Write tracked particle data collectively over minimum shared number of prtcls
   for (int p=0; p<npout_min; ++p) {
-    // offset computed assuming tags run 0...(ntrack-1) sequentially
     std::size_t myoffset =
-        header_offset + NTRACK_VALUES * outpart(p).tag * sizeof(float);
+        header_offset + NTRACK_VALUES * outpart(p).track_index * sizeof(float);
     // Write particle positions collectively for minimum number of particles across ranks
     if (partfile.Write_any_type_at_all(&(data[NTRACK_VALUES*p]), NTRACK_VALUES,
                                        myoffset, "float") != NTRACK_VALUES) {
@@ -480,9 +511,8 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
   // Write particle positions individually for remaining particles on each rank
   for (int p=npout_min; p<npout; ++p) {
-    // offset computed assuming tags run 0...(ntrack-1) sequentially
     std::size_t myoffset =
-        header_offset + NTRACK_VALUES * outpart(p).tag * sizeof(float);
+        header_offset + NTRACK_VALUES * outpart(p).track_index * sizeof(float);
     // Write particle positions collectively for minimum number of particles across ranks
     if (partfile.Write_any_type_at(&(data[NTRACK_VALUES*p]), NTRACK_VALUES,
                                    myoffset, "float") != NTRACK_VALUES) {

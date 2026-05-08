@@ -9,6 +9,7 @@
 #include <iostream>
 #include <string>
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <limits>
 #include <Kokkos_Random.hpp>
@@ -24,6 +25,31 @@
 #include "utils/sn_scheduler.hpp"
 
 namespace particles {
+namespace {
+
+int ParseParticleTrackFace(const std::string &name) {
+  if (name.compare("inner_x1") == 0) {
+    return BoundaryFace::inner_x1;
+  } else if (name.compare("outer_x1") == 0) {
+    return BoundaryFace::outer_x1;
+  } else if (name.compare("inner_x2") == 0) {
+    return BoundaryFace::inner_x2;
+  } else if (name.compare("outer_x2") == 0) {
+    return BoundaryFace::outer_x2;
+  } else if (name.compare("inner_x3") == 0) {
+    return BoundaryFace::inner_x3;
+  } else if (name.compare("outer_x3") == 0) {
+    return BoundaryFace::outer_x3;
+  }
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << "track_inject_face='" << name << "' is not recognized; "
+            << "use inner_x1, outer_x1, inner_x2, outer_x2, inner_x3, or outer_x3."
+            << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+} // namespace
+
 //----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
 
@@ -84,8 +110,76 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       lmc_max_inject_per_step =
           pin->GetOrAddInteger("particles","max_inject_per_step",-1);
       next_tag = 0;
+      lmc_initial_next_tag = 0;
       lmc_mass_per_particle =
           pin->GetOrAddReal("particles","mass_per_particle",-1.0);
+      lmc_scheduled_tracking = false;
+      lmc_track_nparticles_total = 0;
+      lmc_track_ninitial = 0;
+      lmc_track_next_injected_slot = 0;
+      lmc_track_face = BoundaryFace::outer_x3;
+      lmc_track_initial_fraction = 0.10;
+      lmc_track_inject_t_start = 0.0;
+      lmc_track_inject_t_stop = -1.0;
+      const std::string track_selection =
+          pin->GetOrAddString("particles","track_selection","legacy_tag");
+      if (track_selection.compare("scheduled_injection") == 0) {
+        lmc_scheduled_tracking = true;
+        lmc_track_nparticles_total =
+            pin->GetOrAddInteger("particles","track_nparticles_total",0);
+        lmc_track_initial_fraction =
+            pin->GetOrAddReal("particles","track_initial_fraction",0.10);
+        lmc_track_inject_t_start =
+            pin->GetOrAddReal("particles","track_inject_t_start",0.0);
+        lmc_track_inject_t_stop =
+            pin->GetOrAddReal("particles","track_inject_t_stop",-1.0);
+        const std::string face_name =
+            pin->GetOrAddString("particles","track_inject_face","outer_x3");
+        lmc_track_face = ParseParticleTrackFace(face_name);
+
+        if (lmc_track_nparticles_total <= 0) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "scheduled_injection tracking requires "
+                    << "<particles>/track_nparticles_total > 0" << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        if (lmc_track_initial_fraction < 0.0 || lmc_track_initial_fraction > 1.0) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "<particles>/track_initial_fraction must be "
+                    << "between 0 and 1" << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        if (lmc_track_inject_t_stop < 0.0) {
+          if (!pin->DoesParameterExist("time","tlim")) {
+            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                      << std::endl << "track_inject_t_stop < 0 requires <time>/tlim"
+                      << std::endl;
+            std::exit(EXIT_FAILURE);
+          }
+          lmc_track_inject_t_stop = pin->GetReal("time","tlim");
+        }
+        if (lmc_track_inject_t_stop < lmc_track_inject_t_start) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "track_inject_t_stop must be >= "
+                    << "track_inject_t_start" << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        lmc_track_ninitial = static_cast<int>(
+            std::floor(lmc_track_initial_fraction*
+                       static_cast<Real>(lmc_track_nparticles_total) + 0.5));
+        if (lmc_track_ninitial < 0) {
+          lmc_track_ninitial = 0;
+        } else if (lmc_track_ninitial > lmc_track_nparticles_total) {
+          lmc_track_ninitial = lmc_track_nparticles_total;
+        }
+      } else if (track_selection.compare("legacy_tag") != 0 &&
+                 track_selection.compare("tag") != 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle track_selection='" << track_selection
+                  << "' is not recognized; use legacy_tag or scheduled_injection."
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
 
       // read number of particles per cell, and calculate number of particles this pack
       Real ppc = pin->GetOrAddReal("particles","ppc",1.0);
@@ -187,7 +281,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     case ParticleType::lagrangian_mc:
       {
         nrdata = 3;  // LMCX, LMCY, LMCZ (position only)
-        nidata = 4;  // PGID, PTAG, PLASTMOVE, PLASTLEVEL
+        nidata = 5;  // PGID, PTAG, PLASTMOVE, PLASTLEVEL, PTRACK
         break;
       }
     default:
@@ -427,8 +521,8 @@ void Particles::InitializeStars(ParameterInput *pin) {
 
 //----------------------------------------------------------------------------------------
 // CreatePaticleTags()
-// Assigns tags to particles (unique integer).  Note that tracked particles are always
-// those with tag numbers less than ntrack.
+// Assigns unique integer tags. Scheduled tracking additionally assigns persistent
+// PTRACK slots to an evenly spaced deterministic sample of the initial tags.
 
 void Particles::CreateParticleTags(ParameterInput *pin) {
   std::string assign = pin->GetOrAddString("particles","assign_tag","index_order");
@@ -476,6 +570,47 @@ void Particles::CreateParticleTags(ParameterInput *pin) {
   MPI_Allreduce(MPI_IN_PLACE, &next_tag, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
 #endif
   next_tag += 1;
+  lmc_initial_next_tag = next_tag;
+
+  if (particle_type == ParticleType::lagrangian_mc) {
+    if (lmc_scheduled_tracking &&
+        lmc_track_ninitial > pmy_pack->pmesh->nprtcl_total) {
+      if (global_variable::my_rank == 0) {
+        std::cout << "### WARNING in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Requested " << lmc_track_ninitial
+                  << " initial tracked particles, but only "
+                  << pmy_pack->pmesh->nprtcl_total
+                  << " initial particles exist. Reducing the initial tracked count."
+                  << std::endl;
+      }
+      lmc_track_ninitial = pmy_pack->pmesh->nprtcl_total;
+    }
+
+    auto &pi = prtcl_idata;
+    const bool scheduled_tracking = lmc_scheduled_tracking;
+    const int ntrack_initial = lmc_track_ninitial;
+    const int npart_initial = pmy_pack->pmesh->nprtcl_total;
+    par_for("ptrack_initial",DevExeSpace(),0,(nprtcl_thispack-1),
+    KOKKOS_LAMBDA(const int p) {
+      pi(PTRACK,p) = -1;
+      if (scheduled_tracking && ntrack_initial > 0 && npart_initial > 0) {
+        const int tag = pi(PTAG,p);
+        const int slot = static_cast<int>(
+            (static_cast<Real>(tag) + 0.5)*
+            static_cast<Real>(ntrack_initial)/
+            static_cast<Real>(npart_initial));
+        if (slot >= 0 && slot < ntrack_initial) {
+          const int target_tag = static_cast<int>(
+              (static_cast<Real>(slot) + 0.5)*
+              static_cast<Real>(npart_initial)/
+              static_cast<Real>(ntrack_initial));
+          if (tag == target_tag) {
+            pi(PTRACK,p) = slot;
+          }
+        }
+      }
+    });
+  }
 }
 
 //----------------------------------------------------------------------------------------

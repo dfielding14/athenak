@@ -71,7 +71,8 @@ enum ParticleIntegerIndex {PSP=2, NSN=2};
 // Integer data: PGID=0, PTAG=1 (shared), then MC-specific:
 enum LagrangianMCIntIndex {
   PLASTMOVE=2,    // Last move info: -1=frozen, >=0=parity+direction encoding
-  PLASTLEVEL=3    // Refinement level of last cell (for AMR)
+  PLASTLEVEL=3,   // Refinement level of last cell (for AMR)
+  PTRACK=4        // Stable tracked-particle slot, or -1 for untracked particles
 };
 // Real data: compact position-only layout
 enum LagrangianMCRealIndex {
@@ -499,4 +500,3 @@ struct reduction_identity< array_sum::GlobalSum > {
 }
 
 #endif // ATHENA_HPP_
-

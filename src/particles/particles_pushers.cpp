@@ -6,6 +6,7 @@
 //! \file particle_pushers.cpp
 //  \brief
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <vector>
@@ -655,7 +656,32 @@ TaskStatus Particles::InjectLagrangianMCInflow(Driver *pdriver, int stage) {
   int ncycle = pmy_pack->pmesh->ncycle;
   int gids = pmy_pack->gids;
 
-  DualArray2D<int> inject_count("lmc_inflow_count", nslots, 2);
+  if (lmc_scheduled_tracking) {
+    int max_injected_track_thisrank = -1;
+    if (nprtcl_thispack > 0) {
+      auto pi_for_track_scan = prtcl_idata;
+      const int ntrack_initial = lmc_track_ninitial;
+      Kokkos::parallel_reduce("lmc_track_slot_scan",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nprtcl_thispack),
+          KOKKOS_LAMBDA(const int p, int &max_slot) {
+            const int slot = pi_for_track_scan(PTRACK,p);
+            if (slot >= ntrack_initial && slot > max_slot) {
+              max_slot = slot;
+            }
+          }, Kokkos::Max<int>(max_injected_track_thisrank));
+    }
+#if MPI_PARALLEL_ENABLED
+    MPI_Allreduce(MPI_IN_PLACE, &max_injected_track_thisrank, 1, MPI_INT, MPI_MAX,
+                  MPI_COMM_WORLD);
+#endif
+    if (max_injected_track_thisrank >= lmc_track_ninitial) {
+      lmc_track_next_injected_slot =
+          std::max(lmc_track_next_injected_slot,
+                   max_injected_track_thisrank - lmc_track_ninitial + 1);
+    }
+  }
+
+  DualArray2D<int> inject_count("lmc_inflow_count", nslots, 4);
   auto &count = inject_count;
   par_for("lmc_inflow_count", DevExeSpace(), 0, nslots-1,
   KOKKOS_LAMBDA(const int slot) {
@@ -729,10 +755,28 @@ TaskStatus Particles::InjectLagrangianMCInflow(Driver *pdriver, int stage) {
     }
     count.d_view(slot,0) = np;
     count.d_view(slot,1) = 0;
+    count.d_view(slot,2) = 0;
+    count.d_view(slot,3) = 0;
   });
 
   inject_count.template modify<DevExeSpace>();
   inject_count.template sync<HostMemSpace>();
+
+  auto slot_face = [&](const int slot) {
+    const int rem = slot - (slot/slots_per_mb)*slots_per_mb;
+    if (rem < x1_face_size) {
+      return BoundaryFace::inner_x1;
+    } else if (rem < 2*x1_face_size) {
+      return BoundaryFace::outer_x1;
+    } else if (multi_d && rem < 2*x1_face_size + x2_face_size) {
+      return BoundaryFace::inner_x2;
+    } else if (multi_d && rem < 2*x1_face_size + 2*x2_face_size) {
+      return BoundaryFace::outer_x2;
+    } else if (three_d && rem < 2*x1_face_size + 2*x2_face_size + x3_face_size) {
+      return BoundaryFace::inner_x3;
+    }
+    return BoundaryFace::outer_x3;
+  };
 
   int nnew = 0;
   int remaining = lmc_max_inject_per_step;
@@ -751,12 +795,105 @@ TaskStatus Particles::InjectLagrangianMCInflow(Driver *pdriver, int stage) {
     nnew += np;
   }
 
-  if (nnew <= 0) {
-    return TaskStatus::complete;
+  int ntrack_new_total = 0;
+  int ntrack_new_thisrank = 0;
+  int first_track_slot =
+      lmc_track_ninitial + lmc_track_next_injected_slot;
+  if (lmc_scheduled_tracking) {
+    const int ntrack_injected =
+        lmc_track_nparticles_total - lmc_track_ninitial;
+    if (ntrack_injected > 0 &&
+        lmc_track_next_injected_slot < ntrack_injected) {
+      const Real time = pmy_pack->pmesh->time;
+      int due_total = 0;
+      if (time >= lmc_track_inject_t_start) {
+        if (lmc_track_inject_t_stop <= lmc_track_inject_t_start) {
+          due_total = ntrack_injected;
+        } else {
+          const Real frac =
+              (time - lmc_track_inject_t_start)/
+              (lmc_track_inject_t_stop - lmc_track_inject_t_start);
+          due_total = static_cast<int>(
+              std::floor(frac*static_cast<Real>(ntrack_injected) + 0.5));
+        }
+      }
+      due_total = std::max(0, std::min(ntrack_injected, due_total));
+      const int due_remaining =
+          std::max(0, due_total - lmc_track_next_injected_slot);
+      if (due_remaining > 0) {
+        int eligible_thisrank = 0;
+        for (int slot=0; slot<nslots; ++slot) {
+          if (slot_face(slot) == lmc_track_face) {
+            eligible_thisrank += inject_count.h_view(slot,0);
+          }
+        }
+        std::vector<int> eligible_eachrank(global_variable::nranks, 0);
+        eligible_eachrank[global_variable::my_rank] = eligible_thisrank;
+#if MPI_PARALLEL_ENABLED
+        MPI_Allgather(&eligible_thisrank, 1, MPI_INT, eligible_eachrank.data(), 1,
+                      MPI_INT, MPI_COMM_WORLD);
+#endif
+        int eligible_before = 0;
+        int eligible_total = 0;
+        for (int n=0; n<global_variable::nranks; ++n) {
+          if (n < global_variable::my_rank) {
+            eligible_before += eligible_eachrank[n];
+          }
+          eligible_total += eligible_eachrank[n];
+        }
+        ntrack_new_total = std::min(due_remaining, eligible_total);
+        const int local_first_global = std::max(eligible_before, 0);
+        const int local_last_global =
+            std::min(eligible_before + eligible_thisrank, ntrack_new_total);
+        ntrack_new_thisrank = std::max(0, local_last_global - local_first_global);
+        const int skip_thisrank =
+            std::max(0, local_first_global - eligible_before);
+        first_track_slot =
+            lmc_track_ninitial + lmc_track_next_injected_slot + local_first_global;
+
+        int eligible_seen = 0;
+        int track_prefix = 0;
+        for (int slot=0; slot<nslots; ++slot) {
+          int track_count = 0;
+          if (slot_face(slot) == lmc_track_face) {
+            const int np = inject_count.h_view(slot,0);
+            const int begin = eligible_seen;
+            const int end = eligible_seen + np;
+            const int assign_begin = std::max(begin, skip_thisrank);
+            const int assign_end =
+                std::min(end, skip_thisrank + ntrack_new_thisrank);
+            track_count = std::max(0, assign_end - assign_begin);
+            eligible_seen = end;
+          }
+          inject_count.h_view(slot,2) = track_count;
+          inject_count.h_view(slot,3) = track_prefix;
+          track_prefix += track_count;
+        }
+      }
+    }
   }
 
   inject_count.template modify<HostMemSpace>();
   inject_count.template sync<DevExeSpace>();
+
+  if (lmc_initial_next_tag <= 0) {
+    int max_tag_thisrank = -1;
+    if (nprtcl_thispack > 0) {
+      auto old_pi_for_tags = prtcl_idata;
+      Kokkos::parallel_reduce("lmc_initial_tag_scan",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nprtcl_thispack),
+          KOKKOS_LAMBDA(const int p, int &max_tag) {
+            if (old_pi_for_tags(PTAG,p) > max_tag) {
+              max_tag = old_pi_for_tags(PTAG,p);
+            }
+          }, Kokkos::Max<int>(max_tag_thisrank));
+    }
+#if MPI_PARALLEL_ENABLED
+    MPI_Allreduce(MPI_IN_PLACE, &max_tag_thisrank, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+#endif
+    lmc_initial_next_tag = max_tag_thisrank + 1;
+    next_tag = std::max(next_tag, lmc_initial_next_tag);
+  }
 
   std::vector<int> nnew_eachrank(global_variable::nranks, 0);
   nnew_eachrank[global_variable::my_rank] = nnew;
@@ -772,6 +909,15 @@ TaskStatus Particles::InjectLagrangianMCInflow(Driver *pdriver, int stage) {
     nnew_total += nnew_eachrank[n];
   }
   next_tag += nnew_total;
+  lmc_track_next_injected_slot += ntrack_new_total;
+
+  if (nnew_total <= 0) {
+    return TaskStatus::complete;
+  }
+  if (nnew <= 0) {
+    pmy_pack->pmesh->CountParticles();
+    return TaskStatus::complete;
+  }
 
   int old_npart = nprtcl_thispack;
   int new_npart = old_npart + nnew;
@@ -852,6 +998,10 @@ TaskStatus Particles::InjectLagrangianMCInflow(Driver *pdriver, int stage) {
       new_pi(PTAG,p) = tagstart + counts.d_view(slot,1) + n;
       new_pi(PLASTMOVE,p) = 0;
       new_pi(PLASTLEVEL,p) = mblev.d_view(m);
+      new_pi(PTRACK,p) = -1;
+      if (n < counts.d_view(slot,2)) {
+        new_pi(PTRACK,p) = first_track_slot + counts.d_view(slot,3) + n;
+      }
       new_pr(LMCX,p) = x;
       new_pr(LMCY,p) = y;
       new_pr(LMCZ,p) = z;

@@ -32,6 +32,7 @@ Real vy0;
 Real vz0;
 Real t_refine;
 Real t_derefine;
+Real top_inflow_start;
 
 struct ParticleSeed {
   int gid;
@@ -93,7 +94,10 @@ void SetHydroFields(Mesh *pm) {
   const Real scalar_const = scalar0;
   const Real vx = vx0;
   const Real vy = vy0;
-  const Real vz = vz0;
+  Real vz = vz0;
+  if (top_inflow_start >= 0.0 && pm->time < top_inflow_start) {
+    vz = 0.0;
+  }
 
   par_for("particle_tracking_fields", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -212,6 +216,7 @@ void InitializeParticles(ParameterInput *pin, Mesh *pm) {
     h_pi(PTAG,p) = p;
     h_pi(PLASTMOVE,p) = 0;
     h_pi(PLASTLEVEL,p) = seeds[p].level;
+    h_pi(PTRACK,p) = -1;
     h_pr(LMCX,p) = seeds[p].x;
     h_pr(LMCY,p) = seeds[p].y;
     h_pr(LMCZ,p) = seeds[p].z;
@@ -266,6 +271,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   vz0 = pin->GetOrAddReal("problem", "vz0", 0.0);
   t_refine = pin->GetOrAddReal("problem", "t_refine", -1.0);
   t_derefine = pin->GetOrAddReal("problem", "t_derefine", -1.0);
+  top_inflow_start = pin->GetOrAddReal("problem", "top_inflow_start", -1.0);
 
   const bool valid_profile = (field_profile == "analytic" || field_profile == "uniform");
   const bool valid_layout = (particle_layout == "none" ||

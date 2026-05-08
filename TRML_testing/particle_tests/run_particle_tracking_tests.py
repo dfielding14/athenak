@@ -90,7 +90,7 @@ def load_records(run_dir: Path, basename: str) -> list[TrackRecord]:
     records = read_trk(trk)
     if not records:
         raise TestFailure(f"no records parsed from {trk}")
-    expected = ("x", "y", "z", "vx", "vy", "vz", "rho", "press",
+    expected = ("tag", "x", "y", "z", "vx", "vy", "vz", "rho", "press",
                 "temp", "eint", "scalar0", "gid", "level", "active",
                 "edot_cool", "edot_heat", "edot_net", "dedt_rad_mass",
                 "dTdt_rad", "tcool", "entropy", "ln_entropy", "divv",
@@ -177,6 +177,43 @@ def validate_inflow_injection(records: list[TrackRecord]) -> None:
         assert_int(final.rows[tag]["active"], 0, f"inflow unused tag {tag} active")
 
 
+def validate_scheduled_injection(records: list[TrackRecord]) -> None:
+    if records[-1].ntrack != 4:
+        raise TestFailure(f"scheduled ntrack={records[-1].ntrack}, expected 4")
+
+    # The slots are due at t=0.1, but the pgen suppresses top inflow until t=0.3.
+    # They must remain empty while only non-selected faces inject particles.
+    pre_top_records = [record for record in records if record.time < 0.3 - 1.0e-8]
+    if len(pre_top_records) < 2:
+        raise TestFailure("scheduled test did not produce a pre-top-inflow record")
+    for record in pre_top_records:
+        for slot, row in enumerate(record.rows):
+            assert_int(row["active"], 0, f"scheduled pre-top slot {slot} active")
+            assert_int(row["tag"], -1, f"scheduled pre-top slot {slot} tag")
+
+    filled = next(
+        (record for record in records if all(int(round(row["active"])) == 1
+                                             for row in record.rows)),
+        None,
+    )
+    if filled is None:
+        raise TestFailure("scheduled slots never all became active")
+    if filled.time < 0.3 - 1.0e-8:
+        raise TestFailure(f"scheduled slots filled too early at t={filled.time:g}")
+
+    state = uniform_state()
+    for slot, row in enumerate(filled.rows):
+        assert_int(row["active"], 1, f"scheduled filled slot {slot} active")
+        if int(round(row["tag"])) < 0:
+            raise TestFailure(f"scheduled filled slot {slot} has no tag")
+        assert_int(row["gid"], 0, f"scheduled filled slot {slot} gid")
+        assert_int(row["level"], 0, f"scheduled filled slot {slot} level")
+        assert_close(row["z"], 0.875, f"scheduled filled slot {slot} z")
+        assert_close(row["vz"], -1.0, f"scheduled filled slot {slot} vz")
+        for name, expected in state.items():
+            assert_close(row[name], expected, f"scheduled filled slot {slot} {name}")
+
+
 def validate_amr_refine_derefine(records: list[TrackRecord]) -> None:
     mesh = MeshSpec(nx1=4, nx2=4, nx3=1)
     initial = records[0]
@@ -205,6 +242,11 @@ CASES = {
         "athinput.particle_inflow_injection",
         "particle_inflow_injection",
         validate_inflow_injection,
+    ),
+    "scheduled_injection": (
+        "athinput.particle_scheduled_injection",
+        "particle_scheduled_injection",
+        validate_scheduled_injection,
     ),
     "amr_refine_derefine": (
         "athinput.particle_amr_refine_derefine",

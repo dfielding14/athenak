@@ -194,6 +194,7 @@ struct HistoryData {
 //! \brief data output for tracked particles
 
 struct TrackedParticleData {
+  int track_index;
   int tag;
   int gid;
   int level;
@@ -426,6 +427,7 @@ class TrackedParticleOutput : public BaseTypeOutput {
   int ntrack;           // total number of tracked particles across all ranks
   int ntrack_thisrank;  // number of tracked particles this rank (guess)
   int npout;            // number of tracked particles to be written this rank
+  bool track_by_slot=false;  // use persistent PTRACK slots instead of low tags
   bool header_written;
   std::vector<int> npout_eachrank;
   HostArray1D<TrackedParticleData> outpart;

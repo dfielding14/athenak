@@ -75,7 +75,8 @@ def read_trk(path: str | Path) -> list[TrackRecord]:
         for tag in range(ntrack):
             offset = tag * nvalues
             row = {name: values[offset + i] for i, name in enumerate(variables)}
-            row["tag"] = float(tag)
+            row.setdefault("tag", float(tag))
+            row["track_index"] = float(tag)
             rows.append(row)
         records.append(
             TrackRecord(
