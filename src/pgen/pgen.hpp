@@ -60,6 +60,7 @@ class ProblemGenerator {
   void AlfvenWave(ParameterInput *pin, const bool restart);
   void BondiAccretion(ParameterInput *pin, const bool restart);
   void CShock(ParameterInput *pin, const bool restart);
+  void DivBAMR(ParameterInput *pin, const bool restart);
   void Diffusion(ParameterInput *pin, const bool restart);
   void ExternalGravityDisk(ParameterInput *pin, const bool restart);
   void ExternalGravityHydrostatic(ParameterInput *pin, const bool restart);
