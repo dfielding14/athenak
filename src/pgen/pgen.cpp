@@ -407,6 +407,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     AlfvenWave(pin, false);
   } else if (pgen_fun_name.compare("gr_bondi") == 0) {
     BondiAccretion(pin, false);
+  } else if (pgen_fun_name.compare("divb_amr") == 0) {
+    DivBAMR(pin, false);
   } else if (pgen_fun_name.compare("tetrad") == 0) {
     CheckOrthonormalTetrad(pin, false);
   } else if (pgen_fun_name.compare("hohlraum") == 0) {
@@ -1028,6 +1030,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     AlfvenWave(pin, true);
   } else if (pgen_fun_name.compare("gr_bondi") == 0) {
     BondiAccretion(pin, true);
+  } else if (pgen_fun_name.compare("divb_amr") == 0) {
+    DivBAMR(pin, true);
   } else if (pgen_fun_name.compare("tetrad") == 0) {
     CheckOrthonormalTetrad(pin, true);
   } else if (pgen_fun_name.compare("hohlraum") == 0) {
