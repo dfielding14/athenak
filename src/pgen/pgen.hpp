@@ -82,6 +82,7 @@ class ProblemGenerator {
   void Advection(ParameterInput *pin, const bool restart);
   void AlfvenWave(ParameterInput *pin, const bool restart);
   void BondiAccretion(ParameterInput *pin, const bool restart);
+  void DivBAMR(ParameterInput *pin, const bool restart);
   void CheckOrthonormalTetrad(ParameterInput *pin, const bool restart);
   void Hohlraum(ParameterInput *pin, const bool restart);
   void LinearWave(ParameterInput *pin, const bool restart);
