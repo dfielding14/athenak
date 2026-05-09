@@ -11,6 +11,7 @@
 //!  (1) constant (gravitational) acceleration - for RTI
 //!  (2) shearing box in 2D (x-z), for both hydro and MHD
 //!  (3) random forcing to drive turbulence - implemented in TurbulenceDriver class
+//!  (4) initial-condition perturbations - implemented in InitialPerturbations class
 
 #include <map>
 #include <string>
@@ -21,6 +22,7 @@
 
 // forward declarations
 class TurbulenceDriver;
+class InitialPerturbations;
 class Driver;
 
 //----------------------------------------------------------------------------------------

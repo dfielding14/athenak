@@ -2,6 +2,12 @@
 
 This directory contains source term implementations for AthenaK, including the turbulence driving method. The turbulence driver (`turb_driver.hpp/cpp`) implements Cartesian Fourier driving for simulating turbulence in computational domains.
 
+`initial_perturbations.hpp/cpp` uses the same Cartesian Fourier-mode style to apply
+one-time initial-condition perturbations from an `<initial_perturbations>` input block.
+It can perturb density, velocity, or face-centered magnetic fields. Magnetic
+perturbations are generated from an edge-centered vector potential and added as a
+discrete curl so constrained-transport `div(B)` is preserved to roundoff.
+
 ## Cartesian Fourier Driving
 
 ### Mathematical Foundation

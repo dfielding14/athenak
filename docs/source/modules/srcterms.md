@@ -5,6 +5,7 @@ The source terms module wires all non-conservative physics into the hydro, MHD, 
 
 - `SourceTerms` (`src/srcterms/srcterms.{hpp,cpp}`) owns cooling, gravity, rotation, and beam contributions. Instances are constructed by the hydro/MHD constructors and run inside the standard source-term task slots of each integrator stage.
 - `TurbulenceDriver` (`src/srcterms/turb_driver.{hpp,cpp}`) synthesises random acceleration fields used to stir turbulence. It is managed by `MeshBlockPack`, scheduled as its own set of tasks, and can operate on Hydro, MHD, or two-fluid (ion-neutral) states.
+- `InitialPerturbations` (`src/srcterms/initial_perturbations.{hpp,cpp}`) applies one-time Fourier perturbations to the initial density, velocity, and/or magnetic field after the problem generator fills the base state.
 
 `SourceTerms::NewTimeStep` also supplies cooling-based timestep limits that feed into the global CFL reduction.
 
@@ -15,6 +16,7 @@ The source terms module wires all non-conservative physics into the hydro, MHD, 
 | `srcterms.hpp/cpp` | Implements `SourceTerms` and the run-time selection logic for the physics terms enabled in the input file. |
 | `srcterms_newdt.cpp` | Computes timestep constraints contributed by cooling processes. |
 | `turb_driver.hpp/cpp` | Implements the Ornstein–Uhlenbeck turbulence driver and its AMR-aware basis management. |
+| `initial_perturbations.hpp/cpp` | Implements one-time Fourier perturbations selected by `<initial_perturbations>`. |
 | `cooling_tables.hpp`, `ismcooling.hpp` | Tabulated and analytic cooling coefficients used by the CGM and ISM coolers. |
 
 ## Runtime Wiring
@@ -22,7 +24,8 @@ The source terms module wires all non-conservative physics into the hydro, MHD, 
 2. `MeshBlockPack::AddPhysics` instantiates a `TurbulenceDriver` when a `<turb_driving>` block is present. The driver registers two task chains:
    - `before_timeintegrator`: `EnsureBasisSize → InitializeModes → UpdateForcing`
    - `stagen`: inserts `AddForcing` between each solver’s reconstruction update and source-term application.
-3. On AMR updates the driver reruns `EnsureBasisSize`, which resizes device arrays, rebuilds basis functions, and preserves the accumulated OU state.
+3. On new runs, `main.cpp` calls `ApplyInitialPerturbations` immediately after the problem generator and before boundary/primitives initialization. This hook is skipped on restarts.
+4. On AMR updates the turbulence driver reruns `EnsureBasisSize`, which resizes device arrays, rebuilds basis functions, and preserves the accumulated OU state.
 
 ## Source Term Families
 
@@ -138,6 +141,52 @@ If a `<shearing_box>` block exists, the module initialises Coriolis and tidal so
 | `x/y/z_turb_center` | `0.0` | Gaussian centres (code units). |
 | `tdriv_start` | `0.0` | Simulation time when driving begins. |
 | `tdriv_duration` | `tcorr` | Duration when `turb_flag=1`. |
+
+#### Initial Fourier Perturbations (`<initial_perturbations>`)
+
+This optional block applies perturbations once, after the problem generator sets the base conserved state and before the driver fills ghost zones and reconstructs primitives. It is not replayed on restart. The current implementation supports single-fluid, non-relativistic hydro/MHD; ion-neutral and relativistic packs stop with a setup error if this block is enabled.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `variables` | empty | Comma- or space-separated list containing any of `density`, `velocity`, `magnetic`. |
+| `perturb_density`, `perturb_velocity`, `perturb_magnetic` | `false` | Boolean alternatives to `variables`. Any positive corresponding RMS also enables that field. |
+| `density_rms` / `rho_rms` | `0.0` | RMS density perturbation. By default this is fractional, so the applied state is `rho*(1 + delta)`. |
+| `density_fractional` | `true` | If `false`, `density_rms` is an absolute density perturbation. |
+| `velocity_rms` / `v_rms` | `0.0` | RMS velocity perturbation in code units. |
+| `magnetic_rms` / `b_rms` | `0.0` | RMS magnetic perturbation in code units. Requires `<mhd>`. |
+| `spectral_slope` / `expo` | `5/3` | Power-law slope used for Fourier amplitudes. |
+| `nlow`, `nhigh` | `1`, `3` | Inclusive integer wavenumber shell. `kmin`/`kmax` are accepted aliases. |
+| `min_k*`, `max_k*` | `0`, `nhigh` | Optional per-axis integer mode bounds. Inactive dimensions are forced to zero. |
+| `f_solenoidal` | `1.0` | Velocity-mode blend: `1` is purely divergence-free, `0` is purely curl-free. |
+| `rseed` | `-1` | RNG seed. Positive values give reproducible mode amplitudes; negative values use the internal default seed. |
+| `localization` | `none` | `include` multiplies perturbations by a Gaussian region; `exclude` multiplies by one minus that Gaussian. |
+| `x1/x2/x3_center` | domain center | Gaussian center for localization. |
+| `x1/x2/x3_scale` | `-1.0` | Gaussian scale length per direction. Positive scales activate that coordinate. |
+| `remove_density_mean`, `remove_velocity_mean` | `false` | Optional volume-weighted mean subtraction before RMS normalization. |
+
+Density and velocity perturbations are applied to conserved variables while preserving velocity/specific internal energy for density changes and internal energy for velocity changes. Magnetic perturbations are built from an edge-centered vector potential and added through a discrete curl on the face-centered field, so the constrained-transport divergence is zero to roundoff. Localization of magnetic perturbations is applied to the vector potential before the curl, rather than multiplying the magnetic field afterward.
+
+Example:
+
+```ini
+<initial_perturbations>
+variables       = density, velocity, magnetic
+density_rms     = 1.0e-2
+velocity_rms    = 2.0e-2
+magnetic_rms    = 1.0e-2
+spectral_slope  = 1.0
+nlow            = 1
+nhigh           = 4
+f_solenoidal    = 0.75
+rseed           = 314159
+localization    = include
+x1_center       = 0.0
+x2_center       = 0.0
+x3_center       = 0.0
+x1_scale        = 1.0
+x2_scale        = 0.5
+x3_scale        = 0.5
+```
 
 ### Compatibility Notes
 - When both hydro and MHD modules are active (ion-neutral mode), the forcing is applied to each fluid with shared accelerations.
