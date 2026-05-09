@@ -12,6 +12,7 @@
 //!  (2) shearing box in 2D (x-z), for both hydro and MHD
 //!  (3) random forcing to drive turbulence - implemented in TurbulenceDriver class
 //!  (4) initial-condition perturbations - implemented in InitialPerturbations class
+//!  (5) frame tracking - implemented in FrameTracker class
 
 #include <map>
 #include <string>
@@ -23,6 +24,7 @@
 // forward declarations
 class TurbulenceDriver;
 class InitialPerturbations;
+class FrameTracker;
 class Driver;
 
 //----------------------------------------------------------------------------------------

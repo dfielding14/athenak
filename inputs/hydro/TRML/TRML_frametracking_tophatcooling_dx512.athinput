@@ -98,35 +98,35 @@ user_dt = true
 user_hist = true
 ndiag = 100
 
-# ------------------------------------------------------------------------------------
-# Frame tracking (recommended conservative shape; cadence scales with resolution)
-# ------------------------------------------------------------------------------------
 user_work_in_loop = true
-use_frame_tracking = true
-t_frame_tracking_start = 1.0
 
-ft_apply_every = 8
-ft_mode = pd
-ft_tau_avg = 0.04
-ft_tau_relax = 2.6
-ft_tau_vel = 0.09
+<frame_tracking>
+# Recommended conservative shape; cadence scales with resolution
+start_time = 1.0
+axes = x3
+x3_target = 0.0
 
-ft_temp_lo = 0.050
-ft_temp_hi = 0.066
-ft_weight_floor = 1.0e-6
+target = temperature
+target_min = 0.050
+target_max = 0.066
+weight_floor = 1.0e-6
 
-ft_max_abs_boost = 0.012
-ft_max_boost_change = 0.002
+apply_every = 8
+mode = pd
+tau_avg = 0.04
+tau_relax = 2.6
+tau_vel = 0.09
 
-ft_use_lowzlim = false
-ft_use_uppzlim = false
-ft_position_signal = blend
-ft_position_blend = 0.7
+max_abs_boost = 0.012
+max_boost_change = 0.002
 
-ft_tau_int = 12.0
-ft_int_max_abs = 0.0015
-ft_int_leak_tau = 8.0
-ft_int_unsat_only = true
+position_signal = blend
+position_blend = 0.7
+
+tau_int = 12.0
+int_max_abs = 0.0015
+int_leak_tau = 8.0
+int_unsat_only = true
 
 <initial_turb>
 turb_flag = 1

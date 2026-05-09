@@ -80,8 +80,8 @@ struct MHDTaskIDs {
   TaskID crecv;
   TaskID saveflx;  // Save density flux for lagrangian_mc particles
   // Task ID for user-defined work executed after each time integration cycle.
-  // This enables problem generators to perform custom operations (e.g., frame tracking,
-  // diagnostics, or other post-timestep modifications) via the user_work_in_loop_func.
+  // This enables problem generators to perform custom diagnostics or other
+  // post-timestep modifications via the user_work_in_loop_func.
   TaskID workinloop;
 };
 
@@ -199,10 +199,8 @@ class MHD {
 
   // ...in "after_timeintegrator" task list
   // WorkInLoop: Executes user-defined operations after each complete time integration.
-  // This is the hook for problem generators to perform post-timestep work such as:
-  //   - Frame tracking (Galilean velocity shifts to keep features centered)
-  //   - Diagnostic output (min/max values, mass tracking, etc.)
-  //   - Any other custom modifications that should occur once per cycle
+  // This is the hook for problem generators to perform post-timestep work such as
+  // diagnostic output or other custom modifications that should occur once per cycle.
   // The actual work is defined by user_work_in_loop_func in the problem generator.
   TaskStatus WorkInLoop(Driver *pdrive, int stage);
 

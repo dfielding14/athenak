@@ -75,6 +75,7 @@ void ProblemGenerator(ParameterInput *pin, const bool restart) {
 |------|-------------|---------|
 | `turb.cpp` | Driven turbulence | Supersonic turbulence |
 | `blast.cpp` | Blast waves | Explosions |
+| `cloud_crushing.cpp` | Sedov-driven cloud crushing | ISM cooling, TVNS boundary, frame tracking |
 | `rt.cpp` | Rayleigh-Taylor | Instabilities |
 | `kh.cpp` | Kelvin-Helmholtz | Shear instabilities |
 

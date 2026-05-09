@@ -174,19 +174,7 @@ user_dt   = true          # Enable cooling-limited timestep
 user_hist = true          # Enable custom history output
 ndiag     = 100           # Cycles between diagnostic output
 
-# --- Frame Tracking (keeps interface centered) ---
-user_work_in_loop = true  # Enable work-in-loop for frame tracking
-use_frame_tracking = true # Apply velocity shifts to keep interface centered
-t_frame_tracking_start = 1.0  # Start frame tracking after this time
-ft_apply_every = 10       # Apply frame tracking every N cycles
-ft_mode = pd              # velocity | position | pd
-ft_position_signal = blend  # centroid | band_midpoint | blend
-ft_position_blend = 0.7     # Blend weight when ft_position_signal=blend
-ft_max_abs_boost = 0.01   # Maximum absolute velocity shift per tracking event
-ft_tau_int = 12.0         # Integral timescale (<=0 disables integral term)
-ft_int_max_abs = 0.0015   # Clamp on integral contribution to command velocity
-ft_int_leak_tau = 8.0     # Leak timescale for integral memory
-ft_int_unsat_only = true  # Anti-windup: integrate only when pre-clamp command unsaturated
+user_work_in_loop = true  # Enable TRML diagnostic work-in-loop
 
 # --- AMR Refinement Thresholds ---
 # These control where the mesh is refined
@@ -196,6 +184,24 @@ density_ratio_threshold = 0.3  # Refine if |grad(rho)|/rho > 0.3
 T_min_threshold = 0.015        # Refine if T > T_min (1.5 * T_cold)
 T_max_threshold = 0.8          # Refine if T < T_max (0.8 * T_hot)
 # This focuses refinement on the mixing layer where T_cold < T < T_hot
+
+<frame_tracking>
+# Keeps the selected temperature band centered near the initial interface
+start_time = 1.0
+apply_every = 10
+axes = x3
+x3_target = 0.0
+target = temperature
+target_min = 0.010
+target_max = 0.058
+mode = pd                 # velocity | position | pd
+position_signal = blend   # centroid | band_midpoint | blend
+position_blend = 0.7
+max_abs_boost = 0.01
+tau_int = 12.0
+int_max_abs = 0.0015
+int_leak_tau = 8.0
+int_unsat_only = true
 
 # ====================================================================================
 # Turbulent Driving for initial perturbations

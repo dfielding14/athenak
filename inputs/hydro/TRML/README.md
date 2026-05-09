@@ -45,9 +45,12 @@ Uses a piecewise power-law cooling function:
 - `T_peak_over_T_cold = 4.64`: Location of cooling peak relative to T_cold
 
 ### Frame Tracking
-The simulation can apply Galilean velocity shifts to keep the mixing layer
-centered in the domain. This prevents the interface from drifting into boundaries.
-- Enable with `use_frame_tracking = true`
+The shared `<frame_tracking>` block can apply Galilean velocity shifts to keep selected
+material centered in the domain. This prevents the interface from drifting into boundaries.
+- Enable by adding a `<frame_tracking>` block.
+- Select material with `target = temperature`, `density`, `scalar`, or another supported
+  derived variable plus `target_min`/`target_max`.
+- Select directions with `axes = x1`, `x2`, `x3`, or a comma-separated combination.
 
 ### AMR Refinement Criteria
 - `density_ratio_threshold`: Refine if density ratio between cells exceeds this

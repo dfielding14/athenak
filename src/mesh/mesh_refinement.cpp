@@ -26,6 +26,7 @@
 #include "radiation/radiation.hpp"
 #include "z4c/z4c.hpp"
 #include "z4c/z4c_amr.hpp"
+#include "srcterms/frame_tracker.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "prolongation.hpp"
 #include "restriction.hpp"
@@ -695,6 +696,7 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   auto saved_pdyngr = pm->pmb_pack->pdyngr;
   auto saved_pnr = pm->pmb_pack->pnr;
   auto saved_pturb = pm->pmb_pack->pturb;
+  auto saved_pframe_tracker = pm->pmb_pack->pframe_tracker;
   auto saved_punit = pm->pmb_pack->punit;
   auto saved_ppart = pm->pmb_pack->ppart;
   
@@ -708,6 +710,7 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   pm->pmb_pack->pdyngr = nullptr;
   pm->pmb_pack->pnr = nullptr;
   pm->pmb_pack->pturb = nullptr;
+  pm->pmb_pack->pframe_tracker = nullptr;
   pm->pmb_pack->punit = nullptr;
   pm->pmb_pack->ppart = nullptr;
 
@@ -727,12 +730,16 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   pm->pmb_pack->pdyngr = saved_pdyngr;
   pm->pmb_pack->pnr = saved_pnr;
   pm->pmb_pack->pturb = saved_pturb;
+  pm->pmb_pack->pframe_tracker = saved_pframe_tracker;
   pm->pmb_pack->punit = saved_punit;
   pm->pmb_pack->ppart = saved_ppart;
   
   // Update the pmy_pack pointer in physics modules after MeshBlockPack rebuild
   if (saved_pturb != nullptr) {
     saved_pturb->UpdateMeshBlockPack(pm->pmb_pack);
+  }
+  if (saved_pframe_tracker != nullptr) {
+    saved_pframe_tracker->UpdateMeshBlockPack(pm->pmb_pack);
   }
   
   if (saved_pmhd != nullptr) {
@@ -1555,6 +1562,5 @@ void MeshRefinement::RefineParticles() {
 
   return;
 }
-
 
 

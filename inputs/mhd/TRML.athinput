@@ -110,26 +110,28 @@ B_dens_ratio  = true # use compression ratio to scale the magnetic field strengt
 # B_z_uppboundary = 0.375 # decay initial magnetic field to zero above this height
 # B_z_lowboundary = -0.375 # decay initial magnetic field to zero below this height
 
-user_work_in_loop	= true # turn on user work in loop
-use_frame_tracking     	= true # switch on/off frame tracking so that gas close to T_peak stays close to the center
-t_frame_tracking_start 	= 0.5 # time after which we switch on frame-tracking
-ft_apply_every 	       	= 10 # number of cycles between frame-tracking velocity shifts
-ft_mode                = pd # velocity | position | pd
-ft_position_signal     = blend # centroid | band_midpoint | blend
-ft_position_blend      = 0.7 # blend weight when ft_position_signal=blend
-ft_max_abs_boost 	    = 0.00645497 # maximum absolute velocity shift allowed by frame-tracking
-ft_tau_int             = 12.0 # integral timescale (<=0 disables integral term)
-ft_int_max_abs         = 0.0015 # clamp on integral contribution to command velocity
-ft_int_leak_tau        = 8.0 # leak timescale for integral memory
-ft_int_unsat_only      = true # anti-windup: integrate only when pre-clamp command unsaturated
-# ft_temp_lo 	        = 0.01 # lower temperature limit for frame-tracking
-# ft_temp_hi 	        = 0.05 # upper temperature limit for frame-tracking
-ft_use_uppzlim 	      	= true # use upper z-limit on gas for which we are frame-tracking
-ft_uppzlim 		= 0.5 # upper z-limit on gas for which we are frame-tracking
-# ft_use_lowzlim 	= true # use lower z-limit on gas for which we are frame-tracking
-# ft_lowzlim 		= 0.1 # lower z-limit on gas for which we are frame-tracking
+user_work_in_loop	= true # turn on TRML diagnostic work in loop
 
 # prestart_file = no_rst/prst/TRML.00004.prtclrst # prestart file
+
+<frame_tracking>
+start_time             = 0.5 # time after which we switch on frame-tracking
+apply_every            = 10 # number of cycles between frame-tracking velocity shifts
+axes                   = x3
+x3_target              = 0.0
+target                 = temperature
+target_min             = 0.01 # lower temperature limit for frame-tracking
+target_max             = 0.05 # upper temperature limit for frame-tracking
+mode                   = pd # velocity | position | pd
+position_signal        = blend # centroid | band_midpoint | blend
+position_blend         = 0.7 # blend weight when position_signal=blend
+max_abs_boost          = 0.00645497 # maximum absolute velocity shift allowed
+tau_int                = 12.0 # integral timescale (<=0 disables integral term)
+int_max_abs            = 0.0015 # clamp on integral contribution to command velocity
+int_leak_tau           = 8.0 # leak timescale for integral memory
+int_unsat_only         = true # anti-windup: integrate only when pre-clamp command unsaturated
+x3_upper_limit         = 0.5 # upper centroid limit for frame-tracking
+# x3_lower_limit       = 0.1 # lower centroid limit for frame-tracking
 
 <particles>
 particle_type = lagrangian_mc # cosmic_ray or lagrangian_mc

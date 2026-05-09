@@ -6,6 +6,7 @@ The source terms module wires all non-conservative physics into the hydro, MHD, 
 - `SourceTerms` (`src/srcterms/srcterms.{hpp,cpp}`) owns cooling, gravity, rotation, and beam contributions. Instances are constructed by the hydro/MHD constructors and run inside the standard source-term task slots of each integrator stage.
 - `TurbulenceDriver` (`src/srcterms/turb_driver.{hpp,cpp}`) synthesises random acceleration fields used to stir turbulence. It is managed by `MeshBlockPack`, scheduled as its own set of tasks, and can operate on Hydro, MHD, or two-fluid (ion-neutral) states.
 - `InitialPerturbations` (`src/srcterms/initial_perturbations.{hpp,cpp}`) applies one-time Fourier perturbations to the initial density, velocity, and/or magnetic field after the problem generator fills the base state.
+- `FrameTracker` (`src/srcterms/frame_tracker.{hpp,cpp}`) applies post-timestep Galilean boosts from a shared `<frame_tracking>` block, so problem generators can opt in without carrying their own tracking code.
 
 `SourceTerms::NewTimeStep` also supplies cooling-based timestep limits that feed into the global CFL reduction.
 
@@ -17,6 +18,7 @@ The source terms module wires all non-conservative physics into the hydro, MHD, 
 | `srcterms_newdt.cpp` | Computes timestep constraints contributed by cooling processes. |
 | `turb_driver.hpp/cpp` | Implements the Ornstein–Uhlenbeck turbulence driver and its AMR-aware basis management. |
 | `initial_perturbations.hpp/cpp` | Implements one-time Fourier perturbations selected by `<initial_perturbations>`. |
+| `frame_tracker.hpp/cpp` | Implements target-material centroid sampling and Galilean frame shifts selected by `<frame_tracking>`. |
 | `cooling_tables.hpp`, `ismcooling.hpp` | Tabulated and analytic cooling coefficients used by the CGM and ISM coolers. |
 
 ## Runtime Wiring
@@ -25,7 +27,8 @@ The source terms module wires all non-conservative physics into the hydro, MHD, 
    - `before_timeintegrator`: `EnsureBasisSize → InitializeModes → UpdateForcing`
    - `stagen`: inserts `AddForcing` between each solver’s reconstruction update and source-term application.
 3. On new runs, `main.cpp` calls `ApplyInitialPerturbations` immediately after the problem generator and before boundary/primitives initialization. This hook is skipped on restarts.
-4. On AMR updates the turbulence driver reruns `EnsureBasisSize`, which resizes device arrays, rebuilds basis functions, and preserves the accumulated OU state.
+4. The same pack-level wiring instantiates `FrameTracker` when a `<frame_tracking>` block is present. It runs on `after_timeintegrator`, after a complete timestep, and updates its pack pointer across AMR rebuilds.
+5. On AMR updates the turbulence driver reruns `EnsureBasisSize`, which resizes device arrays, rebuilds basis functions, and preserves the accumulated OU state.
 
 ## Source Term Families
 
@@ -188,11 +191,53 @@ x2_scale        = 0.5
 x3_scale        = 0.5
 ```
 
+### Configuration Reference (`<frame_tracking>`)
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `enabled` | `true` | Master switch for the tracker. |
+| `target` | `density` | Material selector: `density`, `temperature`, `pressure`, `entropy`, `internal_energy`, `scalar`/`scalarN`, `v1`/`v2`/`v3`, or `speed`. Use `target = derived` with `derived_variable = ...` as an alias. |
+| `target_min`, `target_max` | unbounded | Inclusive target range used to select cells. |
+| `axes` | highest active dimension | Tracking directions: `x1`, `x2`, `x3`, `all`, or comma-separated combinations such as `x1,x2`. |
+| `x1_target`, `x2_target`, `x3_target` | domain center | Target centroid position on each tracked axis. |
+| `mode` | `pd` | Controller mode: `velocity`, `position`, or `pd`. |
+| `apply_every` | `1` | Number of cycles between frame updates. |
+| `start_time` | `0.0` | Simulation time after which updates begin. |
+| `diagnostic_every` | `-1` | Cycle cadence for tracker diagnostics; negative disables printing. |
+| `tau_avg`, `tau_relax`, `tau_vel` | `1.0` | Filter, position-feedback, and velocity-feedback timescales. |
+| `max_abs_boost` | `0.0` | Absolute boost limit; `0.0` disables the cap. |
+| `max_boost_change` | `0.0` | Per-update slew limit when positive. |
+| `x*_lower_limit`, `x*_upper_limit` | domain bounds | Optional per-axis predicted-centroid limits. |
+
+`FrameTracker` exposes the current moving-frame state to problem generators:
+
+| API | Meaning |
+|-----|---------|
+| `FrameVelocity(axis)` | Lab-frame velocity of the grid frame on axis `0`, `1`, or `2`. |
+| `FrameDisplacement(axis)` | Lab-frame displacement of the grid-frame origin on axis `0`, `1`, or `2`. |
+| `FrameVelocity()` / `FrameDisplacement()` | Three-component `std::array<Real, 3>` versions. |
+
+The boost applied to the fluid is the negative cumulative frame velocity. A
+problem generator that samples a lab-frame boundary condition from grid-frame
+coordinates should use
+
+```text
+x_lab  = x_grid + FrameDisplacement(axis)
+v_grid = v_lab  - FrameVelocity(axis)
+```
+
+Restart outputs store the frame state in the `<frame_tracking>` block as
+`frame_velocity_x1`, `frame_velocity_x2`, `frame_velocity_x3`,
+`frame_displacement_x1`, `frame_displacement_x2`, and
+`frame_displacement_x3`, so lab-frame boundary conditions resume from the same
+sample positions.
+
 ### Compatibility Notes
 - When both hydro and MHD modules are active (ion-neutral mode), the forcing is applied to each fluid with shared accelerations.
 - Relativistic integrations invoke the SR conservative-to-primitive and primitive-to-conservative transforms after applying forces.
 - `EnsureBasisSize` is idempotent and inexpensive when no mesh change is detected.
 - Planar driving (`driving_type = 1`) is less heavily exercised than the default isotropic mode and currently reuses the full 3-component force assembly; it should be treated as experimental.
+- Frame tracking requires an active `<hydro>` or `<mhd>` block, updates primitive velocities and conserved momenta, and adds the corresponding ideal-gas kinetic-energy correction to conserved energy. It is a Galilean velocity-frame update; it does not remap mesh coordinates or move AMR blocks.
 
 #### Initial Turbulence Kick (`<initial_turb>`)
 - Optional block that applies a single impulsive Ornstein–Uhlenbeck update immediately after problem setup.

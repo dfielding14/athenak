@@ -84,10 +84,8 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
 
   // assemble "after_timeintegrator" task list
   // WorkInLoop: User-defined operations to execute after each complete time integration
-  // cycle. This allows problem generators to perform post-timestep work such as:
-  //   - Frame tracking (applying Galilean velocity shifts to keep features centered)
-  //   - Periodic diagnostic output (min/max values, mass tracking, etc.)
-  //   - Any other custom modifications that need to happen once per cycle
+  // cycle. Shared post-timestep modules, such as <frame_tracking>, are scheduled as
+  // separate tasks on this same task list.
   // The task has no dependencies (none) since it runs after all integration is complete.
   id.workinloop = tl["after_timeintegrator"]->AddTask(&MHD::WorkInLoop, this, none);
 
@@ -670,20 +668,15 @@ TaskStatus MHD::RestrictB(Driver *pdrive, int stage) {
 //! that should occur once per timestep, after the time integrator has completed. Common
 //! use cases include:
 //!
-//!   1. Frame Tracking: Apply Galilean velocity shifts to keep features (e.g., a mixing
-//!      layer interface) centered in the domain, preventing them from drifting into
-//!      boundary regions.
-//!
-//!   2. Diagnostic Output: Compute and print summary statistics like min/max temperature,
+//!   1. Diagnostic Output: Compute and print summary statistics like min/max temperature,
 //!      total mass, cooling rates, etc. at regular intervals (controlled by ndiag in the
 //!      problem generator).
 //!
-//!   3. Custom Modifications: Any other physics or data modifications that need to happen
+//!   2. Custom Modifications: Any other physics or data modifications that need to happen
 //!      once per cycle rather than at each RK stage.
 //!
 //! The actual work to be performed is defined by the user_work_in_loop_func function
-//! pointer, which is set by the problem generator (e.g., TRML.cpp sets this to call
-//! Diagnostic() and FrameTracking() functions).
+//! pointer, which is set by the problem generator.
 //!
 //! Note: This function is called from the "after_timeintegrator" task list, meaning it
 //! executes once per full time step, not once per RK stage.

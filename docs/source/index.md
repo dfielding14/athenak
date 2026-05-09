@@ -123,6 +123,7 @@ Compare against shipped problem generators and diagnostics:
 
 - [Shock Tube](examples/shock_tube.md)
 - [Blast Wave](examples/blast_wave.md)
+- [Sedov Cloud Crushing With Frame Tracking](examples/cloud_crushing_snr.md)
 - [Driven Turbulence](examples/turbulence.md)
 - [MRI Turbulence](examples/mri_turbulence.md)
 - [Binary Merger](examples/binary_merger.md)
@@ -135,6 +136,7 @@ Compare against shipped problem generators and diagnostics:
 
 examples/shock_tube
 examples/blast_wave
+examples/cloud_crushing_snr
 examples/turbulence
 examples/mri_turbulence
 examples/binary_merger
