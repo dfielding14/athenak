@@ -10,6 +10,7 @@
 
 #include "srcterms.hpp"
 
+#include <cstdlib>
 #include <iostream>
 #include <string> // string
 
@@ -27,6 +28,48 @@
 #include "turb_driver.hpp"
 #include "units/units.hpp"
 #include "cooling_tables.hpp"
+
+namespace {
+
+constexpr Real kDefaultISMHeatingReference = 2.0e-26;
+constexpr Real kDefaultISMHeatingReferencePressure = 3162.277660168379;
+
+void FatalSourceTermsInput(const std::string &message) {
+  std::cout << "### FATAL ERROR in SourceTerms input" << std::endl
+            << message << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+Real ResolveISMHeatingRate(const std::string &block, ParameterInput *pin) {
+  const bool hrate_auto = pin->GetOrAddBoolean(block, "hrate_auto", false);
+  if (!hrate_auto) {
+    return pin->GetReal(block, "hrate");
+  }
+
+  const Real pressure_over_k = pin->GetOrAddReal(
+      "problem", "pressure_over_k", kDefaultISMHeatingReferencePressure);
+  const Real reference_pressure = pin->GetOrAddReal(
+      block, "hrate_reference_pressure_over_k", kDefaultISMHeatingReferencePressure);
+  const Real reference_hrate = pin->GetOrAddReal(
+      block, "hrate_reference", kDefaultISMHeatingReference);
+
+  if (pressure_over_k <= 0.0) {
+    FatalSourceTermsInput("hydro/hrate_auto requires positive problem/pressure_over_k.");
+  }
+  if (reference_pressure <= 0.0) {
+    FatalSourceTermsInput("hydro/hrate_auto requires positive "
+                          "hydro/hrate_reference_pressure_over_k.");
+  }
+  if (reference_hrate <= 0.0) {
+    FatalSourceTermsInput("hydro/hrate_auto requires positive hydro/hrate_reference.");
+  }
+
+  const Real hrate = reference_hrate*pressure_over_k/reference_pressure;
+  pin->SetReal(block, "hrate", hrate);
+  return pin->GetReal(block, "hrate");
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 // constructor, parses input file and initializes data structures and parameters
@@ -53,7 +96,7 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
   // (2) Optically thin (ISM) cooling
   ism_cooling = pin->GetOrAddBoolean(block, "ism_cooling", false);
   if (ism_cooling) {
-    hrate = pin->GetReal(block, "hrate");
+    hrate = ResolveISMHeatingRate(block, pin);
   }
 
   // (2b) CGM cooling
@@ -84,6 +127,10 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
     Kokkos::realloc(H_He_Cooling, H_He_Cooling_DIM_0, H_He_Cooling_DIM_1);
     Kokkos::realloc(Metal_Cooling_CIE, Metal_Cooling_CIE_DIM_0);
     Kokkos::realloc(H_He_Cooling_CIE, H_He_Cooling_CIE_DIM_0);
+  }
+  cooling_timestep_factor = pin->GetOrAddReal(block, "cooling_timestep_factor", 1.0);
+  if ((ism_cooling || cgm_cooling) && cooling_timestep_factor <= 0.0) {
+    FatalSourceTermsInput(block + "/cooling_timestep_factor must be positive.");
   }
 
   // (3) beam source (radiation)

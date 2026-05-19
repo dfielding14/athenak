@@ -47,6 +47,7 @@ class SourceTerms {
 
   // new timestep
   Real dtnew;
+  Real cooling_timestep_factor;
 
   // magnitude and direction of constant accel
   Real const_accel_val;

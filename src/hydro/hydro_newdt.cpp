@@ -147,6 +147,7 @@ TaskStatus Hydro::NewTimeStep(Driver *pdrive, int stage) {
   // dtnew values across all physics modules.
   if (pmy_pack->pmesh->pgen->user_dt) {
     (pmy_pack->pmesh->pgen->user_time_step_func)(pmy_pack->pmesh);
+    dtnew = std::min(dtnew, pmy_pack->pmesh->pgen->dtnew);
   }
 
   return TaskStatus::complete;

@@ -1106,7 +1106,8 @@ void FrameTracker::ApplyTracking() {
     state.last_x_err = x_err;
 
     if (use_position_feedback) {
-      v_p[axis] = -x_err/tau_relax_;
+      const Real position_weight = 1.0 - std::exp(-dt_boost/tau_relax_);
+      v_p[axis] = -position_weight*x_err/tau_relax_;
     }
     if (mode_ == kFTVelocity) {
       v_d[axis] = -state.last_filtered_v;
@@ -1132,7 +1133,12 @@ void FrameTracker::ApplyTracking() {
         state.i_term = std::copysign(int_max_abs_, state.i_term);
       }
     }
-    v_i[axis] = use_integral ? state.i_term : 0.0;
+    if (use_integral) {
+      const Real position_weight = 1.0 - std::exp(-dt_boost/tau_relax_);
+      v_i[axis] = position_weight*state.i_term;
+    } else {
+      v_i[axis] = 0.0;
+    }
     cmd_pre[axis] = v_p[axis] + v_d[axis] + v_i[axis];
 
     Real cmd = cmd_pre[axis];

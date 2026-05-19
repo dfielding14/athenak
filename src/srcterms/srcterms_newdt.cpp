@@ -48,9 +48,12 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
   dtnew = static_cast<Real>(std::numeric_limits<float>::max());
 
   if (ism_cooling) {
+    Real dt_factor = cooling_timestep_factor;
     Real use_e = eos_data.use_e;
     Real gamma = eos_data.gamma;
     Real gm1 = gamma - 1.0;
+    Real efloor = eos_data.pfloor/gm1;
+    Real tfloor = eos_data.tfloor;
     Real heating_rate = hrate;
     Real temp_unit = pmy_pack->punit->temperature_cgs();
     Real n_unit = pmy_pack->punit->density_cgs()/pmy_pack->punit->mu()
@@ -82,6 +85,8 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
         temp = temp_unit*w0(m,ITM,k,j,i);
         eint = w0(m,ITM,k,j,i)*w0(m,IDN,k,j,i)/gm1;
       }
+      eint = fmax(eint, efloor);
+      eint = fmax(eint, w0(m,IDN,k,j,i)*tfloor/gm1);
 
       Real lambda_cooling = ISMCoolFn(temp)/cooling_unit;
       Real gamma_heating = heating_rate/heating_unit;
@@ -90,16 +95,19 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
       Real cooling_heating = FLT_MIN + fabs(w0(m,IDN,k,j,i) *
                              (w0(m,IDN,k,j,i) * lambda_cooling - gamma_heating));
 
-      min_dt = fmin((eint/cooling_heating), min_dt);
+      min_dt = fmin((dt_factor*eint/cooling_heating), min_dt);
     }, Kokkos::Min<Real>(dtnew));
   }
  
   if (cgm_cooling) {
+    Real dt_factor = cooling_timestep_factor;
     auto &size = pmy_pack->pmb->mb_size;
 
     Real use_e = eos_data.use_e;
     Real gamma = eos_data.gamma;
     Real gm1 = gamma - 1.0;
+    Real efloor = eos_data.pfloor/gm1;
+    Real tfloor_eos = eos_data.tfloor;
 
     auto &units = pmy_pack->punit;
     Real temp_unit = units->temperature_cgs();
@@ -173,6 +181,8 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
         temp = temp_unit*w0(m,ITM,k,j,i);
         eint = w0(m,ITM,k,j,i)*w0(m,IDN,k,j,i)/gm1;
       }
+      eint = fmax(eint, efloor);
+      eint = fmax(eint, w0(m,IDN,k,j,i)*tfloor_eos/gm1);
       Real nH = X*nH_unit*w0(m,IDN,k,j,i); // density in cgs units
 
       // Caculate PIE cooling
@@ -281,7 +291,7 @@ void SourceTerms::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_d
                              (X * w0(m,IDN,k,j,i) * lambda_cooling / cooling_unit
                                                  - gamma_heating / heating_unit));
 
-      min_dt = fmin((eint/cooling_heating), min_dt);
+      min_dt = fmin((dt_factor*eint/cooling_heating), min_dt);
     }, Kokkos::Min<Real>(dtnew));
     
   }
