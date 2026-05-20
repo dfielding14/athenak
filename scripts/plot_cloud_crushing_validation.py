@@ -3,7 +3,7 @@
 
 This script reads an AthenaK run directory produced by
 `inputs/hydro/cloud_crushing_snr.athinput`, parses the `FrameTracker` diagnostic
-blocks from an Athena stdout log, and reads the binary VTK `hydro_w` snapshots.
+blocks from an Athena stdout log, and reads native binary `hydro_w` snapshots.
 It writes one time-series validation plot and one x-y midplane density plot.
 """
 
@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import math
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,10 @@ import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT = REPO_ROOT / "inputs" / "hydro" / "cloud_crushing_snr.athinput"
+ATOMIC_MASS_UNIT_CGS = 1.66053906660e-24
+MSUN_CGS = 1.98847e33
+sys.path.insert(0, str(REPO_ROOT / "vis" / "python"))
+import bin_convert_new  # noqa: E402
 
 
 def strip_comment(line: str) -> str:
@@ -101,78 +106,50 @@ def parse_frame_log(path: Path) -> list[dict[str, Any]]:
   return rows
 
 
-def scalar_data(raw: bytes, ncell: int) -> dict[str, np.ndarray]:
-  fields: dict[str, np.ndarray] = {}
-  pattern = re.compile(
-      rb"SCALARS\s+([A-Za-z0-9_]+)\s+float\s*\nLOOKUP_TABLE\s+\S+\s*\n"
-  )
-  for match in pattern.finditer(raw):
-    name = match.group(1).decode("ascii")
-    start = match.end()
-    stop = start + 4*ncell
-    if stop > len(raw):
-      raise ValueError(f"truncated scalar array {name}")
-    fields[name] = np.frombuffer(raw, dtype=">f4", count=ncell, offset=start).astype(float)
-  return fields
+def read_binary_snapshot(path: Path) -> dict[str, Any]:
+  if "rank_00000000" in path.parts:
+    data = bin_convert_new.read_all_ranks_binary_as_athdf(str(path), quantities=["dens"])
+  else:
+    data = bin_convert_new.read_binary_as_athdf(str(path), quantities=["dens"])
 
+  rho = data.get("dens")
+  if rho is None:
+    raise ValueError(f"snapshot {path} does not contain dens")
 
-def parse_vtk(path: Path) -> dict[str, Any]:
-  raw = path.read_bytes()
-
-  def require(pattern: bytes, label: str) -> re.Match[bytes]:
-    match = re.search(pattern, raw)
-    if match is None:
-      raise ValueError(f"could not find {label} in {path}")
-    return match
-
-  time = float(require(rb"time=\s*([+\-0-9.eE]+)", b"time").group(1))
-  dims = tuple(
-      int(x) for x in require(rb"DIMENSIONS\s+(\d+)\s+(\d+)\s+(\d+)", b"dimensions").groups()
-  )
-  origin = tuple(
-      float(x)
-      for x in require(
-          rb"ORIGIN\s+([+\-0-9.eE]+)\s+([+\-0-9.eE]+)\s+([+\-0-9.eE]+)",
-          b"origin",
-      ).groups()
-  )
-  spacing = tuple(
-      float(x)
-      for x in require(
-          rb"SPACING\s+([+\-0-9.eE]+)\s+([+\-0-9.eE]+)\s+([+\-0-9.eE]+)",
-          b"spacing",
-      ).groups()
-  )
-  ncell = int(require(rb"CELL_DATA\s+(\d+)", b"cell data").group(1))
-  nx = dims[0] - 1
-  ny = dims[1] - 1
-  nz = dims[2] - 1
-  if ncell != nx*ny*nz:
-    raise ValueError(f"unexpected CELL_DATA count in {path}: {ncell} != {nx*ny*nz}")
-
-  fields = scalar_data(raw, ncell)
-  x = origin[0] + (np.arange(nx, dtype=float) + 0.5)*spacing[0]
-  y = origin[1] + (np.arange(ny, dtype=float) + 0.5)*spacing[1]
-  z = origin[2] + (np.arange(nz, dtype=float) + 0.5)*spacing[2]
+  x = np.asarray(data["x1v"], dtype=float)
+  y = np.asarray(data["x2v"], dtype=float)
+  z = np.asarray(data["x3v"], dtype=float)
   zz, yy, xx = np.meshgrid(z, y, x, indexing="ij")
+  spacing = (
+      float(np.mean(np.diff(np.asarray(data["x1f"], dtype=float)))),
+      float(np.mean(np.diff(np.asarray(data["x2f"], dtype=float)))),
+      float(np.mean(np.diff(np.asarray(data["x3f"], dtype=float)))),
+  )
   return {
       "path": path,
-      "time": time,
-      "dims": dims,
-      "shape": (nz, ny, nx),
+      "time": float(data["Time"]),
+      "shape": tuple(int(n) for n in rho.shape),
       "spacing": spacing,
+      "x1v": x,
+      "x2v": y,
+      "x3v": z,
+      "x1f": np.asarray(data["x1f"], dtype=float),
+      "x2f": np.asarray(data["x2f"], dtype=float),
+      "x3f": np.asarray(data["x3f"], dtype=float),
       "x": xx.ravel(),
       "y": yy.ravel(),
       "z": zz.ravel(),
-      "fields": fields,
+      "fields": {"dens": np.asarray(rho, dtype=float).ravel()},
   }
 
 
-def read_vtk_series(run_dir: Path) -> list[dict[str, Any]]:
-  files = sorted((run_dir / "vtk").glob("*.vtk"))
+def read_binary_series(run_dir: Path) -> list[dict[str, Any]]:
+  files = sorted((run_dir / "bin").glob("*.bin"))
   if not files:
-    files = sorted(run_dir.glob("*.vtk"))
-  return [parse_vtk(path) for path in files]
+    files = sorted((run_dir / "bin" / "rank_00000000").glob("*.bin"))
+  if not files:
+    files = sorted(run_dir.glob("*.bin"))
+  return [read_binary_snapshot(path) for path in files]
 
 
 def cold_centroids(
@@ -203,6 +180,135 @@ def cold_centroids(
   }
 
 
+def dense_mass_history(
+    snapshots: list[dict[str, Any]],
+    rho_min: float,
+    mass_unit_cgs: float,
+) -> dict[str, np.ndarray]:
+  times: list[float] = []
+  mass_code: list[float] = []
+  for snap in snapshots:
+    rho = snap["fields"].get("dens")
+    if rho is None:
+      continue
+    mask = rho > rho_min
+    dvol = float(np.prod(np.asarray(snap["spacing"])))
+    mass = float(np.sum(rho[mask])*dvol)
+    times.append(float(snap["time"]))
+    mass_code.append(mass)
+  mass_code_array = np.asarray(mass_code)
+  mass_cgs = mass_code_array*mass_unit_cgs
+  return {
+      "time": np.asarray(times),
+      "mass_code": mass_code_array,
+      "mass_g": mass_cgs,
+      "mass_msun": mass_cgs/MSUN_CGS,
+  }
+
+
+def write_dense_mass_csv(path: Path, history: dict[str, np.ndarray]) -> None:
+  path.parent.mkdir(parents=True, exist_ok=True)
+  with path.open("w") as stream:
+    stream.write("time_Myr,mass_code,mass_g,mass_Msun\n")
+    for time, mass_code, mass_g, mass_msun in zip(
+        history["time"],
+        history["mass_code"],
+        history["mass_g"],
+        history["mass_msun"],
+    ):
+      stream.write(
+          f"{time:.16e},{mass_code:.16e},{mass_g:.16e},{mass_msun:.16e}\n"
+      )
+
+
+def plot_dense_mass(path: Path, history: dict[str, np.ndarray], rho_min: float) -> None:
+  path.parent.mkdir(parents=True, exist_ok=True)
+  fig, ax = plt.subplots(figsize=(7.2, 4.4), constrained_layout=True)
+  ax.plot(history["time"], history["mass_msun"], marker="o", ms=3.0, lw=1.5)
+  ax.set_xlabel("time [Myr]")
+  ax.set_ylabel(r"$M(\rho > \rho_{\rm cloud,0}/3)$ [$M_\odot$]")
+  ax.set_title(f"Dense gas mass, threshold rho > {rho_min:.6g} [code]")
+  ax.grid(True, alpha=0.3)
+  fig.savefig(path, dpi=180)
+  plt.close(fig)
+
+
+def select_evenly_spaced(items: list[dict[str, Any]], count: int) -> list[dict[str, Any]]:
+  if count >= len(items):
+    return items
+  indices = np.linspace(0, len(items) - 1, count)
+  return [items[int(round(index))] for index in indices]
+
+
+def density_plane(snapshot: dict[str, Any]) -> np.ndarray:
+  rho = snapshot["fields"].get("dens")
+  if rho is None:
+    raise ValueError(f"snapshot {snapshot['path']} does not contain dens")
+  rho_3d = np.asarray(rho, dtype=float).reshape(snapshot["shape"])
+  k = int(np.argmin(np.abs(snapshot["x3v"])))
+  return rho_3d[k, :, :]
+
+
+def plot_density_slices_vertical(
+    path: Path,
+    snapshots: list[dict[str, Any]],
+    target_x1: float,
+    number_density_unit: float,
+    slice_count: int,
+) -> None:
+  if not snapshots:
+    raise ValueError("no binary snapshots found")
+  selected = select_evenly_spaced(snapshots, slice_count)
+  panels = [
+      np.log10(np.maximum(density_plane(snapshot)*number_density_unit, 1.0e-99))
+      for snapshot in selected
+  ]
+  vmin = min(float(np.nanmin(panel)) for panel in panels)
+  vmax = max(float(np.nanmax(panel)) for panel in panels)
+  extent = [
+      float(selected[0]["x1f"][0]),
+      float(selected[0]["x1f"][-1]),
+      float(selected[0]["x2f"][0]),
+      float(selected[0]["x2f"][-1]),
+  ]
+
+  path.parent.mkdir(parents=True, exist_ok=True)
+  fig_height = max(7.0, 1.65*len(selected) + 1.2)
+  fig, axes = plt.subplots(
+      len(selected),
+      1,
+      figsize=(14.0, fig_height),
+      constrained_layout=True,
+      squeeze=False,
+  )
+  image = None
+  for ax, panel, snapshot in zip(axes[:, 0], panels, selected):
+    image = ax.imshow(
+        panel,
+        origin="lower",
+        extent=extent,
+        interpolation="nearest",
+        cmap="viridis",
+        vmin=vmin,
+        vmax=vmax,
+    )
+    ax.axvline(target_x1, color="white", lw=1.0, ls="--", alpha=0.75)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_ylabel("x2 [pc]")
+    ax.set_title(f"t = {float(snapshot['time']):.4f} Myr   {snapshot['path'].name}")
+  axes[-1, 0].set_xlabel("x1 [pc]")
+  if image is not None:
+    fig.colorbar(
+        image,
+        ax=axes[:, 0].tolist(),
+        label=r"$\log_{10} n$ [cm$^{-3}$]",
+        fraction=0.025,
+        pad=0.015,
+    )
+  fig.savefig(path, dpi=180)
+  plt.close(fig)
+
+
 def finite_values(rows: list[dict[str, Any]], key: str) -> tuple[np.ndarray, np.ndarray]:
   x: list[float] = []
   y: list[float] = []
@@ -220,7 +326,7 @@ def finite_values(rows: list[dict[str, Any]], key: str) -> tuple[np.ndarray, np.
 def plot_tracker_validation(
     path: Path,
     rows: list[dict[str, Any]],
-    vtk_centroids: dict[str, np.ndarray],
+    snapshot_centroids: dict[str, np.ndarray],
     target_x1: float,
 ) -> None:
   if not rows:
@@ -237,13 +343,13 @@ def plot_tracker_validation(
     time, values = finite_values(rows, key)
     if values.size:
       ax.plot(time, values, style, label=label)
-  if vtk_centroids["time"].size:
+  if snapshot_centroids["time"].size:
     ax.scatter(
-        vtk_centroids["time"],
-        vtk_centroids["x1_centroid"],
+        snapshot_centroids["time"],
+        snapshot_centroids["x1_centroid"],
         s=30,
         color="black",
-        label="VTK cold centroid",
+        label="binary cold centroid",
         zorder=4,
     )
   ax.axhline(target_x1, color="0.35", lw=1.2, label="target")
@@ -295,13 +401,13 @@ def plot_tracker_validation(
   time, weight = finite_values(rows, "x1_global_weight")
   if weight.size:
     ax.plot(time, weight, label="tracker weight")
-  if vtk_centroids["time"].size:
+  if snapshot_centroids["time"].size:
     ax.scatter(
-        vtk_centroids["time"],
-        vtk_centroids["weight"],
+        snapshot_centroids["time"],
+        snapshot_centroids["weight"],
         s=30,
         color="black",
-        label="VTK cold weight",
+        label="binary cold weight",
         zorder=4,
     )
   ax.set_xlabel("time [code]")
@@ -309,7 +415,7 @@ def plot_tracker_validation(
   ax.set_yscale("log")
   ax.legend(loc="best")
 
-  fig.suptitle("Low-resolution Sedov cloud-crushing frame-tracking validation")
+  fig.suptitle("Cloud-crushing frame-tracking validation")
   fig.savefig(path, dpi=180)
   plt.close(fig)
 
@@ -333,12 +439,12 @@ def midplane_points(snapshot: dict[str, Any], density_unit: float) -> dict[str, 
 def plot_midplane_density(
     path: Path,
     snapshots: list[dict[str, Any]],
-    vtk_centroids: dict[str, np.ndarray],
+    snapshot_centroids: dict[str, np.ndarray],
     target_x1: float,
     density_unit: float,
 ) -> None:
   if not snapshots:
-    raise ValueError("no VTK snapshots found")
+    raise ValueError("no binary snapshots found")
   selected = [snapshots[0]]
   if len(snapshots) > 1:
     selected.append(snapshots[-1])
@@ -361,11 +467,11 @@ def plot_midplane_density(
         vmax=vmax,
     )
     ax.axvline(target_x1, color="white", lw=1.2, ls="--", label="target")
-    if vtk_centroids["time"].size:
+    if snapshot_centroids["time"].size:
       centroid = np.interp(
           float(snapshot["time"]),
-          vtk_centroids["time"],
-          vtk_centroids["x1_centroid"],
+          snapshot_centroids["time"],
+          snapshot_centroids["x1_centroid"],
       )
       ax.axvline(centroid, color="black", lw=1.2, ls="-", label="cold centroid")
     ax.set_aspect("equal", adjustable="box")
@@ -393,6 +499,7 @@ def build_parser() -> argparse.ArgumentParser:
   )
   parser.add_argument("--target-min", type=float, default=None)
   parser.add_argument("--target-max", type=float, default=None)
+  parser.add_argument("--slice-count", type=int, default=6)
   return parser
 
 
@@ -401,7 +508,7 @@ def main() -> None:
   blocks = parse_athinput(args.input)
   log_path = args.log if args.log is not None else args.run_dir / "athena.log"
   rows = parse_frame_log(log_path)
-  snapshots = read_vtk_series(args.run_dir)
+  snapshots = read_binary_series(args.run_dir)
 
   target_min = args.target_min
   if target_min is None:
@@ -412,18 +519,39 @@ def main() -> None:
   target_x1 = block_float(blocks, "frame_tracking", "x1_target", 3.0)
   length_cgs = block_float(blocks, "units", "length_cgs", 1.0)
   mass_cgs = block_float(blocks, "units", "mass_cgs", 1.0)
+  mu = block_float(blocks, "units", "mu", 1.0)
   density_unit = mass_cgs/(length_cgs**3)
+  number_density_unit = density_unit/(mu*ATOMIC_MASS_UNIT_CGS)
 
-  vtk_centroids = cold_centroids(snapshots, target_min, target_max)
+  snapshot_centroids = cold_centroids(snapshots, target_min, target_max)
+  dense_mass = dense_mass_history(snapshots, target_min, mass_cgs)
   validation_path = args.output_prefix.with_name(args.output_prefix.name + "_validation.png")
   midplane_path = args.output_prefix.with_name(args.output_prefix.name + "_midplane.png")
-  plot_tracker_validation(validation_path, rows, vtk_centroids, target_x1)
-  plot_midplane_density(midplane_path, snapshots, vtk_centroids, target_x1, density_unit)
+  dense_mass_path = args.output_prefix.with_name(args.output_prefix.name + "_dense_mass.png")
+  dense_mass_csv_path = args.output_prefix.with_name(args.output_prefix.name + "_dense_mass.csv")
+  slices_path = args.output_prefix.with_name(
+      args.output_prefix.name
+      + f"_density_slices_{args.slice_count}_vertical_equal_aspect.png"
+  )
+  plot_tracker_validation(validation_path, rows, snapshot_centroids, target_x1)
+  plot_midplane_density(midplane_path, snapshots, snapshot_centroids, target_x1, density_unit)
+  plot_dense_mass(dense_mass_path, dense_mass, target_min)
+  write_dense_mass_csv(dense_mass_csv_path, dense_mass)
+  plot_density_slices_vertical(
+      slices_path,
+      snapshots,
+      target_x1,
+      number_density_unit,
+      args.slice_count,
+  )
 
   print(f"read {len(rows)} frame-tracking diagnostic block(s)")
-  print(f"read {len(snapshots)} VTK snapshot(s)")
+  print(f"read {len(snapshots)} binary snapshot(s)")
   print(f"wrote {validation_path}")
   print(f"wrote {midplane_path}")
+  print(f"wrote {dense_mass_path}")
+  print(f"wrote {dense_mass_csv_path}")
+  print(f"wrote {slices_path}")
   if rows:
     last = rows[-1]
     print(
@@ -432,11 +560,17 @@ def main() -> None:
         f"v_frame={last.get('x1_frame_velocity', math.nan):.6g}, "
         f"x_frame={last.get('x1_frame_displacement', math.nan):.6g}"
     )
-  if vtk_centroids["time"].size:
+  if snapshot_centroids["time"].size:
     print(
-        "final VTK cold centroid: "
-        f"time={vtk_centroids['time'][-1]:.6g}, "
-        f"x1={vtk_centroids['x1_centroid'][-1]:.6g}"
+        "final binary cold centroid: "
+        f"time={snapshot_centroids['time'][-1]:.6g}, "
+        f"x1={snapshot_centroids['x1_centroid'][-1]:.6g}"
+    )
+  if dense_mass["time"].size:
+    print(
+        "final dense mass: "
+        f"time={dense_mass['time'][-1]:.6g}, "
+        f"M={dense_mass['mass_msun'][-1]:.6g} Msun"
     )
 
 

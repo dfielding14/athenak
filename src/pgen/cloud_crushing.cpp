@@ -4,8 +4,10 @@
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
 //! \file cloud_crushing.cpp
-//! \brief Cold-cloud crushing test with ISM cooling and a Sedov-Taylor inflow boundary.
+//! \brief Cold-cloud crushing test with ISM cooling and user-selectable inflow boundary.
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -26,6 +28,11 @@
 #include "units/units.hpp"
 
 namespace {
+
+enum CloudCrushingBoundaryMode {
+  kBoundarySedovTaylor = 0,
+  kBoundaryConstant = 1
+};
 
 struct PhaseState {
   Real temp_cgs = 0.0;
@@ -53,6 +60,14 @@ struct CloudCrushingData {
   Real cloud_center_x2 = 0.0;
   Real cloud_center_x3 = 0.0;
 
+  int boundary_mode = kBoundarySedovTaylor;
+  Real constant_density_code = 0.0;
+  Real constant_pressure_code = 0.0;
+  Real constant_vx_code = 0.0;
+  Real constant_vy_code = 0.0;
+  Real constant_vz_code = 0.0;
+  Real boundary_timestep_factor = 0.15;
+
   Real sedov_energy_cgs = 1.0e51;
   Real sedov_beta = 1.15167;
   Real sedov_start_time = 0.0;
@@ -70,6 +85,48 @@ void FatalCloudCrushingInput(const std::string &message) {
   std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
             << std::endl << message << std::endl;
   std::exit(EXIT_FAILURE);
+}
+
+std::string NormalizeToken(std::string input) {
+  input.erase(std::remove_if(input.begin(), input.end(),
+                             [](unsigned char c) { return std::isspace(c); }),
+              input.end());
+  std::transform(input.begin(), input.end(), input.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  for (char &c : input) {
+    if (c == '-') {
+      c = '_';
+    }
+  }
+  return input;
+}
+
+int ParseBoundaryMode(const std::string &mode_raw) {
+  const std::string mode = NormalizeToken(mode_raw);
+  if (mode == "sedov" || mode == "sedov_taylor" || mode == "tvns") {
+    return kBoundarySedovTaylor;
+  }
+  if (mode == "constant" || mode == "const") {
+    return kBoundaryConstant;
+  }
+  FatalCloudCrushingInput("Invalid problem/inner_x1_boundary '" + mode_raw +
+                          "'. Expected sedov or constant.");
+  return kBoundarySedovTaylor;
+}
+
+const char *BoundaryModeName(const int mode) {
+  return (mode == kBoundaryConstant) ? "constant" : "sedov";
+}
+
+bool ReadProblemRealAny(ParameterInput *pin, const std::vector<std::string> &names,
+                        Real &value) {
+  for (const std::string &name : names) {
+    if (pin->DoesParameterExist("problem", name)) {
+      value = pin->GetReal("problem", name);
+      return true;
+    }
+  }
+  return false;
 }
 
 Real EquilibriumFunction(const Real temp, const Real pressure_over_k, const Real hrate) {
@@ -180,6 +237,84 @@ void ReadCloudCrushingParameters(ParameterInput *pin, Mesh *pm) {
   data.cloud_center_x2 = pin->GetOrAddReal("problem", "cloud_center_x2", 0.0);
   data.cloud_center_x3 = pin->GetOrAddReal("problem", "cloud_center_x3", 0.0);
 
+  std::string boundary_mode = "sedov";
+  if (pin->DoesParameterExist("problem", "inner_x1_boundary")) {
+    boundary_mode = pin->GetString("problem", "inner_x1_boundary");
+  } else if (pin->DoesParameterExist("problem", "inner_x1_bc")) {
+    boundary_mode = pin->GetString("problem", "inner_x1_bc");
+  } else if (pin->DoesParameterExist("problem", "boundary_mode")) {
+    boundary_mode = pin->GetString("problem", "boundary_mode");
+  }
+  data.boundary_mode = ParseBoundaryMode(boundary_mode);
+  if (pin->DoesParameterExist("problem", "constant_inner_x1") &&
+      pin->GetBoolean("problem", "constant_inner_x1")) {
+    data.boundary_mode = kBoundaryConstant;
+  }
+
+  data.constant_density_code = data.warm.density_code;
+  data.constant_pressure_code = data.warm.pressure_code;
+  data.constant_vx_code = 0.0;
+  data.constant_vy_code = 0.0;
+  data.constant_vz_code = 0.0;
+  (void) ReadProblemRealAny(pin, {"constant_density", "constant_boundary_density",
+                                  "inner_x1_density"},
+                            data.constant_density_code);
+  (void) ReadProblemRealAny(pin, {"constant_pressure", "constant_boundary_pressure",
+                                  "inner_x1_pressure"},
+                            data.constant_pressure_code);
+  (void) ReadProblemRealAny(pin, {"constant_vx", "constant_v1", "constant_boundary_vx",
+                                  "constant_boundary_v1", "inner_x1_vx", "inner_x1_v1"},
+                            data.constant_vx_code);
+  (void) ReadProblemRealAny(pin, {"constant_vy", "constant_v2", "constant_boundary_vy",
+                                  "constant_boundary_v2", "inner_x1_vy", "inner_x1_v2"},
+                            data.constant_vy_code);
+  (void) ReadProblemRealAny(pin, {"constant_vz", "constant_v3", "constant_boundary_vz",
+                                  "constant_boundary_v3", "inner_x1_vz", "inner_x1_v3"},
+                            data.constant_vz_code);
+  Real constant_density_cgs = 0.0;
+  if (ReadProblemRealAny(pin, {"constant_density_cgs", "constant_boundary_density_cgs",
+                               "inner_x1_density_cgs"},
+                         constant_density_cgs)) {
+    data.constant_density_code = constant_density_cgs/pmbp->punit->density_cgs();
+  }
+  Real constant_pressure_cgs = 0.0;
+  if (ReadProblemRealAny(pin, {"constant_pressure_cgs", "constant_boundary_pressure_cgs",
+                               "inner_x1_pressure_cgs"},
+                         constant_pressure_cgs)) {
+    data.constant_pressure_code = constant_pressure_cgs/data.pressure_unit;
+  }
+  Real constant_vx_cgs = 0.0;
+  if (ReadProblemRealAny(pin, {"constant_vx_cgs", "constant_v1_cgs",
+                               "constant_boundary_vx_cgs", "constant_boundary_v1_cgs",
+                               "inner_x1_vx_cgs", "inner_x1_v1_cgs"},
+                         constant_vx_cgs)) {
+    data.constant_vx_code = constant_vx_cgs/data.velocity_unit;
+  }
+  Real constant_vy_cgs = 0.0;
+  if (ReadProblemRealAny(pin, {"constant_vy_cgs", "constant_v2_cgs",
+                               "constant_boundary_vy_cgs", "constant_boundary_v2_cgs",
+                               "inner_x1_vy_cgs", "inner_x1_v2_cgs"},
+                         constant_vy_cgs)) {
+    data.constant_vy_code = constant_vy_cgs/data.velocity_unit;
+  }
+  Real constant_vz_cgs = 0.0;
+  if (ReadProblemRealAny(pin, {"constant_vz_cgs", "constant_v3_cgs",
+                               "constant_boundary_vz_cgs", "constant_boundary_v3_cgs",
+                               "inner_x1_vz_cgs", "inner_x1_v3_cgs"},
+                         constant_vz_cgs)) {
+    data.constant_vz_code = constant_vz_cgs/data.velocity_unit;
+  }
+  if (data.boundary_mode == kBoundaryConstant &&
+      (data.constant_density_code <= 0.0 || data.constant_pressure_code <= 0.0)) {
+    FatalCloudCrushingInput("Constant inner_x1 boundary requires positive density "
+                            "and pressure.");
+  }
+  data.boundary_timestep_factor = pin->GetOrAddReal(
+      "problem", "boundary_timestep_factor", data.boundary_timestep_factor);
+  if (data.boundary_timestep_factor <= 0.0) {
+    FatalCloudCrushingInput("problem/boundary_timestep_factor must be positive.");
+  }
+
   const Real origin_distance = pin->GetOrAddReal("problem", "sedov_origin_distance", 30.0);
   data.sedov_origin_x1 = pin->GetOrAddReal("problem", "sedov_origin_x1",
                                            mesh_size.x1min - origin_distance);
@@ -192,19 +327,21 @@ void ReadCloudCrushingParameters(ParameterInput *pin, Mesh *pm) {
                                                  origin_distance);
   data.ambient_mass_density_cgs = data.warm.number_density_cgs*data.mu*
                                   units::Units::atomic_mass_unit_cgs;
-  if (data.sedov_energy_cgs <= 0.0 || data.sedov_beta <= 0.0 ||
-      data.sedov_radius_at_start <= 0.0 || data.ambient_mass_density_cgs <= 0.0) {
-    FatalCloudCrushingInput("Sedov-Taylor parameters must be positive.");
-  }
   const Real gamma = data.gm1 + 1.0;
-  if (gamma <= 1.0 || gamma >= 2.0) {
-    FatalCloudCrushingInput("The analytic TVNS Sedov profile used by cloud_crushing "
-                            "requires 1 < hydro/gamma < 2.");
+  if (data.boundary_mode == kBoundarySedovTaylor) {
+    if (data.sedov_energy_cgs <= 0.0 || data.sedov_beta <= 0.0 ||
+        data.sedov_radius_at_start <= 0.0 || data.ambient_mass_density_cgs <= 0.0) {
+      FatalCloudCrushingInput("Sedov-Taylor parameters must be positive.");
+    }
+    if (gamma <= 1.0 || gamma >= 2.0) {
+      FatalCloudCrushingInput("The analytic TVNS Sedov profile used by cloud_crushing "
+                              "requires 1 < hydro/gamma < 2.");
+    }
+    const Real radius_start_cgs = data.sedov_radius_at_start*pmbp->punit->length_cgs();
+    data.sedov_age_at_start_cgs =
+        std::sqrt(std::pow(radius_start_cgs/data.sedov_beta, 5)*
+                  data.ambient_mass_density_cgs/data.sedov_energy_cgs);
   }
-  const Real radius_start_cgs = data.sedov_radius_at_start*pmbp->punit->length_cgs();
-  data.sedov_age_at_start_cgs =
-      std::sqrt(std::pow(radius_start_cgs/data.sedov_beta, 5)*
-                data.ambient_mass_density_cgs/data.sedov_energy_cgs);
 
   cloud_crushing = data;
 
@@ -215,10 +352,23 @@ void ReadCloudCrushingParameters(ParameterInput *pin, Mesh *pm) {
               << " K, n=" << data.cold.number_density_cgs << " cm^-3" << std::endl;
     std::cout << " warm: T=" << data.warm.temp_cgs
               << " K, n=" << data.warm.number_density_cgs << " cm^-3" << std::endl;
-    std::cout << " Sedov boundary: E=" << data.sedov_energy_cgs
-              << " erg, R_start=" << data.sedov_radius_at_start
-              << ", age_start=" << data.sedov_age_at_start_cgs/data.time_unit
-              << " code time, full TVNS interior profile" << std::endl;
+    std::cout << " inner_x1 boundary mode=" << BoundaryModeName(data.boundary_mode)
+              << std::endl;
+    if (data.boundary_mode == kBoundaryConstant) {
+      std::cout << " Constant inner_x1 boundary: density="
+                << data.constant_density_code
+                << ", pressure=" << data.constant_pressure_code
+                << ", velocity=(" << data.constant_vx_code << ", "
+                << data.constant_vy_code << ", " << data.constant_vz_code
+                << ") in code units" << std::endl;
+    } else {
+      std::cout << " Sedov boundary: E=" << data.sedov_energy_cgs
+                << " erg, R_start=" << data.sedov_radius_at_start
+                << ", age_start=" << data.sedov_age_at_start_cgs/data.time_unit
+                << " code time, full TVNS interior profile" << std::endl;
+    }
+    std::cout << " inner_x1 boundary timestep factor="
+              << data.boundary_timestep_factor << std::endl;
   }
 }
 
@@ -305,6 +455,20 @@ void SedovBoundary(Mesh *pm) {
   auto &mb_bcs = pmbp->pmb->mb_bcs;
   const CloudCrushingData data = cloud_crushing;
 
+  if (data.boundary_mode == kBoundaryConstant) {
+    par_for("constant_inner_x1", DevExeSpace(), 0, nmb1, 0, n3-1, 0, n2-1, 0, ng-1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      if (mb_bcs.d_view(m, BoundaryFace::inner_x1) != BoundaryFlag::user) {
+        return;
+      }
+      const int ib = is - i - 1;
+      SetHydroState(u0, m, k, j, ib, data.constant_density_code,
+                    data.constant_pressure_code, data.constant_vx_code,
+                    data.constant_vy_code, data.constant_vz_code, data.gm1);
+    });
+    return;
+  }
+
   Real sedov_age_cgs = data.sedov_age_at_start_cgs;
   if (pm->time > data.sedov_start_time) {
     sedov_age_cgs += (pm->time - data.sedov_start_time)*data.time_unit;
@@ -371,6 +535,47 @@ void SedovBoundary(Mesh *pm) {
   });
 }
 
+void CloudCrushingTimeStep(Mesh *pm) {
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  const CloudCrushingData data = cloud_crushing;
+  Real min_dx1 = static_cast<Real>(std::numeric_limits<float>::max());
+  auto &size = pmbp->pmb->mb_size;
+  for (int m = 0; m < pmbp->nmb_thispack; ++m) {
+    min_dx1 = std::min(min_dx1, size.h_view(m).dx1);
+  }
+
+  const Real gamma = data.gm1 + 1.0;
+  Real signal_speed = 0.0;
+  if (data.boundary_mode == kBoundaryConstant) {
+    const Real cs = std::sqrt(gamma*data.constant_pressure_code/
+                              data.constant_density_code);
+    signal_speed = std::fabs(data.constant_vx_code) + cs;
+  } else {
+    Real sedov_age_cgs = data.sedov_age_at_start_cgs;
+    if (pm->time > data.sedov_start_time) {
+      sedov_age_cgs += (pm->time - data.sedov_start_time)*data.time_unit;
+    }
+    const Real shock_radius_cgs = data.sedov_beta*
+        std::pow(data.sedov_energy_cgs*SQR(sedov_age_cgs)/data.ambient_mass_density_cgs,
+                 0.2);
+    const Real shock_speed_code = (0.4*shock_radius_cgs/sedov_age_cgs)/
+                                  data.velocity_unit;
+    signal_speed = 2.0*shock_speed_code;
+    if (pmbp->pframe_tracker != nullptr) {
+      signal_speed += std::fabs(pmbp->pframe_tracker->FrameVelocity(0));
+    }
+  }
+
+  Real dtnew_loc = static_cast<Real>(std::numeric_limits<float>::max());
+  if (min_dx1 > 0.0 && signal_speed > 0.0) {
+    dtnew_loc = data.boundary_timestep_factor*min_dx1/signal_speed;
+  }
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &dtnew_loc, 1, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
+#endif
+  pm->pgen->dtnew = dtnew_loc;
+}
+
 } // namespace
 
 //----------------------------------------------------------------------------------------
@@ -381,6 +586,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   ReadCloudCrushingParameters(pin, pmy_mesh_);
   user_bcs_func = SedovBoundary;
+  user_dt = true;
+  user_time_step_func = CloudCrushingTimeStep;
 
   if (restart) return;
 

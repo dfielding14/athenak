@@ -8,10 +8,50 @@ Taylor-von Neumann-Sedov blast wave.
 The problem is built around three pieces:
 
 - ISM cooling and heating set the cold and warm thermal equilibria at the
-  requested `problem/pressure_over_k` and `hydro/hrate`.
+  requested `problem/pressure_over_k` and resolved `hydro/hrate`.
 - The cold cloud starts as a smoothed density sphere embedded in the warm phase.
 - The `inner_x1` user boundary samples the full xi-dependent TVNS interior
   profile, not just a constant post-shock state.
+- The shipped input enables hydro FOFC with three ghost zones; the strongly
+  driven boundary/cloud interaction can otherwise produce negative internal
+  energies with the HLLC update.
+- The shipped input sets a finite hydro `tfloor` below the cold equilibrium
+  temperature. With the default floating-point temperature floor, one
+  overcooled mixed cell can collapse the explicit cooling timestep.
+
+## Boundary Modes
+
+The `inner_x1` user boundary is selected with
+
+```ini
+<problem>
+inner_x1_boundary = sedov  # sedov or constant
+```
+
+The default `sedov` mode evaluates the Taylor-von Neumann-Sedov blast profile.
+The optional `constant` mode fills the inner `x1` ghost zones with a fixed
+grid-frame state. In constant mode the boundary is not transformed by frame
+tracking: it does not sample `FrameDisplacement()` and it does not subtract
+`FrameVelocity()`.
+
+Constant-mode values are code-unit quantities by default:
+
+```ini
+inner_x1_boundary = constant
+constant_density  = 1.0
+constant_pressure = 1.0e-4
+constant_vx       = 1.0
+constant_vy       = 0.0
+constant_vz       = 0.0
+boundary_timestep_factor = 0.15
+```
+
+The pgen also accepts cgs aliases when a `<units>` block is present:
+`constant_density_cgs`, `constant_pressure_cgs`, and
+`constant_vx_cgs`, `constant_vy_cgs`, `constant_vz_cgs`.
+`boundary_timestep_factor` multiplies the additional timestep constraint based
+on the inner-boundary signal speed. Values below unity are useful for strongly
+driven inflows where the active mesh has not yet seen the boundary sound speed.
 
 ## Units
 
@@ -37,6 +77,36 @@ With the default cooling/heating choices, the equilibrium phases are
 | Ambient mass density | `8.40076e-25 g cm^-3` |
 | Cold-cloud mass density | `1.05339e-22 g cm^-3` |
 
+The heating rate can either be supplied directly or scaled automatically with
+the requested pressure:
+
+```ini
+<hydro>
+tfloor      = 0.1
+hrate_auto  = true
+hrate_reference = 2.0e-26
+hrate_reference_pressure_over_k = 3.162277660168379e3
+cooling_timestep_factor = 0.1
+```
+
+With `hrate_auto = true`, the code sets
+
+```text
+hrate = hrate_reference
+      * problem/pressure_over_k
+      / hrate_reference_pressure_over_k
+```
+
+and writes the resolved value back into `<hydro>`, so source terms and the
+problem generator use the same heating rate. This preserves the default
+cold/warm equilibrium temperatures while allowing a different ambient
+`P/k_B`.
+
+`cooling_timestep_factor` multiplies the source-term cooling/heating timestep
+limit. A value below unity is useful in this strongly shocked cloud test because
+explicit cooling at the full local cooling time can drive mixed cells into the
+energy floor.
+
 ## Sedov Boundary Options
 
 The Sedov boundary is controlled from the `<problem>` block:
@@ -50,7 +120,7 @@ The Sedov boundary is controlled from the `<problem>` block:
 | `sedov_origin_x1`, `sedov_origin_x2`, `sedov_origin_x3` | Optional explicit lab-frame origin. |
 | `sedov_radius_at_start` | Shock radius at `sedov_start_time`; together with `E` and ambient density this fixes the Sedov age. |
 
-At each ghost cell, the code computes
+In Sedov mode, each ghost cell computes
 
 ```text
 x_lab = x_grid + X_frame
@@ -74,6 +144,7 @@ The input tracks the cold cloud by selecting dense gas:
 
 ```ini
 <frame_tracking>
+start_time = 0.02
 axes       = x1
 x1_target  = 3.0
 target     = density
@@ -82,8 +153,10 @@ target_max = 200.0
 mode       = pd
 ```
 
-The tracker applies post-timestep Galilean velocity boosts. It also exposes
-the current frame velocity and displacement through `FrameVelocity(axis)` and
+The tracker applies post-timestep Galilean velocity boosts. The example delays
+tracking until `t=0.02` so the cooling startup transient does not drive the
+cloud frame before the flow has settled. The tracker also exposes the current
+frame velocity and displacement through `FrameVelocity(axis)` and
 `FrameDisplacement(axis)`. Restart files store these values in the
 `<frame_tracking>` block as `frame_velocity_x*` and `frame_displacement_x*`.
 
@@ -119,7 +192,7 @@ mkdir run_cloud_crushing_lowres
   mesh/nx1=32 mesh/nx2=16 mesh/nx3=16 \
   meshblock/nx1=16 meshblock/nx2=8 meshblock/nx3=8 \
   time/nlim=160 time/tlim=0.004 time/cfl_number=0.01 \
-  output1/dt=2.0e-4 output2/dt=5.0e-4 \
+  output1/dt=2.0e-4 output2/file_type=bin output2/dt=5.0e-4 \
   frame_tracking/diagnostic_every=5 \
   frame_tracking/max_abs_boost=50.0 \
   frame_tracking/max_boost_change=2.0 \
@@ -151,11 +224,11 @@ python3 scripts/plot_cloud_crushing_validation.py \
 ```
 
 The validation script reads `athena.log` for tracker diagnostics and the
-binary VTK `hydro_w` snapshots for an independent cold-cloud centroid check.
+native binary `hydro_w` snapshots for an independent cold-cloud centroid check.
 The run used for this documentation produced 31 frame-tracking diagnostic
-blocks and 5 VTK snapshots. The final diagnostic frame state was
+blocks and 5 binary snapshots. The final diagnostic frame state was
 `v_frame=-256.259` and `X_frame=-0.142559` in code units at
-`t=0.00151389`; the final VTK cold-cloud centroid was `x1=3.1529` at
+`t=0.00151389`; the final binary cold-cloud centroid was `x1=3.1529` at
 `t=0.00153755`.
 
 ![Frame-tracking validation](../_static/cloud_crushing_lowres_validation.png)

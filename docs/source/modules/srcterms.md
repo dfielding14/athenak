@@ -6,9 +6,10 @@ position and velocity, and applies global Galilean boosts so that material can
 remain near a chosen target location in grid coordinates.
 
 The tracker is owned by `MeshBlockPack`, scheduled on the existing
-`after_timeintegrator` task list, and stores its state in restart files through
-the `<frame_tracking>` block. Problem generators can query the moving-frame
-state with:
+`after_timeintegrator` task list, updates its pack pointer across AMR rebuilds,
+and stores its state in restart files through the `<frame_tracking>` block.
+
+Problem generators can query the moving-frame state with:
 
 | API | Meaning |
 |-----|---------|
@@ -36,3 +37,7 @@ Common parameters:
 The frame velocity is the lab velocity of the moving grid frame. The velocity
 stored in the fluid is grid-frame velocity, so lab-frame boundary data should
 be transformed as `v_grid = v_lab - V_frame`.
+
+For cloud-crushing runs with ISM cooling, `hrate_auto = true` can set
+`hydro/hrate` from `problem/pressure_over_k`, and
+`cooling_timestep_factor` scales the cooling timestep estimate.
