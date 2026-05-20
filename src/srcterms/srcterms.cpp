@@ -10,6 +10,7 @@
 
 #include "srcterms.hpp"
 
+#include <cstdlib>
 #include <iostream>
 #include <string> // string
 
@@ -19,13 +20,34 @@
 #include "eos/eos.hpp"
 #include "geodesic-grid/geodesic_grid.hpp"
 //#include "hydro/hydro.hpp"
-#include "ismcooling.hpp"
+#include "cooling.hpp"
 #include "mesh/mesh.hpp"
 //#include "mhd/mhd.hpp"
 #include "parameter_input.hpp"
 #include "radiation/radiation.hpp"
 #include "radiation/radiation_tetrad.hpp"
 #include "units/units.hpp"
+
+namespace {
+
+void FatalLegacyCoolingInput(const std::string &block, const std::string &name) {
+  std::cout << "### FATAL ERROR in SourceTerms input" << std::endl
+            << "<" << block << ">/" << name << " is no longer supported. "
+            << "Use the standalone <cooling> block instead." << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+void CheckLegacyCoolingInput(ParameterInput *pin) {
+  const std::string blocks[] = {"hydro", "mhd", "hydro_srcterms", "mhd_srcterms"};
+  const std::string names[] = {"ism_cooling", "cgm_cooling"};
+  for (const auto &block : blocks) {
+    for (const auto &name : names) {
+      if (pin->DoesParameterExist(block, name)) FatalLegacyCoolingInput(block, name);
+    }
+  }
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 // constructor, parses input file and initializes data structures and parameters
@@ -35,11 +57,13 @@
 
 SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *pin) :
     pmy_pack(pp) {
+  CheckLegacyCoolingInput(pin);
+
+  const bool has_block = pin->DoesBlockExist(block);
   // Read flags for each source term implemented (default false)
-  const_accel = pin->GetOrAddBoolean(block, "const_accel", false);
-  ism_cooling = pin->GetOrAddBoolean(block, "ism_cooling", false);
-  rel_cooling = pin->GetOrAddBoolean(block, "rel_cooling", false);
-  rad_beam = pin->GetOrAddBoolean(block, "rad_beam", false);
+  const_accel = has_block ? pin->GetOrAddBoolean(block, "const_accel", false) : false;
+  rel_cooling = has_block ? pin->GetOrAddBoolean(block, "rel_cooling", false) : false;
+  rad_beam = has_block ? pin->GetOrAddBoolean(block, "rad_beam", false) : false;
 
   // (1) read data for (constant) gravitational acceleration
   if (const_accel) {
@@ -52,9 +76,10 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
     }
   }
 
-  // (2) Optically thin ISM cooling
-  if (ism_cooling) {
-    hrate = pin->GetReal(block, "hrate");
+  // (2) General cooling from standalone <cooling> block
+  if (pin->DoesBlockExist("cooling") &&
+      pin->GetOrAddBoolean("cooling", "enabled", false)) {
+    pcooling = new cooling::GeneralCooling(pp, pin);
   }
 
   // (3) optically thin relativistic cooling
@@ -81,6 +106,7 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
 // destructor
 
 SourceTerms::~SourceTerms() {
+  if (pcooling != nullptr) delete pcooling;
 }
 
 //----------------------------------------------------------------------------------------
@@ -92,7 +118,7 @@ void SourceTerms::ApplySrcTerms(const DvceArray5D<Real> &w0, const EOS_Data &eos
                                 const Real bdt, DvceArray5D<Real> &u0) {
   // NOTE source terms must be computed using primitive (w0) and NOT conserved (u0) vars
   if (const_accel) ConstantAccel(w0, eos_data,  bdt, u0);
-  if (ism_cooling) ISMCooling(w0, eos_data, bdt, u0);
+  if (pcooling != nullptr && pcooling->Enabled()) pcooling->Apply(w0, eos_data, bdt, u0);
   if (rel_cooling) RelCooling(w0, eos_data, bdt, u0);
   return;
 }
@@ -123,49 +149,6 @@ void SourceTerms::ConstantAccel(const DvceArray5D<Real> &w0, const EOS_Data &eos
     Real src = bdt*g*w0(m,IDN,k,j,i);
     u0(m,dir,k,j,i) += src;
     if (eos_data.is_ideal) { u0(m,IEN,k,j,i) += src*w0(m,dir,k,j,i); }
-  });
-
-  return;
-}
-
-//----------------------------------------------------------------------------------------
-//! \fn void SourceTerms::ISMCooling()
-//! \brief Add explict ISM cooling and heating source terms in the energy equations.
-//! NOTE source terms must be computed using primitive (w0) and NOT conserved (u0) vars
-
-void SourceTerms::ISMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_data,
-                             const Real bdt, DvceArray5D<Real> &u0) {
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
-  int is = indcs.is, ie = indcs.ie;
-  int js = indcs.js, je = indcs.je;
-  int ks = indcs.ks, ke = indcs.ke;
-  int nmb1 = pmy_pack->nmb_thispack - 1;
-  Real use_e = eos_data.use_e;
-  Real gamma = eos_data.gamma;
-  Real gm1 = gamma - 1.0;
-  Real heating_rate = hrate;
-  Real temp_unit = pmy_pack->punit->temperature_cgs();
-  Real n_unit = pmy_pack->punit->density_cgs()/pmy_pack->punit->mu()
-                /pmy_pack->punit->atomic_mass_unit_cgs;
-  Real cooling_unit = pmy_pack->punit->pressure_cgs()/pmy_pack->punit->time_cgs()
-                      /n_unit/n_unit;
-  Real heating_unit = pmy_pack->punit->pressure_cgs()/pmy_pack->punit->time_cgs()/n_unit;
-
-  par_for("cooling", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
-  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    // temperature in cgs unit
-    Real temp = 1.0;
-    if (use_e) {
-      temp = temp_unit*w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)*gm1;
-    } else {
-      temp = temp_unit*w0(m,ITM,k,j,i);
-    }
-
-    Real lambda_cooling = ISMCoolFn(temp)/cooling_unit;
-    Real gamma_heating = heating_rate/heating_unit;
-
-    u0(m,IEN,k,j,i) -= bdt * w0(m,IDN,k,j,i) *
-                        (w0(m,IDN,k,j,i) * lambda_cooling - gamma_heating);
   });
 
   return;
@@ -213,6 +196,21 @@ void SourceTerms::RelCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
   });
 
   return;
+}
+
+bool SourceTerms::CoolingHistoryEnabled() const {
+  return (pcooling != nullptr && pcooling->HistoryEnabled());
+}
+
+int SourceTerms::AddCoolingHistoryLabels(std::string *labels, int start,
+                                         int max_labels) const {
+  return (pcooling != nullptr) ? pcooling->AddHistoryLabels(labels, start, max_labels) : 0;
+}
+
+int SourceTerms::AddCoolingHistoryData(Real *hdata, int start, int max_data,
+                                       Real current_time) {
+  return (pcooling != nullptr) ? pcooling->AddHistoryData(hdata, start, max_data,
+                                                         current_time) : 0;
 }
 
 //----------------------------------------------------------------------------------------

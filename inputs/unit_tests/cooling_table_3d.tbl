@@ -1,0 +1,38 @@
+ATHENAK_COOLING_TABLE 1
+ndim 3
+value_kind Lambda
+value_units code
+value_scale linear
+bounds clamp
+data_order c_row_major_last_axis_fastest
+axis0 temperature code linear 0.0 2.0 3
+axis1 density code linear 0.0 2.0 3 density_kind=mass_density
+axis2 scalar code linear -1.0 1.0 3 scalar_index=0
+data
+4.0e-3
+5.0e-3
+6.0e-3
+7.0e-3
+8.0e-3
+9.0e-3
+1.0e-2
+1.1e-2
+1.2e-2
+6.0e-3
+7.0e-3
+8.0e-3
+9.0e-3
+1.0e-2
+1.1e-2
+1.2e-2
+1.3e-2
+1.4e-2
+8.0e-3
+9.0e-3
+1.0e-2
+1.1e-2
+1.2e-2
+1.3e-2
+1.4e-2
+1.5e-2
+1.6e-2

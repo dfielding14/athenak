@@ -117,8 +117,17 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     pcond = nullptr;
   }
 
-  // Source terms (if needed)
-  if (pin->DoesBlockExist("mhd_srcterms")) {
+  // Source terms (if needed).  The standalone <cooling> block also routes through
+  // SourceTerms so it can participate in the ordinary stage and timestep hooks.
+  const bool cooling_enabled = pin->DoesBlockExist("cooling") &&
+                               pin->GetOrAddBoolean("cooling", "enabled", false);
+  const bool legacy_cooling_requested =
+      pin->DoesParameterExist("mhd", "ism_cooling") ||
+      pin->DoesParameterExist("mhd", "cgm_cooling") ||
+      pin->DoesParameterExist("mhd_srcterms", "ism_cooling") ||
+      pin->DoesParameterExist("mhd_srcterms", "cgm_cooling");
+  if (pin->DoesBlockExist("mhd_srcterms") || cooling_enabled ||
+      legacy_cooling_requested) {
     psrc = new SourceTerms("mhd_srcterms", ppack, pin);
   }
 
