@@ -18,6 +18,7 @@
 #include <list>
 
 #include "athena.hpp"
+#include "file_sharding.hpp"
 #include "outputs/io_wrapper.hpp"
 
 #if OPENMP_PARALLEL_ENABLED
@@ -74,9 +75,8 @@ class ParameterInput {
   std::list<InputBlock> block;
 
   // functions
-  void CheckBlockNames();
   void LoadFromStream(std::istream &is);
-  void LoadFromFile(IOWrapper &input, bool single_file_per_rank=false);
+  void LoadFromFile(IOWrapper &input, FileShardMode shard_mode=FileShardMode::shared);
   void ModifyFromCmdline(int argc, char *argv[]);
   void ParameterDump(std::ostream& os);
   bool DoesBlockExist(std::string name);
