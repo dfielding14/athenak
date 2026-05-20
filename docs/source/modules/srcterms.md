@@ -39,5 +39,5 @@ stored in the fluid is grid-frame velocity, so lab-frame boundary data should
 be transformed as `v_grid = v_lab - V_frame`.
 
 For cloud-crushing runs with ISM cooling, `hrate_auto = true` can set
-`hydro/hrate` from `problem/pressure_over_k`, and
+`hydro_srcterms/hrate` from `problem/pressure_over_k`, and
 `cooling_timestep_factor` scales the cooling timestep estimate.

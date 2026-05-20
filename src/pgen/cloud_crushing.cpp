@@ -176,7 +176,7 @@ void FindStableISMEquilibria(const Real pressure_over_k, const Real hrate,
 
   if (stable_roots.size() < 2) {
     FatalCloudCrushingInput("Could not find both cold and warm stable ISM equilibria. "
-                            "Adjust hydro/hrate, problem/pressure_over_k, or the "
+                            "Adjust hydro_srcterms/hrate, problem/pressure_over_k, or the "
                             "temperature search interval.");
   }
   temp_cold = stable_roots.front();
@@ -201,8 +201,9 @@ void ReadCloudCrushingParameters(ParameterInput *pin, Mesh *pm) {
   if (pmbp->punit == nullptr) {
     FatalCloudCrushingInput("cloud_crushing with ISM cooling requires a <units> block.");
   }
-  if (!pin->GetOrAddBoolean("hydro", "ism_cooling", false)) {
-    FatalCloudCrushingInput("cloud_crushing requires hydro/ism_cooling = true.");
+  if (!pin->DoesBlockExist("hydro_srcterms") ||
+      !pin->GetOrAddBoolean("hydro_srcterms", "ism_cooling", false)) {
+    FatalCloudCrushingInput("cloud_crushing requires hydro_srcterms/ism_cooling = true.");
   }
   if (!pmbp->phydro->peos->eos_data.is_ideal) {
     FatalCloudCrushingInput("cloud_crushing requires an ideal-gas hydro EOS.");
@@ -210,7 +211,7 @@ void ReadCloudCrushingParameters(ParameterInput *pin, Mesh *pm) {
 
   CloudCrushingData data;
   data.pressure_over_k = pin->GetOrAddReal("problem", "pressure_over_k", 3162.277660168379);
-  data.hrate = pin->GetReal("hydro", "hrate");
+  data.hrate = pin->GetReal("hydro_srcterms", "hrate");
   data.n_unit = pmbp->punit->density_cgs()/pmbp->punit->mu()/
                 units::Units::atomic_mass_unit_cgs;
   data.pressure_unit = pmbp->punit->pressure_cgs();

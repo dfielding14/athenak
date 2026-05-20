@@ -53,6 +53,8 @@ rsolver     = hllc
 fofc        = true
 gamma       = 1.666666666666667
 tfloor      = 0.1   # code temperature, about 11 K with the default units
+
+<hydro_srcterms>
 ism_cooling = true
 hrate       = 2.0e-26
 hrate_auto  = false

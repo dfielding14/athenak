@@ -36,6 +36,7 @@
 ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     user_bcs(false),
     user_srcs(false),
+    user_dt(false),
     user_hist(false),
     pmy_mesh_(pm) {
   // check for user-defined boundary conditions
@@ -46,6 +47,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
   }
 
   user_srcs = pin->GetOrAddBoolean("problem","user_srcs",false);
+  user_dt = pin->GetOrAddBoolean("problem","user_dt",false);
   user_hist = pin->GetOrAddBoolean("problem","user_hist",false);
 
   // second argument false since this IS NOT a restart
@@ -65,6 +67,15 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     if (user_srcs_func == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "User SRCs specified in <problem> block, but not "
+                << "enrolled by UserProblem()." << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+  // Check that user defined timestep outputs were enrolled if needed
+  if (user_dt) {
+    if (user_time_step_func == nullptr) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "User timestep specified in <problem> block, but not "
                 << "enrolled by UserProblem()." << std::endl;
       exit(EXIT_FAILURE);
     }
@@ -92,6 +103,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                                    bool single_file_per_rank) :
     user_bcs(false),
     user_srcs(false),
+    user_dt(false),
     user_hist(false),
     pmy_mesh_(pm) {
   // check for user-defined boundary conditions
@@ -101,6 +113,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     }
   }
   user_srcs = pin->GetOrAddBoolean("problem","user_srcs",false);
+  user_dt = pin->GetOrAddBoolean("problem","user_dt",false);
   user_hist = pin->GetOrAddBoolean("problem","user_hist",false);
 
   // get spatial dimensions of arrays, including ghost zones
@@ -633,6 +646,15 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     if (user_srcs_func == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "User SRCs specified in <problem> block, but not "
+                << "enrolled by UserProblem()." << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+  // Check that user defined timestep outputs were enrolled if needed
+  if (user_dt) {
+    if (user_time_step_func == nullptr) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "User timestep specified in <problem> block, but not "
                 << "enrolled by UserProblem()." << std::endl;
       exit(EXIT_FAILURE);
     }

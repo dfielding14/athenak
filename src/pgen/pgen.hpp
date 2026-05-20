@@ -18,6 +18,7 @@
 using ProblemFinalizeFnPtr = void (*)(ParameterInput *pin, Mesh *pm);
 using UserBoundaryFnPtr = void (*)(Mesh* pm);
 using UserSrctermFnPtr = void (*)(Mesh* pm, const Real bdt);
+using UserTimestepFnPtr = void (*)(Mesh* pm);
 using UserRefinementFnPtr = void (*)(MeshBlockPack* pmbp);
 using UserHistoryFnPtr = void (*)(HistoryData *pdata, Mesh *pm);
 
@@ -39,6 +40,12 @@ class ProblemGenerator {
   // true if user srcterms are specified
   bool user_srcs;
 
+  // true if user timestep constraints are specified
+  bool user_dt;
+
+  // storage for user timestep constraints
+  Real dtnew = 1e10;
+
   // true if user history outputs are specified
   bool user_hist;
 
@@ -51,6 +58,7 @@ class ProblemGenerator {
   // function pointer for user-enrolled BCs.  Called in ApplyPhysicalBCs in task list
   UserBoundaryFnPtr user_bcs_func=nullptr;
   UserSrctermFnPtr user_srcs_func=nullptr;
+  UserTimestepFnPtr user_time_step_func=nullptr;
   UserRefinementFnPtr user_ref_func=nullptr;
   UserHistoryFnPtr user_hist_func=nullptr;
 

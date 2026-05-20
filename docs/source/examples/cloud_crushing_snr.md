@@ -8,7 +8,7 @@ Taylor-von Neumann-Sedov blast wave.
 The problem is built around three pieces:
 
 - ISM cooling and heating set the cold and warm thermal equilibria at the
-  requested `problem/pressure_over_k` and resolved `hydro/hrate`.
+  requested `problem/pressure_over_k` and resolved `hydro_srcterms/hrate`.
 - The cold cloud starts as a smoothed density sphere embedded in the warm phase.
 - The `inner_x1` user boundary samples the full xi-dependent TVNS interior
   profile, not just a constant post-shock state.
@@ -83,6 +83,8 @@ the requested pressure:
 ```ini
 <hydro>
 tfloor      = 0.1
+
+<hydro_srcterms>
 hrate_auto  = true
 hrate_reference = 2.0e-26
 hrate_reference_pressure_over_k = 3.162277660168379e3
@@ -97,8 +99,8 @@ hrate = hrate_reference
       / hrate_reference_pressure_over_k
 ```
 
-and writes the resolved value back into `<hydro>`, so source terms and the
-problem generator use the same heating rate. This preserves the default
+and writes the resolved value back into `<hydro_srcterms>`, so source terms and
+the problem generator use the same heating rate. This preserves the default
 cold/warm equilibrium temperatures while allowing a different ambient
 `P/k_B`.
 
