@@ -76,6 +76,7 @@ struct MHDTaskIDs {
   TaskID prol;
   TaskID c2p;
   TaskID newdt;
+  TaskID saveflx;
   TaskID csend;
   TaskID crecv;
 };
@@ -139,6 +140,9 @@ class MHD {
   DvceArray5D<Real> wsaved;
   DvceArray5D<Real> bccsaved;
 
+  bool uflxidn_saved = false;
+  DvceFaceFld4D<Real> uflxidnsaved;
+
   // following used for FOFC algorithm
   DvceArray4D<bool> fofc;  // flag for each cell to indicate if FOFC is needed
   bool use_fofc = false;   // flag to enable FOFC
@@ -183,6 +187,7 @@ class MHD {
   TaskStatus Prolongate(Driver* pdrive, int stage);
   TaskStatus ConToPrim(Driver *d, int stage);
   TaskStatus NewTimeStep(Driver *d, int stage);
+  TaskStatus SaveFlux(Driver *d, int stage);
   // ...in "after_stagen_tl" task list
   TaskStatus ClearSend(Driver *d, int stage);
   TaskStatus ClearRecv(Driver *d, int stage);  // also in Driver::Initialize
@@ -193,6 +198,7 @@ class MHD {
 
   // first-order flux correction
   void FOFC(Driver *d, int stage);
+  void SetSaveUFlxIdn();
 
   DvceArray5D<Real> utest, bcctest;  // scratch arrays for FOFC
 

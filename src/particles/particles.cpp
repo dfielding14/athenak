@@ -9,11 +9,15 @@
 #include <iostream>
 #include <string>
 #include <algorithm>
+#include <limits>
 
 #include "athena.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
+#include "eos/eos.hpp"
+#include "hydro/hydro.hpp"
+#include "mhd/mhd.hpp"
 #include "bvals/bvals.hpp"
 #include "particles.hpp"
 
@@ -30,21 +34,13 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
 
-  // read number of particles per cell, and calculate number of particles this pack
-  Real ppc = pin->GetOrAddReal("particles","ppc",1.0);
-
-  // compute number of particles as real number, since ppc can be < 1
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
-  int ncells = indcs.nx1*indcs.nx2*indcs.nx3;
-  Real r_npart = ppc*static_cast<Real>((pmy_pack->nmb_thispack)*ncells);
-  // then cast to integer
-  nprtcl_thispack = static_cast<int>(r_npart);
-
   // select particle type
   {
     std::string ptype = pin->GetString("particles","particle_type");
     if (ptype.compare("cosmic_ray") == 0) {
       particle_type = ParticleType::cosmic_ray;
+    } else if (ptype.compare("lagrangian_mc") == 0) {
+      particle_type = ParticleType::lagrangian_mc;
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle type = '" << ptype << "' not recognized"
@@ -58,12 +54,22 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::string ppush = pin->GetString("particles","pusher");
     if (ppush.compare("drift") == 0) {
       pusher = ParticlesPusher::drift;
+    } else if (ppush.compare("lagrangian_mc") == 0) {
+      pusher = ParticlesPusher::lagrangian_mc;
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Particle pusher must be specified in <particles> block"
                 <<std::endl;
       std::exit(EXIT_FAILURE);
     }
+  }
+
+  if (particle_type == ParticleType::lagrangian_mc &&
+      pusher != ParticlesPusher::lagrangian_mc) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "particle_type=lagrangian_mc requires "
+              << "pusher=lagrangian_mc" << std::endl;
+    std::exit(EXIT_FAILURE);
   }
 
   // set dimensions of particle arrays. Note particles only work in 2D/3D
@@ -75,10 +81,47 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   switch (particle_type) {
     case ParticleType::cosmic_ray:
       {
+        Real ppc = pin->GetOrAddReal("particles","ppc",1.0);
+        auto &indcs = pmy_pack->pmesh->mb_indcs;
+        int ncells = indcs.nx1*indcs.nx2*indcs.nx3;
+        Real r_npart = ppc*static_cast<Real>((pmy_pack->nmb_thispack)*ncells);
+        nprtcl_thispack = static_cast<int>(r_npart);
         int ndim=4;
         if (pmy_pack->pmesh->three_d) {ndim+=2;}
         nrdata = ndim;
         nidata = 2;
+        break;
+      }
+    case ParticleType::lagrangian_mc:
+      {
+        if (pmy_pack->phydro == nullptr && pmy_pack->pmhd == nullptr) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "lagrangian_mc particles require hydro or mhd"
+                    << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        EquationOfState *peos = (pmy_pack->phydro != nullptr) ?
+                                pmy_pack->phydro->peos : pmy_pack->pmhd->peos;
+        if (!peos->eos_data.is_ideal) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "lagrangian_mc thermo tracers require an ideal-gas "
+                    << "EOS in this implementation" << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        int nscalars = (pmy_pack->phydro != nullptr) ?
+                       pmy_pack->phydro->nscalars : pmy_pack->pmhd->nscalars;
+        nprtcl_thispack = 0;
+        nrdata = LMC_SCALAR0 + nscalars;
+        nidata = PSEEDID + 1;
+        random_seed = pin->GetOrAddInteger("particles","random_seed",12345);
+        next_tracer_tag = pin->GetOrAddInteger("particles","next_tracer_tag",0);
+        ParseTracerSeedSchedules(pin);
+        if (pmy_pack->phydro != nullptr) {
+          pmy_pack->phydro->SetSaveUFlxIdn();
+        } else {
+          pmy_pack->pmhd->SetSaveUFlxIdn();
+        }
+        dtnew = std::numeric_limits<Real>::max();
         break;
       }
     default:
@@ -103,6 +146,8 @@ Particles::~Particles() {
 // those with tag numbers less than ntrack.
 
 void Particles::CreateParticleTags(ParameterInput *pin) {
+  if (particle_type == ParticleType::lagrangian_mc) return;
+
   std::string assign = pin->GetOrAddString("particles","assign_tag","index_order");
 
   // tags are assigned sequentially within this rank, starting at 0 with rank=0

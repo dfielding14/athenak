@@ -1,0 +1,103 @@
+# AthenaK input file for lagrangian_mc thermodynamic tracer smoke tests
+
+<comment>
+problem   = Lagrangian Monte-Carlo thermodynamic tracers
+
+<job>
+basename  = lagrangian_mc_thermo
+
+<mesh>
+nghost    = 3
+nx1       = 32
+x1min     = -0.5
+x1max     =  0.5
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 32
+x2min     = -0.5
+x2max     =  0.5
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = -0.5
+x3max     =  0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 32
+nx2       = 32
+nx3       = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim       = 4
+tlim       = 0.02
+ndiag      = 1
+
+<hydro>
+eos         = ideal
+reconstruct = plm
+rsolver     = hllc
+nscalars    = 0
+gamma       = 1.6666666666666667
+
+<particles>
+particle_type = lagrangian_mc
+pusher        = lagrangian_mc
+random_seed   = 12345
+
+<tracer_seed1>
+id              = 1
+start_time      = 0.0
+end_time        = 0.0
+cadence         = -1.0
+count_per_event = 16
+weight          = mass
+region          = all
+seed            = 24680
+
+<tracer_seed2>
+id              = 2
+start_time      = 0.01
+end_time        = 0.02
+cadence         = 0.01
+count_per_event = 8
+weight          = volume
+region          = box
+x1min           = -0.25
+x1max           =  0.25
+x2min           = -0.25
+x2max           =  0.25
+target          = temperature
+target_min      = 0.1
+seed            = 13579
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp       = 1.0e-3
+dens      = 1.0
+pgas      = 0.6
+vx0       = 0.0
+along_x1  = true
+along_x2  = false
+along_x3  = false
+
+<output1>
+file_type = prtcl_thermo_history
+dt        = 0.01
+
+<output2>
+file_type = pvtk
+variable  = prtcl_all
+dt        = 0.02
+
+<output3>
+file_type            = rst
+dt                   = 0.02
+single_file_per_rank = true

@@ -101,10 +101,12 @@ add_executable(
         outputs/spherical_surface.cpp
         outputs/coarsened_binary.cpp
         outputs/track_prtcl.cpp
+        outputs/prtcl_thermo_history.cpp
         outputs/vtk_mesh.cpp
         outputs/vtk_prtcl.cpp
 
         particles/particles.cpp
+        particles/particles_lagrangian_mc.cpp
         particles/particles_pushers.cpp
         particles/particles_tasks.cpp
         outputs/pdf.cpp

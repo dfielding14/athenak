@@ -1,0 +1,104 @@
+# AthenaK AMR smoke input for lagrangian_mc thermodynamic tracers
+
+<comment>
+problem   = Lagrangian Monte-Carlo thermodynamic tracers with AMR
+
+<job>
+basename  = lagrangian_mc_thermo_amr
+
+<mesh>
+nghost    = 2
+nx1       = 32
+x1min     = -0.5
+x1max     =  0.5
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 32
+x2min     = -0.5
+x2max     =  0.5
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = -0.5
+x3max     =  0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 16
+nx2       = 16
+nx3       = 1
+
+<mesh_refinement>
+refinement          = adaptive
+num_levels          = 2
+refinement_interval = 1
+max_nmb_per_rank    = 128
+
+<amr_criterion0>
+method    = min_max
+variable  = hydro_w_d
+value_max = 1.0005
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim       = 6
+tlim       = 0.03
+ndiag      = 1
+
+<hydro>
+eos         = ideal
+reconstruct = plm
+rsolver     = hllc
+nscalars    = 0
+gamma       = 1.6666666666666667
+
+<particles>
+particle_type = lagrangian_mc
+pusher        = lagrangian_mc
+random_seed   = 67890
+
+<tracer_seed1>
+id              = 1
+start_time      = 0.0
+end_time        = 0.0
+cadence         = -1.0
+count_per_event = 24
+weight          = mass
+region          = all
+seed            = 112233
+
+<tracer_seed2>
+id              = 2
+start_time      = 0.01
+end_time        = 0.02
+cadence         = 0.01
+count_per_event = 8
+weight          = volume
+region          = sphere
+center1         = 0.0
+center2         = 0.0
+center3         = 0.0
+radius          = 0.3
+target          = temperature
+target_min      = 0.1
+seed            = 445566
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp       = 1.0e-3
+dens      = 1.0
+pgas      = 0.6
+vx0       = 0.0
+along_x1  = true
+along_x2  = false
+along_x3  = false
+
+<output1>
+file_type = prtcl_thermo_history
+dt        = 0.01

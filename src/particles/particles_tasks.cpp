@@ -28,15 +28,24 @@ namespace particles {
 void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) {
   TaskID none(0);
 
-  // particle integration done in "before_timeintegrator" task list
-  id.push   = tl["before_timeintegrator"]->AddTask(&Particles::Push, this, none);
-  id.newgid = tl["before_timeintegrator"]->AddTask(&Particles::NewGID, this, id.push);
-  id.count  = tl["before_timeintegrator"]->AddTask(&Particles::SendCnt, this, id.newgid);
-  id.irecv  = tl["before_timeintegrator"]->AddTask(&Particles::InitRecv, this, id.count);
-  id.sendp  = tl["before_timeintegrator"]->AddTask(&Particles::SendP, this, id.irecv);
-  id.recvp  = tl["before_timeintegrator"]->AddTask(&Particles::RecvP, this, id.sendp);
-  id.crecv  = tl["before_timeintegrator"]->AddTask(&Particles::ClearRecv, this, id.recvp);
-  id.csend  = tl["before_timeintegrator"]->AddTask(&Particles::ClearSend, this, id.crecv);
+  std::shared_ptr<TaskList> list = tl["before_timeintegrator"];
+  if (pusher == ParticlesPusher::lagrangian_mc) {
+    list = tl["after_timeintegrator"];
+  }
+
+  id.push   = list->AddTask(&Particles::Push, this, none);
+  id.newgid = list->AddTask(&Particles::NewGID, this, id.push);
+  id.count  = list->AddTask(&Particles::SendCnt, this, id.newgid);
+  id.irecv  = list->AddTask(&Particles::InitRecv, this, id.count);
+  id.sendp  = list->AddTask(&Particles::SendP, this, id.irecv);
+  id.recvp  = list->AddTask(&Particles::RecvP, this, id.sendp);
+  id.crecv  = list->AddTask(&Particles::ClearRecv, this, id.recvp);
+  id.csend  = list->AddTask(&Particles::ClearSend, this, id.crecv);
+  if (pusher == ParticlesPusher::lagrangian_mc) {
+    id.mradj  = list->AddTask(&Particles::AdjustMeshRefinement, this, id.csend);
+    id.seed   = list->AddTask(&Particles::SeedDueTracers, this, id.mradj);
+    id.sample = list->AddTask(&Particles::SampleThermodynamicsTask, this, id.seed);
+  }
 
   return;
 }
@@ -108,6 +117,24 @@ TaskStatus Particles::ClearRecv(Driver *pdrive, int stage) {
   // check receives of particles complete
   TaskStatus tstat = pbval_part->ClearPrtclRecv();
   return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+
+TaskStatus Particles::SeedDueTracers(Driver *pdrive, int stage) {
+  if (particle_type == ParticleType::lagrangian_mc) {
+    SeedTracersAtTime(pmy_pack->pmesh->time + pmy_pack->pmesh->dt, false);
+  }
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+
+TaskStatus Particles::SampleThermodynamicsTask(Driver *pdrive, int stage) {
+  if (particle_type == ParticleType::lagrangian_mc) {
+    SampleThermodynamics();
+  }
+  return TaskStatus::complete;
 }
 
 } // namespace particles

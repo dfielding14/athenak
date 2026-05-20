@@ -92,7 +92,8 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
       if (opar.file_type.compare("hst") != 0 &&
           opar.file_type.compare("rst") != 0 &&
           opar.file_type.compare("log") != 0 &&
-          opar.file_type.compare("trk") != 0) {
+          opar.file_type.compare("trk") != 0 &&
+          opar.file_type.compare("prtcl_thermo_history") != 0) {
         opar.variable = pin->GetString(opar.block_name, "variable");
         opar.file_id = pin->GetOrAddString(opar.block_name,"id",opar.variable);
       }
@@ -182,8 +183,12 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
       // set output variable and optional file id (default is output variable name)
       if (opar.file_type.compare("hst") != 0 &&
           opar.file_type.compare("rst") != 0 &&
-          opar.file_type.compare("log") != 0) {
+          opar.file_type.compare("log") != 0 &&
+          opar.file_type.compare("prtcl_thermo_history") != 0) {
         opar.variable = pin->GetString(opar.block_name, "variable");
+        opar.file_id = pin->GetOrAddString(opar.block_name,"id",opar.variable);
+      } else if (opar.file_type.compare("prtcl_thermo_history") == 0) {
+        opar.variable = "prtcl_thermo_history";
         opar.file_id = pin->GetOrAddString(opar.block_name,"id",opar.variable);
       }
 
@@ -240,6 +245,9 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("trk") == 0) {
         pnode = new TrackedParticleOutput(pin,pm,opar);
+        pout_list.insert(pout_list.begin(),pnode);
+      } else if (opar.file_type.compare("prtcl_thermo_history") == 0) {
+        pnode = new ParticleThermoHistoryOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("cbin") == 0) {
         opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,

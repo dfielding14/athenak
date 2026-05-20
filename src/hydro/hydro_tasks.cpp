@@ -54,7 +54,8 @@ void Hydro::AssembleHydroTasks(std::map<std::string, std::shared_ptr<TaskList>> 
   // assemble "stagen" task list
   id.copyu     = tl["stagen"]->AddTask(&Hydro::CopyCons, this, none);
   id.flux      = tl["stagen"]->AddTask(&Hydro::Fluxes,this,id.copyu);
-  id.sendf     = tl["stagen"]->AddTask(&Hydro::SendFlux, this, id.flux);
+  id.saveflx   = tl["stagen"]->AddTask(&Hydro::SaveFlux, this, id.flux);
+  id.sendf     = tl["stagen"]->AddTask(&Hydro::SendFlux, this, id.saveflx);
   id.recvf     = tl["stagen"]->AddTask(&Hydro::RecvFlux, this, id.sendf);
   id.rkupdt    = tl["stagen"]->AddTask(&Hydro::RKUpdate, this, id.recvf);
   id.srctrms   = tl["stagen"]->AddTask(&Hydro::HydroSrcTerms, this, id.rkupdt);
