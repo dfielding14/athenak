@@ -87,8 +87,17 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     pcond = nullptr;
   }
 
-  // Source terms (if needed)
-  if (pin->DoesBlockExist("hydro_srcterms")) {
+  // Source terms (if needed).  The standalone <cooling> block also routes through
+  // SourceTerms so it can participate in the ordinary stage and timestep hooks.
+  const bool cooling_enabled = pin->DoesBlockExist("cooling") &&
+                               pin->GetOrAddBoolean("cooling", "enabled", false);
+  const bool legacy_cooling_requested =
+      pin->DoesParameterExist("hydro", "ism_cooling") ||
+      pin->DoesParameterExist("hydro", "cgm_cooling") ||
+      pin->DoesParameterExist("hydro_srcterms", "ism_cooling") ||
+      pin->DoesParameterExist("hydro_srcterms", "cgm_cooling");
+  if (pin->DoesBlockExist("hydro_srcterms") || cooling_enabled ||
+      legacy_cooling_requested) {
     psrc = new SourceTerms("hydro_srcterms", ppack, pin);
   }
 

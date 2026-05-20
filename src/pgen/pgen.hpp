@@ -15,11 +15,26 @@
 #include "geodesic-grid/spherical_grid.hpp"
 #include "parameter_input.hpp"
 
+struct EOS_Data;
+
+namespace cooling {
+struct RuntimeData;
+struct TimestepData;
+}
+
 using ProblemFinalizeFnPtr = void (*)(ParameterInput *pin, Mesh *pm);
 using UserBoundaryFnPtr = void (*)(Mesh* pm);
 using UserSrctermFnPtr = void (*)(Mesh* pm, const Real bdt);
 using UserRefinementFnPtr = void (*)(MeshBlockPack* pmbp);
 using UserHistoryFnPtr = void (*)(HistoryData *pdata, Mesh *pm);
+using UserCoolingSourceFnPtr = void (*)(MeshBlockPack *pmbp,
+    const DvceArray5D<Real> &w0, const EOS_Data &eos_data,
+    const cooling::RuntimeData &runtime, const Real bdt,
+    DvceArray5D<Real> &u0, Real &gross_energy, Real &net_energy);
+using UserCoolingTimeStepFnPtr = void (*)(MeshBlockPack *pmbp,
+    const DvceArray5D<Real> &w0, const EOS_Data &eos_data,
+    const cooling::RuntimeData &runtime, const cooling::TimestepData &timestep,
+    Real &dtnew);
 
 //----------------------------------------------------------------------------------------
 //! \class ProblemGenerator
@@ -53,6 +68,11 @@ class ProblemGenerator {
   UserSrctermFnPtr user_srcs_func=nullptr;
   UserRefinementFnPtr user_ref_func=nullptr;
   UserHistoryFnPtr user_hist_func=nullptr;
+  // Optional hooks used when <cooling>/cooling_model or heating_model is "user".
+  // UserProblem() should set these to host launcher functions that run any needed
+  // device kernels and report domain-integrated gross/net cooling energies.
+  UserCoolingSourceFnPtr user_cooling_func=nullptr;
+  UserCoolingTimeStepFnPtr user_cooling_timestep_func=nullptr;
 
   // predefined problem generator functions (default test suite)
   void CallProblemGenerator(ParameterInput *pin, bool is_restart);
