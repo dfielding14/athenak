@@ -29,6 +29,7 @@
 #include "coordinates/adm.hpp"
 #include "z4c/z4c.hpp"
 #include "z4c/z4c_amr.hpp"
+#include "srcterms/frame_tracker.hpp"
 #include "prolongation.hpp"
 #include "restriction.hpp"
 
@@ -633,6 +634,9 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   pm->pmb_pack->AddMeshBlocks(pin);
   pm->pmb_pack->AddCoordinates(pin);
   pm->pmb_pack->pmb->SetNeighbors(pm->ptree, pm->rank_eachmb);
+  if (pm->pmb_pack->pframe_tracker != nullptr) {
+    pm->pmb_pack->pframe_tracker->UpdateMeshBlockPack(pm->pmb_pack);
+  }
 
   Kokkos::realloc(fc_amr_repair, new_nmb_total);
   for (int m=0; m<new_nmb_total; ++m) {

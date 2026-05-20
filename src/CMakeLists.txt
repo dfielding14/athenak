@@ -149,6 +149,7 @@ add_executable(
 
         srcterms/cooling.cpp
         srcterms/initial_perturbations.cpp
+        srcterms/frame_tracker.cpp
         srcterms/srcterms.cpp
         srcterms/srcterms_newdt.cpp
         srcterms/turb_driver.cpp

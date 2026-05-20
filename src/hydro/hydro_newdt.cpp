@@ -19,6 +19,7 @@
 #include "hydro.hpp"
 #include "diffusion/conduction.hpp"
 #include "srcterms/srcterms.hpp"
+#include "pgen/pgen.hpp"
 
 namespace hydro {
 
@@ -130,6 +131,12 @@ TaskStatus Hydro::NewTimeStep(Driver *pdrive, int stage) {
   // compute source terms timestep
   if (psrc != nullptr) {
     psrc->NewTimeStep(w0, peos->eos_data);
+  }
+
+  // Compute optional problem-specific timestep constraints.
+  if (pmy_pack->pmesh->pgen->user_dt) {
+    (pmy_pack->pmesh->pgen->user_time_step_func)(pmy_pack->pmesh);
+    dtnew = std::min(dtnew, pmy_pack->pmesh->pgen->dtnew);
   }
 
   return TaskStatus::complete;

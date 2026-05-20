@@ -1,0 +1,111 @@
+# AthenaK input file for a cooled cloud-crushing test with Sedov-Taylor inflow.
+
+<comment>
+problem   = Cold cloud hit by a Sedov-Taylor SNR boundary inflow
+reference = Tests shared frame tracking with ISM cooling and user boundary driving
+
+<job>
+basename  = CloudCrushingSNR
+
+<mesh>
+nghost    = 3
+nx1       = 192
+x1min     = -2.0
+x1max     = 10.0
+ix1_bc    = user
+ox1_bc    = outflow
+
+nx2       = 64
+x2min     = -3.0
+x2max     = 3.0
+ix2_bc    = outflow
+ox2_bc    = outflow
+
+nx3       = 64
+x3min     = -3.0
+x3max     = 3.0
+ix3_bc    = outflow
+ox3_bc    = outflow
+
+<meshblock>
+nx1       = 32
+nx2       = 16
+nx3       = 16
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.35
+nlim       = -1
+tlim       = 0.08
+ndiag      = 1
+
+<units>
+length_cgs  = 3.0856775809623245e18  # 1 pc
+time_cgs    = 3.15576e13             # 1 Myr
+mass_cgs    = 4.91416144649125e31    # 1 amu cm^-3 * (1 pc)^3
+mu          = 1.0
+
+<hydro>
+eos         = ideal
+reconstruct = plm
+rsolver     = hllc
+fofc        = true
+gamma       = 1.666666666666667
+tfloor      = 0.1   # code temperature, about 11 K with the default units
+
+<hydro_srcterms>
+ism_cooling = true
+hrate       = 2.0e-26
+hrate_auto  = false
+hrate_reference = 2.0e-26
+hrate_reference_pressure_over_k = 3.162277660168379e3
+cooling_timestep_factor = 0.1
+
+<problem>
+pressure_over_k       = 3.162277660168379e3  # P/k_B = 10^3.5 K cm^-3
+cloud_radius          = 1.0
+cloud_smoothing_width = 0.1
+cloud_center_x1       = 3.0
+cloud_center_x2       = 0.0
+cloud_center_x3       = 0.0
+inner_x1_boundary     = sedov  # sedov or constant
+sedov_energy_cgs      = 1.0e51
+sedov_origin_distance = 30.0
+sedov_radius_at_start = 31.0
+sedov_start_time      = 0.0
+# Constant inner_x1 mode uses grid-frame code-unit values by default.
+# The cgs aliases constant_density_cgs, constant_pressure_cgs, and
+# constant_vx_cgs/vy_cgs/vz_cgs are also accepted.
+constant_density     = 0.502251
+constant_pressure    = 27.30186272619203
+constant_vx          = 0.0
+constant_vy          = 0.0
+constant_vz          = 0.0
+boundary_timestep_factor = 0.15
+
+<frame_tracking>
+start_time       = 0.02
+apply_every      = 1
+diagnostic_every = 10
+axes             = x1
+x1_target        = 3.0
+target           = density
+target_min       = 5.0
+target_max       = 200.0
+mode             = pd
+tau_avg          = 0.01
+tau_relax        = 0.05
+tau_vel          = 0.05
+max_abs_boost    = 50.0
+max_boost_change = 5.0
+
+<output1>
+file_type   = hst
+data_format = %12.5e
+dt          = 1.0e-3
+
+<output2>
+file_type   = bin
+variable    = hydro_w
+dt          = 1.0e-2

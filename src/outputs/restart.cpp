@@ -28,6 +28,7 @@
 #include "z4c/compact_object_tracker.hpp"
 #include "z4c/z4c.hpp"
 #include "radiation/radiation.hpp"
+#include "srcterms/frame_tracker.hpp"
 #include "srcterms/turb_driver.hpp"
 //#include "outputs.hpp"
 
@@ -198,6 +199,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
   pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
   pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
+  if (pm->pmb_pack != nullptr && pm->pmb_pack->pframe_tracker != nullptr) {
+    pm->pmb_pack->pframe_tracker->StoreStateInParameterInput(pin);
+  }
 
   // create string holding input parameters (copy of input file)
   std::stringstream ost;
