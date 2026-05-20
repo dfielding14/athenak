@@ -41,7 +41,6 @@
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <vector>
 
 #include "athena.hpp"
 #include "globals.hpp"
@@ -69,7 +68,6 @@ ParameterInput::ParameterInput(std::string input_filename) : last_filename{} {
   infile.Open(input_filename.c_str(), IOWrapper::FileMode::read);
   LoadFromFile(infile);
   infile.Close();
-  CheckBlockNames();
 }
 
 //----------------------------------------------------------------------------------------
@@ -210,25 +208,26 @@ void ParameterInput::LoadFromStream(std::istream &is) {
 //! \fn  void ParameterInput::LoadFromFile(IOWrapper &input)
 //  \brief Read the parameters from an input or restart file.
 
-void ParameterInput::LoadFromFile(IOWrapper &input, bool single_file_per_rank) {
+void ParameterInput::LoadFromFile(IOWrapper &input, FileShardMode shard_mode) {
   std::stringstream par;
   constexpr int kBufSize = 4096;
   char buf[kBufSize];
   IOWrapperSizeT header = 0, ret, loc;
+  bool use_serial_io = UsesSerialIO(shard_mode);
 
   // search for <par_end> (reading from restart files) or EOF (reading from input file).
   do {
-    if (global_variable::my_rank == 0 || single_file_per_rank) {
-      ret = input.Read_bytes(buf, sizeof(char), kBufSize, single_file_per_rank);
+    if (global_variable::my_rank == 0 || use_serial_io) {
+      ret = input.Read_bytes(buf, sizeof(char), kBufSize, use_serial_io);
     }
 #if MPI_PARALLEL_ENABLED
     // then broadcasts it
-  if (!single_file_per_rank) {
-    MPI_Bcast(&ret, sizeof(IOWrapperSizeT), MPI_BYTE, 0, MPI_COMM_WORLD);
+  if (!use_serial_io) {
+    io_wrapper::BroadcastBytes(&ret, sizeof(IOWrapperSizeT), 0, MPI_COMM_WORLD);
     if (ret == 0) {
       break;
     }
-    MPI_Bcast(buf, ret, MPI_BYTE, 0, MPI_COMM_WORLD);
+    io_wrapper::BroadcastBytes(buf, ret, 0, MPI_COMM_WORLD);
   }
 #endif
     par.write(buf, ret); // add the buffer into the stream
@@ -239,9 +238,9 @@ void ParameterInput::LoadFromFile(IOWrapper &input, bool single_file_per_rank) {
       header = loc + 10; // store the header length
       break;
     }
-    if (header > kBufSize*10) {
+    if (header > kBufSize*40) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "<par_end> is not found in the first 40KBytes."
+                << std::endl << "<par_end> is not found in the first 160KBytes."
                 << std::endl << "Probably the file is broken or the wrong file is "
                 << "specified" << std::endl;
       std::exit(EXIT_FAILURE);
@@ -252,7 +251,7 @@ void ParameterInput::LoadFromFile(IOWrapper &input, bool single_file_per_rank) {
   // Read the stream and load the parameters
   LoadFromStream(par);
   // Seek the file to the end of the header
-  input.Seek(header, single_file_per_rank);
+  input.Seek(header, use_serial_io);
 
   return;
 }
@@ -338,7 +337,7 @@ void ParameterInput::AddParameter(InputBlock *pb, std::string name, std::string 
     for (auto it = pb->line.begin(); it != pb->line.end(); ++it) {
       if (name.compare(it->param_name) == 0) {   // param name already exists
         it->param_value.assign(value);           // replace existing param value
-        it->param_comment.assign(comment);       // replace existing param comment
+        it->param_comment.assign(comment);       // replace exisiting param comment
         if (value.length() > pb->max_len_parvalue) pb->max_len_parvalue = value.length();
         return;
       }

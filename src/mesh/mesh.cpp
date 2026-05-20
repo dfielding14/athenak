@@ -18,7 +18,6 @@
 #include "parameter_input.hpp"
 #include "mesh.hpp"
 #include "coordinates/cell_locations.hpp"
-#include "refinement_criteria.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "z4c/z4c.hpp"
@@ -349,6 +348,15 @@ Mesh::~Mesh() {
   delete [] cost_eachmb;
 }
 
+void Mesh::SetRestartFileInfo(const std::string &base_dir,
+                              const std::string &file_name,
+                              FileShardMode shard_mode) {
+  restart_meta.base_dir = base_dir;
+  restart_meta.file_name = file_name;
+  restart_meta.payload_stride = 0;
+  restart_meta.file_shard_mode = shard_mode;
+}
+
 //----------------------------------------------------------------------------------------
 //! \fn void Mesh::PrintMeshDiagnostics()
 //  \brief prints information about mesh structure, always called at start of every
@@ -366,8 +374,8 @@ void Mesh::PrintMeshDiagnostics() {
 
   // if more than one physical level: compute/output # of blocks and cost per level
   if ((max_level - root_level) > 1) {
-    int nb_per_plevel[max_level];      // NOLINT(runtime/arrays)
-    float cost_per_plevel[max_level];  // NOLINT(runtime/arrays)
+    int *nb_per_plevel = new int[max_level];
+    float *cost_per_plevel = new float[max_level];
     for (int i=0; i<max_level; ++i) {
       nb_per_plevel[i] = 0;
       cost_per_plevel[i] = 0.0;
@@ -383,13 +391,15 @@ void Mesh::PrintMeshDiagnostics() {
                   << cost_per_plevel[i-root_level] <<  std::endl;
       }
     }
+    delete[] nb_per_plevel;
+    delete[] cost_per_plevel;
   }
 
   std::cout << "Number of parallel ranks = " << global_variable::nranks << std::endl;
   // if more than one rank: compute/output # of blocks and cost per rank
   if (global_variable::nranks > 1) {
-    int nb_per_rank[global_variable::nranks];    // NOLINT(runtime/arrays)
-    int cost_per_rank[global_variable::nranks];  // NOLINT(runtime/arrays)
+    int *nb_per_rank = new int[global_variable::nranks];
+    float *cost_per_rank = new float[global_variable::nranks];
     for (int i=0; i<global_variable::nranks; ++i) {
       nb_per_rank[i] = 0;
       cost_per_rank[i] = 0;
@@ -398,8 +408,8 @@ void Mesh::PrintMeshDiagnostics() {
       nb_per_rank[rank_eachmb[i]]++;
       cost_per_rank[rank_eachmb[i]] += cost_eachmb[i];
     }
-    int mincost = std::numeric_limits<int>::max();
-    int maxcost = 0, totalcost = 0;
+    float mincost = std::numeric_limits<float>::max();
+    float maxcost = 0, totalcost = 0;
     for (int i=0; i<global_variable::nranks; ++i) {
       std::cout << "  Rank = " << i << ": " << nb_per_rank[i] <<" MeshBlocks, cost = "
                 << cost_per_rank[i] << std::endl;
@@ -411,9 +421,12 @@ void Mesh::PrintMeshDiagnostics() {
     // output normalized costs per rank
     std::cout << "Load Balancing:" << std::endl;
     std::cout << "  Maximum normalized cost = "
-      << static_cast<float>(maxcost)/static_cast<float>(mincost) << ", Average = "
-      << static_cast<float>(totalcost)/static_cast<float>(global_variable::nranks*mincost)
+      << maxcost/mincost << ", Average = "
+      << totalcost/(global_variable::nranks*mincost)
       << std::endl;
+
+    delete[] nb_per_rank;
+    delete[] cost_per_rank;
   }
 }
 
@@ -625,7 +638,7 @@ void Mesh::NewTimeStep(const Real tlim) {
   }
   // Particles timestep
   if (pmb_pack->ppart != nullptr) {
-    dt = std::min(dt, (pmb_pack->ppart->dtnew) );
+    dt = std::min(dt, (cfl_no)*(pmb_pack->ppart->dtnew) );
   }
 
 #if MPI_PARALLEL_ENABLED
@@ -649,31 +662,31 @@ void Mesh::AddCoordinatesAndPhysics(ParameterInput *pinput) {
     pmb_pack->AddPhysics(pinput);
   }
 
-  // Determine total number of particles across all ranks
   particles::Particles *ppart = pmb_pack->ppart;
   if (ppart != nullptr) {
-    nprtcl_thisrank = 0;
-    for (int n=0; n<nmb_packs_thisrank; ++n) {
-      nprtcl_thisrank += pmb_pack->ppart->nprtcl_thispack;
-    }
-    nprtcl_eachrank = new int[global_variable::nranks];
-    nprtcl_eachrank[global_variable::my_rank] = nprtcl_thisrank;
-#if MPI_PARALLEL_ENABLED
-    // Share number of particles on each rank with all ranks
-    MPI_Allgather(&nprtcl_thisrank,1,MPI_INT,nprtcl_eachrank,1,MPI_INT,MPI_COMM_WORLD);
-#endif
-    for (int n=0; n<global_variable::nranks; ++n) {
-      nprtcl_total += nprtcl_eachrank[n];
-    }
-    // Assign particle IDs
-    if (pmb_pack->ppart != nullptr) {
-      pmb_pack->ppart->CreateParticleTags(pinput);
-    }
+    // Determine total number of particles across all ranks
+    CountParticles();
   }
+}
 
-  // Call RefinementCriteria constructor to enroll various criteria
-  // can only be done after the physics modules have been constructed
-  if (adaptive) {
-    pmr->pmrc = new RefinementCriteria(this, pinput);
+//----------------------------------------------------------------------------------------
+// \fn Mesh::CountParticles
+
+void Mesh::CountParticles() {
+  // Determine total number of particles across all ranks
+  particles::Particles *ppart = pmb_pack->ppart;
+  nprtcl_thisrank = 0.0;
+  for (int n=0; n<nmb_packs_thisrank; ++n) {
+    nprtcl_thisrank += pmb_pack->ppart->nprtcl_thispack;
+  }
+  nprtcl_eachrank = new int[global_variable::nranks];
+  nprtcl_eachrank[global_variable::my_rank] = nprtcl_thisrank;
+#if MPI_PARALLEL_ENABLED
+  // Share number of particles on each rank with all ranks
+  MPI_Allgather(&nprtcl_thisrank,1,MPI_INT,nprtcl_eachrank,1,MPI_INT,MPI_COMM_WORLD);
+#endif
+  nprtcl_total = 0;
+  for (int n=0; n<global_variable::nranks; ++n) {
+    nprtcl_total += nprtcl_eachrank[n];
   }
 }
