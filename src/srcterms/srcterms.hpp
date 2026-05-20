@@ -12,6 +12,7 @@
 //!  (2) general radiative cooling/heating
 //!  (3) shearing box in 2D (x-z), for both hydro and MHD
 //!  (4) random forcing to drive turbulence - implemented in TurbulenceDriver class
+//!  (5) initial-condition perturbations - implemented in InitialPerturbations class
 
 #include <map>
 #include <string>
@@ -19,6 +20,9 @@
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
 #include "parameter_input.hpp"
+
+// forward declarations
+class InitialPerturbations;
 
 namespace cooling {
 class GeneralCooling;

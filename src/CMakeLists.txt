@@ -148,6 +148,7 @@ add_executable(
         shearing_box/shearing_box_tasks.cpp
 
         srcterms/cooling.cpp
+        srcterms/initial_perturbations.cpp
         srcterms/srcterms.cpp
         srcterms/srcterms_newdt.cpp
         srcterms/turb_driver.cpp
