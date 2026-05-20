@@ -38,6 +38,7 @@
 #include "mesh/mesh.hpp"
 #include "outputs/outputs.hpp"
 #include "driver/driver.hpp"
+#include "srcterms/initial_perturbations.hpp"
 #include "utils/utils.hpp"
 
 // MPI/OpenMP headers
@@ -320,6 +321,7 @@ int main(int argc, char *argv[]) {
   if (!res_flag) {
     // set ICs using ProblemGenerator constructor for new runs
     pmesh->pgen = std::make_unique<ProblemGenerator>(pinput, pmesh);
+    ApplyInitialPerturbations(pmesh, pinput);
   } else {
     // read ICs from restart file using ProblemGenerator constructor for restarts
     pmesh->pgen = std::make_unique<ProblemGenerator>(pinput,

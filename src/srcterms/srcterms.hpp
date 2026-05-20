@@ -11,6 +11,7 @@
 //!  (1) constant (gravitational) acceleration - for RTI
 //!  (2) shearing box in 2D (x-z), for both hydro and MHD
 //!  (3) random forcing to drive turbulence - implemented in TurbulenceDriver class
+//!  (4) initial-condition perturbations - implemented in InitialPerturbations class
 
 #include <map>
 #include <string>
@@ -18,6 +19,9 @@
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
 #include "parameter_input.hpp"
+
+// forward declarations
+class InitialPerturbations;
 
 //----------------------------------------------------------------------------------------
 //! \class SourceTerms
