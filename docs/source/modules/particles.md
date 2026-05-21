@@ -218,6 +218,7 @@ state.
 | `inputs/particles/streaming_instability.athinput` | Uniform-grid streaming setup |
 | `inputs/particles/streaming_instability_amr.athinput` | AMR/MPI streaming setup |
 | `inputs/particles/streaming_instability_amr_dynamic.athinput` | Dynamic AMR remap check |
+| `inputs/particles/streaming_instability_visualization.athinput` | Amplified streaming slice output for documentation figures |
 
 The pytest coverage is in `tst/test_suite/particles/`.  The helper scripts
 `tst/scripts/particles/streaming_eigenmode.py` and
@@ -225,3 +226,17 @@ The pytest coverage is in `tst/test_suite/particles/`.  The helper scripts
 run short drag-deposition timing sweeps.  The profiling helper accepts `--np` and
 `--extra` so the same script can time dynamic-AMR MPI cases that exercise particle
 sendlist packing as well as local deposition atomics.
+
+The documentation figures and numerical summary served by the GitHub Pages site are
+regenerated with:
+
+```bash
+python tst/scripts/particles/generate_drag_particle_figures.py \
+  --athena build/src/athena \
+  --mpi-athena build-mpi/src/athena \
+  --np 2
+```
+
+That script reruns the drag-relaxation, ideal-gas energy, uniform streaming, AMR/MPI
+streaming, dynamic-AMR remap, and visualization inputs, then writes the checked figures
+to `docs/source/_static/particles/`.

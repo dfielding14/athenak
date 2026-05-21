@@ -243,3 +243,30 @@ The CI-friendly tests are:
 
 The second file includes both the AMR/MPI growth fit and dynamic AMR particle-remap smoke
 tests, including a higher-particle-count run with smaller MeshBlocks.
+
+## Documentation Figures and Test Results
+
+The GitHub Pages documentation includes checked-in figures generated from actual AthenaK
+run products with `tst/scripts/particles/generate_drag_particle_figures.py`.  The script
+also writes the machine-readable summary
+[`drag_particle_validation_summary.json`](../_static/particles/drag_particle_validation_summary.json).
+
+| Figure | Inputs and tests represented | What to check |
+| --- | --- | --- |
+| Drag relaxation and conservation | `inputs/tests/particle_drag_relaxation.athinput`; `test_drag_relaxation`; `test_drag_energy_conservation_ideal_gas` | Relative particle-gas velocity follows the stopping-time decay, total momentum stays below the `1e-3` tolerance, and ideal-gas total energy stays below the `1e-4` tolerance. |
+| Streaming growth | `inputs/particles/streaming_instability.athinput`; `inputs/particles/streaming_instability_amr.athinput`; uniform and AMR/MPI growth tests | Fitted growth rates follow the linear eigenvalue while particle mass remains conserved to the test floor. |
+| Dynamic AMR remap | `inputs/particles/streaming_instability_amr_dynamic.athinput`; dynamic AMR/MPI remap tests, including the higher-particle-count case | Histories remain finite through remap and the total particle mass is unchanged. |
+| Streaming slice with particles | `inputs/particles/streaming_instability_visualization.athinput` | Mesh VTK gas and particle-mass-density slices are plotted with PVTK particle positions overlaid. |
+
+Fatal input validation, restart callback re-enrollment, the MHD-host smoke test, the
+minimal hello input, and the pgen user-drag-hook example are scalar pass/fail tests rather
+than image-producing runs.  They are still part of the particle test suite and are listed
+in `tst/test_suite/particles/test_particles_drag_relaxation_cpu.py`.
+
+![Drag relaxation and conservation](../_static/particles/drag_relaxation_conservation.png)
+
+![Streaming growth on uniform and AMR/MPI grids](../_static/particles/streaming_growth_uniform_amr_mpi.png)
+
+![Dynamic AMR remap conservation](../_static/particles/streaming_dynamic_amr_remap.png)
+
+![Streaming density slice with overlaid particles](../_static/particles/streaming_slice_particles.png)

@@ -228,11 +228,14 @@ can also be used as PDF dimensions or weights when they are scalar.
   `mhd_dynamo_U^2`, `mhd_dynamo_dU`. Uses finite differences in all available
   dimensions (includes x3 when 3D).
 - `prtcl_d`: Particle number per cell (nearest-cell binning of particle
-  positions). Convert to number density by dividing by cell volume; multiply by
-  particle mass for a mass density (if masses are uniform).
+  positions).
+- `prtcl_rho`: Particle mass density per cell, computed from the per-particle
+  `IPM` slot and cell volume.  This is the preferred mesh output for
+  drag-coupled dust when particle masses are nonuniform.
 
 Notes:
-- `mhd_*` variables require MHD; `prtcl_d` requires particles enabled.
+- `mhd_*` variables require MHD. `prtcl_d` requires particles enabled.
+  `prtcl_rho` requires `particle_type = dust`.
 
 #### Using PDFs for Mdot in bins of (r, theta, T, v_r)
 

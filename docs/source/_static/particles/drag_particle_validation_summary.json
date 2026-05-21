@@ -1,0 +1,11 @@
+{
+  "amr_mpi_growth": 0.14735789705176752,
+  "dynamic_amr_max_particle_mass_drift": 0.0,
+  "energy_max_total_energy_drift": 3.409188930258288e-05,
+  "expected_growth": 0.1424527496587504,
+  "relaxation_final_relative_velocity_ratio": 0.016773623150171876,
+  "relaxation_max_total_momentum_drift": 0.00046199784132561206,
+  "uniform_growth": 0.1441472411927109,
+  "visualization_particles_in_slice": 1024,
+  "visualization_particles_total": 4096
+}

@@ -22,6 +22,7 @@
 #include "globals.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "particles/particles.hpp"
 #include "dyn_grmhd/dyn_grmhd.hpp"
 #include "coordinates/adm.hpp"
 #include "z4c/tmunu.hpp"
@@ -161,11 +162,19 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
        << out_params.block_name << "' but no Tmunu object has been constructed."
        << std::endl << "Input file is likely missing a <adm> block" << std::endl;
   }
-  if ((ivar>=151) && (ivar<153) && (pm->pmb_pack->ppart == nullptr)) {
+  if ((ivar>=151) && (ivar<154) && (pm->pmb_pack->ppart == nullptr)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
        << "Output of particles requested in <output> block '"
        << out_params.block_name << "' but particle object not constructed."
        << std::endl << "Input file is likely missing corresponding block" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  if (out_params.variable.compare("prtcl_rho") == 0 &&
+      pm->pmb_pack->ppart->particle_type != ParticleType::dust) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+       << "Output of particle mass density requested in <output> block '"
+       << out_params.block_name << "' but <particles>/particle_type is not dust."
+       << std::endl;
     exit(EXIT_FAILURE);
   }
 
@@ -697,11 +706,14 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
     }
   }
 
-  // particle density binned to mesh
-  if (out_params.variable.compare("prtcl_d") == 0) {
+  // particle count or mass density binned to mesh
+  if (out_params.variable.compare("prtcl_d") == 0 ||
+      out_params.variable.compare("prtcl_rho") == 0) {
     out_params.contains_derived = true;
     out_params.n_derived += 1;
-    outvars.emplace_back("pdens",0,&(derived_var));
+    std::string label = (out_params.variable.compare("prtcl_rho") == 0) ?
+                        "prho" : "pdens";
+    outvars.emplace_back(label,0,&(derived_var));
   }
 
   // initialize vector containing number of output MBs per rank

@@ -1242,14 +1242,15 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     });
   }
 
-  // Particle density binned to mesh.
-  if (name.compare("prtcl_d") == 0) {
+  // Particle count or mass density binned to mesh.
+  if (name.compare("prtcl_d") == 0 || name.compare("prtcl_rho") == 0) {
     Kokkos::realloc(derived_var, nmb, 1, n3, n2, n1);
     auto pdens = derived_var;
     auto pr = pm->pmb_pack->ppart->prtcl_rdata;
     auto pi = pm->pmb_pack->ppart->prtcl_idata;
     int &npart = pm->nprtcl_thisrank;
     int gids = pm->pmb_pack->gids;
+    bool mass_density = (name.compare("prtcl_rho") == 0);
 
     par_for("pdens0", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -1262,10 +1263,18 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
       int ip = (pr(IPX,p) - size.d_view(m).x1min)/size.d_view(m).dx1 + is;
       int jp = (pr(IPY,p) - size.d_view(m).x2min)/size.d_view(m).dx2 + js;
       int kp = ks;
+      ip = DragClampIndex(ip, is, ie);
+      jp = DragClampIndex(jp, js, je);
       if (three_d) {
         kp = (pr(IPZ,p) - size.d_view(m).x3min)/size.d_view(m).dx3 + ks;
+        kp = DragClampIndex(kp, ks, ke);
       }
-      pdens(m,0,kp,jp,ip) += 1.0;
+      Real value = 1.0;
+      if (mass_density) {
+        Real vol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
+        value = pr(IPM,p)/vol;
+      }
+      Kokkos::atomic_add(&pdens(m,0,kp,jp,ip), value);
     });
   }
   i_dv = i_dv % n_dv; // reset derived variable index
