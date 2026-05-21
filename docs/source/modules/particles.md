@@ -222,4 +222,6 @@ state.
 The pytest coverage is in `tst/test_suite/particles/`.  The helper scripts
 `tst/scripts/particles/streaming_eigenmode.py` and
 `tst/scripts/particles/profile_drag_particles.py` regenerate the streaming eigenmode and
-run short drag-deposition timing sweeps.
+run short drag-deposition timing sweeps.  The profiling helper accepts `--np` and
+`--extra` so the same script can time dynamic-AMR MPI cases that exercise particle
+sendlist packing as well as local deposition atomics.

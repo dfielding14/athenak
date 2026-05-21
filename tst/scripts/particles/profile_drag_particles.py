@@ -23,6 +23,14 @@ def parse_args():
         choices=["host_cell", "cloud_in_cell"],
     )
     parser.add_argument("--tlim", type=float, default=0.05)
+    parser.add_argument("--np", type=int, default=1, help="MPI ranks for each run")
+    parser.add_argument("--mpirun", default="mpirun", help="MPI launcher")
+    parser.add_argument(
+        "--extra",
+        action="append",
+        default=[],
+        help="Additional AthenaK command-line override; may be repeated",
+    )
     parser.add_argument("--output", default="-")
     return parser.parse_args()
 
@@ -39,7 +47,9 @@ def run_case(args, ppc, coupling):
             f"drag_particles/interpolation={coupling}",
             f"drag_particles/deposition={coupling}",
             f"time/tlim={args.tlim}",
-        ]
+        ] + args.extra
+        if args.np > 1:
+            command = [args.mpirun, "-np", str(args.np)] + command
         start = time.perf_counter()
         process = subprocess.run(command, check=False, capture_output=True, text=True)
         elapsed = time.perf_counter() - start
@@ -57,7 +67,12 @@ def main():
     for ppc in args.ppc:
         for coupling in args.coupling:
             elapsed = run_case(args, ppc, coupling)
-            rows.append({"ppc": ppc, "coupling": coupling, "seconds": elapsed})
+            rows.append({
+                "np": args.np,
+                "ppc": ppc,
+                "coupling": coupling,
+                "seconds": elapsed,
+            })
 
     stream = None if args.output == "-" else open(args.output, "w", newline="")
     try:
