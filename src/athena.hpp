@@ -9,7 +9,6 @@
 //  \brief contains Athena++ general purpose types, structures, enums, etc.
 
 #include <string>
-#include <cstdint>
 
 #include <Kokkos_Core.hpp>
 #include <Kokkos_DualView.hpp>
@@ -53,11 +52,6 @@ class Coordinates;
 #define ONE_3RD  0.3333333333333333
 #define TWO_3RDS 0.6666666666666667
 #define FOUR_3RDS 1.333333333333333
-// include self gravity? default=0 (false)
-#define SELF_GRAVITY_ENABLED 0
-
-
-
 // data types only used in physics modules (defined here to avoid recursive dependencies)
 
 // constants that determine array index of Hydro/MHD variables
@@ -96,10 +90,6 @@ struct MHDPrim1D {
 struct MHDCons1D {
   Real d, mx, my, mz, e, bx, by, bz;
 };
-
-inline std::int64_t rotl(std::int64_t i, int s) {
-  return (i << s) | (i >> (64 - s));
-}
 
 //----------------------------------------------------------------------------------------
 // define default Kokkos execution and memory spaces

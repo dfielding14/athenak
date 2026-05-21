@@ -42,8 +42,8 @@ MGGravityDriver::MGGravityDriver(MeshBlockPack *pmbp, ParameterInput *pin)
     omega_ = pin->GetOrAddReal("gravity", "omega", 1.15);
     eps_ = pin->GetOrAddReal("gravity", "threshold", -1.0);
     niter_ = pin->GetOrAddInteger("gravity", "niteration", -1);
-    npresmooth_ = pin->GetOrAddReal("gravity", "npresmooth", npresmooth_);
-    npostsmooth_ = pin->GetOrAddReal("gravity", "npostsmooth", npostsmooth_);
+    npresmooth_ = pin->GetOrAddInteger("gravity", "npresmooth", npresmooth_);
+    npostsmooth_ = pin->GetOrAddInteger("gravity", "npostsmooth", npostsmooth_);
     full_multigrid_ = pin->GetOrAddBoolean("gravity", "full_multigrid", false);
     fmg_ncycle_ = pin->GetOrAddInteger("gravity", "fmg_ncycle", 1);
     fshowdef_ = pin->GetOrAddBoolean("gravity", "show_defect", false);

@@ -53,6 +53,10 @@ npresmooth = 1
 npostsmooth = 1
 full_multigrid = true
 fmg_ncycle = 1
+mg_nghost = 1
+root_on_host = false
+mg_bc = none
+subtract_average = true
 show_defect = false
 
 <mhd_srcterms>

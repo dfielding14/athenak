@@ -19,7 +19,8 @@ _DEFECT_RE = re.compile(r"Final defect norm = ([0-9.eE+-]+)")
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
-def _run_selfgravity(input_file, basename):
+def _run_selfgravity(input_file, basename, extra_args=None,
+                     max_final_defect=2.0e-8):
     command = [
         "./athena",
         "-i",
@@ -27,6 +28,8 @@ def _run_selfgravity(input_file, basename):
         f"job/basename={basename}",
         "gravity/show_defect=true",
     ]
+    if extra_args:
+        command.extend(extra_args)
     result = subprocess.run(command, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, text=True, check=False)
     combined = result.stdout + result.stderr
@@ -34,7 +37,9 @@ def _run_selfgravity(input_file, basename):
     assert "nan" not in combined.lower()
     matches = _DEFECT_RE.findall(combined)
     assert matches, combined
-    assert float(matches[-1]) < 2.0e-8
+    final_defect = float(matches[-1])
+    if max_final_defect is not None:
+        assert final_defect < max_final_defect
     assert "k/k_J = 2" in combined
     return combined
 
@@ -73,6 +78,33 @@ def test_gravity_potential_binary_output():
         bin_outputs = list(Path("bin").glob(f"{basename}*.bin"))
         assert bin_outputs, "grav_phi binary output was not written"
         assert all(path.stat().st_size > 0 for path in bin_outputs)
+    finally:
+        _remove_binary_outputs(basename)
+        testutils.cleanup()
+
+
+def test_root_grid_can_run_on_host():
+    basename = "selfgravity_root_host_cpu"
+    try:
+        _run_selfgravity(
+            "inputs/tests/selfgravity.athinput",
+            basename,
+            extra_args=["gravity/root_on_host=true"],
+        )
+    finally:
+        _remove_binary_outputs(basename)
+        testutils.cleanup()
+
+
+def test_fixed_iteration_mode_runs():
+    basename = "selfgravity_fixed_iter_cpu"
+    try:
+        _run_selfgravity(
+            "inputs/tests/selfgravity.athinput",
+            basename,
+            extra_args=["gravity/threshold=-1", "gravity/niteration=4"],
+            max_final_defect=None,
+        )
     finally:
         _remove_binary_outputs(basename)
         testutils.cleanup()

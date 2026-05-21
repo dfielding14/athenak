@@ -118,6 +118,10 @@ The regression inputs are:
 | `inputs/tests/selfgravity.athinput` | Hydro Jeans wave, multiple MeshBlocks, `grav_phi` output. |
 | `inputs/tests/selfgravity_mhd.athinput` | MHD Jeans wave with the same density source. |
 
+The CPU pytest suite checks hydro and MHD convergence, `grav_phi` binary output,
+host-memory root-grid solves through `root_on_host = true`, and fixed-iteration
+mode with `threshold < 0`.
+
 Run the CPU regression tests with:
 
 ```bash

@@ -70,6 +70,7 @@ MeshBlockPack::~MeshBlockPack() {
   if (pturb  != nullptr) {delete pturb;}
   if (pframe_tracker != nullptr) {delete pframe_tracker;}
   if (prad   != nullptr) {delete prad;}
+  if (pgrav  != nullptr) {delete pgrav;}
   if (pmhd   != nullptr) {delete pmhd;}
   if (phydro != nullptr) {delete phydro;}
   if (punit  != nullptr) {delete punit;}

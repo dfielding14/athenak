@@ -43,10 +43,10 @@ Gravity::Gravity(MeshBlockPack *pmbp, ParameterInput *pin):
     output_defect = pin->GetOrAddBoolean("gravity", "output_defect", false);
     fill_ghost = pin->GetOrAddBoolean("gravity", "fill_ghost", true);
 
-    if (four_pi_G == 0.0) {
+    if (four_pi_G < 0.0) {
         std::cout << "### FATAL ERROR in Gravity::Gravity" << std::endl
-        << "Gravitational constant must be set in the Mesh::InitUserMeshData "
-        << "using the SetGravitationalConstant or SetFourPiG function." << std::endl;
+        << "Gravitational constant must be non-negative. Set gravity/four_pi_G "
+        << "in the input file." << std::endl;
         exit(EXIT_FAILURE);
     }
 

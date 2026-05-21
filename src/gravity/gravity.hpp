@@ -5,8 +5,8 @@
 // Copyright(C) 2014 James M. Stone <jmstone@princeton.edu> and other code contributors
 // Licensed under the 3-clause BSD License, see LICENSE file for details
 //========================================================================================
-//! \file mg_gravity.hpp
-//! \brief defines MGGravity class
+//! \file gravity.hpp
+//! \brief defines Gravity module class
 
 // C headers
 

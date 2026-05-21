@@ -29,7 +29,7 @@
 #include "gravity/mg_gravity.hpp"
 #include "pgen/pgen.hpp"
 
-#ifdef MPI_PARALLEL
+#if MPI_PARALLEL_ENABLED
 #include <mpi.h>
 #endif
 
@@ -173,7 +173,7 @@ void ProblemGenerator::BinaryGravity(ParameterInput *pin, const bool restart) {
       },
       local_mass);
 
-#ifdef MPI_PARALLEL
+#if MPI_PARALLEL_ENABLED
   Real total_mass = 0.0;
   MPI_Allreduce(&local_mass, &total_mass, 1, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
 #else

@@ -34,8 +34,12 @@
 
 Multigrid::Multigrid(MultigridDriver *pmd, MeshBlockPack *pmbp, int nghost,
                      bool on_host):
-  pmy_driver_(pmd), pmy_pack_(pmbp), pmy_mesh_(pmd->pmy_mesh_), ngh_(nghost),
-  nvar_(pmd->nvar_), defscale_(1.0), on_host_(on_host)  {
+  pmy_driver_(pmd), pmy_block_(nullptr), pmy_pack_(pmbp), pmy_mesh_(pmd->pmy_mesh_),
+  nlevel_(0), ngh_(nghost), nvar_(pmd->nvar_), ncoeff_(0), nmatrix_(0),
+  current_level_(0), nmmbx1_(0), nmmbx2_(0), nmmbx3_(0), nmmb_(0),
+  on_host_(on_host), rdx_(0.0), rdy_(0.0), rdz_(0.0), defscale_(1.0),
+  u_(nullptr), def_(nullptr), src_(nullptr), uold_(nullptr), coeff_(nullptr),
+  matrix_(nullptr), coord_(nullptr), ccoord_(nullptr)  {
   if(pmy_pack_ != nullptr) {
     //Meshblock levels
     indcs_ = pmy_mesh_->mb_indcs;
@@ -173,6 +177,7 @@ Multigrid::Multigrid(MultigridDriver *pmd, MeshBlockPack *pmbp, int nghost,
 //! \brief Multigrid destroctor
 
 Multigrid::~Multigrid() {
+  delete pbval;
   delete [] u_;
   delete [] src_;
   delete [] def_;
@@ -1254,6 +1259,8 @@ MultigridBoundaryValues::MultigridBoundaryValues(MeshBlockPack *pmbp, ParameterI
   :
    MeshBoundaryValuesCC(pmbp, pin, coarse), pmy_mg(pmg) {
 }
+
+MultigridBoundaryValues::~MultigridBoundaryValues() = default;
 
 //----------------------------------------------------------------------------------------
 //! \fn void MultigridBoundaryValues::RemapIndicesForMG()
