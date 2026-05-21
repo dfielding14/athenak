@@ -24,6 +24,18 @@
 #include "mhd/mhd.hpp"
 
 namespace mhd {
+
+namespace {
+
+bool UsesHydrostaticGravityBoundary(MeshBlockPack *ppack) {
+  for (int n=0; n<6; ++n) {
+    if (ppack->pmesh->mesh_bcs[n] == BoundaryFlag::hydrostatic_gravity) return true;
+  }
+  return false;
+}
+
+} // namespace
+
 //----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
 
@@ -120,6 +132,14 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   // Source terms (if needed)
   if (pin->DoesBlockExist("mhd_srcterms") || pin->DoesBlockExist("external_gravity")) {
     psrc = new SourceTerms("mhd_srcterms", ppack, pin);
+  }
+  if (UsesHydrostaticGravityBoundary(ppack)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "hydrostatic_gravity boundaries currently support hydro only. "
+              << "For MHD external gravity, use outflow/diode boundaries with gravity "
+              << "tapering or provide a problem-specific user boundary condition."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
   }
 
   // (3) read time-evolution option [already error checked in driver constructor]

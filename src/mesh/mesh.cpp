@@ -517,6 +517,8 @@ BoundaryFlag Mesh::GetBoundaryFlag(const std::string& input_string) {
     return BoundaryFlag::periodic;
   } else if (input_string == "vacuum") {
     return BoundaryFlag::vacuum;
+  } else if (input_string == "hydrostatic_gravity") {
+    return BoundaryFlag::hydrostatic_gravity;
   } else if (input_string == "shear_periodic") {
     return BoundaryFlag::shear_periodic;
   } else if (input_string == "undef") {
@@ -553,6 +555,10 @@ std::string Mesh::GetBoundaryString(BoundaryFlag input_flag) {
       return "periodic";
     case BoundaryFlag::shear_periodic:
       return "shear_periodic";
+    case BoundaryFlag::vacuum:
+      return "vacuum";
+    case BoundaryFlag::hydrostatic_gravity:
+      return "hydrostatic_gravity";
     case BoundaryFlag::undef:
       return "undef";
     default:

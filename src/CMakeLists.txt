@@ -115,6 +115,7 @@ add_executable(
         pgen/tests/cpaw.cpp
         pgen/tests/cshock.cpp
         pgen/tests/diffusion.cpp
+        pgen/tests/external_gravity.cpp
         pgen/tests/gr_bondi.cpp
         pgen/tests/gr_monopole.cpp
         pgen/tests/linear_wave.cpp

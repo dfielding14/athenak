@@ -1,0 +1,73 @@
+# Rotating hydro disk initialized from an external point-mass potential
+
+<job>
+basename = extgrav_disk
+
+<mesh>
+nghost = 2
+nx1    = 128
+x1min  = -2.0
+x1max  = 2.0
+ix1_bc = outflow
+ox1_bc = outflow
+
+nx2    = 128
+x2min  = -2.0
+x2max  = 2.0
+ix2_bc = outflow
+ox2_bc = outflow
+
+nx3    = 1
+x3min  = -0.5
+x3max  = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 64
+nx2 = 64
+nx3 = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = -1
+tlim       = 1.0
+ndiag      = 1
+
+<hydro>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.666666667
+
+<external_gravity>
+model      = point_mass
+G          = 1.0
+mass       = 1.0
+softening  = 0.1
+x1_origin  = 0.0
+x2_origin  = 0.0
+x3_origin  = 0.0
+taper_gravity = true
+taper_width   = 0.1
+
+<problem>
+pgen_name     = external_gravity_disk
+rho0          = 1.0
+pressure0     = 0.01
+r_scale       = 0.75
+z_scale       = 0.1
+density_floor = 1.0e-6
+rotate        = true
+
+<output1>
+file_type   = hst
+data_format = %18.10e
+dt          = 0.05
+
+<output2>
+file_type = vtk
+variable  = hydro_w
+dt        = 0.1

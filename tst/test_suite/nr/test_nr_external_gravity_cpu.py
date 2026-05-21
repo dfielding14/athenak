@@ -13,8 +13,12 @@ import test_suite.testutils as testutils
 
 
 input_file = "inputs/external_gravity.athinput"
+hydrostatic_input_file = "inputs/external_gravity_hydrostatic.athinput"
+mhd_input_file = "inputs/external_gravity_mhd.athinput"
 history_file = "external_gravity.hydro.hst"
 force_history_file = "external_gravity_force.hydro.hst"
+hydrostatic_tab_file = "tab/external_gravity_hydrostatic.hydro_w.00001.tab"
+mhd_history_file = "external_gravity_mhd.mhd.hst"
 
 
 def test_external_gravity_history():
@@ -56,4 +60,30 @@ def test_external_gravity_history():
             os.remove(history_file)
         if os.path.exists(force_history_file):
             os.remove(force_history_file)
+        testutils.cleanup()
+
+
+def test_external_gravity_hydrostatic_boundary():
+    try:
+        results = testutils.run(hydrostatic_input_file)
+        assert results, "External-gravity hydrostatic boundary run failed."
+
+        data = athena_read.tab(hydrostatic_tab_file)
+        expected_density = np.exp(-0.1*data["x1v"])
+        assert np.max(np.abs(data["dens"] - expected_density)) < 2.0e-4
+        assert np.max(np.abs(data["velx"])) < 2.0e-3
+    finally:
+        testutils.cleanup()
+
+
+def test_external_gravity_mhd_history():
+    try:
+        results = testutils.run(mhd_input_file)
+        assert results, "External-gravity MHD history run failed."
+
+        data = athena_read.hst(mhd_history_file)
+        assert "grav-PE" in data, "grav-PE was not added to MHD history output."
+    finally:
+        if os.path.exists(mhd_history_file):
+            os.remove(mhd_history_file)
         testutils.cleanup()

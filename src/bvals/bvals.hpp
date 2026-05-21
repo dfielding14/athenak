@@ -17,7 +17,7 @@ enum BoundaryFace {undef=-1, inner_x1, outer_x1, inner_x2, outer_x2, inner_x3, o
 
 // identifiers for boundary conditions
 enum class BoundaryFlag {undef=-1,block, reflect, inflow, outflow, diode, user, periodic,
-                         shear_periodic, vacuum};
+                         shear_periodic, vacuum, hydrostatic_gravity};
 
 #include <algorithm>
 #include <vector>

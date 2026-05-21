@@ -1,0 +1,77 @@
+# Hydro box with a standalone <external_gravity> block and constant acceleration
+
+<job>
+basename = extgrav_uniform
+
+<mesh>
+nghost = 2
+nx1    = 64
+x1min  = 0.0
+x1max  = 1.0
+ix1_bc = outflow
+ox1_bc = outflow
+
+nx2    = 1
+x2min  = -0.5
+x2max  = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3    = 1
+x3min  = -0.5
+x3max  = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 64
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim       = -1
+tlim       = 0.1
+ndiag      = 1
+
+<hydro>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.4
+
+<external_gravity>
+model = uniform
+g1    = -0.1
+g2    = 0.0
+g3    = 0.0
+
+<problem>
+pgen_name = shock_tube
+shock_dir = 1
+xshock    = 0.5
+dl = 1.0
+pl = 1.0
+ul = 0.0
+vl = 0.0
+wl = 0.0
+dr = 1.0
+pr = 1.0
+ur = 0.0
+vr = 0.0
+wr = 0.0
+
+<output1>
+file_type   = hst
+data_format = %18.10e
+dt          = 0.01
+
+<output2>
+file_type   = tab
+variable    = hydro_w
+data_format = %18.10e
+dt          = 0.1
+slice_x2    = 0.0
+slice_x3    = 0.0

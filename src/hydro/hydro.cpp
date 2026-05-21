@@ -23,6 +23,18 @@
 #include "hydro/hydro.hpp"
 
 namespace hydro {
+
+namespace {
+
+bool UsesHydrostaticGravityBoundary(MeshBlockPack *ppack) {
+  for (int n=0; n<6; ++n) {
+    if (ppack->pmesh->mesh_bcs[n] == BoundaryFlag::hydrostatic_gravity) return true;
+  }
+  return false;
+}
+
+} // namespace
+
 //----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
 
@@ -90,6 +102,13 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
   // Source terms (if needed)
   if (pin->DoesBlockExist("hydro_srcterms") || pin->DoesBlockExist("external_gravity")) {
     psrc = new SourceTerms("hydro_srcterms", ppack, pin);
+  }
+  if (UsesHydrostaticGravityBoundary(ppack) &&
+      (psrc == nullptr || !psrc->external_gravity)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "hydrostatic_gravity boundaries require an enabled <external_gravity> "
+              << "block" << std::endl;
+    std::exit(EXIT_FAILURE);
   }
 
   // (3) read time-evolution option [already error checked in driver constructor]
