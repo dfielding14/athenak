@@ -1,0 +1,116 @@
+# AthenaK input file for streaming-instability AMR remapping smoke tests
+
+<job>
+basename = streaming_instability_amr_dynamic
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 4
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 32
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 4
+nx3 = 16
+
+<mesh_refinement>
+refinement = adaptive
+max_nmb_per_rank = 256
+num_levels = 2
+refinement_interval = 2
+
+<amr_criterion0>
+method = location
+location_x1 = 0.0
+location_x2 = 0.0
+location_x3 = 0.0
+location_rad = 0.45
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.25
+nlim = -1
+tlim = 0.3
+ndiag = 10
+
+<hydro>
+eos = isothermal
+reconstruct = plm
+rsolver = hlle
+iso_sound_speed = 1.0
+
+<particles>
+particle_type = dust
+pusher = drag
+ppc = 1.0
+assign_tag = index_order
+
+<drag_particles>
+enabled = true
+model = stopping_time
+stopping_time = 0.3
+cfl_drag = 0.05
+backreaction = true
+include_energy = false
+orbital_terms = true
+interpolation = host_cell
+deposition = host_cell
+omega0 = 1.0
+qshear = 1.5
+particle_mass = 1.0
+
+<problem>
+pgen_name = streaming_instability
+mode = streaming
+user_hist = true
+rho0 = 1.0
+epsilon = 1.0
+tau_s = 0.3
+eta_vk = 0.5
+omega0 = 1.0
+qshear = 1.5
+pressure_accel = 1.0
+perturbation = eigenmode
+expected_growth = 0.1424527496587504
+expected_frequency = 0.1067230670012035
+amp = 1.0e-4
+nwx = 2
+nwz = 4
+eigen_rhog_re = -6.3941133490089087e-04
+eigen_rhog_im = 4.8248529845820872e-04
+eigen_vgx_re = -7.0111836003118488e-02
+eigen_vgx_im = -2.2111103367351170e-02
+eigen_vgy_re = 1.2150806113551665e-01
+eigen_vgy_im = -3.9156174090960547e-02
+eigen_vgz_re = 3.5079348742086472e-02
+eigen_vgz_im = 1.1032183616959859e-02
+eigen_rhod_re = 1.0
+eigen_rhod_im = 0.0
+eigen_vdx_re = 5.7833082952576656e-03
+eigen_vdx_im = -2.3675841652271375e-02
+eigen_vdy_re = 1.1725574099850000e-01
+eigen_vdy_im = -6.6509847792263046e-03
+eigen_vdz_re = 2.9536786564495800e-02
+eigen_vdz_im = 1.7505935642441284e-02
+
+<output1>
+file_type = hst
+dt = 0.1
+user_hist_only = true
+data_format = %21.14e
