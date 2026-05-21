@@ -148,6 +148,7 @@ add_executable(
 
         srcterms/srcterms.cpp
         srcterms/srcterms_newdt.cpp
+        srcterms/external_gravity.cpp
         srcterms/turb_driver.cpp
 
         tasklist/numerical_relativity.cpp

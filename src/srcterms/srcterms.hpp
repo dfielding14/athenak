@@ -9,8 +9,9 @@
 //! \brief Data, functions, and classes to implement various source terms in the hydro
 //! and/or MHD equations of motion.  Currently implemented:
 //!  (1) constant (gravitational) acceleration - for RTI
-//!  (2) shearing box in 2D (x-z), for both hydro and MHD
-//!  (3) random forcing to drive turbulence - implemented in TurbulenceDriver class
+//!  (2) external gravitational potentials
+//!  (3) shearing box in 2D (x-z), for both hydro and MHD
+//!  (4) random forcing to drive turbulence - implemented in TurbulenceDriver class
 
 #include <map>
 #include <string>
@@ -18,6 +19,7 @@
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
 #include "parameter_input.hpp"
+#include "srcterms/external_gravity.hpp"
 
 //----------------------------------------------------------------------------------------
 //! \class SourceTerms
@@ -34,6 +36,7 @@ class SourceTerms {
   bool ism_cooling;
   bool rel_cooling;
   bool rad_beam;
+  bool external_gravity;
 
   // new timestep
   Real dtnew;
@@ -55,6 +58,9 @@ class SourceTerms {
   Real dir1, dir2, dir3;  // direction of source
   Real width, spread;     // spatial width of source region, spread in angles
 
+  // data for external gravity
+  external_gravity::ExternalGravityData external_gravity_data;
+
   // functions
   void ApplySrcTerms(const DvceArray5D<Real> &w0, const EOS_Data &eos,
                      const Real bdt, DvceArray5D<Real> &u0);
@@ -65,6 +71,8 @@ class SourceTerms {
                   const Real bdt, DvceArray5D<Real> &u0);
   void RelCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos,
                   const Real bdt, DvceArray5D<Real> &u0);
+  void ExternalGravity(const DvceArray5D<Real> &w0, const EOS_Data &eos,
+                       const Real bdt, DvceArray5D<Real> &u0);
   void BeamSource(DvceArray5D<Real> &i0, const Real bdt);
   void NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos);
 

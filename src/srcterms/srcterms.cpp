@@ -19,6 +19,7 @@
 #include "eos/eos.hpp"
 #include "geodesic-grid/geodesic_grid.hpp"
 //#include "hydro/hydro.hpp"
+#include "external_gravity.hpp"
 #include "ismcooling.hpp"
 #include "mesh/mesh.hpp"
 //#include "mhd/mhd.hpp"
@@ -40,6 +41,12 @@ SourceTerms::SourceTerms(std::string block, MeshBlockPack *pp, ParameterInput *p
   ism_cooling = pin->GetOrAddBoolean(block, "ism_cooling", false);
   rel_cooling = pin->GetOrAddBoolean(block, "rel_cooling", false);
   rad_beam = pin->GetOrAddBoolean(block, "rad_beam", false);
+  external_gravity = false;
+
+  if (block.compare("rad_srcterms") != 0 && pin->DoesBlockExist("external_gravity")) {
+    external_gravity_data = external_gravity::ParseInput(pp, pin);
+    external_gravity = (external_gravity_data.model != external_gravity::Model::none);
+  }
 
   // (1) read data for (constant) gravitational acceleration
   if (const_accel) {
@@ -92,6 +99,7 @@ void SourceTerms::ApplySrcTerms(const DvceArray5D<Real> &w0, const EOS_Data &eos
                                 const Real bdt, DvceArray5D<Real> &u0) {
   // NOTE source terms must be computed using primitive (w0) and NOT conserved (u0) vars
   if (const_accel) ConstantAccel(w0, eos_data,  bdt, u0);
+  if (external_gravity) ExternalGravity(w0, eos_data, bdt, u0);
   if (ism_cooling) ISMCooling(w0, eos_data, bdt, u0);
   if (rel_cooling) RelCooling(w0, eos_data, bdt, u0);
   return;

@@ -118,7 +118,7 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   }
 
   // Source terms (if needed)
-  if (pin->DoesBlockExist("mhd_srcterms")) {
+  if (pin->DoesBlockExist("mhd_srcterms") || pin->DoesBlockExist("external_gravity")) {
     psrc = new SourceTerms("mhd_srcterms", ppack, pin);
   }
 

@@ -20,8 +20,10 @@
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "srcterms/srcterms.hpp"
 #include "z4c/z4c.hpp"
 #include "coordinates/adm.hpp"
+#include "coordinates/cell_locations.hpp"
 #include "outputs.hpp"
 
 //----------------------------------------------------------------------------------------
@@ -79,6 +81,9 @@ void HistoryOutput::LoadHydroHistoryData(HistoryData *pdata, Mesh *pm) {
   auto &eos_data = pm->pmb_pack->phydro->peos->eos_data;
   int &nhydro_ = pm->pmb_pack->phydro->nhydro;
   int &nscalars_ = pm->pmb_pack->phydro->nscalars;
+  SourceTerms *psrc = pm->pmb_pack->phydro->psrc;
+  const bool has_external_gravity = (psrc != nullptr) && psrc->external_gravity;
+  const int grav_hist = nhydro_ + 3 + nscalars_;
 
   // set number of and names of history variables for hydro
   if (eos_data.is_ideal) {
@@ -88,6 +93,9 @@ void HistoryOutput::LoadHydroHistoryData(HistoryData *pdata, Mesh *pm) {
   }
   if (nscalars_>0) {
     pdata->nhist += nscalars_;
+  }
+  if (has_external_gravity) {
+    pdata->nhist += 1;
   }
   pdata->label[IDN] = "mass";
   pdata->label[IM1] = "1-mom";
@@ -104,11 +112,20 @@ void HistoryOutput::LoadHydroHistoryData(HistoryData *pdata, Mesh *pm) {
     labelSS << "scal-" << s;
     pdata->label[nhydro_+3+s] = labelSS.str();
   }
+  if (has_external_gravity) {
+    pdata->label[grav_hist] = "grav-PE";
+  }
 
   // capture class variables for kernel
   auto &u0_ = pm->pmb_pack->phydro->u0;
   auto &size = pm->pmb_pack->pmb->mb_size;
   int &nhist_ = pdata->nhist;
+  external_gravity::ExternalGravityData grav_data;
+  if (has_external_gravity) {
+    grav_data = psrc->external_gravity_data;
+  }
+  const bool has_external_gravity_ = has_external_gravity;
+  const int grav_hist_ = grav_hist;
 
   // loop over all MeshBlocks in this pack
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
@@ -130,6 +147,9 @@ void HistoryOutput::LoadHydroHistoryData(HistoryData *pdata, Mesh *pm) {
     j += js;
 
     Real vol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
+    Real x1v = CellCenterX(i - is, nx1, size.d_view(m).x1min, size.d_view(m).x1max);
+    Real x2v = CellCenterX(j - js, nx2, size.d_view(m).x2min, size.d_view(m).x2max);
+    Real x3v = CellCenterX(k - ks, nx3, size.d_view(m).x3min, size.d_view(m).x3max);
 
     // Hydro conserved variables:
     array_sum::GlobalSum hvars;
@@ -149,6 +169,11 @@ void HistoryOutput::LoadHydroHistoryData(HistoryData *pdata, Mesh *pm) {
     // Scalar masses
     for (int s=0; s<nscalars_; ++s) {
       hvars.the_array[nhydro_+3+s] = vol*u0_(m,nhydro_+s,k,j,i);
+    }
+
+    if (has_external_gravity_) {
+      hvars.the_array[grav_hist_] = vol*u0_(m,IDN,k,j,i)*
+                                    external_gravity::Potential(grav_data, x1v, x2v, x3v);
     }
 
     // fill rest of the_array with zeros, if nhist < NHISTORY_VARIABLES
@@ -273,6 +298,9 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   auto &eos_data = pm->pmb_pack->pmhd->peos->eos_data;
   int &nmhd_ = pm->pmb_pack->pmhd->nmhd;
   int &nscalars_ = pm->pmb_pack->pmhd->nscalars;
+  SourceTerms *psrc = pm->pmb_pack->pmhd->psrc;
+  const bool has_external_gravity = (psrc != nullptr) && psrc->external_gravity;
+  const int grav_hist = nmhd_ + 6 + nscalars_;
 
   // set number of and names of history variables for mhd
   if (eos_data.is_ideal) {
@@ -282,6 +310,9 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   }
   if (nscalars_>0) {
     pdata->nhist += nscalars_;
+  }
+  if (has_external_gravity) {
+    pdata->nhist += 1;
   }
   pdata->label[IDN] = "mass";
   pdata->label[IM1] = "1-mom";
@@ -302,6 +333,9 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     labelSS << "scal-" << s;
     pdata->label[nmhd_+6+s] = labelSS.str();
   }
+  if (has_external_gravity) {
+    pdata->label[grav_hist] = "grav-PE";
+  }
 
   // capture class variabels for kernel
   auto &u0_ = pm->pmb_pack->pmhd->u0;
@@ -310,6 +344,12 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   auto &bx3f = pm->pmb_pack->pmhd->b0.x3f;
   auto &size = pm->pmb_pack->pmb->mb_size;
   int &nhist_ = pdata->nhist;
+  external_gravity::ExternalGravityData grav_data;
+  if (has_external_gravity) {
+    grav_data = psrc->external_gravity_data;
+  }
+  const bool has_external_gravity_ = has_external_gravity;
+  const int grav_hist_ = grav_hist;
 
   // loop over all MeshBlocks in this pack
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
@@ -331,6 +371,9 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     j += js;
 
     Real vol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
+    Real x1v = CellCenterX(i - is, nx1, size.d_view(m).x1min, size.d_view(m).x1max);
+    Real x2v = CellCenterX(j - js, nx2, size.d_view(m).x2min, size.d_view(m).x2max);
+    Real x3v = CellCenterX(k - ks, nx3, size.d_view(m).x3min, size.d_view(m).x3max);
 
     // MHD conserved variables:
     array_sum::GlobalSum hvars;
@@ -355,6 +398,11 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     // Scalar masses
     for (int s=0; s<nscalars_; ++s) {
       hvars.the_array[nmhd_+6+s] = vol*u0_(m,nmhd_+s,k,j,i);
+    }
+
+    if (has_external_gravity_) {
+      hvars.the_array[grav_hist_] = vol*u0_(m,IDN,k,j,i)*
+                                    external_gravity::Potential(grav_data, x1v, x2v, x3v);
     }
 
     // fill rest of the_array with zeros, if nhist < NHISTORY_VARIABLES

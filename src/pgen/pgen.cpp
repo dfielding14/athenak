@@ -26,8 +26,26 @@
 #include "z4c/compact_object_tracker.hpp"
 #include "z4c/z4c.hpp"
 #include "radiation/radiation.hpp"
+#include "srcterms/external_gravity.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "pgen.hpp"
+
+namespace external_gravity {
+
+//----------------------------------------------------------------------------------------
+//! \fn UserExternalGravityPotential()
+//! \brief Hook for <external_gravity>/model=user.  Edit this function in a
+//! problem-specific branch when a built-in potential is not enough.
+
+KOKKOS_FUNCTION
+Real UserExternalGravityPotential(Real x1, Real x2, Real x3) {
+  (void) x1;
+  (void) x2;
+  (void) x3;
+  return 0.0;
+}
+
+} // namespace external_gravity
 
 
 //----------------------------------------------------------------------------------------

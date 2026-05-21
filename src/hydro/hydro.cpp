@@ -88,7 +88,7 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
   }
 
   // Source terms (if needed)
-  if (pin->DoesBlockExist("hydro_srcterms")) {
+  if (pin->DoesBlockExist("hydro_srcterms") || pin->DoesBlockExist("external_gravity")) {
     psrc = new SourceTerms("hydro_srcterms", ppack, pin);
   }
 
