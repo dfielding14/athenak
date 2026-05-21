@@ -115,10 +115,13 @@ SourceTerms::~SourceTerms() {
 //! implemented for fluid and radiation fields, distinguished by their argument lists
 
 void SourceTerms::ApplySrcTerms(const DvceArray5D<Real> &w0, const EOS_Data &eos_data,
-                                const Real bdt, DvceArray5D<Real> &u0) {
+                                const Real bdt, const Real history_bdt,
+                                DvceArray5D<Real> &u0) {
   // NOTE source terms must be computed using primitive (w0) and NOT conserved (u0) vars
   if (const_accel) ConstantAccel(w0, eos_data,  bdt, u0);
-  if (pcooling != nullptr && pcooling->Enabled()) pcooling->Apply(w0, eos_data, bdt, u0);
+  if (pcooling != nullptr && pcooling->Enabled()) {
+    pcooling->Apply(w0, eos_data, bdt, history_bdt, u0);
+  }
   if (rel_cooling) RelCooling(w0, eos_data, bdt, u0);
   return;
 }

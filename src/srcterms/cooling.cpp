@@ -412,6 +412,11 @@ void ParseAxisExtra(const std::string &token, AxisData &axis) {
   }
 }
 
+bool IsValueScaleToken(const std::string &value) {
+  const std::string v = Lower(value);
+  return (v == "linear" || v == "log10");
+}
+
 void LoadTable(const std::string &path, BoundsBehavior default_bounds,
                const std::string &expected_value_kind, TableData &table) {
   std::ifstream in(path);
@@ -479,16 +484,32 @@ void LoadTable(const std::string &path, BoundsBehavior default_bounds,
         FatalCoolingInput("Cooling table '" + path + "' has invalid axis index.");
       }
       AxisData axis;
-      std::string kind, units, scale;
-      in >> kind >> units >> scale >> axis.xmin >> axis.xmax >> axis.n;
-      axis.kind = ParseAxisKind(kind, "table axis kind");
-      axis.units = ParseUnitSystem(units, "table axis units");
-      axis.scale = ParseValueScale(scale, "table axis scale");
       std::string rest;
       std::getline(in, rest);
-      std::istringstream extras(rest);
-      std::string extra;
-      while (extras >> extra) ParseAxisExtra(extra, axis);
+      std::istringstream axis_line(rest);
+      std::vector<std::string> fields;
+      std::string field;
+      while (axis_line >> field) fields.push_back(field);
+      if (fields.size() < 5) {
+        FatalCoolingInput("Cooling table '" + path + "' has incomplete axis line.");
+      }
+      axis.kind = ParseAxisKind(fields[0], "table axis kind");
+      axis.units = ParseUnitSystem(fields[1], "table axis units");
+      int next = 2;
+      axis.scale = ValueScale::log10;
+      if (IsValueScaleToken(fields[next])) {
+        axis.scale = ParseValueScale(fields[next], "table axis scale");
+        ++next;
+      }
+      if (static_cast<int>(fields.size()) < next + 3) {
+        FatalCoolingInput("Cooling table '" + path + "' has incomplete axis extent.");
+      }
+      axis.xmin = std::stod(fields[next++]);
+      axis.xmax = std::stod(fields[next++]);
+      axis.n = std::stoi(fields[next++]);
+      for (; next < static_cast<int>(fields.size()); ++next) {
+        ParseAxisExtra(fields[next], axis);
+      }
       if (axis.n < 1 || axis.xmax <= axis.xmin) {
         FatalCoolingInput("Cooling table '" + path + "' has invalid axis extent.");
       }
@@ -904,7 +925,8 @@ GeneralCooling::GeneralCooling(MeshBlockPack *pp, ParameterInput *pin) :
 }
 
 void GeneralCooling::Apply(const DvceArray5D<Real> &w0, const EOS_Data &eos_data,
-                           const Real bdt, DvceArray5D<Real> &u0) {
+                           const Real bdt, const Real history_bdt,
+                           DvceArray5D<Real> &u0) {
   if (!enabled_) return;
   if (!eos_data.is_ideal) {
     FatalCoolingInput("cooling source terms require an ideal-gas energy equation.");
@@ -918,7 +940,8 @@ void GeneralCooling::Apply(const DvceArray5D<Real> &w0, const EOS_Data &eos_data
     Real gross_energy = 0.0;
     Real net_energy = 0.0;
     pmy_pack_->pmesh->pgen->user_cooling_func(pmy_pack_, w0, eos_data, runtime_, bdt,
-                                              u0, gross_energy, net_energy);
+                                              history_bdt, u0, gross_energy,
+                                              net_energy);
     if (history_enabled_) {
       accumulated_gross_energy_ += gross_energy;
       accumulated_net_energy_ += net_energy;
@@ -956,6 +979,7 @@ void GeneralCooling::Apply(const DvceArray5D<Real> &w0, const EOS_Data &eos_data
   const ModifierData heating_modifier = heating_modifier_;
   const ShieldingData shielding = shielding_;
   const Real constant_heating_rate = constant_heating_rate_;
+  const Real history_bdt_local = history_bdt;
   auto &size = pmy_pack_->pmb->mb_size;
 
   Real gross_energy = 0.0, net_energy = 0.0, bad_bounds = 0.0;
@@ -1044,8 +1068,8 @@ void GeneralCooling::Apply(const DvceArray5D<Real> &w0, const EOS_Data &eos_data
     const Real edot_net = edot_cool - edot_heat;
     const Real dvol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
     u0(m,IEN,k,j,i) -= bdt*edot_net;
-    gross_sum += edot_cool*bdt*dvol;
-    net_sum += edot_net*bdt*dvol;
+    gross_sum += edot_cool*history_bdt_local*dvol;
+    net_sum += edot_net*history_bdt_local*dvol;
     bad_sum += local_bad;
   }, Kokkos::Sum<Real>(gross_energy), Kokkos::Sum<Real>(net_energy),
      Kokkos::Sum<Real>(bad_bounds));

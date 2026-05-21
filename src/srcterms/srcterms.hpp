@@ -58,7 +58,7 @@ class SourceTerms {
 
   // functions
   void ApplySrcTerms(const DvceArray5D<Real> &w0, const EOS_Data &eos,
-                     const Real bdt, DvceArray5D<Real> &u0);
+                     const Real bdt, const Real history_bdt, DvceArray5D<Real> &u0);
   void ApplySrcTerms(DvceArray5D<Real> &i0, const Real bdt);
   void ConstantAccel(const DvceArray5D<Real> &w0, const EOS_Data &eos,
                      const Real bdt, DvceArray5D<Real> &u0);

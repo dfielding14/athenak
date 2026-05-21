@@ -897,6 +897,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     Advection(pin, is_restart);
   } else if (pgen_fun_name.compare("cpaw") == 0) {
     AlfvenWave(pin, is_restart);
+  } else if (pgen_fun_name.compare("cooling_test") == 0) {
+    CoolingTest(pin, is_restart);
   } else if (pgen_fun_name.compare("gr_bondi") == 0) {
     BondiAccretion(pin, is_restart);
   } else if (pgen_fun_name.compare("cshock") == 0) {

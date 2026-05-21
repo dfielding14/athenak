@@ -89,6 +89,18 @@ data
 ...
 ```
 
+Table interpolation is logarithmic along each axis by default. An `axisN` line
+therefore has the form
+
+```text
+axisN kind units [linear|log10] xmin xmax n [axis_options]
+```
+
+If the optional scale token is omitted, the axis is treated as `log10`. For a
+logarithmic axis, `xmin` and `xmax` are the lower and upper `log10` coordinates,
+not the raw physical or code-unit values. Add `linear` on any axis that should
+use linear coordinates; axes may be mixed within one table.
+
 Required header keys:
 
 - `ndim`: 1, 2, or 3.
@@ -232,13 +244,16 @@ The source hook signature is declared in `src/pgen/pgen.hpp`:
 void MyCoolingSource(MeshBlockPack *pmbp, const DvceArray5D<Real> &w0,
                      const EOS_Data &eos_data,
                      const cooling::RuntimeData &runtime, const Real bdt,
+                     const Real history_bdt,
                      DvceArray5D<Real> &u0,
                      Real &gross_energy, Real &net_energy);
 ```
 
-The hook should launch its own device work, update `u0`, and return
-domain-local gross and net cooling energies in code units for history
-accumulation.
+The hook should launch its own device work and update `u0` with `bdt`.
+It should return domain-local gross and net cooling energies in code units
+using `history_bdt`.  `bdt` and `history_bdt` differ for multistage RK
+integrators because earlier source increments are blended before they reach the
+final step solution.
 
 Most pgens should include `src/srcterms/cooling_hooks.hpp` and use its shared
 templated launchers
@@ -246,7 +261,7 @@ instead of duplicating the unit conversion and history bookkeeping:
 
 ```cpp
 cooling::ApplyCoolingWithEvaluator(pmbp, w0, eos_data, runtime,
-                                   MyCoolingEvaluator{}, bdt, u0,
+                                   MyCoolingEvaluator{}, bdt, history_bdt, u0,
                                    gross_energy, net_energy);
 
 cooling::CoolingNewDtWithEvaluator(pmbp, w0, eos_data, runtime, timestep,
@@ -256,3 +271,73 @@ cooling::CoolingNewDtWithEvaluator(pmbp, w0, eos_data, runtime, timestep,
 The timestep hook receives a `cooling::TimestepData` object so the shared helper
 can apply the same temperature and density selection bounds as the built-in
 models.
+
+## Cooling Regression Test Suite
+
+The dedicated cooling regression suite lives in `tst/test_suite/cooling/` and
+uses the built-in `cooling_test` problem generator in
+`src/pgen/tests/cooling_test.cpp`.  The pgen initializes a uniform 1D ideal-gas
+state with zero velocity, optional passive scalar zero, and optional uniform
+magnetic field.  There are no fluid gradients, so any energy change and any
+cooling history signal must come from the cooling source term itself.
+
+This pgen is intentionally not a physical flow test.  It is a source-term test
+surface with analytic expectations:
+
+- `density = 1`, `pressure = 1`, and `gamma = 5/3` give code temperature
+  `T = p/rho = 1`.
+- The domain volume is one, so a code-unit volumetric rate is also the
+  domain-integrated rate.
+- With `cooling_density = mass_density` and `rho = 1`, a table or power law
+  returning `Lambda = 1.0e-2` should produce `cool_gross = 1.0e-2`.
+- If heating returns `Gamma = 2.0e-3`, `cool_net` should be `8.0e-3`.
+- The difference in total energy over the first evolved history interval must
+  match the reported `cool_net` rate.
+
+The suite covers:
+
+- Hydro and MHD source-term paths.
+- Constant power-law cooling under `rk1`, `rk2`, and `rk3`.
+- 1D, 2D, and 3D cooling tables.
+- Default logarithmic table axes and mixed logarithmic/linear table axes.
+- Piecewise power-law cooling.
+- Constant and table heating.
+- Constant and table multiplicative cooling modifiers.
+- User-defined pgen cooling hooks through `cooling_hooks.hpp`.
+- CGM PIE/CIE table blending with shielding disabled.
+- CGM shielding with explicit `mu` and `hydrogen_mass_fraction`.
+- Cooling history disabled mode.
+- Table bounds behavior for `zero` and `clamp`.
+- Cooling timestep control and temperature-bound exclusion.
+- Clean failures for removed legacy cooling keys, fatal table bounds, missing
+  cgs `mu`, missing cgs hydrogen fraction, and cgs timestep-temperature bounds
+  without a temperature composition.
+
+During the review that produced the suite, the multistage RK history
+accumulation was found to be overcounting.  The source update must still use the
+stage coefficient `beta[stage-1]*dt`, but the history accumulator must use the
+weight with which that stage contributes to the final RK solution.  For example,
+`rk2` contributes one half of each stage to the final solution, not raw source
+substeps with weights `1` and `1/2`.  The driver now passes a separate
+`history_bdt` to cooling source launchers, and the test
+`test_constant_powerlaw_history_weights` verifies that `rk1`, `rk2`, and `rk3`
+all report the same interval-integrated cooling rate for a constant source.
+
+To run the suite:
+
+```bash
+cd tst
+python run_test_suite.py --test test_suite/cooling/test_cooling_cpu.py --cpu
+```
+
+Local result for the implementation documented here:
+
+```text
+collected 26 items
+../../test_suite/cooling/test_cooling_cpu.py ..........................  [100%]
+26 passed in 0.46s
+```
+
+AthenaK may write a final duplicate-time history row after the accumulator has
+been reset.  The regression tests read raw history files and check the first
+strictly evolved interval, which is the interval with the source contribution.

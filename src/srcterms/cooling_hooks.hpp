@@ -60,7 +60,7 @@ void ApplyCoolingWithEvaluator(MeshBlockPack *pmbp, const DvceArray5D<Real> &w0,
                                const EOS_Data &eos_data,
                                const RuntimeData &runtime,
                                const Evaluator evaluator, const Real bdt,
-                               DvceArray5D<Real> &u0,
+                               const Real history_bdt, DvceArray5D<Real> &u0,
                                Real &gross_energy, Real &net_energy) {
   auto &indcs = pmbp->pmesh->mb_indcs;
   const int is = indcs.is, nx1 = indcs.nx1;
@@ -114,8 +114,8 @@ void ApplyCoolingWithEvaluator(MeshBlockPack *pmbp, const DvceArray5D<Real> &w0,
     const Real edot_net = edot_cool - edot_heat;
     const Real dvol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
     u0(m, IEN, k, j, i) -= bdt*edot_net;
-    gross_sum += edot_cool*bdt*dvol;
-    net_sum += edot_net*bdt*dvol;
+    gross_sum += edot_cool*history_bdt*dvol;
+    net_sum += edot_net*history_bdt*dvol;
   }, Kokkos::Sum<Real>(gross_energy), Kokkos::Sum<Real>(net_energy));
 }
 

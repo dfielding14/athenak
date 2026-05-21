@@ -29,7 +29,7 @@ using UserRefinementFnPtr = void (*)(MeshBlockPack* pmbp);
 using UserHistoryFnPtr = void (*)(HistoryData *pdata, Mesh *pm);
 using UserCoolingSourceFnPtr = void (*)(MeshBlockPack *pmbp,
     const DvceArray5D<Real> &w0, const EOS_Data &eos_data,
-    const cooling::RuntimeData &runtime, const Real bdt,
+    const cooling::RuntimeData &runtime, const Real bdt, const Real history_bdt,
     DvceArray5D<Real> &u0, Real &gross_energy, Real &net_energy);
 using UserCoolingTimeStepFnPtr = void (*)(MeshBlockPack *pmbp,
     const DvceArray5D<Real> &w0, const EOS_Data &eos_data,
@@ -79,6 +79,7 @@ class ProblemGenerator {
   void Advection(ParameterInput *pin, const bool restart);
   void AlfvenWave(ParameterInput *pin, const bool restart);
   void BondiAccretion(ParameterInput *pin, const bool restart);
+  void CoolingTest(ParameterInput *pin, const bool restart);
   void CShock(ParameterInput *pin, const bool restart);
   void DivBAMR(ParameterInput *pin, const bool restart);
   void Diffusion(ParameterInput *pin, const bool restart);

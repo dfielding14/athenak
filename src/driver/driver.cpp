@@ -280,6 +280,23 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn Real Driver::SourceTermHistoryWeight()
+//! \brief Weight for source-term history integrals in the final RK solution.
+//!
+//! Source terms are applied after each stage update using beta[stage-1]*dt.  For
+//! multistage RK methods, earlier source increments are blended by later stage updates
+//! before they reach the final solution.  Interval-integrated source histories should
+//! therefore use the final low-storage RK weight, not the raw stage increment.
+
+Real Driver::SourceTermHistoryWeight(int stage) const {
+  Real weight = beta[stage-1];
+  for (int later = stage + 1; later <= nexp_stages; ++later) {
+    weight *= gam0[later-1];
+  }
+  return weight;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn Driver::ExecuteTaskList()
 //! \brief Perform tasks over all MeshBlocks for the TaskList specified by string "tl".
 //! Integer argument "stage" can be used to indicate at which step in overall algorithm
