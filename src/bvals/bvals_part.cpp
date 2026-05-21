@@ -45,6 +45,25 @@ void UpdateGID(int &newgid, NeighborBlock nghbr, int myrank, int *pcounter,
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void ParticlesBoundaryValues::MarkForDestruction()
+//! \brief Marks particles that leave a non-periodic mesh boundary for removal. The list
+//! uses ParticleLocationData so it can be sorted and compacted with MPI send holes.
+
+KOKKOS_INLINE_FUNCTION
+void MarkForDestruction(int *pcounter, DualArray1D<ParticleLocationData> dlist, int p) {
+  int index = Kokkos::atomic_fetch_add(pcounter, 1);
+  dlist.d_view(index).prtcl_indx = p;
+  dlist.d_view(index).dest_gid = 0;
+  dlist.d_view(index).dest_rank = 0;
+  return;
+}
+
+KOKKOS_INLINE_FUNCTION
+bool IsPeriodicParticleBoundary(BoundaryFlag flag) {
+  return (flag == BoundaryFlag::periodic || flag == BoundaryFlag::shear_periodic);
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn void ParticlesBoundaryValues::SetNewGID()
 //! \brief
 
@@ -60,12 +79,18 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
   auto myrank = global_variable::my_rank;
   auto &nghbr = pmy_part->pmy_pack->pmb->nghbr;
   auto &psendl = sendlist;
-  int counter=0;
-  int *pcounter = &counter;
+  auto &pdestroyl = destroylist;
   bool &multi_d = pmy_part->pmy_pack->pmesh->multi_d;
   bool &three_d = pmy_part->pmy_pack->pmesh->three_d;
+  auto &mb_bcs = pmy_part->pmy_pack->pmb->mb_bcs;
 
-  Kokkos::realloc(sendlist, static_cast<int>(0.1*npart));
+  Kokkos::View<int> atom_count("atom_count");
+  Kokkos::View<int> atom_destroy_count("atom_destroy_count");
+  Kokkos::deep_copy(atom_count, 0);
+  Kokkos::deep_copy(atom_destroy_count, 0);
+
+  Kokkos::realloc(sendlist, npart);
+  Kokkos::realloc(destroylist, npart);
   par_for("part_update",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
     int m = pi(PGID,p) - gids;
     int mylevel = mblev.d_view(m);
@@ -92,7 +117,23 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
 
     // only update particle GID if it has crossed MeshBlock boundary
     if ((abs(ix) + abs(iy) + abs(iz)) != 0) {
-      if (iz == 0) {
+      bool nonperiodic_mesh_exit =
+          (x1 < meshsize.x1min &&
+           !IsPeriodicParticleBoundary(mb_bcs.d_view(m,BoundaryFace::inner_x1))) ||
+          (x1 > meshsize.x1max &&
+           !IsPeriodicParticleBoundary(mb_bcs.d_view(m,BoundaryFace::outer_x1))) ||
+          (x2 < meshsize.x2min &&
+           !IsPeriodicParticleBoundary(mb_bcs.d_view(m,BoundaryFace::inner_x2))) ||
+          (x2 > meshsize.x2max &&
+           !IsPeriodicParticleBoundary(mb_bcs.d_view(m,BoundaryFace::outer_x2))) ||
+          (x3 < meshsize.x3min &&
+           !IsPeriodicParticleBoundary(mb_bcs.d_view(m,BoundaryFace::inner_x3))) ||
+          (x3 > meshsize.x3max &&
+           !IsPeriodicParticleBoundary(mb_bcs.d_view(m,BoundaryFace::outer_x3)));
+
+      if (nonperiodic_mesh_exit) {
+        MarkForDestruction(&atom_destroy_count(), pdestroyl, p);
+      } else if (iz == 0) {
         if (iy == 0) {
           // x1 face
           int indx = NeighborIndex(ix,0,0,0,0);           // neighbor at same level
@@ -100,7 +141,7 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
             indx = NeighborIndex(ix,0,0,fy,fz);
           }
           while (nghbr.d_view(m,indx).gid < 0) {indx++;}  // neighbor at coarser level
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, pcounter, psendl, p);
+          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, &atom_count(), psendl, p);
         } else if (ix == 0) {
           // x2 face
           int indx = NeighborIndex(0,iy,0,0,0);
@@ -108,7 +149,7 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
             indx = NeighborIndex(0,iy,0,fx,fz);
           }
           while (nghbr.d_view(m,indx).gid < 0) {indx++;}
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, pcounter, psendl, p);
+          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, &atom_count(), psendl, p);
         } else {
           // x1x2 edge
           int indx = NeighborIndex(ix,iy,0,0,0);
@@ -116,7 +157,7 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
             indx = NeighborIndex(ix,iy,0,fz,0);
           }
           while (nghbr.d_view(m,indx).gid < 0) {indx++;}
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, pcounter, psendl, p);
+          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, &atom_count(), psendl, p);
         }
       } else if (iy == 0) {
         if (ix == 0) {
@@ -126,7 +167,7 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
             indx = NeighborIndex(0,0,iz,fx,fy);
           }
           while (nghbr.d_view(m,indx).gid < 0) {indx++;}
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, pcounter, psendl, p);
+          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, &atom_count(), psendl, p);
         } else {
           // x3x1 edge
           int indx = NeighborIndex(ix,0,iz,0,0);
@@ -134,7 +175,7 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
             indx = NeighborIndex(ix,0,iz,fy,0);
           }
           while (nghbr.d_view(m,indx).gid < 0) {indx++;}
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, pcounter, psendl, p);
+          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, &atom_count(), psendl, p);
         }
       } else {
         if (ix == 0) {
@@ -144,37 +185,42 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
             indx = NeighborIndex(0,iy,iz,fx,0);
           }
           while (nghbr.d_view(m,indx).gid < 0) {indx++;}
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, pcounter, psendl, p);
+          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, &atom_count(), psendl, p);
         } else {
           // corners
           int indx = NeighborIndex(ix,iy,iz,0,0);
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, pcounter, psendl, p);
+          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, &atom_count(), psendl, p);
         }
       }
 
       // reset x,y,z positions if particle crosses Mesh boundary using periodic BCs
-      if (x1 < meshsize.x1min) {
+      if (!nonperiodic_mesh_exit && x1 < meshsize.x1min) {
         pr(IPX,p) += (meshsize.x1max - meshsize.x1min);
-      } else if (x1 > meshsize.x1max) {
+      } else if (!nonperiodic_mesh_exit && x1 > meshsize.x1max) {
         pr(IPX,p) -= (meshsize.x1max - meshsize.x1min);
       }
-      if (x2 < meshsize.x2min) {
+      if (!nonperiodic_mesh_exit && x2 < meshsize.x2min) {
         pr(IPY,p) += (meshsize.x2max - meshsize.x2min);
-      } else if (x2 > meshsize.x2max) {
+      } else if (!nonperiodic_mesh_exit && x2 > meshsize.x2max) {
         pr(IPY,p) -= (meshsize.x2max - meshsize.x2min);
       }
-      if (x3 < meshsize.x3min) {
+      if (!nonperiodic_mesh_exit && x3 < meshsize.x3min) {
         pr(IPZ,p) += (meshsize.x3max - meshsize.x3min);
-      } else if (x3 > meshsize.x3max) {
+      } else if (!nonperiodic_mesh_exit && x3 > meshsize.x3max) {
         pr(IPZ,p) -= (meshsize.x3max - meshsize.x3min);
       }
     }
   });
-  nprtcl_send = counter;
+  Kokkos::fence();
+  Kokkos::deep_copy(nprtcl_send, atom_count);
+  Kokkos::deep_copy(nprtcl_destroy, atom_destroy_count);
   Kokkos::resize(sendlist, nprtcl_send);
+  Kokkos::resize(destroylist, nprtcl_destroy);
   // sync sendlist device array with host
   sendlist.template modify<DevExeSpace>();
   sendlist.template sync<HostMemSpace>();
+  destroylist.template modify<DevExeSpace>();
+  destroylist.template sync<HostMemSpace>();
 
   return TaskStatus::complete;
 }
@@ -240,6 +286,7 @@ TaskStatus ParticlesBoundaryValues::CountSendsAndRecvs() {
   MPI_Allgatherv(MPI_IN_PLACE, nsends_eachrank[global_variable::my_rank],
                    mpi_ituple, sends_allranks.data(), nsends_eachrank.data(),
                    nsends_displ.data(), mpi_ituple, mpi_comm_part);
+  MPI_Type_free(&mpi_ituple);
 #endif
   return TaskStatus::complete;
 }
@@ -249,6 +296,7 @@ TaskStatus ParticlesBoundaryValues::CountSendsAndRecvs() {
 //! \brief
 
 TaskStatus ParticlesBoundaryValues::InitPrtclRecv() {
+  nprtcl_recv = 0;
 #if MPI_PARALLEL_ENABLED
   // load STL::vector of ParticleMessageData with <sendrank,recvrank,nprtcl_recv> for
   // receives // on this rank. Length will be nrecvs, initially this length is unknown
@@ -263,55 +311,58 @@ TaskStatus ParticlesBoundaryValues::InitPrtclRecv() {
   nrecvs = recvs_thisrank.size();
 
   // Figure out how many particles will be received from all ranks
-  nprtcl_recv=0;
   for (int n=0; n<nrecvs; ++n) {
     nprtcl_recv += recvs_thisrank[n].nprtcls;
   }
-
-  // Allocate receive buffer
-  Kokkos::realloc(prtcl_rrecvbuf, (pmy_part->nrdata)*nprtcl_recv);
-  Kokkos::realloc(prtcl_irecvbuf, (pmy_part->nidata)*nprtcl_recv);
 
   // Post non-blocking receives
   bool no_errors=true;
   rrecv_req.clear();
   irecv_req.clear();
-  for (int n=0; n<nrecvs; ++n) {
-    rrecv_req.emplace_back(MPI_REQUEST_NULL);
-    irecv_req.emplace_back(MPI_REQUEST_NULL);
-  }
+  if (nprtcl_recv > 0) {
+    // Allocate receive buffer
+    Kokkos::realloc(prtcl_rrecvbuf, (pmy_part->nrdata)*nprtcl_recv);
+    Kokkos::realloc(prtcl_irecvbuf, (pmy_part->nidata)*nprtcl_recv);
 
-  // Init receives for Reals
-  int data_start=0;
-  for (int n=0; n<nrecvs; ++n) {
-    // calculate amount of data to be passed, get pointer to variables
-    int data_size = (pmy_part->nrdata)*(recvs_thisrank[n].nprtcls);
-    int data_end = data_start + (pmy_part->nrdata)*(recvs_thisrank[n].nprtcls - 1);
-    auto recv_ptr = Kokkos::subview(prtcl_rrecvbuf, std::make_pair(data_start, data_end));
-    int drank = recvs_thisrank[n].sendrank;
-    int tag = 0; // 0 for Reals, 1 for ints
+    for (int n=0; n<nrecvs; ++n) {
+      rrecv_req.emplace_back(MPI_REQUEST_NULL);
+      irecv_req.emplace_back(MPI_REQUEST_NULL);
+    }
 
-    // Post non-blocking receive
-    int ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
-                         mpi_comm_part, &(rrecv_req[n]));
-    if (ierr != MPI_SUCCESS) {no_errors=false;}
-    data_start += data_size;
-  }
-  // Init receives for ints
-  data_start=0;
-  for (int n=0; n<nrecvs; ++n) {
-    // calculate amount of data to be passed, get pointer to variables
-    int data_size = (pmy_part->nidata)*(recvs_thisrank[n].nprtcls);
-    int data_end = data_start + (pmy_part->nidata)*(recvs_thisrank[n].nprtcls - 1);
-    auto recv_ptr = Kokkos::subview(prtcl_irecvbuf, std::make_pair(data_start, data_end));
-    int drank = recvs_thisrank[n].sendrank;
-    int tag = 1; // 0 for Reals, 1 for ints
+    // Init receives for Reals
+    int data_start=0;
+    for (int n=0; n<nrecvs; ++n) {
+      // calculate amount of data to be passed, get pointer to variables
+      int data_size = (pmy_part->nrdata)*(recvs_thisrank[n].nprtcls);
+      int data_end = data_start + data_size;
+      auto recv_ptr = Kokkos::subview(prtcl_rrecvbuf,
+                                      std::make_pair(data_start, data_end));
+      int drank = recvs_thisrank[n].sendrank;
+      int tag = 0; // 0 for Reals, 1 for ints
 
-    // Post non-blocking receive
-    int ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_INT, drank, tag,
-                         mpi_comm_part, &(irecv_req[n]));
-    if (ierr != MPI_SUCCESS) {no_errors=false;}
-    data_start += data_size;
+      // Post non-blocking receive
+      int ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
+                           mpi_comm_part, &(rrecv_req[n]));
+      if (ierr != MPI_SUCCESS) {no_errors=false;}
+      data_start += data_size;
+    }
+    // Init receives for ints
+    data_start=0;
+    for (int n=0; n<nrecvs; ++n) {
+      // calculate amount of data to be passed, get pointer to variables
+      int data_size = (pmy_part->nidata)*(recvs_thisrank[n].nprtcls);
+      int data_end = data_start + data_size;
+      auto recv_ptr = Kokkos::subview(prtcl_irecvbuf,
+                                      std::make_pair(data_start, data_end));
+      int drank = recvs_thisrank[n].sendrank;
+      int tag = 1; // 0 for Reals, 1 for ints
+
+      // Post non-blocking receive
+      int ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_INT, drank, tag,
+                           mpi_comm_part, &(irecv_req[n]));
+      if (ierr != MPI_SUCCESS) {no_errors=false;}
+      data_start += data_size;
+    }
   }
 
   // Quit if MPI error detected
@@ -374,7 +425,7 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
     for (int n=0; n<nsends; ++n) {
       // calculate amount of data to be passed, get pointer to variables
       int data_size = nrdata*(sends_thisrank[n].nprtcls);
-      int data_end = data_start + nrdata*(sends_thisrank[n].nprtcls - 1);
+      int data_end = data_start + data_size;
       auto send_ptr = Kokkos::subview(prtcl_rsendbuf,std::make_pair(data_start,data_end));
       int drank = sends_thisrank[n].recvrank;
       int tag = 0; // 0 for Reals, 1 for ints
@@ -390,7 +441,7 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
     for (int n=0; n<nsends; ++n) {
       // calculate amount of data to be passed, get pointer to variables
       int data_size = nidata*(sends_thisrank[n].nprtcls);
-      int data_end = data_start + nidata*(sends_thisrank[n].nprtcls - 1);
+      int data_end = data_start + data_size;
       auto send_ptr = Kokkos::subview(prtcl_isendbuf,std::make_pair(data_start,data_end));
       int drank = sends_thisrank[n].recvrank;
       int tag = 1; // 0 for Reals, 1 for ints
@@ -406,7 +457,7 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
   // Quit if MPI error detected
   if (!(no_errors)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "MPI error in posting non-blocking receives" << std::endl;
+              << std::endl << "MPI error in posting non-blocking sends" << std::endl;
     std::exit(EXIT_FAILURE);
   }
 #endif
@@ -418,109 +469,116 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
 //! \brief
 
 TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
-#if MPI_PARALLEL_ENABLED
-  // Sort sendlist on host by index in particle array
   namespace KE = Kokkos::Experimental;
-  std::sort(KE::begin(sendlist.h_view), KE::end(sendlist.h_view), SortByIndex);
-  // sync sendlist host array with device.  This results in sorted array on device
-  sendlist.template modify<HostMemSpace>();
-  sendlist.template sync<DevExeSpace>();
-
-  // increase size of particle arrays if needed
-  int new_npart = pmy_part->nprtcl_thispack + (nprtcl_recv - nprtcl_send);
-  if (nprtcl_recv > nprtcl_send) {
-    Kokkos::resize(pmy_part->prtcl_idata, pmy_part->nidata, new_npart);
-    Kokkos::resize(pmy_part->prtcl_rdata, pmy_part->nrdata, new_npart);
+  if (nprtcl_send > 0) {
+    std::sort(KE::begin(sendlist.h_view), KE::end(sendlist.h_view), SortByIndex);
+    sendlist.template modify<HostMemSpace>();
+  }
+  if (nprtcl_destroy > 0) {
+    std::sort(KE::begin(destroylist.h_view), KE::end(destroylist.h_view), SortByIndex);
+    destroylist.template modify<HostMemSpace>();
   }
 
-  // check that particle communications have all completed
-  bool bflag = false;
+  int local_change = nprtcl_send + nprtcl_recv + nprtcl_destroy;
+  int global_change = local_change;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(&local_change, &global_change, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+
+  // wait for particle communications to complete before global count updates
   bool no_errors=true;
   for (int n=0; n<nrecvs; ++n) {
-    int test;
-    int ierr = MPI_Test(&(rrecv_req[n]), &test, MPI_STATUS_IGNORE);
+    int ierr = MPI_Wait(&(rrecv_req[n]), MPI_STATUS_IGNORE);
     if (ierr != MPI_SUCCESS) {no_errors=false;}
-    if (!(static_cast<bool>(test))) {
-      bflag = true;
-    }
-    ierr = MPI_Test(&(irecv_req[n]), &test, MPI_STATUS_IGNORE);
+    ierr = MPI_Wait(&(irecv_req[n]), MPI_STATUS_IGNORE);
     if (ierr != MPI_SUCCESS) {no_errors=false;}
-    if (!(static_cast<bool>(test))) {
-      bflag = true;
-    }
   }
   // Quit if MPI error detected
   if (!(no_errors)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "MPI error in testing non-blocking receives"
+              << std::endl << "MPI error in receiving particles"
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  // exit if particle communications have not completed
-  if (bflag) {return TaskStatus::incomplete;}
-
-  // unpack particles into positions of sent particles
-  if (nprtcl_recv > 0) {
-    int nrdata = pmy_part->nrdata;
-    int nidata = pmy_part->nidata;
-    auto &pr = pmy_part->prtcl_rdata;
-    auto &pi = pmy_part->prtcl_idata;
-    auto &rrecvbuf = prtcl_rrecvbuf;
-    auto &irecvbuf = prtcl_irecvbuf;
-    int &npart = pmy_part->nprtcl_thispack;
-    par_for("punpack",DevExeSpace(),0,(nprtcl_recv-1), KOKKOS_LAMBDA(const int n) {
-      int p;
-      if (n < nprtcl_send) {
-        p = sendlist.d_view(n).prtcl_indx; // place particles in holes created by sends
-      } else {
-        p = npart + (n - nprtcl_send);     // place particle at end of arrays
-      }
-      for (int i=0; i<nidata; ++i) {
-        pi(i,p) = irecvbuf(nidata*n + i);
-      }
-      for (int i=0; i<nrdata; ++i) {
-        pr(i,p) = rrecvbuf(nrdata*n + i);
-      }
-    });
-  }
-
-  // At this point have filled npart_recv holes in particle arrays from sends
-  // If (nprtcl_recv < nprtcl_send), have to move particles from end of arrays to fill
-  // remaining holes
-  int nremain = nprtcl_send - nprtcl_recv;
-  if (nremain > 0) {
-    int &npart = pmy_part->nprtcl_thispack;
-    int i_last_hole = nprtcl_send-1;
-    int i_next_hole = nprtcl_recv;
-    for (int n=1; n<=nremain; ++n) {
-      int nend = npart-n;
-      if (nend > sendlist.h_view(i_last_hole).prtcl_indx) {
-        // copy particle from end into hole
-        int next_hole = sendlist.h_view(i_next_hole).prtcl_indx;
-        auto rdest = Kokkos::subview(pmy_part->prtcl_rdata, Kokkos::ALL, next_hole);
-        auto rsrc  = Kokkos::subview(pmy_part->prtcl_rdata, Kokkos::ALL, nend);
-        Kokkos::deep_copy(rdest, rsrc);
-        auto idest = Kokkos::subview(pmy_part->prtcl_idata, Kokkos::ALL, next_hole);
-        auto isrc  = Kokkos::subview(pmy_part->prtcl_idata, Kokkos::ALL, nend);
-        Kokkos::deep_copy(idest, isrc);
-        i_next_hole += 1;
-      } else {
-        // this index contains a hole, so do nothing except find new index of last hole
-        i_last_hole -= 1;
-      }
-    }
-
-    // shrink size of particle data arrays
-    Kokkos::resize(pmy_part->prtcl_idata, pmy_part->nidata, new_npart);
-    Kokkos::resize(pmy_part->prtcl_rdata, pmy_part->nrdata, new_npart);
-  }
-
-  // Update nparticles_thisrank.  Update cost array (use npart_thismb[nmb]?)
-  pmy_part->nprtcl_thispack = new_npart;
-  pmy_part->pmy_pack->pmesh->nprtcl_thisrank = new_npart;
-  MPI_Allgather(&new_npart,1,MPI_INT,(pmy_part->pmy_pack->pmesh->nprtcl_eachrank),1,
-                MPI_INT,MPI_COMM_WORLD);
 #endif
+
+  if (global_change == 0) {
+    return TaskStatus::complete;
+  }
+
+  int old_npart = pmy_part->nprtcl_thispack;
+  int new_npart = old_npart + nprtcl_recv - nprtcl_send - nprtcl_destroy;
+  if (new_npart < 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Particle boundary exchange produced a negative "
+              << "particle count" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  auto old_r = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pmy_part->prtcl_rdata);
+  auto old_i = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pmy_part->prtcl_idata);
+  std::vector<char> remove_particle(old_npart, 0);
+  int nmarked = 0;
+  auto mark_removed = [&](int pindx) {
+    if (pindx < 0 || pindx >= old_npart || remove_particle[pindx] != 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Invalid particle removal index " << pindx
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    remove_particle[pindx] = 1;
+    ++nmarked;
+  };
+  for (int n=0; n<nprtcl_send; ++n) {
+    mark_removed(sendlist.h_view(n).prtcl_indx);
+  }
+  for (int n=0; n<nprtcl_destroy; ++n) {
+    mark_removed(destroylist.h_view(n).prtcl_indx);
+  }
+
+  Kokkos::resize(pmy_part->prtcl_idata, pmy_part->nidata, new_npart);
+  Kokkos::resize(pmy_part->prtcl_rdata, pmy_part->nrdata, new_npart);
+  auto new_r = Kokkos::create_mirror_view(pmy_part->prtcl_rdata);
+  auto new_i = Kokkos::create_mirror_view(pmy_part->prtcl_idata);
+
+  int next_particle = 0;
+  for (int p=0; p<old_npart; ++p) {
+    if (remove_particle[p] == 0) {
+      for (int i=0; i<pmy_part->nidata; ++i) {
+        new_i(i,next_particle) = old_i(i,p);
+      }
+      for (int i=0; i<pmy_part->nrdata; ++i) {
+        new_r(i,next_particle) = old_r(i,p);
+      }
+      ++next_particle;
+    }
+  }
+
+#if MPI_PARALLEL_ENABLED
+  if (nprtcl_recv > 0) {
+    auto recv_r = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_rrecvbuf);
+    auto recv_i = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_irecvbuf);
+    for (int n=0; n<nprtcl_recv; ++n) {
+      for (int i=0; i<pmy_part->nidata; ++i) {
+        new_i(i,next_particle) = recv_i((pmy_part->nidata)*n + i);
+      }
+      for (int i=0; i<pmy_part->nrdata; ++i) {
+        new_r(i,next_particle) = recv_r((pmy_part->nrdata)*n + i);
+      }
+      ++next_particle;
+    }
+  }
+#endif
+
+  if (next_particle != new_npart || nmarked != nprtcl_send + nprtcl_destroy) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Particle compaction count mismatch" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  Kokkos::deep_copy(pmy_part->prtcl_idata, new_i);
+  Kokkos::deep_copy(pmy_part->prtcl_rdata, new_r);
+  pmy_part->nprtcl_thispack = new_npart;
+  pmy_part->UpdateParticleCounts();
   return TaskStatus::complete;
 }
 

@@ -1,0 +1,67 @@
+# AthenaK input file for star particle outflow removal regression tests
+
+<comment>
+problem = StarParticleOutflowRemoval
+
+<job>
+basename = star_particle_outflow
+
+<mesh>
+nghost = 2
+nx1 = 4
+x1min = 0.0
+x1max = 1.0
+ix1_bc = outflow
+ox1_bc = outflow
+
+nx2 = 4
+x2min = 0.0
+x2max = 1.0
+ix2_bc = outflow
+ox2_bc = outflow
+
+nx3 = 4
+x3min = 0.0
+x3max = 1.0
+ix3_bc = outflow
+ox3_bc = outflow
+
+<meshblock>
+nx1 = 4
+nx2 = 4
+nx3 = 4
+
+<time>
+evolution = dynamic
+integrator = rk1
+cfl_number = 0.4
+nlim = 1
+tlim = 0.05
+ndiag = 1
+
+<hydro>
+eos = ideal
+gamma = 1.6666666666666667
+rsolver = llf
+reconstruct = plm
+
+<particles>
+particle_type = star
+pusher = drift
+dt = 0.05
+star_init = file
+particle_file = inputs/particles/star_particles_outflow.tbl
+particle_file_columns = mass_then_time
+star_formation = false
+star_accretion = false
+
+<problem>
+pgen_name = star_particle_test
+base_density = 1.0
+peak_density = 1.0
+pressure = 1.0
+
+<output1>
+file_type = hst
+dt = 0.05
+data_format = %24.16e

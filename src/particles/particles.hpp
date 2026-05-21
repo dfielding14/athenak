@@ -23,13 +23,15 @@
 enum class ParticlesPusher {drift, leap_frog, lagrangian_tracer, lagrangian_mc};
 
 // constants that enumerate ParticleTypes
-enum class ParticleType {cosmic_ray};
+enum class ParticleType {cosmic_ray, star};
 
 //----------------------------------------------------------------------------------------
 //! \struct ParticlesTaskIDs
 //  \brief container to hold TaskIDs of all particles tasks
 
 struct ParticlesTaskIDs {
+  TaskID form;
+  TaskID accrete;
   TaskID push;
   TaskID newgid;
   TaskID count;
@@ -64,6 +66,24 @@ class Particles {
 
   ParticlesPusher pusher;
 
+  // Star-particle controls
+  bool star_init_from_file = false;
+  bool star_formation_enabled = false;
+  bool star_accretion_enabled = false;
+  bool star_remove_gas_on_formation = true;
+  int star_formation_interval = 1;
+  int star_formation_max_per_cycle = -1;
+  int star_accretion_radius_cells = 0;
+  int next_star_tag = 0;
+  Real star_formation_density_threshold = 0.0;
+  Real star_formation_particle_mass = 0.0;
+  Real star_formation_density_floor = 0.0;
+  Real star_accretion_rate = 0.0;
+  Real star_accretion_max_fraction = 0.25;
+  Real star_accretion_density_floor = 0.0;
+  Real star_mass_formed_total = 0.0;
+  Real star_mass_accreted_total = 0.0;
+
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
 
@@ -73,6 +93,8 @@ class Particles {
   // functions...
   void CreateParticleTags(ParameterInput *pin);
   void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
+  TaskStatus FormStars(Driver *pdriver, int stage);
+  TaskStatus AccreteStars(Driver *pdriver, int stage);
   TaskStatus Push(Driver *pdriver, int stage);
   TaskStatus NewGID(Driver *pdriver, int stage);
   TaskStatus SendCnt(Driver *pdriver, int stage);
@@ -84,6 +106,10 @@ class Particles {
 
  private:
   MeshBlockPack* pmy_pack;  // ptr to MeshBlockPack containing this Particles
+
+  void LoadStarsFromFile(ParameterInput *pin);
+  void RefreshNextStarTag();
+  void UpdateParticleCounts();
 };
 
 } // namespace particles

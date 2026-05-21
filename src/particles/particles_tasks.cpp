@@ -29,7 +29,10 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   TaskID none(0);
 
   // particle integration done in "before_timeintegrator" task list
-  id.push   = tl["before_timeintegrator"]->AddTask(&Particles::Push, this, none);
+  id.form   = tl["before_timeintegrator"]->AddTask(&Particles::FormStars, this, none);
+  id.accrete = tl["before_timeintegrator"]->AddTask(&Particles::AccreteStars, this,
+                                                    id.form);
+  id.push   = tl["before_timeintegrator"]->AddTask(&Particles::Push, this, id.accrete);
   id.newgid = tl["before_timeintegrator"]->AddTask(&Particles::NewGID, this, id.push);
   id.count  = tl["before_timeintegrator"]->AddTask(&Particles::SendCnt, this, id.newgid);
   id.irecv  = tl["before_timeintegrator"]->AddTask(&Particles::InitRecv, this, id.count);

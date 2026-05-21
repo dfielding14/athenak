@@ -925,6 +925,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     Z4cLinearWave(pin, is_restart);
   } else if (pgen_fun_name.compare("spherical_collapse") == 0) {
     SphericalCollapse(pin, is_restart);
+  } else if (pgen_fun_name.compare("star_particle_test") == 0) {
+    StarParticleTest(pin, is_restart);
   } else if (pgen_fun_name.compare("diffusion") == 0) {
     Diffusion(pin, is_restart);
   // else, name not set on command line or input file, print warning and quit

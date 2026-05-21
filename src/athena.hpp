@@ -63,7 +63,8 @@ enum BFieldIndex {IBX=0, IBY=1, IBZ=2, NMAG=3};
 enum MetricIndex {I00=0, I01=1, I02=2, I03=3, I11=4, I12=5, I13=6, I22=7, I23=8, I33=9,
                   NMETRIC=10};
 // array indices for particle arrays
-enum ParticlesIndex {PGID=0, PTAG=1, IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5};
+enum ParticlesIndex {PGID=0, PTAG=1, IPX=0, IPVX=1, IPY=2, IPVY=3, IPZ=4, IPVZ=5,
+                     IPMASS=6, IPT_CREATE=7};
 
 // integer constants to specify spatial reconstruction methods
 enum ReconstructionMethod {dc, plm, ppm4, ppmx, wenoz};
@@ -73,7 +74,7 @@ enum TimeEvolution {tstatic, kinematic, dynamic};
 
 // constants that enumerate Physics Modules implemented in code
 enum PhysicsModule {HydroDynamics, MagnetoHydroDynamics,
-                    SpaceTimeDynamics, UserDefined}; //SpaceTimeDynamics = Z4c
+                    SpaceTimeDynamics, ParticleDynamics, UserDefined};
 
 // structs to store primitive/conserved variables in one-dimension
 // (density, velocity/momentum, internal/total energy, [transverse magnetic field])

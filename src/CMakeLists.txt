@@ -123,6 +123,7 @@ add_executable(
         pgen/tests/mri3d.cpp
         pgen/tests/shock_tube.cpp
         pgen/tests/shwave.cpp
+        pgen/tests/star_particle_test.cpp
         pgen/tests/rad_beam.cpp
         pgen/tests/rad_linear_wave.cpp
         pgen/tests/z4c_boosted_puncture.cpp

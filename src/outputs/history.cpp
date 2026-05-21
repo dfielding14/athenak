@@ -22,6 +22,7 @@
 #include "mhd/mhd.hpp"
 #include "z4c/z4c.hpp"
 #include "coordinates/adm.hpp"
+#include "particles/particles.hpp"
 #include "outputs.hpp"
 
 //----------------------------------------------------------------------------------------
@@ -46,6 +47,10 @@ HistoryOutput::HistoryOutput(ParameterInput *pin, Mesh *pm, OutputParameters op)
     }
   }
 
+  if (pm->pmb_pack->ppart != nullptr) {
+    hist_data.emplace_back(PhysicsModule::ParticleDynamics);
+  }
+
   if (pm->pmb_pack->pz4c != nullptr) {
     hist_data.emplace_back(PhysicsModule::SpaceTimeDynamics);
   }
@@ -64,6 +69,8 @@ void HistoryOutput::LoadOutputData(Mesh *pm) {
       LoadMHDHistoryData(&data, pm);
     } else if (data.physics == PhysicsModule::SpaceTimeDynamics) {
       LoadZ4cHistoryData(&data, pm);
+    } else if (data.physics == PhysicsModule::ParticleDynamics) {
+      LoadParticleHistoryData(&data, pm);
     } else if (data.physics == PhysicsModule::UserDefined) {
       (pm->pgen->user_hist_func)(&data, pm);
     }
@@ -265,6 +272,42 @@ void HistoryOutput::LoadZ4cHistoryData(HistoryData *pdata, Mesh *pm) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void HistoryOutput::LoadParticleHistoryData()
+//  \brief Compute and store particle counts and star-particle mass totals.
+
+void HistoryOutput::LoadParticleHistoryData(HistoryData *pdata, Mesh *pm) {
+  particles::Particles *ppart = pm->pmb_pack->ppart;
+  pdata->nhist = 4;
+  pdata->label[0] = "npart";
+  pdata->label[1] = "part-mass";
+  pdata->label[2] = "formed";
+  pdata->label[3] = "accreted";
+
+  pdata->hdata[0] = static_cast<Real>(pm->nprtcl_thisrank);
+  pdata->hdata[1] = 0.0;
+  pdata->hdata[2] = ppart->star_mass_formed_total;
+  pdata->hdata[3] = ppart->star_mass_accreted_total;
+  for (int n=pdata->nhist; n<NHISTORY_VARIABLES; ++n) {
+    pdata->hdata[n] = 0.0;
+  }
+
+  if (ppart->nrdata <= IPMASS || ppart->nprtcl_thispack == 0) {
+    return;
+  }
+
+  Real mass_sum = 0.0;
+  auto &pr = ppart->prtcl_rdata;
+  int npart = ppart->nprtcl_thispack;
+  Kokkos::parallel_reduce("ParticleHistMass",
+  Kokkos::RangePolicy<>(DevExeSpace(),0,npart),
+  KOKKOS_LAMBDA(const int &p, Real &sum) {
+    sum += pr(IPMASS,p);
+  }, Kokkos::Sum<Real>(mass_sum));
+  pdata->hdata[1] = mass_sum;
+  return;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn void HistoryOutput::LoadMHDHistoryData()
 //  \brief Compute and store history data over all MeshBlocks on this rank
 //  Data is stored in a Real array defined in derived class.
@@ -407,6 +450,10 @@ void HistoryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           break;
         case PhysicsModule::SpaceTimeDynamics:
           fname.append(".z4c");
+          break;
+        case PhysicsModule::ParticleDynamics:
+          fname.append(".part");
+          break;
         case PhysicsModule::UserDefined:
           fname.append(".user");
           break;
