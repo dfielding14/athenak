@@ -341,3 +341,35 @@ collected 26 items
 AthenaK may write a final duplicate-time history row after the accumulator has
 been reset.  The regression tests read raw history files and check the first
 strictly evolved interval, which is the interval with the source contribution.
+
+### Analytic Comparison Plots
+
+The plotting script
+`tst/test_suite/cooling/plot_cooling_tests.py` reruns representative cooling
+test cases with the built AthenaK binary and writes figures to
+`docs/source/modules/figures/`:
+
+```bash
+python tst/test_suite/cooling/plot_cooling_tests.py
+```
+
+For constant code-unit cooling, the exact solution is
+
+```text
+Delta E(t) = Lambda t = 1.0e-2 t
+```
+
+because the test has unit volume, unit density, and no heating.  The numerical
+loss from `rk1`, `rk2`, and `rk3` lies on that analytic line, and the source
+history rate errors are at roundoff level.  The largest absolute loss error in
+the generated data is `5.87e-16`; the largest net-rate error is `1.56e-17`.
+
+![Constant cooling analytic comparison](figures/cooling_constant_solution.png)
+
+The model-sweep plot compares the first-interval numerical gross and net
+cooling rates against analytic rates for the table, power-law, heating,
+modifier, user-hook, CGM, and MHD paths.  These short runs use `tlim = 1.0e-8`
+so table values are compared to their analytic initial-state expectations.  The
+largest gross or net rate error in the generated data is `3.34e-13`.
+
+![Cooling model rate errors](figures/cooling_model_rate_errors.png)
