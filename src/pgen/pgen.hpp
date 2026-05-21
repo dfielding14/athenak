@@ -30,7 +30,7 @@ class ProblemGenerator {
   // constructor for new problems
   ProblemGenerator(ParameterInput *pin, Mesh *pmesh);
   // constructor for restarts
-  ProblemGenerator(ParameterInput *pin, Mesh *pmesh, IOWrapper resfile,
+  ProblemGenerator(ParameterInput *pin, Mesh *pmesh, IOWrapper &resfile,
                    FileShardMode shard_mode=FileShardMode::shared);
   ~ProblemGenerator() = default;
 

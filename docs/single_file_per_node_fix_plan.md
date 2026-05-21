@@ -1,85 +1,54 @@
-# `single_file_per_node` Fix Plan
+# `single_file_per_node` Review Notes And Follow-Up Plan
 
-## Goals
+This branch now implements `single_file_per_node` as a general file-sharding
+mode for restart, binary, coarsened-binary, spherical-slice, and PDF outputs.
+The design is sound: it reduces file count from one file per MPI rank to about
+one file per physical node, while keeping the heaviest coordination within a
+node-local MPI communicator.
 
-- [ ] Make `single_file_per_node` scale cleanly for very large restart/output workloads.
-- [ ] Remove restart-path bottlenecks before tuning lower-priority output paths.
-- [ ] Preserve restart compatibility with existing `shared`, `per_rank`, and current `per_node` files unless an explicit format bump is introduced.
-- [ ] Add enough tests and instrumentation to verify both correctness and performance regressions.
+## Current Status
 
-## Phase 1: Redesign Per-Node Restart Metadata
+- Restart output uses a shared manifest plus one payload shard per node under
+  `rst/node_XXXXXXXX/`.
+- Restart input accepts either the manifest path or a path inside a rank/node
+  shard directory and normalizes the request to the correct layout.
+- Large MPI-IO transfers use byte-wise chunking so code paths are not limited
+  by `int` MPI counts.
+- Collective MPI-IO paths keep ranks with zero local payload in the collective
+  call, which avoids deadlocks and incomplete collectives.
+- Sparse spherical-slice and PDF readers can reassemble rank- or node-sharded
+  files from any shard path.
+- Regression tests cover per-node restart round trips, restart path variants,
+  forced small MPI-IO chunks, and shared/rank/node spherical-slice equivalence.
 
-- [ ] Define a restart metadata layout that avoids writing the full global manifest into every node shard.
-- [ ] Choose one of these implementations and document it before coding:
-  - [ ] Preferred: one shared manifest file plus per-node payload files.
-  - [ ] Fallback: a single canonical manifest embedded once, with node shards containing payload only.
-- [ ] Update restart writer logic in [src/outputs/restart.cpp](/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/outputs/restart.cpp) so per-node output writes global metadata exactly once.
-- [ ] Update restart discovery/open logic in [src/main.cpp](/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/main.cpp) to locate the new manifest/payload layout robustly.
-- [ ] Update restart metadata storage in [src/mesh/mesh.hpp](/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mesh/mesh.hpp) and related setup code so the reader has all state it needs without re-deriving paths ad hoc.
-- [ ] Decide and implement backward-compatibility behavior for old per-node restart files:
-  - [ ] Read legacy per-node files unchanged.
-  - [ ] Read new-format files with the optimized path.
-  - [ ] Emit a clear format/version marker so the reader can distinguish them cheaply.
+## Remaining Performance Work
 
-## Phase 2: Fix Per-Node Restart Read Scalability
+These are useful follow-up optimizations, but they are separable from the
+correctness and usability fixes in this review.
 
-- [ ] Rework `LoadPartitionedRestartData()` in [src/pgen/pgen.cpp](/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/pgen/pgen.cpp) so shard files are not reopened once per physics component.
-- [ ] Precompute per-rank intra-node block prefixes once, replacing the current O(ranks) scan in `chunk_base()`.
-- [ ] Group restart block requests by shard and sort them by file offset.
-- [ ] Coalesce adjacent or nearly adjacent reads into larger transfers where practical.
-- [ ] Keep shard handles open for the full load pass instead of repeated open/close cycles.
-- [ ] Decide on the final read execution model:
-  - [ ] Option A: every rank reads its own data, but with coalesced large reads.
-  - [ ] Option B: one reader per current node loads shard data and redistributes over `node_comm`.
-  - [ ] Option C: use MPI-IO collectively for per-node shard reads instead of forced serial I/O.
-- [ ] Benchmark the chosen model against the current implementation on at least one multi-node restart workload.
+1. Stream binary and coarsened-binary MeshBlock payloads directly to their final
+   offsets instead of staging `write_mbs * data_size` bytes in one host buffer.
+   This will reduce peak host memory for very large shards.
+2. Replace the spherical-slice per-node gather with a sparse ownership exchange
+   if `ntheta*nphi*nvars` becomes large enough that root-side node staging is a
+   measurable bottleneck.
+3. Add an optional lightweight benchmark script that records shard counts,
+   payload bytes, open counts, and wall time for shared, per-rank, and per-node
+   modes on the same input.
+4. Add a compatibility fixture for a committed legacy per-node restart file if
+   the project decides to preserve older experimental files permanently.
 
-## Phase 3: Remove Large-Count MPI Overflow Risks
+## Documentation Integration
 
-- [ ] Audit all restart metadata read/write/broadcast paths for `IOWrapperSizeT` to `int` truncation.
-- [ ] Add chunked helpers for large byte transfers in [src/outputs/io_wrapper.cpp](/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/outputs/io_wrapper.cpp) and [src/outputs/io_wrapper.hpp](/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/outputs/io_wrapper.hpp), or add higher-level chunking at each call site.
-- [ ] Apply chunking to manifest reads in [src/mesh/build_tree.cpp](/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/mesh/build_tree.cpp).
-- [ ] Apply chunking to any large metadata writes in [src/outputs/restart.cpp](/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/outputs/restart.cpp).
-- [ ] Review `ParameterInput::LoadFromFile()` and any other header read path for similar count-limit assumptions.
-- [ ] Add explicit error handling when a path still exceeds supported transfer sizes.
+The publishable documentation page is
+[`docs/source/modules/output_file_sharding.md`](source/modules/output_file_sharding.md).
+It is intentionally independent of this planning note and can be copied into the
+GitHub Pages branch without bringing along review-only TODOs.
 
-## Phase 4: Harden Restart Path Parsing and Layout Detection
+Suggested `gh-pages` integration:
 
-- [ ] Replace raw substring detection in [src/main.cpp](/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/main.cpp) with path-component-based detection for `rank_*` and `node_*`.
-- [ ] Make relative paths, absolute paths, and trailing-slash variations behave the same way.
-- [ ] Add tests for:
-  - [ ] `rst/node_00000003/foo.rst`
-  - [ ] `node_00000003/foo.rst`
-  - [ ] `./rst/node_00000003/foo.rst`
-  - [ ] shared restart files with no shard directory
-
-## Phase 5: Reduce Spherical-Slice Per-Node Communication Cost
-
-- [ ] Redesign the per-node `spherical_slice` accumulation in [src/outputs/spherical_slice.cpp](/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/outputs/spherical_slice.cpp) so it does not reduce a dense `(nvars, ntheta, nphi)` array when only sparse owned angles are written.
-- [ ] Replace the dense node-wide mask reduction with a sparse angle ownership exchange.
-- [ ] Ensure the writer still emits a format that [vis/python/read_sphslice.py](/Users/dbf75/Work/Research/AthenaK/athenak-DF/vis/python/read_sphslice.py) can reconstruct, or update the reader in the same change.
-- [ ] Add a correctness check that the union of node shard angle indices covers the full surface exactly once.
-- [ ] Benchmark communication volume and memory footprint before and after the change.
-
-## Phase 6: Remove Full-Payload Host Staging in Binary Writers
-
-- [ ] Refactor [src/outputs/binary.cpp](/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/outputs/binary.cpp) to stream MeshBlock payloads directly to the final offsets instead of staging `write_mbs * data_size` bytes in one large host buffer.
-- [ ] Apply the same streaming approach to [src/outputs/coarsened_binary.cpp](/Users/dbf75/Work/Research/AthenaK/athenak-DF/src/outputs/coarsened_binary.cpp).
-- [ ] Preserve the current on-disk block order and offset math.
-- [ ] Keep the existing large-write chunking behavior for MPI count safety.
-- [ ] Re-measure peak host memory during binary/coarsened-binary output.
-
-## Cross-Cutting Validation
-
-- [ ] Add or extend regression tests for `shared`, `per_rank`, and `per_node` restart round-trips.
-- [ ] Add at least one compatibility test that reads a legacy per-node restart produced before these changes.
-- [ ] Add a stress test that exercises very large manifest sizes without overflowing MPI count-limited paths.
-- [ ] Add lightweight timing/logging around restart metadata load, payload load, and shard open counts so performance regressions are visible.
-- [ ] Document the final format and operational tradeoffs in `docs/`.
-
-## Recommended Execution Order
-
-- [ ] Implement Phase 1 and Phase 4 together so the new restart layout and path handling land coherently.
-- [ ] Implement Phase 2 immediately after Phase 1 so the new format gets the optimized reader from the start.
-- [ ] Implement Phase 3 before declaring restart work complete.
-- [ ] Implement Phases 5 and 6 after restart work is stable, since they are important but not as correctness-critical.
+1. Add `modules/output_file_sharding` to the hidden modules toctree in
+   `docs/source/index.md`.
+2. Add an entry in `docs/source/modules/index.md` under Support Systems.
+3. Add a short link from `docs/source/modules/outputs.md`, preferably near the
+   `single_file_per_rank` output-parameter discussion.

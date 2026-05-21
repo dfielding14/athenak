@@ -1164,7 +1164,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
 // also calls ProblemGenerator::SetProblemData() function to set any user-defined BCs,
 // and any data necessary for restart runs to continue correctly.
 
-ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resfile,
+ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper &resfile,
                                    FileShardMode shard_mode) :
     user_bcs(false),
     user_srcs(false),
@@ -1267,6 +1267,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     }
 #endif
     std::memcpy(&(pturb->rstate), &(rng_data[0]), sizeof(RNG_State));
+    delete [] rng_data;
   }
 
   // root process reads size of CC and FC data arrays from restart file
@@ -1289,6 +1290,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
 #endif
   IOWrapperSizeT data_size;
   std::memcpy(&data_size, &(variabledata[0]), sizeof(IOWrapperSizeT));
+  delete [] variabledata;
   pm->restart_meta.payload_stride = static_cast<std::uint64_t>(data_size);
 
   // calculate total number of CC variables

@@ -30,6 +30,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -46,6 +47,31 @@
 // ScatterView is not part of Kokkos core interface
 #include "Kokkos_ScatterView.hpp"
 
+namespace {
+
+void CheckedFwrite(const void *ptr, std::size_t size, std::size_t count,
+                   std::FILE *stream, const std::string &path) {
+  if (count == 0) {
+    return;
+  }
+  if (std::fwrite(ptr, size, count, stream) != count) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Failed writing PDF output '" << path << "'"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
+void CheckedFclose(std::FILE *stream, const std::string &path) {
+  if (std::fclose(stream) != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Failed closing PDF output '" << path << "'"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 // Constructor: initializes N-D PDF data structures
@@ -376,7 +402,7 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       std::fprintf(hfile, "\n");
     }
 
-    std::fclose(hfile);
+    CheckedFclose(hfile, header_fname);
     pdf_data.bins_written = true;
   }
 
@@ -396,7 +422,7 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
   // Write time as first 8 bytes (double)
   double time_val = static_cast<double>(pm->time);
-  std::fwrite(&time_val, sizeof(double), 1, pfile);
+  CheckedFwrite(&time_val, sizeof(double), 1, pfile, data_fname);
 
   // Copy result to host and write
   auto result_host = Kokkos::create_mirror_view(pdf_data.result_);
@@ -415,11 +441,17 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         val_buf.push_back(v);
       }
     }
+    if (idx_buf.size() > std::numeric_limits<uint32_t>::max()) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "PDF sparse output '" << data_fname
+                << "' has too many nonzero bins for uint32 indexing" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     uint32_t nnz = static_cast<uint32_t>(idx_buf.size());
-    std::fwrite(&nnz, sizeof(uint32_t), 1, pfile);
+    CheckedFwrite(&nnz, sizeof(uint32_t), 1, pfile, data_fname);
     if (nnz > 0) {
-      std::fwrite(idx_buf.data(), sizeof(uint32_t), nnz, pfile);
-      std::fwrite(val_buf.data(), sizeof(double), nnz, pfile);
+      CheckedFwrite(idx_buf.data(), sizeof(uint32_t), nnz, pfile, data_fname);
+      CheckedFwrite(val_buf.data(), sizeof(double), nnz, pfile, data_fname);
     }
   } else {
     // Dense write (only reached on rank 0 after global reduction).
@@ -427,10 +459,11 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     for (int n = 0; n < pdf_data.total_bins; ++n) {
       write_buf[n] = static_cast<double>(result_host(n));
     }
-    std::fwrite(write_buf.data(), sizeof(double), pdf_data.total_bins, pfile);
+    CheckedFwrite(write_buf.data(), sizeof(double), pdf_data.total_bins, pfile,
+                  data_fname);
   }
 
-  std::fclose(pfile);
+  CheckedFclose(pfile, data_fname);
 
   // Update counters
   out_params.file_number++;

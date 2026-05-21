@@ -36,6 +36,28 @@ IOWrapperSizeT SafeByteCount(IOWrapperSizeT size, IOWrapperSizeT count,
   return size*count;
 }
 
+std::size_t SizeOfDatatype(const std::string &datatype) {
+  if (datatype == "byte") {
+    return sizeof(char);
+  }
+  if (datatype == "int") {
+    return sizeof(int);
+  }
+  if (datatype == "float") {
+    return sizeof(float);
+  }
+  if (datatype == "double") {
+    return sizeof(double);
+  }
+  if (datatype == "Real") {
+    return sizeof(Real);
+  }
+
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << "Unrecognized datatype '" << datatype << "'" << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
 #if MPI_PARALLEL_ENABLED
 IOWrapperSizeT GetConfiguredMaxChunkedByteCount() {
   static const IOWrapperSizeT max_chunk_bytes = []() {
@@ -492,26 +514,7 @@ std::size_t IOWrapper::Read_bytes_at_all(void *buf, IOWrapperSizeT size,
 
 std::size_t IOWrapper::Read_Reals(void *buf, IOWrapperSizeT cnt,
                                   bool use_serial_io) {
-#if MPI_PARALLEL_ENABLED
-  if (!use_serial_io) {
-    MPI_Status status;
-    int errcode = MPI_File_read(fh_, buf, cnt, MPI_ATHENA_REAL, &status);
-    if (errcode != MPI_SUCCESS) {
-      char msg[MPI_MAX_ERROR_STRING];
-      int resultlen;
-      MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
-      return 0;
-    }
-    int nread;
-    if (MPI_Get_count(&status,MPI_ATHENA_REAL,&nread) == MPI_UNDEFINED) {return 0;}
-    return nread;
-  } else {
-    return std::fread(buf, sizeof(Real), cnt, reinterpret_cast<FILE*>(fh_));
-  }
-#else
-  return std::fread(buf, sizeof(Real), cnt, fh_);
-#endif
+  return Read_bytes(buf, sizeof(Real), cnt, use_serial_io);
 }
 
 //----------------------------------------------------------------------------------------
@@ -522,28 +525,7 @@ std::size_t IOWrapper::Read_Reals(void *buf, IOWrapperSizeT cnt,
 
 std::size_t IOWrapper::Read_Reals_at(void *buf, IOWrapperSizeT cnt,
                                      IOWrapperSizeT offset, bool use_serial_io) {
-#if MPI_PARALLEL_ENABLED
-  if (!use_serial_io) {
-    MPI_Status status;
-    int errcode = MPI_File_read_at(fh_, offset, buf, cnt, MPI_ATHENA_REAL, &status);
-    if (errcode != MPI_SUCCESS) {
-      char msg[MPI_MAX_ERROR_STRING];
-      int resultlen;
-      MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
-      return 0;
-    }
-    int nread;
-    if (MPI_Get_count(&status,MPI_ATHENA_REAL,&nread) == MPI_UNDEFINED) {return 0;}
-    return nread;
-  } else {
-    std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
-    return std::fread(buf, sizeof(Real), cnt, reinterpret_cast<FILE*>(fh_));
-  }
-#else
-  std::fseek(fh_, offset, SEEK_SET);
-  return std::fread(buf, sizeof(Real), cnt, fh_);
-#endif
+  return Read_bytes_at(buf, sizeof(Real), cnt, offset, use_serial_io);
 }
 
 //----------------------------------------------------------------------------------------
@@ -555,28 +537,7 @@ std::size_t IOWrapper::Read_Reals_at(void *buf, IOWrapperSizeT cnt,
 std::size_t IOWrapper::Read_Reals_at_all(void *buf, IOWrapperSizeT cnt,
                                          IOWrapperSizeT offset,
                                          bool use_serial_io) {
-#if MPI_PARALLEL_ENABLED
-  if (!use_serial_io) {
-    MPI_Status status;
-    int errcode = MPI_File_read_at_all(fh_, offset, buf, cnt, MPI_ATHENA_REAL, &status);
-    if (errcode != MPI_SUCCESS) {
-      char msg[MPI_MAX_ERROR_STRING];
-      int resultlen;
-      MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
-      return 0;
-    }
-    int nread;
-    if (MPI_Get_count(&status,MPI_ATHENA_REAL,&nread) == MPI_UNDEFINED) {return 0;}
-    return nread;
-  } else {
-    std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
-    return std::fread(buf, sizeof(Real), cnt, reinterpret_cast<FILE*>(fh_));
-  }
-#else
-  std::fseek(fh_, offset, SEEK_SET);
-  return std::fread(buf, sizeof(Real), cnt, fh_);
-#endif
+  return Read_bytes_at_all(buf, sizeof(Real), cnt, offset, use_serial_io);
 }
 
 //----------------------------------------------------------------------------------------
@@ -587,25 +548,9 @@ std::size_t IOWrapper::Read_Reals_at_all(void *buf, IOWrapperSizeT cnt,
 
 std::size_t IOWrapper::Write_any_type(const void *buf, IOWrapperSizeT cnt,
                                       std::string datatype, bool use_serial_io) {
+  std::size_t datasize = SizeOfDatatype(datatype);
 #if MPI_PARALLEL_ENABLED
   if (use_serial_io) {
-    // Use standard C file handling
-    std::size_t datasize;
-    if (datatype == "byte") {
-      datasize = sizeof(char);
-    } else if (datatype == "int") {
-      datasize = sizeof(int);
-    } else if (datatype == "float") {
-      datasize = sizeof(float);
-    } else if (datatype == "double") {
-      datasize = sizeof(double);
-    } else if (datatype == "Real") {
-      datasize = sizeof(Real);
-    } else {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Unrecognized datatype '" << datatype << "'" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
     std::size_t written = std::fwrite(buf, datasize, cnt, reinterpret_cast<FILE*>(fh_));
     if (written != cnt) {
       std::cerr << "Error writing data. Expected to write " << cnt
@@ -616,60 +561,10 @@ std::size_t IOWrapper::Write_any_type(const void *buf, IOWrapperSizeT cnt,
     if (cnt == 0) {
       return 0;
     }
-    // set appropriate MPI_Datatype
-    MPI_Datatype mpitype;
-    if (datatype.compare("byte") == 0) {
-      mpitype = MPI_BYTE;
-    } else if (datatype.compare("int") == 0) {
-      mpitype = MPI_INT;
-    } else if (datatype.compare("float") == 0) {
-      mpitype = MPI_FLOAT;
-    } else if (datatype.compare("double") == 0) {
-      mpitype = MPI_DOUBLE;
-    } else if (datatype.compare("Real") == 0) {
-      mpitype = MPI_ATHENA_REAL;
-    } else {
-      MPI_Abort(MPI_COMM_WORLD, 1);
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Unrecognized datatype '" << datatype << "'" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    if (datatype.compare("byte") == 0) {
-      return ChunkedMpiByteWrite(fh_, reinterpret_cast<const char*>(buf), cnt);
-    }
-    // Now write data using MPI-IO
-    MPI_Status status;
-    int errcode = MPI_File_write(fh_, buf, cnt, mpitype, &status);
-    if (errcode != MPI_SUCCESS) {
-      char msg[MPI_MAX_ERROR_STRING];
-      int resultlen;
-      MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
-      return 0;
-    }
-    int nwrite;
-    if (MPI_Get_count(&status, mpitype, &nwrite) == MPI_UNDEFINED) {return 0;}
-    return nwrite;
+    IOWrapperSizeT total_bytes = SafeByteCount(datasize, cnt, "Write_any_type");
+    return ChunkedMpiByteWrite(fh_, reinterpret_cast<const char*>(buf), total_bytes)/datasize;
   }
 #else
-  // set appropriate datasize
-  std::size_t datasize;
-  if (datatype.compare("byte") == 0) {
-    datasize = sizeof(char);
-  } else if (datatype.compare("int") == 0) {
-    datasize = sizeof(int);
-  } else if (datatype.compare("float") == 0) {
-    datasize = sizeof(float);
-  } else if (datatype.compare("double") == 0) {
-    datasize = sizeof(double);
-  } else if (datatype.compare("Real") == 0) {
-    datasize = sizeof(Real);
-  } else {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Unrecognized datatype '" << datatype << "'" << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  // Write data using standard C functions
   std::size_t written = std::fwrite(buf, datasize, cnt, fh_);
   if (written != cnt) {
     std::cerr << "Error writing data. Expected to write " << cnt
@@ -688,26 +583,9 @@ std::size_t IOWrapper::Write_any_type(const void *buf, IOWrapperSizeT cnt,
 std::size_t IOWrapper::Write_any_type_at(const void *buf, IOWrapperSizeT cnt,
                                          IOWrapperSizeT offset, std::string datatype,
                                          bool use_serial_io) {
+  std::size_t datasize = SizeOfDatatype(datatype);
 #if MPI_PARALLEL_ENABLED
   if (use_serial_io) {
-    // set appropriate datasize
-    std::size_t datasize;
-    if (datatype.compare("byte") == 0) {
-      datasize = sizeof(char);
-    } else if (datatype.compare("int") == 0) {
-      datasize = sizeof(int);
-    } else if (datatype.compare("float") == 0) {
-      datasize = sizeof(float);
-    } else if (datatype.compare("double") == 0) {
-      datasize = sizeof(double);
-    } else if (datatype.compare("Real") == 0) {
-      datasize = sizeof(Real);
-    } else {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Unrecognized datatype '" << datatype << "'" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    // Write data using standard C functions
     std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
     std::size_t written = std::fwrite(buf, datasize, cnt, reinterpret_cast<FILE*>(fh_));
     if (written != cnt) {
@@ -719,60 +597,11 @@ std::size_t IOWrapper::Write_any_type_at(const void *buf, IOWrapperSizeT cnt,
     if (cnt == 0) {
       return 0;
     }
-    // set appropriate MPI_Datatype
-    MPI_Datatype mpitype;
-    if (datatype.compare("byte") == 0) {
-      mpitype = MPI_BYTE;
-    } else if (datatype.compare("int") == 0) {
-      mpitype = MPI_INT;
-    } else if (datatype.compare("float") == 0) {
-      mpitype = MPI_FLOAT;
-    } else if (datatype.compare("double") == 0) {
-      mpitype = MPI_DOUBLE;
-    } else if (datatype.compare("Real") == 0) {
-      mpitype = MPI_ATHENA_REAL;
-    } else {
-      MPI_Abort(MPI_COMM_WORLD, 1);
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Unrecognized datatype '" << datatype << "'" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    if (datatype.compare("byte") == 0) {
-      return ChunkedMpiByteWriteAt(fh_, reinterpret_cast<const char*>(buf), cnt, offset);
-    }
-    // Now write data using MPI-IO
-    MPI_Status status;
-    int errcode = MPI_File_write_at(fh_, offset, buf, cnt, mpitype, &status);
-    if (errcode != MPI_SUCCESS) {
-      char msg[MPI_MAX_ERROR_STRING];
-      int resultlen;
-      MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
-      return 0;
-    }
-    int nwrite;
-    if (MPI_Get_count(&status, mpitype, &nwrite) == MPI_UNDEFINED) {return 0;}
-    return nwrite;
+    IOWrapperSizeT total_bytes = SafeByteCount(datasize, cnt, "Write_any_type_at");
+    return ChunkedMpiByteWriteAt(fh_, reinterpret_cast<const char*>(buf), total_bytes,
+                                 offset)/datasize;
   }
 #else
-  // set appropriate datasize
-  std::size_t datasize;
-  if (datatype.compare("byte") == 0) {
-    datasize = sizeof(char);
-  } else if (datatype.compare("int") == 0) {
-    datasize = sizeof(int);
-  } else if (datatype.compare("float") == 0) {
-    datasize = sizeof(float);
-  } else if (datatype.compare("double") == 0) {
-    datasize = sizeof(double);
-  } else if (datatype.compare("Real") == 0) {
-    datasize = sizeof(Real);
-  } else {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Unrecognized datatype '" << datatype << "'" << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  // Write data using standard C functions
   std::fseek(fh_, offset, SEEK_SET);
   std::size_t written = std::fwrite(buf, datasize, cnt, fh_);
   if (written != cnt) {
@@ -792,26 +621,9 @@ std::size_t IOWrapper::Write_any_type_at(const void *buf, IOWrapperSizeT cnt,
 std::size_t IOWrapper::Write_any_type_at_all(const void *buf, IOWrapperSizeT cnt,
                                             IOWrapperSizeT offset, std::string datatype,
                                             bool use_serial_io) {
+  std::size_t datasize = SizeOfDatatype(datatype);
 #if MPI_PARALLEL_ENABLED
   if (use_serial_io) {
-    // set appropriate datasize
-    std::size_t datasize;
-    if (datatype.compare("byte") == 0) {
-      datasize = sizeof(char);
-    } else if (datatype.compare("int") == 0) {
-      datasize = sizeof(int);
-    } else if (datatype.compare("float") == 0) {
-      datasize = sizeof(float);
-    } else if (datatype.compare("double") == 0) {
-      datasize = sizeof(double);
-    } else if (datatype.compare("Real") == 0) {
-      datasize = sizeof(Real);
-    } else {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Unrecognized datatype '" << datatype << "'" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    // Write data using standard C functions
     std::fseek(reinterpret_cast<FILE*>(fh_), offset, SEEK_SET);
     std::size_t written = std::fwrite(buf, datasize, cnt, reinterpret_cast<FILE*>(fh_));
     if (written != cnt) {
@@ -820,68 +632,12 @@ std::size_t IOWrapper::Write_any_type_at_all(const void *buf, IOWrapperSizeT cnt
     }
     return written;
   } else {
-    if (cnt == 0) {
-      char dummy = '\0';
-      if (datatype.compare("byte") == 0) {
-        return ChunkedMpiByteWriteAtAll(fh_, comm_, &dummy, 0, offset);
-      }
-      return 0;
-    }
-    // set appropriate MPI_Datatype
-    MPI_Datatype mpitype;
-    if (datatype.compare("byte") == 0) {
-      mpitype = MPI_BYTE;
-    } else if (datatype.compare("int") == 0) {
-      mpitype = MPI_INT;
-    } else if (datatype.compare("float") == 0) {
-      mpitype = MPI_FLOAT;
-    } else if (datatype.compare("double") == 0) {
-      mpitype = MPI_DOUBLE;
-    } else if (datatype.compare("Real") == 0) {
-      mpitype = MPI_ATHENA_REAL;
-    } else {
-      MPI_Abort(MPI_COMM_WORLD, 1);
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Unrecognized datatype '" << datatype << "'" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    if (datatype.compare("byte") == 0) {
-      return ChunkedMpiByteWriteAtAll(fh_, comm_, reinterpret_cast<const char*>(buf), cnt,
-                                      offset);
-    }
-    // Now write data using MPI-IO
-    MPI_Status status;
-    int errcode = MPI_File_write_at_all(fh_, offset, buf, cnt, mpitype, &status);
-    if (errcode != MPI_SUCCESS) {
-      char msg[MPI_MAX_ERROR_STRING];
-      int resultlen;
-      MPI_Error_string(errcode, msg, &resultlen);
-      Kokkos::printf("%.*s\n", resultlen, msg);
-      return 0;
-    }
-    int nwrite;
-    if (MPI_Get_count(&status,mpitype,&nwrite) == MPI_UNDEFINED) {return 0;}
-    return nwrite;
+    IOWrapperSizeT total_bytes = SafeByteCount(datasize, cnt, "Write_any_type_at_all");
+    char dummy = '\0';
+    const char *write_buf = (total_bytes == 0) ? &dummy : reinterpret_cast<const char*>(buf);
+    return ChunkedMpiByteWriteAtAll(fh_, comm_, write_buf, total_bytes, offset)/datasize;
   }
 #else
-  // set appropriate datasize
-  std::size_t datasize;
-  if (datatype.compare("byte") == 0) {
-    datasize = sizeof(char);
-  } else if (datatype.compare("int") == 0) {
-    datasize = sizeof(int);
-  } else if (datatype.compare("float") == 0) {
-    datasize = sizeof(float);
-  } else if (datatype.compare("double") == 0) {
-    datasize = sizeof(double);
-  } else if (datatype.compare("Real") == 0) {
-    datasize = sizeof(Real);
-  } else {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Unrecognized datatype '" << datatype << "'" << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  // Write data using standard C functions
   std::fseek(fh_, offset, SEEK_SET);
   std::size_t written = std::fwrite(buf, datasize, cnt, fh_);
   if (written != cnt) {

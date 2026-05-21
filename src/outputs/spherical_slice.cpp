@@ -61,6 +61,19 @@ void PrintSphsliceStats(FileShardMode mode, int local_points, int node_points,
             << std::endl;
 }
 
+void CheckedFwrite(const void *ptr, std::size_t size, std::size_t count,
+                   std::FILE *stream, const std::string &path) {
+  if (count == 0) {
+    return;
+  }
+  if (std::fwrite(ptr, size, count, stream) != count) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Failed writing spherical-slice output '" << path
+              << "'" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
 #if MPI_PARALLEL_ENABLED
 struct SphsliceMergeCursor {
   int rank = 0;
@@ -242,15 +255,15 @@ SphericalSliceOutput::SphericalSliceOutput(ParameterInput *pin, Mesh *pm,
     std::exit(EXIT_FAILURE);
   }
 
-  Real lx = pm->mesh_size.x1max - pm->mesh_size.x1min;
-  Real ly = pm->mesh_size.x2max - pm->mesh_size.x2min;
-  Real lz = pm->mesh_size.x3max - pm->mesh_size.x3min;
-  Real half = 0.5*std::min({lx, ly, lz});
-  if (!(r > 0.0 && r < half)) {
+  bool sphere_inside_domain =
+      (pm->mesh_size.x1min < -r && pm->mesh_size.x1max > r &&
+       pm->mesh_size.x2min < -r && pm->mesh_size.x2max > r &&
+       pm->mesh_size.x3min < -r && pm->mesh_size.x3max > r);
+  if (!(r > 0.0 && sphere_inside_domain)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "sphslice radius=" << r << " in block '"
-              << op.block_name << "' must satisfy 0 < r < " << half
-              << " (half the smallest box length)" << std::endl;
+              << op.block_name << "' must be positive and the origin-centered "
+              << "sphere must lie strictly inside the mesh domain" << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -364,12 +377,12 @@ void SphericalSliceOutput::LoadOutputData(Mesh *pm) {
     }
 
     MPI_Gatherv(shard_owned_angles.data(), local_points, MPI_INT32_T,
-                gathered_angles.data(),
+                gathered_angles.empty() ? nullptr : gathered_angles.data(),
                 point_counts.empty() ? nullptr : point_counts.data(),
                 point_displs.empty() ? nullptr : point_displs.data(),
                 MPI_INT32_T, 0, global_variable::node_comm);
     MPI_Gatherv(local_values.data(), nout_vars*local_points, MPI_FLOAT,
-                gathered_values.data(),
+                gathered_values.empty() ? nullptr : gathered_values.data(),
                 value_counts.empty() ? nullptr : value_counts.data(),
                 value_displs.empty() ? nullptr : value_displs.data(),
                 MPI_FLOAT, 0, global_variable::node_comm);
@@ -536,19 +549,19 @@ void SphericalSliceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::string sbuf = ost.str();
     hdr << "  header offset=" << sbuf.size() << std::endl;
     std::string h = hdr.str();
-    std::fwrite(h.c_str(), 1, h.size(), pfile);
-    std::fwrite(sbuf.c_str(), 1, sbuf.size(), pfile);
+    CheckedFwrite(h.c_str(), 1, h.size(), pfile, fname);
+    CheckedFwrite(sbuf.c_str(), 1, sbuf.size(), pfile, fname);
 
     if (partitioned) {
       const auto &owned = shard_owned_angles;
-      std::fwrite(owned.data(), sizeof(int32_t), owned.size(), pfile);
+      CheckedFwrite(owned.data(), sizeof(int32_t), owned.size(), pfile, fname);
       if (shard_values.size() != static_cast<size_t>(npoints)*nout_vars) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl << "sphslice sparse payload has incorrect size"
                   << std::endl;
         std::exit(EXIT_FAILURE);
       }
-      std::fwrite(shard_values.data(), sizeof(float), shard_values.size(), pfile);
+      CheckedFwrite(shard_values.data(), sizeof(float), shard_values.size(), pfile, fname);
     } else {
       std::vector<float> data(static_cast<size_t>(nout_vars)*ntheta*nphi);
       size_t k = 0;
@@ -559,10 +572,15 @@ void SphericalSliceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           }
         }
       }
-      std::fwrite(data.data(), sizeof(float), data.size(), pfile);
+      CheckedFwrite(data.data(), sizeof(float), data.size(), pfile, fname);
     }
 
-    std::fclose(pfile);
+    if (std::fclose(pfile) != 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Failed closing spherical-slice output '" << fname
+                << "'" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
   }
 
   out_params.file_number++;

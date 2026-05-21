@@ -93,7 +93,7 @@ def _glob_partition_files(path):
     elif shard_base.startswith('node_'):
         pattern = os.path.join(parent_dir, 'node_*', file_base)
     else:
-      return [path]
+        return [path]
 
     files = sorted(_glob.glob(pattern))
     if not files:
@@ -257,8 +257,15 @@ def read_pdf(data_path, header_path=None, reshape=True):
                 continue
             if time_val is None:
                 time_val = tv
+            elif tv != time_val:
+                raise RuntimeError(
+                    'PDF shard time mismatch in {}: {} vs {}'.format(rf, tv, time_val))
             if idx is None:
                 continue
+            if np.any(idx >= total_bins):
+                raise RuntimeError(
+                    'PDF shard {} contains bin indices outside [0, {})'.format(
+                        rf, total_bins))
             data[idx] += val
     elif fmt == 'dense':
         raw = np.fromfile(data_path, dtype=np.float64)

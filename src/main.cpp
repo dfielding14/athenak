@@ -406,7 +406,7 @@ int main(int argc, char *argv[]) {
           }
           Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
-          MPI_Finalize();
+          FinalizeMpi();
 #endif
           return(0);
           break;
@@ -422,7 +422,7 @@ int main(int argc, char *argv[]) {
               << "See " << argv[0] << " -h for options and usage." << std::endl;
     Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
-    MPI_Finalize();
+    FinalizeMpi();
 #endif
     return(0);
   }
@@ -462,7 +462,6 @@ int main(int argc, char *argv[]) {
     restartfile.Open(restart_file.c_str(), IOWrapper::FileMode::read,
                      UsesSerialIO(restart_shard_mode));
     pinput->LoadFromFile(restartfile, restart_shard_mode);
-    IOWrapperSizeT headeroffset = restartfile.GetPosition(UsesSerialIO(restart_shard_mode));
   }
 
   // read parameters from input file.  If both -r and -i are specified, this will

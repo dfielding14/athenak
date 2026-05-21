@@ -566,7 +566,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
     }
   }
 
-#ifdef MPI_PARALLEL_ENABLED
+#if MPI_PARALLEL_ENABLED
   // check there is at least one MeshBlock per MPI rank
   if (!use_serial_io) {
     if (nmb_total < global_variable::nranks) {

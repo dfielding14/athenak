@@ -188,18 +188,31 @@ def read_sphslice(path):
             full = np.zeros((nvars, ntheta*nphi), dtype=np.float32)
             covered = np.zeros(ntheta*nphi, dtype=bool)
         else:
-            for key in ('ntheta', 'nphi', 'nvars', 'radius'):
+            for key in ('ntheta', 'nphi', 'nvars', 'radius', 'time'):
                 if h[key] != header[key]:
                     raise RuntimeError(
-                        '{} mismatch across rank files: {} vs {}'.format(
+                        '{} mismatch across shard files: {} vs {}'.format(
                             key, h[key], header[key]))
             if h['variables'] != header['variables']:
-                raise RuntimeError('variable list mismatch across rank files')
+                raise RuntimeError('variable list mismatch across shard files')
 
         if idxs is None:
+            if len(files) != 1:
+                raise RuntimeError(
+                    'shared sphslice payload found while reassembling shards: {}'.format(fp))
             full[...] = vals.reshape(nvars, ntheta*nphi)
             covered[...] = True
         elif idxs.size > 0:
+            total_points = ntheta*nphi
+            if np.any((idxs < 0) | (idxs >= total_points)):
+                raise RuntimeError(
+                    'sphslice shard {} contains out-of-range angle indices'.format(fp))
+            if np.unique(idxs).size != idxs.size:
+                raise RuntimeError(
+                    'sphslice shard {} contains duplicate angle indices'.format(fp))
+            if np.any(covered[idxs]):
+                raise RuntimeError(
+                    'sphslice shard set has duplicate angle coverage at {}'.format(fp))
             full[:, idxs] = vals.reshape(nvars, idxs.size)
             covered[idxs] = True
 
