@@ -16,7 +16,7 @@
 #include "athena.hpp"
 #include "io_wrapper.hpp"
 
-#define NHISTORY_VARIABLES 20
+#define NHISTORY_VARIABLES 100
 #if NHISTORY_VARIABLES > NREDUCTION_VARIABLES
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif
@@ -385,6 +385,70 @@ class RestartOutput : public BaseTypeOutput {
   RestartOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
   void LoadOutputData(Mesh *pm) override;
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+};
+
+//----------------------------------------------------------------------------------------
+//! \class ParticleDFOutput
+//  \brief derived BaseTypeOutput class for particle pitch-angle histograms
+
+class ParticleDFOutput : public BaseTypeOutput {
+ public:
+  ParticleDFOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int nbin;
+  Real vmin, vmax;
+  HostArray2D<int> host_histogram;
+  int df_single_file_per_rank;
+};
+
+//----------------------------------------------------------------------------------------
+//! \class ParticleDxHistOutput
+//  \brief derived BaseTypeOutput class for particle displacement histograms
+
+class ParticleDxHistOutput : public BaseTypeOutput {
+ public:
+  ParticleDxHistOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int nbin;
+  Real vmin, vmax;
+  HostArray2D<int> host_histogram;
+  int dxhist_single_file_per_rank;
+};
+
+//----------------------------------------------------------------------------------------
+//! \class ParticleRestartOutput
+//  \brief derived BaseTypeOutput class for particle restart dumps
+
+class ParticleRestartOutput : public BaseTypeOutput {
+ public:
+  ParticleRestartOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int npout_thisrank;
+  int npout_total;
+  HostArray2D<Real> outpart_rdata;
+  HostArray2D<int>  outpart_idata;
+};
+
+//----------------------------------------------------------------------------------------
+//! \class ParticlePositionsOutput
+//  \brief derived BaseTypeOutput class for particle position dumps
+
+class ParticlePositionsOutput : public BaseTypeOutput {
+ public:
+  ParticlePositionsOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int npout_thisrank;
+  int npout_total;
+  HostArray2D<Real> outpart_rdata;
+  HostArray2D<int>  outpart_idata;
 };
 
 // Forward declaration

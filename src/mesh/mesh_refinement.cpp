@@ -25,6 +25,7 @@
 #include "dyn_grmhd/dyn_grmhd.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "particles/particles.hpp"
 #include "radiation/radiation.hpp"
 #include "coordinates/adm.hpp"
 #include "z4c/z4c.hpp"
@@ -656,6 +657,10 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
     if (prad != nullptr) {
       prad->SetOrthonormalTetrad();
     }
+  }
+
+  if (pm->pmb_pack->ppart != nullptr) {
+    pm->pmb_pack->ppart->RemapAfterAMR();
   }
 
   return;

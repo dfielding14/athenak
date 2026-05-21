@@ -14,7 +14,7 @@ AthenaK is targeting challenging problems that require exascale resources, and a
 - Special relativistic (SR) hydrodynamics and MHD
 - General relativistic (GR) hydrodynamics and MHD in stationary spacetimes
 - Relativistic radiation transport
-- Lagrangian tracer particles, and charged test particles
+- Lagrangian tracer particles, charged test particles, and cosmic-ray tracer particles
 - Numerical relativity solver using the Z4c formalism
 - GR hydrodynamics and MHD in dynamical spacetimes
 
@@ -31,6 +31,9 @@ instructions on how to [download](https://github.com/IAS-Astrophysics/athenak/wi
 Other pages give instructions for running the code.
 
 Since AthenaK is very similar to Athena++, the [Athena++ documention](https://github.com/PrincetonUniversity/athena/wiki) may also be helpful.
+
+Cosmic-ray tracer particle inputs, outputs, AMR behavior, and local validation results are
+documented in [`src/particles/README.md`](src/particles/README.md).
 
 ## Code papers
 

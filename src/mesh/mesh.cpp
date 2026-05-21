@@ -52,6 +52,7 @@ Mesh::Mesh(ParameterInput *pin) :
   nmb_packs_thisrank(1),
   nprtcl_thisrank(0),
   nprtcl_total(0),
+  nprtcl_eachrank(nullptr),
   dtold(0.),
   dt_last_completed(0.) {
   // Set physical size and number of cells in mesh (root level)
@@ -337,7 +338,7 @@ Mesh::Mesh(ParameterInput *pin) :
 // destructor
 
 Mesh::~Mesh() {
-  if (pmb_pack->ppart != nullptr) {delete [] nprtcl_eachrank;}
+  if (nprtcl_eachrank != nullptr) {delete [] nprtcl_eachrank;}
   if (multilevel) {
     delete pmr;
   }
@@ -652,19 +653,7 @@ void Mesh::AddCoordinatesAndPhysics(ParameterInput *pinput) {
   // Determine total number of particles across all ranks
   particles::Particles *ppart = pmb_pack->ppart;
   if (ppart != nullptr) {
-    nprtcl_thisrank = 0;
-    for (int n=0; n<nmb_packs_thisrank; ++n) {
-      nprtcl_thisrank += pmb_pack->ppart->nprtcl_thispack;
-    }
-    nprtcl_eachrank = new int[global_variable::nranks];
-    nprtcl_eachrank[global_variable::my_rank] = nprtcl_thisrank;
-#if MPI_PARALLEL_ENABLED
-    // Share number of particles on each rank with all ranks
-    MPI_Allgather(&nprtcl_thisrank,1,MPI_INT,nprtcl_eachrank,1,MPI_INT,MPI_COMM_WORLD);
-#endif
-    for (int n=0; n<global_variable::nranks; ++n) {
-      nprtcl_total += nprtcl_eachrank[n];
-    }
+    UpdateParticleCounts();
     // Assign particle IDs
     if (pmb_pack->ppart != nullptr) {
       pmb_pack->ppart->CreateParticleTags(pinput);
@@ -675,5 +664,31 @@ void Mesh::AddCoordinatesAndPhysics(ParameterInput *pinput) {
   // can only be done after the physics modules have been constructed
   if (adaptive) {
     pmr->pmrc = new RefinementCriteria(this, pinput);
+  }
+}
+
+//----------------------------------------------------------------------------------------
+// \fn Mesh::UpdateParticleCounts
+
+void Mesh::UpdateParticleCounts() {
+  particles::Particles *ppart = pmb_pack->ppart;
+  if (ppart == nullptr) {return;}
+
+  nprtcl_thisrank = 0;
+  for (int n=0; n<nmb_packs_thisrank; ++n) {
+    nprtcl_thisrank += pmb_pack->ppart->nprtcl_thispack;
+  }
+
+  if (nprtcl_eachrank == nullptr) {
+    nprtcl_eachrank = new int[global_variable::nranks];
+  }
+  nprtcl_eachrank[global_variable::my_rank] = nprtcl_thisrank;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allgather(&nprtcl_thisrank,1,MPI_INT,nprtcl_eachrank,1,MPI_INT,MPI_COMM_WORLD);
+#endif
+
+  nprtcl_total = 0;
+  for (int n=0; n<global_variable::nranks; ++n) {
+    nprtcl_total += nprtcl_eachrank[n];
   }
 }

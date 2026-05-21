@@ -20,7 +20,8 @@
 // forward declarations
 
 // constants that enumerate ParticlesPusher options
-enum class ParticlesPusher {drift, leap_frog, lagrangian_tracer, lagrangian_mc};
+enum class ParticlesPusher {drift, leap_frog, lagrangian_tracer, lagrangian_mc,
+                            boris_lin, boris_tsc};
 
 // constants that enumerate ParticleTypes
 enum class ParticleType {cosmic_ray};
@@ -54,13 +55,17 @@ class Particles {
   // data
   ParticleType particle_type;
   int nprtcl_thispack;             // number of particles this MeshBlockPack
+  int nprtcl_perspec_thispack;     // number of particles per species in this pack
   int nrdata, nidata;
+  int nspecies;
 //  DvceArray1D<int>  prtcl_gid;     // GID of MeshBlock containing each par
 //  DvceArray2D<Real> prtcl_pos;     // positions
 //  DvceArray2D<Real> prtcl_vel;     // velocities
   DvceArray2D<Real> prtcl_rdata;   // real number properties each particle (x,v,etc.)
   DvceArray2D<int>  prtcl_idata;   // integer properties each particle (gid, tag, etc.)
   Real dtnew;
+  int is_dynamic;
+  int prtcl_rst_flag;
 
   ParticlesPusher pusher;
 
@@ -72,6 +77,7 @@ class Particles {
 
   // functions...
   void CreateParticleTags(ParameterInput *pin);
+  void RemapAfterAMR();
   void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   TaskStatus Push(Driver *pdriver, int stage);
   TaskStatus NewGID(Driver *pdriver, int stage);
