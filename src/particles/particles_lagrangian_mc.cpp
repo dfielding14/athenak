@@ -321,7 +321,6 @@ void Particles::AppendParticles(const HostArray2D<Real> &new_rdata,
   Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
   Kokkos::deep_copy(prtcl_rdata, merged_r);
   Kokkos::deep_copy(prtcl_idata, merged_i);
-  pmy_pack->pmesh->UpdateParticleCounts();
 }
 
 //----------------------------------------------------------------------------------------
@@ -521,6 +520,7 @@ void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
       }
     }
   }
+  pm->UpdateParticleCounts();
 }
 
 //----------------------------------------------------------------------------------------

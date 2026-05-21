@@ -102,3 +102,8 @@ along_x3  = false
 <output1>
 file_type = prtcl_thermo_history
 dt        = 0.01
+
+<output2>
+file_type            = rst
+dt                   = 0.02
+single_file_per_rank = true

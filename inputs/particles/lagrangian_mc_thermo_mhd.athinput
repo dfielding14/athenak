@@ -1,0 +1,82 @@
+# AthenaK MHD smoke input for lagrangian_mc thermodynamic tracers
+
+<comment>
+problem   = Lagrangian Monte-Carlo thermodynamic tracers in MHD
+
+<job>
+basename  = lagrangian_mc_thermo_mhd
+
+<mesh>
+nghost    = 3
+nx1       = 32
+x1min     = -0.5
+x1max     =  0.5
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 32
+x2min     = -0.5
+x2max     =  0.5
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 1
+x3min     = -0.5
+x3max     =  0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 32
+nx2       = 32
+nx3       = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim       = 4
+tlim       = 0.04  # linear_wave interprets this as wave periods; runtime tlim is 0.02
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+nscalars    = 0
+gamma       = 1.6666666666666667
+
+<particles>
+particle_type = lagrangian_mc
+pusher        = lagrangian_mc
+random_seed   = 97531
+
+<tracer_seed1>
+id              = 1
+start_time      = 0.0
+end_time        = 0.0
+cadence         = -1.0
+count_per_event = 16
+weight          = mass
+region          = all
+seed            = 86420
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp       = 1.0e-3
+dens      = 1.0
+pgas      = 0.6
+vx0       = 0.0
+vy0       = 0.0
+vz0       = 0.0
+bx0       = 1.0
+by0       = 1.4142135623730951
+bz0       = 0.5
+along_x1  = true
+along_x2  = false
+along_x3  = false
+
+<output1>
+file_type = prtcl_thermo_history
+dt        = 0.01
