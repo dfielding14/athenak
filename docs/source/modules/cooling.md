@@ -39,6 +39,26 @@ edot_heat = q_heat Gamma
 where `q_cool` and `q_heat` are selected by `cooling_density` and
 `heating_density`.
 
+## Which Options Do I Need?
+
+| Use case | Required choices |
+| --- | --- |
+| Code-unit power law | `enabled=true`, `units=code`, `cooling_model=powerlaw`, `cooling_reference_axis`, `cooling_reference_value`, and a `cooling_density`. |
+| Piecewise code-unit curve | Same as power law, plus `cooling_model=piecewise_powerlaw`, ordered `cooling_breaks`, and one-more-entry `cooling_slopes`. |
+| Cooling table | `cooling_model=table`, `cooling_table=...`, `cooling_density=...`, and a table with `value_kind Lambda`. |
+| Heating | `heating_model=constant`, `table`, `powerlaw`, or `piecewise_powerlaw`; select `heating_density` independently from `cooling_density`. |
+| CGS Lambda with total number density | Add a `<units>` block, set table/value units to `cgs`, set `cooling_density=number_density`, and provide `<cooling>/mu`. |
+| CGS Lambda with hydrogen number density | Add a `<units>` block, set table/value units to `cgs`, set `cooling_density=hydrogen_number_density`, and provide `hydrogen_mass_fraction` or `mu_H`. |
+| CGS temperature axis or cgs timestep temperature bounds | Add a `<units>` block and provide `temperature_mu` or `mu`. |
+| Passive-scalar/metallicity table axis | Compile/run with enough passive scalars and set `scalar_index=N` on that axis. |
+| Cooling timestep limit | Set `timestep=true`, `timestep_factor`, and explicit bound booleans/units if filtering cells. |
+| History rates | Set `history=true`; `cool_gross` and `cool_net` are interval-integrated rates. |
+| Pgen-defined cooling | Set `cooling_model=user` or `heating_model=user`, then register the user cooling hooks from the pgen. |
+
+Canonical examples live under `inputs/cooling/`, including code-unit power law,
+1D/2D/3D tables, CGS number-density and hydrogen-density tables, CGM PIE/CIE
+blending, and a pgen user-hook example.
+
 ## Units And Density
 
 `units` sets the default value units for built-in analytic cooling and heating:
@@ -116,6 +136,18 @@ Required header keys:
 Allowed axes are `temperature`, `density`, and `scalar`. Density axes may add
 `density_kind=mass_density`, `density_kind=number_density`, or
 `density_kind=hydrogen_number_density`. Scalar axes may add `scalar_index=N`.
+
+Validate tables before running large jobs:
+
+```bash
+tools/validate_cooling_table.py path/to/table.tbl --expect-value-kind lambda
+tools/validate_cooling_table.py path/to/table.tbl --plot table_slice.png
+tools/validate_cooling_table.py --write-example scratch.tbl --ndim 2 --value-kind lambda
+```
+
+The validator checks the header grammar, axis order and extents, default-log
+axis assumptions, expected value count, value kind compatibility, non-finite
+values, and can make a quick 1D/2D slice plot.
 
 ## Power Laws
 
@@ -309,9 +341,14 @@ The suite covers:
 - Cooling history disabled mode.
 - Table bounds behavior for `zero` and `clamp`.
 - Cooling timestep control and temperature-bound exclusion.
+- Nontrivial CGS density conversion for total number density and hydrogen
+  number density.
+- Runtime scalar-axis selection and clean failure for invalid scalar indices.
+- The standalone table validator, including plotting and generated examples.
 - Clean failures for removed legacy cooling keys, fatal table bounds, missing
-  cgs `mu`, missing cgs hydrogen fraction, and cgs timestep-temperature bounds
-  without a temperature composition.
+  cgs `mu`, missing cgs hydrogen fraction, cgs timestep-temperature bounds
+  without a temperature composition, malformed tables, wrong value counts,
+  bad value kinds, non-finite data, invalid log axes, and bad axis-scale tokens.
 
 During the review that produced the suite, the multistage RK history
 accumulation was found to be overcounting.  The source update must still use the
@@ -333,14 +370,26 @@ python run_test_suite.py --test test_suite/cooling/test_cooling_cpu.py --cpu
 Local result for the implementation documented here:
 
 ```text
-collected 26 items
-../../test_suite/cooling/test_cooling_cpu.py ..........................  [100%]
-26 passed in 0.46s
+collected 39 items
+../../test_suite/cooling/test_cooling_cpu.py ...............................  [100%]
+39 passed
 ```
 
 AthenaK may write a final duplicate-time history row after the accumulator has
 been reset.  The regression tests read raw history files and check the first
 strictly evolved interval, which is the interval with the source contribution.
+
+MPI and GPU targeted coverage is also present:
+
+```bash
+cd tst
+python run_test_suite.py --test test_suite/cooling/test_cooling_mpicpu.py --mpicpu
+python run_test_suite.py --test test_suite/cooling/test_cooling_gpu.py --gpu
+```
+
+The MPI test checks that `cool_gross` and `cool_net` are reduced correctly
+across ranks.  The GPU-targeted tests exercise table interpolation with a
+passive-scalar axis and the pgen user-hook launcher on CUDA builds.
 
 ### Analytic Comparison Plots
 
@@ -373,3 +422,16 @@ so table values are compared to their analytic initial-state expectations.  The
 largest gross or net rate error in the generated data is `3.34e-13`.
 
 ![Cooling model rate errors](figures/cooling_model_rate_errors.png)
+
+The interpolation-convergence plot builds temporary 1D tables from the analytic
+curve
+
+```text
+Lambda(T) = 1.0e-2 [1 + 0.2 T^2]
+```
+
+and samples them at an off-grid temperature.  The error decreases with the
+expected second-order trend for linear interpolation as the table spacing is
+refined.
+
+![Cooling table interpolation convergence](figures/cooling_table_interpolation_convergence.png)

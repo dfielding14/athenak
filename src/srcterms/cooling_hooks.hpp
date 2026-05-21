@@ -81,6 +81,45 @@ void ApplyCoolingWithEvaluator(MeshBlockPack *pmbp, const DvceArray5D<Real> &w0,
   const Real gm1 = eos_data.gamma - 1.0;
   const Real use_e = eos_data.use_e;
   auto &size = pmbp->pmb->mb_size;
+
+  if (history_bdt == 0.0) {
+    Kokkos::parallel_for("user_cooling_source_fast",
+                         Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    KOKKOS_LAMBDA(const int &idx) {
+      int m = idx/nkji;
+      int k = (idx - m*nkji)/nji;
+      int j = (idx - m*nkji - k*nji)/nx1;
+      int i = (idx - m*nkji - k*nji - j*nx1) + is;
+      k += ks;
+      j += js;
+
+      CoolingCellState state;
+      state.rho_code = w0(m, IDN, k, j, i);
+      state.rho_cgs = state.rho_code*runtime.density_cgs;
+      state.nfluid = nfluid;
+      state.nscalars = nscalars;
+      if (use_e) {
+        state.temp_code = w0(m, IEN, k, j, i)/state.rho_code*gm1;
+        state.eint_code = w0(m, IEN, k, j, i);
+      } else {
+        state.temp_code = w0(m, ITM, k, j, i);
+        state.eint_code = w0(m, ITM, k, j, i)*state.rho_code/gm1;
+      }
+      state.temp_cgs = state.temp_code*runtime.temp_cgs;
+      if (nscalars > 0) state.scalar0 = w0(m, nfluid, k, j, i);
+
+      const CoolingRates rates = evaluator(state);
+      const Real edot_cool = CoolingEdotFromLambda(rates.lambda, rates.lambda_units,
+          runtime.cooling_density, state.rho_code, runtime);
+      const Real edot_heat = HeatingEdotFromGamma(rates.gamma, rates.gamma_units,
+          runtime.heating_density, state.rho_code, runtime);
+      u0(m, IEN, k, j, i) -= bdt*(edot_cool - edot_heat);
+    });
+    gross_energy = 0.0;
+    net_energy = 0.0;
+    return;
+  }
+
   Kokkos::parallel_reduce("user_cooling_source",
                           Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
   KOKKOS_LAMBDA(const int &idx, Real &gross_sum, Real &net_sum) {

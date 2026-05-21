@@ -22,6 +22,9 @@ import athena_read  # noqa: E402
 
 HYDRO_INPUT = "inputs/cooling_test_hydro.athinput"
 MHD_INPUT = "inputs/cooling_test_mhd.athinput"
+ROOT = Path(__file__).resolve().parents[3]
+VALIDATOR = ROOT / "tools" / "validate_cooling_table.py"
+AMU_CGS = 1.660538921e-24
 
 
 def _remove_outputs(basename, physics):
@@ -179,6 +182,74 @@ def test_mhd_source_path_and_history():
     _assert_history_rate(data, gross=1.0e-2, net=1.0e-2)
 
 
+def test_scalar_axis_uses_selected_passive_scalar():
+    data = _run_case(
+        "cooling_scalar_axis_valid",
+        ["cooling/cooling_model=table",
+         "cooling/cooling_table=inputs/tables/cooling_lambda_3d.tbl",
+         "problem/scalar0=1.0",
+         "time/tlim=1.0e-8",
+         "time/nlim=1"],
+    )
+    row = _first_evolved_row(data)
+    assert np.isclose(data["cool_gross"][row], 1.1e-2, rtol=1.0e-8,
+                      atol=1.0e-12)
+    assert np.isclose(data["cool_net"][row], 1.1e-2, rtol=1.0e-8,
+                      atol=1.0e-12)
+
+
+@pytest.mark.parametrize(
+    "basename,density_kind,composition_flags,expected_rate",
+    [
+        (
+            "cooling_cgs_number_density_units",
+            "number_density",
+            ["cooling/mu=0.5"],
+            2.0e-2,
+        ),
+        (
+            "cooling_cgs_hydrogen_density_units",
+            "hydrogen_number_density",
+            ["cooling/hydrogen_mass_fraction=0.4"],
+            3.0e-2,
+        ),
+    ],
+)
+def test_cgs_density_conversion_with_nontrivial_units(
+        basename, density_kind, composition_flags, expected_rate):
+    length_cgs = 2.0
+    mass_cgs = 16.0
+    time_cgs = 4.0
+    density_code = 0.75
+    density_cgs = density_code*mass_cgs/length_cgs**3
+    pressure_cgs = mass_cgs/(length_cgs*time_cgs**2)
+    edot_cgs_to_code = time_cgs/pressure_cgs
+    if density_kind == "number_density":
+        mu = 0.5
+        q = density_cgs/(mu*AMU_CGS)
+    else:
+        hydrogen_mass_fraction = 0.4
+        q = density_cgs*hydrogen_mass_fraction/AMU_CGS
+    lambda_cgs = expected_rate/(q*q*edot_cgs_to_code)
+    data = _run_case(
+        basename,
+        ["problem/density=0.75",
+         "problem/pressure=1.2",
+         "units/length_cgs=2.0",
+         "units/mass_cgs=16.0",
+         "units/time_cgs=4.0",
+         "cooling/cooling_model=powerlaw",
+         "cooling/shielding_model=none",
+         f"cooling/cooling_density={density_kind}",
+         "cooling/cooling_powerlaw_value_units=cgs",
+         f"cooling/cooling_reference_value={lambda_cgs:.17e}",
+         *composition_flags],
+        input_file="inputs/cooling_test_hydro_composition.athinput",
+    )
+    _assert_history_rate(data, gross=expected_rate, net=expected_rate,
+                         rtol=2.0e-12, atol=1.0e-13)
+
+
 def test_history_can_be_disabled():
     data = _run_case("cooling_history_off", ["cooling/history=false"])
     assert "cool_gross" not in data
@@ -294,6 +365,53 @@ def _run_failure(basename, flags, input_file=HYDRO_INPUT):
              "cooling/timestep_temperature_max=1.0e20"],
             "cgs temperature evaluation requires <cooling>/temperature_mu",
         ),
+        (
+            "cooling_missing_axis_rejected",
+            ["cooling/cooling_model=table",
+             "cooling/cooling_table=inputs/tables/malformed/cooling_missing_axis.tbl"],
+            "missing axis1",
+        ),
+        (
+            "cooling_wrong_value_count_rejected",
+            ["cooling/cooling_model=table",
+             "cooling/cooling_table=inputs/tables/malformed/"
+             "cooling_wrong_value_count.tbl"],
+            "values but expected",
+        ),
+        (
+            "cooling_bad_value_kind_rejected",
+            ["cooling/cooling_model=table",
+             "cooling/cooling_table=inputs/tables/malformed/"
+             "cooling_bad_value_kind.tbl"],
+            "this use requires value_kind lambda",
+        ),
+        (
+            "cooling_nonfinite_value_rejected",
+            ["cooling/cooling_model=table",
+             "cooling/cooling_table=inputs/tables/malformed/"
+             "cooling_nonfinite_value.tbl"],
+            "contains a non-finite value",
+        ),
+        (
+            "cooling_bad_log_axis_rejected",
+            ["cooling/cooling_model=table",
+             "cooling/cooling_table=inputs/tables/malformed/cooling_bad_log_axis.tbl"],
+            "log10 axis0 extent",
+        ),
+        (
+            "cooling_bad_axis_scale_rejected",
+            ["cooling/cooling_model=table",
+             "cooling/cooling_table=inputs/tables/malformed/"
+             "cooling_bad_axis_scale.tbl"],
+            "optional axis scale must be 'linear' or 'log10'",
+        ),
+        (
+            "cooling_scalar_index_rejected",
+            ["cooling/cooling_model=table",
+             "cooling/cooling_table=inputs/tables/malformed/"
+             "cooling_scalar_bad_index.tbl"],
+            "scalar_index=1",
+        ),
     ],
 )
 def test_invalid_cooling_inputs_fail_cleanly(basename, flags, expected_text):
@@ -301,3 +419,49 @@ def test_invalid_cooling_inputs_fail_cleanly(basename, flags, expected_text):
         basename == "cooling_legacy_rejected") else HYDRO_INPUT
     output = _run_failure(basename, flags, input_file=input_file)
     assert expected_text in output
+
+
+def test_table_validator_accepts_runtime_table_and_plots(tmp_path):
+    table = ROOT / "tst" / "inputs" / "tables" / "cooling_lambda_3d.tbl"
+    plot = tmp_path / "table.png"
+    result = subprocess.run(
+        [sys.executable, str(VALIDATOR), str(table),
+         "--expect-value-kind", "lambda", "--plot", str(plot)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "OK:" in result.stdout
+    assert plot.exists()
+
+
+def test_table_validator_rejects_malformed_table():
+    table = ROOT / "tst" / "inputs" / "tables" / "malformed" / (
+        "cooling_wrong_value_count.tbl")
+    result = subprocess.run(
+        [sys.executable, str(VALIDATOR), str(table),
+         "--expect-value-kind", "lambda"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "values but expected" in result.stderr
+
+
+def test_table_validator_can_generate_example(tmp_path):
+    table = tmp_path / "generated.tbl"
+    result = subprocess.run(
+        [sys.executable, str(VALIDATOR), "--write-example", str(table),
+         "--ndim", "2", "--value-kind", "lambda"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert table.exists()
+    assert "ndim=2" in result.stdout

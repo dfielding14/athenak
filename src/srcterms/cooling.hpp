@@ -48,6 +48,7 @@ struct AxisData {
   Real xmin = 0.0;
   Real xmax = 1.0;
   int n = 1;
+  Real inv_dx = 1.0;
 };
 
 struct TableData {
@@ -59,6 +60,7 @@ struct TableData {
   ValueScale value_scale = ValueScale::linear;
   AxisData axes[MAX_TABLE_AXES];
   int n0 = 1, n1 = 1, n2 = 1;
+  int stride0 = 1, stride1 = 1, stride2 = 1;
   DvceArray1D<Real> values;
 };
 

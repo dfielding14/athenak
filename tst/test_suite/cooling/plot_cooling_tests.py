@@ -27,6 +27,7 @@ FIG_DIR = ROOT / "docs" / "source" / "modules" / "figures"
 HYDRO_INPUT = "inputs/cooling_test_hydro.athinput"
 MHD_INPUT = "inputs/cooling_test_mhd.athinput"
 COMPOSITION_INPUT = "inputs/cooling_test_hydro_composition.athinput"
+CONVERGENCE_TABLE_DIR = RUN_DIR / "convergence_tables"
 
 sys.path.insert(0, str(ROOT / "vis" / "python"))
 import athena_read  # noqa: E402
@@ -253,9 +254,79 @@ def plot_rate_sweep() -> Path:
   return out
 
 
+def analytic_table_lambda(temperature: np.ndarray | float) -> np.ndarray | float:
+  return 1.0e-2*(1.0 + 0.2*np.asarray(temperature)**2)
+
+
+def write_convergence_table(naxis: int) -> Path:
+  CONVERGENCE_TABLE_DIR.mkdir(parents=True, exist_ok=True)
+  path = CONVERGENCE_TABLE_DIR / f"lambda_linear_n{naxis}.tbl"
+  coords = np.linspace(0.0, 2.0, naxis)
+  values = analytic_table_lambda(coords)
+  lines = [
+      "ATHENAK_COOLING_TABLE 1",
+      "ndim 1",
+      "value_kind Lambda",
+      "value_units code",
+      "value_scale linear",
+      "bounds fatal",
+      "data_order c_row_major_last_axis_fastest",
+      f"axis0 temperature code linear 0.0 2.0 {naxis}",
+      "data",
+      *(f"{value:.17e}" for value in values),
+  ]
+  path.write_text("\n".join(lines) + "\n")
+  return path
+
+
+def plot_table_interpolation_convergence() -> Path:
+  target_temperature = 0.73
+  exact = float(analytic_table_lambda(target_temperature))
+  resolutions = np.array([5, 9, 17, 33, 65])
+  dx = 2.0/(resolutions - 1)
+  errors = []
+
+  for naxis in resolutions:
+    table = write_convergence_table(int(naxis))
+    data = run_case(
+        f"cooling_plot_interp_n{naxis}",
+        HYDRO_INPUT,
+        "hydro",
+        (
+            "time/tlim=1.0e-8",
+            "time/nlim=1",
+            "cooling/cooling_model=table",
+            f"cooling/cooling_table={table.relative_to(RUN_DIR)}",
+            f"problem/pressure={target_temperature:.17e}",
+        ),
+    )
+    row = strictly_evolved_rows(data)[1]
+    errors.append(abs(data["cool_gross"][row] - exact))
+
+  errors = np.array(errors)
+  reference = errors[0]*(dx/dx[0])**2
+  fig, ax = plt.subplots(figsize=(6.4, 4.4), constrained_layout=True)
+  ax.loglog(dx, errors, "o-", color="#2a6f97", label="numerical error")
+  ax.loglog(dx, reference, "--", color="0.35", label="second-order guide")
+  ax.invert_xaxis()
+  ax.set_xlabel("table spacing")
+  ax.set_ylabel("absolute rate error")
+  ax.set_title("Table interpolation convergence for a known analytic curve")
+  ax.grid(True, which="both", color="0.88", lw=0.8)
+  ax.legend(frameon=False)
+  out = FIG_DIR / "cooling_table_interpolation_convergence.png"
+  fig.savefig(out, dpi=180)
+  plt.close(fig)
+  return out
+
+
 def main() -> None:
   prepare_run_dir()
-  outputs = [plot_constant_solution(), plot_rate_sweep()]
+  outputs = [
+      plot_constant_solution(),
+      plot_rate_sweep(),
+      plot_table_interpolation_convergence(),
+  ]
   for path in outputs:
     print(path.relative_to(ROOT))
 

@@ -15,6 +15,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -151,6 +152,43 @@ std::vector<Real> ParseRealList(const std::string &value, const std::string &con
   return values;
 }
 
+Real ParseRealToken(const std::string &value, const std::string &context) {
+  std::size_t pos = 0;
+  Real result = 0.0;
+  try {
+    result = static_cast<Real>(std::stod(value, &pos));
+  } catch (const std::exception&) {
+    FatalCoolingInput("Could not parse real value '" + value + "' for " + context + ".");
+  }
+  if (pos != value.size()) {
+    FatalCoolingInput("Could not parse real value '" + value + "' for " + context + ".");
+  }
+  return result;
+}
+
+int ParseIntToken(const std::string &value, const std::string &context) {
+  std::size_t pos = 0;
+  int result = 0;
+  try {
+    result = std::stoi(value, &pos);
+  } catch (const std::exception&) {
+    FatalCoolingInput("Could not parse integer value '" + value + "' for " +
+                      context + ".");
+  }
+  if (pos != value.size()) {
+    FatalCoolingInput("Could not parse integer value '" + value + "' for " +
+                      context + ".");
+  }
+  return result;
+}
+
+void ValidateFiniteReal(Real value, const std::string &context) {
+  if (!std::isfinite(value)) {
+    FatalCoolingInput(context + " must be finite.");
+  }
+}
+
+KOKKOS_INLINE_FUNCTION
 Real DensityValue(DensityKind kind, UnitSystem units, Real rho_code,
                   const RuntimeData &runtime) {
   if (units == UnitSystem::cgs) {
@@ -168,6 +206,7 @@ Real DensityValue(DensityKind kind, UnitSystem units, Real rho_code,
   return rho_code*runtime.composition.hydrogen_mass_fraction;
 }
 
+KOKKOS_INLINE_FUNCTION
 Real RawAxisValue(const AxisData &axis, const CoolingCellState &state,
                   const DvceArray5D<Real> &w0, const RuntimeData &runtime,
                   int m, int k, int j, int i) {
@@ -184,6 +223,7 @@ Real RawAxisValue(const AxisData &axis, const CoolingCellState &state,
   return value;
 }
 
+KOKKOS_INLINE_FUNCTION
 Real AxisValue(const AxisData &axis, const CoolingCellState &state,
                const DvceArray5D<Real> &w0, const RuntimeData &runtime,
                int m, int k, int j, int i) {
@@ -192,10 +232,12 @@ Real AxisValue(const AxisData &axis, const CoolingCellState &state,
   return value;
 }
 
+KOKKOS_INLINE_FUNCTION
 Real TransformValue(Real value, ValueScale scale) {
   return (scale == ValueScale::log10) ? pow(10.0, value) : value;
 }
 
+KOKKOS_INLINE_FUNCTION
 Real CoolingEdotCode(Real lambda, UnitSystem units, DensityKind density_kind,
                      Real rho_code, const RuntimeData &runtime) {
   const Real q = DensityValue(density_kind, units, rho_code, runtime);
@@ -204,6 +246,7 @@ Real CoolingEdotCode(Real lambda, UnitSystem units, DensityKind density_kind,
   return edot;
 }
 
+KOKKOS_INLINE_FUNCTION
 Real HeatingEdotCode(Real gamma, UnitSystem units, DensityKind density_kind,
                      Real rho_code, const RuntimeData &runtime) {
   const Real q = DensityValue(density_kind, units, rho_code, runtime);
@@ -212,6 +255,7 @@ Real HeatingEdotCode(Real gamma, UnitSystem units, DensityKind density_kind,
   return edot;
 }
 
+KOKKOS_INLINE_FUNCTION
 Real EvaluateTable(const TableData &table, const CoolingCellState &state,
                    const DvceArray5D<Real> &w0, const RuntimeData &runtime,
                    int m, int k, int j, int i, Real &bad_bounds) {
@@ -250,7 +294,7 @@ Real EvaluateTable(const TableData &table, const CoolingCellState &state,
       idx0[a] = 0;
       frac[a] = 0.0;
     } else {
-      const Real x = (coord[a] - axis.xmin)/(axis.xmax - axis.xmin)*(axis.n - 1);
+      const Real x = (coord[a] - axis.xmin)*axis.inv_dx;
       int lo = static_cast<int>(floor(x));
       lo = (lo < 0) ? 0 : lo;
       lo = (lo > axis.n - 2) ? axis.n - 2 : lo;
@@ -259,23 +303,25 @@ Real EvaluateTable(const TableData &table, const CoolingCellState &state,
     }
   }
 
-  const int n1 = table.n1;
-  const int n2 = table.n2;
+  const int stride0 = table.stride0;
+  const int stride1 = table.stride1;
+  const int stride2 = table.stride2;
   auto values = table.values;
   Real interpolated = 0.0;
   if (table.ndim == 1) {
     const int i0 = idx0[0];
     const Real t = frac[0];
-    interpolated = (1.0 - t)*values(i0) + t*values(i0 + 1);
+    interpolated = (1.0 - t)*values(i0*stride0) +
+                   t*values((i0 + 1)*stride0);
   } else if (table.ndim == 2) {
     const int i0 = idx0[0];
     const int j0 = idx0[1];
     const Real t = frac[0];
     const Real u = frac[1];
-    const int p00 = i0*n1 + j0;
-    const int p10 = (i0 + 1)*n1 + j0;
-    const int p01 = i0*n1 + (j0 + 1);
-    const int p11 = (i0 + 1)*n1 + (j0 + 1);
+    const int p00 = i0*stride0 + j0*stride1;
+    const int p10 = (i0 + 1)*stride0 + j0*stride1;
+    const int p01 = i0*stride0 + (j0 + 1)*stride1;
+    const int p11 = (i0 + 1)*stride0 + (j0 + 1)*stride1;
     interpolated = (1.0 - t)*(1.0 - u)*values(p00) +
                    t*(1.0 - u)*values(p10) +
                    (1.0 - t)*u*values(p01) +
@@ -293,7 +339,8 @@ Real EvaluateTable(const TableData &table, const CoolingCellState &state,
           const Real wi = di ? t : (1.0 - t);
           const Real wj = dj ? u : (1.0 - u);
           const Real wk = dk ? v : (1.0 - v);
-          const int p = ((i0 + di)*n1 + (j0 + dj))*n2 + (k0 + dk);
+          const int p = (i0 + di)*stride0 + (j0 + dj)*stride1 +
+                        (k0 + dk)*stride2;
           interpolated += wi*wj*wk*values(p);
         }
       }
@@ -302,6 +349,7 @@ Real EvaluateTable(const TableData &table, const CoolingCellState &state,
   return TransformValue(interpolated, table.value_scale);
 }
 
+KOKKOS_INLINE_FUNCTION
 Real EvaluatePowerLaw(const PowerLawData &powerlaw, const CoolingCellState &state,
                       const DvceArray5D<Real> &w0, const RuntimeData &runtime,
                       int m, int k, int j, int i, Real &bad_bounds) {
@@ -406,9 +454,11 @@ void ParseAxisExtra(const std::string &token, AxisData &axis) {
   const std::string key = token.substr(0, eq);
   const std::string value = token.substr(eq + 1);
   if (key == "scalar_index") {
-    axis.scalar_index = std::stoi(value);
+    axis.scalar_index = ParseIntToken(value, "table scalar_index");
   } else if (key == "density_kind") {
     axis.density_kind = ParseDensityKind(value, "table density axis");
+  } else {
+    FatalCoolingInput("Unknown table axis option '" + key + "'.");
   }
 }
 
@@ -418,15 +468,20 @@ bool IsValueScaleToken(const std::string &value) {
 }
 
 void LoadTable(const std::string &path, BoundsBehavior default_bounds,
-               const std::string &expected_value_kind, TableData &table) {
+               const std::string &expected_value_kind, const std::string &context,
+               TableData &table) {
   std::ifstream in(path);
-  if (!in) FatalCoolingInput("Could not open cooling table '" + path + "'.");
+  if (!in) {
+    FatalCoolingInput("Could not open " + context + " table '" + path +
+                      "'. Check that the path is relative to the run directory "
+                      "or is an absolute path.");
+  }
 
   std::string token;
   int version = 0;
   in >> token >> version;
   if (token != "ATHENAK_COOLING_TABLE" || version != 1) {
-    FatalCoolingInput("Cooling table '" + path + "' does not start with "
+    FatalCoolingInput(context + " table '" + path + "' does not start with "
                       "ATHENAK_COOLING_TABLE 1.");
   }
   table.bounds = default_bounds;
@@ -448,7 +503,8 @@ void LoadTable(const std::string &path, BoundsBehavior default_bounds,
     } else if (token == "ndim") {
       in >> table.ndim;
       if (table.ndim < 1 || table.ndim > MAX_TABLE_AXES) {
-        FatalCoolingInput("Cooling table '" + path + "' has invalid ndim.");
+        FatalCoolingInput(context + " table '" + path +
+                          "' has invalid ndim; supported ndim is 1, 2, or 3.");
       }
     } else if (token == "value_kind") {
       std::string value_kind;
@@ -456,7 +512,7 @@ void LoadTable(const std::string &path, BoundsBehavior default_bounds,
       table.value_kind = ParseTableValueKind(value_kind, "table value_kind");
       saw_value_kind = true;
       if (table.value_kind != expected_kind) {
-        FatalCoolingInput("Cooling table '" + path + "' has value_kind '" +
+        FatalCoolingInput(context + " table '" + path + "' has value_kind '" +
                           value_kind + "' but this use requires value_kind " +
                           expected_value_kind + ".");
       }
@@ -476,12 +532,15 @@ void LoadTable(const std::string &path, BoundsBehavior default_bounds,
       std::string order;
       in >> order;
       if (order != "c_row_major_last_axis_fastest") {
-        FatalCoolingInput("Cooling table '" + path + "' uses unsupported data_order.");
+        FatalCoolingInput(context + " table '" + path +
+                          "' uses unsupported data_order; expected "
+                          "c_row_major_last_axis_fastest.");
       }
     } else if (token.rfind("axis", 0) == 0) {
-      const int axis_index = std::stoi(token.substr(4));
+      const int axis_index = ParseIntToken(token.substr(4), context + " axis index");
       if (axis_index < 0 || axis_index >= MAX_TABLE_AXES) {
-        FatalCoolingInput("Cooling table '" + path + "' has invalid axis index.");
+        FatalCoolingInput(context + " table '" + path +
+                          "' has invalid axis index; supported axis indices are 0, 1, 2.");
       }
       AxisData axis;
       std::string rest;
@@ -491,7 +550,9 @@ void LoadTable(const std::string &path, BoundsBehavior default_bounds,
       std::string field;
       while (axis_line >> field) fields.push_back(field);
       if (fields.size() < 5) {
-        FatalCoolingInput("Cooling table '" + path + "' has incomplete axis line.");
+        FatalCoolingInput(context + " table '" + path + "' has incomplete " +
+                          token + " line. Expected: axisN kind units "
+                          "[linear|log10] xmin xmax n [axis_options].");
       }
       axis.kind = ParseAxisKind(fields[0], "table axis kind");
       axis.units = ParseUnitSystem(fields[1], "table axis units");
@@ -500,43 +561,68 @@ void LoadTable(const std::string &path, BoundsBehavior default_bounds,
       if (IsValueScaleToken(fields[next])) {
         axis.scale = ParseValueScale(fields[next], "table axis scale");
         ++next;
+      } else {
+        char *end = nullptr;
+        std::strtod(fields[next].c_str(), &end);
+        if (end == fields[next].c_str() || *end != '\0') {
+          FatalCoolingInput(context + " table '" + path + "' has invalid " +
+                            token + " scale/extents. The optional axis scale "
+                            "must be 'linear' or 'log10'; if omitted, the next "
+                            "token must be numeric xmin.");
+        }
       }
       if (static_cast<int>(fields.size()) < next + 3) {
-        FatalCoolingInput("Cooling table '" + path + "' has incomplete axis extent.");
+        FatalCoolingInput(context + " table '" + path + "' has incomplete " +
+                          token + " extent. Expected xmin xmax n after the "
+                          "optional scale token.");
       }
-      axis.xmin = std::stod(fields[next++]);
-      axis.xmax = std::stod(fields[next++]);
-      axis.n = std::stoi(fields[next++]);
+      axis.xmin = ParseRealToken(fields[next++], context + " " + token + " xmin");
+      axis.xmax = ParseRealToken(fields[next++], context + " " + token + " xmax");
+      axis.n = ParseIntToken(fields[next++], context + " " + token + " n");
       for (; next < static_cast<int>(fields.size()); ++next) {
         ParseAxisExtra(fields[next], axis);
       }
+      ValidateFiniteReal(axis.xmin, context + " " + token + " xmin");
+      ValidateFiniteReal(axis.xmax, context + " " + token + " xmax");
       if (axis.n < 1 || axis.xmax <= axis.xmin) {
-        FatalCoolingInput("Cooling table '" + path + "' has invalid axis extent.");
+        FatalCoolingInput(context + " table '" + path + "' has invalid " +
+                          token + " extent; require finite xmax > xmin and n >= 1.");
       }
       if (axis.n < 2) {
-        FatalCoolingInput("Cooling table '" + path + "' axes must have at least "
+        FatalCoolingInput(context + " table '" + path + "' axes must have at least "
                           "two points.");
       }
+      if (axis.scale == ValueScale::log10) {
+        const Real raw_min = TransformValue(axis.xmin, ValueScale::log10);
+        const Real raw_max = TransformValue(axis.xmax, ValueScale::log10);
+        if (!std::isfinite(raw_min) || !std::isfinite(raw_max) ||
+            raw_min <= 0.0 || raw_max <= 0.0) {
+          FatalCoolingInput(context + " table '" + path + "' has a log10 " +
+                            token + " extent that does not map to finite, "
+                            "positive raw coordinates.");
+        }
+      }
+      axis.inv_dx = static_cast<Real>(axis.n - 1)/(axis.xmax - axis.xmin);
       table.axes[axis_index] = axis;
       axis_seen[axis_index] = true;
     } else {
-      FatalCoolingInput("Cooling table '" + path + "' has unknown header token '" +
+      FatalCoolingInput(context + " table '" + path + "' has unknown header token '" +
                         token + "'.");
     }
   }
   if (!saw_data || table.ndim < 1 || !saw_value_kind) {
-    FatalCoolingInput("Cooling table '" + path +
+    FatalCoolingInput(context + " table '" + path +
                       "' is missing data, ndim, or value_kind.");
   }
   for (int a = 0; a < table.ndim; ++a) {
     if (!axis_seen[a]) {
-      FatalCoolingInput("Cooling table '" + path + "' is missing axis" +
+      FatalCoolingInput(context + " table '" + path + "' is missing axis" +
                         std::to_string(a) + ".");
     }
   }
   for (int a = table.ndim; a < MAX_TABLE_AXES; ++a) {
     if (axis_seen[a]) {
-      FatalCoolingInput("Cooling table '" + path + "' defines axis" +
+      FatalCoolingInput(context + " table '" + path + "' defines axis" +
                         std::to_string(a) + " beyond ndim.");
     }
   }
@@ -544,13 +630,23 @@ void LoadTable(const std::string &path, BoundsBehavior default_bounds,
   table.n0 = table.axes[0].n;
   table.n1 = (table.ndim > 1) ? table.axes[1].n : 1;
   table.n2 = (table.ndim > 2) ? table.axes[2].n : 1;
+  table.stride2 = 1;
+  table.stride1 = table.n2;
+  table.stride0 = table.n1*table.n2;
   const int total = table.n0*table.n1*table.n2;
   std::vector<Real> host_values;
   host_values.reserve(total);
-  Real value = 0.0;
-  while (in >> value) host_values.push_back(value);
+  std::string value_token;
+  while (in >> value_token) {
+    if (!value_token.empty() && value_token[0] == '#') {
+      std::string rest;
+      std::getline(in, rest);
+      continue;
+    }
+    host_values.push_back(ParseRealToken(value_token, context + " table data"));
+  }
   if (static_cast<int>(host_values.size()) != total) {
-    FatalCoolingInput("Cooling table '" + path + "' has " +
+    FatalCoolingInput(context + " table '" + path + "' has " +
                       std::to_string(host_values.size()) + " values but expected " +
                       std::to_string(total) + ".");
   }
@@ -558,7 +654,7 @@ void LoadTable(const std::string &path, BoundsBehavior default_bounds,
   auto host = Kokkos::create_mirror_view(table.values);
   for (int n = 0; n < total; ++n) {
     if (!std::isfinite(host_values[n])) {
-      FatalCoolingInput("Cooling table '" + path + "' contains a non-finite value.");
+      FatalCoolingInput(context + " table '" + path + "' contains a non-finite value.");
     }
     host(n) = host_values[n];
   }
@@ -619,6 +715,31 @@ void ValidateTableComposition(const TableData &table, const CompositionData &com
   }
 }
 
+void ValidateScalarAxis(AxisKind axis_kind, int scalar_index, int nscalars,
+                        const std::string &context) {
+  if (axis_kind != AxisKind::scalar) return;
+  if (scalar_index < 0 || scalar_index >= nscalars) {
+    FatalCoolingInput(context + " uses scalar_index=" +
+                      std::to_string(scalar_index) + " but the active "
+                      "Hydro/MHD block has " + std::to_string(nscalars) +
+                      " passive scalars.");
+  }
+}
+
+void ValidateTableScalarAxes(const TableData &table, int nscalars,
+                             const std::string &context) {
+  for (int a = 0; a < table.ndim; ++a) {
+    ValidateScalarAxis(table.axes[a].kind, table.axes[a].scalar_index, nscalars,
+                       context + " axis" + std::to_string(a));
+  }
+}
+
+void ValidatePowerLawScalarAxis(const PowerLawData &powerlaw, int nscalars,
+                                const std::string &context) {
+  if (!powerlaw.enabled) return;
+  ValidateScalarAxis(powerlaw.axis, powerlaw.scalar_index, nscalars, context);
+}
+
 void ParseModifier(ParameterInput *pin, const std::string &prefix,
                    UnitSystem default_units, ModifierData &modifier) {
   modifier.model = ParseModifierModel(pin->GetOrAddString("cooling",
@@ -631,13 +752,14 @@ void ParseModifier(ParameterInput *pin, const std::string &prefix,
     modifier.constant = pin->GetReal("cooling", prefix + "_modifier");
   } else if (modifier.model == ModelKind::table) {
     LoadTable(pin->GetString("cooling", prefix + "_modifier_table"),
-              modifier.bounds, "modifier", modifier.table);
+              modifier.bounds, "modifier", prefix + "_modifier", modifier.table);
   } else {
     ParsePowerLaw(pin, prefix + "_modifier", modifier.model, default_units,
                   modifier.bounds, modifier.powerlaw);
   }
 }
 
+KOKKOS_INLINE_FUNCTION
 Real EvaluateModifier(const ModifierData &modifier, const CoolingCellState &state,
                       const DvceArray5D<Real> &w0, const RuntimeData &runtime,
                       int m, int k, int j, int i, Real &bad_bounds) {
@@ -676,6 +798,37 @@ void ValidateModifierComposition(const ModifierData &modifier,
   }
 }
 
+void ValidateModifierScalarAxes(const ModifierData &modifier, int nscalars,
+                                const std::string &context) {
+  if (!modifier.enabled) return;
+  if (modifier.model == ModelKind::table) {
+    ValidateTableScalarAxes(modifier.table, nscalars, context + " table");
+  } else if (modifier.model == ModelKind::powerlaw ||
+             modifier.model == ModelKind::piecewise_powerlaw) {
+    ValidatePowerLawScalarAxis(modifier.powerlaw, nscalars, context);
+  }
+}
+
+void ValidateBuiltInScalarAxes(const TableData &cooling_table,
+                               const TableData &heating_table,
+                               const TableData &cgm_pie_table,
+                               const TableData &cgm_cie_table,
+                               const PowerLawData &cooling_powerlaw,
+                               const PowerLawData &heating_powerlaw,
+                               const ModifierData &cooling_modifier,
+                               const ModifierData &heating_modifier,
+                               int nscalars) {
+  ValidateTableScalarAxes(cooling_table, nscalars, "cooling table");
+  ValidateTableScalarAxes(heating_table, nscalars, "heating table");
+  ValidateTableScalarAxes(cgm_pie_table, nscalars, "cgm PIE table");
+  ValidateTableScalarAxes(cgm_cie_table, nscalars, "cgm CIE table");
+  ValidatePowerLawScalarAxis(cooling_powerlaw, nscalars, "cooling powerlaw axis");
+  ValidatePowerLawScalarAxis(heating_powerlaw, nscalars, "heating powerlaw axis");
+  ValidateModifierScalarAxes(cooling_modifier, nscalars, "cooling modifier");
+  ValidateModifierScalarAxes(heating_modifier, nscalars, "heating modifier");
+}
+
+KOKKOS_INLINE_FUNCTION
 Real EvaluateShieldingFraction(const ShieldingData &shielding,
                                const CoolingCellState &state,
                                const RuntimeData &runtime, Real dx1_code) {
@@ -691,6 +844,147 @@ Real EvaluateShieldingFraction(const ShieldingData &shielding,
   const Real tau = neutral_frac*n_density*shielding.cross_section_cgs*
                    length_code*runtime.length_cgs;
   return exp(-tau);
+}
+
+struct EvaluatedCoolingRates {
+  Real edot_cool = 0.0;
+  Real edot_heat = 0.0;
+  Real edot_net = 0.0;
+};
+
+KOKKOS_INLINE_FUNCTION
+CoolingCellState LoadCoolingCellState(const DvceArray5D<Real> &w0,
+                                      const RuntimeData &runtime, Real gm1,
+                                      Real use_e, int nfluid, int nscalars,
+                                      int m, int k, int j, int i) {
+  CoolingCellState state;
+  state.rho_code = w0(m, IDN, k, j, i);
+  state.rho_cgs = state.rho_code*runtime.density_cgs;
+  state.nfluid = nfluid;
+  state.nscalars = nscalars;
+  if (use_e) {
+    state.temp_code = w0(m, IEN, k, j, i)/state.rho_code*gm1;
+    state.eint_code = w0(m, IEN, k, j, i);
+  } else {
+    state.temp_code = w0(m, ITM, k, j, i);
+    state.eint_code = w0(m, ITM, k, j, i)*state.rho_code/gm1;
+  }
+  state.temp_cgs = state.temp_code*runtime.temp_cgs;
+  if (nscalars > 0) state.scalar0 = w0(m, nfluid, k, j, i);
+  return state;
+}
+
+KOKKOS_INLINE_FUNCTION
+EvaluatedCoolingRates EvaluateCoolingRates(const CoolingCellState &state,
+    const DvceArray5D<Real> &w0, const RuntimeData &runtime,
+    ModelKind cooling_model, ModelKind heating_model,
+    const TableData &cooling_table, const TableData &heating_table,
+    const TableData &cgm_pie_table, const TableData &cgm_cie_table,
+    const PowerLawData &cooling_powerlaw, const PowerLawData &heating_powerlaw,
+    const ModifierData &cooling_modifier, const ModifierData &heating_modifier,
+    const ShieldingData &shielding, Real constant_heating_rate, Real dx1_code,
+    int m, int k, int j, int i, Real &bad_bounds) {
+  Real lambda = 0.0;
+  UnitSystem lambda_units = runtime.default_units;
+  Real shielding_frac = 1.0;
+  if (shielding.enabled) {
+    shielding_frac = EvaluateShieldingFraction(shielding, state, runtime, dx1_code);
+  }
+
+  if (cooling_model == ModelKind::ism) {
+    lambda = ISMCoolFn(state.temp_cgs);
+    lambda_units = UnitSystem::cgs;
+  } else if (cooling_model == ModelKind::cgm) {
+    const Real lambda_pie = EvaluateTable(cgm_pie_table, state, w0, runtime,
+                                          m, k, j, i, bad_bounds);
+    const Real lambda_cie = EvaluateTable(cgm_cie_table, state, w0, runtime,
+                                          m, k, j, i, bad_bounds);
+    lambda = (1.0 - shielding_frac)*lambda_cie + shielding_frac*lambda_pie;
+    lambda_units = cgm_pie_table.value_units;
+  } else if (cooling_model == ModelKind::table) {
+    lambda = EvaluateTable(cooling_table, state, w0, runtime, m, k, j, i,
+                           bad_bounds);
+    lambda_units = cooling_table.value_units;
+  } else if (cooling_model == ModelKind::powerlaw ||
+             cooling_model == ModelKind::piecewise_powerlaw) {
+    lambda = EvaluatePowerLaw(cooling_powerlaw, state, w0, runtime, m, k, j, i,
+                              bad_bounds);
+    lambda_units = cooling_powerlaw.value_units;
+  }
+  lambda *= EvaluateModifier(cooling_modifier, state, w0, runtime, m, k, j, i,
+                             bad_bounds);
+
+  Real gamma_heat = 0.0;
+  UnitSystem gamma_units = runtime.default_units;
+  if (heating_model == ModelKind::constant) {
+    gamma_heat = constant_heating_rate;
+    gamma_units = runtime.default_units;
+  } else if (heating_model == ModelKind::table) {
+    gamma_heat = EvaluateTable(heating_table, state, w0, runtime, m, k, j, i,
+                               bad_bounds);
+    gamma_units = heating_table.value_units;
+  } else if (heating_model == ModelKind::powerlaw ||
+             heating_model == ModelKind::piecewise_powerlaw) {
+    gamma_heat = EvaluatePowerLaw(heating_powerlaw, state, w0, runtime,
+                                  m, k, j, i, bad_bounds);
+    gamma_units = heating_powerlaw.value_units;
+  }
+  gamma_heat *= EvaluateModifier(heating_modifier, state, w0, runtime, m, k, j, i,
+                                 bad_bounds);
+  if (shielding.enabled && shielding.apply_to_heating) {
+    gamma_heat *= (1.0 - shielding_frac);
+  }
+
+  EvaluatedCoolingRates rates;
+  rates.edot_cool = CoolingEdotCode(lambda, lambda_units, runtime.cooling_density,
+                                    state.rho_code, runtime);
+  rates.edot_heat = HeatingEdotCode(gamma_heat, gamma_units, runtime.heating_density,
+                                    state.rho_code, runtime);
+  rates.edot_net = rates.edot_cool - rates.edot_heat;
+  return rates;
+}
+
+bool TableHasFatalBounds(const TableData &table) {
+  return table.enabled && table.bounds == BoundsBehavior::fatal;
+}
+
+bool PowerLawHasFatalBounds(const PowerLawData &powerlaw) {
+  return powerlaw.enabled && powerlaw.bounds == BoundsBehavior::fatal;
+}
+
+bool ModifierHasFatalBounds(const ModifierData &modifier) {
+  if (!modifier.enabled) return false;
+  if (modifier.model == ModelKind::table) return TableHasFatalBounds(modifier.table);
+  if (modifier.model == ModelKind::powerlaw ||
+      modifier.model == ModelKind::piecewise_powerlaw) {
+    return PowerLawHasFatalBounds(modifier.powerlaw);
+  }
+  return false;
+}
+
+bool BuiltInModelsHaveFatalBounds(ModelKind cooling_model, ModelKind heating_model,
+    const TableData &cooling_table, const TableData &heating_table,
+    const TableData &cgm_pie_table, const TableData &cgm_cie_table,
+    const PowerLawData &cooling_powerlaw, const PowerLawData &heating_powerlaw,
+    const ModifierData &cooling_modifier, const ModifierData &heating_modifier) {
+  bool has_fatal = false;
+  if (cooling_model == ModelKind::table) has_fatal |= TableHasFatalBounds(cooling_table);
+  if (cooling_model == ModelKind::cgm) {
+    has_fatal |= TableHasFatalBounds(cgm_pie_table);
+    has_fatal |= TableHasFatalBounds(cgm_cie_table);
+  }
+  if (cooling_model == ModelKind::powerlaw ||
+      cooling_model == ModelKind::piecewise_powerlaw) {
+    has_fatal |= PowerLawHasFatalBounds(cooling_powerlaw);
+  }
+  if (heating_model == ModelKind::table) has_fatal |= TableHasFatalBounds(heating_table);
+  if (heating_model == ModelKind::powerlaw ||
+      heating_model == ModelKind::piecewise_powerlaw) {
+    has_fatal |= PowerLawHasFatalBounds(heating_powerlaw);
+  }
+  has_fatal |= ModifierHasFatalBounds(cooling_modifier);
+  has_fatal |= ModifierHasFatalBounds(heating_modifier);
+  return has_fatal;
 }
 
 } // namespace
@@ -803,20 +1097,20 @@ GeneralCooling::GeneralCooling(MeshBlockPack *pp, ParameterInput *pin) :
 
   if (cooling_model_ == ModelKind::table) {
     LoadTable(pin->GetString("cooling", "cooling_table"), cooling_bounds_, "lambda",
-              cooling_table_);
+              "cooling_table", cooling_table_);
   }
   if (cooling_model_ == ModelKind::cgm) {
     LoadTable(pin->GetString("cooling", "cgm_pie_table"), cooling_bounds_, "lambda",
-              cgm_pie_table_);
+              "cgm_pie_table", cgm_pie_table_);
     LoadTable(pin->GetString("cooling", "cgm_cie_table"), cooling_bounds_, "lambda",
-              cgm_cie_table_);
+              "cgm_cie_table", cgm_cie_table_);
     if (cgm_pie_table_.value_units != cgm_cie_table_.value_units) {
       FatalCoolingInput("cgm_pie_table and cgm_cie_table must use the same value_units.");
     }
   }
   if (heating_model_ == ModelKind::table) {
     LoadTable(pin->GetString("cooling", "heating_table"), heating_bounds_, "gamma",
-              heating_table_);
+              "heating_table", heating_table_);
   }
   ParsePowerLaw(pin, "cooling", cooling_model_, runtime_.default_units, cooling_bounds_,
                 cooling_powerlaw_);
@@ -940,7 +1234,8 @@ void GeneralCooling::Apply(const DvceArray5D<Real> &w0, const EOS_Data &eos_data
     Real gross_energy = 0.0;
     Real net_energy = 0.0;
     pmy_pack_->pmesh->pgen->user_cooling_func(pmy_pack_, w0, eos_data, runtime_, bdt,
-                                              history_bdt, u0, gross_energy,
+                                              history_enabled_ ? history_bdt : 0.0,
+                                              u0, gross_energy,
                                               net_energy);
     if (history_enabled_) {
       accumulated_gross_energy_ += gross_energy;
@@ -963,6 +1258,9 @@ void GeneralCooling::Apply(const DvceArray5D<Real> &w0, const EOS_Data &eos_data
     nfluid = pmy_pack_->pmhd->nmhd;
     nscalars = pmy_pack_->pmhd->nscalars;
   }
+  ValidateBuiltInScalarAxes(cooling_table_, heating_table_, cgm_pie_table_,
+                            cgm_cie_table_, cooling_powerlaw_, heating_powerlaw_,
+                            cooling_modifier_, heating_modifier_, nscalars);
 
   const Real gm1 = eos_data.gamma - 1.0;
   const Real use_e = eos_data.use_e;
@@ -981,6 +1279,65 @@ void GeneralCooling::Apply(const DvceArray5D<Real> &w0, const EOS_Data &eos_data
   const Real constant_heating_rate = constant_heating_rate_;
   const Real history_bdt_local = history_bdt;
   auto &size = pmy_pack_->pmb->mb_size;
+  const bool track_history = history_enabled_;
+  const bool track_bad_bounds = BuiltInModelsHaveFatalBounds(cooling_model, heating_model,
+      cooling_table, heating_table, cgm_pie_table, cgm_cie_table, cooling_powerlaw,
+      heating_powerlaw, cooling_modifier, heating_modifier);
+
+  if (!track_history && !track_bad_bounds) {
+    Kokkos::parallel_for("general_cooling_source_fast",
+                         Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    KOKKOS_LAMBDA(const int &idx) {
+      int m = idx/nkji;
+      int k = (idx - m*nkji)/nji;
+      int j = (idx - m*nkji - k*nji)/nx1;
+      int i = (idx - m*nkji - k*nji - j*nx1) + is;
+      k += ks;
+      j += js;
+
+      const CoolingCellState state = LoadCoolingCellState(w0, runtime, gm1, use_e,
+          nfluid, nscalars, m, k, j, i);
+      Real local_bad = 0.0;
+      const EvaluatedCoolingRates rates = EvaluateCoolingRates(state, w0, runtime,
+          cooling_model, heating_model, cooling_table, heating_table, cgm_pie_table,
+          cgm_cie_table, cooling_powerlaw, heating_powerlaw, cooling_modifier,
+          heating_modifier, shielding, constant_heating_rate, size.d_view(m).dx1,
+          m, k, j, i, local_bad);
+      u0(m, IEN, k, j, i) -= bdt*rates.edot_net;
+    });
+    return;
+  }
+
+  if (!track_history) {
+    Real bad_bounds = 0.0;
+    Kokkos::parallel_reduce("general_cooling_source_bounds",
+                            Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    KOKKOS_LAMBDA(const int &idx, Real &bad_sum) {
+      int m = idx/nkji;
+      int k = (idx - m*nkji)/nji;
+      int j = (idx - m*nkji - k*nji)/nx1;
+      int i = (idx - m*nkji - k*nji - j*nx1) + is;
+      k += ks;
+      j += js;
+
+      const CoolingCellState state = LoadCoolingCellState(w0, runtime, gm1, use_e,
+          nfluid, nscalars, m, k, j, i);
+      Real local_bad = 0.0;
+      const EvaluatedCoolingRates rates = EvaluateCoolingRates(state, w0, runtime,
+          cooling_model, heating_model, cooling_table, heating_table, cgm_pie_table,
+          cgm_cie_table, cooling_powerlaw, heating_powerlaw, cooling_modifier,
+          heating_modifier, shielding, constant_heating_rate, size.d_view(m).dx1,
+          m, k, j, i, local_bad);
+      u0(m, IEN, k, j, i) -= bdt*rates.edot_net;
+      bad_sum += local_bad;
+    }, Kokkos::Sum<Real>(bad_bounds));
+
+    if (bad_bounds > 0.0) {
+      FatalCoolingInput("fatal cooling/heating bounds were exceeded in at least "
+                        "one cell during source update.");
+    }
+    return;
+  }
 
   Real gross_energy = 0.0, net_energy = 0.0, bad_bounds = 0.0;
   Kokkos::parallel_reduce("general_cooling_source",
@@ -993,89 +1350,25 @@ void GeneralCooling::Apply(const DvceArray5D<Real> &w0, const EOS_Data &eos_data
     k += ks;
     j += js;
 
-    CoolingCellState state;
-    state.rho_code = w0(m,IDN,k,j,i);
-    state.rho_cgs = state.rho_code*runtime.density_cgs;
-    state.nfluid = nfluid;
-    state.nscalars = nscalars;
-    if (use_e) {
-      state.temp_code = w0(m,IEN,k,j,i)/state.rho_code*gm1;
-      state.eint_code = w0(m,IEN,k,j,i);
-    } else {
-      state.temp_code = w0(m,ITM,k,j,i);
-      state.eint_code = w0(m,ITM,k,j,i)*state.rho_code/gm1;
-    }
-    state.temp_cgs = state.temp_code*runtime.temp_cgs;
-
+    const CoolingCellState state = LoadCoolingCellState(w0, runtime, gm1, use_e,
+        nfluid, nscalars, m, k, j, i);
     Real local_bad = 0.0;
-    Real lambda = 0.0;
-    UnitSystem lambda_units = runtime.default_units;
-    Real shielding_frac = 1.0;
-    if (shielding.enabled) {
-      shielding_frac = EvaluateShieldingFraction(shielding, state, runtime,
-                                                 size.d_view(m).dx1);
-    }
-
-    if (cooling_model == ModelKind::ism) {
-      lambda = ISMCoolFn(state.temp_cgs);
-      lambda_units = UnitSystem::cgs;
-    } else if (cooling_model == ModelKind::cgm) {
-      const Real lambda_pie = EvaluateTable(cgm_pie_table, state, w0, runtime,
-                                            m, k, j, i, local_bad);
-      const Real lambda_cie = EvaluateTable(cgm_cie_table, state, w0, runtime,
-                                            m, k, j, i, local_bad);
-      lambda = (1.0 - shielding_frac)*lambda_cie + shielding_frac*lambda_pie;
-      lambda_units = cgm_pie_table.value_units;
-    } else if (cooling_model == ModelKind::table) {
-      lambda = EvaluateTable(cooling_table, state, w0, runtime, m, k, j, i, local_bad);
-      lambda_units = cooling_table.value_units;
-    } else if (cooling_model == ModelKind::powerlaw ||
-               cooling_model == ModelKind::piecewise_powerlaw) {
-      lambda = EvaluatePowerLaw(cooling_powerlaw, state, w0, runtime,
-                                m, k, j, i, local_bad);
-      lambda_units = cooling_powerlaw.value_units;
-    }
-    lambda *= EvaluateModifier(cooling_modifier, state, w0, runtime, m, k, j, i,
-                               local_bad);
-
-    Real gamma_heat = 0.0;
-    UnitSystem gamma_units = runtime.default_units;
-    if (heating_model == ModelKind::constant) {
-      gamma_heat = constant_heating_rate;
-      gamma_units = runtime.default_units;
-    } else if (heating_model == ModelKind::table) {
-      gamma_heat = EvaluateTable(heating_table, state, w0, runtime, m, k, j, i,
-                                 local_bad);
-      gamma_units = heating_table.value_units;
-    } else if (heating_model == ModelKind::powerlaw ||
-               heating_model == ModelKind::piecewise_powerlaw) {
-      gamma_heat = EvaluatePowerLaw(heating_powerlaw, state, w0, runtime,
-                                    m, k, j, i, local_bad);
-      gamma_units = heating_powerlaw.value_units;
-    }
-    gamma_heat *= EvaluateModifier(heating_modifier, state, w0, runtime, m, k, j, i,
-                                   local_bad);
-    if (shielding.enabled && shielding.apply_to_heating) {
-      gamma_heat *= (1.0 - shielding_frac);
-    }
-
-    const Real edot_cool = CoolingEdotCode(lambda, lambda_units,
-                                           runtime.cooling_density,
-                                           state.rho_code, runtime);
-    const Real edot_heat = HeatingEdotCode(gamma_heat, gamma_units,
-                                           runtime.heating_density,
-                                           state.rho_code, runtime);
-    const Real edot_net = edot_cool - edot_heat;
+    const EvaluatedCoolingRates rates = EvaluateCoolingRates(state, w0, runtime,
+        cooling_model, heating_model, cooling_table, heating_table, cgm_pie_table,
+        cgm_cie_table, cooling_powerlaw, heating_powerlaw, cooling_modifier,
+        heating_modifier, shielding, constant_heating_rate, size.d_view(m).dx1,
+        m, k, j, i, local_bad);
     const Real dvol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
-    u0(m,IEN,k,j,i) -= bdt*edot_net;
-    gross_sum += edot_cool*history_bdt_local*dvol;
-    net_sum += edot_net*history_bdt_local*dvol;
+    u0(m, IEN, k, j, i) -= bdt*rates.edot_net;
+    gross_sum += rates.edot_cool*history_bdt_local*dvol;
+    net_sum += rates.edot_net*history_bdt_local*dvol;
     bad_sum += local_bad;
   }, Kokkos::Sum<Real>(gross_energy), Kokkos::Sum<Real>(net_energy),
      Kokkos::Sum<Real>(bad_bounds));
 
   if (bad_bounds > 0.0) {
-    FatalCoolingInput("fatal cooling/heating bounds were exceeded in at least one cell.");
+    FatalCoolingInput("fatal cooling/heating bounds were exceeded in at least "
+                      "one cell during source update.");
   }
   if (history_enabled_) {
     accumulated_gross_energy_ += gross_energy;
@@ -1126,6 +1419,9 @@ void GeneralCooling::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eo
     nfluid = pmy_pack_->pmhd->nmhd;
     nscalars = pmy_pack_->pmhd->nscalars;
   }
+  ValidateBuiltInScalarAxes(cooling_table_, heating_table_, cgm_pie_table_,
+                            cgm_cie_table_, cooling_powerlaw_, heating_powerlaw_,
+                            cooling_modifier_, heating_modifier_, nscalars);
 
   const Real gm1 = eos_data.gamma - 1.0;
   const Real use_e = eos_data.use_e;
@@ -1153,6 +1449,45 @@ void GeneralCooling::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eo
   const Real density_min = timestep_density_min_;
   const Real density_max = timestep_density_max_;
   auto &size = pmy_pack_->pmb->mb_size;
+  const bool track_bad_bounds = BuiltInModelsHaveFatalBounds(cooling_model, heating_model,
+      cooling_table, heating_table, cgm_pie_table, cgm_cie_table, cooling_powerlaw,
+      heating_powerlaw, cooling_modifier, heating_modifier);
+
+  if (!track_bad_bounds) {
+    Kokkos::parallel_reduce("general_cooling_newdt",
+                            Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    KOKKOS_LAMBDA(const int &idx, Real &min_dt) {
+      int m = idx/nkji;
+      int k = (idx - m*nkji)/nji;
+      int j = (idx - m*nkji - k*nji)/nx1;
+      int i = (idx - m*nkji - k*nji - j*nx1) + is;
+      k += ks;
+      j += js;
+
+      const CoolingCellState state = LoadCoolingCellState(w0, runtime, gm1, use_e,
+          nfluid, nscalars, m, k, j, i);
+      if (use_temp_bounds) {
+        const Real dt_temp = (temp_bounds_units == UnitSystem::cgs) ?
+                             state.temp_cgs : state.temp_code;
+        if (dt_temp < temp_min || dt_temp > temp_max) return;
+      }
+      if (use_density_bounds) {
+        const Real dt_density = DensityValue(density_bounds_kind, density_bounds_units,
+                                             state.rho_code, runtime);
+        if (dt_density < density_min || dt_density > density_max) return;
+      }
+
+      Real local_bad = 0.0;
+      const EvaluatedCoolingRates rates = EvaluateCoolingRates(state, w0, runtime,
+          cooling_model, heating_model, cooling_table, heating_table, cgm_pie_table,
+          cgm_cie_table, cooling_powerlaw, heating_powerlaw, cooling_modifier,
+          heating_modifier, shielding, constant_heating_rate, size.d_view(m).dx1,
+          m, k, j, i, local_bad);
+      const Real rate = fabs(rates.edot_net) + FLT_MIN;
+      min_dt = fmin(min_dt, timestep_factor*state.eint_code/rate);
+    }, Kokkos::Min<Real>(dtnew));
+    return;
+  }
 
   Real bad_bounds = 0.0;
   Kokkos::parallel_reduce("general_cooling_newdt",
@@ -1165,20 +1500,8 @@ void GeneralCooling::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eo
     k += ks;
     j += js;
 
-    CoolingCellState state;
-    state.rho_code = w0(m,IDN,k,j,i);
-    state.rho_cgs = state.rho_code*runtime.density_cgs;
-    state.nfluid = nfluid;
-    state.nscalars = nscalars;
-    if (use_e) {
-      state.temp_code = w0(m,IEN,k,j,i)/state.rho_code*gm1;
-      state.eint_code = w0(m,IEN,k,j,i);
-    } else {
-      state.temp_code = w0(m,ITM,k,j,i);
-      state.eint_code = w0(m,ITM,k,j,i)*state.rho_code/gm1;
-    }
-    state.temp_cgs = state.temp_code*runtime.temp_cgs;
-
+    const CoolingCellState state = LoadCoolingCellState(w0, runtime, gm1, use_e,
+        nfluid, nscalars, m, k, j, i);
     if (use_temp_bounds) {
       const Real dt_temp = (temp_bounds_units == UnitSystem::cgs) ?
                            state.temp_cgs : state.temp_code;
@@ -1191,63 +1514,12 @@ void GeneralCooling::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eo
     }
 
     Real local_bad = 0.0;
-    Real lambda = 0.0;
-    UnitSystem lambda_units = runtime.default_units;
-    Real shielding_frac = 1.0;
-    if (shielding.enabled) {
-      shielding_frac = EvaluateShieldingFraction(shielding, state, runtime,
-                                                 size.d_view(m).dx1);
-    }
-
-    if (cooling_model == ModelKind::ism) {
-      lambda = ISMCoolFn(state.temp_cgs);
-      lambda_units = UnitSystem::cgs;
-    } else if (cooling_model == ModelKind::cgm) {
-      const Real lambda_pie = EvaluateTable(cgm_pie_table, state, w0, runtime,
-                                            m, k, j, i, local_bad);
-      const Real lambda_cie = EvaluateTable(cgm_cie_table, state, w0, runtime,
-                                            m, k, j, i, local_bad);
-      lambda = (1.0 - shielding_frac)*lambda_cie + shielding_frac*lambda_pie;
-      lambda_units = cgm_pie_table.value_units;
-    } else if (cooling_model == ModelKind::table) {
-      lambda = EvaluateTable(cooling_table, state, w0, runtime, m, k, j, i, local_bad);
-      lambda_units = cooling_table.value_units;
-    } else if (cooling_model == ModelKind::powerlaw ||
-               cooling_model == ModelKind::piecewise_powerlaw) {
-      lambda = EvaluatePowerLaw(cooling_powerlaw, state, w0, runtime,
-                                m, k, j, i, local_bad);
-      lambda_units = cooling_powerlaw.value_units;
-    }
-    lambda *= EvaluateModifier(cooling_modifier, state, w0, runtime, m, k, j, i,
-                               local_bad);
-    Real gamma_heat = 0.0;
-    UnitSystem gamma_units = runtime.default_units;
-    if (heating_model == ModelKind::constant) {
-      gamma_heat = constant_heating_rate;
-      gamma_units = runtime.default_units;
-    } else if (heating_model == ModelKind::table) {
-      gamma_heat = EvaluateTable(heating_table, state, w0, runtime, m, k, j, i,
-                                 local_bad);
-      gamma_units = heating_table.value_units;
-    } else if (heating_model == ModelKind::powerlaw ||
-               heating_model == ModelKind::piecewise_powerlaw) {
-      gamma_heat = EvaluatePowerLaw(heating_powerlaw, state, w0, runtime,
-                                    m, k, j, i, local_bad);
-      gamma_units = heating_powerlaw.value_units;
-    }
-    gamma_heat *= EvaluateModifier(heating_modifier, state, w0, runtime, m, k, j, i,
-                                   local_bad);
-    if (shielding.enabled && shielding.apply_to_heating) {
-      gamma_heat *= (1.0 - shielding_frac);
-    }
-    const Real edot_cool = CoolingEdotCode(lambda, lambda_units,
-                                           runtime.cooling_density,
-                                           state.rho_code, runtime);
-    const Real edot_heat = HeatingEdotCode(gamma_heat, gamma_units,
-                                           runtime.heating_density,
-                                           state.rho_code, runtime);
-    const Real edot_net = edot_cool - edot_heat;
-    const Real rate = fabs(edot_net) + FLT_MIN;
+    const EvaluatedCoolingRates rates = EvaluateCoolingRates(state, w0, runtime,
+        cooling_model, heating_model, cooling_table, heating_table, cgm_pie_table,
+        cgm_cie_table, cooling_powerlaw, heating_powerlaw, cooling_modifier,
+        heating_modifier, shielding, constant_heating_rate, size.d_view(m).dx1,
+        m, k, j, i, local_bad);
+    const Real rate = fabs(rates.edot_net) + FLT_MIN;
     min_dt = fmin(min_dt, timestep_factor*state.eint_code/rate);
     bad_sum += local_bad;
   }, Kokkos::Min<Real>(dtnew), Kokkos::Sum<Real>(bad_bounds));

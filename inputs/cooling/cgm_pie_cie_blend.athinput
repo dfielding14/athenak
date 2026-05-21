@@ -1,0 +1,78 @@
+# CGM-style PIE/CIE table blend with approximate self-shielding.
+
+<job>
+basename = cooling_cgm_pie_cie_blend
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 1
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 32
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+tlim = 1.0e-2
+ndiag = 10
+
+<units>
+length_cgs = 1.0e18
+mass_cgs = 1.0e30
+time_cgs = 1.0e10
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.6666666666666667
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp = 0.0
+dens = 1.0
+pgas = 1.0
+vx0 = 0.0
+along_x1 = true
+
+<cooling>
+enabled = true
+units = cgs
+cooling_model = cgm
+heating_model = none
+cooling_density = hydrogen_number_density
+hydrogen_mass_fraction = 0.72
+temperature_mu = 0.62
+cgm_pie_table = inputs/cooling/tables/cgm_pie.tbl
+cgm_cie_table = inputs/cooling/tables/cgm_cie.tbl
+shielding_model = cgm_approx
+shielding_density = hydrogen_number_density
+shielding_cross_section_cgs = 1.0e-17
+shielding_transition_temperature_cgs = 8.0e3
+shielding_transition_width_cgs = 1.5e3
+timestep = true
+timestep_factor = 0.1
+history = true
+
+<output1>
+file_type = hst
+data_format = %16.8e
+dt = 1.0e-3

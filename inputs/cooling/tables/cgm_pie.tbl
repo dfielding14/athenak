@@ -1,0 +1,13 @@
+ATHENAK_COOLING_TABLE 1
+ndim 1
+value_kind Lambda
+value_units cgs
+value_scale log10
+bounds zero
+data_order c_row_major_last_axis_fastest
+axis0 temperature cgs log10 2.0 8.0 4
+data
+-24.5
+-23.5
+-23.0
+-22.6
