@@ -91,3 +91,8 @@ njeans     = 64.0
 file_type = bin
 variable  = grav_phi
 dt        = 1.0
+
+<output2>
+file_type = bin
+variable  = hydro_u
+dt        = 1.0

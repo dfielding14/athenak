@@ -174,6 +174,12 @@ dt = 1.0
 
 ## Tested Configurations
 
+The visual validation report at
+[Self-Gravity Validation Results](self_gravity_validation.md) shows the
+figure-producing versions of these tests, including potential slices,
+source-term residuals, restart differences, isolated-boundary errors, static
+refined BE slices, and MPI quantitative summaries.
+
 The regression suite includes:
 
 - periodic Jeans hydro and MHD convergence;

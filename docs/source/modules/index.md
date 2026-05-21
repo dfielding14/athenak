@@ -18,6 +18,7 @@ Complete documentation for AthenaK modules, organized by category.
 | **Hydrodynamics** | `src/hydro/` | Euler equations solver | `hydro.md` |
 | **MHD** | `src/mhd/` | Magnetohydrodynamics with constrained transport | `mhd.md` |
 | **Self-Gravity** | `src/gravity/`, `src/multigrid/` | Poisson self-gravity with a multigrid solver | [self_gravity.md](self_gravity.md) |
+| **Self-Gravity Validation** | `tst/test_suite/selfgravity/` | Test coverage, quantitative metrics, and validation figures | [self_gravity_validation.md](self_gravity_validation.md) |
 | **Radiation** | `src/radiation/` | Radiation transport | `radiation.md` |
 | **Z4c** | `src/z4c/` | Numerical relativity | `z4c.md` |
 | **DynGRMHD** | `src/dyn_grmhd/` | GR MHD in dynamical spacetimes | `dyn_grmhd.md` |
@@ -53,4 +54,5 @@ Module parameters are catalogued in
 :maxdepth: 1
 
 self_gravity
+self_gravity_validation
 ```
