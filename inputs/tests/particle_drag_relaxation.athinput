@@ -1,0 +1,76 @@
+# AthenaK input file for dust-gas drag relaxation
+
+<job>
+basename = particle_drag_relaxation
+
+<mesh>
+nghost = 2
+nx1 = 16
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2 = 4
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3 = 4
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 4
+nx3 = 4
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim = -1
+tlim = 0.2
+ndiag = 1
+
+<hydro>
+eos = isothermal
+reconstruct = plm
+rsolver = hlle
+iso_sound_speed = 1.0
+gamma = 1.6666666666666667
+
+<particles>
+particle_type = dust
+pusher = drag
+ppc = 1.0
+assign_tag = index_order
+
+<drag_particles>
+enabled = true
+model = stopping_time
+stopping_time = 0.1
+cfl_drag = 0.05
+backreaction = true
+include_energy = false
+interpolation = host_cell
+deposition = host_cell
+particle_mass = 1.0
+
+<problem>
+pgen_name = streaming_instability
+mode = relaxation
+user_hist = true
+rho0 = 1.0
+epsilon = 1.0
+gas_vx = 0.0
+particle_vx = 0.1
+
+<output1>
+file_type = hst
+dt = 0.01
+user_hist_only = true
+data_format = %21.14e
