@@ -19,6 +19,7 @@
 #include "parameter_input.hpp"
 #include "tasklist/task_list.hpp"
 #include "bvals/bvals.hpp"
+#include "particles/tracer_fields.hpp"
 
 // forward declarations
 class IOWrapper;
@@ -31,7 +32,6 @@ enum class ParticleType {cosmic_ray, lagrangian_mc};
 
 enum class TracerSeedWeight {mass, volume};
 enum class TracerSeedRegion {all, box, sphere, slab};
-enum class TracerSeedTarget {none, density, temperature, pressure, entropy, scalar};
 
 struct TracerSeedSchedule {
   int id = 0;
@@ -52,8 +52,8 @@ struct TracerSeedSchedule {
   Real center1 = 0.0, center2 = 0.0, center3 = 0.0, radius = 0.0;
   int slab_axis = 1;
   Real slab_min = 0.0, slab_max = 0.0;
-  TracerSeedTarget target = TracerSeedTarget::none;
-  int scalar_index = -1;
+  bool has_target = false;
+  particles::TracerField target_field;
   bool has_target_min = false;
   bool has_target_max = false;
   Real target_min = 0.0;
@@ -75,7 +75,6 @@ struct ParticlesTaskIDs {
   TaskID crecv;
   TaskID mradj;
   TaskID seed;
-  TaskID sample;
 };
 
 namespace particles {
@@ -123,14 +122,12 @@ class Particles {
   TaskStatus ClearRecv(Driver *pdriver, int stage);
   TaskStatus AdjustMeshRefinement(Driver *pdriver, int stage);
   TaskStatus SeedDueTracers(Driver *pdriver, int stage);
-  TaskStatus SampleThermodynamicsTask(Driver *pdriver, int stage);
   TaskStatus PushLagrangianMC(Driver *pdriver, int stage);
   void SeedInitialTracers();
-  void SampleThermodynamics();
   void RemapAfterMeshRefinement();
   void WriteRestartData(IOWrapper &resfile, bool single_file_per_rank);
   void ReadRestartData(IOWrapper &resfile, bool single_file_per_rank);
-  int GetLagrangianMCScalarCount() const {return std::max(0, nrdata - LMC_SCALAR0);}
+  int GetLagrangianMCScalarCount() const;
   bool IsLagrangianMC() const {return particle_type == ParticleType::lagrangian_mc;}
 
  private:

@@ -255,56 +255,45 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
 
   if (pm->pmb_pack->ppart->IsLagrangianMC()) {
-    for (int n=LMC_RHO; n<(pm->pmb_pack->ppart->nrdata); ++n) {
-      std::stringstream msg;
-      static const char *names[] = {"rho", "pressure", "temperature", "entropy",
-                                    "internal_energy", "v1", "v2", "v3",
-                                    "creation_time"};
-      std::string label;
-      if (n < LMC_SCALAR0) {
-        label = names[n - LMC_RHO];
-      } else {
-        label = "scalar" + std::to_string(n - LMC_SCALAR0);
-      }
-      msg << std::endl << "SCALARS " << label << " float" << std::endl
-          << "LOOKUP_TABLE default" << std::endl;
+    std::stringstream msg;
+    msg << std::endl << "SCALARS creation_time float" << std::endl
+        << "LOOKUP_TABLE default" << std::endl;
 
-      if (global_variable::my_rank == 0) {
-        partfile.Write_any_type_at(msg.str().c_str(), msg.str().size(), header_offset,
-                                   "byte");
-      }
-      header_offset += msg.str().size();
+    if (global_variable::my_rank == 0) {
+      partfile.Write_any_type_at(msg.str().c_str(), msg.str().size(), header_offset,
+                                 "byte");
+    }
+    header_offset += msg.str().size();
 
-      for (int p=0; p<npout_thisrank; ++p) {
-        data[p] = static_cast<float>(outpart_rdata(n,p));
-      }
-      if (!big_end) {
-        for (int i=0; i<npout_thisrank; ++i) { Swap4Bytes(&data[i]); }
-      }
+    for (int p=0; p<npout_thisrank; ++p) {
+      data[p] = static_cast<float>(outpart_rdata(LMC_CREATE_TIME,p));
+    }
+    if (!big_end) {
+      for (int i=0; i<npout_thisrank; ++i) { Swap4Bytes(&data[i]); }
+    }
 
-      std::size_t datasize = sizeof(float);
-      std::size_t myoffset = header_offset +
-        rank_offset[global_variable::my_rank]*datasize;
-      if (partfile.Write_any_type_at_all(&(data[0]), npout_min, myoffset, "float")
-          != npout_min) {
+    std::size_t datasize = sizeof(float);
+    std::size_t myoffset = header_offset +
+      rank_offset[global_variable::my_rank]*datasize;
+    if (partfile.Write_any_type_at_all(&(data[0]), npout_min, myoffset, "float")
+        != npout_min) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+          << std::endl << "particle data not written correctly to vtk particle file, "
+          << "vtk file is broken." << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    myoffset += datasize*npout_min;
+    int nremain = pm->nprtcl_thisrank - npout_min;
+    if (nremain > 0) {
+      if (partfile.Write_any_type_at(&(data[npout_min]), nremain, myoffset, "float")
+          != nremain) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
             << std::endl << "particle data not written correctly to vtk particle file, "
             << "vtk file is broken." << std::endl;
         exit(EXIT_FAILURE);
       }
-      myoffset += datasize*npout_min;
-      int nremain = pm->nprtcl_thisrank - npout_min;
-      if (nremain > 0) {
-        if (partfile.Write_any_type_at(&(data[npout_min]), nremain, myoffset, "float")
-            != nremain) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "particle data not written correctly to vtk particle file, "
-              << "vtk file is broken." << std::endl;
-          exit(EXIT_FAILURE);
-        }
-      }
-      header_offset += pm->nprtcl_total*datasize;
     }
+    header_offset += pm->nprtcl_total*datasize;
   }
 
   // Add output of vectors here with header:

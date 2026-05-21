@@ -44,7 +44,6 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   if (pusher == ParticlesPusher::lagrangian_mc) {
     id.mradj  = list->AddTask(&Particles::AdjustMeshRefinement, this, id.csend);
     id.seed   = list->AddTask(&Particles::SeedDueTracers, this, id.mradj);
-    id.sample = list->AddTask(&Particles::SampleThermodynamicsTask, this, id.seed);
   }
 
   return;
@@ -124,15 +123,6 @@ TaskStatus Particles::ClearRecv(Driver *pdrive, int stage) {
 TaskStatus Particles::SeedDueTracers(Driver *pdrive, int stage) {
   if (particle_type == ParticleType::lagrangian_mc) {
     SeedTracersAtTime(pmy_pack->pmesh->time + pmy_pack->pmesh->dt, false);
-  }
-  return TaskStatus::complete;
-}
-
-//----------------------------------------------------------------------------------------
-
-TaskStatus Particles::SampleThermodynamicsTask(Driver *pdrive, int stage) {
-  if (particle_type == ParticleType::lagrangian_mc) {
-    SampleThermodynamics();
   }
   return TaskStatus::complete;
 }

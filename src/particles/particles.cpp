@@ -108,10 +108,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                     << "EOS in this implementation" << std::endl;
           std::exit(EXIT_FAILURE);
         }
-        int nscalars = (pmy_pack->phydro != nullptr) ?
-                       pmy_pack->phydro->nscalars : pmy_pack->pmhd->nscalars;
         nprtcl_thispack = 0;
-        nrdata = LMC_SCALAR0 + nscalars;
+        nrdata = LMC_NREAL;
         nidata = PSEEDID + 1;
         random_seed = pin->GetOrAddInteger("particles","random_seed",12345);
         next_tracer_tag = pin->GetOrAddInteger("particles","next_tracer_tag",0);
@@ -138,6 +136,15 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 // destructor
 
 Particles::~Particles() {
+}
+
+//----------------------------------------------------------------------------------------
+// GetLagrangianMCScalarCount()
+
+int Particles::GetLagrangianMCScalarCount() const {
+  if (pmy_pack->phydro != nullptr) return pmy_pack->phydro->nscalars;
+  if (pmy_pack->pmhd != nullptr) return pmy_pack->pmhd->nscalars;
+  return 0;
 }
 
 //----------------------------------------------------------------------------------------

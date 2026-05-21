@@ -80,3 +80,4 @@ along_x3  = false
 <output1>
 file_type = prtcl_thermo_history
 dt        = 0.01
+variables = bmag, beta, alfven_speed, mach

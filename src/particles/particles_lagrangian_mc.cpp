@@ -28,6 +28,7 @@
 #include "outputs/io_wrapper.hpp"
 #include "parameter_input.hpp"
 #include "particles.hpp"
+#include "particles/tracer_fields.hpp"
 
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
@@ -62,10 +63,6 @@ void FatalParticleInput(const std::string &msg) {
 struct CandidateCell {
   int m, k, j, i;
   Real cumulative_end;
-};
-
-struct ThermoSample {
-  Real rho, pressure, temperature, entropy, eint, v1, v2, v3;
 };
 
 RegionSize MeshBlockSizeFromGID(Mesh *pm, int gid) {
@@ -171,20 +168,6 @@ void SnapToMeshBlockCellCenter(Mesh *pm, int gid, Real &x1, Real &x2, Real &x3) 
   x3 = CellCenterX(k, indcs.nx3, size.x3min, size.x3max);
 }
 
-ThermoSample SampleFromHost(const HostArray5D<Real> &w0, const EOS_Data &eos,
-                            int m, int k, int j, int i) {
-  ThermoSample out;
-  out.rho = w0(m,IDN,k,j,i);
-  out.eint = w0(m,IEN,k,j,i);
-  out.pressure = eos.IdealGasPressure(out.eint);
-  out.temperature = out.pressure/out.rho;
-  out.entropy = std::log(out.pressure/std::pow(out.rho, eos.gamma));
-  out.v1 = w0(m,IVX,k,j,i);
-  out.v2 = w0(m,IVY,k,j,i);
-  out.v3 = w0(m,IVZ,k,j,i);
-  return out;
-}
-
 } // namespace
 
 namespace particles {
@@ -195,6 +178,8 @@ namespace particles {
 void Particles::ParseTracerSeedSchedules(ParameterInput *pin) {
   seed_schedules_.clear();
   int fallback_id = 1;
+  bool has_mhd = (pmy_pack->pmhd != nullptr);
+  int nscalars = GetLagrangianMCScalarCount();
 
   for (auto it = pin->block.begin(); it != pin->block.end(); ++it) {
     const std::string &block = it->block_name;
@@ -257,25 +242,9 @@ void Particles::ParseTracerSeedSchedules(ParameterInput *pin) {
     }
 
     if (pin->DoesParameterExist(block, "target")) {
-      std::string target = pin->GetString(block, "target");
-      if (target == "density") {
-        sched.target = TracerSeedTarget::density;
-      } else if (target == "temperature") {
-        sched.target = TracerSeedTarget::temperature;
-      } else if (target == "pressure") {
-        sched.target = TracerSeedTarget::pressure;
-      } else if (target == "entropy") {
-        sched.target = TracerSeedTarget::entropy;
-      } else if (StartsWith(target, "scalar")) {
-        sched.target = TracerSeedTarget::scalar;
-        sched.scalar_index = std::stoi(target.substr(6));
-        if (sched.scalar_index < 0 || sched.scalar_index >= GetLagrangianMCScalarCount()) {
-          FatalParticleInput(block + ": scalar target index is out of range");
-        }
-      } else {
-        FatalParticleInput(block + ": target must be density, temperature, pressure, "
-                           "entropy, or scalarN");
-      }
+      sched.has_target = true;
+      sched.target_field = ParseTracerFieldName(pin->GetString(block, "target"),
+                                                has_mhd, nscalars, block + "/target");
       sched.has_target_min = pin->DoesParameterExist(block, "target_min");
       sched.has_target_max = pin->DoesParameterExist(block, "target_max");
       if (sched.has_target_min) sched.target_min = pin->GetReal(block, "target_min");
@@ -329,7 +298,6 @@ void Particles::AppendParticles(const HostArray2D<Real> &new_rdata,
 void Particles::SeedInitialTracers() {
   if (particle_type != ParticleType::lagrangian_mc) return;
   SeedTracersAtTime(pmy_pack->pmesh->time, true);
-  SampleThermodynamics();
 }
 
 //----------------------------------------------------------------------------------------
@@ -352,6 +320,7 @@ void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
   auto h_lev = pmy_pack->pmb->mb_lev.h_view;
 
   int nfluid = 0, nscalars = 0;
+  bool has_mhd = (pmy_pack->pmhd != nullptr);
   EOS_Data eos;
   if (pmy_pack->phydro != nullptr) {
     nfluid = pmy_pack->phydro->nhydro;
@@ -368,10 +337,12 @@ void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
   int nmb_alloc = std::max(nmb, pm->nmb_maxperrank);
   HostArray5D<Real> h_w0("seed_w0", nmb_alloc, nfluid+nscalars,
                          ncells3, ncells2, ncells1);
+  HostArray5D<Real> h_bcc("seed_bcc0", nmb_alloc, NMAG, ncells3, ncells2, ncells1);
   if (pmy_pack->phydro != nullptr) {
     Kokkos::deep_copy(h_w0, pmy_pack->phydro->w0);
   } else {
     Kokkos::deep_copy(h_w0, pmy_pack->pmhd->w0);
+    Kokkos::deep_copy(h_bcc, pmy_pack->pmhd->bcc0);
   }
 
   constexpr Real eps = 64.0*std::numeric_limits<Real>::epsilon();
@@ -407,27 +378,17 @@ void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
               }
               if (!inside) continue;
 
-              ThermoSample sample = SampleFromHost(h_w0, eos, m, k, j, i);
-              Real target_value = 0.0;
-              if (sched.target == TracerSeedTarget::density) {
-                target_value = sample.rho;
-              } else if (sched.target == TracerSeedTarget::temperature) {
-                target_value = sample.temperature;
-              } else if (sched.target == TracerSeedTarget::pressure) {
-                target_value = sample.pressure;
-              } else if (sched.target == TracerSeedTarget::entropy) {
-                target_value = sample.entropy;
-              } else if (sched.target == TracerSeedTarget::scalar) {
-                target_value = h_w0(m,nfluid+sched.scalar_index,k,j,i);
-              }
-              if (sched.target != TracerSeedTarget::none) {
+              if (sched.has_target) {
+                Real target_value = EvaluateTracerFieldHost(sched.target_field, h_w0,
+                                                            h_bcc, has_mhd, eos.gamma,
+                                                            nfluid, m, k, j, i);
                 if (sched.has_target_min && target_value < sched.target_min) continue;
                 if (sched.has_target_max && target_value > sched.target_max) continue;
               }
 
               Real volume = h_size(m).dx1*h_size(m).dx2*h_size(m).dx3;
               Real weight = (sched.weight == TracerSeedWeight::mass) ?
-                            sample.rho*volume : volume;
+                            h_w0(m,IDN,k,j,i)*volume : volume;
               if (weight <= 0.0) continue;
               local_weight += weight;
               cells.push_back({m,k,j,i,local_weight});
@@ -483,7 +444,6 @@ void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
       for (int p=0; p<nnew; ++p) {
         CandidateCell cell = cells[chosen[p]];
         int m = cell.m, k = cell.k, j = cell.j, i = cell.i;
-        ThermoSample sample = SampleFromHost(h_w0, eos, m, k, j, i);
         for (int n=0; n<nrdata; ++n) new_r(n,p) = 0.0;
         for (int n=0; n<nidata; ++n) new_i(n,p) = 0;
 
@@ -496,18 +456,7 @@ void Particles::SeedTracersAtTime(Real event_time, bool initial_only) {
         new_r(LMCX,p) = CellCenterX(i-is, nx1, h_size(m).x1min, h_size(m).x1max);
         new_r(LMCY,p) = CellCenterX(j-js, nx2, h_size(m).x2min, h_size(m).x2max);
         new_r(LMCZ,p) = CellCenterX(k-ks, nx3, h_size(m).x3min, h_size(m).x3max);
-        new_r(LMC_RHO,p) = sample.rho;
-        new_r(LMC_PRESSURE,p) = sample.pressure;
-        new_r(LMC_TEMPERATURE,p) = sample.temperature;
-        new_r(LMC_ENTROPY,p) = sample.entropy;
-        new_r(LMC_EINT,p) = sample.eint;
-        new_r(LMC_VX,p) = sample.v1;
-        new_r(LMC_VY,p) = sample.v2;
-        new_r(LMC_VZ,p) = sample.v3;
         new_r(LMC_CREATE_TIME,p) = sched.next_time;
-        for (int n=0; n<nscalars; ++n) {
-          new_r(LMC_SCALAR0+n,p) = h_w0(m,nfluid+n,k,j,i);
-        }
       }
       AppendParticles(new_r, new_i, nnew);
 
@@ -876,86 +825,6 @@ void Particles::RemapAfterMeshRefinement() {
     Kokkos::deep_copy(prtcl_idata, new_i);
   }
   pm->UpdateParticleCounts();
-}
-
-//----------------------------------------------------------------------------------------
-//! \fn void Particles::SampleThermodynamics
-
-void Particles::SampleThermodynamics() {
-  if (particle_type != ParticleType::lagrangian_mc || nprtcl_thispack <= 0) return;
-
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
-  int is = indcs.is, js = indcs.js, ks = indcs.ks;
-  int nmb = pmy_pack->nmb_thispack;
-  auto &mbsize = pmy_pack->pmb->mb_size;
-  auto &pi = prtcl_idata;
-  auto &pr = prtcl_rdata;
-  auto &gids = pmy_pack->gids;
-  bool &multi_d = pmy_pack->pmesh->multi_d;
-  bool &three_d = pmy_pack->pmesh->three_d;
-  int nscalars = GetLagrangianMCScalarCount();
-
-  if (pmy_pack->phydro != nullptr) {
-    auto w0 = pmy_pack->phydro->w0;
-    auto eos = pmy_pack->phydro->peos->eos_data;
-    int nfluid = pmy_pack->phydro->nhydro;
-    par_for("lagrangian_mc_sample_hydro", DevExeSpace(), 0, nprtcl_thispack-1,
-    KOKKOS_LAMBDA(const int p) {
-      int m = pi(PGID,p) - gids;
-      if (m < 0 || m >= nmb) return;
-      int i = static_cast<int>((pr(LMCX,p) - mbsize.d_view(m).x1min)/
-                               mbsize.d_view(m).dx1) + is;
-      int j = multi_d ? static_cast<int>((pr(LMCY,p) - mbsize.d_view(m).x2min)/
-                                       mbsize.d_view(m).dx2) + js : js;
-      int k = three_d ? static_cast<int>((pr(LMCZ,p) - mbsize.d_view(m).x3min)/
-                                       mbsize.d_view(m).dx3) + ks : ks;
-      i = i < is ? is : (i > is + indcs.nx1 - 1 ? is + indcs.nx1 - 1 : i);
-      j = j < js ? js : (j > js + indcs.nx2 - 1 ? js + indcs.nx2 - 1 : j);
-      k = k < ks ? ks : (k > ks + indcs.nx3 - 1 ? ks + indcs.nx3 - 1 : k);
-      Real rho = w0(m,IDN,k,j,i);
-      Real eint = w0(m,IEN,k,j,i);
-      Real press = eos.IdealGasPressure(eint);
-      pr(LMC_RHO,p) = rho;
-      pr(LMC_PRESSURE,p) = press;
-      pr(LMC_TEMPERATURE,p) = press/rho;
-      pr(LMC_ENTROPY,p) = log(press/pow(rho, eos.gamma));
-      pr(LMC_EINT,p) = eint;
-      pr(LMC_VX,p) = w0(m,IVX,k,j,i);
-      pr(LMC_VY,p) = w0(m,IVY,k,j,i);
-      pr(LMC_VZ,p) = w0(m,IVZ,k,j,i);
-      for (int n=0; n<nscalars; ++n) pr(LMC_SCALAR0+n,p) = w0(m,nfluid+n,k,j,i);
-    });
-  } else {
-    auto w0 = pmy_pack->pmhd->w0;
-    auto eos = pmy_pack->pmhd->peos->eos_data;
-    int nfluid = pmy_pack->pmhd->nmhd;
-    par_for("lagrangian_mc_sample_mhd", DevExeSpace(), 0, nprtcl_thispack-1,
-    KOKKOS_LAMBDA(const int p) {
-      int m = pi(PGID,p) - gids;
-      if (m < 0 || m >= nmb) return;
-      int i = static_cast<int>((pr(LMCX,p) - mbsize.d_view(m).x1min)/
-                               mbsize.d_view(m).dx1) + is;
-      int j = multi_d ? static_cast<int>((pr(LMCY,p) - mbsize.d_view(m).x2min)/
-                                       mbsize.d_view(m).dx2) + js : js;
-      int k = three_d ? static_cast<int>((pr(LMCZ,p) - mbsize.d_view(m).x3min)/
-                                       mbsize.d_view(m).dx3) + ks : ks;
-      i = i < is ? is : (i > is + indcs.nx1 - 1 ? is + indcs.nx1 - 1 : i);
-      j = j < js ? js : (j > js + indcs.nx2 - 1 ? js + indcs.nx2 - 1 : j);
-      k = k < ks ? ks : (k > ks + indcs.nx3 - 1 ? ks + indcs.nx3 - 1 : k);
-      Real rho = w0(m,IDN,k,j,i);
-      Real eint = w0(m,IEN,k,j,i);
-      Real press = eos.IdealGasPressure(eint);
-      pr(LMC_RHO,p) = rho;
-      pr(LMC_PRESSURE,p) = press;
-      pr(LMC_TEMPERATURE,p) = press/rho;
-      pr(LMC_ENTROPY,p) = log(press/pow(rho, eos.gamma));
-      pr(LMC_EINT,p) = eint;
-      pr(LMC_VX,p) = w0(m,IVX,k,j,i);
-      pr(LMC_VY,p) = w0(m,IVY,k,j,i);
-      pr(LMC_VZ,p) = w0(m,IVZ,k,j,i);
-      for (int n=0; n<nscalars; ++n) pr(LMC_SCALAR0+n,p) = w0(m,nfluid+n,k,j,i);
-    });
-  }
 }
 
 //----------------------------------------------------------------------------------------

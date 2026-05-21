@@ -11,7 +11,15 @@ import numpy as np
 
 
 FILE_HEADER = struct.Struct("32siiii")
-BLOCK_PREFIX = struct.Struct("16siiiiii")
+BLOCK_PREFIX_V1 = struct.Struct("16siiiiii")
+BLOCK_PREFIX_V2 = struct.Struct("16siiiii")
+
+
+def _read_exact(handle, size: int, label: str) -> bytes:
+    data = handle.read(size)
+    if len(data) != size:
+        raise ValueError(f"truncated {label}")
+    return data
 
 
 def read_history(path: str | Path) -> dict[str, np.ndarray]:
@@ -25,28 +33,65 @@ def read_history(path: str | Path) -> dict[str, np.ndarray]:
         header = handle.read(FILE_HEADER.size)
         if len(header) != FILE_HEADER.size:
             raise ValueError(f"{path} is too small to be a thermo-history file")
-        magic, version, real_size, file_nscalars, _ = FILE_HEADER.unpack(header)
+        magic, version, real_size, count_or_nfields, reserved_or_names_size = (
+            FILE_HEADER.unpack(header)
+        )
         if not magic.rstrip(b"\0").startswith(b"ATHK_PRTCL_THERMO_HISTORY"):
             raise ValueError(f"{path} has an unrecognized magic string")
-        if version != 1:
+        if version not in (1, 2):
             raise ValueError(f"unsupported thermo-history version {version}")
+        if real_size not in (4, 8):
+            raise ValueError(f"unsupported real size {real_size}")
         real_dtype = np.float64 if real_size == 8 else np.float32
-        nscalars = file_nscalars
+        if version == 1:
+            nscalars = count_or_nfields
+            field_names = [
+                "rho",
+                "pressure",
+                "temperature",
+                "specific_entropy",
+                "internal_energy",
+                "v1",
+                "v2",
+                "v3",
+            ] + [f"scalar{n}" for n in range(nscalars)]
+        else:
+            nfields = count_or_nfields
+            names_size = reserved_or_names_size
+            names_blob = _read_exact(handle, names_size, "field schema").decode()
+            field_names = names_blob.split("\n") if names_blob else []
+            if len(field_names) != nfields:
+                raise ValueError("field schema length does not match header")
+            nscalars = 0
 
         while True:
-            prefix = handle.read(BLOCK_PREFIX.size)
+            prefix_size = BLOCK_PREFIX_V1.size if version == 1 else BLOCK_PREFIX_V2.size
+            prefix = handle.read(prefix_size)
             if not prefix:
                 break
-            if len(prefix) != BLOCK_PREFIX.size:
+            if len(prefix) != prefix_size:
                 raise ValueError("truncated block header")
-            magic, block_version, nrecords, block_nscalars, int_per, real_per, cycle = (
-                BLOCK_PREFIX.unpack(prefix)
-            )
-            time = struct.unpack("d" if real_size == 8 else "f", handle.read(real_size))[0]
+            if version == 1:
+                magic, block_version, nrecords, block_nscalars, int_per, real_per, cycle = (
+                    BLOCK_PREFIX_V1.unpack(prefix)
+                )
+                if block_nscalars != nscalars:
+                    raise ValueError("incompatible block scalar metadata")
+            else:
+                magic, block_version, nrecords, int_per, real_per, cycle = (
+                    BLOCK_PREFIX_V2.unpack(prefix)
+                )
+            time = struct.unpack("d" if real_size == 8 else "f",
+                                 _read_exact(handle, real_size, "block time"))[0]
             if not magic.rstrip(b"\0").startswith(b"ATHKTHPBLK"):
                 raise ValueError("unrecognized block magic")
-            if block_version != 1 or block_nscalars != nscalars:
+            if block_version != version:
                 raise ValueError("incompatible block metadata")
+            expected_real_per = (
+                12 + (nscalars or 0) if version == 1 else 4 + len(field_names)
+            )
+            if int_per != 4 or real_per != expected_real_per:
+                raise ValueError("incompatible block record size")
             ints = np.fromfile(handle, dtype=np.int32, count=nrecords * int_per)
             reals = np.fromfile(handle, dtype=real_dtype, count=nrecords * real_per)
             if ints.size != nrecords * int_per or reals.size != nrecords * real_per:
@@ -59,7 +104,11 @@ def read_history(path: str | Path) -> dict[str, np.ndarray]:
         reals = np.vstack(rows_r)
     else:
         ints = np.empty((0, 4), dtype=np.int32)
-        reals = np.empty((0, 12 + (nscalars or 0)), dtype=real_dtype or np.float64)
+        if version == 1:
+            real_per = 12 + (nscalars or 0)
+        else:
+            real_per = 4 + len(field_names)
+        reals = np.empty((0, real_per), dtype=real_dtype or np.float64)
 
     columns = {
         "time": reals[:, 0],
@@ -70,17 +119,9 @@ def read_history(path: str | Path) -> dict[str, np.ndarray]:
         "x2": reals[:, 2],
         "x3": reals[:, 3],
         "gid": ints[:, 3],
-        "rho": reals[:, 4],
-        "pressure": reals[:, 5],
-        "temperature": reals[:, 6],
-        "specific_entropy": reals[:, 7],
-        "internal_energy": reals[:, 8],
-        "v1": reals[:, 9],
-        "v2": reals[:, 10],
-        "v3": reals[:, 11],
     }
-    for n in range(nscalars or 0):
-        columns[f"scalar{n}"] = reals[:, 12 + n]
+    for n, name in enumerate(field_names):
+        columns[name] = reals[:, 4 + n]
     return columns
 
 

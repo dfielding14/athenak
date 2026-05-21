@@ -61,6 +61,7 @@ gamma       = 1.6666666666666667
 particle_type = lagrangian_mc
 pusher        = lagrangian_mc
 random_seed   = 67890
+track_variables = density, temperature, mach
 
 <tracer_seed1>
 id              = 1
@@ -84,8 +85,8 @@ center1         = 0.0
 center2         = 0.0
 center3         = 0.0
 radius          = 0.3
-target          = temperature
-target_min      = 0.1
+target          = mach
+target_min      = 0.0
 seed            = 445566
 
 <problem>

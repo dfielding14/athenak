@@ -15,6 +15,7 @@
 
 #include "athena.hpp"
 #include "io_wrapper.hpp"
+#include "particles/tracer_fields.hpp"
 
 #define NHISTORY_VARIABLES 20
 #if NHISTORY_VARIABLES > NREDUCTION_VARIABLES
@@ -379,9 +380,12 @@ class ParticleThermoHistoryOutput : public BaseTypeOutput {
  protected:
   int npout_thisrank;
   int npout_total;
-  int nscalars;
+  Real tracer_gamma;
+  std::vector<particles::TracerField> tracer_fields;
+  std::vector<std::string> tracer_field_names;
   HostArray2D<Real> outpart_rdata;
   HostArray2D<int> outpart_idata;
+  HostArray2D<Real> outfield_data;
 };
 
 //----------------------------------------------------------------------------------------

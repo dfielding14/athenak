@@ -109,6 +109,7 @@ add_executable(
         particles/particles_lagrangian_mc.cpp
         particles/particles_pushers.cpp
         particles/particles_tasks.cpp
+        particles/tracer_fields.cpp
         outputs/pdf.cpp
 
         pgen/pgen.cpp

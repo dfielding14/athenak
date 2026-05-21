@@ -43,13 +43,14 @@ ndiag      = 1
 eos         = ideal
 reconstruct = plm
 rsolver     = hllc
-nscalars    = 0
+nscalars    = 1
 gamma       = 1.6666666666666667
 
 <particles>
 particle_type = lagrangian_mc
 pusher        = lagrangian_mc
 random_seed   = 12345
+track_variables = default, mach, sound_speed, vmag, scalar0
 
 <tracer_seed1>
 id              = 1
@@ -73,8 +74,8 @@ x1min           = -0.25
 x1max           =  0.25
 x2min           = -0.25
 x2max           =  0.25
-target          = temperature
-target_min      = 0.1
+target          = mach
+target_min      = 0.0
 seed            = 13579
 
 <problem>
@@ -84,6 +85,7 @@ amp       = 1.0e-3
 dens      = 1.0
 pgas      = 0.6
 vx0       = 0.0
+scalar0   = 0.25
 along_x1  = true
 along_x2  = false
 along_x3  = false
@@ -91,6 +93,7 @@ along_x3  = false
 <output1>
 file_type = prtcl_thermo_history
 dt        = 0.01
+variables = density, temperature, mach, scalar0
 
 <output2>
 file_type = pvtk
