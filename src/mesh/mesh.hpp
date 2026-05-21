@@ -154,6 +154,8 @@ class Mesh {
   void WriteMeshStructure();
   void NewTimeStep(const Real tlim);
   void AddCoordinatesAndPhysics(ParameterInput *pinput);
+  void UpdateParticleCounts();
+  int FindMeshBlockByPosition(const Real x1, const Real x2, const Real x3);
   BoundaryFlag GetBoundaryFlag(const std::string& input_string);
   std::string GetBoundaryString(BoundaryFlag input_flag);
 

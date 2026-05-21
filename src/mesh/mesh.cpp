@@ -52,6 +52,7 @@ Mesh::Mesh(ParameterInput *pin) :
   nmb_packs_thisrank(1),
   nprtcl_thisrank(0),
   nprtcl_total(0),
+  nprtcl_eachrank(nullptr),
   dtold(0.),
   dt_last_completed(0.) {
   // Set physical size and number of cells in mesh (root level)
@@ -337,7 +338,7 @@ Mesh::Mesh(ParameterInput *pin) :
 // destructor
 
 Mesh::~Mesh() {
-  if (pmb_pack->ppart != nullptr) {delete [] nprtcl_eachrank;}
+  if (nprtcl_eachrank != nullptr) {delete [] nprtcl_eachrank;}
   if (multilevel) {
     delete pmr;
   }
@@ -652,19 +653,7 @@ void Mesh::AddCoordinatesAndPhysics(ParameterInput *pinput) {
   // Determine total number of particles across all ranks
   particles::Particles *ppart = pmb_pack->ppart;
   if (ppart != nullptr) {
-    nprtcl_thisrank = 0;
-    for (int n=0; n<nmb_packs_thisrank; ++n) {
-      nprtcl_thisrank += pmb_pack->ppart->nprtcl_thispack;
-    }
-    nprtcl_eachrank = new int[global_variable::nranks];
-    nprtcl_eachrank[global_variable::my_rank] = nprtcl_thisrank;
-#if MPI_PARALLEL_ENABLED
-    // Share number of particles on each rank with all ranks
-    MPI_Allgather(&nprtcl_thisrank,1,MPI_INT,nprtcl_eachrank,1,MPI_INT,MPI_COMM_WORLD);
-#endif
-    for (int n=0; n<global_variable::nranks; ++n) {
-      nprtcl_total += nprtcl_eachrank[n];
-    }
+    UpdateParticleCounts();
     // Assign particle IDs
     if (pmb_pack->ppart != nullptr) {
       pmb_pack->ppart->CreateParticleTags(pinput);
@@ -676,4 +665,68 @@ void Mesh::AddCoordinatesAndPhysics(ParameterInput *pinput) {
   if (adaptive) {
     pmr->pmrc = new RefinementCriteria(this, pinput);
   }
+}
+
+//----------------------------------------------------------------------------------------
+// \fn Mesh::UpdateParticleCounts
+
+void Mesh::UpdateParticleCounts() {
+  particles::Particles *ppart = pmb_pack->ppart;
+  if (ppart == nullptr) {return;}
+
+  nprtcl_thisrank = 0;
+  for (int n=0; n<nmb_packs_thisrank; ++n) {
+    nprtcl_thisrank += pmb_pack->ppart->nprtcl_thispack;
+  }
+
+  if (nprtcl_eachrank == nullptr) {
+    nprtcl_eachrank = new int[global_variable::nranks];
+  }
+  nprtcl_eachrank[global_variable::my_rank] = nprtcl_thisrank;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allgather(&nprtcl_thisrank,1,MPI_INT,nprtcl_eachrank,1,MPI_INT,MPI_COMM_WORLD);
+#endif
+
+  nprtcl_total = 0;
+  for (int n=0; n<global_variable::nranks; ++n) {
+    nprtcl_total += nprtcl_eachrank[n];
+  }
+}
+
+namespace {
+
+std::int32_t PositionToLogicalIndex(const Real x, const Real xmin, const Real xmax,
+                                    const std::int32_t nblock) {
+  if (nblock <= 1) {return 0;}
+  Real xi = (x - xmin)/(xmax - xmin);
+  if (xi <= 0.0) {return 0;}
+  if (xi >= 1.0) {return nblock - 1;}
+  return static_cast<std::int32_t>(xi*static_cast<Real>(nblock));
+}
+
+} // namespace
+
+//----------------------------------------------------------------------------------------
+// \fn Mesh::FindMeshBlockByPosition
+
+int Mesh::FindMeshBlockByPosition(const Real x1, const Real x2, const Real x3) {
+  if (ptree == nullptr) {return -1;}
+
+  for (int lev=max_level; lev>=root_level; --lev) {
+    int lev_offset = lev - root_level;
+    LogicalLocation lloc;
+    lloc.level = lev;
+    lloc.lx1 = PositionToLogicalIndex(x1, mesh_size.x1min, mesh_size.x1max,
+                                      nmb_rootx1 << lev_offset);
+    lloc.lx2 = multi_d ? PositionToLogicalIndex(x2, mesh_size.x2min, mesh_size.x2max,
+                                                nmb_rootx2 << lev_offset) : 0;
+    lloc.lx3 = three_d ? PositionToLogicalIndex(x3, mesh_size.x3min, mesh_size.x3max,
+                                                nmb_rootx3 << lev_offset) : 0;
+
+    MeshBlockTree *bt = ptree->FindMeshBlock(lloc);
+    if (bt != nullptr && bt->GetGID() >= 0) {
+      return bt->GetGID();
+    }
+  }
+  return -1;
 }

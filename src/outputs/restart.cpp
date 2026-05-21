@@ -16,6 +16,7 @@
 #include <sstream>
 #include <string>
 #include <utility> // make_pair
+#include <vector>
 
 #include "athena.hpp"
 #include "coordinates/cell_locations.hpp"
@@ -29,6 +30,7 @@
 #include "z4c/z4c.hpp"
 #include "radiation/radiation.hpp"
 #include "srcterms/turb_driver.hpp"
+#include "particles/particles.hpp"
 //#include "outputs.hpp"
 
 //----------------------------------------------------------------------------------------
@@ -148,6 +150,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   TurbulenceDriver* pturb=pm->pmb_pack->pturb;
   z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
   adm::ADM* padm = pm->pmb_pack->padm;
+  particles::Particles* ppart = pm->pmb_pack->ppart;
   int nhydro=0, nmhd=0, nrad=0, nforce=3, nz4c=0, nadm=0, nco=0;
   if (phydro != nullptr) {
     nhydro = phydro->nhydro + phydro->nscalars;
@@ -621,6 +624,82 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     }
     offset_myrank += nout1*nout2*nout3*nadm*sizeof(Real); // adm u_adm
     myoffset = offset_myrank;
+  }
+
+  // Append particle state after MeshBlock-strided physics data.  The particle section is
+  // rank-strided because particles migrate independently of MeshBlocks.
+  if (ppart != nullptr) {
+    int particle_meta[3] = {1, ppart->nrdata, ppart->nidata};
+    int nprtcl_local = ppart->nprtcl_thispack;
+    std::vector<int> nprtcl_rank(global_variable::nranks, 0);
+    nprtcl_rank[global_variable::my_rank] = nprtcl_local;
+#if MPI_PARALLEL_ENABLED
+    if (!single_file_per_rank) {
+      MPI_Allgather(&nprtcl_local, 1, MPI_INT, nprtcl_rank.data(), 1, MPI_INT,
+                    MPI_COMM_WORLD);
+    }
+#endif
+    IOWrapperSizeT particle_offset = step1size + step2size + step3size +
+                                     sizeof(IOWrapperSizeT);
+    if (single_file_per_rank) {
+      particle_offset += data_size*pm->nmb_thisrank;
+    } else {
+      particle_offset += data_size*pm->nmb_total;
+    }
+
+    IOWrapperSizeT rank_counts_size = single_file_per_rank ? sizeof(int) :
+                                      global_variable::nranks*sizeof(int);
+    if (global_variable::my_rank == 0 || single_file_per_rank) {
+      if (resfile.Write_any_type_at(particle_meta, 3, particle_offset, "int",
+                                    single_file_per_rank) != 3) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "particle metadata not written correctly to rst file, "
+                  << "restart file is broken." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      const int *counts_ptr = single_file_per_rank ?
+                              &nprtcl_rank[global_variable::my_rank] :
+                              nprtcl_rank.data();
+      if (resfile.Write_any_type_at(counts_ptr, rank_counts_size/sizeof(int),
+                                    particle_offset + 3*sizeof(int), "int",
+                                    single_file_per_rank) !=
+          rank_counts_size/sizeof(int)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "particle counts not written correctly to rst file, "
+                  << "restart file is broken." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
+
+    IOWrapperSizeT rank_particle_offset = particle_offset + 3*sizeof(int) +
+                                          rank_counts_size;
+    if (!single_file_per_rank) {
+      for (int n=0; n<global_variable::my_rank; ++n) {
+        rank_particle_offset += static_cast<IOWrapperSizeT>(nprtcl_rank[n])*
+            (ppart->nrdata*sizeof(Real) + ppart->nidata*sizeof(int));
+      }
+    }
+    if (nprtcl_local > 0) {
+      auto pr_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), ppart->prtcl_rdata);
+      auto pi_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), ppart->prtcl_idata);
+      IOWrapperSizeT nreal = static_cast<IOWrapperSizeT>(ppart->nrdata)*nprtcl_local;
+      IOWrapperSizeT nint = static_cast<IOWrapperSizeT>(ppart->nidata)*nprtcl_local;
+      if (resfile.Write_any_type_at(pr_h.data(), nreal, rank_particle_offset, "Real",
+                                    single_file_per_rank) != nreal) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "particle Real data not written correctly to rst file, "
+                  << "restart file is broken." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      rank_particle_offset += nreal*sizeof(Real);
+      if (resfile.Write_any_type_at(pi_h.data(), nint, rank_particle_offset, "int",
+                                    single_file_per_rank) != nint) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "particle int data not written correctly to rst file, "
+                  << "restart file is broken." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
   }
 
   // close file, clean up
