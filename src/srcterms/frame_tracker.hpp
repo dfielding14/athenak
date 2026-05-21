@@ -21,7 +21,7 @@ class Driver;
 
 //----------------------------------------------------------------------------------------
 //! \class FrameTracker
-//! \brief Applies global Galilean boosts that keep selected material near target positions.
+//! \brief Keeps selected material near target positions with Galilean boosts.
 
 class FrameTracker {
  public:

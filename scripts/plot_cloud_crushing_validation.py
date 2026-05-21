@@ -2,9 +2,10 @@
 """Plot low-resolution cloud-crushing frame-tracking diagnostics.
 
 This script reads an AthenaK run directory produced by
-`inputs/hydro/cloud_crushing_snr.athinput`, parses the `FrameTracker` diagnostic
-blocks from an Athena stdout log, and reads native binary `hydro_w` snapshots.
-It writes one time-series validation plot and one x-y midplane density plot.
+`inputs/hydro/cloud_crushing_snr.athinput`, reads native binary `hydro_w`
+snapshots, and parses `FrameTracker` diagnostic blocks when an Athena stdout
+log is available. It writes density and dense-mass plots in binary-only mode,
+plus one time-series validation plot when tracker diagnostics are present.
 """
 
 from __future__ import annotations
@@ -27,7 +28,10 @@ DEFAULT_INPUT = REPO_ROOT / "inputs" / "hydro" / "cloud_crushing_snr.athinput"
 ATOMIC_MASS_UNIT_CGS = 1.66053906660e-24
 MSUN_CGS = 1.98847e33
 sys.path.insert(0, str(REPO_ROOT / "vis" / "python"))
-import bin_convert_new  # noqa: E402
+try:
+  import bin_convert_new as bin_reader  # type: ignore[import-not-found]  # noqa: E402
+except ModuleNotFoundError:
+  import bin_convert as bin_reader  # type: ignore[import-not-found]  # noqa: E402
 
 
 def strip_comment(line: str) -> str:
@@ -108,9 +112,9 @@ def parse_frame_log(path: Path) -> list[dict[str, Any]]:
 
 def read_binary_snapshot(path: Path) -> dict[str, Any]:
   if "rank_00000000" in path.parts:
-    data = bin_convert_new.read_all_ranks_binary_as_athdf(str(path), quantities=["dens"])
+    data = bin_reader.read_all_ranks_binary_as_athdf(str(path), quantities=["dens"])
   else:
-    data = bin_convert_new.read_binary_as_athdf(str(path), quantities=["dens"])
+    data = bin_reader.read_binary_as_athdf(str(path), quantities=["dens"])
 
   rho = data.get("dens")
   if rho is None:
@@ -224,10 +228,15 @@ def write_dense_mass_csv(path: Path, history: dict[str, np.ndarray]) -> None:
 def plot_dense_mass(path: Path, history: dict[str, np.ndarray], rho_min: float) -> None:
   path.parent.mkdir(parents=True, exist_ok=True)
   fig, ax = plt.subplots(figsize=(7.2, 4.4), constrained_layout=True)
-  ax.plot(history["time"], history["mass_msun"], marker="o", ms=3.0, lw=1.5)
+  mass = history["mass_msun"]
+  if not mass.size:
+    raise ValueError("no dense-mass samples found")
+  frac_change = mass/mass[0] - 1.0
+  ax.plot(history["time"], frac_change, marker="o", ms=3.0, lw=1.5)
+  ax.axhline(0.0, color="0.35", lw=0.8)
   ax.set_xlabel("time [Myr]")
-  ax.set_ylabel(r"$M(\rho > \rho_{\rm cloud,0}/3)$ [$M_\odot$]")
-  ax.set_title(f"Dense gas mass, threshold rho > {rho_min:.6g} [code]")
+  ax.set_ylabel(r"$M/M_0 - 1$")
+  ax.set_title(f"Dense gas mass conservation, threshold rho > {rho_min:.6g}")
   ax.grid(True, alpha=0.3)
   fig.savefig(path, dpi=180)
   plt.close(fig)
@@ -273,14 +282,15 @@ def plot_density_slices_vertical(
   ]
 
   path.parent.mkdir(parents=True, exist_ok=True)
-  fig_height = max(7.0, 1.65*len(selected) + 1.2)
+  fig_height = max(7.0, 3.15*len(selected) + 1.4)
   fig, axes = plt.subplots(
       len(selected),
       1,
-      figsize=(14.0, fig_height),
-      constrained_layout=True,
+      figsize=(8.4, fig_height),
+      constrained_layout=False,
       squeeze=False,
   )
+  fig.subplots_adjust(left=0.11, right=0.82, bottom=0.06, top=0.96, hspace=0.38)
   image = None
   for ax, panel, snapshot in zip(axes[:, 0], panels, selected):
     image = ax.imshow(
@@ -294,16 +304,17 @@ def plot_density_slices_vertical(
     )
     ax.axvline(target_x1, color="white", lw=1.0, ls="--", alpha=0.75)
     ax.set_aspect("equal", adjustable="box")
+    ax.set_anchor("W")
     ax.set_ylabel("x2 [pc]")
-    ax.set_title(f"t = {float(snapshot['time']):.4f} Myr   {snapshot['path'].name}")
+    output_id = snapshot["path"].stem.split(".")[-1]
+    ax.set_title(f"t = {float(snapshot['time']):.3e} Myr   output {output_id}")
   axes[-1, 0].set_xlabel("x1 [pc]")
   if image is not None:
+    cax = fig.add_axes([0.86, 0.14, 0.035, 0.72])
     fig.colorbar(
         image,
-        ax=axes[:, 0].tolist(),
+        cax=cax,
         label=r"$\log_{10} n$ [cm$^{-3}$]",
-        fraction=0.025,
-        pad=0.015,
     )
   fig.savefig(path, dpi=180)
   plt.close(fig)
@@ -420,7 +431,10 @@ def plot_tracker_validation(
   plt.close(fig)
 
 
-def midplane_points(snapshot: dict[str, Any], density_unit: float) -> dict[str, np.ndarray]:
+def midplane_points(
+    snapshot: dict[str, Any],
+    density_unit: float,
+) -> dict[str, np.ndarray]:
   rho = snapshot["fields"].get("dens")
   if rho is None:
     raise ValueError(f"snapshot {snapshot['path']} does not contain dens")
@@ -490,7 +504,12 @@ def build_parser() -> argparse.ArgumentParser:
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument("run_dir", type=Path, help="AthenaK run directory")
   parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
-  parser.add_argument("--log", type=Path, default=None, help="Athena stdout log")
+  parser.add_argument(
+      "--log",
+      type=Path,
+      default=None,
+      help="Athena stdout log; defaults to run_dir/athena.log when present",
+  )
   parser.add_argument(
       "--output-prefix",
       type=Path,
@@ -507,7 +526,17 @@ def main() -> None:
   args = build_parser().parse_args()
   blocks = parse_athinput(args.input)
   log_path = args.log if args.log is not None else args.run_dir / "athena.log"
-  rows = parse_frame_log(log_path)
+  if log_path.exists():
+    rows = parse_frame_log(log_path)
+  elif args.log is not None:
+    raise FileNotFoundError(f"--log file not found: {log_path}")
+  else:
+    rows = []
+    print(
+        f"warning: no Athena stdout log found at {log_path}; "
+        "skipping tracker-log validation plot",
+        file=sys.stderr,
+    )
   snapshots = read_binary_series(args.run_dir)
 
   target_min = args.target_min
@@ -525,16 +554,31 @@ def main() -> None:
 
   snapshot_centroids = cold_centroids(snapshots, target_min, target_max)
   dense_mass = dense_mass_history(snapshots, target_min, mass_cgs)
-  validation_path = args.output_prefix.with_name(args.output_prefix.name + "_validation.png")
+  validation_path = args.output_prefix.with_name(
+      args.output_prefix.name + "_validation.png"
+  )
   midplane_path = args.output_prefix.with_name(args.output_prefix.name + "_midplane.png")
-  dense_mass_path = args.output_prefix.with_name(args.output_prefix.name + "_dense_mass.png")
-  dense_mass_csv_path = args.output_prefix.with_name(args.output_prefix.name + "_dense_mass.csv")
+  dense_mass_path = args.output_prefix.with_name(
+      args.output_prefix.name + "_dense_mass.png"
+  )
+  dense_mass_csv_path = args.output_prefix.with_name(
+      args.output_prefix.name + "_dense_mass.csv"
+  )
   slices_path = args.output_prefix.with_name(
       args.output_prefix.name
       + f"_density_slices_{args.slice_count}_vertical_equal_aspect.png"
   )
-  plot_tracker_validation(validation_path, rows, snapshot_centroids, target_x1)
-  plot_midplane_density(midplane_path, snapshots, snapshot_centroids, target_x1, density_unit)
+  wrote_validation = False
+  if rows:
+    plot_tracker_validation(validation_path, rows, snapshot_centroids, target_x1)
+    wrote_validation = True
+  plot_midplane_density(
+      midplane_path,
+      snapshots,
+      snapshot_centroids,
+      target_x1,
+      density_unit,
+  )
   plot_dense_mass(dense_mass_path, dense_mass, target_min)
   write_dense_mass_csv(dense_mass_csv_path, dense_mass)
   plot_density_slices_vertical(
@@ -547,7 +591,10 @@ def main() -> None:
 
   print(f"read {len(rows)} frame-tracking diagnostic block(s)")
   print(f"read {len(snapshots)} binary snapshot(s)")
-  print(f"wrote {validation_path}")
+  if wrote_validation:
+    print(f"wrote {validation_path}")
+  else:
+    print(f"skipped {validation_path} because no tracker diagnostics were available")
   print(f"wrote {midplane_path}")
   print(f"wrote {dense_mass_path}")
   print(f"wrote {dense_mass_csv_path}")

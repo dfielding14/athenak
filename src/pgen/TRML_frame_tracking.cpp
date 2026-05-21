@@ -208,6 +208,9 @@ void TRMLCoolingSource(Mesh *pm, const Real bdt) {
   par_for("trml_cooling", DevExeSpace(), 0, pmbp->nmb_thispack-1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     const Real density = w0(m, IDN, k, j, i);
+    if (density <= 0.0) {
+      return;
+    }
     const Real eint = u0(m, IEN, k, j, i) -
         0.5*(SQR(u0(m, IM1, k, j, i)) + SQR(u0(m, IM2, k, j, i)) +
              SQR(u0(m, IM3, k, j, i)))/density;
@@ -243,7 +246,8 @@ void TRMLCoolingTimeStep(Mesh *pm) {
   Real dtnew = static_cast<Real>(std::numeric_limits<float>::max());
 
   Kokkos::parallel_reduce("trml_cooling_newdt",
-  Kokkos::RangePolicy<>(DevExeSpace(), 0, pmbp->nmb_thispack*indcs.nx3*indcs.nx2*indcs.nx1),
+  Kokkos::RangePolicy<>(DevExeSpace(), 0,
+                        pmbp->nmb_thispack*indcs.nx3*indcs.nx2*indcs.nx1),
   KOKKOS_LAMBDA(const int &idx, Real &min_dt) {
     const int nkji = indcs.nx3*indcs.nx2*indcs.nx1;
     const int nji = indcs.nx2*indcs.nx1;
@@ -253,6 +257,9 @@ void TRMLCoolingTimeStep(Mesh *pm) {
     int i = (idx - m*nkji - (k - ks)*nji - (j - js)*indcs.nx1) + is;
 
     const Real density = w0(m, IDN, k, j, i);
+    if (density <= 0.0) {
+      return;
+    }
     const Real eint = u0(m, IEN, k, j, i) -
         0.5*(SQR(u0(m, IM1, k, j, i)) + SQR(u0(m, IM2, k, j, i)) +
              SQR(u0(m, IM3, k, j, i)))/density;

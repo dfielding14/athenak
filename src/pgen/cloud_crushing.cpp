@@ -176,8 +176,8 @@ void FindStableISMEquilibria(const Real pressure_over_k, const Real hrate,
 
   if (stable_roots.size() < 2) {
     FatalCloudCrushingInput("Could not find both cold and warm stable ISM equilibria. "
-                            "Adjust hydro_srcterms/hrate, problem/pressure_over_k, or the "
-                            "temperature search interval.");
+                            "Adjust hydro_srcterms/hrate, problem/pressure_over_k, "
+                            "or the temperature search interval.");
   }
   temp_cold = stable_roots.front();
   temp_warm = stable_roots.back();
@@ -210,7 +210,8 @@ void ReadCloudCrushingParameters(ParameterInput *pin, Mesh *pm) {
   }
 
   CloudCrushingData data;
-  data.pressure_over_k = pin->GetOrAddReal("problem", "pressure_over_k", 3162.277660168379);
+  data.pressure_over_k =
+      pin->GetOrAddReal("problem", "pressure_over_k", 3162.277660168379);
   data.hrate = pin->GetReal("hydro_srcterms", "hrate");
   data.n_unit = pmbp->punit->density_cgs()/pmbp->punit->mu()/
                 units::Units::atomic_mass_unit_cgs;
@@ -316,7 +317,8 @@ void ReadCloudCrushingParameters(ParameterInput *pin, Mesh *pm) {
     FatalCloudCrushingInput("problem/boundary_timestep_factor must be positive.");
   }
 
-  const Real origin_distance = pin->GetOrAddReal("problem", "sedov_origin_distance", 30.0);
+  const Real origin_distance =
+      pin->GetOrAddReal("problem", "sedov_origin_distance", 30.0);
   data.sedov_origin_x1 = pin->GetOrAddReal("problem", "sedov_origin_x1",
                                            mesh_size.x1min - origin_distance);
   data.sedov_origin_x2 = pin->GetOrAddReal("problem", "sedov_origin_x2", 0.0);
@@ -519,7 +521,8 @@ void SedovBoundary(Mesh *pm) {
       TvnsProfile(xi, gamma, density_ratio, velocity_shape, sound_speed_shape);
       const Real density = density_ratio*data.warm.density_code;
       const Real radial_speed = shock_speed_code*xi*velocity_shape;
-      const Real pressure = density*SQR(shock_speed_code*xi_profile)*sound_speed_shape/gamma;
+      const Real pressure =
+          density*SQR(shock_speed_code*xi_profile)*sound_speed_shape/gamma;
       Real vx = -frame_v1;
       Real vy = -frame_v2;
       Real vz = -frame_v3;

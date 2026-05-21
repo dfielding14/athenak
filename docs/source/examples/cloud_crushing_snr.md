@@ -74,8 +74,8 @@ With the default cooling/heating choices, the equilibrium phases are
 | Cold number density | `62.9781 cm^-3` |
 | Warm number density | `0.502251 cm^-3` |
 | Ambient pressure | `4.36599e-13 dyn cm^-2` |
-| Ambient mass density | `8.40076e-25 g cm^-3` |
-| Cold-cloud mass density | `1.05339e-22 g cm^-3` |
+| Ambient mass density | `8.34008e-25 g cm^-3` |
+| Cold-cloud mass density | `1.04578e-22 g cm^-3` |
 
 The heating rate can either be supplied directly or scaled automatically with
 the requested pressure:
@@ -161,6 +161,8 @@ cloud frame before the flow has settled. The tracker also exposes the current
 frame velocity and displacement through `FrameVelocity(axis)` and
 `FrameDisplacement(axis)`. Restart files store these values in the
 `<frame_tracking>` block as `frame_velocity_x*` and `frame_displacement_x*`.
+See the [Frame Tracking module page](../modules/frame_tracking.md) for the full
+runtime contract and parameter reference.
 
 The frame velocity is the lab velocity of the grid frame. The boost applied to
 the fluid is the opposite cumulative velocity, so problem generators should
@@ -194,7 +196,8 @@ mkdir run_cloud_crushing_lowres
   mesh/nx1=32 mesh/nx2=16 mesh/nx3=16 \
   meshblock/nx1=16 meshblock/nx2=8 meshblock/nx3=8 \
   time/nlim=160 time/tlim=0.004 time/cfl_number=0.01 \
-  output1/dt=2.0e-4 output2/file_type=bin output2/dt=5.0e-4 \
+  output1/dt=2.0e-5 output2/file_type=bin output2/dt=5.0e-5 \
+  frame_tracking/start_time=0.0 \
   frame_tracking/diagnostic_every=5 \
   frame_tracking/max_abs_boost=50.0 \
   frame_tracking/max_boost_change=2.0 \
@@ -202,7 +205,10 @@ mkdir run_cloud_crushing_lowres
 ```
 
 This run is intentionally low resolution. It is a wiring and consistency test,
-not a production cloud-crushing calculation.
+not a production cloud-crushing calculation. The shipped input delays tracking
+until `t=0.02` for production-style cloud evolution; the validation command
+sets `frame_tracking/start_time=0.0` so the short smoke test actually exercises
+the frame controller.
 
 ## Validation Plots
 
@@ -227,15 +233,44 @@ python3 scripts/plot_cloud_crushing_validation.py \
 
 The validation script reads `athena.log` for tracker diagnostics and the
 native binary `hydro_w` snapshots for an independent cold-cloud centroid check.
+If no stdout log is present, it still writes the binary-snapshot density and
+dense-mass plots, but skips the tracker-log validation panel.
 The run used for this documentation produced 31 frame-tracking diagnostic
-blocks and 5 binary snapshots. The final diagnostic frame state was
-`v_frame=-256.259` and `X_frame=-0.142559` in code units at
-`t=0.00151389`; the final binary cold-cloud centroid was `x1=3.1529` at
-`t=0.00153755`.
+blocks and 5 binary snapshots.
+
+| Check | Value |
+| --- | ---: |
+| Missed tracker samples | `0` |
+| Slew-limited updates | `0` |
+| Final diagnostic time | `1.472413e-4` |
+| Final frame velocity | `-5.033155e-3` |
+| Final frame displacement | `-3.659557e-7` |
+| Final tracker position error | `-8.622328e-2` |
+| Binary cold-cloud centroid drift | `2.761569e-7` |
+| Final cold-cloud centroid | `3.004256` |
+| Dense-mass fractional change | `-6.720178e-8` |
+| Final dense mass | `6.510077 Msun` |
+
+These numbers show that the tracker remains locked on the selected dense
+material during the short validation run, applies smooth unsaturated boosts,
+and agrees with an independent binary-output centroid measurement. The same
+summary is available as
+[`cloud_crushing_lowres_summary.csv`](../_static/cloud_crushing_lowres_summary.csv).
 
 ![Frame-tracking validation](../_static/cloud_crushing_lowres_validation.png)
+
+The dense mass selected by the same `target_min` threshold is conserved to
+better than one part in `1e7` in this wiring test. The values are also written
+to [`cloud_crushing_lowres_dense_mass.csv`](../_static/cloud_crushing_lowres_dense_mass.csv).
+
+![Dense mass history](../_static/cloud_crushing_lowres_dense_mass.png)
 
 The midplane density snapshots show the dense cloud and the shocked inflow
 entering from the left boundary in the same run.
 
 ![Low-resolution midplane density](../_static/cloud_crushing_lowres_midplane.png)
+
+The vertical slice montage uses equal-aspect panels and number-density units,
+which makes the low-resolution shock/cloud geometry easier to inspect.
+
+![Low-resolution vertical density slices](../_static/cloud_crushing_lowres_density_slices_6_vertical_equal_aspect.png)

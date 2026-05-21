@@ -36,6 +36,8 @@ mode       = pd
 
 With the default problem parameters, `T_cold = 0.01` and `T_hot = 1.0`, so this
 range selects the cooling/mixing layer rather than the cold or hot bulk.
+The [Frame Tracking module page](../modules/frame_tracking.md) documents the
+shared controller, restart state, and moving-frame boundary API.
 
 ## Build And Run
 

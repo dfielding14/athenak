@@ -53,7 +53,8 @@ Real ResolveISMHeatingRate(const std::string &block, ParameterInput *pin) {
       block, "hrate_reference", kDefaultISMHeatingReference);
 
   if (pressure_over_k <= 0.0) {
-    FatalSourceTermsInput(block + "/hrate_auto requires positive problem/pressure_over_k.");
+    FatalSourceTermsInput(block + "/hrate_auto requires positive "
+                          "problem/pressure_over_k.");
   }
   if (reference_pressure <= 0.0) {
     FatalSourceTermsInput(block + "/hrate_auto requires positive "

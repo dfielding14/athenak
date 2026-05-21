@@ -8,6 +8,8 @@
 
 #include "frame_tracker.hpp"
 
+#include <math.h>
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -17,10 +19,10 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
-#include <math.h>
 #include <memory>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "athena.hpp"
@@ -448,8 +450,10 @@ FrameTracker::FrameTracker(MeshBlockPack *pp, ParameterInput *pin,
   target_min_ = -huge;
   target_max_ = huge;
   if (target_kind_ == kFTTargetTemperature) {
-    (void) ReadRealAny(pin, block_name_, {"target_min", "min", "ft_temp_lo"}, target_min_);
-    (void) ReadRealAny(pin, block_name_, {"target_max", "max", "ft_temp_hi"}, target_max_);
+    (void) ReadRealAny(pin, block_name_, {"target_min", "min", "ft_temp_lo"},
+                       target_min_);
+    (void) ReadRealAny(pin, block_name_, {"target_max", "max", "ft_temp_hi"},
+                       target_max_);
   } else {
     (void) ReadRealAny(pin, block_name_, {"target_min", "min"}, target_min_);
     (void) ReadRealAny(pin, block_name_, {"target_max", "max"}, target_max_);
@@ -468,14 +472,16 @@ FrameTracker::FrameTracker(MeshBlockPack *pp, ParameterInput *pin,
   target_max_active_ = target_max_;
 
   std::string target_scale = "auto";
-  (void) ReadStringAny(pin, block_name_, {"target_scale", "reacquire_scale"}, target_scale);
+  (void) ReadStringAny(pin, block_name_, {"target_scale", "reacquire_scale"},
+                       target_scale);
   target_scale = NormalizeToken(target_scale);
   if (target_scale == "log" || target_scale == "logarithmic") {
     use_log_reacquire_ = true;
   } else if (target_scale == "linear") {
     use_log_reacquire_ = false;
   } else if (target_scale == "auto") {
-    use_log_reacquire_ = (target_min_ > 0.0 && target_max_ > 0.0 && target_center_ > 0.0);
+    use_log_reacquire_ =
+        (target_min_ > 0.0 && target_max_ > 0.0 && target_center_ > 0.0);
   } else {
     FatalFrameTrackingInput("Invalid <frame_tracking>/target_scale '" + target_scale +
                             "'. Expected auto, linear, or log.");
@@ -505,7 +511,8 @@ FrameTracker::FrameTracker(MeshBlockPack *pp, ParameterInput *pin,
   weight_floor_ = GetOrAddRealAny(pin, block_name_,
                                   {"weight_floor", "ft_weight_floor"}, 0.0);
   min_global_weight_ = GetOrAddRealAny(pin, block_name_,
-                                       {"min_global_weight", "ft_min_global_weight"}, 0.0);
+                                       {"min_global_weight", "ft_min_global_weight"},
+                                       0.0);
   max_abs_boost_ = GetOrAddRealAny(pin, block_name_,
                                    {"max_abs_boost", "ft_max_abs_boost"}, 0.0);
   max_boost_change_ = GetOrAddRealAny(pin, block_name_,
@@ -525,7 +532,8 @@ FrameTracker::FrameTracker(MeshBlockPack *pp, ParameterInput *pin,
   boundary_guard_cells_ = GetOrAddIntegerAny(
       pin, block_name_, {"boundary_guard_cells", "ft_boundary_guard_cells"}, 8);
   boundary_guard_min_scale_ = GetOrAddRealAny(
-      pin, block_name_, {"boundary_guard_min_scale", "ft_boundary_guard_min_scale"}, 0.15);
+      pin, block_name_, {"boundary_guard_min_scale", "ft_boundary_guard_min_scale"},
+      0.15);
 
   ParseAxes(pin);
   ParseAxisControls(pin);
@@ -706,14 +714,16 @@ void FrameTracker::ValidateConfiguration() {
     FatalFrameTrackingInput("Require <frame_tracking>/apply_every >= 1.");
   }
   if (tau_avg_ <= 0.0 || tau_relax_ <= 0.0 || tau_vel_ <= 0.0) {
-    FatalFrameTrackingInput("Frame-tracking tau_avg, tau_relax, and tau_vel must be positive.");
+    FatalFrameTrackingInput("Frame-tracking tau_avg, tau_relax, and tau_vel "
+                            "must be positive.");
   }
   if (target_max_ < target_min_) {
     FatalFrameTrackingInput("Require <frame_tracking>/target_max >= target_min.");
   }
   if (weight_floor_ < 0.0 || min_global_weight_ < 0.0 || max_abs_boost_ < 0.0 ||
       max_boost_change_ < 0.0 || int_max_abs_ < 0.0) {
-    FatalFrameTrackingInput("Frame-tracking floors and boost/integral limits must be non-negative.");
+    FatalFrameTrackingInput("Frame-tracking floors and boost/integral limits "
+                            "must be non-negative.");
   }
   if (boost_change_mode_ == kFTBoostPerTime && max_boost_change_rate_ <= 0.0) {
     FatalFrameTrackingInput("Require max_boost_change_rate > 0 when "
@@ -751,13 +761,16 @@ void FrameTracker::ValidateConfiguration() {
   }
 
   const bool is_mhd = (pmy_pack->pmhd != nullptr);
-  const int nscalars = is_mhd ? pmy_pack->pmhd->nscalars : pmy_pack->phydro->nscalars;
+  const int nscalars = is_mhd ? pmy_pack->pmhd->nscalars :
+                                pmy_pack->phydro->nscalars;
   const EOS_Data &eos = is_mhd ? pmy_pack->pmhd->peos->eos_data :
                                  pmy_pack->phydro->peos->eos_data;
-  if (target_kind_ == kFTTargetScalar && (scalar_index_ < 0 || scalar_index_ >= nscalars)) {
+  if (target_kind_ == kFTTargetScalar &&
+      (scalar_index_ < 0 || scalar_index_ >= nscalars)) {
     FatalFrameTrackingInput("<frame_tracking> scalar target requested scalar_index=" +
-                            std::to_string(scalar_index_) + ", but the active fluid has " +
-                            std::to_string(nscalars) + " passive scalar(s).");
+                            std::to_string(scalar_index_) +
+                            ", but the active fluid has " + std::to_string(nscalars) +
+                            " passive scalar(s).");
   }
   if (target_kind_ == kFTTargetEntropy && !eos.is_ideal) {
     FatalFrameTrackingInput("<frame_tracking>/target=entropy requires an ideal-gas EOS.");
@@ -817,8 +830,10 @@ void FrameTracker::SetActiveTargetRange() {
     const Real log_hi = std::log10(safe_hi);
     const Real dlog_lo = std::max(static_cast<Real>(0.0), log_center - log_lo);
     const Real dlog_hi = std::max(static_cast<Real>(0.0), log_hi - log_center);
-    target_min_active_ = std::pow(static_cast<Real>(10.0), log_center - dlog_lo*expand);
-    target_max_active_ = std::pow(static_cast<Real>(10.0), log_center + dlog_hi*expand);
+    target_min_active_ = std::pow(static_cast<Real>(10.0),
+                                  log_center - dlog_lo*expand);
+    target_max_active_ = std::pow(static_cast<Real>(10.0),
+                                  log_center + dlog_hi*expand);
   } else {
     target_min_active_ = target_center_ - (target_center_ - target_min_)*expand;
     target_max_active_ = target_center_ + (target_max_ - target_center_)*expand;
@@ -830,7 +845,7 @@ void FrameTracker::SetActiveTargetRange() {
 
 //----------------------------------------------------------------------------------------
 //! \fn bool FrameTracker::SampleAxisMoments()
-//! \brief Compute global weighted moments for the selected target material along one axis.
+//! \brief Compute global weighted moments for tracked material along one axis.
 
 bool FrameTracker::SampleAxisMoments(const int axis, MomentSample &sample) const {
   sample = MomentSample();
@@ -882,7 +897,8 @@ bool FrameTracker::SampleAxisMoments(const int axis, MomentSample &sample) const
       return;
     }
 
-    const Real value = FrameTrackingTargetValue(target_kind, scalar_var, w0, eos, m, k, j, i);
+    const Real value = FrameTrackingTargetValue(target_kind, scalar_var, w0, eos,
+                                                m, k, j, i);
     if (value < target_min || value > target_max) {
       return;
     }
@@ -1143,9 +1159,10 @@ void FrameTracker::ApplyTracking() {
 
     Real cmd = cmd_pre[axis];
     if (boundary_guard_enable_ && boundary_guard_cells_ > 0) {
-      const Real domain_dx = (AxisGlobalMax(axis, pm) - AxisGlobalMin(axis, pm)) /
-                             std::max(static_cast<Real>(1.0),
-                                      static_cast<Real>(AxisCellCount(axis, pm->mesh_indcs)));
+      const Real domain_dx =
+          (AxisGlobalMax(axis, pm) - AxisGlobalMin(axis, pm)) /
+          std::max(static_cast<Real>(1.0),
+                   static_cast<Real>(AxisCellCount(axis, pm->mesh_indcs)));
       const Real guard_thickness = static_cast<Real>(boundary_guard_cells_)*domain_dx;
       if (guard_thickness > 0.0) {
         const Real dist_to_lower = state.last_filtered_x - AxisGlobalMin(axis, pm);
@@ -1264,8 +1281,8 @@ void FrameTracker::PrintSkipMessage(const bool have_sample, const bool low_weigh
     std::cout << "FrameTracker skipped: global_weight <= weight_floor (" << global_weight
               << " <= " << weight_floor_ << ")" << std::endl;
   } else {
-    std::cout << "FrameTracker skipped: global_weight < min_global_weight (" << global_weight
-              << " < " << min_global_weight_ << ")" << std::endl;
+    std::cout << "FrameTracker skipped: global_weight < min_global_weight ("
+              << global_weight << " < " << min_global_weight_ << ")" << std::endl;
   }
   std::cout << " ft_miss_streak=" << miss_streak_ << std::endl;
   std::cout << " target_min_active=" << target_min_active_ << std::endl;

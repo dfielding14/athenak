@@ -1,0 +1,13 @@
+metric,value,units
+frame_tracking_diagnostic_blocks,31,count
+binary_snapshots,5,count
+missed_tracker_samples,0,count
+slew_limited_updates,0,count
+final_diagnostic_time,1.472413e-4,code_time
+final_frame_velocity,-5.033155e-3,code_velocity
+final_frame_displacement,-3.659557e-7,code_length
+final_tracker_position_error,-8.622328e-2,code_length
+binary_cold_cloud_centroid_drift,2.761569e-7,code_length
+final_cold_cloud_centroid,3.004256,code_length
+dense_mass_fractional_change,-6.720178e-8,dimensionless
+final_dense_mass,6.510077,Msun
