@@ -40,6 +40,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   auto &npart = pmbp->ppart->nprtcl_thispack;
   auto gids = pmbp->gids;
   auto gide = pmbp->gide;
+  int nrdata = pmbp->ppart->nrdata;
+  Real particle_mass = pin->DoesBlockExist("drag_particles") ?
+      pin->GetOrAddReal("drag_particles","particle_mass",1.0) :
+      pin->GetOrAddReal("particles","particle_mass",1.0);
 
   // initialize particles
   Kokkos::Random_XorShift64_Pool<> rand_pool64(pmbp->gids);
@@ -68,6 +72,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     pr(IPVX,p) = 2.0*(rand_gen.frand() - 0.5);
     pr(IPVY,p) = 2.0*(rand_gen.frand() - 0.5);
     pr(IPVZ,p) = 2.0*(rand_gen.frand() - 0.5);
+    if (nrdata > IPM) {
+      pr(IPM,p) = particle_mass;
+    }
 
     rand_pool64.free_state(rand_gen);  // free state for use by other threads
   });

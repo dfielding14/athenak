@@ -50,6 +50,20 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
       });
 
     break;
+    case ParticlesPusher::drag:
+
+      par_for("drag_part_drift",DevExeSpace(),0,(nprtcl_thispack-1),
+      KOKKOS_LAMBDA(const int p) {
+        pr(IPX,p) += dt_*pr(IPVX,p);
+        if (multi_d) {
+          pr(IPY,p) += dt_*pr(IPVY,p);
+        }
+        if (three_d) {
+          pr(IPZ,p) += dt_*pr(IPVZ,p);
+        }
+      });
+
+    break;
   default:
     break;
   }

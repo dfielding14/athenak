@@ -18,6 +18,7 @@
 using ProblemFinalizeFnPtr = void (*)(ParameterInput *pin, Mesh *pm);
 using UserBoundaryFnPtr = void (*)(Mesh* pm);
 using UserSrctermFnPtr = void (*)(Mesh* pm, const Real bdt);
+using UserParticleDragFnPtr = void (*)(MeshBlockPack* pmbp, const Real bdt);
 using UserRefinementFnPtr = void (*)(MeshBlockPack* pmbp);
 using UserHistoryFnPtr = void (*)(HistoryData *pdata, Mesh *pm);
 
@@ -39,6 +40,9 @@ class ProblemGenerator {
   // true if user srcterms are specified
   bool user_srcs;
 
+  // true if a pgen-defined particle drag callback is specified
+  bool user_particle_drag;
+
   // true if user history outputs are specified
   bool user_hist;
 
@@ -51,6 +55,7 @@ class ProblemGenerator {
   // function pointer for user-enrolled BCs.  Called in ApplyPhysicalBCs in task list
   UserBoundaryFnPtr user_bcs_func=nullptr;
   UserSrctermFnPtr user_srcs_func=nullptr;
+  UserParticleDragFnPtr user_particle_drag_func=nullptr;
   UserRefinementFnPtr user_ref_func=nullptr;
   UserHistoryFnPtr user_hist_func=nullptr;
 
@@ -71,6 +76,7 @@ class ProblemGenerator {
   void SphericalCollapse(ParameterInput *pin, const bool restart);
   void RadiationLinearWave(ParameterInput *pin, const bool restart);
   void RadiationBeam(ParameterInput *pin, const bool restart);
+  void StreamingInstability(ParameterInput *pin, const bool restart);
   void Z4cBoostedPuncture(ParameterInput *pin, const bool restart);
   void Z4cLinearWave(ParameterInput *pin, const bool restart);
 

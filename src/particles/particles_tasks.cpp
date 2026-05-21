@@ -17,6 +17,8 @@
 #include "tasklist/task_list.hpp"
 #include "mesh/mesh.hpp"
 #include "bvals/bvals.hpp"
+#include "hydro/hydro.hpp"
+#include "mhd/mhd.hpp"
 #include "particles.hpp"
 
 namespace particles {
@@ -37,6 +39,10 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   id.recvp  = tl["before_timeintegrator"]->AddTask(&Particles::RecvP, this, id.sendp);
   id.crecv  = tl["before_timeintegrator"]->AddTask(&Particles::ClearRecv, this, id.recvp);
   id.csend  = tl["before_timeintegrator"]->AddTask(&Particles::ClearSend, this, id.crecv);
+
+  if (drag_enabled) {
+    id.drag = tl["after_timeintegrator"]->AddTask(&Particles::ApplyDrag, this, none);
+  }
 
   return;
 }

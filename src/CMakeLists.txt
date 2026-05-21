@@ -105,6 +105,7 @@ add_executable(
         outputs/vtk_prtcl.cpp
 
         particles/particles.cpp
+        particles/particles_drag.cpp
         particles/particles_pushers.cpp
         particles/particles_tasks.cpp
         outputs/pdf.cpp
@@ -125,6 +126,7 @@ add_executable(
         pgen/tests/shwave.cpp
         pgen/tests/rad_beam.cpp
         pgen/tests/rad_linear_wave.cpp
+        pgen/tests/streaming_instability.cpp
         pgen/tests/z4c_boosted_puncture.cpp
         pgen/tests/z4c_linear_wave.cpp
 

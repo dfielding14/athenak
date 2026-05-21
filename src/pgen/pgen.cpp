@@ -13,6 +13,7 @@
 #include <utility>
 #include <algorithm>
 #include <cstdio>
+#include <vector>
 
 #include "athena.hpp"
 #include "geodesic-grid/geodesic_grid.hpp"
@@ -27,6 +28,7 @@
 #include "z4c/z4c.hpp"
 #include "radiation/radiation.hpp"
 #include "srcterms/turb_driver.hpp"
+#include "particles/particles.hpp"
 #include "pgen.hpp"
 
 
@@ -36,6 +38,7 @@
 ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
     user_bcs(false),
     user_srcs(false),
+    user_particle_drag(false),
     user_hist(false),
     pmy_mesh_(pm) {
   // check for user-defined boundary conditions
@@ -47,6 +50,10 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
 
   user_srcs = pin->GetOrAddBoolean("problem","user_srcs",false);
   user_hist = pin->GetOrAddBoolean("problem","user_hist",false);
+  if (pin->DoesBlockExist("drag_particles")) {
+    std::string drag_model = pin->GetOrAddString("drag_particles","model","none");
+    user_particle_drag = (drag_model.compare("user") == 0);
+  }
 
   // second argument false since this IS NOT a restart
   CallProblemGenerator(pin, false);
@@ -66,6 +73,15 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "User SRCs specified in <problem> block, but not "
                 << "enrolled by UserProblem()." << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+  if (user_particle_drag) {
+    if (user_particle_drag_func == nullptr) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "model=user specified in <drag_particles> block, but "
+                << "no particle drag callback was enrolled by UserProblem()."
+                << std::endl;
       exit(EXIT_FAILURE);
     }
   }
@@ -92,6 +108,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
                                    bool single_file_per_rank) :
     user_bcs(false),
     user_srcs(false),
+    user_particle_drag(false),
     user_hist(false),
     pmy_mesh_(pm) {
   // check for user-defined boundary conditions
@@ -102,6 +119,10 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   }
   user_srcs = pin->GetOrAddBoolean("problem","user_srcs",false);
   user_hist = pin->GetOrAddBoolean("problem","user_hist",false);
+  if (pin->DoesBlockExist("drag_particles")) {
+    std::string drag_model = pin->GetOrAddString("drag_particles","model","none");
+    user_particle_drag = (drag_model.compare("user") == 0);
+  }
 
   // get spatial dimensions of arrays, including ghost zones
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
@@ -116,6 +137,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
   radiation::Radiation* prad=pm->pmb_pack->prad;
   TurbulenceDriver* pturb=pm->pmb_pack->pturb;
+  particles::Particles* ppart = pm->pmb_pack->ppart;
   int nrad = 0, nhydro = 0, nmhd = 0, nforce = 3, nadm = 0, nz4c = 0;
   if (phydro != nullptr) {
     nhydro = phydro->nhydro + phydro->nscalars;
@@ -615,6 +637,83 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     myoffset = offset_myrank;
   }
 
+  if (ppart != nullptr) {
+    IOWrapperSizeT particle_offset = headeroffset;
+    if (single_file_per_rank) {
+      particle_offset += data_size_*pm->nmb_thisrank;
+    } else {
+      particle_offset += data_size_*pm->nmb_total;
+    }
+
+    int particle_meta[3];
+    if (resfile.Read_bytes_at(particle_meta, sizeof(int), 3, particle_offset,
+                              single_file_per_rank) != 3) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "particle metadata not read correctly from rst file, "
+                << "restart file is broken." << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (particle_meta[0] != 1 || particle_meta[1] != ppart->nrdata ||
+        particle_meta[2] != ppart->nidata) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "particle metadata in rst file does not match the "
+                << "configured <particles> layout." << std::endl;
+      exit(EXIT_FAILURE);
+    }
+
+    IOWrapperSizeT rank_counts_size = single_file_per_rank ? sizeof(int) :
+                                      global_variable::nranks*sizeof(int);
+    std::vector<int> nprtcl_rank(global_variable::nranks, 0);
+    int *counts_ptr = single_file_per_rank ? &nprtcl_rank[global_variable::my_rank] :
+                     nprtcl_rank.data();
+    if (resfile.Read_bytes_at(counts_ptr, sizeof(int), rank_counts_size/sizeof(int),
+                              particle_offset + 3*sizeof(int),
+                              single_file_per_rank) != rank_counts_size/sizeof(int)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "particle counts not read correctly from rst file, "
+                << "restart file is broken." << std::endl;
+      exit(EXIT_FAILURE);
+    }
+
+    int nprtcl_local = nprtcl_rank[global_variable::my_rank];
+    Kokkos::resize(ppart->prtcl_rdata, ppart->nrdata, nprtcl_local);
+    Kokkos::resize(ppart->prtcl_idata, ppart->nidata, nprtcl_local);
+    ppart->nprtcl_thispack = nprtcl_local;
+
+    IOWrapperSizeT rank_particle_offset = particle_offset + 3*sizeof(int) +
+                                          rank_counts_size;
+    if (!single_file_per_rank) {
+      for (int n=0; n<global_variable::my_rank; ++n) {
+        rank_particle_offset += static_cast<IOWrapperSizeT>(nprtcl_rank[n])*
+            (ppart->nrdata*sizeof(Real) + ppart->nidata*sizeof(int));
+      }
+    }
+    if (nprtcl_local > 0) {
+      HostArray2D<Real> pr_h("rst-particle-rdata", ppart->nrdata, nprtcl_local);
+      HostArray2D<int> pi_h("rst-particle-idata", ppart->nidata, nprtcl_local);
+      IOWrapperSizeT nreal = static_cast<IOWrapperSizeT>(ppart->nrdata)*nprtcl_local;
+      IOWrapperSizeT nint = static_cast<IOWrapperSizeT>(ppart->nidata)*nprtcl_local;
+      if (resfile.Read_Reals_at(pr_h.data(), nreal, rank_particle_offset,
+                                single_file_per_rank) != nreal) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "particle Real data not read correctly from rst file, "
+                  << "restart file is broken." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      rank_particle_offset += nreal*sizeof(Real);
+      if (resfile.Read_bytes_at(pi_h.data(), sizeof(int), nint, rank_particle_offset,
+                                single_file_per_rank) != nint) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "particle int data not read correctly from rst file, "
+                  << "restart file is broken." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      Kokkos::deep_copy(ppart->prtcl_rdata, pr_h);
+      Kokkos::deep_copy(ppart->prtcl_idata, pi_h);
+    }
+    pm->UpdateParticleCounts();
+  }
+
   // call problem generator again to re-initialize data, fn ptrs, as needed
   // second argument true since this IS a restart
   CallProblemGenerator(pin, true);
@@ -634,6 +733,15 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "User SRCs specified in <problem> block, but not "
                 << "enrolled by UserProblem()." << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+  if (user_particle_drag) {
+    if (user_particle_drag_func == nullptr) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "model=user specified in <drag_particles> block, but "
+                << "no particle drag callback was enrolled by UserProblem()."
+                << std::endl;
       exit(EXIT_FAILURE);
     }
   }
@@ -915,6 +1023,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     RadiationLinearWave(pin, is_restart);
   } else if (pgen_fun_name.compare("rad_beam") == 0) {
     RadiationBeam(pin, is_restart);
+  } else if (pgen_fun_name.compare("streaming_instability") == 0) {
+    StreamingInstability(pin, is_restart);
   } else if (pgen_fun_name.compare("shock_tube") == 0) {
     ShockTube(pin, is_restart);
   } else if (pgen_fun_name.compare("shwave") == 0) {
