@@ -42,6 +42,7 @@ class SourceTerms {
   bool const_accel;
   bool rel_cooling;
   bool rad_beam;
+  bool self_gravity;
 
   // new timestep
   Real dtnew;
@@ -68,6 +69,8 @@ class SourceTerms {
                      const Real bdt, DvceArray5D<Real> &u0);
   void RelCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos,
                   const Real bdt, DvceArray5D<Real> &u0);
+  void SelfGravity(const DvceArray5D<Real> &w0, const EOS_Data &eos,
+                   const Real bdt, DvceArray5D<Real> &u0);
   void BeamSource(DvceArray5D<Real> &i0, const Real bdt);
   void NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos);
   bool CoolingHistoryEnabled() const;

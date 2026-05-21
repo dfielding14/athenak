@@ -35,3 +35,18 @@ top-hat cooling, a passive scalar marking the cold phase, and optional user
 `x3` boundaries. Those user boundaries use `FrameDisplacement()` to sample the
 same lab-frame layer as the grid frame moves and subtract `FrameVelocity()` from
 the lab-frame boundary velocity.
+
+# Self-Gravity Test Problem Generators
+
+The self-gravity feature adds built-in problem generators under
+`src/pgen/tests/`:
+
+| `pgen_name` | Source | Purpose |
+|-------------|--------|---------|
+| `gravity` | `jeans_wave.cpp` | Periodic Jeans-wave setup for hydro or MHD self-gravity. |
+| `binary_gravity` | `binary_gravity.cpp` | Two dense spheres for isolated-potential tests. |
+| `be_collapse` | `be_collapse.cpp` | Bonnor-Ebert-like collapse with Jeans AMR refinement. |
+
+The lightweight regression inputs are `inputs/tests/selfgravity.athinput` and
+`inputs/tests/selfgravity_mhd.athinput`. The full solver and parameter notes are
+in [Self-Gravity and Multigrid](self_gravity.md).

@@ -60,6 +60,9 @@ add_executable(
         geodesic-grid/spherical_grid.cpp
         geodesic-grid/gauss_legendre.cpp
 
+        gravity/gravity.cpp
+        gravity/mg_gravity.cpp
+
         hydro/hydro.cpp
         hydro/hydro_fluxes.cpp
         hydro/hydro_fofc.cpp
@@ -78,6 +81,10 @@ add_executable(
         mesh/meshblock_tree.cpp
         mesh/mesh_refinement.cpp
         mesh/refinement_criteria.cpp
+
+        multigrid/multigrid.cpp
+        multigrid/multigrid_driver.cpp
+        multigrid/multigrid_tasks.cpp
 
         mhd/mhd.cpp
         mhd/mhd_corner_e.cpp
@@ -129,6 +136,9 @@ add_executable(
         pgen/tests/rad_linear_wave.cpp
         pgen/tests/z4c_boosted_puncture.cpp
         pgen/tests/z4c_linear_wave.cpp
+        pgen/tests/jeans_wave.cpp
+        pgen/tests/binary_gravity.cpp
+        pgen/tests/be_collapse.cpp
 
         radiation/radiation.cpp
         radiation/radiation_fluxes.cpp

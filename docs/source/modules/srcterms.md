@@ -89,3 +89,11 @@ Common parameters:
 The frame velocity is the lab velocity of the moving grid frame. The velocity
 stored in the fluid is grid-frame velocity, so lab-frame boundary data should
 be transformed as `v_grid = v_lab - V_frame`.
+
+# Self-Gravity
+
+`self_gravity = true` in `<hydro_srcterms>` or `<mhd_srcterms>` applies the
+acceleration from the multigrid Poisson solve owned by the `<gravity>` block.
+The source term updates momentum and, for ideal equations of state, energy using
+the Godunov density fluxes. See [Self-Gravity and Multigrid](self_gravity.md)
+for solver controls, boundary choices, outputs, and regression tests.
