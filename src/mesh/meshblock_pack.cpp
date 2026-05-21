@@ -267,6 +267,43 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   else {
     pgrav = nullptr;
   }
+
+  const bool hydro_self_gravity =
+      pin->DoesParameterExist("hydro_srcterms", "self_gravity") &&
+      pin->GetBoolean("hydro_srcterms", "self_gravity");
+  const bool mhd_self_gravity =
+      pin->DoesParameterExist("mhd_srcterms", "self_gravity") &&
+      pin->GetBoolean("mhd_srcterms", "self_gravity");
+  if ((hydro_self_gravity || mhd_self_gravity) && pgrav == nullptr) {
+    std::cout << "### FATAL ERROR in MeshBlockPack::AddPhysics" << std::endl
+              << "self_gravity source terms require an active <gravity> block."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (hydro_self_gravity && phydro == nullptr) {
+    std::cout << "### FATAL ERROR in MeshBlockPack::AddPhysics" << std::endl
+              << "<hydro_srcterms>/self_gravity requires a <hydro> block."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (mhd_self_gravity && pmhd == nullptr) {
+    std::cout << "### FATAL ERROR in MeshBlockPack::AddPhysics" << std::endl
+              << "<mhd_srcterms>/self_gravity requires an <mhd> block."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (pgrav != nullptr && phydro == nullptr && pmhd == nullptr) {
+    std::cout << "### FATAL ERROR in MeshBlockPack::AddPhysics" << std::endl
+              << "The <gravity> block requires either <hydro> or <mhd> to provide "
+              << "the Poisson source density." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (pgrav != nullptr && phydro != nullptr && pmhd != nullptr) {
+    std::cout << "### FATAL ERROR in MeshBlockPack::AddPhysics" << std::endl
+              << "Self-gravity currently supports one fluid: use <hydro> or <mhd>, "
+              << "not both." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   // Check that at least ONE is requested and initialized.
   // Error if there are no physics blocks in the input file.
   if (nphysics == 0) {

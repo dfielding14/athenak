@@ -42,6 +42,11 @@ MultigridDriver::MultigridDriver(MeshBlockPack *pmbp, int invar):
     pmy_mesh_(pmbp->pmesh),
     needinit_(true), amr_seq_(0), nreflevel_(0), eps_(-1.0),
     niter_(-1), npresmooth_(1), npostsmooth_(1), coffset_(0), fprolongation_(0),
+    fshowdef_(0), full_multigrid_(false), fmg_ncycle_(1), profile_enabled_(false),
+    profile_source_time_(0.0), profile_setup_time_(0.0), profile_root_transfer_time_(0.0),
+    profile_smooth_time_(0.0), profile_boundary_time_(0.0),
+    profile_restrict_prolong_time_(0.0), profile_solve_time_(0.0),
+    profile_result_time_(0.0),
     nb_rank_(0), ncoeff_(0),
     octets_(nullptr), octetmap_(nullptr), octetbflag_(nullptr), noctets_(nullptr),
     oct_u_buf_(nullptr), oct_def_buf_(nullptr),
@@ -117,6 +122,17 @@ MultigridDriver::~MultigridDriver() {
   delete [] oct_def_buf_;
   delete [] oct_src_buf_;
   delete [] oct_uold_buf_;
+}
+
+void MultigridDriver::ResetProfileCounters() {
+  profile_source_time_ = 0.0;
+  profile_setup_time_ = 0.0;
+  profile_root_transfer_time_ = 0.0;
+  profile_smooth_time_ = 0.0;
+  profile_boundary_time_ = 0.0;
+  profile_restrict_prolong_time_ = 0.0;
+  profile_solve_time_ = 0.0;
+  profile_result_time_ = 0.0;
 }
 
 
@@ -467,6 +483,7 @@ void MultigridDriver::BuildRootFlatBuffers() {
 //! the root grid (if at root level) or the appropriate octet.
 
 void MultigridDriver::TransferFromBlocksToRoot(bool initflag) {
+  Kokkos::Timer profile_timer;
   const int nv = nvar_;
   auto rootbuf = rootbuf_;
   const auto &src = mglevels_->src_[0].d_view;
@@ -531,6 +548,7 @@ void MultigridDriver::TransferFromBlocksToRoot(bool initflag) {
   mgroot_->current_level_ = nrootlevel_ - 1;
   root_sync_state_ = RootSyncState::HOST_MODIFIED;
   if (nreflevel_ == 0) SyncRootToDevice();
+  if (profile_enabled_) profile_root_transfer_time_ += profile_timer.seconds();
   return;
 }
 
@@ -540,12 +558,14 @@ void MultigridDriver::TransferFromBlocksToRoot(bool initflag) {
 //! \brief Transfer data from root/octets to block coarsest levels
 
 void MultigridDriver::TransferFromRootToBlocks(bool folddata) {
+  Kokkos::Timer profile_timer;
   SyncRootToHost();
   if (nreflevel_ > 0) {
     RestrictOctetsBeforeTransfer();
     SetOctetBoundariesBeforeTransfer(folddata);
   }
   mglevels_->SetFromRootGrid(folddata);
+  if (profile_enabled_) profile_root_transfer_time_ += profile_timer.seconds();
   return;
 }
 
@@ -2289,19 +2309,19 @@ void MultigridDriver::CalculateMultipoleCoefficients() {
 //! \brief Apply normalization to raw multipole moments
 
 void MultigridDriver::ScaleMultipoleCoefficients() {
-  constexpr Real c0  = -0.25 / M_PI;
-  constexpr Real c1  = -0.25 / M_PI;
-  constexpr Real c2  = -0.0625 / M_PI;
-  constexpr Real c2a = -0.75 / M_PI;
-  constexpr Real c30 = -0.0625 / M_PI;
-  constexpr Real c31 = -0.0625 * 1.5 / M_PI;
-  constexpr Real c32 = -0.25 * 15.0 / M_PI;
-  constexpr Real c33 = -0.0625 * 2.5 / M_PI;
-  constexpr Real c40 = -0.0625 * 0.0625 / M_PI;
-  constexpr Real c41 = -0.0625 * 2.5 / M_PI;
-  constexpr Real c42 = -0.0625 * 5.0 / M_PI;
-  constexpr Real c43 = -0.0625 * 17.5 / M_PI;
-  constexpr Real c44 = -0.25 * 35.0 / M_PI;
+  constexpr Real c0  = 0.25 / M_PI;
+  constexpr Real c1  = 0.25 / M_PI;
+  constexpr Real c2  = 0.0625 / M_PI;
+  constexpr Real c2a = 0.75 / M_PI;
+  constexpr Real c30 = 0.0625 / M_PI;
+  constexpr Real c31 = 0.0625 * 1.5 / M_PI;
+  constexpr Real c32 = 0.25 * 15.0 / M_PI;
+  constexpr Real c33 = 0.0625 * 2.5 / M_PI;
+  constexpr Real c40 = 0.0625 * 0.0625 / M_PI;
+  constexpr Real c41 = 0.0625 * 2.5 / M_PI;
+  constexpr Real c42 = 0.0625 * 5.0 / M_PI;
+  constexpr Real c43 = 0.0625 * 17.5 / M_PI;
+  constexpr Real c44 = 0.25 * 35.0 / M_PI;
 
   mpcoeff_[0] *= c0;
   mpcoeff_[1] *= c1;

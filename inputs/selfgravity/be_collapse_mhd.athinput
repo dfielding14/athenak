@@ -1,0 +1,73 @@
+# MHD Bonnor-Ebert collapse example with a uniform z magnetic field.
+
+<job>
+basename = BEMHDSelfGravity
+
+<mesh>
+nghost = 3
+nx1 = 32
+x1min = -1.0
+x1max = 1.0
+ix1_bc = outflow
+ox1_bc = outflow
+nx2 = 32
+x2min = -1.0
+x2max = 1.0
+ix2_bc = outflow
+ox2_bc = outflow
+nx3 = 32
+x3min = -1.0
+x3max = 1.0
+ix3_bc = outflow
+ox3_bc = outflow
+
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 16
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.2
+nlim = 1
+tlim = 1.0
+ndiag = 1
+
+<mhd>
+eos = isothermal
+reconstruct = plm
+rsolver = llf
+iso_sound_speed = 1.0
+
+<gravity>
+four_pi_G = 1.0
+threshold = 1.0e-6
+npresmooth = 1
+npostsmooth = 1
+full_multigrid = true
+fmg_ncycle = 1
+mg_nghost = 1
+root_on_host = false
+mg_bc = multipole
+mporder = 4
+auto_mporigin = true
+nodipole = false
+show_defect = true
+profile = false
+
+<mhd_srcterms>
+self_gravity = true
+
+<problem>
+pgen_name = be_collapse
+f = 4.0
+amp = 1.0e-3
+cloud_radius = 0.5
+njeans = 64.0
+b0_z = 0.1
+
+<output1>
+file_type = bin
+variable = grav_phi
+dt = 1.0

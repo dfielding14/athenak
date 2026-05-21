@@ -10,7 +10,6 @@
 
 // C++ headers
 #include <algorithm>
-#include <chrono>
 #include <iostream>
 #include <sstream>    // sstream
 #include <stdexcept>  // runtime_error
@@ -47,6 +46,7 @@ MGGravityDriver::MGGravityDriver(MeshBlockPack *pmbp, ParameterInput *pin)
     full_multigrid_ = pin->GetOrAddBoolean("gravity", "full_multigrid", false);
     fmg_ncycle_ = pin->GetOrAddInteger("gravity", "fmg_ncycle", 1);
     fshowdef_ = pin->GetOrAddBoolean("gravity", "show_defect", false);
+    profile_enabled_ = pin->GetOrAddBoolean("gravity", "profile", false);
     fsubtract_average_ = pin->GetOrAddBoolean("gravity", "subtract_average", true);
     if (eps_ < 0.0 && niter_ < 0) {
         std::cout<< "### FATAL ERROR in MGGravityDriver::MGGravityDriver" << std::endl
@@ -56,10 +56,14 @@ MGGravityDriver::MGGravityDriver(MeshBlockPack *pmbp, ParameterInput *pin)
         << "Set \"threshold = 0.0\" for automatic convergence control." << std::endl;
         exit(EXIT_FAILURE);
   }
+  if (eps_ < 0.0 && niter_ <= 0) {
+    std::cout<< "### FATAL ERROR in MGGravityDriver::MGGravityDriver" << std::endl
+        << "Fixed-iteration mode requires gravity/niteration > 0." << std::endl;
+    exit(EXIT_FAILURE);
+  }
   if (four_pi_G_ < 0.0) {
     std::cout<< "### FATAL ERROR in MGGravityDriver::MGGravityDriver" << std::endl
-        << "Gravitational constant must be set in the Mesh::InitUserMeshData "
-        << "using the SetGravitationalConstant or SetFourPiG function." << std::endl;
+        << "Set gravity/four_pi_G to a non-negative value." << std::endl;
     exit(EXIT_FAILURE);
   }
   // Override MG boundary conditions if specified in input file.
@@ -146,6 +150,11 @@ MGGravityDriver::~MGGravityDriver() {
 }
 
 void MGGravityDriver::SetFourPiG(Real four_pi_G) {
+  if (four_pi_G < 0.0) {
+    std::cout << "### FATAL ERROR in MGGravityDriver::SetFourPiG" << std::endl
+              << "four_pi_G must be non-negative." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   four_pi_G_ = four_pi_G;
 }
 
@@ -173,6 +182,9 @@ MGGravity::~MGGravity() {
 //! \brief load the data and solve
 
 void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
+  ResetProfileCounters();
+  Kokkos::Timer total_timer;
+  Kokkos::Timer phase_timer;
   RegionIndcs &indcs_ = pmy_pack_->pmesh->mb_indcs;
 
   // Reallocate MG arrays and phi if AMR has changed the mesh
@@ -186,6 +198,7 @@ void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
       Kokkos::realloc(pmy_pack_->pgrav->phi, nmb, 1, ncells3, ncells2, ncells1);
     }
   }
+  if (profile_enabled_) profile_setup_time_ += phase_timer.seconds();
 
   // mglevels_ points to the Multigrid object for all MeshBlocks
   // The MG smoother solves -∇²u = src (note the minus sign from the Laplacian
@@ -194,44 +207,66 @@ void MGGravityDriver::Solve(Driver *pdriver, int stage, Real dt) {
   // negative sign so that -∇²φ = -4πGρ, i.e. ∇²φ = +4πGρ.
   auto &u0 = (pmy_pack_->pmhd != nullptr) ? pmy_pack_->pmhd->u0
                                             : pmy_pack_->phydro->u0;
+  phase_timer.reset();
   mglevels_->LoadSource(u0, IDN, indcs_.ng, -four_pi_G_);
 
   // Apply source mask (zero source outside mask_radius_)
   mglevels_->ApplyMask();
+  if (profile_enabled_) profile_source_time_ += phase_timer.seconds();
 
   // iterative mode - load initial guess
+  phase_timer.reset();
   if(!full_multigrid_)
     mglevels_->LoadFinestData(pmy_pack_->pgrav->phi, 0, indcs_.ng);
 
   // Finalize setup (SubtractAverage, level counts) after data is loaded
   SetupMultigrid(dt, false);
+  if (profile_enabled_) profile_setup_time_ += phase_timer.seconds();
 
   // Compute multipole coefficients for isolated boundaries
+  phase_timer.reset();
   if (mporder_ > 0) {
     if (autompo_) CalculateCenterOfMass();
     CalculateMultipoleCoefficients();
     SyncMultipoleToDevice();
   }
+  if (profile_enabled_) profile_setup_time_ += phase_timer.seconds();
 
-  auto t_start = std::chrono::high_resolution_clock::now();
-
+  Kokkos::fence();
+  phase_timer.reset();
   if (full_multigrid_)
     SolveFMG(pdriver);
   else
     SolveMG(pdriver);
 
   Kokkos::fence();
+  double solve_elapsed = phase_timer.seconds();
+  if (profile_enabled_) profile_solve_time_ += solve_elapsed;
 
   if (fshowdef_) {
-    auto t_end = std::chrono::high_resolution_clock::now();
-    double mg_elapsed = std::chrono::duration<double>(t_end - t_start).count();
     std::cout << "mg_solve_time = " << std::scientific << std::setprecision(6)
-              << mg_elapsed << std::endl;
+              << solve_elapsed << std::endl;
     Real norm = CalculateDefectNorm(MGNormType::l2, 0);
     std::cout << "MGGravityDriver::Solve: Final defect norm = " << norm << std::endl;
   }
 
+  phase_timer.reset();
   mglevels_->RetrieveResult(pmy_pack_->pgrav->phi, 0, indcs_.ng);
+  Kokkos::fence();
+  if (profile_enabled_) {
+    profile_result_time_ += phase_timer.seconds();
+    std::cout << "[gravity-profile] stage=" << stage
+              << " source_load=" << profile_source_time_
+              << " setup=" << profile_setup_time_
+              << " root_transfer=" << profile_root_transfer_time_
+              << " smooth=" << profile_smooth_time_
+              << " boundary=" << profile_boundary_time_
+              << " restrict_prolong=" << profile_restrict_prolong_time_
+              << " solve_total=" << profile_solve_time_
+              << " result_retrieve=" << profile_result_time_
+              << " total=" << total_timer.seconds()
+              << std::endl;
+  }
 
   return;
 }

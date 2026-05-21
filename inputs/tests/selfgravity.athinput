@@ -59,6 +59,7 @@ root_on_host = false
 mg_bc = none
 subtract_average = true
 show_defect = false
+profile = false
 
 <hydro_srcterms>
 self_gravity = true
@@ -67,6 +68,7 @@ self_gravity = true
 pgen_name = gravity
 rho0       = 1.0
 amp        = 1.0e-3
+second_mode_amp = 0.0
 n_jeans   = 0.5
 
 <output1>

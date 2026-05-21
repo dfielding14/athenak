@@ -85,6 +85,7 @@ void ProblemGenerator::SelfGravity(ParameterInput *pin, const bool restart) {
   if (restart) return;
 
   Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-6);
+  Real second_mode_amp = pin->GetOrAddReal("problem", "second_mode_amp", amp*amp);
 
   // Get domain size to compute actual wavenumber
   Real Lx1 = pin->GetReal("mesh", "x1max") - pin->GetReal("mesh", "x1min");
@@ -176,7 +177,8 @@ void ProblemGenerator::SelfGravity(ParameterInput *pin, const bool restart) {
       Real mz = M*sin_a2;
 
       // set hydro conserved variables: density, momenta, and (if not isothermal) energy
-      u0(m, IDN, k, j, i) = rho0*(1.0+amp*sinkx+amp*amp*std::sin(x1v*k_wave));
+      u0(m, IDN, k, j, i) = rho0*(1.0 + amp*sinkx
+                                  + second_mode_amp*std::sin(x1v*k_wave));
       u0(m, IM1, k, j, i) = mx;
       u0(m, IM2, k, j, i) = my;
       u0(m, IM3, k, j, i) = mz;
@@ -218,7 +220,8 @@ void ProblemGenerator::SelfGravity(ParameterInput *pin, const bool restart) {
       Real my = M*sin_a3*cos_a2;
       Real mz = M*sin_a2;
 
-      u0(m, IDN, k, j, i) = rho0*(1.0+amp*sinkx+amp*amp*std::sin(x1v*k_wave));
+      u0(m, IDN, k, j, i) = rho0*(1.0 + amp*sinkx
+                                  + second_mode_amp*std::sin(x1v*k_wave));
       u0(m, IM1, k, j, i) = mx;
       u0(m, IM2, k, j, i) = my;
       u0(m, IM3, k, j, i) = mz;

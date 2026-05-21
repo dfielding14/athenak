@@ -471,6 +471,11 @@ class MultigridDriver {
   int fshowdef_;
   bool full_multigrid_;
   int fmg_ncycle_;
+  bool profile_enabled_;
+  double profile_source_time_, profile_setup_time_, profile_root_transfer_time_;
+  double profile_smooth_time_, profile_boundary_time_, profile_restrict_prolong_time_;
+  double profile_solve_time_, profile_result_time_;
+  void ResetProfileCounters();
 
   // Source masking (zero source outside mask_radius_)
   Real mask_radius_;

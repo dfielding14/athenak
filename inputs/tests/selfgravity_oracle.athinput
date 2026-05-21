@@ -1,10 +1,10 @@
-# AthenaK input file for periodic MHD self-gravity tests
+# AthenaK input file for self-gravity source-term oracle tests
 
 <comment>
-problem   = SelfGravity MHD Jeans-wave regression
+problem   = SelfGravity hydro Jeans-wave source oracle
 
 <job>
-basename  = SelfGravityMHD
+basename  = SelfGravityOracle
 
 <mesh>
 nghost    = 3
@@ -34,12 +34,12 @@ nx3       = 16
 <time>
 evolution  = dynamic
 integrator = rk2
-cfl_number = 0.2
+cfl_number = 0.02
 nlim       = 1
 tlim       = 1.0
 ndiag      = 1
 
-<mhd>
+<hydro>
 eos         = isothermal
 reconstruct = plm
 rsolver     = llf
@@ -60,13 +60,13 @@ subtract_average = true
 show_defect = false
 profile = false
 
-<mhd_srcterms>
+<hydro_srcterms>
 self_gravity = true
 
 <problem>
 pgen_name = gravity
 rho0       = 1.0
-amp        = 1.0e-3
+amp        = 1.0e-4
 second_mode_amp = 0.0
 n_jeans   = 0.5
 
@@ -74,3 +74,12 @@ n_jeans   = 0.5
 file_type = bin
 variable  = grav_phi
 dt        = 1.0
+
+<output2>
+file_type = bin
+variable  = hydro_u
+dt        = 1.0
+
+<output3>
+file_type = rst
+dcycle    = 1

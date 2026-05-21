@@ -426,7 +426,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
         // solve gravity at each RK stage so the potential is consistent
         // with the current density (required for 2nd-order accuracy)
         if (pmesh->pmb_pack->pgrav != nullptr)
-            {pmesh->pmb_pack->pgrav->pmgd->Solve(this, stage);}
+            {pmesh->pmb_pack->pgrav->SolveStage(this, stage, pmesh->dt);}
         ExecuteTaskList(pmesh, "stagen", stage);
         ExecuteTaskList(pmesh, "after_stagen", stage);
       }

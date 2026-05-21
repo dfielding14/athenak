@@ -1728,7 +1728,7 @@ TaskStatus MultigridBoundaryValues::PackAndSendMG(const DvceArray5D<Real> &u) {
 
           // get ptr to send buffer when neighbor is at coarser/same/fine level
           int data_size = nvar;
-          data_size *= sendbuf[n].isame_ndat;
+          data_size *= recvbuf[n].isame_ndat;
 
           if (not(sendbuf[n].faces.h_view(0)))
             data_size >>= shift_;
@@ -1797,7 +1797,6 @@ TaskStatus MultigridBoundaryValues::RecvAndUnpackMG(DvceArray5D<Real> &u) {
   }
   // exit if recv boundary buffer communications have not completed
   if (bflag) {return TaskStatus::incomplete;}
-  MPI_Barrier(comm_vars);
 #endif
 
   //----- STEP 2: buffers have all completed, so unpack

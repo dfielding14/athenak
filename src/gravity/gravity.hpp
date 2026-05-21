@@ -24,6 +24,7 @@ class MeshBlockPack;
 class ParameterInput;
 class Coordinates;
 class Multigrid;
+class Driver;
 namespace gravity {
 class Gravity {
     public:
@@ -31,17 +32,10 @@ class Gravity {
         ~Gravity();
 
         MeshBlockPack* pmy_pack;  // ptr to MeshBlock containing this Field
-        DvceArray5D<Real> phi, coarse_phi;   // gravitational potential
-        DvceArray5D<Real> def;   // defect from the Multigrid solver
+        DvceArray5D<Real> phi;   // gravitational potential
         Real four_pi_G;
-        bool output_defect;
-        bool fill_ghost;
         MGGravityDriver *pmgd = nullptr;
-        void SaveFaceBoundaries();
-        void RestoreFaceBoundaries();
-
-    private:
-        DvceArray5D<Real> fbuf_[6];
+        void SolveStage(Driver *pdriver, int stage, Real dt = 0.0);
 };
 } // namespace gravity
 #endif // GRAVITY_GRAVITY_HPP_
