@@ -21,11 +21,21 @@ class InitialPerturbations {
                        const std::string &block_name = "initial_perturbations");
 
   bool AnyEnabled() const {
-    return perturb_density || perturb_velocity || perturb_magnetic;
+    return DensityEnabled() || VelocityEnabled() || MagneticEnabled();
   }
   void Apply();
 
  private:
+  bool DensityEnabled() const {
+    return perturb_density && density_rms > 0.0;
+  }
+  bool VelocityEnabled() const {
+    return perturb_velocity && velocity_rms > 0.0;
+  }
+  bool MagneticEnabled() const {
+    return perturb_magnetic && magnetic_rms > 0.0;
+  }
+
   void InitializeModes();
   void GenerateAmplitudes(DualArray2D<Real> &amp_real, DualArray2D<Real> &amp_imag,
                           const int ncomp, const bool project_velocity,
