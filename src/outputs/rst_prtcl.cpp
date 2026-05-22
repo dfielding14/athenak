@@ -42,6 +42,7 @@ ParticleRestartOutput::ParticleRestartOutput(ParameterInput *pin, Mesh *pm,
 
 void ParticleRestartOutput::LoadOutputData(Mesh *pm) {
   particles::Particles *pp = pm->pmb_pack->ppart;
+  pp->CheckConsistency("particle restart output");
   npout_thisrank = pp->nprtcl_thispack;
   npout_total = pm->nprtcl_total;
   Kokkos::realloc(outpart_rdata, pp->nrdata, npout_thisrank);

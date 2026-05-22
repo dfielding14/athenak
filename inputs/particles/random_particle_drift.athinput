@@ -42,9 +42,14 @@ ndiag      = 1         # cycles between diagostic output
 <particles>
 particle_type = cosmic_ray
 ppc    = 0.01
+nspecies = 1
 pusher = drift
+check_consistency = false
 
 <problem>
+pgen_name = part_random
+prtcl_rst_flag = 0
+prtcl_res_file = prst/rank_00000000/random.00000.prst
 
 <output1>
 file_type   = pvtk      # Particle VTK data dump

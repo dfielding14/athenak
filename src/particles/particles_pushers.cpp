@@ -70,9 +70,12 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
           if (multi_d) {x2 += 0.5*dt_*pr(IPVY,p);}
           if (three_d) {x3 += 0.5*dt_*pr(IPVZ,p);}
 
-          int ip = static_cast<int>((x1 - mbsize.d_view(m).x1min)/mbsize.d_view(m).dx1) + is;
-          int jp = static_cast<int>((x2 - mbsize.d_view(m).x2min)/mbsize.d_view(m).dx2) + js;
-          int kp = static_cast<int>((x3 - mbsize.d_view(m).x3min)/mbsize.d_view(m).dx3) + ks;
+          int ip = static_cast<int>((x1 - mbsize.d_view(m).x1min)/
+                                    mbsize.d_view(m).dx1) + is;
+          int jp = static_cast<int>((x2 - mbsize.d_view(m).x2min)/
+                                    mbsize.d_view(m).dx2) + js;
+          int kp = static_cast<int>((x3 - mbsize.d_view(m).x3min)/
+                                    mbsize.d_view(m).dx3) + ks;
 
           Real x1v = LeftEdgeX(ip, indcs.nx1, mbsize.d_view(m).x1min,
                                mbsize.d_view(m).x1max);

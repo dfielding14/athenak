@@ -22,6 +22,10 @@
 #include "particles/particles.hpp"
 #include "outputs.hpp"
 
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
+
 ParticleDFOutput::ParticleDFOutput(ParameterInput *pin, Mesh *pm, OutputParameters op) :
   BaseTypeOutput(pin, pm, op) {
   int nspec = pm->pmb_pack->ppart->nspecies;
@@ -32,6 +36,8 @@ ParticleDFOutput::ParticleDFOutput(ParameterInput *pin, Mesh *pm, OutputParamete
   Kokkos::realloc(host_histogram, nspec, nbin);
   df_single_file_per_rank = pin->GetOrAddInteger(op.block_name,
                                                  "df_single_file_per_rank",0);
+  reduce_histogram = pin->GetOrAddBoolean(op.block_name,"reduce",true);
+  if (df_single_file_per_rank) {reduce_histogram = false;}
   if (df_single_file_per_rank) {
     char rank_dir[32];
     std::snprintf(rank_dir, sizeof(rank_dir), "df/rank_%08d/", global_variable::my_rank);
@@ -69,6 +75,16 @@ void ParticleDFOutput::LoadOutputData(Mesh *pm) {
     Kokkos::atomic_add(&local_histogram(spec,ip),1);
   });
   Kokkos::deep_copy(host_histogram, local_histogram);
+#if MPI_PARALLEL_ENABLED
+  if (reduce_histogram) {
+    HostArray2D<int> global_histogram("global_df_hist", nspecies, nbin);
+    MPI_Reduce(host_histogram.data(), global_histogram.data(), nspecies*nbin,
+               MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    if (global_variable::my_rank == 0) {
+      Kokkos::deep_copy(host_histogram, global_histogram);
+    }
+  }
+#endif
 }
 
 void ParticleDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
@@ -80,7 +96,17 @@ void ParticleDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
   fname += out_params.file_basename + ".df";
 
-  if (!df_single_file_per_rank && global_variable::my_rank == 0) {
+  if (reduce_histogram && global_variable::my_rank != 0) {
+    bool reset_time = (out_params.last_time < 0.0 ||
+                       out_params.last_time == pm->time);
+    out_params.last_time = reset_time ? pm->time : out_params.last_time + out_params.dt;
+    pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
+    return;
+  }
+
+  bool single = static_cast<bool>(df_single_file_per_rank) || reduce_histogram;
+  if (df_single_file_per_rank || reduce_histogram ||
+      global_variable::my_rank == 0) {
     std::stringstream msg;
     msg << "\n# AthenaK particle distribution function at time= " << pm->time
         << "  nranks= " << global_variable::nranks
@@ -97,7 +123,6 @@ void ParticleDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
 
   IOWrapper partfile;
-  bool single = static_cast<bool>(df_single_file_per_rank);
   partfile.Open(fname.c_str(), IOWrapper::FileMode::append, single);
   std::size_t header_offset = partfile.GetPosition(single);
 
@@ -111,14 +136,23 @@ void ParticleDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
 
   std::size_t myoffset = header_offset;
-  if (!single) {
-    myoffset += static_cast<std::size_t>(global_variable::my_rank)*nout*sizeof(int);
-  }
-  if (partfile.Write_any_type_at_all(data,nout,myoffset,"int",single) !=
-      static_cast<std::size_t>(nout)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Particle DF output failed" << std::endl;
-    std::exit(EXIT_FAILURE);
+  if (reduce_histogram) {
+    if (partfile.Write_any_type(data,nout,"int",single) !=
+        static_cast<std::size_t>(nout)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Particle DF output failed" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  } else {
+    if (!single) {
+      myoffset += static_cast<std::size_t>(global_variable::my_rank)*nout*sizeof(int);
+    }
+    if (partfile.Write_any_type_at_all(data,nout,myoffset,"int",single) !=
+        static_cast<std::size_t>(nout)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Particle DF output failed" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
   }
   partfile.Close(single);
   delete[] data;

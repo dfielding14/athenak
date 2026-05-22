@@ -22,6 +22,7 @@
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "particles/particles.hpp"
 #include "coordinates/adm.hpp"
 #include "z4c/compact_object_tracker.hpp"
 #include "z4c/z4c.hpp"
@@ -50,6 +51,10 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
 
   // second argument false since this IS NOT a restart
   CallProblemGenerator(pin, false);
+  if (pm->pmb_pack->ppart != nullptr) {
+    pm->pmb_pack->ppart->SetConsistencyReference();
+    pm->pmb_pack->ppart->CheckConsistency("problem generator");
+  }
 
   // Check that user defined BCs were enrolled if needed
   if (user_bcs) {
@@ -618,6 +623,10 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   // call problem generator again to re-initialize data, fn ptrs, as needed
   // second argument true since this IS a restart
   CallProblemGenerator(pin, true);
+  if (pm->pmb_pack->ppart != nullptr) {
+    pm->pmb_pack->ppart->SetConsistencyReference();
+    pm->pmb_pack->ppart->CheckConsistency("restart problem generator");
+  }
 
   // Check that user defined BCs were enrolled if needed
   if (user_bcs) {
@@ -913,6 +922,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     MRI3d(pin, is_restart);
   } else if (pgen_fun_name.compare("orszag_tang") == 0) {
     OrszagTang(pin, is_restart);
+  } else if (pgen_fun_name.compare("part_random") == 0) {
+    PartRandom(pin, is_restart);
   } else if (pgen_fun_name.compare("rad_linear_wave") == 0) {
     RadiationLinearWave(pin, is_restart);
   } else if (pgen_fun_name.compare("rad_beam") == 0) {

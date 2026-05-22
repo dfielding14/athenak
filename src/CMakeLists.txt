@@ -114,6 +114,7 @@ add_executable(
         outputs/pdf.cpp
 
         pgen/pgen.cpp
+        pgen/part_random.cpp
         pgen/tests/advection.cpp
         pgen/tests/collapse.cpp
         pgen/tests/cpaw.cpp
@@ -188,7 +189,8 @@ add_executable(
 # specify on command line using '-D PROBLEM=file' where 'file' is name of file in
 # pgen/ directory (not including .cpp extension)
 
-if (NOT ${PROBLEM} STREQUAL "built_in_pgens")
+if ((NOT ${PROBLEM} STREQUAL "built_in_pgens") AND
+    (NOT ${PROBLEM} STREQUAL "part_random"))
   target_sources(athena
       PRIVATE
           pgen/${PROBLEM}.cpp

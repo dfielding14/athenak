@@ -477,3 +477,18 @@ MeshBlockTree* MeshBlockTree::FindMeshBlock(LogicalLocation tloc) {
   }
   return pleaf_[n]->FindMeshBlock(tloc);
 }
+
+//----------------------------------------------------------------------------------------
+//! \fn MeshBlockTree* MeshBlockTree::FindLeafContaining(LogicalLocation tloc)
+//! \brief find the leaf MeshBlock that contains a fine-level LogicalLocation
+
+MeshBlockTree* MeshBlockTree::FindLeafContaining(LogicalLocation tloc) {
+  if (pleaf_ == nullptr || tloc.level <= lloc_.level) {return this;}
+  int sh = tloc.level - lloc_.level - 1;
+  int mx = (((tloc.lx1>>sh) & 1) == 1);
+  int my = (((tloc.lx2>>sh) & 1) == 1);
+  int mz = (((tloc.lx3>>sh) & 1) == 1);
+  int n = mx + (my<<1) + (mz<<2);
+  if (pleaf_[n] == nullptr) {return nullptr;}
+  return pleaf_[n]->FindLeafContaining(tloc);
+}

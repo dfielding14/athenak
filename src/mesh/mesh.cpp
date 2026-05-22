@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cinttypes>
+#include <cmath>
 #include <iostream>
 #include <limits>
 #include <cstdio> // fclose
@@ -691,4 +692,39 @@ void Mesh::UpdateParticleCounts() {
   for (int n=0; n<global_variable::nranks; ++n) {
     nprtcl_total += nprtcl_eachrank[n];
   }
+}
+
+//----------------------------------------------------------------------------------------
+// \fn Mesh::FindMeshBlockContainingPosition
+
+int Mesh::FindMeshBlockContainingPosition(Real x1, Real x2, Real x3) {
+  auto location_index = [](Real x, Real xmin, Real xmax, std::int32_t nloc) {
+    Real frac = (x - xmin)/(xmax - xmin);
+    std::int64_t ix = static_cast<std::int64_t>(std::floor(frac*nloc));
+    ix = std::max<std::int64_t>(0, ix);
+    ix = std::min<std::int64_t>(nloc - 1, ix);
+    return static_cast<std::int32_t>(ix);
+  };
+
+  const int lev_offset = max_level - root_level;
+  LogicalLocation floc;
+  floc.level = max_level;
+  std::int32_t nloc1 = nmb_rootx1 << lev_offset;
+  floc.lx1 = location_index(x1, mesh_size.x1min, mesh_size.x1max, nloc1);
+  if (multi_d) {
+    std::int32_t nloc2 = nmb_rootx2 << lev_offset;
+    floc.lx2 = location_index(x2, mesh_size.x2min, mesh_size.x2max, nloc2);
+  } else {
+    floc.lx2 = 0;
+  }
+  if (three_d) {
+    std::int32_t nloc3 = nmb_rootx3 << lev_offset;
+    floc.lx3 = location_index(x3, mesh_size.x3min, mesh_size.x3max, nloc3);
+  } else {
+    floc.lx3 = 0;
+  }
+
+  MeshBlockTree *bt = ptree->FindLeafContaining(floc);
+  if (bt == nullptr) {return -1;}
+  return bt->GetGID();
 }

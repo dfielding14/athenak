@@ -85,6 +85,11 @@ if (NOT ${PROBLEM} STREQUAL "built_in_pgens")
 else()
   set(USER_PROBLEM_ENABLED 0)
 endif()
+if (${PROBLEM} STREQUAL "part_random")
+  set(PART_RANDOM_USER_PROBLEM_ENABLED 1)
+else()
+  set(PART_RANDOM_USER_PROBLEM_ENABLED 0)
+endif()
 
 #------ set various Kokkos option --------------------------------------------------------
 
@@ -218,4 +223,3 @@ target_include_directories(athena PUBLIC
 configure_file(config.hpp.in config.hpp)
 
 install( TARGETS athena DESTINATION bin )
-

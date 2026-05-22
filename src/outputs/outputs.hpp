@@ -401,6 +401,7 @@ class ParticleDFOutput : public BaseTypeOutput {
   Real vmin, vmax;
   HostArray2D<int> host_histogram;
   int df_single_file_per_rank;
+  bool reduce_histogram;
 };
 
 //----------------------------------------------------------------------------------------
@@ -417,6 +418,7 @@ class ParticleDxHistOutput : public BaseTypeOutput {
   Real vmin, vmax;
   HostArray2D<int> host_histogram;
   int dxhist_single_file_per_rank;
+  bool reduce_histogram;
 };
 
 //----------------------------------------------------------------------------------------

@@ -1,10 +1,10 @@
-# AthenaK input file for cosmic-ray tracer particles with AMR
+# AthenaK input file for cosmic-ray tracer particles with moving AMR
 
 <comment>
-problem   = CR tracer Boris pusher AMR smoke test
+problem   = CR tracer Boris pusher AMR refine/derefine stress test
 
 <job>
-basename  = cr_tracer_amr
+basename  = cr_tracer_amr_stress
 
 <mesh>
 nghost    = 2
@@ -36,21 +36,17 @@ refinement          = adaptive
 ncycle_check        = 1
 refinement_interval = 1
 num_levels          = 2
-max_nmb_per_rank    = 64
+max_nmb_per_rank    = 96
 
 <amr_criterion0>
-method       = location
-location_x1  = 0.0
-location_x2  = 0.0
-location_x3  = 0.0
-location_rad = 0.4
+method = user
 
 <time>
 evolution  = dynamic
 integrator = rk2
 cfl_number = 0.4
-nlim       = 3
-tlim       = 0.03
+nlim       = 8
+tlim       = 0.08
 ndiag      = 1
 
 <mhd>
@@ -60,40 +56,41 @@ rsolver     = hlld
 gamma       = 1.666666667
 
 <particles>
-particle_type     = cosmic_ray
-ppc               = 0.125
-nspecies          = 2
-pusher            = boris
-interpolation     = tsc
-min_mass          = 1.0
-mass_log_spacing  = 2.0
-cfl_part          = 0.1
-check_consistency = false
+particle_type      = cosmic_ray
+ppc                = 0.125
+nspecies           = 2
+pusher             = boris
+interpolation      = tsc
+min_mass           = 1.0
+mass_log_spacing   = 2.0
+cfl_part           = 0.1
+check_consistency  = true
 
 <problem>
-pgen_name = part_random
-prtcl_rst_flag = 0
-prtcl_res_file = prst/rank_00000000/cr_tracer_amr.00000.prst
-B0x = 0.0
-B0y = 0.0
-B0z = 1.0
+pgen_name           = part_random
+particle_refinement = moving_boxes
+prtcl_rst_flag      = 0
+prtcl_res_file      = prst/rank_00000000/cr_tracer_amr_stress.00000.prst
+B0x                 = 0.0
+B0y                 = 0.0
+B0z                 = 1.0
 
 <output1>
 file_type = ppd
-dt        = 0.02
+dt        = 0.04
 
 <output2>
 file_type = prst
-dt        = 0.02
+dt        = 0.04
 
 <output3>
 file_type = df
-dt        = 0.02
+dt        = 0.04
 nbin      = 8
 
 <output4>
 file_type = dxh
-dt        = 0.02
+dt        = 0.04
 nbin      = 8
-vmin      = -0.1
-vmax      = 0.1
+vmin      = -0.2
+vmax      = 0.2

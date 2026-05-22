@@ -11,6 +11,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "athena.hpp"
 #include "parameter_input.hpp"
@@ -66,6 +67,10 @@ class Particles {
   Real dtnew;
   int is_dynamic;
   int prtcl_rst_flag;
+  bool check_consistency;
+  bool reference_counts_set;
+  int reference_nprtcl_total;
+  std::vector<int> reference_nprtcl_eachspec;
 
   ParticlesPusher pusher;
 
@@ -77,6 +82,8 @@ class Particles {
 
   // functions...
   void CreateParticleTags(ParameterInput *pin);
+  void SetConsistencyReference();
+  void CheckConsistency(const std::string &label, bool check_rank=true);
   void RemapAfterAMR();
   void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   TaskStatus Push(Driver *pdriver, int stage);

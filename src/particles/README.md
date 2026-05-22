@@ -2,8 +2,98 @@
 
 This directory contains the AthenaK particle module and the cosmic-ray tracer
 extension.  The implementation is built on the existing particle task list and
-particle boundary exchange path, with additional fields, pushers, outputs, and
-AMR remapping support for charged tracer particles.
+particle boundary exchange path, with additional fields, pushers, outputs, AMR
+remapping support, and test-oriented validation checks for charged tracer
+particles.
+
+## Quick Start
+
+Use `pgen_name = part_random` for the standard built-in particle generator.  A
+custom `-D PROBLEM=part_random` build is still supported, but normal tests and
+examples use the built-in pgen path.
+
+Minimal drifting CR tracer input:
+
+```text
+<particles>
+particle_type     = cosmic_ray
+ppc               = 0.125
+nspecies          = 2
+pusher            = drift
+check_consistency = true
+
+<problem>
+pgen_name = part_random
+
+<output1>
+file_type = prst
+dt        = 0.01
+
+<output2>
+file_type = ppd
+dt        = 0.01
+```
+
+Minimal Boris/MHD AMR setup:
+
+```text
+<mesh_refinement>
+refinement = adaptive
+num_levels = 2
+
+<amr_criterion0>
+method = location
+
+<mhd>
+eos     = ideal
+rsolver = hlld
+
+<particles>
+particle_type     = cosmic_ray
+ppc               = 0.125
+nspecies          = 2
+pusher            = boris
+interpolation     = tsc
+check_consistency = true
+
+<problem>
+pgen_name = part_random
+B0z       = 1.0
+```
+
+The moving refine/derefine AMR stress example is:
+
+```bash
+./athena -i inputs/particles/cr_tracer_boris_amr_stress.athinput
+```
+
+For MPI:
+
+```bash
+mpirun -np 2 ./athena -i inputs/particles/cr_tracer_boris_amr_stress.athinput
+```
+
+Validate the latest particle outputs from a run directory with:
+
+```bash
+python scripts/particles/cr_tracer_inspect.py . \
+  --expected-total 1024 \
+  --expected-species-counts 512,512 \
+  --histogram-nbin 8
+```
+
+Particle restart reads are enabled with:
+
+```text
+<problem>
+prtcl_rst_flag = 1
+prtcl_res_file = prst/rank_00000000/basename.00042.prst
+```
+
+For MPI particle restarts, the input may name the rank-zero file.  The reader
+replaces `rank_00000000` with each rank's local restart directory name.  The
+mesh configuration must be compatible with the saved particle `PGID` values; a
+full mesh restart is separate from this particle-only `prst` path.
 
 ## Input Blocks
 
@@ -19,6 +109,7 @@ interpolation     = tsc
 min_mass          = 1.0
 mass_log_spacing  = 2.0
 cfl_part          = 0.1
+check_consistency = false
 ```
 
 The supported particle settings are:
@@ -26,7 +117,7 @@ The supported particle settings are:
 - `particle_type = cosmic_ray`: selects the cosmic-ray tracer data layout.
 - `ppc`: number of particles per cell per species.  Values below one are
   allowed.
-- `nspecies`: number of particle species.  Tags are unique across species.
+- `nspecies`: number of particle species.
 - `pusher = drift`: moves particles with stored velocities.
 - `pusher = boris`: uses the magnetic Boris update and requires an `<mhd>`
   block.
@@ -38,6 +129,8 @@ The supported particle settings are:
 - `mass_log_spacing`: multiplicative spacing between species masses.
 - `cfl_part`: particle timestep cap used by `part_random`.
 - `assign_tag = index_order` or `rank_order`: controls initial particle tags.
+- `check_consistency = true`: enables host-side invariant checks intended for
+  tests and debugging.  Leave it off for production runs.
 
 `inputs/particles/cr_tracer_boris_amr.athinput` is the branch smoke-test input
 for a 3D MHD, Boris-pushed, AMR cosmic-ray tracer run.
@@ -49,7 +142,7 @@ Cosmic-ray tracer particles allocate 14 real fields and 3 integer fields.
 Integer fields:
 
 - `PGID`: global MeshBlock ID containing the particle.
-- `PTAG`: unique particle tag.
+- `PTAG`: particle tag, unique within each species.
 - `PSP`: species index.
 
 Real fields:
@@ -71,14 +164,21 @@ The remap procedure is:
 
 1. Copy particle positions and IDs to host memory.
 2. Wrap periodic coordinates back into the mesh domain.
-3. Find the new leaf MeshBlock whose logical location contains the particle.
-4. Update `PGID` to the new MeshBlock ID.
-5. Use the existing particle MPI boundary path for particles whose new block is
+3. Convert the wrapped position to a finest-level logical location using
+   `Mesh::max_level`.
+4. Use `MeshBlockTree::FindLeafContaining()` to descend directly to the owning
+   leaf MeshBlock.
+5. Update `PGID` to the new MeshBlock ID.
+6. Use the existing particle MPI boundary path for particles whose new block is
    owned by another rank.
-6. Recompute per-rank and total particle counts with
+7. Recompute per-rank and total particle counts with
    `Mesh::UpdateParticleCounts()`.
 
-This AMR particle remap is intentionally separate from the face-centered MHD AMR
+This replaces the previous host-side scan over every leaf MeshBlock for every
+particle.  When `check_consistency = true`, the tree result is validated against
+the returned MeshBlock's physical bounds.
+
+The AMR particle remap is intentionally separate from the face-centered MHD AMR
 repair used by the div(B) fix.  It does not modify `RefineFC()`,
 `RestrictFC()`, or `RepairAMRFC()`, and the particle remap is called only after
 the mesh AMR metadata and physics arrays have been rebuilt.
@@ -98,107 +198,103 @@ The cosmic-ray tracer branch adds four particle-oriented output types:
   `(time, dt, particles_this_rank)` as `Real`, followed by 17 `Real` values per
   particle containing `PGID`, `PTAG`, `PSP`, and the 14 real particle fields.
 - `df`: pitch-angle cosine histogram.  Use `nbin`, `vmin`, and `vmax` to set the
-  binning range.  `df_single_file_per_rank = 1` writes separate rank files.
+  binning range.
 - `dxh`: displacement histograms for `IPDX`, `IPDY`, and `IPDZ`.  Use `nbin`,
   `vmin`, and `vmax` to set the binning range.
 
-For `df` and `dxh`, the default shared file stores each rank's local histogram
-at a rank-specific offset.  It is not reduced across ranks before writing.
+For `df` and `dxh`, `reduce = true` is the default.  MPI runs write one
+globally reduced histogram from rank zero, so each species sum in `df` equals
+the total particle count for that species, and each displacement component in
+`dxh` sums to the total particle count for that species.  Set
+`df_single_file_per_rank = 1` or `dxhist_single_file_per_rank = 1` to preserve
+the older per-rank output mode; those settings force `reduce = false`.
 
-Particle restart reads are enabled with:
+## Consistency Checks
 
-```text
-<problem>
-prtcl_rst_flag = 1
-prtcl_res_file = prst/rank_00000000/basename.00042.prst
+`<particles>/check_consistency = true` fails fast if any of these invariants are
+violated:
+
+- every particle `PGID` maps to a live MeshBlock on the owning rank,
+- every particle position lies inside its assigned MeshBlock,
+- total and per-species particle counts remain conserved after initialization,
+  AMR remap, MPI exchange, restart load, and restart output,
+- tags are unique within each species,
+- particle restart files have exactly the header and data length implied by the
+  stored particle count.
+
+The checks copy particle data to host and use MPI reductions where needed.  They
+are intended for regression tests and debugging, not for production runs.
+
+## Readback Utility
+
+`scripts/particles/cr_tracer_inspect.py` reads `prst`, `ppd`, `df`, and `dxh`
+outputs.  It reports totals by rank and species, verifies particle restart file
+lengths, checks finite positions and velocities, checks unique tags within each
+species, and can assert expected total/species counts.
+
+Typical commands:
+
+```bash
+python scripts/particles/cr_tracer_inspect.py run-dir/prst
+python scripts/particles/cr_tracer_inspect.py run-dir \
+  --expected-total 1024 \
+  --expected-species-counts 512,512 \
+  --histogram-nbin 8
 ```
 
-For MPI restarts, the input may name the rank-zero file.  The reader replaces
-`rank_00000000` with each rank's local restart directory name.
+The regression tests import the same utility directly, so command-line and test
+validation use the same parser and count checks.
 
 ## Local Validation
 
-These results were produced on 2026-05-20 from branch `feature/CR_tracers`
-based on `main` plus merge `c3cfc63f`, using CMake 4.3.2 and Open MPI 5.0.9.
-The local validation used CPU builds.
+The regression suite exercises serial drift, serial Boris AMR with `tsc` and
+`lin` interpolation, restart write/read, reduced `df`/`dxh` histograms,
+multi-species tags/counts, two-rank MPI AMR migration, and a moving-box AMR
+refine/derefine stress run.
 
-Build commands:
-
-```bash
-cmake -S . -B build-cr-tracers -D PROBLEM=part_random
-cmake --build build-cr-tracers --target athena -j 6
-
-cmake -S . -B build-cr-tracers-mpi -D PROBLEM=part_random -DAthena_ENABLE_MPI=ON
-cmake --build build-cr-tracers-mpi --target athena -j 6
-
-cmake -S . -B build-cr-tracers-builtin -D PROBLEM=built_in_pgens
-cmake --build build-cr-tracers-builtin --target athena -j 6
-```
-
-Serial drift smoke test:
+Required commands:
 
 ```bash
-build-cr-tracers/src/athena \
-  -i inputs/particles/random_particle_drift.athinput \
-  -d run-cr-tracers-smoke \
-  mesh/nx1=16 mesh/nx2=16 mesh/nx3=16 \
-  meshblock/nx1=8 meshblock/nx2=8 meshblock/nx3=8 \
-  particles/ppc=0.125 time/nlim=2 time/tlim=0.02 \
-  output1/dt=0.02 output2/dt=0.02
+cd tst
+python run_test_suite.py --test test_suite/particles/test_particles_cr_cpu.py --cpu
+python run_test_suite.py --test test_suite/particles/test_particles_cr_mpicpu.py --mpicpu
+python run_test_suite.py --style
+git diff --check
 ```
 
-Result: completed at `time=2.000000e-02`, `cycle=1`,
-`MeshBlock-cycles = 8`, and
-`particle-updates/cpu_second = 2.299832e+06`.
+Local results from 2026-05-22:
 
-Serial Boris plus AMR smoke test:
+- `test_particles_cr_cpu.py --cpu`: 4 passed.
+- `test_particles_cr_mpicpu.py --mpicpu`: 3 passed.
+- `--style`: 2 passed.
+- `git diff --check`: passed.
+- Custom `-D PROBLEM=part_random` build: passed.
+
+The explicit two-rank stress run:
 
 ```bash
-build-cr-tracers/src/athena \
-  -i inputs/particles/cr_tracer_boris_amr.athinput \
-  -d run-cr-tracers-boris-amr
+mpirun -np 2 build-cr-robust-mpi/src/athena \
+  -i inputs/particles/cr_tracer_boris_amr_stress.athinput \
+  -d run-cr-stress-mpi-final
+python scripts/particles/cr_tracer_inspect.py run-cr-stress-mpi-final \
+  --expected-total 1024 \
+  --expected-species-counts 512,512 \
+  --histogram-nbin 8
 ```
 
-Result: completed at `time=3.000000e-02`, `cycle=3`; AMR ended with
-`Current number of MeshBlocks = 64` and
-`56 MeshBlocks created, 0 deleted by AMR`.
+Stress result: `105 MeshBlocks created, 77 deleted by AMR`; inspector result:
+1024 total particles, rank counts `0=520 1=504`, species counts `0=512 1=512`,
+and valid reduced `df`/`dxh` histogram totals.
 
-MPI Boris plus AMR test:
+The div(B) AMR compatibility inputs also passed:
 
 ```bash
-mpirun -np 2 build-cr-tracers-mpi/src/athena \
-  -i inputs/particles/cr_tracer_boris_amr.athinput \
-  -d run-cr-tracers-mpi-amr
+./athena -i inputs/tests/divb_amr_1d.athinput
+./athena -i inputs/tests/divb_amr_2d.athinput
+./athena -i inputs/tests/divb_amr_3d.athinput
 ```
 
-Result: completed at `time=3.000000e-02`, `cycle=3`; AMR ended with
-`Current number of MeshBlocks = 64`,
-`56 MeshBlocks created, 0 deleted by AMR`, and
-`load balancing efficiency = 1.000000e+00`.
-
-The MPI restart headers show that particles migrated across ranks while the
-total count stayed fixed at 1024:
-
-```text
-rank 0: 512 -> 515 -> 516 particles
-rank 1: 512 -> 509 -> 508 particles
-```
-
-Div(B) AMR regression inputs were also rerun with the built-in pgen build:
-
-```bash
-build-cr-tracers-builtin/src/athena \
-  -i inputs/tests/divb_amr_1d.athinput \
-  -d run-divb-amr-1d
-build-cr-tracers-builtin/src/athena \
-  -i inputs/tests/divb_amr_2d.athinput \
-  -d run-divb-amr-2d
-build-cr-tracers-builtin/src/athena \
-  -i inputs/tests/divb_amr_3d.athinput \
-  -d run-divb-amr-3d
-```
-
-Results:
+Div(B) results:
 
 - 1D: `cycle=24`, `Current number of MeshBlocks = 27`,
   `69 MeshBlocks created, 50 deleted by AMR`.
@@ -207,20 +303,7 @@ Results:
 - 3D: `cycle=12`, `Current number of MeshBlocks = 855`,
   `3633 MeshBlocks created, 2842 deleted by AMR`.
 
-Style and consistency checks:
-
-```bash
-git diff --check
-awk 'length($0)>100 {print FILENAME ":" FNR ":" length($0)}' <changed files>
-```
-
-`git diff --check` passed.  The changed C++ and input files had no lines longer
-than 100 characters at the time this documentation was written.  `cpplint` was
-not available in the local Python environment, so no `cpplint` run was included.
-
 ## Known Validation Limits
 
-The local validation above confirms serial operation, local two-rank MPI AMR
-particle migration, and compatibility with the current div(B) AMR regression
-inputs.  It does not replace a large multi-node run, and no GPU build was tested
-in this branch validation pass.
+The validation above is CPU and local MPI focused.  It does not replace a large
+multi-node run, and no GPU build is required for this hardening pass.

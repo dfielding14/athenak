@@ -45,6 +45,7 @@ class MeshBlockTree {
   void Refine(int &nnew);
   void Derefine(int &ndel);
   MeshBlockTree* FindMeshBlock(LogicalLocation tloc);
+  MeshBlockTree* FindLeafContaining(LogicalLocation tloc);
   void CountMeshBlocks(int& count);
   void CreateZOrderedLLList(LogicalLocation *list, int *pglist, int& count);
   MeshBlockTree* FindNeighbor(LogicalLocation myloc, int ox1, int ox2, int ox3,

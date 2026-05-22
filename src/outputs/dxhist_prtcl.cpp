@@ -21,6 +21,10 @@
 #include "particles/particles.hpp"
 #include "outputs.hpp"
 
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
+
 ParticleDxHistOutput::ParticleDxHistOutput(ParameterInput *pin, Mesh *pm,
                                            OutputParameters op) :
   BaseTypeOutput(pin, pm, op) {
@@ -32,6 +36,8 @@ ParticleDxHistOutput::ParticleDxHistOutput(ParameterInput *pin, Mesh *pm,
   Kokkos::realloc(host_histogram, nspec*3, nbin);
   dxhist_single_file_per_rank = pin->GetOrAddInteger(op.block_name,
                                                      "dxhist_single_file_per_rank",0);
+  reduce_histogram = pin->GetOrAddBoolean(op.block_name,"reduce",true);
+  if (dxhist_single_file_per_rank) {reduce_histogram = false;}
   if (dxhist_single_file_per_rank) {
     char rank_dir[32];
     std::snprintf(rank_dir, sizeof(rank_dir), "dxh/rank_%08d/", global_variable::my_rank);
@@ -65,6 +71,16 @@ void ParticleDxHistOutput::LoadOutputData(Mesh *pm) {
     }
   });
   Kokkos::deep_copy(host_histogram, local_histogram);
+#if MPI_PARALLEL_ENABLED
+  if (reduce_histogram) {
+    HostArray2D<int> global_histogram("global_dxh_hist", nspecies*3, nbin);
+    MPI_Reduce(host_histogram.data(), global_histogram.data(), nspecies*3*nbin,
+               MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    if (global_variable::my_rank == 0) {
+      Kokkos::deep_copy(host_histogram, global_histogram);
+    }
+  }
+#endif
 }
 
 void ParticleDxHistOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
@@ -76,7 +92,17 @@ void ParticleDxHistOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
   fname += out_params.file_basename + ".dxh";
 
-  if (!dxhist_single_file_per_rank && global_variable::my_rank == 0) {
+  if (reduce_histogram && global_variable::my_rank != 0) {
+    bool reset_time = (out_params.last_time < 0.0 ||
+                       out_params.last_time == pm->time);
+    out_params.last_time = reset_time ? pm->time : out_params.last_time + out_params.dt;
+    pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
+    return;
+  }
+
+  bool single = static_cast<bool>(dxhist_single_file_per_rank) || reduce_histogram;
+  if (dxhist_single_file_per_rank || reduce_histogram ||
+      global_variable::my_rank == 0) {
     std::stringstream msg;
     msg << "\n# AthenaK particle displacement histogram at time= " << pm->time
         << "  nranks= " << global_variable::nranks
@@ -93,7 +119,6 @@ void ParticleDxHistOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
 
   IOWrapper partfile;
-  bool single = static_cast<bool>(dxhist_single_file_per_rank);
   partfile.Open(fname.c_str(), IOWrapper::FileMode::append, single);
   std::size_t header_offset = partfile.GetPosition(single);
 
@@ -109,15 +134,25 @@ void ParticleDxHistOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
 
   std::size_t myoffset = header_offset;
-  if (!single) {
-    myoffset += static_cast<std::size_t>(global_variable::my_rank)*nout*sizeof(int);
-  }
-  if (partfile.Write_any_type_at_all(data,nout,myoffset,"int",single) !=
-      static_cast<std::size_t>(nout)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Particle displacement histogram output failed"
-              << std::endl;
-    std::exit(EXIT_FAILURE);
+  if (reduce_histogram) {
+    if (partfile.Write_any_type(data,nout,"int",single) !=
+        static_cast<std::size_t>(nout)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Particle displacement histogram output failed"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  } else {
+    if (!single) {
+      myoffset += static_cast<std::size_t>(global_variable::my_rank)*nout*sizeof(int);
+    }
+    if (partfile.Write_any_type_at_all(data,nout,myoffset,"int",single) !=
+        static_cast<std::size_t>(nout)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Particle displacement histogram output failed"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
   }
   partfile.Close(single);
   delete[] data;
