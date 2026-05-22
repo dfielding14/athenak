@@ -1,0 +1,86 @@
+# AthenaK input file for 2D initial Fourier perturbation regression tests
+
+<comment>
+problem = one-time 2D density, velocity, and magnetic perturbations
+
+<job>
+basename = InitialPerturbations2D
+
+<mesh>
+nghost = 2
+nx1    = 128
+x1min  = -0.5
+x1max  = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+
+nx2    = 128
+x2min  = -0.5
+x2max  = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+
+nx3    = 1
+x3min  = -0.5
+x3max  = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 128
+nx2 = 128
+nx3 = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 0
+tlim       = 0.0
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp       = 0.0
+dens      = 1.0
+pgas      = 0.6
+vx0       = 0.0
+vy0       = 0.0
+vz0       = 0.0
+bx0       = 1.0
+by0       = 0.25
+bz0       = 0.125
+along_x1  = false
+along_x2  = false
+along_x3  = false
+
+<initial_perturbations>
+variables            = density, velocity, magnetic
+density_rms          = 1.0e-2
+velocity_rms         = 1.0e-3
+magnetic_rms         = 1.0e-3
+remove_density_mean  = true
+remove_velocity_mean = true
+spectral_slope       = 1.0
+nlow                 = 1
+nhigh                = 8
+f_solenoidal         = 0.75
+rseed                = 13579
+localization         = none
+
+<output1>
+file_type = hst
+dt        = 1.0
+
+<output2>
+file_type   = vtk
+variable    = mhd_w_bcc
+dt          = 1.0
+ghost_zones = false

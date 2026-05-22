@@ -16,18 +16,20 @@ from plot_initial_perturbations_example import (  # noqa: E402
 )
 
 
-def test_run():
-    """Run the example and verify amplitudes and Fourier support."""
-    results = testutils.run("inputs/initial_perturbations.athinput")
+def check_initial_perturbation_run(input_file, basename, nlow, nhigh, cell_dims):
+    """Run one input and verify amplitudes and Fourier support."""
+    results = testutils.run(input_file)
     assert results, "Initial perturbation MHD smoke test failed."
 
-    vtk_files = sorted(Path("vtk").glob("InitialPerturbations.mhd_w_bcc.*.vtk"))
+    vtk_files = sorted(Path("vtk").glob(f"{basename}.mhd_w_bcc.*.vtk"))
     assert vtk_files, "Initial perturbation run did not write VTK diagnostics."
 
     data = read_vtk_scalars(vtk_files[0])
+    assert data["cell_dims"] == cell_dims
+
     fields = data["scalars"]
     delta = density_contrast(fields)
-    metrics = density_metrics(delta, nlow=1, nhigh=4)
+    metrics = density_metrics(delta, nlow=nlow, nhigh=nhigh)
 
     assert abs(metrics["mean_delta"]) < 1.0e-7
     assert abs(metrics["rms_delta"] - 1.0e-2) < 5.0e-6
@@ -47,3 +49,25 @@ def test_run():
         )
     )
     assert abs(magnetic_rms - 1.0e-3) < 5.0e-6
+
+
+def test_3d_run():
+    """Run the 32^3 example and verify amplitudes and Fourier support."""
+    check_initial_perturbation_run(
+        "inputs/initial_perturbations.athinput",
+        "InitialPerturbations",
+        nlow=1,
+        nhigh=4,
+        cell_dims=(32, 32, 32),
+    )
+
+
+def test_2d_run():
+    """Run the 128^2 example and verify amplitudes and Fourier support."""
+    check_initial_perturbation_run(
+        "inputs/initial_perturbations_2d.athinput",
+        "InitialPerturbations2D",
+        nlow=1,
+        nhigh=8,
+        cell_dims=(128, 128, 1),
+    )

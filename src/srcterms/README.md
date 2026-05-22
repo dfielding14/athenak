@@ -9,6 +9,7 @@ amplitude is positive. Magnetic perturbations are generated from an
 edge-centered vector potential and added as a discrete curl so
 constrained-transport `div(B)` is preserved to roundoff.
 
-The regression example in `inputs/tests/initial_perturbations.athinput` writes a
-full-grid VTK snapshot that can be turned into documentation figures with
+The regression examples in `inputs/tests/initial_perturbations.athinput` and
+`inputs/tests/initial_perturbations_2d.athinput` write full-grid VTK snapshots.
+The 3D snapshot can be turned into documentation figures with
 `scripts/plot_initial_perturbations_example.py`.

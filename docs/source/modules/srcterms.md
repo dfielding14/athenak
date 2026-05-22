@@ -140,6 +140,9 @@ The committed test problem is `inputs/tests/initial_perturbations.athinput`; the
 test-suite copy is `tst/inputs/initial_perturbations.athinput`. It initializes a
 uniform MHD `linear_wave` state with zero wave amplitude, applies the one-time
 perturbation above, and writes a full-grid `mhd_w_bcc` VTK snapshot at cycle 0.
+A companion 2D regression input,
+`inputs/tests/initial_perturbations_2d.athinput`, repeats the same density,
+velocity, and magnetic checks on a `128 x 128 x 1` mesh.
 
 The figures below were generated directly from that snapshot with:
 
