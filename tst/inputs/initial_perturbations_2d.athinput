@@ -84,3 +84,9 @@ file_type   = vtk
 variable    = mhd_w_bcc
 dt          = 1.0
 ghost_zones = false
+
+<output3>
+file_type   = vtk
+variable    = mhd_divb
+dt          = 1.0
+ghost_zones = false

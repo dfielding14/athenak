@@ -13,6 +13,7 @@ from plot_initial_perturbations_example import (  # noqa: E402
     density_contrast,
     density_metrics,
     read_vtk_scalars,
+    vector_decomposition_metrics,
 )
 
 
@@ -50,6 +51,8 @@ def check_initial_perturbation_run(input_file, basename, nlow, nhigh, cell_dims)
     )
     assert abs(magnetic_rms - 1.0e-3) < 5.0e-6
 
+    return fields
+
 
 def test_3d_run():
     """Run the 32^3 example and verify amplitudes and Fourier support."""
@@ -64,10 +67,20 @@ def test_3d_run():
 
 def test_2d_run():
     """Run the 128^2 example and verify amplitudes and Fourier support."""
-    check_initial_perturbation_run(
+    fields = check_initial_perturbation_run(
         "inputs/initial_perturbations_2d.athinput",
         "InitialPerturbations2D",
         nlow=1,
         nhigh=8,
         cell_dims=(128, 128, 1),
     )
+
+    velocity = np.stack([fields["velx"], fields["vely"], fields["velz"]])
+    velocity_metrics = vector_decomposition_metrics(velocity)
+    assert abs(velocity_metrics["amplitude_solenoidal_fraction"] - 0.75) < 2.0e-2
+
+    divb_files = sorted(Path("vtk").glob("InitialPerturbations2D.mhd_divb.*.vtk"))
+    assert divb_files, "2D initial perturbation run did not write divB diagnostics."
+    divb_fields = read_vtk_scalars(divb_files[0])["scalars"]
+    assert np.max(np.abs(divb_fields["divb"])) < 1.0e-10
+    assert np.sqrt(np.mean(divb_fields["divb"] ** 2)) < 1.0e-11

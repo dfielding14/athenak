@@ -178,6 +178,33 @@ out-of-band power fraction `7.468675940e-12`.
 
 ![2D initial density perturbation power spectrum](../_static/initial_perturbations_2d_density_power_spectrum.png)
 
+The same 2D snapshot also validates the vector perturbations. The velocity
+field is checked with a spectral Helmholtz decomposition after subtracting the
+component means. The configured `f_solenoidal = 0.75` is an amplitude-space
+blend, so the amplitude-space solenoidal fraction is the relevant comparison;
+the documented realization gives `0.741169917`, with solenoidal energy fraction
+`0.891302611`. The magnetic field is checked with AthenaK's `mhd_divb` derived
+variable from the same cycle-0 state, giving `max |divB| = 1.421085472e-14`
+and RMS `8.169763041e-15`.
+
+Those figures were generated with:
+
+```bash
+python scripts/plot_initial_perturbations_example.py \
+  build/initial_perturbations_2d_smoke/vtk/InitialPerturbations2D.mhd_w_bcc.00000.vtk \
+  --divb-vtk build/initial_perturbations_2d_smoke/vtk/InitialPerturbations2D.mhd_divb.00000.vtk \
+  --output-dir docs/source/_static --basename initial_perturbations_2d \
+  --fields velocity,magnetic --f-solenoidal 0.75 --nlow 1 --nhigh 8
+```
+
+![2D initial velocity perturbation slice](../_static/initial_perturbations_2d_velocity_slice.png)
+
+![2D initial velocity Helmholtz decomposition](../_static/initial_perturbations_2d_velocity_decomposition.png)
+
+![2D initial magnetic perturbation slice](../_static/initial_perturbations_2d_magnetic_slice.png)
+
+![2D discrete magnetic divergence](../_static/initial_perturbations_2d_magnetic_divb.png)
+
 ### Performance Notes
 
 Scratch arrays are allocated only for fields with positive requested RMS. The one-time
