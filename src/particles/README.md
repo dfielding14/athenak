@@ -3,8 +3,8 @@
 This directory contains the AthenaK particle module and the cosmic-ray tracer
 extension.  The implementation is built on the existing particle task list and
 particle boundary exchange path, with additional fields, pushers, outputs, AMR
-remapping support, and test-oriented validation checks for charged tracer
-particles.
+remapping support, reduced diagnostics, and test-oriented validation checks for
+charged tracer particles.
 
 ## Quick Start
 
@@ -21,9 +21,12 @@ ppc               = 0.125
 nspecies          = 2
 pusher            = drift
 check_consistency = true
+check_motion_bounds = false
 
 <problem>
 pgen_name = part_random
+particle_position = random
+particle_velocity = random
 
 <output1>
 file_type = prst
@@ -109,7 +112,9 @@ interpolation     = tsc
 min_mass          = 1.0
 mass_log_spacing  = 2.0
 cfl_part          = 0.1
-check_consistency = false
+check_consistency_mode = none
+check_motion_bounds = false
+log_performance = false
 ```
 
 The supported particle settings are:
@@ -129,11 +134,18 @@ The supported particle settings are:
 - `mass_log_spacing`: multiplicative spacing between species masses.
 - `cfl_part`: particle timestep cap used by `part_random`.
 - `assign_tag = index_order` or `rank_order`: controls initial particle tags.
-- `check_consistency = true`: enables host-side invariant checks intended for
-  tests and debugging.  Leave it off for production runs.
+- `check_consistency = true`: legacy alias for full host-side invariant checks.
+- `check_consistency_mode = none`, `counts`, `local`, or `full`: selects how
+  much consistency checking to do.  Leave it at `none` for production runs.
+- `check_motion_bounds = true`: fails after a push if a particle has moved
+  outside the one-neighbor MeshBlock stencil used by the current exchange path.
+- `log_performance = true`: prints lightweight particle push, exchange, remap,
+  and diagnostic counters.
 
 `inputs/particles/cr_tracer_boris_amr.athinput` is the branch smoke-test input
 for a 3D MHD, Boris-pushed, AMR cosmic-ray tracer run.
+`inputs/particles/cr_tracer_boris_uniform.athinput` is a deterministic
+one-particle uniform-field Boris accuracy test.
 
 ## Particle Data
 
@@ -162,7 +174,7 @@ particle by position onto the new leaf MeshBlock list.
 
 The remap procedure is:
 
-1. Copy particle positions and IDs to host memory.
+1. Copy particle positions and `PGID` to host memory.
 2. Wrap periodic coordinates back into the mesh domain.
 3. Convert the wrapped position to a finest-level logical location using
    `Mesh::max_level`.
@@ -190,7 +202,7 @@ The inherited particle outputs are still available:
 - `pvtk`: particle VTK output.
 - `trk`: tracked-particle output.
 
-The cosmic-ray tracer branch adds four particle-oriented output types:
+The cosmic-ray tracer branch adds particle-oriented output types:
 
 - `ppd`: compact species and position dump.  Each particle contributes
   `(species, x, y, z)` as floats.
@@ -201,18 +213,33 @@ The cosmic-ray tracer branch adds four particle-oriented output types:
   binning range.
 - `dxh`: displacement histograms for `IPDX`, `IPDY`, and `IPDZ`.  Use `nbin`,
   `vmin`, and `vmax` to set the binning range.
+- `drh`: scalar displacement histogram for
+  `sqrt(IPDX^2 + IPDY^2 + IPDZ^2)`.
+- `dparh`: parallel-displacement histogram using `IPDB`.
+- `pmom`: reduced per-species moments including count, `<mu>`, `<mu^2>`,
+  `3<mu^2>-1`, displacement moments, parallel-displacement moments, and
+  `<v^2>`.
 
-For `df` and `dxh`, `reduce = true` is the default.  MPI runs write one
-globally reduced histogram from rank zero, so each species sum in `df` equals
-the total particle count for that species, and each displacement component in
-`dxh` sums to the total particle count for that species.  Set
-`df_single_file_per_rank = 1` or `dxhist_single_file_per_rank = 1` to preserve
-the older per-rank output mode; those settings force `reduce = false`.
+For `df`, `dxh`, `drh`, `dparh`, and `pmom`, `reduce = true` is the default.
+MPI runs write one globally reduced diagnostic from rank zero, so each
+histogram species sum equals the total particle count for that species.  Set
+`df_single_file_per_rank = 1`, `dxhist_single_file_per_rank = 1`,
+`drh_single_file_per_rank = 1`, `dparh_single_file_per_rank = 1`, or
+`pmom_single_file_per_rank = 1` to preserve per-rank output.  Those settings
+force `reduce = false`.
 
 ## Consistency Checks
 
-`<particles>/check_consistency = true` fails fast if any of these invariants are
-violated:
+`<particles>/check_consistency = true` is a legacy alias for
+`<particles>/check_consistency_mode = full`.  The available modes are:
+
+- `none`: no extra host-side checks,
+- `counts`: conserved total and per-species counts,
+- `local`: count checks plus local ownership, bounds, finite-value, and
+  duplicate-tag checks,
+- `full`: local checks plus global duplicate-tag checks across MPI ranks.
+
+The full mode fails fast if any of these invariants are violated:
 
 - every particle `PGID` maps to a live MeshBlock on the owning rank,
 - every particle position lies inside its assigned MeshBlock,
@@ -225,12 +252,18 @@ violated:
 The checks copy particle data to host and use MPI reductions where needed.  They
 are intended for regression tests and debugging, not for production runs.
 
+`<particles>/check_motion_bounds = true` is a cheaper exchange guardrail.  It
+detects a pushed particle that has moved outside the one-neighbor MeshBlock
+stencil used by `SetNewPrtclGID()`.  It is a diagnostic check, not a substitute
+for future particle subcycling.
+
 ## Readback Utility
 
-`scripts/particles/cr_tracer_inspect.py` reads `prst`, `ppd`, `df`, and `dxh`
-outputs.  It reports totals by rank and species, verifies particle restart file
-lengths, checks finite positions and velocities, checks unique tags within each
-species, and can assert expected total/species counts.
+`scripts/particles/cr_tracer_inspect.py` reads `prst`, `ppd`, `df`, `dxh`,
+`drh`, `dparh`, and `pmom` outputs.  It reports totals by rank and species,
+verifies particle restart file lengths, checks finite positions and velocities,
+checks unique tags within each species, validates reduced histogram sums, and
+can assert expected total/species counts.
 
 Typical commands:
 
@@ -245,12 +278,37 @@ python scripts/particles/cr_tracer_inspect.py run-dir \
 The regression tests import the same utility directly, so command-line and test
 validation use the same parser and count checks.
 
+## Performance Logging
+
+Set `<particles>/log_performance = true` to print particle counters from the
+push, MPI exchange, AMR remap, and diagnostic-output paths.  For example:
+
+```bash
+./athena -i inputs/particles/random_particle_drift.athinput \
+  particles/log_performance=true \
+  particles/ppc=0.001953125 \
+  problem/particle_position=center \
+  problem/particle_velocity=uniform \
+  time/nlim=1
+```
+
+The local 2026-05-22 smoke run reported:
+
+```text
+Particle performance push: pushed=1 sent=0 received=0 remapped=0 diagnostics=0
+```
+
+Use these counters to compare runs on the same machine; do not treat them as
+portable performance guarantees.
+
 ## Local Validation
 
 The regression suite exercises serial drift, serial Boris AMR with `tsc` and
-`lin` interpolation, restart write/read, reduced `df`/`dxh` histograms,
-multi-species tags/counts, two-rank MPI AMR migration, and a moving-box AMR
-refine/derefine stress run.
+`lin` interpolation, restart write/read, uniform-field Boris speed
+conservation, periodic wrap displacement accounting, the large-motion guard,
+reduced `df`/`dxh`/`drh`/`dparh` histograms, `pmom` moments, multi-species
+tags/counts, two-rank MPI AMR migration, and a moving-box AMR refine/derefine
+stress run.
 
 Required commands:
 
@@ -264,7 +322,7 @@ git diff --check
 
 Local results from 2026-05-22:
 
-- `test_particles_cr_cpu.py --cpu`: 4 passed.
+- `test_particles_cr_cpu.py --cpu`: 6 passed.
 - `test_particles_cr_mpicpu.py --mpicpu`: 3 passed.
 - `--style`: 2 passed.
 - `git diff --check`: passed.

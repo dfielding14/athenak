@@ -189,6 +189,56 @@ def read_dxh_file(path: Path, nspecies: int, nbin: int) -> List[List[List[int]]]
     return result
 
 
+def read_scalar_histogram(path: Path, marker: bytes, nspecies: int,
+                          nbin: int) -> List[List[int]]:
+    values = _histogram_record(path, marker, nspecies * nbin)
+    return [values[sp * nbin: (sp + 1) * nbin] for sp in range(nspecies)]
+
+
+def read_pmom_file(path: Path, nspecies: int) -> List[Dict[str, float]]:
+    """Read the latest per-species particle moment block from a pmom file."""
+    if path.is_dir():
+        path = max(path.glob("*.pmom"), key=_file_number)
+    rows = []
+    for line in path.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        values = stripped.split()
+        if len(values) != 14:
+            raise ValueError(f"{path} has malformed particle-moment row: {line}")
+        rows.append(values)
+    if len(rows) < nspecies:
+        raise ValueError(f"{path} does not contain {nspecies} particle-moment rows")
+
+    latest = rows[-nspecies:]
+    names = [
+        "species",
+        "count",
+        "mean_mu",
+        "mean_mu2",
+        "anisotropy",
+        "mean_dx",
+        "mean_dy",
+        "mean_dz",
+        "mean_dx2",
+        "mean_dy2",
+        "mean_dz2",
+        "mean_dparallel",
+        "mean_dparallel2",
+        "mean_speed2",
+    ]
+    result = []
+    for row in latest:
+        parsed = {name: float(value) for name, value in zip(names, row)}
+        parsed["species"] = int(round(parsed["species"]))
+        parsed["count"] = int(round(parsed["count"]))
+        if not all(math.isfinite(value) for value in parsed.values()):
+            raise ValueError(f"{path} contains non-finite particle moments")
+        result.append(parsed)
+    return result
+
+
 def summarize_restart(path: Path, latest: bool = True) -> Dict:
     files = _restart_files(path, latest=latest)
     if not files:
@@ -261,6 +311,22 @@ def validate_histograms(path: Path, expected_species: Sequence[int],
 
     df = read_df_file(df_file, nspecies, nbin)
     dxh = read_dxh_file(dxh_file, nspecies, nbin)
+    optional = {}
+    scalar_specs = {
+        "drh": b"# AthenaK particle scalar displacement histogram",
+        "dparh": b"# AthenaK particle parallel displacement histogram",
+    }
+    for name, marker in scalar_specs.items():
+        hist_path = path / name
+        if hist_path.is_dir():
+            hist_file = max(hist_path.glob(f"*.{name}"), key=_file_number)
+        else:
+            hist_file = hist_path
+        if hist_file.exists():
+            optional[name] = {
+                "file": hist_file,
+                "histogram": read_scalar_histogram(hist_file, marker, nspecies, nbin),
+            }
     for species, expected in enumerate(expected_species):
         df_total = sum(df[species])
         if df_total != expected:
@@ -272,7 +338,38 @@ def validate_histograms(path: Path, expected_species: Sequence[int],
                 raise ValueError(
                     f"DXH species {species} component {component} sums to "
                     f"{dxh_total}, expected {expected}")
-    return {"df": df, "dxh": dxh, "df_file": df_file, "dxh_file": dxh_file}
+        for name, data in optional.items():
+            hist_total = sum(data["histogram"][species])
+            if hist_total != expected:
+                raise ValueError(
+                    f"{name} species {species} sums to {hist_total}, "
+                    f"expected {expected}")
+    result = {"df": df, "dxh": dxh, "df_file": df_file, "dxh_file": dxh_file}
+    result.update(optional)
+    return result
+
+
+def validate_moments(path: Path, expected_species: Sequence[int]) -> List[Dict]:
+    nspecies = len(expected_species)
+    pmom_path = path / "pmom"
+    if pmom_path.is_dir():
+        pmom_file = max(pmom_path.glob("*.pmom"), key=_file_number)
+    else:
+        pmom_file = pmom_path
+    moments = read_pmom_file(pmom_file, nspecies)
+    for species, expected in enumerate(expected_species):
+        if moments[species]["species"] != species:
+            raise ValueError(
+                f"PMOM row {species} has species {moments[species]['species']}")
+        if moments[species]["count"] != expected:
+            raise ValueError(
+                f"PMOM species {species} count {moments[species]['count']}, "
+                f"expected {expected}")
+        if abs(moments[species]["mean_mu"]) > 1.0 + 1.0e-12:
+            raise ValueError(f"PMOM species {species} has |mean_mu| > 1")
+        if moments[species]["mean_mu2"] < -1.0e-12:
+            raise ValueError(f"PMOM species {species} has negative mean_mu2")
+    return moments
 
 
 def _format_counts(counts: Dict[int, int]) -> str:
@@ -323,6 +420,19 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         print("histograms:")
         print(f"  df: {hist['df_file']}")
         print(f"  dxh: {hist['dxh_file']}")
+        for name in ("drh", "dparh"):
+            if name in hist:
+                print(f"  {name}: {hist[name]['file']}")
+
+    pmom_path = args.path / "pmom"
+    if expected_species is not None and pmom_path.exists():
+        moments = validate_moments(args.path, expected_species)
+        print("moments:")
+        for row in moments:
+            print(
+                "  species {species}: count={count} mean_mu={mean_mu:.6e} "
+                "mean_mu2={mean_mu2:.6e} anisotropy={anisotropy:.6e}".format(
+                    **row))
 
     return 0
 

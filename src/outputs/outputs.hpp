@@ -422,6 +422,42 @@ class ParticleDxHistOutput : public BaseTypeOutput {
 };
 
 //----------------------------------------------------------------------------------------
+//! \class ParticleScalarDxHistOutput
+//  \brief derived BaseTypeOutput class for scalar particle displacement histograms
+
+class ParticleScalarDxHistOutput : public BaseTypeOutput {
+ public:
+  ParticleScalarDxHistOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int nbin;
+  Real vmin, vmax;
+  HostArray2D<int> host_histogram;
+  int single_file_per_rank;
+  bool reduce_histogram;
+  bool use_parallel_displacement;
+  std::string output_dir;
+  std::string header_marker;
+};
+
+//----------------------------------------------------------------------------------------
+//! \class ParticleMomentsOutput
+//  \brief derived BaseTypeOutput class for reduced CR particle moments
+
+class ParticleMomentsOutput : public BaseTypeOutput {
+ public:
+  ParticleMomentsOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int nmoment;
+  HostArray2D<Real> host_moments;
+  int single_file_per_rank;
+  bool reduce_moments;
+};
+
+//----------------------------------------------------------------------------------------
 //! \class ParticleRestartOutput
 //  \brief derived BaseTypeOutput class for particle restart dumps
 

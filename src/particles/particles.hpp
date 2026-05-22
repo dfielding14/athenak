@@ -27,6 +27,9 @@ enum class ParticlesPusher {drift, leap_frog, lagrangian_tracer, lagrangian_mc,
 // constants that enumerate ParticleTypes
 enum class ParticleType {cosmic_ray};
 
+// constants that enumerate particle consistency check levels
+enum class ParticlesConsistencyMode {none, counts, local, full};
+
 //----------------------------------------------------------------------------------------
 //! \struct ParticlesTaskIDs
 //  \brief container to hold TaskIDs of all particles tasks
@@ -68,6 +71,9 @@ class Particles {
   int is_dynamic;
   int prtcl_rst_flag;
   bool check_consistency;
+  bool check_motion_bounds;
+  bool log_performance;
+  ParticlesConsistencyMode consistency_mode;
   bool reference_counts_set;
   int reference_nprtcl_total;
   std::vector<int> reference_nprtcl_eachspec;
@@ -84,6 +90,9 @@ class Particles {
   void CreateParticleTags(ParameterInput *pin);
   void SetConsistencyReference();
   void CheckConsistency(const std::string &label, bool check_rank=true);
+  void CheckMotionBounds(const std::string &label);
+  void LogPerformance(const std::string &label, int64_t npushed, int64_t nsent,
+                      int64_t nrecv, int64_t nremapped, int64_t ndiag);
   void RemapAfterAMR();
   void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   TaskStatus Push(Driver *pdriver, int stage);

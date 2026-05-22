@@ -212,6 +212,29 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
     Real B0x = pin->GetOrAddReal("problem","B0x",0.0);
     Real B0y = pin->GetOrAddReal("problem","B0y",0.0);
     Real B0z = pin->GetOrAddReal("problem","B0z",1.0);
+    std::string particle_position =
+        pin->GetOrAddString("problem","particle_position","random");
+    std::string particle_velocity =
+        pin->GetOrAddString("problem","particle_velocity","random");
+    if (particle_position.compare("random") != 0 &&
+        particle_position.compare("center") != 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Unknown particle_position = '"
+                << particle_position << "'" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (particle_velocity.compare("random") != 0 &&
+        particle_velocity.compare("uniform") != 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Unknown particle_velocity = '"
+                << particle_velocity << "'" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    bool center_particles = (particle_position.compare("center") == 0);
+    bool uniform_velocity = (particle_velocity.compare("uniform") == 0);
+    Real v0x = pin->GetOrAddReal("problem","v0x",1.0);
+    Real v0y = pin->GetOrAddReal("problem","v0y",0.0);
+    Real v0z = pin->GetOrAddReal("problem","v0z",0.0);
 
     // initialize particles
     Kokkos::Random_XorShift64_Pool<> rand_pool64(pmbp->gids);
@@ -229,23 +252,29 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
       pi(PSP,p) = spec;
 
       Real rand = rand_gen.frand();
-      pr(IPX,p) = (1. - rand)*mbsize.d_view(m).x1min + rand*mbsize.d_view(m).x1max;
+      pr(IPX,p) = center_particles ? 0.5*(mbsize.d_view(m).x1min +
+                                           mbsize.d_view(m).x1max) :
+                  (1. - rand)*mbsize.d_view(m).x1min + rand*mbsize.d_view(m).x1max;
       pr(IPX,p) = fmin(pr(IPX,p),mbsize.d_view(m).x1max);
       pr(IPX,p) = fmax(pr(IPX,p),mbsize.d_view(m).x1min);
 
       rand = rand_gen.frand();
-      pr(IPY,p) = (1. - rand)*mbsize.d_view(m).x2min + rand*mbsize.d_view(m).x2max;
+      pr(IPY,p) = center_particles ? 0.5*(mbsize.d_view(m).x2min +
+                                           mbsize.d_view(m).x2max) :
+                  (1. - rand)*mbsize.d_view(m).x2min + rand*mbsize.d_view(m).x2max;
       pr(IPY,p) = fmin(pr(IPY,p),mbsize.d_view(m).x2max);
       pr(IPY,p) = fmax(pr(IPY,p),mbsize.d_view(m).x2min);
 
       rand = rand_gen.frand();
-      pr(IPZ,p) = (1. - rand)*mbsize.d_view(m).x3min + rand*mbsize.d_view(m).x3max;
+      pr(IPZ,p) = center_particles ? 0.5*(mbsize.d_view(m).x3min +
+                                           mbsize.d_view(m).x3max) :
+                  (1. - rand)*mbsize.d_view(m).x3min + rand*mbsize.d_view(m).x3max;
       pr(IPZ,p) = fmin(pr(IPZ,p),mbsize.d_view(m).x3max);
       pr(IPZ,p) = fmax(pr(IPZ,p),mbsize.d_view(m).x3min);
 
-      pr(IPVX,p) = 2.0*(rand_gen.frand() - 0.5);
-      pr(IPVY,p) = 2.0*(rand_gen.frand() - 0.5);
-      pr(IPVZ,p) = 2.0*(rand_gen.frand() - 0.5);
+      pr(IPVX,p) = uniform_velocity ? v0x : 2.0*(rand_gen.frand() - 0.5);
+      pr(IPVY,p) = uniform_velocity ? v0y : 2.0*(rand_gen.frand() - 0.5);
+      pr(IPVZ,p) = uniform_velocity ? v0z : 2.0*(rand_gen.frand() - 0.5);
       pr(IPM,p) = min_mass*pow(mass_log_spacing, spec);
       pr(IPBX,p) = B0x;
       pr(IPBY,p) = B0y;

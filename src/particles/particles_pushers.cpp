@@ -37,19 +37,22 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
 
       par_for("part_update",DevExeSpace(),0,(npart-1),
       KOKKOS_LAMBDA(const int p) {
-        int m = pi(PGID,p) - gids;
-        int ip = (pr(IPX,p) - mbsize.d_view(m).x1min)/mbsize.d_view(m).dx1 + is;
+        Real x1_old = pr(IPX,p);
+        Real x2_old = pr(IPY,p);
+        Real x3_old = pr(IPZ,p);
         pr(IPX,p) += 0.5*dt_*pr(IPVX,p);
 
         if (multi_d) {
-          int jp = (pr(IPY,p) - mbsize.d_view(m).x2min)/mbsize.d_view(m).dx2 + js;
           pr(IPY,p) += 0.5*dt_*pr(IPVY,p);
         }
 
         if (three_d) {
-          int kp = (pr(IPZ,p) - mbsize.d_view(m).x3min)/mbsize.d_view(m).dx3 + ks;
           pr(IPZ,p) += 0.5*dt_*pr(IPVZ,p);
         }
+
+        pr(IPDX,p) += pr(IPX,p) - x1_old;
+        if (multi_d) {pr(IPDY,p) += pr(IPY,p) - x2_old;}
+        if (three_d) {pr(IPDZ,p) += pr(IPZ,p) - x3_old;}
       });
 
     break;
@@ -267,6 +270,8 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
     break;
   }
 
+  CheckMotionBounds("particle push");
+  LogPerformance("push", nprtcl_thispack, 0, 0, 0, 0);
   return TaskStatus::complete;
 }
 } // namespace particles

@@ -1,0 +1,80 @@
+# AthenaK input file for a one-particle uniform-B CR tracer orbit
+
+<comment>
+problem   = CR tracer uniform magnetic-field Boris accuracy test
+
+<job>
+basename  = cr_tracer_boris_uniform
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = -0.5
+x1max     = 0.5
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 8
+x2min     = -0.5
+x2max     = 0.5
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 8
+x3min     = -0.5
+x3max     = 0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 8
+nx2       = 8
+nx3       = 8
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim       = 4
+tlim       = 0.2
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = hlld
+gamma       = 1.666666667
+
+<particles>
+particle_type          = cosmic_ray
+ppc                    = 0.001953125
+nspecies               = 1
+pusher                 = boris
+interpolation          = tsc
+min_mass               = 1.0
+mass_log_spacing       = 1.0
+cfl_part               = 0.05
+check_consistency_mode = counts
+check_motion_bounds    = false
+log_performance        = false
+
+<problem>
+pgen_name           = part_random
+particle_position   = center
+particle_velocity   = uniform
+v0x                 = 1.0
+v0y                 = 0.0
+v0z                 = 0.0
+prtcl_rst_flag      = 0
+prtcl_res_file      = prst/rank_00000000/cr_tracer_boris_uniform.00000.prst
+B0x                 = 0.0
+B0y                 = 0.0
+B0z                 = 1.0
+
+<output1>
+file_type = prst
+dt        = 0.01
+
+<output2>
+file_type = pmom
+dt        = 0.01

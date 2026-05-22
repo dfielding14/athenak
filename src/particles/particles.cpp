@@ -33,6 +33,9 @@ namespace particles {
 Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     pmy_pack(ppack),
     check_consistency(false),
+    check_motion_bounds(false),
+    log_performance(false),
+    consistency_mode(ParticlesConsistencyMode::none),
     reference_counts_set(false),
     reference_nprtcl_total(0) {
   // check this is at least a 2D problem
@@ -62,7 +65,28 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   nprtcl_thispack = nprtcl_perspec_thispack*nspecies;
 
   prtcl_rst_flag = pin->GetOrAddInteger("problem","prtcl_rst_flag",0);
-  check_consistency = pin->GetOrAddBoolean("particles","check_consistency",false);
+  bool legacy_check_consistency = pin->GetOrAddBoolean("particles",
+                                                       "check_consistency",false);
+  std::string check_mode = pin->GetOrAddString("particles","check_consistency_mode",
+                                               legacy_check_consistency ?
+                                               "full" : "none");
+  if (check_mode.compare("none") == 0 || check_mode.compare("false") == 0) {
+    consistency_mode = ParticlesConsistencyMode::none;
+  } else if (check_mode.compare("counts") == 0) {
+    consistency_mode = ParticlesConsistencyMode::counts;
+  } else if (check_mode.compare("local") == 0) {
+    consistency_mode = ParticlesConsistencyMode::local;
+  } else if (check_mode.compare("full") == 0 || check_mode.compare("true") == 0) {
+    consistency_mode = ParticlesConsistencyMode::full;
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "<particles>/check_consistency_mode = '"
+              << check_mode << "' not recognized" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  check_consistency = (consistency_mode != ParticlesConsistencyMode::none);
+  check_motion_bounds = pin->GetOrAddBoolean("particles","check_motion_bounds",false);
+  log_performance = pin->GetOrAddBoolean("particles","log_performance",false);
   if (prtcl_rst_flag) {
     std::string prst_fname = pin->GetString("problem","prtcl_res_file");
     char rank_dir[20];
@@ -290,6 +314,13 @@ void FatalConsistencyError(const std::string &label, const std::string &msg) {
   std::exit(EXIT_FAILURE);
 }
 
+void FatalMotionError(const std::string &label, const std::string &msg) {
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << "Particle motion-bounds check '" << label
+            << "' failed: " << msg << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
 } // namespace
 
 //----------------------------------------------------------------------------------------
@@ -325,11 +356,16 @@ void Particles::CheckConsistency(const std::string &label, bool check_rank) {
 
   Mesh *pm = pmy_pack->pmesh;
   pm->UpdateParticleCounts();
-  auto pr_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_rdata);
   auto pi_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_idata);
+  bool check_local_state = (consistency_mode == ParticlesConsistencyMode::local ||
+                            consistency_mode == ParticlesConsistencyMode::full);
+  HostArray2D<Real> pr_h;
+  if (check_local_state) {
+    pr_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_rdata);
+  }
   std::vector<int> local_counts(nspecies, 0);
   std::vector<int64_t> local_keys;
-  local_keys.reserve(std::max(0, nprtcl_thispack));
+  if (check_local_state) {local_keys.reserve(std::max(0, nprtcl_thispack));}
 
   int errors = 0;
   RegionSize rs;
@@ -347,17 +383,21 @@ void Particles::CheckConsistency(const std::string &label, bool check_rank) {
       errors++;
     } else {
       local_counts[spec]++;
-      int64_t key = (static_cast<int64_t>(spec) << 32) ^
-                    static_cast<unsigned int>(tag);
-      local_keys.push_back(key);
+      if (check_local_state) {
+        int64_t key = (static_cast<int64_t>(spec) << 32) ^
+                      static_cast<unsigned int>(tag);
+        local_keys.push_back(key);
+      }
     }
-    for (int n=0; n<nrdata; ++n) {
-      if (!std::isfinite(pr_h(n,p))) {errors++;}
-    }
-    LogicalLocationToRegion(pm, pm->lloc_eachmb[gid], rs);
-    if (!ContainsParticle(pm, rs, pm->lloc_eachmb[gid],
-                          pr_h(IPX,p), pr_h(IPY,p), pr_h(IPZ,p))) {
-      errors++;
+    if (check_local_state) {
+      for (int n=0; n<nrdata; ++n) {
+        if (!std::isfinite(pr_h(n,p))) {errors++;}
+      }
+      LogicalLocationToRegion(pm, pm->lloc_eachmb[gid], rs);
+      if (!ContainsParticle(pm, rs, pm->lloc_eachmb[gid],
+                            pr_h(IPX,p), pr_h(IPY,p), pr_h(IPZ,p))) {
+        errors++;
+      }
     }
   }
 
@@ -375,35 +415,39 @@ void Particles::CheckConsistency(const std::string &label, bool check_rank) {
     }
   }
 
-  std::sort(local_keys.begin(), local_keys.end());
-  for (std::size_t n=1; n<local_keys.size(); ++n) {
-    if (local_keys[n] == local_keys[n-1]) {errors++;}
+  if (check_local_state) {
+    std::sort(local_keys.begin(), local_keys.end());
+    for (std::size_t n=1; n<local_keys.size(); ++n) {
+      if (local_keys[n] == local_keys[n-1]) {errors++;}
+    }
   }
 #if MPI_PARALLEL_ENABLED
-  int local_nkeys = static_cast<int>(local_keys.size());
-  std::vector<int> recv_counts(global_variable::nranks, 0);
-  MPI_Gather(&local_nkeys, 1, MPI_INT, recv_counts.data(), 1, MPI_INT, 0,
-             MPI_COMM_WORLD);
-  std::vector<int> displs(global_variable::nranks, 0);
-  std::vector<int64_t> all_keys;
-  if (global_variable::my_rank == 0) {
-    for (int n=1; n<global_variable::nranks; ++n) {
-      displs[n] = displs[n-1] + recv_counts[n-1];
+  if (consistency_mode == ParticlesConsistencyMode::full) {
+    int local_nkeys = static_cast<int>(local_keys.size());
+    std::vector<int> recv_counts(global_variable::nranks, 0);
+    MPI_Gather(&local_nkeys, 1, MPI_INT, recv_counts.data(), 1, MPI_INT, 0,
+               MPI_COMM_WORLD);
+    std::vector<int> displs(global_variable::nranks, 0);
+    std::vector<int64_t> all_keys;
+    if (global_variable::my_rank == 0) {
+      for (int n=1; n<global_variable::nranks; ++n) {
+        displs[n] = displs[n-1] + recv_counts[n-1];
+      }
+      all_keys.resize(displs.back() + recv_counts.back());
     }
-    all_keys.resize(displs.back() + recv_counts.back());
-  }
-  MPI_Gatherv(local_keys.data(), local_nkeys, MPI_INT64_T,
-              all_keys.data(), recv_counts.data(), displs.data(), MPI_INT64_T,
-              0, MPI_COMM_WORLD);
-  int duplicate_errors = 0;
-  if (global_variable::my_rank == 0) {
-    std::sort(all_keys.begin(), all_keys.end());
-    for (std::size_t n=1; n<all_keys.size(); ++n) {
-      if (all_keys[n] == all_keys[n-1]) {duplicate_errors++;}
+    MPI_Gatherv(local_keys.data(), local_nkeys, MPI_INT64_T,
+                all_keys.data(), recv_counts.data(), displs.data(), MPI_INT64_T,
+                0, MPI_COMM_WORLD);
+    int duplicate_errors = 0;
+    if (global_variable::my_rank == 0) {
+      std::sort(all_keys.begin(), all_keys.end());
+      for (std::size_t n=1; n<all_keys.size(); ++n) {
+        if (all_keys[n] == all_keys[n-1]) {duplicate_errors++;}
+      }
     }
+    MPI_Bcast(&duplicate_errors, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    errors += duplicate_errors;
   }
-  MPI_Bcast(&duplicate_errors, 1, MPI_INT, 0, MPI_COMM_WORLD);
-  errors += duplicate_errors;
 #endif
 
 #if MPI_PARALLEL_ENABLED
@@ -413,6 +457,75 @@ void Particles::CheckConsistency(const std::string &label, bool check_rank) {
 #endif
   if (errors > 0) {
     FatalConsistencyError(label, std::to_string(errors) + " invariant violations");
+  }
+}
+
+//----------------------------------------------------------------------------------------
+// CheckMotionBounds()
+// Optional guardrail for the neighbor-table particle exchange path.  The current
+// exchange assumes a pushed particle can be assigned through the immediate neighbor
+// stencil of its pre-push MeshBlock.
+
+void Particles::CheckMotionBounds(const std::string &label) {
+  if (!check_motion_bounds) {return;}
+
+  Mesh *pm = pmy_pack->pmesh;
+  auto pr_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_rdata);
+  auto pi_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_idata);
+  RegionSize rs;
+  for (int p=0; p<nprtcl_thispack; ++p) {
+    int gid = pi_h(PGID,p);
+    if (gid < 0 || gid >= pm->nmb_total) {
+      FatalMotionError(label, "particle " + std::to_string(p) +
+                       " has invalid PGID " + std::to_string(gid));
+    }
+    LogicalLocationToRegion(pm, pm->lloc_eachmb[gid], rs);
+    Real lx1 = rs.x1max - rs.x1min;
+    Real lx2 = rs.x2max - rs.x2min;
+    Real lx3 = rs.x3max - rs.x3min;
+    bool bad_x1 = (pr_h(IPX,p) < rs.x1min - lx1) ||
+                  (pr_h(IPX,p) > rs.x1max + lx1);
+    bool bad_x2 = pm->multi_d && ((pr_h(IPY,p) < rs.x2min - lx2) ||
+                                  (pr_h(IPY,p) > rs.x2max + lx2));
+    bool bad_x3 = pm->three_d && ((pr_h(IPZ,p) < rs.x3min - lx3) ||
+                                  (pr_h(IPZ,p) > rs.x3max + lx3));
+    if (bad_x1 || bad_x2 || bad_x3) {
+      std::string msg = "species=" + std::to_string(pi_h(PSP,p)) +
+                        " tag=" + std::to_string(pi_h(PTAG,p)) +
+                        " PGID=" + std::to_string(gid) +
+                        " position=(" + std::to_string(pr_h(IPX,p)) + ", " +
+                        std::to_string(pr_h(IPY,p)) + ", " +
+                        std::to_string(pr_h(IPZ,p)) + ") allowed x1=[" +
+                        std::to_string(rs.x1min - lx1) + ", " +
+                        std::to_string(rs.x1max + lx1) + "]";
+      FatalMotionError(label, msg);
+    }
+  }
+}
+
+//----------------------------------------------------------------------------------------
+// LogPerformance()
+// Optional local performance counter used for CR tracer tests and diagnostics.
+
+void Particles::LogPerformance(const std::string &label, int64_t npushed,
+                               int64_t nsent, int64_t nrecv, int64_t nremapped,
+                               int64_t ndiag) {
+  if (!log_performance) {return;}
+
+  int64_t local[5] = {npushed, nsent, nrecv, nremapped, ndiag};
+  int64_t global[5] = {0, 0, 0, 0, 0};
+#if MPI_PARALLEL_ENABLED
+  MPI_Reduce(local, global, 5, MPI_INT64_T, MPI_SUM, 0, MPI_COMM_WORLD);
+#else
+  for (int n=0; n<5; ++n) {global[n] = local[n];}
+#endif
+  if (global_variable::my_rank == 0) {
+    std::cout << "Particle performance " << label
+              << ": pushed=" << global[0]
+              << " sent=" << global[1]
+              << " received=" << global[2]
+              << " remapped=" << global[3]
+              << " diagnostics=" << global[4] << std::endl;
   }
 }
 
@@ -429,37 +542,45 @@ void Particles::RemapAfterAMR() {
   Kokkos::realloc(pb->sendlist, send_capacity);
   pb->nprtcl_send = 0;
   pb->nprtcl_recv = 0;
+  int nremapped = nprtcl_thispack;
 
   if (nprtcl_thispack > 0) {
-    auto pr_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
-                                                    prtcl_rdata);
-    auto pi_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
-                                                    prtcl_idata);
+    auto x1_d = Kokkos::subview(prtcl_rdata, static_cast<int>(IPX), Kokkos::ALL());
+    auto x2_d = Kokkos::subview(prtcl_rdata, static_cast<int>(IPY), Kokkos::ALL());
+    auto x3_d = Kokkos::subview(prtcl_rdata, static_cast<int>(IPZ), Kokkos::ALL());
+    auto gid_d = Kokkos::subview(prtcl_idata, static_cast<int>(PGID), Kokkos::ALL());
+    HostArray1D<Real> x1_h("prtcl_remap_x1", nprtcl_thispack);
+    HostArray1D<Real> x2_h("prtcl_remap_x2", nprtcl_thispack);
+    HostArray1D<Real> x3_h("prtcl_remap_x3", nprtcl_thispack);
+    HostArray1D<int> gid_h("prtcl_remap_gid", nprtcl_thispack);
+    Kokkos::deep_copy(x1_h, x1_d);
+    Kokkos::deep_copy(x2_h, x2_d);
+    Kokkos::deep_copy(x3_h, x3_d);
+    Kokkos::deep_copy(gid_h, gid_d);
 
     int myrank = global_variable::my_rank;
     for (int p=0; p<nprtcl_thispack; ++p) {
-      WrapCoordinate(pr_h(IPX,p), pm->mesh_size.x1min, pm->mesh_size.x1max);
+      WrapCoordinate(x1_h(p), pm->mesh_size.x1min, pm->mesh_size.x1max);
       if (pm->multi_d) {
-        WrapCoordinate(pr_h(IPY,p), pm->mesh_size.x2min, pm->mesh_size.x2max);
+        WrapCoordinate(x2_h(p), pm->mesh_size.x2min, pm->mesh_size.x2max);
       }
       if (pm->three_d) {
-        WrapCoordinate(pr_h(IPZ,p), pm->mesh_size.x3min, pm->mesh_size.x3max);
+        WrapCoordinate(x3_h(p), pm->mesh_size.x3min, pm->mesh_size.x3max);
       }
 
-      int dest_gid = pm->FindMeshBlockContainingPosition(pr_h(IPX,p), pr_h(IPY,p),
-                                                         pr_h(IPZ,p));
+      int dest_gid = pm->FindMeshBlockContainingPosition(x1_h(p), x2_h(p), x3_h(p));
       if (dest_gid < 0) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl << "Could not remap particle " << p
-                  << " after AMR; position=(" << pr_h(IPX,p) << ", "
-                  << pr_h(IPY,p) << ", " << pr_h(IPZ,p) << ")" << std::endl;
+                  << " after AMR; position=(" << x1_h(p) << ", "
+                  << x2_h(p) << ", " << x3_h(p) << ")" << std::endl;
         std::exit(EXIT_FAILURE);
       }
       if (check_consistency) {
         RegionSize rs;
         LogicalLocationToRegion(pm, pm->lloc_eachmb[dest_gid], rs);
         if (!ContainsParticle(pm, rs, pm->lloc_eachmb[dest_gid],
-                              pr_h(IPX,p), pr_h(IPY,p), pr_h(IPZ,p))) {
+                              x1_h(p), x2_h(p), x3_h(p))) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl << "Tree remap selected MeshBlock " << dest_gid
                     << " that does not contain particle " << p << std::endl;
@@ -467,7 +588,7 @@ void Particles::RemapAfterAMR() {
         }
       }
 
-      pi_h(PGID,p) = dest_gid;
+      gid_h(p) = dest_gid;
 #if MPI_PARALLEL_ENABLED
       int dest_rank = pm->rank_eachmb[dest_gid];
       if (dest_rank != myrank) {
@@ -479,8 +600,10 @@ void Particles::RemapAfterAMR() {
 #endif
     }
 
-    Kokkos::deep_copy(prtcl_rdata, pr_h);
-    Kokkos::deep_copy(prtcl_idata, pi_h);
+    Kokkos::deep_copy(x1_d, x1_h);
+    Kokkos::deep_copy(x2_d, x2_h);
+    Kokkos::deep_copy(x3_d, x3_h);
+    Kokkos::deep_copy(gid_d, gid_h);
   }
   Kokkos::resize(pb->sendlist, pb->nprtcl_send);
   pb->sendlist.template modify<HostMemSpace>();
@@ -496,6 +619,7 @@ void Particles::RemapAfterAMR() {
 #else
   pm->UpdateParticleCounts();
 #endif
+  LogPerformance("amr_remap", 0, pb->nprtcl_send, pb->nprtcl_recv, nremapped, 0);
   CheckConsistency("AMR remap");
 }
 

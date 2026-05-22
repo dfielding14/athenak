@@ -45,9 +45,17 @@ ppc    = 0.01
 nspecies = 1
 pusher = drift
 check_consistency = false
+check_consistency_mode = none
+check_motion_bounds = false
+log_performance = false
 
 <problem>
 pgen_name = part_random
+particle_position = random
+particle_velocity = random
+v0x = 1.0
+v0y = 0.0
+v0z = 0.0
 prtcl_rst_flag = 0
 prtcl_res_file = prst/rank_00000000/random.00000.prst
 

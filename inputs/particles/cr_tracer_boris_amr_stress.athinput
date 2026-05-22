@@ -65,10 +65,15 @@ min_mass           = 1.0
 mass_log_spacing   = 2.0
 cfl_part           = 0.1
 check_consistency  = true
+check_consistency_mode = full
+check_motion_bounds = false
+log_performance = false
 
 <problem>
 pgen_name           = part_random
 particle_refinement = moving_boxes
+particle_position   = random
+particle_velocity   = random
 prtcl_rst_flag      = 0
 prtcl_res_file      = prst/rank_00000000/cr_tracer_amr_stress.00000.prst
 B0x                 = 0.0
@@ -90,6 +95,24 @@ nbin      = 8
 
 <output4>
 file_type = dxh
+dt        = 0.04
+nbin      = 8
+vmin      = -0.2
+vmax      = 0.2
+
+<output5>
+file_type = pmom
+dt        = 0.04
+
+<output6>
+file_type = drh
+dt        = 0.04
+nbin      = 8
+vmin      = 0.0
+vmax      = 0.3
+
+<output7>
+file_type = dparh
 dt        = 0.04
 nbin      = 8
 vmin      = -0.2

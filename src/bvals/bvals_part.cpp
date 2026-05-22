@@ -523,6 +523,7 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
   // Update nparticles_thisrank.  Update cost array (use npart_thismb[nmb]?)
   pmy_part->nprtcl_thispack = new_npart;
   pmy_part->pmy_pack->pmesh->UpdateParticleCounts();
+  pmy_part->LogPerformance("particle_mpi_exchange", 0, nprtcl_send, nprtcl_recv, 0, 0);
   pmy_part->CheckConsistency("particle MPI exchange");
 #endif
   return TaskStatus::complete;

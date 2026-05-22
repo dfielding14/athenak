@@ -20,7 +20,7 @@ EXPECTED_SPECIES = [512, 512]
 
 
 def _clean_particle_outputs():
-    for directory in ("ppd", "prst", "df", "dxh"):
+    for directory in ("ppd", "prst", "df", "dxh", "drh", "dparh", "pmom"):
         shutil.rmtree(directory, ignore_errors=True)
     for pattern in ("*.vtk", "*.pvtk", "*.xdmf"):
         for file_path in Path(".").glob(pattern):
@@ -62,6 +62,7 @@ def test_mpi_boris_amr_migration_mpicpu():
     assert set(summary["rank_counts"]) == {0, 1}
     assert all(count > 0 for count in summary["rank_counts"].values())
     cr_tracer_inspect.validate_histograms(Path("."), EXPECTED_SPECIES, 8)
+    cr_tracer_inspect.validate_moments(Path("."), EXPECTED_SPECIES)
 
 
 def test_mpi_refine_derefine_stress_mpicpu():
@@ -78,6 +79,7 @@ def test_mpi_refine_derefine_stress_mpicpu():
     assert deleted > 0
     _assert_restart_counts()
     cr_tracer_inspect.validate_histograms(Path("."), EXPECTED_SPECIES, 8)
+    cr_tracer_inspect.validate_moments(Path("."), EXPECTED_SPECIES)
 
 
 def test_mpi_drift_restart_round_trip_mpicpu():
