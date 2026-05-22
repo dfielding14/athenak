@@ -1,0 +1,71 @@
+# AthenaK input file for remap-focused cosmic-ray tracer performance checks
+
+<comment>
+problem   = CR tracer drift pusher AMR remap performance comparison
+
+<job>
+basename  = cr_tracer_drift_amr_perf
+
+<mesh>
+nghost    = 2
+nx1       = 64
+x1min     = -0.5
+x1max     = 0.5
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 64
+x2min     = -0.5
+x2max     = 0.5
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 64
+x3min     = -0.5
+x3max     = 0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 8
+nx2       = 8
+nx3       = 8
+
+<mesh_refinement>
+refinement          = adaptive
+ncycle_check        = 1
+refinement_interval = 1
+num_levels          = 2
+max_nmb_per_rank    = 4096
+
+<amr_criterion0>
+method = user
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim       = 4
+tlim       = 0.04
+ndiag      = 100000
+
+<particles>
+particle_type       = cosmic_ray
+ppc                 = 0.125
+nspecies            = 2
+pusher              = drift
+check_consistency   = false
+check_consistency_mode = none
+check_motion_bounds = false
+log_performance     = false
+
+<problem>
+pgen_name           = part_random
+particle_refinement = moving_boxes
+particle_position   = random
+particle_velocity   = uniform
+v0x                 = 0.0
+v0y                 = 0.0
+v0z                 = 0.0
+prtcl_rst_flag      = 0
+prtcl_res_file      = prst/rank_00000000/cr_tracer_drift_amr_perf.00000.prst

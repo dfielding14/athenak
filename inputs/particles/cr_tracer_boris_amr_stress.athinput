@@ -92,6 +92,7 @@ dt        = 0.04
 file_type = df
 dt        = 0.04
 nbin      = 8
+df_single_file_per_rank = 0
 
 <output4>
 file_type = dxh
@@ -99,10 +100,12 @@ dt        = 0.04
 nbin      = 8
 vmin      = -0.2
 vmax      = 0.2
+dxhist_single_file_per_rank = 0
 
 <output5>
 file_type = pmom
 dt        = 0.04
+pmom_single_file_per_rank = 0
 
 <output6>
 file_type = drh
@@ -110,6 +113,7 @@ dt        = 0.04
 nbin      = 8
 vmin      = 0.0
 vmax      = 0.3
+drh_single_file_per_rank = 0
 
 <output7>
 file_type = dparh
@@ -117,3 +121,4 @@ dt        = 0.04
 nbin      = 8
 vmin      = -0.2
 vmax      = 0.2
+dparh_single_file_per_rank = 0

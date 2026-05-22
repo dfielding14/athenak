@@ -144,8 +144,13 @@ The supported particle settings are:
 
 `inputs/particles/cr_tracer_boris_amr.athinput` is the branch smoke-test input
 for a 3D MHD, Boris-pushed, AMR cosmic-ray tracer run.
+`inputs/particles/cr_tracer_boris_amr_stress.athinput` is the moving-box AMR
+refine/derefine stress test used by MPI validation and output checks.
 `inputs/particles/cr_tracer_boris_uniform.athinput` is a deterministic
 one-particle uniform-field Boris accuracy test.
+`inputs/particles/cr_tracer_boris_amr_perf.athinput` and
+`inputs/particles/cr_tracer_drift_amr_perf.athinput` are CPU/MPI performance
+comparison inputs for end-to-end Boris AMR and remap-focused AMR timing.
 
 ## Particle Data
 
@@ -300,6 +305,34 @@ Particle performance push: pushed=1 sent=0 received=0 remapped=0 diagnostics=0
 
 Use these counters to compare runs on the same machine; do not treat them as
 portable performance guarantees.
+
+## CPU/MPI Performance Comparison
+
+The full CPU/MPI benchmark write-up is in
+`docs/source/modules/cr_tracer_cpu_mpi_performance.md`.  The 2026-05-22 local
+comparison used a Release MPI build with the Kokkos Serial backend on an Apple
+M4 Max.  GPU performance was not tested on this machine and remains a TODO.
+
+Median results from three runs:
+
+| Benchmark | MPI ranks | Old scan/full-copy CPU s | Current CPU s | Speedup |
+|-----------|-----------|--------------------------|---------------|---------|
+| Remap-focused drift AMR | 1 | 0.5686 | 0.00511 | 111.3x |
+| Remap-focused drift AMR | 2 | 0.4210 | 0.01261 | 33.4x |
+| Remap-focused drift AMR | 4 | 0.2786 | 0.01696 | 16.4x |
+| Boris+MHD AMR end-to-end | 1 | 1.1082 | 0.8325 | 1.33x |
+| Boris+MHD AMR end-to-end | 2 | 0.7437 | 0.5692 | 1.31x |
+| Boris+MHD AMR end-to-end | 4 | 0.4789 | 0.3743 | 1.28x |
+
+The mesh-tree lookup is the dominant performance fix.  The later position-only
+host-copy optimization is neutral within noise for the small CPU Boris case
+after the tree lookup is present, but it removes unnecessary AMR remap data
+movement and is the right direction for GPU follow-up.
+
+Reduced `df`/`dxh`/`drh`/`dparh`/`pmom` diagnostic output had no significant
+runtime penalty in the local four-rank MPI test.  It reduced each diagnostic
+from four per-rank files to one global file, which is why it remains the
+default.
 
 ## Local Validation
 

@@ -79,6 +79,8 @@ The shipped smoke and stress inputs are:
 | `inputs/particles/cr_tracer_boris_amr.athinput` | 3-D periodic MHD Boris AMR smoke test. |
 | `inputs/particles/cr_tracer_boris_amr_stress.athinput` | Moving refine/derefine MPI AMR stress test. |
 | `inputs/particles/cr_tracer_boris_uniform.athinput` | One-particle uniform-field Boris accuracy test. |
+| `inputs/particles/cr_tracer_boris_amr_perf.athinput` | End-to-end CPU/MPI Boris AMR performance comparison. |
+| `inputs/particles/cr_tracer_drift_amr_perf.athinput` | Remap-focused CPU/MPI AMR performance comparison. |
 
 ## Runtime Parameters
 
@@ -294,6 +296,34 @@ Particle performance push: pushed=1 sent=0 received=0 remapped=0 diagnostics=0
 These counters are intended for local regression and scaling comparisons; they
 are not portable performance guarantees.
 
+## CPU/MPI Performance Comparison
+
+The local 2026-05-22 CPU/MPI comparison is documented in
+[CR Tracer CPU/MPI Performance Comparison](cr_tracer_cpu_mpi_performance.md).
+The benchmark used a Release MPI build with the Kokkos Serial backend on an
+Apple M4 Max and three repeated runs per case.
+
+Key results:
+
+| Benchmark | MPI ranks | Old scan/full-copy CPU s | Current CPU s | Speedup |
+|-----------|-----------|--------------------------|---------------|---------|
+| Remap-focused drift AMR | 1 | 0.5686 | 0.00511 | 111.3x |
+| Remap-focused drift AMR | 2 | 0.4210 | 0.01261 | 33.4x |
+| Remap-focused drift AMR | 4 | 0.2786 | 0.01696 | 16.4x |
+| Boris+MHD AMR end-to-end | 1 | 1.1082 | 0.8325 | 1.33x |
+| Boris+MHD AMR end-to-end | 2 | 0.7437 | 0.5692 | 1.31x |
+| Boris+MHD AMR end-to-end | 4 | 0.4789 | 0.3743 | 1.28x |
+
+The later position-only AMR host-copy optimization was neutral within noise in
+the small CPU Boris benchmark after tree lookup was already present, but it
+removes unnecessary remap data movement and is expected to matter more on GPU
+builds.  GPU timing remains a TODO.
+
+The same comparison found no significant local runtime penalty for reduced
+`df`/`dxh`/`drh`/`dparh`/`pmom` output under four-rank MPI.  The default reduced
+mode wrote one file per diagnostic; per-rank mode wrote one file per rank per
+diagnostic.
+
 ## Regression Suite
 
 Particle tests live in `tst/test_suite/particles/`.
@@ -360,6 +390,9 @@ is needed.
 
 Two planning pages summarize the recommended next CR tracer work:
 
+- [CR Tracer CPU/MPI Performance Comparison](cr_tracer_cpu_mpi_performance.md)
+  records the local CPU and MPI performance evidence for the AMR remap and
+  diagnostic-output changes.
 - [CR Tracer Feature-Branch Hardening Plan](cr_tracer_feature_branch_plan.md)
   covers changes that fit naturally in `feature/CR_tracers`.
 - [CR Tracer Follow-Up Architecture Plan](cr_tracer_followup_architecture_plan.md)
