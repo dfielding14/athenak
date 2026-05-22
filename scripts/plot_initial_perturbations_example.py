@@ -193,6 +193,11 @@ def main() -> None:
         default=Path("docs/source/_static"),
         help="Directory for generated PNG files",
     )
+    parser.add_argument(
+        "--basename",
+        default="initial_perturbations_density",
+        help="Base filename for generated PNG files",
+    )
     parser.add_argument("--nlow", type=int, default=1, help="Lowest requested mode")
     parser.add_argument("--nhigh", type=int, default=4, help="Highest requested mode")
     args = parser.parse_args()
@@ -203,7 +208,13 @@ def main() -> None:
         raise TypeError("VTK parser returned malformed scalar data")
     delta = density_contrast(fields)
     metrics = density_metrics(delta, nlow=args.nlow, nhigh=args.nhigh)
-    paths = make_plots(delta, args.output_dir, nlow=args.nlow, nhigh=args.nhigh)
+    paths = make_plots(
+        delta,
+        args.output_dir,
+        nlow=args.nlow,
+        nhigh=args.nhigh,
+        basename=args.basename,
+    )
 
     for key, value in metrics.items():
         print(f"{key} = {value:.16e}")

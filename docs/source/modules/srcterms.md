@@ -144,7 +144,7 @@ A companion 2D regression input,
 `inputs/tests/initial_perturbations_2d.athinput`, repeats the same density,
 velocity, and magnetic checks on a `128 x 128 x 1` mesh.
 
-The figures below were generated directly from that snapshot with:
+The 3D figures below were generated directly from that snapshot with:
 
 ```bash
 python scripts/plot_initial_perturbations_example.py \
@@ -159,6 +159,24 @@ For the documented run, the measured density contrast had RMS
 ![Initial density perturbation slice](../_static/initial_perturbations_density_slice.png)
 
 ![Initial density perturbation power spectrum](../_static/initial_perturbations_density_power_spectrum.png)
+
+The 2D figures below were generated directly from the `128 x 128 x 1` test
+snapshot with:
+
+```bash
+python scripts/plot_initial_perturbations_example.py \
+  build/initial_perturbations_2d_smoke/vtk/InitialPerturbations2D.mhd_w_bcc.00000.vtk \
+  --output-dir docs/source/_static --basename initial_perturbations_2d_density \
+  --nlow 1 --nhigh 8
+```
+
+For the 2D run, the measured density contrast had RMS `1.000000032e-02`,
+mean `-2.182787284e-11`, zero-mode power fraction `4.764560019e-18`, and
+out-of-band power fraction `7.468675940e-12`.
+
+![2D initial density perturbation slice](../_static/initial_perturbations_2d_density_slice.png)
+
+![2D initial density perturbation power spectrum](../_static/initial_perturbations_2d_density_power_spectrum.png)
 
 ### Performance Notes
 
