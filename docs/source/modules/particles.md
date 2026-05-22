@@ -6,7 +6,7 @@ The Particles module implements Lagrangian cosmic-ray tracer particles on top of
 the existing AthenaK task list, boundary exchange, and AMR infrastructure.  The
 current supported particle type is `cosmic_ray`, with drift and magnetic Boris
 pushers, per-particle species tags, restart output, compact position output,
-pitch-angle histograms, displacement histograms, reduced particle moments, and
+pitch-angle histograms, spectra, displacement histograms, reduced particle moments, and
 AMR-aware particle remap.
 
 Particle evolution is owned by `particles::Particles` and is scheduled through
@@ -24,7 +24,7 @@ by MeshBlocks.
 | `src/particles/particles_pushers.cpp` | Drift and Boris particle pushers. |
 | `src/particles/particles_tasks.cpp` | Particle task registration. |
 | `src/bvals/bvals_part.cpp` | Particle MPI exchange. |
-| `src/outputs/*_prtcl.cpp` | Particle `ppd`, `prst`, `df`, `dxh`, `drh`, `dparh`, `pmom`, VTK, and tracking outputs. |
+| `src/outputs/*_prtcl.cpp` | Particle `ppd`, `prst`, `df`, `pspec`, `dxh`, `drh`, `dparh`, `pmom`, VTK, and tracking outputs. |
 | `src/pgen/part_random.cpp` | Standard random-particle test/problem generator. |
 
 ## Minimal Input
@@ -92,15 +92,25 @@ The shipped smoke and stress inputs are:
 | `ppc` | `1.0` | Particles per cell per species.  Fractional values are allowed. |
 | `nspecies` | `1` | Number of particle species. |
 | `pusher` | required | `drift` or `boris`. |
-| `interpolation` | `tsc` | For `boris`: `tsc` or `lin`. |
+| `interpolation` | `tsc` | For `boris`: `tsc`, `trilinear`, `lin`, or `lin_legacy`. |
 | `min_mass` | `1.0` | Species-zero gyro parameter used by the Boris update. |
 | `mass_log_spacing` | `1.0` | Multiplicative spacing between species gyro parameters. |
 | `cfl_part` | `0.05` | Particle timestep cap used by `part_random`. |
 | `assign_tag` | `index_order` | Initial tag assignment; `rank_order` is also supported. |
 | `check_consistency` | `false` | Legacy boolean alias for `check_consistency_mode = full`. |
 | `check_consistency_mode` | `none` | `none`, `counts`, `local`, or `full`. |
-| `check_motion_bounds` | `false` | Fails if a pushed particle leaves the supported neighbor-update stencil. |
+| `check_motion_bounds` | `false` | Fails if a pushed particle leaves the old one-neighbor update stencil. |
 | `log_performance` | `false` | Prints lightweight particle push, remap, exchange, and diagnostic counters. |
+| `amr_remap` | `device_table` | `device_table` uses a flattened finest-level logical lookup table; `host_tree` is the debug fallback. |
+| `validate_amr_lookup` | `false` | Compares device-table remap results to the host mesh-tree lookup. |
+| `amr_lookup_max_cells` | `20000000` | Maximum flattened AMR lookup entries before falling back to `host_tree`. |
+| `exchange_mode` | `alltoall_counts` | `alltoall_counts` exchanges rank counts only; `allgather` preserves the older detailed metadata path. |
+| `subcycle` | `false` | Enables opt-in particle subcycling during each particle push. |
+| `subcycle_max_steps` | `8` | Maximum allowed substeps before strict mode fails or non-strict mode caps. |
+| `subcycle_cell_fraction` | `0.5` | Limits per-substep motion to this fraction of the local cell width. |
+| `subcycle_meshblock_fraction` | `0.5` | Limits per-substep motion to this fraction of the local MeshBlock size. |
+| `subcycle_gyro_fraction` | `0.25` | Limits Boris gyro angle per substep in radians. |
+| `subcycle_strict` | `true` | If true, fail when the requested constraints need more than `subcycle_max_steps`. |
 
 ### `<problem>` for `part_random`
 
@@ -110,10 +120,19 @@ The shipped smoke and stress inputs are:
 | `prtcl_rst_flag` | `0` | If nonzero, load particle data from `prtcl_res_file`. |
 | `prtcl_res_file` | required for particle restart | Per-rank `prst` path; MPI ranks replace `rank_00000000` with their rank directory. |
 | `particle_refinement` | `none` | `moving_boxes` enrolls the AMR stress-test refinement pattern. |
-| `particle_position` | `random` | `random` or `center`; `center` is intended for deterministic tests. |
+| `particle_position` | `random` | `random`, `center`, or `fixed`; `fixed` uses `particle_x1`, `particle_x2`, and `particle_x3`. |
+| `particle_x1`, `particle_x2`, `particle_x3` | `0, 0, 0` | Fixed particle position used when `particle_position = fixed`. |
 | `particle_velocity` | `random` | `random` or `uniform`; `uniform` uses `v0x`, `v0y`, and `v0z`. |
 | `v0x`, `v0y`, `v0z` | `1, 0, 0` | Uniform particle velocity used when `particle_velocity = uniform`. |
 | `B0x`, `B0y`, `B0z` | `0, 0, 1` | Uniform magnetic field initialized by `part_random`. |
+| `B_profile` | `uniform` | `uniform` or `linear_cross`; `linear_cross` is a smooth divergence-free field for interpolation tests. |
+| `Bgrad` | `1.0` | Gradient used by `B_profile = linear_cross`: `Bx = B0x + Bgrad*x2`, `By = B0y + Bgrad*x1`. |
+
+### `<mesh_refinement>` for Particle AMR Runs
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `particle_load_weight` | `0.0` | Additional AMR load-balancing cost per particle.  Zero preserves mesh-only balancing. |
 
 ## Particle Data Layout
 
@@ -144,10 +163,49 @@ Real fields:
 |--------|--------------|-------|
 | `drift` | `<particles>` only | Advances particles with stored velocities. |
 | `boris` + `tsc` | `<mhd>` block | Uses cell-centered magnetic fields and triangular-shaped-cloud weights. |
-| `boris` + `lin` | `<mhd>` block | Uses linearly interpolated face-centered magnetic fields. |
+| `boris` + `trilinear` | `<mhd>` block | Uses full multidimensional trilinear interpolation of cell-centered magnetic fields. |
+| `boris` + `lin` or `lin_legacy` | `<mhd>` block | Uses legacy component-wise interpolation of face-centered magnetic fields. |
 
 The Boris pusher requires MHD because it samples magnetic fields.  The
-interpolation choice is made through `<particles>/interpolation`.
+interpolation choice is made through `<particles>/interpolation`.  All Boris
+modes share the same pusher update; only the field-gather policy changes.  Use
+`lin` for backward comparisons, `trilinear` for a low-cost point-centered
+gather, and `tsc` for the smoother default.
+
+The regression suite includes a smooth-field convergence check using
+`B_profile = linear_cross`.  In that test, `trilinear` recovers the analytic
+point-centered field to roundoff for a linear cross-field, while `lin` shows
+the expected cross-direction interpolation error that decreases with
+resolution.  The test is intentionally a pusher/gather check, not an MHD
+evolution test.
+
+## Particle Subcycling
+
+Subcycling is off by default so existing CR tracer inputs preserve their
+previous timestep behavior.  Set `<particles>/subcycle = true` when particle
+motion in one mesh timestep would make the field gather stale or when a Boris
+orbit needs a smaller gyro-angle step.
+
+When enabled, AthenaK computes a global substep count from three constraints:
+
+- `subcycle_cell_fraction`: maximum particle displacement as a fraction of the
+  local cell width,
+- `subcycle_meshblock_fraction`: maximum particle displacement as a fraction of
+  the owning MeshBlock size,
+- `subcycle_gyro_fraction`: maximum Boris gyro angle per substep.
+
+The active substep count is the maximum over local particles and MPI ranks.
+Between intermediate substeps, the particle module updates `PGID` and runs the
+same particle MPI exchange used by the normal task list.  This keeps the next
+field gather tied to the current owning MeshBlock instead of waiting until the
+end of the full mesh timestep.  The final substep still hands off to the normal
+`NewGID`/exchange tasks.
+
+With `subcycle_strict = true`, the run fails fast if the constraints require
+more than `subcycle_max_steps`.  With `subcycle_strict = false`, the run caps at
+`subcycle_max_steps`; pair that mode with `check_motion_bounds = true` while
+debugging.  When `log_performance = true`, rank zero prints the selected
+substep count and active constraint.
 
 ## AMR Remapping
 
@@ -156,25 +214,63 @@ MPI ranks.  After AMR, `Particles::RemapAfterAMR()` remaps particles by
 position onto the new leaf list before handing off-rank particles to the normal
 particle MPI exchange.
 
-The remap path is:
+The default remap path is:
 
-1. Copy local particle positions and `PGID` to host memory.
-2. Wrap periodic particle coordinates into the mesh domain.
-3. Convert each wrapped position to a finest-level logical location using
+1. Build a flattened finest-level logical lookup table from the live AMR leaf
+   list.
+2. In a Kokkos kernel, wrap periodic particle coordinates into the mesh domain.
+3. Convert each wrapped position to a finest-level logical table index using
    `Mesh::max_level`.
-4. Descend the mesh tree with `MeshBlockTree::FindLeafContaining()`.
-5. Assign the returned leaf MeshBlock `gid` to `PGID`.
-6. Build the particle send list for particles whose new `PGID` belongs to
+4. Assign the table's leaf MeshBlock `gid` to `PGID`.
+5. Build the particle send list for particles whose new `PGID` belongs to
    another MPI rank.
-7. Run the existing particle MPI exchange and update particle counts.
+6. Exchange rank-count metadata with `MPI_Alltoall`.
+7. Pack, send, receive, unpack, and compact particles.
+8. Update particle counts.
 
 This avoids the previous host-side scan over every MeshBlock for every particle.
-When `check_consistency = true`, the tree result is checked against the returned
-MeshBlock's physical bounds.
+Set `<particles>/amr_remap = host_tree` to use the host mesh-tree fallback.
+Set `<particles>/exchange_mode = allgather` to use the older detailed metadata
+exchange path.  When `validate_amr_lookup = true`, or when local/full
+consistency checks are active, device-table results are checked against
+`MeshBlockTree::FindLeafContaining()` and the returned MeshBlock bounds.
 
 The particle remap is separate from face-centered MHD AMR repair.  It does not
 modify `RefineFC()`, `RestrictFC()`, or `RepairAMRFC()`, and it is called only
 after mesh metadata and physics arrays have been rebuilt.
+
+The same position-based lookup is also used by the post-push particle
+`NewGID` task on multilevel meshes, so AMR ownership after particle motion is
+checked against the live leaf list rather than an immediate-neighbor stencil.
+Uniform meshes keep the cheaper neighbor-stencil update.
+
+## Particle-Aware Load Balancing
+
+AMR load balancing remains mesh-only by default.  Set
+`<mesh_refinement>/particle_load_weight` to a positive value to add particle
+counts to the MeshBlock cost estimate used after refinement and derefinement.
+The cost model is:
+
+```text
+cost = 1 + particle_load_weight * estimated_particles_in_block
+```
+
+The estimate uses the pre-AMR particle owners.  When a MeshBlock is refined,
+its particle count is split evenly among the new children for load-balancing
+purposes; after the mesh has been rebuilt, `RemapAfterAMR()` still remaps each
+particle by its actual position.  When MeshBlocks are derefined, child particle
+counts are assigned to the new parent.  This makes particle-rich regions more
+expensive without changing particle ownership, particle counts, or the div(B)
+AMR repair path.
+
+Recommended use:
+
+- leave `particle_load_weight = 0.0` for baseline mesh-only comparisons,
+- start with a small value such as `0.001` or `0.01` for particle-heavy AMR
+  tests,
+- compare particles per rank before and after rebalancing using restart or
+  inspector output,
+- keep consistency checks enabled while tuning the weight.
 
 ## Consistency Checks
 
@@ -204,9 +300,10 @@ These checks copy particle data to host and use MPI reductions where needed.
 They are intended for regression tests and debugging, not production runs.
 
 `<particles>/check_motion_bounds = true` is a cheaper guardrail for particle
-exchange assumptions.  It fails immediately after a push if a particle has moved
-outside the one-neighbor MeshBlock stencil used by the current ownership update.
-This option detects unsupported timesteps; it does not subcycle particles.
+exchange assumptions.  It fails immediately after a push if a particle has
+moved outside the old one-neighbor MeshBlock stencil.  This option detects
+large timesteps; use `subcycle = true` when large particle velocities require
+intermediate ownership updates or smaller Boris gyro-angle steps.
 
 ## Outputs
 
@@ -215,10 +312,13 @@ This option detects unsupported timesteps; it does not subcycle particles.
 | `ppd` | `ppd/` | Shared compact particle species and position dump. |
 | `prst` | `prst/rank_XXXXXXXX/` | Per-rank particle restart dump. |
 | `df` | `df/` | Pitch-angle cosine histogram. |
+| `pspec` | `pspec/` | Per-species one-dimensional spectrum. |
+| `pspec2` | `pspec2/` | Per-species two-dimensional spectrum. |
 | `dxh` | `dxh/` | Displacement histograms for `IPDX`, `IPDY`, and `IPDZ`. |
 | `drh` | `drh/` | Scalar displacement histogram for `sqrt(IPDX^2 + IPDY^2 + IPDZ^2)`. |
 | `dparh` | `dparh/` | Parallel-displacement histogram using `IPDB`. |
-| `pmom` | `pmom/` | Reduced per-species moments for pitch angle, displacement, and speed. |
+| `pmom` | `pmom/` | Reduced per-species pitch-angle, displacement, flux, and tensor moments. |
+| `psamp` | `psamp/rank_XXXXXXXX/` | Deterministic selected-field particle sample dump. |
 | `pvtk` | run directory | Particle VTK output. |
 | `trk` | run directory | Tracked-particle output. |
 
@@ -226,16 +326,69 @@ This option detects unsupported timesteps; it does not subcycle particles.
 followed by 17 `Real` values per particle: `PGID`, `PTAG`, `PSP`, and the 14
 real particle fields.
 
-For `df`, `dxh`, `drh`, `dparh`, and `pmom`, `reduce = true` is the default.
+For `df`, `pspec`, `dxh`, `drh`, `dparh`, and `pmom`, `reduce = true` is the default.
 MPI runs write one globally reduced diagnostic from rank zero.  The sum of each
 histogram species row equals that species particle count.  Each `dxh`
 species/component histogram also sums to that species count.
 
 Set `df_single_file_per_rank = 1` or `dxhist_single_file_per_rank = 1` to
 preserve per-rank histogram output.  Those options force `reduce = false`.
-The scalar histograms use `drh_single_file_per_rank = 1` and
-`dparh_single_file_per_rank = 1`; particle moments use
-`pmom_single_file_per_rank = 1`.
+The spectrum histogram uses `pspec_single_file_per_rank = 1`, scalar histograms
+use `drh_single_file_per_rank = 1` and `dparh_single_file_per_rank = 1`, and
+particle moments use `pmom_single_file_per_rank = 1`.
+
+`pspec` uses stored particle velocity and sampled pusher fields.  The `p`
+quantity is the tracer speed proxy `sqrt(vx^2 + vy^2 + vz^2)`, `E` is the
+nonrelativistic proxy `0.5 p^2`, `logE` is `log10(E)`, `mu` is the pitch-angle
+cosine against the stored sampled magnetic field, and `magnetic_moment` is the
+proxy `v_perp^2 / B`.  These are diagnostics of the tracer state; they do not
+resample the current MHD fields during output.
+
+`pspec2` writes reduced two-dimensional histograms.  Supported `quantity`
+values are `mu_p` for `f(mu,p)`, `mu_E` for `f(mu,E)`, and `vpar_vperp` for
+`f(v_parallel,v_perp)`.  Use `nbin1`, `nbin2`, `vmin1`, `vmax1`, `vmin2`, and
+`vmax2` to control binning.  The histogram layout is species-major, then first
+coordinate bin, then second coordinate bin.  As with `pspec`, reduced MPI
+histograms are the default.
+
+`pmom` writes globally reduced per-species means.  In addition to count,
+`<mu>`, `<mu^2>`, anisotropy, displacement means, parallel-displacement means,
+and `<v^2>`, it includes `<v_i>` as a CR flux/current proxy,
+`<v_i v_j>` as a pressure-tensor proxy, and cross-displacement moments
+`<dx_i dx_j>` as a diffusion-tensor proxy.  These are tracer moments, not
+coupled CR-fluid source terms.
+
+`psamp` writes a text sample of selected particle fields to one file per rank.
+It is intended for debugging and lightweight analysis, not for restart.  The
+selection is deterministic:
+
+```text
+splitmix64(species, tag) % sample_stride == sample_offset
+```
+
+Use `species = -1` to sample all species, or set `species` to one species
+index.  `sample_stride = 1` writes every local particle; larger values write a
+stable subset.  `fields` is a comma-separated list.  Supported stored fields
+are `x`, `y`, `z`, `vx`, `vy`, `vz`, `mass`, `bx`, `by`, `bz`, `dx`, `dy`,
+`dz`, and `dpar`.  Supported derived fields are `speed`, `energy`, `bmag`,
+`mu`, `vpar`, `vperp`, and `magnetic_moment`.  Every row always includes
+`rank`, `pgid`, `tag`, and `species`, so those do not need to be listed in
+`fields`.
+
+Example:
+
+```text
+<output9>
+file_type     = psamp
+dt            = 0.02
+species       = -1
+sample_stride = 4
+sample_offset = 0
+fields        = x,y,z,vx,vy,vz,bx,by,bz,dx,dy,dz,dpar,mass,mu,bmag
+```
+
+The file is self-describing: each block records the simulation time, cycle,
+rank count, selection parameters, sample count, field count, and column names.
 
 ## Particle Restart
 
@@ -261,13 +414,19 @@ outputs:
 python scripts/particles/cr_tracer_inspect.py run-dir \
   --expected-total 1024 \
   --expected-species-counts 512,512 \
-  --histogram-nbin 8
+  --histogram-nbin 8 \
+  --spectrum-nbin 8 \
+  --joint-spectrum-nbin 8,8
 ```
 
-The utility reads `prst` and `ppd`, reports totals by rank and species, verifies
-restart header/data lengths, checks finite particle data, checks unique tags
-within each species, validates reduced `df`/`dxh`/`drh`/`dparh` histogram sums
-when `--histogram-nbin` is supplied, and summarizes `pmom` files when present.
+The utility reads `prst`, `ppd`, and `psamp`, reports totals by rank, species,
+and MeshBlock `PGID`, reports restart format metadata, validates optional
+`*.prst.pmeta` sidecar payload sizes and checksums, verifies restart
+header/data lengths, checks finite particle data, checks unique tags within
+each species, validates reduced `df`/`pspec`/`pspec2`/`dxh`/`drh`/`dparh`
+histogram sums when `--histogram-nbin`, `--spectrum-nbin`, or
+`--joint-spectrum-nbin` is supplied, summarizes `pmom` files when present, and
+reports sampled-field totals and field names when `psamp` output is present.
 
 The particle regression tests import this utility directly so command-line and
 automated checks use the same parser.
@@ -298,21 +457,25 @@ are not portable performance guarantees.
 
 ## CPU/MPI Performance Comparison
 
-The local 2026-05-22 CPU/MPI comparison is documented in
+The local CPU/MPI comparison is documented in
 [CR Tracer CPU/MPI Performance Comparison](cr_tracer_cpu_mpi_performance.md).
-The benchmark used a Release MPI build with the Kokkos Serial backend on an
-Apple M4 Max and three repeated runs per case.
+The 2026-05-22 benchmark used a Release MPI build with the Kokkos Serial
+backend on an Apple M4 Max and three repeated runs per case.  The detailed page
+includes the compared implementation states, fix-by-fix interpretation,
+rank-scaling notes, a four-mode follow-up matrix for `device_table` versus
+`host_tree` and `alltoall_counts` versus `allgather`, reproducibility commands,
+bottleneck summary, and a GPU follow-up checklist.
 
 Key results:
 
 | Benchmark | MPI ranks | Old scan/full-copy CPU s | Current CPU s | Speedup |
 |-----------|-----------|--------------------------|---------------|---------|
-| Remap-focused drift AMR | 1 | 0.5686 | 0.00511 | 111.3x |
-| Remap-focused drift AMR | 2 | 0.4210 | 0.01261 | 33.4x |
-| Remap-focused drift AMR | 4 | 0.2786 | 0.01696 | 16.4x |
-| Boris+MHD AMR end-to-end | 1 | 1.1082 | 0.8325 | 1.33x |
-| Boris+MHD AMR end-to-end | 2 | 0.7437 | 0.5692 | 1.31x |
-| Boris+MHD AMR end-to-end | 4 | 0.4789 | 0.3743 | 1.28x |
+| Remap-focused drift AMR | 1 | 0.5686 | 0.00386 | 147.4x |
+| Remap-focused drift AMR | 2 | 0.4210 | 0.00540 | 77.9x |
+| Remap-focused drift AMR | 4 | 0.2786 | 0.01233 | 22.6x |
+| Boris+MHD AMR end-to-end | 1 | 1.1082 | 0.7974 | 1.39x |
+| Boris+MHD AMR end-to-end | 2 | 0.7437 | 0.5433 | 1.37x |
+| Boris+MHD AMR end-to-end | 4 | 0.4789 | 0.3451 | 1.39x |
 
 The later position-only AMR host-copy optimization was neutral within noise in
 the small CPU Boris benchmark after tree lookup was already present, but it
@@ -320,9 +483,35 @@ removes unnecessary remap data movement and is expected to matter more on GPU
 builds.  GPU timing remains a TODO.
 
 The same comparison found no significant local runtime penalty for reduced
-`df`/`dxh`/`drh`/`dparh`/`pmom` output under four-rank MPI.  The default reduced
-mode wrote one file per diagnostic; per-rank mode wrote one file per rank per
-diagnostic.
+`df`/`pspec`/`pspec2`/`dxh`/`drh`/`dparh`/`pmom` output under four-rank MPI.
+The default reduced mode wrote one file per diagnostic; per-rank mode wrote
+one file per rank per diagnostic.
+
+The follow-up architecture matrix is intentionally CPU/MPI-only.  On this
+machine the `device_table` AMR remap path is 1.13x-1.63x faster than
+`host_tree` in the remap-focused drift benchmark and neutral to 1.02x faster in
+the Boris+MHD benchmark.  The `alltoall_counts` metadata path is neutral within
+local noise in the drift, exchange, and Boris+MHD matrices, but remains the
+default because it removes detailed all-gather metadata from the exchange
+design.  GPU timing remains a separate TODO.
+
+The benchmark harness is:
+
+```bash
+python scripts/particles/cr_tracer_benchmark.py \
+  --athena build-cr-robust-mpi/src/athena \
+  --cases push,amr_remap,exchange,histogram,histogram_per_rank,restart,boris_amr \
+  --modes default,host_tree,allgather,fallback \
+  --ranks 1,2,4 \
+  --repeats 3 \
+  --mpi-n1 \
+  --output-json cr_tracer_bench_cpu_mpi.json \
+  --output-md cr_tracer_bench_cpu_mpi.md
+```
+
+It runs existing particle inputs with command-line overrides and records
+AthenaK CPU time, wall time, particle update rate, AMR activity, restart
+readback totals, and particle exchange message/byte estimates.
 
 ## Regression Suite
 
@@ -342,35 +531,41 @@ The CPU suite covers:
 - serial particle restart write/read,
 - Boris AMR with `tsc`,
 - Boris AMR with `lin`,
+- smooth-field `trilinear` gather convergence against legacy `lin`,
 - uniform-field Boris speed conservation,
 - periodic drift displacement with wrapping,
 - large-motion guard failure,
-- reduced `df`/`dxh`/`drh`/`dparh` histogram sums,
-- reduced `pmom` count checks,
+- reduced `df`/`pspec`/`dxh`/`drh`/`dparh` histogram sums,
+- reduced `pspec2` joint-spectrum sums,
+- reduced `pmom` count, flux, and tensor checks,
+- deterministic selected-field `psamp` readback,
 - multi-species `ppd` and `prst` count/tag checks.
 
 The MPI suite covers:
 
 - two-rank Boris AMR particle migration,
-- moving-box AMR refine/derefine stress,
+- four-rank moving-box AMR refine/derefine stress,
 - total and per-species conservation across rank exchange,
 - MPI particle restart write/read,
-- reduced `pmom`, `drh`, and `dparh` validation under MPI,
+- reduced `pmom`, `pspec`, `pspec2`, `drh`, and `dparh` validation under MPI,
+- deterministic selected-field `psamp` readback under MPI,
 - consistency-check validation during AMR remap and MPI exchange.
 
 Local validation for this branch on 2026-05-22:
 
 | Command | Result |
 |---------|--------|
-| `test_particles_cr_cpu.py --cpu` | 6 passed. |
-| `test_particles_cr_mpicpu.py --mpicpu` | 3 passed. |
+| `test_particles_cr_cpu.py --cpu` | 20 passed. |
+| `test_particles_cr_mpicpu.py --mpicpu` | 4 passed. |
 | `python run_test_suite.py --style` | 2 passed. |
 | `git diff --check` | Passed. |
 | `-D PROBLEM=part_random` build | Passed. |
 
-The explicit two-rank stress run reported `105 MeshBlocks created, 77 deleted
-by AMR`.  The inspector reported 1024 total particles, rank counts `0=520
-1=504`, species counts `0=512 1=512`, and valid reduced `df`/`dxh` histograms.
+The explicit four-rank stress run reported `105 MeshBlocks created, 77 deleted
+by AMR`.  The inspector reported 1024 total particles, rank counts
+`0=238 1=259 2=267 3=260`, species counts `0=512 1=512`, valid
+`AKPRST-v1` restart metadata, and valid reduced
+`df`/`pspec`/`pspec2`/`dxh`/`drh`/`dparh` histograms.
 
 Div(B) AMR compatibility inputs were rerun against the same built-in pgen
 build:
@@ -385,14 +580,19 @@ build:
 
 The GitHub Pages branch already includes this page in the module toctree as
 `docs/source/modules/particles.md`.  To publish these docs there, copy or merge
-this file over the stale page on `origin/gh-pages`; no `index.md` toctree edit
-is needed.
+this file and the linked CR tracer Markdown pages into
+`docs/source/modules/` on `origin/gh-pages`; no `index.md` toctree edit is
+needed because the supporting pages are reached from this page.
 
-Two planning pages summarize the recommended next CR tracer work:
+These linked pages summarize validation evidence and recommended next CR tracer
+work:
 
 - [CR Tracer CPU/MPI Performance Comparison](cr_tracer_cpu_mpi_performance.md)
   records the local CPU and MPI performance evidence for the AMR remap and
   diagnostic-output changes.
+- [CR Tracer GPU Testing Handoff](cr_tracer_gpu_testing_handoff.md)
+  gives the exact accelerator validation checklist that still needs to run on a
+  GPU machine.
 - [CR Tracer Feature-Branch Hardening Plan](cr_tracer_feature_branch_plan.md)
   covers changes that fit naturally in `feature/CR_tracers`.
 - [CR Tracer Follow-Up Architecture Plan](cr_tracer_followup_architecture_plan.md)

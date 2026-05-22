@@ -20,15 +20,16 @@ EXPECTED_SPECIES = [512, 512]
 
 
 def _clean_particle_outputs():
-    for directory in ("ppd", "prst", "df", "dxh", "drh", "dparh", "pmom"):
+    for directory in ("ppd", "prst", "df", "dxh", "drh", "dparh", "pmom",
+                      "pspec", "pspec2", "psamp"):
         shutil.rmtree(directory, ignore_errors=True)
     for pattern in ("*.vtk", "*.pvtk", "*.xdmf"):
         for file_path in Path(".").glob(pattern):
             file_path.unlink()
 
 
-def _run_mpi_capture(input_file, flags):
-    command = ["mpirun", "-np", "2", "./athena", "-i", input_file] + flags
+def _run_mpi_capture(input_file, flags, ranks=2):
+    command = ["mpirun", "-np", str(ranks), "./athena", "-i", input_file] + flags
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(
@@ -63,22 +64,37 @@ def test_mpi_boris_amr_migration_mpicpu():
     assert all(count > 0 for count in summary["rank_counts"].values())
     cr_tracer_inspect.validate_histograms(Path("."), EXPECTED_SPECIES, 8)
     cr_tracer_inspect.validate_moments(Path("."), EXPECTED_SPECIES)
+    samples = cr_tracer_inspect.summarize_samples(Path("."))
+    expected = cr_tracer_inspect.expected_sample_counts_from_restart(
+        summary, -1, 4, 0)
+    assert samples["total"] == expected["total"]
+    assert samples["species_counts"] == expected["species_counts"]
+    assert samples["rank_counts"] == expected["rank_counts"]
+    assert {"mu", "bmag"}.issubset(set(samples["fields"]))
 
 
 def test_mpi_refine_derefine_stress_mpicpu():
-    """Force AMR creation and deletion while conserving particle counts."""
+    """Force 4-rank AMR creation/deletion while conserving particles."""
     _clean_particle_outputs()
     output = _run_mpi_capture(
         str(INPUTS / "particles" / "cr_tracer_boris_amr_stress.athinput"),
-        ["job/basename=cr_boris_stress_mpi"])
+        [
+            "job/basename=cr_boris_stress_mpi",
+            "particles/check_consistency_mode=full",
+            "particles/validate_amr_lookup=true",
+            "mesh_refinement/particle_load_weight=0.001",
+        ],
+        ranks=4)
     match = re.search(r"(\d+) MeshBlocks created, (\d+) deleted by AMR", output)
     assert match is not None
     created = int(match.group(1))
     deleted = int(match.group(2))
     assert created > 0
     assert deleted > 0
-    _assert_restart_counts()
+    summary = _assert_restart_counts()
+    assert set(summary["rank_counts"]) == {0, 1, 2, 3}
     cr_tracer_inspect.validate_histograms(Path("."), EXPECTED_SPECIES, 8)
+    cr_tracer_inspect.validate_joint_spectra(Path("."), EXPECTED_SPECIES, 8, 8)
     cr_tracer_inspect.validate_moments(Path("."), EXPECTED_SPECIES)
 
 
@@ -132,3 +148,36 @@ def test_mpi_drift_restart_round_trip_mpicpu():
     ]
     _run_mpi_capture(input_file, restart_flags)
     _assert_restart_counts()
+
+
+def test_mpi_drift_subcycle_migration_mpicpu():
+    """Subcycled high-velocity drift preserves ownership across MPI ranks."""
+    _clean_particle_outputs()
+    input_file = str(INPUTS / "particles" / "random_particle_drift.athinput")
+    flags = [
+        "job/basename=cr_drift_subcycle_mpi",
+        "mesh/nx1=32",
+        "mesh/nx2=8",
+        "mesh/nx3=8",
+        "meshblock/nx1=8",
+        "meshblock/nx2=8",
+        "meshblock/nx3=8",
+        "particles/ppc=0.0009765625",
+        "particles/nspecies=1",
+        "particles/check_consistency_mode=local",
+        "particles/check_motion_bounds=true",
+        "particles/subcycle=true",
+        "particles/subcycle_max_steps=256",
+        "problem/particle_position=center",
+        "problem/particle_velocity=uniform",
+        "problem/v0x=100.0",
+        "problem/v0y=0.0",
+        "problem/v0z=0.0",
+        "time/nlim=1",
+        "time/tlim=0.125",
+        "output1/file_type=prst",
+        "output1/dt=0.01",
+    ]
+    _run_mpi_capture(input_file, flags)
+    summary = _assert_restart_counts([2])
+    assert set(summary["rank_counts"]) == {0, 1}

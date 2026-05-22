@@ -22,13 +22,22 @@
 
 // constants that enumerate ParticlesPusher options
 enum class ParticlesPusher {drift, leap_frog, lagrangian_tracer, lagrangian_mc,
-                            boris_lin, boris_tsc};
+                            boris};
+
+// constants that enumerate particle field-gather interpolation options
+enum class ParticleInterpolation {lin_legacy, trilinear, tsc};
 
 // constants that enumerate ParticleTypes
 enum class ParticleType {cosmic_ray};
 
 // constants that enumerate particle consistency check levels
 enum class ParticlesConsistencyMode {none, counts, local, full};
+
+// constants that enumerate AMR remap implementations
+enum class ParticlesAMRRemapMode {device_table, host_tree};
+
+// constants that enumerate particle MPI metadata exchange implementations
+enum class ParticlesExchangeMode {alltoall_counts, allgather};
 
 //----------------------------------------------------------------------------------------
 //! \struct ParticlesTaskIDs
@@ -73,12 +82,23 @@ class Particles {
   bool check_consistency;
   bool check_motion_bounds;
   bool log_performance;
+  bool validate_amr_lookup;
+  bool subcycle;
+  bool subcycle_strict;
+  int amr_lookup_max_cells;
+  int subcycle_max_steps;
+  Real subcycle_cell_fraction;
+  Real subcycle_meshblock_fraction;
+  Real subcycle_gyro_fraction;
   ParticlesConsistencyMode consistency_mode;
+  ParticlesAMRRemapMode amr_remap_mode;
+  ParticlesExchangeMode exchange_mode;
   bool reference_counts_set;
   int reference_nprtcl_total;
   std::vector<int> reference_nprtcl_eachspec;
 
   ParticlesPusher pusher;
+  ParticleInterpolation interpolation;
 
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;
@@ -92,7 +112,12 @@ class Particles {
   void CheckConsistency(const std::string &label, bool check_rank=true);
   void CheckMotionBounds(const std::string &label);
   void LogPerformance(const std::string &label, int64_t npushed, int64_t nsent,
-                      int64_t nrecv, int64_t nremapped, int64_t ndiag);
+                      int64_t nrecv, int64_t nremapped, int64_t ndiag,
+                      int64_t nmessages=0, int64_t nbytes=0);
+  int ComputeSubcycleSteps(Real dt, int &cell_steps, int &block_steps,
+                           int &gyro_steps);
+  void LogSubcycle(int nsub, int cell_steps, int block_steps, int gyro_steps);
+  void ExchangeAfterSubcycle();
   void RemapAfterAMR();
   void AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   TaskStatus Push(Driver *pdriver, int stage);

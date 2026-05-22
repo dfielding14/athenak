@@ -37,6 +37,7 @@ ncycle_check        = 1
 refinement_interval = 1
 num_levels          = 2
 max_nmb_per_rank    = 64
+particle_load_weight = 0.0
 
 <amr_criterion0>
 method       = location
@@ -72,6 +73,16 @@ check_consistency = false
 check_consistency_mode = none
 check_motion_bounds = false
 log_performance = false
+amr_remap = device_table
+validate_amr_lookup = false
+amr_lookup_max_cells = 20000000
+exchange_mode = alltoall_counts
+subcycle = false
+subcycle_max_steps = 8
+subcycle_cell_fraction = 0.5
+subcycle_meshblock_fraction = 0.5
+subcycle_gyro_fraction = 0.25
+subcycle_strict = true
 
 <problem>
 pgen_name = part_random
@@ -125,3 +136,20 @@ nbin      = 8
 vmin      = -0.1
 vmax      = 0.1
 dparh_single_file_per_rank = 0
+
+<output8>
+file_type = pspec
+dt        = 0.02
+quantity  = p
+nbin      = 8
+vmin      = 0.0
+vmax      = 2.0
+pspec_single_file_per_rank = 0
+
+<output9>
+file_type     = psamp
+dt            = 0.02
+species       = -1
+sample_stride = 4
+sample_offset = 0
+fields        = x,y,z,vx,vy,vz,bx,by,bz,dx,dy,dz,dpar,mass,mu,bmag

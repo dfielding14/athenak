@@ -16,6 +16,7 @@
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "athena.hpp"
+#include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "mhd/mhd.hpp"
@@ -25,6 +26,10 @@
 #include <Kokkos_Random.hpp>
 
 namespace {
+
+struct PartRandomBField {
+  Real x, y, z;
+};
 
 KOKKOS_INLINE_FUNCTION
 Real WrapUnit(Real x) {
@@ -66,6 +71,12 @@ bool OverlapsMovingBox(const RegionSize &sz, const RegionSize &mesh_size,
         <= HalfWidthUnit(sz.x3min, sz.x3max, mesh_size.x3min, mesh_size.x3max) + 0.11;
   }
   return overlaps;
+}
+
+KOKKOS_INLINE_FUNCTION
+PartRandomBField PartRandomLinearCrossField(Real x1, Real x2, Real b0x, Real b0y,
+                                            Real b0z, Real bgrad) {
+  return PartRandomBField{b0x + bgrad*x2, b0y + bgrad*x1, b0z};
 }
 
 void PartRandomRefinementCondition(MeshBlockPack *pmbp) {
@@ -217,7 +228,8 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
     std::string particle_velocity =
         pin->GetOrAddString("problem","particle_velocity","random");
     if (particle_position.compare("random") != 0 &&
-        particle_position.compare("center") != 0) {
+        particle_position.compare("center") != 0 &&
+        particle_position.compare("fixed") != 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Unknown particle_position = '"
                 << particle_position << "'" << std::endl;
@@ -231,6 +243,21 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
       std::exit(EXIT_FAILURE);
     }
     bool center_particles = (particle_position.compare("center") == 0);
+    bool fixed_particles = (particle_position.compare("fixed") == 0);
+    Real fixed_x1 = pin->GetOrAddReal("problem","particle_x1",0.0);
+    Real fixed_x2 = pin->GetOrAddReal("problem","particle_x2",0.0);
+    Real fixed_x3 = pin->GetOrAddReal("problem","particle_x3",0.0);
+    if (fixed_particles) {
+      const RegionSize &mesh_size = pmy_mesh_->mesh_size;
+      if (fixed_x1 < mesh_size.x1min || fixed_x1 >= mesh_size.x1max ||
+          fixed_x2 < mesh_size.x2min || fixed_x2 >= mesh_size.x2max ||
+          fixed_x3 < mesh_size.x3min || fixed_x3 >= mesh_size.x3max) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Fixed particle position is outside the mesh"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
     bool uniform_velocity = (particle_velocity.compare("uniform") == 0);
     Real v0x = pin->GetOrAddReal("problem","v0x",1.0);
     Real v0y = pin->GetOrAddReal("problem","v0y",0.0);
@@ -252,21 +279,24 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
       pi(PSP,p) = spec;
 
       Real rand = rand_gen.frand();
-      pr(IPX,p) = center_particles ? 0.5*(mbsize.d_view(m).x1min +
+      pr(IPX,p) = fixed_particles ? fixed_x1 :
+                  center_particles ? 0.5*(mbsize.d_view(m).x1min +
                                            mbsize.d_view(m).x1max) :
                   (1. - rand)*mbsize.d_view(m).x1min + rand*mbsize.d_view(m).x1max;
       pr(IPX,p) = fmin(pr(IPX,p),mbsize.d_view(m).x1max);
       pr(IPX,p) = fmax(pr(IPX,p),mbsize.d_view(m).x1min);
 
       rand = rand_gen.frand();
-      pr(IPY,p) = center_particles ? 0.5*(mbsize.d_view(m).x2min +
+      pr(IPY,p) = fixed_particles ? fixed_x2 :
+                  center_particles ? 0.5*(mbsize.d_view(m).x2min +
                                            mbsize.d_view(m).x2max) :
                   (1. - rand)*mbsize.d_view(m).x2min + rand*mbsize.d_view(m).x2max;
       pr(IPY,p) = fmin(pr(IPY,p),mbsize.d_view(m).x2max);
       pr(IPY,p) = fmax(pr(IPY,p),mbsize.d_view(m).x2min);
 
       rand = rand_gen.frand();
-      pr(IPZ,p) = center_particles ? 0.5*(mbsize.d_view(m).x3min +
+      pr(IPZ,p) = fixed_particles ? fixed_x3 :
+                  center_particles ? 0.5*(mbsize.d_view(m).x3min +
                                            mbsize.d_view(m).x3max) :
                   (1. - rand)*mbsize.d_view(m).x3min + rand*mbsize.d_view(m).x3max;
       pr(IPZ,p) = fmin(pr(IPZ,p),mbsize.d_view(m).x3max);
@@ -291,6 +321,15 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
   Real B0x = pin->GetOrAddReal("problem","B0x",0.0);
   Real B0y = pin->GetOrAddReal("problem","B0y",0.0);
   Real B0z = pin->GetOrAddReal("problem","B0z",1.0);
+  std::string b_profile = pin->GetOrAddString("problem","B_profile","uniform");
+  if (b_profile.compare("uniform") != 0 && b_profile.compare("linear_cross") != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Unknown B_profile = '" << b_profile << "'"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  bool linear_cross_field = (b_profile.compare("linear_cross") == 0);
+  Real Bgrad = pin->GetOrAddReal("problem","Bgrad",1.0);
   Real cfl_part = pin->GetOrAddReal("particles","cfl_part",0.05);
 
   if (pmbp->pmhd != nullptr) {
@@ -304,24 +343,35 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
     int &is = indcs.is, &ie = indcs.ie;
     int &js = indcs.js, &je = indcs.je;
     int &ks = indcs.ks, &ke = indcs.ke;
+    int nx1 = indcs.nx1;
+    int nx2 = indcs.nx2;
+    auto &mb_size = pmbp->pmb->mb_size;
     bool is_ideal = eos.is_ideal;
     par_for("pgen_mhd", DevExeSpace(), 0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real x1c = CellCenterX(i - is, nx1, mb_size.d_view(m).x1min,
+                             mb_size.d_view(m).x1max);
+      Real x2c = CellCenterX(j - js, nx2, mb_size.d_view(m).x2min,
+                             mb_size.d_view(m).x2max);
+      PartRandomBField bf{B0x, B0y, B0z};
+      if (linear_cross_field) {
+        bf = PartRandomLinearCrossField(x1c, x2c, B0x, B0y, B0z, Bgrad);
+      }
       u0(m,IDN,k,j,i) = 1.0;
       u0(m,IM1,k,j,i) = 0.0;
       u0(m,IM2,k,j,i) = 0.0;
       u0(m,IM3,k,j,i) = 0.0;
-      bcc0(m,IBX,k,j,i) = B0x;
-      bcc0(m,IBY,k,j,i) = B0y;
-      bcc0(m,IBZ,k,j,i) = B0z;
-      b0.x1f(m,k,j,i) = B0x;
-      b0.x2f(m,k,j,i) = B0y;
-      b0.x3f(m,k,j,i) = B0z;
-      if (i==ie) {b0.x1f(m,k,j,i+1) = B0x;}
-      if (j==je) {b0.x2f(m,k,j+1,i) = B0y;}
-      if (k==ke) {b0.x3f(m,k+1,j,i) = B0z;}
+      bcc0(m,IBX,k,j,i) = bf.x;
+      bcc0(m,IBY,k,j,i) = bf.y;
+      bcc0(m,IBZ,k,j,i) = bf.z;
+      b0.x1f(m,k,j,i) = bf.x;
+      b0.x2f(m,k,j,i) = bf.y;
+      b0.x3f(m,k,j,i) = bf.z;
+      if (i==ie) {b0.x1f(m,k,j,i+1) = bf.x;}
+      if (j==je) {b0.x2f(m,k,j+1,i) = bf.y;}
+      if (k==ke) {b0.x3f(m,k+1,j,i) = bf.z;}
       if (is_ideal) {
-        u0(m,IEN,k,j,i) = p0/gm1 + 0.5*(B0x*B0x + B0y*B0y + B0z*B0z);
+        u0(m,IEN,k,j,i) = p0/gm1 + 0.5*(bf.x*bf.x + bf.y*bf.y + bf.z*bf.z);
       }
     });
   }

@@ -53,6 +53,9 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       out_params.file_type.compare("drh") == 0 ||
       out_params.file_type.compare("dparh") == 0 ||
       out_params.file_type.compare("pmom") == 0 ||
+      out_params.file_type.compare("pspec") == 0 ||
+      out_params.file_type.compare("pspec2") == 0 ||
+      out_params.file_type.compare("psamp") == 0 ||
       out_params.file_type.compare("ppd") == 0 ||
       out_params.file_type.compare("prst") == 0) {return;}
 

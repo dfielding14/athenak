@@ -48,6 +48,16 @@ check_consistency = false
 check_consistency_mode = none
 check_motion_bounds = false
 log_performance = false
+amr_remap = device_table
+validate_amr_lookup = false
+amr_lookup_max_cells = 20000000
+exchange_mode = alltoall_counts
+subcycle = false
+subcycle_max_steps = 8
+subcycle_cell_fraction = 0.5
+subcycle_meshblock_fraction = 0.5
+subcycle_gyro_fraction = 0.25
+subcycle_strict = true
 
 <problem>
 pgen_name = part_random

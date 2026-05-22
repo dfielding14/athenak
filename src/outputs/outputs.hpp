@@ -458,6 +458,75 @@ class ParticleMomentsOutput : public BaseTypeOutput {
 };
 
 //----------------------------------------------------------------------------------------
+//! \class ParticleSpectrumOutput
+//  \brief derived BaseTypeOutput class for reduced CR particle spectra
+
+class ParticleSpectrumOutput : public BaseTypeOutput {
+ public:
+  ParticleSpectrumOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int nbin;
+  int spectrum_quantity;
+  Real vmin, vmax;
+  std::string quantity_name;
+  HostArray2D<int> host_histogram;
+  int single_file_per_rank;
+  bool reduce_histogram;
+};
+
+//----------------------------------------------------------------------------------------
+//! \class ParticleJointSpectrumOutput
+//  \brief derived BaseTypeOutput class for reduced two-dimensional CR spectra
+
+class ParticleJointSpectrumOutput : public BaseTypeOutput {
+ public:
+  ParticleJointSpectrumOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int nbin1, nbin2;
+  int spectrum_quantity;
+  Real vmin1, vmax1, vmin2, vmax2;
+  std::string quantity_name;
+  HostArray3D<int> host_histogram;
+  int single_file_per_rank;
+  bool reduce_histogram;
+};
+
+//----------------------------------------------------------------------------------------
+//! \struct ParticleSampleField
+//  \brief selected real or derived field written by ParticleSampleOutput
+
+struct ParticleSampleField {
+  std::string label;
+  int kind;
+  int index;
+  ParticleSampleField(std::string field_label, int field_kind, int field_index) :
+    label(field_label), kind(field_kind), index(field_index) {}
+};
+
+//----------------------------------------------------------------------------------------
+//! \class ParticleSampleOutput
+//  \brief derived BaseTypeOutput class for deterministic selected particle samples
+
+class ParticleSampleOutput : public BaseTypeOutput {
+ public:
+  ParticleSampleOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int npout_thisrank;
+  int sample_species;
+  int sample_stride;
+  int sample_offset;
+  std::vector<ParticleSampleField> sample_fields;
+  HostArray2D<Real> outpart_rdata;
+  HostArray2D<int>  outpart_idata;
+};
+
+//----------------------------------------------------------------------------------------
 //! \class ParticleRestartOutput
 //  \brief derived BaseTypeOutput class for particle restart dumps
 

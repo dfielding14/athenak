@@ -9,6 +9,8 @@
 #include <sys/stat.h>
 
 #include <algorithm>
+#include <cinttypes>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
@@ -19,6 +21,19 @@
 #include "mesh/mesh.hpp"
 #include "particles/particles.hpp"
 #include "outputs.hpp"
+
+namespace {
+
+uint64_t UpdateFNV1a(uint64_t hash, const void *data, std::size_t nbyte) {
+  const unsigned char *bytes = static_cast<const unsigned char*>(data);
+  for (std::size_t i=0; i<nbyte; ++i) {
+    hash ^= static_cast<uint64_t>(bytes[i]);
+    hash *= 1099511628211ULL;
+  }
+  return hash;
+}
+
+} // namespace
 
 ParticleRestartOutput::ParticleRestartOutput(ParameterInput *pin, Mesh *pm,
                                              OutputParameters op) :
@@ -98,6 +113,35 @@ void ParticleRestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
 
   partfile.Close(true);
+
+  uint64_t checksum = 1469598103934665603ULL;
+  checksum = UpdateFNV1a(checksum, header, 3*sizeof(Real));
+  checksum = UpdateFNV1a(checksum, real_data,
+                         static_cast<std::size_t>(17*npout_thisrank)*sizeof(Real));
+  std::string meta_fname = fname + ".pmeta";
+  FILE *mfile = std::fopen(meta_fname.c_str(),"w");
+  if (mfile == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Particle restart metadata file '" << meta_fname
+              << "' could not be opened" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  particles::Particles *pp = pm->pmb_pack->ppart;
+  std::fprintf(mfile, "magic AKPRST\n");
+  std::fprintf(mfile, "version 1\n");
+  std::fprintf(mfile, "binary_payload legacy_prst\n");
+  std::fprintf(mfile, "real_size %zu\n", sizeof(Real));
+  std::fprintf(mfile, "integer_size %zu\n", sizeof(int));
+  std::fprintf(mfile, "species_count %d\n", pp->nspecies);
+  std::fprintf(mfile, "real_field_count %d\n", pp->nrdata);
+  std::fprintf(mfile, "integer_field_count %d\n", pp->nidata);
+  std::fprintf(mfile, "record_real_count 17\n");
+  std::fprintf(mfile, "particle_count %d\n", npout_thisrank);
+  std::fprintf(mfile, "byte_count %zu\n",
+               static_cast<std::size_t>(3 + 17*npout_thisrank)*sizeof(Real));
+  std::fprintf(mfile, "checksum_fnv1a64 %" PRIu64 "\n", checksum);
+  std::fclose(mfile);
+
   delete[] real_data;
 
   out_params.file_number++;

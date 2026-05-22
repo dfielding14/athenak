@@ -37,6 +37,7 @@ ncycle_check        = 1
 refinement_interval = 1
 num_levels          = 2
 max_nmb_per_rank    = 96
+particle_load_weight = 0.0
 
 <amr_criterion0>
 method = user
@@ -68,6 +69,16 @@ check_consistency  = true
 check_consistency_mode = full
 check_motion_bounds = false
 log_performance = false
+amr_remap = device_table
+validate_amr_lookup = false
+amr_lookup_max_cells = 20000000
+exchange_mode = alltoall_counts
+subcycle = false
+subcycle_max_steps = 8
+subcycle_cell_fraction = 0.5
+subcycle_meshblock_fraction = 0.5
+subcycle_gyro_fraction = 0.25
+subcycle_strict = true
 
 <problem>
 pgen_name           = part_random
@@ -122,3 +133,24 @@ nbin      = 8
 vmin      = -0.2
 vmax      = 0.2
 dparh_single_file_per_rank = 0
+
+<output8>
+file_type = pspec
+dt        = 0.04
+quantity  = p
+nbin      = 8
+vmin      = 0.0
+vmax      = 2.0
+pspec_single_file_per_rank = 0
+
+<output9>
+file_type = pspec2
+dt        = 0.04
+quantity  = mu_p
+nbin1     = 8
+nbin2     = 8
+vmin1     = -1.0
+vmax1     = 1.0
+vmin2     = 0.0
+vmax2     = 2.0
+pspec2_single_file_per_rank = 0

@@ -57,10 +57,23 @@ cfl_part               = 0.05
 check_consistency_mode = counts
 check_motion_bounds    = false
 log_performance        = false
+amr_remap              = device_table
+validate_amr_lookup    = false
+amr_lookup_max_cells   = 20000000
+exchange_mode          = alltoall_counts
+subcycle               = false
+subcycle_max_steps     = 8
+subcycle_cell_fraction = 0.5
+subcycle_meshblock_fraction = 0.5
+subcycle_gyro_fraction = 0.25
+subcycle_strict        = true
 
 <problem>
 pgen_name           = part_random
 particle_position   = center
+particle_x1         = 0.0
+particle_x2         = 0.0
+particle_x3         = 0.0
 particle_velocity   = uniform
 v0x                 = 1.0
 v0y                 = 0.0
@@ -70,6 +83,8 @@ prtcl_res_file      = prst/rank_00000000/cr_tracer_boris_uniform.00000.prst
 B0x                 = 0.0
 B0y                 = 0.0
 B0z                 = 1.0
+B_profile           = uniform
+Bgrad               = 1.0
 
 <output1>
 file_type = prst
@@ -78,3 +93,22 @@ dt        = 0.01
 <output2>
 file_type = pmom
 dt        = 0.01
+
+<output3>
+file_type = pspec
+dt        = 0.01
+quantity  = p
+nbin      = 8
+vmin      = 0.0
+vmax      = 2.0
+
+<output4>
+file_type = pspec2
+dt        = 0.01
+quantity  = mu_p
+nbin1     = 8
+nbin2     = 8
+vmin1     = -1.0
+vmax1     = 1.0
+vmin2     = 0.0
+vmax2     = 2.0

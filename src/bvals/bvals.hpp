@@ -252,11 +252,14 @@ class ParticlesBoundaryValues {
 
   int nprtcl_send, nprtcl_recv;
   DualArray1D<ParticleLocationData> sendlist;
+  int rsend_capacity, isend_capacity, rrecv_capacity, irecv_capacity;
 
   // Data needed to count number of messages and particles to send between ranks
   int nsends; // number of MPI sends to neighboring ranks on this rank
   int nrecvs; // number of MPI recvs from neighboring ranks on this rank
   std::vector<int> nsends_eachrank;                // length nranks
+  std::vector<int> send_counts_eachrank;           // length nranks
+  std::vector<int> recv_counts_eachrank;           // length nranks
   std::vector<ParticleMessageData> sends_thisrank; // length nsends
   std::vector<ParticleMessageData> recvs_thisrank; // length nrecvs
   std::vector<ParticleMessageData> sends_allranks; // length ncounts summed over ranks
@@ -277,6 +280,7 @@ class ParticlesBoundaryValues {
   TaskStatus PackAndSendPrtcls();
   TaskStatus ClearPrtclSend();
   TaskStatus RecvAndUnpackPrtcls();
+  void EnsureBufferCapacity(int nsend, int nrecv);
 
  protected:
   particles::Particles* pmy_part;

@@ -14,6 +14,7 @@
 #include <cmath>     // abs
 #include <algorithm> // sort
 #include <utility>   // pair
+#include <vector>
 
 #include "athena.hpp"
 #include "globals.hpp"
@@ -51,6 +52,7 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
   nmb_sent_thisrank(0),
   ncyc_check_amr(1),
   refinement_interval(5),
+  particle_load_weight(0.0),
 #if MPI_PARALLEL_ENABLED
   sendbuf("lb send buff",1),
   recvbuf("lb recv buff",1),
@@ -62,6 +64,15 @@ MeshRefinement::MeshRefinement(Mesh *pm, ParameterInput *pin) :
     // read interval (in cycles) between check of AMR and derefinement
     ncyc_check_amr = pin->GetOrAddReal("mesh_refinement", "ncycle_check", 1);
     refinement_interval = pin->GetOrAddReal("mesh_refinement", "refinement_interval", 5);
+    particle_load_weight = pin->GetOrAddReal("mesh_refinement",
+                                             "particle_load_weight", 0.0);
+    if (particle_load_weight < 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<mesh_refinement>/particle_load_weight must be >= 0"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     // read prolongate primitives flag
     if (pin->DoesParameterExist("mesh_refinement", "prolong_primitives")) {
       prolong_prims = pin->GetBoolean("mesh_refinement", "prolong_primitives");
@@ -445,15 +456,56 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   }
 
   // Step 3.
-  // Calculate new load balance. Initialize new cost array with the simplest estimate
-  // possible: all the blocks are equal
-  // TODO(@user): implement variable cost per MeshBlock as needed
+  // Calculate new load balance.  By default all MeshBlocks have equal cost.  If
+  // requested, add an approximate particle cost based on the pre-AMR particle owners.
   new_cost_eachmb = new float[new_nmb];
   new_rank_eachmb = new int[new_nmb];
   new_gids_eachrank = new int[global_variable::nranks];
   new_nmb_eachrank = new int[global_variable::nranks];
 
   for (int i=0; i<new_nmb; i++) {new_cost_eachmb[i] = 1.0;}
+  if (particle_load_weight > 0.0 && pm->pmb_pack->ppart != nullptr) {
+    std::vector<int> local_counts(old_nmb, 0);
+    particles::Particles *pp = pm->pmb_pack->ppart;
+    if (pp->nprtcl_thispack > 0) {
+      auto pi_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pp->prtcl_idata);
+      for (int p=0; p<pp->nprtcl_thispack; ++p) {
+        int gid = pi_h(PGID,p);
+        if (gid >= 0 && gid < old_nmb) {local_counts[gid] += 1;}
+      }
+    }
+    std::vector<int> old_counts(old_nmb, 0);
+#if MPI_PARALLEL_ENABLED
+    MPI_Allreduce(local_counts.data(), old_counts.data(), old_nmb, MPI_INT,
+                  MPI_SUM, MPI_COMM_WORLD);
+#else
+    old_counts = local_counts;
+#endif
+
+    std::vector<int> nchild_eachold(old_nmb, 0);
+    for (int newm=0; newm<new_nmb; ++newm) {
+      int oldm = newtoold[newm];
+      if (oldm >= 0 && oldm < old_nmb) {nchild_eachold[oldm] += 1;}
+    }
+
+    for (int oldm=0; oldm<old_nmb; ++oldm) {
+      if (old_counts[oldm] == 0) {continue;}
+      if (nchild_eachold[oldm] > 1) {
+        float child_cost = static_cast<float>(particle_load_weight*
+                           static_cast<Real>(old_counts[oldm])/
+                           static_cast<Real>(nchild_eachold[oldm]));
+        for (int newm=0; newm<new_nmb; ++newm) {
+          if (newtoold[newm] == oldm) {new_cost_eachmb[newm] += child_cost;}
+        }
+      } else {
+        int newm = oldtonew[oldm];
+        if (newm >= 0 && newm < new_nmb) {
+          new_cost_eachmb[newm] += static_cast<float>(particle_load_weight*
+                                    static_cast<Real>(old_counts[oldm]));
+        }
+      }
+    }
+  }
   pm->LoadBalance(new_cost_eachmb, new_rank_eachmb, new_gids_eachrank, new_nmb_eachrank,
                   new_nmb_total);
   if (new_nmb_eachrank[global_variable::my_rank] > pm->nmb_maxperrank) {

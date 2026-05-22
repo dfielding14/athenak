@@ -52,6 +52,7 @@ class MeshRefinement {
   int nmb_sent_thisrank;     // # of MeshBlocks sent during load balancing on this rank
   int ncyc_check_amr;        // # of cycles between checking mesh for ref/derefinement
   int refinement_interval;   // # of cycles between allowing successive ref/derefinement
+  Real particle_load_weight; // cost weight per particle for AMR load balancing
   bool prolong_prims;        // flag to enable prolongation of primitive vars
   RefinementCriteria* pmrc=nullptr;   // object to control various refinement criteria
 

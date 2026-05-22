@@ -98,6 +98,9 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
           opar.file_type.compare("drh") != 0 &&
           opar.file_type.compare("dparh") != 0 &&
           opar.file_type.compare("pmom") != 0 &&
+          opar.file_type.compare("pspec") != 0 &&
+          opar.file_type.compare("pspec2") != 0 &&
+          opar.file_type.compare("psamp") != 0 &&
           opar.file_type.compare("ppd") != 0 &&
           opar.file_type.compare("prst") != 0) {
         opar.variable = pin->GetString(opar.block_name, "variable");
@@ -196,6 +199,9 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
           opar.file_type.compare("drh") != 0 &&
           opar.file_type.compare("dparh") != 0 &&
           opar.file_type.compare("pmom") != 0 &&
+          opar.file_type.compare("pspec") != 0 &&
+          opar.file_type.compare("pspec2") != 0 &&
+          opar.file_type.compare("psamp") != 0 &&
           opar.file_type.compare("ppd") != 0 &&
           opar.file_type.compare("prst") != 0) {
         opar.variable = pin->GetString(opar.block_name, "variable");
@@ -268,6 +274,15 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("pmom") == 0) {
         pnode = new ParticleMomentsOutput(pin,pm,opar);
+        pout_list.insert(pout_list.begin(),pnode);
+      } else if (opar.file_type.compare("pspec") == 0) {
+        pnode = new ParticleSpectrumOutput(pin,pm,opar);
+        pout_list.insert(pout_list.begin(),pnode);
+      } else if (opar.file_type.compare("pspec2") == 0) {
+        pnode = new ParticleJointSpectrumOutput(pin,pm,opar);
+        pout_list.insert(pout_list.begin(),pnode);
+      } else if (opar.file_type.compare("psamp") == 0) {
+        pnode = new ParticleSampleOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("ppd") == 0) {
         pnode = new ParticlePositionsOutput(pin,pm,opar);

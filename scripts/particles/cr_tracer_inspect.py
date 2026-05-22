@@ -55,6 +55,30 @@ def _ppd_file(path: Path, latest: bool = True) -> Optional[Path]:
     return files[-1]
 
 
+def _psamp_files(path: Path) -> List[Path]:
+    if path.is_file() and path.suffix == ".psamp":
+        return [path]
+
+    sample_root = path / "psamp" if (path / "psamp").is_dir() else path
+    return sorted(sample_root.rglob("*.psamp"))
+
+
+def sample_hash(species: int, tag: int) -> int:
+    """Return the deterministic hash used by AthenaK psamp selection."""
+    value = ((species & 0xFFFFFFFF) << 32) ^ (tag & 0xFFFFFFFF)
+    value = (value + 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+    value = ((value ^ (value >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
+    value = ((value ^ (value >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
+    return (value ^ (value >> 31)) & 0xFFFFFFFFFFFFFFFF
+
+
+def sample_selected(species: int, tag: int, sample_species: int,
+                    sample_stride: int, sample_offset: int) -> bool:
+    if sample_species >= 0 and species != sample_species:
+        return False
+    return sample_hash(species, tag) % sample_stride == sample_offset
+
+
 def _try_restart_decode(blob: bytes, real_size: int) -> Optional[Dict]:
     fmt = "d" if real_size == 8 else "f"
     if len(blob) < 3 * real_size:
@@ -81,6 +105,62 @@ def _try_restart_decode(blob: bytes, real_size: int) -> Optional[Dict]:
     }
 
 
+def _read_particle_metadata(path: Path) -> Optional[Dict[str, str]]:
+    meta_path = path.with_suffix(path.suffix + ".pmeta")
+    if not meta_path.exists():
+        return None
+    metadata: Dict[str, str] = {"path": str(meta_path)}
+    for line in meta_path.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        parts = stripped.split(maxsplit=1)
+        if len(parts) == 2:
+            metadata[parts[0]] = parts[1]
+    return metadata
+
+
+def _fnv1a64(blob: bytes) -> int:
+    value = 1469598103934665603
+    for byte in blob:
+        value ^= byte
+        value = (value * 1099511628211) & 0xFFFFFFFFFFFFFFFF
+    return value
+
+
+def _validate_particle_metadata(path: Path, blob: bytes, decoded: Dict,
+                                metadata: Optional[Dict[str, str]]) -> str:
+    if metadata is None:
+        return "legacy_prst_no_metadata"
+
+    if metadata.get("magic") != "AKPRST":
+        raise ValueError(f"{path} metadata has invalid magic {metadata.get('magic')}")
+    if metadata.get("binary_payload") != "legacy_prst":
+        raise ValueError(f"{path} metadata has unsupported binary payload")
+
+    checks = {
+        "real_size": decoded["real_size"],
+        "particle_count": decoded["count"],
+        "byte_count": len(blob),
+        "record_real_count": RESTART_FIELDS,
+    }
+    for key, expected in checks.items():
+        actual = int(metadata.get(key, -1))
+        if actual != expected:
+            raise ValueError(
+                f"{path} metadata {key}={actual}, expected {expected}")
+
+    if "checksum_fnv1a64" in metadata:
+        expected_checksum = int(metadata["checksum_fnv1a64"])
+        actual_checksum = _fnv1a64(blob)
+        if actual_checksum != expected_checksum:
+            raise ValueError(
+                f"{path} checksum mismatch: metadata={expected_checksum} "
+                f"actual={actual_checksum}")
+
+    return f"AKPRST-v{metadata.get('version', 'unknown')}"
+
+
 def read_prst_file(path: Path) -> Dict:
     """Read one per-rank particle restart file and validate its length."""
     blob = path.read_bytes()
@@ -88,7 +168,13 @@ def read_prst_file(path: Path) -> Dict:
     if decoded is None:
         decoded = _try_restart_decode(blob, 4)
     if decoded is None:
-        raise ValueError(f"{path} is not a well-formed particle restart file")
+        raise ValueError(
+            f"{path} is not a well-formed particle restart file; "
+            f"byte_count={len(blob)} does not match a float or double legacy "
+            "particle restart header/data length")
+
+    metadata = _read_particle_metadata(path)
+    format_version = _validate_particle_metadata(path, blob, decoded, metadata)
 
     particles = []
     data = decoded["data"]
@@ -114,6 +200,8 @@ def read_prst_file(path: Path) -> Dict:
         "dt": decoded["dt"],
         "count": decoded["count"],
         "real_size": decoded["real_size"],
+        "format_version": format_version,
+        "metadata": metadata,
         "particles": particles,
     }
 
@@ -148,7 +236,8 @@ def read_ppd_file(path: Path) -> Dict:
     }
 
 
-def _histogram_record(path: Path, marker: bytes, count: int) -> List[int]:
+def _histogram_record(path: Path, marker: bytes, count: int,
+                      skip_comment_lines: bool = False) -> List[int]:
     blob = path.read_bytes()
     index = blob.rfind(marker)
     if index < 0:
@@ -161,6 +250,14 @@ def _histogram_record(path: Path, marker: bytes, count: int) -> List[int]:
     start = line_end + 1
     while start < len(blob) and blob[start:start + 1] in (b"\n", b"\r"):
         start += 1
+    if skip_comment_lines:
+        while start < len(blob) and blob[start:start + 1] == b"#":
+            line_end = blob.find(b"\n", start)
+            if line_end < 0:
+                raise ValueError(f"{path} has a malformed histogram metadata line")
+            start = line_end + 1
+            while start < len(blob) and blob[start:start + 1] in (b"\n", b"\r"):
+                start += 1
 
     byte_count = count * struct.calcsize("<i")
     end = start + byte_count
@@ -195,6 +292,29 @@ def read_scalar_histogram(path: Path, marker: bytes, nspecies: int,
     return [values[sp * nbin: (sp + 1) * nbin] for sp in range(nspecies)]
 
 
+def read_pspec_file(path: Path, nspecies: int, nbin: int) -> List[List[int]]:
+    values = _histogram_record(
+        path, b"# AthenaK particle spectrum", nspecies * nbin,
+        skip_comment_lines=True)
+    return [values[sp * nbin: (sp + 1) * nbin] for sp in range(nspecies)]
+
+
+def read_pspec2_file(path: Path, nspecies: int,
+                     nbin1: int, nbin2: int) -> List[List[List[int]]]:
+    values = _histogram_record(
+        path, b"# AthenaK particle joint spectrum", nspecies * nbin1 * nbin2,
+        skip_comment_lines=True)
+    result = []
+    for species in range(nspecies):
+        species_values = []
+        base = species * nbin1 * nbin2
+        for bin1 in range(nbin1):
+            start = base + bin1 * nbin2
+            species_values.append(values[start: start + nbin2])
+        result.append(species_values)
+    return result
+
+
 def read_pmom_file(path: Path, nspecies: int) -> List[Dict[str, float]]:
     """Read the latest per-species particle moment block from a pmom file."""
     if path.is_dir():
@@ -205,7 +325,7 @@ def read_pmom_file(path: Path, nspecies: int) -> List[Dict[str, float]]:
         if not stripped or stripped.startswith("#"):
             continue
         values = stripped.split()
-        if len(values) != 14:
+        if len(values) not in (14, 26):
             raise ValueError(f"{path} has malformed particle-moment row: {line}")
         rows.append(values)
     if len(rows) < nspecies:
@@ -227,6 +347,18 @@ def read_pmom_file(path: Path, nspecies: int) -> List[Dict[str, float]]:
         "mean_dparallel",
         "mean_dparallel2",
         "mean_speed2",
+        "mean_vx",
+        "mean_vy",
+        "mean_vz",
+        "mean_vx2",
+        "mean_vy2",
+        "mean_vz2",
+        "mean_vxvy",
+        "mean_vxvz",
+        "mean_vyvz",
+        "mean_dxdy",
+        "mean_dxdz",
+        "mean_dydz",
     ]
     result = []
     for row in latest:
@@ -239,6 +371,143 @@ def read_pmom_file(path: Path, nspecies: int) -> List[Dict[str, float]]:
     return result
 
 
+def _parse_metadata_line(line: str) -> Dict[str, str]:
+    result = {}
+    for token in line.split():
+        if "=" not in token:
+            continue
+        key, value = token.split("=", 1)
+        result[key] = value
+    return result
+
+
+def read_psamp_file(path: Path, latest: bool = True) -> Dict:
+    """Read one per-rank deterministic particle sample file."""
+    blocks = []
+    current: Optional[Dict] = None
+    columns: Optional[List[str]] = None
+    for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("# AthenaK particle sample"):
+            if current is not None:
+                blocks.append(current)
+            current = {
+                "path": path,
+                "rank": _rank_from_path(path),
+                "metadata": {},
+                "columns": [],
+                "rows": [],
+            }
+            columns = None
+            continue
+        if stripped.startswith("# metadata:"):
+            if current is None:
+                raise ValueError(f"{path}:{line_number} metadata before header")
+            current["metadata"].update(
+                _parse_metadata_line(stripped.split(":", 1)[1]))
+            continue
+        if stripped.startswith("# columns:"):
+            if current is None:
+                raise ValueError(f"{path}:{line_number} columns before header")
+            columns = stripped.split(":", 1)[1].split()
+            if len(columns) < 4 or columns[:4] != ["rank", "pgid", "tag", "species"]:
+                raise ValueError(f"{path}:{line_number} has malformed columns")
+            current["columns"] = columns
+            continue
+        if stripped.startswith("#"):
+            continue
+        if current is None or columns is None:
+            raise ValueError(f"{path}:{line_number} sample row before columns")
+
+        values = stripped.split()
+        if len(values) != len(columns):
+            raise ValueError(
+                f"{path}:{line_number} has {len(values)} values for "
+                f"{len(columns)} columns")
+        row = {
+            "rank": int(values[0]),
+            "pgid": int(values[1]),
+            "tag": int(values[2]),
+            "species": int(values[3]),
+            "fields": {},
+        }
+        for name, value in zip(columns[4:], values[4:]):
+            parsed = float(value)
+            if not math.isfinite(parsed):
+                raise ValueError(f"{path}:{line_number} has non-finite {name}")
+            row["fields"][name] = parsed
+        current["rows"].append(row)
+
+    if current is not None:
+        blocks.append(current)
+    if not blocks:
+        raise ValueError(f"{path} does not contain a particle sample block")
+    return blocks[-1] if latest else {"path": path, "blocks": blocks}
+
+
+def summarize_samples(path: Path, latest: bool = True) -> Optional[Dict]:
+    files = _psamp_files(path)
+    if not files:
+        return None
+
+    sample_blocks = [read_psamp_file(file_path, latest=latest) for file_path in files]
+    rows = []
+    rank_counts = Counter()
+    species_counts = Counter()
+    tags = set()
+    duplicates = []
+    field_names = set()
+    for block in sample_blocks:
+        block_rows = block["rows"] if latest else [
+            row for nested in block["blocks"] for row in nested["rows"]]
+        for row in block_rows:
+            rows.append(row)
+            rank_counts[row["rank"]] += 1
+            species_counts[row["species"]] += 1
+            key = (row["species"], row["tag"])
+            if key in tags:
+                duplicates.append(key)
+            tags.add(key)
+            field_names.update(row["fields"].keys())
+
+    if latest and duplicates:
+        raise ValueError(f"Duplicate sampled particle tags: {duplicates[:5]}")
+
+    return {
+        "files": files,
+        "total": len(rows),
+        "rank_counts": dict(sorted(rank_counts.items())),
+        "species_counts": dict(sorted(species_counts.items())),
+        "fields": sorted(field_names),
+        "rows": rows,
+        "blocks": sample_blocks,
+    }
+
+
+def expected_sample_counts_from_restart(summary: Dict, sample_species: int,
+                                        sample_stride: int,
+                                        sample_offset: int) -> Dict:
+    species_counts = Counter()
+    rank_counts = Counter()
+    total = 0
+    for restart in summary["restart"]:
+        for particle in restart["particles"]:
+            species = particle["species"]
+            tag = particle["tag"]
+            if sample_selected(species, tag, sample_species,
+                               sample_stride, sample_offset):
+                total += 1
+                species_counts[species] += 1
+                rank_counts[restart["rank"]] += 1
+    return {
+        "total": total,
+        "species_counts": dict(sorted(species_counts.items())),
+        "rank_counts": dict(sorted(rank_counts.items())),
+    }
+
+
 def summarize_restart(path: Path, latest: bool = True) -> Dict:
     files = _restart_files(path, latest=latest)
     if not files:
@@ -248,17 +517,23 @@ def summarize_restart(path: Path, latest: bool = True) -> Dict:
     total = sum(restart["count"] for restart in restarts)
     rank_counts = Counter()
     species_counts = Counter()
+    pgid_counts = Counter()
+    real_sizes = Counter()
+    format_versions = Counter()
     tags = set()
     duplicates = []
 
     for restart in restarts:
         rank_counts[restart["rank"]] += restart["count"]
+        real_sizes[restart["real_size"]] += 1
+        format_versions[restart["format_version"]] += 1
         for particle in restart["particles"]:
             key = (particle["species"], particle["tag"])
             if key in tags:
                 duplicates.append(key)
             tags.add(key)
             species_counts[particle["species"]] += 1
+            pgid_counts[particle["pgid"]] += 1
 
     if duplicates:
         raise ValueError(f"Duplicate particle tags within species: {duplicates[:5]}")
@@ -268,6 +543,9 @@ def summarize_restart(path: Path, latest: bool = True) -> Dict:
         "total": total,
         "rank_counts": dict(sorted(rank_counts.items())),
         "species_counts": dict(sorted(species_counts.items())),
+        "pgid_counts": dict(sorted(pgid_counts.items())),
+        "real_sizes": dict(sorted(real_sizes.items())),
+        "format_versions": dict(sorted(format_versions.items())),
         "restart": restarts,
     }
 
@@ -327,6 +605,16 @@ def validate_histograms(path: Path, expected_species: Sequence[int],
                 "file": hist_file,
                 "histogram": read_scalar_histogram(hist_file, marker, nspecies, nbin),
             }
+    pspec_path = path / "pspec"
+    if pspec_path.is_dir():
+        pspec_file = max(pspec_path.glob("*.pspec"), key=_file_number)
+    else:
+        pspec_file = pspec_path
+    if pspec_file.exists():
+        optional["pspec"] = {
+            "file": pspec_file,
+            "histogram": read_pspec_file(pspec_file, nspecies, nbin),
+        }
     for species, expected in enumerate(expected_species):
         df_total = sum(df[species])
         if df_total != expected:
@@ -347,6 +635,40 @@ def validate_histograms(path: Path, expected_species: Sequence[int],
     result = {"df": df, "dxh": dxh, "df_file": df_file, "dxh_file": dxh_file}
     result.update(optional)
     return result
+
+
+def validate_spectra(path: Path, expected_species: Sequence[int],
+                     nbin: int) -> Dict:
+    nspecies = len(expected_species)
+    pspec_path = path / "pspec"
+    if pspec_path.is_dir():
+        pspec_file = max(pspec_path.glob("*.pspec"), key=_file_number)
+    else:
+        pspec_file = pspec_path
+    spectrum = read_pspec_file(pspec_file, nspecies, nbin)
+    for species, expected in enumerate(expected_species):
+        total = sum(spectrum[species])
+        if total != expected:
+            raise ValueError(
+                f"PSPEC species {species} sums to {total}, expected {expected}")
+    return {"file": pspec_file, "histogram": spectrum}
+
+
+def validate_joint_spectra(path: Path, expected_species: Sequence[int],
+                           nbin1: int, nbin2: int) -> Dict:
+    nspecies = len(expected_species)
+    pspec2_path = path / "pspec2"
+    if pspec2_path.is_dir():
+        pspec2_file = max(pspec2_path.glob("*.pspec2"), key=_file_number)
+    else:
+        pspec2_file = pspec2_path
+    spectrum = read_pspec2_file(pspec2_file, nspecies, nbin1, nbin2)
+    for species, expected in enumerate(expected_species):
+        total = sum(sum(row) for row in spectrum[species])
+        if total != expected:
+            raise ValueError(
+                f"PSPEC2 species {species} sums to {total}, expected {expected}")
+    return {"file": pspec2_file, "histogram": spectrum}
 
 
 def validate_moments(path: Path, expected_species: Sequence[int]) -> List[Dict]:
@@ -393,6 +715,10 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
                         help="Comma-separated expected counts, e.g. 512,512")
     parser.add_argument("--histogram-nbin", type=int,
                         help="Also validate df/dxh histogram sums")
+    parser.add_argument("--spectrum-nbin", type=int,
+                        help="Also validate pspec spectrum sums")
+    parser.add_argument("--joint-spectrum-nbin",
+                        help="Also validate pspec2 sums as nbin1,nbin2")
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     expected_species = _parse_counts(args.expected_species_counts)
@@ -404,6 +730,9 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     print(f"  total: {summary['total']}")
     print(f"  ranks: {_format_counts(summary['rank_counts'])}")
     print(f"  species: {_format_counts(summary['species_counts'])}")
+    print(f"  meshblocks: {_format_counts(summary['pgid_counts'])}")
+    print(f"  real_sizes: {_format_counts(summary['real_sizes'])}")
+    print(f"  formats: {_format_counts(summary['format_versions'])}")
 
     ppd_summary = summarize_ppd(args.path, latest=not args.all)
     if ppd_summary is not None:
@@ -420,9 +749,29 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         print("histograms:")
         print(f"  df: {hist['df_file']}")
         print(f"  dxh: {hist['dxh_file']}")
-        for name in ("drh", "dparh"):
+        for name in ("drh", "dparh", "pspec"):
             if name in hist:
                 print(f"  {name}: {hist[name]['file']}")
+
+    if args.spectrum_nbin is not None:
+        if expected_species is None:
+            raise ValueError("--spectrum-nbin requires --expected-species-counts")
+        spectrum = validate_spectra(args.path, expected_species,
+                                    args.spectrum_nbin)
+        print("spectra:")
+        print(f"  pspec: {spectrum['file']}")
+
+    if args.joint_spectrum_nbin is not None:
+        if expected_species is None:
+            raise ValueError(
+                "--joint-spectrum-nbin requires --expected-species-counts")
+        nbin_values = _parse_counts(args.joint_spectrum_nbin)
+        if nbin_values is None or len(nbin_values) != 2:
+            raise ValueError("--joint-spectrum-nbin must be nbin1,nbin2")
+        joint = validate_joint_spectra(
+            args.path, expected_species, nbin_values[0], nbin_values[1])
+        print("joint_spectra:")
+        print(f"  pspec2: {joint['file']}")
 
     pmom_path = args.path / "pmom"
     if expected_species is not None and pmom_path.exists():
@@ -433,6 +782,15 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
                 "  species {species}: count={count} mean_mu={mean_mu:.6e} "
                 "mean_mu2={mean_mu2:.6e} anisotropy={anisotropy:.6e}".format(
                     **row))
+
+    sample_summary = summarize_samples(args.path, latest=not args.all)
+    if sample_summary is not None:
+        print("samples:")
+        print(f"  files: {len(sample_summary['files'])}")
+        print(f"  total: {sample_summary['total']}")
+        print(f"  ranks: {_format_counts(sample_summary['rank_counts'])}")
+        print(f"  species: {_format_counts(sample_summary['species_counts'])}")
+        print(f"  fields: {','.join(sample_summary['fields'])}")
 
     return 0
 
