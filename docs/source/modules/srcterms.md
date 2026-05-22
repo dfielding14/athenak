@@ -144,6 +144,8 @@ A companion 2D regression input,
 `inputs/tests/initial_perturbations_2d.athinput`, repeats the same density,
 velocity, and magnetic checks on a `128 x 128 x 1` mesh.
 
+#### 3D Density Validation
+
 The 3D figures below were generated directly from that snapshot with:
 
 ```bash
@@ -159,6 +161,8 @@ For the documented run, the measured density contrast had RMS
 ![Initial density perturbation slice](../_static/initial_perturbations_density_slice.png)
 
 ![Initial density perturbation power spectrum](../_static/initial_perturbations_density_power_spectrum.png)
+
+#### 2D Density Validation
 
 The 2D figures below were generated directly from the `128 x 128 x 1` test
 snapshot with:
@@ -177,6 +181,8 @@ out-of-band power fraction `7.468675940e-12`.
 ![2D initial density perturbation slice](../_static/initial_perturbations_2d_density_slice.png)
 
 ![2D initial density perturbation power spectrum](../_static/initial_perturbations_2d_density_power_spectrum.png)
+
+#### 2D Velocity and Magnetic Validation
 
 The same 2D snapshot also validates the vector perturbations. The velocity
 field is checked with a spectral Helmholtz decomposition after subtracting the
