@@ -546,6 +546,32 @@ TaskStatus MHD::ConToPrim(Driver *pdrive, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::ConToPrimGhostZones
+//! \brief Convert conserved to primitive variables only in ghost-zone slabs.
+
+TaskStatus MHD::ConToPrimGhostZones(Driver *pdrive, int stage) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int &ng = indcs.ng;
+  int n1m1 = indcs.nx1 + 2*ng - 1;
+  int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
+  int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
+  peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, ng-1, 0, n2m1, 0, n3m1);
+  peos->ConsToPrim(u0, b0, w0, bcc0, false, n1m1-ng+1, n1m1,
+                   0, n2m1, 0, n3m1);
+  if (indcs.nx2 > 1) {
+    peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, ng-1, 0, n3m1);
+    peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, n2m1-ng+1, n2m1,
+                     0, n3m1);
+  }
+  if (indcs.nx3 > 1) {
+    peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, ng-1);
+    peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1,
+                     n3m1-ng+1, n3m1);
+  }
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::ClearSend
 //! \brief Wrapper task list function that checks all MPI sends have completed. Used in
 //! TaskList and in Driver::InitBoundaryValuesAndPrimitives()

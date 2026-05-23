@@ -128,6 +128,7 @@ class Hydro {
   TaskStatus ApplyPhysicalBCs(Driver* pdrive, int stage);
   TaskStatus Prolongate(Driver* pdrive, int stage);
   TaskStatus ConToPrim(Driver *d, int stage);
+  TaskStatus ConToPrimGhostZones(Driver *d, int stage);
   TaskStatus NewTimeStep(Driver *d, int stage);
   // ...in "after_stagen_tl" list
   TaskStatus ClearSend(Driver *d, int stage);

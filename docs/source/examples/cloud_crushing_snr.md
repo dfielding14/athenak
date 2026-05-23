@@ -181,6 +181,9 @@ v_grid = v_lab - V_frame
 Frame tracking does not remap mesh coordinates or move AMR blocks. The
 displacement is the bookkeeping needed to evaluate lab-frame physics
 consistently while the grid-frame fluid variables are Galilean shifted.
+After a frame update, the tracker reapplies non-periodic boundary states before
+the next flux calculation so the Sedov inflow is evaluated in the current
+moving frame across uninterrupted and restarted runs.
 
 ## Build And Run
 

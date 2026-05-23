@@ -136,6 +136,8 @@ void TRMLZBoundary(Mesh *pm) {
   auto &u0 = pmbp->phydro->u0;
   auto &size = pmbp->pmb->mb_size;
   auto &mb_bcs = pmbp->pmb->mb_bcs;
+  const int nhydro = pmbp->phydro->nhydro;
+  const int nscalars = pmbp->phydro->nscalars;
   const TRMLFrameTrackingData data = trml_data;
 
   Real frame_x1 = 0.0;
@@ -168,6 +170,9 @@ void TRMLZBoundary(Mesh *pm) {
                       density, pressure, vx, vy, vz, cold_fraction);
     SetHydroState(u0, m, kb, j, i, density, pressure, vx - frame_v1,
                   vy - frame_v2, vz - frame_v3, data.gm1);
+    for (int n = nhydro; n < nhydro + nscalars; ++n) {
+      u0(m, n, kb, j, i) = density*cold_fraction;
+    }
   });
 
   par_for("trml_outer_x3", DevExeSpace(), 0, nmb1, 0, ng-1, 0, n2-1, 0, n1-1,
@@ -185,6 +190,9 @@ void TRMLZBoundary(Mesh *pm) {
                       density, pressure, vx, vy, vz, cold_fraction);
     SetHydroState(u0, m, kb, j, i, density, pressure, vx - frame_v1,
                   vy - frame_v2, vz - frame_v3, data.gm1);
+    for (int n = nhydro; n < nhydro + nscalars; ++n) {
+      u0(m, n, kb, j, i) = density*cold_fraction;
+    }
   });
 }
 

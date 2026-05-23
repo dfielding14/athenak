@@ -99,7 +99,7 @@ class FrameTracker {
                          const std::array<Real, 3> &v_i,
                          const std::array<Real, 3> &cmd_pre,
                          const std::array<Real, 3> &boost) const;
-  void AdvanceFrameDisplacement(const Real dt);
+  bool AdvanceFrameDisplacement(const Real dt);
   void RestoreFrameState(ParameterInput *pin);
 
   MeshBlockPack *pmy_pack = nullptr;

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare frame-tracking runs in lab coordinates and write validation CSV rows."""
+"""Compare frame-tracking runs and write validation CSV rows."""
 
 from __future__ import annotations
 
@@ -38,6 +38,7 @@ FIELDS = (
 QUANTITIES = ("dens", "eint", "velx", "vely", "velz")
 AXIS_INDEX = {"x1": 0, "x2": 1, "x3": 2}
 VELOCITY_NAME = {"x1": "velx", "x2": "vely", "x3": "velz"}
+BINARY_FIELD_TOLERANCE = 100.0 * np.finfo(np.float32).eps
 
 
 def final_binary(run_dir: Path) -> Path:
@@ -51,15 +52,15 @@ def final_binary(run_dir: Path) -> Path:
     return paths[-1]
 
 
-def read_snapshot(run_dir: Path) -> dict[str, Any]:
+def read_snapshot(run_dir: Path, quantities: tuple[str, ...]) -> dict[str, Any]:
     path = final_binary(run_dir)
     if "rank_00000000" in path.parts:
         data = bin_reader.read_all_ranks_binary_as_athdf(
-            str(path), quantities=list(QUANTITIES)
+            str(path), quantities=list(quantities)
         )
     else:
-        data = bin_reader.read_binary_as_athdf(str(path), quantities=list(QUANTITIES))
-    missing = [name for name in QUANTITIES if name not in data]
+        data = bin_reader.read_binary_as_athdf(str(path), quantities=list(quantities))
+    missing = [name for name in quantities if name not in data]
     if missing:
         raise ValueError(f"Snapshot {path} lacks required fields: {', '.join(missing)}.")
     return {
@@ -70,7 +71,7 @@ def read_snapshot(run_dir: Path) -> dict[str, Any]:
         "x1f": np.asarray(data["x1f"], dtype=float),
         "x2f": np.asarray(data["x2f"], dtype=float),
         "x3f": np.asarray(data["x3f"], dtype=float),
-        "fields": {name: np.asarray(data[name], dtype=float) for name in QUANTITIES},
+        "fields": {name: np.asarray(data[name], dtype=float) for name in quantities},
     }
 
 
@@ -102,17 +103,22 @@ def selected_mask(snapshot: dict[str, Any], args: argparse.Namespace) -> np.ndar
     density = snapshot["fields"]["dens"]
     if args.selection == "density":
         value = density
-    else:
+    elif args.selection == "temperature":
         value = (args.gamma - 1.0) * snapshot["fields"]["eint"] / density
+    else:
+        value = snapshot["fields"][args.scalar_field]
     return (value >= args.target_min) & (value <= args.target_max)
 
 
 def selected_observables(snapshot: dict[str, Any], history: dict[str, float],
                          args: argparse.Namespace) -> tuple[float, float]:
     density = snapshot["fields"]["dens"]
-    mask = selected_mask(snapshot, args)
     spacings = [float(np.mean(np.diff(snapshot[f"x{n}f"]))) for n in (1, 2, 3)]
-    weights = np.where(mask, density * np.prod(spacings), 0.0)
+    if args.selection == "scalar":
+        weights = density * snapshot["fields"][args.scalar_field] * np.prod(spacings)
+    else:
+        mask = selected_mask(snapshot, args)
+        weights = np.where(mask, density * np.prod(spacings), 0.0)
     mass = float(np.sum(weights))
     if mass <= 0.0:
         return mass, math.nan
@@ -166,6 +172,13 @@ def norm_error(reference: np.ndarray, candidate: np.ndarray) -> tuple[float, flo
     return absolute, absolute / denominator
 
 
+def grids_match(reference: dict[str, Any], candidate: dict[str, Any]) -> bool:
+    return all(
+        np.array_equal(reference[coordinate], candidate[coordinate])
+        for coordinate in ("x1v", "x2v", "x3v", "x1f", "x2f", "x3f")
+    )
+
+
 def add_row(rows: list[dict[str, object]], args: argparse.Namespace, metric: str,
             absolute: float, relative: float, tolerance: str,
             result: str) -> None:
@@ -214,21 +227,32 @@ def compare_continuity(rows: list[dict[str, object]], reference: dict[str, Any],
                        candidate: dict[str, Any], reference_history: dict[str, float],
                        candidate_history: dict[str, float],
                        args: argparse.Namespace) -> None:
-    tolerance = args.tolerance
+    field_tolerance = args.field_tolerance
+    common_grid = grids_match(reference, candidate)
     for field in QUANTITIES:
-        ref_values, cand_values = interpolate_to_reference(
-            reference, candidate, reference_history, candidate_history, field, args.axis
-        )
+        if args.comparison_kind in ("restart", "mpi") and common_grid:
+            ref_values = reference["fields"][field]
+            cand_values = candidate["fields"][field]
+            metric = f"{field}_l2_grid_frame_binary"
+        else:
+            ref_values, cand_values = interpolate_to_reference(
+                reference, candidate, reference_history, candidate_history,
+                field, args.axis
+            )
+            metric = f"{field}_l2_lab_frame_binary"
         absolute, relative = norm_error(ref_values, cand_values)
-        result = "pass" if (absolute <= tolerance or relative <= tolerance) else "fail"
-        add_row(rows, args, f"{field}_l2_lab_frame", absolute, relative,
-                f"absolute or relative <= {tolerance:.16e}", result)
+        result = "pass" if (absolute <= field_tolerance or
+                            relative <= field_tolerance) else "fail"
+        criterion = (
+            f"native float32 snapshot: absolute or relative <= {field_tolerance:.16e}"
+        )
+        add_row(rows, args, metric, absolute, relative, criterion, result)
     for key in (f"ft_vf_{args.axis}", f"ft_dx_{args.axis}", f"ft_pos_{args.axis}",
                 f"ft_err_{args.axis}", f"ft_dv_{args.axis}"):
         if key not in reference_history or key not in candidate_history:
             continue
         absolute, relative = scaled_error(candidate_history[key], reference_history[key])
-        scale = tolerance * max(1.0, abs(reference_history[key]))
+        scale = args.tolerance * max(1.0, abs(reference_history[key]))
         add_row(rows, args, key, absolute, relative,
                 f"scaled absolute <= {scale:.16e}",
                 "pass" if absolute <= scale else "fail")
@@ -277,18 +301,35 @@ def parser() -> argparse.ArgumentParser:
                         choices=("physical", "restart", "mpi", "amr"),
                         default="physical")
     result.add_argument("--axis", choices=tuple(AXIS_INDEX), required=True)
-    result.add_argument("--selection", choices=("density", "temperature"), required=True)
+    result.add_argument("--selection", choices=("density", "temperature", "scalar"),
+                        required=True)
+    result.add_argument("--scalar-field", default="s_00")
     result.add_argument("--target-min", type=float, required=True)
     result.add_argument("--target-max", type=float, required=True)
     result.add_argument("--gamma", type=float, default=5.0 / 3.0)
     result.add_argument("--tolerance", type=float, default=1.0e-10)
+    result.add_argument(
+        "--field-tolerance",
+        type=float,
+        default=BINARY_FIELD_TOLERANCE,
+        help=("Tolerance for native binary snapshot fields; defaults to 100 times "
+              "float32 epsilon because AthenaK binary outputs store fields as float."),
+    )
     return result
 
 
 def main() -> None:
     args = parser().parse_args()
-    reference = read_snapshot(args.reference_dir)
-    candidate = read_snapshot(args.candidate_dir)
+    if (args.comparison_kind != "physical" and
+            args.field_tolerance < BINARY_FIELD_TOLERANCE):
+        raise ValueError(
+            "Native binary snapshots store fields as float32 and cannot certify a "
+            f"field tolerance below {BINARY_FIELD_TOLERANCE:.16e}; use high-precision "
+            "conserved-state output for strict restart certification."
+        )
+    quantities = QUANTITIES + ((args.scalar_field,) if args.selection == "scalar" else ())
+    reference = read_snapshot(args.reference_dir, quantities)
+    candidate = read_snapshot(args.candidate_dir, quantities)
     reference_history = final_history(args.reference_dir, args.axis)
     candidate_history = final_history(args.candidate_dir, args.axis)
     rows: list[dict[str, object]] = []

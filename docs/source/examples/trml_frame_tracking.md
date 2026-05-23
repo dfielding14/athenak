@@ -18,7 +18,7 @@ without pulling in the older production TRML branch history:
 - Passive scalar 0 stores the cold fraction.
 - User `x3` boundaries sample the lab-frame layer at
   `x_grid + FrameDisplacement()` and set grid-frame velocities with
-  `v_grid = v_lab - FrameVelocity()`.
+  `v_grid = v_lab - FrameVelocity()`, including passive-scalar inflow.
 
 ## Frame Tracking Block
 
@@ -74,3 +74,10 @@ that verifies the frame-tracking hooks, restart-state path, pgen-local cooling
 timestep, and moving-frame boundary transformation. With `file_type=hst`
 active, machine-readable controller diagnostics are written to
 `TRML_frame_tracking.frame_tracker.hst`.
+
+The current medium diagnostic finds that passive-tracer mass agrees between
+tracking-on and tracking-off runs within one percent, while mass selected by
+the controller's instantaneous temperature window does not. See the
+[validation page](../modules/frame_tracking_validation.md); this example
+remains a wiring and method-development configuration rather than production
+guidance.

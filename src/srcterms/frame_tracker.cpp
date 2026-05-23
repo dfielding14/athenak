@@ -981,16 +981,29 @@ void FrameTracker::IncludeFrameTrackingTask(std::shared_ptr<TaskList> tl, TaskID
 //! \brief Task-list wrapper for scheduled frame tracking.
 
 TaskStatus FrameTracker::Apply(Driver *pdrive, int stage) {
-  (void) stage;
   if (!enabled_ || pmy_pack == nullptr || pmy_pack->pmesh == nullptr) {
     return TaskStatus::complete;
   }
   Mesh *pm = pmy_pack->pmesh;
-  AdvanceFrameDisplacement(pm->dt);
-  if (pm->time <= start_time_ || pm->ncycle % apply_every_ != 0) {
-    return TaskStatus::complete;
+  const bool displacement_changed = AdvanceFrameDisplacement(pm->dt);
+  bool boost_changed = false;
+  if (pm->time > start_time_ && pm->ncycle % apply_every_ == 0) {
+    boost_changed = ApplyTracking();
   }
-  if (ApplyTracking()) {
+
+  if ((displacement_changed || boost_changed) && !pm->strictly_periodic) {
+    // User and physical ghost states may depend on the lab-frame origin and velocity.
+    // Refresh them before output and before the next cycle consumes ghost-zone fluxes.
+    if (track_mhd_) {
+      (void) pmy_pack->pmhd->ApplyPhysicalBCs(pdrive, stage);
+      (void) pmy_pack->pmhd->ConToPrimGhostZones(pdrive, stage);
+    } else {
+      (void) pmy_pack->phydro->ApplyPhysicalBCs(pdrive, stage);
+      (void) pmy_pack->phydro->ConToPrimGhostZones(pdrive, stage);
+    }
+  }
+
+  if (boost_changed) {
     // The controller changes characteristic velocities after the usual fluid dt task.
     // Refresh dtnew from the boosted state so restarts follow the same next timestep.
     if (track_mhd_) {
@@ -1480,16 +1493,20 @@ bool FrameTracker::ApplyTracking() {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn void FrameTracker::AdvanceFrameDisplacement()
+//! \fn bool FrameTracker::AdvanceFrameDisplacement()
 //! \brief Advance the lab-frame origin of the tracked grid frame.
 
-void FrameTracker::AdvanceFrameDisplacement(const Real dt) {
+bool FrameTracker::AdvanceFrameDisplacement(const Real dt) {
   if (dt <= 0.0) {
-    return;
+    return false;
   }
+  bool changed = false;
   for (int axis = 0; axis < 3; ++axis) {
-    frame_displacement_[axis] += frame_velocity_[axis]*dt;
+    const Real dx = frame_velocity_[axis]*dt;
+    frame_displacement_[axis] += dx;
+    changed = changed || (dx != 0.0);
   }
+  return changed;
 }
 
 //----------------------------------------------------------------------------------------
