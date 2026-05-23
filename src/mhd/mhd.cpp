@@ -17,6 +17,7 @@
 #include "diffusion/viscosity.hpp"
 #include "diffusion/resistivity.hpp"
 #include "diffusion/conduction.hpp"
+#include "diffusion/scalar_diffusion.hpp"
 #include "srcterms/srcterms.hpp"
 #include "shearing_box/shearing_box.hpp"
 #include "shearing_box/orbital_advection.hpp"
@@ -37,7 +38,15 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     coarse_w0("cprim",1,1,1,1,1),
     coarse_b0("cB_fc",1,1,1,1),
     u1("cons1",1,1,1,1,1),
+    u_sts0("u_sts0",1,1,1,1,1),
+    u_sts1("u_sts1",1,1,1,1,1),
+    u_sts2("u_sts2",1,1,1,1,1),
+    u_sts_rhs("u_sts_rhs",1,1,1,1,1),
     b1("B_fc1",1,1,1,1),
+    b_sts0("b_sts0",1,1,1,1),
+    b_sts1("b_sts1",1,1,1,1),
+    b_sts2("b_sts2",1,1,1,1),
+    b_sts_rhs("b_sts_rhs",1,1,1,1),
     uflx("uflx",1,1,1,1,1),
     efld("efld",1,1,1,1),
     wsaved("wsaved",1,1,1,1,1),
@@ -98,6 +107,18 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   // Viscosity (only constructed if needed)
   if (pin->DoesParameterExist("mhd","viscosity")) {
     pvisc = new Viscosity("mhd", ppack, pin);
+    const bool active = (pvisc->nu_iso > 0.0 || pvisc->nu_floor > 0.0);
+    has_sts_viscosity = active &&
+        (pvisc->mode == parabolic::ParabolicIntegratorMode::sts);
+    has_explicit_viscosity = active &&
+        (pvisc->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
+    if (active) {
+      ppack->RegisterParabolicProcess({"mhd/viscosity",
+                                       parabolic::ParabolicProcessOwner::mhd,
+                                       pvisc->mode,
+                                       parabolic::ParabolicUpdateShape::cell_centered,
+                                       &(pvisc->dtnew)});
+    }
   } else {
     pvisc = nullptr;
   }
@@ -105,6 +126,18 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   // Resistivity (only constructed if needed)
   if (pin->DoesParameterExist("mhd","ohmic_resistivity")) {
     presist = new Resistivity(ppack, pin);
+    const bool active = (presist->eta_ohm > 0.0);
+    has_sts_resistivity = active &&
+        (presist->mode == parabolic::ParabolicIntegratorMode::sts);
+    has_explicit_resistivity = active &&
+        (presist->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
+    if (active) {
+      ppack->RegisterParabolicProcess({"mhd/ohmic_resistivity",
+                                       parabolic::ParabolicProcessOwner::mhd,
+                                       presist->mode,
+                                       parabolic::ParabolicUpdateShape::cell_and_face,
+                                       &(presist->dtnew)});
+    }
   } else {
     presist = nullptr;
   }
@@ -113,14 +146,56 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   if (pin->DoesParameterExist("mhd","conductivity") ||
       pin->DoesParameterExist("mhd","tdep_conductivity")) {
     pcond = new Conduction("mhd", ppack, pin);
+    const bool active = pcond->power_law_kappa ?
+        (pcond->kappa > 0.0 || pcond->kappa_floor > 0.0) :
+        (pcond->kappa > 0.0 || pcond->tdep_kappa);
+    has_sts_conduction = active &&
+        (pcond->mode == parabolic::ParabolicIntegratorMode::sts);
+    has_explicit_conduction = active &&
+        (pcond->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
+    if (active) {
+      ppack->RegisterParabolicProcess({"mhd/conductivity",
+                                       parabolic::ParabolicProcessOwner::mhd,
+                                       pcond->mode,
+                                       parabolic::ParabolicUpdateShape::cell_centered,
+                                       &(pcond->dtnew)});
+    }
   } else {
     pcond = nullptr;
+  }
+
+  // Diffusion of passive scalar concentrations (if requested in input file)
+  if (pin->DoesParameterExist("mhd","scalar_diffusivity")) {
+    if (nscalars > 0) {
+      pscalar_diff = new ScalarDiffusion("mhd", nscalars, ppack, pin);
+      const bool active = (pscalar_diff->kappa_max > 0.0);
+      has_sts_scalar_diffusion = active &&
+          (pscalar_diff->mode == parabolic::ParabolicIntegratorMode::sts);
+      has_explicit_scalar_diffusion = active &&
+          (pscalar_diff->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
+      if (active) {
+        ppack->RegisterParabolicProcess({"mhd/scalar_diffusivity",
+                                         parabolic::ParabolicProcessOwner::mhd,
+                                         pscalar_diff->mode,
+                                         parabolic::ParabolicUpdateShape::cell_centered,
+                                         &(pscalar_diff->dtnew)});
+      }
+    } else {
+      std::cout << "### WARNING: <mhd>/scalar_diffusivity ignored because nscalars=0"
+                << std::endl;
+    }
   }
 
   // Source terms (if needed)
   if (pin->DoesBlockExist("mhd_srcterms")) {
     psrc = new SourceTerms("mhd_srcterms", ppack, pin);
   }
+
+  has_any_sts_cell_update = (has_sts_viscosity || has_sts_conduction ||
+                             has_sts_scalar_diffusion ||
+                             (has_sts_resistivity && peos->eos_data.is_ideal));
+  has_any_sts_field_update = has_sts_resistivity;
+  has_any_sts_diffusion = (has_any_sts_cell_update || has_any_sts_field_update);
 
   // (3) read time-evolution option [already error checked in driver constructor]
   // Then initialize memory and algorithms for reconstruction and Riemann solvers
@@ -311,9 +386,29 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
       int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
       Kokkos::realloc(u1,     nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+      if (has_any_sts_cell_update) {
+        Kokkos::realloc(u_sts0,    nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(u_sts1,    nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(u_sts2,    nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+        Kokkos::realloc(u_sts_rhs, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+      }
       Kokkos::realloc(b1.x1f, nmb, ncells3, ncells2, ncells1+1);
       Kokkos::realloc(b1.x2f, nmb, ncells3, ncells2+1, ncells1);
       Kokkos::realloc(b1.x3f, nmb, ncells3+1, ncells2, ncells1);
+      if (has_any_sts_field_update) {
+        Kokkos::realloc(b_sts0.x1f,    nmb, ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(b_sts0.x2f,    nmb, ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(b_sts0.x3f,    nmb, ncells3+1, ncells2, ncells1);
+        Kokkos::realloc(b_sts1.x1f,    nmb, ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(b_sts1.x2f,    nmb, ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(b_sts1.x3f,    nmb, ncells3+1, ncells2, ncells1);
+        Kokkos::realloc(b_sts2.x1f,    nmb, ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(b_sts2.x2f,    nmb, ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(b_sts2.x3f,    nmb, ncells3+1, ncells2, ncells1);
+        Kokkos::realloc(b_sts_rhs.x1f, nmb, ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(b_sts_rhs.x2f, nmb, ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(b_sts_rhs.x3f, nmb, ncells3+1, ncells2, ncells1);
+      }
 
       // allocate fluxes, electric fields
       Kokkos::realloc(uflx.x1f, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1+1);
@@ -357,6 +452,7 @@ MHD::~MHD() {
   delete pbval_b;
   delete pbval_u;
   if (psrc!= nullptr) {delete psrc;}
+  if (pscalar_diff != nullptr) {delete pscalar_diff;}
   if (pcond != nullptr) {delete pcond;}
   if (presist!= nullptr) {delete presist;}
   if (pvisc != nullptr) {delete pvisc;}

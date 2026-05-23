@@ -9,6 +9,7 @@
 //  Viscosity may be added to Hydro and/or MHD independently.
 
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
 #include <iostream>
 #include <string> // string
@@ -19,6 +20,32 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "viscosity.hpp"
+
+namespace {
+
+parabolic::ParabolicIntegratorMode ParseViscosityIntegrator(std::string block,
+    ParameterInput *pin) {
+  std::string integrator = pin->GetOrAddString(block, "viscosity_integrator", "explicit");
+  if (integrator == "explicit") {
+    return parabolic::ParabolicIntegratorMode::explicit_mode;
+  } else if (integrator == "sts") {
+    return parabolic::ParabolicIntegratorMode::sts;
+  }
+
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+            << "<" << block << ">/viscosity_integrator = '" << integrator
+            << "' must be 'explicit' or 'sts'" << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+KOKKOS_INLINE_FUNCTION
+Real PowerLawNu(Real temp, Real nu_ref, Real temp_ref, Real exponent,
+                Real floor, Real ceiling) {
+  const Real ratio = fmax(temp/temp_ref, static_cast<Real>(1.0e-30));
+  return fmin(fmax(nu_ref*pow(ratio, exponent), floor), ceiling);
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 // ctor:
@@ -31,29 +58,89 @@ Viscosity::Viscosity(std::string block, MeshBlockPack *pp,
   pmy_pack(pp) {
   // Read coefficient of isotropic kinematic shear viscosity (must be present)
   nu_iso = pin->GetReal(block,"viscosity");
-
-  // viscous timestep on MeshBlock(s) in this pack
+  tdep_nu = pin->GetOrAddBoolean(block, "tdep_viscosity", false);
+  nu_tref = pin->GetOrAddReal(block, "viscosity_tref", 1.0);
+  nu_exponent = pin->GetOrAddReal(block, "viscosity_exponent", 0.0);
+  nu_floor = pin->GetOrAddReal(block, "viscosity_floor", 0.0);
+  nu_ceiling = pin->GetOrAddReal(
+      block, "viscosity_ceiling", static_cast<Real>(std::numeric_limits<float>::max()));
+  if (nu_iso < 0.0 || nu_tref <= 0.0 || nu_floor < 0.0 || nu_ceiling < nu_floor) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "Invalid viscosity coefficient, reference temperature, or power-law "
+              << "saturation bounds in <" << block << ">" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  mode = ParseViscosityIntegrator(block, pin);
   dtnew = std::numeric_limits<float>::max();
-  auto size = pmy_pack->pmb->mb_size;
-  Real fac;
-  if (pp->pmesh->three_d) {
-    fac = 1.0/6.0;
-  } else if (pp->pmesh->two_d) {
-    fac = 0.25;
-  } else {
-    fac = 0.5;
-  }
-  for (int m=0; m<(pp->nmb_thispack); ++m) {
-    dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx1)/nu_iso);
-    if (pp->pmesh->multi_d) {dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx2)/nu_iso);}
-    if (pp->pmesh->three_d) {dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx3)/nu_iso);}
-  }
 }
 
 //----------------------------------------------------------------------------------------
 // Viscosity destructor
 
 Viscosity::~Viscosity() {
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Viscosity::NewTimeStep()
+//! \brief Compute new time step for viscosity.
+
+void Viscosity::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_data) {
+  dtnew = std::numeric_limits<float>::max();
+  auto size = pmy_pack->pmb->mb_size;
+  Real fac;
+  if (pmy_pack->pmesh->three_d) {
+    fac = 1.0/6.0;
+  } else if (pmy_pack->pmesh->two_d) {
+    fac = 0.25;
+  } else {
+    fac = 0.5;
+  }
+  if (!tdep_nu) {
+    if (nu_iso <= 0.0) return;
+    for (int m=0; m<(pmy_pack->nmb_thispack); ++m) {
+      dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx1)/nu_iso);
+      if (pmy_pack->pmesh->multi_d) {
+        dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx2)/nu_iso);
+      }
+      if (pmy_pack->pmesh->three_d) {
+        dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx3)/nu_iso);
+      }
+    }
+    return;
+  }
+
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int is = indcs.is, nx1 = indcs.nx1;
+  const int js = indcs.js, nx2 = indcs.nx2;
+  const int ks = indcs.ks, nx3 = indcs.nx3;
+  const int nmkji = (pmy_pack->nmb_thispack)*nx3*nx2*nx1;
+  const int nkji = nx3*nx2*nx1;
+  const int nji = nx2*nx1;
+  const bool multi_d = pmy_pack->pmesh->multi_d;
+  const bool three_d = pmy_pack->pmesh->three_d;
+  const bool use_e = eos_data.use_e;
+  const Real gm1 = eos_data.gamma - 1.0;
+  const Real nu_ref = nu_iso;
+  const Real temp_ref = nu_tref;
+  const Real exponent = nu_exponent;
+  const Real floor = nu_floor;
+  const Real ceiling = nu_ceiling;
+
+  Kokkos::parallel_reduce("visc_newdt", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int idx, Real &min_dt) {
+    const int m = idx/nkji;
+    const int k = (idx - m*nkji)/nji + ks;
+    const int j = (idx - m*nkji - (k-ks)*nji)/nx1 + js;
+    const int i = idx - m*nkji - (k-ks)*nji - (j-js)*nx1 + is;
+    const Real temp = use_e ? gm1*w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)
+                            : w0(m,ITM,k,j,i);
+    const Real nu = PowerLawNu(temp, nu_ref, temp_ref, exponent, floor, ceiling);
+    if (nu > 0.0) {
+      min_dt = fmin(min_dt, fac*SQR(size.d_view(m).dx1)/nu);
+      if (multi_d) min_dt = fmin(min_dt, fac*SQR(size.d_view(m).dx2)/nu);
+      if (three_d) min_dt = fmin(min_dt, fac*SQR(size.d_view(m).dx3)/nu);
+    }
+  }, Kokkos::Min<Real>(dtnew));
 }
 
 //----------------------------------------------------------------------------------------
@@ -71,6 +158,14 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
   auto size = pmy_pack->pmb->mb_size;
   bool &multi_d = pmy_pack->pmesh->multi_d;
   bool &three_d = pmy_pack->pmesh->three_d;
+  const bool variable_nu = tdep_nu;
+  const bool use_e = eos.use_e;
+  const Real gm1 = eos.gamma - 1.0;
+  const Real nu_ref = nu_iso;
+  const Real temp_ref = nu_tref;
+  const Real exponent = nu_exponent;
+  const Real floor = nu_floor;
+  const Real ceiling = nu_ceiling;
 
   //--------------------------------------------------------------------------------------
   // fluxes in x1-direction
@@ -114,7 +209,16 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
 
     // Sum viscous fluxes into fluxes of conserved variables; including energy fluxes
     par_for_inner(member, is, ie+1, [&](const int i) {
-      Real nud = 0.5*nu_iso*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j,i-1));
+      Real nu = nu_ref;
+      if (variable_nu) {
+        const Real tl = use_e ? gm1*w0(m,IEN,k,j,i-1)/w0(m,IDN,k,j,i-1)
+                              : w0(m,ITM,k,j,i-1);
+        const Real tr = use_e ? gm1*w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)
+                              : w0(m,ITM,k,j,i);
+        nu = 0.5*(PowerLawNu(tl, nu_ref, temp_ref, exponent, floor, ceiling) +
+                  PowerLawNu(tr, nu_ref, temp_ref, exponent, floor, ceiling));
+      }
+      Real nud = 0.5*nu*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j,i-1));
       flx1(m,IVX,k,j,i) -= nud*fvx(i);
       flx1(m,IVY,k,j,i) -= nud*fvy(i);
       flx1(m,IVZ,k,j,i) -= nud*fvz(i);
@@ -161,7 +265,16 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
 
     // Sum viscous fluxes into fluxes of conserved variables; including energy fluxes
     par_for_inner(member, is, ie, [&](const int i) {
-      Real nud = 0.5*nu_iso*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j-1,i));
+      Real nu = nu_ref;
+      if (variable_nu) {
+        const Real tl = use_e ? gm1*w0(m,IEN,k,j-1,i)/w0(m,IDN,k,j-1,i)
+                              : w0(m,ITM,k,j-1,i);
+        const Real tr = use_e ? gm1*w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)
+                              : w0(m,ITM,k,j,i);
+        nu = 0.5*(PowerLawNu(tl, nu_ref, temp_ref, exponent, floor, ceiling) +
+                  PowerLawNu(tr, nu_ref, temp_ref, exponent, floor, ceiling));
+      }
+      Real nud = 0.5*nu*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j-1,i));
       flx2(m,IVX,k,j,i) -= nud*fvx(i);
       flx2(m,IVY,k,j,i) -= nud*fvy(i);
       flx2(m,IVZ,k,j,i) -= nud*fvz(i);
@@ -202,7 +315,16 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
 
     // Sum viscous fluxes into fluxes of conserved variables; including energy fluxes
     par_for_inner(member, is, ie, [&](const int i) {
-      Real nud = 0.5*nu_iso*(w0(m,IDN,k,j,i) + w0(m,IDN,k-1,j,i));
+      Real nu = nu_ref;
+      if (variable_nu) {
+        const Real tl = use_e ? gm1*w0(m,IEN,k-1,j,i)/w0(m,IDN,k-1,j,i)
+                              : w0(m,ITM,k-1,j,i);
+        const Real tr = use_e ? gm1*w0(m,IEN,k,j,i)/w0(m,IDN,k,j,i)
+                              : w0(m,ITM,k,j,i);
+        nu = 0.5*(PowerLawNu(tl, nu_ref, temp_ref, exponent, floor, ceiling) +
+                  PowerLawNu(tr, nu_ref, temp_ref, exponent, floor, ceiling));
+      }
+      Real nud = 0.5*nu*(w0(m,IDN,k,j,i) + w0(m,IDN,k-1,j,i));
       flx3(m,IVX,k,j,i) -= nud*fvx(i);
       flx3(m,IVY,k,j,i) -= nud*fvy(i);
       flx3(m,IVZ,k,j,i) -= nud*fvz(i);

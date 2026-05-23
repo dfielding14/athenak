@@ -7,8 +7,10 @@
 //  \brief Implements functions for Resistivity class.
 
 #include <algorithm>
+#include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <string>
 
 // Athena++ headers
 #include "athena.hpp"
@@ -17,6 +19,25 @@
 #include "resistivity.hpp"
 #include "current_density.hpp"
 
+namespace {
+
+parabolic::ParabolicIntegratorMode ParseOhmicResistivityIntegrator(ParameterInput *pin) {
+  std::string integrator = pin->GetOrAddString("mhd", "ohmic_resistivity_integrator",
+                                               "explicit");
+  if (integrator == "explicit") {
+    return parabolic::ParabolicIntegratorMode::explicit_mode;
+  } else if (integrator == "sts") {
+    return parabolic::ParabolicIntegratorMode::sts;
+  }
+
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+            << "<mhd>/ohmic_resistivity_integrator = '" << integrator
+            << "' must be 'explicit' or 'sts'" << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+} // namespace
+
 //----------------------------------------------------------------------------------------
 // ctor: also calls Resistivity base class constructor
 
@@ -24,29 +45,49 @@ Resistivity::Resistivity(MeshBlockPack *pp, ParameterInput *pin) :
   pmy_pack(pp) {
   // Read parameters for Ohmic diffusion (if any)
   eta_ohm = pin->GetReal("mhd","ohmic_resistivity");
-
-  // resistive timestep on MeshBlock(s) in this pack
+  if (eta_ohm < 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "<mhd>/ohmic_resistivity must be non-negative" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  mode = ParseOhmicResistivityIntegrator(pin);
   dtnew = std::numeric_limits<float>::max();
-  auto size = pmy_pack->pmb->mb_size;
-  Real fac;
-  if (pp->pmesh->three_d) {
-    fac = 1.0/6.0;
-  } else if (pp->pmesh->two_d) {
-    fac = 0.25;
-  } else {
-    fac = 0.5;
-  }
-  for (int m=0; m<(pp->nmb_thispack); ++m) {
-    dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx1)/eta_ohm);
-    if (pp->pmesh->multi_d) {dtnew = std::min(dtnew,fac*SQR(size.h_view(m).dx2)/eta_ohm);}
-    if (pp->pmesh->three_d) {dtnew = std::min(dtnew,fac*SQR(size.h_view(m).dx3)/eta_ohm);}
-  }
 }
 
 //----------------------------------------------------------------------------------------
 // Resistivity destructor
 
 Resistivity::~Resistivity() {
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Resistivity::NewTimeStep()
+//! \brief Compute new time step for Ohmic resistivity.
+
+void Resistivity::NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_data) {
+  (void)w0;
+  (void)eos_data;
+  dtnew = std::numeric_limits<float>::max();
+  if (eta_ohm <= 0.0) return;
+  auto size = pmy_pack->pmb->mb_size;
+  Real fac;
+  if (pmy_pack->pmesh->three_d) {
+    fac = 1.0/6.0;
+  } else if (pmy_pack->pmesh->two_d) {
+    fac = 0.25;
+  } else {
+    fac = 0.5;
+  }
+  for (int m=0; m<(pmy_pack->nmb_thispack); ++m) {
+    dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx1)/eta_ohm);
+    if (pmy_pack->pmesh->multi_d) {
+      dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx2)/eta_ohm);
+    }
+    if (pmy_pack->pmesh->three_d) {
+      dtnew = std::min(dtnew, fac*SQR(size.h_view(m).dx3)/eta_ohm);
+    }
+  }
+  return;
 }
 
 //----------------------------------------------------------------------------------------
