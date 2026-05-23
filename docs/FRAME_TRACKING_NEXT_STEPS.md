@@ -17,7 +17,7 @@ the feature as working perfectly.
 
 | Gate | Required outcome | Current branch status |
 | --- | --- | --- |
-| Correctness | Continuous and restart-split runs agree in controller state and final fluid state within precision-aware tolerances. | Small regression fixtures pass locally, but medium TRML split runs exceed the strict continuation tolerance; production gate fails pending investigation. |
+| Correctness | Continuous and restart-split runs agree in controller state and final fluid state within precision-aware tolerances. | The stale frame-aware boundary refresh defect is fixed; a high-precision TRML boundary regression passes and corrected medium TRML controller/binary diagnostics pass. Full conserved-state medium certification still requires precision-suitable output. |
 | Robustness | CPU, MPI/AMR, MHD, invalid configuration, legacy-state, cloud, and TRML tests run through reproducible commands. | Full local CPU and MPI CPU discovery suites pass, including MHD, three-axis, guards, legacy, cloud, and TRML coverage; medium serial scientific comparisons expose blocking failures. |
 | Observability | Controller state is emitted in machine-readable history data. | Implemented as `<basename>.frame_tracker.hst`; stdout is compatibility-only for archived runs. |
 | Efficiency | All active axes share one mesh sampling pass and grouped reductions per controller update. | Measured on clean candidate `78f8e4cd`: serial `x1` overhead is 77.0% lower and serial `all` overhead is 81.4% lower than `cfbcdde7`; see the performance-evidence page and raw CSV. |
@@ -86,12 +86,12 @@ only shipped frame-aware examples are validated.
 | MHD Galilean invariant | Density and magnetic fields are unchanged at the first non-zero boost; momentum and ideal-gas energy match analytic boost updates to `100 * machine_epsilon`. |
 | MPI/AMR | One-rank and multi-rank AMR results agree within reduction-order tolerance and retain valid controller state through refinement. |
 | Guards | SR, GR, dynamical-GR, missing selected fluids, ambiguous eligible fluids, and removed aliases fail before evolution with actionable messages. |
-| Cloud/TRML integrations | Short custom-problem runs compile and execute with finite structured histories; medium serial comparisons are recorded and fail the declared physical acceptance criteria. |
+| Cloud/TRML integrations | Short custom-problem runs compile and execute with finite structured histories; corrected medium serial comparisons are recorded and still fail the declared physical acceptance criteria. |
 
 ## Local Verification Record
 
-The interface and regression-test changes were validated on May 23, 2026
-before their feature-branch commit:
+The interface, boundary-refresh, and regression-test changes were validated on
+May 23, 2026 in the feature worktree before commit:
 
 | Command | Result |
 | --- | --- |
@@ -103,10 +103,9 @@ before their feature-branch commit:
 | `python run_test_suite.py --cpu` | `209 passed, 15 skipped, 60 deselected`; includes cloud and TRML custom-problem integrations. |
 | `python run_test_suite.py --mpicpu` | `31 passed, 253 deselected`. |
 
-The style command uses a local warning suppression for a deprecation warning
-in the test harness's downloaded `cpplint.py` under Python 3.14; it does not
-mask style findings. CI confirmation for the exact pushed commit and
-medium-resolution scientific validation are still required.
+CI confirmation for the exact pushed commit remains required. The
+medium-resolution serial diagnostics below were completed locally and retain a
+failed production gate.
 
 ## Benchmark Campaign
 
@@ -128,22 +127,29 @@ discarded warm-up, and seven measured repeats per case.
 The raw data and compact plot are maintained as
 `docs/source/_static/frame_tracking_benchmark.csv` and
 `docs/source/_static/frame_tracking_benchmark.png`. These measurements do not
-replace cloud/TRML transformed-frame physical validation.
+replace cloud/TRML transformed-frame physical validation. The benchmark uses
+strictly periodic boundaries and therefore does not measure the required
+non-periodic ghost-boundary refresh added for restart-correct frame-aware
+examples; that path converts ghost slabs only, but still needs a dedicated
+boundary-aware timing result before production performance claims.
 
 ## Scientific Validation Campaign
 
-Medium-resolution serial validation was run on May 23, 2026 with the Release
-CPU executable at `505f2df4`; the inputs now expose `enabled = true`
-explicitly so the same documented configuration can be switched off at run
-time. The common comparison tool writes
-`docs/source/_static/frame_tracking_validation_summary.csv`.
+Medium-resolution serial diagnosis was extended on May 23, 2026 after fixing
+post-frame-update boundary refresh and TRML passive-scalar boundary filling.
+The initial failed campaign remains in
+`docs/source/_static/frame_tracking_validation_summary.csv`; corrected
+selection/resolution and restart diagnostics are in
+`docs/source/_static/frame_tracking_resolution_sensitivity.csv` and
+`docs/source/_static/frame_tracking_restart_diagnostic.csv`.
 
 | Problem/comparison | Resolution and duration | Measured result | Acceptance result |
 | --- | --- | --- | --- |
-| Cloud tracking on/off, lab-frame comparison | `96 x 32 x 32`, `tlim=0.04` | Selected-mass relative difference `1.4178e-2`; zero misses and limits. | Fail: mass difference exceeds `1.0e-2`. |
-| TRML tracking on/off, lab-frame comparison | `32 x 32 x 64`, `tlim=0.25` | Selected-mass relative difference `6.0872e-2`; three limit events. | Fail: mass difference and no-limit requirements are not met. |
-| TRML restart splits at approximately 25, 50, and 75 percent | `32 x 32 x 64`, `tlim=0.25` | Finite output and small controller differences, but strict field/controller rows fail. | Fail: `100 * machine_epsilon` continuation criterion is not met. |
-| TRML serial versus 4-rank MPI, uniform grid | `32 x 32 x 64`, `tlim=0.25` | Field/controller comparisons pass `1.0e-10`; three limit events remain. | Numerical comparison passes; health criterion fails. |
+| Cloud tracking on/off, lab-frame comparison | `48 x 16 x 16` and `96 x 32 x 32`, `tlim=0.04` | Density-selected mass difference improves from `2.0914e-2` to `1.4178e-2`; zero misses and limits. | Fail: medium mass difference remains above `1.0e-2`. |
+| TRML tracking on/off, temperature-window selection | `16 x 16 x 32` and `32 x 32 x 64`, `tlim=0.25` | Mass difference is `4.0290e-2` then `6.0872e-2`; medium has three limit events. | Fail: mass and no-limit requirements are not met. |
+| TRML tracking on/off, passive-tracer diagnostic | Same runs | Tracer-mass difference is `2.4241e-3` then `4.0503e-3`. | Diagnostic mass passes; it does not replace the declared temperature-selection or health gates. |
+| TRML restart splits at approximately 25, 50, and 75 percent | `32 x 32 x 64`, `tlim=0.25` | Corrected controller rows pass strict history tolerance; same-grid native binary state diagnostics pass float32-aware tolerance. | Restart defect fixed; full high-precision medium conserved-state certification remains required. |
+| Prior TRML serial versus 4-rank MPI diagnostic, before boundary fix | `32 x 32 x 64`, `tlim=0.25` | Field/controller comparisons passed `1.0e-10`; three limit events remained. | Historical diagnostic only; not rerun because corrected serial physical gates still fail. |
 
 An inexpensive TRML follow-up varied only `max_boost_change_rate`: rates
 `0.05` and `0.10` retain one limit event and produce `7.35%` and `7.81%`
@@ -151,21 +157,27 @@ selected-mass differences, while rates `0.20` and `1.00` remove limit events
 but worsen that difference to `8.05%` and `8.09%`. The existing recipe is
 therefore not replaced by an unvalidated slew-rate adjustment.
 
-The failed serial physical comparisons are already sufficient to block
-production-candidate guidance. Cloud restart/MPI/AMR and full parallel
-scientific comparisons are deferred until the selected-mass discrepancy and
-TRML slew limiting are investigated; running them now could add diagnostics
-but cannot satisfy this release gate.
+The restart mismatch was caused by stale frame-dependent ghost states after
+post-timestep displacement/boost updates: uninterrupted runs reached their
+next flux before boundary values were refreshed, whereas restarted runs
+refilled boundaries on initialization. The tracker now refreshes only affected
+ghost primitive slabs after reapplying non-periodic boundaries, and the TRML
+boundary fills its passive cold-fraction scalar.
+
+The failed serial physical comparisons are still sufficient to block
+production-candidate guidance. Cloud/TRML MPI and AMR scientific comparisons
+are deferred because running them now cannot satisfy this release gate.
 
 Required next work is:
 
-1. Diagnose transformed tracking-on/off mass divergence and validate the
-   selection and boundary/source transformations.
-2. Determine why the tested TRML unsaturated controllers worsen selected-mass
-   agreement before adopting a revised conservative recipe.
-3. Resolve the strict medium restart-continuity mismatch.
-4. Rerun serial, restart, MPI, and AMR comparisons and publish the updated CSV
-   and field-norm tables.
+1. Define and justify the selected-material acceptance observable for TRML:
+   the temperature-window criterion fails while conserved tracer mass passes.
+2. Determine a TRML controller recipe that avoids limit events without
+   degrading the accepted physical observable.
+3. Add a precision-suitable full conserved-state medium restart output path;
+   native binary fields are stored as floats and remain diagnostic only.
+4. Rerun cloud/TRML restart, MPI, and AMR production comparisons only after
+   the serial physical gates pass.
 
 Until those results pass, recommend the feature for controlled wiring tests
 and method-development work only, not irreversible production science runs.

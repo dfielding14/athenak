@@ -25,6 +25,10 @@ v_grid = v_lab - FrameVelocity(axis)
 ```
 
 where `FrameVelocity(axis)` is the lab-frame velocity of the moving grid.
+When the frame state changes, the tracker refreshes non-periodic physical and
+user boundary ghost zones before the next flux calculation. Frame-aware user
+boundaries must fill every evolved boundary variable they introduce, including
+passive scalars.
 
 ## Public API
 
@@ -195,7 +199,9 @@ max_boost_change_rate = 0.02
 
 The cloud-crushing and TRML examples use moving-frame user boundaries that
 sample lab-frame initial/boundary states at `x_grid + FrameDisplacement()` and
-store grid-frame velocities as `v_lab - FrameVelocity()`.
+store grid-frame velocities as `v_lab - FrameVelocity()`. Their cooling
+sources depend on local thermodynamic state; the TRML boundary also fills its
+passive cold-fraction scalar in the moving-frame ghost state.
 
 ## Compatibility Notes
 
@@ -214,6 +220,9 @@ store grid-frame velocities as `v_lab - FrameVelocity()`.
 - Arbitrary user boundaries and source terms cannot be made frame-aware
   automatically. Only examples that explicitly apply the moving-frame
   coordinate and velocity transformations are validated.
+- Native binary snapshots store output fields as single precision and are not
+  a double-precision restart oracle. Use structured history and
+  high-precision conserved-state output for strict continuation evidence.
 - AMR changes preserve the tracker object and refresh its pack pointer after
   mesh-block redistribution.
 
