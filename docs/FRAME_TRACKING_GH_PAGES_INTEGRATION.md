@@ -10,6 +10,7 @@ module pages.
 - `docs/source/modules/frame_tracking.md`
 - `docs/source/modules/frame_tracking_next_steps.md`
 - `docs/source/modules/frame_tracking_recipes.md`
+- `docs/source/modules/frame_tracking_performance.md`
 - `docs/source/examples/cloud_crushing_snr.md`
 - `docs/source/examples/trml_frame_tracking.md`
 - `docs/FRAME_TRACKING_NEXT_STEPS.md`
@@ -22,6 +23,8 @@ module pages.
 - `docs/source/_static/cloud_crushing_lowres_frame_tracker.csv`
 - `docs/source/_static/cloud_crushing_lowres_summary.csv`
 - `docs/source/_static/cloud_crushing_lowres_density_slices_6_vertical_equal_aspect.png`
+- `docs/source/_static/frame_tracking_benchmark.csv`
+- `docs/source/_static/frame_tracking_benchmark.png`
 
 Do not copy `docs/source/modules/pgen.md` or
 `docs/source/modules/srcterms.md` from older versions of this feature branch
@@ -37,6 +40,7 @@ Add this link to the Module Reference bullet list:
 [Frame Tracking](modules/frame_tracking.md)
 [Frame Tracking Production Plan](modules/frame_tracking_next_steps.md)
 [Frame Tracking Recipes And Migration](modules/frame_tracking_recipes.md)
+[Frame Tracking Performance Evidence](modules/frame_tracking_performance.md)
 ```
 
 Add this entry to the hidden Modules toctree:
@@ -45,6 +49,7 @@ Add this entry to the hidden Modules toctree:
 modules/frame_tracking
 modules/frame_tracking_next_steps
 modules/frame_tracking_recipes
+modules/frame_tracking_performance
 ```
 
 Add these links to the Worked Examples bullet list:

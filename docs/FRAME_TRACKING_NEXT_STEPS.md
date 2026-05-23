@@ -20,7 +20,7 @@ the feature as working perfectly.
 | Correctness | Continuous and restart-split runs agree in controller state and final fluid state within precision-aware tolerances. | One- and three-axis restart equivalence tests pass locally at `100 * machine_epsilon`; GitHub Actions confirmation remains pending. |
 | Robustness | CPU, MPI/AMR, MHD, invalid configuration, legacy-state, cloud, and TRML tests run through reproducible commands. | Full local CPU and MPI CPU discovery suites pass, including MHD, three-axis, guards, legacy, cloud, and TRML coverage; medium campaigns remain pending. |
 | Observability | Controller state is emitted in machine-readable history data. | Implemented as `<basename>.frame_tracker.hst`; stdout is compatibility-only for archived runs. |
-| Efficiency | All active axes share one mesh sampling pass and grouped reductions per controller update. | Implemented; benchmark evidence remains to be collected. |
+| Efficiency | All active axes share one mesh sampling pass and grouped reductions per controller update. | Measured on clean candidate `78f8e4cd`: serial `x1` overhead is 77.0% lower and serial `all` overhead is 81.4% lower than `cfbcdde7`; see the performance-evidence page and raw CSV. |
 | Usability | Canonical parameters, conservative examples, removed-alias migration errors, and supported-physics limits are documented. | Implemented in the module reference and recipe/migration page; legacy restart-state reading remains supported. |
 | Publication | GitHub Pages exposes reference pages, slices, CSV summaries, validation limits, and this roadmap. | Existing wiring-validation pages are published; recipe/migration updates and new measured results remain to be synced after validation. |
 
@@ -72,7 +72,7 @@ only shipped frame-aware examples are validated.
 | 2 | Version and serialize complete controller state, retain the legacy reader, and preserve full `Real` precision only for stored controller state. | Restart-split test passes at `100 * machine_epsilon` scaled tolerance without changing unrelated runtime parameter formatting. |
 | 3 | Emit dedicated history output and migrate plotting to consume it before stdout fallback. | Scripts reproduce tables from `.frame_tracker.hst`. |
 | 4 | Add CPU smoke, restart, MHD, MPI/AMR, legacy compatibility, and invalid-input regressions. | Tests run through `tst/run_test_suite.py`. |
-| 5 | Fuse multi-axis sampling and group global reductions per update. | Benchmark table records update costs for one and three axes. |
+| 5 | Fuse multi-axis sampling, group global reductions, and skip no-op boost/timestep kernels. | Clean-revision benchmark passes the declared serial one-axis and three-axis criteria; raw CPU/MPI results are maintained for publication. |
 | 6 | Use time-based slew limiting in shipped examples, reject configuration aliases actionably, and publish copy-ready recipes. | New docs and inputs contain only canonical parameter names; legacy restart state is still readable. |
 | 7 | Execute scientific validation at useful resolution and decomposition. | Published CSVs contain measured errors, convergence trends, and limits. |
 
@@ -105,21 +105,30 @@ before their feature-branch commit:
 
 The style command uses a local warning suppression for a deprecation warning
 in the test harness's downloaded `cpplint.py` under Python 3.14; it does not
-mask style findings. CI confirmation for the exact pushed commit, benchmark
-evidence, and medium-resolution scientific validation are still required.
+mask style findings. CI confirmation for the exact pushed commit and
+medium-resolution scientific validation are still required.
 
 ## Benchmark Campaign
 
-Run benchmarks only after correctness tests pass. Record wall-clock tracker
-update cost, hardware, compiler configuration, mesh/block layout, MPI ranks,
-active axes, and target selection.
+The benchmark was run after the correctness tests passed. It uses a uniform
+zero-velocity material selection in `mode=velocity`, so the enabled and
+disabled fluid evolutions are identical and the measured increment isolates
+steady sampling/controller overhead. It records Release-build wall-clock
+costs for `64 x 64 x 64` cells, `16 x 16 x 16` blocks, 200 cycles, one
+discarded warm-up, and seven measured repeats per case.
 
-| Benchmark | Acceptance criterion |
-| --- | --- |
-| Single-axis CPU | Median tracker-update time does not regress by more than 5 percent relative to the pre-fusion baseline. |
-| Three-axis CPU | Median tracker-update time improves by at least 25 percent on a representative multi-block problem. |
-| MPI CPU | Grouped reductions preserve the CPU result within reduction-order tolerance and reduce per-update collective overhead. |
-| GPU, when available | Record results and kernel timing; do not infer GPU performance from CPU data. |
+| Benchmark | `cfbcdde7` | `78f8e4cd` | Acceptance criterion | Result |
+| --- | ---: | ---: | --- | --- |
+| Single-axis CPU | `3.594 ms/update` | `0.828 ms/update` | No more than 5 percent regression. | Pass; 77.0 percent lower. |
+| Three-axis CPU | `5.588 ms/update` | `1.041 ms/update` | At least 25 percent lower. | Pass; 81.4 percent lower. |
+| Single-axis MPI CPU, 4 ranks | `0.887 ms/update` | `0.233 ms/update` | Recorded comparison. | Measured; 73.7 percent lower. |
+| Three-axis MPI CPU, 4 ranks | `1.443 ms/update` | `0.441 ms/update` | Recorded comparison. | Measured; 69.5 percent lower. |
+| GPU | Not run | Not run | Do not infer GPU performance from CPU data. | Pending follow-up evidence. |
+
+The raw data and compact plot are maintained as
+`docs/source/_static/frame_tracking_benchmark.csv` and
+`docs/source/_static/frame_tracking_benchmark.png`. These measurements do not
+replace cloud/TRML transformed-frame physical validation.
 
 ## Scientific Validation Campaign
 

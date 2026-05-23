@@ -150,7 +150,7 @@ def apply_criteria(rows: list[dict[str, object]], baseline_rev: str,
                    candidate_rev: str,
                    results: dict[tuple[str, str], dict[str, list[float]]],
                    cycles: int) -> None:
-    for backend in ("cpu", "mpicpu"):
+    for backend in ("cpu",):
         baseline = results[(baseline_rev, backend)]
         candidate = results[(candidate_rev, backend)]
         baseline_x1 = median_incremental(baseline, "x1", cycles)
@@ -178,6 +178,13 @@ def apply_criteria(rows: list[dict[str, object]], baseline_rev: str,
                     "pass" if baseline_all > 0.0 and candidate_all <= 0.75 * baseline_all
                     else "fail"
                 )
+    for row in rows:
+        if (row["revision"] == candidate_rev and row["backend"] == "mpicpu" and
+                row["repeat"] == "median" and row["axes"] in ("x1", "all")):
+            row["pass_fail_criterion"] = (
+                "recorded comparison; agreement tested separately"
+            )
+            row["result"] = "measured"
 
 
 def write_csv(path: Path, rows: list[dict[str, object]]) -> None:

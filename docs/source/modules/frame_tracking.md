@@ -219,5 +219,6 @@ store grid-frame velocities as `v_lab - FrameVelocity()`.
 
 - [Frame Tracking Production Plan](frame_tracking_next_steps.md)
 - [Frame Tracking Recipes And Migration](frame_tracking_recipes.md)
+- [Frame Tracking Performance Evidence](frame_tracking_performance.md)
 - [Sedov Cloud Crushing With Frame Tracking](../examples/cloud_crushing_snr.md)
 - [TRML Frame Tracking Example](../examples/trml_frame_tracking.md)
