@@ -10,8 +10,8 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 
 
 def read_metrics(path: Path) -> dict[str, float]:
@@ -106,8 +106,12 @@ def plot_flux_limiter(data_dir: Path, figure_dir: Path) -> None:
     q_limited = column(face_rows, "q_limited")
     q_max = column(face_rows, "q_max")
     x = column(cell_rows, "x")
-    measured_delta = column(cell_rows, "measured_ppar") - column(cell_rows, "initial_ppar")
-    expected_delta = column(cell_rows, "expected_ppar") - column(cell_rows, "initial_ppar")
+    measured_delta = (
+        column(cell_rows, "measured_ppar") - column(cell_rows, "initial_ppar")
+    )
+    expected_delta = (
+        column(cell_rows, "expected_ppar") - column(cell_rows, "initial_ppar")
+    )
     rel = np.linalg.norm(measured_delta - expected_delta)/np.linalg.norm(expected_delta)
     max_ratio = np.max(np.abs(q_unlimited)/np.maximum(q_max, 1.0e-300))
 
@@ -227,8 +231,11 @@ def plot_paper_eigenmodes(data_dir: Path, figure_dir: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data-dir", default="build-cgl-implementation/cgl_lf_validation/data",
-                        type=Path)
+    parser.add_argument(
+        "--data-dir",
+        default="build-cgl-implementation/cgl_lf_validation/data",
+        type=Path,
+    )
     parser.add_argument("--figure-dir",
                         default="build-cgl-implementation/cgl_lf_validation/figures",
                         type=Path)

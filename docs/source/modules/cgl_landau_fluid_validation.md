@@ -40,6 +40,22 @@ build-cgl-implementation/src/athena \
 The explicit mode uses the same anisotropy-to-magnetic-moment split lifecycle
 as STS. It is deliberately restricted to standalone reference checks.
 
+## Reduced 2D AMR Example
+
+The shipped AMR smoke uses periodic boundaries, LF transport, strict
+admissibility monitoring, and conserved prolongation:
+
+```bash
+build-cgl-implementation/src/athena \
+  -i inputs/tests/cgl_lf_amr_2d.athinput
+```
+
+Its `.user.hst` output contains normalized divB, invalid-state count, and
+integrated anisotropy diagnostics. Its `.mhd.hst` output adds the LF counters
+and total-energy history used for the bounded-residual check. CGL LF rejects
+`mesh_refinement/prolong_primitives=true`; this initial support boundary is
+intentional.
+
 ## Extended Workflow
 
 Run the reproducible validation matrix from the repository root:

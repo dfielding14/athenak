@@ -31,6 +31,8 @@ namespace {
 struct DivBAMRConfig {
   Real rho0 = 1.0;
   Real pgas0 = 10.0;
+  Real ppar0 = 10.0;
+  Real pperp0 = 10.0;
   Real vx0 = 0.08;
   Real vy0 = 0.05;
   Real vz0 = 0.03;
@@ -175,6 +177,8 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
 
   divb_amr.rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
   divb_amr.pgas0 = pin->GetOrAddReal("problem", "pgas0", 10.0);
+  divb_amr.ppar0 = pin->GetOrAddReal("problem", "ppar0", divb_amr.pgas0);
+  divb_amr.pperp0 = pin->GetOrAddReal("problem", "pperp0", divb_amr.ppar0);
   divb_amr.vx0 = pin->GetOrAddReal("problem", "vx0", 0.08);
   divb_amr.vy0 = pin->GetOrAddReal("problem", "vy0", 0.05);
   divb_amr.vz0 = pin->GetOrAddReal("problem", "vz0", 0.03);
@@ -212,8 +216,11 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
   int nmb = pmbp->nmb_thispack;
   EOS_Data &eos = pmbp->pmhd->peos->eos_data;
   const Real gm1 = eos.gamma - 1.0;
+  const bool is_cgl = eos.is_cgl;
   auto &u0 = pmbp->pmhd->u0;
+  auto &w0 = pmbp->pmhd->w0;
   auto &b0 = pmbp->pmhd->b0;
+  auto &bcc0 = pmbp->pmhd->bcc0;
   auto &size = pmbp->pmb->mb_size;
   const auto cfg = divb_amr;
 
@@ -278,18 +285,33 @@ void ProblemGenerator::DivBAMR(ParameterInput *pin, const bool restart) {
   par_for("divb_amr_cons", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
     const Real rho = cfg.rho0;
-    u0(m,IDN,k,j,i) = rho;
-    u0(m,IM1,k,j,i) = rho*cfg.vx0;
-    u0(m,IM2,k,j,i) = rho*(multi_d ? cfg.vy0 : 0.0);
-    u0(m,IM3,k,j,i) = rho*(three_d ? cfg.vz0 : 0.0);
     const Real bx = 0.5*(b0.x1f(m,k,j,i) + b0.x1f(m,k,j,i+1));
     const Real by = 0.5*(b0.x2f(m,k,j,i) + b0.x2f(m,k,j+1,i));
     const Real bz = 0.5*(b0.x3f(m,k,j,i) + b0.x3f(m,k+1,j,i));
-    const Real v2 = SQR(cfg.vx0) + (multi_d ? SQR(cfg.vy0) : 0.0)
-                  + (three_d ? SQR(cfg.vz0) : 0.0);
-    u0(m,IEN,k,j,i) = cfg.pgas0/gm1 + 0.5*rho*v2
-                    + 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+    if (is_cgl) {
+      w0(m,IDN,k,j,i) = rho;
+      w0(m,IVX,k,j,i) = cfg.vx0;
+      w0(m,IVY,k,j,i) = multi_d ? cfg.vy0 : 0.0;
+      w0(m,IVZ,k,j,i) = three_d ? cfg.vz0 : 0.0;
+      w0(m,IPR,k,j,i) = cfg.ppar0;
+      w0(m,IPP,k,j,i) = cfg.pperp0;
+      bcc0(m,IBX,k,j,i) = bx;
+      bcc0(m,IBY,k,j,i) = by;
+      bcc0(m,IBZ,k,j,i) = bz;
+    } else {
+      u0(m,IDN,k,j,i) = rho;
+      u0(m,IM1,k,j,i) = rho*cfg.vx0;
+      u0(m,IM2,k,j,i) = rho*(multi_d ? cfg.vy0 : 0.0);
+      u0(m,IM3,k,j,i) = rho*(three_d ? cfg.vz0 : 0.0);
+      const Real v2 = SQR(cfg.vx0) + (multi_d ? SQR(cfg.vy0) : 0.0)
+                    + (three_d ? SQR(cfg.vz0) : 0.0);
+      u0(m,IEN,k,j,i) = cfg.pgas0/gm1 + 0.5*rho*v2
+                      + 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+    }
   });
+  if (is_cgl) {
+    pmbp->pmhd->peos->PrimToCons(w0, bcc0, u0, is, ie, js, je, ks, ke);
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -330,7 +352,9 @@ void DivBAMRRefinementCondition(MeshBlockPack *pmbp) {
 //! \brief Direct discrete divergence diagnostics over active cells.
 
 void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
-  pdata->nhist = 8;
+  auto *pmhd = pm->pmb_pack->pmhd;
+  const bool is_cgl = pmhd->peos->eos_data.is_cgl;
+  pdata->nhist = is_cgl ? 10 : 8;
   pdata->label[0] = "max_divb";
   pdata->label[1] = "max_ndiv";
   pdata->label[2] = "sum_divb";
@@ -339,8 +363,15 @@ void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
   pdata->label[5] = "sum_n2";
   pdata->label[6] = "vol";
   pdata->label[7] = "ncell";
+  if (is_cgl) {
+    pdata->label[8] = "bad_state";
+    pdata->label[9] = "abs_anis";
+    pmhd->RequireCGLAnisotropyRepresentation("divB AMR history output");
+  }
 
-  auto &b = pm->pmb_pack->pmhd->b0;
+  auto &b = pmhd->b0;
+  auto &u = pmhd->u0;
+  auto &w = pmhd->w0;
   auto &size = pm->pmb_pack->pmb->mb_size;
   auto &indcs = pm->mb_indcs;
   const int is = indcs.is;
@@ -355,6 +386,7 @@ void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
   const bool multi_d = pm->multi_d;
   const bool three_d = pm->three_d;
   const auto cfg = divb_amr;
+  const int nhist = pdata->nhist;
 
   array_sum::GlobalSum sum_this_mb;
   Real max_abs_divb = 0.0;
@@ -394,7 +426,15 @@ void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
     hvars.the_array[5] = SQR(norm_divb)*vol;
     hvars.the_array[6] = vol;
     hvars.the_array[7] = 1.0;
-    for (int n=8; n<NREDUCTION_VARIABLES; ++n) {
+    if (is_cgl) {
+      const bool bad_state =
+          (!Kokkos::isfinite(w(m,IDN,k,j,i)) || !Kokkos::isfinite(w(m,IPR,k,j,i)) ||
+           !Kokkos::isfinite(w(m,IPP,k,j,i)) || w(m,IDN,k,j,i) <= 0.0 ||
+           w(m,IPR,k,j,i) <= 0.0 || w(m,IPP,k,j,i) <= 0.0);
+      hvars.the_array[8] = bad_state ? 1.0 : 0.0;
+      hvars.the_array[9] = vol*fabs(u(m,IAN,k,j,i));
+    }
+    for (int n=nhist; n<NREDUCTION_VARIABLES; ++n) {
       hvars.the_array[n] = 0.0;
     }
     max_abs = fmax(max_abs, abs_divb);

@@ -21,7 +21,7 @@ def _run(input_name, basename, *flags):
 
 def _cleanup():
     testutils.cleanup()
-    for path in Path(".").glob("cgl_*.mhd.hst"):
+    for path in Path(".").glob("cgl_*.hst"):
         path.unlink()
     shutil.rmtree("bin", ignore_errors=True)
 
@@ -82,7 +82,9 @@ def test_cgl_lf_explicit_reference_agrees_with_capped_sts():
         max_difference = max(np.max(np.abs(sts[field] - explicit[field]))
                              for field in fields)
         assert max_difference < 1.0e-3
-        _assert_clean_lf_history(testutils.athena_read.hst("cgl_ci_sts_reference.mhd.hst"))
+        _assert_clean_lf_history(
+            testutils.athena_read.hst("cgl_ci_sts_reference.mhd.hst")
+        )
         _assert_clean_lf_history(
             testutils.athena_read.hst("cgl_ci_explicit_reference.mhd.hst")
         )
@@ -109,7 +111,9 @@ def test_cgl_lf_explicit_reference_finite_collision_split():
         sts = _tab("cgl_ci_sts_collision")
         explicit = _tab("cgl_ci_explicit_collision")
         assert np.max(np.abs(sts["eint"] - explicit["eint"])) < 1.0e-3
-        _assert_clean_lf_history(testutils.athena_read.hst("cgl_ci_sts_collision.mhd.hst"))
+        _assert_clean_lf_history(
+            testutils.athena_read.hst("cgl_ci_sts_collision.mhd.hst")
+        )
         _assert_clean_lf_history(
             testutils.athena_read.hst("cgl_ci_explicit_collision.mhd.hst")
         )
@@ -120,6 +124,23 @@ def test_cgl_lf_explicit_reference_finite_collision_split():
 def test_cgl_fofc_live_flux_mutation():
     try:
         _run("cgl_fofc.athinput", "cgl_ci_fofc")
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_amr_conserved_prolongation_stays_admissible():
+    try:
+        _run("cgl_lf_amr_2d.athinput", "cgl_ci_amr")
+        user = testutils.athena_read.hst("cgl_ci_amr.user.hst")
+        mhd = testutils.athena_read.hst("cgl_ci_amr.mhd.hst")
+        assert user["ncell"][-1] > user["ncell"][0]
+        assert np.max(user["max_ndiv"]) < 1.0e-12
+        assert np.max(user["bad_state"]) == 0.0
+        assert np.all(np.isfinite(user["abs_anis"]))
+        _assert_clean_lf_history(mhd)
+        energy_scale = max(abs(mhd["tot-E"][0]), 1.0e-30)
+        energy_residual = abs(mhd["tot-E"][-1] - mhd["tot-E"][0]) / energy_scale
+        assert energy_residual < 5.0e-3
     finally:
         _cleanup()
 
@@ -146,3 +167,15 @@ def test_cgl_lf_explicit_reference_rejects_sts_configuration():
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     assert result.returncode != 0
     assert "explicit reference integration requires" in result.stdout
+
+
+def test_cgl_lf_amr_rejects_primitive_prolongation():
+    command = [
+        "./athena",
+        "-i",
+        f"{INPUT_ROOT}/cgl_lf_amr_2d.athinput",
+        "mesh_refinement/prolong_primitives=true",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert "use conserved prolongation for LF AMR runs" in result.stdout
