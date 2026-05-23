@@ -1,5 +1,6 @@
 """MPI CPU accuracy tests for cosmic-ray tracer particles."""
 
+import math
 import re
 import shutil
 import subprocess
@@ -52,10 +53,10 @@ def test_uniform_gyro_amr_mpi_crossing_preserves_counts_mpicpu():
 
 
 def test_mpi_decomposition_reduced_moments_are_consistent_mpicpu():
-    """One- and two-rank runs should agree on global reduced particle moments."""
+    """One, two, four, and eight-rank runs agree for tag-defined particles."""
     input_name = "cr_mpi_decomposition_invariance.athinput"
     run_dirs = []
-    for ranks in (1, 2):
+    for ranks in (1, 2, 4, 8):
         run_dir = Path(f"cr_acc_mpi_invariance_n{ranks}")
         shutil.rmtree(run_dir, ignore_errors=True)
         command = [
@@ -63,13 +64,18 @@ def test_mpi_decomposition_reduced_moments_are_consistent_mpicpu():
             "-i", str(INPUTS / input_name),
             "-d", str(run_dir),
             f"job/basename=cr_acc_mpi_invariance_n{ranks}",
+            "time/nlim=256",
+            "time/tlim=0.40",
+            "output1/dt=0.20",
+            "output2/dt=0.20",
+            "particles/subcycle_cell_fraction=0.05",
         ]
         result = subprocess.run(command, capture_output=True, text=True)
         if result.returncode != 0:
             raise RuntimeError(result.stdout + result.stderr)
         run_dirs.append(run_dir)
 
-    expected_species = [2, 2]
+    expected_species = [8, 8]
     summaries = [
         acu.cr_tracer_inspect.summarize_restart(path / "prst")
         for path in run_dirs
@@ -82,22 +88,29 @@ def test_mpi_decomposition_reduced_moments_are_consistent_mpicpu():
         acu.cr_tracer_inspect.validate_moments(path, expected_species)
         for path in run_dirs
     ]
-    for species in range(2):
-        assert moments[0][species]["count"] == moments[1][species]["count"]
-        assert abs(moments[0][species]["mean_speed2"] -
-                   moments[1][species]["mean_speed2"]) < 1.0e-12
+    for compared in moments[1:]:
+        for species in range(2):
+            assert moments[0][species]["count"] == compared[species]["count"]
+            assert abs(moments[0][species]["mean_speed2"] -
+                       compared[species]["mean_speed2"]) < 1.0e-12
 
     particles = [acu.particles_by_species_tag(summary) for summary in summaries]
-    assert set(particles[0]) == set(particles[1])
-    for key in particles[0]:
-        p0 = particles[0][key]
-        p1 = particles[1][key]
-        assert acu.vector_error(
-            acu.particle_position(p0), acu.particle_position(p1)) < 1.0e-12
-        assert acu.vector_error(
-            acu.particle_velocity(p0), acu.particle_velocity(p1)) < 1.0e-12
-        assert acu.vector_error(
-            acu.particle_bfield(p0), acu.particle_bfield(p1)) < 1.0e-12
+    for compared in particles[1:]:
+        assert set(particles[0]) == set(compared)
+        for key in particles[0]:
+            p0 = particles[0][key]
+            p1 = compared[key]
+            assert acu.vector_error(
+                acu.particle_position(p0), acu.particle_position(p1)) < 1.0e-12
+            assert acu.vector_error(
+                acu.particle_velocity(p0), acu.particle_velocity(p1)) < 1.0e-12
+            assert acu.vector_error(
+                acu.particle_bfield(p0), acu.particle_bfield(p1)) < 1.0e-12
+    eight_rank_snapshots = [
+        acu.cr_tracer_inspect.read_prst_file(path)
+        for path in (run_dirs[-1] / "prst").rglob("*.prst")
+    ]
+    assert any(len(snapshot["particles"]) == 0 for snapshot in eight_rank_snapshots)
 
 
 def test_amr_boundary_stress_conserves_particles_mpicpu():
@@ -124,3 +137,52 @@ def test_amr_boundary_stress_conserves_particles_mpicpu():
     for row in moments:
         assert row["count"] == expected_species[row["species"]]
         assert row["mean_speed2"] > 0.0
+
+
+def test_mirror_field_ensemble_exchange_is_valid_mpicpu():
+    """Eight-rank mirror-field ensemble keeps deterministic particles valid."""
+    _run_mpi(
+        "cr_magnetic_mirror.athinput",
+        [
+            "job/basename=cr_acc_mirror_ensemble_mpi",
+            "meshblock/nx1=8",
+            "meshblock/nx2=8",
+            "meshblock/nx3=8",
+            "particles/ppc=0.25",
+            "particles/check_consistency_mode=full",
+            "problem/particle_position=tag_random",
+            "problem/particle_seed=57721",
+            "time/nlim=100",
+            "time/tlim=0.12",
+            "output1/dt=0.12",
+            "output2/dt=0.12",
+        ],
+        ranks=8)
+    summary = acu.latest_restart_summary()
+    acu.cr_tracer_inspect.validate_expected_counts(summary, 1024, [1024])
+    assert set(summary["rank_counts"]) == set(range(8))
+    particle_map = acu.particles_by_species_tag(summary)
+    assert len(particle_map) == 1024
+    for particle in particle_map.values():
+        assert all(math.isfinite(value) for value in particle["reals"])
+
+
+def test_deterministic_pitch_angle_evolution_mpicpu():
+    """Two-rank structured-field evolution retains valid deterministic particles."""
+    _run_mpi(
+        "cr_pitch_angle_decorrelation.athinput",
+        [
+            "job/basename=cr_acc_pitch_decorrelation_mpi",
+            "time/nlim=2000",
+            "time/tlim=0.64",
+            "output1/dt=0.64",
+            "output2/dt=0.64",
+            "output3/dt=0.64",
+        ],
+        ranks=2)
+    sequence = acu.restart_sequence()
+    correlation = acu.pitch_angle_correlation(sequence[0], sequence[-1])
+    summary = acu.latest_restart_summary()
+    acu.cr_tracer_inspect.validate_expected_counts(summary, 1024, [1024])
+    assert set(summary["rank_counts"]) == {0, 1}
+    assert correlation < 0.995

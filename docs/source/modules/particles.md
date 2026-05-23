@@ -120,13 +120,15 @@ The shipped smoke and stress inputs are:
 | `prtcl_rst_flag` | `0` | If nonzero, load particle data from `prtcl_res_file`. |
 | `prtcl_res_file` | required for particle restart | Per-rank `prst` path; MPI ranks replace `rank_00000000` with their rank directory. |
 | `particle_refinement` | `none` | `moving_boxes` enrolls the AMR stress-test refinement pattern. |
-| `particle_position` | `random` | `random`, `center`, or `fixed`; `fixed` uses `particle_x1`, `particle_x2`, and `particle_x3`. |
+| `particle_position` | `random` | `random`, `center`, `meshblock_center`, `fixed`, or `tag_random`; `fixed` uses `particle_x1`, `particle_x2`, and `particle_x3`, while `tag_random` is deterministic across MPI decompositions. |
 | `particle_x1`, `particle_x2`, `particle_x3` | `0, 0, 0` | Fixed particle position used when `particle_position = fixed`. |
-| `particle_velocity` | `random` | `random` or `uniform`; `uniform` uses `v0x`, `v0y`, and `v0z`. |
+| `particle_velocity` | `random` | `random`, `uniform`, `isotropic`, or `isotropic_tag_random`; `uniform` uses `v0x`, `v0y`, and `v0z`, while `isotropic_tag_random` is deterministic across MPI decompositions. |
+| `particle_seed` | `0` | Seed combined with species and tag for `tag_random` and `isotropic_tag_random`. |
 | `v0x`, `v0y`, `v0z` | `1, 0, 0` | Uniform particle velocity used when `particle_velocity = uniform`. |
 | `B0x`, `B0y`, `B0z` | `0, 0, 1` | Uniform magnetic field initialized by `part_random`. |
-| `B_profile` | `uniform` | `uniform` or `linear_cross`; `linear_cross` is a smooth divergence-free field for interpolation tests. |
-| `Bgrad` | `1.0` | Gradient used by `B_profile = linear_cross`: `Bx = B0x + Bgrad*x2`, `By = B0y + Bgrad*x1`. |
+| `B_profile` | `uniform` | `uniform`, `linear_cross`, `sinusoidal_divb_free`, `mirror`, `gradb`, or `turbulent`; the nonuniform profiles are prescribed accuracy fields. |
+| `Bgrad` | `1.0` | Gradient strength for `linear_cross`, `mirror`, and `gradb` manufactured fields. |
+| `Bamp`, `Bwave_number` | `0.05`, `1.0` | Amplitude and wave number for `sinusoidal_divb_free` and `turbulent` profiles. |
 
 ### `<mesh_refinement>` for Particle AMR Runs
 
@@ -601,7 +603,7 @@ work:
   gives the exact accelerator validation checklist that still needs to run on a
   GPU machine.
 - [CR Tracer Accuracy Validation](cr_tracer_accuracy.md)
-  records the 11-test CPU/MPI accuracy ladder, current quantitative results,
+  records the 12-test CPU/MPI accuracy ladder, current quantitative results,
   and documentation figures.
 - [CR Tracer Accuracy Test Implementation Plan](cr_tracer_accuracy_test_plan.md)
   lays out the proposed analytic, AMR, MPI, and ensemble accuracy tests and the

@@ -30,7 +30,7 @@ nx2 = 16
 nx3 = 16
 
 <time>
-evolution = dynamic
+evolution = kinematic
 integrator = rk2
 cfl_number = 0.4
 nlim = 6
@@ -40,7 +40,7 @@ ndiag = 1
 <mhd>
 eos = ideal
 reconstruct = plm
-rsolver = hlld
+rsolver = advect
 gamma = 1.666666667
 
 <particles>
@@ -49,7 +49,7 @@ ppc = 0.000244140625
 nspecies = 1
 pusher = boris
 interpolation = trilinear
-min_mass = 1.0
+min_mass = 0.10
 mass_log_spacing = 1.0
 cfl_part = 0.025
 check_consistency_mode = counts
@@ -69,20 +69,21 @@ subcycle_strict = true
 <problem>
 pgen_name = part_random
 particle_position = fixed
+particle_seed = 57721
 particle_x1 = 0.05
 particle_x2 = -0.03
 particle_x3 = -0.12
 particle_velocity = uniform
 v0x = 0.7
 v0y = 0.0
-v0z = 0.25
+v0z = 0.15
 prtcl_rst_flag = 0
 prtcl_res_file = prst/rank_00000000/cr_acc_mirror.00000.prst
 B0x = 0.0
 B0y = 0.0
 B0z = 1.0
 B_profile = mirror
-Bgrad = 0.8
+Bgrad = 4.0
 Bamp = 0.05
 Bwave_number = 1.0
 

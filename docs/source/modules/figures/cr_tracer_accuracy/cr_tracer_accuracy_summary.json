@@ -1,6 +1,11 @@
 {
-  "created_at": "2026-05-22T21:13:59",
+  "created_at": "2026-05-23T11:27:16",
   "athena": "build-cr-robust-mpi/src/athena",
+  "git_revision": "8c041244a5c6910fe2f22125ffea1fd7cdd96071",
+  "git_worktree_dirty": true,
+  "mpi_version": "mpiexec (Open MPI) 5.0.9",
+  "profile": "docs",
+  "mpi_ranks": 8,
   "cases": [
     {
       "case": "uniform_gyro",
@@ -10,25 +15,32 @@
         0.01
       ],
       "phase_error": [
-        3.313990452885607e-05,
+        4.265642959144777e-05,
         1.0666026712347065e-05,
         2.66662666759121e-06
       ],
-      "slope": 1.8177408410357048,
+      "slope": 1.9998377253207436,
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/uniform_gyro_phase_convergence.png"
     },
     {
       "case": "uniform_amr_mpi",
-      "meshblocks_created": 105,
-      "meshblocks_deleted": 77,
+      "meshblocks_created": 147,
+      "meshblocks_deleted": 126,
       "rank_counts": {
-        "0": 505,
-        "1": 519
+        "0": 278,
+        "1": 37,
+        "2": 54,
+        "3": 69,
+        "4": 71,
+        "5": 390,
+        "6": 57,
+        "7": 68
       },
       "mean_speed2": [
-        1.1299999999999968,
-        1.1299999999999968
+        1.1299999999999983,
+        1.1299999999999983
       ],
+      "ranks": 8,
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/uniform_amr_mpi_activity.png"
     },
     {
@@ -48,16 +60,39 @@
     {
       "case": "manufactured_gather",
       "nx": [
-        8,
         16,
-        32
+        32,
+        64,
+        128
       ],
       "sample_error": [
-        0.01272681553821612,
-        0.003028993629130968,
-        0.00033448114137260706
+        {
+          "l1": 0.003028993629130968,
+          "l2": 0.003028993629130968,
+          "linf": 0.003028993629130968
+        },
+        {
+          "l1": 0.00033448114137260706,
+          "l2": 0.00033448114137260706,
+          "linf": 0.00033448114137260706
+        },
+        {
+          "l1": 0.000264525590667228,
+          "l2": 0.000264525590667228,
+          "linf": 0.000264525590667228
+        },
+        {
+          "l1": 5.669647417655609e-05,
+          "l2": 5.669647417655609e-05,
+          "linf": 5.669647417655609e-05
+        }
       ],
-      "slope": 2.6249013981339635,
+      "slope": 1.7556824713870423,
+      "slopes": {
+        "l1": 1.7556824713870423,
+        "l2": 1.7556824713870423,
+        "linf": 1.7556824713870423
+      },
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/manufactured_gather_convergence.png"
     },
     {
@@ -65,58 +100,207 @@
       "nx": [
         16,
         32,
-        64
+        64,
+        128
+      ],
+      "position_error_to_reference": [
+        1.7380877238339975e-06,
+        3.919393445765526e-07,
+        8.502291000871107e-08
       ],
       "velocity_error_to_reference": [
-        6.968912798467074e-05,
-        1.3448345321089956e-05
+        6.613354715695832e-05,
+        1.1517322407000723e-05,
+        2.31798294937925e-06
       ],
-      "reference_nx": 64,
-      "figure": "docs/source/modules/figures/cr_tracer_accuracy/smooth_orbit_reference_error.png"
+      "pitch_angle_error_to_reference": [
+        0.0005638706350660216,
+        0.0003516428716610065,
+        0.00011543184601015
+      ],
+      "magnetic_moment_error_to_reference": [
+        0.00034049953683290557,
+        1.2379795825245843e-05,
+        5.484104482672558e-05
+      ],
+      "reference_nx": 128,
+      "requested_reference_nx": 256,
+      "reference_status": "local reference; 256^3 reference pending",
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/smooth_orbit_reference_error.png",
+      "temporal_sweep": {
+        "nx": 64,
+        "cfl": [
+          0.0125,
+          0.00625,
+          0.003125,
+          0.0015625
+        ],
+        "position_error_to_reference": [
+          7.985668454361213e-07,
+          1.9048917494727456e-07,
+          3.861810725509581e-08
+        ],
+        "velocity_error_to_reference": [
+          2.3293140138204707e-07,
+          6.359721099090954e-08,
+          1.587145504109644e-08
+        ],
+        "pitch_angle_error_to_reference": [
+          0.00010460435299575188,
+          0.00010475310314450592,
+          0.0001047818353613339
+        ],
+        "magnetic_moment_error_to_reference": [
+          3.4097261360721554e-05,
+          3.39182629033874e-05,
+          3.3878695356537314e-05
+        ]
+      }
     },
     {
       "case": "magnetic_mirror",
-      "initial_moment": 0.4827611783650305,
-      "final_moment": 0.47721721633743924,
-      "relative_moment_drift": 0.011483860500894122,
-      "figure": "docs/source/modules/figures/cr_tracer_accuracy/magnetic_mirror_moment.png"
+      "final_time": 18.0,
+      "z_range": [
+        -0.1774494833322301,
+        0.17716109595336116
+      ],
+      "parallel_velocity_reversals": 8,
+      "turning_locations": [
+        0.16797801791007855,
+        -0.16794518825757476,
+        0.16849830344923775,
+        -0.1715257850419912,
+        0.17323748014720755,
+        -0.17486373584737194,
+        0.17618348892747074,
+        -0.17702230408355402
+      ],
+      "mean_bounce_period": 4.6266666666663525,
+      "initial_moment": 0.48999999999999994,
+      "final_moment": 0.4509662772090638,
+      "relative_moment_drift": 0.07966065875701255,
+      "max_relative_moment_excursion": 0.08235539922567481,
+      "passing_control_reversals": 0,
+      "nx": [
+        16,
+        32,
+        64,
+        128
+      ],
+      "position_error_to_reference": [
+        0.0003450450456867238,
+        6.721591176633368e-05,
+        1.3459948724527261e-05
+      ],
+      "velocity_error_to_reference": [
+        0.005728813559697408,
+        0.0011208014545930217,
+        0.00024724995793907415
+      ],
+      "reference_nx": 128,
+      "requested_reference_nx": 256,
+      "reference_status": "local reference; 256^3 reference pending",
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/magnetic_mirror_moment.png",
+      "convergence_figure": "docs/source/modules/figures/cr_tracer_accuracy/magnetic_mirror_convergence.png"
     },
     {
       "case": "gradb_drift",
-      "bgrad": [
-        0.0,
-        0.5,
-        1.0
+      "nx": [
+        16,
+        32,
+        64,
+        128
       ],
-      "velocity_delta": [
-        0.0,
-        0.009331171564517475,
-        0.02221665347366365
+      "position_error_to_reference": [
+        7.758391305833896e-07,
+        7.758391305867045e-07,
+        7.758391305833896e-07
       ],
+      "velocity_error_to_reference": [
+        6.16746570982844e-07,
+        6.167465710652968e-07,
+        6.16746570982844e-07
+      ],
+      "transverse_position": [
+        -0.16748854813855588,
+        -0.1674885481385559,
+        -0.16748854813855588,
+        -0.16748845547816013
+      ],
+      "reference_nx": 128,
+      "requested_reference_nx": 256,
+      "reference_status": "local reference; 256^3 reference pending",
+      "guiding_center_validity_ratio": 0.9876543209876543,
+      "guiding_center_status": "rho_L/L_B is order unity; use the full-orbit reference, not an asymptotic guiding-center estimate",
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/gradb_drift_response.png"
     },
     {
       "case": "amr_boundary",
-      "meshblocks_created": 105,
-      "meshblocks_deleted": 77,
+      "meshblocks_created": 11914,
+      "meshblocks_deleted": 11340,
       "rank_counts": {
-        "0": 508,
-        "1": 516
+        "0": 161,
+        "1": 158,
+        "2": 65,
+        "3": 111,
+        "4": 125,
+        "5": 160,
+        "6": 115,
+        "7": 129
       },
       "mean_speed2": [
-        1.0275540711384423,
-        1.0074637234708343
+        1.0,
+        1.0
       ],
+      "ranks": 8,
+      "effective_nx": [
+        32,
+        64,
+        128
+      ],
+      "max_position_delta_to_reference": [
+        0.0008436717362727735,
+        0.00023410879581230783
+      ],
+      "uniform_grid_128_delta": {
+        "position": 6.412767072126972e-05,
+        "velocity": 0.00016381416514326565
+      },
+      "reference_nx": 128,
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/amr_boundary_activity.png"
     },
     {
       "case": "mpi_decomposition",
+      "ranks": [
+        1,
+        2,
+        4,
+        8
+      ],
       "speed2_delta": [
+        [
+          8.881784197001252e-16,
+          0.0
+        ],
+        [
+          8.881784197001252e-16,
+          0.0
+        ],
+        [
+          8.881784197001252e-16,
+          8.881784197001252e-16
+        ]
+      ],
+      "max_position_delta": [
+        0.0,
         0.0,
         0.0
       ],
-      "max_position_delta": 0.0,
-      "max_velocity_delta": 0.0,
+      "max_velocity_delta": [
+        0.0,
+        0.0,
+        0.0
+      ],
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/mpi_decomposition_delta.png"
     },
     {
@@ -125,12 +309,12 @@
         {
           "species": 0,
           "mean_mu": 0.001883553523612136,
-          "mean_mu2": 0.33309181723438874
+          "mean_mu2": 0.3330918172343888
         },
         {
           "species": 1,
           "mean_mu": 0.003881312917883406,
-          "mean_mu2": 0.3206710426995029
+          "mean_mu2": 0.320671042699503
         }
       ],
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/isotropic_ensemble_moments.png"
@@ -140,16 +324,176 @@
       "moments": [
         {
           "species": 0,
-          "mean_mu": -0.105825844264923,
-          "mean_mu2": 0.34091692413398034
+          "mean_mu": -0.008033236198935905,
+          "mean_mu2": 0.30187023761625864,
+          "mean_speed2": 1.0,
+          "rms_displacement": 0.7461845038563903
         },
         {
           "species": 1,
-          "mean_mu": -0.0673426991122493,
-          "mean_mu2": 0.35157907766402635
+          "mean_mu": 0.02250731773150584,
+          "mean_mu2": 0.27722328302012994,
+          "mean_speed2": 1.0000000000000002,
+          "rms_displacement": 1.056442700151549
+        },
+        {
+          "species": 2,
+          "mean_mu": -0.019239487710733034,
+          "mean_mu2": 0.35515568437487516,
+          "mean_speed2": 0.9999999999999999,
+          "rms_displacement": 1.2254426418252613
+        },
+        {
+          "species": 3,
+          "mean_mu": 0.006979155440618042,
+          "mean_mu2": 0.30668390563636105,
+          "mean_speed2": 1.0,
+          "rms_displacement": 1.2648380495230445
+        },
+        {
+          "species": 4,
+          "mean_mu": 0.028097339534997715,
+          "mean_mu2": 0.33034924402440313,
+          "mean_speed2": 0.9999999999999998,
+          "rms_displacement": 1.2763770351073158
         }
       ],
+      "masses": [
+        0.25,
+        0.5,
+        1.0,
+        2.0,
+        4.0
+      ],
+      "joint_spectrum_totals": [
+        128,
+        128,
+        128,
+        128,
+        128
+      ],
+      "ranks": 8,
+      "final_time": 1.28,
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/frozen_turbulent_moments.png"
+    },
+    {
+      "case": "pitch_angle_decorrelation",
+      "nx": [
+        32,
+        64,
+        128
+      ],
+      "ranks": 8,
+      "final_time": 1.28,
+      "structured_final_correlation": [
+        0.9235782210087538,
+        0.9206373928103517,
+        0.9198331062100119
+      ],
+      "initial_moments": {
+        "mean_mu": -0.007270179837790843,
+        "mean_mu2": 0.3346654952074902
+      },
+      "structured_final_moments": [
+        {
+          "mean_mu": -0.009053118609290499,
+          "mean_mu2": 0.34347204146457977
+        },
+        {
+          "mean_mu": -0.008909683630678903,
+          "mean_mu2": 0.343684716968114
+        },
+        {
+          "mean_mu": -0.00884314162636125,
+          "mean_mu2": 0.3437015805398692
+        }
+      ],
+      "structured_max_speed2_error": [
+        4.3298697960381105e-15,
+        3.9968028886505635e-15,
+        4.884981308350689e-15
+      ],
+      "uniform_control_final_correlation": 1.0,
+      "uniform_control_final_moments": {
+        "mean_mu": -0.007270179837790833,
+        "mean_mu2": 0.3346654952074902
+      },
+      "uniform_control_max_speed2_error": 2.6645352591003757e-15,
+      "histogram_bin_centers": [
+        -0.9375,
+        -0.8125,
+        -0.6875,
+        -0.5625,
+        -0.4375,
+        -0.3125,
+        -0.1875,
+        -0.0625,
+        0.0625,
+        0.1875,
+        0.3125,
+        0.4375,
+        0.5625,
+        0.6875,
+        0.8125,
+        0.9375
+      ],
+      "initial_f_mu": [
+        0.5625,
+        0.4609375,
+        0.5390625,
+        0.5390625,
+        0.3359375,
+        0.5390625,
+        0.5,
+        0.5703125,
+        0.53125,
+        0.5078125,
+        0.4609375,
+        0.453125,
+        0.5546875,
+        0.4921875,
+        0.4296875,
+        0.5234375
+      ],
+      "finest_structured_final_f_mu": [
+        0.5078125,
+        0.4609375,
+        0.609375,
+        0.5390625,
+        0.5,
+        0.4765625,
+        0.5234375,
+        0.5,
+        0.484375,
+        0.5,
+        0.4296875,
+        0.484375,
+        0.359375,
+        0.5390625,
+        0.5625,
+        0.5234375
+      ],
+      "uniform_control_final_f_mu": [
+        0.5625,
+        0.4609375,
+        0.5390625,
+        0.5390625,
+        0.3359375,
+        0.5390625,
+        0.5,
+        0.5703125,
+        0.53125,
+        0.5078125,
+        0.4609375,
+        0.453125,
+        0.5546875,
+        0.4921875,
+        0.4296875,
+        0.5234375
+      ],
+      "requested_reference_nx": 256,
+      "reference_status": "256^3 structured reference pending",
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/pitch_angle_decorrelation.png"
     }
   ],
   "qualitative_figures": {
@@ -159,7 +503,8 @@
       "plane": "xy",
       "fixed_coordinate": 0.0,
       "final_time": 6.4,
-      "track_count": 1
+      "track_count": 1,
+      "ranks": 1
     },
     "uniform_amr_mpi": {
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_uniform_amr_mpi.png",
@@ -167,7 +512,8 @@
       "plane": "xy",
       "fixed_coordinate": 0.0,
       "final_time": 0.64,
-      "track_count": 4
+      "track_count": 4,
+      "ranks": 8
     },
     "linear_gather": {
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_linear_gather.png",
@@ -175,7 +521,8 @@
       "plane": "xy",
       "fixed_coordinate": 0.047,
       "final_time": 0.01,
-      "track_count": 1
+      "track_count": 1,
+      "ranks": 1
     },
     "manufactured_gather": {
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_manufactured_gather.png",
@@ -183,7 +530,8 @@
       "plane": "xy",
       "fixed_coordinate": -0.11,
       "final_time": 0.01,
-      "track_count": 1
+      "track_count": 1,
+      "ranks": 1
     },
     "smooth_orbit_reference": {
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_smooth_orbit_reference.png",
@@ -191,15 +539,17 @@
       "plane": "xy",
       "fixed_coordinate": 0.07,
       "final_time": 1.6,
-      "track_count": 1
+      "track_count": 1,
+      "ranks": 1
     },
     "magnetic_mirror": {
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_magnetic_mirror.png",
       "input": "cr_magnetic_mirror.athinput",
       "plane": "xz",
       "fixed_coordinate": -0.03,
-      "final_time": 1.6,
-      "track_count": 1
+      "final_time": 18.0,
+      "track_count": 1,
+      "ranks": 1
     },
     "gradb_drift": {
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_gradb_drift.png",
@@ -207,7 +557,8 @@
       "plane": "xy",
       "fixed_coordinate": 0.0,
       "final_time": 1.6,
-      "track_count": 1
+      "track_count": 1,
+      "ranks": 1
     },
     "amr_boundary": {
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_amr_boundary.png",
@@ -215,7 +566,8 @@
       "plane": "xy",
       "fixed_coordinate": 0.125,
       "final_time": 0.64,
-      "track_count": 4
+      "track_count": 4,
+      "ranks": 8
     },
     "mpi_decomposition": {
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_mpi_decomposition.png",
@@ -223,7 +575,8 @@
       "plane": "xy",
       "fixed_coordinate": 0.0,
       "final_time": 1.0,
-      "track_count": 4
+      "track_count": 4,
+      "ranks": 8
     },
     "isotropic_ensemble": {
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_isotropic_ensemble.png",
@@ -231,15 +584,1826 @@
       "plane": "xy",
       "fixed_coordinate": 0.0,
       "final_time": 0.8,
-      "track_count": 6
+      "track_count": 6,
+      "ranks": 1
     },
     "frozen_turbulent": {
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_frozen_turbulent.png",
       "input": "cr_frozen_turbulent_field.athinput",
       "plane": "xy",
       "fixed_coordinate": 0.0,
+      "final_time": 3.2,
+      "track_count": 5,
+      "ranks": 8
+    },
+    "pitch_angle_decorrelation": {
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_pitch_angle_decorrelation.png",
+      "input": "cr_pitch_angle_decorrelation.athinput",
+      "plane": "xy",
+      "fixed_coordinate": 0.0,
       "final_time": 1.28,
-      "track_count": 6
+      "track_count": 3,
+      "ranks": 8
     }
-  }
+  },
+  "executions": [
+    {
+      "case": "uniform_gyro_cfl_0.04",
+      "input": "cr_uniform_gyro.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_gyro_cfl_0.04",
+        "particles/cfl_part=0.04",
+        "time/nlim=200",
+        "time/tlim=0.32",
+        "output1/dt=0.32",
+        "output2/dt=0.32"
+      ],
+      "wall_seconds": 0.04375333298230544,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_uniform_gyro.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/uniform_gyro_cfl_0.04",
+        "job/basename=cr_acc_gyro_cfl_0.04",
+        "particles/cfl_part=0.04",
+        "time/nlim=200",
+        "time/tlim=0.32",
+        "output1/dt=0.32",
+        "output2/dt=0.32"
+      ]
+    },
+    {
+      "case": "uniform_gyro_cfl_0.02",
+      "input": "cr_uniform_gyro.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_gyro_cfl_0.02",
+        "particles/cfl_part=0.02",
+        "time/nlim=200",
+        "time/tlim=0.32",
+        "output1/dt=0.32",
+        "output2/dt=0.32"
+      ],
+      "wall_seconds": 0.04937983400304802,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_uniform_gyro.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/uniform_gyro_cfl_0.02",
+        "job/basename=cr_acc_gyro_cfl_0.02",
+        "particles/cfl_part=0.02",
+        "time/nlim=200",
+        "time/tlim=0.32",
+        "output1/dt=0.32",
+        "output2/dt=0.32"
+      ]
+    },
+    {
+      "case": "uniform_gyro_cfl_0.01",
+      "input": "cr_uniform_gyro.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_gyro_cfl_0.01",
+        "particles/cfl_part=0.01",
+        "time/nlim=200",
+        "time/tlim=0.32",
+        "output1/dt=0.32",
+        "output2/dt=0.32"
+      ],
+      "wall_seconds": 0.05537270900094882,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_uniform_gyro.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/uniform_gyro_cfl_0.01",
+        "job/basename=cr_acc_gyro_cfl_0.01",
+        "particles/cfl_part=0.01",
+        "time/nlim=200",
+        "time/tlim=0.32",
+        "output1/dt=0.32",
+        "output2/dt=0.32"
+      ]
+    },
+    {
+      "case": "uniform_amr_mpi",
+      "input": "cr_uniform_gyro_amr.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_gyro_amr_mpi_docs",
+        "particles/check_consistency_mode=full",
+        "particles/validate_amr_lookup=true"
+      ],
+      "wall_seconds": 0.2294162499892991,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_uniform_gyro_amr.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/uniform_amr_mpi",
+        "job/basename=cr_acc_gyro_amr_mpi_docs",
+        "particles/check_consistency_mode=full",
+        "particles/validate_amr_lookup=true"
+      ]
+    },
+    {
+      "case": "linear_gather_lin",
+      "input": "cr_linear_gather.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_linear_lin",
+        "particles/interpolation=lin",
+        "time/nlim=1",
+        "time/tlim=0.01"
+      ],
+      "wall_seconds": 0.043516958015970886,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_linear_gather.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/linear_gather_lin",
+        "job/basename=cr_acc_linear_lin",
+        "particles/interpolation=lin",
+        "time/nlim=1",
+        "time/tlim=0.01"
+      ]
+    },
+    {
+      "case": "linear_gather_trilinear",
+      "input": "cr_linear_gather.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_linear_trilinear",
+        "particles/interpolation=trilinear",
+        "time/nlim=1",
+        "time/tlim=0.01"
+      ],
+      "wall_seconds": 0.04749154200544581,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_linear_gather.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/linear_gather_trilinear",
+        "job/basename=cr_acc_linear_trilinear",
+        "particles/interpolation=trilinear",
+        "time/nlim=1",
+        "time/tlim=0.01"
+      ]
+    },
+    {
+      "case": "linear_gather_tsc",
+      "input": "cr_linear_gather.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_linear_tsc",
+        "particles/interpolation=tsc",
+        "time/nlim=1",
+        "time/tlim=0.01"
+      ],
+      "wall_seconds": 0.042706709005869925,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_linear_gather.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/linear_gather_tsc",
+        "job/basename=cr_acc_linear_tsc",
+        "particles/interpolation=tsc",
+        "time/nlim=1",
+        "time/tlim=0.01"
+      ]
+    },
+    {
+      "case": "manufactured_gather_16",
+      "input": "cr_manufactured_divb_free.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_manufactured_16",
+        "mesh/nx1=16",
+        "mesh/nx2=16",
+        "mesh/nx3=16",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=2.44140625000000000e-04",
+        "particles/interpolation=trilinear",
+        "time/nlim=1",
+        "time/tlim=0.01"
+      ],
+      "wall_seconds": 0.04522645799443126,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_manufactured_divb_free.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/manufactured_gather_16",
+        "job/basename=cr_acc_manufactured_16",
+        "mesh/nx1=16",
+        "mesh/nx2=16",
+        "mesh/nx3=16",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=2.44140625000000000e-04",
+        "particles/interpolation=trilinear",
+        "time/nlim=1",
+        "time/tlim=0.01"
+      ]
+    },
+    {
+      "case": "manufactured_gather_32",
+      "input": "cr_manufactured_divb_free.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_manufactured_32",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
+        "mesh/nx3=32",
+        "meshblock/nx1=32",
+        "meshblock/nx2=32",
+        "meshblock/nx3=32",
+        "particles/ppc=3.05175781250000000e-05",
+        "particles/interpolation=trilinear",
+        "time/nlim=1",
+        "time/tlim=0.01"
+      ],
+      "wall_seconds": 0.05624004200217314,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_manufactured_divb_free.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/manufactured_gather_32",
+        "job/basename=cr_acc_manufactured_32",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
+        "mesh/nx3=32",
+        "meshblock/nx1=32",
+        "meshblock/nx2=32",
+        "meshblock/nx3=32",
+        "particles/ppc=3.05175781250000000e-05",
+        "particles/interpolation=trilinear",
+        "time/nlim=1",
+        "time/tlim=0.01"
+      ]
+    },
+    {
+      "case": "manufactured_gather_64",
+      "input": "cr_manufactured_divb_free.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_manufactured_64",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=64",
+        "meshblock/nx2=64",
+        "meshblock/nx3=64",
+        "particles/ppc=3.81469726562500000e-06",
+        "particles/interpolation=trilinear",
+        "time/nlim=1",
+        "time/tlim=0.01"
+      ],
+      "wall_seconds": 0.12280758400447667,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_manufactured_divb_free.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/manufactured_gather_64",
+        "job/basename=cr_acc_manufactured_64",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=64",
+        "meshblock/nx2=64",
+        "meshblock/nx3=64",
+        "particles/ppc=3.81469726562500000e-06",
+        "particles/interpolation=trilinear",
+        "time/nlim=1",
+        "time/tlim=0.01"
+      ]
+    },
+    {
+      "case": "manufactured_gather_128",
+      "input": "cr_manufactured_divb_free.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_manufactured_128",
+        "mesh/nx1=128",
+        "mesh/nx2=128",
+        "mesh/nx3=128",
+        "meshblock/nx1=128",
+        "meshblock/nx2=128",
+        "meshblock/nx3=128",
+        "particles/ppc=4.76837158203125000e-07",
+        "particles/interpolation=trilinear",
+        "time/nlim=1",
+        "time/tlim=0.01"
+      ],
+      "wall_seconds": 0.6276735829887912,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_manufactured_divb_free.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/manufactured_gather_128",
+        "job/basename=cr_acc_manufactured_128",
+        "mesh/nx1=128",
+        "mesh/nx2=128",
+        "mesh/nx3=128",
+        "meshblock/nx1=128",
+        "meshblock/nx2=128",
+        "meshblock/nx3=128",
+        "particles/ppc=4.76837158203125000e-07",
+        "particles/interpolation=trilinear",
+        "time/nlim=1",
+        "time/tlim=0.01"
+      ]
+    },
+    {
+      "case": "smooth_orbit_16",
+      "input": "cr_smooth_orbit_reference.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_smooth_orbit_16",
+        "mesh/nx1=16",
+        "mesh/nx2=16",
+        "mesh/nx3=16",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=2.44140625000000000e-04",
+        "particles/cfl_part=0.0125",
+        "particles/subcycle_gyro_fraction=0.0125",
+        "time/nlim=200",
+        "time/tlim=0.1"
+      ],
+      "wall_seconds": 0.05776708299526945,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_smooth_orbit_reference.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/smooth_orbit_16",
+        "job/basename=cr_acc_smooth_orbit_16",
+        "mesh/nx1=16",
+        "mesh/nx2=16",
+        "mesh/nx3=16",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=2.44140625000000000e-04",
+        "particles/cfl_part=0.0125",
+        "particles/subcycle_gyro_fraction=0.0125",
+        "time/nlim=200",
+        "time/tlim=0.1"
+      ]
+    },
+    {
+      "case": "smooth_orbit_32",
+      "input": "cr_smooth_orbit_reference.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_smooth_orbit_32",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
+        "mesh/nx3=32",
+        "meshblock/nx1=32",
+        "meshblock/nx2=32",
+        "meshblock/nx3=32",
+        "particles/ppc=3.05175781250000000e-05",
+        "particles/cfl_part=0.00625",
+        "particles/subcycle_gyro_fraction=0.00625",
+        "time/nlim=200",
+        "time/tlim=0.1"
+      ],
+      "wall_seconds": 0.16621087500243448,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_smooth_orbit_reference.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/smooth_orbit_32",
+        "job/basename=cr_acc_smooth_orbit_32",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
+        "mesh/nx3=32",
+        "meshblock/nx1=32",
+        "meshblock/nx2=32",
+        "meshblock/nx3=32",
+        "particles/ppc=3.05175781250000000e-05",
+        "particles/cfl_part=0.00625",
+        "particles/subcycle_gyro_fraction=0.00625",
+        "time/nlim=200",
+        "time/tlim=0.1"
+      ]
+    },
+    {
+      "case": "smooth_orbit_64",
+      "input": "cr_smooth_orbit_reference.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_smooth_orbit_64",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=64",
+        "meshblock/nx2=64",
+        "meshblock/nx3=64",
+        "particles/ppc=3.81469726562500000e-06",
+        "particles/cfl_part=0.003125",
+        "particles/subcycle_gyro_fraction=0.003125",
+        "time/nlim=200",
+        "time/tlim=0.1"
+      ],
+      "wall_seconds": 1.7127999580116011,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_smooth_orbit_reference.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/smooth_orbit_64",
+        "job/basename=cr_acc_smooth_orbit_64",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=64",
+        "meshblock/nx2=64",
+        "meshblock/nx3=64",
+        "particles/ppc=3.81469726562500000e-06",
+        "particles/cfl_part=0.003125",
+        "particles/subcycle_gyro_fraction=0.003125",
+        "time/nlim=200",
+        "time/tlim=0.1"
+      ]
+    },
+    {
+      "case": "smooth_orbit_128",
+      "input": "cr_smooth_orbit_reference.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_smooth_orbit_128",
+        "mesh/nx1=128",
+        "mesh/nx2=128",
+        "mesh/nx3=128",
+        "meshblock/nx1=128",
+        "meshblock/nx2=128",
+        "meshblock/nx3=128",
+        "particles/ppc=4.76837158203125000e-07",
+        "particles/cfl_part=0.0015625",
+        "particles/subcycle_gyro_fraction=0.0015625",
+        "time/nlim=200",
+        "time/tlim=0.1"
+      ],
+      "wall_seconds": 26.223221457999898,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_smooth_orbit_reference.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/smooth_orbit_128",
+        "job/basename=cr_acc_smooth_orbit_128",
+        "mesh/nx1=128",
+        "mesh/nx2=128",
+        "mesh/nx3=128",
+        "meshblock/nx1=128",
+        "meshblock/nx2=128",
+        "meshblock/nx3=128",
+        "particles/ppc=4.76837158203125000e-07",
+        "particles/cfl_part=0.0015625",
+        "particles/subcycle_gyro_fraction=0.0015625",
+        "time/nlim=200",
+        "time/tlim=0.1"
+      ]
+    },
+    {
+      "case": "smooth_orbit_timestep_0.0125",
+      "input": "cr_smooth_orbit_reference.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_smooth_timestep_0.0125",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=64",
+        "meshblock/nx2=64",
+        "meshblock/nx3=64",
+        "particles/ppc=3.81469726562500000e-06",
+        "particles/cfl_part=0.0125",
+        "particles/subcycle_gyro_fraction=0.0125",
+        "time/nlim=200",
+        "time/tlim=0.1"
+      ],
+      "wall_seconds": 0.5183348340215161,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_smooth_orbit_reference.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/smooth_orbit_timestep_0.0125",
+        "job/basename=cr_acc_smooth_timestep_0.0125",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=64",
+        "meshblock/nx2=64",
+        "meshblock/nx3=64",
+        "particles/ppc=3.81469726562500000e-06",
+        "particles/cfl_part=0.0125",
+        "particles/subcycle_gyro_fraction=0.0125",
+        "time/nlim=200",
+        "time/tlim=0.1"
+      ]
+    },
+    {
+      "case": "smooth_orbit_timestep_0.00625",
+      "input": "cr_smooth_orbit_reference.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_smooth_timestep_0.00625",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=64",
+        "meshblock/nx2=64",
+        "meshblock/nx3=64",
+        "particles/ppc=3.81469726562500000e-06",
+        "particles/cfl_part=0.00625",
+        "particles/subcycle_gyro_fraction=0.00625",
+        "time/nlim=200",
+        "time/tlim=0.1"
+      ],
+      "wall_seconds": 0.9235695419774856,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_smooth_orbit_reference.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/smooth_orbit_timestep_0.00625",
+        "job/basename=cr_acc_smooth_timestep_0.00625",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=64",
+        "meshblock/nx2=64",
+        "meshblock/nx3=64",
+        "particles/ppc=3.81469726562500000e-06",
+        "particles/cfl_part=0.00625",
+        "particles/subcycle_gyro_fraction=0.00625",
+        "time/nlim=200",
+        "time/tlim=0.1"
+      ]
+    },
+    {
+      "case": "smooth_orbit_timestep_0.0015625",
+      "input": "cr_smooth_orbit_reference.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_smooth_timestep_0.0015625",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=64",
+        "meshblock/nx2=64",
+        "meshblock/nx3=64",
+        "particles/ppc=3.81469726562500000e-06",
+        "particles/cfl_part=0.0015625",
+        "particles/subcycle_gyro_fraction=0.0015625",
+        "time/nlim=200",
+        "time/tlim=0.1"
+      ],
+      "wall_seconds": 3.3900720840028953,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_smooth_orbit_reference.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/smooth_orbit_timestep_0.0015625",
+        "job/basename=cr_acc_smooth_timestep_0.0015625",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=64",
+        "meshblock/nx2=64",
+        "meshblock/nx3=64",
+        "particles/ppc=3.81469726562500000e-06",
+        "particles/cfl_part=0.0015625",
+        "particles/subcycle_gyro_fraction=0.0015625",
+        "time/nlim=200",
+        "time/tlim=0.1"
+      ]
+    },
+    {
+      "case": "magnetic_mirror",
+      "input": "cr_magnetic_mirror.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_mirror_docs",
+        "time/nlim=200000",
+        "time/tlim=18.0",
+        "output1/dt=0.04",
+        "output2/dt=18.0"
+      ],
+      "wall_seconds": 9.02337270899443,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_magnetic_mirror.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/magnetic_mirror",
+        "job/basename=cr_acc_mirror_docs",
+        "time/nlim=200000",
+        "time/tlim=18.0",
+        "output1/dt=0.04",
+        "output2/dt=18.0"
+      ]
+    },
+    {
+      "case": "magnetic_mirror_passing_control",
+      "input": "cr_magnetic_mirror.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_mirror_passing",
+        "problem/v0z=0.80",
+        "time/nlim=200000",
+        "time/tlim=6.0",
+        "output1/dt=0.04",
+        "output2/dt=6.0"
+      ],
+      "wall_seconds": 3.032960375014227,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_magnetic_mirror.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/magnetic_mirror_passing_control",
+        "job/basename=cr_acc_mirror_passing",
+        "problem/v0z=0.80",
+        "time/nlim=200000",
+        "time/tlim=6.0",
+        "output1/dt=0.04",
+        "output2/dt=6.0"
+      ]
+    },
+    {
+      "case": "magnetic_mirror_convergence_16",
+      "input": "cr_magnetic_mirror.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_mirror_convergence_16",
+        "mesh/nx1=16",
+        "mesh/nx2=16",
+        "mesh/nx3=16",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=2.44140625000000000e-04",
+        "time/nlim=100",
+        "time/tlim=0.12",
+        "output1/dt=0.12",
+        "output2/dt=0.12"
+      ],
+      "wall_seconds": 0.10458666700287722,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_magnetic_mirror.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/magnetic_mirror_convergence_16",
+        "job/basename=cr_acc_mirror_convergence_16",
+        "mesh/nx1=16",
+        "mesh/nx2=16",
+        "mesh/nx3=16",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=2.44140625000000000e-04",
+        "time/nlim=100",
+        "time/tlim=0.12",
+        "output1/dt=0.12",
+        "output2/dt=0.12"
+      ]
+    },
+    {
+      "case": "magnetic_mirror_convergence_32",
+      "input": "cr_magnetic_mirror.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_mirror_convergence_32",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
+        "mesh/nx3=32",
+        "meshblock/nx1=32",
+        "meshblock/nx2=32",
+        "meshblock/nx3=32",
+        "particles/ppc=3.05175781250000000e-05",
+        "time/nlim=100",
+        "time/tlim=0.12",
+        "output1/dt=0.12",
+        "output2/dt=0.12"
+      ],
+      "wall_seconds": 0.37536362500395626,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_magnetic_mirror.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/magnetic_mirror_convergence_32",
+        "job/basename=cr_acc_mirror_convergence_32",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
+        "mesh/nx3=32",
+        "meshblock/nx1=32",
+        "meshblock/nx2=32",
+        "meshblock/nx3=32",
+        "particles/ppc=3.05175781250000000e-05",
+        "time/nlim=100",
+        "time/tlim=0.12",
+        "output1/dt=0.12",
+        "output2/dt=0.12"
+      ]
+    },
+    {
+      "case": "magnetic_mirror_convergence_64",
+      "input": "cr_magnetic_mirror.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_mirror_convergence_64",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=64",
+        "meshblock/nx2=64",
+        "meshblock/nx3=64",
+        "particles/ppc=3.81469726562500000e-06",
+        "time/nlim=100",
+        "time/tlim=0.12",
+        "output1/dt=0.12",
+        "output2/dt=0.12"
+      ],
+      "wall_seconds": 2.5845032910001464,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_magnetic_mirror.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/magnetic_mirror_convergence_64",
+        "job/basename=cr_acc_mirror_convergence_64",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=64",
+        "meshblock/nx2=64",
+        "meshblock/nx3=64",
+        "particles/ppc=3.81469726562500000e-06",
+        "time/nlim=100",
+        "time/tlim=0.12",
+        "output1/dt=0.12",
+        "output2/dt=0.12"
+      ]
+    },
+    {
+      "case": "magnetic_mirror_convergence_128",
+      "input": "cr_magnetic_mirror.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_mirror_convergence_128",
+        "mesh/nx1=128",
+        "mesh/nx2=128",
+        "mesh/nx3=128",
+        "meshblock/nx1=128",
+        "meshblock/nx2=128",
+        "meshblock/nx3=128",
+        "particles/ppc=4.76837158203125000e-07",
+        "time/nlim=100",
+        "time/tlim=0.12",
+        "output1/dt=0.12",
+        "output2/dt=0.12"
+      ],
+      "wall_seconds": 19.412249334010994,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_magnetic_mirror.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/magnetic_mirror_convergence_128",
+        "job/basename=cr_acc_mirror_convergence_128",
+        "mesh/nx1=128",
+        "mesh/nx2=128",
+        "mesh/nx3=128",
+        "meshblock/nx1=128",
+        "meshblock/nx2=128",
+        "meshblock/nx3=128",
+        "particles/ppc=4.76837158203125000e-07",
+        "time/nlim=100",
+        "time/tlim=0.12",
+        "output1/dt=0.12",
+        "output2/dt=0.12"
+      ]
+    },
+    {
+      "case": "gradb_16",
+      "input": "cr_gradb_curvature_drift.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_gradb_16",
+        "mesh/nx1=16",
+        "mesh/nx2=16",
+        "mesh/nx3=16",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=2.44140625000000000e-04",
+        "problem/Bgrad=1.0",
+        "particles/cfl_part=0.01",
+        "particles/subcycle_gyro_fraction=0.01",
+        "time/nlim=1000",
+        "time/tlim=0.64"
+      ],
+      "wall_seconds": 0.1332625420182012,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_gradb_curvature_drift.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/gradb_16",
+        "job/basename=cr_acc_gradb_16",
+        "mesh/nx1=16",
+        "mesh/nx2=16",
+        "mesh/nx3=16",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=2.44140625000000000e-04",
+        "problem/Bgrad=1.0",
+        "particles/cfl_part=0.01",
+        "particles/subcycle_gyro_fraction=0.01",
+        "time/nlim=1000",
+        "time/tlim=0.64"
+      ]
+    },
+    {
+      "case": "gradb_32",
+      "input": "cr_gradb_curvature_drift.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_gradb_32",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
+        "mesh/nx3=32",
+        "meshblock/nx1=32",
+        "meshblock/nx2=32",
+        "meshblock/nx3=32",
+        "particles/ppc=3.05175781250000000e-05",
+        "problem/Bgrad=1.0",
+        "particles/cfl_part=0.01",
+        "particles/subcycle_gyro_fraction=0.01",
+        "time/nlim=1000",
+        "time/tlim=0.64"
+      ],
+      "wall_seconds": 0.5072745000070427,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_gradb_curvature_drift.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/gradb_32",
+        "job/basename=cr_acc_gradb_32",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
+        "mesh/nx3=32",
+        "meshblock/nx1=32",
+        "meshblock/nx2=32",
+        "meshblock/nx3=32",
+        "particles/ppc=3.05175781250000000e-05",
+        "problem/Bgrad=1.0",
+        "particles/cfl_part=0.01",
+        "particles/subcycle_gyro_fraction=0.01",
+        "time/nlim=1000",
+        "time/tlim=0.64"
+      ]
+    },
+    {
+      "case": "gradb_64",
+      "input": "cr_gradb_curvature_drift.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_gradb_64",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=64",
+        "meshblock/nx2=64",
+        "meshblock/nx3=64",
+        "particles/ppc=3.81469726562500000e-06",
+        "problem/Bgrad=1.0",
+        "particles/cfl_part=0.01",
+        "particles/subcycle_gyro_fraction=0.01",
+        "time/nlim=1000",
+        "time/tlim=0.64"
+      ],
+      "wall_seconds": 3.394958166987635,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_gradb_curvature_drift.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/gradb_64",
+        "job/basename=cr_acc_gradb_64",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=64",
+        "meshblock/nx2=64",
+        "meshblock/nx3=64",
+        "particles/ppc=3.81469726562500000e-06",
+        "problem/Bgrad=1.0",
+        "particles/cfl_part=0.01",
+        "particles/subcycle_gyro_fraction=0.01",
+        "time/nlim=1000",
+        "time/tlim=0.64"
+      ]
+    },
+    {
+      "case": "gradb_128",
+      "input": "cr_gradb_curvature_drift.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_gradb_128",
+        "mesh/nx1=128",
+        "mesh/nx2=128",
+        "mesh/nx3=128",
+        "meshblock/nx1=128",
+        "meshblock/nx2=128",
+        "meshblock/nx3=128",
+        "particles/ppc=4.76837158203125000e-07",
+        "problem/Bgrad=1.0",
+        "particles/cfl_part=0.01",
+        "particles/subcycle_gyro_fraction=0.01",
+        "time/nlim=1000",
+        "time/tlim=0.64"
+      ],
+      "wall_seconds": 32.71344850002788,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_gradb_curvature_drift.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/gradb_128",
+        "job/basename=cr_acc_gradb_128",
+        "mesh/nx1=128",
+        "mesh/nx2=128",
+        "mesh/nx3=128",
+        "meshblock/nx1=128",
+        "meshblock/nx2=128",
+        "meshblock/nx3=128",
+        "particles/ppc=4.76837158203125000e-07",
+        "problem/Bgrad=1.0",
+        "particles/cfl_part=0.01",
+        "particles/subcycle_gyro_fraction=0.01",
+        "time/nlim=1000",
+        "time/tlim=0.64"
+      ]
+    },
+    {
+      "case": "amr_boundary_16",
+      "input": "cr_amr_boundary_convergence.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_amr_boundary_16",
+        "mesh/nx1=16",
+        "mesh/nx2=16",
+        "mesh/nx3=16",
+        "meshblock/nx1=8",
+        "meshblock/nx2=8",
+        "meshblock/nx3=8",
+        "particles/ppc=1.25000000000000000e-01",
+        "mesh_refinement/max_nmb_per_rank=512",
+        "particles/check_consistency_mode=full",
+        "particles/validate_amr_lookup=true"
+      ],
+      "wall_seconds": 0.39938650000840425,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_amr_boundary_convergence.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/amr_boundary_16",
+        "job/basename=cr_acc_amr_boundary_16",
+        "mesh/nx1=16",
+        "mesh/nx2=16",
+        "mesh/nx3=16",
+        "meshblock/nx1=8",
+        "meshblock/nx2=8",
+        "meshblock/nx3=8",
+        "particles/ppc=1.25000000000000000e-01",
+        "mesh_refinement/max_nmb_per_rank=512",
+        "particles/check_consistency_mode=full",
+        "particles/validate_amr_lookup=true"
+      ]
+    },
+    {
+      "case": "amr_boundary_32",
+      "input": "cr_amr_boundary_convergence.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_amr_boundary_32",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
+        "mesh/nx3=32",
+        "meshblock/nx1=8",
+        "meshblock/nx2=8",
+        "meshblock/nx3=8",
+        "particles/ppc=1.56250000000000000e-02",
+        "mesh_refinement/max_nmb_per_rank=512",
+        "particles/check_consistency_mode=full",
+        "particles/validate_amr_lookup=true"
+      ],
+      "wall_seconds": 0.7562622080149595,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_amr_boundary_convergence.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/amr_boundary_32",
+        "job/basename=cr_acc_amr_boundary_32",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
+        "mesh/nx3=32",
+        "meshblock/nx1=8",
+        "meshblock/nx2=8",
+        "meshblock/nx3=8",
+        "particles/ppc=1.56250000000000000e-02",
+        "mesh_refinement/max_nmb_per_rank=512",
+        "particles/check_consistency_mode=full",
+        "particles/validate_amr_lookup=true"
+      ]
+    },
+    {
+      "case": "amr_boundary_64",
+      "input": "cr_amr_boundary_convergence.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_amr_boundary_64",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=8",
+        "meshblock/nx2=8",
+        "meshblock/nx3=8",
+        "particles/ppc=1.95312500000000000e-03",
+        "mesh_refinement/max_nmb_per_rank=512",
+        "particles/check_consistency_mode=full",
+        "particles/validate_amr_lookup=true"
+      ],
+      "wall_seconds": 4.958609874971444,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_amr_boundary_convergence.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/amr_boundary_64",
+        "job/basename=cr_acc_amr_boundary_64",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=8",
+        "meshblock/nx2=8",
+        "meshblock/nx3=8",
+        "particles/ppc=1.95312500000000000e-03",
+        "mesh_refinement/max_nmb_per_rank=512",
+        "particles/check_consistency_mode=full",
+        "particles/validate_amr_lookup=true"
+      ]
+    },
+    {
+      "case": "amr_boundary_uniform_128",
+      "input": "cr_amr_boundary_convergence.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_amr_boundary_uniform_128",
+        "mesh/nx1=128",
+        "mesh/nx2=128",
+        "mesh/nx3=128",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "mesh_refinement/refinement=none",
+        "particles/ppc=2.44140625000000000e-04",
+        "mesh_refinement/max_nmb_per_rank=512",
+        "particles/check_consistency_mode=full",
+        "particles/validate_amr_lookup=true"
+      ],
+      "wall_seconds": 9.564527333976002,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_amr_boundary_convergence.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/amr_boundary_uniform_128",
+        "job/basename=cr_acc_amr_boundary_uniform_128",
+        "mesh/nx1=128",
+        "mesh/nx2=128",
+        "mesh/nx3=128",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "mesh_refinement/refinement=none",
+        "particles/ppc=2.44140625000000000e-04",
+        "mesh_refinement/max_nmb_per_rank=512",
+        "particles/check_consistency_mode=full",
+        "particles/validate_amr_lookup=true"
+      ]
+    },
+    {
+      "case": "mpi_decomposition_n1",
+      "input": "cr_mpi_decomposition_invariance.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_mpi_decomposition_n1",
+        "time/nlim=256",
+        "time/tlim=0.40",
+        "output1/dt=0.20",
+        "output2/dt=0.20"
+      ],
+      "wall_seconds": 0.06511466699885204,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_mpi_decomposition_invariance.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/mpi_decomposition_n1",
+        "job/basename=cr_acc_mpi_decomposition_n1",
+        "time/nlim=256",
+        "time/tlim=0.40",
+        "output1/dt=0.20",
+        "output2/dt=0.20"
+      ]
+    },
+    {
+      "case": "mpi_decomposition_n2",
+      "input": "cr_mpi_decomposition_invariance.athinput",
+      "ranks": 2,
+      "overrides": [
+        "job/basename=cr_acc_mpi_decomposition_n2",
+        "time/nlim=256",
+        "time/tlim=0.40",
+        "output1/dt=0.20",
+        "output2/dt=0.20"
+      ],
+      "wall_seconds": 0.08709345798706636,
+      "command": [
+        "mpiexec",
+        "-np",
+        "2",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_mpi_decomposition_invariance.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/mpi_decomposition_n2",
+        "job/basename=cr_acc_mpi_decomposition_n2",
+        "time/nlim=256",
+        "time/tlim=0.40",
+        "output1/dt=0.20",
+        "output2/dt=0.20"
+      ]
+    },
+    {
+      "case": "mpi_decomposition_n4",
+      "input": "cr_mpi_decomposition_invariance.athinput",
+      "ranks": 4,
+      "overrides": [
+        "job/basename=cr_acc_mpi_decomposition_n4",
+        "time/nlim=256",
+        "time/tlim=0.40",
+        "output1/dt=0.20",
+        "output2/dt=0.20"
+      ],
+      "wall_seconds": 0.08641533300396986,
+      "command": [
+        "mpiexec",
+        "-np",
+        "4",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_mpi_decomposition_invariance.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/mpi_decomposition_n4",
+        "job/basename=cr_acc_mpi_decomposition_n4",
+        "time/nlim=256",
+        "time/tlim=0.40",
+        "output1/dt=0.20",
+        "output2/dt=0.20"
+      ]
+    },
+    {
+      "case": "mpi_decomposition_n8",
+      "input": "cr_mpi_decomposition_invariance.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_mpi_decomposition_n8",
+        "time/nlim=256",
+        "time/tlim=0.40",
+        "output1/dt=0.20",
+        "output2/dt=0.20"
+      ],
+      "wall_seconds": 0.11077883301186375,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_mpi_decomposition_invariance.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/mpi_decomposition_n8",
+        "job/basename=cr_acc_mpi_decomposition_n8",
+        "time/nlim=256",
+        "time/tlim=0.40",
+        "output1/dt=0.20",
+        "output2/dt=0.20"
+      ]
+    },
+    {
+      "case": "isotropic_ensemble",
+      "input": "cr_isotropic_ensemble.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_isotropic",
+        "time/nlim=1",
+        "time/tlim=0.02"
+      ],
+      "wall_seconds": 0.04892704199301079,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_isotropic_ensemble.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/isotropic_ensemble",
+        "job/basename=cr_acc_isotropic",
+        "time/nlim=1",
+        "time/tlim=0.02"
+      ]
+    },
+    {
+      "case": "frozen_turbulent",
+      "input": "cr_frozen_turbulent_field.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_turbulent_docs",
+        "time/nlim=2000",
+        "time/tlim=1.28"
+      ],
+      "wall_seconds": 0.2792593339981977,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_frozen_turbulent_field.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/frozen_turbulent",
+        "job/basename=cr_acc_turbulent_docs",
+        "time/nlim=2000",
+        "time/tlim=1.28"
+      ]
+    },
+    {
+      "case": "pitch_angle_structured_32",
+      "input": "cr_pitch_angle_decorrelation.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_pitch_structured_32",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
+        "mesh/nx3=32",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=3.12500000000000000e-02",
+        "time/nlim=200000",
+        "time/tlim=1.28",
+        "output1/dt=0.08",
+        "output4/dt=1.28"
+      ],
+      "wall_seconds": 0.29406537499744445,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_pitch_angle_decorrelation.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/pitch_angle_structured_32",
+        "job/basename=cr_acc_pitch_structured_32",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
+        "mesh/nx3=32",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=3.12500000000000000e-02",
+        "time/nlim=200000",
+        "time/tlim=1.28",
+        "output1/dt=0.08",
+        "output4/dt=1.28"
+      ]
+    },
+    {
+      "case": "pitch_angle_structured_64",
+      "input": "cr_pitch_angle_decorrelation.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_pitch_structured_64",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=3.90625000000000000e-03",
+        "time/nlim=200000",
+        "time/tlim=1.28",
+        "output1/dt=0.08",
+        "output4/dt=1.28"
+      ],
+      "wall_seconds": 1.4306748749804683,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_pitch_angle_decorrelation.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/pitch_angle_structured_64",
+        "job/basename=cr_acc_pitch_structured_64",
+        "mesh/nx1=64",
+        "mesh/nx2=64",
+        "mesh/nx3=64",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=3.90625000000000000e-03",
+        "time/nlim=200000",
+        "time/tlim=1.28",
+        "output1/dt=0.08",
+        "output4/dt=1.28"
+      ]
+    },
+    {
+      "case": "pitch_angle_structured_128",
+      "input": "cr_pitch_angle_decorrelation.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_pitch_structured_128",
+        "mesh/nx1=128",
+        "mesh/nx2=128",
+        "mesh/nx3=128",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=4.88281250000000000e-04",
+        "time/nlim=200000",
+        "time/tlim=1.28",
+        "output1/dt=0.08",
+        "output4/dt=1.28"
+      ],
+      "wall_seconds": 19.63883741700556,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_pitch_angle_decorrelation.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/pitch_angle_structured_128",
+        "job/basename=cr_acc_pitch_structured_128",
+        "mesh/nx1=128",
+        "mesh/nx2=128",
+        "mesh/nx3=128",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=4.88281250000000000e-04",
+        "time/nlim=200000",
+        "time/tlim=1.28",
+        "output1/dt=0.08",
+        "output4/dt=1.28"
+      ]
+    },
+    {
+      "case": "pitch_angle_uniform_control",
+      "input": "cr_pitch_angle_uniform_control.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_pitch_uniform_control",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
+        "mesh/nx3=32",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=3.12500000000000000e-02",
+        "time/nlim=200000",
+        "time/tlim=1.28",
+        "output1/dt=0.08",
+        "output4/dt=1.28"
+      ],
+      "wall_seconds": 0.3075284170045052,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_pitch_angle_uniform_control.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/pitch_angle_uniform_control",
+        "job/basename=cr_acc_pitch_uniform_control",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
+        "mesh/nx3=32",
+        "meshblock/nx1=16",
+        "meshblock/nx2=16",
+        "meshblock/nx3=16",
+        "particles/ppc=3.12500000000000000e-02",
+        "time/nlim=200000",
+        "time/tlim=1.28",
+        "output1/dt=0.08",
+        "output4/dt=1.28"
+      ]
+    },
+    {
+      "case": "qualitative_uniform_gyro",
+      "input": "cr_uniform_gyro.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_qual_uniform_gyro",
+        "particles/cfl_part=0.025",
+        "time/nlim=512",
+        "time/tlim=6.4",
+        "output1/dt=0.04",
+        "output2/dt=6.4"
+      ],
+      "wall_seconds": 0.14520195801742375,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_uniform_gyro.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/qualitative_uniform_gyro",
+        "job/basename=cr_acc_qual_uniform_gyro",
+        "particles/cfl_part=0.025",
+        "time/nlim=512",
+        "time/tlim=6.4",
+        "output1/dt=0.04",
+        "output2/dt=6.4"
+      ]
+    },
+    {
+      "case": "qualitative_uniform_amr_mpi",
+      "input": "cr_uniform_gyro_amr.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_qual_uniform_amr_mpi",
+        "time/nlim=512",
+        "time/tlim=0.64",
+        "output1/dt=0.08",
+        "output2/dt=0.64",
+        "output3/dt=0.64"
+      ],
+      "wall_seconds": 0.22318645799532533,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_uniform_gyro_amr.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/qualitative_uniform_amr_mpi",
+        "job/basename=cr_acc_qual_uniform_amr_mpi",
+        "time/nlim=512",
+        "time/tlim=0.64",
+        "output1/dt=0.08",
+        "output2/dt=0.64",
+        "output3/dt=0.64"
+      ]
+    },
+    {
+      "case": "qualitative_linear_gather",
+      "input": "cr_linear_gather.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_qual_linear_gather",
+        "particles/interpolation=trilinear",
+        "time/nlim=1",
+        "time/tlim=0.01",
+        "output1/dt=0.01"
+      ],
+      "wall_seconds": 0.05021645801025443,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_linear_gather.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/qualitative_linear_gather",
+        "job/basename=cr_acc_qual_linear_gather",
+        "particles/interpolation=trilinear",
+        "time/nlim=1",
+        "time/tlim=0.01",
+        "output1/dt=0.01"
+      ]
+    },
+    {
+      "case": "qualitative_manufactured_gather",
+      "input": "cr_manufactured_divb_free.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_qual_manufactured_gather",
+        "particles/interpolation=trilinear",
+        "time/nlim=1",
+        "time/tlim=0.01",
+        "output1/dt=0.01"
+      ],
+      "wall_seconds": 0.05157654199865647,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_manufactured_divb_free.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/qualitative_manufactured_gather",
+        "job/basename=cr_acc_qual_manufactured_gather",
+        "particles/interpolation=trilinear",
+        "time/nlim=1",
+        "time/tlim=0.01",
+        "output1/dt=0.01"
+      ]
+    },
+    {
+      "case": "qualitative_smooth_orbit_reference",
+      "input": "cr_smooth_orbit_reference.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_qual_smooth_orbit",
+        "time/nlim=256",
+        "time/tlim=1.6",
+        "output1/dt=0.02",
+        "output2/dt=1.6"
+      ],
+      "wall_seconds": 0.1362526660086587,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_smooth_orbit_reference.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/qualitative_smooth_orbit_reference",
+        "job/basename=cr_acc_qual_smooth_orbit",
+        "time/nlim=256",
+        "time/tlim=1.6",
+        "output1/dt=0.02",
+        "output2/dt=1.6"
+      ]
+    },
+    {
+      "case": "qualitative_magnetic_mirror",
+      "input": "cr_magnetic_mirror.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_qual_mirror",
+        "time/nlim=200000",
+        "time/tlim=6.0",
+        "output1/dt=0.04",
+        "output2/dt=6.0",
+        "time/tlim=18.0",
+        "output2/dt=18.0"
+      ],
+      "wall_seconds": 9.048633500002325,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_magnetic_mirror.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/qualitative_magnetic_mirror",
+        "job/basename=cr_acc_qual_mirror",
+        "time/nlim=200000",
+        "time/tlim=6.0",
+        "output1/dt=0.04",
+        "output2/dt=6.0",
+        "time/tlim=18.0",
+        "output2/dt=18.0"
+      ]
+    },
+    {
+      "case": "qualitative_gradb_drift",
+      "input": "cr_gradb_curvature_drift.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_qual_gradb",
+        "problem/Bgrad=1.0",
+        "particles/cfl_part=0.01",
+        "particles/subcycle_gyro_fraction=0.01",
+        "time/nlim=1024",
+        "time/tlim=1.6",
+        "output1/dt=0.02",
+        "output2/dt=1.6"
+      ],
+      "wall_seconds": 0.2528393749962561,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_gradb_curvature_drift.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/qualitative_gradb_drift",
+        "job/basename=cr_acc_qual_gradb",
+        "problem/Bgrad=1.0",
+        "particles/cfl_part=0.01",
+        "particles/subcycle_gyro_fraction=0.01",
+        "time/nlim=1024",
+        "time/tlim=1.6",
+        "output1/dt=0.02",
+        "output2/dt=1.6"
+      ]
+    },
+    {
+      "case": "qualitative_amr_boundary",
+      "input": "cr_amr_boundary_convergence.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_qual_amr_boundary",
+        "time/nlim=512",
+        "time/tlim=0.64",
+        "output1/dt=0.08",
+        "output2/dt=0.64"
+      ],
+      "wall_seconds": 0.2152407499961555,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_amr_boundary_convergence.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/qualitative_amr_boundary",
+        "job/basename=cr_acc_qual_amr_boundary",
+        "time/nlim=512",
+        "time/tlim=0.64",
+        "output1/dt=0.08",
+        "output2/dt=0.64"
+      ]
+    },
+    {
+      "case": "qualitative_mpi_decomposition",
+      "input": "cr_mpi_decomposition_invariance.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_qual_mpi_decomposition",
+        "time/nlim=256",
+        "time/tlim=1.0",
+        "output1/dt=0.08",
+        "output2/dt=1.0"
+      ],
+      "wall_seconds": 0.12079029099550098,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_mpi_decomposition_invariance.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/qualitative_mpi_decomposition",
+        "job/basename=cr_acc_qual_mpi_decomposition",
+        "time/nlim=256",
+        "time/tlim=1.0",
+        "output1/dt=0.08",
+        "output2/dt=1.0"
+      ]
+    },
+    {
+      "case": "qualitative_isotropic_ensemble",
+      "input": "cr_isotropic_ensemble.athinput",
+      "ranks": 1,
+      "overrides": [
+        "job/basename=cr_acc_qual_isotropic",
+        "time/nlim=128",
+        "time/tlim=0.8",
+        "output1/dt=0.02",
+        "output2/dt=0.8",
+        "output3/dt=0.8",
+        "output4/dt=0.8",
+        "output5/dt=0.8",
+        "output6/dt=0.8"
+      ],
+      "wall_seconds": 0.07926320799742825,
+      "command": [
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_isotropic_ensemble.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/qualitative_isotropic_ensemble",
+        "job/basename=cr_acc_qual_isotropic",
+        "time/nlim=128",
+        "time/tlim=0.8",
+        "output1/dt=0.02",
+        "output2/dt=0.8",
+        "output3/dt=0.8",
+        "output4/dt=0.8",
+        "output5/dt=0.8",
+        "output6/dt=0.8"
+      ]
+    },
+    {
+      "case": "qualitative_frozen_turbulent",
+      "input": "cr_frozen_turbulent_field.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_qual_turbulent",
+        "time/nlim=2000",
+        "time/tlim=1.28",
+        "output1/dt=0.08",
+        "output2/dt=1.28",
+        "output3/dt=1.28",
+        "time/tlim=3.20",
+        "output1/dt=0.16",
+        "output2/dt=3.20",
+        "output3/dt=3.20"
+      ],
+      "wall_seconds": 0.36866170799476095,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_frozen_turbulent_field.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/qualitative_frozen_turbulent",
+        "job/basename=cr_acc_qual_turbulent",
+        "time/nlim=2000",
+        "time/tlim=1.28",
+        "output1/dt=0.08",
+        "output2/dt=1.28",
+        "output3/dt=1.28",
+        "time/tlim=3.20",
+        "output1/dt=0.16",
+        "output2/dt=3.20",
+        "output3/dt=3.20"
+      ]
+    },
+    {
+      "case": "qualitative_pitch_angle_decorrelation",
+      "input": "cr_pitch_angle_decorrelation.athinput",
+      "ranks": 8,
+      "overrides": [
+        "job/basename=cr_acc_qual_pitch_angle",
+        "time/nlim=2000",
+        "time/tlim=1.28",
+        "output1/dt=0.08",
+        "output4/dt=1.28"
+      ],
+      "wall_seconds": 0.1731222909875214,
+      "command": [
+        "mpiexec",
+        "-np",
+        "8",
+        "build-cr-robust-mpi/src/athena",
+        "-i",
+        "/Users/dbf75/.codex/worktrees/9c84/athenak-DF/inputs/particles/accuracy/cr_pitch_angle_decorrelation.athinput",
+        "-d",
+        "/tmp/cr_accuracy_docs_runs_9c84_final_v2/qualitative_pitch_angle_decorrelation",
+        "job/basename=cr_acc_qual_pitch_angle",
+        "time/nlim=2000",
+        "time/tlim=1.28",
+        "output1/dt=0.08",
+        "output4/dt=1.28"
+      ]
+    }
+  ]
 }

@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -47,6 +48,23 @@ Real WrapUnit(Real x) {
   while (x < 0.0) {x += 1.0;}
   while (x >= 1.0) {x -= 1.0;}
   return x;
+}
+
+KOKKOS_INLINE_FUNCTION
+std::uint64_t HashParticleState(std::uint64_t value) {
+  value += 0x9E3779B97F4A7C15ULL;
+  value = (value ^ (value >> 30)) * 0xBF58476D1CE4E5B9ULL;
+  value = (value ^ (value >> 27)) * 0x94D049BB133111EBULL;
+  return value ^ (value >> 31);
+}
+
+KOKKOS_INLINE_FUNCTION
+Real TagRandomUnit(std::uint64_t seed, int species, int tag, int stream) {
+  std::uint64_t value = seed ^ (static_cast<std::uint64_t>(species) << 32);
+  value ^= static_cast<std::uint64_t>(static_cast<unsigned int>(tag));
+  value ^= static_cast<std::uint64_t>(stream + 1) * 0xD2B74407B1CE6E93ULL;
+  return static_cast<Real>(HashParticleState(value) >> 11)/
+         static_cast<Real>(9007199254740992.0);
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -273,6 +291,7 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
     std::string particle_velocity =
         pin->GetOrAddString("problem","particle_velocity","random");
     if (particle_position.compare("random") != 0 &&
+        particle_position.compare("tag_random") != 0 &&
         particle_position.compare("center") != 0 &&
         particle_position.compare("meshblock_center") != 0 &&
         particle_position.compare("fixed") != 0) {
@@ -283,7 +302,8 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
     }
     if (particle_velocity.compare("random") != 0 &&
         particle_velocity.compare("uniform") != 0 &&
-        particle_velocity.compare("isotropic") != 0) {
+        particle_velocity.compare("isotropic") != 0 &&
+        particle_velocity.compare("isotropic_tag_random") != 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Unknown particle_velocity = '"
                 << particle_velocity << "'" << std::endl;
@@ -294,6 +314,7 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
         (particle_position.compare("meshblock_center") == 0);
     bool block_center_particles = center_particles || meshblock_center_particles;
     bool fixed_particles = (particle_position.compare("fixed") == 0);
+    bool tag_random_particles = (particle_position.compare("tag_random") == 0);
     Real fixed_x1 = pin->GetOrAddReal("problem","particle_x1",0.0);
     Real fixed_x2 = pin->GetOrAddReal("problem","particle_x2",0.0);
     Real fixed_x3 = pin->GetOrAddReal("problem","particle_x3",0.0);
@@ -310,10 +331,15 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
     }
     bool uniform_velocity = (particle_velocity.compare("uniform") == 0);
     bool isotropic_velocity = (particle_velocity.compare("isotropic") == 0);
+    bool tag_isotropic_velocity =
+        (particle_velocity.compare("isotropic_tag_random") == 0);
     Real v0x = pin->GetOrAddReal("problem","v0x",1.0);
     Real v0y = pin->GetOrAddReal("problem","v0y",0.0);
     Real v0z = pin->GetOrAddReal("problem","v0z",0.0);
     Real v0 = pin->GetOrAddReal("problem","v0",1.0);
+    std::uint64_t particle_seed = static_cast<std::uint64_t>(
+        pin->GetOrAddInteger("problem","particle_seed",0));
+    RegionSize mesh_size = pmy_mesh_->mesh_size;
 
     // initialize particles
     Kokkos::Random_XorShift64_Pool<> rand_pool64(pmbp->gids);
@@ -324,10 +350,11 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
       spec = (spec < 0) ? 0 : spec;
       spec = (spec > nspecies - 1) ? nspecies - 1 : spec;
       int p_in_spec = (npart_spec > 0) ? p - spec*npart_spec : p;
+      int tag = pi(PTAG,p);
 
       // choose parent MeshBlock randomly unless a deterministic layout is requested
       int m = static_cast<int>(rand_gen.frand()*(gide - gids + 1.0));
-      if (meshblock_center_particles && nmb_thispack > 0) {
+      if ((meshblock_center_particles || tag_random_particles) && nmb_thispack > 0) {
         m = p_in_spec % nmb_thispack;
       }
       m = (m < 0) ? 0 : m;
@@ -336,36 +363,55 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
       pi(PSP,p) = spec;
 
       Real rand = rand_gen.frand();
-      pr(IPX,p) = fixed_particles ? fixed_x1 :
+      pr(IPX,p) = tag_random_particles ?
+                  mesh_size.x1min + TagRandomUnit(particle_seed, spec, tag, 0)*
+                  (mesh_size.x1max - mesh_size.x1min) :
+                  fixed_particles ? fixed_x1 :
                   block_center_particles ?
                   0.5*(mbsize.d_view(m).x1min + mbsize.d_view(m).x1max) :
                   (1. - rand)*mbsize.d_view(m).x1min + rand*mbsize.d_view(m).x1max;
-      pr(IPX,p) = fmin(pr(IPX,p),mbsize.d_view(m).x1max);
-      pr(IPX,p) = fmax(pr(IPX,p),mbsize.d_view(m).x1min);
+      if (!tag_random_particles) {
+        pr(IPX,p) = fmin(pr(IPX,p),mbsize.d_view(m).x1max);
+        pr(IPX,p) = fmax(pr(IPX,p),mbsize.d_view(m).x1min);
+      }
 
       rand = rand_gen.frand();
-      pr(IPY,p) = fixed_particles ? fixed_x2 :
+      pr(IPY,p) = tag_random_particles ?
+                  mesh_size.x2min + TagRandomUnit(particle_seed, spec, tag, 1)*
+                  (mesh_size.x2max - mesh_size.x2min) :
+                  fixed_particles ? fixed_x2 :
                   block_center_particles ?
                   0.5*(mbsize.d_view(m).x2min + mbsize.d_view(m).x2max) :
                   (1. - rand)*mbsize.d_view(m).x2min + rand*mbsize.d_view(m).x2max;
-      pr(IPY,p) = fmin(pr(IPY,p),mbsize.d_view(m).x2max);
-      pr(IPY,p) = fmax(pr(IPY,p),mbsize.d_view(m).x2min);
+      if (!tag_random_particles) {
+        pr(IPY,p) = fmin(pr(IPY,p),mbsize.d_view(m).x2max);
+        pr(IPY,p) = fmax(pr(IPY,p),mbsize.d_view(m).x2min);
+      }
 
       rand = rand_gen.frand();
-      pr(IPZ,p) = fixed_particles ? fixed_x3 :
+      pr(IPZ,p) = tag_random_particles ?
+                  mesh_size.x3min + TagRandomUnit(particle_seed, spec, tag, 2)*
+                  (mesh_size.x3max - mesh_size.x3min) :
+                  fixed_particles ? fixed_x3 :
                   block_center_particles ?
                   0.5*(mbsize.d_view(m).x3min + mbsize.d_view(m).x3max) :
                   (1. - rand)*mbsize.d_view(m).x3min + rand*mbsize.d_view(m).x3max;
-      pr(IPZ,p) = fmin(pr(IPZ,p),mbsize.d_view(m).x3max);
-      pr(IPZ,p) = fmax(pr(IPZ,p),mbsize.d_view(m).x3min);
+      if (!tag_random_particles) {
+        pr(IPZ,p) = fmin(pr(IPZ,p),mbsize.d_view(m).x3max);
+        pr(IPZ,p) = fmax(pr(IPZ,p),mbsize.d_view(m).x3min);
+      }
 
       if (uniform_velocity) {
         pr(IPVX,p) = v0x;
         pr(IPVY,p) = v0y;
         pr(IPVZ,p) = v0z;
-      } else if (isotropic_velocity) {
-        Real mu = 2.0*rand_gen.frand() - 1.0;
-        Real phi = kTwoPi*rand_gen.frand();
+      } else if (isotropic_velocity || tag_isotropic_velocity) {
+        Real mu = tag_isotropic_velocity ?
+                  2.0*TagRandomUnit(particle_seed, spec, tag, 3) - 1.0 :
+                  2.0*rand_gen.frand() - 1.0;
+        Real phi = tag_isotropic_velocity ?
+                   kTwoPi*TagRandomUnit(particle_seed, spec, tag, 4) :
+                   kTwoPi*rand_gen.frand();
         Real sintheta = sqrt(fmax(0.0, 1.0 - mu*mu));
         pr(IPVX,p) = v0*sintheta*cos(phi);
         pr(IPVY,p) = v0*sintheta*sin(phi);
@@ -496,6 +542,11 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
   Real bmag = std::sqrt(B0x*B0x + B0y*B0y + B0z*B0z);
   if (bmag > 0.0) {
     dtnew_ = std::min(dtnew_, cfl_part*min_mass/bmag);
+  }
+  std::string particle_position =
+      pin->GetOrAddString("problem","particle_position","random");
+  if ((!restart) && particle_position.compare("tag_random") == 0) {
+    pmbp->ppart->RemapAfterAMR();
   }
 
   return;

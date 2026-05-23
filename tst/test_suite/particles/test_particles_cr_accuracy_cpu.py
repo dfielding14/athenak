@@ -181,23 +181,44 @@ def test_smooth_field_orbit_approaches_high_resolution_reference_cpu():
 
 
 def test_magnetic_mirror_invariants_are_bounded_cpu():
-    """Mirror-field orbit should conserve speed and keep moment drift bounded."""
-    summary = _run(
+    """A trapped mirror orbit should reverse direction while conserving speed."""
+    _run(
         "cr_magnetic_mirror.athinput",
         [
             "job/basename=cr_acc_mirror_invariants",
-            "time/nlim=100",
-            "time/tlim=0.12",
+            "time/nlim=200000",
+            "time/tlim=6.0",
+            "output1/dt=0.04",
+            "output2/dt=0.04",
         ])
-    state = _one_particle_state(summary)
-    initial_velocity = (0.7, 0.0, 0.25)
-    initial_bfield = acu.exact_bfield(
-        "mirror", 0.05, -0.03, -0.12, (0.0, 0.0, 1.0), bgrad=0.8)
-    initial_moment = _magnetic_moment_proxy(initial_velocity, initial_bfield)
-    final_moment = _magnetic_moment_proxy(state["velocity"], state["bfield"])
-    assert acu.speed(state["velocity"]) == pytest.approx(
+    states = []
+    for path in sorted(Path("prst").rglob("*.prst")):
+        particle = acu.cr_tracer_inspect.read_prst_file(path)["particles"][0]
+        states.append({
+            "position": acu.particle_position(particle),
+            "velocity": acu.particle_velocity(particle),
+            "bfield": acu.particle_bfield(particle),
+        })
+    vparallel = [
+        sum(state["velocity"][i]*state["bfield"][i] for i in range(3)) /
+        acu.norm3(state["bfield"])
+        for state in states
+    ]
+    reversals = sum(
+        left*right < 0.0 for left, right in zip(vparallel, vparallel[1:]))
+    initial_velocity = (0.7, 0.0, 0.15)
+    initial_moment = _magnetic_moment_proxy(
+        states[0]["velocity"], states[0]["bfield"])
+    moment_excursion = max(
+        abs(_magnetic_moment_proxy(state["velocity"], state["bfield"]) -
+            initial_moment)/initial_moment
+        for state in states)
+    assert reversals >= 2
+    assert min(state["position"][2] for state in states) > -0.4
+    assert max(state["position"][2] for state in states) < 0.4
+    assert acu.speed(states[-1]["velocity"]) == pytest.approx(
         acu.speed(initial_velocity), rel=1.0e-12, abs=1.0e-12)
-    assert abs(final_moment - initial_moment)/initial_moment < 0.02
+    assert moment_excursion < 0.10
 
 
 def test_gradb_final_state_responds_to_gradient_strength_cpu():
@@ -226,7 +247,7 @@ def test_gradb_final_state_responds_to_gradient_strength_cpu():
 
 
 def test_frozen_turbulent_field_diagnostics_cpu():
-    """Production-like frozen field should keep reduced diagnostics normalized."""
+    """Five gyroradius species should keep reduced diagnostics normalized."""
     summary = _run(
         "cr_frozen_turbulent_field.athinput",
         [
@@ -234,10 +255,37 @@ def test_frozen_turbulent_field_diagnostics_cpu():
             "time/nlim=4",
             "time/tlim=0.08",
         ])
-    expected_species = [128, 128]
+    expected_species = [128, 128, 128, 128, 128]
     acu.cr_tracer_inspect.validate_expected_counts(
         summary, sum(expected_species), expected_species)
     moments = acu.cr_tracer_inspect.validate_moments(Path("."), expected_species)
     acu.cr_tracer_inspect.validate_joint_spectra(Path("."), expected_species, 16, 16)
+    particle_map = acu.particles_by_species_tag(summary)
+    masses = sorted({acu.particle_mass(particle) for particle in particle_map.values()})
+    assert masses == pytest.approx([0.25, 0.5, 1.0, 2.0, 4.0])
     for row in moments:
         assert row["mean_speed2"] == pytest.approx(1.0, rel=1.0e-12, abs=1.0e-12)
+
+
+def test_deterministic_pitch_angle_evolution_has_uniform_control_cpu():
+    """Structured fields change mu while uniform fields preserve it."""
+    correlations = {}
+    for name in ("uniform_control", "decorrelation"):
+        _run(
+            f"cr_pitch_angle_{name}.athinput",
+            [
+                f"job/basename=cr_acc_pitch_{name}",
+                "time/nlim=2000",
+                "time/tlim=0.64",
+                "output1/dt=0.64",
+                "output2/dt=0.64",
+                "output3/dt=0.64",
+            ])
+        sequence = acu.restart_sequence()
+        assert len(sequence) >= 2
+        correlations[name] = acu.pitch_angle_correlation(sequence[0], sequence[-1])
+        summary = acu.latest_restart_summary()
+        acu.cr_tracer_inspect.validate_expected_counts(summary, 1024, [1024])
+    assert correlations["uniform_control"] == pytest.approx(
+        1.0, rel=1.0e-12, abs=1.0e-12)
+    assert correlations["decorrelation"] < 0.995

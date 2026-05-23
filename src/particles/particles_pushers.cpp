@@ -327,74 +327,66 @@ int Particles::ComputeSubcycleSteps(Real dt, int &cell_steps, int &block_steps,
   cell_steps = 1;
   block_steps = 1;
   gyro_steps = 1;
-  if (!subcycle || nprtcl_thispack <= 0) {
-#if MPI_PARALLEL_ENABLED
-    int local_steps[3] = {cell_steps, block_steps, gyro_steps};
-    int global_steps[3] = {1, 1, 1};
-    MPI_Allreduce(local_steps, global_steps, 3, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
-    cell_steps = global_steps[0];
-    block_steps = global_steps[1];
-    gyro_steps = global_steps[2];
-#endif
-    return 1;
+  if (!subcycle) {return 1;}
+
+  if (nprtcl_thispack > 0) {
+    auto &pr = prtcl_rdata;
+    auto &pi = prtcl_idata;
+    auto &mbsize = pmy_pack->pmb->mb_size;
+    int gids = pmy_pack->gids;
+    int npart = nprtcl_thispack;
+    bool multi_d = pmy_pack->pmesh->multi_d;
+    bool three_d = pmy_pack->pmesh->three_d;
+    Real abs_dt_half = 0.5*((dt >= 0.0) ? dt : -dt);
+    Real abs_dt = ((dt >= 0.0) ? dt : -dt);
+    Real cell_fraction = subcycle_cell_fraction;
+    Real block_fraction = subcycle_meshblock_fraction;
+    Real gyro_fraction = subcycle_gyro_fraction;
+    bool boris_pusher = (pusher == ParticlesPusher::boris);
+
+    Kokkos::parallel_reduce("particle_subcycle_steps",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, npart),
+      KOKKOS_LAMBDA(const int p, int &cell_max, int &block_max, int &gyro_max) {
+        int m = pi(PGID,p) - gids;
+        Real vx = pr(IPVX,p);
+        Real vy = multi_d ? pr(IPVY,p) : 0.0;
+        Real vz = three_d ? pr(IPVZ,p) : 0.0;
+
+        Real cell_ratio = abs_dt_half*Kokkos::abs(vx)/
+                          (cell_fraction*mbsize.d_view(m).dx1);
+        if (multi_d) {
+          cell_ratio = Kokkos::max(cell_ratio, abs_dt_half*Kokkos::abs(vy)/
+                                   (cell_fraction*mbsize.d_view(m).dx2));
+        }
+        if (three_d) {
+          cell_ratio = Kokkos::max(cell_ratio, abs_dt_half*Kokkos::abs(vz)/
+                                   (cell_fraction*mbsize.d_view(m).dx3));
+        }
+        cell_max = Kokkos::max(cell_max, StepsForRatio(cell_ratio));
+
+        Real lx1 = mbsize.d_view(m).x1max - mbsize.d_view(m).x1min;
+        Real block_ratio = abs_dt_half*Kokkos::abs(vx)/(block_fraction*lx1);
+        if (multi_d) {
+          Real lx2 = mbsize.d_view(m).x2max - mbsize.d_view(m).x2min;
+          block_ratio = Kokkos::max(block_ratio, abs_dt_half*Kokkos::abs(vy)/
+                                    (block_fraction*lx2));
+        }
+        if (three_d) {
+          Real lx3 = mbsize.d_view(m).x3max - mbsize.d_view(m).x3min;
+          block_ratio = Kokkos::max(block_ratio, abs_dt_half*Kokkos::abs(vz)/
+                                    (block_fraction*lx3));
+        }
+        block_max = Kokkos::max(block_max, StepsForRatio(block_ratio));
+
+        if (boris_pusher && pr(IPM,p) > 0.0) {
+          Real bmag = Kokkos::sqrt(pr(IPBX,p)*pr(IPBX,p) + pr(IPBY,p)*pr(IPBY,p) +
+                                   pr(IPBZ,p)*pr(IPBZ,p));
+          Real gyro_ratio = abs_dt*bmag/(pr(IPM,p)*gyro_fraction);
+          gyro_max = Kokkos::max(gyro_max, StepsForRatio(gyro_ratio));
+        }
+      }, Kokkos::Max<int>(cell_steps), Kokkos::Max<int>(block_steps),
+      Kokkos::Max<int>(gyro_steps));
   }
-
-  auto &pr = prtcl_rdata;
-  auto &pi = prtcl_idata;
-  auto &mbsize = pmy_pack->pmb->mb_size;
-  int gids = pmy_pack->gids;
-  int npart = nprtcl_thispack;
-  bool multi_d = pmy_pack->pmesh->multi_d;
-  bool three_d = pmy_pack->pmesh->three_d;
-  Real abs_dt_half = 0.5*((dt >= 0.0) ? dt : -dt);
-  Real abs_dt = ((dt >= 0.0) ? dt : -dt);
-  Real cell_fraction = subcycle_cell_fraction;
-  Real block_fraction = subcycle_meshblock_fraction;
-  Real gyro_fraction = subcycle_gyro_fraction;
-  bool boris_pusher = (pusher == ParticlesPusher::boris);
-
-  Kokkos::parallel_reduce("particle_subcycle_steps",
-    Kokkos::RangePolicy<>(DevExeSpace(), 0, npart),
-    KOKKOS_LAMBDA(const int p, int &cell_max, int &block_max, int &gyro_max) {
-      int m = pi(PGID,p) - gids;
-      Real vx = pr(IPVX,p);
-      Real vy = multi_d ? pr(IPVY,p) : 0.0;
-      Real vz = three_d ? pr(IPVZ,p) : 0.0;
-
-      Real cell_ratio = abs_dt_half*Kokkos::abs(vx)/
-                        (cell_fraction*mbsize.d_view(m).dx1);
-      if (multi_d) {
-        cell_ratio = Kokkos::max(cell_ratio, abs_dt_half*Kokkos::abs(vy)/
-                                 (cell_fraction*mbsize.d_view(m).dx2));
-      }
-      if (three_d) {
-        cell_ratio = Kokkos::max(cell_ratio, abs_dt_half*Kokkos::abs(vz)/
-                                 (cell_fraction*mbsize.d_view(m).dx3));
-      }
-      cell_max = Kokkos::max(cell_max, StepsForRatio(cell_ratio));
-
-      Real lx1 = mbsize.d_view(m).x1max - mbsize.d_view(m).x1min;
-      Real block_ratio = abs_dt_half*Kokkos::abs(vx)/(block_fraction*lx1);
-      if (multi_d) {
-        Real lx2 = mbsize.d_view(m).x2max - mbsize.d_view(m).x2min;
-        block_ratio = Kokkos::max(block_ratio, abs_dt_half*Kokkos::abs(vy)/
-                                  (block_fraction*lx2));
-      }
-      if (three_d) {
-        Real lx3 = mbsize.d_view(m).x3max - mbsize.d_view(m).x3min;
-        block_ratio = Kokkos::max(block_ratio, abs_dt_half*Kokkos::abs(vz)/
-                                  (block_fraction*lx3));
-      }
-      block_max = Kokkos::max(block_max, StepsForRatio(block_ratio));
-
-      if (boris_pusher && pr(IPM,p) > 0.0) {
-        Real bmag = Kokkos::sqrt(pr(IPBX,p)*pr(IPBX,p) + pr(IPBY,p)*pr(IPBY,p) +
-                                 pr(IPBZ,p)*pr(IPBZ,p));
-        Real gyro_ratio = abs_dt*bmag/(pr(IPM,p)*gyro_fraction);
-        gyro_max = Kokkos::max(gyro_max, StepsForRatio(gyro_ratio));
-      }
-    }, Kokkos::Max<int>(cell_steps), Kokkos::Max<int>(block_steps),
-    Kokkos::Max<int>(gyro_steps));
 
 #if MPI_PARALLEL_ENABLED
   int local_steps[3] = {cell_steps, block_steps, gyro_steps};
@@ -490,34 +482,36 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
 
   for (int sub=0; sub<nsub; ++sub) {
     int npart = nprtcl_thispack;
-    switch (pusher) {
-      case ParticlesPusher::drift:
-        RunDriftStep(pmy_pack, prtcl_rdata, npart, multi_d, three_d, dt_sub);
-        break;
+    if (npart > 0) {
+      switch (pusher) {
+        case ParticlesPusher::drift:
+          RunDriftStep(pmy_pack, prtcl_rdata, npart, multi_d, three_d, dt_sub);
+          break;
 
-      case ParticlesPusher::boris:
-        switch (interpolation) {
-          case ParticleInterpolation::lin_legacy:
-            RunBorisGather<LinLegacyGather>("part_boris_lin", pmy_pack, prtcl_rdata,
-                                            prtcl_idata, npart, gids, is, js, ks,
-                                            nx1, nx2, nx3, multi_d, three_d, dt_sub);
-            break;
-          case ParticleInterpolation::trilinear:
-            RunBorisGather<TrilinearGather>("part_boris_trilinear", pmy_pack,
-                                            prtcl_rdata, prtcl_idata, npart, gids,
-                                            is, js, ks, nx1, nx2, nx3, multi_d,
-                                            three_d, dt_sub);
-            break;
-          case ParticleInterpolation::tsc:
-            RunBorisGather<TSCGather>("part_boris_tsc", pmy_pack, prtcl_rdata,
-                                      prtcl_idata, npart, gids, is, js, ks, nx1,
-                                      nx2, nx3, multi_d, three_d, dt_sub);
-            break;
+        case ParticlesPusher::boris:
+          switch (interpolation) {
+            case ParticleInterpolation::lin_legacy:
+              RunBorisGather<LinLegacyGather>("part_boris_lin", pmy_pack, prtcl_rdata,
+                                              prtcl_idata, npart, gids, is, js, ks,
+                                              nx1, nx2, nx3, multi_d, three_d, dt_sub);
+              break;
+            case ParticleInterpolation::trilinear:
+              RunBorisGather<TrilinearGather>("part_boris_trilinear", pmy_pack,
+                                              prtcl_rdata, prtcl_idata, npart, gids,
+                                              is, js, ks, nx1, nx2, nx3, multi_d,
+                                              three_d, dt_sub);
+              break;
+            case ParticleInterpolation::tsc:
+              RunBorisGather<TSCGather>("part_boris_tsc", pmy_pack, prtcl_rdata,
+                                        prtcl_idata, npart, gids, is, js, ks, nx1,
+                                        nx2, nx3, multi_d, three_d, dt_sub);
+              break;
+          }
+          break;
+
+        default:
+          break;
         }
-        break;
-
-      default:
-        break;
     }
     if (sub < nsub - 1) {
       ExchangeAfterSubcycle();

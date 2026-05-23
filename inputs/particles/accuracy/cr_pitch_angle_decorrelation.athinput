@@ -1,10 +1,10 @@
-# AthenaK input file for CR tracer grad-B drift accuracy tests
+# AthenaK input file for deterministic CR pitch-angle evolution tests
 
 <comment>
-problem = CR tracer grad-B drift accuracy
+problem = CR tracer deterministic pitch-angle evolution in a frozen structured field
 
 <job>
-basename = cr_acc_gradb_drift
+basename = cr_acc_pitch_decorrelation
 
 <mesh>
 nghost = 2
@@ -25,16 +25,16 @@ ix3_bc = periodic
 ox3_bc = periodic
 
 <meshblock>
-nx1 = 16
-nx2 = 16
-nx3 = 16
+nx1 = 8
+nx2 = 8
+nx3 = 8
 
 <time>
 evolution = kinematic
 integrator = rk2
 cfl_number = 0.4
-nlim = 8
-tlim = 0.16
+nlim = 64
+tlim = 1.28
 ndiag = 1
 
 <mhd>
@@ -45,14 +45,14 @@ gamma = 1.666666667
 
 <particles>
 particle_type = cosmic_ray
-ppc = 0.000244140625
+ppc = 0.25
 nspecies = 1
 pusher = boris
-interpolation = trilinear
-min_mass = 1.0
+interpolation = tsc
+min_mass = 0.5
 mass_log_spacing = 1.0
 cfl_part = 0.025
-check_consistency_mode = counts
+check_consistency_mode = full
 check_motion_bounds = false
 log_performance = false
 amr_remap = device_table
@@ -68,28 +68,38 @@ subcycle_strict = true
 
 <problem>
 pgen_name = part_random
-particle_position = fixed
-particle_x1 = -0.1
-particle_x2 = 0.0
-particle_x3 = 0.0
-particle_velocity = uniform
-v0x = 0.8
-v0y = 0.0
-v0z = 0.2
+particle_position = tag_random
+particle_velocity = isotropic_tag_random
+particle_seed = 271828
+v0 = 1.0
 prtcl_rst_flag = 0
-prtcl_res_file = prst/rank_00000000/cr_acc_gradb_drift.00000.prst
+prtcl_res_file = prst/rank_00000000/cr_acc_pitch_decorrelation.00000.prst
 B0x = 0.0
 B0y = 0.0
 B0z = 1.0
-B_profile = gradb
-Bgrad = 0.2
-Bamp = 0.05
+B_profile = turbulent
+Bgrad = 1.0
+Bamp = 0.04
 Bwave_number = 1.0
 
 <output1>
 file_type = prst
-dt = 0.02
+dt = 0.08
 
 <output2>
 file_type = pmom
-dt = 0.02
+dt = 0.08
+
+<output3>
+file_type = df
+dt = 0.08
+nbin = 24
+df_single_file_per_rank = 0
+
+<output4>
+file_type = psamp
+dt = 0.08
+species = -1
+sample_stride = 64
+sample_offset = 0
+fields = x,y,z,vx,vy,vz,bx,by,bz,mu,bmag,magnetic_moment

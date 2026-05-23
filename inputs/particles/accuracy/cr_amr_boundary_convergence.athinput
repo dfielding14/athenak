@@ -41,17 +41,17 @@ particle_load_weight = 0.001
 method = user
 
 <time>
-evolution = dynamic
+evolution = kinematic
 integrator = rk2
 cfl_number = 0.4
-nlim = 8
-tlim = 0.08
+nlim = 512
+tlim = 0.64
 ndiag = 1
 
 <mhd>
 eos = ideal
 reconstruct = plm
-rsolver = hlld
+rsolver = advect
 gamma = 1.666666667
 
 <particles>
@@ -80,8 +80,10 @@ subcycle_strict = true
 <problem>
 pgen_name = part_random
 particle_refinement = moving_boxes
-particle_position = random
-particle_velocity = random
+particle_position = tag_random
+particle_velocity = isotropic_tag_random
+particle_seed = 161803
+v0 = 1.0
 prtcl_rst_flag = 0
 prtcl_res_file = prst/rank_00000000/cr_acc_amr_boundary.00000.prst
 B0x = 0.1

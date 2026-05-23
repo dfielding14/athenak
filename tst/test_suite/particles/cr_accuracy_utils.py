@@ -74,6 +74,11 @@ def particle_bfield(particle: Dict) -> Tuple[float, float, float]:
     return tuple(particle["reals"][7:10])
 
 
+def particle_mass(particle: Dict) -> float:
+    """Return the particle gyro parameter stored as its mass-like field."""
+    return float(particle["reals"][6])
+
+
 def norm3(values: Sequence[float]) -> float:
     """Euclidean norm of a three-vector."""
     return math.sqrt(sum(value*value for value in values))
@@ -87,6 +92,50 @@ def vector_error(a: Sequence[float], b: Sequence[float]) -> float:
 def speed(values: Sequence[float]) -> float:
     """Magnitude of a velocity vector."""
     return norm3(values)
+
+
+def pitch_angle(particle: Dict) -> float:
+    """Return pitch-angle cosine from one particle restart record."""
+    velocity = particle_velocity(particle)
+    bfield = particle_bfield(particle)
+    denominator = speed(velocity)*norm3(bfield)
+    if denominator == 0.0:
+        return 0.0
+    return sum(velocity[i]*bfield[i] for i in range(3))/denominator
+
+
+def restart_sequence(path: Path = Path("prst")) -> List[Dict[Tuple[int, int], Dict]]:
+    """Return per-output particle maps assembled across MPI rank files."""
+    files = sorted(path.rglob("*.prst"))
+    indices = sorted({int(file_path.name.split(".")[-2]) for file_path in files})
+    sequence = []
+    for index in indices:
+        selected = [
+            file_path for file_path in files
+            if int(file_path.name.split(".")[-2]) == index
+        ]
+        particle_map = {}
+        for file_path in selected:
+            restart = cr_tracer_inspect.read_prst_file(file_path)
+            for particle in restart["particles"]:
+                key = (particle["species"], particle["tag"])
+                if key in particle_map:
+                    raise ValueError(f"Duplicate particle key {key}")
+                particle_map[key] = particle
+        sequence.append(particle_map)
+    return sequence
+
+
+def pitch_angle_correlation(initial: Dict[Tuple[int, int], Dict],
+                            final: Dict[Tuple[int, int], Dict]) -> float:
+    """Return normalized tagged-particle pitch-angle autocorrelation."""
+    if set(initial) != set(final):
+        raise ValueError("Pitch-angle correlation requires matching tagged particles")
+    numerator = sum(pitch_angle(initial[key])*pitch_angle(final[key]) for key in initial)
+    denominator = sum(pitch_angle(initial[key])**2 for key in initial)
+    if denominator == 0.0:
+        raise ValueError("Initial pitch-angle variance is zero")
+    return numerator/denominator
 
 
 def gyro_exact_velocity(time: float, vperp: float = 1.0,

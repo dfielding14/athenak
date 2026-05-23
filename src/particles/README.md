@@ -187,13 +187,20 @@ comparison inputs for end-to-end Boris AMR and remap-focused AMR timing.
 
 Useful `part_random` problem settings:
 
-- `particle_position = random`, `center`, or `fixed`.  The `fixed` mode uses
-  `particle_x1`, `particle_x2`, and `particle_x3`.
-- `particle_velocity = random` or `uniform`.  The `uniform` mode uses `v0x`,
-  `v0y`, and `v0z`.
-- `B_profile = uniform` or `linear_cross`.  The `linear_cross` profile is a
-  smooth divergence-free field with `Bx = B0x + Bgrad*x2`,
-  `By = B0y + Bgrad*x1`, and `Bz = B0z`.
+- `particle_position = random`, `center`, `meshblock_center`, `fixed`, or
+  `tag_random`.  The `fixed` mode uses `particle_x1`, `particle_x2`, and
+  `particle_x3`.  `tag_random` generates deterministic global positions from
+  species and tag.
+- `particle_velocity = random`, `uniform`, `isotropic`, or
+  `isotropic_tag_random`.  The `uniform` mode uses `v0x`, `v0y`, and `v0z`.
+  `isotropic_tag_random` generates deterministic directions from species and
+  tag while preserving `v0`.
+- `particle_seed` selects the deterministic `tag_random` sequence.  These
+  modes are intended for MPI-decomposition and resolution comparisons; initial
+  ownership is assigned through the normal remap/exchange path.
+- `B_profile = uniform`, `linear_cross`, `sinusoidal_divb_free`, `mirror`,
+  `gradb`, or `turbulent`.  These prescribed accuracy fields use `Bgrad`, or
+  `Bamp` and `Bwave_number`, as applicable.
 
 ## Particle Subcycling
 

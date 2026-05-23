@@ -30,7 +30,7 @@ nx2 = 8
 nx3 = 8
 
 <time>
-evolution  = dynamic
+evolution  = kinematic
 integrator = rk2
 cfl_number = 0.4
 nlim       = 4
@@ -40,7 +40,7 @@ ndiag      = 1
 <mhd>
 eos         = ideal
 reconstruct = plm
-rsolver     = hlld
+rsolver     = advect
 gamma       = 1.666666667
 
 <particles>

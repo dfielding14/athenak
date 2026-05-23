@@ -41,17 +41,17 @@ particle_load_weight = 0.001
 method = user
 
 <time>
-evolution = dynamic
+evolution = kinematic
 integrator = rk2
 cfl_number = 0.4
-nlim = 8
-tlim = 0.08
+nlim = 512
+tlim = 0.64
 ndiag = 1
 
 <mhd>
 eos = ideal
 reconstruct = plm
-rsolver = hlld
+rsolver = advect
 gamma = 1.666666667
 
 <particles>
@@ -80,7 +80,8 @@ subcycle_strict = true
 <problem>
 pgen_name = part_random
 particle_refinement = moving_boxes
-particle_position = random
+particle_position = tag_random
+particle_seed = 8675309
 particle_velocity = uniform
 v0x = 1.0
 v0y = 0.3

@@ -2,7 +2,7 @@
 orphan: true
 ---
 
-# CR Tracer Accuracy Test Implementation Plan
+# CR Tracer Accuracy 12-Test Implementation Plan
 
 ## Purpose
 
@@ -37,6 +37,10 @@ Out of scope for the first implementation pass:
 - stochastic scattering physics beyond deterministic tracer motion,
 - production-scale turbulence campaigns.
 
+Test 12 below measures deterministic pitch-angle evolution in a structured
+prescribed field.  It must not be described as a stochastic scattering
+operator, collision term, or measured physical diffusion coefficient.
+
 ## Shared Test Infrastructure
 
 ### New Inputs
@@ -57,6 +61,18 @@ Recommended inputs:
 - `cr_mpi_decomposition_invariance.athinput`
 - `cr_isotropic_ensemble.athinput`
 - `cr_frozen_turbulent_field.athinput`
+- `cr_pitch_angle_decorrelation.athinput`
+- `cr_pitch_angle_uniform_control.athinput`
+
+All prescribed-field accuracy inputs use `time/evolution = kinematic` with
+`mhd/rsolver = advect`: particles advance, while the initialized field is not
+allowed to acquire unrelated dynamic-MHD evolution.  AMR and div(B)
+compatibility remain covered by separate dynamic-MHD regression inputs.
+
+Resolution and MPI comparisons use `particle_position = tag_random`,
+`particle_velocity = isotropic_tag_random`, and a fixed `particle_seed`.
+Coordinates and velocity directions depend on species and particle tag rather
+than the owning MPI rank or MeshBlock decomposition.
 
 ### New Test Helpers
 
@@ -88,6 +104,16 @@ Each accuracy test should write:
 - one JSON summary with exact numerical errors and run metadata,
 - one or more PNG or SVG figures for the documentation,
 - a short Markdown results block that can be pasted into the docs page.
+
+The documentation driver exposes two execution profiles:
+
+- `--profile ci` runs reduced workloads for rapid validation.
+- `--profile docs --mpi-ranks 8` generates published long trajectories,
+  distributed ensemble evidence, and spatial sweeps through `128^3`.
+
+The JSON results must record the executable, git revision, profile, MPI ranks,
+overrides, and wall time for each executed case.  GPU repetition remains a
+documented follow-up because this workstation supplies CPU and MPI only.
 
 The documentation page should report:
 
@@ -187,16 +213,18 @@ Acceptance gate:
 - magnetic moment and drift diagnostics are finite and interpretable,
 - method recommendations are supported by plots, not only by text.
 
-### Phase 3: AMR, MPI, and Ensemble Tests
+### Phase 3: AMR, MPI, Ensemble, and Pitch-Angle Tests
 
-Implement tests 8 through 11 last.  These are more production-like and should
+Implement tests 8 through 12 last.  These are more production-like and should
 reuse the lower-level reference data from phases 1 and 2.
 
 Acceptance gate:
 
 - AMR boundaries do not destroy convergence,
 - MPI decomposition changes do not change per-tag final states beyond tolerance,
-- distribution diagnostics remain normalized and useful.
+- distribution diagnostics remain normalized and useful,
+- deterministic pitch-angle evolution differs from its uniform-field control
+  without being misidentified as stochastic scattering.
 
 ## Test 1: Uniform-B Single-Particle Gyro Orbit
 
@@ -464,13 +492,14 @@ Bx = -a*x*z
 By = -a*y*z
 ```
 
-Launch particles with several pitch angles, including trapped and passing
-orbits.
+The implemented trapped baseline uses `min_mass = 0.10`, `Bgrad = 4.0`, and
+`v0z = 0.15`; its published trajectory extends to `t = 18`.  A matching
+passing-control run changes only the parallel launch speed.
 
 ### Sweeps
 
-- pitch angles spanning mirror and non-mirror regimes,
-- resolution sweep,
+- trapped baseline and passing control,
+- short-interval spatial sweep through `128^3`,
 - subcycle/timestep sweep,
 - interpolation-method sweep.
 
@@ -497,6 +526,7 @@ Expected behavior:
 ### Regression Criteria
 
 - trapped particles remain trapped in converged runs,
+- the published trapped path shows at least three complete bounce cycles,
 - magnetic moment drift decreases with timestep and resolution,
 - no interpolation method creates nonphysical speed growth.
 
@@ -605,7 +635,9 @@ diagnostics beyond documented floating-point tolerances.
 ### Setup
 
 - Use deterministic particle initialization and fixed AMR schedule.
-- Run identical physical setup with one, two, and four MPI ranks.
+- Generate positions and velocities from the fixed particle seed, species, and
+  tag rather than rank ownership.
+- Run the identical physical setup with one, two, four, and eight MPI ranks.
 - Sort particles by species and tag before comparison.
 
 ### Sweeps
@@ -624,7 +656,7 @@ diagnostics beyond documented floating-point tolerances.
 
 Expected behavior:
 
-- one-, two-, and four-rank runs should agree within tolerance,
+- one-, two-, four-, and eight-rank runs should agree within tolerance,
 - reduced diagnostics should be identical for integer histograms and
   close-to-identical for floating moments,
 - particle rank ownership can differ, but physical state cannot.
@@ -646,7 +678,8 @@ Expected behavior:
 ### Purpose
 
 Validate CR ensemble diagnostics and show that the method preserves a simple
-stationary distribution.
+stationary distribution.  This initialization/output diagnostic is not a
+pitch-angle scattering experiment.
 
 ### Setup
 
@@ -701,6 +734,8 @@ can be made honestly.
 
 - Use a prescribed smooth turbulent magnetic field or a frozen MHD snapshot.
 - Freeze the fluid state and evolve tracer particles through the field.
+- Use five species with masses `0.25`, `0.5`, `1`, `2`, and `4`, spanning a
+  factor of 16 in gyroradius at fixed speed and field.
 - Compare lower-resolution runs against a high-resolution reference or a
   filtered-reference hierarchy.
 
@@ -739,6 +774,51 @@ Expected behavior:
 - documentation run establishes method tradeoffs,
 - CI version checks only reduced, deterministic quantities,
 - no method recommendation is made without both error and cost evidence.
+
+## Test 12: Deterministic Pitch-Angle Evolution
+
+### Purpose
+
+Measure reproducible field-induced evolution of pitch angle in a structured
+frozen field, with a uniform-field negative control.  This identifies whether
+the pusher and gather resolve deterministic decorrelation; it does not add or
+validate stochastic pitch-angle scattering physics.
+
+### Setup
+
+- Use identical `particle_seed`, species, and tags in both cases.
+- Run an isotropic fixed-speed ensemble in a structured multi-mode field and
+  in a uniform-field control.
+- Use eight MPI ranks for documentation-scale output and consistency checks.
+
+### Sweeps
+
+- structured-field resolutions `32^3`, `64^3`, and `128^3`,
+- a requested `256^3` reference, reported as pending if it exceeds local CPU
+  resources,
+- uniform-field control with the identical deterministic initialization.
+
+### Quantitative Outputs
+
+- `C_mu(t) = <mu(0) mu(t)> / <mu(0)^2>`,
+- evolving `f(mu)` and pitch-angle moments,
+- speed conservation and tag/count validation,
+- convergence of final `C_mu` against the highest completed resolution.
+
+Expected behavior:
+
+- the uniform-field control keeps `C_mu(t)` at unity to numerical tolerance,
+- the structured field produces finite, reproducible nontrivial evolution,
+- refining the prescribed field makes the measured curve converge.
+
+### Figures And Regression Criteria
+
+- Quantitative: `C_mu(t)` for structured resolutions and the uniform control.
+- Qualitative: selected long paths over the structured magnetic-field slice.
+- CI must verify finite data, conserved counts/tags, unity control
+  correlation, and nontrivial structured-field correlation.
+- Documentation must explicitly state that this is deterministic
+  field-induced evolution rather than stochastic scattering.
 
 ## Method Recommendation Logic
 
@@ -798,10 +878,17 @@ The page should embed figures from
 
 The full suite is complete when:
 
-- all 11 test problems have small CI versions,
+- all 12 test problems have small CI versions,
 - at least tests 1 through 5 have documented convergence figures,
+- every published spatial sweep reaches `128^3`, while incomplete `256^3`
+  references are explicitly labeled as pending larger-hardware validation,
 - AMR and MPI tests compare per-tag states across decompositions,
+- distributed documentation cases record eight-rank MPI execution,
 - distribution tests validate `df`, `pspec`, `pspec2`, and `pmom`,
+- the trapped mirror documentation shows at least three complete bounce cycles,
+- the five-species frozen-field case spans a factor of 16 in gyroradius,
+- deterministic pitch-angle evolution is shown against a uniform-field control
+  without a stochastic-scattering claim,
 - every figure is regenerated by a documented command,
 - the docs include both qualitative interpretation and quantitative slopes,
 - recommendations for `lin_legacy`, `trilinear`, `tsc`, and subcycling are

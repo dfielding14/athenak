@@ -25,12 +25,12 @@ ix3_bc = periodic
 ox3_bc = periodic
 
 <meshblock>
-nx1 = 16
-nx2 = 16
-nx3 = 16
+nx1 = 8
+nx2 = 8
+nx3 = 8
 
 <time>
-evolution = dynamic
+evolution = kinematic
 integrator = rk2
 cfl_number = 0.4
 nlim = 4
@@ -40,17 +40,17 @@ ndiag = 1
 <mhd>
 eos = ideal
 reconstruct = plm
-rsolver = hlld
+rsolver = advect
 gamma = 1.666666667
 
 <particles>
 particle_type = cosmic_ray
 ppc = 0.03125
-nspecies = 2
+nspecies = 5
 pusher = boris
 interpolation = tsc
-min_mass = 1.0
-mass_log_spacing = 1.0
+min_mass = 0.25
+mass_log_spacing = 2.0
 cfl_part = 0.025
 check_consistency_mode = counts
 check_motion_bounds = false
@@ -68,8 +68,9 @@ subcycle_strict = true
 
 <problem>
 pgen_name = part_random
-particle_position = random
-particle_velocity = isotropic
+particle_position = tag_random
+particle_velocity = isotropic_tag_random
+particle_seed = 1847
 v0 = 1.0
 prtcl_rst_flag = 0
 prtcl_res_file = prst/rank_00000000/cr_acc_turbulent.00000.prst
