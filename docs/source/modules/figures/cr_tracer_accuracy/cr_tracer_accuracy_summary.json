@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-05-22T20:34:47",
+  "created_at": "2026-05-22T20:59:38",
   "athena": "build-cr-robust-mpi/src/athena",
   "cases": [
     {
@@ -151,5 +151,12 @@
       ],
       "figure": "docs/source/modules/figures/cr_tracer_accuracy/frozen_turbulent_moments.png"
     }
-  ]
+  ],
+  "qualitative_figures": {
+    "field_slice_z": 0.125,
+    "field_figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_magnetic_field_slices.png",
+    "trajectory_figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_cr_trajectories.png",
+    "smooth_trajectory_count": 1,
+    "turbulent_trajectory_count": 6
+  }
 }

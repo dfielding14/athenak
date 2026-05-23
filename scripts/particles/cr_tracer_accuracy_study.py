@@ -20,6 +20,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
 
 import cr_tracer_inspect  # noqa: E402
 
@@ -128,11 +129,20 @@ def _exact_bfield(profile: str, x: float, y: float, z: float,
     bx, by, bz = b0
     if profile == "linear_cross":
         return [bx + bgrad*y, by + bgrad*x, bz]
-    if profile == "sinusoidal_divb_free":
+    if profile in ("sinusoidal_divb_free", "turbulent"):
         k = 2.0*math.pi*bwave
         bx += bamp*k*math.sin(k*x)*(math.cos(k*y) - math.cos(k*z))
         by += bamp*k*math.sin(k*y)*(math.cos(k*z) - math.cos(k*x))
         bz += bamp*k*math.sin(k*z)*(math.cos(k*x) - math.cos(k*y))
+        if profile == "turbulent":
+            k2 = 2.0*k
+            amp2 = 0.35*bamp
+            bx += amp2*k2*math.sin(k2*(x + 0.13))*(
+                math.cos(k2*(y - 0.07)) - math.cos(k2*(z + 0.11)))
+            by += amp2*k2*math.sin(k2*(y - 0.07))*(
+                math.cos(k2*(z + 0.11)) - math.cos(k2*(x + 0.13)))
+            bz += amp2*k2*math.sin(k2*(z + 0.11))*(
+                math.cos(k2*(x + 0.13)) - math.cos(k2*(y - 0.07)))
         return [bx, by, bz]
     if profile == "uniform":
         return list(b0)
@@ -155,6 +165,152 @@ def _sample_error(summary: Dict, profile: str, b0: Sequence[float],
             exact = _exact_bfield(profile, x, y, z, b0, bgrad, bamp, bwave)
             errors.append(_vector_error(sampled, exact))
     return math.sqrt(sum(error*error for error in errors)/len(errors))
+
+
+def _field_slice(profile: str, b0: Sequence[float], bamp: float,
+                 z_slice: float, npoint: int = 121):
+    coords = np.linspace(-0.5, 0.5, npoint)
+    dbx = np.zeros((npoint, npoint))
+    dby = np.zeros((npoint, npoint))
+    dbz = np.zeros((npoint, npoint))
+    for j, y in enumerate(coords):
+        for i, x in enumerate(coords):
+            bfield = _exact_bfield(profile, x, y, z_slice, b0, bamp=bamp)
+            dbx[j, i] = bfield[0] - b0[0]
+            dby[j, i] = bfield[1] - b0[1]
+            dbz[j, i] = bfield[2] - b0[2]
+    return coords, dbx, dby, dbz
+
+
+def _draw_field_slice(ax, profile: str, b0: Sequence[float], bamp: float,
+                      z_slice: float, title: str):
+    coords, dbx, dby, dbz = _field_slice(profile, b0, bamp, z_slice)
+    limit = max(float(np.max(np.abs(dbz))), 1.0e-12)
+    image = ax.pcolormesh(
+        coords, coords, dbz, cmap="RdBu_r", shading="auto",
+        vmin=-limit, vmax=limit)
+    transverse = np.hypot(dbx, dby)
+    unit_x = np.divide(dbx, transverse, out=np.zeros_like(dbx),
+                       where=transverse > 0.0)
+    unit_y = np.divide(dby, transverse, out=np.zeros_like(dby),
+                       where=transverse > 0.0)
+    ax.streamplot(
+        coords, coords, unit_x, unit_y, density=0.9,
+        color="#262626", linewidth=0.55, arrowsize=0.65)
+    ax.set_title(title)
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_aspect("equal")
+    ax.set_xlim(-0.5, 0.5)
+    ax.set_ylim(-0.5, 0.5)
+    return image
+
+
+def _particle_tracks(run_dir: Path, per_species: int) -> Dict:
+    snapshots = [
+        cr_tracer_inspect.read_prst_file(path)
+        for path in (run_dir / "prst").rglob("*.prst")
+    ]
+    snapshots.sort(key=lambda snapshot: snapshot["time"])
+    first = snapshots[0]["particles"]
+    selected = []
+    for species in sorted({particle["species"] for particle in first}):
+        species_tags = sorted(
+            particle["tag"] for particle in first
+            if particle["species"] == species)
+        selected.extend((species, tag) for tag in species_tags[:per_species])
+
+    tracks = {key: [] for key in selected}
+    for snapshot in snapshots:
+        for particle in snapshot["particles"]:
+            key = (particle["species"], particle["tag"])
+            if key in tracks:
+                tracks[key].append(
+                    (snapshot["time"], *particle["reals"][0:3]))
+    return tracks
+
+
+def study_qualitative_figures(args: argparse.Namespace) -> Dict:
+    z_slice = 0.125
+    smooth_b0 = (0.1, -0.2, 1.0)
+    turbulent_b0 = (0.0, 0.0, 1.0)
+
+    fig, axes = plt.subplots(1, 2, figsize=(9.2, 4.1), constrained_layout=True)
+    image = _draw_field_slice(
+        axes[0], "sinusoidal_divb_free", smooth_b0, 0.015, z_slice,
+        "Smooth divergence-free field")
+    fig.colorbar(image, ax=axes[0], label="delta Bz")
+    image = _draw_field_slice(
+        axes[1], "turbulent", turbulent_b0, 0.01, z_slice,
+        "Multi-mode turbulent field")
+    fig.colorbar(image, ax=axes[1], label="delta Bz")
+    fig.suptitle("Prescribed magnetic structure, z = 0.125")
+    field_path = args.output_dir / "qualitative_magnetic_field_slices.png"
+    fig.savefig(field_path, dpi=180)
+    plt.close(fig)
+
+    smooth_dir = _run(
+        args, "qualitative_smooth_track", "cr_smooth_orbit_reference.athinput",
+        [
+            "job/basename=cr_acc_qual_smooth",
+            "time/nlim=256",
+            "time/tlim=0.32",
+            "output1/dt=0.01",
+            "output2/dt=0.32",
+        ])
+    turbulent_dir = _run(
+        args, "qualitative_turbulent_tracks", "cr_frozen_turbulent_field.athinput",
+        [
+            "job/basename=cr_acc_qual_turbulent",
+            "time/nlim=64",
+            "time/tlim=0.12",
+            "output1/dt=0.01",
+            "output2/dt=0.12",
+            "output3/dt=0.12",
+        ])
+    smooth_tracks = _particle_tracks(smooth_dir, per_species=1)
+    turbulent_tracks = _particle_tracks(turbulent_dir, per_species=3)
+
+    fig, axes = plt.subplots(1, 2, figsize=(9.2, 4.1), constrained_layout=True)
+    image = _draw_field_slice(
+        axes[0], "sinusoidal_divb_free", smooth_b0, 0.015, z_slice,
+        "Single CR in smooth field")
+    for points in smooth_tracks.values():
+        values = np.asarray(points)
+        axes[0].plot(values[:, 1], values[:, 2], color="#f5f5f5",
+                     linewidth=2.4)
+        axes[0].scatter(values[0, 1], values[0, 2], color="#1b9e77",
+                        edgecolor="white", s=34, zorder=4, label="start")
+        axes[0].scatter(values[-1, 1], values[-1, 2], color="#d95f02",
+                        edgecolor="white", s=34, zorder=4, label="end")
+    axes[0].legend(loc="lower left", framealpha=0.9)
+    fig.colorbar(image, ax=axes[0], label="delta Bz")
+
+    image = _draw_field_slice(
+        axes[1], "turbulent", turbulent_b0, 0.01, z_slice,
+        "Six CRs in multi-mode field")
+    colors = plt.cm.tab10(np.linspace(0.0, 0.8, len(turbulent_tracks)))
+    for color, (key, points) in zip(colors, sorted(turbulent_tracks.items())):
+        values = np.asarray(points)
+        axes[1].plot(values[:, 1], values[:, 2], color=color,
+                     linewidth=1.65, label=f"s{key[0]} tag {key[1]}")
+        axes[1].scatter(values[0, 1], values[0, 2], color=color,
+                        marker="o", s=16, zorder=4)
+        axes[1].scatter(values[-1, 1], values[-1, 2], color=color,
+                        marker="x", s=22, zorder=4)
+    axes[1].legend(loc="upper left", fontsize=7, framealpha=0.85)
+    fig.colorbar(image, ax=axes[1], label="delta Bz")
+    fig.suptitle("Projected CR trajectories over initial field slices")
+    track_path = args.output_dir / "qualitative_cr_trajectories.png"
+    fig.savefig(track_path, dpi=180)
+    plt.close(fig)
+    return {
+        "field_slice_z": z_slice,
+        "field_figure": _artifact_path(field_path),
+        "trajectory_figure": _artifact_path(track_path),
+        "smooth_trajectory_count": len(smooth_tracks),
+        "turbulent_trajectory_count": len(turbulent_tracks),
+    }
 
 
 def study_uniform_gyro(args: argparse.Namespace) -> Dict:
@@ -637,6 +793,7 @@ def main() -> int:
         if case not in STUDIES:
             raise ValueError(f"Unknown accuracy study '{case}'")
         results["cases"].append(STUDIES[case](args))
+    results["qualitative_figures"] = study_qualitative_figures(args)
 
     json_path = args.output_dir / "cr_tracer_accuracy_summary.json"
     json_path.write_text(json.dumps(results, indent=2) + "\n")
@@ -648,6 +805,11 @@ def main() -> int:
             lines.append(f"- fitted slope: `{case['slope']:.3f}`")
         lines.append(f"- figure: `{case['figure']}`")
         lines.append("")
+    lines.append("## qualitative_figures")
+    lines.append(
+        f"- field structure: `{results['qualitative_figures']['field_figure']}`")
+    lines.append(
+        f"- CR trajectories: `{results['qualitative_figures']['trajectory_figure']}`")
     md_path.write_text("\n".join(lines).rstrip() + "\n")
     print(f"wrote {json_path}")
     print(f"wrote {md_path}")

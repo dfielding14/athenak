@@ -38,3 +38,7 @@ orphan: true
 
 ## frozen_turbulent
 - figure: `docs/source/modules/figures/cr_tracer_accuracy/frozen_turbulent_moments.png`
+
+## qualitative_figures
+- field structure: `docs/source/modules/figures/cr_tracer_accuracy/qualitative_magnetic_field_slices.png`
+- CR trajectories: `docs/source/modules/figures/cr_tracer_accuracy/qualitative_cr_trajectories.png`

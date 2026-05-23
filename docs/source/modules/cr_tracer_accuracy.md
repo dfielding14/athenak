@@ -22,6 +22,30 @@ python scripts/particles/cr_tracer_accuracy_study.py \
 The raw machine-readable summary is written to
 `docs/source/modules/figures/cr_tracer_accuracy/cr_tracer_accuracy_summary.json`.
 
+## Qualitative Field And Trajectory Views
+
+The accuracy tests below reduce errors to scalars, but the prescribed fields
+and representative trajectories are also useful for understanding what is
+being sampled.  The color maps show the initial `delta Bz` slice at
+`z = 0.125`; streamlines show the normalized in-plane magnetic perturbation.
+
+![Prescribed smooth and turbulent magnetic-field slices](figures/cr_tracer_accuracy/qualitative_magnetic_field_slices.png)
+
+The smooth manufactured field has one spatial mode and is used for controlled
+gather and orbit-convergence tests.  The multi-mode field contains smaller
+scale transverse structure and is used as a production-like diagnostic
+environment, without claiming that it represents evolved MHD turbulence.
+
+![Representative CR trajectories over prescribed magnetic-field slices](figures/cr_tracer_accuracy/qualitative_cr_trajectories.png)
+
+The trajectory panels are `x-y` projections.  The left panel follows the
+single smooth-field particle over `0 <= t <= 0.32`.  The right panel follows
+three tagged particles from each of two species over `0 <= t <= 0.12` in the
+multi-mode field; circles mark initial positions and crosses mark final
+positions.  The background is the initial slice at fixed `z`, while the
+particles move in all three dimensions, so these panels visualize field
+complexity and path diversity rather than provide an error metric.
+
 ## Recommended Use
 
 | Method | Best use | Accuracy signal in this suite | Main caution |
@@ -216,8 +240,8 @@ Local results from 2026-05-22:
   `50,673` creations and `19,908` deletions.
 - Style suite: `2 passed in 12.28s`.
 - `git diff --check`: passed.
-- Documentation study: generated all 11 figure panels and
-  `cr_tracer_accuracy_summary.json`.
+- Documentation study: generated 11 quantitative panels, two qualitative field
+  and trajectory panels, and `cr_tracer_accuracy_summary.json`.
 
 ## Known Limits And Follow-Up
 

@@ -145,6 +145,13 @@ Qualitative figure types:
 - AMR-level map with particle trajectory,
 - histogram comparison for `df`, `pspec`, and `pspec2`.
 
+Implemented documentation context figures:
+
+- initial smooth and multi-mode prescribed magnetic-field slices, showing
+  `delta Bz` and normalized in-plane perturbation streamlines,
+- projected representative trajectories for one smooth-field particle and six
+  multi-mode-field particles, with start/end markers.
+
 All figure captions should state which error source is isolated.  For example,
 do not caption a smooth-orbit result as an interpolation convergence result
 unless the timestep error has already been made subdominant.
