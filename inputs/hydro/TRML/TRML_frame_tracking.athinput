@@ -74,6 +74,7 @@ beta_lo               = 1.0
 beta_hi               = 1.0
 
 <frame_tracking>
+tracked_fluid    = hydro
 start_time       = 0.0
 apply_every      = 1
 diagnostic_every = 5
@@ -87,11 +88,12 @@ tau_avg          = 0.1
 tau_relax        = 1.0
 tau_vel          = 0.25
 max_abs_boost    = 0.2
-max_boost_change = 0.02
+max_boost_change_mode = per_time
+max_boost_change_rate = 0.02
 
 <output1>
 file_type   = hst
-data_format = %12.5e
+data_format = %24.16e
 dt          = 0.02
 
 <output2>

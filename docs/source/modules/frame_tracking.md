@@ -7,7 +7,8 @@ fluid so the selected material remains near a chosen grid-coordinate target.
 
 The tracker is enabled by a `<frame_tracking>` input block. It is owned by
 `MeshBlockPack`, scheduled on the existing `after_timeintegrator` task list,
-updates its pack pointer after AMR rebuilds, and stores its frame state in
+updates its pack pointer after AMR rebuilds, refreshes the selected fluid
+timestep after an applied boost, and stores versioned controller state in
 restart files.
 
 ## Runtime Contract
@@ -47,6 +48,7 @@ boundary code should keep a zero-frame fallback.
 | Parameter | Default | Description |
 | --- | ---: | --- |
 | `enabled` | `true` | Master switch. |
+| `tracked_fluid` | inferred when unambiguous | Fluid to sample and boost: `hydro` or `mhd`. Required when both exist. |
 | `target` | `density` | Selected variable: `density`, `temperature`, `pressure`, `entropy`, `internal_energy`, `scalar`/`scalarN`, `v1`/`v2`/`v3`, or `speed`. |
 | `target_min`, `target_max` | unbounded | Inclusive target range for tracked cells. |
 | `target_center` | midpoint or geometric midpoint | Center used when expanding the target range for reacquisition. |
@@ -86,9 +88,9 @@ boundary code should keep a zero-frame fallback.
 | Parameter | Default | Description |
 | --- | ---: | --- |
 | `max_abs_boost` | `0.0` | Absolute per-update boost cap; zero disables this cap. |
-| `max_boost_change` | `0.0` | Per-update boost slew limit when `max_boost_change_mode=per_apply`. |
-| `max_boost_change_rate` | `-1.0` | Per-time boost slew limit when `max_boost_change_mode=per_time`. |
-| `max_boost_change_mode` | `per_apply` | Interpret the boost-change limit per update or per unit time. |
+| `max_boost_change` | `0.0` | Compatibility per-update slew limit when `max_boost_change_mode=per_apply`. |
+| `max_boost_change_rate` | `-1.0` | Recommended per-time boost slew limit when `max_boost_change_mode=per_time`. |
+| `max_boost_change_mode` | `per_apply` for compatibility | Interpret the slew limit per update or per unit time. New configurations should set `per_time` explicitly. |
 | `reacquire_expand_factor` | `1.0` | Factor by which to expand the target range after missed samples. |
 | `reacquire_max_expand` | `1.0` | Maximum target-range expansion. |
 | `reacquire_recover_updates` | `1` | Good updates required before backing off one missed-sample level. |
@@ -101,14 +103,71 @@ boundary code should keep a zero-frame fallback.
 
 | Parameter | Default | Description |
 | --- | ---: | --- |
-| `diagnostic_every` | `-1` | Cycle cadence for rank-0 diagnostic blocks; negative disables printing. |
+| `diagnostic_every` | `-1` | Compatibility cadence for rank-0 stdout diagnostic blocks; negative disables printing. |
 | `verbose` | `false` | Prints parsed setup at startup. |
+| `state_version` | restart only | Restart-state schema version; current value is `1`. |
 | `frame_velocity_x*` | restart only | Stored lab-frame grid velocity. |
 | `frame_displacement_x*` | restart only | Stored lab-frame grid-origin displacement. |
 
-Restart output writes `frame_velocity_x1`, `frame_velocity_x2`,
-`frame_velocity_x3`, `frame_displacement_x1`, `frame_displacement_x2`, and
-`frame_displacement_x3` into the `<frame_tracking>` block.
+When any `file_type=hst` output is configured, the tracker writes a dedicated
+`<basename>.frame_tracker.hst` file. It does not add columns to hydro/MHD
+history or require a pgen `user_hist` callback. Each active axis has five
+columns:
+
+| Column | Quantity |
+| --- | --- |
+| `ft_vf_xN` | Lab-frame grid velocity. |
+| `ft_dx_xN` | Lab-frame grid-origin displacement. |
+| `ft_pos_xN` | Current selected-material control position. |
+| `ft_err_xN` | Filtered position error relative to its target. |
+| `ft_dv_xN` | Last applied velocity boost. |
+
+Shared fields are `ft_weight`, `ft_misses`, `ft_recov`, `ft_limit`, and
+`ft_skip`. The full three-axis output has 20 fields. Controller values are
+global: on MPI runs rank 0 contributes them to the normal history reduction and
+other ranks contribute zeros.
+
+Restart output with `state_version=1` stores the complete mutable controller
+state, including timing, reacquisition counters, filtering, integral control,
+slew-limit state, and per-axis history. A restart containing only
+`frame_velocity_x*` and `frame_displacement_x*` is accepted for compatibility,
+but it emits one rank-0 warning and cannot be an exact controller continuation.
+
+## Conservative Configuration Patterns
+
+New inputs should choose the tracked fluid explicitly and use time-based slew
+limiting so controller behavior is insensitive to output cadence or timestep
+changes:
+
+```ini
+# Cooled cloud tracking
+<frame_tracking>
+tracked_fluid = hydro
+axes = x1
+x1_target = 3.0
+target = density
+target_min = 5.0
+target_max = 200.0
+mode = pd
+max_abs_boost = 50.0
+max_boost_change_mode = per_time
+max_boost_change_rate = 5.0
+```
+
+```ini
+# Mixing-layer tracking
+<frame_tracking>
+tracked_fluid = hydro
+axes = x3
+x3_target = 0.0
+target = temperature
+target_min = 0.015
+target_max = 0.08
+mode = pd
+max_abs_boost = 0.05
+max_boost_change_mode = per_time
+max_boost_change_rate = 0.02
+```
 
 ## Examples
 
@@ -127,16 +186,23 @@ store grid-frame velocities as `v_lab - FrameVelocity()`.
 
 ## Compatibility Notes
 
-- Exactly one active hydro-like fluid is expected. In a hydro+MHD ion-neutral
-  setup, the tracker currently samples and boosts the MHD state.
+- Frame tracking supports non-relativistic hydro and MHD. It rejects special
+  relativistic, general relativistic, and dynamical-GR coordinate systems.
+- When both hydro and MHD are present, set `tracked_fluid` explicitly; an
+  ambiguous configuration fails at startup.
 - `target=entropy` requires an ideal-gas EOS.
 - `target=scalarN` requires `0 <= N < nscalars`.
-- The tracker applies a uniform Galilean boost after the timestep, so it is
-  appropriate for non-relativistic hydro/MHD workflows.
+- Compatibility aliases are accepted for an interim deprecation period and
+  generate rank-0 warnings. New inputs should use the parameter names listed
+  above.
+- Arbitrary user boundaries and source terms cannot be made frame-aware
+  automatically. Only examples that explicitly apply the moving-frame
+  coordinate and velocity transformations are validated.
 - AMR changes preserve the tracker object and refresh its pack pointer after
   mesh-block redistribution.
 
 ## Related Pages
 
+- [Frame Tracking Production Plan](frame_tracking_next_steps.md)
 - [Sedov Cloud Crushing With Frame Tracking](../examples/cloud_crushing_snr.md)
 - [TRML Frame Tracking Example](../examples/trml_frame_tracking.md)

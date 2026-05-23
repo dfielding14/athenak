@@ -27,6 +27,8 @@
 
 #include "athena.hpp"
 #include "coordinates/cell_locations.hpp"
+#include "coordinates/coordinates.hpp"
+#include "driver/driver.hpp"
 #include "eos/eos.hpp"
 #include "globals.hpp"
 #include "hydro/hydro.hpp"
@@ -76,6 +78,8 @@ enum FrameTrackingWeightMode {
   kFTWeightVolume = 1,
   kFTWeightTarget = 2
 };
+
+constexpr int kFrameTrackingStateVersion = 1;
 
 std::string TrimCopy(const std::string &input) {
   const auto first = input.find_first_not_of(" \t\r\n");
@@ -302,32 +306,10 @@ const char *AxisName(const int axis) {
 }
 
 KOKKOS_INLINE_FUNCTION
-int CoordIndex(const int axis, const int i, const int j, const int k,
-               const RegionIndcs &indcs) {
-  if (axis == 0) return i - indcs.is;
-  if (axis == 1) return j - indcs.js;
-  return k - indcs.ks;
-}
-
-KOKKOS_INLINE_FUNCTION
 int AxisCellCount(const int axis, const RegionIndcs &indcs) {
   if (axis == 0) return indcs.nx1;
   if (axis == 1) return indcs.nx2;
   return indcs.nx3;
-}
-
-KOKKOS_INLINE_FUNCTION
-Real AxisMin(const int axis, const RegionSize &size) {
-  if (axis == 0) return size.x1min;
-  if (axis == 1) return size.x2min;
-  return size.x3min;
-}
-
-KOKKOS_INLINE_FUNCTION
-Real AxisMax(const int axis, const RegionSize &size) {
-  if (axis == 0) return size.x1max;
-  if (axis == 1) return size.x2max;
-  return size.x3max;
 }
 
 Real AxisGlobalMin(const int axis, const Mesh *pm) {
@@ -535,8 +517,10 @@ FrameTracker::FrameTracker(MeshBlockPack *pp, ParameterInput *pin,
       pin, block_name_, {"boundary_guard_min_scale", "ft_boundary_guard_min_scale"},
       0.15);
 
+  ParseTrackedFluid(pin);
   ParseAxes(pin);
   ParseAxisControls(pin);
+  WarnDeprecatedAliases(pin);
   ValidateConfiguration();
   RestoreFrameState(pin);
 
@@ -563,6 +547,22 @@ void FrameTracker::RestoreFrameState(ParameterInput *pin) {
   if (pin == nullptr) {
     return;
   }
+  const bool has_state_version = pin->DoesParameterExist(block_name_, "state_version");
+  const int state_version =
+      has_state_version ? pin->GetInteger(block_name_, "state_version") : 0;
+  if (state_version > kFrameTrackingStateVersion) {
+    FatalFrameTrackingInput("<frame_tracking>/state_version=" +
+                            std::to_string(state_version) +
+                            " is newer than this FrameTracker implementation.");
+  }
+  const bool has_legacy_state =
+      pin->DoesParameterExist(block_name_, "frame_velocity_x1") ||
+      pin->DoesParameterExist(block_name_, "frame_velocity_x2") ||
+      pin->DoesParameterExist(block_name_, "frame_velocity_x3") ||
+      pin->DoesParameterExist(block_name_, "frame_displacement_x1") ||
+      pin->DoesParameterExist(block_name_, "frame_displacement_x2") ||
+      pin->DoesParameterExist(block_name_, "frame_displacement_x3");
+
   for (int axis = 0; axis < 3; ++axis) {
     const std::string name = AxisName(axis);
     (void) ReadRealAny(pin, block_name_,
@@ -572,6 +572,51 @@ void FrameTracker::RestoreFrameState(ParameterInput *pin) {
                        {"frame_displacement_" + name, name + "_frame_displacement"},
                        frame_displacement_[axis]);
     axes_[axis].cumulative_boost = -frame_velocity_[axis];
+    if (state_version >= 1) {
+      AxisState &state = axes_[axis];
+      (void) ReadRealAny(pin, block_name_, {"state_" + name + "_last_boost"},
+                         state.last_boost);
+      (void) ReadRealAny(pin, block_name_, {"state_" + name + "_cumulative_boost"},
+                         state.cumulative_boost);
+      (void) ReadRealAny(pin, block_name_, {"state_" + name + "_last_mean_x"},
+                         state.last_mean_x);
+      (void) ReadRealAny(pin, block_name_, {"state_" + name + "_last_mean_v"},
+                         state.last_mean_v);
+      (void) ReadRealAny(pin, block_name_, {"state_" + name + "_last_global_weight"},
+                         state.last_global_weight);
+      (void) ReadRealAny(pin, block_name_, {"state_" + name + "_last_filtered_x"},
+                         state.last_filtered_x);
+      (void) ReadRealAny(pin, block_name_, {"state_" + name + "_last_filtered_v"},
+                         state.last_filtered_v);
+      (void) ReadRealAny(pin, block_name_, {"state_" + name + "_last_x_err"},
+                         state.last_x_err);
+      (void) ReadRealAny(pin, block_name_, {"state_" + name + "_last_vel_cmd_pre"},
+                         state.last_vel_cmd_pre);
+      (void) ReadRealAny(pin, block_name_, {"state_" + name + "_last_vel_cmd_post"},
+                         state.last_vel_cmd_post);
+      (void) ReadRealAny(pin, block_name_, {"state_" + name + "_last_x_centroid"},
+                         state.last_x_centroid);
+      (void) ReadRealAny(pin, block_name_, {"state_" + name + "_last_x_midpoint"},
+                         state.last_x_midpoint);
+      (void) ReadRealAny(pin, block_name_, {"state_" + name + "_last_x_ctrl"},
+                         state.last_x_ctrl);
+      (void) ReadRealAny(pin, block_name_, {"state_" + name + "_i_term"}, state.i_term);
+      (void) ReadBooleanAny(pin, block_name_, {"state_" + name + "_last_skip_flag"},
+                            state.last_skip_flag);
+      (void) ReadBooleanAny(pin, block_name_, {"state_" + name + "_last_slew_limited"},
+                            state.last_slew_limited);
+      (void) ReadBooleanAny(pin, block_name_, {"state_" + name + "_filter_initialized"},
+                            state.filter_initialized);
+    }
+  }
+  if (state_version >= 1) {
+    (void) ReadRealAny(pin, block_name_, {"state_last_apply_time"}, last_apply_time_);
+    (void) ReadIntegerAny(pin, block_name_, {"state_miss_streak"}, miss_streak_);
+    (void) ReadIntegerAny(pin, block_name_, {"state_recover_streak"}, recover_streak_);
+  } else if (has_legacy_state && global_variable::my_rank == 0) {
+    std::cout << "FrameTracker warning: restoring legacy frame state without complete "
+              << "controller history; continuation is finite but not restart-exact."
+              << std::endl;
   }
 }
 
@@ -583,10 +628,160 @@ void FrameTracker::StoreStateInParameterInput(ParameterInput *pin) const {
   if (pin == nullptr) {
     return;
   }
+  pin->SetInteger(block_name_, "state_version", kFrameTrackingStateVersion);
+  pin->SetReal(block_name_, "state_last_apply_time", last_apply_time_);
+  pin->SetInteger(block_name_, "state_miss_streak", miss_streak_);
+  pin->SetInteger(block_name_, "state_recover_streak", recover_streak_);
   for (int axis = 0; axis < 3; ++axis) {
     const std::string name = AxisName(axis);
+    const AxisState &state = axes_[axis];
     pin->SetReal(block_name_, "frame_velocity_" + name, frame_velocity_[axis]);
     pin->SetReal(block_name_, "frame_displacement_" + name, frame_displacement_[axis]);
+    pin->SetReal(block_name_, "state_" + name + "_last_boost", state.last_boost);
+    pin->SetReal(block_name_, "state_" + name + "_cumulative_boost",
+                 state.cumulative_boost);
+    pin->SetReal(block_name_, "state_" + name + "_last_mean_x", state.last_mean_x);
+    pin->SetReal(block_name_, "state_" + name + "_last_mean_v", state.last_mean_v);
+    pin->SetReal(block_name_, "state_" + name + "_last_global_weight",
+                 state.last_global_weight);
+    pin->SetReal(block_name_, "state_" + name + "_last_filtered_x",
+                 state.last_filtered_x);
+    pin->SetReal(block_name_, "state_" + name + "_last_filtered_v",
+                 state.last_filtered_v);
+    pin->SetReal(block_name_, "state_" + name + "_last_x_err", state.last_x_err);
+    pin->SetReal(block_name_, "state_" + name + "_last_vel_cmd_pre",
+                 state.last_vel_cmd_pre);
+    pin->SetReal(block_name_, "state_" + name + "_last_vel_cmd_post",
+                 state.last_vel_cmd_post);
+    pin->SetReal(block_name_, "state_" + name + "_last_x_centroid",
+                 state.last_x_centroid);
+    pin->SetReal(block_name_, "state_" + name + "_last_x_midpoint",
+                 state.last_x_midpoint);
+    pin->SetReal(block_name_, "state_" + name + "_last_x_ctrl", state.last_x_ctrl);
+    pin->SetReal(block_name_, "state_" + name + "_i_term", state.i_term);
+    pin->SetBoolean(block_name_, "state_" + name + "_last_skip_flag",
+                    state.last_skip_flag);
+    pin->SetBoolean(block_name_, "state_" + name + "_last_slew_limited",
+                    state.last_slew_limited);
+    pin->SetBoolean(block_name_, "state_" + name + "_filter_initialized",
+                    state.filter_initialized);
+  }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn int FrameTracker::FillHistoryData()
+//! \brief Copy controller state into a compact machine-readable history record.
+
+int FrameTracker::FillHistoryData(std::string labels[], Real values[],
+                                  const int max_values) const {
+  int required = 5;
+  for (const auto &state : axes_) {
+    if (state.active) {
+      required += 5;
+    }
+  }
+  if (required > max_values) {
+    FatalFrameTrackingInput("FrameTracker history data exceed configured output "
+                            "capacity.");
+  }
+
+  int n = 0;
+  const AxisState *shared_state = nullptr;
+  for (int axis = 0; axis < 3; ++axis) {
+    if (!axes_[axis].active) {
+      continue;
+    }
+    const AxisState &state = axes_[axis];
+    if (shared_state == nullptr) {
+      shared_state = &state;
+    }
+    const std::string name = AxisName(axis);
+    labels[n] = "ft_vf_" + name;
+    values[n++] = frame_velocity_[axis];
+    labels[n] = "ft_dx_" + name;
+    values[n++] = frame_displacement_[axis];
+    labels[n] = "ft_pos_" + name;
+    values[n++] = state.last_x_ctrl;
+    labels[n] = "ft_err_" + name;
+    values[n++] = state.last_x_err;
+    labels[n] = "ft_dv_" + name;
+    values[n++] = state.last_boost;
+  }
+  labels[n] = "ft_weight";
+  values[n++] = (shared_state == nullptr) ? 0.0 : shared_state->last_global_weight;
+  labels[n] = "ft_misses";
+  values[n++] = static_cast<Real>(miss_streak_);
+  labels[n] = "ft_recov";
+  values[n++] = static_cast<Real>(recover_streak_);
+  bool limited = false;
+  bool skipped = false;
+  for (const auto &state : axes_) {
+    limited = limited || (state.active && state.last_slew_limited);
+    skipped = skipped || (state.active && state.last_skip_flag);
+  }
+  labels[n] = "ft_limit";
+  values[n++] = limited ? 1.0 : 0.0;
+  labels[n] = "ft_skip";
+  values[n++] = skipped ? 1.0 : 0.0;
+  return n;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void FrameTracker::ParseTrackedFluid()
+//! \brief Resolve which fluid supplies target samples and receives frame boosts.
+
+void FrameTracker::ParseTrackedFluid(ParameterInput *pin) {
+  const bool have_hydro = (pmy_pack != nullptr && pmy_pack->phydro != nullptr);
+  const bool have_mhd = (pmy_pack != nullptr && pmy_pack->pmhd != nullptr);
+  std::string requested;
+  if (ReadStringAny(pin, block_name_, {"tracked_fluid"}, requested)) {
+    requested = NormalizeToken(requested);
+    if (requested == "hydro" && have_hydro) {
+      track_mhd_ = false;
+      return;
+    }
+    if (requested == "mhd" && have_mhd) {
+      track_mhd_ = true;
+      return;
+    }
+    FatalFrameTrackingInput("<frame_tracking>/tracked_fluid='" + requested +
+                            "' does not select an available hydro or mhd fluid.");
+  }
+  if (have_hydro && have_mhd) {
+    FatalFrameTrackingInput("<frame_tracking> found both <hydro> and <mhd>; set "
+                            "tracked_fluid=hydro or tracked_fluid=mhd explicitly.");
+  }
+  track_mhd_ = have_mhd;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void FrameTracker::WarnDeprecatedAliases()
+//! \brief Warn once at startup when compatibility-only parameter spellings are used.
+
+void FrameTracker::WarnDeprecatedAliases(ParameterInput *pin) const {
+  if (pin == nullptr || global_variable::my_rank != 0) {
+    return;
+  }
+  const std::vector<std::string> aliases = {
+      "enable", "ft_apply_every", "t_start", "t_frame_tracking_start", "ndiag",
+      "target_variable", "derived_variable", "min", "max", "ft_temp_lo", "ft_temp_hi",
+      "center", "reacquire_scale", "ft_mode", "ft_position_signal",
+      "ft_max_boost_change_mode", "ft_position_blend", "ft_tau_avg", "ft_tau_relax",
+      "ft_tau_vel", "ft_tau_int", "ft_int_max_abs", "ft_int_leak_tau",
+      "ft_int_unsat_only", "ft_weight_floor", "ft_min_global_weight",
+      "ft_max_abs_boost", "ft_max_boost_change", "ft_max_boost_change_rate",
+      "ft_reacquire_expand_factor", "ft_reacquire_max_expand",
+      "ft_reacquire_recover_updates", "ft_reacquire_leak_on_miss",
+      "ft_boundary_guard_enable", "ft_boundary_guard_cells",
+      "ft_boundary_guard_min_scale", "axis", "directions", "z_target",
+      "ft_z_target", "z_lower_limit", "ft_lowzlim", "z_upper_limit", "ft_uppzlim",
+      "ft_use_lowzlim", "ft_use_uppzlim"};
+  for (const auto &alias : aliases) {
+    if (pin->DoesParameterExist(block_name_, alias)) {
+      std::cout << "FrameTracker warning: <" << block_name_ << ">/" << alias
+                << " is a deprecated alias; use the canonical input keys documented in "
+                << "docs/source/modules/frame_tracking.md." << std::endl;
+    }
   }
 }
 
@@ -709,6 +904,13 @@ void FrameTracker::ValidateConfiguration() {
   if (pmy_pack->phydro == nullptr && pmy_pack->pmhd == nullptr) {
     FatalFrameTrackingInput("<frame_tracking> requires a <hydro> or <mhd> block.");
   }
+  if (pmy_pack->pcoord != nullptr &&
+      (pmy_pack->pcoord->is_special_relativistic ||
+       pmy_pack->pcoord->is_general_relativistic ||
+       pmy_pack->pcoord->is_dynamical_relativistic)) {
+    FatalFrameTrackingInput("<frame_tracking> supports non-relativistic hydro/MHD only; "
+                            "SR, GR, and dynamical-GR coordinates are unsupported.");
+  }
 
   if (apply_every_ < 1) {
     FatalFrameTrackingInput("Require <frame_tracking>/apply_every >= 1.");
@@ -760,7 +962,7 @@ void FrameTracker::ValidateConfiguration() {
     }
   }
 
-  const bool is_mhd = (pmy_pack->pmhd != nullptr);
+  const bool is_mhd = track_mhd_;
   const int nscalars = is_mhd ? pmy_pack->pmhd->nscalars :
                                 pmy_pack->phydro->nscalars;
   const EOS_Data &eos = is_mhd ? pmy_pack->pmhd->peos->eos_data :
@@ -794,7 +996,6 @@ void FrameTracker::IncludeFrameTrackingTask(std::shared_ptr<TaskList> tl, TaskID
 //! \brief Task-list wrapper for scheduled frame tracking.
 
 TaskStatus FrameTracker::Apply(Driver *pdrive, int stage) {
-  (void) pdrive;
   (void) stage;
   if (!enabled_ || pmy_pack == nullptr || pmy_pack->pmesh == nullptr) {
     return TaskStatus::complete;
@@ -805,6 +1006,13 @@ TaskStatus FrameTracker::Apply(Driver *pdrive, int stage) {
     return TaskStatus::complete;
   }
   ApplyTracking();
+  // The controller changes characteristic velocities after the usual fluid dt task.
+  // Refresh dtnew from the boosted state so restarts follow the same next timestep.
+  if (track_mhd_) {
+    (void) pmy_pack->pmhd->NewTimeStep(pdrive, pdrive->nexp_stages);
+  } else {
+    (void) pmy_pack->phydro->NewTimeStep(pdrive, pdrive->nexp_stages);
+  }
   return TaskStatus::complete;
 }
 
@@ -844,11 +1052,13 @@ void FrameTracker::SetActiveTargetRange() {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn bool FrameTracker::SampleAxisMoments()
-//! \brief Compute global weighted moments for tracked material along one axis.
+//! \fn bool FrameTracker::SampleMoments()
+//! \brief Compute global weighted moments for all active axes in one mesh traversal.
 
-bool FrameTracker::SampleAxisMoments(const int axis, MomentSample &sample) const {
-  sample = MomentSample();
+bool FrameTracker::SampleMoments(std::array<MomentSample, 3> &samples) const {
+  for (auto &sample : samples) {
+    sample = MomentSample();
+  }
   MeshBlockPack *pmbp = pmy_pack;
   Mesh *pm = pmbp->pmesh;
   auto &indcs = pm->mb_indcs;
@@ -863,7 +1073,7 @@ bool FrameTracker::SampleAxisMoments(const int axis, MomentSample &sample) const
   const int nmkji = nmb*nx3*nx2*nx1;
   const int nkji = nx3*nx2*nx1;
   const int nji  = nx2*nx1;
-  const bool is_mhd = (pmbp->pmhd != nullptr);
+  const bool is_mhd = track_mhd_;
   auto &w0 = is_mhd ? pmbp->pmhd->w0 : pmbp->phydro->w0;
   const EOS_Data eos = is_mhd ? pmbp->pmhd->peos->eos_data :
                                 pmbp->phydro->peos->eos_data;
@@ -874,17 +1084,23 @@ bool FrameTracker::SampleAxisMoments(const int axis, MomentSample &sample) const
   const int weight_mode = weight_mode_;
   const Real target_min = target_min_active_;
   const Real target_max = target_max_active_;
+  const bool active_x1 = axes_[0].active;
+  const bool active_x2 = axes_[1].active;
+  const bool active_x3 = axes_[2].active;
   Real rank_weight = 0.0;
-  Real rank_weighted_x = 0.0;
-  Real rank_weighted_v = 0.0;
-  Real rank_xmin = FLT_MAX;
-  Real rank_xmax = -FLT_MAX;
+  Real rank_weighted_x1 = 0.0, rank_weighted_x2 = 0.0, rank_weighted_x3 = 0.0;
+  Real rank_weighted_v1 = 0.0, rank_weighted_v2 = 0.0, rank_weighted_v3 = 0.0;
+  Real rank_xmin1 = FLT_MAX, rank_xmin2 = FLT_MAX, rank_xmin3 = FLT_MAX;
+  Real rank_xmax1 = -FLT_MAX, rank_xmax2 = -FLT_MAX, rank_xmax3 = -FLT_MAX;
   int rank_count = 0;
 
   Kokkos::parallel_reduce("frame_tracking_moments",
   Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-  KOKKOS_LAMBDA(const int idx, Real &weight_, Real &weighted_x_, Real &weighted_v_,
-                Real &xmin_, Real &xmax_, int &count_) {
+  KOKKOS_LAMBDA(const int idx, Real &weight_,
+                Real &weighted_x1_, Real &weighted_x2_, Real &weighted_x3_,
+                Real &weighted_v1_, Real &weighted_v2_, Real &weighted_v3_,
+                Real &xmin1_, Real &xmin2_, Real &xmin3_,
+                Real &xmax1_, Real &xmax2_, Real &xmax3_, int &count_) {
     int m = (idx)/nkji;
     int k = (idx - m*nkji)/nji;
     int j = (idx - m*nkji - k*nji)/nx1;
@@ -915,44 +1131,65 @@ bool FrameTracker::SampleAxisMoments(const int axis, MomentSample &sample) const
       return;
     }
 
-    const Real x = CellCenterX(CoordIndex(axis, i, j, k, indcs),
-                               AxisCellCount(axis, indcs),
-                               AxisMin(axis, block_size),
-                               AxisMax(axis, block_size));
-    const int velocity_index = IVX + axis;
     weight_ += weight;
-    weighted_x_ += weight*x;
-    weighted_v_ += weight*w0(m, velocity_index, k, j, i);
-    xmin_ = fmin(xmin_, x);
-    xmax_ = fmax(xmax_, x);
     count_ += 1;
+    if (active_x1) {
+      const Real x = CellCenterX(i - is, nx1, block_size.x1min, block_size.x1max);
+      weighted_x1_ += weight*x;
+      weighted_v1_ += weight*w0(m, IVX, k, j, i);
+      xmin1_ = fmin(xmin1_, x);
+      xmax1_ = fmax(xmax1_, x);
+    }
+    if (active_x2) {
+      const Real x = CellCenterX(j - js, nx2, block_size.x2min, block_size.x2max);
+      weighted_x2_ += weight*x;
+      weighted_v2_ += weight*w0(m, IVY, k, j, i);
+      xmin2_ = fmin(xmin2_, x);
+      xmax2_ = fmax(xmax2_, x);
+    }
+    if (active_x3) {
+      const Real x = CellCenterX(k - ks, nx3, block_size.x3min, block_size.x3max);
+      weighted_x3_ += weight*x;
+      weighted_v3_ += weight*w0(m, IVZ, k, j, i);
+      xmin3_ = fmin(xmin3_, x);
+      xmax3_ = fmax(xmax3_, x);
+    }
   }, Kokkos::Sum<Real>(rank_weight),
-     Kokkos::Sum<Real>(rank_weighted_x),
-     Kokkos::Sum<Real>(rank_weighted_v),
-     Kokkos::Min<Real>(rank_xmin),
-     Kokkos::Max<Real>(rank_xmax),
+     Kokkos::Sum<Real>(rank_weighted_x1), Kokkos::Sum<Real>(rank_weighted_x2),
+     Kokkos::Sum<Real>(rank_weighted_x3), Kokkos::Sum<Real>(rank_weighted_v1),
+     Kokkos::Sum<Real>(rank_weighted_v2), Kokkos::Sum<Real>(rank_weighted_v3),
+     Kokkos::Min<Real>(rank_xmin1), Kokkos::Min<Real>(rank_xmin2),
+     Kokkos::Min<Real>(rank_xmin3), Kokkos::Max<Real>(rank_xmax1),
+     Kokkos::Max<Real>(rank_xmax2), Kokkos::Max<Real>(rank_xmax3),
      Kokkos::Sum<int>(rank_count));
 
-  Real global_sums[3] = {rank_weight, rank_weighted_x, rank_weighted_v};
-  Real global_xmin = rank_xmin;
-  Real global_xmax = rank_xmax;
+  Real global_sums[7] = {rank_weight, rank_weighted_x1, rank_weighted_x2,
+                         rank_weighted_x3, rank_weighted_v1, rank_weighted_v2,
+                         rank_weighted_v3};
+  Real global_xmin[3] = {rank_xmin1, rank_xmin2, rank_xmin3};
+  Real global_xmax[3] = {rank_xmax1, rank_xmax2, rank_xmax3};
   int global_count = rank_count;
 #if MPI_PARALLEL_ENABLED
-  MPI_Allreduce(MPI_IN_PLACE, global_sums, 3, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
-  MPI_Allreduce(MPI_IN_PLACE, &global_xmin, 1, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
-  MPI_Allreduce(MPI_IN_PLACE, &global_xmax, 1, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, global_sums, 7, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, global_xmin, 3, MPI_ATHENA_REAL, MPI_MIN, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, global_xmax, 3, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
   MPI_Allreduce(MPI_IN_PLACE, &global_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 #endif
 
-  sample.global_weight = global_sums[0];
-  if (sample.global_weight <= 0.0 || global_count <= 0) {
+  if (global_sums[0] <= 0.0 || global_count <= 0) {
     return false;
   }
-  sample.mean_x = global_sums[1]/sample.global_weight;
-  sample.mean_v = global_sums[2]/sample.global_weight;
-  sample.x_min = global_xmin;
-  sample.x_max = global_xmax;
-  sample.valid = true;
+  for (int axis = 0; axis < 3; ++axis) {
+    if (!axes_[axis].active) {
+      continue;
+    }
+    samples[axis].global_weight = global_sums[0];
+    samples[axis].mean_x = global_sums[1 + axis]/global_sums[0];
+    samples[axis].mean_v = global_sums[4 + axis]/global_sums[0];
+    samples[axis].x_min = global_xmin[axis];
+    samples[axis].x_max = global_xmax[axis];
+    samples[axis].valid = true;
+  }
   return true;
 }
 
@@ -972,7 +1209,7 @@ void FrameTracker::ApplyTracking() {
     return;
   }
 
-  const bool is_mhd = (pmy_pack->pmhd != nullptr);
+  const bool is_mhd = track_mhd_;
   auto &u0 = is_mhd ? pmy_pack->pmhd->u0 : pmy_pack->phydro->u0;
   auto &w0 = is_mhd ? pmy_pack->pmhd->w0 : pmy_pack->phydro->w0;
   const EOS_Data eos = is_mhd ? pmy_pack->pmhd->peos->eos_data :
@@ -989,22 +1226,22 @@ void FrameTracker::ApplyTracking() {
   SetActiveTargetRange();
 
   std::array<MomentSample, 3> samples;
-  bool have_sample = true;
   bool any_active = false;
-  Real global_weight = 0.0;
   for (int axis = 0; axis < 3; ++axis) {
-    if (!axes_[axis].active) {
-      continue;
-    }
-    any_active = true;
-    const bool axis_valid = SampleAxisMoments(axis, samples[axis]);
-    have_sample = have_sample && axis_valid;
-    if (axis_valid) {
-      global_weight = samples[axis].global_weight;
-    }
+    any_active = any_active || axes_[axis].active;
   }
   if (!any_active) {
     return;
+  }
+  const bool have_sample = SampleMoments(samples);
+  Real global_weight = 0.0;
+  if (have_sample) {
+    for (int axis = 0; axis < 3; ++axis) {
+      if (axes_[axis].active) {
+        global_weight = samples[axis].global_weight;
+        break;
+      }
+    }
   }
 
   const bool low_weight_floor = have_sample && (global_weight <= weight_floor_);

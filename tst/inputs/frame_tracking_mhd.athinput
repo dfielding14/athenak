@@ -1,0 +1,84 @@
+# FrameTracker regression input for non-relativistic MHD.
+
+<job>
+basename = FrameTrackMHD
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = -0.5
+x1max = 0.5
+ix1_bc = outflow
+ox1_bc = outflow
+nx2 = 1
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim = 4
+tlim = 10.0
+ndiag = 100
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = llf
+gamma = 1.66666666667
+
+<problem>
+pgen_name = shock_tube
+shock_dir = 1
+xshock = 0.0
+dl = 1.08
+pl = 0.95
+ul = 1.2
+vl = 0.01
+wl = 0.5
+bxl = 0.5641895835477562
+byl = 1.0155412503859613
+bzl = 0.5641895835477562
+dr = 1.0
+pr = 1.0
+ur = 0.0
+vr = 0.0
+wr = 0.0
+bxr = 0.5641895835477562
+byr = 1.1283791670955125
+bzr = 0.5641895835477562
+
+<frame_tracking>
+tracked_fluid = mhd
+start_time = -1.0
+apply_every = 1
+axes = x1
+x1_target = 0.0
+target = density
+target_min = 0.5
+target_max = 2.0
+mode = velocity
+tau_avg = 0.01
+tau_relax = 1.0
+tau_vel = 1.0
+max_abs_boost = 0.1
+max_boost_change_mode = per_time
+max_boost_change_rate = 1.0
+
+<output1>
+file_type = hst
+data_format = %24.16e
+dcycle = 1

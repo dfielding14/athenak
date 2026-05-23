@@ -42,6 +42,7 @@ class FrameTracker {
   }
   std::array<Real, 3> FrameVelocity() const { return frame_velocity_; }
   std::array<Real, 3> FrameDisplacement() const { return frame_displacement_; }
+  int FillHistoryData(std::string labels[], Real values[], const int max_values) const;
   void StoreStateInParameterInput(ParameterInput *pin) const;
 
  private:
@@ -83,9 +84,11 @@ class FrameTracker {
 
   void ParseAxes(ParameterInput *pin);
   void ParseAxisControls(ParameterInput *pin);
+  void ParseTrackedFluid(ParameterInput *pin);
+  void WarnDeprecatedAliases(ParameterInput *pin) const;
   void ValidateConfiguration();
   void SetActiveTargetRange();
-  bool SampleAxisMoments(const int axis, MomentSample &sample) const;
+  bool SampleMoments(std::array<MomentSample, 3> &samples) const;
   void PrintSkipMessage(const bool have_sample, const bool low_weight_floor,
                         const Real global_weight) const;
   void PrintPrimeMessage(const std::array<MomentSample, 3> &samples) const;
@@ -110,6 +113,7 @@ class FrameTracker {
   int target_kind_ = 0;
   int scalar_index_ = 0;
   int weight_mode_ = 0;
+  bool track_mhd_ = false;
   Real target_min_ = 0.0;
   Real target_max_ = 0.0;
   Real target_center_ = 0.0;

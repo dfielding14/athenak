@@ -26,18 +26,23 @@ The shipped input tracks intermediate-temperature gas around the interface:
 
 ```ini
 <frame_tracking>
+tracked_fluid = hydro
 axes       = x3
 x3_target  = 0.0
 target     = temperature
 target_min = 0.015
 target_max = 0.08
 mode       = pd
+max_abs_boost = 0.05
+max_boost_change_mode = per_time
+max_boost_change_rate = 0.02
 ```
 
 With the default problem parameters, `T_cold = 0.01` and `T_hot = 1.0`, so this
 range selects the cooling/mixing layer rather than the cold or hot bulk.
 The [Frame Tracking module page](../modules/frame_tracking.md) documents the
-shared controller, restart state, and moving-frame boundary API.
+shared controller, versioned restart state, structured history stream, and
+moving-frame boundary API.
 
 ## Build And Run
 
@@ -65,4 +70,6 @@ mkdir run_trml_frame_tracking_lowres
 
 This is not a production TRML configuration. It is a small, PR-friendly example
 that verifies the frame-tracking hooks, restart-state path, pgen-local cooling
-timestep, and moving-frame boundary transformation.
+timestep, and moving-frame boundary transformation. With `file_type=hst`
+active, machine-readable controller diagnostics are written to
+`TRML_frame_tracking.frame_tracker.hst`.

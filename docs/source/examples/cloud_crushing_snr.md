@@ -146,6 +146,7 @@ The input tracks the cold cloud by selecting dense gas:
 
 ```ini
 <frame_tracking>
+tracked_fluid = hydro
 start_time = 0.02
 axes       = x1
 x1_target  = 3.0
@@ -153,14 +154,18 @@ target     = density
 target_min = 5.0
 target_max = 200.0
 mode       = pd
+max_abs_boost = 50.0
+max_boost_change_mode = per_time
+max_boost_change_rate = 5.0
 ```
 
 The tracker applies post-timestep Galilean velocity boosts. The example delays
 tracking until `t=0.02` so the cooling startup transient does not drive the
 cloud frame before the flow has settled. The tracker also exposes the current
 frame velocity and displacement through `FrameVelocity(axis)` and
-`FrameDisplacement(axis)`. Restart files store these values in the
-`<frame_tracking>` block as `frame_velocity_x*` and `frame_displacement_x*`.
+`FrameDisplacement(axis)`. Restart files store versioned complete controller
+state and retain compatibility with older files that contain only
+`frame_velocity_x*` and `frame_displacement_x*`.
 See the [Frame Tracking module page](../modules/frame_tracking.md) for the full
 runtime contract and parameter reference.
 
@@ -200,7 +205,8 @@ mkdir run_cloud_crushing_lowres
   frame_tracking/start_time=0.0 \
   frame_tracking/diagnostic_every=5 \
   frame_tracking/max_abs_boost=50.0 \
-  frame_tracking/max_boost_change=2.0 \
+  frame_tracking/max_boost_change_mode=per_time \
+  frame_tracking/max_boost_change_rate=2.0 \
   2>&1 | tee run_cloud_crushing_lowres/athena.log
 ```
 
@@ -231,31 +237,35 @@ python3 scripts/plot_cloud_crushing_validation.py \
   --output-prefix docs/source/_static/cloud_crushing_lowres
 ```
 
-The validation script reads `athena.log` for tracker diagnostics and the
-native binary `hydro_w` snapshots for an independent cold-cloud centroid check.
-If no stdout log is present, it still writes the binary-snapshot density and
-dense-mass plots, but skips the tracker-log validation panel.
-The run used for this documentation produced 31 frame-tracking diagnostic
-blocks and 5 binary snapshots.
+The validation script reads structured controller data from
+`CloudCrushingSNR.frame_tracker.hst` when present, with stdout-log parsing only
+as a compatibility fallback for older archived runs. It reads native binary
+`hydro_w` snapshots for an independent cold-cloud centroid check. The run used
+for this documentation produced structured frame-tracker rows and 5 binary
+snapshots.
 
 | Check | Value |
 | --- | ---: |
-| Missed tracker samples | `0` |
-| Slew-limited updates | `0` |
-| Final diagnostic time | `1.472413e-4` |
-| Final frame velocity | `-5.033155e-3` |
-| Final frame displacement | `-3.659557e-7` |
+| Structured history rows | `9` |
+| Binary snapshots | `5` |
+| Maximum miss streak | `0` |
+| Slew-limited rows | `0` |
+| Final history time | `1.537763e-4` |
+| Final frame velocity | `-4.952569e-3` |
+| Final frame displacement | `-3.545292e-7` |
 | Final tracker position error | `-8.622328e-2` |
-| Binary cold-cloud centroid drift | `2.761569e-7` |
+| Binary cold-cloud centroid drift | `2.501526e-7` |
 | Final cold-cloud centroid | `3.004256` |
-| Dense-mass fractional change | `-6.720178e-8` |
-| Final dense mass | `6.510077 Msun` |
+| Dense-mass fractional change | `-4.658305e-8` |
+| Final dense mass | `6.510078 Msun` |
 
-These numbers show that the tracker remains locked on the selected dense
-material during the short validation run, applies smooth unsaturated boosts,
-and agrees with an independent binary-output centroid measurement. The same
-summary is available as
+These numbers establish that this low-resolution wiring run retains selected
+dense material, applies finite unsaturated boosts, and agrees with an
+independent binary-output centroid measurement. They are not a convergence or
+production-accuracy claim. The same summary is available as
 [`cloud_crushing_lowres_summary.csv`](../_static/cloud_crushing_lowres_summary.csv).
+The sampled controller time series is available as
+[`cloud_crushing_lowres_frame_tracker.csv`](../_static/cloud_crushing_lowres_frame_tracker.csv).
 
 ![Frame-tracking validation](../_static/cloud_crushing_lowres_validation.png)
 

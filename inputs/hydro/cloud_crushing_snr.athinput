@@ -85,6 +85,7 @@ constant_vz          = 0.0
 boundary_timestep_factor = 0.15
 
 <frame_tracking>
+tracked_fluid    = hydro
 start_time       = 0.02
 apply_every      = 1
 diagnostic_every = 10
@@ -98,11 +99,12 @@ tau_avg          = 0.01
 tau_relax        = 0.05
 tau_vel          = 0.05
 max_abs_boost    = 50.0
-max_boost_change = 5.0
+max_boost_change_mode = per_time
+max_boost_change_rate = 5.0
 
 <output1>
 file_type   = hst
-data_format = %12.5e
+data_format = %24.16e
 dt          = 1.0e-3
 
 <output2>

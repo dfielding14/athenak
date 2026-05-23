@@ -8,14 +8,17 @@ module pages.
 ## Drop-In Files
 
 - `docs/source/modules/frame_tracking.md`
+- `docs/source/modules/frame_tracking_next_steps.md`
 - `docs/source/examples/cloud_crushing_snr.md`
 - `docs/source/examples/trml_frame_tracking.md`
+- `docs/FRAME_TRACKING_NEXT_STEPS.md`
 - `docs/source/_static/sedov_boundary_cgs.png`
 - `docs/source/_static/sedov_boundary_cgs.csv`
 - `docs/source/_static/cloud_crushing_lowres_validation.png`
 - `docs/source/_static/cloud_crushing_lowres_midplane.png`
 - `docs/source/_static/cloud_crushing_lowres_dense_mass.png`
 - `docs/source/_static/cloud_crushing_lowres_dense_mass.csv`
+- `docs/source/_static/cloud_crushing_lowres_frame_tracker.csv`
 - `docs/source/_static/cloud_crushing_lowres_summary.csv`
 - `docs/source/_static/cloud_crushing_lowres_density_slices_6_vertical_equal_aspect.png`
 
@@ -31,12 +34,14 @@ Add this link to the Module Reference bullet list:
 
 ```markdown
 [Frame Tracking](modules/frame_tracking.md)
+[Frame Tracking Production Plan](modules/frame_tracking_next_steps.md)
 ```
 
 Add this entry to the hidden Modules toctree:
 
 ```markdown
 modules/frame_tracking
+modules/frame_tracking_next_steps
 ```
 
 Add these links to the Worked Examples bullet list:
@@ -74,4 +79,6 @@ docs/.venv/bin/sphinx-build -b html docs/source docs/_build/html
 
 The feature docs use MyST Markdown, local PNG/CSV assets under
 `docs/source/_static`, and relative links that match the existing GitHub Pages
-framework.
+framework. `docs/FRAME_TRACKING_NEXT_STEPS.md` is the maintained roadmap
+published alongside this integration handoff; it records remaining benchmark
+and scientific-validation gates without overstating low-resolution runs.
