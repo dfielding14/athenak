@@ -47,7 +47,7 @@ boundary code should keep a zero-frame fallback.
 
 | Parameter | Default | Description |
 | --- | ---: | --- |
-| `enabled` | `true` | Master switch. |
+| `enabled` | `true` | Master switch. Only canonical parameter names are accepted. |
 | `tracked_fluid` | inferred when unambiguous | Fluid to sample and boost: `hydro` or `mhd`. Required when both exist. |
 | `target` | `density` | Selected variable: `density`, `temperature`, `pressure`, `entropy`, `internal_energy`, `scalar`/`scalarN`, `v1`/`v2`/`v3`, or `speed`. |
 | `target_min`, `target_max` | unbounded | Inclusive target range for tracked cells. |
@@ -133,6 +133,17 @@ slew-limit state, and per-axis history. A restart containing only
 `frame_velocity_x*` and `frame_displacement_x*` is accepted for compatibility,
 but it emits one rank-0 warning and cannot be an exact controller continuation.
 
+At initialization, rank 0 writes one interpreted configuration summary, for
+example:
+
+```text
+FrameTracker configuration: fluid=hydro axes=x1 target=density range=[5,200] mode=pd slew=per_time state=new
+```
+
+Use this summary to confirm fluid selection, axes, selected material, controller
+mode, slew-limit interpretation, and whether a run starts fresh or from
+versioned or legacy restart state.
+
 ## Conservative Configuration Patterns
 
 New inputs should choose the tracked fluid explicitly and use time-based slew
@@ -142,6 +153,7 @@ changes:
 ```ini
 # Cooled cloud tracking
 <frame_tracking>
+enabled = true
 tracked_fluid = hydro
 axes = x1
 x1_target = 3.0
@@ -157,6 +169,7 @@ max_boost_change_rate = 5.0
 ```ini
 # Mixing-layer tracking
 <frame_tracking>
+enabled = true
 tracked_fluid = hydro
 axes = x3
 x3_target = 0.0
@@ -164,7 +177,7 @@ target = temperature
 target_min = 0.015
 target_max = 0.08
 mode = pd
-max_abs_boost = 0.05
+max_abs_boost = 0.2
 max_boost_change_mode = per_time
 max_boost_change_rate = 0.02
 ```
@@ -192,9 +205,12 @@ store grid-frame velocities as `v_lab - FrameVelocity()`.
   ambiguous configuration fails at startup.
 - `target=entropy` requires an ideal-gas EOS.
 - `target=scalarN` requires `0 <= N < nscalars`.
-- Compatibility aliases are accepted for an interim deprecation period and
-  generate rank-0 warnings. New inputs should use the parameter names listed
-  above.
+- Former configuration aliases are rejected with the canonical replacement in
+  the startup error. Use only the parameter names listed above; see the
+  [configuration recipes and migration table](frame_tracking_recipes.md).
+- Legacy restart-state records containing only `frame_velocity_x*` and
+  `frame_displacement_x*` remain readable and warn that continuation is not
+  restart-exact.
 - Arbitrary user boundaries and source terms cannot be made frame-aware
   automatically. Only examples that explicitly apply the moving-frame
   coordinate and velocity transformations are validated.
@@ -204,5 +220,8 @@ store grid-frame velocities as `v_lab - FrameVelocity()`.
 ## Related Pages
 
 - [Frame Tracking Production Plan](frame_tracking_next_steps.md)
+- [Frame Tracking Recipes And Migration](frame_tracking_recipes.md)
+- [Frame Tracking Performance Evidence](frame_tracking_performance.md)
+- [Frame Tracking Medium-Resolution Validation](frame_tracking_validation.md)
 - [Sedov Cloud Crushing With Frame Tracking](../examples/cloud_crushing_snr.md)
 - [TRML Frame Tracking Example](../examples/trml_frame_tracking.md)

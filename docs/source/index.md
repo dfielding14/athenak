@@ -67,7 +67,7 @@ Navigate the full stack of physics and infrastructure modules:
 - Core infrastructure: [Mesh](modules/mesh.md), [Driver](modules/driver.md), [Task Lists](modules/tasklist.md), [Coordinates](modules/coordinates.md)
 - Physics: [Hydro](modules/hydro.md), [MHD](modules/mhd.md), [Radiation](modules/radiation.md), [Z4c](modules/z4c.md), [Dyn GRMHD](modules/dyn_grmhd.md), [Ion-Neutral](modules/ion_neutral.md), [Particles](modules/particles.md)
 - Numerical methods: [Reconstruction](modules/reconstruction.md), [Riemann Solvers](modules/riemann_solvers.md), [EOS](modules/eos.md), [Diffusion](modules/diffusion.md), [Outputs](modules/outputs.md), [Boundaries](modules/boundaries.md), [Source Terms](modules/srcterms.md), [Shearing Box](modules/shearing_box.md), [Problem Generators](modules/pgen.md)
-- Controllers: [Frame Tracking](modules/frame_tracking.md), [Frame Tracking Production Plan](modules/frame_tracking_next_steps.md)
+- Controllers: [Frame Tracking](modules/frame_tracking.md), [Frame Tracking Production Plan](modules/frame_tracking_next_steps.md), [Frame Tracking Recipes And Migration](modules/frame_tracking_recipes.md), [Frame Tracking Performance Evidence](modules/frame_tracking_performance.md), [Frame Tracking Medium-Resolution Validation](modules/frame_tracking_validation.md)
 
 ```{toctree}
 :hidden:
@@ -97,6 +97,9 @@ modules/shearing_box
 modules/pgen
 modules/frame_tracking
 modules/frame_tracking_next_steps
+modules/frame_tracking_recipes
+modules/frame_tracking_performance
+modules/frame_tracking_validation
 ```
 
 ## Reference Library

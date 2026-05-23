@@ -146,6 +146,7 @@ The input tracks the cold cloud by selecting dense gas:
 
 ```ini
 <frame_tracking>
+enabled    = true
 tracked_fluid = hydro
 start_time = 0.02
 axes       = x1

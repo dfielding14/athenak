@@ -1,0 +1,65 @@
+problem,resolution,tracking_mode,restart_split,ranks,amr_mode,diagnostic_metric,comparison_reference,absolute_error,relative_error,tolerance,result
+cloud_crushing,96x32x32,enabled_vs_disabled,none,1,uniform,selected_mass,serial_tracking_disabled,5.4233440663665533e+00,1.4177766188332176e-02,relative <= 1.0e-2,fail
+cloud_crushing,96x32x32,enabled_vs_disabled,none,1,uniform,tracked_centroid,serial_tracking_disabled,5.6278559937710249e-03,1.9711722648253780e-03,absolute <= 1.2500000000000000e-01,pass
+cloud_crushing,96x32x32,enabled_vs_disabled,none,1,uniform,density_l2_lab_frame,serial_tracking_disabled,1.4449508487990062e+02,7.3425728704341386e-02,trend against wiring baseline,measured
+cloud_crushing,96x32x32,enabled_vs_disabled,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+cloud_crushing,96x32x32,enabled_vs_disabled,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+cloud_crushing,96x32x32,enabled_vs_disabled,none,1,uniform,limit_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+trml,32x32x64,enabled_vs_disabled,none,1,uniform,selected_mass,serial_tracking_disabled,1.8752405128907412e-01,6.0872114637806805e-02,relative <= 1.0e-2,fail
+trml,32x32x64,enabled_vs_disabled,none,1,uniform,tracked_centroid,serial_tracking_disabled,3.6179915814026145e-03,9.8156889601367037e-02,absolute <= 3.1250000000000000e-02,pass
+trml,32x32x64,enabled_vs_disabled,none,1,uniform,density_l2_lab_frame,serial_tracking_disabled,2.0237336477943117e+01,1.1515420358777350e-03,trend against wiring baseline,measured
+trml,32x32x64,enabled_vs_disabled,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+trml,32x32x64,enabled_vs_disabled,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+trml,32x32x64,enabled_vs_disabled,none,1,uniform,limit_events,serial_tracking_disabled,3.0000000000000000e+00,3.0000000000000000e+00,absolute <= 0,fail
+trml,32x32x64,enabled,25_percent,1,uniform,dens_l2_lab_frame,continuous_tracking_enabled,2.4114126672410414e-11,1.3751473704656285e-15,absolute or relative <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,25_percent,1,uniform,eint_l2_lab_frame,continuous_tracking_enabled,1.2292049197815086e-13,3.5466096066372652e-16,absolute or relative <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,25_percent,1,uniform,velx_l2_lab_frame,continuous_tracking_enabled,1.2300636153223076e-13,2.0202057506728196e-15,absolute or relative <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,25_percent,1,uniform,vely_l2_lab_frame,continuous_tracking_enabled,2.2233578443053541e-10,1.4440649404251346e-09,absolute or relative <= 2.2204460492503131e-14,fail
+trml,32x32x64,enabled,25_percent,1,uniform,velz_l2_lab_frame,continuous_tracking_enabled,2.6799663380351469e-12,2.2480961799175574e-13,absolute or relative <= 2.2204460492503131e-14,fail
+trml,32x32x64,enabled,25_percent,1,uniform,ft_vf_x3,continuous_tracking_enabled,1.0554057627842894e-14,2.6859976222139261e-13,scaled absolute <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,25_percent,1,uniform,ft_dx_x3,continuous_tracking_enabled,6.6873589998905913e-16,1.6481089505127733e-13,scaled absolute <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,25_percent,1,uniform,ft_pos_x3,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,scaled absolute <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,25_percent,1,uniform,ft_err_x3,continuous_tracking_enabled,2.6020852139652106e-15,6.3563437495826470e-14,scaled absolute <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,25_percent,1,uniform,ft_dv_x3,continuous_tracking_enabled,6.5941176130568380e-16,6.7147518478698969e-13,scaled absolute <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,25_percent,1,uniform,finite_fields,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+trml,32x32x64,enabled,25_percent,1,uniform,max_missed_samples,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+trml,32x32x64,enabled,25_percent,1,uniform,limit_events,continuous_tracking_enabled,1.0000000000000000e+00,1.0000000000000000e+00,absolute <= 0,fail
+trml,32x32x64,enabled,50_percent,1,uniform,dens_l2_lab_frame,continuous_tracking_enabled,3.9162252295344461e-11,2.2332912569075140e-15,absolute or relative <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,50_percent,1,uniform,eint_l2_lab_frame,continuous_tracking_enabled,1.9982435397011034e-13,5.7655071341274001e-16,absolute or relative <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,50_percent,1,uniform,velx_l2_lab_frame,continuous_tracking_enabled,1.9990644703322669e-13,3.2831810392771964e-15,absolute or relative <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,50_percent,1,uniform,vely_l2_lab_frame,continuous_tracking_enabled,4.6795209569822693e-10,3.0393362765560715e-09,absolute or relative <= 2.2204460492503131e-14,fail
+trml,32x32x64,enabled,50_percent,1,uniform,velz_l2_lab_frame,continuous_tracking_enabled,5.5881811379219405e-09,4.6876591286069011e-10,absolute or relative <= 2.2204460492503131e-14,fail
+trml,32x32x64,enabled,50_percent,1,uniform,ft_vf_x3,continuous_tracking_enabled,5.5649929109335972e-14,1.4162853997472511e-12,scaled absolute <= 2.2204460492503131e-14,fail
+trml,32x32x64,enabled,50_percent,1,uniform,ft_dx_x3,continuous_tracking_enabled,1.0859368959614812e-15,2.6763066226225577e-13,scaled absolute <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,50_percent,1,uniform,ft_pos_x3,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,scaled absolute <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,50_percent,1,uniform,ft_err_x3,continuous_tracking_enabled,1.1775302954930567e-14,2.8764574248111338e-13,scaled absolute <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,50_percent,1,uniform,ft_dv_x3,continuous_tracking_enabled,2.4967007627996196e-15,2.5423759545009535e-12,scaled absolute <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,50_percent,1,uniform,finite_fields,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+trml,32x32x64,enabled,50_percent,1,uniform,max_missed_samples,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+trml,32x32x64,enabled,50_percent,1,uniform,limit_events,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+trml,32x32x64,enabled,75_percent,1,uniform,dens_l2_lab_frame,continuous_tracking_enabled,2.3841858262875439e-07,1.3596208207166280e-11,absolute or relative <= 2.2204460492503131e-14,fail
+trml,32x32x64,enabled,75_percent,1,uniform,eint_l2_lab_frame,continuous_tracking_enabled,2.0952352940791474e-13,6.0453562319514784e-16,absolute or relative <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,75_percent,1,uniform,velx_l2_lab_frame,continuous_tracking_enabled,2.0911472996841507e-13,3.4344140804611324e-15,absolute or relative <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,75_percent,1,uniform,vely_l2_lab_frame,continuous_tracking_enabled,5.9497608431765807e-10,3.8643536664832034e-09,absolute or relative <= 2.2204460492503131e-14,fail
+trml,32x32x64,enabled,75_percent,1,uniform,velz_l2_lab_frame,continuous_tracking_enabled,5.5099455580104462e-09,4.6220310250607888e-10,absolute or relative <= 2.2204460492503131e-14,fail
+trml,32x32x64,enabled,75_percent,1,uniform,ft_vf_x3,continuous_tracking_enabled,7.1539996149283525e-14,1.8206860936900447e-12,scaled absolute <= 2.2204460492503131e-14,fail
+trml,32x32x64,enabled,75_percent,1,uniform,ft_dx_x3,continuous_tracking_enabled,1.1345091532888318e-15,2.7960136281072726e-13,scaled absolute <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,75_percent,1,uniform,ft_pos_x3,continuous_tracking_enabled,1.3877787807814457e-17,3.1729070016629533e-16,scaled absolute <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,75_percent,1,uniform,ft_err_x3,continuous_tracking_enabled,1.5223933225172459e-14,3.7188848497558207e-13,scaled absolute <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,75_percent,1,uniform,ft_dv_x3,continuous_tracking_enabled,1.2182095610047128e-15,1.2404957540721170e-12,scaled absolute <= 2.2204460492503131e-14,pass
+trml,32x32x64,enabled,75_percent,1,uniform,finite_fields,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+trml,32x32x64,enabled,75_percent,1,uniform,max_missed_samples,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+trml,32x32x64,enabled,75_percent,1,uniform,limit_events,continuous_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+trml,32x32x64,enabled,none,4,uniform,dens_l2_lab_frame,serial_tracking_enabled,2.2061179118196640e-13,1.2372698273686988e-17,absolute or relative <= 1.0000000000000000e-10,pass
+trml,32x32x64,enabled,none,4,uniform,eint_l2_lab_frame,serial_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute or relative <= 1.0000000000000000e-10,pass
+trml,32x32x64,enabled,none,4,uniform,velx_l2_lab_frame,serial_tracking_enabled,1.2755491433176288e-15,2.0770579028336024e-17,absolute or relative <= 1.0000000000000000e-10,pass
+trml,32x32x64,enabled,none,4,uniform,vely_l2_lab_frame,serial_tracking_enabled,6.3038768652600768e-14,4.0943510704739860e-13,absolute or relative <= 1.0000000000000000e-10,pass
+trml,32x32x64,enabled,none,4,uniform,velz_l2_lab_frame,serial_tracking_enabled,8.9146398050183237e-15,7.4039564622911605e-16,absolute or relative <= 1.0000000000000000e-10,pass
+trml,32x32x64,enabled,none,4,uniform,ft_vf_x3,serial_tracking_enabled,3.4694469519536142e-17,8.8297094747334849e-16,scaled absolute <= 1.0000000000000000e-10,pass
+trml,32x32x64,enabled,none,4,uniform,ft_dx_x3,serial_tracking_enabled,5.2041704279304213e-18,1.2825750587648041e-15,scaled absolute <= 1.0000000000000000e-10,pass
+trml,32x32x64,enabled,none,4,uniform,ft_pos_x3,serial_tracking_enabled,2.7755575615628914e-17,6.3458140033259065e-16,scaled absolute <= 1.0000000000000000e-10,pass
+trml,32x32x64,enabled,none,4,uniform,ft_err_x3,serial_tracking_enabled,6.9388939039072284e-18,1.6950249998887059e-16,scaled absolute <= 1.0000000000000000e-10,pass
+trml,32x32x64,enabled,none,4,uniform,ft_dv_x3,serial_tracking_enabled,2.1684043449710089e-19,2.2080736099539286e-16,scaled absolute <= 1.0000000000000000e-10,pass
+trml,32x32x64,enabled,none,4,uniform,finite_fields,serial_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+trml,32x32x64,enabled,none,4,uniform,max_missed_samples,serial_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+trml,32x32x64,enabled,none,4,uniform,limit_events,serial_tracking_enabled,3.0000000000000000e+00,3.0000000000000000e+00,absolute <= 0,fail
