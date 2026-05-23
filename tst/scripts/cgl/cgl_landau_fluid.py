@@ -1,10 +1,6 @@
 # Regression coverage for the CGL Landau-fluid STS closure.
 #
-# Build this custom problem generator with:
-#   python run_tests.py cgl/cgl_landau_fluid \
-#       --cmake=-DPROBLEM=unit_tests/cgl_lf_quantitative_test
-#
-# The problem generator evaluates its quantitative reference comparison at
+# The built-in problem generator evaluates its quantitative reference comparison at
 # finalization and terminates nonzero on failure.
 
 import logging

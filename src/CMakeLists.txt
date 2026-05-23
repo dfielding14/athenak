@@ -120,6 +120,8 @@ add_executable(
         pgen/tests/collapse.cpp
         pgen/tests/cpaw.cpp
         pgen/tests/cshock.cpp
+        pgen/tests/cgl_fofc.cpp
+        pgen/tests/cgl_landau_fluid.cpp
         pgen/tests/divb_amr.cpp
         pgen/tests/diffusion.cpp
         pgen/tests/sts_diffusion.cpp

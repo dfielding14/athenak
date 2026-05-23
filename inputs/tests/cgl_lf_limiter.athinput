@@ -1,8 +1,7 @@
-# CGL Landau-fluid heat-flux limiter-collisionality test.
-# A mirror-limited face state suppresses the unlimited LF heat flux before the cap.
+# Routine CPU regression for LF limiter occupancy and strict stage admissibility.
 
 <job>
-basename = cgl_lf_limiter_heat_flux_suppression
+basename = cgl_lf_limiter
 
 <mesh>
 nghost = 2
@@ -34,21 +33,21 @@ sts_integrator = rkl2
 sts_max_dt_ratio = 1000.0
 cfl_number = 0.4
 nlim = 1
-tlim = 1.0e-5
+tlim = 0.005
 ndiag = 1
 
 <mhd>
 eos = cgl
 passive = false
 mirror_limiter = true
-backup_limiters = false
-limiter_nu_coll = 10.0
+backup_limiters = true
+limiter_nu_coll = 100.0
 cgl_heat_flux = landau_fluid
 cgl_heat_flux_integrator = sts
-lf_k_parallel = 1.0e-2
+cgl_lf_strict_admissibility = true
+lf_k_parallel = 6.283185307179586
 lf_coefficient_mode = background
 lf_c_parallel0 = 1.0
-cgl_lf_strict_admissibility = true
 reconstruct = plm
 rsolver = advect
 gamma = 1.666666666666667
@@ -60,14 +59,16 @@ bfloor = 1.0e-10
 
 <problem>
 pgen_name = cgl_landau_fluid
-test_mode = limiter_heat_flux_suppression
-mode_number = 1
+test_mode = limiter_stress
+limiter_kind = mirror
 rho0 = 1.0
 ppar0 = 1.0
-pperp0 = 2.0
+pperp0 = 1.75
 b0 = 1.0
 amp = 0.1
-limiter_suppression_max_ratio = 5.0e-2
-limiter_suppression_min_collisionless_ratio = 10.0
-validation_output = false
-validation_output_dir = docs/figures/data
+backup_bound_tol = 1.02
+
+<output1>
+file_type = hst
+data_format = %24.16e
+dcycle = 1

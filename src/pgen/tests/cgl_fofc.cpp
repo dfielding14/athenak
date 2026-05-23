@@ -3,7 +3,7 @@
 // Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the AthenaK collaboration
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
-//! \file cgl_fofc_end_to_end_test.cpp
+//! \file cgl_fofc.cpp
 //! \brief End-to-end test for CGL FOFC mutation of flux and face-EMF Kokkos views.
 
 #include <cmath>
@@ -207,7 +207,7 @@ void FinalizeFOFCMutationTest(ParameterInput *, Mesh *) {
 
 } // namespace
 
-void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
+void ProblemGenerator::CGLFOFC(ParameterInput *pin, const bool restart) {
   pgen_final_func = FinalizeFOFCMutationTest;
   user_srcs_func = ValidateFOFCMutation;
   if (restart) return;

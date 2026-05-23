@@ -95,13 +95,12 @@ column remains the conserved anisotropy variable for compatibility.
 Focused unit problems in `inputs/unit_tests/` exercise CGL transforms, CGL
 FOFC, LF parallel and perpendicular decay, magnetic-field-gradient coupling,
 flux limiting, limiter suppression, and a field-aligned wave. The LF
-quantitative pgen is `src/pgen/unit_tests/cgl_lf_quantitative_test.cpp`.
+quantitative pgen is the built-in `src/pgen/tests/cgl_landau_fluid.cpp`.
 
 Run the LF regression suite from `tst/`:
 
 ```bash
-python run_tests.py cgl/cgl_landau_fluid \
-    --cmake=-DPROBLEM=unit_tests/cgl_lf_quantitative_test
+python run_tests.py cgl/cgl_landau_fluid
 ```
 
 See also [Super Time Stepping](super_time_stepping.md) and

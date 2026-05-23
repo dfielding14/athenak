@@ -59,7 +59,7 @@ sfloor = 1.0e-12
 bfloor = 1.0e-10
 
 <problem>
-pgen_name = unit_tests/cgl_lf_quantitative_test
+pgen_name = cgl_landau_fluid
 test_mode = limiter_stress
 limiter_kind = mirror
 mode_number = 1

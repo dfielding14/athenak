@@ -1,7 +1,7 @@
-# AthenaK input for CGL FOFC end-to-end flux mutation test.
+# Routine CPU end-to-end CGL FOFC flux mutation regression.
 
 <job>
-basename = cgl_fofc_end_to_end_test
+basename = cgl_fofc
 
 <mesh>
 nghost = 3

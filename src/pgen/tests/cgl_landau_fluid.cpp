@@ -3,8 +3,8 @@
 // Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the AthenaK collaboration
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
-//! \file cgl_lf_quantitative_test.cpp
-//! \brief Quantitative unit-style tests for CGL Landau-fluid heat-flux STS.
+//! \file cgl_landau_fluid.cpp
+//! \brief Quantitative built-in tests for CGL Landau-fluid heat-flux transport.
 
 #include <sys/stat.h>
 
@@ -23,18 +23,12 @@
 #include "globals.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "eos/cgl_physics.hpp"
 #include "mhd/mhd.hpp"
 #include "parameter_input.hpp"
 #include "pgen/pgen.hpp"
 
 namespace {
-
-constexpr Real kSqrtTwoOverPi = 0.7978845608028654;
-constexpr Real kSqrtEightOverPi = 1.5957691216057308;
-constexpr Real kSqrtTwoPi = 2.5066282746310002;
-constexpr Real kSqrtEightPi = 5.013256549262000;
-constexpr Real kThreePiMinusEight = 1.4247779607693793;
-constexpr Real kCGLBackupCollisionRate = 1.0e10;
 
 enum class TestMode {
   parallel_decay,
@@ -282,10 +276,7 @@ Real BMagCell(ParameterInput *pin, Mesh *pm, const int q) {
 }
 
 Real LimitedHeatFlux(const Real q_unlimited, const Real q_max) {
-  if (q_max <= 0.0) {
-    return 0.0;
-  }
-  return q_unlimited*q_max/(q_max + std::abs(q_unlimited));
+  return cgl::LimitedHeatFlux(q_unlimited, q_max);
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -315,35 +306,9 @@ Real LimiterCollisionRate(ParameterInput *pin, const Real ppar, const Real pperp
   const bool backup_lim = GetBooleanOrFalse(pin, "mhd", "backup_limiters");
   const Real lim_coll = std::max(GetRealOrZero(pin, "mhd", "limiter_nu_coll"),
                                  static_cast<Real>(0.0));
-  const Real paniso = pperp - ppar;
   const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
-  Real rate = 0.0;
-
-  if (flim && backup_lim) {
-    if ((paniso <= static_cast<Real>(-0.7)*bsqr) && (paniso > -bsqr)) {
-      rate = std::max(rate, lim_coll);
-    } else if (paniso <= -bsqr) {
-      rate = std::max(rate, kCGLBackupCollisionRate);
-    }
-  } else if (flim) {
-    if (paniso <= static_cast<Real>(-0.7)*bsqr) {
-      rate = std::max(rate, lim_coll);
-    }
-  }
-
-  if (mlim && backup_lim) {
-    if ((paniso >= static_cast<Real>(0.5)*bsqr) && (paniso < bsqr)) {
-      rate = std::max(rate, lim_coll);
-    } else if (paniso >= static_cast<Real>(0.5)*bsqr) {
-      rate = std::max(rate, kCGLBackupCollisionRate);
-    }
-  } else if (mlim) {
-    if (paniso >= static_cast<Real>(0.5)*bsqr) {
-      rate = std::max(rate, lim_coll);
-    }
-  }
-
-  return rate;
+  return cgl::LimiterCollisionRate(ppar, pperp, bsqr, lim_coll, mlim, flim,
+                                   backup_lim);
 }
 
 Real EffectiveCollisionFrequency(ParameterInput *pin, const Real ppar, const Real pperp,
@@ -367,12 +332,12 @@ Real FaceCParallel(ParameterInput *pin, const Real rho, const Real ppar) {
 }
 
 Real ChiPerp(const Real cpar, const Real lf_k, const Real nu_eff) {
-  const Real denom = kSqrtTwoPi*cpar*lf_k + nu_eff;
+  const Real denom = cgl::kSqrtTwoPi*cpar*lf_k + nu_eff;
   return (denom > 0.0) ? static_cast<Real>(2.0)*SQR(cpar)/denom : 0.0;
 }
 
 Real ChiParallel(const Real cpar, const Real lf_k, const Real nu_eff) {
-  const Real denom = kSqrtEightPi*cpar*lf_k + kThreePiMinusEight*nu_eff;
+  const Real denom = cgl::kSqrtEightPi*cpar*lf_k + cgl::kThreePiMinusEight*nu_eff;
   return (denom > 0.0) ? static_cast<Real>(8.0)*SQR(cpar)/denom : 0.0;
 }
 
@@ -396,7 +361,7 @@ Real GradBMomentFlux(ParameterInput *pin, Mesh *pm, const int face) {
   const Real nu_eff = EffectiveCollisionFrequency(pin, ppar, pperp, bx, by, bz);
   const Real chi_perp = ChiPerp(cpar, lf_k, nu_eff);
   const Real qperp_l = -chi_perp*(-pperp*(1.0 - pperp/ppar)*gradpar_b/bmag_face);
-  const Real qperp = LimitedHeatFlux(qperp_l, kSqrtTwoOverPi*cpar*pperp);
+  const Real qperp = LimitedHeatFlux(qperp_l, cgl::kSqrtTwoOverPi*cpar*pperp);
   return bhx*qperp/bmag_face;
 }
 
@@ -599,7 +564,7 @@ Real LimitedParallelHeatFlux(ParameterInput *pin, Mesh *pm, const int face,
   const Real chi_parallel = ChiParallel(cpar, lf_k, nu_eff);
   const Real grad_tpar = (ppar_r/rho0 - ppar_l/rho0)/dx;
   q_unlimited = -chi_parallel*rho0*grad_tpar;
-  q_max = kSqrtEightOverPi*cpar*ppar_face;
+  q_max = cgl::kSqrtEightOverPi*cpar*ppar_face;
   return LimitedHeatFlux(q_unlimited, q_max);
 }
 
@@ -629,7 +594,7 @@ Real LimitedPerpHeatFlux(ParameterInput *pin, Mesh *pm, const int face,
   const Real chi_perp = ChiPerp(cpar, lf_k, nu_eff);
   const Real grad_tperp = (pperp_r/rho0 - pperp_l/rho0)/dx;
   q_unlimited = -chi_perp*rho0*grad_tperp;
-  q_max = kSqrtTwoOverPi*cpar*pperp_face;
+  q_max = cgl::kSqrtTwoOverPi*cpar*pperp_face;
   return LimitedHeatFlux(q_unlimited, q_max);
 }
 
@@ -1264,7 +1229,7 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
 
 } // namespace
 
-void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
+void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   pgen_final_func = FinalizeCGLLFQuantitative;
   if (restart) return;
 
