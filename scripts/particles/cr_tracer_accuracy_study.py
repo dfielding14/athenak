@@ -151,6 +151,8 @@ def _exact_bfield(profile: str, x: float, y: float, z: float,
         by += -bgrad*y*z
         bz += bgrad*z*z
         return [bx, by, bz]
+    if profile == "gradb":
+        return [bx, by, bz + bgrad*x]
     raise ValueError(f"Unsupported profile {profile}")
 
 
@@ -167,42 +169,54 @@ def _sample_error(summary: Dict, profile: str, b0: Sequence[float],
     return math.sqrt(sum(error*error for error in errors)/len(errors))
 
 
-def _field_slice(profile: str, b0: Sequence[float], bamp: float,
-                 z_slice: float, npoint: int = 121):
-    coords = np.linspace(-0.5, 0.5, npoint)
-    dbx = np.zeros((npoint, npoint))
-    dby = np.zeros((npoint, npoint))
+def _field_plane(profile: str, b0: Sequence[float], bgrad: float,
+                 bamp: float, bwave: float, plane: str, fixed: float,
+                 limits: Sequence[float], npoint: int = 121):
+    coords = np.linspace(limits[0], limits[1], npoint)
+    du = np.zeros((npoint, npoint))
+    dv = np.zeros((npoint, npoint))
     dbz = np.zeros((npoint, npoint))
-    for j, y in enumerate(coords):
-        for i, x in enumerate(coords):
-            bfield = _exact_bfield(profile, x, y, z_slice, b0, bamp=bamp)
-            dbx[j, i] = bfield[0] - b0[0]
-            dby[j, i] = bfield[1] - b0[1]
+    for j, vcoord in enumerate(coords):
+        for i, ucoord in enumerate(coords):
+            if plane == "xy":
+                position = (ucoord, vcoord, fixed)
+                components = (0, 1)
+            elif plane == "xz":
+                position = (ucoord, fixed, vcoord)
+                components = (0, 2)
+            else:
+                raise ValueError(f"Unsupported qualitative plane {plane}")
+            bfield = _exact_bfield(
+                profile, *position, b0, bgrad=bgrad, bamp=bamp, bwave=bwave)
+            du[j, i] = bfield[components[0]]
+            dv[j, i] = bfield[components[1]]
             dbz[j, i] = bfield[2] - b0[2]
-    return coords, dbx, dby, dbz
+    return coords, du, dv, dbz
 
 
-def _draw_field_slice(ax, profile: str, b0: Sequence[float], bamp: float,
-                      z_slice: float, title: str):
-    coords, dbx, dby, dbz = _field_slice(profile, b0, bamp, z_slice)
+def _draw_field_plane(ax, config: Dict, limits: Sequence[float]):
+    coords, du, dv, dbz = _field_plane(
+        config["profile"], config["b0"], config["bgrad"], config["bamp"],
+        config["bwave"], config["plane"], config["fixed"], limits)
     limit = max(float(np.max(np.abs(dbz))), 1.0e-12)
     image = ax.pcolormesh(
         coords, coords, dbz, cmap="RdBu_r", shading="auto",
         vmin=-limit, vmax=limit)
-    transverse = np.hypot(dbx, dby)
-    unit_x = np.divide(dbx, transverse, out=np.zeros_like(dbx),
+    transverse = np.hypot(du, dv)
+    unit_u = np.divide(du, transverse, out=np.zeros_like(du),
                        where=transverse > 0.0)
-    unit_y = np.divide(dby, transverse, out=np.zeros_like(dby),
+    unit_v = np.divide(dv, transverse, out=np.zeros_like(dv),
                        where=transverse > 0.0)
-    ax.streamplot(
-        coords, coords, unit_x, unit_y, density=0.9,
-        color="#262626", linewidth=0.55, arrowsize=0.65)
-    ax.set_title(title)
-    ax.set_xlabel("x")
-    ax.set_ylabel("y")
+    if float(np.max(transverse)) > 0.0:
+        ax.streamplot(
+            coords, coords, unit_u, unit_v, density=0.9,
+            color="#262626", linewidth=0.55, arrowsize=0.65)
+    ax.set_title(config["title"])
+    ax.set_xlabel(config["plane"][0])
+    ax.set_ylabel(config["plane"][1])
     ax.set_aspect("equal")
-    ax.set_xlim(-0.5, 0.5)
-    ax.set_ylim(-0.5, 0.5)
+    ax.set_xlim(*limits)
+    ax.set_ylim(*limits)
     return image
 
 
@@ -212,7 +226,13 @@ def _particle_tracks(run_dir: Path, per_species: int) -> Dict:
         for path in (run_dir / "prst").rglob("*.prst")
     ]
     snapshots.sort(key=lambda snapshot: snapshot["time"])
-    first = snapshots[0]["particles"]
+    initial_time = snapshots[0]["time"]
+    first = [
+        particle
+        for snapshot in snapshots
+        if math.isclose(snapshot["time"], initial_time)
+        for particle in snapshot["particles"]
+    ]
     selected = []
     for species in sorted({particle["species"] for particle in first}):
         species_tags = sorted(
@@ -230,87 +250,343 @@ def _particle_tracks(run_dir: Path, per_species: int) -> Dict:
     return tracks
 
 
-def study_qualitative_figures(args: argparse.Namespace) -> Dict:
-    z_slice = 0.125
-    smooth_b0 = (0.1, -0.2, 1.0)
-    turbulent_b0 = (0.0, 0.0, 1.0)
+def _project_track(points: Sequence, plane: str, unwrap: bool) -> np.ndarray:
+    values = np.asarray(points)
+    indices = (1, 2) if plane == "xy" else (1, 3)
+    projected = values[:, indices].copy()
+    if unwrap:
+        for axis in range(2):
+            jumps = np.diff(projected[:, axis])
+            offsets = np.where(jumps > 0.5, -1.0, 0.0)
+            offsets += np.where(jumps < -0.5, 1.0, 0.0)
+            projected[1:, axis] += np.cumsum(offsets)
+    else:
+        jumps = np.max(np.abs(np.diff(projected, axis=0)), axis=1)
+        projected[1:][jumps > 0.5] = np.nan
+    return projected
 
-    fig, axes = plt.subplots(1, 2, figsize=(9.2, 4.1), constrained_layout=True)
-    image = _draw_field_slice(
-        axes[0], "sinusoidal_divb_free", smooth_b0, 0.015, z_slice,
-        "Smooth divergence-free field")
-    fig.colorbar(image, ax=axes[0], label="delta Bz")
-    image = _draw_field_slice(
-        axes[1], "turbulent", turbulent_b0, 0.01, z_slice,
-        "Multi-mode turbulent field")
-    fig.colorbar(image, ax=axes[1], label="delta Bz")
-    fig.suptitle("Prescribed magnetic structure, z = 0.125")
-    field_path = args.output_dir / "qualitative_magnetic_field_slices.png"
-    fig.savefig(field_path, dpi=180)
-    plt.close(fig)
 
-    smooth_dir = _run(
-        args, "qualitative_smooth_track", "cr_smooth_orbit_reference.athinput",
-        [
-            "job/basename=cr_acc_qual_smooth",
+QUALITATIVE_CASES = [
+    {
+        "case": "uniform_gyro",
+        "title": "1. Uniform-B gyro orbit",
+        "input": "cr_uniform_gyro.athinput",
+        "profile": "uniform",
+        "b0": (0.0, 0.0, 1.0),
+        "bgrad": 1.0,
+        "bamp": 0.05,
+        "bwave": 1.0,
+        "plane": "xy",
+        "fixed": 0.0,
+        "unwrap": True,
+        "limits": (-2.1, 1.1),
+        "per_species": 1,
+        "ranks": 1,
+        "overrides": [
+            "job/basename=cr_acc_qual_uniform_gyro",
+            "particles/cfl_part=0.025",
+            "time/nlim=512",
+            "time/tlim=6.4",
+            "output1/dt=0.04",
+            "output2/dt=6.4",
+        ],
+    },
+    {
+        "case": "uniform_amr_mpi",
+        "title": "2. Uniform-B AMR/MPI crossing",
+        "input": "cr_uniform_gyro_amr.athinput",
+        "profile": "uniform",
+        "b0": (0.0, 0.0, 1.0),
+        "bgrad": 1.0,
+        "bamp": 0.05,
+        "bwave": 1.0,
+        "plane": "xy",
+        "fixed": 0.0,
+        "unwrap": False,
+        "limits": (-0.5, 0.5),
+        "per_species": 2,
+        "ranks": 2,
+        "overrides": [
+            "job/basename=cr_acc_qual_uniform_amr_mpi",
+            "time/nlim=512",
+            "time/tlim=0.64",
+            "output1/dt=0.02",
+            "output2/dt=0.64",
+            "output3/dt=0.64",
+        ],
+    },
+    {
+        "case": "linear_gather",
+        "title": "3. Linear gather sample point",
+        "input": "cr_linear_gather.athinput",
+        "profile": "linear_cross",
+        "b0": (0.3, -0.2, 1.0),
+        "bgrad": 0.7,
+        "bamp": 0.05,
+        "bwave": 1.0,
+        "plane": "xy",
+        "fixed": 0.047,
+        "unwrap": False,
+        "limits": (-0.5, 0.5),
+        "per_species": 1,
+        "ranks": 1,
+        "overrides": [
+            "job/basename=cr_acc_qual_linear_gather",
+            "particles/interpolation=trilinear",
+            "time/nlim=1",
+            "time/tlim=0.01",
+            "output1/dt=0.01",
+        ],
+    },
+    {
+        "case": "manufactured_gather",
+        "title": "4. Smooth divergence-free gather",
+        "input": "cr_manufactured_divb_free.athinput",
+        "profile": "sinusoidal_divb_free",
+        "b0": (0.1, -0.2, 1.0),
+        "bgrad": 1.0,
+        "bamp": 0.025,
+        "bwave": 1.0,
+        "plane": "xy",
+        "fixed": -0.11,
+        "unwrap": False,
+        "limits": (-0.5, 0.5),
+        "per_species": 1,
+        "ranks": 1,
+        "overrides": [
+            "job/basename=cr_acc_qual_manufactured_gather",
+            "particles/interpolation=trilinear",
+            "time/nlim=1",
+            "time/tlim=0.01",
+            "output1/dt=0.01",
+        ],
+    },
+    {
+        "case": "smooth_orbit_reference",
+        "title": "5. Smooth-field orbit",
+        "input": "cr_smooth_orbit_reference.athinput",
+        "profile": "sinusoidal_divb_free",
+        "b0": (0.1, -0.2, 1.0),
+        "bgrad": 1.0,
+        "bamp": 0.015,
+        "bwave": 1.0,
+        "plane": "xy",
+        "fixed": 0.07,
+        "unwrap": False,
+        "limits": (-0.5, 0.5),
+        "per_species": 1,
+        "ranks": 1,
+        "overrides": [
+            "job/basename=cr_acc_qual_smooth_orbit",
             "time/nlim=256",
-            "time/tlim=0.32",
-            "output1/dt=0.01",
-            "output2/dt=0.32",
-        ])
-    turbulent_dir = _run(
-        args, "qualitative_turbulent_tracks", "cr_frozen_turbulent_field.athinput",
-        [
+            "time/tlim=1.6",
+            "output1/dt=0.02",
+            "output2/dt=1.6",
+        ],
+    },
+    {
+        "case": "magnetic_mirror",
+        "title": "6. Magnetic mirror",
+        "input": "cr_magnetic_mirror.athinput",
+        "profile": "mirror",
+        "b0": (0.0, 0.0, 1.0),
+        "bgrad": 0.8,
+        "bamp": 0.05,
+        "bwave": 1.0,
+        "plane": "xz",
+        "fixed": -0.03,
+        "unwrap": False,
+        "limits": (-0.5, 0.5),
+        "per_species": 1,
+        "ranks": 1,
+        "overrides": [
+            "job/basename=cr_acc_qual_mirror",
+            "time/nlim=256",
+            "time/tlim=1.6",
+            "output1/dt=0.02",
+            "output2/dt=1.6",
+        ],
+    },
+    {
+        "case": "gradb_drift",
+        "title": "7. Grad-B drift",
+        "input": "cr_gradb_curvature_drift.athinput",
+        "profile": "gradb",
+        "b0": (0.0, 0.0, 1.0),
+        "bgrad": 1.0,
+        "bamp": 0.05,
+        "bwave": 1.0,
+        "plane": "xy",
+        "fixed": 0.0,
+        "unwrap": False,
+        "limits": (-0.5, 0.5),
+        "per_species": 1,
+        "ranks": 1,
+        "overrides": [
+            "job/basename=cr_acc_qual_gradb",
+            "problem/Bgrad=1.0",
+            "particles/cfl_part=0.01",
+            "particles/subcycle_gyro_fraction=0.01",
+            "time/nlim=1024",
+            "time/tlim=1.6",
+            "output1/dt=0.02",
+            "output2/dt=1.6",
+        ],
+    },
+    {
+        "case": "amr_boundary",
+        "title": "8. Smooth-field AMR boundary",
+        "input": "cr_amr_boundary_convergence.athinput",
+        "profile": "sinusoidal_divb_free",
+        "b0": (0.1, -0.2, 1.0),
+        "bgrad": 1.0,
+        "bamp": 0.015,
+        "bwave": 1.0,
+        "plane": "xy",
+        "fixed": 0.125,
+        "unwrap": False,
+        "limits": (-0.5, 0.5),
+        "per_species": 2,
+        "ranks": 2,
+        "overrides": [
+            "job/basename=cr_acc_qual_amr_boundary",
+            "time/nlim=512",
+            "time/tlim=0.64",
+            "output1/dt=0.02",
+            "output2/dt=0.64",
+        ],
+    },
+    {
+        "case": "mpi_decomposition",
+        "title": "9. MPI decomposition crossing",
+        "input": "cr_mpi_decomposition_invariance.athinput",
+        "profile": "uniform",
+        "b0": (0.0, 0.0, 1.0),
+        "bgrad": 1.0,
+        "bamp": 0.05,
+        "bwave": 1.0,
+        "plane": "xy",
+        "fixed": 0.0,
+        "unwrap": False,
+        "limits": (-0.5, 0.5),
+        "per_species": 2,
+        "ranks": 2,
+        "overrides": [
+            "job/basename=cr_acc_qual_mpi_decomposition",
+            "time/nlim=256",
+            "time/tlim=1.0",
+            "output1/dt=0.02",
+            "output2/dt=1.0",
+        ],
+    },
+    {
+        "case": "isotropic_ensemble",
+        "title": "10. Isotropic ensemble",
+        "input": "cr_isotropic_ensemble.athinput",
+        "profile": "uniform",
+        "b0": (0.0, 0.0, 1.0),
+        "bgrad": 1.0,
+        "bamp": 0.05,
+        "bwave": 1.0,
+        "plane": "xy",
+        "fixed": 0.0,
+        "unwrap": False,
+        "limits": (-0.5, 0.5),
+        "per_species": 3,
+        "ranks": 1,
+        "overrides": [
+            "job/basename=cr_acc_qual_isotropic",
+            "time/nlim=128",
+            "time/tlim=0.8",
+            "output1/dt=0.02",
+            "output2/dt=0.8",
+            "output3/dt=0.8",
+            "output4/dt=0.8",
+            "output5/dt=0.8",
+            "output6/dt=0.8",
+        ],
+    },
+    {
+        "case": "frozen_turbulent",
+        "title": "11. Frozen multi-mode field",
+        "input": "cr_frozen_turbulent_field.athinput",
+        "profile": "turbulent",
+        "b0": (0.0, 0.0, 1.0),
+        "bgrad": 1.0,
+        "bamp": 0.01,
+        "bwave": 1.0,
+        "plane": "xy",
+        "fixed": 0.0,
+        "unwrap": False,
+        "limits": (-0.5, 0.5),
+        "per_species": 3,
+        "ranks": 1,
+        "overrides": [
             "job/basename=cr_acc_qual_turbulent",
-            "time/nlim=64",
-            "time/tlim=0.12",
-            "output1/dt=0.01",
-            "output2/dt=0.12",
-            "output3/dt=0.12",
-        ])
-    smooth_tracks = _particle_tracks(smooth_dir, per_species=1)
-    turbulent_tracks = _particle_tracks(turbulent_dir, per_species=3)
+            "time/nlim=256",
+            "time/tlim=1.28",
+            "output1/dt=0.02",
+            "output2/dt=1.28",
+            "output3/dt=1.28",
+        ],
+    },
+]
 
-    fig, axes = plt.subplots(1, 2, figsize=(9.2, 4.1), constrained_layout=True)
-    image = _draw_field_slice(
-        axes[0], "sinusoidal_divb_free", smooth_b0, 0.015, z_slice,
-        "Single CR in smooth field")
-    for points in smooth_tracks.values():
-        values = np.asarray(points)
-        axes[0].plot(values[:, 1], values[:, 2], color="#f5f5f5",
-                     linewidth=2.4)
-        axes[0].scatter(values[0, 1], values[0, 2], color="#1b9e77",
-                        edgecolor="white", s=34, zorder=4, label="start")
-        axes[0].scatter(values[-1, 1], values[-1, 2], color="#d95f02",
-                        edgecolor="white", s=34, zorder=4, label="end")
-    axes[0].legend(loc="lower left", framealpha=0.9)
-    fig.colorbar(image, ax=axes[0], label="delta Bz")
 
-    image = _draw_field_slice(
-        axes[1], "turbulent", turbulent_b0, 0.01, z_slice,
-        "Six CRs in multi-mode field")
-    colors = plt.cm.tab10(np.linspace(0.0, 0.8, len(turbulent_tracks)))
-    for color, (key, points) in zip(colors, sorted(turbulent_tracks.items())):
-        values = np.asarray(points)
-        axes[1].plot(values[:, 1], values[:, 2], color=color,
-                     linewidth=1.65, label=f"s{key[0]} tag {key[1]}")
-        axes[1].scatter(values[0, 1], values[0, 2], color=color,
-                        marker="o", s=16, zorder=4)
-        axes[1].scatter(values[-1, 1], values[-1, 2], color=color,
-                        marker="x", s=22, zorder=4)
-    axes[1].legend(loc="upper left", fontsize=7, framealpha=0.85)
-    fig.colorbar(image, ax=axes[1], label="delta Bz")
-    fig.suptitle("Projected CR trajectories over initial field slices")
-    track_path = args.output_dir / "qualitative_cr_trajectories.png"
-    fig.savefig(track_path, dpi=180)
-    plt.close(fig)
-    return {
-        "field_slice_z": z_slice,
-        "field_figure": _artifact_path(field_path),
-        "trajectory_figure": _artifact_path(track_path),
-        "smooth_trajectory_count": len(smooth_tracks),
-        "turbulent_trajectory_count": len(turbulent_tracks),
-    }
+def study_qualitative_figures(args: argparse.Namespace) -> Dict:
+    results = {}
+    for config in QUALITATIVE_CASES:
+        run_dir = _run(
+            args, f"qualitative_{config['case']}", config["input"],
+            config["overrides"], ranks=config["ranks"])
+        tracks = _particle_tracks(run_dir, per_species=config["per_species"])
+        if not tracks or any(len(points) < 2 for points in tracks.values()):
+            raise ValueError(
+                f"Qualitative case {config['case']} has an incomplete track")
+        fig, ax = plt.subplots(figsize=(5.4, 4.5), constrained_layout=True)
+        image = _draw_field_plane(ax, config, config["limits"])
+        seen_species = set()
+        for key, points in sorted(tracks.items()):
+            projected = _project_track(points, config["plane"], config["unwrap"])
+            indices = (1, 2) if config["plane"] == "xy" else (1, 3)
+            raw_projected = np.asarray(points)[:, indices]
+            color = plt.cm.tab10(key[0] % 10)
+            label = f"species {key[0]}" if key[0] not in seen_species else None
+            ax.plot(projected[:, 0], projected[:, 1], color=color,
+                    linewidth=1.65, label=label)
+            markers = projected if config["unwrap"] else raw_projected
+            ax.scatter(markers[0, 0], markers[0, 1], color=color,
+                       edgecolor="white", marker="o", s=27, zorder=4)
+            ax.scatter(markers[-1, 0], markers[-1, 1], color=color,
+                       edgecolor="white", marker="X", s=33, zorder=4)
+            seen_species.add(key[0])
+        final_time = max(points[-1][0] for points in tracks.values())
+        ax.text(
+            0.02, 0.98, f"t = 0 to {final_time:.2f}",
+            transform=ax.transAxes, va="top", fontsize=8,
+            bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.78})
+        if config["profile"] in ("uniform", "linear_cross"):
+            ax.text(
+                0.02, 0.90, "Bz - B0z = 0",
+                transform=ax.transAxes, va="top", fontsize=8,
+                bbox={"facecolor": "white", "edgecolor": "none",
+                      "alpha": 0.78})
+        if len(tracks) > 1:
+            ax.legend(loc="lower right", fontsize=8, framealpha=0.85)
+        if config["profile"] not in ("uniform", "linear_cross"):
+            fig.colorbar(image, ax=ax, label="Bz - B0z")
+        fig_path = args.output_dir / f"qualitative_{config['case']}.png"
+        fig.savefig(fig_path, dpi=180)
+        plt.close(fig)
+        results[config["case"]] = {
+            "figure": _artifact_path(fig_path),
+            "input": config["input"],
+            "plane": config["plane"],
+            "fixed_coordinate": config["fixed"],
+            "final_time": final_time,
+            "track_count": len(tracks),
+        }
+    return results
 
 
 def study_uniform_gyro(args: argparse.Namespace) -> Dict:
@@ -806,10 +1082,11 @@ def main() -> int:
         lines.append(f"- figure: `{case['figure']}`")
         lines.append("")
     lines.append("## qualitative_figures")
-    lines.append(
-        f"- field structure: `{results['qualitative_figures']['field_figure']}`")
-    lines.append(
-        f"- CR trajectories: `{results['qualitative_figures']['trajectory_figure']}`")
+    for case, result in results["qualitative_figures"].items():
+        lines.append(
+            f"- {case}: `{result['figure']}` "
+            f"(`t = 0` to `{result['final_time']:.2f}`, "
+            f"`{result['track_count']}` tracks)")
     md_path.write_text("\n".join(lines).rstrip() + "\n")
     print(f"wrote {json_path}")
     print(f"wrote {md_path}")

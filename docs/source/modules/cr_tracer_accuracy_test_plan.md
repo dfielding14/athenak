@@ -147,10 +147,17 @@ Qualitative figure types:
 
 Implemented documentation context figures:
 
-- initial smooth and multi-mode prescribed magnetic-field slices, showing
-  `delta Bz` and normalized in-plane perturbation streamlines,
-- projected representative trajectories for one smooth-field particle and six
-  multi-mode-field particles, with start/end markers.
+- one magnetic-field and representative-particle panel for each of the 11
+  validation problems, generated from its corresponding accuracy input,
+- `Bz - B0z` color structure with in-plane field streamlines and particle
+  start/end markers,
+- longer companion trajectories for all moving-particle problems, including a
+  near-gyroperiod uniform-field orbit and extended AMR/MPI, mirror, drift,
+  ensemble, and multi-mode paths,
+- stationary point overlays for the two gather-only problems, since those
+  tests intentionally isolate interpolation rather than transport,
+- an `x-z` magnetic-mirror panel, where the mirror-gradient structure is
+  visible, with the remaining panels shown in `x-y`.
 
 All figure captions should state which error source is isolated.  For example,
 do not caption a smooth-orbit result as an interpolation convergence result

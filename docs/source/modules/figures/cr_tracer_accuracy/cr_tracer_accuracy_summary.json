@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-05-22T20:59:38",
+  "created_at": "2026-05-22T21:13:59",
   "athena": "build-cr-robust-mpi/src/athena",
   "cases": [
     {
@@ -153,10 +153,93 @@
     }
   ],
   "qualitative_figures": {
-    "field_slice_z": 0.125,
-    "field_figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_magnetic_field_slices.png",
-    "trajectory_figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_cr_trajectories.png",
-    "smooth_trajectory_count": 1,
-    "turbulent_trajectory_count": 6
+    "uniform_gyro": {
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_uniform_gyro.png",
+      "input": "cr_uniform_gyro.athinput",
+      "plane": "xy",
+      "fixed_coordinate": 0.0,
+      "final_time": 6.4,
+      "track_count": 1
+    },
+    "uniform_amr_mpi": {
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_uniform_amr_mpi.png",
+      "input": "cr_uniform_gyro_amr.athinput",
+      "plane": "xy",
+      "fixed_coordinate": 0.0,
+      "final_time": 0.64,
+      "track_count": 4
+    },
+    "linear_gather": {
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_linear_gather.png",
+      "input": "cr_linear_gather.athinput",
+      "plane": "xy",
+      "fixed_coordinate": 0.047,
+      "final_time": 0.01,
+      "track_count": 1
+    },
+    "manufactured_gather": {
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_manufactured_gather.png",
+      "input": "cr_manufactured_divb_free.athinput",
+      "plane": "xy",
+      "fixed_coordinate": -0.11,
+      "final_time": 0.01,
+      "track_count": 1
+    },
+    "smooth_orbit_reference": {
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_smooth_orbit_reference.png",
+      "input": "cr_smooth_orbit_reference.athinput",
+      "plane": "xy",
+      "fixed_coordinate": 0.07,
+      "final_time": 1.6,
+      "track_count": 1
+    },
+    "magnetic_mirror": {
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_magnetic_mirror.png",
+      "input": "cr_magnetic_mirror.athinput",
+      "plane": "xz",
+      "fixed_coordinate": -0.03,
+      "final_time": 1.6,
+      "track_count": 1
+    },
+    "gradb_drift": {
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_gradb_drift.png",
+      "input": "cr_gradb_curvature_drift.athinput",
+      "plane": "xy",
+      "fixed_coordinate": 0.0,
+      "final_time": 1.6,
+      "track_count": 1
+    },
+    "amr_boundary": {
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_amr_boundary.png",
+      "input": "cr_amr_boundary_convergence.athinput",
+      "plane": "xy",
+      "fixed_coordinate": 0.125,
+      "final_time": 0.64,
+      "track_count": 4
+    },
+    "mpi_decomposition": {
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_mpi_decomposition.png",
+      "input": "cr_mpi_decomposition_invariance.athinput",
+      "plane": "xy",
+      "fixed_coordinate": 0.0,
+      "final_time": 1.0,
+      "track_count": 4
+    },
+    "isotropic_ensemble": {
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_isotropic_ensemble.png",
+      "input": "cr_isotropic_ensemble.athinput",
+      "plane": "xy",
+      "fixed_coordinate": 0.0,
+      "final_time": 0.8,
+      "track_count": 6
+    },
+    "frozen_turbulent": {
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/qualitative_frozen_turbulent.png",
+      "input": "cr_frozen_turbulent_field.athinput",
+      "plane": "xy",
+      "fixed_coordinate": 0.0,
+      "final_time": 1.28,
+      "track_count": 6
+    }
   }
 }

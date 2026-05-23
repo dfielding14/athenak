@@ -40,5 +40,14 @@ orphan: true
 - figure: `docs/source/modules/figures/cr_tracer_accuracy/frozen_turbulent_moments.png`
 
 ## qualitative_figures
-- field structure: `docs/source/modules/figures/cr_tracer_accuracy/qualitative_magnetic_field_slices.png`
-- CR trajectories: `docs/source/modules/figures/cr_tracer_accuracy/qualitative_cr_trajectories.png`
+- uniform_gyro: `docs/source/modules/figures/cr_tracer_accuracy/qualitative_uniform_gyro.png` (`t = 0` to `6.40`, `1` tracks)
+- uniform_amr_mpi: `docs/source/modules/figures/cr_tracer_accuracy/qualitative_uniform_amr_mpi.png` (`t = 0` to `0.64`, `4` tracks)
+- linear_gather: `docs/source/modules/figures/cr_tracer_accuracy/qualitative_linear_gather.png` (`t = 0` to `0.01`, `1` tracks)
+- manufactured_gather: `docs/source/modules/figures/cr_tracer_accuracy/qualitative_manufactured_gather.png` (`t = 0` to `0.01`, `1` tracks)
+- smooth_orbit_reference: `docs/source/modules/figures/cr_tracer_accuracy/qualitative_smooth_orbit_reference.png` (`t = 0` to `1.60`, `1` tracks)
+- magnetic_mirror: `docs/source/modules/figures/cr_tracer_accuracy/qualitative_magnetic_mirror.png` (`t = 0` to `1.60`, `1` tracks)
+- gradb_drift: `docs/source/modules/figures/cr_tracer_accuracy/qualitative_gradb_drift.png` (`t = 0` to `1.60`, `1` tracks)
+- amr_boundary: `docs/source/modules/figures/cr_tracer_accuracy/qualitative_amr_boundary.png` (`t = 0` to `0.64`, `4` tracks)
+- mpi_decomposition: `docs/source/modules/figures/cr_tracer_accuracy/qualitative_mpi_decomposition.png` (`t = 0` to `1.00`, `4` tracks)
+- isotropic_ensemble: `docs/source/modules/figures/cr_tracer_accuracy/qualitative_isotropic_ensemble.png` (`t = 0` to `0.80`, `6` tracks)
+- frozen_turbulent: `docs/source/modules/figures/cr_tracer_accuracy/qualitative_frozen_turbulent.png` (`t = 0` to `1.28`, `6` tracks)
