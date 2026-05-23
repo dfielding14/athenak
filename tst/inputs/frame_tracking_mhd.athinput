@@ -30,7 +30,7 @@ nx3 = 1
 evolution = dynamic
 integrator = rk2
 cfl_number = 0.4
-nlim = 4
+nlim = 3
 tlim = 10.0
 ndiag = 100
 
@@ -52,13 +52,13 @@ wl = 0.5
 bxl = 0.5641895835477562
 byl = 1.0155412503859613
 bzl = 0.5641895835477562
-dr = 1.0
-pr = 1.0
-ur = 0.0
-vr = 0.0
-wr = 0.0
+dr = 1.08
+pr = 0.95
+ur = 1.2
+vr = 0.01
+wr = 0.5
 bxr = 0.5641895835477562
-byr = 1.1283791670955125
+byr = 1.0155412503859613
 bzr = 0.5641895835477562
 
 <frame_tracking>
@@ -82,3 +82,11 @@ max_boost_change_rate = 1.0
 file_type = hst
 data_format = %24.16e
 dcycle = 1
+
+<output2>
+file_type = tab
+variable = mhd_u_bcc
+data_format = %24.16e
+dcycle = 1
+slice_x2 = 0.0
+slice_x3 = 0.0

@@ -81,6 +81,76 @@ enum FrameTrackingWeightMode {
 
 constexpr int kFrameTrackingStateVersion = 1;
 
+const std::vector<std::pair<std::string, std::string>> &RemovedAliases() {
+  static const std::vector<std::pair<std::string, std::string>> aliases = {
+      {"enable", "enabled"},
+      {"ft_apply_every", "apply_every"},
+      {"t_start", "start_time"},
+      {"t_frame_tracking_start", "start_time"},
+      {"ndiag", "diagnostic_every"},
+      {"target_variable", "target"},
+      {"derived_variable", "target"},
+      {"min", "target_min"},
+      {"max", "target_max"},
+      {"ft_temp_lo", "target_min"},
+      {"ft_temp_hi", "target_max"},
+      {"center", "target_center"},
+      {"reacquire_scale", "target_scale"},
+      {"ft_mode", "mode"},
+      {"ft_position_signal", "position_signal"},
+      {"ft_max_boost_change_mode", "max_boost_change_mode"},
+      {"ft_position_blend", "position_blend"},
+      {"ft_tau_avg", "tau_avg"},
+      {"ft_tau_relax", "tau_relax"},
+      {"ft_tau_vel", "tau_vel"},
+      {"ft_tau_int", "tau_int"},
+      {"ft_int_max_abs", "int_max_abs"},
+      {"ft_int_leak_tau", "int_leak_tau"},
+      {"ft_int_unsat_only", "int_unsat_only"},
+      {"ft_weight_floor", "weight_floor"},
+      {"ft_min_global_weight", "min_global_weight"},
+      {"ft_max_abs_boost", "max_abs_boost"},
+      {"ft_max_boost_change", "max_boost_change"},
+      {"ft_max_boost_change_rate", "max_boost_change_rate"},
+      {"ft_reacquire_expand_factor", "reacquire_expand_factor"},
+      {"ft_reacquire_max_expand", "reacquire_max_expand"},
+      {"ft_reacquire_recover_updates", "reacquire_recover_updates"},
+      {"ft_reacquire_leak_on_miss", "reacquire_leak_on_miss"},
+      {"ft_boundary_guard_enable", "boundary_guard_enable"},
+      {"ft_boundary_guard_cells", "boundary_guard_cells"},
+      {"ft_boundary_guard_min_scale", "boundary_guard_min_scale"},
+      {"axis", "axes"},
+      {"directions", "axes"},
+      {"z_target", "x3_target"},
+      {"ft_z_target", "x3_target"},
+      {"z_lower_limit", "x3_lower_limit"},
+      {"ft_lowzlim", "x3_lower_limit"},
+      {"z_upper_limit", "x3_upper_limit"},
+      {"ft_uppzlim", "x3_upper_limit"},
+      {"ft_use_lowzlim", "x3_lower_limit"},
+      {"ft_use_uppzlim", "x3_upper_limit"},
+      {"x1_target_position", "x1_target"},
+      {"x2_target_position", "x2_target"},
+      {"x3_target_position", "x3_target"},
+      {"target_x1", "x1_target"},
+      {"target_x2", "x2_target"},
+      {"target_x3", "x3_target"},
+      {"x1_min_limit", "x1_lower_limit"},
+      {"x2_min_limit", "x2_lower_limit"},
+      {"x3_min_limit", "x3_lower_limit"},
+      {"x1_low_limit", "x1_lower_limit"},
+      {"x2_low_limit", "x2_lower_limit"},
+      {"x3_low_limit", "x3_lower_limit"},
+      {"x1_max_limit", "x1_upper_limit"},
+      {"x2_max_limit", "x2_upper_limit"},
+      {"x3_max_limit", "x3_upper_limit"},
+      {"x1_upp_limit", "x1_upper_limit"},
+      {"x2_upp_limit", "x2_upper_limit"},
+      {"x3_upp_limit", "x3_upper_limit"}
+  };
+  return aliases;
+}
+
 std::string TrimCopy(const std::string &input) {
   const auto first = input.find_first_not_of(" \t\r\n");
   if (first == std::string::npos) {
@@ -168,43 +238,6 @@ bool ReadStringAny(ParameterInput *pin, const std::string &block,
     }
   }
   return false;
-}
-
-Real GetOrAddRealAny(ParameterInput *pin, const std::string &block,
-                     const std::vector<std::string> &names, const Real default_value) {
-  Real value = default_value;
-  if (ReadRealAny(pin, block, names, value)) {
-    return value;
-  }
-  return pin->GetOrAddReal(block, names.front(), default_value);
-}
-
-int GetOrAddIntegerAny(ParameterInput *pin, const std::string &block,
-                       const std::vector<std::string> &names, const int default_value) {
-  int value = default_value;
-  if (ReadIntegerAny(pin, block, names, value)) {
-    return value;
-  }
-  return pin->GetOrAddInteger(block, names.front(), default_value);
-}
-
-bool GetOrAddBooleanAny(ParameterInput *pin, const std::string &block,
-                        const std::vector<std::string> &names, const bool default_value) {
-  bool value = default_value;
-  if (ReadBooleanAny(pin, block, names, value)) {
-    return value;
-  }
-  return pin->GetOrAddBoolean(block, names.front(), default_value);
-}
-
-std::string GetOrAddStringAny(ParameterInput *pin, const std::string &block,
-                              const std::vector<std::string> &names,
-                              const std::string &default_value) {
-  std::string value = default_value;
-  if (ReadStringAny(pin, block, names, value)) {
-    return value;
-  }
-  return pin->GetOrAddString(block, names.front(), default_value);
 }
 
 int ParseFrameTrackingMode(const std::string &mode_raw) {
@@ -410,38 +443,25 @@ FrameTracker::FrameTracker(MeshBlockPack *pp, ParameterInput *pin,
                            const std::string &block_name) :
     pmy_pack(pp),
     block_name_(block_name) {
-  enabled_ = GetOrAddBooleanAny(pin, block_name_, {"enabled", "enable"}, true);
-  apply_every_ = GetOrAddIntegerAny(pin, block_name_,
-                                    {"apply_every", "ft_apply_every"}, 1);
-  start_time_ = GetOrAddRealAny(pin, block_name_,
-                                {"start_time", "t_start", "t_frame_tracking_start"}, 0.0);
-  diagnostic_every_ = GetOrAddIntegerAny(pin, block_name_,
-                                         {"diagnostic_every", "ndiag"}, -1);
-  verbose_ = GetOrAddBooleanAny(pin, block_name_, {"verbose"}, false);
+  RejectRemovedAliases(pin);
+  enabled_ = pin->GetOrAddBoolean(block_name_, "enabled", true);
+  apply_every_ = pin->GetOrAddInteger(block_name_, "apply_every", 1);
+  start_time_ = pin->GetOrAddReal(block_name_, "start_time", 0.0);
+  diagnostic_every_ = pin->GetOrAddInteger(block_name_, "diagnostic_every", -1);
+  verbose_ = pin->GetOrAddBoolean(block_name_, "verbose", false);
 
-  std::string target = GetOrAddStringAny(pin, block_name_,
-                                         {"target", "target_variable"}, "density");
-  if (NormalizeToken(target) == "derived") {
-    target = GetOrAddStringAny(pin, block_name_, {"derived_variable"}, "temperature");
-  }
-  scalar_index_ = GetOrAddIntegerAny(pin, block_name_, {"scalar_index"}, 0);
-  target_kind_ = ParseTargetKind(target, scalar_index_);
-  weight_mode_ = ParseWeightMode(GetOrAddStringAny(pin, block_name_, {"weight"}, "mass"));
+  target_name_ = pin->GetOrAddString(block_name_, "target", "density");
+  scalar_index_ = pin->GetOrAddInteger(block_name_, "scalar_index", 0);
+  target_kind_ = ParseTargetKind(target_name_, scalar_index_);
+  weight_mode_ = ParseWeightMode(pin->GetOrAddString(block_name_, "weight", "mass"));
 
   const Real huge = std::numeric_limits<Real>::max()/static_cast<Real>(4.0);
   target_min_ = -huge;
   target_max_ = huge;
-  if (target_kind_ == kFTTargetTemperature) {
-    (void) ReadRealAny(pin, block_name_, {"target_min", "min", "ft_temp_lo"},
-                       target_min_);
-    (void) ReadRealAny(pin, block_name_, {"target_max", "max", "ft_temp_hi"},
-                       target_max_);
-  } else {
-    (void) ReadRealAny(pin, block_name_, {"target_min", "min"}, target_min_);
-    (void) ReadRealAny(pin, block_name_, {"target_max", "max"}, target_max_);
-  }
+  (void) ReadRealAny(pin, block_name_, {"target_min"}, target_min_);
+  (void) ReadRealAny(pin, block_name_, {"target_max"}, target_max_);
 
-  if (!ReadRealAny(pin, block_name_, {"target_center", "center"}, target_center_)) {
+  if (!ReadRealAny(pin, block_name_, {"target_center"}, target_center_)) {
     if (target_min_ > 0.0 && target_max_ > 0.0 && target_max_ < huge) {
       target_center_ = std::sqrt(target_min_*target_max_);
     } else if (target_min_ > -huge && target_max_ < huge) {
@@ -454,8 +474,7 @@ FrameTracker::FrameTracker(MeshBlockPack *pp, ParameterInput *pin,
   target_max_active_ = target_max_;
 
   std::string target_scale = "auto";
-  (void) ReadStringAny(pin, block_name_, {"target_scale", "reacquire_scale"},
-                       target_scale);
+  (void) ReadStringAny(pin, block_name_, {"target_scale"}, target_scale);
   target_scale = NormalizeToken(target_scale);
   if (target_scale == "log" || target_scale == "logarithmic") {
     use_log_reacquire_ = true;
@@ -469,74 +488,46 @@ FrameTracker::FrameTracker(MeshBlockPack *pp, ParameterInput *pin,
                             "'. Expected auto, linear, or log.");
   }
 
-  mode_ = ParseFrameTrackingMode(GetOrAddStringAny(pin, block_name_,
-                                                   {"mode", "ft_mode"}, "pd"));
+  mode_name_ = pin->GetOrAddString(block_name_, "mode", "pd");
+  mode_ = ParseFrameTrackingMode(mode_name_);
   position_signal_ = ParseFrameTrackingPositionSignal(
-      GetOrAddStringAny(pin, block_name_,
-                        {"position_signal", "ft_position_signal"}, "blend"));
+      pin->GetOrAddString(block_name_, "position_signal", "blend"));
+  boost_change_mode_name_ =
+      pin->GetOrAddString(block_name_, "max_boost_change_mode", "per_apply");
   boost_change_mode_ = ParseFrameTrackingBoostChangeMode(
-      GetOrAddStringAny(pin, block_name_,
-                        {"max_boost_change_mode", "ft_max_boost_change_mode"},
-                        "per_apply"));
-  position_blend_ = GetOrAddRealAny(pin, block_name_,
-                                    {"position_blend", "ft_position_blend"}, 0.7);
-  tau_avg_ = GetOrAddRealAny(pin, block_name_, {"tau_avg", "ft_tau_avg"}, 1.0);
-  tau_relax_ = GetOrAddRealAny(pin, block_name_, {"tau_relax", "ft_tau_relax"}, 1.0);
-  tau_vel_ = GetOrAddRealAny(pin, block_name_, {"tau_vel", "ft_tau_vel"}, 1.0);
-  tau_int_ = GetOrAddRealAny(pin, block_name_, {"tau_int", "ft_tau_int"}, 0.0);
-  int_max_abs_ = GetOrAddRealAny(pin, block_name_,
-                                 {"int_max_abs", "ft_int_max_abs"}, 0.0);
-  int_leak_tau_ = GetOrAddRealAny(pin, block_name_,
-                                  {"int_leak_tau", "ft_int_leak_tau"}, 1.0);
-  int_unsat_only_ = GetOrAddBooleanAny(pin, block_name_,
-                                       {"int_unsat_only", "ft_int_unsat_only"}, true);
-  weight_floor_ = GetOrAddRealAny(pin, block_name_,
-                                  {"weight_floor", "ft_weight_floor"}, 0.0);
-  min_global_weight_ = GetOrAddRealAny(pin, block_name_,
-                                       {"min_global_weight", "ft_min_global_weight"},
-                                       0.0);
-  max_abs_boost_ = GetOrAddRealAny(pin, block_name_,
-                                   {"max_abs_boost", "ft_max_abs_boost"}, 0.0);
-  max_boost_change_ = GetOrAddRealAny(pin, block_name_,
-                                      {"max_boost_change", "ft_max_boost_change"}, 0.0);
-  max_boost_change_rate_ = GetOrAddRealAny(
-      pin, block_name_, {"max_boost_change_rate", "ft_max_boost_change_rate"}, -1.0);
-  reacquire_expand_factor_ = GetOrAddRealAny(
-      pin, block_name_, {"reacquire_expand_factor", "ft_reacquire_expand_factor"}, 1.0);
-  reacquire_max_expand_ = GetOrAddRealAny(
-      pin, block_name_, {"reacquire_max_expand", "ft_reacquire_max_expand"}, 1.0);
-  reacquire_recover_updates_ = GetOrAddIntegerAny(
-      pin, block_name_, {"reacquire_recover_updates", "ft_reacquire_recover_updates"}, 1);
-  reacquire_leak_on_miss_ = GetOrAddBooleanAny(
-      pin, block_name_, {"reacquire_leak_on_miss", "ft_reacquire_leak_on_miss"}, true);
-  boundary_guard_enable_ = GetOrAddBooleanAny(
-      pin, block_name_, {"boundary_guard_enable", "ft_boundary_guard_enable"}, false);
-  boundary_guard_cells_ = GetOrAddIntegerAny(
-      pin, block_name_, {"boundary_guard_cells", "ft_boundary_guard_cells"}, 8);
-  boundary_guard_min_scale_ = GetOrAddRealAny(
-      pin, block_name_, {"boundary_guard_min_scale", "ft_boundary_guard_min_scale"},
-      0.15);
+      boost_change_mode_name_);
+  position_blend_ = pin->GetOrAddReal(block_name_, "position_blend", 0.7);
+  tau_avg_ = pin->GetOrAddReal(block_name_, "tau_avg", 1.0);
+  tau_relax_ = pin->GetOrAddReal(block_name_, "tau_relax", 1.0);
+  tau_vel_ = pin->GetOrAddReal(block_name_, "tau_vel", 1.0);
+  tau_int_ = pin->GetOrAddReal(block_name_, "tau_int", 0.0);
+  int_max_abs_ = pin->GetOrAddReal(block_name_, "int_max_abs", 0.0);
+  int_leak_tau_ = pin->GetOrAddReal(block_name_, "int_leak_tau", 1.0);
+  int_unsat_only_ = pin->GetOrAddBoolean(block_name_, "int_unsat_only", true);
+  weight_floor_ = pin->GetOrAddReal(block_name_, "weight_floor", 0.0);
+  min_global_weight_ = pin->GetOrAddReal(block_name_, "min_global_weight", 0.0);
+  max_abs_boost_ = pin->GetOrAddReal(block_name_, "max_abs_boost", 0.0);
+  max_boost_change_ = pin->GetOrAddReal(block_name_, "max_boost_change", 0.0);
+  max_boost_change_rate_ = pin->GetOrAddReal(block_name_, "max_boost_change_rate", -1.0);
+  reacquire_expand_factor_ =
+      pin->GetOrAddReal(block_name_, "reacquire_expand_factor", 1.0);
+  reacquire_max_expand_ = pin->GetOrAddReal(block_name_, "reacquire_max_expand", 1.0);
+  reacquire_recover_updates_ =
+      pin->GetOrAddInteger(block_name_, "reacquire_recover_updates", 1);
+  reacquire_leak_on_miss_ =
+      pin->GetOrAddBoolean(block_name_, "reacquire_leak_on_miss", true);
+  boundary_guard_enable_ =
+      pin->GetOrAddBoolean(block_name_, "boundary_guard_enable", false);
+  boundary_guard_cells_ = pin->GetOrAddInteger(block_name_, "boundary_guard_cells", 8);
+  boundary_guard_min_scale_ =
+      pin->GetOrAddReal(block_name_, "boundary_guard_min_scale", 0.15);
 
   ParseTrackedFluid(pin);
   ParseAxes(pin);
   ParseAxisControls(pin);
-  WarnDeprecatedAliases(pin);
   ValidateConfiguration();
   RestoreFrameState(pin);
-
-  if (global_variable::my_rank == 0 && verbose_) {
-    std::cout << "FrameTracker enabled from <" << block_name_ << "> with target='"
-              << target << "', target_min=" << std::setprecision(16) << target_min_
-              << ", target_max=" << target_max_ << ", axes=";
-    bool first = true;
-    for (int axis = 0; axis < 3; ++axis) {
-      if (axes_[axis].active) {
-        std::cout << (first ? "" : ",") << AxisName(axis);
-        first = false;
-      }
-    }
-    std::cout << std::endl;
-  }
+  PrintConfigurationSummary();
 }
 
 //----------------------------------------------------------------------------------------
@@ -565,11 +556,9 @@ void FrameTracker::RestoreFrameState(ParameterInput *pin) {
 
   for (int axis = 0; axis < 3; ++axis) {
     const std::string name = AxisName(axis);
-    (void) ReadRealAny(pin, block_name_,
-                       {"frame_velocity_" + name, name + "_frame_velocity"},
+    (void) ReadRealAny(pin, block_name_, {"frame_velocity_" + name},
                        frame_velocity_[axis]);
-    (void) ReadRealAny(pin, block_name_,
-                       {"frame_displacement_" + name, name + "_frame_displacement"},
+    (void) ReadRealAny(pin, block_name_, {"frame_displacement_" + name},
                        frame_displacement_[axis]);
     axes_[axis].cumulative_boost = -frame_velocity_[axis];
     if (state_version >= 1) {
@@ -610,13 +599,17 @@ void FrameTracker::RestoreFrameState(ParameterInput *pin) {
     }
   }
   if (state_version >= 1) {
+    restored_state_kind_ = 1;
     (void) ReadRealAny(pin, block_name_, {"state_last_apply_time"}, last_apply_time_);
     (void) ReadIntegerAny(pin, block_name_, {"state_miss_streak"}, miss_streak_);
     (void) ReadIntegerAny(pin, block_name_, {"state_recover_streak"}, recover_streak_);
-  } else if (has_legacy_state && global_variable::my_rank == 0) {
-    std::cout << "FrameTracker warning: restoring legacy frame state without complete "
-              << "controller history; continuation is finite but not restart-exact."
-              << std::endl;
+  } else if (has_legacy_state) {
+    restored_state_kind_ = 2;
+    if (global_variable::my_rank == 0) {
+      std::cout << "FrameTracker warning: restoring legacy frame state without complete "
+                << "controller history; continuation is finite but not restart-exact."
+                << std::endl;
+    }
   }
 }
 
@@ -629,36 +622,40 @@ void FrameTracker::StoreStateInParameterInput(ParameterInput *pin) const {
     return;
   }
   pin->SetInteger(block_name_, "state_version", kFrameTrackingStateVersion);
-  pin->SetReal(block_name_, "state_last_apply_time", last_apply_time_);
+  pin->SetRealPrecise(block_name_, "state_last_apply_time", last_apply_time_);
   pin->SetInteger(block_name_, "state_miss_streak", miss_streak_);
   pin->SetInteger(block_name_, "state_recover_streak", recover_streak_);
   for (int axis = 0; axis < 3; ++axis) {
     const std::string name = AxisName(axis);
     const AxisState &state = axes_[axis];
-    pin->SetReal(block_name_, "frame_velocity_" + name, frame_velocity_[axis]);
-    pin->SetReal(block_name_, "frame_displacement_" + name, frame_displacement_[axis]);
-    pin->SetReal(block_name_, "state_" + name + "_last_boost", state.last_boost);
-    pin->SetReal(block_name_, "state_" + name + "_cumulative_boost",
-                 state.cumulative_boost);
-    pin->SetReal(block_name_, "state_" + name + "_last_mean_x", state.last_mean_x);
-    pin->SetReal(block_name_, "state_" + name + "_last_mean_v", state.last_mean_v);
-    pin->SetReal(block_name_, "state_" + name + "_last_global_weight",
-                 state.last_global_weight);
-    pin->SetReal(block_name_, "state_" + name + "_last_filtered_x",
-                 state.last_filtered_x);
-    pin->SetReal(block_name_, "state_" + name + "_last_filtered_v",
-                 state.last_filtered_v);
-    pin->SetReal(block_name_, "state_" + name + "_last_x_err", state.last_x_err);
-    pin->SetReal(block_name_, "state_" + name + "_last_vel_cmd_pre",
-                 state.last_vel_cmd_pre);
-    pin->SetReal(block_name_, "state_" + name + "_last_vel_cmd_post",
-                 state.last_vel_cmd_post);
-    pin->SetReal(block_name_, "state_" + name + "_last_x_centroid",
-                 state.last_x_centroid);
-    pin->SetReal(block_name_, "state_" + name + "_last_x_midpoint",
-                 state.last_x_midpoint);
-    pin->SetReal(block_name_, "state_" + name + "_last_x_ctrl", state.last_x_ctrl);
-    pin->SetReal(block_name_, "state_" + name + "_i_term", state.i_term);
+    pin->SetRealPrecise(block_name_, "frame_velocity_" + name, frame_velocity_[axis]);
+    pin->SetRealPrecise(block_name_, "frame_displacement_" + name,
+                        frame_displacement_[axis]);
+    pin->SetRealPrecise(block_name_, "state_" + name + "_last_boost",
+                        state.last_boost);
+    pin->SetRealPrecise(block_name_, "state_" + name + "_cumulative_boost",
+                        state.cumulative_boost);
+    pin->SetRealPrecise(block_name_, "state_" + name + "_last_mean_x",
+                        state.last_mean_x);
+    pin->SetRealPrecise(block_name_, "state_" + name + "_last_mean_v",
+                        state.last_mean_v);
+    pin->SetRealPrecise(block_name_, "state_" + name + "_last_global_weight",
+                        state.last_global_weight);
+    pin->SetRealPrecise(block_name_, "state_" + name + "_last_filtered_x",
+                        state.last_filtered_x);
+    pin->SetRealPrecise(block_name_, "state_" + name + "_last_filtered_v",
+                        state.last_filtered_v);
+    pin->SetRealPrecise(block_name_, "state_" + name + "_last_x_err", state.last_x_err);
+    pin->SetRealPrecise(block_name_, "state_" + name + "_last_vel_cmd_pre",
+                        state.last_vel_cmd_pre);
+    pin->SetRealPrecise(block_name_, "state_" + name + "_last_vel_cmd_post",
+                        state.last_vel_cmd_post);
+    pin->SetRealPrecise(block_name_, "state_" + name + "_last_x_centroid",
+                        state.last_x_centroid);
+    pin->SetRealPrecise(block_name_, "state_" + name + "_last_x_midpoint",
+                        state.last_x_midpoint);
+    pin->SetRealPrecise(block_name_, "state_" + name + "_last_x_ctrl", state.last_x_ctrl);
+    pin->SetRealPrecise(block_name_, "state_" + name + "_i_term", state.i_term);
     pin->SetBoolean(block_name_, "state_" + name + "_last_skip_flag",
                     state.last_skip_flag);
     pin->SetBoolean(block_name_, "state_" + name + "_last_slew_limited",
@@ -755,34 +752,46 @@ void FrameTracker::ParseTrackedFluid(ParameterInput *pin) {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn void FrameTracker::WarnDeprecatedAliases()
-//! \brief Warn once at startup when compatibility-only parameter spellings are used.
+//! \fn void FrameTracker::RejectRemovedAliases()
+//! \brief Reject former parameter spellings so new runs use one stable interface.
 
-void FrameTracker::WarnDeprecatedAliases(ParameterInput *pin) const {
-  if (pin == nullptr || global_variable::my_rank != 0) {
+void FrameTracker::RejectRemovedAliases(ParameterInput *pin) const {
+  if (pin == nullptr) {
     return;
   }
-  const std::vector<std::string> aliases = {
-      "enable", "ft_apply_every", "t_start", "t_frame_tracking_start", "ndiag",
-      "target_variable", "derived_variable", "min", "max", "ft_temp_lo", "ft_temp_hi",
-      "center", "reacquire_scale", "ft_mode", "ft_position_signal",
-      "ft_max_boost_change_mode", "ft_position_blend", "ft_tau_avg", "ft_tau_relax",
-      "ft_tau_vel", "ft_tau_int", "ft_int_max_abs", "ft_int_leak_tau",
-      "ft_int_unsat_only", "ft_weight_floor", "ft_min_global_weight",
-      "ft_max_abs_boost", "ft_max_boost_change", "ft_max_boost_change_rate",
-      "ft_reacquire_expand_factor", "ft_reacquire_max_expand",
-      "ft_reacquire_recover_updates", "ft_reacquire_leak_on_miss",
-      "ft_boundary_guard_enable", "ft_boundary_guard_cells",
-      "ft_boundary_guard_min_scale", "axis", "directions", "z_target",
-      "ft_z_target", "z_lower_limit", "ft_lowzlim", "z_upper_limit", "ft_uppzlim",
-      "ft_use_lowzlim", "ft_use_uppzlim"};
-  for (const auto &alias : aliases) {
-    if (pin->DoesParameterExist(block_name_, alias)) {
-      std::cout << "FrameTracker warning: <" << block_name_ << ">/" << alias
-                << " is a deprecated alias; use the canonical input keys documented in "
-                << "docs/source/modules/frame_tracking.md." << std::endl;
+  for (const auto &alias : RemovedAliases()) {
+    if (pin->DoesParameterExist(block_name_, alias.first)) {
+      FatalFrameTrackingInput("Removed key <" + block_name_ + ">/" + alias.first +
+                              "; use " + alias.second + ".");
     }
   }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void FrameTracker::PrintConfigurationSummary()
+//! \brief Emit one rank-0 startup record of the interpreted active configuration.
+
+void FrameTracker::PrintConfigurationSummary() const {
+  if (!enabled_ || global_variable::my_rank != 0) {
+    return;
+  }
+  const char *state_name =
+      (restored_state_kind_ == 1) ? "versioned_restart" :
+      (restored_state_kind_ == 2) ? "legacy_restart" : "new";
+  std::cout << "FrameTracker configuration: fluid=" << (track_mhd_ ? "mhd" : "hydro")
+            << " axes=";
+  bool first = true;
+  for (int axis = 0; axis < 3; ++axis) {
+    if (axes_[axis].active) {
+      std::cout << (first ? "" : ",") << AxisName(axis);
+      first = false;
+    }
+  }
+  std::cout << " target=" << NormalizeToken(target_name_)
+            << " range=[" << std::setprecision(16) << target_min_ << ","
+            << target_max_ << "] mode=" << NormalizeToken(mode_name_)
+            << " slew=" << NormalizeToken(boost_change_mode_name_)
+            << " state=" << state_name << std::endl;
 }
 
 //----------------------------------------------------------------------------------------
@@ -796,7 +805,7 @@ void FrameTracker::ParseAxes(ParameterInput *pin) {
 
   const Mesh *pm = pmy_pack->pmesh;
   std::string axes_raw;
-  if (!ReadStringAny(pin, block_name_, {"axes", "axis", "directions"}, axes_raw)) {
+  if (!ReadStringAny(pin, block_name_, {"axes"}, axes_raw)) {
     if (pm->mesh_indcs.nx3 > 1) {
       axes_[2].active = true;
     } else if (pm->mesh_indcs.nx2 > 1) {
@@ -855,40 +864,16 @@ void FrameTracker::ParseAxisControls(ParameterInput *pin) {
     axes_[axis].lower_limit = AxisGlobalMin(axis, pm);
     axes_[axis].upper_limit = AxisGlobalMax(axis, pm);
 
-    std::vector<std::string> target_keys = {
-        name + "_target", name + "_target_position", "target_" + name};
-    if (axis == 2) {
-      target_keys.push_back("z_target");
-      target_keys.push_back("ft_z_target");
-    }
+    std::vector<std::string> target_keys = {name + "_target"};
     (void) ReadRealAny(pin, block_name_, target_keys, axes_[axis].target_position);
 
-    std::vector<std::string> lower_keys = {
-        name + "_lower_limit", name + "_min_limit", name + "_low_limit"};
-    std::vector<std::string> upper_keys = {
-        name + "_upper_limit", name + "_max_limit", name + "_upp_limit"};
-    if (axis == 2) {
-      lower_keys.push_back("z_lower_limit");
-      lower_keys.push_back("ft_lowzlim");
-      upper_keys.push_back("z_upper_limit");
-      upper_keys.push_back("ft_uppzlim");
-    }
-
-    bool use_lower_flag = false;
-    bool use_upper_flag = false;
-    if (axis == 2) {
-      (void) ReadBooleanAny(pin, block_name_, {"ft_use_lowzlim"}, use_lower_flag);
-      (void) ReadBooleanAny(pin, block_name_, {"ft_use_uppzlim"}, use_upper_flag);
-    }
+    std::vector<std::string> lower_keys = {name + "_lower_limit"};
+    std::vector<std::string> upper_keys = {name + "_upper_limit"};
     if (ReadRealAny(pin, block_name_, lower_keys, axes_[axis].lower_limit)) {
       axes_[axis].use_lower_limit = true;
-    } else {
-      axes_[axis].use_lower_limit = use_lower_flag;
     }
     if (ReadRealAny(pin, block_name_, upper_keys, axes_[axis].upper_limit)) {
       axes_[axis].use_upper_limit = true;
-    } else {
-      axes_[axis].use_upper_limit = use_upper_flag;
     }
   }
 }

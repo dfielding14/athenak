@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - feature/frame-tracker
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 jobs:        
   lint-job:
     runs-on: [self-hosted, ias-cluster]

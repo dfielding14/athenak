@@ -9,6 +9,7 @@ module pages.
 
 - `docs/source/modules/frame_tracking.md`
 - `docs/source/modules/frame_tracking_next_steps.md`
+- `docs/source/modules/frame_tracking_recipes.md`
 - `docs/source/examples/cloud_crushing_snr.md`
 - `docs/source/examples/trml_frame_tracking.md`
 - `docs/FRAME_TRACKING_NEXT_STEPS.md`
@@ -35,6 +36,7 @@ Add this link to the Module Reference bullet list:
 ```markdown
 [Frame Tracking](modules/frame_tracking.md)
 [Frame Tracking Production Plan](modules/frame_tracking_next_steps.md)
+[Frame Tracking Recipes And Migration](modules/frame_tracking_recipes.md)
 ```
 
 Add this entry to the hidden Modules toctree:
@@ -42,6 +44,7 @@ Add this entry to the hidden Modules toctree:
 ```markdown
 modules/frame_tracking
 modules/frame_tracking_next_steps
+modules/frame_tracking_recipes
 ```
 
 Add these links to the Worked Examples bullet list:

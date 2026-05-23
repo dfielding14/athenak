@@ -85,7 +85,8 @@ class FrameTracker {
   void ParseAxes(ParameterInput *pin);
   void ParseAxisControls(ParameterInput *pin);
   void ParseTrackedFluid(ParameterInput *pin);
-  void WarnDeprecatedAliases(ParameterInput *pin) const;
+  void RejectRemovedAliases(ParameterInput *pin) const;
+  void PrintConfigurationSummary() const;
   void ValidateConfiguration();
   void SetActiveTargetRange();
   bool SampleMoments(std::array<MomentSample, 3> &samples) const;
@@ -105,6 +106,9 @@ class FrameTracker {
   std::string block_name_;
 
   bool enabled_ = true;
+  std::string target_name_ = "density";
+  std::string mode_name_ = "pd";
+  std::string boost_change_mode_name_ = "per_apply";
   int apply_every_ = 1;
   Real start_time_ = 0.0;
   int diagnostic_every_ = -1;
@@ -148,6 +152,7 @@ class FrameTracker {
   Real last_apply_time_ = -1.0;
   int miss_streak_ = 0;
   int recover_streak_ = 0;
+  int restored_state_kind_ = 0;  // 0: new, 1: versioned restart, 2: legacy restart
   std::array<AxisState, 3> axes_;
   std::array<Real, 3> frame_velocity_ = {0.0, 0.0, 0.0};
   std::array<Real, 3> frame_displacement_ = {0.0, 0.0, 0.0};

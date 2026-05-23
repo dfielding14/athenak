@@ -1,43 +1,38 @@
-# FrameTracker regression input for non-relativistic hydro.
+# Three-axis FrameTracker regression input for non-relativistic hydro.
 
 <job>
-basename = FrameTrackHydro
+basename = FrameTrack3D
 
 <mesh>
 nghost = 2
-nx1 = 32
+nx1 = 8
 x1min = -0.5
 x1max = 0.5
-ix1_bc = outflow
-ox1_bc = outflow
-nx2 = 4
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 8
 x2min = -0.5
 x2max = 0.5
 ix2_bc = periodic
 ox2_bc = periodic
-nx3 = 1
+nx3 = 8
 x3min = -0.5
 x3max = 0.5
 ix3_bc = periodic
 ox3_bc = periodic
 
 <meshblock>
-nx1 = 16
+nx1 = 4
 nx2 = 4
-nx3 = 1
+nx3 = 4
 
 <time>
 evolution = dynamic
 integrator = rk2
-cfl_number = 0.4
+cfl_number = 0.3
 nlim = 6
 tlim = 10.0
 ndiag = 100
-
-<coord>
-special_rel = false
-general_rel = false
-minkowski = true
 
 <hydro>
 eos = ideal
@@ -54,8 +49,8 @@ pl = 1.0
 ul = 0.0
 vl = 0.0
 wl = 0.0
-dr = 0.125
-pr = 0.1
+dr = 1.0
+pr = 1.0
 ur = 0.0
 vr = 0.0
 wr = 0.0
@@ -64,19 +59,20 @@ wr = 0.0
 tracked_fluid = hydro
 start_time = -1.0
 apply_every = 1
-axes = x1,x2
-x1_target = 0.0
-x2_target = 0.0
+axes = all
+x1_target = 0.05
+x2_target = -0.04
+x3_target = 0.03
 target = density
-target_min = 0.1
-target_max = 1.1
-mode = pd
+target_min = 0.5
+target_max = 1.5
+mode = position
 tau_avg = 0.01
-tau_relax = 1.0
+tau_relax = 0.2
 tau_vel = 1.0
-max_abs_boost = 0.01
+max_abs_boost = 0.1
 max_boost_change_mode = per_time
-max_boost_change_rate = 0.1
+max_boost_change_rate = 1.0
 
 <output1>
 file_type = hst

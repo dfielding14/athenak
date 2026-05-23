@@ -17,12 +17,12 @@ the feature as working perfectly.
 
 | Gate | Required outcome | Current branch status |
 | --- | --- | --- |
-| Correctness | Continuous and restart-split runs agree in controller state and final fluid state within precision-aware tolerances. | Implemented in `tst/test_suite/nr/test_nr_frame_tracking_restart_cpu.py`; verification is required before release. |
-| Robustness | CPU, MPI/AMR, MHD, invalid configuration, legacy-state, cloud, and TRML tests run through reproducible commands. | CPU/MHD/MPI-AMR/guards/legacy fixtures are present; longer cloud/TRML campaigns remain scientific validation work. |
+| Correctness | Continuous and restart-split runs agree in controller state and final fluid state within precision-aware tolerances. | One- and three-axis restart equivalence tests pass locally at `100 * machine_epsilon`; GitHub Actions confirmation remains pending. |
+| Robustness | CPU, MPI/AMR, MHD, invalid configuration, legacy-state, cloud, and TRML tests run through reproducible commands. | Full local CPU and MPI CPU discovery suites pass, including MHD, three-axis, guards, legacy, cloud, and TRML coverage; medium campaigns remain pending. |
 | Observability | Controller state is emitted in machine-readable history data. | Implemented as `<basename>.frame_tracker.hst`; stdout is compatibility-only for archived runs. |
 | Efficiency | All active axes share one mesh sampling pass and grouped reductions per controller update. | Implemented; benchmark evidence remains to be collected. |
-| Usability | Canonical parameters, conservative examples, compatibility warnings, and supported-physics limits are documented. | Implemented in module and example documentation; retain legacy aliases for one deprecation period. |
-| Publication | GitHub Pages exposes reference pages, slices, CSV summaries, validation limits, and this roadmap. | Publish from `gh-pages` after local Sphinx validation. |
+| Usability | Canonical parameters, conservative examples, removed-alias migration errors, and supported-physics limits are documented. | Implemented in the module reference and recipe/migration page; legacy restart-state reading remains supported. |
+| Publication | GitHub Pages exposes reference pages, slices, CSV summaries, validation limits, and this roadmap. | Existing wiring-validation pages are published; recipe/migration updates and new measured results remain to be synced after validation. |
 
 ## Interface Contract
 
@@ -37,6 +37,10 @@ Restart files containing only `frame_velocity_x*` and
 `frame_displacement_x*` remain readable. This compatibility path initializes
 unavailable history conservatively, emits one rank-0 warning, and is explicitly
 not exact continuation.
+
+Configuration aliases are no longer accepted. Former spellings fail at startup
+with their canonical replacement; this removes hidden configuration paths while
+leaving the legacy restart-state reader intact.
 
 ### Structured Diagnostics
 
@@ -65,11 +69,11 @@ only shipped frame-aware examples are validated.
 | Phase | Work item | Release criterion |
 | --- | --- | --- |
 | 1 | Publish reference docs, example plots, CSVs, and this roadmap through the GitHub Pages docs tree. | Sphinx/MyST build passes and live links render assets. |
-| 2 | Version and serialize complete controller state, retain the legacy reader, and preserve full `Real` precision in runtime parameter serialization. | Restart-split test passes at `100 * machine_epsilon` scaled tolerance. |
+| 2 | Version and serialize complete controller state, retain the legacy reader, and preserve full `Real` precision only for stored controller state. | Restart-split test passes at `100 * machine_epsilon` scaled tolerance without changing unrelated runtime parameter formatting. |
 | 3 | Emit dedicated history output and migrate plotting to consume it before stdout fallback. | Scripts reproduce tables from `.frame_tracker.hst`. |
 | 4 | Add CPU smoke, restart, MHD, MPI/AMR, legacy compatibility, and invalid-input regressions. | Tests run through `tst/run_test_suite.py`. |
 | 5 | Fuse multi-axis sampling and group global reductions per update. | Benchmark table records update costs for one and three axes. |
-| 6 | Make canonical new examples use time-based slew limiting and warn on aliases while retaining compatibility parsing. | New docs and inputs contain only canonical parameter names. |
+| 6 | Use time-based slew limiting in shipped examples, reject configuration aliases actionably, and publish copy-ready recipes. | New docs and inputs contain only canonical parameter names; legacy restart state is still readable. |
 | 7 | Execute scientific validation at useful resolution and decomposition. | Published CSVs contain measured errors, convergence trends, and limits. |
 
 ## Automated Test Matrix
@@ -79,10 +83,30 @@ only shipped frame-aware examples are validated.
 | Serial controller smoke | Structured history is finite; the controller primes then actuates; no unexpected misses occur. |
 | Restart continuity | Uninterrupted and restart-split runs match final frame state and conservative fluid output to `100 * machine_epsilon` scaled tolerance. |
 | Legacy restart keys | Legacy state loads, warns once, and produces finite diagnostics; exact continuation is not claimed. |
-| MHD smoke | Non-relativistic MHD tracking produces finite controller output; a focused momentum/energy and magnetic-invariance oracle remains a desirable extension. |
+| MHD Galilean invariant | Density and magnetic fields are unchanged at the first non-zero boost; momentum and ideal-gas energy match analytic boost updates to `100 * machine_epsilon`. |
 | MPI/AMR | One-rank and multi-rank AMR results agree within reduction-order tolerance and retain valid controller state through refinement. |
-| Guards | Relativistic coordinates and ambiguous eligible fluids fail before evolution with actionable messages. |
-| Cloud/TRML integrations | Short runs generate finite histories, snapshots, slices, and quantitative CSV summaries. |
+| Guards | SR, GR, dynamical-GR, missing selected fluids, ambiguous eligible fluids, and removed aliases fail before evolution with actionable messages. |
+| Cloud/TRML integrations | Short custom-problem runs compile, execute, and generate finite structured histories; quantitative medium-resolution CSV summaries remain pending. |
+
+## Local Verification Record
+
+The interface and regression-test changes were validated on May 23, 2026
+before their feature-branch commit:
+
+| Command | Result |
+| --- | --- |
+| `python run_test_suite.py --style` | `2 passed` |
+| `python run_test_suite.py --cpu --test test_suite/nr/test_nr_lwave1d_cpu.py` | `16 passed`; confirms precise restart storage does not perturb existing linear-wave runtime input updates. |
+| `python run_test_suite.py --cpu --test test_suite/nr/test_nr_frame_tracking_cpu.py` | `17 passed`; includes MHD invariant, canonical/removed-input behavior, initialization summary, and three-axis schema. |
+| `python run_test_suite.py --cpu --test test_suite/nr/test_nr_frame_tracking_restart_cpu.py` | `2 passed`; one- and three-axis restart continuation. |
+| `python run_test_suite.py --mpicpu --test test_suite/nr/test_nr_frame_tracking_amr_mpicpu.py` | `2 passed`; serial/MPI AMR comparison. |
+| `python run_test_suite.py --cpu` | `209 passed, 15 skipped, 60 deselected`; includes cloud and TRML custom-problem integrations. |
+| `python run_test_suite.py --mpicpu` | `31 passed, 253 deselected`. |
+
+The style command uses a local warning suppression for a deprecation warning
+in the test harness's downloaded `cpplint.py` under Python 3.14; it does not
+mask style findings. CI confirmation for the exact pushed commit, benchmark
+evidence, and medium-resolution scientific validation are still required.
 
 ## Benchmark Campaign
 
