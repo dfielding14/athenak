@@ -102,15 +102,11 @@ FOFC, LF parallel and perpendicular decay, magnetic-field-gradient coupling,
 flux limiting, limiter suppression, and a field-aligned wave. The LF
 quantitative pgen is the built-in `src/pgen/tests/cgl_landau_fluid.cpp`.
 
-Run the LF regression suite from `tst/`:
-
-```bash
-python run_tests.py cgl/cgl_landau_fluid
-```
-
-For a reference comparison, rerun a quantitative deck with
-`mhd/cgl_heat_flux_integrator=explicit time/sts_integrator=none`. The
-routine CPU tests compare this explicit split against STS capped with
+For user-facing validated runs and retained result summaries, follow the four
+canonical workflows in [CGL Landau-Fluid Validation](cgl_landau_fluid_validation.md).
+For developer regression execution, run
+`python run_tests.py cgl/cgl_landau_fluid` from `tst/`. The routine CPU tests
+compare the explicit split against STS capped with
 `time/sts_max_dt_ratio=1.0`.
 
 See also [Super Time Stepping](super_time_stepping.md) and

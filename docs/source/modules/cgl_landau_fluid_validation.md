@@ -16,74 +16,71 @@ The manual suite covers:
 - field-aligned and oblique linear waves;
 - exact pure-CGL versus CGL-LF eigenmode comparisons.
 
-## Quantitative 1D Example
+## Canonical Workflows
 
-Build the default binary and run a strict parallel-temperature damping check:
+Use the workflow driver from the repository root. It builds
+`build-cgl-implementation/src/athena` in Release mode when that executable is
+not already available.
+
+For a first validated 1D STS damping run with strict diagnostics:
 
 ```bash
-cmake -S . -B build-cgl-implementation -DCMAKE_BUILD_TYPE=Release
-cmake --build build-cgl-implementation -j
-build-cgl-implementation/src/athena \
-  -i inputs/unit_tests/cgl_lf_quant_parallel.athinput
+python3 scripts/cgl_lf_workflow.py quick
 ```
 
-To compare against the verification integrator, use the routine decay input:
+For the explicit-reference check against STS, including the finite-collision
+split case:
 
 ```bash
-build-cgl-implementation/src/athena \
-  -i inputs/tests/cgl_lf_decay.athinput \
-  job/basename=cgl_lf_explicit_check \
-  mhd/cgl_heat_flux_integrator=explicit \
-  time/sts_integrator=none time/nlim=-1
+python3 scripts/cgl_lf_workflow.py compare
 ```
 
 The explicit mode uses the same anisotropy-to-magnetic-moment split lifecycle
 as STS. It is deliberately restricted to standalone reference checks.
 
-## Reduced 2D AMR Example
-
-The shipped AMR smoke uses periodic boundaries, LF transport, strict
-admissibility monitoring, and conserved prolongation:
+For a supported two-dimensional AMR run with periodic boundaries, active LF
+transport, strict monitoring, and conserved prolongation:
 
 ```bash
-build-cgl-implementation/src/athena \
-  -i inputs/tests/cgl_lf_amr_2d.athinput
+python3 scripts/cgl_lf_workflow.py amr
 ```
 
-Its `.user.hst` output contains normalized divB, invalid-state count, and
-integrated anisotropy diagnostics. Its `.mhd.hst` output adds the LF counters
-and total-energy history used for the bounded-residual check. CGL LF rejects
-`mesh_refinement/prolong_primitives=true`; this initial support boundary is
-intentional.
-
-## Extended Workflow
-
-Run the reproducible validation matrix from the repository root:
+For the full scientific validation matrix and plots:
 
 ```bash
-scripts/run_cgl_lf_validation.sh
+python3 scripts/cgl_lf_workflow.py full
 ```
 
-By default this writes CSV logs and plots below
-`build-cgl-implementation/cgl_lf_validation/`, not into the source tree.
-Use `OUTPUT_DIR=/path/to/results` to retain a named validation bundle.
+The compatibility command `scripts/run_cgl_lf_validation.sh` invokes this
+same `full` workflow. Use `--output-dir /path/to/results` with the Python
+driver, or `OUTPUT_DIR=/path/to/results` with the compatibility command, to
+give a bundle a persistent name.
 
-Regenerate exact oblique-background eigenmode input decks after intentionally
-changing the linear reference convention:
+## Result Bundles
 
-```bash
-python3 scripts/generate_cgl_lf_eigenmode_inputs.py
-scripts/run_cgl_lf_validation.sh
+Each executable workflow writes an ignored result bundle below
+`build-cgl-implementation/cgl_lf_runs/<timestamp>-<workflow>/` by default:
+
+```text
+manifest.json
+summary.md
+logs/
+history/
+data/
+figures/
 ```
 
-The plotting script can also be run directly against an archived data
-directory:
+`manifest.json` records the git revision, executable, source inputs, runtime
+overrides, exact commands, result products, and measured checks. `summary.md`
+is the readable pass/fail digest. The `amr` summary reports whether refinement
+actually occurred, normalized divB, invalid-state count, and normalized
+energy residual. The `compare` summary reports maximum differences between
+STS and explicit final states.
 
-```bash
-python3 scripts/plot_cgl_lf_validation.py \
-  --data-dir /path/to/results/data \
-  --figure-dir /path/to/results/figures
-```
+The workflow also supports regenerating figures from a retained `full` bundle
+with `plot`, and rebuilding `summary.md` and diagnostic values with
+`summarize`, both using `--output-dir` to select that existing bundle.
+Generated bundles are run products and are not committed by default.
 
 ## Diagnostics
 
@@ -98,6 +95,19 @@ The pre-existing `aam-D` label is retained for compatibility. In ordinary
 output and restart state it denotes conserved CGL pressure anisotropy, not
 the temporary magnetic-moment representation used internally during LF split
 sweeps.
+
+The AMR workflow retains both `.user.hst` and `.mhd.hst` products: user
+history provides normalized divB, invalid-state, and anisotropy measures,
+while MHD history provides total energy and LF counters. CGL LF rejects
+`mesh_refinement/prolong_primitives=true`; conserved prolongation is the
+supported AMR path.
+
+## Developer Maintenance
+
+Regenerate exact oblique-background eigenmode input decks only after
+intentionally changing the linear reference convention with
+`scripts/generate_cgl_lf_eigenmode_inputs.py`, then rerun the `full`
+workflow. Routine pass/fail regressions remain under `tst/test_suite/cgl/`.
 
 ## Interpretation Limits
 
