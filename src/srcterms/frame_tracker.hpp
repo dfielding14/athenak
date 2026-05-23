@@ -31,7 +31,7 @@ class FrameTracker {
 
   void IncludeFrameTrackingTask(std::shared_ptr<TaskList> tl, TaskID start);
   TaskStatus Apply(Driver *pdrive, int stage);
-  void ApplyTracking();
+  bool ApplyTracking();
 
   void UpdateMeshBlockPack(MeshBlockPack *new_pp) { pmy_pack = new_pp; }
   Real FrameVelocity(const int axis) const {

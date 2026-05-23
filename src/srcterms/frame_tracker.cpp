@@ -990,13 +990,14 @@ TaskStatus FrameTracker::Apply(Driver *pdrive, int stage) {
   if (pm->time <= start_time_ || pm->ncycle % apply_every_ != 0) {
     return TaskStatus::complete;
   }
-  ApplyTracking();
-  // The controller changes characteristic velocities after the usual fluid dt task.
-  // Refresh dtnew from the boosted state so restarts follow the same next timestep.
-  if (track_mhd_) {
-    (void) pmy_pack->pmhd->NewTimeStep(pdrive, pdrive->nexp_stages);
-  } else {
-    (void) pmy_pack->phydro->NewTimeStep(pdrive, pdrive->nexp_stages);
+  if (ApplyTracking()) {
+    // The controller changes characteristic velocities after the usual fluid dt task.
+    // Refresh dtnew from the boosted state so restarts follow the same next timestep.
+    if (track_mhd_) {
+      (void) pmy_pack->pmhd->NewTimeStep(pdrive, pdrive->nexp_stages);
+    } else {
+      (void) pmy_pack->phydro->NewTimeStep(pdrive, pdrive->nexp_stages);
+    }
   }
   return TaskStatus::complete;
 }
@@ -1179,10 +1180,11 @@ bool FrameTracker::SampleMoments(std::array<MomentSample, 3> &samples) const {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn void FrameTracker::ApplyTracking()
-//! \brief Apply the configured frame-tracking boost.
+//! \fn bool FrameTracker::ApplyTracking()
+//! \brief Apply the configured frame-tracking boost and report whether the
+//! fluid state changed.
 
-void FrameTracker::ApplyTracking() {
+bool FrameTracker::ApplyTracking() {
   Mesh *pm = pmy_pack->pmesh;
   auto &indcs = pm->mb_indcs;
   int &ng = indcs.ng;
@@ -1191,7 +1193,7 @@ void FrameTracker::ApplyTracking() {
   int n3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*ng) : 1;
   int nmb1 = pmy_pack->nmb_thispack - 1;
   if (nmb1 < 0) {
-    return;
+    return false;
   }
 
   const bool is_mhd = track_mhd_;
@@ -1216,7 +1218,7 @@ void FrameTracker::ApplyTracking() {
     any_active = any_active || axes_[axis].active;
   }
   if (!any_active) {
-    return;
+    return false;
   }
   const bool have_sample = SampleMoments(samples);
   Real global_weight = 0.0;
@@ -1265,7 +1267,7 @@ void FrameTracker::ApplyTracking() {
     }
     last_apply_time_ = pm->time;
     PrintSkipMessage(have_sample, low_weight_floor, global_weight);
-    return;
+    return false;
   }
 
   if (miss_streak_ > 0) {
@@ -1323,7 +1325,7 @@ void FrameTracker::ApplyTracking() {
   if (primed_filter) {
     last_apply_time_ = pm->time;
     PrintPrimeMessage(samples);
-    return;
+    return false;
   }
 
   std::array<Real, 3> v_p = {0.0, 0.0, 0.0};
@@ -1449,28 +1451,32 @@ void FrameTracker::ApplyTracking() {
   const Real dv3 = boost[2];
   const Real dv2_total = SQR(dv1) + SQR(dv2) + SQR(dv3);
   const bool use_energy = eos.is_ideal;
-  par_for("frame_tracking_boost", DevExeSpace(), 0, nmb1, 0, n3-1, 0, n2-1, 0, n1-1,
-  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    const Real rho = w0(m, IDN, k, j, i);
-    if (rho <= 0.0) {
-      return;
-    }
-    const Real mom_old1 = u0(m, IM1, k, j, i);
-    const Real mom_old2 = u0(m, IM2, k, j, i);
-    const Real mom_old3 = u0(m, IM3, k, j, i);
-    w0(m, IVX, k, j, i) += dv1;
-    w0(m, IVY, k, j, i) += dv2;
-    w0(m, IVZ, k, j, i) += dv3;
-    u0(m, IM1, k, j, i) += rho*dv1;
-    u0(m, IM2, k, j, i) += rho*dv2;
-    u0(m, IM3, k, j, i) += rho*dv3;
-    if (use_energy) {
-      u0(m, IEN, k, j, i) += mom_old1*dv1 + mom_old2*dv2 + mom_old3*dv3 +
-                              0.5*rho*dv2_total;
-    }
-  });
+  const bool state_changed = (dv1 != 0.0) || (dv2 != 0.0) || (dv3 != 0.0);
+  if (state_changed) {
+    par_for("frame_tracking_boost", DevExeSpace(), 0, nmb1, 0, n3-1, 0, n2-1, 0, n1-1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      const Real rho = w0(m, IDN, k, j, i);
+      if (rho <= 0.0) {
+        return;
+      }
+      const Real mom_old1 = u0(m, IM1, k, j, i);
+      const Real mom_old2 = u0(m, IM2, k, j, i);
+      const Real mom_old3 = u0(m, IM3, k, j, i);
+      w0(m, IVX, k, j, i) += dv1;
+      w0(m, IVY, k, j, i) += dv2;
+      w0(m, IVZ, k, j, i) += dv3;
+      u0(m, IM1, k, j, i) += rho*dv1;
+      u0(m, IM2, k, j, i) += rho*dv2;
+      u0(m, IM3, k, j, i) += rho*dv3;
+      if (use_energy) {
+        u0(m, IEN, k, j, i) += mom_old1*dv1 + mom_old2*dv2 + mom_old3*dv3 +
+                                0.5*rho*dv2_total;
+      }
+    });
+  }
 
   PrintApplyMessage(samples, v_p, v_d, v_i, cmd_pre, boost);
+  return state_changed;
 }
 
 //----------------------------------------------------------------------------------------
