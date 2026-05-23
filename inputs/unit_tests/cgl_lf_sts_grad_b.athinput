@@ -1,0 +1,63 @@
+<job>
+basename = cgl_lf_sts_grad_b
+
+<mesh>
+nghost = 2
+nx1 = 64
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 1
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 64
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution = kinematic
+integrator = rk2
+sts_integrator = rkl2
+sts_max_dt_ratio = 1000.0
+cfl_number = 0.4
+nlim = 1
+tlim = 0.001
+ndiag = 1
+
+<mhd>
+eos = cgl
+passive = false
+cgl_heat_flux = landau_fluid
+cgl_heat_flux_integrator = sts
+lf_k_parallel = 6.283185307179586
+lf_coefficient_mode = background
+lf_c_parallel0 = 1.0
+reconstruct = plm
+rsolver = advect
+gamma = 1.666666666666667
+dfloor = 1.0e-12
+pfloor = 1.0e-12
+tfloor = 1.0e-12
+sfloor = 1.0e-12
+bfloor = 1.0e-10
+
+<problem>
+pgen_name = unit_tests/cgl_lf_quantitative_test
+test_mode = grad_b
+mode_number = 1
+rho0 = 1.0
+ppar0 = 1.0
+pperp0 = 1.3
+b0 = 1.0
+by_amp = 0.3
+grad_b_rel_tol = 1.0e-1

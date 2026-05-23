@@ -150,7 +150,12 @@ void MHD::FOFC(Driver *pdriver, int stage) {
       wim1.vx = w0_(m,IVX,k,j,i-1);
       wim1.vy = w0_(m,IVY,k,j,i-1);
       wim1.vz = w0_(m,IVZ,k,j,i-1);
-      if (eos.is_ideal) {wim1.e  = w0_(m,IEN,k,j,i-1);}
+      if (eos.is_cgl) {
+        wim1.e  = w0_(m,IPR,k,j,i-1);
+        wim1.pp = w0_(m,IPP,k,j,i-1);
+      } else if (eos.is_ideal) {
+        wim1.e  = w0_(m,IEN,k,j,i-1);
+      }
       wim1.by = bcc0_(m,IBY,k,j,i-1);
       wim1.bz = bcc0_(m,IBZ,k,j,i-1);
 
@@ -160,7 +165,12 @@ void MHD::FOFC(Driver *pdriver, int stage) {
       wi.vx = w0_(m,IVX,k,j,i);
       wi.vy = w0_(m,IVY,k,j,i);
       wi.vz = w0_(m,IVZ,k,j,i);
-      if (eos.is_ideal) {wi.e = w0_(m,IEN,k,j,i);}
+      if (eos.is_cgl) {
+        wi.e  = w0_(m,IPR,k,j,i);
+        wi.pp = w0_(m,IPP,k,j,i);
+      } else if (eos.is_ideal) {
+        wi.e = w0_(m,IEN,k,j,i);
+      }
       wi.by = bcc0_(m,IBY,k,j,i);
       wi.bz = bcc0_(m,IBZ,k,j,i);
 
@@ -184,7 +194,11 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         } else if (is_sr) {
           SingleStateLLF_SRMHD(wim1, wi, bxi, eos, flux);
         } else {
-          SingleStateLLF_MHD(wim1, wi, bxi, eos, flux);
+          if (eos.is_cgl) {
+            SingleStateLLF_CGL(wim1, wi, bxi, eos, flux);
+          } else {
+            SingleStateLLF_MHD(wim1, wi, bxi, eos, flux);
+          }
         }
 
         // store 1st-order fluxes.
@@ -193,6 +207,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx1(m,IM2,k,j,i) = flux.my;
         flx1(m,IM3,k,j,i) = flux.mz;
         if (eos.is_ideal) {flx1(m,IEN,k,j,i) = flux.e;}
+        if (eos.is_cgl) {flx1(m,IAN,k,j,i) = flux.mu;}
         e3x1_(m,k,j,i) = flux.by;
         e2x1_(m,k,j,i) = flux.bz;
       }
@@ -204,7 +219,12 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         wjm1.vx = w0_(m,IVY,k,j-1,i);
         wjm1.vy = w0_(m,IVZ,k,j-1,i);
         wjm1.vz = w0_(m,IVX,k,j-1,i);
-        if (eos.is_ideal) {wjm1.e = w0_(m,IEN,k,j-1,i);}
+        if (eos.is_cgl) {
+          wjm1.e  = w0_(m,IPR,k,j-1,i);
+          wjm1.pp = w0_(m,IPP,k,j-1,i);
+        } else if (eos.is_ideal) {
+          wjm1.e = w0_(m,IEN,k,j-1,i);
+        }
         wjm1.by = bcc0_(m,IBZ,k,j-1,i);
         wjm1.bz = bcc0_(m,IBX,k,j-1,i);
 
@@ -214,7 +234,12 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         wj.vx = w0_(m,IVY,k,j,i);
         wj.vy = w0_(m,IVZ,k,j,i);
         wj.vz = w0_(m,IVX,k,j,i);
-        if (eos.is_ideal) {wj.e = w0_(m,IEN,k,j,i);}
+        if (eos.is_cgl) {
+          wj.e  = w0_(m,IPR,k,j,i);
+          wj.pp = w0_(m,IPP,k,j,i);
+        } else if (eos.is_ideal) {
+          wj.e = w0_(m,IEN,k,j,i);
+        }
         wj.by = bcc0_(m,IBZ,k,j,i);
         wj.bz = bcc0_(m,IBX,k,j,i);
 
@@ -237,7 +262,11 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         } else if (is_sr) {
           SingleStateLLF_SRMHD(wjm1, wj, bxi, eos, flux);
         } else {
-          SingleStateLLF_MHD(wjm1, wj, bxi, eos, flux);
+          if (eos.is_cgl) {
+            SingleStateLLF_CGL(wjm1, wj, bxi, eos, flux);
+          } else {
+            SingleStateLLF_MHD(wjm1, wj, bxi, eos, flux);
+          }
         }
 
         // store 1st-order fluxes, permutting indices.
@@ -246,6 +275,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx2(m,IM3,k,j,i) = flux.my;
         flx2(m,IM1,k,j,i) = flux.mz;
         if (eos.is_ideal) {flx2(m,IEN,k,j,i) = flux.e;}
+        if (eos.is_cgl) {flx2(m,IAN,k,j,i) = flux.mu;}
         e1x2_(m,k,j,i) = flux.by;
         e3x2_(m,k,j,i) = flux.bz;
       }
@@ -257,7 +287,12 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         wkm1.vx = w0_(m,IVZ,k-1,j,i);
         wkm1.vy = w0_(m,IVX,k-1,j,i);
         wkm1.vz = w0_(m,IVY,k-1,j,i);
-        if (eos.is_ideal) {wkm1.e = w0_(m,IEN,k-1,j,i);}
+        if (eos.is_cgl) {
+          wkm1.e  = w0_(m,IPR,k-1,j,i);
+          wkm1.pp = w0_(m,IPP,k-1,j,i);
+        } else if (eos.is_ideal) {
+          wkm1.e = w0_(m,IEN,k-1,j,i);
+        }
         wkm1.by = bcc0_(m,IBX,k-1,j,i);
         wkm1.bz = bcc0_(m,IBY,k-1,j,i);
 
@@ -267,7 +302,12 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         wk.vx = w0_(m,IVZ,k,j,i);
         wk.vy = w0_(m,IVX,k,j,i);
         wk.vz = w0_(m,IVY,k,j,i);
-        if (eos.is_ideal) {wk.e = w0_(m,IEN,k,j,i);}
+        if (eos.is_cgl) {
+          wk.e  = w0_(m,IPR,k,j,i);
+          wk.pp = w0_(m,IPP,k,j,i);
+        } else if (eos.is_ideal) {
+          wk.e = w0_(m,IEN,k,j,i);
+        }
         wk.by = bcc0_(m,IBX,k,j,i);
         wk.bz = bcc0_(m,IBY,k,j,i);
 
@@ -290,7 +330,11 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         } else if (is_sr) {
           SingleStateLLF_SRMHD(wkm1, wk, bxi, eos, flux);
         } else {
-          SingleStateLLF_MHD(wkm1, wk, bxi, eos, flux);
+          if (eos.is_cgl) {
+            SingleStateLLF_CGL(wkm1, wk, bxi, eos, flux);
+          } else {
+            SingleStateLLF_MHD(wkm1, wk, bxi, eos, flux);
+          }
         }
 
         // store 1st-order fluxes, permutting indices.
@@ -299,6 +343,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx3(m,IM1,k,j,i) = flux.my;
         flx3(m,IM2,k,j,i) = flux.mz;
         if (eos.is_ideal) {flx3(m,IEN,k,j,i) = flux.e;}
+        if (eos.is_cgl) {flx3(m,IAN,k,j,i) = flux.mu;}
         e2x3_(m,k,j,i) = flux.by;
         e1x3_(m,k,j,i) = flux.bz;
       }
@@ -327,7 +372,12 @@ void MHD::FOFC(Driver *pdriver, int stage) {
       wi.vx = w0_(m,IVX,k,j,i);
       wi.vy = w0_(m,IVY,k,j,i);
       wi.vz = w0_(m,IVZ,k,j,i);
-      if (eos.is_ideal) {wi.e = w0_(m,IEN,k,j,i);}
+      if (eos.is_cgl) {
+        wi.e  = w0_(m,IPR,k,j,i);
+        wi.pp = w0_(m,IPP,k,j,i);
+      } else if (eos.is_ideal) {
+        wi.e = w0_(m,IEN,k,j,i);
+      }
       wi.by = bcc0_(m,IBY,k,j,i);
       wi.bz = bcc0_(m,IBZ,k,j,i);
 
@@ -337,7 +387,12 @@ void MHD::FOFC(Driver *pdriver, int stage) {
       wip1.vx = w0_(m,IVX,k,j,i+1);
       wip1.vy = w0_(m,IVY,k,j,i+1);
       wip1.vz = w0_(m,IVZ,k,j,i+1);
-      if (eos.is_ideal) {wip1.e = w0_(m,IEN,k,j,i+1);}
+      if (eos.is_cgl) {
+        wip1.e  = w0_(m,IPR,k,j,i+1);
+        wip1.pp = w0_(m,IPP,k,j,i+1);
+      } else if (eos.is_ideal) {
+        wip1.e = w0_(m,IEN,k,j,i+1);
+      }
       wip1.by = bcc0_(m,IBY,k,j,i+1);
       wip1.bz = bcc0_(m,IBZ,k,j,i+1);
 
@@ -361,7 +416,11 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         } else if (is_sr) {
           SingleStateLLF_SRMHD(wi, wip1, bxi, eos, flux);
         } else {
-          SingleStateLLF_MHD(wi, wip1, bxi, eos, flux);
+          if (eos.is_cgl) {
+            SingleStateLLF_CGL(wi, wip1, bxi, eos, flux);
+          } else {
+            SingleStateLLF_MHD(wi, wip1, bxi, eos, flux);
+          }
         }
 
         // store 1st-order fluxes.
@@ -370,6 +429,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx1(m,IM2,k,j,i+1) = flux.my;
         flx1(m,IM3,k,j,i+1) = flux.mz;
         if (eos.is_ideal) {flx1(m,IEN,k,j,i+1) = flux.e;}
+        if (eos.is_cgl) {flx1(m,IAN,k,j,i+1) = flux.mu;}
         e3x1_(m,k,j,i+1) = flux.by;
         e2x1_(m,k,j,i+1) = flux.bz;
       }
@@ -381,7 +441,12 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         wj.vx = w0_(m,IVY,k,j,i);
         wj.vy = w0_(m,IVZ,k,j,i);
         wj.vz = w0_(m,IVX,k,j,i);
-        if (eos.is_ideal) {wj.e = w0_(m,IEN,k,j,i);}
+        if (eos.is_cgl) {
+          wj.e  = w0_(m,IPR,k,j,i);
+          wj.pp = w0_(m,IPP,k,j,i);
+        } else if (eos.is_ideal) {
+          wj.e = w0_(m,IEN,k,j,i);
+        }
         wj.by = bcc0_(m,IBZ,k,j,i);
         wj.bz = bcc0_(m,IBX,k,j,i);
 
@@ -391,7 +456,12 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         wjp1.vx = w0_(m,IVY,k,j+1,i);
         wjp1.vy = w0_(m,IVZ,k,j+1,i);
         wjp1.vz = w0_(m,IVX,k,j+1,i);
-        if (eos.is_ideal) {wjp1.e = w0_(m,IEN,k,j+1,i);}
+        if (eos.is_cgl) {
+          wjp1.e  = w0_(m,IPR,k,j+1,i);
+          wjp1.pp = w0_(m,IPP,k,j+1,i);
+        } else if (eos.is_ideal) {
+          wjp1.e = w0_(m,IEN,k,j+1,i);
+        }
         wjp1.by = bcc0_(m,IBZ,k,j+1,i);
         wjp1.bz = bcc0_(m,IBX,k,j+1,i);
 
@@ -414,7 +484,11 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         } else if (is_sr) {
           SingleStateLLF_SRMHD(wj, wjp1, bxi, eos, flux);
         } else {
-          SingleStateLLF_MHD(wj, wjp1, bxi, eos, flux);
+          if (eos.is_cgl) {
+            SingleStateLLF_CGL(wj, wjp1, bxi, eos, flux);
+          } else {
+            SingleStateLLF_MHD(wj, wjp1, bxi, eos, flux);
+          }
         }
 
         // store 1st-order fluxes, permutting indices.
@@ -423,6 +497,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx2(m,IM3,k,j+1,i) = flux.my;
         flx2(m,IM1,k,j+1,i) = flux.mz;
         if (eos.is_ideal) {flx2(m,IEN,k,j+1,i) = flux.e;}
+        if (eos.is_cgl) {flx2(m,IAN,k,j+1,i) = flux.mu;}
         e1x2_(m,k,j+1,i) = flux.by;
         e3x2_(m,k,j+1,i) = flux.bz;
       }
@@ -434,7 +509,12 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         wk.vx = w0_(m,IVZ,k,j,i);
         wk.vy = w0_(m,IVX,k,j,i);
         wk.vz = w0_(m,IVY,k,j,i);
-        if (eos.is_ideal) {wk.e = w0_(m,IEN,k,j,i);}
+        if (eos.is_cgl) {
+          wk.e  = w0_(m,IPR,k,j,i);
+          wk.pp = w0_(m,IPP,k,j,i);
+        } else if (eos.is_ideal) {
+          wk.e = w0_(m,IEN,k,j,i);
+        }
         wk.by = bcc0_(m,IBX,k,j,i);
         wk.bz = bcc0_(m,IBY,k,j,i);
 
@@ -444,7 +524,12 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         wkp1.vx = w0_(m,IVZ,k+1,j,i);
         wkp1.vy = w0_(m,IVX,k+1,j,i);
         wkp1.vz = w0_(m,IVY,k+1,j,i);
-        if (eos.is_ideal) {wkp1.e = w0_(m,IEN,k+1,j,i);}
+        if (eos.is_cgl) {
+          wkp1.e  = w0_(m,IPR,k+1,j,i);
+          wkp1.pp = w0_(m,IPP,k+1,j,i);
+        } else if (eos.is_ideal) {
+          wkp1.e = w0_(m,IEN,k+1,j,i);
+        }
         wkp1.by = bcc0_(m,IBX,k+1,j,i);
         wkp1.bz = bcc0_(m,IBY,k+1,j,i);
 
@@ -467,7 +552,11 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         } else if (is_sr) {
           SingleStateLLF_SRMHD(wk, wkp1, bxi, eos, flux);
         } else {
-          SingleStateLLF_MHD(wk, wkp1, bxi, eos, flux);
+          if (eos.is_cgl) {
+            SingleStateLLF_CGL(wk, wkp1, bxi, eos, flux);
+          } else {
+            SingleStateLLF_MHD(wk, wkp1, bxi, eos, flux);
+          }
         }
 
         // store 1st-order fluxes, permutting indices.
@@ -476,6 +565,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx3(m,IM1,k+1,j,i) = flux.my;
         flx3(m,IM2,k+1,j,i) = flux.mz;
         if (eos.is_ideal) {flx3(m,IEN,k+1,j,i) = flux.e;}
+        if (eos.is_cgl) {flx3(m,IAN,k+1,j,i) = flux.mu;}
         e2x3_(m,k+1,j,i) = flux.by;
         e1x3_(m,k+1,j,i) = flux.bz;
       }

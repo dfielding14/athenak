@@ -23,6 +23,7 @@ class Coordinates;
 class Viscosity;
 class Resistivity;
 class Conduction;
+class CGLLandauFluid;
 class ScalarDiffusion;
 class SourceTerms;
 class OrbitalAdvectionCC;
@@ -37,7 +38,7 @@ using MHDBoundaryFnPtr = void (*)(int m, Mesh* pm, MHD* pmhd, DvceArray5D<Real> 
 }
 
 // constants that enumerate MHD Riemann Solver options
-enum class MHD_RSolver {advect, llf, hlle, hlld, roe,   // non-relativistic
+enum class MHD_RSolver {advect, llf, hlle, hlle_cgl, hlld, roe,   // non-relativistic
                         llf_sr, hlle_sr,                // SR
                         llf_gr, hlle_gr};                       // GR
 
@@ -77,6 +78,7 @@ struct MHDTaskIDs {
   TaskID prol;
   TaskID c2p;
   TaskID newdt;
+  TaskID cglcoll;
   TaskID csend;
   TaskID crecv;
 };
@@ -96,7 +98,7 @@ class MHD {
   MHD_RSolver rsolver_method;
   EquationOfState *peos;   // chosen EOS
 
-  int nmhd;                // number of mhd variables (5/4 for ideal/isothermal EOS)
+  int nmhd;                // number of mhd variables (6/5/4 for CGL/ideal/isothermal EOS)
   int nscalars;            // number of passive scalars
   DvceArray5D<Real> u0;    // conserved variables
   DvceArray5D<Real> w0;    // primitive variables
@@ -123,6 +125,7 @@ class MHD {
   Viscosity *pvisc = nullptr;
   Resistivity *presist = nullptr;
   Conduction *pcond = nullptr;
+  CGLLandauFluid *pcgl_lf = nullptr;
   ScalarDiffusion *pscalar_diff = nullptr;
   SourceTerms *psrc = nullptr;
 
@@ -160,6 +163,7 @@ class MHD {
   bool has_explicit_scalar_diffusion = false;
   bool has_sts_viscosity = false;
   bool has_sts_conduction = false;
+  bool has_sts_cgl_lf = false;
   bool has_sts_resistivity = false;
   bool has_sts_scalar_diffusion = false;
   bool has_any_sts_diffusion = false;
@@ -207,12 +211,17 @@ class MHD {
   TaskStatus Prolongate(Driver* pdrive, int stage);
   TaskStatus ConToPrim(Driver *d, int stage);
   TaskStatus NewTimeStep(Driver *d, int stage);
+  TaskStatus CGLCollisions(Driver *d, int stage);
   TaskStatus ClearSTSFlux(Driver *d, int stage);
   TaskStatus ClearSTSEField(Driver *d, int stage);
   TaskStatus STSFluxes(Driver *d, int stage);
   TaskStatus STSEField(Driver *d, int stage);
   TaskStatus STSUpdateU(Driver *d, int stage);
   TaskStatus STSUpdateB(Driver *d, int stage);
+  TaskStatus BeginCGLLandauFluidSTSSweep(Driver *d, int stage);
+  TaskStatus CGLLandauFluidPrimitiveRefresh(Driver *d, int stage);
+  TaskStatus EndCGLLandauFluidSTSSweep(Driver *d, int stage);
+  TaskStatus STSPostSweepCGLCollisions(Driver *d, int stage);
   TaskStatus STSRefreshTimeStep(Driver *d, int stage);
   // ...in "after_stagen_tl" task list
   TaskStatus ClearSend(Driver *d, int stage);

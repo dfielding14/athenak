@@ -28,8 +28,14 @@ struct EOS_Data {
   Real gamma;        // ratio of specific heats for ideal gas
   Real iso_cs;       // isothermal sound speed
   bool is_ideal;     // flag to denote ideal gas EOS
+  bool is_cgl;       // flag to denote CGL anisotropic MHD EOS
+  bool passive;      // passive CGL evolution flag
+  bool mlim, flim;   // mirror and firehose limiter flags
+  bool coll;         // enable CGL collision/limiter relaxation
+  bool backup_lim;   // enable backup CGL instability limiters
+  Real nu_coll, lim_coll;  // physical and limiter collision frequencies
   bool use_e, use_t; // use internal energy density (e) or temperature (t) as primitive
-  Real dfloor, pfloor, tfloor, sfloor;  // density, pressure, temperature, entropy floors
+  Real dfloor, pfloor, tfloor, sfloor, bfloor;  // fluid and magnetic-field floors
   Real gamma_max;    // ceiling on Lorentz factor in SR/GR
   Real sigma_max;    // ceiling on magnetization in MHD
 
@@ -66,6 +72,29 @@ struct EOS_Data {
     Real qsq = bx*bx + ct2 + asq;
     Real tmp = bx*bx + ct2 - asq;
     return sqrt(0.5*(qsq + sqrt(tmp*tmp + 4.0*asq*ct2))/d);
+  }
+
+  // NON-RELATIVISTIC CGL MHD: inlined fast magnetosonic speed function.
+  KOKKOS_INLINE_FUNCTION
+  Real IdealMHDFastSpeed(const Real d, const Real ppar, const Real pperp,
+                         const Real bx, const Real by, const Real bz,
+                         const Real bflr) const {
+    const Real bperp2 = by*by + bz*bz;
+    const Real bx2 = bx*bx;
+    const Real b2 = bx2 + bperp2;
+    if (b2 < bflr*bflr) {
+      const Real p = ONE_3RD*ppar + TWO_3RDS*pperp;
+      const Real asq = gamma*p;
+      const Real qsq = b2 + asq;
+      const Real tmp = b2 - asq;
+      return sqrt(0.5*(qsq + sqrt(tmp*tmp + 4.0*asq*bperp2))/d);
+    }
+    const Real bhatx2 = bx2/b2;
+    const Real qsq = b2 + 2.0*pperp + (2.0*ppar - pperp)*bhatx2;
+    const Real disc = qsq*qsq + 4.0*pperp*pperp*(1.0 - bhatx2)*bhatx2
+                    - 12.0*ppar*pperp*bhatx2*(2.0 - bhatx2)
+                    + 12.0*ppar*pperp*bhatx2*bhatx2 - 12.0*bx2*ppar;
+    return sqrt(0.5*(qsq + sqrt(fabs(disc)))/d);
   }
 
   // SPECIAL RELATIVISTIC IDEAL GAS HYDRO: inlined maximal sound wave speeds function
@@ -224,6 +253,32 @@ class EquationOfState {
   virtual void PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                           DvceArray5D<Real> &cons, const int il, const int iu,
                           const int jl, const int ju, const int kl, const int ku);
+  virtual void Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
+                          DvceArray5D<Real> &cons, const int il, const int iu,
+                          const int jl, const int ju, const int kl, const int ku);
+  virtual void CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
+                                             const DvceArray5D<Real> &bcc,
+                                             const int il, const int iu,
+                                             const int jl, const int ju,
+                                             const int kl, const int ku);
+  virtual void CGLMagneticMomentToAnisotropy(DvceArray5D<Real> &cons,
+                                             const DvceArray5D<Real> &bcc,
+                                             const int il, const int iu,
+                                             const int jl, const int ju,
+                                             const int kl, const int ku);
+  virtual void CGLMagneticMomentToPrim(DvceArray5D<Real> &cons,
+                                       const DvceFaceFld4D<Real> &b,
+                                       DvceArray5D<Real> &prim,
+                                       DvceArray5D<Real> &bcc,
+                                       const int il, const int iu,
+                                       const int jl, const int ju,
+                                       const int kl, const int ku);
+  virtual void CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
+                                                const DvceArray5D<Real> &bcc,
+                                                DvceArray5D<Real> &prim,
+                                                const int il, const int iu,
+                                                const int jl, const int ju,
+                                                const int kl, const int ku);
 };
 
 //----------------------------------------------------------------------------------------
@@ -346,6 +401,52 @@ class IdealMHD : public EquationOfState {
   void PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                   DvceArray5D<Real> &cons, const int il, const int iu,
                   const int jl, const int ju, const int kl, const int ku) override;
+};
+
+//----------------------------------------------------------------------------------------
+//! \class CGLMHD
+//! \brief Derived class for the anisotropic CGL EOS in nonrelativistic MHD.
+
+class CGLMHD : public EquationOfState {
+ public:
+  using EquationOfState::ConsToPrim;
+  using EquationOfState::PrimToCons;
+
+  CGLMHD(MeshBlockPack *pp, ParameterInput *pin);
+  void ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
+                  DvceArray5D<Real> &prim, DvceArray5D<Real> &bcc,
+                  const bool only_testfloors,
+                  const int il, const int iu, const int jl, const int ju,
+                  const int kl, const int ku) override;
+  void PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
+                  DvceArray5D<Real> &cons, const int il, const int iu,
+                  const int jl, const int ju, const int kl, const int ku) override;
+  void Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
+                  DvceArray5D<Real> &cons, const int il, const int iu,
+                  const int jl, const int ju, const int kl, const int ku) override;
+  void CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
+                                     const DvceArray5D<Real> &bcc,
+                                     const int il, const int iu,
+                                     const int jl, const int ju,
+                                     const int kl, const int ku) override;
+  void CGLMagneticMomentToAnisotropy(DvceArray5D<Real> &cons,
+                                     const DvceArray5D<Real> &bcc,
+                                     const int il, const int iu,
+                                     const int jl, const int ju,
+                                     const int kl, const int ku) override;
+  void CGLMagneticMomentToPrim(DvceArray5D<Real> &cons,
+                               const DvceFaceFld4D<Real> &b,
+                               DvceArray5D<Real> &prim,
+                               DvceArray5D<Real> &bcc,
+                               const int il, const int iu,
+                               const int jl, const int ju,
+                               const int kl, const int ku) override;
+  void CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
+                                        const DvceArray5D<Real> &bcc,
+                                        DvceArray5D<Real> &prim,
+                                        const int il, const int iu,
+                                        const int jl, const int ju,
+                                        const int kl, const int ku) override;
 };
 
 //----------------------------------------------------------------------------------------

@@ -11,6 +11,7 @@
 #include "driver/driver.hpp"
 #include "eos/eos.hpp"
 #include "diffusion/conduction.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
 #include "diffusion/resistivity.hpp"
 #include "diffusion/scalar_diffusion.hpp"
 #include "diffusion/viscosity.hpp"
@@ -20,12 +21,16 @@ namespace {
 
 KOKKOS_INLINE_FUNCTION
 bool UpdateSTSMHDVariable(const int n, const bool update_momentum,
-                          const bool update_energy, const bool update_scalars,
+                          const bool update_energy, const bool update_cgl_moment,
+                          const bool update_scalars,
                           const int nmhd) {
   if (update_momentum && (n == IVX || n == IVY || n == IVZ)) {
     return true;
   }
   if (update_energy && n == IEN) {
+    return true;
+  }
+  if (update_cgl_moment && n == IAN) {
     return true;
   }
   if (update_scalars && n >= nmhd) {
@@ -64,6 +69,9 @@ void MHD::AddSelectedDiffusionFluxes(DiffusionSelection selection) {
   }
   if (add_conduction && pcond != nullptr) {
     pcond->AddHeatFlux(w0, peos->eos_data, uflx);
+  }
+  if (selection == DiffusionSelection::sts_only && has_sts_cgl_lf && pcgl_lf != nullptr) {
+    pcgl_lf->AddHeatFluxes(w0, bcc0, peos->eos_data, uflx);
   }
   if (add_scalar_diffusion && pscalar_diff != nullptr) {
     pscalar_diff->AddScalarDiffusionFlux(w0, nmhd, nscalars, uflx);
@@ -126,6 +134,23 @@ TaskStatus MHD::STSFluxes(Driver *pdrive, int stage) {
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::BeginCGLLandauFluidSTSSweep()
+//! \brief Switch the CGL extra state from anisotropy to magnetic moment for LF STS.
+
+TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
+  if (!has_sts_cgl_lf || !pdrive->sts.enabled || stage != 1) {
+    return TaskStatus::complete;
+  }
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int ng = indcs.ng;
+  const int n1m1 = indcs.nx1 + 2*ng - 1;
+  const int n2m1 = (indcs.nx2 > 1) ? indcs.nx2 + 2*ng - 1 : 0;
+  const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
+  peos->CGLAnisotropyToMagneticMoment(u0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::STSEField()
 //! \brief Accumulate only the STS-managed resistive EMF contribution.
 
@@ -156,11 +181,12 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
   Kokkos::deep_copy(DevExeSpace(), u_sts1, u0);
 
   const bool update_momentum = has_sts_viscosity;
-  const bool update_energy = (has_sts_conduction ||
+  const bool update_energy = (has_sts_conduction || has_sts_cgl_lf ||
                               ((has_sts_viscosity || has_sts_resistivity) &&
                                peos->eos_data.is_ideal));
+  const bool update_cgl_moment = has_sts_cgl_lf;
   const bool update_scalars = has_sts_scalar_diffusion;
-  if (!(update_momentum || update_energy || update_scalars)) {
+  if (!(update_momentum || update_energy || update_cgl_moment || update_scalars)) {
     return TaskStatus::complete;
   }
 
@@ -193,8 +219,8 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
   par_for_outer("mhd_sts_update_u", DevExeSpace(), scr_size, scr_level, 0, nmb1,
                 0, nvars - 1, ks, ke, js, je,
   KOKKOS_LAMBDA(TeamMember_t member, const int m, const int n, const int k, const int j) {
-    if (!UpdateSTSMHDVariable(n, update_momentum, update_energy, update_scalars,
-                              nmhd_vars)) {
+    if (!UpdateSTSMHDVariable(n, update_momentum, update_energy, update_cgl_moment,
+                              update_scalars, nmhd_vars)) {
       return;
     }
 
@@ -337,6 +363,56 @@ TaskStatus MHD::STSUpdateB(Driver *pdrive, int stage) {
     }
   });
 
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::CGLLandauFluidPrimitiveRefresh()
+//! \brief Recover CGL primitives between LF STS stages while IAN stores magnetic moment.
+
+TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int ng = indcs.ng;
+  const int n1m1 = indcs.nx1 + 2*ng - 1;
+  const int n2m1 = (indcs.nx2 > 1) ? indcs.nx2 + 2*ng - 1 : 0;
+  const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
+  peos->CGLRefreshPrimFromMagneticMoment(u0, bcc0, w0, 0, n1m1, 0, n2m1, 0, n3m1);
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::EndCGLLandauFluidSTSSweep()
+//! \brief Restore conserved anisotropy after the final LF STS stage.
+
+TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
+  if (!has_sts_cgl_lf || !pdrive->sts.enabled || stage != pdrive->sts.nstages) {
+    return TaskStatus::complete;
+  }
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int ng = indcs.ng;
+  const int n1m1 = indcs.nx1 + 2*ng - 1;
+  const int n2m1 = (indcs.nx2 > 1) ? indcs.nx2 + 2*ng - 1 : 0;
+  const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
+  peos->CGLMagneticMomentToAnisotropy(u0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::STSPostSweepCGLCollisions()
+//! \brief Apply CGL relaxation after each split LF sweep once anisotropy is restored.
+
+TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
+  if (!has_sts_cgl_lf || !peos->eos_data.coll || stage != pdrive->sts.nstages) {
+    return TaskStatus::complete;
+  }
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int ng = indcs.ng;
+  const int n1m1 = indcs.nx1 + 2*ng - 1;
+  const int n2m1 = (indcs.nx2 > 1) ? indcs.nx2 + 2*ng - 1 : 0;
+  const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
+  peos->Collisions(w0, bcc0, u0, 0, n1m1, 0, n2m1, 0, n3m1);
   return TaskStatus::complete;
 }
 

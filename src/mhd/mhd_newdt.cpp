@@ -18,6 +18,7 @@
 #include "eos/eos.hpp"
 #include "mhd.hpp"
 #include "diffusion/conduction.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
 #include "diffusion/resistivity.hpp"
 #include "diffusion/scalar_diffusion.hpp"
 #include "diffusion/viscosity.hpp"
@@ -132,11 +133,20 @@ void MHD::RecomputeTimeStepFromCurrentState(Driver *pdriver) {
       // timestep in Newtonian MHD
       } else {
         Real &w_d = w0_(m,IDN,k,j,i);
+        Real &w_e = w0_(m,IPR,k,j,i);
+        Real &w_p = w0_(m,IPP,k,j,i);
         Real &w_bx = bcc0_(m,IBX,k,j,i);
         Real &w_by = bcc0_(m,IBY,k,j,i);
         Real &w_bz = bcc0_(m,IBZ,k,j,i);
         Real cf;
-        if (eos.is_ideal) {
+        if (eos.is_cgl && !eos.passive) {
+          cf = eos.IdealMHDFastSpeed(w_d, w_e, w_p, w_bx, w_by, w_bz, eos.bfloor);
+          max_dv1 = fabs(w0_(m,IVX,k,j,i)) + cf;
+          cf = eos.IdealMHDFastSpeed(w_d, w_e, w_p, w_by, w_bz, w_bx, eos.bfloor);
+          max_dv2 = fabs(w0_(m,IVY,k,j,i)) + cf;
+          cf = eos.IdealMHDFastSpeed(w_d, w_e, w_p, w_bz, w_bx, w_by, eos.bfloor);
+          max_dv3 = fabs(w0_(m,IVZ,k,j,i)) + cf;
+        } else if (eos.is_ideal) {
           Real p = eos.IdealGasPressure(w0_(m,IEN,k,j,i));
           cf = eos.IdealMHDFastSpeed(w_d, p, w_bx, w_by, w_bz);
           max_dv1 = fabs(w0_(m,IVX,k,j,i)) + cf;
@@ -168,6 +178,9 @@ void MHD::RecomputeTimeStepFromCurrentState(Driver *pdriver) {
   // compute timestep for diffusion
   if (pcond != nullptr) {
     pcond->NewTimeStep(w0, peos->eos_data);
+  }
+  if (pcgl_lf != nullptr) {
+    pcgl_lf->NewTimeStep(w0, peos->eos_data);
   }
   if (pvisc != nullptr) {
     pvisc->NewTimeStep(w0, peos->eos_data);

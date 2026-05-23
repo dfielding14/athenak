@@ -17,6 +17,7 @@
 #include "diffusion/viscosity.hpp"
 #include "diffusion/resistivity.hpp"
 #include "diffusion/conduction.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
 #include "diffusion/scalar_diffusion.hpp"
 #include "srcterms/srcterms.hpp"
 #include "shearing_box/shearing_box.hpp"
@@ -94,6 +95,19 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       nmhd = 4;
     }
 
+  // CGL anisotropic MHD EOS
+  } else if (eqn_of_state.compare("cgl") == 0) {
+    if (pmy_pack->pcoord->is_special_relativistic ||
+        pmy_pack->pcoord->is_general_relativistic ||
+        pmy_pack->pcoord->is_dynamical_relativistic) {
+      std::cout <<"### FATAL ERROR in "<< __FILE__ <<" at line "<< __LINE__ << std::endl
+                <<"<mhd> eos = cgl cannot be used with SR/GR"<< std::endl;
+      std::exit(EXIT_FAILURE);
+    } else {
+      peos = new CGLMHD(ppack, pin);
+      nmhd = 6;
+    }
+
   // EOS string not recognized
   } else {
     std::cout <<"### FATAL ERROR in "<< __FILE__ <<" at line "<< __LINE__ << std::endl
@@ -145,6 +159,14 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   // Thermal conduction (only constructed if needed)
   if (pin->DoesParameterExist("mhd","conductivity") ||
       pin->DoesParameterExist("mhd","tdep_conductivity")) {
+    if (peos->eos_data.is_cgl) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Ordinary <mhd>/conductivity is disabled for <mhd>/eos = cgl. "
+                << "Use <mhd>/cgl_heat_flux = landau_fluid when that process is enabled."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     pcond = new Conduction("mhd", ppack, pin);
     const bool active = pcond->power_law_kappa ?
         (pcond->kappa > 0.0 || pcond->kappa_floor > 0.0) :
@@ -162,6 +184,23 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     }
   } else {
     pcond = nullptr;
+  }
+
+  // CGL Landau-fluid heat flux is an STS-only operator with its own state lifecycle.
+  if (pin->DoesParameterExist("mhd", "cgl_heat_flux")) {
+    if (!peos->eos_data.is_cgl) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<mhd>/cgl_heat_flux requires <mhd>/eos = cgl" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    pcgl_lf = new CGLLandauFluid(ppack, pin);
+    has_sts_cgl_lf = (pcgl_lf->mode == parabolic::ParabolicIntegratorMode::sts);
+    ppack->RegisterParabolicProcess({"mhd/cgl_heat_flux",
+                                     parabolic::ParabolicProcessOwner::mhd,
+                                     pcgl_lf->mode,
+                                     parabolic::ParabolicUpdateShape::cell_centered,
+                                     &(pcgl_lf->dtnew)});
   }
 
   // Diffusion of passive scalar concentrations (if requested in input file)
@@ -191,7 +230,18 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     psrc = new SourceTerms("mhd_srcterms", ppack, pin);
   }
 
+  if (has_sts_cgl_lf &&
+      (has_sts_viscosity || has_sts_conduction || has_sts_resistivity ||
+       has_sts_scalar_diffusion)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "CGL Landau-fluid STS cannot yet be combined with other MHD STS "
+              << "processes." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
   has_any_sts_cell_update = (has_sts_viscosity || has_sts_conduction ||
+                             has_sts_cgl_lf ||
                              has_sts_scalar_diffusion ||
                              (has_sts_resistivity && peos->eos_data.is_ideal));
   has_any_sts_field_update = has_sts_resistivity;
@@ -348,12 +398,25 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     } else if (evolution_t.compare("dynamic") == 0) {
       // LLF solver
       if (rsolver.compare("llf") == 0) {
+        if (peos->eos_data.is_cgl) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "<mhd>/rsolver = llf is not implemented for CGL"
+                    << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
         rsolver_method = MHD_RSolver::llf;
       // HLLE solver
       } else if (rsolver.compare("hlle") == 0) {
-        rsolver_method = MHD_RSolver::hlle;
+        rsolver_method = peos->eos_data.is_cgl ?
+                         MHD_RSolver::hlle_cgl : MHD_RSolver::hlle;
       // HLLD solver
       } else if (rsolver.compare("hlld") == 0) {
+        if (peos->eos_data.is_cgl) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "<mhd>/rsolver = hlld is not implemented for CGL"
+                    << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
         rsolver_method = MHD_RSolver::hlld;
       // Roe solver
       // } else if (rsolver.compare("roe") == 0) {
@@ -453,6 +516,7 @@ MHD::~MHD() {
   delete pbval_u;
   if (psrc!= nullptr) {delete psrc;}
   if (pscalar_diff != nullptr) {delete pscalar_diff;}
+  if (pcgl_lf != nullptr) {delete pcgl_lf;}
   if (pcond != nullptr) {delete pcond;}
   if (presist!= nullptr) {delete presist;}
   if (pvisc != nullptr) {delete pvisc;}

@@ -32,6 +32,7 @@ add_executable(
         coordinates/excision.cpp
 
         diffusion/conduction.cpp
+        diffusion/cgl_landau_fluid.cpp
         diffusion/resistivity.cpp
         diffusion/scalar_diffusion.cpp
         diffusion/sts_rkl2.cpp
@@ -44,6 +45,7 @@ add_executable(
         dyn_grmhd/dyn_grmhd_fofc.cpp
 
         eos/eos.cpp
+        eos/cgl_mhd.cpp
         eos/ideal_hyd.cpp
         eos/ideal_mhd.cpp
         eos/isothermal_hyd.cpp

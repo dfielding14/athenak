@@ -15,6 +15,7 @@ The EOS module provides thermodynamic closures for hydrodynamics and MHD, suppor
 | `ideal_mhd.cpp` | Ideal gas MHD | Magnetic pressure included |
 | `isothermal_hyd.cpp` | Isothermal hydro | Constant temperature |
 | `isothermal_mhd.cpp` | Isothermal MHD | No energy equation |
+| `cgl_mhd.cpp` | CGL anisotropic MHD | Parallel/perpendicular pressures and anisotropy state |
 | `ideal_srhyd.cpp` | Special relativistic | SR transformations |
 | `ideal_grhyd.cpp` | General relativistic | GR with ideal gas |
 | `primitive-solver/` | Advanced solvers | Tabulated EOS support |
@@ -31,6 +32,13 @@ $$c_s^2 = \frac{\gamma P}{\rho}$$
 $$P = c_s^2 \cdot \rho$$
 $$T = \text{constant}$$
 No energy equation needed
+
+### CGL MHD
+
+CGL MHD uses parallel and perpendicular primitive pressures and a sixth
+conserved MHD component for pressure anisotropy. It is restricted to
+non-relativistic MHD and may be coupled to the STS Landau-fluid closure; see
+[CGL Landau-Fluid Heat Flux](cgl_landau_fluid.md).
 
 ### Polytropic
 $$P = K \cdot \rho^\gamma$$

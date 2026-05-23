@@ -88,6 +88,87 @@ void SingleStateLLF_MHD(const MHDPrim1D &wl, const MHDPrim1D &wr, const Real &bx
 }
 
 //----------------------------------------------------------------------------------------
+//! \fn void SingleStateLLF_CGLStateAndFlux
+//! \brief Convert one CGL primitive state to conserved state and physical flux.
+
+KOKKOS_INLINE_FUNCTION
+void SingleStateLLF_CGLStateAndFlux(const MHDPrim1D &w, const Real &bxi,
+                                    const EOS_Data &eos, MHDCons1D &u,
+                                    MHDCons1D &f, Real &cf) {
+  Real ppar = w.e;
+  Real pperp = w.pp;
+  Real bsq = SQR(bxi) + SQR(w.by) + SQR(w.bz);
+  Real bmag = sqrt(bsq);
+  Real pB = 0.5*bsq;
+  Real fh = 1.0;
+
+  u.d  = w.d;
+  u.mx = w.d*w.vx;
+  u.my = w.d*w.vy;
+  u.mz = w.d*w.vz;
+  u.by = w.by;
+  u.bz = w.bz;
+
+  if (bmag > eos.bfloor) {
+    fh = 1.0 + (pperp - ppar)/bsq;
+    u.mu = w.d*log(pperp/ppar*SQR(w.d)/(bmag*bsq));
+  } else {
+    ppar = TWO_3RDS*pperp + ONE_3RD*ppar;
+    pperp = ppar;
+    u.mu = w.d*log(SQR(w.d)/(eos.bfloor*SQR(eos.bfloor)));
+  }
+
+  Real vsq = SQR(w.vx) + SQR(w.vy) + SQR(w.vz);
+  u.e = pperp + 0.5*ppar + 0.5*(w.d*vsq + bsq);
+
+  f.d = w.d*w.vx;
+  if (eos.passive) {
+    f.mx = w.d*w.vx*w.vx + pB + SQR(eos.iso_cs)*w.d - SQR(bxi);
+    f.my = w.d*w.vy*w.vx - bxi*w.by;
+    f.mz = w.d*w.vz*w.vx - bxi*w.bz;
+    cf = eos.IdealMHDFastSpeed(w.d, bxi, w.by, w.bz);
+  } else {
+    f.mx = w.d*w.vx*w.vx + pB + pperp - SQR(bxi)*fh;
+    f.my = w.d*w.vy*w.vx - bxi*w.by*fh;
+    f.mz = w.d*w.vz*w.vx - bxi*w.bz*fh;
+    cf = eos.IdealMHDFastSpeed(w.d, ppar, pperp, bxi, w.by, w.bz, eos.bfloor);
+  }
+  f.e = u.e*w.vx + w.vx*(pperp + pB);
+  f.e -= bxi*(bxi*w.vx + w.by*w.vy + w.bz*w.vz)*fh;
+  f.mu = u.mu*w.vx;
+  f.by = w.by*w.vx - bxi*w.vy;
+  f.bz = w.bz*w.vx - bxi*w.vz;
+
+  return;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void SingleStateLLF_CGL
+//! \brief The LLF Riemann solver for CGL-MHD for a single L/R state
+
+KOKKOS_INLINE_FUNCTION
+void SingleStateLLF_CGL(const MHDPrim1D &wl, const MHDPrim1D &wr, const Real &bxi,
+                        const EOS_Data &eos, MHDCons1D &flux) {
+  MHDCons1D ul, ur, fl, fr;
+  Real cl, cr;
+  SingleStateLLF_CGLStateAndFlux(wl, bxi, eos, ul, fl, cl);
+  SingleStateLLF_CGLStateAndFlux(wr, bxi, eos, ur, fr, cr);
+
+  Real a = fmax((fabs(wl.vx) + cl), (fabs(wr.vx) + cr));
+
+  flux.d  = 0.5*(fl.d  + fr.d  - a*(ur.d  - ul.d ));
+  flux.mx = 0.5*(fl.mx + fr.mx - a*(ur.mx - ul.mx));
+  flux.my = 0.5*(fl.my + fr.my - a*(ur.my - ul.my));
+  flux.mz = 0.5*(fl.mz + fr.mz - a*(ur.mz - ul.mz));
+  flux.e  = 0.5*(fl.e  + fr.e  - a*(ur.e  - ul.e ));
+  flux.mu = (flux.d >= 0.0) ? flux.d*(ul.mu/ul.d) : flux.d*(ur.mu/ur.d);
+  flux.by = -0.5*(fl.by + fr.by - a*(ur.by - ul.by));
+  flux.bz =  0.5*(fl.bz + fr.bz - a*(ur.bz - ul.bz));
+
+  return;
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn void SingleStateLLF_SRMHD
 //! \brief The LLF Riemann solver for SR MHD for a single L/R state
 

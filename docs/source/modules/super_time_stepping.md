@@ -17,6 +17,7 @@ The currently supported STS operators are:
 | Isotropic viscosity | Yes | Yes | Momentum and energy | `viscosity_integrator` |
 | Ohmic resistivity | No | Yes | Face-centered magnetic field | `ohmic_resistivity_integrator` |
 | Passive-scalar diffusion | Yes | Yes | Each scalar density | `scalar_diffusivity_integrator` |
+| CGL Landau-fluid heat flux | No | Yes | Energy and CGL magnetic moment | `cgl_heat_flux_integrator` |
 
 Each operator may instead remain on the ordinary explicit update. Runs can
 mix explicit and STS operators: only operators selecting `sts` are removed
@@ -77,6 +78,14 @@ Cell-centered operators use the Hydro/MHD conserved-state STS arrays.
 Ohmic resistivity uses the constrained-transport magnetic-field STS arrays.
 MHD does not perform face-field STS communication for viscosity, conduction,
 or scalar diffusion unless resistivity is also assigned to STS.
+
+For CGL Landau-fluid transport, MHD stores conserved anisotropy during normal
+evolution and converts that slot to magnetic moment only for the STS sweep.
+The LF process advances energy and magnetic moment, refreshes CGL primitives
+between stages, and restores anisotropy at the end of each sweep. This initial
+path is STS-only and rejects simultaneous MHD STS viscosity, resistivity,
+ordinary conduction, or scalar diffusion. See
+[CGL Landau-Fluid Heat Flux](cgl_landau_fluid.md).
 
 ## Process Contract
 
@@ -354,5 +363,5 @@ Both follow the expected second-order spatial convergence trend.
 | RKL2 controller and coefficients | `src/driver/driver.cpp`, `src/diffusion/sts_rkl2.cpp` |
 | Registered process descriptor | `src/diffusion/parabolic_process.hpp`, `src/mesh/meshblock_pack.hpp` |
 | Hydro/MHD STS task implementations | `src/hydro/hydro_sts.cpp`, `src/mhd/mhd_sts.cpp` |
-| Physical diffusion operators | `src/diffusion/conduction.cpp`, `src/diffusion/viscosity.cpp`, `src/diffusion/resistivity.cpp`, `src/diffusion/scalar_diffusion.cpp` |
+| Physical diffusion operators | `src/diffusion/conduction.cpp`, `src/diffusion/cgl_landau_fluid.cpp`, `src/diffusion/viscosity.cpp`, `src/diffusion/resistivity.cpp`, `src/diffusion/scalar_diffusion.cpp` |
 | Verification problem generator | `src/pgen/tests/sts_diffusion.cpp` |

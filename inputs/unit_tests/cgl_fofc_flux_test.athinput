@@ -1,0 +1,51 @@
+# AthenaK input for CGL FOFC flux unit test.
+
+<job>
+basename = cgl_fofc_flux_test
+
+<mesh>
+nghost = 3
+nx1 = 4
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 4
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 4
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 4
+nx2 = 4
+nx3 = 4
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim = 0
+tlim = 0.0
+ndiag = 1
+
+<mhd>
+eos = cgl
+passive = false
+fofc = true
+reconstruct = plm
+rsolver = hlle
+gamma = 1.666666666666667
+dfloor = 1.0e-12
+pfloor = 1.0e-12
+tfloor = 1.0e-12
+sfloor = 1.0e-12
+bfloor = 1.0e-10
+
+<problem>
+pgen_name = cgl_fofc_flux_test

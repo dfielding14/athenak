@@ -76,6 +76,10 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, id.prol);
   id.newdt     = tl["stagen"]->AddTask(&MHD::NewTimeStep, this, id.c2p);
 
+  if (peos->eos_data.is_cgl && peos->eos_data.coll && !has_sts_cgl_lf) {
+    id.cglcoll = tl["after_timeintegrator"]->AddTask(&MHD::CGLCollisions, this, none);
+  }
+
   // assemble "after_stagen" task list
   id.csend = tl["after_stagen"]->AddTask(&MHD::ClearSend, this, none);
   // although RecvFlux/U/E/B functions check that all recvs complete, add ClearRecv to
@@ -83,7 +87,12 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.crecv = tl["after_stagen"]->AddTask(&MHD::ClearRecv, this, id.csend);
 
   if (has_any_sts_diffusion) {
-    tl["before_parabolic_stagen"]->AddTask(&MHD::InitRecvParabolic, this, none);
+    TaskID pinit =
+        tl["before_parabolic_stagen"]->AddTask(&MHD::InitRecvParabolic, this, none);
+    if (has_sts_cgl_lf) {
+      (void) tl["before_parabolic_stagen"]->AddTask(
+          &MHD::BeginCGLLandauFluidSTSSweep, this, pinit);
+    }
 
     TaskID pclearf = tl["parabolic_stagen"]->AddTask(&MHD::ClearSTSFlux, this, none);
     TaskID pflux = tl["parabolic_stagen"]->AddTask(&MHD::STSFluxes, this, pclearf);
@@ -116,8 +125,20 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
     TaskID pbcs = tl["parabolic_stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this,
                                                   boundary_dependency);
     TaskID pprol = tl["parabolic_stagen"]->AddTask(&MHD::Prolongate, this, pbcs);
-    TaskID pc2p = tl["parabolic_stagen"]->AddTask(&MHD::ConToPrim, this, pprol);
-    (void) tl["parabolic_stagen"]->AddTask(&MHD::STSRefreshTimeStep, this, pc2p);
+    TaskID pc2p = has_sts_cgl_lf ?
+        tl["parabolic_stagen"]->AddTask(&MHD::CGLLandauFluidPrimitiveRefresh,
+                                        this, pprol) :
+        tl["parabolic_stagen"]->AddTask(&MHD::ConToPrim, this, pprol);
+    TaskID pend = pc2p;
+    if (has_sts_cgl_lf) {
+      pend = tl["parabolic_stagen"]->AddTask(&MHD::EndCGLLandauFluidSTSSweep,
+                                             this, pc2p);
+      if (peos->eos_data.coll) {
+        pend = tl["parabolic_stagen"]->AddTask(&MHD::STSPostSweepCGLCollisions,
+                                               this, pend);
+      }
+    }
+    (void) tl["parabolic_stagen"]->AddTask(&MHD::STSRefreshTimeStep, this, pend);
 
     TaskID pcsend = tl["after_parabolic_stagen"]->AddTask(&MHD::ClearSend, this, none);
     (void) tl["after_parabolic_stagen"]->AddTask(&MHD::ClearRecv, this, pcsend);
@@ -246,6 +267,8 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
     CalculateFluxes<MHD_RSolver::llf>(pdrive, stage);
   } else if (rsolver_method == MHD_RSolver::hlle) {
     CalculateFluxes<MHD_RSolver::hlle>(pdrive, stage);
+  } else if (rsolver_method == MHD_RSolver::hlle_cgl) {
+    CalculateFluxes<MHD_RSolver::hlle_cgl>(pdrive, stage);
   } else if (rsolver_method == MHD_RSolver::hlld) {
     CalculateFluxes<MHD_RSolver::hlld>(pdrive, stage);
   } else if (rsolver_method == MHD_RSolver::llf_sr) {
@@ -597,6 +620,25 @@ TaskStatus MHD::ConToPrim(Driver *pdrive, int stage) {
   int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
   int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
   peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn TaskStatus MHD::CGLCollisions
+//! \brief Apply CGL pressure-anisotropy relaxation after the hyperbolic update.
+
+TaskStatus MHD::CGLCollisions(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  if (!peos->eos_data.is_cgl || !peos->eos_data.coll) {
+    return TaskStatus::complete;
+  }
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int &ng = indcs.ng;
+  int n1m1 = indcs.nx1 + 2*ng - 1;
+  int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
+  int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
+  peos->Collisions(w0, bcc0, u0, 0, n1m1, 0, n2m1, 0, n3m1);
   return TaskStatus::complete;
 }
 

@@ -51,7 +51,7 @@ Passive scalars are appended to hydro variables in both `u0` and `w0`, ensuring 
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `eos` | – (required) | `ideal` or `isothermal` (SR/GR require `ideal`). |
+| `eos` | – (required) | `ideal`, `isothermal`, or Newtonian-only `cgl` (SR/GR require `ideal`). |
 | `gamma` | – | Adiabatic index for ideal EOS. |
 | `iso_sound_speed` | – | Constant sound speed for isothermal runs. |
 | `nscalars` | `0` | Number of passively advected scalars. |
@@ -61,6 +61,7 @@ Passive scalars are appended to hydro variables in both `u0` and `w0`, ensuring 
 | `viscosity` | absent | Enables isotropic viscosity (diffusion module). |
 | `ohmic_resistivity` | absent | Enables resistive diffusion. |
 | `conductivity` / `tdep_conductivity` | absent | Enables thermal conduction. |
+| `cgl_heat_flux` | absent | Set to `landau_fluid` with `eos = cgl` for STS LF transport. |
 
 The constructor enforces EOS/solver compatibility and throws fatal errors for unsupported combinations (`src/mhd/mhd.cpp:36`).
 
@@ -78,7 +79,7 @@ The constructor enforces EOS/solver compatibility and throws fatal errors for un
 
 | Regime | Supported keywords | Notes |
 |--------|-------------------|-------|
-| Non-relativistic dynamic | `llf`, `hlle`, `hlld` | HLLD available only with `ideal` EOS. |
+| Non-relativistic dynamic | `llf`, `hlle`, `hlld` | CGL uses `hlle`; LLF and HLLD are rejected for CGL. |
 | Special relativistic dynamic | `llf`, `hlle` | Mapped to `MHD_RSolver::*_sr`. |
 | General relativistic dynamic | `llf`, `hlle` | Mapped to `MHD_RSolver::*_gr`. |
 
@@ -86,6 +87,7 @@ No Roe solver is implemented for MHD; specifying it raises a fatal error.
 
 ## Diffusion & Source Coupling
 - Viscosity, resistivity, and conduction modules are instantiated only when the corresponding coefficients appear in `<mhd>`. Their fluxes are added immediately after the Riemann solver inside `MHD::Fluxes` (`src/mhd/mhd_tasks.cpp:121`).
+- CGL Landau-fluid heat flux is a distinct STS parabolic process; it updates energy and the temporary magnetic-moment representation documented in [cgl_landau_fluid.md](cgl_landau_fluid.md).
 - `SourceTerms("mhd", …)` applies body forces, turbulence driving, etc., and contributes to the timestep limiter.
 - Orbital advection and shearing-box boundary handlers (`OrbitalAdvection{CC,FC}`, `ShearingBoxBoundary{CC,FC}`) are constructed when `<shearing_box>` exists.
 

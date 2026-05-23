@@ -33,6 +33,11 @@ void Advect(TeamMember_t const &member, const EOS_Data &eos,
       flx(m,ivx,k,j,i) = wl(IDN,i)*wl(ivx,i)*wl(ivx,i);
       flx(m,ivy,k,j,i) = 0.0;
       flx(m,ivz,k,j,i) = 0.0;
+      // CGL parabolic unit tests use advect to isolate STS; leave no stale LF flux.
+      if (eos.is_cgl) {
+        flx(m,IEN,k,j,i) = 0.0;
+        flx(m,IAN,k,j,i) = 0.0;
+      }
       ey(m,k,j,i) = -bl(iby,i)*wl(ivx,i) + bx(m,k,j,i)*wl(ivy,i);
       ez(m,k,j,i) =  bl(ibz,i)*wl(ivx,i) - bx(m,k,j,i)*wl(ivz,i);
     } else {
@@ -40,6 +45,11 @@ void Advect(TeamMember_t const &member, const EOS_Data &eos,
       flx(m,ivx,k,j,i) = wr(IDN,i)*wr(ivx,i)*wr(ivx,i);
       flx(m,ivy,k,j,i) = 0.0;
       flx(m,ivz,k,j,i) = 0.0;
+      // CGL parabolic unit tests use advect to isolate STS; leave no stale LF flux.
+      if (eos.is_cgl) {
+        flx(m,IEN,k,j,i) = 0.0;
+        flx(m,IAN,k,j,i) = 0.0;
+      }
       ey(m,k,j,i) = -br(iby,i)*wr(ivx,i) + bx(m,k,j,i)*wr(ivy,i);
       ez(m,k,j,i) =  br(ibz,i)*wr(ivx,i) - bx(m,k,j,i)*wr(ivz,i);
     }
