@@ -260,6 +260,7 @@ TaskStatus MHD::CopyCons(Driver *pdrive, int stage) {
 //! of conserved variables
 
 TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
+  RequireCGLAnisotropyRepresentation("MHD hyperbolic flux evaluation");
   // select which calculate_flux function to call based on rsolver_method
   if (rsolver_method == MHD_RSolver::advect) {
     CalculateFluxes<MHD_RSolver::advect>(pdrive, stage);
@@ -614,6 +615,9 @@ TaskStatus MHD::Prolongate(Driver *pdrive, int stage) {
 //! \brief Wrapper task list function to call ConsToPrim over entire mesh (including gz)
 
 TaskStatus MHD::ConToPrim(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  RequireCGLAnisotropyRepresentation("MHD conserved-to-primitive conversion");
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int &ng = indcs.ng;
   int n1m1 = indcs.nx1 + 2*ng - 1;
@@ -633,6 +637,7 @@ TaskStatus MHD::CGLCollisions(Driver *pdrive, int stage) {
   if (!peos->eos_data.is_cgl || !peos->eos_data.coll) {
     return TaskStatus::complete;
   }
+  RequireCGLAnisotropyRepresentation("CGL collision relaxation");
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int &ng = indcs.ng;
   int n1m1 = indcs.nx1 + 2*ng - 1;

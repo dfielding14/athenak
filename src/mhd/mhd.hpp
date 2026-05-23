@@ -85,6 +85,8 @@ struct MHDTaskIDs {
 
 namespace mhd {
 
+enum class CGLSlotRepresentation {anisotropy, magnetic_moment};
+
 //----------------------------------------------------------------------------------------
 //! \class MHD
 
@@ -169,12 +171,15 @@ class MHD {
   bool has_any_sts_diffusion = false;
   bool has_any_sts_cell_update = false;
   bool has_any_sts_field_update = false;
+  CGLSlotRepresentation cgl_slot_representation = CGLSlotRepresentation::anisotropy;
 
   // container to hold names of TaskIDs
   MHDTaskIDs id;
 
   // functions...
   void SetSaveWBcc();
+  void RequireCGLAnisotropyRepresentation(const char *consumer) const;
+  void RequireCGLMagneticMomentRepresentation(const char *consumer) const;
   void AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl);
   // ...in "before_timeintegrator" task list
   TaskStatus SaveMHDState(Driver *d, int stage);

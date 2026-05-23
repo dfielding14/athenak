@@ -1,5 +1,5 @@
 # CGL Landau-fluid STS limiter stress test.
-# cgl_lf_admissibility_check detects bad intermediate STS states without applying limiters.
+# Strict admissibility detects unsafe intermediate LF states while limiters operate.
 
 <job>
 basename = cgl_lf_limiter_mirror
@@ -48,7 +48,7 @@ cgl_heat_flux_integrator = sts
 lf_k_parallel = 6.283185307179586
 lf_coefficient_mode = background
 lf_c_parallel0 = 1.0
-cgl_lf_admissibility_check = true
+cgl_lf_strict_admissibility = true
 reconstruct = plm
 rsolver = advect
 gamma = 1.666666666666667

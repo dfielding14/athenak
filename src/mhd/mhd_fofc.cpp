@@ -28,6 +28,7 @@ namespace mhd {
 //! triggered (without estimating updated conserved variables).
 
 void MHD::FOFC(Driver *pdriver, int stage) {
+  RequireCGLAnisotropyRepresentation("MHD FOFC");
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie, nx1 = indcs.nx1;
   int js = indcs.js, je = indcs.je, nx2 = indcs.nx2;

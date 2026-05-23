@@ -22,6 +22,7 @@ cgl_heat_flux = landau_fluid
 cgl_heat_flux_integrator = sts
 lf_k_parallel = 32.0
 lf_coefficient_mode = local
+cgl_lf_strict_admissibility = false
 ```
 
 `lf_k_parallel` is the closure wavenumber magnitude, not a conductivity.
@@ -48,6 +49,12 @@ sweep the MHD task graph performs:
 This lifecycle prevents ordinary hyperbolic fluxes, output, and restart state
 from interpreting magnetic moment as pressure anisotropy.
 
+AthenaK records LF-stage health metrics in normal MHD history output whenever
+this closure is active. Set `cgl_lf_strict_admissibility = true` for
+verification runs to terminate immediately if an LF refresh produces
+non-finite or non-positive thermodynamic state, activates density or pressure
+floors, or crosses a configured hard mirror/firehose backup bound.
+
 ## Closure Controls
 
 | Parameter | Default | Meaning |
@@ -64,6 +71,14 @@ from interpreting magnetic moment as pressure anisotropy.
 | `firehose_limiter` | `false` | Enable firehose-limiter relaxation. |
 | `limiter_nu_coll` | `0.0` | Limiter relaxation frequency. |
 | `backup_limiters` | `false` | Enable hard backup bounds for active limiters. |
+| `cgl_lf_strict_admissibility` | `false` | Fail an LF split stage on unsafe state, LF floors, or hard-bound violations. |
+
+Normal `.mhd.hst` output appends cumulative columns when LF is active:
+`lf_nstage`, `lf_dfloor`, `lf_pfloor`, `lf_nonfin`, `lf_nonpos`,
+`lf_mirror`, `lf_firehs`, and `lf_hardbd`. Differences between successive
+rows give interval counts; divide limiter counts by `lf_nstage` differences
+to obtain cell-stage occupancy fractions. The existing `aam-D` history
+column remains the conserved anisotropy variable for compatibility.
 
 ## Current Restrictions
 
@@ -72,6 +87,8 @@ from interpreting magnetic moment as pressure anisotropy.
 - Ordinary `<mhd>/conductivity` is rejected with `eos = cgl`.
 - CGL LF is currently STS-only and cannot be combined with another MHD
   process selecting STS in the same run.
+- CGL LF with mesh refinement currently requires conserved prolongation;
+  `<mesh_refinement>/prolong_primitives = true` is rejected.
 
 ## Verification
 

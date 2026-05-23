@@ -44,6 +44,7 @@ TaskStatus MHD::NewTimeStep(Driver *pdriver, int stage) {
 //! \brief Recompute hyperbolic and registered parabolic timestep limits.
 
 void MHD::RecomputeTimeStepFromCurrentState(Driver *pdriver) {
+  RequireCGLAnisotropyRepresentation("MHD timestep recomputation");
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, nx1 = indcs.nx1;
   int js = indcs.js, nx2 = indcs.nx2;

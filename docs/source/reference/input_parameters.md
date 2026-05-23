@@ -143,6 +143,7 @@ Complete list of all input parameters by block, extracted from source code.
 | `firehose_limiter` | bool | false | cgl_mhd.cpp |
 | `limiter_nu_coll` | Real | 0.0 | cgl_mhd.cpp |
 | `backup_limiters` | bool | false | cgl_mhd.cpp |
+| `cgl_lf_strict_admissibility` | bool | false | cgl_landau_fluid.cpp |
 | `fixed` | bool | false | dyn_grmhd.cpp:L124 |
 | `fofc` | bool | false | mhd.cpp:L176 |
 | `fofc_method` | string | llf | dyn_grmhd.cpp:L109 |

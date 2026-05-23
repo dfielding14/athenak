@@ -11,6 +11,8 @@
 //! with an ideal gas EOS. Versions for both non-relativistic and relativistic fluids are
 //! provided.
 
+#include "eos/cgl_physics.hpp"
+
 //----------------------------------------------------------------------------------------
 //! \!fn void SingleC2P_IdealMHD()
 //! \brief Converts conserved into primitive variables.  Operates over range of cells
@@ -410,46 +412,60 @@ void SingleColl_CGLMHD(MHDPrim1D &w, const Real &nu_coll, const Real &lim_coll,
 
   // Apply limiters
   Real nudt = lim_coll*dtc;
-  Real nudt_b = 10000000000.*dtc;
+  Real nudt_b = cgl::kBackupCollisionRate*dtc;
   Real bsqr = w.bx*w.bx+w.by*w.by+w.bz*w.bz;
   Real wpptmp;
 
   // Firehose block
   if (flim && backup) { //if using backup
-    if ((paniso <= -0.7*bsqr) && (paniso > -bsqr)) { //in between limiters
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e - 0.7*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e + 2.*0.7*bsqr ))/(3.+3.*nudt);
+    if (cgl::FirehoseLimiterActive(paniso, bsqr) &&
+        !cgl::FirehoseHardBoundViolated(paniso, bsqr)) { //in between limiters
+      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
+                  + cgl::kFirehoseThreshold*bsqr ))/(3.+3.*nudt);
+      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
+                - 2.*cgl::kFirehoseThreshold*bsqr ))/(3.+3.*nudt);
       w.pp = wpptmp;
-    } else if ((paniso <= -bsqr)) {  //beyond backup limiters
-      wpptmp = (3.*w.pp + nudt_b*(2.*w.pp + w.e - bsqr ))/(3.+3.*nudt_b);
-      w.e = (3.*w.e + nudt_b*(2.*w.pp + w.e + 2.*bsqr ))/(3.+3.*nudt_b);
+    } else if (cgl::FirehoseHardBoundViolated(paniso, bsqr)) {
+      wpptmp = (3.*w.pp + nudt_b*(2.*w.pp + w.e
+                  + cgl::kFirehoseHardBound*bsqr ))/(3.+3.*nudt_b);
+      w.e = (3.*w.e + nudt_b*(2.*w.pp + w.e
+                - 2.*cgl::kFirehoseHardBound*bsqr ))/(3.+3.*nudt_b);
       w.pp = wpptmp;
     }
 
   } else if (flim && (!backup)) { //if not using backup, just standard flim
-    if ((paniso <= -0.7*bsqr)) {
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e - 0.7*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e + 2.*0.7*bsqr ))/(3.+3.*nudt);
+    if (cgl::FirehoseLimiterActive(paniso, bsqr)) {
+      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
+                  + cgl::kFirehoseThreshold*bsqr ))/(3.+3.*nudt);
+      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
+                - 2.*cgl::kFirehoseThreshold*bsqr ))/(3.+3.*nudt);
       w.pp = wpptmp;
     }
   }
 
   // Mirror block
   if (mlim && backup) {
-    if ((paniso >= 0.5*bsqr) && (paniso < bsqr)) { //in between limiters
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e + 0.5*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e - bsqr ))/(3.+3.*nudt);
+    if (cgl::MirrorLimiterActive(paniso, bsqr) &&
+        !cgl::MirrorHardBoundViolated(paniso, bsqr)) { //in between limiters
+      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
+                  + cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
+      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
+                - 2.*cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
       w.pp = wpptmp;
-    } else if ((paniso >= 0.5*bsqr)) {  //beyond backup limiters
-      wpptmp = (3.*w.pp + nudt_b*(2.*w.pp + w.e + bsqr ))/(3.+3.*nudt_b);
-      w.e = (3.*w.e + nudt_b*(2.*w.pp + w.e - 2.*bsqr ))/(3.+3.*nudt_b);
+    } else if (cgl::MirrorHardBoundViolated(paniso, bsqr)) {
+      wpptmp = (3.*w.pp + nudt_b*(2.*w.pp + w.e
+                  + cgl::kMirrorHardBound*bsqr ))/(3.+3.*nudt_b);
+      w.e = (3.*w.e + nudt_b*(2.*w.pp + w.e
+                - 2.*cgl::kMirrorHardBound*bsqr ))/(3.+3.*nudt_b);
       w.pp = wpptmp;
     }
 
   } else if (mlim && (!backup)) {  //if not using backup, just standard mlim
-    if ((paniso >= 0.5*bsqr)) {
-      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e + 0.5*bsqr ))/(3.+3.*nudt);
-      w.e = (3.*w.e + nudt*(2.*w.pp + w.e - bsqr ))/(3.+3.*nudt);
+    if (cgl::MirrorLimiterActive(paniso, bsqr)) {
+      wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
+                  + cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
+      w.e = (3.*w.e + nudt*(2.*w.pp + w.e
+                - 2.*cgl::kMirrorThreshold*bsqr ))/(3.+3.*nudt);
       w.pp = wpptmp;
     }
   }

@@ -90,6 +90,7 @@ void RestartOutput::LoadOutputData(Mesh *pm) {
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));
   }
   if (pmhd != nullptr) {
+    pmhd->RequireCGLAnisotropyRepresentation("MHD restart output");
     Kokkos::realloc(outarray_mhd, nmb, nmhd, nout3, nout2, nout1);
     Kokkos::deep_copy(outarray_mhd, Kokkos::subview(pmhd->u0, std::make_pair(0,nmb),
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL));

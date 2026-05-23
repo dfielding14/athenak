@@ -27,6 +27,34 @@
 
 namespace mhd {
 //----------------------------------------------------------------------------------------
+//! \brief Fail if an ordinary CGL consumer sees the temporary LF magnetic-moment slot.
+
+void MHD::RequireCGLAnisotropyRepresentation(const char *consumer) const {
+  if (pcgl_lf != nullptr &&
+      cgl_slot_representation != CGLSlotRepresentation::anisotropy) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << consumer << " cannot run while the CGL IAN slot stores magnetic moment."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Fail if a CGL LF stage callback runs outside its temporary representation.
+
+void MHD::RequireCGLMagneticMomentRepresentation(const char *consumer) const {
+  if (pcgl_lf == nullptr ||
+      cgl_slot_representation != CGLSlotRepresentation::magnetic_moment) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << consumer << " requires the CGL IAN slot to store magnetic moment."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
+//----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
 
 MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
@@ -196,6 +224,15 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     }
     pcgl_lf = new CGLLandauFluid(ppack, pin);
     has_sts_cgl_lf = (pcgl_lf->mode == parabolic::ParabolicIntegratorMode::sts);
+    if (pmy_pack->pmesh->multilevel && pmy_pack->pmesh->pmr != nullptr &&
+        pmy_pack->pmesh->pmr->prolong_prims) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "CGL Landau-fluid transport does not support "
+                << "<mesh_refinement>/prolong_primitives = true; use conserved "
+                << "prolongation for LF AMR runs." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     ppack->RegisterParabolicProcess({"mhd/cgl_heat_flux",
                                      parabolic::ParabolicProcessOwner::mhd,
                                      pcgl_lf->mode,

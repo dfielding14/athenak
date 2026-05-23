@@ -16,6 +16,7 @@
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "eos/cgl_physics.hpp"
 #include "diffusion/cgl_landau_fluid.hpp"
 
 namespace {
@@ -31,36 +32,6 @@ parabolic::ParabolicIntegratorMode ParseCGLHeatFluxIntegrator(ParameterInput *pi
             << "' is not implemented; the initial CGL Landau-fluid feature is STS-only."
             << std::endl;
   std::exit(EXIT_FAILURE);
-}
-
-KOKKOS_INLINE_FUNCTION
-Real CGLLimiterCollisionRate(const Real ppar, const Real pperp, const Real bsqr,
-                             const Real limiter_rate, const bool mirror,
-                             const bool firehose, const bool backup) {
-  const Real paniso = pperp - ppar;
-  const Real rate = fmax(limiter_rate, static_cast<Real>(0.0));
-  const Real backup_rate = static_cast<Real>(1.0e10);
-  Real nu = 0.0;
-  if (firehose) {
-    if (backup && paniso <= -bsqr) {
-      nu = backup_rate;
-    } else if (paniso <= static_cast<Real>(-0.7)*bsqr) {
-      nu = rate;
-    }
-  }
-  if (mirror) {
-    if (backup && paniso >= bsqr) {
-      nu = fmax(nu, backup_rate);
-    } else if (paniso >= static_cast<Real>(0.5)*bsqr) {
-      nu = fmax(nu, rate);
-    }
-  }
-  return nu;
-}
-
-KOKKOS_INLINE_FUNCTION
-Real CGLLimitedHeatFlux(const Real q, const Real qmax) {
-  return (qmax > 0.0) ? q*qmax/(qmax + fabs(q)) : 0.0;
 }
 
 struct CGLLFFaceState {
@@ -100,11 +71,11 @@ bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
   face.cparallel =
       coeff_local ? sqrt(fmax(face.ppar/face.rho, eos.tfloor)) : cparallel0;
   const Real nu = fmax(eos.nu_coll, static_cast<Real>(0.0)) +
-      CGLLimiterCollisionRate(face.ppar, face.pperp, bsqr, eos.lim_coll,
-                              eos.mlim, eos.flim, eos.backup_lim);
-  const Real denom_perp = static_cast<Real>(2.5066282746310002)*face.cparallel*lf_k + nu;
-  const Real denom_parallel = static_cast<Real>(5.013256549262000)*face.cparallel*lf_k
-                            + static_cast<Real>(1.4247779607693793)*nu;
+      cgl::LimiterCollisionRate(face.ppar, face.pperp, bsqr, eos.lim_coll,
+                                eos.mlim, eos.flim, eos.backup_lim);
+  const Real denom_perp = cgl::kSqrtTwoPi*face.cparallel*lf_k + nu;
+  const Real denom_parallel = cgl::kSqrtEightPi*face.cparallel*lf_k
+                            + cgl::kThreePiMinusEight*nu;
   face.chi_perp = (denom_perp > 0.0) ? 2.0*SQR(face.cparallel)/denom_perp : 0.0;
   face.chi_parallel =
       (denom_parallel > 0.0) ? 8.0*SQR(face.cparallel)/denom_parallel : 0.0;
@@ -124,10 +95,10 @@ void CGLLFFlux(const CGLLFFaceState &face, const Real gtpar_x, const Real gtpar_
   const Real qpar_l = -face.chi_parallel*face.rho*grad_tpar;
   const Real qperp_l = -face.chi_perp*(face.rho*grad_tperp -
       face.pperp*(1.0 - face.pperp/face.ppar)*grad_b/face.bmag);
-  const Real qpar = CGLLimitedHeatFlux(
-      qpar_l, static_cast<Real>(1.5957691216057308)*face.cparallel*face.ppar);
-  const Real qperp = CGLLimitedHeatFlux(
-      qperp_l, static_cast<Real>(0.7978845608028654)*face.cparallel*face.pperp);
+  const Real qpar = cgl::LimitedHeatFlux(qpar_l,
+      cgl::kSqrtEightOverPi*face.cparallel*face.ppar);
+  const Real qperp = cgl::LimitedHeatFlux(qperp_l,
+      cgl::kSqrtTwoOverPi*face.cparallel*face.pperp);
   eflux = face.bhdir*(qperp + static_cast<Real>(0.5)*qpar);
   muflux = face.bhdir*qperp/face.bmag;
 }
@@ -139,6 +110,7 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
     lf_k_parallel(0.0),
     lf_coeff_local(true),
     lf_c_parallel0(0.0),
+    strict_admissibility(false),
     mode(parabolic::ParabolicIntegratorMode::sts),
     pmy_pack(pp),
     tpar_("cgl_lf_tpar", 1, 1, 1, 1),
@@ -174,6 +146,8 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
   mode = ParseCGLHeatFluxIntegrator(pin);
+  strict_admissibility =
+      pin->GetOrAddBoolean("mhd", "cgl_lf_strict_admissibility", false);
 }
 
 void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
@@ -348,7 +322,7 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos
     const int i = idx - m*nkji - (k - ks)*nji - (j - js)*nx1 + is;
     const Real rho = fmax(w(m,IDN,k,j,i), eos.dfloor);
     const Real cpar = local ? sqrt(fmax(w(m,IPR,k,j,i)/rho, eos.tfloor)) : cpar0;
-    const Real chi = static_cast<Real>(1.5957691216057308)*cpar/kpar;
+    const Real chi = cgl::kSqrtEightOverPi*cpar/kpar;
     if (chi > 0.0) {
       min_dt = fmin(min_dt, SQR(size.d_view(m).dx1)/chi);
       if (multi_d) min_dt = fmin(min_dt, SQR(size.d_view(m).dx2)/chi);
@@ -358,4 +332,81 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos
   const Real fac = three_d ? static_cast<Real>(1.0/6.0) :
                    (multi_d ? static_cast<Real>(0.25) : static_cast<Real>(0.5));
   dtnew *= fac;
+}
+
+void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
+                                         const DvceArray5D<Real> &w,
+                                         const DvceArray5D<Real> &bcc,
+                                         const EOS_Data &eos,
+                                         int dfloor_delta, int pfloor_delta) {
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int is = indcs.is, nx1 = indcs.nx1;
+  const int js = indcs.js, nx2 = indcs.nx2;
+  const int ks = indcs.ks, nx3 = indcs.nx3;
+  const int nmkji = pmy_pack->nmb_thispack*nx3*nx2*nx1;
+  const int nkji = nx3*nx2*nx1;
+  const int nji = nx2*nx1;
+  int nonfinite = 0, nonpositive = 0, mirror = 0, firehose = 0, hard_bound = 0;
+  Kokkos::parallel_reduce("cgl_lf_admissibility",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int idx, int &nbad, int &nnonpos, int &nmirror,
+                int &nfirehose, int &nhard) {
+    const int m = idx/nkji;
+    int k = (idx - m*nkji)/nji;
+    int j = (idx - m*nkji - k*nji)/nx1;
+    const int i = idx - m*nkji - k*nji - j*nx1 + is;
+    k += ks;
+    j += js;
+    const Real rho = w(m,IDN,k,j,i);
+    const Real ppar = w(m,IPR,k,j,i);
+    const Real pperp = w(m,IPP,k,j,i);
+    const Real energy = u(m,IEN,k,j,i);
+    const Real moment = u(m,IAN,k,j,i);
+    if (!Kokkos::isfinite(rho) || !Kokkos::isfinite(ppar) ||
+        !Kokkos::isfinite(pperp) || !Kokkos::isfinite(energy) ||
+        !Kokkos::isfinite(moment)) {
+      ++nbad;
+    }
+    if (rho <= 0.0 || ppar <= 0.0 || pperp <= 0.0) {
+      ++nnonpos;
+    }
+    const Real bsqr = SQR(bcc(m,IBX,k,j,i)) + SQR(bcc(m,IBY,k,j,i))
+                     + SQR(bcc(m,IBZ,k,j,i));
+    const Real paniso = pperp - ppar;
+    if (eos.mlim && cgl::MirrorLimiterActive(paniso, bsqr)) {
+      ++nmirror;
+      if (eos.backup_lim && cgl::MirrorHardBoundViolated(paniso, bsqr)) {
+        ++nhard;
+      }
+    }
+    if (eos.flim && cgl::FirehoseLimiterActive(paniso, bsqr)) {
+      ++nfirehose;
+      if (eos.backup_lim && cgl::FirehoseHardBoundViolated(paniso, bsqr)) {
+        ++nhard;
+      }
+    }
+  }, Kokkos::Sum<int>(nonfinite), Kokkos::Sum<int>(nonpositive),
+     Kokkos::Sum<int>(mirror), Kokkos::Sum<int>(firehose),
+     Kokkos::Sum<int>(hard_bound));
+
+  diagnostics.nstage += static_cast<std::uint64_t>(nmkji);
+  diagnostics.dfloor += static_cast<std::uint64_t>(dfloor_delta);
+  diagnostics.pfloor += static_cast<std::uint64_t>(pfloor_delta);
+  diagnostics.nonfinite += static_cast<std::uint64_t>(nonfinite);
+  diagnostics.nonpositive += static_cast<std::uint64_t>(nonpositive);
+  diagnostics.mirror += static_cast<std::uint64_t>(mirror);
+  diagnostics.firehose += static_cast<std::uint64_t>(firehose);
+  diagnostics.hard_bound += static_cast<std::uint64_t>(hard_bound);
+
+  if (strict_admissibility &&
+      (dfloor_delta > 0 || pfloor_delta > 0 || nonfinite > 0 ||
+       nonpositive > 0 || hard_bound > 0)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "CGL Landau-fluid strict admissibility failed after a split stage: "
+              << "dfloor=" << dfloor_delta << " pfloor=" << pfloor_delta
+              << " nonfinite=" << nonfinite << " nonpositive=" << nonpositive
+              << " hard_bound=" << hard_bound << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 }

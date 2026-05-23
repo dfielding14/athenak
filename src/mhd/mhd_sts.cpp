@@ -141,12 +141,14 @@ TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
   if (!has_sts_cgl_lf || !pdrive->sts.enabled || stage != 1) {
     return TaskStatus::complete;
   }
+  RequireCGLAnisotropyRepresentation("CGL Landau-fluid sweep begin");
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int ng = indcs.ng;
   const int n1m1 = indcs.nx1 + 2*ng - 1;
   const int n2m1 = (indcs.nx2 > 1) ? indcs.nx2 + 2*ng - 1 : 0;
   const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
   peos->CGLAnisotropyToMagneticMoment(u0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
+  cgl_slot_representation = CGLSlotRepresentation::magnetic_moment;
   return TaskStatus::complete;
 }
 
@@ -373,12 +375,19 @@ TaskStatus MHD::STSUpdateB(Driver *pdrive, int stage) {
 TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
   (void) pdrive;
   (void) stage;
+  RequireCGLMagneticMomentRepresentation("CGL Landau-fluid primitive refresh");
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int ng = indcs.ng;
   const int n1m1 = indcs.nx1 + 2*ng - 1;
   const int n2m1 = (indcs.nx2 > 1) ? indcs.nx2 + 2*ng - 1 : 0;
   const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
+  const int dfloor_before = pmy_pack->pmesh->ecounter.neos_dfloor;
+  const int pfloor_before = pmy_pack->pmesh->ecounter.neos_efloor;
   peos->CGLRefreshPrimFromMagneticMoment(u0, bcc0, w0, 0, n1m1, 0, n2m1, 0, n3m1);
+  pcgl_lf->RecordAdmissibility(
+      u0, w0, bcc0, peos->eos_data,
+      pmy_pack->pmesh->ecounter.neos_dfloor - dfloor_before,
+      pmy_pack->pmesh->ecounter.neos_efloor - pfloor_before);
   return TaskStatus::complete;
 }
 
@@ -390,12 +399,14 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
   if (!has_sts_cgl_lf || !pdrive->sts.enabled || stage != pdrive->sts.nstages) {
     return TaskStatus::complete;
   }
+  RequireCGLMagneticMomentRepresentation("CGL Landau-fluid sweep end");
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int ng = indcs.ng;
   const int n1m1 = indcs.nx1 + 2*ng - 1;
   const int n2m1 = (indcs.nx2 > 1) ? indcs.nx2 + 2*ng - 1 : 0;
   const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
   peos->CGLMagneticMomentToAnisotropy(u0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
+  cgl_slot_representation = CGLSlotRepresentation::anisotropy;
   return TaskStatus::complete;
 }
 
@@ -407,6 +418,7 @@ TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
   if (!has_sts_cgl_lf || !peos->eos_data.coll || stage != pdrive->sts.nstages) {
     return TaskStatus::complete;
   }
+  RequireCGLAnisotropyRepresentation("CGL Landau-fluid post-sweep collisions");
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int ng = indcs.ng;
   const int n1m1 = indcs.nx1 + 2*ng - 1;
