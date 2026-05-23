@@ -11,6 +11,7 @@ module pages.
 - `docs/source/modules/frame_tracking_next_steps.md`
 - `docs/source/modules/frame_tracking_recipes.md`
 - `docs/source/modules/frame_tracking_performance.md`
+- `docs/source/modules/frame_tracking_validation.md`
 - `docs/source/examples/cloud_crushing_snr.md`
 - `docs/source/examples/trml_frame_tracking.md`
 - `docs/FRAME_TRACKING_NEXT_STEPS.md`
@@ -25,6 +26,7 @@ module pages.
 - `docs/source/_static/cloud_crushing_lowres_density_slices_6_vertical_equal_aspect.png`
 - `docs/source/_static/frame_tracking_benchmark.csv`
 - `docs/source/_static/frame_tracking_benchmark.png`
+- `docs/source/_static/frame_tracking_validation_summary.csv`
 
 Do not copy `docs/source/modules/pgen.md` or
 `docs/source/modules/srcterms.md` from older versions of this feature branch
@@ -41,6 +43,7 @@ Add this link to the Module Reference bullet list:
 [Frame Tracking Production Plan](modules/frame_tracking_next_steps.md)
 [Frame Tracking Recipes And Migration](modules/frame_tracking_recipes.md)
 [Frame Tracking Performance Evidence](modules/frame_tracking_performance.md)
+[Frame Tracking Medium-Resolution Validation](modules/frame_tracking_validation.md)
 ```
 
 Add this entry to the hidden Modules toctree:
@@ -50,6 +53,7 @@ modules/frame_tracking
 modules/frame_tracking_next_steps
 modules/frame_tracking_recipes
 modules/frame_tracking_performance
+modules/frame_tracking_validation
 ```
 
 Add these links to the Worked Examples bullet list:
@@ -88,5 +92,6 @@ docs/.venv/bin/sphinx-build -b html docs/source docs/_build/html
 The feature docs use MyST Markdown, local PNG/CSV assets under
 `docs/source/_static`, and relative links that match the existing GitHub Pages
 framework. `docs/FRAME_TRACKING_NEXT_STEPS.md` is the maintained roadmap
-published alongside this integration handoff; it records remaining benchmark
-and scientific-validation gates without overstating low-resolution runs.
+published alongside this integration handoff; it records the passed benchmark
+gate and failed medium-resolution scientific gate without overstating
+low-resolution runs.

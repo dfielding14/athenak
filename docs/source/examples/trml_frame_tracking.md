@@ -26,6 +26,7 @@ The shipped input tracks intermediate-temperature gas around the interface:
 
 ```ini
 <frame_tracking>
+enabled    = true
 tracked_fluid = hydro
 axes       = x3
 x3_target  = 0.0
@@ -33,7 +34,7 @@ target     = temperature
 target_min = 0.015
 target_max = 0.08
 mode       = pd
-max_abs_boost = 0.05
+max_abs_boost = 0.2
 max_boost_change_mode = per_time
 max_boost_change_rate = 0.02
 ```

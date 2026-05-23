@@ -17,12 +17,12 @@ the feature as working perfectly.
 
 | Gate | Required outcome | Current branch status |
 | --- | --- | --- |
-| Correctness | Continuous and restart-split runs agree in controller state and final fluid state within precision-aware tolerances. | One- and three-axis restart equivalence tests pass locally at `100 * machine_epsilon`; GitHub Actions confirmation remains pending. |
-| Robustness | CPU, MPI/AMR, MHD, invalid configuration, legacy-state, cloud, and TRML tests run through reproducible commands. | Full local CPU and MPI CPU discovery suites pass, including MHD, three-axis, guards, legacy, cloud, and TRML coverage; medium campaigns remain pending. |
+| Correctness | Continuous and restart-split runs agree in controller state and final fluid state within precision-aware tolerances. | Small regression fixtures pass locally, but medium TRML split runs exceed the strict continuation tolerance; production gate fails pending investigation. |
+| Robustness | CPU, MPI/AMR, MHD, invalid configuration, legacy-state, cloud, and TRML tests run through reproducible commands. | Full local CPU and MPI CPU discovery suites pass, including MHD, three-axis, guards, legacy, cloud, and TRML coverage; medium serial scientific comparisons expose blocking failures. |
 | Observability | Controller state is emitted in machine-readable history data. | Implemented as `<basename>.frame_tracker.hst`; stdout is compatibility-only for archived runs. |
 | Efficiency | All active axes share one mesh sampling pass and grouped reductions per controller update. | Measured on clean candidate `78f8e4cd`: serial `x1` overhead is 77.0% lower and serial `all` overhead is 81.4% lower than `cfbcdde7`; see the performance-evidence page and raw CSV. |
 | Usability | Canonical parameters, conservative examples, removed-alias migration errors, and supported-physics limits are documented. | Implemented in the module reference and recipe/migration page; legacy restart-state reading remains supported. |
-| Publication | GitHub Pages exposes reference pages, slices, CSV summaries, validation limits, and this roadmap. | Existing wiring-validation pages are published; recipe/migration updates and new measured results remain to be synced after validation. |
+| Publication | GitHub Pages exposes reference pages, slices, CSV summaries, validation limits, and this roadmap. | Existing wiring-validation pages are published; recipe, benchmark, and failed-medium-validation evidence are prepared for sync without upgrading the scientific claim. |
 
 ## Interface Contract
 
@@ -86,7 +86,7 @@ only shipped frame-aware examples are validated.
 | MHD Galilean invariant | Density and magnetic fields are unchanged at the first non-zero boost; momentum and ideal-gas energy match analytic boost updates to `100 * machine_epsilon`. |
 | MPI/AMR | One-rank and multi-rank AMR results agree within reduction-order tolerance and retain valid controller state through refinement. |
 | Guards | SR, GR, dynamical-GR, missing selected fluids, ambiguous eligible fluids, and removed aliases fail before evolution with actionable messages. |
-| Cloud/TRML integrations | Short custom-problem runs compile, execute, and generate finite structured histories; quantitative medium-resolution CSV summaries remain pending. |
+| Cloud/TRML integrations | Short custom-problem runs compile and execute with finite structured histories; medium serial comparisons are recorded and fail the declared physical acceptance criteria. |
 
 ## Local Verification Record
 
@@ -132,15 +132,34 @@ replace cloud/TRML transformed-frame physical validation.
 
 ## Scientific Validation Campaign
 
-1. Run cloud and TRML examples with tracking disabled and enabled, comparing
-   fields after transforming moving-frame results back to lab coordinates.
-2. Repeat at multiple spatial resolutions and publish convergence tables.
-3. Split runs across restarts at more than one controller phase and compare
-   final fields and histories.
-4. Repeat representative calculations across MPI decompositions and AMR
-   layouts.
-5. Publish plots, raw CSV data, commands, software revision, tolerances,
-   controller limit/miss events, and all observed failures.
+Medium-resolution serial validation was run on May 23, 2026 with the Release
+CPU executable at `505f2df4`; the inputs now expose `enabled = true`
+explicitly so the same documented configuration can be switched off at run
+time. The common comparison tool writes
+`docs/source/_static/frame_tracking_validation_summary.csv`.
 
-Until that campaign is complete, recommend the feature for controlled example
-and method-development work, not irreversible production science runs.
+| Problem/comparison | Resolution and duration | Measured result | Acceptance result |
+| --- | --- | --- | --- |
+| Cloud tracking on/off, lab-frame comparison | `96 x 32 x 32`, `tlim=0.04` | Selected-mass relative difference `1.4178e-2`; zero misses and limits. | Fail: mass difference exceeds `1.0e-2`. |
+| TRML tracking on/off, lab-frame comparison | `32 x 32 x 64`, `tlim=0.25` | Selected-mass relative difference `6.0872e-2`; three limit events. | Fail: mass difference and no-limit requirements are not met. |
+| TRML restart splits at approximately 25, 50, and 75 percent | `32 x 32 x 64`, `tlim=0.25` | Finite output and small controller differences, but strict field/controller rows fail. | Fail: `100 * machine_epsilon` continuation criterion is not met. |
+| TRML serial versus 4-rank MPI, uniform grid | `32 x 32 x 64`, `tlim=0.25` | Field/controller comparisons pass `1.0e-10`; three limit events remain. | Numerical comparison passes; health criterion fails. |
+
+The failed serial physical comparisons are already sufficient to block
+production-candidate guidance. Cloud restart/MPI/AMR and full parallel
+scientific comparisons are deferred until the selected-mass discrepancy and
+TRML slew limiting are investigated; running them now could add diagnostics
+but cannot satisfy this release gate.
+
+Required next work is:
+
+1. Diagnose transformed tracking-on/off mass divergence and validate the
+   selection and boundary/source transformations.
+2. Tune or justify the conservative TRML controller limits and rerun the
+   medium serial comparison without unexplained limit events.
+3. Resolve the strict medium restart-continuity mismatch.
+4. Rerun serial, restart, MPI, and AMR comparisons and publish the updated CSV
+   and field-norm tables.
+
+Until those results pass, recommend the feature for controlled wiring tests
+and method-development work only, not irreversible production science runs.

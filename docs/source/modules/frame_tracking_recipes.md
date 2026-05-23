@@ -12,6 +12,7 @@ This block matches the cooled-cloud example input
 
 ```ini
 <frame_tracking>
+enabled = true
 tracked_fluid = hydro
 start_time = 0.02
 apply_every = 1
@@ -39,6 +40,7 @@ This block matches `inputs/hydro/TRML/TRML_frame_tracking.athinput`:
 
 ```ini
 <frame_tracking>
+enabled = true
 tracked_fluid = hydro
 start_time = 0.0
 apply_every = 1

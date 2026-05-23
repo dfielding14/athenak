@@ -74,6 +74,7 @@ beta_lo               = 1.0
 beta_hi               = 1.0
 
 <frame_tracking>
+enabled          = true
 tracked_fluid    = hydro
 start_time       = 0.0
 apply_every      = 1

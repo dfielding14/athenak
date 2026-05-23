@@ -85,6 +85,7 @@ constant_vz          = 0.0
 boundary_timestep_factor = 0.15
 
 <frame_tracking>
+enabled          = true
 tracked_fluid    = hydro
 start_time       = 0.02
 apply_every      = 1

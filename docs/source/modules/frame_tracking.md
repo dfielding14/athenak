@@ -153,6 +153,7 @@ changes:
 ```ini
 # Cooled cloud tracking
 <frame_tracking>
+enabled = true
 tracked_fluid = hydro
 axes = x1
 x1_target = 3.0
@@ -168,6 +169,7 @@ max_boost_change_rate = 5.0
 ```ini
 # Mixing-layer tracking
 <frame_tracking>
+enabled = true
 tracked_fluid = hydro
 axes = x3
 x3_target = 0.0
@@ -175,7 +177,7 @@ target = temperature
 target_min = 0.015
 target_max = 0.08
 mode = pd
-max_abs_boost = 0.05
+max_abs_boost = 0.2
 max_boost_change_mode = per_time
 max_boost_change_rate = 0.02
 ```
@@ -220,5 +222,6 @@ store grid-frame velocities as `v_lab - FrameVelocity()`.
 - [Frame Tracking Production Plan](frame_tracking_next_steps.md)
 - [Frame Tracking Recipes And Migration](frame_tracking_recipes.md)
 - [Frame Tracking Performance Evidence](frame_tracking_performance.md)
+- [Frame Tracking Medium-Resolution Validation](frame_tracking_validation.md)
 - [Sedov Cloud Crushing With Frame Tracking](../examples/cloud_crushing_snr.md)
 - [TRML Frame Tracking Example](../examples/trml_frame_tracking.md)
