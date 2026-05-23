@@ -66,7 +66,7 @@ Navigate the full stack of physics and infrastructure modules:
 
 - Core infrastructure: [Mesh](modules/mesh.md), [Driver](modules/driver.md), [Task Lists](modules/tasklist.md), [Coordinates](modules/coordinates.md)
 - Physics: [Hydro](modules/hydro.md), [MHD](modules/mhd.md), [Radiation](modules/radiation.md), [Z4c](modules/z4c.md), [Dyn GRMHD](modules/dyn_grmhd.md), [Ion-Neutral](modules/ion_neutral.md), [Particles](modules/particles.md)
-- Numerical methods: [Reconstruction](modules/reconstruction.md), [Riemann Solvers](modules/riemann_solvers.md), [EOS](modules/eos.md), [Diffusion](modules/diffusion.md), [Super Time Stepping](modules/super_time_stepping.md), [CGL Landau-Fluid Heat Flux](modules/cgl_landau_fluid.md), [Outputs](modules/outputs.md), [Boundaries](modules/boundaries.md), [Source Terms](modules/srcterms.md), [Shearing Box](modules/shearing_box.md), [Problem Generators](modules/pgen.md)
+- Numerical methods: [Reconstruction](modules/reconstruction.md), [Riemann Solvers](modules/riemann_solvers.md), [EOS](modules/eos.md), [Diffusion](modules/diffusion.md), [Super Time Stepping](modules/super_time_stepping.md), [CGL Landau-Fluid Heat Flux](modules/cgl_landau_fluid.md), [CGL LF Validation](modules/cgl_landau_fluid_validation.md), [Outputs](modules/outputs.md), [Boundaries](modules/boundaries.md), [Source Terms](modules/srcterms.md), [Shearing Box](modules/shearing_box.md), [Problem Generators](modules/pgen.md)
 
 ```{toctree}
 :hidden:
@@ -91,6 +91,7 @@ modules/eos
 modules/diffusion
 modules/super_time_stepping
 modules/cgl_landau_fluid
+modules/cgl_landau_fluid_validation
 modules/outputs
 modules/boundaries
 modules/srcterms

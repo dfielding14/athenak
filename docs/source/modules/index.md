@@ -33,6 +33,7 @@ Complete documentation for all AthenaK modules, organized by category.
 | **Diffusion** | `src/diffusion/` | Physical diffusion processes | [diffusion.md](diffusion.md) |
 | **Super Time Stepping** | `src/diffusion/`, `src/driver/` | RKL2 parabolic integration | [super_time_stepping.md](super_time_stepping.md) |
 | **CGL Landau-Fluid Heat Flux** | `src/eos/`, `src/diffusion/`, `src/mhd/` | Anisotropic MHD LF closure | [cgl_landau_fluid.md](cgl_landau_fluid.md) |
+| **CGL LF Validation** | `inputs/unit_tests/`, `scripts/` | Quantitative and scientific validation workflow | [cgl_landau_fluid_validation.md](cgl_landau_fluid_validation.md) |
 
 ## Support Systems (5+ modules)
 
