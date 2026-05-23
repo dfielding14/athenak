@@ -30,6 +30,12 @@ def _tab(basename):
     return testutils.athena_read.tab(f"tab/{basename}.mhd_w.00001.tab")
 
 
+def _final_tab(basename):
+    paths = sorted(Path("tab").glob(f"{basename}.mhd_w.*.tab"))
+    assert paths, f"no table output found for {basename}"
+    return testutils.athena_read.tab(str(paths[-1]))
+
+
 def _assert_clean_lf_history(history):
     assert history["lf_nstage"][-1] > 0.0
     assert history["lf_dfloor"][-1] == 0.0
@@ -142,6 +148,42 @@ def test_cgl_lf_amr_conserved_prolongation_stays_admissible():
         energy_residual = abs(mhd["tot-E"][-1] - mhd["tot-E"][0]) / energy_scale
         assert energy_residual < 5.0e-3
     finally:
+        _cleanup()
+
+
+def test_cgl_lf_restart_preserves_final_state_and_admissibility():
+    try:
+        _run("cgl_lf_restart.athinput", "cgl_ci_restart_reference")
+        # Stop on a shared cycle so the checkpoint does not change timesteps.
+        _run(
+            "cgl_lf_restart.athinput",
+            "cgl_ci_restart_partial",
+            "time/nlim=1",
+        )
+        restart_paths = sorted(Path("rst").glob("cgl_ci_restart_partial.*.rst"))
+        assert restart_paths, "partial run did not write a restart checkpoint"
+        command = [
+            "./athena",
+            "-r",
+            str(restart_paths[-1]),
+            "job/basename=cgl_ci_restart_resumed",
+            "time/nlim=-1",
+        ]
+        assert testutils.run_command(command)
+
+        reference = _final_tab("cgl_ci_restart_reference")
+        resumed = _final_tab("cgl_ci_restart_resumed")
+        fields = set(reference).intersection(resumed) - {"time", "cycle"}
+        maximum = max(
+            np.max(np.abs(reference[field] - resumed[field]))
+            for field in fields
+        )
+        assert maximum < 1.0e-12
+        _assert_clean_lf_history(
+            testutils.athena_read.hst("cgl_ci_restart_resumed.mhd.hst")
+        )
+    finally:
+        shutil.rmtree("rst", ignore_errors=True)
         _cleanup()
 
 
