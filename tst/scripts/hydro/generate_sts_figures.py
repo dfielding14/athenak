@@ -156,6 +156,131 @@ def make_thermal_front_figure(executable, run_root, output_dir):
     plt.close(fig)
 
 
+def make_viscous_shear_figure(executable, run_root, output_dir):
+    """Compare STS and explicit damping of a bounded power-law viscous shear wave."""
+    sts_name = "figure_viscous_shear_sts"
+    explicit_name = "figure_viscous_shear_explicit"
+    sts_dir = run_case(
+        executable,
+        run_root,
+        "sts_viscous_shear.athinput",
+        sts_name,
+    )
+    explicit_dir = run_case(
+        executable,
+        run_root,
+        "sts_viscous_shear.athinput",
+        explicit_name,
+        "hydro/viscosity_integrator=explicit",
+        "time/sts_integrator=none",
+    )
+    initial = athena_read.tab(
+        str(sts_dir / "tab" / f"{sts_name}.hydro_w.00000.tab")
+    )
+    sts = athena_read.tab(
+        str(sts_dir / "tab" / f"{sts_name}.hydro_w.00001.tab")
+    )
+    explicit = athena_read.tab(
+        str(explicit_dir / "tab" / f"{explicit_name}.hydro_w.00001.tab")
+    )
+    order = np.argsort(sts["x1v"])
+
+    fig, (ax, residual) = plt.subplots(
+        2,
+        1,
+        figsize=(6.1, 5.0),
+        sharex=True,
+        gridspec_kw={"height_ratios": (3.0, 1.15)},
+        constrained_layout=True,
+    )
+    ax.plot(initial["x1v"][order], initial["vely"][order], "--", label=r"$t=0$")
+    ax.plot(sts["x1v"][order], sts["vely"][order], label="RKL2 STS")
+    ax.plot(
+        explicit["x1v"][order],
+        explicit["vely"][order],
+        ":",
+        label="Explicit",
+    )
+    ax.set_ylabel(r"$v_y$")
+    ax.set_title(r"Bounded power-law viscosity, $\nu \propto T^{1.5}$")
+    ax.grid(True, alpha=0.25)
+    ax.legend(frameon=False, ncol=3)
+    residual.plot(
+        sts["x1v"][order],
+        (sts["vely"] - explicit["vely"])[order],
+        color="tab:purple",
+    )
+    residual.axhline(0.0, color="0.3", lw=0.8)
+    residual.set_xlabel(r"$x$")
+    residual.set_ylabel("STS - explicit")
+    residual.grid(True, alpha=0.25)
+    fig.savefig(output_dir / "viscous_shear_comparison.png", dpi=180)
+    plt.close(fig)
+
+
+def make_resistive_figure(executable, run_root, output_dir):
+    """Compare constrained-transport STS and explicit resistive field diffusion."""
+    sts_name = "figure_resistive_sts"
+    explicit_name = "figure_resistive_explicit"
+    sts_dir = run_case(
+        executable,
+        run_root,
+        "sts_resistivity.athinput",
+        sts_name,
+        "time/sts_max_dt_ratio=1.0",
+    )
+    explicit_dir = run_case(
+        executable,
+        run_root,
+        "sts_resistivity.athinput",
+        explicit_name,
+        "mhd/ohmic_resistivity_integrator=explicit",
+        "time/sts_integrator=none",
+    )
+    initial = athena_read.tab(
+        str(sts_dir / "tab" / f"{sts_name}.mhd_bcc.00000.tab")
+    )
+    sts = athena_read.tab(
+        str(sts_dir / "tab" / f"{sts_name}.mhd_bcc.00001.tab")
+    )
+    explicit = athena_read.tab(
+        str(explicit_dir / "tab" / f"{explicit_name}.mhd_bcc.00001.tab")
+    )
+    order = np.argsort(sts["x1v"])
+
+    fig, (ax, residual) = plt.subplots(
+        2,
+        1,
+        figsize=(6.1, 5.0),
+        sharex=True,
+        gridspec_kw={"height_ratios": (3.0, 1.15)},
+        constrained_layout=True,
+    )
+    ax.plot(initial["x1v"][order], initial["bcc2"][order], "--", label=r"$t=0$")
+    ax.plot(sts["x1v"][order], sts["bcc2"][order], label="RKL2 STS")
+    ax.plot(
+        explicit["x1v"][order],
+        explicit["bcc2"][order],
+        ":",
+        label="Explicit",
+    )
+    ax.set_ylabel(r"$B_y$")
+    ax.set_title(r"Ohmic diffusion of a current sheet, $\eta=10^{-3}$")
+    ax.grid(True, alpha=0.25)
+    ax.legend(frameon=False, ncol=3)
+    residual.plot(
+        sts["x1v"][order],
+        (sts["bcc2"] - explicit["bcc2"])[order],
+        color="tab:purple",
+    )
+    residual.axhline(0.0, color="0.3", lw=0.8)
+    residual.set_xlabel(r"$x$")
+    residual.set_ylabel("STS - explicit")
+    residual.grid(True, alpha=0.25)
+    fig.savefig(output_dir / "resistive_current_sheet_comparison.png", dpi=180)
+    plt.close(fig)
+
+
 def main():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -187,6 +312,8 @@ def main():
     make_convergence_figure(executable, run_root, output_dir)
     make_blob_figure(executable, run_root, output_dir)
     make_thermal_front_figure(executable, run_root, output_dir)
+    make_viscous_shear_figure(executable, run_root, output_dir)
+    make_resistive_figure(executable, run_root, output_dir)
 
     for path in sorted(output_dir.glob("*.png")):
         print(path.relative_to(REPO_ROOT))

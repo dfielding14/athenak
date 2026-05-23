@@ -281,6 +281,65 @@ larger conductivity on the hot side until the configured ceiling is reached.
 
 ![Thermally conducting front](../_static/sts/thermal_front_slice.png)
 
+### Bounded Viscous Shear Problem
+
+`inputs/tests/sts_viscous_shear.athinput` initializes a pressure-balanced
+one-dimensional shear mode with a spatially varying temperature. The
+kinematic viscosity follows a bounded power law:
+
+```ini
+<hydro>
+viscosity = 0.02
+tdep_viscosity = true
+viscosity_tref = 1.0
+viscosity_exponent = 1.5
+viscosity_floor = 0.002
+viscosity_ceiling = 0.04
+viscosity_integrator = sts
+
+<problem>
+pgen_name = sts_diffusion
+sts_case = viscous_shear
+tcold = 0.5
+thot = 2.0
+amp = 0.1
+```
+
+The `v_y` mode is damped by viscosity. The automated test runs an RKL2 STS
+solution and an explicit comparison with the same coefficient model, then
+requires the final velocity profiles to agree within `1.0e-5` in maximum
+absolute difference.
+
+![Power-law viscous shear test comparison](../_static/sts/viscous_shear_comparison.png)
+
+### Resistive Current-Sheet Problem
+
+`inputs/tests/sts_resistivity.athinput` initializes a one-dimensional MHD
+magnetic reversal and evolves the Ohmic EMF through the face-centered
+constrained-transport STS update:
+
+```ini
+<time>
+sts_integrator = rkl2
+
+<mhd>
+ohmic_resistivity = 0.001
+ohmic_resistivity_integrator = sts
+
+<problem>
+pgen_name = shock_tube
+byl = 1.0
+byr = -1.0
+```
+
+The diffusing magnetic discontinuity smooths in `B_y` while remaining on the
+constrained-transport field path. The automated comparison applies
+`sts_max_dt_ratio = 1.0` to isolate the STS update from large splitting steps
+and requires the final STS and explicit profiles to agree within `1.0e-2` in
+maximum absolute difference.
+
+![Ohmic resistive current-sheet comparison](../_static/sts/resistive_current_sheet_comparison.png)
+
 ### Quantitative Convergence
 
 The two scalar Fourier modes use diffusivities differing by a factor of ten.
