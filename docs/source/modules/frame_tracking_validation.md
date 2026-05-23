@@ -43,6 +43,24 @@ for the double-precision build. Controller differences are small, but some
 fluid-field norms and final frame velocities exceed that deliberately strict
 threshold. This is a blocking result, not a tolerance adjustment request.
 
+## Bounded Slew-Rate Check
+
+Because the documented TRML case was slew limited, four inexpensive serial
+reruns varied only `max_boost_change_rate`. This check did not identify an
+acceptable replacement recipe:
+
+| Rate | Selected-mass relative difference | Limit events | Interpretation |
+| ---: | ---: | ---: | --- |
+| `0.05` | `7.3519e-2` | `1` | Fails both criteria. |
+| `0.10` | `7.8105e-2` | `1` | Fails both criteria. |
+| `0.20` | `8.0458e-2` | `0` | Removes saturation but worsens mass agreement. |
+| `1.00` | `8.0901e-2` | `0` | Removes saturation but worsens mass agreement. |
+
+The documented `0.02` rate is retained as the recorded failing baseline, not
+as a production recommendation. Removing limit events alone is insufficient:
+the next investigation must address the tracking-on/off physical discrepancy
+before adopting a revised configuration.
+
 ## Commands
 
 Cloud medium-resolution serial runs:
@@ -109,8 +127,9 @@ Download the measured rows:
 1. Diagnose the selected-mass discrepancy in the transformed tracked versus
    untracked solutions, beginning with selection sensitivity and frame-aware
    boundary/source consistency.
-2. Tune or justify the TRML conservative slew limits so the documented
-   configuration does not silently saturate during its validation interval.
+2. Diagnose why removing TRML slew saturation in the tested rate sweep worsens
+   the selected-mass disagreement before adopting a revised conservative
+   configuration.
 3. Investigate the strict restart-continuity mismatch before relying on long
    split production runs.
 4. After those blockers are resolved, rerun the full serial, restart,

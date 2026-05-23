@@ -145,6 +145,12 @@ time. The common comparison tool writes
 | TRML restart splits at approximately 25, 50, and 75 percent | `32 x 32 x 64`, `tlim=0.25` | Finite output and small controller differences, but strict field/controller rows fail. | Fail: `100 * machine_epsilon` continuation criterion is not met. |
 | TRML serial versus 4-rank MPI, uniform grid | `32 x 32 x 64`, `tlim=0.25` | Field/controller comparisons pass `1.0e-10`; three limit events remain. | Numerical comparison passes; health criterion fails. |
 
+An inexpensive TRML follow-up varied only `max_boost_change_rate`: rates
+`0.05` and `0.10` retain one limit event and produce `7.35%` and `7.81%`
+selected-mass differences, while rates `0.20` and `1.00` remove limit events
+but worsen that difference to `8.05%` and `8.09%`. The existing recipe is
+therefore not replaced by an unvalidated slew-rate adjustment.
+
 The failed serial physical comparisons are already sufficient to block
 production-candidate guidance. Cloud restart/MPI/AMR and full parallel
 scientific comparisons are deferred until the selected-mass discrepancy and
@@ -155,8 +161,8 @@ Required next work is:
 
 1. Diagnose transformed tracking-on/off mass divergence and validate the
    selection and boundary/source transformations.
-2. Tune or justify the conservative TRML controller limits and rerun the
-   medium serial comparison without unexplained limit events.
+2. Determine why the tested TRML unsaturated controllers worsen selected-mass
+   agreement before adopting a revised conservative recipe.
 3. Resolve the strict medium restart-continuity mismatch.
 4. Rerun serial, restart, MPI, and AMR comparisons and publish the updated CSV
    and field-norm tables.

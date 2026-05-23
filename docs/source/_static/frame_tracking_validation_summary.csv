@@ -63,3 +63,27 @@ trml,32x32x64,enabled,none,4,uniform,ft_dv_x3,serial_tracking_enabled,2.16840434
 trml,32x32x64,enabled,none,4,uniform,finite_fields,serial_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
 trml,32x32x64,enabled,none,4,uniform,max_missed_samples,serial_tracking_enabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
 trml,32x32x64,enabled,none,4,uniform,limit_events,serial_tracking_enabled,3.0000000000000000e+00,3.0000000000000000e+00,absolute <= 0,fail
+trml,32x32x64,rate_0.05,none,1,uniform,selected_mass,serial_tracking_disabled,2.2648484574165195e-01,7.3519164069569626e-02,relative <= 1.0e-2,fail
+trml,32x32x64,rate_0.05,none,1,uniform,tracked_centroid,serial_tracking_disabled,4.3827951593406675e-03,1.1890617513101792e-01,absolute <= 3.1250000000000000e-02,pass
+trml,32x32x64,rate_0.05,none,1,uniform,density_l2_lab_frame,serial_tracking_disabled,2.3677484490589642e+01,1.3472928477754062e-03,trend against wiring baseline,measured
+trml,32x32x64,rate_0.05,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+trml,32x32x64,rate_0.05,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+trml,32x32x64,rate_0.05,none,1,uniform,limit_events,serial_tracking_disabled,1.0000000000000000e+00,1.0000000000000000e+00,absolute <= 0,fail
+trml,32x32x64,rate_0.1,none,1,uniform,selected_mass,serial_tracking_disabled,2.4061319080647081e-01,7.8105361064121512e-02,relative <= 1.0e-2,fail
+trml,32x32x64,rate_0.1,none,1,uniform,tracked_centroid,serial_tracking_disabled,4.6615225079307751e-03,1.2646810803464134e-01,absolute <= 3.1250000000000000e-02,pass
+trml,32x32x64,rate_0.1,none,1,uniform,density_l2_lab_frame,serial_tracking_disabled,2.4867133522297109e+01,1.4149860874191457e-03,trend against wiring baseline,measured
+trml,32x32x64,rate_0.1,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+trml,32x32x64,rate_0.1,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+trml,32x32x64,rate_0.1,none,1,uniform,limit_events,serial_tracking_disabled,1.0000000000000000e+00,1.0000000000000000e+00,absolute <= 0,fail
+trml,32x32x64,rate_0.2,none,1,uniform,selected_mass,serial_tracking_disabled,2.4786128383129835e-01,8.0458161926090177e-02,relative <= 1.0e-2,fail
+trml,32x32x64,rate_0.2,none,1,uniform,tracked_centroid,serial_tracking_disabled,4.8047959939102949e-03,1.3035514851820229e-01,absolute <= 3.1250000000000000e-02,pass
+trml,32x32x64,rate_0.2,none,1,uniform,density_l2_lab_frame,serial_tracking_disabled,2.5465949301973069e+01,1.4490598175661603e-03,trend against wiring baseline,measured
+trml,32x32x64,rate_0.2,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+trml,32x32x64,rate_0.2,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+trml,32x32x64,rate_0.2,none,1,uniform,limit_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+trml,32x32x64,rate_1.0,none,1,uniform,selected_mass,serial_tracking_disabled,2.4922480795066804e-01,8.0900774998574079e-02,relative <= 1.0e-2,fail
+trml,32x32x64,rate_1.0,none,1,uniform,tracked_centroid,serial_tracking_disabled,4.8317711550929995e-03,1.3108699044171593e-01,absolute <= 3.1250000000000000e-02,pass
+trml,32x32x64,rate_1.0,none,1,uniform,density_l2_lab_frame,serial_tracking_disabled,2.5577787290846018e+01,1.4554236068689470e-03,trend against wiring baseline,measured
+trml,32x32x64,rate_1.0,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+trml,32x32x64,rate_1.0,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+trml,32x32x64,rate_1.0,none,1,uniform,limit_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
