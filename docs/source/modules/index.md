@@ -41,6 +41,7 @@ Complete documentation for all AthenaK modules, organized by category.
 | **Source Terms** | `src/srcterms/` | External sources and turbulence | [srcterms.md](srcterms.md) |
 | **Shearing Box** | `src/shearing_box/` | Orbital advection | [shearing_box.md](shearing_box.md) |
 | **Problem Generators** | `src/pgen/` | Initial conditions | [pgen.md](pgen.md) |
+| **Frame Tracking** | `src/srcterms/frame_tracker.*` | Shared moving-frame controller for hydro/MHD examples | [frame_tracking.md](frame_tracking.md) |
 
 ## Problem-Specific Documentation
 

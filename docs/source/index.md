@@ -67,6 +67,7 @@ Navigate the full stack of physics and infrastructure modules:
 - Core infrastructure: [Mesh](modules/mesh.md), [Driver](modules/driver.md), [Task Lists](modules/tasklist.md), [Coordinates](modules/coordinates.md)
 - Physics: [Hydro](modules/hydro.md), [MHD](modules/mhd.md), [Radiation](modules/radiation.md), [Z4c](modules/z4c.md), [Dyn GRMHD](modules/dyn_grmhd.md), [Ion-Neutral](modules/ion_neutral.md), [Particles](modules/particles.md)
 - Numerical methods: [Reconstruction](modules/reconstruction.md), [Riemann Solvers](modules/riemann_solvers.md), [EOS](modules/eos.md), [Diffusion](modules/diffusion.md), [Outputs](modules/outputs.md), [Boundaries](modules/boundaries.md), [Source Terms](modules/srcterms.md), [Shearing Box](modules/shearing_box.md), [Problem Generators](modules/pgen.md)
+- Controllers: [Frame Tracking](modules/frame_tracking.md), [Frame Tracking Production Plan](modules/frame_tracking_next_steps.md)
 
 ```{toctree}
 :hidden:
@@ -94,6 +95,8 @@ modules/boundaries
 modules/srcterms
 modules/shearing_box
 modules/pgen
+modules/frame_tracking
+modules/frame_tracking_next_steps
 ```
 
 ## Reference Library
@@ -137,6 +140,8 @@ Compare against shipped problem generators and diagnostics:
 - [Driven Turbulence](examples/turbulence.md)
 - [MRI Turbulence](examples/mri_turbulence.md)
 - [Binary Merger](examples/binary_merger.md)
+- [Sedov Cloud Crushing With Frame Tracking](examples/cloud_crushing_snr.md)
+- [TRML Frame Tracking Example](examples/trml_frame_tracking.md)
 - [CGM Cooling Flow (Metals)](cgm_cooling_flow_metals.md)
 
 ```{toctree}
@@ -149,6 +154,8 @@ examples/blast_wave
 examples/turbulence
 examples/mri_turbulence
 examples/binary_merger
+examples/cloud_crushing_snr
+examples/trml_frame_tracking
 cgm_cooling_flow_metals
 ```
 
