@@ -27,9 +27,12 @@ parabolic::ParabolicIntegratorMode ParseCGLHeatFluxIntegrator(ParameterInput *pi
   if (integrator == "sts") {
     return parabolic::ParabolicIntegratorMode::sts;
   }
+  if (integrator == "explicit") {
+    return parabolic::ParabolicIntegratorMode::explicit_mode;
+  }
   std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
             << "<mhd>/cgl_heat_flux_integrator = '" << integrator
-            << "' is not implemented; the initial CGL Landau-fluid feature is STS-only."
+            << "' is not implemented; valid choices are [sts,explicit]."
             << std::endl;
   std::exit(EXIT_FAILURE);
 }

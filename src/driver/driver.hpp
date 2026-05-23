@@ -32,6 +32,7 @@ class Driver {
 
   struct STSController {
     bool enabled = false;
+    bool explicit_split = false;
     parabolic::STSIntegrator integrator = parabolic::STSIntegrator::none;
     STSSweep sweep = STSSweep::none;
     Real dt_cycle = 0.0;

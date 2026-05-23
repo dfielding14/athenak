@@ -214,7 +214,7 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     pcond = nullptr;
   }
 
-  // CGL Landau-fluid heat flux is an STS-only operator with its own state lifecycle.
+  // CGL Landau-fluid heat flux always uses its dedicated split state lifecycle.
   if (pin->DoesParameterExist("mhd", "cgl_heat_flux")) {
     if (!peos->eos_data.is_cgl) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -224,6 +224,9 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     }
     pcgl_lf = new CGLLandauFluid(ppack, pin);
     has_sts_cgl_lf = (pcgl_lf->mode == parabolic::ParabolicIntegratorMode::sts);
+    has_explicit_cgl_lf =
+        (pcgl_lf->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
+    has_cgl_lf_split = (has_sts_cgl_lf || has_explicit_cgl_lf);
     if (pmy_pack->pmesh->multilevel && pmy_pack->pmesh->pmr != nullptr &&
         pmy_pack->pmesh->pmr->prolong_prims) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -277,12 +280,25 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
 
-  has_any_sts_cell_update = (has_sts_viscosity || has_sts_conduction ||
-                             has_sts_cgl_lf ||
-                             has_sts_scalar_diffusion ||
-                             (has_sts_resistivity && peos->eos_data.is_ideal));
-  has_any_sts_field_update = has_sts_resistivity;
-  has_any_sts_diffusion = (has_any_sts_cell_update || has_any_sts_field_update);
+  if (has_explicit_cgl_lf &&
+      (has_sts_viscosity || has_sts_conduction || has_sts_resistivity ||
+       has_sts_scalar_diffusion || has_explicit_viscosity ||
+       has_explicit_conduction || has_explicit_resistivity ||
+       has_explicit_scalar_diffusion)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "CGL Landau-fluid explicit reference integration cannot yet be "
+              << "combined with other active MHD parabolic processes." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  has_any_parabolic_cell_update = (has_sts_viscosity || has_sts_conduction ||
+                                    has_cgl_lf_split ||
+                                    has_sts_scalar_diffusion ||
+                                    (has_sts_resistivity && peos->eos_data.is_ideal));
+  has_any_parabolic_field_update = has_sts_resistivity;
+  has_any_parabolic_split =
+      (has_any_parabolic_cell_update || has_any_parabolic_field_update);
 
   // (3) read time-evolution option [already error checked in driver constructor]
   // Then initialize memory and algorithms for reconstruction and Riemann solvers
@@ -486,7 +502,7 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       int ncells2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
       int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
       Kokkos::realloc(u1,     nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
-      if (has_any_sts_cell_update) {
+      if (has_any_parabolic_cell_update) {
         Kokkos::realloc(u_sts0,    nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
         Kokkos::realloc(u_sts1,    nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
         Kokkos::realloc(u_sts2,    nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
@@ -495,7 +511,7 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       Kokkos::realloc(b1.x1f, nmb, ncells3, ncells2, ncells1+1);
       Kokkos::realloc(b1.x2f, nmb, ncells3, ncells2+1, ncells1);
       Kokkos::realloc(b1.x3f, nmb, ncells3+1, ncells2, ncells1);
-      if (has_any_sts_field_update) {
+      if (has_any_parabolic_field_update) {
         Kokkos::realloc(b_sts0.x1f,    nmb, ncells3, ncells2, ncells1+1);
         Kokkos::realloc(b_sts0.x2f,    nmb, ncells3, ncells2+1, ncells1);
         Kokkos::realloc(b_sts0.x3f,    nmb, ncells3+1, ncells2, ncells1);

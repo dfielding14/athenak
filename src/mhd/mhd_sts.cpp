@@ -70,7 +70,8 @@ void MHD::AddSelectedDiffusionFluxes(DiffusionSelection selection) {
   if (add_conduction && pcond != nullptr) {
     pcond->AddHeatFlux(w0, peos->eos_data, uflx);
   }
-  if (selection == DiffusionSelection::sts_only && has_sts_cgl_lf && pcgl_lf != nullptr) {
+  if (selection == DiffusionSelection::sts_only && has_cgl_lf_split &&
+      pcgl_lf != nullptr) {
     pcgl_lf->AddHeatFluxes(w0, bcc0, peos->eos_data, uflx);
   }
   if (add_scalar_diffusion && pscalar_diff != nullptr) {
@@ -125,7 +126,7 @@ TaskStatus MHD::ClearSTSEField(Driver *pdrive, int stage) {
 TaskStatus MHD::STSFluxes(Driver *pdrive, int stage) {
   (void) pdrive;
   (void) stage;
-  if (!has_any_sts_cell_update) {
+  if (!has_any_parabolic_cell_update) {
     return TaskStatus::complete;
   }
 
@@ -138,7 +139,7 @@ TaskStatus MHD::STSFluxes(Driver *pdrive, int stage) {
 //! \brief Switch the CGL extra state from anisotropy to magnetic moment for LF STS.
 
 TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
-  if (!has_sts_cgl_lf || !pdrive->sts.enabled || stage != 1) {
+  if (!has_cgl_lf_split || !pdrive->sts.enabled || stage != 1) {
     return TaskStatus::complete;
   }
   RequireCGLAnisotropyRepresentation("CGL Landau-fluid sweep begin");
@@ -159,7 +160,7 @@ TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
 TaskStatus MHD::STSEField(Driver *pdrive, int stage) {
   (void) pdrive;
   (void) stage;
-  if (!has_any_sts_field_update) {
+  if (!has_any_parabolic_field_update) {
     return TaskStatus::complete;
   }
 
@@ -172,7 +173,7 @@ TaskStatus MHD::STSEField(Driver *pdrive, int stage) {
 //! \brief Apply one MHD-owned RKL2 STS stage over the enrolled conserved variables.
 
 TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
-  if (!has_any_sts_cell_update || !(pdrive->sts.enabled)) {
+  if (!has_any_parabolic_cell_update || !(pdrive->sts.enabled)) {
     return TaskStatus::complete;
   }
 
@@ -183,10 +184,10 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
   Kokkos::deep_copy(DevExeSpace(), u_sts1, u0);
 
   const bool update_momentum = has_sts_viscosity;
-  const bool update_energy = (has_sts_conduction || has_sts_cgl_lf ||
+  const bool update_energy = (has_sts_conduction || has_cgl_lf_split ||
                               ((has_sts_viscosity || has_sts_resistivity) &&
                                peos->eos_data.is_ideal));
-  const bool update_cgl_moment = has_sts_cgl_lf;
+  const bool update_cgl_moment = has_cgl_lf_split;
   const bool update_scalars = has_sts_scalar_diffusion;
   if (!(update_momentum || update_energy || update_cgl_moment || update_scalars)) {
     return TaskStatus::complete;
@@ -268,7 +269,7 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
 //! \brief Apply one CT-shaped RKL2 STS stage over the enrolled magnetic field.
 
 TaskStatus MHD::STSUpdateB(Driver *pdrive, int stage) {
-  if (!has_any_sts_field_update || !(pdrive->sts.enabled)) {
+  if (!has_any_parabolic_field_update || !(pdrive->sts.enabled)) {
     return TaskStatus::complete;
   }
 
@@ -396,7 +397,7 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
 //! \brief Restore conserved anisotropy after the final LF STS stage.
 
 TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
-  if (!has_sts_cgl_lf || !pdrive->sts.enabled || stage != pdrive->sts.nstages) {
+  if (!has_cgl_lf_split || !pdrive->sts.enabled || stage != pdrive->sts.nstages) {
     return TaskStatus::complete;
   }
   RequireCGLMagneticMomentRepresentation("CGL Landau-fluid sweep end");
@@ -415,7 +416,7 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
 //! \brief Apply CGL relaxation after each split LF sweep once anisotropy is restored.
 
 TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
-  if (!has_sts_cgl_lf || !peos->eos_data.coll || stage != pdrive->sts.nstages) {
+  if (!has_cgl_lf_split || !peos->eos_data.coll || stage != pdrive->sts.nstages) {
     return TaskStatus::complete;
   }
   RequireCGLAnisotropyRepresentation("CGL Landau-fluid post-sweep collisions");
@@ -433,7 +434,7 @@ TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
 //! \brief Refresh MHD-local timestep estimates after the final post sweep stage.
 
 TaskStatus MHD::STSRefreshTimeStep(Driver *pdrive, int stage) {
-  if (!has_any_sts_diffusion || !(pdrive->sts.enabled)) {
+  if (!has_any_parabolic_split || !(pdrive->sts.enabled)) {
     return TaskStatus::complete;
   }
   if (pdrive->sts.sweep == Driver::STSSweep::post && stage == pdrive->sts.nstages) {

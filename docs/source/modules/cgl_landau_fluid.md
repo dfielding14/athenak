@@ -36,12 +36,13 @@ CGL evolves density, momentum, total energy, and a sixth MHD state storing
 conserved pressure anisotropy outside the LF sweep. Primitive arrays use
 `IPR` for parallel pressure and `IPP` for perpendicular pressure.
 
-The LF flux advances total energy and magnetic moment. During each RKL2 STS
+The LF flux advances total energy and magnetic moment. During each LF split
 sweep the MHD task graph performs:
 
 1. Convert conserved anisotropy to magnetic moment.
 2. Evaluate field-aligned LF energy and magnetic-moment fluxes.
-3. Advance those two conserved quantities through all STS stages.
+3. Advance those two conserved quantities through either RKL2 STS stages or
+   one explicit reference stage.
 4. Refresh CGL primitives between stages in the magnetic-moment
    representation.
 5. Convert magnetic moment back to conserved anisotropy at sweep completion.
@@ -62,7 +63,7 @@ floors, or crosses a configured hard mirror/firehose backup bound.
 | `eos` | required | Set to `cgl` for this feature. |
 | `passive` | `false` | Use passive isotropic-wave speeds when `true`. |
 | `cgl_heat_flux` | absent | Set to `landau_fluid` to enable LF transport. |
-| `cgl_heat_flux_integrator` | `sts` | Currently only `sts` is supported. |
+| `cgl_heat_flux_integrator` | `sts` | `sts` for production runs or `explicit` for reference verification. |
 | `lf_k_parallel` | required | Positive closure wavenumber magnitude. |
 | `lf_coefficient_mode` | `local` | `local` or `background`. |
 | `lf_c_parallel0` | required in background mode | Positive fixed parallel thermal speed. |
@@ -85,8 +86,12 @@ column remains the conserved anisotropy variable for compatibility.
 - CGL is not available for SR, GR, or dynamical-GR MHD.
 - CGL dynamic runs use `rsolver = hlle`; LLF and HLLD are rejected.
 - Ordinary `<mhd>/conductivity` is rejected with `eos = cgl`.
-- CGL LF is currently STS-only and cannot be combined with another MHD
-  process selecting STS in the same run.
+- CGL LF with `cgl_heat_flux_integrator = sts` cannot be combined with
+  another MHD process selecting STS in the same run.
+- CGL LF with `cgl_heat_flux_integrator = explicit` runs the same protected
+  LF split lifecycle with a one-stage Euler half-sweep. It requires
+  `sts_integrator = none` and cannot yet be combined with another active MHD
+  parabolic process.
 - CGL LF with mesh refinement currently requires conserved prolongation;
   `<mesh_refinement>/prolong_primitives = true` is rejected.
 
@@ -102,6 +107,11 @@ Run the LF regression suite from `tst/`:
 ```bash
 python run_tests.py cgl/cgl_landau_fluid
 ```
+
+For a reference comparison, rerun a quantitative deck with
+`mhd/cgl_heat_flux_integrator=explicit time/sts_integrator=none`. The
+routine CPU tests compare this explicit split against STS capped with
+`time/sts_max_dt_ratio=1.0`.
 
 See also [Super Time Stepping](super_time_stepping.md) and
 [Magnetohydrodynamics](mhd.md).

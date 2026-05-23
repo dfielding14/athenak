@@ -44,6 +44,7 @@ cgl_heat_flux_integrator = sts
 cgl_lf_strict_admissibility = true
 lf_k_parallel = 32.0
 lf_coefficient_mode = local
+nu_coll = 0.0
 reconstruct = plm
 rsolver = hlle
 gamma = 1.666666666666667
@@ -66,3 +67,11 @@ amp = 0.01
 file_type = hst
 data_format = %24.16e
 dcycle = 1
+
+<output2>
+file_type = tab
+variable = mhd_w
+data_format = %24.16e
+dt = 0.005
+slice_x2 = 0.0
+slice_x3 = 0.0

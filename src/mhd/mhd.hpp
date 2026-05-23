@@ -166,11 +166,13 @@ class MHD {
   bool has_sts_viscosity = false;
   bool has_sts_conduction = false;
   bool has_sts_cgl_lf = false;
+  bool has_explicit_cgl_lf = false;
+  bool has_cgl_lf_split = false;
   bool has_sts_resistivity = false;
   bool has_sts_scalar_diffusion = false;
-  bool has_any_sts_diffusion = false;
-  bool has_any_sts_cell_update = false;
-  bool has_any_sts_field_update = false;
+  bool has_any_parabolic_split = false;
+  bool has_any_parabolic_cell_update = false;
+  bool has_any_parabolic_field_update = false;
   CGLSlotRepresentation cgl_slot_representation = CGLSlotRepresentation::anisotropy;
 
   // container to hold names of TaskIDs

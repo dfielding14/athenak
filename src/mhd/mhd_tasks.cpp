@@ -76,7 +76,7 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, id.prol);
   id.newdt     = tl["stagen"]->AddTask(&MHD::NewTimeStep, this, id.c2p);
 
-  if (peos->eos_data.is_cgl && peos->eos_data.coll && !has_sts_cgl_lf) {
+  if (peos->eos_data.is_cgl && peos->eos_data.coll && !has_cgl_lf_split) {
     id.cglcoll = tl["after_timeintegrator"]->AddTask(&MHD::CGLCollisions, this, none);
   }
 
@@ -86,10 +86,10 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   // task list anyways to catch potential bugs in MPI communication logic
   id.crecv = tl["after_stagen"]->AddTask(&MHD::ClearRecv, this, id.csend);
 
-  if (has_any_sts_diffusion) {
+  if (has_any_parabolic_split) {
     TaskID pinit =
         tl["before_parabolic_stagen"]->AddTask(&MHD::InitRecvParabolic, this, none);
-    if (has_sts_cgl_lf) {
+    if (has_cgl_lf_split) {
       (void) tl["before_parabolic_stagen"]->AddTask(
           &MHD::BeginCGLLandauFluidSTSSweep, this, pinit);
     }
@@ -99,7 +99,7 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
     TaskID psendf = tl["parabolic_stagen"]->AddTask(&MHD::SendFlux, this, pflux);
     TaskID precvf = tl["parabolic_stagen"]->AddTask(&MHD::RecvFlux, this, psendf);
     TaskID update_dependency = precvf;
-    if (has_any_sts_field_update) {
+    if (has_any_parabolic_field_update) {
       TaskID pcleare = tl["parabolic_stagen"]->AddTask(&MHD::ClearSTSEField,
                                                        this, precvf);
       TaskID pefld = tl["parabolic_stagen"]->AddTask(&MHD::STSEField, this, pcleare);
@@ -109,7 +109,7 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
     TaskID pupdt = tl["parabolic_stagen"]->AddTask(&MHD::STSUpdateU, this,
                                                    update_dependency);
     TaskID state_dependency = pupdt;
-    if (has_any_sts_field_update) {
+    if (has_any_parabolic_field_update) {
       state_dependency = tl["parabolic_stagen"]->AddTask(&MHD::STSUpdateB, this, pupdt);
     }
     TaskID prestu = tl["parabolic_stagen"]->AddTask(&MHD::RestrictU, this,
@@ -117,7 +117,7 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
     TaskID psendu = tl["parabolic_stagen"]->AddTask(&MHD::SendU, this, prestu);
     TaskID precvu = tl["parabolic_stagen"]->AddTask(&MHD::RecvU, this, psendu);
     TaskID boundary_dependency = precvu;
-    if (has_any_sts_field_update) {
+    if (has_any_parabolic_field_update) {
       TaskID prestb = tl["parabolic_stagen"]->AddTask(&MHD::RestrictB, this, precvu);
       TaskID psendb = tl["parabolic_stagen"]->AddTask(&MHD::SendB, this, prestb);
       boundary_dependency = tl["parabolic_stagen"]->AddTask(&MHD::RecvB, this, psendb);
@@ -125,12 +125,12 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
     TaskID pbcs = tl["parabolic_stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this,
                                                   boundary_dependency);
     TaskID pprol = tl["parabolic_stagen"]->AddTask(&MHD::Prolongate, this, pbcs);
-    TaskID pc2p = has_sts_cgl_lf ?
+    TaskID pc2p = has_cgl_lf_split ?
         tl["parabolic_stagen"]->AddTask(&MHD::CGLLandauFluidPrimitiveRefresh,
                                         this, pprol) :
         tl["parabolic_stagen"]->AddTask(&MHD::ConToPrim, this, pprol);
     TaskID pend = pc2p;
-    if (has_sts_cgl_lf) {
+    if (has_cgl_lf_split) {
       pend = tl["parabolic_stagen"]->AddTask(&MHD::EndCGLLandauFluidSTSSweep,
                                              this, pc2p);
       if (peos->eos_data.coll) {
@@ -232,7 +232,7 @@ TaskStatus MHD::InitRecvParabolic(Driver *pdrive, int stage) {
     tstat = pbval_u->InitFluxRecv(nmhd+nscalars);
     if (tstat != TaskStatus::complete) return tstat;
   }
-  if (has_any_sts_field_update) {
+  if (has_any_parabolic_field_update) {
     tstat = pbval_b->InitRecv(3);
     if (tstat != TaskStatus::complete) return tstat;
     tstat = pbval_b->InitFluxRecv(3);

@@ -26,16 +26,24 @@ def _cleanup():
     shutil.rmtree("bin", ignore_errors=True)
 
 
+def _tab(basename):
+    return testutils.athena_read.tab(f"tab/{basename}.mhd_w.00001.tab")
+
+
+def _assert_clean_lf_history(history):
+    assert history["lf_nstage"][-1] > 0.0
+    assert history["lf_dfloor"][-1] == 0.0
+    assert history["lf_pfloor"][-1] == 0.0
+    assert history["lf_nonfin"][-1] == 0.0
+    assert history["lf_nonpos"][-1] == 0.0
+    assert history["lf_hardbd"][-1] == 0.0
+
+
 def test_cgl_lf_quantitative_decay_and_diagnostics():
     try:
         _run("cgl_lf_decay.athinput", "cgl_ci_decay")
         history = testutils.athena_read.hst("cgl_ci_decay.mhd.hst")
-        assert history["lf_nstage"][-1] > 0.0
-        assert history["lf_dfloor"][-1] == 0.0
-        assert history["lf_pfloor"][-1] == 0.0
-        assert history["lf_nonfin"][-1] == 0.0
-        assert history["lf_nonpos"][-1] == 0.0
-        assert history["lf_hardbd"][-1] == 0.0
+        _assert_clean_lf_history(history)
     finally:
         _cleanup()
 
@@ -49,6 +57,62 @@ def test_cgl_lf_limiter_occupancy_remains_admissible():
         assert history["lf_nonpos"][-1] == 0.0
         assert history["lf_hardbd"][-1] == 0.0
         assert np.all(np.diff(history["lf_nstage"]) >= 0.0)
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_explicit_reference_agrees_with_capped_sts():
+    try:
+        _run(
+            "cgl_lf_decay.athinput",
+            "cgl_ci_sts_reference",
+            "time/sts_max_dt_ratio=1.0",
+            "time/nlim=-1",
+        )
+        _run(
+            "cgl_lf_decay.athinput",
+            "cgl_ci_explicit_reference",
+            "mhd/cgl_heat_flux_integrator=explicit",
+            "time/sts_integrator=none",
+            "time/nlim=-1",
+        )
+        sts = _tab("cgl_ci_sts_reference")
+        explicit = _tab("cgl_ci_explicit_reference")
+        fields = set(sts).intersection(explicit) - {"time", "cycle"}
+        max_difference = max(np.max(np.abs(sts[field] - explicit[field]))
+                             for field in fields)
+        assert max_difference < 1.0e-3
+        _assert_clean_lf_history(testutils.athena_read.hst("cgl_ci_sts_reference.mhd.hst"))
+        _assert_clean_lf_history(
+            testutils.athena_read.hst("cgl_ci_explicit_reference.mhd.hst")
+        )
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_explicit_reference_finite_collision_split():
+    try:
+        common = ("time/nlim=-1", "mhd/nu_coll=1.0")
+        _run(
+            "cgl_lf_decay.athinput",
+            "cgl_ci_sts_collision",
+            "time/sts_max_dt_ratio=1.0",
+            *common,
+        )
+        _run(
+            "cgl_lf_decay.athinput",
+            "cgl_ci_explicit_collision",
+            "mhd/cgl_heat_flux_integrator=explicit",
+            "time/sts_integrator=none",
+            *common,
+        )
+        sts = _tab("cgl_ci_sts_collision")
+        explicit = _tab("cgl_ci_explicit_collision")
+        assert np.max(np.abs(sts["eint"] - explicit["eint"])) < 1.0e-3
+        _assert_clean_lf_history(testutils.athena_read.hst("cgl_ci_sts_collision.mhd.hst"))
+        _assert_clean_lf_history(
+            testutils.athena_read.hst("cgl_ci_explicit_collision.mhd.hst")
+        )
     finally:
         _cleanup()
 
@@ -70,3 +134,15 @@ def test_cgl_lf_invalid_integrator_is_rejected():
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     assert result.returncode != 0
     assert "cgl_heat_flux_integrator" in result.stdout
+
+
+def test_cgl_lf_explicit_reference_rejects_sts_configuration():
+    command = [
+        "./athena",
+        "-i",
+        f"{INPUT_ROOT}/cgl_lf_decay.athinput",
+        "mhd/cgl_heat_flux_integrator=explicit",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert "explicit reference integration requires" in result.stdout

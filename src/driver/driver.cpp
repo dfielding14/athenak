@@ -298,6 +298,7 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
 
 void Driver::ResetSTSController() {
   sts.enabled = false;
+  sts.explicit_split = false;
   sts.integrator = parabolic::STSIntegrator::none;
   sts.sweep = STSSweep::none;
   sts.dt_cycle = 0.0;
@@ -317,6 +318,8 @@ void Driver::ValidateSTSConfiguration(Mesh *pm) {
   const parabolic::ParabolicProcessDescriptor *first_sts_process = nullptr;
   bool has_hydro_sts = false;
   bool has_mhd_sts = false;
+  const bool has_explicit_cgl_lf =
+      (pm->pmb_pack->pmhd != nullptr && pm->pmb_pack->pmhd->has_explicit_cgl_lf);
 
   for (const auto &process : pm->pmb_pack->parabolic_processes) {
     if (process.UsesSTS()) {
@@ -330,6 +333,14 @@ void Driver::ValidateSTSConfiguration(Mesh *pm) {
         has_mhd_sts = true;
       }
     }
+  }
+
+  if (has_explicit_cgl_lf &&
+      pm->sts_integrator != parabolic::STSIntegrator::none) {
+    DriverFatalError(__FILE__, __LINE__,
+                     "CGL Landau-fluid explicit reference integration requires "
+                     "<time>/sts_integrator = none and cannot run with STS-selected "
+                     "processes.");
   }
 
   if (pm->sts_integrator == parabolic::STSIntegrator::none) {
@@ -391,6 +402,19 @@ void Driver::RefreshSTSCycleState(Mesh *pm) {
   sts.dt_cycle = pm->dt;
   sts.dt_parabolic_min = pm->dt_parabolic_sts;
 
+  const bool has_explicit_cgl_lf =
+      (pm->pmb_pack->pmhd != nullptr && pm->pmb_pack->pmhd->has_explicit_cgl_lf);
+  if (has_explicit_cgl_lf) {
+    if (sts.dt_cycle <= 0.0) {
+      return;
+    }
+    sts.explicit_split = true;
+    sts.dt_sweep = 0.5*sts.dt_cycle;
+    sts.nstages = 1;
+    sts.enabled = true;
+    return;
+  }
+
   if (sts.integrator == parabolic::STSIntegrator::none ||
       sts.dt_cycle <= 0.0 ||
       sts.dt_parabolic_min >= std::numeric_limits<float>::max()) {
@@ -422,7 +446,10 @@ void Driver::BeginSTSSweep(Mesh *pm, STSSweep sweep) {
 void Driver::SetSTSStage(int stage) {
   sts.current_stage = stage;
   sts.coeffs = parabolic::RKL2Coefficients{};
-  if (sts.enabled && sts.integrator == parabolic::STSIntegrator::rkl2) {
+  if (sts.enabled && sts.explicit_split) {
+    sts.coeffs.muj = 1.0;
+    sts.coeffs.muj_tilde = 1.0;
+  } else if (sts.enabled && sts.integrator == parabolic::STSIntegrator::rkl2) {
     sts.coeffs = parabolic::ComputeRKL2Coefficients(stage, sts.nstages);
   }
 }
