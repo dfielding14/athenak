@@ -1,0 +1,92 @@
+# AthenaK input file for CR tracer MPI decomposition invariance tests
+
+<comment>
+problem = CR tracer MPI decomposition invariance accuracy
+
+<job>
+basename = cr_acc_mpi_invariance
+
+<mesh>
+nghost = 2
+nx1 = 16
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 8
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 8
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 8
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim = 4
+tlim = 0.08
+ndiag = 1
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = hlld
+gamma = 1.666666667
+
+<particles>
+particle_type = cosmic_ray
+ppc = 0.001953125
+nspecies = 2
+pusher = boris
+interpolation = tsc
+min_mass = 1.0
+mass_log_spacing = 1.0
+cfl_part = 0.05
+check_consistency_mode = full
+check_motion_bounds = false
+log_performance = false
+amr_remap = device_table
+validate_amr_lookup = false
+amr_lookup_max_cells = 20000000
+exchange_mode = alltoall_counts
+subcycle = true
+subcycle_max_steps = 64
+subcycle_cell_fraction = 0.5
+subcycle_meshblock_fraction = 0.5
+subcycle_gyro_fraction = 0.05
+subcycle_strict = true
+
+<problem>
+pgen_name = part_random
+particle_position = meshblock_center
+particle_velocity = uniform
+v0x = 2.0
+v0y = 0.0
+v0z = 0.0
+prtcl_rst_flag = 0
+prtcl_res_file = prst/rank_00000000/cr_acc_mpi_invariance.00000.prst
+B0x = 0.0
+B0y = 0.0
+B0z = 1.0
+B_profile = uniform
+Bgrad = 1.0
+Bamp = 0.05
+Bwave_number = 1.0
+
+<output1>
+file_type = prst
+dt = 0.04
+
+<output2>
+file_type = pmom
+dt = 0.04

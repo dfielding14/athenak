@@ -558,6 +558,7 @@ Local validation for this branch on 2026-05-22:
 | `test_particles_cr_cpu.py --cpu` | 20 passed. |
 | `test_particles_cr_mpicpu.py --mpicpu` | 4 passed. |
 | `python run_test_suite.py --style` | 2 passed. |
+| `python run_tests.py mhd/mhd_divb_amr` | Passed through 3D physical AMR level 5. |
 | `git diff --check` | Passed. |
 | `-D PROBLEM=part_random` build | Passed. |
 
@@ -576,6 +577,12 @@ build:
 | `inputs/tests/divb_amr_2d.athinput` | 1311 MeshBlocks created, 1095 deleted. |
 | `inputs/tests/divb_amr_3d.athinput` | 3633 MeshBlocks created, 2842 deleted. |
 
+The dedicated normalized-divergence regression,
+`python run_tests.py mhd/mhd_divb_amr`, also passed its 1D, 2D, and 3D
+physical-level-1-through-5 cases.  The deepest 3D case reached `30,829` live
+MeshBlocks after `50,673` creations and `19,908` deletions while remaining
+within the test's normalized `div(B)` tolerances.
+
 ## Integration Notes
 
 The GitHub Pages branch already includes this page in the module toctree as
@@ -593,6 +600,12 @@ work:
 - [CR Tracer GPU Testing Handoff](cr_tracer_gpu_testing_handoff.md)
   gives the exact accelerator validation checklist that still needs to run on a
   GPU machine.
+- [CR Tracer Accuracy Validation](cr_tracer_accuracy.md)
+  records the 11-test CPU/MPI accuracy ladder, current quantitative results,
+  and documentation figures.
+- [CR Tracer Accuracy Test Implementation Plan](cr_tracer_accuracy_test_plan.md)
+  lays out the proposed analytic, AMR, MPI, and ensemble accuracy tests and the
+  documentation figures they should produce.
 - [CR Tracer Feature-Branch Hardening Plan](cr_tracer_feature_branch_plan.md)
   covers changes that fit naturally in `feature/CR_tracers`.
 - [CR Tracer Follow-Up Architecture Plan](cr_tracer_followup_architecture_plan.md)

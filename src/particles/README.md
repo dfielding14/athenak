@@ -555,6 +555,14 @@ The div(B) AMR compatibility inputs also passed:
 ./athena -i inputs/tests/divb_amr_3d.athinput
 ```
 
+Run the deeper normalized-divergence regression from the repository test
+directory:
+
+```bash
+cd tst
+python run_tests.py mhd/mhd_divb_amr
+```
+
 Div(B) results:
 
 - 1D: `cycle=24`, `Current number of MeshBlocks = 27`,
@@ -563,6 +571,11 @@ Div(B) results:
   `1311 MeshBlocks created, 1095 deleted by AMR`.
 - 3D: `cycle=12`, `Current number of MeshBlocks = 855`,
   `3633 MeshBlocks created, 2842 deleted by AMR`.
+
+The normalized-divergence regression passed its 1D, 2D, and 3D
+physical-level-1-through-5 cases.  The deepest 3D case completed with `30,829`
+live MeshBlocks after `50,673` creations and `19,908` deletions while staying
+within the scripted normalized `div(B)` tolerances.
 
 ## Known Validation Limits
 

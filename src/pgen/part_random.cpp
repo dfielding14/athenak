@@ -31,6 +31,17 @@ struct PartRandomBField {
   Real x, y, z;
 };
 
+enum PartRandomBProfile {
+  kUniformField=0,
+  kLinearCrossField=1,
+  kSinusoidalDivFreeField=2,
+  kMirrorField=3,
+  kGradBField=4,
+  kTurbulentField=5
+};
+
+constexpr Real kTwoPi = 6.283185307179586476925286766559;
+
 KOKKOS_INLINE_FUNCTION
 Real WrapUnit(Real x) {
   while (x < 0.0) {x += 1.0;}
@@ -77,6 +88,40 @@ KOKKOS_INLINE_FUNCTION
 PartRandomBField PartRandomLinearCrossField(Real x1, Real x2, Real b0x, Real b0y,
                                             Real b0z, Real bgrad) {
   return PartRandomBField{b0x + bgrad*x2, b0y + bgrad*x1, b0z};
+}
+
+KOKKOS_INLINE_FUNCTION
+PartRandomBField PartRandomProfileField(int profile, Real x1, Real x2, Real x3,
+                                        Real b0x, Real b0y, Real b0z,
+                                        Real bgrad, Real bamp, Real kwave) {
+  PartRandomBField bf{b0x, b0y, b0z};
+  if (profile == kLinearCrossField) {
+    bf = PartRandomLinearCrossField(x1, x2, b0x, b0y, b0z, bgrad);
+  } else if (profile == kSinusoidalDivFreeField) {
+    Real k = kTwoPi*kwave;
+    bf.x += bamp*k*std::sin(k*x1)*(std::cos(k*x2) - std::cos(k*x3));
+    bf.y += bamp*k*std::sin(k*x2)*(std::cos(k*x3) - std::cos(k*x1));
+    bf.z += bamp*k*std::sin(k*x3)*(std::cos(k*x1) - std::cos(k*x2));
+  } else if (profile == kMirrorField) {
+    bf.x += -bgrad*x1*x3;
+    bf.y += -bgrad*x2*x3;
+    bf.z += bgrad*x3*x3;
+  } else if (profile == kGradBField) {
+    bf.z += bgrad*x1;
+  } else if (profile == kTurbulentField) {
+    Real k1 = kTwoPi*kwave;
+    Real k2 = 2.0*k1;
+    bf.x += bamp*k1*std::sin(k1*x1)*(std::cos(k1*x2) - std::cos(k1*x3));
+    bf.y += bamp*k1*std::sin(k1*x2)*(std::cos(k1*x3) - std::cos(k1*x1));
+    bf.z += bamp*k1*std::sin(k1*x3)*(std::cos(k1*x1) - std::cos(k1*x2));
+    bf.x += 0.35*bamp*k2*std::sin(k2*(x1 + 0.13))*
+            (std::cos(k2*(x2 - 0.07)) - std::cos(k2*(x3 + 0.11)));
+    bf.y += 0.35*bamp*k2*std::sin(k2*(x2 - 0.07))*
+            (std::cos(k2*(x3 + 0.11)) - std::cos(k2*(x1 + 0.13)));
+    bf.z += 0.35*bamp*k2*std::sin(k2*(x3 + 0.11))*
+            (std::cos(k2*(x1 + 0.13)) - std::cos(k2*(x2 - 0.07)));
+  }
+  return bf;
 }
 
 void PartRandomRefinementCondition(MeshBlockPack *pmbp) {
@@ -229,6 +274,7 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
         pin->GetOrAddString("problem","particle_velocity","random");
     if (particle_position.compare("random") != 0 &&
         particle_position.compare("center") != 0 &&
+        particle_position.compare("meshblock_center") != 0 &&
         particle_position.compare("fixed") != 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Unknown particle_position = '"
@@ -236,13 +282,17 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
       std::exit(EXIT_FAILURE);
     }
     if (particle_velocity.compare("random") != 0 &&
-        particle_velocity.compare("uniform") != 0) {
+        particle_velocity.compare("uniform") != 0 &&
+        particle_velocity.compare("isotropic") != 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "Unknown particle_velocity = '"
                 << particle_velocity << "'" << std::endl;
       std::exit(EXIT_FAILURE);
     }
     bool center_particles = (particle_position.compare("center") == 0);
+    bool meshblock_center_particles =
+        (particle_position.compare("meshblock_center") == 0);
+    bool block_center_particles = center_particles || meshblock_center_particles;
     bool fixed_particles = (particle_position.compare("fixed") == 0);
     Real fixed_x1 = pin->GetOrAddReal("problem","particle_x1",0.0);
     Real fixed_x2 = pin->GetOrAddReal("problem","particle_x2",0.0);
@@ -259,52 +309,72 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
       }
     }
     bool uniform_velocity = (particle_velocity.compare("uniform") == 0);
+    bool isotropic_velocity = (particle_velocity.compare("isotropic") == 0);
     Real v0x = pin->GetOrAddReal("problem","v0x",1.0);
     Real v0y = pin->GetOrAddReal("problem","v0y",0.0);
     Real v0z = pin->GetOrAddReal("problem","v0z",0.0);
+    Real v0 = pin->GetOrAddReal("problem","v0",1.0);
 
     // initialize particles
     Kokkos::Random_XorShift64_Pool<> rand_pool64(pmbp->gids);
     par_for("part_update",DevExeSpace(),0,(npart-1),
     KOKKOS_LAMBDA(const int p) {
       auto rand_gen = rand_pool64.get_state();  // get random number state this thread
-      // choose parent MeshBlock randomly
-      int m = static_cast<int>(rand_gen.frand()*(gide - gids + 1.0));
-      m = (m < 0) ? 0 : m;
-      m = (m > nmb_thispack - 1) ? nmb_thispack - 1 : m;
-      pi(PGID,p) = gids + m;
       int spec = (npart_spec > 0) ? p/npart_spec : 0;
       spec = (spec < 0) ? 0 : spec;
       spec = (spec > nspecies - 1) ? nspecies - 1 : spec;
+      int p_in_spec = (npart_spec > 0) ? p - spec*npart_spec : p;
+
+      // choose parent MeshBlock randomly unless a deterministic layout is requested
+      int m = static_cast<int>(rand_gen.frand()*(gide - gids + 1.0));
+      if (meshblock_center_particles && nmb_thispack > 0) {
+        m = p_in_spec % nmb_thispack;
+      }
+      m = (m < 0) ? 0 : m;
+      m = (m > nmb_thispack - 1) ? nmb_thispack - 1 : m;
+      pi(PGID,p) = gids + m;
       pi(PSP,p) = spec;
 
       Real rand = rand_gen.frand();
       pr(IPX,p) = fixed_particles ? fixed_x1 :
-                  center_particles ? 0.5*(mbsize.d_view(m).x1min +
-                                           mbsize.d_view(m).x1max) :
+                  block_center_particles ?
+                  0.5*(mbsize.d_view(m).x1min + mbsize.d_view(m).x1max) :
                   (1. - rand)*mbsize.d_view(m).x1min + rand*mbsize.d_view(m).x1max;
       pr(IPX,p) = fmin(pr(IPX,p),mbsize.d_view(m).x1max);
       pr(IPX,p) = fmax(pr(IPX,p),mbsize.d_view(m).x1min);
 
       rand = rand_gen.frand();
       pr(IPY,p) = fixed_particles ? fixed_x2 :
-                  center_particles ? 0.5*(mbsize.d_view(m).x2min +
-                                           mbsize.d_view(m).x2max) :
+                  block_center_particles ?
+                  0.5*(mbsize.d_view(m).x2min + mbsize.d_view(m).x2max) :
                   (1. - rand)*mbsize.d_view(m).x2min + rand*mbsize.d_view(m).x2max;
       pr(IPY,p) = fmin(pr(IPY,p),mbsize.d_view(m).x2max);
       pr(IPY,p) = fmax(pr(IPY,p),mbsize.d_view(m).x2min);
 
       rand = rand_gen.frand();
       pr(IPZ,p) = fixed_particles ? fixed_x3 :
-                  center_particles ? 0.5*(mbsize.d_view(m).x3min +
-                                           mbsize.d_view(m).x3max) :
+                  block_center_particles ?
+                  0.5*(mbsize.d_view(m).x3min + mbsize.d_view(m).x3max) :
                   (1. - rand)*mbsize.d_view(m).x3min + rand*mbsize.d_view(m).x3max;
       pr(IPZ,p) = fmin(pr(IPZ,p),mbsize.d_view(m).x3max);
       pr(IPZ,p) = fmax(pr(IPZ,p),mbsize.d_view(m).x3min);
 
-      pr(IPVX,p) = uniform_velocity ? v0x : 2.0*(rand_gen.frand() - 0.5);
-      pr(IPVY,p) = uniform_velocity ? v0y : 2.0*(rand_gen.frand() - 0.5);
-      pr(IPVZ,p) = uniform_velocity ? v0z : 2.0*(rand_gen.frand() - 0.5);
+      if (uniform_velocity) {
+        pr(IPVX,p) = v0x;
+        pr(IPVY,p) = v0y;
+        pr(IPVZ,p) = v0z;
+      } else if (isotropic_velocity) {
+        Real mu = 2.0*rand_gen.frand() - 1.0;
+        Real phi = kTwoPi*rand_gen.frand();
+        Real sintheta = sqrt(fmax(0.0, 1.0 - mu*mu));
+        pr(IPVX,p) = v0*sintheta*cos(phi);
+        pr(IPVY,p) = v0*sintheta*sin(phi);
+        pr(IPVZ,p) = v0*mu;
+      } else {
+        pr(IPVX,p) = 2.0*(rand_gen.frand() - 0.5);
+        pr(IPVY,p) = 2.0*(rand_gen.frand() - 0.5);
+        pr(IPVZ,p) = 2.0*(rand_gen.frand() - 0.5);
+      }
       pr(IPM,p) = min_mass*pow(mass_log_spacing, spec);
       pr(IPBX,p) = B0x;
       pr(IPBY,p) = B0y;
@@ -322,14 +392,28 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
   Real B0y = pin->GetOrAddReal("problem","B0y",0.0);
   Real B0z = pin->GetOrAddReal("problem","B0z",1.0);
   std::string b_profile = pin->GetOrAddString("problem","B_profile","uniform");
-  if (b_profile.compare("uniform") != 0 && b_profile.compare("linear_cross") != 0) {
+  int b_profile_id = kUniformField;
+  if (b_profile.compare("uniform") == 0) {
+    b_profile_id = kUniformField;
+  } else if (b_profile.compare("linear_cross") == 0) {
+    b_profile_id = kLinearCrossField;
+  } else if (b_profile.compare("sinusoidal_divb_free") == 0) {
+    b_profile_id = kSinusoidalDivFreeField;
+  } else if (b_profile.compare("mirror") == 0) {
+    b_profile_id = kMirrorField;
+  } else if (b_profile.compare("gradb") == 0) {
+    b_profile_id = kGradBField;
+  } else if (b_profile.compare("turbulent") == 0) {
+    b_profile_id = kTurbulentField;
+  } else {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl << "Unknown B_profile = '" << b_profile << "'"
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  bool linear_cross_field = (b_profile.compare("linear_cross") == 0);
   Real Bgrad = pin->GetOrAddReal("problem","Bgrad",1.0);
+  Real Bamp = pin->GetOrAddReal("problem","Bamp",0.05);
+  Real Bwave = pin->GetOrAddReal("problem","Bwave_number",1.0);
   Real cfl_part = pin->GetOrAddReal("particles","cfl_part",0.05);
 
   if (pmbp->pmhd != nullptr) {
@@ -345,18 +429,26 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
     int &ks = indcs.ks, &ke = indcs.ke;
     int nx1 = indcs.nx1;
     int nx2 = indcs.nx2;
+    int nx3 = indcs.nx3;
     auto &mb_size = pmbp->pmb->mb_size;
     bool is_ideal = eos.is_ideal;
+    int b_profile_id_ = b_profile_id;
     par_for("pgen_mhd", DevExeSpace(), 0,(pmbp->nmb_thispack-1),ks,ke,js,je,is,ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real x1c = CellCenterX(i - is, nx1, mb_size.d_view(m).x1min,
                              mb_size.d_view(m).x1max);
       Real x2c = CellCenterX(j - js, nx2, mb_size.d_view(m).x2min,
                              mb_size.d_view(m).x2max);
-      PartRandomBField bf{B0x, B0y, B0z};
-      if (linear_cross_field) {
-        bf = PartRandomLinearCrossField(x1c, x2c, B0x, B0y, B0z, Bgrad);
-      }
+      Real x3c = CellCenterX(k - ks, nx3, mb_size.d_view(m).x3min,
+                             mb_size.d_view(m).x3max);
+      Real x1f = LeftEdgeX(i - is, nx1, mb_size.d_view(m).x1min,
+                           mb_size.d_view(m).x1max);
+      Real x2f = LeftEdgeX(j - js, nx2, mb_size.d_view(m).x2min,
+                           mb_size.d_view(m).x2max);
+      Real x3f = LeftEdgeX(k - ks, nx3, mb_size.d_view(m).x3min,
+                           mb_size.d_view(m).x3max);
+      PartRandomBField bf = PartRandomProfileField(
+          b_profile_id_, x1c, x2c, x3c, B0x, B0y, B0z, Bgrad, Bamp, Bwave);
       u0(m,IDN,k,j,i) = 1.0;
       u0(m,IM1,k,j,i) = 0.0;
       u0(m,IM2,k,j,i) = 0.0;
@@ -364,12 +456,30 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
       bcc0(m,IBX,k,j,i) = bf.x;
       bcc0(m,IBY,k,j,i) = bf.y;
       bcc0(m,IBZ,k,j,i) = bf.z;
-      b0.x1f(m,k,j,i) = bf.x;
-      b0.x2f(m,k,j,i) = bf.y;
-      b0.x3f(m,k,j,i) = bf.z;
-      if (i==ie) {b0.x1f(m,k,j,i+1) = bf.x;}
-      if (j==je) {b0.x2f(m,k,j+1,i) = bf.y;}
-      if (k==ke) {b0.x3f(m,k+1,j,i) = bf.z;}
+      b0.x1f(m,k,j,i) = PartRandomProfileField(
+          b_profile_id_, x1f, x2c, x3c, B0x, B0y, B0z, Bgrad, Bamp, Bwave).x;
+      b0.x2f(m,k,j,i) = PartRandomProfileField(
+          b_profile_id_, x1c, x2f, x3c, B0x, B0y, B0z, Bgrad, Bamp, Bwave).y;
+      b0.x3f(m,k,j,i) = PartRandomProfileField(
+          b_profile_id_, x1c, x2c, x3f, B0x, B0y, B0z, Bgrad, Bamp, Bwave).z;
+      if (i==ie) {
+        Real x1fr = LeftEdgeX(i + 1 - is, nx1, mb_size.d_view(m).x1min,
+                              mb_size.d_view(m).x1max);
+        b0.x1f(m,k,j,i+1) = PartRandomProfileField(
+            b_profile_id_, x1fr, x2c, x3c, B0x, B0y, B0z, Bgrad, Bamp, Bwave).x;
+      }
+      if (j==je) {
+        Real x2fr = LeftEdgeX(j + 1 - js, nx2, mb_size.d_view(m).x2min,
+                              mb_size.d_view(m).x2max);
+        b0.x2f(m,k,j+1,i) = PartRandomProfileField(
+            b_profile_id_, x1c, x2fr, x3c, B0x, B0y, B0z, Bgrad, Bamp, Bwave).y;
+      }
+      if (k==ke) {
+        Real x3fr = LeftEdgeX(k + 1 - ks, nx3, mb_size.d_view(m).x3min,
+                              mb_size.d_view(m).x3max);
+        b0.x3f(m,k+1,j,i) = PartRandomProfileField(
+            b_profile_id_, x1c, x2c, x3fr, B0x, B0y, B0z, Bgrad, Bamp, Bwave).z;
+      }
       if (is_ideal) {
         u0(m,IEN,k,j,i) = p0/gm1 + 0.5*(bf.x*bf.x + bf.y*bf.y + bf.z*bf.z);
       }

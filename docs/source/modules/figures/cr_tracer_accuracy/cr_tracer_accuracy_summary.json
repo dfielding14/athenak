@@ -1,0 +1,155 @@
+{
+  "created_at": "2026-05-22T20:34:47",
+  "athena": "build-cr-robust-mpi/src/athena",
+  "cases": [
+    {
+      "case": "uniform_gyro",
+      "cfl": [
+        0.04,
+        0.02,
+        0.01
+      ],
+      "phase_error": [
+        3.313990452885607e-05,
+        1.0666026712347065e-05,
+        2.66662666759121e-06
+      ],
+      "slope": 1.8177408410357048,
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/uniform_gyro_phase_convergence.png"
+    },
+    {
+      "case": "uniform_amr_mpi",
+      "meshblocks_created": 105,
+      "meshblocks_deleted": 77,
+      "rank_counts": {
+        "0": 505,
+        "1": 519
+      },
+      "mean_speed2": [
+        1.1299999999999968,
+        1.1299999999999968
+      ],
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/uniform_amr_mpi_activity.png"
+    },
+    {
+      "case": "linear_gather",
+      "methods": [
+        "lin",
+        "trilinear",
+        "tsc"
+      ],
+      "sample_error": [
+        0.0227701833545538,
+        1.5700924586837752e-16,
+        0.0
+      ],
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/linear_gather_error.png"
+    },
+    {
+      "case": "manufactured_gather",
+      "nx": [
+        8,
+        16,
+        32
+      ],
+      "sample_error": [
+        0.01272681553821612,
+        0.003028993629130968,
+        0.00033448114137260706
+      ],
+      "slope": 2.6249013981339635,
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/manufactured_gather_convergence.png"
+    },
+    {
+      "case": "smooth_orbit_reference",
+      "nx": [
+        16,
+        32,
+        64
+      ],
+      "velocity_error_to_reference": [
+        6.968912798467074e-05,
+        1.3448345321089956e-05
+      ],
+      "reference_nx": 64,
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/smooth_orbit_reference_error.png"
+    },
+    {
+      "case": "magnetic_mirror",
+      "initial_moment": 0.4827611783650305,
+      "final_moment": 0.47721721633743924,
+      "relative_moment_drift": 0.011483860500894122,
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/magnetic_mirror_moment.png"
+    },
+    {
+      "case": "gradb_drift",
+      "bgrad": [
+        0.0,
+        0.5,
+        1.0
+      ],
+      "velocity_delta": [
+        0.0,
+        0.009331171564517475,
+        0.02221665347366365
+      ],
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/gradb_drift_response.png"
+    },
+    {
+      "case": "amr_boundary",
+      "meshblocks_created": 105,
+      "meshblocks_deleted": 77,
+      "rank_counts": {
+        "0": 508,
+        "1": 516
+      },
+      "mean_speed2": [
+        1.0275540711384423,
+        1.0074637234708343
+      ],
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/amr_boundary_activity.png"
+    },
+    {
+      "case": "mpi_decomposition",
+      "speed2_delta": [
+        0.0,
+        0.0
+      ],
+      "max_position_delta": 0.0,
+      "max_velocity_delta": 0.0,
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/mpi_decomposition_delta.png"
+    },
+    {
+      "case": "isotropic_ensemble",
+      "moments": [
+        {
+          "species": 0,
+          "mean_mu": 0.001883553523612136,
+          "mean_mu2": 0.33309181723438874
+        },
+        {
+          "species": 1,
+          "mean_mu": 0.003881312917883406,
+          "mean_mu2": 0.3206710426995029
+        }
+      ],
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/isotropic_ensemble_moments.png"
+    },
+    {
+      "case": "frozen_turbulent",
+      "moments": [
+        {
+          "species": 0,
+          "mean_mu": -0.105825844264923,
+          "mean_mu2": 0.34091692413398034
+        },
+        {
+          "species": 1,
+          "mean_mu": -0.0673426991122493,
+          "mean_mu2": 0.35157907766402635
+        }
+      ],
+      "figure": "docs/source/modules/figures/cr_tracer_accuracy/frozen_turbulent_moments.png"
+    }
+  ]
+}
