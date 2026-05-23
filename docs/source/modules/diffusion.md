@@ -5,7 +5,7 @@ The Diffusion module implements physical diffusion processes including
 viscosity, thermal conduction, resistivity, and passive-scalar diffusion using
 ordinary explicit integration or second-order RKL2 super time stepping (STS).
 For the STS algorithm, operator-selection inputs, variable-coefficient models,
-and verification plots, see [Generic Super Time Stepping](super_time_stepping.md).
+and verification plots, see [Super Time Stepping](super_time_stepping.md).
 
 ## Source Location
 `src/diffusion/`
@@ -18,7 +18,7 @@ and verification plots, see [Generic Super Time Stepping](super_time_stepping.md
 | `conduction.hpp/cpp` | Thermal conduction | Heat diffusion |
 | `resistivity.hpp/cpp` | Ohmic resistivity | Magnetic diffusion |
 | `scalar_diffusion.hpp/cpp` | Passive-scalar diffusivity | Per-scalar conservative flux |
-| `sts_rkl2.hpp/cpp` | RKL2 stage construction | Generic STS time integration |
+| `sts_rkl2.hpp/cpp` | RKL2 stage construction | STS time integration |
 | `current_density.hpp` | Current calculation | $\mathbf{J} = \nabla \times \mathbf{B}$ |
 
 ## Configuration Parameters
@@ -199,5 +199,5 @@ conductivity = 0.01
 ## See Also
 - [MHD Module](mhd.md)
 - [Hydro Module](hydro.md)
-- [Generic Super Time Stepping](super_time_stepping.md)
+- [Super Time Stepping](super_time_stepping.md)
 - Source: `src/diffusion/`

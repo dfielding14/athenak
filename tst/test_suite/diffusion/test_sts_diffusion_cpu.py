@@ -1,4 +1,4 @@
-"""CPU regression coverage for generic RKL2 super time stepping."""
+"""CPU regression coverage for RKL2 super time stepping."""
 
 from pathlib import Path
 import shutil

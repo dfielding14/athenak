@@ -17,7 +17,7 @@ project = "AthenaK"
 author = "AthenaK Developers"
 copyright = f"{datetime.now():%Y}, {author}"
 
-# Use git metadata or fall back to generic version tag
+# Use git metadata or fall back to a default version tag
 release = os.environ.get("ATHENAK_DOC_VERSION", "latest")
 version = release
 

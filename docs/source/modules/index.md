@@ -31,7 +31,7 @@ Complete documentation for all AthenaK modules, organized by category.
 | **Riemann Solvers** | `src/*/rsolvers/` | Flux computation algorithms | [riemann_solvers.md](riemann_solvers.md) |
 | **EOS** | `src/eos/` | Equations of state | [eos.md](eos.md) |
 | **Diffusion** | `src/diffusion/` | Physical diffusion processes | [diffusion.md](diffusion.md) |
-| **Super Time Stepping** | `src/diffusion/`, `src/driver/` | Generic RKL2 parabolic integration | [super_time_stepping.md](super_time_stepping.md) |
+| **Super Time Stepping** | `src/diffusion/`, `src/driver/` | RKL2 parabolic integration | [super_time_stepping.md](super_time_stepping.md) |
 
 ## Support Systems (5+ modules)
 

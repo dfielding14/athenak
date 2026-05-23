@@ -1,11 +1,11 @@
-# Generic Super Time Stepping
+# Super Time Stepping
 
 ## Scope
 
 AthenaK can integrate parabolic operators with second-order Runge-Kutta-Legendre
 super time stepping (RKL2 STS). STS advances diffusion over a hydro/MHD cycle
 without forcing the cycle timestep to equal the smallest explicit parabolic
-timestep. The implementation is generic: operators register metadata and their
+timestep. The implementation is extensible: operators register metadata and their
 explicit stability bound with the driver, while Hydro or MHD supplies the
 operator-specific flux or electromotive force.
 
@@ -78,7 +78,7 @@ Ohmic resistivity uses the constrained-transport magnetic-field STS arrays.
 MHD does not perform face-field STS communication for viscosity, conduction,
 or scalar diffusion unless resistivity is also assigned to STS.
 
-## Generic Process Contract
+## Process Contract
 
 A parabolic operator participates in STS through
 `parabolic::ParabolicProcessDescriptor`, registered on the
