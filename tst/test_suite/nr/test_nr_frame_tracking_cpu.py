@@ -222,6 +222,7 @@ def test_initialization_summary_records_interpreted_configuration() -> None:
         assert "FrameTracker configuration: fluid=hydro axes=x1,x2" in output
         assert "target=density" in output
         assert "weight=mass" in output
+        assert "position_signal=blend" in output
         assert "slew=per_time state=new" in output
     finally:
         remove_outputs(basename)

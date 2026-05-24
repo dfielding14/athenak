@@ -95,6 +95,7 @@ target           = scalar0
 target_min       = 0.0
 weight           = tracer_mass
 mode             = pd
+position_signal  = centroid
 tau_avg          = 0.01
 tau_relax        = 0.05
 tau_vel          = 0.05

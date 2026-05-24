@@ -492,8 +492,9 @@ FrameTracker::FrameTracker(MeshBlockPack *pp, ParameterInput *pin,
 
   mode_name_ = pin->GetOrAddString(block_name_, "mode", "pd");
   mode_ = ParseFrameTrackingMode(mode_name_);
-  position_signal_ = ParseFrameTrackingPositionSignal(
-      pin->GetOrAddString(block_name_, "position_signal", "blend"));
+  position_signal_name_ =
+      pin->GetOrAddString(block_name_, "position_signal", "blend");
+  position_signal_ = ParseFrameTrackingPositionSignal(position_signal_name_);
   boost_change_mode_name_ =
       pin->GetOrAddString(block_name_, "max_boost_change_mode", "per_apply");
   boost_change_mode_ = ParseFrameTrackingBoostChangeMode(
@@ -796,6 +797,7 @@ void FrameTracker::PrintConfigurationSummary() const {
                 (weight_mode_ == kFTWeightVolume) ? "volume" :
                 (weight_mode_ == kFTWeightTarget) ? "target" : "tracer_mass")
             << " mode=" << NormalizeToken(mode_name_)
+            << " position_signal=" << NormalizeToken(position_signal_name_)
             << " slew=" << NormalizeToken(boost_change_mode_name_)
             << " state=" << state_name << std::endl;
 }

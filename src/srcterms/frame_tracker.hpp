@@ -127,6 +127,7 @@ class FrameTracker {
 
   int mode_ = 0;
   int position_signal_ = 0;
+  std::string position_signal_name_ = "blend";
   int boost_change_mode_ = 0;
   Real position_blend_ = 0.0;
   Real tau_avg_ = 1.0;

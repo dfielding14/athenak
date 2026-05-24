@@ -137,6 +137,7 @@ def test_shipped_frame_aware_example_runs(
         )
         assert "target=scalar0" in material_result.stdout
         assert "weight=tracer_mass" in material_result.stdout
+        assert "position_signal=centroid" in material_result.stdout
         material_history = athena_read.hst(
             str(material_dir / f"{material_basename}.frame_tracker.hst")
         )
@@ -165,6 +166,34 @@ def test_shipped_frame_aware_example_runs(
             assert "must be -1 or index an existing hydro passive scalar" in (
                 invalid_tracer.stdout + invalid_tracer.stderr
             )
+            constant_dir = Path(build_tmp) / "material_constant_inflow"
+            constant_dir.mkdir()
+            constant_result = run(
+                [
+                    str(build_dir / "src" / "athena"),
+                    "-i",
+                    str(REPO_ROOT / material_input),
+                    "-d",
+                    str(constant_dir),
+                    "job/basename=CloudMaterialConstantSmoke",
+                    *overrides,
+                    "problem/inner_x1_boundary=constant",
+                    "frame_tracking/x1_target=2.0",
+                    "output2/dt=1.0e-20",
+                ],
+                check=False,
+                stdout=PIPE,
+                stderr=PIPE,
+                text=True,
+            )
+            assert constant_result.returncode == 0, (
+                constant_result.stdout + constant_result.stderr
+            )
+            constant_history = athena_read.hst(
+                str(constant_dir / "CloudMaterialConstantSmoke.frame_tracker.hst")
+            )
+            assert np.any(np.abs(constant_history["ft_vf_x1"]) > 0.0)
+            assert np.all(np.isfinite(constant_history["ft_weight"]))
 
         if problem == "TRML_frame_tracking":
             restart_input = Path(build_tmp) / "TRML_restart_check.athinput"

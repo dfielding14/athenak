@@ -473,6 +473,21 @@ void SedovBoundary(Mesh *pm) {
   const int nscalars = pmbp->phydro->nscalars;
   const CloudCrushingData data = cloud_crushing;
 
+  Real frame_x1 = 0.0;
+  Real frame_x2 = 0.0;
+  Real frame_x3 = 0.0;
+  Real frame_v1 = 0.0;
+  Real frame_v2 = 0.0;
+  Real frame_v3 = 0.0;
+  if (pmbp->pframe_tracker != nullptr) {
+    frame_x1 = pmbp->pframe_tracker->FrameDisplacement(0);
+    frame_x2 = pmbp->pframe_tracker->FrameDisplacement(1);
+    frame_x3 = pmbp->pframe_tracker->FrameDisplacement(2);
+    frame_v1 = pmbp->pframe_tracker->FrameVelocity(0);
+    frame_v2 = pmbp->pframe_tracker->FrameVelocity(1);
+    frame_v3 = pmbp->pframe_tracker->FrameVelocity(2);
+  }
+
   if (data.boundary_mode == kBoundaryConstant) {
     par_for("constant_inner_x1", DevExeSpace(), 0, nmb1, 0, n3-1, 0, n2-1, 0, ng-1,
     KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -481,8 +496,9 @@ void SedovBoundary(Mesh *pm) {
       }
       const int ib = is - i - 1;
       SetHydroState(u0, m, k, j, ib, data.constant_density_code,
-                    data.constant_pressure_code, data.constant_vx_code,
-                    data.constant_vy_code, data.constant_vz_code, data.gm1);
+                    data.constant_pressure_code, data.constant_vx_code - frame_v1,
+                    data.constant_vy_code - frame_v2, data.constant_vz_code - frame_v3,
+                    data.gm1);
       for (int n = nhydro; n < nhydro + nscalars; ++n) {
         u0(m, n, k, j, ib) = 0.0;
       }
@@ -500,20 +516,6 @@ void SedovBoundary(Mesh *pm) {
   const Real shock_radius_code = shock_radius_cgs/pm->pmb_pack->punit->length_cgs();
   const Real shock_speed_code = (0.4*shock_radius_cgs/sedov_age_cgs)/data.velocity_unit;
   const Real gamma = data.gm1 + 1.0;
-  Real frame_x1 = 0.0;
-  Real frame_x2 = 0.0;
-  Real frame_x3 = 0.0;
-  Real frame_v1 = 0.0;
-  Real frame_v2 = 0.0;
-  Real frame_v3 = 0.0;
-  if (pmbp->pframe_tracker != nullptr) {
-    frame_x1 = pmbp->pframe_tracker->FrameDisplacement(0);
-    frame_x2 = pmbp->pframe_tracker->FrameDisplacement(1);
-    frame_x3 = pmbp->pframe_tracker->FrameDisplacement(2);
-    frame_v1 = pmbp->pframe_tracker->FrameVelocity(0);
-    frame_v2 = pmbp->pframe_tracker->FrameVelocity(1);
-    frame_v3 = pmbp->pframe_tracker->FrameVelocity(2);
-  }
 
   par_for("sedov_inner_x1", DevExeSpace(), 0, nmb1, 0, n3-1, 0, n2-1, 0, ng-1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
