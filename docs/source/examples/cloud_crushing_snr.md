@@ -32,10 +32,10 @@ inner_x1_boundary = sedov  # sedov or constant
 ```
 
 The default `sedov` mode evaluates the Taylor-von Neumann-Sedov blast profile.
-The optional `constant` mode fills the inner `x1` ghost zones with a fixed
-grid-frame state. In constant mode the boundary is not transformed by frame
-tracking: it does not sample `FrameDisplacement()` and it does not subtract
-`FrameVelocity()`.
+The optional `constant` mode fills the inner `x1` ghost zones with a
+spatially uniform lab-frame state. When frame tracking is active, its
+velocities are transformed by subtracting `FrameVelocity()`; no displacement
+sampling is needed for a uniform state.
 
 Constant-mode values are code-unit quantities by default:
 
@@ -206,9 +206,12 @@ cloud_tracer_scalar_index = 0
 target = scalar0
 target_min = 0.0
 weight = tracer_mass
+position_signal = centroid
 ```
 
 Use tracer mass and its lab-frame centroid as material-retention observables.
+The centroid position signal avoids giving numerically small positive tracer
+tails disproportionate influence through a selected-band midpoint.
 The density-selected mass remains useful for diagnosing phase compression and
 cooling, but it is not a conserved material measure.
 

@@ -62,12 +62,15 @@ target = scalar0
 target_min = 0.0
 weight = tracer_mass
 mode = pd
+position_signal = centroid
 max_abs_boost = 0.2
 max_boost_change_mode = per_time
-max_boost_change_rate = 0.05
+max_boost_change_rate = 1.00
 ```
 
-Tracer mass and tracer-mass centroid are the material-retention observables.
+Tracer mass and tracer-mass centroid are the material-retention observables;
+the centroid position signal avoids sensitivity to numerically small positive
+tracer tails.
 Temperature-window mass is retained as a cooling and phase-redistribution
 diagnostic.
 

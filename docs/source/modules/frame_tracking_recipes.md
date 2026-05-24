@@ -30,6 +30,7 @@ target = scalar0
 target_min = 0.0
 weight = tracer_mass
 mode = pd
+position_signal = centroid
 tau_avg = 0.01
 tau_relax = 0.05
 tau_vel = 0.05
@@ -60,13 +61,17 @@ target = scalar0
 target_min = 0.0
 weight = tracer_mass
 mode = pd
+position_signal = centroid
 tau_avg = 0.1
 tau_relax = 1.0
 tau_vel = 0.25
 max_abs_boost = 0.2
 max_boost_change_mode = per_time
-max_boost_change_rate = 0.05
+max_boost_change_rate = 1.00
 ```
+
+These material recipes use `position_signal=centroid` so that numerically
+small positive scalar tails cannot influence control through a band midpoint.
 
 The shipped TRML problem generator provides frame-aware `x3` boundaries.
 Do not apply this block unchanged to a problem with lab-frame boundaries or

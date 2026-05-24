@@ -147,12 +147,12 @@ At initialization, rank 0 writes one interpreted configuration summary, for
 example:
 
 ```text
-FrameTracker configuration: fluid=hydro axes=x1 target=scalar0 range=[0,inf] weight=tracer_mass mode=pd slew=per_time state=new
+FrameTracker configuration: fluid=hydro axes=x1 target=scalar0 range=[0,inf] weight=tracer_mass mode=pd position_signal=centroid slew=per_time state=new
 ```
 
-Use this summary to confirm fluid selection, axes, selected material, controller
-mode, slew-limit interpretation, and whether a run starts fresh or from
-versioned or legacy restart state.
+Use this summary to confirm fluid selection, axes, selected material,
+controller mode and position observable, slew-limit interpretation, and
+whether a run starts fresh or from versioned or legacy restart state.
 
 ## Conservative Configuration Patterns
 
@@ -177,6 +177,7 @@ target = scalar0
 target_min = 0.0
 weight = tracer_mass
 mode = pd
+position_signal = centroid
 max_abs_boost = 50.0
 max_boost_change_mode = per_time
 max_boost_change_rate = 5.0
@@ -193,9 +194,10 @@ target = scalar0
 target_min = 0.0
 weight = tracer_mass
 mode = pd
+position_signal = centroid
 max_abs_boost = 0.2
 max_boost_change_mode = per_time
-max_boost_change_rate = 0.05
+max_boost_change_rate = 1.00
 ```
 
 ## Examples
@@ -228,6 +230,9 @@ passive cold-fraction scalar in the moving-frame ghost state.
 - `target=entropy` requires an ideal-gas EOS.
 - `target=scalarN` requires `0 <= N < nscalars`.
 - `weight=tracer_mass` requires `target=scalar` or `target=scalarN`.
+- Material-tracer recipes use `position_signal=centroid`; a band midpoint or
+  blend can give numerically negligible tracer tails disproportionate
+  positional influence.
 - AMR `min_max` criteria accept `hydro_u_sNN`, `hydro_w_sNN`, `mhd_u_sNN`,
   and `mhd_w_sNN` fields using the two-digit scalar index spelling.
 - Former configuration aliases are rejected with the canonical replacement in

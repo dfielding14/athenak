@@ -90,9 +90,9 @@ only shipped frame-aware examples are validated.
 
 ## Local Verification Record
 
-The material-tracer, precision-output, scalar-AMR, and regression-test changes
-were validated on May 24, 2026 in the feature worktree before and after
-feature commit `a893c52f`:
+The material-tracer, precision-output, scalar-AMR, regression-test, and
+follow-up material-recipe/boundary changes were validated on May 24, 2026 in
+the feature worktree beginning with feature commit `a893c52f`:
 
 | Command | Result |
 | --- | --- |
@@ -100,10 +100,11 @@ feature commit `a893c52f`:
 | `python run_test_suite.py --cpu --test test_suite/nr/test_nr_lwave1d_cpu.py` | `16 passed`; confirms precise restart storage does not perturb existing linear-wave runtime input updates. |
 | `python run_test_suite.py --cpu --test test_suite/nr/test_nr_frame_tracking_cpu.py` | `20 passed`; includes MHD invariant, canonical/removed-input behavior, tracer-mass centroid, invalid scalar AMR index, initialization summary, and three-axis schema. |
 | `python run_test_suite.py --cpu --test test_suite/nr/test_nr_frame_tracking_restart_cpu.py` | `2 passed`; one- and three-axis restart continuation. |
-| `python -m pytest test_suite/nr/test_nr_frame_tracking_examples_cpu.py -q` | `2 passed`; material cloud/TRML output precision, cloud tracer-index guard, and strict short TRML material restart comparison. |
+| `python -m pytest test_suite/nr/test_nr_frame_tracking_examples_cpu.py -q` | `2 passed`; centroid material inputs, moving-frame constant cloud inflow, output precision, cloud tracer-index guard, and strict short TRML material restart comparison. |
 | `python run_test_suite.py --mpicpu --test test_suite/nr/test_nr_frame_tracking_amr_mpicpu.py` | `3 passed`; serial/MPI AMR comparison including scalar-targeted refinement. |
 | `python run_test_suite.py --cpu` | `212 passed, 15 skipped, 61 deselected`; includes cloud and TRML custom-problem integrations. |
 | `python run_test_suite.py --mpicpu` | `32 passed, 256 deselected`. |
+| `python scripts/diagnose_cloud_frame_discrepancy.py ...` | `34` diagnostic rows plus a localization figure; corrected Cloud discrepancy is localized to the shocked-cloud interaction region. |
 
 No GitHub Actions runs were visible for the exact pushed feature commit when
 queried locally; the table above is local evidence. The medium-resolution
@@ -138,7 +139,11 @@ boundary-aware timing result before production performance claims.
 ## Scientific Validation Campaign
 
 The May 24, 2026 campaign replaces threshold-selected material acceptance with
-advected tracer mass and tracer-mass centroid. Density-selected cloud mass and
+advected tracer mass and tracer-mass centroid. Follow-up diagnosis found that
+the initial material recipe's default blended position signal allowed
+numerically small positive tracer tails to influence the controller through
+its selected-band midpoint. The maintained material recipes now set
+`position_signal=centroid`. Density-selected cloud mass and
 temperature-selected TRML mass remain mandatory phase-structure diagnostics.
 The maintained serial table is
 `docs/source/_static/frame_tracking_material_validation_summary.csv`, with
@@ -147,24 +152,25 @@ final medium slices in
 
 | Problem/comparison | Resolution and duration | Measured result | Acceptance result |
 | --- | --- | --- | --- |
-| Cloud Sedov material tracking on/off | `48 x 16 x 16` and `96 x 32 x 32`, `tlim=0.04` | Tracer mass agrees to `7.56e-16` then `2.48e-16`; centroid error decreases to `1.46e-5`; tracer-density L2 decreases from `2.5402e-3` to `2.0079e-3`; no health events. | **Fail:** aggregate lab-frame conserved-state L2 is `7.9004e-3` then `7.9025e-3`, not decreasing. |
-| Cloud constant-inflow control | Same resolutions and duration | Tracer-density L2 decreases from `3.6475e-4` to `4.8008e-5`; conserved-state L2 decreases from `1.1006e-4` to `2.4125e-5`. | Diagnostic only: it identifies Sedov/shocked evolution as the remaining sensitivity; controller limit events occur in this control. |
-| TRML material tracking on/off | `16 x 16 x 32` and `32 x 32 x 64`, `tlim=0.25` | With `max_boost_change_rate=0.05`, tracer mass differences are `8.45e-4` and `1.03e-3`; tracer-density L2 decreases from `5.5852e-4` to `4.1761e-4`; conserved-state L2 decreases from `4.7579e-4` to `3.5137e-4`; no health events. | Pass serial material gate. |
-| TRML cooling-disabled material control | Same resolutions and duration | Tracer-density and conserved-state L2 errors decrease at medium resolution; no health events. | Pass diagnostic control. |
+| Cloud Sedov centroid material tracking on/off | `48 x 16 x 16` and `96 x 32 x 32`, `tlim=0.04` | Tracer-mass relative differences are `7.56e-16` then `0.00`; centroid error decreases to `3.73e-7`; tracer-density L2 decreases from `2.9779e-5` to `2.4588e-5`; no health events. | **Fail:** aggregate lab-frame conserved-state L2 is `9.0074e-5` then `3.1725e-4`, not decreasing. |
+| Cloud Sedov localized diagnosis | Same corrected runs | At medium resolution `99.99999%` of aggregate squared error lies at `1 <= x1 < 4`; the `x1 < 0` inflow fraction is `1.22e-7`; integrated energy relative difference improves from `4.51e-7` to `1.05e-9`. | The remaining failure is localized to shocked-cloud field structure, not the inflow boundary. |
+| TRML centroid material tracking on/off | `16 x 16 x 32` and `32 x 32 x 64`, `tlim=0.25` | With `max_boost_change_rate=1.00`, tracer mass differences are `6.59e-3` and `7.60e-3`; tracer-density L2 decreases from `6.0174e-3` to `3.1076e-3`; conserved-state L2 decreases from `4.9300e-3` to `2.6596e-3`; no health events. | Pass serial material gate. |
 | TRML temperature-window phase diagnostic | Same resolutions and duration | Selected-mass difference is `4.0290e-2` then `6.0872e-2`, with limit events. | Retained phase diagnostic; not a material-retention gate. |
 
-The TRML low-resolution slew-rate sweep selected `0.05`, the lowest tested
-rate with no limit events. The `0.02` starting recipe incurred one limit event;
-`0.05`, `0.10`, `0.20`, and `1.00` give the same reported material metrics at
-this scale.
+The corrected TRML centroid recipe requires a new low-resolution slew-rate
+sweep. Rates `0.02`, `0.05`, `0.10`, and `0.20` incur `9`, `4`, `2`, and `1`
+limit events respectively; `1.00` is the first tested no-limit rate and is
+confirmed at medium resolution.
 
-The cloud material result resolves the former density-threshold ambiguity:
-material mass and centroid pass strongly. It also exposes the next precise
+The cloud centroid correction reduces the previous low-resolution conserved
+discrepancy by nearly two orders of magnitude and resolves the former
+density-threshold and band-midpoint ambiguities. It also leaves a precise
 blocker: the transformed conserved-state discrepancy in the time-dependent,
 shocked Sedov problem does not show the required decreasing resolution trend.
-The constant-inflow control converges, so the remaining diagnosis should focus
-on shocked boundary/source evolution and frame-transformed conserved-field
-comparison rather than on tracer initialization.
+A boundary audit corrected constant lab-inflow velocity transformation; the
+Sedov inflow was already transformed correctly. The localized output in
+`docs/source/_static/frame_tracking_sedov_cloud_localization.csv` demonstrates
+that the remaining discrepancy is in the shocked cloud, not at the boundary.
 
 The restart mismatch diagnosed in the prior campaign was caused by stale
 frame-dependent ghost states after post-timestep frame updates. That defect is
@@ -174,11 +180,11 @@ is run while the serial cloud physical gate fails.
 
 Required next work is:
 
-1. Isolate the Sedov cloud aggregate conserved-state discrepancy using
-   controlled boundary forcing and output-time/resolution checks.
-2. Determine whether the non-monotone result is a numerical-resolution issue,
-   a lab-frame transformation comparison issue, or residual frame-dependent
-   source/boundary behavior.
+1. Determine why small centroid-controlled frame motion produces increasing
+   pointwise shocked-cloud field differences even while material and
+   integrated energy observables improve.
+2. Either make a validated numerical/controller correction or justify a
+   discontinuous-flow acceptance metric with additional published evidence.
 3. Only after the cloud serial trend passes, execute strict medium restart,
    four-rank MPI, and tracer-refined AMR comparisons for both examples.
 
