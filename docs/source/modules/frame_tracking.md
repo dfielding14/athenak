@@ -57,7 +57,7 @@ boundary code should keep a zero-frame fallback.
 | `target_min`, `target_max` | unbounded | Inclusive target range for tracked cells. |
 | `target_center` | midpoint or geometric midpoint | Center used when expanding the target range for reacquisition. |
 | `target_scale` | `auto` | `auto`, `linear`, or `log` expansion around `target_center`. |
-| `weight` | `mass` | Moment weighting: `mass`, `volume`, or absolute `target` value. |
+| `weight` | `mass` | Moment weighting: `mass`, `volume`, absolute `target` value, or `tracer_mass`. `tracer_mass` is valid only with `target=scalar`/`scalarN` and uses `rho * max(scalar, 0) * dV`. |
 | `weight_floor` | `0.0` | Skip actuation when selected material weight is less than or equal to this value. |
 | `min_global_weight` | `0.0` | Optional observable-weight threshold for skipping actuation. |
 
@@ -131,6 +131,12 @@ Shared fields are `ft_weight`, `ft_misses`, `ft_recov`, `ft_limit`, and
 global: on MPI runs rank 0 contributes them to the normal history reduction and
 other ranks contribute zeros.
 
+Binary outputs retain their existing float32 default. Validation runs requiring
+strict full-field continuation checks can set `data_precision=real` in a
+`file_type=bin` output block to store field arrays in compiled `Real`
+precision. The binary header reports the stored variable size, and existing
+Python binary readers consume either four- or eight-byte variables.
+
 Restart output with `state_version=1` stores the complete mutable controller
 state, including timing, reacquisition counters, filtering, integral control,
 slew-limit state, and per-axis history. A restart containing only
@@ -141,7 +147,7 @@ At initialization, rank 0 writes one interpreted configuration summary, for
 example:
 
 ```text
-FrameTracker configuration: fluid=hydro axes=x1 target=density range=[5,200] mode=pd slew=per_time state=new
+FrameTracker configuration: fluid=hydro axes=x1 target=scalar0 range=[0,inf] weight=tracer_mass mode=pd slew=per_time state=new
 ```
 
 Use this summary to confirm fluid selection, axes, selected material, controller
@@ -155,15 +161,21 @@ limiting so controller behavior is insensitive to output cadence or timestep
 changes:
 
 ```ini
-# Cooled cloud tracking
+# Original-cloud material tracking
+<hydro>
+nscalars = 1
+
+<problem>
+cloud_tracer_scalar_index = 0
+
 <frame_tracking>
 enabled = true
 tracked_fluid = hydro
 axes = x1
 x1_target = 3.0
-target = density
-target_min = 5.0
-target_max = 200.0
+target = scalar0
+target_min = 0.0
+weight = tracer_mass
 mode = pd
 max_abs_boost = 50.0
 max_boost_change_mode = per_time
@@ -171,29 +183,33 @@ max_boost_change_rate = 5.0
 ```
 
 ```ini
-# Mixing-layer tracking
+# Original cold-material tracking in the mixing layer
 <frame_tracking>
 enabled = true
 tracked_fluid = hydro
 axes = x3
 x3_target = 0.0
-target = temperature
-target_min = 0.015
-target_max = 0.08
+target = scalar0
+target_min = 0.0
+weight = tracer_mass
 mode = pd
 max_abs_boost = 0.2
 max_boost_change_mode = per_time
-max_boost_change_rate = 0.02
+max_boost_change_rate = 0.05
 ```
 
 ## Examples
 
 - `src/pgen/cloud_crushing.cpp` and
-  `inputs/hydro/cloud_crushing_snr.athinput` demonstrate a cooled cloud
-  impacted by a Sedov-Taylor boundary inflow.
+  `inputs/hydro/cloud_crushing_material_tracking.athinput` track advected
+  original-cloud tracer mass through a Sedov-Taylor boundary inflow.
+- `inputs/hydro/cloud_crushing_snr.athinput` retains density-selected tracking
+  for phase-structure and wiring diagnostics.
 - `src/pgen/TRML_frame_tracking.cpp` and
-  `inputs/hydro/TRML/TRML_frame_tracking.athinput` provide a compact
-  turbulent-radiative-mixing-layer example.
+  `inputs/hydro/TRML/TRML_frame_tracking_material.athinput` track the existing
+  cold-fraction tracer in a turbulent-radiative mixing layer.
+- `inputs/hydro/TRML/TRML_frame_tracking.athinput` retains
+  temperature-selected tracking as a phase diagnostic reproduction case.
 - `inputs/hydro/frame_tracking_smoke.athinput` exercises the shared tracker
   with a built-in shock-tube pgen.
 
@@ -211,6 +227,9 @@ passive cold-fraction scalar in the moving-frame ghost state.
   ambiguous configuration fails at startup.
 - `target=entropy` requires an ideal-gas EOS.
 - `target=scalarN` requires `0 <= N < nscalars`.
+- `weight=tracer_mass` requires `target=scalar` or `target=scalarN`.
+- AMR `min_max` criteria accept `hydro_u_sNN`, `hydro_w_sNN`, `mhd_u_sNN`,
+  and `mhd_w_sNN` fields using the two-digit scalar index spelling.
 - Former configuration aliases are rejected with the canonical replacement in
   the startup error. Use only the parameter names listed above; see the
   [configuration recipes and migration table](frame_tracking_recipes.md).
@@ -220,9 +239,9 @@ passive cold-fraction scalar in the moving-frame ghost state.
 - Arbitrary user boundaries and source terms cannot be made frame-aware
   automatically. Only examples that explicitly apply the moving-frame
   coordinate and velocity transformations are validated.
-- Native binary snapshots store output fields as single precision and are not
-  a double-precision restart oracle. Use structured history and
-  high-precision conserved-state output for strict continuation evidence.
+- Binary snapshots remain float32 by default. Set `data_precision=real` and
+  output conserved fields for strict full-state restart evidence in a
+  double-precision build.
 - AMR changes preserve the tracker object and refresh its pack pointer after
   mesh-block redistribution.
 

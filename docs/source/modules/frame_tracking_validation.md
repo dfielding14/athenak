@@ -1,152 +1,149 @@
-# Frame Tracking Medium-Resolution Validation
+# Frame Tracking Material-Based Serial Validation
 
-This page reports diagnostic validation of the frame tracker on the shipped
-cloud-crushing and TRML frame-aware examples. The results diagnose and fix a
-restart discontinuity, but they do not satisfy the physical production gate.
-Production guidance remains withheld.
+This page reports the May 24, 2026 material-based serial validation campaign
+for the shipped cloud-crushing and TRML frame-aware examples. The campaign
+uses advected tracer mass and tracer-mass centroid as the material-retention
+observables. Density-selected cloud mass and temperature-selected TRML mass
+remain phase-structure diagnostics.
 
-## Status
+Production guidance remains withheld. Material observables pass in the two
+medium cases, but the shocked Sedov cloud case does not meet the declared
+resolution-trend requirement for the aggregate lab-frame conserved state.
+Accordingly, no new production restart, MPI, or AMR campaign was run.
 
-Serial tracking-on versus tracking-off comparisons remain blocking:
+## Method Changes
 
-| Problem and metric | Resolution and duration | Relative difference | Health events | Result |
-| --- | --- | ---: | ---: | --- |
-| Cloud density-selected mass | `48 x 16 x 16`, `tlim=0.04` | `2.0914e-2` | `0` | Fail: exceeds `1.0e-2`. |
-| Cloud density-selected mass | `96 x 32 x 32`, `tlim=0.04` | `1.4178e-2` | `0` | Fail: improves with resolution but remains above tolerance. |
-| TRML temperature-window mass | `16 x 16 x 32`, `tlim=0.25` | `4.0290e-2` | `5` limit events | Fail. |
-| TRML temperature-window mass | `32 x 32 x 64`, `tlim=0.25` | `6.0872e-2` | `3` limit events | Fail. |
-| TRML passive-tracer mass diagnostic | `16 x 16 x 32`, `tlim=0.25` | `2.4241e-3` | Same controller events | Measured pass for mass only. |
-| TRML passive-tracer mass diagnostic | `32 x 32 x 64`, `tlim=0.25` | `4.0503e-3` | Same controller events | Measured pass for mass only. |
+The material-validation implementation adds:
 
-Centroid checks pass in these runs, and all inspected histories and snapshots
-are finite. The tracer result is a diagnostic of selection sensitivity, not a
-replacement acceptance criterion: the documented controller still selects a
-temperature interval and remains slew limited in the TRML case.
+- `weight=tracer_mass`, valid with `target=scalar` or `target=scalarN`, using
+  `rho * max(scalar, 0) * dV` for controller moments.
+- `inputs/hydro/cloud_crushing_material_tracking.athinput`, whose scalar 0 is
+  original-cloud mass fraction and whose boundary inflow tracer is zero.
+- `inputs/hydro/TRML/TRML_frame_tracking_material.athinput`, which uses the
+  existing cold-fraction scalar and the selected no-limit slew rate
+  `max_boost_change_rate=0.05`.
+- Optional binary `data_precision=real` for strict conserved-state comparison
+  in double-precision builds.
+- Scalar AMR criterion variables such as `hydro_w_s00`, reserved for the
+  deferred MPI/AMR production gate.
 
-Download the current on/off diagnostic rows:
-[frame_tracking_resolution_sensitivity.csv](../_static/frame_tracking_resolution_sensitivity.csv).
+The comparison script reconstructs hydro conserved quantities in lab
+coordinates from primitive snapshots for the physical on/off comparison. It
+reports each component and the aggregate conserved-state norm. The aggregate
+norm is the conserved-fluid resolution-trend acceptance quantity; component
+rows remain available for diagnosis.
 
-## Boundary And Source Audit
+## Serial Gate Results
 
-The shipped frame-aware boundaries use the required transforms:
+| Problem | Resolution | Tracer-mass relative difference | Centroid absolute difference | Tracer-density relative L2 | Conserved-state relative L2 | Health | Result |
+| --- | --- | ---: | ---: | ---: | ---: | --- | --- |
+| Cloud, Sedov inflow | `48 x 16 x 16` | `7.56e-16` | `9.91e-5` | `2.5402e-3` | `7.9004e-3` | Pass | Low reference |
+| Cloud, Sedov inflow | `96 x 32 x 32` | `2.48e-16` | `1.46e-5` | `2.0079e-3` | `7.9025e-3` | Pass | **Fail:** conserved trend is not decreasing |
+| TRML, material recipe | `16 x 16 x 32` | `8.45e-4` | `4.07e-4` | `5.5852e-4` | `4.7579e-4` | Pass | Low reference |
+| TRML, material recipe | `32 x 32 x 64` | `1.03e-3` | `4.99e-4` | `4.1761e-4` | `3.5137e-4` | Pass | Pass |
 
-```text
-x_lab = x_grid + FrameDisplacement(axis)
-v_grid = v_lab - FrameVelocity(axis)
-```
+Health requires finite fields, zero missed samples, zero recovery events,
+zero slew-limit events, and zero unexpected skips. A single first-sample skip
+used to prime a controller filter is counted separately as expected
+initialization, not as a health failure.
 
-The cloud cooling and TRML cooling sources operate on local thermodynamic
-state; their cooling rate does not require a position or velocity-frame
-transformation. The applied Galilean boost preserves internal energy.
+The cloud material gate is no longer blocked by density-threshold selection:
+its tracer mass agrees to roundoff and its tracer-density discrepancy improves
+with resolution. The remaining failure is the small non-monotone aggregate
+conserved-state discrepancy in the time-dependent shocked flow
+(`7.9004e-3` to `7.9025e-3`).
 
-Two boundary defects were identified during this audit and corrected:
+## Controlled Diagnostics
 
-1. After a frame displacement or boost, the tracker previously left
-   non-periodic physical and user ghost states at the prior frame until the
-   normal boundary task ran. A continuous run therefore consumed different
-   first-post-update ghost states than a restarted run, which refills
-   boundaries during initialization.
-2. The TRML user boundary initialized density, momentum, and energy but did
-   not populate its passive cold-fraction scalar in ghost cells. Tracer-mass
-   diagnostics therefore lacked a complete frame-aware inflow contract.
+| Control | Low result | Medium result | Interpretation |
+| --- | --- | --- | --- |
+| Cloud constant inflow, tracer-density relative L2 | `3.6475e-4` | `4.8008e-5` | Strong decreasing trend without Sedov forcing. |
+| Cloud constant inflow, conserved-state relative L2 | `1.1006e-4` | `2.4125e-5` | Strong decreasing trend; this control has controller limit events and is diagnostic only. |
+| TRML cooling disabled, tracer-density relative L2 | `5.5097e-4` | `4.1716e-4` | Decreases similarly to cooling-on material tracking. |
+| TRML cooling disabled, conserved-state relative L2 | `4.9289e-4` | `3.5617e-4` | Decreases; cooling is not hiding a material-frame failure. |
+| TRML temperature-window selected mass | `4.0290e-2` | `6.0872e-2` | Phase diagnostic fails the old material-retention interpretation, as expected. |
 
-The tracker now reapplies physical/user boundary conditions after a changed
-frame state and converts only ghost-zone primitives, avoiding an unnecessary
-full active-mesh conversion. The TRML boundary now fills the passive scalar
-with the same evaluated cold fraction used for initialization.
+The constant-inflow cloud control indicates that the remaining non-monotone
+cloud conserved-state trend is associated with the strongly shocked,
+time-dependent Sedov case rather than tracer initialization or basic
+frame-aware boundary wiring. It does not establish a corrected production
+recipe.
 
-## Restart Diagnosis
+The bounded TRML low-resolution slew-rate sweep selected `0.05`, the lowest
+tested rate with no limit events. Rates `0.05`, `0.10`, `0.20`, and `1.00`
+produced the same reported material errors at low resolution; `0.02` incurred
+one limit event.
 
-The earlier strict TRML restart failure combined a runtime defect with an
-analysis-contract defect:
+## Medium Tracer Slices
 
-- The stale boundary-state path described above made uninterrupted and
-  restarted moving-boundary runs follow different post-checkpoint fluxes.
-- Native AthenaK binary snapshots store fluid fields as `float`, so they
-  cannot certify a `100 * double epsilon` full-field requirement.
-- Restart and MPI continuations on an identical grid were unnecessarily
-  interpolated in displaced lab coordinates rather than compared directly in
-  their common grid frame.
+The panels below show final tracer density for the medium uniform serial
+comparisons. The enabled views use lab-frame coordinates reconstructed from
+the tracker displacement.
 
-The comparison script now compares same-grid restart/MPI native snapshots
-directly, labels them as binary float32 diagnostics, and prevents a field
-tolerance below their representable precision. Strict controller quantities
-remain tested with double-precision history output. A high-precision
-TRML boundary restart regression additionally compares formatted conserved
-output at `100 * machine_epsilon` scaled tolerance.
+![Medium material tracer-density slices](../_static/frame_tracking_material_medium_slices.png)
 
-On the corrected medium TRML case, 25, 50, and 75 percent restart splits have
-passing controller-continuity rows and passing binary field diagnostics. The
-run itself still contains controller limit events, so this is evidence for the
-restart fix, not a passed production configuration.
+Download the full serial result table:
+[frame_tracking_material_validation_summary.csv](../_static/frame_tracking_material_validation_summary.csv).
 
-Download the corrected restart diagnostic rows:
-[frame_tracking_restart_diagnostic.csv](../_static/frame_tracking_restart_diagnostic.csv).
+Historical threshold-selected and restart-boundary diagnostic results remain
+available as:
 
-## Commands
+- [frame_tracking_resolution_sensitivity.csv](../_static/frame_tracking_resolution_sensitivity.csv)
+- [frame_tracking_restart_diagnostic.csv](../_static/frame_tracking_restart_diagnostic.csv)
 
-Cloud medium enabled run for the corrected implementation:
+## Reproduction Commands
+
+Material cloud medium tracking-enabled run:
 
 ```bash
 ./build_cloud_crushing/src/athena \
-  -i inputs/hydro/cloud_crushing_snr.athinput \
-  -d run_cloud_medium_on \
+  -i inputs/hydro/cloud_crushing_material_tracking.athinput \
+  -d run_cloud_material_medium_on \
   mesh/nx1=96 mesh/nx2=32 mesh/nx3=32 \
   meshblock/nx1=32 meshblock/nx2=16 meshblock/nx3=16 \
-  time/tlim=0.04 time/nlim=-1 output1/dt=0.004 output2/dt=0.04
+  time/tlim=0.04 time/nlim=-1 \
+  output1/dt=0.004 output2/dt=0.04 output3/dt=10
 ```
 
-The disabled reference uses the same command plus
-`frame_tracking/enabled=false`.
-
-TRML medium serial run:
+Material TRML medium tracking-enabled run:
 
 ```bash
 ./build_trml_frame_tracking/src/athena \
-  -i inputs/hydro/TRML/TRML_frame_tracking.athinput \
-  -d run_trml_medium_on \
+  -i inputs/hydro/TRML/TRML_frame_tracking_material.athinput \
+  -d run_trml_material_medium_on \
   mesh/nx1=32 mesh/nx2=32 mesh/nx3=64 \
   meshblock/nx1=16 meshblock/nx2=16 meshblock/nx3=32 \
   time/tlim=0.25 time/nlim=-1 \
-  output1/dt=0.025 output2/dt=0.25 output3/dt=0.0625
+  output1/dt=0.025 output2/dt=0.25 output3/dt=10
 ```
 
-Temperature-window and passive-tracer diagnostics use the same transformed
-snapshots:
+Use the same commands with `frame_tracking/enabled=false` for reference runs,
+then generate rows and slices with:
 
 ```bash
 python scripts/compare_frame_tracking_validation.py \
-  --reference-dir run_trml_medium_off \
-  --candidate-dir run_trml_medium_on \
-  --output diagnostics.csv \
+  --reference-dir run_trml_material_medium_off \
+  --candidate-dir run_trml_material_medium_on \
+  --output frame_tracking_material_validation_summary.csv \
   --problem TRML --resolution 32x32x64 \
-  --tracking-mode enabled_vs_disabled_temperature \
-  --comparison-reference serial_tracking_disabled \
-  --comparison-kind physical --axis x3 --selection temperature \
-  --target-min 0.015 --target-max 0.08
-
-python scripts/compare_frame_tracking_validation.py \
-  --reference-dir run_trml_medium_off \
-  --candidate-dir run_trml_medium_on \
-  --output diagnostics.csv --append \
-  --problem TRML --resolution 32x32x64 \
-  --tracking-mode enabled_vs_disabled_tracer \
+  --tracking-mode material_selected_recipe \
   --comparison-reference serial_tracking_disabled \
   --comparison-kind physical --axis x3 --selection scalar \
-  --target-min 0 --target-max 1
+  --scalar-field s_00 --target-min 0 --target-max 1
+
+python scripts/plot_frame_tracking_material_slices.py \
+  --cloud-off run_cloud_material_medium_off \
+  --cloud-on run_cloud_material_medium_on \
+  --trml-off run_trml_material_medium_off \
+  --trml-on run_trml_material_medium_on \
+  --output frame_tracking_material_medium_slices.png
 ```
 
-## Required Next Work
+## Remaining Gate
 
-1. Define and justify a production selected-material observable for TRML.
-   The hard instantaneous temperature window fails while conserved tracer mass
-   passes, so changing the gate requires a documented scientific decision.
-2. Develop a TRML conservative controller recipe that eliminates limit events
-   without worsening the accepted physical observable.
-3. Add a high-precision full conserved-state path for medium production
-   restart certification; native binary snapshots are diagnostic only.
-4. Only after serial physical gates pass, run cloud/TRML restart, four-rank
-   MPI, and AMR production comparisons and publish those results.
-
-Until these steps pass their stated criteria, the feature is supported for
-wiring tests and controlled method development only.
+The next action is to diagnose and reduce the Sedov cloud aggregate
+conserved-state frame discrepancy while preserving the now-passing
+tracer-defined material observables. Strict medium restart certification and
+the MPI/AMR production matrix remain deferred until the corrected serial gate
+passes. The feature remains suitable for wiring tests and controlled method
+development only.

@@ -7,10 +7,18 @@ using `x_lab = x_grid + FrameDisplacement(axis)` and
 
 ## `cloud_tracking_conservative`
 
-This block matches the cooled-cloud example input
-`inputs/hydro/cloud_crushing_snr.athinput`:
+This block matches the material-validation input
+`inputs/hydro/cloud_crushing_material_tracking.athinput`. The selected scalar
+is initialized as original-cloud mass fraction and its inflow value is zero,
+so ambient or Sedov-injected material is not counted as original cloud:
 
 ```ini
+<hydro>
+nscalars = 1
+
+<problem>
+cloud_tracer_scalar_index = 0
+
 <frame_tracking>
 enabled = true
 tracked_fluid = hydro
@@ -18,9 +26,9 @@ start_time = 0.02
 apply_every = 1
 axes = x1
 x1_target = 3.0
-target = density
-target_min = 5.0
-target_max = 200.0
+target = scalar0
+target_min = 0.0
+weight = tracer_mass
 mode = pd
 tau_avg = 0.01
 tau_relax = 0.05
@@ -36,7 +44,9 @@ that transformation in Sedov-boundary mode.
 
 ## `mixing_layer_tracking_conservative`
 
-This block matches `inputs/hydro/TRML/TRML_frame_tracking.athinput`:
+This block matches `inputs/hydro/TRML/TRML_frame_tracking_material.athinput`.
+It uses the shipped `s_00` cold-fraction tracer as a conserved material
+identifier:
 
 ```ini
 <frame_tracking>
@@ -46,21 +56,42 @@ start_time = 0.0
 apply_every = 1
 axes = x3
 x3_target = 0.0
-target = temperature
-target_min = 0.015
-target_max = 0.08
+target = scalar0
+target_min = 0.0
+weight = tracer_mass
 mode = pd
 tau_avg = 0.1
 tau_relax = 1.0
 tau_vel = 0.25
 max_abs_boost = 0.2
 max_boost_change_mode = per_time
-max_boost_change_rate = 0.02
+max_boost_change_rate = 0.05
 ```
 
 The shipped TRML problem generator provides frame-aware `x3` boundaries.
 Do not apply this block unchanged to a problem with lab-frame boundaries or
 source terms that have not been transformed.
+
+## Phase-Structure Diagnostic Recipes
+
+The historical inputs `inputs/hydro/cloud_crushing_snr.athinput` and
+`inputs/hydro/TRML/TRML_frame_tracking.athinput` track density-selected cloud
+gas and temperature-selected interface gas, respectively. Keep these inputs
+for reproducible phase-structure diagnostics. Compression and cooling can move
+material across those thresholds, so their selected masses are not the
+material-retention acceptance observables for production validation.
+
+For strict restart state comparisons, add an output block such as:
+
+```ini
+<output2>
+file_type = bin
+variable = hydro_u
+data_precision = real
+```
+
+In a double-precision build this records conserved state and tracer density in
+eight-byte fields while ordinary plotting outputs remain float32 by default.
 
 ## Removed Configuration Aliases
 

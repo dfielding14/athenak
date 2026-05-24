@@ -3,7 +3,10 @@
 This example uses `src/pgen/cloud_crushing.cpp` and
 `inputs/hydro/cloud_crushing_snr.athinput` to initialize a cold ISM cloud in
 pressure balance with a warm ISM, then drives the left boundary with a
-Taylor-von Neumann-Sedov blast wave.
+Taylor-von Neumann-Sedov blast wave. That input retains density-selected
+tracking as a phase-structure diagnostic. Material-retention validation uses
+`inputs/hydro/cloud_crushing_material_tracking.athinput`, which adds an
+advected original-cloud tracer.
 
 The problem is built around three pieces:
 
@@ -140,9 +143,9 @@ If the sample point lies outside the blast radius, the boundary fills warm ISM
 gas moving at `-V_frame` in grid coordinates. If it lies inside the shock, the
 boundary fills the TVNS density, pressure, and radial velocity at that `xi`.
 
-## Frame Tracking
+## Frame Tracking Diagnostics
 
-The input tracks the cold cloud by selecting dense gas:
+The phase-diagnostic input tracks dense gas:
 
 ```ini
 <frame_tracking>
@@ -184,6 +187,30 @@ consistently while the grid-frame fluid variables are Galilean shifted.
 After a frame update, the tracker reapplies non-periodic boundary states before
 the next flux calculation so the Sedov inflow is evaluated in the current
 moving frame across uninterrupted and restarted runs.
+
+## Material-Tracking Input
+
+The material-validation input defines passive scalar 0 as original-cloud mass
+fraction. Initial scalar density is `rho * cold_fraction`, and both constant
+and Sedov inflow boundaries fill this tracer with zero because injected gas is
+not original cloud material:
+
+```ini
+<hydro>
+nscalars = 1
+
+<problem>
+cloud_tracer_scalar_index = 0
+
+<frame_tracking>
+target = scalar0
+target_min = 0.0
+weight = tracer_mass
+```
+
+Use tracer mass and its lab-frame centroid as material-retention observables.
+The density-selected mass remains useful for diagnosing phase compression and
+cooling, but it is not a conserved material measure.
 
 ## Build And Run
 
