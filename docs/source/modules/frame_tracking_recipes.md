@@ -65,7 +65,7 @@ tau_relax = 1.0
 tau_vel = 0.25
 max_abs_boost = 0.2
 max_boost_change_mode = per_time
-max_boost_change_rate = 0.02
+max_boost_change_rate = 0.05
 ```
 
 The shipped TRML problem generator provides frame-aware `x3` boundaries.

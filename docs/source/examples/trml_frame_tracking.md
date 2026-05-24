@@ -64,7 +64,7 @@ weight = tracer_mass
 mode = pd
 max_abs_boost = 0.2
 max_boost_change_mode = per_time
-max_boost_change_rate = 0.02
+max_boost_change_rate = 0.05
 ```
 
 Tracer mass and tracer-mass centroid are the material-retention observables.

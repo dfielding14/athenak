@@ -105,10 +105,16 @@ def final_history(run_dir: Path, axis: str) -> dict[str, float]:
                   f"ft_err_{suffix}", f"ft_dv_{suffix}"):
         if field in data:
             values[field] = float(np.asarray(data[field])[-1])
+    weight = np.asarray(data["ft_weight"])
+    skipped = np.asarray(data["ft_skip"])
+    sampled = np.flatnonzero(weight > 0.0)
+    priming_index = int(sampled[0]) if sampled.size else -1
+    priming_skips = skipped[priming_index] if priming_index >= 0 else 0.0
     values["max_misses"] = float(np.max(np.asarray(data["ft_misses"])))
     values["recovery_events"] = float(np.sum(np.asarray(data["ft_recov"])))
     values["limit_events"] = float(np.sum(np.asarray(data["ft_limit"])))
-    values["skip_events"] = float(np.sum(np.asarray(data["ft_skip"])))
+    values["priming_skip_events"] = float(priming_skips)
+    values["unexpected_skip_events"] = float(np.sum(skipped) - priming_skips)
     return values
 
 
@@ -154,6 +160,27 @@ def transformed_field(snapshot: dict[str, Any], history: dict[str, float],
     if name == VELOCITY_NAME[axis]:
         value = value + history["velocity"]
     return value
+
+
+def hydro_conserved_lab_frame(snapshot: dict[str, Any], history: dict[str, float],
+                              axis: str) -> dict[str, np.ndarray]:
+    density = snapshot["fields"]["dens"]
+    velocity = {
+        name: transformed_field(snapshot, history, name, axis)
+        for name in ("velx", "vely", "velz")
+    }
+    return {
+        "dens": density,
+        "mom1": density * velocity["velx"],
+        "mom2": density * velocity["vely"],
+        "mom3": density * velocity["velz"],
+        "ener": (
+            snapshot["fields"]["eint"]
+            + 0.5
+            * density
+            * sum(velocity[name] * velocity[name] for name in velocity)
+        ),
+    }
 
 
 def interpolate_to_reference(reference: dict[str, Any], candidate: dict[str, Any],
@@ -277,12 +304,34 @@ def compare_physical(rows: list[dict[str, object]], reference: dict[str, Any],
         absolute, relative = norm_error(ref_values, cand_values)
         add_row(rows, args, "tracer_density_l2_lab_frame", absolute, relative,
                 "trend from low to medium resolution", "measured")
-    ref_values, cand_values = interpolate_to_reference(
-        reference, candidate, reference_history, candidate_history, "dens", args.axis
+    reference_conserved = hydro_conserved_lab_frame(
+        reference, reference_history, args.axis
     )
-    absolute, relative = norm_error(ref_values, cand_values)
-    add_row(rows, args, "density_l2_lab_frame", absolute, relative,
-            "trend against wiring baseline", "measured")
+    candidate_conserved = hydro_conserved_lab_frame(
+        candidate, candidate_history, args.axis
+    )
+    ref_state_values = []
+    cand_state_values = []
+    for name in ("dens", "mom1", "mom2", "mom3", "ener"):
+        ref_values, cand_values = interpolate_values_to_reference(
+            reference,
+            candidate,
+            reference_history,
+            candidate_history,
+            reference_conserved[name],
+            candidate_conserved[name],
+            args.axis,
+        )
+        ref_state_values.append(ref_values)
+        cand_state_values.append(cand_values)
+        absolute, relative = norm_error(ref_values, cand_values)
+        add_row(rows, args, f"{name}_l2_lab_frame", absolute, relative,
+                "trend from low to medium resolution", "measured")
+    absolute, relative = norm_error(
+        np.concatenate(ref_state_values), np.concatenate(cand_state_values)
+    )
+    add_row(rows, args, "hydro_conserved_l2_lab_frame", absolute, relative,
+            "trend from low to medium resolution", "measured")
 
 
 def compare_continuity(rows: list[dict[str, object]], reference: dict[str, Any],
@@ -341,10 +390,15 @@ def add_health_rows(rows: list[dict[str, object]], candidate: dict[str, Any],
         recovered = history["recovery_events"]
         add_row(rows, args, "recovery_events", recovered, recovered, "absolute <= 0",
                 "pass" if recovered == 0.0 else "fail")
-    if "skip_events" in history:
-        skipped = history["skip_events"]
-        add_row(rows, args, "skip_events", skipped, skipped, "absolute <= 0",
-                "pass" if skipped == 0.0 else "fail")
+    if "priming_skip_events" in history:
+        priming = history["priming_skip_events"]
+        add_row(rows, args, "priming_skip_events", priming, priming,
+                "expected initialization event <= 1",
+                "pass" if priming <= 1.0 else "fail")
+    if "unexpected_skip_events" in history:
+        skipped = history["unexpected_skip_events"]
+        add_row(rows, args, "unexpected_skip_events", skipped, skipped,
+                "absolute <= 0", "pass" if skipped == 0.0 else "fail")
 
 
 def write_rows(path: Path, rows: list[dict[str, object]], append: bool) -> None:

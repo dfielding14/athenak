@@ -17,12 +17,12 @@ the feature as working perfectly.
 
 | Gate | Required outcome | Current branch status |
 | --- | --- | --- |
-| Correctness | Continuous and restart-split runs agree in controller state and final fluid state within precision-aware tolerances. | The stale frame-aware boundary refresh defect is fixed; a high-precision TRML boundary regression passes and corrected medium TRML controller/binary diagnostics pass. Full conserved-state medium certification still requires precision-suitable output. |
-| Robustness | CPU, MPI/AMR, MHD, invalid configuration, legacy-state, cloud, and TRML tests run through reproducible commands. | Full local CPU and MPI CPU discovery suites pass, including MHD, three-axis, guards, legacy, cloud, and TRML coverage; medium serial scientific comparisons expose blocking failures. |
+| Correctness | Continuous and restart-split runs agree in controller state and final fluid state within precision-aware tolerances. | `data_precision=real` and a strict material TRML restart regression are implemented and pass at test scale. Medium production restart certification is deferred because the serial cloud physical gate fails first. |
+| Robustness | CPU, MPI/AMR, MHD, invalid configuration, legacy-state, cloud, and TRML tests run through reproducible commands. | Full local CPU and MPI CPU discovery suites pass, including tracer weighting, scalar AMR parsing, native-precision output, material cloud/TRML smoke coverage, and strict short restart comparison. |
 | Observability | Controller state is emitted in machine-readable history data. | Implemented as `<basename>.frame_tracker.hst`; stdout is compatibility-only for archived runs. |
 | Efficiency | All active axes share one mesh sampling pass and grouped reductions per controller update. | Measured on clean candidate `78f8e4cd`: serial `x1` overhead is 77.0% lower and serial `all` overhead is 81.4% lower than `cfbcdde7`; see the performance-evidence page and raw CSV. |
-| Usability | Canonical parameters, conservative examples, removed-alias migration errors, and supported-physics limits are documented. | Implemented in the module reference and recipe/migration page; legacy restart-state reading remains supported. |
-| Publication | GitHub Pages exposes reference pages, slices, CSV summaries, validation limits, and this roadmap. | Existing wiring-validation pages are published; recipe, benchmark, and failed-medium-validation evidence are prepared for sync without upgrading the scientific claim. |
+| Usability | Canonical parameters, conservative examples, removed-alias migration errors, and supported-physics limits are documented. | Material recipes now use `target=scalar0` and `weight=tracer_mass`; density/temperature recipes are retained as phase diagnostics; legacy restart-state reading remains supported. |
+| Publication | GitHub Pages exposes reference pages, slices, CSV summaries, validation limits, and this roadmap. | Material-validation CSV and medium tracer-slice assets are prepared for publication without upgrading the scientific claim; Pages sync remains pending. |
 
 ## Interface Contract
 
@@ -81,31 +81,33 @@ only shipped frame-aware examples are validated.
 | Scenario | Assertion |
 | --- | --- |
 | Serial controller smoke | Structured history is finite; the controller primes then actuates; no unexpected misses occur. |
-| Restart continuity | Uninterrupted and restart-split runs match final frame state and conservative fluid output to `100 * machine_epsilon` scaled tolerance. |
+| Restart continuity | Uninterrupted and restart-split material runs with `data_precision=real` match final frame state and conservative fluid output to `100 * machine_epsilon` scaled tolerance. |
 | Legacy restart keys | Legacy state loads, warns once, and produces finite diagnostics; exact continuation is not claimed. |
 | MHD Galilean invariant | Density and magnetic fields are unchanged at the first non-zero boost; momentum and ideal-gas energy match analytic boost updates to `100 * machine_epsilon`. |
-| MPI/AMR | One-rank and multi-rank AMR results agree within reduction-order tolerance and retain valid controller state through refinement. |
+| MPI/AMR | One-rank and multi-rank AMR regression results agree within reduction-order tolerance, including an AMR criterion selecting `hydro_w_s00`. |
 | Guards | SR, GR, dynamical-GR, missing selected fluids, ambiguous eligible fluids, and removed aliases fail before evolution with actionable messages. |
-| Cloud/TRML integrations | Short custom-problem runs compile and execute with finite structured histories; corrected medium serial comparisons are recorded and still fail the declared physical acceptance criteria. |
+| Cloud/TRML integrations | Short custom-problem material runs compile, emit native-precision tracer snapshots, reject invalid cloud tracer indices, and execute a strict short TRML material restart comparison. |
 
 ## Local Verification Record
 
-The interface, boundary-refresh, and regression-test changes were validated on
-May 23, 2026 in the feature worktree before commit:
+The material-tracer, precision-output, scalar-AMR, and regression-test changes
+were validated on May 24, 2026 in the feature worktree before and after
+feature commit `a893c52f`:
 
 | Command | Result |
 | --- | --- |
 | `python run_test_suite.py --style` | `2 passed` |
 | `python run_test_suite.py --cpu --test test_suite/nr/test_nr_lwave1d_cpu.py` | `16 passed`; confirms precise restart storage does not perturb existing linear-wave runtime input updates. |
-| `python run_test_suite.py --cpu --test test_suite/nr/test_nr_frame_tracking_cpu.py` | `17 passed`; includes MHD invariant, canonical/removed-input behavior, initialization summary, and three-axis schema. |
+| `python run_test_suite.py --cpu --test test_suite/nr/test_nr_frame_tracking_cpu.py` | `20 passed`; includes MHD invariant, canonical/removed-input behavior, tracer-mass centroid, invalid scalar AMR index, initialization summary, and three-axis schema. |
 | `python run_test_suite.py --cpu --test test_suite/nr/test_nr_frame_tracking_restart_cpu.py` | `2 passed`; one- and three-axis restart continuation. |
-| `python run_test_suite.py --mpicpu --test test_suite/nr/test_nr_frame_tracking_amr_mpicpu.py` | `2 passed`; serial/MPI AMR comparison. |
-| `python run_test_suite.py --cpu` | `209 passed, 15 skipped, 60 deselected`; includes cloud and TRML custom-problem integrations. |
-| `python run_test_suite.py --mpicpu` | `31 passed, 253 deselected`. |
+| `python -m pytest test_suite/nr/test_nr_frame_tracking_examples_cpu.py -q` | `2 passed`; material cloud/TRML output precision, cloud tracer-index guard, and strict short TRML material restart comparison. |
+| `python run_test_suite.py --mpicpu --test test_suite/nr/test_nr_frame_tracking_amr_mpicpu.py` | `3 passed`; serial/MPI AMR comparison including scalar-targeted refinement. |
+| `python run_test_suite.py --cpu` | `212 passed, 15 skipped, 61 deselected`; includes cloud and TRML custom-problem integrations. |
+| `python run_test_suite.py --mpicpu` | `32 passed, 256 deselected`. |
 
-CI confirmation for the exact pushed commit remains required. The
-medium-resolution serial diagnostics below were completed locally and retain a
-failed production gate.
+No GitHub Actions runs were visible for the exact pushed feature commit when
+queried locally; the table above is local evidence. The medium-resolution
+serial diagnostics below retain a failed production gate.
 
 ## Benchmark Campaign
 
@@ -135,49 +137,50 @@ boundary-aware timing result before production performance claims.
 
 ## Scientific Validation Campaign
 
-Medium-resolution serial diagnosis was extended on May 23, 2026 after fixing
-post-frame-update boundary refresh and TRML passive-scalar boundary filling.
-The initial failed campaign remains in
-`docs/source/_static/frame_tracking_validation_summary.csv`; corrected
-selection/resolution and restart diagnostics are in
-`docs/source/_static/frame_tracking_resolution_sensitivity.csv` and
-`docs/source/_static/frame_tracking_restart_diagnostic.csv`.
+The May 24, 2026 campaign replaces threshold-selected material acceptance with
+advected tracer mass and tracer-mass centroid. Density-selected cloud mass and
+temperature-selected TRML mass remain mandatory phase-structure diagnostics.
+The maintained serial table is
+`docs/source/_static/frame_tracking_material_validation_summary.csv`, with
+final medium slices in
+`docs/source/_static/frame_tracking_material_medium_slices.png`.
 
 | Problem/comparison | Resolution and duration | Measured result | Acceptance result |
 | --- | --- | --- | --- |
-| Cloud tracking on/off, lab-frame comparison | `48 x 16 x 16` and `96 x 32 x 32`, `tlim=0.04` | Density-selected mass difference improves from `2.0914e-2` to `1.4178e-2`; zero misses and limits. | Fail: medium mass difference remains above `1.0e-2`. |
-| TRML tracking on/off, temperature-window selection | `16 x 16 x 32` and `32 x 32 x 64`, `tlim=0.25` | Mass difference is `4.0290e-2` then `6.0872e-2`; medium has three limit events. | Fail: mass and no-limit requirements are not met. |
-| TRML tracking on/off, passive-tracer diagnostic | Same runs | Tracer-mass difference is `2.4241e-3` then `4.0503e-3`. | Diagnostic mass passes; it does not replace the declared temperature-selection or health gates. |
-| TRML restart splits at approximately 25, 50, and 75 percent | `32 x 32 x 64`, `tlim=0.25` | Corrected controller rows pass strict history tolerance; same-grid native binary state diagnostics pass float32-aware tolerance. | Restart defect fixed; full high-precision medium conserved-state certification remains required. |
-| Prior TRML serial versus 4-rank MPI diagnostic, before boundary fix | `32 x 32 x 64`, `tlim=0.25` | Field/controller comparisons passed `1.0e-10`; three limit events remained. | Historical diagnostic only; not rerun because corrected serial physical gates still fail. |
+| Cloud Sedov material tracking on/off | `48 x 16 x 16` and `96 x 32 x 32`, `tlim=0.04` | Tracer mass agrees to `7.56e-16` then `2.48e-16`; centroid error decreases to `1.46e-5`; tracer-density L2 decreases from `2.5402e-3` to `2.0079e-3`; no health events. | **Fail:** aggregate lab-frame conserved-state L2 is `7.9004e-3` then `7.9025e-3`, not decreasing. |
+| Cloud constant-inflow control | Same resolutions and duration | Tracer-density L2 decreases from `3.6475e-4` to `4.8008e-5`; conserved-state L2 decreases from `1.1006e-4` to `2.4125e-5`. | Diagnostic only: it identifies Sedov/shocked evolution as the remaining sensitivity; controller limit events occur in this control. |
+| TRML material tracking on/off | `16 x 16 x 32` and `32 x 32 x 64`, `tlim=0.25` | With `max_boost_change_rate=0.05`, tracer mass differences are `8.45e-4` and `1.03e-3`; tracer-density L2 decreases from `5.5852e-4` to `4.1761e-4`; conserved-state L2 decreases from `4.7579e-4` to `3.5137e-4`; no health events. | Pass serial material gate. |
+| TRML cooling-disabled material control | Same resolutions and duration | Tracer-density and conserved-state L2 errors decrease at medium resolution; no health events. | Pass diagnostic control. |
+| TRML temperature-window phase diagnostic | Same resolutions and duration | Selected-mass difference is `4.0290e-2` then `6.0872e-2`, with limit events. | Retained phase diagnostic; not a material-retention gate. |
 
-An inexpensive TRML follow-up varied only `max_boost_change_rate`: rates
-`0.05` and `0.10` retain one limit event and produce `7.35%` and `7.81%`
-selected-mass differences, while rates `0.20` and `1.00` remove limit events
-but worsen that difference to `8.05%` and `8.09%`. The existing recipe is
-therefore not replaced by an unvalidated slew-rate adjustment.
+The TRML low-resolution slew-rate sweep selected `0.05`, the lowest tested
+rate with no limit events. The `0.02` starting recipe incurred one limit event;
+`0.05`, `0.10`, `0.20`, and `1.00` give the same reported material metrics at
+this scale.
 
-The restart mismatch was caused by stale frame-dependent ghost states after
-post-timestep displacement/boost updates: uninterrupted runs reached their
-next flux before boundary values were refreshed, whereas restarted runs
-refilled boundaries on initialization. The tracker now refreshes only affected
-ghost primitive slabs after reapplying non-periodic boundaries, and the TRML
-boundary fills its passive cold-fraction scalar.
+The cloud material result resolves the former density-threshold ambiguity:
+material mass and centroid pass strongly. It also exposes the next precise
+blocker: the transformed conserved-state discrepancy in the time-dependent,
+shocked Sedov problem does not show the required decreasing resolution trend.
+The constant-inflow control converges, so the remaining diagnosis should focus
+on shocked boundary/source evolution and frame-transformed conserved-field
+comparison rather than on tracer initialization.
 
-The failed serial physical comparisons are still sufficient to block
-production-candidate guidance. Cloud/TRML MPI and AMR scientific comparisons
-are deferred because running them now cannot satisfy this release gate.
+The restart mismatch diagnosed in the prior campaign was caused by stale
+frame-dependent ghost states after post-timestep frame updates. That defect is
+fixed. The new `data_precision=real` output path and strict short material
+restart regression are implemented, but no medium production restart campaign
+is run while the serial cloud physical gate fails.
 
 Required next work is:
 
-1. Define and justify the selected-material acceptance observable for TRML:
-   the temperature-window criterion fails while conserved tracer mass passes.
-2. Determine a TRML controller recipe that avoids limit events without
-   degrading the accepted physical observable.
-3. Add a precision-suitable full conserved-state medium restart output path;
-   native binary fields are stored as floats and remain diagnostic only.
-4. Rerun cloud/TRML restart, MPI, and AMR production comparisons only after
-   the serial physical gates pass.
+1. Isolate the Sedov cloud aggregate conserved-state discrepancy using
+   controlled boundary forcing and output-time/resolution checks.
+2. Determine whether the non-monotone result is a numerical-resolution issue,
+   a lab-frame transformation comparison issue, or residual frame-dependent
+   source/boundary behavior.
+3. Only after the cloud serial trend passes, execute strict medium restart,
+   four-rank MPI, and tracer-refined AMR comparisons for both examples.
 
 Until those results pass, recommend the feature for controlled wiring tests
 and method-development work only, not irreversible production science runs.

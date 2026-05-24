@@ -1,0 +1,221 @@
+problem,resolution,tracking_mode,restart_split,ranks,amr_mode,diagnostic_metric,comparison_reference,absolute_error,relative_error,tolerance,result
+cloud,48x16x16,material_selected_recipe,none,1,uniform,selected_mass,serial_tracking_disabled,1.7053025658242404e-13,7.5631500523526035e-16,relative <= 1.0e-2,pass
+cloud,48x16x16,material_selected_recipe,none,1,uniform,tracked_centroid,serial_tracking_disabled,9.9115305506991547e-05,3.3011334691758465e-05,absolute <= 2.5000000000000000e-01,pass
+cloud,48x16x16,material_selected_recipe,none,1,uniform,tracer_out_of_range_mass,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,relative <= 1.0e-8,pass
+cloud,48x16x16,material_selected_recipe,none,1,uniform,tracer_density_l2_lab_frame,serial_tracking_disabled,1.5057418424818605e+00,2.5401521348320300e-03,trend from low to medium resolution,measured
+cloud,48x16x16,material_selected_recipe,none,1,uniform,dens_l2_lab_frame,serial_tracking_disabled,1.7861217785327466e+00,2.6676216317067683e-03,trend from low to medium resolution,measured
+cloud,48x16x16,material_selected_recipe,none,1,uniform,mom1_l2_lab_frame,serial_tracking_disabled,1.0165470613646987e+02,6.0593567946932644e-03,trend from low to medium resolution,measured
+cloud,48x16x16,material_selected_recipe,none,1,uniform,mom2_l2_lab_frame,serial_tracking_disabled,2.1877578883255335e+00,5.4066042398619608e-03,trend from low to medium resolution,measured
+cloud,48x16x16,material_selected_recipe,none,1,uniform,mom3_l2_lab_frame,serial_tracking_disabled,2.1877578883255109e+00,5.4066042398619070e-03,trend from low to medium resolution,measured
+cloud,48x16x16,material_selected_recipe,none,1,uniform,ener_l2_lab_frame,serial_tracking_disabled,8.2382643968265911e+03,7.9008188323468863e-03,trend from low to medium resolution,measured
+cloud,48x16x16,material_selected_recipe,none,1,uniform,hydro_conserved_l2_lab_frame,serial_tracking_disabled,8.2388923232495545e+03,7.9003957152401945e-03,trend from low to medium resolution,measured
+cloud,48x16x16,material_selected_recipe,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+cloud,48x16x16,material_selected_recipe,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+cloud,48x16x16,material_selected_recipe,none,1,uniform,limit_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+cloud,48x16x16,material_selected_recipe,none,1,uniform,recovery_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+cloud,48x16x16,material_selected_recipe,none,1,uniform,priming_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,expected initialization event <= 1,pass
+cloud,48x16x16,material_selected_recipe,none,1,uniform,unexpected_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+cloud,96x32x32,material_selected_recipe,none,1,uniform,selected_mass,serial_tracking_disabled,5.6843418860808015e-14,2.4799706007430214e-16,relative <= 1.0e-2,pass
+cloud,96x32x32,material_selected_recipe,none,1,uniform,tracked_centroid,serial_tracking_disabled,1.4632843363227011e-05,4.8741964644127860e-06,absolute <= 1.2500000000000000e-01,pass
+cloud,96x32x32,material_selected_recipe,none,1,uniform,tracer_out_of_range_mass,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,relative <= 1.0e-8,pass
+cloud,96x32x32,material_selected_recipe,none,1,uniform,tracer_density_l2_lab_frame,serial_tracking_disabled,3.4148075393329571e+00,2.0079306213916012e-03,trend from low to medium resolution,measured
+cloud,96x32x32,material_selected_recipe,none,1,uniform,dens_l2_lab_frame,serial_tracking_disabled,6.6271652264630490e+00,3.3676192943096553e-03,trend from low to medium resolution,measured
+cloud,96x32x32,material_selected_recipe,none,1,uniform,mom1_l2_lab_frame,serial_tracking_disabled,5.2058337840659624e+02,8.6076518951000124e-03,trend from low to medium resolution,measured
+cloud,96x32x32,material_selected_recipe,none,1,uniform,mom2_l2_lab_frame,serial_tracking_disabled,1.5754527884420993e+01,1.1675094907338868e-02,trend from low to medium resolution,measured
+cloud,96x32x32,material_selected_recipe,none,1,uniform,mom3_l2_lab_frame,serial_tracking_disabled,1.5754527884417312e+01,1.1675094907336194e-02,trend from low to medium resolution,measured
+cloud,96x32x32,material_selected_recipe,none,1,uniform,ener_l2_lab_frame,serial_tracking_disabled,2.8720868272405656e+04,7.9022811968486716e-03,trend from low to medium resolution,measured
+cloud,96x32x32,material_selected_recipe,none,1,uniform,hydro_conserved_l2_lab_frame,serial_tracking_disabled,2.8725595236728648e+04,7.9024855113878287e-03,trend from low to medium resolution,measured
+cloud,96x32x32,material_selected_recipe,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+cloud,96x32x32,material_selected_recipe,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+cloud,96x32x32,material_selected_recipe,none,1,uniform,limit_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+cloud,96x32x32,material_selected_recipe,none,1,uniform,recovery_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+cloud,96x32x32,material_selected_recipe,none,1,uniform,priming_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,expected initialization event <= 1,pass
+cloud,96x32x32,material_selected_recipe,none,1,uniform,unexpected_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_selected_recipe,none,1,uniform,selected_mass,serial_tracking_disabled,8.2277312248450585e-02,8.4534507128493418e-04,relative <= 1.0e-2,pass
+TRML,16x16x32,material_selected_recipe,none,1,uniform,tracked_centroid,serial_tracking_disabled,4.0741006290634374e-04,7.9643411778731034e-04,absolute <= 6.2500000000000000e-02,pass
+TRML,16x16x32,material_selected_recipe,none,1,uniform,tracer_out_of_range_mass,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,relative <= 1.0e-8,pass
+TRML,16x16x32,material_selected_recipe,none,1,uniform,tracer_density_l2_lab_frame,serial_tracking_disabled,3.3457353892334694e+00,5.5852488822357642e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_selected_recipe,none,1,uniform,dens_l2_lab_frame,serial_tracking_disabled,2.7289127247002893e+00,4.4684627840658851e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_selected_recipe,none,1,uniform,mom1_l2_lab_frame,serial_tracking_disabled,1.2105394690108768e+00,8.1792410201942192e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_selected_recipe,none,1,uniform,mom2_l2_lab_frame,serial_tracking_disabled,1.3665244929638067e-03,7.3809459209420499e-03,trend from low to medium resolution,measured
+TRML,16x16x32,material_selected_recipe,none,1,uniform,mom3_l2_lab_frame,serial_tracking_disabled,1.7381199086586357e-01,5.6774046747181631e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_selected_recipe,none,1,uniform,ener_l2_lab_frame,serial_tracking_disabled,1.8895341884970862e-01,6.6251622378704720e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_selected_recipe,none,1,uniform,hydro_conserved_l2_lab_frame,serial_tracking_disabled,2.9963788704229697e+00,4.7578609709019240e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_selected_recipe,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+TRML,16x16x32,material_selected_recipe,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_selected_recipe,none,1,uniform,limit_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_selected_recipe,none,1,uniform,recovery_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_selected_recipe,none,1,uniform,priming_skip_events,serial_tracking_disabled,1.0000000000000000e+00,1.0000000000000000e+00,expected initialization event <= 1,pass
+TRML,16x16x32,material_selected_recipe,none,1,uniform,unexpected_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,32x32x64,material_selected_recipe,none,1,uniform,selected_mass,serial_tracking_disabled,9.9810534935727446e-02,1.0255028339532768e-03,relative <= 1.0e-2,pass
+TRML,32x32x64,material_selected_recipe,none,1,uniform,tracked_centroid,serial_tracking_disabled,4.9937000591337988e-04,9.7579868659935782e-04,absolute <= 3.1250000000000000e-02,pass
+TRML,32x32x64,material_selected_recipe,none,1,uniform,tracer_out_of_range_mass,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,relative <= 1.0e-8,pass
+TRML,32x32x64,material_selected_recipe,none,1,uniform,tracer_density_l2_lab_frame,serial_tracking_disabled,7.2047831409805143e+00,4.1760737841028728e-04,trend from low to medium resolution,measured
+TRML,32x32x64,material_selected_recipe,none,1,uniform,dens_l2_lab_frame,serial_tracking_disabled,5.7370945147857775e+00,3.2645133420655101e-04,trend from low to medium resolution,measured
+TRML,32x32x64,material_selected_recipe,none,1,uniform,mom1_l2_lab_frame,serial_tracking_disabled,2.6892429381129332e+00,6.3046317009047496e-04,trend from low to medium resolution,measured
+TRML,32x32x64,material_selected_recipe,none,1,uniform,mom2_l2_lab_frame,serial_tracking_disabled,2.2024674542967695e-03,4.5187008699796166e-03,trend from low to medium resolution,measured
+TRML,32x32x64,material_selected_recipe,none,1,uniform,mom3_l2_lab_frame,serial_tracking_disabled,5.0688896900972857e-01,5.7483379546832626e-04,trend from low to medium resolution,measured
+TRML,32x32x64,material_selected_recipe,none,1,uniform,ener_l2_lab_frame,serial_tracking_disabled,3.9153399887591350e-01,4.7737984256304760e-04,trend from low to medium resolution,measured
+TRML,32x32x64,material_selected_recipe,none,1,uniform,hydro_conserved_l2_lab_frame,serial_tracking_disabled,6.3684002074161237e+00,3.5137134759249782e-04,trend from low to medium resolution,measured
+TRML,32x32x64,material_selected_recipe,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+TRML,32x32x64,material_selected_recipe,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,32x32x64,material_selected_recipe,none,1,uniform,limit_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,32x32x64,material_selected_recipe,none,1,uniform,recovery_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,32x32x64,material_selected_recipe,none,1,uniform,priming_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,expected initialization event <= 1,pass
+TRML,32x32x64,material_selected_recipe,none,1,uniform,unexpected_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,selected_mass,serial_tracking_disabled,8.4498044386734250e-02,8.6851143410045933e-04,relative <= 1.0e-2,pass
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,tracked_centroid,serial_tracking_disabled,4.1774299796804026e-04,8.1688691481007964e-04,absolute <= 6.2500000000000000e-02,pass
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,tracer_out_of_range_mass,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,relative <= 1.0e-8,pass
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,tracer_density_l2_lab_frame,serial_tracking_disabled,3.3004026131933313e+00,5.5097435454905979e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,dens_l2_lab_frame,serial_tracking_disabled,2.8457343189922746e+00,4.6602997809941089e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,mom1_l2_lab_frame,serial_tracking_disabled,1.2260730951445236e+00,8.2848436087727142e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,mom2_l2_lab_frame,serial_tracking_disabled,1.2510257110974316e-03,5.8944292948770009e-03,trend from low to medium resolution,measured
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,mom3_l2_lab_frame,serial_tracking_disabled,9.8975229188595415e-02,3.2406715487791430e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,ener_l2_lab_frame,serial_tracking_disabled,1.5465759571107285e-01,5.1766487181072705e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,hydro_conserved_l2_lab_frame,serial_tracking_disabled,3.1040579379091962e+00,4.9289428293973752e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,limit_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,recovery_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,priming_skip_events,serial_tracking_disabled,1.0000000000000000e+00,1.0000000000000000e+00,expected initialization event <= 1,pass
+TRML,16x16x32,material_cooling_disabled,none,1,uniform,unexpected_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,temperature_phase_diagnostic,none,1,uniform,selected_mass,serial_tracking_disabled,1.3419687282294035e-01,4.0290103868160253e-02,relative <= 1.0e-2,fail
+TRML,16x16x32,temperature_phase_diagnostic,none,1,uniform,tracked_centroid,serial_tracking_disabled,2.0801957954476105e-03,4.5082242139863241e-02,absolute <= 6.2500000000000000e-02,pass
+TRML,16x16x32,temperature_phase_diagnostic,none,1,uniform,dens_l2_lab_frame,serial_tracking_disabled,7.6600123959343502e+00,1.2542900338174004e-03,trend from low to medium resolution,measured
+TRML,16x16x32,temperature_phase_diagnostic,none,1,uniform,mom1_l2_lab_frame,serial_tracking_disabled,3.3909366218313903e+00,2.2911510604346013e-03,trend from low to medium resolution,measured
+TRML,16x16x32,temperature_phase_diagnostic,none,1,uniform,mom2_l2_lab_frame,serial_tracking_disabled,3.1186016744964729e-03,1.6844359838917671e-02,trend from low to medium resolution,measured
+TRML,16x16x32,temperature_phase_diagnostic,none,1,uniform,mom3_l2_lab_frame,serial_tracking_disabled,5.0930021022125804e-01,1.6635810823225346e-03,trend from low to medium resolution,measured
+TRML,16x16x32,temperature_phase_diagnostic,none,1,uniform,ener_l2_lab_frame,serial_tracking_disabled,5.2268828211611418e-01,1.8326710799895928e-03,trend from low to medium resolution,measured
+TRML,16x16x32,temperature_phase_diagnostic,none,1,uniform,hydro_conserved_l2_lab_frame,serial_tracking_disabled,8.4087359661969714e+00,1.3351981981748850e-03,trend from low to medium resolution,measured
+TRML,16x16x32,temperature_phase_diagnostic,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+TRML,16x16x32,temperature_phase_diagnostic,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,temperature_phase_diagnostic,none,1,uniform,limit_events,serial_tracking_disabled,5.0000000000000000e+00,5.0000000000000000e+00,absolute <= 0,fail
+TRML,16x16x32,temperature_phase_diagnostic,none,1,uniform,recovery_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,temperature_phase_diagnostic,none,1,uniform,priming_skip_events,serial_tracking_disabled,1.0000000000000000e+00,1.0000000000000000e+00,expected initialization event <= 1,pass
+TRML,16x16x32,temperature_phase_diagnostic,none,1,uniform,unexpected_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,selected_mass,serial_tracking_disabled,1.0239653671210647e-01,1.0524877860781847e-03,relative <= 1.0e-2,pass
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,tracked_centroid,serial_tracking_disabled,5.1233324409749592e-04,1.0014561921011741e-03,absolute <= 3.1250000000000000e-02,pass
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,tracer_out_of_range_mass,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,relative <= 1.0e-8,pass
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,tracer_density_l2_lab_frame,serial_tracking_disabled,7.1955084999179908e+00,4.1715534987151267e-04,trend from low to medium resolution,measured
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,dens_l2_lab_frame,serial_tracking_disabled,5.8474544455992410e+00,3.3281479582502986e-04,trend from low to medium resolution,measured
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,mom1_l2_lab_frame,serial_tracking_disabled,2.6955311248701745e+00,6.3211021975013504e-04,trend from low to medium resolution,measured
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,mom2_l2_lab_frame,serial_tracking_disabled,2.0639019514152386e-03,3.6287381832356904e-03,trend from low to medium resolution,measured
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,mom3_l2_lab_frame,serial_tracking_disabled,2.5193606537394958e-01,2.8658908577797713e-04,trend from low to medium resolution,measured
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,ener_l2_lab_frame,serial_tracking_disabled,3.6977709508473944e-01,4.3057665876627949e-04,trend from low to medium resolution,measured
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,hydro_conserved_l2_lab_frame,serial_tracking_disabled,6.4543646224302247e+00,3.5617148555570720e-04,trend from low to medium resolution,measured
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,limit_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,recovery_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,priming_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,expected initialization event <= 1,pass
+TRML,32x32x64,material_cooling_disabled,none,1,uniform,unexpected_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,32x32x64,temperature_phase_diagnostic,none,1,uniform,selected_mass,serial_tracking_disabled,1.8752405128907412e-01,6.0872114637806805e-02,relative <= 1.0e-2,fail
+TRML,32x32x64,temperature_phase_diagnostic,none,1,uniform,tracked_centroid,serial_tracking_disabled,3.6179915814268868e-03,9.8156889602025552e-02,absolute <= 3.1250000000000000e-02,pass
+TRML,32x32x64,temperature_phase_diagnostic,none,1,uniform,dens_l2_lab_frame,serial_tracking_disabled,2.0237336408536716e+01,1.1515420319283820e-03,trend from low to medium resolution,measured
+TRML,32x32x64,temperature_phase_diagnostic,none,1,uniform,mom1_l2_lab_frame,serial_tracking_disabled,9.4609061731142727e+00,2.2180044874990385e-03,trend from low to medium resolution,measured
+TRML,32x32x64,temperature_phase_diagnostic,none,1,uniform,mom2_l2_lab_frame,serial_tracking_disabled,8.1675311539583951e-03,1.6756946868967913e-02,trend from low to medium resolution,measured
+TRML,32x32x64,temperature_phase_diagnostic,none,1,uniform,mom3_l2_lab_frame,serial_tracking_disabled,1.8676338702417634e+00,2.1179767803392877e-03,trend from low to medium resolution,measured
+TRML,32x32x64,temperature_phase_diagnostic,none,1,uniform,ener_l2_lab_frame,serial_tracking_disabled,1.3873837687073518e+00,1.6915747998269370e-03,trend from low to medium resolution,measured
+TRML,32x32x64,temperature_phase_diagnostic,none,1,uniform,hydro_conserved_l2_lab_frame,serial_tracking_disabled,2.2460442721199186e+01,1.2392368214888285e-03,trend from low to medium resolution,measured
+TRML,32x32x64,temperature_phase_diagnostic,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+TRML,32x32x64,temperature_phase_diagnostic,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,32x32x64,temperature_phase_diagnostic,none,1,uniform,limit_events,serial_tracking_disabled,3.0000000000000000e+00,3.0000000000000000e+00,absolute <= 0,fail
+TRML,32x32x64,temperature_phase_diagnostic,none,1,uniform,recovery_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,32x32x64,temperature_phase_diagnostic,none,1,uniform,priming_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,expected initialization event <= 1,pass
+TRML,32x32x64,temperature_phase_diagnostic,none,1,uniform,unexpected_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+cloud,48x16x16,material_constant_inflow,none,1,uniform,selected_mass,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,relative <= 1.0e-2,pass
+cloud,48x16x16,material_constant_inflow,none,1,uniform,tracked_centroid,serial_tracking_disabled,1.0910610229064588e-05,3.6368700763548633e-06,absolute <= 2.5000000000000000e-01,pass
+cloud,48x16x16,material_constant_inflow,none,1,uniform,tracer_out_of_range_mass,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,relative <= 1.0e-8,pass
+cloud,48x16x16,material_constant_inflow,none,1,uniform,tracer_density_l2_lab_frame,serial_tracking_disabled,2.1492514650714747e-01,3.6475216987027603e-04,trend from low to medium resolution,measured
+cloud,48x16x16,material_constant_inflow,none,1,uniform,dens_l2_lab_frame,serial_tracking_disabled,2.1144434180086943e-01,3.3320588398781198e-04,trend from low to medium resolution,measured
+cloud,48x16x16,material_constant_inflow,none,1,uniform,mom1_l2_lab_frame,serial_tracking_disabled,3.6485985329101238e-02,9.7706225564008035e-03,trend from low to medium resolution,measured
+cloud,48x16x16,material_constant_inflow,none,1,uniform,mom2_l2_lab_frame,serial_tracking_disabled,2.6723865599985637e-03,1.0105022014200266e-03,trend from low to medium resolution,measured
+cloud,48x16x16,material_constant_inflow,none,1,uniform,mom3_l2_lab_frame,serial_tracking_disabled,2.6723865599985390e-03,1.0105022014200173e-03,trend from low to medium resolution,measured
+cloud,48x16x16,material_constant_inflow,none,1,uniform,ener_l2_lab_frame,serial_tracking_disabled,4.4984654782561351e-01,1.0032451049696618e-04,trend from low to medium resolution,measured
+cloud,48x16x16,material_constant_inflow,none,1,uniform,hydro_conserved_l2_lab_frame,serial_tracking_disabled,4.9841362009430723e-01,1.1005912959944108e-04,trend from low to medium resolution,measured
+cloud,48x16x16,material_constant_inflow,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+cloud,48x16x16,material_constant_inflow,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+cloud,48x16x16,material_constant_inflow,none,1,uniform,limit_events,serial_tracking_disabled,4.0000000000000000e+00,4.0000000000000000e+00,absolute <= 0,fail
+cloud,48x16x16,material_constant_inflow,none,1,uniform,recovery_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+cloud,48x16x16,material_constant_inflow,none,1,uniform,priming_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,expected initialization event <= 1,pass
+cloud,48x16x16,material_constant_inflow,none,1,uniform,unexpected_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+cloud,96x32x32,material_constant_inflow,none,1,uniform,selected_mass,serial_tracking_disabled,5.6843418860808015e-14,2.4799706007430224e-16,relative <= 1.0e-2,pass
+cloud,96x32x32,material_constant_inflow,none,1,uniform,tracked_centroid,serial_tracking_disabled,5.1739643769366239e-07,1.7246547923122080e-07,absolute <= 1.2500000000000000e-01,pass
+cloud,96x32x32,material_constant_inflow,none,1,uniform,tracer_out_of_range_mass,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,relative <= 1.0e-8,pass
+cloud,96x32x32,material_constant_inflow,none,1,uniform,tracer_density_l2_lab_frame,serial_tracking_disabled,8.0833061000357129e-02,4.8007747658074052e-05,trend from low to medium resolution,measured
+cloud,96x32x32,material_constant_inflow,none,1,uniform,dens_l2_lab_frame,serial_tracking_disabled,9.3076875665846229e-02,5.1375085090524723e-05,trend from low to medium resolution,measured
+cloud,96x32x32,material_constant_inflow,none,1,uniform,mom1_l2_lab_frame,serial_tracking_disabled,2.1812915934889654e-02,1.2247357917451493e-03,trend from low to medium resolution,measured
+cloud,96x32x32,material_constant_inflow,none,1,uniform,mom2_l2_lab_frame,serial_tracking_disabled,5.1006323193596688e-03,3.7656875015671157e-04,trend from low to medium resolution,measured
+cloud,96x32x32,material_constant_inflow,none,1,uniform,mom3_l2_lab_frame,serial_tracking_disabled,5.1006323193596151e-03,3.7656875015670762e-04,trend from low to medium resolution,measured
+cloud,96x32x32,material_constant_inflow,none,1,uniform,ener_l2_lab_frame,serial_tracking_disabled,2.9557669114047286e-01,2.3178460511178857e-05,trend from low to medium resolution,measured
+cloud,96x32x32,material_constant_inflow,none,1,uniform,hydro_conserved_l2_lab_frame,serial_tracking_disabled,3.1073577414092995e-01,2.4124899306393373e-05,trend from low to medium resolution,measured
+cloud,96x32x32,material_constant_inflow,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+cloud,96x32x32,material_constant_inflow,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+cloud,96x32x32,material_constant_inflow,none,1,uniform,limit_events,serial_tracking_disabled,2.0000000000000000e+00,2.0000000000000000e+00,absolute <= 0,fail
+cloud,96x32x32,material_constant_inflow,none,1,uniform,recovery_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+cloud,96x32x32,material_constant_inflow,none,1,uniform,priming_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,expected initialization event <= 1,pass
+cloud,96x32x32,material_constant_inflow,none,1,uniform,unexpected_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,selected_mass,serial_tracking_disabled,7.7291001698256423e-02,7.9411402189461964e-04,relative <= 1.0e-2,pass
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,tracked_centroid,serial_tracking_disabled,3.8272112999515606e-04,7.4817043877565073e-04,absolute <= 6.2500000000000000e-02,pass
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,tracer_out_of_range_mass,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,relative <= 1.0e-8,pass
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,tracer_density_l2_lab_frame,serial_tracking_disabled,3.1479695798795579e+00,5.2551058382900649e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,dens_l2_lab_frame,serial_tracking_disabled,2.5687466474681431e+00,4.2061985683935897e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,mom1_l2_lab_frame,serial_tracking_disabled,1.1390065666705482e+00,7.6959153095557782e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,mom2_l2_lab_frame,serial_tracking_disabled,1.2554584363400313e-03,6.7810499353132825e-03,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,mom3_l2_lab_frame,serial_tracking_disabled,1.6457163897192786e-01,5.3755772991882582e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,ener_l2_lab_frame,serial_tracking_disabled,1.7743788315657563e-01,6.2213998043170670e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,hydro_conserved_l2_lab_frame,serial_tracking_disabled,2.8203483651326362e+00,4.4783473623004870e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,limit_events,serial_tracking_disabled,1.0000000000000000e+00,1.0000000000000000e+00,absolute <= 0,fail
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,recovery_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,priming_skip_events,serial_tracking_disabled,1.0000000000000000e+00,1.0000000000000000e+00,expected initialization event <= 1,pass
+TRML,16x16x32,material_slew_rate_0.02,none,1,uniform,unexpected_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,selected_mass,serial_tracking_disabled,8.2277312248450585e-02,8.4534507128493418e-04,relative <= 1.0e-2,pass
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,tracked_centroid,serial_tracking_disabled,4.0741006290634374e-04,7.9643411778731034e-04,absolute <= 6.2500000000000000e-02,pass
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,tracer_out_of_range_mass,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,relative <= 1.0e-8,pass
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,tracer_density_l2_lab_frame,serial_tracking_disabled,3.3457353892334694e+00,5.5852488822357642e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,dens_l2_lab_frame,serial_tracking_disabled,2.7289127247002893e+00,4.4684627840658851e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,mom1_l2_lab_frame,serial_tracking_disabled,1.2105394690108768e+00,8.1792410201942192e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,mom2_l2_lab_frame,serial_tracking_disabled,1.3665244929638067e-03,7.3809459209420499e-03,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,mom3_l2_lab_frame,serial_tracking_disabled,1.7381199086586357e-01,5.6774046747181631e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,ener_l2_lab_frame,serial_tracking_disabled,1.8895341884970862e-01,6.6251622378704720e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,hydro_conserved_l2_lab_frame,serial_tracking_disabled,2.9963788704229697e+00,4.7578609709019240e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,limit_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,recovery_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,priming_skip_events,serial_tracking_disabled,1.0000000000000000e+00,1.0000000000000000e+00,expected initialization event <= 1,pass
+TRML,16x16x32,material_slew_rate_0.10,none,1,uniform,unexpected_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,selected_mass,serial_tracking_disabled,8.2277312248450585e-02,8.4534507128493418e-04,relative <= 1.0e-2,pass
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,tracked_centroid,serial_tracking_disabled,4.0741006290634374e-04,7.9643411778731034e-04,absolute <= 6.2500000000000000e-02,pass
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,tracer_out_of_range_mass,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,relative <= 1.0e-8,pass
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,tracer_density_l2_lab_frame,serial_tracking_disabled,3.3457353892334694e+00,5.5852488822357642e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,dens_l2_lab_frame,serial_tracking_disabled,2.7289127247002893e+00,4.4684627840658851e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,mom1_l2_lab_frame,serial_tracking_disabled,1.2105394690108768e+00,8.1792410201942192e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,mom2_l2_lab_frame,serial_tracking_disabled,1.3665244929638067e-03,7.3809459209420499e-03,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,mom3_l2_lab_frame,serial_tracking_disabled,1.7381199086586357e-01,5.6774046747181631e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,ener_l2_lab_frame,serial_tracking_disabled,1.8895341884970862e-01,6.6251622378704720e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,hydro_conserved_l2_lab_frame,serial_tracking_disabled,2.9963788704229697e+00,4.7578609709019240e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,limit_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,recovery_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,priming_skip_events,serial_tracking_disabled,1.0000000000000000e+00,1.0000000000000000e+00,expected initialization event <= 1,pass
+TRML,16x16x32,material_slew_rate_0.20,none,1,uniform,unexpected_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,selected_mass,serial_tracking_disabled,8.2277312248450585e-02,8.4534507128493418e-04,relative <= 1.0e-2,pass
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,tracked_centroid,serial_tracking_disabled,4.0741006290634374e-04,7.9643411778731034e-04,absolute <= 6.2500000000000000e-02,pass
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,tracer_out_of_range_mass,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,relative <= 1.0e-8,pass
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,tracer_density_l2_lab_frame,serial_tracking_disabled,3.3457353892334694e+00,5.5852488822357642e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,dens_l2_lab_frame,serial_tracking_disabled,2.7289127247002893e+00,4.4684627840658851e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,mom1_l2_lab_frame,serial_tracking_disabled,1.2105394690108768e+00,8.1792410201942192e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,mom2_l2_lab_frame,serial_tracking_disabled,1.3665244929638067e-03,7.3809459209420499e-03,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,mom3_l2_lab_frame,serial_tracking_disabled,1.7381199086586357e-01,5.6774046747181631e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,ener_l2_lab_frame,serial_tracking_disabled,1.8895341884970862e-01,6.6251622378704720e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,hydro_conserved_l2_lab_frame,serial_tracking_disabled,2.9963788704229697e+00,4.7578609709019240e-04,trend from low to medium resolution,measured
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,finite_fields,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,all finite,pass
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,max_missed_samples,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,limit_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,recovery_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,priming_skip_events,serial_tracking_disabled,1.0000000000000000e+00,1.0000000000000000e+00,expected initialization event <= 1,pass
+TRML,16x16x32,material_slew_rate_1.00,none,1,uniform,unexpected_skip_events,serial_tracking_disabled,0.0000000000000000e+00,0.0000000000000000e+00,absolute <= 0,pass
