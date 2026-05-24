@@ -274,6 +274,16 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
       } else if (opar.file_type.compare("bin") == 0) {
         opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,
           "single_file_per_rank", false);
+        opar.data_precision = pin->GetOrAddString(opar.block_name,
+          "data_precision", "float32");
+        if (opar.data_precision.compare("float32") != 0 &&
+            opar.data_precision.compare("real") != 0) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Invalid data_precision = '" << opar.data_precision
+              << "' in binary output block '" << opar.block_name
+              << "'. Expected float32 or real." << std::endl;
+          exit(EXIT_FAILURE);
+        }
         pnode = new MeshBinaryOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("cart") == 0) {

@@ -76,7 +76,8 @@ enum FrameTrackingTargetKind {
 enum FrameTrackingWeightMode {
   kFTWeightMass = 0,
   kFTWeightVolume = 1,
-  kFTWeightTarget = 2
+  kFTWeightTarget = 2,
+  kFTWeightTracerMass = 3
 };
 
 constexpr int kFrameTrackingStateVersion = 1;
@@ -274,8 +275,9 @@ int ParseWeightMode(const std::string &mode_raw) {
   if (mode == "mass" || mode == "density") return kFTWeightMass;
   if (mode == "volume") return kFTWeightVolume;
   if (mode == "target" || mode == "value") return kFTWeightTarget;
+  if (mode == "tracer_mass") return kFTWeightTracerMass;
   FatalFrameTrackingInput("Invalid <frame_tracking>/weight '" + mode_raw +
-                          "'. Expected one of: mass, volume, target.");
+                          "'. Expected one of: mass, volume, target, tracer_mass.");
   return kFTWeightMass;
 }
 
@@ -789,7 +791,11 @@ void FrameTracker::PrintConfigurationSummary() const {
   }
   std::cout << " target=" << NormalizeToken(target_name_)
             << " range=[" << std::setprecision(16) << target_min_ << ","
-            << target_max_ << "] mode=" << NormalizeToken(mode_name_)
+            << target_max_ << "] weight="
+            << ((weight_mode_ == kFTWeightMass) ? "mass" :
+                (weight_mode_ == kFTWeightVolume) ? "volume" :
+                (weight_mode_ == kFTWeightTarget) ? "target" : "tracer_mass")
+            << " mode=" << NormalizeToken(mode_name_)
             << " slew=" << NormalizeToken(boost_change_mode_name_)
             << " state=" << state_name << std::endl;
 }
@@ -959,6 +965,10 @@ void FrameTracker::ValidateConfiguration() {
                             ", but the active fluid has " + std::to_string(nscalars) +
                             " passive scalar(s).");
   }
+  if (weight_mode_ == kFTWeightTracerMass && target_kind_ != kFTTargetScalar) {
+    FatalFrameTrackingInput("<frame_tracking>/weight=tracer_mass requires "
+                            "target=scalar or target=scalarN.");
+  }
   if (target_kind_ == kFTTargetEntropy && !eos.is_ideal) {
     FatalFrameTrackingInput("<frame_tracking>/target=entropy requires an ideal-gas EOS.");
   }
@@ -1125,6 +1135,8 @@ bool FrameTracker::SampleMoments(std::array<MomentSample, 3> &samples) const {
       weight = dvol;
     } else if (weight_mode == kFTWeightTarget) {
       weight = fabs(value)*dvol;
+    } else if (weight_mode == kFTWeightTracerMass) {
+      weight = dens*fmax(value, 0.0)*dvol;
     }
     if (weight <= 0.0) {
       return;

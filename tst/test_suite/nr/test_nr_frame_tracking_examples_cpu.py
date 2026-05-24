@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from subprocess import PIPE, run
+import sys
 import tempfile
 
 import athena_read
@@ -10,6 +11,8 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO_ROOT / "vis" / "python"))
+import bin_convert  # noqa: E402
 
 
 @pytest.mark.parametrize(
@@ -99,19 +102,73 @@ def test_shipped_frame_aware_example_runs(
         velocity_field = next(name for name in history if name.startswith("ft_vf_"))
         assert np.all(np.isfinite(history[velocity_field]))
         assert history["ft_weight"].size >= 2
+        standard_snapshots = sorted((run_dir / "bin").glob("*.bin"))
+        assert standard_snapshots
+        standard_raw = bin_convert.read_binary(str(standard_snapshots[-1]))
+        assert all(block.dtype == np.float32 for block in standard_raw["mb_data"]["dens"])
+
+        material_input = {
+            "cloud_crushing": "inputs/hydro/cloud_crushing_material_tracking.athinput",
+            "TRML_frame_tracking": (
+                "inputs/hydro/TRML/TRML_frame_tracking_material.athinput"
+            ),
+        }[problem]
+        material_dir = Path(build_tmp) / "material"
+        material_dir.mkdir()
+        material_basename = f"{basename}MaterialSmoke"
+        material_result = run(
+            [
+                str(build_dir / "src" / "athena"),
+                "-i",
+                str(REPO_ROOT / material_input),
+                "-d",
+                str(material_dir),
+                f"job/basename={material_basename}",
+                *overrides,
+                "output2/dt=1.0e-20",
+            ],
+            check=False,
+            stdout=PIPE,
+            stderr=PIPE,
+            text=True,
+        )
+        assert material_result.returncode == 0, (
+            material_result.stdout + material_result.stderr
+        )
+        assert "target=scalar0" in material_result.stdout
+        assert "weight=tracer_mass" in material_result.stdout
+        material_history = athena_read.hst(
+            str(material_dir / f"{material_basename}.frame_tracker.hst")
+        )
+        assert np.all(np.isfinite(material_history["ft_weight"]))
+        assert np.max(material_history["ft_weight"]) > 0.0
+        snapshots = sorted((material_dir / "bin").glob("*.bin"))
+        assert snapshots
+        raw = bin_convert.read_binary(str(snapshots[-1]))
+        assert all(block.dtype == np.float64 for block in raw["mb_data"]["s_00"])
+        assert any(np.any(block > 0.0) for block in raw["mb_data"]["s_00"])
+
+        if problem == "cloud_crushing":
+            invalid_tracer = run(
+                [
+                    str(build_dir / "src" / "athena"),
+                    "-i",
+                    str(REPO_ROOT / material_input),
+                    "problem/cloud_tracer_scalar_index=1",
+                ],
+                check=False,
+                stdout=PIPE,
+                stderr=PIPE,
+                text=True,
+            )
+            assert invalid_tracer.returncode != 0
+            assert "must be -1 or index an existing hydro passive scalar" in (
+                invalid_tracer.stdout + invalid_tracer.stderr
+            )
 
         if problem == "TRML_frame_tracking":
             restart_input = Path(build_tmp) / "TRML_restart_check.athinput"
-            restart_input.write_text(
-                (REPO_ROOT / input_path).read_text().replace(
-                    "variable    = hydro_w\n",
-                    "variable    = hydro_w\n"
-                    "data_format = %24.16e\n"
-                    "slice_x1    = 0.0\n"
-                    "slice_x2    = 0.0\n",
-                    1,
-                )
-            )
+            restart_input.write_text((REPO_ROOT / material_input).read_text())
             restart_overrides = [
                 "mesh/nx1=8",
                 "mesh/nx2=8",
@@ -121,8 +178,9 @@ def test_shipped_frame_aware_example_runs(
                 "meshblock/nx3=16",
                 "time/tlim=1.0",
                 "output1/dt=1.0e-20",
-                "output2/file_type=tab",
+                "output2/file_type=bin",
                 "output2/variable=hydro_u",
+                "output2/data_precision=real",
                 "output2/dt=1.0e-20",
                 "output3/dt=1.0e-20",
                 "frame_tracking/diagnostic_every=1000",
@@ -195,12 +253,18 @@ def test_shipped_frame_aware_example_runs(
                     rtol=tolerance,
                     atol=tolerance,
                 )
-            continuous_tabs = sorted((continuous_dir / "tab").glob("*.tab"))
-            split_tabs = sorted((split_dir / "tab").glob("*.tab"))
-            assert continuous_tabs and split_tabs
-            np.testing.assert_allclose(
-                np.loadtxt(split_tabs[-1]),
-                np.loadtxt(continuous_tabs[-1]),
-                rtol=tolerance,
-                atol=tolerance,
-            )
+            continuous_bins = sorted((continuous_dir / "bin").glob("*.bin"))
+            split_bins = sorted((split_dir / "bin").glob("*.bin"))
+            assert continuous_bins and split_bins
+            continuous_state = bin_convert.read_binary(
+                str(continuous_bins[-1])
+            )["mb_data"]
+            split_state = bin_convert.read_binary(str(split_bins[-1]))["mb_data"]
+            for field in ("dens", "mom1", "mom2", "mom3", "ener", "r_00"):
+                assert all(block.dtype == np.float64 for block in continuous_state[field])
+                np.testing.assert_allclose(
+                    split_state[field],
+                    continuous_state[field],
+                    rtol=tolerance,
+                    atol=tolerance,
+                )

@@ -3,7 +3,9 @@
 This example uses `src/pgen/TRML_frame_tracking.cpp` and
 `inputs/hydro/TRML/TRML_frame_tracking.athinput` to initialize a
 pressure-balanced hot/cold mixing layer and keep the interface near a target
-`x3` position with the shared frame tracker.
+`x3` position with the shared frame tracker. This temperature-selected input
+is retained as a phase-structure diagnostic. Material-retention validation
+uses `inputs/hydro/TRML/TRML_frame_tracking_material.athinput`.
 
 The pgen is intentionally compact. It demonstrates the moving-frame contract
 without pulling in the older production TRML branch history:
@@ -20,7 +22,7 @@ without pulling in the older production TRML branch history:
   `x_grid + FrameDisplacement()` and set grid-frame velocities with
   `v_grid = v_lab - FrameVelocity()`, including passive-scalar inflow.
 
-## Frame Tracking Block
+## Phase-Diagnostic Frame Tracking Block
 
 The shipped input tracks intermediate-temperature gas around the interface:
 
@@ -44,6 +46,30 @@ range selects the cooling/mixing layer rather than the cold or hot bulk.
 The [Frame Tracking module page](../modules/frame_tracking.md) documents the
 shared controller, versioned restart state, structured history stream, and
 moving-frame boundary API.
+
+## Material-Tracking Input
+
+The material input uses the existing cold-fraction passive scalar rather than
+an instantaneous temperature band:
+
+```ini
+<frame_tracking>
+enabled = true
+tracked_fluid = hydro
+axes = x3
+x3_target = 0.0
+target = scalar0
+target_min = 0.0
+weight = tracer_mass
+mode = pd
+max_abs_boost = 0.2
+max_boost_change_mode = per_time
+max_boost_change_rate = 0.02
+```
+
+Tracer mass and tracer-mass centroid are the material-retention observables.
+Temperature-window mass is retained as a cooling and phase-redistribution
+diagnostic.
 
 ## Build And Run
 

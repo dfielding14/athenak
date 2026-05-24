@@ -59,6 +59,7 @@ struct CloudCrushingData {
   Real cloud_center_x1 = 0.0;
   Real cloud_center_x2 = 0.0;
   Real cloud_center_x3 = 0.0;
+  int cloud_tracer_scalar_index = -1;
 
   int boundary_mode = kBoundarySedovTaylor;
   Real constant_density_code = 0.0;
@@ -238,6 +239,14 @@ void ReadCloudCrushingParameters(ParameterInput *pin, Mesh *pm) {
                                            0.5*(mesh_size.x1min + mesh_size.x1max));
   data.cloud_center_x2 = pin->GetOrAddReal("problem", "cloud_center_x2", 0.0);
   data.cloud_center_x3 = pin->GetOrAddReal("problem", "cloud_center_x3", 0.0);
+  data.cloud_tracer_scalar_index =
+      pin->GetOrAddInteger("problem", "cloud_tracer_scalar_index", -1);
+  if (data.cloud_tracer_scalar_index < -1 ||
+      data.cloud_tracer_scalar_index >= pmbp->phydro->nscalars) {
+    FatalCloudCrushingInput(
+        "problem/cloud_tracer_scalar_index must be -1 or index an existing hydro "
+        "passive scalar.");
+  }
 
   std::string boundary_mode = "sedov";
   if (pin->DoesParameterExist("problem", "inner_x1_boundary")) {
@@ -372,6 +381,10 @@ void ReadCloudCrushingParameters(ParameterInput *pin, Mesh *pm) {
     }
     std::cout << " inner_x1 boundary timestep factor="
               << data.boundary_timestep_factor << std::endl;
+    if (data.cloud_tracer_scalar_index >= 0) {
+      std::cout << " original-cloud tracer scalar index="
+                << data.cloud_tracer_scalar_index << std::endl;
+    }
   }
 }
 
@@ -456,6 +469,8 @@ void SedovBoundary(Mesh *pm) {
   auto &u0 = pmbp->phydro->u0;
   auto &size = pmbp->pmb->mb_size;
   auto &mb_bcs = pmbp->pmb->mb_bcs;
+  const int nhydro = pmbp->phydro->nhydro;
+  const int nscalars = pmbp->phydro->nscalars;
   const CloudCrushingData data = cloud_crushing;
 
   if (data.boundary_mode == kBoundaryConstant) {
@@ -468,6 +483,9 @@ void SedovBoundary(Mesh *pm) {
       SetHydroState(u0, m, k, j, ib, data.constant_density_code,
                     data.constant_pressure_code, data.constant_vx_code,
                     data.constant_vy_code, data.constant_vz_code, data.gm1);
+      for (int n = nhydro; n < nhydro + nscalars; ++n) {
+        u0(m, n, k, j, ib) = 0.0;
+      }
     });
     return;
   }
@@ -535,6 +553,9 @@ void SedovBoundary(Mesh *pm) {
     } else {
       SetHydroState(u0, m, k, j, ib, data.warm.density_code, data.warm.pressure_code,
                     -frame_v1, -frame_v2, -frame_v3, data.gm1);
+    }
+    for (int n = nhydro; n < nhydro + nscalars; ++n) {
+      u0(m, n, k, j, ib) = 0.0;
     }
   });
 }
@@ -604,6 +625,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   const int ke = indcs.ke;
   auto &size = pmbp->pmb->mb_size;
   auto &u0 = pmbp->phydro->u0;
+  const int nhydro = pmbp->phydro->nhydro;
+  const int nscalars = pmbp->phydro->nscalars;
   const CloudCrushingData data = cloud_crushing;
 
   par_for("pgen_cloud_crushing", DevExeSpace(), 0, pmbp->nmb_thispack-1,
@@ -625,5 +648,12 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
                          cold_fraction*(data.cold.density_code - data.warm.density_code);
     SetHydroState(u0, m, k, j, i, density, data.warm.pressure_code,
                   0.0, 0.0, 0.0, data.gm1);
+    for (int n = nhydro; n < nhydro + nscalars; ++n) {
+      u0(m, n, k, j, i) = 0.0;
+    }
+    if (data.cloud_tracer_scalar_index >= 0) {
+      u0(m, nhydro + data.cloud_tracer_scalar_index, k, j, i) =
+          density*cold_fraction;
+    }
   });
 }

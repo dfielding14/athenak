@@ -144,6 +144,7 @@ struct OutputParameters {
   bool logscale=true, logscale2=true;
   bool mass_weighted=false;
   bool single_file_per_rank=false; // DBF: parameter for single file per rank
+  std::string data_precision="float32"; // binary field storage: float32 or native Real
 };
 
 //----------------------------------------------------------------------------------------

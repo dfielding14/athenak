@@ -1,0 +1,73 @@
+# FrameTracker tracer-mass moment regression using a stationary scalar profile.
+
+<job>
+basename = FrameTrackScalar
+
+<mesh>
+nghost = 2
+nx1 = 16
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 1
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim = 2
+tlim = 10.0
+ndiag = 100
+
+<hydro>
+eos = isothermal
+reconstruct = plm
+rsolver = llf
+iso_sound_speed = 1.0
+nscalars = 1
+
+<problem>
+pgen_name = advection
+advect_dens = false
+flow_dir = 1
+iproblem = 2
+velocity = 0.0
+amplitude = 1.0
+
+<frame_tracking>
+tracked_fluid = hydro
+start_time = -1.0
+apply_every = 1
+axes = x1
+x1_target = 0.0
+target = scalar0
+target_min = 0.0
+weight = tracer_mass
+mode = position
+position_signal = centroid
+tau_avg = 0.01
+tau_relax = 1.0
+tau_vel = 1.0
+max_abs_boost = 0.1
+max_boost_change_mode = per_time
+max_boost_change_rate = 1.0
+
+<output1>
+file_type = hst
+data_format = %24.16e
+dcycle = 1

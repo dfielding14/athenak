@@ -15,6 +15,8 @@ MHD_INPUT = "inputs/frame_tracking_mhd.athinput"
 THREE_D_INPUT = "inputs/frame_tracking_3d.athinput"
 AMBIGUOUS_INPUT = "inputs/frame_tracking_invalid_ambiguous.athinput"
 LEGACY_INPUT = "inputs/frame_tracking_legacy.athinput"
+SCALAR_INPUT = "inputs/frame_tracking_scalar.athinput"
+SCALAR_AMR_INPUT = "inputs/frame_tracking_amr_scalar.athinput"
 
 
 def remove_outputs(basename: str) -> None:
@@ -219,11 +221,64 @@ def test_initialization_summary_records_interpreted_configuration() -> None:
         assert result.returncode == 0
         assert "FrameTracker configuration: fluid=hydro axes=x1,x2" in output
         assert "target=density" in output
+        assert "weight=mass" in output
         assert "slew=per_time state=new" in output
     finally:
         remove_outputs(basename)
         shutil.rmtree("rst", ignore_errors=True)
         testutils.cleanup()
+
+
+def test_tracer_mass_weight_requires_scalar_target(tmp_path: Path) -> None:
+    input_path = input_with_frame_key(tmp_path, "weight", "tracer_mass")
+    result = run(
+        ["./athena", "-i", str(input_path)],
+        check=False,
+        stdout=PIPE,
+        stderr=PIPE,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "weight=tracer_mass requires target=scalar or target=scalarN" in (
+        result.stdout + result.stderr
+    )
+
+
+def test_tracer_mass_moments_use_conserved_scalar_mass() -> None:
+    basename = "FrameTrackScalar"
+    try:
+        assert testutils.run(SCALAR_INPUT)
+        data = athena_read.hst(f"{basename}.frame_tracker.hst")
+        sampled = int(np.flatnonzero(data["ft_weight"] > 0.0)[0])
+        np.testing.assert_allclose(
+            data["ft_weight"][sampled], 1.25, rtol=0.0, atol=1.0e-14
+        )
+        np.testing.assert_allclose(
+            data["ft_pos_x1"][sampled], -0.025, rtol=0.0, atol=1.0e-14
+        )
+        assert np.any(np.abs(data["ft_dv_x1"]) > 0.0)
+    finally:
+        remove_outputs(basename)
+        testutils.cleanup()
+
+
+def test_invalid_scalar_amr_index_is_rejected() -> None:
+    result = run(
+        [
+            "./athena",
+            "-i",
+            SCALAR_AMR_INPUT,
+            "amr_criterion0/variable=hydro_w_s01",
+        ],
+        check=False,
+        stdout=PIPE,
+        stderr=PIPE,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "Passive-scalar AMR variable index exceeds configured nscalars" in (
+        result.stdout + result.stderr
+    )
 
 
 def test_legacy_frame_state_warns_and_remains_finite() -> None:

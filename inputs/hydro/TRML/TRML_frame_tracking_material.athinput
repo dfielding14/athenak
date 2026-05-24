@@ -1,0 +1,108 @@
+# AthenaK input for material-tracer validation of a radiative mixing layer.
+
+<comment>
+problem   = Pressure-balanced turbulent radiative mixing layer with frame tracking
+reference = Material-based frame-tracking production validation candidate
+
+<job>
+basename  = TRMLFrameTrackingMaterial
+
+<mesh>
+nghost    = 3
+nx1       = 64
+x1min     = -0.5
+x1max     = 0.5
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 64
+x2min     = -0.5
+x2max     = 0.5
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 128
+x3min     = -1.0
+x3max     = 1.0
+ix3_bc    = user
+ox3_bc    = user
+
+<meshblock>
+nx1       = 32
+nx2       = 32
+nx3       = 64
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.35
+nlim       = -1
+tlim       = 1.0
+ndiag      = 1
+
+<hydro>
+eos         = ideal
+reconstruct = plm
+rsolver     = hllc
+gamma       = 1.666666666666667
+nscalars    = 1
+fofc        = true
+dfloor      = 1.0e-6
+pfloor      = 1.0e-8
+tfloor      = 1.0e-6
+
+<problem>
+rho_0                 = 1.0
+pgas_0                = 1.0
+density_contrast      = 100.0
+velocity              = 0.5
+drift_velocity_x3     = 0.05
+z_interface           = 0.0
+smoothing_thickness   = 0.08
+perturbation_amplitude = 0.02
+perturbation_mode_x1  = 1
+perturbation_mode_x2  = 1
+
+cooling_enabled       = true
+t_cool_start          = 0.0
+t_cool_0              = 0.5
+cfl_cool              = 0.25
+T_peak_over_T_cold    = 3.16227766017
+T_cutoff_over_T_hot   = 1.0
+T_floor               = 0.005
+beta_lo               = 1.0
+beta_hi               = 1.0
+
+<frame_tracking>
+enabled          = true
+tracked_fluid    = hydro
+start_time       = 0.0
+apply_every      = 1
+diagnostic_every = 5
+axes             = x3
+x3_target        = 0.0
+target           = scalar0
+target_min       = 0.0
+weight           = tracer_mass
+mode             = pd
+tau_avg          = 0.1
+tau_relax        = 1.0
+tau_vel          = 0.25
+max_abs_boost    = 0.2
+max_boost_change_mode = per_time
+max_boost_change_rate = 0.02
+
+<output1>
+file_type   = hst
+data_format = %24.16e
+dt          = 0.02
+
+<output2>
+file_type      = bin
+variable       = hydro_w
+data_precision = real
+dt             = 0.1
+
+<output3>
+file_type = rst
+dt        = 0.0625
