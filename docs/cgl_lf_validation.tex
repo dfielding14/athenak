@@ -8,21 +8,59 @@
 \IfFileExists{placeins.sty}{\usepackage{placeins}}{%
   \newcommand{\FloatBarrier}{\clearpage}}
 
-\title{AthenaK CGL--Landau-Fluid Validation and MKS24 Analysis Note}
+\title{Toward an Independent AthenaK Reproduction of CGL--Landau-Fluid
+Self-Organization in High-\(\beta\) Turbulence}
 \author{}
 \date{May 25, 2026}
 
 \begin{document}
 \maketitle
 
-\section{Purpose}
+\begin{abstract}
+Pressure anisotropy may reorganize collisionless, high-\(\beta\) turbulence
+before microscale instabilities provide an effective collisional closure, but
+the numerical evidence for this ``magneto-immutable'' response is demanding
+to reproduce.  We define an independent AthenaK reproduction of the
+CGL--Landau-fluid (CGL--LF) simulations of Majeski, Kunz, and Squire (2024,
+MKS24), after validating the heat-flux operator, threshold policy, driven
+turbulence problem generator, and retained diagnostics.  The reproduction
+targets sixteen unique source-mapped CGL--LF calculations spanning
+active/passive pressure feedback, forcing geometry, beta, heat-flux scale,
+limiter scattering, and scale separation.  Several dimensionless published
+products admit checksum-qualified digitized comparisons, whereas absolute
+spectral ordinates remain blocked pending a documented transform or original
+numeric data; the hybrid-kinetic comparison is outside a direct CGL--LF
+recalculation.  The production campaign has commenced, but no
+standard-duration comparison is claimed in this version of the manuscript.
+\end{abstract}
 
-This note integrates the illustrated validation report originally maintained
-on branch \texttt{CGL-STS-LF} into the current
-\texttt{feature/cgl-landau-fluid} implementation.  It documents the AthenaK
-CGL--Landau-fluid (CGL--LF) heat-flux method, preserves its method-level
-validation figures, and adds representative outputs from the reduced
-Majeski--Kunz--Squire (2024, hereafter MKS24) analysis workflow.
+\section{Introduction}
+
+In a weakly collisional plasma, conservation of the adiabatic invariants can
+make changes in magnetic-field strength energetically expensive: field
+amplification and reduction generate a pressure anisotropy that acts back on
+the turbulent strain.  A central question is whether this feedback suppresses
+the field-strength-changing motions before mirror and firehose regulation
+dominates the dynamics.  MKS24 addressed this question with driven
+high-\(\beta\) CGL--LF turbulence and found strong active/passive contrasts in
+instability exposure, transfer, and scale-dependent organization.
+
+The numerical claim is consequential because it combines non-local
+heat-flux closure, threshold-activated anomalous scattering, and turbulent
+statistics in an elongated mean-field box.  An independent reproduction must
+therefore match the physical experiment before interpreting a new parameter
+scan.  In particular, MKS24 varies the anomalous limiter rate after a
+microinstability threshold is crossed; it does not scan a uniform background
+collision frequency.  We retain the latter experiment as later work, rather
+than confusing it with the published target.
+
+This manuscript integrates the illustrated validation report originally
+maintained on branch \texttt{CGL-STS-LF} into the current
+\texttt{feature/cgl-landau-fluid} implementation and establishes the
+reproduction campaign.  It documents the AthenaK CGL--LF method, preserves
+method-level validation figures, states the MKS24 comparison contract, and
+records the production and reference-data boundaries needed for defensible
+claims.
 
 The method-level results show that the implemented update follows the intended
 finite-volume variable strategy and passes checks including a
@@ -33,6 +71,34 @@ steady-state, or quantitative MKS24 reproduction results.  The current
 execution and reference-admission status is maintained in
 \texttt{docs/cgl\_lf\_mks24\_reproduction\_implementation\_plan.md} and in
 the Sphinx CGL--LF validation guide.
+
+\section{MKS24 Target Contract}
+
+The directly reproducible target is the CGL--LF simulation component of MKS24.
+We use a fully periodic domain
+\([L_x,L_y,L_z]=[1,1,2]\), with the background magnetic field along \(z\),
+standard resolution \(192\times192\times384\), and initial
+\(\beta_0\in\{1,10,100\}\) where required by the mapped published panels.
+The nominal closure scale is
+\(\lvert k_\parallel\rvert=4\pi/L_\parallel=2\pi\), the background collision
+frequency is zero, and the standard microinstability treatment is a hard-wall
+limiter at the mirror and parallel-firehose thresholds,
+\(\beta\Delta=1\) and \(\beta\Delta=-2\).  The forced calculations use an
+Ornstein--Uhlenbeck velocity source with fiducial injection
+\(\dot E_K=0.32\rho_0v_A^2L_\perp^3\), shell
+\(k/(2\pi/L_\parallel)\in[1,3]\), and power proportional to \(k^{-2}\).
+Every production calculation must reach at least
+\(t_f=10L_\perp/v_A\); comparisons use declared late-time windows no shorter
+than \(2L_\perp/v_A\).
+
+The comparison has two deliberate limitations.  First, MKS24 Figure 10 uses
+a hybrid-kinetic \texttt{Pegasus++} calculation and is external context unless
+that separate dataset or an equivalent kinetic rerun is obtained.  Second,
+dimensionful spectral ordinate comparisons are withheld where the published
+material does not state the discrete Fourier normalization required for an
+AthenaK transform.  We may therefore establish reproduction of specified
+CGL--LF products, but we do not claim complete reproduction of every published
+panel unless these boundaries are closed.
 
 \section{Conserved Variables}
 
@@ -147,6 +213,51 @@ explicit-RK-applied total and anisotropic CGL pressure-traction work.  Strict
 validation rejects floors, invalid states, or emergency-bound crossings;
 hard-wall projection activity is an expected model action, not by itself a
 safety failure.
+
+\section{Reproduction Campaign}
+
+The production matrix is frozen in
+\path{inputs/cgl_lf_paper/mks24_stage_i_manifest.json}.  It contains sixteen
+unique CGL--LF calculations after two required alias decisions: the standard
+active, Alfv\'enic \(\beta_0=10\) output also supplies the nominal heat-flux
+and \(n_\perp=192\) scale-separation roles, while the standard active,
+Alfv\'enic \(\beta_0=100\) hard-wall output also supplies the hard-wall
+limiter-scan role.  The separately defined active, Alfv\'enic \(\beta_0=1\)
+deck is not executed in this matrix because the displayed MKS24 beta-one
+compressive-spectrum case is randomly forced.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{p{0.20\textwidth}p{0.36\textwidth}p{0.33\textwidth}}
+\toprule
+Cases & Physical variation & Published role \\
+\midrule
+\texttt{R02--R09} & Active/passive; Alfv\'enic/random; \(\beta_0=10,100\)
+  & State, PDF, transfer, alignment comparisons \\
+\texttt{R10--R11} & Random compressive variants; \(\beta_0=1,100\)
+  & Compressive-spectrum comparison \\
+\texttt{R12--R13} & Stronger/weaker heat-flux scales
+  & Closure-scale sensitivity \\
+\texttt{R14--R15} & \(\nu_{\rm lim}=20,200\) at \(\beta_0=100\)
+  & Limiter sensitivity \\
+\texttt{R16--R17} & \(n_\perp=96,384\) around reused \texttt{R02}
+  & Scale-separation comparison \\
+\bottomrule
+\end{tabular}
+\caption{Unique AthenaK CGL--LF production calculations mapped to the MKS24
+simulation panels.  The manifest records each input file and the analysis
+roles that reuse an accepted output.}
+\end{table}
+
+Production is executed on Frontier through
+\path{scripts/frontier/cgl_lf_stage_i.py}, separately from the debug-only
+qualification utility.  The production utility admits only mapped input
+files, archives input and executable checksums, uses the \texttt{batch}
+partition with its default production \texttt{normal} QOS, reserves usage
+against the Stage I ceiling, and permits only one submitted segment at a time.
+The first submitted segment is \texttt{R16/s00\_t0\_t2}, Frontier job
+\texttt{4674731}; it is an active calculation, not an accepted result.
 
 \section{Validation Workflow}
 
@@ -406,9 +517,127 @@ admitted: the paper and cited donor source define shell spectra and plotted
 units but do not state the discrete Fourier normalization needed to map
 absolute digitized ordinates into AthenaK products.  Those panels require
 author/archive numeric data, donor diagnostic code, or an explicit
-normalization statement.  Production executions and quantitative MKS24
-simulation-to-reference comparisons additionally require explicit
-authorization; none is claimed by this note.
+normalization statement.  The first mapped production segment has been
+submitted, but quantitative MKS24 simulation-to-reference comparisons require
+completed accepted bundles; none is claimed by this manuscript version.
+
+\section{Comparison Gate Matrix}
+
+Table~\ref{tab:comparison-gates} records the evidentiary boundary for every
+published-panel family targeted by Stage I.  An ``admitted'' comparison has a
+declared dimensionless transform and an archived digitized or analytic
+reference; it still requires a matched, accepted AthenaK output bundle.
+``Blocked'' means that a necessary reference normalization or external
+simulation product is not available in the present reproduction archive.
+
+\begin{table}[htbp]
+\centering
+\footnotesize
+\begin{tabular}{p{0.13\textwidth}p{0.22\textwidth}p{0.36\textwidth}
+                p{0.17\textwidth}}
+\toprule
+MKS24 panel & AthenaK cases & Quantitative gate & Status \\
+\midrule
+Figure 1 & \texttt{R02}, \texttt{R06}
+  & Common-time active/passive spatial comparison; qualitative captioned
+    interpretation only.
+  & Awaiting runs \\
+Figure 2(a--b) & \texttt{R02--R09}
+  & Admitted sampled-surface and unstable-volume reference products.
+  & Awaiting runs \\
+Figure 3 & \texttt{R03--R05}, \texttt{R09--R11}
+  & Absolute compressive spectral ordinate normalization not established.
+  & Blocked/reference \\
+Figure 4 & \texttt{R02--R09}
+  & Density PDF admitted; density spectral ordinate mapping blocked.
+  & Partial gate \\
+Figures 5--6 & \texttt{R02}, \texttt{R04}
+  & Eddy-scale product admitted where normalized; absolute spectra blocked.
+  & Partial gate \\
+Figures 7--9 & \texttt{R02--R09}
+  & Dimensionless transfer and alignment reference products admitted.
+  & Awaiting runs \\
+Figure 10 & none
+  & External \texttt{Pegasus++} hybrid-kinetic comparator.
+  & External data \\
+Figure 11 & \texttt{R16}, \texttt{R02}, \texttt{R17}
+  & Dimensionless scale-separation alignment product admitted.
+  & \texttt{R16} active \\
+Figure 12 & \texttt{R12}, \texttt{R02}, \texttt{R13}
+  & Dimensionless heat-flux-scale alignment product admitted.
+  & Awaiting runs \\
+Figure 13 & \texttt{R03}, \texttt{R07}, \texttt{R14--R15}
+  & Admitted dimensionless limiter-sensitivity products only.
+  & Awaiting runs \\
+\bottomrule
+\end{tabular}
+\caption{Stage I panel-family comparison gates.  ``Awaiting runs'' does not
+denote agreement or disagreement; it denotes absence of accepted
+standard-duration AthenaK bundles.}
+\label{tab:comparison-gates}
+\end{table}
+
+\section{Discussion}
+
+The reproduction is designed to distinguish a physical active-pressure
+response from two easier but weaker demonstrations: a correct implementation
+of individual LF terms and a visually plausible short turbulence transient.
+The validation results establish the first requirement at the operator and
+linear-wave levels.  The guarded Stage I matrix and the comparison gates make
+the second requirement testable, but it cannot be resolved by the reduced
+diagnostic bundles shown above.  Evidence for the MKS24 interpretation will
+require late-time active/passive contrasts in the admitted instability,
+transfer, alignment, and sensitivity products from accepted production data.
+
+Two limitations are structural rather than statistical.  The spectral
+ordinate panels cannot be used for absolute residual tests until the
+published normalization is mapped to the AthenaK transform or original
+numeric products are recovered.  Similarly, no CGL--LF rerun is an
+independent reproduction of the hybrid-kinetic Figure 10 comparator.  These
+limitations narrow the claims supported by Stage I but do not prevent
+quantitative evaluation of the admitted CGL--LF diagnostics.
+
+The later weak-guide-field and background-collisionality study is therefore
+not part of the present results.  In particular, varying uniform background
+collisionality would answer a different question from changing the
+threshold-activated limiter rate in MKS24.  Treating those scans as
+interchangeable before the reproduction baseline is accepted would obscure
+both the numerical and physical comparison.
+
+\section{Conclusions}
+
+AthenaK now has a validated CGL--LF implementation path, retained nonlinear
+diagnostics, source-mapped MKS24 case definitions, and a checksum- and
+allocation-recorded Frontier production protocol.  The production protocol
+began with the required low-resolution scale-separation case
+\texttt{R16/s00\_t0\_t2}; at the time of writing that segment is running and
+is not counted as a scientific result.  Thus the present manuscript
+establishes the method, target contract, and acceptance procedure, but does
+not yet claim reproduction of the MKS24 turbulent conclusions.
+
+Completion of the reproduction claim requires all sixteen mapped cases to
+reach \(t_f\geq10L_\perp/v_A\), pass strict safety and provenance checks, and
+be evaluated against each admitted comparison gate.  Results of the later
+extension campaign will be reported only after that baseline is complete and
+a separate execution plan is approved.
+
+\section{Data and Reproducibility}
+
+The frozen Stage I matrix is stored in
+\path{inputs/cgl_lf_paper/mks24_stage_i_manifest.json}; preparation,
+submission accounting, and terminal-time acceptance inspection are performed
+by \path{scripts/frontier/cgl_lf_stage_i.py}.  The first production executable
+was built from revision
+\texttt{e129a7ff8be60eb177c8268da0a73e7700d8b543}, with archived executable
+SHA-256 digest
+\texttt{de99066f3546976093f6ff656660952032e30f31c939736c0212629cfb015157}.
+For each segment, the production record retains the submitted input,
+executable and input provenance, Slurm allocation record, histories,
+snapshots, restarts, and an inspection record that tests target time and
+strict LF safety counters before acceptance.  Production products are
+retained beneath the project
+\path{runs/mks24-stage-i} archive and will be linked to quantitative panel
+products only after their corresponding gates pass.
 
 \section{Build and Runtime Status}
 
@@ -416,8 +645,9 @@ The imported method figures come from a passing local \texttt{full} workflow
 bundle.  The reduced nonlinear figures come from a passing
 \texttt{paper-convergence} bundle reanalyzed with the current plotting code.
 Warning-strict Sphinx documentation and this \LaTeX{} build are checked when
-the report is updated.  Production/statistical and paper-reference comparison
-gates remain outside this method-document build.
+the report is updated.  A committed production path and its first submitted
+segment now exist, but production/statistical and paper-reference comparison
+gates remain open until accepted long-time output bundles are analyzed.
 
 \begin{thebibliography}{9}
 \bibitem{Squire2023}
