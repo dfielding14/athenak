@@ -260,7 +260,8 @@ strain ordinate conversion; those comparisons require external numeric data,
 donor diagnostic code, or an explicit normalization statement. Figure 3's
 sonic-correlation and beta-1 random definitions now
 exist under the guarded `paper-compressive` workflow, but have not been run.
-With `--reference-curves <manifest.json>`, `paper-analyze` also accepts
+With repeated `--reference-curves <manifest.json>` options, `paper-analyze`
+also accepts
 external numerical or digitized curves and sampled joint-PDF surfaces only
 when their manifest records provenance, SHA-256 digests, and positive
 per-sample uncertainties. It reports uncertainty-normalized residuals

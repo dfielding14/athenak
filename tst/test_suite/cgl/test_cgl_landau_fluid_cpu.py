@@ -698,6 +698,14 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
     workflow = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = workflow
     spec.loader.exec_module(workflow)
+    args = workflow.parser().parse_args([
+        "paper-analyze",
+        "--reference-curves",
+        "fig2.json",
+        "--reference-curves",
+        "fig13.json",
+    ])
+    assert args.reference_curves == ["fig2.json", "fig13.json"]
     input_paths = sorted(
         PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_standard_*.athinput")
     )
@@ -1374,6 +1382,14 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
                 "interpolation": "bilinear",
             }],
         }))
+        second_manifest = json.loads(manifest_path.read_text())
+        second_manifest["curves"] = [{
+            **second_manifest["curves"][0],
+            "id": "delta_p_exact_second",
+        }]
+        second_manifest["surfaces"] = []
+        second_manifest_path = reference_dir / "second_curves.json"
+        second_manifest_path.write_text(json.dumps(second_manifest))
         result = subprocess.run(
             [
                 "python3",
@@ -1383,6 +1399,8 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
                 "cgl_ci_paper_analysis.user.hst",
                 "--reference-curves",
                 str(manifest_path),
+                "--reference-curves",
+                str(second_manifest_path),
                 "--alignment-shells",
                 "2,4,6",
                 "--eddy-samples",
@@ -1403,10 +1421,16 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
             Path("cgl_ci_paper_reference_products/diagnostics.json").read_text()
         )["reference_curve_comparisons"]
         assert reference["available"]
+        assert len(reference["manifests"]) == 2
         comparison = reference["comparisons"]["delta_p_exact"]
         assert comparison["sample_count"] == len(sampled)
         assert comparison["maximum_absolute_residual"] < 1.0e-14
         assert comparison["rms_normalized_by_reported_uncertainty"] < 1.0e-12
+        assert (
+            reference["comparisons"]["delta_p_exact_second"][
+                "maximum_absolute_residual"
+            ] < 1.0e-14
+        )
         alignment_comparison = reference["comparisons"]["alignment_peak_exact"]
         assert alignment_comparison["sample_count"] == len(alignment_sampled)
         assert alignment_comparison["maximum_absolute_residual"] < 1.0e-14
@@ -1461,6 +1485,27 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         )
         assert result.returncode != 0
         assert "source figure checksum does not match" in result.stderr
+        duplicate_manifest = json.loads(second_manifest_path.read_text())
+        duplicate_path = reference_dir / "duplicate_curves.json"
+        duplicate_path.write_text(json.dumps(duplicate_manifest))
+        result = subprocess.run(
+            [
+                "python3",
+                "../../../scripts/analyze_cgl_lf_paper.py",
+                str(snapshots[-1]),
+                "--reference-curves",
+                str(second_manifest_path),
+                "--reference-curves",
+                str(duplicate_path),
+                "--output-dir",
+                "cgl_ci_paper_duplicate_reference_products",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode != 0
+        assert "duplicated across manifests" in result.stderr
     finally:
         shutil.rmtree("bin", ignore_errors=True)
         shutil.rmtree("cgl_ci_paper_analysis_products", ignore_errors=True)
@@ -1468,6 +1513,7 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         shutil.rmtree("cgl_ci_paper_reference_products", ignore_errors=True)
         shutil.rmtree("cgl_ci_paper_reference_figures", ignore_errors=True)
         shutil.rmtree("cgl_ci_paper_invalid_reference_products", ignore_errors=True)
+        shutil.rmtree("cgl_ci_paper_duplicate_reference_products", ignore_errors=True)
         shutil.rmtree("rst", ignore_errors=True)
         _cleanup()
 

@@ -2363,6 +2363,59 @@ def reference_curve_comparisons(result: dict[str, object],
     }
 
 
+def combined_reference_curve_comparisons(
+    result: dict[str, object], manifest_paths: list[Path],
+) -> dict[str, object]:
+    """Combine distinct comparison products from qualified reference manifests."""
+
+    manifests: list[dict[str, object]] = []
+    comparisons: dict[str, object] = {}
+    surface_comparisons: dict[str, object] = {}
+    combined: dict[str, object] = {
+        "available": True,
+        "definition": (
+            "analysis products interpolated onto provenance-qualified reference "
+            "curve or surface coordinates"
+        ),
+        "manifests": manifests,
+        "comparisons": comparisons,
+        "surface_comparisons": surface_comparisons,
+    }
+    product_ids: set[str] = set()
+    for manifest_path in manifest_paths:
+        comparison = reference_curve_comparisons(result, manifest_path)
+        manifests.append({
+            "manifest": comparison["manifest"],
+            "manifest_sha256": comparison["manifest_sha256"],
+            "provenance": comparison["provenance"],
+        })
+        for collection, retained in (
+            ("comparisons", comparisons),
+            ("surface_comparisons", surface_comparisons),
+        ):
+            products = comparison.get(collection, {})
+            if not isinstance(products, dict):
+                raise ValueError(f"reference comparison {collection} is not an object")
+            for product_id, product in products.items():
+                if not isinstance(product_id, str):
+                    raise ValueError("reference product id is not text")
+                if product_id in product_ids:
+                    raise ValueError(
+                        f"reference product id is duplicated across manifests: "
+                        f"{product_id}"
+                    )
+                retained[product_id] = product
+                product_ids.add(product_id)
+    if len(manifest_paths) == 1:
+        only = manifests[0]
+        combined.update({
+            "manifest": only["manifest"],
+            "manifest_sha256": only["manifest_sha256"],
+            "provenance": only["provenance"],
+        })
+    return combined
+
+
 def main() -> int:
     """Command-line entry point."""
 
@@ -2379,7 +2432,7 @@ def main() -> int:
     command.add_argument("--eddy-seed", type=int, default=0)
     command.add_argument("--time-start", type=float)
     command.add_argument("--time-end", type=float)
-    command.add_argument("--reference-curves", type=Path)
+    command.add_argument("--reference-curves", action="append", type=Path, default=[])
     command.add_argument("--synthetic-test", action="store_true")
     args = command.parse_args()
     if (
@@ -2473,8 +2526,8 @@ def main() -> int:
         }
     if args.synthetic_test:
         result["synthetic_test"] = synthetic_test()
-    if args.reference_curves is not None:
-        result["reference_curve_comparisons"] = reference_curve_comparisons(
+    if args.reference_curves:
+        result["reference_curve_comparisons"] = combined_reference_curve_comparisons(
             result, args.reference_curves
         )
     destination = args.output_dir / "diagnostics.json"

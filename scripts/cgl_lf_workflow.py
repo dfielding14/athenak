@@ -1649,10 +1649,10 @@ def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
             "--eddy-seed",
             str(args.eddy_seed),
         ]
-        if args.reference_curves:
+        for reference_curves in args.reference_curves:
             analysis_command.extend([
                 "--reference-curves",
-                str(resolve_from_root(args.reference_curves)),
+                str(resolve_from_root(reference_curves)),
             ])
         subprocess.run(analysis_command, cwd=ROOT_DIR, check=True)
         provenance = analysis_reference_provenance(args, paths, analysis_dir)
@@ -1689,9 +1689,16 @@ def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
             manifest["reference_provenance"] = provenance
             manifest["analysis_products"]["reference_provenance"] = provenance["product"]
         if args.reference_curves:
-            manifest["reference_curve_manifest"] = str(
-                resolve_from_root(args.reference_curves)
-            )
+            manifest["reference_curve_manifests"] = [
+                str(resolve_from_root(reference_curves))
+                for reference_curves in args.reference_curves
+            ]
+            if len(args.reference_curves) == 1:
+                manifest["reference_curve_manifest"] = (
+                    manifest["reference_curve_manifests"][0]
+                )
+            else:
+                manifest.pop("reference_curve_manifest", None)
     manifest["diagnostics"] = evaluate_manifest(manifest, paths.root)
     manifest["status"] = (
         "passed" if manifest["diagnostics"]["passed"] else "failed"
@@ -1728,11 +1735,14 @@ def parser() -> argparse.ArgumentParser:
         default=os.environ.get("CGL_LF_REFERENCE_MANIFEST"),
         help="Pinned MKS24 staging manifest to attach during paper-analyze.",
     )
+    reference_curves_default = os.environ.get("CGL_LF_REFERENCE_CURVES")
     command.add_argument(
         "--reference-curves",
-        default=os.environ.get("CGL_LF_REFERENCE_CURVES"),
+        action="append",
+        default=[reference_curves_default] if reference_curves_default else [],
         help=(
-            "Provenance-qualified curve manifest to compare during paper-analyze."
+            "Provenance-qualified curve manifest to compare during paper-analyze; "
+            "repeat for products split across manifests."
         ),
     )
     command.add_argument(

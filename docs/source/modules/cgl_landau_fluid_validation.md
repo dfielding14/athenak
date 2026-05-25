@@ -576,8 +576,9 @@ provide the missing discrete Fourier normalization; admission therefore
 requires machine-readable original data, donor diagnostic code, or an
 explicit normalization statement in addition to any digitization.
 
-An optional reference-data manifest passed to `paper-analyze --reference-curves`
-has `schema_version = 1`, a `provenance` object, and one or more `curves`
+Optional reference-data manifests passed through repeated
+`paper-analyze --reference-curves` options
+have `schema_version = 1`, a `provenance` object, and one or more `curves`
 and/or `surfaces` entries. For `method = "digitized"`, provenance must name
 either one source
 figure and its SHA-256 digest or a nonempty `source_figures` list of such
@@ -595,6 +596,7 @@ Each sampled surface CSV must contain `x`, `y`, `z`, and positive
 `pressure_density_joint.parallel` or `.perpendicular` and supports
 `interpolation = "bilinear"`. The renderer writes reference, analyzed, and
 uncertainty-normalized residual views for each supplied surface.
+Comparison product identifiers must be unique across all supplied manifests.
 Dimensionful paper curves must additionally be withheld from such a manifest
 until their paper-to-AthenaK normalization is explicitly established.
 
