@@ -1547,6 +1547,12 @@ def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
             "--synthetic-test",
             "--alignment-shells",
             args.alignment_shells,
+            "--eddy-samples",
+            str(args.eddy_samples),
+            "--eddy-bins",
+            str(args.eddy_bins),
+            "--eddy-seed",
+            str(args.eddy_seed),
         ]
         if args.reference_curves:
             analysis_command.extend([
@@ -1573,6 +1579,9 @@ def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
                 analysis_dir / "diagnostics.json", paths.root
             ),
             "alignment_shells": args.alignment_shells,
+            "eddy_samples": args.eddy_samples,
+            "eddy_bins": args.eddy_bins,
+            "eddy_seed": args.eddy_seed,
             "paper_figure_index": display_path(
                 paper_figures / "paper_figures.json", paths.root
             ),
@@ -1637,6 +1646,27 @@ def parser() -> argparse.ArgumentParser:
             "Comma-separated k_perp shell indices used by paper-analyze "
             "alignment PDFs and peak curves."
         ),
+    )
+    command.add_argument(
+        "--eddy-samples",
+        type=int,
+        default=int(os.environ.get("CGL_LF_EDDY_SAMPLES", "0")),
+        help=(
+            "Deterministic random separation samples per snapshot used by "
+            "paper-analyze for opt-in local-field eddy anisotropy curves."
+        ),
+    )
+    command.add_argument(
+        "--eddy-bins",
+        type=int,
+        default=int(os.environ.get("CGL_LF_EDDY_BINS", "20")),
+        help="Logarithmic separation bins for opt-in eddy anisotropy analysis.",
+    )
+    command.add_argument(
+        "--eddy-seed",
+        type=int,
+        default=int(os.environ.get("CGL_LF_EDDY_SEED", "0")),
+        help="Random seed retained for deterministic eddy anisotropy sampling.",
     )
     command.add_argument(
         "--jobs",

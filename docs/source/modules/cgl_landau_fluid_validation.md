@@ -177,16 +177,27 @@ including regularized/unlimited and cap-active contributions. This product
 uses snapshot central differences; its optional snapshot-time quadrature and
 the pressure-work quadrature are explicitly not the applied finite-volume
 face flux or a closed energy budget.
+When requested with `--eddy-samples <count>`, the analyzer also estimates
+three-point second-order structure functions conditioned within 15 degrees
+of the three-point local mean magnetic field, solves
+`S2(ell_perp) = S2(ell_parallel)`, and reports
+`eddy_anisotropy.velocity_perp` and `eddy_anisotropy.magnetic_perp`.
+It bins `|ell|/L_perp` inside each angular cone, retaining that estimator
+definition in the diagnostic JSON.
+The deterministic sample count, logarithmic-bin count, and seed are retained
+through `--eddy-samples`, `--eddy-bins`, and `--eddy-seed`.
 
 The analyzer runs synthetic binning/gradient/transfer/alignment and
 heat-flux-sign/pressure-work checks and renders available history, PDF,
 spectrum, transfer, alignment, heat-flux-proxy, and pressure-work figures
-under `figures/paper/`. When an externally prepared reference-curve manifest
+under `figures/paper/`, including eddy anisotropy when requested. When an
+externally prepared reference-curve manifest
 is supplied, it validates curve/source checksums and reported pointwise
 uncertainties, computes uncertainty-normalized residuals for supported
 snapshot products and threshold-volume history series, and renders
 `paper_reference_comparisons.pdf`. Figure 2(b) vector-curve extraction is
-available below, together with dimensionless Figure 7 lower-panel transfer,
+available below, together with Figure 5(b) normalized eddy anisotropy,
+dimensionless Figure 7 lower-panel transfer,
 Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and
 Figure 12 alignment, and Figure 13(b),(d) limiter curves. Dimensional Figure
 7 upper spectra, Figure 11 upper spectra, Figure 12 lower spectra, and Figure
@@ -199,9 +210,10 @@ RGB heatmaps are decoded against their labeled linear colorbar, selected
 shell slices are checked against the paper's per-`k_perp` unit-normalization
 statement and renormalized, and an absolute PDF-density uncertainty is
 retained in the manifest. Figure 4(a)'s normalized-density PDF is also
-admitted through its plotted `rho/<rho>` coordinate. Remaining dimensional,
-spectral-normalization, unmatched joint-distribution, or
-conditioned-structure-function MKS24 panels, exact
+admitted through its plotted `rho/<rho>` coordinate. Figure 5(b) is admitted
+through its normalized length coordinates and the opt-in conditioned
+structure functions. Remaining dimensional, spectral-normalization, or
+unmatched joint-distribution MKS24 panels, exact
 time-integrated/production local budget closure, and production comparisons
 remain to be completed. For retained LF histories, the analyzer
 also reports the RKL2-applied capped-face heat-flux contractions retained in
@@ -334,6 +346,31 @@ PDF ordinate uncertainty. It omits plotted-boundary-clipped vertices. The
 companion Figure 4(b) `E_rho` spectrum remains excluded because the plotted
 ordinate does not declare a `rho/<rho>-1` spectral normalization.
 
+For Figure 5(b), extract the four normalized eddy-length curves from the
+pinned source PDF:
+
+```bash
+python3 scripts/digitize_cgl_lf_mks24_fig5b.py \
+  /path/to/arXiv-2405.02418v2/source/fig5b.pdf \
+  /path/to/arXiv-2405.02418v2/digitized_fig5b_v1
+```
+
+This extractor maps blue/orange curves to
+`eddy_anisotropy.velocity_perp`/`eddy_anisotropy.magnetic_perp`, and
+solid/dash-dotted curves to the random/Alfvenic active beta-10 standard
+cases. Both plotted axes are normalized lengths; the analysis normalization
+uses `L_perp = sqrt(Lx Ly)`, which is unity in the shared `[1,1,2]` domain.
+It records five-percent relative parallel-length uncertainty and omits
+plot-boundary-clipped vertices. A comparison must explicitly enable the
+costlier structure-function sampling, for example:
+
+```bash
+python3 scripts/cgl_lf_workflow.py paper-analyze \
+  --output-dir /path/to/existing/standard/bundle \
+  --eddy-samples 2000000 --eddy-bins 24 --eddy-seed 731 \
+  --reference-curves /path/to/arXiv-2405.02418v2/digitized_fig5b_v1/curves.json
+```
+
 For Figure 7, extract the directly comparable lower-panel transfer-ratio
 curves from the pinned source PDF:
 
@@ -447,9 +484,6 @@ a matching analyzer product, or a separately provenance-tracked numerical
 reference source. In particular, Figure 2(a)'s joint pressure-density panel
 and Figure 4(b)'s `E_rho` spectrum must not be substituted for current
 one-dimensional or normalized products without matching definitions.
-Figure 5(b)'s dimensionless characteristic-eddy-length relation likewise
-requires a new local-field-conditioned structure-function product before any
-digitized curve can be admitted for comparison.
 
 An optional curve manifest passed to `paper-analyze --reference-curves`
 has `schema_version = 1`, a `provenance` object, and one or more curve
@@ -461,7 +495,7 @@ columns; its entry records `data_sha256`, target analysis `case`, supported
 `product` (for example `spectra.grad_parallel_delta_p` or
 `pressure_transfer.transfer_normalized_by_total` or
 `alignment.<shell>` or `alignment_peak.cos_theta` or
-`history.unstable_fraction`), and optional
+`eddy_anisotropy.velocity_perp` or `history.unstable_fraction`), and optional
 `interpolation` (`linear` or `loglog`). The analyzer fails closed on missing
 uncertainty, checksum mismatches, or out-of-domain coordinates.
 Dimensionful paper curves must additionally be withheld from such a manifest

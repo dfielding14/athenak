@@ -826,6 +826,12 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
                 "--synthetic-test",
                 "--alignment-shells",
                 "2,4,6",
+                "--eddy-samples",
+                "200000",
+                "--eddy-bins",
+                "10",
+                "--eddy-seed",
+                "731",
                 "--output-dir",
                 "cgl_ci_paper_analysis_products",
             ],
@@ -857,6 +863,7 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
             > 0.0
         )
         assert diagnostics["synthetic_test"]["passive_pressure_work_is_diagnostic_only"]
+        assert diagnostics["synthetic_test"]["finite_eddy_anisotropy"]
         assert abs(
             diagnostics["synthetic_test"]["constant_power_quadrature_error"]
         ) < 1.0e-14
@@ -881,6 +888,24 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
             "time_integral_estimate"
         ]["available"]
         assert diagnostics["histories"][0]["analysis_window"]["rows_selected"] > 0
+        assert "eddy_anisotropy" in diagnostics["snapshot_ensemble"]
+        module_spec = importlib.util.spec_from_file_location(
+            "cgl_lf_paper_analysis", "../../../scripts/analyze_cgl_lf_paper.py"
+        )
+        assert module_spec is not None and module_spec.loader is not None
+        module = importlib.util.module_from_spec(module_spec)
+        module_spec.loader.exec_module(module)
+        eddy_x, eddy_y = module.analyzed_product_curve({
+            "eddy_anisotropy": {
+                "velocity_perp": {
+                    "available": True,
+                    "ell_perp_over_lperp": [0.05, 0.1],
+                    "ell_parallel_over_lperp": [0.15, 0.25],
+                }
+            }
+        }, "eddy_anisotropy.velocity_perp")
+        assert np.allclose(eddy_x, [0.05, 0.1])
+        assert np.allclose(eddy_y, [0.15, 0.25])
         history_series = diagnostics["histories"][0]["time_series"]
         assert "unstable_fraction" in history_series
         reference_dir = Path("cgl_ci_paper_reference_inputs")
@@ -1013,6 +1038,12 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
                 str(manifest_path),
                 "--alignment-shells",
                 "2,4,6",
+                "--eddy-samples",
+                "200000",
+                "--eddy-bins",
+                "10",
+                "--eddy-seed",
+                "731",
                 "--output-dir",
                 "cgl_ci_paper_reference_products",
             ],

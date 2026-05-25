@@ -267,6 +267,41 @@ def plot_pressure_work(ensembles: dict[str, dict[str, object]], figure_dir: Path
     save(fig, figure_dir / "paper_pressure_work.pdf", generated)
 
 
+def plot_eddy_anisotropy(ensembles: dict[str, dict[str, object]], figure_dir: Path,
+                         generated: list[str]) -> None:
+    """Plot local-field-conditioned parallel/perpendicular eddy lengths."""
+
+    retained = {
+        name: ensemble["eddy_anisotropy"]
+        for name, ensemble in ensembles.items()
+        if ensemble.get("eddy_anisotropy", {}).get("available", False)
+    }
+    if not retained:
+        return
+    fig, axes = plt.subplots(1, 2, figsize=(8.4, 3.25))
+    for name, product in retained.items():
+        for axis, key, title in (
+            (axes[0], "velocity_perp", r"$u_\perp$"),
+            (axes[1], "magnetic_perp", r"$B_\perp$"),
+        ):
+            curve_product = product.get(key, {})
+            if not curve_product.get("available", False):
+                continue
+            axis.loglog(
+                curve_product["ell_perp_over_lperp"],
+                curve_product["ell_parallel_over_lperp"],
+                label=name,
+            )
+            axis.set_title(title)
+    for axis in axes:
+        axis.set_xlabel(r"$\ell_\perp/L_\perp$")
+        axis.set_ylabel(r"$\ell_\parallel/L_\perp$")
+        axis.grid(True, which="both", alpha=0.25)
+        axis.legend(fontsize=7)
+    fig.suptitle("Local-field-conditioned eddy anisotropy")
+    save(fig, figure_dir / "paper_eddy_anisotropy.pdf", generated)
+
+
 def plot_reference_comparisons(data: dict[str, object], figure_dir: Path,
                                generated: list[str]) -> None:
     """Plot optional provenance-qualified reference and simulated curves."""
@@ -318,6 +353,7 @@ def main() -> int:
     plot_transfer_and_alignment(ensembles, args.figure_dir, generated)
     plot_heat_flux_proxy(ensembles, args.figure_dir, generated)
     plot_pressure_work(ensembles, args.figure_dir, generated)
+    plot_eddy_anisotropy(ensembles, args.figure_dir, generated)
     plot_reference_comparisons(data, args.figure_dir, generated)
     (args.figure_dir / "paper_figures.json").write_text(
         json.dumps({"figures": generated}, indent=2, sort_keys=True) + "\n",

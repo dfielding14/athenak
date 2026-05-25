@@ -29,6 +29,7 @@ SQRT_EIGHT_PI = 5.013256549262000
 THREE_PI_MINUS_EIGHT = 1.4247779607693793
 BACKUP_COLLISION_RATE = 1.0e10
 REFERENCE_CURVE_SCHEMA_VERSION = 1
+EDDY_ANGLE_DEGREES = 15.0
 
 
 def parse_history(path: Path) -> dict[str, np.ndarray]:
@@ -807,6 +808,226 @@ def alignment_histograms(velocity: list[np.ndarray], magnetic: list[np.ndarray],
     return output
 
 
+def eddy_anisotropy_curve(bin_centers: np.ndarray, perpendicular: np.ndarray,
+                          parallel: np.ndarray) -> dict[str, object]:
+    """Invert perpendicular and parallel structure functions at common power."""
+
+    parallel_valid = np.isfinite(parallel) & (parallel > 0.0)
+    perpendicular_valid = np.isfinite(perpendicular) & (perpendicular > 0.0)
+    parallel_length = bin_centers[parallel_valid]
+    parallel_power = parallel[parallel_valid]
+    monotonic: list[int] = []
+    maximum = -math.inf
+    for index, value in enumerate(parallel_power):
+        if value > maximum:
+            monotonic.append(index)
+            maximum = float(value)
+    if len(monotonic) < 2:
+        return {
+            "available": False,
+            "reason": "parallel structure function has fewer than two increasing bins",
+        }
+    parallel_length = parallel_length[monotonic]
+    parallel_power = parallel_power[monotonic]
+    selected = perpendicular_valid & (perpendicular >= parallel_power[0]) & (
+        perpendicular <= parallel_power[-1]
+    )
+    if np.count_nonzero(selected) < 2:
+        return {
+            "available": False,
+            "reason": "structure functions do not overlap on at least two bins",
+        }
+    ell_perp = bin_centers[selected]
+    ell_parallel = np.exp(np.interp(
+        np.log(perpendicular[selected]),
+        np.log(parallel_power),
+        np.log(parallel_length),
+    ))
+    return {
+        "available": True,
+        "ell_perp_over_lperp": ell_perp.tolist(),
+        "ell_parallel_over_lperp": ell_parallel.tolist(),
+    }
+
+
+def local_field_eddy_anisotropy(
+    velocity: list[np.ndarray], magnetic: list[np.ndarray],
+    lengths: tuple[float, float, float], samples: int, bins: int, seed: int
+) -> dict[str, object]:
+    """Estimate local-field-conditioned three-point eddy anisotropy curves."""
+
+    definition = (
+        "solve S2(phi; ell_perp) = S2(phi; ell_parallel), where "
+        "S2 = <|phi(x+ell) - 2 phi(x) + phi(x-ell)|^2>"
+    )
+    if samples <= 0:
+        return {
+            "computed": False,
+            "available": False,
+            "definition": definition,
+            "reason": "eddy anisotropy analysis is opt-in; set --eddy-samples",
+        }
+    nz, ny, nx = velocity[0].shape
+    lx, ly, lz = lengths
+    lperp = math.sqrt(lx * ly)
+    spacing_xyz = np.asarray((lx / nx, ly / ny, lz / nz), dtype=float)
+    minimum = max(float(np.min(spacing_xyz)), np.finfo(float).tiny)
+    maximum = 0.5 * min(lx, ly)
+    if maximum <= minimum:
+        return {
+            "computed": False,
+            "available": False,
+            "definition": definition,
+            "reason": "snapshot has insufficient perpendicular scale separation",
+        }
+    edges = np.geomspace(minimum, maximum, bins + 1)
+    centers = np.sqrt(edges[:-1] * edges[1:]) / lperp
+    per_bin = max(1, int(math.ceil(samples / bins)))
+    generated = per_bin * bins
+    generator = np.random.default_rng(seed)
+    source_bins = np.repeat(np.arange(bins), per_bin)
+    radius = np.exp(generator.uniform(
+        np.log(edges[source_bins]), np.log(edges[source_bins + 1])
+    ))
+    directions = generator.normal(size=(generated, 3))
+    directions /= np.linalg.norm(directions, axis=1)[:, None]
+    offsets_xyz = np.rint(
+        directions * radius[:, None] / spacing_xyz[None, :]
+    ).astype(int)
+    separation_xyz = offsets_xyz * spacing_xyz[None, :]
+    separation = np.linalg.norm(separation_xyz, axis=1)
+    retained = (separation >= edges[0]) & (separation <= edges[-1])
+    retained &= np.any(offsets_xyz != 0, axis=1)
+    offsets_xyz = offsets_xyz[retained]
+    separation_xyz = separation_xyz[retained]
+    separation = separation[retained]
+    sample_bins = np.searchsorted(edges, separation, side="right") - 1
+    valid_bins = (sample_bins >= 0) & (sample_bins < bins)
+    offsets_xyz = offsets_xyz[valid_bins]
+    separation_xyz = separation_xyz[valid_bins]
+    separation = separation[valid_bins]
+    sample_bins = sample_bins[valid_bins]
+    count = len(sample_bins)
+    center_z = generator.integers(0, nz, size=count)
+    center_y = generator.integers(0, ny, size=count)
+    center_x = generator.integers(0, nx, size=count)
+    offset_x = offsets_xyz[:, 0]
+    offset_y = offsets_xyz[:, 1]
+    offset_z = offsets_xyz[:, 2]
+    plus = (
+        (center_z + offset_z) % nz,
+        (center_y + offset_y) % ny,
+        (center_x + offset_x) % nx,
+    )
+    center = (center_z, center_y, center_x)
+    minus = (
+        (center_z - offset_z) % nz,
+        (center_y - offset_y) % ny,
+        (center_x - offset_x) % nx,
+    )
+    local_field = [
+        (component[plus] + component[center] + component[minus]) / 3.0
+        for component in magnetic
+    ]
+    field_norm = np.sqrt(sum(component * component for component in local_field))
+    valid_field = field_norm > np.finfo(float).tiny
+    bhat = [
+        component / np.maximum(field_norm, np.finfo(float).tiny)
+        for component in local_field
+    ]
+    separation_hat = separation_xyz / separation[:, None]
+    cosine = np.abs(sum(
+        separation_hat[:, index] * bhat[index] for index in range(3)
+    ))
+    radians = math.radians(EDDY_ANGLE_DEGREES)
+    parallel_selected = valid_field & (cosine >= math.cos(radians))
+    perpendicular_selected = valid_field & (cosine <= math.sin(radians))
+
+    def second_order_perp(vector: list[np.ndarray]) -> np.ndarray:
+        sampled = [
+            [component[location] for component in vector]
+            for location in (plus, center, minus)
+        ]
+        perpendicular_values = []
+        for values in sampled:
+            field_parallel = sum(values[index] * bhat[index] for index in range(3))
+            perpendicular_values.append([
+                values[index] - field_parallel * bhat[index] for index in range(3)
+            ])
+        return sum(
+            (
+                perpendicular_values[0][index]
+                - 2.0 * perpendicular_values[1][index]
+                + perpendicular_values[2][index]
+            ) ** 2
+            for index in range(3)
+        )
+
+    def conditioned_mean(values: np.ndarray, selected: np.ndarray
+                         ) -> tuple[np.ndarray, np.ndarray]:
+        counts = np.bincount(sample_bins[selected], minlength=bins)
+        sums = np.bincount(
+            sample_bins[selected], weights=values[selected], minlength=bins
+        )
+        mean = np.zeros(bins, dtype=float)
+        populated = counts > 0
+        mean[populated] = sums[populated] / counts[populated]
+        return mean, counts
+
+    output: dict[str, object] = {
+        "computed": True,
+        "available": True,
+        "definition": definition,
+        "conditioning": (
+            "three-point local mean magnetic field; separation vectors within "
+            f"{EDDY_ANGLE_DEGREES:g} degrees of parallel or perpendicular"
+        ),
+        "sampling": (
+            "deterministic random lattice separations, logarithmically balanced "
+            "over normalized separation bins"
+        ),
+        "separation_coordinate": (
+            "|ell|/L_perp binned within each angular cone; the selected "
+            "parallel or perpendicular projection differs by at most "
+            "1 - cos(15 degrees)"
+        ),
+        "normalization_definition": "lengths divided by L_perp = sqrt(Lx Ly)",
+        "lperp": lperp,
+        "angle_degrees": EDDY_ANGLE_DEGREES,
+        "samples_requested": samples,
+        "samples_retained": int(count),
+        "seed": seed,
+        "bins": bins,
+        "bin_centers_over_lperp": centers.tolist(),
+    }
+    for name, vector in (
+        ("velocity_perp", velocity),
+        ("magnetic_perp", magnetic),
+    ):
+        values = second_order_perp(vector)
+        perpendicular, perpendicular_counts = conditioned_mean(
+            values, perpendicular_selected
+        )
+        parallel, parallel_counts = conditioned_mean(values, parallel_selected)
+        product = eddy_anisotropy_curve(centers, perpendicular, parallel)
+        product.update({
+            "perpendicular_structure_function": perpendicular.tolist(),
+            "parallel_structure_function": parallel.tolist(),
+            "perpendicular_sample_counts": perpendicular_counts.tolist(),
+            "parallel_sample_counts": parallel_counts.tolist(),
+        })
+        output[name] = product
+    output["available"] = bool(
+        output["velocity_perp"]["available"]
+        or output["magnetic_perp"]["available"]
+    )
+    if not output["available"]:
+        output["reason"] = (
+            "no eddy-anisotropy product has overlapping structure functions"
+        )
+    return output
+
+
 def read_snapshot(path: Path
                   ) -> tuple[dict[str, np.ndarray], tuple[float, float, float], float]:
     """Read one current CGL primitive binary snapshot."""
@@ -859,7 +1080,9 @@ def pdf_fields(fields: dict[str, np.ndarray],
 def analyze_fields(fields: dict[str, np.ndarray], lengths: tuple[float, float, float],
                    time: float, bins: int, alignment_shells: list[int],
                    pdf_ranges: dict[str, tuple[float, float]] | None = None,
-                   model_choices: dict[str, object] | None = None
+                   model_choices: dict[str, object] | None = None,
+                   eddy_samples: int = 0, eddy_bins: int = 20,
+                   eddy_seed: int = 0
                    ) -> dict[str, object]:
     """Analyze a single snapshot already represented as field arrays."""
 
@@ -917,6 +1140,9 @@ def analyze_fields(fields: dict[str, np.ndarray], lengths: tuple[float, float, f
         "pressure_work_decomposition": pressure_work,
         "alignment": alignment_histograms(velocity, magnetic, lengths, dk,
                                           alignment_shells, bins),
+        "eddy_anisotropy": local_field_eddy_anisotropy(
+            velocity, magnetic, lengths, eddy_samples, eddy_bins, eddy_seed
+        ),
         "heat_flux_transport_proxy": heat_flux_transport_proxy(
             fields, lengths, model_choices
         ),
@@ -946,6 +1172,66 @@ def mean_spectrum(records: list[dict[str, object]]) -> dict[str, object]:
             axis=0,
         ).tolist(),
     }
+
+
+def mean_eddy_anisotropy(records: list[dict[str, object]]) -> dict[str, object]:
+    """Average sampled structure functions and invert the ensemble result."""
+
+    computed = [record for record in records if record.get("computed", False)]
+    if not computed:
+        return {
+            "available": False,
+            "reason": "eddy anisotropy was not computed for selected snapshots",
+        }
+    centers = np.asarray(computed[0]["bin_centers_over_lperp"], dtype=float)
+    output = {
+        name: computed[0][name] for name in (
+            "definition", "conditioning", "sampling", "separation_coordinate",
+            "normalization_definition", "lperp", "angle_degrees",
+            "samples_requested", "seed", "bins",
+        )
+    }
+    output["computed"] = True
+    output["snapshot_count"] = len(computed)
+    output["samples_retained"] = int(sum(
+        int(record["samples_retained"]) for record in computed
+    ))
+    output["bin_centers_over_lperp"] = centers.tolist()
+    for name in ("velocity_perp", "magnetic_perp"):
+        product = {}
+        for direction in ("perpendicular", "parallel"):
+            count_name = f"{direction}_sample_counts"
+            value_name = f"{direction}_structure_function"
+            counts = np.sum([
+                np.asarray(record[name][count_name], dtype=float)
+                for record in computed
+            ], axis=0)
+            weighted = np.sum([
+                np.nan_to_num(np.asarray(record[name][value_name], dtype=float))
+                * np.asarray(record[name][count_name], dtype=float)
+                for record in computed
+            ], axis=0)
+            values = np.zeros(counts.shape, dtype=float)
+            populated = counts > 0.0
+            values[populated] = weighted[populated] / counts[populated]
+            product[value_name] = values
+            product[count_name] = counts
+        curve = eddy_anisotropy_curve(
+            centers,
+            product["perpendicular_structure_function"],
+            product["parallel_structure_function"],
+        )
+        curve.update({
+            key: value.tolist() for key, value in product.items()
+        })
+        output[name] = curve
+    output["available"] = bool(
+        output["velocity_perp"]["available"]
+        or output["magnetic_perp"]["available"]
+    )
+    if not output["available"]:
+        output["reason"] = "no ensemble eddy-anisotropy curve could be inverted"
+    return output
 
 
 def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str, object]:
@@ -1136,6 +1422,9 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
             name: mean_distribution([sample["alignment"][name] for sample in samples])
             for name in sorted(alignment_names)
         },
+        "eddy_anisotropy": mean_eddy_anisotropy([
+            sample["eddy_anisotropy"] for sample in samples
+        ]),
         "heat_flux_transport_proxy": heat_flux_ensemble,
     }
 
@@ -1143,7 +1432,9 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
 def analyze_snapshot_paths(paths: list[Path], bins: int, alignment_shells: list[int],
                            time_start: float | None = None,
                            time_end: float | None = None,
-                           model_choices: dict[str, object] | None = None
+                           model_choices: dict[str, object] | None = None,
+                           eddy_samples: int = 0, eddy_bins: int = 20,
+                           eddy_seed: int = 0
                            ) -> tuple[dict[str, dict[str, object]], dict[str, object]]:
     """Analyze and time-average selected snapshots with common PDF bin edges."""
 
@@ -1175,7 +1466,8 @@ def analyze_snapshot_paths(paths: list[Path], bins: int, alignment_shells: list[
     for path in selected:
         fields, lengths, time = read_snapshot(path)
         records[str(path)] = analyze_fields(
-            fields, lengths, time, bins, alignment_shells, ranges, model_choices
+            fields, lengths, time, bins, alignment_shells, ranges, model_choices,
+            eddy_samples, eddy_bins, eddy_seed
         )
     ensemble = average_snapshot_records(records)
     ensemble["time_start"] = time_start
@@ -1189,8 +1481,9 @@ def synthetic_test() -> dict[str, object]:
     lengths = (1.0, 1.0, 2.0)
     shape = (32, 16, 16)
     z = (np.arange(shape[0]) + 0.5) * lengths[2] / shape[0]
+    y = (np.arange(shape[1]) + 0.5) * lengths[1] / shape[1]
     x = (np.arange(shape[2]) + 0.5) * lengths[0] / shape[2]
-    zz, _, xx = np.meshgrid(z, np.arange(shape[1]), x, indexing="ij")
+    zz, yy, xx = np.meshgrid(z, y, x, indexing="ij")
     fields = {
         "dens": np.ones(shape),
         "velx": np.sin(2.0 * math.pi * xx / lengths[0]),
@@ -1256,6 +1549,37 @@ def synthetic_test() -> dict[str, object]:
         "early": correlated_record,
         "late": repeated_correlated,
     })["pressure_work_decomposition"]["time_integral_estimate"]
+    eddy_fields = {
+        name: np.array(values, copy=True) for name, values in fields.items()
+    }
+    eddy_fields["velx"] = (
+        np.sin(2.0 * math.pi * xx) + np.sin(math.pi * zz)
+    )
+    eddy_fields["vely"] = (
+        np.sin(2.0 * math.pi * yy) + np.sin(math.pi * zz)
+    )
+    eddy_fields["bcc1"] = 0.1 * (
+        np.sin(2.0 * math.pi * xx) + np.sin(math.pi * zz)
+    )
+    eddy_fields["bcc2"] = 0.1 * (
+        np.sin(2.0 * math.pi * yy) + np.sin(math.pi * zz)
+    )
+    eddy_record = analyze_fields(
+        eddy_fields, lengths, 0.0, 16, [2], model_choices=model,
+        eddy_samples=200000, eddy_bins=10, eddy_seed=731
+    )
+    eddy = eddy_record["eddy_anisotropy"]
+    finite_eddy_anisotropy = bool(
+        eddy["available"]
+        and eddy["velocity_perp"]["available"]
+        and eddy["magnetic_perp"]["available"]
+        and np.isfinite(np.asarray(
+            eddy["velocity_perp"]["ell_parallel_over_lperp"]
+        )).all()
+        and np.isfinite(np.asarray(
+            eddy["magnetic_perp"]["ell_parallel_over_lperp"]
+        )).all()
+    )
     passed = bool(
         peak == 2
         and relative_gradient_error < 7.0e-3
@@ -1280,6 +1604,7 @@ def synthetic_test() -> dict[str, object]:
         and correlated_quadrature["available"]
         and abs(float(correlated_quadrature["anisotropic_stress_power_integral"])
                 - 2.0 * float(correlated["anisotropic_stress_power"])) < 1.0e-14
+        and finite_eddy_anisotropy
     )
     return {
         "passed": passed,
@@ -1317,6 +1642,7 @@ def synthetic_test() -> dict[str, object]:
             correlated_quadrature["anisotropic_stress_power_integral"]
             - 2.0 * correlated["anisotropic_stress_power"]
         ),
+        "finite_eddy_anisotropy": finite_eddy_anisotropy,
     }
 
 
@@ -1476,6 +1802,17 @@ def analyzed_product_curve(ensemble: dict[str, object], product: str,
         return 0.5 * (edges[1:] + edges[:-1]), np.asarray(record["density"], dtype=float)
     if family == "alignment_peak" and name == "cos_theta":
         return alignment_peak_curve(ensemble)
+    if family == "eddy_anisotropy":
+        products = ensemble.get("eddy_anisotropy", {})
+        if not isinstance(products, dict) or name not in products:
+            raise ValueError(f"analyzed product is missing: {product}")
+        record = products[name]
+        if not isinstance(record, dict) or not record.get("available", False):
+            raise ValueError(f"analyzed product is missing: {product}")
+        return (
+            np.asarray(record["ell_perp_over_lperp"], dtype=float),
+            np.asarray(record["ell_parallel_over_lperp"], dtype=float),
+        )
     if family == "history":
         if not isinstance(histories, list) or len(histories) != 1:
             raise ValueError(
@@ -1669,6 +2006,9 @@ def main() -> int:
     command.add_argument("--output-dir", type=Path, default=Path("cgl_lf_paper_analysis"))
     command.add_argument("--pdf-bins", type=int, default=64)
     command.add_argument("--alignment-shells", default="1,2,3")
+    command.add_argument("--eddy-samples", type=int, default=0)
+    command.add_argument("--eddy-bins", type=int, default=20)
+    command.add_argument("--eddy-seed", type=int, default=0)
     command.add_argument("--time-start", type=float)
     command.add_argument("--time-end", type=float)
     command.add_argument("--reference-curves", type=Path)
@@ -1680,6 +2020,10 @@ def main() -> int:
         and args.time_end < args.time_start
     ):
         command.error("--time-end must be greater than or equal to --time-start")
+    if args.eddy_samples < 0:
+        command.error("--eddy-samples must be nonnegative")
+    if args.eddy_bins < 2:
+        command.error("--eddy-bins must be at least 2")
 
     alignment_shells = [
         int(value) for value in args.alignment_shells.split(",") if value.strip()
@@ -1713,7 +2057,8 @@ def main() -> int:
             if not isinstance(model, dict):
                 model = {}
             records, ensemble = analyze_snapshot_paths(
-                snapshots, args.pdf_bins, alignment_shells, start, end, model
+                snapshots, args.pdf_bins, alignment_shells, start, end, model,
+                args.eddy_samples, args.eddy_bins, args.eddy_seed
             )
             summaries = [summarize_history(path, start, end) for path in histories]
             lf_summaries = [
@@ -1747,7 +2092,8 @@ def main() -> int:
     )
     direct_records, direct_ensemble = analyze_snapshot_paths(
         list(args.snapshots), args.pdf_bins, alignment_shells,
-        args.time_start, args.time_end
+        args.time_start, args.time_end, None, args.eddy_samples,
+        args.eddy_bins, args.eddy_seed
     )
     result["snapshots"].update(direct_records)
     if args.snapshots:

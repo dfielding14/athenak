@@ -229,6 +229,11 @@ The workflow also renders available diagnostic figures under
 `figures/paper/`. For
 paper-standard bundles it uses each case's declared analysis window to
 produce ensemble-average products and interval heat-flux-cap fractions.
+With `--eddy-samples <count>`, `paper-analyze` additionally computes
+deterministic, local-field-conditioned three-point structure functions and
+emits `eddy_anisotropy.velocity_perp` and
+`eddy_anisotropy.magnetic_perp`; `--eddy-bins` and `--eddy-seed` are
+archived with the analysis products.
 If a pinned MKS24 staging manifest is available, the analysis bundle retains
 its archive and source-TeX checksums as reference provenance.
 With `--reference-curves <manifest.json>`, `paper-analyze` also accepts
@@ -236,12 +241,13 @@ external numerical or digitized curves only when their manifest records
 provenance, SHA-256 digests, and positive per-point `y_uncertainty` values.
 It reports uncertainty-normalized residuals against supported PDF, spectrum,
 raw or MKS24-normalized transfer, selected-shell alignment-distribution, alignment-peak-versus-
-`k_perp`, and threshold-volume history products and renders
+`k_perp`, eddy-anisotropy, and threshold-volume history products and renders
 `paper_reference_comparisons.pdf`. Use `--alignment-shells` with
 `paper-analyze` when a comparison manifest requires an alignment-peak curve
 over additional shells.
 The staged-reference tooling includes pinned vector extraction for Figure
-2(b), Figure 4(a) normalized-density PDFs, Figure 7 lower-panel and Figure
+2(b), Figure 4(a) normalized-density PDFs, Figure 5(b) normalized eddy
+anisotropy, Figure 7 lower-panel and Figure
 13(d) normalized transfer curves, the
 dimensionless Figure 9, Figure 11 lower-panel, and Figure 12 alignment
 curves, and the dimensionless `beta Delta` PDF curves in Figure 13(b).
@@ -254,9 +260,9 @@ units for its beta-100 limiter runs, while the equivalent AthenaK
 `v_A = 1` normalization uses `p0 = 50`; until an explicit observable
 conversion is qualified, dimensional Figure 11 upper spectra, Figure 12
 spectra, and Figure 13(a),(c) curves are retained only as excluded audit
-context. Figure 5(b)'s normalized eddy-length relation is also excluded
-until a local-field-conditioned structure-function product is implemented
-and validated for comparison.
+context. Figure 5(b)'s dimensionless curves are admitted through the opt-in
+conditioned-structure-function analysis; no paper-scale comparison has been
+executed.
 These products are analysis infrastructure; they do not by themselves
 establish statistically converged paper comparisons.
 
