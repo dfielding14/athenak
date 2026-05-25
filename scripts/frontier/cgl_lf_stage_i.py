@@ -1228,7 +1228,9 @@ def bundle_case(args: argparse.Namespace) -> int:
         "created_utc": utc_now(),
         "status": "accepted_for_analysis",
         "git_revision": first_command["input_revision"],
-        "git_worktree_dirty": False,
+        "git_worktree_dirty": (
+            "not recorded; submitted input and matrix verified committed"
+        ),
         "executable": first_command["executable"],
         "production_case_id": args.case_id,
         "required_final_time": args.required_final_time,
@@ -1241,6 +1243,89 @@ def bundle_case(args: argparse.Namespace) -> int:
     write_json(bundle / "manifest.json", manifest)
     print(f"Wrote accepted Stage I analysis bundle: {bundle}")
     print(f"  final_time={final_time:.12g}, snapshots={len(snapshots)}")
+    return 0
+
+
+def prefix_bundle_case_paths(case: dict[str, object], prefix: Path
+                             ) -> dict[str, object]:
+    """Rewrite nested per-case paths for a campaign-level bundle manifest."""
+
+    copied = json.loads(json.dumps(case))
+    copied["execution_input"] = str(prefix / str(copied["execution_input"]))
+    outputs = copied["outputs"]
+    for key in ("mhd_history", "user_history"):
+        outputs[key] = str(prefix / str(outputs[key]))
+    outputs["snapshot_paths"] = [
+        str(prefix / str(path)) for path in outputs["snapshot_paths"]
+    ]
+    return copied
+
+
+def bundle_campaign(args: argparse.Namespace) -> int:
+    """Assemble all accepted mapped cases into one paper-analysis bundle."""
+
+    root = require_root(Path(args.root), args.allow_local_root)
+    paths = initialize(root)
+    source_dir = Path(args.source_dir).expanduser().resolve()
+    matrix_path = Path(args.matrix).expanduser().resolve()
+    matrix = validate_matrix(matrix_path, source_dir)
+    for case in matrix["cases"]:
+        segments = accepted_case_segments(paths, str(case["id"]))
+        if not segments:
+            raise ValueError(f"no accepted segments are recorded for {case['id']}")
+        final_time = float(segments[-1]["scientific_inspection"]["final_time"])
+        if final_time < args.required_final_time - 1.0e-10:
+            raise ValueError(
+                f"{case['id']} reaches only t={final_time}; "
+                f"required final time is {args.required_final_time}"
+            )
+    bundle = (
+        Path(args.output_dir).expanduser().resolve()
+        if args.output_dir
+        else paths["runs"] / "bundles" / "mks24-stage-i-campaign"
+    )
+    require_beneath_root(bundle, root, "analysis bundle", args.allow_local_root)
+    if bundle.exists():
+        if not args.replace:
+            raise ValueError(f"analysis bundle already exists: {bundle}")
+        shutil.rmtree(bundle)
+    bundle.mkdir(parents=True)
+    cases: list[dict[str, object]] = []
+    segment_manifests: list[str] = []
+    case_times: dict[str, float] = {}
+    for case in matrix["cases"]:
+        case_id = str(case["id"])
+        nested = bundle / "case_bundles" / case_id
+        case_args = argparse.Namespace(**vars(args))
+        case_args.case_id = case_id
+        case_args.output_dir = str(nested)
+        case_args.replace = False
+        bundle_case(case_args)
+        nested_manifest = read_manifest(nested / "manifest.json")
+        prefix = nested.relative_to(bundle)
+        cases.append(prefix_bundle_case_paths(nested_manifest["cases"][0], prefix))
+        segment_manifests.extend(nested_manifest["production_segment_manifests"])
+        case_times[case_id] = float(nested_manifest["accepted_final_time"])
+    campaign_manifest = {
+        "workflow": "paper-mks24-stage-i-production",
+        "created_utc": utc_now(),
+        "status": "accepted_for_analysis",
+        "git_revision": subprocess.run(
+            ["git", "-C", str(source_dir), "rev-parse", "HEAD"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip(),
+        "git_worktree_dirty": (
+            "not recorded; submitted inputs and matrices verified committed"
+        ),
+        "executable": "recorded per accepted production segment",
+        "required_final_time": args.required_final_time,
+        "accepted_case_final_times": case_times,
+        "production_segment_manifests": segment_manifests,
+        "cases": cases,
+    }
+    write_json(bundle / "manifest.json", campaign_manifest)
+    print(f"Wrote accepted Stage I campaign bundle: {bundle}")
+    print(f"  accepted cases={len(cases)}")
     return 0
 
 
@@ -1320,6 +1405,12 @@ def parser() -> argparse.ArgumentParser:
     bundled.add_argument("--matrix", default=str(DEFAULT_MATRIX))
     bundled.add_argument("--output-dir")
     bundled.add_argument("--replace", action="store_true")
+    campaign = actions.add_parser("bundle-campaign")
+    campaign.add_argument("--required-final-time", type=float, default=10.0)
+    campaign.add_argument("--source-dir", default=str(ROOT_DIR))
+    campaign.add_argument("--matrix", default=str(DEFAULT_MATRIX))
+    campaign.add_argument("--output-dir")
+    campaign.add_argument("--replace", action="store_true")
     cancelled = actions.add_parser("cancel")
     cancelled.add_argument("--manifest", required=True)
     cancelled.add_argument("--notes", required=True)
@@ -1357,6 +1448,8 @@ def main() -> int:
             return record(args)
         if args.action == "bundle-case":
             return bundle_case(args)
+        if args.action == "bundle-campaign":
+            return bundle_campaign(args)
         if args.action == "cancel":
             return cancel(args)
         if args.action == "summary":
