@@ -197,9 +197,12 @@ Paper-standard input definitions and the limiter-frequency scan live under
 duration, hard-wall baseline, physical forcing shell, binary snapshot
 cadence, and analysis window. The nine standard definitions cover all eight
 active/passive, Alfvenic/random beta-10/beta-100 series in MKS24 Figure 2(b)
-plus the active Alfvenic beta-1 case. The `paper-standard` and `paper-nulim`
-workflows require explicit production authorization; the presence of these
-decks is not evidence that paper-scale runs have been executed.
+plus the active Alfvenic beta-1 case. Two `paper-heat-flux` definitions supply
+the nonnominal active beta-10 Figure 12 variants; its nominal active and
+passive comparisons reuse standard definitions. The `paper-standard`,
+`paper-nulim`, and `paper-heat-flux` workflows require explicit production
+authorization; the presence of these decks is not evidence that paper-scale
+runs have been executed.
 
 For CGL `mhd_w` or `mhd_w_bcc` output, the existing `eint` field retains its
 legacy meaning of `p_parallel`; output now also includes `p_perp`. Paper

@@ -122,6 +122,8 @@ python3 scripts/cgl_lf_workflow.py paper-standard \
   --authorize-paper-execution --output-dir /path/to/archive/run
 python3 scripts/cgl_lf_workflow.py paper-nulim \
   --authorize-paper-execution --output-dir /path/to/archive/run
+python3 scripts/cgl_lf_workflow.py paper-heat-flux \
+  --authorize-paper-execution --output-dir /path/to/archive/run
 ```
 
 Their inputs use `192x192x384`, `tlim = 10`, full-field binary snapshots,
@@ -129,8 +131,11 @@ checkpoints, and the `t = [8,10]` analysis window. Without
 `--authorize-paper-execution` the workflow rejects these expensive modes
 before creating a run bundle. The nine `paper-standard` definitions include
 the eight active/passive, Alfvenic/random beta-10/beta-100 histories plotted
-in MKS24 Figure 2(b), plus the active Alfvenic beta-1 case. Defining these
-inputs does not constitute a paper-standard execution or reproduction result.
+in MKS24 Figure 2(b), plus the active Alfvenic beta-1 case. The two
+`paper-heat-flux` definitions add the nonnominal active beta-10 Figure 12
+heat-flux cases; the nominal active and passive comparisons reuse standard
+definitions. Defining these inputs does not constitute paper-standard
+execution or a reproduction result.
 In CGL primitive snapshots, legacy `eint` is `p_parallel` and the dedicated
 `p_perp` output supplies the perpendicular pressure required for paper
 anisotropy analysis.
@@ -351,8 +356,8 @@ For real runs the utility requires all source, executable, input, and output
 locations beneath `/lustre/orion/ast207/proj-shared/dfielding/CGL`, limits
 debug walltime to two hours, reserves against the 1000 node-hour testing
 budget, checks that no other debug job is queued, and rejects
-`paper-standard` and `paper-nulim` inputs. Paper-production simulations must
-not be run through this debug-only workflow.
+`paper-standard`, `paper-nulim`, and `paper-heat-flux` inputs.
+Paper-production simulations must not be run through this debug-only workflow.
 
 ## Diagnostics
 

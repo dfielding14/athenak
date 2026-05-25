@@ -277,10 +277,14 @@ def validate_debug_input(path: Path) -> None:
 
     lower_name = path.name.lower()
     text = path.read_text(encoding="utf-8").lower()
-    if "paper_standard" in lower_name or "paper_nulim" in lower_name:
+    if (
+        "paper_standard" in lower_name
+        or "paper_nulim" in lower_name
+        or "paper_heat_flux" in lower_name
+    ):
         raise ValueError(
-            "paper-standard and limiter-production inputs may not be "
-            "prepared for Frontier debug execution"
+            "paper-standard, limiter-production, and heat-flux-production "
+            "inputs may not be prepared for Frontier debug execution"
         )
     if re.search(r"(?m)^\s*paper_grade\s*=\s*(true|1)\b", text):
         raise ValueError(
@@ -956,6 +960,17 @@ def self_test() -> int:
             rejected_production = True
         if not rejected_production:
             raise ValueError("self-test failed to reject production input")
+        heat_flux = Path(directory) / "cgl_lf_paper_heat_flux_beta10_strong.athinput"
+        heat_flux.write_text("<problem>\npaper_grade = false\n", encoding="utf-8")
+        arguments.run_name = "bad_heat_flux_production"
+        arguments.input_file = str(heat_flux)
+        rejected_heat_flux = False
+        try:
+            prepare(arguments)
+        except ValueError:
+            rejected_heat_flux = True
+        if not rejected_heat_flux:
+            raise ValueError("self-test failed to reject heat-flux production input")
     print("Frontier CGL-LF campaign utility self-test passed.")
     return 0
 

@@ -540,6 +540,18 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
                 prefix + "cgl_lf_paper_nulim_beta100_hardwall.athinput",
             ),
         ]
+    if workflow == "paper-heat-flux":
+        prefix = "inputs/cgl_lf_paper/"
+        return [
+            CaseSpec(
+                "paper_heat_flux_beta10_strong",
+                prefix + "cgl_lf_paper_heat_flux_beta10_strong.athinput",
+            ),
+            CaseSpec(
+                "paper_heat_flux_beta10_weak",
+                prefix + "cgl_lf_paper_heat_flux_beta10_weak.athinput",
+            ),
+        ]
     if workflow == "accuracy":
         cases: list[CaseSpec] = []
         decay_inputs = {
@@ -1459,7 +1471,7 @@ def execute_workflow(args: argparse.Namespace, paths: RunPaths) -> int:
     """Execute one AthenaK workflow and write a result bundle."""
 
     if (
-        args.workflow in ("paper-standard", "paper-nulim")
+        args.workflow in ("paper-standard", "paper-nulim", "paper-heat-flux")
         and not args.authorize_paper_execution
     ):
         raise ValueError(
@@ -1572,8 +1584,8 @@ def parser() -> argparse.ArgumentParser:
         "workflow",
         choices=(
             "quick", "compare", "amr", "paper-smoke", "paper-standard",
-            "paper-convergence", "paper-nulim", "paper-analyze", "paper-summary",
-            "accuracy", "full", "plot",
+            "paper-convergence", "paper-nulim", "paper-heat-flux",
+            "paper-analyze", "paper-summary", "accuracy", "full", "plot",
             "summarize",
         ),
     )
@@ -1608,7 +1620,7 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument(
         "--authorize-paper-execution",
         action="store_true",
-        help="Permit expensive paper-standard or paper-nulim simulations.",
+        help="Permit expensive paper-standard, paper-nulim, or heat-flux simulations.",
     )
     return command
 
@@ -1619,7 +1631,7 @@ def main() -> int:
     args = parser().parse_args()
     try:
         if (
-            args.workflow in ("paper-standard", "paper-nulim")
+            args.workflow in ("paper-standard", "paper-nulim", "paper-heat-flux")
             and not args.authorize_paper_execution
         ):
             raise ValueError(

@@ -694,7 +694,10 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
     input_paths += sorted(
         PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_nulim_*.athinput")
     )
-    assert len(input_paths) == 12
+    input_paths += sorted(
+        PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_heat_flux_*.athinput")
+    )
+    assert len(input_paths) == 14
     standard_input_names = {
         path.name
         for path in PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_standard_*.athinput")
@@ -704,6 +707,17 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         for case in workflow.workflow_cases("paper-standard")
     }
     assert workflow_standard_names == standard_input_names
+    heat_flux_input_names = {
+        path.name
+        for path in PAPER_PRODUCTION_INPUT_ROOT.glob(
+            "cgl_lf_paper_heat_flux_*.athinput"
+        )
+    }
+    workflow_heat_flux_names = {
+        Path(case.input_path).name
+        for case in workflow.workflow_cases("paper-heat-flux")
+    }
+    assert workflow_heat_flux_names == heat_flux_input_names
     hardwall_paths = {
         "cgl_lf_paper_standard_active_alfvenic_beta1.athinput",
         "cgl_lf_paper_standard_active_alfvenic_beta10.athinput",
@@ -715,6 +729,8 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         "cgl_lf_paper_standard_passive_random_beta10.athinput",
         "cgl_lf_paper_standard_passive_random_beta100.athinput",
         "cgl_lf_paper_nulim_beta100_hardwall.athinput",
+        "cgl_lf_paper_heat_flux_beta10_strong.athinput",
+        "cgl_lf_paper_heat_flux_beta10_weak.athinput",
     }
     for input_path in input_paths:
         source = input_path.read_text()
