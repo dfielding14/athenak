@@ -27,6 +27,11 @@ out explicitly.
 [Download the illustrated CGL-LF validation and MKS24 analysis note
 (PDF)](../_static/cgl_lf_validation.pdf)
 
+The execution plan for expanding that note into a weak-guide-field turbulence
+manuscript is maintained in
+`docs/cgl_lf_weak_guide_manuscript_plan.md`. Manuscript prose and claim
+discipline are governed by the recovered `docs/writing_style_guide.md`.
+
 The manual suite covers:
 
 - collisionless and finite-collision parallel and perpendicular damping;
