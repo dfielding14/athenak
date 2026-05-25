@@ -59,30 +59,6 @@ CURVES = {
         "alignment_peak.cos_theta",
         "linear",
     ),
-    ("bottom", "0.4941 0.1843 0.5569", "solid"): (
-        "fig12_spectrum_weak_heat_flux",
-        "paper_heat_flux_beta10_weak",
-        "spectra.grad_parallel_delta_p",
-        "loglog",
-    ),
-    ("bottom", "0.851 0.3255 0.098", "solid"): (
-        "fig12_spectrum_nominal_active",
-        "paper_standard_active_alfvenic_beta10",
-        "spectra.grad_parallel_delta_p",
-        "loglog",
-    ),
-    ("bottom", "0.851 0.3255 0.098", "dashed"): (
-        "fig12_spectrum_nominal_passive",
-        "paper_standard_passive_alfvenic_beta10",
-        "spectra.grad_parallel_delta_p",
-        "loglog",
-    ),
-    ("bottom", "0 0.4471 0.7412", "solid"): (
-        "fig12_spectrum_strong_heat_flux",
-        "paper_heat_flux_beta10_strong",
-        "spectra.grad_parallel_delta_p",
-        "loglog",
-    ),
 }
 
 
@@ -203,13 +179,8 @@ def write_curves(source_figure: Path, output_dir: Path) -> Path:
             writer = csv.writer(stream)
             writer.writerow(("x", "y", "y_uncertainty"))
             for x, y in curves[key]:
-                uncertainty = (
-                    ALIGNMENT_Y_UNCERTAINTY
-                    if key[0] == "top"
-                    else SPECTRUM_RELATIVE_Y_UNCERTAINTY * y
-                )
                 writer.writerow(
-                    (f"{x:.17g}", f"{y:.17g}", f"{uncertainty:.17g}")
+                    (f"{x:.17g}", f"{y:.17g}", f"{ALIGNMENT_Y_UNCERTAINTY:.17g}")
                 )
         point_counts[curve_id] = len(curves[key])
         entries.append(
@@ -234,11 +205,12 @@ def write_curves(source_figure: Path, output_dir: Path) -> Path:
             "source_figure_sha256": digest,
             "digitization_tool": Path(__file__).name,
             "uncertainty_description": (
-                "Absolute |cos(theta)| uncertainty 0.005 for the top panel "
-                "and five-percent spectral uncertainty for the logarithmic "
-                "bottom panel, conservatively covering plotted stroke width "
-                "and tick-calibrated coordinate mapping; vertices clipped at "
-                "the horizontal plot limits are omitted."
+                "Absolute |cos(theta)| uncertainty 0.005 for the top-panel "
+                "alignment curves, conservatively covering plotted stroke "
+                "width and tick-calibrated coordinate mapping; vertices "
+                "clipped at the horizontal plot limits are omitted. The "
+                "dimensionful lower-panel spectrum is excluded pending a "
+                "paper-to-AthenaK code-unit transform."
             ),
         },
         "curves": entries,
@@ -263,6 +235,13 @@ def write_curves(source_figure: Path, output_dir: Path) -> Path:
         "spectrum_relative_y_uncertainty": SPECTRUM_RELATIVE_Y_UNCERTAINTY,
         "point_counts": point_counts,
         **extraction,
+        "excluded_curves": {
+            "bottom_panel_spectra.grad_parallel_delta_p": (
+                "The plotted gradient spectrum is dimensionful; MKS24's "
+                "reported p0 code-unit scale is not yet reconciled with "
+                "AthenaK's v_A=1 normalization."
+            ),
+        },
         "curve_manifest": manifest_path.name,
         "curve_manifest_sha256": sha256_file(manifest_path),
     }

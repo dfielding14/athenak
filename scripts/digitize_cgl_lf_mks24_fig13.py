@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract directly comparable MKS24 Figure 13 curves from vector PDFs."""
+"""Extract dimensionless, directly comparable MKS24 Figure 13 curves."""
 
 from __future__ import annotations
 
@@ -29,13 +29,6 @@ EXPECTED_FIGURE_SHA256 = {
     ),
 }
 PANEL_CONFIG = {
-    "fig13a.pdf": {
-        "plot": (83.0, 575.0, 16.0, 166.0),
-        "group": re.compile(
-            rb"q\n6 0 0 6 543 2531\.99975586 cm\n(.*?)\nQ", re.DOTALL
-        ),
-        "marker": b"83 166 m",
-    },
     "fig13b.pdf": {
         "plot": (60.0, 279.0, 19.0, 215.0),
         "group": re.compile(
@@ -49,27 +42,8 @@ POINT_RE = re.compile(
     re.MULTILINE,
 )
 COLOR_RE = re.compile(r"^([0-9.]+ [0-9.]+ [0-9.]+) RG$", re.MULTILINE)
-SPECTRUM_RELATIVE_Y_UNCERTAINTY = 0.05
 PDF_RELATIVE_Y_UNCERTAINTY = 0.05
 CURVES = {
-    ("fig13a.pdf", "0 0.4471 0.7412", "solid"): (
-        "fig13a_velocity_nulim_20",
-        "paper_nulim_beta100_20",
-        "spectra.velocity",
-        "loglog",
-    ),
-    ("fig13a.pdf", "0.851 0.3255 0.098", "solid"): (
-        "fig13a_velocity_nulim_200",
-        "paper_nulim_beta100_200",
-        "spectra.velocity",
-        "loglog",
-    ),
-    ("fig13a.pdf", "0.4941 0.1843 0.5569", "solid"): (
-        "fig13a_velocity_nulim_hardwall",
-        "paper_nulim_beta100_hardwall",
-        "spectra.velocity",
-        "loglog",
-    ),
     ("fig13b.pdf", "0 0.4471 0.7412", "solid"): (
         "fig13b_beta_delta_nulim_20",
         "paper_nulim_beta100_20",
@@ -129,15 +103,8 @@ def pdf_content(pdf: bytes, marker: bytes) -> bytes:
 def map_coordinate(panel: str, raw_x: float, raw_y: float) -> tuple[float, float]:
     """Map plotted vector coordinates onto the panel's physical axes."""
 
-    if panel == "fig13a.pdf":
-        x = 10.0 * 10.0 ** (
-            (raw_x - 139.87391663) / (421.67892456 - 139.87391663)
-        )
-        y = 1.0e-2 * 10.0 ** (
-            -(raw_y - 26.50599861)
-            * 3.0 / (123.056839 - 26.50599861)
-        )
-        return x, y
+    if panel != "fig13b.pdf":
+        raise ValueError(f"no admitted coordinate mapping for {panel}")
     x = -3.0 + (raw_x - 60.0) / (279.0 - 60.0) * 5.0
     y = 10.0 ** (
         -(raw_y - 36.87377167) * 2.0 / (155.62458801 - 36.87377167)
@@ -215,11 +182,9 @@ def write_curves(source_dir: Path, output_dir: Path) -> Path:
             writer = csv.writer(stream)
             writer.writerow(("x", "y", "y_uncertainty"))
             for x, y in curves[key]:
-                relative = (
-                    SPECTRUM_RELATIVE_Y_UNCERTAINTY
-                    if key[0] == "fig13a.pdf" else PDF_RELATIVE_Y_UNCERTAINTY
+                writer.writerow(
+                    (f"{x:.17g}", f"{y:.17g}", f"{PDF_RELATIVE_Y_UNCERTAINTY * y:.17g}")
                 )
-                writer.writerow((f"{x:.17g}", f"{y:.17g}", f"{relative * y:.17g}"))
         point_counts[curve_id] = len(curves[key])
         entries.append(
             {
@@ -236,8 +201,8 @@ def write_curves(source_dir: Path, output_dir: Path) -> Path:
         "provenance": {
             "method": "digitized",
             "source_description": (
-                "MKS24 arXiv:2405.02418v2 source/fig13a.pdf and "
-                "source/fig13b.pdf; vector polyline vertices extracted "
+                "MKS24 arXiv:2405.02418v2 source/fig13b.pdf; "
+                "vector polyline vertices extracted "
                 "through tick-calibrated plotted axes"
             ),
             "source_figures": [
@@ -245,14 +210,15 @@ def write_curves(source_dir: Path, output_dir: Path) -> Path:
                     "source_figure": name,
                     "source_figure_sha256": digests[name],
                 }
-                for name in ("fig13a.pdf", "fig13b.pdf")
+                for name in ("fig13b.pdf",)
             ],
             "digitization_tool": Path(__file__).name,
             "uncertainty_description": (
-                "Five-percent relative y uncertainty for directly comparable "
-                "kinetic-spectrum and beta-Delta PDF curves, conservatively "
-                "covering plotted stroke width and tick-calibrated mapping; "
-                "vertices clipped at plotting boundaries are omitted."
+                "Five-percent relative y uncertainty for dimensionless "
+                "beta-Delta PDF curves, conservatively covering plotted "
+                "stroke width and tick-calibrated mapping; vertices clipped "
+                "at plotting boundaries are omitted. Dimensionful panels are "
+                "excluded pending a paper-to-AthenaK code-unit transform."
             ),
         },
         "curves": entries,
@@ -264,25 +230,26 @@ def write_curves(source_dir: Path, output_dir: Path) -> Path:
     metadata = {
         "source_figure_sha256": digests,
         "axis_mapping": {
-            "fig13a.pdf": {
-                "x_log_ticks": [[139.87391663, 10.0], [421.67892456, 100.0]],
-                "y_log_ticks": [[26.50599861, 1.0e-2], [123.056839, 1.0e-5]],
-            },
             "fig13b.pdf": {
                 "x_linear_ticks": [[60.0, -3.0], [279.0, 2.0]],
                 "y_log_ticks": [[36.87377167, 1.0], [155.62458801, 1.0e-2]],
             },
         },
         "relative_y_uncertainty": {
-            "spectra.velocity": SPECTRUM_RELATIVE_Y_UNCERTAINTY,
             "pdf.beta_delta": PDF_RELATIVE_Y_UNCERTAINTY,
         },
         "point_counts": point_counts,
         "clipped_vertices_omitted": clipped,
         "excluded_panels": {
+            "fig13a.pdf": (
+                "The plotted kinetic spectrum is dimensionful; MKS24's "
+                "reported p0 code-unit scale is not yet reconciled with "
+                "AthenaK's v_A=1 normalization."
+            ),
             "fig13c.pdf": (
-                "The plotted strain PDF includes a magnetic-field "
-                "normalization not represented by pdf.bb_grad_velocity."
+                "The plotted strain PDF uses "
+                "bhat bhat : grad(u) / <B^2>; its scale requires the "
+                "unresolved paper-to-AthenaK code-unit transform."
             ),
             "fig13d.pdf": (
                 "The plotted pressure-transfer ratio includes T_total; "

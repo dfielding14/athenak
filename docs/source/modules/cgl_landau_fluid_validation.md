@@ -177,9 +177,12 @@ is supplied, it validates curve/source checksums and reported pointwise
 uncertainties, computes uncertainty-normalized residuals for supported
 snapshot products and threshold-volume history series, and renders
 `paper_reference_comparisons.pdf`. Figure 2(b) vector-curve extraction is
-available below, together with Figure 12 alignment/spectrum extraction and
-the directly comparable Figure 13(a)-(b) limiter curves; remaining MKS24
-panel curves, exact
+available below, together with dimensionless Figure 12 alignment extraction
+and dimensionless Figure 13(b) limiter-PDF curves. Dimensional Figure 12
+spectra and Figure 13(a),(c) curves remain excluded because the paper's
+reported code-unit pressure scale is not yet transformed to the AthenaK
+`v_A = 1` convention; Figure 13(d) additionally requires `T_total`.
+Remaining MKS24 panel curves, exact
 time-integrated/production local budget closure, and production comparisons
 remain to be completed. For retained LF histories, the analyzer
 also reports the RKL2-applied capped-face heat-flux contractions retained in
@@ -296,47 +299,50 @@ writes the eight active/passive unstable-volume histories as CSV curves. It
 records an absolute `0.0025` plotted-line digitization uncertainty and omits
 vertices hidden above the panel's `0.8` vertical limit.
 
-For Figure 12, extract both the alignment-peak and
-`grad_parallel_delta_p` spectrum paths from the pinned source PDF:
+For Figure 12, extract the alignment-peak paths from the pinned source PDF:
 
 ```bash
 python3 scripts/digitize_cgl_lf_mks24_fig12.py \
   /path/to/arXiv-2405.02418v2/source/fig12.pdf \
-  /path/to/arXiv-2405.02418v2/digitized_fig12_v1
+  /path/to/arXiv-2405.02418v2/digitized_fig12_v2
 ```
 
 This extractor maps four active/passive heat-flux cases to
-`alignment_peak.cos_theta` and `spectra.grad_parallel_delta_p`, using
-absolute `0.005` top-panel uncertainty and five-percent logarithmic-spectrum
-uncertainty. It omits vertices clipped at the horizontal plot boundaries and
-records its recommended alignment shells. At the standard domain size, a
-Figure 12 comparison can request those shell centers directly; the workflow
-archives that selection in its analysis-product metadata:
+`alignment_peak.cos_theta`, using absolute `0.005` top-panel uncertainty. It
+omits vertices clipped at the horizontal plot boundaries and records its
+recommended alignment shells. The lower-panel
+`spectra.grad_parallel_delta_p` curves are not emitted because their
+dimensionful scale cannot be compared until the paper-to-AthenaK code-unit
+conversion is qualified. At the standard domain size, a Figure 12 comparison
+can request the admitted shell centers directly; the workflow archives that
+selection in its analysis-product metadata:
 
 ```bash
 python3 scripts/cgl_lf_workflow.py paper-analyze \
   --output-dir /path/to/existing/bundle \
   --alignment-shells 8,12,16,17,20,24,27,28,32,36,37,40,44,47,48,52,\
 56,57,60,64,67,68,72,76,77,80,84,87,88,92 \
-  --reference-curves /path/to/arXiv-2405.02418v2/digitized_fig12_v1/curves.json
+  --reference-curves /path/to/arXiv-2405.02418v2/digitized_fig12_v2/curves.json
 ```
 
-For Figure 13, extract the directly comparable kinetic-energy spectra and
-`beta Delta` PDF paths from the four checksum-pinned panel PDFs:
+For Figure 13, extract the directly comparable dimensionless `beta Delta` PDF
+paths from the four checksum-pinned panel PDFs:
 
 ```bash
 python3 scripts/digitize_cgl_lf_mks24_fig13.py \
   /path/to/arXiv-2405.02418v2/source \
-  /path/to/arXiv-2405.02418v2/digitized_fig13_v1
+  /path/to/arXiv-2405.02418v2/digitized_fig13_v2
 ```
 
-The extractor maps panel (a) to `spectra.velocity` for the three
-`paper-nulim` cases and panel (b) to `pdf.beta_delta` for those cases plus
-the passive beta-100 comparison. It records five-percent relative
-digitization uncertainty and omits plotted-boundary-clipped vertices.
-Panels (c) and (d) are copied and checksum-recorded for audit context but
-are not emitted as comparison curves: their plotted strain and transfer
-quantities contain normalizations not yet exposed as analyzer products.
+The extractor maps panel (b) to `pdf.beta_delta` for the three
+`paper-nulim` cases plus the passive beta-100 comparison. It records
+five-percent relative digitization uncertainty and omits
+plotted-boundary-clipped vertices. Panels (a), (c), and (d) are copied and
+checksum-recorded for audit context but are not emitted as comparison curves.
+Panel (a) is dimensionful, panel (c) is plotted as
+`bhat bhat : grad(u) / <B^2>`, and panel (d) is plotted as
+`T_Delta p / T_total`; none currently has a qualified AthenaK comparison
+product under the paper code-unit evidence.
 
 Other quantitative panels still require a recorded digitization procedure,
 a matching analyzer product, or a separately provenance-tracked numerical
@@ -353,6 +359,8 @@ columns; its entry records `data_sha256`, target analysis `case`, supported
 `alignment_peak.cos_theta` or `history.unstable_fraction`), and optional
 `interpolation` (`linear` or `loglog`). The analyzer fails closed on missing
 uncertainty, checksum mismatches, or out-of-domain coordinates.
+Dimensionful paper curves must additionally be withheld from such a manifest
+until their paper-to-AthenaK normalization is explicitly established.
 
 ## Frontier Debug Qualification Preparation
 

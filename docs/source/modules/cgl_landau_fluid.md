@@ -235,9 +235,13 @@ transfer, selected-shell alignment-distribution, alignment-peak-versus-
 `paper-analyze` when a comparison manifest requires an alignment-peak curve
 over additional shells.
 The staged-reference tooling includes pinned vector extraction for Figure
-2(b), Figure 12, and the directly comparable kinetic-spectrum and
-`beta Delta` PDF curves in Figure 13(a)-(b). Figure 13(c)-(d) remain
-excluded until their plotted normalizations are exposed as analysis products.
+2(b), the dimensionless Figure 12 alignment curves, and the dimensionless
+`beta Delta` PDF curves in Figure 13(b). The paper states `p0 = 100` in code
+units for its beta-100 limiter runs, while the equivalent AthenaK
+`v_A = 1` normalization uses `p0 = 50`; until an explicit observable
+conversion is qualified, dimensional Figure 12 spectra and Figure 13(a),(c)
+curves are retained only as excluded audit context. Figure 13(d) also remains
+excluded until its `T_total` denominator is defined as an analysis product.
 These products are analysis infrastructure; they do not by themselves
 establish statistically converged paper comparisons.
 
