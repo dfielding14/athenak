@@ -202,8 +202,11 @@ the nonnominal active beta-10 Figure 12 variants; its nominal active and
 passive comparisons reuse standard definitions. Two `paper-scale-separation`
 definitions supply the nonstandard `n_perp = 96` and `384` Figure 11 cases;
 its `n_perp = 192` comparison reuses the standard active Alfvenic beta-10
-definition. The `paper-standard`, `paper-nulim`, `paper-heat-flux`, and
-`paper-scale-separation` workflows require explicit production authorization;
+definition. Two `paper-compressive` definitions supply the active random
+beta-1 and beta-100 sonic-correlation Figure 3 cases; four other Figure 3
+cases reuse standard definitions. The `paper-standard`, `paper-nulim`,
+`paper-heat-flux`, `paper-compressive`, and `paper-scale-separation`
+workflows require explicit production authorization;
 the presence of these decks is not evidence that paper-scale runs have been
 executed.
 
@@ -247,8 +250,8 @@ They also include the Figure 3 compressive-flow projection
 separate `p_parallel`, `p_perp`, and AthenaK `B^2/2` spectra needed for
 Figures 4(b) and 6(a). The products are rendered for inspection, but their
 paper curves remain excluded until spectral ordinate transformations are
-qualified; Figure 3's sonic-correlation run definitions are not yet in the
-guarded production matrix.
+qualified. Figure 3's sonic-correlation and beta-1 random definitions now
+exist under the guarded `paper-compressive` workflow, but have not been run.
 With `--reference-curves <manifest.json>`, `paper-analyze` also accepts
 external numerical or digitized curves only when their manifest records
 provenance, SHA-256 digests, and positive per-point `y_uncertainty` values.

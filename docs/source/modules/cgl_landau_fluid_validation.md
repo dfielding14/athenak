@@ -124,11 +124,13 @@ python3 scripts/cgl_lf_workflow.py paper-nulim \
   --authorize-paper-execution --output-dir /path/to/archive/run
 python3 scripts/cgl_lf_workflow.py paper-heat-flux \
   --authorize-paper-execution --output-dir /path/to/archive/run
+python3 scripts/cgl_lf_workflow.py paper-compressive \
+  --authorize-paper-execution --output-dir /path/to/archive/run
 python3 scripts/cgl_lf_workflow.py paper-scale-separation \
   --authorize-paper-execution --output-dir /path/to/archive/run
 ```
 
-The standard, limiter, and heat-flux inputs use `192x192x384`; the
+The standard, limiter, heat-flux, and compressive inputs use `192x192x384`; the
 scale-separation workflow adds `96x96x192` and `384x384x768` around its
 reused standard-resolution case. All use `tlim = 10`, full-field binary
 snapshots, checkpoints, and the `t = [8,10]` analysis window. Without
@@ -138,7 +140,10 @@ the eight active/passive, Alfvenic/random beta-10/beta-100 histories plotted
 in MKS24 Figure 2(b), plus the active Alfvenic beta-1 case. The two
 `paper-heat-flux` definitions add the nonnominal active beta-10 Figure 12
 heat-flux cases; the nominal active and passive comparisons reuse standard
-definitions. The two `paper-scale-separation` definitions add the nonstandard
+definitions. The two `paper-compressive` definitions add the active random
+beta-1 and beta-100 sonic-correlation cases required by Figure 3; its other
+four plotted cases reuse standard definitions. The two
+`paper-scale-separation` definitions add the nonstandard
 active Alfvenic beta-10 Figure 11 resolutions; the `n_perp = 192` comparison
 reuses its standard definition. Defining these inputs does not constitute
 paper-standard execution or a reproduction result.
@@ -204,8 +209,9 @@ products and AthenaK magnetic-pressure product `B^2/2` supply the fields
 needed for Figure 6(a), and `spectra.density_fluctuation` supplies a
 mean-normalized density diagnostic for Figure 4(b). These products do not
 admit the plotted MKS24 spectral curves: their ordinate transforms remain
-unqualified, and Figure 3 additionally requires sonic-correlation case
-definitions that are not in the current guarded matrix.
+unqualified. Figure 3's previously missing sonic-correlation and beta-1
+random cases are now definition-only entries in the guarded
+`paper-compressive` workflow; they have not been executed.
 
 The analyzer runs synthetic binning/gradient/transfer/alignment and
 heat-flux-sign/pressure-work checks and renders available history, PDF,
@@ -238,7 +244,7 @@ structure functions. Figure 2(a)'s matching joint product is implemented,
 but its pressure-scaled raster remains unadmitted. Figure 3 and Figure 6(a)
 now have matching emitted spectral fields, and Figure 4(b) has an explicit
 normalized-density spectral product; their plotted spectral ordinates remain
-unadmitted pending qualified transformations and complete case coverage.
+unadmitted pending qualified transformations and authorized case execution.
 Remaining dimensional, spectral-normalization, or unqualified raster MKS24
 panels, exact
 time-integrated/production local budget closure, and production comparisons
@@ -580,7 +586,7 @@ For real runs the utility requires all source, executable, input, and output
 locations beneath `/lustre/orion/ast207/proj-shared/dfielding/CGL`, limits
 debug walltime to two hours, reserves against the 1000 node-hour testing
 budget, checks that no other debug job is queued, and rejects
-`paper-standard`, `paper-nulim`, `paper-heat-flux`, and
+`paper-standard`, `paper-nulim`, `paper-heat-flux`, `paper-compressive`, and
 `paper-scale-separation` inputs.
 Paper-production simulations must not be run through this debug-only workflow.
 

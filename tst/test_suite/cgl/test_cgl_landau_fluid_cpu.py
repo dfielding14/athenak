@@ -698,11 +698,14 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_heat_flux_*.athinput")
     )
     input_paths += sorted(
+        PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_compressive_*.athinput")
+    )
+    input_paths += sorted(
         PAPER_PRODUCTION_INPUT_ROOT.glob(
             "cgl_lf_paper_scale_separation_*.athinput"
         )
     )
-    assert len(input_paths) == 16
+    assert len(input_paths) == 18
     standard_input_names = {
         path.name
         for path in PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_standard_*.athinput")
@@ -723,6 +726,22 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         for case in workflow.workflow_cases("paper-heat-flux")
     }
     assert workflow_heat_flux_names == heat_flux_input_names
+    compressive_input_names = {
+        path.name
+        for path in PAPER_PRODUCTION_INPUT_ROOT.glob(
+            "cgl_lf_paper_compressive_*.athinput"
+        )
+    }
+    workflow_compressive_names = {
+        Path(case.input_path).name
+        for case in workflow.workflow_cases("paper-compressive")
+    }
+    assert workflow_compressive_names == compressive_input_names | {
+        "cgl_lf_paper_standard_active_alfvenic_beta100.athinput",
+        "cgl_lf_paper_standard_active_random_beta100.athinput",
+        "cgl_lf_paper_standard_active_random_beta10.athinput",
+        "cgl_lf_paper_standard_passive_random_beta100.athinput",
+    }
     scale_separation_input_names = {
         path.name
         for path in PAPER_PRODUCTION_INPUT_ROOT.glob(
@@ -749,6 +768,8 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         "cgl_lf_paper_nulim_beta100_hardwall.athinput",
         "cgl_lf_paper_heat_flux_beta10_strong.athinput",
         "cgl_lf_paper_heat_flux_beta10_weak.athinput",
+        "cgl_lf_paper_compressive_active_random_beta1.athinput",
+        "cgl_lf_paper_compressive_active_random_beta100_sonic.athinput",
         "cgl_lf_paper_scale_separation_beta10_nperp96.athinput",
         "cgl_lf_paper_scale_separation_beta10_nperp384.athinput",
     }
@@ -785,21 +806,35 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         assert (
             choices["mesh_nx1"], choices["mesh_nx2"], choices["mesh_nx3"]
         ) == expected
-    denied = subprocess.run(
-        [
-            "python3",
-            str(PAPER_WORKFLOW_PATH),
-            "paper-scale-separation",
-            "--output-dir",
-            "cgl_ci_denied_scale_separation",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert denied.returncode != 0
-    assert "--authorize-paper-execution" in denied.stderr
-    assert not Path("cgl_ci_denied_scale_separation").exists()
+    compressive_parameters = {
+        "cgl_lf_paper_compressive_active_random_beta1.athinput": ("1.0", "2.0"),
+        "cgl_lf_paper_compressive_active_random_beta100_sonic.athinput": (
+            "100.0", "0.2"
+        ),
+    }
+    for name, (beta0, tcorr) in compressive_parameters.items():
+        source = (PAPER_PRODUCTION_INPUT_ROOT / name).read_text()
+        choices = workflow.model_choices(source, [])
+        assert choices["beta0"] == beta0
+        assert choices["forcing_mode"] == "isotropic_random"
+        assert choices["forcing_tcorr"] == tcorr
+    for workflow_name in ("paper-compressive", "paper-scale-separation"):
+        output_dir = f"cgl_ci_denied_{workflow_name.replace('-', '_')}"
+        denied = subprocess.run(
+            [
+                "python3",
+                str(PAPER_WORKFLOW_PATH),
+                workflow_name,
+                "--output-dir",
+                output_dir,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert denied.returncode != 0
+        assert "--authorize-paper-execution" in denied.stderr
+        assert not Path(output_dir).exists()
 
 
 def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():

@@ -85,7 +85,9 @@ Fourier-projected compressive-flow spectrum and the Figure 4(b)/6(a)
 normalized-density and separate thermal/magnetic-pressure spectral fields now
 emit with explicit normalization metadata and generic rendering; their
 published spectral ordinates remain excluded pending qualified transforms, and
-Figure 3 still requires its sonic-correlation production definitions. The
+two guarded `paper-compressive` definitions now supply Figure 3's missing
+active random beta-1 and beta-100 sonic-correlation cases without authorizing
+execution. The
 production interpretation of the applied local-work ledgers, Frontier
 production execution, and production-run phases remain
 open. A tracked Frontier debug-campaign
@@ -225,9 +227,9 @@ test or run evidence.
 | CPU numerical accuracy | Convergence, asymptotic, cap, directional, restart, MPI/AMR checks | Yes | Partial 2026-05-25; archived `accuracy-v2` bundle covers N-001 through N-007 locally, the AMR workflow passed, and the full CPU suite passed (`218 passed, 15 skipped`); focused CGL tests now pass (`30 passed`) with corrected RK forcing work, restartable AMR-corrected applied CGL pressure work, and the F-033 algebraic hard-wall policy; Frontier Kokkos-Serial/MPI jobs `4659053`/`4659141` pass the one-rank/four-rank AMR oracle at `rtol = atol = 1.0e-12`, although direct invocation in the local shell remains unavailable because it lacks `mpirun` |
 | Frontier GPU numerical equivalence | CPU/GPU comparison suite, MPI/GPU restart checks, strict diagnostics | Yes for Frontier use | Partial 2026-05-25; immutable HIP/MPI builds archived; G-001 through G-007 pass their retained reduced gates; post-F-026 jobs `4658072`/`4658163` pass restart comparison for `lf_cpwrk`/`lf_cawrk`, `4658191`/`4658283` pass one-rank/four-rank GPU AMR comparison, policy-confirmation job `4659663` is identical to its pre-policy reference, and F-033 corrected nonlinear job G013 (`4673404`) passes through `t = 2.0` with zero strict safety counters; production-scale execution remains open |
 | Paper pgen and forcing fidelity | Input/pgen review, forcing metadata, restartable reduced smoke | Yes for MKS24 claims | Partial 2026-05-25; active/passive/random reduced smoke, forcing restart, OU cadence, multi-cycle RK-companion source-work checks, passive flow-decoupling checks, and Frontier G-007 reduced-paper matrix passed; paper-grade statistical calibration open |
-| Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Partial 2026-05-25; reduced histories, restartable RK-integrated applied forcing work/global active residual, RKL2-applied heat-flux contractions with fine-side AMR ownership, AMR-corrected RK-applied total/anisotropic CGL pressure-work ledgers, operator-face cap counters, windowed snapshot PDF/spectral/transfer/alignment/local-strain products, Figure 2(a)-coordinate joint pressure-density PDFs, Figure 3 compressive-flow spectra, Figure 4(b) normalized-density spectra, Figure 6(a) thermal/magnetic-pressure spectra, MKS24-normalized transfer and alignment-peak curve comparisons, opt-in local-field eddy-anisotropy structure functions, deduplicated threshold-volume history curves, manifest-qualified proxies and cadence-limited estimates, generic figures, checksum/uncertainty-qualified reference-curve comparison plumbing, Figure 2(b) histories, Figure 4(a) normalized-density PDFs, Figure 5(b) normalized eddy scales, Figure 7 lower-panel transfer ratios, Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and Figure 12 alignment curves, and Figure 13(b),(d) dimensionless curves are implemented; the Figure 2(a) raster transform, dimensional/unmatched-panel conversion, missing Figure 3 sonic-correlation case definitions, standard-run comparison, and remaining panel references remain open |
-| Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Nine guarded `paper-standard`, three `paper-nulim`, two `paper-heat-flux`, and two additional `paper-scale-separation` input definitions exist, with Figure 2(b), Figure 11, and Figure 12 case coverage corrected 2026-05-25; no paper-scale runs or scientific figure comparisons executed |
-| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-25; immutable HIP/MPI builds through revision `9e1986df` and earlier Kokkos-Serial/MPI evidence are archived; sequential debug validation through G011 standard-layout startup MPI-I/O sizing, failed G012 finite-rate validation, and passed G013 F-033 corrected nonlinear validation is retained and recorded (`0.851670` node-hours total, no active reservation); a non-authorizing fifteen-unique-run cost/storage proposal including estimated Figure 11 scale-separation increments is documented below and requires user/queue approval plus measured production validation |
+| Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Partial 2026-05-25; reduced histories, restartable RK-integrated applied forcing work/global active residual, RKL2-applied heat-flux contractions with fine-side AMR ownership, AMR-corrected RK-applied total/anisotropic CGL pressure-work ledgers, operator-face cap counters, windowed snapshot PDF/spectral/transfer/alignment/local-strain products, Figure 2(a)-coordinate joint pressure-density PDFs, Figure 3 compressive-flow spectra, Figure 4(b) normalized-density spectra, Figure 6(a) thermal/magnetic-pressure spectra, MKS24-normalized transfer and alignment-peak curve comparisons, opt-in local-field eddy-anisotropy structure functions, deduplicated threshold-volume history curves, manifest-qualified proxies and cadence-limited estimates, generic figures, checksum/uncertainty-qualified reference-curve comparison plumbing, Figure 2(b) histories, Figure 4(a) normalized-density PDFs, Figure 5(b) normalized eddy scales, Figure 7 lower-panel transfer ratios, Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and Figure 12 alignment curves, and Figure 13(b),(d) dimensionless curves are implemented; guarded Figure 3 case definitions are present under `paper-compressive`; the Figure 2(a) raster transform, dimensional/unmatched-panel conversion, standard-run comparison, and remaining panel references remain open |
+| Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Nine guarded `paper-standard`, three `paper-nulim`, two `paper-heat-flux`, two `paper-compressive`, and two additional `paper-scale-separation` input definitions exist, with Figure 2(b), Figure 3, Figure 11, and Figure 12 case coverage corrected 2026-05-25; no paper-scale runs or scientific figure comparisons executed |
+| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-25; immutable HIP/MPI builds through revision `9e1986df` and earlier Kokkos-Serial/MPI evidence are archived; sequential debug validation through G011 standard-layout startup MPI-I/O sizing, failed G012 finite-rate validation, and passed G013 F-033 corrected nonlinear validation is retained and recorded (`0.851670` node-hours total, no active reservation); a non-authorizing seventeen-unique-run cost/storage proposal including Figure 3 and estimated Figure 11 increments is documented below, exceeds the former 1000-node-hour contingency envelope, and requires revised user/queue approval plus measured production validation |
 | User documentation | Sphinx build and accurately scoped runbook | Yes | Implemented for current functionality 2026-05-25; Sphinx warnings-as-errors and repository style suite pass in an isolated validation environment; future campaign results must still be documented when executed |
 | Performance suitability | Representative timing/memory/I/O evidence; no uninvestigated prohibitive bottleneck | Yes for production use | Partial 2026-05-25; G-008 records reduced debug-scale evidence, G010b records reduced shared-MPI-I/O timing, G011 measures startup-only standard-layout memory/file size, and corrected nonlinear G013 reaches `t = 2.0` in `2080` allocated seconds with retained MPI-I/O timing; a conservative scaling proposal is documented, but measured standard-run runtime and approved production execution remain open |
 
@@ -251,7 +253,7 @@ authorization to execute paper-production jobs.
 | Local operator and reduced-workflow implementation | Supported for the exercised local scope only | Full CPU suite (`218 passed, 15 skipped`), focused CGL suite (`30 passed`), retained `accuracy-v2`, `20260525-paper-smoke-pressure-work-v1`, `20260525-paper-convergence-pressure-work-v1`, and `20260525-amr-pressure-work-v1` bundles, F-018 through F-026 regression evidence, F-033 local exact-state hard-wall evidence, and scheduler-launched MPI CPU AMR jobs `4659053`/`4659141` | Production/statistical comparison gates remain open |
 | Validated on Frontier GPU hardware | Supported for the archived reduced qualification cases through F-033 | Immutable HIP/MPI builds; G-001 through G-007 strict/restart/decomposition/reduced-paper records; post-F-026 restart jobs `4658072`/`4658163`, GPU AMR jobs `4658191`/`4658283`, managed-policy confirmation job `4659663`, G010b/G011 I/O evidence, and G013 corrected nonlinear hard-wall job `4673404` | Paper-scale execution, measured standard runtime, and long-time statistical qualification remain open; G012 remains the retained failure of the superseded finite-rate hard-wall interpretation |
 | Production ready for supported CGL-LF use | Not established | Debug policy/accounting tooling, reduced GPU qualification including F-033 G013, MPI CPU AMR evidence, shared-MPI-I/O measurements, a reviewable scaling/storage proposal, and RK/AMR-consistent applied hyperbolic pressure traction histories exist | Measured representative standard runtime, approval of an appropriate production submission, and production/statistical qualification remain required |
-| MKS24 reproduction complete | Not established | Guarded standard/limiter/heat-flux/scale-separation input matrices, paper analysis products including Figure 2(a)-coordinate joint PDFs and Figure 3/4(b)/6(a) spectral fields, checksum/uncertainty-qualified reference-curve comparison interface, populated Figure 2(b) histories, Figure 4(a) normalized-density PDFs, Figure 5(b) normalized eddy-scale curves, dimensionless Figure 7 transfer ratios, Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and Figure 12 alignment curves, and Figure 13(b),(d) curves exist | Qualified Figure 2(a) raster conversion, paper-to-AthenaK transforms for dimensional or unmatched spectral panels, Figure 3 sonic-correlation case definitions, other remaining panel reference data, long-time statistical calibration, authorized standard/limiter/heat-flux/scale-separation runs, quantitative panel comparisons, and archived scientific interpretation remain required |
+| MKS24 reproduction complete | Not established | Guarded standard/limiter/heat-flux/compressive/scale-separation input matrices, paper analysis products including Figure 2(a)-coordinate joint PDFs and Figure 3/4(b)/6(a) spectral fields, checksum/uncertainty-qualified reference-curve comparison interface, populated Figure 2(b) histories, Figure 4(a) normalized-density PDFs, Figure 5(b) normalized eddy-scale curves, dimensionless Figure 7 transfer ratios, Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and Figure 12 alignment curves, and Figure 13(b),(d) curves exist | Qualified Figure 2(a) raster conversion, paper-to-AthenaK transforms for dimensional or unmatched spectral panels, other remaining panel reference data, long-time statistical calibration, authorized standard/limiter/heat-flux/compressive/scale-separation runs, quantitative panel comparisons, and archived scientific interpretation remain required |
 
 The final audit specifically rejects two tempting overclaims:
 
@@ -398,7 +400,8 @@ table such as:
 | F-045 | 2026-05-25 | Corrected remaining-panel boundary after F-043/F-044 | Figure 5(b) is dimensionless but was not representable through existing products: MKS24 defines characteristic parallel/perpendicular eddy lengths through local-field-conditioned structure functions, while the analyzer exposed PDFs, spectra, transfer, and alignment products only. Figure 2(a) remains a joint distribution; Figures 3, 4(b), 5(a), 6, 7 upper, 11 upper, 12 lower, and 13(a),(c) remain dimensional or otherwise unqualified; Figure 10 is a hybrid-kinetic contextual comparison outside direct CGL-LF reproduction. | pinned `source/MKS24.tex:478-496,509-512,530-586,621-650,670-680`; pre-F-046 `scripts/analyze_cgl_lf_paper.py`; extraction manifests through F-044 | High | Do not emit a Figure 5(b) manifest until a validated local-field-conditioned structure-function product and case comparison contract exist; retain F-038 dimensional exclusions and unmatched/out-of-scope panel boundaries | Pinned-source diagnostic/caption audit and analyzer product inventory; no reference data emitted by design | Superseded for Figure 5(b) by F-046; remaining dimensional/unmatched boundaries and production comparison gates remain open |
 | F-046 | 2026-05-25 | Figure 5(b) conditioned-structure-function implementation | MKS24 Figure 5(b) plots dimensionless characteristic parallel/perpendicular eddy lengths for `u_perp` and `B_perp`, but no analyzer product or numeric reference manifest existed after F-045 | pinned `source/MKS24.tex:557-567`; cited Squire structure-function definition/`L_perp` normalization; `source/fig5b.pdf` SHA-256 `8886c425749f97af6f50b7960db071179758e6ea68b79ca547dfe1b163c2e0fe`; `scripts/analyze_cgl_lf_paper.py`; `scripts/digitize_cgl_lf_mks24_fig5b.py`; ignored `digitized_fig5b_v1/curves.json` SHA-256 `45365392e6ff8b173e829639d3409e5c2d4af05c261c9bf817e43cceab5fcde8`; `digitization_metadata.json` SHA-256 `506b08f970468bc51d42153701690d24304458184961067f1b39efed25d68064` | High | Add opt-in deterministic three-point structure functions conditioned within 15 degrees of the local three-point field, invert equal-power perpendicular/parallel scales, archive sampling controls in `paper-analyze`, and vector-extract the four normalized panel curves | Synthetic finite-eddy oracle; comparator product-selection regression; checksum-bound extraction and four-curve manifest-ingestion probe recording eight clipped endpoints | Implemented for Figure 5(b) analysis/reference scope; authorized standard execution and quantitative simulation-to-paper comparison remain open |
 | F-047 | 2026-05-25 | Figure 2(a) joint-product completion and reference-boundary audit | MKS24 Figure 2(a) is a two-dimensional PDF in coordinates `<p> delta rho/<rho>` and `delta p_parallel`/`delta p_perp`, while the analyzer retained only marginal PDFs. Its embedded raster and pressure-scaled ordinate also cannot be quantitatively admitted through the one-dimensional curve interface or the unresolved donor pressure convention. | pinned `source/MKS24.tex:503-512`; `source/fig2a.pdf` SHA-256 `277545ff1a86b5ca46e97fa034ce189f72f149ecbb515470c30996494c1de129`; `scripts/analyze_cgl_lf_paper.py`; `scripts/plot_cgl_lf_paper.py` | High | Emit common-bin per-snapshot and ensemble joint PDFs in the displayed AthenaK coordinates, render the two pressure panels with the `5/3` guide, and retain the raster as excluded comparison context pending a qualified pressure/color-density transform | Synthetic finite joint-PDF and exact `5/3` coordinate oracles plus binary-snapshot product regression; rendered-analysis probe | Implemented for Figure 2(a) analysis-product scope; quantitative raster admission, authorized execution, and simulation-to-paper comparison remain open |
-| F-048 | 2026-05-25 | Figures 3/4(b)/6(a) spectral-product completion | MKS24 requires `E_{khat dot u}` for Figure 3, density-fluctuation spectra for Figure 4(b), and separate `p_parallel`, `p_perp`, and magnetic-pressure spectra for Figure 6(a), but the analyzer previously exposed only total velocity, raw density, magnetic-field, and `Delta p` spectra. Figure 4(b) is vector-extractable, yet its raw `E_rho` ordinate is not qualified against an explicitly normalized AthenaK density product. | pinned `source/MKS24.tex:478-486,522-580`; `fig3a.pdf` SHA-256 `7d2cf6720f390c21f2710eafe86c921c4002859623cd18b6015e79e64afe5932`; `fig3b.pdf` SHA-256 `bce1acabfb0fd9a29dfac893fcf48b75549c34f6c18c516b760b3aefbad13eb0`; `fig4b.pdf` SHA-256 `67764db729df84e6b245b88ffd476a8910962d1fd9224727090615168e8c2e3c`; `fig6a.pdf` SHA-256 `f6afdc345e647dcd71b4982c43bea1b8809ce21f4d1c22ac40bf48bf6a126dff`; analyzer/plotter | High | Emit full-wavevector-projected `spectra.compressive_velocity`, `spectra.density_fluctuation`, and separate `spectra.p_parallel`, `.p_perp`, and `.magnetic_pressure` products with normalization metadata and rendering; retain raw spectral references excluded until their transforms and required Figure 3 sonic-correlation cases are qualified | Synthetic longitudinal/non-compressive Fourier projection oracle plus binary-snapshot product/metadata regression; rendered-analysis probe | Implemented for missing spectral analysis-product scope; reference admission, sonic-correlation input definitions, authorized execution, and quantitative comparisons remain open |
+| F-048 | 2026-05-25 | Figures 3/4(b)/6(a) spectral-product completion | MKS24 requires `E_{khat dot u}` for Figure 3, density-fluctuation spectra for Figure 4(b), and separate `p_parallel`, `p_perp`, and magnetic-pressure spectra for Figure 6(a), but the analyzer previously exposed only total velocity, raw density, magnetic-field, and `Delta p` spectra. Figure 4(b) is vector-extractable, yet its raw `E_rho` ordinate is not qualified against an explicitly normalized AthenaK density product. | pinned `source/MKS24.tex:478-486,522-580`; `fig3a.pdf` SHA-256 `7d2cf6720f390c21f2710eafe86c921c4002859623cd18b6015e79e64afe5932`; `fig3b.pdf` SHA-256 `bce1acabfb0fd9a29dfac893fcf48b75549c34f6c18c516b760b3aefbad13eb0`; `fig4b.pdf` SHA-256 `67764db729df84e6b245b88ffd476a8910962d1fd9224727090615168e8c2e3c`; `fig6a.pdf` SHA-256 `f6afdc345e647dcd71b4982c43bea1b8809ce21f4d1c22ac40bf48bf6a126dff`; analyzer/plotter | High | Emit full-wavevector-projected `spectra.compressive_velocity`, `spectra.density_fluctuation`, and separate `spectra.p_parallel`, `.p_perp`, and `.magnetic_pressure` products with normalization metadata and rendering; retain raw spectral references excluded until their transforms and required Figure 3 sonic-correlation cases are qualified | Synthetic longitudinal/non-compressive Fourier projection oracle plus binary-snapshot product/metadata regression; rendered-analysis probe | Implemented for missing spectral analysis-product scope; F-049 supplies missing guarded case definitions, while reference admission, authorized execution, and quantitative comparisons remain open |
+| F-049 | 2026-05-25 | Figure 3 compressive-case matrix audit | MKS24 Figure 3 requires active random beta-1 and active random beta-100 sonic-correlation runs absent from the guarded case matrix; F-048 supplies the plotted compressive field but not those simulation definitions. | pinned `source/MKS24.tex:522-536`; `fig3a.pdf` SHA-256 `7d2cf6720f390c21f2710eafe86c921c4002859623cd18b6015e79e64afe5932`; `fig3b.pdf` SHA-256 `bce1acabfb0fd9a29dfac893fcf48b75549c34f6c18c516b760b3aefbad13eb0`; `inputs/cgl_lf_paper/cgl_lf_paper_compressive_*.athinput`; `scripts/cgl_lf_workflow.py` | High | Add a guarded `paper-compressive` workflow reusing four standard cases and defining the two missing unique cases; exclude it from debug preparation and revise cost/storage scope | Production-input/workflow/authorization regression and Frontier offline self-test | Implemented for Figure 3 execution-definition scope; spectral transforms, approved execution, and quantitative comparison remain open |
 
 ### Implemented Core Decision Log
 
@@ -424,7 +427,7 @@ table such as:
 | 2026-05-25 | Track cumulative net applied forcing work at the source update only when explicitly requested by a driven input. | The before/after conserved-energy difference across the full source task, including zero-net-momentum projection, is exact at that stage and restartable; instantaneous output-time `force_pwr` cannot close an active energy residual. Opt-in persistence avoids altering legacy forcing restart records. | Focused CPU/restart coverage and corrected `20260525-paper-smoke-rk-work-v1`/`20260525-paper-convergence-rk-work-v1` bundles; production tolerance and heat-flux transfer decomposition remain open |
 | 2026-05-25 | Retain applied LF heat-flux transport as a signed RKL2 companion recurrence with fine-side ownership at coarse/fine interfaces, not as a total-energy closure term. | The applied capped face flux and STS coefficients are available in the LF update; on AMR interfaces the fine-side closure flux is the quantity restricted into the coarse update, so it owns the contraction without double counting. | Focused CPU/restart tests and fresh fixed-level bundles pass; fresh AMR workflow/analyzer report total work `6.511527338026022e-4`; Frontier Kokkos-Serial/MPI jobs `4659053`/`4659141` pass the AMR decomposition regression |
 | 2026-05-25 | Checkpoint every cumulative LF diagnostic history value, not only signed applied work. | Restart-spanning paper analysis differentiates face/cap/exposure counters; resetting their baseline after a valid restart silently corrupts intervals even when evolved fields agree. | Initial GPU G-005 exposed F-022; expanded CPU restart checks and corrected jobs `4653516`/`4653582` verify the correction |
-| 2026-05-25 | Treat G-008/G010b/G011 debug measurements as storage/I/O reconnaissance, not a paper-scale runtime cost model. | Startup-length runs expose elapsed time, memory, output volume, and checkpoint size; G011 adds exact standard-layout shared-file timing and size, but no retained run measures late-time timestep evolution or statistical-production duration. | G010b retains reduced timing and its excessive cadence warning; G011 file sizes plus F-041's cell-count scaling feed the estimated `781.694` GB sequential allocation for fifteen unique runs; only a G013-based scaling estimate, not measured production runtime, is available |
+| 2026-05-25 | Treat G-008/G010b/G011 debug measurements as storage/I/O reconnaissance, not a paper-scale runtime cost model. | Startup-length runs expose elapsed time, memory, output volume, and checkpoint size; G011 adds exact standard-layout shared-file timing and size, but no retained run measures late-time timestep evolution or statistical-production duration. | G010b retains reduced timing and its excessive cadence warning; G011 file sizes plus F-041/F-049 case additions feed the estimated `880.368` GB sequential allocation for seventeen unique runs; only a G013-based scaling estimate, not measured production runtime, is available |
 | 2026-05-25 | Stop runtime costing after G012 and treat limiter-active RKL2 STS as unqualified for the screened finite-rate nonlinear state. | The finite-rate hard-wall reduced nonlinear run and local reduced branches with unlimited STS or caps `20`, `10`, `5`, `2`, and `1` all cross the strict firehose emergency bound in an LF split stage; reducing the cap through the documented conservative setting delays but does not resolve the observed failure. | F-031 is addressed by F-033; G012 consumes `0.188889` node-hours and remains invalid for extrapolation, while corrected G013 supplies new reduced GPU evidence |
 | 2026-05-25 | Archive the STS timestep/integrator contract in paper workflow manifests. | F-031 makes the split-step cap a qualification-critical model choice; a result cannot be interpreted or repeated if the manifest omits it. | F-032 metadata regression records guarded-deck `sts_max_dt_ratio = -1.0`; G013 archives and passes that setting with the F-033 hard-wall model |
 | 2026-05-25 | Represent the MKS24 hard-wall limit explicitly with `limiter_hardwall = true` in hard-wall paper decks rather than finite-rate pressure relaxation at `limiter_nu_coll = 1.0e10`. | The pinned paper source describes anisotropy effectively pinned at thresholds; F-031 locates a same-state internal LF-stage overshoot under finite-rate scattering, while the energy-preserving constrained state passes locally through `t = 2.0`. Finite-rate `20`/`200` decks remain unchanged. | F-033 CPU/exact-state validation and corrected G013 reduced Frontier GPU execution pass; standard costing, proposal approval, and production/statistical qualification remain required |
@@ -445,7 +448,8 @@ table such as:
 | 2026-05-25 | Retain Figure 5(b) outside admitted references until its conditioned-structure-function observable is implemented. | Unlike the corrected Figure 4(a) PDF and Figure 8 alignment slices, Figure 5(b)'s dimensionless axes did not map to an existing analyzer curve: its characteristic eddy lengths are derived from local-field-conditioned structure functions. | F-045 documented the product boundary; F-046 supersedes that defer-only state with an opt-in product and checksum-bound extraction, without authorizing production execution |
 | 2026-05-25 | Admit Figure 5(b) only through an explicitly sampled local-field structure-function contract. | The paper and cited method define three-point second-order structure functions, local three-point magnetic-field conditioning, equal-power inversion, and `L_perp` length normalization; the computationally heavier estimate should be opt-in and reproducible rather than silently imposed on every snapshot analysis. | F-046 adds archived `--eddy-samples`, `--eddy-bins`, and `--eddy-seed`, two `eddy_anisotropy.*` products, and external `digitized_fig5b_v1/curves.json`; production comparison remains open |
 | 2026-05-25 | Implement Figure 2(a)'s joint product without treating its raster as admitted reference data. | The panel's plotted coordinates define a calculable joint pressure-density PDF in each AthenaK snapshot, but its absolute pressure-scale/color-density mapping is not established by the pinned source and cannot be represented by the current curve-only manifest. | F-047 adds `pressure_density_joint` products and rendering; raster extraction and quantitative comparison remain open until a reviewed transform or author numeric data exists |
-| 2026-05-25 | Complete missing spectral analysis fields without admitting unqualified spectral references. | The plotted field definitions for Figures 3, 4(b), and 6(a) can be emitted from retained snapshots independently of the unresolved donor ordinate normalization; a Fourier-projected compressive flow product is necessary before Figure 3 can be compared at all. | F-048 adds compressive, normalized-density, and separate thermal/magnetic-pressure spectra plus rendering and projection oracles; spectral reference transforms and Figure 3 sonic-correlation case definitions remain open |
+| 2026-05-25 | Complete missing spectral analysis fields without admitting unqualified spectral references. | The plotted field definitions for Figures 3, 4(b), and 6(a) can be emitted from retained snapshots independently of the unresolved donor ordinate normalization; a Fourier-projected compressive flow product is necessary before Figure 3 can be compared at all. | F-048 adds compressive, normalized-density, and separate thermal/magnetic-pressure spectra plus rendering and projection oracles; spectral reference transforms remain open and F-049 supplies the missing guarded Figure 3 definitions |
+| 2026-05-25 | Define Figure 3's missing compressive-case execution scope without launching it. | The panel legends add an active random beta-1 run and a beta-100 random run with `t_corr = L_parallel/v_th`; the latter is `0.2` in the normalized AthenaK beta-100 deck, while four other panel cases already exist in `paper-standard`. | F-049 adds guarded `paper-compressive`, two definition-only decks, debug exclusion, and a revised seventeen-unique-run proposal; execution and comparison remain open |
 | 2026-05-25 | Advance `force_work` through the same explicit-RK recurrence as the source-modified conserved state. | Adding every source-call energy increment overcounts work retained in a multi-stage final state because later RK combinations reweight earlier source contributions; active reduced cases must fail when the ledger does not close conserved energy. | F-025 multi-cycle CPU regression; corrected smoke and convergence bundles pass with maximum active relative residual `5.141362829086986e-10`; production residual qualification remains open |
 | 2026-05-25 | Define applied CGL pressure work from the isolated numerical pressure traction after momentum AMR flux correction, then integrate it with the explicit-RK companion recurrence. | A snapshot-gradient estimate is not the applied finite-volume operator and a face-jump contraction is ambiguous across coarse/fine interfaces; contracting each active cell's corrected pressure-traction momentum RHS with its stage velocity uses exactly the operator consumed by the update. | F-026 focused AMR/restart/passive/FOFC regressions and fresh pressure-work bundles pass locally; Frontier GPU restart and GPU/CPU AMR decomposition comparisons pass for `lf_cpwrk`/`lf_cawrk`; production interpretation remains open |
 | 2026-05-25 | Generate distinct Frontier debug launch environments for GPU-aware qualification and MPI CPU decomposition validation. | A Kokkos-Serial MPI executable is not linked against Cray's GPU transport library and must not inherit `MPICH_GPU_SUPPORT_ENABLED=1` or GPU binding from the HIP/MPI launch path; retaining the target in each manifest avoids ambiguous evidence. | F-027 failure job `4658519` identifies the pre-launch abort; utility self-test verifies CPU and GPU generated scripts separately; corrected CPU-target jobs `4659053`/`4659141` pass |
@@ -713,8 +717,9 @@ code and Sphinx docs, and verify it analytically.
 **Implementation status (2026-05-24):** Corrected in the working tree with
 the `cgl_firehose_threshold = oblique|parallel` policy. Focused policy tests
 pass; the reduced active and passive paper-smoke decks and the defined
-paper-standard/limiter-scan/heat-flux/scale-separation inputs explicitly
-select `parallel`. Standard paper execution and analysis remain open.
+paper-standard/limiter-scan/heat-flux/compressive/scale-separation inputs
+explicitly select `parallel`. Standard paper execution and analysis remain
+open.
 
 #### Baseline Behavior
 
@@ -1071,7 +1076,7 @@ diagnostics, converged statistics, and documented quantitative comparisons.
 | Paper result | Required simulation modes | Required products | Current status |
 | --- | --- | --- | --- |
 | Figure 2: pressure-density distributions and unstable-volume history | Active and passive, Alfvenic/random, beta 10 and 100 | PDFs of `delta p_parallel`, `delta p_perp`, density; volume fraction beyond thresholds versus time | Reduced threshold-volume, steady-window PDFs, and panel-(a)-coordinate joint pressure-density products are implemented; all eight panel-(b) histories are vector-extracted with checksummed provenance; panel (a)'s raster still needs a qualified pressure/color-density transform before quantitative comparison |
-| Figures 3-4: compressive/density behavior | Active/passive; beta and forcing variants | Density PDFs and density/compressive spectra | Steady-window density PDFs plus `spectra.compressive_velocity` and normalized `spectra.density_fluctuation` products/rendering are implemented under F-048; Figure 4(a)'s explicit `rho/<rho>` coordinate is mapped to eight admitted curves under F-044; Figure 4(b)'s raw `E_rho` normalization and Figure 3 reference transform remain unqualified, and Figure 3's sonic-correlation case definitions are still missing |
+| Figures 3-4: compressive/density behavior | Active/passive; beta and forcing variants | Density PDFs and density/compressive spectra | Steady-window density PDFs plus `spectra.compressive_velocity` and normalized `spectra.density_fluctuation` products/rendering are implemented under F-048; F-049's guarded `paper-compressive` workflow supplies Figure 3's missing active random beta-1 and beta-100 sonic-correlation definitions while reusing four standard cases; Figure 4(a)'s explicit `rho/<rho>` coordinate is mapped to eight admitted curves under F-044; Figure 4(b)'s raw `E_rho` normalization and Figure 3 reference transform remain unqualified, and production execution remains open |
 | Figures 5-6: turbulent spectra and rate-of-strain suppression | Active/passive, Alfvenic/random | Velocity/magnetic/pressure spectra; parallel/perpendicular velocity-gradient spectra; local-field eddy scales | Local-field velocity-gradient/strain products, separate `p_parallel`, `p_perp`, and AthenaK `B^2/2` spectra/rendering, plus opt-in conditioned three-point `eddy_anisotropy.velocity_perp`/`.magnetic_perp` products are implemented; Figure 5(b)'s four normalized eddy-scale curves are admitted under F-046, while Figure 5(a)/6 spectral panels retain reference-transform gaps; target runs/comparison missing |
 | Figure 7: pressure-anisotropy organization and transfer | Active/passive, Alfvenic/random, beta 10 | `grad_parallel Delta p`, `grad_perp Delta p` spectra; `T_Delta p(k_perp)/T_total` | Steady-window gradient spectra, transfer partition/closure, snapshot anisotropic-work cross-check, MKS24-normalized transfer product, and dimensionless lower-panel reference curves are implemented; dimensional upper-panel reference transform, target runs, and comparison remain open |
 | Figures 8-9: alignment diagnostic | Active/passive; beta/forcing variants | Scale-dependent PDFs and peak locations of local-field/rate-of-strain eigenvector alignment | Steady-window selected-shell alignment PDFs, reference-comparable peak curves, rendered peak summaries, and synthetic finite check implemented; Figure 8 active/passive beta-10 Alfvenic raster panels emit ten calibrated `alignment.<shell>` curves with explicit uncertainty under F-043; Figure 9 eight peak-alignment reference curves are vector-extracted for the standard case matrix |
@@ -1639,6 +1644,8 @@ inputs/cgl_lf_paper/
   cgl_lf_paper_standard_passive_random_beta100.athinput
   cgl_lf_paper_heat_flux_beta10_strong.athinput
   cgl_lf_paper_heat_flux_beta10_weak.athinput
+  cgl_lf_paper_compressive_active_random_beta1.athinput
+  cgl_lf_paper_compressive_active_random_beta100_sonic.athinput
   cgl_lf_paper_nulim_beta100_20.athinput
   cgl_lf_paper_nulim_beta100_200.athinput
   cgl_lf_paper_nulim_beta100_hardwall.athinput
@@ -1664,9 +1671,12 @@ standard matrix now maps all eight active/passive, Alfvenic/random beta-10
 and beta-100 histories in that panel, while retaining the active Alfvenic
 beta-1 case needed elsewhere. Figure 12 reuses nominal active/passive
 standard cases and adds the two active nonnominal heat-flux definitions.
+Figure 3 reuses four standard cases and adds active random beta-1 plus
+active random beta-100 sonic-correlation definitions through
+`paper-compressive`.
 Figure 11 adds active Alfvenic beta-10 definitions at `n_perp = 96` and
 `384` while reusing the standard `n_perp = 192` case. The standard,
-heat-flux, limiter, and scale-separation
+heat-flux, compressive, limiter, and scale-separation
 decks now explicitly select shared binary/restart MPI-I/O and their future
 workflow manifests archive the output cadence/layout choices used for sizing
 and the timestep/STS/CFL contract exposed by F-031. They remain production
@@ -1920,8 +1930,8 @@ compressive product projects `u_k` onto the full Fourier wavevector before
 `k_perp` binning. Synthetic checks now cover both the existing single mode and
 exact zero compressive power for a transverse mode; the JSON records field
 and normalization definitions and the plotter renders the new products.
-Reference normalization qualification and missing Figure 3 sonic-correlation
-case definitions remain open.
+Reference normalization qualification and authorized execution of the
+guarded Figure 3 case matrix remain open.
 
 #### E4. Pressure-Anisotropy Transfer Function
 
@@ -2022,7 +2032,8 @@ inspect, and rerun without confusing the two tiers.
 
 **Implementation status (2026-05-25):** `paper-smoke` executes locally and
 archives reduced model/forcing choices. `paper-standard`, `paper-nulim`,
-`paper-heat-flux`, and `paper-scale-separation` now enumerate the defined
+`paper-heat-flux`, `paper-compressive`, and `paper-scale-separation` now
+enumerate the defined
 production inputs, retain
 model/resolution/domain/analysis-window metadata and in-place
 binary/checkpoint references, and refuse execution unless
@@ -2062,6 +2073,7 @@ Add clear modes whose computational cost and scientific meaning are evident:
 | `paper-standard` | Published-resolution selected MKS24 matrix; defined and guarded by explicit authorization | HPC |
 | `paper-nulim` | Figure 13 limiter-frequency suite; defined and guarded by explicit authorization | HPC |
 | `paper-heat-flux` | Figure 12 nonnominal heat-flux sensitivity suite; defined and guarded by explicit authorization | HPC |
+| `paper-compressive` | Figure 3 compressive-case suite, including beta-1 and sonic-correlation definitions; defined and guarded by explicit authorization | HPC |
 | `paper-scale-separation` | Figure 11 `n_perp = 96, 192, 384` suite; defined and guarded by explicit authorization | HPC |
 | `paper-analyze` | Regenerate implemented diagnostics/figures and optionally evaluate checksum/uncertainty-qualified reference curves; populated paper-panel comparisons remain open | Analysis host |
 | `paper-summary` | Regenerate human/machine summaries without plotting | Any host |
@@ -2515,7 +2527,8 @@ scripts/frontier/build_cgl_lf_frontier.sh
 `cgl_lf_frontier.py` is intentionally a preparation/accounting utility, not a
 submission launcher. It requires the prescribed CGL root for real use,
 reserves conservative node-hours, rejects walltimes greater than two hours
-and paper-standard/limiter/heat-flux/scale-separation production decks under
+and paper-standard/limiter/heat-flux/compressive/scale-separation production
+decks under
 `debug`, emits an
 inspectable batch script, queries `squeue` before the user manually submits,
 and records exactly one completed top-level allocation from `sacct` together
@@ -3040,7 +3053,9 @@ Retained live evidence as of 2026-05-25:
   sequential storage with 20 percent margin. F-041 subsequently extends the
   proposed matrix to fifteen unique runs and estimates `781.694` GB
   sequential storage with 20 percent margin after adding the mixed-resolution
-  Figure 11 cases. G011 itself explicitly withholds
+  Figure 11 cases. F-049 adds two standard-layout Figure 3 definitions and
+  revises the candidate to seventeen unique runs with an estimated
+  `880.368` GB sequential allocation with margin. G011 itself explicitly withholds
   runtime/node-hour projection.
 - G012 nonlinear validation job `4662477` uses an archived reduced
   `96 x 96 x 192` active beta10 Alfvenic deck with SHA-256
@@ -3250,8 +3265,9 @@ Retained live evidence as of 2026-05-25:
   4(b)-oriented density field, and `spectra.p_parallel`, `.p_perp`, and
   `.magnetic_pressure` provide Figure 6(a)-oriented fields. Their emitted
   definitions and synthetic transverse-mode oracle do not qualify raw
-  published spectral ordinates or define the still-missing sonic-correlation
-  Figure 3 production cases.
+  published spectral ordinates. F-049 now defines the previously missing
+  sonic-correlation and beta-1 random Figure 3 production cases behind an
+  explicit authorization guard.
 - The retained ledger records `0.851670` node-hours used with no active
   reservation, including `0.188889` node-hours for failed G012 and
   `0.577778` node-hours for passed G013. Paper-scale
@@ -3308,26 +3324,29 @@ runtime/node-hour proposal.
 
 Job `4661434` is a startup-only, one-node/eight-GPU measurement at the exact
 `192 x 192 x 384` mesh and `32 x 32 x 64` MeshBlock layout used by the
-fourteen guarded `paper-standard`/`paper-nulim`/`paper-heat-flux`
+sixteen guarded standard-layout
+`paper-standard`/`paper-nulim`/`paper-heat-flux`/`paper-compressive`
 definitions. It reaches only
 `t = 0.01`; it validates standard-layout launch, host-memory evidence, shared
 MPI-I/O file size/timing, and strict diagnostics, not scientific production or
 runtime/node-hour cost. F-034 expanded the standard definitions to cover the
 published Figure 2(b) series; F-035 adds the two nonnominal Figure 12
-heat-flux cases. F-041 adds two guarded Figure 11 scale-separation inputs at
+heat-flux cases. F-049 adds two guarded standard-layout Figure 3
+compressive-case definitions. F-041 adds two guarded Figure 11
+scale-separation inputs at
 `96 x 96 x 192` and `384 x 384 x 768`; their file sizes below are estimated
 from cell count until an approved measurement is retained. The standard active Alfvenic beta-100 hard-wall definition
 and the limiter-scan hard-wall definition are model-identical apart from
 labels/comments, so the proposed campaign reuses one accepted result in both
 analysis roles. Figure 11 similarly reuses the accepted standard active
-Alfvenic beta-10 `n_perp = 192` result, yielding fifteen unique simulations.
+Alfvenic beta-10 `n_perp = 192` result, yielding seventeen unique simulations.
 
 All guarded inputs explicitly select shared `bin` and `rst` outputs. Their
 common definition writes binary snapshots every `0.25` and restarts every
 `1.0` through `tlim = 10.0`. Retained reduced runs confirm inclusive
 initial/final time-cadenced output, giving 41 binary snapshots and 11 restart
 files per executed case. Using the larger of the two exact G011 files of each
-kind for the thirteen standard-layout unique runs, and cell-count-scaled
+kind for the fifteen standard-layout unique runs, and cell-count-scaled
 estimates for the additional one-eighth-size `n_perp = 96` and eight-times-size
 `n_perp = 384` cases:
 
@@ -3338,11 +3357,11 @@ estimates for the additional one-eighth-size `n_perp = 96` and eight-times-size
 | Raw generated output for one standard-layout case | `41 bin + 11 rst` | `41114362477` | `41.114` |
 | Estimated raw output for added `n_perp = 96` case | `one standard case / 8` | `~5139295310` | `~5.139` |
 | Estimated raw output for added `n_perp = 384` case | `8 x one standard case` | `~328914899816` | `~328.915` |
-| Estimated raw output for fifteen unique cases | `13 standard + n96 + n384` | `~868540907327` | `~868.541` |
-| Estimated retained output after acceptance | all snapshots plus final two restarts per case | `~519066101323` | `~519.066` |
-| Estimated sequential peak before pruning accepted checkpoints | retain 13 standard and n96; run n384 last | `~651411589987` | `~651.412` |
-| Estimated sequential retained-policy allocation with 20 percent margin | `1.2 x sequential peak` | `~781693907985` | `~781.694` |
-| Estimated no-pruning allocation with 20 percent margin | `1.2 x all raw output` | `~1042249088792` | `~1042.249` |
+| Estimated raw output for seventeen unique cases | `15 standard + n96 + n384` | `~950769632281` | `~950.770` |
+| Estimated retained output after acceptance | all snapshots plus final two restarts per case | `~568208454111` | `~568.208` |
+| Estimated sequential peak before pruning accepted checkpoints | retain 15 standard and n96; run n384 last | `~733640314941` | `~733.640` |
+| Estimated sequential retained-policy allocation with 20 percent margin | `1.2 x sequential peak` | `~880368377929` | `~880.368` |
+| Estimated no-pruning allocation with 20 percent margin | `1.2 x all raw output` | `~1140923558737` | `~1140.924` |
 
 The candidate retention policy is to run cases sequentially, retain all
 analysis snapshots and the final two restarts for every accepted case, and
@@ -3351,7 +3370,7 @@ recorded. The standard-layout file-size measurement remains authoritative in
 `analysis/g011_standard_layout_mpiio_sizing_evidence.json` beneath the G011
 run directory; the Figure 11 mixed-resolution increments are planning
 estimates requiring measurement or approved storage margin before execution.
-Executing all sixteen definitions independently would duplicate the equivalent
+Executing all eighteen definitions independently would duplicate the equivalent
 hard-wall beta-100 run and is not proposed.
 
 ### Candidate Standard-Run Cost Proposal (Requires Approval)
@@ -3364,12 +3383,12 @@ an eightfold cell-count factor and a fivefold simulated-duration factor:
 | Quantity | Planning calculation | Estimate |
 | --- | --- | ---: |
 | Standard `t = 10` time per unique case on one node | `2080 s x 8 x 5` | `83200 s = 23.111111` node-hours |
-| Thirteen unique standard/limiter/heat-flux cases | `13 x 83200 s` | `300.444444` node-hours |
+| Fifteen unique standard/limiter/heat-flux/compressive cases | `15 x 83200 s` | `346.666667` node-hours |
 | Added `n_perp = 96` scale-separation case | `83200 s / 8` | `2.888889` node-hours |
 | Added `n_perp = 384` scale-separation case | `8 x 83200 s` | `184.888889` node-hours |
-| Fifteen unique cases including Figure 11 | `300.444444 + 2.888889 + 184.888889` | `488.222222` node-hours |
-| Proposed runtime reservation with 2x contingency | `2 x 488.222222` | `976.444444` node-hours |
-| Existing recorded debug qualification plus proposed ceiling | `0.851670 + 976.444444` | `977.296114` node-hours |
+| Seventeen unique cases including Figure 3 and Figure 11 | `346.666667 + 2.888889 + 184.888889` | `534.444444` node-hours |
+| Revised runtime reservation with 2x contingency | `2 x 534.444444` | `1068.888889` node-hours |
+| Existing recorded debug qualification plus revised ceiling | `0.851670 + 1068.888889` | `1069.740559` node-hours |
 
 This estimate is not a standard-mesh benchmark. It assumes linear scaling
 with cell count and simulated duration, equivalent timestep behavior among
@@ -3382,14 +3401,16 @@ counters/work/output after the first segment, and stop for renewed review if
 measured use would exceed the ceiling.
 
 This plan intentionally provides only a `debug`-QOS validation launcher:
-production work must not be submitted through it. Any paper-production launch
-requires explicit user approval of the fifteen-run scope or a revised scope,
-the estimated `781.694` GB sequential-retention allocation (or estimated
-`1042.249` GB no-pruning alternative), executable/module provenance,
+production work must not be submitted through it. The revised twofold
+planning ceiling exceeds the documented 1000-node-hour testing budget, so it
+cannot be approved under the earlier envelope. Any paper-production launch
+requires explicit user approval of the seventeen-run scope or a revised
+scope and budget, the estimated `880.368` GB sequential-retention allocation
+(or estimated `1140.924` GB no-pruning alternative), executable/module provenance,
 restart/archive strategy, and an appropriate non-debug queue/QOS under current
-OLCF policy. The defined Figure 11 and Figure 12 variants are included; any
-remaining panel-reference-driven additions require a revised cost before
-execution.
+OLCF policy. The defined Figure 3, Figure 11, and Figure 12 variants are
+included; any remaining panel-reference-driven additions require a revised
+cost before execution.
 
 ## Phase H: Execution Tiers and Scientific Acceptance
 
@@ -3556,10 +3577,10 @@ must define:
 - manifest and environment archival;
 - how outputs are transferred back for analysis.
 
-For the sixteen guarded input definitions and fifteen proposed unique
+For the eighteen guarded input definitions and seventeen proposed unique
 executions, the G011-measured standard-layout file sizes plus the F-041
 cell-count-scaled resolution estimates define a candidate sequential
-retention allocation of `781.694` GB including margin. The candidate cost
+retention allocation of `880.368` GB including margin. The candidate cost
 proposal uses G013 only as a scaling basis; it does not replace measured
 standard or high-resolution runtime/I/O evidence. Any change in case matrix,
 cadence, file layout, retention policy, or required panel coverage must
@@ -3771,7 +3792,7 @@ Document and automate tiered MKS24 CGL-LF reproduction workflows
 Deliverables:
 
 - `paper-smoke`, `paper-standard`, `paper-nulim`, `paper-heat-flux`,
-  `paper-scale-separation`, and analysis modes;
+  `paper-compressive`, `paper-scale-separation`, and analysis modes;
 - runbook;
 - result interpretation;
 - storage/HPC guidance.
@@ -4056,7 +4077,8 @@ until its pressure/color-density transform is qualified and the comparison
   interface represents surfaces. Under F-048, Figures 3, 4(b), and 6(a)
   have matching emitted spectral-field products, but their raw plotted
   ordinates remain excluded because they do not yet map to qualified supported
-  normalizations; Figure 3 also lacks its sonic-correlation input definitions.
+  normalizations. Under F-049, Figure 3's sonic-correlation and beta-1 random
+  cases are guarded definitions only; they are not simulation evidence.
 Data still required:
 
 - obtain machine-readable original data from authors/archive if available for
@@ -4232,10 +4254,11 @@ local implementation evidence. The next critical path is:
    F-047 now supplies Figure 2(a)'s joint diagnostic in AthenaK coordinates,
    but its raster comparison still requires a qualified pressure/color-density
    transform. F-048 supplies the missing Figure 3/4(b)/6(a) spectral fields,
-   but not raw-ordinate reference transforms or Figure 3's sonic-correlation
-   case definitions. Resolve the F-038 paper-to-AthenaK transform before
-   admitting dimensional spectra or strain, establish matching normalizations
-   for remaining spectral panels, and define the missing Figure 3 cases.
+   and F-049 supplies guarded Figure 3 case definitions, but neither admits
+   raw-ordinate spectral reference transforms nor execution evidence. Resolve
+   the F-038 paper-to-AthenaK transform before admitting dimensional spectra
+   or strain and establish matching normalizations for remaining spectral
+   panels.
    Obtain or digitize any remaining
    targeted panels with recorded
    uncertainty, revise the proposal when scope changes, and
@@ -4253,11 +4276,14 @@ local implementation evidence. The next critical path is:
    G012 remains retained evidence that the superseded finite-rate hard-wall
    interpretation fails; F-033 and corrected G013 job `4673404` now pass the
    reduced nonlinear GPU correctness gate through `t = 2.0` with zero safety
-   counters and active `lf_hwproj`. The documented candidate executes fifteen
-   unique defined cases sequentially, projects `488.222222` node-hours with
-   a `976.444444` node-hour planning ceiling, and estimates `781.694` GB with
-   sequential-retention margin. It includes F-041's Figure 11
-   scale-separation additions and remains a scaling proposal rather than a
-   measured standard/high-resolution runtime or I/O result.
+   counters and active `lf_hwproj`. The documented candidate executes
+   seventeen unique defined cases sequentially, projects `534.444444`
+   node-hours with a `1068.888889` node-hour twofold planning ceiling, and
+   estimates `880.368` GB with sequential-retention margin. It includes
+   F-041's Figure 11 and F-049's Figure 3 additions; the revised ceiling
+   exceeds the prior 1000-node-hour accounting envelope and therefore
+   requires an explicitly revised scope or budget before any production
+   authorization. It remains a scaling proposal rather than a measured
+   standard/high-resolution runtime or I/O result.
    No standard or production run is authorized by this evidence alone;
    approved submission and paper/statistical qualification remain open.

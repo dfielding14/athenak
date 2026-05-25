@@ -281,12 +281,13 @@ def validate_debug_input(path: Path) -> None:
         "paper_standard" in lower_name
         or "paper_nulim" in lower_name
         or "paper_heat_flux" in lower_name
+        or "paper_compressive" in lower_name
         or "paper_scale_separation" in lower_name
     ):
         raise ValueError(
-            "paper-standard, limiter-production, heat-flux-production, and "
-            "scale-separation-production inputs may not be prepared for "
-            "Frontier debug execution"
+            "paper-standard, limiter-production, heat-flux-production, "
+            "compressive-production, and scale-separation-production inputs "
+            "may not be prepared for Frontier debug execution"
         )
     if re.search(r"(?m)^\s*paper_grade\s*=\s*(true|1)\b", text):
         raise ValueError(
@@ -973,6 +974,22 @@ def self_test() -> int:
             rejected_heat_flux = True
         if not rejected_heat_flux:
             raise ValueError("self-test failed to reject heat-flux production input")
+        compressive = (
+            Path(directory)
+            / "cgl_lf_paper_compressive_active_random_beta100_sonic.athinput"
+        )
+        compressive.write_text(
+            "<problem>\npaper_grade = false\n", encoding="utf-8"
+        )
+        arguments.run_name = "bad_compressive_production"
+        arguments.input_file = str(compressive)
+        rejected_compressive = False
+        try:
+            prepare(arguments)
+        except ValueError:
+            rejected_compressive = True
+        if not rejected_compressive:
+            raise ValueError("self-test failed to reject compressive production input")
         scale_separation = (
             Path(directory) / "cgl_lf_paper_scale_separation_beta10_nperp384.athinput"
         )
