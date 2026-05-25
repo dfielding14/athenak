@@ -212,6 +212,53 @@ def plot_heat_flux_proxy(ensembles: dict[str, dict[str, object]], figure_dir: Pa
     save(fig, figure_dir / "paper_heat_flux_proxy.pdf", generated)
 
 
+def plot_pressure_work(ensembles: dict[str, dict[str, object]], figure_dir: Path,
+                       generated: list[str]) -> None:
+    """Plot snapshot-reconstructed CGL pressure mechanical-power terms."""
+
+    retained = {
+        name: ensemble["pressure_work_decomposition"]
+        for name, ensemble in ensembles.items()
+        if ensemble.get("pressure_work_decomposition", {}).get("available", False)
+    }
+    if not retained:
+        return
+    labels = list(retained)
+    locations = np.arange(len(labels), dtype=float)
+    width = 0.25
+    perpendicular = np.asarray([
+        retained[name]["isotropic_perpendicular_pressure_power_mean"]
+        for name in labels
+    ])
+    anisotropic = np.asarray([
+        retained[name]["anisotropic_stress_power_mean"] for name in labels
+    ])
+    total = np.asarray([
+        retained[name]["total_cgl_pressure_power_mean"] for name in labels
+    ])
+    fig, axis = plt.subplots(figsize=(max(5.0, 1.1 * len(labels) + 2.5), 3.25))
+    axis.bar(
+        locations - width / 2.0,
+        perpendicular,
+        width,
+        label=r"$p_\perp\nabla\cdot u$",
+    )
+    axis.bar(
+        locations + width / 2.0,
+        anisotropic,
+        width,
+        label=r"$-\Delta p\,\hat b\hat b:\nabla u$",
+    )
+    axis.plot(locations, total, color="0.2", marker="o", label="total CGL pressure")
+    axis.axhline(0.0, color="0.3", lw=0.8)
+    axis.set_xticks(locations, labels, rotation=30, ha="right")
+    axis.set_ylabel("integrated pressure power")
+    axis.set_title("Snapshot-reconstructed CGL pressure work")
+    axis.grid(True, axis="y", alpha=0.25)
+    axis.legend(fontsize=7)
+    save(fig, figure_dir / "paper_pressure_work.pdf", generated)
+
+
 def main() -> int:
     """Command-line entry point."""
 
@@ -228,6 +275,7 @@ def main() -> int:
     plot_spatial_spectra(ensembles, args.figure_dir, generated)
     plot_transfer_and_alignment(ensembles, args.figure_dir, generated)
     plot_heat_flux_proxy(ensembles, args.figure_dir, generated)
+    plot_pressure_work(ensembles, args.figure_dir, generated)
     (args.figure_dir / "paper_figures.json").write_text(
         json.dumps({"figures": generated}, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

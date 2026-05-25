@@ -140,19 +140,27 @@ it reads each case's archived `analysis_t_start`/`analysis_t_end` values and
 forms common-bin steady-window averages. Current products include
 pressure/density PDFs, perpendicular shell spectra, field-projected
 `Delta p` and velocity-gradient spectra, the `b b : grad u` strain PDF,
-pressure-stress transfer with a real-space closure check, and selected-scale
-alignment PDFs. When the run manifest contains the complete LF closure
-choices, it also reconstructs a cell-centered heat-flux smoothing proxy,
+pressure-stress transfer with a real-space closure check, selected-scale
+alignment PDFs, and a cell-centered CGL pressure-work split,
+`integral[p_perp div(u) - Delta p (b b : grad u)] dV`. The anisotropic
+stress term is compared with the direct pressure-transfer integral and is
+labelled as active feedback or passive-only interpretation when that model
+choice is archived. For windows with at least two retained snapshots, the
+ensemble record also reports cadence-limited trapezoidal time-integral
+estimates of these pressure powers. When the run manifest contains the complete LF closure
+choices, the analyzer also reconstructs a cell-centered heat-flux smoothing proxy,
 `integral[-q_parallel b.grad(T_parallel) - q_perp b.grad(T_perp)] dV`,
 including regularized/unlimited and cap-active contributions. This product
-uses snapshot central differences and is explicitly not the applied
-finite-volume face flux or a closed energy budget.
+uses snapshot central differences; its optional snapshot-time quadrature and
+the pressure-work quadrature are explicitly not the applied finite-volume
+face flux or a closed energy budget.
 
 The analyzer runs synthetic binning/gradient/transfer/alignment and
-heat-flux-sign checks and renders available history, PDF, spectrum, transfer,
-alignment, and heat-flux-proxy figures under `figures/paper/`. Panel-specific
-reference-curve comparison and a full anisotropic-pressure/local-work budget
-decomposition remain to be completed. For fixed-level runs, the analyzer
+heat-flux-sign/pressure-work checks and renders available history, PDF,
+spectrum, transfer, alignment, heat-flux-proxy, and pressure-work figures
+under `figures/paper/`. Panel-specific reference-curve comparison,
+AMR-corrected applied heat-flux work, and time-integrated/production local
+budget closure remain to be completed. For fixed-level runs, the analyzer
 also reports the RKL2-applied capped-face heat-flux contractions retained in
 `lf_qprwrk` and `lf_qpewrk`; this is not an AMR-corrected or total-energy
 budget diagnostic, and the signed value need not equal the positive

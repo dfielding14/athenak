@@ -33,15 +33,17 @@ behind an explicit execution guard. Snapshot analysis foundations are
 implemented, including manifest-selected time-window aggregation and
 operator-face heat-flux-cap activity, local-field velocity-gradient/strain
 products, manifest-qualified cell-centered heat-flux smoothing proxies, and
-generic diagnostic figure rendering. A local `accuracy`
+snapshot pressure-work/heat-flux time-quadrature estimates, and generic
+diagnostic figure rendering. A local `accuracy`
 workflow now retains collisionless resolution/timestep, finite-collision,
 extreme-cap, rotated-field, and low-field evidence. Paper forcing now retains
 restartable cumulative applied source work for active global energy-residual
 analysis. Fixed-level LF histories now also retain restartable,
 RKL2-applied capped-face heat-flux contractions. Long-time energy
 qualification, steady nonlinear convergence, reference comparison,
-AMR-corrected/full local-work accounting, Frontier production execution, and
-production-run phases remain open. A tracked Frontier debug-campaign
+AMR-corrected applied heat-flux accounting, exact time-integrated local-work
+closure, Frontier production execution, and production-run phases remain
+open. A tracked Frontier debug-campaign
 utility and HIP build script now
 implement offline-verifiable root, QOS, walltime, sequential-submission, and
 budget-ledger policy enforcement. Live Frontier debug qualification now
@@ -173,7 +175,7 @@ test or run evidence.
 | CPU numerical accuracy | Convergence, asymptotic, cap, directional, restart, MPI/AMR checks | Yes | Partial 2026-05-25; archived `accuracy-v2` bundle covers N-001 through N-007 locally, the AMR workflow passed, and the full CPU suite passed (`218 passed, 15 skipped`); MPI execution is blocked in this shell because `mpirun` is unavailable; forced accounting remains |
 | Frontier GPU numerical equivalence | CPU/GPU comparison suite, MPI/GPU restart checks, strict diagnostics | Yes for Frontier use | Partial 2026-05-25; immutable HIP/MPI builds archived; G-001 through G-004 passed, corrected G-005 verifies all 15 restartable LF diagnostics, G-006 passes one-node/eight-rank versus two-node/sixteen-rank comparison, and G-007 reduced paper cases pass; managed-memory behavior and production-scale execution remain open |
 | Paper pgen and forcing fidelity | Input/pgen review, forcing metadata, restartable reduced smoke | Yes for MKS24 claims | Partial 2026-05-25; active/passive/random reduced smoke, forcing restart, OU cadence, RK source work, passive flow-decoupling checks, and Frontier G-007 reduced-paper matrix passed; paper-grade statistical calibration open |
-| Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Partial 2026-05-25; reduced histories, restartable applied forcing work/global active residual, fixed-level RKL2-applied heat-flux contractions, operator-face cap counters, windowed snapshot PDF/spectral/transfer/alignment/local-strain diagnostics, manifest-qualified heat-flux smoothing proxies, and generic figures implemented; panel/reference comparison, AMR-corrected/full local-work budget accounting, and production qualification open |
+| Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Partial 2026-05-25; reduced histories, restartable applied forcing work/global active residual, fixed-level RKL2-applied heat-flux contractions, operator-face cap counters, windowed snapshot PDF/spectral/transfer/alignment/local-strain/CGL pressure-work diagnostics, manifest-qualified heat-flux smoothing proxies and cadence-limited time-quadrature estimates, and generic figures implemented; panel/reference comparison, AMR-corrected applied heat-flux accounting, exact time-integrated local-work closure, and production qualification open |
 | Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Inputs and guarded workflow modes defined 2026-05-24; no paper-scale runs or figure comparisons executed |
 | Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-25; clean revisions `2a1b1fef`, `827394fb`, and `2bc8d0e0` were built on Frontier; sequential debug jobs through G-007 are retained and recorded (`0.035280` node-hours total); corrected environment capture and diagnostic restart persistence were verified live, while F-021 remains open |
 | User documentation | Sphinx build and accurately scoped runbook | Yes | Implemented for current functionality 2026-05-25; Sphinx warnings-as-errors and repository style suite pass in an isolated validation environment; future campaign results must still be documented when executed |
@@ -273,11 +275,12 @@ table such as:
 | F-015 | 2026-05-25 | Frontier operations | The plan prescribed debug-only root/budget/sequential-submission controls but provided templates without an executable fail-closed ledger or preparation tool | `scripts/frontier/cgl_lf_frontier.py`, `scripts/frontier/build_cgl_lf_frontier.sh` | High | Add tracked immutable-build and debug-campaign tooling that reserves budget, generates an inspectable batch script, checks an empty debug queue before manual submission, records one top-level `sacct` allocation from its run manifest, and rejects production decks | `python3 scripts/frontier/cgl_lf_frontier.py self-test`; `bash -n scripts/frontier/build_cgl_lf_frontier.sh` | Implemented; sequential live Frontier debug submission/accounting exercised through G-007 |
 | F-016 | 2026-05-25 | Phase G | Required style validation could not pass because the Sphinx configuration used nonconforming indentation and the active system Python lacked lint/documentation dependencies | `docs/source/conf.py`, temporary validation environment built from `docs/requirements.txt` plus `flake8`, style/Sphinx logs | Medium | Correct the configuration indentation and run style/Sphinx through an isolated dependency-complete environment | `python run_test_suite.py --style`; `sphinx-build -W --keep-going -b html source _build/html` | Implemented; style wrapper and warning-strict documentation build passed |
 | F-017 | 2026-05-25 | Phase E | Heat-flux cap occupancy alone did not quantify the transport strength, while an exact face-power reduction needs a decomposition-independent discrete accounting design | `scripts/analyze_cgl_lf_paper.py`, `scripts/plot_cgl_lf_paper.py`, `scripts/cgl_lf_workflow.py` | High | Add a manifest-qualified cell-centered reconstruction of the implemented LF closure as an explicitly non-budget heat-flux smoothing proxy; retain exact applied-face accounting as an open gate | Synthetic positive perpendicular-conduction/zero-parallel proxy check through `test_cgl_lf_paper_snapshot_analysis_uses_both_pressures` | Implemented for snapshot proxy; fixed-level applied accounting added by F-019 |
-| F-018 | 2026-05-25 | Phase E | Retained `force_pwr` sampled instantaneous power but did not preserve the exact net RK stage forcing source, including zero-net-momentum projection, in forced paper runs or through restart | `src/srcterms/turb_driver.cpp`, `src/outputs/restart.cpp`, `src/pgen/tests/cgl_lf_paper.cpp`, `scripts/analyze_cgl_lf_paper.py` | High | Add opt-in globally reduced cumulative `force_work`, checkpoint it for paper decks, and compare active-case interval work to conserved `tot-E`; do not give passive-Delta the active budget interpretation | Expanded forcing identity/restart regressions and reduced paper analysis bundle | Implemented locally; long-time/production residual tolerance and full local-work budget remain open |
-| F-019 | 2026-05-25 | Phase E | The snapshot heat-flux proxy did not measure the capped face flux actually advanced by an RKL2 LF sweep | `src/diffusion/cgl_landau_fluid.cpp`, `src/mhd/mhd_sts.cpp`, `src/outputs/history.cpp`, `scripts/analyze_cgl_lf_paper.py` | High | Accumulate owned-face capped-flux/temperature-jump contractions through the same RKL2 recurrence as the state, checkpoint cumulative `lf_qprwrk`/`lf_qpewrk`, and disable the metric for AMR until flux-corrected accounting exists | Decay/sign, cap-analysis, low-field/AMR-zero, and restart-preservation regressions in the CGL CPU/MPI test suites | Implemented locally for fixed-level meshes; AMR-corrected and full anisotropic-pressure/local-work budget accounting remain open |
+| F-018 | 2026-05-25 | Phase E | Retained `force_pwr` sampled instantaneous power but did not preserve the exact net RK stage forcing source, including zero-net-momentum projection, in forced paper runs or through restart | `src/srcterms/turb_driver.cpp`, `src/outputs/restart.cpp`, `src/pgen/tests/cgl_lf_paper.cpp`, `scripts/analyze_cgl_lf_paper.py` | High | Add opt-in globally reduced cumulative `force_work`, checkpoint it for paper decks, and compare active-case interval work to conserved `tot-E`; do not give passive-Delta the active budget interpretation | Expanded forcing identity/restart regressions and reduced paper analysis bundle | Implemented locally; long-time/production residual tolerance and exact time-integrated local-work closure remain open |
+| F-019 | 2026-05-25 | Phase E | The snapshot heat-flux proxy did not measure the capped face flux actually advanced by an RKL2 LF sweep | `src/diffusion/cgl_landau_fluid.cpp`, `src/mhd/mhd_sts.cpp`, `src/outputs/history.cpp`, `scripts/analyze_cgl_lf_paper.py` | High | Accumulate owned-face capped-flux/temperature-jump contractions through the same RKL2 recurrence as the state, checkpoint cumulative `lf_qprwrk`/`lf_qpewrk`, and disable the metric for AMR until flux-corrected accounting exists | Decay/sign, cap-analysis, low-field/AMR-zero, and restart-preservation regressions in the CGL CPU/MPI test suites | Implemented locally for fixed-level meshes; AMR-corrected applied accounting and exact time-integrated local-work closure remain open |
 | F-020 | 2026-05-25 | Frontier operations | The generated environment-log filter required `MPICH=` instead of matching `MPICH_*`, so the first live manifests did not preserve the requested MPI/GPU environment variables | `scripts/frontier/cgl_lf_frontier.py`, `g001-g002-active-smoke-8gpu/manifest/run_environment.txt`, `g004-collision-relaxation-1gpu/manifest/run_environment.txt` | High | Capture configured runtime variable prefixes and archive optional restart files in the preparation utility before continuing restart qualification | Expanded `cgl_lf_frontier.py self-test` for environment capture and restart provenance; live G-004 inspection | Implemented; G-004 manifest retains requested MPICH/FI/HSA settings |
 | F-021 | 2026-05-25 | Frontier G-001/G-007 | Live Slurm logs reported `MPICH_GPU_SUPPORT_ENABLED = 1` but `MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED = 0` although the generated script exported the latter as `1` | `/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_g001_g002_active_smoke_8gpu.4653415.log`, `/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_g006b_active_smoke_16blocks_16gpu_2node.4653601.log`, `/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_g007b_paper_smoke_active_random_1gpu.4653770.log` | Medium | Treat runtime-reported behavior as authoritative, preserve it with the corrected environment capture, and investigate stack support before making managed-memory claims | Subsequent live manifest/log inspection | Open; confirmed on corrected-build one-node and two-node runs, without preventing strict qualification agreement |
 | F-022 | 2026-05-25 | Frontier G-005 | The first GPU restart continuation restored physical fields and signed applied LF work but reset cumulative LF stage/face counters, making restart-spanning cap/exposure analysis discontinuous | `g005b-restart-resumed-1gpu/analysis/g005_restart_comparison.json`, `src/outputs/restart.cpp`, `src/pgen/pgen.cpp` | High | Checkpoint and restore all 15 cumulative LF history diagnostics using the established shared-MPI rank-zero baseline rule, then rerun restart qualification | Expanded CPU restart assertions for ordinary, finite-collision, and paper-forcing restarts; repeated Frontier G-005 | Implemented; corrected Frontier jobs `4653516`/`4653582` pass all 15 LF endpoint comparisons at `rtol = atol = 1.0e-12` with maximum absolute difference `3.9916427639358903e-20` |
+| F-023 | 2026-05-25 | Phase E | The analyzer retained anisotropic-pressure transfer and heat-flux products but did not expose the configuration-space CGL pressure mechanical-work split required to interpret local anisotropic stress | `scripts/analyze_cgl_lf_paper.py`, `scripts/plot_cgl_lf_paper.py`, `20260525-paper-convergence-face-work-v1` analysis bundle | High | Add snapshot-derived `integral[p_perp div(u) - Delta p (b b : grad(u))] dV`, compare its anisotropic term with direct MKS24 transfer, label passive diagnostics without asserting applied feedback, and retain explicitly cadence-limited snapshot quadrature estimates | Synthetic correlated-pressure/strain transfer and constant-power quadrature checks through `test_cgl_lf_paper_snapshot_analysis_uses_both_pressures`; regenerated retained convergence bundle and pressure-work figure | Implemented for snapshot analysis; AMR applied accounting, exact interval budget closure, reference comparison, and production qualification remain open |
 
 ### Implemented Core Decision Log
 
@@ -304,6 +307,7 @@ table such as:
 | 2026-05-25 | Retain applied LF heat-flux transport as a signed fixed-level RKL2 companion recurrence, not as a total-energy closure term. | The applied capped face flux and STS coefficients are available in the LF update; counting owned faces once and advancing the diagnostic with the same recurrence avoids replacing the operator with a snapshot surrogate. AMR correction and anisotropic-pressure budget terms require separate designs. | Focused CPU/restart tests and fresh `20260525-paper-smoke-face-work-v1`/`20260525-paper-convergence-face-work-v1` bundles pass; strong-flux startup demonstrates that the signed face contraction is distinct from the positive snapshot proxy |
 | 2026-05-25 | Checkpoint every cumulative LF diagnostic history value, not only signed applied work. | Restart-spanning paper analysis differentiates face/cap/exposure counters; resetting their baseline after a valid restart silently corrupts intervals even when evolved fields agree. | Initial GPU G-005 exposed F-022; expanded CPU restart checks and corrected jobs `4653516`/`4653582` verify the correction |
 | 2026-05-25 | Treat G-008 reduced debug measurements as baseline sizing evidence, not a paper-scale cost model. | Startup-length smoke runs expose elapsed time, accounting memory, output volume, and checkpoint size, but do not measure steady-state storage cadence or production duration; their logs also disabled isolated MPI-I/O timers. | `g008_reduced_sizing_evidence.json` retains 3-to-5-second Athena steps, `452492K` to `588224K` `MaxRSS`, and `287185`-to-`817024`-byte checkpoints; isolated I/O timing and a production projection remain open |
+| 2026-05-25 | Implement CGL pressure mechanical work first as a snapshot-derived local decomposition with a transfer cross-check and sparse-time quadrature estimate. | Retained fields determine `p_perp div(u) - Delta p (b b : grad(u))` without changing the integrator; trapezoidal snapshot-time integration aids interval interpretation, but neither result is an applied budget identity. | F-023 synthetic sign/transfer/quadrature oracles and regenerated `20260525-paper-convergence-face-work-v1` products; AMR and exact production interval closure remain open |
 
 Each plan-revision commit must update this register or explain why no new
 finding was introduced. Each implementation commit resolving a finding must
@@ -719,7 +723,14 @@ PDFs, shell spectra, field-projected anisotropy gradients, pressure-transfer
 partitions, alignment PDFs, and per-case manifest-window ensemble averages
 with synthetic checks. It also produces local-field velocity-gradient and
 `b b : grad u` products, while `scripts/plot_cgl_lf_paper.py` renders generic
-archived diagnostics. Cumulative `lf_q*` history counters now retain exact
+archived diagnostics. Snapshot products now also split the CGL pressure
+mechanical power as
+`integral[p_perp div(u) - Delta p (b b : grad(u))] dV`; the analyzer
+compares its anisotropic term with the direct pressure-transfer integral and
+labels passive-Delta values as non-feedback diagnostics. Multi-snapshot
+ensembles additionally retain explicitly cadence-limited trapezoidal
+pressure-work and reconstructed heat-flux integral estimates. Cumulative
+`lf_q*` history counters now retain exact
 operator-face heat-flux-cap activity for interval summaries. For new bundle
 manifests that archive complete LF closure policy choices, the analyzer also
 emits a cell-centered reconstruction of
@@ -729,18 +740,18 @@ identifies it as a snapshot proxy, not an applied face-flux reduction or
 energy-budget identity. Fixed-level runs additionally retain restartable
 `lf_qprwrk` and `lf_qpewrk` histories: signed RKL2-applied owned-face contractions
 of capped parallel/perpendicular heat flux with temperature jumps. This
-quantity is disabled on AMR and is not a full energy or pressure-work
-decomposition. Other `lf_*` counters remain safety/stage counters.
+quantity is disabled on AMR and is not a total-energy or time-integrated
+local-work closure. Other `lf_*` counters remain safety/stage counters.
 Figure-level reproduction still lacks:
 
 - paper-panel-specific reference-data mapping and comparison figures;
 - quantitative comparison to machine-readable or explicitly digitized
   reference curves; the staged official source contains PDFs but no numeric
   curve tables;
-- AMR-corrected applied heat-flux accounting and a full
-  anisotropic-pressure/local-work budget decomposition;
-- production qualification of active global budget residuals and any local
-  heat-flux/anisotropic-work decomposition.
+- AMR-corrected applied heat-flux accounting and time-integrated local-work
+  budget closure;
+- production qualification of active global budget residuals and the
+  snapshot/applied local-work products.
 
 These products must be implemented before figure-level reproduction is
 possible.
@@ -888,7 +899,7 @@ diagnostics, converged statistics, and documented quantitative comparisons.
 | Figure 2: pressure-density distributions and unstable-volume history | Active and passive, Alfvenic, representative beta values | PDFs of `delta p_parallel`, `delta p_perp`, density; volume fraction beyond thresholds versus time | Reduced threshold-volume and steady-window PDF machinery implemented; standard statistics/comparison missing |
 | Figures 3-4: compressive/density behavior | Active/passive; beta and forcing variants | Density PDFs and density/compressive spectra | Steady-window density PDF/spectrum machinery implemented; target runs/comparison missing |
 | Figures 5-6: turbulent spectra and rate-of-strain suppression | Active/passive, Alfvenic/random | Velocity/magnetic/pressure spectra; parallel/perpendicular velocity-gradient spectra | Local-field velocity-gradient and strain products plus generic rendering implemented; target runs/comparison missing |
-| Figure 7: pressure-anisotropy organization and transfer | Active/passive, Alfvenic/random, beta 10 | `grad_parallel Delta p`, `grad_perp Delta p` spectra; `T_Delta p(k_perp)/T_total` | Steady-window gradient spectra and transfer partition with closure test implemented; comparison missing |
+| Figure 7: pressure-anisotropy organization and transfer | Active/passive, Alfvenic/random, beta 10 | `grad_parallel Delta p`, `grad_perp Delta p` spectra; `T_Delta p(k_perp)/T_total` | Steady-window gradient spectra, transfer partition/closure, and snapshot anisotropic-work cross-check implemented; reference comparison missing |
 | Figures 8-9: alignment diagnostic | Active/passive; beta/forcing variants | Scale-dependent PDFs and peak locations of local-field/rate-of-strain eigenvector alignment | Steady-window selected-shell alignment PDFs, rendered peak summaries, and synthetic finite check implemented; comparison missing |
 | Figure 10: kinetic comparison context | Not reproduced directly by CGL-LF | Documentation of non-reproducible kinetic comparator and any qualitative CGL-only comparison | Out of direct scope |
 | Figure 11: scale-separation behavior | Selected resolutions | Resolution/convergence or scale-separation comparison products | Operator accuracy and short reduced resolution product paths implemented; steady nonlinear comparison missing |
@@ -1516,8 +1527,14 @@ CGL primitive snapshots now export both pressures, and
 projected pressure/velocity-gradient spectra, `b b : grad u` strain PDFs,
 pressure-transfer partitions with a real-space closure check, selected-shell
 alignment PDFs, and per-case ensemble averages inside the archived analysis
-window. `scripts/plot_cgl_lf_paper.py` renders available archived diagnostic
-figures and is invoked by `paper-analyze`. LF history now retains exact operator
+window. It additionally reports snapshot CGL pressure mechanical work as
+separate `p_perp div(u)` and `-Delta p (b b : grad(u))` terms, compares the
+anisotropic term with direct pressure transfer, and preserves whether an
+archived case applies that feedback to the flow. For retained multi-snapshot
+windows it records trapezoidal time-integral estimates of the pressure and
+heat-flux proxy rates, explicitly excluding them from applied budget claims.
+`scripts/plot_cgl_lf_paper.py` renders available archived diagnostic figures
+and is invoked by `paper-analyze`. LF history now retains exact operator
 face counts for parallel/perpendicular heat-flux-cap ratios above `1` and
 `10`, which `paper-analyze` differences over that window. The analyzer now
 also reconstructs a cell-centered heat-flux smoothing-power proxy from
@@ -1527,10 +1544,9 @@ face-flux or budget claims. Fixed-level `.mhd.hst` output additionally
 retains restartable signed RKL2-applied capped-face heat-flux contractions,
 which need not equal that snapshot proxy. Its
 synthetic numerical test and a two-snapshot window-selection/rendering probe
-have passed locally. AMR-corrected heat-flux accounting, full
-anisotropic-pressure/local-work decomposition, paper-panel/reference
-comparisons, long-time residual qualification, and production statistics
-remain open.
+have passed locally. AMR-corrected applied heat-flux accounting,
+time-integrated local-work closure, paper-panel/reference comparisons,
+long-time residual qualification, and production statistics remain open.
 
 ### Diagnostic Architecture
 
@@ -1578,9 +1594,10 @@ history additionally retains
 `lf_qface`, `lf_qprcap`, `lf_qpr10`, `lf_qpecap`, and `lf_qpe10` for
 operator-face cap occupancy, plus restartable `lf_qprwrk` and `lf_qpewrk`
 for fixed-level signed RKL2-applied capped-face transport contractions. Offline
-snapshots additionally provide a reconstructed heat-flux smoothing proxy.
-AMR-corrected applied heat-flux accounting and anisotropic-pressure-work
-history entries in the target list remain outstanding.
+snapshots additionally provide a reconstructed heat-flux smoothing proxy and
+a CGL pressure-work decomposition. AMR-corrected applied heat-flux accounting
+and time-integrated anisotropic-pressure-work history entries in the target
+list remain outstanding.
 
 ### Snapshot Output Requirements
 
@@ -1646,8 +1663,10 @@ against restartable cumulative applied forcing work, while excluding
 passive-Delta from that total-energy interpretation. A closure-reconstructed
 heat-flux smoothing proxy is reported from manifest-qualified snapshots;
 fixed-level history also reports RKL2-applied capped-face transport
-contractions. AMR-corrected heat-flux accounting, full
-anisotropic-pressure/local-work decomposition, and production residual
+contractions. Snapshot analysis additionally reports the CGL pressure
+mechanical-work split, its direct-transfer comparison, and a sparse-snapshot
+quadrature estimate where cadence allows. AMR-corrected applied heat-flux
+accounting, exact time-integrated local-work closure, and production residual
 qualification remain open.
 
 #### E2. PDF Products
@@ -1697,8 +1716,13 @@ normalization. Requirements:
 
 **Status:** A shell-partition implementation of the stated pressure-stress
 transfer and its direct real-space closure error are emitted by the analyzer;
-the synthetic zero-transfer/closure check passes. Sign and normalization must
-still be qualified against production fields/reference interpretation.
+the snapshot-derived anisotropic-stress work term is emitted with a
+transfer-minus-work comparison residual. Synthetic zero-transfer/closure and
+correlated negative-work/zero-residual checks pass, including passive-only
+interpretation metadata and constant-power time quadrature. Sparse-snapshot
+quadrature is retained as an estimate, not applied budget closure.
+Normalization must still be qualified against production fields/reference
+interpretation.
 
 #### E5. Alignment Diagnostic
 
@@ -3090,9 +3114,11 @@ manifest-window archived-run averages and generic diagnostic plots. Snapshot
 analysis now adds a manifest-qualified heat-flux smoothing proxy; paper
 history retains restartable cumulative applied forcing work and active-case
 global energy residuals. Fixed-level LF history now retains RKL2-applied
-capped-face heat-flux contractions. AMR-corrected heat-flux accounting, full
-anisotropic-pressure/local-work decomposition, and production residual
-qualification remain open.
+capped-face heat-flux contractions. Snapshot analysis now retains CGL
+pressure-work components, their transfer comparison, and cadence-limited
+time-quadrature estimates for pressure/heat-flux proxy rates. AMR-corrected
+applied heat-flux accounting, exact time-integrated local-work closure, and
+production residual qualification remain open.
 
 ### Commit 7: Add Paper Spatial Analysis
 
@@ -3532,10 +3558,11 @@ local implementation evidence. The next critical path is:
 
 2. **Complete remaining diagnostic and comparison products.**
    Extend fixed-level applied-face heat-flux transport accounting to
-   AMR-corrected and full anisotropic-pressure/local-work budgets, and add
+   AMR-corrected meshes and time-integrated local-work budget closure, and add
    machine-readable or uncertainty-documented paper-panel reference
    comparisons on top of the implemented cap, forcing-work residual,
-   snapshot-proxy, applied fixed-level face-contraction, and
+   snapshot heat-flux/pressure-work products, applied fixed-level
+   face-contraction, and
    steady-window PDF/spectral/transfer/alignment/strain products and generic
    figure renderer.
 

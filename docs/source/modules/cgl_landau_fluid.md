@@ -180,8 +180,14 @@ snapshot analysis must use both fields when constructing `Delta p`.
 `python3 scripts/cgl_lf_workflow.py paper-analyze --output-dir <bundle>`
 regenerates reduced-history summaries and, for retained binary snapshots,
 current PDF, local-field pressure/velocity-gradient spectral,
-pressure-transfer, and alignment diagnostics with synthetic numerical checks.
-It also renders available diagnostic figures under `figures/paper/`. For
+pressure-transfer, CGL pressure-work decomposition, and alignment
+diagnostics with synthetic numerical checks. The pressure-work product splits
+`p_perp div(u)` from `-Delta p (b b : grad u)` and compares the latter with
+the direct transfer integral. Multi-snapshot ensembles include trapezoidal
+time-integral estimates for this product and the reconstructed heat-flux
+proxy; both remain snapshot-derived rather than closed applied energy
+budgets. The workflow also renders available diagnostic figures under
+`figures/paper/`. For
 paper-standard bundles it uses each case's declared analysis window to
 produce ensemble-average products and interval heat-flux-cap fractions.
 If a pinned MKS24 staging manifest is available, the analysis bundle retains

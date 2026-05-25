@@ -538,6 +538,69 @@ def velocity_gradient_products(velocity: list[np.ndarray], bhat: list[np.ndarray
     }
 
 
+def pressure_work_decomposition(fields: dict[str, np.ndarray],
+                                lengths: tuple[float, float, float],
+                                strain_parallel: np.ndarray,
+                                model: dict[str, object] | None
+                                ) -> dict[str, object]:
+    """Reconstruct cell-centered CGL pressure-force work from one snapshot.
+
+    For P = p_perp I - Delta p b b, periodic integration of the pressure
+    force contribution to kinetic energy is integral[P : grad(u)] dV.
+    """
+
+    velocity = [fields["velx"], fields["vely"], fields["velz"]]
+    divergence = sum(
+        periodic_gradient(velocity[index], lengths)[index] for index in range(3)
+    )
+    pperp = fields["p_perp"]
+    delta_p = pperp - fields["eint"]
+    isotropic_density = pperp * divergence
+    anisotropic_density = -delta_p * strain_parallel
+    volume = lengths[0] * lengths[1] * lengths[2]
+    cell_volume = volume / pperp.size
+
+    def integral(values: np.ndarray) -> float:
+        return float(cell_volume * np.sum(values))
+
+    applied_to_flow: bool | None = None
+    if model is not None and "passive_delta" in model:
+        applied_to_flow = not model_bool(model, "passive_delta", False)
+    if applied_to_flow is True:
+        interpretation = "active pressure-feedback diagnostic"
+    elif applied_to_flow is False:
+        interpretation = "passive-Delta diagnostic; not applied to flow evolution"
+    else:
+        interpretation = "model feedback scope was not archived"
+    anisotropic_power = integral(anisotropic_density)
+    isotropic_power = integral(isotropic_density)
+    return {
+        "available": True,
+        "definition": (
+            "integral[p_perp div(u) - Delta p (b b : grad(u))] dV"
+        ),
+        "anisotropic_stress_definition": (
+            "integral[-Delta p (b b : grad(u))] dV"
+        ),
+        "discretization": (
+            "cell-centered periodic-gradient reconstruction from one snapshot; "
+            "not a time-integrated energy budget"
+        ),
+        "sign_convention": (
+            "positive power is kinetic-energy gain from the CGL pressure force"
+        ),
+        "applied_to_flow": applied_to_flow,
+        "interpretation": interpretation,
+        "isotropic_perpendicular_pressure_power": isotropic_power,
+        "anisotropic_stress_power": anisotropic_power,
+        "total_cgl_pressure_power": isotropic_power + anisotropic_power,
+        "parallel_strain_rms": float(np.sqrt(np.mean(strain_parallel ** 2))),
+        "anisotropic_power_density_rms": float(
+            np.sqrt(np.mean(anisotropic_density ** 2))
+        ),
+    }
+
+
 def wavenumbers(shape: tuple[int, int, int],
                 lengths: tuple[float, float, float]) -> tuple[np.ndarray, ...]:
     """Return physical FFT wavenumber grids in array indexing order."""
@@ -737,6 +800,22 @@ def analyze_fields(fields: dict[str, np.ndarray], lengths: tuple[float, float, f
             for component in magnetic]
     gradient_parallel, gradient_perp = projected_gradient(delta_p, bhat, lengths)
     velocity_products = velocity_gradient_products(velocity, bhat, lengths)
+    transfer = pressure_transfer(rho, velocity, magnetic, delta_p, lengths, dk)
+    pressure_work = pressure_work_decomposition(
+        fields, lengths, velocity_products["bb_grad_velocity"], model_choices
+    )
+    anisotropic_power = float(pressure_work["anisotropic_stress_power"])
+    transfer_direct = float(transfer["direct_real_space"])
+    transfer_difference = transfer_direct - anisotropic_power
+    pressure_work.update({
+        "mks24_transfer_direct_real_space": transfer_direct,
+        "mks24_transfer_minus_anisotropic_stress_power": transfer_difference,
+        "mks24_transfer_relative_difference": float(
+            transfer_difference / max(
+                abs(transfer_direct), abs(anisotropic_power), np.finfo(float).tiny
+            )
+        ),
+    })
     pdf_values = pdf_fields(fields, lengths)
     spectra = {
         "velocity": shell_spectrum(velocity, lengths, dk),
@@ -759,8 +838,8 @@ def analyze_fields(fields: dict[str, np.ndarray], lengths: tuple[float, float, f
             for name, values in pdf_values.items()
         },
         "spectra": spectra,
-        "pressure_transfer": pressure_transfer(rho, velocity, magnetic, delta_p,
-                                               lengths, dk),
+        "pressure_transfer": transfer,
+        "pressure_work_decomposition": pressure_work,
         "alignment": alignment_histograms(velocity, magnetic, lengths, dk,
                                           alignment_shells, bins),
         "heat_flux_transport_proxy": heat_flux_transport_proxy(
@@ -799,17 +878,76 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
 
     if not records:
         return {"snapshot_count": 0}
-    samples = list(records.values())
+    samples = sorted(records.values(), key=lambda sample: float(sample["time"]))
+    times = np.asarray([float(sample["time"]) for sample in samples], dtype=float)
+    can_integrate = bool(len(times) >= 2 and times[-1] > times[0])
     pdf_names = samples[0]["pdf"].keys()
     spectrum_names = samples[0]["spectra"].keys()
     alignment_names = set(samples[0]["alignment"].keys())
     for sample in samples[1:]:
         alignment_names.intersection_update(sample["alignment"].keys())
     transfer = [sample["pressure_transfer"] for sample in samples]
+    pressure_work = [sample["pressure_work_decomposition"] for sample in samples]
     heat_flux = [
         sample["heat_flux_transport_proxy"] for sample in samples
         if sample["heat_flux_transport_proxy"].get("available", False)
     ]
+    shared_work_scope = pressure_work[0]["interpretation"]
+    if any(sample["interpretation"] != shared_work_scope for sample in pressure_work[1:]):
+        shared_work_scope = "mixed model feedback scopes"
+    pressure_work_ensemble: dict[str, object] = {
+        "available": True,
+        "snapshot_count": len(pressure_work),
+        "definition": pressure_work[0]["definition"],
+        "anisotropic_stress_definition": pressure_work[0][
+            "anisotropic_stress_definition"
+        ],
+        "discretization": pressure_work[0]["discretization"],
+        "sign_convention": pressure_work[0]["sign_convention"],
+        "applied_to_flow": pressure_work[0]["applied_to_flow"] if all(
+            sample["applied_to_flow"] == pressure_work[0]["applied_to_flow"]
+            for sample in pressure_work[1:]
+        ) else None,
+        "interpretation": shared_work_scope,
+    }
+    for name in (
+        "isotropic_perpendicular_pressure_power",
+        "anisotropic_stress_power",
+        "total_cgl_pressure_power",
+        "parallel_strain_rms",
+        "anisotropic_power_density_rms",
+        "mks24_transfer_direct_real_space",
+        "mks24_transfer_minus_anisotropic_stress_power",
+        "mks24_transfer_relative_difference",
+    ):
+        pressure_work_ensemble[f"{name}_mean"] = float(
+            np.mean([sample[name] for sample in pressure_work])
+        )
+    pressure_integral: dict[str, object] = {
+        "available": can_integrate,
+        "definition": (
+            "trapezoidal time integral of snapshot-reconstructed CGL "
+            "pressure-power terms"
+        ),
+        "discretization": (
+            "sparse retained-snapshot quadrature; not applied stage accounting"
+        ),
+        "snapshot_count": len(times),
+        "time_first": float(times[0]),
+        "time_last": float(times[-1]),
+    }
+    if can_integrate:
+        for name in (
+            "isotropic_perpendicular_pressure_power",
+            "anisotropic_stress_power",
+            "total_cgl_pressure_power",
+            "mks24_transfer_direct_real_space",
+            "mks24_transfer_minus_anisotropic_stress_power",
+        ):
+            pressure_integral[f"{name}_integral"] = float(np.trapz(
+                [sample[name] for sample in pressure_work], times
+            ))
+    pressure_work_ensemble["time_integral_estimate"] = pressure_integral
     heat_flux_ensemble: dict[str, object] = {
         "available": bool(heat_flux),
         "snapshot_count": len(heat_flux),
@@ -836,6 +974,37 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
             heat_flux_ensemble[f"{name}_mean"] = float(
                 np.mean([sample[name] for sample in heat_flux])
             )
+        heat_flux_times = np.asarray([
+            float(sample["time"]) for sample in samples
+            if sample["heat_flux_transport_proxy"].get("available", False)
+        ])
+        heat_flux_can_integrate = bool(
+            len(heat_flux_times) >= 2 and heat_flux_times[-1] > heat_flux_times[0]
+        )
+        heat_flux_integral: dict[str, object] = {
+            "available": heat_flux_can_integrate,
+            "definition": (
+                "trapezoidal time integral of snapshot-reconstructed LF "
+                "heat-flux smoothing-power terms"
+            ),
+            "discretization": (
+                "sparse retained-snapshot quadrature; not applied face accounting"
+            ),
+            "snapshot_count": len(heat_flux_times),
+            "time_first": float(heat_flux_times[0]),
+            "time_last": float(heat_flux_times[-1]),
+        }
+        if heat_flux_can_integrate:
+            for name in (
+                "regularized_parallel_power",
+                "regularized_perpendicular_power",
+                "regularized_total_power",
+                "unlimited_total_power",
+            ):
+                heat_flux_integral[f"{name}_integral"] = float(np.trapz(
+                    [sample[name] for sample in heat_flux], heat_flux_times
+                ))
+        heat_flux_ensemble["time_integral_estimate"] = heat_flux_integral
     return {
         "snapshot_count": len(samples),
         "time_first": min(float(sample["time"]) for sample in samples),
@@ -862,6 +1031,7 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
                 [item["closure_error"] for item in transfer]
             )),
         },
+        "pressure_work_decomposition": pressure_work_ensemble,
         "alignment": {
             name: mean_distribution([sample["alignment"][name] for sample in samples])
             for name in sorted(alignment_names)
@@ -945,6 +1115,7 @@ def synthetic_test() -> dict[str, object]:
         "pfloor": "1.0e-12",
         "tfloor": "1.0e-12",
         "bfloor": "1.0e-10",
+        "passive_delta": "false",
     }
     record = analyze_fields(fields, lengths, 0.0, 16, [2], model_choices=model)
     velocity_power = np.asarray(record["spectra"]["velocity"]["power_per_dk"])
@@ -955,12 +1126,35 @@ def synthetic_test() -> dict[str, object]:
         np.max(np.abs(derivative - exact)) / np.max(np.abs(exact))
     )
     transfer = record["pressure_transfer"]
+    pressure_work = record["pressure_work_decomposition"]
     alignment = record["alignment"].get("2", {})
     strain = np.asarray(record["pdf"]["bb_grad_velocity"]["density"])
     heat_flux = record["heat_flux_transport_proxy"]
     finite_alignment = bool(
         alignment and np.isfinite(np.asarray(alignment["density"])).all()
     )
+    correlated_fields = {
+        name: np.array(values, copy=True) for name, values in fields.items()
+    }
+    correlated_fields["velx"] = np.zeros(shape)
+    correlated_fields["velz"] = np.sin(math.pi * zz)
+    correlated_fields["p_perp"] = 1.0 + 0.1 * np.cos(math.pi * zz)
+    correlated_record = analyze_fields(
+        correlated_fields, lengths, 0.0, 16, [2], model_choices=model
+    )
+    correlated = correlated_record["pressure_work_decomposition"]
+    passive_model = dict(model)
+    passive_model["passive_delta"] = "true"
+    passive_work = analyze_fields(
+        correlated_fields, lengths, 0.0, 16, [2], model_choices=passive_model
+    )["pressure_work_decomposition"]
+    repeated_correlated = analyze_fields(
+        correlated_fields, lengths, 2.0, 16, [2], model_choices=model
+    )
+    correlated_quadrature = average_snapshot_records({
+        "early": correlated_record,
+        "late": repeated_correlated,
+    })["pressure_work_decomposition"]["time_integral_estimate"]
     passed = bool(
         peak == 2
         and relative_gradient_error < 7.0e-3
@@ -971,6 +1165,15 @@ def synthetic_test() -> dict[str, object]:
         and heat_flux["available"]
         and heat_flux["regularized_perpendicular_power"] > 0.0
         and abs(float(heat_flux["regularized_parallel_power"])) < 1.0e-14
+        and abs(float(pressure_work["anisotropic_stress_power"])) < 1.0e-14
+        and correlated["anisotropic_stress_power"] < 0.0
+        and abs(float(
+            correlated["mks24_transfer_minus_anisotropic_stress_power"]
+        )) < 1.0e-14
+        and passive_work["applied_to_flow"] is False
+        and correlated_quadrature["available"]
+        and abs(float(correlated_quadrature["anisotropic_stress_power_integral"])
+                - 2.0 * float(correlated["anisotropic_stress_power"])) < 1.0e-14
     )
     return {
         "passed": passed,
@@ -985,6 +1188,20 @@ def synthetic_test() -> dict[str, object]:
             heat_flux["regularized_perpendicular_power"]
         ),
         "zero_parallel_heat_flux_proxy": heat_flux["regularized_parallel_power"],
+        "zero_anisotropic_pressure_work": pressure_work["anisotropic_stress_power"],
+        "negative_correlated_anisotropic_pressure_work": (
+            correlated["anisotropic_stress_power"]
+        ),
+        "correlated_transfer_work_difference": (
+            correlated["mks24_transfer_minus_anisotropic_stress_power"]
+        ),
+        "passive_pressure_work_is_diagnostic_only": (
+            passive_work["applied_to_flow"] is False
+        ),
+        "constant_power_quadrature_error": (
+            correlated_quadrature["anisotropic_stress_power_integral"]
+            - 2.0 * correlated["anisotropic_stress_power"]
+        ),
     }
 
 
