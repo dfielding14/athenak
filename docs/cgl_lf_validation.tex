@@ -264,11 +264,18 @@ clean partial diagnostic evidence, not an accepted result.  Its prolonged
 \(t=1\) snapshot/checkpoint write motivated a committed rank-local retained
 output protocol with grouped checksum and analysis support.  The fresh
 rank-local \texttt{R16/s01\_rankio\_t0\_t2} segment was submitted as job
-\texttt{4675322} from \(t=0\) and began executing on 2026-05-25.  A complete
-initial eight-rank snapshot/restart set was observed and read through the
-rank-aware analyzer; acceptance still requires terminal inspection and
-accounting.  The legacy partial is not continued across the changed input
-digest.
+\texttt{4675322} from \(t=0\), completed cleanly at
+\(t=1.87769834013<2\), and was recorded as an inspected rank-local clean
+partial using \(1.253056\) node-hours.  Its complete eight-rank
+\(t=1\) snapshot/restart boundary incurred no legacy-scale pause.  The
+same-digest continuation \texttt{R16/s02\_rankio\_t1p877698\_t2}
+(job \texttt{4676557}) reached \(t=2.0\), passed inspection with zero
+strict LF failure counters and complete terminal rank-local products, and
+used \(0.106389\) node-hours.  It is accepted as the terminal segment of the
+rank-local \(t=0\)-to-\(2\) prefix, not as a completed \(t=10\) case.  A
+further same-digest continuation through \(t=3.5\) has been submitted as
+job \texttt{4676696}.  The legacy partial is not continued across the
+changed input digest.
 
 \section{Validation Workflow}
 
@@ -533,10 +540,11 @@ units but do not state the discrete Fourier normalization needed to map
 absolute digitized ordinates into AthenaK products.  Those panels require
 author/archive numeric data, donor diagnostic code, or an explicit
 normalization statement.  One mapped production segment has been retained
-only as clean partial I/O-diagnostic evidence and its rank-local rerun has
-been submitted, but quantitative MKS24 simulation-to-reference comparisons
-require completed accepted bundles; none is claimed by this manuscript
-version.
+only as clean partial I/O-diagnostic evidence; the ranked-output replacement
+is accepted through its \(t=2\) prefix and is being continued toward the
+required \(t=10\) final time.  Quantitative MKS24
+simulation-to-reference comparisons require completed accepted bundles; none
+is claimed by this manuscript version.
 
 \section{Comparison Gate Matrix}
 
@@ -627,11 +635,12 @@ AthenaK now has a validated CGL--LF implementation path, retained nonlinear
 diagnostics, source-mapped MKS24 case definitions, and a checksum- and
 allocation-recorded Frontier production protocol.  The production protocol
 began with the required low-resolution scale-separation case; its first
-shared-I/O segment is a clean partial diagnostic record, and a fresh
-rank-local segment has been submitted from \(t=0\).  Neither is counted as an
-accepted comparison result.  Thus the present manuscript establishes the
-method, target contract, and acceptance procedure, but does not yet claim
-reproduction of the MKS24 turbulent conclusions.
+shared-I/O segment is a clean partial diagnostic record, and its ranked-output
+replacement has passed the inspected \(t=2\) prefix gate and is continuing
+toward \(t=10\).  No completed case is yet counted as an accepted comparison
+result.  Thus the present manuscript establishes the method, target contract,
+and acceptance procedure, but does not yet claim reproduction of the MKS24
+turbulent conclusions.
 
 Completion of the reproduction claim requires all sixteen mapped cases to
 reach \(t_f\geq10L_\perp/v_A\), pass strict safety and provenance checks, and
@@ -667,10 +676,10 @@ The imported method figures come from a passing local \texttt{full} workflow
 bundle.  The reduced nonlinear figures come from a passing
 \texttt{paper-convergence} bundle reanalyzed with the current plotting code.
 Warning-strict Sphinx documentation and this \LaTeX{} build are checked when
-the report is updated.  One production segment has been accounted as clean
-partial and its rank-local replacement has been submitted, but
+the report is updated.  The ranked-output low-resolution case has passed its
+inspected \(t=2\) prefix gate and a continuation has been submitted, but
 production/statistical and paper-reference comparison gates remain open until
-accepted long-time output bundles are analyzed.
+accepted \(t\geq10\) output bundles are analyzed.
 
 \begin{thebibliography}{9}
 \bibitem{Squire2023}
