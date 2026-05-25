@@ -1258,7 +1258,7 @@ def record(args: argparse.Namespace) -> int:
 
 def accepted_case_segments(paths: dict[str, Path],
                            case_id: str) -> list[dict[str, object]]:
-    """Load scientifically accepted, accounted segments for one mapped case."""
+    """Load scientifically qualifying, accounted segments for one mapped case."""
 
     segments: list[dict[str, object]] = []
     manifests = sorted(
@@ -1293,6 +1293,64 @@ def accepted_case_segments(paths: dict[str, Path],
         key=lambda item: float(item["scientific_inspection"]["final_time"])
     )
     return segments
+
+
+def accepted_case_lineage(paths: dict[str, Path],
+                          case_id: str) -> list[dict[str, object]]:
+    """Select the recorded restart lineage ending at the latest accepted segment."""
+
+    segments = accepted_case_segments(paths, case_id)
+    if not segments:
+        return []
+    accepted = [
+        segment for segment in segments
+        if segment["accounting"]["result"] == "accepted"
+    ]
+    if not accepted:
+        raise ValueError(f"{case_id} has no accepted terminal segment")
+    final_time = max(
+        float(segment["scientific_inspection"]["final_time"])
+        for segment in accepted
+    )
+    terminals = [
+        segment for segment in accepted
+        if abs(
+            float(segment["scientific_inspection"]["final_time"]) - final_time
+        ) <= 1.0e-10
+    ]
+    if len(terminals) != 1:
+        raise ValueError(
+            f"{case_id} has multiple latest accepted terminal segments"
+        )
+    indexed = {
+        Path(str(segment["_manifest_path"])).resolve(): segment
+        for segment in segments
+    }
+    lineage: list[dict[str, object]] = []
+    current = terminals[0]
+    visited: set[Path] = set()
+    while True:
+        path = Path(str(current["_manifest_path"])).resolve()
+        if path in visited:
+            raise ValueError(f"{case_id} accepted restart lineage contains a cycle")
+        visited.add(path)
+        lineage.append(current)
+        parent = current["command"].get("parent_segment")
+        if parent is None:
+            break
+        if not isinstance(parent, dict) or "manifest" not in parent:
+            raise ValueError(
+                f"{case_id} accepted restart lineage lacks a parent manifest"
+            )
+        parent_path = Path(str(parent["manifest"])).resolve()
+        if parent_path not in indexed:
+            raise ValueError(
+                f"{case_id} accepted restart lineage parent is not a "
+                f"qualifying recorded segment: {parent_path}"
+            )
+        current = indexed[parent_path]
+    lineage.reverse()
+    return lineage
 
 
 def one_segment_output(manifest: dict[str, object], pattern: str) -> Path:
@@ -1349,12 +1407,10 @@ def bundle_case(args: argparse.Namespace) -> int:
     matrix_path = Path(args.matrix).expanduser().resolve()
     matrix = validate_matrix(matrix_path, source_dir)
     case = case_for_id(matrix, args.case_id)
-    segments = accepted_case_segments(paths, args.case_id)
+    segments = accepted_case_lineage(paths, args.case_id)
     if not segments:
         raise ValueError(f"no accepted segments are recorded for {args.case_id}")
     final_time = float(segments[-1]["scientific_inspection"]["final_time"])
-    if segments[-1]["accounting"]["result"] != "accepted":
-        raise ValueError(f"{args.case_id} has no accepted terminal segment")
     if final_time < args.required_final_time - 1.0e-10:
         raise ValueError(
             f"{args.case_id} reaches only t={final_time}; "
@@ -1493,11 +1549,9 @@ def bundle_campaign(args: argparse.Namespace) -> int:
     matrix_path = Path(args.matrix).expanduser().resolve()
     matrix = validate_matrix(matrix_path, source_dir)
     for case in matrix["cases"]:
-        segments = accepted_case_segments(paths, str(case["id"]))
+        segments = accepted_case_lineage(paths, str(case["id"]))
         if not segments:
             raise ValueError(f"no accepted segments are recorded for {case['id']}")
-        if segments[-1]["accounting"]["result"] != "accepted":
-            raise ValueError(f"{case['id']} has no accepted terminal segment")
         final_time = float(segments[-1]["scientific_inspection"]["final_time"])
         if final_time < args.required_final_time - 1.0e-10:
             raise ValueError(

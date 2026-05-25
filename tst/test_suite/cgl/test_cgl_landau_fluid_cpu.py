@@ -1052,6 +1052,54 @@ def test_cgl_lf_stage_i_groups_rank_local_output_products(tmp_path):
     assert stage_i.retained_product_paths(product) == groups[0]
 
 
+def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(tmp_path):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_lineage_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    root = tmp_path / "root"
+    paths = stage_i.initialize(root)
+
+    def record_segment(segment, final_time, result, input_sha, parent=None):
+        manifest_path = (
+            root / "runs" / "mks24-stage-i" / "R16" / segment
+            / "manifest" / "prepared_run.json"
+        )
+        manifest_path.parent.mkdir(parents=True)
+        command = {"input_sha256": input_sha, "executable_sha256": "x" * 64}
+        if parent is not None:
+            command["parent_segment"] = {"manifest": str(parent)}
+        stage_i.write_json(manifest_path, {
+            "state": "recorded",
+            "accounting": {"result": result},
+            "command": command,
+            "scientific_inspection": {
+                "accepted": result == "accepted",
+                "clean_for_continuation": True,
+                "final_time": final_time,
+            },
+        })
+        return manifest_path
+
+    diagnostic = record_segment("s00_legacy", 1.6, "clean_partial", "a" * 64)
+    ranked = record_segment("s01_rankio", 1.8, "clean_partial", "b" * 64)
+    terminal = record_segment(
+        "s02_rankio", 2.0, "accepted", "b" * 64, parent=ranked
+    )
+
+    lineage = stage_i.accepted_case_lineage(paths, "R16")
+    assert [Path(segment["_manifest_path"]) for segment in lineage] == [
+        ranked, terminal
+    ]
+    assert diagnostic not in [
+        Path(segment["_manifest_path"]) for segment in lineage
+    ]
+
+
 def test_rank_local_binary_reader_keeps_unequal_rank_files(tmp_path, monkeypatch):
     spec = importlib.util.spec_from_file_location(
         "bin_convert_rank_output_test", "../../../vis/python/bin_convert.py"
