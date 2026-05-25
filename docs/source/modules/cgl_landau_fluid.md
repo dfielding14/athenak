@@ -239,8 +239,8 @@ raw or MKS24-normalized transfer, selected-shell alignment-distribution, alignme
 over additional shells.
 The staged-reference tooling includes pinned vector extraction for Figure
 2(b), Figure 7 lower-panel and Figure 13(d) normalized transfer curves, the
-dimensionless Figure 12 alignment curves, and the dimensionless `beta Delta`
-PDF curves in Figure 13(b). The paper states `p0 = 100` in code
+dimensionless Figure 9 and Figure 12 alignment curves, and the dimensionless
+`beta Delta` PDF curves in Figure 13(b). The paper states `p0 = 100` in code
 units for its beta-100 limiter runs, while the equivalent AthenaK
 `v_A = 1` normalization uses `p0 = 50`; until an explicit observable
 conversion is qualified, dimensional Figure 12 spectra and Figure 13(a),(c)

@@ -52,8 +52,9 @@ and authorized standard comparison remain open. Two guarded active beta-10
 heat-flux definitions now cover the nonnominal Figure 12 parameter variants;
 their nominal active/passive comparisons reuse standard definitions. A
 tick-calibrated vector extractor and an `alignment_peak.cos_theta` analysis
-product now populate the dimensionless Figure 12 alignment panel for future
-comparisons. A normalization audit found that dimensional Figure 12 spectra
+product now populate the dimensionless Figure 9 standard-case and Figure 12
+heat-flux alignment panels for future comparisons. A normalization audit found
+that dimensional Figure 12 spectra
 and Figure 13(a),(c) curves cannot be admitted until MKS24's reported
 `p0 = 100` code-unit scale is transformed to AthenaK's `v_A = 1`
 normalization. MKS24's stated
@@ -200,7 +201,7 @@ test or run evidence.
 | CPU numerical accuracy | Convergence, asymptotic, cap, directional, restart, MPI/AMR checks | Yes | Partial 2026-05-25; archived `accuracy-v2` bundle covers N-001 through N-007 locally, the AMR workflow passed, and the full CPU suite passed (`218 passed, 15 skipped`); focused CGL tests now pass (`30 passed`) with corrected RK forcing work, restartable AMR-corrected applied CGL pressure work, and the F-033 algebraic hard-wall policy; Frontier Kokkos-Serial/MPI jobs `4659053`/`4659141` pass the one-rank/four-rank AMR oracle at `rtol = atol = 1.0e-12`, although direct invocation in the local shell remains unavailable because it lacks `mpirun` |
 | Frontier GPU numerical equivalence | CPU/GPU comparison suite, MPI/GPU restart checks, strict diagnostics | Yes for Frontier use | Partial 2026-05-25; immutable HIP/MPI builds archived; G-001 through G-007 pass their retained reduced gates; post-F-026 jobs `4658072`/`4658163` pass restart comparison for `lf_cpwrk`/`lf_cawrk`, `4658191`/`4658283` pass one-rank/four-rank GPU AMR comparison, policy-confirmation job `4659663` is identical to its pre-policy reference, and F-033 corrected nonlinear job G013 (`4673404`) passes through `t = 2.0` with zero strict safety counters; production-scale execution remains open |
 | Paper pgen and forcing fidelity | Input/pgen review, forcing metadata, restartable reduced smoke | Yes for MKS24 claims | Partial 2026-05-25; active/passive/random reduced smoke, forcing restart, OU cadence, multi-cycle RK-companion source-work checks, passive flow-decoupling checks, and Frontier G-007 reduced-paper matrix passed; paper-grade statistical calibration open |
-| Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Partial 2026-05-25; reduced histories, restartable RK-integrated applied forcing work/global active residual, RKL2-applied heat-flux contractions with fine-side AMR ownership, AMR-corrected RK-applied total/anisotropic CGL pressure-work ledgers, operator-face cap counters, windowed snapshot PDF/spectral/transfer/alignment/local-strain products, MKS24-normalized transfer and alignment-peak curve comparisons, deduplicated threshold-volume history curves, manifest-qualified proxies and cadence-limited estimates, generic figures, checksum/uncertainty-qualified reference-curve comparison plumbing, Figure 2(b) histories, Figure 7 lower-panel transfer ratios, Figure 12 alignment curves, and Figure 13(b),(d) dimensionless curves are implemented; dimensional-panel unit conversion, standard-run comparison, and remaining panel references remain open |
+| Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Partial 2026-05-25; reduced histories, restartable RK-integrated applied forcing work/global active residual, RKL2-applied heat-flux contractions with fine-side AMR ownership, AMR-corrected RK-applied total/anisotropic CGL pressure-work ledgers, operator-face cap counters, windowed snapshot PDF/spectral/transfer/alignment/local-strain products, MKS24-normalized transfer and alignment-peak curve comparisons, deduplicated threshold-volume history curves, manifest-qualified proxies and cadence-limited estimates, generic figures, checksum/uncertainty-qualified reference-curve comparison plumbing, Figure 2(b) histories, Figure 7 lower-panel transfer ratios, Figure 9 and Figure 12 alignment curves, and Figure 13(b),(d) dimensionless curves are implemented; dimensional-panel unit conversion, standard-run comparison, and remaining panel references remain open |
 | Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Nine guarded `paper-standard`, three `paper-nulim`, and two `paper-heat-flux` definitions exist, with Figure 2(b) series and Figure 12 parameter coverage corrected 2026-05-25; no paper-scale runs or scientific figure comparisons executed |
 | Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-25; immutable HIP/MPI builds through revision `9e1986df` and earlier Kokkos-Serial/MPI evidence are archived; sequential debug validation through G011 standard-layout startup MPI-I/O sizing, failed G012 finite-rate validation, and passed G013 F-033 corrected nonlinear validation is retained and recorded (`0.851670` node-hours total, no active reservation); a non-authorizing thirteen-unique-run cost/storage proposal is documented below and requires user/queue approval plus measured production validation |
 | User documentation | Sphinx build and accurately scoped runbook | Yes | Implemented for current functionality 2026-05-25; Sphinx warnings-as-errors and repository style suite pass in an isolated validation environment; future campaign results must still be documented when executed |
@@ -226,7 +227,7 @@ authorization to execute paper-production jobs.
 | Local operator and reduced-workflow implementation | Supported for the exercised local scope only | Full CPU suite (`218 passed, 15 skipped`), focused CGL suite (`30 passed`), retained `accuracy-v2`, `20260525-paper-smoke-pressure-work-v1`, `20260525-paper-convergence-pressure-work-v1`, and `20260525-amr-pressure-work-v1` bundles, F-018 through F-026 regression evidence, F-033 local exact-state hard-wall evidence, and scheduler-launched MPI CPU AMR jobs `4659053`/`4659141` | Production/statistical comparison gates remain open |
 | Validated on Frontier GPU hardware | Supported for the archived reduced qualification cases through F-033 | Immutable HIP/MPI builds; G-001 through G-007 strict/restart/decomposition/reduced-paper records; post-F-026 restart jobs `4658072`/`4658163`, GPU AMR jobs `4658191`/`4658283`, managed-policy confirmation job `4659663`, G010b/G011 I/O evidence, and G013 corrected nonlinear hard-wall job `4673404` | Paper-scale execution, measured standard runtime, and long-time statistical qualification remain open; G012 remains the retained failure of the superseded finite-rate hard-wall interpretation |
 | Production ready for supported CGL-LF use | Not established | Debug policy/accounting tooling, reduced GPU qualification including F-033 G013, MPI CPU AMR evidence, shared-MPI-I/O measurements, a reviewable scaling/storage proposal, and RK/AMR-consistent applied hyperbolic pressure traction histories exist | Measured representative standard runtime, approval of an appropriate production submission, and production/statistical qualification remain required |
-| MKS24 reproduction complete | Not established | Guarded standard/limiter/heat-flux input matrices, paper analysis products, checksum/uncertainty-qualified reference-curve comparison interface, populated Figure 2(b) histories, dimensionless Figure 7 transfer ratios, Figure 12 alignment curves, and Figure 13(b),(d) curves exist | Paper-to-AthenaK transforms for dimensional panels, other remaining panel reference data, long-time statistical calibration, authorized standard/limiter/heat-flux runs, quantitative panel comparisons, and archived scientific interpretation remain required |
+| MKS24 reproduction complete | Not established | Guarded standard/limiter/heat-flux input matrices, paper analysis products, checksum/uncertainty-qualified reference-curve comparison interface, populated Figure 2(b) histories, dimensionless Figure 7 transfer ratios, Figure 9 and Figure 12 alignment curves, and Figure 13(b),(d) curves exist | Paper-to-AthenaK transforms for dimensional panels, other remaining panel reference data, long-time statistical calibration, authorized standard/limiter/heat-flux runs, quantitative panel comparisons, and archived scientific interpretation remain required |
 
 The final audit specifically rejects two tempting overclaims:
 
@@ -365,6 +366,7 @@ table such as:
 | F-037 | 2026-05-25 | Figure 13 reference/product audit | Figure 13(a)-(b) appeared to map directly to existing `spectra.velocity` and `pdf.beta_delta` products, while panels (c)-(d) displayed additional strain/transfer normalizations not exposed by the analyzer; the published panels are separate PDFs | pinned `source/fig13{a,b,c,d}.pdf` SHA-256 values retained in `digitized_fig13_v1/digitization_metadata.json`; `scripts/digitize_cgl_lf_mks24_fig13.py`; ignored `digitized_fig13_v1/curves.json` SHA-256 `410e208f968f6e3b1007baff9e97ae8aeb80b03f2e3039b819fae7dc2e9494eb` | High | Admit backward-compatible multi-source digitized provenance, vector-extract provisional panel-(a)/(b) paths, and exclude normalized panels until matching products exist | Expanded multi-source checksum rejection regression; checksum-qualified seven-curve manifest ingestion probe | Implemented provisionally; F-038 supersedes admission of dimensionful panel (a) while retaining dimensionless panel (b) |
 | F-038 | 2026-05-25 | Paper/reference normalization audit | MKS24 states `p0 = 100` in code units for its beta-100 Figure 13 runs and plots panel (c) against `bhat bhat : grad(u) / <B^2>`, while AthenaK's internally consistent `B0 = 1`, `v_A = 1` beta-100 decks use `p0 = 50`; an absolute ordinate transform for dimensional panels is not established | pinned `source/MKS24.tex:467,687`, `source/fig13{a,c,d}.pdf`, `src/pgen/tests/cgl_lf_paper.cpp:167-174`, `scripts/digitize_cgl_lf_mks24_fig{12,13}.py`; ignored `digitized_fig12_v2/curves.json` SHA-256 `8bc302c082ed971eda657f5aac283fd423ab182dbd676faa7da72ca3436a0b9c` and `digitized_fig13_v2/curves.json` SHA-256 `816013b3e4af9f5755fde5d64228721c86f14206a69210e3b2c38db35c1aa12e` | Blocker | Do not alter normalized decks without donor-state evidence; emit only dimensionless Figure 12 alignment and Figure 13(b) `beta Delta` comparisons, and exclude dimensional spectra/strain/transfer until their transform and `T_total` are qualified | Regenerated checksum-bound `v2` manifests; extractor compilation/style and manifest-ingestion validation | Implemented for fail-closed admission of dimensional panels; F-039 subsequently admits dimensionless normalized-transfer ratios |
 | F-039 | 2026-05-25 | Dimensionless transfer-reference audit | MKS24 defines `T_Delta p/T_total` with `T_total ~= E_K (2 pi u_rms/L_perp)` in its diagnostics section, but the analyzer retained only unnormalized transfer, preventing direct admission of the dimensionless Figure 7 lower panel and Figure 13(d) | pinned `source/MKS24.tex:488-494,591`, `source/fig7.pdf` SHA-256 `5411da17391d19fceb26f617f91b4fb1153c7638ccca8afee6c8e0d013651afa`, `source/fig13d.pdf` SHA-256 `bf1c063fa5a54c2dbbe9dce417490b5bf821fcd2e1cb1926d78c923b90387a24`, `scripts/analyze_cgl_lf_paper.py`; ignored `digitized_fig7_v1/curves.json` SHA-256 `7c2f02bca4725674b9e77292a7f33c40de211bdcd48fe2e29a4b2e8fe81c1d09` and `digitized_fig13_v3/curves.json` SHA-256 `78f084d55d851561bf7a649becbfa907626f0890605b5e792fe0352cc205c924` | High | Emit the MKS24 Kolmogorov-rate-normalized transfer product and vector-extract only the dimensionless transfer panels with absolute ordinate uncertainty | Synthetic exact normalized-transfer manifest regression; checksum-bound Figure 7/13 generation and manifest-ingestion validation | Implemented for comparison infrastructure/reference curves; authorized case execution and quantitative simulation-to-paper comparisons remain open |
+| F-040 | 2026-05-25 | Figure 9 dimensionless-reference audit | The comparator already exposes `alignment_peak.cos_theta` and the standard workflow already defines the eight active/passive Alfvenic/random beta-10/beta-100 cases plotted in Figure 9, but no numeric Figure 9 reference curves were admitted | pinned `source/MKS24.tex:610-614`, `source/fig9.pdf` SHA-256 `9d0dbb05514a8ce7a48eddb178b05a47ec512e58d2a2ff99d899123f8e458984`; `scripts/digitize_cgl_lf_mks24_fig9.py`; ignored `digitized_fig9_v1/curves.json` SHA-256 `07417294ca44e7aa7e8c499931e12ed7fce9eec55e4691e3172a8684470163b8` | High | Vector-extract only the dimensionless peak-alignment paths and map them to the existing standard case definitions with absolute ordinate uncertainty | Checksum-bound Figure 9 generation and eight-curve manifest-ingestion validation | Implemented for dimensionless alignment references; authorized standard execution and quantitative comparison remain open |
 
 ### Implemented Core Decision Log
 
@@ -395,7 +397,7 @@ table such as:
 | 2026-05-25 | Archive the STS timestep/integrator contract in paper workflow manifests. | F-031 makes the split-step cap a qualification-critical model choice; a result cannot be interpreted or repeated if the manifest omits it. | F-032 metadata regression records guarded-deck `sts_max_dt_ratio = -1.0`; G013 archives and passes that setting with the F-033 hard-wall model |
 | 2026-05-25 | Represent the MKS24 hard-wall limit explicitly with `limiter_hardwall = true` in hard-wall paper decks rather than finite-rate pressure relaxation at `limiter_nu_coll = 1.0e10`. | The pinned paper source describes anisotropy effectively pinned at thresholds; F-031 locates a same-state internal LF-stage overshoot under finite-rate scattering, while the energy-preserving constrained state passes locally through `t = 2.0`. Finite-rate `20`/`200` decks remain unchanged. | F-033 CPU/exact-state validation and corrected G013 reduced Frontier GPU execution pass; standard costing, proposal approval, and production/statistical qualification remain required |
 | 2026-05-25 | Implement CGL pressure mechanical work first as a snapshot-derived local decomposition with a transfer cross-check and sparse-time quadrature estimate. | Retained fields determine `p_perp div(u) - Delta p (b b : grad(u))` without changing the integrator; trapezoidal snapshot-time integration aids interval interpretation, but neither result is an applied budget identity. | F-023 synthetic sign/transfer/quadrature oracles and corrected `20260525-paper-convergence-rk-work-v1` products; exact production interval closure remains open |
-| 2026-05-25 | Admit paper reference curves only through an external checksum- and uncertainty-qualified manifest. | The staged arXiv source supplies panel PDFs but not numeric curve tables; separating source data from code and rejecting absent uncertainties permits author-data or documented-digitization comparisons without overstating simulation evidence. | F-024 exact-curve and source-checksum-rejection regressions plus F-034/F-036/F-037 checksum-bound vector extraction for Figures 2(b), 12, and 13(a)-(b); remaining panels and production comparisons remain open |
+| 2026-05-25 | Admit paper reference curves only through an external checksum- and uncertainty-qualified manifest. | The staged arXiv source supplies panel PDFs but not numeric curve tables; separating source data from code and rejecting absent uncertainties permits author-data or documented-digitization comparisons without overstating simulation evidence. | F-024 exact-curve and source-checksum-rejection regressions plus F-034/F-036/F-037/F-039/F-040 checksum-bound vector extraction for Figures 2(b), 7, 9, 12, and 13; remaining panels and production comparisons remain open |
 | 2026-05-25 | Expose threshold-volume histories as reference-comparable curves while collapsing duplicate terminal timestamps. | Figure 2(b) is a time-series result rather than a snapshot statistic, and Athena repeats an unchanged terminal history row; retaining the final equal-time value gives ordered coordinates without changing the measured endpoint. | F-030 synthetic exact-history comparison passes; F-034 now supplies eight digitized Figure 2(b) histories, while standard-run comparison remains open |
 | 2026-05-25 | Complete Figure 2(b) coverage with four additional guarded standard definitions and vector-derived external reference histories. | The official panel shows active and passive Alfvenic/random cases at beta 10 and 100; omitting any series prevents the implemented comparison interface from evaluating the displayed result. | F-034 adds nine standard definitions in total and external `digitized_fig2b_v1/curves.json`; no production execution is authorized by this definition/reference work |
 | 2026-05-25 | Define the nonnominal Figure 12 heat-flux sensitivity cases in a separate guarded workflow. | The pinned paper source varies the active beta-10 Alfvenic heat-flux parameter by factors of 100 around the nominal case; two additional definitions avoid duplicating nominal active/passive output while making the intended campaign auditable. | F-035 adds two `paper-heat-flux` decks and debug exclusion; F-036 supplies reference curves; authorized production runs and comparison remain open |
@@ -403,6 +405,7 @@ table such as:
 | 2026-05-25 | Extract only directly comparable Figure 13 panels and validate multiple source PDFs in one digitized manifest. | Panels (a)-(b) use existing velocity-spectrum and `beta Delta` PDF products, whereas panels (c)-(d) include plotted normalizations that cannot be represented honestly by the current raw strain/transfer products. | F-037 adds external `digitized_fig13_v1/curves.json` for seven curves and records panels (c)-(d) as excluded product gaps; authorized limiter execution and comparison remain open |
 | 2026-05-25 | Supersede dimensional reference-curve admission until the paper-to-AthenaK code-unit transform is qualified. | MKS24's beta-100 footnote reports `p0 = 100`, while the normalized AthenaK decks use `p0 = 50`; this does not affect dimensionless `beta Delta` or alignment products, but it prevents honest raw spectral/strain/transfer comparisons without a declared conversion. | F-038 emits corrected `digitized_fig12_v2`/`digitized_fig13_v2` manifests containing only dimensionless admitted curves; earlier `v1` outputs remain archived as provisional evidence |
 | 2026-05-25 | Implement MKS24's stated normalized transfer comparator and admit dimensionless transfer panels. | The paper defines `T_total ~= E_K (2 pi u_rms/L_perp)`, so Figure 7's lower panel and Figure 13(d) do not require the unresolved dimensional ordinate transform. | F-039 adds `pressure_transfer.transfer_normalized_by_total` and external `digitized_fig7_v1`/`digitized_fig13_v3` manifests; production comparisons remain open |
+| 2026-05-25 | Admit Figure 9 peak-alignment references through existing standard-case mappings. | Its `|cos(theta)|` ordinate is dimensionless and all eight legend cases already exist in the guarded standard matrix, so it is not blocked by the dimensional normalization audit. | F-040 adds external `digitized_fig9_v1/curves.json`; production comparisons remain open |
 | 2026-05-25 | Advance `force_work` through the same explicit-RK recurrence as the source-modified conserved state. | Adding every source-call energy increment overcounts work retained in a multi-stage final state because later RK combinations reweight earlier source contributions; active reduced cases must fail when the ledger does not close conserved energy. | F-025 multi-cycle CPU regression; corrected smoke and convergence bundles pass with maximum active relative residual `5.141362829086986e-10`; production residual qualification remains open |
 | 2026-05-25 | Define applied CGL pressure work from the isolated numerical pressure traction after momentum AMR flux correction, then integrate it with the explicit-RK companion recurrence. | A snapshot-gradient estimate is not the applied finite-volume operator and a face-jump contraction is ambiguous across coarse/fine interfaces; contracting each active cell's corrected pressure-traction momentum RHS with its stage velocity uses exactly the operator consumed by the update. | F-026 focused AMR/restart/passive/FOFC regressions and fresh pressure-work bundles pass locally; Frontier GPU restart and GPU/CPU AMR decomposition comparisons pass for `lf_cpwrk`/`lf_cawrk`; production interpretation remains open |
 | 2026-05-25 | Generate distinct Frontier debug launch environments for GPU-aware qualification and MPI CPU decomposition validation. | A Kokkos-Serial MPI executable is not linked against Cray's GPU transport library and must not inherit `MPICH_GPU_SUPPORT_ENABLED=1` or GPU binding from the HIP/MPI launch path; retaining the target in each manifest avoids ambiguous evidence. | F-027 failure job `4658519` identifies the pre-launch abort; utility self-test verifies CPU and GPU generated scripts separately; corrected CPU-target jobs `4659053`/`4659141` pass |
@@ -539,6 +542,7 @@ The current branch already contains:
 | Workflow wrapper | `scripts/run_cgl_lf_validation.sh` |
 | Figure 2(b) reference extractor | `scripts/digitize_cgl_lf_mks24_fig2b.py` |
 | Figure 7 lower-panel reference extractor | `scripts/digitize_cgl_lf_mks24_fig7.py` |
+| Figure 9 alignment reference extractor | `scripts/digitize_cgl_lf_mks24_fig9.py` |
 | Figure 12 reference extractor | `scripts/digitize_cgl_lf_mks24_fig12.py` |
 | Figure 13(b),(d) dimensionless reference extractor | `scripts/digitize_cgl_lf_mks24_fig13.py` |
 | Existing plots | `scripts/plot_cgl_lf_validation.py` |
@@ -1026,7 +1030,7 @@ diagnostics, converged statistics, and documented quantitative comparisons.
 | Figures 3-4: compressive/density behavior | Active/passive; beta and forcing variants | Density PDFs and density/compressive spectra | Steady-window density PDF/spectrum machinery implemented; target runs/comparison missing |
 | Figures 5-6: turbulent spectra and rate-of-strain suppression | Active/passive, Alfvenic/random | Velocity/magnetic/pressure spectra; parallel/perpendicular velocity-gradient spectra | Local-field velocity-gradient and strain products plus generic rendering implemented; target runs/comparison missing |
 | Figure 7: pressure-anisotropy organization and transfer | Active/passive, Alfvenic/random, beta 10 | `grad_parallel Delta p`, `grad_perp Delta p` spectra; `T_Delta p(k_perp)/T_total` | Steady-window gradient spectra, transfer partition/closure, snapshot anisotropic-work cross-check, MKS24-normalized transfer product, and dimensionless lower-panel reference curves are implemented; dimensional upper-panel reference transform, target runs, and comparison remain open |
-| Figures 8-9: alignment diagnostic | Active/passive; beta/forcing variants | Scale-dependent PDFs and peak locations of local-field/rate-of-strain eigenvector alignment | Steady-window selected-shell alignment PDFs, reference-comparable peak curves, rendered peak summaries, and synthetic finite check implemented; target reference comparison missing |
+| Figures 8-9: alignment diagnostic | Active/passive; beta/forcing variants | Scale-dependent PDFs and peak locations of local-field/rate-of-strain eigenvector alignment | Steady-window selected-shell alignment PDFs, reference-comparable peak curves, rendered peak summaries, and synthetic finite check implemented; Figure 9 eight peak-alignment reference curves are vector-extracted for the standard case matrix; Figure 8 two-dimensional PDF reference extraction and target-run comparison remain open |
 | Figure 10: kinetic comparison context | Not reproduced directly by CGL-LF | Documentation of non-reproducible kinetic comparator and any qualitative CGL-only comparison | Out of direct scope |
 | Figure 11: scale-separation behavior | Selected resolutions | Resolution/convergence or scale-separation comparison products | Operator accuracy and short reduced resolution product paths implemented; steady nonlinear comparison missing |
 | Figure 12: heat-flux sensitivity | Heat-flux parameter variants | Spectra/transfer/diagnostic products under heat-flux changes | Two nonnominal active beta-10 guarded definitions exist and nominal active/passive cases reuse standard definitions; dimensionless top-panel curves are admitted through `alignment_peak.cos_theta`; the dimensional lower spectrum is excluded pending the F-038 unit transform; execution, steady nonlinear comparison, and exact interval/production budget remain missing |
@@ -1908,8 +1912,9 @@ is interpreted physically.
 reference-comparable peak curves are implemented, with explicit
 `paper-analyze --alignment-shells` selection for wide plotted ranges.
 Synthetic output is checked for finite bounded histograms and exact
-peak-curve comparison. Physically interpretable production validation remains
-open.
+peak-curve comparison. Eight dimensionless Figure 9 peak-alignment references
+are populated under F-040 for the standard case matrix. Physically
+interpretable production validation remains open.
 
 ### Figure Reproduction Outputs
 
@@ -3111,6 +3116,20 @@ Retained live evidence as of 2026-05-25:
   Both extractors record absolute transfer ordinate uncertainty `0.025`;
   dimensional Figure 7 upper-panel and Figure 13(a),(c) comparison remains
   excluded pending the paper-to-AthenaK transform.
+- F-040 Figure 9 dimensionless alignment reference extraction is retained
+  outside git under
+  `build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2/digitized_fig9_v1/`.
+  The tracked extractor verifies `source/fig9.pdf` SHA-256
+  `9d0dbb05514a8ce7a48eddb178b05a47ec512e58d2a2ff99d899123f8e458984`,
+  emits eight `alignment_peak.cos_theta` curves for the guarded standard
+  active/passive Alfvenic/random beta-10/beta-100 cases, omits 16
+  horizontal-boundary vertices, and records 27 recommended alignment shells
+  with absolute ordinate uncertainty `0.005`. `curves.json` has SHA-256
+  `07417294ca44e7aa7e8c499931e12ed7fce9eec55e4691e3172a8684470163b8`;
+  `digitization_metadata.json` has SHA-256
+  `55db154b26d3b040258f79c6ee56042fe0e215c8f6ea9a39fc9155ecf177d242`.
+  Manifest ingestion admits all eight curves; these are references only, not
+  simulation comparisons.
 - The retained ledger records `0.851670` node-hours used with no active
   reservation, including `0.188889` node-hours for failed G012 and
   `0.577778` node-hours for passed G013. Paper-scale
@@ -3752,6 +3771,7 @@ docs/source/reference/input_parameters.md
 scripts/stage_cgl_lf_mks24_reference.py
 scripts/digitize_cgl_lf_mks24_fig2b.py
 scripts/digitize_cgl_lf_mks24_fig7.py
+scripts/digitize_cgl_lf_mks24_fig9.py
 scripts/digitize_cgl_lf_mks24_fig12.py
 scripts/digitize_cgl_lf_mks24_fig13.py
 build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2/manifest.json
@@ -3861,14 +3881,15 @@ Decision implemented for comparison ingestion on 2026-05-25:
   at supplied reference coordinates and retain normalized residuals.
 
 Figure 2(b), dimensionless Figure 7 lower-panel transfer, dimensionless
-Figure 12 alignment, and dimensionless Figure 13(b),(d) data are now
+Figure 9 and Figure 12 alignment, and dimensionless Figure 13(b),(d) data are now
 extracted from pinned vector PDFs by
 `scripts/digitize_cgl_lf_mks24_fig2b.py` and
 `scripts/digitize_cgl_lf_mks24_fig7.py` and
+`scripts/digitize_cgl_lf_mks24_fig9.py` and
 `scripts/digitize_cgl_lf_mks24_fig12.py` and
 `scripts/digitize_cgl_lf_mks24_fig13.py`, with checksum-qualified external
-manifests and explicit line-extraction uncertainty. Figure 12's top-panel
-comparison uses `alignment_peak.cos_theta` and requires explicitly selected
+manifests and explicit line-extraction uncertainty. Figure 9 and Figure 12
+comparisons use `alignment_peak.cos_theta` and require explicitly selected
 alignment shells spanning the reference coordinates. Figure 7 lower-panel
 and Figure 13(d) comparisons use
 `pressure_transfer.transfer_normalized_by_total` under F-039. Under F-038,
@@ -4041,10 +4062,10 @@ local implementation evidence. The next critical path is:
 
 1. **Complete reference coverage and long-time calibration.**
    Figure 2(b)'s eight unstable-volume histories, Figure 7's dimensionless
-   lower-panel transfer curves, Figure 12's dimensionless alignment curves,
-   and Figure 13(b),(d)'s dimensionless curves are populated through pinned
-   vector-PDF extractors. Resolve the F-038 paper-to-AthenaK transform before
-   admitting dimensional spectra or strain, obtain or digitize remaining
+   lower-panel transfer curves, Figure 9's and Figure 12's dimensionless
+   alignment curves, and Figure 13(b),(d)'s dimensionless curves are populated
+   through pinned vector-PDF extractors. Resolve the F-038 paper-to-AthenaK
+   transform before admitting dimensional spectra or strain, obtain or digitize remaining
    targeted panels with recorded uncertainty, revise the proposal when scope
    changes, and calibrate long-time injection/spectral behavior against the
    documented setup.

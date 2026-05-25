@@ -181,7 +181,7 @@ uncertainties, computes uncertainty-normalized residuals for supported
 snapshot products and threshold-volume history series, and renders
 `paper_reference_comparisons.pdf`. Figure 2(b) vector-curve extraction is
 available below, together with dimensionless Figure 7 lower-panel transfer,
-Figure 12 alignment, and Figure 13(b),(d) limiter curves. Dimensional
+Figure 9 and Figure 12 alignment, and Figure 13(b),(d) limiter curves. Dimensional
 Figure 7 upper spectra, Figure 12 lower spectra, and Figure 13(a),(c) curves
 remain excluded because the paper's
 reported code-unit pressure scale is not yet transformed to the AthenaK
@@ -317,6 +317,20 @@ Alfvenic beta-10 curves as
 `pressure_transfer.transfer_normalized_by_total`, with absolute `0.025`
 digitization uncertainty. The plotted upper-panel gradient spectra remain
 excluded pending the paper-to-AthenaK dimensional conversion.
+
+For Figure 9, extract the eight standard-case peak-alignment paths from the
+pinned source PDF:
+
+```bash
+python3 scripts/digitize_cgl_lf_mks24_fig9.py \
+  /path/to/arXiv-2405.02418v2/source/fig9.pdf \
+  /path/to/arXiv-2405.02418v2/digitized_fig9_v1
+```
+
+This extractor maps active/passive Alfvenic/random beta-10/beta-100 cases to
+`alignment_peak.cos_theta`, uses absolute `0.005` ordinate uncertainty,
+omits vertices clipped at the horizontal plot boundaries, and records its
+recommended alignment shells for `paper-analyze --alignment-shells`.
 
 For Figure 12, extract the alignment-peak paths from the pinned source PDF:
 
