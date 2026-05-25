@@ -564,6 +564,7 @@ def prepare(args: argparse.Namespace) -> Path:
     provenance = read_build_provenance(executable, build_manifest)
     if restart is not None and not restart.is_file():
         raise ValueError(f"restart file is unavailable: {restart}")
+    parent_segment = verify_continuation_restart(restart) if restart else None
     if args.nodes < 1:
         raise ValueError("--nodes must be positive")
     requested_seconds = parse_walltime(args.walltime)
@@ -645,6 +646,7 @@ def prepare(args: argparse.Namespace) -> Path:
             "source_restart_file": str(restart) if restart else None,
             "restart_file": str(archived_restart) if archived_restart else None,
             "restart_sha256": sha256(archived_restart) if archived_restart else None,
+            "parent_segment": parent_segment,
             "athena_walltime": args.athena_walltime,
             "overrides": args.override,
         },
@@ -687,6 +689,42 @@ def read_manifest(path: Path) -> dict[str, object]:
     if not isinstance(value, dict):
         raise ValueError(f"invalid run manifest: {path}")
     return value
+
+
+def verify_continuation_restart(restart: Path) -> dict[str, object]:
+    """Require an inspected production parent for a continuation restart."""
+
+    parent_manifest_path = (
+        restart.parent.parent.parent / "manifest" / "prepared_run.json"
+    )
+    if not parent_manifest_path.is_file():
+        raise ValueError("restart does not belong to a retained Stage I segment")
+    parent = read_manifest(parent_manifest_path)
+    accounting = parent.get("accounting", {})
+    inspection = parent.get("scientific_inspection", {})
+    if (
+        parent.get("state") != "recorded"
+        or not isinstance(accounting, dict)
+        or accounting.get("result") not in {"accepted", "clean_partial"}
+        or not isinstance(inspection, dict)
+        or inspection.get("clean_for_continuation") is not True
+    ):
+        raise ValueError("restart parent has not passed continuation inspection")
+    inventory = inspection.get("restarts", [])
+    for retained in inventory if isinstance(inventory, list) else []:
+        if (
+            isinstance(retained, dict)
+            and Path(str(retained.get("path", ""))).resolve() == restart
+            and retained.get("sha256") == sha256(restart)
+        ):
+            return {
+                "manifest": str(parent_manifest_path),
+                "case_id": parent["run"]["case_id"],
+                "segment": parent["run"]["segment"],
+                "result": accounting["result"],
+                "restart_sha256": retained["sha256"],
+            }
+    raise ValueError("restart is not present in the inspected parent inventory")
 
 
 def reservation_for_manifest(reservations: list[dict[str, object]],
@@ -926,6 +964,14 @@ def inspect_segment(args: argparse.Namespace) -> int:
         "restart_retained": bool(restarts),
     }
     accepted = all(checks.values())
+    clean_for_continuation = all(
+        checks[key]
+        for key in (
+            "strict_lf_failure_counters_zero",
+            "snapshots_retained",
+            "restart_retained",
+        )
+    )
     inspection: dict[str, object] = {
         "schema_version": 1,
         "inspected_utc": utc_now(),
@@ -938,6 +984,7 @@ def inspect_segment(args: argparse.Namespace) -> int:
         "maximum_strict_failure_counts": maximum_failure_counts,
         "checks": checks,
         "accepted": accepted,
+        "clean_for_continuation": clean_for_continuation,
         "mhd_history": retained_file(mhd_histories[0]),
         "user_history": retained_file(user_histories[0]),
         "snapshots": [retained_file(path) for path in snapshots],
@@ -947,7 +994,11 @@ def inspect_segment(args: argparse.Namespace) -> int:
         inspection["final_hardwall_projection_count"] = history["lf_hwproj"][-1]
     inspection_path = manifest_path.parent / "segment_inspection.json"
     write_json(inspection_path, inspection)
-    status = "accepted" if accepted else "not accepted"
+    status = (
+        "accepted"
+        if accepted
+        else "clean partial" if clean_for_continuation else "not accepted"
+    )
     print(
         f"Segment inspection {status}: final_time={final_time:.12g}, "
         f"required_time={required_time:.12g}"
@@ -1018,25 +1069,34 @@ def record(args: argparse.Namespace) -> int:
     if nodes != int(manifest["allocation"]["nodes"]):
         raise ValueError("allocated nodes differ from the prepared reservation")
     inspection = None
-    if args.result == "accepted":
+    if args.result in {"accepted", "clean_partial"}:
         if sacct["state"] != "COMPLETED" or sacct["exit_code"] != "0:0":
             raise ValueError(
-                "accepted scientific output requires a clean COMPLETED job"
+                "scientific continuation output requires a clean COMPLETED job"
             )
         inspection_path = manifest_path.parent / "segment_inspection.json"
         if not inspection_path.is_file():
             raise ValueError(
-                "accepted scientific output requires inspect-segment evidence"
+                "scientific continuation output requires inspect-segment evidence"
             )
         inspection = json.loads(inspection_path.read_text(encoding="utf-8"))
         if (
             not isinstance(inspection, dict)
-            or inspection.get("accepted") is not True
             or inspection.get("job_id") != args.job_id
             or Path(str(inspection.get("manifest", ""))).resolve()
             != manifest_path
         ):
+            raise ValueError("segment inspection does not match this submitted job")
+        if args.result == "accepted" and inspection.get("accepted") is not True:
             raise ValueError("segment inspection does not accept this submitted job")
+        if (
+            args.result == "clean_partial"
+            and (
+                inspection.get("accepted") is True
+                or inspection.get("clean_for_continuation") is not True
+            )
+        ):
+            raise ValueError("clean_partial requires clean output short of its target")
     actual = node_hours(nodes, int(sacct["elapsed_seconds"]))
     cumulative = sum(float(row["actual_node_hours"]) for row in ledger) + actual
     if cumulative > STAGE_I_RESERVED_NODE_HOURS:
@@ -1099,19 +1159,25 @@ def accepted_case_segments(paths: dict[str, Path],
     for manifest_path in manifests:
         manifest = read_manifest(manifest_path)
         accounting = manifest.get("accounting", {})
-        if (
-            manifest.get("state") != "recorded"
-            or not isinstance(accounting, dict)
-            or accounting.get("result") != "accepted"
-        ):
+        if manifest.get("state") != "recorded" or not isinstance(accounting, dict):
+            continue
+        result = accounting.get("result")
+        if result not in {"accepted", "clean_partial"}:
             continue
         inspection = manifest.get("scientific_inspection")
         if (
             not isinstance(inspection, dict)
-            or inspection.get("accepted") is not True
+            or (
+                result == "accepted"
+                and inspection.get("accepted") is not True
+            )
+            or (
+                result == "clean_partial"
+                and inspection.get("clean_for_continuation") is not True
+            )
         ):
             raise ValueError(
-                f"accepted segment lacks embedded inspection: {manifest_path}"
+                f"retained segment lacks qualifying inspection: {manifest_path}"
             )
         manifest["_manifest_path"] = str(manifest_path)
         segments.append(manifest)
@@ -1165,6 +1231,8 @@ def bundle_case(args: argparse.Namespace) -> int:
     if not segments:
         raise ValueError(f"no accepted segments are recorded for {args.case_id}")
     final_time = float(segments[-1]["scientific_inspection"]["final_time"])
+    if segments[-1]["accounting"]["result"] != "accepted":
+        raise ValueError(f"{args.case_id} has no accepted terminal segment")
     if final_time < args.required_final_time - 1.0e-10:
         raise ValueError(
             f"{args.case_id} reaches only t={final_time}; "
@@ -1300,6 +1368,8 @@ def bundle_campaign(args: argparse.Namespace) -> int:
         segments = accepted_case_segments(paths, str(case["id"]))
         if not segments:
             raise ValueError(f"no accepted segments are recorded for {case['id']}")
+        if segments[-1]["accounting"]["result"] != "accepted":
+            raise ValueError(f"{case['id']} has no accepted terminal segment")
         final_time = float(segments[-1]["scientific_inspection"]["final_time"])
         if final_time < args.required_final_time - 1.0e-10:
             raise ValueError(
@@ -1422,7 +1492,11 @@ def parser() -> argparse.ArgumentParser:
     recorded = actions.add_parser("record")
     recorded.add_argument("--manifest", required=True)
     recorded.add_argument("--job-id", required=True)
-    recorded.add_argument("--result", required=True)
+    recorded.add_argument(
+        "--result",
+        choices=("accepted", "clean_partial", "rejected", "failed", "aborted"),
+        required=True,
+    )
     recorded.add_argument("--notes", default="")
     recorded.add_argument("--sacct-file")
     bundled = actions.add_parser("bundle-case")

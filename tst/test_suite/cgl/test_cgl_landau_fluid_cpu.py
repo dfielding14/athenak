@@ -945,6 +945,8 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
     )
     write_history([(0.0, 0, 0, 0, 0, 0, 0), (1.0, 0, 0, 0, 0, 0, 1)])
     assert stage_i.inspect_segment(inspect_args) == 1
+    partial = json.loads((manifest_dir / "segment_inspection.json").read_text())
+    assert partial["clean_for_continuation"]
 
     write_history([
         (0.0, 0, 0, 0, 0, 0, 0),
@@ -978,6 +980,10 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
     accounted = json.loads(manifest_path.read_text())
     assert accounted["state"] == "recorded"
     assert accounted["scientific_inspection"]["accepted"]
+    parent = stage_i.verify_continuation_restart(
+        output_dir / "rst" / "case.00000.rst"
+    )
+    assert parent["result"] == "accepted"
     continuation = tmp_path / "continuation.mhd.hst"
     continuation.write_text(
         "# [0]=time [1]=lf_dfloor [2]=lf_pfloor [3]=lf_nonfin "
