@@ -193,6 +193,10 @@ Figure 12 lower spectra, and Figure 13(a),(c) curves
 remain excluded because the paper's
 reported code-unit pressure scale is not yet transformed to the AthenaK
 `v_A = 1` convention.
+Figure 8 is also withheld from quantitative comparison: its dimensionless
+alignment distributions and colorbar are raster images in the pinned PDF,
+and require machine-readable source data or a reviewed raster calibration and
+uncertainty contract before a reference manifest can be admitted.
 Remaining MKS24 panel curves, exact
 time-integrated/production local budget closure, and production comparisons
 remain to be completed. For retained LF histories, the analyzer
@@ -403,7 +407,9 @@ panel (a) is dimensionful and panel (c) is plotted as
 
 Other quantitative panels still require a recorded digitization procedure,
 a matching analyzer product, or a separately provenance-tracked numerical
-reference source.
+reference source. In particular, Figure 4(a)'s raw `rho` PDF must not be
+substituted for `pdf.density_fluctuation` without a declared paper-density
+normalization transform.
 
 An optional curve manifest passed to `paper-analyze --reference-curves`
 has `schema_version = 1`, a `provenance` object, and one or more curve

@@ -250,6 +250,10 @@ units for its beta-100 limiter runs, while the equivalent AthenaK
 conversion is qualified, dimensional Figure 11 upper spectra, Figure 12
 spectra, and Figure 13(a),(c) curves are retained only as excluded audit
 context.
+Figure 8's alignment distributions are dimensionless, but its pinned PDF
+stores the two probability surfaces and colorbar as RGB raster images. They
+remain excluded from quantitative manifests until machine-readable data or a
+reviewed color-scale/surface uncertainty extraction contract is available.
 These products are analysis infrastructure; they do not by themselves
 establish statistically converged paper comparisons.
 
