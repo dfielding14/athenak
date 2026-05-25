@@ -10,6 +10,11 @@ Governing prose guide: `docs/writing_style_guide.md`
 Related implementation record:
 `docs/cgl_lf_mks24_reproduction_implementation_plan.md`
 
+Completion boundary: this document defines the work required to produce the
+paper; it is not evidence that the weak-guide runs or manuscript results
+already exist. Future agents should change a phase from planned to complete
+only when the named artifacts and gates in this document have been retained.
+
 ## 1. Purpose and claim discipline
 
 The central physical uncertainty is whether the AthenaK CGL-Landau-fluid
@@ -70,6 +75,27 @@ subsonic flow:     M_s approximately 0.5
 
 The study tests whether the same physical organization survives when a global
 mean-field decomposition is no longer the dominant geometrical guide.
+
+### 2.1 What is inherited and what is new
+
+The motivating papers constrain the question but do not already answer it.
+Squire et al. (2019) report trans-Alfvenic cubic runs with
+`\delta B_\perp/B_0 approximately 1`, isotropic forcing, spectra, and
+local-field structure functions; their reported highest trans-Alfvenic
+resolution is `192^3`, and they explicitly identify higher-resolution
+structural measurements as future work. Under the definitions adopted below,
+the requested `R_B = 2` corresponds approximately to
+`\delta B_{\rm rms}/B_{\rm mean} = \sqrt{3}`. The proposed calculation is
+therefore a weaker-guide, larger-field-wandering extension, not a direct
+replication of their trans-Alfvenic state.
+
+Squire et al. (2023) supply the closer closure precedent: their CGL-LF
+calculations motivate active/passive comparisons, pressure-anisotropy
+heating, heat-flux accounting, spectra, PDFs, and scale-dependent structure.
+Their mean-field setup does not establish the weak-guide limit. The present
+paper must consequently make two comparisons separately: whether AthenaK
+recovers closure-consistent numerical behavior, and whether its new
+weak-guide statistics support a magneto-immutability interpretation.
 
 ## 3. Definitions that must be frozen before running
 
@@ -225,6 +251,27 @@ No statistical-production case is admissible until all applicable gates pass:
 | GPU sizing | A short representative cubic run records memory, output size, runtime, and LF timestep behavior before a `192^3` or larger production submission. |
 | Energy accounting | Active production intervals close the forcing/energy/pressure-work accounting within a declared tolerance validated on reduced tests. |
 
+### 5.4 Implementation and artifact map
+
+Do not reimplement analysis products that are already present. The current
+analyzer supplies snapshot pressure-anisotropy PDFs, local parallel strain,
+pressure-work decomposition, pressure-transfer products, kinetic/magnetic and
+pressure spectra, a heat-flux transport proxy, and opt-in local-field eddy
+anisotropy. The weak-guide campaign needs to expose those products through a
+new case family and add only the target, stationarity, visualization, and
+comparison layers required by this experiment.
+
+| File or new artifact | Required change | Acceptance evidence |
+| --- | --- | --- |
+| `inputs/cgl_lf_paper/cgl_lf_paper_weak_guide_active.athinput` | Add a cubic active base deck with isotropic forcing and placeholders fixed by calibration. | Parsed input metadata matches the contract in Section 6.1. |
+| `inputs/cgl_lf_paper/cgl_lf_paper_weak_guide_passive.athinput` | Add the matched passive-feedback base deck. | A test confirms it differs from active only in feedback-declaring controls. |
+| `src/pgen/tests/cgl_lf_paper.cpp` and history support | Retain vector mean field, `B_rms`, `delta_B_rms`, volume-weighted `u_rms`, scalar `M_s`, both beta values, and residual energy at history cadence. | Synthetic or reduced-run regression evaluates each formula and preserves it over restart. |
+| `scripts/analyze_cgl_lf_paper.py` | Reuse existing turbulence products; add weak-guide target windows, block statistics, seed/resolution comparisons, and an acceptance JSON product. | Reduced synthetic and snapshot tests exercise pass, fail, off-target, and nonstationary cases. |
+| `scripts/plot_cgl_lf_paper.py` | Add target histories/convergence and two-dimensional field/derived-field slice rendering with common active/passive limits. | Figure-generation regression lists all required output files. |
+| `scripts/cgl_lf_workflow.py` | Add `paper-weak-guide-calibration`, `paper-weak-guide-production`, and `paper-weak-guide-analyze` case families and manifest metadata. | Workflow tests enumerate the fixed case matrix and refuse expensive execution without authorization. |
+| Production allocation/accounting path | Provide reviewed production-QOS reservation/submission/accounting outside `scripts/frontier/cgl_lf_frontier.py`. That existing utility is debug-only and deliberately rejects paper production. | Offline budget self-test plus retained production reservation records; the debug-only rejection remains passing. |
+| `docs/cgl_lf_validation.tex` | Convert the note into the manuscript structure and figures specified below. | Warning-free PDF build plus figure/data provenance table. |
+
 ## 6. Simulation campaign
 
 ### 6.1 Physical setup
@@ -233,14 +280,20 @@ The primary weak-guide suite should use:
 
 | Choice | Baseline |
 | --- | --- |
-| Domain | Periodic cubic box, `L_x = L_y = L_z = L`. |
+| Domain | Periodic cubic box, `L_x = L_y = L_z = L = 1`. |
 | Mean field | Uniform `B_mean` along `z`; its amplitude is calibrated, not presumed. |
-| Forcing | Isotropic, solenoidal Ornstein-Uhlenbeck velocity forcing in the lowest shells, with an archived seed and correlation time near one outer-scale turnover time. |
+| Mesh | `N x N x N`; choose the meshblock decomposition after the GPU sizing run without changing `N` or physical parameters. |
+| Forcing mode | `<turb_driving>/driving_type = 0`, the implemented isotropic solenoidal Ornstein-Uhlenbeck velocity-forcing mode. |
+| Forcing shell | `physical_k_shell = true`, `k_shell_unit = 2*pi/L = 6.283185307179586`, `nlow = 1`, `nhigh = 3`, `isotropic_power_spectrum = true`, `expo = 2.0`. |
+| Seeds | Primary ladder seed `271828`; second-seed cases `314159`; calibration may use the primary seed only. |
+| Forcing amplitude/time | Calibrate `dedt`; start the bracket from the currently exercised `dedt = 0.32`. Freeze `tcorr` after requiring it to be within a factor of two of the measured outer-scale turnover time; start from `tcorr = 2.0`. |
 | Primary target | Late-time `R_B = 2.0 +/- 0.2`, `M_s = 0.50 +/- 0.05`, and `beta_rms approximately 10`. |
+| Thermodynamics | `rho0 = 1`; begin calibration with `beta0 = 40` (the initial `beta_mean`), `p_parallel0 = p_perp0 = 0.5 * beta0 * b0^2`, then freeze the accepted calibrated value. |
 | Closure | Active CGL-LF with currently qualified hard-wall instability treatment and strict diagnostics. |
 | Matched control | Passive-pressure-feedback case with identical forcing realization and thermodynamic initialization. |
-| LF sensitivity | Active cases with baseline `lf_k_parallel` multiplied by `1/2` and `2` at moderate resolution. |
-| Time interval | Provisional `t_end = 12`; use `t = 0` to `8` for spin-up and `t = 8` to `12` for analysis only if stationarity passes. |
+| LF scale | Baseline `lf_k_parallel = 2*pi/L = 6.283185307179586`, interpreted as a closure assumption in a wandering-field box; active sensitivity cases use `pi/L` and `4*pi/L`. |
+| Limiter/numerics | `cgl_firehose_threshold = parallel`, `limiter_hardwall = true`, strict LF admissibility, applied pressure-work histories, forcing-work history, and explicit metadata for integrator/CFL/STS controls. |
+| Time interval | Provisional `t_end = 12`; use `t = 0` to `8` for spin-up and `t = 8` to `12` for analysis only if the stationarity and turnover-span criteria below pass. |
 
 The cubic, isotropically forced baseline follows the most relevant structural
 test in Squire et al. (2019), where local-field anisotropy could be measured
@@ -255,27 +308,74 @@ The targets cannot be selected reliably from initial conditions alone because
 the saturated fluctuation amplitude depends on forcing, pressure feedback,
 limiter activity, and heat flux. Calibrate before increasing resolution:
 
-1. At `32^3`, run a small active grid over imposed `b0` and forcing power
-   `dedt`, with common seeds, to identify candidates near both `R_B` and `M_s`.
-   These are tuning runs and must never enter scientific averages.
-2. At `64^3`, rerun the leading candidates for a longer window, including the
-   matched passive case. Adjust `p0`/`beta0` only to place the chosen
-   `beta_rms` regime after the magnetic and velocity targets are plausible.
-3. Select a single fixed parameter set before the resolution ladder. Freeze
+1. At `32^3`, run the primary-seed active bracket shown below. These are
+   tuning runs and must never enter scientific averages.
+2. Interpolate or extend the bracket only after plotting late-time
+   `(R_B, M_s, beta_rms)`. Select the two nearest candidates to the target
+   point; do not select by visual field appearance.
+3. At `64^3`, rerun those two candidates through `t = 8`, including a matched
+   passive case for the best active candidate. Adjust `p0`/`beta0` only to
+   place the chosen `beta_rms` regime after the magnetic and velocity targets
+   are plausible.
+4. If the best candidate is not inside both target tolerances at `64^3`,
+   carry out a second, locally bracketed calibration round and charge it to
+   the calibration reservation. Do not advance the resolution ladder.
+5. Select a single fixed parameter set before the resolution ladder. Freeze
    the forcing algorithm, shell, correlation time, target definitions, output
    cadence, closure settings, and seeds in a versioned manifest.
-4. At each production resolution, require the late-time target tolerance and
+6. At each production resolution, require the late-time target tolerance and
    stationarity checks. If either target drifts with resolution, report the
    drift and recalibrate or alter the scientific question; do not relabel an
    off-target run as a successful weak-guide test.
 
-Stationarity requires that block averages over the analysis interval show no
-resolved monotonic trend in `R_B`, `M_s`, total energy relative to injection,
-and the principal pressure-work measure. If `t = 8` to `12` is too short to
-establish that condition at `96^3`, stop the high-resolution ladder and spend
-only the reserved contingency on a reviewed time-extension plan.
+The first active bracket is concrete but revisable based on its measured
+response:
 
-### 6.3 Resolution ladder and matched cases
+| Calibration variable | Values | Reason |
+| --- | --- | --- |
+| Resolution/duration/seed | `32^3`, `t_end = 4`, `271828` | Cheap response map, excluded from science ensemble. |
+| `b0` | `0.25`, `0.50`, `1.00` | Bracket field wandering relative to the imposed field. |
+| `dedt` | `0.08`, `0.32`, `1.28` | Bracket driven velocity and magnetic fluctuation amplitudes around the exercised forcing power. |
+| `beta0` | `40` for all first-round cases | Starting hypothesis corresponding to `beta_rms approximately 10` at `R_B approximately 2`. |
+| Number/cost | Nine active cases; estimated `9 x 0.042798 = 0.385185` node-hours under the conservative scaling | Leaves room for confirmation, sizing, and local refinements inside the `20` node-hour calibration reserve. |
+
+The accepted parameter manifest must record the selected `b0`, `dedt`,
+`tcorr`, `beta0`, derived initial pressure, `lf_k_parallel`, seed list, and
+the calibration data used to select them.
+
+### 6.3 Late-time acceptance contract
+
+For each reportable case, define the outer-scale turnover time from the
+accepted analysis window,
+
+```math
+\tau_{\rm eddy} = L_{\rm force}/\overline{u_{\rm rms}},
+\qquad L_{\rm force} = 2\pi/k_{\rm peak},
+```
+
+where `k_peak` is the energy-injection-spectrum peak archived from the forcing
+manifest. The provisional `t = 8` to `12` window is admissible only if it
+spans at least four measured `tau_eddy`; otherwise extend the window before
+submitting a higher resolution.
+
+Split an admissible window into four equal-duration blocks and emit
+`analysis/weak_guide_acceptance.json` with the following decisions:
+
+| Test | Passing definition |
+| --- | --- |
+| Magnetic target | Full-window mean `R_B` lies in `[1.8, 2.2]`; report `R_deltaB` without replacing this metric. |
+| Sonic target | Full-window mean `M_s` lies in `[0.45, 0.55]`. |
+| Target stationarity | The difference between first and last block means is below `0.10` for `R_B` and below `0.025` for `M_s`. |
+| Energetic stationarity | Conserved total-energy change versus recorded forcing work is consistent with the reduced-test accounting tolerance or a tighter production tolerance frozen before the ladder; applied closure-work histories are reported separately to interpret internal transfers. |
+| Safety | Zero nonfinite, nonpositive, floor, emergency-bound, or invalid-direction failures; report hard-wall and cap activity as physics/model exposure rather than silently excluding it. |
+| Sample sufficiency | Four turnover times and at least four block summaries; bootstrap intervals are emitted for paper statistics. |
+
+If `t = 8` to `12` is too short to establish those conditions at `96^3`,
+stop the high-resolution ladder and spend only the reserved contingency on a
+reviewed time-extension plan. An off-target or nonstationary case is retained
+as a failed calibration/result, not omitted from the record.
+
+### 6.4 Resolution ladder and matched cases
 
 Use one fixed forcing seed at every baseline resolution and a second seed at
 intermediate resolutions to quantify realization variance economically.
@@ -293,6 +393,36 @@ The high-resolution case is paired with a passive control because a beautiful
 single active run cannot isolate pressure-feedback physics. The second seed is
 spent at `96^3` and `192^3`, where it can test uncertainty without consuming
 the high-resolution reserve.
+
+The production manifest should use stable case identities:
+
+| Case pattern | Included values |
+| --- | --- |
+| `wg_active_N{N}_s271828` and `wg_passive_N{N}_s271828` | `N = 64, 96, 192, 384`. |
+| `wg_active_N{N}_s314159` and `wg_passive_N{N}_s314159` | `N = 96, 192`. |
+| `wg_active_N96_s271828_kpar_half` | Active-only `lf_k_parallel = pi/L`. |
+| `wg_active_N96_s271828_kpar_double` | Active-only `lf_k_parallel = 4*pi/L`. |
+| `wg_passive_state_N{N}_s271828` | Conditional state-matched passive controls at `N = 96, 192` only if triggered below. |
+
+Each active/passive pair must reuse an identical archived OU seed and forcing
+configuration. It is an implementation failure if the passive run silently
+uses a separately generated random realization.
+
+The target gate is mandatory for the primary active ladder. The passive cases
+in the fixed matrix are forcing-matched controls: they answer how removing
+active pressure feedback changes a calculation with the same input forcing
+and mean field. They must report their attained `(R_B, M_s)` values, but they
+must not be called state-matched controls if those values fall outside the
+active target tolerances.
+
+If a forcing-matched passive control falls outside either tolerance, use the
+contingency allocation for passive state-matching runs at `96^3` and `192^3`
+with the primary seed, adjusting only the declared calibration controls and
+archiving the adjustment. These two additional `t = 12` cases cost
+`31.200001` node-hours on the conservative basis. Use forcing-matched
+comparisons to discuss feedback at fixed input and state-matched comparisons
+to discuss conditional turbulence statistics. Do not add a state-matched
+`384^3` case without recomputing and approving the budget.
 
 ## 7. Node-hour budget and maximum admissible resolution
 
@@ -330,9 +460,16 @@ The proposed allocation is:
 | Baseline paired ladder | Active and passive at `64^3`, `96^3`, `192^3`, `384^3`, one seed | `508.187674` |
 | Second-seed statistical pairs | Active and passive at `96^3` and `192^3` | `62.400002` |
 | LF-scale sensitivity | Two additional active `96^3` cases | `6.933334` |
-| Failure/time/statistics contingency | May be spent only after a documented gate review | `200.000000` |
+| Failure/time/statistics contingency | Conditional state-matched passive controls, time extensions, or reruns only after a documented gate review | `200.000000` |
 | Total committed ceiling | Includes consumed ledger and contingency | `798.372680` |
 | Uncommitted margin below `1000` | Preserved for accounting error or a separately reviewed amendment | `201.627320` |
+
+This allocation assumes that an accepted statistical case ends at `t = 12`.
+If the turnover-span or stationarity gate requires longer runs, agents must
+recompute every affected case reservation before submitting the extension.
+The `200` node-hour contingency is not permission to overrun the ledger
+silently; it is the only preallocated source for an approved extension or
+rerun.
 
 The largest presently admissible paired production resolution is `384^3`.
 Under the same conservative evidence, one `512^3` `t = 12` case costs
@@ -340,6 +477,14 @@ Under the same conservative evidence, one `512^3` `t = 12` case costs
 `1051.812386` node-hours, before calibration or contingency. A measured cubic
 benchmark may later justify an amendment, but agents must not schedule a
 `512^3` pair on an assumed cell-count speedup.
+
+The existing `scripts/frontier/cgl_lf_frontier.py` utility is not the
+submission path for this suite: it is an intentionally debug-only
+qualification tool and rejects paper-production decks. Before any production
+submission, either implement a separately reviewed production accounting
+driver with the same fail-closed `1000` node-hour ledger or retain equivalent
+manual reservation records approved for the production queue. Do not remove
+the debug rejection to make the new cases executable.
 
 Before every submitted job:
 
@@ -358,8 +503,14 @@ restart-connected segments:
 
 | Segment | Time range | Retained output |
 | --- | --- | --- |
-| Spin-up | `0 <= t < 8` | Fine history; sparse snapshots for failure diagnosis; checkpoints sufficient to restart and audit. |
-| Analysis | `8 <= t <= 12` | Fine history; snapshots adequate for spectra, PDFs, and fixed-time visual panels; final restart pair. |
+| Spin-up | `0 <= t <= 8` | History `dt = 0.02`; binary snapshots `dt = 2.0`; restart at least at `t = 4` and `8`, retaining the `t = 8` parent of the analysis segment. |
+| Analysis | `8 <= t <= 12` | History `dt = 0.02`; binary snapshots `dt = 0.25`; restart `dt = 2.0`, retaining the final two checkpoints. |
+
+Implement the cadence change by two input manifests joined by a recorded
+restart, rather than by manually deleting transient output after a
+single high-cadence run. If an accepted analysis interval is extended, retain
+the same `dt = 0.25` snapshot cadence unless a storage amendment records a
+different choice before execution.
 
 The G011 storage measurements in the existing plan imply that a conservative
 `384` elongated-layout binary snapshot is about `4.08 GB` and a restart is
@@ -437,6 +588,46 @@ resolved.
 5. Treat failure of convergence, target attainment, energy closure, or LF
    sensitivity as a scientific result that limits the claim.
 
+### 9.5 Quantitative decision and artifact contract
+
+Before inspecting the `384^3` case, freeze the principal tests in the
+production manifest:
+
+| Principal statistic | Comparison |
+| --- | --- |
+| Parallel-strain suppression | Active/passive ratio of RMS `\hat{b}\hat{b}:\nabla u`. |
+| Magnetic-strength regulation | Active/passive comparison of the distribution width of `|B|/B_mean`, while still requiring target attainment separately. |
+| Pressure-feedback energetics | Active anisotropic pressure work and LF work normalized by recorded injected work. |
+| Residual energy | Active/passive magnetic-minus-kinetic residual-energy comparison. |
+| Limiter/closure exposure | Mirror, firehose, hard-wall, and LF-cap fractions and their LF-scale sensitivity. |
+
+An active/passive effect claimed from the first four statistics may be
+described as resolution-robust only if its sign is the same for both seeds at
+`96^3` and `192^3`, is retained by the `384^3` primary-seed comparison, and
+the normalized `192^3` to `384^3` change is no greater than the larger of
+`10%` or the measured two-seed uncertainty at `192^3`. Limiter/closure
+exposure instead qualifies those claims: a strong or unresolved sensitivity
+prevents an unqualified physical conclusion. If a gate fails, the manuscript
+may show the result but must label its resolution or model dependence. Apply
+the equivalent criterion to spectral or structure-function statements only on
+the common resolved range.
+
+Every accepted production bundle must retain these machine-readable and
+rendered products:
+
+| Artifact | Contents |
+| --- | --- |
+| `analysis/weak_guide_acceptance.json` | Target values, block trends, turnover-span decision, safety counters, energy gate, and pass/fail reasons. |
+| `analysis/weak_guide_statistics.json` | Block/bootstrap estimates, active/passive effects, seed scatter, resolution comparisons, and LF-scale sensitivity. |
+| `analysis/weak_guide_provenance.json` | Executable/input hashes, parent restart, case identity, seed, model choices, output cadence, analysis configuration, and ledger entry. |
+| `figures/weak_guide_targets.pdf` | Target/stationarity histories and `(R_B, M_s)` target plane. |
+| `figures/weak_guide_slices.pdf` | Common-scale active/passive slices of fields, anisotropy, strain, pressure work, and limiter/LF exposure. |
+| `figures/weak_guide_pdfs.pdf` | PDFs and joint PDFs used for magneto-immutability inferences. |
+| `figures/weak_guide_energetics.pdf` | Injection, applied pressure/LF work, residual energy, and accounting quality. |
+| `figures/weak_guide_spectra.pdf` | Spectra and resolved-range convergence markers. |
+| `figures/weak_guide_structure.pdf` | Local-field structure functions/anisotropy and resolution comparison. |
+| `figures/weak_guide_sensitivity.pdf` | Seed, resolution, LF-scale, and safety/limiter exposure summary. |
+
 ## 10. Manuscript conversion plan
 
 The current `docs/cgl_lf_validation.tex` is an illustrated method-validation
@@ -473,6 +664,59 @@ Planned main-text figure sequence:
 | 8 | Local-field structure functions and anisotropy. |
 | 9 | Closure-scale and limiter/safety sensitivity summary. |
 
+### 10.1 Mapping the existing TeX note into the paper
+
+Retain `docs/cgl_lf_validation.tex` as the editable manuscript source unless
+a reviewed journal-template conversion requires a new filename. The existing
+content should be transformed as follows:
+
+| Current note content | Manuscript treatment |
+| --- | --- |
+| Purpose and implementation narrative | Replace with a styled abstract and introduction beginning from the weak-guide uncertainty. |
+| Conserved variables, LF closure, heat-flux cap, and threshold policy | Retain in a compact methods section; move detailed operator exposition to an appendix if it interrupts the physical argument. |
+| Method validation problems and five method figures | Retain as numerical-method evidence, condensed into one validation section plus appendix material as needed. |
+| Reduced MKS24-oriented product-path figures | Do not present as physical results. Replace in the main narrative with accepted weak-guide figures; retain only where explicitly labeled as diagnostic validation. |
+| MKS24 reproduction boundary | Recast as a data/provenance and limitation statement; it is not the central result of the new paper. |
+| Current bibliography | Add Squire et al. (2019) and the weak-guide interpretation, retain Squire et al. (2023), and add any directly used method/diagnostic references. |
+
+### 10.2 Complete-manuscript acceptance checklist
+
+The manuscript is complete only when all items below are true:
+
+1. `docs/cgl_lf_validation.tex` has the section order in Section 10, follows
+   `docs/writing_style_guide.md`, and nowhere asserts perfection or kinetic
+   generality.
+2. All claims in the abstract, results, discussion, and conclusion are
+   traceable to accepted cases and to the claim verbs defined in Section 12.
+3. The case table includes every successful and failed calibration or
+   production case used to make a decision, its role, resolution, seed,
+   analysis window, and target/gate outcome.
+4. The main figures use the accepted analysis artifacts from Section 9.5;
+   each caption states the comparison, parameters, principal pattern, and
+   conclusion or limitation.
+5. The reproducibility appendix records executable/input hashes, analysis
+   commands, data-product paths/checksums, output retention, and final
+   node-hour accounting.
+6. A manuscript PDF builds without warning-producing missing references or
+   figures from a clean checkout plus the declared retained-data products.
+
+After the workflow and analysis additions in this plan exist, the expected
+paper-product sequence is:
+
+```bash
+python3 scripts/cgl_lf_workflow.py paper-weak-guide-analyze \
+  --output-dir /path/to/accepted-weak-guide-bundle
+cd docs
+pdflatex -halt-on-error -interaction=nonstopmode \
+  -output-directory /tmp/cgl_lf_manuscript_build cgl_lf_validation.tex
+pdflatex -halt-on-error -interaction=nonstopmode \
+  -output-directory /tmp/cgl_lf_manuscript_build cgl_lf_validation.tex
+```
+
+The workflow command is a required future interface, not a currently
+available command; Phase B must implement and test it before this sequence is
+used.
+
 ## 11. Execution phases and stop conditions
 
 | Phase | Work | Deliverable | Stop condition |
@@ -484,6 +728,30 @@ Planned main-text figure sequence:
 | E. Resolution ladder | Run paired `64^3`, `96^3`, `192^3`, then `384^3` only as gates remain satisfied. | Archived production cases and ledger. | Off-target state, nonstationarity, failed accounting, or budget margin breach. |
 | F. Robustness | Run second seeds and LF-scale variants. | Uncertainty and closure-sensitivity products. | Principal inference changes without a qualified explanation. |
 | G. Manuscript | Revise TeX, generate figures/tables, write conclusions and caveats. | Buildable complete manuscript and reproducibility package. | Results cannot support stated claims; rewrite conclusions accordingly. |
+
+### 11.1 Current handoff status and first execution sequence
+
+As of 2026-05-25, this repository contains the restored style guide, the
+illustrated TeX validation note, existing strong-guide CGL-LF paper-analysis
+infrastructure, and reduced GPU qualification/budget evidence. It does not
+contain weak-guide base decks, weak-guide target/stationarity products, a
+weak-guide slice renderer, a production submission/accounting path, accepted
+weak-guide production runs, or a completed weak-guide manuscript.
+
+A future implementation agent should therefore proceed in this order:
+
+1. Implement the target histories, weak-guide base inputs, case-family
+   metadata, synthetic target/stationarity tests, and active/passive identity
+   test without submitting an HPC job.
+2. Implement slice and quantitative analysis products and exercise them on
+   reduced local/GPU qualification data; keep all figures explicitly labeled
+   non-statistical until production cases are accepted.
+3. Establish reviewed production allocation/accounting that preserves the
+   debug-only protection of `scripts/frontier/cgl_lf_frontier.py`.
+4. Execute calibration and short GPU sizing only after the local/reduced
+   gates pass; freeze accepted physical parameters and updated measured cost.
+5. Execute the resolution ladder conditionally, analyze accepted cases, and
+   then convert the TeX note using the manuscript checklist above.
 
 The high-resolution submission is conditional: do not execute `384^3` merely
 because it appears in this plan. It is authorized only after lower-resolution
@@ -529,3 +797,16 @@ Before drafting a result statement in the manuscript, classify it:
 4. `docs/cgl_lf_validation.tex`: current CGL-LF validation manuscript source.
 5. `docs/cgl_lf_mks24_reproduction_implementation_plan.md`: current
    implementation, evidence, runtime, storage, and budget ledger context.
+
+## 14. Requirement traceability
+
+| Requested element | Where this plan specifies it | Completion evidence for the eventual paper project |
+| --- | --- | --- |
+| Follow `writing_style_guide.md` | Sections 1, 9, 10, and 12 | Manuscript claim/caption review and buildable TeX/PDF. |
+| Turn `cgl_lf_validation.tex` into a complete manuscript | Sections 10 and 11 | Converted TeX source, generated PDF, data/figure provenance, and checked claims. |
+| Weak guide field with `B_rms approximately 2 B_mean` | Sections 3, 6.1, 6.2, and 6.3 | Acceptance JSON with declared `R_B` definition and passed late-time target. |
+| Sonic Mach number `approximately 0.5` | Sections 3, 6.1, and 6.3 | Acceptance JSON with scalar `M_s` definition and passed late-time target. |
+| Resolution range as large as possible within `1000` node-hours | Sections 6.4 and 7 | Fail-closed ledger, measured updates, conditional paired ladder through the largest admissible resolution. |
+| Robust turbulence analysis and strong visuals | Sections 4 and 9 | Retained JSON products, common-scale slices, quantitative figures, convergence and uncertainty tests. |
+| Motivation from arXiv:1811.12421 and arXiv:2303.00468 | Sections 2 and 13 | Literature-positioned introduction/discussion and diagnostics tied to those motivations without claiming reproduction. |
+| Lead future agents | Sections 5, 6, 7, 8, 9.5, 10.2, 11, and 12 | File-level work map, cases, gates, budget, retained products, and immediate work order. |
