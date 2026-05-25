@@ -275,7 +275,16 @@ used \(0.106389\) node-hours.  It is accepted as the terminal segment of the
 rank-local \(t=0\)-to-\(2\) prefix, not as a completed \(t=10\) case.  A
 further same-digest continuation through \(t=3.5\) has been submitted as
 job \texttt{4676696}.  The legacy partial is not continued across the
-changed input digest.
+changed input digest.  The bundle assembler follows only the explicit
+inspected restart lineage and bounds a sampled-history boundary gap using
+the retained history cadence and boundary timesteps, rather than mixing in
+the abandoned shared-output branch.  Applied to the ranked \(t=0\)-to-\(2\)
+prefix, it linked ten distinct rank-local snapshots from only the two
+rank-local segments.  A separately labeled transient-window analysis over
+\(0\leq t\leq2\) read all ten snapshots, selected 101 history rows, passed
+its synthetic diagnostic check, and rendered nine diagnostic figures.  This
+check qualifies the retained-output pipeline only; it is not a late-time
+MKS24 comparison.
 
 \section{Validation Workflow}
 
@@ -542,7 +551,9 @@ author/archive numeric data, donor diagnostic code, or an explicit
 normalization statement.  One mapped production segment has been retained
 only as clean partial I/O-diagnostic evidence; the ranked-output replacement
 is accepted through its \(t=2\) prefix and is being continued toward the
-required \(t=10\) final time.  Quantitative MKS24
+required \(t=10\) final time.  Its transient-prefix bundle has verified the
+rank-local assembly and diagnostic path, but the production comparison window
+is \(8\leq t\leq10\).  Quantitative MKS24
 simulation-to-reference comparisons require completed accepted bundles; none
 is claimed by this manuscript version.
 
@@ -669,6 +680,10 @@ shared-I/O delay in job \texttt{4674731}, commit
 \texttt{1f52784d291718fff3bf1dc984a682ada52780ab} stores production
 snapshots and restarts as rank-local product sets; inspection retains every
 rank-file digest and analysis reconstructs the combined snapshot fields.
+Commits \texttt{476f9dbd}, \texttt{9c5c1b40}, and \texttt{bad8ba05}
+make analysis bundles follow inspected restart ancestry, permit the expected
+sampled output boundary without requiring duplicated history rows, and reject
+larger gaps inconsistent with the recorded history cadence.
 
 \section{Build and Runtime Status}
 
