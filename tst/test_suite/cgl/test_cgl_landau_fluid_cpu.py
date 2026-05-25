@@ -1,5 +1,6 @@
 """CPU regressions for the CGL Landau-fluid closure and CGL FOFC path."""
 
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -10,6 +11,10 @@ import test_suite.testutils as testutils
 
 
 INPUT_ROOT = "../../../inputs/tests"
+PAPER_INPUT = "../../../inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.athinput"
+PAPER_PASSIVE_INPUT = (
+    "../../../inputs/cgl_lf_paper/cgl_lf_paper_smoke_passive_beta10.athinput"
+)
 
 
 def _run(input_name, basename, *flags):
@@ -17,6 +22,14 @@ def _run(input_name, basename, *flags):
         f"{INPUT_ROOT}/{input_name}",
         [f"job/basename={basename}", *flags],
     )
+
+
+def _run_paper(basename, *flags):
+    testutils.run(PAPER_INPUT, [f"job/basename={basename}", *flags])
+
+
+def _run_paper_passive(basename, *flags):
+    testutils.run(PAPER_PASSIVE_INPUT, [f"job/basename={basename}", *flags])
 
 
 def _cleanup():
@@ -36,6 +49,12 @@ def _final_tab(basename):
     return testutils.athena_read.tab(str(paths[-1]))
 
 
+def _final_variable_tab(basename, variable):
+    paths = sorted(Path("tab").glob(f"{basename}.{variable}.*.tab"))
+    assert paths, f"no {variable} table output found for {basename}"
+    return testutils.athena_read.tab(str(paths[-1]))
+
+
 def _assert_clean_lf_history(history):
     assert history["lf_nstage"][-1] > 0.0
     assert history["lf_dfloor"][-1] == 0.0
@@ -43,6 +62,11 @@ def _assert_clean_lf_history(history):
     assert history["lf_nonfin"][-1] == 0.0
     assert history["lf_nonpos"][-1] == 0.0
     assert history["lf_hardbd"][-1] == 0.0
+    assert history["lf_qface"][-1] > 0.0
+    for name in ("lf_qprcap", "lf_qpr10", "lf_qpecap", "lf_qpe10"):
+        assert 0.0 <= history[name][-1] <= history["lf_qface"][-1]
+    for name in ("lf_qprwrk", "lf_qpewrk"):
+        assert np.all(np.isfinite(history[name]))
 
 
 def test_cgl_lf_quantitative_decay_and_diagnostics():
@@ -50,6 +74,8 @@ def test_cgl_lf_quantitative_decay_and_diagnostics():
         _run("cgl_lf_decay.athinput", "cgl_ci_decay")
         history = testutils.athena_read.hst("cgl_ci_decay.mhd.hst")
         _assert_clean_lf_history(history)
+        assert history["lf_qprwrk"][-1] > history["lf_qprwrk"][0]
+        assert abs(history["lf_qpewrk"][-1]) < 1.0e-6 * history["lf_qprwrk"][-1]
     finally:
         _cleanup()
 
@@ -65,6 +91,130 @@ def test_cgl_lf_limiter_occupancy_remains_admissible():
         assert np.all(np.diff(history["lf_nstage"]) >= 0.0)
     finally:
         _cleanup()
+
+
+def test_cgl_lf_heat_flux_cap_face_activity_is_reported():
+    try:
+        _run(
+            "cgl_lf_decay.athinput",
+            "cgl_ci_flux_cap",
+            "time/evolution=kinematic",
+            "time/nlim=1",
+            "time/tlim=1.0e-5",
+            "mhd/rsolver=advect",
+            "mhd/lf_k_parallel=1.0e-2",
+            "problem/test_mode=flux_limiter",
+            "problem/amp=0.5",
+        )
+        history = testutils.athena_read.hst("cgl_ci_flux_cap.mhd.hst")
+        _assert_clean_lf_history(history)
+        assert history["lf_qprcap"][-1] > 0.0
+        assert history["lf_qpecap"][-1] > 0.0
+        assert history["lf_qpr10"][-1] > 0.0
+        assert history["lf_qpe10"][-1] > 0.0
+        result = subprocess.run(
+            [
+                "python3",
+                "../../../scripts/analyze_cgl_lf_paper.py",
+                "--lf-history",
+                "cgl_ci_flux_cap.mhd.hst",
+                "--time-start",
+                "0.0",
+                "--time-end",
+                "1.0",
+                "--output-dir",
+                "cgl_ci_flux_cap_analysis",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        diagnostics = json.loads(
+            Path("cgl_ci_flux_cap_analysis/diagnostics.json").read_text()
+        )
+        cap = diagnostics["lf_histories"][0]["heat_flux_cap_fractions"]
+        assert cap["parallel_over_10"] > 0.0
+        assert cap["perpendicular_over_10"] > 0.0
+        work = diagnostics["lf_histories"][0]["applied_heat_flux_work"]
+        assert np.isfinite(work["total"])
+        assert work["total"] > 0.0
+    finally:
+        shutil.rmtree("cgl_ci_flux_cap_analysis", ignore_errors=True)
+        _cleanup()
+
+
+def test_cgl_lf_low_field_faces_disable_transport_cleanly():
+    try:
+        _run(
+            "cgl_lf_decay.athinput",
+            "cgl_ci_low_field",
+            "time/evolution=kinematic",
+            "time/nlim=1",
+            "time/tlim=1.0e-5",
+            "mhd/rsolver=advect",
+            "problem/test_mode=low_field",
+            "problem/b0=5.0e-11",
+            "problem/amp=0.5",
+        )
+        history = testutils.athena_read.hst("cgl_ci_low_field.mhd.hst")
+        assert history["lf_nstage"][-1] > 0.0
+        assert history["lf_qface"][-1] == 0.0
+        assert history["lf_qprwrk"][-1] == 0.0
+        assert history["lf_qpewrk"][-1] == 0.0
+        for column in (
+            "lf_dfloor",
+            "lf_pfloor",
+            "lf_nonfin",
+            "lf_nonpos",
+            "lf_hardbd",
+        ):
+            assert history[column][-1] == 0.0
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_background_collision_advances_one_physical_timestep():
+    try:
+        _run("cgl_lf_collision_relaxation.athinput", "cgl_ci_collision_relaxation")
+        _assert_clean_lf_history(
+            testutils.athena_read.hst("cgl_ci_collision_relaxation.mhd.hst")
+        )
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_firehose_threshold_policies_are_distinct():
+    try:
+        _run("cgl_lf_firehose_policy.athinput", "cgl_ci_firehose_oblique")
+        _run(
+            "cgl_lf_firehose_policy.athinput",
+            "cgl_ci_firehose_parallel",
+            "mhd/cgl_firehose_threshold=parallel",
+        )
+        oblique = testutils.athena_read.hst("cgl_ci_firehose_oblique.mhd.hst")
+        parallel = testutils.athena_read.hst("cgl_ci_firehose_parallel.mhd.hst")
+        assert oblique["lf_firehs"][-1] > 0.0
+        assert parallel["lf_firehs"][-1] == 0.0
+        _assert_clean_lf_history(oblique)
+        _assert_clean_lf_history(parallel)
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_strict_hard_bound_is_reported_without_backup_correction():
+    command = [
+        "./athena",
+        "-i",
+        f"{INPUT_ROOT}/cgl_lf_firehose_policy.athinput",
+        "mhd/cgl_firehose_threshold=parallel",
+        "problem/ppar0=3.0",
+        "problem/pperp0=1.0",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert "strict admissibility failed" in result.stdout
+    assert "hard_bound=" in result.stdout
 
 
 def test_cgl_lf_explicit_reference_agrees_with_capped_sts():
@@ -182,6 +332,60 @@ def test_cgl_lf_restart_preserves_final_state_and_admissibility():
         _assert_clean_lf_history(
             testutils.athena_read.hst("cgl_ci_restart_resumed.mhd.hst")
         )
+        reference_history = testutils.athena_read.hst(
+            "cgl_ci_restart_reference.mhd.hst"
+        )
+        resumed_history = testutils.athena_read.hst("cgl_ci_restart_resumed.mhd.hst")
+        for column in ("lf_qprwrk", "lf_qpewrk"):
+            assert np.isclose(
+                reference_history[column][-1],
+                resumed_history[column][-1],
+                rtol=1.0e-12,
+                atol=1.0e-14,
+            )
+    finally:
+        shutil.rmtree("rst", ignore_errors=True)
+        _cleanup()
+
+
+def test_cgl_lf_restart_with_finite_collision_preserves_corrected_split():
+    try:
+        collision = "mhd/nu_coll=1.0"
+        _run(
+            "cgl_lf_restart.athinput",
+            "cgl_ci_restart_collision_reference",
+            collision,
+        )
+        _run(
+            "cgl_lf_restart.athinput",
+            "cgl_ci_restart_collision_partial",
+            collision,
+            "time/nlim=1",
+        )
+        restart_paths = sorted(
+            Path("rst").glob("cgl_ci_restart_collision_partial.*.rst")
+        )
+        assert restart_paths, "finite-collision partial run did not write a checkpoint"
+        command = [
+            "./athena",
+            "-r",
+            str(restart_paths[-1]),
+            "job/basename=cgl_ci_restart_collision_resumed",
+            "time/nlim=-1",
+        ]
+        assert testutils.run_command(command)
+
+        reference = _final_tab("cgl_ci_restart_collision_reference")
+        resumed = _final_tab("cgl_ci_restart_collision_resumed")
+        fields = set(reference).intersection(resumed) - {"time", "cycle"}
+        maximum = max(
+            np.max(np.abs(reference[field] - resumed[field]))
+            for field in fields
+        )
+        assert maximum < 1.0e-12
+        _assert_clean_lf_history(
+            testutils.athena_read.hst("cgl_ci_restart_collision_resumed.mhd.hst")
+        )
     finally:
         shutil.rmtree("rst", ignore_errors=True)
         _cleanup()
@@ -197,6 +401,256 @@ def test_cgl_lf_invalid_integrator_is_rejected():
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     assert result.returncode != 0
     assert "cgl_heat_flux_integrator" in result.stdout
+
+
+def test_cgl_lf_invalid_firehose_threshold_is_rejected():
+    command = [
+        "./athena",
+        "-i",
+        f"{INPUT_ROOT}/cgl_lf_firehose_policy.athinput",
+        "mhd/cgl_firehose_threshold=invalid",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert "cgl_firehose_threshold" in result.stdout
+
+
+def test_cgl_lf_paper_active_alfvenic_smoke_injects_energy_without_parallel_force():
+    try:
+        _run_paper("cgl_ci_paper_alfvenic", "time/nlim=1")
+        mhd = testutils.athena_read.hst("cgl_ci_paper_alfvenic.mhd.hst")
+        user = testutils.athena_read.hst("cgl_ci_paper_alfvenic.user.hst")
+        primitive = _final_variable_tab("cgl_ci_paper_alfvenic", "mhd_w_bcc")
+        _assert_clean_lf_history(mhd)
+        assert user["p_parallel"][0] == user["p_perp"][0]
+        assert user["force_prp2"][-1] > 0.0
+        assert user["force_prl2"][-1] == 0.0
+        assert np.isclose(user["mass"][0], user["volume"][0])
+        assert np.isclose(user["b2"][0], user["volume"][0])
+        assert np.isclose(user["b4"][0], user["volume"][0])
+        assert np.isclose(user["beta"][0] / user["volume"][0], 10.0)
+        assert user["delta_p"][0] == 0.0
+        assert user["mirror_vol"][-1] == 0.0
+        assert user["fire_vol"][-1] == 0.0
+        assert user["hard_vol"][-1] == 0.0
+        assert user["force_pwr"][-1] > 0.0
+        assert user["force_work"][-1] > user["force_work"][0]
+        assert "p_perp" in primitive
+        assert np.all(np.isfinite(primitive["p_perp"]))
+        assert mhd["tot-E"][-1] > mhd["tot-E"][0]
+        dt = mhd["time"][-1] - mhd["time"][0]
+        expected_work = 0.5 * user["force_prp2"][-1] * dt * dt
+        measured_work = mhd["tot-E"][-1] - mhd["tot-E"][0]
+        assert np.isclose(measured_work, expected_work, rtol=1.0e-10, atol=1.0e-12)
+        applied_work = user["force_work"][-1] - user["force_work"][0]
+        assert np.isclose(applied_work, measured_work, rtol=1.0e-10, atol=1.0e-12)
+    finally:
+        shutil.rmtree("rst", ignore_errors=True)
+        _cleanup()
+
+
+def test_cgl_lf_paper_forcing_ou_state_advances_once_per_cycle():
+    try:
+        _run_paper("cgl_ci_ou_correlated", "time/nlim=1")
+        _run_paper("cgl_ci_ou_white", "time/nlim=1", "turb_driving/tcorr=0.0")
+        correlated = _final_variable_tab("cgl_ci_ou_correlated", "turb_force")
+        white = _final_variable_tab("cgl_ci_ou_white", "turb_force")
+        history = testutils.athena_read.hst("cgl_ci_ou_correlated.mhd.hst")
+        dt = history["time"][-1] - history["time"][0]
+        fcorr = np.exp(-dt / 2.0)
+        gcorr = np.sqrt(1.0 - fcorr * fcorr)
+        for field in ("force1", "force2", "force3"):
+            assert np.allclose(
+                correlated[field], gcorr * white[field], rtol=5.0e-12, atol=5.0e-14
+            )
+    finally:
+        shutil.rmtree("rst", ignore_errors=True)
+        _cleanup()
+
+
+def test_cgl_lf_paper_forcing_seed_is_deterministic_and_selectable():
+    try:
+        _run_paper("cgl_ci_seed_a", "time/nlim=1")
+        _run_paper("cgl_ci_seed_b", "time/nlim=1")
+        _run_paper("cgl_ci_seed_c", "time/nlim=1", "turb_driving/rseed=42")
+        force_a = _final_variable_tab("cgl_ci_seed_a", "turb_force")
+        force_b = _final_variable_tab("cgl_ci_seed_b", "turb_force")
+        force_c = _final_variable_tab("cgl_ci_seed_c", "turb_force")
+        for field in ("force1", "force2", "force3"):
+            assert np.array_equal(force_a[field], force_b[field])
+        changed = max(
+            np.max(np.abs(force_a[field] - force_c[field]))
+            for field in ("force1", "force2", "force3")
+        )
+        assert changed > 1.0e-12
+    finally:
+        shutil.rmtree("rst", ignore_errors=True)
+        _cleanup()
+
+
+def test_cgl_lf_paper_forcing_restart_preserves_rng_and_force_state():
+    try:
+        _run_paper("cgl_ci_paper_restart_reference")
+        _run_paper("cgl_ci_paper_restart_partial", "time/nlim=1")
+        restart_paths = sorted(Path("rst").glob("cgl_ci_paper_restart_partial.*.rst"))
+        assert restart_paths, "paper smoke partial run did not write a checkpoint"
+        command = [
+            "./athena",
+            "-r",
+            str(restart_paths[-1]),
+            "job/basename=cgl_ci_paper_restart_resumed",
+            "time/nlim=-1",
+        ]
+        assert testutils.run_command(command)
+
+        for variable in ("mhd_w_bcc", "turb_force"):
+            reference = _final_variable_tab("cgl_ci_paper_restart_reference", variable)
+            resumed = _final_variable_tab("cgl_ci_paper_restart_resumed", variable)
+            fields = set(reference).intersection(resumed) - {"time", "cycle"}
+            maximum = max(
+                np.max(np.abs(reference[field] - resumed[field]))
+                for field in fields
+            )
+            assert maximum < 1.0e-12
+        _assert_clean_lf_history(
+            testutils.athena_read.hst("cgl_ci_paper_restart_resumed.mhd.hst")
+        )
+        reference_user = testutils.athena_read.hst(
+            "cgl_ci_paper_restart_reference.user.hst"
+        )
+        resumed_user = testutils.athena_read.hst("cgl_ci_paper_restart_resumed.user.hst")
+        assert np.isclose(
+            reference_user["force_work"][-1],
+            resumed_user["force_work"][-1],
+            rtol=1.0e-12,
+            atol=1.0e-14,
+        )
+        reference_mhd = testutils.athena_read.hst(
+            "cgl_ci_paper_restart_reference.mhd.hst"
+        )
+        resumed_mhd = testutils.athena_read.hst("cgl_ci_paper_restart_resumed.mhd.hst")
+        for column in ("lf_qprwrk", "lf_qpewrk"):
+            assert np.isclose(
+                reference_mhd[column][-1],
+                resumed_mhd[column][-1],
+                rtol=1.0e-12,
+                atol=1.0e-14,
+            )
+    finally:
+        shutil.rmtree("rst", ignore_errors=True)
+        _cleanup()
+
+
+def test_cgl_lf_paper_passive_delta_has_no_anisotropic_flow_feedback():
+    try:
+        _run_paper_passive("cgl_ci_passive_iso", "time/nlim=4")
+        _run_paper_passive(
+            "cgl_ci_passive_aniso",
+            "time/nlim=4",
+            "problem/p_parallel0=5.2",
+            "problem/p_perp0=4.9",
+        )
+        isotropic = _final_variable_tab("cgl_ci_passive_iso", "mhd_w_bcc")
+        anisotropic = _final_variable_tab("cgl_ci_passive_aniso", "mhd_w_bcc")
+        for field in ("dens", "velx", "vely", "velz", "bcc1", "bcc2", "bcc3"):
+            assert np.max(np.abs(isotropic[field] - anisotropic[field])) < 1.0e-12
+        assert np.max(np.abs(isotropic["eint"] - anisotropic["eint"])) > 1.0e-4
+        _assert_clean_lf_history(testutils.athena_read.hst("cgl_ci_passive_iso.mhd.hst"))
+        _assert_clean_lf_history(
+            testutils.athena_read.hst("cgl_ci_passive_aniso.mhd.hst")
+        )
+    finally:
+        shutil.rmtree("rst", ignore_errors=True)
+        _cleanup()
+
+
+def test_cgl_lf_paper_passive_delta_must_match_eos_mode():
+    command = [
+        "./athena",
+        "-i",
+        PAPER_INPUT,
+        "problem/passive_delta=true",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert "passive_delta must match" in result.stdout
+
+
+def test_cgl_lf_paper_rejects_unsupported_forcing_mode():
+    command = [
+        "./athena",
+        "-i",
+        PAPER_INPUT,
+        "turb_driving/driving_type=2",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert "driving_type must be 0" in result.stdout
+
+
+def test_cgl_lf_paper_physical_forcing_shell_requires_positive_unit():
+    command = [
+        "./athena",
+        "-i",
+        PAPER_INPUT,
+        "turb_driving/k_shell_unit=0.0",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert "k_shell_unit must be positive" in result.stdout
+
+
+def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
+    try:
+        _run_paper(
+            "cgl_ci_paper_analysis",
+            "time/nlim=1",
+            "output2/file_type=bin",
+            "output2/dt=0.01",
+        )
+        snapshots = sorted(Path("bin").glob("cgl_ci_paper_analysis.mhd_w_bcc.*.bin"))
+        assert snapshots
+        result = subprocess.run(
+            [
+                "python3",
+                "../../../scripts/analyze_cgl_lf_paper.py",
+                str(snapshots[-1]),
+                "--history",
+                "cgl_ci_paper_analysis.user.hst",
+                "--time-start",
+                "0.0",
+                "--time-end",
+                "1.0",
+                "--synthetic-test",
+                "--output-dir",
+                "cgl_ci_paper_analysis_products",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        diagnostics = json.loads(
+            Path("cgl_ci_paper_analysis_products/diagnostics.json").read_text()
+        )
+        assert diagnostics["synthetic_test"]["passed"]
+        assert (
+            diagnostics["synthetic_test"]["positive_perpendicular_heat_flux_proxy"]
+            > 0.0
+        )
+        assert diagnostics["synthetic_test"]["zero_parallel_heat_flux_proxy"] == 0.0
+        snapshot = next(iter(diagnostics["snapshots"].values()))
+        assert "beta_delta" in snapshot["pdf"]
+        assert "delta_p" in snapshot["spectra"]
+        assert abs(snapshot["pressure_transfer"]["closure_error"]) < 1.0e-12
+        assert diagnostics["snapshot_ensemble"]["snapshot_count"] == 1
+        assert "beta_delta" in diagnostics["snapshot_ensemble"]["pdf"]
+        assert diagnostics["histories"][0]["analysis_window"]["rows_selected"] > 0
+    finally:
+        shutil.rmtree("bin", ignore_errors=True)
+        shutil.rmtree("cgl_ci_paper_analysis_products", ignore_errors=True)
+        shutil.rmtree("rst", ignore_errors=True)
+        _cleanup()
 
 
 def test_cgl_lf_explicit_reference_rejects_sts_configuration():

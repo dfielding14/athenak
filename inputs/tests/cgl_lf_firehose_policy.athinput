@@ -1,12 +1,11 @@
-# CGL Landau-fluid STS limiter stress test.
-# Strict admissibility detects unsafe intermediate LF states while limiters operate.
+# Controlled state between the oblique and parallel firehose thresholds.
 
 <job>
-basename = cgl_lf_limiter_firehose
+basename = cgl_lf_firehose_policy
 
 <mesh>
 nghost = 2
-nx1 = 64
+nx1 = 16
 x1min = 0.0
 x1max = 1.0
 ix1_bc = periodic
@@ -23,7 +22,7 @@ ix3_bc = periodic
 ox3_bc = periodic
 
 <meshblock>
-nx1 = 64
+nx1 = 16
 nx2 = 1
 nx3 = 1
 
@@ -42,14 +41,14 @@ eos = cgl
 passive = false
 firehose_limiter = true
 cgl_firehose_threshold = oblique
-backup_limiters = true
-limiter_nu_coll = 100.0
+backup_limiters = false
+limiter_nu_coll = 0.0
 cgl_heat_flux = landau_fluid
 cgl_heat_flux_integrator = sts
+cgl_lf_strict_admissibility = true
 lf_k_parallel = 6.283185307179586
 lf_coefficient_mode = background
 lf_c_parallel0 = 1.0
-cgl_lf_strict_admissibility = true
 reconstruct = plm
 rsolver = advect
 gamma = 1.666666666666667
@@ -63,12 +62,14 @@ bfloor = 1.0e-10
 pgen_name = cgl_landau_fluid
 test_mode = limiter_stress
 limiter_kind = firehose
-mode_number = 1
 rho0 = 1.0
-ppar0 = 1.75
-pperp0 = 0.9
+ppar0 = 1.85
+pperp0 = 1.0
 b0 = 1.0
-amp = 0.1
+amp = 0.0
 backup_bound_tol = 1.02
-validation_output = false
-validation_output_dir = docs/figures/data
+
+<output1>
+file_type = hst
+data_format = %24.16e
+dcycle = 1

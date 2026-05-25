@@ -24,6 +24,7 @@
 #include "mesh/mesh.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
 #include "coordinates/adm.hpp"
 #include "z4c/compact_object_tracker.hpp"
 #include "z4c/z4c.hpp"
@@ -244,6 +245,24 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                            "byte", single_file_per_rank);
   }
 
+  Real lf_work[2] = {0.0, 0.0};
+  if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) {
+    const auto &diag = pmhd->pcgl_lf->diagnostics;
+    lf_work[0] = diag.qpar_work;
+    lf_work[1] = diag.qperp_work;
+#if MPI_PARALLEL_ENABLED
+    if (!single_file_per_rank) {
+      if (global_variable::my_rank == 0) {
+        MPI_Reduce(MPI_IN_PLACE, &lf_work[0], 2, MPI_ATHENA_REAL,
+                   MPI_SUM, 0, MPI_COMM_WORLD);
+      } else {
+        MPI_Reduce(&lf_work[0], &lf_work[0], 2, MPI_ATHENA_REAL,
+                   MPI_SUM, 0, MPI_COMM_WORLD);
+      }
+    }
+#endif
+  }
+
   //--- STEP 3.  Root process writes internal state of objects that require it
   if (global_variable::my_rank == 0 || single_file_per_rank) {
     // store z4c information
@@ -261,6 +280,14 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     // turbulence driver internal RNG
     if (pturb != nullptr) {
       resfile.Write_any_type(&(pturb->rstate), sizeof(RNG_State), "byte",
+                             single_file_per_rank);
+      if (pturb->record_injected_work) {
+        resfile.Write_any_type(&(pturb->injected_work), sizeof(Real), "byte",
+                               single_file_per_rank);
+      }
+    }
+    if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) {
+      resfile.Write_any_type(&lf_work[0], 2*sizeof(Real), "byte",
                              single_file_per_rank);
     }
   }
@@ -304,6 +331,8 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   IOWrapperSizeT step3size = 3*nco*sizeof(Real);
   if (pz4c != nullptr) step3size += sizeof(Real);
   if (pturb != nullptr) step3size += sizeof(RNG_State);
+  if (pturb != nullptr && pturb->record_injected_work) step3size += sizeof(Real);
+  if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) step3size += 2*sizeof(Real);
 
   // write cell-centered variables in parallel
   IOWrapperSizeT offset_myrank = (step1size + step2size + step3size

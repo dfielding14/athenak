@@ -13,6 +13,7 @@
 #include "athena.hpp"
 #include "mhd/mhd.hpp"
 #include "eos.hpp"
+#include "eos/cgl_physics.hpp"
 #include "eos/ideal_c2p_mhd.hpp"
 
 namespace {
@@ -24,6 +25,23 @@ void RequireNonnegativeCGLParameter(const char *name, const Real value) {
               << "<mhd>/" << name << " must be nonnegative" << std::endl;
     std::exit(EXIT_FAILURE);
   }
+}
+
+Real ParseCGLFirehoseThreshold(ParameterInput *pin) {
+  const std::string policy =
+      pin->GetOrAddString("mhd", "cgl_firehose_threshold", "oblique");
+  if (policy == "oblique") {
+    return cgl::kFirehoseObliqueThreshold;
+  }
+  if (policy == "parallel") {
+    return cgl::kFirehoseParallelThreshold;
+  }
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl
+            << "<mhd>/cgl_firehose_threshold = '" << policy
+            << "' is not implemented; valid choices are [oblique,parallel]."
+            << std::endl;
+  std::exit(EXIT_FAILURE);
 }
 
 } // namespace
@@ -42,6 +60,7 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
   eos_data.gamma = pin->GetOrAddReal("mhd", "gamma", 5.0/3.0);
   eos_data.nu_coll = 0.0;
   eos_data.lim_coll = 0.0;
+  eos_data.firehose_threshold = ParseCGLFirehoseThreshold(pin);
   eos_data.sigma_max = pin->GetOrAddReal("mhd","sigma_max",(FLT_MAX));
 
   eos_data.passive = pin->GetOrAddBoolean("mhd", "passive", false);
@@ -473,7 +492,8 @@ void CGLMHD::CGLMagneticMomentToAnisotropy(DvceArray5D<Real> &cons,
 //! range of cells given in argument list.
 
 void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
-                          DvceArray5D<Real> &cons, const int il, const int iu,
+                          DvceArray5D<Real> &cons, const Real dtc,
+                          const int il, const int iu,
                           const int jl, const int ju, const int kl, const int ku) {
   int &nmhd  = pmy_pack->pmhd->nmhd;
   int &nscal = pmy_pack->pmhd->nscalars;
@@ -484,7 +504,7 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
   auto &mlim = eos_data.mlim;
   auto &backup = eos_data.backup_lim;
   auto &bfloor = eos_data.bfloor;
-  auto &dtc = pmy_pack->pmesh->dt;
+  auto &firehose_threshold = eos_data.firehose_threshold;
 
   // TODO(cgl-lf): If the limiter/collision closure becomes nonlocal or
   // gradient-dependent, store nu_eff on the grid here and reconstruct it to LF
@@ -509,7 +529,8 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
 
     // call scattering and then p2c function
     HydCons1D u;
-    SingleColl_CGLMHD(w, nu_coll, lim_coll, dtc, mlim, flim, backup);
+    SingleColl_CGLMHD(w, nu_coll, lim_coll, dtc, mlim, flim, firehose_threshold,
+                      backup);
     SingleP2C_CGLMHD(w, bfloor, u);
 
     // Correct conserved anisotropy variable

@@ -104,9 +104,16 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
 
     //--- Step 3. Compute fast magnetosonic speed in L,R states (MHD used Roe-averaged)
 
-    //need to use mhd fast speed instead if the bfloor was hit
-    Real cl = eos.IdealMHDFastSpeed(wl_idn, wl_ipr, wl_ipp, bxi, wl_iby, wl_ibz, bfloor);
-    Real cr = eos.IdealMHDFastSpeed(wr_idn, wr_ipr, wr_ipp, bxi, wr_iby, wr_ibz, bfloor);
+    // Passive-Delta evolves CGL thermodynamics diagnostically while the flow
+    // follows isothermal MHD, including its numerical signal speeds.
+    Real cl, cr;
+    if (eos.passive) {
+      cl = eos.IdealMHDFastSpeed(wl_idn, bxi, wl_iby, wl_ibz);
+      cr = eos.IdealMHDFastSpeed(wr_idn, bxi, wr_iby, wr_ibz);
+    } else {
+      cl = eos.IdealMHDFastSpeed(wl_idn, wl_ipr, wl_ipp, bxi, wl_iby, wl_ibz, bfloor);
+      cr = eos.IdealMHDFastSpeed(wr_idn, wr_ipr, wr_ipp, bxi, wr_iby, wr_ibz, bfloor);
+    }
 
     //Real sqrtdl = sqrt(wl_idn);
     //Real sqrtdr = sqrt(wr_idn);

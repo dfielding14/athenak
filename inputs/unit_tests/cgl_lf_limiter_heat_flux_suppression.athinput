@@ -1,5 +1,5 @@
 # CGL Landau-fluid heat-flux limiter-collisionality test.
-# A mirror-limited face state suppresses the unlimited LF heat flux before the cap.
+# A mirror-limited state below the emergency bound suppresses unlimited LF heat flux.
 
 <job>
 basename = cgl_lf_limiter_heat_flux_suppression
@@ -64,7 +64,9 @@ test_mode = limiter_heat_flux_suppression
 mode_number = 1
 rho0 = 1.0
 ppar0 = 1.0
-pperp0 = 2.0
+# paniso = 0.9 B^2 activates the 0.5 B^2 mirror limiter without violating
+# the independent 1.0 B^2 emergency bound used by strict diagnostics.
+pperp0 = 1.9
 b0 = 1.0
 amp = 0.1
 limiter_suppression_max_ratio = 5.0e-2

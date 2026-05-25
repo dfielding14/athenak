@@ -15,12 +15,39 @@ The remaining work is different in character. It must:
 1. Correct confirmed physical-correctness problems in the current LF/collision
    and instability-limiter implementation.
 2. Turn the existing operator-level validation framework into a faithful
-   reproduction program for Majeski, Kunz, and Squire 2024 (MKS24), whose
-   source is available locally in `docs/arXiv-2405.02418v2/MKS24.tex`.
+   reproduction program for Majeski, Kunz, and Squire 2024 (MKS24), using a
+   checksum-recorded staging copy of the official arXiv `2405.02418v2`
+   source instead of assuming paper contents are vendored in the checkout.
 3. Establish a reproducible workflow for paper-grade driven-turbulence runs,
    their analysis products, and their limitations.
 
-This is a plan, not a claim that the work has already been performed.
+Implementation began on 2026-05-24. Phases A and B have working-tree
+implementations and focused CPU evidence recorded below. Phase D now has an
+active-Delta reduced turbulence initializer, repaired deterministic forcing,
+stage-consistent reduced forcing with focused CPU oracles, and a passing
+active/passive `paper-smoke` workflow. Reduced passive-Delta flow
+decoupling is now regression-tested and pinned paper-source staging has been
+exercised. Paper forcing inputs now state their physical mode shell and
+`k^-2` power contract; standard and limiter-scan input definitions now exist
+behind an explicit execution guard. Snapshot analysis foundations are
+implemented, including manifest-selected time-window aggregation and
+operator-face heat-flux-cap activity, local-field velocity-gradient/strain
+products, manifest-qualified cell-centered heat-flux smoothing proxies, and
+generic diagnostic figure rendering. A local `accuracy`
+workflow now retains collisionless resolution/timestep, finite-collision,
+extreme-cap, rotated-field, and low-field evidence. Paper forcing now retains
+restartable cumulative applied source work for active global energy-residual
+analysis. Fixed-level LF histories now also retain restartable,
+RKL2-applied capped-face heat-flux contractions. Long-time energy
+qualification, steady nonlinear convergence, reference comparison,
+AMR-corrected/full local-work accounting, Frontier execution, and
+production-run phases remain open. A tracked Frontier debug-campaign
+utility and HIP build script now
+implement offline-verifiable root, QOS, walltime, sequential-submission, and
+budget-ledger policy enforcement; they do not constitute Frontier
+qualification evidence. The current Sphinx runbook builds with warnings
+treated as errors, and the repository style gate passes in an isolated
+environment containing the declared documentation and test dependencies.
 
 ## Read This First
 
@@ -40,7 +67,8 @@ branch: feature/cgl-landau-fluid
 HEAD:   8f7d13c6 Add CGL-LF MPI reproducibility coverage
 ```
 
-The local paper source directory and the older planning note were untracked:
+The earlier local paper source directory and the older planning note were
+reported as untracked when the plan was authored:
 
 ```text
 ?? docs/arXiv-2405.02418v2/
@@ -48,8 +76,8 @@ The local paper source directory and the older planning note were untracked:
 ```
 
 Do not accidentally stage, delete, or rewrite either untracked path unless the
-user explicitly asks for it. The paper source directory is a reference input
-for this plan.
+user explicitly asks for it. The implemented reference path is now the
+checksum-recorded staging procedure described below.
 
 ## Executive Summary
 
@@ -65,20 +93,21 @@ The existing branch is a good foundation for a CGL-LF numerical feature:
   already exist.
 
 However, the branch is not ready to support paper-reproduction claims.
-Three findings dominate all next work:
+Three initial findings define the corrected core and the remaining work:
 
-1. **Collision splitting is physically wrong or, at minimum, unjustified.**
-   When LF and collisions are active, each full cycle currently applies two
-   collision relaxations, each using the full mesh timestep. The quantitative
-   oracle reproduces that schedule, so tests validate the bug rather than
-   detect it.
-2. **The firehose activation threshold is not the MKS24 production
-   threshold.** The current code activates at the oblique threshold
-   `beta Delta = -1.4`; MKS24 production simulations use the parallel-fluid
-   threshold `beta Delta = -2`.
-3. **The current validation workflow does not implement the MKS24 experiment.**
-   It validates linear/operator cases, not forced 3D turbulence, active versus
-   passive anisotropy, published diagnostic products, or the limiter scan.
+1. **Collision splitting was physically wrong.** This working tree now gives
+   each of the two LF post-sweep collision calls its half-sweep duration and
+   checks uniform collisional relaxation against an independent analytic
+   oracle.
+2. **The baseline firehose activation threshold did not match MKS24
+   production.** This working tree now exposes explicit `oblique` and
+   `parallel` policies; reduced paper smoke inputs select the MKS24
+   `beta Delta = -2` convention.
+3. **The validation workflow still does not implement the full MKS24
+   experiment.** It now includes reduced active and passive forcing smoke
+   cases and snapshot-diagnostic foundations, but not long-time paper forcing
+   calibration, figure/reference comparisons, execution of the limiter scan,
+   or standard-resolution execution.
 
 The work must therefore proceed in this order:
 
@@ -90,9 +119,9 @@ The work must therefore proceed in this order:
 6. Execute tiered smoke, convergence, standard, and HPC reproduction runs.
 
 Do not begin performance tuning, new operator composition support, Frontier
-GPU qualification, or publication-level claims before phases 1 through 3 are
-complete. Frontier GPU correctness and operational validation are required
-after the physical-core phases and before any production-readiness claim.
+GPU qualification, or publication-level claims until remaining numerical
+accuracy gates and Phase D blockers are resolved. Frontier GPU correctness and
+operational validation are required before any production-readiness claim.
 
 ## Meaning of Production Readiness
 
@@ -136,16 +165,16 @@ test or run evidence.
 | Gate | Required evidence | Release-blocking? | Initial status |
 | --- | --- | --- | --- |
 | Physical equations and normalization | Equation-to-code review, closure/cap tests, documented code-unit mapping | Yes | Partial; collisionless mapping reviewed |
-| Collision source-term timing | Independent analytic regression and operator-ordering documentation | Yes | Failing/current behavior suspect |
-| Instability-threshold policy | Explicit MKS24 policy, alternative-policy tests, archived input choice | Yes | Failing/current default mismatched |
-| Safety diagnostic truthfulness | Strict tests independent of backup correction | Yes | Failing/current hard-bound gap |
-| CPU numerical accuracy | Convergence, asymptotic, cap, directional, restart, MPI/AMR checks | Yes | Partial |
+| Collision source-term timing | Independent analytic regression and operator-ordering documentation | Yes | Implemented 2026-05-24; focused CPU test passed, broader gates pending |
+| Instability-threshold policy | Explicit MKS24 policy, alternative-policy tests, archived input choice | Yes | Implemented 2026-05-24; CPU policy test and active paper-smoke manifest passed |
+| Safety diagnostic truthfulness | Strict tests independent of backup correction | Yes | Implemented 2026-05-24; focused CPU test passed, broader gates pending |
+| CPU numerical accuracy | Convergence, asymptotic, cap, directional, restart, MPI/AMR checks | Yes | Partial 2026-05-25; archived `accuracy-v2` bundle covers N-001 through N-007 locally, the AMR workflow passed, and the full CPU suite passed (`218 passed, 15 skipped`); MPI execution is blocked in this shell because `mpirun` is unavailable; forced accounting remains |
 | Frontier GPU numerical equivalence | CPU/GPU comparison suite, MPI/GPU restart checks, strict diagnostics | Yes for Frontier use | Not started |
-| Paper pgen and forcing fidelity | Input/pgen review, forcing metadata, restartable reduced smoke | Yes for MKS24 claims | Not started |
-| Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Not started |
-| Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Not started |
-| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Not started |
-| User documentation | Sphinx build and accurately scoped runbook | Yes | Partial |
+| Paper pgen and forcing fidelity | Input/pgen review, forcing metadata, restartable reduced smoke | Yes for MKS24 claims | Partial 2026-05-24; active/passive reduced smoke, forcing restart, OU cadence, RK source work, and passive flow-decoupling checks passed; paper-grade statistical calibration open |
+| Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Partial 2026-05-25; reduced histories, restartable applied forcing work/global active residual, fixed-level RKL2-applied heat-flux contractions, operator-face cap counters, windowed snapshot PDF/spectral/transfer/alignment/local-strain diagnostics, manifest-qualified heat-flux smoothing proxies, and generic figures implemented; panel/reference comparison, AMR-corrected/full local-work budget accounting, and production qualification open |
+| Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Inputs and guarded workflow modes defined 2026-05-24; no paper-scale runs or figure comparisons executed |
+| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-25; tracked debug-only build/campaign/accounting tools pass offline policy tests; no Frontier job has been prepared or executed |
+| User documentation | Sphinx build and accurately scoped runbook | Yes | Implemented for current functionality 2026-05-25; Sphinx warnings-as-errors and repository style suite pass in an isolated validation environment; future campaign results must still be documented when executed |
 | Performance suitability | Representative timing/memory/I/O evidence; no uninvestigated prohibitive bottleneck | Yes for production use | Not started |
 
 The final readiness report must distinguish:
@@ -225,9 +254,48 @@ table such as:
 
 | ID | Date | Phase/run | Finding | Evidence path | Severity | Plan change | Regression added | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| F-001 | TBD | Phase A | Collision updates currently cover two full timesteps per LF cycle | Source audit and corrected analytic test | Blocker | Correct collision split before paper work | Required in Commit 1 | Open |
-| F-002 | TBD | Phase B | Current ordinary firehose threshold differs from MKS24 production convention | Source and paper audit | Blocker | Add threshold policy and paper deck setting | Required in Commit 2 | Open |
-| F-003 | TBD | Phase B | Hard-bound diagnostic currently depends on backup correction enablement | Source audit and negative test | High | Separate safety from correction policy | Required in Commit 3 | Open |
+| F-001 | 2026-05-24 | Phase A | Collision updates covered two full timesteps per LF cycle | `src/mhd/mhd_sts.cpp`, `inputs/tests/cgl_lf_collision_relaxation.athinput`, focused CPU run | Blocker | Pass `dt_sweep = dt/2` to each LF collision call | `test_cgl_lf_background_collision_advances_one_physical_timestep` | Implemented; focused CPU passed |
+| F-002 | 2026-05-24 | Phase B | Ordinary firehose threshold differed from MKS24 production convention | `src/eos/cgl_physics.hpp`, `inputs/tests/cgl_lf_firehose_policy.athinput`, focused CPU run | Blocker | Add `cgl_firehose_threshold = oblique/parallel`; MKS24 decks must state `parallel` | `test_cgl_lf_firehose_threshold_policies_are_distinct` | Implemented; active smoke deck and manifest select `parallel` |
+| F-003 | 2026-05-24 | Phase B | Hard-bound diagnostic depended on backup correction enablement | `src/diffusion/cgl_landau_fluid.cpp`, focused CPU run | High | Count emergency bounds independently of correction policy | `test_cgl_lf_strict_hard_bound_is_reported_without_backup_correction` | Implemented; focused CPU passed |
+| F-004 | 2026-05-24 | Phase D | Built-in turbulence forcing ignored documented seed selection, mapped type-1 parallel/perpendicular axes inconsistently with `B0 || z`, and added momentum without nonrelativistic energy work | `src/srcterms/turb_driver.cpp`, `src/utils/random.hpp`, `inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.athinput`, `paper-smoke` bundle | Blocker | Add restartable `rseed`, define type 1 as `z`-guide-field Alfvenic forcing, add RK-consistent ideal/CGL source work, archive forcing metadata | `test_cgl_lf_paper_active_alfvenic_smoke_injects_energy_without_parallel_force`, seed and forcing-restart tests | Implemented for reduced active smoke mechanics; focused CPU passed |
+| F-005 | 2026-05-24 | Phase D | Existing `mhd/passive=true` removed anisotropic terms from central momentum fluxes but still used CGL pressure-dependent HLLE and CFL signal speeds, allowing diagnostic anisotropy to alter MHD-like flow | `src/mhd/rsolvers/hlle_cgl.hpp`, `src/mhd/mhd_newdt.cpp`, `src/pgen/tests/cgl_lf_paper.cpp`, `inputs/cgl_lf_paper/cgl_lf_paper_smoke_passive_beta10.athinput` | Blocker | Use isothermal-MHD signal speeds for passive fluxing/timestep selection; require explicit matching passive pgen/EOS selection; add reduced flow-decoupling regression and smoke deck | `test_cgl_lf_paper_passive_delta_has_no_anisotropic_flow_feedback`, `test_cgl_lf_paper_passive_delta_must_match_eos_mode` | Implemented; focused CPU passed; long-time active/passive statistics remain open |
+| F-006 | 2026-05-24 | Phase D | The plan named a local MKS24 source/figure bundle that is absent from the live worktree and should not be copied into the code branch without separately establishing redistribution permission | official arXiv `2405.02418v2` source, `scripts/stage_cgl_lf_mks24_reference.py`, staged `build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2/manifest.json` | High | Stage the pinned official source in ignored result storage, safely extract it, record archive/file SHA-256 checksums, and attach checksum provenance during paper analysis | Staging utility executed with archive SHA-256 `6b58e1ed01585c9820659a01b7549a08a09b7ea3fcbb28dbb96205259e82da8e`; `paper-convergence-v1/analysis/reference_provenance.json` | Implemented for reference provenance; quantitative reference curves/comparisons remain open |
+| F-007 | 2026-05-24 | Phase D | `AddForcing` was chained after `InitializeModes` before the integrator and inserted before each RK update; every call advanced and applied the OU force with the full mesh timestep, so an `rk2` cycle invoked three full-duration pushes | `src/srcterms/turb_driver.cpp`, `src/mesh/meshblock_pack.cpp`, `src/driver/driver.cpp`, `docs/source/modules/srcterms.md` | Blocker | Advance OU state once per cycle in `UpdateForcing`; apply a fixed acceleration after each `RKUpdate` with `beta dt` primitive-state work and energy-preserving nonrelativistic mean-momentum projection | `test_cgl_lf_paper_forcing_ou_state_advances_once_per_cycle`, `test_cgl_lf_paper_active_alfvenic_smoke_injects_energy_without_parallel_force` | Implemented; focused CPU passed; long-time paper calibration remains open |
+| F-008 | 2026-05-24 | Phase D | Reduced paper forcing selected integer-index shells and type-1 anisotropic exponents; the random override also inherited the `5/3` isotropic default instead of the documented physical `abs(k)` shell with `k^-2` power | staged `MKS24.tex:463-469`, `src/srcterms/turb_driver.cpp`, `inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.athinput`, `scripts/cgl_lf_workflow.py` | Blocker | Add opt-in physical-shell/common-spectrum forcing controls, select them explicitly in paper inputs, archive them in manifests, and complete valid type-1 phase coefficients | `test_cgl_lf_paper_physical_forcing_shell_requires_positive_unit` plus `paper-smoke` execution | Implemented for reduced forcing contract; long-time spectral calibration remains open |
+| F-009 | 2026-05-24 | Phase E | CGL primitive `mhd_w_bcc` snapshots exported `p_parallel` through the legacy `eint` field but omitted `p_perp`, making pressure-anisotropy snapshot products impossible | `src/outputs/basetype_output.cpp`, binary analysis probe, standard `bin` snapshot decks | Blocker | Retain legacy `eint = p_parallel` and append explicit `p_perp` for CGL primitive outputs | `test_cgl_lf_paper_snapshot_analysis_uses_both_pressures` validates binary output and analyzer products | Implemented; focused CPU and binary analyzer regression passed |
+| F-010 | 2026-05-24 | Phase E | The LF closure applied heat-flux caps at operator faces but exposed no retained cap-activity counters for paper-window interpretation | `src/diffusion/cgl_landau_fluid.cpp`, `src/outputs/history.cpp`, `paper-smoke-core-v12` analysis bundle | High | Retain cumulative face counts and parallel/perpendicular pre-cap ratios above `q_max` and `10*q_max`; convert interval differences to fractions | `test_cgl_lf_heat_flux_cap_face_activity_is_reported` and windowed `paper-analyze` smoke result | Implemented; cap oracle and end-to-end smoke passed |
+| F-011 | 2026-05-25 | Phase C | Single-case operator checks did not retain the required convergence, collisional-asymptotic, rotated-field, extreme-cap, or low-field evidence | `scripts/cgl_lf_workflow.py`, `src/pgen/tests/cgl_landau_fluid.cpp`, `inputs/unit_tests/cgl_lf_rotated_decay.athinput`, `20260524-accuracy-v2` bundle | High | Add archived `accuracy` workflow tables and pgen checks for directional decay and magnetic-floor shutdown | `test_cgl_lf_low_field_faces_disable_transport_cleanly`; `accuracy-v2` run | Implemented; focused CPU and 33-case accuracy bundle passed |
+| F-012 | 2026-05-25 | Phase E | Snapshot analysis omitted MKS24 local-field velocity-gradient/strain products and produced no inspectable paper diagnostic figures | `scripts/analyze_cgl_lf_paper.py`, `scripts/plot_cgl_lf_paper.py`, binary analysis probe, `paper-smoke-core-v12` | High | Add local projected flow products and generic renderer invoked by `paper-analyze`; keep reference comparison separately gated | Expanded synthetic analysis and retained-bundle rendering | Implemented for diagnostic figures; paper-panel/reference comparison remains open |
+| F-013 | 2026-05-25 | Phase F | The workflow table required a reduced `paper-convergence` path but only smoke and guarded production cases were executable | `scripts/cgl_lf_workflow.py`, `20260524-paper-convergence-v1` bundle | High | Add short resolution, heat-flux-strength, and threshold-policy variants with binary snapshots and analysis-window metadata | Six-case reduced workflow followed by `paper-analyze`/`paper-summary` | Implemented for startup/product-path qualification; steady-state convergence remains open |
+| F-014 | 2026-05-25 | Phase C | Truthful hard-bound monitoring exposed that `cgl_lf_limiter_heat_flux_suppression` initialized exactly on the mirror emergency bound while requesting strict admissibility | `inputs/unit_tests/cgl_lf_limiter_heat_flux_suppression.athinput`, failed `20260524-final-full` and passing `20260524-final-full-v2` bundles | High | Keep strict checking and move the oracle state to `p_perp - p_parallel = 0.9 B^2`, above the `0.5 B^2` physical threshold but below the `1.0 B^2` emergency bound | Corrected suppression oracle and regenerated `full` plots/summary | Implemented; full workflow passed |
+| F-015 | 2026-05-25 | Frontier operations | The plan prescribed debug-only root/budget/sequential-submission controls but provided templates without an executable fail-closed ledger or preparation tool | `scripts/frontier/cgl_lf_frontier.py`, `scripts/frontier/build_cgl_lf_frontier.sh` | High | Add tracked immutable-build and debug-campaign tooling that reserves budget, generates an inspectable batch script, checks an empty debug queue before manual submission, records one top-level `sacct` allocation from its run manifest, and rejects production decks | `python3 scripts/frontier/cgl_lf_frontier.py self-test`; `bash -n scripts/frontier/build_cgl_lf_frontier.sh` | Implemented offline; live Frontier execution/qualification remains open |
+| F-016 | 2026-05-25 | Phase G | Required style validation could not pass because the Sphinx configuration used nonconforming indentation and the active system Python lacked lint/documentation dependencies | `docs/source/conf.py`, temporary validation environment built from `docs/requirements.txt` plus `flake8`, style/Sphinx logs | Medium | Correct the configuration indentation and run style/Sphinx through an isolated dependency-complete environment | `python run_test_suite.py --style`; `sphinx-build -W --keep-going -b html source _build/html` | Implemented; style wrapper and warning-strict documentation build passed |
+| F-017 | 2026-05-25 | Phase E | Heat-flux cap occupancy alone did not quantify the transport strength, while an exact face-power reduction needs a decomposition-independent discrete accounting design | `scripts/analyze_cgl_lf_paper.py`, `scripts/plot_cgl_lf_paper.py`, `scripts/cgl_lf_workflow.py` | High | Add a manifest-qualified cell-centered reconstruction of the implemented LF closure as an explicitly non-budget heat-flux smoothing proxy; retain exact applied-face accounting as an open gate | Synthetic positive perpendicular-conduction/zero-parallel proxy check through `test_cgl_lf_paper_snapshot_analysis_uses_both_pressures` | Implemented for snapshot proxy; fixed-level applied accounting added by F-019 |
+| F-018 | 2026-05-25 | Phase E | Retained `force_pwr` sampled instantaneous power but did not preserve the exact net RK stage forcing source, including zero-net-momentum projection, in forced paper runs or through restart | `src/srcterms/turb_driver.cpp`, `src/outputs/restart.cpp`, `src/pgen/tests/cgl_lf_paper.cpp`, `scripts/analyze_cgl_lf_paper.py` | High | Add opt-in globally reduced cumulative `force_work`, checkpoint it for paper decks, and compare active-case interval work to conserved `tot-E`; do not give passive-Delta the active budget interpretation | Expanded forcing identity/restart regressions and reduced paper analysis bundle | Implemented locally; long-time/production residual tolerance and full local-work budget remain open |
+| F-019 | 2026-05-25 | Phase E | The snapshot heat-flux proxy did not measure the capped face flux actually advanced by an RKL2 LF sweep | `src/diffusion/cgl_landau_fluid.cpp`, `src/mhd/mhd_sts.cpp`, `src/outputs/history.cpp`, `scripts/analyze_cgl_lf_paper.py` | High | Accumulate owned-face capped-flux/temperature-jump contractions through the same RKL2 recurrence as the state, checkpoint cumulative `lf_qprwrk`/`lf_qpewrk`, and disable the metric for AMR until flux-corrected accounting exists | Decay/sign, cap-analysis, low-field/AMR-zero, and restart-preservation regressions in the CGL CPU/MPI test suites | Implemented locally for fixed-level meshes; AMR-corrected and full anisotropic-pressure/local-work budget accounting remain open |
+
+### Implemented Core Decision Log
+
+| Date | Decision | Rationale | Evidence still required |
+| --- | --- | --- | --- |
+| 2026-05-24 | Keep the existing LF source placement and apply collisions after each LF half-sweep with explicit duration `dt/2`. | This repairs physical elapsed time without changing the protected LF representation/task ownership; both collision calls together span one `dt`. | Finite-collision restart and `compare` workflow passed on CPU; broader MPI/GPU gates remain |
+| 2026-05-24 | Preserve `cgl_firehose_threshold = oblique` as the public default and add explicit `parallel` selection for MKS24. | Existing branch inputs retain their historical convention; paper inputs cannot accidentally depend on that default. | Paper pgen/decks and paper manifests |
+| 2026-05-24 | Define firehose emergency overshoot at `p_perp - p_parallel <= -1.5 B^2` (`beta Delta <= -3`) and count it independently of `backup_limiters`. | The emergency condition must remain distinct from normal finite-rate activity when the physical MKS24 activation threshold is `beta Delta <= -2`. | Reduced nonlinear validation of overshoot interpretation |
+| 2026-05-24 | Reuse and repair the built-in turbulence driver for active paper smoke rather than copy donor forcing logic into the pgen. | Shared forcing now records a deterministic seed, has explicit `B0 || z` Alfvenic orientation, preserves restart state, advances OU state once per cycle, and supplies RK-consistent energy work. | Calibrate published injection/spectral normalization and qualify larger runs |
+| 2026-05-24 | Qualify reduced `passive_delta` only as isothermal-MHD flow with diagnostic CGL/LF thermodynamics, requiring matching `mhd/passive = true`. | Passive fluxes and CFL speeds are independent of diagnostic anisotropy; a paired-anisotropy regression shows identical density, velocity, and magnetic evolution under identical forcing. | Long-time active/passive statistics, execution of defined standard decks, and spatial paper observables |
+| 2026-05-24 | Stage official arXiv source version `2405.02418v2` into ignored result storage with SHA-256 provenance rather than vendoring paper contents. | A pinned source archive supports exact reference interpretation while leaving third-party redistribution outside the code branch. | Analysis bundles now retain the pinned checksum provenance; implement quantitative reference curves/comparisons |
+| 2026-05-24 | Add explicit physical-shell/common-spectrum turbulence settings for MKS24 inputs while preserving legacy driver defaults. | The paper specifies physical `abs(k)` bounds and `k^-2` power in its anisotropic domain; index shells and type-specific default exponents do not encode that setup. | Measure long-time injected spectra and steady-state statistics in standard configurations |
+| 2026-05-24 | Extend CGL primitive outputs with `p_perp` while preserving legacy `eint = p_parallel`. | Offline anisotropy PDFs, spectra, and transfer diagnostics require both pressures; retaining the legacy label avoids breaking existing readers. | Focused CPU and binary snapshot analyzer verification passed; standard-run statistics and comparison remain open |
+| 2026-05-24 | Measure heat-flux-cap occupancy from the LF operator-face closure rather than duplicating it in the offline analyzer. | The applied cap and limiter-selected diffusivity already exist in shared C++ physics; cumulative face counters preserve that exact decision and can be differenced over analysis windows. | Strong-cap oracle and windowed reduced smoke pass; signed fixed-level face contraction subsequently implemented under F-019; production statistics remain open |
+| 2026-05-25 | Treat `|B| <= bfloor` faces as having no usable LF direction and verify zero LF face transport in a strict kinematic test. | The closure cannot define `bhat` below its configured floor; explicit shutdown is finite and auditable rather than directionally arbitrary. | Focused CPU low-field regression passed; nonlinear near-floor cases remain outside the paper baseline |
+| 2026-05-25 | Render generic archived paper diagnostics separately from paper-panel comparison claims. | Inspectable local products are needed before production, but without reference data or standard runs they cannot establish MKS24 figure reproduction. | Binary probe and smoke rendering passed; reference comparison and production statistics remain open |
+| 2026-05-25 | Define `paper-convergence` as a short reduced nonlinear qualification tier rather than a substitute for paper-scale convergence. | It exercises resolution, heat-flux, threshold, snapshot, and plotting paths locally while its `tlim = 0.02` metadata prevents steady-state interpretation. | `20260525-paper-convergence-net-work-v2` passed and rendered five generic figures; longer reduced/standard statistics remain open |
+| 2026-05-25 | Keep strict emergency monitoring enabled in limiter-suppression validation and move its physical limiter state below the emergency bound. | A limiter-action oracle must not intentionally begin in a state the independent safety contract defines as invalid. | Corrected case retains strong flux suppression and `full-v2` passes |
+| 2026-05-25 | Keep Frontier submission manual while automating fail-closed preparation and accounting policy checks. | The debug-QOS one-job constraint forbids job chaining; generating an explicit script and retained reservation/manifest improves reproducibility without silently submitting work. | Utility offline self-test passes; live `squeue`, `sbatch`, `sacct`, HIP build, and GPU qualification remain open |
+| 2026-05-25 | Use an isolated dependency-complete Python environment for local style and Sphinx gate execution. | The checkout declares Sphinx dependencies but the active system module lacks them and `flake8`; installing validation-only packages under `/tmp` avoids changing the product dependency surface. | Repository style suite and warning-strict Sphinx build passed; no generated documentation output is retained as source |
+| 2026-05-25 | Emit heat-flux transport strength initially as a snapshot-reconstructed proxy rather than claim an applied discrete energy budget. | Archived fields and closure choices are sufficient to reconstruct the continuous LF smoothing measure; exact finite-volume accounting must first define a decomposition-independent applied-face reduction. | Synthetic sign check passed; F-019 later adds the signed fixed-level applied contraction; production/reference interpretation and full budget closure remain open |
+| 2026-05-25 | Track cumulative net applied forcing work at the source update only when explicitly requested by a driven input. | The before/after conserved-energy difference across the full source task, including zero-net-momentum projection, is exact and restartable; instantaneous output-time `force_pwr` cannot close an active energy residual. Opt-in persistence avoids altering legacy forcing restart records. | Focused CPU/restart coverage and `20260525-paper-smoke-net-work-v2`/`20260525-paper-convergence-net-work-v2` analysis bundles; production tolerance and heat-flux transfer decomposition remain open |
+| 2026-05-25 | Retain applied LF heat-flux transport as a signed fixed-level RKL2 companion recurrence, not as a total-energy closure term. | The applied capped face flux and STS coefficients are available in the LF update; counting owned faces once and advancing the diagnostic with the same recurrence avoids replacing the operator with a snapshot surrogate. AMR correction and anisotropic-pressure budget terms require separate designs. | Focused CPU/restart tests and fresh `20260525-paper-smoke-face-work-v1`/`20260525-paper-convergence-face-work-v1` bundles pass; strong-flux startup demonstrates that the signed face contraction is distinct from the positive snapshot proxy |
 
 Each plan-revision commit must update this register or explain why no new
 finding was introduced. Each implementation commit resolving a finding must
@@ -372,13 +440,15 @@ The current `scripts/cgl_lf_workflow.py` supports:
 | `quick` | One strict one-dimensional LF quantitative run |
 | `compare` | STS versus explicit comparison, collisionless and finite-collision |
 | `amr` | Strict two-dimensional CGL-LF AMR smoke |
+| `paper-smoke` | Reduced active/passive-Delta CGL-LF turbulence with Alfvenic/random forcing, retained forcing metadata and tables |
 | `full` | Eighteen operator/linear-wave/eigenmode cases plus plots |
 | `plot` | Regenerate existing operator-validation plots |
 | `summarize` | Regenerate a result summary from retained outputs |
 
 This workflow layer must remain usable throughout the reproduction work.
 It should not silently change meaning. In particular, `full` is presently a
-closure/operator validation tier, not an MKS24 turbulence reproduction tier.
+closure/operator validation tier, and `paper-smoke` is only a reduced
+active/passive turbulence gate; neither is an MKS24 production reproduction tier.
 
 ### Existing Routine Tests
 
@@ -402,7 +472,12 @@ collision-splitting bug and firehose-threshold policy are corrected.
 
 ## Confirmed Defects and Gaps
 
-### Defect 1: Collision Relaxation Advances Two Full Timesteps per LF Cycle
+### Defect 1: Collision Relaxation Advanced Two Full Timesteps per LF Cycle
+
+**Implementation status (2026-05-24):** Corrected in the working tree by
+passing the explicit LF half-sweep duration to each post-sweep collision
+update. The independent uniform-anisotropy CPU regression passes; broader
+phase gates remain required.
 
 #### Evidence
 
@@ -471,9 +546,15 @@ once-per-cycle collision application.
 Do not choose by convenience. Derive the operator ordering, document it in the
 code and Sphinx docs, and verify it analytically.
 
-### Defect 2: Current Firehose Activation Does Not Match MKS24
+### Defect 2: Baseline Firehose Activation Did Not Match MKS24
 
-#### Current Behavior
+**Implementation status (2026-05-24):** Corrected in the working tree with
+the `cgl_firehose_threshold = oblique|parallel` policy. Focused policy tests
+pass; the reduced active and passive paper-smoke decks and the defined
+paper-standard/limiter-scan inputs explicitly select `parallel`. Standard
+paper execution and analysis remain open.
+
+#### Baseline Behavior
 
 `src/eos/cgl_physics.hpp` currently defines:
 
@@ -538,9 +619,13 @@ change defaults without deciding whether backward compatibility or paper
 correctness governs the public default. Paper workflows must not depend on the
 default either way.
 
-### Defect 3: Hard-Bound Monitoring Depends on Corrective Backup Mode
+### Defect 3: Hard-Bound Monitoring Depended on Corrective Backup Mode
 
-#### Current Behavior
+**Implementation status (2026-05-24):** Corrected in the working tree.
+`lf_hardbd` now reports emergency-bound crossings independently of
+`backup_limiters`, with a focused strict negative test passing.
+
+#### Baseline Behavior
 
 `CGLLandauFluid::RecordAdmissibility` increments `lf_hardbd` only when
 `eos.backup_lim` is enabled. Thus the diagnostic answers:
@@ -578,6 +663,17 @@ threshold occupancy.
 
 ### Gap 4: Current Workflows Are Operator Validation, Not Paper Reproduction
 
+**Implementation status (2026-05-24):** Partially advanced. A new
+`paper-smoke` workflow runs reduced active-Delta Alfvenic/random and
+passive-Delta Alfvenic forcing cases, archives forcing/model choices, retains
+state and force tables, and checks clean LF safety and positive forcing work.
+Focused CPU regressions verify one OU update per physical cycle, the
+one-cycle RK2 work identity, and passive flow independence from diagnostic
+initial anisotropy. It does not supply long-time paper-grade active/passive
+statistics, standard-resolution results, or figure/reference comparisons. Workflow
+manifests now expose dirty worktree status so development evidence cannot be
+mistaken for an immutable production-revision bundle.
+
 The existing `full` matrix covers linear and controlled validation cases:
 
 - parallel/perpendicular heat-flux decay;
@@ -601,20 +697,42 @@ MKS24 is instead a forced-turbulence study requiring:
 
 No paper-grade result should be claimed from the existing `full` workflow.
 
-### Gap 5: Current Diagnostics Cannot Produce the Published Figures
+### Gap 5: Analysis Infrastructure Exists but Paper Comparisons Are Missing
 
-Existing `lf_*` history counters are useful safety counters, but they do not
-provide:
+The paper pgen now provides reduced volume-integrated histories for energy,
+`C_B2`, pressure anisotropy, beta, physical threshold volumes, effective
+collision frequency, instantaneous forcing power, and, for paper decks,
+restartable cumulative applied forcing work. The analyzer compares
+active-case cumulative applied work with conserved `tot-E` over the selected
+history interval; it retains applied work without giving passive-Delta this
+active energy-budget interpretation. Current binary output supplies both CGL
+pressures, and `scripts/analyze_cgl_lf_paper.py` now produces snapshot
+PDFs, shell spectra, field-projected anisotropy gradients, pressure-transfer
+partitions, alignment PDFs, and per-case manifest-window ensemble averages
+with synthetic checks. It also produces local-field velocity-gradient and
+`b b : grad u` products, while `scripts/plot_cgl_lf_paper.py` renders generic
+archived diagnostics. Cumulative `lf_q*` history counters now retain exact
+operator-face heat-flux-cap activity for interval summaries. For new bundle
+manifests that archive complete LF closure policy choices, the analyzer also
+emits a cell-centered reconstruction of
+`integral[-q_parallel b.grad(T_parallel) - q_perp b.grad(T_perp)] dV`,
+separating regularized, unlimited, and cap-active contributions. The JSON
+identifies it as a snapshot proxy, not an applied face-flux reduction or
+energy-budget identity. Fixed-level runs additionally retain restartable
+`lf_qprwrk` and `lf_qpewrk` histories: signed RKL2-applied owned-face contractions
+of capped parallel/perpendicular heat flux with temperature jumps. This
+quantity is disabled on AMR and is not a full energy or pressure-work
+decomposition. Other `lf_*` counters remain safety/stage counters.
+Figure-level reproduction still lacks:
 
-- physical unstable volume fractions at the paper threshold;
-- active versus passive comparisons;
-- `C_B2 = <B^4>/<B^2>^2 - 1`;
-- density and pressure-anisotropy PDFs;
-- field-parallel and perpendicular gradient spectra;
-- anisotropic pressure-stress transfer functions;
-- local-field/rate-of-strain alignment distributions;
-- heat-flux power and cap-activity breakdowns;
-- forcing injection and closed energy budgets.
+- paper-panel-specific reference-data mapping and comparison figures;
+- quantitative comparison to machine-readable or explicitly digitized
+  reference curves; the staged official source contains PDFs but no numeric
+  curve tables;
+- AMR-corrected applied heat-flux accounting and a full
+  anisotropic-pressure/local-work budget decomposition;
+- production qualification of active global budget residuals and any local
+  heat-flux/anisotropic-work decomposition.
 
 These products must be implemented before figure-level reproduction is
 possible.
@@ -623,11 +741,20 @@ possible.
 
 ### What Paper Is Being Reproduced
 
-The target source bundle is:
+The pinned reference is official arXiv source version `2405.02418v2`. Stage
+it rather than vendor it:
+
+```bash
+python3 scripts/stage_cgl_lf_mks24_reference.py
+```
+
+A validated local staging run produced:
 
 ```text
-docs/arXiv-2405.02418v2/MKS24.tex
-docs/arXiv-2405.02418v2/fig*.pdf
+build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2/manifest.json
+build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2/source/MKS24.tex
+archive SHA-256: 6b58e1ed01585c9820659a01b7549a08a09b7ea3fcbb28dbb96205259e82da8e
+MKS24.tex SHA-256: 6d6e748fd1883c5d33167be653d67aed2f84a9b364267d9e90ea075df184af4c
 ```
 
 The paper is:
@@ -637,8 +764,8 @@ Self-organization in collisionless, high-beta turbulence
 S. Majeski, M. W. Kunz, and J. Squire
 ```
 
-Future agents should read the source directly before modifying reproduction
-inputs or interpreting plots. At minimum, reread:
+Future agents should read the staged source directly before modifying
+reproduction inputs or interpreting plots. At minimum, reread:
 
 ```text
 MKS24.tex:204-239   theoretical CGL-LF equations and heat-flux closure
@@ -750,15 +877,15 @@ diagnostics, converged statistics, and documented quantitative comparisons.
 
 | Paper result | Required simulation modes | Required products | Current status |
 | --- | --- | --- | --- |
-| Figure 2: pressure-density distributions and unstable-volume history | Active and passive, Alfvenic, representative beta values | PDFs of `delta p_parallel`, `delta p_perp`, density; volume fraction beyond thresholds versus time | Missing |
-| Figures 3-4: compressive/density behavior | Active/passive; beta and forcing variants | Density PDFs and density/compressive spectra | Missing |
-| Figures 5-6: turbulent spectra and rate-of-strain suppression | Active/passive, Alfvenic/random | Velocity/magnetic/pressure spectra; parallel/perpendicular velocity-gradient spectra | Missing |
-| Figure 7: pressure-anisotropy organization and transfer | Active/passive, Alfvenic/random, beta 10 | `grad_parallel Delta p`, `grad_perp Delta p` spectra; `T_Delta p(k_perp)/T_total` | Missing |
-| Figures 8-9: alignment diagnostic | Active/passive; beta/forcing variants | Scale-dependent PDFs and peak locations of local-field/rate-of-strain eigenvector alignment | Missing |
+| Figure 2: pressure-density distributions and unstable-volume history | Active and passive, Alfvenic, representative beta values | PDFs of `delta p_parallel`, `delta p_perp`, density; volume fraction beyond thresholds versus time | Reduced threshold-volume and steady-window PDF machinery implemented; standard statistics/comparison missing |
+| Figures 3-4: compressive/density behavior | Active/passive; beta and forcing variants | Density PDFs and density/compressive spectra | Steady-window density PDF/spectrum machinery implemented; target runs/comparison missing |
+| Figures 5-6: turbulent spectra and rate-of-strain suppression | Active/passive, Alfvenic/random | Velocity/magnetic/pressure spectra; parallel/perpendicular velocity-gradient spectra | Local-field velocity-gradient and strain products plus generic rendering implemented; target runs/comparison missing |
+| Figure 7: pressure-anisotropy organization and transfer | Active/passive, Alfvenic/random, beta 10 | `grad_parallel Delta p`, `grad_perp Delta p` spectra; `T_Delta p(k_perp)/T_total` | Steady-window gradient spectra and transfer partition with closure test implemented; comparison missing |
+| Figures 8-9: alignment diagnostic | Active/passive; beta/forcing variants | Scale-dependent PDFs and peak locations of local-field/rate-of-strain eigenvector alignment | Steady-window selected-shell alignment PDFs, rendered peak summaries, and synthetic finite check implemented; comparison missing |
 | Figure 10: kinetic comparison context | Not reproduced directly by CGL-LF | Documentation of non-reproducible kinetic comparator and any qualitative CGL-only comparison | Out of direct scope |
-| Figure 11: scale-separation behavior | Selected resolutions | Resolution/convergence or scale-separation comparison products | Missing |
-| Figure 12: heat-flux sensitivity | Heat-flux parameter variants | Spectra/transfer/diagnostic products under heat-flux changes | Missing |
-| Figure 13: limiter-frequency sensitivity | Beta 100, Alfvenic, several `nu_lim` | Energy spectra, `beta Delta` PDFs, strain PDFs, pressure-stress transfer | Missing and threshold-blocked |
+| Figure 11: scale-separation behavior | Selected resolutions | Resolution/convergence or scale-separation comparison products | Operator accuracy and short reduced resolution product paths implemented; steady nonlinear comparison missing |
+| Figure 12: heat-flux sensitivity | Heat-flux parameter variants | Spectra/transfer/diagnostic products under heat-flux changes | Short reduced parameter path, reconstructed smoothing proxy, and signed fixed-level applied face contraction implemented; steady nonlinear comparison/full or AMR-corrected budget missing |
+| Figure 13: limiter-frequency sensitivity | Beta 100, Alfvenic, several `nu_lim` | Energy spectra, `beta Delta` PDFs, strain PDFs, pressure-stress transfer | Inputs, threshold policy, beta-Delta PDF and transfer foundations implemented; case runs/full products missing |
 
 ## Delivery Strategy
 
@@ -1022,6 +1149,25 @@ Make CGL-LF hard-bound diagnostics independent of backup correction
 Establish a credible numerical-accuracy basis before running costly nonlinear
 turbulence simulations.
 
+**Implementation status (2026-05-25):** The local `accuracy` workflow now
+archives parallel/perpendicular collisionless decay at three resolutions and
+three STS timestep ratios plus explicit references, both LF coefficient modes
+at collision rates below, comparable to, and above `c_parallel |k_parallel|`,
+and STS/explicit extreme-cap cases. The retained
+`20260524-accuracy-v2` bundle passed with decreasing resolution errors, a
+maximum finite-collision relative error below `3.0e-4`, and parallel and
+perpendicular pre-cap ratios of `3.62e5` in both extreme-cap methods.
+Field-aligned decay in the `x`, `y`, `z`, and periodic oblique directions
+passed with relative errors no greater than `8.8e-4`; a strict low-field
+case confirmed zero LF face transport below `bfloor`. Production forcing-energy
+residual qualification remains open. The final broad local CPU gate passed with
+`218 passed, 15 skipped, 59 deselected`.
+
+The required MPI CPU suite configured and built successfully on 2026-05-25,
+but all attempted cases failed before simulation launch because `mpirun` is
+not installed in the current shell environment. This is an execution blocker,
+not evidence of an MPI numerical pass or failure; MPI validation remains open.
+
 ### Existing Tests to Preserve
 
 Preserve the role of:
@@ -1156,6 +1302,17 @@ Extend CGL-LF accuracy validation after source-term and limiter corrections
 
 Add a current-architecture problem generator capable of initializing the
 MKS24 turbulence runs and associated controlled comparison modes.
+
+**Implementation status (2026-05-24):** Active/passive-Delta `turbulence` mode is
+registered in the default binary through `src/pgen/tests/cgl_lf_paper.cpp`.
+The reduced beta-10 inputs and `paper-smoke` workflow pass for active
+Alfvenic/random and passive Alfvenic forcing with clean strict diagnostics,
+retained forcing metadata, and restart-tested deterministic forcing.
+Once-per-cycle OU evolution, stage-consistent RK coupling, and reduced
+passive flow decoupling pass focused CPU regressions. Standard decks,
+including the beta scan and beta-100 limiter-frequency suite, are now defined
+for guarded production workflows but have not been executed. Paper-grade
+forcing calibration and controlled analogue modes are not yet qualified.
 
 ### Porting Strategy
 
@@ -1298,15 +1455,33 @@ state:
 - analysis/statistical averaging window;
 - whether it is smoke, convergence, or paper-grade.
 
+**Status (2026-05-24):** All listed smoke, standard baseline, and beta-100
+limiter-frequency input definitions are present. The standard and limiter
+decks are production definitions only; they have not been executed for
+scientific evidence.
+
 ### Pgen-Level Acceptance Criteria
 
 - A small active turbulence case initializes and evolves with clean strict
-  safety diagnostics.
+  safety diagnostics. **Passed for the reduced CPU smoke case on
+  2026-05-24.**
 - A small passive case evolves with the documented passive feedback behavior.
+  **Passed for reduced isothermal-MHD flow decoupling from diagnostic
+  anisotropy on CPU on 2026-05-24.**
 - Restart does not corrupt the CGL representation or forcing setup.
+  **Passed for the reduced active forcing case on 2026-05-24.**
+- Once-per-cycle OU correlation and RK source coupling are correct under the
+  selected time integrator. **Passed for the reduced active CPU case on
+  2026-05-24; long-time calibration against published forcing statistics is
+  still open.**
 - Threshold and LF closure choices are visible from input and manifest output.
+  **Passed for threshold, passive-mode, and forcing choices in the reduced
+  `paper-smoke` manifest; standard workflow metadata support is implemented
+  but awaits authorized execution.**
 - No pgen-local duplicated threshold or LF formula can drift from shared
-  physics helpers.
+  physics helpers. **Satisfied for active initialization; it calls the shared
+  CGL/LF modules and does not encode limiter thresholds or heat-flux
+  formulas.**
 
 ### Recommended Commit
 
@@ -1321,6 +1496,33 @@ Add current-API CGL-LF paper problem generator and reduced turbulence inputs
 Produce the observables needed to make quantitative comparisons with MKS24,
 while keeping raw simulation output manageable and archived analyses
 reproducible.
+
+**Implementation status (2026-05-25):** The paper pgen now emits reduced
+volume-integrated histories for mass, energies, `B^2`, `B^4`, pressure
+anisotropy, beta, threshold volumes, effective collision frequency, and
+forcing power. `paper-smoke` summaries report beta, `C_B2`, and threshold
+fractions; paper histories also retain restartable cumulative applied
+forcing work and the analyzer reports active-case conserved-energy residuals.
+CGL primitive snapshots now export both pressures, and
+`scripts/analyze_cgl_lf_paper.py` generates per-snapshot PDFs, shell spectra,
+projected pressure/velocity-gradient spectra, `b b : grad u` strain PDFs,
+pressure-transfer partitions with a real-space closure check, selected-shell
+alignment PDFs, and per-case ensemble averages inside the archived analysis
+window. `scripts/plot_cgl_lf_paper.py` renders available archived diagnostic
+figures and is invoked by `paper-analyze`. LF history now retains exact operator
+face counts for parallel/perpendicular heat-flux-cap ratios above `1` and
+`10`, which `paper-analyze` differences over that window. The analyzer now
+also reconstructs a cell-centered heat-flux smoothing-power proxy from
+snapshots and archived closure choices, reporting regularized, unlimited, and
+cap-active contributions while explicitly excluding it from discrete
+face-flux or budget claims. Fixed-level `.mhd.hst` output additionally
+retains restartable signed RKL2-applied capped-face heat-flux contractions,
+which need not equal that snapshot proxy. Its
+synthetic numerical test and a two-snapshot window-selection/rendering probe
+have passed locally. AMR-corrected heat-flux accounting, full
+anisotropic-pressure/local-work decomposition, paper-panel/reference
+comparisons, long-time residual qualification, and production statistics
+remain open.
 
 ### Diagnostic Architecture
 
@@ -1358,6 +1560,20 @@ well-defined labels. At minimum include:
 All threshold-volume diagnostics must evaluate the user-selected threshold
 policy, and the manifest must identify that policy.
 
+Implemented paper user-history columns are `volume`, `mass`, `kinetic`, `magnetic`,
+`therm_cgl`, `b2`, `b4`, `delta_p`, `abs_dp`, `beta`, `mirror_vol`,
+`fire_vol`, `hard_vol`, `nu_eff`, `force_pwr`, `force_work`, and retained
+forcing-orientation quantities. `force_work` is the exact cumulative net
+forcing source, including zero-net-momentum projection, for paper inputs that enable its restartable driver counter;
+active-case analysis differences it against conserved `tot-E`. Normal LF MHD
+history additionally retains
+`lf_qface`, `lf_qprcap`, `lf_qpr10`, `lf_qpecap`, and `lf_qpe10` for
+operator-face cap occupancy, plus restartable `lf_qprwrk` and `lf_qpewrk`
+for fixed-level signed RKL2-applied capped-face transport contractions. Offline
+snapshots additionally provide a reconstructed heat-flux smoothing proxy.
+AMR-corrected applied heat-flux accounting and anisotropic-pressure-work
+history entries in the target list remain outstanding.
+
 ### Snapshot Output Requirements
 
 At scientifically useful cadence, retain enough fields for offline analysis:
@@ -1394,8 +1610,10 @@ scripts/plot_cgl_lf_paper.py            # optional split if analysis grows
 scripts/cgl_lf_workflow.py              # orchestration and manifest integration
 ```
 
-The donor analyzer is a useful beginning for history parsing and summary JSON,
-but it does not compute spectra, transfer functions, or alignment diagnostics.
+The implemented analyzer is current-format code rather than a direct donor
+copy. It reads retained binary `mhd_w_bcc` products through the repository
+binary reader and writes `diagnostics.json`; CGL snapshots use legacy
+`eint = p_parallel` together with the added `p_perp` field.
 
 ### Required Analysis Capabilities
 
@@ -1411,6 +1629,19 @@ For every paper run:
 - report cap and limiter activity;
 - write machine-readable JSON and readable Markdown.
 
+**Status:** Reduced history JSON summaries and manifest-selected steady-window
+averages are implemented through the paper analyzer and workflow integration.
+The analyzer also reports interval heat-flux-cap fractions from exact
+operator-face counters, and the paper plotter renders retained history
+summaries when available. It reports active-case conserved-energy change
+against restartable cumulative applied forcing work, while excluding
+passive-Delta from that total-energy interpretation. A closure-reconstructed
+heat-flux smoothing proxy is reported from manifest-qualified snapshots;
+fixed-level history also reports RKL2-applied capped-face transport
+contractions. AMR-corrected heat-flux accounting, full
+anisotropic-pressure/local-work decomposition, and production residual
+qualification remain open.
+
 #### E2. PDF Products
 
 Compute:
@@ -1420,6 +1651,10 @@ Compute:
 - selected strain-distribution PDFs for Figure 13-style interpretation.
 
 Record binning, normalization, selected snapshot times, and averaging windows.
+
+**Status:** Per-snapshot density, parallel/perpendicular pressure-fluctuation,
+`beta Delta`, and `b b : grad u` PDFs plus common-bin steady-window averages
+and generic plots are implemented. Reference-panel targeting remains open.
 
 #### E3. Spectra
 
@@ -1434,6 +1669,12 @@ Compute bin-averaged spectra in the convention described by MKS24:
 Implement and test isotropic and `k_perp` shell binning as required. Specify
 normalization conventions in documentation and output metadata.
 
+**Status:** `k_perp` shell products for velocity, magnetic fluctuation,
+density, `Delta p`, projected `Delta p` gradients, and local-field
+parallel/perpendicular velocity gradients are implemented with a synthetic
+single-mode binning check and generic plot output. Reference normalization
+qualification remains open.
+
 #### E4. Pressure-Anisotropy Transfer Function
 
 Implement the paper-defined `T_Delta p(k_perp)` diagnostic. This is one of the
@@ -1445,6 +1686,11 @@ normalization. Requirements:
 - compare integral transfer against a real-space anisotropic work measure where
   possible;
 - archive normalization conventions in summary metadata.
+
+**Status:** A shell-partition implementation of the stated pressure-stress
+transfer and its direct real-space closure error are emitted by the analyzer;
+the synthetic zero-transfer/closure check passes. Sign and normalization must
+still be qualified against production fields/reference interpretation.
 
 #### E5. Alignment Diagnostic
 
@@ -1459,6 +1705,11 @@ Implement the local-field/rate-of-strain alignment diagnostic:
 
 This requires careful numerical validation on synthetic flow fields before it
 is interpreted physically.
+
+**Status:** Selected-`k_perp` stretching-eigenvector alignment PDFs and
+rendered selected-shell peak curves are implemented, and synthetic output is
+checked for finite bounded histograms. Paper-panel aggregation and physically
+interpretable production validation remain open.
 
 ### Figure Reproduction Outputs
 
@@ -1508,6 +1759,18 @@ Add CGL-LF paper PDF, spectra, transfer, and alignment analysis
 Make operator validation and paper reproduction easy to launch, archive,
 inspect, and rerun without confusing the two tiers.
 
+**Implementation status (2026-05-25):** `paper-smoke` executes locally and
+archives reduced model/forcing choices. `paper-standard` and `paper-nulim`
+now enumerate the defined production inputs, retain model/resolution/domain/
+analysis-window metadata and in-place binary/checkpoint references, and
+refuse execution unless `--authorize-paper-execution` is passed.
+`paper-analyze --output-dir <bundle>` regenerates current history/snapshot
+diagnostics with a synthetic test and generic diagnostic figures;
+`paper-summary` regenerates retained summaries without plotting. Local
+operator convergence is available through `accuracy`; `paper-convergence` is
+implemented as a short startup/product-path qualification tier. Steady
+nonlinear convergence and reference-comparison modes remain open.
+
 ### Preserve Existing Commands
 
 Keep existing user commands functional:
@@ -1531,11 +1794,11 @@ Add clear modes whose computational cost and scientific meaning are evident:
 
 | Workflow | Purpose | Expected cost |
 | --- | --- | --- |
-| `paper-smoke` | Reduced active/passive and limiter-policy startup checks | Workstation/local |
+| `paper-smoke` | Reduced active/passive forcing-mechanics and limiter-policy startup checks | Workstation/local |
 | `paper-convergence` | Selected resolution/timestep/threshold studies | Local cluster or modest HPC |
-| `paper-standard` | Published-resolution selected MKS24 matrix | HPC |
-| `paper-nulim` | Figure 13 limiter-frequency suite | HPC |
-| `paper-analyze` | Regenerate paper diagnostics and figures from archived runs | Analysis host |
+| `paper-standard` | Published-resolution selected MKS24 matrix; defined and guarded by explicit authorization | HPC |
+| `paper-nulim` | Figure 13 limiter-frequency suite; defined and guarded by explicit authorization | HPC |
+| `paper-analyze` | Regenerate implemented history/snapshot diagnostics and generic figures from archived runs; paper-panel comparison remains open | Analysis host |
 | `paper-summary` | Regenerate human/machine summaries without plotting | Any host |
 
 The exact CLI naming may change, but avoid overloading `full` with runs that
@@ -1543,8 +1806,9 @@ are orders of magnitude more expensive.
 
 ### Manifest Schema Evolution
 
-The current bundle schema should be extended or version-bumped. Every paper
-bundle must record:
+Schema version 2 now records development-run worktree status and model/forcing
+choices for the reduced `paper-smoke` workflow. Every eventual paper bundle
+must record:
 
 ```text
 schema_version
@@ -1552,6 +1816,8 @@ workflow
 status
 created_utc
 git_revision
+git_worktree_dirty
+git_worktree_status
 executable
 build_configuration
 build_dir
@@ -1974,17 +2240,30 @@ agents should use substantially less when reduced tests settle the question.
 
 #### Recommended Accounting Helper
 
-As part of the first Frontier workflow implementation, add a small helper
-under:
+A tracked implementation is now provided at:
 
 ```text
-/lustre/orion/ast207/proj-shared/dfielding/CGL/scripts/accounting/
+scripts/frontier/cgl_lf_frontier.py
+scripts/frontier/build_cgl_lf_frontier.sh
 ```
 
-or a tracked repository script that is copied there with each campaign. It
-should accept a completed Slurm job ID, query the top-level allocation record,
-calculate actual node-hours, reject duplicate recording of a job ID, append
-the CSV row, and regenerate the Markdown budget summary.
+`cgl_lf_frontier.py` is intentionally a preparation/accounting utility, not a
+submission launcher. It requires the prescribed CGL root for real use,
+reserves conservative node-hours, rejects walltimes greater than two hours
+and paper-standard/limiter-production decks under `debug`, emits an
+inspectable batch script, queries `squeue` before the user manually submits,
+and records exactly one completed top-level allocation from `sacct` together
+with the source/executable/input provenance held in its manifest. It also
+supports releasing an unsubmitted reservation. Validate its policy logic
+offline with:
+
+```bash
+python3 scripts/frontier/cgl_lf_frontier.py self-test
+```
+
+The shell/Python pattern below records the original design sketch; the tracked
+utility supersedes it for actual campaign accounting and fills the required
+provenance fields rather than leaving them blank.
 
 Minimal shell/Python pattern for future agents to turn into a reviewed helper:
 
@@ -2117,10 +2396,11 @@ unexamined optimization guarantee:
 
 ### Improved Frontier Build Script Template
 
-The following template uses the repository's existing `built_in_pgens`
-configuration so the CGL-LF test and future registered paper pgens are
-available in one executable. Save an adapted version beneath
-`$CGL_ROOT/scripts/build/` and archive its output.
+The tracked `scripts/frontier/build_cgl_lf_frontier.sh` uses the repository's
+existing `built_in_pgens` configuration so the CGL-LF test and paper pgen are
+available in one executable. Copy the reviewed script beneath
+`$CGL_ROOT/scripts/build/` for a campaign and archive its output. The
+following listing documents its required behavior.
 
 ```bash
 #!/bin/bash
@@ -2207,8 +2487,10 @@ Notes:
 
 ### Improved Frontier Debug-Run Slurm Template
 
-This is a correctness and reduced-validation template. It intentionally uses
-`debug` and therefore is not a paper-production submission template.
+The `prepare` action of `scripts/frontier/cgl_lf_frontier.py` generates a
+concrete version of this correctness and reduced-validation script in each
+run manifest directory. It intentionally uses `debug` and therefore is not a
+paper-production submission template.
 
 ```bash
 #!/bin/bash
@@ -2724,7 +3006,7 @@ Deliverables:
 - threshold-volume histories;
 - `C_B2`;
 - energy/injection summaries;
-- cap and collision activity;
+- collision activity and forcing-power proxy;
 - manifest extensions.
 
 Gate:
@@ -2732,6 +3014,16 @@ Gate:
 - smoke workflows;
 - finite history validation;
 - summary regeneration from existing bundle.
+
+**Status (2026-05-25):** Implemented for reduced global histories, exact
+operator-face heat-flux-cap fractions, smoke summary generation, and
+manifest-window archived-run averages and generic diagnostic plots. Snapshot
+analysis now adds a manifest-qualified heat-flux smoothing proxy; paper
+history retains restartable cumulative applied forcing work and active-case
+global energy residuals. Fixed-level LF history now retains RKL2-applied
+capped-face heat-flux contractions. AMR-corrected heat-flux accounting, full
+anisotropic-pressure/local-work decomposition, and production residual
+qualification remain open.
 
 ### Commit 7: Add Paper Spatial Analysis
 
@@ -2849,10 +3141,13 @@ python run_test_suite.py --mpicpu
 python run_test_suite.py --style
 ```
 
-Use the actual repository commands present at that time. The prior branch work
-identified an existing style-wrapper problem involving
-`docs/source/conf.py`; confirm whether it has been resolved rather than
-silently accepting blocked CI.
+Use the actual repository commands present at that time. On 2026-05-25 the
+nonconforming indentation in `docs/source/conf.py` was corrected, and an
+isolated validation environment populated from `docs/requirements.txt` plus
+`flake8`, `pytest`, and `numpy` was used because the active system Python does
+not provide these gate dependencies. In that environment,
+`python run_test_suite.py --style` passed (`2 passed`), as did
+`sphinx-build -W --keep-going -b html source _build/html`.
 
 ## Files Future Agents Should Inspect First
 
@@ -2896,8 +3191,9 @@ scripts/generate_cgl_lf_eigenmode_inputs.py
 docs/source/modules/cgl_landau_fluid.md
 docs/source/modules/cgl_landau_fluid_validation.md
 docs/source/reference/input_parameters.md
-docs/arXiv-2405.02418v2/MKS24.tex
-docs/arXiv-2405.02418v2/fig*.pdf
+scripts/stage_cgl_lf_mks24_reference.py
+build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2/manifest.json
+build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2/source/MKS24.tex
 ```
 
 ### Selective Donor Assets
@@ -2937,58 +3233,60 @@ details.
 
 ### Collision Split Form
 
-Decision required:
+Decision implemented on 2026-05-24:
 
-- one full collision update per evolution cycle; or
-- two symmetric half-collision updates.
+- apply collisions after each LF sweep with the sweep duration `dt/2`, so the
+  two symmetric updates cover one physical evolution cycle.
 
-Criterion:
+Evidence:
 
-- analytic physical-time correctness first;
-- symmetry and numerical accuracy second;
-- minimal architectural disruption third.
+- `test_cgl_lf_background_collision_advances_one_physical_timestep` checks
+  the analytic relaxation law independently;
+- the finite-collision `compare` and restart workflows pass in the focused
+  CPU validation.
 
 ### Threshold Default
 
-Decision required:
+Decision implemented on 2026-05-24:
 
-- preserve current oblique default for backward compatibility while paper decks
-  explicitly choose parallel; or
-- change the public default to parallel because the feature is not yet
-  established and the principal reproduction target uses parallel.
+- preserve `cgl_firehose_threshold = oblique` as the compatibility default;
+- require MKS24 inputs to state `cgl_firehose_threshold = parallel`.
 
-Criterion:
+Evidence:
 
-- user compatibility and explicit documentation;
-- no hidden behavioral change in archived runs.
+- the policy regression distinguishes both thresholds;
+- reduced paper inputs and workflow manifests state `parallel` explicitly.
 
 ### Emergency-Bound Definition Under Parallel Threshold
 
-Decision required:
+Decision implemented on 2026-05-24:
 
-- define a stricter numerical overshoot bound beyond `beta Delta = -2`;
-- use finite overshoot tolerance tied to regulator model;
-- or use strict safety only for nonfinite/floor failures while reporting all
-  physical threshold excursions separately.
+- report physical firehose occupancy at the selected threshold and reserve
+  the emergency hard bound for `beta Delta <= -3`;
+- count hard-bound violations independently of whether backup correction is
+  enabled.
 
-Criterion:
+Evidence:
 
-- the diagnostic must not mark normal finite-rate paper physics as a numerical
-  failure;
-- it must still reveal unstable numerical excursions.
+- `test_cgl_lf_strict_hard_bound_is_reported_without_backup_correction`
+  protects truthful safety reporting;
+- reduced paper smoke retains separate limiter occupancy and hard-bound
+  histories.
 
 ### Pgen Integration With Forcing
 
-Decision required:
+Decision implemented on 2026-05-24:
 
-- reuse and extend the current turbulence forcing implementation; or
-- implement a narrowly scoped paper pgen forcing hook.
+- reuse the common `TurbulenceDriver` and extend it with deterministic
+  restartable state, repaired RK coupling, explicit Alfvenic orientation, and
+  opt-in MKS24 physical-shell/common-spectrum settings.
 
-Criterion:
+Evidence:
 
-- matches MKS24 forcing definition;
-- restart and random-seed reproducibility;
-- minimal duplication.
+- focused tests cover seed selection, restart continuation, OU cadence,
+  stage work, forcing orientation, and physical-shell input validity;
+- reduced paper-smoke manifests archive the selected forcing contract, while
+  long-time statistical calibration remains open.
 
 ### Reference Data for Quantitative Paper Comparison
 
@@ -3003,24 +3301,25 @@ Criterion:
 
 ### Paper Source and Figure Provenance on Frontier
 
-Decision required:
+Decision implemented for staging on 2026-05-24:
 
-- add the permitted MKS24 source/figure bundle to an appropriate tracked or
-  archived project-data location; or
-- add a documented retrieval/staging procedure that produces an immutable
-  reference copy beneath the Frontier CGL run root.
+- use `scripts/stage_cgl_lf_mks24_reference.py` to download or copy the
+  official arXiv `2405.02418v2` source archive into ignored result storage;
+- retain its generated `manifest.json`, containing SHA-256 checksums for the
+  archive, `MKS24.tex`, and extracted figures, beneath the Frontier CGL run
+  root or in its archived provenance record.
 
 Context:
 
-- the local `docs/arXiv-2405.02418v2/` directory was untracked when this plan
-  was authored;
+- the local `docs/arXiv-2405.02418v2/` directory was reported as untracked
+  when this plan was authored and is absent from the current live checkout;
 - a pushed code branch alone will therefore not deliver that reference bundle
   to Frontier;
 - simulations need not read the paper source, but figure comparison,
   provenance, and agent interpretation do require stable access to the exact
   reference version.
 
-Criterion:
+Remaining criterion:
 
 - every paper comparison campaign must identify the exact paper source/figure
   reference and retain either its checksum or its immutable archive path.
@@ -3150,26 +3449,27 @@ following are true:
 - Any remaining scientific or operational limitation is documented before
   users are directed to run the feature.
 
-## Immediate Next Three Implementation Tasks
+## Immediate Next Blocking Tasks
 
-No future agent should begin by porting the large paper pgen. The immediate
-critical path is:
+Collision timing, threshold selection, truthful emergency monitoring, reduced
+forcing cadence/source coupling, passive-Delta flow decoupling, pinned
+paper-source staging, and explicit paper forcing-shell selection now have
+local implementation evidence. The next critical path is:
 
-1. **Correct collision-time integration.**
-   Trace the source-term task graph, implement a physically correct update
-   duration, and replace the self-referential finite-collision oracle with an
-   independent analytic regression.
+1. **Calibrate forcing and use paper provenance.**
+   Carry the staged official-source manifest into comparison products and
+   calibrate long-time injection/spectral behavior against the documented
+   setup.
 
-2. **Implement explicit instability-threshold policy and truthful safety
-   diagnostics.**
-   Add the MKS24 parallel-firehose option, retain an explicit oblique option,
-   separate physical occupancy from emergency failure, and cover both in
-   tests and manifests.
+2. **Complete remaining diagnostic and comparison products.**
+   Extend fixed-level applied-face heat-flux transport accounting to
+   AMR-corrected and full anisotropic-pressure/local-work budgets, and add
+   machine-readable or uncertainty-documented paper-panel reference
+   comparisons on top of the implemented cap, forcing-work residual,
+   snapshot-proxy, applied fixed-level face-contraction, and
+   steady-window PDF/spectral/transfer/alignment/strain products and generic
+   figure renderer.
 
-3. **Strengthen accuracy validation before nonlinear paper work.**
-   Add convergence, finite-collision asymptotic, and directional tests so that
-   the eventual turbulence program rests on a defensible corrected numerical
-   operator.
-
-Only after these three tasks pass review should work begin on the MKS24 driven
-turbulence pgen, diagnostics, and paper-grade execution workflows.
+3. **Build broader execution evidence.**
+   Qualify forced energy residuals plus steady reduced nonlinear convergence,
+   and only then prepare standard or Frontier execution campaigns.

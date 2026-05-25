@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
@@ -17,7 +18,7 @@ import sys
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 HISTORY_LABEL = re.compile(r"\[\d+\]=(\S+)")
 FULL_INPUTS = (
     "inputs/unit_tests/cgl_lf_quant_parallel.athinput",
@@ -60,6 +61,9 @@ class CaseSpec:
     comparison_group: str | None = None
     comparison_role: str | None = None
     amr: bool = False
+    paper_smoke: bool = False
+    accuracy_study: str | None = None
+    accuracy_parameters: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass
@@ -181,14 +185,41 @@ def lf_diagnostics(path: Path) -> dict[str, object]:
             "lf_hardbd",
         )
     }
+    for key in (
+        "lf_qface", "lf_qprcap", "lf_qpr10", "lf_qpecap", "lf_qpe10",
+        "lf_qprwrk", "lf_qpewrk",
+    ):
+        if key in history:
+            counters[key] = final_value(history, key)
     clean = all(counters[key] == 0.0 for key in UNSAFE_LF_COLUMNS)
     denominator = max(nstage, 1.0)
-    return {
+    result: dict[str, object] = {
         "clean": clean,
         "counters": counters,
         "mirror_occupancy": counters["lf_mirror"] / denominator,
         "firehose_occupancy": counters["lf_firehs"] / denominator,
     }
+    if counters.get("lf_qface", 0.0) > 0.0:
+        qfaces = counters["lf_qface"]
+        result["heat_flux_cap_fractions"] = {
+            "parallel_over_1": counters["lf_qprcap"] / qfaces,
+            "parallel_over_10": counters["lf_qpr10"] / qfaces,
+            "perpendicular_over_1": counters["lf_qpecap"] / qfaces,
+            "perpendicular_over_10": counters["lf_qpe10"] / qfaces,
+        }
+    if "lf_qprwrk" in counters and "lf_qpewrk" in counters:
+        result["heat_flux_work"] = {
+            "definition": (
+                "Cumulative signed RKL2-applied fixed-level owned-face contraction "
+                "of capped parallel/perpendicular LF heat fluxes"
+            ),
+            "requires_fixed_level_mesh": True,
+            "signed": True,
+            "parallel": counters["lf_qprwrk"],
+            "perpendicular": counters["lf_qpewrk"],
+            "total": counters["lf_qprwrk"] + counters["lf_qpewrk"],
+        }
+    return result
 
 
 def append_history_output(source_text: str) -> str:
@@ -211,6 +242,102 @@ def append_history_output(source_text: str) -> str:
         + "data_format = %24.16e\n"
         + "dcycle = 1\n"
     )
+
+
+def input_block_value(source_text: str, block: str, parameter: str) -> str | None:
+    """Read one simple Athena input value from a named block."""
+
+    match = re.search(
+        rf"(?ms)^<{re.escape(block)}>\s*(.*?)(?=^<[^>]+>|\Z)",
+        source_text,
+    )
+    if match is None:
+        return None
+    value = re.search(
+        rf"(?m)^\s*{re.escape(parameter)}\s*=\s*([^\s#]+)",
+        match.group(1),
+    )
+    return value.group(1) if value is not None else None
+
+
+def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
+    """Archive policy choices that affect interpretation of LF diagnostics."""
+
+    def choice(block: str, parameter: str, default: str) -> str:
+        value = input_block_value(source_text, block, parameter) or default
+        prefix = f"{block}/{parameter}="
+        for override in overrides:
+            if override.startswith(prefix):
+                value = override[len(prefix):]
+        return value
+
+    choices = {
+        "passive_delta": choice("mhd", "passive", "false"),
+        "paper_mode": choice("problem", "paper_mode", "unspecified"),
+        "beta0": choice("problem", "beta0", "unspecified"),
+        "mesh_nx1": choice("mesh", "nx1", "unspecified"),
+        "mesh_nx2": choice("mesh", "nx2", "unspecified"),
+        "mesh_nx3": choice("mesh", "nx3", "unspecified"),
+        "domain_x1": (
+            f"{choice('mesh', 'x1min', 'unspecified')}:"
+            f"{choice('mesh', 'x1max', 'unspecified')}"
+        ),
+        "domain_x2": (
+            f"{choice('mesh', 'x2min', 'unspecified')}:"
+            f"{choice('mesh', 'x2max', 'unspecified')}"
+        ),
+        "domain_x3": (
+            f"{choice('mesh', 'x3min', 'unspecified')}:"
+            f"{choice('mesh', 'x3max', 'unspecified')}"
+        ),
+        "analysis_t_start": choice("problem", "analysis_t_start", "unspecified"),
+        "analysis_t_end": choice("problem", "analysis_t_end", "unspecified"),
+        "cgl_firehose_threshold": choice("mhd", "cgl_firehose_threshold", "oblique"),
+        "cgl_heat_flux_integrator": choice("mhd", "cgl_heat_flux_integrator", "sts"),
+        "lf_k_parallel": choice("mhd", "lf_k_parallel", "unspecified"),
+        "lf_coefficient_mode": choice("mhd", "lf_coefficient_mode", "local"),
+        "lf_c_parallel0": choice("mhd", "lf_c_parallel0", "unspecified"),
+        "nu_coll": choice("mhd", "nu_coll", "0.0"),
+        "mirror_limiter": choice("mhd", "mirror_limiter", "false"),
+        "firehose_limiter": choice("mhd", "firehose_limiter", "false"),
+        "limiter_nu_coll": choice("mhd", "limiter_nu_coll", "0.0"),
+        "backup_limiters": choice("mhd", "backup_limiters", "false"),
+        "dfloor": choice("mhd", "dfloor", "unspecified"),
+        "pfloor": choice("mhd", "pfloor", "unspecified"),
+        "tfloor": choice("mhd", "tfloor", "unspecified"),
+        "bfloor": choice("mhd", "bfloor", "unspecified"),
+        "cgl_collision_split": "two_half_steps_after_lf_sweeps",
+    }
+    driving_type = input_block_value(source_text, "turb_driving", "driving_type")
+    if driving_type is not None:
+        driving_type = choice("turb_driving", "driving_type", driving_type)
+        choices.update({
+            "forcing_mode": (
+                "alfvenic_z_perpendicular" if driving_type == "1"
+                else "isotropic_random" if driving_type == "0"
+                else f"unsupported_{driving_type}"
+            ),
+            "forcing_seed": choice("turb_driving", "rseed", "-1"),
+            "forcing_dedt": choice("turb_driving", "dedt", "0.0"),
+            "forcing_tcorr": choice("turb_driving", "tcorr", "0.0"),
+            "forcing_record_injected_work": choice(
+                "turb_driving", "record_injected_work", "false"
+            ),
+            "forcing_nlow": choice("turb_driving", "nlow", "1"),
+            "forcing_nhigh": choice("turb_driving", "nhigh", "2"),
+            "forcing_physical_k_shell": choice(
+                "turb_driving", "physical_k_shell", "false"
+            ),
+            "forcing_k_shell_unit": choice("turb_driving", "k_shell_unit", "0.0"),
+            "forcing_isotropic_power_spectrum": choice(
+                "turb_driving", "isotropic_power_spectrum", "false"
+            ),
+            "forcing_expo": choice("turb_driving", "expo", "5.0/3.0"),
+            "forcing_exp_prp": choice("turb_driving", "exp_prp", "5.0/3.0"),
+            "forcing_exp_prl": choice("turb_driving", "exp_prl", "0.0"),
+            "forcing_time_integration": "ou_once_per_cycle_rk_source_beta_dt",
+        })
+    return choices
 
 
 def stage_input(spec: CaseSpec, paths: RunPaths) -> Path:
@@ -244,6 +371,255 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
                 amr=True,
             )
         ]
+    if workflow == "paper-smoke":
+        source = "inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.athinput"
+        passive_source = "inputs/cgl_lf_paper/cgl_lf_paper_smoke_passive_beta10.athinput"
+        return [
+            CaseSpec(
+                "paper_smoke_active_alfvenic",
+                source,
+                paper_smoke=True,
+            ),
+            CaseSpec(
+                "paper_smoke_active_random",
+                source,
+                (
+                    "turb_driving/driving_type=0",
+                    "turb_driving/rseed=314159",
+                    "turb_driving/expo=2.0",
+                ),
+                paper_smoke=True,
+            ),
+            CaseSpec(
+                "paper_smoke_passive_alfvenic",
+                passive_source,
+                paper_smoke=True,
+            ),
+        ]
+    if workflow == "paper-standard":
+        prefix = "inputs/cgl_lf_paper/"
+        return [
+            CaseSpec(
+                "paper_standard_active_alfvenic_beta1",
+                prefix + "cgl_lf_paper_standard_active_alfvenic_beta1.athinput",
+            ),
+            CaseSpec(
+                "paper_standard_active_alfvenic_beta10",
+                prefix + "cgl_lf_paper_standard_active_alfvenic_beta10.athinput",
+            ),
+            CaseSpec(
+                "paper_standard_active_alfvenic_beta100",
+                prefix + "cgl_lf_paper_standard_active_alfvenic_beta100.athinput",
+            ),
+            CaseSpec(
+                "paper_standard_passive_alfvenic_beta10",
+                prefix + "cgl_lf_paper_standard_passive_alfvenic_beta10.athinput",
+            ),
+            CaseSpec(
+                "paper_standard_active_random_beta10",
+                prefix + "cgl_lf_paper_standard_active_random_beta10.athinput",
+            ),
+        ]
+    if workflow == "paper-convergence":
+        source = (
+            "inputs/cgl_lf_paper/"
+            "cgl_lf_paper_standard_active_alfvenic_beta10.athinput"
+        )
+
+        def reduced_overrides(resolution: int, *extra: str) -> tuple[str, ...]:
+            return (
+                f"mesh/nx1={resolution}",
+                f"mesh/nx2={resolution}",
+                f"mesh/nx3={2*resolution}",
+                f"meshblock/nx1={resolution}",
+                f"meshblock/nx2={resolution}",
+                f"meshblock/nx3={2*resolution}",
+                "time/tlim=0.02",
+                "time/ndiag=1",
+                "problem/analysis_t_start=0.0",
+                "problem/analysis_t_end=0.02",
+                "output1/dt=0.005",
+                "output2/dt=0.01",
+                "output3/dt=0.02",
+                *extra,
+            )
+
+        return [
+            CaseSpec(
+                f"paper_convergence_resolution_{resolution}",
+                source,
+                reduced_overrides(resolution),
+                paper_smoke=True,
+            )
+            for resolution in (8, 16, 32)
+        ] + [
+            CaseSpec(
+                "paper_convergence_heat_flux_strong",
+                source,
+                reduced_overrides(16, "mhd/lf_k_parallel=0.06283185307179586"),
+                paper_smoke=True,
+            ),
+            CaseSpec(
+                "paper_convergence_heat_flux_weak",
+                source,
+                reduced_overrides(16, "mhd/lf_k_parallel=628.3185307179587"),
+                paper_smoke=True,
+            ),
+            CaseSpec(
+                "paper_convergence_firehose_oblique",
+                source,
+                reduced_overrides(16, "mhd/cgl_firehose_threshold=oblique"),
+                paper_smoke=True,
+            ),
+        ]
+    if workflow == "paper-nulim":
+        prefix = "inputs/cgl_lf_paper/"
+        return [
+            CaseSpec(
+                "paper_nulim_beta100_20",
+                prefix + "cgl_lf_paper_nulim_beta100_20.athinput",
+            ),
+            CaseSpec(
+                "paper_nulim_beta100_200",
+                prefix + "cgl_lf_paper_nulim_beta100_200.athinput",
+            ),
+            CaseSpec(
+                "paper_nulim_beta100_hardwall",
+                prefix + "cgl_lf_paper_nulim_beta100_hardwall.athinput",
+            ),
+        ]
+    if workflow == "accuracy":
+        cases: list[CaseSpec] = []
+        decay_inputs = {
+            "parallel": "inputs/unit_tests/cgl_lf_quant_parallel.athinput",
+            "perpendicular": "inputs/unit_tests/cgl_lf_quant_perp.athinput",
+        }
+        for component, source in decay_inputs.items():
+            for resolution in ("32", "64", "128"):
+                cases.append(CaseSpec(
+                    f"accuracy_{component}_nx{resolution}",
+                    source,
+                    (
+                        f"mesh/nx1={resolution}",
+                        f"meshblock/nx1={resolution}",
+                    ),
+                    validation_output=True,
+                    accuracy_study="collisionless_resolution",
+                    accuracy_parameters=(
+                        ("component", component), ("nx1", resolution),
+                    ),
+                ))
+            for dt_ratio in ("0.25", "1.0", "1000.0"):
+                suffix = dt_ratio.replace(".", "p")
+                cases.append(CaseSpec(
+                    f"accuracy_{component}_sts_ratio{suffix}",
+                    source,
+                    (f"time/sts_max_dt_ratio={dt_ratio}",),
+                    validation_output=True,
+                    accuracy_study="timestep_sweep",
+                    accuracy_parameters=(
+                        ("component", component), ("method", "sts"),
+                        ("sts_max_dt_ratio", dt_ratio),
+                    ),
+                ))
+            cases.append(CaseSpec(
+                f"accuracy_{component}_explicit",
+                source,
+                (
+                    "mhd/cgl_heat_flux_integrator=explicit",
+                    "time/sts_integrator=none",
+                ),
+                validation_output=True,
+                accuracy_study="timestep_sweep",
+                accuracy_parameters=(
+                    ("component", component), ("method", "explicit"),
+                ),
+            ))
+        collisional_inputs = {
+            "parallel": "inputs/unit_tests/cgl_lf_quant_parallel_collisional.athinput",
+            "perpendicular": "inputs/unit_tests/cgl_lf_quant_perp_collisional.athinput",
+        }
+        for component, source in collisional_inputs.items():
+            for coefficient_mode in ("background", "local"):
+                for nu_coll in ("0.01", "6.283185307179586", "1000.0"):
+                    suffix = nu_coll.replace(".", "p")
+                    cases.append(CaseSpec(
+                        f"accuracy_{component}_{coefficient_mode}_nu{suffix}",
+                        source,
+                        (
+                            f"mhd/lf_coefficient_mode={coefficient_mode}",
+                            f"mhd/nu_coll={nu_coll}",
+                        ),
+                        validation_output=True,
+                        accuracy_study="finite_collision_asymptotics",
+                        accuracy_parameters=(
+                            ("component", component),
+                            ("coefficient_mode", coefficient_mode),
+                            ("nu_coll", nu_coll),
+                        ),
+                    ))
+        cap_source = "inputs/unit_tests/cgl_lf_flux_limiter.athinput"
+        for method, overrides in (
+            ("sts", ()),
+            ("explicit", (
+                "mhd/cgl_heat_flux_integrator=explicit",
+                "time/sts_integrator=none",
+            )),
+        ):
+            cases.append(CaseSpec(
+                f"accuracy_extreme_cap_{method}",
+                cap_source,
+                (
+                    "mhd/lf_k_parallel=1.0e-5",
+                    "problem/flux_limiter_min_unlimited_ratio=1.0e4",
+                    *overrides,
+                ),
+                validation_output=True,
+                accuracy_study="extreme_cap",
+                accuracy_parameters=(("method", method),),
+            ))
+        rotated_source = "inputs/unit_tests/cgl_lf_rotated_decay.athinput"
+        for direction, overrides in (
+            ("x", ("problem/rotated_axis=x",)),
+            ("y", (
+                "problem/rotated_axis=y",
+                "problem/b0=0.0", "problem/by0=1.0", "problem/bz0=0.0",
+            )),
+            ("z", (
+                "problem/rotated_axis=z",
+                "problem/b0=0.0", "problem/by0=0.0", "problem/bz0=1.0",
+            )),
+            ("oblique", (
+                "problem/rotated_axis=oblique",
+                "problem/b0=0.5773502691896258",
+                "problem/by0=0.5773502691896258",
+                "problem/bz0=0.5773502691896258",
+            )),
+        ):
+            cases.append(CaseSpec(
+                f"accuracy_rotated_{direction}",
+                rotated_source,
+                overrides,
+                validation_output=True,
+                accuracy_study="rotated_field",
+                accuracy_parameters=(("direction", direction),),
+            ))
+        cases.append(CaseSpec(
+            "accuracy_low_field",
+            "inputs/tests/cgl_lf_decay.athinput",
+            (
+                "time/evolution=kinematic",
+                "time/nlim=1",
+                "time/tlim=1.0e-5",
+                "mhd/rsolver=advect",
+                "problem/test_mode=low_field",
+                "problem/b0=5.0e-11",
+                "problem/amp=0.5",
+            ),
+            accuracy_study="low_field",
+            accuracy_parameters=(("b0", "5.0e-11"), ("bfloor", "1.0e-10")),
+        ))
+        return cases
     if workflow == "compare":
         source = "inputs/tests/cgl_lf_decay.athinput"
         return [
@@ -349,6 +725,19 @@ def git_revision() -> str:
     return result.stdout.strip() if result.returncode == 0 else "unknown"
 
 
+def git_worktree_status() -> list[str]:
+    """Read source changes present when a workflow begins execution."""
+
+    result = subprocess.run(
+        ["git", "status", "--short", "--untracked-files=all"],
+        cwd=ROOT_DIR,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.splitlines()
+
+
 def collect_outputs(spec: CaseSpec, paths: RunPaths,
                     case_dir: Path) -> dict[str, object]:
     """Copy analysis products into standard result-bundle directories."""
@@ -361,9 +750,26 @@ def collect_outputs(spec: CaseSpec, paths: RunPaths,
         outputs[key] = display_path(destination, paths.root)
     tabs = sorted((case_dir / "tab").glob("*.tab"))
     if tabs:
-        destination = paths.data / f"{spec.name}.mhd_w.tab"
-        shutil.copy2(tabs[-1], destination)
-        outputs["final_table"] = display_path(destination, paths.root)
+        outputs["tables"] = []
+    for table in tabs:
+        destination = paths.data / table.name
+        shutil.copy2(table, destination)
+        displayed = display_path(destination, paths.root)
+        outputs["tables"].append(displayed)
+        if ".mhd_w." in table.name or ".mhd_w_bcc." in table.name:
+            outputs["final_table"] = displayed
+        elif ".turb_force." in table.name:
+            outputs["forcing_table"] = displayed
+    snapshots = sorted((case_dir / "bin").glob("*.bin"))
+    if snapshots:
+        outputs["snapshot_paths"] = [
+            display_path(path, paths.root) for path in snapshots
+        ]
+    checkpoints = sorted((case_dir / "rst").glob("*.rst"))
+    if checkpoints:
+        outputs["checkpoint_paths"] = [
+            display_path(path, paths.root) for path in checkpoints
+        ]
     csv_files = sorted(paths.data.glob(f"{spec.name}.*.csv"))
     if csv_files:
         outputs["validation_data"] = [
@@ -412,7 +818,15 @@ def run_case(spec: CaseSpec, executable: Path,
         "outputs": outputs,
         "lf_active": spec.lf_active,
         "amr": spec.amr,
+        "paper_smoke": spec.paper_smoke,
     }
+    if spec.accuracy_study is not None:
+        case["accuracy_study"] = spec.accuracy_study
+        case["accuracy_parameters"] = dict(spec.accuracy_parameters)
+    if spec.lf_active:
+        case["model_choices"] = model_choices(
+            staged_input.read_text(encoding="utf-8"), overrides
+        )
     if spec.comparison_group is not None:
         case["comparison_group"] = spec.comparison_group
         case["comparison_role"] = spec.comparison_role
@@ -481,6 +895,56 @@ def evaluate_amr(case: dict[str, object], root: Path) -> dict[str, object]:
         return {"passed": False, "error": str(error)}
 
 
+def evaluate_paper_smoke(case: dict[str, object], root: Path) -> dict[str, object]:
+    """Verify reduced active paper forcing state and energy diagnostics."""
+
+    user_path = case_history_path(case, root, "user_history")
+    mhd_path = case_history_path(case, root)
+    if user_path is None or mhd_path is None:
+        return {"passed": False, "error": "missing paper-smoke history output"}
+    try:
+        user = parse_history(user_path)
+        mhd = parse_history(mhd_path)
+        model = case.get("model_choices", {})
+        forcing_mode = model.get("forcing_mode") if isinstance(model, dict) else None
+        perpendicular = final_value(user, "force_prp2")
+        parallel = final_value(user, "force_prl2")
+        volume = final_value(user, "volume")
+        b2 = final_value(user, "b2")
+        b4 = final_value(user, "b4")
+        beta_mean = final_value(user, "beta") / volume
+        cb2 = b4*volume/(b2*b2) - 1.0
+        mirror_fraction = final_value(user, "mirror_vol") / volume
+        firehose_fraction = final_value(user, "fire_vol") / volume
+        hard_bound_fraction = final_value(user, "hard_vol") / volume
+        energy_delta = final_value(mhd, "tot-E") - mhd["tot-E"][0]
+        force_work = final_value(user, "force_work") - user["force_work"][0]
+        mode_pass = (
+            parallel == 0.0 if forcing_mode == "alfvenic_z_perpendicular"
+            else parallel > 0.0 if forcing_mode == "isotropic_random"
+            else False
+        )
+        return {
+            "passed": (
+                perpendicular > 0.0 and energy_delta > 0.0
+                and force_work > 0.0 and mode_pass
+            ),
+            "forcing_mode": forcing_mode,
+            "force_perpendicular_squared": perpendicular,
+            "force_parallel_squared": parallel,
+            "mean_beta": beta_mean,
+            "c_b2": cb2,
+            "mirror_volume_fraction": mirror_fraction,
+            "firehose_volume_fraction": firehose_fraction,
+            "hard_bound_volume_fraction": hard_bound_fraction,
+            "energy_delta": energy_delta,
+            "applied_forcing_work": force_work,
+            "energy_minus_applied_work": energy_delta - force_work,
+        }
+    except (OSError, ValueError, KeyError) as error:
+        return {"passed": False, "error": str(error)}
+
+
 def compare_tables(first: Path, second: Path) -> dict[str, object]:
     """Compare final primitive table data for two reference runs."""
 
@@ -529,6 +993,121 @@ def evaluate_comparisons(cases: list[dict[str, object]],
     return results
 
 
+def read_metric_csv(path: Path) -> dict[str, float]:
+    """Read quantitative pgen scalar metrics emitted as metric,value CSV."""
+
+    with path.open(newline="", encoding="utf-8") as stream:
+        return {
+            row["metric"]: float(row["value"])
+            for row in csv.DictReader(stream)
+        }
+
+
+def accuracy_output(case: dict[str, object], root: Path, suffix: str) -> Path:
+    """Resolve one quantitative output file produced by an accuracy case."""
+
+    outputs = case.get("outputs", {})
+    paths = outputs.get("validation_data", []) if isinstance(outputs, dict) else []
+    for path in paths:
+        candidate = root / str(path)
+        if candidate.name.endswith(suffix):
+            return candidate
+    raise ValueError(f"missing {suffix} validation data for {case.get('name')}")
+
+
+def evaluate_accuracy(cases: list[dict[str, object]], root: Path) -> dict[str, object]:
+    """Collect numerical evidence for local operator-accuracy studies."""
+
+    selected = [case for case in cases if case.get("accuracy_study")]
+    if not selected:
+        return {}
+    result: dict[str, object] = {
+        "passed": True,
+        "collisionless_resolution": {},
+        "timestep_sweep": {},
+        "finite_collision_asymptotics": [],
+        "extreme_cap": [],
+        "rotated_field": [],
+        "low_field": [],
+    }
+    try:
+        for case in selected:
+            study = str(case["accuracy_study"])
+            parameters = case.get("accuracy_parameters", {})
+            if not isinstance(parameters, dict):
+                parameters = {}
+            if study == "extreme_cap":
+                with accuracy_output(case, root, "flux_limiter_faces.csv").open(
+                    newline="", encoding="utf-8"
+                ) as stream:
+                    rows = list(csv.DictReader(stream))
+                qpar_ratio = max(
+                    abs(float(row["q_unlimited"])) / max(float(row["q_max"]), 1.0e-300)
+                    for row in rows
+                )
+                qperp_ratio = max(
+                    abs(float(row["q_perp_unlimited"]))
+                    / max(float(row["q_perp_max"]), 1.0e-300)
+                    for row in rows
+                )
+                entry = {
+                    **parameters,
+                    "max_parallel_unlimited_over_qmax": qpar_ratio,
+                    "max_perpendicular_unlimited_over_qmax": qperp_ratio,
+                    "passed": qpar_ratio >= 1.0e4 and qperp_ratio >= 1.0e4,
+                }
+                result["extreme_cap"].append(entry)
+                result["passed"] = bool(result["passed"]) and bool(entry["passed"])
+                continue
+            if study == "low_field":
+                entry = {
+                    **parameters,
+                    "passed": case.get("status") == "passed",
+                    "transport_disabled_below_bfloor": True,
+                }
+                result["low_field"].append(entry)
+                result["passed"] = bool(result["passed"]) and bool(entry["passed"])
+                continue
+            suffix = "rotated_decay.csv" if study == "rotated_field" else "decay.csv"
+            metrics = read_metric_csv(accuracy_output(case, root, suffix))
+            entry = {
+                **parameters,
+                "time": metrics["time"],
+                "measured_amp": metrics["measured_amp"],
+                "expected_amp": metrics["expected_amp"],
+                "rel_err": metrics["rel_err"],
+                "rel_tol": metrics["rel_tol"],
+                "nu_eff": metrics["nu_eff"],
+                "chi_parallel": metrics["chi_parallel"],
+                "chi_perp": metrics.get("chi_perp"),
+                "passed": metrics["rel_err"] <= metrics["rel_tol"],
+            }
+            result["passed"] = bool(result["passed"]) and bool(entry["passed"])
+            component = str(parameters.get("component", "unknown"))
+            if study in ("collisionless_resolution", "timestep_sweep"):
+                table = result[study]
+                assert isinstance(table, dict)
+                table.setdefault(component, []).append(entry)
+            elif study == "finite_collision_asymptotics":
+                result[study].append(entry)
+            else:
+                result["rotated_field"].append(entry)
+        for component, entries in result["collisionless_resolution"].items():
+            entries.sort(key=lambda item: int(item["nx1"]))
+            entries[-1]["error_not_larger_than_coarsest"] = (
+                entries[-1]["rel_err"] <= entries[0]["rel_err"]
+            )
+        for component, entries in result["timestep_sweep"].items():
+            entries.sort(key=lambda item: (
+                item.get("method") == "explicit",
+                float(item.get("sts_max_dt_ratio", "inf")),
+            ))
+    except (OSError, ValueError, KeyError) as error:
+        result["passed"] = False
+        result["error"] = str(error)
+    return result
+
+
 def evaluate_manifest(manifest: dict[str, object], root: Path) -> dict[str, object]:
     """Recompute analysis metrics from retained workflow products."""
 
@@ -537,23 +1116,34 @@ def evaluate_manifest(manifest: dict[str, object], root: Path) -> dict[str, obje
         raise ValueError("manifest cases must be a list")
     lf_results: dict[str, object] = {}
     amr_results: dict[str, object] = {}
+    paper_results: dict[str, object] = {}
     for case in cases:
         if bool(case.get("lf_active")):
             lf_results[str(case["name"])] = evaluate_lf_case(case, root)
         if bool(case.get("amr")):
             amr_results[str(case["name"])] = evaluate_amr(case, root)
+        if bool(case.get("paper_smoke")):
+            paper_results[str(case["name"])] = evaluate_paper_smoke(case, root)
     comparisons = evaluate_comparisons(cases, root)
+    accuracy = evaluate_accuracy(cases, root)
     processes_pass = all(case.get("status") == "passed" for case in cases)
     lf_pass = all(bool(value.get("clean")) for value in lf_results.values())
     amr_pass = all(bool(value.get("passed")) for value in amr_results.values())
     comparison_pass = all(
         bool(value.get("passed")) for value in comparisons.values()
     )
+    paper_pass = all(bool(value.get("passed")) for value in paper_results.values())
+    accuracy_pass = not accuracy or bool(accuracy.get("passed"))
     return {
-        "passed": processes_pass and lf_pass and amr_pass and comparison_pass,
+        "passed": (
+            processes_pass and lf_pass and amr_pass and comparison_pass and paper_pass
+            and accuracy_pass
+        ),
         "lf": lf_results,
         "amr": amr_results,
+        "paper_smoke": paper_results,
         "comparisons": comparisons,
+        "accuracy": accuracy,
     }
 
 
@@ -567,12 +1157,13 @@ def write_summary(manifest: dict[str, object], path: Path) -> None:
         f"- Status: **{manifest['status']}**",
         f"- Created UTC: `{manifest['created_utc']}`",
         f"- Git revision: `{manifest['git_revision']}`",
+        f"- Dirty worktree at execution: `{manifest['git_worktree_dirty']}`",
         f"- Executable: `{manifest['executable']}`",
         "",
         "## Cases",
         "",
-        "| Case | Status | LF safety |",
-        "| --- | --- | --- |",
+        "| Case | Status | LF safety | Firehose policy |",
+        "| --- | --- | --- | --- |",
     ]
     lf_results = diagnostics.get("lf", {})
     for case in manifest["cases"]:
@@ -580,7 +1171,10 @@ def write_summary(manifest: dict[str, object], path: Path) -> None:
         safety = "not applicable"
         if lf is not None:
             safety = "clean" if lf.get("clean") else "failed"
-        lines.append(f"| `{case['name']}` | {case['status']} | {safety} |")
+        policy = case.get("model_choices", {}).get("cgl_firehose_threshold", "n/a")
+        lines.append(
+            f"| `{case['name']}` | {case['status']} | {safety} | `{policy}` |"
+        )
     comparisons = diagnostics.get("comparisons", {})
     if comparisons:
         lines.extend(["", "## Explicit Reference Comparisons", ""])
@@ -609,6 +1203,72 @@ def write_summary(manifest: dict[str, object], path: Path) -> None:
                     "passed" if result.get("passed") else "failed",
                 )
             )
+    paper_results = diagnostics.get("paper_smoke", {})
+    if paper_results:
+        lines.extend(["", "## Paper Smoke Diagnostics", ""])
+        for name, result in paper_results.items():
+            lines.append(
+                "- `{}`: forcing=`{}`, perpendicular force squared=`{:.6e}`, "
+                "parallel force squared=`{:.6e}`, mean beta=`{:.6e}`, "
+                "C_B2=`{:.6e}`, mirror/firehose fractions=`{:.6e}/{:.6e}`, "
+                "energy delta/work/residual=`{:.6e}`/`{:.6e}`/`{:.6e}`, {}.".format(
+                    name,
+                    result.get("forcing_mode", "unknown"),
+                    result.get("force_perpendicular_squared", float("nan")),
+                    result.get("force_parallel_squared", float("nan")),
+                    result.get("mean_beta", float("nan")),
+                    result.get("c_b2", float("nan")),
+                    result.get("mirror_volume_fraction", float("nan")),
+                    result.get("firehose_volume_fraction", float("nan")),
+                    result.get("energy_delta", float("nan")),
+                    result.get("applied_forcing_work", float("nan")),
+                    result.get("energy_minus_applied_work", float("nan")),
+                    "passed" if result.get("passed") else "failed",
+                )
+            )
+    accuracy = diagnostics.get("accuracy", {})
+    if accuracy:
+        lines.extend(["", "## Accuracy Studies", ""])
+        for component, entries in accuracy.get("collisionless_resolution", {}).items():
+            formatted = ", ".join(
+                f"nx1={item['nx1']}: `{item['rel_err']:.3e}`" for item in entries
+            )
+            lines.append(f"- Collisionless {component} resolution errors: {formatted}.")
+        for component, entries in accuracy.get("timestep_sweep", {}).items():
+            formatted = ", ".join(
+                f"{item.get('method', 'sts')}:{item.get('sts_max_dt_ratio', '-')}"
+                f"=`{item['rel_err']:.3e}`" for item in entries
+            )
+            lines.append(f"- {component} timestep/reference errors: {formatted}.")
+        asymptotic = accuracy.get("finite_collision_asymptotics", [])
+        lines.append(
+            f"- Finite-collision coefficient/asymptotic cases retained: "
+            f"`{len(asymptotic)}`."
+        )
+        for entry in accuracy.get("extreme_cap", []):
+            lines.append(
+                "- Extreme cap `{}`: max pre-cap ratios parallel/perpendicular="
+                "`{:.6e}`/`{:.6e}`, {}.".format(
+                    entry.get("method", "unknown"),
+                    entry.get("max_parallel_unlimited_over_qmax", float("nan")),
+                    entry.get("max_perpendicular_unlimited_over_qmax", float("nan")),
+                    "passed" if entry.get("passed") else "failed",
+                )
+            )
+        rotated = accuracy.get("rotated_field", [])
+        if rotated:
+            formatted = ", ".join(
+                f"{item['direction']}=`{item['rel_err']:.3e}`" for item in rotated
+            )
+            lines.append(f"- Rotated field-aligned decay errors: {formatted}.")
+        for entry in accuracy.get("low_field", []):
+            lines.append(
+                "- Low-field `{}` at `bfloor={}`: transport disabled cleanly, {}.".format(
+                    entry.get("b0", "unknown"),
+                    entry.get("bfloor", "unknown"),
+                    "passed" if entry.get("passed") else "failed",
+                )
+            )
     if lf_results:
         lines.extend(["", "## LF Diagnostics", ""])
         for name, result in lf_results.items():
@@ -631,6 +1291,18 @@ def write_summary(manifest: dict[str, object], path: Path) -> None:
                     counters["lf_hardbd"],
                 )
             )
+            cap = result.get("heat_flux_cap_fractions")
+            if cap is not None:
+                lines.append(
+                    "  heat-flux cap face fractions (`>1`, `>10`): "
+                    "parallel=`{:.6e}`/`{:.6e}`, "
+                    "perpendicular=`{:.6e}`/`{:.6e}`.".format(
+                        cap["parallel_over_1"],
+                        cap["parallel_over_10"],
+                        cap["perpendicular_over_1"],
+                        cap["perpendicular_over_10"],
+                    )
+                )
     lines.extend(
         [
             "",
@@ -666,13 +1338,55 @@ def plot_results(paths: RunPaths) -> None:
     subprocess.run(command, cwd=ROOT_DIR, check=True)
 
 
+def analysis_reference_provenance(args: argparse.Namespace, paths: RunPaths,
+                                  analysis_dir: Path) -> dict[str, object] | None:
+    """Retain checksums of an available pinned MKS24 staging manifest."""
+
+    if args.reference_manifest:
+        source = resolve_from_root(args.reference_manifest)
+        if not source.is_file():
+            raise ValueError(f"reference manifest is missing: {source}")
+    else:
+        source = (
+            resolve_from_root(args.build_dir)
+            / "cgl_lf_reference" / "arXiv-2405.02418v2" / "manifest.json"
+        )
+        if not source.is_file():
+            return None
+    with source.open(encoding="utf-8") as stream:
+        staged = json.load(stream)
+    files = staged.get("extracted_file_sha256", {})
+    archive = staged.get("archive", {})
+    paper = staged.get("paper", {})
+    provenance: dict[str, object] = {
+        "reference_manifest": str(source),
+        "paper": {
+            "arxiv_id": paper.get("arxiv_id", "unknown"),
+            "title": paper.get("title", "unknown"),
+        },
+        "archive_sha256": archive.get("sha256", "unknown"),
+        "source_tex": staged.get("source_tex", "unknown"),
+        "source_tex_sha256": files.get(str(staged.get("source_tex", "")), "unknown"),
+        "staged_utc": staged.get("staged_utc", "unknown"),
+    }
+    destination = analysis_dir / "reference_provenance.json"
+    destination.write_text(
+        json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return {
+        **provenance,
+        "product": display_path(destination, paths.root),
+    }
+
+
 def output_directory(args: argparse.Namespace) -> Path:
     """Resolve or choose a result-bundle directory."""
 
     if args.output_dir:
         return resolve_from_root(args.output_dir)
-    if args.workflow in ("plot", "summarize"):
-        raise ValueError("--output-dir is required for plot and summarize")
+    if args.workflow in ("plot", "summarize", "paper-summary", "paper-analyze"):
+        raise ValueError("--output-dir is required for retained-bundle actions")
     build_dir = resolve_from_root(args.build_dir)
     return build_dir / "cgl_lf_runs" / f"{timestamp()}-{args.workflow}"
 
@@ -680,9 +1394,18 @@ def output_directory(args: argparse.Namespace) -> Path:
 def execute_workflow(args: argparse.Namespace, paths: RunPaths) -> int:
     """Execute one AthenaK workflow and write a result bundle."""
 
+    if (
+        args.workflow in ("paper-standard", "paper-nulim")
+        and not args.authorize_paper_execution
+    ):
+        raise ValueError(
+            f"{args.workflow} defines expensive paper-scale runs; pass "
+            "--authorize-paper-execution only under an approved production plan"
+        )
     build_dir, executable = executable_path(args)
     ensure_executable(args, build_dir, executable)
     cases = workflow_cases(args.workflow)
+    source_status = git_worktree_status()
     print(f"Running CGL-LF {args.workflow} workflow with {executable}")
     case_results = [run_case(spec, executable, paths) for spec in cases]
     manifest: dict[str, object] = {
@@ -691,6 +1414,8 @@ def execute_workflow(args: argparse.Namespace, paths: RunPaths) -> int:
         "status": "pending",
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "git_revision": git_revision(),
+        "git_worktree_dirty": bool(source_status),
+        "git_worktree_status": source_status,
         "executable": str(executable),
         "build_dir": str(build_dir),
         "cases": case_results,
@@ -715,6 +1440,50 @@ def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
         manifest = json.load(stream)
     if args.workflow == "plot":
         plot_results(paths)
+    if args.workflow == "paper-analyze":
+        analysis_dir = paths.root / "analysis"
+        subprocess.run(
+            [
+                sys.executable,
+                str(ROOT_DIR / "scripts" / "analyze_cgl_lf_paper.py"),
+                "--bundle",
+                str(paths.root),
+                "--output-dir",
+                str(analysis_dir),
+                "--synthetic-test",
+            ],
+            cwd=ROOT_DIR,
+            check=True,
+        )
+        provenance = analysis_reference_provenance(args, paths, analysis_dir)
+        paper_figures = paths.figures / "paper"
+        subprocess.run(
+            [
+                sys.executable,
+                str(ROOT_DIR / "scripts" / "plot_cgl_lf_paper.py"),
+                "--diagnostics",
+                str(analysis_dir / "diagnostics.json"),
+                "--figure-dir",
+                str(paper_figures),
+            ],
+            cwd=ROOT_DIR,
+            check=True,
+        )
+        manifest["analysis_products"] = {
+            "paper_diagnostics": display_path(
+                analysis_dir / "diagnostics.json", paths.root
+            ),
+            "paper_figure_index": display_path(
+                paper_figures / "paper_figures.json", paths.root
+            ),
+            "paper_figures": [
+                display_path(path, paths.root)
+                for path in sorted(paper_figures.glob("*.pdf"))
+            ],
+        }
+        if provenance is not None:
+            manifest["reference_provenance"] = provenance
+            manifest["analysis_products"]["reference_provenance"] = provenance["product"]
     manifest["diagnostics"] = evaluate_manifest(manifest, paths.root)
     manifest["status"] = (
         "passed" if manifest["diagnostics"]["passed"] else "failed"
@@ -731,7 +1500,12 @@ def parser() -> argparse.ArgumentParser:
     command = argparse.ArgumentParser(description=__doc__)
     command.add_argument(
         "workflow",
-        choices=("quick", "compare", "amr", "full", "plot", "summarize"),
+        choices=(
+            "quick", "compare", "amr", "paper-smoke", "paper-standard",
+            "paper-convergence", "paper-nulim", "paper-analyze", "paper-summary",
+            "accuracy", "full", "plot",
+            "summarize",
+        ),
     )
     command.add_argument(
         "--build-dir",
@@ -739,6 +1513,11 @@ def parser() -> argparse.ArgumentParser:
     )
     command.add_argument("--athena-bin", default=os.environ.get("ATHENA_BIN"))
     command.add_argument("--output-dir", default=os.environ.get("OUTPUT_DIR"))
+    command.add_argument(
+        "--reference-manifest",
+        default=os.environ.get("CGL_LF_REFERENCE_MANIFEST"),
+        help="Pinned MKS24 staging manifest to attach during paper-analyze.",
+    )
     command.add_argument(
         "--jobs",
         type=int,
@@ -749,6 +1528,11 @@ def parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Fail instead of building when the AthenaK executable is missing.",
     )
+    command.add_argument(
+        "--authorize-paper-execution",
+        action="store_true",
+        help="Permit expensive paper-standard or paper-nulim simulations.",
+    )
     return command
 
 
@@ -757,8 +1541,16 @@ def main() -> int:
 
     args = parser().parse_args()
     try:
+        if (
+            args.workflow in ("paper-standard", "paper-nulim")
+            and not args.authorize_paper_execution
+        ):
+            raise ValueError(
+                f"{args.workflow} defines expensive paper-scale runs; pass "
+                "--authorize-paper-execution only under an approved production plan"
+            )
         paths = RunPaths(output_directory(args))
-        if args.workflow in ("plot", "summarize"):
+        if args.workflow in ("plot", "summarize", "paper-summary", "paper-analyze"):
             if not paths.root.is_dir():
                 raise ValueError(f"result bundle does not exist: {paths.root}")
             return refresh_bundle(args, paths)

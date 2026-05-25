@@ -36,19 +36,22 @@ class TurbulenceDriver {
   // parameters of driving
   int nlow, nhigh;
   int mode_count;
-  Real tcorr, dedt;
+  Real tcorr, dedt, k_shell_unit;
+  Real injected_work;
   Real expo, exp_prl, exp_prp;
-  int driving_type;
+  int driving_type, rseed;
+  bool physical_k_shell, isotropic_power_spectrum, record_injected_work;
 
   // functions
   void IncludeInitializeModesTask(std::shared_ptr<TaskList> tl, TaskID start);
   void IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskID start);
   TaskStatus InitializeModes(Driver *pdrive, int stage);
+  TaskStatus UpdateForcing(Driver *pdrive, int stage);
   TaskStatus AddForcing(Driver *pdrive, int stage);
   void Initialize();
 
  private:
-  bool first_time = true;   // flag to enable initialization on first call
+  bool IsDrivenMode(int nkx, int nky, int nkz, Real dkx, Real dky, Real dkz) const;
   MeshBlockPack *pmy_pack;  // ptr to MeshBlockPack containing this TurbulenceDriver
 };
 

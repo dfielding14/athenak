@@ -62,6 +62,7 @@ class ProblemGenerator {
   void CShock(ParameterInput *pin, const bool restart);
   void CGLFOFC(ParameterInput *pin, const bool restart);
   void CGLLandauFluid(ParameterInput *pin, const bool restart);
+  void CGLLFPaper(ParameterInput *pin, const bool restart);
   void DivBAMR(ParameterInput *pin, const bool restart);
   void Diffusion(ParameterInput *pin, const bool restart);
   void STSDiffusion(ParameterInput *pin, const bool restart);

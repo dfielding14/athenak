@@ -13,6 +13,7 @@
 #include "mesh/mesh.hpp"
 #include "parameter_input.hpp"
 #include "eos/eos.hpp"
+#include "eos/cgl_physics.hpp"
 
 //----------------------------------------------------------------------------------------
 // EquationOfState constructor
@@ -32,6 +33,7 @@ EquationOfState::EquationOfState(std::string bk, MeshBlockPack* pp, ParameterInp
   eos_data.backup_lim = false;
   eos_data.nu_coll = 0.0;
   eos_data.lim_coll = 0.0;
+  eos_data.firehose_threshold = cgl::kFirehoseObliqueThreshold;
 }
 
 //----------------------------------------------------------------------------------------
@@ -80,11 +82,13 @@ void EquationOfState::PrimToCons(const DvceArray5D<Real> &prim,
 }
 
 void EquationOfState::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
-                                 DvceArray5D<Real> &cons, const int il, const int iu,
+                                 DvceArray5D<Real> &cons, const Real dtc,
+                                 const int il, const int iu,
                                  const int jl, const int ju, const int kl, const int ku) {
   (void) prim;
   (void) bcc;
   (void) cons;
+  (void) dtc;
   (void) il;
   (void) iu;
   (void) jl;

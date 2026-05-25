@@ -261,6 +261,11 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
     });
   });
 
+  if (has_cgl_lf_split && pcgl_lf != nullptr) {
+    pcgl_lf->AdvanceHeatFluxWorkDiagnostics(dt_sweep, coeffs, stage,
+                                            pdrive->sts.nstages);
+  }
+
   return TaskStatus::complete;
 }
 
@@ -413,7 +418,10 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
 
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::STSPostSweepCGLCollisions()
-//! \brief Apply CGL relaxation after each split LF sweep once anisotropy is restored.
+//! \brief Apply CGL relaxation after each split LF half-sweep.
+//!
+//! The pre and post LF sweeps each advance dt_cycle/2. Use that same physical
+//! interval here so both source updates together advance exactly one cycle.
 
 TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
   if (!has_cgl_lf_split || !peos->eos_data.coll || stage != pdrive->sts.nstages) {
@@ -425,7 +433,8 @@ TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
   const int n1m1 = indcs.nx1 + 2*ng - 1;
   const int n2m1 = (indcs.nx2 > 1) ? indcs.nx2 + 2*ng - 1 : 0;
   const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
-  peos->Collisions(w0, bcc0, u0, 0, n1m1, 0, n2m1, 0, n3m1);
+  peos->Collisions(w0, bcc0, u0, pdrive->sts.dt_sweep,
+                   0, n1m1, 0, n2m1, 0, n3m1);
   return TaskStatus::complete;
 }
 

@@ -75,7 +75,8 @@ bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
       coeff_local ? sqrt(fmax(face.ppar/face.rho, eos.tfloor)) : cparallel0;
   const Real nu = fmax(eos.nu_coll, static_cast<Real>(0.0)) +
       cgl::LimiterCollisionRate(face.ppar, face.pperp, bsqr, eos.lim_coll,
-                                eos.mlim, eos.flim, eos.backup_lim);
+                                eos.mlim, eos.flim, eos.firehose_threshold,
+                                eos.backup_lim);
   const Real denom_perp = cgl::kSqrtTwoPi*face.cparallel*lf_k + nu;
   const Real denom_parallel = cgl::kSqrtEightPi*face.cparallel*lf_k
                             + cgl::kThreePiMinusEight*nu;
@@ -89,7 +90,8 @@ KOKKOS_INLINE_FUNCTION
 void CGLLFFlux(const CGLLFFaceState &face, const Real gtpar_x, const Real gtpar_y,
                const Real gtpar_z, const Real gtperp_x, const Real gtperp_y,
                const Real gtperp_z, const Real gb_x, const Real gb_y, const Real gb_z,
-               Real &eflux, Real &muflux) {
+               Real &eflux, Real &muflux, Real &qpar_flux, Real &qperp_flux,
+               Real &qpar_ratio, Real &qperp_ratio) {
   const Real grad_tpar =
       face.bhx*gtpar_x + face.bhy*gtpar_y + face.bhz*gtpar_z;
   const Real grad_tperp =
@@ -98,12 +100,16 @@ void CGLLFFlux(const CGLLFFaceState &face, const Real gtpar_x, const Real gtpar_
   const Real qpar_l = -face.chi_parallel*face.rho*grad_tpar;
   const Real qperp_l = -face.chi_perp*(face.rho*grad_tperp -
       face.pperp*(1.0 - face.pperp/face.ppar)*grad_b/face.bmag);
-  const Real qpar = cgl::LimitedHeatFlux(qpar_l,
-      cgl::kSqrtEightOverPi*face.cparallel*face.ppar);
-  const Real qperp = cgl::LimitedHeatFlux(qperp_l,
-      cgl::kSqrtTwoOverPi*face.cparallel*face.pperp);
-  eflux = face.bhdir*(qperp + static_cast<Real>(0.5)*qpar);
-  muflux = face.bhdir*qperp/face.bmag;
+  const Real qpar_max = cgl::kSqrtEightOverPi*face.cparallel*face.ppar;
+  const Real qperp_max = cgl::kSqrtTwoOverPi*face.cparallel*face.pperp;
+  qpar_ratio = (qpar_max > 0.0) ? fabs(qpar_l)/qpar_max : 0.0;
+  qperp_ratio = (qperp_max > 0.0) ? fabs(qperp_l)/qperp_max : 0.0;
+  const Real qpar = cgl::LimitedHeatFlux(qpar_l, qpar_max);
+  const Real qperp = cgl::LimitedHeatFlux(qperp_l, qperp_max);
+  qpar_flux = face.bhdir*qpar;
+  qperp_flux = face.bhdir*qperp;
+  eflux = qperp_flux + static_cast<Real>(0.5)*qpar_flux;
+  muflux = qperp_flux/face.bmag;
 }
 
 } // namespace
@@ -153,6 +159,16 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
       pin->GetOrAddBoolean("mhd", "cgl_lf_strict_admissibility", false);
 }
 
+void CGLLandauFluid::AccumulateHeatFluxDiagnostics(const array_sum::GlobalSum &stats) {
+  diagnostics.qfaces += static_cast<std::uint64_t>(stats.the_array[0]);
+  diagnostics.qpar_cap += static_cast<std::uint64_t>(stats.the_array[1]);
+  diagnostics.qpar_cap10 += static_cast<std::uint64_t>(stats.the_array[2]);
+  diagnostics.qperp_cap += static_cast<std::uint64_t>(stats.the_array[3]);
+  diagnostics.qperp_cap10 += static_cast<std::uint64_t>(stats.the_array[4]);
+  stage_qpar_power_ += stats.the_array[5];
+  stage_qperp_power_ += stats.the_array[6];
+}
+
 void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
                                    const DvceArray5D<Real> &bcc,
                                    const EOS_Data &eos, DvceFaceFld5D<Real> &f) {
@@ -164,6 +180,8 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
   const int ncells1 = indcs.nx1 + 2*indcs.ng;
   const int ncells2 = (indcs.nx2 > 1) ? indcs.nx2 + 2*indcs.ng : 1;
   const int ncells3 = (indcs.nx3 > 1) ? indcs.nx3 + 2*indcs.ng : 1;
+  stage_qpar_power_ = 0.0;
+  stage_qperp_power_ = 0.0;
   if (tpar_.extent(0) != static_cast<std::size_t>(pmy_pack->nmb_thispack) ||
       tpar_.extent(1) != static_cast<std::size_t>(ncells3) ||
       tpar_.extent(2) != static_cast<std::size_t>(ncells2) ||
@@ -188,13 +206,26 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
 
   const bool multi_d = pmy_pack->pmesh->multi_d;
   const bool three_d = pmy_pack->pmesh->three_d;
+  const bool work_supported = !pmy_pack->pmesh->multilevel;
   auto size = pmy_pack->pmb->mb_size;
   const Real lf_k = lf_k_parallel;
   const bool local = lf_coeff_local;
   const Real cpar0 = lf_c_parallel0;
   auto &f1 = f.x1f;
-  par_for("cgl_lf_flux1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie + 1,
-  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+  const int ni1 = ie - is + 2;
+  const int nj1 = je - js + 1;
+  const int nk1 = ke - ks + 1;
+  const int nji1 = nj1*ni1;
+  const int nkji1 = nk1*nji1;
+  const int nmkji1 = (nmb1 + 1)*nkji1;
+  array_sum::GlobalSum qstats1;
+  Kokkos::parallel_reduce("cgl_lf_flux1",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji1),
+  KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum &qstats) {
+    const int m = idx/nkji1;
+    const int k = (idx - m*nkji1)/nji1 + ks;
+    const int j = (idx - m*nkji1 - (k - ks)*nji1)/ni1 + js;
+    const int i = idx - m*nkji1 - (k - ks)*nji1 - (j - js)*ni1 + is;
     Real tx = (tpar(m,k,j,i) - tpar(m,k,j,i-1))/size.d_view(m).dx1;
     Real px = (tperp(m,k,j,i) - tperp(m,k,j,i-1))/size.d_view(m).dx1;
     Real bxg = (bmag(m,k,j,i) - bmag(m,k,j,i-1))/size.d_view(m).dx1;
@@ -219,21 +250,48 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const Real by = 0.5*(bcc(m,IBY,k,j,i-1) + bcc(m,IBY,k,j,i));
     const Real bz = 0.5*(bcc(m,IBZ,k,j,i-1) + bcc(m,IBZ,k,j,i));
     CGLLFFaceState face;
-    Real eflux = 0.0, muflux = 0.0;
+    Real eflux = 0.0, muflux = 0.0, qpar_flux = 0.0, qperp_flux = 0.0;
+    Real qpar_ratio = 0.0, qperp_ratio = 0.0;
     if (BuildCGLLFFaceState(w(m,IDN,k,j,i-1), w(m,IDN,k,j,i),
                             w(m,IPR,k,j,i-1), w(m,IPR,k,j,i),
                             w(m,IPP,k,j,i-1), w(m,IPP,k,j,i),
                             bx, by, bz, 0, lf_k, local, cpar0, eos, face)) {
-      CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg, eflux, muflux);
+      CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                eflux, muflux, qpar_flux, qperp_flux, qpar_ratio, qperp_ratio);
+      qstats.the_array[0] += 1.0;
+      if (qpar_ratio > 1.0) qstats.the_array[1] += 1.0;
+      if (qpar_ratio > 10.0) qstats.the_array[2] += 1.0;
+      if (qperp_ratio > 1.0) qstats.the_array[3] += 1.0;
+      if (qperp_ratio > 10.0) qstats.the_array[4] += 1.0;
+      if (work_supported && i <= ie) {
+        const Real area = size.d_view(m).dx2*size.d_view(m).dx3;
+        qstats.the_array[5] -= area*qpar_flux*(tpar(m,k,j,i) - tpar(m,k,j,i-1));
+        qstats.the_array[6] -= area*qperp_flux*(tperp(m,k,j,i) - tperp(m,k,j,i-1));
+      }
     }
     f1(m,IEN,k,j,i) = eflux;
     f1(m,IAN,k,j,i) = muflux;
-  });
-  if (pmy_pack->pmesh->one_d) return;
+  }, Kokkos::Sum<array_sum::GlobalSum>(qstats1));
+  AccumulateHeatFluxDiagnostics(qstats1);
+  if (pmy_pack->pmesh->one_d) {
+    return;
+  }
 
   auto &f2 = f.x2f;
-  par_for("cgl_lf_flux2", DevExeSpace(), 0, nmb1, ks, ke, js, je + 1, is, ie,
-  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+  const int ni2 = ie - is + 1;
+  const int nj2 = je - js + 2;
+  const int nk2 = ke - ks + 1;
+  const int nji2 = nj2*ni2;
+  const int nkji2 = nk2*nji2;
+  const int nmkji2 = (nmb1 + 1)*nkji2;
+  array_sum::GlobalSum qstats2;
+  Kokkos::parallel_reduce("cgl_lf_flux2",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji2),
+  KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum &qstats) {
+    const int m = idx/nkji2;
+    const int k = (idx - m*nkji2)/nji2 + ks;
+    const int j = (idx - m*nkji2 - (k - ks)*nji2)/ni2 + js;
+    const int i = idx - m*nkji2 - (k - ks)*nji2 - (j - js)*ni2 + is;
     const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
                           tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx1;
     const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
@@ -256,21 +314,48 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const Real by = 0.5*(bcc(m,IBY,k,j-1,i) + bcc(m,IBY,k,j,i));
     const Real bz = 0.5*(bcc(m,IBZ,k,j-1,i) + bcc(m,IBZ,k,j,i));
     CGLLFFaceState face;
-    Real eflux = 0.0, muflux = 0.0;
+    Real eflux = 0.0, muflux = 0.0, qpar_flux = 0.0, qperp_flux = 0.0;
+    Real qpar_ratio = 0.0, qperp_ratio = 0.0;
     if (BuildCGLLFFaceState(w(m,IDN,k,j-1,i), w(m,IDN,k,j,i),
                             w(m,IPR,k,j-1,i), w(m,IPR,k,j,i),
                             w(m,IPP,k,j-1,i), w(m,IPP,k,j,i),
                             bx, by, bz, 1, lf_k, local, cpar0, eos, face)) {
-      CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg, eflux, muflux);
+      CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                eflux, muflux, qpar_flux, qperp_flux, qpar_ratio, qperp_ratio);
+      qstats.the_array[0] += 1.0;
+      if (qpar_ratio > 1.0) qstats.the_array[1] += 1.0;
+      if (qpar_ratio > 10.0) qstats.the_array[2] += 1.0;
+      if (qperp_ratio > 1.0) qstats.the_array[3] += 1.0;
+      if (qperp_ratio > 10.0) qstats.the_array[4] += 1.0;
+      if (work_supported && j <= je) {
+        const Real area = size.d_view(m).dx1*size.d_view(m).dx3;
+        qstats.the_array[5] -= area*qpar_flux*(tpar(m,k,j,i) - tpar(m,k,j-1,i));
+        qstats.the_array[6] -= area*qperp_flux*(tperp(m,k,j,i) - tperp(m,k,j-1,i));
+      }
     }
     f2(m,IEN,k,j,i) = eflux;
     f2(m,IAN,k,j,i) = muflux;
-  });
-  if (pmy_pack->pmesh->two_d) return;
+  }, Kokkos::Sum<array_sum::GlobalSum>(qstats2));
+  AccumulateHeatFluxDiagnostics(qstats2);
+  if (pmy_pack->pmesh->two_d) {
+    return;
+  }
 
   auto &f3 = f.x3f;
-  par_for("cgl_lf_flux3", DevExeSpace(), 0, nmb1, ks, ke + 1, js, je, is, ie,
-  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+  const int ni3 = ie - is + 1;
+  const int nj3 = je - js + 1;
+  const int nk3 = ke - ks + 2;
+  const int nji3 = nj3*ni3;
+  const int nkji3 = nk3*nji3;
+  const int nmkji3 = (nmb1 + 1)*nkji3;
+  array_sum::GlobalSum qstats3;
+  Kokkos::parallel_reduce("cgl_lf_flux3",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji3),
+  KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum &qstats) {
+    const int m = idx/nkji3;
+    const int k = (idx - m*nkji3)/nji3 + ks;
+    const int j = (idx - m*nkji3 - (k - ks)*nji3)/ni3 + js;
+    const int i = idx - m*nkji3 - (k - ks)*nji3 - (j - js)*ni3 + is;
     const Real tx = 0.25*(tpar(m,k,j,i+1) - tpar(m,k,j,i-1) +
                           tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx1;
     const Real px = 0.25*(tperp(m,k,j,i+1) - tperp(m,k,j,i-1) +
@@ -290,16 +375,65 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     const Real by = 0.5*(bcc(m,IBY,k-1,j,i) + bcc(m,IBY,k,j,i));
     const Real bz = 0.5*(bcc(m,IBZ,k-1,j,i) + bcc(m,IBZ,k,j,i));
     CGLLFFaceState face;
-    Real eflux = 0.0, muflux = 0.0;
+    Real eflux = 0.0, muflux = 0.0, qpar_flux = 0.0, qperp_flux = 0.0;
+    Real qpar_ratio = 0.0, qperp_ratio = 0.0;
     if (BuildCGLLFFaceState(w(m,IDN,k-1,j,i), w(m,IDN,k,j,i),
                             w(m,IPR,k-1,j,i), w(m,IPR,k,j,i),
                             w(m,IPP,k-1,j,i), w(m,IPP,k,j,i),
                             bx, by, bz, 2, lf_k, local, cpar0, eos, face)) {
-      CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg, eflux, muflux);
+      CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                eflux, muflux, qpar_flux, qperp_flux, qpar_ratio, qperp_ratio);
+      qstats.the_array[0] += 1.0;
+      if (qpar_ratio > 1.0) qstats.the_array[1] += 1.0;
+      if (qpar_ratio > 10.0) qstats.the_array[2] += 1.0;
+      if (qperp_ratio > 1.0) qstats.the_array[3] += 1.0;
+      if (qperp_ratio > 10.0) qstats.the_array[4] += 1.0;
+      if (work_supported && k <= ke) {
+        const Real area = size.d_view(m).dx1*size.d_view(m).dx2;
+        qstats.the_array[5] -= area*qpar_flux*(tpar(m,k,j,i) - tpar(m,k-1,j,i));
+        qstats.the_array[6] -= area*qperp_flux*(tperp(m,k,j,i) - tperp(m,k-1,j,i));
+      }
     }
     f3(m,IEN,k,j,i) = eflux;
     f3(m,IAN,k,j,i) = muflux;
-  });
+  }, Kokkos::Sum<array_sum::GlobalSum>(qstats3));
+  AccumulateHeatFluxDiagnostics(qstats3);
+}
+
+void CGLLandauFluid::AdvanceHeatFluxWorkDiagnostics(
+    Real dt_sweep, const parabolic::RKL2Coefficients &coeffs, int stage, int nstages) {
+  if (stage == 1) {
+    sweep_qpar_work_ = 0.0;
+    sweep_qperp_work_ = 0.0;
+    sweep_qpar_work1_ = 0.0;
+    sweep_qperp_work1_ = 0.0;
+    sweep_qpar_work2_ = 0.0;
+    sweep_qperp_work2_ = 0.0;
+    sweep_qpar_rhs_ = 0.0;
+    sweep_qperp_rhs_ = 0.0;
+  }
+
+  const Real qpar_rhs = dt_sweep*stage_qpar_power_;
+  const Real qperp_rhs = dt_sweep*stage_qperp_power_;
+  sweep_qpar_work2_ = sweep_qpar_work1_;
+  sweep_qperp_work2_ = sweep_qperp_work1_;
+  sweep_qpar_work1_ = sweep_qpar_work_;
+  sweep_qperp_work1_ = sweep_qperp_work_;
+  // The per-sweep diagnostic starts at zero, so the RKL2 S0 term vanishes.
+  sweep_qpar_work_ = coeffs.muj*sweep_qpar_work1_ + coeffs.nuj*sweep_qpar_work2_
+                   + coeffs.gammaj_tilde*sweep_qpar_rhs_
+                   + coeffs.muj_tilde*qpar_rhs;
+  sweep_qperp_work_ = coeffs.muj*sweep_qperp_work1_ + coeffs.nuj*sweep_qperp_work2_
+                    + coeffs.gammaj_tilde*sweep_qperp_rhs_
+                    + coeffs.muj_tilde*qperp_rhs;
+  if (stage == 1) {
+    sweep_qpar_rhs_ = qpar_rhs;
+    sweep_qperp_rhs_ = qperp_rhs;
+  }
+  if (stage == nstages) {
+    diagnostics.qpar_work += sweep_qpar_work_;
+    diagnostics.qperp_work += sweep_qperp_work_;
+  }
 }
 
 void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos) {
@@ -378,13 +512,14 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
     const Real paniso = pperp - ppar;
     if (eos.mlim && cgl::MirrorLimiterActive(paniso, bsqr)) {
       ++nmirror;
-      if (eos.backup_lim && cgl::MirrorHardBoundViolated(paniso, bsqr)) {
+      if (cgl::MirrorHardBoundViolated(paniso, bsqr)) {
         ++nhard;
       }
     }
-    if (eos.flim && cgl::FirehoseLimiterActive(paniso, bsqr)) {
+    if (eos.flim &&
+        cgl::FirehoseLimiterActive(paniso, bsqr, eos.firehose_threshold)) {
       ++nfirehose;
-      if (eos.backup_lim && cgl::FirehoseHardBoundViolated(paniso, bsqr)) {
+      if (cgl::FirehoseHardBoundViolated(paniso, bsqr)) {
         ++nhard;
       }
     }

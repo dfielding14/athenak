@@ -321,7 +321,14 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     pdata->label[lf_begin+5] = "lf_mirror";
     pdata->label[lf_begin+6] = "lf_firehs";
     pdata->label[lf_begin+7] = "lf_hardbd";
-    pdata->nhist += 8;
+    pdata->label[lf_begin+8] = "lf_qface";
+    pdata->label[lf_begin+9] = "lf_qprcap";
+    pdata->label[lf_begin+10] = "lf_qpr10";
+    pdata->label[lf_begin+11] = "lf_qpecap";
+    pdata->label[lf_begin+12] = "lf_qpe10";
+    pdata->label[lf_begin+13] = "lf_qprwrk";
+    pdata->label[lf_begin+14] = "lf_qpewrk";
+    pdata->nhist += 15;
   }
 
   // capture class variabels for kernel
@@ -405,6 +412,13 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     pdata->hdata[lf_begin+5] = static_cast<Real>(diag.mirror);
     pdata->hdata[lf_begin+6] = static_cast<Real>(diag.firehose);
     pdata->hdata[lf_begin+7] = static_cast<Real>(diag.hard_bound);
+    pdata->hdata[lf_begin+8] = static_cast<Real>(diag.qfaces);
+    pdata->hdata[lf_begin+9] = static_cast<Real>(diag.qpar_cap);
+    pdata->hdata[lf_begin+10] = static_cast<Real>(diag.qpar_cap10);
+    pdata->hdata[lf_begin+11] = static_cast<Real>(diag.qperp_cap);
+    pdata->hdata[lf_begin+12] = static_cast<Real>(diag.qperp_cap10);
+    pdata->hdata[lf_begin+13] = diag.qpar_work;
+    pdata->hdata[lf_begin+14] = diag.qperp_work;
   }
 
   return;

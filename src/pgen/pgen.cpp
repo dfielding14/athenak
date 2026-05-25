@@ -22,6 +22,7 @@
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
 #include "coordinates/adm.hpp"
 #include "z4c/compact_object_tracker.hpp"
 #include "z4c/z4c.hpp"
@@ -189,6 +190,46 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     }
 #endif
     std::memcpy(&(pturb->rstate), &(rng_data[0]), sizeof(RNG_State));
+    if (pturb->record_injected_work) {
+      Real injected_work = 0.0;
+      if (global_variable::my_rank == 0 || single_file_per_rank) {
+        if (resfile.Read_Reals(&injected_work, 1, single_file_per_rank) != 1) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "Injected-work data size read from restart file "
+                    << "is incorrect, restart file is broken." << std::endl;
+          exit(EXIT_FAILURE);
+        }
+      }
+#if MPI_PARALLEL_ENABLED
+      if (!single_file_per_rank) {
+        MPI_Bcast(&injected_work, 1, MPI_ATHENA_REAL, 0, MPI_COMM_WORLD);
+      }
+#endif
+      pturb->injected_work = injected_work;
+    }
+  }
+
+  if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) {
+    Real lf_work[2] = {0.0, 0.0};
+    if (global_variable::my_rank == 0 || single_file_per_rank) {
+      if (resfile.Read_Reals(&lf_work[0], 2, single_file_per_rank) != 2) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "LF heat-flux-work data size read from restart file "
+                  << "is incorrect, restart file is broken." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
+#if MPI_PARALLEL_ENABLED
+    if (!single_file_per_rank) {
+      MPI_Bcast(&lf_work[0], 2, MPI_ATHENA_REAL, 0, MPI_COMM_WORLD);
+      if (global_variable::my_rank != 0) {
+        lf_work[0] = 0.0;
+        lf_work[1] = 0.0;
+      }
+    }
+#endif
+    pmhd->pcgl_lf->diagnostics.qpar_work = lf_work[0];
+    pmhd->pcgl_lf->diagnostics.qperp_work = lf_work[1];
   }
 
   // root process reads size of CC and FC data arrays from restart file
@@ -905,6 +946,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     CGLFOFC(pin, is_restart);
   } else if (pgen_fun_name.compare("cgl_landau_fluid") == 0) {
     CGLLandauFluid(pin, is_restart);
+  } else if (pgen_fun_name.compare("cgl_lf_paper") == 0) {
+    CGLLFPaper(pin, is_restart);
   } else if (pgen_fun_name.compare("divb_amr") == 0) {
     DivBAMR(pin, is_restart);
   } else if (pgen_fun_name.compare("linear_wave") == 0) {

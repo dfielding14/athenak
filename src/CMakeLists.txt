@@ -122,6 +122,7 @@ add_executable(
         pgen/tests/cshock.cpp
         pgen/tests/cgl_fofc.cpp
         pgen/tests/cgl_landau_fluid.cpp
+        pgen/tests/cgl_lf_paper.cpp
         pgen/tests/divb_amr.cpp
         pgen/tests/diffusion.cpp
         pgen/tests/sts_diffusion.cpp

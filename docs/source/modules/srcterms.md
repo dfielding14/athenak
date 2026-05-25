@@ -14,15 +14,15 @@ The source terms module wires all non-conservative physics into the hydro, MHD, 
 |------|---------|
 | `srcterms.hpp/cpp` | Implements `SourceTerms` and the run-time selection logic for the physics terms enabled in the input file. |
 | `srcterms_newdt.cpp` | Computes timestep constraints contributed by cooling processes. |
-| `turb_driver.hpp/cpp` | Implements the Ornstein–Uhlenbeck turbulence driver and its AMR-aware basis management. |
+| `turb_driver.hpp/cpp` | Implements the fixed-mode Ornstein-Uhlenbeck turbulence driver. |
 | `cooling_tables.hpp`, `ismcooling.hpp` | Tabulated and analytic cooling coefficients used by the CGM and ISM coolers. |
 
 ## Runtime Wiring
 1. `Hydro`, `MHD`, and `Radiation` constructors create one `SourceTerms` object per pack. Only the features whose flags appear in the corresponding block are activated.
 2. `MeshBlockPack::AddPhysics` instantiates a `TurbulenceDriver` when a `<turb_driving>` block is present. The driver registers two task chains:
-   - `before_timeintegrator`: `EnsureBasisSize → InitializeModes → UpdateForcing`
-   - `stagen`: inserts `AddForcing` between each solver’s reconstruction update and source-term application.
-3. On AMR updates the driver reruns `EnsureBasisSize`, which resizes device arrays, rebuilds basis functions, and preserves the accumulated OU state.
+   - `before_timeintegrator`: `InitializeModes`, followed by `UpdateForcing`, which advances the OU state once per physical timestep.
+   - `stagen`: inserts `AddForcing` after `RKUpdate` and before ordinary source terms in each solver stage.
+3. Restart output stores the accumulated forcing field and RNG state so a resumed run continues the same forcing stream.
 
 ## Source Term Families
 
@@ -102,93 +102,54 @@ If a `<shearing_box>` block exists, the module initialises Coriolis and tidal so
 ## Turbulence Driver
 
 ### Task Flow
-1. **EnsureBasisSize** detects changes in the mesh pack (AMR splits/merges or root-grid edits), resizes `force`, `force_tmp{1,2}`, and basis caches, and recomputes trigonometric basis functions per MeshBlock. Existing OU coefficients `mode_amp_real/mode_amp_imag` are preserved.
-2. **InitializeModes** builds the mode catalogue for the selected wavenumber ranges, computes spectral weights, and generates random amplitudes using the configured seed (`rseed >= 0`). Negative seeds fall back to the built-in Numerical Recipes sequence (equivalent to seeding with `1`).
-3. **UpdateForcing** copies the OU state into the working force array, applies optional Gaussian weighting (`*_scale_height` and `*_center`), removes net momentum, and rescales the field to match the requested energy injection `dedt`.
-4. **AddForcing** applies accelerations during each integrator stage. The kernel supports hydro-only, MHD, and two-fluid ion-neutral configurations. For relativistic runs it converts to/from conserved variables with the appropriate SR transformations.
+1. The constructor builds a Fourier-mode catalogue and spatial trigonometric basis for the current pack.
+2. **InitializeModes** runs once per full timestep, draws a new random forcing candidate, removes its net momentum, and scales that candidate using `dedt`.
+3. **UpdateForcing** advances the accumulated field once per full timestep using that candidate; the resulting acceleration is fixed during the explicit RK stages.
+4. **AddForcing** applies that fixed acceleration as a stage source using `beta[stage-1] * dt` and the pre-stage primitive state, matching the standard hydro/MHD source-term contract. For nonrelativistic ideal and CGL states, it supplies the corresponding RK work term and preserves non-kinetic energy when the zero-net-momentum projection changes frame. With `record_injected_work = true`, a single-fluid nonrelativistic run also accumulates the net applied energy source, including that projection, globally for history accounting.
 
 ### Ornstein–Uhlenbeck Update
-- `dt_turb_update` controls how often the OU process is advanced. The OU coefficients are \( f_{\text{corr}} = \exp(-\Delta t/t_{\text{corr}}) \) and \( g_{\text{corr}} = \sqrt{1 - f_{\text{corr}}^2} \); in the white-noise limit (`tcorr <= 1e-6`) the new sample is used directly.
-- `turb_flag = 1` drives for a finite duration (`tdriv_duration`, default `tcorr`); `turb_flag = 2` drives continuously. Driving begins once `time >= tdriv_start`.
-- `constant_edot = true` (default) scales the field so the volumetric energy injection equals `dedt`. When `false`, the scaling instead keeps the instantaneous acceleration magnitude fixed.
-- Net linear momentum is removed every update and the solver guards against degenerate volume sums.
-
-### Tiling and Spatial Weighting
-- `tile_driving` repeats the forcing pattern over `tile_nx × tile_ny × tile_nz` tiles. Each tile must evenly divide the corresponding root-grid dimension; 1-D or 2-D meshes force unused tile counts to 1.
-- Optional Gaussian envelopes in each coordinate (`x/y/z_turb_scale_height` with associated `_center`) weight the forcing amplitude during `UpdateForcing`.
-- `sol_fraction` blends solenoidal and compressive components when projecting the random field in Fourier space.
+- The OU coefficients use the mesh timestep: \( f_{\text{corr}} = \exp(-\Delta t/t_{\text{corr}}) \) and \( g_{\text{corr}} = \sqrt{1 - f_{\text{corr}}^2} \). In the white-noise limit (`tcorr <= 1e-6`) the new candidate is used directly.
+- `rseed > 0` chooses a deterministic RNG sequence. Non-positive values retain the historical sequence initialized with seed `1`.
+- The full RNG state, including a cached Gaussian deviate, and the accumulated forcing array are stored in restart output. When requested, cumulative applied forcing work is checkpointed with them.
+- `dedt` scales each new candidate before OU mixing. Focused CPU testing verifies a single-cycle OU transition and RK2 source-work identity for the reduced paper smoke state.
+- The once-per-cycle OU cadence and stage-local coupling are regression-tested; long-duration statistical calibration of `dedt` for paper-grade forcing remains a separate validation requirement.
 
 ### Configuration Reference (`<turb_driving>`)
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `turb_flag` | `2` | 0=off, 1=drive for `tdriv_duration`, 2=continuous. |
 | `dedt` | `0.0` | Target energy injection rate (code units). |
 | `tcorr` | `0.0` | OU correlation time. |
-| `dt_turb_update` | `0.01` | Minimum cadence between OU refreshes. |
-| `driving_type` | `0` | 0=3-D isotropic, 1=planar driving. |
-| `nlow`, `nhigh` | `1`, `3` | Inclusive wavenumber bounds. |
-| `npeak` / `kpeak` | `kpeak=4π` | Spectrum peak, either as a mode index or explicit wavenumber. |
-| `spect_form` | `1` | 1=parabolic, 2=power-law weighting. |
-| `expo`, `exp_prp`, `exp_prl` | `5/3`, `5/3`, `0` | Spectral slopes (isotropic / perpendicular / parallel). |
-| `min_k*`, `max_k*` | `0` / `nhigh` | Cartesian mode limits per axis. |
-| `sol_fraction` | `1.0` | Amplitude-space blend between solenoidal (divergence-free) and compressive components of each mode’s Fourier amplitudes (`1.0` = purely solenoidal, `0.0` = purely compressive). |
-| `rseed` | `-1` | RNG seed for the OU process. Non-negative values give reproducible sequences; negative values fall back to the internal default (seed = 1). |
-| `constant_edot` | `true` | Switch between fixed `dedt` and fixed acceleration. |
-| `tile_driving` | `false` | Enable spatial tiling. |
-| `tile_factor` / `tile_nx,ny,nz` | `1` | Tile replication counts. |
-| `x/y/z_turb_scale_height` | `-1.0` | Gaussian half-widths; negative disables weighting. |
-| `x/y/z_turb_center` | `0.0` | Gaussian centres (code units). |
-| `tdriv_start` | `0.0` | Simulation time when driving begins. |
-| `tdriv_duration` | `tcorr` | Duration when `turb_flag=1`. |
+| `driving_type` | `0` | `0` = isotropic incompressible/random; `1` = incompressible Alfvenic forcing perpendicular to a `z`-directed guide field. |
+| `nlow`, `nhigh` | `1`, `2` | Inclusive mode-shell bounds. |
+| `expo` | `5/3` | Spectral exponent for type `0`. |
+| `exp_prp`, `exp_prl` | `5/3`, `0` | Perpendicular and parallel exponents for type `1`, with `k_parallel = abs(k_z)`. |
+| `physical_k_shell` | `false` | If `true`, apply `nlow`/`nhigh` to physical `abs(k)/k_shell_unit` rather than integer mode indices. |
+| `k_shell_unit` | `0.0` | Positive reference wavenumber required when `physical_k_shell = true`. |
+| `isotropic_power_spectrum` | `false` | If `true`, type `1` uses `expo` against total `abs(k)` while retaining Alfvenic velocity orientation. |
+| `rseed` | `-1` | RNG sequence selector; positive values select reproducible alternatives. |
+| `record_injected_work` | `false` | Accumulate and restart exact net applied energy-source work, including zero-net-momentum projection, for a single nonrelativistic ideal/CGL fluid. |
 
 ### Compatibility Notes
 - When both hydro and MHD modules are active (ion-neutral mode), the forcing is applied to each fluid with shared accelerations.
 - Relativistic integrations invoke the SR conservative-to-primitive and primitive-to-conservative transforms after applying forces.
-- `EnsureBasisSize` is idempotent and inexpensive when no mesh change is detected.
-- Planar driving (`driving_type = 1`) is less heavily exercised than the default isotropic mode and currently reuses the full 3-component force assembly; it should be treated as experimental.
-
-#### Initial Turbulence Kick (`<initial_turb>`)
-- Optional block that applies a single impulsive Ornstein–Uhlenbeck update immediately after problem setup.
-- Uses the same keys as `<turb_driving>`; the block is forced to `turb_flag = 1` and executes once with its own RNG seed.
-- The kick is applied before the first timestep, after which the temporary driver is destroyed and does not participate in restarts.
-- `dt_turb_update` (or `tdriv_duration` when provided) controls the effective impulse duration used to scale the kick.
-- Executed only on brand-new runs (not restarts). The kick honours `tdriv_start` when it is less than or equal to the initial simulation time; otherwise the start time is clamped to the current time, so prefer `tdriv_start = 0` for pure initial-condition kicks.
-- Because the impulse operates through the same forcing kernels as the sustained driver, set `dedt`, spectra, and `sol_fraction` just as you would for a continuous run. Use a unique `rseed` when you need deterministic reproducibility distinct from the main driver.
-
-##### Example: Initial Kick + Sustained OU Driving
-
-```ini
-[initial_turb]
-dedt            = 5.0e-3   # one-off energy injection
-dt_turb_update  = 0.02     # width of the impulse
-kmin            = 1
-kmax            = 3
-sol_fraction    = 1.0
-rseed           = 314159
-
-[turb_driving]
-dedt            = 1.0e-4   # continuous driving level
-tcorr           = 0.5
-dt_turb_update  = 0.02
-kmin            = 1
-kmax            = 3
-sol_fraction    = 0.7
-rseed           = 271828
-tdriv_start     = 0.0
-turb_flag       = 2        # leave continuous forcing enabled
-```
-
-With this configuration the mesh receives a single kick before the first timestep, after which the steady OU driver takes over using its own seed and parameters. Restart files only preserve the continuous driver state, so rerunning from a checkpoint will not repeat the initial impulse.
+- The current fixed-mode driver does not implement cadence, tiling, envelope, compressive-fraction, finite-duration, or initial-kick controls.
 
 ## Cooling Timestep Constraint
 `SourceTerms::NewTimeStep` scans the mesh pack for ISM and CGM cooling cells and stores the minimum stable timestep in `dtnew`. The driver reduces the global timestep against this value before advancing.
 
 ## Operational Tips
-- Monitor the scalar `dt_turb_update` against the hydrodynamic timestep. Large `dt` jumps can cause multiple OU updates in a single call; the driver loops until the elapsed time is caught up.
-- When using tiling, double-check that each tile dimension divides the root-grid extent; the constructor exits with a fatal error otherwise.
+- Archive `rseed`, `driving_type`, mode bounds, spectral exponents, `dedt`,
+  `tcorr`, `record_injected_work`, and any physical-shell settings with
+  driven-run results.
+- MKS24-oriented inputs explicitly set `physical_k_shell = true`,
+  `k_shell_unit = 2*pi/L_parallel`, `isotropic_power_spectrum = true`, and
+  `expo = 2` to encode the documented physical shell and `k^-2` forcing.
+- Treat quantitative forcing-correlation or energy-injection comparisons as
+  paper-qualified only after long-duration statistical calibration at the
+  target configuration; the reduced cadence/source contract alone is not
+  sufficient.
 - For CGM cooling, provide passive scalar metallicity or the code assumes a fixed `Z=1/3 Z⊙`.
-- To disable turbulence mid-run, set `turb_flag=0` or advance past `tdriv_start + tdriv_duration` when using burst mode.
 - Use `scripts/plot_cooling_curves.py` (one-off helper) to regenerate the cooling visualisations or inspect new tables; outputs are written to `docs/source/_static`.
 
 ## Related Modules

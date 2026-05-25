@@ -179,9 +179,8 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   // (6) TURBULENCE DRIVER
   // This is a special module to drive turbulence in hydro, MHD, or both. Cannot be
   // included as a source term since it requires evolving force array via O-U process.
-  // Instead, TurbulenceDriver object is stored in MeshBlockPack and tasks for evolving
-  // force and adding force to fluid are included in operator_split and stage_run
-  // task lists respectively.
+  // Instead, TurbulenceDriver object is stored in MeshBlockPack. Its force is evolved
+  // once before the integrator and applied through stage-local explicit source updates.
   if (pin->DoesBlockExist("turb_driving")) {
     pturb = new TurbulenceDriver(this, pin);
     pturb->IncludeInitializeModesTask(tl_map["before_timeintegrator"], none);

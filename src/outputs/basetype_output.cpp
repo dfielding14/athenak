@@ -394,6 +394,10 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
           outvars.emplace_back("press",4,&(pm->pmb_pack->pmhd->w0));
         } else {
           outvars.emplace_back("eint",4,&(pm->pmb_pack->pmhd->w0));
+          if (pm->pmb_pack->pmhd->peos->eos_data.is_cgl) {
+            // Preserve legacy eint=p_parallel and expose the second CGL pressure.
+            outvars.emplace_back("p_perp",IPP,&(pm->pmb_pack->pmhd->w0));
+          }
         }
       }
     }

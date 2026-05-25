@@ -36,6 +36,11 @@ def _assert_admissible(mhd, user):
         "lf_hardbd",
     ):
         assert mhd[column][-1] == 0.0
+    assert mhd["lf_qface"][-1] > 0.0
+    for column in ("lf_qprcap", "lf_qpr10", "lf_qpecap", "lf_qpe10"):
+        assert 0.0 <= mhd[column][-1] <= mhd["lf_qface"][-1]
+    assert mhd["lf_qprwrk"][-1] == 0.0
+    assert mhd["lf_qpewrk"][-1] == 0.0
     scale = max(abs(mhd["tot-E"][0]), 1.0e-30)
     residual = abs(mhd["tot-E"][-1] - mhd["tot-E"][0]) / scale
     assert residual < 5.0e-3
@@ -48,7 +53,19 @@ def test_cgl_lf_amr_is_reproducible_across_mpi_decomposition():
         _assert_admissible(single_mhd, single_user)
         _assert_admissible(multi_mhd, multi_user)
 
-        for column in ("mass", "tot-E", "aam-D", "lf_nstage"):
+        for column in (
+            "mass",
+            "tot-E",
+            "aam-D",
+            "lf_nstage",
+            "lf_qface",
+            "lf_qprcap",
+            "lf_qpr10",
+            "lf_qpecap",
+            "lf_qpe10",
+            "lf_qprwrk",
+            "lf_qpewrk",
+        ):
             assert np.isclose(
                 single_mhd[column][-1],
                 multi_mhd[column][-1],

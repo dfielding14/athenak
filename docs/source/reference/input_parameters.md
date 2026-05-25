@@ -141,6 +141,7 @@ Complete list of all input parameters by block, extracted from source code.
 | `nu_coll` | Real | 0.0 | cgl_mhd.cpp |
 | `mirror_limiter` | bool | false | cgl_mhd.cpp |
 | `firehose_limiter` | bool | false | cgl_mhd.cpp |
+| `cgl_firehose_threshold` | string | oblique (`oblique` or `parallel`) | cgl_mhd.cpp |
 | `limiter_nu_coll` | Real | 0.0 | cgl_mhd.cpp |
 | `backup_limiters` | bool | false | cgl_mhd.cpp |
 | `cgl_lf_strict_admissibility` | bool | false | cgl_landau_fluid.cpp |
@@ -415,40 +416,18 @@ Complete list of all input parameters by block, extracted from source code.
 | Parameter | Type | Default | Source |
 |-----------|------|---------|--------|
 | `nlow` | int | 1 | turb_driver.cpp:L68 |
-| `nhigh` | int | 3 | turb_driver.cpp:L69 |
-| `npeak` | Real | — (optional) | turb_driver.cpp:L72 |
-| `kpeak` | Real | 4.0*M_PI | turb_driver.cpp:L78 |
-| `spect_form` | int | 1 | turb_driver.cpp:L81 |
-| `driving_type` | int | 0 | turb_driver.cpp:L83 |
-| `min_kz` | int | 0 | turb_driver.cpp:L85 |
-| `max_kz` | int | nhigh | turb_driver.cpp:L86 |
-| `min_kx` | int | 0 | turb_driver.cpp:L87 |
-| `max_kx` | int | nhigh | turb_driver.cpp:L88 |
-| `min_ky` | int | 0 | turb_driver.cpp:L89 |
-| `max_ky` | int | nhigh | turb_driver.cpp:L90 |
-| `expo` | Real | 5.0/3.0 | turb_driver.cpp:L92 |
-| `exp_prp` | Real | 5.0/3.0 | turb_driver.cpp:L93 |
-| `exp_prl` | Real | 0.0 | turb_driver.cpp:L94 |
-| `dedt` | Real | 0.0 | turb_driver.cpp:L96 |
-| `tcorr` | Real | 0.0 | turb_driver.cpp:L98 |
-| `dt_turb_update` | Real | 0.01 | turb_driver.cpp:L100 |
-| `sol_fraction` | Real | 1.0 | turb_driver.cpp:L102 |
-| `rseed` | int | -1 | turb_driver.cpp:L105 |
-| `constant_edot` | bool | true | turb_driver.cpp:L108 |
-| `x_turb_scale_height` | Real | -1.0 | turb_driver.cpp:L111 |
-| `y_turb_scale_height` | Real | -1.0 | turb_driver.cpp:L112 |
-| `z_turb_scale_height` | Real | -1.0 | turb_driver.cpp:L113 |
-| `x_turb_center` | Real | 0.0 | turb_driver.cpp:L114 |
-| `y_turb_center` | Real | 0.0 | turb_driver.cpp:L115 |
-| `z_turb_center` | Real | 0.0 | turb_driver.cpp:L116 |
-| `tile_driving` | bool | false | turb_driver.cpp:L119 |
-| `tile_factor` | int | 1 | turb_driver.cpp:L120 |
-| `tile_nx` | int | tile_factor | turb_driver.cpp:L121 |
-| `tile_ny` | int | tile_factor | turb_driver.cpp:L122 |
-| `tile_nz` | int | tile_factor | turb_driver.cpp:L123 |
-| `turb_flag` | int | 2 | turb_driver.cpp:L114 |
-| `tdriv_duration` | Real | tcorr (if `turb_flag = 1`) | turb_driver.cpp:L115 |
-| `tdriv_start` | Real | 0.0 | turb_driver.cpp:L121 |
+| `nhigh` | int | 2 | turb_driver.cpp |
+| `driving_type` | int | 0 (`0` isotropic, `1` Alfvenic perpendicular to `z`) | turb_driver.cpp |
+| `expo` | Real | 5.0/3.0 | turb_driver.cpp |
+| `exp_prp` | Real | 5.0/3.0 | turb_driver.cpp |
+| `exp_prl` | Real | 0.0 | turb_driver.cpp |
+| `physical_k_shell` | Boolean | false | turb_driver.cpp |
+| `k_shell_unit` | Real | 0.0 (must be positive with `physical_k_shell`) | turb_driver.cpp |
+| `isotropic_power_spectrum` | Boolean | false | turb_driver.cpp |
+| `dedt` | Real | 0.0 | turb_driver.cpp |
+| `tcorr` | Real | 0.0 | turb_driver.cpp |
+| `rseed` | int | -1 (historic seed sequence; positive values select a sequence) | turb_driver.cpp |
+| `record_injected_work` | Boolean | false (net applied forcing work; single nonrelativistic ideal/CGL fluid only) | turb_driver.cpp |
 
 ## Input Block: `<units>`
 **Used by**: units.cpp

@@ -33,13 +33,16 @@ namespace {
 enum class TestMode {
   parallel_decay,
   perp_decay,
+  collision_relaxation,
   grad_b,
   flux_limiter,
   limiter_heat_flux_suppression,
   limiter_stress,
   field_aligned_wave,
   paper_oblique_wave,
-  paper_eigen_wave
+  paper_eigen_wave,
+  rotated_decay,
+  low_field
 };
 
 struct Projection {
@@ -120,6 +123,7 @@ TestMode ParseMode(ParameterInput *pin) {
   const std::string mode = pin->GetOrAddString("problem", "test_mode", "parallel_decay");
   if (mode == "parallel_decay") return TestMode::parallel_decay;
   if (mode == "perp_decay") return TestMode::perp_decay;
+  if (mode == "collision_relaxation") return TestMode::collision_relaxation;
   if (mode == "grad_b") return TestMode::grad_b;
   if (mode == "flux_limiter") return TestMode::flux_limiter;
   if (mode == "limiter_heat_flux_suppression") {
@@ -129,15 +133,20 @@ TestMode ParseMode(ParameterInput *pin) {
   if (mode == "field_aligned_wave") return TestMode::field_aligned_wave;
   if (mode == "paper_oblique_wave") return TestMode::paper_oblique_wave;
   if (mode == "paper_eigen_wave") return TestMode::paper_eigen_wave;
-  Fail("<problem>/test_mode must be parallel_decay, perp_decay, grad_b, "
-       "flux_limiter, limiter_heat_flux_suppression, limiter_stress, "
-       "field_aligned_wave, paper_oblique_wave, or paper_eigen_wave");
+  if (mode == "rotated_decay") return TestMode::rotated_decay;
+  if (mode == "low_field") return TestMode::low_field;
+  Fail("<problem>/test_mode must be parallel_decay, perp_decay, "
+       "collision_relaxation, grad_b, flux_limiter, "
+       "limiter_heat_flux_suppression, limiter_stress, "
+       "field_aligned_wave, paper_oblique_wave, paper_eigen_wave, rotated_decay, "
+       "or low_field");
 }
 
 const char *ModeName(const TestMode mode) {
   switch (mode) {
     case TestMode::parallel_decay: return "parallel_decay";
     case TestMode::perp_decay: return "perp_decay";
+    case TestMode::collision_relaxation: return "collision_relaxation";
     case TestMode::grad_b: return "grad_b";
     case TestMode::flux_limiter: return "flux_limiter";
     case TestMode::limiter_heat_flux_suppression: return "limiter_heat_flux_suppression";
@@ -145,6 +154,8 @@ const char *ModeName(const TestMode mode) {
     case TestMode::field_aligned_wave: return "field_aligned_wave";
     case TestMode::paper_oblique_wave: return "paper_oblique_wave";
     case TestMode::paper_eigen_wave: return "paper_eigen_wave";
+    case TestMode::rotated_decay: return "rotated_decay";
+    case TestMode::low_field: return "low_field";
   }
   return "unknown";
 }
@@ -154,6 +165,11 @@ void RequireOneDimensionalSingleBlock(Mesh *pm) {
           "this unit test currently expects one MeshBlock on one rank");
   Require(pm->mb_indcs.nx2 == 1 && pm->mb_indcs.nx3 == 1,
           "this unit test currently expects a 1D mesh");
+}
+
+void RequireSingleBlock(Mesh *pm) {
+  Require(pm->pmb_pack->nmb_thispack == 1,
+          "this unit test currently expects one MeshBlock on one rank");
 }
 
 Real XCenter(Mesh *pm, const int q) {
@@ -166,6 +182,26 @@ Real Wavenumber(ParameterInput *pin, Mesh *pm) {
   const int mode_number = pin->GetOrAddInteger("problem", "mode_number", 1);
   const Real length = pm->mesh_size.x1max - pm->mesh_size.x1min;
   return 2.0*M_PI*static_cast<Real>(mode_number)/length;
+}
+
+struct RotatedWave {
+  Real kx = 0.0;
+  Real ky = 0.0;
+  Real kz = 0.0;
+};
+
+RotatedWave RotatedWavenumber(ParameterInput *pin, Mesh *pm) {
+  const int mode_number = pin->GetOrAddInteger("problem", "mode_number", 1);
+  const std::string axis = pin->GetOrAddString("problem", "rotated_axis", "x");
+  const Real multiple = 2.0*M_PI*static_cast<Real>(mode_number);
+  const Real kx = multiple/(pm->mesh_size.x1max - pm->mesh_size.x1min);
+  const Real ky = multiple/(pm->mesh_size.x2max - pm->mesh_size.x2min);
+  const Real kz = multiple/(pm->mesh_size.x3max - pm->mesh_size.x3min);
+  if (axis == "x") return {kx, 0.0, 0.0};
+  if (axis == "y") return {0.0, ky, 0.0};
+  if (axis == "z") return {0.0, 0.0, kz};
+  if (axis == "oblique") return {kx, ky, kz};
+  Fail("<problem>/rotated_axis must be x, y, z, or oblique");
 }
 
 template <typename HostView>
@@ -196,6 +232,52 @@ Projection ProjectTemperature(const HostView &w, ParameterInput *pin, Mesh *pm,
   }
   p.sin_amp *= 2.0/static_cast<Real>(nx1);
   p.cos_amp *= 2.0/static_cast<Real>(nx1);
+  return p;
+}
+
+template <typename HostView>
+Projection ProjectRotatedTemperature(const HostView &w, ParameterInput *pin, Mesh *pm,
+                                     const int pidx) {
+  RequireSingleBlock(pm);
+  const int is = pm->mb_indcs.is;
+  const int js = pm->mb_indcs.js;
+  const int ks = pm->mb_indcs.ks;
+  const int nx1 = pm->mb_indcs.nx1;
+  const int nx2 = pm->mb_indcs.nx2;
+  const int nx3 = pm->mb_indcs.nx3;
+  const RotatedWave wave = RotatedWavenumber(pin, pm);
+  const Real xmin = pm->mesh_size.x1min;
+  const Real ymin = pm->mesh_size.x2min;
+  const Real zmin = pm->mesh_size.x3min;
+  const Real ncells = static_cast<Real>(nx1*nx2*nx3);
+  Projection p;
+  for (int qk = 0; qk < nx3; ++qk) {
+    for (int qj = 0; qj < nx2; ++qj) {
+      for (int qi = 0; qi < nx1; ++qi) {
+        const Real value = w(0,pidx,ks + qk,js + qj,is + qi)
+                         / w(0,IDN,ks + qk,js + qj,is + qi);
+        p.mean += value;
+      }
+    }
+  }
+  p.mean /= ncells;
+  for (int qk = 0; qk < nx3; ++qk) {
+    const Real z = CellCenterX(qk, nx3, zmin, pm->mesh_size.x3max);
+    for (int qj = 0; qj < nx2; ++qj) {
+      const Real y = CellCenterX(qj, nx2, ymin, pm->mesh_size.x2max);
+      for (int qi = 0; qi < nx1; ++qi) {
+        const Real value = w(0,pidx,ks + qk,js + qj,is + qi)
+                         / w(0,IDN,ks + qk,js + qj,is + qi) - p.mean;
+        const Real x = CellCenterX(qi, nx1, xmin, pm->mesh_size.x1max);
+        const Real phase = wave.kx*(x - xmin) + wave.ky*(y - ymin)
+                         + wave.kz*(z - zmin);
+        p.sin_amp += value*std::sin(phase);
+        p.cos_amp += value*std::cos(phase);
+      }
+    }
+  }
+  p.sin_amp *= 2.0/ncells;
+  p.cos_amp *= 2.0/ncells;
   return p;
 }
 
@@ -299,6 +381,14 @@ Real BackgroundCollisionFrequency(ParameterInput *pin) {
   return GetRealOrZero(pin, "mhd", "nu_coll");
 }
 
+Real FirehoseThreshold(ParameterInput *pin) {
+  const std::string policy =
+      pin->GetOrAddString("mhd", "cgl_firehose_threshold", "oblique");
+  if (policy == "oblique") return cgl::kFirehoseObliqueThreshold;
+  if (policy == "parallel") return cgl::kFirehoseParallelThreshold;
+  Fail("<mhd>/cgl_firehose_threshold must be oblique or parallel");
+}
+
 Real LimiterCollisionRate(ParameterInput *pin, const Real ppar, const Real pperp,
                           const Real bx, const Real by, const Real bz) {
   const bool mlim = GetBooleanOrFalse(pin, "mhd", "mirror_limiter");
@@ -308,7 +398,7 @@ Real LimiterCollisionRate(ParameterInput *pin, const Real ppar, const Real pperp
                                  static_cast<Real>(0.0));
   const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
   return cgl::LimiterCollisionRate(ppar, pperp, bsqr, lim_coll, mlim, flim,
-                                   backup_lim);
+                                   FirehoseThreshold(pin), backup_lim);
 }
 
 Real EffectiveCollisionFrequency(ParameterInput *pin, const Real ppar, const Real pperp,
@@ -400,13 +490,49 @@ DecayState IntegrateDecayReference(ParameterInput *pin, Mesh *pm, const TestMode
     return state;
   };
 
-  // Driver order with STS enabled: pre half-sweep, CGL collision after the main
-  // integrator, post half-sweep, then the post-STS CGL collision.
+  // Each LF half-sweep is followed by a collision source update over the same
+  // half-cycle duration, so the two updates cover one physical cycle in total.
   s = apply_heat_flux(s, 0.5*pm->time);
-  s = apply_collision(s, pm->time);
+  s = apply_collision(s, 0.5*pm->time);
   s = apply_heat_flux(s, 0.5*pm->time);
-  s = apply_collision(s, pm->time);
+  s = apply_collision(s, 0.5*pm->time);
   return s;
+}
+
+void CheckCollisionRelaxation(ParameterInput *pin, Mesh *pm) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  auto w = HostCopy(pmhd->w0);
+  const int is = pm->mb_indcs.is;
+  const int js = pm->mb_indcs.js;
+  const int ks = pm->mb_indcs.ks;
+  const int nx1 = pm->mb_indcs.nx1;
+  const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
+  const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
+  const Real nu_coll = BackgroundCollisionFrequency(pin);
+  const Real rel_tol = pin->GetOrAddReal("problem", "collision_rel_tol", 1.0e-12);
+  Require(nu_coll > 0.0, "collision_relaxation requires positive <mhd>/nu_coll");
+
+  Real measured_paniso = 0.0;
+  Real measured_piso = 0.0;
+  for (int q = 0; q < nx1; ++q) {
+    const Real ppar = w(0,IPR,ks,js,is + q);
+    const Real pperp = w(0,IPP,ks,js,is + q);
+    measured_paniso += pperp - ppar;
+    measured_piso += ONE_3RD*ppar + TWO_3RDS*pperp;
+  }
+  measured_paniso /= static_cast<Real>(nx1);
+  measured_piso /= static_cast<Real>(nx1);
+
+  const Real initial_paniso = pperp0 - ppar0;
+  const Real initial_piso = ONE_3RD*ppar0 + TWO_3RDS*pperp0;
+  const Real expected_paniso = initial_paniso*std::exp(-nu_coll*pm->time);
+  RequireRelative("collision_relaxation anisotropy", measured_paniso,
+                  expected_paniso, rel_tol);
+  RequireRelative("collision_relaxation isotropic pressure", measured_piso,
+                  initial_piso, rel_tol);
+  std::cout << "CGL LF collision_relaxation passed: measured_paniso="
+            << measured_paniso << " expected_paniso=" << expected_paniso
+            << " time=" << pm->time << " nu_coll=" << nu_coll << std::endl;
 }
 
 void CheckDecay(ParameterInput *pin, Mesh *pm, const TestMode mode) {
@@ -474,6 +600,89 @@ void CheckDecay(ParameterInput *pin, Mesh *pm, const TestMode mode) {
             << " rel_err=" << rel_err << " rel_tol=" << rel_tol
             << " cos_amp=" << projection.cos_amp << " cos_limit=" << cos_limit
             << std::endl;
+}
+
+void CheckRotatedDecay(ParameterInput *pin, Mesh *pm) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  auto w = HostCopy(pmhd->w0);
+  const Projection projection = ProjectRotatedTemperature(w, pin, pm, IPR);
+  const Real rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
+  const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
+  const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
+  const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-4);
+  const Real rel_tol = pin->GetOrAddReal("problem", "decay_rel_tol", 5.0e-2);
+  const Real phase_tol = pin->GetOrAddReal("problem", "phase_rel_tol", 2.0e-2);
+  const Real bx0 = pin->GetOrAddReal("problem", "b0", 1.0);
+  const Real by0 = pin->GetOrAddReal("problem", "by0", 0.0);
+  const Real bz0 = pin->GetOrAddReal("problem", "bz0", 0.0);
+  const Real bmag = std::sqrt(SQR(bx0) + SQR(by0) + SQR(bz0));
+  Require(bmag > 0.0, "rotated_decay requires a nonzero mean field");
+  const RotatedWave wave = RotatedWavenumber(pin, pm);
+  const Real k_parallel = (bx0*wave.kx + by0*wave.ky + bz0*wave.kz)/bmag;
+  const Real cpar0 = FaceCParallel(pin, rho0, ppar0);
+  const Real nu_eff = EffectiveCollisionFrequency(pin, ppar0, pperp0, bx0, by0, bz0);
+  const Real chi_parallel =
+      ChiParallel(cpar0, pin->GetReal("mhd", "lf_k_parallel"), nu_eff);
+  const Real initial_amp = (ppar0/rho0)*amp;
+  const Real expected_amp =
+      initial_amp*std::exp(-chi_parallel*SQR(k_parallel)*pm->time);
+  const Real measured_amp = std::abs(projection.sin_amp);
+  const Real rel_err = RelativeError(measured_amp, expected_amp);
+  RequireRelative("rotated_decay Fourier amplitude", measured_amp, expected_amp, rel_tol);
+  Require(std::abs(projection.cos_amp) <= phase_tol*std::abs(initial_amp),
+          "rotated_decay developed an unexpected cosine component");
+  auto out = OpenValidationDataFile(pin, "rotated_decay");
+  if (out) {
+    out << "metric,value\n"
+        << "time," << pm->time << "\n"
+        << "initial_amp," << initial_amp << "\n"
+        << "measured_amp," << measured_amp << "\n"
+        << "expected_amp," << expected_amp << "\n"
+        << "chi_parallel," << chi_parallel << "\n"
+        << "nu_eff," << nu_eff << "\n"
+        << "k_parallel," << k_parallel << "\n"
+        << "rel_err," << rel_err << "\n"
+        << "rel_tol," << rel_tol << "\n";
+  }
+  std::cout << "CGL LF rotated_decay passed: k_parallel=" << k_parallel
+            << " measured_amp=" << measured_amp << " expected_amp=" << expected_amp
+            << " rel_err=" << rel_err << " rel_tol=" << rel_tol << std::endl;
+}
+
+Real InitialParallelPressure(ParameterInput *pin, Mesh *pm, const int q);
+Real InitialPerpPressure(ParameterInput *pin, Mesh *pm, const int q);
+
+void CheckLowField(ParameterInput *pin, Mesh *pm) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  auto w = HostCopy(pmhd->w0);
+  const int is = pm->mb_indcs.is;
+  const int js = pm->mb_indcs.js;
+  const int ks = pm->mb_indcs.ks;
+  const int nx1 = pm->mb_indcs.nx1;
+  const Real bx0 = pin->GetOrAddReal("problem", "b0", 1.0);
+  const Real by0 = pin->GetOrAddReal("problem", "by0", 0.0);
+  const Real bz0 = pin->GetOrAddReal("problem", "bz0", 0.0);
+  const Real bmag = std::sqrt(SQR(bx0) + SQR(by0) + SQR(bz0));
+  const Real bfloor = pin->GetReal("mhd", "bfloor");
+  Require(bmag <= bfloor, "low_field requires |B| <= <mhd>/bfloor");
+  Real maximum_error = 0.0;
+  for (int q = 0; q < nx1; ++q) {
+    const Real ppar = w(0,IPR,ks,js,is + q);
+    const Real pperp = w(0,IPP,ks,js,is + q);
+    Require(std::isfinite(ppar) && std::isfinite(pperp) &&
+            ppar > 0.0 && pperp > 0.0,
+            "low_field produced a nonfinite or nonpositive pressure");
+    maximum_error = std::max(maximum_error,
+        std::abs(ppar - InitialParallelPressure(pin, pm, q)));
+    maximum_error = std::max(maximum_error,
+        std::abs(pperp - InitialPerpPressure(pin, pm, q)));
+  }
+  const Real abs_tol = pin->GetOrAddReal("problem", "low_field_abs_tol", 1.0e-13);
+  Require(maximum_error <= abs_tol,
+          "low_field transported pressure at or below the magnetic-field floor");
+  std::cout << "CGL LF low_field passed: bmag=" << bmag
+            << " bfloor=" << bfloor << " maximum_pressure_change="
+            << maximum_error << std::endl;
 }
 
 void CheckGradB(ParameterInput *pin, Mesh *pm) {
@@ -1206,10 +1415,16 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
   auto *pmhd = pm->pmb_pack->pmhd;
   Require(pmhd != nullptr && pmhd->peos->eos_data.is_cgl,
           "quantitative LF tests require <mhd>/eos = cgl");
-  RequireOneDimensionalSingleBlock(pm);
   const TestMode mode = ParseMode(pin);
+  if (mode == TestMode::rotated_decay) {
+    RequireSingleBlock(pm);
+  } else {
+    RequireOneDimensionalSingleBlock(pm);
+  }
   if (mode == TestMode::parallel_decay || mode == TestMode::perp_decay) {
     CheckDecay(pin, pm, mode);
+  } else if (mode == TestMode::collision_relaxation) {
+    CheckCollisionRelaxation(pin, pm);
   } else if (mode == TestMode::grad_b) {
     CheckGradB(pin, pm);
   } else if (mode == TestMode::flux_limiter) {
@@ -1224,6 +1439,10 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     CheckPaperObliqueWave(pin, pm);
   } else if (mode == TestMode::paper_eigen_wave) {
     CheckPaperEigenWave(pin, pm);
+  } else if (mode == TestMode::rotated_decay) {
+    CheckRotatedDecay(pin, pm);
+  } else if (mode == TestMode::low_field) {
+    CheckLowField(pin, pm);
   }
 }
 
@@ -1238,9 +1457,12 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   if (pmhd == nullptr || !pmhd->peos->eos_data.is_cgl) {
     Fail("quantitative LF tests require <mhd>/eos = cgl");
   }
-  RequireOneDimensionalSingleBlock(pmy_mesh_);
-
   const TestMode mode = ParseMode(pin);
+  if (mode == TestMode::rotated_decay) {
+    RequireSingleBlock(pmy_mesh_);
+  } else {
+    RequireOneDimensionalSingleBlock(pmy_mesh_);
+  }
   const Real rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
   const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
   const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
@@ -1266,8 +1488,16 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   const Real eig_pperp_re = pin->GetOrAddReal("problem", "eigen_pperp_re", 0.0);
   const Real eig_pperp_im = pin->GetOrAddReal("problem", "eigen_pperp_im", 0.0);
   const Real k_wave = Wavenumber(pin, pmy_mesh_);
+  RotatedWave rotated_wave;
+  if (mode == TestMode::rotated_decay) {
+    rotated_wave = RotatedWavenumber(pin, pmy_mesh_);
+  }
   const Real xmin = pmy_mesh_->mesh_size.x1min;
   const Real xmax = pmy_mesh_->mesh_size.x1max;
+  const Real ymin = pmy_mesh_->mesh_size.x2min;
+  const Real ymax = pmy_mesh_->mesh_size.x2max;
+  const Real zmin = pmy_mesh_->mesh_size.x3min;
+  const Real zmax = pmy_mesh_->mesh_size.x3max;
   const std::string limiter_kind =
       pin->GetOrAddString("problem", "limiter_kind", "mirror");
   const int limiter_kind_id = (limiter_kind == "mirror") ? 0 :
@@ -1289,8 +1519,15 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     const int q = i - is;
     const Real x = CellCenterX(q, indcs.nx1, xmin, xmax);
-    const Real s = sin(k_wave*(x - xmin));
-    const Real c = cos(k_wave*(x - xmin));
+    const Real y = CellCenterX(j - js, indcs.nx2, ymin, ymax);
+    const Real z = CellCenterX(k - ks, indcs.nx3, zmin, zmax);
+    Real phase = k_wave*(x - xmin);
+    if (mode == TestMode::rotated_decay) {
+      phase = rotated_wave.kx*(x - xmin) + rotated_wave.ky*(y - ymin)
+            + rotated_wave.kz*(z - zmin);
+    }
+    const Real s = sin(phase);
+    const Real c = cos(phase);
     Real rho = rho0;
     Real vx = 0.0;
     Real vy = 0.0;
@@ -1300,11 +1537,11 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     Real by = (mode == TestMode::grad_b) ? by_amp*s : by0;
     Real bz = bz0;
 
-    if (mode == TestMode::parallel_decay) {
+    if (mode == TestMode::parallel_decay || mode == TestMode::rotated_decay) {
       ppar = ppar0*(1.0 + amp*s);
     } else if (mode == TestMode::perp_decay) {
       pperp = pperp0*(1.0 + amp*s);
-    } else if (mode == TestMode::flux_limiter ||
+    } else if (mode == TestMode::flux_limiter || mode == TestMode::low_field ||
                mode == TestMode::limiter_heat_flux_suppression) {
       ppar = ppar0*(1.0 + amp*s);
       pperp = pperp0*(1.0 + amp*s);

@@ -34,6 +34,7 @@ struct EOS_Data {
   bool coll;         // enable CGL collision/limiter relaxation
   bool backup_lim;   // enable backup CGL instability limiters
   Real nu_coll, lim_coll;  // physical and limiter collision frequencies
+  Real firehose_threshold;  // selected firehose activation coefficient in B^2 units
   bool use_e, use_t; // use internal energy density (e) or temperature (t) as primitive
   Real dfloor, pfloor, tfloor, sfloor, bfloor;  // fluid and magnetic-field floors
   Real gamma_max;    // ceiling on Lorentz factor in SR/GR
@@ -254,7 +255,8 @@ class EquationOfState {
                           DvceArray5D<Real> &cons, const int il, const int iu,
                           const int jl, const int ju, const int kl, const int ku);
   virtual void Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
-                          DvceArray5D<Real> &cons, const int il, const int iu,
+                          DvceArray5D<Real> &cons, const Real dtc,
+                          const int il, const int iu,
                           const int jl, const int ju, const int kl, const int ku);
   virtual void CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
                                              const DvceArray5D<Real> &bcc,
@@ -422,7 +424,8 @@ class CGLMHD : public EquationOfState {
                   DvceArray5D<Real> &cons, const int il, const int iu,
                   const int jl, const int ju, const int kl, const int ku) override;
   void Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
-                  DvceArray5D<Real> &cons, const int il, const int iu,
+                  DvceArray5D<Real> &cons, const Real dtc,
+                  const int il, const int iu,
                   const int jl, const int ju, const int kl, const int ku) override;
   void CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
                                      const DvceArray5D<Real> &bcc,

@@ -400,7 +400,7 @@ void SingleP2C_CGLMHD(const MHDPrim1D &w, const Real &bfloor, HydCons1D &u) {
 KOKKOS_INLINE_FUNCTION
 void SingleColl_CGLMHD(MHDPrim1D &w, const Real &nu_coll, const Real &lim_coll,
                        const Real &dtc, const bool &mlim, const bool &flim,
-                       const bool &backup) {
+                       const Real &firehose_threshold, const bool &backup) {
   Real paniso = w.pp-w.e;
   Real piso = ONE_3RD*w.e + TWO_3RDS*w.pp;
 
@@ -418,12 +418,12 @@ void SingleColl_CGLMHD(MHDPrim1D &w, const Real &nu_coll, const Real &lim_coll,
 
   // Firehose block
   if (flim && backup) { //if using backup
-    if (cgl::FirehoseLimiterActive(paniso, bsqr) &&
+    if (cgl::FirehoseLimiterActive(paniso, bsqr, firehose_threshold) &&
         !cgl::FirehoseHardBoundViolated(paniso, bsqr)) { //in between limiters
       wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
-                  + cgl::kFirehoseThreshold*bsqr ))/(3.+3.*nudt);
+                  + firehose_threshold*bsqr ))/(3.+3.*nudt);
       w.e = (3.*w.e + nudt*(2.*w.pp + w.e
-                - 2.*cgl::kFirehoseThreshold*bsqr ))/(3.+3.*nudt);
+                - 2.*firehose_threshold*bsqr ))/(3.+3.*nudt);
       w.pp = wpptmp;
     } else if (cgl::FirehoseHardBoundViolated(paniso, bsqr)) {
       wpptmp = (3.*w.pp + nudt_b*(2.*w.pp + w.e
@@ -434,11 +434,11 @@ void SingleColl_CGLMHD(MHDPrim1D &w, const Real &nu_coll, const Real &lim_coll,
     }
 
   } else if (flim && (!backup)) { //if not using backup, just standard flim
-    if (cgl::FirehoseLimiterActive(paniso, bsqr)) {
+    if (cgl::FirehoseLimiterActive(paniso, bsqr, firehose_threshold)) {
       wpptmp = (3.*w.pp + nudt*(2.*w.pp + w.e
-                  + cgl::kFirehoseThreshold*bsqr ))/(3.+3.*nudt);
+                  + firehose_threshold*bsqr ))/(3.+3.*nudt);
       w.e = (3.*w.e + nudt*(2.*w.pp + w.e
-                - 2.*cgl::kFirehoseThreshold*bsqr ))/(3.+3.*nudt);
+                - 2.*firehose_threshold*bsqr ))/(3.+3.*nudt);
       w.pp = wpptmp;
     }
   }
