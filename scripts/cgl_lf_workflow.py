@@ -1654,6 +1654,8 @@ def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
                 "--reference-curves",
                 str(resolve_from_root(reference_curves)),
             ])
+        if args.allow_partial_reference_cases:
+            analysis_command.append("--allow-partial-reference-cases")
         subprocess.run(analysis_command, cwd=ROOT_DIR, check=True)
         provenance = analysis_reference_provenance(args, paths, analysis_dir)
         paper_figures = paths.figures / "paper"
@@ -1693,6 +1695,9 @@ def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
                 str(resolve_from_root(reference_curves))
                 for reference_curves in args.reference_curves
             ]
+            manifest["analysis_products"]["allow_partial_reference_cases"] = (
+                args.allow_partial_reference_cases
+            )
             if len(args.reference_curves) == 1:
                 manifest["reference_curve_manifest"] = (
                     manifest["reference_curve_manifests"][0]
@@ -1743,6 +1748,14 @@ def parser() -> argparse.ArgumentParser:
         help=(
             "Provenance-qualified curve manifest to compare during paper-analyze; "
             "repeat for products split across manifests."
+        ),
+    )
+    command.add_argument(
+        "--allow-partial-reference-cases",
+        action="store_true",
+        help=(
+            "During paper-analyze, compare reference products for present "
+            "bundle cases and archive explicit omissions for absent cases."
         ),
     )
     command.add_argument(

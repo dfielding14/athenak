@@ -23,6 +23,7 @@ PAPER_PASSIVE_INPUT = (
 PAPER_PRODUCTION_INPUT_ROOT = Path("../../../inputs/cgl_lf_paper")
 PAPER_STAGE_I_MANIFEST = PAPER_PRODUCTION_INPUT_ROOT / "mks24_stage_i_manifest.json"
 PAPER_WORKFLOW_PATH = Path("../../../scripts/cgl_lf_workflow.py")
+PAPER_ANALYZER_PATH = Path("../../../scripts/analyze_cgl_lf_paper.py")
 PAPER_STAGE_I_TOOL = Path("../../../scripts/frontier/cgl_lf_stage_i.py")
 
 
@@ -704,8 +705,10 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         "fig2.json",
         "--reference-curves",
         "fig13.json",
+        "--allow-partial-reference-cases",
     ])
     assert args.reference_curves == ["fig2.json", "fig13.json"]
+    assert args.allow_partial_reference_cases
     input_paths = sorted(
         PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_standard_*.athinput")
     )
@@ -1206,6 +1209,56 @@ def test_rank_local_binary_reader_keeps_unequal_rank_files(tmp_path, monkeypatch
     assert [values[0, 0, 0] for values in combined["mb_data"]["dens"]] == [0.0, 1.0]
 
 
+def test_cgl_lf_paper_snapshot_window_skips_unselected_field_reads(
+    tmp_path, monkeypatch
+):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_paper_snapshot_selection_test", PAPER_ANALYZER_PATH
+    )
+    assert spec is not None and spec.loader is not None
+    analyzer = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = analyzer
+    spec.loader.exec_module(analyzer)
+
+    def write_header(path, time):
+        path.write_bytes(
+            (
+                "Athena binary output version=1.1\n"
+                "  size of preheader=5\n"
+                f"  time={time}\n"
+                "  cycle=0\n"
+                "  size of location=8\n"
+                "  size of variable=4\n"
+            ).encode()
+        )
+
+    excluded = tmp_path / "excluded.bin"
+    selected = tmp_path / "selected.bin"
+    write_header(excluded, 0.0)
+    write_header(selected, 1.0)
+    read_paths = []
+
+    def fake_read(path):
+        read_paths.append(path)
+        return {}, (1.0, 1.0, 1.0), 1.0
+
+    monkeypatch.setattr(analyzer, "read_snapshot", fake_read)
+    monkeypatch.setattr(analyzer, "pdf_fields", lambda *_: {})
+    monkeypatch.setattr(analyzer, "pressure_density_fields", lambda *_: {})
+    monkeypatch.setattr(analyzer, "analyze_fields", lambda *_, **__: {})
+    monkeypatch.setattr(
+        analyzer, "average_snapshot_records",
+        lambda records: {"snapshot_count": len(records)},
+    )
+    records, ensemble = analyzer.analyze_snapshot_paths(
+        [excluded, selected], bins=4, alignment_shells=[],
+        time_start=1.0, time_end=1.0,
+    )
+    assert list(records) == [str(selected)]
+    assert read_paths == [selected, selected]
+    assert ensemble["snapshot_count"] == 1
+
+
 def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
     try:
         _run_paper(
@@ -1618,6 +1671,62 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         )
         assert result.returncode != 0
         assert "duplicated across manifests" in result.stderr
+        partial_manifest = json.loads(manifest_path.read_text())
+        partial_manifest["curves"].append({
+            **partial_manifest["curves"][0],
+            "id": "absent_case_reference",
+            "case": "case_not_in_bundle",
+        })
+        partial_path = reference_dir / "partial_curves.json"
+        partial_path.write_text(json.dumps(partial_manifest))
+        result = subprocess.run(
+            [
+                "python3",
+                "../../../scripts/analyze_cgl_lf_paper.py",
+                str(snapshots[-1]),
+                "--history",
+                "cgl_ci_paper_analysis.user.hst",
+                "--reference-curves",
+                str(partial_path),
+                "--alignment-shells",
+                "2,4,6",
+                "--output-dir",
+                "cgl_ci_paper_unscoped_reference_products",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode != 0
+        assert "selects missing case case_not_in_bundle" in result.stderr
+        result = subprocess.run(
+            [
+                "python3",
+                "../../../scripts/analyze_cgl_lf_paper.py",
+                str(snapshots[-1]),
+                "--history",
+                "cgl_ci_paper_analysis.user.hst",
+                "--reference-curves",
+                str(partial_path),
+                "--allow-partial-reference-cases",
+                "--alignment-shells",
+                "2,4,6",
+                "--output-dir",
+                "cgl_ci_paper_partial_reference_products",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        partial = json.loads(
+            Path("cgl_ci_paper_partial_reference_products/diagnostics.json").read_text()
+        )["reference_curve_comparisons"]
+        assert partial["allow_missing_cases"]
+        assert partial["comparisons"]["delta_p_exact"]["available"]
+        assert partial["omitted_products"][0]["id"] == "absent_case_reference"
+        assert partial["omitted_products"][0]["case"] == "case_not_in_bundle"
+        assert "absent_case_reference" not in partial["comparisons"]
     finally:
         shutil.rmtree("bin", ignore_errors=True)
         shutil.rmtree("cgl_ci_paper_analysis_products", ignore_errors=True)
@@ -1626,6 +1735,8 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         shutil.rmtree("cgl_ci_paper_reference_figures", ignore_errors=True)
         shutil.rmtree("cgl_ci_paper_invalid_reference_products", ignore_errors=True)
         shutil.rmtree("cgl_ci_paper_duplicate_reference_products", ignore_errors=True)
+        shutil.rmtree("cgl_ci_paper_unscoped_reference_products", ignore_errors=True)
+        shutil.rmtree("cgl_ci_paper_partial_reference_products", ignore_errors=True)
         shutil.rmtree("rst", ignore_errors=True)
         _cleanup()
 

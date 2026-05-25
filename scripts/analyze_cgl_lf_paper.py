@@ -1111,6 +1111,26 @@ def read_snapshot(path: Path
     return values, lengths, float(raw["time"])
 
 
+def snapshot_time(path: Path) -> float:
+    """Read the time in one Athena binary preheader without loading field data."""
+
+    with path.open("rb") as stream:
+        code_header = stream.readline().split()
+        if not code_header or code_header[0] != b"Athena":
+            raise ValueError(f"binary snapshot has invalid header: {path}")
+        pheader_count = int(stream.readline().split(b"=")[-1])
+        values: dict[str, str] = {}
+        for _ in range(pheader_count - 1):
+            key, value = [
+                token.strip()
+                for token in stream.readline().decode("utf-8").split("=", 1)
+            ]
+            values[key] = value
+    if "time" not in values:
+        raise ValueError(f"binary snapshot has no time field: {path}")
+    return float(values["time"])
+
+
 def pdf_fields(fields: dict[str, np.ndarray],
                lengths: tuple[float, float, float] | None = None
                ) -> dict[str, np.ndarray]:
@@ -1599,10 +1619,12 @@ def analyze_snapshot_paths(paths: list[Path], bins: int, alignment_shells: list[
     extrema: dict[str, list[float]] = {}
     joint_extrema: dict[str, list[list[float]]] = {}
     for path in paths:
-        fields, lengths, time = read_snapshot(path)
+        time = snapshot_time(path)
         if not time_mask(np.asarray([time]), time_start, time_end)[0]:
             continue
         selected.append(path)
+    for path in selected:
+        fields, lengths, _ = read_snapshot(path)
         for name, values in pdf_fields(fields, lengths).items():
             finite = values[np.isfinite(values)]
             if finite.size == 0:
@@ -2129,8 +2151,10 @@ def interpolate_analysis_surface(
     return np.asarray(values, dtype=float)
 
 
-def reference_curve_comparisons(result: dict[str, object],
-                                manifest_path: Path) -> dict[str, object]:
+def reference_curve_comparisons(
+    result: dict[str, object], manifest_path: Path,
+    allow_missing_cases: bool = False,
+) -> dict[str, object]:
     """Compare analysis products against provenance-qualified external data."""
 
     with manifest_path.open(encoding="utf-8") as stream:
@@ -2182,12 +2206,15 @@ def reference_curve_comparisons(result: dict[str, object],
         raise ValueError("reference manifest must contain curves or surfaces")
     cases = result.get("cases", {})
     comparisons: dict[str, object] = {}
+    omitted_products: list[dict[str, str]] = []
+    product_ids: set[str] = set()
     for curve in curves:
         if not isinstance(curve, dict):
             raise ValueError("reference curve entries must be objects")
         curve_id = require_manifest_text(curve, "id", "reference curve")
-        if curve_id in comparisons:
+        if curve_id in product_ids:
             raise ValueError(f"reference curve id is duplicated: {curve_id}")
+        product_ids.add(curve_id)
         case = require_manifest_text(curve, "case", f"reference curve {curve_id}")
         product = require_manifest_text(curve, "product", f"reference curve {curve_id}")
         data_file = require_manifest_text(
@@ -2228,6 +2255,15 @@ def reference_curve_comparisons(result: dict[str, object],
             ensemble = cases[case].get("snapshot_ensemble", {})
             histories = cases[case].get("histories", [])
         else:
+            if allow_missing_cases:
+                omitted_products.append({
+                    "id": curve_id,
+                    "kind": "curve",
+                    "case": case,
+                    "product": product,
+                    "reason": "referenced case is absent from analyzed bundle",
+                })
+                continue
             raise ValueError(f"reference curve {curve_id} selects missing case {case}")
         if (
             not product.startswith("history.")
@@ -2269,8 +2305,9 @@ def reference_curve_comparisons(result: dict[str, object],
         if not isinstance(surface, dict):
             raise ValueError("reference surface entries must be objects")
         surface_id = require_manifest_text(surface, "id", "reference surface")
-        if surface_id in comparisons or surface_id in surface_comparisons:
+        if surface_id in product_ids:
             raise ValueError(f"reference product id is duplicated: {surface_id}")
+        product_ids.add(surface_id)
         case = require_manifest_text(surface, "case", f"reference surface {surface_id}")
         product = require_manifest_text(
             surface, "product", f"reference surface {surface_id}"
@@ -2314,6 +2351,15 @@ def reference_curve_comparisons(result: dict[str, object],
         elif isinstance(cases, dict) and case in cases:
             ensemble = cases[case].get("snapshot_ensemble", {})
         else:
+            if allow_missing_cases:
+                omitted_products.append({
+                    "id": surface_id,
+                    "kind": "surface",
+                    "case": case,
+                    "product": product,
+                    "reason": "referenced case is absent from analyzed bundle",
+                })
+                continue
             raise ValueError(
                 f"reference surface {surface_id} selects missing case {case}"
             )
@@ -2360,17 +2406,21 @@ def reference_curve_comparisons(result: dict[str, object],
         "provenance": provenance,
         "comparisons": comparisons,
         "surface_comparisons": surface_comparisons,
+        "omitted_products": omitted_products,
+        "allow_missing_cases": allow_missing_cases,
     }
 
 
 def combined_reference_curve_comparisons(
     result: dict[str, object], manifest_paths: list[Path],
+    allow_missing_cases: bool = False,
 ) -> dict[str, object]:
     """Combine distinct comparison products from qualified reference manifests."""
 
     manifests: list[dict[str, object]] = []
     comparisons: dict[str, object] = {}
     surface_comparisons: dict[str, object] = {}
+    omitted_products: list[dict[str, str]] = []
     combined: dict[str, object] = {
         "available": True,
         "definition": (
@@ -2380,15 +2430,35 @@ def combined_reference_curve_comparisons(
         "manifests": manifests,
         "comparisons": comparisons,
         "surface_comparisons": surface_comparisons,
+        "omitted_products": omitted_products,
+        "allow_missing_cases": allow_missing_cases,
     }
     product_ids: set[str] = set()
     for manifest_path in manifest_paths:
-        comparison = reference_curve_comparisons(result, manifest_path)
+        comparison = reference_curve_comparisons(
+            result, manifest_path, allow_missing_cases=allow_missing_cases
+        )
         manifests.append({
             "manifest": comparison["manifest"],
             "manifest_sha256": comparison["manifest_sha256"],
             "provenance": comparison["provenance"],
         })
+        all_ids = [
+            *comparison["comparisons"].keys(),
+            *comparison["surface_comparisons"].keys(),
+            *[item["id"] for item in comparison["omitted_products"]],
+        ]
+        for product_id in all_ids:
+            if product_id in product_ids:
+                raise ValueError(
+                    f"reference product id is duplicated across manifests: "
+                    f"{product_id}"
+                )
+            product_ids.add(product_id)
+        omitted_products.extend({
+            **item,
+            "manifest": comparison["manifest"],
+        } for item in comparison["omitted_products"])
         for collection, retained in (
             ("comparisons", comparisons),
             ("surface_comparisons", surface_comparisons),
@@ -2399,13 +2469,7 @@ def combined_reference_curve_comparisons(
             for product_id, product in products.items():
                 if not isinstance(product_id, str):
                     raise ValueError("reference product id is not text")
-                if product_id in product_ids:
-                    raise ValueError(
-                        f"reference product id is duplicated across manifests: "
-                        f"{product_id}"
-                    )
                 retained[product_id] = product
-                product_ids.add(product_id)
     if len(manifest_paths) == 1:
         only = manifests[0]
         combined.update({
@@ -2433,6 +2497,14 @@ def main() -> int:
     command.add_argument("--time-start", type=float)
     command.add_argument("--time-end", type=float)
     command.add_argument("--reference-curves", action="append", type=Path, default=[])
+    command.add_argument(
+        "--allow-partial-reference-cases",
+        action="store_true",
+        help=(
+            "Compare available bundle cases while retaining explicit omissions "
+            "for other cases named by reference manifests."
+        ),
+    )
     command.add_argument("--synthetic-test", action="store_true")
     args = command.parse_args()
     if (
@@ -2528,7 +2600,8 @@ def main() -> int:
         result["synthetic_test"] = synthetic_test()
     if args.reference_curves:
         result["reference_curve_comparisons"] = combined_reference_curve_comparisons(
-            result, args.reference_curves
+            result, args.reference_curves,
+            allow_missing_cases=args.allow_partial_reference_cases,
         )
     destination = args.output_dir / "diagnostics.json"
     destination.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n",
