@@ -190,7 +190,7 @@ def summarize_forcing_energy_budget(user_path: Path, mhd_path: Path,
 
 def summarize_lf_history(path: Path, time_start: float | None = None,
                          time_end: float | None = None) -> dict[str, object]:
-    """Summarize cumulative LF face-cap and fixed-level work diagnostics."""
+    """Summarize cumulative LF face-cap and applied-face work diagnostics."""
 
     data = parse_history(path)
     result: dict[str, object] = {"path": str(path)}
@@ -234,11 +234,12 @@ def summarize_lf_history(path: Path, time_start: float | None = None,
         qperp_work = float(data["lf_qpewrk"][rows[-1]] - data["lf_qpewrk"][rows[0]])
         result["applied_heat_flux_work"] = {
             "definition": (
-                "Signed RKL2-applied fixed-level owned-face discrete contraction of "
+                "Signed RKL2-applied owned-face discrete contraction of "
                 "-q_parallel dT_parallel and -q_perp dT_perp"
             ),
-            "requires_fixed_level_mesh": True,
-            "amr_behavior": "reported values remain zero for refined meshes",
+            "amr_face_ownership": (
+                "coarse/fine interfaces are accumulated from the fine-side flux"
+            ),
             "interpretation": (
                 "operator contraction; not required to be positive or equal "
                 "the snapshot reconstruction proxy"

@@ -210,10 +210,10 @@ def lf_diagnostics(path: Path) -> dict[str, object]:
     if "lf_qprwrk" in counters and "lf_qpewrk" in counters:
         result["heat_flux_work"] = {
             "definition": (
-                "Cumulative signed RKL2-applied fixed-level owned-face contraction "
+                "Cumulative signed RKL2-applied owned-face contraction "
                 "of capped parallel/perpendicular LF heat fluxes"
             ),
-            "requires_fixed_level_mesh": True,
+            "amr_face_ownership": "coarse/fine interfaces use the fine-side flux",
             "signed": True,
             "parallel": counters["lf_qprwrk"],
             "perpendicular": counters["lf_qpewrk"],

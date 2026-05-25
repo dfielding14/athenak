@@ -159,12 +159,13 @@ The analyzer runs synthetic binning/gradient/transfer/alignment and
 heat-flux-sign/pressure-work checks and renders available history, PDF,
 spectrum, transfer, alignment, heat-flux-proxy, and pressure-work figures
 under `figures/paper/`. Panel-specific reference-curve comparison,
-AMR-corrected applied heat-flux work, and time-integrated/production local
-budget closure remain to be completed. For fixed-level runs, the analyzer
+exact time-integrated/production local budget closure remains to be
+completed. For retained LF histories, the analyzer
 also reports the RKL2-applied capped-face heat-flux contractions retained in
-`lf_qprwrk` and `lf_qpewrk`; this is not an AMR-corrected or total-energy
-budget diagnostic, and the signed value need not equal the positive
-cell-centered snapshot proxy. Operator-face heat-flux-cap fractions are separately
+`lf_qprwrk` and `lf_qpewrk`. On refined meshes these contractions count
+coarse/fine interfaces from their fine-side closure faces; they are not a
+total-energy budget diagnostic, and their signed value need not equal the
+positive cell-centered snapshot proxy. Operator-face heat-flux-cap fractions are separately
 summarized from LF history counters over the same selected interval. When the
 default staged MKS24 manifest is available, `paper-analyze` also writes
 `analysis/reference_provenance.json` with its archive and source-TeX
@@ -326,12 +327,12 @@ parallel/perpendicular pre-cap flux ratios above `q_max` and `10*q_max`;
 their interval fractions use `lf_qface` as denominator. Restart files retain
 the baseline for every cumulative LF diagnostic column, including the face
 and cap counters, so segmented-run intervals can be analyzed continuously.
-For fixed-level meshes, `lf_qprwrk` and `lf_qpewrk` retain cumulative
+`lf_qprwrk` and `lf_qpewrk` retain cumulative
 RKL2-applied owned-face contractions of capped parallel and perpendicular
-heat flux with discrete temperature jumps. Refined meshes intentionally
-leave these work columns zero because this diagnostic does not include AMR
-flux correction. These are signed operator contractions, not a positivity or
-total-energy closure condition.
+heat flux with discrete temperature jumps. At a coarse/fine interface, the
+fine-side closure faces own the contraction because their fluxes are
+restricted into the coarse update. These are signed operator contractions,
+not a positivity or total-energy closure condition.
 
 The firehose policy is explicit for threshold-sensitive work:
 `cgl_firehose_threshold = parallel` selects the MKS24 production convention

@@ -39,8 +39,7 @@ def _assert_admissible(mhd, user):
     assert mhd["lf_qface"][-1] > 0.0
     for column in ("lf_qprcap", "lf_qpr10", "lf_qpecap", "lf_qpe10"):
         assert 0.0 <= mhd[column][-1] <= mhd["lf_qface"][-1]
-    assert mhd["lf_qprwrk"][-1] == 0.0
-    assert mhd["lf_qpewrk"][-1] == 0.0
+    assert abs(mhd["lf_qprwrk"][-1]) + abs(mhd["lf_qpewrk"][-1]) > 0.0
     scale = max(abs(mhd["tot-E"][0]), 1.0e-30)
     residual = abs(mhd["tot-E"][-1] - mhd["tot-E"][0]) / scale
     assert residual < 5.0e-3

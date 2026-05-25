@@ -15,6 +15,7 @@
 #include "athena.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
+#include "mesh/nghbr_index.hpp"
 #include "eos/eos.hpp"
 #include "eos/cgl_physics.hpp"
 #include "diffusion/cgl_landau_fluid.hpp"
@@ -112,6 +113,41 @@ void CGLLFFlux(const CGLLFFaceState &face, const Real gtpar_x, const Real gtpar_
   muflux = qperp_flux/face.bmag;
 }
 
+KOKKOS_INLINE_FUNCTION
+bool OwnsHeatFluxWorkFace(const int m, const int direction, const int face_index,
+                          const int lower, const int upper, const bool multilevel,
+                          const int my_level, const DualArray2D<NeighborBlock> &nghbr) {
+  if (face_index > lower && face_index <= upper) {
+    return true;
+  }
+  if (face_index != lower && face_index != upper + 1) {
+    return false;
+  }
+  if (!multilevel) {
+    return face_index == lower;
+  }
+
+  const int side = (face_index == lower) ? -1 : 1;
+  for (int n1 = 0; n1 < 2; ++n1) {
+    for (int n2 = 0; n2 < 2; ++n2) {
+      const int neighbor = (direction == 0) ? NeighborIndex(side, 0, 0, n1, n2)
+                         : ((direction == 1) ? NeighborIndex(0, side, 0, n1, n2)
+                                             : NeighborIndex(0, 0, side, n1, n2));
+      if (nghbr.d_view(m, neighbor).gid < 0) {
+        continue;
+      }
+      const int neighbor_level = nghbr.d_view(m, neighbor).lev;
+      if (face_index == lower && neighbor_level > my_level) {
+        return false;
+      }
+      if (face_index == upper + 1 && neighbor_level < my_level) {
+        return true;
+      }
+    }
+  }
+  return face_index == lower;
+}
+
 } // namespace
 
 CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
@@ -206,8 +242,10 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
 
   const bool multi_d = pmy_pack->pmesh->multi_d;
   const bool three_d = pmy_pack->pmesh->three_d;
-  const bool work_supported = !pmy_pack->pmesh->multilevel;
+  const bool multilevel = pmy_pack->pmesh->multilevel;
   auto size = pmy_pack->pmb->mb_size;
+  auto &nghbr = pmy_pack->pmb->nghbr;
+  auto &mblev = pmy_pack->pmb->mb_lev;
   const Real lf_k = lf_k_parallel;
   const bool local = lf_coeff_local;
   const Real cpar0 = lf_c_parallel0;
@@ -263,7 +301,8 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       if (qpar_ratio > 10.0) qstats.the_array[2] += 1.0;
       if (qperp_ratio > 1.0) qstats.the_array[3] += 1.0;
       if (qperp_ratio > 10.0) qstats.the_array[4] += 1.0;
-      if (work_supported && i <= ie) {
+      if (OwnsHeatFluxWorkFace(m, 0, i, is, ie, multilevel, mblev.d_view(m),
+                               nghbr)) {
         const Real area = size.d_view(m).dx2*size.d_view(m).dx3;
         qstats.the_array[5] -= area*qpar_flux*(tpar(m,k,j,i) - tpar(m,k,j,i-1));
         qstats.the_array[6] -= area*qperp_flux*(tperp(m,k,j,i) - tperp(m,k,j,i-1));
@@ -327,7 +366,8 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       if (qpar_ratio > 10.0) qstats.the_array[2] += 1.0;
       if (qperp_ratio > 1.0) qstats.the_array[3] += 1.0;
       if (qperp_ratio > 10.0) qstats.the_array[4] += 1.0;
-      if (work_supported && j <= je) {
+      if (OwnsHeatFluxWorkFace(m, 1, j, js, je, multilevel, mblev.d_view(m),
+                               nghbr)) {
         const Real area = size.d_view(m).dx1*size.d_view(m).dx3;
         qstats.the_array[5] -= area*qpar_flux*(tpar(m,k,j,i) - tpar(m,k,j-1,i));
         qstats.the_array[6] -= area*qperp_flux*(tperp(m,k,j,i) - tperp(m,k,j-1,i));
@@ -388,7 +428,8 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       if (qpar_ratio > 10.0) qstats.the_array[2] += 1.0;
       if (qperp_ratio > 1.0) qstats.the_array[3] += 1.0;
       if (qperp_ratio > 10.0) qstats.the_array[4] += 1.0;
-      if (work_supported && k <= ke) {
+      if (OwnsHeatFluxWorkFace(m, 2, k, ks, ke, multilevel, mblev.d_view(m),
+                               nghbr)) {
         const Real area = size.d_view(m).dx1*size.d_view(m).dx2;
         qstats.the_array[5] -= area*qpar_flux*(tpar(m,k,j,i) - tpar(m,k-1,j,i));
         qstats.the_array[6] -= area*qperp_flux*(tperp(m,k,j,i) - tperp(m,k-1,j,i));

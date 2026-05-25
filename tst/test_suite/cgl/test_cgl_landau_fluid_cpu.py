@@ -320,6 +320,7 @@ def test_cgl_lf_amr_conserved_prolongation_stays_admissible():
         assert np.max(user["bad_state"]) == 0.0
         assert np.all(np.isfinite(user["abs_anis"]))
         _assert_clean_lf_history(mhd)
+        assert abs(mhd["lf_qprwrk"][-1]) + abs(mhd["lf_qpewrk"][-1]) > 0.0
         energy_scale = max(abs(mhd["tot-E"][0]), 1.0e-30)
         energy_residual = abs(mhd["tot-E"][-1] - mhd["tot-E"][0]) / energy_scale
         assert energy_residual < 5.0e-3
