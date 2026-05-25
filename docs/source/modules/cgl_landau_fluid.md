@@ -195,7 +195,9 @@ activity and retained snapshots supply spatial diagnostics.
 Paper-standard input definitions and the limiter-frequency scan live under
 `inputs/cgl_lf_paper/`. They encode the standard `192x192x384` domain,
 duration, hard-wall baseline, physical forcing shell, binary snapshot
-cadence, and analysis window. The `paper-standard` and `paper-nulim`
+cadence, and analysis window. The nine standard definitions cover all eight
+active/passive, Alfvenic/random beta-10/beta-100 series in MKS24 Figure 2(b)
+plus the active Alfvenic beta-1 case. The `paper-standard` and `paper-nulim`
 workflows require explicit production authorization; the presence of these
 decks is not evidence that paper-scale runs have been executed.
 

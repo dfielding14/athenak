@@ -455,6 +455,22 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
                 "paper_standard_active_random_beta10",
                 prefix + "cgl_lf_paper_standard_active_random_beta10.athinput",
             ),
+            CaseSpec(
+                "paper_standard_active_random_beta100",
+                prefix + "cgl_lf_paper_standard_active_random_beta100.athinput",
+            ),
+            CaseSpec(
+                "paper_standard_passive_alfvenic_beta100",
+                prefix + "cgl_lf_paper_standard_passive_alfvenic_beta100.athinput",
+            ),
+            CaseSpec(
+                "paper_standard_passive_random_beta10",
+                prefix + "cgl_lf_paper_standard_passive_random_beta10.athinput",
+            ),
+            CaseSpec(
+                "paper_standard_passive_random_beta100",
+                prefix + "cgl_lf_paper_standard_passive_random_beta100.athinput",
+            ),
         ]
     if workflow == "paper-convergence":
         source = (

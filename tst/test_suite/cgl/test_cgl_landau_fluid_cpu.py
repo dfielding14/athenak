@@ -694,13 +694,26 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
     input_paths += sorted(
         PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_nulim_*.athinput")
     )
-    assert len(input_paths) == 8
+    assert len(input_paths) == 12
+    standard_input_names = {
+        path.name
+        for path in PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_standard_*.athinput")
+    }
+    workflow_standard_names = {
+        Path(case.input_path).name
+        for case in workflow.workflow_cases("paper-standard")
+    }
+    assert workflow_standard_names == standard_input_names
     hardwall_paths = {
         "cgl_lf_paper_standard_active_alfvenic_beta1.athinput",
         "cgl_lf_paper_standard_active_alfvenic_beta10.athinput",
         "cgl_lf_paper_standard_active_alfvenic_beta100.athinput",
         "cgl_lf_paper_standard_active_random_beta10.athinput",
+        "cgl_lf_paper_standard_active_random_beta100.athinput",
         "cgl_lf_paper_standard_passive_alfvenic_beta10.athinput",
+        "cgl_lf_paper_standard_passive_alfvenic_beta100.athinput",
+        "cgl_lf_paper_standard_passive_random_beta10.athinput",
+        "cgl_lf_paper_standard_passive_random_beta100.athinput",
         "cgl_lf_paper_nulim_beta100_hardwall.athinput",
     }
     for input_path in input_paths:

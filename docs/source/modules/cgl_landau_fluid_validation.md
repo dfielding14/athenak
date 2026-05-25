@@ -127,8 +127,10 @@ python3 scripts/cgl_lf_workflow.py paper-nulim \
 Their inputs use `192x192x384`, `tlim = 10`, full-field binary snapshots,
 checkpoints, and the `t = [8,10]` analysis window. Without
 `--authorize-paper-execution` the workflow rejects these expensive modes
-before creating a run bundle. Defining these inputs does not constitute a
-paper-standard execution or reproduction result.
+before creating a run bundle. The nine `paper-standard` definitions include
+the eight active/passive, Alfvenic/random beta-10/beta-100 histories plotted
+in MKS24 Figure 2(b), plus the active Alfvenic beta-1 case. Defining these
+inputs does not constitute a paper-standard execution or reproduction result.
 In CGL primitive snapshots, legacy `eint` is `p_parallel` and the dedicated
 `p_perp` output supplies the perpendicular pressure required for paper
 anisotropy analysis.
@@ -168,9 +170,10 @@ under `figures/paper/`. When an externally prepared reference-curve manifest
 is supplied, it validates curve/source checksums and reported pointwise
 uncertainties, computes uncertainty-normalized residuals for supported
 snapshot products and threshold-volume history series, and renders
-`paper_reference_comparisons.pdf`. Obtaining or explicitly digitizing the
-actual MKS24 curves, exact time-integrated/production local budget closure,
-and production comparisons remain to be completed. For retained LF histories, the analyzer
+`paper_reference_comparisons.pdf`. Figure 2(b) vector-curve extraction is
+available below; remaining MKS24 panel curves, exact
+time-integrated/production local budget closure, and production comparisons
+remain to be completed. For retained LF histories, the analyzer
 also reports the RKL2-applied capped-face heat-flux contractions retained in
 `lf_qprwrk` and `lf_qpewrk`. On refined meshes these contractions count
 coarse/fine interfaces from their fine-side closure faces; they are not a
@@ -270,9 +273,22 @@ their redistribution permission is separately established. Archive the
 staging manifest or immutable reference path with every quantitative paper
 comparison bundle. The staged official `2405.02418v2` source inventory
 contains TeX and rendered figure PDFs, not machine-readable curve tables.
-Quantitative panel comparison therefore still requires a recorded
-digitization procedure or a separately provenance-tracked numerical
-reference source.
+For Figure 2(b), extract the plotted vector paths from the pinned source PDF
+into an ignored or archival results area:
+
+```bash
+python3 scripts/digitize_cgl_lf_mks24_fig2b.py \
+  /path/to/arXiv-2405.02418v2/source/fig2b.pdf \
+  /path/to/arXiv-2405.02418v2/digitized_fig2b_v1
+```
+
+The utility refuses a PDF whose SHA-256 is not the pinned Figure 2(b)
+checksum, copies the source figure alongside its generated manifest, and
+writes the eight active/passive unstable-volume histories as CSV curves. It
+records an absolute `0.0025` plotted-line digitization uncertainty and omits
+vertices hidden above the panel's `0.8` vertical limit. Other quantitative
+panels still require a recorded digitization procedure or a separately
+provenance-tracked numerical reference source.
 
 An optional curve manifest passed to `paper-analyze --reference-curves`
 has `schema_version = 1`, a `provenance` object, and one or more curve
