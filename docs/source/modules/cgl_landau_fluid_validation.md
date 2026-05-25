@@ -159,7 +159,10 @@ pressure-work split,
 `integral[p_perp div(u) - Delta p (b b : grad u)] dV`. The anisotropic
 stress term is compared with the direct pressure-transfer integral and is
 labelled as active feedback or passive-only interpretation when that model
-choice is archived. For windows with at least two retained snapshots, the
+choice is archived. The pressure-transfer output also records the MKS24
+dimensionless normalization
+`T_Delta_p/T_total`, where the paper approximates
+`T_total ~= E_K (2 pi u_rms/L_perp)`. For windows with at least two retained snapshots, the
 ensemble record also reports cadence-limited trapezoidal time-integral
 estimates of these pressure powers. When the run manifest contains the complete LF closure
 choices, the analyzer also reconstructs a cell-centered heat-flux smoothing proxy,
@@ -177,11 +180,12 @@ is supplied, it validates curve/source checksums and reported pointwise
 uncertainties, computes uncertainty-normalized residuals for supported
 snapshot products and threshold-volume history series, and renders
 `paper_reference_comparisons.pdf`. Figure 2(b) vector-curve extraction is
-available below, together with dimensionless Figure 12 alignment extraction
-and dimensionless Figure 13(b) limiter-PDF curves. Dimensional Figure 12
-spectra and Figure 13(a),(c) curves remain excluded because the paper's
+available below, together with dimensionless Figure 7 lower-panel transfer,
+Figure 12 alignment, and Figure 13(b),(d) limiter curves. Dimensional
+Figure 7 upper spectra, Figure 12 lower spectra, and Figure 13(a),(c) curves
+remain excluded because the paper's
 reported code-unit pressure scale is not yet transformed to the AthenaK
-`v_A = 1` convention; Figure 13(d) additionally requires `T_total`.
+`v_A = 1` convention.
 Remaining MKS24 panel curves, exact
 time-integrated/production local budget closure, and production comparisons
 remain to be completed. For retained LF histories, the analyzer
@@ -299,6 +303,21 @@ writes the eight active/passive unstable-volume histories as CSV curves. It
 records an absolute `0.0025` plotted-line digitization uncertainty and omits
 vertices hidden above the panel's `0.8` vertical limit.
 
+For Figure 7, extract the directly comparable lower-panel transfer-ratio
+curves from the pinned source PDF:
+
+```bash
+python3 scripts/digitize_cgl_lf_mks24_fig7.py \
+  /path/to/arXiv-2405.02418v2/source/fig7.pdf \
+  /path/to/arXiv-2405.02418v2/digitized_fig7_v1
+```
+
+This extractor emits the active random, active Alfvenic, and passive
+Alfvenic beta-10 curves as
+`pressure_transfer.transfer_normalized_by_total`, with absolute `0.025`
+digitization uncertainty. The plotted upper-panel gradient spectra remain
+excluded pending the paper-to-AthenaK dimensional conversion.
+
 For Figure 12, extract the alignment-peak paths from the pinned source PDF:
 
 ```bash
@@ -326,23 +345,24 @@ python3 scripts/cgl_lf_workflow.py paper-analyze \
 ```
 
 For Figure 13, extract the directly comparable dimensionless `beta Delta` PDF
-paths from the four checksum-pinned panel PDFs:
+and normalized pressure-transfer paths from the four checksum-pinned panel
+PDFs:
 
 ```bash
 python3 scripts/digitize_cgl_lf_mks24_fig13.py \
   /path/to/arXiv-2405.02418v2/source \
-  /path/to/arXiv-2405.02418v2/digitized_fig13_v2
+  /path/to/arXiv-2405.02418v2/digitized_fig13_v3
 ```
 
 The extractor maps panel (b) to `pdf.beta_delta` for the three
-`paper-nulim` cases plus the passive beta-100 comparison. It records
-five-percent relative digitization uncertainty and omits
-plotted-boundary-clipped vertices. Panels (a), (c), and (d) are copied and
-checksum-recorded for audit context but are not emitted as comparison curves.
-Panel (a) is dimensionful, panel (c) is plotted as
-`bhat bhat : grad(u) / <B^2>`, and panel (d) is plotted as
-`T_Delta p / T_total`; none currently has a qualified AthenaK comparison
-product under the paper code-unit evidence.
+`paper-nulim` cases plus the passive beta-100 comparison and panel (d) to
+`pressure_transfer.transfer_normalized_by_total` for those same cases. It
+records five-percent relative uncertainty for the panel-(b) PDFs, absolute
+`0.025` uncertainty for panel-(d) transfer ratios, and omits
+plotted-boundary-clipped vertices. Panels (a) and (c) are copied and
+checksum-recorded for audit context but are not emitted as comparison curves:
+panel (a) is dimensionful and panel (c) is plotted as
+`bhat bhat : grad(u) / <B^2>`.
 
 Other quantitative panels still require a recorded digitization procedure,
 a matching analyzer product, or a separately provenance-tracked numerical
@@ -356,6 +376,7 @@ pairs, together with the digitization tool and uncertainty procedure.
 Each CSV curve must contain ordered `x`, `y`, and positive `y_uncertainty`
 columns; its entry records `data_sha256`, target analysis `case`, supported
 `product` (for example `spectra.grad_parallel_delta_p` or
+`pressure_transfer.transfer_normalized_by_total` or
 `alignment_peak.cos_theta` or `history.unstable_fraction`), and optional
 `interpolation` (`linear` or `loglog`). The analyzer fails closed on missing
 uncertainty, checksum mismatches, or out-of-domain coordinates.

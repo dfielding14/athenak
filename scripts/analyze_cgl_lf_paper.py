@@ -715,12 +715,15 @@ def pressure_transfer(rho: np.ndarray, velocity: list[np.ndarray],
 
     This implements integral <sqrt(rho) u>_k dot [(B/sqrt(rho)) dot grad
     ((Delta p/B^2) B)], with filtering in k_perp shells.
+    MKS24 normalizes this diagnostic by the Kolmogorov estimate
+    T_total ~= E_K (2 pi u_rms / L_perp).
     """
 
+    if not np.isfinite(rho).all() or np.any(rho <= 0.0):
+        raise ValueError("pressure-transfer normalization requires positive density")
     bsqr = sum(component * component for component in magnetic)
     safe_bsqr = np.maximum(bsqr, np.finfo(float).tiny)
-    safe_rho = np.maximum(rho, np.finfo(float).tiny)
-    root_rho = np.sqrt(safe_rho)
+    root_rho = np.sqrt(rho)
     weighted_velocity = [root_rho * component for component in velocity]
     stress_vector = [delta_p * component / safe_bsqr for component in magnetic]
     directional = []
@@ -740,10 +743,36 @@ def pressure_transfer(rho: np.ndarray, velocity: list[np.ndarray],
         values.append(volume * float(np.mean(sum(
             filtered[index] * directional[index] for index in range(3)
         ))))
+    kinetic_energy = volume * float(np.mean(
+        0.5 * rho * sum(component * component for component in velocity)
+    ))
+    velocity_rms = float(np.sqrt(np.mean(
+        sum(component * component for component in velocity)
+    )))
+    lperp = math.sqrt(lengths[0] * lengths[1])
+    total_transfer_rate = kinetic_energy * (2.0 * math.pi * velocity_rms / lperp)
+    normalization_available = bool(
+        math.isfinite(total_transfer_rate)
+        and total_transfer_rate > np.finfo(float).tiny
+    )
     return {
         "dk": dk,
         "k_perp": (np.arange(len(values), dtype=float) * dk).tolist(),
         "transfer": values,
+        "normalization_available": normalization_available,
+        "normalization_definition": (
+            "T_total ~= E_K (2 pi u_rms / L_perp), with "
+            "E_K = integral[0.5 rho |u|^2] dV, "
+            "u_rms = sqrt(<|u|^2>), and L_perp = sqrt(Lx Ly)"
+        ),
+        "kinetic_energy": kinetic_energy,
+        "velocity_rms": velocity_rms,
+        "perpendicular_outer_scale": lperp,
+        "total_transfer_rate": total_transfer_rate,
+        "transfer_normalized_by_total": (
+            [value / total_transfer_rate for value in values]
+            if normalization_available else None
+        ),
         "direct_real_space": direct,
         "shell_sum": float(sum(values)),
         "closure_error": float(sum(values) - direct),
@@ -933,6 +962,9 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
     for sample in samples[1:]:
         alignment_names.intersection_update(sample["alignment"].keys())
     transfer = [sample["pressure_transfer"] for sample in samples]
+    normalized_transfer_available = all(
+        item.get("normalization_available", False) for item in transfer
+    )
     pressure_work = [sample["pressure_work_decomposition"] for sample in samples]
     heat_flux = [
         sample["heat_flux_transport_proxy"] for sample in samples
@@ -1069,6 +1101,28 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
             "transfer": np.mean(
                 [np.asarray(item["transfer"], dtype=float) for item in transfer], axis=0
             ).tolist(),
+            "normalization_available": normalized_transfer_available,
+            "normalization_definition": transfer[0]["normalization_definition"],
+            "kinetic_energy_mean": float(np.mean(
+                [item["kinetic_energy"] for item in transfer]
+            )),
+            "velocity_rms_mean": float(np.mean(
+                [item["velocity_rms"] for item in transfer]
+            )),
+            "perpendicular_outer_scale": transfer[0]["perpendicular_outer_scale"],
+            "total_transfer_rate_mean": float(np.mean(
+                [item["total_transfer_rate"] for item in transfer]
+            )),
+            "transfer_normalized_by_total": (
+                np.mean(
+                    [
+                        np.asarray(item["transfer_normalized_by_total"], dtype=float)
+                        for item in transfer
+                    ],
+                    axis=0,
+                ).tolist()
+                if normalized_transfer_available else None
+            ),
             "direct_real_space_mean": float(np.mean(
                 [item["direct_real_space"] for item in transfer]
             )),
@@ -1189,6 +1243,7 @@ def synthetic_test() -> dict[str, object]:
         correlated_fields, lengths, 0.0, 16, [2], model_choices=model
     )
     correlated = correlated_record["pressure_work_decomposition"]
+    correlated_transfer = correlated_record["pressure_transfer"]
     passive_model = dict(model)
     passive_model["passive_delta"] = "true"
     passive_work = analyze_fields(
@@ -1206,6 +1261,10 @@ def synthetic_test() -> dict[str, object]:
         and relative_gradient_error < 7.0e-3
         and abs(float(transfer["direct_real_space"])) < 1.0e-14
         and abs(float(transfer["closure_error"])) < 1.0e-14
+        and transfer["normalization_available"]
+        and np.isfinite(
+            np.asarray(transfer["transfer_normalized_by_total"], dtype=float)
+        ).all()
         and finite_alignment
         and np.isfinite(strain).all()
         and heat_flux["available"]
@@ -1213,6 +1272,7 @@ def synthetic_test() -> dict[str, object]:
         and abs(float(heat_flux["regularized_parallel_power"])) < 1.0e-14
         and abs(float(pressure_work["anisotropic_stress_power"])) < 1.0e-14
         and correlated["anisotropic_stress_power"] < 0.0
+        and correlated_transfer["normalization_available"]
         and abs(float(
             correlated["mks24_transfer_minus_anisotropic_stress_power"]
         )) < 1.0e-14
@@ -1228,6 +1288,15 @@ def synthetic_test() -> dict[str, object]:
         "parallel_gradient_relative_error": relative_gradient_error,
         "zero_transfer": transfer["direct_real_space"],
         "transfer_closure_error": transfer["closure_error"],
+        "finite_normalized_transfer": bool(
+            transfer["normalization_available"]
+            and np.isfinite(
+                np.asarray(transfer["transfer_normalized_by_total"], dtype=float)
+            ).all()
+        ),
+        "positive_correlated_transfer_normalization": (
+            correlated_transfer["total_transfer_rate"]
+        ),
         "finite_alignment": finite_alignment,
         "finite_strain_pdf": bool(np.isfinite(strain).all()),
         "positive_perpendicular_heat_flux_proxy": (
@@ -1385,6 +1454,18 @@ def analyzed_product_curve(ensemble: dict[str, object], product: str,
         return (
             np.asarray(record["k_perp"], dtype=float),
             np.asarray(record["transfer"], dtype=float),
+        )
+    if product == "pressure_transfer.transfer_normalized_by_total":
+        record = ensemble.get("pressure_transfer", {})
+        if (
+            not isinstance(record, dict)
+            or not record.get("normalization_available", False)
+            or record.get("transfer_normalized_by_total") is None
+        ):
+            raise ValueError(f"analyzed product is missing: {product}")
+        return (
+            np.asarray(record["k_perp"], dtype=float),
+            np.asarray(record["transfer_normalized_by_total"], dtype=float),
         )
     if family == "alignment":
         products = ensemble.get("alignment", {})

@@ -140,11 +140,16 @@ def plot_transfer_and_alignment(ensembles: dict[str, dict[str, object]],
 
     if not ensembles:
         return
+    normalized = all(
+        ensemble.get("pressure_transfer", {}).get("normalization_available", False)
+        for ensemble in ensembles.values()
+    )
     fig, axes = plt.subplots(1, 2, figsize=(8.4, 3.25))
     for name, ensemble in ensembles.items():
         transfer = ensemble["pressure_transfer"]
         k = np.asarray(transfer["k_perp"], dtype=float)
-        values = np.asarray(transfer["transfer"], dtype=float)
+        key = "transfer_normalized_by_total" if normalized else "transfer"
+        values = np.asarray(transfer[key], dtype=float)
         selected = k > 0.0
         axes[0].plot(k[selected], values[selected], label=name)
         shells: list[float] = []
@@ -159,7 +164,10 @@ def plot_transfer_and_alignment(ensembles: dict[str, dict[str, object]],
             axes[1].plot(shells, peaks, marker="o", label=name)
     axes[0].axhline(0.0, color="0.3", lw=0.8)
     axes[0].set_xlabel(r"$k_\perp$")
-    axes[0].set_ylabel(r"$\mathcal{T}_{\Delta p}$")
+    axes[0].set_ylabel(
+        r"$\mathcal{T}_{\Delta p}/\mathcal{T}_{\rm total}$"
+        if normalized else r"$\mathcal{T}_{\Delta p}$"
+    )
     axes[0].set_title("Anisotropic-pressure transfer")
     axes[1].set_xlabel(r"$k_\perp$ shell")
     axes[1].set_ylabel(r"peak $|\cos\theta|$")

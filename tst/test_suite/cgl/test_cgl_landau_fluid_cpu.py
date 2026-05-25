@@ -802,6 +802,11 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         assert abs(
             diagnostics["synthetic_test"]["correlated_transfer_work_difference"]
         ) < 1.0e-14
+        assert diagnostics["synthetic_test"]["finite_normalized_transfer"]
+        assert (
+            diagnostics["synthetic_test"]["positive_correlated_transfer_normalization"]
+            > 0.0
+        )
         assert diagnostics["synthetic_test"]["passive_pressure_work_is_diagnostic_only"]
         assert abs(
             diagnostics["synthetic_test"]["constant_power_quadrature_error"]
@@ -810,12 +815,16 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         assert "beta_delta" in snapshot["pdf"]
         assert "delta_p" in snapshot["spectra"]
         assert abs(snapshot["pressure_transfer"]["closure_error"]) < 1.0e-12
+        assert snapshot["pressure_transfer"]["normalization_available"]
         assert snapshot["pressure_work_decomposition"]["available"]
         assert np.isfinite(
             snapshot["pressure_work_decomposition"]["anisotropic_stress_power"]
         )
         assert diagnostics["snapshot_ensemble"]["snapshot_count"] == 1
         assert "beta_delta" in diagnostics["snapshot_ensemble"]["pdf"]
+        assert diagnostics["snapshot_ensemble"]["pressure_transfer"][
+            "normalization_available"
+        ]
         assert diagnostics["snapshot_ensemble"]["pressure_work_decomposition"][
             "available"
         ]
@@ -863,6 +872,22 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         )
         alignment_curve_digest = hashlib.sha256(
             alignment_curve_path.read_bytes()
+        ).hexdigest()
+        normalized_transfer = diagnostics["snapshot_ensemble"]["pressure_transfer"]
+        transfer_sampled = list(zip(
+            normalized_transfer["k_perp"],
+            normalized_transfer["transfer_normalized_by_total"],
+        ))[1:4]
+        assert len(transfer_sampled) >= 2
+        transfer_curve_path = reference_dir / "normalized_transfer.csv"
+        transfer_curve_path.write_text(
+            "x,y,y_uncertainty\n" + "".join(
+                f"{x:.17g},{y:.17g},{max(abs(y) * 0.01, 1.0e-12):.17g}\n"
+                for x, y in transfer_sampled
+            )
+        )
+        transfer_curve_digest = hashlib.sha256(
+            transfer_curve_path.read_bytes()
         ).hexdigest()
         history_curve_path = reference_dir / "unstable_fraction.csv"
         history_sampled = list(
@@ -913,6 +938,13 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
                 "data_sha256": alignment_curve_digest,
                 "interpolation": "linear",
             }, {
+                "id": "normalized_transfer_exact",
+                "case": "direct",
+                "product": "pressure_transfer.transfer_normalized_by_total",
+                "data_file": transfer_curve_path.name,
+                "data_sha256": transfer_curve_digest,
+                "interpolation": "linear",
+            }, {
                 "id": "unstable_fraction_exact",
                 "case": "direct",
                 "product": "history.unstable_fraction",
@@ -951,6 +983,9 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         alignment_comparison = reference["comparisons"]["alignment_peak_exact"]
         assert alignment_comparison["sample_count"] == len(alignment_sampled)
         assert alignment_comparison["maximum_absolute_residual"] < 1.0e-14
+        transfer_comparison = reference["comparisons"]["normalized_transfer_exact"]
+        assert transfer_comparison["sample_count"] == len(transfer_sampled)
+        assert transfer_comparison["maximum_absolute_residual"] < 1.0e-14
         history_comparison = reference["comparisons"]["unstable_fraction_exact"]
         assert history_comparison["sample_count"] == len(history_sampled)
         assert history_comparison["maximum_absolute_residual"] < 1.0e-14

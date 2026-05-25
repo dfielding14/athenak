@@ -36,6 +36,13 @@ PANEL_CONFIG = {
         ),
         "marker": b"60 215 m",
     },
+    "fig13d.pdf": {
+        "plot": (82.0, 571.0, 20.0, 169.0),
+        "group": re.compile(
+            rb"q\n6 0 0 6 555 2493 cm\n(.*?)\nQ", re.DOTALL
+        ),
+        "marker": b"82 169 m",
+    },
 }
 POINT_RE = re.compile(
     r"^([-+]?[0-9]*\.?[0-9]+) ([-+]?[0-9]*\.?[0-9]+) ([ml])$",
@@ -43,6 +50,7 @@ POINT_RE = re.compile(
 )
 COLOR_RE = re.compile(r"^([0-9.]+ [0-9.]+ [0-9.]+) RG$", re.MULTILINE)
 PDF_RELATIVE_Y_UNCERTAINTY = 0.05
+TRANSFER_ABSOLUTE_Y_UNCERTAINTY = 0.025
 CURVES = {
     ("fig13b.pdf", "0 0.4471 0.7412", "solid"): (
         "fig13b_beta_delta_nulim_20",
@@ -66,6 +74,30 @@ CURVES = {
         "fig13b_beta_delta_passive_hardwall",
         "paper_standard_passive_alfvenic_beta100",
         "pdf.beta_delta",
+        "linear",
+    ),
+    ("fig13d.pdf", "0 0.4471 0.7412", "solid"): (
+        "fig13d_transfer_nulim_20",
+        "paper_nulim_beta100_20",
+        "pressure_transfer.transfer_normalized_by_total",
+        "linear",
+    ),
+    ("fig13d.pdf", "0.851 0.3255 0.098", "solid"): (
+        "fig13d_transfer_nulim_200",
+        "paper_nulim_beta100_200",
+        "pressure_transfer.transfer_normalized_by_total",
+        "linear",
+    ),
+    ("fig13d.pdf", "0.4941 0.1843 0.5569", "solid"): (
+        "fig13d_transfer_nulim_hardwall",
+        "paper_nulim_beta100_hardwall",
+        "pressure_transfer.transfer_normalized_by_total",
+        "linear",
+    ),
+    ("fig13d.pdf", "0.4941 0.1843 0.5569", "dashed"): (
+        "fig13d_transfer_passive_hardwall",
+        "paper_standard_passive_alfvenic_beta100",
+        "pressure_transfer.transfer_normalized_by_total",
         "linear",
     ),
 }
@@ -103,13 +135,19 @@ def pdf_content(pdf: bytes, marker: bytes) -> bytes:
 def map_coordinate(panel: str, raw_x: float, raw_y: float) -> tuple[float, float]:
     """Map plotted vector coordinates onto the panel's physical axes."""
 
-    if panel != "fig13b.pdf":
-        raise ValueError(f"no admitted coordinate mapping for {panel}")
-    x = -3.0 + (raw_x - 60.0) / (279.0 - 60.0) * 5.0
-    y = 10.0 ** (
-        -(raw_y - 36.87377167) * 2.0 / (155.62458801 - 36.87377167)
-    )
-    return x, y
+    if panel == "fig13b.pdf":
+        x = -3.0 + (raw_x - 60.0) / (279.0 - 60.0) * 5.0
+        y = 10.0 ** (
+            -(raw_y - 36.87377167) * 2.0 / (155.62458801 - 36.87377167)
+        )
+        return x, y
+    if panel == "fig13d.pdf":
+        x = 10.0 * 10.0 ** (
+            (raw_x - 138.91017151) / (506.30499268 - 138.91017151)
+        )
+        y = 0.5 - (raw_y - 20.0) * 0.5 / (53.11111069 - 20.0)
+        return x, y
+    raise ValueError(f"no admitted coordinate mapping for {panel}")
 
 
 def extract_curves(
@@ -182,8 +220,13 @@ def write_curves(source_dir: Path, output_dir: Path) -> Path:
             writer = csv.writer(stream)
             writer.writerow(("x", "y", "y_uncertainty"))
             for x, y in curves[key]:
+                uncertainty = (
+                    PDF_RELATIVE_Y_UNCERTAINTY * y
+                    if key[0] == "fig13b.pdf"
+                    else TRANSFER_ABSOLUTE_Y_UNCERTAINTY
+                )
                 writer.writerow(
-                    (f"{x:.17g}", f"{y:.17g}", f"{PDF_RELATIVE_Y_UNCERTAINTY * y:.17g}")
+                    (f"{x:.17g}", f"{y:.17g}", f"{uncertainty:.17g}")
                 )
         point_counts[curve_id] = len(curves[key])
         entries.append(
@@ -201,7 +244,8 @@ def write_curves(source_dir: Path, output_dir: Path) -> Path:
         "provenance": {
             "method": "digitized",
             "source_description": (
-                "MKS24 arXiv:2405.02418v2 source/fig13b.pdf; "
+                "MKS24 arXiv:2405.02418v2 source/fig13b.pdf and "
+                "source/fig13d.pdf; "
                 "vector polyline vertices extracted "
                 "through tick-calibrated plotted axes"
             ),
@@ -210,15 +254,17 @@ def write_curves(source_dir: Path, output_dir: Path) -> Path:
                     "source_figure": name,
                     "source_figure_sha256": digests[name],
                 }
-                for name in ("fig13b.pdf",)
+                for name in ("fig13b.pdf", "fig13d.pdf")
             ],
             "digitization_tool": Path(__file__).name,
             "uncertainty_description": (
                 "Five-percent relative y uncertainty for dimensionless "
-                "beta-Delta PDF curves, conservatively covering plotted "
-                "stroke width and tick-calibrated mapping; vertices clipped "
-                "at plotting boundaries are omitted. Dimensionful panels are "
-                "excluded pending a paper-to-AthenaK code-unit transform."
+                "beta-Delta PDF curves and absolute 0.025 uncertainty for "
+                "dimensionless T_Delta_p/T_total transfer curves, "
+                "conservatively covering plotted stroke width and "
+                "tick-calibrated mapping; vertices clipped at plotting "
+                "boundaries are omitted. Dimensionful panels are excluded "
+                "pending a paper-to-AthenaK code-unit transform."
             ),
         },
         "curves": entries,
@@ -234,9 +280,18 @@ def write_curves(source_dir: Path, output_dir: Path) -> Path:
                 "x_linear_ticks": [[60.0, -3.0], [279.0, 2.0]],
                 "y_log_ticks": [[36.87377167, 1.0], [155.62458801, 1.0e-2]],
             },
+            "fig13d.pdf": {
+                "x_log_ticks": [[138.91017151, 10.0], [506.30499268, 100.0]],
+                "y_linear_ticks": [[20.0, 0.5], [53.11111069, 0.0]],
+            },
         },
         "relative_y_uncertainty": {
             "pdf.beta_delta": PDF_RELATIVE_Y_UNCERTAINTY,
+        },
+        "absolute_y_uncertainty": {
+            "pressure_transfer.transfer_normalized_by_total": (
+                TRANSFER_ABSOLUTE_Y_UNCERTAINTY
+            ),
         },
         "point_counts": point_counts,
         "clipped_vertices_omitted": clipped,
@@ -250,10 +305,6 @@ def write_curves(source_dir: Path, output_dir: Path) -> Path:
                 "The plotted strain PDF uses "
                 "bhat bhat : grad(u) / <B^2>; its scale requires the "
                 "unresolved paper-to-AthenaK code-unit transform."
-            ),
-            "fig13d.pdf": (
-                "The plotted pressure-transfer ratio includes T_total; "
-                "pressure_transfer.transfer currently exposes T_Delta_p only."
             ),
         },
         "curve_manifest": manifest_path.name,

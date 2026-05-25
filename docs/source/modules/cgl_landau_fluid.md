@@ -214,7 +214,10 @@ current PDF, local-field pressure/velocity-gradient spectral,
 pressure-transfer, CGL pressure-work decomposition, and alignment
 diagnostics with synthetic numerical checks. The pressure-work product splits
 `p_perp div(u)` from `-Delta p (b b : grad u)` and compares the latter with
-the direct transfer integral. Multi-snapshot ensembles include trapezoidal
+the direct transfer integral. The pressure-transfer product additionally
+reports the MKS24 dimensionless ratio
+`T_Delta_p/T_total`, using the stated estimate
+`T_total ~= E_K (2 pi u_rms/L_perp)`. Multi-snapshot ensembles include trapezoidal
 time-integral estimates for this product and the reconstructed heat-flux
 proxy; both remain snapshot-derived. For decks enabling
 `cgl_lf_record_pressure_work`, interval history analysis additionally reports
@@ -229,19 +232,19 @@ With `--reference-curves <manifest.json>`, `paper-analyze` also accepts
 external numerical or digitized curves only when their manifest records
 provenance, SHA-256 digests, and positive per-point `y_uncertainty` values.
 It reports uncertainty-normalized residuals against supported PDF, spectrum,
-transfer, selected-shell alignment-distribution, alignment-peak-versus-
+raw or MKS24-normalized transfer, selected-shell alignment-distribution, alignment-peak-versus-
 `k_perp`, and threshold-volume history products and renders
 `paper_reference_comparisons.pdf`. Use `--alignment-shells` with
 `paper-analyze` when a comparison manifest requires an alignment-peak curve
 over additional shells.
 The staged-reference tooling includes pinned vector extraction for Figure
-2(b), the dimensionless Figure 12 alignment curves, and the dimensionless
-`beta Delta` PDF curves in Figure 13(b). The paper states `p0 = 100` in code
+2(b), Figure 7 lower-panel and Figure 13(d) normalized transfer curves, the
+dimensionless Figure 12 alignment curves, and the dimensionless `beta Delta`
+PDF curves in Figure 13(b). The paper states `p0 = 100` in code
 units for its beta-100 limiter runs, while the equivalent AthenaK
 `v_A = 1` normalization uses `p0 = 50`; until an explicit observable
 conversion is qualified, dimensional Figure 12 spectra and Figure 13(a),(c)
-curves are retained only as excluded audit context. Figure 13(d) also remains
-excluded until its `T_total` denominator is defined as an analysis product.
+curves are retained only as excluded audit context.
 These products are analysis infrastructure; they do not by themselves
 establish statistically converged paper comparisons.
 
