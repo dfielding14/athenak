@@ -37,7 +37,7 @@ class TurbulenceDriver {
   int nlow, nhigh;
   int mode_count;
   Real tcorr, dedt, k_shell_unit;
-  Real injected_work;
+  Real injected_work, injected_work_cycle_start;
   Real expo, exp_prl, exp_prp;
   int driving_type, rseed;
   bool physical_k_shell, isotropic_power_spectrum, record_injected_work;

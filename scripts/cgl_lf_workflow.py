@@ -335,7 +335,7 @@ def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
             "forcing_expo": choice("turb_driving", "expo", "5.0/3.0"),
             "forcing_exp_prp": choice("turb_driving", "exp_prp", "5.0/3.0"),
             "forcing_exp_prl": choice("turb_driving", "exp_prl", "0.0"),
-            "forcing_time_integration": "ou_once_per_cycle_rk_source_beta_dt",
+            "forcing_time_integration": "ou_once_per_cycle_rk_companion_source_work",
         })
     return choices
 
@@ -919,6 +919,10 @@ def evaluate_paper_smoke(case: dict[str, object], root: Path) -> dict[str, objec
         hard_bound_fraction = final_value(user, "hard_vol") / volume
         energy_delta = final_value(mhd, "tot-E") - mhd["tot-E"][0]
         force_work = final_value(user, "force_work") - user["force_work"][0]
+        energy_work_residual = energy_delta - force_work
+        energy_work_scale = max(abs(energy_delta), abs(force_work), 1.0e-30)
+        energy_work_relative_residual = abs(energy_work_residual) / energy_work_scale
+        active_delta = model.get("passive_delta", "false").lower() != "true"
         mode_pass = (
             parallel == 0.0 if forcing_mode == "alfvenic_z_perpendicular"
             else parallel > 0.0 if forcing_mode == "isotropic_random"
@@ -928,6 +932,7 @@ def evaluate_paper_smoke(case: dict[str, object], root: Path) -> dict[str, objec
             "passed": (
                 perpendicular > 0.0 and energy_delta > 0.0
                 and force_work > 0.0 and mode_pass
+                and (not active_delta or energy_work_relative_residual < 1.0e-8)
             ),
             "forcing_mode": forcing_mode,
             "force_perpendicular_squared": perpendicular,
@@ -939,7 +944,10 @@ def evaluate_paper_smoke(case: dict[str, object], root: Path) -> dict[str, objec
             "hard_bound_volume_fraction": hard_bound_fraction,
             "energy_delta": energy_delta,
             "applied_forcing_work": force_work,
-            "energy_minus_applied_work": energy_delta - force_work,
+            "energy_minus_applied_work": energy_work_residual,
+            "energy_work_relative_residual": energy_work_relative_residual,
+            "energy_work_residual_required": active_delta,
+            "energy_work_relative_tolerance": 1.0e-8 if active_delta else None,
         }
     except (OSError, ValueError, KeyError) as error:
         return {"passed": False, "error": str(error)}

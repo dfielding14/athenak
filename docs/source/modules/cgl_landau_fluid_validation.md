@@ -83,11 +83,12 @@ This workflow archives the explicit parallel-firehose policy, forcing mode,
 random seed, correlation time, injection parameter, mode bounds, state
 tables, forcing tables, and the physical-shell/common-spectrum settings that
 select the documented `abs(k) in (2*pi/L_parallel)[1,3]` and `k^-2` forcing.
-Paper decks enable restartable cumulative applied source work. The workflow
-checks clean LF safety diagnostics, positive applied work, zero parallel
+Paper decks enable restartable cumulative RK-integrated applied source work.
+The workflow checks clean LF safety diagnostics, positive applied work, active
+global energy/work residual closure, zero parallel
 forcing for the Alfvenic case, and nonzero parallel forcing for the random
 case. Focused CPU regressions separately check a one-cycle OU transition,
-RK2 source-work identity, and cumulative-work restart continuation. The
+multi-cycle RK2 companion source-work identity, and cumulative-work restart continuation. The
 workflow also archives the explicit passive-Delta choice; a focused
 regression checks that its flow fields are independent of diagnostic initial
 anisotropy. It does not qualify paper-resolution or long-time active/passive
@@ -365,13 +366,15 @@ The `cgl_lf_paper` user history stores volume integrals named `mass`,
 `force_work`. `force_pwr` is an instantaneous proxy; `force_work` is the
 cumulative net energy source actually applied by stage-weighted forcing,
 including its zero-net-momentum projection, when the paper input enables
-`record_injected_work`. Form means or fractions
+`record_injected_work`. It is updated as a companion variable with the same
+explicit-RK recurrence used by the source-modified conserved state. Form means or fractions
 using `volume`; for example, `C_B2 = b4*volume/b2^2 - 1`.
 Threshold-volume columns use the selected firehose policy, whereas
 `hard_vol` is safety-only. For active-Delta bundles, `paper-analyze` compares
 the `force_work` interval difference to the conserved MHD `tot-E` interval
-difference and reports the global residual for qualification. Passive-Delta bundles
-retain applied work but are not labeled as an active-CGL energy budget.
+difference and reports the global residual for qualification; the reduced
+workflow rejects a relative residual of `1.0e-8` or larger. Passive-Delta
+bundles retain applied work but are not labeled as an active-CGL energy budget.
 
 The AMR workflow retains both `.user.hst` and `.mhd.hst` products: user
 history provides normalized divB, invalid-state, and anisotropy measures,

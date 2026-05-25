@@ -150,7 +150,7 @@ turbulence driver. Passive mode requires `mhd/passive = true` and
 `problem/passive_delta = true`; a routine regression verifies that changing
 stable diagnostic initial anisotropy does not change its driven flow fields.
 These are reduced smoke cases, not standard paper-resolution runs. Their
-forcing-orientation, seed-continuation, and one-cycle OU/RK source-work checks
+forcing-orientation, seed-continuation, and multi-cycle OU/RK source-work checks
 qualify reduced mechanics, not paper-scale active/passive statistics or
 figure diagnostics.
 
@@ -161,7 +161,9 @@ rate, and instantaneous forcing power (written using the compact history
 labels `therm_cgl`, `abs_dp`, `mirror_vol`, `fire_vol`, `hard_vol`, and
 `force_pwr`) in addition to forcing-orientation quantities. Paper inputs
 also enable `record_injected_work`, adding cumulative exact net forcing-source
-work, including the zero-net-momentum projection, as `force_work`; the
+work, including the zero-net-momentum projection, as `force_work`. The counter
+is advanced as an explicit-RK companion quantity so earlier stage increments
+receive the same final-state weighting as the evolved conserved variables; the
 analyzer uses it with conserved `tot-E` to report an active-Delta global
 energy residual. These histories support reduced global
 summaries such as `C_B2`; `.mhd.hst` supplies operator-face heat-flux-cap

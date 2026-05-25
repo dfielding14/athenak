@@ -497,6 +497,20 @@ def test_cgl_lf_paper_forcing_ou_state_advances_once_per_cycle():
         _cleanup()
 
 
+def test_cgl_lf_paper_multicycle_forcing_work_follows_rk_state_recurrence():
+    try:
+        _run_paper("cgl_ci_paper_multicycle_work", "time/nlim=4")
+        mhd = testutils.athena_read.hst("cgl_ci_paper_multicycle_work.mhd.hst")
+        user = testutils.athena_read.hst("cgl_ci_paper_multicycle_work.user.hst")
+        energy_delta = mhd["tot-E"][-1] - mhd["tot-E"][0]
+        applied_work = user["force_work"][-1] - user["force_work"][0]
+        assert applied_work > 0.0
+        assert np.isclose(applied_work, energy_delta, rtol=1.0e-10, atol=1.0e-12)
+    finally:
+        shutil.rmtree("rst", ignore_errors=True)
+        _cleanup()
+
+
 def test_cgl_lf_paper_forcing_seed_is_deterministic_and_selectable():
     try:
         _run_paper("cgl_ci_seed_a", "time/nlim=1")

@@ -126,7 +126,7 @@ def summarize_forcing_energy_budget(user_path: Path, mhd_path: Path,
                                     time_start: float | None = None,
                                     time_end: float | None = None
                                     ) -> dict[str, object]:
-    """Compare active CGL energy change to the net applied forcing update."""
+    """Compare active CGL energy change to RK-integrated forcing work."""
 
     user = parse_history(user_path)
     mhd = parse_history(mhd_path)
@@ -181,7 +181,8 @@ def summarize_forcing_energy_budget(user_path: Path, mhd_path: Path,
     result.update({
         "available": True,
         "definition": (
-            "Delta conserved tot-E - Delta cumulative applied force source work"
+            "Delta conserved tot-E - Delta RK-integrated cumulative applied "
+            "force source work"
         ),
         "total_energy_delta": energy_delta,
         "residual": residual,

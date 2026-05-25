@@ -84,6 +84,7 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   record_injected_work =
       pin->GetOrAddBoolean("turb_driving", "record_injected_work", false);
   injected_work = 0.0;
+  injected_work_cycle_start = 0.0;
   // correlation time
   tcorr = pin->GetOrAddReal("turb_driving", "tcorr", 0.0);
   // deterministic seed; non-positive values retain the historic seed = 1 sequence
@@ -920,6 +921,9 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
               << "requires a single nonrelativistic ideal/CGL fluid." << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  if (record_injected_work && stage == 1) {
+    injected_work_cycle_start = injected_work;
+  }
 
   auto force_ = force;
   // Measure the complete conserved-energy change made by this source task.
@@ -1323,7 +1327,10 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
                   MPI_COMM_WORLD);
     forcing_energy_after = global_energy;
 #endif
-    injected_work += forcing_energy_after - forcing_energy_before;
+    const Real stage_work = forcing_energy_after - forcing_energy_before;
+    injected_work = pdrive->gam0[stage-1]*injected_work
+                  + pdrive->gam1[stage-1]*injected_work_cycle_start
+                  + stage_work;
   }
 
   return TaskStatus::complete;
