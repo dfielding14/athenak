@@ -193,6 +193,11 @@ paper-standard bundles it uses each case's declared analysis window to
 produce ensemble-average products and interval heat-flux-cap fractions.
 If a pinned MKS24 staging manifest is available, the analysis bundle retains
 its archive and source-TeX checksums as reference provenance.
+With `--reference-curves <manifest.json>`, `paper-analyze` also accepts
+external numerical or digitized curves only when their manifest records
+provenance, SHA-256 digests, and positive per-point `y_uncertainty` values.
+It reports uncertainty-normalized residuals against supported PDF, spectrum,
+transfer, and alignment products and renders `paper_reference_comparisons.pdf`.
 These products are analysis infrastructure; they do not by themselves
 establish statistically converged paper comparisons.
 

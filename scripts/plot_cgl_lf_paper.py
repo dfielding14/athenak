@@ -259,6 +259,40 @@ def plot_pressure_work(ensembles: dict[str, dict[str, object]], figure_dir: Path
     save(fig, figure_dir / "paper_pressure_work.pdf", generated)
 
 
+def plot_reference_comparisons(data: dict[str, object], figure_dir: Path,
+                               generated: list[str]) -> None:
+    """Plot optional provenance-qualified reference and simulated curves."""
+
+    reference = data.get("reference_curve_comparisons", {})
+    if not isinstance(reference, dict) or not reference.get("available", False):
+        return
+    comparisons = reference.get("comparisons", {})
+    if not isinstance(comparisons, dict) or not comparisons:
+        return
+    names = list(comparisons)
+    fig, axes = plt.subplots(
+        len(names), 1, figsize=(6.2, max(3.0, 2.8 * len(names))), squeeze=False
+    )
+    for axis, name in zip(axes[:, 0], names):
+        record = comparisons[name]
+        x = np.asarray(record["x"], dtype=float)
+        y = np.asarray(record["reference_y"], dtype=float)
+        uncertainty = np.asarray(record["reference_y_uncertainty"], dtype=float)
+        simulated = np.asarray(record["simulated_y"], dtype=float)
+        axis.errorbar(x, y, yerr=uncertainty, fmt="o", ms=3, label="reference")
+        axis.plot(x, simulated, label="analysis")
+        if record.get("interpolation") == "loglog":
+            axis.set_xscale("log")
+            axis.set_yscale("log")
+        axis.set_title(f"{name}: {record['product']}", fontsize=9)
+        axis.set_xlabel("reference coordinate")
+        axis.set_ylabel("diagnostic value")
+        axis.grid(True, which="both", alpha=0.25)
+        axis.legend(fontsize=7)
+    fig.suptitle("Reference-curve comparisons")
+    save(fig, figure_dir / "paper_reference_comparisons.pdf", generated)
+
+
 def main() -> int:
     """Command-line entry point."""
 
@@ -276,6 +310,7 @@ def main() -> int:
     plot_transfer_and_alignment(ensembles, args.figure_dir, generated)
     plot_heat_flux_proxy(ensembles, args.figure_dir, generated)
     plot_pressure_work(ensembles, args.figure_dir, generated)
+    plot_reference_comparisons(data, args.figure_dir, generated)
     (args.figure_dir / "paper_figures.json").write_text(
         json.dumps({"figures": generated}, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

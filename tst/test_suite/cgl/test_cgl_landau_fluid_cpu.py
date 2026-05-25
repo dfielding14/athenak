@@ -1,5 +1,6 @@
 """CPU regressions for the CGL Landau-fluid closure and CGL FOFC path."""
 
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -690,9 +691,95 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
             "time_integral_estimate"
         ]["available"]
         assert diagnostics["histories"][0]["analysis_window"]["rows_selected"] > 0
+        reference_dir = Path("cgl_ci_paper_reference_inputs")
+        reference_dir.mkdir()
+        spectrum = diagnostics["snapshot_ensemble"]["spectra"]["delta_p"]
+        sampled = [
+            (x, y) for x, y in zip(spectrum["k"], spectrum["power_per_dk"])
+            if x > 0.0 and y > 0.0
+        ][:3]
+        assert len(sampled) >= 2
+        curve_path = reference_dir / "delta_p.csv"
+        curve_path.write_text(
+            "x,y,y_uncertainty\n" + "".join(
+                f"{x:.17g},{y:.17g},{max(y * 0.01, 1.0e-30):.17g}\n"
+                for x, y in sampled
+            )
+        )
+        curve_digest = hashlib.sha256(curve_path.read_bytes()).hexdigest()
+        source_figure = reference_dir / "synthetic.pdf"
+        source_figure.write_bytes(b"synthetic reference panel\n")
+        manifest_path = reference_dir / "curves.json"
+        manifest_path.write_text(json.dumps({
+            "schema_version": 1,
+            "provenance": {
+                "method": "digitized",
+                "source_description": "synthetic regression reference",
+                "source_figure": source_figure.name,
+                "source_figure_sha256": hashlib.sha256(
+                    source_figure.read_bytes()
+                ).hexdigest(),
+                "digitization_tool": "test fixture",
+                "uncertainty_description": "one-percent fixture uncertainty",
+            },
+            "curves": [{
+                "id": "delta_p_exact",
+                "case": "direct",
+                "product": "spectra.delta_p",
+                "data_file": curve_path.name,
+                "data_sha256": curve_digest,
+                "interpolation": "linear",
+            }],
+        }))
+        result = subprocess.run(
+            [
+                "python3",
+                "../../../scripts/analyze_cgl_lf_paper.py",
+                str(snapshots[-1]),
+                "--reference-curves",
+                str(manifest_path),
+                "--output-dir",
+                "cgl_ci_paper_reference_products",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        reference = json.loads(
+            Path("cgl_ci_paper_reference_products/diagnostics.json").read_text()
+        )["reference_curve_comparisons"]
+        assert reference["available"]
+        comparison = reference["comparisons"]["delta_p_exact"]
+        assert comparison["sample_count"] == len(sampled)
+        assert comparison["maximum_absolute_residual"] < 1.0e-14
+        assert comparison["rms_normalized_by_reported_uncertainty"] < 1.0e-12
+        invalid_manifest = json.loads(manifest_path.read_text())
+        invalid_manifest["provenance"]["source_figure_sha256"] = "0" * 64
+        invalid_path = reference_dir / "invalid_curves.json"
+        invalid_path.write_text(json.dumps(invalid_manifest))
+        result = subprocess.run(
+            [
+                "python3",
+                "../../../scripts/analyze_cgl_lf_paper.py",
+                str(snapshots[-1]),
+                "--reference-curves",
+                str(invalid_path),
+                "--output-dir",
+                "cgl_ci_paper_invalid_reference_products",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode != 0
+        assert "source figure checksum does not match" in result.stderr
     finally:
         shutil.rmtree("bin", ignore_errors=True)
         shutil.rmtree("cgl_ci_paper_analysis_products", ignore_errors=True)
+        shutil.rmtree("cgl_ci_paper_reference_inputs", ignore_errors=True)
+        shutil.rmtree("cgl_ci_paper_reference_products", ignore_errors=True)
+        shutil.rmtree("cgl_ci_paper_invalid_reference_products", ignore_errors=True)
         shutil.rmtree("rst", ignore_errors=True)
         _cleanup()
 

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -27,6 +28,7 @@ SQRT_TWO_PI = 2.5066282746310002
 SQRT_EIGHT_PI = 5.013256549262000
 THREE_PI_MINUS_EIGHT = 1.4247779607693793
 BACKUP_COLLISION_RATE = 1.0e10
+REFERENCE_CURVE_SCHEMA_VERSION = 1
 
 
 def parse_history(path: Path) -> dict[str, np.ndarray]:
@@ -1244,6 +1246,214 @@ def bundle_cases(bundle: Path) -> list[dict[str, object]]:
     return cases
 
 
+def sha256_file(path: Path) -> str:
+    """Return the SHA-256 digest of one reference-data input."""
+
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def require_manifest_text(record: dict[str, object], key: str, context: str) -> str:
+    """Return one required nonempty manifest text value."""
+
+    value = record.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{context} requires nonempty {key}")
+    return value
+
+
+def analyzed_product_curve(ensemble: dict[str, object],
+                           product: str) -> tuple[np.ndarray, np.ndarray]:
+    """Return analyzed x/y arrays selected by a reference product identifier."""
+
+    parts = product.split(".", maxsplit=1)
+    if len(parts) != 2:
+        raise ValueError(f"unsupported reference product: {product}")
+    family, name = parts
+    if family == "spectra":
+        products = ensemble.get("spectra", {})
+        if not isinstance(products, dict) or name not in products:
+            raise ValueError(f"analyzed product is missing: {product}")
+        record = products[name]
+        return (
+            np.asarray(record["k"], dtype=float),
+            np.asarray(record["power_per_dk"], dtype=float),
+        )
+    if family == "pdf":
+        products = ensemble.get("pdf", {})
+        if not isinstance(products, dict) or name not in products:
+            raise ValueError(f"analyzed product is missing: {product}")
+        record = products[name]
+        edges = np.asarray(record["edges"], dtype=float)
+        return 0.5 * (edges[1:] + edges[:-1]), np.asarray(record["density"], dtype=float)
+    if product == "pressure_transfer.transfer":
+        record = ensemble.get("pressure_transfer", {})
+        if not isinstance(record, dict):
+            raise ValueError(f"analyzed product is missing: {product}")
+        return (
+            np.asarray(record["k_perp"], dtype=float),
+            np.asarray(record["transfer"], dtype=float),
+        )
+    if family == "alignment":
+        products = ensemble.get("alignment", {})
+        if not isinstance(products, dict) or name not in products:
+            raise ValueError(f"analyzed product is missing: {product}")
+        record = products[name]
+        edges = np.asarray(record["edges"], dtype=float)
+        return 0.5 * (edges[1:] + edges[:-1]), np.asarray(record["density"], dtype=float)
+    raise ValueError(f"unsupported reference product: {product}")
+
+
+def interpolate_analysis_curve(x: np.ndarray, source_x: np.ndarray,
+                               source_y: np.ndarray, method: str) -> np.ndarray:
+    """Interpolate analyzed values at reference coordinates."""
+
+    selected = np.isfinite(source_x) & np.isfinite(source_y)
+    if method == "loglog":
+        selected &= (source_x > 0.0) & (source_y > 0.0)
+        if np.any(x <= 0.0):
+            raise ValueError("loglog reference coordinates must be positive")
+    source_x = source_x[selected]
+    source_y = source_y[selected]
+    if source_x.size < 2 or np.any(np.diff(source_x) <= 0.0):
+        raise ValueError("analyzed reference product needs ordered finite samples")
+    if np.any(x < source_x[0]) or np.any(x > source_x[-1]):
+        raise ValueError("reference coordinates lie outside analyzed product range")
+    if method == "linear":
+        return np.interp(x, source_x, source_y)
+    if method == "loglog":
+        return np.exp(np.interp(np.log(x), np.log(source_x), np.log(source_y)))
+    raise ValueError(f"unsupported reference interpolation: {method}")
+
+
+def reference_curve_comparisons(result: dict[str, object],
+                                manifest_path: Path) -> dict[str, object]:
+    """Compare analysis products against provenance-qualified external curves."""
+
+    with manifest_path.open(encoding="utf-8") as stream:
+        manifest = json.load(stream)
+    if manifest.get("schema_version") != REFERENCE_CURVE_SCHEMA_VERSION:
+        raise ValueError(
+            f"reference curves require schema_version={REFERENCE_CURVE_SCHEMA_VERSION}"
+        )
+    provenance = manifest.get("provenance", {})
+    if not isinstance(provenance, dict):
+        raise ValueError("reference curves require provenance metadata")
+    method = require_manifest_text(provenance, "method", "reference provenance")
+    if method not in ("machine_readable", "digitized"):
+        raise ValueError(f"unsupported reference provenance method: {method}")
+    require_manifest_text(provenance, "source_description", "reference provenance")
+    require_manifest_text(
+        provenance, "uncertainty_description", "reference provenance"
+    )
+    if method == "digitized":
+        figure_name = require_manifest_text(
+            provenance, "source_figure", "digitized provenance"
+        )
+        figure_digest = require_manifest_text(
+            provenance, "source_figure_sha256", "digitized provenance"
+        )
+        if not re.fullmatch(r"[0-9a-f]{64}", figure_digest):
+            raise ValueError("digitized source_figure_sha256 must be lowercase SHA-256")
+        figure_path = (manifest_path.parent / figure_name).resolve()
+        if not figure_path.is_file():
+            raise ValueError(f"digitized source figure is missing: {figure_path}")
+        if figure_digest != sha256_file(figure_path):
+            raise ValueError("digitized source figure checksum does not match")
+        require_manifest_text(provenance, "digitization_tool", "digitized provenance")
+    curves = manifest.get("curves", [])
+    if not isinstance(curves, list) or not curves:
+        raise ValueError("reference curves manifest must contain curves")
+    cases = result.get("cases", {})
+    comparisons: dict[str, object] = {}
+    for curve in curves:
+        if not isinstance(curve, dict):
+            raise ValueError("reference curve entries must be objects")
+        curve_id = require_manifest_text(curve, "id", "reference curve")
+        if curve_id in comparisons:
+            raise ValueError(f"reference curve id is duplicated: {curve_id}")
+        case = require_manifest_text(curve, "case", f"reference curve {curve_id}")
+        product = require_manifest_text(curve, "product", f"reference curve {curve_id}")
+        data_file = require_manifest_text(
+            curve, "data_file", f"reference curve {curve_id}"
+        )
+        expected_digest = require_manifest_text(
+            curve, "data_sha256", f"reference curve {curve_id}"
+        )
+        data_path = (manifest_path.parent / data_file).resolve()
+        if not data_path.is_file():
+            raise ValueError(f"reference curve data is missing: {data_path}")
+        if expected_digest != sha256_file(data_path):
+            raise ValueError(f"reference curve checksum does not match: {curve_id}")
+        table = np.genfromtxt(data_path, delimiter=",", names=True, encoding="utf-8")
+        rows = np.atleast_1d(table)
+        if table.dtype.names is None or not {"x", "y", "y_uncertainty"}.issubset(
+            table.dtype.names
+        ):
+            raise ValueError(
+                f"reference curve {curve_id} requires x,y,y_uncertainty columns"
+            )
+        x = np.asarray(rows["x"], dtype=float)
+        y = np.asarray(rows["y"], dtype=float)
+        uncertainty = np.asarray(rows["y_uncertainty"], dtype=float)
+        if (
+            x.size < 2 or not np.isfinite(x).all() or not np.isfinite(y).all()
+            or not np.isfinite(uncertainty).all() or np.any(uncertainty <= 0.0)
+            or np.any(np.diff(x) <= 0.0)
+        ):
+            raise ValueError(
+                f"reference curve {curve_id} needs ordered finite points and "
+                "positive y_uncertainty"
+            )
+        if case == "direct":
+            ensemble = result.get("snapshot_ensemble", {})
+        elif isinstance(cases, dict) and case in cases:
+            ensemble = cases[case].get("snapshot_ensemble", {})
+        else:
+            raise ValueError(f"reference curve {curve_id} selects missing case {case}")
+        if not isinstance(ensemble, dict) or ensemble.get("snapshot_count", 0) == 0:
+            raise ValueError(f"reference curve {curve_id} selects empty analysis")
+        source_x, source_y = analyzed_product_curve(ensemble, product)
+        simulated = interpolate_analysis_curve(
+            x, source_x, source_y, str(curve.get("interpolation", "linear"))
+        )
+        residual = simulated - y
+        normalized = residual / uncertainty
+        comparisons[curve_id] = {
+            "available": True,
+            "case": case,
+            "product": product,
+            "data_file": str(data_path),
+            "data_sha256": expected_digest,
+            "interpolation": str(curve.get("interpolation", "linear")),
+            "sample_count": int(x.size),
+            "x": x.tolist(),
+            "reference_y": y.tolist(),
+            "reference_y_uncertainty": uncertainty.tolist(),
+            "simulated_y": simulated.tolist(),
+            "residual": residual.tolist(),
+            "rms_residual": float(np.sqrt(np.mean(residual ** 2))),
+            "maximum_absolute_residual": float(np.max(np.abs(residual))),
+            "rms_normalized_by_reported_uncertainty": float(
+                np.sqrt(np.mean(normalized ** 2))
+            ),
+        }
+    return {
+        "available": True,
+        "definition": (
+            "analysis products interpolated onto provenance-qualified reference "
+            "curve coordinates"
+        ),
+        "manifest": str(manifest_path),
+        "manifest_sha256": sha256_file(manifest_path),
+        "provenance": provenance,
+        "comparisons": comparisons,
+    }
+
+
 def main() -> int:
     """Command-line entry point."""
 
@@ -1257,6 +1467,7 @@ def main() -> int:
     command.add_argument("--alignment-shells", default="1,2,3")
     command.add_argument("--time-start", type=float)
     command.add_argument("--time-end", type=float)
+    command.add_argument("--reference-curves", type=Path)
     command.add_argument("--synthetic-test", action="store_true")
     args = command.parse_args()
     if (
@@ -1344,6 +1555,10 @@ def main() -> int:
         }
     if args.synthetic_test:
         result["synthetic_test"] = synthetic_test()
+    if args.reference_curves is not None:
+        result["reference_curve_comparisons"] = reference_curve_comparisons(
+            result, args.reference_curves
+        )
     destination = args.output_dir / "diagnostics.json"
     destination.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n",
                            encoding="utf-8")

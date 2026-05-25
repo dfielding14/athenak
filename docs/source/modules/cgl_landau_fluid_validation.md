@@ -158,9 +158,12 @@ face flux or a closed energy budget.
 The analyzer runs synthetic binning/gradient/transfer/alignment and
 heat-flux-sign/pressure-work checks and renders available history, PDF,
 spectrum, transfer, alignment, heat-flux-proxy, and pressure-work figures
-under `figures/paper/`. Panel-specific reference-curve comparison,
-exact time-integrated/production local budget closure remains to be
-completed. For retained LF histories, the analyzer
+under `figures/paper/`. When an externally prepared reference-curve manifest
+is supplied, it validates curve/source checksums and reported pointwise
+uncertainties, computes uncertainty-normalized residuals, and renders
+`paper_reference_comparisons.pdf`. Obtaining or explicitly digitizing the
+actual MKS24 curves, exact time-integrated/production local budget closure,
+and production comparisons remain to be completed. For retained LF histories, the analyzer
 also reports the RKL2-applied capped-face heat-flux contractions retained in
 `lf_qprwrk` and `lf_qpewrk`. On refined meshes these contractions count
 coarse/fine interfaces from their fine-side closure faces; they are not a
@@ -171,6 +174,8 @@ default staged MKS24 manifest is available, `paper-analyze` also writes
 `analysis/reference_provenance.json` with its archive and source-TeX
 checksums; provide a different pinned copy with
 `--reference-manifest <path>`.
+Provide numerical or digitized panel curves separately with
+`--reference-curves <path/to/curves.json>`.
 For a standalone LF history file, the same interval calculation is available
 through `scripts/analyze_cgl_lf_paper.py --lf-history <path>`.
 
@@ -256,6 +261,16 @@ contains TeX and rendered figure PDFs, not machine-readable curve tables.
 Quantitative panel comparison therefore still requires a recorded
 digitization procedure or a separately provenance-tracked numerical
 reference source.
+
+An optional curve manifest passed to `paper-analyze --reference-curves`
+has `schema_version = 1`, a `provenance` object, and one or more curve
+entries. For `method = "digitized"`, provenance must name the source figure,
+its SHA-256 digest, the digitization tool, and the uncertainty procedure.
+Each CSV curve must contain ordered `x`, `y`, and positive `y_uncertainty`
+columns; its entry records `data_sha256`, target analysis `case`, supported
+`product` (for example `spectra.grad_parallel_delta_p`), and optional
+`interpolation` (`linear` or `loglog`). The analyzer fails closed on missing
+uncertainty, checksum mismatches, or out-of-domain coordinates.
 
 ## Frontier Debug Qualification Preparation
 

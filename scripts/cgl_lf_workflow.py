@@ -1442,19 +1442,21 @@ def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
         plot_results(paths)
     if args.workflow == "paper-analyze":
         analysis_dir = paths.root / "analysis"
-        subprocess.run(
-            [
-                sys.executable,
-                str(ROOT_DIR / "scripts" / "analyze_cgl_lf_paper.py"),
-                "--bundle",
-                str(paths.root),
-                "--output-dir",
-                str(analysis_dir),
-                "--synthetic-test",
-            ],
-            cwd=ROOT_DIR,
-            check=True,
-        )
+        analysis_command = [
+            sys.executable,
+            str(ROOT_DIR / "scripts" / "analyze_cgl_lf_paper.py"),
+            "--bundle",
+            str(paths.root),
+            "--output-dir",
+            str(analysis_dir),
+            "--synthetic-test",
+        ]
+        if args.reference_curves:
+            analysis_command.extend([
+                "--reference-curves",
+                str(resolve_from_root(args.reference_curves)),
+            ])
+        subprocess.run(analysis_command, cwd=ROOT_DIR, check=True)
         provenance = analysis_reference_provenance(args, paths, analysis_dir)
         paper_figures = paths.figures / "paper"
         subprocess.run(
@@ -1484,6 +1486,10 @@ def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
         if provenance is not None:
             manifest["reference_provenance"] = provenance
             manifest["analysis_products"]["reference_provenance"] = provenance["product"]
+        if args.reference_curves:
+            manifest["reference_curve_manifest"] = str(
+                resolve_from_root(args.reference_curves)
+            )
     manifest["diagnostics"] = evaluate_manifest(manifest, paths.root)
     manifest["status"] = (
         "passed" if manifest["diagnostics"]["passed"] else "failed"
@@ -1517,6 +1523,13 @@ def parser() -> argparse.ArgumentParser:
         "--reference-manifest",
         default=os.environ.get("CGL_LF_REFERENCE_MANIFEST"),
         help="Pinned MKS24 staging manifest to attach during paper-analyze.",
+    )
+    command.add_argument(
+        "--reference-curves",
+        default=os.environ.get("CGL_LF_REFERENCE_CURVES"),
+        help=(
+            "Provenance-qualified curve manifest to compare during paper-analyze."
+        ),
     )
     command.add_argument(
         "--jobs",
