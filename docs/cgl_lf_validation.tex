@@ -264,8 +264,11 @@ clean partial diagnostic evidence, not an accepted result.  Its prolonged
 \(t=1\) snapshot/checkpoint write motivated a committed rank-local retained
 output protocol with grouped checksum and analysis support.  The fresh
 rank-local \texttt{R16/s01\_rankio\_t0\_t2} segment was submitted as job
-\texttt{4675322} from \(t=0\); the legacy partial is not continued across the
-changed input digest.
+\texttt{4675322} from \(t=0\) and began executing on 2026-05-25.  A complete
+initial eight-rank snapshot/restart set was observed and read through the
+rank-aware analyzer; acceptance still requires terminal inspection and
+accounting.  The legacy partial is not continued across the changed input
+digest.
 
 \section{Validation Workflow}
 
@@ -518,7 +521,11 @@ published reference products presently include Figure 2(a) transformed
 sampled surfaces, Figure 2(b) histories, normalized Figure 4(a) PDFs,
 normalized Figure 5(b) eddy scales, dimensionless Figure 7 transfer ratios,
 Figure 8 selected-shell alignment PDFs, Figure 9 and Figure 11/12 alignment
-curves, and Figure 13(b),(d) dimensionless products.
+curves, and Figure 13(b),(d) dimensionless products.  Because each admitted
+panel product retains its own provenance manifest, an accepted campaign
+bundle is analyzed by repeating \texttt{paper-analyze --reference-curves}
+for the admitted manifests; the analyzer records every manifest checksum and
+provenance block and rejects duplicate product identifiers across manifests.
 
 Remaining absolute spectral or strain ordinate panels are intentionally not
 admitted: the paper and cited donor source define shell spectra and plotted
