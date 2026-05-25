@@ -710,21 +710,20 @@ def verify_continuation_restart(restart: Path) -> dict[str, object]:
         or inspection.get("clean_for_continuation") is not True
     ):
         raise ValueError("restart parent has not passed continuation inspection")
-    inventory = inspection.get("restarts", [])
-    for retained in inventory if isinstance(inventory, list) else []:
-        if (
-            isinstance(retained, dict)
-            and Path(str(retained.get("path", ""))).resolve() == restart
-            and retained.get("sha256") == sha256(restart)
-        ):
-            return {
-                "manifest": str(parent_manifest_path),
-                "case_id": parent["run"]["case_id"],
-                "segment": parent["run"]["segment"],
-                "result": accounting["result"],
-                "restart_sha256": retained["sha256"],
-            }
-    raise ValueError("restart is not present in the inspected parent inventory")
+    terminal = inspection.get("terminal_restart")
+    if (
+        not isinstance(terminal, dict)
+        or Path(str(terminal.get("path", ""))).resolve() != restart
+        or terminal.get("sha256") != sha256(restart)
+    ):
+        raise ValueError("continuation must use the inspected terminal restart")
+    return {
+        "manifest": str(parent_manifest_path),
+        "case_id": parent["run"]["case_id"],
+        "segment": parent["run"]["segment"],
+        "result": accounting["result"],
+        "restart_sha256": terminal["sha256"],
+    }
 
 
 def reservation_for_manifest(reservations: list[dict[str, object]],
@@ -972,6 +971,7 @@ def inspect_segment(args: argparse.Namespace) -> int:
             "restart_retained",
         )
     )
+    restart_records = [retained_file(path) for path in restarts]
     inspection: dict[str, object] = {
         "schema_version": 1,
         "inspected_utc": utc_now(),
@@ -988,7 +988,8 @@ def inspect_segment(args: argparse.Namespace) -> int:
         "mhd_history": retained_file(mhd_histories[0]),
         "user_history": retained_file(user_histories[0]),
         "snapshots": [retained_file(path) for path in snapshots],
-        "restarts": [retained_file(path) for path in restarts],
+        "restarts": restart_records,
+        "terminal_restart": restart_records[-1] if restart_records else None,
     }
     if "lf_hwproj" in history:
         inspection["final_hardwall_projection_count"] = history["lf_hwproj"][-1]
