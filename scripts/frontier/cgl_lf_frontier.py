@@ -320,7 +320,7 @@ def generated_batch_script(manifest: dict[str, object], script_path: Path) -> st
             "module load cpe/25.09 cray-mpich/9.0.1 rocm/6.4.2\n"
         )
         target_environment = """export MPICH_GPU_SUPPORT_ENABLED=1
-export MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=1
+export MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=0
 export MPICH_OFI_NIC_POLICY=GPU
 export MPICH_GPU_IPC_CACHE_MAX_SIZE=1000
 export HSA_XNACK=1
@@ -851,7 +851,9 @@ def self_test() -> int:
         expected_capture = "grep -E '^(MPICH_|FI_|HSA_|OMP_|ROCR_|HIP_|CRAY_)'"
         if expected_capture not in script_text:
             raise ValueError("self-test failed to retain exported runtime settings")
-        if "MPICH_GPU_SUPPORT_ENABLED=1" not in script_text:
+        if ("MPICH_GPU_SUPPORT_ENABLED=1" not in script_text
+                or "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=0" not in script_text
+                or "--gpus-per-task=1" not in script_text):
             raise ValueError("self-test failed to configure the GPU target")
         check_submit(argparse.Namespace(
             manifest=str(manifest_path), allow_local_root=True,

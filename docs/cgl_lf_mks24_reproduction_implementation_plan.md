@@ -307,7 +307,7 @@ table such as:
 | F-018 | 2026-05-25 | Phase E | Retained `force_pwr` sampled instantaneous power but did not preserve the exact net RK stage forcing source, including zero-net-momentum projection, in forced paper runs or through restart | `src/srcterms/turb_driver.cpp`, `src/outputs/restart.cpp`, `src/pgen/tests/cgl_lf_paper.cpp`, `scripts/analyze_cgl_lf_paper.py` | High | Add opt-in globally reduced cumulative `force_work`, checkpoint it for paper decks, and compare active-case interval work to conserved `tot-E`; do not give passive-Delta the active budget interpretation | Expanded forcing identity/restart regressions and reduced paper analysis bundle | Implemented and corrected under F-025; long-time/production residual tolerance and scientific interpretation remain open |
 | F-019 | 2026-05-25 | Phase E | The snapshot heat-flux proxy did not measure the capped face flux actually advanced by an RKL2 LF sweep | `src/diffusion/cgl_landau_fluid.cpp`, `src/mhd/mhd_sts.cpp`, `src/outputs/history.cpp`, `scripts/analyze_cgl_lf_paper.py` | High | Accumulate owned-face capped-flux/temperature-jump contractions through the same RKL2 recurrence as the state, checkpoint cumulative `lf_qprwrk`/`lf_qpewrk`, and count coarse/fine interfaces from fine-side closure fluxes that feed flux correction | Decay/sign, cap-analysis, low-field, AMR-nonzero, restart-preservation, and AMR MPI-decomposition regressions in the CGL test suites | Implemented for fixed-level and conserved-prolongation AMR paths; focused CPU AMR and fresh `amr` workflow/analyzer report nonzero applied work, while MPI rerun remains blocked locally because `mpirun` is unavailable |
 | F-020 | 2026-05-25 | Frontier operations | The generated environment-log filter required `MPICH=` instead of matching `MPICH_*`, so the first live manifests did not preserve the requested MPI/GPU environment variables | `scripts/frontier/cgl_lf_frontier.py`, `g001-g002-active-smoke-8gpu/manifest/run_environment.txt`, `g004-collision-relaxation-1gpu/manifest/run_environment.txt` | High | Capture configured runtime variable prefixes and archive optional restart files in the preparation utility before continuing restart qualification | Expanded `cgl_lf_frontier.py self-test` for environment capture and restart provenance; live G-004 inspection | Implemented; G-004 manifest retains requested MPICH/FI/HSA settings |
-| F-021 | 2026-05-25 | Frontier G-001/G-007 | Live Slurm logs reported `MPICH_GPU_SUPPORT_ENABLED = 1` but `MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED = 0` although the generated script exported the latter as `1` | `/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_g001_g002_active_smoke_8gpu.4653415.log`, `/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_g006b_active_smoke_16blocks_16gpu_2node.4653601.log`, `/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_g007b_paper_smoke_active_random_1gpu.4653770.log` | Medium | Treat runtime-reported behavior as authoritative, preserve it with the corrected environment capture, and investigate stack support before making managed-memory claims | Subsequent live manifest/log inspection | Open; confirmed on corrected-build one-node and two-node runs, without preventing strict qualification agreement |
+| F-021 | 2026-05-25 | Frontier G-001/G-007 | Live Slurm logs reported `MPICH_GPU_SUPPORT_ENABLED = 1` but `MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED = 0` although the generated script exported the latter as `1` | `/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_g001_g002_active_smoke_8gpu.4653415.log`, `/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_g006b_active_smoke_16blocks_16gpu_2node.4653601.log`, `/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_g007b_paper_smoke_active_random_1gpu.4653770.log` | Medium | Treat runtime-reported behavior as authoritative, inspect the active stack and application memory space, and stop requesting managed-MPI support when it is not part of the model's memory contract | Installed Cray MPICH 9.0.1 `intro_mpi` documentation; AthenaK/Kokkos memory-space trace; post-policy GPU smoke rerun | Policy implemented: the AMD/HIP launch path now explicitly requests managed-MPI support `0`, because Cray MPICH documents a non-NVIDIA default of `0` and AthenaK CGL-LF arrays use `HIPSpace`, distinct from `HIPManagedSpace`; live confirmation pending |
 | F-022 | 2026-05-25 | Frontier G-005 | The first GPU restart continuation restored physical fields and signed applied LF work but reset cumulative LF stage/face counters, making restart-spanning cap/exposure analysis discontinuous | `g005b-restart-resumed-1gpu/analysis/g005_restart_comparison.json`, `src/outputs/restart.cpp`, `src/pgen/pgen.cpp` | High | Checkpoint and restore all 15 then-existing cumulative LF history diagnostics using the established shared-MPI rank-zero baseline rule, then rerun restart qualification | Expanded CPU restart assertions for ordinary, finite-collision, and paper-forcing restarts; repeated Frontier G-005 | Implemented for the then-existing fields; corrected Frontier jobs `4653516`/`4653582` pass all 15 LF endpoint comparisons at `rtol = atol = 1.0e-12` with maximum absolute difference `3.9916427639358903e-20`; F-026 adds two CPU-tested fields that require GPU rerun |
 | F-023 | 2026-05-25 | Phase E | The analyzer retained anisotropic-pressure transfer and heat-flux products but did not expose the configuration-space CGL pressure mechanical-work split required to interpret local anisotropic stress | `scripts/analyze_cgl_lf_paper.py`, `scripts/plot_cgl_lf_paper.py`, `20260525-paper-convergence-face-work-v1` analysis bundle | High | Add snapshot-derived `integral[p_perp div(u) - Delta p (b b : grad(u))] dV`, compare its anisotropic term with direct MKS24 transfer, label passive diagnostics without asserting applied feedback, and retain explicitly cadence-limited snapshot quadrature estimates | Synthetic correlated-pressure/strain transfer and constant-power quadrature checks through `test_cgl_lf_paper_snapshot_analysis_uses_both_pressures`; regenerated retained convergence bundle and pressure-work figure | Implemented for snapshot analysis; applied operator ledger added under F-026, while reference comparison and production qualification remain open |
 | F-024 | 2026-05-25 | Phase E | The staged official source provides rendered panel PDFs rather than numeric curves, and the analyzer lacked a fail-closed contract for separately obtained or digitized reference data | `scripts/analyze_cgl_lf_paper.py`, `scripts/plot_cgl_lf_paper.py`, `scripts/cgl_lf_workflow.py` | High | Add optional reference-curve manifest ingestion requiring provenance, source/data SHA-256 values, and positive pointwise uncertainties; compare mapped products and render residual-qualified overlays | Generated exact-curve and wrong-source-checksum regressions in `test_cgl_lf_paper_snapshot_analysis_uses_both_pressures`; retained-bundle workflow rendering probe | Implemented for comparison infrastructure; populated MKS24 curve data and production comparison remain open |
@@ -333,7 +333,7 @@ table such as:
 | 2026-05-25 | Define `paper-convergence` as a short reduced nonlinear qualification tier rather than a substitute for paper-scale convergence. | It exercises resolution, heat-flux, threshold, snapshot, and plotting paths locally while its `tlim = 0.02` metadata prevents steady-state interpretation. | Corrected `20260525-paper-convergence-rk-work-v1` passed and rendered six generic figures; longer reduced/standard statistics remain open |
 | 2026-05-25 | Keep strict emergency monitoring enabled in limiter-suppression validation and move its physical limiter state below the emergency bound. | A limiter-action oracle must not intentionally begin in a state the independent safety contract defines as invalid. | Corrected case retains strong flux suppression and `full-v2` passes |
 | 2026-05-25 | Keep Frontier submission manual while automating fail-closed preparation and accounting policy checks. | The debug-QOS one-job constraint forbids job chaining; generating an explicit script and retained reservation/manifest improves reproducibility without silently submitting work. | Utility self-test passes; immutable HIP/MPI builds and sequential debug accounting exercised through G-007 with `0.035280` node-hours recorded |
-| 2026-05-25 | Treat runtime-reported MPI/GPU memory support as evidence, not the requested export alone. | Live debug jobs display GPU-aware MPI active but managed-memory support inactive despite the requested setting; manifests must retain both configured and reported behavior. | Corrected environment capture is implemented; G-004 through G-007 confirm the discrepancy remains open under the corrected build |
+| 2026-05-25 | Request GPU-aware MPI without requesting managed-memory MPI support for the AMD/HIP CGL-LF baseline. | Installed Cray MPICH 9.0.1 documents managed-memory MPI default `0` for non-NVIDIA GPUs, and AthenaK's `DvceArray*` storage resolves through Kokkos HIP to `HIPSpace`, not `HIPManagedSpace`; `HSA_XNACK=1` remains a separately recorded GPU-runtime configuration. | Earlier GPU logs expose the mismatched request/runtime report; the generated GPU launch now records `MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=0`; post-policy GPU smoke confirmation pending |
 | 2026-05-25 | Use an isolated dependency-complete Python environment for local style and Sphinx gate execution. | The checkout declares Sphinx dependencies but the active system module lacks them and `flake8`; installing validation-only packages under `/tmp` avoids changing the product dependency surface. | Repository style suite and warning-strict Sphinx build passed; no generated documentation output is retained as source |
 | 2026-05-25 | Emit heat-flux transport strength initially as a snapshot-reconstructed proxy rather than claim an applied discrete energy budget. | Archived fields and closure choices are sufficient to reconstruct the continuous LF smoothing measure; exact finite-volume accounting must first define a decomposition-independent applied-face reduction. | Synthetic sign check passed; F-019 later adds the signed applied contraction with fine-side AMR ownership; production/reference interpretation and full budget closure remain open |
 | 2026-05-25 | Track cumulative net applied forcing work at the source update only when explicitly requested by a driven input. | The before/after conserved-energy difference across the full source task, including zero-net-momentum projection, is exact at that stage and restartable; instantaneous output-time `force_pwr` cannot close an active energy residual. Opt-in persistence avoids altering legacy forcing restart records. | Focused CPU/restart coverage and corrected `20260525-paper-smoke-rk-work-v1`/`20260525-paper-convergence-rk-work-v1` bundles; production tolerance and heat-flux transfer decomposition remain open |
@@ -2475,7 +2475,7 @@ export LD_LIBRARY_PATH=${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}
 export MPICH_ENV_DISPLAY=1
 export MPICH_VERSION_DISPLAY=1
 export MPICH_GPU_SUPPORT_ENABLED=1
-export MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=1
+export MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=0
 export MPICH_OFI_NIC_POLICY=GPU
 export MPICH_GPU_IPC_CACHE_MAX_SIZE=1000
 export MPICH_MPIIO_HINTS="*:romio_cb_write=disable"
@@ -2489,20 +2489,26 @@ Treat these settings as an explicit run configuration to validate, not as an
 unexamined optimization guarantee:
 
 - retain `MPICH_GPU_SUPPORT_ENABLED=1` for GPU-aware MPI testing;
+- retain `MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=0` for this AMD/HIP
+  `HIPSpace` baseline; it does not use managed MPI buffers;
 - record all environment settings in each manifest;
-- validate correctness and memory behavior under the selected
-  `HSA_XNACK`/managed-memory setting;
+- validate correctness and memory behavior under the selected `HSA_XNACK`
+  setting without presenting it as managed-MPI support;
 - do not change communication or memory-tuning variables between comparison
   runs without treating that as a new run configuration;
 - do not load performance instrumentation packages in the baseline correctness
   build unless profiling is the stated purpose of the run.
 
-Live qualification jobs from `4653415` through corrected-build job `4653770`
-reported
-`MPICH_GPU_SUPPORT_ENABLED = 1` but
-`MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED = 0`, despite requesting the latter
-as `1`. Their strict qualification results remain valid, but the runtime report
-precludes a managed-memory claim until the active stack behavior is resolved.
+Live qualification jobs from `4653415` through post-F-026 job `4658283`
+reported `MPICH_GPU_SUPPORT_ENABLED = 1` but
+`MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED = 0`, despite the earlier generated
+scripts requesting the latter as `1`. Installed Cray MPICH 9.0.1
+documentation states that this managed-memory setting defaults to `0` for
+non-NVIDIA GPUs. AthenaK defines its CGL-LF device arrays through
+`Kokkos::DefaultExecutionSpace::memory_space`, and the HIP backend maps that
+space to `HIPSpace`, not `HIPManagedSpace`. The generated GPU launch now
+requests the observed AMD/HIP baseline explicitly and makes no managed-MPI
+claim; its strict numerical confirmation remains to be rerun.
 The initial run-environment log filter also failed to retain `MPICH_*`
 exports; the tracked utility now captures these prefixes explicitly for
 subsequent runs, and corrected-build manifests/logs retain the discrepancy.
@@ -2645,7 +2651,7 @@ export LD_LIBRARY_PATH=${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}
 export MPICH_ENV_DISPLAY=1
 export MPICH_VERSION_DISPLAY=1
 export MPICH_GPU_SUPPORT_ENABLED=1
-export MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=1
+export MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=0
 export MPICH_OFI_NIC_POLICY=GPU
 export MPICH_GPU_IPC_CACHE_MAX_SIZE=1000
 export MPICH_MPIIO_HINTS="*:romio_cb_write=disable"
