@@ -254,7 +254,9 @@ units for its beta-100 limiter runs, while the equivalent AthenaK
 `v_A = 1` normalization uses `p0 = 50`; until an explicit observable
 conversion is qualified, dimensional Figure 11 upper spectra, Figure 12
 spectra, and Figure 13(a),(c) curves are retained only as excluded audit
-context.
+context. Figure 5(b)'s normalized eddy-length relation is also excluded
+until a local-field-conditioned structure-function product is implemented
+and validated for comparison.
 These products are analysis infrastructure; they do not by themselves
 establish statistically converged paper comparisons.
 

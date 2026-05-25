@@ -200,7 +200,8 @@ shell slices are checked against the paper's per-`k_perp` unit-normalization
 statement and renormalized, and an absolute PDF-density uncertainty is
 retained in the manifest. Figure 4(a)'s normalized-density PDF is also
 admitted through its plotted `rho/<rho>` coordinate. Remaining dimensional,
-spectral-normalization, or unmatched joint-distribution MKS24 panels, exact
+spectral-normalization, unmatched joint-distribution, or
+conditioned-structure-function MKS24 panels, exact
 time-integrated/production local budget closure, and production comparisons
 remain to be completed. For retained LF histories, the analyzer
 also reports the RKL2-applied capped-face heat-flux contractions retained in
@@ -446,6 +447,9 @@ a matching analyzer product, or a separately provenance-tracked numerical
 reference source. In particular, Figure 2(a)'s joint pressure-density panel
 and Figure 4(b)'s `E_rho` spectrum must not be substituted for current
 one-dimensional or normalized products without matching definitions.
+Figure 5(b)'s dimensionless characteristic-eddy-length relation likewise
+requires a new local-field-conditioned structure-function product before any
+digitized curve can be admitted for comparison.
 
 An optional curve manifest passed to `paper-analyze --reference-curves`
 has `schema_version = 1`, a `provenance` object, and one or more curve
