@@ -312,6 +312,9 @@ def generated_batch_script(manifest: dict[str, object], script_path: Path) -> st
         override_text = " " + override_text
     restart_file = command.get("restart_file")
     restart_value = quote(str(restart_file)) if restart_file else "''"
+    mpiio_timers = "export MPICH_MPIIO_TIMERS=1\n" if command.get(
+        "mpiio_timers", False
+    ) else ""
     job_name = re.sub(r"[^A-Za-z0-9_]+", "_", str(run["run_name"]))[:60]
     if execution_target == "gpu":
         gpu_request = "#SBATCH --gpus-per-node=8\n"
@@ -378,7 +381,7 @@ export LD_LIBRARY_PATH=${{CRAY_LD_LIBRARY_PATH}}:${{LD_LIBRARY_PATH:-}}
 export MPICH_ENV_DISPLAY=1
 export MPICH_VERSION_DISPLAY=1
 {target_environment}export MPICH_MPIIO_HINTS="*:romio_cb_write=disable"
-export MPICH_OFI_NUM_CQ_ENTRIES=131072
+{mpiio_timers}export MPICH_OFI_NUM_CQ_ENTRIES=131072
 export FI_MR_CACHE_MONITOR=kdreg2
 export FI_CXI_RX_MATCH_MODE=software
 export OMP_NUM_THREADS=1
@@ -532,6 +535,7 @@ def prepare(args: argparse.Namespace) -> Path:
                 sha256(archived_restart) if archived_restart is not None else None
             ),
             "execution_target": args.execution_target,
+            "mpiio_timers": args.mpiio_timers,
             "athena_walltime": args.athena_walltime,
             "overrides": args.override,
         },
@@ -838,6 +842,7 @@ def self_test() -> int:
             ranks_per_node=8,
             cpus_per_task=7,
             execution_target="gpu",
+            mpiio_timers=False,
             campaign="self-test",
             run_name="valid",
             purpose="offline accounting validation",
@@ -914,6 +919,20 @@ def self_test() -> int:
             manifest=str(cpu_manifest_path), allow_local_root=True,
             notes="offline CPU MPI preparation check complete",
         ))
+        arguments.run_name = "valid_mpiio"
+        arguments.execution_target = "gpu"
+        arguments.mpiio_timers = True
+        mpiio_manifest_path = prepare(arguments)
+        mpiio_script_text = Path(str(
+            read_manifest(mpiio_manifest_path)["paths"]["batch_script"]
+        )).read_text(encoding="utf-8")
+        if "MPICH_MPIIO_TIMERS=1" not in mpiio_script_text:
+            raise ValueError("self-test failed to enable MPI-IO timing")
+        cancel(argparse.Namespace(
+            manifest=str(mpiio_manifest_path), allow_local_root=True,
+            notes="offline MPI-IO timer preparation check complete",
+        ))
+        arguments.mpiio_timers = False
         arguments.restart_file = None
         arguments.execution_target = "gpu"
         arguments.run_name = "bad_walltime"
@@ -974,6 +993,10 @@ def parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument(
         "--execution-target", choices=("gpu", "cpu"), default="gpu",
         help="Select GPU-aware or Kokkos-Serial CPU/MPI launch configuration.",
+    )
+    prepare_parser.add_argument(
+        "--mpiio-timers", action="store_true",
+        help="Enable retained Cray MPICH MPI-IO phase timers for a sizing run.",
     )
     prepare_parser.add_argument("--override", action="append", default=[])
     prepare_parser.add_argument(

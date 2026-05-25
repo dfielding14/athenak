@@ -2364,7 +2364,12 @@ the default `--execution-target gpu` path. For a separately archived
 MPI-enabled Kokkos-Serial executable, use `--execution-target cpu`; that path
 records the target in the manifest, disables GPU-aware MPICH, and omits GPU
 binding so CPU MPI evidence cannot accidentally be launched through the HIP
-transport contract. Validate its policy logic offline with:
+transport contract. For an explicitly scoped reduced sizing run that writes
+shared MPI-I/O products, add `--mpiio-timers`; this records the choice in the
+manifest and exports `MPICH_MPIIO_TIMERS=1` so Cray MPICH emits phase timings
+at file close. Do not enable that measurement option silently in correctness
+comparisons or paper-production definitions. Validate its policy logic offline
+with:
 
 ```bash
 python3 scripts/frontier/cgl_lf_frontier.py self-test
@@ -2502,6 +2507,8 @@ unexamined optimization guarantee:
   setting without presenting it as managed-MPI support;
 - do not change communication or memory-tuning variables between comparison
   runs without treating that as a new run configuration;
+- enable `MPICH_MPIIO_TIMERS=1` only through a manifest-recorded
+  `--mpiio-timers` sizing run whose output path actually invokes MPI-I/O;
 - do not load performance instrumentation packages in the baseline correctness
   build unless profiling is the stated purpose of the run.
 
