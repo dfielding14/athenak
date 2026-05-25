@@ -302,6 +302,7 @@ def generated_batch_script(manifest: dict[str, object], script_path: Path) -> st
     allocation = manifest["allocation"]
     paths = manifest["paths"]
     command = manifest["command"]
+    execution_target = str(command.get("execution_target", "gpu"))
     ranks_per_node = int(allocation["ranks_per_node"])
     cpus_per_task = int(allocation["cpus_per_task"])
     nodes = int(allocation["nodes"])
@@ -312,6 +313,29 @@ def generated_batch_script(manifest: dict[str, object], script_path: Path) -> st
     restart_file = command.get("restart_file")
     restart_value = quote(str(restart_file)) if restart_file else "''"
     job_name = re.sub(r"[^A-Za-z0-9_]+", "_", str(run["run_name"]))[:60]
+    if execution_target == "gpu":
+        gpu_request = "#SBATCH --gpus-per-node=8\n"
+        accelerator_modules = (
+            "module load craype-accel-amd-gfx90a\n"
+            "module load cpe/25.09 cray-mpich/9.0.1 rocm/6.4.2\n"
+        )
+        target_environment = """export MPICH_GPU_SUPPORT_ENABLED=1
+export MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=1
+export MPICH_OFI_NIC_POLICY=GPU
+export MPICH_GPU_IPC_CACHE_MAX_SIZE=1000
+export HSA_XNACK=1
+"""
+        target_launch = "  --gpus-per-task=1 --gpu-bind=closest \\\n"
+    elif execution_target == "cpu":
+        gpu_request = ""
+        accelerator_modules = "module load cpe/25.09 cray-mpich/9.0.1\n"
+        target_environment = """export MPICH_GPU_SUPPORT_ENABLED=0
+unset MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED MPICH_OFI_NIC_POLICY
+unset MPICH_GPU_IPC_CACHE_MAX_SIZE HSA_XNACK
+"""
+        target_launch = ""
+    else:
+        raise ValueError(f"unsupported execution target: {execution_target}")
     return f"""#!/bin/bash
 #SBATCH -J cgl_{job_name}
 #SBATCH -A {ACCOUNT}
@@ -320,8 +344,7 @@ def generated_batch_script(manifest: dict[str, object], script_path: Path) -> st
 #SBATCH -q {QOS}
 #SBATCH -t {allocation["requested_walltime"]}
 #SBATCH -N {nodes}
-#SBATCH --gpus-per-node=8
-#SBATCH --threads-per-core=1
+{gpu_request}#SBATCH --threads-per-core=1
 
 set -euo pipefail
 
@@ -348,23 +371,16 @@ mkdir -p "${{OUT_DIR}}" "${{RESTART_DIR}}"
 
 module restore
 module load PrgEnv-cray
-module load craype-accel-amd-gfx90a
-module load cpe/25.09 cray-mpich/9.0.1 rocm/6.4.2
-module load cce/20.0.0
+{accelerator_modules}module load cce/20.0.0
 module unload darshan-runtime
 
 export LD_LIBRARY_PATH=${{CRAY_LD_LIBRARY_PATH}}:${{LD_LIBRARY_PATH:-}}
 export MPICH_ENV_DISPLAY=1
 export MPICH_VERSION_DISPLAY=1
-export MPICH_GPU_SUPPORT_ENABLED=1
-export MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=1
-export MPICH_OFI_NIC_POLICY=GPU
-export MPICH_GPU_IPC_CACHE_MAX_SIZE=1000
-export MPICH_MPIIO_HINTS="*:romio_cb_write=disable"
+{target_environment}export MPICH_MPIIO_HINTS="*:romio_cb_write=disable"
 export MPICH_OFI_NUM_CQ_ENTRIES=131072
 export FI_MR_CACHE_MONITOR=kdreg2
 export FI_CXI_RX_MATCH_MODE=software
-export HSA_XNACK=1
 export OMP_NUM_THREADS=1
 
 {{
@@ -384,8 +400,7 @@ fi
 
 srun -N "${{NNODES}}" -n "${{NRANKS}}" --ntasks-per-node="${{RANKS_PER_NODE}}" \
   -c "${{CPUS_PER_TASK}}" --threads-per-core=1 --cpu-bind=threads \
-  --gpus-per-task=1 --gpu-bind=closest \
-  "${{ATHENA}}" "${{RUN_ARGS[@]}}" -d "${{OUT_DIR}}" \
+{target_launch}  "${{ATHENA}}" "${{RUN_ARGS[@]}}" -d "${{OUT_DIR}}" \
   -t {quote(command["athena_walltime"])} \
   job/basename={quote(run["run_name"])}{override_text}
 
@@ -516,6 +531,7 @@ def prepare(args: argparse.Namespace) -> Path:
             "restart_sha256": (
                 sha256(archived_restart) if archived_restart is not None else None
             ),
+            "execution_target": args.execution_target,
             "athena_walltime": args.athena_walltime,
             "overrides": args.override,
         },
@@ -821,6 +837,7 @@ def self_test() -> int:
             athena_walltime="00:25:00",
             ranks_per_node=8,
             cpus_per_task=7,
+            execution_target="gpu",
             campaign="self-test",
             run_name="valid",
             purpose="offline accounting validation",
@@ -834,6 +851,8 @@ def self_test() -> int:
         expected_capture = "grep -E '^(MPICH_|FI_|HSA_|OMP_|ROCR_|HIP_|CRAY_)'"
         if expected_capture not in script_text:
             raise ValueError("self-test failed to retain exported runtime settings")
+        if "MPICH_GPU_SUPPORT_ENABLED=1" not in script_text:
+            raise ValueError("self-test failed to configure the GPU target")
         check_submit(argparse.Namespace(
             manifest=str(manifest_path), allow_local_root=True,
             squeue_file=str(empty_queue),
@@ -878,7 +897,23 @@ def self_test() -> int:
             manifest=str(restart_manifest_path), allow_local_root=True,
             notes="offline restart preparation check complete",
         ))
+        arguments.run_name = "valid_cpu"
+        arguments.execution_target = "cpu"
+        cpu_manifest_path = prepare(arguments)
+        cpu_script_text = Path(str(
+            read_manifest(cpu_manifest_path)["paths"]["batch_script"]
+        )).read_text(encoding="utf-8")
+        if ("MPICH_GPU_SUPPORT_ENABLED=0" not in cpu_script_text
+                or "--gpus-per-task" in cpu_script_text
+                or "#SBATCH --gpus-per-node" in cpu_script_text
+                or "rocm/6.4.2" in cpu_script_text):
+            raise ValueError("self-test failed to generate a CPU MPI launch")
+        cancel(argparse.Namespace(
+            manifest=str(cpu_manifest_path), allow_local_root=True,
+            notes="offline CPU MPI preparation check complete",
+        ))
         arguments.restart_file = None
+        arguments.execution_target = "gpu"
         arguments.run_name = "bad_walltime"
         arguments.walltime = "02:00:01"
         rejected_walltime = False
@@ -934,6 +969,10 @@ def parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--athena-walltime", required=True)
     prepare_parser.add_argument("--ranks-per-node", type=int, default=8)
     prepare_parser.add_argument("--cpus-per-task", type=int, default=7)
+    prepare_parser.add_argument(
+        "--execution-target", choices=("gpu", "cpu"), default="gpu",
+        help="Select GPU-aware or Kokkos-Serial CPU/MPI launch configuration.",
+    )
     prepare_parser.add_argument("--override", action="append", default=[])
     prepare_parser.add_argument(
         "--allow-dirty-source", action="store_true",
