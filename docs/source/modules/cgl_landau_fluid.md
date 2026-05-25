@@ -243,10 +243,12 @@ its archive and source-TeX checksums as reference provenance.
 The snapshot products also include Figure 2(a)-coordinate joint PDFs of
 `delta p_parallel` and `delta p_perp` versus
 `<p> delta rho/<rho>`, rendered for each analyzed case. This supplies the
-joint diagnostic in AthenaK units. The paper raster can be decoded into
-sampled donor-coordinate surfaces with
-`scripts/digitize_cgl_lf_mks24_fig2a.py`, but it is not a quantitative
-reference until its donor-pressure conversion is qualified.
+joint diagnostic in AthenaK units. The paper raster is decoded into sampled
+surfaces with `scripts/digitize_cgl_lf_mks24_fig2a.py`. For this beta-10
+panel, the pinned source and matching input deck establish pressure scale
+`s = 0.5`; the extractor applies the corresponding two-dimensional PDF
+Jacobian and emits comparison-manifest surfaces while retaining raw donor
+samples for audit.
 They also include the Figure 3 compressive-flow projection
 `E_{khat dot u}(k_perp)`, a normalized density-fluctuation spectrum, and
 separate `p_parallel`, `p_perp`, and AthenaK `B^2/2` spectra needed for
@@ -277,13 +279,13 @@ colorbar, checked against the published per-shell unit normalization, and
 emitted with an explicit raster-extraction uncertainty. The
 paper states `p0 = 100` in code
 units for its beta-100 limiter runs, while the equivalent AthenaK
-`v_A = 1` normalization uses `p0 = 50`; until an explicit observable
-conversion is qualified, dimensional Figure 11 upper spectra, Figure 12
+`v_A = 1` normalization uses `p0 = 50`; until transforms for the listed
+spectral and strain observables are qualified, dimensional Figure 11 upper
+spectra, Figure 12
 spectra, and Figure 13(a),(c) curves are retained only as excluded audit
-context. Figure 2(a)'s sampled-surface comparison route is implemented and
-its labeled raster/color mapping is decoded into excluded
-donor-pressure-coordinate samples; no analyzer manifest is emitted until the
-pressure-scale conversion and surface-density Jacobian are qualified.
+context. Figure 2(a)'s sampled-surface comparison route is implemented, and
+its labeled raster/color mapping is admitted through its source-derived
+beta-10 pressure conversion and surface-density Jacobian.
 Figure 5(b)'s dimensionless
 curves are admitted through the opt-in
 conditioned-structure-function analysis; no paper-scale comparison has been

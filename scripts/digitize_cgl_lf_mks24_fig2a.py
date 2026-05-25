@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract raw donor-coordinate MKS24 Figure 2(a) surfaces from its raster PDF."""
+"""Extract admitted MKS24 Figure 2(a) joint-PDF surfaces from its raster PDF."""
 
 from __future__ import annotations
 
@@ -15,6 +15,9 @@ import zlib
 
 EXPECTED_FIGURE_SHA256 = (
     "277545ff1a86b5ca46e97fa034ce189f72f149ecbb515470c30996494c1de129"
+)
+EXPECTED_SOURCE_TEX_SHA256 = (
+    "6d6e748fd1883c5d33167be653d67aed2f84a9b364267d9e90ea075df184af4c"
 )
 IMAGE_RE = re.compile(
     rb"<<(.*?)>>\s*stream\r?\n(.*?)\r?\nendstream", re.DOTALL
@@ -44,6 +47,11 @@ X_TICKS = (
 )
 SAMPLE_STRIDE = 8
 SURFACE_Z_UNCERTAINTY = 0.5
+DONOR_FIGURE_BETA0 = 10.0
+DONOR_BETA100_P0 = 100.0
+DONOR_FIGURE_P0 = DONOR_BETA100_P0 * DONOR_FIGURE_BETA0 / 100.0
+ATHENAK_FIGURE_P0 = 5.0
+ATHENAK_PRESSURE_SCALE = ATHENAK_FIGURE_P0 / DONOR_FIGURE_P0
 PANELS = {
     "parallel": {
         "intended_case": "paper_standard_active_alfvenic_beta10",
@@ -214,77 +222,148 @@ def sample_surface(
     }
 
 
-def write_surfaces(source_figure: Path, output_dir: Path) -> Path:
-    """Write donor-coordinate CSV surfaces and an explicitly excluded record."""
+def write_surface_csv(
+    path: Path, samples: list[tuple[float, float, float]], pressure_scale: float
+) -> None:
+    """Write surface samples in one pressure-unit convention."""
+
+    density_scale = 1.0 / pressure_scale ** 2
+    with path.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(("x", "y", "z", "z_uncertainty"))
+        for x, y, z in samples:
+            writer.writerow((
+                f"{pressure_scale * x:.17g}",
+                f"{pressure_scale * y:.17g}",
+                f"{density_scale * z:.17g}",
+                f"{density_scale * SURFACE_Z_UNCERTAINTY:.17g}",
+            ))
+
+
+def write_surfaces(source_figure: Path, source_tex: Path, output_dir: Path) -> Path:
+    """Write donor audit data and admitted AthenaK-coordinate surfaces."""
 
     digest = sha256_file(source_figure)
     if digest != EXPECTED_FIGURE_SHA256:
         raise ValueError(
             "Figure 2(a) SHA-256 does not match pinned arXiv:2405.02418v2 source"
         )
+    source_tex_digest = sha256_file(source_tex)
+    if source_tex_digest != EXPECTED_SOURCE_TEX_SHA256:
+        raise ValueError(
+            "MKS24 TeX SHA-256 does not match pinned arXiv:2405.02418v2 source"
+        )
     mosaic = tiled_mosaic(pdf_images(source_figure.read_bytes()))
     values, colorbar = colorbar_values(mosaic)
     output_dir.mkdir(parents=True, exist_ok=True)
     archived_figure = output_dir / "fig2a.pdf"
+    archived_source_tex = output_dir / "MKS24.tex"
     shutil.copy2(source_figure, archived_figure)
-    entries: list[dict[str, object]] = []
+    shutil.copy2(source_tex, archived_source_tex)
+    raw_entries: list[dict[str, object]] = []
+    admitted_entries: list[dict[str, object]] = []
     panel_metadata: dict[str, object] = {}
     for panel_name, panel in PANELS.items():
         samples, extraction = sample_surface(mosaic, panel, values)
-        csv_path = output_dir / f"fig2a_{panel_name}_paper_pressure_units.csv"
-        with csv_path.open("w", newline="", encoding="utf-8") as stream:
-            writer = csv.writer(stream)
-            writer.writerow(("paper_x", "paper_y", "z", "z_uncertainty"))
-            for x, y, z in samples:
-                writer.writerow((
-                    f"{x:.17g}",
-                    f"{y:.17g}",
-                    f"{z:.17g}",
-                    f"{SURFACE_Z_UNCERTAINTY:.17g}",
-                ))
-        entries.append({
+        raw_path = output_dir / f"fig2a_{panel_name}_paper_pressure_units.csv"
+        admitted_path = output_dir / (
+            f"fig2a_{panel_name}_athenak_pressure_units.csv"
+        )
+        write_surface_csv(raw_path, samples, 1.0)
+        write_surface_csv(admitted_path, samples, ATHENAK_PRESSURE_SCALE)
+        raw_entries.append({
             "id": f"fig2a_{panel_name}_paper_pressure_units",
-            "intended_case": panel["intended_case"],
-            "intended_product": panel["intended_product"],
-            "data_file": csv_path.name,
-            "data_sha256": sha256_file(csv_path),
+            "case": panel["intended_case"],
+            "product": panel["intended_product"],
+            "data_file": raw_path.name,
+            "data_sha256": sha256_file(raw_path),
             "sample_count": extraction["sample_count"],
+        })
+        admitted_entries.append({
+            "id": f"fig2a_{panel_name}_athenak_pressure_units",
+            "case": panel["intended_case"],
+            "product": panel["intended_product"],
+            "data_file": admitted_path.name,
+            "data_sha256": sha256_file(admitted_path),
+            "interpolation": "bilinear",
         })
         panel_metadata[panel_name] = {
             "bounds": list(panel["bounds"]),
             "y_ticks": [list(point) for point in panel["y_ticks"]],
             **extraction,
         }
-    record = {
-        "admission_status": "excluded_pending_paper_to_athenak_pressure_transform",
+    transform = {
+        "source_evidence": (
+            "MKS24.tex states fixed B0 across runs and p0 proportional to "
+            "beta0; its beta-100 limiter-scan footnote states p0=100 in code "
+            "units. Therefore its beta-10 Figure 2(a) run has p0=10. The "
+            "matching AthenaK beta-10 deck uses p0=5."
+        ),
+        "donor_beta100_p0": DONOR_BETA100_P0,
+        "donor_figure_beta0": DONOR_FIGURE_BETA0,
+        "donor_figure_p0": DONOR_FIGURE_P0,
+        "athenak_figure_p0": ATHENAK_FIGURE_P0,
+        "pressure_scale_s": ATHENAK_PRESSURE_SCALE,
+        "coordinate_transform": "x_A=s*x_paper; y_A=s*y_paper",
+        "density_transform": "z_A=z_paper/s^2; sigma_z_A=sigma_z_paper/s^2",
+    }
+    raw_record = {
+        "admission_status": "transformed_to_athenak_surface_manifest",
         "source_description": (
             "MKS24 arXiv:2405.02418v2 source/fig2a.pdf; source-resolution "
             "tiled raster decoded through its labeled linear colorbar and axes"
         ),
         "source_figure": archived_figure.name,
         "source_figure_sha256": digest,
+        "conversion_source": archived_source_tex.name,
+        "conversion_source_sha256": source_tex_digest,
         "digitization_tool": Path(__file__).name,
         "coordinate_units": "MKS24 plotted donor pressure units",
-        "exclusion_reason": (
-            "Both plotted axes carry donor pressure units. The current "
-            "AthenaK normalized deck has no qualified donor-pressure conversion; "
-            "if a pressure scale s is later established, conversion requires "
-            "x_A=s*x_paper, y_A=s*y_paper, z_A=z_paper/s^2, and "
-            "sigma_z_A=sigma_z_paper/s^2."
-        ),
+        "athenak_transform": transform,
         "uncertainty_description": (
             "Absolute joint-PDF density uncertainty 0.5 conservatively covers "
             "color quantization and raster sampling. Black dotted-guide pixels "
             "and axis-overlay pixels absent from the colorbar palette are omitted."
         ),
-        "surfaces": entries,
+        "surfaces": raw_entries,
     }
-    record_path = output_dir / "excluded_surfaces.json"
-    record_path.write_text(
-        json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    raw_record_path = output_dir / "donor_surfaces.json"
+    raw_record_path.write_text(
+        json.dumps(raw_record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    manifest = {
+        "schema_version": 1,
+        "provenance": {
+            "method": "digitized",
+            "source_description": (
+                "MKS24 arXiv:2405.02418v2 source/fig2a.pdf; embedded raster "
+                "decoded through its labeled colorbar and axes, then mapped "
+                "from donor to AthenaK beta-10 pressure coordinates using "
+                "pinned MKS24.tex initial-pressure evidence"
+            ),
+            "source_figure": archived_figure.name,
+            "source_figure_sha256": digest,
+            "conversion_source": archived_source_tex.name,
+            "conversion_source_sha256": source_tex_digest,
+            "coordinate_transform": transform,
+            "digitization_tool": Path(__file__).name,
+            "uncertainty_description": (
+                "Donor-coordinate absolute joint-PDF density uncertainty 0.5 "
+                "covers color quantization and raster sampling; after the "
+                "source-derived pressure scale s=0.5, density and uncertainty "
+                "are multiplied by 1/s^2=4. Black overlays are omitted."
+            ),
+        },
+        "surfaces": admitted_entries,
+    }
+    manifest_path = output_dir / "surfaces.json"
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     metadata = {
         "source_figure_sha256": digest,
+        "conversion_source_sha256": source_tex_digest,
+        "coordinate_transform": transform,
         "mosaic_size": [MOSAIC_WIDTH, MOSAIC_HEIGHT],
         "tile_sizes_in_pdf_order": [list(size) for size in TILE_SIZES],
         "colorbar": {
@@ -295,15 +374,17 @@ def write_surfaces(source_figure: Path, output_dir: Path) -> Path:
         },
         "x_ticks": [list(point) for point in X_TICKS],
         "sample_stride_pixels": SAMPLE_STRIDE,
-        "surface_z_uncertainty": SURFACE_Z_UNCERTAINTY,
+        "surface_z_uncertainty_donor_coordinates": SURFACE_Z_UNCERTAINTY,
         "panels": panel_metadata,
-        "excluded_surface_record": record_path.name,
-        "excluded_surface_record_sha256": sha256_file(record_path),
+        "donor_surface_record": raw_record_path.name,
+        "donor_surface_record_sha256": sha256_file(raw_record_path),
+        "surface_manifest": manifest_path.name,
+        "surface_manifest_sha256": sha256_file(manifest_path),
     }
     (output_dir / "digitization_metadata.json").write_text(
         json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    return record_path
+    return manifest_path
 
 
 def main() -> int:
@@ -311,10 +392,11 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source_figure", type=Path)
+    parser.add_argument("source_tex", type=Path)
     parser.add_argument("output_dir", type=Path)
     args = parser.parse_args()
-    record = write_surfaces(args.source_figure, args.output_dir)
-    print(f"Wrote excluded Figure 2(a) surface record to {record}")
+    manifest = write_surfaces(args.source_figure, args.source_tex, args.output_dir)
+    print(f"Wrote digitized Figure 2(a) surface manifest to {manifest}")
     return 0
 
 

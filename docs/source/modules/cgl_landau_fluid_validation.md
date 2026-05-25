@@ -199,10 +199,14 @@ The joint pressure-density output uses the plotted Figure 2(a) coordinates
 `x = <p> delta rho/<rho>` and `y = delta p_parallel` or `delta p_perp`,
 where `<p> = <(2 p_perp + p_parallel)/3>`, and renders one two-panel PDF per
 analyzed case. The optional reference manifest can compare sampled surfaces
-against these products by bilinear interpolation. The pinned published
-raster can now be decoded into sampled donor-coordinate surfaces through its
-labeled colorbar, but those surfaces are deliberately excluded from the
-manifest until the donor-to-AthenaK pressure-unit transform is qualified.
+against these products by bilinear interpolation. The pinned raster is
+decoded through its labeled colorbar into sampled surfaces. For this beta-10
+panel, the pinned source fixes the pressure conversion: it states that `p0`
+scales with `beta0` at fixed `B0` and reports `p0 = 100` for its beta-100
+limiter runs, so the plotted run has donor `p0 = 10`; the matching AthenaK
+deck has `p0 = 5`. The extractor admits the surfaces with pressure scale
+`s = 0.5` and applies the two-dimensional PDF Jacobian to density and
+uncertainty.
 
 The compressive spectrum implements the Figure 3 quantity
 `E_{khat dot u}(k_perp)` by Fourier-projecting velocity onto the full
@@ -232,10 +236,9 @@ dimensionless Figure 7 lower-panel transfer,
 Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and
 Figure 12 alignment, and Figure 13(b),(d) limiter curves. Dimensional Figure
 7 upper spectra, Figure 11 upper spectra, Figure 12 lower spectra, and Figure
-13(a),(c) curves
-remain excluded because the paper's
-reported code-unit pressure scale is not yet transformed to the AthenaK
-`v_A = 1` convention.
+13(a),(c) curves remain excluded because their complete spectral or strain
+ordinate transforms are not qualified by the pressure-coordinate conversion
+used only for Figure 2(a).
 Figure 8 is admitted only through its reviewed raster contract: its embedded
 RGB heatmaps are decoded against their labeled linear colorbar, selected
 shell slices are checked against the paper's per-`k_perp` unit-normalization
@@ -244,10 +247,9 @@ retained in the manifest. Figure 4(a)'s normalized-density PDF is also
 admitted through its plotted `rho/<rho>` coordinate. Figure 5(b) is admitted
 through its normalized length coordinates and the opt-in conditioned
 structure functions. Figure 2(a)'s matching joint product and sampled-surface
-comparison route are implemented; its labeled raster/color mapping is decoded
-to excluded donor-pressure-coordinate samples, but no analyzer manifest is
-emitted until the pressure-unit conversion and two-dimensional PDF Jacobian
-are established. Figure 3 and Figure 6(a)
+comparison route are implemented; its labeled raster/color mapping and
+source-derived beta-10 pressure conversion emit admitted surfaces while
+retaining donor-coordinate samples for audit. Figure 3 and Figure 6(a)
 now have matching emitted spectral fields, and Figure 4(b) has an explicit
 normalized-density spectral product; their plotted spectral ordinates remain
 unadmitted pending qualified transformations and authorized case execution.
@@ -354,25 +356,26 @@ their redistribution permission is separately established. Archive the
 staging manifest or immutable reference path with every quantitative paper
 comparison bundle. The staged official `2405.02418v2` source inventory
 contains TeX and rendered figure PDFs, not machine-readable curve tables.
-For Figure 2(a), decode its labeled raster into explicitly excluded
-donor-pressure-coordinate surface samples:
+For Figure 2(a), decode its labeled raster and apply its source-qualified
+beta-10 pressure-coordinate conversion:
 
 ```bash
 python3 scripts/digitize_cgl_lf_mks24_fig2a.py \
   /path/to/arXiv-2405.02418v2/source/fig2a.pdf \
-  /path/to/arXiv-2405.02418v2/digitized_fig2a_v1
+  /path/to/arXiv-2405.02418v2/source/MKS24.tex \
+  /path/to/arXiv-2405.02418v2/digitized_fig2a_v2
 ```
 
-The utility refuses a PDF whose SHA-256 differs from the pinned Figure 2(a)
-source, reconstructs the tiled source-resolution chart, and decodes its
-labeled linear colorbar. It emits two sampled CSV surfaces with absolute
-joint-PDF density uncertainty `0.5`, masking only black plotted overlays.
-The output is `excluded_surfaces.json`, not an analyzer reference manifest:
-both axes remain in donor pressure units. If a donor-to-AthenaK pressure
-scale `s` is later qualified, the corresponding surface conversion is
-`x_A = s x_paper`, `y_A = s y_paper`, and
-`z_A = z_paper/s^2`, with the same `1/s^2` factor applied to
-`z_uncertainty`.
+The utility refuses either input if its SHA-256 differs from the pinned
+`2405.02418v2` sources, reconstructs the tiled source-resolution chart, and
+decodes its labeled linear colorbar. It retains two donor-coordinate CSV
+surfaces with absolute joint-PDF density uncertainty `0.5`, masking only
+black plotted overlays, and emits `surfaces.json` plus two
+AthenaK-coordinate surfaces. The source-derived pressure scale is `s = 0.5`,
+so `x_A = s x_paper`, `y_A = s y_paper`,
+`z_A = z_paper/s^2`, and `z_uncertainty_A = 2.0`. Supply `surfaces.json` to
+`paper-analyze --reference-curves` for the matching standard active beta-10
+case.
 
 For Figure 2(b), extract the plotted vector paths from the pinned source PDF
 into an ignored or archival results area:
@@ -541,9 +544,8 @@ panel (a) is dimensionful and panel (c) is plotted as
 Other quantitative panels still require a recorded digitization procedure,
 a qualified coordinate transform, or a separately provenance-tracked
 numerical reference source. Figure 2(a) now has a matching joint
-pressure-density product, sampled-surface comparison route, and decoded raw
-donor-coordinate raster samples; its donor-pressure conversion is not
-admitted. Figure 4(b)'s
+pressure-density product and admitted sampled surfaces, with raw
+donor-coordinate raster samples retained for audit. Figure 4(b)'s
 `E_rho` spectrum must not be
 substituted for `spectra.density_fluctuation` without a matching ordinate
 transformation.
