@@ -84,6 +84,30 @@ def summarize_history(path: Path, time_start: float | None = None,
     for name in ("mirror_vol", "fire_vol", "hard_vol"):
         if name in data:
             result[f"{name}_fraction_final"] = float(data[name][-1] / volume)
+    volumes = data["volume"]
+    if np.all(volumes != 0.0):
+        # Athena writes an unchanged final history row at termination; retain
+        # its last value once so reference-curve coordinates remain ordered.
+        series_rows = np.concatenate((np.diff(data["time"]) > 0.0, [True]))
+        time_series: dict[str, object] = {
+            "time": data["time"][series_rows].tolist()
+        }
+        fraction_names = {
+            "mirror_vol": "mirror_fraction",
+            "fire_vol": "firehose_fraction",
+            "hard_vol": "hard_bound_fraction",
+        }
+        for source, target in fraction_names.items():
+            if source in data:
+                time_series[target] = (
+                    data[source][series_rows] / volumes[series_rows]
+                ).tolist()
+        if "mirror_vol" in data and "fire_vol" in data:
+            time_series["unstable_fraction"] = (
+                (data["mirror_vol"][series_rows] + data["fire_vol"][series_rows])
+                / volumes[series_rows]
+            ).tolist()
+        result["time_series"] = time_series
     if "force_work" in data:
         result["force_work_final"] = float(data["force_work"][-1])
     if "b2" in data and "b4" in data and data["b2"][-1] != 0.0:
@@ -1283,8 +1307,9 @@ def require_manifest_text(record: dict[str, object], key: str, context: str) -> 
     return value
 
 
-def analyzed_product_curve(ensemble: dict[str, object],
-                           product: str) -> tuple[np.ndarray, np.ndarray]:
+def analyzed_product_curve(ensemble: dict[str, object], product: str,
+                           histories: object = None
+                           ) -> tuple[np.ndarray, np.ndarray]:
     """Return analyzed x/y arrays selected by a reference product identifier."""
 
     parts = product.split(".", maxsplit=1)
@@ -1322,6 +1347,18 @@ def analyzed_product_curve(ensemble: dict[str, object],
         record = products[name]
         edges = np.asarray(record["edges"], dtype=float)
         return 0.5 * (edges[1:] + edges[:-1]), np.asarray(record["density"], dtype=float)
+    if family == "history":
+        if not isinstance(histories, list) or len(histories) != 1:
+            raise ValueError(
+                f"analyzed product requires exactly one history: {product}"
+            )
+        time_series = histories[0].get("time_series", {})
+        if not isinstance(time_series, dict) or name not in time_series:
+            raise ValueError(f"analyzed product is missing: {product}")
+        return (
+            np.asarray(time_series["time"], dtype=float),
+            np.asarray(time_series[name], dtype=float),
+        )
     raise ValueError(f"unsupported reference product: {product}")
 
 
@@ -1428,13 +1465,23 @@ def reference_curve_comparisons(result: dict[str, object],
             )
         if case == "direct":
             ensemble = result.get("snapshot_ensemble", {})
+            histories = result.get("histories", [])
         elif isinstance(cases, dict) and case in cases:
             ensemble = cases[case].get("snapshot_ensemble", {})
+            histories = cases[case].get("histories", [])
         else:
             raise ValueError(f"reference curve {curve_id} selects missing case {case}")
-        if not isinstance(ensemble, dict) or ensemble.get("snapshot_count", 0) == 0:
+        if (
+            not product.startswith("history.")
+            and (
+                not isinstance(ensemble, dict)
+                or ensemble.get("snapshot_count", 0) == 0
+            )
+        ):
             raise ValueError(f"reference curve {curve_id} selects empty analysis")
-        source_x, source_y = analyzed_product_curve(ensemble, product)
+        if not isinstance(ensemble, dict):
+            ensemble = {}
+        source_x, source_y = analyzed_product_curve(ensemble, product, histories)
         simulated = interpolate_analysis_curve(
             x, source_x, source_y, str(curve.get("interpolation", "linear"))
         )

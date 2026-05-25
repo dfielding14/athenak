@@ -166,7 +166,8 @@ heat-flux-sign/pressure-work checks and renders available history, PDF,
 spectrum, transfer, alignment, heat-flux-proxy, and pressure-work figures
 under `figures/paper/`. When an externally prepared reference-curve manifest
 is supplied, it validates curve/source checksums and reported pointwise
-uncertainties, computes uncertainty-normalized residuals, and renders
+uncertainties, computes uncertainty-normalized residuals for supported
+snapshot products and threshold-volume history series, and renders
 `paper_reference_comparisons.pdf`. Obtaining or explicitly digitizing the
 actual MKS24 curves, exact time-integrated/production local budget closure,
 and production comparisons remain to be completed. For retained LF histories, the analyzer
@@ -279,8 +280,9 @@ entries. For `method = "digitized"`, provenance must name the source figure,
 its SHA-256 digest, the digitization tool, and the uncertainty procedure.
 Each CSV curve must contain ordered `x`, `y`, and positive `y_uncertainty`
 columns; its entry records `data_sha256`, target analysis `case`, supported
-`product` (for example `spectra.grad_parallel_delta_p`), and optional
-`interpolation` (`linear` or `loglog`). The analyzer fails closed on missing
+`product` (for example `spectra.grad_parallel_delta_p` or
+`history.unstable_fraction`), and optional `interpolation` (`linear` or
+`loglog`). The analyzer fails closed on missing
 uncertainty, checksum mismatches, or out-of-domain coordinates.
 
 ## Frontier Debug Qualification Preparation

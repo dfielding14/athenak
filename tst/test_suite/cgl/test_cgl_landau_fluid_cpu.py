@@ -749,6 +749,8 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
             "time_integral_estimate"
         ]["available"]
         assert diagnostics["histories"][0]["analysis_window"]["rows_selected"] > 0
+        history_series = diagnostics["histories"][0]["time_series"]
+        assert "unstable_fraction" in history_series
         reference_dir = Path("cgl_ci_paper_reference_inputs")
         reference_dir.mkdir()
         spectrum = diagnostics["snapshot_ensemble"]["spectra"]["delta_p"]
@@ -765,6 +767,19 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
             )
         )
         curve_digest = hashlib.sha256(curve_path.read_bytes()).hexdigest()
+        history_curve_path = reference_dir / "unstable_fraction.csv"
+        history_sampled = list(
+            zip(history_series["time"], history_series["unstable_fraction"])
+        )[:2]
+        assert len(history_sampled) == 2
+        history_curve_path.write_text(
+            "x,y,y_uncertainty\n" + "".join(
+                f"{x:.17g},{y:.17g},1.0e-12\n" for x, y in history_sampled
+            )
+        )
+        history_curve_digest = hashlib.sha256(
+            history_curve_path.read_bytes()
+        ).hexdigest()
         source_figure = reference_dir / "synthetic.pdf"
         source_figure.write_bytes(b"synthetic reference panel\n")
         manifest_path = reference_dir / "curves.json"
@@ -787,6 +802,13 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
                 "data_file": curve_path.name,
                 "data_sha256": curve_digest,
                 "interpolation": "linear",
+            }, {
+                "id": "unstable_fraction_exact",
+                "case": "direct",
+                "product": "history.unstable_fraction",
+                "data_file": history_curve_path.name,
+                "data_sha256": history_curve_digest,
+                "interpolation": "linear",
             }],
         }))
         result = subprocess.run(
@@ -794,6 +816,8 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
                 "python3",
                 "../../../scripts/analyze_cgl_lf_paper.py",
                 str(snapshots[-1]),
+                "--history",
+                "cgl_ci_paper_analysis.user.hst",
                 "--reference-curves",
                 str(manifest_path),
                 "--output-dir",
@@ -812,6 +836,9 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         assert comparison["sample_count"] == len(sampled)
         assert comparison["maximum_absolute_residual"] < 1.0e-14
         assert comparison["rms_normalized_by_reported_uncertainty"] < 1.0e-12
+        history_comparison = reference["comparisons"]["unstable_fraction_exact"]
+        assert history_comparison["sample_count"] == len(history_sampled)
+        assert history_comparison["maximum_absolute_residual"] < 1.0e-14
         invalid_manifest = json.loads(manifest_path.read_text())
         invalid_manifest["provenance"]["source_figure_sha256"] = "0" * 64
         invalid_path = reference_dir / "invalid_curves.json"
