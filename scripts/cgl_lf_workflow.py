@@ -1526,6 +1526,8 @@ def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
             "--output-dir",
             str(analysis_dir),
             "--synthetic-test",
+            "--alignment-shells",
+            args.alignment_shells,
         ]
         if args.reference_curves:
             analysis_command.extend([
@@ -1551,6 +1553,7 @@ def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
             "paper_diagnostics": display_path(
                 analysis_dir / "diagnostics.json", paths.root
             ),
+            "alignment_shells": args.alignment_shells,
             "paper_figure_index": display_path(
                 paper_figures / "paper_figures.json", paths.root
             ),
@@ -1605,6 +1608,14 @@ def parser() -> argparse.ArgumentParser:
         default=os.environ.get("CGL_LF_REFERENCE_CURVES"),
         help=(
             "Provenance-qualified curve manifest to compare during paper-analyze."
+        ),
+    )
+    command.add_argument(
+        "--alignment-shells",
+        default=os.environ.get("CGL_LF_ALIGNMENT_SHELLS", "1,2,3"),
+        help=(
+            "Comma-separated k_perp shell indices used by paper-analyze "
+            "alignment PDFs and peak curves."
         ),
     )
     command.add_argument(

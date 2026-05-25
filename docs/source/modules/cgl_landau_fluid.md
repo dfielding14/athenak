@@ -229,8 +229,11 @@ With `--reference-curves <manifest.json>`, `paper-analyze` also accepts
 external numerical or digitized curves only when their manifest records
 provenance, SHA-256 digests, and positive per-point `y_uncertainty` values.
 It reports uncertainty-normalized residuals against supported PDF, spectrum,
-transfer, alignment, and threshold-volume history products and renders
-`paper_reference_comparisons.pdf`.
+transfer, selected-shell alignment-distribution, alignment-peak-versus-
+`k_perp`, and threshold-volume history products and renders
+`paper_reference_comparisons.pdf`. Use `--alignment-shells` with
+`paper-analyze` when a comparison manifest requires an alignment-peak curve
+over additional shells.
 These products are analysis infrastructure; they do not by themselves
 establish statistically converged paper comparisons.
 

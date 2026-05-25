@@ -154,7 +154,8 @@ forms common-bin steady-window averages. Current products include
 pressure/density PDFs, perpendicular shell spectra, field-projected
 `Delta p` and velocity-gradient spectra, the `b b : grad u` strain PDF,
 pressure-stress transfer with a real-space closure check, selected-scale
-alignment PDFs, and a cell-centered CGL pressure-work split,
+alignment PDFs and their peak-versus-`k_perp` curve, and a cell-centered CGL
+pressure-work split,
 `integral[p_perp div(u) - Delta p (b b : grad u)] dV`. The anisotropic
 stress term is compared with the direct pressure-transfer integral and is
 labelled as active feedback or passive-only interpretation when that model
@@ -176,7 +177,8 @@ is supplied, it validates curve/source checksums and reported pointwise
 uncertainties, computes uncertainty-normalized residuals for supported
 snapshot products and threshold-volume history series, and renders
 `paper_reference_comparisons.pdf`. Figure 2(b) vector-curve extraction is
-available below; remaining MKS24 panel curves, exact
+available below, together with Figure 12 alignment/spectrum extraction;
+remaining MKS24 panel curves, exact
 time-integrated/production local budget closure, and production comparisons
 remain to be completed. For retained LF histories, the analyzer
 also reports the RKL2-applied capped-face heat-flux contractions retained in
@@ -291,9 +293,35 @@ The utility refuses a PDF whose SHA-256 is not the pinned Figure 2(b)
 checksum, copies the source figure alongside its generated manifest, and
 writes the eight active/passive unstable-volume histories as CSV curves. It
 records an absolute `0.0025` plotted-line digitization uncertainty and omits
-vertices hidden above the panel's `0.8` vertical limit. Other quantitative
-panels still require a recorded digitization procedure or a separately
-provenance-tracked numerical reference source.
+vertices hidden above the panel's `0.8` vertical limit.
+
+For Figure 12, extract both the alignment-peak and
+`grad_parallel_delta_p` spectrum paths from the pinned source PDF:
+
+```bash
+python3 scripts/digitize_cgl_lf_mks24_fig12.py \
+  /path/to/arXiv-2405.02418v2/source/fig12.pdf \
+  /path/to/arXiv-2405.02418v2/digitized_fig12_v1
+```
+
+This extractor maps four active/passive heat-flux cases to
+`alignment_peak.cos_theta` and `spectra.grad_parallel_delta_p`, using
+absolute `0.005` top-panel uncertainty and five-percent logarithmic-spectrum
+uncertainty. It omits vertices clipped at the horizontal plot boundaries and
+records its recommended alignment shells. At the standard domain size, a
+Figure 12 comparison can request those shell centers directly; the workflow
+archives that selection in its analysis-product metadata:
+
+```bash
+python3 scripts/cgl_lf_workflow.py paper-analyze \
+  --output-dir /path/to/existing/bundle \
+  --alignment-shells 8,12,16,17,20,24,27,28,32,36,37,40,44,47,48,52,\
+56,57,60,64,67,68,72,76,77,80,84,87,88,92 \
+  --reference-curves /path/to/arXiv-2405.02418v2/digitized_fig12_v1/curves.json
+```
+
+Other quantitative panels still require a recorded digitization procedure or
+a separately provenance-tracked numerical reference source.
 
 An optional curve manifest passed to `paper-analyze --reference-curves`
 has `schema_version = 1`, a `provenance` object, and one or more curve
@@ -302,8 +330,8 @@ its SHA-256 digest, the digitization tool, and the uncertainty procedure.
 Each CSV curve must contain ordered `x`, `y`, and positive `y_uncertainty`
 columns; its entry records `data_sha256`, target analysis `case`, supported
 `product` (for example `spectra.grad_parallel_delta_p` or
-`history.unstable_fraction`), and optional `interpolation` (`linear` or
-`loglog`). The analyzer fails closed on missing
+`alignment_peak.cos_theta` or `history.unstable_fraction`), and optional
+`interpolation` (`linear` or `loglog`). The analyzer fails closed on missing
 uncertainty, checksum mismatches, or out-of-domain coordinates.
 
 ## Frontier Debug Qualification Preparation

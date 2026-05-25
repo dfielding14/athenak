@@ -775,6 +775,8 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
                 "--time-end",
                 "1.0",
                 "--synthetic-test",
+                "--alignment-shells",
+                "2,4,6",
                 "--output-dir",
                 "cgl_ci_paper_analysis_products",
             ],
@@ -839,6 +841,29 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
             )
         )
         curve_digest = hashlib.sha256(curve_path.read_bytes()).hexdigest()
+        alignment = diagnostics["snapshot_ensemble"]["alignment"]
+        alignment_dk = diagnostics["snapshot_ensemble"]["spectra"]["velocity"]["dk"]
+        alignment_sampled = []
+        for shell, distribution in sorted(
+            alignment.items(), key=lambda item: int(item[0])
+        ):
+            edges = np.asarray(distribution["edges"])
+            density = np.asarray(distribution["density"])
+            centers = 0.5 * (edges[1:] + edges[:-1])
+            alignment_sampled.append(
+                (float(shell) * alignment_dk, centers[np.argmax(density)])
+            )
+        assert len(alignment_sampled) >= 2
+        alignment_curve_path = reference_dir / "alignment_peak.csv"
+        alignment_curve_path.write_text(
+            "x,y,y_uncertainty\n" + "".join(
+                f"{x:.17g},{y:.17g},1.0e-12\n"
+                for x, y in alignment_sampled
+            )
+        )
+        alignment_curve_digest = hashlib.sha256(
+            alignment_curve_path.read_bytes()
+        ).hexdigest()
         history_curve_path = reference_dir / "unstable_fraction.csv"
         history_sampled = list(
             zip(history_series["time"], history_series["unstable_fraction"])
@@ -875,6 +900,13 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
                 "data_sha256": curve_digest,
                 "interpolation": "linear",
             }, {
+                "id": "alignment_peak_exact",
+                "case": "direct",
+                "product": "alignment_peak.cos_theta",
+                "data_file": alignment_curve_path.name,
+                "data_sha256": alignment_curve_digest,
+                "interpolation": "linear",
+            }, {
                 "id": "unstable_fraction_exact",
                 "case": "direct",
                 "product": "history.unstable_fraction",
@@ -892,6 +924,8 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
                 "cgl_ci_paper_analysis.user.hst",
                 "--reference-curves",
                 str(manifest_path),
+                "--alignment-shells",
+                "2,4,6",
                 "--output-dir",
                 "cgl_ci_paper_reference_products",
             ],
@@ -908,6 +942,9 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         assert comparison["sample_count"] == len(sampled)
         assert comparison["maximum_absolute_residual"] < 1.0e-14
         assert comparison["rms_normalized_by_reported_uncertainty"] < 1.0e-12
+        alignment_comparison = reference["comparisons"]["alignment_peak_exact"]
+        assert alignment_comparison["sample_count"] == len(alignment_sampled)
+        assert alignment_comparison["maximum_absolute_residual"] < 1.0e-14
         history_comparison = reference["comparisons"]["unstable_fraction_exact"]
         assert history_comparison["sample_count"] == len(history_sampled)
         assert history_comparison["maximum_absolute_residual"] < 1.0e-14

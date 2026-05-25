@@ -1308,6 +1308,34 @@ def require_manifest_text(record: dict[str, object], key: str, context: str) -> 
     return value
 
 
+def alignment_peak_curve(ensemble: dict[str, object]) -> tuple[np.ndarray, np.ndarray]:
+    """Return physical-k peak alignment cosine values from selected-shell PDFs."""
+
+    alignment = ensemble.get("alignment", {})
+    spectra = ensemble.get("spectra", {})
+    if not isinstance(alignment, dict) or not isinstance(spectra, dict):
+        raise ValueError("analyzed product is missing: alignment_peak.cos_theta")
+    velocity = spectra.get("velocity", {})
+    if not isinstance(velocity, dict) or "dk" not in velocity:
+        raise ValueError("analyzed product is missing: alignment_peak.cos_theta")
+    dk = float(velocity["dk"])
+    peaks: list[tuple[float, float]] = []
+    for shell, record in sorted(alignment.items(), key=lambda item: int(item[0])):
+        edges = np.asarray(record["edges"], dtype=float)
+        density = np.asarray(record["density"], dtype=float)
+        centers = 0.5 * (edges[1:] + edges[:-1])
+        peaks.append((float(shell) * dk, float(centers[np.argmax(density)])))
+    if len(peaks) < 2:
+        raise ValueError(
+            "analyzed product requires at least two shells: "
+            "alignment_peak.cos_theta"
+        )
+    return (
+        np.asarray([peak[0] for peak in peaks], dtype=float),
+        np.asarray([peak[1] for peak in peaks], dtype=float),
+    )
+
+
 def analyzed_product_curve(ensemble: dict[str, object], product: str,
                            histories: object = None
                            ) -> tuple[np.ndarray, np.ndarray]:
@@ -1348,6 +1376,8 @@ def analyzed_product_curve(ensemble: dict[str, object], product: str,
         record = products[name]
         edges = np.asarray(record["edges"], dtype=float)
         return 0.5 * (edges[1:] + edges[:-1]), np.asarray(record["density"], dtype=float)
+    if family == "alignment_peak" and name == "cos_theta":
+        return alignment_peak_curve(ensemble)
     if family == "history":
         if not isinstance(histories, list) or len(histories) != 1:
             raise ValueError(
