@@ -672,6 +672,10 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
             body = source.split(f"<{block}>", 1)[1].split("<", 1)[0]
             assert "single_file_per_rank = false" in body
         choices = workflow.model_choices(source, [])
+        assert choices["time_integrator"] == "rk2"
+        assert choices["time_sts_integrator"] == "rkl2"
+        assert choices["time_sts_max_dt_ratio"] == "-1.0"
+        assert choices["time_cfl_number"] == "0.3"
         assert choices["time_tlim"] == "10.0"
         assert choices["output2_file_type"] == "bin"
         assert choices["output2_dt"] == "0.25"
