@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 import hashlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -1421,7 +1422,20 @@ def bundle_case(args: argparse.Namespace) -> int:
         first_command["input_sha256"],
         first_command["executable_sha256"],
     )
+    submitted_input = Path(str(first_command["input_file"]))
+    model_choices = analysis_model_choices(submitted_input)
+    if model_choices.get("output1_file_type") != "hst":
+        raise ValueError("accepted production input does not retain output1 history")
+    try:
+        history_interval = float(model_choices["output1_dt"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError(
+            "accepted production input has no numeric history cadence"
+        ) from error
+    if not math.isfinite(history_interval) or history_interval <= 0.0:
+        raise ValueError("accepted production input has invalid history cadence")
     previous_final = None
+    previous_history: dict[str, list[float]] | None = None
     for segment in segments:
         command = segment["command"]
         if (
@@ -1436,10 +1450,27 @@ def bundle_case(args: argparse.Namespace) -> int:
             if first_time > 1.0e-10:
                 raise ValueError("accepted case history does not begin at t=0")
         else:
-            # Output cadence need not repeat the inspected restart boundary row.
+            if (
+                previous_history is None
+                or "dt" not in previous_history
+                or "dt" not in history
+            ):
+                raise ValueError(
+                    "accepted histories lack timesteps needed to validate restarts"
+                )
+            boundary_step = max(previous_history["dt"][-1], history["dt"][0])
+            if not math.isfinite(boundary_step) or boundary_step < 0.0:
+                raise ValueError("accepted histories have invalid boundary timestep")
+            # A walltime terminal row can replace one scheduled output at restart.
+            permitted_gap = 2.0 * history_interval + boundary_step + 1.0e-10
+            if first_time > previous_final + permitted_gap:
+                raise ValueError(
+                    "accepted restart histories exceed configured sampling cadence"
+                )
             if segment_final <= previous_final + 1.0e-10:
                 raise ValueError("accepted restart segment does not advance time")
         previous_final = segment_final
+        previous_history = history
     bundle = (
         Path(args.output_dir).expanduser().resolve()
         if args.output_dir
@@ -1478,7 +1509,6 @@ def bundle_case(args: argparse.Namespace) -> int:
     snapshots = link_distinct_snapshots(
         snapshot_sources, snapshot_dir, str(case["name"])
     )
-    submitted_input = Path(str(segments[0]["command"]["input_file"]))
     archived_input = input_dir / submitted_input.name
     shutil.copy2(submitted_input, archived_input)
     case_entry = {
@@ -1499,7 +1529,7 @@ def bundle_case(args: argparse.Namespace) -> int:
         "lf_active": True,
         "amr": False,
         "paper_smoke": False,
-        "model_choices": analysis_model_choices(archived_input),
+        "model_choices": model_choices,
     }
     manifest = {
         "workflow": "paper-mks24-stage-i-production",

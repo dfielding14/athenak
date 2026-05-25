@@ -1076,9 +1076,11 @@ def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(
         (output_dir / "bin").mkdir(parents=True)
         input_file = manifest_path.parent / "submitted_input.athinput"
         input_file.write_text("retained input\n")
-        rows = "".join(f"{time} 0\n" for time in times)
+        rows = "".join(f"{time} 0.001 0\n" for time in times)
         for name in ("case.mhd.hst", "case.user.hst"):
-            (output_dir / name).write_text("# [0]=time [1]=clean\n" + rows)
+            (output_dir / name).write_text(
+                "# [0]=time [1]=dt [2]=clean\n" + rows
+            )
         (output_dir / "bin" / f"{segment}.00000.bin").write_bytes(
             (
                 "Athena binary output version=1.1\n"
@@ -1119,7 +1121,7 @@ def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(
         "s01_rankio", [0.0, 1.8], "clean_partial", "b" * 64
     )
     terminal = record_segment(
-        "s02_rankio", [1.82, 2.0], "accepted", "b" * 64, parent=ranked
+        "s02_rankio", [1.823, 2.0], "accepted", "b" * 64, parent=ranked
     )
 
     lineage = stage_i.accepted_case_lineage(paths, "R16")
@@ -1132,7 +1134,10 @@ def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(
     monkeypatch.setattr(stage_i, "validate_matrix", lambda *_: {
         "cases": [{"id": "R16", "name": "case", "input": "ignored"}]
     })
-    monkeypatch.setattr(stage_i, "analysis_model_choices", lambda _: {})
+    monkeypatch.setattr(stage_i, "analysis_model_choices", lambda _: {
+        "output1_file_type": "hst",
+        "output1_dt": "0.02",
+    })
     bundle = root / "runs" / "bundles" / "test"
     args = SimpleNamespace(
         root=str(root),
@@ -1150,7 +1155,13 @@ def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(
         str(ranked), str(terminal)
     ]
     merged = stage_i.parse_history(bundle / "history" / "case.mhd.hst")
-    assert merged["time"] == [0.0, 1.8, 1.82, 2.0]
+    assert merged["time"] == [0.0, 1.8, 1.823, 2.0]
+    (terminal.parent.parent / "output" / "case.mhd.hst").write_text(
+        "# [0]=time [1]=dt [2]=clean\n1.85 0.001 0\n2.0 0.001 0\n"
+    )
+    args.output_dir = str(root / "runs" / "bundles" / "gap")
+    with pytest.raises(ValueError, match="configured sampling cadence"):
+        stage_i.bundle_case(args)
 
 
 def test_rank_local_binary_reader_keeps_unequal_rank_files(tmp_path, monkeypatch):
