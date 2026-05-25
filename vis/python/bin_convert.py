@@ -455,15 +455,6 @@ def read_all_ranks_binary(rank0_filename):
             + os.path.basename(rank0_filename)
         )
     )
-    file_sizes = np.array([os.path.getsize(file) for file in rank_files])
-    if len(np.unique(file_sizes)) > 1:
-        unique_file_sizes = np.unique(file_sizes)
-        larger_file_size = max(unique_file_sizes)
-        rank_files = [
-            file
-            for file, size in zip(rank_files, file_sizes)
-            if size == larger_file_size
-        ]
 
     # Read the rank 0 file to get the metadata
     rank0_filedata = read_binary(rank_files[0])

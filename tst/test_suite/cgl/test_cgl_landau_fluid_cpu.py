@@ -577,8 +577,14 @@ def test_cgl_lf_paper_forcing_seed_is_deterministic_and_selectable():
 def test_cgl_lf_paper_forcing_restart_preserves_rng_and_force_state():
     try:
         _run_paper("cgl_ci_paper_restart_reference")
-        _run_paper("cgl_ci_paper_restart_partial", "time/nlim=1")
-        restart_paths = sorted(Path("rst").glob("cgl_ci_paper_restart_partial.*.rst"))
+        _run_paper(
+            "cgl_ci_paper_restart_partial",
+            "time/nlim=1",
+            "output4/single_file_per_rank=true",
+        )
+        restart_paths = sorted(
+            Path("rst/rank_00000000").glob("cgl_ci_paper_restart_partial.*.rst")
+        )
         assert restart_paths, "paper smoke partial run did not write a checkpoint"
         command = [
             "./athena",
@@ -815,7 +821,7 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         source = input_path.read_text()
         for block in ("output2", "output3"):
             body = source.split(f"<{block}>", 1)[1].split("<", 1)[0]
-            assert "single_file_per_rank = false" in body
+            assert "single_file_per_rank = true" in body
         choices = workflow.model_choices(source, [])
         assert choices["time_integrator"] == "rk2"
         assert choices["time_sts_integrator"] == "rkl2"
@@ -824,10 +830,10 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         assert choices["time_tlim"] == "10.0"
         assert choices["output2_file_type"] == "bin"
         assert choices["output2_dt"] == "0.25"
-        assert choices["output2_single_file_per_rank"] == "false"
+        assert choices["output2_single_file_per_rank"] == "true"
         assert choices["output3_file_type"] == "rst"
         assert choices["output3_dt"] == "1.0"
-        assert choices["output3_single_file_per_rank"] == "false"
+        assert choices["output3_single_file_per_rank"] == "true"
         expected_hardwall = "true" if input_path.name in hardwall_paths else "false"
         assert choices["limiter_hardwall"] == expected_hardwall
     scale_resolutions = {
@@ -998,6 +1004,70 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
     assert merged_history["time"] == [0.0, 2.0, 3.0]
 
 
+def test_cgl_lf_stage_i_groups_rank_local_output_products(tmp_path):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_rank_output_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    restart_dir = tmp_path / "rst"
+    for rank in range(2):
+        path = restart_dir / f"rank_{rank:08d}" / "case.00000.rst"
+        path.parent.mkdir(parents=True)
+        path.write_bytes(f"rank-{rank}".encode())
+    groups = stage_i.output_product_groups(restart_dir, "*.rst", expected_ranks=2)
+    assert len(groups) == 1
+    product = stage_i.retained_product(groups[0])
+    assert product["storage"] == "per_rank"
+    assert len(product["rank_files"]) == 2
+    assert stage_i.retained_product_paths(product) == groups[0]
+
+
+def test_rank_local_binary_reader_keeps_unequal_rank_files(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location(
+        "bin_convert_rank_output_test", "../../../vis/python/bin_convert.py"
+    )
+    assert spec is not None and spec.loader is not None
+    bin_convert = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = bin_convert
+    spec.loader.exec_module(bin_convert)
+
+    rank0 = tmp_path / "rank_00000000" / "case.00000.bin"
+    rank1 = tmp_path / "rank_00000001" / "case.00000.bin"
+    rank0.parent.mkdir()
+    rank1.parent.mkdir()
+    rank0.write_bytes(b"short")
+    rank1.write_bytes(b"deliberately-longer-rank-output")
+
+    def fake_read(path):
+        value = 0.0 if Path(path).parent.name == "rank_00000000" else 1.0
+        return {
+            "header": [],
+            "time": 0.0,
+            "cycle": 0,
+            "var_names": ["dens"],
+            "Nx1": 2, "Nx2": 1, "Nx3": 1, "nvars": 1,
+            "x1min": 0.0, "x1max": 1.0,
+            "x2min": 0.0, "x2max": 1.0,
+            "x3min": 0.0, "x3max": 1.0,
+            "n_mbs": 1,
+            "nx1_mb": 1, "nx2_mb": 1, "nx3_mb": 1,
+            "nx1_out_mb": 1, "nx2_out_mb": 1, "nx3_out_mb": 1,
+            "mb_index": np.array([[0, 0, 0, 0, 0, 0]]),
+            "mb_logical": np.array([[int(value), 0, 0, 0]]),
+            "mb_geometry": np.zeros((1, 6)),
+            "mb_data": {"dens": [np.asarray([[[value]]])]},
+        }
+
+    monkeypatch.setattr(bin_convert, "read_binary", fake_read)
+    combined = bin_convert.read_all_ranks_binary(str(rank0))
+    assert combined["n_mbs"] == 2
+    assert [values[0, 0, 0] for values in combined["mb_data"]["dens"]] == [0.0, 1.0]
+
+
 def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
     try:
         _run_paper(
@@ -1005,8 +1075,13 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
             "time/nlim=1",
             "output2/file_type=bin",
             "output2/dt=0.01",
+            "output2/single_file_per_rank=true",
         )
-        snapshots = sorted(Path("bin").glob("cgl_ci_paper_analysis.mhd_w_bcc.*.bin"))
+        snapshots = sorted(
+            Path("bin/rank_00000000").glob(
+                "cgl_ci_paper_analysis.mhd_w_bcc.*.bin"
+            )
+        )
         assert snapshots
         result = subprocess.run(
             [

@@ -1084,14 +1084,23 @@ def read_snapshot(path: Path
                   ) -> tuple[dict[str, np.ndarray], tuple[float, float, float], float]:
     """Read one current CGL primitive binary snapshot."""
 
-    raw = bin_convert.read_binary(str(path))
+    rank_local = path.parent.name == "rank_00000000"
+    raw_reader = (
+        bin_convert.read_all_ranks_binary if rank_local
+        else bin_convert.read_binary
+    )
+    athdf_reader = (
+        bin_convert.read_all_ranks_binary_as_athdf if rank_local
+        else bin_convert.read_binary_as_athdf
+    )
+    raw = raw_reader(str(path))
     missing = sorted(set(REQUIRED_FIELDS) - set(raw["var_names"]))
     if missing:
         raise ValueError(
             f"{path} lacks CGL paper fields {missing}; regenerate with current "
             "mhd_w_bcc output (legacy eint is p_parallel)"
         )
-    values = bin_convert.read_binary_as_athdf(
+    values = athdf_reader(
         str(path), quantities=list(REQUIRED_FIELDS), dtype=np.float64
     )
     lengths = (

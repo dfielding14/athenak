@@ -95,6 +95,7 @@ file_type = tab
 variable = mhd_w_bcc
 data_format = %24.16e
 dt = 0.01
+single_file_per_rank = false
 slice_x2 = 0.5
 slice_x3 = 1.0
 
@@ -109,3 +110,4 @@ slice_x3 = 1.0
 <output4>
 file_type = rst
 dcycle = 1
+single_file_per_rank = false

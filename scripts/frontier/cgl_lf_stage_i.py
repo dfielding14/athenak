@@ -602,9 +602,27 @@ def prepare(args: argparse.Namespace) -> Path:
     shutil.copy2(input_path, archived_input)
     shutil.copy2(matrix_path, archived_matrix)
     archived_restart = None
+    archived_restart_files: list[Path] = []
     if restart is not None:
-        archived_restart = manifest_dir / "submitted_restart.rst"
-        shutil.copy2(restart, archived_restart)
+        source_restart_files = (
+            [Path(str(path)) for path in parent_segment["restart_files"]]
+            if parent_segment is not None
+            else [restart]
+        )
+        if restart.parent.name.startswith("rank_"):
+            archive_root = manifest_dir / "submitted_restart"
+            for source in source_restart_files:
+                target = archive_root / source.parent.name / source.name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+                archived_restart_files.append(target)
+            archived_restart = (
+                archive_root / restart.parent.name / restart.name
+            )
+        else:
+            archived_restart = manifest_dir / "submitted_restart.rst"
+            shutil.copy2(restart, archived_restart)
+            archived_restart_files.append(archived_restart)
     batch_script = manifest_dir / "cgl_lf_stage_i.sbatch"
     manifest: dict[str, object] = {
         "schema_version": 1,
@@ -653,6 +671,9 @@ def prepare(args: argparse.Namespace) -> Path:
             "source_restart_file": str(restart) if restart else None,
             "restart_file": str(archived_restart) if archived_restart else None,
             "restart_sha256": sha256(archived_restart) if archived_restart else None,
+            "restart_files": [
+                retained_file(path) for path in archived_restart_files
+            ],
             "parent_segment": parent_segment,
             "athena_walltime": args.athena_walltime,
             "overrides": args.override,
@@ -701,10 +722,13 @@ def read_manifest(path: Path) -> dict[str, object]:
 def verify_continuation_restart(restart: Path) -> dict[str, object]:
     """Require an inspected production parent for a continuation restart."""
 
-    parent_manifest_path = (
-        restart.parent.parent.parent / "manifest" / "prepared_run.json"
-    )
-    if not parent_manifest_path.is_file():
+    parent_manifest_path = None
+    for ancestor in restart.parents:
+        candidate = ancestor / "manifest" / "prepared_run.json"
+        if candidate.is_file():
+            parent_manifest_path = candidate
+            break
+    if parent_manifest_path is None:
         raise ValueError("restart does not belong to a retained Stage I segment")
     parent = read_manifest(parent_manifest_path)
     accounting = parent.get("accounting", {})
@@ -724,12 +748,20 @@ def verify_continuation_restart(restart: Path) -> dict[str, object]:
         or terminal.get("sha256") != sha256(restart)
     ):
         raise ValueError("continuation must use the inspected terminal restart")
+    restart_files = retained_product_paths(terminal)
+    for path, record in zip(
+        restart_files,
+        terminal.get("rank_files", [terminal]),
+    ):
+        if not path.is_file() or record.get("sha256") != sha256(path):
+            raise ValueError("inspected terminal restart set has changed")
     return {
         "manifest": str(parent_manifest_path),
         "case_id": parent["run"]["case_id"],
         "segment": parent["run"]["segment"],
         "result": accounting["result"],
         "restart_sha256": terminal["sha256"],
+        "restart_files": [str(path) for path in restart_files],
         "input_sha256": parent["command"]["input_sha256"],
         "executable_sha256": parent["command"]["executable_sha256"],
     }
@@ -861,6 +893,50 @@ def retained_file(path: Path) -> dict[str, object]:
     }
 
 
+def output_product_groups(directory: Path, pattern: str,
+                          expected_ranks: int | None = None) -> list[list[Path]]:
+    """Collect shared outputs or complete rank-local product sets."""
+
+    groups = [[path] for path in sorted(directory.glob(pattern))]
+    rank0_dir = directory / "rank_00000000"
+    if rank0_dir.is_dir():
+        for rank0 in sorted(rank0_dir.glob(pattern)):
+            rank_files = sorted(directory.glob(f"rank_*/{rank0.name}"))
+            expected_names = [
+                f"rank_{rank:08d}" for rank in range(len(rank_files))
+            ]
+            if [path.parent.name for path in rank_files] != expected_names:
+                raise ValueError(f"rank-local output set is not contiguous: {rank0}")
+            if expected_ranks is not None and len(rank_files) != expected_ranks:
+                raise ValueError(
+                    f"rank-local output set has {len(rank_files)} files; "
+                    f"expected {expected_ranks}: {rank0}"
+                )
+            groups.append(rank_files)
+    return sorted(groups, key=lambda group: str(group[0]))
+
+
+def retained_product(group: list[Path]) -> dict[str, object]:
+    """Describe one shared or rank-local retained output product."""
+
+    representative = retained_file(group[0])
+    if group[0].parent.name.startswith("rank_"):
+        representative["storage"] = "per_rank"
+        representative["rank_files"] = [retained_file(path) for path in group]
+    else:
+        representative["storage"] = "shared_mpiio"
+    return representative
+
+
+def retained_product_paths(record: dict[str, object]) -> list[Path]:
+    """Return every file belonging to an inspected retained product."""
+
+    rank_files = record.get("rank_files")
+    if isinstance(rank_files, list):
+        return [Path(str(item["path"])).resolve() for item in rank_files]
+    return [Path(str(record["path"])).resolve()]
+
+
 def merge_history_files(sources: list[Path], destination: Path) -> None:
     """Merge restart-segment histories while removing repeated boundary rows."""
 
@@ -944,8 +1020,16 @@ def inspect_segment(args: argparse.Namespace) -> int:
     output_dir = Path(str(manifest["paths"]["output_dir"])).resolve()
     mhd_histories = sorted(output_dir.glob("*.mhd.hst"))
     user_histories = sorted(output_dir.glob("*.user.hst"))
-    snapshots = sorted((output_dir / "bin").glob("*.bin"))
-    restarts = sorted((output_dir / "rst").glob("*.rst"))
+    expected_ranks = (
+        int(manifest["allocation"]["nodes"])
+        * int(manifest["allocation"].get("ranks_per_node", 1))
+    )
+    snapshots = output_product_groups(
+        output_dir / "bin", "*.bin", expected_ranks
+    )
+    restarts = output_product_groups(
+        output_dir / "rst", "*.rst", expected_ranks
+    )
     if len(mhd_histories) != 1 or len(user_histories) != 1:
         raise ValueError("segment must retain exactly one MHD and one user history")
     history = parse_history(mhd_histories[0])
@@ -980,7 +1064,7 @@ def inspect_segment(args: argparse.Namespace) -> int:
             "restart_retained",
         )
     )
-    restart_records = [retained_file(path) for path in restarts]
+    restart_records = [retained_product(group) for group in restarts]
     inspection: dict[str, object] = {
         "schema_version": 1,
         "inspected_utc": utc_now(),
@@ -996,7 +1080,7 @@ def inspect_segment(args: argparse.Namespace) -> int:
         "clean_for_continuation": clean_for_continuation,
         "mhd_history": retained_file(mhd_histories[0]),
         "user_history": retained_file(user_histories[0]),
-        "snapshots": [retained_file(path) for path in snapshots],
+        "snapshots": [retained_product(group) for group in snapshots],
         "restarts": restart_records,
         "terminal_restart": restart_records[-1] if restart_records else None,
     }
@@ -1209,19 +1293,33 @@ def one_segment_output(manifest: dict[str, object], pattern: str) -> Path:
     return matches[0]
 
 
-def link_distinct_snapshots(sources: list[Path], destination: Path,
+def link_distinct_snapshots(sources: list[list[Path]], destination: Path,
                             case_name: str) -> list[Path]:
     """Link one retained binary per physical time into an analysis bundle."""
 
-    timed = sorted((binary_snapshot_time(path), path) for path in sources)
+    timed = sorted((binary_snapshot_time(group[0]), group) for group in sources)
     linked: list[Path] = []
     last_time = float("-inf")
-    for time, source in timed:
+    for time, group in timed:
         if time <= last_time + 1.0e-12:
             continue
-        target = destination / f"{case_name}.{len(linked):05d}.bin"
-        target.symlink_to(source)
-        linked.append(target)
+        name = f"{case_name}.{len(linked):05d}.bin"
+        if group[0].parent.name.startswith("rank_"):
+            rank0_target = None
+            for source in group:
+                rank_dir = destination / source.parent.name
+                rank_dir.mkdir(exist_ok=True)
+                target = rank_dir / name
+                target.symlink_to(source)
+                if source.parent.name == "rank_00000000":
+                    rank0_target = target
+            if rank0_target is None:
+                raise ValueError("rank-local snapshot set has no rank zero file")
+            linked.append(rank0_target)
+        else:
+            target = destination / name
+            target.symlink_to(group[0])
+            linked.append(target)
         last_time = time
     if not linked:
         raise ValueError("accepted segments retain no distinct snapshots")
@@ -1298,10 +1396,10 @@ def bundle_case(args: argparse.Namespace) -> int:
         [one_segment_output(segment, "*.user.hst") for segment in segments],
         user_history,
     )
-    snapshot_sources: list[Path] = []
+    snapshot_sources: list[list[Path]] = []
     for segment in segments:
         output_dir = Path(str(segment["paths"]["output_dir"]))
-        snapshot_sources.extend(sorted((output_dir / "bin").glob("*.bin")))
+        snapshot_sources.extend(output_product_groups(output_dir / "bin", "*.bin"))
     snapshots = link_distinct_snapshots(
         snapshot_sources, snapshot_dir, str(case["name"])
     )
