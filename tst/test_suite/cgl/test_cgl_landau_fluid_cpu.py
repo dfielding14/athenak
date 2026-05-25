@@ -1043,6 +1043,24 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         history_curve_digest = hashlib.sha256(
             history_curve_path.read_bytes()
         ).hexdigest()
+        joint = diagnostics["snapshot_ensemble"]["pressure_density_joint"]["parallel"]
+        joint_x_edges = np.asarray(joint["x_edges"])
+        joint_y_edges = np.asarray(joint["y_edges"])
+        joint_density = np.asarray(joint["density"])
+        joint_x = 0.5 * (joint_x_edges[1:] + joint_x_edges[:-1])
+        joint_y = 0.5 * (joint_y_edges[1:] + joint_y_edges[:-1])
+        surface_sampled = [
+            (joint_x[index], joint_y[index], joint_density[index, index])
+            for index in (16, 24, 32)
+        ]
+        surface_path = reference_dir / "pressure_density_joint.csv"
+        surface_path.write_text(
+            "x,y,z,z_uncertainty\n" + "".join(
+                f"{x:.17g},{y:.17g},{z:.17g},{max(abs(z) * 0.01, 1.0e-12):.17g}\n"
+                for x, y, z in surface_sampled
+            )
+        )
+        surface_digest = hashlib.sha256(surface_path.read_bytes()).hexdigest()
         source_figures = [
             reference_dir / "synthetic_a.pdf",
             reference_dir / "synthetic_b.pdf",
@@ -1093,6 +1111,14 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
                 "data_sha256": history_curve_digest,
                 "interpolation": "linear",
             }],
+            "surfaces": [{
+                "id": "pressure_density_joint_exact",
+                "case": "direct",
+                "product": "pressure_density_joint.parallel",
+                "data_file": surface_path.name,
+                "data_sha256": surface_digest,
+                "interpolation": "bilinear",
+            }],
         }))
         result = subprocess.run(
             [
@@ -1136,6 +1162,29 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         history_comparison = reference["comparisons"]["unstable_fraction_exact"]
         assert history_comparison["sample_count"] == len(history_sampled)
         assert history_comparison["maximum_absolute_residual"] < 1.0e-14
+        surface_comparison = reference["surface_comparisons"][
+            "pressure_density_joint_exact"
+        ]
+        assert surface_comparison["sample_count"] == len(surface_sampled)
+        assert surface_comparison["maximum_absolute_residual"] < 1.0e-14
+        rendered = subprocess.run(
+            [
+                "python3",
+                "../../../scripts/plot_cgl_lf_paper.py",
+                "--diagnostics",
+                "cgl_ci_paper_reference_products/diagnostics.json",
+                "--figure-dir",
+                "cgl_ci_paper_reference_figures",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert rendered.returncode == 0, rendered.stdout + rendered.stderr
+        assert Path(
+            "cgl_ci_paper_reference_figures/"
+            "paper_reference_surface_pressure_density_joint_exact.pdf"
+        ).is_file()
         invalid_manifest = json.loads(manifest_path.read_text())
         invalid_manifest["provenance"]["source_figures"][1][
             "source_figure_sha256"
@@ -1163,6 +1212,7 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         shutil.rmtree("cgl_ci_paper_analysis_products", ignore_errors=True)
         shutil.rmtree("cgl_ci_paper_reference_inputs", ignore_errors=True)
         shutil.rmtree("cgl_ci_paper_reference_products", ignore_errors=True)
+        shutil.rmtree("cgl_ci_paper_reference_figures", ignore_errors=True)
         shutil.rmtree("cgl_ci_paper_invalid_reference_products", ignore_errors=True)
         shutil.rmtree("rst", ignore_errors=True)
         _cleanup()

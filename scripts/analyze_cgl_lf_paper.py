@@ -2068,9 +2068,61 @@ def interpolate_analysis_curve(x: np.ndarray, source_x: np.ndarray,
     raise ValueError(f"unsupported reference interpolation: {method}")
 
 
+def analyzed_product_surface(ensemble: dict[str, object], product: str
+                             ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return analyzed x/y centers and density for a reference surface."""
+
+    parts = product.split(".", maxsplit=1)
+    if len(parts) != 2 or parts[0] != "pressure_density_joint":
+        raise ValueError(f"unsupported reference surface product: {product}")
+    products = ensemble.get("pressure_density_joint", {})
+    if not isinstance(products, dict) or parts[1] not in products:
+        raise ValueError(f"analyzed product is missing: {product}")
+    record = products[parts[1]]
+    x_edges = np.asarray(record["x_edges"], dtype=float)
+    y_edges = np.asarray(record["y_edges"], dtype=float)
+    density = np.asarray(record["density"], dtype=float)
+    return (
+        0.5 * (x_edges[1:] + x_edges[:-1]),
+        0.5 * (y_edges[1:] + y_edges[:-1]),
+        density,
+    )
+
+
+def interpolate_analysis_surface(
+    x: np.ndarray, y: np.ndarray, source_x: np.ndarray, source_y: np.ndarray,
+    source_z: np.ndarray, method: str,
+) -> np.ndarray:
+    """Interpolate one rectangular analyzed surface at reference samples."""
+
+    if method != "bilinear":
+        raise ValueError(f"unsupported reference surface interpolation: {method}")
+    if (
+        x.shape != y.shape or source_x.size < 2 or source_y.size < 2
+        or source_z.shape != (source_x.size, source_y.size)
+        or not np.isfinite(source_x).all() or not np.isfinite(source_y).all()
+        or not np.isfinite(source_z).all()
+        or np.any(np.diff(source_x) <= 0.0) or np.any(np.diff(source_y) <= 0.0)
+    ):
+        raise ValueError("analyzed reference surface needs a finite ordered grid")
+    if (
+        np.any(x < source_x[0]) or np.any(x > source_x[-1])
+        or np.any(y < source_y[0]) or np.any(y > source_y[-1])
+    ):
+        raise ValueError("reference coordinates lie outside analyzed surface range")
+    values = []
+    for x_value, y_value in zip(x, y):
+        row = np.asarray([
+            np.interp(x_value, source_x, source_z[:, index])
+            for index in range(source_y.size)
+        ])
+        values.append(np.interp(y_value, source_y, row))
+    return np.asarray(values, dtype=float)
+
+
 def reference_curve_comparisons(result: dict[str, object],
                                 manifest_path: Path) -> dict[str, object]:
-    """Compare analysis products against provenance-qualified external curves."""
+    """Compare analysis products against provenance-qualified external data."""
 
     with manifest_path.open(encoding="utf-8") as stream:
         manifest = json.load(stream)
@@ -2114,8 +2166,11 @@ def reference_curve_comparisons(result: dict[str, object],
                 figure_names.add(name)
         require_manifest_text(provenance, "digitization_tool", "digitized provenance")
     curves = manifest.get("curves", [])
-    if not isinstance(curves, list) or not curves:
-        raise ValueError("reference curves manifest must contain curves")
+    surfaces = manifest.get("surfaces", [])
+    if not isinstance(curves, list) or not isinstance(surfaces, list):
+        raise ValueError("reference manifest curves and surfaces must be lists")
+    if not curves and not surfaces:
+        raise ValueError("reference manifest must contain curves or surfaces")
     cases = result.get("cases", {})
     comparisons: dict[str, object] = {}
     for curve in curves:
@@ -2200,16 +2255,102 @@ def reference_curve_comparisons(result: dict[str, object],
                 np.sqrt(np.mean(normalized ** 2))
             ),
         }
+    surface_comparisons: dict[str, object] = {}
+    for surface in surfaces:
+        if not isinstance(surface, dict):
+            raise ValueError("reference surface entries must be objects")
+        surface_id = require_manifest_text(surface, "id", "reference surface")
+        if surface_id in comparisons or surface_id in surface_comparisons:
+            raise ValueError(f"reference product id is duplicated: {surface_id}")
+        case = require_manifest_text(surface, "case", f"reference surface {surface_id}")
+        product = require_manifest_text(
+            surface, "product", f"reference surface {surface_id}"
+        )
+        data_file = require_manifest_text(
+            surface, "data_file", f"reference surface {surface_id}"
+        )
+        expected_digest = require_manifest_text(
+            surface, "data_sha256", f"reference surface {surface_id}"
+        )
+        data_path = (manifest_path.parent / data_file).resolve()
+        if not data_path.is_file():
+            raise ValueError(f"reference surface data is missing: {data_path}")
+        if expected_digest != sha256_file(data_path):
+            raise ValueError(
+                f"reference surface checksum does not match: {surface_id}"
+            )
+        table = np.genfromtxt(data_path, delimiter=",", names=True, encoding="utf-8")
+        rows = np.atleast_1d(table)
+        required = {"x", "y", "z", "z_uncertainty"}
+        if table.dtype.names is None or not required.issubset(table.dtype.names):
+            raise ValueError(
+                f"reference surface {surface_id} requires "
+                "x,y,z,z_uncertainty columns"
+            )
+        x = np.asarray(rows["x"], dtype=float)
+        y = np.asarray(rows["y"], dtype=float)
+        z = np.asarray(rows["z"], dtype=float)
+        uncertainty = np.asarray(rows["z_uncertainty"], dtype=float)
+        if (
+            x.size < 1 or not np.isfinite(x).all() or not np.isfinite(y).all()
+            or not np.isfinite(z).all() or not np.isfinite(uncertainty).all()
+            or np.any(uncertainty <= 0.0)
+        ):
+            raise ValueError(
+                f"reference surface {surface_id} needs finite samples and "
+                "positive z_uncertainty"
+            )
+        if case == "direct":
+            ensemble = result.get("snapshot_ensemble", {})
+        elif isinstance(cases, dict) and case in cases:
+            ensemble = cases[case].get("snapshot_ensemble", {})
+        else:
+            raise ValueError(
+                f"reference surface {surface_id} selects missing case {case}"
+            )
+        if (
+            not isinstance(ensemble, dict)
+            or ensemble.get("snapshot_count", 0) == 0
+        ):
+            raise ValueError(f"reference surface {surface_id} selects empty analysis")
+        source_x, source_y, source_z = analyzed_product_surface(ensemble, product)
+        simulated = interpolate_analysis_surface(
+            x, y, source_x, source_y, source_z,
+            str(surface.get("interpolation", "bilinear")),
+        )
+        residual = simulated - z
+        normalized = residual / uncertainty
+        surface_comparisons[surface_id] = {
+            "available": True,
+            "case": case,
+            "product": product,
+            "data_file": str(data_path),
+            "data_sha256": expected_digest,
+            "interpolation": str(surface.get("interpolation", "bilinear")),
+            "sample_count": int(x.size),
+            "x": x.tolist(),
+            "y": y.tolist(),
+            "reference_z": z.tolist(),
+            "reference_z_uncertainty": uncertainty.tolist(),
+            "simulated_z": simulated.tolist(),
+            "residual": residual.tolist(),
+            "rms_residual": float(np.sqrt(np.mean(residual ** 2))),
+            "maximum_absolute_residual": float(np.max(np.abs(residual))),
+            "rms_normalized_by_reported_uncertainty": float(
+                np.sqrt(np.mean(normalized ** 2))
+            ),
+        }
     return {
         "available": True,
         "definition": (
             "analysis products interpolated onto provenance-qualified reference "
-            "curve coordinates"
+            "curve or surface coordinates"
         ),
         "manifest": str(manifest_path),
         "manifest_sha256": sha256_file(manifest_path),
         "provenance": provenance,
         "comparisons": comparisons,
+        "surface_comparisons": surface_comparisons,
     }
 
 

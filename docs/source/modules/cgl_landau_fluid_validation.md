@@ -198,7 +198,8 @@ through `--eddy-samples`, `--eddy-bins`, and `--eddy-seed`.
 The joint pressure-density output uses the plotted Figure 2(a) coordinates
 `x = <p> delta rho/<rho>` and `y = delta p_parallel` or `delta p_perp`,
 where `<p> = <(2 p_perp + p_parallel)/3>`, and renders one two-panel PDF per
-analyzed case. This supplies the analysis product, but does not admit the
+analyzed case. The optional reference manifest can compare sampled surfaces
+against these products by bilinear interpolation. This does not admit the
 published raster as a quantitative reference: its pressure-unit and
 color-density transform must first be qualified.
 
@@ -219,11 +220,12 @@ compressive/pressure-spectrum, joint-pressure-density, transfer, alignment,
 heat-flux-proxy, and
 pressure-work figures
 under `figures/paper/`, including eddy anisotropy when requested. When an
-externally prepared reference-curve manifest
-is supplied, it validates curve/source checksums and reported pointwise
+externally prepared reference-data manifest
+is supplied, it validates data/source checksums and reported pointwise
 uncertainties, computes uncertainty-normalized residuals for supported
-snapshot products and threshold-volume history series, and renders
-`paper_reference_comparisons.pdf`. Figure 2(b) vector-curve extraction is
+snapshot products, sampled joint-PDF surfaces, and threshold-volume history
+series, and renders curve and surface comparison figures. Figure 2(b)
+vector-curve extraction is
 available below, together with Figure 5(b) normalized eddy anisotropy,
 dimensionless Figure 7 lower-panel transfer,
 Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and
@@ -240,8 +242,9 @@ statement and renormalized, and an absolute PDF-density uncertainty is
 retained in the manifest. Figure 4(a)'s normalized-density PDF is also
 admitted through its plotted `rho/<rho>` coordinate. Figure 5(b) is admitted
 through its normalized length coordinates and the opt-in conditioned
-structure functions. Figure 2(a)'s matching joint product is implemented,
-but its pressure-scaled raster remains unadmitted. Figure 3 and Figure 6(a)
+structure functions. Figure 2(a)'s matching joint product and sampled-surface
+comparison route are implemented, but its pressure-scaled raster remains
+unadmitted. Figure 3 and Figure 6(a)
 now have matching emitted spectral fields, and Figure 4(b) has an explicit
 normalized-density spectral product; their plotted spectral ordinates remain
 unadmitted pending qualified transformations and authorized case execution.
@@ -515,14 +518,16 @@ panel (a) is dimensionful and panel (c) is plotted as
 Other quantitative panels still require a recorded digitization procedure,
 a qualified coordinate transform, or a separately provenance-tracked
 numerical reference source. Figure 2(a) now has a matching joint
-pressure-density product, but its pressure-unit and color-density raster
-mapping is not admitted. Figure 4(b)'s `E_rho` spectrum must not be
+pressure-density product and sampled-surface comparison route, but its
+pressure-unit and color-density raster mapping is not admitted. Figure 4(b)'s
+`E_rho` spectrum must not be
 substituted for `spectra.density_fluctuation` without a matching ordinate
 transformation.
 
-An optional curve manifest passed to `paper-analyze --reference-curves`
-has `schema_version = 1`, a `provenance` object, and one or more curve
-entries. For `method = "digitized"`, provenance must name either one source
+An optional reference-data manifest passed to `paper-analyze --reference-curves`
+has `schema_version = 1`, a `provenance` object, and one or more `curves`
+and/or `surfaces` entries. For `method = "digitized"`, provenance must name
+either one source
 figure and its SHA-256 digest or a nonempty `source_figures` list of such
 pairs, together with the digitization tool and uncertainty procedure.
 Each CSV curve must contain ordered `x`, `y`, and positive `y_uncertainty`
@@ -533,6 +538,11 @@ columns; its entry records `data_sha256`, target analysis `case`, supported
 `eddy_anisotropy.velocity_perp` or `history.unstable_fraction`), and optional
 `interpolation` (`linear` or `loglog`). The analyzer fails closed on missing
 uncertainty, checksum mismatches, or out-of-domain coordinates.
+Each sampled surface CSV must contain `x`, `y`, `z`, and positive
+`z_uncertainty` columns; its entry selects
+`pressure_density_joint.parallel` or `.perpendicular` and supports
+`interpolation = "bilinear"`. The renderer writes reference, analyzed, and
+uncertainty-normalized residual views for each supplied surface.
 Dimensionful paper curves must additionally be withheld from such a manifest
 until their paper-to-AthenaK normalization is explicitly established.
 

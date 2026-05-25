@@ -253,12 +253,14 @@ paper curves remain excluded until spectral ordinate transformations are
 qualified. Figure 3's sonic-correlation and beta-1 random definitions now
 exist under the guarded `paper-compressive` workflow, but have not been run.
 With `--reference-curves <manifest.json>`, `paper-analyze` also accepts
-external numerical or digitized curves only when their manifest records
-provenance, SHA-256 digests, and positive per-point `y_uncertainty` values.
-It reports uncertainty-normalized residuals against supported PDF, spectrum,
+external numerical or digitized curves and sampled joint-PDF surfaces only
+when their manifest records provenance, SHA-256 digests, and positive
+per-sample uncertainties. It reports uncertainty-normalized residuals
+against supported PDF, spectrum,
 raw or MKS24-normalized transfer, selected-shell alignment-distribution, alignment-peak-versus-
-`k_perp`, eddy-anisotropy, and threshold-volume history products and renders
-`paper_reference_comparisons.pdf`. Use `--alignment-shells` with
+`k_perp`, eddy-anisotropy, threshold-volume history, and
+`pressure_density_joint.parallel`/`.perpendicular` products and renders
+curve or surface comparison figures. Use `--alignment-shells` with
 `paper-analyze` when a comparison manifest requires an alignment-peak curve
 over additional shells.
 The staged-reference tooling includes pinned vector extraction for Figure
@@ -276,8 +278,9 @@ units for its beta-100 limiter runs, while the equivalent AthenaK
 `v_A = 1` normalization uses `p0 = 50`; until an explicit observable
 conversion is qualified, dimensional Figure 11 upper spectra, Figure 12
 spectra, and Figure 13(a),(c) curves are retained only as excluded audit
-context. Figure 2(a)'s raster is likewise retained as excluded reference
-context despite its implemented joint product. Figure 5(b)'s dimensionless
+context. Figure 2(a)'s sampled-surface comparison route is implemented, but
+its raster is retained as excluded reference context until its pressure-scale
+and color-density mapping are qualified. Figure 5(b)'s dimensionless
 curves are admitted through the opt-in
 conditioned-structure-function analysis; no paper-scale comparison has been
 executed.

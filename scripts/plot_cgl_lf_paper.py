@@ -407,6 +407,43 @@ def plot_reference_comparisons(data: dict[str, object], figure_dir: Path,
     save(fig, figure_dir / "paper_reference_comparisons.pdf", generated)
 
 
+def plot_reference_surface_comparisons(data: dict[str, object], figure_dir: Path,
+                                       generated: list[str]) -> None:
+    """Plot optional provenance-qualified sampled reference surfaces."""
+
+    reference = data.get("reference_curve_comparisons", {})
+    if not isinstance(reference, dict) or not reference.get("available", False):
+        return
+    surfaces = reference.get("surface_comparisons", {})
+    if not isinstance(surfaces, dict):
+        return
+    for name, record in surfaces.items():
+        x = np.asarray(record["x"], dtype=float)
+        y = np.asarray(record["y"], dtype=float)
+        reference_z = np.asarray(record["reference_z"], dtype=float)
+        uncertainty = np.asarray(record["reference_z_uncertainty"], dtype=float)
+        simulated = np.asarray(record["simulated_z"], dtype=float)
+        normalized = (simulated - reference_z) / uncertainty
+        fig, axes = plt.subplots(1, 3, figsize=(11.0, 3.25))
+        for axis, values, title in (
+            (axes[0], reference_z, "reference"),
+            (axes[1], simulated, "analysis"),
+            (axes[2], normalized, "residual / uncertainty"),
+        ):
+            image = axis.scatter(x, y, c=values, s=18, cmap="viridis")
+            axis.set_title(title)
+            axis.set_xlabel("x coordinate")
+            axis.set_ylabel("y coordinate")
+            fig.colorbar(image, ax=axis)
+        fig.suptitle(f"{name}: {record['product']}")
+        suffix = re.sub(r"[^A-Za-z0-9_.-]+", "_", name)
+        save(
+            fig,
+            figure_dir / f"paper_reference_surface_{suffix}.pdf",
+            generated,
+        )
+
+
 def main() -> int:
     """Command-line entry point."""
 
@@ -428,6 +465,7 @@ def main() -> int:
     plot_pressure_work(ensembles, args.figure_dir, generated)
     plot_eddy_anisotropy(ensembles, args.figure_dir, generated)
     plot_reference_comparisons(data, args.figure_dir, generated)
+    plot_reference_surface_comparisons(data, args.figure_dir, generated)
     (args.figure_dir / "paper_figures.json").write_text(
         json.dumps({"figures": generated}, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
