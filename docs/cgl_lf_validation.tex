@@ -253,11 +253,19 @@ roles that reuse an accepted output.}
 Production is executed on Frontier through
 \path{scripts/frontier/cgl_lf_stage_i.py}, separately from the debug-only
 qualification utility.  The production utility admits only mapped input
-files, archives input and executable checksums, uses the \texttt{batch}
+files, archives input, executable, and utility checksums, uses the \texttt{batch}
 partition with its default production \texttt{normal} QOS, reserves usage
 against the Stage I ceiling, and permits only one submitted segment at a time.
-The first submitted segment is \texttt{R16/s00\_t0\_t2}, Frontier job
-\texttt{4674731}; it is an active calculation, not an accepted result.
+The first submitted segment, legacy shared-I/O
+\texttt{R16/s00\_t0\_t2} (Frontier job \texttt{4674731}), terminated cleanly
+on its wall-clock limit at \(t=1.66204848945<2\), with zero strict LF
+failure counters and \(1.253333\) accounted node-hours.  It is retained as
+clean partial diagnostic evidence, not an accepted result.  Its prolonged
+\(t=1\) snapshot/checkpoint write motivated a committed rank-local retained
+output protocol with grouped checksum and analysis support.  The fresh
+rank-local \texttt{R16/s01\_rankio\_t0\_t2} segment was submitted as job
+\texttt{4675322} from \(t=0\); the legacy partial is not continued across the
+changed input digest.
 
 \section{Validation Workflow}
 
@@ -517,9 +525,11 @@ admitted: the paper and cited donor source define shell spectra and plotted
 units but do not state the discrete Fourier normalization needed to map
 absolute digitized ordinates into AthenaK products.  Those panels require
 author/archive numeric data, donor diagnostic code, or an explicit
-normalization statement.  The first mapped production segment has been
-submitted, but quantitative MKS24 simulation-to-reference comparisons require
-completed accepted bundles; none is claimed by this manuscript version.
+normalization statement.  One mapped production segment has been retained
+only as clean partial I/O-diagnostic evidence and its rank-local rerun has
+been submitted, but quantitative MKS24 simulation-to-reference comparisons
+require completed accepted bundles; none is claimed by this manuscript
+version.
 
 \section{Comparison Gate Matrix}
 
@@ -609,11 +619,12 @@ both the numerical and physical comparison.
 AthenaK now has a validated CGL--LF implementation path, retained nonlinear
 diagnostics, source-mapped MKS24 case definitions, and a checksum- and
 allocation-recorded Frontier production protocol.  The production protocol
-began with the required low-resolution scale-separation case
-\texttt{R16/s00\_t0\_t2}; at the time of writing that segment is running and
-is not counted as a scientific result.  Thus the present manuscript
-establishes the method, target contract, and acceptance procedure, but does
-not yet claim reproduction of the MKS24 turbulent conclusions.
+began with the required low-resolution scale-separation case; its first
+shared-I/O segment is a clean partial diagnostic record, and a fresh
+rank-local segment has been submitted from \(t=0\).  Neither is counted as an
+accepted comparison result.  Thus the present manuscript establishes the
+method, target contract, and acceptance procedure, but does not yet claim
+reproduction of the MKS24 turbulent conclusions.
 
 Completion of the reproduction claim requires all sixteen mapped cases to
 reach \(t_f\geq10L_\perp/v_A\), pass strict safety and provenance checks, and
@@ -637,7 +648,11 @@ snapshots, restarts, and an inspection record that tests target time and
 strict LF safety counters before acceptance.  Production products are
 retained beneath the project
 \path{runs/mks24-stage-i} archive and will be linked to quantitative panel
-products only after their corresponding gates pass.
+products only after their corresponding gates pass.  Following the measured
+shared-I/O delay in job \texttt{4674731}, commit
+\texttt{1f52784d291718fff3bf1dc984a682ada52780ab} stores production
+snapshots and restarts as rank-local product sets; inspection retains every
+rank-file digest and analysis reconstructs the combined snapshot fields.
 
 \section{Build and Runtime Status}
 
@@ -645,9 +660,10 @@ The imported method figures come from a passing local \texttt{full} workflow
 bundle.  The reduced nonlinear figures come from a passing
 \texttt{paper-convergence} bundle reanalyzed with the current plotting code.
 Warning-strict Sphinx documentation and this \LaTeX{} build are checked when
-the report is updated.  A committed production path and its first submitted
-segment now exist, but production/statistical and paper-reference comparison
-gates remain open until accepted long-time output bundles are analyzed.
+the report is updated.  One production segment has been accounted as clean
+partial and its rank-local replacement has been submitted, but
+production/statistical and paper-reference comparison gates remain open until
+accepted long-time output bundles are analyzed.
 
 \begin{thebibliography}{9}
 \bibitem{Squire2023}
