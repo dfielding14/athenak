@@ -234,6 +234,10 @@ transfer, selected-shell alignment-distribution, alignment-peak-versus-
 `paper_reference_comparisons.pdf`. Use `--alignment-shells` with
 `paper-analyze` when a comparison manifest requires an alignment-peak curve
 over additional shells.
+The staged-reference tooling includes pinned vector extraction for Figure
+2(b), Figure 12, and the directly comparable kinetic-spectrum and
+`beta Delta` PDF curves in Figure 13(a)-(b). Figure 13(c)-(d) remain
+excluded until their plotted normalizations are exposed as analysis products.
 These products are analysis infrastructure; they do not by themselves
 establish statistically converged paper comparisons.
 

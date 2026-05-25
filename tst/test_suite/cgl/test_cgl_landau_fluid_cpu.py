@@ -877,18 +877,24 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         history_curve_digest = hashlib.sha256(
             history_curve_path.read_bytes()
         ).hexdigest()
-        source_figure = reference_dir / "synthetic.pdf"
-        source_figure.write_bytes(b"synthetic reference panel\n")
+        source_figures = [
+            reference_dir / "synthetic_a.pdf",
+            reference_dir / "synthetic_b.pdf",
+        ]
+        source_figures[0].write_bytes(b"synthetic reference panel a\n")
+        source_figures[1].write_bytes(b"synthetic reference panel b\n")
         manifest_path = reference_dir / "curves.json"
         manifest_path.write_text(json.dumps({
             "schema_version": 1,
             "provenance": {
                 "method": "digitized",
                 "source_description": "synthetic regression reference",
-                "source_figure": source_figure.name,
-                "source_figure_sha256": hashlib.sha256(
-                    source_figure.read_bytes()
-                ).hexdigest(),
+                "source_figures": [{
+                    "source_figure": source_figure.name,
+                    "source_figure_sha256": hashlib.sha256(
+                        source_figure.read_bytes()
+                    ).hexdigest(),
+                } for source_figure in source_figures],
                 "digitization_tool": "test fixture",
                 "uncertainty_description": "one-percent fixture uncertainty",
             },
@@ -949,7 +955,9 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         assert history_comparison["sample_count"] == len(history_sampled)
         assert history_comparison["maximum_absolute_residual"] < 1.0e-14
         invalid_manifest = json.loads(manifest_path.read_text())
-        invalid_manifest["provenance"]["source_figure_sha256"] = "0" * 64
+        invalid_manifest["provenance"]["source_figures"][1][
+            "source_figure_sha256"
+        ] = "0" * 64
         invalid_path = reference_dir / "invalid_curves.json"
         invalid_path.write_text(json.dumps(invalid_manifest))
         result = subprocess.run(

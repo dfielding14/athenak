@@ -177,8 +177,9 @@ is supplied, it validates curve/source checksums and reported pointwise
 uncertainties, computes uncertainty-normalized residuals for supported
 snapshot products and threshold-volume history series, and renders
 `paper_reference_comparisons.pdf`. Figure 2(b) vector-curve extraction is
-available below, together with Figure 12 alignment/spectrum extraction;
-remaining MKS24 panel curves, exact
+available below, together with Figure 12 alignment/spectrum extraction and
+the directly comparable Figure 13(a)-(b) limiter curves; remaining MKS24
+panel curves, exact
 time-integrated/production local budget closure, and production comparisons
 remain to be completed. For retained LF histories, the analyzer
 also reports the RKL2-applied capped-face heat-flux contractions retained in
@@ -320,13 +321,32 @@ python3 scripts/cgl_lf_workflow.py paper-analyze \
   --reference-curves /path/to/arXiv-2405.02418v2/digitized_fig12_v1/curves.json
 ```
 
-Other quantitative panels still require a recorded digitization procedure or
-a separately provenance-tracked numerical reference source.
+For Figure 13, extract the directly comparable kinetic-energy spectra and
+`beta Delta` PDF paths from the four checksum-pinned panel PDFs:
+
+```bash
+python3 scripts/digitize_cgl_lf_mks24_fig13.py \
+  /path/to/arXiv-2405.02418v2/source \
+  /path/to/arXiv-2405.02418v2/digitized_fig13_v1
+```
+
+The extractor maps panel (a) to `spectra.velocity` for the three
+`paper-nulim` cases and panel (b) to `pdf.beta_delta` for those cases plus
+the passive beta-100 comparison. It records five-percent relative
+digitization uncertainty and omits plotted-boundary-clipped vertices.
+Panels (c) and (d) are copied and checksum-recorded for audit context but
+are not emitted as comparison curves: their plotted strain and transfer
+quantities contain normalizations not yet exposed as analyzer products.
+
+Other quantitative panels still require a recorded digitization procedure,
+a matching analyzer product, or a separately provenance-tracked numerical
+reference source.
 
 An optional curve manifest passed to `paper-analyze --reference-curves`
 has `schema_version = 1`, a `provenance` object, and one or more curve
-entries. For `method = "digitized"`, provenance must name the source figure,
-its SHA-256 digest, the digitization tool, and the uncertainty procedure.
+entries. For `method = "digitized"`, provenance must name either one source
+figure and its SHA-256 digest or a nonempty `source_figures` list of such
+pairs, together with the digitization tool and uncertainty procedure.
 Each CSV curve must contain ordered `x`, `y`, and positive `y_uncertainty`
 columns; its entry records `data_sha256`, target analysis `case`, supported
 `product` (for example `spectra.grad_parallel_delta_p` or

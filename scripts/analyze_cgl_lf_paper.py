@@ -1308,6 +1308,23 @@ def require_manifest_text(record: dict[str, object], key: str, context: str) -> 
     return value
 
 
+def validate_digitized_source_figure(manifest_path: Path,
+                                     record: dict[str, object],
+                                     context: str) -> str:
+    """Validate one source figure named by digitized reference provenance."""
+
+    figure_name = require_manifest_text(record, "source_figure", context)
+    figure_digest = require_manifest_text(record, "source_figure_sha256", context)
+    if not re.fullmatch(r"[0-9a-f]{64}", figure_digest):
+        raise ValueError("digitized source_figure_sha256 must be lowercase SHA-256")
+    figure_path = (manifest_path.parent / figure_name).resolve()
+    if not figure_path.is_file():
+        raise ValueError(f"digitized source figure is missing: {figure_path}")
+    if figure_digest != sha256_file(figure_path):
+        raise ValueError("digitized source figure checksum does not match")
+    return figure_name
+
+
 def alignment_peak_curve(ensemble: dict[str, object]) -> tuple[np.ndarray, np.ndarray]:
     """Return physical-k peak alignment cosine values from selected-shell PDFs."""
 
@@ -1436,19 +1453,29 @@ def reference_curve_comparisons(result: dict[str, object],
         provenance, "uncertainty_description", "reference provenance"
     )
     if method == "digitized":
-        figure_name = require_manifest_text(
-            provenance, "source_figure", "digitized provenance"
-        )
-        figure_digest = require_manifest_text(
-            provenance, "source_figure_sha256", "digitized provenance"
-        )
-        if not re.fullmatch(r"[0-9a-f]{64}", figure_digest):
-            raise ValueError("digitized source_figure_sha256 must be lowercase SHA-256")
-        figure_path = (manifest_path.parent / figure_name).resolve()
-        if not figure_path.is_file():
-            raise ValueError(f"digitized source figure is missing: {figure_path}")
-        if figure_digest != sha256_file(figure_path):
-            raise ValueError("digitized source figure checksum does not match")
+        source_figures = provenance.get("source_figures")
+        if source_figures is None:
+            validate_digitized_source_figure(
+                manifest_path, provenance, "digitized provenance"
+            )
+        else:
+            if not isinstance(source_figures, list) or not source_figures:
+                raise ValueError(
+                    "digitized provenance source_figures must be a nonempty list"
+                )
+            figure_names: set[str] = set()
+            for index, figure in enumerate(source_figures):
+                if not isinstance(figure, dict):
+                    raise ValueError(
+                        "digitized provenance source_figures entries must be objects"
+                    )
+                name = validate_digitized_source_figure(
+                    manifest_path, figure,
+                    f"digitized provenance source_figures[{index}]",
+                )
+                if name in figure_names:
+                    raise ValueError("digitized source figure is duplicated")
+                figure_names.add(name)
         require_manifest_text(provenance, "digitization_tool", "digitized provenance")
     curves = manifest.get("curves", [])
     if not isinstance(curves, list) or not curves:
