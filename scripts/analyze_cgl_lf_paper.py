@@ -702,6 +702,21 @@ def pdf(values: np.ndarray, bins: int, value_range: tuple[float, float] | None =
     return {"edges": edges.tolist(), "density": counts.tolist()}
 
 
+def joint_pdf(x_values: np.ndarray, y_values: np.ndarray, bins: int,
+              ranges: tuple[tuple[float, float], tuple[float, float]] | None = None
+              ) -> dict[str, object]:
+    """Return a density-normalized two-dimensional histogram."""
+
+    density, x_edges, y_edges = np.histogram2d(
+        x_values.ravel(), y_values.ravel(), bins=bins, range=ranges, density=True
+    )
+    return {
+        "x_edges": x_edges.tolist(),
+        "y_edges": y_edges.tolist(),
+        "density": density.tolist(),
+    }
+
+
 def filter_kperp(field: np.ndarray, shell: np.ndarray, selected: int) -> np.ndarray:
     """Filter one real field to a single perpendicular Fourier shell."""
 
@@ -1077,12 +1092,31 @@ def pdf_fields(fields: dict[str, np.ndarray],
     return values
 
 
+def pressure_density_fields(
+    fields: dict[str, np.ndarray],
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Construct Figure 2(a)-style pressure-versus-density coordinates."""
+
+    rho = fields["dens"]
+    ppar = fields["eint"]
+    pperp = fields["p_perp"]
+    mean_pressure = float(np.mean((2.0 * pperp + ppar) / 3.0))
+    density_coordinate = mean_pressure * (rho / np.mean(rho) - 1.0)
+    return {
+        "parallel": (density_coordinate, ppar - np.mean(ppar)),
+        "perpendicular": (density_coordinate, pperp - np.mean(pperp)),
+    }
+
+
 def analyze_fields(fields: dict[str, np.ndarray], lengths: tuple[float, float, float],
                    time: float, bins: int, alignment_shells: list[int],
                    pdf_ranges: dict[str, tuple[float, float]] | None = None,
                    model_choices: dict[str, object] | None = None,
                    eddy_samples: int = 0, eddy_bins: int = 20,
-                   eddy_seed: int = 0
+                   eddy_seed: int = 0,
+                   joint_ranges: dict[
+                       str, tuple[tuple[float, float], tuple[float, float]]
+                   ] | None = None
                    ) -> dict[str, object]:
     """Analyze a single snapshot already represented as field arrays."""
 
@@ -1115,6 +1149,7 @@ def analyze_fields(fields: dict[str, np.ndarray], lengths: tuple[float, float, f
         ),
     })
     pdf_values = pdf_fields(fields, lengths)
+    pressure_density_values = pressure_density_fields(fields)
     spectra = {
         "velocity": shell_spectrum(velocity, lengths, dk),
         "magnetic_fluctuation": shell_spectrum(magnetic, lengths, dk),
@@ -1135,6 +1170,24 @@ def analyze_fields(fields: dict[str, np.ndarray], lengths: tuple[float, float, f
             name: pdf(values, bins, None if pdf_ranges is None else pdf_ranges[name])
             for name, values in pdf_values.items()
         },
+        "pressure_density_joint": {
+            "definition": (
+                "joint PDF in MKS24 Figure 2(a) panel coordinates: "
+                "x = <p> delta rho/<rho>, y = delta p_parallel or delta p_perp"
+            ),
+            "mean_pressure_definition": "<p> = <(2 p_perp + p_parallel)/3>",
+            "reference_scope": (
+                "AthenaK-coordinate diagnostic; direct paper-raster comparison "
+                "requires a qualified donor pressure/color-density transform"
+            ),
+            **{
+                name: joint_pdf(
+                    x_values, y_values, bins,
+                    None if joint_ranges is None else joint_ranges[name],
+                )
+                for name, (x_values, y_values) in pressure_density_values.items()
+            },
+        },
         "spectra": spectra,
         "pressure_transfer": transfer,
         "pressure_work_decomposition": pressure_work,
@@ -1154,6 +1207,18 @@ def mean_distribution(records: list[dict[str, object]]) -> dict[str, object]:
 
     return {
         "edges": records[0]["edges"],
+        "density": np.mean(
+            [np.asarray(record["density"], dtype=float) for record in records], axis=0
+        ).tolist(),
+    }
+
+
+def mean_joint_distribution(records: list[dict[str, object]]) -> dict[str, object]:
+    """Average compatible two-dimensional histogram products."""
+
+    return {
+        "x_edges": records[0]["x_edges"],
+        "y_edges": records[0]["y_edges"],
         "density": np.mean(
             [np.asarray(record["density"], dtype=float) for record in records], axis=0
         ).tolist(),
@@ -1243,6 +1308,10 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
     times = np.asarray([float(sample["time"]) for sample in samples], dtype=float)
     can_integrate = bool(len(times) >= 2 and times[-1] > times[0])
     pdf_names = samples[0]["pdf"].keys()
+    pressure_density = [
+        sample["pressure_density_joint"] for sample in samples
+    ]
+    joint_names = ("parallel", "perpendicular")
     spectrum_names = samples[0]["spectra"].keys()
     alignment_names = set(samples[0]["alignment"].keys())
     for sample in samples[1:]:
@@ -1377,6 +1446,19 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
             name: mean_distribution([sample["pdf"][name] for sample in samples])
             for name in pdf_names
         },
+        "pressure_density_joint": {
+            "definition": pressure_density[0]["definition"],
+            "mean_pressure_definition": pressure_density[0][
+                "mean_pressure_definition"
+            ],
+            "reference_scope": pressure_density[0]["reference_scope"],
+            **{
+                name: mean_joint_distribution([
+                    sample[name] for sample in pressure_density
+                ])
+                for name in joint_names
+            },
+        },
         "spectra": {
             name: mean_spectrum([sample["spectra"][name] for sample in samples])
             for name in spectrum_names
@@ -1440,6 +1522,7 @@ def analyze_snapshot_paths(paths: list[Path], bins: int, alignment_shells: list[
 
     selected: list[Path] = []
     extrema: dict[str, list[float]] = {}
+    joint_extrema: dict[str, list[list[float]]] = {}
     for path in paths:
         fields, lengths, time = read_snapshot(path)
         if not time_mask(np.asarray([time]), time_start, time_end)[0]:
@@ -1455,6 +1538,21 @@ def analyze_snapshot_paths(paths: list[Path], bins: int, alignment_shells: list[
                 extrema[name][1] = max(extrema[name][1], high)
             else:
                 extrema[name] = [low, high]
+        for name, (x_values, y_values) in pressure_density_fields(fields).items():
+            coordinates = (x_values, y_values)
+            if name not in joint_extrema:
+                joint_extrema[name] = [
+                    [float(np.min(values)), float(np.max(values))]
+                    for values in coordinates
+                ]
+                continue
+            for index, values in enumerate(coordinates):
+                joint_extrema[name][index][0] = min(
+                    joint_extrema[name][index][0], float(np.min(values))
+                )
+                joint_extrema[name][index][1] = max(
+                    joint_extrema[name][index][1], float(np.max(values))
+                )
     ranges: dict[str, tuple[float, float]] = {}
     for name, (low, high) in extrema.items():
         if high <= low:
@@ -1462,12 +1560,24 @@ def analyze_snapshot_paths(paths: list[Path], bins: int, alignment_shells: list[
             low -= delta
             high += delta
         ranges[name] = (low, high)
+    joint_ranges: dict[
+        str, tuple[tuple[float, float], tuple[float, float]]
+    ] = {}
+    for name, coordinates in joint_extrema.items():
+        padded: list[tuple[float, float]] = []
+        for low, high in coordinates:
+            if high <= low:
+                delta = max(abs(low), 1.0) * 1.0e-12
+                low -= delta
+                high += delta
+            padded.append((low, high))
+        joint_ranges[name] = (padded[0], padded[1])
     records: dict[str, dict[str, object]] = {}
     for path in selected:
         fields, lengths, time = read_snapshot(path)
         records[str(path)] = analyze_fields(
             fields, lengths, time, bins, alignment_shells, ranges, model_choices,
-            eddy_samples, eddy_bins, eddy_seed
+            eddy_samples, eddy_bins, eddy_seed, joint_ranges
         )
     ensemble = average_snapshot_records(records)
     ensemble["time_start"] = time_start
@@ -1522,10 +1632,26 @@ def synthetic_test() -> dict[str, object]:
     pressure_work = record["pressure_work_decomposition"]
     alignment = record["alignment"].get("2", {})
     strain = np.asarray(record["pdf"]["bb_grad_velocity"]["density"])
+    pressure_density = record["pressure_density_joint"]
     heat_flux = record["heat_flux_transport_proxy"]
     finite_alignment = bool(
         alignment and np.isfinite(np.asarray(alignment["density"])).all()
     )
+    finite_pressure_density = bool(all(
+        np.isfinite(np.asarray(pressure_density[name]["density"], dtype=float)).all()
+        for name in ("parallel", "perpendicular")
+    ))
+    joint_fields = {
+        name: np.array(values, copy=True) for name, values in fields.items()
+    }
+    density_fluctuation = 0.05 * np.sin(2.0 * math.pi * xx / lengths[0])
+    joint_fields["dens"] = 1.0 + density_fluctuation
+    joint_fields["eint"] = 1.0 + (5.0 / 3.0) * density_fluctuation
+    joint_fields["p_perp"] = 1.0 + (5.0 / 3.0) * density_fluctuation
+    joint_coordinates = pressure_density_fields(joint_fields)["parallel"]
+    joint_guide_error = float(np.max(np.abs(
+        joint_coordinates[1] - (5.0 / 3.0) * joint_coordinates[0]
+    )))
     correlated_fields = {
         name: np.array(values, copy=True) for name, values in fields.items()
     }
@@ -1590,6 +1716,8 @@ def synthetic_test() -> dict[str, object]:
             np.asarray(transfer["transfer_normalized_by_total"], dtype=float)
         ).all()
         and finite_alignment
+        and finite_pressure_density
+        and joint_guide_error < 1.0e-14
         and np.isfinite(strain).all()
         and heat_flux["available"]
         and heat_flux["regularized_perpendicular_power"] > 0.0
@@ -1623,6 +1751,8 @@ def synthetic_test() -> dict[str, object]:
             correlated_transfer["total_transfer_rate"]
         ),
         "finite_alignment": finite_alignment,
+        "finite_pressure_density_joint_pdf": finite_pressure_density,
+        "pressure_density_five_thirds_coordinate_error": joint_guide_error,
         "finite_strain_pdf": bool(np.isfinite(strain).all()),
         "positive_perpendicular_heat_flux_proxy": (
             heat_flux["regularized_perpendicular_power"]

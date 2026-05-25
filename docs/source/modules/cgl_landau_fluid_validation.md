@@ -157,7 +157,8 @@ This action writes `analysis/diagnostics.json`, summarizes reduced histories,
 and analyzes retained CGL binary snapshots when present. For standard inputs,
 it reads each case's archived `analysis_t_start`/`analysis_t_end` values and
 forms common-bin steady-window averages. Current products include
-pressure/density PDFs, perpendicular shell spectra, field-projected
+pressure/density PDFs, Figure 2(a)-coordinate joint pressure-density PDFs,
+perpendicular shell spectra, field-projected
 `Delta p` and velocity-gradient spectra, the `b b : grad u` strain PDF,
 pressure-stress transfer with a real-space closure check, selected-scale
 alignment PDFs and their peak-versus-`k_perp` curve, and a cell-centered CGL
@@ -187,9 +188,17 @@ definition in the diagnostic JSON.
 The deterministic sample count, logarithmic-bin count, and seed are retained
 through `--eddy-samples`, `--eddy-bins`, and `--eddy-seed`.
 
+The joint pressure-density output uses the plotted Figure 2(a) coordinates
+`x = <p> delta rho/<rho>` and `y = delta p_parallel` or `delta p_perp`,
+where `<p> = <(2 p_perp + p_parallel)/3>`, and renders one two-panel PDF per
+analyzed case. This supplies the analysis product, but does not admit the
+published raster as a quantitative reference: its pressure-unit and
+color-density transform must first be qualified.
+
 The analyzer runs synthetic binning/gradient/transfer/alignment and
 heat-flux-sign/pressure-work checks and renders available history, PDF,
-spectrum, transfer, alignment, heat-flux-proxy, and pressure-work figures
+spectrum, joint-pressure-density, transfer, alignment, heat-flux-proxy, and
+pressure-work figures
 under `figures/paper/`, including eddy anisotropy when requested. When an
 externally prepared reference-curve manifest
 is supplied, it validates curve/source checksums and reported pointwise
@@ -212,8 +221,9 @@ statement and renormalized, and an absolute PDF-density uncertainty is
 retained in the manifest. Figure 4(a)'s normalized-density PDF is also
 admitted through its plotted `rho/<rho>` coordinate. Figure 5(b) is admitted
 through its normalized length coordinates and the opt-in conditioned
-structure functions. Remaining dimensional, spectral-normalization, or
-unmatched joint-distribution MKS24 panels, exact
+structure functions. Figure 2(a)'s matching joint product is implemented,
+but its pressure-scaled raster remains unadmitted. Remaining dimensional,
+spectral-normalization, or unqualified raster MKS24 panels, exact
 time-integrated/production local budget closure, and production comparisons
 remain to be completed. For retained LF histories, the analyzer
 also reports the RKL2-applied capped-face heat-flux contractions retained in
@@ -480,10 +490,11 @@ panel (a) is dimensionful and panel (c) is plotted as
 `bhat bhat : grad(u) / <B^2>`.
 
 Other quantitative panels still require a recorded digitization procedure,
-a matching analyzer product, or a separately provenance-tracked numerical
-reference source. In particular, Figure 2(a)'s joint pressure-density panel
-and Figure 4(b)'s `E_rho` spectrum must not be substituted for current
-one-dimensional or normalized products without matching definitions.
+a qualified coordinate transform, or a separately provenance-tracked
+numerical reference source. Figure 2(a) now has a matching joint
+pressure-density product, but its pressure-unit and color-density raster
+mapping is not admitted. Figure 4(b)'s `E_rho` spectrum must not be
+substituted for current normalized products without a matching definition.
 
 An optional curve manifest passed to `paper-analyze --reference-curves`
 has `schema_version = 1`, a `provenance` object, and one or more curve

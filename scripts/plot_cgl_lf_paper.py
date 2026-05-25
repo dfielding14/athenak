@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import re
 
 import matplotlib
 
@@ -101,6 +102,38 @@ def plot_pdfs(ensembles: dict[str, dict[str, object]], figure_dir: Path,
     axes[0].legend(fontsize=7)
     fig.suptitle("Pressure anisotropy and strain production")
     save(fig, figure_dir / "paper_pdfs.pdf", generated)
+
+
+def plot_pressure_density_joint(ensembles: dict[str, dict[str, object]],
+                                figure_dir: Path, generated: list[str]) -> None:
+    """Plot Figure 2(a)-style pressure-density joint distributions."""
+
+    for name, ensemble in ensembles.items():
+        product = ensemble.get("pressure_density_joint", {})
+        if not isinstance(product, dict):
+            continue
+        if not all(key in product for key in ("parallel", "perpendicular")):
+            continue
+        fig, axes = plt.subplots(2, 1, figsize=(5.0, 6.0), sharex=True)
+        for axis, key, ylabel in (
+            (axes[0], "parallel", r"$\delta p_\parallel$"),
+            (axes[1], "perpendicular", r"$\delta p_\perp$"),
+        ):
+            record = product[key]
+            x_edges = np.asarray(record["x_edges"], dtype=float)
+            y_edges = np.asarray(record["y_edges"], dtype=float)
+            density = np.asarray(record["density"], dtype=float)
+            image = axis.pcolormesh(
+                x_edges, y_edges, density.T, shading="auto", cmap="viridis"
+            )
+            limits = np.asarray([x_edges[0], x_edges[-1]], dtype=float)
+            axis.plot(limits, (5.0 / 3.0) * limits, "k:", lw=1.0)
+            axis.set_ylabel(ylabel)
+            fig.colorbar(image, ax=axis, label="joint PDF")
+        axes[1].set_xlabel(r"$\langle p\rangle\,\delta\rho/\langle\rho\rangle$")
+        fig.suptitle(f"Pressure-density joint PDF: {name}")
+        suffix = re.sub(r"[^A-Za-z0-9_.-]+", "_", name)
+        save(fig, figure_dir / f"paper_pressure_density_{suffix}.pdf", generated)
 
 
 def plot_spatial_spectra(ensembles: dict[str, dict[str, object]], figure_dir: Path,
@@ -349,6 +382,7 @@ def main() -> int:
     ensembles = case_ensembles(data)
     plot_history(data, args.figure_dir, generated)
     plot_pdfs(ensembles, args.figure_dir, generated)
+    plot_pressure_density_joint(ensembles, args.figure_dir, generated)
     plot_spatial_spectra(ensembles, args.figure_dir, generated)
     plot_transfer_and_alignment(ensembles, args.figure_dir, generated)
     plot_heat_flux_proxy(ensembles, args.figure_dir, generated)

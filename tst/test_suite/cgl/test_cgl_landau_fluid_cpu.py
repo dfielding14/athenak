@@ -864,11 +864,20 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         )
         assert diagnostics["synthetic_test"]["passive_pressure_work_is_diagnostic_only"]
         assert diagnostics["synthetic_test"]["finite_eddy_anisotropy"]
+        assert diagnostics["synthetic_test"]["finite_pressure_density_joint_pdf"]
+        assert (
+            diagnostics["synthetic_test"][
+                "pressure_density_five_thirds_coordinate_error"
+            ] < 1.0e-14
+        )
         assert abs(
             diagnostics["synthetic_test"]["constant_power_quadrature_error"]
         ) < 1.0e-14
         snapshot = next(iter(diagnostics["snapshots"].values()))
         assert "beta_delta" in snapshot["pdf"]
+        assert "pressure_density_joint" in snapshot
+        assert "parallel" in snapshot["pressure_density_joint"]
+        assert "perpendicular" in snapshot["pressure_density_joint"]
         assert "delta_p" in snapshot["spectra"]
         assert abs(snapshot["pressure_transfer"]["closure_error"]) < 1.0e-12
         assert snapshot["pressure_transfer"]["normalization_available"]
@@ -878,6 +887,7 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         )
         assert diagnostics["snapshot_ensemble"]["snapshot_count"] == 1
         assert "beta_delta" in diagnostics["snapshot_ensemble"]["pdf"]
+        assert "pressure_density_joint" in diagnostics["snapshot_ensemble"]
         assert diagnostics["snapshot_ensemble"]["pressure_transfer"][
             "normalization_available"
         ]

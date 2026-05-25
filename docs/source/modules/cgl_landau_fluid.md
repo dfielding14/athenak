@@ -236,6 +236,11 @@ emits `eddy_anisotropy.velocity_perp` and
 archived with the analysis products.
 If a pinned MKS24 staging manifest is available, the analysis bundle retains
 its archive and source-TeX checksums as reference provenance.
+The snapshot products also include Figure 2(a)-coordinate joint PDFs of
+`delta p_parallel` and `delta p_perp` versus
+`<p> delta rho/<rho>`, rendered for each analyzed case. This supplies the
+joint diagnostic in AthenaK units; the paper raster is not a quantitative
+reference until its pressure-unit and color-density transform is qualified.
 With `--reference-curves <manifest.json>`, `paper-analyze` also accepts
 external numerical or digitized curves only when their manifest records
 provenance, SHA-256 digests, and positive per-point `y_uncertainty` values.
@@ -260,7 +265,9 @@ units for its beta-100 limiter runs, while the equivalent AthenaK
 `v_A = 1` normalization uses `p0 = 50`; until an explicit observable
 conversion is qualified, dimensional Figure 11 upper spectra, Figure 12
 spectra, and Figure 13(a),(c) curves are retained only as excluded audit
-context. Figure 5(b)'s dimensionless curves are admitted through the opt-in
+context. Figure 2(a)'s raster is likewise retained as excluded reference
+context despite its implemented joint product. Figure 5(b)'s dimensionless
+curves are admitted through the opt-in
 conditioned-structure-function analysis; no paper-scale comparison has been
 executed.
 These products are analysis infrastructure; they do not by themselves
