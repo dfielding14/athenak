@@ -199,9 +199,10 @@ The joint pressure-density output uses the plotted Figure 2(a) coordinates
 `x = <p> delta rho/<rho>` and `y = delta p_parallel` or `delta p_perp`,
 where `<p> = <(2 p_perp + p_parallel)/3>`, and renders one two-panel PDF per
 analyzed case. The optional reference manifest can compare sampled surfaces
-against these products by bilinear interpolation. This does not admit the
-published raster as a quantitative reference: its pressure-unit and
-color-density transform must first be qualified.
+against these products by bilinear interpolation. The pinned published
+raster can now be decoded into sampled donor-coordinate surfaces through its
+labeled colorbar, but those surfaces are deliberately excluded from the
+manifest until the donor-to-AthenaK pressure-unit transform is qualified.
 
 The compressive spectrum implements the Figure 3 quantity
 `E_{khat dot u}(k_perp)` by Fourier-projecting velocity onto the full
@@ -243,12 +244,14 @@ retained in the manifest. Figure 4(a)'s normalized-density PDF is also
 admitted through its plotted `rho/<rho>` coordinate. Figure 5(b) is admitted
 through its normalized length coordinates and the opt-in conditioned
 structure functions. Figure 2(a)'s matching joint product and sampled-surface
-comparison route are implemented, but its pressure-scaled raster remains
-unadmitted. Figure 3 and Figure 6(a)
+comparison route are implemented; its labeled raster/color mapping is decoded
+to excluded donor-pressure-coordinate samples, but no analyzer manifest is
+emitted until the pressure-unit conversion and two-dimensional PDF Jacobian
+are established. Figure 3 and Figure 6(a)
 now have matching emitted spectral fields, and Figure 4(b) has an explicit
 normalized-density spectral product; their plotted spectral ordinates remain
 unadmitted pending qualified transformations and authorized case execution.
-Remaining dimensional, spectral-normalization, or unqualified raster MKS24
+Remaining dimensional or spectral-normalization MKS24
 panels, exact
 time-integrated/production local budget closure, and production comparisons
 remain to be completed. For retained LF histories, the analyzer
@@ -351,6 +354,26 @@ their redistribution permission is separately established. Archive the
 staging manifest or immutable reference path with every quantitative paper
 comparison bundle. The staged official `2405.02418v2` source inventory
 contains TeX and rendered figure PDFs, not machine-readable curve tables.
+For Figure 2(a), decode its labeled raster into explicitly excluded
+donor-pressure-coordinate surface samples:
+
+```bash
+python3 scripts/digitize_cgl_lf_mks24_fig2a.py \
+  /path/to/arXiv-2405.02418v2/source/fig2a.pdf \
+  /path/to/arXiv-2405.02418v2/digitized_fig2a_v1
+```
+
+The utility refuses a PDF whose SHA-256 differs from the pinned Figure 2(a)
+source, reconstructs the tiled source-resolution chart, and decodes its
+labeled linear colorbar. It emits two sampled CSV surfaces with absolute
+joint-PDF density uncertainty `0.5`, masking only black plotted overlays.
+The output is `excluded_surfaces.json`, not an analyzer reference manifest:
+both axes remain in donor pressure units. If a donor-to-AthenaK pressure
+scale `s` is later qualified, the corresponding surface conversion is
+`x_A = s x_paper`, `y_A = s y_paper`, and
+`z_A = z_paper/s^2`, with the same `1/s^2` factor applied to
+`z_uncertainty`.
+
 For Figure 2(b), extract the plotted vector paths from the pinned source PDF
 into an ignored or archival results area:
 
@@ -518,8 +541,9 @@ panel (a) is dimensionful and panel (c) is plotted as
 Other quantitative panels still require a recorded digitization procedure,
 a qualified coordinate transform, or a separately provenance-tracked
 numerical reference source. Figure 2(a) now has a matching joint
-pressure-density product and sampled-surface comparison route, but its
-pressure-unit and color-density raster mapping is not admitted. Figure 4(b)'s
+pressure-density product, sampled-surface comparison route, and decoded raw
+donor-coordinate raster samples; its donor-pressure conversion is not
+admitted. Figure 4(b)'s
 `E_rho` spectrum must not be
 substituted for `spectra.density_fluctuation` without a matching ordinate
 transformation.
