@@ -169,11 +169,11 @@ test or run evidence.
 | Instability-threshold policy | Explicit MKS24 policy, alternative-policy tests, archived input choice | Yes | Implemented 2026-05-24; CPU policy test and active paper-smoke manifest passed |
 | Safety diagnostic truthfulness | Strict tests independent of backup correction | Yes | Implemented 2026-05-24; focused CPU test passed, broader gates pending |
 | CPU numerical accuracy | Convergence, asymptotic, cap, directional, restart, MPI/AMR checks | Yes | Partial 2026-05-25; archived `accuracy-v2` bundle covers N-001 through N-007 locally, the AMR workflow passed, and the full CPU suite passed (`218 passed, 15 skipped`); MPI execution is blocked in this shell because `mpirun` is unavailable; forced accounting remains |
-| Frontier GPU numerical equivalence | CPU/GPU comparison suite, MPI/GPU restart checks, strict diagnostics | Yes for Frontier use | Not started |
+| Frontier GPU numerical equivalence | CPU/GPU comparison suite, MPI/GPU restart checks, strict diagnostics | Yes for Frontier use | Partial 2026-05-25; immutable HIP/MPI build archived, G-001/G-002 strict eight-GPU active smoke passed, and G-003 one-rank/eight-rank comparison passed with maximum absolute difference `2.0816681711721685e-17`; finite-collision, restart, and multinode gates remain open |
 | Paper pgen and forcing fidelity | Input/pgen review, forcing metadata, restartable reduced smoke | Yes for MKS24 claims | Partial 2026-05-24; active/passive reduced smoke, forcing restart, OU cadence, RK source work, and passive flow-decoupling checks passed; paper-grade statistical calibration open |
 | Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Partial 2026-05-25; reduced histories, restartable applied forcing work/global active residual, fixed-level RKL2-applied heat-flux contractions, operator-face cap counters, windowed snapshot PDF/spectral/transfer/alignment/local-strain diagnostics, manifest-qualified heat-flux smoothing proxies, and generic figures implemented; panel/reference comparison, AMR-corrected/full local-work budget accounting, and production qualification open |
 | Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Inputs and guarded workflow modes defined 2026-05-24; no paper-scale runs or figure comparisons executed |
-| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-25; tracked debug-only build/campaign/accounting tools pass offline policy tests; no Frontier job has been prepared or executed |
+| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-25; clean revision `2a1b1fef` was built on Frontier and debug jobs `4653415`/`4653417` are retained and recorded (`0.005834` node-hours total); restart preparation and environment capture are implemented for the remaining ladder |
 | User documentation | Sphinx build and accurately scoped runbook | Yes | Implemented for current functionality 2026-05-25; Sphinx warnings-as-errors and repository style suite pass in an isolated validation environment; future campaign results must still be documented when executed |
 | Performance suitability | Representative timing/memory/I/O evidence; no uninvestigated prohibitive bottleneck | Yes for production use | Not started |
 
@@ -273,6 +273,8 @@ table such as:
 | F-017 | 2026-05-25 | Phase E | Heat-flux cap occupancy alone did not quantify the transport strength, while an exact face-power reduction needs a decomposition-independent discrete accounting design | `scripts/analyze_cgl_lf_paper.py`, `scripts/plot_cgl_lf_paper.py`, `scripts/cgl_lf_workflow.py` | High | Add a manifest-qualified cell-centered reconstruction of the implemented LF closure as an explicitly non-budget heat-flux smoothing proxy; retain exact applied-face accounting as an open gate | Synthetic positive perpendicular-conduction/zero-parallel proxy check through `test_cgl_lf_paper_snapshot_analysis_uses_both_pressures` | Implemented for snapshot proxy; fixed-level applied accounting added by F-019 |
 | F-018 | 2026-05-25 | Phase E | Retained `force_pwr` sampled instantaneous power but did not preserve the exact net RK stage forcing source, including zero-net-momentum projection, in forced paper runs or through restart | `src/srcterms/turb_driver.cpp`, `src/outputs/restart.cpp`, `src/pgen/tests/cgl_lf_paper.cpp`, `scripts/analyze_cgl_lf_paper.py` | High | Add opt-in globally reduced cumulative `force_work`, checkpoint it for paper decks, and compare active-case interval work to conserved `tot-E`; do not give passive-Delta the active budget interpretation | Expanded forcing identity/restart regressions and reduced paper analysis bundle | Implemented locally; long-time/production residual tolerance and full local-work budget remain open |
 | F-019 | 2026-05-25 | Phase E | The snapshot heat-flux proxy did not measure the capped face flux actually advanced by an RKL2 LF sweep | `src/diffusion/cgl_landau_fluid.cpp`, `src/mhd/mhd_sts.cpp`, `src/outputs/history.cpp`, `scripts/analyze_cgl_lf_paper.py` | High | Accumulate owned-face capped-flux/temperature-jump contractions through the same RKL2 recurrence as the state, checkpoint cumulative `lf_qprwrk`/`lf_qpewrk`, and disable the metric for AMR until flux-corrected accounting exists | Decay/sign, cap-analysis, low-field/AMR-zero, and restart-preservation regressions in the CGL CPU/MPI test suites | Implemented locally for fixed-level meshes; AMR-corrected and full anisotropic-pressure/local-work budget accounting remain open |
+| F-020 | 2026-05-25 | Frontier operations | The generated environment-log filter required `MPICH=` instead of matching `MPICH_*`, so the first live manifests did not preserve the requested MPI/GPU environment variables | `scripts/frontier/cgl_lf_frontier.py`, `g001-g002-active-smoke-8gpu/manifest/run_environment.txt`, `g003-active-smoke-1gpu/manifest/run_environment.txt` | High | Capture configured runtime variable prefixes and archive optional restart files in the preparation utility before continuing restart qualification | Expanded `cgl_lf_frontier.py self-test` for environment capture and restart provenance | Implemented locally; verify corrected capture in the next live run |
+| F-021 | 2026-05-25 | Frontier G-001/G-003 | Both live Slurm logs reported `MPICH_GPU_SUPPORT_ENABLED = 1` but `MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED = 0` although the generated script exported the latter as `1` | `/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_g001_g002_active_smoke_8gpu.4653415.log`, `/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_g003_active_smoke_1gpu.4653417.log` | Medium | Treat runtime-reported behavior as authoritative, preserve it with the corrected environment capture, and investigate stack support before making managed-memory claims | Subsequent live manifest/log inspection | Open; did not prevent strict smoke or decomposition agreement |
 
 ### Implemented Core Decision Log
 
@@ -291,7 +293,8 @@ table such as:
 | 2026-05-25 | Render generic archived paper diagnostics separately from paper-panel comparison claims. | Inspectable local products are needed before production, but without reference data or standard runs they cannot establish MKS24 figure reproduction. | Binary probe and smoke rendering passed; reference comparison and production statistics remain open |
 | 2026-05-25 | Define `paper-convergence` as a short reduced nonlinear qualification tier rather than a substitute for paper-scale convergence. | It exercises resolution, heat-flux, threshold, snapshot, and plotting paths locally while its `tlim = 0.02` metadata prevents steady-state interpretation. | `20260525-paper-convergence-net-work-v2` passed and rendered five generic figures; longer reduced/standard statistics remain open |
 | 2026-05-25 | Keep strict emergency monitoring enabled in limiter-suppression validation and move its physical limiter state below the emergency bound. | A limiter-action oracle must not intentionally begin in a state the independent safety contract defines as invalid. | Corrected case retains strong flux suppression and `full-v2` passes |
-| 2026-05-25 | Keep Frontier submission manual while automating fail-closed preparation and accounting policy checks. | The debug-QOS one-job constraint forbids job chaining; generating an explicit script and retained reservation/manifest improves reproducibility without silently submitting work. | Utility offline self-test passes; live `squeue`, `sbatch`, `sacct`, HIP build, and GPU qualification remain open |
+| 2026-05-25 | Keep Frontier submission manual while automating fail-closed preparation and accounting policy checks. | The debug-QOS one-job constraint forbids job chaining; generating an explicit script and retained reservation/manifest improves reproducibility without silently submitting work. | Utility self-test passes; immutable HIP/MPI build and sequential debug accounting exercised by jobs `4653415` and `4653417`; remaining GPU ladder open |
+| 2026-05-25 | Treat runtime-reported MPI/GPU memory support as evidence, not the requested export alone. | Both first live debug jobs displayed GPU-aware MPI active but managed-memory support inactive despite the requested setting; future manifests must retain both configured and reported behavior. | Corrected environment capture is implemented; configuration investigation and subsequent live verification remain open |
 | 2026-05-25 | Use an isolated dependency-complete Python environment for local style and Sphinx gate execution. | The checkout declares Sphinx dependencies but the active system module lacks them and `flake8`; installing validation-only packages under `/tmp` avoids changing the product dependency surface. | Repository style suite and warning-strict Sphinx build passed; no generated documentation output is retained as source |
 | 2026-05-25 | Emit heat-flux transport strength initially as a snapshot-reconstructed proxy rather than claim an applied discrete energy budget. | Archived fields and closure choices are sufficient to reconstruct the continuous LF smoothing measure; exact finite-volume accounting must first define a decomposition-independent applied-face reduction. | Synthetic sign check passed; F-019 later adds the signed fixed-level applied contraction; production/reference interpretation and full budget closure remain open |
 | 2026-05-25 | Track cumulative net applied forcing work at the source update only when explicitly requested by a driven input. | The before/after conserved-energy difference across the full source task, including zero-net-momentum projection, is exact and restartable; instantaneous output-time `force_pwr` cannot close an active energy residual. Opt-in persistence avoids altering legacy forcing restart records. | Focused CPU/restart coverage and `20260525-paper-smoke-net-work-v2`/`20260525-paper-convergence-net-work-v2` analysis bundles; production tolerance and heat-flux transfer decomposition remain open |
@@ -2254,7 +2257,8 @@ and paper-standard/limiter-production decks under `debug`, emits an
 inspectable batch script, queries `squeue` before the user manually submits,
 and records exactly one completed top-level allocation from `sacct` together
 with the source/executable/input provenance held in its manifest. It also
-supports releasing an unsubmitted reservation. Validate its policy logic
+archives an optional `--restart-file` for explicit continuation qualification
+and supports releasing an unsubmitted reservation. Validate its policy logic
 offline with:
 
 ```bash
@@ -2393,6 +2397,15 @@ unexamined optimization guarantee:
   runs without treating that as a new run configuration;
 - do not load performance instrumentation packages in the baseline correctness
   build unless profiling is the stated purpose of the run.
+
+Live qualification jobs `4653415` and `4653417` reported
+`MPICH_GPU_SUPPORT_ENABLED = 1` but
+`MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED = 0`, despite requesting the latter
+as `1`. Their strict active-smoke results remain valid, but the runtime report
+precludes a managed-memory claim until the active stack behavior is resolved.
+The initial run-environment log filter also failed to retain `MPICH_*`
+exports; the tracked utility now captures these prefixes explicitly for
+subsequent runs.
 
 ### Improved Frontier Build Script Template
 
@@ -2560,7 +2573,7 @@ sha256sum "${ATHENA}" > "${MANIFEST_DIR}/athena.sha256"
   echo "cpus_per_task=${CPUS_PER_TASK}"
   echo "athena_walltime=${ATHENA_WALLTIME}"
   module -t list 2>&1
-  env | LC_ALL=C sort | grep -E '^(MPICH|FI_|HSA_|OMP_|ROCR|HIP|CRAY)=' || true
+  env | LC_ALL=C sort | grep -E '^(MPICH_|FI_|HSA_|OMP_|ROCR_|HIP_|CRAY_)' || true
 } > "${MANIFEST_DIR}/run_environment.txt"
 
 RUN_ARGS=(-i "${INPUT}")
@@ -2640,6 +2653,22 @@ Run in the following order, stopping on the first unexplained failure:
 | G-006 | 2 to 4 nodes, at most 60 minutes | MPI/GPU decomposition behavior on multiblock problem | Clean strict diagnostics, tolerance-based reduced histories |
 | G-007 | 1 to 4 nodes, at most 90 minutes | Reduced paper-pgen active/passive/forcing validation after implementation | Complete manifests and finite analysis products |
 | G-008 | Carefully approved small set | Timing, memory, I/O, and checkpoint sizing | Evidence for later production plan |
+
+Retained live evidence as of 2026-05-25:
+
+- The Frontier HIP/MPI executable built from committed revision `2a1b1fef`
+  has SHA-256
+  `d06be3e8dbed8f0b2e00f031b0f9274ae52b77c1b6c7e6861380d368becffbb8`.
+- Combined G-001/G-002 job `4653415` completed on one node with eight GPU
+  ranks, clean strict LF diagnostics, finite forcing/applied-heat-flux
+  histories, and `0.003056` accounted node-hours.
+- G-003 job `4653417` completed on one node with one GPU rank. Its final
+  primitive/tab and history products agree with the eight-rank case under
+  `rtol = atol = 1.0e-12`, with maximum absolute difference
+  `2.0816681711721685e-17`, and it consumed `0.002778` node-hours.
+- The retained ledger therefore records `0.005834` node-hours used. G-004
+  finite-collision, G-005 restart, multinode, reduced-science, and sizing
+  evidence remain open.
 
 Required Frontier GPU comparison principles:
 

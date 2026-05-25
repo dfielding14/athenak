@@ -309,6 +309,8 @@ def generated_batch_script(manifest: dict[str, object], script_path: Path) -> st
     override_text = " ".join(overrides)
     if override_text:
         override_text = " " + override_text
+    restart_file = command.get("restart_file")
+    restart_value = quote(str(restart_file)) if restart_file else "''"
     job_name = re.sub(r"[^A-Za-z0-9_]+", "_", str(run["run_name"]))[:60]
     return f"""#!/bin/bash
 #SBATCH -J cgl_{job_name}
@@ -327,6 +329,7 @@ CGL_ROOT={quote(manifest["project_root"])}
 RUN_MANIFEST={quote(script_path.parent / "prepared_run.json")}
 ATHENA={quote(command["executable"])}
 INPUT={quote(command["input_file"])}
+RESTART={restart_value}
 OUT_DIR={quote(paths["output_dir"])}
 RESTART_DIR={quote(paths["restart_dir"])}
 ENV_LOG={quote(paths["environment_log"])}
@@ -338,6 +341,9 @@ NRANKS="$((NNODES * RANKS_PER_NODE))"
 test -f "${{RUN_MANIFEST}}"
 test -x "${{ATHENA}}"
 test -f "${{INPUT}}"
+if [[ -n "${{RESTART}}" ]]; then
+  test -f "${{RESTART}}"
+fi
 mkdir -p "${{OUT_DIR}}" "${{RESTART_DIR}}"
 
 module restore
@@ -368,13 +374,18 @@ export OMP_NUM_THREADS=1
   echo "nodes=${{NNODES}}"
   echo "ranks=${{NRANKS}}"
   module -t list 2>&1
-  env | LC_ALL=C sort | grep -E '^(MPICH|FI_|HSA_|OMP_|ROCR|HIP|CRAY)=' || true
+  env | LC_ALL=C sort | grep -E '^(MPICH_|FI_|HSA_|OMP_|ROCR_|HIP_|CRAY_)' || true
 }} > "${{ENV_LOG}}"
+
+RUN_ARGS=(-i "${{INPUT}}")
+if [[ -n "${{RESTART}}" ]]; then
+  RUN_ARGS=(-r "${{RESTART}}")
+fi
 
 srun -N "${{NNODES}}" -n "${{NRANKS}}" --ntasks-per-node="${{RANKS_PER_NODE}}" \
   -c "${{CPUS_PER_TASK}}" --threads-per-core=1 --cpu-bind=threads \
   --gpus-per-task=1 --gpu-bind=closest \
-  "${{ATHENA}}" -i "${{INPUT}}" -d "${{OUT_DIR}}" \
+  "${{ATHENA}}" "${{RUN_ARGS[@]}}" -d "${{OUT_DIR}}" \
   -t {quote(command["athena_walltime"])} \
   job/basename={quote(run["run_name"])}{override_text}
 
@@ -405,13 +416,23 @@ def prepare(args: argparse.Namespace) -> Path:
     executable = Path(args.executable).expanduser().resolve()
     input_path = Path(args.input_file).expanduser().resolve()
     source_dir = Path(args.source_dir).expanduser().resolve()
+    restart_path = (
+        Path(args.restart_file).expanduser().resolve()
+        if args.restart_file is not None else None
+    )
     if not executable.is_file() or not os.access(executable, os.X_OK):
         raise ValueError(f"executable is missing or not executable: {executable}")
     if not input_path.is_file():
         raise ValueError(f"input deck is missing: {input_path}")
+    if restart_path is not None and not restart_path.is_file():
+        raise ValueError(f"restart file is missing: {restart_path}")
     require_beneath_root(executable, root, "executable", args.allow_local_root)
     require_beneath_root(input_path, root, "input deck", args.allow_local_root)
     require_beneath_root(source_dir, root, "source directory", args.allow_local_root)
+    if restart_path is not None:
+        require_beneath_root(
+            restart_path, root, "restart file", args.allow_local_root
+        )
     validate_debug_input(input_path)
     nodes = args.nodes
     if nodes < 1:
@@ -446,6 +467,10 @@ def prepare(args: argparse.Namespace) -> Path:
         path.mkdir(parents=True, exist_ok=True)
     archived_input = manifest_dir / "submitted_input.athinput"
     shutil.copy2(input_path, archived_input)
+    archived_restart = None
+    if restart_path is not None:
+        archived_restart = manifest_dir / "submitted_restart.rst"
+        shutil.copy2(restart_path, archived_restart)
     batch_script = manifest_dir / "cgl_lf_debug.sbatch"
     manifest: dict[str, object] = {
         "schema_version": 1,
@@ -482,6 +507,15 @@ def prepare(args: argparse.Namespace) -> Path:
             "source_input_file": str(input_path),
             "input_file": str(archived_input),
             "input_sha256": sha256(archived_input),
+            "source_restart_file": (
+                str(restart_path) if restart_path is not None else None
+            ),
+            "restart_file": (
+                str(archived_restart) if archived_restart is not None else None
+            ),
+            "restart_sha256": (
+                sha256(archived_restart) if archived_restart is not None else None
+            ),
             "athena_walltime": args.athena_walltime,
             "overrides": args.override,
         },
@@ -779,6 +813,7 @@ def self_test() -> int:
             allow_dirty_source=True,
             executable=str(executable),
             input_file=str(smoke_input),
+            restart_file=None,
             source_dir=str(ROOT_DIR),
             test_git_revision="self-test-revision",
             nodes=1,
@@ -793,6 +828,12 @@ def self_test() -> int:
             override=[],
         )
         manifest_path = prepare(arguments)
+        script_text = Path(str(
+            read_manifest(manifest_path)["paths"]["batch_script"]
+        )).read_text(encoding="utf-8")
+        expected_capture = "grep -E '^(MPICH_|FI_|HSA_|OMP_|ROCR_|HIP_|CRAY_)'"
+        if expected_capture not in script_text:
+            raise ValueError("self-test failed to retain exported runtime settings")
         check_submit(argparse.Namespace(
             manifest=str(manifest_path), allow_local_root=True,
             squeue_file=str(empty_queue),
@@ -823,6 +864,21 @@ def self_test() -> int:
             duplicate_rejected = True
         if not duplicate_rejected:
             raise ValueError("self-test failed to reject duplicate accounting")
+        restart = Path(directory) / "checkpoint.rst"
+        restart.write_text("restart-test-data\n", encoding="utf-8")
+        arguments.run_name = "valid_restart"
+        arguments.restart_file = str(restart)
+        restart_manifest_path = prepare(arguments)
+        restart_manifest = read_manifest(restart_manifest_path)
+        archived_restart = Path(str(restart_manifest["command"]["restart_file"]))
+        if (not archived_restart.is_file()
+                or restart_manifest["command"]["restart_sha256"] != sha256(restart)):
+            raise ValueError("self-test failed to archive restart provenance")
+        cancel(argparse.Namespace(
+            manifest=str(restart_manifest_path), allow_local_root=True,
+            notes="offline restart preparation check complete",
+        ))
+        arguments.restart_file = None
         arguments.run_name = "bad_walltime"
         arguments.walltime = "02:00:01"
         rejected_walltime = False
@@ -868,6 +924,10 @@ def parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--acceptance-criterion", required=True)
     prepare_parser.add_argument("--executable", required=True)
     prepare_parser.add_argument("--input-file", required=True)
+    prepare_parser.add_argument(
+        "--restart-file",
+        help="Archive and resume from a retained restart file beneath the run root.",
+    )
     prepare_parser.add_argument("--source-dir", default=str(ROOT_DIR))
     prepare_parser.add_argument("--nodes", type=int, required=True)
     prepare_parser.add_argument("--walltime", required=True)
