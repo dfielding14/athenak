@@ -19,6 +19,7 @@ PAPER_PASSIVE_INPUT = (
     "../../../inputs/cgl_lf_paper/cgl_lf_paper_smoke_passive_beta10.athinput"
 )
 PAPER_PRODUCTION_INPUT_ROOT = Path("../../../inputs/cgl_lf_paper")
+PAPER_STAGE_I_MANIFEST = PAPER_PRODUCTION_INPUT_ROOT / "mks24_stage_i_manifest.json"
 PAPER_WORKFLOW_PATH = Path("../../../scripts/cgl_lf_workflow.py")
 
 
@@ -714,7 +715,9 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         Path(case.input_path).name
         for case in workflow.workflow_cases("paper-standard")
     }
-    assert workflow_standard_names == standard_input_names
+    assert workflow_standard_names == standard_input_names - {
+        "cgl_lf_paper_standard_active_alfvenic_beta1.athinput"
+    }
     heat_flux_input_names = {
         path.name
         for path in PAPER_PRODUCTION_INPUT_ROOT.glob(
@@ -754,6 +757,38 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
     }
     assert workflow_scale_separation_names == scale_separation_input_names | {
         "cgl_lf_paper_standard_active_alfvenic_beta10.athinput"
+    }
+    stage_i_names = [
+        Path(case.input_path).name
+        for case in workflow.workflow_cases("paper-mks24-stage-i")
+    ]
+    stage_i_manifest = json.loads(PAPER_STAGE_I_MANIFEST.read_text())
+    manifest_names = [
+        Path(case["input"]).name for case in stage_i_manifest["cases"]
+    ]
+    assert len(stage_i_names) == 16
+    assert len(set(stage_i_names)) == 16
+    assert stage_i_manifest["authorization"]["mapped_unique_runs"] == 16
+    assert stage_i_names == manifest_names
+    assert "cgl_lf_paper_standard_active_alfvenic_beta1.athinput" not in stage_i_names
+    assert "cgl_lf_paper_nulim_beta100_hardwall.athinput" not in stage_i_names
+    assert set(stage_i_names) == {
+        "cgl_lf_paper_standard_active_alfvenic_beta10.athinput",
+        "cgl_lf_paper_standard_active_alfvenic_beta100.athinput",
+        "cgl_lf_paper_standard_active_random_beta10.athinput",
+        "cgl_lf_paper_standard_active_random_beta100.athinput",
+        "cgl_lf_paper_standard_passive_alfvenic_beta10.athinput",
+        "cgl_lf_paper_standard_passive_alfvenic_beta100.athinput",
+        "cgl_lf_paper_standard_passive_random_beta10.athinput",
+        "cgl_lf_paper_standard_passive_random_beta100.athinput",
+        "cgl_lf_paper_compressive_active_random_beta1.athinput",
+        "cgl_lf_paper_compressive_active_random_beta100_sonic.athinput",
+        "cgl_lf_paper_heat_flux_beta10_strong.athinput",
+        "cgl_lf_paper_heat_flux_beta10_weak.athinput",
+        "cgl_lf_paper_nulim_beta100_20.athinput",
+        "cgl_lf_paper_nulim_beta100_200.athinput",
+        "cgl_lf_paper_scale_separation_beta10_nperp96.athinput",
+        "cgl_lf_paper_scale_separation_beta10_nperp384.athinput",
     }
     hardwall_paths = {
         "cgl_lf_paper_standard_active_alfvenic_beta1.athinput",
@@ -818,7 +853,9 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         assert choices["beta0"] == beta0
         assert choices["forcing_mode"] == "isotropic_random"
         assert choices["forcing_tcorr"] == tcorr
-    for workflow_name in ("paper-compressive", "paper-scale-separation"):
+    for workflow_name in (
+        "paper-compressive", "paper-scale-separation", "paper-mks24-stage-i"
+    ):
         output_dir = f"cgl_ci_denied_{workflow_name.replace('-', '_')}"
         denied = subprocess.run(
             [

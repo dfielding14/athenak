@@ -1,0 +1,180 @@
+{
+  "schema_version": 1,
+  "campaign": "mks24_stage_i_cgl_lf_reproduction",
+  "reference": {
+    "work": "Majeski, Kunz, and Squire (2024), Self-organization in collisionless, high-beta turbulence",
+    "arxiv_source": "2405.02418v2",
+    "source_evidence": {
+      "standard_setup": "MKS24.tex:463-469",
+      "compressive_beta_scan": "MKS24.tex:530-538",
+      "limiter_scan": "MKS24.tex:662-698"
+    }
+  },
+  "authorization": {
+    "project_account": "AST207",
+    "project_budget_node_hours": 4000.0,
+    "stage_i_reservation_node_hours_including_contingency": 1068.888889,
+    "mapped_unique_runs": 16,
+    "execution_rule": "Run only canonical cases once; reuse accepted outputs for listed aliases and panel roles."
+  },
+  "aliases": [
+    {
+      "canonical_case": "R02",
+      "canonical_input": "inputs/cgl_lf_paper/cgl_lf_paper_standard_active_alfvenic_beta10.athinput",
+      "roles": [
+        "standard_active_alfvenic_beta10",
+        "heat_flux_beta10_nominal_active",
+        "scale_separation_beta10_nperp192"
+      ]
+    },
+    {
+      "canonical_case": "R03",
+      "canonical_input": "inputs/cgl_lf_paper/cgl_lf_paper_standard_active_alfvenic_beta100.athinput",
+      "equivalent_input": "inputs/cgl_lf_paper/cgl_lf_paper_nulim_beta100_hardwall.athinput",
+      "comparison_ignore_parameters": [
+        "job/basename"
+      ],
+      "roles": [
+        "standard_active_alfvenic_beta100",
+        "nulim_beta100_hardwall"
+      ]
+    }
+  ],
+  "excluded_definitions": [
+    {
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_standard_active_alfvenic_beta1.athinput",
+      "status": "unmapped_not_authorized",
+      "reason": "MKS24 Figure 3 identifies its beta-1 compressive-spectrum case as randomly driven; no displayed-result mapping has been established for this separate Alfvenic beta-1 deck."
+    }
+  ],
+  "cases": [
+    {
+      "id": "R02",
+      "name": "paper_standard_active_alfvenic_beta10",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_standard_active_alfvenic_beta10.athinput",
+      "resolution": "192x192x384",
+      "estimated_node_hours": 23.111111,
+      "figure_roles": ["1", "2", "4", "5", "6", "7", "8", "9", "11", "12"]
+    },
+    {
+      "id": "R03",
+      "name": "paper_standard_active_alfvenic_beta100",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_standard_active_alfvenic_beta100.athinput",
+      "resolution": "192x192x384",
+      "estimated_node_hours": 23.111111,
+      "figure_roles": ["3", "4", "9", "13"]
+    },
+    {
+      "id": "R04",
+      "name": "paper_standard_active_random_beta10",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_standard_active_random_beta10.athinput",
+      "resolution": "192x192x384",
+      "estimated_node_hours": 23.111111,
+      "figure_roles": ["2", "3", "4", "5", "6", "7", "9"]
+    },
+    {
+      "id": "R05",
+      "name": "paper_standard_active_random_beta100",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_standard_active_random_beta100.athinput",
+      "resolution": "192x192x384",
+      "estimated_node_hours": 23.111111,
+      "figure_roles": ["2", "3", "4", "9"]
+    },
+    {
+      "id": "R06",
+      "name": "paper_standard_passive_alfvenic_beta10",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_standard_passive_alfvenic_beta10.athinput",
+      "resolution": "192x192x384",
+      "estimated_node_hours": 23.111111,
+      "figure_roles": ["1", "2", "4", "7", "8", "9", "12"]
+    },
+    {
+      "id": "R07",
+      "name": "paper_standard_passive_alfvenic_beta100",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_standard_passive_alfvenic_beta100.athinput",
+      "resolution": "192x192x384",
+      "estimated_node_hours": 23.111111,
+      "figure_roles": ["2", "4", "9", "13"]
+    },
+    {
+      "id": "R08",
+      "name": "paper_standard_passive_random_beta10",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_standard_passive_random_beta10.athinput",
+      "resolution": "192x192x384",
+      "estimated_node_hours": 23.111111,
+      "figure_roles": ["2", "4", "9"]
+    },
+    {
+      "id": "R09",
+      "name": "paper_standard_passive_random_beta100",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_standard_passive_random_beta100.athinput",
+      "resolution": "192x192x384",
+      "estimated_node_hours": 23.111111,
+      "figure_roles": ["2", "3", "4", "9"]
+    },
+    {
+      "id": "R10",
+      "name": "paper_compressive_active_random_beta1",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_compressive_active_random_beta1.athinput",
+      "resolution": "192x192x384",
+      "estimated_node_hours": 23.111111,
+      "figure_roles": ["3"]
+    },
+    {
+      "id": "R11",
+      "name": "paper_compressive_active_random_beta100_sonic",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_compressive_active_random_beta100_sonic.athinput",
+      "resolution": "192x192x384",
+      "estimated_node_hours": 23.111111,
+      "figure_roles": ["3"]
+    },
+    {
+      "id": "R12",
+      "name": "paper_heat_flux_beta10_strong",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_heat_flux_beta10_strong.athinput",
+      "resolution": "192x192x384",
+      "estimated_node_hours": 23.111111,
+      "figure_roles": ["12"]
+    },
+    {
+      "id": "R13",
+      "name": "paper_heat_flux_beta10_weak",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_heat_flux_beta10_weak.athinput",
+      "resolution": "192x192x384",
+      "estimated_node_hours": 23.111111,
+      "figure_roles": ["12"]
+    },
+    {
+      "id": "R14",
+      "name": "paper_nulim_beta100_20",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_nulim_beta100_20.athinput",
+      "resolution": "192x192x384",
+      "estimated_node_hours": 23.111111,
+      "figure_roles": ["13"]
+    },
+    {
+      "id": "R15",
+      "name": "paper_nulim_beta100_200",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_nulim_beta100_200.athinput",
+      "resolution": "192x192x384",
+      "estimated_node_hours": 23.111111,
+      "figure_roles": ["13"]
+    },
+    {
+      "id": "R16",
+      "name": "paper_scale_separation_active_alfvenic_beta10_nperp96",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_scale_separation_beta10_nperp96.athinput",
+      "resolution": "96x96x192",
+      "estimated_node_hours": 2.888889,
+      "figure_roles": ["11"]
+    },
+    {
+      "id": "R17",
+      "name": "paper_scale_separation_active_alfvenic_beta10_nperp384",
+      "input": "inputs/cgl_lf_paper/cgl_lf_paper_scale_separation_beta10_nperp384.athinput",
+      "resolution": "384x384x768",
+      "estimated_node_hours": 184.888889,
+      "figure_roles": ["11"]
+    }
+  ]
+}

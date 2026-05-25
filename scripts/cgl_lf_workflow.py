@@ -436,10 +436,6 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
         prefix = "inputs/cgl_lf_paper/"
         return [
             CaseSpec(
-                "paper_standard_active_alfvenic_beta1",
-                prefix + "cgl_lf_paper_standard_active_alfvenic_beta1.athinput",
-            ),
-            CaseSpec(
                 "paper_standard_active_alfvenic_beta10",
                 prefix + "cgl_lf_paper_standard_active_alfvenic_beta10.athinput",
             ),
@@ -470,6 +466,75 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
             CaseSpec(
                 "paper_standard_passive_random_beta100",
                 prefix + "cgl_lf_paper_standard_passive_random_beta100.athinput",
+            ),
+        ]
+    if workflow == "paper-mks24-stage-i":
+        prefix = "inputs/cgl_lf_paper/"
+        return [
+            CaseSpec(
+                "paper_standard_active_alfvenic_beta10",
+                prefix + "cgl_lf_paper_standard_active_alfvenic_beta10.athinput",
+            ),
+            CaseSpec(
+                "paper_standard_active_alfvenic_beta100",
+                prefix + "cgl_lf_paper_standard_active_alfvenic_beta100.athinput",
+            ),
+            CaseSpec(
+                "paper_standard_active_random_beta10",
+                prefix + "cgl_lf_paper_standard_active_random_beta10.athinput",
+            ),
+            CaseSpec(
+                "paper_standard_active_random_beta100",
+                prefix + "cgl_lf_paper_standard_active_random_beta100.athinput",
+            ),
+            CaseSpec(
+                "paper_standard_passive_alfvenic_beta10",
+                prefix + "cgl_lf_paper_standard_passive_alfvenic_beta10.athinput",
+            ),
+            CaseSpec(
+                "paper_standard_passive_alfvenic_beta100",
+                prefix + "cgl_lf_paper_standard_passive_alfvenic_beta100.athinput",
+            ),
+            CaseSpec(
+                "paper_standard_passive_random_beta10",
+                prefix + "cgl_lf_paper_standard_passive_random_beta10.athinput",
+            ),
+            CaseSpec(
+                "paper_standard_passive_random_beta100",
+                prefix + "cgl_lf_paper_standard_passive_random_beta100.athinput",
+            ),
+            CaseSpec(
+                "paper_compressive_active_random_beta1",
+                prefix + "cgl_lf_paper_compressive_active_random_beta1.athinput",
+            ),
+            CaseSpec(
+                "paper_compressive_active_random_beta100_sonic",
+                prefix
+                + "cgl_lf_paper_compressive_active_random_beta100_sonic.athinput",
+            ),
+            CaseSpec(
+                "paper_heat_flux_beta10_strong",
+                prefix + "cgl_lf_paper_heat_flux_beta10_strong.athinput",
+            ),
+            CaseSpec(
+                "paper_heat_flux_beta10_weak",
+                prefix + "cgl_lf_paper_heat_flux_beta10_weak.athinput",
+            ),
+            CaseSpec(
+                "paper_nulim_beta100_20",
+                prefix + "cgl_lf_paper_nulim_beta100_20.athinput",
+            ),
+            CaseSpec(
+                "paper_nulim_beta100_200",
+                prefix + "cgl_lf_paper_nulim_beta100_200.athinput",
+            ),
+            CaseSpec(
+                "paper_scale_separation_active_alfvenic_beta10_nperp96",
+                prefix + "cgl_lf_paper_scale_separation_beta10_nperp96.athinput",
+            ),
+            CaseSpec(
+                "paper_scale_separation_active_alfvenic_beta10_nperp384",
+                prefix + "cgl_lf_paper_scale_separation_beta10_nperp384.athinput",
             ),
         ]
     if workflow == "paper-compressive":
@@ -1517,7 +1582,8 @@ def execute_workflow(args: argparse.Namespace, paths: RunPaths) -> int:
 
     if (
         args.workflow in (
-            "paper-standard", "paper-nulim", "paper-heat-flux",
+            "paper-standard", "paper-mks24-stage-i", "paper-nulim",
+            "paper-heat-flux",
             "paper-compressive", "paper-scale-separation",
         )
         and not args.authorize_paper_execution
@@ -1644,6 +1710,7 @@ def parser() -> argparse.ArgumentParser:
         "workflow",
         choices=(
             "quick", "compare", "amr", "paper-smoke", "paper-standard",
+            "paper-mks24-stage-i",
             "paper-convergence", "paper-nulim", "paper-heat-flux",
             "paper-compressive", "paper-scale-separation",
             "paper-analyze", "paper-summary", "accuracy", "full", "plot",
@@ -1711,8 +1778,8 @@ def parser() -> argparse.ArgumentParser:
         "--authorize-paper-execution",
         action="store_true",
         help=(
-            "Permit expensive paper-standard, paper-nulim, heat-flux, "
-            "compressive, or scale-separation simulations."
+            "Permit expensive Stage I, paper-standard, paper-nulim, "
+            "heat-flux, compressive, or scale-separation simulations."
         ),
     )
     return command
@@ -1725,7 +1792,8 @@ def main() -> int:
     try:
         if (
             args.workflow in (
-                "paper-standard", "paper-nulim", "paper-heat-flux",
+                "paper-standard", "paper-mks24-stage-i", "paper-nulim",
+                "paper-heat-flux",
                 "paper-compressive", "paper-scale-separation",
             )
             and not args.authorize_paper_execution
