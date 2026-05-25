@@ -995,6 +995,15 @@ def binary_snapshot_time(path: Path) -> float:
     return float(values["time"])
 
 
+def binary_product_time(group: list[Path]) -> float:
+    """Require every rank-local member of a snapshot to record one time."""
+
+    times = [binary_snapshot_time(path) for path in group]
+    if any(abs(time - times[0]) > 1.0e-12 for time in times[1:]):
+        raise ValueError(f"rank-local snapshot times disagree: {group[0]}")
+    return times[0]
+
+
 def analysis_model_choices(input_path: Path) -> dict[str, str]:
     """Use the workflow's interpretation mapping for a production bundle."""
 
@@ -1046,6 +1055,7 @@ def inspect_segment(args: argparse.Namespace) -> int:
         label: max(history[label])
         for label in STRICT_LF_FAILURE_COLUMNS
     }
+    snapshot_times = [binary_product_time(group) for group in snapshots]
     required_time = float(args.required_time)
     checks = {
         "required_time_reached": final_time >= required_time - 1.0e-10,
@@ -1053,6 +1063,8 @@ def inspect_segment(args: argparse.Namespace) -> int:
             value == 0.0 for value in maximum_failure_counts.values()
         ),
         "snapshots_retained": bool(snapshots),
+        "terminal_snapshot_retained": bool(snapshot_times)
+        and max(snapshot_times) >= final_time - 1.0e-10,
         "restart_retained": bool(restarts),
     }
     accepted = all(checks.values())
@@ -1061,6 +1073,7 @@ def inspect_segment(args: argparse.Namespace) -> int:
         for key in (
             "strict_lf_failure_counters_zero",
             "snapshots_retained",
+            "terminal_snapshot_retained",
             "restart_retained",
         )
     )
@@ -1081,6 +1094,7 @@ def inspect_segment(args: argparse.Namespace) -> int:
         "mhd_history": retained_file(mhd_histories[0]),
         "user_history": retained_file(user_histories[0]),
         "snapshots": [retained_product(group) for group in snapshots],
+        "snapshot_times": snapshot_times,
         "restarts": restart_records,
         "terminal_restart": restart_records[-1] if restart_records else None,
     }
@@ -1297,7 +1311,7 @@ def link_distinct_snapshots(sources: list[list[Path]], destination: Path,
                             case_name: str) -> list[Path]:
     """Link one retained binary per physical time into an analysis bundle."""
 
-    timed = sorted((binary_snapshot_time(group[0]), group) for group in sources)
+    timed = sorted((binary_product_time(group), group) for group in sources)
     linked: list[Path] = []
     last_time = float("-inf")
     for time, group in timed:
@@ -1399,7 +1413,13 @@ def bundle_case(args: argparse.Namespace) -> int:
     snapshot_sources: list[list[Path]] = []
     for segment in segments:
         output_dir = Path(str(segment["paths"]["output_dir"]))
-        snapshot_sources.extend(output_product_groups(output_dir / "bin", "*.bin"))
+        expected_ranks = (
+            int(segment["allocation"]["nodes"])
+            * int(segment["allocation"].get("ranks_per_node", 1))
+        )
+        snapshot_sources.extend(
+            output_product_groups(output_dir / "bin", "*.bin", expected_ranks)
+        )
     snapshots = link_distinct_snapshots(
         snapshot_sources, snapshot_dir, str(case["name"])
     )

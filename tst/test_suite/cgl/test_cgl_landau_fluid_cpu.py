@@ -900,8 +900,20 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
     manifest_dir.mkdir()
     mhd_history = output_dir / "case.mhd.hst"
     (output_dir / "case.user.hst").write_text("# retained user history\n")
-    (output_dir / "bin" / "case.00000.bin").write_bytes(b"snapshot")
+    snapshot = output_dir / "bin" / "case.00000.bin"
     (output_dir / "rst" / "case.00000.rst").write_bytes(b"restart")
+
+    def write_snapshot_time(time):
+        snapshot.write_bytes(
+            (
+                "Athena binary output version=1.1\n"
+                "  size of preheader=5\n"
+                f"  time={time}\n"
+                "  cycle=0\n"
+                "  size of location=8\n"
+                "  size of variable=4\n"
+            ).encode()
+        )
 
     def write_history(rows):
         mhd_history.write_text(
@@ -950,7 +962,13 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
     inspect_args = SimpleNamespace(
         manifest=str(manifest_path), required_time=2.0
     )
+    write_snapshot_time(0.5)
     write_history([(0.0, 0, 0, 0, 0, 0, 0), (1.0, 0, 0, 0, 0, 0, 1)])
+    assert stage_i.inspect_segment(inspect_args) == 1
+    incomplete = json.loads((manifest_dir / "segment_inspection.json").read_text())
+    assert not incomplete["checks"]["terminal_snapshot_retained"]
+    assert not incomplete["clean_for_continuation"]
+    write_snapshot_time(2.0)
     assert stage_i.inspect_segment(inspect_args) == 1
     partial = json.loads((manifest_dir / "segment_inspection.json").read_text())
     assert partial["clean_for_continuation"]
