@@ -192,6 +192,31 @@ The final readiness report must distinguish:
 
 None of these phrases should be used as a substitute for the others.
 
+## Current Readiness Decision (2026-05-25)
+
+This is the current final readiness report for the implemented and retained
+evidence on this branch. It is a blocked release decision, not an
+authorization to execute paper-production jobs.
+
+| Claim | Decision | Retained supporting evidence | Blocking work |
+| --- | --- | --- | --- |
+| Local operator and reduced-workflow implementation | Supported for the exercised local scope only | Full CPU suite (`218 passed, 15 skipped`), retained `accuracy-v2`, reduced paper/convergence analysis bundles, AMR workflow, F-018 through F-024 regression evidence | Local shell lacks `mpirun` for the required MPI rerun; exact applied hyperbolic CGL pressure-work budget identity is not yet implemented |
+| Validated on Frontier GPU hardware | Supported only for the archived reduced qualification cases | Immutable HIP/MPI builds; G-001 through G-007 strict/restart/decomposition/reduced-paper records; G-008 reduced baseline measurements | F-021 managed-memory behavior remains unexplained; paper-scale execution and representative I/O/cost measurement have not been performed |
+| Production ready for supported CGL-LF use | Not established | Debug policy/accounting tooling and reduced qualification evidence exist | Exact interval local-work closure, complete MPI/GPU operational qualification, isolated I/O timing, and a defensible production resource/storage proposal remain required |
+| MKS24 reproduction complete | Not established | Guarded standard/limiter input matrices, paper analysis products, and checksum/uncertainty-qualified reference-curve comparison interface exist | Populated MKS24 reference curves, long-time statistical calibration, authorized standard/limiter runs, quantitative panel comparisons, and archived scientific interpretation remain required |
+
+The final audit specifically rejects two tempting overclaims:
+
+- G-008 reports useful startup-scale timing, memory, output, and checkpoint
+  sizes, but its retained record disables isolated MPI-I/O timing and marks a
+  paper-scale extrapolation unavailable. It cannot support a production cost
+  or storage projection.
+- The implemented `lf_qprwrk`/`lf_qpewrk` histories are exact for the
+  RKL2-applied LF heat-flux contractions they measure, including fine-side
+  AMR-interface ownership. They do not supply the outstanding applied
+  hyperbolic CGL pressure-work budget identity required for production
+  local-work closure.
+
 ## Living Plan and Revision Protocol
 
 This plan must be treated as a controlled living document, not as a checklist
@@ -3570,18 +3595,23 @@ local implementation evidence. The next critical path is:
 
 1. **Calibrate forcing and use paper provenance.**
    Carry the staged official-source manifest into comparison products and
-   calibrate long-time injection/spectral behavior against the documented
-   setup.
+   populate documented, checksum- and uncertainty-qualified MKS24 reference
+   curves; calibrate long-time injection/spectral behavior against the
+   documented setup.
 
 2. **Complete remaining diagnostic and comparison products.**
-   Complete exact time-integrated local-work budget closure, and populate
-   machine-readable or uncertainty-documented paper-panel reference
-   comparisons through the implemented manifest interface on top of the cap, forcing-work residual,
+   Define and implement the outstanding applied hyperbolic CGL
+   pressure-work budget identity needed for exact time-integrated local-work
+   closure, and run paper-panel reference comparisons through the implemented
+   manifest interface on top of the cap, forcing-work residual,
    snapshot heat-flux/pressure-work products, applied face contractions with
    fine-side AMR ownership, and
    steady-window PDF/spectral/transfer/alignment/strain products and generic
    figure renderer.
 
 3. **Build broader execution evidence.**
-   Qualify forced energy residuals plus steady reduced nonlinear convergence,
-   and only then prepare standard or Frontier execution campaigns.
+   Rerun MPI AMR decomposition evidence in an environment providing `mpirun`,
+   resolve Frontier F-021, and obtain explicitly authorized representative
+   timing/I/O measurements before preparing a costed production-campaign
+   proposal. Qualify forced energy residuals plus steady reduced nonlinear
+   convergence before requesting authorization for standard paper runs.
