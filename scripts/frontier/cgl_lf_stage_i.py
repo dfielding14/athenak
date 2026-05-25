@@ -379,6 +379,31 @@ def git_revision_for_input(source_dir: Path, input_path: Path,
     return revision
 
 
+def production_utility_provenance() -> dict[str, str]:
+    """Require the production-control script itself to be committed."""
+
+    script_path = Path(__file__).resolve()
+    relative = str(script_path.relative_to(ROOT_DIR))
+    revision = subprocess.run(
+        ["git", "-C", str(ROOT_DIR), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    for diff_args in (["diff", "--quiet", "--"], ["diff", "--cached", "--quiet", "--"]):
+        result = subprocess.run(
+            ["git", "-C", str(ROOT_DIR), *diff_args, relative],
+            check=False,
+        )
+        if result.returncode != 0:
+            raise ValueError(
+                "production utility must be committed before preparing a segment"
+            )
+    return {
+        "path": str(script_path),
+        "revision": revision,
+        "sha256": sha256(script_path),
+    }
+
+
 def read_build_provenance(executable: Path,
                           build_manifest: Path) -> dict[str, str]:
     """Verify an archived executable against its immutable build manifest."""
@@ -535,6 +560,7 @@ def prepare(args: argparse.Namespace) -> Path:
     case = case_for_id(matrix, args.case_id)
     input_path = source_dir / str(case["input"])
     input_revision = git_revision_for_input(source_dir, input_path, matrix_path)
+    utility_provenance = production_utility_provenance()
     provenance = read_build_provenance(executable, build_manifest)
     if restart is not None and not restart.is_file():
         raise ValueError(f"restart file is unavailable: {restart}")
@@ -604,6 +630,7 @@ def prepare(args: argparse.Namespace) -> Path:
             "cpus_per_task": args.cpus_per_task,
         },
         "command": {
+            "production_utility": utility_provenance,
             "source_dir": str(source_dir),
             "input_revision": input_revision,
             "source_input_file": str(input_path),
