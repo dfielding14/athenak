@@ -16,6 +16,17 @@ The broader scientific suite is a manual tier because it generates diagnostic
 CSV files and figures and is intended for interpretation, not just pass/fail
 gating.
 
+## Illustrated Validation Note
+
+The illustrated method note originally developed on `CGL-STS-LF` is now
+maintained in this branch as `docs/cgl_lf_validation.tex`. It includes the
+five method-validation figures plus representative reduced MKS24-oriented
+analysis products, with production and reference-admission boundaries called
+out explicitly.
+
+[Download the illustrated CGL-LF validation and MKS24 analysis note
+(PDF)](../_static/cgl_lf_validation.pdf)
+
 The manual suite covers:
 
 - collisionless and finite-collision parallel and perpendicular damping;
