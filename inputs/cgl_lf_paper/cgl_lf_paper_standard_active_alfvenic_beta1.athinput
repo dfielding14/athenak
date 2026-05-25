@@ -99,7 +99,9 @@ dt = 0.02
 file_type = bin
 variable = mhd_w_bcc
 dt = 0.25
+single_file_per_rank = false
 
 <output3>
 file_type = rst
 dt = 1.0
+single_file_per_rank = false

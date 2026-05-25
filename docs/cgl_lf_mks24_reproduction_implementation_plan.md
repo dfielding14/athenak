@@ -55,8 +55,9 @@ retains corrected GPU restart, cross-node decomposition, reduced
 paper-smoke evidence through G-007, post-F-026 pressure-work GPU restart and
 AMR/MPI comparisons, scheduler-launched MPI CPU AMR comparison, an explicit
 AMD/HIP managed-memory-policy confirmation, a partial G-008 sizing baseline,
-and an opt-in reduced shared-MPI-I/O timing follow-up; it does not constitute
-paper-scale production evidence. The
+an opt-in reduced shared-MPI-I/O timing follow-up, and a standard-layout
+startup sizing measurement with a preliminary storage envelope; it does not
+constitute paper-scale production evidence. The
 current Sphinx runbook builds with warnings
 treated as errors, and the repository style gate passes in an isolated
 environment containing the declared documentation and test dependencies.
@@ -185,9 +186,9 @@ test or run evidence.
 | Paper pgen and forcing fidelity | Input/pgen review, forcing metadata, restartable reduced smoke | Yes for MKS24 claims | Partial 2026-05-25; active/passive/random reduced smoke, forcing restart, OU cadence, multi-cycle RK-companion source-work checks, passive flow-decoupling checks, and Frontier G-007 reduced-paper matrix passed; paper-grade statistical calibration open |
 | Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Partial 2026-05-25; reduced histories, restartable RK-integrated applied forcing work/global active residual, RKL2-applied heat-flux contractions with fine-side AMR ownership, AMR-corrected RK-applied total/anisotropic CGL pressure-work ledgers, operator-face cap counters, windowed snapshot PDF/spectral/transfer/alignment/local-strain products, manifest-qualified proxies and cadence-limited estimates, generic figures, and checksum/uncertainty-qualified reference-curve comparison plumbing implemented; populated panel comparisons and production qualification remain open |
 | Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Inputs and guarded workflow modes defined 2026-05-24; no paper-scale runs or figure comparisons executed |
-| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-25; immutable HIP/MPI and Kokkos-Serial/MPI builds through revision `3e3c206b` are archived; sequential debug validation through post-F-026 GPU, MPI CPU, F-021 policy confirmation, and G010b reduced MPI-I/O timing is retained and recorded (`0.061670` node-hours total); a costed production storage/resource proposal remains open |
+| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-25; immutable HIP/MPI and Kokkos-Serial/MPI builds through revision `3e3c206b` are archived; sequential debug validation through G011 standard-layout startup MPI-I/O sizing is retained and recorded (`0.085003` node-hours total); a preliminary eight-case storage envelope is retained, while runtime/node-hour costing and an approved production proposal remain open |
 | User documentation | Sphinx build and accurately scoped runbook | Yes | Implemented for current functionality 2026-05-25; Sphinx warnings-as-errors and repository style suite pass in an isolated validation environment; future campaign results must still be documented when executed |
-| Performance suitability | Representative timing/memory/I/O evidence; no uninvestigated prohibitive bottleneck | Yes for production use | Partial 2026-05-25; G-008 records reduced debug-scale step timing, `sacct` memory evidence, output sizes, and checkpoint sizes, while G010b records reduced shared-binary/restart MPI-I/O timing and per-file format-size scaling; a defensible paper-scale runtime/cadence/resource/storage proposal remains open |
+| Performance suitability | Representative timing/memory/I/O evidence; no uninvestigated prohibitive bottleneck | Yes for production use | Partial 2026-05-25; G-008 records reduced debug-scale evidence, G010b records reduced shared-MPI-I/O timing, and G011 measures startup-only standard-layout memory, per-file size, and shared-MPI-I/O timing for a preliminary storage envelope; representative late-time runtime/node-hour costing remains open |
 
 The final readiness report must distinguish:
 
@@ -207,8 +208,8 @@ authorization to execute paper-production jobs.
 | Claim | Decision | Retained supporting evidence | Blocking work |
 | --- | --- | --- | --- |
 | Local operator and reduced-workflow implementation | Supported for the exercised local scope only | Full CPU suite (`218 passed, 15 skipped`), focused CGL suite (`27 passed`), retained `accuracy-v2`, `20260525-paper-smoke-pressure-work-v1`, `20260525-paper-convergence-pressure-work-v1`, and `20260525-amr-pressure-work-v1` bundles, F-018 through F-026 regression evidence, and scheduler-launched MPI CPU AMR jobs `4659053`/`4659141` | Production/statistical comparison gates remain open |
-| Validated on Frontier GPU hardware | Supported for the archived reduced qualification cases through F-026 only | Immutable HIP/MPI builds; G-001 through G-007 strict/restart/decomposition/reduced-paper records; post-F-026 restart jobs `4658072`/`4658163`, GPU AMR jobs `4658191`/`4658283`, managed-policy confirmation job `4659663`, G-008 reduced baseline measurements, and G010b reduced shared-MPI-I/O timing | Paper-scale execution and a production runtime/cadence/storage cost proposal have not been performed |
-| Production ready for supported CGL-LF use | Not established | Debug policy/accounting tooling, reduced GPU qualification, MPI CPU AMR evidence, reduced shared-MPI-I/O measurement, and RK/AMR-consistent applied hyperbolic pressure traction histories exist | A defensible production runtime/cadence/resource/storage proposal and production/statistical qualification remain required |
+| Validated on Frontier GPU hardware | Supported for the archived reduced qualification cases through F-026 only | Immutable HIP/MPI builds; G-001 through G-007 strict/restart/decomposition/reduced-paper records; post-F-026 restart jobs `4658072`/`4658163`, GPU AMR jobs `4658191`/`4658283`, managed-policy confirmation job `4659663`, G010b reduced shared-MPI-I/O timing, and G011 standard-layout startup sizing | Paper-scale execution and representative late-time runtime/node-hour costing have not been performed |
+| Production ready for supported CGL-LF use | Not established | Debug policy/accounting tooling, reduced GPU qualification, MPI CPU AMR evidence, shared-MPI-I/O measurements, preliminary defined-matrix storage envelope, and RK/AMR-consistent applied hyperbolic pressure traction histories exist | Representative runtime/node-hour costing, an approved production proposal, and production/statistical qualification remain required |
 | MKS24 reproduction complete | Not established | Guarded standard/limiter input matrices, paper analysis products, and checksum/uncertainty-qualified reference-curve comparison interface exist | Populated MKS24 reference curves, long-time statistical calibration, authorized standard/limiter runs, quantitative panel comparisons, and archived scientific interpretation remain required |
 
 The final audit specifically rejects two tempting overclaims:
@@ -217,8 +218,9 @@ The final audit specifically rejects two tempting overclaims:
   checkpoint sizes but disabled MPI-I/O timers. Follow-up G010b measures
   reduced shared-binary/restart MPI-I/O and exposes that its deliberate
   `dcycle = 1` restart cadence writes `4.654` GB in only `t = 0.01`.
-  Its reduced resolution, startup-length duration, and measurement-only
-  cadence still cannot support a production cost or storage proposal.
+  G011 then directly measures the standard layout and permits a preliminary
+  storage envelope under the defined cadence, but its startup-length
+  duration still cannot support runtime or node-hour costing.
 - The implemented `lf_cpwrk`/`lf_cawrk` histories supply the applied
   hyperbolic CGL pressure-traction identity for enabled decks by contracting
   stage velocity with the AMR-corrected traction divergence through the same
@@ -307,7 +309,7 @@ table such as:
 | F-012 | 2026-05-25 | Phase E | Snapshot analysis omitted MKS24 local-field velocity-gradient/strain products and produced no inspectable paper diagnostic figures | `scripts/analyze_cgl_lf_paper.py`, `scripts/plot_cgl_lf_paper.py`, binary analysis probe, `paper-smoke-core-v12` | High | Add local projected flow products and generic renderer invoked by `paper-analyze`; keep reference comparison separately gated | Expanded synthetic analysis and retained-bundle rendering | Implemented for diagnostic figures; paper-panel/reference comparison remains open |
 | F-013 | 2026-05-25 | Phase F | The workflow table required a reduced `paper-convergence` path but only smoke and guarded production cases were executable | `scripts/cgl_lf_workflow.py`, `20260524-paper-convergence-v1` bundle | High | Add short resolution, heat-flux-strength, and threshold-policy variants with binary snapshots and analysis-window metadata | Six-case reduced workflow followed by `paper-analyze`/`paper-summary` | Implemented for startup/product-path qualification; steady-state convergence remains open |
 | F-014 | 2026-05-25 | Phase C | Truthful hard-bound monitoring exposed that `cgl_lf_limiter_heat_flux_suppression` initialized exactly on the mirror emergency bound while requesting strict admissibility | `inputs/unit_tests/cgl_lf_limiter_heat_flux_suppression.athinput`, failed `20260524-final-full` and passing `20260524-final-full-v2` bundles | High | Keep strict checking and move the oracle state to `p_perp - p_parallel = 0.9 B^2`, above the `0.5 B^2` physical threshold but below the `1.0 B^2` emergency bound | Corrected suppression oracle and regenerated `full` plots/summary | Implemented; full workflow passed |
-| F-015 | 2026-05-25 | Frontier operations | The plan prescribed debug-only root/budget/sequential-submission controls but provided templates without an executable fail-closed ledger or preparation tool | `scripts/frontier/cgl_lf_frontier.py`, `scripts/frontier/build_cgl_lf_frontier.sh` | High | Add tracked immutable-build and debug-campaign tooling that reserves budget, generates an inspectable batch script, checks an empty debug queue before manual submission, records one top-level `sacct` allocation from its run manifest, and rejects production decks | `python3 scripts/frontier/cgl_lf_frontier.py self-test`; `bash -n scripts/frontier/build_cgl_lf_frontier.sh` | Implemented; sequential live Frontier debug submission/accounting exercised through job `4660445` with `0.061670` node-hours recorded |
+| F-015 | 2026-05-25 | Frontier operations | The plan prescribed debug-only root/budget/sequential-submission controls but provided templates without an executable fail-closed ledger or preparation tool | `scripts/frontier/cgl_lf_frontier.py`, `scripts/frontier/build_cgl_lf_frontier.sh` | High | Add tracked immutable-build and debug-campaign tooling that reserves budget, generates an inspectable batch script, checks an empty debug queue before manual submission, records one top-level `sacct` allocation from its run manifest, and rejects production decks | `python3 scripts/frontier/cgl_lf_frontier.py self-test`; `bash -n scripts/frontier/build_cgl_lf_frontier.sh` | Implemented; sequential live Frontier debug submission/accounting exercised through job `4661434` with `0.085003` node-hours recorded |
 | F-016 | 2026-05-25 | Phase G | Required style validation could not pass because the Sphinx configuration used nonconforming indentation and the active system Python lacked lint/documentation dependencies | `docs/source/conf.py`, temporary validation environment built from `docs/requirements.txt` plus `flake8`, style/Sphinx logs | Medium | Correct the configuration indentation and run style/Sphinx through an isolated dependency-complete environment | `python run_test_suite.py --style`; `sphinx-build -W --keep-going -b html source _build/html` | Implemented; style wrapper and warning-strict documentation build passed |
 | F-017 | 2026-05-25 | Phase E | Heat-flux cap occupancy alone did not quantify the transport strength, while an exact face-power reduction needs a decomposition-independent discrete accounting design | `scripts/analyze_cgl_lf_paper.py`, `scripts/plot_cgl_lf_paper.py`, `scripts/cgl_lf_workflow.py` | High | Add a manifest-qualified cell-centered reconstruction of the implemented LF closure as an explicitly non-budget heat-flux smoothing proxy; retain exact applied-face accounting as an open gate | Synthetic positive perpendicular-conduction/zero-parallel proxy check through `test_cgl_lf_paper_snapshot_analysis_uses_both_pressures` | Implemented for snapshot proxy; applied accounting with fine-side AMR ownership added by F-019 |
 | F-018 | 2026-05-25 | Phase E | Retained `force_pwr` sampled instantaneous power but did not preserve the exact net RK stage forcing source, including zero-net-momentum projection, in forced paper runs or through restart | `src/srcterms/turb_driver.cpp`, `src/outputs/restart.cpp`, `src/pgen/tests/cgl_lf_paper.cpp`, `scripts/analyze_cgl_lf_paper.py` | High | Add opt-in globally reduced cumulative `force_work`, checkpoint it for paper decks, and compare active-case interval work to conserved `tot-E`; do not give passive-Delta the active budget interpretation | Expanded forcing identity/restart regressions and reduced paper analysis bundle | Implemented and corrected under F-025; long-time/production residual tolerance and scientific interpretation remain open |
@@ -320,7 +322,8 @@ table such as:
 | F-025 | 2026-05-25 | Phase E | `force_work` directly summed each explicit-RK source-call energy change even though the final RK state reweights earlier stage source increments; retained multi-cycle reduced bundles consequently reported false active global residuals while passing | `src/srcterms/turb_driver.cpp`, `scripts/cgl_lf_workflow.py`, `20260525-paper-convergence-face-work-v1` manifest | Blocker | Advance cumulative forcing work as a companion RK state using the cycle baseline and `gam0`/`gam1`, and reject active reduced cases whose energy/work relative residual is at least `1.0e-8` | `test_cgl_lf_paper_multicycle_forcing_work_follows_rk_state_recurrence`; regenerated `20260525-paper-smoke-rk-work-v1` and `20260525-paper-convergence-rk-work-v1` bundles | Implemented locally; focused CPU suite passes (`27 passed`), all six corrected convergence cases pass with maximum relative residual `5.141362829086986e-10` |
 | F-026 | 2026-05-25 | Phase E | Snapshot-reconstructed pressure work could not identify the pressure traction actually applied by hyperbolic CGL momentum fluxes, especially after FOFC replacement and AMR flux correction | `src/mhd/rsolvers/hlle_cgl.hpp`, `src/mhd/mhd_tasks.cpp`, `src/mhd/mhd_fofc.cpp`, `src/outputs/history.cpp`, `scripts/analyze_cgl_lf_paper.py` | Blocker | Retain total and anisotropic CGL pressure traction in the numerical flux, apply the same AMR flux correction as momentum, contract corrected divergence with stage velocity, and advance `lf_cpwrk`/`lf_cawrk` by the explicit-RK companion recurrence; retain zero applied work for passive-Delta | Focused CPU AMR/restart/passive checks, dedicated CGL FOFC traction check, expanded MPI AMR decomposition oracle, regenerated local pressure-work bundles, and retained Frontier post-F-026 GPU/CPU evidence | Implemented for reduced qualification: local focused CGL CPU (`27 passed`) and style (`2 passed`) succeed; Frontier GPU restart jobs `4658072`/`4658163` and GPU AMR jobs `4658191`/`4658283` pass at `rtol = atol = 1.0e-12`; MPI CPU AMR jobs `4659053`/`4659141` also pass; production interpretation remains open |
 | F-027 | 2026-05-25 | Frontier MPI CPU rerun | The debug preparation utility unconditionally generated GPU-aware MPICH exports and GPU binding; launching the intentionally non-GTL-linked Kokkos-Serial MPI executable consequently aborted before simulation with `MPIDI_CRAY_init: GPU_SUPPORT_ENABLED is requested, but GTL library is not linked` | `scripts/frontier/cgl_lf_frontier.py`, job `4658519` log and manifest | High | Add explicit `--execution-target gpu/cpu` generation; retain the existing GPU-aware path by default, while the CPU path omits GPU Slurm/srun binding and forces `MPICH_GPU_SUPPORT_ENABLED=0` | Expanded `cgl_lf_frontier.py self-test` and repeated scheduler-launched MPI CPU AMR comparison | Implemented and confirmed live: corrected jobs `4659053`/`4659141` run with `MPICH_GPU_SUPPORT_ENABLED=0`, refine cleanly, retain nonzero pressure work, and pass the one-rank/four-rank AMR oracle at `rtol = atol = 1.0e-12` |
-| F-028 | 2026-05-25 | Frontier G-008 sizing | Original reduced sizing evidence retained output sizes but no MPI-I/O phase timing because runtime reported `MPICH_MPIIO_TIMERS = 0` | `scripts/frontier/cgl_lf_frontier.py`, `g008_reduced_sizing_evidence.json`, job `4660445` and `analysis/g010b_mpiio_sizing_evidence.json` | Medium | Add manifest-recorded opt-in `--mpiio-timers` and execute a reduced shared-binary/checkpoint sizing run; treat its high-cadence results only as reconnaissance | Utility self-test; job `4660445`; `analysis/g010b_mpiio_sizing_evidence.json` | Implemented for reduced sizing: timers captured, strict diagnostics remain clean, and binary/restart net-write means are measured; production resource proposal remains open |
+| F-028 | 2026-05-25 | Frontier G-008 sizing | Original reduced sizing evidence retained output sizes but no MPI-I/O phase timing because runtime reported `MPICH_MPIIO_TIMERS = 0` | `scripts/frontier/cgl_lf_frontier.py`, `g008_reduced_sizing_evidence.json`, jobs `4660445`/`4661434` and their retained analysis JSON | Medium | Add manifest-recorded opt-in `--mpiio-timers`, then execute reduced and standard-layout startup shared-binary/checkpoint sizing runs; treat startup timing only as storage/I/O reconnaissance | Utility self-test; jobs `4660445`/`4661434`; retained G010b/G011 analysis JSON | Implemented for storage/I/O sizing: timers captured, strict diagnostics remain clean, and G011 supplies a preliminary standard-layout storage envelope; representative runtime/node-hour costing remains open |
+| F-029 | 2026-05-25 | Production input audit after G011 | Defined standard/limiter decks relied on the default `single_file_per_rank = false`, while workflow manifests did not archive the output cadence/file-layout contract used for storage sizing | `inputs/cgl_lf_paper/`, `scripts/cgl_lf_workflow.py`, `analysis/g011_standard_layout_mpiio_sizing_evidence.json` | Medium | State shared binary/restart MPI-I/O explicitly in each guarded production deck and archive output layout/cadence choices in future workflow manifests | `test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio`; metadata probe over `paper-standard`/`paper-nulim` cases | Implemented for defined inputs and future manifests; any later layout/cadence revision requires renewed storage and I/O review |
 
 ### Implemented Core Decision Log
 
@@ -339,14 +342,14 @@ table such as:
 | 2026-05-25 | Render generic archived paper diagnostics separately from paper-panel comparison claims. | Inspectable local products are needed before production, but without reference data or standard runs they cannot establish MKS24 figure reproduction. | Binary probe and smoke rendering passed; reference comparison and production statistics remain open |
 | 2026-05-25 | Define `paper-convergence` as a short reduced nonlinear qualification tier rather than a substitute for paper-scale convergence. | It exercises resolution, heat-flux, threshold, snapshot, and plotting paths locally while its `tlim = 0.02` metadata prevents steady-state interpretation. | Corrected `20260525-paper-convergence-rk-work-v1` passed and rendered six generic figures; longer reduced/standard statistics remain open |
 | 2026-05-25 | Keep strict emergency monitoring enabled in limiter-suppression validation and move its physical limiter state below the emergency bound. | A limiter-action oracle must not intentionally begin in a state the independent safety contract defines as invalid. | Corrected case retains strong flux suppression and `full-v2` passes |
-| 2026-05-25 | Keep Frontier submission manual while automating fail-closed preparation and accounting policy checks. | The debug-QOS one-job constraint forbids job chaining; generating an explicit script and retained reservation/manifest improves reproducibility without silently submitting work. | Utility self-test passes; immutable HIP/MPI and Kokkos-Serial/MPI builds plus sequential debug accounting through job `4660445` retain `0.061670` node-hours recorded |
+| 2026-05-25 | Keep Frontier submission manual while automating fail-closed preparation and accounting policy checks. | The debug-QOS one-job constraint forbids job chaining; generating an explicit script and retained reservation/manifest improves reproducibility without silently submitting work. | Utility self-test passes; immutable HIP/MPI and Kokkos-Serial/MPI builds plus sequential debug accounting through job `4661434` retain `0.085003` node-hours recorded |
 | 2026-05-25 | Request GPU-aware MPI without requesting managed-memory MPI support for the AMD/HIP CGL-LF baseline. | Installed Cray MPICH 9.0.1 documents managed-memory MPI default `0` for non-NVIDIA GPUs, and AthenaK's `DvceArray*` storage resolves through Kokkos HIP to `HIPSpace`, not `HIPManagedSpace`; `HSA_XNACK=1` remains a separately recorded GPU-runtime configuration. | Job `4659663` records generated and reported `MPICH_GPU_SUPPORT_ENABLED=1` with `MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=0`; its histories and state/forcing tabs are identical to job `4658072` |
 | 2026-05-25 | Use an isolated dependency-complete Python environment for local style and Sphinx gate execution. | The checkout declares Sphinx dependencies but the active system module lacks them and `flake8`; installing validation-only packages under `/tmp` avoids changing the product dependency surface. | Repository style suite and warning-strict Sphinx build passed; no generated documentation output is retained as source |
 | 2026-05-25 | Emit heat-flux transport strength initially as a snapshot-reconstructed proxy rather than claim an applied discrete energy budget. | Archived fields and closure choices are sufficient to reconstruct the continuous LF smoothing measure; exact finite-volume accounting must first define a decomposition-independent applied-face reduction. | Synthetic sign check passed; F-019 later adds the signed applied contraction with fine-side AMR ownership; production/reference interpretation and full budget closure remain open |
 | 2026-05-25 | Track cumulative net applied forcing work at the source update only when explicitly requested by a driven input. | The before/after conserved-energy difference across the full source task, including zero-net-momentum projection, is exact at that stage and restartable; instantaneous output-time `force_pwr` cannot close an active energy residual. Opt-in persistence avoids altering legacy forcing restart records. | Focused CPU/restart coverage and corrected `20260525-paper-smoke-rk-work-v1`/`20260525-paper-convergence-rk-work-v1` bundles; production tolerance and heat-flux transfer decomposition remain open |
 | 2026-05-25 | Retain applied LF heat-flux transport as a signed RKL2 companion recurrence with fine-side ownership at coarse/fine interfaces, not as a total-energy closure term. | The applied capped face flux and STS coefficients are available in the LF update; on AMR interfaces the fine-side closure flux is the quantity restricted into the coarse update, so it owns the contraction without double counting. | Focused CPU/restart tests and fresh fixed-level bundles pass; fresh AMR workflow/analyzer report total work `6.511527338026022e-4`; Frontier Kokkos-Serial/MPI jobs `4659053`/`4659141` pass the AMR decomposition regression |
 | 2026-05-25 | Checkpoint every cumulative LF diagnostic history value, not only signed applied work. | Restart-spanning paper analysis differentiates face/cap/exposure counters; resetting their baseline after a valid restart silently corrupts intervals even when evolved fields agree. | Initial GPU G-005 exposed F-022; expanded CPU restart checks and corrected jobs `4653516`/`4653582` verify the correction |
-| 2026-05-25 | Treat G-008/G010b reduced debug measurements as sizing reconnaissance, not a paper-scale cost model. | Startup-length runs expose elapsed time, accounting memory, output volume, and checkpoint size; G010b adds opt-in shared MPI-I/O phase timing, but its reduced resolution and deliberate `dcycle = 1` measurement cadence do not represent production duration or retention. | `g008_reduced_sizing_evidence.json` retains baseline timings/sizes; G010b job `4660445` retains binary/restart net-write means of `1132.879`/`1020.535` MiB/s and `4.654` GB of measurement-cadence output; a production proposal remains open |
+| 2026-05-25 | Treat G-008/G010b/G011 debug measurements as storage/I/O reconnaissance, not a paper-scale runtime cost model. | Startup-length runs expose elapsed time, memory, output volume, and checkpoint size; G011 adds exact standard-layout shared-file timing and size, but no retained run measures late-time timestep evolution or statistical-production duration. | G010b retains reduced timing and its excessive cadence warning; G011 job `4661434` retains standard-layout binary/restart net-write means of `1772.938`/`1252.430` MiB/s and the `328.915` GB eight-case raw storage envelope; runtime/node-hour costing remains open |
 | 2026-05-25 | Implement CGL pressure mechanical work first as a snapshot-derived local decomposition with a transfer cross-check and sparse-time quadrature estimate. | Retained fields determine `p_perp div(u) - Delta p (b b : grad(u))` without changing the integrator; trapezoidal snapshot-time integration aids interval interpretation, but neither result is an applied budget identity. | F-023 synthetic sign/transfer/quadrature oracles and corrected `20260525-paper-convergence-rk-work-v1` products; exact production interval closure remains open |
 | 2026-05-25 | Admit paper reference curves only through an external checksum- and uncertainty-qualified manifest. | The staged arXiv source supplies panel PDFs but not numeric curve tables; separating source data from code and rejecting absent uncertainties permits later author-data or documented-digitization comparisons without overstating current evidence. | F-024 exact-curve and source-checksum-rejection regressions plus retained reduced-bundle rendering probe; actual MKS24 curve acquisition/digitization and production comparisons remain open |
 | 2026-05-25 | Advance `force_work` through the same explicit-RK recurrence as the source-modified conserved state. | Adding every source-call energy increment overcounts work retained in a multi-stage final state because later RK combinations reweight earlier source contributions; active reduced cases must fail when the ledger does not close conserved energy. | F-025 multi-cycle CPU regression; corrected smoke and convergence bundles pass with maximum active relative residual `5.141362829086986e-10`; production residual qualification remains open |
@@ -1537,9 +1540,11 @@ state:
 - analysis/statistical averaging window;
 - whether it is smoke, convergence, or paper-grade.
 
-**Status (2026-05-24):** All listed smoke, standard baseline, and beta-100
+**Status (2026-05-25):** All listed smoke, standard baseline, and beta-100
 limiter-frequency input definitions are present. The standard and limiter
-decks are production definitions only; they have not been executed for
+decks now explicitly select shared binary/restart MPI-I/O and their future
+workflow manifests archive the output cadence/layout choices used for sizing.
+They remain production definitions only; they have not been executed for
 scientific evidence.
 
 ### Pgen-Level Acceptance Criteria
@@ -2372,10 +2377,11 @@ transport contract. For an explicitly scoped reduced sizing run that writes
 shared MPI-I/O products, add `--mpiio-timers`; this records the choice in the
 manifest and exports `MPICH_MPIIO_TIMERS=1` so Cray MPICH emits phase timings
 at file close. Do not enable that measurement option silently in correctness
-comparisons or paper-production definitions. Reduced sizing job `4660445`
-uses that opt-in path and retains reported shared-binary and checkpoint write
-timings; its deliberately frequent checkpoint cadence is measurement evidence,
-not a production run definition. Validate its policy logic offline with:
+comparisons or paper-production definitions. Reduced sizing jobs `4660445`
+and `4661434` use that opt-in path and retain reported shared-binary and
+checkpoint write timings; the latter uses the exact standard mesh/block
+layout only for startup sizing. Neither is a production run definition.
+Validate its policy logic offline with:
 
 ```bash
 python3 scripts/frontier/cgl_lf_frontier.py self-test
@@ -2865,9 +2871,22 @@ Retained live evidence as of 2026-05-25:
   `analysis/g010b_mpiio_sizing_evidence.json` records `4.654` GB total
   output from the deliberately excessive `dcycle = 1` measurement cadence,
   so these results constrain rather than define a production cadence.
-- The retained ledger records `0.061670` node-hours used with no active
-  reservation. Paper-scale execution, reference-panel comparison, and a
-  cadence-correct production runtime/resource/storage proposal remain open.
+- G011 standard-layout sizing job `4661434` uses an archived startup-only
+  `192 x 192 x 384` active deck with SHA-256
+  `ca643cdc659df8bea66f1c5aacfc03296605582cbc55a7396e64430762ae4af1`.
+  It runs on one node/eight GPU ranks through `t = 0.01`, reports
+  `MPICH_MPIIO_TIMERS = 1`, and has zero strict failures. Its maximum
+  same-layout shared binary/restart file sizes are `509632020` and
+  `1838131787` bytes, with mean net write rates `1772.938` and `1252.430`
+  MiB/s, respectively. The retained
+  `analysis/g011_standard_layout_mpiio_sizing_evidence.json` calculates a
+  `328.915` GB raw eight-case storage envelope and a `255.735` GB
+  sequential-retention allocation with 20 percent margin; it explicitly
+  withholds runtime/node-hour projection.
+- The retained ledger records `0.085003` node-hours used with no active
+  reservation. Paper-scale execution, reference-panel comparison,
+  representative runtime/node-hour costing, and an approved production
+  proposal remain open.
 
 Required Frontier GPU comparison principles:
 
@@ -2903,6 +2922,47 @@ Only then decide whether to optimize scratch allocation, repeated derived-state
 construction, I/O cadence, meshblock layout, or other measured bottlenecks.
 Any optimization requires rerunning the corrected physics and Frontier GPU
 qualification gates.
+
+### Preliminary Defined-Matrix Storage Envelope (Not Authorization)
+
+Job `4661434` is a startup-only, one-node/eight-GPU measurement at the exact
+`192 x 192 x 384` mesh and `32 x 32 x 64` MeshBlock layout used by the eight
+currently defined `paper-standard`/`paper-nulim` inputs. It reaches only
+`t = 0.01`; it validates standard-layout launch, host-memory evidence, shared
+MPI-I/O file size/timing, and strict diagnostics, not scientific production or
+runtime/node-hour cost.
+
+Those eight guarded inputs now explicitly select shared `bin` and `rst`
+outputs. Their common definition writes binary snapshots every `0.25` and
+restarts every `1.0` through `tlim = 10.0`. Retained reduced runs confirm
+inclusive initial/final time-cadenced output, giving 41 binary snapshots and
+11 restart files per case. Using the larger of the two exact G011 files of
+each kind:
+
+| Quantity | Calculation basis | Bytes | Decimal GB |
+| --- | --- | ---: | ---: |
+| One shared binary snapshot | G011 maximum measured file | `509632020` | `0.510` |
+| One shared restart file | G011 maximum measured file | `1838131787` | `1.838` |
+| Raw generated output for one defined case | `41 bin + 11 rst` | `41114362477` | `41.114` |
+| Raw generated output for all eight defined cases | `8 x one case` | `328914899816` | `328.915` |
+| Retained output after acceptance | all binary snapshots plus final two restarts per case | `196569411152` | `196.569` |
+| Sequential peak before pruning accepted checkpoints | seven retained cases plus one raw current case | `213112597235` | `213.113` |
+| Sequential retained-policy allocation with 20 percent margin | `1.2 x sequential peak` | `255735116682` | `255.735` |
+| No-pruning allocation with 20 percent margin | `1.2 x all raw output` | `394697879779` | `394.698` |
+
+The candidate retention policy is to run cases sequentially, retain all
+analysis snapshots and the final two restarts for every accepted case, and
+remove earlier checkpoints only after acceptance and archive verification are
+recorded. The authoritative retained calculation is
+`analysis/g011_standard_layout_mpiio_sizing_evidence.json` beneath the G011
+run directory.
+
+This resolves the storage-volume portion of a proposal for the currently
+defined cadence. It does **not** establish a production node count, late-time
+timestep behavior, walltime, node-hour cost, or whether additional cases are
+needed after reference-panel mapping. Those items require representative
+runtime evidence and scientific review before any production submission can
+be proposed for approval.
 
 ### No Authorized Production Submission Template Yet
 
@@ -3081,6 +3141,13 @@ must define:
 - retention policy for raw versus reduced products;
 - manifest and environment archival;
 - how outputs are transferred back for analysis.
+
+For the eight currently defined inputs and their explicit shared-I/O cadence,
+the preliminary G011 storage envelope above defines the candidate sequential
+retention plan and a `255.735` GB allocation including margin. A reviewed
+production proposal must revisit that envelope if the case matrix, cadence,
+file layout, or retention policy changes, and must still supply the missing
+runtime/node-hour basis.
 
 Do not launch long high-resolution runs without this plan.
 Do not launch any Frontier test run without updating its projected and actual
@@ -3708,10 +3775,11 @@ local implementation evidence. The next critical path is:
    products and generic figure renderer.
 
 3. **Build broader execution evidence.**
-   Use the retained G010b reduced shared-output timing evidence to draft a
-   cadence-correct costed production-campaign proposal; obtain any additional
-   explicitly authorized representative sizing measurement required by that
-   proposal. Qualify forced energy residuals plus steady reduced nonlinear
-   convergence before requesting authorization for standard paper runs.
-   Scheduler-launched Frontier MPI-AMR decomposition evidence and the AMD/HIP
-   launch-policy confirmation are now retained and no longer block this step.
+   Use the retained G011 standard-layout storage envelope as the file-volume
+   portion of a production-campaign proposal, and obtain explicitly
+   authorized representative late-time timing evidence for its missing
+   runtime/node-hour basis. Qualify forced energy residuals plus steady
+   reduced nonlinear convergence before requesting authorization for standard
+   paper runs. Scheduler-launched Frontier MPI-AMR decomposition evidence and
+   the AMD/HIP launch-policy confirmation are now retained and no longer
+   block this step.

@@ -303,6 +303,22 @@ def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
         ),
         "analysis_t_start": choice("problem", "analysis_t_start", "unspecified"),
         "analysis_t_end": choice("problem", "analysis_t_end", "unspecified"),
+        "time_tlim": choice("time", "tlim", "unspecified"),
+        "output1_file_type": choice("output1", "file_type", "unspecified"),
+        "output1_dt": choice("output1", "dt", "unspecified"),
+        "output1_dcycle": choice("output1", "dcycle", "unspecified"),
+        "output2_file_type": choice("output2", "file_type", "unspecified"),
+        "output2_dt": choice("output2", "dt", "unspecified"),
+        "output2_dcycle": choice("output2", "dcycle", "unspecified"),
+        "output2_single_file_per_rank": choice(
+            "output2", "single_file_per_rank", "false"
+        ),
+        "output3_file_type": choice("output3", "file_type", "unspecified"),
+        "output3_dt": choice("output3", "dt", "unspecified"),
+        "output3_dcycle": choice("output3", "dcycle", "unspecified"),
+        "output3_single_file_per_rank": choice(
+            "output3", "single_file_per_rank", "false"
+        ),
         "cgl_firehose_threshold": choice("mhd", "cgl_firehose_threshold", "oblique"),
         "cgl_heat_flux_integrator": choice("mhd", "cgl_heat_flux_integrator", "sts"),
         "cgl_lf_record_pressure_work": choice(

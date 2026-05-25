@@ -1,10 +1,12 @@
 """CPU regressions for the CGL Landau-fluid closure and CGL FOFC path."""
 
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 import numpy as np
 
@@ -16,6 +18,8 @@ PAPER_INPUT = "../../../inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.ath
 PAPER_PASSIVE_INPUT = (
     "../../../inputs/cgl_lf_paper/cgl_lf_paper_smoke_passive_beta10.athinput"
 )
+PAPER_PRODUCTION_INPUT_ROOT = Path("../../../inputs/cgl_lf_paper")
+PAPER_WORKFLOW_PATH = Path("../../../scripts/cgl_lf_workflow.py")
 
 
 def _run(input_name, basename, *flags):
@@ -645,6 +649,36 @@ def test_cgl_lf_paper_physical_forcing_shell_requires_positive_unit():
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     assert result.returncode != 0
     assert "k_shell_unit must be positive" in result.stdout
+
+
+def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_workflow_test", PAPER_WORKFLOW_PATH
+    )
+    assert spec is not None and spec.loader is not None
+    workflow = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = workflow
+    spec.loader.exec_module(workflow)
+    input_paths = sorted(
+        PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_standard_*.athinput")
+    )
+    input_paths += sorted(
+        PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_nulim_*.athinput")
+    )
+    assert len(input_paths) == 8
+    for input_path in input_paths:
+        source = input_path.read_text()
+        for block in ("output2", "output3"):
+            body = source.split(f"<{block}>", 1)[1].split("<", 1)[0]
+            assert "single_file_per_rank = false" in body
+        choices = workflow.model_choices(source, [])
+        assert choices["time_tlim"] == "10.0"
+        assert choices["output2_file_type"] == "bin"
+        assert choices["output2_dt"] == "0.25"
+        assert choices["output2_single_file_per_rank"] == "false"
+        assert choices["output3_file_type"] == "rst"
+        assert choices["output3_dt"] == "1.0"
+        assert choices["output3_single_file_per_rank"] == "false"
 
 
 def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
