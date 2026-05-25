@@ -198,8 +198,9 @@ Figure 8 is admitted only through its reviewed raster contract: its embedded
 RGB heatmaps are decoded against their labeled linear colorbar, selected
 shell slices are checked against the paper's per-`k_perp` unit-normalization
 statement and renormalized, and an absolute PDF-density uncertainty is
-retained in the manifest. Remaining raw-density or dimensional MKS24 panel
-curves, exact
+retained in the manifest. Figure 4(a)'s normalized-density PDF is also
+admitted through its plotted `rho/<rho>` coordinate. Remaining dimensional,
+spectral-normalization, or unmatched joint-distribution MKS24 panels, exact
 time-integrated/production local budget closure, and production comparisons
 remain to be completed. For retained LF histories, the analyzer
 also reports the RKL2-applied capped-face heat-flux contractions retained in
@@ -316,6 +317,22 @@ writes the eight active/passive unstable-volume histories as CSV curves. It
 records an absolute `0.0025` plotted-line digitization uncertainty and omits
 vertices hidden above the panel's `0.8` vertical limit.
 
+For Figure 4(a), extract the eight normalized-density PDF paths from the
+pinned source PDF:
+
+```bash
+python3 scripts/digitize_cgl_lf_mks24_fig4a.py \
+  /path/to/arXiv-2405.02418v2/source/fig4a.pdf \
+  /path/to/arXiv-2405.02418v2/digitized_fig4a_v1
+```
+
+This extractor maps the plotted `rho/<rho>` abscissa to
+`pdf.density_fluctuation` by subtracting one, emits the active/passive
+Alfvenic/random beta-10/beta-100 curves, and records five-percent relative
+PDF ordinate uncertainty. It omits plotted-boundary-clipped vertices. The
+companion Figure 4(b) `E_rho` spectrum remains excluded because the plotted
+ordinate does not declare a `rho/<rho>-1` spectral normalization.
+
 For Figure 7, extract the directly comparable lower-panel transfer-ratio
 curves from the pinned source PDF:
 
@@ -426,9 +443,9 @@ panel (a) is dimensionful and panel (c) is plotted as
 
 Other quantitative panels still require a recorded digitization procedure,
 a matching analyzer product, or a separately provenance-tracked numerical
-reference source. In particular, Figure 4(a)'s raw `rho` PDF must not be
-substituted for `pdf.density_fluctuation` without a declared paper-density
-normalization transform.
+reference source. In particular, Figure 2(a)'s joint pressure-density panel
+and Figure 4(b)'s `E_rho` spectrum must not be substituted for current
+one-dimensional or normalized products without matching definitions.
 
 An optional curve manifest passed to `paper-analyze --reference-curves`
 has `schema_version = 1`, a `provenance` object, and one or more curve

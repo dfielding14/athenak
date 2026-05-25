@@ -241,7 +241,8 @@ raw or MKS24-normalized transfer, selected-shell alignment-distribution, alignme
 `paper-analyze` when a comparison manifest requires an alignment-peak curve
 over additional shells.
 The staged-reference tooling includes pinned vector extraction for Figure
-2(b), Figure 7 lower-panel and Figure 13(d) normalized transfer curves, the
+2(b), Figure 4(a) normalized-density PDFs, Figure 7 lower-panel and Figure
+13(d) normalized transfer curves, the
 dimensionless Figure 9, Figure 11 lower-panel, and Figure 12 alignment
 curves, and the dimensionless `beta Delta` PDF curves in Figure 13(b).
 Figure 8 is additionally admitted as selected-shell `alignment.<shell>` PDFs:
