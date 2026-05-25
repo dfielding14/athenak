@@ -343,14 +343,18 @@ not be run through this debug-only workflow.
 With LF active, normal MHD history output appends cumulative counters:
 `lf_nstage`, `lf_dfloor`, `lf_pfloor`, `lf_nonfin`, `lf_nonpos`,
 `lf_mirror`, `lf_firehs`, `lf_hardbd`, `lf_qface`, `lf_qprcap`,
-`lf_qpr10`, `lf_qpecap`, `lf_qpe10`, `lf_qprwrk`, and `lf_qpewrk`. Strict
+`lf_qpr10`, `lf_qpecap`, `lf_qpe10`, `lf_qprwrk`, `lf_qpewrk`, and
+`lf_hwproj`. Strict
 validation decks require zero floors, zero nonfinite/nonpositive states, and
 zero hard-bound violations; limiter and cap counts may be nonzero when
 intentionally exercised.
 `lf_mirror` and `lf_firehs` are physical threshold-occupancy counters
 evaluated with the selected policy. `lf_hardbd` is an emergency safety
 counter and is evaluated whether or not corrective `backup_limiters` are
-enabled. The `lf_q*` columns record evaluated LF operator faces and
+enabled. `lf_hwproj` is the cumulative number of primitive-refresh
+applications of `limiter_hardwall = true`, including refreshed support/ghost
+states; it records constraint activity rather than an admissibility failure
+and is not a normalized active-cell occupancy. The `lf_q*` columns record evaluated LF operator faces and
 parallel/perpendicular pre-cap flux ratios above `q_max` and `10*q_max`;
 their interval fractions use `lf_qface` as denominator. Restart files retain
 the baseline for every cumulative LF diagnostic column, including the face
@@ -365,7 +369,10 @@ not a positivity or total-energy closure condition.
 The firehose policy is explicit for threshold-sensitive work:
 `cgl_firehose_threshold = parallel` selects the MKS24 production convention
 `beta Delta <= -2`, while `oblique` selects `beta Delta <= -1.4` for
-comparison studies and backward-compatible operator validation.
+comparison studies and backward-compatible operator validation. MKS24
+hard-wall decks additionally set `limiter_hardwall = true`, which projects
+pressures to the selected threshold while preserving CGL internal energy and
+replaces finite-rate limiter pressure relaxation.
 
 The pre-existing `aam-D` label is retained for compatibility. In ordinary
 output and restart state it denotes conserved CGL pressure anisotropy, not

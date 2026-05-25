@@ -245,7 +245,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                            "byte", single_file_per_rank);
   }
 
-  constexpr int nlf_diag = 17;
+  constexpr int nlf_diag = 18;
   Real lf_diag[nlf_diag] = {};
   if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) {
     const auto &diag = pmhd->pcgl_lf->diagnostics;
@@ -266,6 +266,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     lf_diag[14] = diag.qperp_work;
     lf_diag[15] = diag.pressure_work;
     lf_diag[16] = diag.anisotropic_pressure_work;
+    lf_diag[17] = static_cast<Real>(diag.hardwall_projection);
 #if MPI_PARALLEL_ENABLED
     if (!single_file_per_rank) {
       if (global_variable::my_rank == 0) {

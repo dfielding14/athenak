@@ -33,6 +33,7 @@ struct EOS_Data {
   bool mlim, flim;   // mirror and firehose limiter flags
   bool coll;         // enable CGL collision/limiter relaxation
   bool backup_lim;   // enable backup CGL instability limiters
+  bool hardwall_lim; // project CGL pressure anisotropy to selected instability bounds
   Real nu_coll, lim_coll;  // physical and limiter collision frequencies
   Real firehose_threshold;  // selected firehose activation coefficient in B^2 units
   bool use_e, use_t; // use internal energy density (e) or temperature (t) as primitive

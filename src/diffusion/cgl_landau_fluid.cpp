@@ -532,7 +532,9 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
                                          const DvceArray5D<Real> &w,
                                          const DvceArray5D<Real> &bcc,
                                          const EOS_Data &eos,
-                                         int dfloor_delta, int pfloor_delta) {
+                                         int dfloor_delta, int pfloor_delta,
+                                         const char *sweep_name,
+                                         int stage, int nstages) {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int is = indcs.is, nx1 = indcs.nx1;
   const int js = indcs.js, nx2 = indcs.nx2;
@@ -599,7 +601,8 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "CGL Landau-fluid strict admissibility failed after a split stage: "
-              << "dfloor=" << dfloor_delta << " pfloor=" << pfloor_delta
+              << "sweep=" << sweep_name << " stage=" << stage << "/" << nstages
+              << " dfloor=" << dfloor_delta << " pfloor=" << pfloor_delta
               << " nonfinite=" << nonfinite << " nonpositive=" << nonpositive
               << " hard_bound=" << hard_bound << std::endl;
     std::exit(EXIT_FAILURE);

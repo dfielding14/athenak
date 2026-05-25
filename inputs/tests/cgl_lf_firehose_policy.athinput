@@ -43,6 +43,7 @@ firehose_limiter = true
 cgl_firehose_threshold = oblique
 backup_limiters = false
 limiter_nu_coll = 0.0
+limiter_hardwall = false
 cgl_heat_flux = landau_fluid
 cgl_heat_flux_integrator = sts
 cgl_lf_strict_admissibility = true

@@ -85,6 +85,7 @@ def _assert_restarted_lf_diagnostics(reference, resumed):
         "lf_mirror",
         "lf_firehs",
         "lf_hardbd",
+        "lf_hwproj",
         "lf_qface",
         "lf_qprcap",
         "lf_qpr10",
@@ -232,6 +233,22 @@ def test_cgl_lf_firehose_threshold_policies_are_distinct():
         assert parallel["lf_firehs"][-1] == 0.0
         _assert_clean_lf_history(oblique)
         _assert_clean_lf_history(parallel)
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_hardwall_projects_to_selected_firehose_threshold():
+    try:
+        _run(
+            "cgl_lf_firehose_policy.athinput",
+            "cgl_ci_firehose_hardwall",
+            "mhd/limiter_hardwall=true",
+        )
+        history = testutils.athena_read.hst("cgl_ci_firehose_hardwall.mhd.hst")
+        assert history["lf_hwproj"][-1] > 0.0
+        assert history["lf_hardbd"][-1] == 0.0
+        assert history["lf_nonfin"][-1] == 0.0
+        assert history["lf_nonpos"][-1] == 0.0
     finally:
         _cleanup()
 
@@ -452,6 +469,18 @@ def test_cgl_lf_invalid_firehose_threshold_is_rejected():
     assert "cgl_firehose_threshold" in result.stdout
 
 
+def test_cgl_lf_hardwall_requires_instability_limiter():
+    command = [
+        "./athena",
+        "-i",
+        f"{INPUT_ROOT}/cgl_lf_decay.athinput",
+        "mhd/limiter_hardwall=true",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert "limiter_hardwall requires" in result.stdout
+
+
 def test_cgl_lf_paper_active_alfvenic_smoke_injects_energy_without_parallel_force():
     try:
         _run_paper("cgl_ci_paper_alfvenic", "time/nlim=1")
@@ -666,6 +695,14 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_nulim_*.athinput")
     )
     assert len(input_paths) == 8
+    hardwall_paths = {
+        "cgl_lf_paper_standard_active_alfvenic_beta1.athinput",
+        "cgl_lf_paper_standard_active_alfvenic_beta10.athinput",
+        "cgl_lf_paper_standard_active_alfvenic_beta100.athinput",
+        "cgl_lf_paper_standard_active_random_beta10.athinput",
+        "cgl_lf_paper_standard_passive_alfvenic_beta10.athinput",
+        "cgl_lf_paper_nulim_beta100_hardwall.athinput",
+    }
     for input_path in input_paths:
         source = input_path.read_text()
         for block in ("output2", "output3"):
@@ -683,6 +720,8 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         assert choices["output3_file_type"] == "rst"
         assert choices["output3_dt"] == "1.0"
         assert choices["output3_single_file_per_rank"] == "false"
+        expected_hardwall = "true" if input_path.name in hardwall_paths else "false"
+        assert choices["limiter_hardwall"] == expected_hardwall
 
 
 def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():

@@ -82,6 +82,7 @@ reporting is independent of whether `backup_limiters` is enabled.
 | `firehose_limiter` | `false` | Enable firehose-limiter relaxation. |
 | `cgl_firehose_threshold` | `oblique` | `oblique` activates at `beta Delta <= -1.4`; `parallel` activates at `beta Delta <= -2`. |
 | `limiter_nu_coll` | `0.0` | Limiter relaxation frequency. |
+| `limiter_hardwall` | `false` | With an enabled instability limiter, replace its pressure-relaxation update by an energy-preserving projection to the selected mirror/firehose threshold. |
 | `backup_limiters` | `false` | Apply rapid correction after an emergency bound is crossed. |
 | `cgl_lf_strict_admissibility` | `false` | Fail an LF split stage on unsafe state, LF floors, or hard-bound violations. |
 | `cgl_lf_record_pressure_work` | `false` | Retain RK-integrated applied CGL pressure-traction work diagnostics. |
@@ -92,7 +93,12 @@ accuracy campaign exercises this shutdown behavior with strict monitoring.
 
 MKS24 production simulations use the mirror threshold `beta Delta >= 1` and
 the parallel-firehose threshold `beta Delta <= -2`; paper reproduction inputs
-must therefore set `cgl_firehose_threshold = parallel` explicitly. The
+must therefore set `cgl_firehose_threshold = parallel` and
+`limiter_hardwall = true` explicitly for their hard-wall closure. In this
+mode, CGL primitive recovery pins newly unstable pressures to the selected
+threshold while preserving `0.5*p_parallel + p_perp`; ordinary `nu_coll`
+relaxation remains enabled, but finite-rate limiter pressure relaxation is
+replaced by the algebraic constraint. The
 oblique-firehose policy remains the default to preserve behavior of existing
 feature-branch inputs. In both policies `lf_mirror` and `lf_firehs` count
 physical threshold occupancy, while `lf_hardbd` counts emergency numerical
@@ -101,7 +107,8 @@ overshoot and is a strict-validation failure.
 Normal `.mhd.hst` output appends cumulative columns when LF is active:
 `lf_nstage`, `lf_dfloor`, `lf_pfloor`, `lf_nonfin`, `lf_nonpos`,
 `lf_mirror`, `lf_firehs`, `lf_hardbd`, `lf_qface`, `lf_qprcap`,
-`lf_qpr10`, `lf_qpecap`, `lf_qpe10`, `lf_qprwrk`, and `lf_qpewrk`. When
+`lf_qpr10`, `lf_qpecap`, `lf_qpe10`, `lf_qprwrk`, `lf_qpewrk`, and
+`lf_hwproj`. When
 `cgl_lf_record_pressure_work = true`, it additionally appends `lf_cpwrk`
 and `lf_cawrk`. The
 face-count columns record evaluated LF faces and parallel/perpendicular
@@ -109,7 +116,12 @@ unlimited heat-flux ratios exceeding `q_max` or `10*q_max`. Differences
 between successive rows give interval counts; normalize limiter counts by
 `lf_nstage` and heat-flux-cap counts by `lf_qface`. All cumulative LF
 diagnostic columns are preserved through CGL-LF restart files so interval
-analysis remains continuous across segments. `lf_qprwrk` and `lf_qpewrk`
+analysis remains continuous across segments. `lf_hwproj` counts applications
+of the algebraic hard-wall constraint during CGL primitive-refresh task
+ranges, including refreshed support/ghost states; it is not a normalized
+active-cell occupancy statistic. It is expected to be nonzero in
+limiter-active hard-wall production intervals and is not a safety violation.
+`lf_qprwrk` and `lf_qpewrk`
 are cumulative RKL2-applied
 owned-face contractions of the capped heat fluxes with their corresponding
 temperature jumps. On refined meshes, each coarse/fine interface is owned by

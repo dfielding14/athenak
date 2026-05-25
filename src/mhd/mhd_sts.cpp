@@ -379,8 +379,6 @@ TaskStatus MHD::STSUpdateB(Driver *pdrive, int stage) {
 //! \brief Recover CGL primitives between LF STS stages while IAN stores magnetic moment.
 
 TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
-  (void) pdrive;
-  (void) stage;
   RequireCGLMagneticMomentRepresentation("CGL Landau-fluid primitive refresh");
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int ng = indcs.ng;
@@ -393,7 +391,9 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
   pcgl_lf->RecordAdmissibility(
       u0, w0, bcc0, peos->eos_data,
       pmy_pack->pmesh->ecounter.neos_dfloor - dfloor_before,
-      pmy_pack->pmesh->ecounter.neos_efloor - pfloor_before);
+      pmy_pack->pmesh->ecounter.neos_efloor - pfloor_before,
+      pdrive->sts.sweep == Driver::STSSweep::pre ? "pre" : "post",
+      stage, pdrive->sts.nstages);
   return TaskStatus::complete;
 }
 

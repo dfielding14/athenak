@@ -513,6 +513,7 @@ def heat_flux_transport_proxy(fields: dict[str, np.ndarray],
     unlimited_parallel = integral(ppar_unlimited_work)
     unlimited_perpendicular = integral(pperp_unlimited_work)
     choices_used = {name: model[name] for name in required_choices}
+    choices_used["limiter_hardwall"] = model.get("limiter_hardwall", "false")
     if coefficient_mode == "background":
         choices_used["lf_c_parallel0"] = model.get("lf_c_parallel0", "unspecified")
     return {

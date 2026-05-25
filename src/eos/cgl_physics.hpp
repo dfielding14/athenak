@@ -47,6 +47,28 @@ bool MirrorHardBoundViolated(const Real paniso, const Real bsqr) {
 }
 
 KOKKOS_INLINE_FUNCTION
+bool ApplyHardwallLimiter(Real &ppar, Real &pperp, const Real bsqr,
+                          const bool mirror, const bool firehose,
+                          const Real firehose_threshold) {
+  const Real paniso = pperp - ppar;
+  Real limited_anisotropy = paniso;
+  if (firehose && paniso < firehose_threshold*bsqr) {
+    limited_anisotropy = firehose_threshold*bsqr;
+  } else if (mirror && paniso > kMirrorThreshold*bsqr) {
+    limited_anisotropy = kMirrorThreshold*bsqr;
+  }
+  if (limited_anisotropy == paniso) {
+    return false;
+  }
+
+  // Scattering preserves internal energy while pinning Delta p to the bound.
+  const Real piso = ONE_3RD*ppar + TWO_3RDS*pperp;
+  pperp = piso + ONE_3RD*limited_anisotropy;
+  ppar = piso - TWO_3RDS*limited_anisotropy;
+  return true;
+}
+
+KOKKOS_INLINE_FUNCTION
 Real LimiterCollisionRate(const Real ppar, const Real pperp, const Real bsqr,
                           const Real limiter_rate, const bool mirror,
                           const bool firehose, const Real firehose_threshold,

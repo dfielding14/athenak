@@ -51,6 +51,7 @@ mirror_limiter = true
 firehose_limiter = true
 cgl_firehose_threshold = parallel
 limiter_nu_coll = 1.0e10
+limiter_hardwall = true
 backup_limiters = false
 reconstruct = plm
 rsolver = hlle

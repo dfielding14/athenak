@@ -186,6 +186,7 @@ def lf_diagnostics(path: Path) -> dict[str, object]:
         )
     }
     for key in (
+        "lf_hwproj",
         "lf_qface", "lf_qprcap", "lf_qpr10", "lf_qpecap", "lf_qpe10",
         "lf_qprwrk", "lf_qpewrk", "lf_cpwrk", "lf_cawrk",
     ):
@@ -335,6 +336,7 @@ def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
         "mirror_limiter": choice("mhd", "mirror_limiter", "false"),
         "firehose_limiter": choice("mhd", "firehose_limiter", "false"),
         "limiter_nu_coll": choice("mhd", "limiter_nu_coll", "0.0"),
+        "limiter_hardwall": choice("mhd", "limiter_hardwall", "false"),
         "backup_limiters": choice("mhd", "backup_limiters", "false"),
         "dfloor": choice("mhd", "dfloor", "unspecified"),
         "pfloor": choice("mhd", "pfloor", "unspecified"),
@@ -1334,6 +1336,10 @@ def write_summary(manifest: dict[str, object], path: Path) -> None:
                 )
             )
             cap = result.get("heat_flux_cap_fractions")
+            if "lf_hwproj" in counters:
+                lines.append(
+                    "  hard-wall projections: `{:.0f}`.".format(counters["lf_hwproj"])
+                )
             if cap is not None:
                 lines.append(
                     "  heat-flux cap face fractions (`>1`, `>10`): "

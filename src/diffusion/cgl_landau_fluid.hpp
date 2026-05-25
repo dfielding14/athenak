@@ -25,6 +25,7 @@ struct CGLLFDiagnostics {
   std::uint64_t mirror = 0;
   std::uint64_t firehose = 0;
   std::uint64_t hard_bound = 0;
+  std::uint64_t hardwall_projection = 0;
   std::uint64_t qfaces = 0;
   std::uint64_t qpar_cap = 0;
   std::uint64_t qpar_cap10 = 0;
@@ -58,7 +59,8 @@ class CGLLandauFluid {
   void NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos);
   void RecordAdmissibility(const DvceArray5D<Real> &u, const DvceArray5D<Real> &w,
                            const DvceArray5D<Real> &bcc, const EOS_Data &eos,
-                           int dfloor_delta, int pfloor_delta);
+                           int dfloor_delta, int pfloor_delta,
+                           const char *sweep_name, int stage, int nstages);
 
  private:
   void AccumulateHeatFluxDiagnostics(const array_sum::GlobalSum &stats);

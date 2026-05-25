@@ -31,6 +31,7 @@ EquationOfState::EquationOfState(std::string bk, MeshBlockPack* pp, ParameterInp
   eos_data.flim = false;
   eos_data.coll = false;
   eos_data.backup_lim = false;
+  eos_data.hardwall_lim = false;
   eos_data.nu_coll = 0.0;
   eos_data.lim_coll = 0.0;
   eos_data.firehose_threshold = cgl::kFirehoseObliqueThreshold;
