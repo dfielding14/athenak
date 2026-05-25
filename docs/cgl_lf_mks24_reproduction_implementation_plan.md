@@ -92,7 +92,12 @@ emit with explicit normalization metadata and generic rendering; their
 published spectral ordinates remain excluded pending qualified transforms, and
 two guarded `paper-compressive` definitions now supply Figure 3's missing
 active random beta-1 and beta-100 sonic-correlation cases without authorizing
-execution. The
+execution. A follow-up source/archive audit confirms that MKS24 and its cited
+donor source define shell spectra and plotted units but do not state the
+discrete Fourier normalization required for absolute ordinate conversion; no
+linked public donor code or numeric-data package was identified. Those
+spectral and strain panels therefore remain excluded pending external
+normalization evidence or machine-readable reference data. The
 production interpretation of the applied local-work ledgers, Frontier
 production execution, and production-run phases remain
 open. A tracked Frontier debug-campaign
@@ -410,6 +415,7 @@ table such as:
 | F-050 | 2026-05-25 | Figure 2(a) surface-comparison contract | F-047 emits the panel's two-dimensional joint PDFs, but the external reference manifest and renderer accepted only one-dimensional curves, so even qualified raster or author-provided surface data could not be compared. | pinned `source/MKS24.tex:503-512`; `source/fig2a.pdf` SHA-256 `277545ff1a86b5ca46e97fa034ce189f72f149ecbb515470c30996494c1de129`; `scripts/analyze_cgl_lf_paper.py`; `scripts/plot_cgl_lf_paper.py` | High | Extend the checksum/uncertainty-qualified manifest with optional sampled surfaces mapped only to `pressure_density_joint.parallel`/`.perpendicular`, bilinear interpolation, and residual rendering; do not admit untransformed raster data | Exact sampled-surface binary-snapshot manifest comparison and rendered-surface regression | Implemented for comparison-interface scope; F-051 decodes donor-coordinate raster surfaces and F-052 admits transformed surfaces; authorized execution and quantitative comparison remain open |
 | F-051 | 2026-05-25 | Figure 2(a) raster-decoding and unit-boundary audit | F-050 supplies a surface comparison contract, and the pinned panel contains a numeric colorbar and axes, but its two plotted coordinates remain in donor pressure units while AthenaK has no qualified donor-pressure conversion. | pinned `source/fig2a.pdf` SHA-256 `277545ff1a86b5ca46e97fa034ce189f72f149ecbb515470c30996494c1de129`; `scripts/digitize_cgl_lf_mks24_fig2a.py`; ignored `digitized_fig2a_v1/excluded_surfaces.json` SHA-256 `3c2c4e8984d538acda37c6c36c49dfa11eae73a7ecadd03a05074b5660cbc428`; `digitization_metadata.json` SHA-256 `5354a7206f80a0630e9f86db1dd3a9c5efd552c59e2cc2a8341bf78ebd89f541` | High | Reconstruct the tiled raster, decode its 256-color labeled bar, mask only verified black overlays, and emit sampled surfaces in donor pressure coordinates with explicit uncertainty; withhold an analyzer manifest until conversion `x_A = s x`, `y_A = s y`, `z_A = z/s^2`, `sigma_z_A = sigma_z/s^2` is qualified | Checksum-bound extraction; palette/overlay invariant; `6953` parallel and `6952` perpendicular retained surface samples | Superseded for Figure 2(a) admission by F-052; retained as raw-raster provenance |
 | F-052 | 2026-05-25 | Figure 2(a) pressure-transform admission | F-051 left donor-coordinate surfaces excluded, but the pinned source determines the beta-10 pressure mapping: MKS24 holds `B0` fixed while varying `p0` with `beta0`, and its beta-100 limiter footnote states `p0 = 100` in code units; thus its beta-10 Figure 2(a) run has `p0 = 10`, while the matched AthenaK beta-10 deck uses `p0 = 5`. | pinned `source/MKS24.tex` SHA-256 `6d6e748fd1883c5d33167be653d67aed2f84a9b364267d9e90ea075df184af4c` at lines `467,687`; `source/fig2a.pdf` SHA-256 `277545ff1a86b5ca46e97fa034ce189f72f149ecbb515470c30996494c1de129`; `inputs/cgl_lf_paper/cgl_lf_paper_standard_active_alfvenic_beta10.athinput`; ignored `digitized_fig2a_v2/surfaces.json` SHA-256 `3e2f961b1bdc8bb46180be1e4b38448a997d306738a834898caf3b5b0bd89845`; `digitization_metadata.json` SHA-256 `89575ae0dd3953a72c903fca377c3709923e93199b522fd2bab4178b0a862016` | High | Require both pinned source checksums; retain raw donor samples and emit analyzer-compatible surfaces with `s = 0.5`, `x_A = s x`, `y_A = s y`, `z_A = z/s^2`, and `sigma_z_A = sigma_z/s^2`; do not treat this pressure-only mapping as a qualified spectral transform | Checksum-bound extraction and transform metadata; `6953` parallel and `6952` perpendicular admitted surface samples; manifest-ingestion probe | Implemented for Figure 2(a) reference admission; authorized execution and quantitative simulation comparison remain open |
+| F-053 | 2026-05-25 | Remaining spectral/strain normalization evidence audit | MKS24 defines its shell-binned Fourier spectra but does not specify the discrete Fourier normalization behind absolute plotted ordinates. Its cited Squire et al. donor source additionally states spectra are plotted in `phi^2 L_perp` units and defines rate-of-strain fields, but likewise omits the discrete transform convention needed to map digitized absolute curves to AthenaK products. A targeted publication/archive and public-repository audit identified article/preprint records but no linked diagnostic source or machine-readable panel-data deposit. | pinned `source/MKS24.tex:478-496`; cited donor source `AthenaMagnetoimmutability_JPP.tex:976-1002`; Cambridge/official preprint-record and public-repository audit performed 2026-05-25 | Blocker | Keep Figures 3, 4(b), 5(a), 6, Figure 7 upper, Figure 11 upper, Figure 12 lower, and Figure 13(a),(c) spectral/strain ordinates excluded unless author numeric data, donor diagnostic code, or an explicit discrete-normalization statement establishes a checksum/provenance-qualified mapping | Manual source-line audit and targeted public-source/data/repository search; no speculative curve manifest emitted | Documented external-evidence boundary; the existing dimensionless and Figure 2(a) pressure-only admissions are unchanged, and authorized simulations/comparisons remain open |
 
 ### Implemented Core Decision Log
 
@@ -461,6 +467,7 @@ table such as:
 | 2026-05-25 | Extend admitted reference infrastructure to sampled two-dimensional surfaces without admitting Figure 2(a)'s unresolved raster. | F-047 provides joint-PDF analysis grids, but a curve-only manifest cannot compare them once a valid transform or author dataset becomes available. | F-050 adds `surfaces` entries with positive `z_uncertainty`, bilinear `pressure_density_joint.*` comparison, and residual plotting; F-051 decodes excluded raw samples while donor-pressure conversion remains open |
 | 2026-05-25 | Decode Figure 2(a)'s calibrated raster only into excluded donor-coordinate samples. | The pinned PDF provides a numeric linear colorbar and numeric pressure axes, resolving the RGB/raster mapping, but both axes are dimensionful and any later pressure scale conversion must also transform the joint-PDF density and its uncertainty by the two-dimensional Jacobian. | F-051 adds `scripts/digitize_cgl_lf_mks24_fig2a.py` and external `digitized_fig2a_v1/excluded_surfaces.json`; no analyzer-compatible manifest is emitted until `x_A = s x`, `y_A = s y`, `z_A = z/s^2`, and `sigma_z_A = sigma_z/s^2` are qualified |
 | 2026-05-25 | Admit Figure 2(a) surfaces through a pressure-only beta-10 transform while retaining broader dimensional exclusions. | The pinned MKS24 source fixes the donor beta-10 initial pressure as `p0 = 10` by combining fixed `B0`, linear `p0(beta0)`, and the beta-100 `p0 = 100` code-unit statement; the matched AthenaK deck explicitly uses `p0 = 5`. This establishes `s = 0.5` for both Figure 2(a) pressure axes and the joint-PDF Jacobian, but not the ordinate conventions of unrelated spectra or strain panels. | F-052 requires pinned `MKS24.tex` and `fig2a.pdf`, emits external `digitized_fig2a_v2/surfaces.json`, and retains `digitized_fig2a_v2/donor_surfaces.json` for audit |
+| 2026-05-25 | Keep remaining absolute spectral and strain ordinates excluded at an explicit external-evidence boundary. | MKS24 and its cited donor manuscript define shell spectra and the donor's plotted `phi^2 L_perp` units, but neither states the discrete Fourier convention needed to convert absolute ordinates; targeted public-source/data discovery found no linked diagnostic implementation or machine-readable deposit. | F-053 records the source and discovery audit; a later admission requires author/archive numeric data, donor diagnostic code, or an explicit discrete-normalization statement |
 | 2026-05-25 | Advance `force_work` through the same explicit-RK recurrence as the source-modified conserved state. | Adding every source-call energy increment overcounts work retained in a multi-stage final state because later RK combinations reweight earlier source contributions; active reduced cases must fail when the ledger does not close conserved energy. | F-025 multi-cycle CPU regression; corrected smoke and convergence bundles pass with maximum active relative residual `5.141362829086986e-10`; production residual qualification remains open |
 | 2026-05-25 | Define applied CGL pressure work from the isolated numerical pressure traction after momentum AMR flux correction, then integrate it with the explicit-RK companion recurrence. | A snapshot-gradient estimate is not the applied finite-volume operator and a face-jump contraction is ambiguous across coarse/fine interfaces; contracting each active cell's corrected pressure-traction momentum RHS with its stage velocity uses exactly the operator consumed by the update. | F-026 focused AMR/restart/passive/FOFC regressions and fresh pressure-work bundles pass locally; Frontier GPU restart and GPU/CPU AMR decomposition comparisons pass for `lf_cpwrk`/`lf_cawrk`; production interpretation remains open |
 | 2026-05-25 | Generate distinct Frontier debug launch environments for GPU-aware qualification and MPI CPU decomposition validation. | A Kokkos-Serial MPI executable is not linked against Cray's GPU transport library and must not inherit `MPICH_GPU_SUPPORT_ENABLED=1` or GPU binding from the HIP/MPI launch path; retaining the target in each manifest avoids ambiguous evidence. | F-027 failure job `4658519` identifies the pre-launch abort; utility self-test verifies CPU and GPU generated scripts separately; corrected CPU-target jobs `4659053`/`4659141` pass |
@@ -1946,7 +1953,10 @@ compressive product projects `u_k` onto the full Fourier wavevector before
 exact zero compressive power for a transverse mode; the JSON records field
 and normalization definitions and the plotter renders the new products.
 Reference normalization qualification and authorized execution of the
-guarded Figure 3 case matrix remain open.
+guarded Figure 3 case matrix remain open. F-053 establishes that the
+available manuscript definitions and donor plotted units are insufficient for
+absolute ordinate conversion without donor diagnostic code, machine-readable
+reference data, or an explicit discrete Fourier-normalization statement.
 
 #### E4. Pressure-Anisotropy Transfer Function
 
@@ -3310,6 +3320,15 @@ Retained live evidence as of 2026-05-25:
   The admitted parallel and perpendicular surfaces retain `6953` and `6952`
   samples respectively, with transformed absolute density uncertainty `2.0`.
   This does not qualify unrelated spectral or strain ordinate transforms.
+- F-053 audits the remaining spectral/strain boundary. MKS24
+  `source/MKS24.tex:478-496` defines shell-binned spectra and transfer
+  filtering; the cited donor source
+  `AthenaMagnetoimmutability_JPP.tex:976-1002` defines corresponding spectra,
+  rate-of-strain fields, and plotted `phi^2 L_perp` units. Neither passage
+  states the discrete Fourier normalization needed for absolute ordinate
+  conversion. A targeted public publication/archive/repository audit on
+  2026-05-25 found article/preprint records but no linked donor diagnostic
+  code or numeric panel-data package, so no further manifest was emitted.
 - F-048 adds the missing spectral analysis fields in tracked analysis:
   `spectra.compressive_velocity` implements the Figure 3 full-wavevector
   projection, `spectra.density_fluctuation` provides a normalized Figure
@@ -4136,14 +4155,17 @@ and under F-052 its labeled raster/colorbar is admitted as converted sampled
 surface comparison data. Under F-048, Figures 3, 4(b), and 6(a)
   have matching emitted spectral-field products, but their raw plotted
   ordinates remain excluded because they do not yet map to qualified supported
-  normalizations. Under F-049, Figure 3's sonic-correlation and beta-1 random
+  normalizations. F-053 confirms that the manuscripts' shell definitions and
+  plotted units do not supply the missing discrete Fourier normalization and
+  that this audit found no linked public numeric-data or donor-code source.
+  Under F-049, Figure 3's sonic-correlation and beta-1 random
   cases are guarded definitions only; they are not simulation evidence.
 Data still required:
 
-- obtain machine-readable original data from authors/archive if available for
-  remaining quantitative panels; or
-- digitize the remaining plotted MKS24 reference curves with documented
-  uncertainty and case mapping.
+- obtain machine-readable original data from an author/archive for remaining
+  quantitative spectral/strain panels; or
+- obtain donor diagnostic code or an explicit discrete Fourier-normalization
+  statement sufficient to qualify a digitized ordinate conversion.
 
 ### Paper Source and Figure Provenance on Frontier
 
@@ -4318,12 +4340,11 @@ local implementation evidence. The next critical path is:
    supplies the missing Figure 3/4(b)/6(a) spectral fields,
    and F-049 supplies guarded Figure 3 case definitions, but neither admits
    raw-ordinate spectral reference transforms nor execution evidence. Resolve
-   the F-038 paper-to-AthenaK transform before admitting dimensional spectra
-   or strain and establish matching normalizations for remaining spectral
-   panels.
-   Obtain or digitize any remaining
-   targeted panels with recorded
-   uncertainty, revise the proposal when scope changes, and
+   the F-038/F-053 paper-to-AthenaK normalization boundary before admitting
+   dimensional spectra or strain: obtain author/archive numeric data, donor
+   diagnostic code, or an explicit discrete Fourier-normalization statement
+   before digitizing absolute spectral/strain ordinates. Revise the proposal
+   when scope changes, and
    calibrate long-time injection/spectral behavior against the documented
    setup.
 

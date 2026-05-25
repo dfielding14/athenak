@@ -215,7 +215,10 @@ products and AthenaK magnetic-pressure product `B^2/2` supply the fields
 needed for Figure 6(a), and `spectra.density_fluctuation` supplies a
 mean-normalized density diagnostic for Figure 4(b). These products do not
 admit the plotted MKS24 spectral curves: their ordinate transforms remain
-unqualified. Figure 3's previously missing sonic-correlation and beta-1
+unqualified. MKS24 and its cited donor source state shell-binned definitions
+and plotted spectral units, but do not state the discrete Fourier
+normalization required to convert digitized absolute ordinates into these
+AthenaK products. Figure 3's previously missing sonic-correlation and beta-1
 random cases are now definition-only entries in the guarded
 `paper-compressive` workflow; they have not been executed.
 
@@ -238,7 +241,10 @@ Figure 12 alignment, and Figure 13(b),(d) limiter curves. Dimensional Figure
 7 upper spectra, Figure 11 upper spectra, Figure 12 lower spectra, and Figure
 13(a),(c) curves remain excluded because their complete spectral or strain
 ordinate transforms are not qualified by the pressure-coordinate conversion
-used only for Figure 2(a).
+used only for Figure 2(a). The remaining admission boundary requires
+machine-readable author/archive data, donor diagnostic code, or an explicit
+discrete Fourier-normalization statement; digitizing those absolute curves
+alone is insufficient.
 Figure 8 is admitted only through its reviewed raster contract: its embedded
 RGB heatmaps are decoded against their labeled linear colorbar, selected
 shell slices are checked against the paper's per-`k_perp` unit-normalization
@@ -548,7 +554,11 @@ pressure-density product and admitted sampled surfaces, with raw
 donor-coordinate raster samples retained for audit. Figure 4(b)'s
 `E_rho` spectrum must not be
 substituted for `spectra.density_fluctuation` without a matching ordinate
-transformation.
+transformation. For the remaining absolute spectral and strain panels, the
+manuscripts' shell-spectrum definitions and stated plotted units do not
+provide the missing discrete Fourier normalization; admission therefore
+requires machine-readable original data, donor diagnostic code, or an
+explicit normalization statement in addition to any digitization.
 
 An optional reference-data manifest passed to `paper-analyze --reference-curves`
 has `schema_version = 1`, a `provenance` object, and one or more `curves`

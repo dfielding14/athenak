@@ -254,7 +254,11 @@ They also include the Figure 3 compressive-flow projection
 separate `p_parallel`, `p_perp`, and AthenaK `B^2/2` spectra needed for
 Figures 4(b) and 6(a). The products are rendered for inspection, but their
 paper curves remain excluded until spectral ordinate transformations are
-qualified. Figure 3's sonic-correlation and beta-1 random definitions now
+qualified. The manuscript definitions and cited donor plotted units do not
+state the discrete Fourier normalization needed for absolute spectral or
+strain ordinate conversion; those comparisons require external numeric data,
+donor diagnostic code, or an explicit normalization statement. Figure 3's
+sonic-correlation and beta-1 random definitions now
 exist under the guarded `paper-compressive` workflow, but have not been run.
 With `--reference-curves <manifest.json>`, `paper-analyze` also accepts
 external numerical or digitized curves and sampled joint-PDF surfaces only
