@@ -28,7 +28,8 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
      const int m, const int k, const int j, const int il, const int iu, const int ivx,
      const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr,
      const ScrArray2D<Real> &bl, const ScrArray2D<Real> &br, const DvceArray4D<Real> &bx,
-     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez) {
+     DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez,
+     const bool record_pwork, DvceArray5D<Real> pflux) {
   int ivy = IVX + ((ivx-IVX)+1)%3;
   int ivz = IVX + ((ivx-IVX)+2)%3;
   int iby = ((ivx-IVX) + 1)%3;
@@ -270,6 +271,35 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
     flx(m,IAN,k,j,i) = fmutmp;
     ey(m,k,j,i) = -0.5*(fl.by + fr.by) - (fl.by - fr.by)*tmp;
     ez(m,k,j,i) =  0.5*(fl.bz + fr.bz) + (fl.bz - fr.bz)*tmp;
+
+    if (record_pwork) {
+      Real plx = 0.0, ply = 0.0, plz = 0.0;
+      Real prx = 0.0, pry = 0.0, prz = 0.0;
+      Real alx = 0.0, aly = 0.0, alz = 0.0;
+      Real arx = 0.0, ary = 0.0, arz = 0.0;
+      if (!eos.passive) {
+        const Real danisl = (bmagl > bfloor) ? (wl_ipp - wl_ipr)/(2.0*pbl) : 0.0;
+        const Real danisr = (bmagr > bfloor) ? (wr_ipp - wr_ipr)/(2.0*pbr) : 0.0;
+        alx = -SQR(bxi)*danisl;
+        aly = -bxi*wl_iby*danisl;
+        alz = -bxi*wl_ibz*danisl;
+        arx = -SQR(bxi)*danisr;
+        ary = -bxi*wr_iby*danisr;
+        arz = -bxi*wr_ibz*danisr;
+        plx = wl_ipp + alx;
+        ply = aly;
+        plz = alz;
+        prx = wr_ipp + arx;
+        pry = ary;
+        prz = arz;
+      }
+      pflux(m,ivx-IVX,k,j,i) = 0.5*(plx + prx) + (plx - prx)*tmp;
+      pflux(m,ivy-IVX,k,j,i) = 0.5*(ply + pry) + (ply - pry)*tmp;
+      pflux(m,ivz-IVX,k,j,i) = 0.5*(plz + prz) + (plz - prz)*tmp;
+      pflux(m,3+ivx-IVX,k,j,i) = 0.5*(alx + arx) + (alx - arx)*tmp;
+      pflux(m,3+ivy-IVX,k,j,i) = 0.5*(aly + ary) + (aly - ary)*tmp;
+      pflux(m,3+ivz-IVX,k,j,i) = 0.5*(alz + arz) + (alz - arz)*tmp;
+    }
   });
 
   return;

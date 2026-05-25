@@ -21,6 +21,7 @@
 #include "diffusion/viscosity.hpp"
 #include "diffusion/resistivity.hpp"
 #include "diffusion/conduction.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
 #include "diffusion/scalar_diffusion.hpp"
 #include "srcterms/srcterms.hpp"
 #include "bvals/bvals.hpp"
@@ -50,7 +51,10 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.flux      = tl["stagen"]->AddTask(&MHD::Fluxes, this, id.copyu);
   id.sendf     = tl["stagen"]->AddTask(&MHD::SendFlux, this, id.flux);
   id.recvf     = tl["stagen"]->AddTask(&MHD::RecvFlux, this, id.sendf);
-  id.rkupdt    = tl["stagen"]->AddTask(&MHD::RKUpdate, this, id.recvf);
+  id.psendf    = tl["stagen"]->AddTask(&MHD::SendCGLPressureFlux, this, id.recvf);
+  id.precvf    = tl["stagen"]->AddTask(&MHD::RecvCGLPressureFlux, this, id.psendf);
+  id.pwork     = tl["stagen"]->AddTask(&MHD::CGLPressureWork, this, id.precvf);
+  id.rkupdt    = tl["stagen"]->AddTask(&MHD::RKUpdate, this, id.pwork);
   id.srctrms   = tl["stagen"]->AddTask(&MHD::MHDSrcTerms, this, id.rkupdt);
   id.sendu_oa  = tl["stagen"]->AddTask(&MHD::SendU_OA, this, id.srctrms);
   id.recvu_oa  = tl["stagen"]->AddTask(&MHD::RecvU_OA, this, id.sendu_oa);
@@ -85,6 +89,8 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   // although RecvFlux/U/E/B functions check that all recvs complete, add ClearRecv to
   // task list anyways to catch potential bugs in MPI communication logic
   id.crecv = tl["after_stagen"]->AddTask(&MHD::ClearRecv, this, id.csend);
+  id.pclear =
+      tl["after_stagen"]->AddTask(&MHD::ClearCGLPressureFlux, this, id.crecv);
 
   if (has_any_parabolic_split) {
     TaskID pinit =
@@ -182,6 +188,10 @@ TaskStatus MHD::InitRecv(Driver *pdrive, int stage) {
     if (pmy_pack->pmesh->multilevel) {
       tstat = pbval_u->InitFluxRecv(nmhd+nscalars);
       if (tstat != TaskStatus::complete) return tstat;
+      if (record_cgl_pressure_work) {
+        tstat = pbval_cgl_pflux->InitFluxRecv(NCGLPressureFlux);
+        if (tstat != TaskStatus::complete) return tstat;
+      }
     }
     // post receives for fluxes of B, which are used even with uniform grids
     tstat = pbval_b->InitFluxRecv(3);
@@ -323,6 +333,93 @@ TaskStatus MHD::RecvFlux(Driver *pdrive, int stage) {
     tstat = pbval_u->RecvAndUnpackFluxCC(uflx);
   }
   return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Send retained CGL pressure-traction fluxes for AMR flux correction.
+
+TaskStatus MHD::SendCGLPressureFlux(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  if (record_cgl_pressure_work && pmy_pack->pmesh->multilevel) {
+    return pbval_cgl_pflux->PackAndSendFluxCC(cgl_pflux);
+  }
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Receive retained CGL pressure-traction fluxes for AMR flux correction.
+
+TaskStatus MHD::RecvCGLPressureFlux(Driver *pdrive, int stage) {
+  (void) pdrive;
+  (void) stage;
+  if (record_cgl_pressure_work && pmy_pack->pmesh->multilevel) {
+    return pbval_cgl_pflux->RecvAndUnpackFluxCC(cgl_pflux);
+  }
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Accumulate mechanical work from the pressure component of applied CGL fluxes.
+
+TaskStatus MHD::CGLPressureWork(Driver *pdrive, int stage) {
+  if (!record_cgl_pressure_work) {
+    return TaskStatus::complete;
+  }
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int is = indcs.is, nx1 = indcs.nx1;
+  const int js = indcs.js, nx2 = indcs.nx2;
+  const int ks = indcs.ks, nx3 = indcs.nx3;
+  const int nkji = nx3*nx2*nx1;
+  const int nji = nx2*nx1;
+  const int nmkji = pmy_pack->nmb_thispack*nkji;
+  const bool multi_d = pmy_pack->pmesh->multi_d;
+  const bool three_d = pmy_pack->pmesh->three_d;
+  auto w = w0;
+  auto p1 = cgl_pflux.x1f;
+  auto p2 = cgl_pflux.x2f;
+  auto p3 = cgl_pflux.x3f;
+  auto size = pmy_pack->pmb->mb_size;
+  Real pressure_power = 0.0;
+  Real anisotropic_power = 0.0;
+  Kokkos::parallel_reduce("cgl_pressure_work",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int idx, Real &ptotal, Real &paniso) {
+    const int m = idx/nkji;
+    const int k = (idx - m*nkji)/nji + ks;
+    const int j = (idx - m*nkji - (k - ks)*nji)/nx1 + js;
+    const int i = idx - m*nkji - (k - ks)*nji - (j - js)*nx1 + is;
+    const Real dx1 = size.d_view(m).dx1;
+    const Real dx2 = size.d_view(m).dx2;
+    const Real dx3 = size.d_view(m).dx3;
+    const Real volume = dx1*dx2*dx3;
+    for (int n = 0; n < 3; ++n) {
+      Real div_total = (p1(m,ICGLPressureX+n,k,j,i+1)
+                      - p1(m,ICGLPressureX+n,k,j,i))/dx1;
+      Real div_aniso = (p1(m,ICGLAnisPressureX+n,k,j,i+1)
+                      - p1(m,ICGLAnisPressureX+n,k,j,i))/dx1;
+      if (multi_d) {
+        div_total += (p2(m,ICGLPressureX+n,k,j+1,i)
+                    - p2(m,ICGLPressureX+n,k,j,i))/dx2;
+        div_aniso += (p2(m,ICGLAnisPressureX+n,k,j+1,i)
+                    - p2(m,ICGLAnisPressureX+n,k,j,i))/dx2;
+      }
+      if (three_d) {
+        div_total += (p3(m,ICGLPressureX+n,k+1,j,i)
+                    - p3(m,ICGLPressureX+n,k,j,i))/dx3;
+        div_aniso += (p3(m,ICGLAnisPressureX+n,k+1,j,i)
+                    - p3(m,ICGLAnisPressureX+n,k,j,i))/dx3;
+      }
+      ptotal -= volume*w(m,IVX+n,k,j,i)*div_total;
+      paniso -= volume*w(m,IVX+n,k,j,i)*div_aniso;
+    }
+  }, Kokkos::Sum<Real>(pressure_power), Kokkos::Sum<Real>(anisotropic_power));
+
+  const Real beta_dt = pdrive->beta[stage-1]*pmy_pack->pmesh->dt;
+  pcgl_lf->AdvancePressureWorkDiagnostics(
+      beta_dt, pdrive->gam0[stage-1], pdrive->gam1[stage-1], stage,
+      pressure_power, anisotropic_power);
+  return TaskStatus::complete;
 }
 
 //----------------------------------------------------------------------------------------
@@ -765,6 +862,20 @@ TaskStatus MHD::ClearRecv(Driver *pdrive, int stage) {
     }
   }
 
+  return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Clear retained CGL pressure-traction AMR flux communication.
+
+TaskStatus MHD::ClearCGLPressureFlux(Driver *pdrive, int stage) {
+  (void) pdrive;
+  if (stage >= 0 && record_cgl_pressure_work && pmy_pack->pmesh->multilevel) {
+    TaskStatus tstat = pbval_cgl_pflux->ClearFluxSend();
+    if (tstat != TaskStatus::complete) return tstat;
+    tstat = pbval_cgl_pflux->ClearFluxRecv();
+    if (tstat != TaskStatus::complete) return tstat;
+  }
   return TaskStatus::complete;
 }
 

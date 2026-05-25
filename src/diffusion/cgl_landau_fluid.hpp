@@ -32,6 +32,8 @@ struct CGLLFDiagnostics {
   std::uint64_t qperp_cap10 = 0;
   Real qpar_work = 0.0;
   Real qperp_work = 0.0;
+  Real pressure_work = 0.0;
+  Real anisotropic_pressure_work = 0.0;
 };
 
 class CGLLandauFluid {
@@ -51,6 +53,8 @@ class CGLLandauFluid {
   void AdvanceHeatFluxWorkDiagnostics(Real dt_sweep,
                                       const parabolic::RKL2Coefficients &coeffs,
                                       int stage, int nstages);
+  void AdvancePressureWorkDiagnostics(Real beta_dt, Real gam0, Real gam1, int stage,
+                                      Real pressure_power, Real anisotropic_power);
   void NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos);
   void RecordAdmissibility(const DvceArray5D<Real> &u, const DvceArray5D<Real> &w,
                            const DvceArray5D<Real> &bcc, const EOS_Data &eos,
@@ -71,6 +75,8 @@ class CGLLandauFluid {
   Real sweep_qperp_work2_ = 0.0;
   Real sweep_qpar_rhs_ = 0.0;
   Real sweep_qperp_rhs_ = 0.0;
+  Real pressure_work_cycle_start_ = 0.0;
+  Real anisotropic_pressure_work_cycle_start_ = 0.0;
 };
 
 #endif // DIFFUSION_CGL_LANDAU_FLUID_HPP_

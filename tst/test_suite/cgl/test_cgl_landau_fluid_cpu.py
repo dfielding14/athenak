@@ -66,8 +66,9 @@ def _assert_clean_lf_history(history):
     assert history["lf_qface"][-1] > 0.0
     for name in ("lf_qprcap", "lf_qpr10", "lf_qpecap", "lf_qpe10"):
         assert 0.0 <= history[name][-1] <= history["lf_qface"][-1]
-    for name in ("lf_qprwrk", "lf_qpewrk"):
-        assert np.all(np.isfinite(history[name]))
+    for name in ("lf_qprwrk", "lf_qpewrk", "lf_cpwrk", "lf_cawrk"):
+        if name in history:
+            assert np.all(np.isfinite(history[name]))
 
 
 def _assert_restarted_lf_diagnostics(reference, resumed):
@@ -87,6 +88,8 @@ def _assert_restarted_lf_diagnostics(reference, resumed):
         "lf_qpe10",
         "lf_qprwrk",
         "lf_qpewrk",
+        "lf_cpwrk",
+        "lf_cawrk",
     ):
         assert np.isclose(
             reference[column][-1],
@@ -322,6 +325,7 @@ def test_cgl_lf_amr_conserved_prolongation_stays_admissible():
         assert np.all(np.isfinite(user["abs_anis"]))
         _assert_clean_lf_history(mhd)
         assert abs(mhd["lf_qprwrk"][-1]) + abs(mhd["lf_qpewrk"][-1]) > 0.0
+        assert abs(mhd["lf_cpwrk"][-1]) + abs(mhd["lf_cawrk"][-1]) > 0.0
         energy_scale = max(abs(mhd["tot-E"][0]), 1.0e-30)
         energy_residual = abs(mhd["tot-E"][-1] - mhd["tot-E"][0]) / energy_scale
         assert energy_residual < 5.0e-3
@@ -506,6 +510,8 @@ def test_cgl_lf_paper_multicycle_forcing_work_follows_rk_state_recurrence():
         applied_work = user["force_work"][-1] - user["force_work"][0]
         assert applied_work > 0.0
         assert np.isclose(applied_work, energy_delta, rtol=1.0e-10, atol=1.0e-12)
+        assert np.all(np.isfinite(mhd["lf_cpwrk"]))
+        assert np.all(np.isfinite(mhd["lf_cawrk"]))
     finally:
         shutil.rmtree("rst", ignore_errors=True)
         _cleanup()
@@ -592,10 +598,14 @@ def test_cgl_lf_paper_passive_delta_has_no_anisotropic_flow_feedback():
         for field in ("dens", "velx", "vely", "velz", "bcc1", "bcc2", "bcc3"):
             assert np.max(np.abs(isotropic[field] - anisotropic[field])) < 1.0e-12
         assert np.max(np.abs(isotropic["eint"] - anisotropic["eint"])) > 1.0e-4
-        _assert_clean_lf_history(testutils.athena_read.hst("cgl_ci_passive_iso.mhd.hst"))
-        _assert_clean_lf_history(
-            testutils.athena_read.hst("cgl_ci_passive_aniso.mhd.hst")
-        )
+        passive_iso = testutils.athena_read.hst("cgl_ci_passive_iso.mhd.hst")
+        passive_aniso = testutils.athena_read.hst("cgl_ci_passive_aniso.mhd.hst")
+        _assert_clean_lf_history(passive_iso)
+        _assert_clean_lf_history(passive_aniso)
+        assert np.all(passive_iso["lf_cpwrk"] == 0.0)
+        assert np.all(passive_iso["lf_cawrk"] == 0.0)
+        assert np.all(passive_aniso["lf_cpwrk"] == 0.0)
+        assert np.all(passive_aniso["lf_cawrk"] == 0.0)
     finally:
         shutil.rmtree("rst", ignore_errors=True)
         _cleanup()

@@ -84,6 +84,7 @@ reporting is independent of whether `backup_limiters` is enabled.
 | `limiter_nu_coll` | `0.0` | Limiter relaxation frequency. |
 | `backup_limiters` | `false` | Apply rapid correction after an emergency bound is crossed. |
 | `cgl_lf_strict_admissibility` | `false` | Fail an LF split stage on unsafe state, LF floors, or hard-bound violations. |
+| `cgl_lf_record_pressure_work` | `false` | Retain RK-integrated applied CGL pressure-traction work diagnostics. |
 
 At an operator face with `|B| <= bfloor`, LF does not construct a local field
 direction and applies zero heat-flux contribution at that face. The local
@@ -100,7 +101,9 @@ overshoot and is a strict-validation failure.
 Normal `.mhd.hst` output appends cumulative columns when LF is active:
 `lf_nstage`, `lf_dfloor`, `lf_pfloor`, `lf_nonfin`, `lf_nonpos`,
 `lf_mirror`, `lf_firehs`, `lf_hardbd`, `lf_qface`, `lf_qprcap`,
-`lf_qpr10`, `lf_qpecap`, `lf_qpe10`, `lf_qprwrk`, and `lf_qpewrk`. The
+`lf_qpr10`, `lf_qpecap`, `lf_qpe10`, `lf_qprwrk`, and `lf_qpewrk`. When
+`cgl_lf_record_pressure_work = true`, it additionally appends `lf_cpwrk`
+and `lf_cawrk`. The
 face-count columns record evaluated LF faces and parallel/perpendicular
 unlimited heat-flux ratios exceeding `q_max` or `10*q_max`. Differences
 between successive rows give interval counts; normalize limiter counts by
@@ -115,6 +118,14 @@ These are signed operator contractions; they are not required to be positive,
 equal an offline snapshot proxy, or close a total energy budget. The existing
 `aam-D` history column remains the conserved anisotropy variable for
 compatibility.
+
+When `cgl_lf_record_pressure_work = true`, `lf_cpwrk` is the cumulative
+explicit-RK-applied contraction of velocity with the retained CGL
+pressure-traction divergence, and `lf_cawrk` is its `Delta p` anisotropic
+component. The retained face traction is corrected through the same AMR flux
+exchange used by the momentum update before the contraction is evaluated.
+Passive-Delta runs retain zeros for both fields because their diagnostic CGL
+pressures are not applied to flow momentum.
 
 ## Current Restrictions
 
@@ -188,8 +199,10 @@ diagnostics with synthetic numerical checks. The pressure-work product splits
 `p_perp div(u)` from `-Delta p (b b : grad u)` and compares the latter with
 the direct transfer integral. Multi-snapshot ensembles include trapezoidal
 time-integral estimates for this product and the reconstructed heat-flux
-proxy; both remain snapshot-derived rather than closed applied energy
-budgets. The workflow also renders available diagnostic figures under
+proxy; both remain snapshot-derived. For decks enabling
+`cgl_lf_record_pressure_work`, interval history analysis additionally reports
+the applied hyperbolic pressure ledger from `lf_cpwrk` and `lf_cawrk`.
+The workflow also renders available diagnostic figures under
 `figures/paper/`. For
 paper-standard bundles it uses each case's declared analysis window to
 produce ensemble-average products and interval heat-flux-cap fractions.

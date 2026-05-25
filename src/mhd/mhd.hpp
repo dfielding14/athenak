@@ -53,6 +53,9 @@ struct MHDTaskIDs {
   TaskID flux;
   TaskID sendf;
   TaskID recvf;
+  TaskID psendf;
+  TaskID precvf;
+  TaskID pwork;
   TaskID rkupdt;
   TaskID srctrms;
   TaskID sendu_oa;
@@ -81,11 +84,19 @@ struct MHDTaskIDs {
   TaskID cglcoll;
   TaskID csend;
   TaskID crecv;
+  TaskID pclear;
 };
 
 namespace mhd {
 
 enum class CGLSlotRepresentation {anisotropy, magnetic_moment};
+constexpr int NCGLPressureFlux = 6;
+constexpr int ICGLPressureX = 0;
+constexpr int ICGLPressureY = 1;
+constexpr int ICGLPressureZ = 2;
+constexpr int ICGLAnisPressureX = 3;
+constexpr int ICGLAnisPressureY = 4;
+constexpr int ICGLAnisPressureZ = 5;
 
 //----------------------------------------------------------------------------------------
 //! \class MHD
@@ -114,6 +125,7 @@ class MHD {
   // Objects containing boundary communication buffers and routines for u and b
   MeshBoundaryValuesCC *pbval_u;
   MeshBoundaryValuesFC *pbval_b;
+  MeshBoundaryValuesCC *pbval_cgl_pflux = nullptr;
   MHDBoundaryFnPtr MHDBoundaryFunc[6];
 
   // Orbital advection and shearing box BCs
@@ -143,6 +155,7 @@ class MHD {
   DvceFaceFld4D<Real> b_sts2;  // second previous STS stage magnetic state
   DvceFaceFld4D<Real> b_sts_rhs;  // cached first-stage RKL2 magnetic contribution
   DvceFaceFld5D<Real> uflx;   // fluxes of conserved quantities on cell faces
+  DvceFaceFld5D<Real> cgl_pflux;  // retained CGL pressure traction for diagnostics
   DvceEdgeFld4D<Real> efld;   // edge-centered electric fields (fluxes of B)
   // temporary variables used to store face-centered electric fields returned by RS
   DvceArray4D<Real> e3x1, e2x1;
@@ -168,6 +181,7 @@ class MHD {
   bool has_sts_cgl_lf = false;
   bool has_explicit_cgl_lf = false;
   bool has_cgl_lf_split = false;
+  bool record_cgl_pressure_work = false;
   bool has_sts_resistivity = false;
   bool has_sts_scalar_diffusion = false;
   bool has_any_parabolic_split = false;
@@ -193,6 +207,9 @@ class MHD {
   TaskStatus Fluxes(Driver *d, int stage);
   TaskStatus SendFlux(Driver *d, int stage);
   TaskStatus RecvFlux(Driver *d, int stage);
+  TaskStatus SendCGLPressureFlux(Driver *d, int stage);
+  TaskStatus RecvCGLPressureFlux(Driver *d, int stage);
+  TaskStatus CGLPressureWork(Driver *d, int stage);
   TaskStatus RKUpdate(Driver *d, int stage);
   TaskStatus MHDSrcTerms(Driver *d, int stage);
   TaskStatus SendU_OA(Driver *d, int stage);
@@ -233,6 +250,7 @@ class MHD {
   // ...in "after_stagen_tl" task list
   TaskStatus ClearSend(Driver *d, int stage);
   TaskStatus ClearRecv(Driver *d, int stage);  // also in Driver::Initialize
+  TaskStatus ClearCGLPressureFlux(Driver *d, int stage);
 
   // CalculateFluxes function templated over Riemann Solvers
   template <MHD_RSolver T>

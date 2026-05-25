@@ -252,6 +252,23 @@ def summarize_lf_history(path: Path, time_start: float | None = None,
             "perpendicular": qperp_work,
             "total": qpar_work + qperp_work,
         }
+    pressure_names = ("lf_cpwrk", "lf_cawrk")
+    if all(name in data for name in pressure_names):
+        pressure_work = float(data["lf_cpwrk"][rows[-1]] - data["lf_cpwrk"][rows[0]])
+        anisotropic_work = float(data["lf_cawrk"][rows[-1]] - data["lf_cawrk"][rows[0]])
+        result["applied_pressure_work"] = {
+            "definition": (
+                "Signed explicit-RK-applied cell contraction of velocity with "
+                "the AMR-corrected retained CGL pressure-traction divergence"
+            ),
+            "traction_split": (
+                "total CGL pressure traction and its Delta-p anisotropic component"
+            ),
+            "interpretation": "applied hyperbolic momentum-feedback ledger",
+            "signed": True,
+            "total": pressure_work,
+            "anisotropic": anisotropic_work,
+        }
     return result
 
 

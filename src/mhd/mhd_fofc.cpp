@@ -41,6 +41,10 @@ void MHD::FOFC(Driver *pdriver, int stage) {
   auto flx1 = uflx.x1f;
   auto flx2 = uflx.x2f;
   auto flx3 = uflx.x3f;
+  auto pflx1 = cgl_pflux.x1f;
+  auto pflx2 = cgl_pflux.x2f;
+  auto pflx3 = cgl_pflux.x3f;
+  const bool record_pwork_ = record_cgl_pressure_work;
   auto &size = pmy_pack->pmb->mb_size;
 
   auto &bcc0_ = bcc0;
@@ -209,6 +213,16 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx1(m,IM3,k,j,i) = flux.mz;
         if (eos.is_ideal) {flx1(m,IEN,k,j,i) = flux.e;}
         if (eos.is_cgl) {flx1(m,IAN,k,j,i) = flux.mu;}
+        if (eos.is_cgl && record_pwork_) {
+          MHDCons1D pressure, anisotropic;
+          SingleStateLLF_CGLPressureTraction(wim1, wi, bxi, eos, pressure, anisotropic);
+          pflx1(m,ICGLPressureX,k,j,i) = pressure.mx;
+          pflx1(m,ICGLPressureY,k,j,i) = pressure.my;
+          pflx1(m,ICGLPressureZ,k,j,i) = pressure.mz;
+          pflx1(m,ICGLAnisPressureX,k,j,i) = anisotropic.mx;
+          pflx1(m,ICGLAnisPressureY,k,j,i) = anisotropic.my;
+          pflx1(m,ICGLAnisPressureZ,k,j,i) = anisotropic.mz;
+        }
         e3x1_(m,k,j,i) = flux.by;
         e2x1_(m,k,j,i) = flux.bz;
       }
@@ -277,6 +291,16 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx2(m,IM1,k,j,i) = flux.mz;
         if (eos.is_ideal) {flx2(m,IEN,k,j,i) = flux.e;}
         if (eos.is_cgl) {flx2(m,IAN,k,j,i) = flux.mu;}
+        if (eos.is_cgl && record_pwork_) {
+          MHDCons1D pressure, anisotropic;
+          SingleStateLLF_CGLPressureTraction(wjm1, wj, bxi, eos, pressure, anisotropic);
+          pflx2(m,ICGLPressureX,k,j,i) = pressure.mz;
+          pflx2(m,ICGLPressureY,k,j,i) = pressure.mx;
+          pflx2(m,ICGLPressureZ,k,j,i) = pressure.my;
+          pflx2(m,ICGLAnisPressureX,k,j,i) = anisotropic.mz;
+          pflx2(m,ICGLAnisPressureY,k,j,i) = anisotropic.mx;
+          pflx2(m,ICGLAnisPressureZ,k,j,i) = anisotropic.my;
+        }
         e1x2_(m,k,j,i) = flux.by;
         e3x2_(m,k,j,i) = flux.bz;
       }
@@ -345,6 +369,16 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx3(m,IM2,k,j,i) = flux.mz;
         if (eos.is_ideal) {flx3(m,IEN,k,j,i) = flux.e;}
         if (eos.is_cgl) {flx3(m,IAN,k,j,i) = flux.mu;}
+        if (eos.is_cgl && record_pwork_) {
+          MHDCons1D pressure, anisotropic;
+          SingleStateLLF_CGLPressureTraction(wkm1, wk, bxi, eos, pressure, anisotropic);
+          pflx3(m,ICGLPressureX,k,j,i) = pressure.my;
+          pflx3(m,ICGLPressureY,k,j,i) = pressure.mz;
+          pflx3(m,ICGLPressureZ,k,j,i) = pressure.mx;
+          pflx3(m,ICGLAnisPressureX,k,j,i) = anisotropic.my;
+          pflx3(m,ICGLAnisPressureY,k,j,i) = anisotropic.mz;
+          pflx3(m,ICGLAnisPressureZ,k,j,i) = anisotropic.mx;
+        }
         e2x3_(m,k,j,i) = flux.by;
         e1x3_(m,k,j,i) = flux.bz;
       }
@@ -431,6 +465,16 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx1(m,IM3,k,j,i+1) = flux.mz;
         if (eos.is_ideal) {flx1(m,IEN,k,j,i+1) = flux.e;}
         if (eos.is_cgl) {flx1(m,IAN,k,j,i+1) = flux.mu;}
+        if (eos.is_cgl && record_pwork_) {
+          MHDCons1D pressure, anisotropic;
+          SingleStateLLF_CGLPressureTraction(wi, wip1, bxi, eos, pressure, anisotropic);
+          pflx1(m,ICGLPressureX,k,j,i+1) = pressure.mx;
+          pflx1(m,ICGLPressureY,k,j,i+1) = pressure.my;
+          pflx1(m,ICGLPressureZ,k,j,i+1) = pressure.mz;
+          pflx1(m,ICGLAnisPressureX,k,j,i+1) = anisotropic.mx;
+          pflx1(m,ICGLAnisPressureY,k,j,i+1) = anisotropic.my;
+          pflx1(m,ICGLAnisPressureZ,k,j,i+1) = anisotropic.mz;
+        }
         e3x1_(m,k,j,i+1) = flux.by;
         e2x1_(m,k,j,i+1) = flux.bz;
       }
@@ -499,6 +543,16 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx2(m,IM1,k,j+1,i) = flux.mz;
         if (eos.is_ideal) {flx2(m,IEN,k,j+1,i) = flux.e;}
         if (eos.is_cgl) {flx2(m,IAN,k,j+1,i) = flux.mu;}
+        if (eos.is_cgl && record_pwork_) {
+          MHDCons1D pressure, anisotropic;
+          SingleStateLLF_CGLPressureTraction(wj, wjp1, bxi, eos, pressure, anisotropic);
+          pflx2(m,ICGLPressureX,k,j+1,i) = pressure.mz;
+          pflx2(m,ICGLPressureY,k,j+1,i) = pressure.mx;
+          pflx2(m,ICGLPressureZ,k,j+1,i) = pressure.my;
+          pflx2(m,ICGLAnisPressureX,k,j+1,i) = anisotropic.mz;
+          pflx2(m,ICGLAnisPressureY,k,j+1,i) = anisotropic.mx;
+          pflx2(m,ICGLAnisPressureZ,k,j+1,i) = anisotropic.my;
+        }
         e1x2_(m,k,j+1,i) = flux.by;
         e3x2_(m,k,j+1,i) = flux.bz;
       }
@@ -567,6 +621,16 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx3(m,IM2,k+1,j,i) = flux.mz;
         if (eos.is_ideal) {flx3(m,IEN,k+1,j,i) = flux.e;}
         if (eos.is_cgl) {flx3(m,IAN,k+1,j,i) = flux.mu;}
+        if (eos.is_cgl && record_pwork_) {
+          MHDCons1D pressure, anisotropic;
+          SingleStateLLF_CGLPressureTraction(wk, wkp1, bxi, eos, pressure, anisotropic);
+          pflx3(m,ICGLPressureX,k+1,j,i) = pressure.my;
+          pflx3(m,ICGLPressureY,k+1,j,i) = pressure.mz;
+          pflx3(m,ICGLPressureZ,k+1,j,i) = pressure.mx;
+          pflx3(m,ICGLAnisPressureX,k+1,j,i) = anisotropic.my;
+          pflx3(m,ICGLAnisPressureY,k+1,j,i) = anisotropic.mz;
+          pflx3(m,ICGLAnisPressureZ,k+1,j,i) = anisotropic.mx;
+        }
         e2x3_(m,k+1,j,i) = flux.by;
         e1x3_(m,k+1,j,i) = flux.bz;
       }

@@ -42,6 +42,7 @@ passive = false
 cgl_heat_flux = landau_fluid
 cgl_heat_flux_integrator = sts
 cgl_lf_strict_admissibility = true
+cgl_lf_record_pressure_work = true
 lf_k_parallel = 32.0
 lf_coefficient_mode = local
 nu_coll = 0.0

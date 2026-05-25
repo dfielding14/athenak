@@ -132,6 +132,42 @@ void CheckZFace(const std::string &label, const FluxView &flx, const E2View &e2x
   CheckClose(label + ".E1", e1x3(m,k,j,i), expected.bz);
 }
 
+template <typename FluxView>
+void CheckXPressure(const std::string &label, const FluxView &flx,
+                    const MHDCons1D &pressure, const MHDCons1D &anisotropic,
+                    int m, int k, int j, int i) {
+  CheckClose(label + ".PX", flx(m,mhd::ICGLPressureX,k,j,i), pressure.mx);
+  CheckClose(label + ".PY", flx(m,mhd::ICGLPressureY,k,j,i), pressure.my);
+  CheckClose(label + ".PZ", flx(m,mhd::ICGLPressureZ,k,j,i), pressure.mz);
+  CheckClose(label + ".AX", flx(m,mhd::ICGLAnisPressureX,k,j,i), anisotropic.mx);
+  CheckClose(label + ".AY", flx(m,mhd::ICGLAnisPressureY,k,j,i), anisotropic.my);
+  CheckClose(label + ".AZ", flx(m,mhd::ICGLAnisPressureZ,k,j,i), anisotropic.mz);
+}
+
+template <typename FluxView>
+void CheckYPressure(const std::string &label, const FluxView &flx,
+                    const MHDCons1D &pressure, const MHDCons1D &anisotropic,
+                    int m, int k, int j, int i) {
+  CheckClose(label + ".PX", flx(m,mhd::ICGLPressureX,k,j,i), pressure.mz);
+  CheckClose(label + ".PY", flx(m,mhd::ICGLPressureY,k,j,i), pressure.mx);
+  CheckClose(label + ".PZ", flx(m,mhd::ICGLPressureZ,k,j,i), pressure.my);
+  CheckClose(label + ".AX", flx(m,mhd::ICGLAnisPressureX,k,j,i), anisotropic.mz);
+  CheckClose(label + ".AY", flx(m,mhd::ICGLAnisPressureY,k,j,i), anisotropic.mx);
+  CheckClose(label + ".AZ", flx(m,mhd::ICGLAnisPressureZ,k,j,i), anisotropic.my);
+}
+
+template <typename FluxView>
+void CheckZPressure(const std::string &label, const FluxView &flx,
+                    const MHDCons1D &pressure, const MHDCons1D &anisotropic,
+                    int m, int k, int j, int i) {
+  CheckClose(label + ".PX", flx(m,mhd::ICGLPressureX,k,j,i), pressure.my);
+  CheckClose(label + ".PY", flx(m,mhd::ICGLPressureY,k,j,i), pressure.mz);
+  CheckClose(label + ".PZ", flx(m,mhd::ICGLPressureZ,k,j,i), pressure.mx);
+  CheckClose(label + ".AX", flx(m,mhd::ICGLAnisPressureX,k,j,i), anisotropic.my);
+  CheckClose(label + ".AY", flx(m,mhd::ICGLAnisPressureY,k,j,i), anisotropic.mz);
+  CheckClose(label + ".AZ", flx(m,mhd::ICGLAnisPressureZ,k,j,i), anisotropic.mx);
+}
+
 void ValidateFOFCMutation(Mesh *pm, const Real /*bdt*/) {
   auto *pmhd = pm->pmb_pack->pmhd;
   if (pmhd == nullptr) {
@@ -147,6 +183,14 @@ void ValidateFOFCMutation(Mesh *pm, const Real /*bdt*/) {
   auto f1 = HostCopy(pmhd->uflx.x1f);
   auto f2 = HostCopy(pmhd->uflx.x2f);
   auto f3 = HostCopy(pmhd->uflx.x3f);
+  if (!pmhd->record_cgl_pressure_work) {
+    std::cout << "CGL FOFC end-to-end test requires retained CGL pressure traction"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  auto pf1 = HostCopy(pmhd->cgl_pflux.x1f);
+  auto pf2 = HostCopy(pmhd->cgl_pflux.x2f);
+  auto pf3 = HostCopy(pmhd->cgl_pflux.x3f);
   auto e3x1 = HostCopy(pmhd->e3x1);
   auto e2x1 = HostCopy(pmhd->e2x1);
   auto e1x2 = HostCopy(pmhd->e1x2);
@@ -162,31 +206,55 @@ void ValidateFOFCMutation(Mesh *pm, const Real /*bdt*/) {
   int k = indcs.ks + 1;
   const EOS_Data &eos = pmhd->peos->eos_data;
 
-  MHDCons1D expected;
+  MHDCons1D expected, pressure, anisotropic;
 
   mhd::SingleStateLLF_CGL(XState(w, bcc, m, k, j, i-1), XState(w, bcc, m, k, j, i),
                           b1(m,k,j,i), eos, expected);
+  mhd::SingleStateLLF_CGLPressureTraction(
+      XState(w, bcc, m, k, j, i-1), XState(w, bcc, m, k, j, i),
+      b1(m,k,j,i), eos, pressure, anisotropic);
   CheckXFace("x-lower", f1, e3x1, e2x1, expected, m, k, j, i);
+  CheckXPressure("x-lower", pf1, pressure, anisotropic, m, k, j, i);
 
   mhd::SingleStateLLF_CGL(XState(w, bcc, m, k, j, i), XState(w, bcc, m, k, j, i+1),
                           b1(m,k,j,i+1), eos, expected);
+  mhd::SingleStateLLF_CGLPressureTraction(
+      XState(w, bcc, m, k, j, i), XState(w, bcc, m, k, j, i+1),
+      b1(m,k,j,i+1), eos, pressure, anisotropic);
   CheckXFace("x-upper", f1, e3x1, e2x1, expected, m, k, j, i+1);
+  CheckXPressure("x-upper", pf1, pressure, anisotropic, m, k, j, i+1);
 
   mhd::SingleStateLLF_CGL(YState(w, bcc, m, k, j-1, i), YState(w, bcc, m, k, j, i),
                           b2(m,k,j,i), eos, expected);
+  mhd::SingleStateLLF_CGLPressureTraction(
+      YState(w, bcc, m, k, j-1, i), YState(w, bcc, m, k, j, i),
+      b2(m,k,j,i), eos, pressure, anisotropic);
   CheckYFace("y-lower", f2, e1x2, e3x2, expected, m, k, j, i);
+  CheckYPressure("y-lower", pf2, pressure, anisotropic, m, k, j, i);
 
   mhd::SingleStateLLF_CGL(YState(w, bcc, m, k, j, i), YState(w, bcc, m, k, j+1, i),
                           b2(m,k,j+1,i), eos, expected);
+  mhd::SingleStateLLF_CGLPressureTraction(
+      YState(w, bcc, m, k, j, i), YState(w, bcc, m, k, j+1, i),
+      b2(m,k,j+1,i), eos, pressure, anisotropic);
   CheckYFace("y-upper", f2, e1x2, e3x2, expected, m, k, j+1, i);
+  CheckYPressure("y-upper", pf2, pressure, anisotropic, m, k, j+1, i);
 
   mhd::SingleStateLLF_CGL(ZState(w, bcc, m, k-1, j, i), ZState(w, bcc, m, k, j, i),
                           b3(m,k,j,i), eos, expected);
+  mhd::SingleStateLLF_CGLPressureTraction(
+      ZState(w, bcc, m, k-1, j, i), ZState(w, bcc, m, k, j, i),
+      b3(m,k,j,i), eos, pressure, anisotropic);
   CheckZFace("z-lower", f3, e2x3, e1x3, expected, m, k, j, i);
+  CheckZPressure("z-lower", pf3, pressure, anisotropic, m, k, j, i);
 
   mhd::SingleStateLLF_CGL(ZState(w, bcc, m, k, j, i), ZState(w, bcc, m, k+1, j, i),
                           b3(m,k+1,j,i), eos, expected);
+  mhd::SingleStateLLF_CGLPressureTraction(
+      ZState(w, bcc, m, k, j, i), ZState(w, bcc, m, k+1, j, i),
+      b3(m,k+1,j,i), eos, pressure, anisotropic);
   CheckZFace("z-upper", f3, e2x3, e1x3, expected, m, k+1, j, i);
+  CheckZPressure("z-upper", pf3, pressure, anisotropic, m, k+1, j, i);
 
   if (fofc(m,k,j,i)) {
     std::cout << "CGL FOFC end-to-end test failed: FOFC flag was not reset" << std::endl;

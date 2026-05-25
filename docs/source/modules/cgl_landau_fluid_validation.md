@@ -10,6 +10,8 @@ It also covers the reduced active paper initializer, deterministic turbulence
 seed selection, Alfvenic forcing orientation, nonrelativistic forcing-energy
 work, once-per-cycle OU forcing advancement, forcing restart continuation, and
 passive-Delta flow independence from diagnostic pressure anisotropy.
+AMR, restart, and live FOFC checks also exercise the optional retained
+RK-integrated CGL pressure-traction work path.
 The broader scientific suite is a manual tier because it generates diagnostic
 CSV files and figures and is intended for interpretation, not just pass/fail
 gating.
@@ -84,6 +86,9 @@ random seed, correlation time, injection parameter, mode bounds, state
 tables, forcing tables, and the physical-shell/common-spectrum settings that
 select the documented `abs(k) in (2*pi/L_parallel)[1,3]` and `k^-2` forcing.
 Paper decks enable restartable cumulative RK-integrated applied source work.
+They also enable `cgl_lf_record_pressure_work`, which retains total and
+anisotropic applied hyperbolic CGL pressure-traction work in `lf_cpwrk` and
+`lf_cawrk`.
 The workflow checks clean LF safety diagnostics, positive applied work, active
 global energy/work residual closure, zero parallel
 forcing for the Alfvenic case, and nonzero parallel forcing for the random
@@ -171,6 +176,11 @@ coarse/fine interfaces from their fine-side closure faces; they are not a
 total-energy budget diagnostic, and their signed value need not equal the
 positive cell-centered snapshot proxy. Operator-face heat-flux-cap fractions are separately
 summarized from LF history counters over the same selected interval. When the
+selected history contains `lf_cpwrk` and `lf_cawrk`, it additionally reports
+the explicit-RK-applied CGL pressure-traction ledger. That ledger is evaluated
+from the retained traction after the same AMR flux correction used by
+momentum; passive-Delta decks record zero applied pressure work.
+When the
 default staged MKS24 manifest is available, `paper-analyze` also writes
 `analysis/reference_provenance.json` with its archive and source-TeX
 checksums; provide a different pinned copy with

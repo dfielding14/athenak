@@ -77,6 +77,7 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     b_sts2("b_sts2",1,1,1,1),
     b_sts_rhs("b_sts_rhs",1,1,1,1),
     uflx("uflx",1,1,1,1,1),
+    cgl_pflux("cgl_pflux",1,1,1,1,1),
     efld("efld",1,1,1,1),
     wsaved("wsaved",1,1,1,1,1),
     bccsaved("bccsaved",1,1,1,1,1),
@@ -227,6 +228,8 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     has_explicit_cgl_lf =
         (pcgl_lf->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
     has_cgl_lf_split = (has_sts_cgl_lf || has_explicit_cgl_lf);
+    record_cgl_pressure_work =
+        pin->GetOrAddBoolean("mhd", "cgl_lf_record_pressure_work", false);
     if (pmy_pack->pmesh->multilevel && pmy_pack->pmesh->pmr != nullptr &&
         pmy_pack->pmesh->pmr->prolong_prims) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -340,6 +343,10 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   pbval_u->InitializeBuffers((nmhd+nscalars));
   pbval_b = new MeshBoundaryValuesFC(ppack, pin);
   pbval_b->InitializeBuffers(3);
+  if (record_cgl_pressure_work) {
+    pbval_cgl_pflux = new MeshBoundaryValuesCC(ppack, pin, false);
+    pbval_cgl_pflux->InitializeBuffers(NCGLPressureFlux);
+  }
 
   // Orbital advection and shearing box BCs (if requested in input file)
   if (pin->DoesBlockExist("shearing_box")) {
@@ -530,6 +537,14 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       Kokkos::realloc(uflx.x1f, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1+1);
       Kokkos::realloc(uflx.x2f, nmb, (nmhd+nscalars), ncells3, ncells2+1, ncells1);
       Kokkos::realloc(uflx.x3f, nmb, (nmhd+nscalars), ncells3+1, ncells2, ncells1);
+      if (record_cgl_pressure_work) {
+        Kokkos::realloc(cgl_pflux.x1f, nmb, NCGLPressureFlux,
+                        ncells3, ncells2, ncells1+1);
+        Kokkos::realloc(cgl_pflux.x2f, nmb, NCGLPressureFlux,
+                        ncells3, ncells2+1, ncells1);
+        Kokkos::realloc(cgl_pflux.x3f, nmb, NCGLPressureFlux,
+                        ncells3+1, ncells2, ncells1);
+      }
       Kokkos::realloc(efld.x1e, nmb, ncells3+1, ncells2+1, ncells1);
       Kokkos::realloc(efld.x2e, nmb, ncells3+1, ncells2, ncells1+1);
       Kokkos::realloc(efld.x3e, nmb, ncells3, ncells2+1, ncells1+1);
@@ -567,6 +582,7 @@ MHD::~MHD() {
   if (porb_u != nullptr) {delete porb_u;}
   delete pbval_b;
   delete pbval_u;
+  if (pbval_cgl_pflux != nullptr) {delete pbval_cgl_pflux;}
   if (psrc!= nullptr) {delete psrc;}
   if (pscalar_diff != nullptr) {delete pscalar_diff;}
   if (pcgl_lf != nullptr) {delete pcgl_lf;}

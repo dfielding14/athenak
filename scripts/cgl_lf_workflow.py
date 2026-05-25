@@ -187,7 +187,7 @@ def lf_diagnostics(path: Path) -> dict[str, object]:
     }
     for key in (
         "lf_qface", "lf_qprcap", "lf_qpr10", "lf_qpecap", "lf_qpe10",
-        "lf_qprwrk", "lf_qpewrk",
+        "lf_qprwrk", "lf_qpewrk", "lf_cpwrk", "lf_cawrk",
     ):
         if key in history:
             counters[key] = final_value(history, key)
@@ -218,6 +218,17 @@ def lf_diagnostics(path: Path) -> dict[str, object]:
             "parallel": counters["lf_qprwrk"],
             "perpendicular": counters["lf_qpewrk"],
             "total": counters["lf_qprwrk"] + counters["lf_qpewrk"],
+        }
+    if "lf_cpwrk" in counters and "lf_cawrk" in counters:
+        result["pressure_work"] = {
+            "definition": (
+                "Cumulative RK-applied cell contraction of velocity with the "
+                "AMR-corrected CGL pressure-traction momentum flux divergence"
+            ),
+            "anisotropic_definition": "retained Delta-p traction contribution",
+            "signed": True,
+            "total": counters["lf_cpwrk"],
+            "anisotropic": counters["lf_cawrk"],
         }
     return result
 
@@ -294,6 +305,9 @@ def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
         "analysis_t_end": choice("problem", "analysis_t_end", "unspecified"),
         "cgl_firehose_threshold": choice("mhd", "cgl_firehose_threshold", "oblique"),
         "cgl_heat_flux_integrator": choice("mhd", "cgl_heat_flux_integrator", "sts"),
+        "cgl_lf_record_pressure_work": choice(
+            "mhd", "cgl_lf_record_pressure_work", "false"
+        ),
         "lf_k_parallel": choice("mhd", "lf_k_parallel", "unspecified"),
         "lf_coefficient_mode": choice("mhd", "lf_coefficient_mode", "local"),
         "lf_c_parallel0": choice("mhd", "lf_c_parallel0", "unspecified"),

@@ -210,7 +210,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   }
 
   if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) {
-    constexpr int nlf_diag = 15;
+    constexpr int nlf_diag = 17;
     Real lf_diag[nlf_diag] = {};
     if (global_variable::my_rank == 0 || single_file_per_rank) {
       if (resfile.Read_Reals(&lf_diag[0], nlf_diag, single_file_per_rank)
@@ -245,6 +245,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     diag.qperp_cap10 = static_cast<std::uint64_t>(lf_diag[12]);
     diag.qpar_work = lf_diag[13];
     diag.qperp_work = lf_diag[14];
+    diag.pressure_work = lf_diag[15];
+    diag.anisotropic_pressure_work = lf_diag[16];
   }
 
   // root process reads size of CC and FC data arrays from restart file

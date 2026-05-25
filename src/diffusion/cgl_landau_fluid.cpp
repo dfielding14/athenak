@@ -477,6 +477,22 @@ void CGLLandauFluid::AdvanceHeatFluxWorkDiagnostics(
   }
 }
 
+void CGLLandauFluid::AdvancePressureWorkDiagnostics(Real beta_dt, Real gam0, Real gam1,
+                                                     int stage, Real pressure_power,
+                                                     Real anisotropic_power) {
+  if (stage == 1) {
+    pressure_work_cycle_start_ = diagnostics.pressure_work;
+    anisotropic_pressure_work_cycle_start_ = diagnostics.anisotropic_pressure_work;
+  }
+  diagnostics.pressure_work =
+      gam0*diagnostics.pressure_work + gam1*pressure_work_cycle_start_
+      + beta_dt*pressure_power;
+  diagnostics.anisotropic_pressure_work =
+      gam0*diagnostics.anisotropic_pressure_work
+      + gam1*anisotropic_pressure_work_cycle_start_
+      + beta_dt*anisotropic_power;
+}
+
 void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos) {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int is = indcs.is, nx1 = indcs.nx1;

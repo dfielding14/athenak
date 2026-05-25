@@ -59,6 +59,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   auto &coord_ = pmy_pack->pcoord->coord_data;
   auto &w0_ = w0;
   auto &b0_ = bcc0;
+  const bool record_pwork_ = record_cgl_pressure_work;
 
   //--------------------------------------------------------------------------------------
   // i-direction
@@ -70,6 +71,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
   auto &e31_ = e3x1;
   auto &e21_ = e2x1;
   auto &bx_ = b0.x1f;
+  auto &pflx1_ = cgl_pflux.x1f;
 
   // set the loop limits for 1D/2D/3D problems
   int jl,ju,kl,ku;
@@ -127,6 +129,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     auto flx1 = flx1_;
     auto e31 = e31_;
     auto e21 = e21_;
+    auto pflx1 = pflx1_;
     if constexpr (rsolver_method_ == MHD_RSolver::advect) {
       Advect(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21);
     } else if constexpr (rsolver_method_ == MHD_RSolver::llf) {
@@ -135,7 +138,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
       HLLE(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21);
     } else if constexpr (rsolver_method_ == MHD_RSolver::hlle_cgl) {
       HLLE_CGL(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,
-               e21);
+               e21,record_pwork_,pflx1);
     } else if constexpr (rsolver_method_ == MHD_RSolver::hlld) {
       HLLD(member,eos,indcs,size,coord,m,k,j,il,iu,IVX,wl,wr,bl,br,bx,flx1,e31,e21);
     } else if constexpr (rsolver_method_ == MHD_RSolver::llf_sr) {
@@ -173,6 +176,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     auto &by_ = b0.x2f;
     auto &e12_ = e1x2;
     auto &e32_ = e3x2;
+    auto &pflx2_ = cgl_pflux.x2f;
 
     // set the loop limits for 2D/3D problems
     if (pmy_pack->pmesh->two_d) {
@@ -244,6 +248,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
           auto flx2 = flx2_;
           auto e12 = e12_;
           auto e32 = e32_;
+          auto pflx2 = pflx2_;
           if constexpr (rsolver_method_ == MHD_RSolver::advect) {
             Advect(member,eos,indcs,size,coord,
                     m,k,j,is-1,ie+1,IVY,wl,wr,bl,br,by,flx2,e12,e32);
@@ -255,7 +260,8 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
                     m,k,j,is-1,ie+1,IVY,wl,wr,bl,br,by,flx2,e12,e32);
           } else if constexpr (rsolver_method_ == MHD_RSolver::hlle_cgl) {
             HLLE_CGL(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVY,wl,wr,bl,br,by,flx2,e12,e32);
+                    m,k,j,is-1,ie+1,IVY,wl,wr,bl,br,by,flx2,e12,e32,
+                    record_pwork_,pflx2);
           } else if constexpr (rsolver_method_ == MHD_RSolver::hlld) {
             HLLD(member,eos,indcs,size,coord,
                     m,k,j,is-1,ie+1,IVY,wl,wr,bl,br,by,flx2,e12,e32);
@@ -301,6 +307,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
     auto &bz_ = b0.x3f;
     auto &e23_ = e2x3;
     auto &e13_ = e1x3;
+    auto &pflx3_ = cgl_pflux.x3f;
 
     // set the loop limits
     kl = ks-1, ku = ke+1;
@@ -367,6 +374,7 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
           auto flx3 = flx3_;
           auto e23 = e23_;
           auto e13 = e13_;
+          auto pflx3 = pflx3_;
           if constexpr (rsolver_method_ == MHD_RSolver::advect) {
             Advect(member,eos,indcs,size,coord,
                     m,k,j,is-1,ie+1,IVZ,wl,wr,bl,br,bz,flx3,e23,e13);
@@ -378,7 +386,8 @@ void MHD::CalculateFluxes(Driver *pdriver, int stage) {
                     m,k,j,is-1,ie+1,IVZ,wl,wr,bl,br,bz,flx3,e23,e13);
           } else if constexpr (rsolver_method_ == MHD_RSolver::hlle_cgl) {
             HLLE_CGL(member,eos,indcs,size,coord,
-                    m,k,j,is-1,ie+1,IVZ,wl,wr,bl,br,bz,flx3,e23,e13);
+                    m,k,j,is-1,ie+1,IVZ,wl,wr,bl,br,bz,flx3,e23,e13,
+                    record_pwork_,pflx3);
           } else if constexpr (rsolver_method_ == MHD_RSolver::hlld) {
             HLLD(member,eos,indcs,size,coord,
                     m,k,j,is-1,ie+1,IVZ,wl,wr,bl,br,bz,flx3,e23,e13);

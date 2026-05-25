@@ -329,6 +329,11 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     pdata->label[lf_begin+13] = "lf_qprwrk";
     pdata->label[lf_begin+14] = "lf_qpewrk";
     pdata->nhist += 15;
+    if (pmhd->record_cgl_pressure_work) {
+      pdata->label[lf_begin+15] = "lf_cpwrk";
+      pdata->label[lf_begin+16] = "lf_cawrk";
+      pdata->nhist += 2;
+    }
   }
 
   // capture class variabels for kernel
@@ -419,6 +424,10 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     pdata->hdata[lf_begin+12] = static_cast<Real>(diag.qperp_cap10);
     pdata->hdata[lf_begin+13] = diag.qpar_work;
     pdata->hdata[lf_begin+14] = diag.qperp_work;
+    if (pmhd->record_cgl_pressure_work) {
+      pdata->hdata[lf_begin+15] = diag.pressure_work;
+      pdata->hdata[lf_begin+16] = diag.anisotropic_pressure_work;
+    }
   }
 
   return;
