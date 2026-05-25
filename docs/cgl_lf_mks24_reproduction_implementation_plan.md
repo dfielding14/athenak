@@ -331,7 +331,7 @@ table such as:
 | F-028 | 2026-05-25 | Frontier G-008 sizing | Original reduced sizing evidence retained output sizes but no MPI-I/O phase timing because runtime reported `MPICH_MPIIO_TIMERS = 0` | `scripts/frontier/cgl_lf_frontier.py`, `g008_reduced_sizing_evidence.json`, jobs `4660445`/`4661434` and their retained analysis JSON | Medium | Add manifest-recorded opt-in `--mpiio-timers`, then execute reduced and standard-layout startup shared-binary/checkpoint sizing runs; treat startup timing only as storage/I/O reconnaissance | Utility self-test; jobs `4660445`/`4661434`; retained G010b/G011 analysis JSON | Implemented for storage/I/O sizing: timers captured, strict diagnostics remain clean, and G011 supplies a preliminary standard-layout storage envelope; representative runtime/node-hour costing remains open |
 | F-029 | 2026-05-25 | Production input audit after G011 | Defined standard/limiter decks relied on the default `single_file_per_rank = false`, while workflow manifests did not archive the output cadence/file-layout contract used for storage sizing | `inputs/cgl_lf_paper/`, `scripts/cgl_lf_workflow.py`, `analysis/g011_standard_layout_mpiio_sizing_evidence.json` | Medium | State shared binary/restart MPI-I/O explicitly in each guarded production deck and archive output layout/cadence choices in future workflow manifests | `test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio`; metadata probe over `paper-standard`/`paper-nulim` cases | Implemented for defined inputs and future manifests; any later layout/cadence revision requires renewed storage and I/O review |
 | F-030 | 2026-05-25 | Phase E reference-panel audit | MKS24 Figure 2(b) is an unstable-volume time history, but the checksum-qualified reference comparator admitted only snapshot-derived PDF/spectrum/transfer/alignment products | `scripts/analyze_cgl_lf_paper.py`, staged `MKS24.tex:508-512`, `docs/source/modules/cgl_landau_fluid_validation.md` | High | Export ordered threshold-volume history series, collapsing Athena's duplicate terminal row by retaining its last equal-time value, and admit them through `history.*` reference products | Expanded exact-curve regression in `test_cgl_lf_paper_snapshot_analysis_uses_both_pressures` for `history.unstable_fraction` | Implemented for comparison infrastructure; populated digitized MKS24 histories and target-run comparisons remain open |
-| F-031 | 2026-05-25 | Frontier G012 nonlinear hard-wall validation | The intended active beta10 hard-wall run with uncapped RKL2 STS reaches the parallel firehose limiter and then crosses the strict emergency bound in an LF split stage before its analysis window | G012 job `4662477` log and retained histories/snapshots under `/lustre/orion/ast207/proj-shared/dfielding/CGL/runs/qualification-3e3c206b-cpe2509/g012-reduced-active-beta10-t2-96x96x192-8gpu`; local `/tmp/cgl-hardwall-probe/run.log`; `src/mhd/mhd_sts.cpp` | Blocker | Retain strict checking, diagnose a validated timestep/splitting policy for limiter-active nonlinear runs, and rerun reduced GPU qualification before any runtime costing or production proposal | Local uncapped probe reproduces the strict abort; capped-policy probe in progress | Open; G012 consumed `0.188889` node-hours and runtime projection is invalid |
+| F-031 | 2026-05-25 | Frontier G012 nonlinear hard-wall validation | The intended active beta10 hard-wall run with uncapped RKL2 STS reaches the parallel firehose limiter and then crosses the strict emergency bound in an LF split stage before its analysis window | G012 job `4662477` log, retained histories/snapshots, and `analysis/g012_hardwall_strict_failure_evidence.json`; `analysis/f031_local_screen/f031_local_timestep_screen.json` under the G012 run; `src/mhd/mhd_sts.cpp` | Blocker | Retain strict checking, reject unvalidated RKL2 caps, diagnose an explicit-LF or revised splitting/integration policy for limiter-active nonlinear runs, and rerun reduced GPU qualification before any runtime costing or production proposal | Local reduced screen retains strict aborts for uncapped RKL2 and capped ratios `20`, `10`, `5`, and `2`; an explicit continuation from a clean `t = 1` checkpoint remains clean through `t = 1.6` | Open; no capped-STS replacement is qualified, G012 consumed `0.188889` node-hours, and runtime projection is invalid |
 | F-032 | 2026-05-25 | Workflow provenance after F-031 | Workflow manifests archived closure and output layout choices but omitted the STS timestep cap and integrator controls that now determine limiter-active qualification | `scripts/cgl_lf_workflow.py`, `inputs/cgl_lf_paper/`, F-031 | High | Archive time integrator, STS integrator, `sts_max_dt_ratio`, and CFL number in future workflow manifests; expose the current unqualified `-1.0` guarded-deck setting until F-031 selects a replacement | Extended `test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio` metadata assertions | Implemented for provenance; the accepted limiter-active timestep policy remains blocked on F-031 validation |
 
 ### Implemented Core Decision Log
@@ -359,7 +359,7 @@ table such as:
 | 2026-05-25 | Retain applied LF heat-flux transport as a signed RKL2 companion recurrence with fine-side ownership at coarse/fine interfaces, not as a total-energy closure term. | The applied capped face flux and STS coefficients are available in the LF update; on AMR interfaces the fine-side closure flux is the quantity restricted into the coarse update, so it owns the contraction without double counting. | Focused CPU/restart tests and fresh fixed-level bundles pass; fresh AMR workflow/analyzer report total work `6.511527338026022e-4`; Frontier Kokkos-Serial/MPI jobs `4659053`/`4659141` pass the AMR decomposition regression |
 | 2026-05-25 | Checkpoint every cumulative LF diagnostic history value, not only signed applied work. | Restart-spanning paper analysis differentiates face/cap/exposure counters; resetting their baseline after a valid restart silently corrupts intervals even when evolved fields agree. | Initial GPU G-005 exposed F-022; expanded CPU restart checks and corrected jobs `4653516`/`4653582` verify the correction |
 | 2026-05-25 | Treat G-008/G010b/G011 debug measurements as storage/I/O reconnaissance, not a paper-scale runtime cost model. | Startup-length runs expose elapsed time, memory, output volume, and checkpoint size; G011 adds exact standard-layout shared-file timing and size, but no retained run measures late-time timestep evolution or statistical-production duration. | G010b retains reduced timing and its excessive cadence warning; G011 job `4661434` retains standard-layout binary/restart net-write means of `1772.938`/`1252.430` MiB/s and the `328.915` GB eight-case raw storage envelope; runtime/node-hour costing remains open |
-| 2026-05-25 | Stop runtime costing after G012 and treat uncapped limiter-active STS as unqualified. | The intended hard-wall reduced nonlinear run and a local reduced twin both cross the strict firehose emergency bound in an LF split stage; a failed run cannot establish a production rate. | F-031 is open; job `4662477` consumes `0.188889` node-hours for a cumulative `0.273892`; a capped timestep/splitting policy must be validated locally and requalified on GPU before further costing |
+| 2026-05-25 | Stop runtime costing after G012 and treat limiter-active RKL2 STS as unqualified for the screened nonlinear state. | The intended hard-wall reduced nonlinear run and local reduced branches with unlimited STS or caps `20`, `10`, `5`, and `2` all cross the strict firehose emergency bound in an LF split stage; reducing the cap delays but does not resolve the observed failure. | F-031 is open; job `4662477` consumes `0.188889` node-hours for a cumulative `0.273892`; the retained local screen shows an explicit-LF continuation clean through `t = 1.6`, but an accepted integration policy and GPU requalification remain required before further costing |
 | 2026-05-25 | Archive the STS timestep/integrator contract in paper workflow manifests. | F-031 makes the split-step cap a qualification-critical model choice; a result cannot be interpreted or repeated if the manifest omits it. | F-032 metadata regression records current guarded-deck `sts_max_dt_ratio = -1.0`; replace that setting only after nonlinear validation |
 | 2026-05-25 | Implement CGL pressure mechanical work first as a snapshot-derived local decomposition with a transfer cross-check and sparse-time quadrature estimate. | Retained fields determine `p_perp div(u) - Delta p (b b : grad(u))` without changing the integrator; trapezoidal snapshot-time integration aids interval interpretation, but neither result is an applied budget identity. | F-023 synthetic sign/transfer/quadrature oracles and corrected `20260525-paper-convergence-rk-work-v1` products; exact production interval closure remains open |
 | 2026-05-25 | Admit paper reference curves only through an external checksum- and uncertainty-qualified manifest. | The staged arXiv source supplies panel PDFs but not numeric curve tables; separating source data from code and rejecting absent uncertainties permits later author-data or documented-digitization comparisons without overstating current evidence. | F-024 exact-curve and source-checksum-rejection regressions plus retained reduced-bundle rendering probe; actual MKS24 curve acquisition/digitization and production comparisons remain open |
@@ -2910,6 +2910,17 @@ Retained live evidence as of 2026-05-25:
   `t = 0.7503056885529213`, before the unretained failing intermediate state
   crosses the emergency bound. This is F-031 and invalidates runtime
   extrapolation from this run.
+- Follow-up local F-031 screening is retained beneath G012 in
+  `analysis/f031_local_screen/f031_local_timestep_screen.json` with SHA-256
+  `315be6b701dd96a3241d595a9b8563d0adada75b37327651cbacbb9e0c16fd37`.
+  At `32 x 32 x 64`, a fresh uncapped RKL2 reduced probe fails near
+  `t = 0.946`; RKL2 continuations using `sts_max_dt_ratio = 20`, `10`, `5`,
+  and `2` fail near `t = 1.038`, `1.146`, `1.197`, and `1.572`,
+  respectively, despite zero strict counters in their last retained history
+  rows. An explicit-LF continuation from the clean ratio-10 `t = 1.0`
+  checkpoint completes through `t = 1.6` with zero stored strict counters.
+  This diagnostic isolates a screened RKL2 split-path failure but is not a
+  from-`t = 0`, GPU, or paper-statistics qualification of explicit transport.
 - The retained ledger records `0.273892` node-hours used with no active
   reservation, including `0.188889` node-hours for failed G012. Paper-scale
   execution, reference-panel comparison, representative runtime/node-hour
@@ -2954,9 +2965,11 @@ qualification gates.
 G012 demonstrates that this performance measurement is presently blocked by
 correctness rather than by unavailable timing: the intended limiter-active
 nonlinear deck aborts on a strict split-stage emergency-bound crossing before
-its measurement window. Do not infer a production rate from that failed run,
-and do not launch a replacement sizing run until F-031 has a locally tested
-and GPU-qualified correction.
+its measurement window. The retained local F-031 screen rejects RKL2 caps
+through ratio `2` in the tested continuation and gives only partial explicit
+transport evidence. Do not infer a production rate from those runs, and do
+not launch a replacement sizing run until F-031 has a locally tested and
+GPU-qualified integration correction.
 
 ### Preliminary Defined-Matrix Storage Envelope (Not Authorization)
 
@@ -3814,10 +3827,13 @@ local implementation evidence. The next critical path is:
 3. **Resolve the nonlinear hard-wall timestep/splitting blocker.**
    G012 job `4662477` and a matching local uncapped reduced probe expose a
    strict firehose emergency-bound failure before the nonlinear measurement
-   window when the intended hard-wall limiter is active. Retain truthful
-   strict monitoring, establish a validated timestep or splitting policy
-   locally, archive it in workflow manifests and guarded inputs if it changes
-   the paper contract, and pass a corrected reduced Frontier GPU rerun before
+   window when the intended hard-wall limiter is active. The retained local
+   screen also rejects RKL2 timestep caps `20`, `10`, `5`, and `2` for the
+   screened continuation, while an explicit-LF continuation remains clean
+   only through its tested `t = 1.6` interval. Retain truthful strict
+   monitoring, establish a validated integration/splitting policy locally,
+   archive it in workflow manifests and guarded inputs if it changes the
+   paper contract, and pass a corrected reduced Frontier GPU rerun before
    using G011 as the file-volume portion of a costed production-campaign
    proposal. Scheduler-launched Frontier MPI-AMR decomposition evidence and
    the AMD/HIP launch-policy confirmation are retained; F-031 now blocks
