@@ -697,7 +697,12 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
     input_paths += sorted(
         PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_heat_flux_*.athinput")
     )
-    assert len(input_paths) == 14
+    input_paths += sorted(
+        PAPER_PRODUCTION_INPUT_ROOT.glob(
+            "cgl_lf_paper_scale_separation_*.athinput"
+        )
+    )
+    assert len(input_paths) == 16
     standard_input_names = {
         path.name
         for path in PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_standard_*.athinput")
@@ -718,6 +723,19 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         for case in workflow.workflow_cases("paper-heat-flux")
     }
     assert workflow_heat_flux_names == heat_flux_input_names
+    scale_separation_input_names = {
+        path.name
+        for path in PAPER_PRODUCTION_INPUT_ROOT.glob(
+            "cgl_lf_paper_scale_separation_*.athinput"
+        )
+    }
+    workflow_scale_separation_names = {
+        Path(case.input_path).name
+        for case in workflow.workflow_cases("paper-scale-separation")
+    }
+    assert workflow_scale_separation_names == scale_separation_input_names | {
+        "cgl_lf_paper_standard_active_alfvenic_beta10.athinput"
+    }
     hardwall_paths = {
         "cgl_lf_paper_standard_active_alfvenic_beta1.athinput",
         "cgl_lf_paper_standard_active_alfvenic_beta10.athinput",
@@ -731,6 +749,8 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         "cgl_lf_paper_nulim_beta100_hardwall.athinput",
         "cgl_lf_paper_heat_flux_beta10_strong.athinput",
         "cgl_lf_paper_heat_flux_beta10_weak.athinput",
+        "cgl_lf_paper_scale_separation_beta10_nperp96.athinput",
+        "cgl_lf_paper_scale_separation_beta10_nperp384.athinput",
     }
     for input_path in input_paths:
         source = input_path.read_text()
@@ -751,6 +771,35 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         assert choices["output3_single_file_per_rank"] == "false"
         expected_hardwall = "true" if input_path.name in hardwall_paths else "false"
         assert choices["limiter_hardwall"] == expected_hardwall
+    scale_resolutions = {
+        "cgl_lf_paper_scale_separation_beta10_nperp96.athinput": (
+            "96", "96", "192"
+        ),
+        "cgl_lf_paper_scale_separation_beta10_nperp384.athinput": (
+            "384", "384", "768"
+        ),
+    }
+    for name, expected in scale_resolutions.items():
+        source = (PAPER_PRODUCTION_INPUT_ROOT / name).read_text()
+        choices = workflow.model_choices(source, [])
+        assert (
+            choices["mesh_nx1"], choices["mesh_nx2"], choices["mesh_nx3"]
+        ) == expected
+    denied = subprocess.run(
+        [
+            "python3",
+            str(PAPER_WORKFLOW_PATH),
+            "paper-scale-separation",
+            "--output-dir",
+            "cgl_ci_denied_scale_separation",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert denied.returncode != 0
+    assert "--authorize-paper-execution" in denied.stderr
+    assert not Path("cgl_ci_denied_scale_separation").exists()
 
 
 def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():

@@ -472,6 +472,22 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
                 prefix + "cgl_lf_paper_standard_passive_random_beta100.athinput",
             ),
         ]
+    if workflow == "paper-scale-separation":
+        prefix = "inputs/cgl_lf_paper/"
+        return [
+            CaseSpec(
+                "paper_scale_separation_active_alfvenic_beta10_nperp96",
+                prefix + "cgl_lf_paper_scale_separation_beta10_nperp96.athinput",
+            ),
+            CaseSpec(
+                "paper_standard_active_alfvenic_beta10",
+                prefix + "cgl_lf_paper_standard_active_alfvenic_beta10.athinput",
+            ),
+            CaseSpec(
+                "paper_scale_separation_active_alfvenic_beta10_nperp384",
+                prefix + "cgl_lf_paper_scale_separation_beta10_nperp384.athinput",
+            ),
+        ]
     if workflow == "paper-convergence":
         source = (
             "inputs/cgl_lf_paper/"
@@ -1471,7 +1487,10 @@ def execute_workflow(args: argparse.Namespace, paths: RunPaths) -> int:
     """Execute one AthenaK workflow and write a result bundle."""
 
     if (
-        args.workflow in ("paper-standard", "paper-nulim", "paper-heat-flux")
+        args.workflow in (
+            "paper-standard", "paper-nulim", "paper-heat-flux",
+            "paper-scale-separation",
+        )
         and not args.authorize_paper_execution
     ):
         raise ValueError(
@@ -1588,6 +1607,7 @@ def parser() -> argparse.ArgumentParser:
         choices=(
             "quick", "compare", "amr", "paper-smoke", "paper-standard",
             "paper-convergence", "paper-nulim", "paper-heat-flux",
+            "paper-scale-separation",
             "paper-analyze", "paper-summary", "accuracy", "full", "plot",
             "summarize",
         ),
@@ -1631,7 +1651,10 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument(
         "--authorize-paper-execution",
         action="store_true",
-        help="Permit expensive paper-standard, paper-nulim, or heat-flux simulations.",
+        help=(
+            "Permit expensive paper-standard, paper-nulim, heat-flux, or "
+            "scale-separation simulations."
+        ),
     )
     return command
 
@@ -1642,7 +1665,10 @@ def main() -> int:
     args = parser().parse_args()
     try:
         if (
-            args.workflow in ("paper-standard", "paper-nulim", "paper-heat-flux")
+            args.workflow in (
+                "paper-standard", "paper-nulim", "paper-heat-flux",
+                "paper-scale-separation",
+            )
             and not args.authorize_paper_execution
         ):
             raise ValueError(

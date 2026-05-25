@@ -114,8 +114,8 @@ nonlinear startup, snapshot output, and analysis/plot plumbing. It is too
 short and too coarse for steady-state convergence or direct MKS24 figure
 comparison claims.
 
-Paper-standard and limiter-frequency workflow modes are defined for approved
-production campaigns, not local validation:
+Paper-scale workflow modes are defined for approved production campaigns,
+not local validation:
 
 ```bash
 python3 scripts/cgl_lf_workflow.py paper-standard \
@@ -124,18 +124,24 @@ python3 scripts/cgl_lf_workflow.py paper-nulim \
   --authorize-paper-execution --output-dir /path/to/archive/run
 python3 scripts/cgl_lf_workflow.py paper-heat-flux \
   --authorize-paper-execution --output-dir /path/to/archive/run
+python3 scripts/cgl_lf_workflow.py paper-scale-separation \
+  --authorize-paper-execution --output-dir /path/to/archive/run
 ```
 
-Their inputs use `192x192x384`, `tlim = 10`, full-field binary snapshots,
-checkpoints, and the `t = [8,10]` analysis window. Without
+The standard, limiter, and heat-flux inputs use `192x192x384`; the
+scale-separation workflow adds `96x96x192` and `384x384x768` around its
+reused standard-resolution case. All use `tlim = 10`, full-field binary
+snapshots, checkpoints, and the `t = [8,10]` analysis window. Without
 `--authorize-paper-execution` the workflow rejects these expensive modes
 before creating a run bundle. The nine `paper-standard` definitions include
 the eight active/passive, Alfvenic/random beta-10/beta-100 histories plotted
 in MKS24 Figure 2(b), plus the active Alfvenic beta-1 case. The two
 `paper-heat-flux` definitions add the nonnominal active beta-10 Figure 12
 heat-flux cases; the nominal active and passive comparisons reuse standard
-definitions. Defining these inputs does not constitute paper-standard
-execution or a reproduction result.
+definitions. The two `paper-scale-separation` definitions add the nonstandard
+active Alfvenic beta-10 Figure 11 resolutions; the `n_perp = 192` comparison
+reuses its standard definition. Defining these inputs does not constitute
+paper-standard execution or a reproduction result.
 In CGL primitive snapshots, legacy `eint` is `p_parallel` and the dedicated
 `p_perp` output supplies the perpendicular pressure required for paper
 anisotropy analysis.
@@ -181,8 +187,9 @@ uncertainties, computes uncertainty-normalized residuals for supported
 snapshot products and threshold-volume history series, and renders
 `paper_reference_comparisons.pdf`. Figure 2(b) vector-curve extraction is
 available below, together with dimensionless Figure 7 lower-panel transfer,
-Figure 9 and Figure 12 alignment, and Figure 13(b),(d) limiter curves. Dimensional
-Figure 7 upper spectra, Figure 12 lower spectra, and Figure 13(a),(c) curves
+Figure 9, Figure 11 lower-panel, and Figure 12 alignment, and Figure 13(b),(d)
+limiter curves. Dimensional Figure 7 upper spectra, Figure 11 upper spectra,
+Figure 12 lower spectra, and Figure 13(a),(c) curves
 remain excluded because the paper's
 reported code-unit pressure scale is not yet transformed to the AthenaK
 `v_A = 1` convention.
@@ -332,6 +339,22 @@ This extractor maps active/passive Alfvenic/random beta-10/beta-100 cases to
 omits vertices clipped at the horizontal plot boundaries, and records its
 recommended alignment shells for `paper-analyze --alignment-shells`.
 
+For Figure 11, extract the three scale-separation lower-panel peak-alignment
+paths from the pinned source PDF:
+
+```bash
+python3 scripts/digitize_cgl_lf_mks24_fig11.py \
+  /path/to/arXiv-2405.02418v2/source/fig11.pdf \
+  /path/to/arXiv-2405.02418v2/digitized_fig11_v1
+```
+
+This extractor maps active Alfvenic beta-10 cases at `n_perp = 96`, `192`,
+and `384` to `alignment_peak.cos_theta`, using absolute `0.005` ordinate
+uncertainty. It omits horizontal-boundary-clipped vertices and records the
+alignment shells required by `paper-analyze`. The upper-panel kinetic spectra
+are not emitted because their dimensionful scale is excluded pending the
+paper-to-AthenaK conversion.
+
 For Figure 12, extract the alignment-peak paths from the pinned source PDF:
 
 ```bash
@@ -447,7 +470,8 @@ For real runs the utility requires all source, executable, input, and output
 locations beneath `/lustre/orion/ast207/proj-shared/dfielding/CGL`, limits
 debug walltime to two hours, reserves against the 1000 node-hour testing
 budget, checks that no other debug job is queued, and rejects
-`paper-standard`, `paper-nulim`, and `paper-heat-flux` inputs.
+`paper-standard`, `paper-nulim`, `paper-heat-flux`, and
+`paper-scale-separation` inputs.
 Paper-production simulations must not be run through this debug-only workflow.
 
 ## Diagnostics

@@ -61,7 +61,10 @@ normalization. MKS24's stated
 `T_total ~= E_K (2 pi u_rms/L_perp)` transfer normalization is now
 implemented, so dimensionless Figure 7 lower-panel and Figure 13(d) transfer
 ratios join the Figure 13(b) `beta Delta` PDFs as vector-extracted curves with
-checksum provenance. The
+checksum provenance. Two guarded Figure 11 scale-separation definitions now
+cover `n_perp = 96` and `384` around the existing standard `n_perp = 192`
+case, and a checksum-bound extractor populates its dimensionless lower-panel
+alignment curves while withholding its dimensional upper spectra. The
 production interpretation of the applied local-work ledgers, Frontier
 production execution, and production-run phases remain
 open. A tracked Frontier debug-campaign
@@ -201,9 +204,9 @@ test or run evidence.
 | CPU numerical accuracy | Convergence, asymptotic, cap, directional, restart, MPI/AMR checks | Yes | Partial 2026-05-25; archived `accuracy-v2` bundle covers N-001 through N-007 locally, the AMR workflow passed, and the full CPU suite passed (`218 passed, 15 skipped`); focused CGL tests now pass (`30 passed`) with corrected RK forcing work, restartable AMR-corrected applied CGL pressure work, and the F-033 algebraic hard-wall policy; Frontier Kokkos-Serial/MPI jobs `4659053`/`4659141` pass the one-rank/four-rank AMR oracle at `rtol = atol = 1.0e-12`, although direct invocation in the local shell remains unavailable because it lacks `mpirun` |
 | Frontier GPU numerical equivalence | CPU/GPU comparison suite, MPI/GPU restart checks, strict diagnostics | Yes for Frontier use | Partial 2026-05-25; immutable HIP/MPI builds archived; G-001 through G-007 pass their retained reduced gates; post-F-026 jobs `4658072`/`4658163` pass restart comparison for `lf_cpwrk`/`lf_cawrk`, `4658191`/`4658283` pass one-rank/four-rank GPU AMR comparison, policy-confirmation job `4659663` is identical to its pre-policy reference, and F-033 corrected nonlinear job G013 (`4673404`) passes through `t = 2.0` with zero strict safety counters; production-scale execution remains open |
 | Paper pgen and forcing fidelity | Input/pgen review, forcing metadata, restartable reduced smoke | Yes for MKS24 claims | Partial 2026-05-25; active/passive/random reduced smoke, forcing restart, OU cadence, multi-cycle RK-companion source-work checks, passive flow-decoupling checks, and Frontier G-007 reduced-paper matrix passed; paper-grade statistical calibration open |
-| Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Partial 2026-05-25; reduced histories, restartable RK-integrated applied forcing work/global active residual, RKL2-applied heat-flux contractions with fine-side AMR ownership, AMR-corrected RK-applied total/anisotropic CGL pressure-work ledgers, operator-face cap counters, windowed snapshot PDF/spectral/transfer/alignment/local-strain products, MKS24-normalized transfer and alignment-peak curve comparisons, deduplicated threshold-volume history curves, manifest-qualified proxies and cadence-limited estimates, generic figures, checksum/uncertainty-qualified reference-curve comparison plumbing, Figure 2(b) histories, Figure 7 lower-panel transfer ratios, Figure 9 and Figure 12 alignment curves, and Figure 13(b),(d) dimensionless curves are implemented; dimensional-panel unit conversion, standard-run comparison, and remaining panel references remain open |
-| Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Nine guarded `paper-standard`, three `paper-nulim`, and two `paper-heat-flux` definitions exist, with Figure 2(b) series and Figure 12 parameter coverage corrected 2026-05-25; no paper-scale runs or scientific figure comparisons executed |
-| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-25; immutable HIP/MPI builds through revision `9e1986df` and earlier Kokkos-Serial/MPI evidence are archived; sequential debug validation through G011 standard-layout startup MPI-I/O sizing, failed G012 finite-rate validation, and passed G013 F-033 corrected nonlinear validation is retained and recorded (`0.851670` node-hours total, no active reservation); a non-authorizing thirteen-unique-run cost/storage proposal is documented below and requires user/queue approval plus measured production validation |
+| Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Partial 2026-05-25; reduced histories, restartable RK-integrated applied forcing work/global active residual, RKL2-applied heat-flux contractions with fine-side AMR ownership, AMR-corrected RK-applied total/anisotropic CGL pressure-work ledgers, operator-face cap counters, windowed snapshot PDF/spectral/transfer/alignment/local-strain products, MKS24-normalized transfer and alignment-peak curve comparisons, deduplicated threshold-volume history curves, manifest-qualified proxies and cadence-limited estimates, generic figures, checksum/uncertainty-qualified reference-curve comparison plumbing, Figure 2(b) histories, Figure 7 lower-panel transfer ratios, Figure 9, Figure 11 lower-panel, and Figure 12 alignment curves, and Figure 13(b),(d) dimensionless curves are implemented; dimensional-panel unit conversion, standard-run comparison, and remaining panel references remain open |
+| Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Nine guarded `paper-standard`, three `paper-nulim`, two `paper-heat-flux`, and two additional `paper-scale-separation` input definitions exist, with Figure 2(b), Figure 11, and Figure 12 case coverage corrected 2026-05-25; no paper-scale runs or scientific figure comparisons executed |
+| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-25; immutable HIP/MPI builds through revision `9e1986df` and earlier Kokkos-Serial/MPI evidence are archived; sequential debug validation through G011 standard-layout startup MPI-I/O sizing, failed G012 finite-rate validation, and passed G013 F-033 corrected nonlinear validation is retained and recorded (`0.851670` node-hours total, no active reservation); a non-authorizing fifteen-unique-run cost/storage proposal including estimated Figure 11 scale-separation increments is documented below and requires user/queue approval plus measured production validation |
 | User documentation | Sphinx build and accurately scoped runbook | Yes | Implemented for current functionality 2026-05-25; Sphinx warnings-as-errors and repository style suite pass in an isolated validation environment; future campaign results must still be documented when executed |
 | Performance suitability | Representative timing/memory/I/O evidence; no uninvestigated prohibitive bottleneck | Yes for production use | Partial 2026-05-25; G-008 records reduced debug-scale evidence, G010b records reduced shared-MPI-I/O timing, G011 measures startup-only standard-layout memory/file size, and corrected nonlinear G013 reaches `t = 2.0` in `2080` allocated seconds with retained MPI-I/O timing; a conservative scaling proposal is documented, but measured standard-run runtime and approved production execution remain open |
 
@@ -227,7 +230,7 @@ authorization to execute paper-production jobs.
 | Local operator and reduced-workflow implementation | Supported for the exercised local scope only | Full CPU suite (`218 passed, 15 skipped`), focused CGL suite (`30 passed`), retained `accuracy-v2`, `20260525-paper-smoke-pressure-work-v1`, `20260525-paper-convergence-pressure-work-v1`, and `20260525-amr-pressure-work-v1` bundles, F-018 through F-026 regression evidence, F-033 local exact-state hard-wall evidence, and scheduler-launched MPI CPU AMR jobs `4659053`/`4659141` | Production/statistical comparison gates remain open |
 | Validated on Frontier GPU hardware | Supported for the archived reduced qualification cases through F-033 | Immutable HIP/MPI builds; G-001 through G-007 strict/restart/decomposition/reduced-paper records; post-F-026 restart jobs `4658072`/`4658163`, GPU AMR jobs `4658191`/`4658283`, managed-policy confirmation job `4659663`, G010b/G011 I/O evidence, and G013 corrected nonlinear hard-wall job `4673404` | Paper-scale execution, measured standard runtime, and long-time statistical qualification remain open; G012 remains the retained failure of the superseded finite-rate hard-wall interpretation |
 | Production ready for supported CGL-LF use | Not established | Debug policy/accounting tooling, reduced GPU qualification including F-033 G013, MPI CPU AMR evidence, shared-MPI-I/O measurements, a reviewable scaling/storage proposal, and RK/AMR-consistent applied hyperbolic pressure traction histories exist | Measured representative standard runtime, approval of an appropriate production submission, and production/statistical qualification remain required |
-| MKS24 reproduction complete | Not established | Guarded standard/limiter/heat-flux input matrices, paper analysis products, checksum/uncertainty-qualified reference-curve comparison interface, populated Figure 2(b) histories, dimensionless Figure 7 transfer ratios, Figure 9 and Figure 12 alignment curves, and Figure 13(b),(d) curves exist | Paper-to-AthenaK transforms for dimensional panels, other remaining panel reference data, long-time statistical calibration, authorized standard/limiter/heat-flux runs, quantitative panel comparisons, and archived scientific interpretation remain required |
+| MKS24 reproduction complete | Not established | Guarded standard/limiter/heat-flux/scale-separation input matrices, paper analysis products, checksum/uncertainty-qualified reference-curve comparison interface, populated Figure 2(b) histories, dimensionless Figure 7 transfer ratios, Figure 9, Figure 11 lower-panel, and Figure 12 alignment curves, and Figure 13(b),(d) curves exist | Paper-to-AthenaK transforms for dimensional panels, other remaining panel reference data, long-time statistical calibration, authorized standard/limiter/heat-flux/scale-separation runs, quantitative panel comparisons, and archived scientific interpretation remain required |
 
 The final audit specifically rejects two tempting overclaims:
 
@@ -332,7 +335,7 @@ table such as:
 | F-003 | 2026-05-24 | Phase B | Hard-bound diagnostic depended on backup correction enablement | `src/diffusion/cgl_landau_fluid.cpp`, focused CPU run | High | Count emergency bounds independently of correction policy | `test_cgl_lf_strict_hard_bound_is_reported_without_backup_correction` | Implemented; focused CPU passed |
 | F-004 | 2026-05-24 | Phase D | Built-in turbulence forcing ignored documented seed selection, mapped type-1 parallel/perpendicular axes inconsistently with `B0 || z`, and added momentum without nonrelativistic energy work | `src/srcterms/turb_driver.cpp`, `src/utils/random.hpp`, `inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.athinput`, `paper-smoke` bundle | Blocker | Add restartable `rseed`, define type 1 as `z`-guide-field Alfvenic forcing, add RK-consistent ideal/CGL source work, archive forcing metadata | `test_cgl_lf_paper_active_alfvenic_smoke_injects_energy_without_parallel_force`, seed and forcing-restart tests | Implemented for reduced active smoke mechanics; focused CPU passed |
 | F-005 | 2026-05-24 | Phase D | Existing `mhd/passive=true` removed anisotropic terms from central momentum fluxes but still used CGL pressure-dependent HLLE and CFL signal speeds, allowing diagnostic anisotropy to alter MHD-like flow | `src/mhd/rsolvers/hlle_cgl.hpp`, `src/mhd/mhd_newdt.cpp`, `src/pgen/tests/cgl_lf_paper.cpp`, `inputs/cgl_lf_paper/cgl_lf_paper_smoke_passive_beta10.athinput` | Blocker | Use isothermal-MHD signal speeds for passive fluxing/timestep selection; require explicit matching passive pgen/EOS selection; add reduced flow-decoupling regression and smoke deck | `test_cgl_lf_paper_passive_delta_has_no_anisotropic_flow_feedback`, `test_cgl_lf_paper_passive_delta_must_match_eos_mode` | Implemented; focused CPU passed; long-time active/passive statistics remain open |
-| F-006 | 2026-05-24 | Phase D | The plan named a local MKS24 source/figure bundle that is absent from the live worktree and should not be copied into the code branch without separately establishing redistribution permission | official arXiv `2405.02418v2` source, `scripts/stage_cgl_lf_mks24_reference.py`, staged `build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2/manifest.json` | High | Stage the pinned official source in ignored result storage, safely extract it, record archive/file SHA-256 checksums, and attach checksum provenance during paper analysis | Staging utility executed with archive SHA-256 `6b58e1ed01585c9820659a01b7549a08a09b7ea3fcbb28dbb96205259e82da8e`; `paper-convergence-v1/analysis/reference_provenance.json` | Implemented for source provenance; F-034/F-036/F-037 populate Figures 2(b), 12, and 13(a)-(b), while remaining panel curves/comparisons remain open |
+| F-006 | 2026-05-24 | Phase D | The plan named a local MKS24 source/figure bundle that is absent from the live worktree and should not be copied into the code branch without separately establishing redistribution permission | official arXiv `2405.02418v2` source, `scripts/stage_cgl_lf_mks24_reference.py`, staged `build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2/manifest.json` | High | Stage the pinned official source in ignored result storage, safely extract it, record archive/file SHA-256 checksums, and attach checksum provenance during paper analysis | Staging utility executed with archive SHA-256 `6b58e1ed01585c9820659a01b7549a08a09b7ea3fcbb28dbb96205259e82da8e`; `paper-convergence-v1/analysis/reference_provenance.json` | Implemented for source provenance; F-034/F-036/F-038/F-039/F-040/F-041 populate currently admitted reference-safe curves, while remaining panel curves/comparisons remain open |
 | F-007 | 2026-05-24 | Phase D | `AddForcing` was chained after `InitializeModes` before the integrator and inserted before each RK update; every call advanced and applied the OU force with the full mesh timestep, so an `rk2` cycle invoked three full-duration pushes | `src/srcterms/turb_driver.cpp`, `src/mesh/meshblock_pack.cpp`, `src/driver/driver.cpp`, `docs/source/modules/srcterms.md` | Blocker | Advance OU state once per cycle in `UpdateForcing`; apply a fixed acceleration after each `RKUpdate` with `beta dt` primitive-state work and energy-preserving nonrelativistic mean-momentum projection | `test_cgl_lf_paper_forcing_ou_state_advances_once_per_cycle`, `test_cgl_lf_paper_active_alfvenic_smoke_injects_energy_without_parallel_force` | Implemented; focused CPU passed; long-time paper calibration remains open |
 | F-008 | 2026-05-24 | Phase D | Reduced paper forcing selected integer-index shells and type-1 anisotropic exponents; the random override also inherited the `5/3` isotropic default instead of the documented physical `abs(k)` shell with `k^-2` power | staged `MKS24.tex:463-469`, `src/srcterms/turb_driver.cpp`, `inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.athinput`, `scripts/cgl_lf_workflow.py` | Blocker | Add opt-in physical-shell/common-spectrum forcing controls, select them explicitly in paper inputs, archive them in manifests, and complete valid type-1 phase coefficients | `test_cgl_lf_paper_physical_forcing_shell_requires_positive_unit` plus `paper-smoke` execution | Implemented for reduced forcing contract; long-time spectral calibration remains open |
 | F-009 | 2026-05-24 | Phase E | CGL primitive `mhd_w_bcc` snapshots exported `p_parallel` through the legacy `eint` field but omitted `p_perp`, making pressure-anisotropy snapshot products impossible | `src/outputs/basetype_output.cpp`, binary analysis probe, standard `bin` snapshot decks | Blocker | Retain legacy `eint = p_parallel` and append explicit `p_perp` for CGL primitive outputs | `test_cgl_lf_paper_snapshot_analysis_uses_both_pressures` validates binary output and analyzer products | Implemented; focused CPU and binary analyzer regression passed |
@@ -350,7 +353,7 @@ table such as:
 | F-021 | 2026-05-25 | Frontier G-001/G-007 | Live Slurm logs reported `MPICH_GPU_SUPPORT_ENABLED = 1` but `MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED = 0` although the generated script exported the latter as `1` | `/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_g001_g002_active_smoke_8gpu.4653415.log`, `/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_g006b_active_smoke_16blocks_16gpu_2node.4653601.log`, `/lustre/orion/ast207/proj-shared/dfielding/CGL/logs/slurm/cgl_g007b_paper_smoke_active_random_1gpu.4653770.log` | Medium | Treat runtime-reported behavior as authoritative, inspect the active stack and application memory space, and stop requesting managed-MPI support when it is not part of the model's memory contract | Installed Cray MPICH 9.0.1 `intro_mpi` documentation; AthenaK/Kokkos memory-space trace; job `4659663` and `analysis/f021_managed_policy_comparison.json` | Implemented and confirmed live: the AMD/HIP launch path requests managed-MPI support `0`; job `4659663` reports the requested values at runtime and is identical to job `4658072` across retained histories and state/forcing tabs |
 | F-022 | 2026-05-25 | Frontier G-005 | The first GPU restart continuation restored physical fields and signed applied LF work but reset cumulative LF stage/face counters, making restart-spanning cap/exposure analysis discontinuous | `g005b-restart-resumed-1gpu/analysis/g005_restart_comparison.json`, `src/outputs/restart.cpp`, `src/pgen/pgen.cpp` | High | Checkpoint and restore all cumulative LF history diagnostics using the established shared-MPI rank-zero baseline rule, then rerun restart qualification after subsequent schema additions | Expanded CPU restart assertions for ordinary, finite-collision, and paper-forcing restarts; repeated Frontier G-005 | Implemented; corrected Frontier jobs `4653516`/`4653582` pass the original 15 LF endpoint comparisons, and post-F-026 jobs `4658072`/`4658163` pass restart comparison for added `lf_cpwrk`/`lf_cawrk` with differences below `1.2e-22` at `rtol = atol = 1.0e-12` |
 | F-023 | 2026-05-25 | Phase E | The analyzer retained anisotropic-pressure transfer and heat-flux products but did not expose the configuration-space CGL pressure mechanical-work split required to interpret local anisotropic stress | `scripts/analyze_cgl_lf_paper.py`, `scripts/plot_cgl_lf_paper.py`, `20260525-paper-convergence-face-work-v1` analysis bundle | High | Add snapshot-derived `integral[p_perp div(u) - Delta p (b b : grad(u))] dV`, compare its anisotropic term with direct MKS24 transfer, label passive diagnostics without asserting applied feedback, and retain explicitly cadence-limited snapshot quadrature estimates | Synthetic correlated-pressure/strain transfer and constant-power quadrature checks through `test_cgl_lf_paper_snapshot_analysis_uses_both_pressures`; regenerated retained convergence bundle and pressure-work figure | Implemented for snapshot analysis; applied operator ledger added under F-026, while reference comparison and production qualification remain open |
-| F-024 | 2026-05-25 | Phase E | The staged official source provides rendered panel PDFs rather than numeric curves, and the analyzer lacked a fail-closed contract for separately obtained or digitized reference data | `scripts/analyze_cgl_lf_paper.py`, `scripts/plot_cgl_lf_paper.py`, `scripts/cgl_lf_workflow.py` | High | Add optional reference-curve manifest ingestion requiring provenance, source/data SHA-256 values, and positive pointwise uncertainties; compare mapped products and render residual-qualified overlays | Generated exact-curve and wrong-source-checksum regressions in `test_cgl_lf_paper_snapshot_analysis_uses_both_pressures`; retained-bundle workflow rendering probe | Implemented for comparison infrastructure; F-034 and F-038 provide currently admitted dimensionless/reference-safe panel curves, while dimensional panels and production comparison remain open |
+| F-024 | 2026-05-25 | Phase E | The staged official source provides rendered panel PDFs rather than numeric curves, and the analyzer lacked a fail-closed contract for separately obtained or digitized reference data | `scripts/analyze_cgl_lf_paper.py`, `scripts/plot_cgl_lf_paper.py`, `scripts/cgl_lf_workflow.py` | High | Add optional reference-curve manifest ingestion requiring provenance, source/data SHA-256 values, and positive pointwise uncertainties; compare mapped products and render residual-qualified overlays | Generated exact-curve and wrong-source-checksum regressions in `test_cgl_lf_paper_snapshot_analysis_uses_both_pressures`; retained-bundle workflow rendering probe | Implemented for comparison infrastructure; F-034/F-038/F-039/F-040/F-041 provide currently admitted reference-safe panel curves, while dimensional panels and production comparison remain open |
 | F-025 | 2026-05-25 | Phase E | `force_work` directly summed each explicit-RK source-call energy change even though the final RK state reweights earlier stage source increments; retained multi-cycle reduced bundles consequently reported false active global residuals while passing | `src/srcterms/turb_driver.cpp`, `scripts/cgl_lf_workflow.py`, `20260525-paper-convergence-face-work-v1` manifest | Blocker | Advance cumulative forcing work as a companion RK state using the cycle baseline and `gam0`/`gam1`, and reject active reduced cases whose energy/work relative residual is at least `1.0e-8` | `test_cgl_lf_paper_multicycle_forcing_work_follows_rk_state_recurrence`; regenerated `20260525-paper-smoke-rk-work-v1` and `20260525-paper-convergence-rk-work-v1` bundles | Implemented locally; focused CPU suite passes (`27 passed`), all six corrected convergence cases pass with maximum relative residual `5.141362829086986e-10` |
 | F-026 | 2026-05-25 | Phase E | Snapshot-reconstructed pressure work could not identify the pressure traction actually applied by hyperbolic CGL momentum fluxes, especially after FOFC replacement and AMR flux correction | `src/mhd/rsolvers/hlle_cgl.hpp`, `src/mhd/mhd_tasks.cpp`, `src/mhd/mhd_fofc.cpp`, `src/outputs/history.cpp`, `scripts/analyze_cgl_lf_paper.py` | Blocker | Retain total and anisotropic CGL pressure traction in the numerical flux, apply the same AMR flux correction as momentum, contract corrected divergence with stage velocity, and advance `lf_cpwrk`/`lf_cawrk` by the explicit-RK companion recurrence; retain zero applied work for passive-Delta | Focused CPU AMR/restart/passive checks, dedicated CGL FOFC traction check, expanded MPI AMR decomposition oracle, regenerated local pressure-work bundles, and retained Frontier post-F-026 GPU/CPU evidence | Implemented for reduced qualification: local focused CGL CPU (`27 passed`) and style (`2 passed`) succeed; Frontier GPU restart jobs `4658072`/`4658163` and GPU AMR jobs `4658191`/`4658283` pass at `rtol = atol = 1.0e-12`; MPI CPU AMR jobs `4659053`/`4659141` also pass; production interpretation remains open |
 | F-027 | 2026-05-25 | Frontier MPI CPU rerun | The debug preparation utility unconditionally generated GPU-aware MPICH exports and GPU binding; launching the intentionally non-GTL-linked Kokkos-Serial MPI executable consequently aborted before simulation with `MPIDI_CRAY_init: GPU_SUPPORT_ENABLED is requested, but GTL library is not linked` | `scripts/frontier/cgl_lf_frontier.py`, job `4658519` log and manifest | High | Add explicit `--execution-target gpu/cpu` generation; retain the existing GPU-aware path by default, while the CPU path omits GPU Slurm/srun binding and forces `MPICH_GPU_SUPPORT_ENABLED=0` | Expanded `cgl_lf_frontier.py self-test` and repeated scheduler-launched MPI CPU AMR comparison | Implemented and confirmed live: corrected jobs `4659053`/`4659141` run with `MPICH_GPU_SUPPORT_ENABLED=0`, refine cleanly, retain nonzero pressure work, and pass the one-rank/four-rank AMR oracle at `rtol = atol = 1.0e-12` |
@@ -367,6 +370,7 @@ table such as:
 | F-038 | 2026-05-25 | Paper/reference normalization audit | MKS24 states `p0 = 100` in code units for its beta-100 Figure 13 runs and plots panel (c) against `bhat bhat : grad(u) / <B^2>`, while AthenaK's internally consistent `B0 = 1`, `v_A = 1` beta-100 decks use `p0 = 50`; an absolute ordinate transform for dimensional panels is not established | pinned `source/MKS24.tex:467,687`, `source/fig13{a,c,d}.pdf`, `src/pgen/tests/cgl_lf_paper.cpp:167-174`, `scripts/digitize_cgl_lf_mks24_fig{12,13}.py`; ignored `digitized_fig12_v2/curves.json` SHA-256 `8bc302c082ed971eda657f5aac283fd423ab182dbd676faa7da72ca3436a0b9c` and `digitized_fig13_v2/curves.json` SHA-256 `816013b3e4af9f5755fde5d64228721c86f14206a69210e3b2c38db35c1aa12e` | Blocker | Do not alter normalized decks without donor-state evidence; emit only dimensionless Figure 12 alignment and Figure 13(b) `beta Delta` comparisons, and exclude dimensional spectra/strain/transfer until their transform and `T_total` are qualified | Regenerated checksum-bound `v2` manifests; extractor compilation/style and manifest-ingestion validation | Implemented for fail-closed admission of dimensional panels; F-039 subsequently admits dimensionless normalized-transfer ratios |
 | F-039 | 2026-05-25 | Dimensionless transfer-reference audit | MKS24 defines `T_Delta p/T_total` with `T_total ~= E_K (2 pi u_rms/L_perp)` in its diagnostics section, but the analyzer retained only unnormalized transfer, preventing direct admission of the dimensionless Figure 7 lower panel and Figure 13(d) | pinned `source/MKS24.tex:488-494,591`, `source/fig7.pdf` SHA-256 `5411da17391d19fceb26f617f91b4fb1153c7638ccca8afee6c8e0d013651afa`, `source/fig13d.pdf` SHA-256 `bf1c063fa5a54c2dbbe9dce417490b5bf821fcd2e1cb1926d78c923b90387a24`, `scripts/analyze_cgl_lf_paper.py`; ignored `digitized_fig7_v1/curves.json` SHA-256 `7c2f02bca4725674b9e77292a7f33c40de211bdcd48fe2e29a4b2e8fe81c1d09` and `digitized_fig13_v3/curves.json` SHA-256 `78f084d55d851561bf7a649becbfa907626f0890605b5e792fe0352cc205c924` | High | Emit the MKS24 Kolmogorov-rate-normalized transfer product and vector-extract only the dimensionless transfer panels with absolute ordinate uncertainty | Synthetic exact normalized-transfer manifest regression; checksum-bound Figure 7/13 generation and manifest-ingestion validation | Implemented for comparison infrastructure/reference curves; authorized case execution and quantitative simulation-to-paper comparisons remain open |
 | F-040 | 2026-05-25 | Figure 9 dimensionless-reference audit | The comparator already exposes `alignment_peak.cos_theta` and the standard workflow already defines the eight active/passive Alfvenic/random beta-10/beta-100 cases plotted in Figure 9, but no numeric Figure 9 reference curves were admitted | pinned `source/MKS24.tex:610-614`, `source/fig9.pdf` SHA-256 `9d0dbb05514a8ce7a48eddb178b05a47ec512e58d2a2ff99d899123f8e458984`; `scripts/digitize_cgl_lf_mks24_fig9.py`; ignored `digitized_fig9_v1/curves.json` SHA-256 `07417294ca44e7aa7e8c499931e12ed7fce9eec55e4691e3172a8684470163b8` | High | Vector-extract only the dimensionless peak-alignment paths and map them to the existing standard case definitions with absolute ordinate uncertainty | Checksum-bound Figure 9 generation and eight-curve manifest-ingestion validation | Implemented for dimensionless alignment references; authorized standard execution and quantitative comparison remain open |
+| F-041 | 2026-05-25 | Figure 11 scale-separation audit | The dimensionless lower-panel `alignment_peak.cos_theta` product is already comparable, but the guarded matrix lacked the plotted `n_perp = 96` and `384` active Alfvenic beta-10 cases and retained no Figure 11 numeric references | pinned `source/MKS24.tex:628-634`, `source/fig11.pdf` SHA-256 `efab7ae64d5837ee621249acfedf79cd77bb221e37504f8c41a79bf5ba30f5f8`; `inputs/cgl_lf_paper/cgl_lf_paper_scale_separation_beta10_nperp{96,384}.athinput`; `scripts/digitize_cgl_lf_mks24_fig11.py`; ignored `digitized_fig11_v1/curves.json` SHA-256 `9922eb24245cdf0e7dfe355864a610ee8ebf437ccf593ea40a2e7df6016c037a` | High | Define a guarded scale-separation production workflow reusing the standard `n_perp = 192` case, exclude it from debug preparation, vector-extract only lower-panel alignment paths, and revise storage/runtime estimates for two additional unique runs | Production-input/workflow/authorization assertions; Frontier offline self-test; checksum-bound Figure 11 generation and three-curve manifest-ingestion validation | Implemented for definition/reference infrastructure; upper-panel dimensional spectrum, approved execution, and quantitative comparison remain open |
 
 ### Implemented Core Decision Log
 
@@ -392,12 +396,12 @@ table such as:
 | 2026-05-25 | Track cumulative net applied forcing work at the source update only when explicitly requested by a driven input. | The before/after conserved-energy difference across the full source task, including zero-net-momentum projection, is exact at that stage and restartable; instantaneous output-time `force_pwr` cannot close an active energy residual. Opt-in persistence avoids altering legacy forcing restart records. | Focused CPU/restart coverage and corrected `20260525-paper-smoke-rk-work-v1`/`20260525-paper-convergence-rk-work-v1` bundles; production tolerance and heat-flux transfer decomposition remain open |
 | 2026-05-25 | Retain applied LF heat-flux transport as a signed RKL2 companion recurrence with fine-side ownership at coarse/fine interfaces, not as a total-energy closure term. | The applied capped face flux and STS coefficients are available in the LF update; on AMR interfaces the fine-side closure flux is the quantity restricted into the coarse update, so it owns the contraction without double counting. | Focused CPU/restart tests and fresh fixed-level bundles pass; fresh AMR workflow/analyzer report total work `6.511527338026022e-4`; Frontier Kokkos-Serial/MPI jobs `4659053`/`4659141` pass the AMR decomposition regression |
 | 2026-05-25 | Checkpoint every cumulative LF diagnostic history value, not only signed applied work. | Restart-spanning paper analysis differentiates face/cap/exposure counters; resetting their baseline after a valid restart silently corrupts intervals even when evolved fields agree. | Initial GPU G-005 exposed F-022; expanded CPU restart checks and corrected jobs `4653516`/`4653582` verify the correction |
-| 2026-05-25 | Treat G-008/G010b/G011 debug measurements as storage/I/O reconnaissance, not a paper-scale runtime cost model. | Startup-length runs expose elapsed time, memory, output volume, and checkpoint size; G011 adds exact standard-layout shared-file timing and size, but no retained run measures late-time timestep evolution or statistical-production duration. | G010b retains reduced timing and its excessive cadence warning; G011 file sizes feed F-035's revised `403.162` GB sequential allocation for thirteen unique runs; only a G013-based scaling estimate, not measured standard runtime, is available |
+| 2026-05-25 | Treat G-008/G010b/G011 debug measurements as storage/I/O reconnaissance, not a paper-scale runtime cost model. | Startup-length runs expose elapsed time, memory, output volume, and checkpoint size; G011 adds exact standard-layout shared-file timing and size, but no retained run measures late-time timestep evolution or statistical-production duration. | G010b retains reduced timing and its excessive cadence warning; G011 file sizes plus F-041's cell-count scaling feed the estimated `781.694` GB sequential allocation for fifteen unique runs; only a G013-based scaling estimate, not measured production runtime, is available |
 | 2026-05-25 | Stop runtime costing after G012 and treat limiter-active RKL2 STS as unqualified for the screened finite-rate nonlinear state. | The finite-rate hard-wall reduced nonlinear run and local reduced branches with unlimited STS or caps `20`, `10`, `5`, `2`, and `1` all cross the strict firehose emergency bound in an LF split stage; reducing the cap through the documented conservative setting delays but does not resolve the observed failure. | F-031 is addressed by F-033; G012 consumes `0.188889` node-hours and remains invalid for extrapolation, while corrected G013 supplies new reduced GPU evidence |
 | 2026-05-25 | Archive the STS timestep/integrator contract in paper workflow manifests. | F-031 makes the split-step cap a qualification-critical model choice; a result cannot be interpreted or repeated if the manifest omits it. | F-032 metadata regression records guarded-deck `sts_max_dt_ratio = -1.0`; G013 archives and passes that setting with the F-033 hard-wall model |
 | 2026-05-25 | Represent the MKS24 hard-wall limit explicitly with `limiter_hardwall = true` in hard-wall paper decks rather than finite-rate pressure relaxation at `limiter_nu_coll = 1.0e10`. | The pinned paper source describes anisotropy effectively pinned at thresholds; F-031 locates a same-state internal LF-stage overshoot under finite-rate scattering, while the energy-preserving constrained state passes locally through `t = 2.0`. Finite-rate `20`/`200` decks remain unchanged. | F-033 CPU/exact-state validation and corrected G013 reduced Frontier GPU execution pass; standard costing, proposal approval, and production/statistical qualification remain required |
 | 2026-05-25 | Implement CGL pressure mechanical work first as a snapshot-derived local decomposition with a transfer cross-check and sparse-time quadrature estimate. | Retained fields determine `p_perp div(u) - Delta p (b b : grad(u))` without changing the integrator; trapezoidal snapshot-time integration aids interval interpretation, but neither result is an applied budget identity. | F-023 synthetic sign/transfer/quadrature oracles and corrected `20260525-paper-convergence-rk-work-v1` products; exact production interval closure remains open |
-| 2026-05-25 | Admit paper reference curves only through an external checksum- and uncertainty-qualified manifest. | The staged arXiv source supplies panel PDFs but not numeric curve tables; separating source data from code and rejecting absent uncertainties permits author-data or documented-digitization comparisons without overstating simulation evidence. | F-024 exact-curve and source-checksum-rejection regressions plus F-034/F-036/F-037/F-039/F-040 checksum-bound vector extraction for Figures 2(b), 7, 9, 12, and 13; remaining panels and production comparisons remain open |
+| 2026-05-25 | Admit paper reference curves only through an external checksum- and uncertainty-qualified manifest. | The staged arXiv source supplies panel PDFs but not numeric curve tables; separating source data from code and rejecting absent uncertainties permits author-data or documented-digitization comparisons without overstating simulation evidence. | F-024 exact-curve and source-checksum-rejection regressions plus F-034/F-036/F-037/F-039/F-040/F-041 checksum-bound vector extraction for Figures 2(b), 7, 9, 11, 12, and 13; remaining panels and production comparisons remain open |
 | 2026-05-25 | Expose threshold-volume histories as reference-comparable curves while collapsing duplicate terminal timestamps. | Figure 2(b) is a time-series result rather than a snapshot statistic, and Athena repeats an unchanged terminal history row; retaining the final equal-time value gives ordered coordinates without changing the measured endpoint. | F-030 synthetic exact-history comparison passes; F-034 now supplies eight digitized Figure 2(b) histories, while standard-run comparison remains open |
 | 2026-05-25 | Complete Figure 2(b) coverage with four additional guarded standard definitions and vector-derived external reference histories. | The official panel shows active and passive Alfvenic/random cases at beta 10 and 100; omitting any series prevents the implemented comparison interface from evaluating the displayed result. | F-034 adds nine standard definitions in total and external `digitized_fig2b_v1/curves.json`; no production execution is authorized by this definition/reference work |
 | 2026-05-25 | Define the nonnominal Figure 12 heat-flux sensitivity cases in a separate guarded workflow. | The pinned paper source varies the active beta-10 Alfvenic heat-flux parameter by factors of 100 around the nominal case; two additional definitions avoid duplicating nominal active/passive output while making the intended campaign auditable. | F-035 adds two `paper-heat-flux` decks and debug exclusion; F-036 supplies reference curves; authorized production runs and comparison remain open |
@@ -406,6 +410,7 @@ table such as:
 | 2026-05-25 | Supersede dimensional reference-curve admission until the paper-to-AthenaK code-unit transform is qualified. | MKS24's beta-100 footnote reports `p0 = 100`, while the normalized AthenaK decks use `p0 = 50`; this does not affect dimensionless `beta Delta` or alignment products, but it prevents honest raw spectral/strain/transfer comparisons without a declared conversion. | F-038 emits corrected `digitized_fig12_v2`/`digitized_fig13_v2` manifests containing only dimensionless admitted curves; earlier `v1` outputs remain archived as provisional evidence |
 | 2026-05-25 | Implement MKS24's stated normalized transfer comparator and admit dimensionless transfer panels. | The paper defines `T_total ~= E_K (2 pi u_rms/L_perp)`, so Figure 7's lower panel and Figure 13(d) do not require the unresolved dimensional ordinate transform. | F-039 adds `pressure_transfer.transfer_normalized_by_total` and external `digitized_fig7_v1`/`digitized_fig13_v3` manifests; production comparisons remain open |
 | 2026-05-25 | Admit Figure 9 peak-alignment references through existing standard-case mappings. | Its `|cos(theta)|` ordinate is dimensionless and all eight legend cases already exist in the guarded standard matrix, so it is not blocked by the dimensional normalization audit. | F-040 adds external `digitized_fig9_v1/curves.json`; production comparisons remain open |
+| 2026-05-25 | Define Figure 11 scale-separation execution scope and admit its lower alignment panel. | The lower panel is dimensionless and directly uses `alignment_peak.cos_theta`, but comparing its resolution dependence requires explicit `n_perp = 96` and `384` inputs in addition to the standard `192` case. | F-041 adds guarded `paper-scale-separation`, external `digitized_fig11_v1/curves.json`, and revised estimated resource scope; execution/comparison remain open |
 | 2026-05-25 | Advance `force_work` through the same explicit-RK recurrence as the source-modified conserved state. | Adding every source-call energy increment overcounts work retained in a multi-stage final state because later RK combinations reweight earlier source contributions; active reduced cases must fail when the ledger does not close conserved energy. | F-025 multi-cycle CPU regression; corrected smoke and convergence bundles pass with maximum active relative residual `5.141362829086986e-10`; production residual qualification remains open |
 | 2026-05-25 | Define applied CGL pressure work from the isolated numerical pressure traction after momentum AMR flux correction, then integrate it with the explicit-RK companion recurrence. | A snapshot-gradient estimate is not the applied finite-volume operator and a face-jump contraction is ambiguous across coarse/fine interfaces; contracting each active cell's corrected pressure-traction momentum RHS with its stage velocity uses exactly the operator consumed by the update. | F-026 focused AMR/restart/passive/FOFC regressions and fresh pressure-work bundles pass locally; Frontier GPU restart and GPU/CPU AMR decomposition comparisons pass for `lf_cpwrk`/`lf_cawrk`; production interpretation remains open |
 | 2026-05-25 | Generate distinct Frontier debug launch environments for GPU-aware qualification and MPI CPU decomposition validation. | A Kokkos-Serial MPI executable is not linked against Cray's GPU transport library and must not inherit `MPICH_GPU_SUPPORT_ENABLED=1` or GPU binding from the HIP/MPI launch path; retaining the target in each manifest avoids ambiguous evidence. | F-027 failure job `4658519` identifies the pre-launch abort; utility self-test verifies CPU and GPU generated scripts separately; corrected CPU-target jobs `4659053`/`4659141` pass |
@@ -543,6 +548,7 @@ The current branch already contains:
 | Figure 2(b) reference extractor | `scripts/digitize_cgl_lf_mks24_fig2b.py` |
 | Figure 7 lower-panel reference extractor | `scripts/digitize_cgl_lf_mks24_fig7.py` |
 | Figure 9 alignment reference extractor | `scripts/digitize_cgl_lf_mks24_fig9.py` |
+| Figure 11 lower-panel alignment reference extractor | `scripts/digitize_cgl_lf_mks24_fig11.py` |
 | Figure 12 reference extractor | `scripts/digitize_cgl_lf_mks24_fig12.py` |
 | Figure 13(b),(d) dimensionless reference extractor | `scripts/digitize_cgl_lf_mks24_fig13.py` |
 | Existing plots | `scripts/plot_cgl_lf_validation.py` |
@@ -669,8 +675,8 @@ code and Sphinx docs, and verify it analytically.
 **Implementation status (2026-05-24):** Corrected in the working tree with
 the `cgl_firehose_threshold = oblique|parallel` policy. Focused policy tests
 pass; the reduced active and passive paper-smoke decks and the defined
-paper-standard/limiter-scan/heat-flux inputs explicitly select `parallel`.
-Standard paper execution and analysis remain open.
+paper-standard/limiter-scan/heat-flux/scale-separation inputs explicitly
+select `parallel`. Standard paper execution and analysis remain open.
 
 #### Baseline Behavior
 
@@ -1032,7 +1038,7 @@ diagnostics, converged statistics, and documented quantitative comparisons.
 | Figure 7: pressure-anisotropy organization and transfer | Active/passive, Alfvenic/random, beta 10 | `grad_parallel Delta p`, `grad_perp Delta p` spectra; `T_Delta p(k_perp)/T_total` | Steady-window gradient spectra, transfer partition/closure, snapshot anisotropic-work cross-check, MKS24-normalized transfer product, and dimensionless lower-panel reference curves are implemented; dimensional upper-panel reference transform, target runs, and comparison remain open |
 | Figures 8-9: alignment diagnostic | Active/passive; beta/forcing variants | Scale-dependent PDFs and peak locations of local-field/rate-of-strain eigenvector alignment | Steady-window selected-shell alignment PDFs, reference-comparable peak curves, rendered peak summaries, and synthetic finite check implemented; Figure 9 eight peak-alignment reference curves are vector-extracted for the standard case matrix; Figure 8 two-dimensional PDF reference extraction and target-run comparison remain open |
 | Figure 10: kinetic comparison context | Not reproduced directly by CGL-LF | Documentation of non-reproducible kinetic comparator and any qualitative CGL-only comparison | Out of direct scope |
-| Figure 11: scale-separation behavior | Selected resolutions | Resolution/convergence or scale-separation comparison products | Operator accuracy and short reduced resolution product paths implemented; steady nonlinear comparison missing |
+| Figure 11: scale-separation behavior | Active Alfvenic beta 10 at `n_perp = 96, 192, 384` | Kinetic-energy spectra and peak-alignment scale separation | Guarded `paper-scale-separation` definitions cover `96` and `384` while reusing the standard `192` case; three dimensionless lower-panel `alignment_peak.cos_theta` curves are admitted; dimensional upper-spectrum transform, approved runs, and comparison remain open |
 | Figure 12: heat-flux sensitivity | Heat-flux parameter variants | Spectra/transfer/diagnostic products under heat-flux changes | Two nonnominal active beta-10 guarded definitions exist and nominal active/passive cases reuse standard definitions; dimensionless top-panel curves are admitted through `alignment_peak.cos_theta`; the dimensional lower spectrum is excluded pending the F-038 unit transform; execution, steady nonlinear comparison, and exact interval/production budget remain missing |
 | Figure 13: limiter-frequency sensitivity | Beta 100, Alfvenic, several `nu_lim` | Energy spectra, `beta Delta` PDFs, strain PDFs, pressure-stress transfer | Inputs and foundations exist; dimensionless panel-(b) `beta Delta` PDFs and panel-(d) normalized transfer curves are vector-extracted for comparison; panel (a) spectra and panel (c) strain are excluded pending the F-038 unit transform; case runs/comparisons are missing |
 
@@ -1614,13 +1620,15 @@ state:
 - whether it is smoke, convergence, or paper-grade.
 
 **Status (2026-05-25):** All listed smoke, Figure 2(b)-complete standard
-baseline, Figure 12 heat-flux, and beta-100 limiter-frequency input
-definitions are present. The
+baseline, Figure 11 scale-separation, Figure 12 heat-flux, and beta-100
+limiter-frequency input definitions are present. The
 standard matrix now maps all eight active/passive, Alfvenic/random beta-10
 and beta-100 histories in that panel, while retaining the active Alfvenic
 beta-1 case needed elsewhere. Figure 12 reuses nominal active/passive
-standard cases and adds the two active nonnominal heat-flux definitions. The
-standard, heat-flux, and limiter
+standard cases and adds the two active nonnominal heat-flux definitions.
+Figure 11 adds active Alfvenic beta-10 definitions at `n_perp = 96` and
+`384` while reusing the standard `n_perp = 192` case. The standard,
+heat-flux, limiter, and scale-separation
 decks now explicitly select shared binary/restart MPI-I/O and their future
 workflow manifests archive the output cadence/layout choices used for sizing
 and the timestep/STS/CFL contract exposed by F-031. They remain production
@@ -1913,8 +1921,10 @@ reference-comparable peak curves are implemented, with explicit
 `paper-analyze --alignment-shells` selection for wide plotted ranges.
 Synthetic output is checked for finite bounded histograms and exact
 peak-curve comparison. Eight dimensionless Figure 9 peak-alignment references
-are populated under F-040 for the standard case matrix. Physically
-interpretable production validation remains open.
+are populated under F-040 for the standard case matrix; three dimensionless
+Figure 11 lower-panel peak curves are populated under F-041 for the
+scale-separation matrix. Physically interpretable production validation
+remains open.
 
 ### Figure Reproduction Outputs
 
@@ -1965,8 +1975,9 @@ Make operator validation and paper reproduction easy to launch, archive,
 inspect, and rerun without confusing the two tiers.
 
 **Implementation status (2026-05-25):** `paper-smoke` executes locally and
-archives reduced model/forcing choices. `paper-standard`, `paper-nulim`, and
-`paper-heat-flux` now enumerate the defined production inputs, retain
+archives reduced model/forcing choices. `paper-standard`, `paper-nulim`,
+`paper-heat-flux`, and `paper-scale-separation` now enumerate the defined
+production inputs, retain
 model/resolution/domain/analysis-window metadata and in-place
 binary/checkpoint references, and refuse execution unless
 `--authorize-paper-execution` is passed.
@@ -2005,6 +2016,7 @@ Add clear modes whose computational cost and scientific meaning are evident:
 | `paper-standard` | Published-resolution selected MKS24 matrix; defined and guarded by explicit authorization | HPC |
 | `paper-nulim` | Figure 13 limiter-frequency suite; defined and guarded by explicit authorization | HPC |
 | `paper-heat-flux` | Figure 12 nonnominal heat-flux sensitivity suite; defined and guarded by explicit authorization | HPC |
+| `paper-scale-separation` | Figure 11 `n_perp = 96, 192, 384` suite; defined and guarded by explicit authorization | HPC |
 | `paper-analyze` | Regenerate implemented diagnostics/figures and optionally evaluate checksum/uncertainty-qualified reference curves; populated paper-panel comparisons remain open | Analysis host |
 | `paper-summary` | Regenerate human/machine summaries without plotting | Any host |
 
@@ -2457,7 +2469,8 @@ scripts/frontier/build_cgl_lf_frontier.sh
 `cgl_lf_frontier.py` is intentionally a preparation/accounting utility, not a
 submission launcher. It requires the prescribed CGL root for real use,
 reserves conservative node-hours, rejects walltimes greater than two hours
-and paper-standard/limiter/heat-flux-production decks under `debug`, emits an
+and paper-standard/limiter/heat-flux/scale-separation production decks under
+`debug`, emits an
 inspectable batch script, queries `squeue` before the user manually submits,
 and records exactly one completed top-level allocation from `sacct` together
 with the source/executable/input provenance held in its manifest. It also
@@ -2977,8 +2990,11 @@ Retained live evidence as of 2026-05-25:
   `328.915` GB raw eight-case storage envelope and a `255.735` GB
   sequential-retention allocation with 20 percent margin for the pre-F-034
   eight-definition inventory; F-035 applies those measured per-file sizes to
-  the expanded thirteen-unique-run proposal, yielding `403.162` GB
-  sequential storage with 20 percent margin. G011 itself explicitly withholds
+  the expanded thirteen-unique-run baseline proposal, yielding `403.162` GB
+  sequential storage with 20 percent margin. F-041 subsequently extends the
+  proposed matrix to fifteen unique runs and estimates `781.694` GB
+  sequential storage with 20 percent margin after adding the mixed-resolution
+  Figure 11 cases. G011 itself explicitly withholds
   runtime/node-hour projection.
 - G012 nonlinear validation job `4662477` uses an archived reduced
   `96 x 96 x 192` active beta10 Alfvenic deck with SHA-256
@@ -3130,6 +3146,20 @@ Retained live evidence as of 2026-05-25:
   `55db154b26d3b040258f79c6ee56042fe0e215c8f6ea9a39fc9155ecf177d242`.
   Manifest ingestion admits all eight curves; these are references only, not
   simulation comparisons.
+- F-041 Figure 11 dimensionless lower-panel alignment extraction is retained
+  outside git under
+  `build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2/digitized_fig11_v1/`.
+  The tracked extractor verifies `source/fig11.pdf` SHA-256
+  `efab7ae64d5837ee621249acfedf79cd77bb221e37504f8c41a79bf5ba30f5f8`,
+  emits three `alignment_peak.cos_theta` curves for active Alfvenic beta-10
+  cases at `n_perp = 96`, `192`, and `384`, omits four horizontal-boundary
+  vertices, and records 56 recommended alignment shells with absolute
+  ordinate uncertainty `0.005`. `curves.json` has SHA-256
+  `9922eb24245cdf0e7dfe355864a610ee8ebf437ccf593ea40a2e7df6016c037a`;
+  `digitization_metadata.json` has SHA-256
+  `b59b0db90ec786724095ab645ec0e84f915c5abbb3db97b2bd379c9745d0665c`.
+  The dimensional upper-panel kinetic spectra remain excluded under F-038;
+  these lower-panel curves are references only, not simulation comparisons.
 - The retained ledger records `0.851670` node-hours used with no active
   reservation, including `0.188889` node-hours for failed G012 and
   `0.577778` node-hours for passed G013. Paper-scale
@@ -3185,43 +3215,51 @@ runtime/node-hour proposal.
 ### Defined-Matrix Storage Envelope (Not Authorization)
 
 Job `4661434` is a startup-only, one-node/eight-GPU measurement at the exact
-`192 x 192 x 384` mesh and `32 x 32 x 64` MeshBlock layout used by all
+`192 x 192 x 384` mesh and `32 x 32 x 64` MeshBlock layout used by the
 fourteen guarded `paper-standard`/`paper-nulim`/`paper-heat-flux`
 definitions. It reaches only
 `t = 0.01`; it validates standard-layout launch, host-memory evidence, shared
 MPI-I/O file size/timing, and strict diagnostics, not scientific production or
 runtime/node-hour cost. F-034 expanded the standard definitions to cover the
 published Figure 2(b) series; F-035 adds the two nonnominal Figure 12
-heat-flux cases. The standard active Alfvenic beta-100 hard-wall definition
+heat-flux cases. F-041 adds two guarded Figure 11 scale-separation inputs at
+`96 x 96 x 192` and `384 x 384 x 768`; their file sizes below are estimated
+from cell count until an approved measurement is retained. The standard active Alfvenic beta-100 hard-wall definition
 and the limiter-scan hard-wall definition are model-identical apart from
 labels/comments, so the proposed campaign reuses one accepted result in both
-analysis roles and executes thirteen unique simulations.
+analysis roles. Figure 11 similarly reuses the accepted standard active
+Alfvenic beta-10 `n_perp = 192` result, yielding fifteen unique simulations.
 
 All guarded inputs explicitly select shared `bin` and `rst` outputs. Their
 common definition writes binary snapshots every `0.25` and restarts every
 `1.0` through `tlim = 10.0`. Retained reduced runs confirm inclusive
 initial/final time-cadenced output, giving 41 binary snapshots and 11 restart
 files per executed case. Using the larger of the two exact G011 files of each
-kind and thirteen unique runs:
+kind for the thirteen standard-layout unique runs, and cell-count-scaled
+estimates for the additional one-eighth-size `n_perp = 96` and eight-times-size
+`n_perp = 384` cases:
 
 | Quantity | Calculation basis | Bytes | Decimal GB |
 | --- | --- | ---: | ---: |
 | One shared binary snapshot | G011 maximum measured file | `509632020` | `0.510` |
 | One shared restart file | G011 maximum measured file | `1838131787` | `1.838` |
-| Raw generated output for one executed case | `41 bin + 11 rst` | `41114362477` | `41.114` |
-| Raw generated output for thirteen unique cases | `13 x one case` | `534486712201` | `534.487` |
-| Retained output after acceptance | all snapshots plus final two restarts per case | `319425293122` | `319.425` |
-| Sequential peak before pruning accepted checkpoints | twelve retained cases plus one raw current case | `335968479205` | `335.968` |
-| Sequential retained-policy allocation with 20 percent margin | `1.2 x sequential peak` | `403162175046` | `403.162` |
-| No-pruning allocation with 20 percent margin | `1.2 x all raw output` | `641384054641` | `641.384` |
+| Raw generated output for one standard-layout case | `41 bin + 11 rst` | `41114362477` | `41.114` |
+| Estimated raw output for added `n_perp = 96` case | `one standard case / 8` | `~5139295310` | `~5.139` |
+| Estimated raw output for added `n_perp = 384` case | `8 x one standard case` | `~328914899816` | `~328.915` |
+| Estimated raw output for fifteen unique cases | `13 standard + n96 + n384` | `~868540907327` | `~868.541` |
+| Estimated retained output after acceptance | all snapshots plus final two restarts per case | `~519066101323` | `~519.066` |
+| Estimated sequential peak before pruning accepted checkpoints | retain 13 standard and n96; run n384 last | `~651411589987` | `~651.412` |
+| Estimated sequential retained-policy allocation with 20 percent margin | `1.2 x sequential peak` | `~781693907985` | `~781.694` |
+| Estimated no-pruning allocation with 20 percent margin | `1.2 x all raw output` | `~1042249088792` | `~1042.249` |
 
 The candidate retention policy is to run cases sequentially, retain all
 analysis snapshots and the final two restarts for every accepted case, and
 remove earlier checkpoints only after acceptance and archive verification are
-recorded. The file-size measurement remains authoritative in
+recorded. The standard-layout file-size measurement remains authoritative in
 `analysis/g011_standard_layout_mpiio_sizing_evidence.json` beneath the G011
-run directory; the thirteen-case arithmetic is the F-035 proposal update.
-Executing all fourteen definitions independently would duplicate the equivalent
+run directory; the Figure 11 mixed-resolution increments are planning
+estimates requiring measurement or approved storage margin before execution.
+Executing all sixteen definitions independently would duplicate the equivalent
 hard-wall beta-100 run and is not proposed.
 
 ### Candidate Standard-Run Cost Proposal (Requires Approval)
@@ -3235,26 +3273,31 @@ an eightfold cell-count factor and a fivefold simulated-duration factor:
 | --- | --- | ---: |
 | Standard `t = 10` time per unique case on one node | `2080 s x 8 x 5` | `83200 s = 23.111111` node-hours |
 | Thirteen unique standard/limiter/heat-flux cases | `13 x 83200 s` | `300.444444` node-hours |
-| Proposed runtime reservation with 2x contingency | `2 x 300.444444` | `600.888889` node-hours |
-| Existing recorded debug qualification plus proposed ceiling | `0.851670 + 600.888889` | `601.740559` node-hours |
+| Added `n_perp = 96` scale-separation case | `83200 s / 8` | `2.888889` node-hours |
+| Added `n_perp = 384` scale-separation case | `8 x 83200 s` | `184.888889` node-hours |
+| Fifteen unique cases including Figure 11 | `300.444444 + 2.888889 + 184.888889` | `488.222222` node-hours |
+| Proposed runtime reservation with 2x contingency | `2 x 488.222222` | `976.444444` node-hours |
+| Existing recorded debug qualification plus proposed ceiling | `0.851670 + 976.444444` | `977.296114` node-hours |
 
 This estimate is not a standard-mesh benchmark. It assumes linear scaling
 with cell count and simulated duration, equivalent timestep behavior among
 cases, and no late-time performance change. The 2x factor is a planning
 allowance, not a measured error bar. A compliant execution proposal should
 run at most one case at a time, segment each candidate run at restart
-boundaries (a `Delta t = 2` segment is estimated at `4.622222` one-node
-hours), inspect strict counters/work/output after the first segment, and stop
-for renewed review if measured use would exceed the ceiling.
+boundaries (a standard-layout `Delta t = 2` segment is estimated at
+`4.622222` one-node hours, before resolution scaling), inspect strict
+counters/work/output after the first segment, and stop for renewed review if
+measured use would exceed the ceiling.
 
 This plan intentionally provides only a `debug`-QOS validation launcher:
 production work must not be submitted through it. Any paper-production launch
-requires explicit user approval of the thirteen-run scope or a revised scope,
-the `403.162` GB sequential-retention allocation (or the `641.384` GB
-no-pruning alternative), executable/module provenance, restart/archive
-strategy, and an appropriate non-debug queue/QOS under current OLCF policy.
-The defined Figure 12 heat-flux variants are included; any remaining
-panel-reference-driven additions require a revised cost before execution.
+requires explicit user approval of the fifteen-run scope or a revised scope,
+the estimated `781.694` GB sequential-retention allocation (or estimated
+`1042.249` GB no-pruning alternative), executable/module provenance,
+restart/archive strategy, and an appropriate non-debug queue/QOS under current
+OLCF policy. The defined Figure 11 and Figure 12 variants are included; any
+remaining panel-reference-driven additions require a revised cost before
+execution.
 
 ## Phase H: Execution Tiers and Scientific Acceptance
 
@@ -3393,6 +3436,11 @@ Selected cases should be repeated at:
 384x384x768, resources permitting
 ```
 
+F-041 defines the active Alfvenic beta-10 Figure 11 realization of this
+three-resolution suite behind the same explicit paper-execution guard and
+admits its dimensionless lower-panel alignment references. It does not
+authorize those runs or qualify the dimensional upper-panel kinetic spectrum.
+
 Assess:
 
 - inertial-range spectral trends;
@@ -3416,12 +3464,14 @@ must define:
 - manifest and environment archival;
 - how outputs are transferred back for analysis.
 
-For the fourteen guarded definitions and thirteen proposed unique executions,
-the G011-measured file sizes define the candidate sequential retention plan
-and a `403.162` GB allocation including margin. The candidate cost proposal
-uses G013 only as a scaling basis; it does not replace a measured standard
-runtime. Any change in case matrix, cadence, file layout, retention policy,
-or required panel coverage must revise this storage/runtime proposal.
+For the sixteen guarded input definitions and fifteen proposed unique
+executions, the G011-measured standard-layout file sizes plus the F-041
+cell-count-scaled resolution estimates define a candidate sequential
+retention allocation of `781.694` GB including margin. The candidate cost
+proposal uses G013 only as a scaling basis; it does not replace measured
+standard or high-resolution runtime/I/O evidence. Any change in case matrix,
+cadence, file layout, retention policy, or required panel coverage must
+revise this storage/runtime proposal.
 
 Do not launch long high-resolution runs without this plan.
 Do not launch any Frontier test run without updating its projected and actual
@@ -3628,8 +3678,8 @@ Document and automate tiered MKS24 CGL-LF reproduction workflows
 
 Deliverables:
 
-- `paper-smoke`, `paper-standard`, `paper-nulim`, `paper-heat-flux`, and
-  analysis modes;
+- `paper-smoke`, `paper-standard`, `paper-nulim`, `paper-heat-flux`,
+  `paper-scale-separation`, and analysis modes;
 - runbook;
 - result interpretation;
 - storage/HPC guidance.
@@ -3772,6 +3822,7 @@ scripts/stage_cgl_lf_mks24_reference.py
 scripts/digitize_cgl_lf_mks24_fig2b.py
 scripts/digitize_cgl_lf_mks24_fig7.py
 scripts/digitize_cgl_lf_mks24_fig9.py
+scripts/digitize_cgl_lf_mks24_fig11.py
 scripts/digitize_cgl_lf_mks24_fig12.py
 scripts/digitize_cgl_lf_mks24_fig13.py
 build-cgl-implementation/cgl_lf_reference/arXiv-2405.02418v2/manifest.json
@@ -3881,21 +3932,23 @@ Decision implemented for comparison ingestion on 2026-05-25:
   at supplied reference coordinates and retain normalized residuals.
 
 Figure 2(b), dimensionless Figure 7 lower-panel transfer, dimensionless
-Figure 9 and Figure 12 alignment, and dimensionless Figure 13(b),(d) data are now
+Figure 9, Figure 11 lower-panel, and Figure 12 alignment, and dimensionless
+Figure 13(b),(d) data are now
 extracted from pinned vector PDFs by
 `scripts/digitize_cgl_lf_mks24_fig2b.py` and
 `scripts/digitize_cgl_lf_mks24_fig7.py` and
 `scripts/digitize_cgl_lf_mks24_fig9.py` and
+`scripts/digitize_cgl_lf_mks24_fig11.py` and
 `scripts/digitize_cgl_lf_mks24_fig12.py` and
 `scripts/digitize_cgl_lf_mks24_fig13.py`, with checksum-qualified external
-manifests and explicit line-extraction uncertainty. Figure 9 and Figure 12
-comparisons use `alignment_peak.cos_theta` and require explicitly selected
-alignment shells spanning the reference coordinates. Figure 7 lower-panel
-and Figure 13(d) comparisons use
+manifests and explicit line-extraction uncertainty. Figure 9, Figure 11
+lower-panel, and Figure 12 comparisons use `alignment_peak.cos_theta` and
+require explicitly selected alignment shells spanning the reference
+coordinates. Figure 7 lower-panel and Figure 13(d) comparisons use
 `pressure_transfer.transfer_normalized_by_total` under F-039. Under F-038,
-Figure 7's upper spectra, Figure 12's lower spectrum, and Figure 13(a),(c)
-remain excluded because their dimensionful ordinates do not have a qualified
-paper-to-AthenaK transform.
+Figure 7's upper spectra, Figure 11's upper kinetic spectrum, Figure 12's
+lower spectrum, and Figure 13(a),(c) remain excluded because their
+dimensionful ordinates do not have a qualified paper-to-AthenaK transform.
 Data still required:
 
 - obtain machine-readable original data from authors/archive if available for
@@ -4062,13 +4115,14 @@ local implementation evidence. The next critical path is:
 
 1. **Complete reference coverage and long-time calibration.**
    Figure 2(b)'s eight unstable-volume histories, Figure 7's dimensionless
-   lower-panel transfer curves, Figure 9's and Figure 12's dimensionless
-   alignment curves, and Figure 13(b),(d)'s dimensionless curves are populated
-   through pinned vector-PDF extractors. Resolve the F-038 paper-to-AthenaK
-   transform before admitting dimensional spectra or strain, obtain or digitize remaining
-   targeted panels with recorded uncertainty, revise the proposal when scope
-   changes, and calibrate long-time injection/spectral behavior against the
-   documented setup.
+   lower-panel transfer curves, Figure 9's, Figure 11's lower-panel, and
+   Figure 12's dimensionless alignment curves, and Figure 13(b),(d)'s
+   dimensionless curves are populated through pinned vector-PDF extractors.
+   Resolve the F-038 paper-to-AthenaK transform before admitting dimensional
+   spectra or strain, obtain or digitize remaining targeted panels with
+   recorded uncertainty, revise the proposal when scope changes, and
+   calibrate long-time injection/spectral behavior against the documented
+   setup.
 
 2. **Complete remaining comparison products.**
    Run paper-panel reference comparisons through the implemented manifest
@@ -4081,10 +4135,11 @@ local implementation evidence. The next critical path is:
    G012 remains retained evidence that the superseded finite-rate hard-wall
    interpretation fails; F-033 and corrected G013 job `4673404` now pass the
    reduced nonlinear GPU correctness gate through `t = 2.0` with zero safety
-   counters and active `lf_hwproj`. The documented candidate executes thirteen
-   unique defined cases sequentially, projects `300.444444` node-hours with
-   a `600.888889` node-hour planning ceiling, and allocates `403.162` GB with
-   sequential-retention margin. It excludes still-undefined panel additions
-   and remains a scaling proposal rather than a standard-runtime measurement.
+   counters and active `lf_hwproj`. The documented candidate executes fifteen
+   unique defined cases sequentially, projects `488.222222` node-hours with
+   a `976.444444` node-hour planning ceiling, and estimates `781.694` GB with
+   sequential-retention margin. It includes F-041's Figure 11
+   scale-separation additions and remains a scaling proposal rather than a
+   measured standard/high-resolution runtime or I/O result.
    No standard or production run is authorized by this evidence alone;
    approved submission and paper/statistical qualification remain open.

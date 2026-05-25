@@ -199,10 +199,13 @@ cadence, and analysis window. The nine standard definitions cover all eight
 active/passive, Alfvenic/random beta-10/beta-100 series in MKS24 Figure 2(b)
 plus the active Alfvenic beta-1 case. Two `paper-heat-flux` definitions supply
 the nonnominal active beta-10 Figure 12 variants; its nominal active and
-passive comparisons reuse standard definitions. The `paper-standard`,
-`paper-nulim`, and `paper-heat-flux` workflows require explicit production
-authorization; the presence of these decks is not evidence that paper-scale
-runs have been executed.
+passive comparisons reuse standard definitions. Two `paper-scale-separation`
+definitions supply the nonstandard `n_perp = 96` and `384` Figure 11 cases;
+its `n_perp = 192` comparison reuses the standard active Alfvenic beta-10
+definition. The `paper-standard`, `paper-nulim`, `paper-heat-flux`, and
+`paper-scale-separation` workflows require explicit production authorization;
+the presence of these decks is not evidence that paper-scale runs have been
+executed.
 
 For CGL `mhd_w` or `mhd_w_bcc` output, the existing `eint` field retains its
 legacy meaning of `p_parallel`; output now also includes `p_perp`. Paper
@@ -239,12 +242,14 @@ raw or MKS24-normalized transfer, selected-shell alignment-distribution, alignme
 over additional shells.
 The staged-reference tooling includes pinned vector extraction for Figure
 2(b), Figure 7 lower-panel and Figure 13(d) normalized transfer curves, the
-dimensionless Figure 9 and Figure 12 alignment curves, and the dimensionless
-`beta Delta` PDF curves in Figure 13(b). The paper states `p0 = 100` in code
+dimensionless Figure 9, Figure 11 lower-panel, and Figure 12 alignment
+curves, and the dimensionless `beta Delta` PDF curves in Figure 13(b). The
+paper states `p0 = 100` in code
 units for its beta-100 limiter runs, while the equivalent AthenaK
 `v_A = 1` normalization uses `p0 = 50`; until an explicit observable
-conversion is qualified, dimensional Figure 12 spectra and Figure 13(a),(c)
-curves are retained only as excluded audit context.
+conversion is qualified, dimensional Figure 11 upper spectra, Figure 12
+spectra, and Figure 13(a),(c) curves are retained only as excluded audit
+context.
 These products are analysis infrastructure; they do not by themselves
 establish statistically converged paper comparisons.
 
