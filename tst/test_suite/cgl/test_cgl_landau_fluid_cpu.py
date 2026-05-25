@@ -69,6 +69,32 @@ def _assert_clean_lf_history(history):
         assert np.all(np.isfinite(history[name]))
 
 
+def _assert_restarted_lf_diagnostics(reference, resumed):
+    for column in (
+        "lf_nstage",
+        "lf_dfloor",
+        "lf_pfloor",
+        "lf_nonfin",
+        "lf_nonpos",
+        "lf_mirror",
+        "lf_firehs",
+        "lf_hardbd",
+        "lf_qface",
+        "lf_qprcap",
+        "lf_qpr10",
+        "lf_qpecap",
+        "lf_qpe10",
+        "lf_qprwrk",
+        "lf_qpewrk",
+    ):
+        assert np.isclose(
+            reference[column][-1],
+            resumed[column][-1],
+            rtol=1.0e-12,
+            atol=1.0e-14,
+        )
+
+
 def test_cgl_lf_quantitative_decay_and_diagnostics():
     try:
         _run("cgl_lf_decay.athinput", "cgl_ci_decay")
@@ -336,13 +362,7 @@ def test_cgl_lf_restart_preserves_final_state_and_admissibility():
             "cgl_ci_restart_reference.mhd.hst"
         )
         resumed_history = testutils.athena_read.hst("cgl_ci_restart_resumed.mhd.hst")
-        for column in ("lf_qprwrk", "lf_qpewrk"):
-            assert np.isclose(
-                reference_history[column][-1],
-                resumed_history[column][-1],
-                rtol=1.0e-12,
-                atol=1.0e-14,
-            )
+        _assert_restarted_lf_diagnostics(reference_history, resumed_history)
     finally:
         shutil.rmtree("rst", ignore_errors=True)
         _cleanup()
@@ -386,6 +406,13 @@ def test_cgl_lf_restart_with_finite_collision_preserves_corrected_split():
         _assert_clean_lf_history(
             testutils.athena_read.hst("cgl_ci_restart_collision_resumed.mhd.hst")
         )
+        reference_history = testutils.athena_read.hst(
+            "cgl_ci_restart_collision_reference.mhd.hst"
+        )
+        resumed_history = testutils.athena_read.hst(
+            "cgl_ci_restart_collision_resumed.mhd.hst"
+        )
+        _assert_restarted_lf_diagnostics(reference_history, resumed_history)
     finally:
         shutil.rmtree("rst", ignore_errors=True)
         _cleanup()
@@ -529,13 +556,7 @@ def test_cgl_lf_paper_forcing_restart_preserves_rng_and_force_state():
             "cgl_ci_paper_restart_reference.mhd.hst"
         )
         resumed_mhd = testutils.athena_read.hst("cgl_ci_paper_restart_resumed.mhd.hst")
-        for column in ("lf_qprwrk", "lf_qpewrk"):
-            assert np.isclose(
-                reference_mhd[column][-1],
-                resumed_mhd[column][-1],
-                rtol=1.0e-12,
-                atol=1.0e-14,
-            )
+        _assert_restarted_lf_diagnostics(reference_mhd, resumed_mhd)
     finally:
         shutil.rmtree("rst", ignore_errors=True)
         _cleanup()

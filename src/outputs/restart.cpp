@@ -245,18 +245,32 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                            "byte", single_file_per_rank);
   }
 
-  Real lf_work[2] = {0.0, 0.0};
+  constexpr int nlf_diag = 15;
+  Real lf_diag[nlf_diag] = {};
   if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) {
     const auto &diag = pmhd->pcgl_lf->diagnostics;
-    lf_work[0] = diag.qpar_work;
-    lf_work[1] = diag.qperp_work;
+    lf_diag[0] = static_cast<Real>(diag.nstage);
+    lf_diag[1] = static_cast<Real>(diag.dfloor);
+    lf_diag[2] = static_cast<Real>(diag.pfloor);
+    lf_diag[3] = static_cast<Real>(diag.nonfinite);
+    lf_diag[4] = static_cast<Real>(diag.nonpositive);
+    lf_diag[5] = static_cast<Real>(diag.mirror);
+    lf_diag[6] = static_cast<Real>(diag.firehose);
+    lf_diag[7] = static_cast<Real>(diag.hard_bound);
+    lf_diag[8] = static_cast<Real>(diag.qfaces);
+    lf_diag[9] = static_cast<Real>(diag.qpar_cap);
+    lf_diag[10] = static_cast<Real>(diag.qpar_cap10);
+    lf_diag[11] = static_cast<Real>(diag.qperp_cap);
+    lf_diag[12] = static_cast<Real>(diag.qperp_cap10);
+    lf_diag[13] = diag.qpar_work;
+    lf_diag[14] = diag.qperp_work;
 #if MPI_PARALLEL_ENABLED
     if (!single_file_per_rank) {
       if (global_variable::my_rank == 0) {
-        MPI_Reduce(MPI_IN_PLACE, &lf_work[0], 2, MPI_ATHENA_REAL,
+        MPI_Reduce(MPI_IN_PLACE, &lf_diag[0], nlf_diag, MPI_ATHENA_REAL,
                    MPI_SUM, 0, MPI_COMM_WORLD);
       } else {
-        MPI_Reduce(&lf_work[0], &lf_work[0], 2, MPI_ATHENA_REAL,
+        MPI_Reduce(&lf_diag[0], &lf_diag[0], nlf_diag, MPI_ATHENA_REAL,
                    MPI_SUM, 0, MPI_COMM_WORLD);
       }
     }
@@ -287,7 +301,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       }
     }
     if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) {
-      resfile.Write_any_type(&lf_work[0], 2*sizeof(Real), "byte",
+      resfile.Write_any_type(&lf_diag[0], nlf_diag*sizeof(Real), "byte",
                              single_file_per_rank);
     }
   }
@@ -332,7 +346,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   if (pz4c != nullptr) step3size += sizeof(Real);
   if (pturb != nullptr) step3size += sizeof(RNG_State);
   if (pturb != nullptr && pturb->record_injected_work) step3size += sizeof(Real);
-  if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) step3size += 2*sizeof(Real);
+  if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) step3size += nlf_diag*sizeof(Real);
 
   // write cell-centered variables in parallel
   IOWrapperSizeT offset_myrank = (step1size + step2size + step3size

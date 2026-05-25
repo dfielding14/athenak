@@ -104,8 +104,10 @@ Normal `.mhd.hst` output appends cumulative columns when LF is active:
 face-count columns record evaluated LF faces and parallel/perpendicular
 unlimited heat-flux ratios exceeding `q_max` or `10*q_max`. Differences
 between successive rows give interval counts; normalize limiter counts by
-`lf_nstage` and heat-flux-cap counts by `lf_qface`. On fixed-level meshes,
-`lf_qprwrk` and `lf_qpewrk` are restartable cumulative RKL2-applied
+`lf_nstage` and heat-flux-cap counts by `lf_qface`. All cumulative LF
+diagnostic columns are preserved through CGL-LF restart files so interval
+analysis remains continuous across segments. On fixed-level meshes,
+`lf_qprwrk` and `lf_qpewrk` are cumulative RKL2-applied
 owned-face contractions of the capped heat fluxes with their corresponding
 temperature jumps. They are disabled on refined meshes because AMR flux
 correction occurs after closure face evaluation. These are signed operator

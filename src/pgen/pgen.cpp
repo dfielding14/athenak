@@ -210,26 +210,41 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   }
 
   if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) {
-    Real lf_work[2] = {0.0, 0.0};
+    constexpr int nlf_diag = 15;
+    Real lf_diag[nlf_diag] = {};
     if (global_variable::my_rank == 0 || single_file_per_rank) {
-      if (resfile.Read_Reals(&lf_work[0], 2, single_file_per_rank) != 2) {
+      if (resfile.Read_Reals(&lf_diag[0], nlf_diag, single_file_per_rank)
+          != nlf_diag) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "LF heat-flux-work data size read from restart file "
+                  << std::endl << "LF diagnostics data size read from restart file "
                   << "is incorrect, restart file is broken." << std::endl;
         exit(EXIT_FAILURE);
       }
     }
 #if MPI_PARALLEL_ENABLED
     if (!single_file_per_rank) {
-      MPI_Bcast(&lf_work[0], 2, MPI_ATHENA_REAL, 0, MPI_COMM_WORLD);
+      MPI_Bcast(&lf_diag[0], nlf_diag, MPI_ATHENA_REAL, 0, MPI_COMM_WORLD);
       if (global_variable::my_rank != 0) {
-        lf_work[0] = 0.0;
-        lf_work[1] = 0.0;
+        std::fill_n(&lf_diag[0], nlf_diag, 0.0);
       }
     }
 #endif
-    pmhd->pcgl_lf->diagnostics.qpar_work = lf_work[0];
-    pmhd->pcgl_lf->diagnostics.qperp_work = lf_work[1];
+    auto &diag = pmhd->pcgl_lf->diagnostics;
+    diag.nstage = static_cast<std::uint64_t>(lf_diag[0]);
+    diag.dfloor = static_cast<std::uint64_t>(lf_diag[1]);
+    diag.pfloor = static_cast<std::uint64_t>(lf_diag[2]);
+    diag.nonfinite = static_cast<std::uint64_t>(lf_diag[3]);
+    diag.nonpositive = static_cast<std::uint64_t>(lf_diag[4]);
+    diag.mirror = static_cast<std::uint64_t>(lf_diag[5]);
+    diag.firehose = static_cast<std::uint64_t>(lf_diag[6]);
+    diag.hard_bound = static_cast<std::uint64_t>(lf_diag[7]);
+    diag.qfaces = static_cast<std::uint64_t>(lf_diag[8]);
+    diag.qpar_cap = static_cast<std::uint64_t>(lf_diag[9]);
+    diag.qpar_cap10 = static_cast<std::uint64_t>(lf_diag[10]);
+    diag.qperp_cap = static_cast<std::uint64_t>(lf_diag[11]);
+    diag.qperp_cap10 = static_cast<std::uint64_t>(lf_diag[12]);
+    diag.qpar_work = lf_diag[13];
+    diag.qperp_work = lf_diag[14];
   }
 
   // root process reads size of CC and FC data arrays from restart file

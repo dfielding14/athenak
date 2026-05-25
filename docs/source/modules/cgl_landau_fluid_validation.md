@@ -315,8 +315,10 @@ evaluated with the selected policy. `lf_hardbd` is an emergency safety
 counter and is evaluated whether or not corrective `backup_limiters` are
 enabled. The `lf_q*` columns record evaluated LF operator faces and
 parallel/perpendicular pre-cap flux ratios above `q_max` and `10*q_max`;
-their interval fractions use `lf_qface` as denominator. For fixed-level
-meshes, `lf_qprwrk` and `lf_qpewrk` retain restartable cumulative
+their interval fractions use `lf_qface` as denominator. Restart files retain
+the baseline for every cumulative LF diagnostic column, including the face
+and cap counters, so segmented-run intervals can be analyzed continuously.
+For fixed-level meshes, `lf_qprwrk` and `lf_qpewrk` retain cumulative
 RKL2-applied owned-face contractions of capped parallel and perpendicular
 heat flux with discrete temperature jumps. Refined meshes intentionally
 leave these work columns zero because this diagnostic does not include AMR
