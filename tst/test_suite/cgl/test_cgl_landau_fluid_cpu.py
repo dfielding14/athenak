@@ -978,6 +978,17 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
     accounted = json.loads(manifest_path.read_text())
     assert accounted["state"] == "recorded"
     assert accounted["scientific_inspection"]["accepted"]
+    continuation = tmp_path / "continuation.mhd.hst"
+    continuation.write_text(
+        "# [0]=time [1]=lf_dfloor [2]=lf_pfloor [3]=lf_nonfin "
+        "[4]=lf_nonpos [5]=lf_hardbd [6]=lf_hwproj\n"
+        "2.0 0 0 0 0 0 2\n"
+        "3.0 0 0 0 0 0 3\n"
+    )
+    merged = tmp_path / "merged.mhd.hst"
+    stage_i.merge_history_files([mhd_history, continuation], merged)
+    merged_history = stage_i.parse_history(merged)
+    assert merged_history["time"] == [0.0, 2.0, 3.0]
 
 
 def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():

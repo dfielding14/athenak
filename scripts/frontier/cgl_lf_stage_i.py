@@ -14,6 +14,7 @@ import argparse
 import csv
 from datetime import datetime, timezone
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -787,6 +788,79 @@ def retained_file(path: Path) -> dict[str, object]:
     }
 
 
+def merge_history_files(sources: list[Path], destination: Path) -> None:
+    """Merge restart-segment histories while removing repeated boundary rows."""
+
+    reference_labels: list[str] | None = None
+    header: list[str] = []
+    retained_rows: list[str] = []
+    last_time = float("-inf")
+    for source_index, source in enumerate(sources):
+        source_header: list[str] = []
+        source_labels: list[str] = []
+        source_rows: list[str] = []
+        for line in source.read_text(encoding="utf-8").splitlines():
+            if line.startswith("#"):
+                source_header.append(line)
+                found = re.findall(r"\[\d+\]=([A-Za-z0-9_]+)", line)
+                if found:
+                    source_labels = found
+            elif line.strip():
+                source_rows.append(line)
+        if not source_labels:
+            raise ValueError(f"history file has no labeled header: {source}")
+        if reference_labels is None:
+            reference_labels = source_labels
+            header = source_header
+        elif source_labels != reference_labels:
+            raise ValueError("restart-segment history columns do not match")
+        for line in source_rows:
+            time = float(line.split()[0])
+            if time > last_time + 1.0e-12:
+                retained_rows.append(line)
+                last_time = time
+        if source_index == 0 and not retained_rows:
+            raise ValueError(f"history file has no retained rows: {source}")
+    destination.write_text(
+        "\n".join([*header, *retained_rows]) + "\n", encoding="utf-8"
+    )
+
+
+def binary_snapshot_time(path: Path) -> float:
+    """Read a retained Athena binary snapshot time without loading field data."""
+
+    with path.open("rb") as stream:
+        code_header = stream.readline().split()
+        if not code_header or code_header[0] != b"Athena":
+            raise ValueError(f"invalid Athena binary snapshot: {path}")
+        pheader_count = int(stream.readline().split(b"=")[-1])
+        values: dict[str, str] = {}
+        for _ in range(pheader_count - 1):
+            key, value = [
+                token.strip()
+                for token in stream.readline().decode("utf-8").split("=", 1)
+            ]
+            values[key] = value
+    if "time" not in values:
+        raise ValueError(f"binary snapshot has no time field: {path}")
+    return float(values["time"])
+
+
+def analysis_model_choices(input_path: Path) -> dict[str, str]:
+    """Use the workflow's interpretation mapping for a production bundle."""
+
+    workflow_path = ROOT_DIR / "scripts/cgl_lf_workflow.py"
+    spec = importlib.util.spec_from_file_location(
+        "_cgl_lf_workflow_stage_i", workflow_path
+    )
+    if spec is None or spec.loader is None:
+        raise ValueError(f"cannot load workflow model mapping: {workflow_path}")
+    workflow = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = workflow
+    spec.loader.exec_module(workflow)
+    return workflow.model_choices(input_path.read_text(encoding="utf-8"), [])
+
+
 def inspect_segment(args: argparse.Namespace) -> int:
     """Inspect terminal-time output evidence before scientific acceptance."""
 
@@ -987,6 +1061,189 @@ def record(args: argparse.Namespace) -> int:
     return 0
 
 
+def accepted_case_segments(paths: dict[str, Path],
+                           case_id: str) -> list[dict[str, object]]:
+    """Load scientifically accepted, accounted segments for one mapped case."""
+
+    segments: list[dict[str, object]] = []
+    manifests = sorted(
+        (paths["runs"] / case_id).glob("*/manifest/prepared_run.json")
+    )
+    for manifest_path in manifests:
+        manifest = read_manifest(manifest_path)
+        accounting = manifest.get("accounting", {})
+        if (
+            manifest.get("state") != "recorded"
+            or not isinstance(accounting, dict)
+            or accounting.get("result") != "accepted"
+        ):
+            continue
+        inspection = manifest.get("scientific_inspection")
+        if (
+            not isinstance(inspection, dict)
+            or inspection.get("accepted") is not True
+        ):
+            raise ValueError(
+                f"accepted segment lacks embedded inspection: {manifest_path}"
+            )
+        manifest["_manifest_path"] = str(manifest_path)
+        segments.append(manifest)
+    segments.sort(
+        key=lambda item: float(item["scientific_inspection"]["final_time"])
+    )
+    return segments
+
+
+def one_segment_output(manifest: dict[str, object], pattern: str) -> Path:
+    """Select the unique retained output matching one segment product."""
+
+    output_dir = Path(str(manifest["paths"]["output_dir"]))
+    matches = sorted(output_dir.glob(pattern))
+    if len(matches) != 1:
+        raise ValueError(
+            f"segment output must have one {pattern} product: {output_dir}"
+        )
+    return matches[0]
+
+
+def link_distinct_snapshots(sources: list[Path], destination: Path,
+                            case_name: str) -> list[Path]:
+    """Link one retained binary per physical time into an analysis bundle."""
+
+    timed = sorted((binary_snapshot_time(path), path) for path in sources)
+    linked: list[Path] = []
+    last_time = float("-inf")
+    for time, source in timed:
+        if time <= last_time + 1.0e-12:
+            continue
+        target = destination / f"{case_name}.{len(linked):05d}.bin"
+        target.symlink_to(source)
+        linked.append(target)
+        last_time = time
+    if not linked:
+        raise ValueError("accepted segments retain no distinct snapshots")
+    return linked
+
+
+def bundle_case(args: argparse.Namespace) -> int:
+    """Assemble accepted restart segments as one analyzer-compatible bundle."""
+
+    root = require_root(Path(args.root), args.allow_local_root)
+    paths = initialize(root)
+    source_dir = Path(args.source_dir).expanduser().resolve()
+    matrix_path = Path(args.matrix).expanduser().resolve()
+    matrix = validate_matrix(matrix_path, source_dir)
+    case = case_for_id(matrix, args.case_id)
+    segments = accepted_case_segments(paths, args.case_id)
+    if not segments:
+        raise ValueError(f"no accepted segments are recorded for {args.case_id}")
+    final_time = float(segments[-1]["scientific_inspection"]["final_time"])
+    if final_time < args.required_final_time - 1.0e-10:
+        raise ValueError(
+            f"{args.case_id} reaches only t={final_time}; "
+            f"required final time is {args.required_final_time}"
+        )
+    first_command = segments[0]["command"]
+    expected_digests = (
+        first_command["input_sha256"],
+        first_command["executable_sha256"],
+    )
+    previous_final = None
+    for segment in segments:
+        command = segment["command"]
+        if (
+            command["input_sha256"],
+            command["executable_sha256"],
+        ) != expected_digests:
+            raise ValueError("accepted segments do not share input/executable digests")
+        history = parse_history(one_segment_output(segment, "*.mhd.hst"))
+        first_time = history["time"][0]
+        segment_final = history["time"][-1]
+        if previous_final is None:
+            if first_time > 1.0e-10:
+                raise ValueError("accepted case history does not begin at t=0")
+        else:
+            if first_time > previous_final + 1.0e-10:
+                raise ValueError("accepted restart histories contain a time gap")
+            if segment_final <= previous_final + 1.0e-10:
+                raise ValueError("accepted restart segment does not advance time")
+        previous_final = segment_final
+    bundle = (
+        Path(args.output_dir).expanduser().resolve()
+        if args.output_dir
+        else paths["runs"] / "bundles" / args.case_id
+    )
+    require_beneath_root(bundle, root, "analysis bundle", args.allow_local_root)
+    if bundle.exists():
+        if not args.replace:
+            raise ValueError(f"analysis bundle already exists: {bundle}")
+        shutil.rmtree(bundle)
+    history_dir = bundle / "history"
+    input_dir = bundle / "inputs"
+    snapshot_dir = bundle / "cases" / str(case["name"]) / "bin"
+    for directory in (history_dir, input_dir, snapshot_dir):
+        directory.mkdir(parents=True, exist_ok=True)
+    mhd_history = history_dir / f"{case['name']}.mhd.hst"
+    user_history = history_dir / f"{case['name']}.user.hst"
+    merge_history_files(
+        [one_segment_output(segment, "*.mhd.hst") for segment in segments],
+        mhd_history,
+    )
+    merge_history_files(
+        [one_segment_output(segment, "*.user.hst") for segment in segments],
+        user_history,
+    )
+    snapshot_sources: list[Path] = []
+    for segment in segments:
+        output_dir = Path(str(segment["paths"]["output_dir"]))
+        snapshot_sources.extend(sorted((output_dir / "bin").glob("*.bin")))
+    snapshots = link_distinct_snapshots(
+        snapshot_sources, snapshot_dir, str(case["name"])
+    )
+    submitted_input = Path(str(segments[0]["command"]["input_file"]))
+    archived_input = input_dir / submitted_input.name
+    shutil.copy2(submitted_input, archived_input)
+    case_entry = {
+        "name": case["name"],
+        "input": case["input"],
+        "execution_input": str(archived_input.relative_to(bundle)),
+        "command": ["archived production segments"],
+        "overrides": [],
+        "log": "retained in production segment archive",
+        "status": "passed",
+        "outputs": {
+            "mhd_history": str(mhd_history.relative_to(bundle)),
+            "user_history": str(user_history.relative_to(bundle)),
+            "snapshot_paths": [
+                str(path.relative_to(bundle)) for path in snapshots
+            ],
+        },
+        "lf_active": True,
+        "amr": False,
+        "paper_smoke": False,
+        "model_choices": analysis_model_choices(archived_input),
+    }
+    manifest = {
+        "workflow": "paper-mks24-stage-i-production",
+        "created_utc": utc_now(),
+        "status": "accepted_for_analysis",
+        "git_revision": first_command["input_revision"],
+        "git_worktree_dirty": False,
+        "executable": first_command["executable"],
+        "production_case_id": args.case_id,
+        "required_final_time": args.required_final_time,
+        "accepted_final_time": final_time,
+        "production_segment_manifests": [
+            str(segment["_manifest_path"]) for segment in segments
+        ],
+        "cases": [case_entry],
+    }
+    write_json(bundle / "manifest.json", manifest)
+    print(f"Wrote accepted Stage I analysis bundle: {bundle}")
+    print(f"  final_time={final_time:.12g}, snapshots={len(snapshots)}")
+    return 0
+
+
 def cancel(args: argparse.Namespace) -> int:
     """Release a segment that was prepared but never submitted."""
 
@@ -1056,6 +1313,13 @@ def parser() -> argparse.ArgumentParser:
     recorded.add_argument("--result", required=True)
     recorded.add_argument("--notes", default="")
     recorded.add_argument("--sacct-file")
+    bundled = actions.add_parser("bundle-case")
+    bundled.add_argument("--case-id", required=True)
+    bundled.add_argument("--required-final-time", type=float, default=10.0)
+    bundled.add_argument("--source-dir", default=str(ROOT_DIR))
+    bundled.add_argument("--matrix", default=str(DEFAULT_MATRIX))
+    bundled.add_argument("--output-dir")
+    bundled.add_argument("--replace", action="store_true")
     cancelled = actions.add_parser("cancel")
     cancelled.add_argument("--manifest", required=True)
     cancelled.add_argument("--notes", required=True)
@@ -1091,6 +1355,8 @@ def main() -> int:
             return inspect_segment(args)
         if args.action == "record":
             return record(args)
+        if args.action == "bundle-case":
+            return bundle_case(args)
         if args.action == "cancel":
             return cancel(args)
         if args.action == "summary":
