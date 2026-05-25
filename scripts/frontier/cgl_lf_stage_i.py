@@ -64,6 +64,13 @@ NONTERMINAL_STATES = {
     "COMPLETING",
     "SUSPENDED",
 }
+STRICT_LF_FAILURE_COLUMNS = (
+    "lf_dfloor",
+    "lf_pfloor",
+    "lf_nonfin",
+    "lf_nonpos",
+    "lf_hardbd",
+)
 
 
 def utc_now() -> str:
@@ -747,6 +754,107 @@ def mark_submitted(args: argparse.Namespace) -> int:
     return 0
 
 
+def parse_history(path: Path) -> dict[str, list[float]]:
+    """Read one AthenaK history file keyed by its labeled columns."""
+
+    labels: list[str] = []
+    rows: list[list[float]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("#"):
+            found = re.findall(r"\[\d+\]=([A-Za-z0-9_]+)", line)
+            if found:
+                labels = found
+            continue
+        if line.strip():
+            rows.append([float(value) for value in line.split()])
+    if not labels or not rows:
+        raise ValueError(f"history file is missing labels or data: {path}")
+    if any(len(row) != len(labels) for row in rows):
+        raise ValueError(f"history row width does not match labels: {path}")
+    return {
+        label: [row[index] for row in rows]
+        for index, label in enumerate(labels)
+    }
+
+
+def retained_file(path: Path) -> dict[str, object]:
+    """Describe an output retained for acceptance review."""
+
+    return {
+        "path": str(path),
+        "size_bytes": path.stat().st_size,
+        "sha256": sha256(path),
+    }
+
+
+def inspect_segment(args: argparse.Namespace) -> int:
+    """Inspect terminal-time output evidence before scientific acceptance."""
+
+    manifest_path = Path(args.manifest).expanduser().resolve()
+    manifest = read_manifest(manifest_path)
+    if manifest.get("state") not in {"submitted", "recorded"}:
+        raise ValueError("only a submitted or recorded segment may be inspected")
+    output_dir = Path(str(manifest["paths"]["output_dir"])).resolve()
+    mhd_histories = sorted(output_dir.glob("*.mhd.hst"))
+    user_histories = sorted(output_dir.glob("*.user.hst"))
+    snapshots = sorted((output_dir / "bin").glob("*.bin"))
+    restarts = sorted((output_dir / "rst").glob("*.rst"))
+    if len(mhd_histories) != 1 or len(user_histories) != 1:
+        raise ValueError("segment must retain exactly one MHD and one user history")
+    history = parse_history(mhd_histories[0])
+    if "time" not in history:
+        raise ValueError("MHD history does not contain a time column")
+    missing = [
+        label for label in STRICT_LF_FAILURE_COLUMNS
+        if label not in history
+    ]
+    if missing:
+        raise ValueError(f"MHD history lacks strict safety counters: {missing}")
+    final_time = history["time"][-1]
+    maximum_failure_counts = {
+        label: max(history[label])
+        for label in STRICT_LF_FAILURE_COLUMNS
+    }
+    required_time = float(args.required_time)
+    checks = {
+        "required_time_reached": final_time >= required_time - 1.0e-10,
+        "strict_lf_failure_counters_zero": all(
+            value == 0.0 for value in maximum_failure_counts.values()
+        ),
+        "snapshots_retained": bool(snapshots),
+        "restart_retained": bool(restarts),
+    }
+    accepted = all(checks.values())
+    inspection: dict[str, object] = {
+        "schema_version": 1,
+        "inspected_utc": utc_now(),
+        "manifest": str(manifest_path),
+        "job_id": manifest.get("job_id"),
+        "case_id": manifest["run"]["case_id"],
+        "segment": manifest["run"]["segment"],
+        "required_time": required_time,
+        "final_time": final_time,
+        "maximum_strict_failure_counts": maximum_failure_counts,
+        "checks": checks,
+        "accepted": accepted,
+        "mhd_history": retained_file(mhd_histories[0]),
+        "user_history": retained_file(user_histories[0]),
+        "snapshots": [retained_file(path) for path in snapshots],
+        "restarts": [retained_file(path) for path in restarts],
+    }
+    if "lf_hwproj" in history:
+        inspection["final_hardwall_projection_count"] = history["lf_hwproj"][-1]
+    inspection_path = manifest_path.parent / "segment_inspection.json"
+    write_json(inspection_path, inspection)
+    status = "accepted" if accepted else "not accepted"
+    print(
+        f"Segment inspection {status}: final_time={final_time:.12g}, "
+        f"required_time={required_time:.12g}"
+    )
+    print(f"Wrote {inspection_path}")
+    return 0 if accepted else 1
+
+
 def sacct_output(args: argparse.Namespace, paths: dict[str, Path]) -> str:
     """Read or query a top-level Slurm allocation record."""
 
@@ -808,6 +916,26 @@ def record(args: argparse.Namespace) -> int:
     nodes = int(sacct["nodes"])
     if nodes != int(manifest["allocation"]["nodes"]):
         raise ValueError("allocated nodes differ from the prepared reservation")
+    inspection = None
+    if args.result == "accepted":
+        if sacct["state"] != "COMPLETED" or sacct["exit_code"] != "0:0":
+            raise ValueError(
+                "accepted scientific output requires a clean COMPLETED job"
+            )
+        inspection_path = manifest_path.parent / "segment_inspection.json"
+        if not inspection_path.is_file():
+            raise ValueError(
+                "accepted scientific output requires inspect-segment evidence"
+            )
+        inspection = json.loads(inspection_path.read_text(encoding="utf-8"))
+        if (
+            not isinstance(inspection, dict)
+            or inspection.get("accepted") is not True
+            or inspection.get("job_id") != args.job_id
+            or Path(str(inspection.get("manifest", ""))).resolve()
+            != manifest_path
+        ):
+            raise ValueError("segment inspection does not accept this submitted job")
     actual = node_hours(nodes, int(sacct["elapsed_seconds"]))
     cumulative = sum(float(row["actual_node_hours"]) for row in ledger) + actual
     if cumulative > STAGE_I_RESERVED_NODE_HOURS:
@@ -847,6 +975,8 @@ def record(args: argparse.Namespace) -> int:
     reservation["result"] = args.result
     manifest["state"] = "recorded"
     manifest["accounting"] = row
+    if inspection is not None:
+        manifest["scientific_inspection"] = inspection
     write_json(paths["reservations"], reservations)
     write_json(manifest_path, manifest)
     refresh_summary(paths)
@@ -917,6 +1047,9 @@ def parser() -> argparse.ArgumentParser:
     submitted = actions.add_parser("mark-submitted")
     submitted.add_argument("--manifest", required=True)
     submitted.add_argument("--job-id", required=True)
+    inspected = actions.add_parser("inspect-segment")
+    inspected.add_argument("--manifest", required=True)
+    inspected.add_argument("--required-time", type=float, required=True)
     recorded = actions.add_parser("record")
     recorded.add_argument("--manifest", required=True)
     recorded.add_argument("--job-id", required=True)
@@ -954,6 +1087,8 @@ def main() -> int:
             return check_submit(args)
         if args.action == "mark-submitted":
             return mark_submitted(args)
+        if args.action == "inspect-segment":
+            return inspect_segment(args)
         if args.action == "record":
             return record(args)
         if args.action == "cancel":

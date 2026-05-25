@@ -7,8 +7,10 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 import test_suite.testutils as testutils
 
@@ -21,6 +23,7 @@ PAPER_PASSIVE_INPUT = (
 PAPER_PRODUCTION_INPUT_ROOT = Path("../../../inputs/cgl_lf_paper")
 PAPER_STAGE_I_MANIFEST = PAPER_PRODUCTION_INPUT_ROOT / "mks24_stage_i_manifest.json"
 PAPER_WORKFLOW_PATH = Path("../../../scripts/cgl_lf_workflow.py")
+PAPER_STAGE_I_TOOL = Path("../../../scripts/frontier/cgl_lf_stage_i.py")
 
 
 def _run(input_name, basename, *flags):
@@ -872,6 +875,109 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         assert denied.returncode != 0
         assert "--authorize-paper-execution" in denied.stderr
         assert not Path(output_dir).exists()
+
+
+def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    root = tmp_path / "root"
+    output_dir = root / "runs" / "mks24-stage-i" / "R16" / "s00" / "output"
+    manifest_dir = output_dir.parent / "manifest"
+    (output_dir / "bin").mkdir(parents=True)
+    (output_dir / "rst").mkdir()
+    manifest_dir.mkdir()
+    mhd_history = output_dir / "case.mhd.hst"
+    (output_dir / "case.user.hst").write_text("# retained user history\n")
+    (output_dir / "bin" / "case.00000.bin").write_bytes(b"snapshot")
+    (output_dir / "rst" / "case.00000.rst").write_bytes(b"restart")
+
+    def write_history(rows):
+        mhd_history.write_text(
+            "# [0]=time [1]=lf_dfloor [2]=lf_pfloor [3]=lf_nonfin "
+            "[4]=lf_nonpos [5]=lf_hardbd [6]=lf_hwproj\n"
+            + "\n".join(" ".join(str(value) for value in row) for row in rows)
+            + "\n"
+        )
+
+    manifest_path = manifest_dir / "prepared_run.json"
+    manifest = {
+        "state": "submitted",
+        "project_root": str(root),
+        "job_id": "test-job",
+        "run": {
+            "case_id": "R16",
+            "case_name": "case",
+            "segment": "s00",
+        },
+        "allocation": {
+            "nodes": 1,
+            "requested_walltime": "00:10:00",
+            "reserved_node_hours": 1.0 / 6.0,
+        },
+        "command": {
+            "executable_revision": "a" * 40,
+            "executable_sha256": "b" * 64,
+            "input_revision": "a" * 40,
+            "input_file": "submitted_input.athinput",
+        },
+        "paths": {"output_dir": str(output_dir)},
+    }
+    stage_i.write_json(manifest_path, manifest)
+    paths = stage_i.initialize(root)
+    stage_i.write_json(paths["reservations"], [{
+        "manifest": str(manifest_path),
+        "case_id": "R16",
+        "case_name": "case",
+        "segment": "s00",
+        "nodes": 1,
+        "requested_walltime": "00:10:00",
+        "reserved_node_hours": 1.0 / 6.0,
+        "state": "submitted",
+    }])
+    inspect_args = SimpleNamespace(
+        manifest=str(manifest_path), required_time=2.0
+    )
+    write_history([(0.0, 0, 0, 0, 0, 0, 0), (1.0, 0, 0, 0, 0, 0, 1)])
+    assert stage_i.inspect_segment(inspect_args) == 1
+
+    write_history([
+        (0.0, 0, 0, 0, 0, 0, 0),
+        (1.0, 0, 0, 1, 0, 0, 1),
+        (2.0, 0, 0, 0, 0, 0, 2),
+    ])
+    assert stage_i.inspect_segment(inspect_args) == 1
+    inspection_path = manifest_dir / "segment_inspection.json"
+    inspection = json.loads(inspection_path.read_text())
+    assert not inspection["checks"]["strict_lf_failure_counters_zero"]
+
+    write_history([(0.0, 0, 0, 0, 0, 0, 0), (2.0, 0, 0, 0, 0, 0, 2)])
+    assert stage_i.inspect_segment(inspect_args) == 0
+    inspection_path.unlink()
+    sacct_path = tmp_path / "job.sacct"
+    sacct_path.write_text(
+        "test-job|case|COMPLETED|0:0|1|60|submit-time|end-time|\n"
+    )
+    record_args = SimpleNamespace(
+        manifest=str(manifest_path),
+        allow_local_root=True,
+        job_id="test-job",
+        result="accepted",
+        notes="test",
+        sacct_file=str(sacct_path),
+    )
+    with pytest.raises(ValueError, match="inspect-segment evidence"):
+        stage_i.record(record_args)
+    assert stage_i.inspect_segment(inspect_args) == 0
+    assert stage_i.record(record_args) == 0
+    accounted = json.loads(manifest_path.read_text())
+    assert accounted["state"] == "recorded"
+    assert accounted["scientific_inspection"]["accepted"]
 
 
 def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
