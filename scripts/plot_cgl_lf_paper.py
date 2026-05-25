@@ -136,6 +136,44 @@ def plot_pressure_density_joint(ensembles: dict[str, dict[str, object]],
         save(fig, figure_dir / f"paper_pressure_density_{suffix}.pdf", generated)
 
 
+def plot_compressive_pressure_spectra(
+    ensembles: dict[str, dict[str, object]], figure_dir: Path, generated: list[str]
+) -> None:
+    """Plot Figure 3/4/6-oriented compressive and pressure spectra."""
+
+    if not ensembles:
+        return
+    fig, axes = plt.subplots(1, 3, figsize=(12.0, 3.25))
+    for name, ensemble in ensembles.items():
+        spectra = ensemble["spectra"]
+        for axis, key in (
+            (axes[0], "compressive_velocity"),
+            (axes[1], "density_fluctuation"),
+        ):
+            if key in spectra:
+                k, power = spectral_curve(spectra[key])
+                axis.loglog(k, power, label=name)
+        for key, label, linestyle in (
+            ("p_parallel", r"$p_\parallel$", "-"),
+            ("p_perp", r"$p_\perp$", "--"),
+            ("magnetic_pressure", r"$B^2/2$", ":"),
+        ):
+            if key in spectra:
+                k, power = spectral_curve(spectra[key])
+                axes[2].loglog(
+                    k, power, linestyle=linestyle, label=f"{name} {label}"
+                )
+    axes[0].set_title(r"Compressive flow $\hat{k}\cdot u_k$")
+    axes[1].set_title(r"Density fluctuation $\rho/\langle\rho\rangle-1$")
+    axes[2].set_title("Thermal and magnetic pressure")
+    for axis in axes:
+        axis.set_xlabel(r"$k_\perp$")
+        axis.set_ylabel("spectral power")
+        axis.grid(True, which="both", alpha=0.25)
+        axis.legend(fontsize=6)
+    save(fig, figure_dir / "paper_compressive_pressure_spectra.pdf", generated)
+
+
 def plot_spatial_spectra(ensembles: dict[str, dict[str, object]], figure_dir: Path,
                          generated: list[str]) -> None:
     """Plot projected pressure and velocity gradient spectra."""
@@ -383,6 +421,7 @@ def main() -> int:
     plot_history(data, args.figure_dir, generated)
     plot_pdfs(ensembles, args.figure_dir, generated)
     plot_pressure_density_joint(ensembles, args.figure_dir, generated)
+    plot_compressive_pressure_spectra(ensembles, args.figure_dir, generated)
     plot_spatial_spectra(ensembles, args.figure_dir, generated)
     plot_transfer_and_alignment(ensembles, args.figure_dir, generated)
     plot_heat_flux_proxy(ensembles, args.figure_dir, generated)

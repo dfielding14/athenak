@@ -674,7 +674,8 @@ def shell_indices(shape: tuple[int, int, int], lengths: tuple[float, float, floa
 
 
 def shell_spectrum(fields: list[np.ndarray], lengths: tuple[float, float, float],
-                   dk: float, perpendicular: bool = True) -> dict[str, object]:
+                   dk: float, perpendicular: bool = True,
+                   field_definition: str | None = None) -> dict[str, object]:
     """Compute an MKS24-style bin-summed spectrum for scalar or vector fields."""
 
     shell = shell_indices(fields[0].shape, lengths, dk, perpendicular)
@@ -684,11 +685,47 @@ def shell_spectrum(fields: list[np.ndarray], lengths: tuple[float, float, float]
         transformed = np.fft.fftn(field - np.mean(field)) / normalizer
         power += np.abs(transformed) ** 2
     binned = np.bincount(shell.ravel(), weights=power.ravel())
-    return {
+    result: dict[str, object] = {
         "dk": dk,
         "perpendicular": perpendicular,
         "k": (np.arange(len(binned), dtype=float) * dk).tolist(),
         "power_per_dk": (binned / dk).tolist(),
+        "normalization_definition": (
+            "E_chi(k) = sum_shell |FFT(chi - <chi>)/N|^2 / dk"
+        ),
+    }
+    if field_definition is not None:
+        result["field_definition"] = field_definition
+    return result
+
+
+def compressive_velocity_spectrum(
+    velocity: list[np.ndarray], lengths: tuple[float, float, float], dk: float
+) -> dict[str, object]:
+    """Compute the MKS24 compressive-flow spectrum of khat dot u_k."""
+
+    shell = shell_indices(velocity[0].shape, lengths, dk, True)
+    k_components = wavenumbers(velocity[0].shape, lengths)
+    magnitude = np.sqrt(sum(component * component for component in k_components))
+    valid = magnitude > 0.0
+    normalizer = float(velocity[0].size)
+    projected = np.zeros(velocity[0].shape, dtype=complex)
+    for field, component in zip(velocity, k_components):
+        transformed = np.fft.fftn(field - np.mean(field)) / normalizer
+        projected[valid] += transformed[valid] * component[valid] / magnitude[valid]
+    binned = np.bincount(shell.ravel(), weights=np.abs(projected).ravel() ** 2)
+    return {
+        "dk": dk,
+        "perpendicular": True,
+        "k": (np.arange(len(binned), dtype=float) * dk).tolist(),
+        "power_per_dk": (binned / dk).tolist(),
+        "field_definition": (
+            "compressive velocity khat dot u_k projected with the full "
+            "three-dimensional Fourier wavevector and binned by k_perp"
+        ),
+        "normalization_definition": (
+            "E_khat_dot_u(k_perp) = sum_shell |khat dot FFT(u)/N|^2 / dk"
+        ),
     }
 
 
@@ -1151,10 +1188,35 @@ def analyze_fields(fields: dict[str, np.ndarray], lengths: tuple[float, float, f
     pdf_values = pdf_fields(fields, lengths)
     pressure_density_values = pressure_density_fields(fields)
     spectra = {
-        "velocity": shell_spectrum(velocity, lengths, dk),
-        "magnetic_fluctuation": shell_spectrum(magnetic, lengths, dk),
-        "density": shell_spectrum([rho], lengths, dk),
-        "delta_p": shell_spectrum([delta_p], lengths, dk),
+        "velocity": shell_spectrum(
+            velocity, lengths, dk, field_definition="velocity vector u"
+        ),
+        "compressive_velocity": compressive_velocity_spectrum(
+            velocity, lengths, dk
+        ),
+        "magnetic_fluctuation": shell_spectrum(
+            magnetic, lengths, dk, field_definition="magnetic field B"
+        ),
+        "density": shell_spectrum(
+            [rho], lengths, dk, field_definition="mass density rho"
+        ),
+        "density_fluctuation": shell_spectrum(
+            [rho / np.mean(rho) - 1.0], lengths, dk,
+            field_definition="normalized density fluctuation rho/<rho> - 1",
+        ),
+        "p_parallel": shell_spectrum(
+            [ppar], lengths, dk, field_definition="parallel thermal pressure p_parallel"
+        ),
+        "p_perp": shell_spectrum(
+            [pperp], lengths, dk, field_definition="perpendicular thermal pressure p_perp"
+        ),
+        "magnetic_pressure": shell_spectrum(
+            [0.5 * bsqr], lengths, dk,
+            field_definition="magnetic pressure B^2/2 in AthenaK units",
+        ),
+        "delta_p": shell_spectrum(
+            [delta_p], lengths, dk, field_definition="pressure anisotropy Delta p"
+        ),
         "grad_parallel_delta_p": shell_spectrum([gradient_parallel], lengths, dk),
         "grad_perp_delta_p": shell_spectrum([gradient_perp], lengths, dk),
     }
@@ -1228,7 +1290,7 @@ def mean_joint_distribution(records: list[dict[str, object]]) -> dict[str, objec
 def mean_spectrum(records: list[dict[str, object]]) -> dict[str, object]:
     """Average compatible shell-summed spectra."""
 
-    return {
+    result: dict[str, object] = {
         "dk": records[0]["dk"],
         "perpendicular": records[0]["perpendicular"],
         "k": records[0]["k"],
@@ -1237,6 +1299,10 @@ def mean_spectrum(records: list[dict[str, object]]) -> dict[str, object]:
             axis=0,
         ).tolist(),
     }
+    for key in ("field_definition", "normalization_definition"):
+        if key in records[0]:
+            result[key] = records[0][key]
+    return result
 
 
 def mean_eddy_anisotropy(records: list[dict[str, object]]) -> dict[str, object]:
@@ -1622,7 +1688,21 @@ def synthetic_test() -> dict[str, object]:
     }
     record = analyze_fields(fields, lengths, 0.0, 16, [2], model_choices=model)
     velocity_power = np.asarray(record["spectra"]["velocity"]["power_per_dk"])
+    compressive_power = np.asarray(
+        record["spectra"]["compressive_velocity"]["power_per_dk"]
+    )
     peak = int(np.argmax(velocity_power))
+    transverse_fields = {
+        name: np.array(values, copy=True) for name, values in fields.items()
+    }
+    transverse_fields["velx"] = np.zeros(shape)
+    transverse_fields["vely"] = np.sin(2.0 * math.pi * xx / lengths[0])
+    transverse_record = analyze_fields(
+        transverse_fields, lengths, 0.0, 16, [2], model_choices=model
+    )
+    transverse_compressive_power = np.asarray(
+        transverse_record["spectra"]["compressive_velocity"]["power_per_dk"]
+    )
     derivative = periodic_gradient(fields["p_perp"] - fields["eint"], lengths)[2]
     exact = 0.1 * math.pi * np.cos(math.pi * zz)
     relative_gradient_error = float(
@@ -1708,6 +1788,8 @@ def synthetic_test() -> dict[str, object]:
     )
     passed = bool(
         peak == 2
+        and float(np.max(compressive_power)) > 0.0
+        and float(np.max(np.abs(transverse_compressive_power))) < 1.0e-28
         and relative_gradient_error < 7.0e-3
         and abs(float(transfer["direct_real_space"])) < 1.0e-14
         and abs(float(transfer["closure_error"])) < 1.0e-14
@@ -1738,6 +1820,12 @@ def synthetic_test() -> dict[str, object]:
         "passed": passed,
         "velocity_peak_kperp_bin": peak,
         "expected_velocity_peak_kperp_bin": 2,
+        "positive_longitudinal_compressive_spectrum": float(
+            np.max(compressive_power)
+        ),
+        "zero_transverse_compressive_spectrum": float(
+            np.max(np.abs(transverse_compressive_power))
+        ),
         "parallel_gradient_relative_error": relative_gradient_error,
         "zero_transfer": transfer["direct_real_space"],
         "transfer_closure_error": transfer["closure_error"],

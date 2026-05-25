@@ -213,7 +213,8 @@ snapshot analysis must use both fields when constructing `Delta p`.
 
 `python3 scripts/cgl_lf_workflow.py paper-analyze --output-dir <bundle>`
 regenerates reduced-history summaries and, for retained binary snapshots,
-current PDF, local-field pressure/velocity-gradient spectral,
+current PDF, compressive-velocity, normalized-density,
+thermal/magnetic-pressure, local-field pressure/velocity-gradient spectral,
 pressure-transfer, CGL pressure-work decomposition, and alignment
 diagnostics with synthetic numerical checks. The pressure-work product splits
 `p_perp div(u)` from `-Delta p (b b : grad u)` and compares the latter with
@@ -241,6 +242,13 @@ The snapshot products also include Figure 2(a)-coordinate joint PDFs of
 `<p> delta rho/<rho>`, rendered for each analyzed case. This supplies the
 joint diagnostic in AthenaK units; the paper raster is not a quantitative
 reference until its pressure-unit and color-density transform is qualified.
+They also include the Figure 3 compressive-flow projection
+`E_{khat dot u}(k_perp)`, a normalized density-fluctuation spectrum, and
+separate `p_parallel`, `p_perp`, and AthenaK `B^2/2` spectra needed for
+Figures 4(b) and 6(a). The products are rendered for inspection, but their
+paper curves remain excluded until spectral ordinate transformations are
+qualified; Figure 3's sonic-correlation run definitions are not yet in the
+guarded production matrix.
 With `--reference-curves <manifest.json>`, `paper-analyze` also accepts
 external numerical or digitized curves only when their manifest records
 provenance, SHA-256 digests, and positive per-point `y_uncertainty` values.

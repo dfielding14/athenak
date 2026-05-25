@@ -870,6 +870,14 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
                 "pressure_density_five_thirds_coordinate_error"
             ] < 1.0e-14
         )
+        assert (
+            diagnostics["synthetic_test"]["positive_longitudinal_compressive_spectrum"]
+            > 0.0
+        )
+        assert (
+            diagnostics["synthetic_test"]["zero_transverse_compressive_spectrum"]
+            < 1.0e-28
+        )
         assert abs(
             diagnostics["synthetic_test"]["constant_power_quadrature_error"]
         ) < 1.0e-14
@@ -879,6 +887,15 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         assert "parallel" in snapshot["pressure_density_joint"]
         assert "perpendicular" in snapshot["pressure_density_joint"]
         assert "delta_p" in snapshot["spectra"]
+        for product in (
+            "compressive_velocity",
+            "density_fluctuation",
+            "p_parallel",
+            "p_perp",
+            "magnetic_pressure",
+        ):
+            assert product in snapshot["spectra"]
+            assert "field_definition" in snapshot["spectra"][product]
         assert abs(snapshot["pressure_transfer"]["closure_error"]) < 1.0e-12
         assert snapshot["pressure_transfer"]["normalization_available"]
         assert snapshot["pressure_work_decomposition"]["available"]
@@ -888,6 +905,11 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         assert diagnostics["snapshot_ensemble"]["snapshot_count"] == 1
         assert "beta_delta" in diagnostics["snapshot_ensemble"]["pdf"]
         assert "pressure_density_joint" in diagnostics["snapshot_ensemble"]
+        assert "compressive_velocity" in diagnostics["snapshot_ensemble"]["spectra"]
+        assert "magnetic_pressure" in diagnostics["snapshot_ensemble"]["spectra"]
+        assert "field_definition" in diagnostics["snapshot_ensemble"]["spectra"][
+            "compressive_velocity"
+        ]
         assert diagnostics["snapshot_ensemble"]["pressure_transfer"][
             "normalization_available"
         ]
