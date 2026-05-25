@@ -243,17 +243,17 @@ over additional shells.
 The staged-reference tooling includes pinned vector extraction for Figure
 2(b), Figure 7 lower-panel and Figure 13(d) normalized transfer curves, the
 dimensionless Figure 9, Figure 11 lower-panel, and Figure 12 alignment
-curves, and the dimensionless `beta Delta` PDF curves in Figure 13(b). The
+curves, and the dimensionless `beta Delta` PDF curves in Figure 13(b).
+Figure 8 is additionally admitted as selected-shell `alignment.<shell>` PDFs:
+its checksum-pinned RGB heatmaps are decoded using the labeled linear
+colorbar, checked against the published per-shell unit normalization, and
+emitted with an explicit raster-extraction uncertainty. The
 paper states `p0 = 100` in code
 units for its beta-100 limiter runs, while the equivalent AthenaK
 `v_A = 1` normalization uses `p0 = 50`; until an explicit observable
 conversion is qualified, dimensional Figure 11 upper spectra, Figure 12
 spectra, and Figure 13(a),(c) curves are retained only as excluded audit
 context.
-Figure 8's alignment distributions are dimensionless, but its pinned PDF
-stores the two probability surfaces and colorbar as RGB raster images. They
-remain excluded from quantitative manifests until machine-readable data or a
-reviewed color-scale/surface uncertainty extraction contract is available.
 These products are analysis infrastructure; they do not by themselves
 establish statistically converged paper comparisons.
 

@@ -187,17 +187,19 @@ uncertainties, computes uncertainty-normalized residuals for supported
 snapshot products and threshold-volume history series, and renders
 `paper_reference_comparisons.pdf`. Figure 2(b) vector-curve extraction is
 available below, together with dimensionless Figure 7 lower-panel transfer,
-Figure 9, Figure 11 lower-panel, and Figure 12 alignment, and Figure 13(b),(d)
-limiter curves. Dimensional Figure 7 upper spectra, Figure 11 upper spectra,
-Figure 12 lower spectra, and Figure 13(a),(c) curves
+Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and
+Figure 12 alignment, and Figure 13(b),(d) limiter curves. Dimensional Figure
+7 upper spectra, Figure 11 upper spectra, Figure 12 lower spectra, and Figure
+13(a),(c) curves
 remain excluded because the paper's
 reported code-unit pressure scale is not yet transformed to the AthenaK
 `v_A = 1` convention.
-Figure 8 is also withheld from quantitative comparison: its dimensionless
-alignment distributions and colorbar are raster images in the pinned PDF,
-and require machine-readable source data or a reviewed raster calibration and
-uncertainty contract before a reference manifest can be admitted.
-Remaining MKS24 panel curves, exact
+Figure 8 is admitted only through its reviewed raster contract: its embedded
+RGB heatmaps are decoded against their labeled linear colorbar, selected
+shell slices are checked against the paper's per-`k_perp` unit-normalization
+statement and renormalized, and an absolute PDF-density uncertainty is
+retained in the manifest. Remaining raw-density or dimensional MKS24 panel
+curves, exact
 time-integrated/production local budget closure, and production comparisons
 remain to be completed. For retained LF histories, the analyzer
 also reports the RKL2-applied capped-face heat-flux contractions retained in
@@ -329,6 +331,23 @@ Alfvenic beta-10 curves as
 digitization uncertainty. The plotted upper-panel gradient spectra remain
 excluded pending the paper-to-AthenaK dimensional conversion.
 
+For Figure 8, extract the active/passive beta-10 Alfvenic selected-shell
+alignment PDFs from the pinned raster heatmaps:
+
+```bash
+python3 scripts/digitize_cgl_lf_mks24_fig8.py \
+  /path/to/arXiv-2405.02418v2/source/fig8.pdf \
+  /path/to/arXiv-2405.02418v2/digitized_fig8_v1
+```
+
+The extractor decodes the embedded RGB panels through the figure's labeled
+linear colorbar, samples shells `8,16,32,64,128`, and emits ten
+`alignment.<shell>` curves. It requires each decoded slice to integrate
+within `0.03` of unity before renormalizing it consistently with the paper's
+stated per-`k_perp` normalization, and records absolute probability-density
+uncertainty `0.05`. A comparison bundle must analyze the emitted shell set
+with `paper-analyze --alignment-shells 8,16,32,64,128`.
+
 For Figure 9, extract the eight standard-case peak-alignment paths from the
 pinned source PDF:
 
@@ -420,7 +439,8 @@ Each CSV curve must contain ordered `x`, `y`, and positive `y_uncertainty`
 columns; its entry records `data_sha256`, target analysis `case`, supported
 `product` (for example `spectra.grad_parallel_delta_p` or
 `pressure_transfer.transfer_normalized_by_total` or
-`alignment_peak.cos_theta` or `history.unstable_fraction`), and optional
+`alignment.<shell>` or `alignment_peak.cos_theta` or
+`history.unstable_fraction`), and optional
 `interpolation` (`linear` or `loglog`). The analyzer fails closed on missing
 uncertainty, checksum mismatches, or out-of-domain coordinates.
 Dimensionful paper curves must additionally be withheld from such a manifest
