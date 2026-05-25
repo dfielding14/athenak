@@ -924,6 +924,7 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
             "executable_revision": "a" * 40,
             "executable_sha256": "b" * 64,
             "input_revision": "a" * 40,
+            "input_sha256": "c" * 64,
             "input_file": "submitted_input.athinput",
         },
         "paths": {"output_dir": str(output_dir)},

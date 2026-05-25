@@ -565,6 +565,13 @@ def prepare(args: argparse.Namespace) -> Path:
     if restart is not None and not restart.is_file():
         raise ValueError(f"restart file is unavailable: {restart}")
     parent_segment = verify_continuation_restart(restart) if restart else None
+    if parent_segment is not None:
+        if parent_segment["case_id"] != args.case_id:
+            raise ValueError("continuation restart belongs to a different case")
+        if parent_segment["input_sha256"] != sha256(input_path):
+            raise ValueError("continuation restart input differs from its parent")
+        if parent_segment["executable_sha256"] != provenance["sha256"]:
+            raise ValueError("continuation executable differs from its parent")
     if args.nodes < 1:
         raise ValueError("--nodes must be positive")
     requested_seconds = parse_walltime(args.walltime)
@@ -723,6 +730,8 @@ def verify_continuation_restart(restart: Path) -> dict[str, object]:
         "segment": parent["run"]["segment"],
         "result": accounting["result"],
         "restart_sha256": terminal["sha256"],
+        "input_sha256": parent["command"]["input_sha256"],
+        "executable_sha256": parent["command"]["executable_sha256"],
     }
 
 
