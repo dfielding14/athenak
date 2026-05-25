@@ -1436,8 +1436,7 @@ def bundle_case(args: argparse.Namespace) -> int:
             if first_time > 1.0e-10:
                 raise ValueError("accepted case history does not begin at t=0")
         else:
-            if first_time > previous_final + 1.0e-10:
-                raise ValueError("accepted restart histories contain a time gap")
+            # Output cadence need not repeat the inspected restart boundary row.
             if segment_final <= previous_final + 1.0e-10:
                 raise ValueError("accepted restart segment does not advance time")
         previous_final = segment_final

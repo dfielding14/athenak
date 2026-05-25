@@ -1052,7 +1052,9 @@ def test_cgl_lf_stage_i_groups_rank_local_output_products(tmp_path):
     assert stage_i.retained_product_paths(product) == groups[0]
 
 
-def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(tmp_path):
+def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(
+    tmp_path, monkeypatch
+):
     spec = importlib.util.spec_from_file_location(
         "cgl_lf_stage_i_lineage_test", PAPER_STAGE_I_TOOL
     )
@@ -1064,31 +1066,60 @@ def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(tmp_path):
     root = tmp_path / "root"
     paths = stage_i.initialize(root)
 
-    def record_segment(segment, final_time, result, input_sha, parent=None):
+    def record_segment(segment, times, result, input_sha, parent=None):
         manifest_path = (
             root / "runs" / "mks24-stage-i" / "R16" / segment
             / "manifest" / "prepared_run.json"
         )
         manifest_path.parent.mkdir(parents=True)
-        command = {"input_sha256": input_sha, "executable_sha256": "x" * 64}
+        output_dir = manifest_path.parent.parent / "output"
+        (output_dir / "bin").mkdir(parents=True)
+        input_file = manifest_path.parent / "submitted_input.athinput"
+        input_file.write_text("retained input\n")
+        rows = "".join(f"{time} 0\n" for time in times)
+        for name in ("case.mhd.hst", "case.user.hst"):
+            (output_dir / name).write_text("# [0]=time [1]=clean\n" + rows)
+        (output_dir / "bin" / f"{segment}.00000.bin").write_bytes(
+            (
+                "Athena binary output version=1.1\n"
+                "  size of preheader=5\n"
+                f"  time={times[-1]}\n"
+                "  cycle=0\n"
+                "  size of location=8\n"
+                "  size of variable=4\n"
+            ).encode()
+        )
+        command = {
+            "input_sha256": input_sha,
+            "input_revision": "r" * 40,
+            "input_file": str(input_file),
+            "executable_sha256": "x" * 64,
+            "executable": "athena",
+        }
         if parent is not None:
             command["parent_segment"] = {"manifest": str(parent)}
         stage_i.write_json(manifest_path, {
             "state": "recorded",
             "accounting": {"result": result},
             "command": command,
+            "allocation": {"nodes": 1, "ranks_per_node": 1},
+            "paths": {"output_dir": str(output_dir)},
             "scientific_inspection": {
                 "accepted": result == "accepted",
                 "clean_for_continuation": True,
-                "final_time": final_time,
+                "final_time": times[-1],
             },
         })
         return manifest_path
 
-    diagnostic = record_segment("s00_legacy", 1.6, "clean_partial", "a" * 64)
-    ranked = record_segment("s01_rankio", 1.8, "clean_partial", "b" * 64)
+    diagnostic = record_segment(
+        "s00_legacy", [0.0, 1.6], "clean_partial", "a" * 64
+    )
+    ranked = record_segment(
+        "s01_rankio", [0.0, 1.8], "clean_partial", "b" * 64
+    )
     terminal = record_segment(
-        "s02_rankio", 2.0, "accepted", "b" * 64, parent=ranked
+        "s02_rankio", [1.82, 2.0], "accepted", "b" * 64, parent=ranked
     )
 
     lineage = stage_i.accepted_case_lineage(paths, "R16")
@@ -1098,6 +1129,28 @@ def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(tmp_path):
     assert diagnostic not in [
         Path(segment["_manifest_path"]) for segment in lineage
     ]
+    monkeypatch.setattr(stage_i, "validate_matrix", lambda *_: {
+        "cases": [{"id": "R16", "name": "case", "input": "ignored"}]
+    })
+    monkeypatch.setattr(stage_i, "analysis_model_choices", lambda _: {})
+    bundle = root / "runs" / "bundles" / "test"
+    args = SimpleNamespace(
+        root=str(root),
+        allow_local_root=True,
+        source_dir=str(tmp_path),
+        matrix=str(tmp_path / "matrix.json"),
+        case_id="R16",
+        required_final_time=2.0,
+        output_dir=str(bundle),
+        replace=False,
+    )
+    assert stage_i.bundle_case(args) == 0
+    manifest = json.loads((bundle / "manifest.json").read_text())
+    assert manifest["production_segment_manifests"] == [
+        str(ranked), str(terminal)
+    ]
+    merged = stage_i.parse_history(bundle / "history" / "case.mhd.hst")
+    assert merged["time"] == [0.0, 1.8, 1.82, 2.0]
 
 
 def test_rank_local_binary_reader_keeps_unequal_rank_files(tmp_path, monkeypatch):
