@@ -283,10 +283,14 @@ continuation through \(t=5.0\), job \texttt{4679803}, completed in
 safety counters, six complete rank-local snapshot groups ending at \(t=5.0\),
 and a complete terminal rank-local restart group.  It extends the accepted
 prefix but is not a completed \(t=10\) case.  The subsequent continuation
-through \(t=6.5\), job \texttt{4681476}, began running from that inspected
-restart set on 2026-05-25 at 22:26:45 EDT; it retained a complete first
-eight-rank snapshot group and zero strict LF safety counters through
-\(t=5.26028360958\).  The
+toward \(t=6.5\), job \texttt{4681476}, terminated cleanly on its application
+wall-clock limit at \(t=6.43828031751<6.5\).  Its formal partial-continuation
+inspection records zero strict LF safety counters, six complete rank-local
+snapshot groups, complete terminal rank-local restart products, and
+\(1.753333\) accounted node-hours.  It is retained as a clean partial, not
+as an accepted extension of the prefix.  A short completion segment from
+that inspected terminal restart set to \(t=6.5\), job \texttt{4683291}, has
+been submitted.  The
 legacy partial is not continued across the
 changed input digest.  The bundle assembler follows only the explicit
 inspected restart lineage and bounds a sampled-history boundary gap using
@@ -582,8 +586,10 @@ absolute digitized ordinates into AthenaK products.  Those panels require
 author/archive numeric data, donor diagnostic code, or an explicit
 normalization statement.  One mapped production segment has been retained
 only as clean partial I/O-diagnostic evidence; the ranked-output replacement
-is accepted through its \(t=5.0\) prefix and has a submitted continuation
-toward \(t=6.5\) on the path to the required \(t=10\) final time.  Its
+is accepted through its \(t=5.0\) prefix.  Its first continuation toward
+\(t=6.5\) is retained as a clean partial through \(t=6.43828031751\), and a
+short terminal-gate completion has been submitted on the path to the
+required \(t=10\) final time.  Its
 transient-prefix bundle has verified the
 rank-local assembly and diagnostic path, but the production comparison window
 is \(8\leq t\leq10\).  Quantitative MKS24
@@ -728,8 +734,9 @@ bundle.  The reduced nonlinear figures come from a passing
 \texttt{paper-convergence} bundle reanalyzed with the current plotting code.
 Warning-strict Sphinx documentation and this \LaTeX{} build are checked when
 the report is updated.  The ranked-output low-resolution case has passed its
-inspected \(t=5.0\) prefix gate and its continuation through \(t=6.5\) is
-running with a verified first retained snapshot boundary, but
+inspected \(t=5.0\) prefix gate; a continuation terminated cleanly at
+\(t=6.43828031751<6.5\), and a short segment to complete the \(t=6.5\) gate
+has been submitted.  Nevertheless,
 production/statistical and paper-reference comparison gates remain open until
 accepted \(t\geq10\) output bundles are analyzed.
 
