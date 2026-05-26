@@ -1,10 +1,63 @@
 # MKS24 Reproduction-First CGL-LF Manuscript and Later Extension Plan
 
-Status: execution plan, revised 2026-05-25. No paper-production simulation
-has been run or is claimed by this document. The first scientific objective is
-now an independent AthenaK reproduction of the attainable numerical results
-in Majeski, Kunz, and Squire (2024, hereafter MKS24), before any new
-weak-guide or background-collisionality experiment is executed.
+Status: execution plan, revised 2026-05-26. The first paper-production
+segment, mapped case `R16/s00_t0_t2`, completed on Frontier as job `4674731`
+on 2026-05-25 and was recorded only as a clean partial diagnostic result
+(`t = 1.66204848945`, `1.253333` node-hours), not an accepted scientific
+result. After that legacy shared-MPI-I/O segment incurred an approximately
+twenty-minute pause at its `t = 1` snapshot/checkpoint boundary, commit
+`1f52784d` changed retained production snapshots and restarts to rank-local
+files with grouped checksum/analysis support. A fresh ranked-output
+`R16/s01_rankio_t0_t2` segment began running as Frontier job `4675322` on
+2026-05-25; its complete initial eight-rank snapshot/restart groups were
+successfully read by the rank-aware analyzer, and its complete `t = 1`
+eight-rank snapshot/restart groups were emitted without the legacy-scale
+boundary pause. It completed as an inspected clean partial at
+`t = 1.87769834013` using `1.253056` node-hours. Same-digest continuation
+`R16/s02_rankio_t1p877698_t2` (job `4676557`) reached `t = 2.0`, passed
+inspection with zero strict LF safety counters and complete terminal
+rank-local products, and used `0.106389` node-hours. It is an accepted prefix
+gate, not a completed `t = 10` case. Same-digest continuation
+`R16/s03_rankio_t2_t3p5` (job `4676696`) completed on 2026-05-25 at
+16:50:22 EDT, reached exactly `t = 3.5`, passed formal inspection with zero
+strict LF safety counters and complete terminal rank-local snapshot/restart
+products, and used `1.383611` node-hours. It extends the accepted ranked
+prefix only. Continuation `R16/s04_rankio_t3p5_t5` (job `4679803`)
+completed on 2026-05-25 at 21:53:04 EDT, reached exactly `t = 5.0`, passed
+formal inspection with zero strict LF safety counters and complete terminal
+rank-local snapshot/restart products, and used `1.567778` node-hours.
+Continuation `R16/s05_rankio_t5_t6p5` (job `4681476`) terminated cleanly
+on its Athena wall-clock limit on 2026-05-26 at 00:11:57 EDT, reached
+`t = 6.43828031751 < 6.5`, passed partial-continuation inspection with zero
+strict LF safety counters and complete terminal ranked products, and used
+`1.753333` node-hours. Short continuation `R16/s06_rankio_t6p438280_t6p5`
+(job `4683291`) completed on 2026-05-26 at 00:34:30 EDT, reached exactly
+`t = 6.5`, passed formal inspection with zero strict LF safety counters and
+complete terminal ranked products, and used `0.080556` node-hours. It extends
+the accepted ranked prefix to `t = 6.5`. Continuation
+`R16/s07_rankio_t6p5_t7p5` (job `4683918`) completed on 2026-05-26 at
+01:58:33 EDT, reached exactly `t = 7.5`, passed formal inspection with zero
+strict LF safety counters and complete terminal ranked products, and used
+`1.281944` node-hours. It extends the accepted ranked prefix to `t = 7.5`.
+Continuation `R16/s08_rankio_t7p5_t8p5` was submitted as job `4686032`
+from the accepted `s07` terminal restart set toward the first prefix
+containing samples in the `t = 8`--`10` analysis window.
+Utility commits `476f9dbd`, `9c5c1b40`, and `bad8ba05` select only the
+explicit accepted restart lineage during bundling and admit normal
+sampled-history separation across authenticated restart boundaries while
+rejecting gaps inconsistent with the recorded cadence. They assembled the
+ranked prefix through `t = 2.0` into diagnostic bundle
+`runs/bundles/diagnostic-prefixes/R16_rankio_t2_prefix_20260525`, excluding
+the abandoned shared-output branch. The default production-window
+`paper-analyze` action selected no prefix snapshots because its declared
+window is `t = 8`--`10` and wrote one history-only diagnostic figure; a
+separately labeled transient-window (`t = 0`--`2`) analyzer check read all ten
+retained snapshots, selected 101 history rows, passed its synthetic check,
+and wrote nine diagnostic figures. Neither action is reproduction evidence.
+The first scientific objective is an independent AthenaK reproduction
+of the attainable numerical results in Majeski, Kunz, and Squire (2024,
+hereafter MKS24), before any new weak-guide or background-collisionality
+experiment is executed.
 
 Primary manuscript source: `docs/cgl_lf_validation.tex`
 
@@ -41,7 +94,7 @@ The project is reorganized into two non-interchangeable stages:
 | Stage | Objective | Permission boundary |
 | --- | --- | --- |
 | I. MKS24 reproduction | Reproduce the published CGL-LF simulation setup, numerical comparisons, and all quantitatively attainable figure claims; account honestly for the external hybrid-kinetic comparator. | This is the only production-science campaign authorized for planning under the current `4000` node-hour ceiling. Execution still requires the gates below. |
-| II. New extension | Study weak versus stronger guide fields and background collisionality after Stage I establishes a credible baseline. | Retained as a later program; it must be recosted or receive additional budget after Stage I. |
+| II. New extension | Study weak versus stronger guide fields and background collisionality after Stage I establishes a credible baseline. | Retained as a later candidate protocol; it is not presently authorized and must be recosted and approved after Stage I. |
 
 The manuscript claim discipline is:
 
@@ -50,7 +103,7 @@ The manuscript claim discipline is:
 | Implementation | AthenaK implements the MKS24 CGL-LF case definitions and diagnostics used here. | Input/workflow tests, physical-equation audit, forcing and limiter audit, restart/GPU qualification, archived provenance. |
 | CGL-LF numerical reproduction | AthenaK independently reproduces a specified MKS24 CGL-LF result within stated comparison uncertainty. | Matched production cases, explicit normalizations, reference data or admissible digitization, convergence/statistical checks, and a per-panel pass/fail table. |
 | Full-paper reproduction | Every claimed MKS24 result, including non-AthenaK external comparisons, has been reproduced or independently re-evaluated. | In addition to CGL-LF reproduction, a qualified path for MKS24 Figure 10 and any other externally generated result. |
-| Extension inference | A new guide-field or background-collisionality result extends the reproduced baseline. | Stage I acceptance followed by separately designed, funded, executed, and analyzed Stage II cases. |
+| Extension inference | A new guide-field or background-collisionality result extends the reproduced baseline. | Stage I acceptance followed by separately approved, funded, executed, and analyzed Stage II cases. |
 | Not permitted | The method is perfect or reproduces results that have not passed the stated gates. | No numerical campaign establishes perfection; absent data are not evidence. |
 
 ## 2. MKS24 Source Contract
@@ -193,19 +246,18 @@ families. Reuse one accepted run wherever a plotted role is physically and
 numerically identical; do not execute aliases twice merely because a figure
 uses them twice.
 
-### 4.1 Seventeen unique CGL-LF simulations
+### 4.1 Sixteen mapped CGL-LF simulations and one unresolved definition
 
 | ID | Existing input role | Configuration | MKS24 purpose |
 | --- | --- | --- | --- |
-| R01 | `standard_active_alfvenic_beta1` | Active, Alfvenic, beta `1`, standard mesh/closure | Beta dependence and density/compressive results. |
-| R02 | `standard_active_alfvenic_beta10` | Active, Alfvenic, beta `10`, standard mesh/closure | Central backbone: Figures 1, 2, 5-9, 11, and 12 nominal role. |
-| R03 | `standard_active_alfvenic_beta100` | Active, Alfvenic, beta `100`, hard wall | Beta results and Figure 13 hard-wall role. |
+| R02 | `standard_active_alfvenic_beta10` | Active, Alfvenic, beta `10`, standard mesh/closure | Central backbone: Figures 1, 2, 4-9, 11, and 12 nominal role. |
+| R03 | `standard_active_alfvenic_beta100` | Active, Alfvenic, beta `100`, hard wall | Figures 3-4 beta results and Figure 13 hard-wall role. |
 | R04 | `standard_active_random_beta10` | Active, random, beta `10`, standard closure | Forcing comparison. |
 | R05 | `standard_active_random_beta100` | Active, random, beta `100`, Alfvenic correlation time | Forcing/density comparison. |
 | R06 | `standard_passive_alfvenic_beta10` | Passive, Alfvenic, beta `10` | Active/passive comparison. |
-| R07 | `standard_passive_alfvenic_beta100` | Passive, Alfvenic, beta `100` | Unstable-volume/beta comparison. |
+| R07 | `standard_passive_alfvenic_beta100` | Passive, Alfvenic, beta `100` | Unstable-volume/beta comparison and Figure 13 passive context. |
 | R08 | `standard_passive_random_beta10` | Passive, random, beta `10` | Forcing/passive comparison. |
-| R09 | `standard_passive_random_beta100` | Passive, random, beta `100` | Forcing/passive comparison and Figure 13 context. |
+| R09 | `standard_passive_random_beta100` | Passive, random, beta `100` | Forcing/passive and Figure 3 beta comparison. |
 | R10 | `compressive_active_random_beta1` | Active, random, beta `1` | Figure 3 beta-dependent compressive spectrum. |
 | R11 | `compressive_active_random_beta100_sonic` | Active, random, beta `100`, sonic `t_corr` | Figure 3 sonic-correlation experiment. |
 | R12 | `heat_flux_beta10_strong` | Active, Alfvenic, beta `10`, `|k_parallel|/100` | Figure 12 stronger-heat-flux limit. |
@@ -215,11 +267,37 @@ uses them twice.
 | R16 | `scale_separation_beta10_nperp96` | Active, Alfvenic, beta `10`, `96 x 96 x 192` | Figure 11 low-resolution case. |
 | R17 | `scale_separation_beta10_nperp384` | Active, Alfvenic, beta `10`, `384 x 384 x 768` | Figure 11 high-resolution case. |
 
+The repository also defines `standard_active_alfvenic_beta1`. The current
+checksum-qualified extractor mappings do not map that case to a displayed
+MKS24 result: the source explicitly identifies Figure 3's beta-1 curve as
+randomly driven (`R10`), while the admitted Figure 4 and Figure 9 mappings use
+`R02`-`R09`. Treat the separate Alfvenic beta-1 deck as unresolved inventory,
+not as an authorized production case, unless the Phase A source audit
+identifies and records a specific published claim requiring it.
+
 `R03` supplies the otherwise duplicated beta-100 hard-wall `nu_lim` role, and
 `R02` supplies the `n_perp = 192` scale-separation and nominal heat-flux roles.
-The run matrix is therefore seventeen unique calculations, not nineteen.
+The currently mapped run matrix is therefore sixteen unique calculations
+after role and input-alias reuse.
 
-### 4.2 Reproduction is not achieved by input files alone
+### 4.2 Alias and execution contract
+
+The workflow exposes some published roles through more than one campaign
+entry. The production manifest must resolve these aliases before reserving
+compute:
+
+| Physical case | Existing workflow role(s) | Required handling |
+| --- | --- | --- |
+| `R02` | `paper_standard_active_alfvenic_beta10`; reused by the nominal Figure 12 comparison and the `n_perp = 192` Figure 11 comparison. | Execute once and link all three panel roles to the same accepted run bundle. |
+| `R03` | `paper_standard_active_alfvenic_beta100` and `paper_nulim_beta100_hardwall`. | Compare parsed physics, numerical, forcing, output, and analysis parameters after ignoring the basename/comments; if they remain identical, execute once and link the hard-wall role to that output. |
+
+If an intended alias has a material parameter difference, it is not an alias:
+assign a new `Rxx` identifier, revise the run count and budget, and document
+why the additional calculation is necessary before submission. In particular,
+the five paper workflow commands must not be executed independently without
+deduplicating their overlapping case roles.
+
+### 4.3 Reproduction is not achieved by input files alone
 
 The existing input definitions are necessary but not sufficient. Before a
 case contributes to a claim, it must have:
@@ -244,17 +322,17 @@ been completed with pass/fail/blocked outcomes and justified uncertainties.
 | Figure 1: beta-10 active/passive `beta Delta` slices | `R02`, `R06`; common-time or statistically declared slice visual; instability mask. | Recreate the qualitative active/passive spatial contrast with source-provenance caption; do not treat a hand-selected attractive snapshot as quantitative proof. |
 | Figure 2(a): pressure-density joint PDFs | `R02`; joint `delta p_parallel`, `delta p_perp`, density surface. | Use the existing source-qualified sampled-surface transform or a superior author dataset; report residuals and uncertainty. |
 | Figure 2(b): unstable-volume histories | Active/passive Alfvenic/random beta `10`, `100` roles (`R02`-`R09`). | Compare all eight curves against the retained checksum-qualified reference histories and the reported active/passive volume-fraction conclusion. |
-| Figure 3: compressive velocity spectra | `R01`, `R04`, `R05`, `R09`, `R10`, `R11` as appropriate. | Qualify absolute spectral normalization or obtain reference data; then test forcing-correlation and beta-dependence conclusions. |
-| Figure 4: density PDF and density spectra | Standard Alfvenically correlated beta roles and passive comparisons. | Compare admitted normalized density PDFs; unblock spectral ordinate mapping before claiming reproduction of panel (b). |
+| Figure 3: compressive velocity spectra | Panel (a): `R03`, `R05`, `R11`; panel (b): `R10`, `R04`, `R11`, `R09`. | Qualify absolute spectral normalization or obtain reference data; then test forcing-correlation and beta-dependence conclusions. |
+| Figure 4: density PDF and density spectra | The eight Alfvenically correlated active/passive beta-10/beta-100 roles, `R02`-`R09`. | Compare admitted normalized density PDFs; unblock spectral ordinate mapping before claiming reproduction of panel (b). |
 | Figure 5: energy spectra and local-field eddy anisotropy | `R02`, `R04`; local-field structure/eddy products. | Compare admitted normalized eddy-scale curves; qualify panel (a) spectral ordinate mapping. |
 | Figure 6: pressure/magnetic and strain spectra | `R02`, `R04`. | Establish comparison normalization for dimensional spectra and test pressure-balance/parallel-strain-suppression claims. |
 | Figure 7: pressure-anisotropy gradient and transfer | `R02`, `R04`, `R06`; normalized transfer product. | Compare admitted dimensionless transfer curves; unblock upper-panel dimensional spectra before a complete panel claim. |
 | Figure 8: scale-dependent alignment PDFs | `R02`, `R06`. | Compare existing calibrated selected-shell alignment PDFs and preserve color-map uncertainty. |
-| Figure 9: alignment peaks across cases | Standard active/passive roles. | Compare the existing admitted peak-alignment curves and test active/passive separation. |
+| Figure 9: alignment peaks across cases | The eight standard active/passive beta-10/beta-100 roles, `R02`-`R09`. | Compare the existing admitted peak-alignment curves and test active/passive separation. |
 | Figure 10: hybrid-kinetic comparison | External `Pegasus++` beta-16 result, not generated by CGL-LF AthenaK. | Block a full-paper reproduction claim until qualified source data or a compatible kinetic rerun is obtained; otherwise label it external context. |
 | Figure 11: resolution/scale separation | `R16`, `R02`, `R17`. | Compare dimensionless alignment peaks; unblock energy-spectrum ordinate mapping; verify the scale at which alignment ends trends with dissipation scale. |
 | Figure 12: heat-flux sensitivity | `R12`, `R02`, `R13`, plus nominal passive `R06`. | Compare dimensionless alignment peaks; unblock lower-panel gradient-spectrum mapping; test claimed insensitivity across factor-100 `|k_parallel|` variations. |
-| Figure 13: limiter-induced collisionality | `R14`, `R15`, `R03`, with passive context where plotted. | Compare admitted `beta Delta` PDF and normalized transfer curves; unblock energy/strain dimensional panels; test nonmonotonic response to `nu_lim`. |
+| Figure 13: limiter-induced collisionality | `R14`, `R15`, `R03`, with passive hard-wall context `R07` where plotted. | Compare admitted `beta Delta` PDF and normalized transfer curves; unblock energy/strain dimensional panels; test nonmonotonic response to `nu_lim`. |
 | Figure 13 associated quantitative text | `R15` postprocessing with parallel and oblique firehose masks; outer-scale rate estimate; external kinetic context. | Test the reported `10.4%` versus `18.5%` unstable-volume reclassification over the same late-time interval and the estimated rate near `235 v_A/L_perp`; treat the reported hybrid-kinetic `17.9%` comparison as external unless its data are obtained. |
 | Analytic/reduced-model conclusions and appendices | Equation audit plus reproduced diagnostics above. | Trace each claimed analytic prediction to an equation and a reproduced numerical test; explicitly separate derivation verification from independent simulation evidence. |
 
@@ -354,11 +432,11 @@ work is:
 
 | Work item | Existing starting point | Required completion evidence |
 | --- | --- | --- |
-| Freeze MKS24 case inventory | Guarded `paper-standard`, `paper-compressive`, `paper-heat-flux`, `paper-nulim`, and `paper-scale-separation` input definitions exist. | Machine-readable seventeen-run manifest with alias reuse, exact parameters, analysis roles, and production authorization guard. |
+| Freeze MKS24 case inventory | `inputs/cgl_lf_paper/mks24_stage_i_manifest.json` and guarded workflow `paper-mks24-stage-i` define sixteen source-mapped executions, reuse aliases, and exclude the unmapped active-Alfvenic beta-1 deck. | Preserve the committed manifest and validate it against every submitted input bundle. |
 | Close reference-data boundary | Many dimensionless curves/surfaces are extracted; dimensional panels remain blocked. | Author/archive data, explicit transform proof, or manuscript-scoped blocked-panel decision. |
 | Verify numerical model identity | Corrected collisions, limiter threshold selection, forcing work, passive feedback, and reduced/GPU gates are recorded. | Formal pre-production review against Stage I Sections 3-6 and passing required tests. |
-| Production accounting path | Current Frontier utility is intentionally debug-only. | A reviewed production-QOS submission/accounting path that fails closed under this plan's budget. |
-| Production analysis/plot orchestration | Existing analyzer and MKS24 extractors implement many products. | Workflow command regenerating the per-panel gate table and retained figures from accepted outputs. |
+| Production accounting path | `scripts/frontier/cgl_lf_stage_i.py` is separate from the debug-only utility, validates mapped cases and aliases, uses `batch` with default production `normal` QOS, archives executable/input and production-utility provenance, enforces sequential Stage I reservations, and requires an inspection record before an output may be recorded as `accepted` or retained as a clean partial prefix. Rank-local output sets are retained and checksum-verified as grouped products. Continuations may use only the inspected terminal restart set from a parent with matching case, input digest, and executable digest. | Record and review each completed segment before preparing its continuation or the next case. |
+| Production analysis/plot orchestration | Existing analyzer and MKS24 extractors implement many products; `paper-analyze` composes repeated checksum-qualified split reference manifests while rejecting duplicate product identifiers, and commit `449e297b` adds explicit partial-case comparison recording plus header-only snapshot-window selection; `cgl_lf_stage_i.py bundle-case` follows the explicit accepted restart lineage, merges sampled histories that need not repeat authenticated restart boundary rows while bounding gaps by their retained cadence and boundary timesteps, and links time-deduplicated shared or rank-local snapshot sets only after a case reaches its required final time, while `bundle-campaign` requires all sixteen completed mapped cases for cross-case comparisons. | Workflow command regenerating the per-panel gate table and retained figures from accepted output bundles. |
 | Manuscript conversion | Illustrated validation note exists. | TeX manuscript structured around reproduction claims, blocked boundaries, and only later an extension. |
 
 No weak/strong-guide case family or uniform-`nu_coll` extension case should be
@@ -378,8 +456,8 @@ reservation in this document control future submission authorization.
 | Stage I allocation | Calculation basis | Node-hours |
 | --- | --- | ---: |
 | Previously consumed qualification ledger | Retained CGL-LF debug qualification evidence | `0.851670` |
-| Seventeen unique MKS24 CGL-LF runs, estimated runtime | Fifteen standard-layout cases plus one `n_perp = 96` and one `n_perp = 384` case | `534.444444` |
-| Runtime contingency for measurement error, segment extensions, and reruns | `2x` planning ceiling already including the seventeen-run estimate | `534.444445` |
+| Conservative mapped-run reservation including unresolved-definition contingency | Earlier seventeen-run estimate: fourteen mapped standard-layout cases plus one held beta-1 contingency slot, one `n_perp = 96`, and one `n_perp = 384` case | `534.444444` |
+| Runtime contingency for measurement error, segment extensions, and reruns | `2x` planning ceiling retaining the unresolved-definition contingency until Phase A disposition | `534.444445` |
 | Stage I production reservation plus prior consumption | `0.851670 + 1068.888889` | `1069.740559` |
 | Remaining project ceiling after Stage I reservation | `4000 - 1069.740559` | `2930.259441` |
 
@@ -392,12 +470,102 @@ The estimate is not a measured standard-run benchmark. Prior to production:
 4. Stop and recost if projected Stage I consumption exceeds its reserved
    ceiling.
 
-The existing estimated sequential-retention storage allocation for the
-seventeen unique cases is approximately `880.368 GB` with margin; the
-no-pruning alternative is approximately `1140.924 GB`. Confirm the storage
-reservation and retention rule before executing the standard matrix.
+The existing estimated sequential-retention storage allocation, conservatively
+including the unresolved beta-1 definition as a contingency, is approximately
+`880.368 GB` with margin; the no-pruning alternative is approximately
+`1140.924 GB`. Confirm the storage reservation and retention rule before
+executing the mapped matrix, and reduce these envelopes only after Phase A
+records the beta-1 disposition and updates the cost model.
 
-### 8.1 Why Stage II is not currently reserved in full
+### 8.1 Active production record
+
+Stage I execution has begun under the production path; the following rows
+are execution provenance, not accepted reproduction evidence:
+
+| Case/segment | Frontier job | Requested allocation | Input/build provenance | Acceptance gate |
+| --- | ---: | --- | --- | --- |
+| `R16/s00_t0_t2` | `4674731`, `COMPLETED`, `0:0` | `1` node, `01:15:12` charged elapsed; `1.253333` actual node-hours | Legacy shared-MPI-I/O input at committed revision `e129a7ff8be60eb177c8268da0a73e7700d8b543`; executable SHA-256 `de99066f3546976093f6ff656660952032e30f31c939736c0212629cfb015157`; archived submitted input and matrix in the run manifest directory. | `clean_partial`: terminal `t = 1.66204848945 < 2.0`, zero strict LF safety counters and retained terminal restart; retained as diagnostic evidence only and not continued into the changed output-protocol digest. |
+| `R16/s01_rankio_t0_t2` | `4675322`, `COMPLETED`, `0:0` | `1` node, `01:15:11` charged elapsed; `1.253056` actual node-hours | Rank-local retained-output input/utility revision `1f52784d291718fff3bf1dc984a682ada52780ab`; executable revision `e129a7ff8be60eb177c8268da0a73e7700d8b543` and SHA-256 `de99066f3546976093f6ff656660952032e30f31c939736c0212629cfb015157`; complete `t = 1` ranked snapshot/restart boundary and terminal ranked products retained, initial snapshot read through the rank-aware analyzer, and no legacy-scale output pause observed. | `clean_partial`: terminal `t = 1.87769834013 < 2.0`, zero strict LF safety counters and complete terminal rank-local snapshot/restart products; eligible for same-digest continuation only. |
+| `R16/s02_rankio_t1p877698_t2` | `4676557`, `COMPLETED`, `0:0` | `1` node, `00:06:23` charged elapsed; `0.106389` actual node-hours | Continued from inspected terminal eight-rank restart set of `s01` with unchanged input/executable digests. | `accepted`: reached `t = 2.0`, zero strict LF safety counters, and complete terminal rank-local snapshot/restart products; establishes the ranked prefix gate only. |
+| `R16/s03_rankio_t2_t3p5` | `4676696`, `COMPLETED`, `0:0` | `1` node, `01:23:01` charged elapsed; `1.383611` actual node-hours | Continued from inspected accepted terminal eight-rank restart set of `s02` with unchanged input/executable digests; terminal outputs contain five complete eight-rank snapshot groups at `t = 2.50014742786`, `2.75033411668`, `3.00023812685`, `3.25023774201`, and `3.5`, plus the terminal eight-rank restart group. | `accepted`: reached `t = 3.5`, formal inspection records zero strict LF safety counters and complete terminal rank-local products; establishes a longer ranked prefix gate only. |
+| `R16/s04_rankio_t3p5_t5` | `4679803`, `COMPLETED`, `0:0` | `1` node, `01:34:04` charged elapsed; `1.567778` actual node-hours | Continued from the inspected accepted terminal eight-rank `.00004.rst` set of `s03` with unchanged input/executable digests. Terminal outputs contain six complete eight-rank snapshot groups at `t = 3.75032903725`, `4.00000477772`, `4.25028947444`, `4.49999984569`, `4.75028920409`, and `5.0`, plus the terminal eight-rank restart group. | `accepted`: reached `t = 5.0`, formal inspection records zero strict LF safety counters and complete terminal rank-local products; establishes a longer ranked prefix gate only. |
+| `R16/s05_rankio_t5_t6p5` | `4681476`, `COMPLETED`, `0:0` | `1` node, `01:45:12` charged elapsed; `1.753333` actual node-hours | Continued from the inspected accepted terminal eight-rank `.00005.rst` set of `s04` using unchanged input/executable digests. Terminal outputs contain six complete eight-rank snapshot groups at the `t = 5.25`, `5.5`, `5.75`, `6.0`, `6.25`, and terminal `6.43828031751` states, plus complete scheduled `t = 6.0` and terminal restart groups. | `clean_partial`: clean application-walltime termination at `t = 6.43828031751 < 6.5`; formal inspection records zero strict LF safety counters and complete terminal ranked products, allowing same-digest continuation only. |
+| `R16/s06_rankio_t6p438280_t6p5` | `4683291`, `COMPLETED`, `0:0` | `1` node, `00:04:50` charged elapsed; `0.080556` actual node-hours | Continued from the inspected clean-partial terminal eight-rank `.00007.rst` set of `s05` using unchanged input/executable digests and a `time/tlim=6.5` override; terminal outputs include complete eight-rank snapshot and restart groups at `t = 6.5`. | `accepted`: reached `t = 6.5`, formal inspection records zero strict LF safety counters and complete terminal rank-local products; promotes the accepted ranked prefix through the clean-partial parent. |
+| `R16/s07_rankio_t6p5_t7p5` | `4683918`, `COMPLETED`, `0:0` | `1` node, `01:16:55` charged elapsed; `1.281944` actual node-hours | Continued from the inspected accepted terminal eight-rank `.00008.rst` set of `s06` using unchanged input/executable digests and a `time/tlim=7.5` override; terminal outputs contain three complete eight-rank snapshot groups at `t = 7.00026203265`, `7.25019568336`, and `7.5`, plus the terminal eight-rank restart group. | `accepted`: reached `t = 7.5`, formal inspection records zero strict LF safety counters and complete terminal rank-local products; extends the accepted ranked prefix but remains before the analysis window. |
+| `R16/s08_rankio_t7p5_t8p5` | `4686032`, `PENDING` at submission check on `2026-05-26` | `1` node, `02:00:00`, `batch` / default `normal` QOS; `2.000000` reserved node-hours | Submitted from the inspected accepted terminal eight-rank `.00009.rst` set of `s07` using unchanged input/executable digests and a `time/tlim=8.5` override. | Require exact target completion, formal inspection, zero strict LF safety counters, and complete terminal rank-local products before admitting the first production-window prefix evidence. |
+
+The ranked `t = 0`--`2` prefix was assembled as the diagnostic bundle
+`runs/bundles/diagnostic-prefixes/R16_rankio_t2_prefix_20260525` after the
+bundler was made lineage-aware, then reassembled successfully under the
+cadence-bounded implementation as
+`runs/bundles/diagnostic-prefixes/R16_rankio_t2_prefix_cadence_20260525`.
+Both bundles contain only `s01` and `s02` and link ten retained rank-local
+snapshots. The first bundle's default `paper-analyze`
+execution produced only a history summary because a `t = 2` prefix has no
+samples in the production `t = 8`--`10` analysis window. A distinct,
+infrastructure-only transient-window check over `t = 0`--`2` then read all
+ten snapshots, selected 101 history rows, passed the synthetic analyzer
+check, and rendered nine diagnostic figures. It is not a final-time `R16`
+bundle and is not panel reproduction evidence.
+
+After `s03` acceptance, the lineage-checked bundle
+`runs/bundles/diagnostic-prefixes/R16_rankio_t3p5_prefix_cadence_20260525`
+was assembled from only `s01`, `s02`, and `s03`; its manifest records
+`accepted_final_time = 3.5`, `status = accepted_for_analysis`, and fifteen
+deduplicated rank-local snapshots. It verifies accepted-prefix assembly at
+the new gate, but it still has no samples in the required production window
+`t = 8`--`10`: a default-window analyzer check found `176` merged history
+rows overall but selected zero history rows and zero snapshots in that
+window, while passing its synthetic diagnostic test. It is not panel
+reproduction evidence.
+
+After `s04` acceptance, the further lineage-checked bundle
+`runs/bundles/diagnostic-prefixes/R16_rankio_t5_prefix_cadence_20260525`
+was assembled from only `s01` through `s04`; its manifest records
+`accepted_final_time = 5.0`, `status = accepted_for_analysis`, and twenty-one
+deduplicated rank-local snapshots. A default-window analyzer check found
+`251` merged history rows overall but selected zero history rows and zero
+snapshots in `t = 8`--`10`, while passing its synthetic diagnostic test.
+This is accepted continuation evidence, not panel reproduction evidence.
+
+After `s06` acceptance, including the inspected `s05` clean partial in its
+continued lineage, the accepted-prefix bundle
+`runs/bundles/diagnostic-prefixes/R16_rankio_t6p5_prefix_cadence_20260526`
+was assembled from `s01` through `s06`; its manifest records
+`accepted_final_time = 6.5`, `status = accepted_for_analysis`, and
+twenty-eight deduplicated ranked snapshots. A default-window analyzer check
+found `326` merged history rows overall but selected zero history rows and
+zero snapshots in `t = 8`--`10`, while passing its synthetic diagnostic test.
+This is accepted continuation evidence, not panel reproduction evidence.
+
+After `s07` acceptance, the accepted-prefix bundle
+`runs/bundles/diagnostic-prefixes/R16_rankio_t7p5_prefix_cadence_20260526`
+was assembled from `s01` through `s07`; its manifest records
+`accepted_final_time = 7.5`, `status = accepted_for_analysis`, and
+thirty-one deduplicated ranked snapshots. A generic default-window analysis
+found `376` merged history rows overall but selected zero history rows and
+zero snapshots in `t = 8`--`10`, while passing its synthetic diagnostic
+test and writing one history-only figure. A requested Figure 11 reference
+comparison fails closed because the present case selects an empty analysis;
+this prefix is not panel reproduction evidence.
+
+Commit `449e297b` adds an explicitly scoped
+`--allow-partial-reference-cases` comparison mode, which records products
+omitted because their cases are not present in a single-case bundle, and
+selects snapshot windows from binary headers before loading full fields. A
+local terminal-snapshot plumbing probe at `t = 2.0` evaluated only the
+available Figure 11 `R16` product and recorded the absent `R02` and `R17`
+products as omissions. That transient, out-of-window probe is not production
+comparison evidence.
+
+Job `4683918` is inspected and recorded as an accepted continuation through
+`t = 7.5` after the clean partial `4681476` at `t = 6.43828031751` and
+accepted terminal-gate segment `4683291`; job `4686032` is submitted toward
+the `t = 8.5` acceptance gate and the first production-window prefix.
+Do not describe `R16` as a completed accepted case until ranked-output
+segments satisfy the stated gates through the required final time.
+
+### 8.2 Why Stage II is not currently reserved in full
 
 The former full extension plan reserved `3735.627090` node-hours including
 the existing ledger. Its incremental requirement after the already consumed
@@ -425,7 +593,7 @@ reference-data decision, and execution authorization have been reviewed.
 | Introduction | Motivate magneto-immutability and the need to reproduce MKS24 before testing new guide-field/collisionality regimes. |
 | MKS24 target contract | State the closure, box, forcing, beta/limiter/LF-scale cases, and what direct reproduction excludes unless externally supplied. |
 | AthenaK method validation | Condense existing operator, forcing, limiter, restart, GPU, and work-accounting evidence needed to trust the independent reproduction. |
-| Reproduction campaign | Present the seventeen unique cases, output/analysis protocol, cost/storage provenance, and per-panel comparison method. |
+| Reproduction campaign | Present the sixteen mapped cases, any audited beta-1 disposition, output/analysis protocol, cost/storage provenance, and per-panel comparison method. |
 | Reproduced equation of state and compressive behavior | Figures 1-4 comparisons, with blocked status if required normalization remains unresolved. |
 | Reproduced cascade and self-organization | Figures 5-9 and 11 comparisons: spectra, transfer, alignment, structure, and resolution. |
 | Reproduced closure sensitivities | Figures 12-13: heat-flux scale and limiter-induced scattering rate. |
@@ -483,6 +651,32 @@ extension design, not a reproduction configuration. Define:
 | Weak guide `wg` | Late-time `R_B = B_rms/B_mean = 2.0 +/- 0.2`, `M_s = 0.50 +/- 0.05`, and primary `beta_rms approximately 10`. |
 | Stronger guide `sg` | Late-time `R_deltaB = delta_B_rms/B_mean = 0.50 +/- 0.05`, `M_s = 0.50 +/- 0.05`, and primary `beta_rms approximately 10`. |
 
+The retained target definitions are:
+
+```math
+\boldsymbol{B}_{\rm mean}=\langle\boldsymbol{B}\rangle_V,\qquad
+B_{\rm mean}=|\boldsymbol{B}_{\rm mean}|,\qquad
+B_{\rm rms}=\langle|\boldsymbol{B}|^2\rangle_V^{1/2},
+```
+
+```math
+\delta B_{\rm rms}=
+\langle|\boldsymbol{B}-\boldsymbol{B}_{\rm mean}|^2\rangle_V^{1/2},
+\qquad
+p_{\rm iso}={2p_\perp+p_\parallel\over3},
+```
+
+```math
+M_s={u_{\rm rms}\over
+\sqrt{(5/3)\langle p_{\rm iso}\rangle_V/\langle\rho\rangle_V}},
+\qquad
+\beta_{\rm rms}={2\langle p_{\rm iso}\rangle_V\over B_{\rm rms}^2}.
+```
+
+The weak-guide definition deliberately uses total `B_rms`; the stronger-guide
+definition deliberately uses fluctuating `delta_B_rms`. Report both magnetic
+ratios for both anchors and do not interchange these targets during tuning.
+
 Calibrate anchors with a calibration-only seed and hold science seeds out of
 tuning. Measure each collisionless anchor turnover time
 `tau_eddy,0,G` and define the background-collision scan:
@@ -498,7 +692,30 @@ case metadata. Drift in magnetic amplitude, Mach number, or beta is then a
 physical response rather than a calibration failure. Separately tuned
 state-matched runs may be secondary comparisons only.
 
-### 10.3 Extension safeguards retained from the earlier plan
+### 10.3 Candidate Stage II matrix
+
+This is the retained scientific design to be recosted after Stage I, not an
+execution authorization. A post-reproduction approval may reduce it only by
+recording which resulting inference is relinquished.
+
+| Tier | Guide regimes and `C_G` | Resolutions | Models and seeds | Purpose |
+| --- | --- | --- | --- | --- |
+| Calibration | `wg`, `sg`; `0` | `32^3`, then `64^3` | Active finalists and matched passive confirmation; calibration seed `161803` only. | Freeze anchor inputs and `tau_eddy,0,G`; never enter scientific averages. |
+| Collisionless anchor ladder | `wg`, `sg`; `0` | `64^3`, `96^3`, `192^3`, `384^3` | Active/passive; seed `271828`. | Resolve guide-field and feedback baselines. |
+| Collisionless seed repeat | `wg`, `sg`; `0` | `96^3`, `192^3` | Active/passive; seed `314159`. | Estimate realization uncertainty. |
+| Background-collision sweep | `wg`, `sg`; `0.1`, `1`, `10`, `100` | `96^3`, `192^3` | Active/passive; seed `271828`. | Measure fixed-input `nu_coll` response. |
+| Strongly collisional endpoint | `wg`, `sg`; `100` | `384^3` | Active/passive; seed `271828`. | Test resolution of the largest collision contrast. |
+| Collisional seed repeat | `wg`, `sg`; `1`, `100` | `192^3` | Active/passive; seed `314159`. | Check sampling at the transition and endpoint. |
+| Selected sensitivities | Both guide regimes; collisionless and `C_G = 1` roles selected before execution. | `96^3`, with `192^3` beta checks only if budgeted. | Active/passive beta checks at `beta_rms approximately 1,100`; active-only LF scale factors `1/2,2`; seed `271828`. | Bound beta and closure-scale dependence of principal inferences. |
+
+Stable production identities should encode guide regime, collision coordinate,
+feedback choice, resolution, and seed, for example
+`g_wg_c1_active_N192_s271828`. For every active/passive pair, reuse the
+identical archived forcing realization. For every fixed-input collision
+series, change only `nu_coll` and identifying metadata after its collisionless
+anchor has been frozen.
+
+### 10.4 Extension safeguards and acceptance contract
 
 | Safeguard or secondary check | Requirement |
 | --- | --- |
@@ -509,8 +726,18 @@ state-matched runs may be secondary comparisons only.
 | Beta sensitivity | After primary `beta_rms approximately 10`, assess selected cases at `beta_rms approximately 1` and `100`. |
 | LF-scale sensitivity | At minimum vary `lf_k_parallel` by factors of two around the baseline in selected anchor/transitional cases. |
 | Estimands | Separate active/passive feedback effects, fixed-input background-collisionality effects, and weak/strong-guide contrasts. |
+| Late-time sampling | Require a stationary accepted window spanning at least four measured turnover times, with block/bootstrap uncertainty retained for reported statistics. |
+| Safety and accounting | Require zero invalid-state/undefined-direction failures and retain forcing, applied pressure/LF work, limiter, and energy-residual evidence. |
+| Resolution claims | Describe a guide/collision effect as resolution-robust only after its sign survives the declared seed checks and the applicable `384^3` endpoint comparison. |
 
-### 10.4 Stage II recosting rule
+The minimum Stage II analysis bundle must contain target/stationarity
+decisions, low-field and limiter exposure, active/passive and collision
+contrasts with uncertainty, isotropic spectra and local-field structure
+products, selected common-scale slices, exact submitted-input/build hashes,
+and compute/storage accounting. No Stage II result enters the manuscript
+unless that bundle records its accepted case and comparison role.
+
+### 10.5 Stage II recosting rule
 
 Do not reuse the former `3735.627090` node-hour extension reservation after
 Stage I is inserted ahead of it. After Stage I:
@@ -528,10 +755,10 @@ Stage I is inserted ahead of it. After Stage I:
 
 | Phase | Work | Deliverable | Stop condition |
 | --- | --- | --- | --- |
-| A. Reproduction specification audit | Verify pinned MKS24 source, seventeen-run alias map, closure/forcing/limiter identity, and figure/status table. | Reviewed Stage I protocol. | A published simulation role or observable remains unidentified. |
+| A. Reproduction specification audit | Verify pinned MKS24 source, sixteen-run mapped alias map, disposition of the unmapped active-Alfvenic beta-1 definition, closure/forcing/limiter identity, and figure/status table. | Reviewed Stage I protocol. | A published simulation role or observable remains unidentified. |
 | B. Reference-data closure | Resolve dimensional panel normalization/data boundary and the Figure 10 external-model decision. | Qualified reference manifests or explicit scoped limitation. | A "complete" claim would depend on unqualified data. |
 | C. Production readiness | Validate required local/GPU/restart/work-accounting tests and implement reviewed production accounting. | Passing readiness review and fail-closed ledger. | Numerical gates or submission controls fail. |
-| D. MKS24 production | Execute the seventeen unique Stage I runs conditionally, one at a time with segment reviews. | Accepted run bundles and measured ledger/storage. | Safety, stationarity, accounting, storage, or budget gate fails. |
+| D. MKS24 production | Execute the sixteen mapped Stage I runs conditionally, plus the beta-1 case only if Phase A assigns it a published role; run one at a time with segment reviews. | Accepted run bundles and measured ledger/storage. | Safety, stationarity, accounting, storage, or budget gate fails. |
 | E. MKS24 analysis | Generate each required product and complete the figure-by-figure status table. | Quantitative reproduction report. | Any claimed result lacks qualified comparison evidence. |
 | F. Reproduction manuscript | Transform the TeX note into a buildable Stage I manuscript. | Manuscript and reproducibility package. | Claims exceed the accepted status table. |
 | G. Extension decision | Recalculate the Stage II design using measured Stage I results/costs. | Approved extension matrix or deferred-work record. | Insufficient budget or unresolved baseline reproduction. |
@@ -539,20 +766,46 @@ Stage I is inserted ahead of it. After Stage I:
 
 ## 12. Immediate Handoff
 
-As of 2026-05-25:
+As of 2026-05-26:
 
 1. The repository contains the TeX validation note, the writing style guide,
    a detailed MKS24 implementation/evidence plan, substantial MKS24 analysis
-   infrastructure, guarded inputs for all seventeen unique CGL-LF production
-   roles, and reduced/GPU qualification evidence.
-2. It does **not** contain executed paper-scale MKS24 production simulations,
-   completed quantitative comparisons for the full figure program, resolved
-   dimensional reference mappings for all panels, independent reproduction of
-   the Figure 10 hybrid-kinetic comparator, or a completed paper manuscript.
-3. The next task is not to launch the weak-guide extension. It is to review
-   the Stage I source/figure/reference boundary, authorize a production
-   accounting path under the revised ceiling, and execute MKS24 cases only
-   after the stated readiness gates pass.
+   infrastructure, guarded inputs for sixteen source-mapped CGL-LF production
+   roles plus one unresolved active-Alfvenic beta-1 definition, a committed
+   sixteen-run mapped execution manifest, a production-QOS accounting utility
+   with terminal-time inspection and accepted-bundle assembly gates, and
+   reduced/GPU qualification evidence.
+2. Frontier job `4674731` completed as the legacy shared-output
+   `R16/s00_t0_t2` diagnostic segment and was recorded `clean_partial` at
+   `t = 1.66204848945`. The ranked-output replacement is inspected and
+   accepted through its `t = 6.5` prefix via jobs `4675322`, `4676557`,
+   `4676696`, `4679803`, `4681476`, and `4683291`;
+   its lineage-only diagnostic prefix bundle passed a separately labeled
+   transient-window analyzer pipeline check without promoting that prefix to
+   a reproduced result. Segment `R16/s05_rankio_t5_t6p5`
+   terminated cleanly on application walltime at `t = 6.43828031751 < 6.5`,
+   was recorded `clean_partial` with complete terminal ranked products and
+   zero strict LF safety counters, and used `1.753333` node-hours. Short
+   continuation `R16/s06_rankio_t6p438280_t6p5` reached exact `t = 6.5`,
+   was recorded `accepted` after formal inspection, and used `0.080556`
+   node-hours. The accepted-prefix `t = 6.5` bundle contains twenty-eight
+   deduplicated ranked snapshots but remains outside the production
+   comparison window. Continuation `R16/s07_rankio_t6p5_t7p5` reached
+   exact `t = 7.5`, was recorded `accepted`, and used `1.281944`
+   node-hours; its generic prefix analysis still selects zero samples in the
+   `t = 8`--`10` window. Continuation `R16/s08_rankio_t7p5_t8p5` is
+   submitted as job `4686032` toward the first production-window prefix.
+   No complete `t = 10` `R16` run bundle or reproduced panel exists yet.
+3. It does **not** contain completed paper-scale MKS24 production
+   simulations, completed quantitative comparisons for the full figure
+   program, resolved dimensional reference mappings for all panels,
+   independent reproduction of the Figure 10 hybrid-kinetic comparator, or a
+   completed paper manuscript.
+4. The next task is not to launch the weak-guide extension. It is to monitor,
+   inspect and account `R16/s08_rankio_t7p5_t8p5` after job `4686032`
+   completes, continue only inspected Stage I segments sequentially to their
+   required durations, assemble accepted per-case analysis bundles, and then
+   complete the panel/status and manuscript program.
 
 ## 13. Reproducibility Record
 

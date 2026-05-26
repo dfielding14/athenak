@@ -289,8 +289,16 @@ inspection records zero strict LF safety counters, six complete rank-local
 snapshot groups, complete terminal rank-local restart products, and
 \(1.753333\) accounted node-hours.  It is retained as a clean partial, not
 as an accepted extension of the prefix.  A short completion segment from
-that inspected terminal restart set to \(t=6.5\), job \texttt{4683291}, has
-been submitted.  The
+that inspected terminal restart set to \(t=6.5\), job \texttt{4683291},
+completed in \(0.080556\) node-hours and passed formal inspection with zero
+strict LF safety counters and complete terminal rank-local products.  It
+extends the accepted prefix through \(t=6.5\).  Continuation
+\texttt{R16/s07\_rankio\_t6p5\_t7p5}, job \texttt{4683918}, completed in
+\(1.281944\) node-hours, reached \(t=7.5\), and passed formal inspection
+with zero strict LF safety counters and complete terminal rank-local
+products.  It extends the accepted prefix through \(t=7.5\).  Continuation
+\texttt{R16/s08\_rankio\_t7p5\_t8p5}, job \texttt{4686032}, has been
+submitted toward the first prefix containing production-window samples.  The
 legacy partial is not continued across the
 changed input digest.  The bundle assembler follows only the explicit
 inspected restart lineage and bounds a sampled-history boundary gap using
@@ -314,6 +322,18 @@ assembled only the four ranked-output segments and retained twenty-one
 deduplicated rank-local snapshots.  A default-window analysis found 251
 merged history rows overall but selected zero history rows and zero snapshots
 in \(8\leq t\leq10\), while passing its synthetic diagnostic check.
+After acceptance through \(t=6.5\), the lineage-checked prefix includes the
+inspected clean-partial continuation and its accepted terminal-gate segment;
+it retains twenty-eight deduplicated rank-local snapshots.  A default-window
+analysis found 326 merged history rows overall but selected zero history rows
+and zero snapshots in \(8\leq t\leq10\), while passing its synthetic
+diagnostic check.
+After acceptance through \(t=7.5\), the next lineage-checked prefix retains
+thirty-one deduplicated rank-local snapshots.  Its generic analysis found 376
+merged history rows overall but selected zero history rows and zero snapshots
+in \(8\leq t\leq10\), while passing its synthetic diagnostic check.  A
+requested Figure~11 comparison is therefore rejected as an empty selected
+analysis rather than presented as paper evidence.
 
 \section{Validation Workflow}
 
@@ -586,10 +606,12 @@ absolute digitized ordinates into AthenaK products.  Those panels require
 author/archive numeric data, donor diagnostic code, or an explicit
 normalization statement.  One mapped production segment has been retained
 only as clean partial I/O-diagnostic evidence; the ranked-output replacement
-is accepted through its \(t=5.0\) prefix.  Its first continuation toward
-\(t=6.5\) is retained as a clean partial through \(t=6.43828031751\), and a
-short terminal-gate completion has been submitted on the path to the
-required \(t=10\) final time.  Its
+is accepted through its \(t=7.5\) prefix.  Its first continuation beyond
+\(t=5.0\) is retained as a clean partial through \(t=6.43828031751\), and
+its inspected short terminal-gate completion establishes the accepted
+\(t=6.5\) prefix.  The accepted continuation to \(t=7.5\) remains outside
+the comparison window, and a submitted continuation toward \(t=8.5\) is on
+the path to the required \(t=10\) final time.  Its
 transient-prefix bundle has verified the
 rank-local assembly and diagnostic path, but the production comparison window
 is \(8\leq t\leq10\).  Quantitative MKS24
@@ -686,7 +708,7 @@ diagnostics, source-mapped MKS24 case definitions, and a checksum- and
 allocation-recorded Frontier production protocol.  The production protocol
 began with the required low-resolution scale-separation case; its first
 shared-I/O segment is a clean partial diagnostic record, and its ranked-output
-replacement has passed the inspected \(t=5.0\) prefix gate and is continuing
+replacement has passed the inspected \(t=7.5\) prefix gate and is continuing
 toward \(t=10\).  No completed case is yet counted as an accepted comparison
 result.  Thus the present manuscript establishes the method, target contract,
 and acceptance procedure, but does not yet claim reproduction of the MKS24
@@ -734,9 +756,10 @@ bundle.  The reduced nonlinear figures come from a passing
 \texttt{paper-convergence} bundle reanalyzed with the current plotting code.
 Warning-strict Sphinx documentation and this \LaTeX{} build are checked when
 the report is updated.  The ranked-output low-resolution case has passed its
-inspected \(t=5.0\) prefix gate; a continuation terminated cleanly at
-\(t=6.43828031751<6.5\), and a short segment to complete the \(t=6.5\) gate
-has been submitted.  Nevertheless,
+inspected \(t=7.5\) prefix gate after a clean partial at
+\(t=6.43828031751<6.5\) and its formally accepted terminal-gate
+continuation; the next segment toward \(t=8.5\) has been submitted.
+Nevertheless,
 production/statistical and paper-reference comparison gates remain open until
 accepted \(t\geq10\) output bundles are analyzed.
 
