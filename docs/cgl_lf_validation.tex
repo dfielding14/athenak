@@ -273,8 +273,14 @@ same-digest continuation \texttt{R16/s02\_rankio\_t1p877698\_t2}
 strict LF failure counters and complete terminal rank-local products, and
 used \(0.106389\) node-hours.  It is accepted as the terminal segment of the
 rank-local \(t=0\)-to-\(2\) prefix, not as a completed \(t=10\) case.  A
-further same-digest continuation through \(t=3.5\) has been submitted as
-job \texttt{4676696}.  The legacy partial is not continued across the
+further same-digest continuation through \(t=3.5\), job \texttt{4676696},
+completed in \(1.383611\) node-hours and passed formal inspection with zero
+strict LF safety counters, five complete rank-local snapshot groups ending at
+\(t=3.5\), and a complete terminal rank-local restart group.  It extends the
+accepted prefix, but is not a completed \(t=10\) case.  The next same-digest
+continuation through \(t=5.0\), job \texttt{4679803}, has been submitted.
+The
+legacy partial is not continued across the
 changed input digest.  The bundle assembler follows only the explicit
 inspected restart lineage and bounds a sampled-history boundary gap using
 the retained history cadence and boundary timesteps, rather than mixing in
@@ -285,6 +291,13 @@ rank-local segments.  A separately labeled transient-window analysis over
 its synthetic diagnostic check, and rendered nine diagnostic figures.  This
 check qualifies the retained-output pipeline only; it is not a late-time
 MKS24 comparison.
+After acceptance through \(t=3.5\), a new lineage-checked prefix bundle
+assembled only the three ranked-output segments and retained fifteen
+deduplicated rank-local snapshots.  This verifies accepted-prefix assembly at
+the later gate, but it remains outside the declared \(8\leq t\leq10\)
+comparison window: a default-window analysis found 176 merged history rows
+overall but selected zero history rows and zero snapshots for comparison,
+while passing its synthetic diagnostic check.
 
 \section{Validation Workflow}
 
@@ -542,6 +555,13 @@ panel product retains its own provenance manifest, an accepted campaign
 bundle is analyzed by repeating \texttt{paper-analyze --reference-curves}
 for the admitted manifests; the analyzer records every manifest checksum and
 provenance block and rejects duplicate product identifiers across manifests.
+For incremental review of a single accepted case,
+\texttt{--allow-partial-reference-cases} evaluates only products whose cases
+are present in the bundle and records the omitted products; it does not
+authorize a missing-case panel claim.  Snapshot-window selection reads the
+binary output time from each header before loading fields, so retained
+snapshots outside the declared late-time comparison window do not dominate
+analysis cost.
 
 Remaining absolute spectral or strain ordinate panels are intentionally not
 admitted: the paper and cited donor source define shell spectra and plotted
@@ -550,8 +570,8 @@ absolute digitized ordinates into AthenaK products.  Those panels require
 author/archive numeric data, donor diagnostic code, or an explicit
 normalization statement.  One mapped production segment has been retained
 only as clean partial I/O-diagnostic evidence; the ranked-output replacement
-is accepted through its \(t=2\) prefix and is being continued toward the
-required \(t=10\) final time.  Its transient-prefix bundle has verified the
+is accepted through its \(t=3.5\) prefix and has a submitted continuation
+toward the required \(t=10\) final time.  Its transient-prefix bundle has verified the
 rank-local assembly and diagnostic path, but the production comparison window
 is \(8\leq t\leq10\).  Quantitative MKS24
 simulation-to-reference comparisons require completed accepted bundles; none
@@ -647,7 +667,7 @@ diagnostics, source-mapped MKS24 case definitions, and a checksum- and
 allocation-recorded Frontier production protocol.  The production protocol
 began with the required low-resolution scale-separation case; its first
 shared-I/O segment is a clean partial diagnostic record, and its ranked-output
-replacement has passed the inspected \(t=2\) prefix gate and is continuing
+replacement has passed the inspected \(t=3.5\) prefix gate and is continuing
 toward \(t=10\).  No completed case is yet counted as an accepted comparison
 result.  Thus the present manuscript establishes the method, target contract,
 and acceptance procedure, but does not yet claim reproduction of the MKS24
@@ -684,6 +704,9 @@ Commits \texttt{476f9dbd}, \texttt{9c5c1b40}, and \texttt{bad8ba05}
 make analysis bundles follow inspected restart ancestry, permit the expected
 sampled output boundary without requiring duplicated history rows, and reject
 larger gaps inconsistent with the recorded history cadence.
+Commit \texttt{449e297b} records absent comparison cases explicitly during
+scoped single-case analysis and selects snapshot windows from lightweight
+binary-header reads before reconstructing retained fields.
 
 \section{Build and Runtime Status}
 
@@ -692,7 +715,7 @@ bundle.  The reduced nonlinear figures come from a passing
 \texttt{paper-convergence} bundle reanalyzed with the current plotting code.
 Warning-strict Sphinx documentation and this \LaTeX{} build are checked when
 the report is updated.  The ranked-output low-resolution case has passed its
-inspected \(t=2\) prefix gate and a continuation has been submitted, but
+inspected \(t=3.5\) prefix gate and a continuation has been submitted, but
 production/statistical and paper-reference comparison gates remain open until
 accepted \(t\geq10\) output bundles are analyzed.
 
