@@ -241,7 +241,7 @@ test or run evidence.
 | Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Partial 2026-05-26; a frozen sixteen-case mapped Stage I manifest supersedes duplicate/unmapped roles, and normal-QOS production has begun with low-resolution Figure 11 case `R16`; its rank-local lineage is accepted only through `t = 7.5`, with job `4686032` submitted toward `t = 8.5`; no complete `t = 10` accepted case or scientific figure comparison exists |
 | Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-26; reduced debug qualification remains archived (`0.851670` node-hours), and separate `scripts/frontier/cgl_lf_stage_i.py` production control now validates the mapped manifest, uses sequential `batch`/default-`normal` segments, archives per-segment provenance/inspection, and records `8.680000` Stage I node-hours through accepted job `4683918`; submitted job `4686032` reserves `2.000000` more node-hours under the revised `4000` node-hour project ceiling recorded in the manuscript execution plan |
 | User documentation | Sphinx build and accurately scoped runbook | Yes | Implemented for current functionality 2026-05-25; Sphinx warnings-as-errors and repository style suite pass in an isolated validation environment; future campaign results must still be documented when executed |
-| Performance suitability | Representative timing/memory/I/O evidence; no uninvestigated prohibitive bottleneck | Yes for production use | Partial 2026-05-25; G-008 records reduced debug-scale evidence, G010b records reduced shared-MPI-I/O timing, G011 measures startup-only standard-layout memory/file size, and corrected nonlinear G013 reaches `t = 2.0` in `2080` allocated seconds with retained MPI-I/O timing; a conservative scaling proposal is documented, but measured standard-run runtime and approved production execution remain open |
+| Performance suitability | Representative timing/memory/I/O evidence; no uninvestigated prohibitive bottleneck | Yes for production use | Partial 2026-05-26; G-008 records reduced debug-scale evidence, G010b records reduced shared-MPI-I/O timing, G011 measures startup-only standard-layout memory/file size, and corrected nonlinear G013 reaches `t = 2.0` in `2080` allocated seconds with retained MPI-I/O timing; Stage I `R16` normal-QOS execution is accepted only through `t = 7.5`, so measured complete-case runtime and production/statistical qualification remain open |
 
 The final readiness report must distinguish:
 
@@ -254,15 +254,17 @@ None of these phrases should be used as a substitute for the others.
 
 ## Current Readiness Decision (2026-05-25)
 
-This is the current final readiness report for the implemented and retained
-evidence on this branch. It is a blocked release decision, not an
-authorization to execute paper-production jobs.
+This is the current readiness report for the implemented and retained
+evidence on this branch. It is a blocked release decision, not a completed
+reproduction claim.  Paper-production execution is governed separately by
+the subsequently recorded sequential Stage I protocol and its `4000`
+node-hour ceiling in `docs/cgl_lf_weak_guide_manuscript_plan.md`.
 
 | Claim | Decision | Retained supporting evidence | Blocking work |
 | --- | --- | --- | --- |
 | Local operator and reduced-workflow implementation | Supported for the exercised local scope only | Full CPU suite (`218 passed, 15 skipped`), focused CGL suite (`30 passed`), retained `accuracy-v2`, `20260525-paper-smoke-pressure-work-v1`, `20260525-paper-convergence-pressure-work-v1`, and `20260525-amr-pressure-work-v1` bundles, F-018 through F-026 regression evidence, F-033 local exact-state hard-wall evidence, and scheduler-launched MPI CPU AMR jobs `4659053`/`4659141` | Production/statistical comparison gates remain open |
 | Validated on Frontier GPU hardware | Supported for the archived reduced qualification cases through F-033 | Immutable HIP/MPI builds; G-001 through G-007 strict/restart/decomposition/reduced-paper records; post-F-026 restart jobs `4658072`/`4658163`, GPU AMR jobs `4658191`/`4658283`, managed-policy confirmation job `4659663`, G010b/G011 I/O evidence, and G013 corrected nonlinear hard-wall job `4673404` | Paper-scale execution, measured standard runtime, and long-time statistical qualification remain open; G012 remains the retained failure of the superseded finite-rate hard-wall interpretation |
-| Production ready for supported CGL-LF use | Not established | Debug policy/accounting tooling, reduced GPU qualification including F-033 G013, MPI CPU AMR evidence, shared-MPI-I/O measurements, a reviewable scaling/storage proposal, and RK/AMR-consistent applied hyperbolic pressure traction histories exist | Measured representative standard runtime, approval of an appropriate production submission, and production/statistical qualification remain required |
+| Production ready for supported CGL-LF use | Not established | Debug policy/accounting tooling, reduced GPU qualification including F-033 G013, MPI CPU AMR evidence, shared-MPI-I/O measurements, a sequential normal-QOS Stage I production protocol with accepted `R16` prefix evidence, and RK/AMR-consistent applied hyperbolic pressure traction histories exist | Completion and analysis of representative mapped production runs and production/statistical qualification remain required |
 | MKS24 reproduction complete | Not established | Guarded standard/limiter/heat-flux/compressive/scale-separation input matrices, paper analysis products including Figure 2(a)-coordinate joint PDFs with source-qualified sampled-surface references, Figure 3/4(b)/6(a) spectral fields, checksum/uncertainty-qualified reference-data comparison interface, populated Figure 2(b) histories, Figure 4(a) normalized-density PDFs, Figure 5(b) normalized eddy-scale curves, dimensionless Figure 7 transfer ratios, Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and Figure 12 alignment curves, Figure 13(b),(d) curves, and a formally inspected `R16` production prefix through `t = 7.5` exist | Paper-to-AthenaK transforms for remaining dimensional or unmatched spectral panels, other remaining panel reference data, completion/analysis of `R16` through `t = 10`, all other mapped Stage I production cases, quantitative panel comparisons, and archived scientific interpretation remain required |
 
 The final audit specifically rejects two tempting overclaims:
@@ -1097,7 +1099,7 @@ diagnostics, converged statistics, and documented quantitative comparisons.
 | Paper result | Required simulation modes | Required products | Current status |
 | --- | --- | --- | --- |
 | Figure 2: pressure-density distributions and unstable-volume history | Active and passive, Alfvenic/random, beta 10 and 100 | PDFs of `delta p_parallel`, `delta p_perp`, density; volume fraction beyond thresholds versus time | Reduced threshold-volume, steady-window PDFs, panel-(a)-coordinate joint pressure-density products, source-qualified color-calibrated sampled surfaces, and all eight vector-extracted panel-(b) histories are implemented with checksummed provenance; quantitative comparison still requires authorized standard execution |
-| Figures 3-4: compressive/density behavior | Active/passive; beta and forcing variants | Density PDFs and density/compressive spectra | Steady-window density PDFs plus `spectra.compressive_velocity` and normalized `spectra.density_fluctuation` products/rendering are implemented under F-048; F-049's guarded `paper-compressive` workflow supplies Figure 3's missing active random beta-1 and beta-100 sonic-correlation definitions while reusing four standard cases; Figure 4(a)'s explicit `rho/<rho>` coordinate is mapped to eight admitted curves under F-044; Figure 4(b)'s raw `E_rho` normalization and Figure 3 reference transform remain unqualified, and production execution remains open |
+| Figures 3-4: compressive/density behavior | Active/passive; beta and forcing variants | Density PDFs and density/compressive spectra | Steady-window density PDFs plus `spectra.compressive_velocity` and normalized `spectra.density_fluctuation` products/rendering are implemented under F-048; F-049's guarded `paper-compressive` workflow supplies Figure 3's missing active random beta-1 and beta-100 sonic-correlation definitions while reusing four standard cases; Figure 4(a)'s explicit `rho/<rho>` coordinate is mapped to eight admitted curves under F-044; Figure 4(b)'s raw `E_rho` normalization and Figure 3 reference transform remain unqualified, and required case execution/comparison remains incomplete |
 | Figures 5-6: turbulent spectra and rate-of-strain suppression | Active/passive, Alfvenic/random | Velocity/magnetic/pressure spectra; parallel/perpendicular velocity-gradient spectra; local-field eddy scales | Local-field velocity-gradient/strain products, separate `p_parallel`, `p_perp`, and AthenaK `B^2/2` spectra/rendering, plus opt-in conditioned three-point `eddy_anisotropy.velocity_perp`/`.magnetic_perp` products are implemented; Figure 5(b)'s four normalized eddy-scale curves are admitted under F-046, while Figure 5(a)/6 spectral panels retain reference-transform gaps; target runs/comparison missing |
 | Figure 7: pressure-anisotropy organization and transfer | Active/passive, Alfvenic/random, beta 10 | `grad_parallel Delta p`, `grad_perp Delta p` spectra; `T_Delta p(k_perp)/T_total` | Steady-window gradient spectra, transfer partition/closure, snapshot anisotropic-work cross-check, MKS24-normalized transfer product, and dimensionless lower-panel reference curves are implemented; dimensional upper-panel reference transform, target runs, and comparison remain open |
 | Figures 8-9: alignment diagnostic | Active/passive; beta/forcing variants | Scale-dependent PDFs and peak locations of local-field/rate-of-strain eigenvector alignment | Steady-window selected-shell alignment PDFs, reference-comparable peak curves, rendered peak summaries, and synthetic finite check implemented; Figure 8 active/passive beta-10 Alfvenic raster panels emit ten calibrated `alignment.<shell>` curves with explicit uncertainty under F-043; Figure 9 eight peak-alignment reference curves are vector-extracted for the standard case matrix |
@@ -3392,11 +3394,11 @@ standard-matrix production cost model. Do not infer a production rate from
 failed G012; use G013 only as input to a separately reviewed standard-matrix
 runtime/node-hour proposal.
 
-### Defined-Matrix Storage Envelope (Not Authorization)
+### Defined-Matrix Storage Envelope (Superseded Authorization Boundary)
 
 Job `4661434` is a startup-only, one-node/eight-GPU measurement at the exact
 `192 x 192 x 384` mesh and `32 x 32 x 64` MeshBlock layout used by the
-sixteen guarded standard-layout
+guarded standard-layout
 `paper-standard`/`paper-nulim`/`paper-heat-flux`/`paper-compressive`
 definitions. It reaches only
 `t = 0.01`; it validates standard-layout launch, host-memory evidence, shared
@@ -3411,14 +3413,17 @@ from cell count until an approved measurement is retained. The standard active A
 and the limiter-scan hard-wall definition are model-identical apart from
 labels/comments, so the proposed campaign reuses one accepted result in both
 analysis roles. Figure 11 similarly reuses the accepted standard active
-Alfvenic beta-10 `n_perp = 192` result, yielding seventeen unique simulations.
+Alfvenic beta-10 `n_perp = 192` result.  The later frozen Stage I manifest
+also excludes the unmapped active-Alfvenic beta-1 definition, yielding sixteen
+mapped simulations: fourteen standard-layout cases plus `n_perp = 96` and
+`384` scale-separation cases.
 
 All guarded inputs explicitly select shared `bin` and `rst` outputs. Their
 common definition writes binary snapshots every `0.25` and restarts every
 `1.0` through `tlim = 10.0`. Retained reduced runs confirm inclusive
 initial/final time-cadenced output, giving 41 binary snapshots and 11 restart
 files per executed case. Using the larger of the two exact G011 files of each
-kind for the fifteen standard-layout unique runs, and cell-count-scaled
+kind for the fourteen mapped standard-layout runs, and cell-count-scaled
 estimates for the additional one-eighth-size `n_perp = 96` and eight-times-size
 `n_perp = 384` cases:
 
@@ -3429,11 +3434,17 @@ estimates for the additional one-eighth-size `n_perp = 96` and eight-times-size
 | Raw generated output for one standard-layout case | `41 bin + 11 rst` | `41114362477` | `41.114` |
 | Estimated raw output for added `n_perp = 96` case | `one standard case / 8` | `~5139295310` | `~5.139` |
 | Estimated raw output for added `n_perp = 384` case | `8 x one standard case` | `~328914899816` | `~328.915` |
-| Estimated raw output for seventeen unique cases | `15 standard + n96 + n384` | `~950769632281` | `~950.770` |
-| Estimated retained output after acceptance | all snapshots plus final two restarts per case | `~568208454111` | `~568.208` |
-| Estimated sequential peak before pruning accepted checkpoints | retain 15 standard and n96; run n384 last | `~733640314941` | `~733.640` |
-| Estimated sequential retained-policy allocation with 20 percent margin | `1.2 x sequential peak` | `~880368377929` | `~880.368` |
-| Estimated no-pruning allocation with 20 percent margin | `1.2 x all raw output` | `~1140923558737` | `~1140.924` |
+| Estimated raw output for sixteen mapped cases | `14 standard + n96 + n384` | `~909655269804` | `~909.655` |
+| Estimated retained output after acceptance | all snapshots plus final two restarts per case | `~543637277717` | `~543.637` |
+| Estimated sequential peak before pruning accepted checkpoints | retain 14 standard and n96; run n384 last | `~675982766381` | `~675.983` |
+| Estimated sequential retained-policy allocation with 20 percent margin | `1.2 x sequential peak` | `~811179319658` | `~811.179` |
+| Estimated no-pruning allocation with 20 percent margin | `1.2 x all raw output` | `~1091586323765` | `~1091.586` |
+
+These are recalculated lower-envelope estimates for the sixteen mapped
+executions.  The active Stage I protocol conservatively retains its earlier
+`880.368` GB sequential-retention and `1140.924` GB no-pruning allocations
+while a segment is submitted; that retained margin does not authorize
+execution of the excluded beta-1 inventory definition.
 
 The candidate retention policy is to run cases sequentially, retain all
 analysis snapshots and the final two restarts for every accepted case, and
@@ -3442,10 +3453,11 @@ recorded. The standard-layout file-size measurement remains authoritative in
 `analysis/g011_standard_layout_mpiio_sizing_evidence.json` beneath the G011
 run directory; the Figure 11 mixed-resolution increments are planning
 estimates requiring measurement or approved storage margin before execution.
-Executing all eighteen definitions independently would duplicate the equivalent
-hard-wall beta-100 run and is not proposed.
+Executing all eighteen guarded definitions independently would duplicate the
+equivalent hard-wall beta-100 role and execute the unmapped active-Alfvenic
+beta-1 inventory entry; the frozen Stage I manifest does neither.
 
-### Candidate Standard-Run Cost Proposal (Requires Approval)
+### Candidate Standard-Run Cost Proposal (Superseded by Stage I Protocol)
 
 The only corrected nonlinear late-time GPU timing is G013: one node/eight
 GPUs advances the `96 x 96 x 192` hard-wall beta-10 case through `t = 2.0` in
@@ -3455,12 +3467,13 @@ an eightfold cell-count factor and a fivefold simulated-duration factor:
 | Quantity | Planning calculation | Estimate |
 | --- | --- | ---: |
 | Standard `t = 10` time per unique case on one node | `2080 s x 8 x 5` | `83200 s = 23.111111` node-hours |
-| Fifteen unique standard/limiter/heat-flux/compressive cases | `15 x 83200 s` | `346.666667` node-hours |
+| Fourteen mapped standard/limiter/heat-flux/compressive cases | `14 x 83200 s` | `323.555556` node-hours |
 | Added `n_perp = 96` scale-separation case | `83200 s / 8` | `2.888889` node-hours |
 | Added `n_perp = 384` scale-separation case | `8 x 83200 s` | `184.888889` node-hours |
-| Seventeen unique cases including Figure 3 and Figure 11 | `346.666667 + 2.888889 + 184.888889` | `534.444444` node-hours |
-| Revised runtime reservation with 2x contingency | `2 x 534.444444` | `1068.888889` node-hours |
-| Existing recorded debug qualification plus revised ceiling | `0.851670 + 1068.888889` | `1069.740559` node-hours |
+| Sixteen mapped cases including Figure 3 and Figure 11 | `323.555556 + 2.888889 + 184.888889` | `511.333333` node-hours |
+| Recalculated twofold mapped-case planning estimate | `2 x 511.333333` | `1022.666667` node-hours |
+| Conservative Stage I reservation retained by the submitted manifest | frozen protocol ceiling | `1068.888889` node-hours |
+| Existing recorded debug qualification plus retained reservation | `0.851670 + 1068.888889` | `1069.740559` node-hours |
 
 This estimate is not a standard-mesh benchmark. It assumes linear scaling
 with cell count and simulated duration, equivalent timestep behavior among
@@ -3472,17 +3485,19 @@ boundaries (a standard-layout `Delta t = 2` segment is estimated at
 counters/work/output after the first segment, and stop for renewed review if
 measured use would exceed the ceiling.
 
-This plan intentionally provides only a `debug`-QOS validation launcher:
-production work must not be submitted through it. The revised twofold
-planning ceiling exceeds the documented 1000-node-hour testing budget, so it
-cannot be approved under the earlier envelope. Any paper-production launch
-requires explicit user approval of the seventeen-run scope or a revised
-scope and budget, the estimated `880.368` GB sequential-retention allocation
-(or estimated `1140.924` GB no-pruning alternative), executable/module provenance,
-restart/archive strategy, and an appropriate non-debug queue/QOS under current
-OLCF policy. The defined Figure 3, Figure 11, and Figure 12 variants are
-included; any remaining panel-reference-driven additions require a revised
-cost before execution.
+The debug-QOS validation launcher remains prohibited for production work.
+The subsequent Stage I protocol supplies the non-debug authorization path: it
+freezes the sixteen mapped cases, retains the conservative `1068.888889`
+node-hour reservation instead of altering an active submitted manifest, and
+uses sequential `batch`/default-`normal` submissions with recorded
+inspection/accounting.  Its current retained execution reaches only the
+accepted `R16` prefix through `t = 7.5`, with job `4686032` submitted toward
+`t = 8.5`.  The mapped lower-envelope storage estimates are `811.179` GB
+under the sequential retained-policy margin or `1091.586` GB without
+pruning; the active conservative reservation remains the larger original
+margin until separately revised.
+Any additional panel-reference-driven case beyond the frozen manifest
+requires a revised cost before execution.
 
 ## Phase H: Execution Tiers and Scientific Acceptance
 
@@ -3566,13 +3581,14 @@ must remain within the node-hour ledger and formal readiness review process.
 
 Purpose: reproduce the principal CGL-LF results in MKS24.
 
-This tier is scientifically required for a completed reproduction claim, but
-it is **not currently authorized for execution by future agents** under the
-debug-only Frontier instruction. OLCF prohibits production work in the
-`debug` QOS. Agents must complete the lower-tier qualification, prepare a
-costed production campaign proposal, obtain explicit user authorization for
-an appropriate production-compliant submission mode, and revise this document
-before submitting Tier 3 jobs.
+This tier is scientifically required for a completed reproduction claim.
+OLCF prohibits production work in the `debug` QOS.  The later Stage I
+protocol in `docs/cgl_lf_weak_guide_manuscript_plan.md` records the
+production-compliant execution decision: only the frozen sixteen mapped cases
+may be submitted, sequentially, through `scripts/frontier/cgl_lf_stage_i.py`
+on `batch` with default `normal` QOS under its retained budget.  `R16`
+execution is underway under that protocol; no complete accepted case or
+paper-panel result exists yet.
 
 Required baseline:
 
@@ -3608,10 +3624,10 @@ Acceptance:
 
 Purpose: establish robustness of scientific conclusions.
 
-Like Tier 3, this is a required later scientific campaign rather than an
-authorized `debug`-QOS workload. Only reduced tests needed to determine
-feasibility, correctness, or resource requirements may be run under the
-current debug-only instruction.
+Like Tier 3, this is not an authorized `debug`-QOS workload.  The frozen
+Stage I production manifest includes the mapped Figure 11 scale-separation
+cases, which may be run only through the sequential production protocol.
+Other convergence additions still require a revised mapped scope and cost.
 
 Selected cases should be repeated at:
 
@@ -3623,8 +3639,9 @@ Selected cases should be repeated at:
 
 F-041 defines the active Alfvenic beta-10 Figure 11 realization of this
 three-resolution suite behind the same explicit paper-execution guard and
-admits its dimensionless lower-panel alignment references. It does not
-authorize those runs or qualify the dimensional upper-panel kinetic spectrum.
+admits its dimensionless lower-panel alignment references. The later Stage I
+protocol maps those three runs and has begun `R16`; it does not qualify the
+dimensional upper-panel kinetic spectrum or establish a completed comparison.
 
 Assess:
 
@@ -3649,14 +3666,15 @@ must define:
 - manifest and environment archival;
 - how outputs are transferred back for analysis.
 
-For the eighteen guarded input definitions and seventeen proposed unique
-executions, the G011-measured standard-layout file sizes plus the F-041
-cell-count-scaled resolution estimates define a candidate sequential
-retention allocation of `880.368` GB including margin. The candidate cost
-proposal uses G013 only as a scaling basis; it does not replace measured
-standard or high-resolution runtime/I/O evidence. Any change in case matrix,
-cadence, file layout, retention policy, or required panel coverage must
-revise this storage/runtime proposal.
+For the frozen sixteen-case Stage I manifest, the G011-measured
+standard-layout file sizes plus the F-041 cell-count-scaled resolution
+estimates define a mapped lower-envelope sequential-retention allocation of
+`811.179` GB including margin.  The active protocol retains the more
+conservative earlier `880.368` GB allocation while job `4686032` is
+submitted. The candidate cost proposal uses G013 only as a scaling basis; it
+does not replace measured standard or high-resolution runtime/I/O evidence.
+Any change in case matrix, cadence, file layout, retention policy, or
+required panel coverage must revise this storage/runtime proposal.
 
 Do not launch long high-resolution runs without this plan.
 Do not launch any Frontier test run without updating its projected and actual

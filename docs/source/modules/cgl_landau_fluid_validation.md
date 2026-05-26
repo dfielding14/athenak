@@ -161,11 +161,76 @@ beta-1 and beta-100 sonic-correlation cases required by Figure 3; its other
 four plotted cases reuse standard definitions. The two
 `paper-scale-separation` definitions add the nonstandard
 active Alfvenic beta-10 Figure 11 resolutions; the `n_perp = 192` comparison
-reuses its standard definition. Defining these inputs does not constitute
-paper-standard execution or a reproduction result.
+reuses its standard definition. The frozen Stage I production manifest
+deduplicates these roles into sixteen mapped executions and excludes the
+unmapped active-Alfvenic beta-1 definition unless a later source audit assigns
+it a displayed result. Defining an input does not constitute a reproduction
+result.
 In CGL primitive snapshots, legacy `eint` is `p_parallel` and the dedicated
 `p_perp` output supplies the perpendicular pressure required for paper
 anisotropy analysis.
+
+## Stage I Production Execution
+
+Paper-production segments are managed separately from the debug qualification
+utility. The tracked controller `scripts/frontier/cgl_lf_stage_i.py`
+validates `inputs/cgl_lf_paper/mks24_stage_i_manifest.json`, prepares one
+retained segment at a time on Frontier's `batch` partition with default
+production `normal` QOS, archives submitted inputs/restarts and executable
+provenance, and requires terminal inspection before a segment can be recorded
+as accepted or usable for continuation. Paper-production jobs must not be
+submitted through the debug-only workflow described below.
+
+On Frontier, validate the mapped matrix before preparing a segment, then
+preflight and submit only the single prepared job:
+
+```bash
+python3 scripts/frontier/cgl_lf_stage_i.py validate-matrix
+python3 scripts/frontier/cgl_lf_stage_i.py prepare \
+  --case-id <Rxx> --segment <segment-name> \
+  --acceptance-criterion "<terminal acceptance rule>" \
+  --executable <immutable-athena-executable> \
+  --build-manifest <immutable-build-manifest> \
+  --restart-file <inspected-terminal-restart-if-continuing> \
+  --nodes <nodes> --walltime <slurm-walltime> \
+  --athena-walltime <shorter-application-walltime> \
+  --override time/tlim=<segment-target>
+python3 scripts/frontier/cgl_lf_stage_i.py check-submit \
+  --manifest <prepared_run.json>
+sbatch <batch-script-printed-by-check-submit>
+python3 scripts/frontier/cgl_lf_stage_i.py mark-submitted \
+  --manifest <prepared_run.json> --job-id <jobid>
+```
+
+After the allocation terminates, accept a scientific continuation only after
+inspection and accounting complete:
+
+```bash
+python3 scripts/frontier/cgl_lf_stage_i.py inspect-segment \
+  --manifest <prepared_run.json> --required-time <segment-target>
+python3 scripts/frontier/cgl_lf_stage_i.py record \
+  --manifest <prepared_run.json> --job-id <jobid> \
+  --result accepted --notes "<inspection result>"
+python3 scripts/frontier/cgl_lf_stage_i.py bundle-case \
+  --case-id <Rxx> --required-final-time <accepted-final-time> \
+  --output-dir <accepted-bundle-path>
+```
+
+The production campaign has begun with Figure 11 low-resolution case `R16`
+(`paper_scale_separation_active_alfvenic_beta10_nperp96`). The rank-local
+restart lineage is formally accepted through `t = 7.5` after inspection of
+jobs `4675322`, `4676557`, `4676696`, `4679803`, `4681476`, `4683291`, and
+`4683918`; the legacy shared-I/O startup segment is retained as diagnostic
+evidence only. Through job `4683918`, Stage I accounts for `8.680000`
+node-hours. Continuation job `4686032` has been submitted from the accepted
+`t = 7.5` terminal restart toward `t = 8.5`.
+
+The accepted prefix bundle
+`runs/bundles/diagnostic-prefixes/R16_rankio_t7p5_prefix_cadence_20260526`
+contains 31 deduplicated rank-local snapshots and passes the analyzer's
+synthetic check, but it ends before the declared `t = [8,10]` analysis
+window. It therefore provides production-pipeline evidence only: there is no
+accepted completed `t = 10` case or quantitative MKS24 panel comparison yet.
 
 Analyze a retained paper bundle without rerunning simulations:
 

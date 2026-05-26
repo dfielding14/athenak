@@ -456,8 +456,8 @@ reservation in this document control future submission authorization.
 | Stage I allocation | Calculation basis | Node-hours |
 | --- | --- | ---: |
 | Previously consumed qualification ledger | Retained CGL-LF debug qualification evidence | `0.851670` |
-| Conservative mapped-run reservation including unresolved-definition contingency | Earlier seventeen-run estimate: fourteen mapped standard-layout cases plus one held beta-1 contingency slot, one `n_perp = 96`, and one `n_perp = 384` case | `534.444444` |
-| Runtime contingency for measurement error, segment extensions, and reruns | `2x` planning ceiling retaining the unresolved-definition contingency until Phase A disposition | `534.444445` |
+| Conservative mapped-run reservation including a held contingency | Earlier seventeen-run estimate: fourteen mapped standard-layout cases plus one unexecuted beta-1 contingency slot, one `n_perp = 96`, and one `n_perp = 384` case | `534.444444` |
+| Runtime contingency for measurement error, segment extensions, and reruns | `2x` planning ceiling retaining the held slot until a separate reservation reduction is recorded | `534.444445` |
 | Stage I production reservation plus prior consumption | `0.851670 + 1068.888889` | `1069.740559` |
 | Remaining project ceiling after Stage I reservation | `4000 - 1069.740559` | `2930.259441` |
 
@@ -471,11 +471,12 @@ The estimate is not a measured standard-run benchmark. Prior to production:
    ceiling.
 
 The existing estimated sequential-retention storage allocation, conservatively
-including the unresolved beta-1 definition as a contingency, is approximately
+including the excluded beta-1 inventory definition only as an unexecuted contingency, is approximately
 `880.368 GB` with margin; the no-pruning alternative is approximately
 `1140.924 GB`. Confirm the storage reservation and retention rule before
-executing the mapped matrix, and reduce these envelopes only after Phase A
-records the beta-1 disposition and updates the cost model.
+executing the mapped matrix, and reduce these envelopes only through a
+recorded reservation/storage revision. The contingency does not authorize a
+beta-1 production run absent a source-mapped role.
 
 ### 8.1 Active production record
 
