@@ -277,9 +277,16 @@ further same-digest continuation through \(t=3.5\), job \texttt{4676696},
 completed in \(1.383611\) node-hours and passed formal inspection with zero
 strict LF safety counters, five complete rank-local snapshot groups ending at
 \(t=3.5\), and a complete terminal rank-local restart group.  It extends the
-accepted prefix, but is not a completed \(t=10\) case.  The next same-digest
-continuation through \(t=5.0\), job \texttt{4679803}, has been submitted.
-The
+accepted prefix, but is not a completed \(t=10\) case.  The same-digest
+continuation through \(t=5.0\), job \texttt{4679803}, completed in
+\(1.567778\) node-hours and passed formal inspection with zero strict LF
+safety counters, six complete rank-local snapshot groups ending at \(t=5.0\),
+and a complete terminal rank-local restart group.  It extends the accepted
+prefix but is not a completed \(t=10\) case.  The subsequent continuation
+through \(t=6.5\), job \texttt{4681476}, began running from that inspected
+restart set on 2026-05-25 at 22:26:45 EDT; it retained a complete first
+eight-rank snapshot group and zero strict LF safety counters through
+\(t=5.26028360958\).  The
 legacy partial is not continued across the
 changed input digest.  The bundle assembler follows only the explicit
 inspected restart lineage and bounds a sampled-history boundary gap using
@@ -298,6 +305,11 @@ the later gate, but it remains outside the declared \(8\leq t\leq10\)
 comparison window: a default-window analysis found 176 merged history rows
 overall but selected zero history rows and zero snapshots for comparison,
 while passing its synthetic diagnostic check.
+After acceptance through \(t=5.0\), a further lineage-checked prefix bundle
+assembled only the four ranked-output segments and retained twenty-one
+deduplicated rank-local snapshots.  A default-window analysis found 251
+merged history rows overall but selected zero history rows and zero snapshots
+in \(8\leq t\leq10\), while passing its synthetic diagnostic check.
 
 \section{Validation Workflow}
 
@@ -570,8 +582,9 @@ absolute digitized ordinates into AthenaK products.  Those panels require
 author/archive numeric data, donor diagnostic code, or an explicit
 normalization statement.  One mapped production segment has been retained
 only as clean partial I/O-diagnostic evidence; the ranked-output replacement
-is accepted through its \(t=3.5\) prefix and has a submitted continuation
-toward the required \(t=10\) final time.  Its transient-prefix bundle has verified the
+is accepted through its \(t=5.0\) prefix and has a submitted continuation
+toward \(t=6.5\) on the path to the required \(t=10\) final time.  Its
+transient-prefix bundle has verified the
 rank-local assembly and diagnostic path, but the production comparison window
 is \(8\leq t\leq10\).  Quantitative MKS24
 simulation-to-reference comparisons require completed accepted bundles; none
@@ -667,7 +680,7 @@ diagnostics, source-mapped MKS24 case definitions, and a checksum- and
 allocation-recorded Frontier production protocol.  The production protocol
 began with the required low-resolution scale-separation case; its first
 shared-I/O segment is a clean partial diagnostic record, and its ranked-output
-replacement has passed the inspected \(t=3.5\) prefix gate and is continuing
+replacement has passed the inspected \(t=5.0\) prefix gate and is continuing
 toward \(t=10\).  No completed case is yet counted as an accepted comparison
 result.  Thus the present manuscript establishes the method, target contract,
 and acceptance procedure, but does not yet claim reproduction of the MKS24
@@ -715,7 +728,8 @@ bundle.  The reduced nonlinear figures come from a passing
 \texttt{paper-convergence} bundle reanalyzed with the current plotting code.
 Warning-strict Sphinx documentation and this \LaTeX{} build are checked when
 the report is updated.  The ranked-output low-resolution case has passed its
-inspected \(t=3.5\) prefix gate and a continuation has been submitted, but
+inspected \(t=5.0\) prefix gate and its continuation through \(t=6.5\) is
+running with a verified first retained snapshot boundary, but
 production/statistical and paper-reference comparison gates remain open until
 accepted \(t\geq10\) output bundles are analyzed.
 
