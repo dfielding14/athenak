@@ -211,15 +211,22 @@ full-depth `x3` column-density map and a one-dimensional profile reduced over
 :align: center
 ```
 
-### AMR Blast: Fractional-Domain Mean And Dispersion
+### Four-Level AMR Blast: Fractional-Domain Statistics And Native Binning
 
 `inputs/hydro/projection/blast_amr_weighted.athinput` exercises adaptive refinement and
-projects only the slab \(0 \le x_1 \le 0.1\) in a
-\([-0.5,0.5]^3\) domain. The figure is composed from native AMR records at display
-level 1 and shows a mass-weighted internal-energy mean and line-of-sight deviation.
+allows four adaptive levels above the root mesh (`num_levels = 5`, because the root
+counts as level zero). It projects only the slab \(0 \le x_1 \le 0.1\) in a
+\([-0.5,0.5]^3\) domain. The figure composes its additive moments at the finest native
+level present: the first two panels show a mass-weighted internal-energy mean and
+line-of-sight deviation, while the third reports the finest native leaf patch
+contributing to each projected bin. White outlines mark finest-level MeshBlock
+footprints, making the adaptive output representation visible independently of the
+projected field. At the displayed evolved output, the slab contains 776 additive patch
+records spanning native leaf levels 1 through 4; composition at level 4 gives the
+`384 x 384` display grid without requiring that dense grid during simulation output.
 
 ```{image} ../_static/projection_blast_amr_slab_statistics.png
-:alt: Native-AMR blast slab mass-weighted mean and standard deviation
+:alt: Four-level native-AMR blast slab statistics and contributing leaf-patch levels
 :width: 100%
 :align: center
 ```

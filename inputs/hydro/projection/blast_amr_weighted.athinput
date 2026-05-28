@@ -1,7 +1,7 @@
-# AthenaK 3D blast-wave projection example with adaptive refinement
+# AthenaK 3D blast-wave projection example with four levels of adaptive refinement
 
 <comment>
-problem = AMR spherical blast with narrow-slab projected mean and dispersion
+problem = four-level AMR spherical blast with narrow-slab native projected moments
 
 <job>
 basename = blast_projection_amr
@@ -31,9 +31,9 @@ nx3 = 8
 
 <mesh_refinement>
 refinement = adaptive
-num_levels = 2
+num_levels = 5  # root grid plus four adaptive refinement levels
 refinement_interval = 2
-max_nmb_per_rank = 1024
+max_nmb_per_rank = 8192
 
 <amr_criterion0>
 method = slope
