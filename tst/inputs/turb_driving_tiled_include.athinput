@@ -1,0 +1,68 @@
+<job>
+basename  = turb_test_tiled
+
+<mesh>
+nghost    = 2
+nx1       = 16
+x1min     = -0.5
+x1max     = 0.5
+ix1_bc    = periodic
+ox1_bc    = periodic
+nx2       = 16
+x2min     = -0.5
+x2max     = 0.5
+ix2_bc    = periodic
+ox2_bc    = periodic
+nx3       = 8
+x3min     = -0.5
+x3max     = 0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 8
+nx2       = 8
+nx3       = 8
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 4
+tlim       = 0.2
+ndiag      = 1
+
+<hydro>
+eos         = ideal
+reconstruct = plm
+rsolver     = hllc
+gamma       = 1.001
+
+<problem>
+d_n = 1.0
+
+<turb_driving>
+turb_flag      = 2
+tcorr          = 0.25
+dt_update      = 0.01
+normalization  = accel_rms
+accel_rms      = 0.25
+nlow           = 1
+nhigh          = 3
+npeak          = 2
+spectrum       = parabolic
+sol_fraction   = 0.7
+rseed          = 31415
+tile_nx        = 2
+tile_ny        = 2
+tile_nz        = 1
+localization   = include
+sigma_x1       = 0.15
+sigma_x2       = 0.15
+sigma_x3       = 0.25
+
+<output1>
+file_type = bin
+variable  = turb_force
+id        = force
+dcycle    = 4

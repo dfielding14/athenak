@@ -1,40 +1,34 @@
-# Fixed-grid turbulence driven at constant volume-averaged energy injection rate.
-# Build with: cmake -S . -B build -DPROBLEM=turb && cmake --build build
-
-<comment>
-problem   = fixed-grid turbulence with constant Edot driving
-
 <job>
-basename  = turb_edot_fixed
+basename  = turb_test_edot
 
 <mesh>
 nghost    = 2
-nx1       = 32
+nx1       = 16
 x1min     = -0.5
 x1max     = 0.5
 ix1_bc    = periodic
 ox1_bc    = periodic
-nx2       = 32
+nx2       = 16
 x2min     = -0.5
 x2max     = 0.5
 ix2_bc    = periodic
 ox2_bc    = periodic
-nx3       = 32
+nx3       = 16
 x3min     = -0.5
 x3max     = 0.5
 ix3_bc    = periodic
 ox3_bc    = periodic
 
 <meshblock>
-nx1       = 16
-nx2       = 16
-nx3       = 16
+nx1       = 8
+nx2       = 8
+nx3       = 8
 
 <time>
 evolution  = dynamic
 integrator = rk2
 cfl_number = 0.3
-nlim       = 12
+nlim       = 6
 tlim       = 0.2
 ndiag      = 1
 
@@ -48,17 +42,17 @@ gamma       = 1.001
 d_n = 1.0
 
 <turb_driving>
-turb_flag       = 2
-tcorr           = 0.25
-dt_update       = 0.01
-normalization   = edot
-dedt            = 0.1
-nlow            = 1
-nhigh           = 3
-npeak           = 2
-spectrum        = parabolic
-sol_fraction    = 1.0
-rseed           = 2718
+turb_flag      = 2
+tcorr          = 0.25
+dt_update      = 0.01
+normalization  = edot
+dedt           = 0.1
+nlow           = 1
+nhigh          = 3
+npeak          = 2
+spectrum       = parabolic
+sol_fraction   = 1.0
+rseed          = 2718
 
 <output1>
 file_type = hst
@@ -68,10 +62,10 @@ dcycle    = 1
 file_type = bin
 variable  = turb_force
 id        = force
-dcycle    = 4
+dcycle    = 3
 
 <output3>
 file_type = bin
 variable  = hydro_w
 id        = prim
-dcycle    = 4
+dcycle    = 3

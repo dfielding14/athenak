@@ -1,75 +1,107 @@
-# Example: Localized and AMR Turbulence Driving
+# Example: Localized And AMR Turbulence Driving
 
-These examples use the `turb` problem generator with hydro and write the
-applied acceleration field through `variable = turb_force`.  They are short
-demonstration runs rather than statistically converged turbulence experiments.
+These short `turb` problem-generator calculations demonstrate the driver
+controls and write the applied acceleration with `variable=turb_force`. They
+are validation examples, not statistically converged turbulence experiments.
 
-## Build
+## Build And Run
 
 From the repository root:
 
 ```bash
 cmake -S . -B build-turb -DPROBLEM=turb -DCMAKE_BUILD_TYPE=Release
 cmake --build build-turb -j
-```
 
-Run each example from a separate output directory because AthenaK creates
-`bin/` and history outputs in the current working directory:
-
-```bash
 mkdir -p run/turb_edot_fixed run/turb_tiled_include run/turb_amr_exclude
-(cd run/turb_edot_fixed && ../../build-turb/src/athena \
-  -i ../../inputs/hydro/turb_driving/constant_edot_fixed_grid.athinput)
-(cd run/turb_tiled_include && ../../build-turb/src/athena \
-  -i ../../inputs/hydro/turb_driving/tiled_localized_include.athinput)
-(cd run/turb_amr_exclude && ../../build-turb/src/athena \
-  -i ../../inputs/hydro/turb_driving/amr_localized_exclude.athinput)
+build-turb/src/athena -d run/turb_edot_fixed \
+  -i inputs/hydro/turb_driving/constant_edot_fixed_grid.athinput
+build-turb/src/athena -d run/turb_tiled_include \
+  -i inputs/hydro/turb_driving/tiled_localized_include.athinput
+build-turb/src/athena -d run/turb_amr_exclude \
+  -i inputs/hydro/turb_driving/amr_localized_exclude.athinput
 ```
+
+The `-d` option keeps each case's `bin/` and history files in its run
+directory.
 
 ## Cases
 
-### Constant-Edot Fixed Grid
+### Constant Energy Injection
 
-`constant_edot_fixed_grid.athinput` uses a \(32^3\) periodic grid and
-`constant_edot = true`.  This is the baseline for a statistically homogeneous
-force field normalized to a requested energy injection rate.
+`constant_edot_fixed_grid.athinput` uses a \(32^3\) periodic uniform grid and
+
+```text
+normalization = edot
+dedt          = 0.1
+```
+
+It supplies the homogeneous baseline for checking requested energy injection.
 
 ### Tiled Included Region
 
-`tiled_localized_include.athinput` repeats one realization in
-\(2\times2\times1\) tiles.  It selects `constant_edot = false`,
-`accel_rms = 0.3`, and multiplies the field by a three-dimensional Gaussian
-centred at the origin.  The resulting acceleration is concentrated in the
-central region while the substructure records the tile scale.
+`tiled_localized_include.athinput` uses
+
+```text
+normalization = accel_rms
+accel_rms     = 0.3
+tile_nx       = 2
+tile_ny       = 2
+localization  = include
+sigma_x1      = 0.18
+sigma_x2      = 0.18
+sigma_x3      = 0.28
+```
+
+The same realization repeats over \(2\times2\times1\) tiles and is
+concentrated near the origin.
 
 ### Adaptive Excluded Region
 
-`amr_localized_exclude.athinput` enables adaptive refinement using a location
-criterion about the origin.  It also uses a \(2\times2\times1\) tile pattern,
-but applies `localization = exclude`; the central refined region is quiet and
-the forcing is retained outside it.  In a validation run to cycle 12, the
-input created 56 MeshBlocks and completed with 88 active MeshBlocks.
+`amr_localized_exclude.athinput` uses location-based adaptive refinement
+around the origin, the same \(2\times2\times1\) tile pattern, and
+`localization=exclude`. Its refined central region is suppressed while
+driving remains active outside.
 
 ## Projected Acceleration
 
-The figure below was generated from the final `turb_force` binary dump of each
-included input.  Every panel displays
-\(L_3^{-1}\int |\boldsymbol{a}|\,dx_3\).  The cyan outline in the AMR panel
-marks the level-0/level-1 transition in the projected mesh.
+The figure below is generated from cycle-12 `turb_force` dumps. Each panel
+shows \(L_3^{-1}\int|\boldsymbol{a}|\,dx_3\); the cyan contour in the AMR
+panel marks the level-0/level-1 interface.
 
 ![Projections of turbulence-driving examples](../_static/turbulence_driving_projections.png)
 
-The short validation runs used for this figure produced the following checks:
+Measured checks from the committed inputs are:
 
 | Case | Measured check |
 | --- | --- |
-| Constant-Edot fixed grid | Least-squares energy growth rate after forcing onset: `0.0992` for requested `dedt = 0.1`. |
-| Tiled Gaussian include | Volume-weighted `a_rms = 0.29999999`; requested `accel_rms = 0.3`; centre/outer projected-amplitude ratio `13.67`. |
-| AMR Gaussian exclude | `88` final MeshBlocks at maximum physical level `1`; centre/outer projected-amplitude ratio `0.56`. |
+| Constant energy injection | Fitted total-energy growth rate after onset: `0.09924` for `dedt=0.1`. |
+| Tiled included region | Volume-weighted `a_rms=0.30000000` for `accel_rms=0.3`; central/outer projected-amplitude ratio `13.67`. |
+| AMR excluded region | 88 final MeshBlocks at maximum level 1; central/outer projected-amplitude ratio `0.56`. |
 
-For the localized runs, the centre/outer ratio is evaluated on the cycle-12
-projection shown above: the mean in `r < 0.12` divided by the mean in
-`r > 0.32`, where `r = sqrt(x1^2 + x2^2)`.
+The projected-amplitude ratio is the mean within `r < 0.12` divided by the
+mean at `r > 0.32`, where \(r=(x_1^2+x_2^2)^{1/2}\). It is used here only as
+a compact confirmation of the requested spatial selection.
+
+## Implementation Benchmark
+
+Three Release runs of each input were compared against the initial feature
+prototype at commit `a84c7ffd`; the table reports median executable CPU time.
+These short total-runtime measurements include integration and output work,
+not only driver kernels.
+
+| Case | Prototype CPU time (s) | Modal-state CPU time (s) | Ratio |
+| --- | ---: | ---: | ---: |
+| Constant energy injection | `0.12035` | `0.11882` | `0.987` |
+| Tiled included region | `0.22149` | `0.24983` | `1.128` |
+| AMR excluded region | `0.27642` | `0.28859` | `1.044` |
+
+The correctness change removes the prototype's two cell-sized OU scratch
+arrays (`force_tmp1` and `force_tmp2`) and replaces them with two modal
+innovation arrays. For these inputs, at double precision, the removed cell
+storage is `2.93 MiB`, `5.86 MiB`, and `40.50 MiB`, respectively; the new
+modal innovations use `1.31 KiB` in all three cases. The measured tiled-case
+overhead is retained as evidence for any future kernel-level optimization
+rather than hiding it behind unprofiled changes.
 
 Regenerate the figure after running the examples:
 
@@ -81,17 +113,21 @@ python vis/python/plot_turbulence_driving_projection.py \
   --output docs/source/_static/turbulence_driving_projections.png
 ```
 
-## Adapting the Inputs
+## Regression Coverage
 
-- Use `constant_edot = true` when the scientific control variable is the
-  injected power density; use `constant_edot = false` with an explicit
-  `accel_rms` when the acceleration field itself is the controlled amplitude.
-- Change `localization = include` to concentrate driving in a cloud or disc,
-  and `localization = exclude` to leave a protected central region undriven.
-- Keep tile counts divisible into the root-grid cell counts.  Tiling is
-  evaluated in physical coordinates and is compatible with refined blocks.
-- For adaptive runs, choose `max_nmb_per_rank` using the intended refinement
-  ceiling rather than the initial number of blocks.
+The turbulence regression tests exercise:
 
-The detailed equations and complete parameter reference are in
-{doc}`../modules/turbulence_driving`.
+- fixed-RMS normalization with tiling and inclusion localization;
+- AMR execution with exclusion localization;
+- exact rendered-force continuation across fixed-grid and AMR restarts;
+- MPI execution of the AMR/localized case;
+- rejection of removed parameter names and singular parabolic spectra.
+
+The driver uses precision-correct MPI reductions. The current upstream source
+tree does not build a complete single-precision executable with AppleClang
+because unchanged coordinate and tabulated-EOS translation units contain
+single-precision type/narrowing errors; those blockers are outside this
+feature.
+
+The equations, restart contract, and full canonical parameter reference are
+in {doc}`../modules/turbulence_driving`.
