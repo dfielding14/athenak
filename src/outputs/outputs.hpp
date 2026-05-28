@@ -528,6 +528,71 @@ class PDFOutput : public BaseTypeOutput {
 };
 
 //----------------------------------------------------------------------------------------
+//! \class ProjectionOutput
+//  \brief projected Cartesian output in native-AMR patch or guarded uniform layout
+
+class ProjectionOutput : public BaseTypeOutput {
+ public:
+  ProjectionOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+
+ private:
+  enum class Weighting { integral, volume, mass };
+  enum class Statistic { value, stddev };
+  enum class Layout { native_amr, uniform };
+
+  struct Patch {
+    int gid;
+    int level;
+    int nx;
+    int ny;
+    Real xmin;
+    Real xmax;
+    Real ymin;
+    Real ymax;
+    std::vector<Real> weight;
+    std::vector<Real> first_moment;
+    std::vector<Real> second_moment;
+  };
+
+  bool projection_axes_[3];
+  int n_projection_axes_;
+  int n_image_axes_;
+  int projection_level_;
+  int uniform_max_megabytes_;
+  int image_axes_[2];
+  int image_nx_[2];
+  Real projection_min_[3];
+  Real projection_max_[3];
+  Real image_min_[2];
+  Real image_max_[2];
+  Real image_dx_[2];
+  Layout layout_;
+  std::string layout_name_;
+  Weighting weighting_;
+  std::string weighting_name_;
+  Statistic statistic_;
+  std::string statistic_name_;
+  std::string projection_axes_name_;
+  DvceArray5D<Real> *density_ptr_;
+  HostArray3D<Real> projected_data_;
+  HostArray3D<Real> second_moment_;
+  HostArray2D<Real> normalization_;
+  std::vector<Patch> patches_;
+  std::vector<char> shard_payload_;
+  int local_patch_count_;
+  int shard_patch_count_;
+  std::size_t local_staged_cells_;
+  std::size_t shard_staged_cells_;
+  std::size_t local_payload_bytes_;
+  std::size_t communicated_bytes_;
+  std::size_t peak_output_bytes_;
+  double output_elapsed_seconds_;
+};
+
+//----------------------------------------------------------------------------------------
 //! \class MeshVTKOutput
 //  \brief derived BaseTypeOutput class for mesh data in VTK (legacy) format
 

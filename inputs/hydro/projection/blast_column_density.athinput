@@ -1,0 +1,72 @@
+# AthenaK 3D blast-wave projection example on a fixed grid
+
+<comment>
+problem = 3D spherical blast with a 2D column density map and bounded 1D profile
+
+<job>
+basename = blast_projection
+
+<mesh>
+nghost = 2
+nx1 = 48
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 48
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 48
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 24
+nx2 = 24
+nx3 = 24
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim = -1
+tlim = 0.05
+ndiag = 10
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = hllc
+gamma = 1.666666666667
+
+<problem>
+pn_amb = 0.1
+prat = 100.0
+inner_radius = 0.1
+outer_radius = 0.1
+
+<output1>
+file_type = proj
+projection_layout = native_amr
+id = column_density
+variable = hydro_w_d
+projection_axis = x3
+weighting = integral
+dt = 0.05
+
+<output2>
+file_type = proj
+projection_layout = native_amr
+id = bounded_density_profile
+variable = hydro_w_d
+projection_axes = x1,x2
+projection_x1_min = 0.0
+projection_x1_max = 0.1
+projection_x2_min = -0.1
+projection_x2_max = 0.1
+weighting = integral
+dt = 0.05

@@ -1,0 +1,85 @@
+# Static central-refinement workload for native-AMR projection I/O metrics
+
+<job>
+basename = projection_scale_central
+
+<mesh>
+nghost = 2
+nx1 = 16
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 16
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 16
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 4
+nx2 = 4
+nx3 = 4
+
+<mesh_refinement>
+refinement = static
+
+<refined_region1>
+level = 1
+x1min = -0.25
+x1max = 0.25
+x2min = -0.25
+x2max = 0.25
+x3min = -0.25
+x3max = 0.25
+
+<time>
+evolution = kinematic
+integrator = rk2
+cfl_number = 0.2
+nlim = 0
+tlim = 0.01
+ndiag = 1
+
+<hydro>
+eos = isothermal
+reconstruct = plm
+rsolver = advect
+iso_sound_speed = 1.0
+
+<problem>
+pgen_name = advection
+advect_dens = true
+flow_dir = 3
+iproblem = 1
+velocity = 0.0
+amplitude = 0.0
+
+<output1>
+file_type = proj
+projection_layout = native_amr
+single_file_per_node = false
+id = full_depth_statistics
+variable = hydro_w_d
+projection_axis = x1
+weighting = volume
+statistic = stddev
+dt = 1.0
+
+<output2>
+file_type = proj
+projection_layout = native_amr
+single_file_per_node = false
+id = bounded_slab_statistics
+variable = hydro_w_d
+projection_axis = x1
+projection_x1_min = 0.0
+projection_x1_max = 0.1
+weighting = volume
+statistic = stddev
+dt = 1.0

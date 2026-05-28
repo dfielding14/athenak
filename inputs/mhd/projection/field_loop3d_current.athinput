@@ -1,0 +1,72 @@
+# AthenaK projection example for the rotated three-dimensional MHD field loop
+
+<comment>
+problem = 3D rotated field loop with bounded derived-current projection diagnostics
+
+<job>
+basename = field_loop3d_projection
+
+<mesh>
+nghost = 2
+nx1 = 48
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 48
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 48
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 24
+nx2 = 24
+nx3 = 24
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim = -1
+tlim = 0.05
+ndiag = 10
+
+<mhd>
+eos = ideal
+reconstruct = plm
+rsolver = hlld
+gamma = 1.666666667
+
+<problem>
+rad = 0.2
+amp = 1.0e-3
+iprob = 4
+
+<output1>
+file_type = proj
+projection_layout = native_amr
+id = bounded_current_squared
+variable = mhd_j2
+projection_axes = x3
+projection_x3_min = -0.2
+projection_x3_max = 0.2
+weighting = integral
+dt = 0.05
+
+<output2>
+file_type = proj
+projection_layout = native_amr
+id = bounded_bmag_stddev
+variable = mhd_bmag
+projection_axes = x3
+projection_x3_min = -0.2
+projection_x3_max = 0.2
+weighting = volume
+statistic = stddev
+dt = 0.05

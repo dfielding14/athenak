@@ -61,7 +61,7 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
     max_level = 31;
   }
 
-  // For meshes with refinement, construct new nodes for <refinement> blocks in input file
+  // For meshes with refinement, construct new nodes for fixed-region input blocks.
 
   if (multilevel) {
     // error check that number of cells in MeshBlock divisible by two
@@ -74,10 +74,11 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
       std::exit(EXIT_FAILURE);
     }
 
-    // cycle through ParameterInput list and find "refinement" blocks (SMR), extract data
-    // Expand MeshBlockTree to include "refinement" regions specified in input file:
+    // Accept the longstanding <refined_regionN> spelling and the shorter
+    // <refinementN> spelling introduced with output-sharding work.
     for (auto it = pin->block.begin(); it != pin->block.end(); ++it) {
-      if (it->block_name.compare(0, 10, "refinement") == 0) {
+      if (it->block_name.compare(0, 14, "refined_region") == 0 ||
+          it->block_name.compare(0, 10, "refinement") == 0) {
         RegionSize ref_size;
         ref_size.x1min = pin->GetReal(it->block_name, "x1min");
         ref_size.x1max = pin->GetReal(it->block_name, "x1max");

@@ -1,0 +1,95 @@
+# AthenaK 3D blast-wave projection example with adaptive refinement
+
+<comment>
+problem = AMR spherical blast with narrow-slab projected mean and dispersion
+
+<job>
+basename = blast_projection_amr
+
+<mesh>
+nghost = 2
+nx1 = 24
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 24
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 24
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 8
+
+<mesh_refinement>
+refinement = adaptive
+num_levels = 2
+refinement_interval = 2
+max_nmb_per_rank = 1024
+
+<amr_criterion0>
+method = slope
+variable = hydro_w_d
+value_max = 0.08
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim = -1
+tlim = 0.05
+ndiag = 10
+
+<hydro>
+eos = ideal
+reconstruct = plm
+rsolver = hllc
+gamma = 1.666666666667
+
+<problem>
+pn_amb = 0.1
+prat = 100.0
+inner_radius = 0.1
+outer_radius = 0.1
+
+<output1>
+file_type = proj
+projection_layout = native_amr
+id = narrow_slab_column_density
+variable = hydro_w_d
+projection_axes = x1
+projection_x1_min = 0.0
+projection_x1_max = 0.1
+weighting = integral
+dt = 0.05
+
+<output2>
+file_type = proj
+projection_layout = native_amr
+id = narrow_slab_mass_energy
+variable = hydro_w_e
+projection_axes = x1
+projection_x1_min = 0.0
+projection_x1_max = 0.1
+weighting = mass
+dt = 0.05
+
+<output3>
+file_type = proj
+projection_layout = native_amr
+id = narrow_slab_energy_stddev
+variable = hydro_w_e
+projection_axes = x1
+projection_x1_min = 0.0
+projection_x1_max = 0.1
+weighting = mass
+statistic = stddev
+dt = 0.05

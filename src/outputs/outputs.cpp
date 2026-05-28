@@ -18,7 +18,7 @@
 //! Required parameters that must be specified in an <output[n]> block are:
 //!   - variable  = [list of currently implemented strings for specifing output variables
 //!                  is defined at start of outputs.hpp file]
-//!   - file_type = tab,vtk,hst,bin,rst
+//!   - file_type = tab,vtk,hst,bin,rst,proj
 //!   - dt        = problem time between outputs
 //!
 //! EXAMPLE of an <output[n]> block for a TAB dump:
@@ -462,6 +462,10 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
 
         opar.file_shard_mode = parse_file_shard_mode(opar.block_name);
         pnode = new PDFOutput(pin,pm,opar);
+        pout_list.insert(pout_list.begin(),pnode);
+      } else if (opar.file_type.compare("proj") == 0) {
+        opar.file_shard_mode = parse_file_shard_mode(opar.block_name);
+        pnode = new ProjectionOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("bin") == 0) {
         opar.file_shard_mode = parse_file_shard_mode(opar.block_name);
