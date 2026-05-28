@@ -12,6 +12,7 @@
 #include <memory>
 #include <vector>
 
+#include "file_sharding.hpp"
 #include "geodesic-grid/spherical_grid.hpp"
 #include "parameter_input.hpp"
 
@@ -29,8 +30,8 @@ class ProblemGenerator {
   // constructor for new problems
   ProblemGenerator(ParameterInput *pin, Mesh *pmesh);
   // constructor for restarts
-  ProblemGenerator(ParameterInput *pin, Mesh *pmesh, IOWrapper resfile,
-                   bool single_file_per_rank=false);
+  ProblemGenerator(ParameterInput *pin, Mesh *pmesh, IOWrapper &resfile,
+                   FileShardMode shard_mode=FileShardMode::shared);
   ~ProblemGenerator() = default;
 
   // true if user BCs are specified on any face
@@ -55,7 +56,6 @@ class ProblemGenerator {
   UserHistoryFnPtr user_hist_func=nullptr;
 
   // predefined problem generator functions (default test suite)
-  void CallProblemGenerator(ParameterInput *pin, bool is_restart);
   void Advection(ParameterInput *pin, const bool restart);
   void AlfvenWave(ParameterInput *pin, const bool restart);
   void BondiAccretion(ParameterInput *pin, const bool restart);
@@ -68,11 +68,11 @@ class ProblemGenerator {
   void OrszagTang(ParameterInput *pin, const bool restart);
   void ShockTube(ParameterInput *pin, const bool restart);
   void Shwave(ParameterInput *pin, const bool restart);
-  void SphericalCollapse(ParameterInput *pin, const bool restart);
   void RadiationLinearWave(ParameterInput *pin, const bool restart);
   void RadiationBeam(ParameterInput *pin, const bool restart);
   void Z4cBoostedPuncture(ParameterInput *pin, const bool restart);
   void Z4cLinearWave(ParameterInput *pin, const bool restart);
+  void SphericalCollapse(ParameterInput *pin, const bool restart);
 
   // Generic error output function (using difference u0-u1)
   void OutputErrors(ParameterInput *pin, Mesh *pm);
@@ -81,7 +81,7 @@ class ProblemGenerator {
   void UserProblem(ParameterInput *pin, const bool restart);
 
  private:
-  bool single_file_per_rank; // for restart file naming
+  FileShardMode restart_file_shard_mode = FileShardMode::shared;
   Mesh* pmy_mesh_;
 };
 

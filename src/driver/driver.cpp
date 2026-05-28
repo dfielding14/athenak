@@ -29,6 +29,20 @@
 #include <mpi.h>
 #endif
 
+namespace {
+
+double GlobalMaxOutputTime(double local_time) {
+#if MPI_PARALLEL_ENABLED
+  double max_time = local_time;
+  MPI_Reduce(&local_time, &max_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+  return max_time;
+#else
+  return local_time;
+#endif
+}
+
+}  // namespace
+
 //----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
 //
@@ -165,8 +179,8 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
       nimp_stages = 3;
       nexp_stages = 2;
       cfl_limit = 1.0;
-      gam0[0] = 1.0;
-      gam1[0] = 0.0;
+      gam0[0] = 0.0;
+      gam1[0] = 1.0;
       beta[0] = 1.0;
 
       gam0[1] = 0.5;
@@ -185,48 +199,6 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
       a_twid[2][1] = 0.25;
       a_twid[2][2] = 0.25;
       a_impl = 0.5;
-    } else if (integrator == "imex2+") {
-      // IMEX(4,3,2): Krapp et al. (2024, arXiv:2310.04435), Eq.30.
-      // three-stage explicit, four-stage implicit, second-order ImEx
-      // two implicit stages added, adapting Athenak's overall architecture
-      // Note explicit steps may not reduce to RK2 based on the parameters chosen
-      nimp_stages = 4;
-      nexp_stages = 3;
-      cfl_limit = 1.0;
-      gamma = 1.707106781186547;   //1+1/sqrt(2)
-      gam0[0] = 1.0;
-      gam1[0] = 0.0;
-      beta[0] = gamma;
-
-      gam0[1] = (2.0*gamma-1.0)/(2.0*gamma*gamma);
-      gam1[1] = (1.0-(2.0*gamma-1.0)/(2.0*gamma*gamma));
-      beta[1] = 1.0/(2.0*gamma);
-
-      gam0[2] = 1.0;
-      gam1[2] = 0.0;
-      beta[2] = 0.0;
-
-      a_twid[0][0] = 0.0;
-      a_twid[0][1] = 0.0;
-      a_twid[0][2] = 0.0;
-      a_twid[0][3] = 0.0;
-
-      a_twid[1][0] = 0.0;
-      a_twid[1][1] = 0.0;
-      a_twid[1][2] = 0.0;
-      a_twid[1][3] = 0.0;
-
-      a_twid[2][0] = 0.0;
-      a_twid[2][1] = 0.0;
-      a_twid[2][2] = (1.0-2.0*gamma*gamma)/2.0/gamma;
-      a_twid[2][3] = 0.0;
-
-      a_twid[3][0] = 0.0;
-      a_twid[3][1] = 0.0;
-      a_twid[3][2] = 0.0;
-      a_twid[3][3] = 0.0;
-
-      a_impl = gamma;
     } else if (integrator == "imex3") {
       // IMEX-SSP3(4,3,3): Pareschi & Russo (2005) Table VI.
       // three-stage explicit, four-stage implicit, third-order ImEx
@@ -269,11 +241,38 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
       a_twid[3][2] = (4.0*(b + e + a) - 1.0)/6.0;
       a_twid[3][3] = 2.0*(1.0 - a)/3.0;
       a_impl = a;
+    } else if (integrator == "imex+") {
+      // IMEX(2,3,2): Krapp et al. (2024, arXiv:2310.04435), Eq.30.
+      // three-stage explicit, two-stage implicit, second-order ImEx
+      // Note explicit steps may not reduce to RK2 based on the parameters chosen
+      nimp_stages = 2;
+      nexp_stages = 3;
+      cfl_limit = 1.0;
+      Real gamma = 1.7071067811865475;   // 1 + 1/sqrt(2)
+      gam0[0] = 0.0;
+      gam1[0] = 1.0;
+      beta[0] = gamma;
+
+      gam0[1] = (2.0*gamma-1.0)/(2.0*gamma*gamma);
+      gam1[1] = 1.0-(2.0*gamma-1.0)/(2.0*gamma*gamma);
+      beta[1] = 1.0/(2.0*gamma);
+
+      gam0[2] = 1.0;
+      gam1[2] = 0.0;
+      beta[2] = 0.0;
+
+      a_twid[0][0] = (1.0-2*gamma*gamma)/(2.0*gamma);
+      a_twid[0][1] = 0.0;
+
+      a_twid[1][0] = 0.0;
+      a_twid[1][1] = 0.0;
+
+      a_impl = gamma;
     // Error, unrecognized integrator name.
     } else {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
          << std::endl << "integrator=" << integrator << " not implemented. "
-         << "Valid choices are [rk1,rk2,rk3,rk4,imex2,imex3]." << std::endl;
+         << "Valid choices are [rk1,rk2,rk3,imex2,imex3]." << std::endl;
       exit(EXIT_FAILURE);
     }
   }
@@ -314,6 +313,9 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   InitBoundaryValuesAndPrimitives(pmesh);
 
   //---- Step 2.  Compute time step (if problem involves time evolution)
+  // NOTE: For new simulations (!res_flag), the initial conditions haven't been set yet
+  // by the ProblemGenerator, so we can't compute a proper timestep for MHD here.
+  // The timestep will be computed properly on the first cycle.
   hydro::Hydro *phydro = pmesh->pmb_pack->phydro;
   mhd::MHD *pmhd = pmesh->pmb_pack->pmhd;
   radiation::Radiation *prad = pmesh->pmb_pack->prad;
@@ -337,9 +339,31 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
 
   //---- Step 3.  Cycle through output Types and load data / write files.
   if (!res_flag) { // only write outputs at the beginning of the run
+    Kokkos::fence();
+    double load_time = 0.0;
+    double write_time = 0.0;
+
     for (auto &out : pout->pout_list) {
+      Kokkos::Timer load_timer;
       out->LoadOutputData(pmesh);
+      Kokkos::fence();
+      load_time += load_timer.seconds();
+      Kokkos::Timer write_timer;
       out->WriteOutputFile(pmesh, pin);
+      Kokkos::fence();
+      write_time += write_timer.seconds();
+    }
+
+    double out_time = load_time + write_time;
+    double max_load_time = GlobalMaxOutputTime(load_time);
+    double max_write_time = GlobalMaxOutputTime(write_time);
+    double max_out_time = GlobalMaxOutputTime(out_time);
+    if (global_variable::my_rank == 0) {
+      std::cout << "Total Outputs Time: "
+                << max_out_time << " s"
+                << " (load=" << max_load_time
+                << " s, write=" << max_write_time << " s)"
+                << std::endl;
     }
   }
 
@@ -353,7 +377,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   if (pionn != nullptr) {
     if (nimp_stages == 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-          << std::endl << "IonNeutral MHD can only be run with ImEx integrators."
+          << std::endl << "IonNetral MHD can only be run with ImEx integrators."
           << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -432,8 +456,27 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
         if (((out->out_params.dt > 0.0) && ((time_32 >= next_32) && (time_32<tlim_32))) ||
             ((dcycle_ > 0) && ((pmesh->ncycle)%(dcycle_) == 0)) ) {
+          Kokkos::fence();
+          Kokkos::Timer load_timer;
           out->LoadOutputData(pmesh);
+          Kokkos::fence();
+          double load_time = load_timer.seconds();
+          Kokkos::Timer write_timer;
           out->WriteOutputFile(pmesh, pin);
+          Kokkos::fence();
+          double write_time = write_timer.seconds();
+          double out_time = load_time + write_time;
+          double max_load_time = GlobalMaxOutputTime(load_time);
+          double max_write_time = GlobalMaxOutputTime(write_time);
+          double max_out_time = GlobalMaxOutputTime(out_time);
+          if (global_variable::my_rank == 0) {
+            std::cout << out->out_params.block_name
+                      << " (" << out->out_params.file_type << "): "
+                      << max_out_time << " s"
+                      << " (load=" << max_load_time
+                      << " s, write=" << max_write_time << " s)"
+                      << std::endl;
+          }
         }
       }
 
@@ -446,6 +489,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       if (wall_time > 0.) {
         elapsed_time = UpdateWallClock();
       }
+
     }  // end while
   }    // end of (time_evolution != tstatic) clause
   return;
@@ -459,9 +503,31 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   // cycle through output Types and load data / write files
   //  This design allows for asynchronous outputs to implemented in the future.
+  Kokkos::fence();
+  double load_time = 0.0;
+  double write_time = 0.0;
+
   for (auto &out : pout->pout_list) {
+    Kokkos::Timer load_timer;
     out->LoadOutputData(pmesh);
+    Kokkos::fence();
+    load_time += load_timer.seconds();
+    Kokkos::Timer write_timer;
     out->WriteOutputFile(pmesh, pin);
+    Kokkos::fence();
+    write_time += write_timer.seconds();
+  }
+
+  double out_time = load_time + write_time;
+  double max_load_time = GlobalMaxOutputTime(load_time);
+  double max_write_time = GlobalMaxOutputTime(write_time);
+  double max_out_time = GlobalMaxOutputTime(out_time);
+  if (global_variable::my_rank == 0) {
+    std::cout << "Total Outputs Time: "
+              << max_out_time << " s"
+              << " (load=" << max_load_time
+              << " s, write=" << max_write_time << " s)"
+              << std::endl;
   }
 
   // call any problem specific functions to do work after main loop
@@ -530,7 +596,8 @@ void Driver::OutputCycleDiagnostics(Mesh *pm) {
     Real elapsed = pwall_clock_->seconds();
     std::cout << "elapsed=" << std::scientific << std::setprecision(dtprcsn) << elapsed
               << " cycle=" << pm->ncycle
-              << " time=" << pm->time << " dt=" << pm->dt << std::endl;
+              << " time=" << pm->time << " dt=" << pm->dt
+              << " nmb=" << pm->nmb_total << std::endl;
   }
   return;
 }
