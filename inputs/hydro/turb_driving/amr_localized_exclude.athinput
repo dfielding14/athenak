@@ -1,0 +1,98 @@
+# Adaptive refinement plus turbulent forcing excluded from a Gaussian central region.
+
+<comment>
+problem   = adaptive AMR turbulence outside a quiet central region
+
+<job>
+basename  = turb_amr_exclude
+
+<mesh>
+nghost    = 2
+nx1       = 32
+x1min     = -0.5
+x1max     = 0.5
+ix1_bc    = periodic
+ox1_bc    = periodic
+nx2       = 32
+x2min     = -0.5
+x2max     = 0.5
+ix2_bc    = periodic
+ox2_bc    = periodic
+nx3       = 16
+x3min     = -0.5
+x3max     = 0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 8
+nx2       = 8
+nx3       = 8
+
+<mesh_refinement>
+refinement          = adaptive
+num_levels          = 2
+ncycle_check        = 1
+refinement_interval = 1
+max_nmb_per_rank    = 512
+
+<amr_criterion0>
+method       = location
+location_x1  = 0.0
+location_x2  = 0.0
+location_x3  = 0.0
+location_rad = 0.22
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 12
+tlim       = 0.2
+ndiag      = 1
+
+<hydro>
+eos         = ideal
+reconstruct = plm
+rsolver     = hllc
+gamma       = 1.001
+
+<problem>
+d_n = 1.0
+
+<turb_driving>
+turb_flag       = 2
+tcorr           = 0.25
+dt_turb_update  = 0.01
+dedt            = 0.1
+constant_edot   = true
+nlow            = 1
+nhigh           = 3
+npeak           = 2
+spect_form      = 1
+sol_fraction    = 0.7
+rseed           = 16180
+tile_driving    = true
+tile_nx         = 2
+tile_ny         = 2
+tile_nz         = 1
+localization    = exclude
+x_turb_scale_height = 0.14
+y_turb_scale_height = 0.14
+z_turb_scale_height = 0.20
+
+<output1>
+file_type = hst
+dcycle    = 1
+
+<output2>
+file_type = bin
+variable  = turb_force
+id        = force
+dcycle    = 4
+
+<output3>
+file_type = bin
+variable  = hydro_w
+id        = prim
+dcycle    = 4
