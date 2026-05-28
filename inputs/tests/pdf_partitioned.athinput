@@ -1,0 +1,93 @@
+# AthenaK input file for partitioned PDF regression tests
+
+<comment>
+problem   = partitioned PDF regression
+
+<job>
+basename  = PDF
+
+<mesh>
+nghost    = 2
+nx1       = 32
+x1min     = -1.5
+x1max     = 1.5
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 16
+x2min     = -0.75
+x2max     = 0.75
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 8
+x3min     = -0.75
+x3max     = 0.75
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 8
+nx2       = 8
+nx3       = 8
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = 0
+tlim       = 0.0
+ndiag      = 1
+
+<hydro>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.66666666667
+
+<problem>
+pgen_name = linear_wave
+wave_flag = 0
+amp       = 1.0e-3
+dens      = 1.0
+pgas      = 0.6
+vx0       = 0.0
+along_x1  = false
+along_x2  = false
+along_x3  = false
+
+<output1>
+file_type            = pdf
+variable             = hydro_w_d
+dt                   = 1.0
+bin_min              = 0.995
+bin_max              = 1.005
+nbin                 = 16
+logscale             = false
+mass_weighted        = true
+single_file_per_rank = false
+single_file_per_node = false
+
+<output2>
+file_type            = pdf
+variable_1           = hydro_w_d
+bin1_min             = 0.995
+bin1_max             = 1.005
+nbin1                = 8
+scale1               = linear
+variable_2           = hydro_w_vx
+bin2_min             = -0.01
+bin2_max             = 0.01
+nbin2                = 8
+scale2               = symlog
+linthresh2           = 1.0e-5
+variable_3           = hydro_w_vy
+bin3_min             = -0.01
+bin3_max             = 0.01
+nbin3                = 4
+scale3               = linear
+weight               = variable
+weight_variable      = hydro_w_d
+dt                   = 1.0
+single_file_per_rank = false
+single_file_per_node = false

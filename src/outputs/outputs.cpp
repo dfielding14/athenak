@@ -322,17 +322,22 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
           }
         };
 
-        if (pin->DoesParameterExist(opar.block_name, "mass_weighted")) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "PDF output block '" << opar.block_name
-              << "' no longer supports mass_weighted. Use weight=mass instead."
-              << std::endl;
-          exit(EXIT_FAILURE);
-        }
+        bool has_legacy_mass_weighted =
+            pin->DoesParameterExist(opar.block_name, "mass_weighted");
+        bool legacy_mass_weighted = has_legacy_mass_weighted
+            ? pin->GetBoolean(opar.block_name, "mass_weighted") : false;
         if (pin->DoesParameterExist(opar.block_name, "weight")) {
           opar.pdf_weight = pin->GetString(opar.block_name, "weight");
         } else {
-          opar.pdf_weight = "volume";
+          opar.pdf_weight = legacy_mass_weighted ? "mass" : "volume";
+        }
+        if (has_legacy_mass_weighted &&
+            ((legacy_mass_weighted && opar.pdf_weight.compare("mass") != 0) ||
+             (!legacy_mass_weighted && opar.pdf_weight.compare("mass") == 0))) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "PDF output block '" << opar.block_name
+              << "' has conflicting mass_weighted and weight settings." << std::endl;
+          exit(EXIT_FAILURE);
         }
         if (opar.pdf_weight.compare("volume") != 0 &&
             opar.pdf_weight.compare("mass") != 0 &&
@@ -365,29 +370,40 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
           }
         }
 
-        // Backward compatibility: if variable_1 doesn't exist but variable does,
-        // treat 'variable' as alias for 'variable_1'
-        if (opar.pdf_ndim == 0 && pin->DoesParameterExist(opar.block_name, "variable")) {
+        // Backward compatibility: if variable_1 doesn't exist but variable
+        // does, treat 'variable' as alias for 'variable_1'
+        if (opar.pdf_ndim == 0 &&
+            pin->DoesParameterExist(opar.block_name, "variable")) {
           opar.pdf_ndim = 1;
           opar.pdf_variables[0] = opar.variable;  // already parsed above
           opar.pdf_nbin[0] = pin->GetInteger(opar.block_name, "nbin");
           opar.pdf_bin_min[0] = pin->GetReal(opar.block_name, "bin_min");
           opar.pdf_bin_max[0] = pin->GetReal(opar.block_name, "bin_max");
-          std::string scale1_key = pin->DoesParameterExist(opar.block_name, "scale1")
-              ? "scale1" : "scale";
-          std::string logscale1_key = pin->DoesParameterExist(opar.block_name, "logscale1")
-              ? "logscale1" : "logscale";
-          std::string linthresh1_key = pin->DoesParameterExist(opar.block_name, "linthresh1")
-              ? "linthresh1" : "linthresh";
-          configure_pdf_scale(0, scale1_key, logscale1_key, linthresh1_key, true);
+          std::string scale1_key =
+              pin->DoesParameterExist(opar.block_name, "scale1") ? "scale1"
+                                                                 : "scale";
+          std::string logscale1_key =
+              pin->DoesParameterExist(opar.block_name, "logscale1")
+                  ? "logscale1"
+                  : "logscale";
+          std::string linthresh1_key =
+              pin->DoesParameterExist(opar.block_name, "linthresh1")
+                  ? "linthresh1"
+                  : "linthresh";
+          configure_pdf_scale(0, scale1_key, logscale1_key, linthresh1_key,
+                              true);
 
           // Check for legacy variable_2 format
           if (pin->DoesParameterExist(opar.block_name, "variable_2")) {
             opar.pdf_ndim = 2;
-            opar.pdf_variables[1] = pin->GetString(opar.block_name, "variable_2");
-            opar.pdf_nbin[1] = pin->GetOrAddInteger(opar.block_name, "nbin2", 10);
-            opar.pdf_bin_min[1] = pin->GetOrAddReal(opar.block_name, "bin2_min", 0.0);
-            opar.pdf_bin_max[1] = pin->GetOrAddReal(opar.block_name, "bin2_max", 1.0);
+            opar.pdf_variables[1] =
+                pin->GetString(opar.block_name, "variable_2");
+            opar.pdf_nbin[1] =
+                pin->GetOrAddInteger(opar.block_name, "nbin2", 10);
+            opar.pdf_bin_min[1] =
+                pin->GetOrAddReal(opar.block_name, "bin2_min", 0.0);
+            opar.pdf_bin_max[1] =
+                pin->GetOrAddReal(opar.block_name, "bin2_max", 1.0);
             configure_pdf_scale(1, "scale2", "logscale2", "linthresh2", true);
           }
         } else {

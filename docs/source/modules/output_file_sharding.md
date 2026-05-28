@@ -22,7 +22,7 @@ Use one of the sharding flags in each supported output block:
 <output1>
 file_type = bin
 dt = 0.1
-variable = prim
+variable = hydro_w
 single_file_per_node = true
 ```
 
@@ -79,6 +79,10 @@ accepts either the manifest path or a path inside a `node_XXXXXXXX/` or
 ./athena -r rst/rank_00000000/run.00000.rst
 ```
 
+Shared and per-rank restart files retain the historical on-disk layout and
+remain readable through their established paths. Only per-node restart output
+uses the manifest extension.
+
 For per-node restarts, each node opens its payload shard collectively over the
 node communicator. Large reads are coalesced where practical and are issued
 through chunked byte MPI-IO helpers so the transfer does not depend on MPI
@@ -121,6 +125,34 @@ The header file records `format = dense` or `format = sparse_coo`,
 reader `vis/python/read_pdf.py` can be pointed at any shard and sums all matching
 rank/node sparse records into a dense histogram.
 
+PDF inputs accept the historical one- or two-variable form, including
+`mass_weighted=true`, and the N-dimensional form:
+
+```ini
+<output2>
+file_type = pdf
+variable_1 = hydro_w_d
+bin1_min = 1.0e-3
+bin1_max = 1.0e2
+nbin1 = 128
+scale1 = log
+variable_2 = hydro_w_vx
+bin2_min = -1.0
+bin2_max = 1.0
+nbin2 = 128
+scale2 = symlog
+linthresh2 = 1.0e-4
+weight = variable
+weight_variable = hydro_w_d
+single_file_per_node = true
+```
+
+The N-dimensional form supports up to four `variable_N` axes with
+`scaleN=linear|log|symlog`. For `symlog`, specify a positive `linthreshN`.
+The `weight` option accepts `volume`, `mass`, or `variable`; when
+`weight=variable`, also set `weight_variable`. Do not set `mass_weighted` and
+`weight` inconsistently.
+
 ## Choosing A Mode
 
 Use shared output when the run is small enough that a single file is not a
@@ -141,6 +173,8 @@ default scaling path for large restart dumps.
   overflow.
 - Restart path normalization is path-component based, so relative paths,
   absolute paths, and paths inside shard directories are handled consistently.
+- A root restart path is treated as a per-node manifest only when its stored
+  restart configuration selects per-node output and a matching node payload is present.
 - Partitioned Python readers validate shard metadata before reassembly.
 
 ## Tests
@@ -149,7 +183,9 @@ The branch includes focused regression coverage:
 
 | Test | Coverage |
 | --- | --- |
-| `tst/scripts/restart/per_node_restart.py` | per-node manifest/payload creation, restart from manifest and shard paths, shared/per-rank compatibility, forced small MPI-IO chunks |
+| `tst/scripts/restart/per_node_restart.py` | per-node manifest/payload creation, restart from manifest and shard paths, shared/per-rank compatibility, stale-node collision handling, forced small MPI-IO chunks |
+| `tst/scripts/hydro/binary_partitioned.py` | shared, per-rank, and per-node binary and coarsened-binary equivalence, including an empty first rank shard, through `vis/python/bin_convert.py` |
 | `tst/scripts/hydro/sphslice_partitioned.py` | shared, per-rank, and per-node spherical-slice equivalence plus sparse output stats |
+| `tst/scripts/hydro/pdf_partitioned.py` | shared, per-rank, and per-node PDF equivalence, legacy mass-weighted compatibility, three-dimensional `symlog` input, and variable weighting |
 
-Both tests require an MPI-enabled build and `mpiexec`.
+These tests require an MPI-enabled build and `mpiexec`.

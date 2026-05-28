@@ -34,12 +34,6 @@
 
 namespace {
 
-struct RestartBlockRequest {
-  int local_index;
-  int global_id;
-  int src_rank;
-};
-
 struct PerNodeRestartRequest {
   int local_index;
   IOWrapperSizeT file_offset;
@@ -80,48 +74,57 @@ bool RestartIoStatsEnabled() {
   return enabled;
 }
 
-RestartChunkLayout BuildRestartChunkLayout(const RestartMetaData &meta,
+RestartChunkLayout BuildRestartChunkLayout(const RestartMetaData& meta,
                                            IOWrapperSizeT data_stride,
                                            int nout1, int nout2, int nout3,
                                            int nhydro, int nmhd, int nrad,
                                            int nforce, int nz4c, int nadm,
-                                           const char *context) {
+                                           const char* context) {
   RestartChunkLayout layout;
   layout.chunk_stride = (meta.payload_stride != 0)
-      ? static_cast<IOWrapperSizeT>(meta.payload_stride)
-      : data_stride;
-  if (meta.file_shard_mode == FileShardMode::per_node && layout.chunk_stride != data_stride) {
+                            ? static_cast<IOWrapperSizeT>(meta.payload_stride)
+                            : data_stride;
+  if (meta.file_shard_mode == FileShardMode::per_node &&
+      layout.chunk_stride != data_stride) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Per-node restart payload stride does not match local "
+              << std::endl
+              << "Per-node restart payload stride does not match local "
               << "physics payload size." << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
   IOWrapperSizeT offset = 0;
   layout.hydro_offset = offset;
-  layout.hydro_bytes = static_cast<IOWrapperSizeT>(nout1)*nout2*nout3*nhydro*sizeof(Real);
+  layout.hydro_bytes = static_cast<IOWrapperSizeT>(nout1) * nout2 * nout3 *
+                       nhydro * sizeof(Real);
   offset += layout.hydro_bytes;
   layout.mhd_cc_offset = offset;
-  layout.mhd_cc_bytes = static_cast<IOWrapperSizeT>(nout1)*nout2*nout3*nmhd*sizeof(Real);
+  layout.mhd_cc_bytes =
+      static_cast<IOWrapperSizeT>(nout1) * nout2 * nout3 * nmhd * sizeof(Real);
   offset += layout.mhd_cc_bytes;
   layout.mhd_x1f_offset = offset;
-  layout.mhd_x1f_bytes = static_cast<IOWrapperSizeT>(nout1 + 1)*nout2*nout3*sizeof(Real);
+  layout.mhd_x1f_bytes =
+      static_cast<IOWrapperSizeT>(nout1 + 1) * nout2 * nout3 * sizeof(Real);
   if (nmhd > 0) offset += layout.mhd_x1f_bytes;
   layout.mhd_x2f_offset = offset;
-  layout.mhd_x2f_bytes = static_cast<IOWrapperSizeT>(nout1)*(nout2 + 1)*nout3*sizeof(Real);
+  layout.mhd_x2f_bytes =
+      static_cast<IOWrapperSizeT>(nout1) * (nout2 + 1) * nout3 * sizeof(Real);
   if (nmhd > 0) offset += layout.mhd_x2f_bytes;
   layout.mhd_x3f_offset = offset;
-  layout.mhd_x3f_bytes = static_cast<IOWrapperSizeT>(nout1)*nout2*(nout3 + 1)*sizeof(Real);
+  layout.mhd_x3f_bytes =
+      static_cast<IOWrapperSizeT>(nout1) * nout2 * (nout3 + 1) * sizeof(Real);
   if (nmhd > 0) offset += layout.mhd_x3f_bytes;
   layout.rad_offset = offset;
-  layout.rad_bytes = static_cast<IOWrapperSizeT>(nout1)*nout2*nout3*nrad*sizeof(Real);
+  layout.rad_bytes =
+      static_cast<IOWrapperSizeT>(nout1) * nout2 * nout3 * nrad * sizeof(Real);
   offset += layout.rad_bytes;
   layout.turb_offset = offset;
-  layout.turb_bytes = static_cast<IOWrapperSizeT>(nout1)*nout2*nout3*nforce*sizeof(Real);
+  layout.turb_bytes = static_cast<IOWrapperSizeT>(nout1) * nout2 * nout3 *
+                      nforce * sizeof(Real);
   if (nforce > 0) offset += layout.turb_bytes;
   layout.grav_offset = offset;
-  layout.grav_bytes = static_cast<IOWrapperSizeT>(nout1)*nout2*nout3*
-                      ((nz4c > 0) ? nz4c : nadm)*sizeof(Real);
+  layout.grav_bytes = static_cast<IOWrapperSizeT>(nout1) * nout2 * nout3 *
+                      ((nz4c > 0) ? nz4c : nadm) * sizeof(Real);
   if ((nz4c > 0) || (nadm > 0)) offset += layout.grav_bytes;
 
   if (offset != layout.chunk_stride) {
@@ -533,24 +536,21 @@ void ProblemGenerator::OutputErrors(ParameterInput *pin, Mesh *pm) {
 
 namespace {
 
-void LoadPerNodeRestartData(Mesh *pm, IOWrapperSizeT data_stride,
-                            int nout1, int nout2, int nout3,
-                            int nhydro, int nmhd, int nrad,
-                            int nforce, int nz4c, int nadm) {
-  MeshBlockPack *pack = pm->pmb_pack;
-  hydro::Hydro *phydro = pack->phydro;
-  mhd::MHD *pmhd = pack->pmhd;
-  adm::ADM *padm = pack->padm;
-  z4c::Z4c *pz4c = pack->pz4c;
-  radiation::Radiation *prad = pack->prad;
-  TurbulenceDriver *pturb = pack->pturb;
-  const RestartMetaData &meta = pm->restart_meta;
+void LoadPerNodeRestartData(Mesh* pm, IOWrapperSizeT data_stride, int nout1,
+                            int nout2, int nout3, int nhydro, int nmhd,
+                            int nrad, int nforce, int nz4c, int nadm) {
+  MeshBlockPack* pack = pm->pmb_pack;
+  hydro::Hydro* phydro = pack->phydro;
+  mhd::MHD* pmhd = pack->pmhd;
+  adm::ADM* padm = pack->padm;
+  z4c::Z4c* pz4c = pack->pz4c;
+  radiation::Radiation* prad = pack->prad;
+  TurbulenceDriver* pturb = pack->pturb;
+  const RestartMetaData& meta = pm->restart_meta;
 
-  RestartChunkLayout layout = BuildRestartChunkLayout(meta, data_stride, nout1, nout2, nout3,
-                                                      nhydro, nmhd, nrad,
-                                                      (pturb != nullptr) ? nforce : 0,
-                                                      nz4c, nadm,
-                                                      "Per-node restart data");
+  RestartChunkLayout layout = BuildRestartChunkLayout(
+      meta, data_stride, nout1, nout2, nout3, nhydro, nmhd, nrad,
+      (pturb != nullptr) ? nforce : 0, nz4c, nadm, "Per-node restart data");
   std::vector<int> rank_chunk_prefix = BuildPerNodeRankChunkPrefix(meta);
   auto requests = BuildPerNodeRestartRequests(pm, meta, rank_chunk_prefix,
                                               layout.chunk_stride);
@@ -627,31 +627,32 @@ void LoadPerNodeRestartData(Mesh *pm, IOWrapperSizeT data_stride,
 
     char dummy = '\0';
     for (int span_idx = 0; span_idx < collective_reads; ++span_idx) {
-      const PerNodeRestartSpan *span = (span_idx < static_cast<int>(spans.size()))
-          ? &spans[span_idx] : nullptr;
+      const PerNodeRestartSpan* span =
+          (span_idx < static_cast<int>(spans.size())) ? &spans[span_idx]
+                                                      : nullptr;
       IOWrapperSizeT local_bytes = (span == nullptr) ? 0 : span->byte_count;
       std::vector<char> span_buffer;
-      char *span_data = &dummy;
+      char* span_data = &dummy;
       if (local_bytes > 0) {
         span_buffer.resize(static_cast<std::size_t>(local_bytes));
         span_data = span_buffer.data();
       }
 
 #if MPI_PARALLEL_ENABLED
-      std::size_t bytes_read = srcfile.Read_bytes_at_all(span_data, 1, local_bytes,
-                                                         (span == nullptr) ? 0
-                                                                           : span->file_offset,
-                                                         false);
+      std::size_t bytes_read = srcfile.Read_bytes_at_all(
+          span_data, 1, local_bytes, (span == nullptr) ? 0 : span->file_offset,
+          false);
 #else
-      std::size_t bytes_read = srcfile.Read_bytes_at(span_data, 1, local_bytes,
-                                                     (span == nullptr) ? 0
-                                                                       : span->file_offset,
-                                                     true);
+      std::size_t bytes_read = srcfile.Read_bytes_at(
+          span_data, 1, local_bytes, (span == nullptr) ? 0 : span->file_offset,
+          true);
 #endif
       if (bytes_read != local_bytes) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Per-node restart payload not read correctly from shard "
-                  << shard_paths[shard] << ", restart file is broken." << std::endl;
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
+                  << __LINE__ << std::endl
+                  << "Per-node restart payload not read correctly from shard "
+                  << shard_paths[shard] << ", restart file is broken."
+                  << std::endl;
         std::exit(EXIT_FAILURE);
       }
 
@@ -660,12 +661,14 @@ void LoadPerNodeRestartData(Mesh *pm, IOWrapperSizeT data_stride,
       }
 
       for (int req_idx = 0; req_idx < span->request_count; ++req_idx) {
-        const auto &request = shard_requests[span->first_request + req_idx];
-        const char *chunk_ptr = span_data
-                              + static_cast<IOWrapperSizeT>(req_idx)*layout.chunk_stride;
-        UnpackPerNodePayloadChunk(chunk_ptr, request.local_index, layout, phydro, pmhd,
-                                  prad, pturb, pz4c, padm, hyd_scratch, mhd_cc_scratch,
-                                  mhd_fc_scratch, rad_scratch, turb_scratch, grav_scratch);
+        const auto& request = shard_requests[span->first_request + req_idx];
+        const char* chunk_ptr =
+            span_data +
+            static_cast<IOWrapperSizeT>(req_idx) * layout.chunk_stride;
+        UnpackPerNodePayloadChunk(chunk_ptr, request.local_index, layout,
+                                  phydro, pmhd, prad, pturb, pz4c, padm,
+                                  hyd_scratch, mhd_cc_scratch, mhd_fc_scratch,
+                                  rad_scratch, turb_scratch, grav_scratch);
       }
     }
 
@@ -681,385 +684,6 @@ void LoadPerNodeRestartData(Mesh *pm, IOWrapperSizeT data_stride,
 
   if (pz4c != nullptr) {
     pz4c->Z4cToADM(pm->pmb_pack);
-  }
-}
-
-void LoadPartitionedRestartData(Mesh *pm,
-                                IOWrapperSizeT headeroffset,
-                                IOWrapperSizeT data_stride,
-                                int nout1, int nout2, int nout3,
-                                int nhydro, int nmhd, int nrad,
-                                int nforce, int nz4c, int nadm,
-                                HostArray5D<Real> &ccin,
-                                HostFaceFld4D<Real> &fcin) {
-  MeshBlockPack *pack = pm->pmb_pack;
-  int nmb = pack->nmb_thispack;
-  hydro::Hydro* phydro = pack->phydro;
-  mhd::MHD* pmhd = pack->pmhd;
-  adm::ADM* padm = pack->padm;
-  z4c::Z4c* pz4c = pack->pz4c;
-  radiation::Radiation* prad = pack->prad;
-  TurbulenceDriver* pturb = pack->pturb;
-
-  const RestartMetaData &meta = pm->restart_meta;
-  if (meta.file_name.empty()) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Restart metadata missing file name for single-file restart."
-              << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  if (meta.rank_eachmb.size() != static_cast<std::size_t>(pm->nmb_total)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Restart metadata inconsistent with MeshBlock count."
-              << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  if (meta.original_nranks <= 0 ||
-      meta.gids_eachrank.size() != static_cast<std::size_t>(meta.original_nranks) ||
-      meta.nmb_eachrank.size() != static_cast<std::size_t>(meta.original_nranks)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Restart metadata missing original rank layout."
-              << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  if (meta.file_shard_mode == FileShardMode::per_node &&
-      (meta.original_nnodes <= 0 ||
-       meta.rank_to_node.size() != static_cast<std::size_t>(meta.original_nranks))) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Restart metadata missing original node layout."
-              << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-
-  if (meta.file_shard_mode == FileShardMode::per_node) {
-    LoadPerNodeRestartData(pm, data_stride, nout1, nout2, nout3, nhydro, nmhd, nrad,
-                           nforce, nz4c, nadm);
-    return;
-  }
-
-  int nshards = meta.original_nranks;
-  if (meta.file_shard_mode == FileShardMode::per_node) {
-    nshards = meta.original_nnodes;
-  }
-  std::vector<std::vector<RestartBlockRequest>> requests(nshards);
-  for (int m=0; m<nmb; ++m) {
-    int gid = pack->pmb->mb_gid.h_view(m);
-    if (gid < 0 || gid >= pm->nmb_total) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Invalid MeshBlock gid encountered during restart."
-                << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    int src_rank = meta.rank_eachmb[gid];
-    if (src_rank < 0 || src_rank >= meta.original_nranks) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Restart metadata contains invalid rank assignments."
-                << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    int src_shard = src_rank;
-    if (meta.file_shard_mode == FileShardMode::per_node) {
-      src_shard = meta.rank_to_node[src_rank];
-      if (src_shard < 0 || src_shard >= meta.original_nnodes) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Restart metadata contains invalid node assignments."
-                  << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-    }
-    requests[src_shard].push_back({m, gid, src_rank});
-  }
-
-  std::vector<std::string> shard_paths(nshards);
-  for (int s=0; s<nshards; ++s) {
-    char shard_dir[20];
-    std::snprintf(shard_dir, sizeof(shard_dir),
-                  meta.file_shard_mode == FileShardMode::per_node ? "node_%08d"
-                                                                  : "rank_%08d",
-                  s);
-    if (!meta.base_dir.empty()) {
-      shard_paths[s] = meta.base_dir + "/" + shard_dir + "/" + meta.file_name;
-    } else {
-      shard_paths[s] = std::string(shard_dir) + "/" + meta.file_name;
-    }
-  }
-
-  IOWrapperSizeT chunk_stride = data_stride;
-  if (meta.payload_stride != 0) {
-    chunk_stride = static_cast<IOWrapperSizeT>(meta.payload_stride);
-  }
-  if (meta.file_shard_mode == FileShardMode::per_node && chunk_stride != data_stride) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Per-node restart payload stride does not match local "
-              << "physics payload size." << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  const IOWrapperSizeT shard_payload_offset =
-      (meta.file_shard_mode == FileShardMode::per_node) ? 0 : headeroffset;
-  IOWrapperSizeT chunk_offset = 0;
-  const IOWrapperSizeT hydro_offset = chunk_offset;
-  chunk_offset += nout1*nout2*nout3*nhydro*sizeof(Real);
-  const IOWrapperSizeT mhd_cc_offset = chunk_offset;
-  chunk_offset += nout1*nout2*nout3*nmhd*sizeof(Real);
-  const IOWrapperSizeT mhd_x1f_offset = chunk_offset;
-  if (pmhd != nullptr) chunk_offset += (nout1+1)*nout2*nout3*sizeof(Real);
-  const IOWrapperSizeT mhd_x2f_offset = chunk_offset;
-  if (pmhd != nullptr) chunk_offset += nout1*(nout2+1)*nout3*sizeof(Real);
-  const IOWrapperSizeT mhd_x3f_offset = chunk_offset;
-  if (pmhd != nullptr) chunk_offset += nout1*nout2*(nout3+1)*sizeof(Real);
-  const IOWrapperSizeT rad_offset = chunk_offset;
-  chunk_offset += nout1*nout2*nout3*nrad*sizeof(Real);
-  const IOWrapperSizeT turb_offset = chunk_offset;
-  if (pturb != nullptr) {
-    chunk_offset += nout1*nout2*nout3*nforce*sizeof(Real);
-  }
-  const IOWrapperSizeT z4c_adm_offset = chunk_offset;
-  if (pz4c != nullptr) {
-    chunk_offset += nout1*nout2*nout3*nz4c*sizeof(Real);
-  } else if (padm != nullptr) {
-    chunk_offset += nout1*nout2*nout3*nadm*sizeof(Real);
-  }
-  if (chunk_offset != chunk_stride) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Restart data chunk size mismatch, restart file is broken."
-              << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-
-  auto chunk_base = [&](int src_rank, int global_id) -> IOWrapperSizeT {
-    int start_gid = meta.gids_eachrank[src_rank];
-    int local_index = global_id - start_gid;
-    if (local_index < 0 || (meta.nmb_eachrank[src_rank] > 0 &&
-                            local_index >= meta.nmb_eachrank[src_rank])) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Restart metadata inconsistent with MeshBlock ids."
-                << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    if (meta.file_shard_mode == FileShardMode::per_node) {
-      int src_node = meta.rank_to_node[src_rank];
-      for (int r=0; r<src_rank; ++r) {
-        if (meta.rank_to_node[r] == src_node) {
-          local_index += meta.nmb_eachrank[r];
-        }
-      }
-    }
-    return shard_payload_offset + chunk_stride * static_cast<IOWrapperSizeT>(local_index);
-  };
-
-  if (phydro != nullptr && nhydro > 0) {
-    Kokkos::realloc(ccin, nmb, nhydro, nout3, nout2, nout1);
-    for (int s=0; s<nshards; ++s) {
-      auto &reqs = requests[s];
-      if (reqs.empty()) continue;
-      IOWrapper srcfile;
-      srcfile.Open(shard_paths[s].c_str(), IOWrapper::FileMode::read, true);
-      for (const auto &req : reqs) {
-        auto mbptr = Kokkos::subview(ccin, req.local_index, Kokkos::ALL, Kokkos::ALL,
-                                     Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
-        if (mbcnt > 0) {
-          IOWrapperSizeT base = chunk_base(req.src_rank, req.global_id);
-          if (srcfile.Read_Reals_at(mbptr.data(), mbcnt, base + hydro_offset, true)
-              != mbcnt) {
-            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                      << std::endl << "CC hydro data not read correctly from rst file, "
-                      << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
-          }
-        }
-      }
-      srcfile.Close(true);
-    }
-    Kokkos::deep_copy(Kokkos::subview(phydro->u0, std::make_pair(0,nmb), Kokkos::ALL,
-                      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
-  }
-
-  if (pmhd != nullptr && nmhd > 0) {
-    Kokkos::realloc(ccin, nmb, nmhd, nout3, nout2, nout1);
-    Kokkos::realloc(fcin.x1f, nmb, nout3, nout2, nout1+1);
-    Kokkos::realloc(fcin.x2f, nmb, nout3, nout2+1, nout1);
-    Kokkos::realloc(fcin.x3f, nmb, nout3+1, nout2, nout1);
-    for (int s=0; s<nshards; ++s) {
-      auto &reqs = requests[s];
-      if (reqs.empty()) continue;
-      IOWrapper srcfile;
-      srcfile.Open(shard_paths[s].c_str(), IOWrapper::FileMode::read, true);
-      for (const auto &req : reqs) {
-        IOWrapperSizeT base = chunk_base(req.src_rank, req.global_id);
-        auto mbptr = Kokkos::subview(ccin, req.local_index, Kokkos::ALL, Kokkos::ALL,
-                                     Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
-        if (mbcnt > 0) {
-          if (srcfile.Read_Reals_at(mbptr.data(), mbcnt, base + mhd_cc_offset, true)
-              != mbcnt) {
-            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                      << std::endl << "CC mhd data not read correctly from rst file, "
-                      << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
-          }
-        }
-
-        auto x1fptr = Kokkos::subview(fcin.x1f, req.local_index, Kokkos::ALL, Kokkos::ALL,
-                                       Kokkos::ALL);
-        int fldcnt = x1fptr.size();
-        if (fldcnt > 0) {
-          if (srcfile.Read_Reals_at(x1fptr.data(), fldcnt, base + mhd_x1f_offset, true)
-              != fldcnt) {
-            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                      << std::endl << "Input b0.x1f field not read correctly from rst file, "
-                      << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
-          }
-        }
-
-        auto x2fptr = Kokkos::subview(fcin.x2f, req.local_index, Kokkos::ALL, Kokkos::ALL,
-                                       Kokkos::ALL);
-        fldcnt = x2fptr.size();
-        if (fldcnt > 0) {
-          if (srcfile.Read_Reals_at(x2fptr.data(), fldcnt, base + mhd_x2f_offset, true)
-              != fldcnt) {
-            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                      << std::endl << "Input b0.x2f field not read correctly from rst file, "
-                      << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
-          }
-        }
-
-        auto x3fptr = Kokkos::subview(fcin.x3f, req.local_index, Kokkos::ALL, Kokkos::ALL,
-                                       Kokkos::ALL);
-        fldcnt = x3fptr.size();
-        if (fldcnt > 0) {
-          if (srcfile.Read_Reals_at(x3fptr.data(), fldcnt, base + mhd_x3f_offset, true)
-              != fldcnt) {
-            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                      << std::endl << "Input b0.x3f field not read correctly from rst file, "
-                      << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
-          }
-        }
-      }
-      srcfile.Close(true);
-    }
-    Kokkos::deep_copy(Kokkos::subview(pmhd->u0, std::make_pair(0,nmb), Kokkos::ALL,
-                      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
-    Kokkos::deep_copy(Kokkos::subview(pmhd->b0.x1f, std::make_pair(0,nmb), Kokkos::ALL,
-                      Kokkos::ALL, Kokkos::ALL), fcin.x1f);
-    Kokkos::deep_copy(Kokkos::subview(pmhd->b0.x2f, std::make_pair(0,nmb), Kokkos::ALL,
-                      Kokkos::ALL, Kokkos::ALL), fcin.x2f);
-    Kokkos::deep_copy(Kokkos::subview(pmhd->b0.x3f, std::make_pair(0,nmb), Kokkos::ALL,
-                      Kokkos::ALL, Kokkos::ALL), fcin.x3f);
-  }
-
-  if (prad != nullptr && nrad > 0) {
-    Kokkos::realloc(ccin, nmb, nrad, nout3, nout2, nout1);
-    for (int s=0; s<nshards; ++s) {
-      auto &reqs = requests[s];
-      if (reqs.empty()) continue;
-      IOWrapper srcfile;
-      srcfile.Open(shard_paths[s].c_str(), IOWrapper::FileMode::read, true);
-      for (const auto &req : reqs) {
-        auto mbptr = Kokkos::subview(ccin, req.local_index, Kokkos::ALL, Kokkos::ALL,
-                                     Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
-        if (mbcnt > 0) {
-          IOWrapperSizeT base = chunk_base(req.src_rank, req.global_id);
-          if (srcfile.Read_Reals_at(mbptr.data(), mbcnt, base + rad_offset, true)
-              != mbcnt) {
-            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                      << std::endl << "CC rad data not read correctly from rst file, "
-                      << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
-          }
-        }
-      }
-      srcfile.Close(true);
-    }
-    Kokkos::deep_copy(Kokkos::subview(prad->i0, std::make_pair(0,nmb), Kokkos::ALL,
-                      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
-  }
-
-  if (pturb != nullptr && nforce > 0) {
-    Kokkos::realloc(ccin, nmb, nforce, nout3, nout2, nout1);
-    for (int s=0; s<nshards; ++s) {
-      auto &reqs = requests[s];
-      if (reqs.empty()) continue;
-      IOWrapper srcfile;
-      srcfile.Open(shard_paths[s].c_str(), IOWrapper::FileMode::read, true);
-      for (const auto &req : reqs) {
-        auto mbptr = Kokkos::subview(ccin, req.local_index, Kokkos::ALL, Kokkos::ALL,
-                                     Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
-        if (mbcnt > 0) {
-          IOWrapperSizeT base = chunk_base(req.src_rank, req.global_id);
-          if (srcfile.Read_Reals_at(mbptr.data(), mbcnt, base + turb_offset, true)
-              != mbcnt) {
-            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                      << std::endl << "CC turb data not read correctly from rst file, "
-                      << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
-          }
-        }
-      }
-      srcfile.Close(true);
-    }
-    Kokkos::deep_copy(Kokkos::subview(pturb->force, std::make_pair(0,nmb), Kokkos::ALL,
-                      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
-  }
-
-  if (pz4c != nullptr && nz4c > 0) {
-    Kokkos::realloc(ccin, nmb, nz4c, nout3, nout2, nout1);
-    for (int s=0; s<nshards; ++s) {
-      auto &reqs = requests[s];
-      if (reqs.empty()) continue;
-      IOWrapper srcfile;
-      srcfile.Open(shard_paths[s].c_str(), IOWrapper::FileMode::read, true);
-      for (const auto &req : reqs) {
-        auto mbptr = Kokkos::subview(ccin, req.local_index, Kokkos::ALL, Kokkos::ALL,
-                                     Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
-        if (mbcnt > 0) {
-          IOWrapperSizeT base = chunk_base(req.src_rank, req.global_id);
-          if (srcfile.Read_Reals_at(mbptr.data(), mbcnt, base + z4c_adm_offset, true)
-              != mbcnt) {
-            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                      << std::endl << "CC z4c data not read correctly from rst file, "
-                      << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
-          }
-        }
-      }
-      srcfile.Close(true);
-    }
-    Kokkos::deep_copy(Kokkos::subview(pz4c->u0, std::make_pair(0,nmb), Kokkos::ALL,
-                      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
-    pz4c->Z4cToADM(pm->pmb_pack);
-  } else if (padm != nullptr && nadm > 0) {
-    Kokkos::realloc(ccin, nmb, nadm, nout3, nout2, nout1);
-    for (int s=0; s<nshards; ++s) {
-      auto &reqs = requests[s];
-      if (reqs.empty()) continue;
-      IOWrapper srcfile;
-      srcfile.Open(shard_paths[s].c_str(), IOWrapper::FileMode::read, true);
-      for (const auto &req : reqs) {
-        auto mbptr = Kokkos::subview(ccin, req.local_index, Kokkos::ALL, Kokkos::ALL,
-                                     Kokkos::ALL, Kokkos::ALL);
-        int mbcnt = mbptr.size();
-        if (mbcnt > 0) {
-          IOWrapperSizeT base = chunk_base(req.src_rank, req.global_id);
-          if (srcfile.Read_Reals_at(mbptr.data(), mbcnt, base + z4c_adm_offset, true)
-              != mbcnt) {
-            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                      << std::endl << "CC adm data not read correctly from rst file, "
-                      << "restart file is broken." << std::endl;
-            std::exit(EXIT_FAILURE);
-          }
-        }
-      }
-      srcfile.Close(true);
-    }
-    Kokkos::deep_copy(Kokkos::subview(padm->u_adm, std::make_pair(0,nmb), Kokkos::ALL,
-                      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
   }
 }
 
@@ -1083,49 +707,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm) :
   user_srcs = pin->GetOrAddBoolean("problem","user_srcs",false);
   user_hist = pin->GetOrAddBoolean("problem","user_hist",false);
 
-#if USER_PROBLEM_ENABLED
-  // call user-defined problem generator
-  UserProblem(pin, false);
-#else
-  // else read name of built-in pgen from <problem> block in input file, and call
-  std::string pgen_fun_name = pin->GetOrAddString("problem", "pgen_name", "none");
-
-  if (pgen_fun_name.compare("advection") == 0) {
-    Advection(pin, false);
-  } else if (pgen_fun_name.compare("cpaw") == 0) {
-    AlfvenWave(pin, false);
-  } else if (pgen_fun_name.compare("gr_bondi") == 0) {
-    BondiAccretion(pin, false);
-  } else if (pgen_fun_name.compare("linear_wave") == 0) {
-    LinearWave(pin, false);
-  } else if (pgen_fun_name.compare("implode") == 0) {
-    LWImplode(pin, false);
-  } else if (pgen_fun_name.compare("gr_monopole") == 0) {
-    Monopole(pin, false);
-  } else if (pgen_fun_name.compare("orszag_tang") == 0) {
-    OrszagTang(pin, false);
-  } else if (pgen_fun_name.compare("rad_linear_wave") == 0) {
-    RadiationLinearWave(pin, false);
-  } else if (pgen_fun_name.compare("shock_tube") == 0) {
-    ShockTube(pin, false);
-  } else if (pgen_fun_name.compare("z4c_linear_wave") == 0) {
-    Z4cLinearWave(pin, false);
-  } else if (pgen_fun_name.compare("spherical_collapse") == 0) {
-    SphericalCollapse(pin, false);
-  } else if (pgen_fun_name.compare("diffusion") == 0) {
-    Diffusion(pin, false);
-  // else, name not set on command line or input file, print warning and quit
-  } else {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-        << "Problem generator name could not be found in <problem> block in input file"
-        << std::endl
-        << "and it was not set by -D PROBLEM option on cmake command line during build"
-        << std::endl
-        << "Rerun cmake with -D PROBLEM=file to specify custom problem generator file"
-        << std::endl;;
-    std::exit(EXIT_FAILURE);
-  }
-#endif
+  // second argument false since this IS NOT a restart
+  CallProblemGenerator(pin, false);
 
   // Check that user defined BCs were enrolled if needed
   if (user_bcs) {
@@ -1339,15 +922,16 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper &res
   HostArray5D<Real> ccin("rst-cc-in", 1, 1, 1, 1, 1);
   HostFaceFld4D<Real> fcin("rst-fc-in", 1, 1, 1, 1);
 
-  if (shard_mode != FileShardMode::shared) {
-    LoadPartitionedRestartData(pm, headeroffset, data_size_, nout1, nout2, nout3,
-                               nhydro, nmhd, nrad, nforce, nz4c, nadm,
-                               ccin, fcin);
+  if (shard_mode == FileShardMode::per_node) {
+    LoadPerNodeRestartData(pm, data_size_, nout1, nout2, nout3, nhydro, nmhd, nrad,
+                           nforce, nz4c, nadm);
   } else {
     // read CC data into host array
     int mygids = pm->gids_eachrank[global_variable::my_rank];
     IOWrapperSizeT offset_myrank = headeroffset;
-    offset_myrank += data_size_ * pm->gids_eachrank[global_variable::my_rank];
+    if (shard_mode == FileShardMode::shared) {
+      offset_myrank += data_size_ * pm->gids_eachrank[global_variable::my_rank];
+    }
     IOWrapperSizeT myoffset = offset_myrank;
 
     // calculate max/min number of MeshBlocks across all ranks
@@ -1685,69 +1269,34 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper &res
         int mbcnt = mbptr.size();
         if (resfile.Read_Reals_at(mbptr.data(), mbcnt, myoffset,
                                   use_serial_io) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC adm data not read correctly from rst file, "
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
+                    << __LINE__ << std::endl
+                    << "CC adm data not read correctly from rst file, "
                     << "restart file is broken." << std::endl;
           exit(EXIT_FAILURE);
         }
         myoffset += data_size;
       }
     }
-    Kokkos::deep_copy(Kokkos::subview(padm->u_adm, std::make_pair(0,nmb), Kokkos::ALL,
-                      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
-    offset_myrank += nout1*nout2*nout3*nadm*sizeof(Real);   // adm u_adm
+    Kokkos::deep_copy(
+        Kokkos::subview(padm->u_adm, std::make_pair(0, nmb), Kokkos::ALL,
+                        Kokkos::ALL, Kokkos::ALL, Kokkos::ALL),
+        ccin);
+    offset_myrank += nout1 * nout2 * nout3 * nadm * sizeof(Real);  // adm u_adm
     myoffset = offset_myrank;
   }
-
   }
 
   // call problem generator again to re-initialize data, fn ptrs, as needed
-#if USER_PROBLEM_ENABLED
-  UserProblem(pin, true);
-#else
-  std::string pgen_fun_name = pin->GetOrAddString("problem", "pgen_name", "none");
-
-  if (pgen_fun_name.compare("advection") == 0) {
-    Advection(pin, true);
-  } else if (pgen_fun_name.compare("cpaw") == 0) {
-    AlfvenWave(pin, true);
-  } else if (pgen_fun_name.compare("gr_bondi") == 0) {
-    BondiAccretion(pin, true);
-  } else if (pgen_fun_name.compare("linear_wave") == 0) {
-    LinearWave(pin, true);
-  } else if (pgen_fun_name.compare("implode") == 0) {
-    LWImplode(pin, true);
-  } else if (pgen_fun_name.compare("gr_monopole") == 0) {
-    Monopole(pin, true);
-  } else if (pgen_fun_name.compare("orszag_tang") == 0) {
-    OrszagTang(pin, true);
-  } else if (pgen_fun_name.compare("rad_linear_wave") == 0) {
-    RadiationLinearWave(pin, true);
-  } else if (pgen_fun_name.compare("shock_tube") == 0) {
-    ShockTube(pin, true);
-  } else if (pgen_fun_name.compare("z4c_linear_wave") == 0) {
-    Z4cLinearWave(pin, true);
-  } else if (pgen_fun_name.compare("spherical_collapse") == 0) {
-    SphericalCollapse(pin, true);
-  } else if (pgen_fun_name.compare("diffusion") == 0) {
-    Diffusion(pin, true);
-  } else {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-        << "Problem generator name could not be found in <problem> block in input file"
-        << std::endl
-        << "and it was not set by -D PROBLEM option on cmake command line during build"
-        << std::endl
-        << "Rerun cmake with -D PROBLEM=file to specify custom problem generator file"
-        << std::endl;;
-    std::exit(EXIT_FAILURE);
-  }
-#endif
+  // second argument true since this IS a restart
+  CallProblemGenerator(pin, true);
 
   // Check that user defined BCs were enrolled if needed
   if (user_bcs) {
     if (user_bcs_func == nullptr) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "User BCs specified in <mesh> block, but not enrolled "
+                << std::endl
+                << "User BCs specified in <mesh> block, but not enrolled "
                 << "during restart by SetProblemData()." << std::endl;
       exit(EXIT_FAILURE);
     }
@@ -1770,4 +1319,65 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper &res
       exit(EXIT_FAILURE);
     }
   }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn ProblemGenerator::CallProblemGenerator()
+//! \brief Selects the built-in or user problem generator for new and restart runs.
+
+void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart) {
+#if USER_PROBLEM_ENABLED
+  UserProblem(pin, is_restart);
+#else
+  std::string pgen_fun_name = pin->GetOrAddString("problem", "pgen_name", "none");
+
+  if (pgen_fun_name.compare("advection") == 0) {
+    Advection(pin, is_restart);
+  } else if (pgen_fun_name.compare("cpaw") == 0) {
+    AlfvenWave(pin, is_restart);
+  } else if (pgen_fun_name.compare("gr_bondi") == 0) {
+    BondiAccretion(pin, is_restart);
+  } else if (pgen_fun_name.compare("cshock") == 0) {
+    CShock(pin, is_restart);
+  } else if (pgen_fun_name.compare("linear_wave") == 0) {
+    LinearWave(pin, is_restart);
+  } else if (pgen_fun_name.compare("implode") == 0) {
+    LWImplode(pin, is_restart);
+  } else if (pgen_fun_name.compare("gr_monopole") == 0) {
+    Monopole(pin, is_restart);
+  } else if (pgen_fun_name.compare("mri3d") == 0) {
+    MRI3d(pin, is_restart);
+  } else if (pgen_fun_name.compare("orszag_tang") == 0) {
+    OrszagTang(pin, is_restart);
+  } else if (pgen_fun_name.compare("rad_linear_wave") == 0) {
+    RadiationLinearWave(pin, is_restart);
+  } else if (pgen_fun_name.compare("rad_beam") == 0) {
+    RadiationBeam(pin, is_restart);
+  } else if (pgen_fun_name.compare("shock_tube") == 0) {
+    ShockTube(pin, is_restart);
+  } else if (pgen_fun_name.compare("shwave") == 0) {
+    Shwave(pin, is_restart);
+  } else if (pgen_fun_name.compare("z4c_boosted_puncture") == 0) {
+    Z4cBoostedPuncture(pin, is_restart);
+  } else if (pgen_fun_name.compare("z4c_linear_wave") == 0) {
+    Z4cLinearWave(pin, is_restart);
+  } else if (pgen_fun_name.compare("spherical_collapse") == 0) {
+    SphericalCollapse(pin, is_restart);
+  } else if (pgen_fun_name.compare("diffusion") == 0) {
+    Diffusion(pin, is_restart);
+  } else {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Problem generator name could not be found in <problem> block "
+                 "in input file"
+              << std::endl
+              << "and it was not set by -D PROBLEM option on cmake command "
+                 "line during build"
+              << std::endl
+              << "Rerun cmake with -D PROBLEM=file to specify custom problem "
+                 "generator file"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+#endif
 }

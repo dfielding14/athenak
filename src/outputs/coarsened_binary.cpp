@@ -386,8 +386,8 @@ void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   fname.append(out_params.file_id);
   fname.append("_");
   fname.append(std::to_string(out_params.coarsen_factor));
+  fname.append("/");
   if (shard_mode != FileShardMode::shared) {
-    fname.append("/");
     fname.append(ShardDirectoryName(shard_mode));
   }
   fname.append(out_params.file_basename);

@@ -128,13 +128,13 @@ def _read_payload(f, header):
         idxs = np.fromfile(f, dtype=np.int32, count=npoints)
         if idxs.size != npoints:
             raise RuntimeError('Truncated index block in {}'.format(f.name))
-        vals = np.fromfile(f, dtype=np.float32, count=nvars*npoints)
-        if vals.size != nvars*npoints:
+        vals = np.fromfile(f, dtype=np.float32, count=nvars * npoints)
+        if vals.size != nvars * npoints:
             raise RuntimeError('Truncated value block in {}'.format(f.name))
         return idxs, vals
     ntheta = header['ntheta']
     nphi = header['nphi']
-    n = nvars*ntheta*nphi
+    n = nvars * ntheta * nphi
     vals = np.fromfile(f, dtype=np.float32, count=n)
     if vals.size != n:
         raise RuntimeError('Truncated payload in {}'.format(f.name))
@@ -185,8 +185,8 @@ def read_sphslice(path):
             ntheta = h['ntheta']
             nphi = h['nphi']
             nvars = h['nvars']
-            full = np.zeros((nvars, ntheta*nphi), dtype=np.float32)
-            covered = np.zeros(ntheta*nphi, dtype=bool)
+            full = np.zeros((nvars, ntheta * nphi), dtype=np.float32)
+            covered = np.zeros(ntheta * nphi, dtype=bool)
         else:
             for key in ('ntheta', 'nphi', 'nvars', 'radius', 'time'):
                 if h[key] != header[key]:
@@ -199,11 +199,12 @@ def read_sphslice(path):
         if idxs is None:
             if len(files) != 1:
                 raise RuntimeError(
-                    'shared sphslice payload found while reassembling shards: {}'.format(fp))
-            full[...] = vals.reshape(nvars, ntheta*nphi)
+                    'shared sphslice payload found while reassembling shards: '
+                    '{}'.format(fp))
+            full[...] = vals.reshape(nvars, ntheta * nphi)
             covered[...] = True
         elif idxs.size > 0:
-            total_points = ntheta*nphi
+            total_points = ntheta * nphi
             if np.any((idxs < 0) | (idxs >= total_points)):
                 raise RuntimeError(
                     'sphslice shard {} contains out-of-range angle indices'.format(fp))
@@ -225,8 +226,8 @@ def read_sphslice(path):
     # (var, itheta*nphi) -> (ntheta, nphi, nvars)
     data = full.reshape(nvars, ntheta, nphi).transpose(1, 2, 0)
 
-    theta = np.arccos(-1.0 + 2.0*(np.arange(ntheta) + 0.5)/ntheta)
-    phi = 2.0*np.pi*(np.arange(nphi) + 0.5)/nphi
+    theta = np.arccos(-1.0 + 2.0 * (np.arange(ntheta) + 0.5) / ntheta)
+    phi = 2.0 * np.pi * (np.arange(nphi) + 0.5) / nphi
 
     return {
         'header': header,

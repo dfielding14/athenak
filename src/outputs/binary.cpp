@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <numeric>
 #include <sstream>
 #include <string>
@@ -133,16 +134,17 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   char number[7];
   std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);
   if (shard_mode != FileShardMode::shared) {
-    fname = std::string("bin/") + ShardDirectoryName(shard_mode) + out_params.file_basename
-          + "." + out_params.file_id + number + ".bin";
+    fname = std::string("bin/") + ShardDirectoryName(shard_mode) +
+            out_params.file_basename + "." + out_params.file_id + number +
+            ".bin";
   } else {
     // Existing behavior: single restart file
-    fname = std::string("bin/") + out_params.file_basename
-          + "." + out_params.file_id + number + ".bin";
+    fname = std::string("bin/") + out_params.file_basename + "." +
+            out_params.file_id + number + ".bin";
   }
 
   IOWrapper binfile;
-  std::size_t header_offset=0;
+  std::size_t header_offset = 0;
 #if MPI_PARALLEL_ENABLED
   if (shard_mode == FileShardMode::per_node) {
     binfile.SetCommunicator(global_variable::node_comm);
@@ -161,9 +163,11 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   phase_timer.reset();
   {
     std::stringstream msg;
+    const int time_precision = std::numeric_limits<Real>::max_digits10 - 1;
     msg << "Athena binary output version=1.1" << std::endl
         // preheader size includes "size of preheader" line up to "number of variables"
         << "  size of preheader=5" << std::endl
+        << std::scientific << std::setprecision(time_precision)
         << "  time=" << pm->time << std::endl
         << "  cycle=" << pm->ncycle << std::endl
         << "  size of location=" << sizeof(Real) << std::endl

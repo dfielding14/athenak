@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
-import scripts.utils.athena as athena
+import scripts.utils.athena as athena  # noqa: F401
 
 logger = logging.getLogger('athena' + __name__[7:])
 
@@ -118,6 +118,7 @@ def run(**kwargs):
             'restart_from_manifest_rel',
             'restart_from_node_rel',
             'restart_from_shared',
+            'restart_from_shared_with_stale_node',
             'restart_from_rank',
             'restart_from_manifest_chunked',
             'restart_from_shared_chunked'):
@@ -141,7 +142,8 @@ def run(**kwargs):
     shared_path = _RST_DIR / 'restart_shared.00000.rst'
     shared_payload_path = _RST_DIR / 'node_00000000' / 'restart_shared.00000.rst'
     assert shared_path.is_file(), 'missing shared restart file'
-    assert not shared_payload_path.exists(), 'shared restart should not create node payload'
+    assert not shared_payload_path.exists(), (
+        'shared restart should not create node payload')
 
     rank_args = ['job/basename=restart_ranked',
                  'time/nlim=0',
@@ -155,6 +157,18 @@ def run(**kwargs):
     assert rank1_path.is_file(), 'missing rank-1 restart shard'
     assert not (_RST_DIR / 'restart_ranked.00000.rst').exists(), (
         'per-rank restart should not create a shared root file')
+
+    collision_node_args = ['job/basename=restart_collision',
+                           'time/nlim=0',
+                           'time/tlim=0.0']
+    _run_athena(_INPUT, collision_node_args, _EXE_DIR)
+    collision_shared_args = ['job/basename=restart_collision',
+                             'time/nlim=0',
+                             'time/tlim=0.0',
+                             'output1/single_file_per_node=false']
+    _run_athena(_INPUT, collision_shared_args, _EXE_DIR)
+    assert (_RST_DIR / 'node_00000000' / 'restart_collision.00000.rst').is_file(), (
+        'test requires a stale node shard beside the overwritten shared restart')
 
     restart_args = ['time/nlim=0', 'time/tlim=0.0']
     manifest_output = _run_restart('rst/restart_per_node.00000.rst',
@@ -174,6 +188,9 @@ def run(**kwargs):
 
     _run_restart('rst/restart_shared.00000.rst',
                  restart_args + ['-d', 'restart_from_shared'],
+                 _EXE_DIR)
+    _run_restart('rst/restart_collision.00000.rst',
+                 restart_args + ['-d', 'restart_from_shared_with_stale_node'],
                  _EXE_DIR)
     _run_restart('rst/rank_00000000/restart_ranked.00000.rst',
                  restart_args + ['-d', 'restart_from_rank'],

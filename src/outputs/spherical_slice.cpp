@@ -463,9 +463,9 @@ void SphericalSliceOutput::LoadOutputData(Mesh *pm) {
   shard_values.swap(local_values);
   std::size_t sparse_payload_bytes =
       static_cast<std::size_t>(local_points) *
-      (sizeof(int32_t) + static_cast<std::size_t>(nout_vars)*sizeof(float));
+      (sizeof(int32_t) + static_cast<std::size_t>(nout_vars) * sizeof(float));
   std::size_t dense_baseline_bytes =
-      static_cast<std::size_t>(nout_vars)*nangles*sizeof(Real);
+      static_cast<std::size_t>(nout_vars) * nangles * sizeof(Real);
   PrintSphsliceStats(out_params.file_shard_mode, local_points, local_points,
                      sparse_payload_bytes, dense_baseline_bytes);
 }
@@ -473,23 +473,19 @@ void SphericalSliceOutput::LoadOutputData(Mesh *pm) {
 //----------------------------------------------------------------------------------------
 // SphericalSliceOutput::WriteOutputFile()
 //
-// Binary layout (ASCII preheader, newline-terminated, then input-file dump, then payload):
+// Binary layout (ASCII preheader, newline-terminated, then input-file dump,
+// then payload):
 //   "Athena spherical slice version=1.0"
 //   "  single_file_per_rank=<0|1>"
-//   "  rank=<R>"                       (rank that wrote this file; 0 for shared file)
-//   "  time=<t>"
-//   "  cycle=<n>"
-//   "  radius=<r>"
-//   "  ntheta=<ntheta>"
-//   "  nphi=<nphi>"
-//   "  size of variable=4"
-//   "  number of variables=<nv>"
-//   "  npoints=<P>"                    (P = ntheta*nphi shared, or owned count per-rank)
-//   "  variables: v1 v2 ..."
-//   "  header offset=<bytes of input dump>"
+//   "  rank=<R>"                       (rank that wrote this file; 0 for shared
+//   file) "  time=<t>" "  cycle=<n>" "  radius=<r>" "  ntheta=<ntheta>" "
+//   nphi=<nphi>" "  size of variable=4" "  number of variables=<nv>" "
+//   npoints=<P>"                    (P = ntheta*nphi shared, or owned count
+//   per-rank) "  variables: v1 v2 ..." "  header offset=<bytes of input dump>"
 //   <input parameter dump bytes>
-//   shared mode:    <nv * ntheta * nphi  float32>     ordering: (var, itheta, iphi)
-//   per-rank mode:  <P int32 angle indices a> <nv * P float32 values>  (var-major)
+//   shared mode:    <nv * ntheta * nphi  float32>     ordering: (var, itheta,
+//   iphi) per-rank mode:  <P int32 angle indices a> <nv * P float32 values>
+//   (var-major)
 //                   recover (it, ip) via it = a/nphi, ip = a%nphi
 
 void SphericalSliceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
@@ -553,17 +549,18 @@ void SphericalSliceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     CheckedFwrite(sbuf.c_str(), 1, sbuf.size(), pfile, fname);
 
     if (partitioned) {
-      const auto &owned = shard_owned_angles;
+      const auto& owned = shard_owned_angles;
       CheckedFwrite(owned.data(), sizeof(int32_t), owned.size(), pfile, fname);
-      if (shard_values.size() != static_cast<size_t>(npoints)*nout_vars) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "sphslice sparse payload has incorrect size"
-                  << std::endl;
+      if (shard_values.size() != static_cast<size_t>(npoints) * nout_vars) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
+                  << __LINE__ << std::endl
+                  << "sphslice sparse payload has incorrect size" << std::endl;
         std::exit(EXIT_FAILURE);
       }
-      CheckedFwrite(shard_values.data(), sizeof(float), shard_values.size(), pfile, fname);
+      CheckedFwrite(shard_values.data(), sizeof(float), shard_values.size(),
+                    pfile, fname);
     } else {
-      std::vector<float> data(static_cast<size_t>(nout_vars)*ntheta*nphi);
+      std::vector<float> data(static_cast<size_t>(nout_vars) * ntheta * nphi);
       size_t k = 0;
       for (int n = 0; n < nout_vars; ++n) {
         for (int it = 0; it < ntheta; ++it) {

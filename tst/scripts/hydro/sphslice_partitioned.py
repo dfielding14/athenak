@@ -8,7 +8,7 @@ import subprocess
 import sys
 
 import numpy as np
-import scripts.utils.athena as athena
+import scripts.utils.athena as athena  # noqa: F401
 
 _REPO_DIR = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str((_REPO_DIR / 'vis' / 'python').resolve()))

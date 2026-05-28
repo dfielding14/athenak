@@ -16,6 +16,7 @@
 #include <sstream>
 #include <string>
 #include <utility> // make_pair
+#include <vector>
 
 #include "athena.hpp"
 #include "coordinates/cell_locations.hpp"
@@ -208,12 +209,13 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   char number[7];
   std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);
   if (split_per_node_manifest) {
-    manifest_fname = std::string("rst/") + out_params.file_basename + number + ".rst";
-    fname = std::string("rst/") + ShardDirectoryName(shard_mode) + out_params.file_basename
-      + number + ".rst";
+    manifest_fname =
+        std::string("rst/") + out_params.file_basename + number + ".rst";
+    fname = std::string("rst/") + ShardDirectoryName(shard_mode) +
+            out_params.file_basename + number + ".rst";
   } else if (shard_mode != FileShardMode::shared) {
-    fname = std::string("rst/") + ShardDirectoryName(shard_mode) + out_params.file_basename
-      + number + ".rst";
+    fname = std::string("rst/") + ShardDirectoryName(shard_mode) +
+            out_params.file_basename + number + ".rst";
   } else {
     // Existing behavior: single restart file
     // create filename: "rst/file_basename" + "." + XXXXX + ".rst"
@@ -290,26 +292,32 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     WriteMetadata(&(pm->time), sizeof(Real), "byte");
     WriteMetadata(&(pm->dt), sizeof(Real), "byte");
     WriteMetadata(&(pm->ncycle), sizeof(int), "byte");
-    WriteMetadata(&(global_variable::nranks), sizeof(int), "byte");
     if (split_per_node_manifest) {
       int manifest_version = kPerNodeManifestVersion;
+      WriteMetadata(&(global_variable::nranks), sizeof(int), "byte");
       WriteMetadata(&(global_variable::nnodes), sizeof(int), "byte");
       WriteMetadata(&manifest_version, sizeof(int), "byte");
     }
   }
-  //--- STEP 2.  Root process writes list of logical locations and cost of MeshBlocks
+  //--- STEP 2.  Root process writes list of logical locations and cost of
+  //MeshBlocks
   // This data read in Mesh::BuildTreeFromRestart()
 
   if (write_manifest) {
-    WriteMetadata(&(pm->lloc_eachmb[0]), (pm->nmb_total)*sizeof(LogicalLocation), "byte");
-    WriteMetadata(&(pm->cost_eachmb[0]), (pm->nmb_total)*sizeof(float), "byte");
-    WriteMetadata(&(pm->rank_eachmb[0]), (pm->nmb_total)*sizeof(int), "byte");
-    if (global_variable::nranks > 0) {
-      WriteMetadata(&(pm->gids_eachrank[0]), (global_variable::nranks)*sizeof(int), "byte");
-      WriteMetadata(&(pm->nmb_eachrank[0]), (global_variable::nranks)*sizeof(int), "byte");
-      if (split_per_node_manifest) {
+    WriteMetadata(&(pm->lloc_eachmb[0]),
+                  (pm->nmb_total) * sizeof(LogicalLocation), "byte");
+    WriteMetadata(&(pm->cost_eachmb[0]), (pm->nmb_total) * sizeof(float),
+                  "byte");
+    if (split_per_node_manifest) {
+      WriteMetadata(&(pm->rank_eachmb[0]), (pm->nmb_total) * sizeof(int),
+                    "byte");
+      if (global_variable::nranks > 0) {
+        WriteMetadata(&(pm->gids_eachrank[0]),
+                      (global_variable::nranks) * sizeof(int), "byte");
+        WriteMetadata(&(pm->nmb_eachrank[0]),
+                      (global_variable::nranks) * sizeof(int), "byte");
         WriteMetadata(global_variable::rank_to_node.data(),
-                      (global_variable::nranks)*sizeof(int), "byte");
+                      (global_variable::nranks) * sizeof(int), "byte");
       }
     }
   }
@@ -366,40 +374,43 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
 
   // calculate size of data written in Steps 1-2 above
-  IOWrapperSizeT step1size = sbuf.size()*sizeof(char) + 4*sizeof(int) + 2*sizeof(Real) +
+  IOWrapperSizeT step1size = sbuf.size()*sizeof(char) + 3*sizeof(int) + 2*sizeof(Real) +
                              sizeof(RegionSize) + 2*sizeof(RegionIndcs);
   if (split_per_node_manifest) {
-    step1size += 2*sizeof(int);
+    step1size += 3*sizeof(int);
   }
-  IOWrapperSizeT step2size = (pm->nmb_total)*(sizeof(LogicalLocation) + sizeof(float)
-                           + sizeof(int))
-                           + (global_variable::nranks)*2*sizeof(int);
+  IOWrapperSizeT step2size =
+      (pm->nmb_total) * (sizeof(LogicalLocation) + sizeof(float));
   if (split_per_node_manifest) {
-    step2size += (global_variable::nranks)*sizeof(int);
+    step2size += (pm->nmb_total) * sizeof(int) +
+                 (global_variable::nranks) * 3 * sizeof(int);
   }
 
-  IOWrapperSizeT step3size = 3*nco*sizeof(Real);
+  IOWrapperSizeT step3size = 3 * nco * sizeof(Real);
   if (pz4c != nullptr) step3size += sizeof(Real);
   if (pturb != nullptr) step3size += sizeof(RNG_State);
 
   // write cell-centered variables in parallel
   IOWrapperSizeT offset_myrank = 0;
-  std::vector<int> shard_counts = GatherShardCounts(pm->nmb_thisrank, shard_mode);
+  std::vector<int> shard_counts =
+      GatherShardCounts(pm->nmb_thisrank, shard_mode);
   int shard_prefix = PrefixCountBeforeMe(shard_counts, shard_mode);
   int shard_min = *std::min_element(shard_counts.begin(), shard_counts.end());
   int shard_max = *std::max_element(shard_counts.begin(), shard_counts.end());
   if (!split_per_node_manifest) {
-    offset_myrank = (step1size + step2size + step3size + sizeof(IOWrapperSizeT));
+    offset_myrank =
+        (step1size + step2size + step3size + sizeof(IOWrapperSizeT));
   }
-  offset_myrank += data_size*shard_prefix;
+  offset_myrank += data_size * shard_prefix;
 
   IOWrapperSizeT myoffset = offset_myrank;
   header_time = phase_timer.seconds();
   phase_timer.reset();
 
-  // write cell-centered variables, one MeshBlock at a time (but parallelized over all
-  // ranks). MeshBlocks are written seperately to reduce number of data elements per write
-  // call, to avoid exceeding 2^31 limit for very large grids per MPI rank.
+  // write cell-centered variables, one MeshBlock at a time (but parallelized
+  // over all ranks). MeshBlocks are written seperately to reduce number of data
+  // elements per write call, to avoid exceeding 2^31 limit for very large grids
+  // per MPI rank.
   if (phydro != nullptr) {
     for (int m=0;  m<shard_max; ++m) {
       // every rank has a MB to write, so write collectively

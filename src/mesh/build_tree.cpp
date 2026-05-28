@@ -4,7 +4,7 @@
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
 //! \file build_tree.cpp
-//! \brief Functions to build MeshBlockTreee, both for new runs and restarts
+//! \brief Functions to build MeshBlock, both for new runs and restarts
 
 #include <iostream>
 #include <cinttypes>
@@ -61,8 +61,9 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
     max_level = 31;
   }
 
-  // For meshes with refinement, construct new nodes for <refinement> blocks in input file
-
+  // Read <refined_region> blocks and construct tree accordingly
+  // These regions can be used with both SMR (in which case they will remain fixed) and
+  // AMR (in which case they may be defined, unless the location refinement criteria used)
   if (multilevel) {
     // error check that number of cells in MeshBlock divisible by two
     if (mb_indcs.nx1 % 2 != 0 ||
@@ -74,10 +75,10 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
       std::exit(EXIT_FAILURE);
     }
 
-    // cycle through ParameterInput list and find "refinement" blocks (SMR), extract data
-    // Expand MeshBlockTree to include "refinement" regions specified in input file:
+    // cycle through ParameterInput list and find "refined_region" blocks, extract data
+    // and expand MeshBlockTree
     for (auto it = pin->block.begin(); it != pin->block.end(); ++it) {
-      if (it->block_name.compare(0, 10, "refinement") == 0) {
+      if (it->block_name.compare(0, 14, "refined_region") == 0) {
         RegionSize ref_size;
         ref_size.x1min = pin->GetReal(it->block_name, "x1min");
         ref_size.x1max = pin->GetReal(it->block_name, "x1max");
@@ -102,13 +103,13 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
         // error check parameters in "refinement" blocks
         if (phy_ref_lev < 1) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Refinement level must be larger than 0 (root level = 0)"
+              << std::endl <<"<refined_region> level must be larger than 0 (root level=0)"
               << std::endl;
           std::exit(EXIT_FAILURE);
         }
         if (log_ref_lev > max_level) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Refinement level exceeds maximum allowed ("
+              << std::endl << "<refined_region> level exceeds maximum allowed ("
               << max_level << ")" << std::endl << "Reduce/specify 'num_levels' in "
               << "<mesh_refinement> input block if using AMR" << std::endl;
           std::exit(EXIT_FAILURE);
@@ -117,7 +118,7 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
             || ref_size.x2min > ref_size.x2max
             || ref_size.x3min > ref_size.x3max)  {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Invalid refinement region (xmax < xmin in one direction)."
+              << std::endl << "Invalid <refined_region> (xmax < xmin in one direction)."
               << std::endl;
           std::exit(EXIT_FAILURE);
         }
@@ -125,7 +126,7 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
             || ref_size.x2min < mesh_size.x2min || ref_size.x2max > mesh_size.x2max
             || ref_size.x3min < mesh_size.x3min || ref_size.x3max > mesh_size.x3max) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Refinement region must be fully contained within root mesh"
+              << std::endl << "<refined_region> must be fully contained within root mesh"
               << std::endl;
           std::exit(EXIT_FAILURE);
         }
@@ -326,10 +327,10 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
 
   // following must be identical to calculation of headeroffset (excluding size of
   // ParameterInput data) in restart.cpp
-  IOWrapperSizeT headersize = 4*sizeof(int) + 2*sizeof(Real)
+  IOWrapperSizeT headersize = 3*sizeof(int) + 2*sizeof(Real)
     + sizeof(RegionSize) + 2*sizeof(RegionIndcs);
   if (shard_mode == FileShardMode::per_node) {
-    headersize += 2*sizeof(int);
+    headersize += 3*sizeof(int);
   }
   char *headerdata = new char[headersize];
 
@@ -371,11 +372,12 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   std::memcpy(&dt, &(headerdata[hdos]), sizeof(Real));
   hdos += sizeof(Real);
   std::memcpy(&ncycle, &(headerdata[hdos]), sizeof(int));
-  hdos += sizeof(int);
-  std::memcpy(&(restart_meta.original_nranks), &(headerdata[hdos]), sizeof(int));
-  hdos += sizeof(int);
+  restart_meta.original_nranks = 0;
   restart_meta.original_nnodes = 1;
   if (shard_mode == FileShardMode::per_node) {
+    hdos += sizeof(int);
+    std::memcpy(&(restart_meta.original_nranks), &(headerdata[hdos]), sizeof(int));
+    hdos += sizeof(int);
     std::memcpy(&(restart_meta.original_nnodes), &(headerdata[hdos]), sizeof(int));
     hdos += sizeof(int);
     int manifest_version = 0;
@@ -383,32 +385,37 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
     hdos += sizeof(int);
     if (manifest_version != kPerNodeManifestVersion) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Unsupported per-node restart manifest version "
+                << std::endl
+                << "Unsupported per-node restart manifest version "
                 << manifest_version << ". Expected " << kPerNodeManifestVersion
                 << "." << std::endl;
       std::exit(EXIT_FAILURE);
     }
   }
-  delete [] headerdata;
+  delete[] headerdata;
 
   if (restart_meta.original_nranks < 0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Number of ranks stored in restart file is invalid." << std::endl;
+              << std::endl
+              << "Number of ranks stored in restart file is invalid."
+              << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
   // calculate the number of MeshBlocks at root level in each dir
-  nmb_rootx1 = mesh_indcs.nx1/mb_indcs.nx1;
-  nmb_rootx2 = mesh_indcs.nx2/mb_indcs.nx2;
-  nmb_rootx3 = mesh_indcs.nx3/mb_indcs.nx3;
+  nmb_rootx1 = mesh_indcs.nx1 / mb_indcs.nx1;
+  nmb_rootx2 = mesh_indcs.nx2 / mb_indcs.nx2;
+  nmb_rootx3 = mesh_indcs.nx3 / mb_indcs.nx3;
   int current_level = root_level;
 
   // Error check properties of input paraemters for SMR/AMR meshes.
   if (adaptive) {
-    max_level = pin->GetOrAddInteger("mesh_refinement", "num_levels", 1) + root_level - 1;
+    max_level = pin->GetOrAddInteger("mesh_refinement", "num_levels", 1) +
+                root_level - 1;
     if (max_level > 31) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Number of refinement levels must be smaller than "
+                << std::endl
+                << "Number of refinement levels must be smaller than "
                 << 31 - root_level + 1 << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -425,13 +432,14 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
 
   // allocate idlist buffer and read list of logical locations and cost
   IOWrapperSizeT listsize = sizeof(LogicalLocation) + sizeof(float);
-  char *idlist = new char[listsize*nmb_total];
+  char* idlist = new char[listsize * nmb_total];
   // only the master process reads the ID list
   if (global_variable::my_rank == 0 || use_serial_io) {
-    if (resfile.Read_bytes(idlist,listsize,nmb_total,use_serial_io) !=
+    if (resfile.Read_bytes(idlist, listsize, nmb_total, use_serial_io) !=
         static_cast<unsigned int>(nmb_total)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Incorrect number of MeshBlocks in restart file; "
+                << std::endl
+                << "Incorrect number of MeshBlocks in restart file; "
                 << "restart file is broken." << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -439,90 +447,89 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
 #if MPI_PARALLEL_ENABLED
   // then broadcast the ID list
   if (!use_serial_io) {
-    io_wrapper::BroadcastBytes(idlist, listsize*nmb_total, 0, MPI_COMM_WORLD);
+    io_wrapper::BroadcastBytes(idlist, listsize * nmb_total, 0, MPI_COMM_WORLD);
   }
 #endif
 
   // everyone sets the logical location and cost lists based on bradcasted data
   int os = 0;
-  for (int i=0; i<nmb_total; i++) {
+  for (int i = 0; i < nmb_total; i++) {
     std::memcpy(&(lloc_eachmb[i]), &(idlist[os]), sizeof(LogicalLocation));
     os += sizeof(LogicalLocation);
   }
-  for (int i=0; i<nmb_total; i++) {
+  for (int i = 0; i < nmb_total; i++) {
     std::memcpy(&(cost_eachmb[i]), &(idlist[os]), sizeof(float));
     os += sizeof(float);
-    if (lloc_eachmb[i].level > current_level) current_level = lloc_eachmb[i].level;
+    if (lloc_eachmb[i].level > current_level)
+      current_level = lloc_eachmb[i].level;
   }
-  delete [] idlist;
+  delete[] idlist;
   if (!adaptive) max_level = current_level;
 
-  restart_meta.rank_eachmb.assign(nmb_total, 0);
-  if (restart_meta.original_nranks > 0) {
+  if (shard_mode == FileShardMode::per_node) {
+    restart_meta.rank_eachmb.assign(nmb_total, 0);
     restart_meta.gids_eachrank.assign(restart_meta.original_nranks, 0);
     restart_meta.nmb_eachrank.assign(restart_meta.original_nranks, 0);
     restart_meta.rank_to_node.assign(restart_meta.original_nranks, 0);
-  } else {
-    restart_meta.gids_eachrank.clear();
-    restart_meta.nmb_eachrank.clear();
-    restart_meta.rank_to_node.clear();
-  }
 
-  if (global_variable::my_rank == 0 || use_serial_io) {
-    if (resfile.Read_bytes(restart_meta.rank_eachmb.data(), sizeof(int), nmb_total,
-                           use_serial_io)
-        != static_cast<unsigned int>(nmb_total)) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "MeshBlock rank list read from restart file is incorrect,"
-                << " restart file is broken." << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-  }
-#if MPI_PARALLEL_ENABLED
-  if (!use_serial_io) {
-    io_wrapper::BroadcastBytes(restart_meta.rank_eachmb.data(),
-                               nmb_total*sizeof(int), 0, MPI_COMM_WORLD);
-  }
-#endif
-
-  if (restart_meta.original_nranks > 0) {
     if (global_variable::my_rank == 0 || use_serial_io) {
-      if (resfile.Read_bytes(restart_meta.gids_eachrank.data(), sizeof(int),
-                             restart_meta.original_nranks, use_serial_io)
-          != static_cast<unsigned int>(restart_meta.original_nranks)) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Rank gid table read from restart file is incorrect,"
+      if (resfile.Read_bytes(restart_meta.rank_eachmb.data(), sizeof(int),
+                             nmb_total, use_serial_io) !=
+          static_cast<unsigned int>(nmb_total)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
+                  << __LINE__ << std::endl
+                  << "MeshBlock rank list read from restart file is incorrect,"
                   << " restart file is broken." << std::endl;
         std::exit(EXIT_FAILURE);
       }
     }
 #if MPI_PARALLEL_ENABLED
     if (!use_serial_io) {
-      io_wrapper::BroadcastBytes(restart_meta.gids_eachrank.data(),
-                                 restart_meta.original_nranks*sizeof(int), 0,
-                                 MPI_COMM_WORLD);
+      io_wrapper::BroadcastBytes(restart_meta.rank_eachmb.data(),
+                                 nmb_total * sizeof(int), 0, MPI_COMM_WORLD);
     }
 #endif
 
-    if (global_variable::my_rank == 0 || use_serial_io) {
-      if (resfile.Read_bytes(restart_meta.nmb_eachrank.data(), sizeof(int),
-                             restart_meta.original_nranks, use_serial_io)
-          != static_cast<unsigned int>(restart_meta.original_nranks)) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Rank MeshBlock count read from restart file is incorrect,"
-                  << " restart file is broken." << std::endl;
-        std::exit(EXIT_FAILURE);
+    if (restart_meta.original_nranks > 0) {
+      if (global_variable::my_rank == 0 || use_serial_io) {
+        if (resfile.Read_bytes(restart_meta.gids_eachrank.data(), sizeof(int),
+                               restart_meta.original_nranks, use_serial_io) !=
+            static_cast<unsigned int>(restart_meta.original_nranks)) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line "
+                    << __LINE__ << std::endl
+                    << "Rank gid table read from restart file is incorrect,"
+                    << " restart file is broken." << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
       }
-    }
 #if MPI_PARALLEL_ENABLED
-    if (!use_serial_io) {
-      io_wrapper::BroadcastBytes(restart_meta.nmb_eachrank.data(),
-                                 restart_meta.original_nranks*sizeof(int), 0,
-                                 MPI_COMM_WORLD);
-    }
+      if (!use_serial_io) {
+        io_wrapper::BroadcastBytes(restart_meta.gids_eachrank.data(),
+                                   restart_meta.original_nranks * sizeof(int),
+                                   0, MPI_COMM_WORLD);
+      }
 #endif
 
-    if (shard_mode == FileShardMode::per_node) {
+      if (global_variable::my_rank == 0 || use_serial_io) {
+        if (resfile.Read_bytes(restart_meta.nmb_eachrank.data(), sizeof(int),
+                               restart_meta.original_nranks, use_serial_io) !=
+            static_cast<unsigned int>(restart_meta.original_nranks)) {
+          std::cout
+              << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Rank MeshBlock count read from restart file is incorrect,"
+              << " restart file is broken." << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+      }
+#if MPI_PARALLEL_ENABLED
+      if (!use_serial_io) {
+        io_wrapper::BroadcastBytes(restart_meta.nmb_eachrank.data(),
+                                   restart_meta.original_nranks * sizeof(int),
+                                   0, MPI_COMM_WORLD);
+      }
+#endif
+
       if (global_variable::my_rank == 0 || use_serial_io) {
         if (resfile.Read_bytes(restart_meta.rank_to_node.data(), sizeof(int),
                                restart_meta.original_nranks, use_serial_io)
@@ -540,11 +547,6 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                                    MPI_COMM_WORLD);
       }
 #endif
-    } else {
-      restart_meta.original_nnodes = restart_meta.original_nranks;
-      for (int r = 0; r < restart_meta.original_nranks; ++r) {
-        restart_meta.rank_to_node[r] = r;
-      }
     }
   }
 

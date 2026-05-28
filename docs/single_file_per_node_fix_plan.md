@@ -16,10 +16,12 @@ node-local MPI communicator.
   by `int` MPI counts.
 - Collective MPI-IO paths keep ranks with zero local payload in the collective
   call, which avoids deadlocks and incomplete collectives.
-- Sparse spherical-slice and PDF readers can reassemble rank- or node-sharded
-  files from any shard path.
+- Binary, coarsened-binary, spherical-slice, and PDF readers can reassemble
+  rank- or node-sharded files from any shard path.
 - Regression tests cover per-node restart round trips, restart path variants,
-  forced small MPI-IO chunks, and shared/rank/node spherical-slice equivalence.
+  stale payload collisions, forced small MPI-IO chunks, binary/coarsened-binary
+  empty-shard reassembly, spherical-slice equivalence, and N-dimensional PDF
+  weighting compatibility.
 
 ## Remaining Performance Work
 

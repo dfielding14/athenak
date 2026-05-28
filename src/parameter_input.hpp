@@ -75,6 +75,7 @@ class ParameterInput {
   std::list<InputBlock> block;
 
   // functions
+  void CheckBlockNames();
   void LoadFromStream(std::istream &is);
   void LoadFromFile(IOWrapper &input, FileShardMode shard_mode=FileShardMode::shared);
   void ModifyFromCmdline(int argc, char *argv[]);

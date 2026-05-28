@@ -175,8 +175,8 @@ def read_pdf_header(header_path):
     dimensions = []
     for dim in range(1, header['ndim'] + 1):
         if dim not in dims:
-            raise RuntimeError('Missing metadata for dimension {} in {}'.format(dim,
-                                                                                header_path))
+            raise RuntimeError(
+                'Missing metadata for dimension {} in {}'.format(dim, header_path))
         info = dims[dim]
         if 'nbin' not in info:
             raise RuntimeError('Missing nbin{} in {}'.format(dim, header_path))

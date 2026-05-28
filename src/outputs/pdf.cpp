@@ -8,7 +8,7 @@
 //
 //  PDFs can be 1D, 2D, 3D, or 4D and can be volume, mass, or variable weighted.
 //  Each PDF is stored in its own directory with binary data files and an ASCII header.
-//  Variables can be any from var_choice[] in outputs.hpp, including coordinate variables.
+//  Variables can be scalar choices supported through var_choice[] in outputs.hpp.
 //
 //  Input format (new N-D):
 //    variable_1 = <var>   bin1_min = <min>   bin1_max = <max>   nbin1 = <n>
@@ -24,61 +24,62 @@
 
 #include <sys/stat.h>  // mkdir
 
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <cmath>
 #include <iomanip>
 #include <iostream>
 #include <limits>
 #include <sstream>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "athena.hpp"
+#include "eos/eos.hpp"
 #include "file_sharding.hpp"
 #include "globals.hpp"
-#include "mesh/mesh.hpp"
-#include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
+#include "mesh/mesh.hpp"
 #include "mhd/mhd.hpp"
-#include "z4c/z4c.hpp"
 #include "outputs.hpp"
+#include "z4c/z4c.hpp"
 
 // ScatterView is not part of Kokkos core interface
 #include "Kokkos_ScatterView.hpp"
 
 namespace {
 
-void CheckedFwrite(const void *ptr, std::size_t size, std::size_t count,
-                   std::FILE *stream, const std::string &path) {
+void CheckedFwrite(const void* ptr, std::size_t size, std::size_t count,
+                   std::FILE* stream, const std::string& path) {
   if (count == 0) {
     return;
   }
   if (std::fwrite(ptr, size, count, stream) != count) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Failed writing PDF output '" << path << "'"
-              << std::endl;
+              << std::endl
+              << "Failed writing PDF output '" << path << "'" << std::endl;
     std::exit(EXIT_FAILURE);
   }
 }
 
-void CheckedFclose(std::FILE *stream, const std::string &path) {
+void CheckedFclose(std::FILE* stream, const std::string& path) {
   if (std::fclose(stream) != 0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Failed closing PDF output '" << path << "'"
-              << std::endl;
+              << std::endl
+              << "Failed closing PDF output '" << path << "'" << std::endl;
     std::exit(EXIT_FAILURE);
   }
 }
 
-} // namespace
+}  // namespace
 
 //----------------------------------------------------------------------------------------
 // Constructor: initializes N-D PDF data structures
 
-PDFOutput::PDFOutput(ParameterInput *pin, Mesh *pm, OutputParameters op) :
-  BaseTypeOutput(pin, pm, op) {
-
+PDFOutput::PDFOutput(ParameterInput* pin, Mesh* pm, OutputParameters op)
+    : BaseTypeOutput(pin, pm, op) {
   // Create directory for outputs
   std::string dir_name = "pdf_" + op.file_id;
   for (int d = 1; d < op.pdf_ndim; ++d) {
@@ -86,7 +87,8 @@ PDFOutput::PDFOutput(ParameterInput *pin, Mesh *pm, OutputParameters op) :
   }
   mkdir(dir_name.c_str(), 0775);
   if (op.file_shard_mode != FileShardMode::shared) {
-    std::string shard_subdir = dir_name + "/" + ShardDirectoryName(op.file_shard_mode);
+    std::string shard_subdir =
+        dir_name + "/" + ShardDirectoryName(op.file_shard_mode);
     mkdir(shard_subdir.c_str(), 0775);
   }
 
@@ -109,7 +111,6 @@ PDFOutput::PDFOutput(ParameterInput *pin, Mesh *pm, OutputParameters op) :
     exit(EXIT_FAILURE);
   }
 }
-
 
 //----------------------------------------------------------------------------------------
 //! \fn void PDFOutput::LoadOutputData()
@@ -160,28 +161,34 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
   }
 
   auto &size = pm->pmb_pack->pmb->mb_size;
-  auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
-  int is = indcs.is; int ie = indcs.ie;
-  int js = indcs.js; int je = indcs.je;
-  int ks = indcs.ks; int ke = indcs.ke;
+  auto& indcs = pm->pmb_pack->pmesh->mb_indcs;
+  int is = indcs.is;
+  int ie = indcs.ie;
+  int js = indcs.js;
+  int je = indcs.je;
+  int ks = indcs.ks;
+  int ke = indcs.ke;
 
   int nmb = pm->pmb_pack->nmb_thispack;
-  int nx1 = indcs.nx1 + 2*indcs.ng;
-  int nx2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*indcs.ng) : 1;
-  int nx3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*indcs.ng) : 1;
+  int nx1 = indcs.nx1 + 2 * indcs.ng;
+  int nx2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2 * indcs.ng) : 1;
+  int nx3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2 * indcs.ng) : 1;
 
   // Copy MeshBlock data from host to device
   // Use explicit ranges for ALL dimensions because:
   // 1. Physics arrays may be allocated with more meshblocks than nmb_thispack
   // 2. Need to ensure source and target shapes match exactly for deep_copy
-  DvceArray5D<Real> outvars_device("outvars_device", outvars.size(), nmb, nx3, nx2, nx1);
+  DvceArray5D<Real> outvars_device("outvars_device", outvars.size(), nmb, nx3,
+                                   nx2, nx1);
   for (std::size_t i = 0; i < outvars.size(); ++i) {
-      auto d_slice = Kokkos::subview(*(outvars[i].data_ptr),
-          Kokkos::make_pair(0, nmb), outvars[i].data_index,
-          Kokkos::make_pair(0, nx3), Kokkos::make_pair(0, nx2), Kokkos::make_pair(0, nx1));
-      auto d_target_slice = Kokkos::subview(outvars_device, i,
-          Kokkos::ALL(), Kokkos::ALL(), Kokkos::ALL(), Kokkos::ALL());
-      Kokkos::deep_copy(d_target_slice, d_slice);
+    auto d_slice =
+        Kokkos::subview(*(outvars[i].data_ptr), Kokkos::make_pair(0, nmb),
+                        outvars[i].data_index, Kokkos::make_pair(0, nx3),
+                        Kokkos::make_pair(0, nx2), Kokkos::make_pair(0, nx1));
+    auto d_target_slice =
+        Kokkos::subview(outvars_device, i, Kokkos::ALL(), Kokkos::ALL(),
+                        Kokkos::ALL(), Kokkos::ALL());
+    Kokkos::deep_copy(d_target_slice, d_slice);
   }
   Kokkos::fence();
 
@@ -294,31 +301,29 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
 #if MPI_PARALLEL_ENABLED
   if (out_params.file_shard_mode == FileShardMode::shared) {
     if (global_variable::my_rank == 0) {
-      MPI_Reduce(MPI_IN_PLACE, result.data(), total_bins,
-                 MPI_ATHENA_REAL, MPI_SUM, 0, MPI_COMM_WORLD);
+      MPI_Reduce(MPI_IN_PLACE, result.data(), total_bins, MPI_ATHENA_REAL,
+                 MPI_SUM, 0, MPI_COMM_WORLD);
     } else {
-      MPI_Reduce(result.data(), result.data(), total_bins,
-                 MPI_ATHENA_REAL, MPI_SUM, 0, MPI_COMM_WORLD);
+      MPI_Reduce(result.data(), result.data(), total_bins, MPI_ATHENA_REAL,
+                 MPI_SUM, 0, MPI_COMM_WORLD);
     }
   } else if (out_params.file_shard_mode == FileShardMode::per_node) {
     if (global_variable::rank_in_node == 0) {
-      MPI_Reduce(MPI_IN_PLACE, result.data(), total_bins,
-                 MPI_ATHENA_REAL, MPI_SUM, 0, global_variable::node_comm);
+      MPI_Reduce(MPI_IN_PLACE, result.data(), total_bins, MPI_ATHENA_REAL,
+                 MPI_SUM, 0, global_variable::node_comm);
     } else {
-      MPI_Reduce(result.data(), result.data(), total_bins,
-                 MPI_ATHENA_REAL, MPI_SUM, 0, global_variable::node_comm);
+      MPI_Reduce(result.data(), result.data(), total_bins, MPI_ATHENA_REAL,
+                 MPI_SUM, 0, global_variable::node_comm);
     }
   }
 #endif
-
 }
-
 
 //----------------------------------------------------------------------------------------
 //! \fn void PDFOutput::WriteOutputFile()
 //  \brief Writes N-D PDF to binary file with ASCII header
 
-void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void PDFOutput::WriteOutputFile(Mesh* pm, ParameterInput* pin) {
   FileShardMode shard_mode = out_params.file_shard_mode;
 
   if (!IsShardWriter(shard_mode)) {
@@ -362,7 +367,8 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::fprintf(hfile, "# AthenaK N-D PDF Output\n");
     std::fprintf(hfile, "format = %s\n",
                  shard_mode == FileShardMode::shared ? "dense" : "sparse_coo");
-    std::fprintf(hfile, "distribution = %s\n", ShardDistributionName(shard_mode));
+    std::fprintf(hfile, "distribution = %s\n",
+                 ShardDistributionName(shard_mode));
     std::fprintf(hfile, "ndim = %d\n", pdf_data.ndim);
     std::fprintf(hfile, "weight = %s\n", out_params.pdf_weight.c_str());
     if (out_params.pdf_weight.compare("variable") == 0) {
@@ -375,15 +381,19 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     // Write dimension info
     for (int d = 0; d < pdf_data.ndim; ++d) {
       std::fprintf(hfile, "# Dimension %d\n", d + 1);
-      std::fprintf(hfile, "variable_%d = %s\n", d + 1, out_params.pdf_variables[d].c_str());
+      std::fprintf(hfile, "variable_%d = %s\n", d + 1,
+                   out_params.pdf_variables[d].c_str());
       std::fprintf(hfile, "nbin%d = %d\n", d + 1, pdf_data.nbin[d]);
       std::fprintf(hfile, "bin%d_min = %.15e\n", d + 1, pdf_data.bin_min[d]);
       std::fprintf(hfile, "bin%d_max = %.15e\n", d + 1, pdf_data.bin_max[d]);
-      std::fprintf(hfile, "scale%d = %s\n", d + 1, PDFScaleName(pdf_data.scale[d]));
+      std::fprintf(hfile, "scale%d = %s\n", d + 1,
+                   PDFScaleName(pdf_data.scale[d]));
       if (pdf_data.scale[d] == PDF_SCALE_SYMLOG) {
-        std::fprintf(hfile, "linthresh%d = %.15e\n", d + 1, pdf_data.linthresh[d]);
+        std::fprintf(hfile, "linthresh%d = %.15e\n", d + 1,
+                     pdf_data.linthresh[d]);
       }
-      std::fprintf(hfile, "logscale%d = %s\n", d + 1, pdf_data.logscale[d] ? "true" : "false");
+      std::fprintf(hfile, "logscale%d = %s\n", d + 1,
+                   pdf_data.logscale[d] ? "true" : "false");
       std::fprintf(hfile, "stride%d = %d\n", d + 1, pdf_data.stride[d]);
       std::fprintf(hfile, "\n");
     }
@@ -443,8 +453,10 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     }
     if (idx_buf.size() > std::numeric_limits<uint32_t>::max()) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "PDF sparse output '" << data_fname
-                << "' has too many nonzero bins for uint32 indexing" << std::endl;
+                << std::endl
+                << "PDF sparse output '" << data_fname
+                << "' has too many nonzero bins for uint32 indexing"
+                << std::endl;
       std::exit(EXIT_FAILURE);
     }
     uint32_t nnz = static_cast<uint32_t>(idx_buf.size());

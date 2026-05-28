@@ -32,8 +32,8 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include <system_error>
 #include <unordered_map>
+#include <vector>
 
 // Athena headers
 #include "athena.hpp"
@@ -43,7 +43,6 @@
 #include "mesh/mesh.hpp"
 #include "outputs/outputs.hpp"
 #include "driver/driver.hpp"
-#include "particles/particles.hpp"
 #include "utils/utils.hpp"
 
 // MPI/OpenMP headers
@@ -68,6 +67,7 @@ struct RestartPathInfo {
   std::string normalized_open_path;
   std::string base_dir;
   std::string file_name;
+  bool has_matching_node_payload = false;
 };
 
 bool HasShardPrefix(const std::string &name, const char *prefix) {
@@ -119,13 +119,15 @@ RestartPathInfo NormalizeRestartPath(const std::string &restart_arg) {
     bool exact_node = IsExactShardDirectoryName(name, "node_");
     bool exact_rank = IsExactShardDirectoryName(name, "rank_");
     if (!exact_node && !exact_rank) {
-      throw std::runtime_error("Malformed restart shard directory '" + name
-                               + "'. Expected node_######## or rank_########.");
+      throw std::runtime_error("Malformed restart shard directory '" + name +
+                               "'. Expected node_######## or rank_########.");
     }
 
-    FileShardMode part_mode = exact_node ? FileShardMode::per_node : FileShardMode::per_rank;
+    FileShardMode part_mode =
+        exact_node ? FileShardMode::per_node : FileShardMode::per_rank;
     if (embedded_mode != FileShardMode::shared) {
-      throw std::runtime_error("Restart path may contain only one shard directory.");
+      throw std::runtime_error(
+          "Restart path may contain only one shard directory.");
     }
     embedded_mode = part_mode;
     embedded_name = name;
@@ -160,7 +162,15 @@ RestartPathInfo NormalizeRestartPath(const std::string &restart_arg) {
                                  + "' does not exist.");
       }
     } else {
-      info.normalized_open_path = PathToString(normalized);
+      char rank_dir[20];
+      std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d", global_variable::my_rank);
+      fs::path rank_path = base_dir / rank_dir / info.file_name;
+      info.normalized_open_path = PathToString(rank_path);
+      ec.clear();
+      if (!fs::exists(rank_path, ec) || ec) {
+        throw std::runtime_error("Per-rank restart shard '" + info.normalized_open_path
+                                 + "' does not exist.");
+      }
     }
     return info;
   }
@@ -195,23 +205,28 @@ RestartPathInfo NormalizeRestartPath(const std::string &restart_arg) {
     }
   }
 
-  if (found_payload) {
-    info.shard_mode = FileShardMode::per_node;
-    ec.clear();
-    if (!fs::exists(normalized, ec) || ec) {
-      throw std::runtime_error("Per-node restart manifest '" + info.normalized_open_path
-                               + "' does not exist.");
-    }
-    return info;
-  }
-
   ec.clear();
   if (!fs::exists(normalized, ec) || ec) {
     throw std::runtime_error("Restart file '" + info.normalized_open_path
                              + "' does not exist.");
   }
+  info.has_matching_node_payload = found_payload;
 
   return info;
+}
+
+bool ParametersRequestPerNodeRestart(ParameterInput *pin) {
+  for (const auto &input_block : pin->block) {
+    const std::string &block_name = input_block.block_name;
+    if (block_name.compare(0, 6, "output") != 0 ||
+        !pin->DoesParameterExist(block_name, "file_type") ||
+        pin->GetString(block_name, "file_type").compare("rst") != 0 ||
+        !pin->DoesParameterExist(block_name, "single_file_per_node")) {
+      continue;
+    }
+    return pin->GetBoolean(block_name, "single_file_per_node");
+  }
+  return false;
 }
 
 }  // namespace
@@ -248,7 +263,7 @@ int main(int argc, char *argv[]) {
   }
   if (mpiprv != MPI_THREAD_MULTIPLE) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-              << "MPI_THREAD_MULTIPLE must be supported for hybrid parallelzation. "
+              << "MPI_THREAD_MULTIPLE must be supported for hybrid parallelization. "
               << MPI_THREAD_MULTIPLE << " : " << mpiprv
               << std::endl;
     MPI_Finalize();
@@ -278,12 +293,15 @@ int main(int argc, char *argv[]) {
   }
 
   if (MPI_SUCCESS != MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED,
-                                         global_variable::my_rank, MPI_INFO_NULL,
+                                         global_variable::my_rank,
+                                         MPI_INFO_NULL,
                                          &global_variable::node_comm)) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-              << "MPI_Comm_split_type(MPI_COMM_TYPE_SHARED) failed." << std::endl;
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "MPI_Comm_split_type(MPI_COMM_TYPE_SHARED) failed."
+              << std::endl;
     MPI_Finalize();
-    return(0);
+    return (0);
   }
   MPI_Comm_rank(global_variable::node_comm, &global_variable::rank_in_node);
   MPI_Comm_size(global_variable::node_comm, &global_variable::ranks_per_node);
@@ -291,18 +309,19 @@ int main(int argc, char *argv[]) {
   int node_leader_world_rank = global_variable::my_rank;
   MPI_Bcast(&node_leader_world_rank, 1, MPI_INT, 0, global_variable::node_comm);
   std::vector<int> node_leader_for_rank(global_variable::nranks, 0);
-  MPI_Allgather(&node_leader_world_rank, 1, MPI_INT, node_leader_for_rank.data(), 1,
-                MPI_INT, MPI_COMM_WORLD);
+  MPI_Allgather(&node_leader_world_rank, 1, MPI_INT,
+                node_leader_for_rank.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
   std::unordered_map<int, int> leader_to_node;
   global_variable::rank_to_node.assign(global_variable::nranks, 0);
   for (int r = 0; r < global_variable::nranks; ++r) {
-    auto [it, inserted] = leader_to_node.emplace(node_leader_for_rank[r],
-                                                 static_cast<int>(leader_to_node.size()));
+    auto [it, inserted] = leader_to_node.emplace(
+        node_leader_for_rank[r], static_cast<int>(leader_to_node.size()));
     global_variable::rank_to_node[r] = it->second;
   }
-  global_variable::node_id = global_variable::rank_to_node[global_variable::my_rank];
-  global_variable::nnodes = leader_to_node.size();
+  global_variable::node_id =
+      global_variable::rank_to_node[global_variable::my_rank];
+  global_variable::nnodes = static_cast<int>(leader_to_node.size());
 #else  // no MPI
   global_variable::my_rank = 0;
   global_variable::nranks  = 1;
@@ -462,6 +481,22 @@ int main(int argc, char *argv[]) {
     restartfile.Open(restart_file.c_str(), IOWrapper::FileMode::read,
                      UsesSerialIO(restart_shard_mode));
     pinput->LoadFromFile(restartfile, restart_shard_mode);
+    if (restart_path.shard_mode == FileShardMode::shared &&
+        ParametersRequestPerNodeRestart(pinput)) {
+      if (!restart_path.has_matching_node_payload) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Per-node restart manifest '" << restart_file
+                  << "' has no matching node payload shard." << std::endl;
+        restartfile.Close(false);
+        delete pinput;
+        Kokkos::finalize();
+#if MPI_PARALLEL_ENABLED
+        FinalizeMpi();
+#endif
+        return(0);
+      }
+      restart_shard_mode = FileShardMode::per_node;
+    }
   }
 
   // read parameters from input file.  If both -r and -i are specified, this will
@@ -470,6 +505,7 @@ int main(int argc, char *argv[]) {
     infile.Open(input_file.c_str(), IOWrapper::FileMode::read);
     pinput->LoadFromFile(infile);
     infile.Close();
+    pinput->CheckBlockNames();
   }
   pinput->ModifyFromCmdline(argc, argv);
 
@@ -522,9 +558,6 @@ int main(int argc, char *argv[]) {
   if (!res_flag) {
     // set ICs using ProblemGenerator constructor for new runs
     pmesh->pgen = std::make_unique<ProblemGenerator>(pinput, pmesh);
-    if (pmesh->pmb_pack->ppart != nullptr) {
-      pmesh->pmb_pack->ppart->CreateParticleTags(pinput);
-    }
   } else {
     // read ICs from restart file using ProblemGenerator constructor for restarts
     pmesh->pgen = std::make_unique<ProblemGenerator>(pinput,

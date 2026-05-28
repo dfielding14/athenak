@@ -14,7 +14,6 @@
 #include <cstdint>  // int32_t
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "athena.hpp"
@@ -66,20 +65,6 @@ struct LogicalLocation {
   std::int32_t lx1, lx2, lx3, level;
 };
 
-//----------------------------------------------------------------------------------------
-//! \struct LogicalLocationHash
-//! \brief Hash functor for LogicalLocation to enable use in unordered_map
-
-struct LogicalLocationHash {
-  std::size_t operator()(const LogicalLocation& loc) const noexcept {
-    // Combine level and indices into hash using prime numbers for good distribution
-    return (static_cast<std::size_t>(loc.lx1) * 1315423911ULL) ^
-           (static_cast<std::size_t>(loc.lx2) * 2654435761ULL) ^
-           (static_cast<std::size_t>(loc.lx3) * 97531ULL) ^
-           (static_cast<std::size_t>(loc.level) << 1);
-  }
-};
-
 struct RestartMetaData {
   FileShardMode file_shard_mode = FileShardMode::shared;
   std::string base_dir;
@@ -92,12 +77,6 @@ struct RestartMetaData {
   std::vector<int> rank_eachmb;
   std::vector<int> rank_to_node;
 };
-
-// Equality operator for LogicalLocation (needed for unordered_map)
-inline bool operator==(const LogicalLocation& a, const LogicalLocation& b) noexcept {
-  return (a.level == b.level && a.lx1 == b.lx1 &&
-          a.lx2 == b.lx2 && a.lx3 == b.lx3);
-}
 
 //----------------------------------------------------------------------------------------
 //! \struct EventCounters
@@ -193,7 +172,6 @@ class Mesh {
   void WriteMeshStructure();
   void NewTimeStep(const Real tlim);
   void AddCoordinatesAndPhysics(ParameterInput *pinput);
-  void CountParticles();
   BoundaryFlag GetBoundaryFlag(const std::string& input_string);
   std::string GetBoundaryString(BoundaryFlag input_flag);
 
@@ -205,12 +183,7 @@ class Mesh {
   }
 
   // accessors
-  int FindMeshBlockIndex(int tgid) {
-    for (int m=0; m<pmb_pack->nmb_thispack; ++m) {
-      if (pmb_pack->pmb->mb_gid.h_view(m) == tgid) return m;
-    }
-    return -1;
-  }
+  int FindMeshBlockIndex(int tgid);
   int NumberOfMeshBlockCells() const {
     return (mb_indcs.nx1)*(mb_indcs.nx2)*(mb_indcs.nx3);
   }

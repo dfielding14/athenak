@@ -10,10 +10,10 @@
 // e.g., global constants that are set once and never changed.  To prevent name collisions
 // global variables are wrapped in their own namespace.
 
+#include <vector>
+
 #include "athena.hpp"
 #include "globals.hpp"
-
-#include <vector>
 
 namespace global_variable {
 int my_rank;   // MPI rank of this process; set at start of main();
@@ -26,4 +26,4 @@ std::vector<int> rank_to_node;  // dense node id for every world rank
 #if MPI_PARALLEL_ENABLED
 MPI_Comm node_comm = MPI_COMM_NULL;
 #endif
-}
+}  // namespace global_variable
