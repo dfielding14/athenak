@@ -49,23 +49,22 @@ d_n = 1.0
 <turb_driving>
 turb_flag       = 2
 tcorr           = 0.25
-dt_turb_update  = 0.01
-constant_edot   = false
+dt_update       = 0.01
+normalization   = accel_rms
 accel_rms       = 0.3
 nlow            = 1
 nhigh           = 3
 npeak           = 2
-spect_form      = 1
+spectrum        = parabolic
 sol_fraction    = 0.7
 rseed           = 31415
-tile_driving    = true
 tile_nx         = 2
 tile_ny         = 2
 tile_nz         = 1
 localization    = include
-x_turb_scale_height = 0.18
-y_turb_scale_height = 0.18
-z_turb_scale_height = 0.28
+sigma_x1        = 0.18
+sigma_x2        = 0.18
+sigma_x3        = 0.28
 
 <output1>
 file_type = hst

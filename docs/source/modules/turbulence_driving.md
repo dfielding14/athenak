@@ -2,151 +2,152 @@
 
 ## Scope
 
-`TurbulenceDriver` applies a stochastic acceleration field to hydro, MHD, or
-ion-neutral states.  The driver constructs a band-limited Fourier field,
-evolves its amplitudes with an Ornstein-Uhlenbeck (OU) process, removes the
-net accelerated momentum, and normalizes the remaining field before applying
-it during the integrator stages.
-
-This implementation adds three controls needed for multiphase and refined
+`TurbulenceDriver` applies a stochastic acceleration source to hydro, MHD, or
+ion-neutral fluid states. It supports uniform meshes and adaptive mesh
+refinement (AMR), with three controls intended for localized multiphase
 calculations:
 
-- constant volume-averaged energy injection or constant RMS acceleration;
-- periodic repetition of one driving realization on spatial tiles;
-- Gaussian inclusion or exclusion envelopes around a chosen region.
+- normalization by fixed energy injection rate or fixed RMS acceleration;
+- periodic repetition of one forcing realization on spatial tiles;
+- Gaussian inclusion or exclusion of a specified physical region.
 
-The same input controls operate on uniform meshes, static mesh refinement, and
-adaptive mesh refinement (AMR).
+The implementation keeps stochastic state in Fourier coefficient space, not
+in cell arrays. Mesh changes therefore alter only the evaluation geometry.
 
-## Forcing Construction
+## Modal Evolution
 
-For selected wavevectors \(\boldsymbol{k}\), the raw acceleration is assembled
-from random Fourier amplitudes and cached cell-centered basis functions:
+For selected wavevectors \(\boldsymbol{k}\), the unnormalized acceleration is
 
 ```{math}
 \boldsymbol{a}_0(\boldsymbol{x},t)
- = \sum_{\boldsymbol{k}} \mathrm{Re}\left[
-   \boldsymbol{A}_{\boldsymbol{k}}(t)
-   \exp(i\boldsymbol{k}\cdot\boldsymbol{x})\right].
+ = \sum_{\boldsymbol{k}} \operatorname{Re}\left[
+ \boldsymbol{A}_{\boldsymbol{k}}(t)
+ \exp(i\boldsymbol{k}\cdot\boldsymbol{x})\right].
 ```
 
-The OU update cadence is `dt_turb_update`.  For a non-zero correlation time,
+At cadence `dt_update`, each complex modal coefficient is updated by an
+Ornstein-Uhlenbeck (OU) recurrence,
 
 ```{math}
 \boldsymbol{A}^{n+1}
- = f_{\rm corr}\boldsymbol{A}^{n}
- + g_{\rm corr}\boldsymbol{\xi}^{n}, \qquad
-f_{\rm corr}=\exp(-\Delta t_{\rm turb}/t_{\rm corr}),\quad
+= f_{\rm corr}\boldsymbol{A}^{n}
++ g_{\rm corr}\boldsymbol{\xi}^{n},\qquad
+f_{\rm corr}=\exp(-\Delta t_{\rm update}/t_{\rm corr}),\qquad
 g_{\rm corr}=\sqrt{1-f_{\rm corr}^{2}},
 ```
 
-where \(\boldsymbol{\xi}^{n}\) is a new seeded random realization.  When
-`tcorr <= 1e-6`, the driver uses white-noise forcing.
+where \(\boldsymbol{\xi}^{n}\) is a newly generated, projected modal
+innovation. With negligible `tcorr`, each update replaces the previous state
+with a white-noise realization. `sol_fraction=1` gives solenoidal forcing and
+`sol_fraction=0` gives compressive forcing.
 
-`sol_fraction` blends the solenoidal and compressive Fourier projections:
-`1.0` is purely solenoidal and `0.0` is purely compressive.
+`mode_amp_real` and `mode_amp_imag` are the authoritative OU state. The
+cell-centered `force` field is rendered from those coefficients and the
+current MeshBlock geometry.
 
-## Tiled Driving
+## Tiled Evaluation
 
-With `tile_driving = true`, the Fourier realization is evaluated using local
-tile coordinates rather than global coordinates.  In coordinate \(q\),
+`tile_nx`, `tile_ny`, and `tile_nz` specify the number of repetitions in each
+coordinate direction. A count of one disables tiling in that direction. For
+coordinate \(q\),
 
 ```{math}
 q_{\rm tile} = q - q_{\min}
  - L_{\rm tile}\left\lfloor\frac{q-q_{\min}}{L_{\rm tile}}\right\rfloor,
-\qquad
-L_{\rm tile} = \frac{L}{N_{\rm tile}}.
+\qquad L_{\rm tile}=L/N_{\rm tile}.
 ```
 
-This repeats one statistically identical driving pattern on
-`tile_nx * tile_ny * tile_nz` subdomains.  Each tile count must evenly divide
-the root-grid cell count in that direction.  Counts in absent dimensions are
-automatically reduced to one.
+The basis is evaluated at \(q_{\rm tile}\), so every tile receives the same
+modal realization. Tile counts must be positive and evenly divide the
+root-grid cell count; inactive dimensions require a tile count of one.
 
 ## Spatial Localization
 
-The optional envelope is constructed from each positive scale height:
+When `localization=include` or `localization=exclude`, positive widths among
+`sigma_x1`, `sigma_x2`, and `sigma_x3` define
 
 ```{math}
 G(\boldsymbol{x}) =
-\exp\left[-\frac{1}{2}
-\sum_{q\in\{x_1,x_2,x_3\}}
-\left(\frac{q-q_0}{H_q}\right)^2\right].
+\exp\left[-\frac{1}{2}\sum_q
+\left(\frac{x_q-\mathrm{center}_{x_q}}{\sigma_{x_q}}\right)^2\right].
 ```
 
-Only directions with `*_turb_scale_height > 0` contribute to the sum.
-`localization = include` applies \(W=G\), concentrating forcing near the
-specified centre.  `localization = exclude` applies \(W=1-G\), suppressing
-forcing in that region while retaining it outside.  For backward compatibility,
-a positive scale height without an explicit `localization` value selects the
-include form.
-
-After applying the envelope, the code subtracts the mass-weighted mean field:
+Directions with non-positive widths are omitted. The applied envelope is
+\(W=G\) for `include` and \(W=1-G\) for `exclude`. The driver then removes
+the mass-weighted mean acceleration,
 
 ```{math}
 \boldsymbol{a} \leftarrow W\boldsymbol{a}_0
-- \frac{\int \rho W\boldsymbol{a}_0\,dV}{\int \rho\,dV}.
+-\frac{\int \rho W\boldsymbol{a}_0\,dV}{\int \rho\,dV}.
 ```
 
-## Normalization Modes
+`localization=none` rejects positive `sigma_x*` parameters, and localized
+modes require at least one positive width.
 
-All normalization integrals use physical cell volumes.  This is essential on
-AMR meshes: refined blocks represent smaller volumes and must not receive
-extra statistical weight merely because they contain more cells.
+## Normalization
 
-### Constant Energy Injection
+All integrals include physical cell volumes. On AMR meshes this prevents fine
+cells from receiving extra statistical weight solely because they are more
+numerous.
 
-With `constant_edot = true`, `dedt` is the target volume-averaged energy
-injection rate.  If the final acceleration is \(s\boldsymbol{a}\), the driver
-computes
+### Energy Injection
+
+With `normalization=edot`, `dedt` specifies the target volume-averaged energy
+injection rate. For a scale factor \(s\), the driver evaluates
 
 ```{math}
-m_0 = \frac{1}{V}\int
-\frac{1}{2}\rho |\boldsymbol{a}|^2\Delta t\,dV,\qquad
-m_1 = \frac{1}{V}\int
-\boldsymbol{p}\cdot\boldsymbol{a}\,dV
+m_0=\frac{1}{V}\int \frac{1}{2}\rho|\boldsymbol{a}|^2\Delta t\,dV,
+\qquad
+m_1=\frac{1}{V}\int \boldsymbol{p}\cdot\boldsymbol{a}\,dV,
 ```
 
-and applies the non-negative solution of
+and uses the non-negative solution to
 
 ```{math}
-m_0s^2+m_1s=\dot{e}_{\rm target}.
+m_0s^2+m_1s=\dot e_{\rm target}.
 ```
 
-### Constant RMS Acceleration
+### RMS Acceleration
 
-With `constant_edot = false`, `accel_rms` is imposed directly:
+With `normalization=accel_rms`, `accel_rms` is imposed directly:
 
 ```{math}
-a_{\rm rms}^2 = \frac{1}{V}\int |\boldsymbol{a}|^2\,dV,\qquad
-s = \frac{a_{\rm rms,target}}{a_{\rm rms}}.
+a_{\rm rms}^2=\frac{1}{V}\int|\boldsymbol{a}|^2\,dV,\qquad
+s=\frac{a_{\rm rms,target}}{a_{\rm rms}}.
 ```
 
-If `accel_rms` is omitted, the code retains donor-input compatibility by using
-`sqrt(2*dedt)` and emits a warning.  New inputs should specify `accel_rms`
-explicitly.
+`dedt` and `accel_rms` are mutually exclusive: the selected normalization
+mode requires its target and rejects the other target.
 
-## AMR Operation
+## AMR And Restart Invariants
 
-The forcing and basis arrays are allocated with the same MeshBlock capacity
-used by the evolved state arrays (`nmb_maxperrank`).  Before each forcing
-update, `EnsureBasisSize` observes changes in the active MeshBlocks and AMR
-creation/deletion counters.  When refinement changes the layout it rebuilds
-cell-centered Fourier bases from the current MeshBlock geometry, including
-tile-local coordinates, before applying localization and volume-weighted
-normalization.
+On every refinement topology change, the driver resizes capacity if required
+and recomputes only the trigonometric basis on active MeshBlocks. It does not
+interpolate, restrict, or regenerate modal OU coefficients. Thus newly
+created fine cells evaluate the same instantaneous realization at their
+physical centers, and tile/localization boundaries remain physical-coordinate
+operations.
 
-Consequently:
+Restart output records:
 
-- newly refined cells receive a force evaluated at their own physical centres;
-- Gaussian envelopes and tile boundaries are defined in physical coordinates;
-- energy or acceleration normalization is independent of coarse/fine cell
-  multiplicity;
-- AMR input files must still set a sufficient `max_nmb_per_rank` capacity.
+- a versioned configuration record and completed OU update count;
+- random-number generator state;
+- the real and imaginary coefficient arrays.
 
-The AMR rebuild reconstructs the instantaneous forcing on the new block
-layout; it is not a claim of bitwise identity with an alternative run that
-never refined.
+It does not checkpoint the rendered cell-centered force array. On restart,
+the force is regenerated on the restored mesh from the authoritative modal
+state. A checkpoint is rejected if turbulence-driving configuration differs
+from the run reading it. Prototype checkpoint layouts are intentionally not
+supported.
+
+Real-valued defaults added at runtime are read back from their serialized
+parameter representation on the initial run, so an unchanged restart uses
+the same exact configuration record as the uninterrupted calculation.
+
+MPI reductions use `MPI_ATHENA_REAL`, so the driver source is valid for both
+double and single `Real` builds. Full single-precision executable builds of
+the current upstream tree remain blocked by pre-existing non-turbulence
+sources; see the example validation notes.
 
 ## Input Reference
 
@@ -156,36 +157,43 @@ The following keys belong in `<turb_driving>`.
 | --- | --- | --- |
 | `turb_flag` | `2` | `1` drives for `tdriv_duration`; `2` drives continuously. |
 | `tdriv_start` | `0.0` | Time at which driving begins. |
-| `tdriv_duration` | `tcorr` | Duration when `turb_flag = 1`. |
-| `tcorr` | `0.0` | OU correlation time. |
-| `dt_turb_update` | `0.01` | OU refresh cadence; must be positive. |
-| `constant_edot` | `true` | Select constant `dedt` or constant `accel_rms`. |
-| `dedt` | `0.0` | Target energy injection rate for constant-Edot mode. |
-| `accel_rms` | `sqrt(2*dedt)` | Target RMS acceleration when `constant_edot = false`. |
+| `tdriv_duration` | `tcorr` | Duration when `turb_flag=1`. |
+| `tcorr` | `0.0` | OU correlation time; must be non-negative. |
+| `dt_update` | `0.01` | Modal update cadence; must be positive. |
+| `normalization` | `edot` | `edot` or `accel_rms`. |
+| `dedt` | required for `edot` | Target volume-averaged injection rate. |
+| `accel_rms` | required for `accel_rms` | Target volume-weighted RMS acceleration. |
 | `nlow`, `nhigh` | `1`, `3` | Inclusive driven mode-radius bounds. |
-| `npeak` / `kpeak` | `kpeak = 4*pi` | Spectral peak for the parabolic spectrum; `npeak` is in tile-local x1 mode units, while `kpeak` is an explicit wavenumber. |
-| `spect_form` | `1` | `1` parabolic spectrum; `2` power law. |
-| `expo` | `5/3` | Isotropic power-law exponent. |
+| `npeak` / `kpeak` | `kpeak=4*pi` | Parabolic spectral peak; `npeak` is tile-local mode number. |
+| `spectrum` | `parabolic` | `parabolic` or `power_law`. |
+| `expo`, `exp_prp`, `exp_prl` | `5/3`, `5/3`, `0` | Power-law spectrum exponents. |
 | `min_kx/y/z`, `max_kx/y/z` | `0`, `nhigh` | Optional directional mode bounds. |
-| `sol_fraction` | `1.0` | Solenoidal fraction; range `[0,1]`. |
-| `rseed` | `-1` | Non-negative values select reproducible random sequences. |
-| `tile_driving` | `false` | Enable tiled evaluation of the same realization. |
-| `tile_factor` | `1` | Common tile count fallback. |
-| `tile_nx/y/z` | `tile_factor` | Per-direction tile counts. |
+| `driving_type` | `0` | `0` for three-dimensional; `1` for planar driving. |
+| `sol_fraction` | `1.0` | Solenoidal fraction in `[0,1]`. |
+| `rseed` | `-1` | Non-negative values select reproducible sequences. |
+| `tile_nx`, `tile_ny`, `tile_nz` | `1` | Tile repetitions in each direction. |
 | `localization` | `none` | `none`, `include`, or `exclude`. |
-| `x/y/z_turb_scale_height` | `-1.0` | Positive Gaussian scale heights. |
-| `x/y/z_turb_center` | `0.0` | Gaussian centre coordinates. |
+| `sigma_x1`, `sigma_x2`, `sigma_x3` | `-1.0` | Positive Gaussian widths in active directions. |
+| `center_x1`, `center_x2`, `center_x3` | `0.0` | Gaussian center coordinates. |
 
-## Validation Cases
+## Rejected Prototype Names
 
-The repository provides three short runnable inputs under
-`inputs/hydro/turb_driving/`:
+This interface has no deprecated aliases. In particular, inputs containing
+`constant_edot`, `tile_factor`, or `x_turb_scale_height` terminate with an
+input error rather than silently selecting a new behavior. The driver also
+rejects the provisional names `dt_turb_update`, `spect_form`,
+`tile_driving`, `y_turb_scale_height`, `z_turb_scale_height`, and
+`x/y/z_turb_center`; use the canonical keys above.
+
+## Included Problems
+
+Three runnable demonstrations are provided under `inputs/hydro/turb_driving/`:
 
 | Input | Purpose |
 | --- | --- |
-| `constant_edot_fixed_grid.athinput` | Uniform-grid reference using fixed `dedt`. |
-| `tiled_localized_include.athinput` | Tiled forcing with fixed `accel_rms` and a central inclusion envelope. |
-| `amr_localized_exclude.athinput` | Adaptive refinement with a central exclusion envelope and fixed `dedt`. |
+| `constant_edot_fixed_grid.athinput` | Uniform-grid reference with `normalization=edot`. |
+| `tiled_localized_include.athinput` | Tiled fixed-RMS forcing with a Gaussian inclusion region. |
+| `amr_localized_exclude.athinput` | AMR calculation with a Gaussian exclusion region. |
 
-See {doc}`../examples/turbulence_driving` for commands and simulation-derived
-projections of these configurations.
+See {doc}`../examples/turbulence_driving` for commands, measured checks, and
+projections generated from these inputs.
