@@ -9,8 +9,9 @@
 //  \brief defines turbulence driver class, which implements data and functions for
 //  randomly forced turbulence which evolves via an Ornstein-Uhlenbeck stochastic process
 
-#include <memory>
 #include <cmath>
+#include <memory>
+#include <string>
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
@@ -20,43 +21,46 @@
 //----------------------------------------------------------------------------------------
 //! \class TurbulenceDriver
 
-
 class TurbulenceDriver {
  public:
-  TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin);
+  TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin,
+                   const std::string& block_name = "turb_driving");
   ~TurbulenceDriver();
 
   DvceArray5D<Real> force, force_tmp1, force_tmp2;  // arrays used for turb forcing
-  RNG_State rstate;                    // random state
+  RNG_State rstate;                                 // random state
 
-  DualArray2D<Real> aka, akb; //to store amplitude coefficients (same pattern repeated on all tiles)
+  // Fourier mode amplitudes; the same realization is repeated on every tile.
+  DualArray2D<Real> mode_amp_real, mode_amp_imag;
   DualArray1D<Real> kx_mode, ky_mode, kz_mode;
   DvceArray3D<Real> xcos, xsin, ycos, ysin, zcos, zsin;
 
-
   // AMR tracking variables
-  int current_nmb_;            // current number of mesh blocks
-  int last_nmb_created_;        // last tracked created blocks count  
-  int last_nmb_deleted_;        // last tracked deleted blocks count
+  int current_nmb_;       // current number of mesh blocks
+  int last_nmb_created_;  // last tracked created blocks count
+  int last_nmb_deleted_;  // last tracked deleted blocks count
 
   // parameters of driving
   int nlow, nhigh, spect_form;
   int mode_count;
-  int rseed; // random seed for turbulence driving
-  Real kpeak;
+  int rseed;  // random seed for turbulence driving
+  Real kpeak, npeak;
+  bool use_npeak;
   Real tcorr, dedt, tdriv_duration, tdriv_start;
   Real expo, exp_prl, exp_prp;
   int driving_type, turb_flag;
   int min_kz, max_kz, min_kx, max_kx, min_ky, max_ky;
-  Real sol_fraction; // To store fraction of energy in solenoidal modes
+  Real sol_fraction;  // fraction of acceleration in solenoidal modes
   Real dt_turb_update;
   // Real t_last_update;
   int n_turb_updates_yet;
 
-  // drive with constant edot or constant acceleration
+  // Drive with constant volume-averaged Edot or constant RMS acceleration.
   bool constant_edot;
+  Real accel_rms;
 
-  // spatially varying driving
+  // Spatial envelope: 0=none, 1=include Gaussian, 2=exclude Gaussian.
+  int localization_mode;
   Real x_turb_scale_height, y_turb_scale_height, z_turb_scale_height;
   Real x_turb_center, y_turb_center, z_turb_center;
 
@@ -68,19 +72,23 @@ class TurbulenceDriver {
   Real inv_tile_lx, inv_tile_ly, inv_tile_lz;
   Real domain_x1min, domain_x2min, domain_x3min;
 
-
   // functions
   void IncludeInitializeModesTask(std::shared_ptr<TaskList> tl, TaskID start);
   void IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskID start);
-  TaskStatus InitializeModes(Driver *pdrive, int stage);
-  TaskStatus EnsureBasisSize(Driver *pdrive, int stage);
-  TaskStatus UpdateForcing(Driver *pdrive, int stage);
-  TaskStatus AddForcing(Driver *pdrive, int stage);
+  TaskStatus InitializeModes(Driver* pdrive, int stage);
+  TaskStatus EnsureBasisSize(Driver* pdrive, int stage);
+  TaskStatus UpdateForcing(Driver* pdrive, int stage);
+  TaskStatus AddForcing(Driver* pdrive, int stage);
   void Initialize();
+  void ApplyImpulse(Real kick_dt);
+  void ApplyForcingWithStep(Real bdt);
+
+  // Update the MeshBlockPack pointer after AMR
+  void UpdateMeshBlockPack(MeshBlockPack* new_pp) { pmy_pack = new_pp; }
 
  private:
-  MeshBlockPack *pmy_pack;  // ptr to MeshBlockPack containing this TurbulenceDriver
+  MeshBlockPack* pmy_pack;  // ptr to MeshBlockPack containing this TurbulenceDriver
+  const std::string block_name_;
 };
-
 
 #endif  // SRCTERMS_TURB_DRIVER_HPP_
