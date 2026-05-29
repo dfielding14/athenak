@@ -113,6 +113,27 @@ def run(**kwargs):
     _clean_output_dirs()
     _run_athena(['job/basename=binary_shared'] + common_args)
     shared_bin, shared_cbin = _read_outputs()
+    shared_path = _latest_file(_BIN_DIR, '.bin')
+    parsed_input = bin_convert.athinput(str(_REPO_DIR / 'inputs' / _INPUT))
+    assert parsed_input['output1']['file_type'] == 'bin'
+    assert 'read_rank_binary_as_athdf' in bin_convert.__all__
+    variable = shared_bin['var_names'][0]
+    rank_grid = bin_convert.read_rank_binary_as_athdf(
+        str(shared_path), return_levels=True)
+    assert rank_grid[variable].shape == (
+        shared_bin['Nx3'], shared_bin['Nx2'], shared_bin['Nx1'])
+    selected = bin_convert.read_single_rank_binary_as_athdf(
+        str(shared_path), 1, return_levels=True)
+    assert np.array_equal(selected[variable], shared_bin['mb_data'][variable][1])
+    assert selected['MaxLevel'] == shared_bin['mb_logical'][1, 3]
+    legacy_data = {
+        variable: np.empty_like(shared_bin['mb_data'][variable][0]),
+    }
+    legacy_selected = bin_convert.read_single_rank_binary_as_athdf(
+        str(shared_path), False, legacy_data, [variable], np.float32)
+    assert legacy_selected is legacy_data
+    assert np.array_equal(legacy_selected[variable],
+                          shared_bin['mb_data'][variable][0])
 
     _clean_output_dirs()
     _run_athena(['job/basename=binary_node'] + common_args

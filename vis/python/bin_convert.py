@@ -1195,19 +1195,67 @@ def read_all_ranks_coarsened_binary_as_athdf(
     return data
 
 
-def read_single_rank_binary_as_athdf(
-        filename, raw=False, data=None, quantities=None, dtype=None,
-        return_levels=False, x1_min=None, x1_max=None, x2_min=None,
-        x2_max=None, x3_min=None, x3_max=None, vol_func=None,
-        center_func_1=None, center_func_2=None, center_func_3=None):
+def read_single_rank_binary_as_athdf(filename, *args, **kwargs):
     """
-    Reads a single rank binary file and organizes data in athdf-like format.
+    Reads one MeshBlock from a binary file into an athdf-like dictionary.
+
+    Both historical calling forms are supported: ``(filename, raw, data,
+    ...)`` from this module, and ``(filename, meshblock_index_in_file, raw,
+    data, ...)`` from ``bin_convert_new.py``. To avoid ambiguity, an indexed
+    call uses an integer second positional argument and the legacy shorthand
+    uses a boolean second positional argument.
     """
+    option_names = (
+        'raw', 'data', 'quantities', 'dtype', 'return_levels',
+        'x1_min', 'x1_max', 'x2_min', 'x2_max', 'x3_min', 'x3_max',
+        'vol_func', 'center_func_1', 'center_func_2', 'center_func_3')
+    indexed_names = ('meshblock_index_in_file',) + option_names
+    if not args or isinstance(args[0], (bool, np.bool_)):
+        positional_names = option_names
+    else:
+        positional_names = indexed_names
+    if len(args) > len(positional_names):
+        raise TypeError('too many positional arguments')
+    for name, value in zip(positional_names, args):
+        if name in kwargs:
+            raise TypeError(f"multiple values for argument {name!r}")
+        kwargs[name] = value
+    unexpected = set(kwargs).difference(indexed_names)
+    if unexpected:
+        name = sorted(unexpected)[0]
+        raise TypeError(f"unexpected keyword argument {name!r}")
+
+    meshblock_index_in_file = kwargs.pop('meshblock_index_in_file', 0)
+    raw = kwargs.pop('raw', False)
+    data = kwargs.pop('data', None)
+    quantities = kwargs.pop('quantities', None)
+    dtype = kwargs.pop('dtype', None)
+    return_levels = kwargs.pop('return_levels', False)
+    x1_min = kwargs.pop('x1_min', None)
+    x1_max = kwargs.pop('x1_max', None)
+    x2_min = kwargs.pop('x2_min', None)
+    x2_max = kwargs.pop('x2_max', None)
+    x3_min = kwargs.pop('x3_min', None)
+    x3_max = kwargs.pop('x3_max', None)
+    vol_func = kwargs.pop('vol_func', None)
+    center_func_1 = kwargs.pop('center_func_1', None)
+    center_func_2 = kwargs.pop('center_func_2', None)
+    center_func_3 = kwargs.pop('center_func_3', None)
+    if meshblock_index_in_file is None:
+        meshblock_index_in_file = 0
+    if (isinstance(meshblock_index_in_file, (bool, np.bool_))
+            or not isinstance(meshblock_index_in_file, (int, np.integer))):
+        raise TypeError('meshblock_index_in_file must be an integer')
+
     # Step 1: Read binary data for a single rank
     filedata = read_binary(filename)
 
     if raw:
         return filedata
+    if not 0 <= meshblock_index_in_file < filedata['n_mbs']:
+        raise IndexError(
+            f"meshblock index {meshblock_index_in_file} is outside "
+            f"[0, {filedata['n_mbs']})")
 
     # Prepare dictionary for results
     if data is None:
@@ -1243,8 +1291,8 @@ def read_single_rank_binary_as_athdf(
         nx = block_size[d - 1]
 
         # Use the meshblock geometry for local min and max
-        xmin = filedata['mb_geometry'][0, (d - 1) * 2]
-        xmax = filedata['mb_geometry'][0, (d - 1) * 2 + 1]
+        xmin = filedata['mb_geometry'][meshblock_index_in_file, (d - 1) * 2]
+        xmax = filedata['mb_geometry'][meshblock_index_in_file, (d - 1) * 2 + 1]
 
         data[xf] = np.linspace(xmin, xmax, nx + 1, dtype=dtype)
         data[xv] = np.empty(nx, dtype=dtype)
@@ -1285,17 +1333,77 @@ def read_single_rank_binary_as_athdf(
 
     # Process the single block
     for q in quantities:
-        block_data = filedata['mb_data'][q][0]  # Single rank, so only one block
+        block_data = filedata['mb_data'][q][meshblock_index_in_file]
         data[q] = block_data[k_min:k_max, j_min:j_max, i_min:i_max]
 
     if return_levels:
-        data['Levels'].fill(filedata['mb_logical'][0, 3])  # Level of the single block
+        data['Levels'].fill(filedata['mb_logical'][meshblock_index_in_file, 3])
 
     # Add metadata
     data['Time'] = filedata['time']
     data['NumCycles'] = filedata['cycle']
-    data['MaxLevel'] = filedata['mb_logical'][0, 3]
+    data['MaxLevel'] = filedata['mb_logical'][meshblock_index_in_file, 3]
 
+    return data
+
+
+def read_rank_binary_as_athdf(filename, raw=False, data=None, quantities=None,
+                              dtype=None, return_levels=False):
+    """
+    Combines all MeshBlocks in one binary shard into a root-grid array.
+
+    This restores the public convenience reader from ``bin_convert_new.py``.
+    It is intended for a rank or node shard on a uniform mesh; for AMR-aware
+    regridding, use ``read_binary_as_athdf``.
+    """
+    filedata = read_binary(filename)
+    if raw:
+        return filedata
+    if dtype is None:
+        dtype = np.float32
+    if quantities is None:
+        quantities = filedata['var_names']
+    if data is None:
+        data = {}
+
+    nx1 = filedata['Nx1']
+    nx2 = filedata['Nx2']
+    nx3 = filedata['Nx3']
+    data['x1f'] = np.linspace(filedata['x1min'], filedata['x1max'],
+                              nx1 + 1, dtype=dtype)
+    data['x2f'] = np.linspace(filedata['x2min'], filedata['x2max'],
+                              nx2 + 1, dtype=dtype)
+    data['x3f'] = np.linspace(filedata['x3min'], filedata['x3max'],
+                              nx3 + 1, dtype=dtype)
+    for d in range(1, 4):
+        data[f'x{d}v'] = 0.5 * (data[f'x{d}f'][1:] + data[f'x{d}f'][:-1])
+
+    output_shape = (nx3, nx2, nx1)
+    for q in quantities:
+        data[q] = np.zeros(output_shape, dtype=dtype)
+    if return_levels:
+        data['Levels'] = np.zeros(output_shape, dtype=np.int32)
+
+    for mb in range(filedata['n_mbs']):
+        is_, ie, js, je, ks, ke = (int(value) for value in filedata['mb_index'][mb])
+        dst_lo = [max(is_, 0), max(js, 0), max(ks, 0)]
+        dst_hi = [min(ie + 1, nx1), min(je + 1, nx2), min(ke + 1, nx3)]
+        if any(lo >= hi for lo, hi in zip(dst_lo, dst_hi)):
+            continue
+        src_lo = [dst_lo[0] - is_, dst_lo[1] - js, dst_lo[2] - ks]
+        src_hi = [src_lo[d] + dst_hi[d] - dst_lo[d] for d in range(3)]
+        dst = (slice(dst_lo[2], dst_hi[2]), slice(dst_lo[1], dst_hi[1]),
+               slice(dst_lo[0], dst_hi[0]))
+        src = (slice(src_lo[2], src_hi[2]), slice(src_lo[1], src_hi[1]),
+               slice(src_lo[0], src_hi[0]))
+        for q in quantities:
+            data[q][dst] = filedata['mb_data'][q][mb][src]
+        if return_levels:
+            data['Levels'][dst] = filedata['mb_logical'][mb][3]
+
+    data['Time'] = filedata['time']
+    data['NumCycles'] = filedata['cycle']
+    data['MaxLevel'] = np.max(filedata['mb_logical'][:, 3])
     return data
 
 
@@ -1506,6 +1614,34 @@ def read_coarsened_binary_as_athdf(
     data['MaxLevel'] = max_level
 
     return data
+
+
+def athinput(filename):
+    """Read an Athena input file into a dictionary keyed by block name."""
+    with open(filename, 'r') as input_file:
+        lines = [line.split('#')[0].strip() for line in input_file]
+    blocks = '\n'.join(filter(None, lines)).split('<')[1:]
+
+    def typecast(value):
+        if '_' in value:
+            return value
+        for converter in (int, float, complex):
+            try:
+                return converter(value)
+            except ValueError:
+                continue
+        return value
+
+    parsed = {}
+    for block in blocks:
+        info = list(filter(None, block.split('\n')))
+        name = info.pop(0)[:-1]
+        values = {}
+        for line in info:
+            key, value = (part.strip() for part in line.split('=', 1))
+            values[key] = typecast(value)
+        parsed[name] = values
+    return parsed
 
 
 def write_athdf(filename, fdata, varsize_bytes=4, locsize_bytes=8):
@@ -1772,6 +1908,24 @@ def convert_file(binary_fname):
     filedata = read_binary(binary_fname)
     write_athdf(athdf_fname, filedata)
     write_xdmf_for(xdmf_fname, os.path.basename(athdf_fname), filedata)
+
+
+__all__ = [
+    'read_binary',
+    'read_coarsened_binary',
+    'read_all_ranks_binary',
+    'read_all_ranks_coarsened_binary',
+    'read_binary_as_athdf',
+    'read_all_ranks_binary_as_athdf',
+    'read_all_ranks_coarsened_binary_as_athdf',
+    'read_single_rank_binary_as_athdf',
+    'read_rank_binary_as_athdf',
+    'read_coarsened_binary_as_athdf',
+    'athinput',
+    'write_athdf',
+    'write_xdmf_for',
+    'convert_file',
+]
 
 
 if __name__ == "__main__":
