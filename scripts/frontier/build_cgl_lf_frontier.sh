@@ -1,11 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-# Produce an immutable baseline HIP/MPI executable for CGL-LF qualification.
-# Run this script on Frontier after verifying the live module stack.
+# Produce an immutable HIP/MPI executable for CGL-LF work on Frontier.
+# Run this from a clean committed checkout; artifacts are retained beneath CGL_ROOT.
 
 CGL_ROOT="${CGL_ROOT:-/lustre/orion/ast207/proj-shared/dfielding/CGL}"
-SRC_DIR="${SRC_DIR:-${CGL_ROOT}/repo/athenak-DF}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEFAULT_SRC_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+SRC_DIR="${SRC_DIR:-${DEFAULT_SRC_DIR}}"
 BUILD_JOBS="${BUILD_JOBS:-16}"
 STACK_TAG="${STACK_TAG:-cpe25.09-cce20-rocm6.4.2}"
 
@@ -16,7 +18,13 @@ module load cpe/25.09 cray-mpich/9.0.1 rocm/6.4.2
 module load cce/20.0.0
 module unload darshan-runtime
 
-test -d "${SRC_DIR}/.git"
+git -C "${SRC_DIR}" rev-parse --is-inside-work-tree >/dev/null
+case "${SRC_DIR}/" in
+  "${CGL_ROOT}/"*)
+    echo "Refusing to retain a source checkout beneath CGL_ROOT: ${SRC_DIR}" >&2
+    exit 1
+    ;;
+esac
 GIT_SHA="$(git -C "${SRC_DIR}" rev-parse HEAD)"
 GIT_SHORT="$(git -C "${SRC_DIR}" rev-parse --short=12 HEAD)"
 BUILD_DIR="${BUILD_DIR:-${CGL_ROOT}/build/frontier-hip-${GIT_SHORT}-${STACK_TAG}}"
@@ -24,9 +32,13 @@ BUILD_LOG_DIR="${CGL_ROOT}/logs/build"
 MANIFEST_DIR="${CGL_ROOT}/runs/build-manifests/${GIT_SHORT}-${STACK_TAG}"
 mkdir -p "${BUILD_DIR}" "${BUILD_LOG_DIR}" "${MANIFEST_DIR}"
 
-if ! git -C "${SRC_DIR}" diff --quiet --ignore-submodules -- ||
-   ! git -C "${SRC_DIR}" diff --cached --quiet --ignore-submodules --; then
-  echo "Refusing to build Frontier evidence from tracked source changes." >&2
+if [[ -n "$(git -C "${SRC_DIR}" status --porcelain=v1 --untracked-files=all \
+    --ignore-submodules=none)" ]]; then
+  echo "Refusing to build Frontier evidence from a dirty source checkout." >&2
+  exit 1
+fi
+if git -C "${SRC_DIR}" submodule status --recursive | grep -Eq '^[+-U]'; then
+  echo "Refusing to build with an uninitialized or non-recorded submodule checkout." >&2
   exit 1
 fi
 
@@ -35,6 +47,7 @@ fi
   hostname
   echo "source_dir=${SRC_DIR}"
   echo "git_revision=${GIT_SHA}"
+  git -C "${SRC_DIR}" submodule status --recursive
   echo "build_dir=${BUILD_DIR}"
   module -t list 2>&1
   CC --version 2>&1 | head -n 4
