@@ -1,5 +1,11 @@
 # Face-Field Correction Implementation Final Status
 
+```{warning}
+Historical/development record only. Status claims below have not been verified
+as public functionality on the documented source baseline. Use
+[MHD](../modules/mhd.md) and [Mesh](../modules/mesh.md) for stable guidance.
+```
+
 ## ✅ IMPLEMENTATION SUCCESSFUL (Core Functionality)
 
 ### What Was Accomplished

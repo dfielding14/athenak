@@ -1,5 +1,11 @@
 # Unified Particle Data Structures
 
+```{warning}
+Historical/development record only. The expanded particle model below is not a
+public supported interface on the documented source baseline. Use
+[Particles](../modules/particles.md) for current behavior.
+```
+
 ## Core Architecture
 
 ### Flexible Index System

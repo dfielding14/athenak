@@ -1,206 +1,125 @@
 # Module: Radiation
 
-## Overview
-The Radiation module implements radiation transport using the M1 closure scheme, supporting both optically thin and thick regimes with full special and general relativistic treatments.
+The public Radiation module evolves angle-resolved radiation intensities on a
+geodesic angular mesh. It does not implement the M1-closure moment interface
+described by earlier draft documentation.
 
-## Source Location
-`src/radiation/`
+## Public Representation
 
-## Key Components
+`src/radiation/radiation.hpp` owns:
 
-| File | Purpose | Key Functions |
-|------|---------|---------------|
-| `radiation.hpp/cpp` | Core radiation class | Initialization, closures |
-| `radiation_fluxes.cpp` | Radiation flux calculation | `CalculateFluxes()` |
-| `radiation_source.cpp` | Source terms | Emission, absorption |
-| `radiation_update.cpp` | Implicit update | `ImplicitUpdate()` |
-| `radiation_tetrad.hpp/cpp` | Tetrad formalism | Frame transformations |
-| `radiation_tasks.cpp` | Task management | Task registration |
-| `radiation_opacities.hpp` | Opacity models | κ calculations |
+| Member | Role |
+| --- | --- |
+| `GeodesicGrid *prgeo` | Angular mesh selected by `nlevel` |
+| `i0`, `i1` | Intensity arrays indexed by radiation angle and cell |
+| `iflx` | Spatial face fluxes of intensity |
+| `divfa` | Angular-flux divergence when `angular_fluxes = true` |
+| tetrad arrays | Coordinate/tetrad transformations used by the transport kernels |
 
-## Equations Solved
+Radiation construction currently requires `<coord>/general_rel = true`; flat
+spacetime tests use `<coord>/minkowski = true`. Radiation may run alone or
+alongside either Hydro or MHD, but not both simultaneously.
 
-### M1 Radiation Transport
-$$\frac{\partial E_r}{\partial t} + \nabla \cdot \mathbf{F}_r = -\kappa_a(E_r - aT^4) - \kappa_s \cdot \mathbf{F}_r/c$$
-$$\frac{\partial \mathbf{F}_r}{\partial t} + \nabla \cdot \mathbf{P}_r = -\kappa_a \mathbf{F}_r - (\kappa_a + \kappa_s)\mathbf{F}_r/c$$
+## Implementation Files
 
-Where:
-- $E_r$: Radiation energy density
-- $\mathbf{F}_r$: Radiation flux
-- $\mathbf{P}_r$: Radiation pressure tensor
-- $\kappa_a$: Absorption opacity
-- $\kappa_s$: Scattering opacity
+| File | Responsibility |
+| --- | --- |
+| `src/radiation/radiation.cpp`, `radiation.hpp` | State, parameter parsing, angular-grid allocation |
+| `src/radiation/radiation_fluxes.cpp` | Spatial and angular transport fluxes |
+| `src/radiation/radiation_update.cpp` | Intensity update |
+| `src/radiation/radiation_source.cpp` | Radiation-fluid coupling |
+| `src/radiation/radiation_tetrad.cpp` | Tetrad geometry |
+| `src/radiation/radiation_tasks.cpp` | Coupled and uncoupled task sequencing |
 
-## Configuration Parameters
+## `<radiation>` Parameters
 
-From `<radiation>` block:
+| Parameter | Requirement/default | Behavior |
+| --- | --- | --- |
+| `nlevel` | Required | Geodesic angular mesh level |
+| `rotate_geo` | Default `true` | Rotation option for the angular mesh |
+| `angular_fluxes` | Default `true` | Enable angular flux-divergence update |
+| `n_0_floor` | Default `0.1` | Angular transport floor used by the implementation |
+| `reconstruct` | Default `plm` | `dc`, `plm`, `ppm4`, `ppmx`, or `wenoz`; high-order choices require `nghost >= 3` |
+| `fixed_fluid` | Default `false` | Holds an accompanying fluid fixed when selected |
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `arad` | Real | required | Radiation constant |
-| `kappa_a` | Real | required | Absorption opacity |
-| `kappa_s` | Real | required | Scattering opacity |
-| `power_opacity` | bool | false | Power-law opacity |
-| `compton` | bool | false | Compton scattering |
-| `beam_source` | bool | false | Beam source |
-| `affect_fluid` | bool | true | Radiation affects fluid |
-| `fixed_fluid` | bool | false | Fixed background |
-| `angular_fluxes` | bool | true | Angular flux transport |
-| `reconstruct` | string | plm | Reconstruction method |
-| `n_0_floor` | Real | 0.1 | Flux limiter floor |
+When `<hydro>` or `<mhd>` is present, radiation-fluid coupling is enabled by
+default through `rad_source = true`. In that case:
 
-## M1 Closure Relations
+| Parameter | Requirement/default |
+| --- | --- |
+| `rad_source` | Default `true` with a fluid module |
+| `kappa_s` | Required when `rad_source = true` |
+| `power_opacity` | Default `false` |
+| `kappa_a`, `kappa_p` | Required when `rad_source = true` and `power_opacity = false` |
+| `compton` | Default `false`; enabling it requires a `<units>` block |
+| `arad` | Required without `<units>`; computed from units when present |
+| `affect_fluid` | Default `true` |
 
-### Eddington Tensor
-Closure function:
-$$\chi = \frac{3 + 4f^2}{5 + 2\sqrt{4-3f^2}}$$
+## Beam Source Term
 
-Where $f = |\mathbf{F}_r|/(cE_r)$ is the flux factor
+The current beam interface belongs in `<rad_srcterms>`, as documented in
+[Source Terms](srcterms.md):
 
-### Pressure Tensor
-$$P_{ij} = D_{ij} E_r$$
-$$D_{ij} = \frac{1-\chi}{2} \delta_{ij} + \frac{3\chi-1}{2} n_i n_j$$
-
-## Opacity Models
-
-### Constant Opacity
-$$\kappa = \kappa_0 = \text{const}$$
-
-### Power-Law Opacity
-$$\kappa = \kappa_0 \left(\frac{\rho}{\rho_0}\right)^a \left(\frac{T}{T_0}\right)^b$$
-
-### Rosseland Mean
-Pre-tabulated opacity tables supported
-
-## Execution Flow
-
-```{mermaid}
-flowchart TD
-    Start[Radiation Tasks] --> Source[Calculate Sources]
-    Source --> Opacity[Update Opacities]
-    Opacity --> Flux[Calculate Fluxes]
-    Flux --> Implicit[Implicit Update]
-    Implicit --> Couple[Fluid Coupling]
-    Couple --> BC[Apply BCs]
-    BC --> Done[Complete]
-```
-
-## Tetrad Formalism (GR)
-
-### Tetrad Basis
-Orthonormal tetrad:
-- $e^\mu_0$: Timelike (fluid frame)
-- $e^\mu_1$: Spacelike (radial)
-- $e^\mu_2$: Spacelike (theta)
-- $e^\mu_3$: Spacelike (phi)
-
-### Frame Transformations
-Lab to fluid frame:
-$$E_{\text{fluid}} = \Lambda^0_0 E_{\text{lab}} - \Lambda^0_i F^i_{\text{lab}}$$
-$$F^i_{\text{fluid}} = \Lambda^i_0 E_{\text{lab}} - \Lambda^i_j F^j_{\text{lab}}$$
-
-## Implicit Solver
-
-### Newton-Raphson Iteration
-```cpp
-while (error > tolerance) {
-  // Jacobian matrix
-  // J = ∂R/∂U
-  
-  // Solve linear system
-  // ΔU = -J^(-1) * R
-  
-  // Update
-  // U_new = U_old + ΔU
-}
-```
-
-Update equations:
-$$\mathbf{J} = \frac{\partial \mathbf{R}}{\partial \mathbf{U}}$$
-$$\Delta \mathbf{U} = -\mathbf{J}^{-1} \cdot \mathbf{R}$$
-$$\mathbf{U}_{\text{new}} = \mathbf{U}_{\text{old}} + \Delta \mathbf{U}$$
-
-## Source Terms
-
-### Emission
-$$S_{\text{emit}} = \kappa_a \cdot a \cdot T^4$$
-
-### Absorption
-$$S_{\text{abs}} = -\kappa_a \cdot E_r$$
-
-### Scattering
-$$S_{\text{scat}} = -\kappa_s \cdot \mathbf{F}_r/c$$
-
-## Beam Sources
-
-For testing and laser applications:
-```cpp
-// Collimated beam
-F_beam = I_0 * exp(-r²/w²) * direction
-```
-
-## Variable Arrays
-
-### Radiation Variables
-- `rad.er`: Radiation energy density
-- `rad.fr1`: Radiation flux x1
-- `rad.fr2`: Radiation flux x2
-- `rad.fr3`: Radiation flux x3
-
-### Radiation Pressure (computed)
-- `pr11, pr12, pr13`
-- `pr22, pr23`
-- `pr33`
-
-## Common Test Problems
-
-### Radiation Diffusion
 ```ini
-<radiation>
-arad = 1.0
-kappa_a = 100.0  # Optically thick
-kappa_s = 0.0
+<rad_srcterms>
+rad_beam = true
+dii_dt   = 1.0
+pos_1    = 3.91
+pos_2    = 0.0
+pos_3    = 0.0
+dir_1    = 0.0
+dir_2    = 1.0
+dir_3    = 0.0
+width    = 0.7
+spread   = 10.0
 ```
 
-### Radiation Beam
+`inputs/radiation/bh_beam.athinput` contains that current source-term block,
+but its `<problem>` block omits the built-in selector required by
+`src/pgen/tests/rad_beam.cpp`. To validate the deck with the default build,
+work from a copy and add:
+
 ```ini
-<radiation>
-beam_source = true
-kappa_a = 0.1  # Optically thin
+<problem>
+pgen_name = rad_beam
 ```
 
-### Radiation Shock
-```ini
-<radiation>
-arad = 1.0
-kappa_a = 1.0
-affect_fluid = true
+For example, after adding that selector to a copy:
+
+```bash
+./build/src/athena -i my_bh_beam.athinput -d run-beam time/nlim=1
 ```
 
-## Performance Considerations
+With `basename = beam_audit` in the audit copy, a verified one-cycle run
+writes binary radiation-coordinate output:
 
-### Implicit Solver Cost
-- Dominates in optically thick regime
-- Use subcycling for efficiency
-- Consider reduced speed of light
+```text
+run-beam/bin/beam_audit.rad_coord.00000.bin
+run-beam/bin/beam_audit.rad_coord.00001.bin
+```
 
-### Memory Usage
-- 4 variables (er, fr1, fr2, fr3)
-- Plus coupling terms
-- Jacobian storage for implicit
+The older `inputs/radiation/beam.athinput` and `inputs/radiation/snake.athinput`
+place beam parameters in blocks that are not consumed by the current public
+beam-source constructor; they should not be used as runnable beam guidance
+without correction.
 
-## Common Issues
+## Task Coupling
 
-### Convergence Problems
-- Reduce CFL for radiation
-- Adjust Newton-Raphson tolerance
-- Check opacity values
+`Radiation::AssembleRadTasks()` inserts transport, source, boundary,
+prolongation, and update tasks. When an evolving Hydro or MHD module is
+present, the radiation tasks are sequenced with that module and apply
+`RadFluidCoupling`; when no fluid evolves, the radiation transport tasks run
+without a fluid update.
 
-### Negative Energy
-- Use flux limiters
-- Check reconstruction
-- Ensure proper floor values
+## Outputs
+
+Radiation-derived output selections include values beginning with `rad_coord`,
+`rad_fluid`, `rad_hydro`, and `rad_mhd` where the corresponding module state
+exists; output resolution is implemented in
+`src/outputs/basetype_output.cpp` and `src/outputs/derived_variables.cpp`.
 
 ## See Also
-- [Hydro Module](hydro.md)
-- Source: `src/radiation/radiation.cpp`
+
+- [Source Terms](srcterms.md)
+- [Outputs](outputs.md)
+- [Public Input Parameters](../reference/input_parameters.md)

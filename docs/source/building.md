@@ -2,8 +2,9 @@
 
 ## Prerequisites
 
-- C++17 compiler (GCC 10+, Clang 12+, or NVCC 11+ for CUDA)
-- CMake 3.18 or newer
+- A compiler capable of C++17
+- CMake 3.16 or newer; the bundled Kokkos dependency requires 3.16 even
+  though AthenaK's top-level project declaration is older
 - Git (for submodules) and `make`/`ninja`
 - Optional: MPI distribution, ROCm, or CUDA toolkit depending on your target
 
@@ -26,12 +27,12 @@ Artifacts live in `build-cpu/src/athena`. Re-run `cmake --build …` whenever yo
 
 ## MPI Build
 
-MPI support requires both Athena and Kokkos to be configured with MPI enabled. Use a dedicated build directory:
+Enable MPI through AthenaK's top-level option. The top-level CMake file finds
+MPI and sets `Kokkos_ENABLE_MPI=ON` in the cache automatically:
 
 ```bash
 cmake -S . -B build-mpi \
-  -DAthena_ENABLE_MPI=ON \
-  -DKokkos_ENABLE_MPI=ON
+  -DAthena_ENABLE_MPI=ON
 cmake --build build-mpi -j $(sysctl -n hw.ncpu 2>/dev/null || nproc)
 ```
 
@@ -56,23 +57,27 @@ Choose the matching `Kokkos_ARCH_*` value (e.g. `VOLTA70`, `AMPERE86`) for your 
 ```bash
 cmake -S . -B build-hip \
   -DKokkos_ENABLE_HIP=ON \
-  -DKokkos_ARCH_VEGA90A=ON
+  -DKokkos_ARCH_VEGA90A=ON \
+  -DCMAKE_CXX_COMPILER=${ROCM_PATH:-/opt/rocm}/bin/hipcc
 cmake --build build-hip -j $(sysctl -n hw.ncpu 2>/dev/null || nproc)
 ```
 
-Ensure `HIP_PATH`/`ROCM_PATH` is set if the toolchain is installed outside the default location.
+Set `ROCM_PATH` if ROCm is installed outside `/opt/rocm`, and point
+`CMAKE_CXX_COMPILER` at its `hipcc` (or a ROCm clang compiler configured for
+HIP). The bundled Kokkos configuration inspects the selected compiler when
+enabling HIP support.
 
 ## Common CMake Options
 
 | Option | Default | Notes |
 |--------|---------|-------|
-| `Athena_ENABLE_MPI` | `OFF` | Requires `Kokkos_ENABLE_MPI=ON` and an MPI toolchain |
-| `Athena_ENABLE_OPENMP` | `OFF` | Also set `Kokkos_ENABLE_OPENMP=ON` |
+| `Athena_ENABLE_MPI` | `OFF` | Finds MPI and enables Kokkos MPI support when set |
+| `Athena_ENABLE_OPENMP` | `OFF` | Finds OpenMP and enables Kokkos OpenMP support when set |
 | `Athena_SINGLE_PRECISION` | `OFF` | Enable single precision build |
 | `PROBLEM` | `built_in_pgens` | Select a problem generator (reconfigure after changing) |
 | `CMAKE_BUILD_TYPE` | `Release` | Use `Debug`/`RelWithDebInfo` for development |
 
-Configure custom problem generators with:
+For a custom problem generator source at `src/pgen/my_problem.cpp`, configure with:
 
 ```bash
 cmake -S . -B build-problem -DPROBLEM=my_problem
@@ -95,8 +100,11 @@ cmake -S . -B build-mpi -DAthena_ENABLE_MPI=ON -DMPI_CXX_COMPILER=mpicxx
 ### Missing CUDA Toolkit
 
 ```bash
-export CUDA_HOME=/usr/local/cuda
-cmake -S . -B build-cuda -DKokkos_ENABLE_CUDA=ON
+export CUDAToolkit_ROOT=/usr/local/cuda
+export PATH="$CUDAToolkit_ROOT/bin:$PATH"
+cmake -S . -B build-cuda \
+  -DKokkos_ENABLE_CUDA=ON \
+  -DCMAKE_CXX_COMPILER=${PWD}/kokkos/bin/nvcc_wrapper
 ```
 
 ### Reconfiguring an Existing Build

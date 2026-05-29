@@ -43,12 +43,14 @@ When GR or dynamical GR is active, the module loads additional parameters into
 | `a` | — | Dimensionless BH spin (|a|<1); ignored for Minkowski |
 | `excise` | `true` (if `minkowski = false`) | Enable excision masks near the horizon |
 | `dexcise`, `pexcise` | — | Density/pressure floors applied inside the excision region |
-| `flux_excise_r` | `1.0` (or horizon radius when radiation is enabled) | Radius inside which FOFC is forced |
+| `flux_excise_r` | `1.0` without radiation; not parsed when radiation is enabled | Non-radiation input radius inside which FOFC is forced; radiation forces the horizon radius |
 | `excision_scheme` | `"fixed"` (dynamic GR only) | `"fixed"` builds masks once; `"lapse"` recomputes masks from the lapse |
 | `excise_lapse` | `0.25` | Lapse threshold for the `"lapse"` scheme (dynamic GR only) |
 
-`flux_excise_r` and `rexcise` default to the horizon radius when the radiation
-module is active; otherwise users must specify appropriate values.
+When the radiation module is active, it forces both `flux_excise_r` and the
+internal `rexcise` radius to the horizon radius. Without radiation, the
+public constructor defaults both to `1.0`, and only `flux_excise_r` is a
+parsed input parameter.
 
 ## Coordinate Source Terms
 
@@ -67,9 +69,10 @@ void CoordSrcTerms(const DvceArray5D<Real> &prim,
                    DvceArray5D<Real> &cons);
 ```
 
-These routines rebuild the ADM 4‑metric (via `ComputeMetricAndInverse`), compute
-Christoffel derivatives, and add the geometric source terms to the conserved
-variables. They are invoked from the hydro/MHD task lists whenever SR/GR is active.
+These routines rebuild the ADM 4-metric (via `ComputeMetricAndInverse`), compute
+metric derivatives, and add geometric source terms to conserved variables in
+the GR paths. Special-relativistic configurations do not require curvature
+source terms.
 
 ## Excision Support
 
@@ -132,18 +135,30 @@ a          = 0.7
 excise     = true
 dexcise    = 1.0e-8
 pexcise    = 1.0e-10
-flux_excise_r = 1.0   # optional; defaults to horizon radius
+flux_excise_r = 1.0   # optional; defaults to 1.0 without radiation
 ```
 
-### Dynamical GR with Z4c/ADM
+### Dynamical GRMHD With Z4c
+
+This activation fragment is not a complete runnable deck; begin from a
+shipped `inputs/dyngr/` input and add the relevant Z4c and problem-generator
+controls. Dynamical relativistic fluid coordinates require MHD, not Hydro.
 
 ```ini
 <z4c>
-# dynamic spacetime blocks automatically set is_dynamical_relativistic
+# add Z4c evolution parameters from the selected starting deck
+
+<mhd>
+eos       = ideal
+dyn_eos   = ideal
+dyn_error = reset_floor
+rsolver   = hlle
 
 <coord>
 a = 0.5
 excise = true
+dexcise = 1.0e-8
+pexcise = 1.0e-10
 excision_scheme = lapse
 excise_lapse    = 0.2
 ```

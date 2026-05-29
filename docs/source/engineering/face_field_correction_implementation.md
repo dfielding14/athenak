@@ -1,5 +1,11 @@
 # Face-Field Correction Implementation for AMR div(B) Preservation
 
+```{warning}
+Historical/development record only. This document does not establish public
+support on the documented source baseline. Use [MHD](../modules/mhd.md) and
+[Mesh](../modules/mesh.md) for stable configuration and behavior.
+```
+
 ## Executive Summary
 
 This document details the implementation of Face-Field Correction (FFC) in AthenaK to maintain the divergence-free constraint (∇·B = 0) for magnetic fields across Adaptive Mesh Refinement (AMR) boundaries. The implementation ensures exact flux conservation at coarse-fine interfaces through a three-phase algorithm that synchronizes face-centered magnetic field values.

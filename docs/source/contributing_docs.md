@@ -1,356 +1,70 @@
-# Contributing to AthenaK Documentation
+# Contributing Documentation
 
-This guide explains how to add to and maintain the AthenaK documentation.
+Published documentation lives under `docs/source/` on the documentation
+branch. Public user guidance must describe code, input decks, tests, or
+observed behavior present on that public baseline. Branch experiments and
+design histories belong in [Developer Notes](engineering/index.md) and must
+be labelled as such.
 
-## Documentation Structure
+## Source Layout
 
-```
-docs/
-├── README.md           # How to set up the documentation toolchain
-├── requirements.txt    # Python dependencies (Sphinx, MyST, theme, etc.)
-├── Makefile            # Helpful targets (html, linkcheck, live)
-└── source/             # All documentation sources
-    ├── index.md        # Home page and global navigation
-    ├── modules/        # Module documentation
-    ├── examples/       # Example problems
-    ├── flowcharts/     # Architecture diagrams
-    ├── migration/      # Migration guides
-    ├── reference/      # API and parameter reference
-    ├── _static/        # CSS, images, downloadable assets
-    └── _templates/     # Jinja templates (rarely needed)
-```
+| Path | Purpose |
+| --- | --- |
+| `docs/source/index.md` | Home page and top-level navigation |
+| `docs/source/modules/` | Implemented module behavior and configuration |
+| `docs/source/examples/` | Runnable or explicitly prerequisite-gated cases |
+| `docs/source/reference/` | Source-backed reference maps |
+| `docs/source/migration/` | Developer porting guidance |
+| `docs/source/engineering/` | Qualified implementation records |
+| `docs/source/_static/` | Static assets, including the interactive home banner |
 
-## Adding New Documentation
+The interactive fluid-simulation banner on the home page is a published site
+asset. Changes to its integration must keep it visible and functional and
+must be checked in a rendered browser view.
 
-### 1. Document a New Module
+## Evidence Standard
 
-Create `docs/source/modules/your_module.md`:
+For each technical change:
 
-```markdown
-# Module: Your Module Name
+1. Identify the relevant public source file, shipped deck, build option, or
+   runtime result.
+2. State defaults and limitations only when they are verified from that
+   evidence.
+3. Mark a workflow as prerequisite-gated or development-only when it is not
+   runnable from the public baseline.
+4. Add navigation links only after the target page has the same support
+   status.
 
-## Overview
-Brief description of what the module does.
+Line numbers are helpful during review, but source file and symbol names are
+more durable in published prose.
 
-## Source Location
-`src/your_module/`
+## Build And Link Check
 
-## Key Components
-
-| File | Purpose | Key Functions |
-|------|---------|---------------|
-| `main.cpp` | Core implementation | `Initialize()`, `Execute()` |
-
-## Configuration Parameters
-
-From `<your_block>` block:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `param1` | Real | 1.0 | What it does |
-
-## Usage Example
-
-\```ini
-<your_block>
-param1 = 2.0
-\```
-
-## See Also
-- [Related Module](other_module.md)
-- Source: `src/your_module/main.cpp`
-```
-
-### 2. Add an Example
-
-Create `docs/source/examples/your_example.md`:
-
-```markdown
-# Example: Your Example
-
-Brief description of the physics problem.
-
-## Problem Generator
-**Source**: `src/pgen/your_problem.cpp`
-
-## Available Input Files
-- **Basic**: `inputs/hydro/your_problem.athinput`
-- **With AMR**: `inputs/hydro/your_problem_amr.athinput`
-
-## Physics
-Explain the physics being demonstrated.
-
-## Running the Simulation
-
-\```bash
-# Build
-cmake -B build -DPROBLEM=your_problem
-make -C build -j8
-
-# Run
-./build/src/athena -i inputs/your_problem.athinput
-\```
-
-## Complete Input File
-
-\```ini
-<time>
-tlim = 1.0
-
-<mesh>
-nx1 = 256
-# ... etc
-\```
-
-## Analysis
-How to analyze the results.
-
-## See Also
-- [Module Documentation](../modules/your_module.md)
-```
-
-### 3. Update Navigation
-
-Add your new page to `docs/source/index.md` in the relevant `toctree` block:
-
-```md
-```{toctree}
-:maxdepth: 1
-:caption: Modules
-
-modules/index
-modules/your_module  # Add this line
-```
-```
-
-## Writing Style Guidelines
-
-### Use Clear Headers
-```markdown
-# Main Title (Module Name)
-## Major Sections
-### Subsections
-#### Details
-```
-
-### Include Code References
-Always include file and line references:
-```markdown
-**Source**: `src/hydro/hydro.cpp:L125-L250`
-```
-
-### Add Practical Examples
-Show actual usage, not just theory:
-```markdown
-## Usage Example
-\```bash
-./athena -i inputs/test.athinput
-\```
-```
-
-### Cross-Reference
-Link to related documentation:
-```markdown
-See [Hydro Module](../modules/hydro.md) for details.
-```
-
-## Documenting Code Changes
-
-When you modify code, update documentation:
-
-1. **New Feature**: Add to relevant module doc
-2. **New Parameter**: Update parameter tables
-3. **Bug Fix**: Note in "Recent Improvements" section
-4. **New Problem Generator**: Create example page
-
-### Example: Adding a Parameter
-
-If you add a parameter to the code:
-```cpp
-// In hydro.cpp
-Real new_param = pin->GetReal("hydro", "new_param");
-```
-
-Update documentation:
-```markdown
-# In modules/hydro.md
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `new_param` | Real | 1.0 | Controls new feature |
-```
-
-## Using Documentation Tools
-
-### Extract Parameters Automatically
+Install the documentation dependencies, then build with warnings treated as
+errors:
 
 ```bash
-cd docs
-python scan_parameters.py
-# Updates source/reference/input_parameters.md
+python -m venv .venv-docs
+. .venv-docs/bin/activate
+python -m pip install -r docs/requirements.txt
+sphinx-build -W --keep-going -b html docs/source docs/build/html
+sphinx-build -W --keep-going -b linkcheck docs/source docs/build/linkcheck
 ```
 
-### Validate Documentation
+The repository `docs/Makefile` also exposes `html`, `linkcheck`, and `live`
+targets:
 
 ```bash
-cd docs
-bash validate_all_docs.sh
-# Checks for:
-# - Broken links
-# - Missing modules
-# - Parameter coverage
+make -C docs html SPHINXOPTS="-W --keep-going"
+make -C docs linkcheck SPHINXOPTS="-W --keep-going"
 ```
 
-### Build HTML Documentation
+## Review Checklist
 
-```bash
-cd docs
-make clean
-make html
-# View at build/html/index.html
-```
-
-## Mermaid Flowcharts
-
-Use Mermaid for diagrams:
-
-```markdown
-\```{mermaid}
-flowchart TD
-    A[Start] --> B{Decision}
-    B -->|Yes| C[Action 1]
-    B -->|No| D[Action 2]
-\```
-```
-
-Ensure proper configuration in `conf.py`:
-```python
-mermaid_init_js = """
-mermaid.initialize({
-    startOnLoad: true,
-    theme: 'neutral'
-});
-"""
-```
-
-## Common Documentation Patterns
-
-### Module Documentation Template
-
-```markdown
-# Module: [Name]
-
-## Overview
-[What it does]
-
-## Source Location
-`src/[directory]/`
-
-## Key Components
-[Table of files]
-
-## Configuration Parameters
-[Table of parameters]
-
-## Execution Flow
-[Mermaid diagram]
-
-## Key Methods
-[Important functions with descriptions]
-
-## Usage Examples
-[Practical examples]
-
-## Common Issues
-[Troubleshooting]
-
-## See Also
-[Related modules]
-```
-
-### Parameter Documentation
-
-Always document:
-- **Name**: Exact parameter name
-- **Type**: Real, int, string, bool
-- **Default**: Default value or "required"
-- **Source**: File:Line reference
-- **Description**: What it controls
-
-## Testing Your Documentation
-
-1. **Build and View**
-   ```bash
-   make html
-   open build/html/index.html
-   ```
-
-2. **Check Links**
-   ```bash
-   # In browser, click all links
-   # Or use link checker tool
-   ```
-
-3. **Verify Code Examples**
-   ```bash
-   # Copy examples and test they work
-   ./athena -i your_example.athinput
-   ```
-
-## Documentation Checklist
-
-Before committing documentation:
-
-- [ ] Spell check completed
-- [ ] All links work
-- [ ] Code examples tested
-- [ ] Parameters match source code
-- [ ] Cross-references added
-- [ ] Added to index/navigation
-- [ ] Mermaid diagrams render
-- [ ] Validation script passes
-
-## Getting Help
-
-- **Sphinx Issues**: Check [Sphinx docs](https://www.sphinx-doc.org/)
-- **Mermaid Diagrams**: Use [Mermaid live editor](https://mermaid.live/)
-- **Markdown**: Follow [CommonMark spec](https://commonmark.org/)
-
-## Advanced Topics
-
-### Custom CSS
-Edit `docs/source/_static/custom.css` for styling.
-
-### API Documentation
-If Doxygen is installed, API docs are auto-generated.
-
-### Version-Specific Docs
-Use git branches for version-specific documentation.
-
-## Quick Commands
-
-```bash
-# Full rebuild
-cd docs
-make clean && make html
-
-# Quick parameter scan
-python scan_parameters.py
-
-# Validate everything
-bash validate_all_docs.sh
-
-# Open docs
-open build/html/index.html
-```
-
-## Remember
-
-Good documentation:
-- **Helps users** understand how to use the code
-- **Helps developers** understand how code works
-- **Stays current** with code changes
-- **Includes examples** that actually work
-- **Cross-references** related topics
-
-Thank you for contributing to AthenaK documentation!
+- The page is linked from the intended navigation path or intentionally
+  recorded as not published.
+- Commands use actual build flags, input paths, and executable behavior.
+- Parameters and defaults match their owning source.
+- Example output claims were checked with a focused run where feasible.
+- Stable pages do not present branch-only work as available functionality.
+- Tables, diagrams, code blocks, and the home banner render correctly.

@@ -1,5 +1,11 @@
 # Cosmic Ray Pusher Porting Guide
 
+```{warning}
+Historical/development record only. The public particle implementation accepts
+the `drift` pusher; Boris-pusher material below is not stable public guidance.
+Use [Particles](../modules/particles.md) for current behavior.
+```
+
 ## Boris Pusher Implementation
 
 ### Core Algorithm

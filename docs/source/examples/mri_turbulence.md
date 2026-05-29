@@ -1,69 +1,75 @@
-# Example: MRI Turbulence
+# Example: MRI In A Shearing Box
 
-Magnetorotational instability (MRI) in a shearing box - the fundamental mechanism for angular momentum transport in accretion disks.
+The public tree contains three shearing-box magnetorotational-instability
+(MRI) inputs using two generator-selection paths.
 
-## Problem Generators
-- **2D MRI**: `src/pgen/mri2d.cpp`
-- **3D MRI**: `src/pgen/mri3d.cpp`
+## Public Inputs
 
-## Available Input Files
-- **2D Setup**: `inputs/mhd/mri2d.athinput`
-- **3D Setup**: `inputs/mhd/mri3d.athinput`
+| Input deck | Dimension | Problem-generator path |
+| --- | --- | --- |
+| `inputs/shearing_box/mri3d_unstratified.athinput` | 3D | Built-in `pgen_name = mri3d` |
+| `inputs/shearing_box/mri3d_stratified.athinput` | 3D | Built-in `pgen_name = mri3d`, with stratified setup controls in the deck |
+| `inputs/shearing_box/mri2d.athinput` | 2D | Custom source `src/pgen/mri2d.cpp`; configure with `-DPROBLEM=mri2d` |
 
-## Physics
+All three use `<shearing_box>` with `qshear` and `omega0`, `<mhd>`, and
+x1 `shear_periodic` boundaries.
 
-The MRI occurs when a weak magnetic field destabilizes a differentially rotating disk:
-- Linear growth rate: $\gamma = 0.75 \Omega$ for optimal wavelength
-- Critical wavelength: $\lambda_{\text{MRI}} = 2\pi v_A/\Omega$
-- Requires: $\lambda_{\text{MRI}} > 6-8 \Delta x$ for resolution
+## Built-In 3D Validation Run
 
-## Running the Simulation
+The unstratified 3D input can run with the default executable:
 
 ```bash
-# Build once (MRI problems are part of the built-in set)
 cmake -S . -B build
-cmake --build build -j $(sysctl -n hw.ncpu 2>/dev/null || nproc)
-
-# Run 3D MRI shearing box
-./build/src/athena -i inputs/mhd/mri3d.athinput
+cmake --build build
+./build/src/athena -i inputs/shearing_box/mri3d_unstratified.athinput \
+  -d run-mri3d time/nlim=1
 ```
 
-## Complete Input File
+In a verified one-cycle run this deck wrote:
 
-```ini
-<shearing_box>
-omega0 = 1.0          # Orbital frequency
-qshear = 1.5          # Keplerian shear
-
-<mhd>
-eos = ideal
-gamma = 1.66667       # 5/3
-rsolver = hlld
-
-<problem>
-beta = 400.0          # Plasma beta
-amp = 0.025           # Perturbation amplitude
-ifield = 1            # 1=vertical, 2=toroidal
-
-<meshblock>
-nx1 = 32              # Radial
-nx2 = 64              # Azimuthal  
-nx3 = 32              # Vertical
+```text
+run-mri3d/HGB.user.hst
+run-mri3d/vtk/HGB.mhd_w_bcc.00000.vtk
+run-mri3d/vtk/HGB.mhd_w_bcc.00001.vtk
 ```
 
-## Analysis
+The history stream uses `user_hist_only = true`, and
+`src/pgen/tests/mri3d.cpp` enrolls the MRI history function.
 
-Monitor volume-averaged stresses:
+## Custom 2D Status
 
-Reynolds stress:
-$$\alpha_{\text{Re}} = -\frac{\langle \rho \delta v_x \delta v_y \rangle}{\langle P \rangle}$$
+The 2D input has no `pgen_name`; use its custom generator:
 
-Maxwell stress:
-$$\alpha_{\text{Max}} = \frac{\langle B_x B_y \rangle}{4\pi \langle P \rangle}$$
+```bash
+cmake -S . -B build-mri2d -DPROBLEM=mri2d
+cmake --build build-mri2d
+```
 
-Total stress ($\alpha$-parameter):
-$$\alpha = \alpha_{\text{Re}} + \alpha_{\text{Max}}$$
+The shipped `inputs/shearing_box/mri2d.athinput` is **not currently a runnable
+validation example**. In an audit run with this custom build, execution stops
+at startup with:
+
+```text
+Shearing box source terms not enabled for mri2d problem
+```
+
+The input does define `<shearing_box>` and the MHD constructor creates its
+shearing-box objects from that block. However, `src/pgen/mri2d.cpp` currently
+checks `pmhd->psrc`, which is the generic `<mhd_srcterms>` object, rather than
+the shearing-box object used by the built-in 3D generator. Until that
+implementation/input mismatch is resolved and validated, use the verified
+3D deck above for a public MRI run.
+
+## Interpreting The Setup
+
+The decks provide parameters such as `beta`, perturbation amplitude `amp`,
+mode count `nwx`, and `ifield`; inspect the selected input and its generator
+source together before changing them. The history data are intended for
+monitoring MRI diagnostics, while VTK field dumps are used to examine the
+spatial magnetic and fluid structure.
 
 ## See Also
-- [Shearing Box Module](../modules/shearing_box.md)
-- [MHD Module](../modules/mhd.md)
+
+- [Shearing Box](../modules/shearing_box.md)
+- [MHD](../modules/mhd.md)
+- [Problem Generators](../modules/pgen.md)

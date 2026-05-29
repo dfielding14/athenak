@@ -11,6 +11,10 @@ adds the stiff coupling pieces needed for partially-ionised plasmas
 - `<ion-neutral>` block must appear **alongside** both `<mhd>` and `<hydro>`; the mesh
   constructor checks for this combination and aborts if either fluid block is missing
   ([src/mesh/meshblock_pack.cpp:206]).
+- `<adm>` and `<z4c>` must be absent. The current constructor admits the
+  ion-neutral task graph only when neither metric block is present, although
+  its fatal message does not describe this extra incompatibility
+  ([src/mesh/meshblock_pack.cpp:143]).
 - The driver must run an ImEx integrator. At start-up the driver verifies `nimp_stages >
   0` when ion-neutral is active and terminates otherwise
   ([src/driver/driver.cpp:340]).
@@ -26,15 +30,14 @@ adds the stiff coupling pieces needed for partially-ionised plasmas
 `AssembleIonNeutralTasks` interleaves the neutral hydro tasks with the ion MHD ones inside
 the standard stage lists ([src/ion-neutral/ion-neutral_tasks.cpp:20]). The ordering is:
 
-1. `FirstTwoImpRK` runs before any explicit work and performs two implicit solves for the
-   stiff drag term, while copying both fluids’ conserved states into the ImEx scratch
-   registers ([src/ion-neutral/ion-neutral_tasks.cpp:42],
+1. On explicit stage 1, `FirstTwoImpRK` copies Hydro/MHD conserved state into their `u1`
+   registers, copies MHD face fields into `b1`, and calls `ImpRKUpdate` for the first two
+   implicit evaluations ([src/ion-neutral/ion-neutral_tasks.cpp:42],
    [src/ion-neutral/ion-neutral_tasks.cpp:58]).
-2. The ion (MHD) stage advances first, reusing the existing flux/communication tasks.
-3. The neutral (hydro) stage follows immediately, using the updated ion momentum in the
-   coupling source.
-4. `ImpRKUpdate` executes after both explicit legs to finish the implicit solve for the
-   current stage and populate the driver’s `impl_src` array for subsequent stages
+2. The ion (MHD) explicit flux/update/source leg advances first.
+3. The neutral (Hydro) explicit flux/update/source leg follows.
+4. `ImpRKUpdate` then applies implicit drag/chemistry using partially updated conserved
+   variables and populates the driver's `impl_src` array for later stages
    ([src/ion-neutral/ion-neutral_tasks.cpp:68],
    [src/ion-neutral/ion-neutral_tasks.cpp:128]).
 
@@ -62,6 +65,23 @@ terms for later stages ([src/ion-neutral/ion-neutral_tasks.cpp:172],
 | `drag_coeff` | – (required) | Collisional coupling strength between ions and neutrals ([src/ion-neutral/ion-neutral.cpp:18]). |
 | `ionization_coeff` | `0.0` | Converts neutral mass/momentum into ion mass/momentum ([src/ion-neutral/ion-neutral.cpp:19]). |
 | `recombination_coeff` | `0.0` | Converts ion mass/momentum back to neutrals ([src/ion-neutral/ion-neutral.cpp:20]). |
+
+## Verified Starting Point
+
+The shipped two-fluid blast input selects the custom `blast` problem
+generator and an IMEX integrator:
+
+```bash
+cmake -S . -B build-blast -DPROBLEM=blast
+cmake --build build-blast
+./build-blast/src/athena -i inputs/ion-neutral/blast_2fluid.athinput \
+  -d run-ion-neutral time/nlim=1
+```
+
+A focused one-cycle audit run initialized the ion-neutral module and completed
+successfully, writing its configured history and VTK output streams. The
+shipped C-shock inputs use the built-in `pgen_name = cshock` route and are
+also paired with IMEX integrators.
 
 ## Notes
 - The module manipulates the existing `hydro::Hydro` and `mhd::MHD` arrays in-place and

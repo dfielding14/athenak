@@ -1,167 +1,48 @@
 # Module: Reconstruction
 
-## Overview
-The Reconstruction module provides spatial reconstruction methods for computing interface values from cell-centered data, crucial for high-order accuracy in finite volume schemes.
+Hydro selects reconstruction through `<hydro>/reconstruct`; MHD and DynGRMHD
+select it through `<mhd>/reconstruct`; radiation selects it through its
+radiation block. Public reconstruction kernels are inline implementations in
+`src/reconstruct/` for Cartesian-like uniform spacing.
 
-## Source Location
-`src/reconstruct/`
+## Available Methods
 
-## Reconstruction Methods
+| Input keyword | Source | Implemented method | Ghost zones without FOFC |
+| --- | --- | --- | --- |
+| `dc` | `dc.hpp` | Piecewise constant donor cell | `>= 2` |
+| `plm` | `plm.hpp` | Limited piecewise linear | `>= 2` |
+| `ppm4` | `ppm.hpp` | Colella-Woodward PPM limiter path | `>= 3` |
+| `ppmx` | `ppm.hpp` | Colella-Sekora extrema-preserving limiter path | `>= 3` |
+| `wenoz` | `wenoz.hpp` | Fifth-order WENO-Z stencil | `>= 3` |
 
-| File | Method | Order | Description |
-|------|--------|-------|-------------|
-| `dc.hpp` | DC | 1st | Piecewise constant (donor cell) |
-| `plm.hpp` | PLM | 2nd | Piecewise linear with limiters |
-| `ppm.hpp` | PPM4/PPMX | 4th/3rd | PPM4: 4th order accurate, PPMX: extrema preserving |
-| `wenoz.hpp` | WENO-Z | 5th | Weighted ENO with Z-indicator |
+Hydro/MHD first-order flux correction changes the requirements to
+`nghost >= 3` for `plm` and `nghost >= 4` for `ppm4`, `ppmx`, or `wenoz`.
+Refined meshes require even `nghost`, so their effective minimum is four when
+three would otherwise suffice.
 
-## Method Details
+## Configuration
 
-### Donor Cell (DC)
-```cpp
-// First-order - most diffusive but robust
-u_L = u_i
-u_R = u_i
-```
-
-### Piecewise Linear (PLM)
-```cpp
-// Second-order with minmod limiter
-δu = minmod(u_i - u_{i-1}, u_{i+1} - u_i)
-u_L = u_i - 0.5*δu
-u_R = u_i + 0.5*δu
-```
-
-### Piecewise Parabolic (PPM4/PPMX)
-```cpp
-// PPM4: 4th-order accurate PPM from Colella & Woodward
-// PPMX: PPM with Colella-Sekora extrema preserving limiters
-// Both construct parabola through cell
-// Apply different limiters to prevent oscillations
-```
-
-### WENO-Z
-```cpp
-// Fifth-order weighted ENO
-// Uses multiple stencils with smooth weights
-// Z-indicator improves accuracy at discontinuities
-```
-
-## Slope Limiters
-
-### MinMod
-```cpp
-minmod(a,b) = 0.5*(sign(a)+sign(b))*min(|a|,|b|)
-```
-
-### Van Leer
-```cpp
-vanleer(a,b) = 2ab/(a+b) if ab>0, else 0
-```
-
-### MC Limiter
-```cpp
-mc(a,b) = minmod(2a, 2b, 0.5*(a+b))
-```
-
-## Implementation
-
-### Interface Template
-```cpp
-template<typename T>
-KOKKOS_INLINE_FUNCTION
-void ReconstructionX1(
-    const T &q,      // Input array
-    T &ql,          // Left states
-    T &qr,          // Right states
-    const int il,   // Start index
-    const int iu    // End index
-);
-```
-
-### Characteristic Variables
-For systems of equations, reconstruction in characteristic variables improves accuracy:
-
-```cpp
-// Transform to characteristic variables
-W = L * Q  // L = left eigenvectors
-
-// Reconstruct W
-Reconstruct(W, W_L, W_R)
-
-// Transform back
-Q_L = R * W_L  // R = right eigenvectors
-Q_R = R * W_R
-```
-
-## Usage in Physics Modules
-
-### Hydro
 ```ini
 <hydro>
-reconstruct = ppm4  # Options: dc, plm, ppm4, ppmx, wenoz
+reconstruct = plm
 ```
 
-### MHD
 ```ini
 <mhd>
-reconstruct = plm  # Often more stable than ppm
+reconstruct = ppm4
 ```
 
-### Radiation
 ```ini
 <radiation>
-reconstruct = plm  # Balance accuracy/robustness
+reconstruct = plm
 ```
 
-## Performance Considerations
-
-### Vectorization
-- All methods vectorized over i-direction
-- SIMD operations for slope calculations
-
-### GPU Optimization
-```cpp
-// Reconstruction kernel
-par_for("reconstruct", DevExeSpace(),
-KOKKOS_LAMBDA(int k, int j, int i) {
-  // Reconstruction at (i,j,k)
-});
-```
-
-### Memory Access
-- Stencil width affects cache usage
-- DC: 1 cell, PLM: 3 cells, PPM4/PPMX: 5 cells, WENOZ: 6 cells
-
-## Accuracy vs Robustness
-
-| Method | Accuracy | Robustness | Cost |
-|--------|----------|------------|------|
-| DC | Low | Excellent | Minimal |
-| PLM | Good | Good | Low |
-| PPM4 | High | Moderate | Medium |
-| PPMX | High | Good | Medium |
-| WENOZ | Highest | Good | High |
-
-## Common Issues
-
-### Oscillations
-- Use more diffusive limiter
-- Reduce to lower order near shocks
-- Check CFL number
-
-### Carbuncle Instability
-- Common with PPM4 in strong shocks
-- Switch to PLM or PPMX (more robust)
-- Enable first-order flux correction (FOFC)
-
-## Testing
-
-Convergence tests demonstrate order of accuracy:
-- Smooth problems: Full order
-- Discontinuous: Reduced to first order
+The constructor of the active module validates the keyword and ghost-zone
+requirements. Choice of method is problem-dependent; this documentation does
+not promise a universal accuracy or robustness ranking.
 
 ## See Also
-- [Hydro Module](hydro.md)
-- [Riemann Solvers](riemann_solvers.md)
-- Source: `src/reconstruct/`
+
+- [Hydrodynamics](hydro.md)
+- [Magnetohydrodynamics](mhd.md)
+- [Configuration](../configuration.md)

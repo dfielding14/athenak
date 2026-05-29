@@ -1,118 +1,65 @@
-# AthenaK Runtime Flow
+# Runtime Flow
 
-The runtime sequence below mirrors the control flow in `src/main.cpp` and the driver implementation. Nodes link to the relevant documentation for deeper inspection.
+These diagrams summarize control flow implemented in `src/main.cpp`,
+`src/driver/driver.cpp`, and `src/mesh/mesh_refinement.cpp`.
 
-## Main Program Sequence
-
-```{mermaid}
-flowchart TB
-    classDef setup fill:#e3f2fd,stroke:#1e88e5,stroke-width:2px,color:#0d47a1;
-    classDef io fill:#ede7f6,stroke:#512da8,stroke-width:2px,color:#311b92;
-    classDef mesh fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#1b5e20;
-    classDef sim fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#e65100;
-    classDef output fill:#fce4ec,stroke:#ad1457,stroke-width:2px,color:#880e4f;
-
-    START([Start]):::setup --> MPI_INIT["Initialize MPI (if enabled)"]:::setup
-    MPI_INIT --> KOKKOS_INIT["Initialize Kokkos"]:::setup
-    KOKKOS_INIT --> PARSE["Parse CLI arguments"]:::setup
-    PARSE --> VALIDATE{"Input or restart specified?"}:::io
-    VALIDATE -->|No| ERROR["Abort: missing -i or -r"]:::io
-    VALIDATE -->|Yes| LOAD_RST{"Restart file supplied?"}:::io
-    LOAD_RST -->|Yes| LOAD_RESTART["Load restart header\n(ParameterInput::LoadFromFile)"]:::io
-    LOAD_RST -->|No| SKIP_RST["Skip restart load"]:::io
-    LOAD_RESTART --> LOAD_INPUT
-    SKIP_RST --> LOAD_INPUT["Load athinput\n(ParameterInput::LoadFromFile)"]:::io
-    LOAD_INPUT --> OVERRIDES["Apply CLI overrides\n(ModifyFromCmdline)"]:::io
-    OVERRIDES --> DUMP_CHECK{"-n requested?"}:::io
-    DUMP_CHECK -->|Yes| PAR_DUMP["Dump parameters and exit"]:::io
-    DUMP_CHECK -->|No| MESH_STEP["Construct Mesh"]:::mesh
-
-    MESH_STEP --> TREE_BUILD{"Restart run?"}:::mesh
-    TREE_BUILD -->|No| BUILD_SCRATCH["Build tree from scratch"]:::mesh
-    TREE_BUILD -->|Yes| BUILD_RESTART["Build tree from restart"]:::mesh
-    BUILD_SCRATCH --> MESH_POST
-    BUILD_RESTART --> MESH_POST["Set restart metadata"]:::mesh
-
-    MESH_POST --> MESH_OPTION{"-m requested?"}:::mesh
-    MESH_OPTION -->|Yes| WRITE_MESH["Write mesh structure and exit"]:::mesh
-    MESH_OPTION -->|No| ADD_PHYS["Mesh::AddCoordinatesAndPhysics"]:::mesh
-
-    ADD_PHYS --> PROBLEM_INIT["Construct ProblemGenerator\n(ICs or restart)"]:::sim
-    PROBLEM_INIT --> DRIVER_BUILD["Create Driver"]:::sim
-    PROBLEM_INIT --> OUTPUT_BUILD["Create Outputs manager"]:::output
-    DRIVER_BUILD --> INITIALIZE["Driver::Initialize"]:::sim
-    INITIALIZE --> EXECUTE["Driver::Execute"]:::sim
-    EXECUTE --> FINALIZE["Driver::Finalize"]:::sim
-    FINALIZE --> CLEANUP["Destroy Driver/Outputs/Mesh/ParameterInput"]:::sim
-    CLEANUP --> KOKKOS_FINI["Finalize Kokkos"]:::setup
-    KOKKOS_FINI --> MPI_FINI["Finalize MPI"]:::setup
-    MPI_FINI --> END([End]):::setup
-
-    click LOAD_RESTART "../modules/mesh.html" "Mesh restart handling"
-    click LOAD_INPUT "../configuration.html" "Configuration guide"
-    click MESH_STEP "../modules/mesh.html" "Mesh module"
-    click ADD_PHYS "../modules/tasklist.html#assembly" "Coordinates and physics assembly"
-    click PROBLEM_INIT "../modules/pgen.html" "Problem generator"
-    click DRIVER_BUILD "../modules/driver.html" "Driver overview"
-    click OUTPUT_BUILD "../modules/outputs.html" "Outputs manager"
-```
-
-## Driver Time Integration
+## Startup And Shutdown
 
 ```{mermaid}
-flowchart LR
-    classDef loop fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#e65100;
-    classDef stage fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,color:#4a148c;
-    classDef check fill:#ede7f6,stroke:#512da8,stroke-width:2px,color:#311b92;
-
-    INIT["Driver::Initialize"]:::loop --> CYCLE{"Cycle loop\n(t < tlim, n < nlim)"}:::loop
-    CYCLE -->|No| DONE(["Driver::Finalize"]):::loop
-    CYCLE -->|Yes| STAGE_LOOP{"For each RK/IMEX stage"}:::loop
-
-    STAGE_LOOP --> POST_RECV["Post boundary receives"]:::stage
-    POST_RECV --> DO_TASKS["Execute TaskList stage\n(module kernels)"]:::stage
-    DO_TASKS --> POST_UPDATE["Update state & apply BCs"]:::stage
-    POST_UPDATE --> NEWDT["Hydro/MHD/Radiation dt estimates"]:::stage
-    NEWDT --> StageNext{"More stages?"}:::stage
-    StageNext -->|Yes| STAGE_LOOP
-    StageNext -->|No| OUTPUT_CHECK{"Output due?"}:::check
-
-    OUTPUT_CHECK -->|Yes| WRITE["Outputs::MakeOutputs"]:::check
-    OUTPUT_CHECK -->|No| AMR_CHECK{"Adaptive refinement triggered?"}:::check
-    WRITE --> AMR_CHECK
-    AMR_CHECK -->|Yes| ADAPT["Mesh::AdaptiveRefinement\n+ load balance"]:::check
-    AMR_CHECK -->|No| ADVANCE
-    ADAPT --> ADVANCE["Advance time & counters"]:::loop
-    ADVANCE --> CYCLE
-
-    click DO_TASKS "../modules/tasklist.html" "Task scheduling"
-    click NEWDT "../modules/hydro.html#timestep-control" "Timestep control"
-    click WRITE "../modules/outputs.html" "Outputs"
-    click ADAPT "../modules/mesh.html#adaptive-mesh-refinement" "AMR workflow"
+flowchart TD
+    A["MPI init when enabled"] --> B["Kokkos::initialize"]
+    B --> C["Parse CLI options and paths"]
+    C --> D["Load input or restart parameters"]
+    D --> E["Apply block/name=value overrides"]
+    E --> F{"-n requested?"}
+    F -->|Yes| G["Dump parsed parameters and exit"]
+    F -->|No| H["Construct Mesh and mesh tree"]
+    H --> I{"-m requested?"}
+    I -->|Yes| J["Report mesh structure and exit"]
+    I -->|No| K["Add coordinates and enabled physics"]
+    K --> L["Construct ProblemGenerator"]
+    L --> M["Construct Driver and Outputs"]
+    M --> N["Driver::Initialize"]
+    N --> O["Driver::Execute"]
+    O --> P["Driver::Finalize"]
+    P --> Q["Delete runtime objects"]
+    Q --> R["Kokkos::finalize; MPI_Finalize when enabled"]
 ```
 
-## AMR Workflow Snapshot
+`Driver::Initialize()` sets boundary values and primitives, computes the
+initial timestep for non-static problems, and writes initial outputs for a new
+run. Restart runs do not emit the new-run initialization outputs.
+
+## Time Loop
 
 ```{mermaid}
-flowchart TB
-    classDef amr fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#1b5e20;
-
-    START_AMR[["AMR trigger"]]:::amr --> EVAL["Evaluate criteria\n(MeshRefinement::Evaluate)"]:::amr
-    EVAL --> MARK["Mark MeshBlocks\n(refine / derefine)"]:::amr
-    MARK --> ACTION{"Action"}:::amr
-    ACTION -->|Refine| SPLIT["Split block\n(MeshBlockTree::Refine)"]:::amr
-    ACTION -->|Derefine| MERGE["Merge blocks\n(MeshBlockTree::Derefine)"]:::amr
-    ACTION -->|None| SKIP[["No change"]]:::amr
-    SPLIT --> PROLONG["Prolongate data\n(module-specific operators)"]:::amr
-    MERGE --> RESTRICT["Restrict data"]:::amr
-    PROLONG --> SYNC_NGHBR[Update neighbour metadata]:::amr
-    RESTRICT --> SYNC_NGHBR
-    SKIP --> SYNC_NGHBR
-    SYNC_NGHBR --> LB[Load balance / redistribute packs]:::amr
-    LB --> AMR_DONE[[Return to Driver loop]]:::amr
-
-    click PROLONG "../modules/mesh.html#prolongation" "Prolongation operators"
-    click RESTRICT "../modules/mesh.html#restriction" "Restriction operators"
+flowchart TD
+    LOOP{"time/cycle/wall limit not reached"} -->|"Continue"| DIAG["Print cycle diagnostics"]
+    DIAG --> PRE["Execute before_timeintegrator tasks"]
+    PRE --> STAGE["For each explicit stage: before_stagen, stagen, after_stagen"]
+    STAGE --> POST["Execute after_timeintegrator tasks"]
+    POST --> ADV["Advance time and cycle counters"]
+    ADV --> OUT["Write due output streams"]
+    OUT --> AMR{"Adaptive mesh active?"}
+    AMR -->|Yes| REF["MeshRefinement::AdaptiveMeshRefinement"]
+    AMR -->|No| DT["Mesh::NewTimeStep"]
+    REF --> DT
+    DT --> LOOP
+    LOOP -->|"Stop"| FINAL["Driver::Finalize writes final outputs"]
 ```
 
-The main loop diagram follows the logic in `Driver::Execute`, while the AMR snapshot corresponds to the refinement helpers in `Mesh` and associated module hooks. Together with the system architecture overview, these charts provide a complete, code-accurate picture of how AthenaK evolves a simulation.
+Outputs are directed by the driver after a completed cycle; they are not
+TaskList nodes. AMR is applied after due outputs, and the next timestep is
+computed after refinement or derefinement has completed.
+
+## Adaptive Refinement Entry Point
+
+When `<mesh_refinement>/refinement = adaptive`, the driver calls
+`MeshRefinement::AdaptiveMeshRefinement()`. That routine begins with
+`CheckForRefinement()`, changes the tree and pack allocation if required,
+reestablishes module timestep estimates as needed, and returns before
+`Mesh::NewTimeStep()` selects the next global step.
+
+See [Mesh](../modules/mesh.md), [Driver](../modules/driver.md),
+[Outputs](../modules/outputs.md), and [TaskList](../modules/tasklist.md) for
+the relevant interfaces and configuration.

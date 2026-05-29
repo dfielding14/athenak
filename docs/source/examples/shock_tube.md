@@ -1,227 +1,67 @@
-# Example: Shock Tube (Sod Problem)
+# Example: Shock Tube
 
-The classic Sod shock tube test - a fundamental benchmark for hydrodynamics codes demonstrating shock capturing, contact discontinuities, and rarefaction waves.
+The Sod hydrodynamic shock tube is the public first-run example. It uses the
+built-in `shock_tube` problem generator selected in
+`inputs/hydro/sod.athinput`.
 
-## Problem Generator
-**Source**: `src/pgen/tests/shock_tube.cpp`
+## Run Sod
 
-## Available Input Files
-- **Standard Sod**: `inputs/hydro/sod.athinput`
-- **MHD Brio-Wu**: `inputs/mhd/bw.athinput`
-- **Relativistic**: `inputs/srhydro/mb1.athinput`
-- **GRMHD**: `inputs/grmhd/mub1-gr.athinput`
-
-## Physics
-
-The shock tube problem consists of two uniform states separated by a discontinuity:
-
-```
-Initial Condition (t=0):
-|  Left State  |  Right State |
-|  ρ=1.0       |  ρ=0.125    |
-|  P=1.0       |  P=0.1      |
-|  v=0.0       |  v=0.0      |
-```
-
-This evolves into three waves:
-1. **Shock wave** propagating right
-2. **Contact discontinuity** moving right
-3. **Rarefaction wave** propagating left
-
-## Running the Simulation
-
-### Basic Hydrodynamic Version
 ```bash
-# One-time configure & build (built_in_pgens includes shock_tube)
 cmake -S . -B build
-cmake --build build -j $(sysctl -n hw.ncpu 2>/dev/null || nproc)
-
-# Run standard Sod test
-./build/src/athena -i inputs/hydro/sod.athinput
-
-# Output: Sod.block0.out1.000*.tab (primitive slice) and Sod.block0.out2.000*.hst
+cmake --build build
+./build/src/athena -i inputs/hydro/sod.athinput -d run-sod
 ```
 
-### Complete Input File
-```ini
-# inputs/hydro/sod.athinput
-<comment>
-problem   = Sod shock tube
-reference = Sod, G.A., JCP 27, 1-31 (1978)
+A verified public run produced:
 
-<job>
-basename  = sod        # problem ID
-
-<mesh>
-nghost    = 2
-nx1       = 256        # resolution
-x1min     = -0.5
-x1max     = 0.5
-ix1_bc    = outflow
-ox1_bc    = outflow
-
-nx2       = 1          # 1D problem
-x2min     = -0.5
-x2max     = 0.5
-ix2_bc    = periodic
-ox2_bc    = periodic
-
-nx3       = 1
-x3min     = -0.5
-x3max     = 0.5
-ix3_bc    = periodic
-ox3_bc    = periodic
-
-<meshblock>
-nx1       = 256
-
-<time>
-evolution  = dynamic
-integrator = rk2       # 2nd-order Runge-Kutta
-cfl_number = 0.4
-nlim       = -1
-tlim       = 0.25      # end time
-ndiag      = 1
-
-<hydro>
-eos         = ideal
-reconstruct = plm      # piecewise linear
-rsolver     = hllc     # HLLC Riemann solver
-gamma       = 1.4      # ideal gas
-
-<problem>
-shock_dir  = 1         # 1,2,3 for x,y,z
-xshock     = 0.0       # position of discontinuity
-
-# Left state
-dl         = 1.0       # density
-pl         = 1.0       # pressure
-ul         = 0.0       # velocity
-
-# Right state
-dr         = 0.125
-pr         = 0.1
-ur         = 0.0
-
-<output1>
-file_type  = tab       # tabular slice of primitive variables
-dt         = 0.01
-slice_x2   = 0.0
-slice_x3   = 0.0
-
-<output2>
-file_type  = hst       # history diagnostics
-dt         = 0.01
+```text
+run-sod/Sod.hydro.hst
+run-sod/tab/Sod.hydro_w.00000.tab
+...
+run-sod/tab/Sod.hydro_w.00025.tab
 ```
 
-## MHD Version (Brio-Wu)
+The table header identifies columns including `x1v`, `dens`, `velx`, `vely`,
+`velz`, and `eint`. Plot density from the final table with:
 
-For magnetohydrodynamics, use the Brio-Wu shock tube:
-
-```bash
-# Run MHD version
-./build/src/athena -i inputs/mhd/bw.athinput
-```
-
-Key differences:
-- Includes magnetic field: `B_x = 0.75`, `B_y = ±1.0`
-- Seven waves instead of three
-- Tests constrained transport for div(B)=0
-
-## Relativistic Versions
-
-### Special Relativistic Hydrodynamics
-```bash
-./build/src/athena -i inputs/srhydro/mb1.athinput
-```
-
-### General Relativistic MHD
-```bash
-./build/src/athena -i inputs/grmhd/mub1-gr.athinput
-```
-
-## Analyzing Results
-
-### Expected Solution Structure
 ```python
-import numpy as np
 import matplotlib.pyplot as plt
+from vis.python import athena_read
 
-# Load the tabular output (columns: x, rho, vx, vy, vz, pressure, ...)
-import numpy as np
-data = np.loadtxt("Sod.block0.out1.00025.tab")
-
-# Plot density profile
-plt.figure(figsize=(10, 6))
-plt.plot(data[:,0], data[:,1], 'b-', label='Density')
-plt.xlabel('Position')
-plt.ylabel('Density')
-plt.legend()
-plt.title('Sod Shock Tube at t=0.25')
+data = athena_read.tab("run-sod/tab/Sod.hydro_w.00025.tab")
+plt.plot(data["x1v"], data["dens"])
+plt.xlabel("x1")
+plt.ylabel("density")
+plt.show()
 ```
 
-## Convergence Testing
+## Related Built-In Shock Input
 
-Test numerical convergence by varying resolution:
+The Brio-Wu MHD shock tube uses the same built-in dispatcher:
 
 ```bash
-for nx in 128 256 512; do
-  outdir=results_${nx}
-  mkdir -p "${outdir}"
-  ./build/src/athena -i inputs/hydro/sod.athinput mesh/nx1=${nx} -d "${outdir}"
-done
+./build/src/athena -i inputs/mhd/bw.athinput -d run-bw
 ```
 
-## Variations and Extensions
+The shipped Brio-Wu deck writes primitive and cell-centered magnetic table
+outputs plus history data.
 
-### Different Riemann Solvers
-```ini
-<hydro>
-rsolver = llf     # Most diffusive, most robust
-rsolver = hlle    # Good balance
-rsolver = hllc    # Most accurate (default)
-rsolver = roe     # Can be unstable
+## Configuration Notes
+
+The Sod deck uses `nghost = 2`, `reconstruct = plm`, and `rsolver = llf`.
+Switching to `ppm4`, `ppmx`, or `wenoz` requires `nghost >= 3`; combining
+higher-order reconstruction with `fofc = true` requires `nghost >= 4`.
+
+For a small resolution experiment, edit a copy of the input deck. Runtime
+overrides update existing parameters only:
+
+```bash
+cp inputs/hydro/sod.athinput my_sod.athinput
+./build/src/athena -i my_sod.athinput -d run-sod-128 mesh/nx1=128 meshblock/nx1=128
 ```
-
-### Different Reconstruction
-```ini
-<hydro>
-reconstruct = dc      # 1st order (very diffusive)
-reconstruct = plm     # 2nd order (default)
-reconstruct = ppm4    # 3rd order PPM (4th order accurate)
-reconstruct = ppmx    # PPM with extrema preserving limiter
-reconstruct = wenoz   # 5th order WENO-Z
-```
-
-### Multi-dimensional
-Change to 2D by modifying:
-```ini
-<mesh>
-nx2 = 256
-<meshblock>
-nx2 = 32
-```
-
-## Common Issues
-
-### Oscillations Near Discontinuities
-- Reduce CFL number: `cfl_number = 0.2`
-- Use more diffusive solver: `rsolver = llf`
-- Use lower-order reconstruction: `reconstruct = plm`
-
-### Wrong Wave Speeds
-- Check equation of state: `gamma = 1.4`
-- Verify initial conditions match literature
-
-## References
-
-1. **Original Sod Problem**: Sod, G.A., "A Survey of Several Finite Difference Methods for Systems of Nonlinear Hyperbolic Conservation Laws", JCP 27, 1-31 (1978)
-
-2. **MHD Version**: Brio, M. & Wu, C.C., "An Upwind Differencing Scheme for the Equations of Ideal Magnetohydrodynamics", JCP 75, 400-422 (1988)
-
-3. **Relativistic Tests**: Marti & Müller, "Numerical Hydrodynamics in Special Relativity", Living Rev. Relativity 6, 7 (2003)
 
 ## See Also
-- [Hydro Module Documentation](../modules/hydro.md)
-- [Riemann Solvers](../modules/riemann_solvers.md)
-- [Problem Generator API](../modules/pgen.md)
+
+- [5-Minute Quickstart](../quickstart.md)
+- [Configuration](../configuration.md)
+- [Problem Generators](../modules/pgen.md)

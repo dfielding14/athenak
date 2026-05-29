@@ -14,7 +14,7 @@ documentation by topic.
 | Review ongoing implementation work | [Developer Notes](engineering/index.md) | Stable guidance in [Modules](modules/index.md) |
 
 <div style="width: 100%; max-width: 900px; margin: 1em auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-<iframe src="_static/athenak_fluid_sim.html" style="width: 100%; aspect-ratio: 3/1; border: none;"></iframe>
+<iframe src="_static/athenak_fluid_sim.html" title="Interactive AthenaK fluid-simulation banner" style="width: 100%; aspect-ratio: 3/1; border: none;"></iframe>
 </div>
 
 <details style="margin-top: 0.5em; font-size: 0.85em;">
@@ -82,9 +82,9 @@ modules/index
 
 ## Reference Library
 
-- [Input Parameters](reference/input_parameters.md) — authoritative block/parameter catalogue
-- [File Reference](reference/file_reference.md) — generated API & file index
-- [API Reference](reference/api_reference.md) — autodoc coverage
+- [Input Parameters](reference/input_parameters.md) - verified shared controls and source pointers
+- [File Reference](reference/file_reference.md) - public source and input-deck map
+- [API Reference](reference/api_reference.md) - implemented developer-facing interfaces
 
 ```{toctree}
 :hidden:
@@ -127,7 +127,7 @@ examples/index
 
 ## Tools & Utilities
 
-- [Visualization Toolkit](tools/visualization.md) — binary readers, converters, and plotting helpers for Athena++ outputs
+- [Visualization Toolkit](tools/visualization.md) - readers and converters for current AthenaK outputs
 
 ```{toctree}
 :hidden:

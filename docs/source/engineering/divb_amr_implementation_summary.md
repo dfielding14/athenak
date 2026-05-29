@@ -1,5 +1,11 @@
 # Face-Field Correction for AMR div(B) Implementation Summary
 
+```{warning}
+Historical/development record only. The status and test claims below are not
+verified public guarantees on the documented source baseline. Use
+[MHD](../modules/mhd.md) and [Mesh](../modules/mesh.md) for stable guidance.
+```
+
 ## Implementation Status: COMPLETE ✔️
 
 ### Key Features

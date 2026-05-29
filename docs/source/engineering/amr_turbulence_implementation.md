@@ -1,5 +1,11 @@
 # AMR-Compatible Turbulence Driver Implementation
 
+```{warning}
+Historical/development record only. This page is not verified as implemented
+public behavior on the documented source baseline. Use
+[Source Terms](../modules/srcterms.md) for supported turbulence guidance.
+```
+
 ## Overview
 
 This document describes the modifications made to the turbulence driver in AthenaK to support Adaptive Mesh Refinement (AMR). The turbulence driver implements randomly forced turbulence using an Ornstein-Uhlenbeck stochastic process with Cartesian basis functions.

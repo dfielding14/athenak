@@ -24,7 +24,8 @@ each invoked from `main.cpp` after the mesh and physics modules have been constr
    asked to compute its stage-local limit via `NewTimeStep(this, nexp_stages)`
    ([src/driver/driver.cpp:305]).
 3. **Global timestep** – The mesh reduces those stage limits alongside diffusion and
-   particle constraints in `Mesh::NewTimeStep`, clamping the first cycle to `tlim`
+   particle constraints in `Mesh::NewTimeStep`, clipping any proposed step that would
+   cross `tlim`
    ([src/mesh/mesh.cpp:580]).
 4. **Initial outputs** – For fresh runs, every configured output writes once so the initial
    state is captured ([src/driver/driver.cpp:326]).
@@ -56,20 +57,21 @@ diagnostics are only emitted on rank 0 and include the reason for termination
 ([src/driver/driver.cpp:446]).
 
 ## Time Integration Options
-The `<time>/integrator` string determines the explicit/implicit stage counts and CFL bound
-([src/driver/driver.cpp:86]).
+The `<time>/integrator` string determines the explicit/implicit stage counts and stores a
+nominal stability coefficient; the current input path does not compare a user-provided
+`cfl_number` against that stored value ([src/driver/driver.cpp:86]).
 
-| Keyword | Order | Explicit stages (`nexp_stages`) | Implicit stages (`nimp_stages`) | CFL limit | Notes |
+| Keyword | Order | Explicit stages (`nexp_stages`) | Implicit stages (`nimp_stages`) | Stored nominal CFL coefficient | Notes |
 |---------|-------|---------------------------------|----------------------------------|-----------|-------|
 | `rk1` | 1 | 1 | 0 | 1.0 | Forward Euler baseline ([src/driver/driver.cpp:91]). |
 | `rk2` | 2 | 2 | 0 | 1.0 | SSPRK(2,2) Heun scheme ([src/driver/driver.cpp:99]). |
 | `rk3` | 3 | 3 | 0 | 1.0 | SSPRK(3,3) ([src/driver/driver.cpp:112]). |
 | `rk4` | 4 | 4 | 0 | 1.3925 | Low-storage RK4()4[2S]; uses `delta` weights for register updates ([src/driver/driver.cpp:129]). |
 | `imex2` | 2 | 2 | 3 | 1.0 | Pareschi & Russo IMEX-SSP2; explicit leg matches RK2 ([src/driver/driver.cpp:162]). |
-| `imex3` | 3 | 3 | 4 | 1.0 | IMEX-SSP3 with RK3 explicit leg ([src/driver/driver.cpp:188]). |
-| `imex+` | 2 | 3 | 2 | 1.0 | Krapp et al. (2024) IMEX(2,3,2); explicit stages have non-RK2 weights ([src/driver/driver.cpp:230]). |
+| `imex2+` | 2 | 3 | 4 | 1.0 | Krapp et al. (2024) IMEX(4,3,2); explicit stages have non-RK2 weights ([src/driver/driver.cpp:188]). |
+| `imex3` | 3 | 3 | 4 | 1.0 | IMEX-SSP3 with RK3 explicit leg ([src/driver/driver.cpp:230]). |
 
-> The fatal error message printed for unknown integrators omits `rk4` and `imex+`; be aware
+> The fatal error message printed for unknown integrators omits `imex2+`; be aware
 > the warning is stale ([src/driver/driver.cpp:258]).
 
 ## Driver Configuration
@@ -77,8 +79,8 @@ The `<time>/integrator` string determines the explicit/implicit stage counts and
 |---------|--------|---------|--------|
 | `time/evolution` | input file | – (required) | Chooses `static`, `kinematic`, or `dynamic` evolution; anything else aborts ([src/driver/driver.cpp:68]). |
 | `time/integrator` | input file | `rk2` | Only read for non-static runs; selects table entry above ([src/driver/driver.cpp:86]). |
-| `time/tlim` | input file | – (required) | Simulation end time tested by the main loop ([src/driver/driver.cpp:274], [src/driver/driver.cpp:378]). |
-| `time/nlim` | input file | `-1` | Maximum cycles; negative keeps running indefinitely ([src/driver/driver.cpp:88]). |
+| `time/tlim` | input file | – (required for non-static evolution) | Simulation end time tested by the main loop ([src/driver/driver.cpp:87], [src/driver/driver.cpp:390]). |
+| `time/nlim` | input file | `-1` | Maximum cycles; negative disables only the cycle-count stopping condition, while `tlim` and wall-clock stopping still apply ([src/driver/driver.cpp:88], [src/driver/driver.cpp:390]). |
 | `time/ndiag` | input file | `1` | Frequency for `OutputCycleDiagnostics` prints ([src/driver/driver.cpp:89], [src/driver/driver.cpp:513]). |
 | `time/cfl_number` | input file | – (required) | Stored on the mesh and applied when reducing module timesteps ([src/mesh/build_tree.cpp:304], [src/mesh/mesh.cpp:586]). |
 | `-t hh:mm:ss` | CLI flag | unset | Optional wall-clock limit broadcast each loop ([src/main.cpp:172], [src/driver/driver.cpp:374]). |
@@ -117,6 +119,8 @@ routine is also reused by mesh refinement to seed newly created blocks.
   initialization before allocating implicit scratch space ([src/driver/driver.cpp:340]).
 - The global CFL number is read during mesh construction, so ensure `<time>/cfl_number` is
   present even if only the driver section is being edited ([src/mesh/build_tree.cpp:304]).
+- The stored nominal integrator coefficient is not enforced as a validation limit for
+  `<time>/cfl_number` in the current public input path.
 
 ## See Also
 - [TaskList Module](tasklist.md) – scheduler internals referenced by the driver.

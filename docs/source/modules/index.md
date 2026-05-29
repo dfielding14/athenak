@@ -1,6 +1,8 @@
 # AthenaK Modules Documentation
 
-Complete documentation for all AthenaK modules, organized by category.
+Stable module entry points for the public AthenaK implementation, organized by
+category. Developer records for work that is not part of this baseline are
+listed separately under [Developer Notes](../engineering/index.md).
 
 ## Core Infrastructure (4 modules)
 
@@ -17,11 +19,11 @@ Complete documentation for all AthenaK modules, organized by category.
 |--------|-----------|-------------|---------------|
 | **Hydrodynamics** | `src/hydro/` | Euler equations solver | [hydro.md](hydro.md) |
 | **MHD** | `src/mhd/` | Magnetohydrodynamics with CT | [mhd.md](mhd.md) |
-| **Radiation** | `src/radiation/` | Radiation transport (M1 closure) | [radiation.md](radiation.md) |
+| **Radiation** | `src/radiation/` | Angle-resolved intensity transport on a geodesic angular grid | [radiation.md](radiation.md) |
 | **Z4c** | `src/z4c/` | Numerical relativity (Einstein equations) | [z4c.md](z4c.md) |
 | **DynGRMHD** | `src/dyn_grmhd/` | GR MHD in dynamical spacetimes | [dyn_grmhd.md](dyn_grmhd.md) |
 | **Ion-Neutral** | `src/ion-neutral/` | Two-fluid ion-neutral MHD | [ion_neutral.md](ion_neutral.md) |
-| **Particles** | `src/particles/` | Lagrangian particle tracking | [particles.md](particles.md) |
+| **Particles** | `src/particles/` | Current cosmic-ray drift particle path | [particles.md](particles.md) |
 
 ## Numerical Methods (4 modules)
 
@@ -36,17 +38,18 @@ Complete documentation for all AthenaK modules, organized by category.
 
 | Module | Directory | Description | Documentation |
 |--------|-----------|-------------|---------------|
-| **Outputs** | `src/outputs/` | Data I/O (14 formats) | [outputs.md](outputs.md) |
+| **Outputs** | `src/outputs/` | Data I/O (12 registered formats) | [outputs.md](outputs.md) |
 | **Boundary Values** | `src/bvals/` | Boundary conditions and MPI | [boundaries.md](boundaries.md) |
 | **Source Terms** | `src/srcterms/` | External sources and turbulence | [srcterms.md](srcterms.md) |
-| **Shearing Box** | `src/shearing_box/` | Orbital advection | [shearing_box.md](shearing_box.md) |
+| **Shearing Box** | `src/shearing_box/` | Shearing source terms and boundaries | [shearing_box.md](shearing_box.md) |
 | **Problem Generators** | `src/pgen/` | Initial conditions | [pgen.md](pgen.md) |
 
-## Problem-Specific Documentation
+## Development Records
 
-| Problem | File | Description | Documentation |
-|---------|------|-------------|---------------|
-| **CGM Cooling Flow with Metals** | `src/pgen/cgm_cooling_flow_amr_metals.cpp` | Cooling flow with SNe feedback and metal enrichment | [cgm_cooling_flow_metals.md](../cgm_cooling_flow_metals.md) |
+Problem-specific records whose implementation is not present in the public
+baseline, including the CGM cooling-flow note, are intentionally routed through
+[Developer Notes](../engineering/index.md) rather than the stable module or
+worked-example paths.
 
 ## Additional Components
 
@@ -54,7 +57,7 @@ Complete documentation for all AthenaK modules, organized by category.
 |-----------|-----------|-------------|
 | **Units** | `src/units/` | Physical unit system |
 | **Utils** | `src/utils/` | Utility functions |
-| **Geodesic Grid** | `src/geodesic-grid/` | Spherical harmonic analysis |
+| **Geodesic Grid** | `src/geodesic-grid/` | Angular grids and spherical-surface interpolation |
 
 ## Module Interaction Diagram
 
@@ -78,9 +81,9 @@ flowchart TD
     Hydro --> EOS[EOS]
     MHD --> EOS
     
-    MB --> Driver[Driver]
+    Main --> Driver[Driver]
     Driver --> Tasks[TaskList]
-    Tasks --> Outputs[Outputs]
+    Driver --> Outputs[Outputs]
     
     MB --> BVals[Boundary Values]
     BVals --> MPI[MPI Comm]
@@ -92,24 +95,18 @@ flowchart TD
 
 ## Quick Reference
 
-### Adding a New Physics Module
-1. Create directory in `src/`
-2. Inherit from base physics class
-3. Register with MeshBlock
-4. Add tasks to TaskList
-5. Document in `docs/source/modules/`
+### Extending Physics
 
-### Module Requirements
-Each module must:
-- Have clear interfaces with other modules
-- Support device (GPU) execution via Kokkos
-- Handle AMR refinement properly
-- Provide restart capability
-- Include unit tests
+New modules must be wired through the existing `MeshBlockPack` and task-list
+patterns and documented only to the level verified by their implementation and
+tests. Start with [Problem Generators](pgen.md) for problem-specific initial
+conditions and [Migration](../migration/index.md) for porting guidance.
 
 ## Input Parameters
 
-All module parameters are documented in [Input Parameters Reference](../reference/input_parameters.md).
+Shared public controls and owning-source pointers are documented in
+[Input Parameters Reference](../reference/input_parameters.md); consult
+module sources and shipped input decks for specialized settings.
 
 ## See Also
 - [Architecture Overview](../flowcharts/runtime.md)

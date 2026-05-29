@@ -1,106 +1,63 @@
-# Common Gotchas
+# Migration Gotchas
 
-## Migration Issues from Athena++
+## Pack-Wide Arrays
 
-### 1. Extra MeshBlock Index
-**Issue**: All arrays have an extra dimension for MeshBlock index
+AthenaK field storage normally includes a MeshBlockPack index:
+
 ```cpp
-// Athena++
-prim(IDN,k,j,i)
-
-// AthenaK  
-u0(m,IDN,k,j,i)  // 'm' is MeshBlock index, variable index is second
+u0(m, IDN, k, j, i)
 ```
 
-### 2. Device Memory
-**Issue**: Accessing device memory from host code
+Use `pmy_mesh_->pmb_pack` and `pmy_mesh_->mb_indcs` in a problem generator,
+following an implemented generator in `src/pgen/`. Do not mechanically retain
+single-block Athena++ indexing.
+
+## Device Accessibility
+
+`DvceArray*` data is device storage. Fill or inspect it on the host by using a
+host mirror plus `Kokkos::deep_copy`, or write it in a device lambda:
+
 ```cpp
-// WRONG - will crash
-Real value = u0(0,IDN,0,0,0);  // Can't access from CPU
-
-// CORRECT
-Kokkos::deep_copy(host_view, device_view);
-Real value = host_view(0,IDN,0,0,0);
+DvceArray1D<Real> data("data", n);
+auto host = Kokkos::create_mirror_view(data);
+host(0) = 1.0;
+Kokkos::deep_copy(data, host);
 ```
 
-### 3. Lambda Capture and Device-Accessible State
-**Issue**: Capturing host-only state or host stack references in device kernels
+Ordinary host pointers and standard-library containers must not be
+dereferenced in a `KOKKOS_LAMBDA` intended for GPU execution.
 
-`KOKKOS_LAMBDA` captures ordinary local variables by value. Scalars used as
-read-only kernel parameters do not need to be declared `const`.
-```cpp
-// CORRECT - factor is copied into the kernel closure
-Real factor = 2.0;
-par_for(..., KOKKOS_LAMBDA(int i) {
-  data(i) *= factor;
-});
+## Input Compatibility
 
-// WRONG for portable device execution - factor_ptr points to host stack storage
-Real *factor_ptr = &factor;
-par_for(..., KOKKOS_LAMBDA(int i) {
-  data(i) *= *factor_ptr;
-});
-```
+- A custom `src/pgen/name.cpp` generally requires a build configured with
+  `-DPROBLEM=name`; only generators registered in the built-in dispatcher can
+  be selected with `<problem>/pgen_name`.
+- SR and GR fluid configurations reject `eos = isothermal`.
+- Refined cases that require at least three ghost zones must choose an even
+  value, normally `nghost >= 4`.
+- The public particle module accepts `particle_type = cosmic_ray` and
+  `pusher = drift`; branch records describing Boris or star particles are not
+  public runtime configuration.
 
-For outer Kokkos kernels, use values captured by copy for scalar parameters and
-device-accessible Kokkos Views for array data; avoid reference capture such as
-`[&]`. Nested team/vector lambdas are a separate case: reference capture may be
-used only where permitted by Kokkos and where the computation is also correct
-under capture-by-copy semantics.
+## Backend Builds
 
-### 4. Boundary Conditions
-**Issue**: Ghost zones indexed differently
-- Athena++: Negative indices for ghost zones
-- AthenaK: Explicit ghost zone ranges
+CUDA builds use the bundled wrapper:
 
-### 5. MPI + GPU
-**Issue**: MPI not GPU-aware
 ```bash
-# May need to set
-export MPICH_GPU_SUPPORT_ENABLED=1
+cmake -S . -B build-cuda -DKokkos_ENABLE_CUDA=ON \
+  -DCMAKE_CXX_COMPILER=${PWD}/kokkos/bin/nvcc_wrapper
 ```
 
-## Performance Gotchas
+HIP builds must select a ROCm compiler:
 
-### 1. Small MeshBlocks on GPU
-**Issue**: MeshBlocks too small for GPU efficiency
-```ini
-<meshblock>
-nx1 = 32  # Better for GPU (default is mesh nx1)
-```
-
-### 2. Memory Transfers
-**Issue**: Frequent CPU-GPU transfers
-- Minimize deep_copy operations
-- Keep data on device
-
-### 3. Task Granularity
-**Issue**: Too many small tasks
-- Batch operations when possible
-- Use MeshBlockPacks
-
-## Common Errors
-
-### Build Errors
 ```bash
-# Kokkos not found
-git submodule update --init
-
-# CUDA not detected
-export CUDA_ROOT=/usr/local/cuda
+export ROCM_PATH=/opt/rocm
+cmake -S . -B build-hip -DKokkos_ENABLE_HIP=ON \
+  -DCMAKE_CXX_COMPILER=${ROCM_PATH}/bin/hipcc
 ```
 
-### Runtime Errors
-```bash
-# Segfault on GPU
-# Check for race conditions
-# Verify array bounds
+Add an appropriate `Kokkos_ARCH_*` setting for the actual device and validate
+with a short shipped input before assessing performance.
 
-# Wrong results
-# Check reduction operations
-# Verify atomic operations
-```
-
-## See Also
-- [Migration Guide](index.md)
-- [Troubleshooting Guide](../troubleshooting.md)
+See [Migration](index.md), [Building](../building.md), and
+[Troubleshooting](../troubleshooting.md).

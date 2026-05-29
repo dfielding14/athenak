@@ -1,208 +1,127 @@
 # Module: Mesh
 
-## Overview
+The mesh layer constructs the root domain, partitions it into MeshBlocks,
+tracks static/adaptive refinement, and owns the `MeshBlockPack` containers
+through which physics modules operate. The public implementation is in
+`src/mesh/`.
 
-The mesh package turns user input into a block-structured AMR hierarchy.  It
-constructs the space-filling curve, distributes MeshBlocks across MPI ranks,
-creates GPU-friendly MeshBlockPacks, and manages refinement/coarsening through
-`MeshRefinement`.
+## Public Objects
 
-All heavy data (hydro, MHD, GR state) lives in the physics modules; the mesh layer
-primarily tracks topology and geometry.
-
-## Source Layout
-
-`src/mesh/`
-
-| File | Role |
+| Source | Public responsibility |
 | --- | --- |
-| `mesh.hpp/.cpp` | Public `Mesh` class and high-level driver hooks |
-| `meshblock.hpp/.cpp` | Lightweight per-block metadata |
-| `meshblock_pack.hpp/.cpp` | Pack container and physics module wiring |
-| `meshblock_tree.hpp/.cpp` | Octree used for AMR bookkeeping |
-| `mesh_refinement.hpp/.cpp` | Refinement criteria, prolongation/restriction |
-| `build_tree.cpp` | Root grid construction and MPI partitioning |
-| `load_balance.cpp` | Space-filling-curve load balancing |
-| `prolongation.hpp`, `restriction.hpp` | Inter-grid transfer operators |
+| `mesh.hpp`, `mesh.cpp` | `Mesh`, root-domain parsing, boundary validation, physics attachment |
+| `meshblock.hpp`, `meshblock.cpp` | Per-pack MeshBlock IDs, levels, extents, and neighbors |
+| `meshblock_pack.hpp`, `meshblock_pack.cpp` | Coordinates, physics pointers, and task lists for a pack |
+| `meshblock_tree.*`, `build_tree.cpp` | Static/refined tree construction |
+| `mesh_refinement.*` | Adaptive refinement driver and transfer coordination |
+| `refinement_criteria.*` | Built-in adaptive criteria parsed from `<amr_criterion*>` |
+| `load_balance.cpp` | MeshBlock redistribution |
 
-## Mesh Class (selected fields)
+`MeshBlockPack::AddPhysics()` creates a module only when its input block is
+present, for example `<hydro>`, `<mhd>`, `<radiation>`, or `<particles>`.
 
-```cpp
-class Mesh {
-  RegionSize  mesh_size;    // physical size of the root grid
-  RegionIndcs mesh_indcs;   // cell indices on the root grid
-  RegionIndcs mb_indcs;     // indices including ghost zones for each MeshBlock
-  BoundaryFlag mesh_bcs[6]; // physical boundary conditions
+## Root Mesh And MeshBlocks
 
-  int nmb_total;            // total MeshBlocks across all ranks
-  int nmb_thisrank;         // MeshBlocks owned by this rank
-  int nmb_maxperrank;       // AMR safety limit (input-controlled)
+Every run supplies `<mesh>`. Required domain fields are `nx1`, `nx2`, `nx3`,
+`x1min`/`x1max`, `x2min`/`x2max`, `x3min`/`x3max`, and boundary flags for
+active directions. `nghost` defaults to `2`.
 
-  float *cost_eachmb;       // per-block weighting used by LoadBalance
-  int   *rank_eachmb;       // owning rank for each block
-  LogicalLocation *lloc_eachmb; // logical coordinates in the AMR tree
-
-  MeshBlockPack *pmb_pack;  // primary pack for this rank
-  MeshRefinement *pmr;      // optional AMR controller
-};
-```
-
-`BuildTreeFromScratch()` (or the restart variant) allocates these buffers, creates
-the initial pack, and fills neighbor metadata via `MeshBlock::SetNeighbors`.
-
-## MeshBlock & MeshBlockPack
-
-```cpp
-class MeshBlock {
- public:
-  DualArray1D<int>          mb_gid;    // global ID
-  DualArray1D<int>          mb_lev;    // logical AMR level
-  DualArray1D<RegionSize>   mb_size;   // physical extents
-  DualArray2D<BoundaryFlag> mb_bcs;    // boundary flags (6 faces)
-  DualArray2D<NeighborBlock> nghbr;    // neighbor descriptors (up to 56)
-  DualArray1D<bool>         newly_created; // true for blocks created this cycle
-  int nnghbr;                          // max neighbors per block (cached)
-};
-
-class MeshBlockPack {
- public:
-  Mesh *pmesh;
-  int nmb_thispack;
-  MeshBlock     *pmb;
-  Coordinates   *pcoord;
-  hydro::Hydro  *phydro;
-  mhd::MHD      *pmhd;
-  z4c::Z4c      *pz4c;
-  adm::ADM      *padm;
-  numrel::NumericalRelativity *pnr;
-  // ... other optional physics modules (particles, radiation, source terms, etc.)
-};
-```
-
-Physics modules are allocated on demand inside `MeshBlockPack::AddPhysics()` based
-on the presence of blocks in the input deck.
-
-## Input Blocks
-
-### `<mesh>`
-
-Required for every run.
-
-| Parameter | Description |
-| --- | --- |
-| `nx1`, `nx2`, `nx3` | active cell counts on the root grid |
-| `nghost` | ghost-zone depth (default 2) |
-| `x#min`, `x#max` | domain extents |
-| `i#_bc`, `o#_bc` | boundary conditions (`periodic`, `outflow`, `reflect`, `inflow`, `vacuum`, `shear_periodic`, `user`) |
-
-### `<meshblock>`
-
-Optional override of the block resolution. When omitted, each MeshBlock inherits
-the root-grid resolution (`nx#`).  Values must evenly divide the corresponding
-root-grid counts.
-
-### `<mesh_refinement>`
-
-Controls AMR.
-
-| Parameter | Default | Meaning |
-| --- | --- | --- |
-| `refinement` | `"none"` | `"none"`, `"static"`, or `"adaptive"` |
-| `num_levels` | 1 | Maximum AMR level (root level + `num_levels` - 1) |
-| `max_nmb_per_rank` | required for AMR | Upper bound on blocks per rank (avoids GPU OOM) |
-| `ncycle_check` | 1 | Cycles between refinement checks |
-| `refinement_interval` | 5 | Minimum cycles between successive refinements |
-| `prolong_primitives` | false | When true, prolong primitive variables instead of conserved |
-| `dens_max`, `ddens_max`, `dpres_max`, `dvel_max` | optional thresholds | Trigger flags for density/gradient-based refinement |
-
-Problem generators set `MeshRefinement::refine_flag` and `derefine_flag`
-directly—there is no Athena++-style `UserRefinementCondition`.
-
-## AMR Workflow
-
-1. **Flagging:** problem generators populate `pmr->refine_flag.h_view(m)` (1 =
-   refine, -1 = derefine). Convenience helpers such as
-   `MeshRefinement::CheckRefinementCondition` exist in individual generators.
-2. **Sync:** flags are mirrored to the device and evaluated every `ncycle_check`
-   cycles (respecting `refinement_interval`).
-3. **Tree Update:** `MeshRefinement::Apply` creates/destroys blocks, updates
-   `newly_created`, and repacks MeshBlockPack.
-4. **Load Balance:** `LoadBalance` adjusts the space-filling curve when the cost
-   distribution changes significantly.
-5. **Transfer Operators:** `prolongation.hpp` and `restriction.hpp` perform
-   conservative interpolation/averaging; AMR-aware constrained transport is handled
-   inside the MHD module.
-
-## Load Balancing
-
-`float *cost_eachmb` stores a user-adjustable cost for each block (default 1).  The
-`LoadBalance` helper computes a prefix sum along the space-filling curve and
-assigns contiguous segments to ranks, ensuring `max_nmb_per_rank` is respected.
-
-## Memory / Performance Notes
-
-- All field arrays live in Kokkos `View`s with layout `(nmb, nvar, nk, nj, ni)` so
-  the `i` index is fastest varying.
-- Pack size is determined automatically from the space-filling curve segment; GPU
-  performance is best with several blocks per pack (8–32 typical).
-- Ghost-zone exchange uses nonblocking MPI and overlaps with compute via the task
-  system.
-
-## Boundary Conditions
-
-`Mesh::GetBoundaryFlag()` recognizes: `periodic`, `outflow`, `reflecting`,
-`inflow`, `shear_periodic`, `vacuum`, and `user`. Custom boundary logic is
-implemented inside the physics modules or problem generators via the boundary
-value package in `src/bvals/`.
-
-## Practical Tips
-
-- Always specify `max_nmb_per_rank` when AMR is enabled—AthenaK enforces this at
-  runtime.
-- If you shrink `<meshblock>` sizes, ensure they still divide the global counts and
-  that each pack maintains enough work for the GPU.
-- Use the event log (`outputs/eventlog.cpp`) to monitor `nfofc` and other counters
-  that originate in the mesh/refinement layer.
-
-### Ghost Cells
-- Default is 2 ghost cells (`nghost=2`)
-- Higher-order methods may need 3-4 ghost cells
-- Set in input file, not hardcoded
-
-### MeshBlock Indexing
-- Indices are local to each MPI rank
-- Use global ID (`mb_gid`) for unique identification
-
-### AMR Notes
-- MeshBlockPacks rebuilt after refinement
-- Load balancing automatic after AMR
-- Refinement controlled via problem generators
-
-## Example Usage
-
-### Basic Mesh Setup
 ```ini
 <mesh>
 nx1 = 256
+nx2 = 1
+nx3 = 1
+nghost = 2
 x1min = -1.0
 x1max = 1.0
+x2min = -0.5
+x2max = 0.5
+x3min = -0.5
+x3max = 0.5
 ix1_bc = periodic
 ox1_bc = periodic
 
 <meshblock>
-nx1 = 64   # 256/64 = 4 MeshBlocks in x1
+nx1 = 64
 ```
 
-### AMR Configuration
+`<meshblock>/nx*` sets block cell dimensions; omitted values inherit the
+corresponding root values. Each block dimension must divide the global mesh
+dimension. Reducing block dimensions at fixed global resolution changes
+decomposition and ghost-zone overhead, not physical resolution.
+
+## Mesh Checks
+
+The constructor enforces these constraints:
+
+| Rule | Consequence |
+| --- | --- |
+| Each active direction has at least 4 cells | `nx1 >= 4`, plus `nx2`/`nx3 >= 4` when active |
+| An `x1-x3` two-dimensional mesh is unsupported | `nx2 = 1`, `nx3 > 1` is rejected |
+| `nghost >= 2` | Increase it for high-order reconstruction or FOFC |
+| SMR/AMR requires even `nghost` | Refined cases that need three ghost zones must use at least four |
+| Periodic boundaries are paired on a direction | Both faces must be periodic together |
+| `shear_periodic` is x1-only and paired | It also requires a `<shearing_box>` block and is incompatible with mesh refinement |
+
+For hydro and MHD reconstruction-specific ghost requirements, see
+[Configuration](../configuration.md).
+
+## Static And Adaptive Refinement
+
+`<mesh_refinement>/refinement` accepts `none`, `static`, or `adaptive`.
+
+| Parameter | Use |
+| --- | --- |
+| `num_levels` | Adaptive only; maximum adaptive refinement-level count, default `1` |
+| `max_nmb_per_rank` | Required for adaptive refinement; caps allocated MeshBlocks per rank |
+| `ncycle_check` | Adaptive checking cadence; default `1` |
+| `refinement_interval` | Minimum cycles between adaptive changes; default `5` |
+| `prolong_primitives` | Multilevel transfer option; use primitive rather than conserved variables in SMR or AMR prolongation when `true` |
+
+Static refinement regions are specified with `<refined_region*>` blocks; see a
+shipped example such as `inputs/grhydro/gr_fm_torus_smr.athinput`. Static
+refinement derives its constructed levels from those regions and does not
+require `num_levels` or `max_nmb_per_rank`.
+
+Adaptive refinement requires one or more `<amr_criterion*>` blocks. The
+initial tree may also contain `<refined_region*>` blocks before dynamic
+criterion checks begin. The current criteria parser accepts:
+
+| `method` | Additional fields |
+| --- | --- |
+| `min_max`, `slope`, `second_deriv` | `variable`; optional `value_min`, `value_max` |
+| `location` | Optional `location_x1`, `location_x2`, `location_x3`, `location_rad` |
+| `user` | Selected problem generator must enroll `user_ref_func` |
+
+For example, the public adaptive blast input uses:
+
 ```ini
 <mesh_refinement>
 refinement = adaptive
-num_levels = 3
-ncycle_check = 10
-refinement_interval = 5
+num_levels = 2
+refinement_interval = 3
+max_nmb_per_rank = 1024
+
+<amr_criterion0>
+method = slope
+variable = hydro_w_d
+value_max = 0.1
 ```
 
+The older threshold keys `dens_max`, `ddens_max`, `dpres_max`, and
+`dvel_max` are not the interface parsed by the public refinement criteria
+implementation.
+
+## Problem-Generator Hook
+
+Problem generators may enroll a custom adaptive criterion through
+`ProblemGenerator::user_ref_func`. Public source uses that hook in several
+relativity/problem-generator files. An `<amr_criterion*>` with
+`method = user` invokes that enrolled function; it is not an automatic
+replacement for supplying an implementation.
+
 ## See Also
-- [Coordinates Module](coordinates.md)
-- [Boundary Values Module](boundaries.md)
-- Source: `src/mesh/`
+
+- [Public Input Parameters](../reference/input_parameters.md)
+- [Boundaries](boundaries.md)
+- [Problem Generators](pgen.md)

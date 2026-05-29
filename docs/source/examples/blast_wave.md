@@ -1,72 +1,76 @@
 # Example: Blast Wave
 
-2D/3D blast wave problem demonstrating strong shocks, AMR capabilities, and both cylindrical and spherical explosions.
+The shipped blast inputs exercise the custom problem generator
+`src/pgen/blast.cpp` with hydro or MHD, with uniform-grid and adaptive-mesh
+variants.
 
-## Problem Generator
-**Source**: `src/pgen/blast.cpp`
+## Inputs
 
-## Available Input Files
-- **Hydro**: `inputs/hydro/blast_hydro.athinput`
-- **Hydro with AMR**: `inputs/hydro/blast_hydro_amr.athinput`
-- **MHD**: `inputs/mhd/blast_mhd.athinput`
-- **MHD with AMR**: `inputs/mhd/blast_mhd_amr.athinput`
+| Input deck | Physics | Mesh behavior | Output |
+| --- | --- | --- | --- |
+| `inputs/hydro/blast_hydro.athinput` | Hydro | Uniform two-dimensional grid | History and `hydro_w` VTK |
+| `inputs/hydro/blast_hydro_amr.athinput` | Hydro | Adaptive mesh using an `<amr_criterion0>` density-slope criterion | History and binary `hydro_w` |
+| `inputs/mhd/blast_mhd.athinput` | MHD | Uniform-grid magnetic blast | History and VTK |
+| `inputs/mhd/blast_mhd_amr.athinput` | MHD | Adaptive mesh magnetic blast | See the shipped deck |
 
-## Physics
+## Build And Run
 
-A high-pressure region in pressure equilibrium expands into a low-pressure ambient medium, creating:
-- Strong outward-propagating blast wave
-- Contact discontinuity
-- Optional: Magnetic field interaction (MHD)
-
-Initial setup:
-```
-r < r_inner: P = P_high, ρ = ρ_high
-r_inner < r < r_outer: smooth transition
-r > r_outer: P = P_low, ρ = ρ_low
-```
-
-## Running the Simulation
+`blast.cpp` is a build-selected custom generator; it is not in the default
+`pgen_name` dispatcher.
 
 ```bash
-# Configure & build once (blast is part of the built-in problem set)
-cmake -S . -B build
-cmake --build build -j $(sysctl -n hw.ncpu 2>/dev/null || nproc)
+cmake -S . -B build-blast -DPROBLEM=blast
+cmake --build build-blast
 
-# Run hydro blast
-./build/src/athena -i inputs/hydro/blast_hydro.athinput
+# Short public hydro validation run
+./build-blast/src/athena -i inputs/hydro/blast_hydro.athinput \
+  -d run-blast time/nlim=1
 ```
 
-## Input File with AMR
+This one-cycle command was validated against the public source tree and
+writes:
+
+```text
+run-blast/Blast.hydro.hst
+run-blast/vtk/Blast.hydro_w.00000.vtk
+run-blast/vtk/Blast.hydro_w.00001.vtk
+```
+
+For the complete supplied run, omit `time/nlim=1`. Switch to one of the MHD
+or AMR input decks without rebuilding; they use the same selected generator.
+
+## Verified Controls
+
+The generator reads required `<problem>/inner_radius`,
+`<problem>/outer_radius`, and `<problem>/prat`. It also accepts public optional
+controls including `pn_amb`, `dn_amb`, `pi_amb`, `di_amb`, `drat`, `b_amb`,
+and `coordinates`, as defined in `src/pgen/blast.cpp`.
+
+The uniform hydro input sets `nghost = 3` because it uses
+`reconstruct = ppm4`. The AMR hydro input instead uses `plm` and defines:
 
 ```ini
-# Blast with AMR
-<problem>
-inner_radius = 0.1     # Inner radius of blast
-outer_radius = 0.125   # Outer radius (transition)
-prat = 100.0          # Pressure ratio
-drat = 1.0            # Density ratio
-coordinates = cartesian
-
-# High pressure region
-pi_amb = 100.0        # Inner pressure
-di_amb = 1.0          # Inner density
-
-# Low pressure ambient
-pn_amb = 1.0          # Ambient pressure
-dn_amb = 1.0          # Ambient density
-
 <mesh_refinement>
 refinement = adaptive
-num_levels = 3
-dpres_max = 0.5       # Refine on pressure gradients
+num_levels = 2
+refinement_interval = 3
+max_nmb_per_rank = 1024
+
+<amr_criterion0>
+method = slope
+variable = hydro_w_d
+value_max = 0.1
 ```
 
-## Sedov-Taylor Comparison
+## Validation Use
 
-For a strong point explosion the solution follows the Sedov–Taylor similarity law. The theoretical shock position is
+These decks are appropriate for checking shock propagation, symmetry and AMR
+behavior. Quantitative Sedov-Taylor comparison requires defining the intended
+energy normalization and measuring the output; it is not asserted as an
+automatic result of the supplied run.
 
-```{math}
-r_\text{shock}(t) = \xi\left(\frac{E_0 t^2}{\rho_0}\right)^{1/5},
-```
+## See Also
 
-with $\xi \approx 1.15$ for $\gamma = 1.4$. Measure the shock radius from the simulation output and compare it against this expression to verify energy conservation.
+- [Configuration](../configuration.md)
+- [Problem Generators](../modules/pgen.md)
+- [Visualization Utilities](../tools/visualization.md)

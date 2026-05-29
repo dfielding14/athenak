@@ -1,183 +1,74 @@
 # Module: Diffusion
 
-## Overview
-The Diffusion module implements physical diffusion processes including viscosity, thermal conduction, and resistivity using explicit or implicit time integration schemes.
+The public diffusion implementation contributes explicit viscous,
+conductive, or resistive terms to Hydro/MHD updates. These helpers are
+constructed from parameters in the active `<hydro>` or `<mhd>` block; there
+is no separate public diffusion input block.
 
-## Source Location
-`src/diffusion/`
+## Implemented Paths
 
-## Key Components
+| Source | Activated by | Role |
+| --- | --- | --- |
+| `src/diffusion/viscosity.*` | `viscosity` in `<hydro>` or `<mhd>` | Isotropic kinematic shear viscosity |
+| `src/diffusion/conduction.*` | `conductivity` or `tdep_conductivity` in `<hydro>` or `<mhd>` | Heat flux and conductive timestep bound |
+| `src/diffusion/resistivity.*` | `ohmic_resistivity` in `<mhd>` | Ohmic electric field and resistive timestep bound |
+| `src/diffusion/current_density.hpp` | Resistive path | Current-density helpers |
 
-| File | Purpose | Key Functions |
-|------|---------|---------------|
-| `viscosity.hpp/cpp` | Kinematic/dynamic viscosity | Momentum diffusion |
-| `conduction.hpp/cpp` | Thermal conduction | Heat diffusion |
-| `resistivity.hpp/cpp` | Ohmic resistivity | Magnetic diffusion |
-| `current_density.hpp` | Current calculation | $\mathbf{J} = \nabla \times \mathbf{B}$ |
+## Inputs
 
-## Configuration Parameters
-
-### Viscosity
-```ini
-<mhd>  # or <hydro>
-viscosity = 0.01  # Kinematic viscosity coefficient
-```
-
-### Thermal Conduction
-```ini
-<mhd>  # or <hydro>
-conductivity = 0.1  # Thermal conductivity coefficient
-cond_ceiling = 1.0e10  # Optional ceiling value
-```
-
-### Resistivity
-```ini
-<mhd>
-ohmic_resistivity = 0.001   # Resistivity coefficient η
-```
-
-## Diffusion Equations
-
-### Viscosity (Navier-Stokes)
-
-The viscous force per unit mass (for constant kinematic viscosity $\nu$):
-
-$$\frac{\partial \mathbf{v}}{\partial t} = ... + \nu \nabla^2 \mathbf{v} + \frac{\nu}{3} \nabla(\nabla \cdot \mathbf{v})$$
-
-**Note on bulk viscosity**: AthenaK implements only shear (dynamic) viscosity with the standard assumption that bulk viscosity $\zeta = 0$. This is why the coefficient of the divergence term is $\frac{2\mu}{3}$ (or $\frac{2\nu}{3}$ in kinematic form) rather than $\zeta + \frac{2\mu}{3}$. This assumption is valid for monatomic gases and is commonly used in astrophysical simulations.
-
-### Thermal Conduction
-
-The energy equation with thermal conduction:
-
-$$\frac{\partial E}{\partial t} + \nabla \cdot \mathbf{F}_E = ... - \nabla \cdot \mathbf{q}$$
-
-where the heat flux is:
-
-$$\mathbf{q} = -\kappa \nabla T$$
-
-Note: In the code, $\kappa$ represents thermal **conductivity** (not diffusivity), with units of energy/(length·time·temperature).
-
-### Resistivity (Magnetic Diffusion)
-
-The induction equation with Ohmic resistivity:
-
-$$\frac{\partial \mathbf{B}}{\partial t} = \nabla \times (\mathbf{v} \times \mathbf{B}) - \nabla \times (\eta \mathbf{J})$$
-
-where the current density is:
-
-$$\mathbf{J} = \nabla \times \mathbf{B}$$
-
-For constant resistivity $\eta$, this simplifies to:
-
-$$\frac{\partial \mathbf{B}}{\partial t} = \nabla \times (\mathbf{v} \times \mathbf{B}) + \eta \nabla^2 \mathbf{B}$$
-
-## Numerical Implementation
-
-### Heat Flux Implementation
-
-At x1-faces, the code computes:
-
-$$q_{x,i+1/2} = -\kappa \frac{T_i - T_{i-1}}{\Delta x}$$
-
-where temperature is computed from:
-- **Ideal gas**: $T = (\gamma - 1) e / \rho$ where $e$ is internal energy per unit mass
-- **With ITM variable**: $T$ is stored directly
-
-The energy flux is then updated:
-
-$$F^E_{i+1/2} \mathrel{-}= q_{x,i+1/2}$$
-
-### Resistive Electric Field Implementation
-
-The code uses Ohm's law:
-
-$$\mathbf{E} = -\mathbf{v} \times \mathbf{B} + \eta \mathbf{J}$$
-
-where:
-- The inductive term $-\mathbf{v} \times \mathbf{B}$ is computed in the MHD Riemann solver
-- The resistive term $\eta \mathbf{J}$ is added separately
-
-The current density components at cell edges are computed using:
-
-$$J_x = \frac{\partial B_z}{\partial y} - \frac{\partial B_y}{\partial z}$$
-
-$$J_y = \frac{\partial B_x}{\partial z} - \frac{\partial B_z}{\partial x}$$
-
-$$J_z = \frac{\partial B_y}{\partial x} - \frac{\partial B_x}{\partial y}$$
-
-Note: The code omits the $1/\mu_0$ factor by using normalized units where $\mu_0 = 1$.
-
-### Stability Constraint
-Diffusive CFL condition:
-
-$$\Delta t < \frac{0.5 \Delta x^2}{D}$$
-
-Where $D = \max(\nu, \kappa, \eta)$
-
-## Viscous Stress Tensor
-
-### Definition
-The viscous stress tensor for a Newtonian fluid (with zero bulk viscosity):
-
-$$\tau_{ij} = \mu\left(\frac{\partial v_i}{\partial x_j} + \frac{\partial v_j}{\partial x_i} - \frac{2}{3}\delta_{ij} \nabla \cdot \mathbf{v}\right)$$
-
-where:
-- $\mu = \rho \nu$ is the dynamic (shear) viscosity
-- $\nu$ is the kinematic viscosity (input parameter `viscosity`)
-- The $-\frac{2}{3}\delta_{ij} \nabla \cdot \mathbf{v}$ term ensures the stress tensor is traceless (zero bulk viscosity)
-
-### Viscous Flux Implementation
-The code computes the viscous momentum flux directly. For example, at x1-faces:
-
-$$F^{visc}_{x,1} = -\tau_{11} = -\mu\left(\frac{4}{3}\frac{\partial v_x}{\partial x} - \frac{2}{3}\frac{\partial v_y}{\partial y} - \frac{2}{3}\frac{\partial v_z}{\partial z}\right)$$
-
-$$F^{visc}_{y,1} = -\tau_{12} = -\mu\left(\frac{\partial v_y}{\partial x} + \frac{\partial v_x}{\partial y}\right)$$
-
-$$F^{visc}_{z,1} = -\tau_{13} = -\mu\left(\frac{\partial v_z}{\partial x} + \frac{\partial v_x}{\partial z}\right)$$
-
-
-## Reynolds Numbers
-
-### Kinematic Reynolds
-
-$$\text{Re} = \frac{LV}{\nu}$$
-
-### Magnetic Reynolds
-
-$$\text{Rm} = \frac{LV}{\eta}$$
-
-### Prandtl Number
-
-$$\text{Pr} = \frac{\nu}{\kappa}$$
-
-## Common Applications
-
-### Viscous Shear Flow
 ```ini
 <hydro>
-viscosity = 0.1
-```
+eos = ideal
+rsolver = hlle
+viscosity = 1.0e-3
+conductivity = 1.0e-2
 
-### MHD Reconnection
-```ini
 <mhd>
-ohmic_resistivity = 0.001
+eos = ideal
+rsolver = hlle
+ohmic_resistivity = 1.0e-3
 ```
 
-### Thermal Diffusion
-```ini
-<hydro>
-conductivity = 0.01
-```
+| Parameter | Module(s) | Verified parser behavior |
+| --- | --- | --- |
+| `viscosity` | Hydro, MHD | Required value when viscosity helper is constructed |
+| `conductivity` | Hydro, MHD | Constant thermal conductivity; default `0.0` within constructed helper |
+| `tdep_conductivity` | Hydro, MHD | Boolean enabling temperature-dependent conductivity |
+| `cond_ceiling` | Hydro, MHD | Ceiling for temperature-dependent conductivity |
+| `sat_hflux` | Hydro, MHD | Boolean saturated-heat-flux option |
+| `ohmic_resistivity` | MHD only | Required Ohmic coefficient when resistivity helper is constructed |
 
-## Performance Considerations
+Thermal conduction currently requires an ideal-gas fluid; the constructor
+rejects conduction with an isothermal EOS.
 
-- Explicit diffusion limits timestep
-- Consider implicit methods for large diffusion
-- Diffusion terms add ~20% computational cost
+`sat_hflux` is meaningful only with `tdep_conductivity = true`. With constant
+conductivity, enabling it disables the usual conduction timestep bound without
+selecting the saturated-flux calculation path.
+
+DynGRMHD bypasses the standard viscosity and conduction flux-task paths.
+Resistivity has only partial routing through its corner electric-field
+calculation. Do not treat the standard diffusion settings on this page as
+supported DynGRMHD behavior.
+
+## Timestep Consequences
+
+Viscosity and resistivity compute explicit diffusion timestep limits using
+the smallest cell spacing and dimensional prefactors in their constructors.
+Conduction supplies its own timestep limit from the configured conductivity
+path. Large coefficients can therefore reduce the allowed simulation
+timestep substantially; the public module does not advertise an implicit
+diffusion alternative.
+
+## Shipped Evidence
+
+- `inputs/hydro/viscosity.athinput` supplies a Hydro viscosity example.
+- `inputs/mhd/resistivity.athinput` supplies an MHD Ohmic-resistivity example.
+
+Inspect those decks and run a short cycle-limited case before adapting a
+diffusion configuration to a new problem.
 
 ## See Also
-- [MHD Module](mhd.md)
-- [Hydro Module](hydro.md)
-- Source: `src/diffusion/`
+
+- [Hydrodynamics](hydro.md)
+- [Magnetohydrodynamics](mhd.md)
+- [Configuration](../configuration.md)

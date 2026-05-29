@@ -1,5 +1,11 @@
 # Face-Field Correction Implementation Checklist
 
+```{warning}
+Historical/development record only. Completed checkboxes below do not establish
+public support on the documented source baseline. Use
+[MHD](../modules/mhd.md) and [Mesh](../modules/mesh.md) for stable guidance.
+```
+
 ## Phase 1: Fix Foundation Issues
 
 ### [x] 1.1 Fix BuildLocationMaps() Method

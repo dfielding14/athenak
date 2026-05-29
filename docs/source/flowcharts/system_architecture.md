@@ -28,7 +28,7 @@ flowchart LR
     end
     class MAIN,PARAMS,MESH boot
 
-    subgraph PACKLAYER["MeshBlockPack::AddCoordinatesAndPhysics"]
+    subgraph PACKLAYER["Mesh::AddCoordinatesAndPhysics"]
         COORDS["Coordinates"]
         PACK["MeshBlockPack"]
     end
@@ -93,6 +93,7 @@ flowchart LR
     RAD --> TASKS
     TURB --> TASKS
     Z4C --> GRMHD
+    ADM --> GRMHD
 
     MESH --> PGEN
     PGEN --> HYDRO
@@ -134,7 +135,11 @@ flowchart LR
     click OUTPUTS "../modules/outputs.html" "Outputs manager"
 ```
 
-Ion-neutral MHD is instantiated only when both `<hydro>` and `<mhd>` blocks exist; otherwise the constructor aborts (`src/mesh/meshblock_pack.cpp:138`). Dynamical spacetime modules (`<z4c>` or `<adm>`) are mutually exclusive with Hydro but may pair with MHD (`src/mesh/meshblock_pack.cpp:156`).
+Ion-neutral MHD is instantiated only when `<ion-neutral>`, `<hydro>`, and
+`<mhd>` blocks all exist. Specifying both fluid blocks without
+`<ion-neutral>` also aborts. Dynamical spacetime inputs (`<z4c>` or `<adm>`)
+are rejected with Hydro and with ion-neutral coupling, while an MHD state
+routes through DynGRMHD.
 
 ## Task Contributors
 
@@ -153,7 +158,7 @@ flowchart LR
     RAD_TASKS["Radiation tasks"]:::phys
     NUMREL["Numerical relativity tasks"]:::phys
     PART["Particle tasks"]:::phys
-    TURB_TASKS["Turbulence driver tasks\n(EnsureBasisSize, AddForcing)"]:::phys
+    TURB_TASKS["Turbulence driver tasks\n(InitializeModes, AddForcing)"]:::phys
 
     BVAL_TASKS["Boundary exchange tasks"]:::support
     DIFF_TASKS["Diffusion / resistivity"]:::support
@@ -241,11 +246,11 @@ flowchart LR
     CT --> BCC
     BCC --> RECON
 
-    W0 --> PACKBUF
+    U0 --> PACKBUF
     BFACE --> PACKBUF
     PACKBUF --> EXCHANGE
     EXCHANGE --> UNPACK
-    UNPACK --> W0
+    UNPACK --> U0
     UNPACK --> BFACE
 
     click RECON "../modules/reconstruction.html"

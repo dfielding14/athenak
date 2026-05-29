@@ -1,5 +1,11 @@
 # Particle Merge Implementation Summary
 
+```{warning}
+Historical/development record only. The star/Boris capabilities described
+below are not public supported interfaces on the documented source baseline.
+Use [Particles](../modules/particles.md) for current behavior.
+```
+
 ## Completed (Weeks 1-4)
 
 ### 1. Unified Data Structures ✓

@@ -1,5 +1,11 @@
 # Face-Field Correction for AMR div(B) Implementation Plan
 
+```{warning}
+Historical/development design record only. It is not a public configuration or
+support claim. Use [MHD](../modules/mhd.md) and [Mesh](../modules/mesh.md)
+for current documented behavior.
+```
+
 ## Overview
 This plan implements face-field correction (FFC) to maintain div(B) = 0 across AMR refinement boundaries in AthenaK. The approach is based on the Athena++ PR #625 and adapted for AthenaK's Kokkos-based architecture.
 

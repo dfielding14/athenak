@@ -11,7 +11,9 @@ then move to the physics closest to your application.
 | [Driven Turbulence](turbulence.md) | Driven flows | [Source Terms](../modules/srcterms.md) |
 | [MRI Turbulence](mri_turbulence.md) | MHD instability | [MHD](../modules/mhd.md) |
 | [Binary Merger](binary_merger.md) | Relativistic application | [DynGRMHD](../modules/dyn_grmhd.md) |
-| [CGM Cooling Flow With Metals](../cgm_cooling_flow_metals.md) | Cooling-flow setup | [Configuration](../configuration.md) |
+
+Development records that are not runnable public examples are kept under
+[Developer Notes](../engineering/index.md), separately from this selection path.
 
 ```{toctree}
 :hidden:
@@ -22,5 +24,4 @@ blast_wave
 turbulence
 mri_turbulence
 binary_merger
-../cgm_cooling_flow_metals
 ```
