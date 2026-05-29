@@ -4,9 +4,12 @@
 
 Routine CPU testing covers a quantitative decay case, limiter occupancy with
 strict admissibility, explicit-versus-STS reference comparisons, and the live
-CGL FOFC regression. The broader scientific suite is a manual tier because it
-generates diagnostic CSV files and figures and is intended for interpretation,
-not just pass/fail gating.
+CGL FOFC regression. It also includes a strict two-dimensional AMR/restart
+interaction regression with modal turbulence driving enabled. Routine MPI
+coverage compares that driven AMR configuration at one and four ranks. The
+broader scientific suite is a manual tier because it generates diagnostic CSV
+files and figures and is intended for interpretation, not just pass/fail
+gating.
 
 The manual suite covers:
 
@@ -101,6 +104,13 @@ history provides normalized divB, invalid-state, and anisotropy measures,
 while MHD history provides total energy and LF counters. CGL LF rejects
 `mesh_refinement/prolong_primitives=true`; conserved prolongation is the
 supported AMR path.
+
+The driven AMR interaction deck,
+`inputs/tests/cgl_lf_turb_driving_amr.athinput`, uses fixed RMS acceleration
+so it is not an energy-conservation test. It verifies clean LF safety
+counters, controlled refinement, divergence control, the requested rendered
+forcing level, and restart restoration of the turbulence driver's modal
+state.
 
 ## Developer Maintenance
 

@@ -414,11 +414,19 @@ Complete list of all input parameters by block, extracted from source code.
 
 | Parameter | Type | Default | Source |
 |-----------|------|---------|--------|
+| `turb_flag` | int | 2 | turb_driver.cpp |
+| `tdriv_start` | Real | 0.0 | turb_driver.cpp |
+| `tdriv_duration` | Real | `tcorr` for `turb_flag=1` | turb_driver.cpp |
+| `tcorr` | Real | 0.0 | turb_driver.cpp |
+| `dt_update` | Real | 0.01 | turb_driver.cpp |
+| `normalization` | string | `edot` | turb_driver.cpp |
+| `dedt` | Real | required for `normalization=edot` | turb_driver.cpp |
+| `accel_rms` | Real | required for `normalization=accel_rms` | turb_driver.cpp |
 | `nlow` | int | 1 | turb_driver.cpp:L68 |
 | `nhigh` | int | 3 | turb_driver.cpp:L69 |
 | `npeak` | Real | — (optional) | turb_driver.cpp:L72 |
 | `kpeak` | Real | 4.0*M_PI | turb_driver.cpp:L78 |
-| `spect_form` | int | 1 | turb_driver.cpp:L81 |
+| `spectrum` | string | `parabolic` | turb_driver.cpp |
 | `driving_type` | int | 0 | turb_driver.cpp:L83 |
 | `min_kz` | int | 0 | turb_driver.cpp:L85 |
 | `max_kz` | int | nhigh | turb_driver.cpp:L86 |
@@ -429,26 +437,18 @@ Complete list of all input parameters by block, extracted from source code.
 | `expo` | Real | 5.0/3.0 | turb_driver.cpp:L92 |
 | `exp_prp` | Real | 5.0/3.0 | turb_driver.cpp:L93 |
 | `exp_prl` | Real | 0.0 | turb_driver.cpp:L94 |
-| `dedt` | Real | 0.0 | turb_driver.cpp:L96 |
-| `tcorr` | Real | 0.0 | turb_driver.cpp:L98 |
-| `dt_turb_update` | Real | 0.01 | turb_driver.cpp:L100 |
 | `sol_fraction` | Real | 1.0 | turb_driver.cpp:L102 |
 | `rseed` | int | -1 | turb_driver.cpp:L105 |
-| `constant_edot` | bool | true | turb_driver.cpp:L108 |
-| `x_turb_scale_height` | Real | -1.0 | turb_driver.cpp:L111 |
-| `y_turb_scale_height` | Real | -1.0 | turb_driver.cpp:L112 |
-| `z_turb_scale_height` | Real | -1.0 | turb_driver.cpp:L113 |
-| `x_turb_center` | Real | 0.0 | turb_driver.cpp:L114 |
-| `y_turb_center` | Real | 0.0 | turb_driver.cpp:L115 |
-| `z_turb_center` | Real | 0.0 | turb_driver.cpp:L116 |
-| `tile_driving` | bool | false | turb_driver.cpp:L119 |
-| `tile_factor` | int | 1 | turb_driver.cpp:L120 |
-| `tile_nx` | int | tile_factor | turb_driver.cpp:L121 |
-| `tile_ny` | int | tile_factor | turb_driver.cpp:L122 |
-| `tile_nz` | int | tile_factor | turb_driver.cpp:L123 |
-| `turb_flag` | int | 2 | turb_driver.cpp:L114 |
-| `tdriv_duration` | Real | tcorr (if `turb_flag = 1`) | turb_driver.cpp:L115 |
-| `tdriv_start` | Real | 0.0 | turb_driver.cpp:L121 |
+| `tile_nx` | int | 1 | turb_driver.cpp |
+| `tile_ny` | int | 1 | turb_driver.cpp |
+| `tile_nz` | int | 1 | turb_driver.cpp |
+| `localization` | string | `none` | turb_driver.cpp |
+| `sigma_x1` | Real | -1.0 | turb_driver.cpp |
+| `sigma_x2` | Real | -1.0 | turb_driver.cpp |
+| `sigma_x3` | Real | -1.0 | turb_driver.cpp |
+| `center_x1` | Real | 0.0 | turb_driver.cpp |
+| `center_x2` | Real | 0.0 | turb_driver.cpp |
+| `center_x3` | Real | 0.0 | turb_driver.cpp |
 
 ## Input Block: `<units>`
 **Used by**: units.cpp
