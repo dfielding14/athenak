@@ -86,8 +86,8 @@ _resolved_theme = _THEME_ALIASES.get(_theme_key, "press")
 if _resolved_theme == "sphinx_rtd_theme":
   html_theme = "sphinx_rtd_theme"
   html_theme_options: dict[str, object] = {
-      "collapse_navigation": False,
-      "navigation_depth": 3,
+      "collapse_navigation": True,
+      "navigation_depth": 2,
   }
 else:
   html_theme = "press"

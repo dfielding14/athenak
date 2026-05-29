@@ -115,3 +115,29 @@ All module parameters are documented in [Input Parameters Reference](../referenc
 - [Architecture Overview](../flowcharts/runtime.md)
 - [File Reference](../reference/file_reference.md)
 - [Migration Guide](../migration/index.md)
+
+```{toctree}
+:hidden:
+:maxdepth: 1
+
+mesh
+driver
+tasklist
+coordinates
+hydro
+mhd
+radiation
+z4c
+dyn_grmhd
+ion_neutral
+particles
+reconstruction
+riemann_solvers
+eos
+diffusion
+outputs
+boundaries
+srcterms
+shearing_box
+pgen
+```

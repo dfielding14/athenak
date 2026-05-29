@@ -1,5 +1,18 @@
 # AthenaK Documentation
 
+Welcome to the AthenaK knowledge base. Choose a path below, or explore the
+documentation by topic.
+
+## Find Your Path
+
+| Goal | Start here | Continue with |
+| --- | --- | --- |
+| Run AthenaK for the first time | [5-Minute Quickstart](quickstart.md) | [Running Simulations](running.md) |
+| Configure or adapt a simulation | [Worked Examples](examples/index.md) | [Configuration Guide](configuration.md) |
+| Understand or extend the code | [System Overview](overview.md) | [Modules](modules/index.md) and [Kokkos Guide](kokkos_guide.md) |
+| Port code from Athena++ | [Migration Guide](migration/index.md) | [Common Gotchas](migration/common_gotchas.md) |
+| Review ongoing implementation work | [Developer Notes](engineering/index.md) | Stable guidance in [Modules](modules/index.md) |
+
 <div style="width: 100%; max-width: 900px; margin: 1em auto; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
 <iframe src="_static/athenak_fluid_sim.html" style="width: 100%; aspect-ratio: 3/1; border: none;"></iframe>
 </div>
@@ -12,13 +25,6 @@ This is a real-time 2D incompressible Navier-Stokes simulation running in WebGL2
 </details>
 
 <div style="margin-top: 2em;"></div>
-
-Welcome to the AthenaK knowledge base. Use this hub to launch simulations quickly, explore the architecture, or deep-dive into physics modules and engineering notes.
-
-```{admonition} New to AthenaK?
-:class: tip
-Start with the **Getting Started** playbook below, then follow the quick links for your role (simulation author, performance tuner, or contributor).
-```
 
 ## Getting Started
 
@@ -60,40 +66,18 @@ flowcharts/runtime
 kokkos_guide
 ```
 
-## Module Reference
+## Modules
 
-Navigate the full stack of physics and infrastructure modules:
-
-- Core infrastructure: [Mesh](modules/mesh.md), [Driver](modules/driver.md), [Task Lists](modules/tasklist.md), [Coordinates](modules/coordinates.md)
-- Physics: [Hydro](modules/hydro.md), [MHD](modules/mhd.md), [Radiation](modules/radiation.md), [Z4c](modules/z4c.md), [Dyn GRMHD](modules/dyn_grmhd.md), [Ion-Neutral](modules/ion_neutral.md), [Particles](modules/particles.md)
-- Numerical methods: [Reconstruction](modules/reconstruction.md), [Riemann Solvers](modules/riemann_solvers.md), [EOS](modules/eos.md), [Diffusion](modules/diffusion.md), [Outputs](modules/outputs.md), [Boundaries](modules/boundaries.md), [Source Terms](modules/srcterms.md), [Shearing Box](modules/shearing_box.md), [Problem Generators](modules/pgen.md)
+Use the [Modules index](modules/index.md) to browse infrastructure, physics,
+numerical methods, and support systems without expanding the complete
+catalogue in the global navigation.
 
 ```{toctree}
 :hidden:
-:maxdepth: 2
+:maxdepth: 1
 :caption: Modules
 
 modules/index
-modules/mesh
-modules/driver
-modules/tasklist
-modules/coordinates
-modules/hydro
-modules/mhd
-modules/radiation
-modules/z4c
-modules/dyn_grmhd
-modules/ion_neutral
-modules/particles
-modules/reconstruction
-modules/riemann_solvers
-modules/eos
-modules/diffusion
-modules/outputs
-modules/boundaries
-modules/srcterms
-modules/shearing_box
-modules/pgen
 ```
 
 ## Reference Library
@@ -130,26 +114,15 @@ migration/common_gotchas
 
 ## Worked Examples
 
-Compare against shipped problem generators and diagnostics:
-
-- [Shock Tube](examples/shock_tube.md)
-- [Blast Wave](examples/blast_wave.md)
-- [Driven Turbulence](examples/turbulence.md)
-- [MRI Turbulence](examples/mri_turbulence.md)
-- [Binary Merger](examples/binary_merger.md)
-- [CGM Cooling Flow (Metals)](cgm_cooling_flow_metals.md)
+Start from the [Worked Examples index](examples/index.md) to find a test
+problem by physics goal and connect it to configuration and output guidance.
 
 ```{toctree}
 :hidden:
 :maxdepth: 1
 :caption: Examples
 
-examples/shock_tube
-examples/blast_wave
-examples/turbulence
-examples/mri_turbulence
-examples/binary_merger
-cgm_cooling_flow_metals
+examples/index
 ```
 
 ## Tools & Utilities
@@ -176,26 +149,17 @@ tools/visualization
 contributing_docs
 ```
 
-## Engineering Notes
+## Developer Notes
 
-Internal design dossiers and ongoing investigations live here:
-
-- AMR turbulence evolution, divergence control, particle merging, and more.
+Implementation records and ongoing investigations are collected separately
+from stable module and user guidance in [Developer Notes](engineering/index.md).
 
 ```{toctree}
 :hidden:
 :maxdepth: 1
-:caption: Engineering Notes
+:caption: Developer Notes
 
-engineering/amr_turbulence_implementation
-engineering/divb_amr_completion_plan
-engineering/divb_amr_final_status
-engineering/divb_amr_implementation_plan
-engineering/divb_amr_implementation_summary
-engineering/face_field_correction_implementation
-engineering/particle_merge_cr_pushers
-engineering/particle_merge_implementation
-engineering/particle_merge_unified_data
+engineering/index
 ```
 
 Need to fix something or found a discrepancy? Please log it in `documentation_audit_log.md` and submit a pull request!

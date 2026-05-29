@@ -23,21 +23,30 @@ Kokkos::deep_copy(host_view, device_view);
 Real value = host_view(0,IDN,0,0,0);
 ```
 
-### 3. Lambda Capture
-**Issue**: Capturing by reference in Kokkos kernels
+### 3. Lambda Capture and Device-Accessible State
+**Issue**: Capturing host-only state or host stack references in device kernels
+
+`KOKKOS_LAMBDA` captures ordinary local variables by value. Scalars used as
+read-only kernel parameters do not need to be declared `const`.
 ```cpp
-// WRONG
+// CORRECT - factor is copied into the kernel closure
 Real factor = 2.0;
 par_for(..., KOKKOS_LAMBDA(int i) {
-  data(i) *= factor;  // Undefined behavior
+  data(i) *= factor;
 });
 
-// CORRECT
-const Real factor = 2.0;  // Make const
+// WRONG for portable device execution - factor_ptr points to host stack storage
+Real *factor_ptr = &factor;
 par_for(..., KOKKOS_LAMBDA(int i) {
-  data(i) *= factor;  // OK
+  data(i) *= *factor_ptr;
 });
 ```
+
+For outer Kokkos kernels, use values captured by copy for scalar parameters and
+device-accessible Kokkos Views for array data; avoid reference capture such as
+`[&]`. Nested team/vector lambdas are a separate case: reference capture may be
+used only where permitted by Kokkos and where the computation is also correct
+under capture-by-copy semantics.
 
 ### 4. Boundary Conditions
 **Issue**: Ghost zones indexed differently
