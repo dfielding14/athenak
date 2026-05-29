@@ -114,9 +114,10 @@ void CGLLFFlux(const CGLLFFaceState &face, const Real gtpar_x, const Real gtpar_
 }
 
 KOKKOS_INLINE_FUNCTION
-bool OwnsHeatFluxWorkFace(const int m, const int direction, const int face_index,
-                          const int lower, const int upper, const bool multilevel,
-                          const int my_level, const DualArray2D<NeighborBlock> &nghbr) {
+bool OwnsHeatFluxDiagnosticFace(const int m, const int direction, const int face_index,
+                                const int lower, const int upper, const bool multilevel,
+                                const int my_level,
+                                const DualArray2D<NeighborBlock> &nghbr) {
   if (face_index > lower && face_index <= upper) {
     return true;
   }
@@ -296,13 +297,13 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
                             bx, by, bz, 0, lf_k, local, cpar0, eos, face)) {
       CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
                 eflux, muflux, qpar_flux, qperp_flux, qpar_ratio, qperp_ratio);
-      qstats.the_array[0] += 1.0;
-      if (qpar_ratio > 1.0) qstats.the_array[1] += 1.0;
-      if (qpar_ratio > 10.0) qstats.the_array[2] += 1.0;
-      if (qperp_ratio > 1.0) qstats.the_array[3] += 1.0;
-      if (qperp_ratio > 10.0) qstats.the_array[4] += 1.0;
-      if (OwnsHeatFluxWorkFace(m, 0, i, is, ie, multilevel, mblev.d_view(m),
-                               nghbr)) {
+      if (OwnsHeatFluxDiagnosticFace(m, 0, i, is, ie, multilevel,
+                                     mblev.d_view(m), nghbr)) {
+        qstats.the_array[0] += 1.0;
+        if (qpar_ratio > 1.0) qstats.the_array[1] += 1.0;
+        if (qpar_ratio > 10.0) qstats.the_array[2] += 1.0;
+        if (qperp_ratio > 1.0) qstats.the_array[3] += 1.0;
+        if (qperp_ratio > 10.0) qstats.the_array[4] += 1.0;
         const Real area = size.d_view(m).dx2*size.d_view(m).dx3;
         qstats.the_array[5] -= area*qpar_flux*(tpar(m,k,j,i) - tpar(m,k,j,i-1));
         qstats.the_array[6] -= area*qperp_flux*(tperp(m,k,j,i) - tperp(m,k,j,i-1));
@@ -361,13 +362,13 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
                             bx, by, bz, 1, lf_k, local, cpar0, eos, face)) {
       CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
                 eflux, muflux, qpar_flux, qperp_flux, qpar_ratio, qperp_ratio);
-      qstats.the_array[0] += 1.0;
-      if (qpar_ratio > 1.0) qstats.the_array[1] += 1.0;
-      if (qpar_ratio > 10.0) qstats.the_array[2] += 1.0;
-      if (qperp_ratio > 1.0) qstats.the_array[3] += 1.0;
-      if (qperp_ratio > 10.0) qstats.the_array[4] += 1.0;
-      if (OwnsHeatFluxWorkFace(m, 1, j, js, je, multilevel, mblev.d_view(m),
-                               nghbr)) {
+      if (OwnsHeatFluxDiagnosticFace(m, 1, j, js, je, multilevel,
+                                     mblev.d_view(m), nghbr)) {
+        qstats.the_array[0] += 1.0;
+        if (qpar_ratio > 1.0) qstats.the_array[1] += 1.0;
+        if (qpar_ratio > 10.0) qstats.the_array[2] += 1.0;
+        if (qperp_ratio > 1.0) qstats.the_array[3] += 1.0;
+        if (qperp_ratio > 10.0) qstats.the_array[4] += 1.0;
         const Real area = size.d_view(m).dx1*size.d_view(m).dx3;
         qstats.the_array[5] -= area*qpar_flux*(tpar(m,k,j,i) - tpar(m,k,j-1,i));
         qstats.the_array[6] -= area*qperp_flux*(tperp(m,k,j,i) - tperp(m,k,j-1,i));
@@ -423,13 +424,13 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
                             bx, by, bz, 2, lf_k, local, cpar0, eos, face)) {
       CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
                 eflux, muflux, qpar_flux, qperp_flux, qpar_ratio, qperp_ratio);
-      qstats.the_array[0] += 1.0;
-      if (qpar_ratio > 1.0) qstats.the_array[1] += 1.0;
-      if (qpar_ratio > 10.0) qstats.the_array[2] += 1.0;
-      if (qperp_ratio > 1.0) qstats.the_array[3] += 1.0;
-      if (qperp_ratio > 10.0) qstats.the_array[4] += 1.0;
-      if (OwnsHeatFluxWorkFace(m, 2, k, ks, ke, multilevel, mblev.d_view(m),
-                               nghbr)) {
+      if (OwnsHeatFluxDiagnosticFace(m, 2, k, ks, ke, multilevel,
+                                     mblev.d_view(m), nghbr)) {
+        qstats.the_array[0] += 1.0;
+        if (qpar_ratio > 1.0) qstats.the_array[1] += 1.0;
+        if (qpar_ratio > 10.0) qstats.the_array[2] += 1.0;
+        if (qperp_ratio > 1.0) qstats.the_array[3] += 1.0;
+        if (qperp_ratio > 10.0) qstats.the_array[4] += 1.0;
         const Real area = size.d_view(m).dx1*size.d_view(m).dx2;
         qstats.the_array[5] -= area*qpar_flux*(tpar(m,k,j,i) - tpar(m,k-1,j,i));
         qstats.the_array[6] -= area*qperp_flux*(tperp(m,k,j,i) - tperp(m,k-1,j,i));

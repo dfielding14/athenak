@@ -111,21 +111,22 @@ Normal `.mhd.hst` output appends cumulative columns when LF is active:
 `lf_hwproj`. When
 `cgl_lf_record_pressure_work = true`, it additionally appends `lf_cpwrk`
 and `lf_cawrk`. The
-face-count columns record evaluated LF faces and parallel/perpendicular
-unlimited heat-flux ratios exceeding `q_max` or `10*q_max`. Differences
-between successive rows give interval counts; normalize limiter counts by
-`lf_nstage` and heat-flux-cap counts by `lf_qface`. All cumulative LF
+face-count columns record owned LF faces and parallel/perpendicular unlimited
+heat-flux ratios exceeding `q_max` or `10*q_max`; a shared face is retained
+once, and a coarse/fine interface is owned by its fine-side closure faces.
+Differences between successive rows give interval counts; normalize limiter
+counts by `lf_nstage` and heat-flux-cap counts by `lf_qface`. All cumulative LF
 diagnostic columns are preserved through CGL-LF restart files so interval
 analysis remains continuous across segments. `lf_hwproj` counts applications
 of the algebraic hard-wall constraint during CGL primitive-refresh task
 ranges, including refreshed support/ghost states; it is not a normalized
 active-cell occupancy statistic. It is expected to be nonzero in
 limiter-active hard-wall production intervals and is not a safety violation.
-`lf_qprwrk` and `lf_qpewrk`
-are cumulative RKL2-applied
-owned-face contractions of the capped heat fluxes with their corresponding
-temperature jumps. On refined meshes, each coarse/fine interface is owned by
-the fine-side closure faces whose flux is restricted into the coarse update.
+`lf_qprwrk` and `lf_qpewrk` are cumulative RKL2-applied owned-face
+contractions of the capped heat fluxes with their corresponding temperature
+jumps. On refined meshes, each coarse/fine interface uses the same fine-side
+ownership convention as the face-count columns because those fluxes are
+restricted into the coarse update.
 These are signed operator contractions; they are not required to be positive,
 equal an offline snapshot proxy, or close a total energy budget. The existing
 `aam-D` history column remains the conserved anisotropy variable for

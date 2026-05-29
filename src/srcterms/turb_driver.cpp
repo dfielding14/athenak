@@ -1490,7 +1490,8 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
     mb_size.template sync<DevExeSpace>();
     Real total = 0.0;
     Kokkos::parallel_reduce(
-        "turb_injected_energy", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmb * nx3 * nx2 * nx1),
+        "turb_injected_energy",
+        Kokkos::RangePolicy<>(DevExeSpace(), 0, nmb * nx3 * nx2 * nx1),
         KOKKOS_LAMBDA(const int idx, Real& energy) {
           const int m = idx / (nx3 * nx2 * nx1);
           const int k = (idx - m * nx3 * nx2 * nx1) / (nx2 * nx1) + ks;

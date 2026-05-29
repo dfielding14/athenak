@@ -32,6 +32,14 @@ REFERENCE_CURVE_SCHEMA_VERSION = 1
 EDDY_ANGLE_DEGREES = 15.0
 
 
+def trapezoidal_integral(values: list[float], times: list[float]) -> float:
+    """Integrate with the available NumPy trapezoidal-rule entry point."""
+
+    if hasattr(np, "trapezoid"):
+        return float(np.trapezoid(values, times))
+    return float(np.trapz(values, times))
+
+
 def parse_history(path: Path) -> dict[str, np.ndarray]:
     """Read a history file into named one-dimensional arrays."""
 
@@ -1472,9 +1480,9 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
             "mks24_transfer_direct_real_space",
             "mks24_transfer_minus_anisotropic_stress_power",
         ):
-            pressure_integral[f"{name}_integral"] = float(np.trapz(
+            pressure_integral[f"{name}_integral"] = trapezoidal_integral(
                 [sample[name] for sample in pressure_work], times
-            ))
+            )
     pressure_work_ensemble["time_integral_estimate"] = pressure_integral
     heat_flux_ensemble: dict[str, object] = {
         "available": bool(heat_flux),
@@ -1529,9 +1537,9 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
                 "regularized_total_power",
                 "unlimited_total_power",
             ):
-                heat_flux_integral[f"{name}_integral"] = float(np.trapz(
+                heat_flux_integral[f"{name}_integral"] = trapezoidal_integral(
                     [sample[name] for sample in heat_flux], heat_flux_times
-                ))
+                )
         heat_flux_ensemble["time_integral_estimate"] = heat_flux_integral
     return {
         "snapshot_count": len(samples),

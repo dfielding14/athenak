@@ -154,7 +154,7 @@ def test_cgl_lf_heat_flux_cap_face_activity_is_reported():
         assert history["lf_qpe10"][-1] > 0.0
         result = subprocess.run(
             [
-                "python3",
+                sys.executable,
                 "../../../scripts/analyze_cgl_lf_paper.py",
                 "--lf-history",
                 "cgl_ci_flux_cap.mhd.hst",
@@ -181,6 +181,36 @@ def test_cgl_lf_heat_flux_cap_face_activity_is_reported():
         assert work["total"] > 0.0
     finally:
         shutil.rmtree("cgl_ci_flux_cap_analysis", ignore_errors=True)
+        _cleanup()
+
+
+def test_cgl_lf_heat_flux_cap_fractions_are_meshblock_layout_independent():
+    common_flags = (
+        "time/nlim=1",
+        "time/tlim=2.0e-5",
+        "mhd/lf_k_parallel=1.0e-8",
+        "output2/dt=1.0",
+        "output3/dt=1.0",
+    )
+    try:
+        _run_paper("cgl_ci_cap_single_block", *common_flags)
+        _run_paper("cgl_ci_cap_split_blocks", *common_flags, "meshblock/nx1=4")
+        single = testutils.athena_read.hst("cgl_ci_cap_single_block.mhd.hst")
+        split = testutils.athena_read.hst("cgl_ci_cap_split_blocks.mhd.hst")
+        for column in (
+            "lf_qface",
+            "lf_qprcap",
+            "lf_qpr10",
+            "lf_qpecap",
+            "lf_qpe10",
+        ):
+            assert single[column][-1] == split[column][-1]
+        for column in ("lf_qprwrk", "lf_qpewrk"):
+            assert np.isclose(
+                single[column][-1], split[column][-1], rtol=5.0e-12, atol=1.0e-20
+            )
+    finally:
+        shutil.rmtree("rst", ignore_errors=True)
         _cleanup()
 
 
@@ -872,7 +902,7 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
         output_dir = f"cgl_ci_denied_{workflow_name.replace('-', '_')}"
         denied = subprocess.run(
             [
-                "python3",
+                sys.executable,
                 str(PAPER_WORKFLOW_PATH),
                 workflow_name,
                 "--output-dir",
@@ -1269,7 +1299,7 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         assert snapshots
         result = subprocess.run(
             [
-                "python3",
+                sys.executable,
                 "../../../scripts/analyze_cgl_lf_paper.py",
                 str(snapshots[-1]),
                 "--history",
@@ -1550,7 +1580,7 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         second_manifest_path.write_text(json.dumps(second_manifest))
         result = subprocess.run(
             [
-                "python3",
+                sys.executable,
                 "../../../scripts/analyze_cgl_lf_paper.py",
                 str(snapshots[-1]),
                 "--history",
@@ -1605,7 +1635,7 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         assert surface_comparison["maximum_absolute_residual"] < 1.0e-14
         rendered = subprocess.run(
             [
-                "python3",
+                sys.executable,
                 "../../../scripts/plot_cgl_lf_paper.py",
                 "--diagnostics",
                 "cgl_ci_paper_reference_products/diagnostics.json",
@@ -1629,7 +1659,7 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         invalid_path.write_text(json.dumps(invalid_manifest))
         result = subprocess.run(
             [
-                "python3",
+                sys.executable,
                 "../../../scripts/analyze_cgl_lf_paper.py",
                 str(snapshots[-1]),
                 "--reference-curves",
@@ -1648,7 +1678,7 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         duplicate_path.write_text(json.dumps(duplicate_manifest))
         result = subprocess.run(
             [
-                "python3",
+                sys.executable,
                 "../../../scripts/analyze_cgl_lf_paper.py",
                 str(snapshots[-1]),
                 "--reference-curves",
@@ -1674,7 +1704,7 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         partial_path.write_text(json.dumps(partial_manifest))
         result = subprocess.run(
             [
-                "python3",
+                sys.executable,
                 "../../../scripts/analyze_cgl_lf_paper.py",
                 str(snapshots[-1]),
                 "--history",
@@ -1694,7 +1724,7 @@ def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
         assert "selects missing case case_not_in_bundle" in result.stderr
         result = subprocess.run(
             [
-                "python3",
+                sys.executable,
                 "../../../scripts/analyze_cgl_lf_paper.py",
                 str(snapshots[-1]),
                 "--history",

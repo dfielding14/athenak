@@ -41,7 +41,7 @@ jobs:
         run: |
           source /usr/share/Modules/init/bash
           module load gcc-toolset/10 anaconda3
-          python -m pip install --user flake8 numpy pytest testutils
+          python -m pip install --user flake8 matplotlib numpy pytest testutils
           cd ${{ github.workspace }}/tst
           echo "Running regression script on CPU..."
           python run_test_suite.py --cpu

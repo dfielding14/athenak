@@ -738,9 +738,11 @@ counter and is evaluated whether or not corrective `backup_limiters` are
 enabled. `lf_hwproj` is the cumulative number of primitive-refresh
 applications of `limiter_hardwall = true`, including refreshed support/ghost
 states; it records constraint activity rather than an admissibility failure
-and is not a normalized active-cell occupancy. The `lf_q*` columns record evaluated LF operator faces and
-parallel/perpendicular pre-cap flux ratios above `q_max` and `10*q_max`;
-their interval fractions use `lf_qface` as denominator. Restart files retain
+and is not a normalized active-cell occupancy. The `lf_q*` columns record
+owned LF operator faces and parallel/perpendicular pre-cap flux ratios above
+`q_max` and `10*q_max`; shared MeshBlock faces are counted once and
+coarse/fine interfaces use the fine-side closure faces. Their interval
+fractions use `lf_qface` as denominator. Restart files retain
 the baseline for every cumulative LF diagnostic column, including the face
 and cap counters, so segmented-run intervals can be analyzed continuously.
 `lf_qprwrk` and `lf_qpewrk` retain cumulative
