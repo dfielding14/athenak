@@ -19,7 +19,7 @@
 #include "file_sharding.hpp"
 #include "io_wrapper.hpp"
 
-#define NHISTORY_VARIABLES 12
+#define NHISTORY_VARIABLES 20
 #if NHISTORY_VARIABLES > NREDUCTION_VARIABLES
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif

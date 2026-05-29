@@ -18,6 +18,7 @@
 #include "parameter_input.hpp"
 #include "mesh.hpp"
 #include "coordinates/cell_locations.hpp"
+#include "refinement_criteria.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "z4c/z4c.hpp"
@@ -666,6 +667,11 @@ void Mesh::AddCoordinatesAndPhysics(ParameterInput *pinput) {
   if (ppart != nullptr) {
     // Determine total number of particles across all ranks
     CountParticles();
+  }
+
+  // Refinement criteria depend on physics modules constructed above.
+  if (adaptive) {
+    pmr->pmrc = new RefinementCriteria(this, pinput);
   }
 }
 
