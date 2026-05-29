@@ -1,6 +1,6 @@
 # MKS24 Reproduction-First CGL-LF Manuscript and Later Extension Plan
 
-Status: execution plan, revised 2026-05-26. The first paper-production
+Status: execution plan, revised 2026-05-29. The first paper-production
 segment, mapped case `R16/s00_t0_t2`, completed on Frontier as job `4674731`
 on 2026-05-25 and was recorded only as a clean partial diagnostic result
 (`t = 1.66204848945`, `1.253333` node-hours), not an accepted scientific
@@ -39,9 +39,16 @@ the accepted ranked prefix to `t = 6.5`. Continuation
 01:58:33 EDT, reached exactly `t = 7.5`, passed formal inspection with zero
 strict LF safety counters and complete terminal ranked products, and used
 `1.281944` node-hours. It extends the accepted ranked prefix to `t = 7.5`.
-Continuation `R16/s08_rankio_t7p5_t8p5` was submitted as job `4686032`
-from the accepted `s07` terminal restart set toward the first prefix
-containing samples in the `t = 8`--`10` analysis window.
+Continuation `R16/s08_rankio_t7p5_t8p5` (job `4686032`) completed on
+2026-05-27 at exact `t = 8.5`, passed formal inspection with zero strict LF
+safety counters and complete terminal ranked products, and used `1.282778`
+node-hours. On 2026-05-29 it was recorded `rejected` for current reproduction
+admission because the merged turbulent-driver replacement changes forcing
+evolution and restart state/layout. The pre-replacement restart lineage
+cannot continue under the replacement executable. Stage I actual use is now
+`9.962778` node-hours with no active reservation; further production requires
+replacement-driver qualification, an immutable production build, and a fresh
+lineage from `t = 0`.
 Utility commits `476f9dbd`, `9c5c1b40`, and `bad8ba05` select only the
 explicit accepted restart lineage during bundling and admit normal
 sampled-history separation across authenticated restart boundaries while
@@ -493,7 +500,7 @@ are execution provenance, not accepted reproduction evidence:
 | `R16/s05_rankio_t5_t6p5` | `4681476`, `COMPLETED`, `0:0` | `1` node, `01:45:12` charged elapsed; `1.753333` actual node-hours | Continued from the inspected accepted terminal eight-rank `.00005.rst` set of `s04` using unchanged input/executable digests. Terminal outputs contain six complete eight-rank snapshot groups at the `t = 5.25`, `5.5`, `5.75`, `6.0`, `6.25`, and terminal `6.43828031751` states, plus complete scheduled `t = 6.0` and terminal restart groups. | `clean_partial`: clean application-walltime termination at `t = 6.43828031751 < 6.5`; formal inspection records zero strict LF safety counters and complete terminal ranked products, allowing same-digest continuation only. |
 | `R16/s06_rankio_t6p438280_t6p5` | `4683291`, `COMPLETED`, `0:0` | `1` node, `00:04:50` charged elapsed; `0.080556` actual node-hours | Continued from the inspected clean-partial terminal eight-rank `.00007.rst` set of `s05` using unchanged input/executable digests and a `time/tlim=6.5` override; terminal outputs include complete eight-rank snapshot and restart groups at `t = 6.5`. | `accepted`: reached `t = 6.5`, formal inspection records zero strict LF safety counters and complete terminal rank-local products; promotes the accepted ranked prefix through the clean-partial parent. |
 | `R16/s07_rankio_t6p5_t7p5` | `4683918`, `COMPLETED`, `0:0` | `1` node, `01:16:55` charged elapsed; `1.281944` actual node-hours | Continued from the inspected accepted terminal eight-rank `.00008.rst` set of `s06` using unchanged input/executable digests and a `time/tlim=7.5` override; terminal outputs contain three complete eight-rank snapshot groups at `t = 7.00026203265`, `7.25019568336`, and `7.5`, plus the terminal eight-rank restart group. | `accepted`: reached `t = 7.5`, formal inspection records zero strict LF safety counters and complete terminal rank-local products; extends the accepted ranked prefix but remains before the analysis window. |
-| `R16/s08_rankio_t7p5_t8p5` | `4686032`, `PENDING` at submission check on `2026-05-26` | `1` node, `02:00:00`, `batch` / default `normal` QOS; `2.000000` reserved node-hours | Submitted from the inspected accepted terminal eight-rank `.00009.rst` set of `s07` using unchanged input/executable digests and a `time/tlim=8.5` override. | Require exact target completion, formal inspection, zero strict LF safety counters, and complete terminal rank-local products before admitting the first production-window prefix evidence. |
+| `R16/s08_rankio_t7p5_t8p5` | `4686032`, `COMPLETED`, `0:0` | `1` node, `01:16:58` charged elapsed; `1.282778` actual node-hours | Ran from the inspected accepted terminal eight-rank `.00009.rst` set of `s07` under pre-replacement executable revision `e129a7ff8be60eb177c8268da0a73e7700d8b543` and SHA-256 `de99066f3546976093f6ff656660952032e30f31c939736c0212629cfb015157`; terminal products reached exact `t = 8.5`. | `rejected`: formal inspection records zero strict LF safety counters and complete terminal ranked products, but the merged turbulent-driver replacement changes forcing/restart state, so this old-executable continuation is archival evidence only. |
 
 The ranked `t = 0`--`2` prefix was assembled as the diagnostic bundle
 `runs/bundles/diagnostic-prefixes/R16_rankio_t2_prefix_20260525` after the
@@ -561,10 +568,12 @@ comparison evidence.
 
 Job `4683918` is inspected and recorded as an accepted continuation through
 `t = 7.5` after the clean partial `4681476` at `t = 6.43828031751` and
-accepted terminal-gate segment `4683291`; job `4686032` is submitted toward
-the `t = 8.5` acceptance gate and the first production-window prefix.
-Do not describe `R16` as a completed accepted case until ranked-output
-segments satisfy the stated gates through the required final time.
+accepted terminal-gate segment `4683291`. Job `4686032` reached `t = 8.5`
+and passed inspection, but was recorded `rejected` after the replacement
+turbulent driver changed its forcing/restart-state contract. Do not continue
+the old restart lineage or describe `R16` as a completed accepted case;
+replacement-driver production must begin from `t = 0` after qualification
+and immutable-build archival.
 
 ### 8.2 Why Stage II is not currently reserved in full
 
@@ -767,7 +776,7 @@ Stage I is inserted ahead of it. After Stage I:
 
 ## 12. Immediate Handoff
 
-As of 2026-05-26:
+As of 2026-05-29:
 
 1. The repository contains the TeX validation note, the writing style guide,
    a detailed MKS24 implementation/evidence plan, substantial MKS24 analysis
@@ -794,19 +803,22 @@ As of 2026-05-26:
    comparison window. Continuation `R16/s07_rankio_t6p5_t7p5` reached
    exact `t = 7.5`, was recorded `accepted`, and used `1.281944`
    node-hours; its generic prefix analysis still selects zero samples in the
-   `t = 8`--`10` window. Continuation `R16/s08_rankio_t7p5_t8p5` is
-   submitted as job `4686032` toward the first production-window prefix.
+   `t = 8`--`10` window. Continuation `R16/s08_rankio_t7p5_t8p5` reached
+   exact `t = 8.5` as job `4686032`, passed formal clean inspection, and
+   used `1.282778` node-hours, but is recorded `rejected` for current
+   reproduction admission because the replacement turbulent driver changes
+   forcing/restart state.
    No complete `t = 10` `R16` run bundle or reproduced panel exists yet.
 3. It does **not** contain completed paper-scale MKS24 production
    simulations, completed quantitative comparisons for the full figure
    program, resolved dimensional reference mappings for all panels,
    independent reproduction of the Figure 10 hybrid-kinetic comparator, or a
    completed paper manuscript.
-4. The next task is not to launch the weak-guide extension. It is to monitor,
-   inspect and account `R16/s08_rankio_t7p5_t8p5` after job `4686032`
-   completes, continue only inspected Stage I segments sequentially to their
-   required durations, assemble accepted per-case analysis bundles, and then
-   complete the panel/status and manuscript program.
+4. The next task is not to launch the weak-guide extension or continue old
+   restarts. It is to qualify the replacement turbulent driver, archive a new
+   immutable production build, and start a fresh sequential Stage I lineage
+   from `t = 0`; only accepted replacement-driver bundles can support new
+   comparison claims.
 
 ## 13. Reproducibility Record
 

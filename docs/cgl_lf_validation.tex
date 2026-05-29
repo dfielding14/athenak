@@ -11,7 +11,7 @@
 \title{Toward an Independent AthenaK Reproduction of CGL--Landau-Fluid
 Self-Organization in High-\(\beta\) Turbulence}
 \author{}
-\date{May 25, 2026}
+\date{May 29, 2026}
 
 \begin{document}
 \maketitle
@@ -30,7 +30,9 @@ limiter scattering, and scale separation.  Several dimensionless published
 products admit checksum-qualified digitized comparisons, whereas absolute
 spectral ordinates remain blocked pending a documented transform or original
 numeric data; the hybrid-kinetic comparison is outside a direct CGL--LF
-recalculation.  The production campaign has commenced, but no
+recalculation.  A pre-replacement production lineage has been exercised only
+as archival pipeline evidence; the merged turbulent-driver replacement
+changes its forcing/restart-state contract.  No current-implementation
 standard-duration comparison is claimed in this version of the manuscript.
 \end{abstract}
 
@@ -297,10 +299,15 @@ extends the accepted prefix through \(t=6.5\).  Continuation
 \(1.281944\) node-hours, reached \(t=7.5\), and passed formal inspection
 with zero strict LF safety counters and complete terminal rank-local
 products.  It extends the accepted prefix through \(t=7.5\).  Continuation
-\texttt{R16/s08\_rankio\_t7p5\_t8p5}, job \texttt{4686032}, has been
-submitted toward the first prefix containing production-window samples.  The
-legacy partial is not continued across the
-changed input digest.  The bundle assembler follows only the explicit
+\texttt{R16/s08\_rankio\_t7p5\_t8p5}, job \texttt{4686032}, completed at
+exact \(t=8.5\) in \(1.282778\) node-hours and passed formal inspection with
+zero strict LF safety counters and complete terminal rank-local products.  It
+was recorded as rejected for current reproduction admission because the
+merged turbulent-driver replacement changes forcing evolution and restart
+state/layout.  Stage I has consumed \(9.962778\) node-hours with no active
+reservation; a replacement-driver production lineage must start at \(t=0\)
+after qualification and immutable-build archival.  The bundle assembler
+follows only the explicit
 inspected restart lineage and bounds a sampled-history boundary gap using
 the retained history cadence and boundary timesteps, rather than mixing in
 the abandoned shared-output branch.  Applied to the ranked \(t=0\)-to-\(2\)
@@ -610,8 +617,9 @@ is accepted through its \(t=7.5\) prefix.  Its first continuation beyond
 \(t=5.0\) is retained as a clean partial through \(t=6.43828031751\), and
 its inspected short terminal-gate completion establishes the accepted
 \(t=6.5\) prefix.  The accepted continuation to \(t=7.5\) remains outside
-the comparison window, and a submitted continuation toward \(t=8.5\) is on
-the path to the required \(t=10\) final time.  Its
+the comparison window.  A pre-replacement continuation reached \(t=8.5\)
+cleanly but is rejected for current reproduction admission after the
+turbulent-driver forcing/restart-state contract changed.  Its
 transient-prefix bundle has verified the
 rank-local assembly and diagnostic path, but the production comparison window
 is \(8\leq t\leq10\).  Quantitative MKS24
@@ -708,8 +716,10 @@ diagnostics, source-mapped MKS24 case definitions, and a checksum- and
 allocation-recorded Frontier production protocol.  The production protocol
 began with the required low-resolution scale-separation case; its first
 shared-I/O segment is a clean partial diagnostic record, and its ranked-output
-replacement has passed the inspected \(t=7.5\) prefix gate and is continuing
-toward \(t=10\).  No completed case is yet counted as an accepted comparison
+replacement passed the inspected \(t=7.5\) prefix gate.  Its clean
+\(t=8.5\) continuation is retained only as pre-replacement archival evidence
+after the turbulent-driver contract changed.  No completed case is yet
+counted as an accepted comparison
 result.  Thus the present manuscript establishes the method, target contract,
 and acceptance procedure, but does not yet claim reproduction of the MKS24
 turbulent conclusions.
@@ -755,10 +765,12 @@ The imported method figures come from a passing local \texttt{full} workflow
 bundle.  The reduced nonlinear figures come from a passing
 \texttt{paper-convergence} bundle reanalyzed with the current plotting code.
 Warning-strict Sphinx documentation and this \LaTeX{} build are checked when
-the report is updated.  The ranked-output low-resolution case has passed its
-inspected \(t=7.5\) prefix gate after a clean partial at
+the report is updated.  The ranked-output low-resolution case passed its
+pre-replacement inspected \(t=7.5\) prefix gate after a clean partial at
 \(t=6.43828031751<6.5\) and its formally accepted terminal-gate
-continuation; the next segment toward \(t=8.5\) has been submitted.
+continuation.  Its subsequent \(t=8.5\) segment completed cleanly but is
+rejected for current reproduction admission because the replacement driver
+changes forcing/restart state; a fresh qualified lineage is required.
 Nevertheless,
 production/statistical and paper-reference comparison gates remain open until
 accepted \(t\geq10\) output bundles are analyzed.

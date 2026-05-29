@@ -219,14 +219,20 @@ python3 scripts/frontier/cgl_lf_stage_i.py bundle-case \
   --output-dir <accepted-bundle-path>
 ```
 
-The production campaign has begun with Figure 11 low-resolution case `R16`
-(`paper_scale_separation_active_alfvenic_beta10_nperp96`). The rank-local
-restart lineage is formally accepted through `t = 7.5` after inspection of
-jobs `4675322`, `4676557`, `4676696`, `4679803`, `4681476`, `4683291`, and
-`4683918`; the legacy shared-I/O startup segment is retained as diagnostic
-evidence only. Through job `4683918`, Stage I accounts for `8.680000`
-node-hours. Continuation job `4686032` has been submitted from the accepted
-`t = 7.5` terminal restart toward `t = 8.5`.
+The initial production campaign exercised Figure 11 low-resolution case
+`R16` (`paper_scale_separation_active_alfvenic_beta10_nperp96`) with the
+pre-replacement turbulent driver. Its rank-local restart lineage was formally
+accepted through `t = 7.5` after inspection of jobs `4675322`, `4676557`,
+`4676696`, `4679803`, `4681476`, `4683291`, and `4683918`; the legacy
+shared-I/O startup segment is retained as diagnostic evidence only. Job
+`4686032` then completed cleanly through exact `t = 8.5` and passed formal
+inspection, but is recorded as `rejected` for current reproduction admission:
+the replacement turbulent driver now stores modal forcing restart state and
+metadata rather than the old retained forcing representation. The old
+restart lineage cannot be continued under the replacement executable. Stage I
+has consumed `9.962778` node-hours with no active reservation; new production
+requires qualification of the replacement driver and a fresh lineage from
+`t = 0`.
 
 The accepted prefix bundle
 `runs/bundles/diagnostic-prefixes/R16_rankio_t7p5_prefix_cadence_20260526`
