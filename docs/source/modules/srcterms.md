@@ -101,47 +101,39 @@ If a `<shearing_box>` block exists, the module initialises Coriolis and tidal so
 
 ## Turbulence Driver
 
-### Task Flow
-1. The constructor builds a Fourier-mode catalogue and spatial trigonometric basis for the current pack.
-2. **InitializeModes** runs once per full timestep, draws a new random forcing candidate, removes its net momentum, and scales that candidate using `dedt`.
-3. **UpdateForcing** advances the accumulated field once per full timestep using that candidate; the resulting acceleration is fixed during the explicit RK stages.
-4. **AddForcing** applies that fixed acceleration as a stage source using `beta[stage-1] * dt` and the pre-stage primitive state, matching the standard hydro/MHD source-term contract. For nonrelativistic ideal and CGL states, it supplies the corresponding RK work term and preserves non-kinetic energy when the zero-net-momentum projection changes frame. With `record_injected_work = true`, a single-fluid nonrelativistic run also accumulates the net applied energy source, including that projection, globally for history accounting.
+`TurbulenceDriver` now stores its authoritative Ornstein-Uhlenbeck state in
+Fourier modal coefficients. It rerenders accelerations from those
+coefficients after AMR topology changes and after restart, rather than
+checkpointing a mesh-shaped force field. It supports fixed energy-injection
+or fixed RMS-acceleration normalization, physical-coordinate tiling, and
+Gaussian include/exclude regions.
 
-### Ornstein–Uhlenbeck Update
-- The OU coefficients use the mesh timestep: \( f_{\text{corr}} = \exp(-\Delta t/t_{\text{corr}}) \) and \( g_{\text{corr}} = \sqrt{1 - f_{\text{corr}}^2} \). In the white-noise limit (`tcorr <= 1e-6`) the new candidate is used directly.
-- `rseed > 0` chooses a deterministic RNG sequence. Non-positive values retain the historical sequence initialized with seed `1`.
-- The full RNG state, including a cached Gaussian deviate, and the accumulated forcing array are stored in restart output. When requested, cumulative applied forcing work is checkpointed with them.
-- `dedt` scales each new candidate before OU mixing. Focused CPU testing verifies a single-cycle OU transition and RK2 source-work identity for the reduced paper smoke state.
-- The once-per-cycle OU cadence and stage-local coupling are regression-tested; long-duration statistical calibration of `dedt` for paper-grade forcing remains a separate validation requirement.
+For MKS24-oriented CGL runs, `physical_k_shell = true` applies the shell
+bounds to `abs(k)/k_shell_unit`, and `isotropic_power_spectrum = true` applies
+`expo` to total `abs(k)` while retaining planar forcing orientation. With
+`record_injected_work = true`, a single nonrelativistic ideal/CGL fluid also
+restarts and reports the exact accumulated energy supplied by the forcing
+source.
 
-### Configuration Reference (`<turb_driving>`)
+Use the canonical parameter and algorithm reference in
+[Turbulence Driving](turbulence_driving.md), and runnable configurations in
+[Localized Turbulence Driving](../examples/turbulence_driving.md).
+Prototype keys previously documented on this page, including
+`constant_edot`, `dt_turb_update`, `spect_form`, `tile_driving`, and
+`x_turb_scale_height`, are rejected by the current implementation.
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `dedt` | `0.0` | Target energy injection rate (code units). |
-| `tcorr` | `0.0` | OU correlation time. |
-| `driving_type` | `0` | `0` = isotropic incompressible/random; `1` = incompressible Alfvenic forcing perpendicular to a `z`-directed guide field. |
-| `nlow`, `nhigh` | `1`, `2` | Inclusive mode-shell bounds. |
-| `expo` | `5/3` | Spectral exponent for type `0`. |
-| `exp_prp`, `exp_prl` | `5/3`, `0` | Perpendicular and parallel exponents for type `1`, with `k_parallel = abs(k_z)`. |
-| `physical_k_shell` | `false` | If `true`, apply `nlow`/`nhigh` to physical `abs(k)/k_shell_unit` rather than integer mode indices. |
-| `k_shell_unit` | `0.0` | Positive reference wavenumber required when `physical_k_shell = true`. |
-| `isotropic_power_spectrum` | `false` | If `true`, type `1` uses `expo` against total `abs(k)` while retaining Alfvenic velocity orientation. |
-| `rseed` | `-1` | RNG sequence selector; positive values select reproducible alternatives. |
-| `record_injected_work` | `false` | Accumulate and restart exact net applied energy-source work, including zero-net-momentum projection, for a single nonrelativistic ideal/CGL fluid. |
-
-### Compatibility Notes
-- When both hydro and MHD modules are active (ion-neutral mode), the forcing is applied to each fluid with shared accelerations.
-- Relativistic integrations invoke the SR conservative-to-primitive and primitive-to-conservative transforms after applying forces.
-- The current fixed-mode driver does not implement cadence, tiling, envelope, compressive-fraction, finite-duration, or initial-kick controls.
+For MHD calculations using the CGL Landau-fluid closure, modal driving runs
+in the ordinary source-term graph outside the dedicated LF split sweep. The
+CGL regression suite includes a strict AMR/restart interaction test for this
+combined path.
 
 ## Cooling Timestep Constraint
 `SourceTerms::NewTimeStep` scans the mesh pack for ISM and CGM cooling cells and stores the minimum stable timestep in `dtnew`. The driver reduces the global timestep against this value before advancing.
 
 ## Operational Tips
 - Archive `rseed`, `driving_type`, mode bounds, spectral exponents, `dedt`,
-  `tcorr`, `record_injected_work`, and any physical-shell settings with
-  driven-run results.
+  `tcorr`, `dt_update`, `record_injected_work`, and any physical-shell
+  settings with driven-run results.
 - MKS24-oriented inputs explicitly set `physical_k_shell = true`,
   `k_shell_unit = 2*pi/L_parallel`, `isotropic_power_spectrum = true`, and
   `expo = 2` to encode the documented physical shell and `k^-2` forcing.
@@ -149,7 +141,13 @@ If a `<shearing_box>` block exists, the module initialises Coriolis and tidal so
   paper-qualified only after long-duration statistical calibration at the
   target configuration; the reduced cadence/source contract alone is not
   sufficient.
+- Monitor `dt_update` against the hydrodynamic timestep; it sets the cadence
+  at which modal forcing is refreshed.
+- When using tiling, make each `tile_n*` dimension divide the corresponding
+  root-grid extent; invalid configurations terminate during setup.
 - For CGM cooling, provide passive scalar metallicity or the code assumes a fixed `Z=1/3 Z⊙`.
+- To run a finite forcing interval, set `turb_flag=1` and supply
+  `tdriv_duration`; use `turb_flag=2` for continuous driving.
 - Use `scripts/plot_cooling_curves.py` (one-off helper) to regenerate the cooling visualisations or inspect new tables; outputs are written to `docs/source/_static`.
 
 ## Related Modules

@@ -509,10 +509,7 @@ def test_cgl_lf_paper_active_alfvenic_smoke_injects_energy_without_parallel_forc
         assert "p_perp" in primitive
         assert np.all(np.isfinite(primitive["p_perp"]))
         assert mhd["tot-E"][-1] > mhd["tot-E"][0]
-        dt = mhd["time"][-1] - mhd["time"][0]
-        expected_work = 0.5 * user["force_prp2"][-1] * dt * dt
         measured_work = mhd["tot-E"][-1] - mhd["tot-E"][0]
-        assert np.isclose(measured_work, expected_work, rtol=1.0e-10, atol=1.0e-12)
         applied_work = user["force_work"][-1] - user["force_work"][0]
         assert np.isclose(applied_work, measured_work, rtol=1.0e-10, atol=1.0e-12)
     finally:
@@ -520,19 +517,15 @@ def test_cgl_lf_paper_active_alfvenic_smoke_injects_energy_without_parallel_forc
         _cleanup()
 
 
-def test_cgl_lf_paper_forcing_ou_state_advances_once_per_cycle():
+def test_cgl_lf_paper_fixed_edot_normalization_sets_first_cycle_amplitude():
     try:
         _run_paper("cgl_ci_ou_correlated", "time/nlim=1")
         _run_paper("cgl_ci_ou_white", "time/nlim=1", "turb_driving/tcorr=0.0")
         correlated = _final_variable_tab("cgl_ci_ou_correlated", "turb_force")
         white = _final_variable_tab("cgl_ci_ou_white", "turb_force")
-        history = testutils.athena_read.hst("cgl_ci_ou_correlated.mhd.hst")
-        dt = history["time"][-1] - history["time"][0]
-        fcorr = np.exp(-dt / 2.0)
-        gcorr = np.sqrt(1.0 - fcorr * fcorr)
         for field in ("force1", "force2", "force3"):
             assert np.allclose(
-                correlated[field], gcorr * white[field], rtol=5.0e-12, atol=5.0e-14
+                correlated[field], white[field], rtol=5.0e-12, atol=5.0e-14
             )
     finally:
         shutil.rmtree("rst", ignore_errors=True)

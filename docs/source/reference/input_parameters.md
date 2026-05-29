@@ -416,19 +416,45 @@ Complete list of all input parameters by block, extracted from source code.
 
 | Parameter | Type | Default | Source |
 |-----------|------|---------|--------|
+| `turb_flag` | int | 2 | turb_driver.cpp |
+| `tdriv_start` | Real | 0.0 | turb_driver.cpp |
+| `tdriv_duration` | Real | `tcorr` for `turb_flag=1` | turb_driver.cpp |
+| `tcorr` | Real | 0.0 | turb_driver.cpp |
+| `dt_update` | Real | 0.01 | turb_driver.cpp |
+| `normalization` | string | `edot` | turb_driver.cpp |
+| `dedt` | Real | required for `normalization=edot` | turb_driver.cpp |
+| `accel_rms` | Real | required for `normalization=accel_rms` | turb_driver.cpp |
 | `nlow` | int | 1 | turb_driver.cpp:L68 |
-| `nhigh` | int | 2 | turb_driver.cpp |
-| `driving_type` | int | 0 (`0` isotropic, `1` Alfvenic perpendicular to `z`) | turb_driver.cpp |
-| `expo` | Real | 5.0/3.0 | turb_driver.cpp |
-| `exp_prp` | Real | 5.0/3.0 | turb_driver.cpp |
-| `exp_prl` | Real | 0.0 | turb_driver.cpp |
+| `nhigh` | int | 3 | turb_driver.cpp:L69 |
+| `npeak` | Real | — (optional) | turb_driver.cpp:L72 |
+| `kpeak` | Real | 4.0*M_PI | turb_driver.cpp:L78 |
+| `spectrum` | string | `parabolic` | turb_driver.cpp |
+| `driving_type` | int | 0 (`0` three-dimensional, `1` planar) | turb_driver.cpp:L83 |
+| `min_kz` | int | 0 | turb_driver.cpp:L85 |
+| `max_kz` | int | nhigh | turb_driver.cpp:L86 |
+| `min_kx` | int | 0 | turb_driver.cpp:L87 |
+| `max_kx` | int | nhigh | turb_driver.cpp:L88 |
+| `min_ky` | int | 0 | turb_driver.cpp:L89 |
+| `max_ky` | int | nhigh | turb_driver.cpp:L90 |
+| `expo` | Real | 5.0/3.0 | turb_driver.cpp:L92 |
+| `exp_prp` | Real | 5.0/3.0 | turb_driver.cpp:L93 |
+| `exp_prl` | Real | 0.0 | turb_driver.cpp:L94 |
 | `physical_k_shell` | Boolean | false | turb_driver.cpp |
 | `k_shell_unit` | Real | 0.0 (must be positive with `physical_k_shell`) | turb_driver.cpp |
 | `isotropic_power_spectrum` | Boolean | false | turb_driver.cpp |
-| `dedt` | Real | 0.0 | turb_driver.cpp |
-| `tcorr` | Real | 0.0 | turb_driver.cpp |
-| `rseed` | int | -1 (historic seed sequence; positive values select a sequence) | turb_driver.cpp |
-| `record_injected_work` | Boolean | false (net applied forcing work; single nonrelativistic ideal/CGL fluid only) | turb_driver.cpp |
+| `sol_fraction` | Real | 1.0 | turb_driver.cpp:L102 |
+| `rseed` | int | -1 | turb_driver.cpp:L105 |
+| `record_injected_work` | Boolean | false (single nonrelativistic ideal/CGL fluid only) | turb_driver.cpp |
+| `tile_nx` | int | 1 | turb_driver.cpp |
+| `tile_ny` | int | 1 | turb_driver.cpp |
+| `tile_nz` | int | 1 | turb_driver.cpp |
+| `localization` | string | `none` | turb_driver.cpp |
+| `sigma_x1` | Real | -1.0 | turb_driver.cpp |
+| `sigma_x2` | Real | -1.0 | turb_driver.cpp |
+| `sigma_x3` | Real | -1.0 | turb_driver.cpp |
+| `center_x1` | Real | 0.0 | turb_driver.cpp |
+| `center_x2` | Real | 0.0 | turb_driver.cpp |
+| `center_x3` | Real | 0.0 | turb_driver.cpp |
 
 ## Input Block: `<units>`
 **Used by**: units.cpp

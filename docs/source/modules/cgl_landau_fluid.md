@@ -152,6 +152,10 @@ pressures are not applied to flow momentum.
   parabolic process.
 - CGL LF with mesh refinement currently requires conserved prolongation;
   `<mesh_refinement>/prolong_primitives = true` is rejected.
+- Modal `<turb_driving>` forcing is supported with CGL LF. It is applied in
+  the ordinary source-term task graph, outside the protected LF
+  magnetic-moment sweep; the routine strict AMR/restart regression exercises
+  this combined path.
 
 ## Verification
 
@@ -304,6 +308,11 @@ For developer regression execution, run
 `python run_tests.py cgl/cgl_landau_fluid` from `tst/`. The routine CPU tests
 compare the explicit split against STS capped with
 `time/sts_max_dt_ratio=1.0`.
+The routine CPU interaction regression uses
+`inputs/tests/cgl_lf_turb_driving_amr.athinput` to check strict LF
+admissibility, refinement, rendered forcing, and deterministic modal restart
+while turbulence driving is active.
 
 See also [Super Time Stepping](super_time_stepping.md) and
-[Magnetohydrodynamics](mhd.md).
+[Magnetohydrodynamics](mhd.md), and
+[Turbulence Driving](turbulence_driving.md).

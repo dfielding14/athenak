@@ -11,6 +11,7 @@
 #include <iostream>
 #include <string>
 #include <utility>
+#include <vector>
 #include <algorithm>
 #include <cstdio>
 
@@ -117,7 +118,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   z4c::Z4c* pz4c = pm->pmb_pack->pz4c;
   radiation::Radiation* prad=pm->pmb_pack->prad;
   TurbulenceDriver* pturb=pm->pmb_pack->pturb;
-  int nrad = 0, nhydro = 0, nmhd = 0, nforce = 3, nadm = 0, nz4c = 0;
+  int nrad = 0, nhydro = 0, nmhd = 0, nadm = 0, nz4c = 0;
   if (phydro != nullptr) {
     nhydro = phydro->nhydro + phydro->nscalars;
   }
@@ -171,25 +172,58 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   }
 
   if (pturb != nullptr) {
-    // root process reads size the random seed
-    char *rng_data = new char[sizeof(RNG_State)];
-    // the master process reads the variables data
+    TurbulenceRestartMetadata metadata;
+    RNG_State rng_state;
+    std::vector<Real> amp_real(3 * pturb->mode_count);
+    std::vector<Real> amp_imag(3 * pturb->mode_count);
     if (global_variable::my_rank == 0 || single_file_per_rank) {
-      if (resfile.Read_bytes(rng_data, 1, sizeof(RNG_State), single_file_per_rank)
+      if (resfile.Read_bytes(&metadata, 1, sizeof(TurbulenceRestartMetadata),
+                             single_file_per_rank) != sizeof(TurbulenceRestartMetadata) ||
+          resfile.Read_bytes(&rng_state, 1, sizeof(RNG_State), single_file_per_rank)
           != sizeof(RNG_State)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "RNG data size read from restart file is incorrect, "
+                  << std::endl
+                  << "Turbulence state data read from restart file is incorrect, "
+                  << "restart file is broken." << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      pturb->ValidateRestartMetadata(metadata);
+      if (resfile.Read_bytes(amp_real.data(), 1, amp_real.size() * sizeof(Real),
+                             single_file_per_rank) != amp_real.size() * sizeof(Real) ||
+          resfile.Read_bytes(amp_imag.data(), 1, amp_imag.size() * sizeof(Real),
+                             single_file_per_rank) != amp_imag.size() * sizeof(Real)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Turbulence modal data read from restart file is incorrect, "
                   << "restart file is broken." << std::endl;
         exit(EXIT_FAILURE);
       }
     }
 #if MPI_PARALLEL_ENABLED
     if (!single_file_per_rank) {
-      // then broadcast the RNG information
-      MPI_Bcast(rng_data, sizeof(RNG_State), MPI_CHAR, 0, MPI_COMM_WORLD);
+      MPI_Bcast(&metadata, sizeof(TurbulenceRestartMetadata), MPI_CHAR, 0,
+                MPI_COMM_WORLD);
+      MPI_Bcast(&rng_state, sizeof(RNG_State), MPI_CHAR, 0, MPI_COMM_WORLD);
+      MPI_Bcast(amp_real.data(), static_cast<int>(amp_real.size()), MPI_ATHENA_REAL, 0,
+                MPI_COMM_WORLD);
+      MPI_Bcast(amp_imag.data(), static_cast<int>(amp_imag.size()), MPI_ATHENA_REAL, 0,
+                MPI_COMM_WORLD);
+      pturb->ValidateRestartMetadata(metadata);
     }
 #endif
-    std::memcpy(&(pturb->rstate), &(rng_data[0]), sizeof(RNG_State));
+    pturb->rstate = rng_state;
+    pturb->n_turb_updates_yet = metadata.n_updates;
+    for (int dir = 0; dir < 3; ++dir) {
+      for (int n = 0; n < pturb->mode_count; ++n) {
+        int idx = dir * pturb->mode_count + n;
+        pturb->mode_amp_real.h_view(dir, n) = amp_real[idx];
+        pturb->mode_amp_imag.h_view(dir, n) = amp_imag[idx];
+      }
+    }
+    pturb->mode_amp_real.template modify<HostMemSpace>();
+    pturb->mode_amp_real.template sync<DevExeSpace>();
+    pturb->mode_amp_imag.template modify<HostMemSpace>();
+    pturb->mode_amp_imag.template sync<DevExeSpace>();
     if (pturb->record_injected_work) {
       Real injected_work = 0.0;
       if (global_variable::my_rank == 0 || single_file_per_rank) {
@@ -296,9 +330,6 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   }
   if (prad != nullptr) {
     data_size_ += nout1*nout2*nout3*nrad*sizeof(Real);   // rad i0
-  }
-  if (pturb != nullptr) {
-    data_size_ += nout1*nout2*nout3*nforce*sizeof(Real); // forcing
   }
   if (pz4c != nullptr) {
     data_size_ += nout1*nout2*nout3*nz4c*sizeof(Real);   // z4c u0
@@ -550,46 +581,6 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     Kokkos::deep_copy(Kokkos::subview(prad->i0, std::make_pair(0,nmb), Kokkos::ALL,
                       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
     offset_myrank += nout1*nout2*nout3*nrad*sizeof(Real);   // radiation i0
-    myoffset = offset_myrank;
-  }
-
-  if (pturb != nullptr) {
-    Kokkos::realloc(ccin, nmb, nforce, nout3, nout2, nout1);
-    for (int m=0;  m<noutmbs_max; ++m) {
-      // every rank has a MB to read, so read collectively
-      if (m < noutmbs_min) {
-        // get ptr to cell-centered MeshBlock data
-        auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
-                                     Kokkos::ALL);
-        int mbcnt = mbptr.size();
-        if (resfile.Read_Reals_at_all(mbptr.data(), mbcnt, myoffset,
-                                      single_file_per_rank) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC turb data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
-        }
-        myoffset += data_size;
-
-      // some ranks are finished writing, so use non-collective write
-      } else if (m < pm->nmb_thisrank) {
-        // get ptr to MeshBlock data
-        auto mbptr = Kokkos::subview(ccin, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
-                                     Kokkos::ALL);
-        int mbcnt = mbptr.size();
-        if (resfile.Read_Reals_at(mbptr.data(), mbcnt, myoffset,
-                                      single_file_per_rank) != mbcnt) {
-          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                    << std::endl << "CC turb data not read correctly from rst file, "
-                    << "restart file is broken." << std::endl;
-          exit(EXIT_FAILURE);
-        }
-        myoffset += data_size;
-      }
-    }
-    Kokkos::deep_copy(Kokkos::subview(pturb->force, std::make_pair(0,nmb), Kokkos::ALL,
-                      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), ccin);
-    offset_myrank += nout1*nout2*nout3*nforce*sizeof(Real); // forcing
     myoffset = offset_myrank;
   }
 
@@ -996,6 +987,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     Diffusion(pin, is_restart);
   } else if (pgen_fun_name.compare("sts_diffusion") == 0) {
     STSDiffusion(pin, is_restart);
+  } else if (pgen_fun_name.compare("turb") == 0) {
+    Turb(pin, is_restart);
   // else, name not set on command line or input file, print warning and quit
   } else {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl

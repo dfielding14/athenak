@@ -8,10 +8,12 @@ emergency-bound reporting without automatic correction, limiter occupancy,
 explicit-versus-STS reference comparisons, and the live CGL FOFC regression.
 It also covers the reduced active paper initializer, deterministic turbulence
 seed selection, Alfvenic forcing orientation, nonrelativistic forcing-energy
-work, once-per-cycle OU forcing advancement, forcing restart continuation, and
-passive-Delta flow independence from diagnostic pressure anisotropy.
-AMR, restart, and live FOFC checks also exercise the optional retained
-RK-integrated CGL pressure-traction work path.
+work, forcing restart continuation, and passive-Delta flow independence from
+diagnostic pressure anisotropy. A strict two-dimensional AMR/restart
+regression exercises modal turbulence driving, with MPI coverage comparing
+that configuration at one and four ranks. AMR, restart, and live FOFC checks
+also exercise the optional retained RK-integrated CGL pressure-traction work
+path.
 The broader scientific suite is a manual tier because it generates diagnostic
 CSV files and figures and is intended for interpretation, not just pass/fail
 gating.
@@ -108,8 +110,9 @@ anisotropic applied hyperbolic CGL pressure-traction work in `lf_cpwrk` and
 The workflow checks clean LF safety diagnostics, positive applied work, active
 global energy/work residual closure, zero parallel
 forcing for the Alfvenic case, and nonzero parallel forcing for the random
-case. Focused CPU regressions separately check a one-cycle OU transition,
-multi-cycle RK2 companion source-work identity, and cumulative-work restart continuation. The
+case. Focused CPU regressions separately check fixed-`dedt` first-cycle
+normalization, multi-cycle RK2 companion source-work identity, and
+cumulative-work restart continuation. The
 workflow also archives the explicit passive-Delta choice; a focused
 regression checks that its flow fields are independent of diagnostic initial
 anisotropy. It does not qualify paper-resolution or long-time active/passive
@@ -781,6 +784,13 @@ history provides normalized divB, invalid-state, and anisotropy measures,
 while MHD history provides total energy and LF counters. CGL LF rejects
 `mesh_refinement/prolong_primitives=true`; conserved prolongation is the
 supported AMR path.
+
+The driven AMR interaction deck,
+`inputs/tests/cgl_lf_turb_driving_amr.athinput`, uses fixed RMS acceleration
+so it is not an energy-conservation test. It verifies clean LF safety
+counters, controlled refinement, divergence control, the requested rendered
+forcing level, and restart restoration of the turbulence driver's modal
+state.
 
 ## Developer Maintenance
 

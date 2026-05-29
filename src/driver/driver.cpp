@@ -24,6 +24,7 @@
 #include "dyn_grmhd/dyn_grmhd.hpp"
 #include "ion-neutral/ion-neutral.hpp"
 #include "radiation/radiation.hpp"
+#include "srcterms/turb_driver.hpp"
 #include "driver.hpp"
 
 #if MPI_PARALLEL_ENABLED
@@ -666,6 +667,12 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 //!  and printing diagnostic messages
 
 void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
+  // The last cycle can end with AMR after the normal output point. Refresh a
+  // rendered turbulence field only when it no longer matches the final mesh.
+  if (pmesh->pmb_pack->pturb != nullptr) {
+    pmesh->pmb_pack->pturb->RefreshForceAfterMeshChange(this);
+  }
+
   // cycle through output Types and load data / write files
   //  This design allows for asynchronous outputs to implemented in the future.
   for (auto &out : pout->pout_list) {
