@@ -149,19 +149,32 @@ class FrontierF2MultirankRuntimeMetadataAnalysisTests(unittest.TestCase):
                 analyze(root)
 
     def test_multirank_runtime_metadata_rejects_runtime_model_drift(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            self._artifacts(root)
-            stdout = root / "athena_stdout.txt"
-            stdout.write_text(
-                stdout.read_text(encoding="utf-8").replace(
-                    "background=coupled", "background=passive_mhd", 1
-                ),
-                encoding="utf-8",
-            )
-            self._publish_inventory(root)
-            with self.assertRaisesRegex(ValueError, "missing expected tokens"):
-                analyze(root)
+        replacements = {
+            "background": ("background=coupled", "background=passive_mhd"),
+            "state": ("state=momentum_p_over_m", "state=velocity"),
+            "artificial_C": ("C=3", "C=9"),
+            "adaptive_delta_f": (
+                "deltaf_adapt=off",
+                "deltaf_adapt=global_bikappa_moments_experimental",
+            ),
+            "unreviewed_extra_token": ("restart_schema=7", "restart_schema=7 extra=1"),
+        }
+        for label, (expected, replacement) in replacements.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                self._artifacts(root)
+                stdout = root / "athena_stdout.txt"
+                stdout.write_text(
+                    stdout.read_text(encoding="utf-8").replace(
+                        expected, replacement, 1
+                    ),
+                    encoding="utf-8",
+                )
+                self._publish_inventory(root)
+                with self.assertRaisesRegex(
+                    ValueError, "differs from the reviewed identity"
+                ):
+                    analyze(root)
 
     def test_trusted_runner_publishes_receipt_and_recomputes_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

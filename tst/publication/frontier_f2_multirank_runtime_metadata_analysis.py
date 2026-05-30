@@ -92,17 +92,14 @@ GPU_PREFLIGHT = re.compile(
     r"host=(?P<host>\S+) ROCR_VISIBLE_DEVICES=(?P<device>[0-9]+) "
     r"linkage=libamdhip64,libmpi_amd,libmpi_gtl_hsa$"
 )
-RUNTIME_MODEL_PREFIX = "PIC runtime model: physical_mode=extended_mhd_pic "
-EXPECTED_RUNTIME_TOKENS = {
-    "background=coupled",
-    "feedback=coupled",
-    "induction=ideal_mhd_only",
-    "deposition=tsc",
-    "deltaf=off",
-    "expanding_box=off",
-    "wave_damping=off",
-    "restart_schema=7",
-}
+RUNTIME_MODEL_PREFIX = "PIC runtime model:"
+EXPECTED_RUNTIME_MODEL = (
+    "PIC runtime model: physical_mode=extended_mhd_pic state=momentum_p_over_m "
+    "C=3 background=coupled feedback=coupled induction=ideal_mhd_only "
+    "deposition=tsc deltaf=off deltaf_adapt=off deltaf_adapt_interval=0 "
+    "expanding_box=off expansion_law=linear wave_damping=off nu_in=0 "
+    "lb_cost_per_particle=0 max_cell_cross=2 theta_max=0.3 restart_schema=7"
+)
 
 
 def _sha256(data: bytes) -> str:
@@ -186,10 +183,8 @@ def _require_runtime_model(stdout: str) -> str:
     ]
     if len(models) != 1:
         raise ValueError("F2 Athena stdout does not contain exactly one runtime-model line")
-    tokens = set(models[0].split())
-    missing = EXPECTED_RUNTIME_TOKENS - tokens
-    if missing:
-        raise ValueError(f"F2 Athena runtime model is missing expected tokens: {sorted(missing)}")
+    if models[0] != EXPECTED_RUNTIME_MODEL:
+        raise ValueError("F2 Athena runtime model differs from the reviewed identity")
     return models[0]
 
 
