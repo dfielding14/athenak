@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -22,6 +23,7 @@
 #include "eos/eos.hpp"
 #include "mhd/mhd.hpp"
 #include "particles/particles.hpp"
+#include "particles/particle_restart.hpp"
 #include "particles/relativistic_pusher.hpp"
 #include "pgen.hpp"
 
@@ -220,40 +222,97 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
   auto nmb_thispack = pmbp->nmb_thispack;
 
   if (prtcl_rst_flag) {
-    std::string prst_fname = pin->GetString("problem","prtcl_res_file");
-    char rank_dir[20];
-    std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d", global_variable::my_rank);
-    std::size_t rank_pos = prst_fname.find("rank_00000000");
-    if (rank_pos != std::string::npos) {
-      prst_fname.replace(rank_pos, sizeof("rank_00000000") - 1, rank_dir);
-    }
-
-    FILE* pfile = std::fopen(prst_fname.c_str(),"rb");
-    if (pfile == nullptr) {
+    if (pmbp->ppart->pusher == ParticlesPusher::relativistic_hc) {
+      if (!pmbp->ppart->relativistic_restart_v2_loaded) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Relativistic typed-v2 particle restart staging "
+                  << "state is missing" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      const auto &restart_i = pmbp->ppart->relativistic_restart_idata;
+      const auto &restart_r = pmbp->ppart->relativistic_restart_rdata;
+      if (restart_i.size() !=
+              particles::restart::kV2IntegerFields*static_cast<std::size_t>(npart) ||
+          restart_r.size() !=
+              particles::restart::kV2RealFields*static_cast<std::size_t>(npart)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Relativistic typed-v2 particle restart staging "
+                  << "width is inconsistent" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      auto host_pi = Kokkos::create_mirror_view(pi);
+      auto host_pr = Kokkos::create_mirror_view(pr);
+      for (int p=0; p<npart; ++p) {
+        for (std::uint32_t n=0; n<particles::restart::kV2IntegerFields; ++n) {
+          host_pi(n,p) = restart_i[particles::restart::kV2IntegerFields*p + n];
+        }
+        for (std::uint32_t n=0; n<particles::restart::kV2RealFields; ++n) {
+          host_pr(n,p) = restart_r[particles::restart::kV2RealFields*p + n];
+        }
+        if (host_pi(PGID,p) < 0 || host_pi(PGID,p) >= pmy_mesh_->nmb_total ||
+            host_pi(PTAG,p) < 0 || host_pi(PSP,p) < 0 ||
+            host_pi(PSP,p) >= nspecies || host_pr(IPALPHA,p) != pmbp->ppart->alpha_s) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "Relativistic typed-v2 particle restart has "
+                    << "invalid identity or signed alpha_s data" << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+      }
+      Kokkos::deep_copy(pi, host_pi);
+      Kokkos::deep_copy(pr, host_pr);
+      DvceArray1D<int> restart_status("part_relativistic_restart_status", 1);
+      Kokkos::deep_copy(restart_status, 0);
+      Real c_model = pmbp->ppart->c_model;
+      par_for("part_relativistic_restart_sync", DevExeSpace(), 0, (npart-1),
+      KOKKOS_LAMBDA(const int p) {
+        particles::relativistic::StateStatus status =
+            particles::relativistic::StoreAuthoritativeWAndSynchronizeVelocityShadow(
+                pr, p, {pr(IPWX,p), pr(IPWY,p), pr(IPWZ,p)}, c_model);
+        if (status != particles::relativistic::StateStatus::success) {
+          Kokkos::atomic_max(&restart_status(0), static_cast<int>(status));
+        }
+      });
+      auto restart_status_h =
+          Kokkos::create_mirror_view_and_copy(HostMemSpace(), restart_status);
+      if (restart_status_h(0) != 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Relativistic typed-v2 particle restart could not "
+                  << "resynchronize the velocity shadow from authoritative w"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (pmbp->ppart->relativistic_restart_mesh_cycle != pmy_mesh_->ncycle ||
+          pmbp->ppart->relativistic_restart_mesh_time != pmy_mesh_->time ||
+          pmbp->ppart->relativistic_restart_mesh_dt != pmy_mesh_->dt) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Relativistic typed-v2 particle restart metadata "
+                  << "does not match the paired mesh checkpoint" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      pmbp->ppart->relativistic_timestep_bound_dirty = true;
+      pmbp->ppart->ValidateRelativisticRestartState("typed-v2 particle restart load");
+      pmbp->ppart->relativistic_restart_idata.clear();
+      pmbp->ppart->relativistic_restart_rdata.clear();
+      if (restart) {
+        pmbp->ppart->CheckConsistency("particle restart load");
+        return;
+      }
+    } else {
+    const auto &restart_r = pmbp->ppart->legacy_restart_rdata;
+    if (restart_r.size() != static_cast<std::size_t>(17*npart)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Particle restart file '" << prst_fname
-                << "' could not be opened" << std::endl;
+                << std::endl << "Legacy particle restart staging width is inconsistent"
+                << std::endl;
       std::exit(EXIT_FAILURE);
     }
-    Real gen_data[3];
-    if (std::fread(gen_data, sizeof(Real), 3, pfile) != 3) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Particle restart file '" << prst_fname
-                << "' has an incomplete header" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-
-    pmbp->ppart->dtnew = gen_data[1];
-    pmy_mesh_->time = gen_data[0];
+    pmy_mesh_->time = pmbp->ppart->legacy_restart_mesh_time;
     HostArray1D<Real> host_part_data("host_part_data", 17*npart);
-    if (std::fread(host_part_data.data(), sizeof(Real), 17*npart, pfile) !=
-        static_cast<std::size_t>(17*npart)) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Particle restart file '" << prst_fname
-                << "' has incomplete particle data" << std::endl;
-      std::exit(EXIT_FAILURE);
+    for (int p=0; p<npart; ++p) {
+      for (int n=0; n<17; ++n) {
+        host_part_data(17*p + n) = restart_r[17*p + n];
+      }
     }
-    std::fclose(pfile);
+    pmbp->ppart->legacy_restart_rdata.clear();
 
     DvceArray1D<Real> part_data("part_data", 17*npart);
     Kokkos::deep_copy(part_data, host_part_data);
@@ -280,6 +339,7 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
     if (restart) {
       pmbp->ppart->CheckConsistency("particle restart load");
       return;
+    }
     }
   } else {
     Real min_mass = pin->GetOrAddReal("particles","min_mass",1.0);

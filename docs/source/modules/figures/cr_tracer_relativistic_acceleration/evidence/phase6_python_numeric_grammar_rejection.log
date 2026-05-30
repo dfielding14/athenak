@@ -1,0 +1,21 @@
+Traceback (most recent call last):
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_tracer_inspect.py", line 1318, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_tracer_inspect.py", line 1244, in main
+    summary = summarize_restart(args.path, latest=not args.all)
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_tracer_inspect.py", line 1033, in summarize_restart
+    read_prst_file(file_path, _typed_v2_checkpoints=typed_v2_checkpoints)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_tracer_inspect.py", line 677, in read_prst_file
+    checkpoint = _read_typed_v2_checkpoint(path, blob)
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_tracer_inspect.py", line 514, in _read_typed_v2_checkpoint
+    manifest = _read_typed_v2_manifest(manifest_path, path.name)
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_tracer_inspect.py", line 241, in _read_typed_v2_manifest
+    "mesh_byte_count": _typed_v2_uint(
+                       ~~~~~~~~~~~~~~^
+        required("mesh_byte_count"), "mesh_byte_count"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_tracer_inspect.py", line 128, in _typed_v2_uint
+    raise ValueError(f"typed-v2 restart {context} has invalid {label}={text}")
+ValueError: typed-v2 restart manifest has invalid mesh_byte_count=121_872

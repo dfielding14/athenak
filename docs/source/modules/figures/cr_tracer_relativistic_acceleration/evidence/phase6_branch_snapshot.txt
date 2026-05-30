@@ -1,0 +1,35 @@
+branch feature/CR_tracers_relativistic_acceleration
+head 1faf0c8a84c541d6af66fab36f8cea23429f21c4
+status
+ M docs/source/modules/cr_tracer_relativistic_acceleration_ledger.md
+ M scripts/particles/cr_tracer_inspect.py
+ M src/main.cpp
+ M src/outputs/outputs.cpp
+ M src/outputs/restart.cpp
+ M src/outputs/rst_prtcl.cpp
+ M src/particles/particles.cpp
+ M src/particles/particles.hpp
+ M src/pgen/part_random.cpp
+ M tst/test_suite/particles/test_particles_cr_relativistic_contract_cpu.py
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase6_preregistered_criteria.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_branch_snapshot.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_diff_check.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_evidence_sha256.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_legacy_accuracy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_legacy_accuracy_mpicpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_legacy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_legacy_mpicpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_mpicpu_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_mpicpu_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_mpicpu_relativistic_fence.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_parser_contract.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_python_numeric_grammar_rejection.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_restart_inspector.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_restart_runtime_analyzer.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_restart_runtime_metrics.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_serial_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_style.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase6_tampered_criteria_rejection.log
+?? inputs/unit_tests/cr_relativistic_restart_runtime.athinput
+?? scripts/particles/cr_relativistic_restart_runtime_inspect.py
+?? src/particles/particle_restart.hpp

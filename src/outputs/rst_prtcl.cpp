@@ -13,14 +13,23 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include "athena.hpp"
 #include "globals.hpp"
 #include "mesh/mesh.hpp"
+#include "particles/particle_restart.hpp"
 #include "particles/particles.hpp"
 #include "outputs.hpp"
+
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
 
 namespace {
 
@@ -31,6 +40,94 @@ uint64_t UpdateFNV1a(uint64_t hash, const void *data, std::size_t nbyte) {
     hash *= 1099511628211ULL;
   }
   return hash;
+}
+
+void WriteBytesAndRename(const std::string &fname,
+                         const std::vector<unsigned char> &bytes) {
+  std::string tmp_fname = fname + ".tmp";
+  FILE *file = std::fopen(tmp_fname.c_str(), "wb");
+  bool published = file != nullptr;
+  if (published) {
+    published = std::fwrite(bytes.data(), 1, bytes.size(), file) == bytes.size();
+    published = std::fclose(file) == 0 && published;
+    if (published) {published = std::rename(tmp_fname.c_str(), fname.c_str()) == 0;}
+  }
+  if (!published) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Relativistic typed-v2 restart shard '" << fname
+              << "' could not be published" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
+void PublishRelativisticManifest(
+    const std::string &fname, const std::string &mesh_restart,
+    const particles::restart::V2Header &local_header,
+    const particles::restart::MeshWitness &mesh_witness) {
+  std::vector<std::uint64_t> local_counts(global_variable::nranks, 0);
+  std::vector<std::uint64_t> byte_counts(global_variable::nranks, 0);
+  std::vector<std::uint64_t> payload_checksums(global_variable::nranks, 0);
+  std::vector<std::uint64_t> header_checksums(global_variable::nranks, 0);
+#if MPI_PARALLEL_ENABLED
+  MPI_Gather(&local_header.local_count, 1, MPI_UINT64_T, local_counts.data(), 1,
+             MPI_UINT64_T, 0, MPI_COMM_WORLD);
+  std::uint64_t byte_count =
+      particles::restart::kV2HeaderBytes + local_header.payload_bytes;
+  MPI_Gather(&byte_count, 1, MPI_UINT64_T, byte_counts.data(), 1, MPI_UINT64_T,
+             0, MPI_COMM_WORLD);
+  MPI_Gather(&local_header.payload_checksum, 1, MPI_UINT64_T,
+             payload_checksums.data(), 1, MPI_UINT64_T, 0, MPI_COMM_WORLD);
+  MPI_Gather(&local_header.header_checksum, 1, MPI_UINT64_T,
+             header_checksums.data(), 1, MPI_UINT64_T, 0, MPI_COMM_WORLD);
+  MPI_Barrier(MPI_COMM_WORLD);
+#else
+  local_counts[0] = local_header.local_count;
+  byte_counts[0] = particles::restart::kV2HeaderBytes + local_header.payload_bytes;
+  payload_checksums[0] = local_header.payload_checksum;
+  header_checksums[0] = local_header.header_checksum;
+#endif
+  if (global_variable::my_rank == 0) {
+    std::string manifest_fname =
+        particles::restart::ManifestPathFromRankZeroShard(fname);
+    std::string tmp_fname = manifest_fname + ".tmp";
+    std::ofstream manifest(tmp_fname);
+    manifest << std::setprecision(17);
+    manifest << "magic AKPRST-MANIFEST\n";
+    manifest << "version 2.0\n";
+    manifest << "topology_policy reject_rank_count_change\n";
+    manifest << "paired_mesh_checkpoint required\n";
+    manifest << "checkpoint_id " << local_header.checkpoint_id << '\n';
+    manifest << "saved_nranks " << local_header.saved_nranks << '\n';
+    manifest << "global_count " << local_header.global_count << '\n';
+    manifest << "mesh_cycle " << local_header.mesh_cycle << '\n';
+    manifest << "mesh_time " << local_header.mesh_time << '\n';
+    manifest << "mesh_dt " << local_header.mesh_dt << '\n';
+    manifest << "particle_dtnew " << local_header.particle_dtnew << '\n';
+    manifest << "config_fingerprint " << local_header.config_fingerprint << '\n';
+    manifest << "mesh_byte_count " << mesh_witness.mesh_byte_count << '\n';
+    manifest << "mesh_checksum " << mesh_witness.mesh_checksum << '\n';
+    manifest << "mesh_topology_hash " << mesh_witness.mesh_topology_hash << '\n';
+    manifest << "mesh_restart " << mesh_restart << '\n';
+    for (int rank=0; rank<global_variable::nranks; ++rank) {
+      char rank_dir[32];
+      std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d/", rank);
+      std::size_t slash = fname.rfind('/');
+      std::string basename = fname.substr(slash + 1);
+      manifest << "shard " << rank << ' ' << rank_dir << basename << ' '
+               << byte_counts[rank] << ' ' << local_counts[rank] << ' '
+               << payload_checksums[rank] << ' ' << header_checksums[rank] << '\n';
+    }
+    manifest.close();
+    if (!manifest || std::rename(tmp_fname.c_str(), manifest_fname.c_str()) != 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Relativistic typed-v2 restart manifest '"
+                << manifest_fname << "' could not be published" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+#if MPI_PARALLEL_ENABLED
+  MPI_Barrier(MPI_COMM_WORLD);
+#endif
 }
 
 } // namespace
@@ -46,11 +143,24 @@ ParticleRestartOutput::ParticleRestartOutput(ParameterInput *pin, Mesh *pm,
   int prtcl_rst_flag = pin->GetOrAddInteger("problem","prtcl_rst_flag",0);
   if (prtcl_rst_flag) {
     std::string prst_fname = pin->GetString("problem","prtcl_res_file");
-    std::size_t last_period = prst_fname.rfind('.');
-    if (last_period != std::string::npos && last_period >= 5) {
-      std::string outnumber_str = prst_fname.substr(last_period-5,5);
-      out_params.file_number = std::stoi(outnumber_str) + 1;
-      out_params.last_time = pm->time;
+    particles::Particles *pp = pm->pmb_pack->ppart;
+    if (pp != nullptr && pp->pusher == ParticlesPusher::relativistic_hc) {
+      try {
+        out_params.file_number = particles::restart::FileNumber(prst_fname) + 1;
+        out_params.last_time = pm->time;
+      } catch (const std::exception &error) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Relativistic typed-v2 restart output initialization "
+                  << "rejected: " << error.what() << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    } else {
+      std::size_t last_period = prst_fname.rfind('.');
+      if (last_period != std::string::npos && last_period >= 5) {
+        std::string outnumber_str = prst_fname.substr(last_period-5,5);
+        out_params.file_number = std::stoi(outnumber_str) + 1;
+        out_params.last_time = pm->time;
+      }
     }
   }
 }
@@ -58,6 +168,9 @@ ParticleRestartOutput::ParticleRestartOutput(ParameterInput *pin, Mesh *pm,
 void ParticleRestartOutput::LoadOutputData(Mesh *pm) {
   particles::Particles *pp = pm->pmb_pack->ppart;
   pp->CheckConsistency("particle restart output");
+  if (pp->pusher == ParticlesPusher::relativistic_hc) {
+    pp->ValidateRelativisticRestartState("typed-v2 particle restart output");
+  }
   npout_thisrank = pp->nprtcl_thispack;
   npout_total = pm->nprtcl_total;
   Kokkos::realloc(outpart_rdata, pp->nrdata, npout_thisrank);
@@ -67,12 +180,92 @@ void ParticleRestartOutput::LoadOutputData(Mesh *pm) {
 }
 
 void ParticleRestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+  particles::Particles *pp = pm->pmb_pack->ppart;
+  if (pp->pusher == ParticlesPusher::relativistic_hc &&
+      (out_params.file_number < 0 || out_params.file_number > 99999)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Relativistic typed-v2 particle restart file_number must "
+              << "remain in the five-digit range [0, 99999]" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   char rank_dir[32];
   char number[8];
   std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d/", global_variable::my_rank);
   std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);
   std::string fname = "prst/" + std::string(rank_dir) + out_params.file_basename +
                       std::string(number) + ".prst";
+
+  if (pp->pusher == ParticlesPusher::relativistic_hc) {
+    try {
+      std::string number_string(number);
+      std::string mesh_restart =
+          "rst/" + out_params.file_basename + number_string + ".rst";
+      std::ifstream mesh_file(mesh_restart, std::ios::binary);
+      particles::restart::Require(
+          mesh_file.good(),
+          "typed-v2 particle restart requires paired mesh checkpoint '" +
+          mesh_restart + "' to be published first");
+      std::vector<std::int32_t> idata(
+          particles::restart::kV2IntegerFields*npout_thisrank);
+      std::vector<double> rdata(particles::restart::kV2RealFields*npout_thisrank);
+      for (int p=0; p<npout_thisrank; ++p) {
+        idata[particles::restart::kV2IntegerFields*p] = outpart_idata(PGID,p);
+        idata[particles::restart::kV2IntegerFields*p + 1] = outpart_idata(PTAG,p);
+        idata[particles::restart::kV2IntegerFields*p + 2] = outpart_idata(PSP,p);
+        for (std::uint32_t n=0; n<particles::restart::kV2RealFields; ++n) {
+          rdata[particles::restart::kV2RealFields*p + n] = outpart_rdata(n,p);
+        }
+      }
+      particles::restart::V2Header header;
+      header.saved_nranks = global_variable::nranks;
+      header.saved_rank = global_variable::my_rank;
+      header.local_count = npout_thisrank;
+      header.global_count = npout_total;
+      header.mesh_cycle = pm->ncycle;
+      header.mesh_time = pm->time;
+      header.mesh_dt = pm->dt;
+      header.particle_dtnew = pp->dtnew;
+      std::uint32_t field_source =
+          (pp->relativistic_field_source == RelativisticFieldSource::prescribed_test) ?
+          1U : 2U;
+      std::uint32_t temporal_sampling =
+          (pp->relativistic_temporal_sampling == RelativisticTemporalSampling::none) ?
+          0U : 1U;
+      header.config_fingerprint =
+          particles::restart::ComputeRelativisticConfigFingerprint(
+              pp->c_model, pp->alpha_s, field_source, temporal_sampling,
+              pp->subcycle, pp->subcycle_strict, pp->subcycle_max_steps,
+              pp->subcycle_cell_fraction, pp->subcycle_meshblock_fraction,
+              pp->subcycle_gyro_fraction, pp->subcycle_electric_kick_max);
+      header.checkpoint_id = particles::restart::ComputeCheckpointID(
+          pm->ncycle, pm->time, pm->dt, out_params.file_number,
+          global_variable::nranks);
+      particles::restart::MeshWitness mesh_witness =
+          particles::restart::ReadMeshWitness(mesh_restart);
+      particles::restart::Require(
+          mesh_witness.checkpoint_id == header.checkpoint_id &&
+          mesh_witness.saved_nranks == header.saved_nranks &&
+          mesh_witness.mesh_cycle == header.mesh_cycle &&
+          mesh_witness.mesh_time == header.mesh_time &&
+          mesh_witness.mesh_dt == header.mesh_dt,
+          "typed-v2 particle checkpoint does not match paired mesh witness");
+      std::vector<unsigned char> bytes =
+          particles::restart::EncodeShard(header, idata, rdata);
+      WriteBytesAndRename(fname, bytes);
+      PublishRelativisticManifest(fname, mesh_restart, header, mesh_witness);
+    } catch (const std::exception &error) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Relativistic typed-v2 restart output rejected: "
+                << error.what() << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    out_params.file_number++;
+    out_params.last_time = (out_params.last_time < 0.0) ? pm->time :
+                           out_params.last_time + out_params.dt;
+    pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
+    pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
+    return;
+  }
 
   IOWrapper partfile;
   partfile.Open(fname.c_str(), IOWrapper::FileMode::write, true);
@@ -126,7 +319,6 @@ void ParticleRestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
               << "' could not be opened" << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  particles::Particles *pp = pm->pmb_pack->ppart;
   std::fprintf(mfile, "magic AKPRST\n");
   std::fprintf(mfile, "version 1\n");
   std::fprintf(mfile, "binary_payload legacy_prst\n");

@@ -3205,3 +3205,163 @@ before the fixes are accepted.
 - Next permitted edit set:
   - Phase 6 only: versioned relativistic restart writer, reader, inspector,
     restart-focused tests and evidence, plus append-only ledger updates.
+
+## DR-032: Phase-6 Paired Typed-V2 Restart Boundary
+
+- Date: 2026-05-30
+- Status: accepted candidate pending final restart-specialist replay
+- Question: how should relativistic particle state cross a restart boundary
+  without weakening legacy pushers, silently truncating identity, or allowing
+  an unpaired particle shard to masquerade as a complete checkpoint?
+- Selected implementation:
+  - preserve legacy v1 seventeen-`Real` particle restart payloads for legacy
+    pushers through one centralized decoder;
+  - require `relativistic_hc` to use a paired native mesh `.rst`, mesh
+    `.rst.rmeta` witness, rank shard, and typed-v2 manifest;
+  - encode every relativistic particle identity as three little-endian
+    `int32` values: `PGID`, `PTAG`, and `PSP`;
+  - encode all authoritative and compatibility real state as twenty-two
+    little-endian `float64` values in the exact `ParticlesIndex` order:
+    `IPX`, `IPVX`, `IPY`, `IPVY`, `IPZ`, `IPVZ`, `IPM`, `IPBX`, `IPBY`,
+    `IPBZ`, `IPDX`, `IPDY`, `IPDZ`, `IPDB`, `IPWX`, `IPWY`, `IPWZ`,
+    `IPCEX`, `IPCEY`, `IPCEZ`, `IPWORK`, and `IPALPHA`;
+  - keep `w = gamma v` authoritative, keep physical velocity as an invariant-
+    checked compatibility shadow, and reconstruct `gamma` diagnostically
+    rather than serializing another authoritative field;
+  - publish a fixed-width `144`-byte shard header with magic, schema,
+    endian marker, record widths, saved rank topology, local and global
+    counts, mesh cycle, mesh time, mesh timestep, particle timestep,
+    checkpoint ID, payload bytes, payload checksum, header checksum, manifest
+    requirement, and semantic configuration fingerprint;
+  - bind the mesh witness and particle manifest to the native mesh checkpoint
+    byte count, checksum, rank-to-MeshBlock topology hash, exact five-digit
+    checkpoint number, cycle, time, timestep, and deterministic checkpoint ID;
+  - deterministically reject MPI rank-count change for typed-v2 restart.
+- Alternatives rejected:
+  - reusing legacy seventeen-`Real` records would omit relativistic state and
+    continue routing integer identity through floating-point storage;
+  - silently reconstructing relativistic momentum from legacy velocity is an
+    ambiguous model migration and is not labeled backward compatible;
+  - implementing rank-count redistribution inside this phase would mix a
+    restart-schema change with unqualified Phase-8 migration work.
+
+## DR-033: Phase-6 Restart-Specialist Rebound
+
+- Date: 2026-05-30
+- Status: corrected candidate replayed after two independent HOLD rounds
+- Initial HOLD findings:
+  - the shard could be renamed before paired mesh-witness preflight;
+  - paired output blocks lacked one coordinator for cadence and counter
+    equality;
+  - restart state semantic validation depended too heavily on optional debug
+    checks;
+  - the semantic fingerprint omitted accepted subcycle controls;
+  - five-digit writer bounds and strict parser tests were incomplete.
+- Second HOLD findings:
+  - mesh-witness validation occurred after native mesh restart consumption;
+  - the C++ reader did not bind particle and mesh checkpoint numbers exactly;
+  - the Python inspector accepted checkpoint identities and filename widths
+    that C++ rejected;
+  - semantic particle validation could occur after native mesh output had
+    already started overwriting a same-number checkpoint;
+  - the runtime qualifier did not mutate native mesh bytes, fabricate a
+    checkpoint ID, exercise overwidth shard filenames, or compare regenerated
+    native mesh state payloads.
+- Third HOLD findings:
+  - the runtime qualifier recorded the criteria SHA-256 digest but did not
+    enforce an immutable expected digest or the complete registered criterion
+    ID sequence;
+  - Python `int()` accepted underscore-separated numeric spellings that the
+    strict C++ parser rejected, allowing the offline inspector to certify a
+    bundle that Athena refused to restore.
+- Corrected choices:
+  - preflight any present mesh witness before native restart parameter reads
+    and require the witness again for paired relativistic restoration before
+    mesh-tree construction;
+  - validate relativistic particle semantics in mesh restart
+    `LoadOutputData()` before native mesh output staging and write;
+  - parse particle and mesh file numbers strictly and require exact equality;
+  - make the Python inspector recompute the deterministic checkpoint ID and
+    enforce the same typed-v2 five-digit filename contract;
+  - compare native mesh state bytes after the `<par_end>` parameter terminator,
+    because restart-only input flags intentionally change the native
+    parameter dump while the serialized mesh state remains byte-identical;
+  - bind the corrected runtime replay to a frozen criteria file with schema,
+    status, exact ordered criterion IDs, archived SHA-256 digest, and a
+    hard-coded expected SHA-256 assertion;
+  - apply a strict decimal lexical grammar before Python typed-v2 integer and
+    floating-point conversion so the inspector cannot bless runtime-rejected
+    numeric spellings.
+
+## RG-007: Is The Migration Contract Honest?
+
+- Date: 2026-05-30
+- Verdict: `PROCEED` candidate pending final restart-specialist replay
+- Reflection:
+  - legacy v1 remains supported for legacy pushers with centralized validation
+    of header length, record count, finite state, optional metadata, and
+    checksum;
+  - `relativistic_hc` does not claim legacy-v1 conversion because reconstructing
+    the authoritative momentum, sampled `cE`, accumulated work, signed
+    coupling, or semantic fingerprint would be lossy or ambiguous;
+  - typed-v2 restart requires a complete paired checkpoint and rejects stale,
+    missing, mismatched, corrupted, future-version, truncated, semantically
+    incompatible, and rank-count-changed inputs;
+  - rank-count redistribution remains explicit Phase-8 follow-up work rather
+    than an undocumented partial feature.
+- Revisit trigger:
+  - if Phase 8 opens rank-count redistribution or legacy-to-relativistic
+    conversion, stop and write a new reviewed migration design before coding.
+
+## CP-6 Versioned Relativistic Restart And Inspection Contract
+
+- Date: 2026-05-30
+- Verdict: `PROCEED`
+- Accepted scope:
+  - preserve validated legacy v1 particle restart behavior for legacy pushers;
+  - require `relativistic_hc` to use paired native mesh restart, mesh witness,
+    typed-v2 rank shard, and typed-v2 manifest artifacts;
+  - serialize typed identity and the full twenty-two-real relativistic state
+    without treating derived `gamma` as authoritative;
+  - reject typed-v2 MPI rank-count changes deterministically pending Phase 8;
+  - require strict C++ and Python parsing, checksums, topology witness,
+    checkpoint-number equality, deterministic checkpoint identity, and
+    semantic configuration equality.
+- Accepted evidence:
+  - release serial and MPI CPU builds pass;
+  - paired continuation regenerates byte-identical typed-v2 particle shards
+    and byte-identical native mesh state payloads after the native parameter
+    dump terminator;
+  - the runtime qualifier passes `21/21` frozen criteria, `13/13` copied-
+    artifact runtime corruption controls, and `1/1` inspector numeric-grammar
+    control;
+  - direct typed-v2 inspector replay passes;
+  - parser contract replay passes `120` cases;
+  - fixed-energy compatibility regressions pass CPU `20 + 12` and MPI CPU
+    `4 + 5`;
+  - the two-rank relativistic execution fence still rejects MPI before
+    Phase-8 qualification;
+  - style and whitespace gates pass;
+  - a tampered criteria copy is rejected by immutable SHA-256 assertion;
+  - the path-sorted Phase-6 evidence seal verifies every archived artifact.
+- Independent review disposition:
+  - three restart-specialist HOLD rounds exposed shard-publication ordering,
+    paired-output coordination, semantic-fingerprint coverage, mesh-witness
+    preflight ordering, mesh-particle number binding, Python/C++ parser drift,
+    missing runtime controls, mutable criteria acceptance, and stale evidence
+    sealing;
+  - each finding was corrected and mutation-replayed;
+  - the final narrow restart-specialist audit returned `PROCEED` with no
+    remaining Phase-6 blocker.
+- Deferred residual risks:
+  - relativistic diagnostic semantics remain Phase-7 work;
+  - MPI execution, same-level migration, SMR, AMR migration, restart after
+    migration, and any rank-count redistribution remain Phase-8 work;
+  - GPU, performance, public documentation overlay, and final handoff remain
+    Phase-9 work.
+- Next permitted edit set:
+  - Phase 7 only: particle-facing output implementations, output metadata,
+    inspector output validation, diagnostics-focused tests and evidence,
+    `src/particles/README.md`, and append-only ledger updates;
+  - keep migration infrastructure, MPI widening, AMR algorithms, GPU
+    optimization, and public documentation overlay closed.

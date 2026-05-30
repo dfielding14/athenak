@@ -13,6 +13,7 @@
 #include <iostream>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "athena.hpp"
@@ -21,6 +22,7 @@
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
 #include "bvals/bvals.hpp"
+#include "particle_restart.hpp"
 #include "particles.hpp"
 
 #if MPI_PARALLEL_ENABLED
@@ -34,6 +36,13 @@ namespace particles {
 Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     pmy_pack(ppack),
     dtnew(std::numeric_limits<float>::max()),
+    relativistic_restart_v2_loaded(false),
+    relativistic_restart_mesh_cycle(0),
+    relativistic_restart_mesh_time(0.0),
+    relativistic_restart_mesh_dt(0.0),
+    relativistic_restart_config_fingerprint(0),
+    legacy_restart_mesh_time(0.0),
+    legacy_restart_mesh_dt(0.0),
     check_consistency(false),
     check_motion_bounds(false),
     log_performance(false),
@@ -191,60 +200,78 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
   if (ppush.compare("relativistic_hc") == 0) {
+    int qualified_prst = 0;
+    int qualified_rst = 0;
     for (auto it = pin->block.begin(); it != pin->block.end(); ++it) {
       if (it->block_name.compare(0, 6, "output") == 0) {
+        std::string file_type = pin->GetString(it->block_name, "file_type");
+        if (file_type.compare("prst") == 0) {
+          ++qualified_prst;
+          continue;
+        }
+        if (file_type.compare("rst") == 0) {
+          ++qualified_rst;
+          continue;
+        }
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl << "Particle pusher 'relativistic_hc' staged "
                   << "contract rejects <" << it->block_name
-                  << "> until relativistic outputs are qualified" << std::endl;
-        std::exit(EXIT_FAILURE);
-      }
-    }
-  }
-  if (prtcl_rst_flag && ppush.compare("relativistic_hc") == 0) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Particle pusher 'relativistic_hc' does not support "
-              << "legacy particle restart input" << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-  if (prtcl_rst_flag) {
-    std::string prst_fname = pin->GetString("problem","prtcl_res_file");
-    char rank_dir[20];
-    std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d", global_variable::my_rank);
-    std::size_t rank_pos = prst_fname.find("rank_00000000");
-    if (rank_pos != std::string::npos) {
-      prst_fname.replace(rank_pos, sizeof("rank_00000000") - 1, rank_dir);
-    }
-
-    FILE* pfile = std::fopen(prst_fname.c_str(),"rb");
-    if (pfile == nullptr) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Particle restart file '" << prst_fname
-                << "' could not be opened" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    Real gen_data[3];
-    if (std::fread(gen_data, sizeof(Real), 3, pfile) != 3) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Particle restart file '" << prst_fname
-                << "' has an incomplete header" << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
-    nprtcl_thispack = static_cast<int>(gen_data[2]);
-    nprtcl_perspec_thispack = nprtcl_thispack/nspecies;
-    int64_t expected_size = static_cast<int64_t>(sizeof(Real))*
-                            static_cast<int64_t>(3 + 17*nprtcl_thispack);
-    if (std::fseek(pfile, 0, SEEK_END) == 0) {
-      int64_t file_size = static_cast<int64_t>(std::ftell(pfile));
-      if (file_size != expected_size) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Particle restart file '" << prst_fname
-                  << "' has size " << file_size << ", expected " << expected_size
+                  << "> until non-restart relativistic outputs are qualified"
                   << std::endl;
         std::exit(EXIT_FAILURE);
       }
     }
-    std::fclose(pfile);
+    if (qualified_prst != qualified_rst || qualified_prst > 1) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Particle pusher 'relativistic_hc' requires exactly "
+                << "one paired <output>/file_type = prst and rst block, or neither"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+  if (prtcl_rst_flag) {
+    std::string prst_fname = pin->GetString("problem","prtcl_res_file");
+    if (ppush.compare("relativistic_hc") == 0) {
+      try {
+        std::string mesh_restart =
+            pin->GetString("problem","relativistic_paired_mesh_restart_file");
+        restart::V2Shard shard = restart::ReadV2Shard(
+            prst_fname, mesh_restart, global_variable::my_rank,
+            global_variable::nranks,
+            restart::ComputeTopologyHash(pmy_pack->pmesh->rank_eachmb,
+                                         pmy_pack->pmesh->nmb_total));
+        nprtcl_thispack = static_cast<int>(shard.header.local_count);
+        nprtcl_perspec_thispack = nprtcl_thispack/nspecies;
+        relativistic_restart_v2_loaded = true;
+        relativistic_restart_mesh_cycle = shard.header.mesh_cycle;
+        relativistic_restart_mesh_time = shard.header.mesh_time;
+        relativistic_restart_mesh_dt = shard.header.mesh_dt;
+        relativistic_restart_config_fingerprint = shard.header.config_fingerprint;
+        dtnew = shard.header.particle_dtnew;
+        relativistic_restart_idata = std::move(shard.idata);
+        relativistic_restart_rdata = std::move(shard.rdata);
+      } catch (const std::exception &error) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Relativistic typed-v2 particle restart rejected: "
+                  << error.what() << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    } else {
+      try {
+        restart::LegacyV1Shard<Real> shard =
+            restart::ReadLegacyV1Shard<Real>(prst_fname, global_variable::my_rank);
+        nprtcl_thispack = static_cast<int>(shard.rdata.size()/17);
+        nprtcl_perspec_thispack = nprtcl_thispack/nspecies;
+        legacy_restart_mesh_time = shard.mesh_time;
+        legacy_restart_mesh_dt = shard.mesh_dt;
+        legacy_restart_rdata = std::move(shard.rdata);
+      } catch (const std::exception &error) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Legacy particle restart rejected: "
+                  << error.what() << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
   }
 
   // select particle type
@@ -529,6 +556,24 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                   << "particle pusher 'relativistic_hc'" << std::endl;
         std::exit(EXIT_FAILURE);
       }
+      std::uint32_t field_source_id =
+          (relativistic_field_source == RelativisticFieldSource::prescribed_test) ?
+          1U : 2U;
+      std::uint32_t temporal_sampling_id =
+          (relativistic_temporal_sampling == RelativisticTemporalSampling::none) ?
+          0U : 1U;
+      if (relativistic_restart_v2_loaded &&
+          relativistic_restart_config_fingerprint !=
+          restart::ComputeRelativisticConfigFingerprint(
+              c_model, alpha_s, field_source_id, temporal_sampling_id,
+              subcycle, subcycle_strict, subcycle_max_steps,
+              subcycle_cell_fraction, subcycle_meshblock_fraction,
+              subcycle_gyro_fraction, subcycle_electric_kick_max)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Relativistic typed-v2 particle restart semantic "
+                  << "configuration does not match the active input" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
       if (!std::isfinite(subcycle_cell_fraction) ||
           !std::isfinite(subcycle_meshblock_fraction) ||
           !std::isfinite(subcycle_gyro_fraction) ||
@@ -559,8 +604,10 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   switch (particle_type) {
     case ParticleType::cosmic_ray:
       {
-        nrdata = (pusher == ParticlesPusher::relativistic_hc) ? 22 : 14;
-        nidata = 3;
+        nrdata = (pusher == ParticlesPusher::relativistic_hc) ?
+            static_cast<int>(restart::kV2RealFields) : 14;
+        nidata = (pusher == ParticlesPusher::relativistic_hc) ?
+            static_cast<int>(restart::kV2IntegerFields) : 3;
         break;
       }
     default:
@@ -995,6 +1042,52 @@ void Particles::CheckConsistency(const std::string &label, bool check_rank) {
       std::cout << "Particle consistency detail: " << first_local_error << std::endl;
     }
     FatalConsistencyError(label, details);
+  }
+}
+
+//----------------------------------------------------------------------------------------
+// ValidateRelativisticRestartState()
+// Enforce the typed-v2 semantic boundary independently of optional debug checks.
+
+void Particles::ValidateRelativisticRestartState(const std::string &label) {
+  Mesh *pm = pmy_pack->pmesh;
+  auto pi_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_idata);
+  auto pr_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_rdata);
+  std::vector<int64_t> identity_keys;
+  identity_keys.reserve(std::max(0, nprtcl_thispack));
+  RegionSize rs;
+  for (int p=0; p<nprtcl_thispack; ++p) {
+    int gid = pi_h(PGID,p);
+    int tag = pi_h(PTAG,p);
+    int spec = pi_h(PSP,p);
+    if (gid < 0 || gid >= pm->nmb_total ||
+        pm->rank_eachmb[gid] != global_variable::my_rank) {
+      FatalConsistencyError(label, "typed-v2 particle has invalid rank ownership");
+    }
+    if (tag < 0 || spec < 0 || spec >= nspecies) {
+      FatalConsistencyError(label, "typed-v2 particle has invalid identity");
+    }
+    for (int n=0; n<nrdata; ++n) {
+      if (!std::isfinite(pr_h(n,p))) {
+        FatalConsistencyError(label, "typed-v2 particle has non-finite real state");
+      }
+    }
+    if (pr_h(IPALPHA,p) != alpha_s) {
+      FatalConsistencyError(label, "typed-v2 particle signed alpha_s is inconsistent");
+    }
+    LogicalLocationToRegion(pm, pm->lloc_eachmb[gid], rs);
+    if (!ContainsParticle(pm, rs, pm->lloc_eachmb[gid],
+                          pr_h(IPX,p), pr_h(IPY,p), pr_h(IPZ,p))) {
+      FatalConsistencyError(label, "typed-v2 particle lies outside its saved MeshBlock");
+    }
+    identity_keys.push_back((static_cast<int64_t>(spec) << 32) ^
+                            static_cast<unsigned int>(tag));
+  }
+  std::sort(identity_keys.begin(), identity_keys.end());
+  for (std::size_t n=1; n<identity_keys.size(); ++n) {
+    if (identity_keys[n] == identity_keys[n-1]) {
+      FatalConsistencyError(label, "typed-v2 particle identity is duplicated");
+    }
   }
 }
 

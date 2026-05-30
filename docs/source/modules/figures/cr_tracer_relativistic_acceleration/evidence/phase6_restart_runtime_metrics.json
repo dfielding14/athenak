@@ -1,0 +1,128 @@
+{
+  "binary": "/private/tmp/athenak-rel-phase6-build/src/athena",
+  "criteria": {
+    "count": 21,
+    "path": "/Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase6_preregistered_criteria.json",
+    "sha256": "123701e93374eb61bdd5921f6d4b07eb3899a3aaabae36db632930da980fb269",
+    "status": "PASS"
+  },
+  "input": "/Users/dbf75/.codex/worktrees/e354/athenak-DF/inputs/unit_tests/cr_relativistic_restart_runtime.athinput",
+  "inspector_negative_control_count": 1,
+  "inspector_negative_controls": [
+    {
+      "expected_diagnostic": "invalid mesh_byte_count",
+      "id": "inspector_numeric_grammar",
+      "status": "PASS"
+    }
+  ],
+  "metrics": {
+    "continuation_decoded_particle_state_equal": true,
+    "continuation_mesh_state_payload_byte_identical": true,
+    "continuation_particle_shard_byte_identical": true,
+    "copied_artifact_negative_control_count": 13,
+    "fabricated_checkpoint_id_rejected": true,
+    "future_version_header_corruption_rejected": true,
+    "inspector_negative_control_count": 1,
+    "inspector_numeric_grammar_rejected": true,
+    "manifest_count_corruption_rejected": true,
+    "mesh_payload_corruption_rejected": true,
+    "mismatched_mesh_particle_pair_rejected": true,
+    "missing_mesh_rmeta_rejected": true,
+    "overwidth_particle_filename_rejected": true,
+    "payload_corruption_rejected": true,
+    "semantic_alpha_mismatch_rejected": true,
+    "semantic_subcycle_mismatch_rejected": true,
+    "source_checkpoint_count": 2,
+    "source_final_format": "AKPRST-v2.0",
+    "stale_mesh_rmeta_rejected": true,
+    "truncated_shard_rejected": true,
+    "unpaired_particle_only_reload_rejected": true
+  },
+  "negative_control_count": 13,
+  "negative_controls": [
+    {
+      "expected_diagnostic": "payload checksum mismatch",
+      "id": "payload_corruption",
+      "status": "PASS"
+    },
+    {
+      "expected_diagnostic": "schema version is unsupported",
+      "id": "future_version_header_corruption",
+      "status": "PASS"
+    },
+    {
+      "expected_diagnostic": "shard byte count does not match manifest",
+      "id": "truncated_shard",
+      "status": "PASS"
+    },
+    {
+      "expected_diagnostic": "could not be opened",
+      "id": "missing_mesh_rmeta",
+      "status": "PASS"
+    },
+    {
+      "expected_diagnostic": "byte count does not match mesh checkpoint",
+      "id": "stale_mesh_rmeta",
+      "status": "PASS"
+    },
+    {
+      "expected_diagnostic": "particle and mesh checkpoint numbers do not match",
+      "id": "mismatched_mesh_particle_pair",
+      "status": "PASS"
+    },
+    {
+      "expected_diagnostic": "shard counts do not sum to global count",
+      "id": "manifest_count_corruption",
+      "status": "PASS"
+    },
+    {
+      "expected_diagnostic": "semantic configuration does not match the active input",
+      "id": "semantic_alpha_mismatch",
+      "status": "PASS"
+    },
+    {
+      "expected_diagnostic": "semantic configuration does not match the active input",
+      "id": "semantic_subcycle_mismatch",
+      "status": "PASS"
+    },
+    {
+      "expected_diagnostic": "requires paired full-mesh -r and typed-v2 particle restart input",
+      "id": "unpaired_particle_only_reload",
+      "status": "PASS"
+    },
+    {
+      "expected_diagnostic": "mesh restart witness checksum does not match mesh checkpoint",
+      "id": "mesh_payload_corruption",
+      "status": "PASS"
+    },
+    {
+      "expected_diagnostic": "mesh restart witness checkpoint ID is inconsistent",
+      "id": "fabricated_checkpoint_id",
+      "status": "PASS"
+    },
+    {
+      "expected_diagnostic": "missing five-digit checkpoint number",
+      "id": "overwidth_particle_filename",
+      "status": "PASS"
+    }
+  ],
+  "paired_continuation": {
+    "compared_checkpoint": 1,
+    "decoded_particle_state_equal": true,
+    "mesh_state_payload_byte_identical": true,
+    "particle_shard_byte_identical": true,
+    "reloaded_checkpoint": 0
+  },
+  "qualification": "cr_relativistic_restart_runtime_phase6",
+  "schema_version": 1,
+  "source": {
+    "checkpoint_count": 2,
+    "checkpoint_numbers": [
+      0,
+      1
+    ],
+    "final_format": "AKPRST-v2.0",
+    "final_particle_count": 1
+  },
+  "status": "PASS"
+}

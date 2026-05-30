@@ -9,13 +9,16 @@
 #include <sys/stat.h>  // mkdir
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>      // fwrite(), fclose(), fopen(), fnprintf(), snprintf()
 #include <cstdlib>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <utility> // make_pair
+#include <vector>
 
 #include "athena.hpp"
 #include "coordinates/cell_locations.hpp"
@@ -24,12 +27,51 @@
 #include "mesh/mesh.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "particles/particle_restart.hpp"
+#include "particles/particles.hpp"
 #include "coordinates/adm.hpp"
 #include "z4c/compact_object_tracker.hpp"
 #include "z4c/z4c.hpp"
 #include "radiation/radiation.hpp"
 #include "srcterms/turb_driver.hpp"
 //#include "outputs.hpp"
+
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
+
+namespace {
+
+void PublishRelativisticMeshWitness(Mesh *pm, const std::string &mesh_restart) {
+  std::vector<unsigned char> bytes = particles::restart::ReadBytes(mesh_restart);
+  std::uint64_t topology_hash =
+      particles::restart::ComputeTopologyHash(pm->rank_eachmb, pm->nmb_total);
+  std::uint64_t checkpoint_id = particles::restart::ComputeCheckpointID(
+      pm->ncycle, pm->time, pm->dt, particles::restart::FileNumber(mesh_restart),
+      global_variable::nranks);
+  std::string witness_path = mesh_restart + ".rmeta";
+  std::string tmp_path = witness_path + ".tmp";
+  std::ofstream witness(tmp_path);
+  witness << std::setprecision(17);
+  witness << "magic AKRST-WITNESS\n";
+  witness << "version 1\n";
+  witness << "checkpoint_id " << checkpoint_id << '\n';
+  witness << "saved_nranks " << global_variable::nranks << '\n';
+  witness << "mesh_cycle " << pm->ncycle << '\n';
+  witness << "mesh_time " << pm->time << '\n';
+  witness << "mesh_dt " << pm->dt << '\n';
+  witness << "mesh_byte_count " << bytes.size() << '\n';
+  witness << "mesh_checksum "
+          << particles::restart::FNV1a(bytes.data(), bytes.size()) << '\n';
+  witness << "mesh_topology_hash " << topology_hash << '\n';
+  witness.close();
+  particles::restart::Require(
+      static_cast<bool>(witness) &&
+      std::rename(tmp_path.c_str(), witness_path.c_str()) == 0,
+      "mesh restart witness '" + witness_path + "' could not be published");
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 // constructor: also calls BaseTypeOutput base class constructor
@@ -52,6 +94,11 @@ RestartOutput::RestartOutput(ParameterInput *pin, Mesh *pm, OutputParameters op)
 // variables, including ghost zones.
 
 void RestartOutput::LoadOutputData(Mesh *pm) {
+  particles::Particles *pp = pm->pmb_pack->ppart;
+  if (pp != nullptr && pp->pusher == ParticlesPusher::relativistic_hc) {
+    pp->ValidateRelativisticRestartState("typed-v2 paired mesh restart preflight");
+  }
+
   // get spatial dimensions of arrays, including ghost zones
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
   int nout1 = indcs.nx1 + 2*(indcs.ng);
@@ -165,6 +212,23 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     nadm = padm->nadm;
   }
   bool single_file_per_rank = out_params.single_file_per_rank;
+  particles::Particles *pp = pm->pmb_pack->ppart;
+  bool relativistic_hc =
+      pp != nullptr && pp->pusher == ParticlesPusher::relativistic_hc;
+  if (relativistic_hc &&
+      (out_params.file_number < 0 || out_params.file_number > 99999)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Relativistic paired mesh restart file_number must remain "
+              << "in the five-digit range [0, 99999]" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (relativistic_hc && single_file_per_rank) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Particle pusher 'relativistic_hc' paired restart "
+              << "currently requires <output>/single_file_per_rank = false"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   std::string fname;
   if (single_file_per_rank) {
     // Generate a directory and filename for each rank
@@ -625,6 +689,19 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
   // close file, clean up
   resfile.Close(single_file_per_rank);
+  if (relativistic_hc && global_variable::my_rank == 0) {
+    try {
+      PublishRelativisticMeshWitness(pm, fname);
+    } catch (const std::exception &error) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Relativistic mesh restart witness output rejected: "
+                << error.what() << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+#if MPI_PARALLEL_ENABLED
+  if (relativistic_hc) {MPI_Barrier(MPI_COMM_WORLD);}
+#endif
 
   return;
 }

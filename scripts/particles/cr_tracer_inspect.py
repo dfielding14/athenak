@@ -18,6 +18,14 @@ from typing import Sequence
 
 RESTART_FIELDS = 17
 PPD_FIELDS = 4
+TYPED_V2_MAGIC = b"AKPRST2\0"
+TYPED_V2_HEADER_BYTES = 144
+TYPED_V2_HEADER_CHECKSUM_OFFSET = 120
+TYPED_V2_INTEGER_FIELDS = 3
+TYPED_V2_REAL_FIELDS = 22
+TYPED_V2_RECORD = struct.Struct("<iii22d")
+TYPED_V2_RECORD_BYTES = TYPED_V2_RECORD.size
+TYPED_V2_HEADER = struct.Struct("<8sHH9IQQqdddQQQQIQ4x")
 
 
 def _rank_from_path(path: Path) -> int:
@@ -28,6 +36,22 @@ def _rank_from_path(path: Path) -> int:
 def _file_number(path: Path) -> int:
     match = re.search(r"\.(\d+)\.[^.]+$", path.name)
     return int(match.group(1)) if match else -1
+
+
+def _typed_v2_file_number(path: Path) -> int:
+    match = re.search(r"\.(\d{5})\.[^.]+$", path.name)
+    if match is None:
+        raise ValueError(
+            f"{path} typed-v2 restart filename is missing five-digit checkpoint number")
+    return int(match.group(1))
+
+
+def _typed_v2_checkpoint_id(cycle: int, mesh_time: float, mesh_dt: float,
+                            file_number: int, saved_nranks: int) -> int:
+    if saved_nranks <= 0 or saved_nranks > (1 << 31) - 1:
+        raise ValueError("typed-v2 restart saved rank count exceeds runtime int range")
+    return _fnv1a64(struct.pack(
+        "<qddii", cycle, mesh_time, mesh_dt, file_number, saved_nranks))
 
 
 def _restart_files(path: Path, latest: bool = True) -> List[Path]:
@@ -77,6 +101,485 @@ def sample_selected(species: int, tag: int, sample_species: int,
     if sample_species >= 0 and species != sample_species:
         return False
     return sample_hash(species, tag) % sample_stride == sample_offset
+
+
+def _typed_v2_manifest_path(path: Path) -> Path:
+    match = re.fullmatch(r"rank_(\d+)", path.parent.name)
+    if match is None:
+        raise ValueError(
+            f"{path} typed-v2 restart shard is not below a rank directory")
+    return path.parent.parent / f"{path.name}.manifest"
+
+
+def _is_typed_v2_restart(path: Path, blob: bytes) -> bool:
+    if blob.startswith(TYPED_V2_MAGIC) or blob.startswith(b"AKPRST2"):
+        return True
+    if blob and TYPED_V2_MAGIC.startswith(blob):
+        return True
+    try:
+        return _typed_v2_manifest_path(path).exists()
+    except ValueError:
+        return False
+
+
+def _typed_v2_uint(text: str, label: str, maximum: int = (1 << 64) - 1,
+                   context: str = "manifest") -> int:
+    if re.fullmatch(r"[0-9]+", text) is None:
+        raise ValueError(f"typed-v2 restart {context} has invalid {label}={text}")
+    try:
+        value = int(text)
+    except ValueError as error:
+        raise ValueError(
+            f"typed-v2 restart {context} has invalid {label}={text}") from error
+    if value < 0 or value > maximum:
+        raise ValueError(f"typed-v2 restart {context} has invalid {label}={text}")
+    return value
+
+
+def _typed_v2_int(text: str, label: str, context: str = "manifest") -> int:
+    if re.fullmatch(r"-?[0-9]+", text) is None:
+        raise ValueError(
+            f"typed-v2 restart {context} has invalid {label}={text}")
+    try:
+        return int(text)
+    except ValueError as error:
+        raise ValueError(
+            f"typed-v2 restart {context} has invalid {label}={text}") from error
+
+
+def _typed_v2_float(text: str, label: str, context: str = "manifest") -> float:
+    if re.fullmatch(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?",
+                    text) is None:
+        raise ValueError(
+            f"typed-v2 restart {context} has invalid {label}={text}")
+    try:
+        value = float(text)
+    except ValueError as error:
+        raise ValueError(
+            f"typed-v2 restart {context} has invalid {label}={text}") from error
+    if not math.isfinite(value):
+        raise ValueError(f"typed-v2 restart {context} has non-finite {label}={text}")
+    return value
+
+
+def _typed_v2_safe_relative_path(path: str) -> bool:
+    return bool(path) and not path.startswith("/") and ".." not in path and "\\" not in path
+
+
+def _read_typed_v2_manifest(path: Path, shard_name: str) -> Dict:
+    try:
+        lines = path.read_text().splitlines()
+    except FileNotFoundError as error:
+        raise ValueError(f"typed-v2 restart requires manifest {path}") from error
+    except (OSError, UnicodeDecodeError) as error:
+        raise ValueError(f"typed-v2 restart manifest {path} could not be read") from error
+
+    values: Dict[str, str] = {}
+    shard_rows = []
+    for line_number, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        fields = stripped.split()
+        key = fields[0]
+        if key == "shard":
+            if len(fields) != 7:
+                raise ValueError(
+                    f"typed-v2 restart manifest {path}:{line_number} "
+                    "has malformed shard row")
+            shard_rows.append({
+                "rank": _typed_v2_uint(fields[1], "shard rank", (1 << 32) - 1),
+                "relative_path": fields[2],
+                "byte_count": _typed_v2_uint(fields[3], "shard byte_count"),
+                "local_count": _typed_v2_uint(fields[4], "shard local_count"),
+                "payload_checksum": _typed_v2_uint(
+                    fields[5], "shard payload_checksum"),
+                "header_checksum": _typed_v2_uint(
+                    fields[6], "shard header_checksum"),
+            })
+            continue
+        if len(fields) != 2:
+            raise ValueError(
+                f"typed-v2 restart manifest {path}:{line_number} "
+                f"has malformed key {key!r}")
+        if key in values:
+            raise ValueError(f"typed-v2 restart manifest {path} repeats key {key!r}")
+        values[key] = fields[1]
+
+    def required(key: str) -> str:
+        try:
+            return values[key]
+        except KeyError as error:
+            raise ValueError(
+                f"typed-v2 restart manifest {path} is missing {key!r}") from error
+
+    if required("magic") != "AKPRST-MANIFEST":
+        raise ValueError(f"typed-v2 restart manifest {path} has invalid magic")
+    if required("version") != "2.0":
+        raise ValueError(f"typed-v2 restart manifest {path} has unsupported version")
+    if required("topology_policy") != "reject_rank_count_change":
+        raise ValueError(
+            f"typed-v2 restart manifest {path} has unsupported topology policy")
+    if required("paired_mesh_checkpoint") != "required":
+        raise ValueError(
+            f"typed-v2 restart manifest {path} does not require a paired checkpoint")
+
+    manifest = {
+        "path": path,
+        "values": values,
+        "checkpoint_id": _typed_v2_uint(required("checkpoint_id"), "checkpoint_id"),
+        "saved_nranks": _typed_v2_uint(
+            required("saved_nranks"), "saved_nranks", (1 << 32) - 1),
+        "global_count": _typed_v2_uint(required("global_count"), "global_count"),
+        "mesh_cycle": _typed_v2_int(required("mesh_cycle"), "mesh_cycle"),
+        "mesh_time": _typed_v2_float(required("mesh_time"), "mesh_time"),
+        "mesh_dt": _typed_v2_float(required("mesh_dt"), "mesh_dt"),
+        "particle_dtnew": _typed_v2_float(
+            required("particle_dtnew"), "particle_dtnew"),
+        "config_fingerprint": _typed_v2_uint(
+            required("config_fingerprint"), "config_fingerprint"),
+        "mesh_byte_count": _typed_v2_uint(
+            required("mesh_byte_count"), "mesh_byte_count"),
+        "mesh_checksum": _typed_v2_uint(required("mesh_checksum"), "mesh_checksum"),
+        "mesh_topology_hash": _typed_v2_uint(
+            required("mesh_topology_hash"), "mesh_topology_hash"),
+        "mesh_restart": required("mesh_restart"),
+        "shards": {},
+    }
+    if manifest["saved_nranks"] == 0:
+        raise ValueError(f"typed-v2 restart manifest {path} has zero saved ranks")
+    if len(shard_rows) != manifest["saved_nranks"]:
+        raise ValueError(
+            f"typed-v2 restart manifest {path} shard coverage count mismatch: "
+            f"found {len(shard_rows)}, expected {manifest['saved_nranks']}")
+    if not _typed_v2_safe_relative_path(manifest["mesh_restart"]):
+        raise ValueError(
+            f"typed-v2 restart manifest {path} has unsafe mesh restart path "
+            f"{manifest['mesh_restart']!r}")
+
+    manifest_total = 0
+    for row in shard_rows:
+        rank = row["rank"]
+        relative_path = row["relative_path"]
+        if rank >= manifest["saved_nranks"]:
+            raise ValueError(
+                f"typed-v2 restart manifest {path} shard rank {rank} is out of range")
+        if not _typed_v2_safe_relative_path(relative_path):
+            raise ValueError(
+                f"typed-v2 restart manifest {path} has unsafe shard path "
+                f"{relative_path!r}")
+        expected_path = f"rank_{rank:08d}/{shard_name}"
+        if relative_path != expected_path:
+            raise ValueError(
+                f"typed-v2 restart manifest {path} topology mismatch for rank {rank}: "
+                f"path={relative_path!r}, expected={expected_path!r}")
+        if rank in manifest["shards"]:
+            raise ValueError(
+                f"typed-v2 restart manifest {path} repeats shard rank {rank}")
+        manifest["shards"][rank] = row
+        if row["local_count"] > (1 << 64) - 1 - manifest_total:
+            raise ValueError(
+                f"typed-v2 restart manifest {path} shard count sum overflows uint64")
+        manifest_total += row["local_count"]
+
+    expected_ranks = set(range(manifest["saved_nranks"]))
+    if set(manifest["shards"]) != expected_ranks:
+        raise ValueError(f"typed-v2 restart manifest {path} shard coverage is incomplete")
+    if manifest_total != manifest["global_count"]:
+        raise ValueError(
+            f"typed-v2 restart manifest {path} particle count mismatch: "
+            f"shards sum to {manifest_total}, global_count={manifest['global_count']}")
+    return manifest
+
+
+def _read_typed_v2_mesh_witness(manifest_path: Path, manifest: Dict) -> Dict:
+    run_root = manifest_path.parent.parent
+    mesh_path = run_root / manifest["mesh_restart"]
+    witness_path = Path(str(mesh_path) + ".rmeta")
+    try:
+        lines = witness_path.read_text().splitlines()
+    except FileNotFoundError as error:
+        raise ValueError(
+            f"typed-v2 restart requires mesh witness {witness_path}") from error
+    except (OSError, UnicodeDecodeError) as error:
+        raise ValueError(
+            f"typed-v2 restart mesh witness {witness_path} could not be read") from error
+
+    values: Dict[str, str] = {}
+    for line_number, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        fields = stripped.split()
+        if len(fields) != 2:
+            raise ValueError(
+                f"typed-v2 restart mesh witness {witness_path}:{line_number} "
+                "has malformed row")
+        key, value = fields
+        if key == "shard":
+            raise ValueError(
+                f"typed-v2 restart mesh witness {witness_path} "
+                "contains unexpected shard row")
+        if key in values:
+            raise ValueError(
+                f"typed-v2 restart mesh witness {witness_path} "
+                f"repeats key {key!r}")
+        values[key] = value
+
+    def required(key: str) -> str:
+        try:
+            return values[key]
+        except KeyError as error:
+            raise ValueError(
+                f"typed-v2 restart mesh witness {witness_path} "
+                f"is missing {key!r}") from error
+
+    if required("magic") != "AKRST-WITNESS":
+        raise ValueError(f"typed-v2 restart mesh witness {witness_path} has invalid magic")
+    if required("version") != "1":
+        raise ValueError(
+            f"typed-v2 restart mesh witness {witness_path} has unsupported version")
+
+    context = "mesh witness"
+    witness = {
+        "path": witness_path,
+        "mesh_path": mesh_path,
+        "checkpoint_id": _typed_v2_uint(
+            required("checkpoint_id"), "checkpoint_id", context=context),
+        "saved_nranks": _typed_v2_uint(
+            required("saved_nranks"), "saved_nranks", (1 << 32) - 1,
+            context=context),
+        "mesh_cycle": _typed_v2_int(
+            required("mesh_cycle"), "mesh_cycle", context=context),
+        "mesh_time": _typed_v2_float(
+            required("mesh_time"), "mesh_time", context=context),
+        "mesh_dt": _typed_v2_float(required("mesh_dt"), "mesh_dt", context=context),
+        "mesh_byte_count": _typed_v2_uint(
+            required("mesh_byte_count"), "mesh_byte_count", context=context),
+        "mesh_checksum": _typed_v2_uint(
+            required("mesh_checksum"), "mesh_checksum", context=context),
+        "mesh_topology_hash": _typed_v2_uint(
+            required("mesh_topology_hash"), "mesh_topology_hash", context=context),
+    }
+    for key in (
+            "checkpoint_id", "saved_nranks", "mesh_cycle", "mesh_time", "mesh_dt",
+            "mesh_byte_count", "mesh_checksum", "mesh_topology_hash"):
+        if witness[key] != manifest[key]:
+            raise ValueError(
+                f"typed-v2 restart mesh witness {witness_path} {key} mismatch: "
+                f"witness={witness[key]}, manifest={manifest[key]}")
+
+    try:
+        mesh_blob = mesh_path.read_bytes()
+    except OSError as error:
+        raise ValueError(
+            f"typed-v2 restart mesh checkpoint {mesh_path} could not be read") from error
+    if len(mesh_blob) != witness["mesh_byte_count"]:
+        raise ValueError(
+            f"typed-v2 restart mesh checkpoint {mesh_path} byte count mismatch: "
+            f"actual={len(mesh_blob)}, witness={witness['mesh_byte_count']}")
+    actual_checksum = _fnv1a64(mesh_blob)
+    if actual_checksum != witness["mesh_checksum"]:
+        raise ValueError(
+            f"typed-v2 restart mesh checkpoint {mesh_path} checksum mismatch: "
+            f"actual={actual_checksum}, witness={witness['mesh_checksum']}")
+    mesh_file_number = _typed_v2_file_number(mesh_path)
+    expected_checkpoint_id = _typed_v2_checkpoint_id(
+        witness["mesh_cycle"], witness["mesh_time"], witness["mesh_dt"],
+        mesh_file_number, witness["saved_nranks"])
+    if witness["checkpoint_id"] != expected_checkpoint_id:
+        raise ValueError(
+            f"typed-v2 restart mesh witness {witness_path} checkpoint ID is inconsistent")
+    witness["file_number"] = mesh_file_number
+    return witness
+
+
+def _decode_typed_v2_header(path: Path, blob: bytes) -> Dict:
+    if len(blob) < TYPED_V2_HEADER_BYTES:
+        raise ValueError(
+            f"{path} typed-v2 restart has truncated header: "
+            f"byte_count={len(blob)}, expected at least {TYPED_V2_HEADER_BYTES}")
+
+    fields = TYPED_V2_HEADER.unpack_from(blob)
+    (magic, schema_major, schema_minor, header_bytes, flags, endian_marker,
+     integer_fields, real_fields, record_bytes, saved_nranks, saved_rank,
+     topology_policy, local_count, global_count, mesh_cycle, mesh_time, mesh_dt,
+     particle_dtnew, checkpoint_id, payload_bytes, payload_checksum,
+     header_checksum, requires_manifest, config_fingerprint) = fields
+    if magic != TYPED_V2_MAGIC:
+        raise ValueError(f"{path} typed-v2 restart has corrupt magic")
+    if (schema_major, schema_minor) != (2, 0):
+        raise ValueError(
+            f"{path} typed-v2 restart schema version mismatch: "
+            f"found {schema_major}.{schema_minor}, expected 2.0")
+    if header_bytes != TYPED_V2_HEADER_BYTES:
+        raise ValueError(
+            f"{path} typed-v2 restart header width mismatch: "
+            f"found {header_bytes}, expected {TYPED_V2_HEADER_BYTES}")
+    if flags != 1:
+        raise ValueError(f"{path} typed-v2 restart mode flags mismatch: found {flags}")
+    if endian_marker != 0x01020304:
+        raise ValueError(f"{path} typed-v2 restart endian marker mismatch")
+    if (integer_fields, real_fields, record_bytes) != (
+            TYPED_V2_INTEGER_FIELDS, TYPED_V2_REAL_FIELDS, TYPED_V2_RECORD_BYTES):
+        raise ValueError(
+            f"{path} typed-v2 restart record type mismatch: "
+            f"found int32_fields={integer_fields}, f64_fields={real_fields}, "
+            f"record_bytes={record_bytes}; expected int32_fields=3, "
+            f"f64_fields=22, record_bytes={TYPED_V2_RECORD_BYTES}")
+    if topology_policy != 1:
+        raise ValueError(f"{path} typed-v2 restart topology policy mismatch")
+    if requires_manifest != 1:
+        raise ValueError(f"{path} typed-v2 restart does not require a manifest")
+
+    checksum_bytes = bytearray(blob[:TYPED_V2_HEADER_BYTES])
+    checksum_bytes[
+        TYPED_V2_HEADER_CHECKSUM_OFFSET:TYPED_V2_HEADER_CHECKSUM_OFFSET + 8
+    ] = b"\0" * 8
+    actual_header_checksum = _fnv1a64(checksum_bytes)
+    if actual_header_checksum != header_checksum:
+        raise ValueError(
+            f"{path} typed-v2 restart header checksum mismatch: "
+            f"stored={header_checksum}, actual={actual_header_checksum}")
+    if not all(math.isfinite(value) for value in (mesh_time, mesh_dt, particle_dtnew)):
+        raise ValueError(f"{path} typed-v2 restart header has non-finite timestep data")
+    if saved_nranks == 0 or saved_rank >= saved_nranks:
+        raise ValueError(f"{path} typed-v2 restart has invalid saved rank topology")
+    if local_count > (1 << 31) - 1:
+        raise ValueError(f"{path} typed-v2 restart local count exceeds runtime int range")
+    expected_payload_bytes = local_count * TYPED_V2_RECORD_BYTES
+    if payload_bytes != expected_payload_bytes:
+        raise ValueError(
+            f"{path} typed-v2 restart payload count mismatch: "
+            f"payload_bytes={payload_bytes}, expected {expected_payload_bytes} "
+            f"for local_count={local_count}")
+    expected_bytes = TYPED_V2_HEADER_BYTES + payload_bytes
+    if len(blob) < expected_bytes:
+        raise ValueError(
+            f"{path} typed-v2 restart has truncated payload: "
+            f"byte_count={len(blob)}, expected {expected_bytes}")
+    if len(blob) > expected_bytes:
+        raise ValueError(
+            f"{path} typed-v2 restart has corrupt trailing data: "
+            f"byte_count={len(blob)}, expected {expected_bytes}")
+    actual_payload_checksum = _fnv1a64(blob[TYPED_V2_HEADER_BYTES:])
+    if actual_payload_checksum != payload_checksum:
+        raise ValueError(
+            f"{path} typed-v2 restart payload checksum mismatch: "
+            f"stored={payload_checksum}, actual={actual_payload_checksum}")
+    return {
+        "saved_nranks": saved_nranks,
+        "saved_rank": saved_rank,
+        "local_count": local_count,
+        "global_count": global_count,
+        "mesh_cycle": mesh_cycle,
+        "mesh_time": mesh_time,
+        "mesh_dt": mesh_dt,
+        "particle_dtnew": particle_dtnew,
+        "checkpoint_id": checkpoint_id,
+        "payload_bytes": payload_bytes,
+        "payload_checksum": payload_checksum,
+        "header_checksum": header_checksum,
+        "config_fingerprint": config_fingerprint,
+    }
+
+
+def _validate_typed_v2_header_manifest(path: Path, header: Dict,
+                                       manifest: Dict, shard: Dict) -> None:
+    checks = {
+        "saved_nranks": manifest["saved_nranks"],
+        "saved_rank": shard["rank"],
+        "local_count": shard["local_count"],
+        "global_count": manifest["global_count"],
+        "mesh_cycle": manifest["mesh_cycle"],
+        "mesh_time": manifest["mesh_time"],
+        "mesh_dt": manifest["mesh_dt"],
+        "particle_dtnew": manifest["particle_dtnew"],
+        "checkpoint_id": manifest["checkpoint_id"],
+        "config_fingerprint": manifest["config_fingerprint"],
+        "payload_checksum": shard["payload_checksum"],
+        "header_checksum": shard["header_checksum"],
+    }
+    for key, expected in checks.items():
+        actual = header[key]
+        if actual != expected:
+            raise ValueError(
+                f"{path} typed-v2 restart {key} mismatch: "
+                f"header={actual}, manifest={expected}")
+
+
+def _read_typed_v2_checkpoint(path: Path, selected_blob: bytes) -> Dict:
+    particle_file_number = _typed_v2_file_number(path)
+    manifest_path = _typed_v2_manifest_path(path)
+    manifest = _read_typed_v2_manifest(manifest_path, path.name)
+    mesh_witness = _read_typed_v2_mesh_witness(manifest_path, manifest)
+    if particle_file_number != mesh_witness["file_number"]:
+        raise ValueError(
+            f"{path} typed-v2 restart particle and mesh checkpoint numbers do not match")
+    shards = {}
+    selected_path = path.resolve()
+    for shard in manifest["shards"].values():
+        shard_path = manifest_path.parent / shard["relative_path"]
+        if _typed_v2_file_number(shard_path) != mesh_witness["file_number"]:
+            raise ValueError(
+                f"{shard_path} typed-v2 restart particle and mesh checkpoint "
+                "numbers do not match")
+        try:
+            blob = (selected_blob if shard_path.resolve() == selected_path
+                    else shard_path.read_bytes())
+        except OSError as error:
+            raise ValueError(
+                f"typed-v2 restart manifest {manifest_path} references missing "
+                f"shard {shard_path}") from error
+        if len(blob) != shard["byte_count"]:
+            condition = "truncated" if len(blob) < shard["byte_count"] else "corrupt"
+            raise ValueError(
+                f"{shard_path} typed-v2 restart has {condition} shard byte count: "
+                f"actual={len(blob)}, manifest={shard['byte_count']}")
+        header = _decode_typed_v2_header(shard_path, blob)
+        _validate_typed_v2_header_manifest(shard_path, header, manifest, shard)
+        shards[shard_path.resolve()] = {"blob": blob, "header": header}
+    if selected_path not in shards:
+        raise ValueError(
+            f"{path} typed-v2 restart shard is not covered by manifest {manifest_path}")
+    return {"manifest": manifest, "mesh_witness": mesh_witness, "shards": shards}
+
+
+def _decode_typed_v2_restart(path: Path, checkpoint: Dict) -> Dict:
+    shard = checkpoint["shards"][path.resolve()]
+    header = shard["header"]
+    particles = []
+    payload = shard["blob"][TYPED_V2_HEADER_BYTES:]
+    for record in TYPED_V2_RECORD.iter_unpack(payload):
+        pgid, tag, species = record[:TYPED_V2_INTEGER_FIELDS]
+        reals = tuple(float(value) for value in record[TYPED_V2_INTEGER_FIELDS:])
+        if not all(math.isfinite(value) for value in reals):
+            raise ValueError(f"{path} typed-v2 restart contains non-finite particle data")
+        particles.append({
+            "pgid": pgid,
+            "tag": tag,
+            "species": species,
+            "reals": reals,
+        })
+    if len(particles) != header["local_count"]:
+        raise ValueError(
+            f"{path} typed-v2 restart particle count mismatch: "
+            f"decoded={len(particles)}, header={header['local_count']}")
+
+    manifest = checkpoint["manifest"]
+    metadata = dict(manifest["values"])
+    metadata["path"] = str(manifest["path"])
+    return {
+        "path": path,
+        "rank": header["saved_rank"],
+        "time": header["mesh_time"],
+        "dt": header["mesh_dt"],
+        "count": header["local_count"],
+        "real_size": struct.calcsize("<d"),
+        "format_version": "AKPRST-v2.0",
+        "metadata": metadata,
+        "particles": particles,
+    }
 
 
 def _try_restart_decode(blob: bytes, real_size: int) -> Optional[Dict]:
@@ -161,9 +664,21 @@ def _validate_particle_metadata(path: Path, blob: bytes, decoded: Dict,
     return f"AKPRST-v{metadata.get('version', 'unknown')}"
 
 
-def read_prst_file(path: Path) -> Dict:
+def read_prst_file(path: Path,
+                   _typed_v2_checkpoints: Optional[Dict[Path, Dict]] = None) -> Dict:
     """Read one per-rank particle restart file and validate its length."""
     blob = path.read_bytes()
+    if _is_typed_v2_restart(path, blob):
+        manifest_path = _typed_v2_manifest_path(path).resolve()
+        checkpoint = None
+        if _typed_v2_checkpoints is not None:
+            checkpoint = _typed_v2_checkpoints.get(manifest_path)
+        if checkpoint is None:
+            checkpoint = _read_typed_v2_checkpoint(path, blob)
+            if _typed_v2_checkpoints is not None:
+                _typed_v2_checkpoints[manifest_path] = checkpoint
+        return _decode_typed_v2_restart(path, checkpoint)
+
     decoded = _try_restart_decode(blob, 8)
     if decoded is None:
         decoded = _try_restart_decode(blob, 4)
@@ -513,7 +1028,11 @@ def summarize_restart(path: Path, latest: bool = True) -> Dict:
     if not files:
         raise FileNotFoundError(f"No particle restart files found below {path}")
 
-    restarts = [read_prst_file(file_path) for file_path in files]
+    typed_v2_checkpoints: Dict[Path, Dict] = {}
+    restarts = [
+        read_prst_file(file_path, _typed_v2_checkpoints=typed_v2_checkpoints)
+        for file_path in files
+    ]
     total = sum(restart["count"] for restart in restarts)
     rank_counts = Counter()
     species_counts = Counter()

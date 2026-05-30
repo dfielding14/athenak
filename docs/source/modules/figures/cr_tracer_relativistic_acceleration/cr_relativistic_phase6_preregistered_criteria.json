@@ -1,0 +1,29 @@
+{
+  "manifest_schema_version": 1,
+  "experiment": "CR relativistic Phase-6 paired typed-v2 restart and inspector qualification",
+  "status": "reviewer_rebound_freeze_after_third_restart_specialist_hold_before_corrected_replay",
+  "scope": "serial uniform-level exactly-one-MeshBlock Phase-6 qualification; paired native mesh restart plus typed-v2 particle shard manifest with deterministic rank-count-change rejection; MPI execution, SMR, AMR migration execution, explicit relativistic diagnostics, GPU, and public overlay remain later phases",
+  "criteria": [
+    {"id": "P6-01", "metric": "source_checkpoint_count", "operator": ">=", "limit": 2},
+    {"id": "P6-02", "metric": "source_final_format", "operator": "==", "limit": "AKPRST-v2.0"},
+    {"id": "P6-03", "metric": "continuation_decoded_particle_state_equal", "operator": "==", "limit": true},
+    {"id": "P6-04", "metric": "continuation_particle_shard_byte_identical", "operator": "==", "limit": true},
+    {"id": "P6-05", "metric": "copied_artifact_negative_control_count", "operator": "==", "limit": 13},
+    {"id": "P6-06", "metric": "payload_corruption_rejected", "operator": "==", "limit": true},
+    {"id": "P6-07", "metric": "future_version_header_corruption_rejected", "operator": "==", "limit": true},
+    {"id": "P6-08", "metric": "truncated_shard_rejected", "operator": "==", "limit": true},
+    {"id": "P6-09", "metric": "missing_mesh_rmeta_rejected", "operator": "==", "limit": true},
+    {"id": "P6-10", "metric": "stale_mesh_rmeta_rejected", "operator": "==", "limit": true},
+    {"id": "P6-11", "metric": "mismatched_mesh_particle_pair_rejected", "operator": "==", "limit": true},
+    {"id": "P6-12", "metric": "manifest_count_corruption_rejected", "operator": "==", "limit": true},
+    {"id": "P6-13", "metric": "semantic_alpha_mismatch_rejected", "operator": "==", "limit": true},
+    {"id": "P6-14", "metric": "semantic_subcycle_mismatch_rejected", "operator": "==", "limit": true},
+    {"id": "P6-15", "metric": "unpaired_particle_only_reload_rejected", "operator": "==", "limit": true},
+    {"id": "P6-16", "metric": "continuation_mesh_state_payload_byte_identical", "operator": "==", "limit": true},
+    {"id": "P6-17", "metric": "mesh_payload_corruption_rejected", "operator": "==", "limit": true},
+    {"id": "P6-18", "metric": "fabricated_checkpoint_id_rejected", "operator": "==", "limit": true},
+    {"id": "P6-19", "metric": "overwidth_particle_filename_rejected", "operator": "==", "limit": true},
+    {"id": "P6-20", "metric": "inspector_negative_control_count", "operator": "==", "limit": 1},
+    {"id": "P6-21", "metric": "inspector_numeric_grammar_rejected", "operator": "==", "limit": true}
+  ]
+}

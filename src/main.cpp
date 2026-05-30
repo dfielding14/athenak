@@ -37,6 +37,7 @@
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "outputs/outputs.hpp"
+#include "particles/particle_restart.hpp"
 #include "driver/driver.hpp"
 #include "utils/utils.hpp"
 
@@ -257,6 +258,22 @@ int main(int argc, char *argv[]) {
         std::cerr << "Error: Unable to open restart file: " << restart_file << std::endl;
         // Handle the error (e.g., exit the program or use a default configuration)
     }
+    std::ifstream witness_check(restart_file + ".rmeta");
+    if (witness_check.good()) {
+      try {
+        particles::restart::ReadMeshWitness(restart_file);
+      } catch (const std::exception &error) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Mesh restart witness preflight rejected checkpoint: "
+                  << error.what() << std::endl;
+        delete pinput;
+        Kokkos::finalize();
+#if MPI_PARALLEL_ENABLED
+        MPI_Finalize();
+#endif
+        return(EXIT_FAILURE);
+      }
+    }
 
     // read parameters from restart file
     restartfile.Open(restart_file.c_str(),IOWrapper::FileMode::read,single_file_per_rank);
@@ -273,20 +290,40 @@ int main(int argc, char *argv[]) {
     pinput->CheckBlockNames();
   }
   pinput->ModifyFromCmdline(argc, argv);
-  if (res_flag && pinput->DoesBlockExist("particles") &&
+  if (pinput->DoesBlockExist("particles") &&
       pinput->DoesParameterExist("particles","pusher") &&
       pinput->GetString("particles","pusher").compare("relativistic_hc") == 0) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Particle pusher 'relativistic_hc' does not support "
-              << "full mesh restart input until the relativistic restart schema is "
-              << "qualified" << std::endl;
-    if (res_flag) restartfile.Close(single_file_per_rank);
-    delete pinput;
-    Kokkos::finalize();
+    int particle_restart =
+        pinput->GetOrAddInteger("problem","prtcl_rst_flag",0);
+    if (res_flag && particle_restart) {
+      pinput->SetString("problem","relativistic_paired_mesh_restart_file",
+                        restart_file);
+      try {
+        particles::restart::ReadMeshWitness(restart_file);
+      } catch (const std::exception &error) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Relativistic paired mesh restart preflight rejected "
+                  << "checkpoint: " << error.what() << std::endl;
+        restartfile.Close(single_file_per_rank);
+        delete pinput;
+        Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
-    MPI_Finalize();
+        MPI_Finalize();
 #endif
-    return(EXIT_FAILURE);
+        return(EXIT_FAILURE);
+      }
+    } else if (res_flag || particle_restart) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Particle pusher 'relativistic_hc' requires paired "
+                << "full-mesh -r and typed-v2 particle restart input" << std::endl;
+      if (res_flag) restartfile.Close(single_file_per_rank);
+      delete pinput;
+      Kokkos::finalize();
+#if MPI_PARALLEL_ENABLED
+      MPI_Finalize();
+#endif
+      return(EXIT_FAILURE);
+    }
   }
 
   // Dump input parameters and quit if code was run with -n option.

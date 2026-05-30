@@ -166,7 +166,7 @@ def test_relativistic_hc_requires_explicit_interpolation_cpu(tmp_path):
         (["mesh/ix1_bc=outflow", "mesh/ox1_bc=outflow"], "periodic"),
         (["time/evolution=dynamic", "mhd/rsolver=hlld"], "kinematic"),
         (["time/evolution=static"], "kinematic"),
-        (["problem/prtcl_rst_flag=1"], "legacy particle restart"),
+        (["problem/prtcl_rst_flag=1"], "paired"),
     ],
     ids=["single-species-only", "three-dimensional-only", "periodic-only",
          "kinematic-only", "static-rejected", "legacy-restart-rejected"],
@@ -323,11 +323,12 @@ def test_relativistic_hc_coupled_dependency_is_explicit_cpu():
     assert "AddTask(&Particles::Push, this, push_dependency)" in source
 
 
-def test_relativistic_hc_full_mesh_restart_guard_is_explicit_cpu():
-    """Full-mesh -r restoration remains closed until the Phase-6 schema exists."""
+def test_relativistic_hc_full_mesh_restart_pairing_guard_is_explicit_cpu():
+    """Full-mesh restoration is accepted only alongside typed-v2 particle input."""
     source = (ROOT / "src" / "main.cpp").read_text()
-    assert "res_flag && pinput->DoesBlockExist(\"particles\")" in source
-    assert "full mesh restart input until the relativistic restart schema is " in source
+    assert "if (res_flag && particle_restart)" in source
+    assert "relativistic_paired_mesh_restart_file" in source
+    assert "requires paired " in source
 
 
 def test_relativistic_hc_requires_mhd_block_cpu(tmp_path):
@@ -553,11 +554,39 @@ def test_relativistic_hc_velocity_initialization_rejects_w_tuple_cpu(tmp_path):
 
 
 def test_relativistic_hc_rejects_outputs_before_writing_files_cpu(tmp_path):
-    """Parser-only cases must not serialize misleading legacy particle artifacts."""
+    """A one-sided relativistic particle dump cannot masquerade as a checkpoint."""
     output = "\n<output1>\nfile_type = prst\ndt = 0.01\n"
     result = _run_relativistic(tmp_path, append_text=output)
-    _assert_fatal(result, "until relativistic outputs are qualified")
+    _assert_fatal(result, "one paired")
     assert not (tmp_path / "prst").exists()
+
+
+@pytest.mark.parametrize(
+    ("output_text", "expected_substring"),
+    [
+        (
+            "\n<output1>\nfile_type = prst\ndt = 0.01\n"
+            "\n<output2>\nfile_type = rst\ndt = 0.02\n",
+            "identical cadence",
+        ),
+        (
+            "\n<output1>\nfile_type = prst\ndt = 0.0\n"
+            "\n<output2>\nfile_type = rst\ndt = 0.01\n",
+            "enabled paired",
+        ),
+        (
+            "\n<output1>\nfile_type = prst\ndt = 0.01\nfile_number = 100000\n"
+            "\n<output2>\nfile_type = rst\ndt = 0.01\nfile_number = 100000\n",
+            "five-digit",
+        ),
+    ],
+    ids=["mismatched-cadence", "disabled-half-pair", "counter-overflow"],
+)
+def test_relativistic_hc_rejects_uncoordinated_restart_outputs_cpu(
+        tmp_path, output_text, expected_substring):
+    """The paired checkpoint coordinator fails before writing partial artifacts."""
+    result = _run_relativistic(tmp_path, append_text=output_text)
+    _assert_fatal(result, expected_substring)
 
 
 def test_legacy_pushers_reject_relativistic_only_keys_cpu(tmp_path):

@@ -50,6 +50,7 @@
 #include "athena.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
+#include "particles/particles.hpp"
 #include "outputs.hpp"
 
 //----------------------------------------------------------------------------------------
@@ -289,7 +290,12 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("prst") == 0) {
         pnode = new ParticleRestartOutput(pin,pm,opar);
-        pout_list.insert(pout_list.begin(),pnode);
+        if (pm->pmb_pack->ppart != nullptr &&
+            pm->pmb_pack->ppart->pusher == ParticlesPusher::relativistic_hc) {
+          pout_list.push_back(pnode);
+        } else {
+          pout_list.insert(pout_list.begin(),pnode);
+        }
       } else if (opar.file_type.compare("cbin") == 0) {
         opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,
           "single_file_per_rank", false);
@@ -337,7 +343,12 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
         opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,
           "single_file_per_rank", false);
         pnode = new RestartOutput(pin,pm,opar);
-        pout_list.push_back(pnode);
+        if (pm->pmb_pack->ppart != nullptr &&
+            pm->pmb_pack->ppart->pusher == ParticlesPusher::relativistic_hc) {
+          pout_list.insert(pout_list.begin(),pnode);
+        } else {
+          pout_list.push_back(pnode);
+        }
         num_rst++;
       } else {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -354,6 +365,43 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
               << "More than one history, event log, or restart output block found in "
               << "input file" << std::endl;
     exit(EXIT_FAILURE);
+  }
+  if (pm->pmb_pack->ppart != nullptr &&
+      pm->pmb_pack->ppart->pusher == ParticlesPusher::relativistic_hc) {
+    BaseTypeOutput *particle_restart = nullptr;
+    BaseTypeOutput *mesh_restart = nullptr;
+    for (BaseTypeOutput *output : pout_list) {
+      if (output->out_params.file_type.compare("prst") == 0) {
+        particle_restart = output;
+      } else if (output->out_params.file_type.compare("rst") == 0) {
+        mesh_restart = output;
+      }
+    }
+    if ((particle_restart == nullptr) != (mesh_restart == nullptr)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Particle pusher 'relativistic_hc' requires enabled "
+                << "paired prst and rst outputs" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if (particle_restart != nullptr) {
+      OutputParameters &pp = particle_restart->out_params;
+      OutputParameters &mp = mesh_restart->out_params;
+      if (pm->pmb_pack->ppart->prtcl_rst_flag) {
+        pp.last_time = pm->time;
+        mp.last_time = pm->time;
+        pin->SetReal(pp.block_name, "last_time", pp.last_time);
+        pin->SetReal(mp.block_name, "last_time", mp.last_time);
+      }
+      if (pp.dt != mp.dt || pp.dcycle != mp.dcycle ||
+          pp.last_time != mp.last_time || pp.file_number != mp.file_number ||
+          mp.single_file_per_rank || pp.file_number < 0 || pp.file_number > 99999) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' requires prst and "
+                  << "rst outputs with identical cadence, last_time, five-digit "
+                  << "file_number, and single_file_per_rank = false" << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
   }
 }
 

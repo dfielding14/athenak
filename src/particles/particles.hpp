@@ -10,6 +10,7 @@
 
 #include <map>
 #include <memory>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -86,6 +87,16 @@ class Particles {
   Real dtnew;
   int is_dynamic;
   int prtcl_rst_flag;
+  bool relativistic_restart_v2_loaded;
+  std::int64_t relativistic_restart_mesh_cycle;
+  Real relativistic_restart_mesh_time;
+  Real relativistic_restart_mesh_dt;
+  std::uint64_t relativistic_restart_config_fingerprint;
+  std::vector<std::int32_t> relativistic_restart_idata;
+  std::vector<double> relativistic_restart_rdata;
+  Real legacy_restart_mesh_time;
+  Real legacy_restart_mesh_dt;
+  std::vector<Real> legacy_restart_rdata;
   bool check_consistency;
   bool check_motion_bounds;
   bool log_performance;
@@ -126,6 +137,7 @@ class Particles {
   void CreateParticleTags(ParameterInput *pin);
   void SetConsistencyReference();
   void CheckConsistency(const std::string &label, bool check_rank=true);
+  void ValidateRelativisticRestartState(const std::string &label);
   void CheckMotionBounds(const std::string &label);
   void LogPerformance(const std::string &label, int64_t npushed, int64_t nsent,
                       int64_t nrecv, int64_t nremapped, int64_t ndiag,
