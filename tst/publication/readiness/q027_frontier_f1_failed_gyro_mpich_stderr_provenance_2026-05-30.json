@@ -15,6 +15,7 @@
     "run_artifact_dir": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_relativistic_gyro/7fbdd818-c3c8-4da3-9ce8-ba71a6446b16",
     "run_artifact_dir_mode": "0555",
     "artifact_inventory_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_relativistic_gyro/7fbdd818-c3c8-4da3-9ce8-ba71a6446b16/artifact_inventory.json",
+    "artifact_inventory_fixture_path": "tst/publication/readiness/fixtures/q027_frontier_f1_gyro_v1_artifact_inventory_2026-05-30.json",
     "artifact_inventory_mode": "0444",
     "artifact_inventory_sha256": "8ddb136b1cc5b6dfddea01f8257988820ac7c07fd47c13fb6faeea9643f13a76",
     "stderr_inventory_entry": {

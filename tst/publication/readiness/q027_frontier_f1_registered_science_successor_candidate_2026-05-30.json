@@ -10,8 +10,8 @@
     "Q-038",
     "Q-042"
   ],
-  "qualification_effect": "local_registered_f1_gyro_v2_reconciled_analysis_rejected_v3_retry_policy_staged",
-  "scope": "Successor chronology after the clean-candidate Frontier F0 admission closure. The candidate retains the completed F0 chronology and narrows execution to exact one-attempt registered-science slices: a clean-candidate GPU relativistic-gyro oracle and a clean-candidate GPU paper-mode coupling oracle. The launch trampoline freezes an exact structured artifact tree and immutable inventory. Offline analyzers retain descriptor-pinned tree identity, validate exact inventory closure, publish one immutable result and receipt, and support qualification-time no-write recomputation from the snapshotted analyzer. Qualification retains descriptors for the immutable inventory, result and receipt plus their directory ancestry across recomputation and rechecks path identity and bytes afterward. Reconciled gyro v2 execution is preserved as unqualified chronology after offline analysis rejected before result publication; this candidate does not claim scientific qualification.",
+  "qualification_effect": "registered_f1_gyro_v3_and_paper_coupling_v2_reconciled_analysis_pass_qualification_manifests_frozen_pending_external_review",
+  "scope": "Successor chronology after the clean-candidate Frontier F0 admission closure. The candidate retains the completed F0 chronology and narrows execution to exact one-attempt registered-science slices: a clean-candidate GPU relativistic-gyro oracle and a clean-candidate GPU paper-mode coupling oracle. The launch trampoline freezes an exact structured artifact tree and immutable inventory. Offline analyzers retain descriptor-pinned tree identity, validate exact inventory closure, publish one immutable result and receipt, and support qualification-time no-write recomputation from the snapshotted analyzer. Qualification retains descriptors for the immutable inventory, result and receipt plus their directory ancestry across recomputation and rechecks path identity and bytes afterward. Reconciled gyro v2 execution is preserved as unqualified chronology after offline analysis rejected before result publication. Gyro v3 and paper-coupling v2 both completed, reconciled, published passing offline analysis and froze qualification manifests for pending external review; this candidate does not promote a claim to qualified.",
   "initial_live_predecessor": {
     "record": "tst/publication/readiness/q027_frontier_f0_compute_snapshot_activation_2026-05-30.json",
     "control_plane_version": "e8e47eadb491b20e3f196f3d8ea0b859c61ccad961f8d56bc85ea2a48424eecf",
@@ -26,7 +26,7 @@
     "control_plane_inventory_files": 19,
     "worktree_state": "clean_reviewed_commit_6fa926a9bf113edf6258a7555aeab4ac450ca06b",
     "paired_install_status": "pass_identical_immutable_paired_install",
-    "active_policy_promotion_status": "pass_reviewed_gyro_v3_and_paper_v2_parser_policy_promoted"
+    "active_policy_promotion_status": "pass_reviewed_coupling_scrub_safe_policy_promoted"
   },
   "registered_science_slices": [
     {
@@ -66,7 +66,7 @@
     },
     "publication_standalone_tests": {
       "status": "pass",
-      "tests_run": 115
+      "tests_run": 119
     },
     "focused_frontier_chain_tests": {
       "status": "pass",
@@ -80,7 +80,7 @@
     },
     "readiness_registry_tests": {
       "status": "pass",
-      "tests_run": 16,
+      "tests_run": 20,
       "command": "python3 -m unittest tst.publication.test_pic_readiness_registry"
     },
     "control_plane_discovery_command": "python3 -m unittest discover -s tst/publication/frontier_control_plane -p 'test_*.py'",
@@ -364,7 +364,7 @@
       "particle_count": 64,
       "max_abs_velocity_error": 5.808176634092277e-09
     },
-    "remediation": "Register gyro v3 with the exact deterministic output tree and emitted particle VTK schema. Preserve the unused paper-coupling v2 authorization ID while strengthening its analyzer binding before the first serialized execution boundary."
+    "remediation": "Register gyro v3 with the exact deterministic output tree and emitted particle VTK schema. Preserve the unused paper-coupling v2 authorization unchanged until its serialized execution boundary."
   },
   "superseded_gyro_v2_registered_execution_fixture": "tst/publication/readiness/q027_frontier_f1_gyro_v2_analysis_rejection_fixture_2026-05-30.json",
   "gyro_v3_parser_policy_transition": {
@@ -399,21 +399,104 @@
     "reason": "Rotate the consumed gyro one-attempt authorization and bind its analyzer to the exact deterministic output tree plus emitted particle VTK schema before any further submission. Preserve the unused paper-coupling v2 authorization ID while binding its repaired analyzer before first submission."
   },
   "coupling_v2_submission_artifact_scrub_transition": {
-    "status": "staged_reviewed_policy_promotion_pending",
+    "status": "pass_reviewed_policy_promoted",
     "failed_manifest_creation_submission_id": "1e12dd79-adea-4fda-8d0f-af119dd7ae6e",
     "failed_manifest_creation": "fail_closed_before_manifest_publication_reservation_intent_and_scheduler_submission",
+    "failed_pre_manifest_attestation_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260530T231439Z-f1-clean-paper-coupling-mpich-stderr-v2-pre_manifest/attestation.json",
+    "failed_pre_manifest_attestation_sha256": "20291e655a4af5e098df248cd209bd6653e8d196d2c1a279d2085f75f536a404",
     "registered_science_authorization_id": "f1-clean-paper-coupling-mpich-stderr-v2",
     "predecessor_policy_sha256": "0538da6d231dccf8382edbaa6483ca274adaed439afbb1ad8c89d9c898d5467b",
     "predecessor_promotion_sha256": "f84fc7b7b6d1c7e98202e76d5496b73826989125be802024fb483b571f6286e0",
+    "source_commit": "ae9fbb976c8670c5979f3bfc5ca381fe0e738614",
     "scrub_safe_analysis_script_sha256": "9b27bace0b8fc1e6ae4ebeac914b25c80c2d8b12beeb763628b4049c5085c67a",
     "analysis_support_sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a",
+    "active_policy_sha256": "559a4b1ebc13425e53e40b544cf92931d11271ec0a07f678b680f68bf5c00052",
+    "active_promotion_sha256": "84065c8a8abb5aad3fc41e452537e27507260ca968eb1bae6eec60b0655fa436",
+    "pre_policy_promotion_attestation_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260530T231650Z-f1-clean-paper-coupling-mpich-stderr-v2-pre_policy_promotion_scrub_retry/attestation.json",
+    "pre_policy_promotion_attestation_sha256": "a45a004af785b44e1398f98cd154794648f289402aca198f7e4eb488adb4e6f0",
+    "orion_ledger_records": 40,
+    "orion_receipt_records": 40,
+    "project_home_ledger_records": 40,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent",
     "reason": "The installed manifest creator rejected ordinary parser identifier substrings through its fail-closed submission-artifact scrubber. Rename only those identifiers, retain the unused coupling-v2 authorization ID, rotate its exact analyzer digest and promote the reviewed policy before retrying manifest creation."
+  },
+  "accepted_gyro_v3_registered_execution": {
+    "status": "pass_reconciled_analysis_published_qualification_manifest_frozen_pending_external_review",
+    "submission_id": "79c74d09-8462-437b-b357-97b7bf63717d",
+    "reservation_id": "4d07d2ca-e207-4ee3-bef5-521cf409c039",
+    "job_id": "4746290",
+    "registered_science_authorization_id": "f1-clean-gyro-mpich-stderr-v3",
+    "pre_submit_manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/79c74d09-8462-437b-b357-97b7bf63717d/pre_submit_manifest.json",
+    "pre_submit_manifest_sha256": "85df58614531a7bab395867b7d3c34aa4ef9e64111f8eea713ecfc12cd5ad30c",
+    "run_artifact_dir": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_relativistic_gyro/79c74d09-8462-437b-b357-97b7bf63717d",
+    "artifact_inventory_sha256": "2714c82f9cc02819b778637a21a5a6e98a6c42c09b84785ca2f0329780f1651f",
+    "analysis_result_sha256": "0ca735018f17067c541acb331ecef3b308416810fced0547eb2aa5926bfd3ad2",
+    "offline_analysis_receipt_sha256": "4bfe86664dcd46c9f31c15e12a39024436428f1ff1cd8fffc286ac256a0d2821",
+    "initial_qualification_manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/qualifications/f1_gpu_relativistic_gyro/79c74d09-8462-437b-b357-97b7bf63717d/qualification_manifest.json",
+    "initial_qualification_manifest_sha256": "9f7a5d64f818b3d59b0b1bfd9e6cf46fa72716884e6cb74a39cdb5d853f96b84",
+    "qualification_manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/qualifications/f1_gpu_relativistic_gyro/79c74d09-8462-437b-b357-97b7bf63717d/qualification_manifest.policy-559a4b1e.json",
+    "qualification_manifest_sha256": "17265e0244e410b900ec2296dfcfcb51ec19138d82a331d497c8f341ad4cd354",
+    "qualification_refresh_reason": "The initial qualification freeze remains immutable chronology but its active-policy anchor was superseded by the coupling scrub-safe policy promotion. Freeze this successor review manifest against the final active policy before terminal review.",
+    "execution_active_policy_sha256": "0538da6d231dccf8382edbaa6483ca274adaed439afbb1ad8c89d9c898d5467b",
+    "execution_active_promotion_sha256": "f84fc7b7b6d1c7e98202e76d5496b73826989125be802024fb483b571f6286e0",
+    "qualification_active_policy_sha256": "559a4b1ebc13425e53e40b544cf92931d11271ec0a07f678b680f68bf5c00052",
+    "qualification_active_promotion_sha256": "84065c8a8abb5aad3fc41e452537e27507260ca968eb1bae6eec60b0655fa436",
+    "pre_manifest_attestation_sha256": "27dfdf6c0e44850c45e197c76494738a8f4adab3294c71f5cd094fce9c8b2f36",
+    "pre_submit_wrapper_attestation_sha256": "593e92247c7255ac3e35433e4fd1f1b81ff8a4031a1d68d541292d088c7faf71",
+    "consumed_node_hours": 0.0033333333333333335,
+    "cumulative_consumed_node_hours": 0.08777777777777776,
+    "orion_ledger_records": 40,
+    "orion_receipt_records": 40,
+    "project_home_ledger_records": 40,
+    "analysis": {
+      "status": "pass",
+      "cycle": 2,
+      "particle_count": 64,
+      "max_abs_velocity_error": 5.808176634092277e-09,
+      "velocity_tolerance": 2e-06
+    },
+    "review": "pending external review"
+  },
+  "accepted_paper_coupling_v2_registered_execution": {
+    "status": "pass_reconciled_analysis_published_qualification_manifest_frozen_pending_external_review",
+    "submission_id": "fad21006-b33a-4d53-9636-55d055b0bf81",
+    "reservation_id": "281a8b1f-9576-436e-bae2-c440874c101e",
+    "job_id": "4746297",
+    "registered_science_authorization_id": "f1-clean-paper-coupling-mpich-stderr-v2",
+    "pre_submit_manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_paper_coupling/fad21006-b33a-4d53-9636-55d055b0bf81/pre_submit_manifest.json",
+    "pre_submit_manifest_sha256": "e074c163d16b918d558880bba21ba8530130e4ce01dfb173ef5af1c952a92637",
+    "run_artifact_dir": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_paper_coupling/fad21006-b33a-4d53-9636-55d055b0bf81",
+    "artifact_inventory_sha256": "a11b7f4ed98ad2e8074e711f44168274c9a97f3cf871bd5a31049440b0e21a80",
+    "analysis_result_sha256": "0260dfa6d8a48a66ee82e6dd253bd1dd92cdc198039c3f476858230cac290284",
+    "offline_analysis_receipt_sha256": "8d9353e8f003fdf7734622d96511dc09f866cb897f3bd5ed7f52fb3e0037ab00",
+    "qualification_manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/qualifications/f1_gpu_paper_coupling/fad21006-b33a-4d53-9636-55d055b0bf81/qualification_manifest.json",
+    "qualification_manifest_sha256": "6262332ad758953525cd745999766f7c9b23eb535594b802a79a75fee8fc5456",
+    "active_policy_sha256": "559a4b1ebc13425e53e40b544cf92931d11271ec0a07f678b680f68bf5c00052",
+    "active_promotion_sha256": "84065c8a8abb5aad3fc41e452537e27507260ca968eb1bae6eec60b0655fa436",
+    "pre_manifest_attestation_sha256": "1799197c0c34d0ddf64dfad39fa379bbe88dc4a68be887b873cb4ce8c844db2f",
+    "pre_submit_wrapper_attestation_sha256": "eacbbdd9850971d93104f593ba70c3653b7974b61ab0db3b7e4556357b07c5ca",
+    "consumed_node_hours": 0.006111111111111111,
+    "cumulative_consumed_node_hours": 0.09388888888888887,
+    "orion_ledger_records": 43,
+    "orion_receipt_records": 43,
+    "project_home_ledger_records": 43,
+    "analysis": {
+      "status": "pass",
+      "coeff0_max_abs_momentum_conservation_error": 6.731680066707213e-07,
+      "coeff0_abs_energy_conservation_error": 6.459872196273864e-06,
+      "coeff7_max_abs_momentum_conservation_error": 6.731680066707213e-07,
+      "coeff7_abs_energy_conservation_error": 6.459872196273864e-06,
+      "max_abs_particle_momentum_coefficient_invariance_error": 0
+    },
+    "review": "pending external review"
   },
   "required_live_preflight": {
     "status": "required_immediately_before_policy_promotion_and_each_registered_science_submission_boundary",
     "historical_submission_ids_must_remain_absent_from_live_ledgers": [
       "bc7febae-e4a5-493f-ae52-d6578851e563",
-      "13f053df-e488-4394-82a4-585c02d92063"
+      "13f053df-e488-4394-82a4-585c02d92063",
+      "1e12dd79-adea-4fda-8d0f-af119dd7ae6e"
     ],
     "checks": [
       "current Orion ledger, Orion mirror-receipt and Project Home mirror chains are coherent",
@@ -425,10 +508,9 @@
     "evidence_rule": "Archive the current preflight result separately from the immutable historical incident fixture. Legitimate later reservations may advance live ledger counts without changing the frozen 34/34/34 incident chronology."
   },
   "open_boundaries": [
-    "preserve the active reviewed gyro-v3 and unused paper-v2 parser-binding policy promoted through installed repair successor 4ccde8df",
-    "archive one reviewed same-account process-isolation attestation from tst/publication/readiness/q027_frontier_registered_science_same_account_isolation_attestation_template_2026-05-30.json immediately before each registered-science submission",
-    "the gyro-v3 and paper-coupling-v2 registered Frontier F1 slices have not qualified",
+    "preserve active coupling scrub-safe policy SHA 559a4b1e and promotion SHA 84065c8a through installed repair successor 4ccde8df",
+    "preserve the gyro-v3 and paper-coupling-v2 passing immutable qualification manifests as pending external review evidence",
     "external reviewer disposition remains pending external review"
   ],
-  "overall_disposition": "local_registered_f1_gyro_v2_reconciled_analysis_rejected_v3_retry_policy_active_keep_submissions_paused"
+  "overall_disposition": "registered_f1_gyro_v3_and_paper_coupling_v2_pass_qualification_manifests_frozen_pending_external_review"
 }

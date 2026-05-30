@@ -35,11 +35,15 @@
       "particle_count": 64,
       "max_abs_velocity_error": 5.808176634092277e-09
     },
-    "remediation": "Register gyro v3 with the exact deterministic output tree and emitted particle VTK schema. Preserve the unused paper-coupling v2 authorization ID while strengthening its analyzer binding before the first serialized execution boundary."
+    "remediation": "Register gyro v3 with the exact deterministic output tree and emitted particle VTK schema. Preserve the unused paper-coupling v2 authorization unchanged until its serialized execution boundary."
   },
   "artifact_inventory_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_relativistic_gyro/8245b90f-f2cd-437c-bd5e-64564fe2b9ba/artifact_inventory.json",
   "artifact_inventory_fixture_path": "tst/publication/readiness/fixtures/q027_frontier_f1_gyro_v2_artifact_inventory_2026-05-30.json",
   "artifact_inventory_mode": "0444",
+  "terminal_reconciliation_mirror_receipt_fixture": {
+    "path": "tst/publication/readiness/fixtures/q027_frontier_f1_gyro_v2_terminal_reconciliation_mirror_receipt_2026-05-30.json",
+    "sha256": "8a03c8e9eb8dd9f885145dc6939e651665e72f101ea340a7bb7dc4b5226db203"
+  },
   "artifact_inventory": {
     "files": [
       {

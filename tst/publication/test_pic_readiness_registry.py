@@ -7,6 +7,7 @@ import base64
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -20,6 +21,8 @@ from control_plane_common import CONTROL_PLANE_FILES
 from control_plane_common import inventory_digest
 from control_plane_common import launch_contract_sha256
 from control_plane_common import validate_launch_contract
+from ledger import record_sha256
+from tst.publication.pic_qualification_manifest import validate_qualification_manifest
 from tst.publication.pic_qualification_manifest import validate_schema
 
 
@@ -567,11 +570,18 @@ class PicReadinessRegistryTests(unittest.TestCase):
             validate=True,
         )
         stderr_entry = failed["stderr_inventory_entry"]
+        inventory_path = REPO_ROOT / failed["artifact_inventory_fixture_path"]
+        self.assertEqual(_sha256(inventory_path), failed["artifact_inventory_sha256"])
+        inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+        inventory_records = {
+            record["path"]: record for record in inventory["files"]
+        }
         self.assertEqual(_sha256(fixture_path), fixture["encoded_file_sha256"])
         self.assertEqual(hashlib.sha256(decoded).hexdigest(), fixture["decoded_sha256"])
         self.assertEqual(len(decoded), fixture["decoded_size"])
         self.assertEqual(fixture["decoded_sha256"], stderr_entry["sha256"])
         self.assertEqual(fixture["decoded_size"], stderr_entry["size"])
+        self.assertEqual(inventory_records[stderr_entry["path"]], stderr_entry)
         self.assertTrue(fixture["verified_byte_identical_to_live_immutable_stderr"])
         binding = provenance["reviewed_validator_binding"]
         commit = binding["source_commit"]
@@ -700,7 +710,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 [34, 34, 34],
             )
 
-    def test_rejected_pre_reservation_manifest_live_preflight_is_explicit(self) -> None:
+    def test_rejected_pre_reservation_manifest_live_preflight_contract_is_explicit(self) -> None:
         successor = _load(
             "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
         )
@@ -715,7 +725,13 @@ class PicReadinessRegistryTests(unittest.TestCase):
         ]
         self.assertEqual(
             preflight["historical_submission_ids_must_remain_absent_from_live_ledgers"],
-            [chronology["submission_id"], queue_chronology["submission_id"]],
+            [
+                chronology["submission_id"],
+                queue_chronology["submission_id"],
+                successor["coupling_v2_submission_artifact_scrub_transition"][
+                    "failed_manifest_creation_submission_id"
+                ],
+            ],
         )
         self.assertEqual(
             preflight["checks"],
@@ -728,6 +744,16 @@ class PicReadinessRegistryTests(unittest.TestCase):
             ],
         )
         self.assertIn("Legitimate later reservations", preflight["evidence_rule"])
+
+    @unittest.skipUnless(
+        os.environ.get("PIC_RUN_LIVE_PREFLIGHT") == "1",
+        "set PIC_RUN_LIVE_PREFLIGHT=1 for Orion live-state checks",
+    )
+    def test_rejected_pre_reservation_manifest_live_preflight(self) -> None:
+        successor = _load(
+            "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
+        )
+        preflight = successor["required_live_preflight"]
         ledger_path = Path(
             "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl"
         )
@@ -763,6 +789,40 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 "historical_submission_ids_must_remain_absent_from_live_ledgers"
             ]:
                 self.assertNotIn(submission_id, contents)
+        queue_fixture = _load(
+            "q027_frontier_f1_rejected_operator_queue_format_manifest_fixture_2026-05-30.json"
+        )
+        rejected_manifest = Path(queue_fixture["chronology"]["manifest_path"])
+        self.assertEqual(
+            sorted(path.name for path in rejected_manifest.parent.iterdir()),
+            ["pre_submit_manifest.json", "snapshot"],
+        )
+        gyro_fixture = _load(
+            "q027_frontier_f1_gyro_v2_analysis_rejection_fixture_2026-05-30.json"
+        )
+        self.assertIn(gyro_fixture["terminal_reconciliation_event"], ledger_events)
+
+    @unittest.skipUnless(
+        os.environ.get("PIC_RUN_LIVE_PREFLIGHT") == "1",
+        "set PIC_RUN_LIVE_PREFLIGHT=1 for Orion live-state checks",
+    )
+    def test_registered_f1_terminal_review_manifests_replay_live(self) -> None:
+        successor = _load(
+            "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
+        )
+        for key in [
+            "accepted_gyro_v3_registered_execution",
+            "accepted_paper_coupling_v2_registered_execution",
+        ]:
+            execution = successor[key]
+            manifest_path = Path(execution["qualification_manifest_path"])
+            self.assertEqual(
+                _sha256(manifest_path),
+                execution["qualification_manifest_sha256"],
+            )
+            validate_qualification_manifest(
+                json.loads(manifest_path.read_text(encoding="utf-8"))
+            )
 
     def test_registered_parser_policy_transition_resolves_source_commit(self) -> None:
         successor = _load(
@@ -847,10 +907,70 @@ class PicReadinessRegistryTests(unittest.TestCase):
             self.assertEqual(_sha256(path), chronology[digest_key])
             contents = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(contents["phase"], attestation["phase"])
+            self.assertEqual(contents["pending_submission_marker"]["value"], "absent")
+            self.assertEqual(
+                sorted(contents["mirrored_ledger_line_counts"]["counts"].values()),
+                [
+                    chronology["orion_ledger_records"],
+                    chronology["orion_receipt_records"],
+                    chronology["project_home_ledger_records"],
+                ],
+            )
             self.assertEqual(
                 contents["queue_snapshot"]["sha256"],
                 binding["queue_snapshot_sha256"],
             )
+
+    def test_coupling_scrub_transition_resolves_source_commit(self) -> None:
+        successor = _load(
+            "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
+        )
+        transition = successor["coupling_v2_submission_artifact_scrub_transition"]
+        commit = transition["source_commit"]
+        self.assertEqual(
+            subprocess.check_output(
+                ["git", "cat-file", "-t", commit],
+                cwd=REPO_ROOT,
+                text=True,
+            ).strip(),
+            "commit",
+        )
+        self.assertEqual(
+            transition["scrub_safe_analysis_script_sha256"],
+            _git_blob_sha256(
+                commit,
+                "tst/publication/frontier_f1_gpu_paper_coupling_analysis.py",
+            ),
+        )
+        self.assertEqual(
+            transition["active_policy_sha256"],
+            _git_blob_sha256(
+                commit,
+                "tst/publication/readiness/storage_policy.json",
+            ),
+        )
+        gyro = successor["accepted_gyro_v3_registered_execution"]
+        coupling = successor["accepted_paper_coupling_v2_registered_execution"]
+        self.assertNotEqual(
+            gyro["initial_qualification_manifest_sha256"],
+            gyro["qualification_manifest_sha256"],
+        )
+        self.assertEqual(
+            gyro["qualification_active_policy_sha256"],
+            transition["active_policy_sha256"],
+        )
+        self.assertEqual(
+            gyro["qualification_active_promotion_sha256"],
+            transition["active_promotion_sha256"],
+        )
+        self.assertEqual(
+            coupling["active_policy_sha256"],
+            transition["active_policy_sha256"],
+        )
+        self.assertEqual(
+            coupling["active_promotion_sha256"],
+            transition["active_promotion_sha256"],
+        )
 
     def test_reconciled_gyro_v2_analysis_rejection_chronology_is_bound(self) -> None:
         successor = _load(
@@ -888,6 +1008,19 @@ class PicReadinessRegistryTests(unittest.TestCase):
         self.assertEqual(event["job_id"], chronology["job_id"])
         self.assertEqual(event["manifest_sha256"], chronology["pre_submit_manifest_sha256"])
         self.assertEqual(event["consumed_node_hours"], chronology["consumed_node_hours"])
+        self.assertEqual(
+            event["event_sha256"],
+            record_sha256(event, "event_sha256"),
+        )
+        receipt_fixture = fixture["terminal_reconciliation_mirror_receipt_fixture"]
+        receipt_path = REPO_ROOT / receipt_fixture["path"]
+        self.assertEqual(_sha256(receipt_path), receipt_fixture["sha256"])
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            receipt["mirror_ack_sha256"],
+            record_sha256(receipt, "mirror_ack_sha256"),
+        )
+        self.assertEqual(receipt["mirrored_event_sha256"], event["event_sha256"])
         self.assertEqual(chronology["analysis_result"], "absent")
         self.assertEqual(chronology["offline_analysis_receipt"], "absent")
 
