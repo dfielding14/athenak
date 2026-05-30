@@ -509,6 +509,8 @@ def orphaned_segment_run_directories(paths: dict[str, Path]) -> list[Path]:
         if not case_dir.is_dir() or case_dir.name not in AUTHORIZED_CASE_IDS:
             continue
         for run_dir in sorted(case_dir.iterdir()):
+            if run_dir.name == "analysis":
+                continue
             if (
                 run_dir.is_dir()
                 and not (run_dir / "manifest" / "prepared_run.json").is_file()
@@ -1812,6 +1814,7 @@ def authenticate_production_utility(
     expected = record.get("sha256")
     if not isinstance(expected, str) or SHA256_PATTERN.fullmatch(expected) is None:
         raise ValueError("prepared production utility checksum is invalid")
+    production_utility_provenance(allow_uncommitted=allow_uncommitted)
     if not allow_historical:
         require_file_sha256(path, expected, "production utility")
         return

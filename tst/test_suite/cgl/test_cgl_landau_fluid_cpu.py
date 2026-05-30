@@ -1310,6 +1310,17 @@ def test_cgl_lf_stage_i_hardens_identifiers_overrides_json_and_locking(
         stage_i.read_ledger(paths)
     paths["ledger"].write_text(original_ledger)
 
+    analysis = paths["runs"] / "R02" / "analysis"
+    analysis.mkdir(parents=True)
+    (analysis / "recost.json").write_text("{}\n")
+    assert stage_i.orphaned_segment_run_directories(paths) == []
+    orphan = paths["runs"] / "R02" / "s_orphan"
+    orphan.mkdir()
+    assert stage_i.orphaned_segment_run_directories(paths) == [orphan]
+    with pytest.raises(ValueError, match="interrupted-prepare cleanup"):
+        stage_i.require_no_orphaned_segment_runs(paths)
+    orphan.rmdir()
+
     resources = {
         "allocation": {
             "nodes": 1,
@@ -1517,10 +1528,11 @@ def test_cgl_lf_stage_i_authenticates_historical_production_utility(
         record, source_bundle=bundle_record, allow_historical=True
     )
     script.write_text("dirty current helper\n")
-    stage_i.authenticate_production_utility(
-        record, source_bundle=bundle_record, allow_historical=True
-    )
-    with pytest.raises(ValueError, match="checksum has changed"):
+    with pytest.raises(ValueError, match="must be committed"):
+        stage_i.authenticate_production_utility(
+            record, source_bundle=bundle_record, allow_historical=True
+        )
+    with pytest.raises(ValueError, match="must be committed"):
         stage_i.authenticate_production_utility(record)
     subprocess.run(
         ["git", "checkout", "--", "scripts/frontier/stage_i.py"],
