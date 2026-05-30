@@ -613,3 +613,6 @@ work:
 - [CR Tracer Follow-Up Architecture Plan](cr_tracer_followup_architecture_plan.md)
   covers deeper remap, communication, interpolation, and diagnostics work for a
   subsequent feature branch.
+- [CR Tracer Relativistic Acceleration Implementation Guide](cr_tracer_relativistic_acceleration_implementation_guide.md)
+  defines the gated implementation and validation workflow for an opt-in
+  passive relativistic acceleration follow-up.
