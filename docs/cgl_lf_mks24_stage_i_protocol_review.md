@@ -170,9 +170,9 @@ accepted `E02` products as pipeline and cost evidence. Corrected E03
 qualification is closed. The reviewed E03 approval token is retained and
 reconciliation passed. Fresh `R02/s00_rankio_t0_t0p1` job `4745922` was
 formally inspected and recorded `accepted` at exact `t = 0.1`, using
-`0.188889` node-hours. Commit and archive the F-079/F-080 controller-provenance
-transition before preparing its continuation. Then run one formally inspected
-segment at a time and complete `R17` last.
+`0.188889` node-hours. F-079/F-080 controller provenance is committed,
+archived, and reconciled. Continue only from the authenticated R02 checkpoint,
+then run one formally inspected segment at a time and complete `R17` last.
 
 The first R02 preflight exposed a nonblocking preview-rendering defect:
 `check-submit` enforced the reviewed shared-root acknowledgement but omitted it
@@ -183,10 +183,13 @@ later submission.
 
 Applying that fix after the pilot record exposed a second lifecycle boundary:
 one mutable live-helper checksum cannot authenticate both retained history and
-future helper revisions. F-080 requires the executing controller itself to be
-tracked, clean, and committed. New preparation and submission remain strict
-against live helper bytes. Lifecycle accounting, inspection, reconciliation,
-continuation-parent validation, and retained-lineage bundling may authenticate
-an earlier helper blob only from that segment's checksum-bound retained source
-bundle. Commit the transition, archive a new source bundle, and reconcile
-before preparing the R02 continuation.
+future helper revisions. F-080 keeps `prepared` and `submitted` manifests
+strict against live helper bytes, while `recorded` manifests authenticate each
+historical helper blob from its checksum-bound source bundle. Final controller
+transition `05cb4c324bfd8feec72ebdeb33b1961c9fde70bf` is archived in
+`athenak-feature-cgl-through-05cb4c324.bundle` with SHA-256
+`1381918e471730d8c9639014475566f93fc87bac66b62738dd8316fc69c03570`.
+Retained F-080 evidence JSON SHA-256 is
+`46fc1c4054e75f4224302be1895c1b9eaae88097544512ac067c53376e542e34`;
+post-archive reconciliation passes. Prepare the R02 continuation only from the
+authenticated checkpoint.
