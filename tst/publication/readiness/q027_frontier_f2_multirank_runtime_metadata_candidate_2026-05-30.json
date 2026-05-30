@@ -42,6 +42,11 @@
     "launch_contract_sha256": "05ecc15d519b9f74c9dc0a0f9c7b38f730f8397843f73a164cb24a91178f075d",
     "clean_candidate_manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41"
   },
+  "reviewed_mpich_stderr_contract": {
+    "sha256": "fecd6e9635eb80d47efa65ec0789ad03c2ea1375ac96bfa9c801b3cbb7dc00ac",
+    "reuse_disposition": "deliberate_fail_closed_reuse_of_rank_zero_cray_mpich_environment_transcript",
+    "scope": "The reviewed transcript contains rank-zero Cray MPICH version, processor, environment and thread-safety diagnostics and no communicator-size-dependent field. The F2 analyzer rejects any byte drift before result publication; an unexpected eight-rank transcript therefore fails closed and is not accepted as evidence."
+  },
   "submission_state": "blocked_until_curated_policy_binding_commit_live_preflight_operator_attestation_and_mirrored_policy_promotion",
   "open_boundaries": [
     "curate and commit the staged policy binding",
