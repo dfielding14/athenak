@@ -154,9 +154,11 @@ scale-separation workflow adds `96x96x192` and `384x384x768` around its
 reused standard-resolution case. All use `tlim = 10`, full-field binary
 snapshots, checkpoints, and the `t = [8,10]` analysis window. Without
 `--authorize-paper-execution` the workflow rejects these expensive modes
-before creating a run bundle. The nine `paper-standard` definitions include
-the eight active/passive, Alfvenic/random beta-10/beta-100 histories plotted
-in MKS24 Figure 2(b), plus the active Alfvenic beta-1 case. The two
+before creating a run bundle. The eight canonical `paper-standard` decks are
+the active/passive, Alfvenic/random beta-10/beta-100 histories plotted in
+MKS24 Figure 2(b). A separate active-Alfvenic beta-1 inventory deck
+remains defined but is excluded from execution because no displayed-result
+mapping has been established for it. The two
 `paper-heat-flux` definitions add the nonnominal active beta-10 Figure 12
 heat-flux cases; the nominal active and passive comparisons reuse standard
 definitions. The two `paper-compressive` definitions add the active random
@@ -185,10 +187,17 @@ as accepted or usable for continuation. Paper-production jobs must not be
 submitted through the debug-only workflow described below.
 
 On Frontier, validate the mapped matrix before preparing a segment, then
-preflight and submit only the single prepared job:
+retain the reviewed corrected-build qualification approval once, preflight,
+and submit only the single prepared job:
 
 ```bash
 python3 scripts/frontier/cgl_lf_stage_i.py validate-matrix
+python3 scripts/frontier/cgl_lf_stage_i.py approve-qualification \
+  --executable <immutable-athena-executable> \
+  --build-manifest <immutable-build-manifest> \
+  --approved-by "$USER" \
+  --review-notes "<corrected-build Frontier qualification evidence>" \
+  --confirm-corrected-build-frontier-qualified
 python3 scripts/frontier/cgl_lf_stage_i.py prepare \
   --case-id <Rxx> --segment <segment-name> \
   --acceptance-criterion "<terminal acceptance rule>" \
@@ -203,10 +212,20 @@ python3 scripts/frontier/cgl_lf_stage_i.py prepare \
   --override time/tlim=<segment-target>
 python3 scripts/frontier/cgl_lf_stage_i.py check-submit \
   --manifest <prepared_run.json>
-sbatch <batch-script-printed-by-check-submit>
-python3 scripts/frontier/cgl_lf_stage_i.py mark-submitted \
-  --manifest <prepared_run.json> --job-id <jobid>
+python3 scripts/frontier/cgl_lf_stage_i.py submit \
+  --manifest <prepared_run.json>
 ```
+
+Create the approval token only after the corrected executable completes the
+reviewed Frontier qualification ladder. The token binds the execution epoch,
+executable digest, and executable revision; `prepare`, `submit`, runtime
+launch, `record`, and reconciliation fail closed if it is absent or changes.
+`check-submit` is an optional read-only preview. The authoritative `submit`
+action reruns preflight, authenticates retained preparation artifacts, invokes
+`sbatch --parsable`, and records the returned numeric job ID under the
+canonical-root lock. Do not manually issue `sbatch` for Stage I production.
+Use `recover-submit` only to complete a retained pending transaction after
+confirming the scheduler job identity.
 
 After the allocation terminates, accept a scientific continuation only after
 inspection and accounting complete:
@@ -222,27 +241,37 @@ python3 scripts/frontier/cgl_lf_stage_i.py bundle-case \
   --output-dir <accepted-bundle-path>
 ```
 
-The initial production campaign exercised Figure 11 low-resolution case
-`R16` (`paper_scale_separation_active_alfvenic_beta10_nperp96`) with the
-pre-replacement turbulent driver. Its rank-local restart lineage was formally
-accepted through `t = 7.5` after inspection of jobs `4675322`, `4676557`,
-`4676696`, `4679803`, `4681476`, `4683291`, and `4683918`; the legacy
-shared-I/O startup segment is retained as diagnostic evidence only. Job
-`4686032` then completed cleanly through exact `t = 8.5` and passed formal
-inspection, but is recorded as `rejected` for current reproduction admission:
-the replacement turbulent driver now stores modal forcing restart state and
-metadata rather than the old retained forcing representation. The old
-restart lineage cannot be continued under the replacement executable. Stage I
-has consumed `9.962778` node-hours with no active reservation; new production
-requires qualification of the replacement driver and a fresh lineage from
-`t = 0`.
+For E03 continuations, the retained restart siblings must agree on their
+embedded `time/restart_time` marker and that physical timestamp must match the
+inspected terminal state. A matching filename or requested `time/tlim` alone
+is not continuation evidence.
 
-The accepted prefix bundle
-`runs/bundles/diagnostic-prefixes/R16_rankio_t7p5_prefix_cadence_20260526`
-contains 31 deduplicated rank-local snapshots and passes the analyzer's
-synthetic check, but it ends before the declared `t = [8,10]` analysis
-window. It therefore provides production-pipeline evidence only: there is no
-accepted completed `t = 10` case or quantitative MKS24 panel comparison yet.
+The pre-replacement `R16` lineage remains archived as historical pipeline
+evidence only. Replacement-driver qualification established a separate
+`E02-modal-driver` execution epoch with modal forcing restart state,
+bundle-backed source provenance, rank-local retained products, and
+shared-root submission checks. E02 `R16`
+(`paper_scale_separation_active_alfvenic_beta10_nperp96`) reaches exact
+`t = 10.0`, its `t = [8,10]` production-window analyzer passes, the
+standard-layout E02 `R02` lineage reaches exact `t = 2.5`, and the
+high-resolution E02 `R17` timing lineage reaches exact `t = 0.10`.
+
+An independent source-to-code audit then found that E02 does not exactly
+implement MKS24 forcing semantics: random roles inherit generic projected
+forcing and paper decks rely on the driver's parabolic-spectrum default,
+while planar roles do not generally enforce published perpendicular
+incompressibility for retained `k_z != 0` modes. Preserve E02 only as pipeline
+and cost evidence. Prohibit every new E02 preparation or submission.
+Correct and qualify explicit MKS24 forcing policies, start a fresh epoch from
+`t = 0`, then run the frozen sixteen-case `R02`--`R17` mapped matrix one
+inspected segment at a time and complete `R17` last.
+
+The Frontier root is shared with exploratory campaigns. In particular, Slurm
+records exploratory job `4743106` as complete while its top-level campaign
+record remains stale at `state = running`. Do not modify that stale record.
+Before each Stage I prepare and submit action, inspect all user jobs and
+active shared-root campaign records; explicitly acknowledge a reviewed stale
+record only after confirming isolation.
 
 Analyze a retained paper bundle without rerunning simulations:
 

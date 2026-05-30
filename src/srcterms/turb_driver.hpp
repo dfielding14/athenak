@@ -18,6 +18,11 @@
 enum class TurbNormalization { edot, accel_rms };
 enum class TurbLocalization { none, include, exclude };
 enum class TurbSpectrum { parabolic, power_law };
+enum class TurbProjectionPolicy {
+  solenoidal_compressive,
+  mks24_random_unprojected,
+  mks24_alfvenic_perpendicular
+};
 
 // Native restart records are only intended for restarts from the same executable
 // precision and feature version, consistent with the existing AthenaK restart format.
@@ -42,6 +47,7 @@ struct TurbulenceRestartMetadata {
   int normalization;
   int localization;
   int spectrum;
+  int projection_policy;
   int physical_k_shell;
   int isotropic_power_spectrum;
   int record_injected_work;
@@ -123,6 +129,7 @@ class TurbulenceDriver {
   TurbNormalization normalization;
   Real accel_rms;
   TurbSpectrum spectrum;
+  TurbProjectionPolicy projection_policy;
 
   TurbLocalization localization;
   Real sigma_x1, sigma_x2, sigma_x3;

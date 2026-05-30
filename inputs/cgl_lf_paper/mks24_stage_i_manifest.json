@@ -13,9 +13,11 @@
   "authorization": {
     "project_account": "AST207",
     "project_budget_node_hours": 4000.0,
-    "stage_i_reservation_node_hours_including_contingency": 1068.888889,
+    "historical_prior_stage_i_estimate_node_hours_including_contingency": 1068.888889,
+    "stage_i_reservation_node_hours_including_contingency": 900.000000,
+    "stage_i_reservation_basis": "Historical measured E02 mapped-matrix projection retained as pipeline and cost evidence only. The F-076 forcing-contract audit pauses direct-reproduction submissions until explicit MKS24 forcing policies are qualified in a fresh epoch from t=0.",
     "mapped_unique_runs": 16,
-    "execution_rule": "Run only canonical cases once; reuse accepted outputs for listed aliases and panel roles."
+    "execution_rule": "Do not prepare or submit any new E02 segment. Preserve the frozen R02-R17 mapped inventory and reuse aliases, qualify explicit MKS24 forcing policies, then run the mapped cases once from t=0 in the fresh E03-forcing-policy epoch under sequential inspection. Complete R17 last."
   },
   "aliases": [
     {
@@ -176,5 +178,403 @@
       "estimated_node_hours": 184.888889,
       "figure_roles": ["11"]
     }
-  ]
+  ],
+  "panel_status": {
+    "schema_version": 2,
+    "analysis_case_aliases": {
+      "paper_nulim_beta100_hardwall": "paper_standard_active_alfvenic_beta100"
+    },
+    "reference_manifests": {
+      "fig2a_v2": {"path": "digitized_fig2a_v2/surfaces.json", "sha256": "3e2f961b1bdc8bb46180be1e4b38448a997d306738a834898caf3b5b0bd89845"},
+      "fig2b_v1": {"path": "digitized_fig2b_v1/curves.json", "sha256": "66996af7ddd48a39c1a8fc46e1fd7ba6206ced5625c2d30a123cc3df67df3df1"},
+      "fig4a_v1": {"path": "digitized_fig4a_v1/curves.json", "sha256": "00c0fadeb15a82758be543a95b45d883ebea32388961756d0146eef3f8ca4cb9"},
+      "fig5b_v1": {"path": "digitized_fig5b_v1/curves.json", "sha256": "45365392e6ff8b173e829639d3409e5c2d4af05c261c9bf817e43cceab5fcde8"},
+      "fig7_v1": {"path": "digitized_fig7_v1/curves.json", "sha256": "7c2f02bca4725674b9e77292a7f33c40de211bdcd48fe2e29a4b2e8fe81c1d09"},
+      "fig8_v1": {"path": "digitized_fig8_v1/curves.json", "sha256": "a533778f7777d755a682e898ae44dcb7356be8f74a9818d6b6cc7b6fd6048522"},
+      "fig9_v1": {"path": "digitized_fig9_v1/curves.json", "sha256": "07417294ca44e7aa7e8c499931e12ed7fce9eec55e4691e3172a8684470163b8"},
+      "fig11_v1": {"path": "digitized_fig11_v1/curves.json", "sha256": "9922eb24245cdf0e7dfe355864a610ee8ebf437ccf593ea40a2e7df6016c037a"},
+      "fig12_v2": {"path": "digitized_fig12_v2/curves.json", "sha256": "8bc302c082ed971eda657f5aac283fd423ab182dbd676faa7da72ca3436a0b9c"},
+      "fig13_v3": {"path": "digitized_fig13_v3/curves.json", "sha256": "78f084d55d851561bf7a649becbfa907626f0890605b5e792fe0352cc205c924"}
+    },
+    "reference_product_bindings": {
+      "fig11_alignment_active_alfvenic_beta10_nperp192": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta10", "product": "alignment_peak.cos_theta", "data_file": "fig11_alignment_active_alfvenic_beta10_nperp192.csv", "data_sha256": "6cdfb0abc029279f756ca7f4d5373c63e4e95c15050ffeb6d62ad36b00fb782d", "reference_manifest": "fig11_v1"},
+      "fig11_alignment_active_alfvenic_beta10_nperp384": {"kind": "curve", "case": "paper_scale_separation_active_alfvenic_beta10_nperp384", "product": "alignment_peak.cos_theta", "data_file": "fig11_alignment_active_alfvenic_beta10_nperp384.csv", "data_sha256": "acc861015bd3e2cab75fb6b2cd656f537f6666a1b067749ed7cb5555c8f37653", "reference_manifest": "fig11_v1"},
+      "fig11_alignment_active_alfvenic_beta10_nperp96": {"kind": "curve", "case": "paper_scale_separation_active_alfvenic_beta10_nperp96", "product": "alignment_peak.cos_theta", "data_file": "fig11_alignment_active_alfvenic_beta10_nperp96.csv", "data_sha256": "8cec4a76661ff24bbc86ee0202bd3322b057aa84b98481822357dbf33fcd7b82", "reference_manifest": "fig11_v1"},
+      "fig12_alignment_nominal_active": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta10", "product": "alignment_peak.cos_theta", "data_file": "fig12_alignment_nominal_active.csv", "data_sha256": "cf3515717406c04601f600a0ce34079337c2ba09ace896de75b33d6e74f20dce", "reference_manifest": "fig12_v2"},
+      "fig12_alignment_nominal_passive": {"kind": "curve", "case": "paper_standard_passive_alfvenic_beta10", "product": "alignment_peak.cos_theta", "data_file": "fig12_alignment_nominal_passive.csv", "data_sha256": "3e03294e051082aac0296aa5466f1248caa1d8b15d8aeb85a804252ca420b36b", "reference_manifest": "fig12_v2"},
+      "fig12_alignment_strong_heat_flux": {"kind": "curve", "case": "paper_heat_flux_beta10_strong", "product": "alignment_peak.cos_theta", "data_file": "fig12_alignment_strong_heat_flux.csv", "data_sha256": "ddf0fffa31b4af3bb10e01e4a4f2c855670652c7f11aea217aabc7f0c7326f78", "reference_manifest": "fig12_v2"},
+      "fig12_alignment_weak_heat_flux": {"kind": "curve", "case": "paper_heat_flux_beta10_weak", "product": "alignment_peak.cos_theta", "data_file": "fig12_alignment_weak_heat_flux.csv", "data_sha256": "ade2950b5c7d8f07e30d5f7450afa348c91e24f04f6b640b06adb0ce44c2009b", "reference_manifest": "fig12_v2"},
+      "fig13b_beta_delta_nulim_20": {"kind": "curve", "case": "paper_nulim_beta100_20", "product": "pdf.beta_delta", "data_file": "fig13b_beta_delta_nulim_20.csv", "data_sha256": "a66ada8bb3e8b7e4a9c2cb303d729278868ecea9f0aab04a44339713bd61e049", "reference_manifest": "fig13_v3"},
+      "fig13b_beta_delta_nulim_200": {"kind": "curve", "case": "paper_nulim_beta100_200", "product": "pdf.beta_delta", "data_file": "fig13b_beta_delta_nulim_200.csv", "data_sha256": "a8f21d854dfd1f800155428dcadb5eb307941c7df80b13911fe2436e7e0546ea", "reference_manifest": "fig13_v3"},
+      "fig13b_beta_delta_nulim_hardwall": {"kind": "curve", "case": "paper_nulim_beta100_hardwall", "product": "pdf.beta_delta", "data_file": "fig13b_beta_delta_nulim_hardwall.csv", "data_sha256": "7848f738238c6f0c5b710935cb3b24dbbe5d7212449df16974c8db73c8c28cff", "reference_manifest": "fig13_v3"},
+      "fig13b_beta_delta_passive_hardwall": {"kind": "curve", "case": "paper_standard_passive_alfvenic_beta100", "product": "pdf.beta_delta", "data_file": "fig13b_beta_delta_passive_hardwall.csv", "data_sha256": "47b91980b8c0371c069592d34da797d2faccb71e0dfd06c94e574c80b76b8313", "reference_manifest": "fig13_v3"},
+      "fig13d_transfer_nulim_20": {"kind": "curve", "case": "paper_nulim_beta100_20", "product": "pressure_transfer.transfer_normalized_by_total", "data_file": "fig13d_transfer_nulim_20.csv", "data_sha256": "bc28d380e59f716f256a31e097ae18f4306faa7ccdd45940f1442bf64928d4cb", "reference_manifest": "fig13_v3"},
+      "fig13d_transfer_nulim_200": {"kind": "curve", "case": "paper_nulim_beta100_200", "product": "pressure_transfer.transfer_normalized_by_total", "data_file": "fig13d_transfer_nulim_200.csv", "data_sha256": "412ca4877e5fcbb2b75d39d3b7264fb002228dc6832417784b79f264bfc8499e", "reference_manifest": "fig13_v3"},
+      "fig13d_transfer_nulim_hardwall": {"kind": "curve", "case": "paper_nulim_beta100_hardwall", "product": "pressure_transfer.transfer_normalized_by_total", "data_file": "fig13d_transfer_nulim_hardwall.csv", "data_sha256": "32bbba22027a1de2deb1401230fbf59121a6897d3a7c1af6f60e8728646e79a3", "reference_manifest": "fig13_v3"},
+      "fig13d_transfer_passive_hardwall": {"kind": "curve", "case": "paper_standard_passive_alfvenic_beta100", "product": "pressure_transfer.transfer_normalized_by_total", "data_file": "fig13d_transfer_passive_hardwall.csv", "data_sha256": "a05ad60fb907ea3cdbe24bf4d36c194b61433e612525d9154395aef9b0d5b97e", "reference_manifest": "fig13_v3"},
+      "fig2a_parallel_athenak_pressure_units": {"kind": "surface", "case": "paper_standard_active_alfvenic_beta10", "product": "pressure_density_joint.parallel", "data_file": "fig2a_parallel_athenak_pressure_units.csv", "data_sha256": "bf7f466f58454c90029c3c5f2d7d325eea9803fca4b5dcfaa3e027f65c1211d5", "reference_manifest": "fig2a_v2"},
+      "fig2a_perpendicular_athenak_pressure_units": {"kind": "surface", "case": "paper_standard_active_alfvenic_beta10", "product": "pressure_density_joint.perpendicular", "data_file": "fig2a_perpendicular_athenak_pressure_units.csv", "data_sha256": "c3e8b2d27b4a75301b1545acebb55b246079c8ce5f2ef97895e0c868c375c168", "reference_manifest": "fig2a_v2"},
+      "fig2b_active_alfvenic_beta10": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta10", "product": "history.unstable_fraction", "data_file": "fig2b_active_alfvenic_beta10.csv", "data_sha256": "59e7dfd40707b31479cc752980a0ed8d3c47413cdf931fc4daf27b1c4c0a75a9", "reference_manifest": "fig2b_v1"},
+      "fig2b_active_alfvenic_beta100": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta100", "product": "history.unstable_fraction", "data_file": "fig2b_active_alfvenic_beta100.csv", "data_sha256": "265490834ab92de0e9cd68518cc939e9cca142d6d37f994437c99fbf468df75f", "reference_manifest": "fig2b_v1"},
+      "fig2b_active_random_beta10": {"kind": "curve", "case": "paper_standard_active_random_beta10", "product": "history.unstable_fraction", "data_file": "fig2b_active_random_beta10.csv", "data_sha256": "8121da032b665c446af83541ace924ac3215e32fddd67202c12038be8dd409fc", "reference_manifest": "fig2b_v1"},
+      "fig2b_active_random_beta100": {"kind": "curve", "case": "paper_standard_active_random_beta100", "product": "history.unstable_fraction", "data_file": "fig2b_active_random_beta100.csv", "data_sha256": "5e00636696a6df7d5c2639829f8ba1554f702bcaffc15ff9597de35fb57ee77a", "reference_manifest": "fig2b_v1"},
+      "fig2b_passive_alfvenic_beta10": {"kind": "curve", "case": "paper_standard_passive_alfvenic_beta10", "product": "history.unstable_fraction", "data_file": "fig2b_passive_alfvenic_beta10.csv", "data_sha256": "5ab891d26432163d34acf01064c20c7c5eaceaab102cb1d823742cf20c333cad", "reference_manifest": "fig2b_v1"},
+      "fig2b_passive_alfvenic_beta100": {"kind": "curve", "case": "paper_standard_passive_alfvenic_beta100", "product": "history.unstable_fraction", "data_file": "fig2b_passive_alfvenic_beta100.csv", "data_sha256": "79807dffa4e935c3a35f14e94fe83897b6869d729f01fe24e0470ed06c78def2", "reference_manifest": "fig2b_v1"},
+      "fig2b_passive_random_beta10": {"kind": "curve", "case": "paper_standard_passive_random_beta10", "product": "history.unstable_fraction", "data_file": "fig2b_passive_random_beta10.csv", "data_sha256": "62ae9765d1291b35d14bf6480584e6dd2afa9dbd41c65fe245827eef4f6731f8", "reference_manifest": "fig2b_v1"},
+      "fig2b_passive_random_beta100": {"kind": "curve", "case": "paper_standard_passive_random_beta100", "product": "history.unstable_fraction", "data_file": "fig2b_passive_random_beta100.csv", "data_sha256": "fe3947257e51607291f3d1d81ec7770bc5390e64b1099d7577902ddbae2dd173", "reference_manifest": "fig2b_v1"},
+      "fig4a_density_active_alfvenic_beta10": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta10", "product": "pdf.density_fluctuation", "data_file": "fig4a_density_active_alfvenic_beta10.csv", "data_sha256": "e10847576e2561832fa976e3b42605fa0d3ea6ae5a72b1b925996dc6c0e6b377", "reference_manifest": "fig4a_v1"},
+      "fig4a_density_active_alfvenic_beta100": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta100", "product": "pdf.density_fluctuation", "data_file": "fig4a_density_active_alfvenic_beta100.csv", "data_sha256": "301929b1f420e6fb8f373542c80ebb382ba3f39018814fa7c66c85b4dcaf015b", "reference_manifest": "fig4a_v1"},
+      "fig4a_density_active_random_beta10": {"kind": "curve", "case": "paper_standard_active_random_beta10", "product": "pdf.density_fluctuation", "data_file": "fig4a_density_active_random_beta10.csv", "data_sha256": "1a08b7993ef503df47bc41fe2b4b3e91091185b681896d8b1dba7cabad0e7780", "reference_manifest": "fig4a_v1"},
+      "fig4a_density_active_random_beta100": {"kind": "curve", "case": "paper_standard_active_random_beta100", "product": "pdf.density_fluctuation", "data_file": "fig4a_density_active_random_beta100.csv", "data_sha256": "f89f309e4ae1290a25c9279835a745673a072d73b579a0ce4d6d73fcc4fb42c4", "reference_manifest": "fig4a_v1"},
+      "fig4a_density_passive_alfvenic_beta10": {"kind": "curve", "case": "paper_standard_passive_alfvenic_beta10", "product": "pdf.density_fluctuation", "data_file": "fig4a_density_passive_alfvenic_beta10.csv", "data_sha256": "4b309df0184e031033a0cb1d04baddd5f361ffdaad3ff691bc56796b5d24f1f5", "reference_manifest": "fig4a_v1"},
+      "fig4a_density_passive_alfvenic_beta100": {"kind": "curve", "case": "paper_standard_passive_alfvenic_beta100", "product": "pdf.density_fluctuation", "data_file": "fig4a_density_passive_alfvenic_beta100.csv", "data_sha256": "b36a65b65ec044f1ee19e0519e74c39020cb80cb040c6ba4a75ddc718a2a23de", "reference_manifest": "fig4a_v1"},
+      "fig4a_density_passive_random_beta10": {"kind": "curve", "case": "paper_standard_passive_random_beta10", "product": "pdf.density_fluctuation", "data_file": "fig4a_density_passive_random_beta10.csv", "data_sha256": "2821295ce64cddce00e0a06c01d73dbc40b9b8c5cd6c8481ce700f6b0bfbb326", "reference_manifest": "fig4a_v1"},
+      "fig4a_density_passive_random_beta100": {"kind": "curve", "case": "paper_standard_passive_random_beta100", "product": "pdf.density_fluctuation", "data_file": "fig4a_density_passive_random_beta100.csv", "data_sha256": "674c4dcac3d127bfaf640a711868f7da837843263bd1b8e91cc1f384fe2b3dcc", "reference_manifest": "fig4a_v1"},
+      "fig5b_eddy_magnetic_perp_active_alfvenic_beta10": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta10", "product": "eddy_anisotropy.magnetic_perp", "data_file": "fig5b_eddy_magnetic_perp_active_alfvenic_beta10.csv", "data_sha256": "736d4ec695d4db04c8ce3f7ebe2990370522ed2e296804180dd23e7f089c616f", "reference_manifest": "fig5b_v1"},
+      "fig5b_eddy_magnetic_perp_active_random_beta10": {"kind": "curve", "case": "paper_standard_active_random_beta10", "product": "eddy_anisotropy.magnetic_perp", "data_file": "fig5b_eddy_magnetic_perp_active_random_beta10.csv", "data_sha256": "db9362279feacfed10957925d9359a2c2c61dae6b3b73cf1c356741ca3807356", "reference_manifest": "fig5b_v1"},
+      "fig5b_eddy_velocity_perp_active_alfvenic_beta10": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta10", "product": "eddy_anisotropy.velocity_perp", "data_file": "fig5b_eddy_velocity_perp_active_alfvenic_beta10.csv", "data_sha256": "d78a18489d1a9fc03de2792a676700a469f9bb829f5adef02cc4634ed4a18ed5", "reference_manifest": "fig5b_v1"},
+      "fig5b_eddy_velocity_perp_active_random_beta10": {"kind": "curve", "case": "paper_standard_active_random_beta10", "product": "eddy_anisotropy.velocity_perp", "data_file": "fig5b_eddy_velocity_perp_active_random_beta10.csv", "data_sha256": "a77231bbbca22dbf6037faeda05c111de8a1f3e07cfb694e5e7181814554f182", "reference_manifest": "fig5b_v1"},
+      "fig7_transfer_active_alfvenic_beta10": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta10", "product": "pressure_transfer.transfer_normalized_by_total", "data_file": "fig7_transfer_active_alfvenic_beta10.csv", "data_sha256": "81a425f89c626e4de88141fd344fbb0ad7107409bd19a5dfacc398effee5ec40", "reference_manifest": "fig7_v1"},
+      "fig7_transfer_active_random_beta10": {"kind": "curve", "case": "paper_standard_active_random_beta10", "product": "pressure_transfer.transfer_normalized_by_total", "data_file": "fig7_transfer_active_random_beta10.csv", "data_sha256": "30d45b766c15733ce92d9716fe2eeab94900d30669fd04ba00dbf472d8e431df", "reference_manifest": "fig7_v1"},
+      "fig7_transfer_passive_alfvenic_beta10": {"kind": "curve", "case": "paper_standard_passive_alfvenic_beta10", "product": "pressure_transfer.transfer_normalized_by_total", "data_file": "fig7_transfer_passive_alfvenic_beta10.csv", "data_sha256": "e2ae3de4546b5f1d74e87aba958b4a527bdb5651d0af8349d52c1352af162f71", "reference_manifest": "fig7_v1"},
+      "fig8_alignment_pdf_active_alfvenic_beta10_shell128": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta10", "product": "alignment.128", "data_file": "fig8_alignment_pdf_active_alfvenic_beta10_shell128.csv", "data_sha256": "cb781d56adcaebf0f05435072de082dbbb36604cd3cc38810a045f3baceca05f", "reference_manifest": "fig8_v1"},
+      "fig8_alignment_pdf_active_alfvenic_beta10_shell16": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta10", "product": "alignment.16", "data_file": "fig8_alignment_pdf_active_alfvenic_beta10_shell16.csv", "data_sha256": "593e63ea50a7a8e7ceeabb895bcb0117201fcdd74ff9f8f6d5d26877bfbfd7c2", "reference_manifest": "fig8_v1"},
+      "fig8_alignment_pdf_active_alfvenic_beta10_shell32": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta10", "product": "alignment.32", "data_file": "fig8_alignment_pdf_active_alfvenic_beta10_shell32.csv", "data_sha256": "413b04fba5d85201e34d3ade60efc9be9e99409b850aba61c340b67d15d7ebf6", "reference_manifest": "fig8_v1"},
+      "fig8_alignment_pdf_active_alfvenic_beta10_shell64": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta10", "product": "alignment.64", "data_file": "fig8_alignment_pdf_active_alfvenic_beta10_shell64.csv", "data_sha256": "ebc6660f4dc3d186aa682b9f454e6e044128cd7857dafb9eb97497ed9fffffda", "reference_manifest": "fig8_v1"},
+      "fig8_alignment_pdf_active_alfvenic_beta10_shell8": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta10", "product": "alignment.8", "data_file": "fig8_alignment_pdf_active_alfvenic_beta10_shell8.csv", "data_sha256": "71a3cca72f335d29b4986d8f5651961d22b3a315dfa609756ce79bc17e18e51f", "reference_manifest": "fig8_v1"},
+      "fig8_alignment_pdf_passive_alfvenic_beta10_shell128": {"kind": "curve", "case": "paper_standard_passive_alfvenic_beta10", "product": "alignment.128", "data_file": "fig8_alignment_pdf_passive_alfvenic_beta10_shell128.csv", "data_sha256": "836bb586c1a0d189e184f08b24de32f871d6ab476c74b5e7ae9f1d9d8d98169e", "reference_manifest": "fig8_v1"},
+      "fig8_alignment_pdf_passive_alfvenic_beta10_shell16": {"kind": "curve", "case": "paper_standard_passive_alfvenic_beta10", "product": "alignment.16", "data_file": "fig8_alignment_pdf_passive_alfvenic_beta10_shell16.csv", "data_sha256": "47e01d753b7d3c41617dc5bf547a9951d99a49a0eaa2b2779178a43b92a155f9", "reference_manifest": "fig8_v1"},
+      "fig8_alignment_pdf_passive_alfvenic_beta10_shell32": {"kind": "curve", "case": "paper_standard_passive_alfvenic_beta10", "product": "alignment.32", "data_file": "fig8_alignment_pdf_passive_alfvenic_beta10_shell32.csv", "data_sha256": "119cb1fead6f3ab8448a9a6d83fd89ce5f1500e58f80038f50ea1ca78269d15d", "reference_manifest": "fig8_v1"},
+      "fig8_alignment_pdf_passive_alfvenic_beta10_shell64": {"kind": "curve", "case": "paper_standard_passive_alfvenic_beta10", "product": "alignment.64", "data_file": "fig8_alignment_pdf_passive_alfvenic_beta10_shell64.csv", "data_sha256": "efd10a46c59087c247fc9008659296bb7bbf9f158aa74204171071c74824054a", "reference_manifest": "fig8_v1"},
+      "fig8_alignment_pdf_passive_alfvenic_beta10_shell8": {"kind": "curve", "case": "paper_standard_passive_alfvenic_beta10", "product": "alignment.8", "data_file": "fig8_alignment_pdf_passive_alfvenic_beta10_shell8.csv", "data_sha256": "9d016abf183227052f4995426674d469d4cc2a30512bd19613079e419b831e67", "reference_manifest": "fig8_v1"},
+      "fig9_alignment_active_alfvenic_beta10": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta10", "product": "alignment_peak.cos_theta", "data_file": "fig9_alignment_active_alfvenic_beta10.csv", "data_sha256": "c612ee2ef8bfb4aaf7e15f28cef221b28fccef03f84f6c832e7641b60584524e", "reference_manifest": "fig9_v1"},
+      "fig9_alignment_active_alfvenic_beta100": {"kind": "curve", "case": "paper_standard_active_alfvenic_beta100", "product": "alignment_peak.cos_theta", "data_file": "fig9_alignment_active_alfvenic_beta100.csv", "data_sha256": "9ff4bfb98a1082bb7c11c513d62b48cac398df9551bed1df26f00de39a8b0d6d", "reference_manifest": "fig9_v1"},
+      "fig9_alignment_active_random_beta10": {"kind": "curve", "case": "paper_standard_active_random_beta10", "product": "alignment_peak.cos_theta", "data_file": "fig9_alignment_active_random_beta10.csv", "data_sha256": "b935342e639e2ac90bad1beb5e84479ca577bbefad5e2bd0c15a4e7ab7a33412", "reference_manifest": "fig9_v1"},
+      "fig9_alignment_active_random_beta100": {"kind": "curve", "case": "paper_standard_active_random_beta100", "product": "alignment_peak.cos_theta", "data_file": "fig9_alignment_active_random_beta100.csv", "data_sha256": "89cc478c8024391e2d4c9a1d660a9b14cd09cf51ab8278be6225467d9dc0dc09", "reference_manifest": "fig9_v1"},
+      "fig9_alignment_passive_alfvenic_beta10": {"kind": "curve", "case": "paper_standard_passive_alfvenic_beta10", "product": "alignment_peak.cos_theta", "data_file": "fig9_alignment_passive_alfvenic_beta10.csv", "data_sha256": "d1a7c6140b1b4ea32fff5f1f76ab1851151343274f392847555844bdf1eb6d88", "reference_manifest": "fig9_v1"},
+      "fig9_alignment_passive_alfvenic_beta100": {"kind": "curve", "case": "paper_standard_passive_alfvenic_beta100", "product": "alignment_peak.cos_theta", "data_file": "fig9_alignment_passive_alfvenic_beta100.csv", "data_sha256": "536ba34c849550cc0f5c314a5d5f9978bccbf95450d01abb587f3b264cb8aba4", "reference_manifest": "fig9_v1"},
+      "fig9_alignment_passive_random_beta10": {"kind": "curve", "case": "paper_standard_passive_random_beta10", "product": "alignment_peak.cos_theta", "data_file": "fig9_alignment_passive_random_beta10.csv", "data_sha256": "f081308d287213c42b5246648c961fe69438485b2bc409d609ba1bb373f74eb8", "reference_manifest": "fig9_v1"},
+      "fig9_alignment_passive_random_beta100": {"kind": "curve", "case": "paper_standard_passive_random_beta100", "product": "alignment_peak.cos_theta", "data_file": "fig9_alignment_passive_random_beta100.csv", "data_sha256": "ba1f912f4d301cb16b7f0fb6b78fc3de8bf19834cd80438b448e295321ac6076", "reference_manifest": "fig9_v1"}
+    },
+    "panels": [
+      {
+        "id": "fig2a",
+        "figure": "2",
+        "panel": "a",
+        "description": "Pressure-density joint PDF surfaces",
+        "disposition": "comparison",
+        "required_cases": ["R02"],
+        "reference_products": [
+          "fig2a_parallel_athenak_pressure_units",
+          "fig2a_perpendicular_athenak_pressure_units"
+        ],
+        "criterion_state": "pending_review",
+        "criterion_reason": "Admitted checksum-qualified Figure 2(a) pressure-coordinate surfaces are retained, but numeric acceptance criteria await scientific review.",
+        "criteria": []
+      },
+      {
+        "id": "fig2b",
+        "figure": "2",
+        "panel": "b",
+        "description": "Unstable-volume histories",
+        "disposition": "comparison",
+        "required_cases": ["R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09"],
+        "reference_products": [
+          "fig2b_active_alfvenic_beta10",
+          "fig2b_active_alfvenic_beta100",
+          "fig2b_active_random_beta10",
+          "fig2b_active_random_beta100",
+          "fig2b_passive_alfvenic_beta10",
+          "fig2b_passive_alfvenic_beta100",
+          "fig2b_passive_random_beta10",
+          "fig2b_passive_random_beta100"
+        ],
+        "criterion_state": "pending_review",
+        "criterion_reason": "Admitted checksum-qualified Figure 2(b) unstable-volume histories are retained, but numeric acceptance criteria await scientific review.",
+        "criteria": []
+      },
+      {
+        "id": "fig4a",
+        "figure": "4",
+        "panel": "a",
+        "description": "Normalized-density PDFs",
+        "disposition": "comparison",
+        "required_cases": ["R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09"],
+        "reference_products": [
+          "fig4a_density_active_alfvenic_beta10",
+          "fig4a_density_active_alfvenic_beta100",
+          "fig4a_density_active_random_beta10",
+          "fig4a_density_active_random_beta100",
+          "fig4a_density_passive_alfvenic_beta10",
+          "fig4a_density_passive_alfvenic_beta100",
+          "fig4a_density_passive_random_beta10",
+          "fig4a_density_passive_random_beta100"
+        ],
+        "criterion_state": "pending_review",
+        "criterion_reason": "Admitted checksum-qualified Figure 4(a) normalized-density PDFs are retained, but numeric acceptance criteria await scientific review.",
+        "criteria": []
+      },
+      {
+        "id": "fig5b",
+        "figure": "5",
+        "panel": "b",
+        "description": "Normalized local-field eddy anisotropy curves",
+        "disposition": "comparison",
+        "required_cases": ["R02", "R04"],
+        "reference_products": [
+          "fig5b_eddy_velocity_perp_active_random_beta10",
+          "fig5b_eddy_magnetic_perp_active_random_beta10",
+          "fig5b_eddy_velocity_perp_active_alfvenic_beta10",
+          "fig5b_eddy_magnetic_perp_active_alfvenic_beta10"
+        ],
+        "criterion_state": "pending_review",
+        "criterion_reason": "Admitted checksum-qualified Figure 5(b) normalized eddy-scale curves are retained, but numeric acceptance criteria await scientific review.",
+        "criteria": []
+      },
+      {
+        "id": "fig7bottom",
+        "figure": "7",
+        "panel": "bottom",
+        "description": "Normalized pressure-anisotropy transfer curves",
+        "disposition": "comparison",
+        "required_cases": ["R02", "R04", "R06"],
+        "reference_products": [
+          "fig7_transfer_active_random_beta10",
+          "fig7_transfer_active_alfvenic_beta10",
+          "fig7_transfer_passive_alfvenic_beta10"
+        ],
+        "criterion_state": "pending_review",
+        "criterion_reason": "Admitted checksum-qualified Figure 7 lower-panel normalized-transfer curves are retained, but numeric acceptance criteria await scientific review.",
+        "criteria": []
+      },
+      {
+        "id": "fig8",
+        "figure": "8",
+        "description": "Selected-shell alignment PDFs",
+        "disposition": "comparison",
+        "required_cases": ["R02", "R06"],
+        "reference_products": [
+          "fig8_alignment_pdf_active_alfvenic_beta10_shell8",
+          "fig8_alignment_pdf_active_alfvenic_beta10_shell16",
+          "fig8_alignment_pdf_active_alfvenic_beta10_shell32",
+          "fig8_alignment_pdf_active_alfvenic_beta10_shell64",
+          "fig8_alignment_pdf_active_alfvenic_beta10_shell128",
+          "fig8_alignment_pdf_passive_alfvenic_beta10_shell8",
+          "fig8_alignment_pdf_passive_alfvenic_beta10_shell16",
+          "fig8_alignment_pdf_passive_alfvenic_beta10_shell32",
+          "fig8_alignment_pdf_passive_alfvenic_beta10_shell64",
+          "fig8_alignment_pdf_passive_alfvenic_beta10_shell128"
+        ],
+        "criterion_state": "pending_review",
+        "criterion_reason": "Admitted checksum-qualified Figure 8 selected-shell alignment PDFs are retained, but numeric acceptance criteria await scientific review.",
+        "criteria": []
+      },
+      {
+        "id": "fig9",
+        "figure": "9",
+        "description": "Peak-alignment curves across standard cases",
+        "disposition": "comparison",
+        "required_cases": ["R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09"],
+        "reference_products": [
+          "fig9_alignment_active_alfvenic_beta10",
+          "fig9_alignment_passive_alfvenic_beta10",
+          "fig9_alignment_active_alfvenic_beta100",
+          "fig9_alignment_passive_alfvenic_beta100",
+          "fig9_alignment_active_random_beta10",
+          "fig9_alignment_passive_random_beta10",
+          "fig9_alignment_active_random_beta100",
+          "fig9_alignment_passive_random_beta100"
+        ],
+        "criterion_state": "pending_review",
+        "criterion_reason": "Admitted checksum-qualified Figure 9 peak-alignment curves are retained, but numeric acceptance criteria await scientific review.",
+        "criteria": []
+      },
+      {
+        "id": "fig11bottom",
+        "figure": "11",
+        "panel": "bottom",
+        "description": "Scale-separation peak-alignment curves",
+        "disposition": "comparison",
+        "required_cases": ["R16", "R02", "R17"],
+        "reference_products": [
+          "fig11_alignment_active_alfvenic_beta10_nperp96",
+          "fig11_alignment_active_alfvenic_beta10_nperp192",
+          "fig11_alignment_active_alfvenic_beta10_nperp384"
+        ],
+        "criterion_state": "pending_review",
+        "criterion_reason": "Admitted checksum-qualified Figure 11 lower-panel peak-alignment curves are retained, but numeric acceptance criteria await scientific review.",
+        "criteria": []
+      },
+      {
+        "id": "fig12top",
+        "figure": "12",
+        "panel": "top",
+        "description": "Heat-flux sensitivity peak-alignment curves",
+        "disposition": "comparison",
+        "required_cases": ["R12", "R02", "R06", "R13"],
+        "reference_products": [
+          "fig12_alignment_weak_heat_flux",
+          "fig12_alignment_nominal_active",
+          "fig12_alignment_nominal_passive",
+          "fig12_alignment_strong_heat_flux"
+        ],
+        "criterion_state": "pending_review",
+        "criterion_reason": "Admitted checksum-qualified Figure 12 upper-panel peak-alignment curves are retained, but numeric acceptance criteria await scientific review.",
+        "criteria": []
+      },
+      {
+        "id": "fig13b",
+        "figure": "13",
+        "panel": "b",
+        "description": "Limiter-sensitivity beta-Delta PDFs",
+        "disposition": "comparison",
+        "required_cases": ["R14", "R15", "R03", "R07"],
+        "reference_products": [
+          "fig13b_beta_delta_nulim_20",
+          "fig13b_beta_delta_nulim_200",
+          "fig13b_beta_delta_nulim_hardwall",
+          "fig13b_beta_delta_passive_hardwall"
+        ],
+        "criterion_state": "pending_review",
+        "criterion_reason": "Admitted checksum-qualified Figure 13(b) beta-Delta PDFs are retained, but numeric acceptance criteria await scientific review.",
+        "criteria": []
+      },
+      {
+        "id": "fig13d",
+        "figure": "13",
+        "panel": "d",
+        "description": "Limiter-sensitivity normalized-transfer curves",
+        "disposition": "comparison",
+        "required_cases": ["R14", "R15", "R03", "R07"],
+        "reference_products": [
+          "fig13d_transfer_nulim_20",
+          "fig13d_transfer_nulim_200",
+          "fig13d_transfer_nulim_hardwall",
+          "fig13d_transfer_passive_hardwall"
+        ],
+        "criterion_state": "pending_review",
+        "criterion_reason": "Admitted checksum-qualified Figure 13(d) normalized-transfer curves are retained, but numeric acceptance criteria await scientific review.",
+        "criteria": []
+      },
+      {
+        "id": "fig3a",
+        "figure": "3",
+        "panel": "a",
+        "description": "Compressive-velocity spectra by forcing correlation",
+        "disposition": "blocked_reference",
+        "required_cases": ["R03", "R05", "R11"],
+        "reference_products": [],
+        "reason": "The published absolute compressive-velocity spectral ordinate cannot be mapped defensibly into AthenaK products because the discrete Fourier normalization is not stated; author or archive data, donor diagnostic code, or an explicit normalization statement is required."
+      },
+      {
+        "id": "fig3b",
+        "figure": "3",
+        "panel": "b",
+        "description": "Compressive-velocity spectra by beta",
+        "disposition": "blocked_reference",
+        "required_cases": ["R10", "R04", "R11", "R09"],
+        "reference_products": [],
+        "reason": "The published absolute compressive-velocity spectral ordinate cannot be mapped defensibly into AthenaK products because the discrete Fourier normalization is not stated; author or archive data, donor diagnostic code, or an explicit normalization statement is required."
+      },
+      {
+        "id": "fig4b",
+        "figure": "4",
+        "panel": "b",
+        "description": "Density-fluctuation spectra",
+        "disposition": "blocked_reference",
+        "required_cases": ["R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09"],
+        "reference_products": [],
+        "reason": "The plotted density-spectrum ordinate does not declare the normalization required to map it defensibly into AthenaK density-fluctuation spectra; author or archive data, donor diagnostic code, or an explicit normalization statement is required."
+      },
+      {
+        "id": "fig5a",
+        "figure": "5",
+        "panel": "a",
+        "description": "Energy spectra",
+        "disposition": "blocked_reference",
+        "required_cases": ["R02", "R04"],
+        "reference_products": [],
+        "reason": "The published absolute energy-spectrum ordinates cannot be mapped defensibly into AthenaK products because the discrete Fourier normalization is not stated; author or archive data, donor diagnostic code, or an explicit normalization statement is required."
+      },
+      {
+        "id": "fig6a",
+        "figure": "6",
+        "panel": "a",
+        "description": "Pressure and magnetic-pressure spectra",
+        "disposition": "blocked_reference",
+        "required_cases": ["R02", "R04"],
+        "reference_products": [],
+        "reason": "The published absolute pressure and magnetic-pressure spectral ordinates cannot be mapped defensibly into AthenaK products because the discrete Fourier normalization is not stated; author or archive data, donor diagnostic code, or an explicit normalization statement is required."
+      },
+      {
+        "id": "fig6b",
+        "figure": "6",
+        "panel": "b",
+        "description": "Parallel-strain spectra",
+        "disposition": "blocked_reference",
+        "required_cases": ["R02", "R04"],
+        "reference_products": [],
+        "reason": "The published absolute parallel-strain spectral ordinate cannot be mapped defensibly into AthenaK products because the discrete Fourier normalization is not stated; author or archive data, donor diagnostic code, or an explicit normalization statement is required."
+      },
+      {
+        "id": "fig7top",
+        "figure": "7",
+        "panel": "top",
+        "description": "Pressure-anisotropy-gradient spectra",
+        "disposition": "blocked_reference",
+        "required_cases": ["R02", "R04", "R06"],
+        "reference_products": [],
+        "reason": "The published dimensional pressure-anisotropy-gradient spectral ordinate cannot be mapped defensibly into AthenaK products because the discrete Fourier normalization is not stated; author or archive data, donor diagnostic code, or an explicit normalization statement is required."
+      },
+      {
+        "id": "fig11top",
+        "figure": "11",
+        "panel": "top",
+        "description": "Scale-separation kinetic spectra",
+        "disposition": "blocked_reference",
+        "required_cases": ["R16", "R02", "R17"],
+        "reference_products": [],
+        "reason": "The published dimensional kinetic-spectrum scale cannot be mapped defensibly into AthenaK products because the paper-to-AthenaK conversion is not qualified; author or archive data, donor diagnostic code, or an explicit normalization statement is required."
+      },
+      {
+        "id": "fig12bottom",
+        "figure": "12",
+        "panel": "bottom",
+        "description": "Heat-flux sensitivity parallel-pressure-gradient spectra",
+        "disposition": "blocked_reference",
+        "required_cases": ["R12", "R02", "R06", "R13"],
+        "reference_products": [],
+        "reason": "The published dimensional parallel-pressure-gradient spectral scale cannot be mapped defensibly into AthenaK products because the paper-to-AthenaK conversion is not qualified; author or archive data, donor diagnostic code, or an explicit normalization statement is required."
+      },
+      {
+        "id": "fig13a",
+        "figure": "13",
+        "panel": "a",
+        "description": "Limiter-sensitivity kinetic spectra",
+        "disposition": "blocked_reference",
+        "required_cases": ["R14", "R15", "R03"],
+        "reference_products": [],
+        "reason": "The plotted kinetic spectrum is dimensionful; MKS24's reported p0 code-unit scale is not yet reconciled with AthenaK's v_A=1 normalization."
+      },
+      {
+        "id": "fig13c",
+        "figure": "13",
+        "panel": "c",
+        "description": "Limiter-sensitivity strain PDFs",
+        "disposition": "blocked_reference",
+        "required_cases": ["R14", "R15", "R03", "R07"],
+        "reference_products": [],
+        "reason": "The plotted strain PDF uses bhat bhat : grad(u) / <B^2>; its scale requires the unresolved paper-to-AthenaK code-unit transform."
+      },
+      {
+        "id": "fig10",
+        "figure": "10",
+        "description": "Hybrid-kinetic Pegasus++ comparison",
+        "disposition": "external_model",
+        "required_cases": [],
+        "reference_products": [],
+        "reason": "Figure 10 is a Pegasus++ hybrid-kinetic comparison outside the AthenaK CGL-LF reproduction scope; retain it as external context unless qualified external data or a compatible kinetic rerun is obtained."
+      }
+    ]
+  }
 }

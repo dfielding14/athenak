@@ -136,6 +136,27 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
   if (driving_type != 0 && driving_type != 1) {
     FatalTurbulenceError("driving_type must be 0 or 1");
   }
+  std::string projection_policy_name =
+      pin->GetOrAddString(block_name, "projection_policy", "solenoidal_compressive");
+  if (projection_policy_name == "solenoidal_compressive") {
+    projection_policy = TurbProjectionPolicy::solenoidal_compressive;
+  } else if (projection_policy_name == "mks24_random_unprojected") {
+    projection_policy = TurbProjectionPolicy::mks24_random_unprojected;
+  } else if (projection_policy_name == "mks24_alfvenic_perpendicular") {
+    projection_policy = TurbProjectionPolicy::mks24_alfvenic_perpendicular;
+  } else {
+    FatalTurbulenceError(
+        "projection_policy must be solenoidal_compressive, "
+        "mks24_random_unprojected, or mks24_alfvenic_perpendicular");
+  }
+  if (projection_policy == TurbProjectionPolicy::mks24_random_unprojected &&
+      driving_type != 0) {
+    FatalTurbulenceError("mks24_random_unprojected requires driving_type = 0");
+  }
+  if (projection_policy == TurbProjectionPolicy::mks24_alfvenic_perpendicular &&
+      driving_type != 1) {
+    FatalTurbulenceError("mks24_alfvenic_perpendicular requires driving_type = 1");
+  }
   // min kz zero should be 0 for including kz modes and 1 for not including
   min_kz = pin->GetOrAddInteger(block_name, "min_kz", 0);
   max_kz = pin->GetOrAddInteger(block_name, "max_kz", nhigh);
@@ -168,6 +189,11 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
   }
   if (sol_fraction < 0.0 || sol_fraction > 1.0) {
     FatalTurbulenceError("sol_fraction must lie between zero and one");
+  }
+  if (projection_policy == TurbProjectionPolicy::mks24_alfvenic_perpendicular &&
+      sol_fraction != 1.0) {
+    FatalTurbulenceError(
+        "mks24_alfvenic_perpendicular requires sol_fraction = 1");
   }
 
   // random seed for turbulence driving
@@ -500,7 +526,9 @@ void TurbulenceDriver::BuildBasis() {
   size_view.template modify<HostMemSpace>();
   size_view.template sync<DevExeSpace>();
   const int drivingtype = driving_type;
-  const bool retain_z_variation = isotropic_power_spectrum;
+  const bool retain_z_variation =
+      isotropic_power_spectrum ||
+      projection_policy == TurbProjectionPolicy::mks24_alfvenic_perpendicular;
   const bool tile_enabled = (tile_nx > 1 || tile_ny > 1 || tile_nz > 1);
   const int tile_nx_local = tile_nx;
   const int tile_ny_local = tile_ny;
@@ -651,6 +679,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
   Real& ex = expo;
   Real& ex_prp = exp_prp;
   Real& ex_prl = exp_prl;
+  const TurbProjectionPolicy projection_policy_ = projection_policy;
   Real norm, kprl, kprp, kiso;
   Real khigh = nhigh * fmax(fmax(dkx, dky), dkz);
   Real klow = nlow * fmin(fmin(dkx, dky), dkz);
@@ -705,8 +734,17 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
                 }
               } else if (driving_type == 1) {
                 no_dir = 2;
-                kprl = sqrt(SQR(kx));
-                kprp = sqrt(SQR(ky) + SQR(kz));
+                if (projection_policy_ ==
+                    TurbProjectionPolicy::mks24_alfvenic_perpendicular) {
+                  // MKS24 paper setup: B0 || z, so k_parallel = kz and
+                  // k_perp = (kx, ky), even though retained modes vary along z.
+                  kprl = fabs(kz);
+                  kprp = sqrt(SQR(kx) + SQR(ky));
+                } else {
+                  // Preserve the historical generic planar-driver convention.
+                  kprl = fabs(kx);
+                  kprp = sqrt(SQR(ky) + SQR(kz));
+                }
                 if (isotropic_power_spectrum && kiso > 1e-16) {
                   norm = 1.0 / pow(kiso, (ex + 2.0) / 2.0);
                 } else if (kprl > 1e-16 && kprp > 1e-16) {
@@ -743,13 +781,28 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
                 k_dot_amp_real += k[dir] * amp_real_dir;  // k·Re(A)
               }
 
-              // Now decompose into solenoidal/compressive modes.
-              if (norm > 0.) {
+              // The generic policy preserves the historical full-k
+              // solenoidal/compressive blend. MKS24 random forcing retains
+              // all three independent amplitudes without projection. MKS24
+              // Alfvenic forcing projects only its x/y amplitudes against
+              // k_perp = (kx, ky), while retaining kz phase variation.
+              if (norm > 0. &&
+                  projection_policy_ !=
+                      TurbProjectionPolicy::mks24_random_unprojected) {
+                Real projection_norm_sqr = SQR(kiso);
+                if (projection_policy_ ==
+                    TurbProjectionPolicy::mks24_alfvenic_perpendicular) {
+                  projection_norm_sqr = SQR(kx) + SQR(ky);
+                }
                 for (int dir = 0; dir < no_dir; dir++) {
                   // Compressible (longitudinal) projections:
                   //   A_div = k (k·Re(A)) / |k|^2,  B_div = k (k·Im(A)) / |k|^2
-                  Real A_div = k[dir] * k_dot_amp_real / SQR(kiso);
-                  Real B_div = k[dir] * k_dot_amp_imag / SQR(kiso);
+                  Real A_div = 0.0;
+                  Real B_div = 0.0;
+                  if (projection_norm_sqr > 1.0e-32) {
+                    A_div = k[dir] * k_dot_amp_real / projection_norm_sqr;
+                    B_div = k[dir] * k_dot_amp_imag / projection_norm_sqr;
+                  }
 
                   // Solenoidal parts (divergence-free):
                   //   A_sol = A - A_div,  B_sol = B - B_div
@@ -1629,7 +1682,7 @@ void TurbulenceDriver::RefreshForceAfterMeshChange(Driver* pdrive) {
 
 TurbulenceRestartMetadata TurbulenceDriver::RestartMetadata() const {
   TurbulenceRestartMetadata metadata{};
-  metadata.version = 2;
+  metadata.version = 3;
   metadata.mode_count = mode_count;
   metadata.n_updates = n_turb_updates_yet;
   metadata.nlow = nlow;
@@ -1649,6 +1702,7 @@ TurbulenceRestartMetadata TurbulenceDriver::RestartMetadata() const {
   metadata.normalization = static_cast<int>(normalization);
   metadata.localization = static_cast<int>(localization);
   metadata.spectrum = static_cast<int>(spectrum);
+  metadata.projection_policy = static_cast<int>(projection_policy);
   metadata.physical_k_shell = static_cast<int>(physical_k_shell);
   metadata.isotropic_power_spectrum = static_cast<int>(isotropic_power_spectrum);
   metadata.record_injected_work = static_cast<int>(record_injected_work);
@@ -1702,6 +1756,7 @@ void TurbulenceDriver::ValidateRestartMetadata(
   check(metadata.normalization != expected.normalization, "normalization");
   check(metadata.localization != expected.localization, "localization");
   check(metadata.spectrum != expected.spectrum, "spectrum");
+  check(metadata.projection_policy != expected.projection_policy, "projection_policy");
   check(metadata.physical_k_shell != expected.physical_k_shell, "physical_k_shell");
   check(metadata.isotropic_power_spectrum != expected.isotropic_power_spectrum,
         "isotropic_power_spectrum");

@@ -47,6 +47,7 @@ UNSAFE_LF_COLUMNS = (
     "lf_nonpos",
     "lf_hardbd",
 )
+STAGE_I_PRODUCTION_WORKFLOW = "paper-mks24-stage-i-production"
 
 
 @dataclass(frozen=True)
@@ -1337,6 +1338,10 @@ def write_summary(manifest: dict[str, object], path: Path) -> None:
         f"# CGL-LF {manifest['workflow']} workflow summary",
         "",
         f"- Status: **{manifest['status']}**",
+    ]
+    if "analysis_status" in manifest:
+        lines.append(f"- Analysis status: **{manifest['analysis_status']}**")
+    lines.extend([
         f"- Created UTC: `{manifest['created_utc']}`",
         f"- Git revision: `{manifest['git_revision']}`",
         f"- Dirty worktree at execution: `{manifest['git_worktree_dirty']}`",
@@ -1346,7 +1351,7 @@ def write_summary(manifest: dict[str, object], path: Path) -> None:
         "",
         "| Case | Status | LF safety | Firehose policy |",
         "| --- | --- | --- | --- |",
-    ]
+    ])
     lf_results = diagnostics.get("lf", {})
     for case in manifest["cases"]:
         lf = lf_results.get(case["name"])
@@ -1622,6 +1627,79 @@ def execute_workflow(args: argparse.Namespace, paths: RunPaths) -> int:
     return 0 if manifest["status"] == "passed" else 1
 
 
+def refreshed_analysis_status(manifest: dict[str, object]) -> str:
+    """Record recomputed health without replacing durable Stage I admission."""
+
+    status = "passed" if manifest["diagnostics"]["passed"] else "failed"
+    legacy_accepted = (
+        "stage_i_admission_status" not in manifest
+        and manifest.get("workflow") == STAGE_I_PRODUCTION_WORKFLOW
+        and manifest.get("status") == "accepted_for_analysis"
+    )
+    if legacy_accepted:
+        manifest["stage_i_admission_status"] = "accepted_for_analysis"
+        manifest["stage_i_admission_migration"] = (
+            "migrated from legacy workflow manifest with explicit "
+            "status=accepted_for_analysis"
+        )
+    if "stage_i_admission_status" in manifest:
+        manifest["analysis_status"] = status
+    else:
+        manifest["status"] = status
+    return status
+
+
+def inherit_paper_analysis_inputs(args: argparse.Namespace,
+                                  manifest: dict[str, object]) -> None:
+    """Reuse retained paper-analysis inputs when a refresh omits them."""
+
+    products = manifest.get("analysis_products", {})
+    if not isinstance(products, dict):
+        products = {}
+    provenance = manifest.get("reference_provenance", {})
+    if not isinstance(provenance, dict):
+        provenance = {}
+    if not args.reference_curves:
+        retained_curves = manifest.get("reference_curve_manifests")
+        if retained_curves is None:
+            retained_curve = manifest.get("reference_curve_manifest")
+            retained_curves = [retained_curve] if retained_curve is not None else []
+        if not isinstance(retained_curves, list) or not all(
+            isinstance(path, str) and path for path in retained_curves
+        ):
+            raise ValueError("retained reference_curve_manifests must be text paths")
+        args.reference_curves = retained_curves
+    if args.stage_i_manifest is None:
+        retained_stage_i = manifest.get("stage_i_manifest")
+        if retained_stage_i is not None and not isinstance(retained_stage_i, str):
+            raise ValueError("retained stage_i_manifest must be a text path")
+        args.stage_i_manifest = retained_stage_i
+    if args.reference_manifest is None:
+        retained_reference = provenance.get("reference_manifest")
+        if retained_reference is not None and not isinstance(retained_reference, str):
+            raise ValueError("retained reference manifest must be a text path")
+        args.reference_manifest = retained_reference
+    if args.alignment_shells is None:
+        args.alignment_shells = str(products.get("alignment_shells", "1,2,3"))
+    for key, default in (
+        ("eddy_samples", 0),
+        ("eddy_bins", 20),
+        ("eddy_seed", 0),
+    ):
+        if getattr(args, key) is None:
+            value = products.get(key, default)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(f"retained {key} must be an integer")
+            setattr(args, key, value)
+    if args.allow_partial_reference_cases is None:
+        retained_partial = products.get("allow_partial_reference_cases", False)
+        if not isinstance(retained_partial, bool):
+            raise ValueError(
+                "retained allow_partial_reference_cases must be boolean"
+            )
+        args.allow_partial_reference_cases = retained_partial
+
+
 def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
     """Regenerate summaries or plots for a previously executed bundle."""
 
@@ -1631,6 +1709,7 @@ def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
     if args.workflow == "plot":
         plot_results(paths)
     if args.workflow == "paper-analyze":
+        inherit_paper_analysis_inputs(args, manifest)
         analysis_dir = paths.root / "analysis"
         analysis_command = [
             sys.executable,
@@ -1653,6 +1732,11 @@ def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
             analysis_command.extend([
                 "--reference-curves",
                 str(resolve_from_root(reference_curves)),
+            ])
+        if args.stage_i_manifest:
+            analysis_command.extend([
+                "--stage-i-manifest",
+                str(resolve_from_root(args.stage_i_manifest)),
             ])
         if args.allow_partial_reference_cases:
             analysis_command.append("--allow-partial-reference-cases")
@@ -1690,6 +1774,8 @@ def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
         if provenance is not None:
             manifest["reference_provenance"] = provenance
             manifest["analysis_products"]["reference_provenance"] = provenance["product"]
+        else:
+            manifest.pop("reference_provenance", None)
         if args.reference_curves:
             manifest["reference_curve_manifests"] = [
                 str(resolve_from_root(reference_curves))
@@ -1704,14 +1790,26 @@ def refresh_bundle(args: argparse.Namespace, paths: RunPaths) -> int:
                 )
             else:
                 manifest.pop("reference_curve_manifest", None)
+        else:
+            manifest.pop("reference_curve_manifests", None)
+            manifest.pop("reference_curve_manifest", None)
+        if args.stage_i_manifest:
+            stage_i_manifest = resolve_from_root(args.stage_i_manifest)
+            manifest["stage_i_manifest"] = str(stage_i_manifest)
+            manifest["analysis_products"]["stage_i_panel_status_json"] = display_path(
+                analysis_dir / "stage_i_panel_status.json", paths.root
+            )
+            manifest["analysis_products"]["stage_i_panel_status_markdown"] = (
+                display_path(analysis_dir / "stage_i_panel_status.md", paths.root)
+            )
+        else:
+            manifest.pop("stage_i_manifest", None)
     manifest["diagnostics"] = evaluate_manifest(manifest, paths.root)
-    manifest["status"] = (
-        "passed" if manifest["diagnostics"]["passed"] else "failed"
-    )
+    analysis_status = refreshed_analysis_status(manifest)
     manifest["last_action"] = args.workflow
     write_manifest(manifest, paths)
     print(f"Updated result bundle at {paths.root}")
-    return 0 if manifest["status"] == "passed" else 1
+    return 0 if analysis_status == "passed" else 1
 
 
 def parser() -> argparse.ArgumentParser:
@@ -1740,6 +1838,14 @@ def parser() -> argparse.ArgumentParser:
         default=os.environ.get("CGL_LF_REFERENCE_MANIFEST"),
         help="Pinned MKS24 staging manifest to attach during paper-analyze.",
     )
+    command.add_argument(
+        "--stage-i-manifest",
+        default=os.environ.get("CGL_LF_STAGE_I_MANIFEST"),
+        help=(
+            "Tracked Stage I case and versioned panel configuration forwarded "
+            "to paper-analyze for a retained per-panel status table."
+        ),
+    )
     reference_curves_default = os.environ.get("CGL_LF_REFERENCE_CURVES")
     command.add_argument(
         "--reference-curves",
@@ -1753,6 +1859,7 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument(
         "--allow-partial-reference-cases",
         action="store_true",
+        default=None,
         help=(
             "During paper-analyze, compare reference products for present "
             "bundle cases and archive explicit omissions for absent cases."
@@ -1760,7 +1867,7 @@ def parser() -> argparse.ArgumentParser:
     )
     command.add_argument(
         "--alignment-shells",
-        default=os.environ.get("CGL_LF_ALIGNMENT_SHELLS", "1,2,3"),
+        default=os.environ.get("CGL_LF_ALIGNMENT_SHELLS"),
         help=(
             "Comma-separated k_perp shell indices used by paper-analyze "
             "alignment PDFs and peak curves."
@@ -1769,7 +1876,10 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument(
         "--eddy-samples",
         type=int,
-        default=int(os.environ.get("CGL_LF_EDDY_SAMPLES", "0")),
+        default=(
+            int(os.environ["CGL_LF_EDDY_SAMPLES"])
+            if "CGL_LF_EDDY_SAMPLES" in os.environ else None
+        ),
         help=(
             "Deterministic random separation samples per snapshot used by "
             "paper-analyze for opt-in local-field eddy anisotropy curves."
@@ -1778,13 +1888,19 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument(
         "--eddy-bins",
         type=int,
-        default=int(os.environ.get("CGL_LF_EDDY_BINS", "20")),
+        default=(
+            int(os.environ["CGL_LF_EDDY_BINS"])
+            if "CGL_LF_EDDY_BINS" in os.environ else None
+        ),
         help="Logarithmic separation bins for opt-in eddy anisotropy analysis.",
     )
     command.add_argument(
         "--eddy-seed",
         type=int,
-        default=int(os.environ.get("CGL_LF_EDDY_SEED", "0")),
+        default=(
+            int(os.environ["CGL_LF_EDDY_SEED"])
+            if "CGL_LF_EDDY_SEED" in os.environ else None
+        ),
         help="Random seed retained for deterministic eddy anisotropy sampling.",
     )
     command.add_argument(

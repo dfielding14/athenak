@@ -77,6 +77,9 @@ analysis_t_end = 10.0
 
 <turb_driving>
 driving_type = 1
+spectrum = power_law
+projection_policy = mks24_alfvenic_perpendicular
+sol_fraction = 1.0
 rseed = 271828
 nlow = 1
 nhigh = 3

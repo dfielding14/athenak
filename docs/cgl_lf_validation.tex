@@ -11,7 +11,7 @@
 \title{Toward an Independent AthenaK Reproduction of CGL--Landau-Fluid
 Self-Organization in High-\(\beta\) Turbulence}
 \author{}
-\date{May 29, 2026}
+\date{May 30, 2026}
 
 \begin{document}
 \maketitle
@@ -30,10 +30,13 @@ limiter scattering, and scale separation.  Several dimensionless published
 products admit checksum-qualified digitized comparisons, whereas absolute
 spectral ordinates remain blocked pending a documented transform or original
 numeric data; the hybrid-kinetic comparison is outside a direct CGL--LF
-recalculation.  A pre-replacement production lineage has been exercised only
-as archival pipeline evidence; the merged turbulent-driver replacement
-changes its forcing/restart-state contract.  No current-implementation
-standard-duration comparison is claimed in this version of the manuscript.
+recalculation.  The pre-replacement production lineage is retained only as
+archival pipeline evidence.  In the later \texttt{E02-modal-driver} epoch,
+the replacement-driver \texttt{R16} lineage reaches exact \(t=10\), and its
+production-window analyzer passes.  A subsequent source-to-code audit found
+that E02 forcing semantics are not exact; preserve E02 as pipeline and cost
+evidence only.  Corrected mapped production and admitted panel comparisons
+remain in progress.
 \end{abstract}
 
 \section{Introduction}
@@ -257,90 +260,39 @@ Production is executed on Frontier through
 qualification utility.  The production utility admits only mapped input
 files, archives input, executable, and utility checksums, uses the \texttt{batch}
 partition with its default production \texttt{normal} QOS, reserves usage
-against the Stage I ceiling, and permits only one submitted segment at a time.
-The first submitted segment, legacy shared-I/O
-\texttt{R16/s00\_t0\_t2} (Frontier job \texttt{4674731}), terminated cleanly
-on its wall-clock limit at \(t=1.66204848945<2\), with zero strict LF
-failure counters and \(1.253333\) accounted node-hours.  It is retained as
-clean partial diagnostic evidence, not an accepted result.  Its prolonged
-\(t=1\) snapshot/checkpoint write motivated a committed rank-local retained
-output protocol with grouped checksum and analysis support.  The fresh
-rank-local \texttt{R16/s01\_rankio\_t0\_t2} segment was submitted as job
-\texttt{4675322} from \(t=0\), completed cleanly at
-\(t=1.87769834013<2\), and was recorded as an inspected rank-local clean
-partial using \(1.253056\) node-hours.  Its complete eight-rank
-\(t=1\) snapshot/restart boundary incurred no legacy-scale pause.  The
-same-digest continuation \texttt{R16/s02\_rankio\_t1p877698\_t2}
-(job \texttt{4676557}) reached \(t=2.0\), passed inspection with zero
-strict LF failure counters and complete terminal rank-local products, and
-used \(0.106389\) node-hours.  It is accepted as the terminal segment of the
-rank-local \(t=0\)-to-\(2\) prefix, not as a completed \(t=10\) case.  A
-further same-digest continuation through \(t=3.5\), job \texttt{4676696},
-completed in \(1.383611\) node-hours and passed formal inspection with zero
-strict LF safety counters, five complete rank-local snapshot groups ending at
-\(t=3.5\), and a complete terminal rank-local restart group.  It extends the
-accepted prefix, but is not a completed \(t=10\) case.  The same-digest
-continuation through \(t=5.0\), job \texttt{4679803}, completed in
-\(1.567778\) node-hours and passed formal inspection with zero strict LF
-safety counters, six complete rank-local snapshot groups ending at \(t=5.0\),
-and a complete terminal rank-local restart group.  It extends the accepted
-prefix but is not a completed \(t=10\) case.  The subsequent continuation
-toward \(t=6.5\), job \texttt{4681476}, terminated cleanly on its application
-wall-clock limit at \(t=6.43828031751<6.5\).  Its formal partial-continuation
-inspection records zero strict LF safety counters, six complete rank-local
-snapshot groups, complete terminal rank-local restart products, and
-\(1.753333\) accounted node-hours.  It is retained as a clean partial, not
-as an accepted extension of the prefix.  A short completion segment from
-that inspected terminal restart set to \(t=6.5\), job \texttt{4683291},
-completed in \(0.080556\) node-hours and passed formal inspection with zero
-strict LF safety counters and complete terminal rank-local products.  It
-extends the accepted prefix through \(t=6.5\).  Continuation
-\texttt{R16/s07\_rankio\_t6p5\_t7p5}, job \texttt{4683918}, completed in
-\(1.281944\) node-hours, reached \(t=7.5\), and passed formal inspection
-with zero strict LF safety counters and complete terminal rank-local
-products.  It extends the accepted prefix through \(t=7.5\).  Continuation
-\texttt{R16/s08\_rankio\_t7p5\_t8p5}, job \texttt{4686032}, completed at
-exact \(t=8.5\) in \(1.282778\) node-hours and passed formal inspection with
-zero strict LF safety counters and complete terminal rank-local products.  It
-was recorded as rejected for current reproduction admission because the
-merged turbulent-driver replacement changes forcing evolution and restart
-state/layout.  Stage I has consumed \(9.962778\) node-hours with no active
-reservation; a replacement-driver production lineage must start at \(t=0\)
-after qualification and immutable-build archival.  The bundle assembler
-follows only the explicit
-inspected restart lineage and bounds a sampled-history boundary gap using
-the retained history cadence and boundary timesteps, rather than mixing in
-the abandoned shared-output branch.  Applied to the ranked \(t=0\)-to-\(2\)
-prefix, it linked ten distinct rank-local snapshots from only the two
-rank-local segments.  A separately labeled transient-window analysis over
-\(0\leq t\leq2\) read all ten snapshots, selected 101 history rows, passed
-its synthetic diagnostic check, and rendered nine diagnostic figures.  This
-check qualifies the retained-output pipeline only; it is not a late-time
-MKS24 comparison.
-After acceptance through \(t=3.5\), a new lineage-checked prefix bundle
-assembled only the three ranked-output segments and retained fifteen
-deduplicated rank-local snapshots.  This verifies accepted-prefix assembly at
-the later gate, but it remains outside the declared \(8\leq t\leq10\)
-comparison window: a default-window analysis found 176 merged history rows
-overall but selected zero history rows and zero snapshots for comparison,
-while passing its synthetic diagnostic check.
-After acceptance through \(t=5.0\), a further lineage-checked prefix bundle
-assembled only the four ranked-output segments and retained twenty-one
-deduplicated rank-local snapshots.  A default-window analysis found 251
-merged history rows overall but selected zero history rows and zero snapshots
-in \(8\leq t\leq10\), while passing its synthetic diagnostic check.
-After acceptance through \(t=6.5\), the lineage-checked prefix includes the
-inspected clean-partial continuation and its accepted terminal-gate segment;
-it retains twenty-eight deduplicated rank-local snapshots.  A default-window
-analysis found 326 merged history rows overall but selected zero history rows
-and zero snapshots in \(8\leq t\leq10\), while passing its synthetic
-diagnostic check.
-After acceptance through \(t=7.5\), the next lineage-checked prefix retains
-thirty-one deduplicated rank-local snapshots.  Its generic analysis found 376
-merged history rows overall but selected zero history rows and zero snapshots
-in \(8\leq t\leq10\), while passing its synthetic diagnostic check.  A
-requested Figure~11 comparison is therefore rejected as an empty selected
-analysis rather than presented as paper evidence.
+against an explicitly reviewed epoch envelope, and permits only one submitted
+segment at a time.  The frozen \texttt{R02}--\texttt{R17} matrix is executed
+sequentially under inspection, with \texttt{R17} completed last to control
+peak storage.
+
+The original pre-replacement \texttt{R16} lineage remains archived as
+\texttt{E01-pre-modal-driver} pipeline evidence.  Its legacy shared-I/O
+startup exposed a prolonged snapshot/checkpoint write, and its later
+rank-local lineage reached \(t=8.5\) cleanly.  That lineage is not admitted
+for current reproduction because the replacement turbulent driver changes
+forcing evolution and retained restart state.
+
+The fresh \texttt{E02-modal-driver} epoch starts from \(t=0\) with the
+qualified replacement driver.  Its immutable production executable was built
+from revision
+\texttt{462b9dbd53e085dea46c2478b567781576d7d03e}, with SHA-256 digest
+\texttt{df87684e9d2b7af33b36c2757779d15de87b84ef051ca9c4489f2efa358f5c48}.
+Fresh \texttt{R16} reaches exact \(t=10.0\), and its declared
+\(8\leq t\leq10\) production-window analyzer passes.  The standard-layout
+\texttt{R02} lineage reaches exact \(t=2.5\) at the tracked
+\texttt{F-075} checkpoint.  The high-resolution \texttt{R17} timing lineage
+reaches exact \(t=0.10\).  The subsequent \texttt{F-076} source-to-code audit
+found that E02 does not exactly implement the published forcing semantics.
+These records remain pipeline and cost evidence only; they do not support a
+direct MKS24 reproduction claim.  No additional E02 preparation or submission
+is authorized.
+
+The Frontier project root is shared with exploratory campaigns.  In
+particular, Slurm records exploratory job \texttt{4743106} as complete while
+its top-level campaign record remains stale at \texttt{state = running}.
+That stale record must not be modified.  Before each Stage I prepare and
+submit action, all user jobs and active shared-root campaign records are
+inspected; a stale record is acknowledged only after an isolation review.
 
 \section{Validation Workflow}
 
@@ -611,20 +563,17 @@ admitted: the paper and cited donor source define shell spectra and plotted
 units but do not state the discrete Fourier normalization needed to map
 absolute digitized ordinates into AthenaK products.  Those panels require
 author/archive numeric data, donor diagnostic code, or an explicit
-normalization statement.  One mapped production segment has been retained
-only as clean partial I/O-diagnostic evidence; the ranked-output replacement
-is accepted through its \(t=7.5\) prefix.  Its first continuation beyond
-\(t=5.0\) is retained as a clean partial through \(t=6.43828031751\), and
-its inspected short terminal-gate completion establishes the accepted
-\(t=6.5\) prefix.  The accepted continuation to \(t=7.5\) remains outside
-the comparison window.  A pre-replacement continuation reached \(t=8.5\)
-cleanly but is rejected for current reproduction admission after the
-turbulent-driver forcing/restart-state contract changed.  Its
-transient-prefix bundle has verified the
-rank-local assembly and diagnostic path, but the production comparison window
-is \(8\leq t\leq10\).  Quantitative MKS24
-simulation-to-reference comparisons require completed accepted bundles; none
-is claimed by this manuscript version.
+normalization statement.  The earlier mapped production lineage is retained
+only as pre-replacement archival I/O-diagnostic evidence.  The fresh
+\texttt{E02-modal-driver} \texttt{R16} lineage reaches exact \(t=10.0\), and
+its \(8\leq t\leq10\) production-window analyzer passes.  \texttt{R02}
+reaches exact \(t=2.5\) at the tracked \texttt{F-075} checkpoint, while the
+\texttt{R17} timing lineage reaches exact \(t=0.10\).  The \texttt{F-076}
+forcing-contract audit retains these records only as pipeline and cost
+evidence.  Quantitative MKS24 simulation-to-reference comparisons require a
+corrected executable, a fresh epoch from \(t=0\), matched accepted bundles,
+and admitted reference products; none is claimed by this
+manuscript version.
 
 \section{Comparison Gate Matrix}
 
@@ -667,8 +616,8 @@ Figure 10 & none
   & External data \\
 Figure 11 & \texttt{R16}, \texttt{R02}, \texttt{R17}
   & Dimensionless scale-separation alignment product admitted.
-  & \texttt{R16} active \\
-Figure 12 & \texttt{R12}, \texttt{R02}, \texttt{R13}
+  & \texttt{R16} accepted \\
+Figure 12 & \texttt{R12}, \texttt{R02}, \texttt{R13}, \texttt{R06}
   & Dimensionless heat-flux-scale alignment product admitted.
   & Awaiting runs \\
 Figure 13 & \texttt{R03}, \texttt{R07}, \texttt{R14--R15}
@@ -677,8 +626,8 @@ Figure 13 & \texttt{R03}, \texttt{R07}, \texttt{R14--R15}
 \bottomrule
 \end{tabular}
 \caption{Stage I panel-family comparison gates.  ``Awaiting runs'' does not
-denote agreement or disagreement; it denotes absence of accepted
-standard-duration AthenaK bundles.}
+denote agreement or disagreement; it denotes absence of the required matched
+accepted standard-duration AthenaK bundles.}
 \label{tab:comparison-gates}
 \end{table}
 
@@ -714,15 +663,15 @@ both the numerical and physical comparison.
 AthenaK now has a validated CGL--LF implementation path, retained nonlinear
 diagnostics, source-mapped MKS24 case definitions, and a checksum- and
 allocation-recorded Frontier production protocol.  The production protocol
-began with the required low-resolution scale-separation case; its first
-shared-I/O segment is a clean partial diagnostic record, and its ranked-output
-replacement passed the inspected \(t=7.5\) prefix gate.  Its clean
-\(t=8.5\) continuation is retained only as pre-replacement archival evidence
-after the turbulent-driver contract changed.  No completed case is yet
-counted as an accepted comparison
-result.  Thus the present manuscript establishes the method, target contract,
-and acceptance procedure, but does not yet claim reproduction of the MKS24
-turbulent conclusions.
+began with the required low-resolution scale-separation case.  The
+pre-replacement lineage is retained only as archival evidence after the
+turbulent-driver contract changed.  Fresh \texttt{E02-modal-driver}
+\texttt{R16} reaches exact \(t=10.0\), its production-window analyzer passes,
+\texttt{R02} reaches \(t=2.5\), and the \texttt{R17} timing lineage reaches
+\(t=0.10\).  The \texttt{F-076} audit retains E02 only as pipeline and cost
+evidence because its forcing semantics are not exact.  Thus the present
+manuscript establishes the method, target contract, and acceptance procedure,
+but does not yet claim reproduction of the MKS24 turbulent conclusions.
 
 Completion of the reproduction claim requires all sixteen mapped cases to
 reach \(t_f\geq10L_\perp/v_A\), pass strict safety and provenance checks, and
@@ -735,11 +684,11 @@ a separate execution plan is approved.
 The frozen Stage I matrix is stored in
 \path{inputs/cgl_lf_paper/mks24_stage_i_manifest.json}; preparation,
 submission accounting, and terminal-time acceptance inspection are performed
-by \path{scripts/frontier/cgl_lf_stage_i.py}.  The first production executable
-was built from revision
-\texttt{e129a7ff8be60eb177c8268da0a73e7700d8b543}, with archived executable
+by \path{scripts/frontier/cgl_lf_stage_i.py}.  The archived
+\texttt{E02-modal-driver} production executable was built from revision
+\texttt{462b9dbd53e085dea46c2478b567781576d7d03e}, with archived executable
 SHA-256 digest
-\texttt{de99066f3546976093f6ff656660952032e30f31c939736c0212629cfb015157}.
+\texttt{df87684e9d2b7af33b36c2757779d15de87b84ef051ca9c4489f2efa358f5c48}.
 For each segment, the production record retains the submitted input,
 executable and input provenance, Slurm allocation record, histories,
 snapshots, restarts, and an inspection record that tests target time and
@@ -765,15 +714,16 @@ The imported method figures come from a passing local \texttt{full} workflow
 bundle.  The reduced nonlinear figures come from a passing
 \texttt{paper-convergence} bundle reanalyzed with the current plotting code.
 Warning-strict Sphinx documentation and this \LaTeX{} build are checked when
-the report is updated.  The ranked-output low-resolution case passed its
-pre-replacement inspected \(t=7.5\) prefix gate after a clean partial at
-\(t=6.43828031751<6.5\) and its formally accepted terminal-gate
-continuation.  Its subsequent \(t=8.5\) segment completed cleanly but is
-rejected for current reproduction admission because the replacement driver
-changes forcing/restart state; a fresh qualified lineage is required.
-Nevertheless,
-production/statistical and paper-reference comparison gates remain open until
-accepted \(t\geq10\) output bundles are analyzed.
+the report is updated.  Fresh \texttt{E02-modal-driver} \texttt{R16} reaches
+exact \(t=10.0\), and its production-window analyzer passes.  \texttt{R02}
+reaches exact \(t=2.5\) at the tracked \texttt{F-075} checkpoint.  The
+high-resolution \texttt{R17} timing lineage reaches exact \(t=0.10\).
+\texttt{F-076} preserves these as pipeline and cost evidence only.  A
+corrected forcing-policy executable must be qualified before the mapped
+matrix starts again from \(t=0\), one inspected segment at a time, with
+\texttt{R17} completed last.  Production/statistical and paper-reference
+comparison gates remain open until the required corrected-epoch output bundles are
+analyzed against admitted references.
 
 \begin{thebibliography}{9}
 \bibitem{Squire2023}

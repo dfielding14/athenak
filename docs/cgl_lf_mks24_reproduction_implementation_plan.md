@@ -177,9 +177,23 @@ R02 job `4744913` continues the inspected lineage through exact `t = 2.0` in
 `1.068889` node-hours. F-074 updates the projection to `730.081697`
 node-hours and authorizes only a conservative continuation through `t = 2.5`.
 R02 job `4745305` continues the inspected lineage through exact `t = 2.5` in
-`1.061944` node-hours. F-075 updates the projection to `728.164877`
-node-hours and authorizes continued frozen-matrix execution one inspected
-segment at a time, with R17 last.
+`1.061944` node-hours. F-075 updated the projection to `728.164877`
+node-hours and historically authorized continued frozen-matrix execution one
+inspected segment at a time, with R17 last. Continuation
+`R02/s07_rankio_t2p5_t3` was prepared from the inspected `s06` terminal
+restart siblings and submitted as job `4745498` on 2026-05-30.
+
+The formal source-to-code execution signoff is retained in
+`docs/cgl_lf_mks24_stage_i_protocol_review.md`. Its independent review found
+that `E02` does not exactly implement the published forcing semantics: random
+roles inherit a generic projection and implicit parabolic-spectrum default,
+while planar roles do not generally enforce `grad_perp dot u_perp = 0` for
+retained `k_z != 0` modes. Job `4745498` was therefore cancelled after `498`
+seconds and recorded `aborted`, consuming `0.138333` node-hours and bringing
+E02 cumulative use to `15.628610`. Preserve E02 products as pipeline and cost
+evidence, keep E02 preparation fail closed, implement and qualify explicit
+MKS24 forcing policies, and start a fresh execution epoch from `t = 0`.
+There is no active Stage I reservation.
 
 ## Read This First
 
@@ -313,10 +327,10 @@ test or run evidence.
 | Safety diagnostic truthfulness | Strict tests independent of backup correction | Yes | Implemented 2026-05-24; focused CPU test passed, broader gates pending |
 | CPU numerical accuracy | Convergence, asymptotic, cap, directional, restart, MPI/AMR checks | Yes | Partial 2026-05-30; archived `accuracy-v2` bundle covers N-001 through N-007 locally, the AMR workflow passed, and the pre-replacement full CPU suite passed (`218 passed, 15 skipped`). The focused post-merge serial CGL gate passed (`39 passed`) with F-056 layout-independent cap-fraction coverage, fixed-grid/AMR modal-driver restart identity, and CGL-LF interaction regressions. Scheduled one-node MPI CPU job `4743666` passed both current one-rank/four-rank decomposition regressions (`2 passed`). Production/statistical comparison gates remain open. |
 | Frontier GPU numerical equivalence | CPU/GPU comparison suite, MPI/GPU restart checks, strict diagnostics | Yes for Frontier use | Partial 2026-05-30; archived pre-replacement HIP/MPI builds and G-001 through G013 evidence remain useful historical qualification. Reduced replacement-driver startup `g015`, natural-cycle eight-rank modal restart comparison `g018`, one-rank versus eight-rank decomposition comparison `g019`, passive-Alfvénic smoke `g020`, active-random smoke `g021`, corrected nonlinear hard-wall run `g022`, and standard-layout rank-local startup/sizing run `g023` pass with zero strict safety counters. Frontier debug qualification is closed; long-time production statistics remain open. |
-| Paper pgen and forcing fidelity | Input/pgen review, forcing metadata, restartable reduced smoke | Yes for MKS24 claims | Partial 2026-05-30; pre-replacement active/passive/random reduced smoke, forcing restart, OU cadence, multi-cycle RK-companion source-work checks, passive flow-decoupling checks, and Frontier G-007 reduced-paper matrix passed. The merged driver now stores authoritative modal OU coefficients with `TurbulenceRestartMetadata`; `g018` closes reduced rank-local modal restart identity, and replacement-driver `g020`/`g021` close reduced passive-Alfvénic and active-random startup smoke. Long-time production forcing statistics remain open. |
+| Paper pgen and forcing fidelity | Input/pgen review, forcing metadata, restartable reduced smoke | Yes for MKS24 claims | **Blocked 2026-05-30 by F-076.** Pre-replacement active/passive/random reduced smoke, forcing restart, OU cadence, multi-cycle RK-companion source-work checks, passive flow-decoupling checks, and Frontier G-007 reduced-paper matrix passed. The merged driver stores authoritative modal OU coefficients with `TurbulenceRestartMetadata`; `g018` closes reduced rank-local modal restart identity, and replacement-driver `g020`/`g021` close reduced passive-Alfvénic and active-random startup smoke. However, the independent source-to-code audit found that E02 random roles inherit generic projected forcing and paper decks rely on an implicit parabolic-spectrum default, while planar roles do not generally enforce published perpendicular incompressibility for retained `k_z != 0` modes. Add explicit MKS24 forcing policies and requalify from `t = 0`. |
 | Paper observables and analysis | Synthetic analysis tests and archived reduced-run products | Yes for MKS24 claims | Partial 2026-05-25; reduced histories, restartable RK-integrated applied forcing work/global active residual, RKL2-applied heat-flux contractions with fine-side AMR ownership, AMR-corrected RK-applied total/anisotropic CGL pressure-work ledgers, operator-face cap counters, windowed snapshot PDF/spectral/transfer/alignment/local-strain products, Figure 2(a)-coordinate joint pressure-density PDFs and admitted checksum-qualified sampled surfaces, Figure 3 compressive-flow spectra, Figure 4(b) normalized-density spectra, Figure 6(a) thermal/magnetic-pressure spectra, MKS24-normalized transfer and alignment-peak curve comparisons, opt-in local-field eddy-anisotropy structure functions, deduplicated threshold-volume history curves, manifest-qualified proxies and cadence-limited estimates, generic figures, checksum/uncertainty-qualified reference-data comparison plumbing, Figure 2(b) histories, Figure 4(a) normalized-density PDFs, Figure 5(b) normalized eddy scales, Figure 7 lower-panel transfer ratios, Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and Figure 12 alignment curves, and Figure 13(b),(d) dimensionless curves are implemented; guarded Figure 3 case definitions are present under `paper-compressive`; dimensional/unmatched-panel conversion, standard-run comparison, and remaining panel references remain open |
-| Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | Partial 2026-05-30; the frozen sixteen-case mapped Stage I manifest remains the target matrix. The pre-replacement `R16` lineage is archival only. Fresh replacement-driver `E02` jobs `4743735` through `4744158` are accepted through exact `R16 t = 10.0` with zero strict counters and complete rank-local products. The `t = 8`--`10` analyzer selects nine snapshots and passes its synthetic check. Other mapped cases and cross-case comparisons remain open. |
-| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-30; the debug-helper ledger records `1.361950` node-hours after retained `g014` through `g023`; separately retained scheduled MPI CPU job `4743666` consumed `0.002222` node-hours, and the old Stage I ledger records `9.962778` historical node-hours through rejected job `4686032`. Commit `462b9dbd` makes `scripts/frontier/cgl_lf_stage_i.py` write new work beneath `E02-modal-driver`, use separate accounting files, reject cross-epoch ancestry, and check all queued user jobs and active top-level shared-root campaign records. The fresh `E02` ledger records `15.490277` node-hours through accepted R16 completion, accepted R02/R17 timing pilots, and mapped R02 continuation `4745305` through `t = 2.5`. F-071 permits only the frozen `R02`--`R17` mapped matrix under sequential inspection inside a `900.000000` node-hour envelope. F-072 adds prepare-time rejection above the observed two-hour normal-QOS limit. F-073 through F-075 record the late-time standard-layout recosts. Commits `d210cdd5`, `eab6e12b`, and `7fae0bcf` retain bundle-backed source provenance, complete rank-local debug restart archival, matching debug shared-root checks, and absent-override-key rejection before reservation. |
+| Standard MKS24 results | Required cases, durations, manifests, figure comparisons | Yes for reproduction claim | **Blocked 2026-05-30 by F-076.** The frozen sixteen-case mapped Stage I manifest remains the target matrix. E02 jobs `4743735` through `4744158` reach exact `R16 t = 10.0` with zero strict counters and complete rank-local products, and the `t = 8`--`10` analyzer selects nine snapshots and passes its synthetic check. Preserve those products only as pipeline and cost evidence. No E02 turbulent output is admissible as direct MKS24 reproduction evidence. |
+| Operational workflow | Frontier scripts, budget ledger, failure recovery, storage plan | Yes for Frontier use | Partial 2026-05-30; the debug-helper ledger records `1.361950` node-hours after retained `g014` through `g023`; separately retained scheduled MPI CPU job `4743666` consumed `0.002222` node-hours, and the old Stage I ledger records `9.962778` historical node-hours through rejected job `4686032`. Commit `462b9dbd` makes `scripts/frontier/cgl_lf_stage_i.py` write new work beneath `E02-modal-driver`, use separate accounting files, reject cross-epoch ancestry, and check all queued user jobs and active top-level shared-root campaign records. The E02 ledger records `15.628610` node-hours through accepted pipeline/cost segments plus cancelled and recorded stop-line job `4745498`; it has no active reservation. F-071 through F-075 retain useful timing and storage evidence, but F-076 supersedes their submission authorization. Keep E02 preparation fail closed, harden provenance transitions, and create a fresh epoch after forcing correction. |
 | User documentation | Sphinx build and accurately scoped runbook | Yes | Implemented for current functionality 2026-05-25; Sphinx warnings-as-errors and repository style suite pass in an isolated validation environment; future campaign results must still be documented when executed |
 | Performance suitability | Representative timing/memory/I/O evidence; no uninvestigated prohibitive bottleneck | Yes for production use | Partial 2026-05-30; G-008 records reduced debug-scale evidence, G010b records reduced shared-MPI-I/O timing, G011 measures startup-only historical standard-layout memory/file size, and corrected replacement-driver nonlinear `g022` reaches `t = 2.0` in `1554` allocated seconds with retained shared MPI-I/O timing. Replacement-driver `g023` launches the exact `192 x 192 x 384` standard layout with intended rank-local output, retains `509682248`-byte terminal snapshots and `1381366136`-byte modal checkpoint groups, and reaches startup-only `t = 0.01` in `79` allocated seconds. Fresh rank-local R16 completes `t = 10.0` in `6.145556` node-hours. Standard-layout R02 reaches native restart boundary `t = 2.5`; its latest authenticated continuation measures `2.123888` node-hours per simulated unit. R17 reaches authenticated continuation `t = 0.10`; its developed interval projects `424.888889` node-hours for full high-resolution `t = 10`. The updated continuation-aware mapped E02 matrix projection is `728.164877` node-hours. |
 
@@ -343,8 +357,8 @@ while preserving all historical usage records.
 | --- | --- | --- | --- |
 | Local operator and reduced-workflow implementation | Supported for the exercised replacement-driver scope; production comparison still required | Full CPU suite (`218 passed, 15 skipped`), retained historical focused suites and bundles, F-018 through F-026 regression evidence, F-033 local exact-state hard-wall evidence, current focused serial CGL gate (`39 passed`), and scheduled current MPI CPU job `4743666` (`2 passed`); the retained current gate covers modal restart, CGL-LF turbulence-driving AMR interaction, and F-056 layout-fraction accounting | Complete production/statistical comparison gates |
 | Validated on Frontier GPU hardware | Supported for archived pre-replacement reduced qualification cases through F-033 plus replacement-driver debug qualification through standard-layout rank-local startup/sizing | Immutable historical HIP/MPI builds; G-001 through G-007 strict/restart/decomposition/reduced-paper records; post-F-026 restart jobs `4658072`/`4658163`, GPU AMR jobs `4658191`/`4658283`, managed-policy confirmation job `4659663`, G010b/G011 I/O evidence, G013 corrected nonlinear hard-wall job `4673404`, and replacement-driver `g015`/`g018`/`g019`/`g020`/`g021`/`g022`/`g023` | Long-time replacement-driver production runtime and statistical qualification remain open; G012 remains the retained failure of the superseded finite-rate hard-wall interpretation |
-| Production ready for supported CGL-LF use | Not established | Debug policy/accounting tooling, committed epoch isolation and shared-root controls, immutable replacement-driver build archival, retained focused current serial/MPI CPU gates, reduced `g015` startup, `g018` rank-local modal restart identity, `g019` one-rank/eight-rank decomposition, `g020`/`g021` passive/random smoke, `g022` nonlinear hard-wall completion, `g023` standard-layout rank-local startup/sizing, accepted `E02` R16 completion and production-window analysis, and accepted R02/R17 developed timing measurements exist | Resume R02 under the F-071 measured matrix envelope, execute representative mapped production runs, and complete production/statistical qualification |
-| MKS24 reproduction complete | Not established | Guarded standard/limiter/heat-flux/compressive/scale-separation input matrices, paper analysis products including Figure 2(a)-coordinate joint PDFs with source-qualified sampled-surface references, Figure 3/4(b)/6(a) spectral fields, checksum/uncertainty-qualified reference-data comparison interface, populated Figure 2(b) histories, Figure 4(a) normalized-density PDFs, Figure 5(b) normalized eddy-scale curves, dimensionless Figure 7 transfer ratios, Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and Figure 12 alignment curves, Figure 13(b),(d) curves, and an archived pre-replacement `R16` prefix through `t = 7.5` exist | Paper-to-AthenaK transforms for remaining dimensional or unmatched spectral panels, replacement-driver qualification, fresh `E02` completion/analysis of `R16` through `t = 10`, all other mapped Stage I production cases, quantitative panel comparisons, and archived scientific interpretation remain required |
+| Production ready for supported CGL-LF use | Not established | Debug policy/accounting tooling, committed epoch isolation and shared-root controls, immutable replacement-driver build archival, retained focused current serial/MPI CPU gates, reduced `g015` startup, `g018` rank-local modal restart identity, `g019` one-rank/eight-rank decomposition, `g020`/`g021` passive/random smoke, `g022` nonlinear hard-wall completion, `g023` standard-layout rank-local startup/sizing, E02 R16 pipeline analysis, and R02/R17 developed cost measurements exist | Correct the MKS24 forcing contract, harden the production helper, qualify a fresh executable, start a fresh epoch from `t = 0`, execute representative mapped production runs, and complete production/statistical qualification |
+| MKS24 reproduction complete | Not established | Guarded standard/limiter/heat-flux/compressive/scale-separation input matrices and paper analysis products including Figure 2(a)-coordinate joint PDFs with source-qualified sampled-surface references, Figure 3/4(b)/6(a) spectral fields, checksum/uncertainty-qualified reference-data comparison interface, populated Figure 2(b) histories, Figure 4(a) normalized-density PDFs, Figure 5(b) normalized eddy-scale curves, dimensionless Figure 7 transfer ratios, Figure 8 selected-shell alignment PDFs, Figure 9, Figure 11 lower-panel, and Figure 12 alignment curves, and Figure 13(b),(d) curves exist. E02 R16 pipeline analysis is retained but is not direct reproduction evidence. | Correct and qualify explicit MKS24 forcing policies; execute the frozen mapped Stage I matrix from `t = 0` in a fresh epoch; resolve remaining dimensional or unmatched spectral transforms; complete quantitative panel comparisons and archived scientific interpretation |
 
 The final audit specifically rejects two tempting overclaims:
 
@@ -588,11 +602,15 @@ table such as:
 | F-073 | 2026-05-30 | Second mapped R02 production continuation and late-time recost | F-072 deliberately limited the next standard-layout interval to one half-unit so a late-time developed rate could be measured before longer production segments. | accepted `R02/s04_rankio_t1_t1p5`; job `4744518`; R02 continuation evidence JSON SHA-256 `0319284b72628f2456087f378588515726f0fa8586b20660d37da2a20a1ba6ba` | High | Run from authenticated `t = 1.0` restart siblings through native restart boundary `t = 1.5`, require zero strict counters and complete ranked products, and apply its measured rate conservatively to unfinished standard-layout work before authorizing another segment. | Job `4744518` completes exact `t = 1.5` in `1.052222` node-hours with zero strict counters, expected active hard-wall projection, and complete products. The late-time rate is `2.104444` node-hours per simulated unit, updating the mapped projection to `725.464938` node-hours and leaving `174.535062` margin. | Continue R02 conservatively from `t = 1.5` to `2.0`, inspect, and recost before lengthening later segments. |
 | F-074 | 2026-05-30 | Third mapped R02 production continuation and late-time recost | F-073 retained a one-half-unit standard-layout interval so measured rate drift could be reviewed before lengthening later production segments. | accepted `R02/s05_rankio_t1p5_t2`; job `4744913`; R02 continuation evidence JSON SHA-256 `d0c7e0f9cdd8031a9d88c195adee9822943a358eb55193b0e1146bf3b95a08e4` | High | Run from authenticated `t = 1.5` restart siblings through native restart boundary `t = 2.0`, require zero strict counters and complete ranked products, and apply its measured rate conservatively to unfinished standard-layout work before authorizing another segment. | Job `4744913` completes exact `t = 2.0` in `1.068889` node-hours with zero strict counters, expected active hard-wall projection, and complete products. The latest rate is `2.137778` node-hours per simulated unit, updating the mapped projection to `730.081697` node-hours and leaving `169.918303` margin. | Continue R02 conservatively from `t = 2.0` to `2.5`, inspect, and recost before lengthening later segments. |
 | F-075 | 2026-05-30 | Fourth mapped R02 production continuation and stable late-time recost | F-074 retained one more half-unit standard-layout interval so the latest late-time drift could be reviewed before authorizing sustained matrix execution. | accepted `R02/s06_rankio_t2_t2p5`; job `4745305`; R02 continuation evidence JSON SHA-256 `f823ef6993045d5d90f016f7052518a353f348f7f83b9efdc19d32ee097f0c59` | High | Run from authenticated `t = 2.0` restart siblings through native restart boundary `t = 2.5`, require zero strict counters and complete ranked products, and apply its measured rate conservatively to unfinished standard-layout work before authorizing sustained sequential execution. | Job `4745305` completes exact `t = 2.5` in `1.061944` node-hours with zero strict counters, expected active hard-wall projection, and complete products. The latest rate is `2.123888` node-hours per simulated unit, updating the mapped projection to `728.164877` node-hours and leaving `171.835123` margin. | Continue only the frozen matrix one inspected segment at a time and complete R17 last. |
+| F-076 | 2026-05-30 | Phase A forcing-contract stop-the-line audit | The tracked paper decks describe MKS24 `k^-2` forcing and the production campaign treated the modal-driver qualification as sufficient, but an independent source-to-code review found that the E02 driver does not exactly implement the published forcing semantics. Random paper roles omit `spectrum = power_law` and inherit the generic projected-force policy; planar roles apply a full-`abs(k)^2` projection and therefore do not generally enforce published `grad_perp dot u_perp = 0` when retained `k_z != 0` modes are present. | pinned `MKS24.tex:469`; `src/srcterms/turb_driver.cpp:126-132,692-767`; E02 executable revision `462b9dbd53e085dea46c2478b567781576d7d03e`; cancelled `R02/s07_rankio_t2p5_t3` job `4745498`; stop-line evidence JSON SHA-256 `de85c443c3bc9bab795f7f1903e5de224d7d86b553ac40e9dd7249986c3df211`; `docs/cgl_lf_mks24_stage_i_protocol_review.md` | Blocker | Cancel active E02 work, account the allocation, preserve existing E02 output only as pipeline and cost evidence, fail closed on further E02 preparation, add explicit restart-retained MKS24 random and Alfvenic forcing policies while preserving generic driver defaults, make paper deck spectrum selection explicit, requalify, and start a fresh epoch from `t = 0`. | Job `4745498` is cancelled after `498` seconds and recorded `aborted`, consuming `0.138333` node-hours; E02 cumulative use is `15.628610` with no active reservation. Source correction and replacement qualification are in progress. | Open blocker: no additional E02 preparation or submission is permitted; a forcing-correct executable and fresh execution epoch require review. |
+| F-077 | 2026-05-30 | Corrected `E03-forcing-policy` worktree and fail-closed qualification boundary | F-076 requires a clean epoch because E02 physics is not exact. A fresh executable also needs stronger operational provenance than a prose-only requalification instruction. | `src/srcterms/turb_driver.cpp`; `src/srcterms/turb_driver.hpp`; `src/outputs/restart.cpp`; all tracked paper decks; `scripts/frontier/cgl_lf_stage_i.py`; `scripts/analyze_cgl_lf_paper.py`; `scripts/cgl_lf_workflow.py`; `inputs/cgl_lf_paper/mks24_stage_i_manifest.json`; focused CPU and local-root regressions; independent replay/recovery exploit probes; staged full-field policy-smoke input SHA-256 `33a712e85dc2bf522daa56bd7d9e08bb0a32f4e2a2a6d2b49d1e2918922c2a0a` and `0c8bd9f66981ecf6852135db999a0cb2192d866ce128ec3c68944b1045905fda` | Blocker | Preserve generic turbulence defaults for non-paper users; add explicit restart-retained `mks24_random_unprojected` and `mks24_alfvenic_perpendicular` policies; enforce planar `sol_fraction = 1`; add explicit `spectrum = power_law`; retain authoritative `time/restart_time`; isolate E03 accounting; require a reviewed immutable-build qualification token; atomically submit under lock; authenticate prepared artifacts across submission, runtime, record, reconciliation, and bundling; retain the schema-v2 panel inventory with checksum-bound references and pending scientific criteria. | Corrected source, decks, E03 helper, panel inventory, reference bindings, and local regressions are implemented in the worktree. The independent helper audit is closed after targeted rejection probes for the prior scheduler-timestamp, replay-baseline, reservation-preservation, and cleared-submit-evidence exploits. Deterministic replay passes before and after reservation replacement. The canonical E03 summary reports zero actual use, zero active reservations, and a pending qualification token. Staged one-rank policy-smoke decks now retain full force fields for direct HIP FFT checks. | Open blocker: do not create the E03 approval token or prepare canonical production until a clean committed Git bundle and immutable HIP/MPI build are archived and the corrected executable completes reviewed Frontier qualification. |
 
 ### Implemented Core Decision Log
 
 | Date | Decision | Rationale | Evidence still required |
 | --- | --- | --- | --- |
+| 2026-05-30 | Isolate corrected work beneath `E03-forcing-policy`, require a canonical immutable-build qualification token before preparation, and retain schema-v2 panel status as fail-closed until numeric criteria review. | The replacement forcing policy, restart timestamp, provenance controller, and panel-reference bindings are part of one auditable execution contract. The independent operational audit is closed; the canonical E03 summary reports the approval token as absent and therefore blocks production. | Commit and archive the corrected source bundle; build and qualify one immutable HIP/MPI executable; retain the approval token only after Frontier review. |
+| 2026-05-30 | Stop every new E02 preparation or submission, preserve its products only as pipeline and cost evidence, correct the forcing contract, and start a fresh epoch from `t = 0`. | The independent F-076 source-to-code audit found that E02 random roles inherit generic projected forcing and paper decks rely on an implicit parabolic-spectrum default, while planar roles do not generally enforce `grad_perp dot u_perp = 0` for retained `k_z != 0` modes. Job `4745498` was cancelled and recorded `aborted`; the stop-line evidence JSON has SHA-256 `de85c443c3bc9bab795f7f1903e5de224d7d86b553ac40e9dd7249986c3df211`. | Explicit restart-retained MKS24 random and Alfvenic forcing policies, explicit paper-deck `spectrum = power_law`, fresh qualification, immutable executable archival, and a new execution epoch. |
 | 2026-05-30 | Continue only the frozen matrix one inspected segment at a time, with R17 last. | R02 job `4745305` reaches exact `t = 2.5` cleanly in `1.061944` node-hours. Its latest late-time rate updates the mapped projection to `728.164877` node-hours, leaving `171.835123` node-hours of margin. | Preserve formal inspection, accounting, projection review, and shared-root queue audit for every segment. |
 | 2026-05-30 | Continue R02 conservatively from `t = 2.0` to `2.5` under the existing F-071 envelope. | R02 job `4744913` reaches exact `t = 2.0` cleanly in `1.068889` node-hours. Its latest late-time rate updates the mapped projection to `730.081697` node-hours, leaving `169.918303` node-hours of margin. | Continue R02 from `t = 2.0` to `2.5`, inspect, and recost before lengthening later segments. |
 | 2026-05-30 | Continue R02 conservatively from `t = 1.5` to `2.0` under the existing F-071 envelope. | R02 job `4744518` reaches exact `t = 1.5` cleanly in `1.052222` node-hours. Its late-time rate updates the mapped projection to `725.464938` node-hours, leaving `174.535062` node-hours of margin. | Continue R02 from `t = 1.5` to `2.0`, inspect, and recost before lengthening later segments. |
@@ -2504,8 +2522,10 @@ only a conservative continuation through `t = 2.0`. F-074 accepts R02
 through exact `t = 2.0`, updates the projection to `730.081697` node-hours,
 and authorizes only a conservative continuation through `t = 2.5`. F-075
 accepts R02 through exact `t = 2.5`, updates the projection to `728.164877`
-node-hours, and authorizes continued frozen-matrix execution one inspected
-segment at a time, with R17 last.
+node-hours, and historically authorized continued frozen-matrix execution one
+inspected segment at a time, with R17 last. F-076 supersedes that
+authorization: preserve E02 as pipeline and cost evidence, correct the forcing
+contract, and qualify a fresh epoch from `t = 0`.
 
 All Frontier simulations for this CGL-LF project must place their output,
 logs, manifests, restart products, and usage accounting beneath:
@@ -2662,15 +2682,15 @@ The archived Frontier debug qualification ledger was governed by:
 The recorded use of that historical ledger is `0.851670` node-hours. The
 2026-05-30 clean-restart decision does not erase it.
 
-For future `E02-modal-driver` work, use a fresh incremental project planning
+The earlier `E02-modal-driver` reset used a fresh incremental project planning
 ceiling:
 
 ```text
 4000 node-hours
 ```
 
-Reserve no more than `50` node-hours initially for replacement-driver
-requalification. The epoch-aware helper initially carried a separate `4.0`
+This block is historical and superseded by F-076. It does not authorize any
+new E02 preparation or submission. The epoch-aware helper initially carried a separate `4.0`
 node-hour production-path envelope for an `R16` pilot only, then a `7.0`
 node-hour completion envelope after F-068. Accepted replacement-driver jobs
 `4743735` through `4744158` now complete exact `t = 10.0` using `6.145556`
@@ -2680,8 +2700,8 @@ separate `2.0` node-hour R02 standard-layout timing pilot. Jobs `4744198` and
 `0.473333` node-hours. R17 jobs `4744210` and `4744230` complete the
 high-resolution timing pilot through authenticated continuation `t = 0.10`
 using `4.235556` node-hours. F-071 replaces the bracket with a measured
-`900.000000` node-hour mapped-matrix envelope. Resume R02 first and complete
-R17 last. F-072 records R02 job `4744249` through exact `t = 1.0`, updates
+`900.000000` node-hour mapped-matrix envelope. F-072 records R02 job `4744249`
+through exact `t = 1.0`, updates
 the projection to `702.195370` node-hours, and requires conservative
 two-hour-or-shorter normal-QOS segments. F-073 records R02 job `4744518`
 through exact `t = 1.5`, updates the projection to `725.464938` node-hours,
@@ -2692,7 +2712,9 @@ through `t = 2.5`. F-075 records R02 job `4745305` through exact `t = 2.5`,
 updates the projection to `728.164877` node-hours, and permits continued
 frozen-matrix execution one inspected segment at a time, with R17 last. The
 old `1068.888889` Stage I reservation is planning history, not an `E02`
-entitlement.
+entitlement. F-076 cancels job `4745498`, records E02 cumulative use
+`15.628610`, and requires a forcing-correct `E03-forcing-policy` epoch from
+`t = 0`.
 
 According to OLCF accounting, a job is charged according to requested nodes
 multiplied by actual time from entering the running state until exit; unused
@@ -2713,16 +2735,18 @@ An agent must:
    reserved_node_hours = requested_nodes * requested_walltime_hours
    ```
 
-3. Refuse to submit `E02` work if the new epoch reservation would exceed its
-   currently approved envelope or the fresh project ceiling:
+3. Refuse every new E02 preparation or submission. For E03, require the
+   reviewed qualification-approval token and refuse submission if the new
+   epoch reservation would exceed its currently approved envelope or the
+   fresh project ceiling:
 
    ```text
-   e02_consumed_actual + e02_active_reserved + proposed_reserved > approved_e02_envelope
-   e02_consumed_actual + e02_active_reserved + proposed_reserved > 4000
+   e03_consumed_actual + e03_active_reserved + proposed_reserved > approved_e03_envelope
+   e03_consumed_actual + e03_active_reserved + proposed_reserved > 4000
    ```
 
-4. Confirm there is no existing `debug` job by this user in `PD`, `R`, or any
-   other state before issuing `sbatch`.
+4. Confirm there is no other queued user job in `PD`, `R`, or any other state
+   before issuing `sbatch`.
 5. Confirm there is no unrelated live root-writing CGL campaign unless an
    explicit concurrency review permits overlap.
 6. Record the proposed job, scientific purpose, acceptance criterion, node
@@ -2978,6 +3002,7 @@ module load craype-accel-amd-gfx90a
 module load cpe/25.09 cray-mpich/9.0.1 rocm/6.4.2
 module load cce/20.0.0
 module unload darshan-runtime
+export LD_LIBRARY_PATH=${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}
 ```
 
 This module stack is not permanent truth. Before its first use in a new
@@ -3864,8 +3889,8 @@ boundary `t = 2.5`. Job `4745305` consumes `1.061944` node-hours, or
 interval. Applying that rate conservatively to the unfinished standard-layout
 work updates the continuation-aware mapped projection to `728.164877`
 node-hours and leaves `171.835123` node-hours of F-071 envelope margin.
-Continue the frozen matrix one inspected segment at a time and complete R17
-last.
+F-076 supersedes the continuation authorization after the source-to-code
+forcing audit. Prohibit every new E02 preparation or submission.
 
 This estimate is not a standard-mesh benchmark. It assumes linear scaling
 with cell count and simulated duration, equivalent timestep behavior among
@@ -3888,12 +3913,13 @@ replacement turbulent driver changed forcing/restart state.  Stage I has
 consumed `9.962778` node-hours with no active segment reservation.  The
 historical mapped lower-envelope storage estimates are `811.179` GB under the
 sequential retained-policy margin or `1091.586` GB without pruning. Fresh
-`E02-modal-driver` R16 is accepted through exact `t = 10.0` and passes its
-production-window analysis. F-069 authorizes only a `2.0` node-hour R02
+`E02-modal-driver` R16 reaches exact `t = 10.0` and passes its
+production-window analyzer. F-069 historically authorizes only a `2.0` node-hour R02
 standard-layout timing pilot next. F-070 records its accepted completion and
 authorizes only an `8.0` node-hour R17 high-resolution timing probe. F-071
-records its accepted completion and authorizes only the frozen mapped matrix
-inside the measured `900.000000` node-hour envelope.
+records its accepted completion and historically authorizes only the frozen
+mapped matrix inside the measured `900.000000` node-hour envelope. F-076
+retains these records only as pipeline and cost evidence.
 Any additional panel-reference-driven case beyond the frozen manifest
 requires a revised cost before execution.
 
@@ -3999,8 +4025,11 @@ normal-QOS continuation segments. R02 job `4744518` then reaches exact
 `t = 1.5`; F-073 authorizes only a conservative continuation through
 `t = 2.0`. R02 job `4744913` then reaches exact `t = 2.0`; F-074 authorizes
 only a conservative continuation through `t = 2.5`. R02 job `4745305` then
-reaches exact `t = 2.5`; F-075 authorizes continued frozen-matrix execution
-one inspected segment at a time, with R17 last.
+reaches exact `t = 2.5`; F-075 historically authorizes continued
+frozen-matrix execution one inspected segment at a time, with R17 last. F-076
+supersedes that authorization after the source-to-code forcing audit.
+Preserve E02 as pipeline and cost evidence, correct and qualify the forcing
+policy, and start a fresh epoch from `t = 0`.
 
 Required baseline:
 
@@ -4355,8 +4384,10 @@ preparation limit. R02 job `4744518` subsequently reaches exact `t = 1.5`;
 F-073 authorizes only a conservative continuation through `t = 2.0`. R02
 job `4744913` subsequently reaches exact `t = 2.0`; F-074 authorizes only a
 conservative continuation through `t = 2.5`. R02 job `4745305` subsequently
-reaches exact `t = 2.5`; F-075 authorizes continued frozen-matrix execution
-one inspected segment at a time, with R17 last.
+reaches exact `t = 2.5`; F-075 historically authorizes continued
+frozen-matrix execution one inspected segment at a time, with R17 last. F-076
+supersedes that authorization: prohibit every new E02 preparation or
+submission.
 
 ## Repository Validation Gates
 
@@ -4808,9 +4839,10 @@ local implementation evidence. The next critical path is:
    accepts R02 through exact `t = 1.5` and authorizes only the next
    conservative segment through `t = 2.0`. F-074 accepts R02 through exact
    `t = 2.0` and authorizes only the next conservative segment through
-   `t = 2.5`. F-075 accepts R02 through exact `t = 2.5` and authorizes
-   continued frozen-matrix execution one inspected segment at a time, with
-   R17 last. Commits `462b9dbd`, `d210cdd5`,
+   `t = 2.5`. F-075 accepts R02 through exact `t = 2.5` and historically
+   authorizes continued frozen-matrix execution one inspected segment at a
+   time, with R17 last. F-076 supersedes that authorization after the
+   source-to-code forcing audit. Commits `462b9dbd`, `d210cdd5`,
    `eab6e12b`, and `7fae0bcf` retain the original controls, including the
    F-061 prepare-time absent-override-key guard exposed by `g014`. The
    2026-05-29 EDT audit found cancelled exploratory job `4743020` and
@@ -4820,8 +4852,8 @@ local implementation evidence. The next critical path is:
    that tree untouched and explicitly acknowledge the reviewed stale record
    during preflight.
 
-2. **Qualify the replacement driver and archive one immutable production
-   build.**
+2. **Correct the explicit MKS24 forcing contract, requalify, and archive one
+   immutable production build.**
    Use the smallest discriminating local and Frontier debug tests within the
    initial `50` node-hour `E02` envelope. Require modal restart identity,
    forcing-state continuity, one-rank/eight-rank decomposition evidence,
@@ -4843,10 +4875,14 @@ local implementation evidence. The next critical path is:
    guarded `192 x 192 x 384` layout with intended rank-local output and
    closes startup/retained-output sizing. Focused current serial CGL tests
    (`39 passed`) and scheduled MPI CPU job `4743666` (`2 passed`) close the
-   retained local entry gate. Frontier debug qualification is complete.
+   retained E02 operational entry gate. F-076 preserves that qualification
+   history for pipeline and cost evidence but requires explicit MKS24 random
+   and planar forcing policies, fresh local regressions, a new immutable HIP/MPI
+   build, and the smallest discriminating Frontier debug requalification.
 
-3. **Execute the measured mapped matrix sequentially.**
-   Fresh `E02-modal-driver` R16 jobs `4743735` through `4744158` are accepted
+3. **Preserve E02 as pipeline and cost evidence; execute a fresh corrected
+   epoch sequentially from `t = 0`.**
+   E02 `R16` jobs `4743735` through `4744158` are retained
    through exact `t = 10.0` with zero strict counters, authenticated modal
    restarts, and passing `t = 8`--`10` analysis. They consume `6.145556`
    node-hours. R02 jobs `4744198` and `4744205` then reach native snapshot
@@ -4864,9 +4900,15 @@ local implementation evidence. The next critical path is:
    R02 job `4744913` reaches exact `t = 2.0` in `1.068889` node-hours; F-074
    updates the projection to `730.081697` node-hours. R02 job `4745305`
    reaches exact `t = 2.5` in `1.061944` node-hours; F-075 updates the
-   projection to `728.164877` node-hours. Continue the frozen matrix one
-   inspected segment at a time, retain accepted snapshots plus final two
-   restart groups, and complete R17 last.
+   projection to `728.164877` node-hours.
+   Continuation `R02/s07_rankio_t2p5_t3` was prepared from the inspected
+   `s06` terminal restart siblings and submitted as job `4745498` on
+   2026-05-30. F-076 cancels that segment after `498` seconds and records it
+   `aborted`, bringing E02 cumulative use to `15.628610` node-hours with no
+   active reservation. Prohibit every new E02 preparation or submission.
+   After forcing correction and qualification, start a fresh epoch from
+   `t = 0`, retain accepted snapshots plus final two restart groups, run one
+   inspected segment at a time, and complete R17 last.
    The old `1068.888889` node-hour and `880.368` GB values remain historical
    priors, not authorization.
 
@@ -4894,7 +4936,8 @@ local implementation evidence. The next critical path is:
    calibrate long-time injection/spectral behavior against the documented
    setup.
 
-5. **Complete remaining comparison products from accepted `E02` outputs.**
+5. **Complete remaining comparison products from accepted corrected-epoch
+   outputs.**
    Run paper-panel reference comparisons through the implemented manifest
    interface on top of the cap, forcing-work residual, applied
    heat-flux/pressure-traction ledgers, snapshot heat-flux/pressure-work

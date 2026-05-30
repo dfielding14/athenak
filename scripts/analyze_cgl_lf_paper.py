@@ -29,6 +29,15 @@ SQRT_EIGHT_PI = 5.013256549262000
 THREE_PI_MINUS_EIGHT = 1.4247779607693793
 BACKUP_COLLISION_RATE = 1.0e10
 REFERENCE_CURVE_SCHEMA_VERSION = 1
+STAGE_I_PANEL_SCHEMA_VERSION = 2
+STAGE_I_PANEL_STATUSES = (
+    "external_model",
+    "blocked_reference",
+    "not_run",
+    "failed",
+    "passed",
+)
+STAGE_I_PRODUCTION_WORKFLOW = "paper-mks24-stage-i-production"
 EDDY_ANGLE_DEGREES = 15.0
 
 
@@ -1930,14 +1939,28 @@ def case_window(case: dict[str, object], time_start: float | None,
     return start, end
 
 
-def bundle_cases(bundle: Path) -> list[dict[str, object]]:
-    """Read case metadata used to preserve per-case analysis windows."""
+def bundle_manifest(bundle: Path) -> dict[str, object]:
+    """Read one retained bundle manifest."""
 
     with (bundle / "manifest.json").open(encoding="utf-8") as stream:
         manifest = json.load(stream)
+    if not isinstance(manifest, dict):
+        raise ValueError(f"bundle manifest must be an object: {bundle}")
+    return manifest
+
+
+def bundle_cases(bundle: Path,
+                 manifest: dict[str, object] | None = None
+                 ) -> list[dict[str, object]]:
+    """Read case metadata used to preserve per-case analysis windows."""
+
+    if manifest is None:
+        manifest = bundle_manifest(bundle)
     cases = manifest.get("cases", [])
     if not isinstance(cases, list):
         raise ValueError(f"manifest cases must be a list: {bundle}")
+    if not all(isinstance(case, dict) for case in cases):
+        raise ValueError(f"manifest cases must contain objects: {bundle}")
     return cases
 
 
@@ -2162,9 +2185,14 @@ def interpolate_analysis_surface(
 def reference_curve_comparisons(
     result: dict[str, object], manifest_path: Path,
     allow_missing_cases: bool = False,
+    analysis_case_aliases: dict[str, str] | None = None,
+    stage_i_reference_bindings: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, object]:
     """Compare analysis products against provenance-qualified external data."""
 
+    if analysis_case_aliases is None:
+        analysis_case_aliases = {}
+    manifest_sha256 = sha256_file(manifest_path)
     with manifest_path.open(encoding="utf-8") as stream:
         manifest = json.load(stream)
     if manifest.get("schema_version") != REFERENCE_CURVE_SCHEMA_VERSION:
@@ -2231,6 +2259,10 @@ def reference_curve_comparisons(
         expected_digest = require_manifest_text(
             curve, "data_sha256", f"reference curve {curve_id}"
         )
+        binding_validated = validate_stage_i_reference_binding(
+            stage_i_reference_bindings, curve_id, "curve", case, product,
+            data_file, expected_digest, manifest_sha256,
+        )
         data_path = (manifest_path.parent / data_file).resolve()
         if not data_path.is_file():
             raise ValueError(f"reference curve data is missing: {data_path}")
@@ -2256,19 +2288,22 @@ def reference_curve_comparisons(
                 f"reference curve {curve_id} needs ordered finite points and "
                 "positive y_uncertainty"
             )
+        analysis_case = analysis_case_aliases.get(case, case)
         if case == "direct":
             ensemble = result.get("snapshot_ensemble", {})
             histories = result.get("histories", [])
-        elif isinstance(cases, dict) and case in cases:
-            ensemble = cases[case].get("snapshot_ensemble", {})
-            histories = cases[case].get("histories", [])
+        elif isinstance(cases, dict) and analysis_case in cases:
+            ensemble = cases[analysis_case].get("snapshot_ensemble", {})
+            histories = cases[analysis_case].get("histories", [])
         else:
             if allow_missing_cases:
                 omitted_products.append({
                     "id": curve_id,
                     "kind": "curve",
                     "case": case,
+                    "analysis_case": analysis_case,
                     "product": product,
+                    "stage_i_binding_validated": binding_validated,
                     "reason": "referenced case is absent from analyzed bundle",
                 })
                 continue
@@ -2291,8 +2326,13 @@ def reference_curve_comparisons(
         normalized = residual / uncertainty
         comparisons[curve_id] = {
             "available": True,
+            "kind": "curve",
             "case": case,
+            "analysis_case": analysis_case,
             "product": product,
+            "stage_i_binding_validated": binding_validated,
+            "reference_data_file": data_file,
+            "reference_manifest_sha256": manifest_sha256,
             "data_file": str(data_path),
             "data_sha256": expected_digest,
             "interpolation": str(curve.get("interpolation", "linear")),
@@ -2326,6 +2366,10 @@ def reference_curve_comparisons(
         expected_digest = require_manifest_text(
             surface, "data_sha256", f"reference surface {surface_id}"
         )
+        binding_validated = validate_stage_i_reference_binding(
+            stage_i_reference_bindings, surface_id, "surface", case, product,
+            data_file, expected_digest, manifest_sha256,
+        )
         data_path = (manifest_path.parent / data_file).resolve()
         if not data_path.is_file():
             raise ValueError(f"reference surface data is missing: {data_path}")
@@ -2354,17 +2398,20 @@ def reference_curve_comparisons(
                 f"reference surface {surface_id} needs finite samples and "
                 "positive z_uncertainty"
             )
+        analysis_case = analysis_case_aliases.get(case, case)
         if case == "direct":
             ensemble = result.get("snapshot_ensemble", {})
-        elif isinstance(cases, dict) and case in cases:
-            ensemble = cases[case].get("snapshot_ensemble", {})
+        elif isinstance(cases, dict) and analysis_case in cases:
+            ensemble = cases[analysis_case].get("snapshot_ensemble", {})
         else:
             if allow_missing_cases:
                 omitted_products.append({
                     "id": surface_id,
                     "kind": "surface",
                     "case": case,
+                    "analysis_case": analysis_case,
                     "product": product,
+                    "stage_i_binding_validated": binding_validated,
                     "reason": "referenced case is absent from analyzed bundle",
                 })
                 continue
@@ -2385,8 +2432,13 @@ def reference_curve_comparisons(
         normalized = residual / uncertainty
         surface_comparisons[surface_id] = {
             "available": True,
+            "kind": "surface",
             "case": case,
+            "analysis_case": analysis_case,
             "product": product,
+            "stage_i_binding_validated": binding_validated,
+            "reference_data_file": data_file,
+            "reference_manifest_sha256": manifest_sha256,
             "data_file": str(data_path),
             "data_sha256": expected_digest,
             "interpolation": str(surface.get("interpolation", "bilinear")),
@@ -2410,7 +2462,7 @@ def reference_curve_comparisons(
             "curve or surface coordinates"
         ),
         "manifest": str(manifest_path),
-        "manifest_sha256": sha256_file(manifest_path),
+        "manifest_sha256": manifest_sha256,
         "provenance": provenance,
         "comparisons": comparisons,
         "surface_comparisons": surface_comparisons,
@@ -2422,6 +2474,8 @@ def reference_curve_comparisons(
 def combined_reference_curve_comparisons(
     result: dict[str, object], manifest_paths: list[Path],
     allow_missing_cases: bool = False,
+    analysis_case_aliases: dict[str, str] | None = None,
+    stage_i_reference_bindings: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, object]:
     """Combine distinct comparison products from qualified reference manifests."""
 
@@ -2444,7 +2498,9 @@ def combined_reference_curve_comparisons(
     product_ids: set[str] = set()
     for manifest_path in manifest_paths:
         comparison = reference_curve_comparisons(
-            result, manifest_path, allow_missing_cases=allow_missing_cases
+            result, manifest_path, allow_missing_cases=allow_missing_cases,
+            analysis_case_aliases=analysis_case_aliases,
+            stage_i_reference_bindings=stage_i_reference_bindings,
         )
         manifests.append({
             "manifest": comparison["manifest"],
@@ -2488,6 +2544,488 @@ def combined_reference_curve_comparisons(
     return combined
 
 
+def require_text_list(record: dict[str, object], key: str, context: str,
+                      required: bool = False) -> list[str]:
+    """Return one unique list of nonempty manifest text values."""
+
+    values = record.get(key, [])
+    if not isinstance(values, list) or (
+        required and not values
+    ) or not all(isinstance(value, str) and value.strip() for value in values):
+        qualifier = "nonempty " if required else ""
+        raise ValueError(f"{context} requires a {qualifier}list of text {key}")
+    retained = [str(value) for value in values]
+    if len(set(retained)) != len(retained):
+        raise ValueError(f"{context} {key} entries must be unique")
+    return retained
+
+
+def require_sha256(record: dict[str, object], key: str, context: str) -> str:
+    """Return one required lowercase SHA-256 manifest value."""
+
+    value = require_manifest_text(record, key, context)
+    if not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise ValueError(f"{context} {key} must be lowercase SHA-256")
+    return value
+
+
+def validate_stage_i_reference_binding(
+    bindings: dict[str, dict[str, str]] | None, product_id: str, kind: str,
+    case: str, product: str, data_file: str, data_sha256: str,
+    reference_manifest_sha256: str,
+) -> bool:
+    """Reject substituted semantics or provenance for one approved product id."""
+
+    if bindings is None or product_id not in bindings:
+        return False
+    expected = bindings[product_id]
+    observed = {
+        "kind": kind,
+        "case": case,
+        "product": product,
+        "data_file": data_file,
+        "data_sha256": data_sha256,
+        "reference_manifest_sha256": reference_manifest_sha256,
+    }
+    mismatches = sorted(
+        key for key, value in observed.items() if expected.get(key) != value
+    )
+    if mismatches:
+        raise ValueError(
+            f"Stage I reference binding mismatch for {product_id}: "
+            f"{', '.join(mismatches)}"
+        )
+    return True
+
+
+def stage_i_panels_configuration(manifest_path: Path) -> dict[str, object]:
+    """Read the versioned Stage I panel-gate configuration."""
+
+    with manifest_path.open(encoding="utf-8") as stream:
+        manifest = json.load(stream)
+    if not isinstance(manifest, dict):
+        raise ValueError("Stage I manifest must be an object")
+    configuration = manifest.get("panel_status")
+    if configuration is None:
+        configuration = {
+            "schema_version": manifest.get("panels_schema_version"),
+            "panels": manifest.get("panels"),
+        }
+    if not isinstance(configuration, dict):
+        raise ValueError("Stage I manifest panel_status must be an object")
+    if configuration.get("schema_version") != STAGE_I_PANEL_SCHEMA_VERSION:
+        raise ValueError(
+            "Stage I panels require panels_schema_version="
+            f"{STAGE_I_PANEL_SCHEMA_VERSION}"
+        )
+    cases = manifest.get("cases", [])
+    panels = configuration.get("panels", [])
+    analysis_case_aliases = configuration.get("analysis_case_aliases", {})
+    reference_manifests = configuration.get("reference_manifests", {})
+    reference_product_bindings = configuration.get("reference_product_bindings", {})
+    if not isinstance(cases, list) or not all(
+        isinstance(case, dict) for case in cases
+    ):
+        raise ValueError("Stage I manifest cases must be a list of objects")
+    if not isinstance(panels, list) or not panels or not all(
+        isinstance(panel, dict) for panel in panels
+    ):
+        raise ValueError("Stage I manifest panels must be a nonempty list of objects")
+    case_names: dict[str, str] = {}
+    case_ids: set[str] = set()
+    for case in cases:
+        case_id = require_manifest_text(case, "id", "Stage I case")
+        name = require_manifest_text(case, "name", f"Stage I case {case_id}")
+        if case_id in case_ids or name in case_names:
+            raise ValueError("Stage I case ids and names must be unique")
+        case_ids.add(case_id)
+        case_names[name] = case_id
+    if not isinstance(analysis_case_aliases, dict) or not all(
+        isinstance(alias, str) and alias.strip()
+        and isinstance(canonical, str) and canonical.strip()
+        for alias, canonical in analysis_case_aliases.items()
+    ):
+        raise ValueError("Stage I analysis_case_aliases must map text names to names")
+    for alias, canonical in analysis_case_aliases.items():
+        if alias in case_names:
+            raise ValueError(f"Stage I analysis alias shadows a canonical case: {alias}")
+        if canonical not in case_names:
+            raise ValueError(
+                f"Stage I analysis alias selects unknown canonical case: {canonical}"
+            )
+    if not isinstance(reference_manifests, dict) or not reference_manifests:
+        raise ValueError("Stage I reference_manifests must be a nonempty object")
+    normalized_manifests: dict[str, dict[str, str]] = {}
+    for name, record in reference_manifests.items():
+        if not isinstance(name, str) or not name.strip() or not isinstance(record, dict):
+            raise ValueError("Stage I reference_manifests entries must be named objects")
+        normalized_manifests[name] = {
+            "path": require_manifest_text(record, "path", f"Stage I reference {name}"),
+            "sha256": require_sha256(record, "sha256", f"Stage I reference {name}"),
+        }
+    if not isinstance(reference_product_bindings, dict):
+        raise ValueError("Stage I reference_product_bindings must be an object")
+    normalized_bindings: dict[str, dict[str, str]] = {}
+    for product_id, binding in reference_product_bindings.items():
+        context = f"Stage I reference product {product_id}"
+        if (
+            not isinstance(product_id, str) or not product_id.strip()
+            or not isinstance(binding, dict)
+        ):
+            raise ValueError("Stage I reference_product_bindings entries are malformed")
+        kind = require_manifest_text(binding, "kind", context)
+        if kind not in ("curve", "surface"):
+            raise ValueError(f"{context} has unsupported kind: {kind}")
+        reference_manifest = require_manifest_text(
+            binding, "reference_manifest", context
+        )
+        if reference_manifest not in normalized_manifests:
+            raise ValueError(
+                f"{context} selects unknown reference manifest: {reference_manifest}"
+            )
+        normalized_bindings[product_id] = {
+            "kind": kind,
+            "case": require_manifest_text(binding, "case", context),
+            "product": require_manifest_text(binding, "product", context),
+            "data_file": require_manifest_text(binding, "data_file", context),
+            "data_sha256": require_sha256(binding, "data_sha256", context),
+            "reference_manifest": reference_manifest,
+            "reference_manifest_sha256": normalized_manifests[
+                reference_manifest
+            ]["sha256"],
+        }
+    normalized: list[dict[str, object]] = []
+    panel_ids: set[str] = set()
+    configured_products: set[str] = set()
+    for panel in panels:
+        panel_id = require_manifest_text(panel, "id", "Stage I panel")
+        context = f"Stage I panel {panel_id}"
+        if panel_id in panel_ids:
+            raise ValueError(f"Stage I panel id is duplicated: {panel_id}")
+        panel_ids.add(panel_id)
+        disposition = require_manifest_text(panel, "disposition", context)
+        if disposition not in ("comparison", "blocked_reference", "external_model"):
+            raise ValueError(f"{context} has unsupported disposition: {disposition}")
+        required_cases = require_text_list(
+            panel, "required_cases", context, required=disposition == "comparison"
+        )
+        unknown_cases = sorted(set(required_cases) - case_ids)
+        if unknown_cases:
+            raise ValueError(f"{context} selects unknown cases: {unknown_cases}")
+        products = require_text_list(
+            panel, "reference_products", context,
+            required=disposition == "comparison",
+        )
+        configured_products.update(products)
+        criteria = panel.get("criteria", [])
+        if not isinstance(criteria, list) or not all(
+            isinstance(criterion, dict) for criterion in criteria
+        ):
+            raise ValueError(f"{context} criteria must be a list of objects")
+        if disposition != "comparison" and criteria:
+            raise ValueError(f"{context} static disposition cannot define criteria")
+        criterion_state: str | None = None
+        criterion_reason = str(panel.get("criterion_reason", "")).strip()
+        if disposition == "comparison":
+            criterion_state = require_manifest_text(panel, "criterion_state", context)
+            if criterion_state not in ("pending_review", "reviewed"):
+                raise ValueError(
+                    f"{context} has unsupported criterion_state: {criterion_state}"
+                )
+            if criterion_state == "pending_review" and not criterion_reason:
+                raise ValueError(
+                    f"{context} pending_review requires criterion_reason"
+                )
+            if criterion_state == "reviewed" and not criteria:
+                raise ValueError(f"{context} reviewed criteria cannot be empty")
+        elif "criterion_state" in panel or criterion_reason:
+            raise ValueError(
+                f"{context} static disposition cannot define criterion lifecycle"
+            )
+        normalized_criteria: list[dict[str, object]] = []
+        criterion_products: set[str] = set()
+        for criterion in criteria:
+            product = require_manifest_text(criterion, "product", context)
+            metric = require_manifest_text(criterion, "metric", context)
+            operator = require_manifest_text(criterion, "operator", context)
+            if operator not in ("<", "<=", "==", ">=", ">"):
+                raise ValueError(
+                    f"{context} criterion has unsupported operator: {operator}"
+                )
+            try:
+                limit = float(criterion["limit"])
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError(f"{context} criterion requires numeric limit") from error
+            if not math.isfinite(limit):
+                raise ValueError(f"{context} criterion limit must be finite")
+            if product not in products:
+                raise ValueError(
+                    f"{context} criterion selects unlisted product: {product}"
+                )
+            criterion_products.add(product)
+            normalized_criteria.append({
+                "product": product,
+                "metric": metric,
+                "operator": operator,
+                "limit": limit,
+            })
+        if criterion_state == "reviewed" and criterion_products != set(products):
+            raise ValueError(
+                f"{context} requires reviewed criteria for every reference product"
+            )
+        reason = str(panel.get("reason", "")).strip()
+        if disposition != "comparison" and not reason:
+            raise ValueError(f"{context} static disposition requires reason")
+        normalized.append({
+            "id": panel_id,
+            "figure": str(panel.get("figure", "")),
+            "panel": str(panel.get("panel", "")),
+            "description": str(panel.get("description", "")),
+            "disposition": disposition,
+            "required_cases": required_cases,
+            "reference_products": products,
+            "criteria": normalized_criteria,
+            "criterion_state": criterion_state,
+            "criterion_reason": criterion_reason,
+            "configured_reason": reason,
+        })
+    if set(normalized_bindings) != configured_products:
+        raise ValueError(
+            "Stage I reference_product_bindings must exactly cover configured "
+            "comparison products"
+        )
+    return {
+        "schema_version": STAGE_I_PANEL_SCHEMA_VERSION,
+        "manifest": str(manifest_path),
+        "manifest_sha256": sha256_file(manifest_path),
+        "case_names": case_names,
+        "case_ids": sorted(case_ids),
+        "analysis_case_aliases": analysis_case_aliases,
+        "reference_manifests": normalized_manifests,
+        "reference_product_bindings": normalized_bindings,
+        "panels": normalized,
+    }
+
+
+def stage_i_bundle_case_ids(bundle: Path, manifest: dict[str, object],
+                            configuration: dict[str, object]) -> list[str]:
+    """Map accepted bundle cases to canonical Stage I ids."""
+
+    admission = manifest.get("stage_i_admission_status")
+    if admission is None and (
+        manifest.get("workflow") == STAGE_I_PRODUCTION_WORKFLOW
+        and manifest.get("status") == "accepted_for_analysis"
+    ):
+        # Explicit legacy accepted status is sufficient migration evidence.
+        admission = "accepted_for_analysis"
+    if admission != "accepted_for_analysis":
+        raise ValueError(
+            "Stage I panel status table requires an accepted_for_analysis bundle"
+        )
+    case_names = configuration["case_names"]
+    if not isinstance(case_names, dict):
+        raise ValueError("Stage I panel configuration case_names must be an object")
+    cases = bundle_cases(bundle, manifest)
+    accepted: list[str] = []
+    for case in cases:
+        case_id = case.get("case_id")
+        if case_id is None and len(cases) == 1:
+            case_id = manifest.get("production_case_id")
+        if case_id is None:
+            case_id = case_names.get(str(case.get("name", "")))
+        if not isinstance(case_id, str) or case_id not in configuration["case_ids"]:
+            raise ValueError(
+                f"accepted bundle case does not map to Stage I inventory: "
+                f"{case.get('name', 'unnamed_case')}"
+            )
+        accepted.append(case_id)
+    if len(set(accepted)) != len(accepted):
+        raise ValueError("accepted bundle maps more than one case to a Stage I id")
+    return sorted(accepted)
+
+
+def criterion_passes(observed: float, operator: str, limit: float) -> bool:
+    """Apply one reviewed generic criterion without embedding scientific limits."""
+
+    return {
+        "<": observed < limit,
+        "<=": observed <= limit,
+        "==": observed == limit,
+        ">=": observed >= limit,
+        ">": observed > limit,
+    }[operator]
+
+
+def stage_i_panel_status_table(
+    bundle: Path, bundle_metadata: dict[str, object],
+    configuration: dict[str, object],
+    comparisons: dict[str, object] | None,
+) -> dict[str, object]:
+    """Build one retained Stage I status row per configured paper panel."""
+
+    accepted_cases = stage_i_bundle_case_ids(bundle, bundle_metadata, configuration)
+    accepted = set(accepted_cases)
+    available_products: dict[str, object] = {}
+    omitted_products: dict[str, object] = {}
+    if comparisons is not None:
+        for collection in ("comparisons", "surface_comparisons"):
+            products = comparisons.get(collection, {})
+            if not isinstance(products, dict):
+                raise ValueError(f"reference comparison {collection} is not an object")
+            available_products.update(products)
+        omissions = comparisons.get("omitted_products", [])
+        if not isinstance(omissions, list):
+            raise ValueError("reference comparison omitted_products is not a list")
+        for omission in omissions:
+            if not isinstance(omission, dict) or not isinstance(
+                omission.get("id"), str
+            ):
+                raise ValueError("reference comparison omission is malformed")
+            omitted_products[str(omission["id"])] = omission
+    rows: list[dict[str, object]] = []
+    counts = {status: 0 for status in STAGE_I_PANEL_STATUSES}
+    for configured in configuration["panels"]:
+        row = dict(configured)
+        required_cases = set(row["required_cases"])
+        required_products = set(row["reference_products"])
+        missing_cases = sorted(required_cases - accepted)
+        missing_products = sorted(required_products - set(available_products))
+        omitted = sorted(required_products & set(omitted_products))
+        row.update({
+            "missing_cases": missing_cases,
+            "available_reference_products": sorted(
+                required_products & set(available_products)
+            ),
+            "missing_reference_products": missing_products,
+            "omitted_reference_products": omitted,
+            "criterion_results": [],
+        })
+        disposition = row["disposition"]
+        if disposition == "external_model":
+            status = "external_model"
+            reason = row["configured_reason"]
+        elif disposition == "blocked_reference":
+            status = "blocked_reference"
+            reason = row["configured_reason"]
+        elif row["criterion_state"] == "pending_review":
+            status = "not_run"
+            reason = row["criterion_reason"]
+        elif missing_cases or missing_products:
+            status = "not_run"
+            details = []
+            if missing_cases:
+                details.append(f"missing accepted cases: {', '.join(missing_cases)}")
+            if missing_products:
+                details.append(
+                    f"missing reference products: {', '.join(missing_products)}"
+                )
+            reason = "; ".join(details)
+        else:
+            criterion_results = []
+            for criterion in row["criteria"]:
+                product = str(criterion["product"])
+                record = available_products[product]
+                if not isinstance(record, dict):
+                    raise ValueError(f"reference product is not an object: {product}")
+                if not record.get("stage_i_binding_validated", False):
+                    raise ValueError(
+                        f"reviewed Stage I reference product is not binding-validated: "
+                        f"{product}"
+                    )
+                validate_stage_i_reference_binding(
+                    configuration["reference_product_bindings"], product,
+                    str(record.get("kind", "")), str(record.get("case", "")),
+                    str(record.get("product", "")),
+                    str(record.get("reference_data_file", "")),
+                    str(record.get("data_sha256", "")),
+                    str(record.get("reference_manifest_sha256", "")),
+                )
+                observed = record.get(str(criterion["metric"]))
+                if isinstance(observed, bool) or not isinstance(
+                    observed, (int, float)
+                ) or not math.isfinite(float(observed)):
+                    raise ValueError(
+                        f"reference product {product} requires finite metric "
+                        f"{criterion['metric']}"
+                    )
+                passed = criterion_passes(
+                    float(observed), str(criterion["operator"]),
+                    float(criterion["limit"]),
+                )
+                criterion_results.append({
+                    **criterion,
+                    "observed": float(observed),
+                    "passed": passed,
+                })
+            row["criterion_results"] = criterion_results
+            if all(bool(criterion["passed"]) for criterion in criterion_results):
+                status = "passed"
+                reason = "all reviewed criteria passed"
+            else:
+                status = "failed"
+                reason = "one or more reviewed criteria failed"
+        row.update({"status": status, "reason": reason})
+        counts[status] += 1
+        rows.append(row)
+    return {
+        "schema_version": STAGE_I_PANEL_SCHEMA_VERSION,
+        "definition": (
+            "per-panel Stage I comparison gate from accepted bundles, "
+            "tracked dispositions, and reviewed data criteria"
+        ),
+        "stage_i_manifest": configuration["manifest"],
+        "stage_i_manifest_sha256": configuration["manifest_sha256"],
+        "bundle": str(bundle),
+        "bundle_manifest": str(bundle / "manifest.json"),
+        "bundle_manifest_sha256_at_analysis": sha256_file(bundle / "manifest.json"),
+        "stage_i_admission_status": "accepted_for_analysis",
+        "accepted_cases": accepted_cases,
+        "analysis_case_aliases": configuration["analysis_case_aliases"],
+        "status_counts": counts,
+        "panels": rows,
+    }
+
+
+def markdown_cell(value: object) -> str:
+    """Escape one compact Markdown table cell."""
+
+    return str(value).replace("|", r"\|").replace("\n", " ")
+
+
+def write_stage_i_panel_status_table(table: dict[str, object],
+                                     output_dir: Path) -> None:
+    """Retain machine-readable and concise human-readable Stage I gate tables."""
+
+    json_path = output_dir / "stage_i_panel_status.json"
+    markdown_path = output_dir / "stage_i_panel_status.md"
+    json_path.write_text(json.dumps(table, indent=2, sort_keys=True) + "\n",
+                         encoding="utf-8")
+    lines = [
+        "# CGL-LF MKS24 Stage I Panel Status",
+        "",
+        f"- Stage I manifest: `{table['stage_i_manifest']}`",
+        f"- Accepted cases: `{', '.join(table['accepted_cases'])}`",
+        "",
+        "| Panel | Figure | Status | Required cases | Reference products | Reason |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for panel in table["panels"]:
+        figure = str(panel["figure"])
+        if panel["panel"]:
+            figure += str(panel["panel"])
+        lines.append(
+            "| `{}` | `{}` | **{}** | `{}` | `{}` | {} |".format(
+                markdown_cell(panel["id"]),
+                markdown_cell(figure),
+                markdown_cell(panel["status"]),
+                markdown_cell(", ".join(panel["required_cases"])),
+                markdown_cell(", ".join(panel["reference_products"])),
+                markdown_cell(panel["reason"]),
+            )
+        )
+    markdown_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def main() -> int:
     """Command-line entry point."""
 
@@ -2505,6 +3043,14 @@ def main() -> int:
     command.add_argument("--time-start", type=float)
     command.add_argument("--time-end", type=float)
     command.add_argument("--reference-curves", action="append", type=Path, default=[])
+    command.add_argument(
+        "--stage-i-manifest",
+        type=Path,
+        help=(
+            "Tracked Stage I case and versioned panel configuration used to "
+            "retain a per-panel status table for accepted bundles."
+        ),
+    )
     command.add_argument(
         "--allow-partial-reference-cases",
         action="store_true",
@@ -2525,6 +3071,8 @@ def main() -> int:
         command.error("--eddy-samples must be nonnegative")
     if args.eddy_bins < 2:
         command.error("--eddy-bins must be at least 2")
+    if args.stage_i_manifest is not None and args.bundle is None:
+        command.error("--stage-i-manifest requires --bundle")
 
     alignment_shells = [
         int(value) for value in args.alignment_shells.split(",") if value.strip()
@@ -2536,9 +3084,11 @@ def main() -> int:
         "forcing_energy_budgets": [],
         "snapshots": {},
     }
+    bundle_metadata: dict[str, object] | None = None
     if args.bundle is not None:
+        bundle_metadata = bundle_manifest(args.bundle)
         result["cases"] = {}
-        for case in bundle_cases(args.bundle):
+        for case in bundle_cases(args.bundle, bundle_metadata):
             name = str(case.get("name", "unnamed_case"))
             outputs = case.get("outputs", {})
             if not isinstance(outputs, dict):
@@ -2606,10 +3156,31 @@ def main() -> int:
         }
     if args.synthetic_test:
         result["synthetic_test"] = synthetic_test()
+    configuration: dict[str, object] | None = None
+    if args.stage_i_manifest is not None:
+        configuration = stage_i_panels_configuration(args.stage_i_manifest)
     if args.reference_curves:
         result["reference_curve_comparisons"] = combined_reference_curve_comparisons(
             result, args.reference_curves,
             allow_missing_cases=args.allow_partial_reference_cases,
+            analysis_case_aliases=(
+                configuration["analysis_case_aliases"]
+                if configuration is not None else None
+            ),
+            stage_i_reference_bindings=(
+                configuration["reference_product_bindings"]
+                if configuration is not None else None
+            ),
+        )
+    if args.stage_i_manifest is not None:
+        assert args.bundle is not None and bundle_metadata is not None
+        assert configuration is not None
+        result["stage_i_panel_status"] = stage_i_panel_status_table(
+            args.bundle, bundle_metadata, configuration,
+            result.get("reference_curve_comparisons"),
+        )
+        write_stage_i_panel_status_table(
+            result["stage_i_panel_status"], args.output_dir
         )
     destination = args.output_dir / "diagnostics.json"
     destination.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n",

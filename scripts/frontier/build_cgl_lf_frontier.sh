@@ -18,6 +18,8 @@ module load cpe/25.09 cray-mpich/9.0.1 rocm/6.4.2
 module load cce/20.0.0
 module unload darshan-runtime
 
+export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}"
+
 git -C "${SRC_DIR}" rev-parse --is-inside-work-tree >/dev/null
 case "${SRC_DIR}/" in
   "${CGL_ROOT}/"*)

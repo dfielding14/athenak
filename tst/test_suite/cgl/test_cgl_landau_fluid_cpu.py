@@ -1,5 +1,6 @@
 """CPU regressions for the CGL Landau-fluid closure and CGL FOFC path."""
 
+import fcntl
 import hashlib
 import importlib.util
 import json
@@ -13,6 +14,7 @@ import numpy as np
 import pytest
 
 import test_suite.testutils as testutils
+from test_suite.turb.test_turb_driving_cpu import read_force_blocks
 
 
 INPUT_ROOT = "../../../inputs/tests"
@@ -63,6 +65,28 @@ def _final_variable_tab(basename, variable):
     paths = sorted(Path("tab").glob(f"{basename}.{variable}.*.tab"))
     assert paths, f"no {variable} table output found for {basename}"
     return testutils.athena_read.tab(str(paths[-1]))
+
+
+def _final_force_binary(basename):
+    paths = sorted(Path("bin").glob(f"{basename}.force_bin.*.bin"))
+    assert paths, f"no full-field force output found for {basename}"
+    return read_force_blocks(paths[-1])
+
+
+def _force_fourier_components(output):
+    """Return one fixed-grid force snapshot and its physical Fourier wavevectors."""
+
+    assert len(output["blocks"]) == 1
+    block = output["blocks"][0]
+    force = np.asarray(block["force"], dtype=float)
+    _, nz, ny, nx = force.shape
+    limits = block["limits"]
+    kx = 2.0 * np.pi * np.fft.fftfreq(nx, d=(limits[1] - limits[0]) / nx)
+    ky = 2.0 * np.pi * np.fft.fftfreq(ny, d=(limits[3] - limits[2]) / ny)
+    kz = 2.0 * np.pi * np.fft.fftfreq(nz, d=(limits[5] - limits[4]) / nz)
+    kz_grid, ky_grid, kx_grid = np.meshgrid(kz, ky, kx, indexing="ij")
+    fourier = np.fft.fftn(force, axes=(1, 2, 3))
+    return force, fourier, kx_grid, ky_grid, kz_grid
 
 
 def _assert_clean_lf_history(history):
@@ -400,6 +424,7 @@ def test_cgl_lf_restart_preserves_final_state_and_admissibility():
         )
         restart_paths = sorted(Path("rst").glob("cgl_ci_restart_partial.*.rst"))
         assert restart_paths, "partial run did not write a restart checkpoint"
+        assert b"restart_time" in restart_paths[-1].read_bytes()[:40000]
         command = [
             "./athena",
             "-r",
@@ -542,6 +567,49 @@ def test_cgl_lf_paper_active_alfvenic_smoke_injects_energy_without_parallel_forc
         measured_work = mhd["tot-E"][-1] - mhd["tot-E"][0]
         applied_work = user["force_work"][-1] - user["force_work"][0]
         assert np.isclose(applied_work, measured_work, rtol=1.0e-10, atol=1.0e-12)
+        force, fourier, kx, ky, kz = _force_fourier_components(
+            _final_force_binary("cgl_ci_paper_alfvenic")
+        )
+        assert np.max(np.abs(force[2])) == 0.0
+        perpendicular_divergence = kx * fourier[0] + ky * fourier[1]
+        perpendicular_scale = np.abs(kx * fourier[0]) + np.abs(ky * fourier[1])
+        retained_kz = (
+            (np.abs(kz) > 0.0)
+            & (perpendicular_scale > 1.0e-10 * np.max(perpendicular_scale))
+        )
+        assert np.any(retained_kz)
+        assert np.max(np.abs(perpendicular_divergence[retained_kz])) < (
+            2.0e-6 * np.max(perpendicular_scale[retained_kz])
+        )
+    finally:
+        shutil.rmtree("rst", ignore_errors=True)
+        _cleanup()
+
+
+def test_cgl_lf_paper_random_forcing_leaves_cartesian_amplitudes_unprojected():
+    try:
+        _run_paper(
+            "cgl_ci_paper_random",
+            "time/nlim=1",
+            "turb_driving/driving_type=0",
+            "turb_driving/projection_policy=mks24_random_unprojected",
+            "turb_driving/rseed=314159",
+        )
+        force, fourier, kx, ky, kz = _force_fourier_components(
+            _final_force_binary("cgl_ci_paper_random")
+        )
+        assert np.max(np.abs(force[2])) > 0.0
+        divergence = kx * fourier[0] + ky * fourier[1] + kz * fourier[2]
+        divergence_scale = (
+            np.abs(kx * fourier[0])
+            + np.abs(ky * fourier[1])
+            + np.abs(kz * fourier[2])
+        )
+        active = divergence_scale > 1.0e-10 * np.max(divergence_scale)
+        assert np.any(active)
+        assert np.max(np.abs(divergence[active])) > (
+            1.0e-3 * np.max(divergence_scale[active])
+        )
     finally:
         shutil.rmtree("rst", ignore_errors=True)
         _cleanup()
@@ -610,6 +678,21 @@ def test_cgl_lf_paper_forcing_restart_preserves_rng_and_force_state():
             Path("rst/rank_00000000").glob("cgl_ci_paper_restart_partial.*.rst")
         )
         assert restart_paths, "paper smoke partial run did not write a checkpoint"
+        incompatible = subprocess.run(
+            [
+                "./athena",
+                "-r",
+                str(restart_paths[-1]),
+                "turb_driving/projection_policy=solenoidal_compressive",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert incompatible.returncode != 0
+        assert "configuration differs for 'projection_policy'" in (
+            incompatible.stdout + incompatible.stderr
+        )
         command = [
             "./athena",
             "-r",
@@ -702,6 +785,18 @@ def test_cgl_lf_paper_rejects_unsupported_forcing_mode():
     assert "driving_type must be 0" in result.stdout
 
 
+def test_cgl_lf_paper_alfvenic_policy_rejects_compressive_blend():
+    command = [
+        "./athena",
+        "-i",
+        PAPER_INPUT,
+        "turb_driving/sol_fraction=0.5",
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode != 0
+    assert "mks24_alfvenic_perpendicular requires sol_fraction = 1" in result.stdout
+
+
 def test_cgl_lf_paper_physical_forcing_shell_requires_positive_unit():
     command = [
         "./athena",
@@ -732,6 +827,26 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io():
     ])
     assert args.reference_curves == ["fig2.json", "fig13.json"]
     assert args.allow_partial_reference_cases
+    all_paper_inputs = sorted(PAPER_PRODUCTION_INPUT_ROOT.glob("*.athinput"))
+    assert len(all_paper_inputs) == 20
+    for input_path in all_paper_inputs:
+        source = input_path.read_text()
+        turbulence = source.split("<turb_driving>", 1)[1].split("<", 1)[0]
+        assert "spectrum = power_law" in turbulence
+        assert "physical_k_shell = true" in turbulence
+        assert "k_shell_unit = 3.141592653589793" in turbulence
+        assert "nlow = 1" in turbulence
+        assert "nhigh = 3" in turbulence
+        assert "isotropic_power_spectrum = true" in turbulence
+        assert "expo = 2.0" in turbulence
+        expected_policy = (
+            "mks24_random_unprojected"
+            if "driving_type = 0" in turbulence
+            else "mks24_alfvenic_perpendicular"
+        )
+        assert f"projection_policy = {expected_policy}" in turbulence
+        if expected_policy == "mks24_alfvenic_perpendicular":
+            assert "sol_fraction = 1.0" in turbulence
     input_paths = sorted(
         PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_standard_*.athinput")
     )
@@ -938,7 +1053,8 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
     mhd_history = output_dir / "case.mhd.hst"
     (output_dir / "case.user.hst").write_text("# retained user history\n")
     snapshot = output_dir / "bin" / "case.00000.bin"
-    (output_dir / "rst" / "case.00000.rst").write_bytes(b"restart")
+    restart = output_dir / "rst" / "case.00000.rst"
+    restart.write_bytes(b"restart")
 
     def write_snapshot_time(time):
         snapshot.write_bytes(
@@ -959,13 +1075,16 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
             + "\n".join(" ".join(str(value) for value in row) for row in rows)
             + "\n"
         )
+        restart.write_text(
+            f"<time>\nrestart_time = {rows[-1][0]}\n<par_end>\n"
+        )
 
     manifest_path = manifest_dir / "prepared_run.json"
     manifest = {
         "execution_epoch": stage_i.EXECUTION_EPOCH,
         "state": "submitted",
         "project_root": str(root),
-        "job_id": "test-job",
+        "job_id": "12345",
         "run": {
             "case_id": "R16",
             "case_name": "case",
@@ -982,6 +1101,8 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
             "input_revision": "a" * 40,
             "input_sha256": "c" * 64,
             "input_file": "submitted_input.athinput",
+            "overrides": ["time/tlim=2.0"],
+            "time_tlim_target": 2.0,
         },
         "paths": {"output_dir": str(output_dir)},
     }
@@ -997,12 +1118,19 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
         "requested_walltime": "00:10:00",
         "reserved_node_hours": 1.0 / 6.0,
         "state": "submitted",
+        "prepared_utc": stage_i.utc_now(),
+        "job_id": "12345",
     }])
     inspect_args = SimpleNamespace(
-        manifest=str(manifest_path), required_time=2.0
+        manifest=str(manifest_path), required_time=2.0, allow_local_root=True
     )
     write_snapshot_time(0.5)
     write_history([(0.0, 0, 0, 0, 0, 0, 0), (1.0, 0, 0, 0, 0, 0, 1)])
+    with pytest.raises(ValueError, match="prepared time/tlim target"):
+        stage_i.inspect_segment(SimpleNamespace(
+            manifest=str(manifest_path), required_time=2.5,
+            allow_local_root=True,
+        ))
     assert stage_i.inspect_segment(inspect_args) == 1
     incomplete = json.loads((manifest_dir / "segment_inspection.json").read_text())
     assert not incomplete["checks"]["terminal_snapshot_retained"]
@@ -1022,23 +1150,43 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
     inspection = json.loads(inspection_path.read_text())
     assert not inspection["checks"]["strict_lf_failure_counters_zero"]
 
+    restart.write_text("<time>\nrestart_time = 1.5\n<par_end>\n")
+    with pytest.raises(ValueError, match="explicit physical time"):
+        stage_i.inspect_segment(inspect_args)
     write_history([(0.0, 0, 0, 0, 0, 0, 0), (2.0, 0, 0, 0, 0, 0, 2)])
     assert stage_i.inspect_segment(inspect_args) == 0
     inspection_path.unlink()
     sacct_path = tmp_path / "job.sacct"
     sacct_path.write_text(
-        "test-job|case|COMPLETED|0:0|1|60|submit-time|end-time|\n"
+        f"12345|cgl_mks24_{stage_i.EXECUTION_EPOCH_SLUG}_R16_s00|"
+        "COMPLETED|0:0|1|60|"
+        "submit-time|end-time|\n"
     )
     record_args = SimpleNamespace(
         manifest=str(manifest_path),
         allow_local_root=True,
-        job_id="test-job",
+        job_id="12345",
         result="accepted",
         notes="test",
         sacct_file=str(sacct_path),
     )
     with pytest.raises(ValueError, match="inspect-segment evidence"):
         stage_i.record(record_args)
+    assert stage_i.inspect_segment(inspect_args) == 0
+    sacct_path.write_text(
+        "12345|wrong_name|COMPLETED|0:0|1|60|submit-time|end-time|\n"
+    )
+    with pytest.raises(ValueError, match="sacct job name"):
+        stage_i.record(record_args)
+    sacct_path.write_text(
+        f"12345|cgl_mks24_{stage_i.EXECUTION_EPOCH_SLUG}_R16_s00|"
+        "COMPLETED|0:0|1|60|"
+        "submit-time|end-time|\n"
+    )
+    snapshot.write_bytes(snapshot.read_bytes().replace(b"variable=4", b"variable=5"))
+    with pytest.raises(ValueError, match="inspection-retained file checksum"):
+        stage_i.record(record_args)
+    write_snapshot_time(2.0)
     assert stage_i.inspect_segment(inspect_args) == 0
     assert stage_i.record(record_args) == 0
     accounted = json.loads(manifest_path.read_text())
@@ -1068,6 +1216,161 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
     stage_i.merge_history_files([mhd_history, continuation], merged)
     merged_history = stage_i.parse_history(merged)
     assert merged_history["time"] == [0.0, 2.0, 3.0]
+    before_reconcile = paths["reservations"].read_text()
+    report = stage_i.reconcile_report(root)
+    assert report["consistent"], report["issues"]
+    assert paths["reservations"].read_text() == before_reconcile
+    reservations = json.loads(before_reconcile)
+    reservations[0]["segment"] = "wrong"
+    stage_i.write_json(paths["reservations"], reservations)
+    inconsistent = stage_i.reconcile_report(root)
+    assert not inconsistent["consistent"]
+    assert any(
+        "reservation record is invalid" in issue
+        and "identity differs from manifest path" in issue
+        for issue in inconsistent["issues"]
+    )
+
+
+def test_cgl_lf_stage_i_hardens_identifiers_overrides_json_and_locking(
+    tmp_path, monkeypatch
+):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_hardening_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    assert stage_i.require_safe_segment("s06_rankio_t6p438280_t6p5")
+    assert stage_i.require_numeric_job_id("4745305") == "4745305"
+    assert stage_i.expected_job_name({
+        "run": {"case_id": "R16", "segment": "s-01"},
+    }) == f"cgl_mks24_{stage_i.EXECUTION_EPOCH_SLUG}_R16_s_01"
+    for value in ("../escape", "bad/name", "x" * 30):
+        with pytest.raises(ValueError, match="--segment"):
+            stage_i.require_safe_segment(value)
+    for value in ("0", "-1", "123.batch", "not-a-job"):
+        with pytest.raises(ValueError, match="--job-id"):
+            stage_i.require_numeric_job_id(value)
+
+    input_path = tmp_path / "case.athinput"
+    input_path.write_text("<time>\ntlim = 10.0\n<job>\nbasename = case\n")
+    assert stage_i.validate_prepare_overrides(
+        input_path, ["time/tlim=2.5"]
+    ) == 2.5
+    assert stage_i.validate_prepare_overrides(
+        input_path, [], allow_missing_time_target=True
+    ) is None
+    with pytest.raises(ValueError, match="absent from input deck"):
+        stage_i.validate_prepare_overrides(
+            input_path, ["time/tlim=2.5", "mhd/missing=true"]
+        )
+    with pytest.raises(ValueError, match="exactly one"):
+        stage_i.validate_prepare_overrides(input_path, [])
+    with pytest.raises(ValueError, match="numeric"):
+        stage_i.validate_prepare_overrides(input_path, ["time/tlim=not-a-time"])
+    for target in ("0", "-1"):
+        with pytest.raises(ValueError, match="positive"):
+            stage_i.validate_prepare_overrides(
+                input_path, [f"time/tlim={target}"]
+            )
+
+    metadata = tmp_path / "metadata.json"
+    metadata.write_text('{"old": true}\n')
+    original_replace = stage_i.os.replace
+    replacements = []
+
+    def capture_replace(source, destination):
+        replacements.append((Path(source), Path(destination)))
+        original_replace(source, destination)
+
+    monkeypatch.setattr(stage_i.os, "replace", capture_replace)
+    stage_i.write_json(metadata, {"new": True})
+    assert json.loads(metadata.read_text()) == {"new": True}
+    assert len(replacements) == 1
+    assert replacements[0][0] != metadata
+    assert replacements[0][1] == metadata
+    assert not list(tmp_path.glob(".metadata.json.*.tmp"))
+
+    local_root = tmp_path / "offline"
+    with stage_i.canonical_root_lock(local_root):
+        pass
+    assert not local_root.exists()
+
+    paths = stage_i.initialize(tmp_path / "stores")
+    original_ledger = paths["ledger"].read_text()
+    paths["ledger"].write_text("")
+    with pytest.raises(ValueError, match="ledger is empty"):
+        stage_i.read_ledger(paths)
+    paths["ledger"].write_text("wrong,header\n")
+    with pytest.raises(ValueError, match="ledger header is invalid"):
+        stage_i.read_ledger(paths)
+    paths["ledger"].write_text(original_ledger)
+
+    resources = {
+        "allocation": {
+            "nodes": 1,
+            "requested_walltime": "00:20:00",
+            "requested_seconds": 1200,
+            "reserved_node_hours": 1.0 / 3.0,
+            "ranks_per_node": 8,
+            "cpus_per_task": 7,
+        },
+        "command": {"athena_walltime": "00:10:00"},
+    }
+    stage_i.validate_prepared_resources(resources, canonical_production=True)
+    resources["allocation"]["ranks_per_node"] = 0
+    with pytest.raises(ValueError, match="resource shape"):
+        stage_i.validate_prepared_resources(resources, canonical_production=True)
+    resources["allocation"]["ranks_per_node"] = 8
+    resources["command"]["athena_walltime"] = "00:20:00"
+    with pytest.raises(ValueError, match="not shorter"):
+        stage_i.validate_prepared_resources(resources, canonical_production=True)
+
+    restart_a = tmp_path / "a.rst"
+    restart_b = tmp_path / "b.rst"
+    restart_a.write_text("<time>\nrestart_time = 1.0\n<par_end>\n")
+    restart_b.write_text("<time>\nrestart_time = 1.5\n<par_end>\n")
+    with pytest.raises(ValueError, match="markers disagree"):
+        stage_i.restart_product_time([restart_a, restart_b])
+
+    transaction = paths["transactions"] / "outside.json"
+    stage_i.write_json(transaction, {
+        "schema_version": 1,
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "transaction_id": transaction.stem,
+        "kind": "submit_pending",
+        "created_utc": stage_i.utc_now(),
+        "manifest_path": str(tmp_path / "outside.json"),
+        "prior_reservations": [],
+        "prior_reservations_sha256": stage_i.stable_json_sha256([]),
+        "prepared_manifest_sha256": "a" * 64,
+        "submission_audit": {
+            "created_utc": stage_i.utc_now(),
+            "offline_local_root": True,
+            "skip_slurm_test": True,
+            "slurm_test_only": "offline local-root fixture",
+            "acknowledged_shared_root_campaigns": [],
+        },
+    })
+    with pytest.raises(ValueError, match="outside the E03 run store"):
+        stage_i.read_transaction(paths, transaction)
+
+    canonical_root = tmp_path / "canonical"
+    canonical_root.mkdir()
+    monkeypatch.setattr(stage_i, "DEFAULT_ROOT", canonical_root)
+    lock_path = stage_i.canonical_root_lock_path(canonical_root)
+    with stage_i.canonical_root_lock(canonical_root):
+        assert lock_path.is_file()
+        with stage_i.canonical_root_lock(canonical_root):
+            pass
+    with lock_path.open("a+") as stream:
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(ValueError, match="another Stage I mutation"):
+            with stage_i.canonical_root_lock(canonical_root):
+                pass
 
 
 def test_cgl_lf_stage_i_groups_rank_local_output_products(tmp_path):
@@ -1147,7 +1450,7 @@ def test_cgl_lf_stage_i_requires_retained_source_bundle_provenance(tmp_path):
         )
 
 
-def test_cgl_lf_stage_i_isolates_e02_and_checks_all_shared_root_jobs(tmp_path):
+def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(tmp_path):
     spec = importlib.util.spec_from_file_location(
         "cgl_lf_stage_i_epoch_test", PAPER_STAGE_I_TOOL
     )
@@ -1161,9 +1464,11 @@ def test_cgl_lf_stage_i_isolates_e02_and_checks_all_shared_root_jobs(tmp_path):
     assert paths["runs"] == (
         root / "runs" / "mks24-stage-i" / stage_i.EXECUTION_EPOCH
     )
-    assert paths["ledger"].name == "mks24_stage_i_E02_modal_driver_node_hours.csv"
+    assert paths["ledger"].name == (
+        f"mks24_stage_i_{stage_i.EXECUTION_EPOCH_SLUG}_node_hours.csv"
+    )
     assert paths["reservations"].name == (
-        "mks24_stage_i_E02_modal_driver_reservations.json"
+        f"mks24_stage_i_{stage_i.EXECUTION_EPOCH_SLUG}_reservations.json"
     )
     assert stage_i.COMPLETED_R16_NODE_HOURS == 6.145556
     assert stage_i.COMPLETED_R02_STANDARD_LAYOUT_PILOT_NODE_HOURS == 0.473333
@@ -1174,7 +1479,7 @@ def test_cgl_lf_stage_i_isolates_e02_and_checks_all_shared_root_jobs(tmp_path):
     stage_i.require_authorized_case("R02")
     stage_i.require_authorized_case("R17")
     with pytest.raises(
-        ValueError, match="authorized only for frozen mapped matrix cases R02-R17"
+        ValueError, match="authorized only for mapped matrix cases R02-R17"
     ):
         stage_i.require_authorized_case("R18")
 
@@ -1310,6 +1615,13 @@ def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(
     terminal = record_segment(
         "s02_rankio", [1.823, 2.0], "accepted", "b" * 64, parent=ranked
     )
+    stage_i.write_json(paths["reservations"], [
+        {
+            "execution_epoch": stage_i.EXECUTION_EPOCH,
+            "manifest": str(manifest),
+        }
+        for manifest in (diagnostic, ranked, terminal)
+    ])
 
     lineage = stage_i.accepted_case_lineage(paths, "R16")
     assert [Path(segment["_manifest_path"]) for segment in lineage] == [
@@ -1349,6 +1661,268 @@ def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(
     args.output_dir = str(root / "runs" / "bundles" / "gap")
     with pytest.raises(ValueError, match="configured sampling cadence"):
         stage_i.bundle_case(args)
+
+
+def test_cgl_lf_stage_i_qualification_token_binds_corrected_build(tmp_path):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_qualification_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    root = tmp_path / "root"
+    paths = stage_i.initialize(root)
+    executable = root / "build" / "athena"
+    executable.parent.mkdir()
+    executable.write_bytes(b"corrected executable\n")
+    executable.chmod(0o755)
+    executable_sha = hashlib.sha256(executable.read_bytes()).hexdigest()
+    revision = "a" * 40
+    build_manifest = root / "build-manifest"
+    build_manifest.mkdir()
+    (build_manifest / "athena.sha256").write_text(f"{executable_sha}  athena\n")
+    (build_manifest / "environment.txt").write_text(
+        f"git_revision={revision}\n"
+    )
+    assert stage_i.require_qualification_approval(
+        paths, executable_sha, revision, offline_local_root=True
+    ) is None
+    with pytest.raises(ValueError, match="token is absent"):
+        stage_i.require_qualification_approval(
+            paths, executable_sha, revision, offline_local_root=False
+        )
+
+    approval_args = SimpleNamespace(
+        root=str(root),
+        allow_local_root=True,
+        executable=str(executable),
+        build_manifest=str(build_manifest),
+        approved_by="test-reviewer",
+        review_notes="reviewed corrected-build Frontier qualification",
+        confirm_corrected_build_frontier_qualified=True,
+        replace_existing_approval=False,
+    )
+    assert stage_i.approve_qualification(approval_args) == 0
+    qualification = stage_i.require_qualification_approval(
+        paths, executable_sha, revision, offline_local_root=False
+    )
+    assert qualification is not None
+    assert qualification["sha256"] == stage_i.sha256(paths["qualification"])
+    assert "approved by `test-reviewer`" in paths["summary"].read_text()
+    with pytest.raises(ValueError, match="does not approve this executable"):
+        stage_i.require_qualification_approval(
+            paths, "b" * 64, revision, offline_local_root=False
+        )
+    with pytest.raises(ValueError, match="does not approve this git revision"):
+        stage_i.require_qualification_approval(
+            paths, executable_sha, "b" * 40, offline_local_root=False
+        )
+
+    manifest_path = (
+        paths["runs"] / "R02" / "s00" / "manifest" / "prepared_run.json"
+    )
+    manifest_path.parent.mkdir(parents=True)
+    input_path = manifest_path.parent / "submitted_input.athinput"
+    input_path.write_text("<time>\ntlim = 10.0\n")
+    matrix_path = manifest_path.parent / "mks24_stage_i_manifest.json"
+    matrix_path.write_text("{}\n")
+    manifest = {
+        "run": {
+            "case_id": "R02",
+            "segment": "s00",
+            "run_basename": "test",
+        },
+        "allocation": {
+            "requested_walltime": "00:10:00",
+            "nodes": 1,
+            "ranks_per_node": 8,
+            "cpus_per_task": 7,
+        },
+        "command": {
+            "overrides": ["time/tlim=1.0"],
+            "athena_walltime": "00:09:00",
+            "executable": str(executable),
+            "executable_sha256": executable_sha,
+            "input_file": str(input_path),
+            "input_sha256": stage_i.sha256(input_path),
+            "matrix_file": str(matrix_path),
+            "matrix_sha256": stage_i.sha256(matrix_path),
+            "production_utility": {
+                "path": str(PAPER_STAGE_I_TOOL.resolve()),
+                "sha256": stage_i.sha256(PAPER_STAGE_I_TOOL.resolve()),
+            },
+            "qualification_approval": qualification,
+            "restart_files": [],
+        },
+        "paths": {
+            "slurm_log": str(root / "slurm.log"),
+            "output_dir": str(root / "output"),
+            "environment_log": str(root / "environment.log"),
+        },
+    }
+    script = stage_i.generated_batch_script(manifest, manifest_path)
+    assert "qualification_approval" in script
+    assert qualification["sha256"] in script
+    assert script.index("qualification_approval") < script.index("srun -N")
+
+    stage_i.write_json(manifest_path, {"state": "prepared"})
+    approval_args.replace_existing_approval = True
+    with pytest.raises(ValueError, match="cannot change after segment preparation"):
+        stage_i.approve_qualification(approval_args)
+
+
+def test_cgl_lf_stage_i_recovers_ambiguous_atomic_submit(tmp_path):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_submit_recovery_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    def prepared_fixture(root, segment):
+        paths = stage_i.initialize(root)
+        manifest_path = (
+            paths["runs"] / "R16" / segment / "manifest" / "prepared_run.json"
+        )
+        manifest_path.parent.mkdir(parents=True)
+        batch_script = manifest_path.parent / "cgl_lf_stage_i.sbatch"
+        batch_script.write_text("#!/bin/bash\n")
+        manifest = {
+            "execution_epoch": stage_i.EXECUTION_EPOCH,
+            "project_root": str(root),
+            "state": "prepared",
+            "run": {
+                "case_id": "R16",
+                "case_name": "case",
+                "segment": segment,
+            },
+            "allocation": {
+                "nodes": 1,
+                "requested_walltime": "00:10:00",
+                "reserved_node_hours": 1.0 / 6.0,
+            },
+            "paths": {"batch_script": str(batch_script)},
+        }
+        stage_i.write_json(manifest_path, manifest)
+        stage_i.write_json(paths["reservations"], [{
+            "execution_epoch": stage_i.EXECUTION_EPOCH,
+            "manifest": str(manifest_path),
+            "case_id": "R16",
+            "case_name": "case",
+            "segment": segment,
+            "nodes": 1,
+            "requested_walltime": "00:10:00",
+            "reserved_node_hours": 1.0 / 6.0,
+            "state": "prepared",
+            "prepared_utc": stage_i.utc_now(),
+        }])
+        queue = root / "squeue.txt"
+        queue.write_text("")
+        malformed = root / "sbatch.txt"
+        malformed.write_text("scheduler output unavailable\n")
+        args = SimpleNamespace(
+            manifest=str(manifest_path),
+            allow_local_root=True,
+            squeue_file=str(queue),
+            skip_slurm_test=True,
+            allow_shared_root_campaign=[],
+            sbatch_output_file=str(malformed),
+        )
+        return paths, manifest_path, args
+
+    paths, manifest_path, args = prepared_fixture(tmp_path / "recover", "s00")
+    before_manifest = manifest_path.read_text()
+    before_reservations = paths["reservations"].read_text()
+    assert stage_i.check_submit(args) == 0
+    assert manifest_path.read_text() == before_manifest
+    assert paths["reservations"].read_text() == before_reservations
+    with pytest.raises(ValueError, match="did not return one numeric job ID"):
+        stage_i.submit(args)
+    assert len(stage_i.pending_transaction_paths(paths)) == 1
+    assert json.loads(manifest_path.read_text())["state"] == "prepared"
+    assert stage_i.recover_submit(SimpleNamespace(
+        manifest=str(manifest_path),
+        allow_local_root=True,
+        job_id="12345",
+    )) == 0
+    assert not stage_i.pending_transaction_paths(paths)
+    assert json.loads(manifest_path.read_text())["state"] == "submitted"
+
+    paths, manifest_path, args = prepared_fixture(tmp_path / "clear", "s01")
+    with pytest.raises(ValueError, match="did not return one numeric job ID"):
+        stage_i.submit(args)
+    assert stage_i.clear_submit_pending(SimpleNamespace(
+        manifest=str(manifest_path),
+        allow_local_root=True,
+        confirm_no_job_submitted=True,
+        notes="reviewed scheduler and confirmed no submitted job",
+    )) == 0
+    cleared = json.loads(manifest_path.read_text())
+    assert cleared["state"] == "prepared"
+    assert cleared["submission_recovery_notes"]
+    assert not stage_i.pending_transaction_paths(paths)
+
+
+def test_cgl_lf_stage_i_panel_schema_pins_reference_inventory_and_admission(
+    tmp_path, monkeypatch
+):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_panel_schema_test", PAPER_ANALYZER_PATH
+    )
+    assert spec is not None and spec.loader is not None
+    analyzer = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = analyzer
+    spec.loader.exec_module(analyzer)
+
+    configuration = analyzer.stage_i_panels_configuration(PAPER_STAGE_I_MANIFEST)
+    panels = configuration["panels"]
+    bindings = configuration["reference_product_bindings"]
+    assert len(configuration["reference_manifests"]) == 10
+    assert len(bindings) == 58
+    assert len(panels) == 23
+    assert sum(panel["disposition"] == "comparison" for panel in panels) == 11
+    assert sum(panel["disposition"] == "blocked_reference" for panel in panels) == 11
+    assert sum(panel["disposition"] == "external_model" for panel in panels) == 1
+    assert all(
+        panel["criterion_state"] == "pending_review"
+        for panel in panels if panel["disposition"] == "comparison"
+    )
+    assert configuration["analysis_case_aliases"][
+        "paper_nulim_beta100_hardwall"
+    ] == "paper_standard_active_alfvenic_beta100"
+
+    product_id = "fig2a_parallel_athenak_pressure_units"
+    binding = bindings[product_id]
+    assert analyzer.validate_stage_i_reference_binding(
+        bindings, product_id, binding["kind"], binding["case"],
+        binding["product"], binding["data_file"], binding["data_sha256"],
+        binding["reference_manifest_sha256"],
+    )
+    with pytest.raises(ValueError, match="Stage I reference binding mismatch"):
+        analyzer.validate_stage_i_reference_binding(
+            bindings, product_id, "curve", binding["case"],
+            binding["product"], binding["data_file"], binding["data_sha256"],
+            binding["reference_manifest_sha256"],
+        )
+
+    monkeypatch.setattr(analyzer, "bundle_cases", lambda *_: [{
+        "case_id": "R02",
+        "name": "paper_standard_active_alfvenic_beta10",
+    }])
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    with pytest.raises(ValueError, match="accepted_for_analysis"):
+        analyzer.stage_i_bundle_case_ids(bundle, {
+            "workflow": analyzer.STAGE_I_PRODUCTION_WORKFLOW,
+            "status": "pending",
+        }, configuration)
+    assert analyzer.stage_i_bundle_case_ids(bundle, {
+        "workflow": analyzer.STAGE_I_PRODUCTION_WORKFLOW,
+        "status": "accepted_for_analysis",
+    }, configuration) == ["R02"]
 
 
 def test_rank_local_binary_reader_keeps_unequal_rank_files(tmp_path, monkeypatch):
