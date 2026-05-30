@@ -608,13 +608,130 @@ decision.
 | Evidence | Final Python tooling re-audit correction; `vis/python/bin_convert.py`; direct malformed two-MeshBlock `.bin` and `.cbin` regressions in `tst/test_suite/io/test_python_io_readers_cpu.py`; Python reader module returned `148 passed`; full serial IO matrix returned `204 passed`; full MPI IO matrix returned `59 passed`; repository style returned `2 passed`; fixture checksum verification passed for all `27` artifacts; detached Pages warnings-as-errors build passed; targeted py_compile, flake8, and `git diff --check origin/main` returned no output. |
 | Follow-up | Preserve direct-file mixed-extent rejection beside the cross-shard output-shape checks. |
 
+### D-069: Accept The Expanded Robustification Register And Sequence
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted |
+| Decision | Execute `RCP-01` through `RCP-10` in the order defined by `IO_FEATURE_BRANCH_ROBUSTIFICATION_GUIDE.md`. Retain `ROB-001` through `ROB-022` and add `ROB-023` through `ROB-027`: ignored restart-header reposition failures, signed output-sequence domain failures, incorrect `cbin` global-`gid` filtering, converter-side allocation preflight, and preservation-aware deferred Pages staging. |
+| Reason | Three independent `RCP-00` baseline auditors confirmed the seeded register and identified additional locally actionable defects. The checkpoint order still minimizes risk: restart arithmetic first, shared MPI/publication behavior second, format semantics third, diagnostics fourth, then maintainability, tooling, Pages staging, scaling evidence, external qualification, and packaging. |
+| Alternatives | Reorder format or documentation work ahead of restart safety; fold all new findings into broad existing rows without durable identifiers. |
+| Why not | Restart correctness and shared publication helpers are prerequisites for later work. Separate identifiers keep new evidence auditable. |
+| Reversal path | Append a superseding decision if a checkpoint reflection shows that a prerequisite must move earlier or a finding belongs to a different checkpoint. Re-run affected audits before resuming. |
+| Evidence | Frozen guide commit `e40621d81e1948567415a1435f531b275fe14c2e`; runtime, format/tooling, and documentation/process baseline audits; fresh local regression floors recorded in `IO_FEATURE_AUDIT_LEDGER.md`. |
+| Follow-up | Track every row in the robustification checkpoint board and do not close a row without independent re-audit. |
+
+### D-070: Use A Small Shared Restart-Layout Descriptor
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-01` implementation |
+| Decision | Add a narrowly scoped shared restart-layout descriptor and checked unsigned add/multiply helpers used by both writer and reader. Keep module-specific serialization loops in their existing files. |
+| Reason | Writer and reader currently duplicate field-size arithmetic with pre-assignment `int` overflow risk. A shared descriptor makes parity explicit while avoiding an unrelated restart rewrite. |
+| Alternatives | Mirror checked arithmetic independently in `restart.cpp` and `pgen.cpp`; add only scattered narrow casts; redesign the restart format. |
+| Why not | Mirrored logic can drift, scattered casts are difficult to audit, and a format redesign is outside scope. |
+| Reversal path | If the descriptor begins to absorb serialization control flow or module ownership, reduce it to shared arithmetic utilities and retain an explicit parity test. |
+| Evidence | `ROB-001`; `src/outputs/restart.cpp`; `src/pgen/pgen.cpp`; runtime baseline audit. |
+| Follow-up | Add artificial large-extent and overflow harness coverage before closing `RCP-01`. |
+
+### D-071: Use Checked POSIX Large-File Serial Positioning
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-01` implementation |
+| Decision | Implement serial positioned IO with `fseeko()` and `ftello()`. Reject offsets above the representable `off_t` range before conversion, check seek failures, and reject negative positions explicitly. |
+| Reason | AthenaK production platforms are POSIX systems. `fseeko()` and `ftello()` provide the intended large-file interface without narrowing through `long` on platforms where that differs from `off_t`. |
+| Alternatives | Continue using unchecked `fseek()` and `ftell()`; introduce a broad platform abstraction; rely on MPI IO for all large files. |
+| Why not | Existing serial paths are public behavior and need direct protection. A broader abstraction is unnecessary unless non-POSIX support is requested. |
+| Reversal path | Add a platform wrapper with equivalent checked semantics if AthenaK gains a supported non-POSIX build target. |
+| Evidence | `ROB-004`; `ROB-023`; `src/outputs/io_wrapper.cpp`; `src/parameter_input.cpp`. |
+| Follow-up | Add a focused serial wrapper harness and check the parameter-header reposition call site. |
+
+### D-073: Promise Namespace-Atomic Publication, Not Crash Durability
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted direction for `RCP-02` |
+| Decision | Describe temporary-file publication followed by rename as namespace-atomic publication. Do not promise crash-durable persistence. Add checked directory creation and reconcile `.bin`, `.cbin`, modern PDF, `sphslice`, and node-restart publication under this narrower contract. Preserve legacy PDF bytes and behavior. |
+| Reason | Rename prevents readers from observing partially written public files. Full crash durability would require payload sync plus directory sync ordering across filesystems and MPI paths, which is a materially larger operational contract. |
+| Alternatives | Promise full crash durability now; retain direct public-path writes for `.bin` and `.cbin`; change legacy PDF publication. |
+| Why not | The branch needs a truthful, consistent contract without claiming guarantees it does not implement. Legacy PDF compatibility is explicitly preserved. |
+| Reversal path | Add a separate durability feature with filesystem-specific sync semantics and failure-injection qualification if production requirements demand it. |
+| Evidence | `ROB-006`; baseline publication audit; existing temporary-file behavior in modern PDF, `sphslice`, and node restart. |
+| Follow-up | Resolve helper boundaries and stale-temporary behavior during `RCP-02`. |
+
+### D-075: Keep Coarsened Binary Deliberately Uniform-3D In This Branch
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted direction for `RCP-03` |
+| Decision | Support uniform three-dimensional full-volume `.cbin` in shared, rank, and node layouts. Permit ghost-expanded full-volume extents only when divisible by the validated factor. Reject lower-dimensional meshes, AMR meshes, and sliced output during construction until each receives a deliberately designed format contract. |
+| Reason | The current lower-dimensional reader arithmetic can collapse singleton axes to zero, AMR logical-location semantics remain unresolved, and sliced output is already deliberately excluded. A narrow explicit contract is safer than partially promoting ambiguous behavior. |
+| Alternatives | Promote lower-dimensional and AMR output immediately; silently rely on current incidental behavior. |
+| Why not | Promotion requires new reader/writer semantics, positive reconstruction evidence, and documentation beyond the risk-reduction goal of this branch. |
+| Reversal path | Add support row-by-row in a later feature branch with writer, reader, conversion, and shard-equality tests. |
+| Evidence | `ROB-005`; format/tooling baseline audit; `src/outputs/outputs.cpp`; `src/outputs/coarsened_binary.cpp`; `vis/python/bin_convert.py`. |
+| Follow-up | Enforce the matrix, repair global-`gid` filtering, and check Kokkos ranges during `RCP-03`. |
+
+### D-081: Add Keyword-Only Python Reader Limit Overrides
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted direction for `RCP-06` |
+| Decision | Preserve safe defaults and expose deliberate reader/converter budget overrides through keyword-only configuration objects or keyword-only arguments. Do not use environment variables as the primary public API. Add CLI flags only where an existing CLI workflow needs equivalent control. |
+| Reason | Python analysis users sometimes need larger trusted products, but hidden constants force source edits. Keyword-only overrides preserve compatibility and make elevated budgets explicit at the call site. |
+| Alternatives | Keep fixed private constants; use environment variables only; add positional parameters. |
+| Why not | Fixed constants are inflexible, environment-only behavior is hard to audit, and positional additions risk API ambiguity. |
+| Reversal path | Consolidate keyword-only arguments into a shared immutable configuration object if local repetition becomes harder to maintain than the object boundary. |
+| Evidence | `ROB-012`; `ROB-026`; format/tooling baseline audit. |
+| Follow-up | Inventory each public reader and converter allocation before implementing `RCP-06`. |
+
+### D-083: Treat Replicated Manifest Validation As Evidence-Driven Optimization
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted with measurement gate |
+| Decision | Retain strict replicated manifest and payload-header validation on every rank until production-topology measurements justify a structured-broadcast or node-leader optimization. Treat measurement and an explicit keep-or-refactor decision as required evidence, but do not refactor preemptively. |
+| Reason | Replicated validation is simple and defensible for correctness. Optimization without topology evidence risks weakening validation or adding collective asymmetry. |
+| Alternatives | Centralize immediately on rank 0; validate only on node leaders; ignore scaling evidence. |
+| Why not | The correct boundary depends on filesystem and topology measurements unavailable on the local one-node host. |
+| Reversal path | Implement the preregistered optimization if `RCP-08` and `RCP-09` measurements exceed the threshold recorded in `D-090`. |
+| Evidence | `ROB-010`; existing D-046; local topology probe reports one physical host only. |
+| Follow-up | Add instrumentation and preregister thresholds before scheduler-backed qualification. |
+
+### D-085: Bound Node-Restart Manifest Materialization
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-01` implementation |
+| Decision | Reject node-restart manifests above 64 MiB before parsing. Bound signature lines at 256 bytes, scalar records at 256 bytes, payload records at 4096 bytes, segment records at 256 bytes, trailing records at 256 bytes, and generated payload paths at 1024 bytes. Apply the signature-line bound in both format probing and full parsing. |
+| Reason | The existing record-count caps do not prevent a malformed file from forcing an unbounded `std::string` allocation before semantic validation. These limits exceed plausible production records while stopping pathological inputs early. |
+| Alternatives | Depend only on payload and segment count caps; use substantially smaller limits; permit unbounded line reads. |
+| Why not | Count caps do not bound bytes, very small limits create avoidable topology-path constraints, and unconstrained reads violate the strict parser contract. |
+| Reversal path | Raise an individual limit with production evidence and regression coverage; keep the total cap and early-rejection structure. |
+| Evidence | `ROB-019`; `src/restart_manifest.cpp`; runtime baseline audit. |
+| Follow-up | Add oversized signature, scalar, payload, segment, trailing, path, and total-file regressions. |
+
 ## Pending Decision Queue
 
 Resolve these before merge readiness:
 
 | ID | Question | Required evidence | Owner checkpoint |
 | --- | --- | --- | --- |
-| None | Current evidence-backed scope decisions are resolved. | Re-open only if implementation evidence contradicts an accepted decision. | CP-08 |
+| D-072 | Select common MPI error-reporting helper and teardown policy. | Diff-driven MPI inventory and helper design. | RCP-02 |
+| D-074 | Define checked directory creation, stale temporary handling, and restart generation collision policy. | Filesystem helper design and failure regressions. | RCP-02 |
+| D-076 | Define diagnostic clamp, singularity, and zero-density semantics. | Numerical audit and analytic tests. | RCP-04 |
+| D-077 | Reject or implement derived ghost-zone output. | Derived-variable audit and focused regression. | RCP-04 |
+| D-078 | Select stable spherical-slice radius naming. | Collision analysis and compatibility review. | RCP-04 |
+| D-079 | Bound the C++ parser and interface cleanup. | Scope audit after correctness checkpoints. | RCP-05 |
+| D-080 | Decide whether to extract shared private Python reader utilities. | Duplication inventory and API review. | RCP-06 |
+| D-082 | Select preservation-aware deferred Pages staging implementation. | Live `origin/gh-pages` blob inventory and idempotence design. | RCP-07 |
+| D-084 | Select final process-artifact packaging. | Whole-branch review and PR usability audit. | RCP-10 |
+| D-086 | Define widened output sequence rendering and counter domain. | Writer/reader inventory and compatibility tests. | RCP-02 |
+| D-087 | Define deterministic output namespace collision rejection. | Target map inventory and compatibility tests. | RCP-02 |
+| D-088 | Select checked `cbin` Kokkos range representation. | Kernel-range audit and boundary harness. | RCP-03 |
+| D-089 | Select writer-side PDF and `sphslice` allocation limits. | Allocation map and reduced-cap tests. | RCP-04 |
+| D-090 | Preregister production scaling topology and optimization threshold. | Scheduler qualification plan. | RCP-08 |
 
 ## Decision Update Template
 

@@ -561,3 +561,106 @@ resolutions, and re-audit results required by `IO_FEATURE_BRANCH_GUIDE.md`.
 | TEST-009 | Private spherical retained-budget regression did not prove that public multi-shard reconstruction forwards retained state into later sibling reads. | Major | Extend the public two-shard lifecycle regression to assert a nonzero retained-byte argument after the first sibling. | Resolved locally; Python reader module returned `145 passed`, full serial IO returned `201 passed`, and style returned `2 passed`; final independent test/example re-audit pending. |
 | PY-018 | Final spherical coordinate-generation preflight removed the retained variable-metadata summary before constructing theta/phi arrays even though the returned header still owned those strings. | Blocking | Preserve and charge the private metadata summary until after coordinate construction; add a focused reduced-cap regression. | Resolved locally; Python reader module returned `146 passed`, full serial IO returned `202 passed`, full MPI IO returned `59 passed`, style returned `2 passed`, fixture checksum verification passed for all `27` artifacts, and detached Pages warnings-as-errors build passed; final independent Python and documentation re-audits pending. |
 | PY-019 | Binary and coarsened-binary direct readers accepted mixed emitted MeshBlock extents within one file even though athdf-like reconstruction derived one block size from the first record. | Blocking | Reject later MeshBlock records whose emitted extents differ from the first record in the shared decoder; add malformed two-record `.bin` and `.cbin` regressions. | Resolved and independently accepted; Python reader module returned `148 passed`, full serial IO returned `204 passed`, full MPI IO returned `59 passed`, style returned `2 passed`, fixture checksum verification passed for all `27` artifacts, detached Pages warnings-as-errors build passed, and final Python, docs, tests/examples, and scope rechecks reported clean. |
+
+## Robustification Pass
+
+### Approved Guide Freeze
+
+| Field | Record |
+| --- | --- |
+| Approval instruction | User requested execution of `IO_FEATURE_BRANCH_ROBUSTIFICATION_GUIDE.md` in its entirety and explicitly requested subagent review. |
+| Frozen path | `IO_FEATURE_BRANCH_ROBUSTIFICATION_GUIDE.md` |
+| Process-only commit | `e40621d81e1948567415a1435f531b275fe14c2e` |
+| SHA-256 | `cdf53351104c135f2d79f9ee2f36c2908001b00a31339db18eb1cf66bcae11ff` |
+| Line count | `2222` |
+| Byte count | `89840` |
+| Approval date | `2026-05-29 EDT` |
+| Rule | Recompute the checksum, line count, and byte count at every work session and checkpoint. Stop on drift until a changed guide is explicitly approved, frozen, and re-audited. |
+
+### Live Robustification Checkpoint Board
+
+| Checkpoint | Status | Decisions | Pre-edit auditors | Implementation commit(s) | Focused tests | Post-edit auditors | Reflection | Remaining risk |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| RCP-00 | Locally closed | D-069, D-070, D-071, D-073, D-075, D-081, D-083, D-085 | Runtime baseline; format/tooling baseline; documentation/process baseline | `e40621d8` guide freeze | Fresh floors registered below | Three baseline reports accepted | R-00 recorded below | External CUDA and multi-node topology remain unavailable locally |
+| RCP-01 | Reconnaissance | D-070, D-071, D-085 | Focused layout auditor pending |  |  |  |  | Restart arithmetic, serial positioning, bounded manifests, and startup failure |
+| RCP-02 | Not started | D-072, D-073, D-074, D-086, D-087 pending |  |  |  |  |  |  |
+| RCP-03 | Not started | D-075 accepted direction; D-088 pending |  |  |  |  |  |  |
+| RCP-04 | Not started | D-076, D-077, D-078, D-089 pending |  |  |  |  |  |  |
+| RCP-05 | Not started | D-079 pending |  |  |  |  |  |  |
+| RCP-06 | Not started | D-080 pending; D-081 accepted direction |  |  |  |  |  |  |
+| RCP-07 | Not started | D-082 pending |  |  |  |  |  | Preservation-aware staging must replace literal full-page application |
+| RCP-08 | Not started | D-083 accepted direction; D-090 pending |  |  |  |  |  | Production topology evidence required |
+| RCP-09 | Blocked locally |  |  |  |  |  |  | No CUDA/HIP toolchain, scheduler launcher, or second physical host locally |
+| RCP-10 | Not started | D-084 pending |  |  |  |  |  |  |
+
+### Expanded Robustification Finding Register
+
+The frozen guide defines `ROB-001` through `ROB-022`. `RCP-00` baseline auditors
+added the following durable rows. Do not close or merge them silently into broad
+cleanup claims.
+
+| ID | Severity | Finding | Primary checkpoint |
+| --- | --- | --- | --- |
+| ROB-023 | P2 | Restart parameter-header scanning ignores a failed `Seek()` reposition after reading the parameter dump | RCP-01 |
+| ROB-024 | P2 | Signed `file_number` accepts negative values and can overflow at `INT_MAX`; widened rendering alone does not define a safe sequence-counter domain | RCP-02 |
+| ROB-025 | P2 | `cbin` `gid` filtering compares a pack-local index against a global MeshBlock ID and can select the wrong block when a pack offset is nonzero | RCP-03 |
+| ROB-026 | P3 | Public Python converter paths still need explicit allocation preflight and deliberate budget override behavior | RCP-06 |
+| ROB-027 | P1 docs | Literal deferred Pages whole-page replacement can delete unrelated live `origin/gh-pages` guidance even when Sphinx builds successfully | RCP-07 |
+
+The `ROB-017` inventory is expanded to include inherited table and VTK writers in
+addition to `.bin`, `.cbin`, PDF, `sphslice`, and restart output.
+
+### 2026-05-29: RCP-00 Reopen Baseline And Freeze Facts
+
+| Field | Record |
+| --- | --- |
+| Session-start refresh | `git fetch --prune origin` returned success before local inspection. |
+| Snapshot | `HEAD=e40621d81e1948567415a1435f531b275fe14c2e`; `origin/main=886dd2a1437e45a3a30b3eeebf2adfa838328f73`; `origin/gh-pages=4833aa9341e19861297e330ff02aabfd8001935c`; merge base equals `origin/main`. |
+| Worktree classification | Clean after the guide-only freeze commit. Existing worktrees were enumerated. Temporary Debug builds live under `/tmp/athenak-io-robust-build` and `/tmp/athenak-io-robust-build-mpi`, outside the repository. |
+| Guide verification | Checksum, line count, and byte count match the approved frozen-guide record above. |
+| Independent auditors | Runtime baseline auditor; format/tooling baseline auditor; documentation/process baseline auditor. All were read-only and reported clean repository status. |
+| Accepted recommendations | Retain all seeded `ROB-*` findings; add `ROB-023` through `ROB-027`; include `src/parameter_input.cpp` in `RCP-01`; expand sequence-format inventory to table and VTK writers; keep Pages publication deferred until preservation-aware staging exists; register external-build-safe baseline commands. |
+| Rejected recommendations | None. Recommendations that belong to later checkpoints remain queued rather than implemented during `RCP-00`. |
+| Immutable fixtures | `(cd tst/fixtures/io/origin_main_886dd2a1 && shasum -a 256 -c SHA256SUMS)` returned `OK` for all `27` artifacts. |
+| Python syntax | `python3 -m py_compile vis/python/bin_convert.py vis/python/read_pdf.py vis/python/read_sphslice.py vis/python/examples/read_io_outputs.py tst/test_suite/io/*.py` passed. |
+| Pytest collection | `python3 -m pytest --collect-only -q tst/test_suite/io` reported `263 tests collected`. |
+| Fresh serial Debug build | `cmake -S . -B /tmp/athenak-io-robust-build -DCMAKE_BUILD_TYPE=Debug -DAthena_ENABLE_MPI=OFF`; `cmake --build /tmp/athenak-io-robust-build -j 4`; both passed. |
+| Fresh MPI Debug build | `cmake -S . -B /tmp/athenak-io-robust-build-mpi -DCMAKE_BUILD_TYPE=Debug -DAthena_ENABLE_MPI=ON`; `cmake --build /tmp/athenak-io-robust-build-mpi -j 4`; both passed. |
+| Fresh serial floor | From `/tmp/athenak-io-robust-build/src` after linking `inputs -> <repo>/tst/inputs`: `python -m pytest -q <repo>/tst/test_suite/io/*_cpu.py <repo>/tst/test_suite/io/test_output_formats_gpu.py` returned `204 passed`. The `_gpu` module is a CPU smoke only on this host. |
+| Fresh MPI floor | From `/tmp/athenak-io-robust-build-mpi/src` after linking `inputs -> <repo>/tst/inputs`: `python -m pytest -q <repo>/tst/test_suite/io/*_mpicpu.py` returned `59 passed`. |
+| Fresh style floor | From `<repo>/tst`: `python -m pytest -q test_suite/style` returned `2 passed`. The style wrapper transiently downloads and removes `tst/test_suite/style/cpplint.py`. |
+| Initial invocation correction | An initial isolated-build run linked `<repo>/inputs`, which lacks the flat regression decks expected by the pytest modules. Those failures were classified as invocation errors. Replacing the temporary link with `<repo>/tst/inputs` restored the registered floors without repository edits. |
+| Local topology | `mpirun -np 2 hostname | sort -u` reported one physical host: `Tin-Drum`. No `srun`, `jsrun`, `aprun`, `qsub`, `sbatch`, `bsub`, or `flux` launcher was found. No `nvcc`, `nvidia-smi`, `hipcc`, or `rocm-smi` tool was found. |
+| Status | `RCP-00` locally closed. Implementation may begin at `RCP-01`. `RCP-09` remains blocked locally and cannot be described as externally qualified. |
+
+### Reflection R-00: Reassess The Robustification Direction
+
+| Question | Record |
+| --- | --- |
+| Did auditors find defects not present in the guide? | Yes. Added `ROB-023` through `ROB-027`. |
+| Are planned refactors too broad? | The risk is highest in restart and Python tooling. Use a small shared restart-layout descriptor, narrow checked helpers, and keyword-only Python overrides. Avoid broad format rewrites. |
+| Should checkpoint order change? | No. Restart arithmetic remains the first implementation checkpoint. MPI/publication helpers remain a prerequisite for namespace work. Conservative `cbin` enforcement follows. |
+| Did prior resolved findings become invalid? | Prior local evidence remains valid, but the new register reopens stronger robustness claims. Prior Pages HTML success is insufficient evidence because a literal overlay can remove unrelated live content. |
+| What changed direction? | `RCP-07` must build a preservation-aware staging helper and review whole-page overlays against live `origin/gh-pages`; it must not mechanically replace live pages. |
+
+### Canonical External-Build-Safe Local Matrix
+
+Use these commands after linking each temporary build tree's `src/inputs` to
+`<repo>/tst/inputs`. Record exact logs and exit codes for checkpoint closure.
+
+| Matrix | Command | RCP-00 floor |
+| --- | --- | --- |
+| Python readers | From `<repo>`: `PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q tst/test_suite/io/test_python_io_readers_cpu.py` | `148 passed` |
+| Serial IO and CPU smoke of GPU-selectable regression | From `/tmp/athenak-io-robust-build/src`: `python -m pytest -q <repo>/tst/test_suite/io/*_cpu.py <repo>/tst/test_suite/io/test_output_formats_gpu.py` | `204 passed` |
+| MPI IO | From `/tmp/athenak-io-robust-build-mpi/src`: `python -m pytest -q <repo>/tst/test_suite/io/*_mpicpu.py` | `59 passed` |
+| Style | From `<repo>/tst`: `python -m pytest -q test_suite/style` | `2 passed` |
+| Fixtures | From `<repo>/tst/fixtures/io/origin_main_886dd2a1`: `shasum -a 256 -c SHA256SUMS` | `27` artifacts verified |
+
+### Canonical External Qualification Matrix
+
+The local matrix does not satisfy these production gates:
+
+| Gate | Requirement | Local disposition |
+| --- | --- | --- |
+| CUDA | Configure a real CUDA-capable build and execute `tst/test_suite/io/test_output_formats_gpu.py` plus representative neighboring regressions | Blocked: no CUDA compiler or runtime tool on `Tin-Drum` |
+| Multi-node | Execute per-node output equality, direct manifest restart, changed-rank restart, empty or non-owning node, timing labels, and scaling measurements on at least two physical scheduler-backed nodes | Blocked: one physical host and no scheduler launcher locally |
