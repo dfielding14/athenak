@@ -1,0 +1,93 @@
+# AthenaK construction-only runtime gather diagnostic across static refinement
+
+<comment>
+problem   = CR relativistic construction-only SMR runtime gather diagnostic
+
+<job>
+basename  = cr_relativistic_runtime_gather_smr
+
+<mesh>
+nghost    = 2
+nx1       = 16
+x1min     = -0.5
+x1max     = 0.5
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 16
+x2min     = -0.5
+x2max     = 0.5
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 16
+x3min     = -0.5
+x3max     = 0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 8
+nx2       = 8
+nx3       = 8
+
+<mesh_refinement>
+refinement = static
+num_levels = 2
+
+<refined_region1>
+level = 1
+x1min = -0.25
+x1max = 0.25
+x2min = -0.25
+x2max = 0.25
+x3min = -0.25
+x3max = 0.25
+
+<time>
+evolution  = kinematic
+integrator = rk2
+cfl_number = 0.4
+nlim       = 0
+tlim       = 0.1
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = advect
+gamma       = 1.666666666666667
+
+<particles>
+particle_type             = cosmic_ray
+ppc                       = 0.015625
+nspecies                  = 1
+pusher                    = relativistic_hc
+interpolation             = trilinear
+relativistic_field_source = prescribed_test
+c_model                   = 1.0
+alpha_s                   = 1.0
+
+<problem>
+pgen_name              = cr_relativistic_runtime_gather_test
+particle_position      = tag_random
+particle_seed          = 23
+runtime_probe_layout   = refined_region_tags
+particle_velocity      = uniform
+v0x                    = 0.0
+v0y                    = 0.0
+v0z                    = 0.0
+prtcl_rst_flag         = 0
+B0x                    = 0.25
+B0y                    = -0.5
+B0z                    = 1.0
+B_profile              = sinusoidal_divb_free
+Bamp                   = 0.05
+Bwave_number           = 1.0
+fluid_velocity_profile = periodic
+u1_0                   = 0.125
+u2_0                   = -0.25
+u3_0                   = 0.375
+fluid_velocity_amplitude   = 0.08
+fluid_velocity_wave_number = 1.0
+runtime_gather_tsv      = cr_relativistic_runtime_gather_smr.tsv

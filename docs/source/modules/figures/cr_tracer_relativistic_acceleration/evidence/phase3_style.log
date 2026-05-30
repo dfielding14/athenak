@@ -1,0 +1,10 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.13, pytest-8.4.1, pluggy-1.6.0
+rootdir: /Users/dbf75/.codex/worktrees/e354/athenak-DF/tst
+plugins: anyio-4.9.0, xdist-3.8.0, jaxtyping-0.3.7, cov-6.2.1, Faker-40.1.2
+collected 2 items
+
+test_suite/style/test_style.py ..                                        [100%]2026-05-30 01:46:43,734 - INFO - Cleaning build directory
+
+
+============================== 2 passed in 13.27s ==============================

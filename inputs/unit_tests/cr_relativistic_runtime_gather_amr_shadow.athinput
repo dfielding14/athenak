@@ -1,0 +1,88 @@
+# AthenaK legacy drift AMR shadow for the runtime gather diagnostic
+
+<comment>
+problem   = CR legacy drift dynamic moving-box AMR shadow runtime gather diagnostic
+
+<job>
+basename  = cr_relativistic_runtime_gather_amr_shadow
+
+<mesh>
+nghost    = 2
+nx1       = 16
+x1min     = -0.5
+x1max     = 0.5
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 16
+x2min     = -0.5
+x2max     = 0.5
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 16
+x3min     = -0.5
+x3max     = 0.5
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 8
+nx2       = 8
+nx3       = 8
+
+<mesh_refinement>
+refinement           = adaptive
+ncycle_check         = 1
+refinement_interval  = 1
+num_levels           = 2
+max_nmb_per_rank     = 128
+particle_load_weight = 0.0
+
+<amr_criterion0>
+method = user
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.4
+nlim       = 3
+tlim       = 0.05
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = hlld
+gamma       = 1.666666666666667
+
+<particles>
+particle_type          = cosmic_ray
+ppc                    = 0.015625
+nspecies               = 1
+pusher                 = drift
+check_consistency_mode = full
+amr_remap              = device_table
+validate_amr_lookup    = true
+
+<problem>
+pgen_name              = cr_relativistic_runtime_gather_test
+particle_refinement    = moving_boxes
+particle_position      = tag_random
+particle_seed          = 29
+particle_velocity      = uniform
+v0x                    = 0.4
+v0y                    = -0.2
+v0z                    = 0.1
+prtcl_rst_flag         = 0
+B0x                    = 0.25
+B0y                    = -0.5
+B0z                    = 1.0
+B_profile              = sinusoidal_divb_free
+Bamp                   = 0.05
+Bwave_number           = 1.0
+fluid_velocity_profile = uniform
+u1_0                   = 0.0
+u2_0                   = 0.0
+u3_0                   = 0.0
+runtime_gather_tsv      = cr_relativistic_runtime_gather_amr_shadow.tsv

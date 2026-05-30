@@ -1,0 +1,56 @@
++zsh:5> cmake -S /Users/dbf75/.codex/worktrees/e354/athenak-DF -B /tmp/athenak-cr-runtime-serial -D 'PROBLEM=unit_tests/cr_relativistic_runtime_gather_test'
+-- Setting build type to 'Release' as none was specified.
+-- Including user-specified problem generator file: unit_tests/cr_relativistic_runtime_gather_test
+-- Setting default Kokkos CXX standard to 17
+-- Kokkos version: 4.4.0
+-- The project name is: Kokkos
+-- Using internal gtest for testing
+-- Using -std=c++17 for C++17 standard as feature
+-- Built-in Execution Spaces:
+--     Device Parallel: NoTypeDefined
+--     Host Parallel: NoTypeDefined
+--       Host Serial: SERIAL
+--
+-- Architectures:
+-- Using internal desul_atomics copy
+-- Experimental mdspan support is enabled
+-- Using internal mdspan directory /Users/dbf75/.codex/worktrees/e354/athenak-DF/kokkos/core/src/../../tpls/mdspan/include
+-- Kokkos Backends: SERIAL
+-- Configuring done (0.4s)
+-- Generating done (0.1s)
+-- Build files have been written to: /tmp/athenak-cr-runtime-serial
++zsh:6> cmake --build /tmp/athenak-cr-runtime-serial -j 16
+[  2%] Built target kokkossimd
+[  2%] Built target AlwaysCheckGit
+[ 11%] Built target kokkoscore
+[ 12%] Built target impl_git_version
+[ 14%] Built target kokkoscontainers
+[100%] Built target athena
++zsh:7> cmake -S /Users/dbf75/.codex/worktrees/e354/athenak-DF -B /tmp/athenak-cr-runtime-mpi -D 'PROBLEM=unit_tests/cr_relativistic_runtime_gather_test' -D 'Athena_ENABLE_MPI=ON'
+-- Setting build type to 'Release' as none was specified.
+-- Including user-specified problem generator file: unit_tests/cr_relativistic_runtime_gather_test
+-- Setting default Kokkos CXX standard to 17
+-- Kokkos version: 4.4.0
+-- The project name is: Kokkos
+-- Using internal gtest for testing
+-- Using -std=c++17 for C++17 standard as feature
+-- Built-in Execution Spaces:
+--     Device Parallel: NoTypeDefined
+--     Host Parallel: NoTypeDefined
+--       Host Serial: SERIAL
+--
+-- Architectures:
+-- Using internal desul_atomics copy
+-- Experimental mdspan support is enabled
+-- Using internal mdspan directory /Users/dbf75/.codex/worktrees/e354/athenak-DF/kokkos/core/src/../../tpls/mdspan/include
+-- Kokkos Backends: SERIAL
+-- Configuring done (0.7s)
+-- Generating done (0.1s)
+-- Build files have been written to: /tmp/athenak-cr-runtime-mpi
++zsh:8> cmake --build /tmp/athenak-cr-runtime-mpi -j 16
+[  2%] Built target kokkossimd
+[  2%] Built target AlwaysCheckGit
+[ 11%] Built target kokkoscore
+[ 12%] Built target impl_git_version
+[ 14%] Built target kokkoscontainers
+[100%] Built target athena

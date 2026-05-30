@@ -212,8 +212,10 @@ void RequireStencilBounds(const CellCenteredTrilinearStencil &stencil,
 }
 
 template<typename BlockSize>
-GatherResult EvaluateDeviceGather(const DvceArray5D<Real> &w0, const DvceArray5D<Real> &bcc,
-                                  const BlockSize &mbsize, const GatherProbe &probe,
+GatherResult EvaluateDeviceGather(const DvceArray5D<Real> &w0,
+                                  const DvceArray5D<Real> &bcc,
+                                  const BlockSize &mbsize,
+                                  const GatherProbe &probe,
                                   const RegionIndcs &indcs) {
   DvceArray1D<GatherResult> device_result("cr_rel_gather_device_result", 1);
   par_for("cr_rel_gather_device_probe", DevExeSpace(), 0, 0, KOKKOS_LAMBDA(const int) {
@@ -325,8 +327,10 @@ void CheckSyntheticInterfaces(const Real tolerance) {
   DvceArray5D<Real> left_bcc("cr_rel_gather_left_bcc", 1, 3, 8, 8, 8);
   DvceArray5D<Real> right_w0("cr_rel_gather_right_w0", 1, 5, 8, 8, 8);
   DvceArray5D<Real> right_bcc("cr_rel_gather_right_bcc", 1, 3, 8, 8, 8);
-  DualArray1D<RegionSize> left_mbsize = MakeBlockSize("cr_rel_gather_left_size", left_size);
-  DualArray1D<RegionSize> right_mbsize = MakeBlockSize("cr_rel_gather_right_size", right_size);
+  DualArray1D<RegionSize> left_mbsize =
+      MakeBlockSize("cr_rel_gather_left_size", left_size);
+  DualArray1D<RegionSize> right_mbsize =
+      MakeBlockSize("cr_rel_gather_right_size", right_size);
   FillFields(left_w0, left_bcc, indcs, left_size, TestProfile::affine,
              TestProfile::affine);
   FillFields(right_w0, right_bcc, indcs, right_size, TestProfile::affine,
@@ -352,7 +356,8 @@ void CheckSyntheticInterfaces(const Real tolerance) {
   DvceArray5D<Real> fine_bcc("cr_rel_gather_fine_bcc", 1, 3, 12, 12, 12);
   DualArray1D<RegionSize> coarse_mbsize = MakeBlockSize("cr_rel_gather_coarse_size",
                                                         coarse_size);
-  DualArray1D<RegionSize> fine_mbsize = MakeBlockSize("cr_rel_gather_fine_size", fine_size);
+  DualArray1D<RegionSize> fine_mbsize =
+      MakeBlockSize("cr_rel_gather_fine_size", fine_size);
   FillFields(coarse_w0, coarse_bcc, indcs, coarse_size, TestProfile::affine,
              TestProfile::affine);
   FillFields(fine_w0, fine_bcc, fine_indcs, fine_size, TestProfile::affine,

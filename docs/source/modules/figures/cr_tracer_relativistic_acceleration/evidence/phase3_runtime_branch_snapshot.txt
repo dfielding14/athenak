@@ -1,0 +1,33 @@
+feature/CR_tracers_relativistic_acceleration
+56dcbf3f3c0120171604af4db9300bcde86b2397
+be24fa12ce2937193c0b72120a159a739c86e4ec
+## feature/CR_tracers_relativistic_acceleration...origin/feature/CR_tracers_relativistic_acceleration [ahead 1]
+ M docs/source/modules/cr_tracer_relativistic_acceleration_ledger.md
+ M src/pgen/unit_tests/cr_relativistic_gather_test.cpp
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_legacy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_legacy_mpicpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_amr_shadow_mpi4.tsv
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_amr_shadow_serial.tsv
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_branch_snapshot.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_build_commands.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_diff_check.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_mpi.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_mpicpu_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_oracle_negative_controls.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_periodic_mpi1.tsv
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_periodic_mpi2.tsv
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_periodic_mpi4.tsv
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_periodic_mpi6_empty.tsv
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_periodic_serial.tsv
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_serial.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_serial_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_sha256.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_smr_mpi4.tsv
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_smr_serial.tsv
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_untracked_whitespace_check.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_style.log
+?? inputs/unit_tests/cr_relativistic_runtime_gather_amr_shadow.athinput
+?? inputs/unit_tests/cr_relativistic_runtime_gather_periodic.athinput
+?? inputs/unit_tests/cr_relativistic_runtime_gather_smr.athinput
+?? scripts/particles/cr_relativistic_runtime_gather_inspect.py
+?? src/pgen/unit_tests/cr_relativistic_runtime_gather_test.cpp

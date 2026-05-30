@@ -1,0 +1,81 @@
++zsh:5> RUN=/tmp/cr-rel-phase3-serial-rerun
++zsh:6> rm -rf /tmp/cr-rel-phase3-serial-rerun
++zsh:7> mkdir -p /tmp/cr-rel-phase3-serial-rerun
++zsh:8> cd /tmp/cr-rel-phase3-serial-rerun
++zsh:9> git -C /Users/dbf75/.codex/worktrees/e354/athenak-DF rev-parse HEAD
+56dcbf3f3c0120171604af4db9300bcde86b2397
++zsh:10> /tmp/athenak-cr-runtime-serial/src/athena -i /Users/dbf75/.codex/worktrees/e354/athenak-DF/inputs/unit_tests/cr_relativistic_runtime_gather_periodic.athinput
+
+Root grid = 2 x 2 x 2 MeshBlocks
+Total number of MeshBlocks = 8
+Number of logical  levels of refinement = 1 (2 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=1.762917e-03 cycle=0 time=0.000000e+00 dt=4.364358e-02
+
+Terminating on cycle limit
+time=0.000000e+00 cycle=0
+tlim=1.000000e-01 nlim=0
+
+MeshBlock-cycles = 0
+cpu time used  = 4.032080e-04
+zone-cycles/cpu_second = 0.000000e+00
+particle-updates/cpu_second = 0.000000e+00
++zsh:11> python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_relativistic_runtime_gather_periodic.tsv --expected-count 64 --expected-cycle 0 --expected-time 0 --expected-contiguous-tags 64 --require-boundary-tag-probes --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
+validated 64 CR runtime gather rows from cr_relativistic_runtime_gather_periodic.tsv
++zsh:12> cp cr_relativistic_runtime_gather_periodic.tsv /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_periodic_serial.tsv
++zsh:13> /tmp/athenak-cr-runtime-serial/src/athena -i /Users/dbf75/.codex/worktrees/e354/athenak-DF/inputs/unit_tests/cr_relativistic_runtime_gather_smr.athinput
+
+Root grid = 2 x 2 x 2 MeshBlocks
+Total number of MeshBlocks = 64
+Number of logical  levels of refinement = 2 (3 levels total)
+Number of physical levels of refinement = 1 (2 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=1.215954e-02 cycle=0 time=0.000000e+00 dt=2.751901e-02
+
+Terminating on cycle limit
+time=0.000000e+00 cycle=0
+tlim=1.000000e-01 nlim=0
+
+MeshBlock-cycles = 0
+cpu time used  = 2.099083e-03
+zone-cycles/cpu_second = 0.000000e+00
+particle-updates/cpu_second = 0.000000e+00
++zsh:14> python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_relativistic_runtime_gather_smr.tsv --expected-count 512 --expected-cycle 0 --expected-time 0 --expected-contiguous-tags 512 --require-refined-region-tag-probes --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
+validated 512 CR runtime gather rows from cr_relativistic_runtime_gather_smr.tsv
++zsh:15> cp cr_relativistic_runtime_gather_smr.tsv /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_smr_serial.tsv
++zsh:16> /tmp/athenak-cr-runtime-serial/src/athena -i /Users/dbf75/.codex/worktrees/e354/athenak-DF/inputs/unit_tests/cr_relativistic_runtime_gather_amr_shadow.athinput
+
+Root grid = 2 x 2 x 2 MeshBlocks
+Total number of MeshBlocks = 8
+Number of logical  levels of refinement = 2 (3 levels total)
+Number of physical levels of refinement = 1 (2 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=8.162125e-03 cycle=0 time=0.000000e+00 dt=1.309821e-02
+elapsed=1.939208e-02 cycle=1 time=1.309821e-02 dt=6.459868e-03
+elapsed=4.845413e-02 cycle=2 time=1.955808e-02 dt=6.412439e-03
+elapsed=8.327267e-02 cycle=3 time=2.597052e-02 dt=6.374722e-03
+
+Terminating on cycle limit
+time=2.597052e-02 cycle=3
+tlim=5.000000e-02 nlim=3
+
+Current number of MeshBlocks = 43
+56 MeshBlocks created, 21 deleted by AMR
+
+MeshBlock-cycles = 136
+cpu time used  = 7.511742e-02
+zone-cycles/cpu_second = 9.269754e+05
+particle-updates/cpu_second = 2.555999e+03
++zsh:17> python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_relativistic_runtime_gather_amr_shadow.tsv --expected-count 64 --expected-cycle 3 --expected-time 0.025970518172472944 --expected-contiguous-tags 64 --require-tag-random-motion --particle-seed 29 --min-motion 0.001 --min-moved-particles 64 --skip-profile-check
+validated 64 CR runtime gather rows from cr_relativistic_runtime_gather_amr_shadow.tsv
++zsh:18> cp cr_relativistic_runtime_gather_amr_shadow.tsv /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_amr_shadow_serial.tsv

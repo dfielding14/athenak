@@ -25,14 +25,14 @@ The statuses in this initial draft are intentionally conservative:
 | --- | --- | --- |
 | Ledger date | `2026-05-30` | Record the date of each accepted update. |
 | Working branch | `feature/CR_tracers_relativistic_acceleration` | Stop if the working branch changes unexpectedly. |
-| Working branch HEAD at latest accepted commit | `be24fa12ca9b330f1da20c489c826a231bf01d85` | Refresh after every accepted commit. |
+| Working branch HEAD at latest accepted commit | `56dcbf3f3c0120171604af4db9300bcde86b2397` | Refresh after every accepted commit. |
 | Frozen feature base | `64a4d1be8da1c22d1328cc47280195b3747fa0ab` from `feature/CR_tracers_followup_architecture` | Change only through an accepted `DR-000` update. |
 | Intended eventual integration target | `origin/development` at `c6a73b08e60807f8b925164c5e7edd5cb820c8ae` | Refresh the target SHA and merge-tree audit after target updates and before handoff. |
-| Current implementation phase | `Phase 3: shared trilinear gather helper and prescribed-field diagnostics` | Advance to acceleration only after helper and diagnostic-only gather tests, independent review, and `RG-004` record `PROCEED`. |
-| Allowed write manifest | `src/particles/trilinear_gather.hpp`, `src/particles/particles_pushers.cpp`, narrowly scoped Phase-3 diagnostic pgen and input files, gather-only tests, Phase-3 evidence, and this ledger only | Keep particle widths, restart payloads, outputs, MHD tasks, AMR algorithms, subcycling, displacement, Boris algebra, and positive-cycle `relativistic_hc` abort unchanged. |
-| Last accepted checkpoint | Phase-2 fail-closed parser contract at `be24fa12ca9b330f1da20c489c826a231bf01d85` | Record each milestone commit before opening the next phase. |
-| Open blocking findings | Phase-3 helper review corrections, true MPI launch parity, diagnostic-only runtime integration, and actual ghost-fill, periodic, block-boundary, SMR, forced-AMR evidence; downstream `BF-009`, `BF-014`, backend qualification, layout, restart, output, solver-coupling, and migration obligations remain open for their owning phases | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
-| CPU/MPI qualification status | Phase 2 accepted: focused parser `49 passed` plus `nlim=0` smoke and positive-cycle abort; full CPU `269 passed, 15 skipped, 67 deselected`; MPI CPU `38 passed, 313 deselected`; style `2 passed`; single precision remains blocked by inherited repository narrowing errors | Rerun and archive qualification at each accepted milestone. |
+| Current implementation phase | `Phase 4a: mechanically isolated prescribed-test relativistic push` | Keep solver coupling closed until `CP-3 Minimal Serial`, `RG-005`, and later `CP-4 Solver Coupling`. |
+| Allowed write manifest | Exact DR-026 Phase-4a surfaces: `src/athena.hpp`, `src/particles/particles.cpp`, `src/pgen/part_random.cpp`, `src/particles/particles_pushers.cpp`, one narrowly scoped invariant helper, prescribed-field kernel tests and decks, Phase-4a evidence, and this ledger only | Keep restart, outputs, MHD tasks, AMR infrastructure, live-grid coupling, CT EMF reuse, subcycling, and outer timestep unchanged. |
+| Last accepted checkpoint | `RG-004 PROCEED`: Phase-3 runtime-diagnostic package accepted after fresh oracle and integration-boundary rereviews | Record each milestone commit before opening the next phase. |
+| Open blocking findings | Downstream `BF-009`, `BF-014`, backend qualification, restart, output, solver-coupling, subcycling, timestep-refresh, and migration obligations remain open for their owning phases | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
+| CPU/MPI qualification status | Phase-3 rebound candidate: legacy CPU plus parser `81 passed`; legacy MPI CPU plus accuracy `9 passed`; custom runtime periodic, SMR, AMR, and MPI ladder pass; style `2 passed`; single precision remains blocked by inherited repository narrowing errors | Rerun and archive qualification at each accepted milestone. |
 | GPU qualification status | Not started; unavailable on this workstation | GPU qualification is optional for `MERGE READY` on this workstation, but it remains a separate unqualified residual risk.  Do not claim `GPU QUALIFIED` without accelerator evidence on an accepted SHA. |
 | Merge-ready status | Not eligible | Requires the guide's checkpoint sequence, including `CP-4 Solver Coupling` and `CP-7 Final Cold Review`. |
 
@@ -2169,3 +2169,314 @@ before the fixes are accepted.
   block-boundary behavior, production MPI collection including particle-empty
   ranks, static refinement, forced AMR migration shadow evidence, and an
   independent runtime-diagnostic review.
+
+## Phase 3 Update 4: Test-Only Live-Grid Diagnostic Harness
+
+### DR-024: Finalizer-Only Runtime Sampling Harness
+
+- Status: selected for Phase-3 diagnostic qualification
+- Date: 2026-05-30
+- Problem: exercise actual repaired `w0` and `bcc0` storage without opening
+  positive-cycle `relativistic_hc`, changing particle records, routing through
+  production outputs, or editing MHD and AMR tasks.
+- Options considered:
+  1. Add a production particle diagnostic task beside `Push()`.
+  2. Sample during AMR remapping or before boundary repair.
+  3. Add one compile-selected custom pgen whose finalizer samples live MHD
+     fields after initialization or the final repaired AMR hierarchy.
+- Selected option: option 3.
+- Reasoning: the existing finalizer runs after initialization ghost repair and,
+  for positive-cycle legacy shadow tests, after final MHD stages and AMR repair.
+  It observes the real integration surface while remaining mechanically
+  distinct from future production sampled-MHD coupling.
+- Implementation boundary:
+  - call existing `PartRandom()` initialization;
+  - prescribe active-cell primitive velocity and convert it back to conserved
+    state through the existing EOS;
+  - retain face-centered magnetic initialization from `PartRandom()`, because
+    later repair reconstructs cell-centered `bcc0`;
+  - gather live `w0(IVX:IVZ)` and `bcc0(IBX:IBZ)` through the reviewed helper;
+  - construct diagnostic-only `cE = -u_fluid x B`;
+  - globally gather rows from every MPI rank, including particle-empty ranks,
+    sort by `(species, tag)`, and emit explicit TSV metadata;
+  - use a separate analyzer to reconstruct analytic values and compare
+    decomposition-invariant physical rows.
+- Deliberately excluded: particle-record widening, restart, production output
+  registration, MHD task edits, solver-coupled acceleration, dynamic-MHD order
+  claims, and positive-cycle `relativistic_hc`.
+
+### DR-025: Separate Hierarchy Oracles By Question
+
+- Status: selected
+- Date: 2026-05-30
+- Observation: an affine velocity profile is not periodic.  Using it as a
+  strict live-grid oracle on a periodic domain correctly exposed wrapped-ghost
+  discontinuities near the domain boundary.
+- Selected split:
+  - retain affine exactness across synthetic same-level and coarse/fine helper
+    views, where the interpolation coordinate contract is isolated;
+  - use a smooth periodic manufactured `u_fluid` and the existing
+    `sinusoidal_divb_free` magnetic profile for live periodic and SMR
+    qualification, with a preregistered `4e-2` pointwise profile-error bound;
+  - use deterministic tags immediately on both sides of periodic faces,
+    same-level interfaces, and each coarse/fine interface plane;
+  - keep dynamic AMR as a separate moving-particle lifecycle shadow: require
+    exact identity preservation, nonzero motion for every tag, final repaired
+    sampled-field construction, serial/MPI parity, and recorded mesh churn,
+    but do not claim a static analytic MHD-field oracle after the background
+    evolves.
+- Rejected alternative: loosening tolerances around an incompatible affine
+  periodic fixture.  That would hide a test-design error.
+
+## Phase 3 Update 5: Runtime-Diagnostic Review Hold And Corrections
+
+- Date: 2026-05-30
+- Independent runtime reviews: `HOLD`, honored before `RG-004`.
+- Findings:
+  1. Initial live-grid decks used uniform fields, which could mask wrong-neighbor
+     and stale-ghost reads.
+  2. The analyzer checked values but did not bind deterministic face,
+     same-level-interface, coarse/fine-interface, or exact AMR identity
+     coverage.
+  3. Particle-empty-rank evidence inferred absence from rows instead of binding
+     independent per-rank counts.
+  4. Decomposition comparison did not structurally validate the reference TSV
+     and omitted lifecycle coordinates.
+  5. The dynamic AMR shadow proved hierarchy churn but did not require
+     particle motion.
+  6. Test-only failures used rank-local `exit`, which could strand MPI peers.
+  7. The retained archive omitted periodic MPI ranks `1` and `2`, CMake caches,
+     exact command transcripts, and a branch snapshot.
+- Selected corrections:
+  - add smooth periodic manufactured `u_fluid` and use the existing smooth
+    divergence-free periodic magnetic profile;
+  - add deterministic all-axis periodic and same-level probes plus deterministic
+    all-axis coarse/fine probes;
+  - emit and validate explicit rank-count metadata;
+  - require exact contiguous `(species, tag)` identity sets and a final cycle;
+  - validate both decomposition-comparison operands structurally and compare
+    `cycle` and `time`;
+  - move every AMR-shadow particle and require motion reconstructed
+    independently from deterministic tag-random initialization;
+  - use `MPI_Abort` for test-harness failures after MPI initialization;
+  - retain serial and MPI CMake caches, exact set-`-x` transcripts, all compared
+    TSVs, negative controls, legacy regressions, style, branch snapshot, diff
+    check, and direct SHA-256 manifest.
+- Deliberate boundary: the dynamic AMR shadow is lifecycle and
+  decomposition-parity evidence.  It is not a dynamic-MHD temporal-order claim.
+  The static periodic and SMR manufactured cases own analytic repaired-grid
+  field qualification.
+
+### Corrected Runtime Validation In Progress
+
+- Serial periodic construction-only diagnostic:
+  all-axis periodic-face, corner, and same-level-interface deterministic probes,
+  nonuniform periodic `u_fluid` and `B`, `64` rows, bounded analytic analyzer
+  `PASS`; observed max absolute errors are `2.2877e-3` for `u_fluid` and
+  `2.3893e-2` for `B`, below the preregistered `4e-2` bound.
+- Serial SMR construction-only diagnostic:
+  deterministic probes on both sides of all six coarse/fine planes, level-1
+  static refined region, nonuniform periodic `u_fluid` and `B`, `512` rows,
+  bounded analytic analyzer `PASS`; observed max absolute errors are
+  `5.0446e-4` for `u_fluid` and `1.9321e-3` for `B`.
+- Serial dynamic AMR shadow:
+  moving legacy drift particles, exact contiguous identity set, independently
+  reconstructed nonzero motion for every tag, `56` MeshBlocks created and `21`
+  deleted, `64` rows, final sampled-field construction analyzer `PASS`.
+- MPI periodic construction-only diagnostic:
+  ranks `1`, `2`, and `4`, explicit rank-count metadata, `64` rows each,
+  bounded analytic analyzer and serial physical-row comparison `PASS`.
+- MPI particle-empty-rank diagnostic:
+  ranks `6`, uneven `8`-MeshBlock decomposition, explicit rank counts
+  `0,0,0,0,2,0`, `2` global rows, particle-empty ranks participate in
+  collection, bounded analytic analyzer `PASS`.
+- MPI SMR construction-only diagnostic:
+  ranks `4`, explicit rank-count metadata, deterministic coarse/fine probes,
+  `512` rows, bounded analytic analyzer and serial physical-row comparison
+  `PASS`.
+- MPI dynamic AMR shadow:
+  moving legacy drift particles, ranks `4`, `56` MeshBlocks created, `21`
+  deleted, `11` communicated for load balancing, exact contiguous identity set,
+  independently reconstructed nonzero motion for every tag, `64` rows, final
+  sampled-field construction analyzer and serial physical-row comparison
+  `PASS`.
+- Analyzer adversarial controls:
+  collapsed periodic probes, collapsed SMR probes, shifted AMR tags, false
+  serial-as-six-rank evidence, duplicated comparison reference rows, and
+  falsified rank-count metadata all reject as intended.
+- Fresh shared-path regressions:
+  - legacy CPU, fixed-energy accuracy, and parser contract: `81 passed`;
+  - legacy MPI CPU and fixed-energy accuracy: `9 passed`.
+- Open before `RG-004`: style refresh, retained evidence manifest, branch
+  snapshot, and fresh independent rereview of the corrected runtime package.
+
+## Phase 3 Update 6: Adversarial Oracle Hold And Rebound
+
+- Date: 2026-05-30
+- Independent runtime rereviews: `HOLD`, honored before `RG-004`.
+- Findings:
+  1. A forged serial TSV could pad `rank_counts` with zero entries and satisfy
+     the empty-rank oracle without a separately emitted participation witness.
+  2. AMR serial/MPI comparison bound equal lifecycle times but did not bind the
+     final time independently.  A coherent time rewrite of both operands could
+     pass.
+  3. The negative-control transcript invoked mutated `/tmp` TSVs without
+     retaining the fixture-construction commands.
+  4. The control header and tail still described completed style, manifest, and
+     branch-snapshot packaging as pending.
+- Selected corrections:
+  - gather the communicator rank independently of particle-row counts and emit
+    an explicit `rank_participants` witness with `world_size`;
+  - require contiguous participant identities and exact agreement between the
+    participant witness and rank-count width;
+  - add `--expected-time` with an explicit tolerance and require it for the
+    AMR serial and MPI lifecycle-shadow validations;
+  - regenerate the negative-control transcript with traced fixture
+    construction commands, including padded serial rank counts, malformed
+    participant witness, and coherent serial/MPI `time=999` mutations;
+  - rerun every retained serial and MPI runtime case through the corrected
+    producer and analyzer;
+  - refresh full style, CMake caches, build transcript, diff check, direct
+    untracked-artifact whitespace scan, branch snapshot, and SHA-256 manifest.
+- Rebound validation:
+  - serial periodic, serial SMR, and serial dynamic-AMR-shadow analyzers pass;
+  - MPI periodic ranks `1`, `2`, and `4`, MPI-`6` particle-empty-rank,
+    MPI-`4` SMR, and MPI-`4` dynamic-AMR-shadow analyzers pass;
+  - the six-rank artifact records rank counts `0,0,0,0,2,0` and an independent
+    participant witness `0,1,2,3,4,5`;
+  - AMR validations bind cycle `3` and final time
+    `0.025970518172472944`;
+  - `8` traced adversarial rejection cases are retained, including both newly
+    identified attacks;
+  - full style passes: `2 passed`.
+- Deliberate boundary: the participant witness and retained `mpirun -np 6`
+  transcript make the MPI-empty-rank claim auditable.  The TSV remains an
+  evidence artifact, not a cryptographically unforgeable attestation.
+- Open before `RG-004`: refreshed direct SHA-256 manifest and fresh independent
+  rereview of this rebound package.
+
+### DR-026: Phase-4a Prescribed-Test Layout And Initialization Candidate
+
+- Status: candidate-selected; opens only after `RG-004` records `PROCEED`
+- Date: 2026-05-30
+- Question: What is the smallest explicit state-layout and initialization
+  contract needed for prescribed-field-only relativistic acceleration?
+- Options considered:
+  1. Replace legacy prefix velocity slots with authoritative momentum.
+  2. Append authoritative momentum, prescribed sampled fields, direct work,
+     signed coefficient, and stored applicability metrics immediately.
+  3. Append only authoritative momentum, prescribed sampled fields, direct
+     work, and signed coefficient; defer recomputed applicability metrics to
+     the diagnostics phase.
+- Selected option: option 3.
+- Reasoning:
+  - preserve real-data prefix indices `0..13` unchanged;
+  - append `IPWX=14`, `IPWY=15`, `IPWZ=16`, `IPCEX=17`, `IPCEY=18`,
+    `IPCEZ=19`, `IPWORK=20`, and `IPALPHA=21`;
+  - use `nrdata=22` only for `relativistic_hc`; retain legacy `nrdata=14` and
+    common `nidata=3`;
+  - derive `gamma`; do not cache or serialize it;
+  - synchronize `IPVX`, `IPVY`, and `IPVZ` compatibility shadows from
+    authoritative `w` through one invariant helper after initialization and
+    every kick;
+  - retain deterministic legacy-prefix `IPM` initialization but never read it
+    in relativistic algebra;
+  - defer topology-dependent or instantaneously recomputable applicability
+    metrics until the diagnostics phase rather than expanding authoritative
+    restart state prematurely.
+- Initialization contract:
+  - add explicit test-harness selector
+    `problem/relativistic_initial_state = velocity | w`;
+  - support `problem/w0x`, `problem/w0y`, and `problem/w0z` for authoritative
+    momentum initialization;
+  - support `problem/cE0x`, `problem/cE0y`, and `problem/cE0z` only for the
+    mechanically isolated `prescribed_test` harness;
+  - reuse `problem/B0x`, `problem/B0y`, and `problem/B0z` as the prescribed
+    magnetic-field source, stored in legacy-prefix `IPBX`, `IPBY`, and `IPBZ`;
+  - prohibit routing Phase 4a through `w0`, `bcc0`, the Phase-3 live-grid
+    diagnostic gather, or CT edge EMFs;
+  - reject `relativistic_initial_state`, `w0x`, `w0y`, `w0z`, `cE0x`, `cE0y`,
+    and `cE0z` when `pusher != relativistic_hc`;
+  - reject mixed initialization modes, nonfinite state, inverse parsing beyond
+    the velocity-to-`w` cap, and forward shadows beyond the `w`-to-velocity
+    cap.
+- Phase-4a write manifest reopened exactly for:
+  - `src/athena.hpp`;
+  - `src/particles/particles.cpp`;
+  - `src/pgen/part_random.cpp`;
+  - `src/particles/particles_pushers.cpp`;
+  - one narrowly scoped invariant helper;
+  - prescribed-field kernel tests and decks;
+  - this ledger and Phase-4a evidence artifacts.
+- Still excluded during Phase 4a: restart writers and decoders, particle
+  outputs, MHD tasks, AMR infrastructure, live-grid coupling, CT EMF reuse,
+  subcycling redesign, outer-timestep redesign, and solver-coupled execution.
+- Compatibility impact: legacy drift and Boris records remain byte-for-byte
+  runtime-width compatible.  Restart and outputs remain rejected for
+  `relativistic_hc` until their owning phases.
+- Validation required: isolated prescribed-field kernel harness, positive and
+  negative `alpha_s`, state-cap rejections, shadow synchronization, direct-work
+  closure, reversibility, convergence, and retained legacy regressions.
+- Failure signals: any live-MHD gather in Phase 4a, any read of `IPM` in
+  relativistic algebra, any mutable `gamma` cache, any ambiguous output or
+  restart widening, or any legacy record-width change.
+- Revisit trigger: `RG-005`, restart-schema implementation, diagnostics-schema
+  implementation, or solver-coupling design.
+
+## RG-004: Pointwise Ideal Construction And Prescribed-Test Opening
+
+- Date: 2026-05-30
+- Commit range reviewed: Phase-3 helper commit
+  `56dcbf3f3c0120171604af4db9300bcde86b2397` plus the bound runtime-diagnostic
+  package and Update-6 rebound corrections.
+- Evidence reviewed:
+  - retained direct SHA-256 manifest;
+  - serial periodic, SMR, and dynamic-AMR-shadow runtime transcripts;
+  - MPI periodic ranks `1`, `2`, `4`, particle-empty rank-`6`, SMR rank-`4`,
+    and dynamic-AMR-shadow rank-`4` runtime transcripts;
+  - full style, legacy CPU, legacy MPI CPU, CMake-cache, branch-snapshot,
+    whitespace, and diff-check evidence;
+  - reconstructible negative-control transcript with `8` traced rejection
+    cases.
+- Assumptions that still hold:
+  - gather Newtonian primitive fluid velocity and cell-centered `B` with the
+    same trilinear stencil before constructing pointwise
+    `cE = -u_fluid x B`;
+  - do not substitute CT edge EMFs or add a particle-side curl;
+  - retain a mechanically distinct prescribed-field harness before opening
+    solver coupling;
+  - dynamic-AMR evidence is a lifecycle shadow, not dynamic-MHD temporal-order
+    qualification.
+- Assumptions weakened or falsified:
+  - row-count metadata alone was not a sufficient empty-rank oracle;
+  - pairwise lifecycle-time equality alone was not a sufficient AMR-time
+    oracle;
+  - unexplained temporary negative-control fixtures were not reviewable
+    evidence.
+- New risks:
+  - retained TSVs are auditable evidence artifacts, not cryptographic
+    attestations.  Their narrow claims depend on the bound producer,
+    transcripts, and direct manifest.
+- Blocking findings: none after the Update-6 rebound and focused DR-026
+  recheck.
+- Independent reviewer findings and responses:
+  - fresh physics/oracle reviewer: `PROCEED`; replayed all nine positive
+    analyzers and checked the participant witness, expected-time binding, and
+    reconstructible controls;
+  - fresh integration-boundary reviewer: initial `HOLD` until DR-026 named the
+    reopened files, prescribed `B` source, live-grid prohibition, and
+    fail-closed legacy key policy;
+  - focused integration-boundary recheck: `PROCEED` after all three DR-026
+    amendments.
+- Decision: `PROCEED`.
+- Plan changes:
+  - close Phase 3;
+  - open Phase 4a only for the mechanically isolated prescribed-test
+    relativistic Higuera-Cary push and the exact DR-026 write manifest;
+  - keep solver-coupled execution closed behind `CP-3 Minimal Serial`,
+    `RG-005`, and later `CP-4 Solver Coupling`.
+- Next smallest reviewable increment: append the explicit Phase-4a state
+  fields, add one invariant helper for velocity shadows, initialize
+  prescribed-test state fail-closed, integrate the prescribed HC map, and add
+  isolated analytical kernel tests.  Do not edit restart, outputs, subcycling,
+  outer timestep, MHD tasks, or AMR infrastructure.

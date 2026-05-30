@@ -1,0 +1,154 @@
++zsh:5> RUN=/tmp/cr-rel-phase3-negative-controls
++zsh:6> rm -rf /tmp/cr-rel-phase3-negative-controls
++zsh:7> mkdir -p /tmp/cr-rel-phase3-negative-controls
++zsh:8> cd /tmp/cr-rel-phase3-negative-controls
++zsh:10> COMMON=( --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04 )
++zsh:11> python3 -c 'import sys; p=open(sys.argv[1]).read().splitlines(); p[4:]=["\t".join((lambda f: f[:6]+["0","0","0"]+f[9:])(line.split("\t"))) for line in p[4:]]; open(sys.argv[2],"w").write("\n".join(p)+"\n")' /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_periodic_serial.tsv cr_rel_periodic_interior.tsv
++zsh:12> expect_fail python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_rel_periodic_interior.tsv --expected-count 64 --expected-cycle 0 --expected-time 0 --expected-contiguous-tags 64 --require-boundary-tag-probes --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
++expect_fail:0> python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_rel_periodic_interior.tsv --expected-count 64 --expected-cycle 0 --expected-time 0 --expected-contiguous-tags 64 --require-boundary-tag-probes --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
+Traceback (most recent call last):
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 414, in <module>
+    main()
+    ~~~~^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 406, in main
+    _validate(args, rows, rank_counts, participants)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 303, in _validate
+    _require_boundary_tag_probes(args, rows)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 150, in _require_boundary_tag_probes
+    raise ValueError(
+        f"tag {row['tag']}: boundary probe {actual} expected {expected}")
+ValueError: tag 0: boundary probe (0.0, 0.0, 0.0) expected (-0.4999999999, -0.13, 0.11)
++expect_fail:0> echo 'expected rejection observed'
+expected rejection observed
++expect_fail:0> return 0
++zsh:13> python3 -c 'import sys; p=open(sys.argv[1]).read().splitlines(); p[4:]=["\t".join((lambda f: f[:6]+["0","0","0"]+f[9:])(line.split("\t"))) for line in p[4:]]; open(sys.argv[2],"w").write("\n".join(p)+"\n")' /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_smr_serial.tsv cr_rel_smr_interior.tsv
++zsh:14> expect_fail python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_rel_smr_interior.tsv --expected-count 512 --expected-cycle 0 --expected-time 0 --expected-contiguous-tags 512 --require-refined-region-tag-probes --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
++expect_fail:0> python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_rel_smr_interior.tsv --expected-count 512 --expected-cycle 0 --expected-time 0 --expected-contiguous-tags 512 --require-refined-region-tag-probes --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
+Traceback (most recent call last):
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 414, in <module>
+    main()
+    ~~~~^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 406, in main
+    _validate(args, rows, rank_counts, participants)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 304, in _validate
+    _require_refined_region_tag_probes(args, rows)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 191, in _require_refined_region_tag_probes
+    raise ValueError(
+        f"tag {row['tag']}: refined-region probe {actual} expected {expected}")
+ValueError: tag 0: refined-region probe (0.0, 0.0, 0.0) expected (-0.2500000001, -0.13, 0.11)
++expect_fail:0> echo 'expected rejection observed'
+expected rejection observed
++expect_fail:0> return 0
++zsh:15> python3 -c 'import sys; p=open(sys.argv[1]).read().splitlines(); p[4:]=["\t".join((lambda f: f[:5]+[str(int(f[5])+1000)]+f[6:])(line.split("\t"))) for line in p[4:]]; open(sys.argv[2],"w").write("\n".join(p)+"\n")' /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_amr_shadow_serial.tsv cr_rel_amr_shifted_tags.tsv
++zsh:16> expect_fail python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_rel_amr_shifted_tags.tsv --expected-count 64 --expected-cycle 3 --expected-time 0.025970518172472944 --expected-contiguous-tags 64 --skip-profile-check
++expect_fail:0> python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_rel_amr_shifted_tags.tsv --expected-count 64 --expected-cycle 3 --expected-time 0.025970518172472944 --expected-contiguous-tags 64 --skip-profile-check
+Traceback (most recent call last):
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 414, in <module>
+    main()
+    ~~~~^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 406, in main
+    _validate(args, rows, rank_counts, participants)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 302, in _validate
+    _require_contiguous_tags(args, rows)
+    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 111, in _require_contiguous_tags
+    raise ValueError("particle identity set is not the expected contiguous tag set")
+ValueError: particle identity set is not the expected contiguous tag set
++expect_fail:0> echo 'expected rejection observed'
+expected rejection observed
++expect_fail:0> return 0
++zsh:17> python3 -c 'import sys; p=open(sys.argv[1]).read().splitlines(); p[1]="# rank_counts\t0=64\t1=0\t2=0\t3=0\t4=0\t5=0"; open(sys.argv[2],"w").write("\n".join(p)+"\n")' /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_periodic_serial.tsv cr_rel_serial_padded_rank_counts.tsv
++zsh:18> expect_fail python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_rel_serial_padded_rank_counts.tsv --nranks 6 --require-empty-particle-rank --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
++expect_fail:0> python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_rel_serial_padded_rank_counts.tsv --nranks 6 --require-empty-particle-rank --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
+Traceback (most recent call last):
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 414, in <module>
+    main()
+    ~~~~^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 405, in main
+    rows, rank_counts, participants = _read_rows(args.tsv)
+                                      ~~~~~~~~~~^^^^^^^^^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 44, in _read_rows
+    raise ValueError(f"{path}: rank counts and participant witness disagree")
+ValueError: cr_rel_serial_padded_rank_counts.tsv: rank counts and participant witness disagree
++expect_fail:0> echo 'expected rejection observed'
+expected rejection observed
++expect_fail:0> return 0
++zsh:19> python3 -c 'import sys; p=open(sys.argv[1]).read().splitlines(); p.append(p[4]); open(sys.argv[2],"w").write("\n".join(p)+"\n")' /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_periodic_mpi4.tsv cr_rel_periodic_duplicate.tsv
++zsh:20> expect_fail python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_periodic_mpi4.tsv --compare cr_rel_periodic_duplicate.tsv --nranks 4 --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
++expect_fail:0> python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_periodic_mpi4.tsv --compare cr_rel_periodic_duplicate.tsv --nranks 4 --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
+Traceback (most recent call last):
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 414, in <module>
+    main()
+    ~~~~^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 408, in main
+    _compare((rows, rank_counts, participants), _read_rows(args.compare),
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+             args.tolerance)
+             ^^^^^^^^^^^^^^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 341, in _compare
+    _validate_structure(right_rows, right_counts, right_participants)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 220, in _validate_structure
+    raise ValueError("duplicate (species, tag) rows")
+ValueError: duplicate (species, tag) rows
++expect_fail:0> echo 'expected rejection observed'
+expected rejection observed
++expect_fail:0> return 0
++zsh:21> python3 -c 'import sys; p=open(sys.argv[1]).read().splitlines(); p[1]=p[1].replace("4=2","4=1"); open(sys.argv[2],"w").write("\n".join(p)+"\n")' /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_periodic_mpi6_empty.tsv cr_rel_bad_rank_counts.tsv
++zsh:22> expect_fail python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_rel_bad_rank_counts.tsv --nranks 6 --require-empty-particle-rank --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
++expect_fail:0> python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_rel_bad_rank_counts.tsv --nranks 6 --require-empty-particle-rank --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
+Traceback (most recent call last):
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 414, in <module>
+    main()
+    ~~~~^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 406, in main
+    _validate(args, rows, rank_counts, participants)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 283, in _validate
+    _validate_structure(rows, rank_counts, participants)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 234, in _validate_structure
+    raise ValueError(
+        f"rank-count metadata {rank_counts} does not match rows {observed_counts}")
+ValueError: rank-count metadata [0, 0, 0, 0, 1, 0] does not match rows [0, 0, 0, 0, 2, 0]
++expect_fail:0> echo 'expected rejection observed'
+expected rejection observed
++expect_fail:0> return 0
++zsh:23> python3 -c 'import sys; p=open(sys.argv[1]).read().splitlines(); p[2]="# rank_participants\tworld_size=6\t0\t1\t2\t3\t4"; open(sys.argv[2],"w").write("\n".join(p)+"\n")' /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_periodic_mpi6_empty.tsv cr_rel_bad_participant_witness.tsv
++zsh:24> expect_fail python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_rel_bad_participant_witness.tsv --nranks 6 --require-empty-particle-rank --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
++expect_fail:0> python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_rel_bad_participant_witness.tsv --nranks 6 --require-empty-particle-rank --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
+Traceback (most recent call last):
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 414, in <module>
+    main()
+    ~~~~^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 405, in main
+    rows, rank_counts, participants = _read_rows(args.tsv)
+                                      ~~~~~~~~~~^^^^^^^^^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 42, in _read_rows
+    raise ValueError(f"{path}: rank-participant witness is not contiguous")
+ValueError: cr_rel_bad_participant_witness.tsv: rank-participant witness is not contiguous
++expect_fail:0> echo 'expected rejection observed'
+expected rejection observed
++expect_fail:0> return 0
++zsh:25> python3 -c 'import sys; p=open(sys.argv[1]).read().splitlines(); p[4:]=["\t".join((lambda f: f[:1]+["999"]+f[2:])(line.split("\t"))) for line in p[4:]]; open(sys.argv[2],"w").write("\n".join(p)+"\n")' /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_amr_shadow_serial.tsv cr_rel_amr_time999_serial.tsv
++zsh:26> python3 -c 'import sys; p=open(sys.argv[1]).read().splitlines(); p[4:]=["\t".join((lambda f: f[:1]+["999"]+f[2:])(line.split("\t"))) for line in p[4:]]; open(sys.argv[2],"w").write("\n".join(p)+"\n")' /Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase3_runtime_amr_shadow_mpi4.tsv cr_rel_amr_time999_mpi4.tsv
++zsh:27> expect_fail python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_rel_amr_time999_mpi4.tsv --compare cr_rel_amr_time999_serial.tsv --expected-count 64 --expected-cycle 3 --expected-time 0.025970518172472944 --expected-contiguous-tags 64 --skip-profile-check --nranks 4 --tolerance 1.0e-11
++expect_fail:0> python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_rel_amr_time999_mpi4.tsv --compare cr_rel_amr_time999_serial.tsv --expected-count 64 --expected-cycle 3 --expected-time 0.025970518172472944 --expected-contiguous-tags 64 --skip-profile-check --nranks 4 --tolerance 1.0e-11
+Traceback (most recent call last):
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 414, in <module>
+    main()
+    ~~~~^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 406, in main
+    _validate(args, rows, rank_counts, participants)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py", line 294, in _validate
+    raise ValueError(f"expected time {args.expected_time}, found {times}")
+ValueError: expected time 0.025970518172472944, found {999.0}
++expect_fail:0> echo 'expected rejection observed'
+expected rejection observed
++expect_fail:0> return 0
