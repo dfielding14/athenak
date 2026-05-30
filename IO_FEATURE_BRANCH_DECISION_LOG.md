@@ -712,6 +712,19 @@ decision.
 | Evidence | `ROB-019`; `src/restart_manifest.cpp`; runtime baseline audit. |
 | Follow-up | Add oversized signature, scalar, payload, segment, trailing, path, and total-file regressions. |
 
+### D-091: Include Restart Metadata Reconstruction In The Shared Layout Boundary
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-01` implementation |
+| Decision | Keep the shared restart-layout facility narrow, but use its checked arithmetic for replicated metadata reconstruction in `Mesh::BuildTreeFromRestart()` as well as per-MeshBlock payload layout in the writer and reader. Preserve serialization order, wire bytes, and module-specific read/write loops. |
+| Reason | The focused pre-edit layout audit found that `src/mesh/build_tree.cpp` reconstructs `listsize * nmb_total` into an allocation, broadcast byte count, and signed cursor. Hardening only `restart.cpp` and `pgen.cpp` would leave the header path vulnerable before payload routing begins. |
+| Alternatives | Restrict the descriptor to payload arithmetic; redesign restart serialization around a broad object model; patch metadata reconstruction with scattered casts only. |
+| Why not | The narrow descriptor can cover the arithmetic contract without absorbing control flow or changing persisted bytes. Scattered casts remain difficult to audit, while a broader restart rewrite increases compatibility risk. |
+| Reversal path | Reduce the facility to checked arithmetic helpers if it starts to own serialization behavior. Retain explicit writer-reader parity tests and frozen resume coverage. |
+| Evidence | Focused `RCP-01` pre-edit restart-layout audit; `src/outputs/restart.cpp`; `src/pgen/pgen.cpp`; `src/mesh/build_tree.cpp`. |
+| Follow-up | Add artificial large-count harness coverage and preserve frozen shared and per-rank restart resumes. |
+
 ## Pending Decision Queue
 
 Resolve these before merge readiness:

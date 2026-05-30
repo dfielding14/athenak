@@ -582,7 +582,7 @@ resolutions, and re-audit results required by `IO_FEATURE_BRANCH_GUIDE.md`.
 | Checkpoint | Status | Decisions | Pre-edit auditors | Implementation commit(s) | Focused tests | Post-edit auditors | Reflection | Remaining risk |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | RCP-00 | Locally closed | D-069, D-070, D-071, D-073, D-075, D-081, D-083, D-085 | Runtime baseline; format/tooling baseline; documentation/process baseline | `e40621d8` guide freeze | Fresh floors registered below | Three baseline reports accepted | R-00 recorded below | External CUDA and multi-node topology remain unavailable locally |
-| RCP-01 | Reconnaissance | D-070, D-071, D-085 | Focused layout auditor pending |  |  |  |  | Restart arithmetic, serial positioning, bounded manifests, and startup failure |
+| RCP-01 | Implementing | D-070, D-071, D-085, D-091 | Focused layout auditor accepted |  |  |  |  | Restart arithmetic, metadata reconstruction, serial positioning, bounded manifests, and startup failure |
 | RCP-02 | Not started | D-072, D-073, D-074, D-086, D-087 pending |  |  |  |  |  |  |
 | RCP-03 | Not started | D-075 accepted direction; D-088 pending |  |  |  |  |  |  |
 | RCP-04 | Not started | D-076, D-077, D-078, D-089 pending |  |  |  |  |  |  |
@@ -606,6 +606,7 @@ cleanup claims.
 | ROB-025 | P2 | `cbin` `gid` filtering compares a pack-local index against a global MeshBlock ID and can select the wrong block when a pack offset is nonzero | RCP-03 |
 | ROB-026 | P3 | Public Python converter paths still need explicit allocation preflight and deliberate budget override behavior | RCP-06 |
 | ROB-027 | P1 docs | Literal deferred Pages whole-page replacement can delete unrelated live `origin/gh-pages` guidance even when Sphinx builds successfully | RCP-07 |
+| ROB-028 | P1 | Restart metadata reconstruction allocates and broadcasts `listsize * nmb_total` bytes with unchecked arithmetic and advances through the buffer with a signed cursor | RCP-01 |
 
 The `ROB-017` inventory is expanded to include inherited table and VTK writers in
 addition to `.bin`, `.cbin`, PDF, `sphslice`, and restart output.
@@ -664,3 +665,18 @@ The local matrix does not satisfy these production gates:
 | --- | --- | --- |
 | CUDA | Configure a real CUDA-capable build and execute `tst/test_suite/io/test_output_formats_gpu.py` plus representative neighboring regressions | Blocked: no CUDA compiler or runtime tool on `Tin-Drum` |
 | Multi-node | Execute per-node output equality, direct manifest restart, changed-rank restart, empty or non-owning node, timing labels, and scaling measurements on at least two physical scheduler-backed nodes | Blocked: one physical host and no scheduler launcher locally |
+
+### 2026-05-29: RCP-01 Pre-Edit Restart-Layout Audit
+
+| Field | Record |
+| --- | --- |
+| Auditor | Focused read-only restart-layout auditor. Repository status remained clean and no runtime tests or edits were performed. |
+| Accepted design | Use a small shared restart-layout descriptor plus checked unsigned add and multiply helpers. Keep serialization loops, MPI routing, file opening, and module-specific state reads and writes local. This confirms D-070 and expands the boundary through D-091. |
+| Persisted layout | Preserve `H = P + M + F + L + C + S + sizeof(IOWrapperSizeT)`, where `P` is the parameter dump, `M` is the node-only marker, `F` is the fixed mesh header, `L` is logical-location bytes, `C` is MeshBlock-cost bytes, `S` is optional Z4c tracker and turbulence state, and the final field stores per-MeshBlock payload bytes. Do not add serialized per-field descriptors. |
+| Payload descriptor fields | Hydro cell-centered; MHD cell-centered; MHD `x1f`, `x2f`, and `x3f`; radiation; forcing; Z4c; and mutually exclusive ADM fallback. Calculate every field element count, byte count, cumulative payload size, rank offset, node offset, payload size, and local subview count with checked arithmetic. |
+| New scope finding | Add `ROB-028`: `Mesh::BuildTreeFromRestart()` reconstructs replicated metadata with unchecked `listsize * nmb_total` allocation and broadcast arithmetic plus a signed cursor. Include `src/mesh/build_tree.cpp` in `RCP-01`. |
+| Existing findings confirmed | `ROB-004`: unchecked serial `fseek()` and negative `ftell()` conversion. `ROB-016`: missing restart path logs and continues. `ROB-019`: unbounded manifest probe and parser lines. `ROB-023`: parameter scanning discards the final reposition result. |
+| Compatibility constraints | Preserve legacy shared and per-rank restart bytes, node-only marker placement, manifest-only node entry semantics, and direct local-span routing. Do not broaden the descriptor into a restart rewrite. |
+| Accepted recommendations | Include metadata reconstruction; preflight signed counts before unsigned conversion; replace `int` Kokkos subview-count narrowing; use descriptor field offsets for MHD face strides; add artificial-count, serial-wrapper, bounded-manifest, and immediate missing-path tests. |
+| Rejected recommendations | None. Local Kokkos allocation preflight is accepted as part of the descriptor use sites rather than a separate abstraction. |
+| Stop-gate status | Pre-edit layout map and abstraction decision are recorded. Runtime editing may begin. |
