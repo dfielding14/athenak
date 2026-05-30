@@ -101,6 +101,7 @@ EXPECTED_RUNTIME_MODEL = (
     "lb_cost_per_particle=0 max_cell_cross=2 theta_max=0.3 restart_schema=7"
 )
 EXPECTED_RANK_COUNT = "Number of parallel ranks = 8"
+ERROR_HISTORY_ARTIFACT = "output/f2_multirank_runtime_metadata-errs.dat"
 
 
 def _sha256(data: bytes) -> str:
@@ -198,6 +199,9 @@ def _analyze_tree(artifact_tree: object) -> dict[str, object]:
     stderr_data, stderr = _decode(
         artifact_tree, inventory, "athena_stderr.txt", require_nonempty=True
     )
+    error_history_data, _ = _decode(
+        artifact_tree, inventory, ERROR_HISTORY_ARTIFACT, require_nonempty=True
+    )
     validate_frontier_mpich_diagnostic_stderr(stderr)
     if stdout.splitlines().count(EXPECTED_RANK_COUNT) != 1:
         raise ValueError("F2 Athena stdout does not report exactly one eight-rank record")
@@ -218,6 +222,7 @@ def _analyze_tree(artifact_tree: object) -> dict[str, object]:
             "f2-runtime-metadata.environment.allowlist.txt": _sha256(allowlist_data),
             "athena_stdout.txt": _sha256(stdout_data),
             "athena_stderr.txt": _sha256(stderr_data),
+            ERROR_HISTORY_ARTIFACT: _sha256(error_history_data),
         },
     }
 

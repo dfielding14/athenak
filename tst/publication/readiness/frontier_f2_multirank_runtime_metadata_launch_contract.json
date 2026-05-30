@@ -21,6 +21,12 @@
           "snapshot_role": "input-deck"
         },
         {
+          "literal": "-d"
+        },
+        {
+          "artifact_directory": "output"
+        },
+        {
           "literal": "job/basename=f2_multirank_runtime_metadata"
         },
         {

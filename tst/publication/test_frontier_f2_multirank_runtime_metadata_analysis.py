@@ -53,6 +53,9 @@ class FrontierF2MultirankRuntimeMetadataAnalysisTests(unittest.TestCase):
             encoding="utf-8",
         )
         inventory_path.chmod(0o444)
+        for path in sorted(root.rglob("*"), reverse=True):
+            if path.is_dir() and path != root / "analysis":
+                path.chmod(0o555)
         root.chmod(0o555)
 
     def _artifacts(self, root: Path) -> None:
@@ -90,6 +93,12 @@ class FrontierF2MultirankRuntimeMetadataAnalysisTests(unittest.TestCase):
             validate=True,
         )
         (root / "athena_stderr.txt").write_bytes(diagnostic)
+        output = root / "output"
+        output.mkdir()
+        (output / "f2_multirank_runtime_metadata-errs.dat").write_text(
+            "# bounded F2 error history\n0008 0008 0008 00001 0.0\n",
+            encoding="utf-8",
+        )
 
     def test_multirank_runtime_metadata_passes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -207,6 +216,16 @@ class FrontierF2MultirankRuntimeMetadataAnalysisTests(unittest.TestCase):
             )
             self._publish_inventory(root)
             with self.assertRaisesRegex(ValueError, "exactly one eight-rank record"):
+                analyze(root)
+
+    def test_multirank_runtime_metadata_rejects_missing_error_history(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._artifacts(root)
+            (root / "output/f2_multirank_runtime_metadata-errs.dat").unlink()
+            (root / "output").rmdir()
+            self._publish_inventory(root)
+            with self.assertRaisesRegex(ValueError, "omits required path"):
                 analyze(root)
 
     def test_trusted_runner_publishes_receipt_and_recomputes_without_writing(self) -> None:
