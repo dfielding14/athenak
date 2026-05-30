@@ -133,6 +133,13 @@ qualify any scientific claim by itself.
   handoff `06392534`, zero-consumption reconciliation, paired recovery
   successor `f2ad817a` and policy promotion `51c9d6a4` pass; a fresh F0 retry
   remains pending.
+- `q027_frontier_f0_compute_snapshot_activation_2026-05-30.json`: successor
+  chronology for compute-startup failure job `4745755`, whose Project Home
+  writer lock returned `OSError 524` before Athena. Reviewed paired successor
+  `e8e47ead` uses an authorized-root-traversed, descriptor-pinned, byte-stable
+  read-only compute snapshot while preserving login-side writer locks. Fresh
+  structured F0 job `4745842`, policy promotion `6d6bf1cd`, reconciliation and
+  parser analysis pass; registered-science prerequisites remain open.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.

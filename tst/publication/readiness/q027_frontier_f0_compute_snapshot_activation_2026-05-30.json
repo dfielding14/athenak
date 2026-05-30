@@ -1,0 +1,215 @@
+{
+  "record_type": "q027_frontier_f0_compute_snapshot_activation",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-002",
+    "Q-013",
+    "Q-025",
+    "Q-027",
+    "Q-038",
+    "Q-042"
+  ],
+  "qualification_effect": "structured_clean_candidate_f0_compute_node_snapshot_launch_and_reconciliation_pass_registered_science_prerequisites_remain_open",
+  "scope": "Successor chronology for the first executed clean-candidate Frontier F0 parser-contract retries. Predecessor f2ad817a correctly attached and released job 4745755, but Frontier compute-node startup failed before Athena because the Project Home mount returned OSError 524 when the trampoline attempted the login-side mirrored writer lock. Reviewed successor e8e47ead retains writer locks for login-side reads and all mutation paths, while the dedicated numeric-job-ID compute trampoline validates a descriptor-pinned, byte-stable, authorized-root-traversed read-only snapshot of both ledgers, receipts and paired genesis anchors. Fresh job 4745842 completed through that installed successor and passed the structured parser analyzer. This record authorizes the F0 admission smoke only and does not promote registered-science evidence.",
+  "predecessor": {
+    "control_plane_version": "f2ad817ae63a2a4c28d60e6c08e781aaaf59a3b67fac7dc4150ea0d440fe64cd",
+    "operational_source_commit": "3df7deeedf3aad1e5c5843c357fda2a46545c0be",
+    "record": "tst/publication/readiness/q027_frontier_f0_purged_submission_recovery_activation_2026-05-30.json",
+    "policy_sha256": "2f01e58fe21880deefc50d90cfc44ae4a70c4093bcd4adf44c32e00211baa898",
+    "promotion_sha256": "51c9d6a4979681e07e9b310f25381d6787f1545129508c5ad4ce56e88717a17c"
+  },
+  "failed_submission": {
+    "submission_id": "928e3884-07a9-4e7f-ad9a-32bd7f0a5c0b",
+    "reservation_id": "3570ad95-533b-4ce5-b569-eb01431ea31f",
+    "job_id": "4745755",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f0_hipmpi_smoke/928e3884-07a9-4e7f-ad9a-32bd7f0a5c0b/pre_submit_manifest.json",
+    "manifest_sha256": "494205ba0166fb5be1ae38ed3e96db4cba9a5f28597cbaaeeade5d7e9ed9e881",
+    "failure_log": "/lustre/orion/ast207/proj-shared/dfielding/PIC/logs/slurm/run_installed_control_plane_job.sh.4745755.log",
+    "failure_log_sha256": "8f2b2eb0301c20bfecead0319cd3026775dd62f2cca0c056e6f00f19f8f65ea7",
+    "scheduler_snapshot": {
+      "job_name": "run_installed_control_plane_job.sh",
+      "state": "FAILED",
+      "allocated_nodes": 1,
+      "submit": "2026-05-30T16:32:52",
+      "start": "2026-05-30T16:33:00",
+      "end": "2026-05-30T16:33:05",
+      "elapsed_raw": 5,
+      "exit_code": "1:0"
+    },
+    "diagnostic": "launch_trampoline entered reservation_bound_manifest and failed before Athena while ledger_lock attempted fcntl.flock on the Project Home mirror parent descriptor: OSError [Errno 524] Unknown error 524",
+    "ledger_transition": {
+      "reservation_sequence_number": 25,
+      "reservation_event_sha256": "94930759a65eb0740754a73bf0ecfdce2b69e3be2f1c8a95482707df293572a7",
+      "attached_sequence_number": 26,
+      "attached_event_sha256": "e5f08d1e609a4280ab1be75d8f29aa7805b797ccfe0c6cad824007eb53e96900",
+      "reconciled_sequence_number": 27,
+      "reconciled_event_sha256": "8e8df601342507601f5ce2593d9d687657c7aded168447bc83414bcb0fea4bab",
+      "consumed_node_hours": 0.001388888888888889,
+      "cumulative_consumed_node_hours": 0.07583333333333331
+    },
+    "disposition": "reconciled_failed_compute_startup_before_athena_then_repaired_by_reviewed_successor"
+  },
+  "active_successor": {
+    "control_plane_version": "e8e47eadb491b20e3f196f3d8ea0b859c61ccad961f8d56bc85ea2a48424eecf",
+    "operational_source_commit": "a110e38c223469d0c414c085f12bbe145c53741b",
+    "orion_install": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/e8e47eadb491b20e3f196f3d8ea0b859c61ccad961f8d56bc85ea2a48424eecf",
+    "project_home_install": "/ccs/proj/ast207/proj-shared/PIC/control_plane/e8e47eadb491b20e3f196f3d8ea0b859c61ccad961f8d56bc85ea2a48424eecf",
+    "inventory_sha256": "7820f022392ac4baf75a18d6fa5ee23e04fc30627c42a7147203235ea4652653",
+    "paired_install_status": "pass_identical_immutable_install"
+  },
+  "repair_contract": {
+    "compute_node_lookup": "dedicated_numeric_scheduler_job_id_descriptor_pinned_read_only_snapshot",
+    "authoritative_snapshot_files": [
+      "orion_ledger_jsonl",
+      "orion_mirror_receipts_jsonl",
+      "project_home_ledger_jsonl",
+      "orion_genesis_anchor_json",
+      "project_home_genesis_anchor_json"
+    ],
+    "snapshot_guards": [
+      "authorized_root_traversal_for_new_and_inherited_parent_descriptors",
+      "nofollow_regular_leaf_descriptors",
+      "descriptor_captured_byte_map_semantic_validation",
+      "orion_project_home_ledger_equality",
+      "receipt_provenance_and_exact_order",
+      "paired_read_only_genesis_anchor_binding",
+      "pathname_inode_identity_recheck_before_validation_after_validation_and_after_use",
+      "exact_authoritative_byte_recheck_after_validation_and_after_use"
+    ],
+    "writer_contract": "login_side_reads_and_all_mutations_retain_the_mirrored_ledger_lock",
+    "adversarial_regressions": [
+      "frontier_compute_launch_passes_when_fcntl_flock_raises_errno_524",
+      "login_side_predispatch_lookup_retains_the_lock",
+      "transient_coherent_pathname_ABA_substitution_yields_only_descriptor_captured_records",
+      "nested_parent_pin_rechecks_authorized_root_traversal",
+      "receipt_drift_parent_replacement_leaf_replacement_and_genesis_anchor_replacement_fail_closed"
+    ]
+  },
+  "local_validation": {
+    "control_plane_discovery_tests": {
+      "status": "pass",
+      "tests_run": 261
+    },
+    "publication_pic_discovery_tests": {
+      "status": "pass",
+      "tests_run": 76
+    },
+    "publication_frontier_discovery_tests": {
+      "status": "pass",
+      "tests_run": 5
+    },
+    "readiness_registry_tests": {
+      "status": "pass",
+      "tests_run": 8
+    },
+    "focused_compute_snapshot_tests": {
+      "status": "pass",
+      "tests_run": 11
+    },
+    "live_read_only_snapshot_probe": {
+      "status": "pass",
+      "records": 28,
+      "head_event_sha256": "8e8df601342507601f5ce2593d9d687657c7aded168447bc83414bcb0fea4bab"
+    },
+    "python_compile": "pass",
+    "shell_syntax": "pass",
+    "git_diff_check": "pass"
+  },
+  "independent_review": {
+    "status": "pass",
+    "reviewed_commit": "a110e38c223469d0c414c085f12bbe145c53741b",
+    "reviewed_control_plane_version": "e8e47eadb491b20e3f196f3d8ea0b859c61ccad961f8d56bc85ea2a48424eecf",
+    "independent_reviewers": 3,
+    "review_scope": "compute-node errno-524 lock avoidance, dedicated numeric scheduler binding, descriptor-pinned semantic byte-map validation, transient coherent pathname ABA substitution, nested inherited-parent rooted traversal, pathname inode replacement, receipt drift and retained login-side writer-lock discipline"
+  },
+  "paired_install_transition": {
+    "status": "pass_identical_immutable_install_and_active_promotion",
+    "control_plane_version": "e8e47eadb491b20e3f196f3d8ea0b859c61ccad961f8d56bc85ea2a48424eecf",
+    "inventory_sha256": "7820f022392ac4baf75a18d6fa5ee23e04fc30627c42a7147203235ea4652653",
+    "genesis_event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
+    "genesis_mirror_ack_sha256": "a3af8af8c3b579ee323850902aad7aab58abde98dff98618ccffd15958dbb296",
+    "orion_ledger_records": 31,
+    "orion_receipt_records": 31,
+    "project_home_ledger_records": 31,
+    "active_reservations": 0
+  },
+  "active_policy_transition": {
+    "status": "pass",
+    "validated_utc": "2026-05-30T20:47:19Z",
+    "control_plane_version": "e8e47eadb491b20e3f196f3d8ea0b859c61ccad961f8d56bc85ea2a48424eecf",
+    "policy_sha256": "cfe6610a4f7f54b153f2e20b30397d0417a2634b32997117f6d14a2eb4b771cc",
+    "promotion_sha256": "6d6bf1cd54dc0d0e0a86bd296d8c84df5966c310b4b1191b53972c7b0799dbe2",
+    "idempotent_post_promotion_validation": "pass",
+    "frontier_admission_smoke_status": "authorized_f0_parser_contract_only",
+    "orion_ledger_records": 31,
+    "orion_receipt_records": 31,
+    "project_home_ledger_records": 31,
+    "cumulative_consumed_node_hours": 0.07833333333333331,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent"
+  },
+  "successful_structured_f0": {
+    "status": "pass_completed_and_reconciled",
+    "submission_id": "226e81ee-df8c-41e3-a9d1-e250471e43c1",
+    "reservation_id": "ab0ed163-9510-425e-a68f-9554e94b38fc",
+    "job_id": "4745842",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f0_hipmpi_smoke/226e81ee-df8c-41e3-a9d1-e250471e43c1/pre_submit_manifest.json",
+    "manifest_sha256": "cc9f47e1e2acfcffee5ec363f50950a7e90d1b975cb19bf009576ac71b1a6281",
+    "artifact_dir": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f0_hipmpi_smoke/226e81ee-df8c-41e3-a9d1-e250471e43c1",
+    "scheduler_snapshot": {
+      "job_name": "run_installed_control_plane_job.sh",
+      "state": "COMPLETED",
+      "allocated_nodes": 1,
+      "submit": "2026-05-30T16:47:23",
+      "start": "2026-05-30T16:47:28",
+      "end": "2026-05-30T16:47:37",
+      "elapsed_raw": 9,
+      "exit_code": "0:0"
+    },
+    "ledger_transition": {
+      "reservation_sequence_number": 28,
+      "reservation_event_sha256": "700a74a2ffed2c10792746f887be1a257ca737a4e46af17aedb8c8f7375a5c14",
+      "attached_sequence_number": 29,
+      "attached_event_sha256": "bdd45f0f660e31314da18fb6efc83a5780929d5d65534456639e90c297c7d334",
+      "reconciled_sequence_number": 30,
+      "reconciled_event_sha256": "26b0849320a3d816479fdc91cc140919a0615e4df3ce927c64a057140db789f2",
+      "consumed_node_hours": 0.0025,
+      "cumulative_consumed_node_hours": 0.07833333333333331
+    },
+    "structured_analysis": {
+      "status": "pass",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f0_hipmpi_smoke/226e81ee-df8c-41e3-a9d1-e250471e43c1/analysis.json",
+      "sha256": "d2db63550953c61ca3783136fbc03418b69097b2e2044302ac26ab328b275da1",
+      "runtime_profile": "frontier_minimum_supported",
+      "parser_smoke": "pass",
+      "launch_contract": "trusted_trampoline_athena_argv_v1"
+    }
+  },
+  "ledger_validation": {
+    "status": "pass",
+    "orion_ledger_records": 31,
+    "orion_receipt_records": 31,
+    "project_home_ledger_records": 31,
+    "orion_ledger_sha256": "f43b9589d1cbc8b4c5e1646024e2a04573b61b2022127bec8519406183da4c83",
+    "project_home_ledger_sha256": "f43b9589d1cbc8b4c5e1646024e2a04573b61b2022127bec8519406183da4c83",
+    "orion_receipts_sha256": "27db7005682b152e61296a56ea43a267fd3dc1081609c379681ac94a8b0398c1",
+    "orion_csv_sha256": "61c42c6b9a6c06cb9de940e9eef06509ce5ecbc485e4d9b6568e2eeb018ccb5a",
+    "cumulative_consumed_node_hours": 0.07833333333333331,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent"
+  },
+  "inherited_clean_candidate_freeze": {
+    "status": "authorized",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/clean_candidate_manifest.json",
+    "manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41",
+    "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8"
+  },
+  "open_boundaries": [
+    "registered-science submissions remain paused pending applicable prerequisites",
+    "matched Frontier environment-profile XNACK and OFI A/B evidence remains open",
+    "clean-candidate rank-launched Athena MPI and registered-science matrix remains open",
+    "external reviewer disposition remains pending external review"
+  ],
+  "overall_disposition": "structured_clean_candidate_f0_compute_snapshot_launch_pass_reconciled_active_successor_registered_science_remains_paused"
+}

@@ -210,8 +210,15 @@ class PicReadinessRegistryTests(unittest.TestCase):
         source_alias_candidate = _load(
             "q027_control_plane_source_alias_hardening_candidate_2026-05-30.json"
         )
-        candidate = _load(
+        recovery_candidate = _load(
             "q027_frontier_f0_purged_submission_recovery_activation_2026-05-30.json"
+        )
+        candidate = _load(
+            "q027_frontier_f0_compute_snapshot_activation_2026-05-30.json"
+        )
+        self.assertEqual(
+            candidate["predecessor"]["control_plane_version"],
+            recovery_candidate["active_successor"]["control_plane_version"],
         )
         self.assertEqual(
             storage["staged_control_plane_candidate_version"],
@@ -297,11 +304,11 @@ class PicReadinessRegistryTests(unittest.TestCase):
             )
             self.assertEqual(
                 admission_activation["control_plane_version"],
-                candidate["predecessor"]["control_plane_version"],
+                recovery_candidate["predecessor"]["control_plane_version"],
             )
             self.assertEqual(
                 admission_activation["policy_sha256"],
-                candidate["predecessor"]["policy_sha256"],
+                recovery_candidate["predecessor"]["policy_sha256"],
             )
             self.assertEqual(
                 admission_activation["science_submission_freeze"],
@@ -335,7 +342,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 recovery_transition["policy_sha256"],
                 _sha256(READINESS_DIR / "storage_policy.json"),
             )
-            self.assertEqual(recovery_transition["orion_ledger_records"], 25)
+            self.assertEqual(recovery_transition["orion_ledger_records"], 31)
             self.assertEqual(
                 recovery_transition["orion_ledger_records"],
                 recovery_transition["project_home_ledger_records"],
