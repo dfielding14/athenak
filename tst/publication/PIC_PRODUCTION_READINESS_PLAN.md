@@ -2273,7 +2273,7 @@ and measured values as work progresses.
 | Q-041 | Undriven CRPAI nonlinear saturation | Undriven branch evolution, anisotropy, spectra, scattering, saturation, effective-damping trends, sensitivity matrix, matched reduced nonlinear full-f controls and archived weight-validity envelope, distinct from Section 5.6 linear reproduction and physical-damping calibration | Blocked by Q-007 |
 | Q-042 | AthenaK architecture and style conformance | Review every implementation batch against nearby AthenaK patterns; run targeted formatting/lint checks and the repository style baseline; archive evidence for any accuracy- or efficiency-driven exception; introduce no new style violations or avoidable PIC-only infrastructure | Verifying: predecessor host architecture sidecars plus `q042_schema7_architecture_docs_successor_2026-05-30.json` cover the schema-6, shock-control, comoving-flux, schema-7 provenance/spectrum, repeated-AMR, warning-free Sphinx and bounded serial-host standard-MHD compatibility tranches, including one-cycle blast-AMR, shearing and orbital-advection launches; focused host regressions, targeted touched-file C++ lint and `git diff --check` pass; predecessor control-plane digest `3e933edd` and superseded successor candidates `d8820c33`, `121f9f8f`, `7b722ab2`, `7ea4aa8b`, `1843ce72`, `7397038b`, `88db7e94` and `0d07f132` are preserved as chronology; live outer-anchor digest `80c0797b` retained all earlier controls and additionally serialized ledger mutation and policy promotion through site-owned `/lustre/orion/ast207` outside replaceable PIC domains. Its 208-test control-plane suite, 36-test focused ledger suite, paired temporary install, 286-test publication discovery, independent clone/hardlink retest and quiescent paired promotion pass. Active MODULEPATH-hardening digest `c8002a1d` preserves those controls, closes stripped-wrapper provenance drift and passes 212 control-plane tests, 288 publication tests, static checks, independent runtime audit, paired install, idempotent anchor migration and coherent promotion; clean-candidate freeze, non-PIC MPI/multilevel runtime slices, Frontier and external review remain open |
 
-Current staged Q-027/Q-038/Q-042 successor `6cbbbbd6` preserves the active
+Current active Q-027/Q-038/Q-042 successor `6cbbbbd6` preserves the predecessor
 `c8002a1d` controls and closes the next exact-build blocker: the authenticated
 `/ccs/home/dfielding/athenak-pic` site mount alias was compared directly with
 its resolved `/autofs/...` submodule path. The successor normalizes only after
@@ -2281,9 +2281,9 @@ exact lexical authentication, preserves that lexical spelling for the second
 writer authorization boundary, rejects arbitrary generated-checkout aliases
 including the zero-submodule case and passes 217 control-plane tests, 293
 publication tests, static checks, the actual clean pinned `kokkos` probe and
-two independent reviews. Paired immutable install and idempotent anchor
-migration pass; active-policy promotion and the exact clean-candidate freeze
-remain open.
+two independent reviews. Paired immutable install, idempotent anchor migration
+and coherent policy promotion pass; the exact clean-candidate freeze remains
+open.
 
 ## Immediate Agent Handoff: First Actions
 
@@ -2303,9 +2303,9 @@ Future implementation agents should execute the following successor sequence:
    artifact creation. Active reviewed successor `c8002a1d` from operational
    commit `37ccee56` closed that drift, but the exact clean-build retry then
    rejected the authenticated `/ccs/home/...` source alias before artifact
-   creation. Paired reviewed successor `6cbbbbd6` from operational commit
-   `5f1458e3` is installed with its existing-genesis anchor migration complete.
-   Promote it, then rerun the exact clean build and freeze.
+   creation. Active reviewed successor `6cbbbbd6` from operational commit
+   `5f1458e3` is paired-installed and promoted with its existing-genesis anchor
+   migration complete. Rerun the exact clean build and freeze.
 5. Curate a clean source commit series, remove or classify generated guard
    outputs and freeze the exact clean candidate and executable digest.
 6. Close remaining local prerequisites: Q-009 broader-boundary, MPI, ASan and
@@ -2376,6 +2376,7 @@ Future implementation agents should execute the following successor sequence:
 | 2026-05-30 | Preserved live `80c0797b` after its first clean build-profile attempt rejected caller-dependent Frontier `MODULEPATH` provenance before artifact creation; staged runtime-hardening digest `c8002a1d` resets a reviewed seed before loading, publishes the exact reviewed 19-component value after module work and passes its 212-test control-plane suite, 288-test publication discovery, static checks and independent stripped-wrapper audit | Keep science submissions paused until paired successor install, active-policy promotion and exact clean-candidate freeze |
 | 2026-05-30 | Activated runtime-hardening snapshot `c8002a1d`: paired immutable Orion and Project Home install, idempotent existing-genesis anchor migration, coherent policy SHA `46bac279` promotion and post-promotion validation pass while all three ledger streams remain at 22 records | Keep science submissions paused until the exact clean-candidate build and freeze plus applicable prerequisites close |
 | 2026-05-30 | Preserved live `c8002a1d` after its exact clean build-profile retry rejected clean initialized `kokkos` because the authorized `/ccs/home/...` source mount alias was compared directly with its resolved `/autofs/...` path before artifact creation; staged source-alias hardening digest `6cbbbbd6` normalizes only after exact lexical authentication, preserves the second writer authorization handoff, rejects arbitrary checkout aliases including zero-submodule roots and passes its 217-test control-plane suite, 293-test publication discovery, static checks, actual-worktree probe and two independent reviews | Keep science submissions paused until paired successor install, active-policy promotion and exact clean-candidate freeze |
+| 2026-05-30 | Activated source-alias hardening snapshot `6cbbbbd6`: paired immutable Orion and Project Home install, idempotent existing-genesis anchor migration, coherent policy SHA `6533172b` promotion and post-promotion validation pass while all three ledger streams remain at 22 records | Keep science submissions paused until the exact clean-candidate build and freeze plus applicable prerequisites close |
 
 ## Source Pointers For The Initial Review
 

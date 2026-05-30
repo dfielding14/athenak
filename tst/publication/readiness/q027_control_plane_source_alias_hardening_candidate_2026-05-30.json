@@ -7,7 +7,7 @@
     "Q-038",
     "Q-042"
   ],
-  "qualification_effect": "paired_source_alias_hardening_successor_install_pass_active_policy_promotion_pending",
+  "qualification_effect": "paired_source_alias_hardening_successor_activation_pass_science_submission_freeze_pending",
   "scope": "Successor chronology after the exact clean Orion build-profile attempt through live MODULEPATH-hardening digest c8002a1d rejected initialized clean submodule kokkos before creating artifacts. The authorized lexical source spelling /ccs/home/dfielding/athenak-pic resolves through site mount aliases to /autofs/nccs-svm1_home2/dfielding/athenak-pic. The predecessor validator authenticated the reviewed lexical root but then compared each lexical submodule path directly with its resolved physical path. This successor normalizes only after the exact authorized-spelling and resolved-identity checks, preserves the lexical spelling across the second writer authentication boundary, and keeps generated checkout plus submodule canonical-path rejection strict. This record does not attest a paired live install, active-policy promotion, clean-candidate freeze or Frontier science execution.",
   "live_predecessor": {
     "record": "tst/publication/readiness/q027_control_plane_modulepath_hardening_candidate_2026-05-30.json",
@@ -25,7 +25,7 @@
     "control_plane_version": "6cbbbbd6f5da8fb2dcd0a1ab9b91fca51570f5a54502dcb1da59aea0eda0f3ab",
     "operational_source_commit": "5f1458e30bc7af19642f7db36d2dba6a3a083a46",
     "paired_install_status": "pass_identical_immutable_install_and_anchor_migration",
-    "active_policy_promotion_status": "pending",
+    "active_policy_promotion_status": "pass",
     "science_submission_freeze": "pending_clean_candidate_freeze"
   },
   "local_validation": {
@@ -88,11 +88,20 @@
     "reviewed_control_plane_version": "6cbbbbd6f5da8fb2dcd0a1ab9b91fca51570f5a54502dcb1da59aea0eda0f3ab",
     "independent_reviewers": 2
   },
+  "active_policy_transition": {
+    "status": "pass",
+    "activated_utc": "2026-05-30T19:31:09Z",
+    "control_plane_version": "6cbbbbd6f5da8fb2dcd0a1ab9b91fca51570f5a54502dcb1da59aea0eda0f3ab",
+    "policy_sha256": "6533172b92c22a91c42a1c9c994143c2d619f9fad39ccf07417653bb89fcf167",
+    "promotion_sha256": "db4c788570b8e5246b6a3d1ccef9d58ad0a4ac542b247482df8baf632d27a2b4",
+    "idempotent_post_promotion_anchor_validation": "pass",
+    "cumulative_consumed_node_hours": 0.07444444444444442,
+    "active_reservations": 0
+  },
   "open_boundaries": [
-    "active-policy promotion remains pending",
     "science_submission_freeze.status remains pending_clean_candidate_freeze",
     "matched Frontier environment-profile A/B evidence remains open",
     "external reviewer disposition remains pending external review"
   ],
-  "overall_disposition": "source_alias_hardening_successor_paired_install_pass_all_science_submissions_paused_pending_promotion_clean_candidate_freeze_and_applicable_prerequisites"
+  "overall_disposition": "source_alias_hardening_successor_paired_activation_pass_all_science_submissions_paused_pending_clean_candidate_freeze_and_applicable_prerequisites"
 }
