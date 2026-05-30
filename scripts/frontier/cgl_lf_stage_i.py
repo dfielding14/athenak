@@ -363,10 +363,11 @@ def node_hours(nodes: int, seconds: int) -> float:
 def require_safe_segment(value: str) -> str:
     """Require a path- and Slurm-safe retained segment identifier."""
 
-    if SEGMENT_PATTERN.fullmatch(value) is None:
+    if value == "analysis" or SEGMENT_PATTERN.fullmatch(value) is None:
         raise ValueError(
             "--segment must contain 1-29 ASCII letters, digits, underscores, "
-            "or hyphens and must begin with a letter or digit"
+            "or hyphens, must begin with a letter or digit, and must not use "
+            "the reserved analysis namespace"
         )
     return value
 

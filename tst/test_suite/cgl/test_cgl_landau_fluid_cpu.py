@@ -1249,7 +1249,7 @@ def test_cgl_lf_stage_i_hardens_identifiers_overrides_json_and_locking(
     assert stage_i.expected_job_name({
         "run": {"case_id": "R16", "segment": "s-01"},
     }) == f"cgl_mks24_{stage_i.EXECUTION_EPOCH_SLUG}_R16_s_01"
-    for value in ("../escape", "bad/name", "x" * 30):
+    for value in ("../escape", "bad/name", "analysis", "x" * 30):
         with pytest.raises(ValueError, match="--segment"):
             stage_i.require_safe_segment(value)
     for value in ("0", "-1", "123.batch", "not-a-job"):
