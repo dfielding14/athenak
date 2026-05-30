@@ -84,8 +84,9 @@ pic_feedback_mode                 = coupled
 pic_enable_2d3v                   = true
 pic_sort_interval                 = 16
 pic_intermediate_arrays           = auto
-# C = 1e4 U_A0 in Section 5.4; with rho0=1 and B0=1, U_A0=1.
-pic_cr_light_speed                = 1.0e4
+# The reduced-speed-of-light parameter used in Section 5.4 is not implemented
+# in this nonrelativistic Boris branch. Non-default pic_cr_light_speed values
+# are intentionally rejected rather than silently ignored.
 
 <species0>
 mass   = 1.0

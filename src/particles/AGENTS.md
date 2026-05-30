@@ -48,13 +48,15 @@ Index constants are defined in `athena.hpp`:
     `IPDX/IPDY/IPDZ` (displacement), `IPDB` (parallel displacement),
     `IPEX/IPEY/IPEZ` (sampled midpoint `cE`), `IPDPX/IPDPY/IPDPZ` (per-step
     momentum-rate feedback channels), `IPDE` (per-step energy-rate channel),
-    `IPEBDOT` (midpoint frozen-in orthogonality diagnostic `cE dot B`)
+    `IPEBDOT` (midpoint frozen-in orthogonality diagnostic `cE dot B`),
+    `IPWT` (relative macro-particle weight)
   - Stars (`StarParticlesIndex`): `IPT_CREATE`, `IPMASS`, `IPT_NEXT_SN`
 
 The number of real slots (`nrdata`) is chosen at construction time:
 - Cosmic rays:
-  - Always provisioned as `nrdata = IPEBDOT + 1` so midpoint E+B and coupled
-    feedback diagnostics are available in all staged PIC modes.
+  - Always provisioned as `nrdata = IPWT + 1` so midpoint E+B, coupled feedback
+    diagnostics, and per-particle macro weights are available in all staged PIC
+    modes.
 - Stars: `nrdata = 9` (positions, velocities, and three star fields).
 
 `nidata` is always 3 (`PGID`, `PTAG`, and `PSP` or `NSN`).
@@ -64,8 +66,10 @@ The number of real slots (`nrdata`) is chosen at construction time:
 ## Particle Types
 
 ### Cosmic rays (`particle_type = cosmic_ray`)
-- Particle count: `ppc` (particles per cell). Total per pack is
-  `ppc * nmb_thispack * nx1 * nx2 * nx3` truncated to an integer.
+- Particle count: `ppc` (particles per cell). Counts are computed per global
+  MeshBlock from cumulative `floor(gid * ppc * nx1 * nx2 * nx3)` differences
+  so total particle count is independent of MPI rank decomposition, including
+  fractional `ppc`.
 - Species:
   - `nspecies` in `<particles>` block.
   - Species properties in blocks `species0`, `species1`, ... with `mass` and
@@ -74,8 +78,16 @@ The number of real slots (`nrdata`) is chosen at construction time:
     `vx0`, `vy0`, `vz0` (fallback to global `cr_vx0/cr_vy0/cr_vz0`).
   - `IPM` stores charge-to-mass ratio for each particle.
 - Initialization:
-  - `cr_distribution = center` (default) places particles at block centers.
-  - `cr_distribution = random` uses Kokkos RNG to place uniformly in each block.
+  - `cr_distribution = center` (default) maps particles over MeshBlock cell
+    centers; it does not collapse every particle in a block onto the block
+    center.
+  - `cr_distribution = random` uses deterministic per-global-block hashing
+    controlled by `pic_random_seed` to place uniformly in each block. Species
+    are assigned round-robin per block, and particles with the same
+    `position_index = pinmb/nspecies` share a position across species.
+  - `IPWT` is initialized as local cell volume divided by root-cell volume, so
+    ppc-created particles carry refinement-consistent macro weights while
+    preserving root-level `deposit_qscale` semantics.
 - Optional displacement tracking via `track_displacement` updates `IPD*` and `IPDB`.
 - Boris pushers support both MHD-carried fields (`coupled` / `passive_mhd`) and
   particle-owned no-MHD carriers (`pic_background_mode=no_mhd`).
@@ -96,9 +108,10 @@ The number of real slots (`nrdata`) is chosen at construction time:
 ### Pusher selection (`<particles>` block)
 Supported strings in code:
 - `drift` -> `PushDrift`
-- `rk4_gravity` -> `PushStars`
+- `rk4_gravity` -> `PushStars`; valid only with `particle_type=star`
 - `boris_lin` -> `PushCosmicRays` with linear interpolation
 - `boris_tsc` -> `PushCosmicRays` with TSC interpolation
+- Boris pushers are valid only with `particle_type=cosmic_ray`.
 
 Note: the enum also lists `leap_frog`, `lagrangian_tracer`, and `lagrangian_mc`,
 but these are not wired in the constructor.
@@ -132,7 +145,13 @@ but these are not wired in the constructor.
 - `deposit_order`:
   - default and all non-direct paths: `1` only
   - coupled `direct_staggered` path: `1` and `2` supported
+  - coupled `direct_staggered` deposition is trajectory-based and aborts if the
+    old-to-new particle shape support shifts by more than one cell in any active
+    dimension; lower `time/cfl_number` or `pic_max_cell_cross` if that guard trips.
 - `deposit_qscale`: macro-charge scaling.
+- Restart files persist the particle record for every active particle mode.
+  When `deposit_moments=true`, restart files also persist deposited moment
+  arrays; coupled edge-staggered runs additionally persist `j_edge_x*e`.
 
 ### PR2 E-field coupling controls
 - `couple_moments_to_mhd` (default `false`): opt-in particle-to-MHD coupling.
@@ -140,7 +159,8 @@ but these are not wired in the constructor.
   coefficient applied in MHD `EFieldSrc`.
 - `couple_j_to_efield_representation`:
   - `cell_centered` (default): uses deposited CC current directly.
-  - `edge_staggered`: runs deterministic CC->edge conversion before `EFieldSrc`.
+  - `edge_staggered`: stores current on the edge-centered layout consumed by
+    `MHD::EFieldSrc`.
 
 ### PR2 fluid feedback controls
 - `couple_moments_momentum_to_mhd` (default `false`)
@@ -151,6 +171,9 @@ but these are not wired in the constructor.
   - `efield_src` (parity experiment mode).
 
 ### Deterministic CR initialization knobs
+- `cr_distribution=center` maps initialized positions deterministically onto cell
+  centers across each MeshBlock. It no longer collapses all particles in a block
+  onto the MeshBlock center; extra particles wrap over cell centers.
 - `cr_vx0`, `cr_vy0`, `cr_vz0` default to `0.0` and are used by PR2 regression
   tests to make integrated current expectations deterministic.
 - `speciesN/vx0`, `speciesN/vy0`, `speciesN/vz0` optionally override those
@@ -164,14 +187,23 @@ but these are not wired in the constructor.
   - default `test_particle` for `pic_background_mode=passive_mhd`
   - accepted values: `coupled`, `test_particle`
 - `pic_interp_scheme`: `tsc` (default and currently only valid value).
-- `pic_cr_light_speed` (default `1.0`), `pic_max_cell_cross` (default `2`),
-  `pic_theta_max` (default `0.3`) with positivity guards.
+- `pic_enable_2d3v`: required for Boris pushers on 2D meshes; the reduced
+  2D/2V Lorentz-force path is not implemented.
+- `pic_cr_light_speed` is reserved for a future reduced-speed-of-light pusher;
+  only the default value `1.0` is accepted.
+- `pic_max_cell_cross` (default `2`) and `pic_theta_max` (default `0.3`)
+  with positivity guards. `pic_max_cell_cross` must not exceed the smallest
+  active MeshBlock dimension because particle exchange is nearest-neighbor.
 - `pic_deltaf_mode`: `off` (default) or `on`; `on` requires
-  `pic_deltaf_f0` to be explicitly set.
+  `pic_deltaf_f0` to be explicitly set to `kappa_iso` or `uniform_quiet`.
   - staged behavior: with `cr_distribution=random`, `pic_deltaf_mode=on`
     applies deterministic low-discrepancy quiet-start particle placement for
-    reduced sampling noise in proxy instability tests.
+    reduced sampling noise in proxy instability tests. It does not yet apply a
+    full delta-f particle-weight evolution or otherwise use `pic_deltaf_f0` in
+    moment deposition.
 - `pic_sort_interval` (default `0`, must be `>= 0`).
+- `pic_random_seed` (default `0`, must be `>= 0`) controls deterministic
+  `cr_distribution=random` particle placement.
 - `pic_intermediate_arrays`: `auto` (default) or `off`.
 - `pic_expanding_box_mode`: `off` (default) or `on`.
 - `pic_expansion_rate_x1/x2/x3` default to `0.0`; non-zero expansion rates
@@ -190,7 +222,8 @@ but these are not wired in the constructor.
   - `pic_feedback_mode=test_particle`
   - coupling toggles disabled (`couple_moments_to_mhd`,
     `couple_moments_momentum_to_mhd`, `couple_moments_energy_to_mhd`)
-  - Boris pushers use `pic_no_mhd_bcc0` instead of `pmhd->bcc0`.
+  - Boris pushers use `pic_no_mhd_bcc0` instead of `pmhd->bcc0`; the
+    particle-owned carrier is allocated to AMR `max_nmb_per_rank` capacity.
 
 ### Runtime guards (constructor)
 - Coupling requires `deposit_moments=true` and an active `<mhd>` block.
@@ -220,7 +253,12 @@ High-level flow:
 7. **ClearRecv/ClearSend**: finalize MPI requests.
 
 Notes from `bvals_part.cpp`:
-- `BoundaryFlag::user` on a face marks particles for destruction.
+- `BoundaryFlag::reflect` is handled immediately after each pusher by mirroring
+  the particle position and flipping the normal velocity before deposition or
+  exchange.
+- Any particle that still exits through a non-periodic physical face during
+  exchange (`outflow`, `inflow`, `user`, or an unhandled physical crossing) is
+  marked for destruction.
 - Periodic boundaries wrap positions back into the global domain.
 - Arrays are resized when receives exceed sends, and compacted after destruction.
 - `mesh->CountParticles()` is called after exchanges to update global counts.
@@ -241,15 +279,23 @@ Particle migration communication depends on coupling mode:
 In coupled mode, moment wrappers are also inserted into `stagen` on stage 1:
 - insertion anchor is selected by `couple_fluid_feedback_order`
   (`MHD::MHDSrcTerms` vs `MHD::EFieldSrc`)
-- if `couple_j_to_efield_representation=edge_staggered`, conversion task
-  `ConvertCoupledCurrentRepresentation` is inserted immediately before
-  `MHD::EFieldSrc` and depends on both `CornerE` and wrapper completion.
+- if `couple_j_to_efield_representation=edge_staggered` and
+  `couple_j_deposition_mode=cc_convert`, `ConvertCoupledCurrentRepresentation`
+  is inserted immediately before `MHD::EFieldSrc` and depends on both `CornerE`
+  and wrapper completion.
+- if `couple_j_deposition_mode=direct_staggered`, direct edge-current
+  synchronization and physical-BC tasks are inserted before `MHD::EFieldSrc`
+  instead of the CC conversion task. Physical edge-current BCs cover
+  `periodic`, `reflect`, and `outflow`; direct mode rejects `inflow`, so use
+  `couple_j_deposition_mode=cc_convert` for inflow-boundary coupled runs.
 
 ---
 
 ## Outputs and Diagnostics (references)
 - `outputs/vtk_prtcl.cpp` and `outputs/track_prtcl.cpp` consume `prtcl_rdata` and
   `prtcl_idata` for particle dumps and tracked particles.
+- `trk` output selects particles by nonnegative `PTAG < <output>/nparticles` and
+  writes big-endian float32 position/velocity rows at tag-derived offsets.
 - Derived variable `prtcl_d` (in `outputs/derived_variables.cpp`) bins particle
   counts onto the mesh.
 

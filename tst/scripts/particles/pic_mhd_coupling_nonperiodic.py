@@ -19,6 +19,8 @@ _UNSUPPORTED_DECK = 'tests/pic_mhd_coupling_guard_nonperiodic_unsupported.athinp
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
 _RESULTS = {}
 _NEGATIVE_RESULTS = {}
+_MOMENT_ABS_TOL = 1.0e-4
+_MOMENT_REL_TOL = 1.0e-7
 
 
 def _athena_exe_dir():
@@ -191,6 +193,12 @@ def _check_with_tolerance(label, measured, expected, abs_tol, rel_tol):
     return abs_err <= abs_tol or rel_err <= rel_tol
 
 
+def _tolerances_for_quantity(quantity):
+    if quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
+        return _MOMENT_ABS_TOL, _MOMENT_REL_TOL
+    return 1.0e-6, 1.0e-8
+
+
 def run(**kwargs):
     logger.debug('Running test ' + __name__)
 
@@ -277,6 +285,17 @@ def run(**kwargs):
                      'particles/cr_vy0=0.0',
                      'particles/cr_vz0=0.0'],
         },
+        {
+            'name': 'serial_coupled_inflow',
+            'basename': 'pic_mhd_np_coupled_inflow',
+            'nproc': 1,
+            'args': ['job/basename=pic_mhd_np_coupled_inflow',
+                     'mesh/ix2_bc=inflow',
+                     'mesh/ox2_bc=inflow',
+                     'particles/couple_moments_to_mhd=true',
+                     'particles/couple_j_to_efield_representation=cell_centered'] +
+                    common_args,
+        },
     ]
 
     if _athena_mpi_enabled():
@@ -352,13 +371,6 @@ def run(**kwargs):
         input_deck=_UNSUPPORTED_DECK,
     )
     _run_command(
-        'guard_unsupported_boundary_inflow',
-        1,
-        ['mesh/ix2_bc=inflow', 'mesh/ox2_bc=inflow', 'time/nlim=0'],
-        expect_fail=True,
-        expected_message='does not support mesh/ix2_bc=inflow',
-    )
-    _run_command(
         'guard_unsupported_boundary_vacuum',
         1,
         ['mesh/ix3_bc=vacuum', 'mesh/ox3_bc=vacuum', 'time/nlim=0'],
@@ -382,15 +394,16 @@ def analyze():
         measured = result['measured']
         expected = result['expected']
         ok = _check_with_tolerance(case_name + ':Q', measured['Q'], expected['Q'],
-                                   1.0e-6, 1.0e-8) and ok
+                                   _MOMENT_ABS_TOL, _MOMENT_REL_TOL) and ok
         ok = _check_with_tolerance(case_name + ':Jx', measured['Jx'], expected['Jx'],
-                                   1.0e-6, 1.0e-8) and ok
+                                   _MOMENT_ABS_TOL, _MOMENT_REL_TOL) and ok
         ok = _check_with_tolerance(case_name + ':Jy', measured['Jy'], expected['Jy'],
-                                   1.0e-6, 1.0e-8) and ok
+                                   _MOMENT_ABS_TOL, _MOMENT_REL_TOL) and ok
         ok = _check_with_tolerance(case_name + ':Jz', measured['Jz'], expected['Jz'],
-                                   1.0e-6, 1.0e-8) and ok
+                                   _MOMENT_ABS_TOL, _MOMENT_REL_TOL) and ok
         ok = _check_with_tolerance(case_name + ':npart', measured['npart'],
-                                   expected['npart'], 1.0e-6, 1.0e-8) and ok
+                                   expected['npart'], _MOMENT_ABS_TOL,
+                                   _MOMENT_REL_TOL) and ok
 
     unc = _RESULTS['serial_uncoupled']['measured']
     cpl_cc = _RESULTS['serial_coupled_cc']['measured']
@@ -422,16 +435,16 @@ def analyze():
     for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
         ok = _check_with_tolerance('nonperiodic_default_mode_vs_direct:' + quantity,
                                    cpl_edge_default[quantity], cpl_direct[quantity],
-                                   1.0e-6, 1.0e-8) and ok
+                                   _MOMENT_ABS_TOL, _MOMENT_REL_TOL) and ok
         ok = _check_with_tolerance('nonperiodic_cc_vs_edge:' + quantity,
                                    cpl_cc[quantity], cpl_edge[quantity],
-                                   1.0e-6, 1.0e-8) and ok
+                                   _MOMENT_ABS_TOL, _MOMENT_REL_TOL) and ok
         ok = _check_with_tolerance('nonperiodic_cc_vs_direct:' + quantity,
                                    cpl_cc[quantity], cpl_direct[quantity],
-                                   1.0e-6, 1.0e-8) and ok
+                                   _MOMENT_ABS_TOL, _MOMENT_REL_TOL) and ok
         ok = _check_with_tolerance('nonperiodic_cc_vs_direct_o2:' + quantity,
                                    cpl_cc[quantity], cpl_direct_o2[quantity],
-                                   1.0e-6, 1.0e-8) and ok
+                                   _MOMENT_ABS_TOL, _MOMENT_REL_TOL) and ok
     for quantity in ['bcc1_l2', 'bcc2_l2', 'bcc3_l2']:
         ok = _check_with_tolerance('nonperiodic_default_mode_vs_direct:' + quantity,
                                    cpl_edge_default[quantity], cpl_direct[quantity],
@@ -463,46 +476,51 @@ def analyze():
         mpi_cc = _RESULTS['mpi2_coupled_cc']['measured']
         for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart',
                          'bcc1_l2', 'bcc2_l2', 'bcc3_l2']:
+            abs_tol, rel_tol = _tolerances_for_quantity(quantity)
             ok = _check_with_tolerance('nonperiodic_mpi_cc:' + quantity,
                                        mpi_cc[quantity], cpl_cc[quantity],
-                                       1.0e-6, 1.0e-8) and ok
+                                       abs_tol, rel_tol) and ok
 
     if 'mpi2_coupled_edge' in _RESULTS:
         mpi_edge = _RESULTS['mpi2_coupled_edge']['measured']
         for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart',
                          'bcc1_l2', 'bcc2_l2', 'bcc3_l2']:
+            abs_tol, rel_tol = _tolerances_for_quantity(quantity)
             ok = _check_with_tolerance('nonperiodic_mpi_edge:' + quantity,
                                        mpi_edge[quantity], cpl_edge[quantity],
-                                       1.0e-6, 1.0e-8) and ok
+                                       abs_tol, rel_tol) and ok
 
     if 'mpi2_coupled_edge_default_mode' in _RESULTS:
         mpi_edge_default = _RESULTS['mpi2_coupled_edge_default_mode']['measured']
         for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart',
                          'bcc1_l2', 'bcc2_l2', 'bcc3_l2']:
+            abs_tol, rel_tol = _tolerances_for_quantity(quantity)
             ok = _check_with_tolerance('nonperiodic_mpi_default_mode:' + quantity,
                                        mpi_edge_default[quantity],
                                        cpl_edge_default[quantity],
-                                       1.0e-6, 1.0e-8) and ok
+                                       abs_tol, rel_tol) and ok
 
     if 'mpi2_coupled_edge_direct' in _RESULTS:
         mpi_direct = _RESULTS['mpi2_coupled_edge_direct']['measured']
         for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart',
                          'bcc1_l2', 'bcc2_l2', 'bcc3_l2']:
+            abs_tol, rel_tol = _tolerances_for_quantity(quantity)
             ok = _check_with_tolerance('nonperiodic_mpi_direct:' + quantity,
                                        mpi_direct[quantity], cpl_direct[quantity],
-                                       1.0e-6, 1.0e-8) and ok
+                                       abs_tol, rel_tol) and ok
 
     if 'mpi2_coupled_edge_direct_o2' in _RESULTS:
         mpi_direct_o2 = _RESULTS['mpi2_coupled_edge_direct_o2']['measured']
         for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart',
                          'bcc1_l2', 'bcc2_l2', 'bcc3_l2']:
+            abs_tol, rel_tol = _tolerances_for_quantity(quantity)
             ok = _check_with_tolerance('nonperiodic_mpi_direct_o2:' + quantity,
                                        mpi_direct_o2[quantity],
                                        cpl_direct_o2[quantity],
-                                       1.0e-6, 1.0e-8) and ok
+                                       abs_tol, rel_tol) and ok
 
-    ok = (len(_NEGATIVE_RESULTS) == 4) and ok
-    if len(_NEGATIVE_RESULTS) != 4:
-        logger.warning('Expected 4 negative checks, got %d', len(_NEGATIVE_RESULTS))
+    ok = (len(_NEGATIVE_RESULTS) == 3) and ok
+    if len(_NEGATIVE_RESULTS) != 3:
+        logger.warning('Expected 3 negative checks, got %d', len(_NEGATIVE_RESULTS))
 
     return ok

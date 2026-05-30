@@ -67,6 +67,7 @@ pic_theta_max       = 0.3
 pic_deltaf_mode     = off
 pic_deltaf_f0       =
 pic_sort_interval   = 0
+pic_random_seed     = 0
 pic_intermediate_arrays = auto
 pic_expanding_box_mode  = off
 pic_expansion_rate_x1   = 0.0

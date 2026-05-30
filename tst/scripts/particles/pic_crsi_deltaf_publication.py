@@ -185,7 +185,7 @@ def analyze():
 
     ok = _check_lower('serial_on:max_branch_gamma', max_on, 5.0e-2) and ok
     ok = _check_lower('serial_on:max_branch_r2', max(on['r2_r'], on['r2_l']), 0.6) and ok
-    ok = _check_upper('serial:deltaf_noise_guard', max_off - max_on, 5.0) and ok
+    ok = _check_upper('serial:quiet_start_gamma_guard', max_off - max_on, 5.0) and ok
 
     if 'mpi2_on' in _RESULTS:
         mpi2 = _RESULTS['mpi2_on']

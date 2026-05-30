@@ -16,6 +16,7 @@ logger = logging.getLogger('athena' + __name__[7:])
 _INPUT_DECK = 'tests/pic_amr_shock_lb_smoke.athinput'
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
 _RESULTS = {}
+_PARTICLE_RESULTS = {}
 
 
 def _athena_exe_dir():
@@ -36,9 +37,11 @@ def _athena_mpi_enabled():
 
 
 def _remove_outputs(basename):
-    pattern = os.path.join(_athena_exe_dir(), 'bin', basename + '.*.bin')
-    for fname in glob.glob(pattern):
-        os.remove(fname)
+    for pattern in [
+            os.path.join(_athena_exe_dir(), 'bin', basename + '.*.bin'),
+            os.path.join(_athena_exe_dir(), 'pvtk', basename + '.*.part.vtk')]:
+        for fname in glob.glob(pattern):
+            os.remove(fname)
 
 
 def _output_files_by_cycle(basename, file_id):
@@ -49,6 +52,114 @@ def _output_files_by_cycle(basename, file_id):
         cycle = os.path.basename(fname).split('.')[-2]
         out[cycle] = fname
     return out
+
+
+def _pvtk_files(basename, file_id='prtcl_all'):
+    pattern = os.path.join(_athena_exe_dir(), 'pvtk',
+                           f'{basename}.{file_id}.*.part.vtk')
+    matches = sorted(glob.glob(pattern))
+    if len(matches) == 0:
+        raise RuntimeError('No particle VTK files found for pattern: ' + pattern)
+    return matches
+
+
+def _read_big_endian_floats(contents, offset, count, label):
+    payload = contents[offset:offset + 4 * count]
+    if len(payload) != 4 * count:
+        raise RuntimeError('Truncated ' + label + ' payload in particle VTK output')
+    return np.frombuffer(payload, dtype='>f4').astype(np.float64)
+
+
+def _read_big_endian_ints(contents, offset, count, label):
+    payload = contents[offset:offset + 4 * count]
+    if len(payload) != 4 * count:
+        raise RuntimeError('Truncated ' + label + ' payload in particle VTK output')
+    return np.frombuffer(payload, dtype='>i4').astype(np.int64)
+
+
+def _find_marker(contents, pattern, offset, label):
+    match = re.search(pattern, contents[offset:])
+    if match is None:
+        raise RuntimeError('Could not find ' + label + ' marker in particle VTK output')
+    return offset + match.start(), offset + match.end(), match
+
+
+def _read_pvtk_snapshot(path):
+    with open(path, 'rb') as fp:
+        contents = fp.read()
+
+    _, offset, match = _find_marker(
+        contents, rb'\nPOINTS\s+([0-9]+)\s+float\n', 0, 'POINTS')
+    npoint = int(match.group(1))
+    points = _read_big_endian_floats(contents, offset, 3 * npoint, 'POINTS')
+    points = points.reshape(npoint, 3)
+    offset += 4 * 3 * npoint
+
+    scalars = {}
+    for name in ['gid', 'ptag', 'species']:
+        pattern = (rb'\nSCALARS ' + name.encode('ascii') +
+                   rb' int\nLOOKUP_TABLE default\n')
+        _, offset, _ = _find_marker(contents, pattern, offset, 'SCALARS ' + name)
+        scalars[name] = _read_big_endian_ints(contents, offset, npoint, name)
+        offset += 4 * npoint
+
+    _, offset, _ = _find_marker(contents, rb'\nVECTORS vel float\n',
+                                offset, 'VECTORS vel')
+    velocity = _read_big_endian_floats(contents, offset, 3 * npoint, 'vel')
+    velocity = velocity.reshape(npoint, 3)
+
+    return {
+        'path': path,
+        'npoint': npoint,
+        'points': points,
+        'gid': scalars['gid'],
+        'ptag': scalars['ptag'],
+        'species': scalars['species'],
+        'velocity': velocity,
+    }
+
+
+def _load_particle_state_metrics(basename):
+    snapshots = [_read_pvtk_snapshot(path) for path in _pvtk_files(basename)]
+    if len(snapshots) < 2:
+        raise RuntimeError('Need at least two particle VTK snapshots for ' + basename)
+
+    counts = np.asarray([snap['npoint'] for snap in snapshots], dtype=np.int64)
+    first_tags = np.sort(snapshots[0]['ptag'])
+    lower = np.array([-0.5, -0.5, -0.5], dtype=float)
+    upper = np.array([0.5, 0.5, 0.5], dtype=float)
+
+    finite_points = True
+    in_domain = True
+    finite_velocity = True
+    gid_nonnegative = True
+    species_valid = True
+    tags_unique = True
+    tags_stable = True
+    for snap in snapshots:
+        finite_points = finite_points and bool(np.all(np.isfinite(snap['points'])))
+        in_domain = in_domain and bool(np.all((snap['points'] >= lower) &
+                                              (snap['points'] <= upper)))
+        finite_velocity = finite_velocity and bool(np.all(np.isfinite(snap['velocity'])))
+        gid_nonnegative = gid_nonnegative and bool(np.all(snap['gid'] >= 0))
+        species_valid = species_valid and bool(np.all(snap['species'] == 0))
+        tags_unique = tags_unique and bool(
+            np.all(snap['ptag'] >= 0) and np.unique(snap['ptag']).size == snap['npoint'])
+        tags_stable = tags_stable and bool(np.array_equal(np.sort(snap['ptag']),
+                                                          first_tags))
+
+    return {
+        'n_snapshots': float(len(snapshots)),
+        'npoint': float(counts[0]),
+        'count_drift': float(np.max(counts) - np.min(counts)),
+        'finite_points': float(finite_points),
+        'in_domain': float(in_domain),
+        'finite_velocity': float(finite_velocity),
+        'gid_nonnegative': float(gid_nonnegative),
+        'species_valid': float(species_valid),
+        'tags_unique': float(tags_unique),
+        'tags_stable': float(tags_stable),
+    }
 
 
 def _load_smoke_metrics(basename):
@@ -187,7 +298,10 @@ def run(**kwargs):
         _run_case('mpi2', 'pic_amr_shock_lb_mpi2', 2, common_args)
 
         _remove_outputs('pic_amr_shock_lb_mpi4')
-        _run_case('mpi4', 'pic_amr_shock_lb_mpi4', 4, common_args)
+        _run_case('mpi4', 'pic_amr_shock_lb_mpi4', 4,
+                  common_args + ['output5/dcycle=2'])
+        _PARTICLE_RESULTS['mpi4'] = _load_particle_state_metrics(
+            'pic_amr_shock_lb_mpi4')
 
 
 def analyze():
@@ -243,6 +357,18 @@ def analyze():
                               1.0e-3) and ok
         ok = _check_log_ratio('serial_vs_mpi4:tail_peak',
                               mpi4['tail_peak'], serial['tail_peak'], 0.2) and ok
+
+        if 'mpi4' in _PARTICLE_RESULTS:
+            prtcl = _PARTICLE_RESULTS['mpi4']
+            ok = _check_lower('mpi4:pvtk_n_snapshots',
+                              prtcl['n_snapshots'], 2.0) and ok
+            ok = _check_lower('mpi4:pvtk_npoint', prtcl['npoint'], 1.0) and ok
+            ok = _check_upper('mpi4:pvtk_count_drift',
+                              prtcl['count_drift'], 0.0) and ok
+            for key in ['finite_points', 'in_domain', 'finite_velocity',
+                        'gid_nonnegative', 'species_valid', 'tags_unique',
+                        'tags_stable']:
+                ok = _check_lower('mpi4:pvtk_' + key, prtcl[key], 1.0) and ok
 
     if 'mpi2' in _RESULTS and 'mpi4' in _RESULTS:
         ok = _check_log_ratio('mpi2_vs_mpi4:b1_std_peak_amp',

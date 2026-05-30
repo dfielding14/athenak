@@ -97,6 +97,8 @@ def _load_growth_metrics(basename):
     gamma_l, r2_l, noise_l, ratio_l = _fit_branch(t, amp_l)
 
     dominant = 'right' if amp_r[-1] >= amp_l[-1] else 'left'
+    asymmetry = float((amp_r[-1] - amp_l[-1]) /
+                      max(amp_r[-1] + amp_l[-1], 1.0e-30))
     if dominant == 'right':
         dom_gamma = gamma_r
         dom_r2 = r2_r
@@ -112,11 +114,14 @@ def _load_growth_metrics(basename):
 
     return {
         'dom_branch': dominant,
+        'asymmetry': asymmetry,
         'dom_gamma': float(dom_gamma),
         'dom_r2': float(dom_r2),
         'dom_noise': float(dom_noise),
         'dom_ratio': float(dom_ratio),
         'sub_gamma': float(sub_gamma),
+        'gamma_r': float(gamma_r),
+        'gamma_l': float(gamma_l),
     }
 
 
@@ -186,13 +191,15 @@ def analyze():
         ok = _check_lower(label + ':branch_split_np1',
                           abs(case['dom_gamma'] - case['sub_gamma']),
                           1.0e-3) and ok
+        ok = _check_lower(label + ':branch_asym_np1',
+                          abs(case['asymmetry']),
+                          1.0e-2) and ok
 
     pro = _RESULTS['prolate_np1']
     obl = _RESULTS['oblate_np1']
-    if pro['dom_branch'] == obl['dom_branch']:
-        logger.error('expected opposite dominant branches, got %s for both',
-                     pro['dom_branch'])
-        ok = False
+    ok = _check_lower('np1:prolate_oblate_asym_separation',
+                      abs(pro['asymmetry'] - obl['asymmetry']),
+                      5.0e-2) and ok
 
     if 'prolate_np2' in _RESULTS:
         for label in _CASES:

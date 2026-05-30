@@ -6,6 +6,7 @@
 //! \file particles_moments.cpp
 //! \brief task wrappers and kernels for particle moment deposition/communication
 
+#include <cstdlib>
 #include <cmath>
 #include <iostream>
 
@@ -59,6 +60,33 @@ void PosToCellAndFrac(const Real x, const Real xmin, const Real dx, const int is
 KOKKOS_INLINE_FUNCTION
 bool InBoundsInclusive(const int i, const int imin, const int imax) {
   return (i >= imin && i <= imax);
+}
+
+KOKKOS_INLINE_FUNCTION
+bool MomentDepositUsesGhostFace(const BoundaryFlag flag) {
+  return ((flag == BoundaryFlag::block) ||
+          (flag == BoundaryFlag::periodic) ||
+          (flag == BoundaryFlag::shear_periodic));
+}
+
+KOKKOS_INLINE_FUNCTION
+int AbsIndexDelta(const int a, const int b) {
+  return (a > b) ? (a - b) : (b - a);
+}
+
+KOKKOS_INLINE_FUNCTION
+int MaxIndexDelta(const int a, const int b) {
+  return (a > b) ? a : b;
+}
+
+KOKKOS_INLINE_FUNCTION
+void AddX1EdgeCurrent1D(DvceArray4D<Real> jx_e, const int m, const int ks,
+                        const int ke, const int js, const int je, const int i,
+                        const Real val) {
+  Kokkos::atomic_add(&jx_e(m, ks,   js,   i), val);
+  Kokkos::atomic_add(&jx_e(m, ke+1, js,   i), val);
+  Kokkos::atomic_add(&jx_e(m, ks,   je+1, i), val);
+  Kokkos::atomic_add(&jx_e(m, ke+1, je+1, i), val);
 }
 
 template <bool STAGGERED, int O>
@@ -148,6 +176,119 @@ void ShapeForDeposit(const int i_init, const Real di_init,
     iS[O + 1] = static_cast<Real>(0.0);
     for (int j = 0; j < O + 1; ++j) fS[j] = fS_local[j];
     fS[O + 1] = static_cast<Real>(0.0);
+  }
+}
+
+template <int O>
+KOKKOS_INLINE_FUNCTION
+void DepositCellCenteredMomentsShape(
+    DvceArray5D<Real> mom, const int m,
+    const Real x, const Real y, const Real z,
+    const Real x1min, const Real x2min, const Real x3min,
+    const Real dx1, const Real dx2, const Real dx3,
+    const int is, const int js, const int ks,
+    const int i_min, const int i_max,
+    const int j_min, const int j_max,
+    const int k_min, const int k_max,
+    const bool multi_d, const bool three_d, const bool is_boris_pusher,
+    const bool use_delta_feedback, const Real q_macro,
+    const Real vx, const Real vy, const Real vz,
+    const Real ebdot, const Real dpxdt,
+    const Real dpydt, const Real dpzdt, const Real dedt) {
+  int ip = is;
+  int jp = js;
+  int kp = ks;
+  Real dxp = static_cast<Real>(0.0);
+  Real dyp = static_cast<Real>(0.0);
+  Real dzp = static_cast<Real>(0.0);
+  PosToCellAndFrac(x, x1min, dx1, is, i_min, i_max, ip, dxp);
+  if (multi_d) {
+    PosToCellAndFrac(y, x2min, dx2, js, j_min, j_max, jp, dyp);
+  }
+  if (three_d) {
+    PosToCellAndFrac(z, x3min, dx3, ks, k_min, k_max, kp, dzp);
+  }
+
+  Real sx[O + 1];
+  Real sy[O + 1];
+  Real sz[O + 1];
+  int i0 = 0;
+  int j0 = 0;
+  int k0 = ks;
+  ShapeOrder<false, O>(ip, dxp, i0, sx);
+  if (multi_d) {
+    ShapeOrder<false, O>(jp, dyp, j0, sy);
+  } else {
+    j0 = js;
+    sy[0] = static_cast<Real>(1.0);
+  }
+  if (three_d) {
+    ShapeOrder<false, O>(kp, dzp, k0, sz);
+  } else {
+    sz[0] = static_cast<Real>(1.0);
+  }
+
+  const Real inv_cell_vol = static_cast<Real>(1.0)/(dx1*dx2*dx3);
+  const Real q_density = q_macro*inv_cell_vol;
+  const Real dpxdt_density = dpxdt*inv_cell_vol;
+  const Real dpydt_density = dpydt*inv_cell_vol;
+  const Real dpzdt_density = dpzdt*inv_cell_vol;
+  const Real dedt_density = dedt*inv_cell_vol;
+  const int nk = three_d ? (O + 1) : 1;
+  const int nj = multi_d ? (O + 1) : 1;
+
+  Real norm = static_cast<Real>(0.0);
+  for (int dk = 0; dk < nk; ++dk) {
+    const int kk = k0 + dk;
+    if (!InBoundsInclusive(kk, k_min, k_max)) continue;
+    for (int dj = 0; dj < nj; ++dj) {
+      const int jj = j0 + dj;
+      if (!InBoundsInclusive(jj, j_min, j_max)) continue;
+      for (int di = 0; di < O + 1; ++di) {
+        const int ii = i0 + di;
+        if (!InBoundsInclusive(ii, i_min, i_max)) continue;
+        norm += sx[di]*sy[dj]*sz[dk];
+      }
+    }
+  }
+  if (norm <= static_cast<Real>(0.0)) return;
+  const Real inv_norm = static_cast<Real>(1.0)/norm;
+
+  for (int dk = 0; dk < nk; ++dk) {
+    const int kk = k0 + dk;
+    if (!InBoundsInclusive(kk, k_min, k_max)) continue;
+    for (int dj = 0; dj < nj; ++dj) {
+      const int jj = j0 + dj;
+      if (!InBoundsInclusive(jj, j_min, j_max)) continue;
+      for (int di = 0; di < O + 1; ++di) {
+        const int ii = i0 + di;
+        if (!InBoundsInclusive(ii, i_min, i_max)) continue;
+        const Real shape_weight = sx[di]*sy[dj]*sz[dk]*inv_norm;
+        const Real weighted_q_density = q_density*shape_weight;
+        Kokkos::atomic_add(&mom(m, Particles::IMOM_RHO, kk, jj, ii),
+                           weighted_q_density);
+        Kokkos::atomic_add(&mom(m, Particles::IMOM_JX, kk, jj, ii),
+                           weighted_q_density*vx);
+        Kokkos::atomic_add(&mom(m, Particles::IMOM_JY, kk, jj, ii),
+                           weighted_q_density*vy);
+        Kokkos::atomic_add(&mom(m, Particles::IMOM_JZ, kk, jj, ii),
+                           weighted_q_density*vz);
+        if (is_boris_pusher) {
+          Kokkos::atomic_add(&mom(m, Particles::IMOM_EBDOT, kk, jj, ii),
+                             ebdot*shape_weight);
+          if (use_delta_feedback) {
+            Kokkos::atomic_add(&mom(m, Particles::IMOM_DPXDT, kk, jj, ii),
+                               dpxdt_density*shape_weight);
+            Kokkos::atomic_add(&mom(m, Particles::IMOM_DPYDT, kk, jj, ii),
+                               dpydt_density*shape_weight);
+            Kokkos::atomic_add(&mom(m, Particles::IMOM_DPZDT, kk, jj, ii),
+                               dpzdt_density*shape_weight);
+            Kokkos::atomic_add(&mom(m, Particles::IMOM_DEDT, kk, jj, ii),
+                               dedt_density*shape_weight);
+          }
+        }
+      }
+    }
   }
 }
 
@@ -290,6 +431,9 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
   const int j_max = je + ng;
   const int k_min = ks - ng;
   const int k_max = ke + ng;
+  const bool one_d = pmy_pack->pmesh->one_d;
+  const bool two_d = pmy_pack->pmesh->two_d;
+  const bool multi_d = pmy_pack->pmesh->multi_d;
   const bool three_d = pmy_pack->pmesh->three_d;
   const int nmb = pmy_pack->nmb_thispack;
   const int gids = pmy_pack->gids;
@@ -305,62 +449,105 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
        (couple_moments_momentum_to_mhd || couple_moments_energy_to_mhd));
 
   auto &size = pmy_pack->pmb->mb_size;
+  auto &mb_bcs = pmy_pack->pmb->mb_bcs;
   auto &pr = prtcl_rdata;
   auto &pi = prtcl_idata;
   auto &qspecies = species_charge;
   auto &mom = moments;
 
-  par_for("deposit_moments", DevExeSpace(), 0, npart-1,
-  KOKKOS_LAMBDA(const int p) {
-    int m = pi(PGID,p) - gids;
-    if (m < 0 || m >= nmb) return;
+  if (deposit_order == 1) {
+    par_for("deposit_moments_o1", DevExeSpace(), 0, npart-1,
+    KOKKOS_LAMBDA(const int p) {
+      int m = pi(PGID,p) - gids;
+      if (m < 0 || m >= nmb) return;
 
-    int sp = pi(PSP,p);
-    if (sp < 0 || sp >= nspecies_local) return;
+      int sp = pi(PSP,p);
+      if (sp < 0 || sp >= nspecies_local) return;
 
-    Real q_macro = qscale*qspecies(sp);
+      Real weight = pr(IPWT,p);
+      if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
+      const Real q_macro = qscale*weight*qspecies(sp);
 
-    Real x = pr(IPX,p);
-    Real y = pr(IPY,p);
-    Real z = pr(IPZ,p);
-    Real x1min = size.d_view(m).x1min;
-    Real x2min = size.d_view(m).x2min;
-    Real x3min = size.d_view(m).x3min;
-    Real dx1 = size.d_view(m).dx1;
-    Real dx2 = size.d_view(m).dx2;
-    Real dx3 = size.d_view(m).dx3;
-    const Real inv_cell_vol = 1.0/(dx1*dx2*dx3);
+      const int dep_i_min =
+          MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::inner_x1))
+          ? i_min : is;
+      const int dep_i_max =
+          MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::outer_x1))
+          ? i_max : ie;
+      const int dep_j_min =
+          (multi_d &&
+           MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::inner_x2)))
+          ? j_min : js;
+      const int dep_j_max =
+          (multi_d &&
+           MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::outer_x2)))
+          ? j_max : je;
+      const int dep_k_min =
+          (three_d &&
+           MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::inner_x3)))
+          ? k_min : ks;
+      const int dep_k_max =
+          (three_d &&
+           MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::outer_x3)))
+          ? k_max : ke;
 
-    int ip = static_cast<int>((x - x1min)/dx1) + is;
-    int jp = static_cast<int>((y - x2min)/dx2) + js;
-    if (ip < i_min) ip = i_min;
-    if (ip > i_max) ip = i_max;
-    if (jp < j_min) jp = j_min;
-    if (jp > j_max) jp = j_max;
+      DepositCellCenteredMomentsShape<1>(
+          mom, m, pr(IPX,p), pr(IPY,p), pr(IPZ,p),
+          size.d_view(m).x1min, size.d_view(m).x2min, size.d_view(m).x3min,
+          size.d_view(m).dx1, size.d_view(m).dx2, size.d_view(m).dx3,
+          is, js, ks, dep_i_min, dep_i_max, dep_j_min, dep_j_max,
+          dep_k_min, dep_k_max, multi_d, three_d, is_boris_pusher,
+          use_delta_feedback, q_macro,
+          pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p), pr(IPEBDOT,p),
+          pr(IPDPX,p), pr(IPDPY,p), pr(IPDPZ,p), pr(IPDE,p));
+    });
+  } else if (deposit_order == 2) {
+    par_for("deposit_moments_o2", DevExeSpace(), 0, npart-1,
+    KOKKOS_LAMBDA(const int p) {
+      int m = pi(PGID,p) - gids;
+      if (m < 0 || m >= nmb) return;
 
-    int kp = ks;
-    if (three_d) {
-      kp = static_cast<int>((z - x3min)/dx3) + ks;
-      if (kp < k_min) kp = k_min;
-      if (kp > k_max) kp = k_max;
-    }
+      int sp = pi(PSP,p);
+      if (sp < 0 || sp >= nspecies_local) return;
 
-    Kokkos::atomic_add(&mom(m, IMOM_RHO, kp, jp, ip), q_macro);
-    Kokkos::atomic_add(&mom(m, IMOM_JX,  kp, jp, ip), q_macro*pr(IPVX,p));
-    Kokkos::atomic_add(&mom(m, IMOM_JY,  kp, jp, ip), q_macro*pr(IPVY,p));
-    Kokkos::atomic_add(&mom(m, IMOM_JZ,  kp, jp, ip), q_macro*pr(IPVZ,p));
-    if (is_boris_pusher) {
-      Kokkos::atomic_add(&mom(m, IMOM_EBDOT, kp, jp, ip), pr(IPEBDOT, p));
-      if (use_delta_feedback) {
-        // Convert particle-integrated delta channels to conservative-density
-        // source rates before MHD source-term application.
-        Kokkos::atomic_add(&mom(m, IMOM_DPXDT, kp, jp, ip), pr(IPDPX, p)*inv_cell_vol);
-        Kokkos::atomic_add(&mom(m, IMOM_DPYDT, kp, jp, ip), pr(IPDPY, p)*inv_cell_vol);
-        Kokkos::atomic_add(&mom(m, IMOM_DPZDT, kp, jp, ip), pr(IPDPZ, p)*inv_cell_vol);
-        Kokkos::atomic_add(&mom(m, IMOM_DEDT, kp, jp, ip), pr(IPDE, p)*inv_cell_vol);
-      }
-    }
-  });
+      Real weight = pr(IPWT,p);
+      if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
+      const Real q_macro = qscale*weight*qspecies(sp);
+
+      const int dep_i_min =
+          MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::inner_x1))
+          ? i_min : is;
+      const int dep_i_max =
+          MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::outer_x1))
+          ? i_max : ie;
+      const int dep_j_min =
+          (multi_d &&
+           MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::inner_x2)))
+          ? j_min : js;
+      const int dep_j_max =
+          (multi_d &&
+           MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::outer_x2)))
+          ? j_max : je;
+      const int dep_k_min =
+          (three_d &&
+           MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::inner_x3)))
+          ? k_min : ks;
+      const int dep_k_max =
+          (three_d &&
+           MomentDepositUsesGhostFace(mb_bcs.d_view(m, BoundaryFace::outer_x3)))
+          ? k_max : ke;
+
+      DepositCellCenteredMomentsShape<2>(
+          mom, m, pr(IPX,p), pr(IPY,p), pr(IPZ,p),
+          size.d_view(m).x1min, size.d_view(m).x2min, size.d_view(m).x3min,
+          size.d_view(m).dx1, size.d_view(m).dx2, size.d_view(m).dx3,
+          is, js, ks, dep_i_min, dep_i_max, dep_j_min, dep_j_max,
+          dep_k_min, dep_k_max, multi_d, three_d, is_boris_pusher,
+          use_delta_feedback, q_macro,
+          pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p), pr(IPEBDOT,p),
+          pr(IPDPX,p), pr(IPDPY,p), pr(IPDPZ,p), pr(IPDE,p));
+    });
+  }
 
   if (!UseDirectEdgeCurrentDeposit(deposit_moments, couple_moments_to_mhd,
                                    couple_j_to_efield_representation,
@@ -377,6 +564,52 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
   auto &jz_e = j_edge_x3e;
 
   if (deposit_order == 1) {
+    int max_shape_shift = 0;
+    Kokkos::parallel_reduce(
+        "check_direct_edge_current_o1_shift",
+        Kokkos::RangePolicy<>(DevExeSpace(), 0, npart),
+        KOKKOS_LAMBDA(const int p, int &max_shift) {
+          int m = pi(PGID,p) - gids;
+          if (m < 0 || m >= nmb) return;
+
+          int sp = pi(PSP,p);
+          if (sp < 0 || sp >= nspecies_local) return;
+
+          int i0, i1, j0, j1, k0, k1;
+          Real dxo, dxn, dyo, dyn, dzo, dzn;
+          PosToCellAndFrac(x1prev(p), size.d_view(m).x1min, size.d_view(m).dx1,
+                           is, i_min, i_max, i0, dxo);
+          PosToCellAndFrac(pr(IPX,p), size.d_view(m).x1min, size.d_view(m).dx1,
+                           is, i_min, i_max, i1, dxn);
+          int shift = AbsIndexDelta(i1, i0);
+          if (multi_d) {
+            PosToCellAndFrac(x2prev(p), size.d_view(m).x2min, size.d_view(m).dx2,
+                             js, j_min, j_max, j0, dyo);
+            PosToCellAndFrac(pr(IPY,p), size.d_view(m).x2min, size.d_view(m).dx2,
+                             js, j_min, j_max, j1, dyn);
+            shift = MaxIndexDelta(shift, AbsIndexDelta(j1, j0));
+          }
+          if (three_d) {
+            PosToCellAndFrac(x3prev(p), size.d_view(m).x3min, size.d_view(m).dx3,
+                             ks, k_min, k_max, k0, dzo);
+            PosToCellAndFrac(pr(IPZ,p), size.d_view(m).x3min, size.d_view(m).dx3,
+                             ks, k_min, k_max, k1, dzn);
+            shift = MaxIndexDelta(shift, AbsIndexDelta(k1, k0));
+          }
+          max_shift = MaxIndexDelta(max_shift, shift);
+        },
+        Kokkos::Max<int>(max_shape_shift));
+    if (max_shape_shift > 1) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/couple_j_deposition_mode=direct_staggered requires "
+                << "particle shape support to move by at most one cell per step; "
+                << "observed support shift " << max_shape_shift
+                << ". Lower <time>/cfl_number or "
+                << "<particles>/pic_max_cell_cross." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+
     par_for("deposit_direct_edge_currents", DevExeSpace(), 0, npart-1,
     KOKKOS_LAMBDA(const int p) {
     int m = pi(PGID,p) - gids;
@@ -385,7 +618,9 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
     int sp = pi(PSP,p);
     if (sp < 0 || sp >= nspecies_local) return;
 
-    Real q_macro = qscale*qspecies(sp);
+    Real weight = pr(IPWT,p);
+    if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
+    Real q_macro = qscale*weight*qspecies(sp);
     Real coeff = q_macro*inv_dt;
 
     Real x1min = size.d_view(m).x1min;
@@ -394,6 +629,10 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
     Real dx1 = size.d_view(m).dx1;
     Real dx2 = size.d_view(m).dx2;
     Real dx3 = size.d_view(m).dx3;
+    const Real inv_area_x1 = static_cast<Real>(1.0)/(dx2*dx3);
+    const Real inv_area_x2 = static_cast<Real>(1.0)/(dx1*dx3);
+    const Real inv_area_x3 = static_cast<Real>(1.0)/(dx1*dx2);
+    const Real inv_cell_vol = static_cast<Real>(1.0)/(dx1*dx2*dx3);
 
     int i0, i1, j0, j1, k0, k1;
     Real dxo, dxn, dyo, dyn, dzo, dzn;
@@ -420,16 +659,22 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
                                          static_cast<Real>(i1 > i0));
     Real wx1_2 = static_cast<Real>(0.5)*(dxn + dxp1 +
       static_cast<Real>(static_cast<int>(i1 > i0) + i0 - i1));
-    Real fx1_1 = (static_cast<Real>(i1 > i0) + dxp1 - dxo)*coeff;
+    Real fx1_1 = (static_cast<Real>(i1 > i0) + dxp1 - dxo)*coeff*inv_area_x1;
     Real fx1_2 = (static_cast<Real>(i1 - i0 - static_cast<int>(i1 > i0)) +
-                  dxn - dxp1)*coeff;
+                  dxn - dxp1)*coeff*inv_area_x1;
 
-    if (pmy_pack->pmesh->one_d) {
-      Real fx2_1 = static_cast<Real>(0.5)*vy*q_macro;
-      Real fx2_2 = static_cast<Real>(0.5)*vy*q_macro;
-      Real fx3_1 = static_cast<Real>(0.5)*vz*q_macro;
-      Real fx3_2 = static_cast<Real>(0.5)*vz*q_macro;
+    if (one_d) {
+      Real fx2_1 = static_cast<Real>(0.5)*vy*q_macro*inv_cell_vol;
+      Real fx2_2 = static_cast<Real>(0.5)*vy*q_macro*inv_cell_vol;
+      Real fx3_1 = static_cast<Real>(0.5)*vz*q_macro*inv_cell_vol;
+      Real fx3_2 = static_cast<Real>(0.5)*vz*q_macro*inv_cell_vol;
 
+      if (i0 >= i_min && i0 <= i_max) {
+        AddX1EdgeCurrent1D(jx_e, m, ks, ke, js, je, i0, fx1_1);
+      }
+      if (i1 >= i_min && i1 <= i_max) {
+        AddX1EdgeCurrent1D(jx_e, m, ks, ke, js, je, i1, fx1_2);
+      }
       if (i0 >= i_min && i0 <= i_max) {
         Kokkos::atomic_add(&jy_e(m, ks, js, i0), fx2_1*(static_cast<Real>(1.0) - wx1_1));
         Kokkos::atomic_add(&jy_e(m, ke+1, js, i0),
@@ -467,13 +712,13 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
                                          static_cast<Real>(j1 > j0));
     Real wx2_2 = static_cast<Real>(0.5)*(dyn + dxp2 +
       static_cast<Real>(static_cast<int>(j1 > j0) + j0 - j1));
-    Real fx2_1 = (static_cast<Real>(j1 > j0) + dxp2 - dyo)*coeff;
+    Real fx2_1 = (static_cast<Real>(j1 > j0) + dxp2 - dyo)*coeff*inv_area_x2;
     Real fx2_2 = (static_cast<Real>(j1 - j0 - static_cast<int>(j1 > j0)) +
-                  dyn - dxp2)*coeff;
+                  dyn - dxp2)*coeff*inv_area_x2;
 
-    if (pmy_pack->pmesh->two_d) {
-      Real fx3_1 = static_cast<Real>(0.5)*vz*q_macro;
-      Real fx3_2 = static_cast<Real>(0.5)*vz*q_macro;
+    if (two_d) {
+      Real fx3_1 = static_cast<Real>(0.5)*vz*q_macro*inv_cell_vol;
+      Real fx3_2 = static_cast<Real>(0.5)*vz*q_macro*inv_cell_vol;
       int kf = ks;
       int kf2 = ke + 1;
 
@@ -558,9 +803,9 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
                                          static_cast<Real>(k1 > k0));
     Real wx3_2 = static_cast<Real>(0.5)*(dzn + dxp3 +
       static_cast<Real>(static_cast<int>(k1 > k0) + k0 - k1));
-    Real fx3_1 = (static_cast<Real>(k1 > k0) + dxp3 - dzo)*coeff;
+    Real fx3_1 = (static_cast<Real>(k1 > k0) + dxp3 - dzo)*coeff*inv_area_x3;
     Real fx3_2 = (static_cast<Real>(k1 - k0 - static_cast<int>(k1 > k0)) +
-                  dzn - dxp3)*coeff;
+                  dzn - dxp3)*coeff*inv_area_x3;
 
     if (k0 >= k_min && k0 <= (k_max + 1) &&
         j0 >= j_min && j0 <= (j_max + 1) &&
@@ -707,6 +952,61 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
   }
 
   if (deposit_order == 2) {
+    int max_shape_shift = 0;
+    Kokkos::parallel_reduce(
+        "check_direct_edge_current_o2_shift",
+        Kokkos::RangePolicy<>(DevExeSpace(), 0, npart),
+        KOKKOS_LAMBDA(const int p, int &max_shift) {
+          int m = pi(PGID,p) - gids;
+          if (m < 0 || m >= nmb) return;
+
+          int sp = pi(PSP,p);
+          if (sp < 0 || sp >= nspecies_local) return;
+
+          int i0, i1, j0, j1, k0, k1;
+          Real dxo, dxn, dyo, dyn, dzo, dzn;
+          PosToCellAndFrac(x1prev(p), size.d_view(m).x1min, size.d_view(m).dx1,
+                           is, i_min, i_max, i0, dxo);
+          PosToCellAndFrac(pr(IPX,p), size.d_view(m).x1min, size.d_view(m).dx1,
+                           is, i_min, i_max, i1, dxn);
+          int init_min = 0;
+          int fin_min = 0;
+          Real shape[3];
+          ShapeOrder<false, 2>(i0, dxo, init_min, shape);
+          ShapeOrder<false, 2>(i1, dxn, fin_min, shape);
+          int shift = AbsIndexDelta(fin_min, init_min);
+          if (multi_d) {
+            PosToCellAndFrac(x2prev(p), size.d_view(m).x2min, size.d_view(m).dx2,
+                             js, j_min, j_max, j0, dyo);
+            PosToCellAndFrac(pr(IPY,p), size.d_view(m).x2min, size.d_view(m).dx2,
+                             js, j_min, j_max, j1, dyn);
+            ShapeOrder<false, 2>(j0, dyo, init_min, shape);
+            ShapeOrder<false, 2>(j1, dyn, fin_min, shape);
+            shift = MaxIndexDelta(shift, AbsIndexDelta(fin_min, init_min));
+          }
+          if (three_d) {
+            PosToCellAndFrac(x3prev(p), size.d_view(m).x3min, size.d_view(m).dx3,
+                             ks, k_min, k_max, k0, dzo);
+            PosToCellAndFrac(pr(IPZ,p), size.d_view(m).x3min, size.d_view(m).dx3,
+                             ks, k_min, k_max, k1, dzn);
+            ShapeOrder<false, 2>(k0, dzo, init_min, shape);
+            ShapeOrder<false, 2>(k1, dzn, fin_min, shape);
+            shift = MaxIndexDelta(shift, AbsIndexDelta(fin_min, init_min));
+          }
+          max_shift = MaxIndexDelta(max_shift, shift);
+        },
+        Kokkos::Max<int>(max_shape_shift));
+    if (max_shape_shift > 1) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/couple_j_deposition_mode=direct_staggered requires "
+                << "particle shape support to move by at most one cell per step; "
+                << "observed support shift " << max_shape_shift
+                << ". Lower <time>/cfl_number or "
+                << "<particles>/pic_max_cell_cross." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+
     par_for("deposit_direct_edge_currents_o2", DevExeSpace(), 0, npart-1,
     KOKKOS_LAMBDA(const int p) {
       int m = pi(PGID,p) - gids;
@@ -715,7 +1015,9 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
       int sp = pi(PSP,p);
       if (sp < 0 || sp >= nspecies_local) return;
 
-      Real q_macro = qscale*qspecies(sp);
+      Real weight = pr(IPWT,p);
+      if (weight <= static_cast<Real>(0.0)) weight = static_cast<Real>(1.0);
+      Real q_macro = qscale*weight*qspecies(sp);
       Real coeff = q_macro*inv_dt;
 
       Real x1min = size.d_view(m).x1min;
@@ -724,6 +1026,10 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
       Real dx1 = size.d_view(m).dx1;
       Real dx2 = size.d_view(m).dx2;
       Real dx3 = size.d_view(m).dx3;
+      const Real inv_area_x1 = static_cast<Real>(1.0)/(dx2*dx3);
+      const Real inv_area_x2 = static_cast<Real>(1.0)/(dx1*dx3);
+      const Real inv_area_x3 = static_cast<Real>(1.0)/(dx1*dx2);
+      const Real inv_cell_vol = static_cast<Real>(1.0)/(dx1*dx2*dx3);
 
       int i0, i1, j0, j1, k0, k1;
       Real dxo, dxn, dyo, dyn, dzo, dzn;
@@ -750,7 +1056,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
       int i1_max = 0;
       ShapeForDeposit<2>(i0, dxo, i1, dxn, i1_min, i1_max, iS_x1, fS_x1);
 
-      if (pmy_pack->pmesh->one_d) {
+      if (one_d) {
         Real wx1[4];
         Real wx23[4];
         for (int i = 0; i < 4; ++i) {
@@ -759,15 +1065,21 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
         }
 
         Real jx1_contrib[4];
-        Real qdx1dt = coeff;
-        Real qvy = q_macro*vy;
-        Real qvz = q_macro*vz;
+        Real qdx1dt = coeff*inv_area_x1;
+        Real qvy = q_macro*vy*inv_cell_vol;
+        Real qvz = q_macro*vz*inv_cell_vol;
         jx1_contrib[0] = -qdx1dt*wx1[0];
         for (int i = 1; i < 4; ++i) {
           jx1_contrib[i] = jx1_contrib[i-1] - qdx1dt*wx1[i];
         }
 
         const int di_x1 = i1_max - i1_min;
+        for (int i = 0; i < di_x1; ++i) {
+          int ii = i1_min + i;
+          if (InBoundsInclusive(ii, i_min, i_max)) {
+            AddX1EdgeCurrent1D(jx_e, m, ks, ke, js, je, ii, jx1_contrib[i]);
+          }
+        }
         for (int i = 0; i <= di_x1; ++i) {
           int ii = i1_min + i;
           if (InBoundsInclusive(ii, i_min, i_max + 1)) {
@@ -788,7 +1100,7 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
       int i2_max = 0;
       ShapeForDeposit<2>(j0, dyo, j1, dyn, i2_min, i2_max, iS_x2, fS_x2);
 
-      if (pmy_pack->pmesh->two_d) {
+      if (two_d) {
         Real wx1[4][4];
         Real wx2[4][4];
         Real wx3[4][4];
@@ -806,9 +1118,9 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
 
         Real jx1_contrib[4][4];
         Real jy1_contrib[4][4];
-        Real qdx1dt = coeff;
-        Real qdx2dt = coeff;
-        Real qvz = q_macro*vz;
+        Real qdx1dt = coeff*inv_area_x1;
+        Real qdx2dt = coeff*inv_area_x2;
+        Real qvz = q_macro*vz*inv_cell_vol;
 
         for (int j = 0; j < 4; ++j) {
           jx1_contrib[0][j] = -qdx1dt*wx1[0][j];
@@ -903,9 +1215,9 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
       Real jx1_contrib[4][4][4];
       Real jy1_contrib[4][4][4];
       Real jz1_contrib[4][4][4];
-      Real qdx1dt = coeff;
-      Real qdx2dt = coeff;
-      Real qdx3dt = coeff;
+      Real qdx1dt = coeff*inv_area_x1;
+      Real qdx2dt = coeff*inv_area_x2;
+      Real qdx3dt = coeff*inv_area_x3;
 
       for (int j = 0; j < 4; ++j) {
         for (int k = 0; k < 4; ++k) {
@@ -1594,6 +1906,15 @@ TaskStatus Particles::ConvertCoupledCurrentRepresentation(Driver *pdriver, int s
   auto jz_e = j_edge_x3e;
 
   if (pmy_pack->pmesh->one_d) {
+    par_for("convert_jx_cc_to_edge_1d", DevExeSpace(), 0, nmb1, is, ie,
+    KOKKOS_LAMBDA(const int m, const int i) {
+      Real jedge = mom(m, IMOM_JX, ks, js, i);
+      jx_e(m,ks,  js, i) = jedge;
+      jx_e(m,ke+1,js, i) = jedge;
+      jx_e(m,ks,  je+1,i) = jedge;
+      jx_e(m,ke+1,je+1, i) = jedge;
+    });
+
     par_for("convert_jy_cc_to_edge_1d", DevExeSpace(), 0, nmb1, is, ie+1,
     KOKKOS_LAMBDA(const int m, const int i) {
       Real jedge = mom(m, IMOM_JY, ks, js, i);

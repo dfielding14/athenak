@@ -35,7 +35,7 @@ nx3       = 4
 evolution  = dynamic
 integrator = rk2
 cfl_number = 0.3
-nlim       = 20
+nlim       = 30
 tlim       = 2.0
 ndiag      = 1
 
@@ -47,13 +47,13 @@ gamma       = 1.66666666667
 
 <particles>
 particle_type           = cosmic_ray
-ppc                     = 1.0
+ppc                     = 8.0
 pusher                  = drift
 nspecies                = 1
-cr_distribution         = center
+cr_distribution         = random
 deposit_moments         = true
 deposit_order           = 1
-deposit_qscale          = 1.0
+deposit_qscale          = 0.1
 couple_moments_to_mhd   = false
 couple_moments_momentum_to_mhd = false
 couple_moments_energy_to_mhd   = false

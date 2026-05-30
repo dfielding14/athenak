@@ -95,12 +95,24 @@ def _measure_case(basename):
         _latest_output_file(basename, 'mhd_u_m3'))
     e_data = bin_convert.read_binary_as_athdf(
         _latest_output_file(basename, 'mhd_u_e'))
+    jx_edge_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'prtcl_jx_edge'))
+    jy_edge_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'prtcl_jy_edge'))
+    jz_edge_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'prtcl_jz_edge'))
 
     return {
         'Q': _integrate_quantity(rho_data, 'prtcl_rho'),
         'Jx': _integrate_quantity(jx_data, 'prtcl_jx'),
         'Jy': _integrate_quantity(jy_data, 'prtcl_jy'),
         'Jz': _integrate_quantity(jz_data, 'prtcl_jz'),
+        'Jx_edge': _integrate_quantity(jx_edge_data, 'prtcl_jx_edge'),
+        'Jy_edge': _integrate_quantity(jy_edge_data, 'prtcl_jy_edge'),
+        'Jz_edge': _integrate_quantity(jz_edge_data, 'prtcl_jz_edge'),
+        'jx_edge_l2': _l2_quantity(jx_edge_data, 'prtcl_jx_edge'),
+        'jy_edge_l2': _l2_quantity(jy_edge_data, 'prtcl_jy_edge'),
+        'jz_edge_l2': _l2_quantity(jz_edge_data, 'prtcl_jz_edge'),
         'npart': float(np.sum(pdens_data['pdens'])),
         'bcc1_l2': _l2_quantity(bcc_data, 'bcc1'),
         'bcc2_l2': _l2_quantity(bcc_data, 'bcc2'),
@@ -251,7 +263,9 @@ def analyze():
     rel_tol = 1.0e-8
     quantities = [
         'Q', 'Jx', 'Jy', 'Jz', 'npart', 'bcc1_l2', 'bcc2_l2', 'bcc3_l2',
-        'mom1', 'mom2', 'mom3', 'ener'
+        'mom1', 'mom2', 'mom3', 'ener',
+        'Jx_edge', 'Jy_edge', 'Jz_edge',
+        'jx_edge_l2', 'jy_edge_l2', 'jz_edge_l2'
     ]
 
     for case_name, case_data in _RESULTS.items():
@@ -287,14 +301,16 @@ def analyze():
         for state in ['full', 'restart']:
             edge_state = edge[state]
             direct_state = direct[state]
-            for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
+            for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart',
+                             'Jx_edge', 'Jy_edge', 'Jz_edge']:
                 ok = _check_with_tolerance(
                     case_tag + ':' + state + ':edge_vs_edge_direct:' + quantity,
                     direct_state[quantity], edge_state[quantity],
                     1.0e-6, 1.0e-8) and ok
 
         for quantity in ['bcc1_l2', 'bcc2_l2', 'bcc3_l2',
-                         'mom1', 'mom2', 'mom3', 'ener']:
+                         'mom1', 'mom2', 'mom3', 'ener',
+                         'jx_edge_l2', 'jy_edge_l2', 'jz_edge_l2']:
             edge_full = edge['full'][quantity]
             edge_rst = edge['restart'][quantity]
             direct_full = direct['full'][quantity]

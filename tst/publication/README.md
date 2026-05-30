@@ -22,13 +22,17 @@ PIC/MHD-PIC set:
     for publication shock decks.
 - `pvtk_particles.py`
   - Lightweight parser for AthenaK `pvtk/*.part.vtk` particle files.
+- `PIC_LARGE_MACHINE_VALIDATION.md`
+  - Required larger-machine validation tiers, commands, pass criteria, and
+    archive checklist for publication/HPC campaigns that are too large for a
+    laptop-class run.
 
 ## Typical Workflow
 
 1. Run local publication groups:
 ```bash
 python3 tst/publication/run_pic_publication_suite.py \
-  --groups entity_core,benchmarks,shock_story \
+  --groups entity_core_publication,benchmarks_publication,shock_story \
   --tier local
 ```
 
@@ -77,11 +81,16 @@ Both decks include:
 - For MPI validation evidence, configure with:
 ```bash
 python3 tst/publication/run_pic_publication_suite.py \
-  --groups entity_core,benchmarks \
+  --groups entity_core_publication,benchmarks_publication \
   --tier local \
   --enable-mpi \
   --mpiexec /opt/homebrew/bin/mpiexec
 ```
+- Standard `tst/run_tests.py` suite discovery skips `*_publication.py`
+  modules by default. Use this manifest runner for publication campaigns, pass
+  an explicit test such as `particles/pic_bell_growth_publication`, or set
+  `ATHENA_INCLUDE_PUBLICATION_TESTS=1` to include publication modules in broad
+  suite discovery.
 - Heavy cases should be run on GPU-capable systems.
 - The plotting script is robust to missing cases; it will generate only figures
   with available artifacts.

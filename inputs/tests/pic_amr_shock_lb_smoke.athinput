@@ -102,3 +102,9 @@ file_type   = bin
 variable    = prtcl_jz
 dcycle      = 1
 ghost_zones = false
+
+<output5>
+file_type   = pvtk
+variable    = prtcl_all
+id          = prtcl_all
+dcycle      = 0

@@ -47,6 +47,7 @@ gamma       = 1.66666666667
 
 <particles>
 particle_type            = cosmic_ray
+star_particle_file       = pic_guard_star_particles.txt
 ppc                      = 1.0
 pusher                   = boris_tsc
 nspecies                 = 1
@@ -132,3 +133,10 @@ file_type   = rst
 id          = rst
 dcycle      = 1
 single_file_per_rank = false
+
+<output8>
+file_type   = trk
+variable    = prtcl_all
+id          = trk
+dcycle      = 1
+nparticles  = 16

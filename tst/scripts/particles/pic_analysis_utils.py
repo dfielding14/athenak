@@ -158,13 +158,3 @@ def polarization_split(
     right = 0.5 * (by - 1.0j * bz)
     left = 0.5 * (by + 1.0j * bz)
     return right, left
-
-
-def run(**kwargs):
-    """Utility module: no standalone runtime stage."""
-    return
-
-
-def analyze():
-    """Utility module: discovery compatibility for package-level test runs."""
-    return True

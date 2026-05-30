@@ -278,7 +278,10 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
   }
 
   // WS-H: optional particle-feedback source split for fluid momentum/energy.
-  if ((ppart != nullptr) && ppart->couple_moments_to_mhd && (stage == 1)) {
+  // Particle feedback rates are deposited once per cycle, then reused as a
+  // cycle-fixed source across all explicit RK stages, just like the current
+  // source added in EFieldSrc below.
+  if ((ppart != nullptr) && ppart->couple_moments_to_mhd) {
     const bool add_mom = ppart->couple_moments_momentum_to_mhd;
     const bool add_eng = ppart->couple_moments_energy_to_mhd;
     const bool apply_feedback_here = (ppart->couple_fluid_feedback_order ==
@@ -477,23 +480,40 @@ TaskStatus MHD::EFieldSrc(Driver *pdrive, int stage) {
         auto e1 = efld.x1e;
         auto e2 = efld.x2e;
         auto e3 = efld.x3e;
-        par_for("prtcl_efldsrc_edge_2d", DevExeSpace(), 0, nmb1, js, je+1, is, ie+1,
+        par_for("prtcl_efldsrc_edge_2d_e1", DevExeSpace(), 0, nmb1, js, je+1,
+                is, ie,
         KOKKOS_LAMBDA(const int m, const int j, const int i) {
           e1(m,ks  ,j,i) += jcoef*jx_e(m,ks  ,j,i);
           e1(m,ke+1,j,i) += jcoef*jx_e(m,ke+1,j,i);
+        });
+        par_for("prtcl_efldsrc_edge_2d_e2", DevExeSpace(), 0, nmb1, js, je,
+                is, ie+1,
+        KOKKOS_LAMBDA(const int m, const int j, const int i) {
           e2(m,ks  ,j,i) += jcoef*jy_e(m,ks  ,j,i);
           e2(m,ke+1,j,i) += jcoef*jy_e(m,ke+1,j,i);
+        });
+        par_for("prtcl_efldsrc_edge_2d_e3", DevExeSpace(), 0, nmb1, js, je+1,
+                is, ie+1,
+        KOKKOS_LAMBDA(const int m, const int j, const int i) {
           e3(m,ks  ,j,i) += jcoef*jz_e(m,ks,j,i);
         });
       } else {
         auto e1 = efld.x1e;
         auto e2 = efld.x2e;
         auto e3 = efld.x3e;
-        par_for("prtcl_efldsrc_edge_3d", DevExeSpace(), 0, nmb1, ks, ke+1, js, je+1,
-                is, ie+1,
+        par_for("prtcl_efldsrc_edge_3d_e1", DevExeSpace(), 0, nmb1, ks, ke+1,
+                js, je+1, is, ie,
         KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
           e1(m,k,j,i) += jcoef*jx_e(m,k,j,i);
+        });
+        par_for("prtcl_efldsrc_edge_3d_e2", DevExeSpace(), 0, nmb1, ks, ke+1,
+                js, je, is, ie+1,
+        KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
           e2(m,k,j,i) += jcoef*jy_e(m,k,j,i);
+        });
+        par_for("prtcl_efldsrc_edge_3d_e3", DevExeSpace(), 0, nmb1, ks, ke,
+                js, je+1, is, ie+1,
+        KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
           e3(m,k,j,i) += jcoef*jz_e(m,k,j,i);
         });
       }
@@ -513,22 +533,37 @@ TaskStatus MHD::EFieldSrc(Driver *pdrive, int stage) {
         auto e1 = efld.x1e;
         auto e2 = efld.x2e;
         auto e3 = efld.x3e;
-        par_for("prtcl_efldsrc_2d", DevExeSpace(), 0, nmb1, js, je+1, is, ie+1,
+        par_for("prtcl_efldsrc_2d_e1", DevExeSpace(), 0, nmb1, js, je+1, is, ie,
         KOKKOS_LAMBDA(const int m, const int j, const int i) {
           e1(m,ks  ,j,i) += jcoef*mom(m, particles::Particles::IMOM_JX, ks, j, i);
           e1(m,ke+1,j,i) += jcoef*mom(m, particles::Particles::IMOM_JX, ks, j, i);
+        });
+        par_for("prtcl_efldsrc_2d_e2", DevExeSpace(), 0, nmb1, js, je, is, ie+1,
+        KOKKOS_LAMBDA(const int m, const int j, const int i) {
           e2(m,ks  ,j,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, j, i);
           e2(m,ke+1,j,i) += jcoef*mom(m, particles::Particles::IMOM_JY, ks, j, i);
+        });
+        par_for("prtcl_efldsrc_2d_e3", DevExeSpace(), 0, nmb1, js, je+1, is, ie+1,
+        KOKKOS_LAMBDA(const int m, const int j, const int i) {
           e3(m,ks  ,j,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, ks, j, i);
         });
       } else {
         auto e1 = efld.x1e;
         auto e2 = efld.x2e;
         auto e3 = efld.x3e;
-        par_for("prtcl_efldsrc_3d", DevExeSpace(), 0, nmb1, ks, ke+1, js, je+1, is, ie+1,
+        par_for("prtcl_efldsrc_3d_e1", DevExeSpace(), 0, nmb1, ks, ke+1, js, je+1,
+                is, ie,
         KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
           e1(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JX, k, j, i);
+        });
+        par_for("prtcl_efldsrc_3d_e2", DevExeSpace(), 0, nmb1, ks, ke+1, js, je,
+                is, ie+1,
+        KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
           e2(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JY, k, j, i);
+        });
+        par_for("prtcl_efldsrc_3d_e3", DevExeSpace(), 0, nmb1, ks, ke, js, je+1,
+                is, ie+1,
+        KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
           e3(m,k,j,i) += jcoef*mom(m, particles::Particles::IMOM_JZ, k, j, i);
         });
       }
@@ -536,7 +571,7 @@ TaskStatus MHD::EFieldSrc(Driver *pdrive, int stage) {
   }
 
   // PR2 step II: optional fluid-feedback ordering mode for parity experiments.
-  if ((ppart != nullptr) && ppart->couple_moments_to_mhd && (stage == 1) &&
+  if ((ppart != nullptr) && ppart->couple_moments_to_mhd &&
       (ppart->couple_fluid_feedback_order == CoupledFluidFeedbackOrder::efield_src)) {
     const bool add_mom = ppart->couple_moments_momentum_to_mhd;
     const bool add_eng = ppart->couple_moments_energy_to_mhd;

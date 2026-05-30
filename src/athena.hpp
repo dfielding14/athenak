@@ -64,7 +64,7 @@ enum CRParticlesIndex {
   IPBX=7,  IPBY=8,  IPBZ=9,
   IPDX=10, IPDY=11, IPDZ=12, IPDB=13,
   IPEX=14, IPEY=15, IPEZ=16,
-  IPDPX=17, IPDPY=18, IPDPZ=19, IPDE=20, IPEBDOT=21
+  IPDPX=17, IPDPY=18, IPDPZ=19, IPDE=20, IPEBDOT=21, IPWT=22
 };
 
 // additional indices for star particles

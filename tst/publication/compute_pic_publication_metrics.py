@@ -83,15 +83,24 @@ def _freq_nonuniform(times: np.ndarray, signal: np.ndarray,
     freqs = np.linspace(fmin, fmax, nsample)
     best_f = float(freqs[0])
     best_amp = -1.0
-    for f in freqs:
-        omega_t = 2.0 * np.pi * f * t
+    for freq in freqs:
+        omega_t = 2.0 * np.pi * freq * t
         design = np.column_stack((np.sin(omega_t), np.cos(omega_t)))
         coeff, _, _, _ = np.linalg.lstsq(design, y, rcond=None)
         amp = float(np.hypot(coeff[0], coeff[1]))
         if amp > best_amp:
             best_amp = amp
-            best_f = float(f)
+            best_f = float(freq)
     return best_f
+
+
+def _zero_crossings(signal: np.ndarray) -> float:
+    shifted = np.asarray(signal, dtype=float) - np.mean(signal)
+    signs = np.sign(shifted)
+    signs = signs[signs != 0.0]
+    if signs.size < 2:
+        return 0.0
+    return float(np.count_nonzero(signs[1:] != signs[:-1]))
 
 
 def _growth_fit_from_series(times: np.ndarray, amp: np.ndarray) -> tuple[float, float]:
@@ -100,6 +109,33 @@ def _growth_fit_from_series(times: np.ndarray, amp: np.ndarray) -> tuple[float, 
         times, amp, min_points=6, floor=floor, min_growth_factor=1.2
     )
     return float(fit["gamma"]), float(fit["r2"])
+
+
+def _proxy_stability_fit(
+    times: np.ndarray, amp: np.ndarray
+) -> tuple[float, float, float]:
+    t = np.asarray(times, dtype=float)
+    a = np.asarray(amp, dtype=float)
+    if t.size != a.size or t.size < 6:
+        raise ValueError("proxy stability fit requires at least six samples")
+    floor = max(1.0e-16, 1.0e-3 * float(np.max(a)))
+    gamma, _, r2 = fit_exponential_growth(
+        t, a + floor, float(t[2]), float(t[-3]), floor=1.0e-30
+    )
+    ratio = float((np.max(a) + floor) / max(np.min(a) + floor, 1.0e-30))
+    return float(gamma), float(r2), ratio
+
+
+def _publication_growth_fit(
+    times: np.ndarray, amp: np.ndarray
+) -> tuple[float, float, float]:
+    t = np.asarray(times, dtype=float)
+    a = np.asarray(amp, dtype=float)
+    floor = max(1.0e-30, 1.0e-4 * float(np.max(a)))
+    fit = fit_exponential_growth_windowed(
+        t, a, min_points=6, floor=floor, min_growth_factor=2.0
+    )
+    return float(fit["gamma"]), float(fit["r2"]), float(fit["growth_factor"])
 
 
 def _add_entity_metrics(run_dir: Path, out: dict[str, object]) -> None:
@@ -223,6 +259,7 @@ def _collect_two_stream_weibel(run_dir: Path, out: dict[str, object]) -> None:
     for rank in (1, 2):
         files = sorted(ts_dir.glob(f"pic_two_stream_pub_np{rank}.mhd_bcc.*.bin"))
         field = "bcc2"
+        publication = bool(files)
         if not files:
             files = sorted(
                 ts_dir.glob(f"pic_two_stream_growth_proxy_np{rank}.prtcl_rho.*.bin")
@@ -235,7 +272,14 @@ def _collect_two_stream_weibel(run_dir: Path, out: dict[str, object]) -> None:
             d = bin_convert.read_binary_as_athdf(str(f))
             t.append(float(d["Time"]))
             a.append(abs(_mode1_complex(d, field)))
-        gamma, r2 = _growth_fit_from_series(np.asarray(t), np.asarray(a))
+        if publication:
+            gamma, r2, growth_factor = _publication_growth_fit(
+                np.asarray(t), np.asarray(a)
+            )
+            ts[f"np{rank}_growth_factor"] = growth_factor
+        else:
+            gamma, r2, ratio = _proxy_stability_fit(np.asarray(t), np.asarray(a))
+            ts[f"np{rank}_ratio"] = ratio
         ts[f"np{rank}_gamma"] = gamma
         ts[f"np{rank}_r2"] = r2
         ts[f"np{rank}_max"] = float(np.max(a))
@@ -245,6 +289,7 @@ def _collect_two_stream_weibel(run_dir: Path, out: dict[str, object]) -> None:
     for rank in (1, 2):
         files = sorted(wb_dir.glob(f"pic_weibel_pub_np{rank}.mhd_bcc.*.bin"))
         field = "bcc2"
+        publication = bool(files)
         if not files:
             files = sorted(
                 wb_dir.glob(f"pic_weibel_growth_proxy_np{rank}.prtcl_jy.*.bin")
@@ -257,7 +302,14 @@ def _collect_two_stream_weibel(run_dir: Path, out: dict[str, object]) -> None:
             d = bin_convert.read_binary_as_athdf(str(f))
             t.append(float(d["Time"]))
             a.append(abs(_mode1_complex(d, field)))
-        gamma, r2 = _growth_fit_from_series(np.asarray(t), np.asarray(a))
+        if publication:
+            gamma, r2, growth_factor = _publication_growth_fit(
+                np.asarray(t), np.asarray(a)
+            )
+            wb[f"np{rank}_growth_factor"] = growth_factor
+        else:
+            gamma, r2, ratio = _proxy_stability_fit(np.asarray(t), np.asarray(a))
+            wb[f"np{rank}_ratio"] = ratio
         wb[f"np{rank}_gamma"] = gamma
         wb[f"np{rank}_r2"] = r2
         wb[f"np{rank}_max"] = float(np.max(a))
@@ -349,11 +401,22 @@ def _collect_mso(run_dir: Path, out: dict[str, object]) -> None:
                 t = np.asarray(t)
                 mom = np.asarray(mom)
                 ener = np.asarray(ener)
-                freq = _freq_nonuniform(t, mom, 0.01, 0.12)
-                drift = float(np.max(np.abs(ener - ener[0])) / max(abs(ener[0]), 1.0))
+                finite = bool(np.all(np.isfinite(mom)) and np.all(np.isfinite(ener)))
+                if finite:
+                    amp = float(np.max(mom) - np.min(mom))
+                    turns = _zero_crossings(mom)
+                    drift = float(
+                        np.max(np.abs(ener - ener[0])) / max(abs(ener[0]), 1.0)
+                    )
+                else:
+                    amp = -1.0
+                    turns = -1.0
+                    drift = 1.0e300
                 key = f"{tag}_np{rank}".replace("amr_publication", "amr")
-                metrics[key + "_freq"] = freq
+                metrics[key + "_amp"] = amp
+                metrics[key + "_turns"] = turns
                 metrics[key + "_drift"] = drift
+                metrics[key + "_finite"] = 1.0 if finite else 0.0
     out["F06_mso"] = metrics
 
 

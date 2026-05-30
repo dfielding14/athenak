@@ -18,6 +18,75 @@
 #include "units/units.hpp"
 
 namespace particles {
+namespace {
+
+KOKKOS_INLINE_FUNCTION
+Real ParticleBoundaryRoundoff() {
+#if SINGLE_PRECISION_ENABLED
+  return static_cast<Real>(1.1920928955078125e-7);
+#else
+  return static_cast<Real>(2.2204460492503131e-16);
+#endif
+}
+
+KOKKOS_INLINE_FUNCTION
+Real InteriorUpperBoundary(const Real lower, const Real upper, const Real dx) {
+  const Real scale = fmax(static_cast<Real>(1.0),
+                          fmax(fabs(lower), fmax(fabs(upper), fabs(dx))));
+  const Real tol = static_cast<Real>(64.0)*ParticleBoundaryRoundoff()*scale;
+  const Real interior = upper - tol;
+  return (interior > lower) ? interior : static_cast<Real>(0.5)*(lower + upper);
+}
+
+KOKKOS_INLINE_FUNCTION
+void ReflectCoordinateAtPhysicalBoundary(const BoundaryFlag inner_flag,
+                                         const BoundaryFlag outer_flag,
+                                         const Real lower, const Real upper,
+                                         const Real dx, Real &x, Real &v) {
+  if (inner_flag == BoundaryFlag::reflect && x < lower) {
+    x = static_cast<Real>(2.0)*lower - x;
+    v = -v;
+    if (x < lower) {
+      x = lower;
+    }
+  }
+  if (outer_flag == BoundaryFlag::reflect && x >= upper) {
+    x = static_cast<Real>(2.0)*upper - x;
+    v = -v;
+    if (x >= upper) {
+      x = InteriorUpperBoundary(lower, upper, dx);
+    }
+  }
+}
+
+template <typename SizeView, typename BoundaryView>
+KOKKOS_INLINE_FUNCTION
+void ApplyReflectiveParticleBCs(const int m, const SizeView size,
+                                const BoundaryView mb_bcs,
+                                const bool multi_d, const bool three_d,
+                                Real &x, Real &y, Real &z,
+                                Real &vx, Real &vy, Real &vz) {
+  const auto block_size = size.d_view(m);
+  ReflectCoordinateAtPhysicalBoundary(
+      mb_bcs.d_view(m, BoundaryFace::inner_x1),
+      mb_bcs.d_view(m, BoundaryFace::outer_x1),
+      block_size.x1min, block_size.x1max, block_size.dx1, x, vx);
+  if (multi_d) {
+    ReflectCoordinateAtPhysicalBoundary(
+        mb_bcs.d_view(m, BoundaryFace::inner_x2),
+        mb_bcs.d_view(m, BoundaryFace::outer_x2),
+        block_size.x2min, block_size.x2max, block_size.dx2, y, vy);
+  }
+  if (three_d) {
+    ReflectCoordinateAtPhysicalBoundary(
+        mb_bcs.d_view(m, BoundaryFace::inner_x3),
+        mb_bcs.d_view(m, BoundaryFace::outer_x3),
+        block_size.x3min, block_size.x3max, block_size.dx3, z, vz);
+  }
+}
+
+}  // namespace
+
 KOKKOS_INLINE_FUNCTION
 Real GravPot(Real x1, Real x2, Real x3, Real G, Real r_s, Real rho_s,
              Real M_gal, Real a_gal, Real z_gal, Real R200, Real rho_mean);
@@ -45,14 +114,24 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
 //! \brief Simple drift pusher updating positions using velocities
 
 TaskStatus Particles::PushDrift(Driver *pdriver, int stage) {
-  bool &multi_d = pmy_pack->pmesh->multi_d;
-  bool &three_d = pmy_pack->pmesh->three_d;
+  const bool multi_d = pmy_pack->pmesh->multi_d;
+  const bool three_d = pmy_pack->pmesh->three_d;
+  const int gids = pmy_pack->gids;
+  const int nmb = pmy_pack->nmb_thispack;
+  auto &pi = prtcl_idata;
   auto &pr = prtcl_rdata;
+  auto &size = pmy_pack->pmb->mb_size;
+  auto &mb_bcs = pmy_pack->pmb->mb_bcs;
   auto dt_ = (pmy_pack->pmesh->dt);
+  size.template sync<DevExeSpace>();
+  mb_bcs.template sync<DevExeSpace>();
+  auto size_view = size;
+  auto mb_bcs_view = mb_bcs;
 
   par_for(
       "part_update", DevExeSpace(), 0, (nprtcl_thispack - 1),
       KOKKOS_LAMBDA(const int p) {
+        const int m = pi(PGID, p) - gids;
         pr(IPX, p) += dt_ * pr(IPVX, p);
 
         if (multi_d) {
@@ -61,6 +140,22 @@ TaskStatus Particles::PushDrift(Driver *pdriver, int stage) {
 
         if (three_d) {
           pr(IPZ, p) += dt_ * pr(IPVZ, p);
+        }
+        if (m >= 0 && m < nmb) {
+          Real x = pr(IPX, p);
+          Real y = pr(IPY, p);
+          Real z = pr(IPZ, p);
+          Real vx = pr(IPVX, p);
+          Real vy = pr(IPVY, p);
+          Real vz = pr(IPVZ, p);
+          ApplyReflectiveParticleBCs(m, size_view, mb_bcs_view, multi_d, three_d,
+                                     x, y, z, vx, vy, vz);
+          pr(IPX, p) = x;
+          pr(IPY, p) = y;
+          pr(IPZ, p) = z;
+          pr(IPVX, p) = vx;
+          pr(IPVY, p) = vy;
+          pr(IPVZ, p) = vz;
         }
       });
 
@@ -72,8 +167,19 @@ TaskStatus Particles::PushDrift(Driver *pdriver, int stage) {
 //! \brief RK4 gravity pusher for star particles
 
 TaskStatus Particles::PushStars(Driver *pdriver, int stage) {
+  const bool multi_d = pmy_pack->pmesh->multi_d;
+  const bool three_d = pmy_pack->pmesh->three_d;
+  const int gids = pmy_pack->gids;
+  const int nmb = pmy_pack->nmb_thispack;
+  auto &pi = prtcl_idata;
   auto &pr = prtcl_rdata;
+  auto &size = pmy_pack->pmb->mb_size;
+  auto &mb_bcs = pmy_pack->pmb->mb_bcs;
   auto dt_ = (pmy_pack->pmesh->dt);
+  size.template sync<DevExeSpace>();
+  mb_bcs.template sync<DevExeSpace>();
+  auto size_view = size;
+  auto mb_bcs_view = mb_bcs;
 
   Real G = pmy_pack->punit->grav_constant();
   Real r_s = r_scale;
@@ -175,9 +281,179 @@ TaskStatus Particles::PushStars(Driver *pdriver, int stage) {
         pr(IPVX, p) = vx + dt_ / 6.0 * (k1vx + 2.0 * k2vx + 2.0 * k3vx + k4vx);
         pr(IPVY, p) = vy + dt_ / 6.0 * (k1vy + 2.0 * k2vy + 2.0 * k3vy + k4vy);
         pr(IPVZ, p) = vz + dt_ / 6.0 * (k1vz + 2.0 * k2vz + 2.0 * k3vz + k4vz);
+        const int m = pi(PGID, p) - gids;
+        if (m >= 0 && m < nmb) {
+          Real xr = pr(IPX, p);
+          Real yr = pr(IPY, p);
+          Real zr = pr(IPZ, p);
+          Real vxr = pr(IPVX, p);
+          Real vyr = pr(IPVY, p);
+          Real vzr = pr(IPVZ, p);
+          ApplyReflectiveParticleBCs(m, size_view, mb_bcs_view, multi_d, three_d,
+                                     xr, yr, zr, vxr, vyr, vzr);
+          pr(IPX, p) = xr;
+          pr(IPY, p) = yr;
+          pr(IPZ, p) = zr;
+          pr(IPVX, p) = vxr;
+          pr(IPVY, p) = vyr;
+          pr(IPVZ, p) = vzr;
+        }
       });
 
   return TaskStatus::complete;
+}
+
+template <typename SizeView>
+KOKKOS_INLINE_FUNCTION
+void InterpolateLinearFields(const RegionIndcs indcs, const SizeView size,
+                             const DvceArray5D<Real> bcc,
+                             const DvceArray5D<Real> w0,
+                             const bool use_mhd_fluid_velocity, const int m,
+                             Real x, Real y, Real z, Real &Bx, Real &By,
+                             Real &Bz, Real &Ux, Real &Uy, Real &Uz,
+                             bool allow_2d3v) {
+  const bool three_d = (indcs.nx3 > 1);
+  const bool use_bz_channel = three_d || allow_2d3v;
+  Real dx1 = size.d_view(m).dx1;
+  Real dx2 = size.d_view(m).dx2;
+  Real dx3 = three_d ? size.d_view(m).dx3 : 1.0;
+
+  Real fx = (x - size.d_view(m).x1min) / dx1;
+  Real fy = (y - size.d_view(m).x2min) / dx2;
+  Real fz = three_d ? (z - size.d_view(m).x3min) / dx3 : 0.0;
+
+  int i0 = static_cast<int>(floor(fx)) + indcs.is;
+  int j0 = static_cast<int>(floor(fy)) + indcs.js;
+  int k0 = three_d ? static_cast<int>(floor(fz)) + indcs.ks : indcs.ks;
+
+  i0 = (i0 < indcs.is) ? indcs.is : ((i0 > indcs.ie - 1) ? indcs.ie - 1 : i0);
+  j0 = (j0 < indcs.js) ? indcs.js : ((j0 > indcs.je - 1) ? indcs.je - 1 : j0);
+  k0 = (k0 < indcs.ks) ? indcs.ks : ((k0 > indcs.ke - 1) ? indcs.ke - 1 : k0);
+
+  int i1 = i0 + 1;
+  int j1 = j0 + 1;
+  int k1 = three_d ? k0 + 1 : k0;
+
+  Real wx = fx - floor(fx);
+  Real wy = fy - floor(fy);
+  Real wz = three_d ? fz - floor(fz) : 0.0;
+
+  Bx = By = Bz = 0.0;
+  Ux = Uy = Uz = 0.0;
+
+  for (int dk = 0; dk <= (three_d ? 1 : 0); ++dk) {
+    Real wk = three_d ? (dk == 0 ? (1.0 - wz) : wz) : 1.0;
+    int kk = (dk == 0) ? k0 : k1;
+    for (int dj = 0; dj <= 1; ++dj) {
+      Real wj = (dj == 0) ? (1.0 - wy) : wy;
+      int jj = (dj == 0) ? j0 : j1;
+      for (int di = 0; di <= 1; ++di) {
+        Real wi = (di == 0) ? (1.0 - wx) : wx;
+        int ii = (di == 0) ? i0 : i1;
+        Real w = wi * wj * wk;
+        Bx += w * bcc(m, IBX, kk, jj, ii);
+        By += w * bcc(m, IBY, kk, jj, ii);
+        if (use_mhd_fluid_velocity) {
+          Ux += w*w0(m, IVX, kk, jj, ii);
+          Uy += w*w0(m, IVY, kk, jj, ii);
+          Uz += w*w0(m, IVZ, kk, jj, ii);
+        }
+        if (use_bz_channel) {
+          Bz += w * bcc(m, IBZ, kk, jj, ii);
+        }
+      }
+    }
+  }
+  if (!use_bz_channel) {
+    Bz = 0.0;
+    Uz = 0.0;
+  }
+}
+
+template <typename SizeView>
+KOKKOS_INLINE_FUNCTION
+void InterpolateTSCFields(const RegionIndcs indcs, const SizeView size,
+                          const DvceArray5D<Real> bcc,
+                          const DvceArray5D<Real> w0,
+                          const bool use_mhd_fluid_velocity, const int m,
+                          Real x, Real y, Real z, Real &Bx, Real &By,
+                          Real &Bz, Real &Ux, Real &Uy, Real &Uz,
+                          bool allow_2d3v) {
+  const bool three_d = (indcs.nx3 > 1);
+  const bool use_bz_channel = three_d || allow_2d3v;
+  Real dx1 = size.d_view(m).dx1;
+  Real dx2 = size.d_view(m).dx2;
+  Real dx3 = three_d ? size.d_view(m).dx3 : 1.0;
+
+  Real fx = (x - size.d_view(m).x1min) / dx1 - 0.5;
+  Real fy = (y - size.d_view(m).x2min) / dx2 - 0.5;
+  Real fz = three_d ? (z - size.d_view(m).x3min) / dx3 - 0.5 : 0.0;
+
+  int ic = static_cast<int>(floor(fx)) + indcs.is;
+  int jc = static_cast<int>(floor(fy)) + indcs.js;
+  int kc = three_d ? static_cast<int>(floor(fz)) + indcs.ks : indcs.ks;
+
+  Real di = fx - floor(fx);
+  Real dj = fy - floor(fy);
+  Real dk = three_d ? fz - floor(fz) : 0.0;
+
+  auto weight = [](Real d) {
+    Real ad = fabs(d);
+    if (ad < 0.5) return 0.75 - ad * ad;
+    if (ad < 1.5) {
+      Real t = 1.5 - ad;
+      return 0.5 * t * t;
+    }
+    return 0.0;
+  };
+
+  Real wx[3] = {weight(di + 1.0), weight(di), weight(di - 1.0)};
+  Real wy[3] = {weight(dj + 1.0), weight(dj), weight(dj - 1.0)};
+  Real wz[3] = {1.0, 0.0, 0.0};
+  int kz[3] = {kc, kc, kc};
+  if (three_d) {
+    wz[0] = weight(dk + 1.0);
+    wz[1] = weight(dk);
+    wz[2] = weight(dk - 1.0);
+    kz[0] = kc - 1;
+    kz[1] = kc;
+    kz[2] = kc + 1;
+  }
+
+  int ix[3] = {ic - 1, ic, ic + 1};
+  int iy[3] = {jc - 1, jc, jc + 1};
+  for (int n = 0; n < 3; ++n) {
+    ix[n] = (ix[n] < indcs.is) ? indcs.is : ((ix[n] > indcs.ie) ? indcs.ie : ix[n]);
+    iy[n] = (iy[n] < indcs.js) ? indcs.js : ((iy[n] > indcs.je) ? indcs.je : iy[n]);
+    if (three_d) {
+      kz[n] = (kz[n] < indcs.ks) ? indcs.ks : ((kz[n] > indcs.ke) ? indcs.ke : kz[n]);
+    }
+  }
+
+  Bx = By = Bz = 0.0;
+  Ux = Uy = Uz = 0.0;
+  int nk = three_d ? 3 : 1;
+  for (int kk = 0; kk < nk; ++kk) {
+    for (int jj = 0; jj < 3; ++jj) {
+      for (int ii = 0; ii < 3; ++ii) {
+        Real w = wx[ii] * wy[jj] * wz[kk];
+        Bx += w * bcc(m, IBX, kz[kk], iy[jj], ix[ii]);
+        By += w * bcc(m, IBY, kz[kk], iy[jj], ix[ii]);
+        if (use_mhd_fluid_velocity) {
+          Ux += w*w0(m, IVX, kz[kk], iy[jj], ix[ii]);
+          Uy += w*w0(m, IVY, kz[kk], iy[jj], ix[ii]);
+          Uz += w*w0(m, IVZ, kz[kk], iy[jj], ix[ii]);
+        }
+        if (use_bz_channel) {
+          Bz += w * bcc(m, IBZ, kz[kk], iy[jj], ix[ii]);
+        }
+      }
+    }
+  }
+  if (!use_bz_channel) {
+    Bz = 0.0;
+    Uz = 0.0;
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -185,9 +461,10 @@ TaskStatus Particles::PushStars(Driver *pdriver, int stage) {
 //  \brief Boris pusher for cosmic ray particles in electromagnetic fields
 
 TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const RegionIndcs indcs = pmy_pack->pmesh->mb_indcs;
   auto &pi = prtcl_idata;
   auto &pr = prtcl_rdata;
+  auto &size = pmy_pack->pmb->mb_size;
   Real dt = pmy_pack->pmesh->dt;
   int gids = pmy_pack->gids;
   bool use_tsc = (pusher == ParticlesPusher::boris_tsc);
@@ -203,18 +480,26 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
     std::exit(EXIT_FAILURE);
   }
 
-  Particles *pt = this;
-
   // Create local copies to avoid GPU lambda capture warning
   bool track_displacement_local = track_displacement;
+  const bool multi_d_local = pmy_pack->pmesh->multi_d;
   const int nx3_local = indcs.nx3;  // avoid capturing host ref
   const bool allow_2d3v_local = (pic_enable_2d3v && (nx3_local == 1));
   const bool use_vz_component = (nx3_local > 1) || allow_2d3v_local;
+  const bool use_mhd_fluid_velocity =
+      (!no_mhd_mode && (pmy_pack->pmhd != nullptr));
+  auto bcc = use_mhd_fluid_velocity ? pmy_pack->pmhd->bcc0 : pic_no_mhd_bcc0;
+  auto w0 = use_mhd_fluid_velocity ? pmy_pack->pmhd->w0 : DvceArray5D<Real>();
+  size.template sync<DevExeSpace>();
+  auto size_view = size;
 
   const Real qscale = deposit_qscale;
   auto mspecies = species_mass;
   const int nspecies_local = nspecies;
   const int nmb_local = pmy_pack->nmb_thispack;
+  auto &mb_bcs = pmy_pack->pmb->mb_bcs;
+  mb_bcs.template sync<DevExeSpace>();
+  auto mb_bcs_view = mb_bcs;
   const Real inv_dt = (dt > 0.0) ? (1.0/dt) : 0.0;
   const bool expanding_box_local =
       (pic_expanding_box_mode == PICExpandingBoxMode::on);
@@ -231,7 +516,7 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         if (m < 0 || m >= nmb_local) return;
         Real x = pr(IPX, p);
         Real y = pr(IPY, p);
-        Real z = (indcs.nx3 > 1) ? pr(IPZ, p) : 0.0;
+        Real z = (nx3_local > 1) ? pr(IPZ, p) : 0.0;
         Real vx = pr(IPVX, p);
         Real vy = pr(IPVY, p);
         Real vz = use_vz_component ? pr(IPVZ, p) : 0.0;
@@ -241,7 +526,9 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         Real q_over_m = pr(IPM, p);
         int sp = pi(PSP, p);
         if (sp < 0 || sp >= nspecies_local) return;
-        Real m_macro = qscale*mspecies(sp);
+        Real weight = pr(IPWT, p);
+        if (weight <= 0.0) weight = 1.0;
+        Real m_macro = qscale*weight*mspecies(sp);
 
         if (expanding_box_local) {
           // Apply half-step expansion/compression source update around Boris.
@@ -265,11 +552,14 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         Real Bx = 0.0, By = 0.0, Bz = 0.0;
         Real Ux = 0.0, Uy = 0.0, Uz = 0.0;
         if (use_tsc) {
-          pt->InterpolateTSC(
-              m, x_mid, y_mid, z_mid, Bx, By, Bz, Ux, Uy, Uz, allow_2d3v_local);
+          InterpolateTSCFields(indcs, size_view, bcc, w0, use_mhd_fluid_velocity,
+                               m, x_mid, y_mid, z_mid, Bx, By, Bz, Ux, Uy, Uz,
+                               allow_2d3v_local);
         } else {
-          pt->InterpolateLinear(
-              m, x_mid, y_mid, z_mid, Bx, By, Bz, Ux, Uy, Uz, allow_2d3v_local);
+          InterpolateLinearFields(indcs, size_view, bcc, w0,
+                                  use_mhd_fluid_velocity, m, x_mid, y_mid,
+                                  z_mid, Bx, By, Bz, Ux, Uy, Uz,
+                                  allow_2d3v_local);
         }
         if (!use_vz_component) {
           Bz = 0.0;
@@ -322,10 +612,20 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
           }
         }
 
-        // Complete drift from midpoint to full-step position.
-        pr(IPX, p) = x_mid + dt_half*vx;
-        pr(IPY, p) = y_mid + dt_half*vy;
-        pr(IPZ, p) = (nx3_local > 1) ? (z_mid + dt_half*vz) : 0.0;
+        // Complete drift from midpoint to full-step position, then apply wall
+        // reflection. Feedback diagnostics below remain the EM-push delta only.
+        Real x_new = x_mid + dt_half*vx;
+        Real y_new = y_mid + dt_half*vy;
+        Real z_new = (nx3_local > 1) ? (z_mid + dt_half*vz) : 0.0;
+        const Real vx_em = vx;
+        const Real vy_em = vy;
+        const Real vz_em = vz;
+        ApplyReflectiveParticleBCs(m, size_view, mb_bcs_view, multi_d_local,
+                                   (nx3_local > 1), x_new, y_new, z_new,
+                                   vx, vy, vz);
+        pr(IPX, p) = x_new;
+        pr(IPY, p) = y_new;
+        pr(IPZ, p) = z_new;
 
         // Store updated velocity
         pr(IPVX, p) = vx;
@@ -340,10 +640,10 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
         pr(IPEY, p) = cEy;
         pr(IPEZ, p) = use_vz_component ? cEz : 0.0;
 
-        Real v_new_sq = vx*vx + vy*vy + vz*vz;
-        pr(IPDPX, p) = m_macro*(vx - vx_old)*inv_dt;
-        pr(IPDPY, p) = m_macro*(vy - vy_old)*inv_dt;
-        pr(IPDPZ, p) = m_macro*(vz - vz_old)*inv_dt;
+        Real v_new_sq = vx_em*vx_em + vy_em*vy_em + vz_em*vz_em;
+        pr(IPDPX, p) = m_macro*(vx_em - vx_old)*inv_dt;
+        pr(IPDPY, p) = m_macro*(vy_em - vy_old)*inv_dt;
+        pr(IPDPZ, p) = m_macro*(vz_em - vz_old)*inv_dt;
         pr(IPDE, p) = 0.5*m_macro*(v_new_sq - v_old_sq)*inv_dt;
         pr(IPEBDOT, p) = cEx*Bx + cEy*By + cEz*Bz;
 
@@ -363,166 +663,6 @@ TaskStatus Particles::PushCosmicRays(Driver *pdriver, int stage) {
       });
 
   return TaskStatus::complete;
-}
-
-KOKKOS_INLINE_FUNCTION
-void Particles::InterpolateLinear(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                                  Real &Bz, Real &Ux, Real &Uy, Real &Uz,
-                                  bool allow_2d3v) const {
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
-  auto &size = pmy_pack->pmb->mb_size;
-  const bool use_no_mhd_bcc =
-      (pic_background_mode == PICBackgroundMode::no_mhd) ||
-      (pmy_pack->pmhd == nullptr);
-  auto bcc = use_no_mhd_bcc ? pic_no_mhd_bcc0 : pmy_pack->pmhd->bcc0;
-  auto w0 = (use_no_mhd_bcc || pmy_pack->pmhd == nullptr) ?
-            DvceArray5D<Real>() : pmy_pack->pmhd->w0;
-
-  const bool use_bz_channel = (indcs.nx3 > 1) || allow_2d3v;
-  Real dx1 = size.d_view(m).dx1;
-  Real dx2 = size.d_view(m).dx2;
-  Real dx3 = (indcs.nx3 > 1) ? size.d_view(m).dx3 : 1.0;
-
-  Real fx = (x - size.d_view(m).x1min) / dx1;
-  Real fy = (y - size.d_view(m).x2min) / dx2;
-  Real fz = (indcs.nx3 > 1) ? (z - size.d_view(m).x3min) / dx3 : 0.0;
-
-  int i0 = static_cast<int>(floor(fx)) + indcs.is;
-  int j0 = static_cast<int>(floor(fy)) + indcs.js;
-  int k0 = (indcs.nx3 > 1) ? static_cast<int>(floor(fz)) + indcs.ks : indcs.ks;
-
-  i0 = (i0 < indcs.is) ? indcs.is : ((i0 > indcs.ie - 1) ? indcs.ie - 1 : i0);
-  j0 = (j0 < indcs.js) ? indcs.js : ((j0 > indcs.je - 1) ? indcs.je - 1 : j0);
-  k0 = (k0 < indcs.ks) ? indcs.ks : ((k0 > indcs.ke - 1) ? indcs.ke - 1 : k0);
-
-  int i1 = i0 + 1;
-  int j1 = j0 + 1;
-  int k1 = (indcs.nx3 > 1) ? k0 + 1 : k0;
-
-  Real wx = fx - floor(fx);
-  Real wy = fy - floor(fy);
-  Real wz = (indcs.nx3 > 1) ? fz - floor(fz) : 0.0;
-
-  Bx = By = Bz = 0.0;
-  Ux = Uy = Uz = 0.0;
-
-  for (int dk = 0; dk <= (indcs.nx3 > 1 ? 1 : 0); ++dk) {
-    Real wk = (indcs.nx3 > 1) ? (dk == 0 ? (1.0 - wz) : wz) : 1.0;
-    int kk = (dk == 0) ? k0 : k1;
-    for (int dj = 0; dj <= 1; ++dj) {
-      Real wj = (dj == 0) ? (1.0 - wy) : wy;
-      int jj = (dj == 0) ? j0 : j1;
-      for (int di = 0; di <= 1; ++di) {
-        Real wi = (di == 0) ? (1.0 - wx) : wx;
-        int ii = (di == 0) ? i0 : i1;
-        Real w = wi * wj * wk;
-        Bx += w * bcc(m, IBX, kk, jj, ii);
-        By += w * bcc(m, IBY, kk, jj, ii);
-        if (!use_no_mhd_bcc && pmy_pack->pmhd != nullptr) {
-          Ux += w*w0(m, IVX, kk, jj, ii);
-          Uy += w*w0(m, IVY, kk, jj, ii);
-          Uz += w*w0(m, IVZ, kk, jj, ii);
-        }
-        if (use_bz_channel) {
-          Bz += w * bcc(m, IBZ, kk, jj, ii);
-        }
-      }
-    }
-  }
-  if (!use_bz_channel) {
-    Bz = 0.0;
-    Uz = 0.0;
-  }
-}
-
-KOKKOS_INLINE_FUNCTION
-void Particles::InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                               Real &Bz, Real &Ux, Real &Uy, Real &Uz,
-                               bool allow_2d3v) const {
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
-  auto &size = pmy_pack->pmb->mb_size;
-  const bool use_no_mhd_bcc =
-      (pic_background_mode == PICBackgroundMode::no_mhd) ||
-      (pmy_pack->pmhd == nullptr);
-  auto bcc = use_no_mhd_bcc ? pic_no_mhd_bcc0 : pmy_pack->pmhd->bcc0;
-  auto w0 = (use_no_mhd_bcc || pmy_pack->pmhd == nullptr) ?
-            DvceArray5D<Real>() : pmy_pack->pmhd->w0;
-
-  const bool use_bz_channel = (indcs.nx3 > 1) || allow_2d3v;
-  Real dx1 = size.d_view(m).dx1;
-  Real dx2 = size.d_view(m).dx2;
-  Real dx3 = (indcs.nx3 > 1) ? size.d_view(m).dx3 : 1.0;
-
-  Real fx = (x - size.d_view(m).x1min) / dx1 - 0.5;
-  Real fy = (y - size.d_view(m).x2min) / dx2 - 0.5;
-  Real fz = (indcs.nx3 > 1) ? (z - size.d_view(m).x3min) / dx3 - 0.5 : 0.0;
-
-  int ic = static_cast<int>(floor(fx)) + indcs.is;
-  int jc = static_cast<int>(floor(fy)) + indcs.js;
-  int kc = (indcs.nx3 > 1) ? static_cast<int>(floor(fz)) + indcs.ks : indcs.ks;
-
-  Real di = fx - floor(fx);
-  Real dj = fy - floor(fy);
-  Real dk = (indcs.nx3 > 1) ? fz - floor(fz) : 0.0;
-
-  auto weight = [](Real d) {
-    Real ad = fabs(d);
-    if (ad < 0.5) return 0.75 - ad * ad;
-    if (ad < 1.5) {
-      Real t = 1.5 - ad;
-      return 0.5 * t * t;
-    }
-    return 0.0;
-  };
-
-  Real wx[3] = {weight(di + 1.0), weight(di), weight(di - 1.0)};
-  Real wy[3] = {weight(dj + 1.0), weight(dj), weight(dj - 1.0)};
-  // In 2D, collapse TSC to a single in-plane sample with unit z-weight.
-  Real wz[3] = {1.0, 0.0, 0.0};
-  int kz[3] = {kc, kc, kc};
-  if (indcs.nx3 > 1) {
-    wz[0] = weight(dk + 1.0);
-    wz[1] = weight(dk);
-    wz[2] = weight(dk - 1.0);
-    kz[0] = kc - 1;
-    kz[1] = kc;
-    kz[2] = kc + 1;
-  }
-
-  int ix[3] = {ic - 1, ic, ic + 1};
-  int iy[3] = {jc - 1, jc, jc + 1};
-  for (int n = 0; n < 3; ++n) {
-    ix[n] = (ix[n] < indcs.is) ? indcs.is : ((ix[n] > indcs.ie) ? indcs.ie : ix[n]);
-    iy[n] = (iy[n] < indcs.js) ? indcs.js : ((iy[n] > indcs.je) ? indcs.je : iy[n]);
-    if (indcs.nx3 > 1) {
-      kz[n] = (kz[n] < indcs.ks) ? indcs.ks : ((kz[n] > indcs.ke) ? indcs.ke : kz[n]);
-    }
-  }
-
-  Bx = By = Bz = 0.0;
-  Ux = Uy = Uz = 0.0;
-  int nk = (indcs.nx3 > 1) ? 3 : 1;
-  for (int kk = 0; kk < nk; ++kk) {
-    for (int jj = 0; jj < 3; ++jj) {
-      for (int ii = 0; ii < 3; ++ii) {
-        Real w = wx[ii] * wy[jj] * wz[kk];
-        Bx += w * bcc(m, IBX, kz[kk], iy[jj], ix[ii]);
-        By += w * bcc(m, IBY, kz[kk], iy[jj], ix[ii]);
-        if (!use_no_mhd_bcc && pmy_pack->pmhd != nullptr) {
-          Ux += w*w0(m, IVX, kz[kk], iy[jj], ix[ii]);
-          Uy += w*w0(m, IVY, kz[kk], iy[jj], ix[ii]);
-          Uz += w*w0(m, IVZ, kz[kk], iy[jj], ix[ii]);
-        }
-        if (use_bz_channel) {
-          Bz += w * bcc(m, IBZ, kz[kk], iy[jj], ix[ii]);
-        }
-      }
-    }
-  }
-  if (!use_bz_channel) {
-    Bz = 0.0;
-    Uz = 0.0;
-  }
 }
 
 KOKKOS_INLINE_FUNCTION

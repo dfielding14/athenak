@@ -31,6 +31,22 @@
 #include "outputs.hpp"
 #include "utils/current.hpp"
 
+namespace {
+
+KOKKOS_INLINE_FUNCTION
+int ClampDerivedCellIndex(const int idx, const int lo, const int hi) {
+  return (idx < lo) ? lo : ((idx > hi) ? hi : idx);
+}
+
+KOKKOS_INLINE_FUNCTION
+int ParticleDiagnosticCellIndex(const Real x, const Real xmin, const Real dx,
+                                const int is, const int ie) {
+  const int idx = static_cast<int>((x - xmin)/dx) + is;
+  return ClampDerivedCellIndex(idx, is, ie);
+}
+
+}  // namespace
+
 //----------------------------------------------------------------------------------------
 // BaseTypeOutput::ComputeDerivedVariable()
 
@@ -2694,18 +2710,29 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     i_dv += 1;
   }
 
+  // Project edge-centered particle current back to cell centers for output.
+  // These diagnostics are not the raw staggered arrays consumed by EFieldSrc.
   if (name.compare("prtcl_jx_edge") == 0) {
     if (derived_var.extent(4) <= 1)
       Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto mom = pm->pmb_pack->ppart->moments;
     auto jx_e = pm->pmb_pack->ppart->j_edge_x1e;
-    if (jx_e.size() > 0 && multi_d) {
-      par_for("prtcl_jx_edge", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
-      KOKKOS_LAMBDA(int m, int k, int j, int i) {
-        dv(m,i_dv,k,j,i) = 0.25*(jx_e(m,k,j,i) + jx_e(m,k+1,j,i) +
-                                 jx_e(m,k,j+1,i) + jx_e(m,k+1,j+1,i));
-      });
+    if (jx_e.size() > 0) {
+      if (multi_d) {
+        par_for("prtcl_jx_edge", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          dv(m,i_dv,k,j,i) = 0.25*(jx_e(m,k,j,i) + jx_e(m,k+1,j,i) +
+                                   jx_e(m,k,j+1,i) + jx_e(m,k+1,j+1,i));
+        });
+      } else {
+        par_for("prtcl_jx_edge_1d", DevExeSpace(), 0, (nmb-1), ks, ke, js, je,
+                is, ie,
+        KOKKOS_LAMBDA(int m, int k, int j, int i) {
+          dv(m,i_dv,k,j,i) = 0.25*(jx_e(m,k,j,i) + jx_e(m,k+1,j,i) +
+                                   jx_e(m,k,j+1,i) + jx_e(m,k+1,j+1,i));
+        });
+      }
     } else {
       par_for("prtcl_jx_edge_fallback", DevExeSpace(), 0, (nmb-1), ks, ke, js, je,
               is, ie,
@@ -2792,11 +2819,16 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     par_for("pdens", DevExeSpace(), 0, (npart-1),
     KOKKOS_LAMBDA(const int p) {
       int m = pi(PGID,p) - gids;
-      int ip = (pr(IPX,p) - size.d_view(m).x1min)/size.d_view(m).dx1 + is;
-      int jp = (pr(IPY,p) - size.d_view(m).x2min)/size.d_view(m).dx2 + js;
+      if (m < 0 || m >= nmb) return;
+
+      int ip = ParticleDiagnosticCellIndex(pr(IPX,p), size.d_view(m).x1min,
+                                           size.d_view(m).dx1, is, ie);
+      int jp = ParticleDiagnosticCellIndex(pr(IPY,p), size.d_view(m).x2min,
+                                           size.d_view(m).dx2, js, je);
       int kp = ks;
       if (three_d) {
-        kp = (pr(IPZ,p) - size.d_view(m).x3min)/size.d_view(m).dx3 + ks;
+        kp = ParticleDiagnosticCellIndex(pr(IPZ,p), size.d_view(m).x3min,
+                                         size.d_view(m).dx3, ks, ke);
       }
       Kokkos::atomic_add(&pdens(m,i_dv,kp,jp,ip), 1.0);
     });

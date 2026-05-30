@@ -179,7 +179,10 @@ PUBLICATION_CASES: Tuple[PublicationCase, ...] = (
         runner="module",
         module="scripts.particles.pic_multispecies_backreaction_publication",
         output_globs=("tst/build/src/bin/pic_mso_pub_*.*.bin",),
-        note="Lower-CFL multispecies publication variants for drift control.",
+        note=(
+            "Long uniform/SMR multispecies oscillations plus conservative AMR "
+            "drift check."
+        ),
     ),
     PublicationCase(
         case_id="crsi_deltaf_publication",

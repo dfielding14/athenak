@@ -34,7 +34,7 @@ nx3       = 4
 <time>
 evolution  = dynamic
 integrator = rk2
-cfl_number = 0.2
+cfl_number = 0.05
 nlim       = 80
 tlim       = 8.0
 ndiag      = 1

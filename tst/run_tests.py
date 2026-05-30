@@ -31,6 +31,29 @@ import scripts.utils.athena as athena  # noqa
 logger = logging.getLogger('athena')
 
 
+INCLUDE_PUBLICATION_TESTS = (
+    os.environ.get('ATHENA_INCLUDE_PUBLICATION_TESTS', '0') == '1'
+)
+
+
+def is_publication_test(test_name):
+    return test_name.rsplit('.', 1)[-1].endswith('_publication')
+
+
+def is_helper_module(test_name):
+    return test_name.rsplit('.', 1)[-1].endswith('_utils')
+
+
+def script_test_names(directory):
+    names = [name for _, name, _ in
+             iter_modules(path=['scripts/' + directory],
+                          prefix=directory + '.')]
+    names = [name for name in names if not is_helper_module(name)]
+    if not INCLUDE_PUBLICATION_TESTS:
+        names = [name for name in names if not is_publication_test(name)]
+    return names
+
+
 # Main function
 def main(**kwargs):
     # Make list of tests to run
@@ -39,11 +62,7 @@ def main(**kwargs):
     if len(tests) == 0:  # run all tests
         for _, directory, ispkg in iter_modules(path=['scripts']):
             if ispkg and (directory != 'utils' and directory != 'style'):
-                dir_test_names = [name for _, name, _ in
-                                  iter_modules(path=['scripts/'
-                                                     + directory],
-                                               prefix=directory + '.')]
-                test_names.extend(dir_test_names)
+                test_names.extend(script_test_names(directory))
     else:  # run selected tests
         for test in tests:
             if test[-1] == '/':
@@ -51,11 +70,7 @@ def main(**kwargs):
             if '/' in test:  # specific test specified
                 test_names.append(test.replace('/', '.'))
             else:  # test suite specified
-                dir_test_names = [name for _, name, _ in
-                                  iter_modules(path=['scripts/'
-                                                     + test],
-                                               prefix=test + '.')]
-                test_names.extend(dir_test_names)
+                test_names.extend(script_test_names(test))
 
     # Remove duplicate test entries while preserving the original order
     test_names = list(OrderedDict.fromkeys(test_names))

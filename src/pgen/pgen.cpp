@@ -37,7 +37,7 @@ struct RestartBlockRequest {
   int global_id;
 };
 
-struct CoupledRestartSectionMeta {
+struct ParticleRestartSectionMeta {
   int version = -1;
   int nmb_section = 0;
   int nrdata = 0;
@@ -62,15 +62,37 @@ struct CoupledRestartSectionMeta {
   std::vector<IOWrapperSizeT> mb_offsets;
 };
 
-void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
-                                              IOWrapperSizeT headeroffset,
-                                              IOWrapperSizeT data_stride,
-                                              int nout1, int nout2, int nout3) {
+template <typename IntArray>
+void ValidateRestoredParticleIDData(const particles::Particles *ppart,
+                                    const IntArray &h_pi, const int p,
+                                    const int gids_local, const int nmb_local) {
+  const int gid = h_pi(PGID, p);
+  if (gid < gids_local || gid >= (gids_local + nmb_local)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Restarted particle gid is not local after restore (gid="
+              << gid << ")." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (ppart->particle_type == ParticleType::cosmic_ray) {
+    const int sp = h_pi(PSP, p);
+    if (sp < 0 || sp >= ppart->nspecies) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Restarted cosmic-ray particle species is out of range "
+                << "(species=" << sp << ", nspecies=" << ppart->nspecies << ")."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+}
+
+void LoadParticleRestartDataSingleFile(Mesh *pm,
+                                       IOWrapperSizeT headeroffset,
+                                       IOWrapperSizeT data_stride,
+                                       int nout1, int nout2, int nout3) {
   auto *ppart = pm->pmb_pack->ppart;
-  const bool read_coupled_state = (ppart != nullptr) &&
-                                  ppart->couple_moments_to_mhd &&
-                                  ppart->deposit_moments;
-  if (!read_coupled_state) return;
+  if (ppart == nullptr) return;
 
   constexpr std::uint64_t kPicMagic = 0x5049435253543031ULL;
   constexpr int kPicVersion = 1;
@@ -142,7 +164,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
   }
 
   std::vector<int> local_mb_counts(nmb_local, 0);
-  std::vector<CoupledRestartSectionMeta> src_meta(meta.original_nranks);
+  std::vector<ParticleRestartSectionMeta> src_meta(meta.original_nranks);
   std::vector<bool> src_used(meta.original_nranks, false);
   int ref_has_moments = -1;
   int ref_has_edge = -1;
@@ -166,7 +188,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
                               true) != sizeof(std::uint64_t)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Coupled particle restart state is missing from source restart "
+              << "Particle restart state is missing from source restart "
                 << "file '" << rank_paths[r] << "'." << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -174,18 +196,18 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
                 << "Source restart file '" << rank_paths[r]
-                << "' has an unknown coupled particle restart marker."
+                << "' has an unknown particle restart marker."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
 
-    CoupledRestartSectionMeta sm;
+    ParticleRestartSectionMeta sm;
     IOWrapperSizeT rd_offset = section_offset + sizeof(std::uint64_t);
     auto read_int_meta = [&](int &val, const char *name) {
       if (srcfile.Read_bytes_at(&val, sizeof(int), 1, rd_offset, true) != 1) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
-                  << "Failed to read coupled restart metadata field '" << name
+                  << "Failed to read particle restart metadata field '" << name
                   << "' from source restart file '" << rank_paths[r] << "'."
                   << std::endl;
         std::exit(EXIT_FAILURE);
@@ -211,7 +233,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
                               true) != 1) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Failed to read coupled particle-count metadata from source "
+                << "Failed to read particle-count metadata from source "
                 << "restart file '" << rank_paths[r] << "'." << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -220,7 +242,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
     if (sm.version != kPicVersion) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Unsupported coupled particle restart version " << sm.version
+                << "Unsupported particle restart version " << sm.version
                 << " in source restart file '" << rank_paths[r] << "'."
                 << std::endl;
       std::exit(EXIT_FAILURE);
@@ -228,7 +250,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
     if (sm.nmb_section != meta.nmb_eachrank[r]) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Coupled restart MeshBlock count mismatch in source restart file '"
+                << "Particle restart MeshBlock count mismatch in source restart file '"
                 << rank_paths[r] << "' (file=" << sm.nmb_section << ", metadata="
                 << meta.nmb_eachrank[r] << ")." << std::endl;
       std::exit(EXIT_FAILURE);
@@ -236,21 +258,29 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
     if (sm.nrdata != nrdata || sm.nidata != nidata) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Coupled restart particle data layout mismatch in source restart "
+                << "Particle restart data layout mismatch in source restart "
                 << "file '" << rank_paths[r] << "'." << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if (sm.rst_nout1 != nout1 || sm.rst_nout2 != nout2 || sm.rst_nout3 != nout3) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Coupled restart mesh extents mismatch in source restart file '"
+                << "Particle restart mesh extents mismatch in source restart file '"
                 << rank_paths[r] << "'." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if ((sm.has_moments != 0 && sm.has_moments != 1) ||
+        (sm.has_edge != 0 && sm.has_edge != 1)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Particle restart optional-array flags are invalid in source "
+                << "restart file '" << rank_paths[r] << "'." << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if (sm.moment_cnt != expected_moment_cnt) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Coupled restart moment size mismatch in source restart file '"
+                << "Particle restart moment size mismatch in source restart file '"
                 << rank_paths[r] << "'." << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -259,7 +289,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
          sm.edge3_cnt != expected_edge3_cnt)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Coupled restart edge-current size mismatch in source restart file '"
+                << "Particle restart edge-current size mismatch in source restart file '"
                 << rank_paths[r] << "'." << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -279,7 +309,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
                sm.edge3_cnt != ref_edge3_cnt) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Coupled restart metadata is inconsistent across source restart "
+                << "Particle restart metadata is inconsistent across source restart "
                 << "files." << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -291,7 +321,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
           static_cast<std::size_t>(sm.nmb_section)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
-                  << "Failed to read coupled restart MeshBlock counts from source "
+                  << "Failed to read particle restart MeshBlock counts from source "
                   << "restart file '" << rank_paths[r] << "'." << std::endl;
         std::exit(EXIT_FAILURE);
       }
@@ -300,13 +330,21 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
 
     sm.mb_offsets.assign(sm.nmb_section + 1, 0);
     for (int m=0; m<sm.nmb_section; ++m) {
+      if (sm.mb_counts[m] < 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Particle restart MeshBlock count table contains a negative "
+                  << "count in source restart file '" << rank_paths[r] << "'."
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
       sm.mb_offsets[m + 1] = sm.mb_offsets[m] +
                              static_cast<IOWrapperSizeT>(sm.mb_counts[m]);
     }
     if (sm.mb_offsets[sm.nmb_section] != sm.npart_section) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Coupled restart particle-count table is inconsistent in source "
+                << "Particle restart count table is inconsistent in source "
                 << "restart file '" << rank_paths[r] << "'." << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -337,7 +375,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
       if (src_local < 0 || src_local >= sm.nmb_section) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
-                  << "Restart metadata is inconsistent with coupled particle section "
+                  << "Restart metadata is inconsistent with particle section "
                   << "layout in source restart file '" << rank_paths[r] << "'."
                   << std::endl;
         std::exit(EXIT_FAILURE);
@@ -371,7 +409,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
     if (ppart->moments.size() == 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Restart expects coupled moments, but moments are not allocated."
+                << "Restart expects particle moments, but moments are not allocated."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -386,7 +424,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
         ppart->j_edge_x3e.size() == 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Restart expects edge-current state, but edge arrays are not "
+                << "Restart expects particle edge-current state, but edge arrays are not "
                 << "allocated." << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -424,7 +462,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
                                   true) != static_cast<std::size_t>(cnt*nrdata)) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl
-                    << "Failed to read coupled restart particle real data from "
+                    << "Failed to read particle restart real data from "
                     << "source restart file '" << rank_paths[r] << "'."
                     << std::endl;
           std::exit(EXIT_FAILURE);
@@ -434,7 +472,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
             static_cast<std::size_t>(cnt*nidata)) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl
-                    << "Failed to read coupled restart particle integer data from "
+                    << "Failed to read particle restart integer data from "
                     << "source restart file '" << rank_paths[r] << "'."
                     << std::endl;
           std::exit(EXIT_FAILURE);
@@ -451,7 +489,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
             static_cast<std::size_t>(sm.moment_cnt)) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl
-                    << "Failed to read coupled moment restart data from source "
+                    << "Failed to read particle moment restart data from source "
                     << "restart file '" << rank_paths[r] << "'." << std::endl;
           std::exit(EXIT_FAILURE);
         }
@@ -481,7 +519,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
               static_cast<std::size_t>(sm.edge3_cnt)) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl
-                    << "Failed to read coupled edge-current restart data from "
+                    << "Failed to read particle edge-current restart data from "
                     << "source restart file '" << rank_paths[r] << "'."
                     << std::endl;
           std::exit(EXIT_FAILURE);
@@ -502,14 +540,7 @@ void LoadCoupledParticleRestartDataSingleFile(Mesh *pm,
     for (int n=0; n<nidata; ++n) {
       h_pi(n, p) = packed_pi[p*nidata + n];
     }
-    const int gid = h_pi(PGID, p);
-    if (gid < gids_local || gid >= (gids_local + nmb_local)) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl
-                << "Restarted particle gid is not local after restore (gid="
-                << gid << ")." << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
+    ValidateRestoredParticleIDData(ppart, h_pi, p, gids_local, nmb_local);
   }
   Kokkos::deep_copy(ppart->prtcl_rdata, h_pr);
   Kokkos::deep_copy(ppart->prtcl_idata, h_pi);
@@ -866,21 +897,18 @@ void LoadSingleFileRestartData(Mesh *pm,
   }
 }
 
-void LoadCoupledParticleRestartData(Mesh *pm,
-                                    IOWrapper &resfile,
-                                    bool single_file_per_rank,
-                                    IOWrapperSizeT headeroffset,
-                                    IOWrapperSizeT data_stride,
-                                    int nout1, int nout2, int nout3) {
+void LoadParticleRestartData(Mesh *pm,
+                             IOWrapper &resfile,
+                             bool single_file_per_rank,
+                             IOWrapperSizeT headeroffset,
+                             IOWrapperSizeT data_stride,
+                             int nout1, int nout2, int nout3) {
   auto *ppart = pm->pmb_pack->ppart;
-  const bool read_coupled_state = (ppart != nullptr) &&
-                                  ppart->couple_moments_to_mhd &&
-                                  ppart->deposit_moments;
-  if (!read_coupled_state) return;
+  if (ppart == nullptr) return;
 
   if (single_file_per_rank) {
-    LoadCoupledParticleRestartDataSingleFile(pm, headeroffset, data_stride,
-                                             nout1, nout2, nout3);
+    LoadParticleRestartDataSingleFile(pm, headeroffset, data_stride,
+                                      nout1, nout2, nout3);
     return;
   }
 
@@ -904,14 +932,14 @@ void LoadCoupledParticleRestartData(Mesh *pm,
   if (!has_pic_section) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "Coupled particle restart state is missing from restart file."
+              << "Particle restart state is missing from restart file."
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
   if (pic_magic != kPicMagic) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "Restart file has an unknown coupled particle restart marker."
+              << "Restart file has an unknown particle restart marker."
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
@@ -937,7 +965,7 @@ void LoadCoupledParticleRestartData(Mesh *pm,
       if (resfile.Read_bytes_at(&val, sizeof(int), 1, off, false) != 1) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
-                  << "Failed to read coupled restart metadata field '" << name << "'."
+                  << "Failed to read particle restart metadata field '" << name << "'."
                   << std::endl;
         std::exit(EXIT_FAILURE);
       }
@@ -979,7 +1007,7 @@ void LoadCoupledParticleRestartData(Mesh *pm,
                               false) != 1) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Failed to read coupled restart particle-count metadata."
+                << "Failed to read particle restart count metadata."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -992,28 +1020,53 @@ void LoadCoupledParticleRestartData(Mesh *pm,
   if (version != kPicVersion) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "Unsupported coupled particle restart version " << version << "."
+              << "Unsupported particle restart version " << version << "."
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
   if (nmb_section != pm->nmb_total) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "Coupled restart MeshBlock count mismatch (file=" << nmb_section
+              << "Particle restart MeshBlock count mismatch (file=" << nmb_section
               << ", runtime=" << pm->nmb_total << ")." << std::endl;
     std::exit(EXIT_FAILURE);
   }
   if (nrdata != ppart->nrdata || nidata != ppart->nidata) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "Coupled restart particle data layout mismatch." << std::endl;
+              << "Particle restart data layout mismatch." << std::endl;
     std::exit(EXIT_FAILURE);
   }
   if (rst_nout1 != nout1 || rst_nout2 != nout2 || rst_nout3 != nout3) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "Coupled restart mesh extents mismatch for moment arrays."
+              << "Particle restart mesh extents mismatch for moment arrays."
               << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if ((has_moments != 0 && has_moments != 1) || (has_edge != 0 && has_edge != 1)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Particle restart optional-array flags are invalid."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  const int expected_moment_cnt = particles::Particles::NMOM*nout3*nout2*nout1;
+  const int expected_edge1_cnt = (nout3 + 1)*(nout2 + 1)*nout1;
+  const int expected_edge2_cnt = (nout3 + 1)*nout2*(nout1 + 1);
+  const int expected_edge3_cnt = nout3*(nout2 + 1)*(nout1 + 1);
+  if (moment_cnt != expected_moment_cnt) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Particle restart moment size mismatch." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (has_edge != 0 &&
+      (edge1_cnt != expected_edge1_cnt || edge2_cnt != expected_edge2_cnt ||
+       edge3_cnt != expected_edge3_cnt)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Particle restart edge-current size mismatch." << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -1024,7 +1077,7 @@ void LoadCoupledParticleRestartData(Mesh *pm,
                               false) != static_cast<std::size_t>(nmb_section)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Failed to read coupled restart MeshBlock particle counts."
+                << "Failed to read particle restart MeshBlock counts."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -1037,12 +1090,19 @@ void LoadCoupledParticleRestartData(Mesh *pm,
 
   std::vector<IOWrapperSizeT> mb_offsets(nmb_section + 1, 0);
   for (int m=0; m<nmb_section; ++m) {
+    if (mb_counts[m] < 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Particle restart MeshBlock count table contains a negative count."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     mb_offsets[m + 1] = mb_offsets[m] + static_cast<IOWrapperSizeT>(mb_counts[m]);
   }
   if (mb_offsets[nmb_section] != npart_section) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "Coupled restart particle-count table is inconsistent." << std::endl;
+              << "Particle restart count table is inconsistent." << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -1098,7 +1158,7 @@ void LoadCoupledParticleRestartData(Mesh *pm,
         static_cast<std::size_t>(cnt*nrdata)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Failed to read coupled restart particle real data." << std::endl;
+                << "Failed to read particle restart real data." << std::endl;
       std::exit(EXIT_FAILURE);
     }
     if (resfile.Read_bytes_at(&(packed_pi[lstart*nidata]), sizeof(int), cnt*nidata,
@@ -1106,7 +1166,7 @@ void LoadCoupledParticleRestartData(Mesh *pm,
         static_cast<std::size_t>(cnt*nidata)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Failed to read coupled restart particle integer data." << std::endl;
+                << "Failed to read particle restart integer data." << std::endl;
       std::exit(EXIT_FAILURE);
     }
   }
@@ -1120,14 +1180,7 @@ void LoadCoupledParticleRestartData(Mesh *pm,
     for (int n=0; n<nidata; ++n) {
       h_pi(n, p) = packed_pi[p*nidata + n];
     }
-    const int gid = h_pi(PGID, p);
-    if (gid < gids_local || gid >= (gids_local + nmb_local)) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl
-                << "Restarted particle gid is not local after restore (gid="
-                << gid << ")." << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
+    ValidateRestoredParticleIDData(ppart, h_pi, p, gids_local, nmb_local);
   }
   Kokkos::deep_copy(ppart->prtcl_rdata, h_pr);
   Kokkos::deep_copy(ppart->prtcl_idata, h_pi);
@@ -1136,7 +1189,7 @@ void LoadCoupledParticleRestartData(Mesh *pm,
     if (ppart->moments.size() == 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Restart expects coupled moments, but moments are not allocated."
+                << "Restart expects particle moments, but moments are not allocated."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -1152,7 +1205,7 @@ void LoadCoupledParticleRestartData(Mesh *pm,
           static_cast<std::size_t>(moment_cnt)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
-                  << "Failed to read coupled moment restart data." << std::endl;
+                  << "Failed to read particle moment restart data." << std::endl;
         std::exit(EXIT_FAILURE);
       }
     }
@@ -1166,7 +1219,7 @@ void LoadCoupledParticleRestartData(Mesh *pm,
         ppart->j_edge_x3e.size() == 0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Restart expects edge-current state, but edge arrays are not "
+                << "Restart expects particle edge-current state, but edge arrays are not "
                 << "allocated." << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -1195,7 +1248,7 @@ void LoadCoupledParticleRestartData(Mesh *pm,
             static_cast<std::size_t>(edge3_cnt)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
-                  << "Failed to read coupled edge-current restart data." << std::endl;
+                  << "Failed to read particle edge-current restart data." << std::endl;
         std::exit(EXIT_FAILURE);
       }
     }
@@ -1865,8 +1918,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   }
   }
 
-  LoadCoupledParticleRestartData(pm, resfile, single_file_per_rank, headeroffset,
-                                 data_size_, nout1, nout2, nout3);
+  LoadParticleRestartData(pm, resfile, single_file_per_rank, headeroffset,
+                          data_size_, nout1, nout2, nout3);
 
   // call problem generator again to re-initialize data, fn ptrs, as needed
 #if USER_PROBLEM_ENABLED

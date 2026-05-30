@@ -102,10 +102,14 @@ Format rules are enforced by `src/parameter_input.cpp`:
   - `particles/pic_background_mode = coupled|passive_mhd|no_mhd`
   - `particles/pic_feedback_mode = coupled|test_particle`
   - `particles/pic_interp_scheme = tsc`
-  - `particles/pic_cr_light_speed`, `particles/pic_max_cell_cross`,
-    `particles/pic_theta_max`
-  - `particles/pic_deltaf_mode = off|on` (with `particles/pic_deltaf_f0`)
+  - `particles/pic_cr_light_speed = 1.0` only; non-default reduced-speed
+    values are reserved and rejected
+  - `particles/pic_max_cell_cross` (bounded by the smallest active MeshBlock
+    dimension), `particles/pic_theta_max`
+  - `particles/pic_deltaf_mode = off|on` (with
+    `particles/pic_deltaf_f0 = kappa_iso|uniform_quiet`)
   - `particles/pic_sort_interval`
+  - `particles/pic_random_seed` for deterministic random particle placement
   - `particles/pic_intermediate_arrays = auto|off`
   - `particles/pic_expanding_box_mode = off|on`
   - `particles/pic_expansion_rate_x1/x2/x3` (require expanding-box mode on)
@@ -154,7 +158,7 @@ Format rules are enforced by `src/parameter_input.cpp`:
     uniform/SMR/AMR parity gating in current AthenaK harness limits).
 - `inputs/tests/pic_crsi_deltaf_proxy.athinput`
   - Coupled-MHD CRSI-style proxy deck used with `pic_deltaf_mode=off|on` to
-    gate polarization-resolved growth metrics and delta-f noise behavior.
+    gate polarization-resolved growth metrics and MPI decomposition parity.
 - `inputs/tests/pic_crpai_prolate_proxy.athinput`
   - CRPAI-style prolate branch-selection proxy (`cr_vx0 > 0`) used with
     polarization-resolved growth diagnostics.
@@ -169,7 +173,7 @@ Format rules are enforced by `src/parameter_input.cpp`:
     using negative `pic_expansion_rate_x1`.
 - `inputs/tests/pic_refinement_boundary_smr_proxy.athinput`
   - Static-refinement SMR proxy for coarse/fine boundary homogeneity and
-    conservation-characterization metrics using deterministic `delta f` quiet
+    conservation-characterization metrics using deterministic quiet-start
     initialization.
 - `inputs/tests/pic_refinement_boundary_amr_proxy.athinput`
   - Nested static-refinement AMR-style proxy paired with SMR to gate bounded

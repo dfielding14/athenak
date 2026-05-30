@@ -1,7 +1,7 @@
-# AthenaXXX input file for PIC CRSI delta-f proxy test
+# AthenaXXX input file for PIC CRSI quiet-start publication test
 
 <comment>
-problem   = CRSI-style polarization/growth proxy with delta-f toggle
+problem   = CRSI-style polarization/growth proxy with quiet-start toggle
 
 <job>
 basename  = pic_crsi_deltaf_publication
@@ -50,7 +50,7 @@ particle_type                     = cosmic_ray
 ppc                               = 32.0
 pusher                            = drift
 nspecies                          = 1
-cr_distribution                   = center
+cr_distribution                   = random
 deposit_moments                   = true
 deposit_order                     = 1
 deposit_qscale                    = 0.05

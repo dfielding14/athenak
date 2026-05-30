@@ -16,6 +16,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include "athena.hpp"
 #include "globals.hpp"
@@ -29,11 +30,24 @@
 TrackedParticleOutput::TrackedParticleOutput(ParameterInput *pin, Mesh *pm,
                                              OutputParameters op) :
   BaseTypeOutput(pin, pm, op) {
+  if (pm->pmb_pack->ppart == nullptr) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Tracked-particle output requires an active <particles> block"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   // create new directory for this output. Comments in binary.cpp constructor explain why
   mkdir("trk",0775);
   // allocate arrays
   npout_eachrank.resize(global_variable::nranks);
   ntrack = pin->GetInteger(op.block_name,"nparticles");
+  if (ntrack < 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Tracked-particle output nparticles must be nonnegative"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   // TODO(@user) improve guess below?
   ntrack_thisrank = ntrack;
 }
@@ -49,26 +63,44 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
   auto &pr = pm->pmb_pack->ppart->prtcl_rdata;
   auto &pi = pm->pmb_pack->ppart->prtcl_idata;
   int ntrack_ = ntrack;
+  int ntrack_thisrank_ = ntrack_thisrank;
 
-  // Create device-side counter
+  // Create device-side counters
   Kokkos::View<int> d_counter("counter");
+  Kokkos::View<int> d_overflow("overflow");
+  Kokkos::deep_copy(d_counter, 0);
+  Kokkos::deep_copy(d_overflow, 0);
 
   par_for("part_update",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
-    if (pi(PTAG,p) < ntrack_) {
+    const int tag = pi(PTAG,p);
+    if ((tag >= 0) && (tag < ntrack_)) {
       int index = Kokkos::atomic_fetch_add(&d_counter(),1);
-      tracked_prtcl.d_view(index).tag = pi(PTAG,p);
-      tracked_prtcl.d_view(index).x   = pr(IPX,p);
-      tracked_prtcl.d_view(index).y   = pr(IPY,p);
-      tracked_prtcl.d_view(index).z   = pr(IPZ,p);
-      tracked_prtcl.d_view(index).vx  = pr(IPVX,p);
-      tracked_prtcl.d_view(index).vy  = pr(IPVY,p);
-      tracked_prtcl.d_view(index).vz  = pr(IPVZ,p);
+      if (index < ntrack_thisrank_) {
+        tracked_prtcl.d_view(index).tag = tag;
+        tracked_prtcl.d_view(index).x   = pr(IPX,p);
+        tracked_prtcl.d_view(index).y   = pr(IPY,p);
+        tracked_prtcl.d_view(index).z   = pr(IPZ,p);
+        tracked_prtcl.d_view(index).vx  = pr(IPVX,p);
+        tracked_prtcl.d_view(index).vy  = pr(IPVY,p);
+        tracked_prtcl.d_view(index).vz  = pr(IPVZ,p);
+      } else {
+        Kokkos::atomic_fetch_add(&d_overflow(),1);
+      }
     }
   });
-  
+
   Kokkos::fence();
   Kokkos::deep_copy(npout, d_counter);
-  
+  int overflow = 0;
+  Kokkos::deep_copy(overflow, d_overflow);
+  if ((overflow > 0) || (npout > ntrack_thisrank)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+      << std::endl << "Tracked-particle output found " << npout
+      << " particles with tags in [0," << ntrack << "), but this rank only allocated "
+      << ntrack_thisrank << " output slots" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
   // share number of tracked particles to be output across all ranks
   npout_eachrank[global_variable::my_rank] = npout;
 #if MPI_PARALLEL_ENABLED
@@ -85,7 +117,6 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
     auto tracked_slice = Kokkos::subview(tracked_prtcl.h_view, std::make_pair(0, npout));
     Kokkos::deep_copy(outpart, tracked_slice);
   }
-
 }
 
 //----------------------------------------------------------------------------------------
@@ -135,6 +166,9 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     data[(6*p)+4] = static_cast<float>(outpart(p).vy);
     data[(6*p)+5] = static_cast<float>(outpart(p).vz);
   }
+  if (!big_end) {
+    for (int i=0; i<(6*npout); ++i) { Swap4Bytes(&data[i]); }
+  }
 
   // calculate local data offset
   std::vector<int> rank_offset(global_variable::nranks, 0);
@@ -142,6 +176,35 @@ void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   for (int n=1; n<global_variable::nranks; ++n) {
     rank_offset[n] = rank_offset[n-1] + npout_eachrank[n-1];
     npout_min = std::min(npout_min, npout_eachrank[n]);
+  }
+
+  std::vector<int> tag_counts(ntrack, 0);
+  for (int p=0; p<npout; ++p) {
+    const int tag = outpart(p).tag;
+    if (tag < 0 || tag >= ntrack) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Tracked-particle output encountered invalid tag "
+                << tag << " for ntracked_prtcls=" << ntrack << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    tag_counts[tag] += 1;
+  }
+#if MPI_PARALLEL_ENABLED
+  if (ntrack > 0) {
+    std::vector<int> global_tag_counts(ntrack, 0);
+    MPI_Allreduce(tag_counts.data(), global_tag_counts.data(), ntrack, MPI_INT, MPI_SUM,
+                  MPI_COMM_WORLD);
+    tag_counts.swap(global_tag_counts);
+  }
+#endif
+  for (int tag=0; tag<ntrack; ++tag) {
+    if (tag_counts[tag] != 1) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Tracked-particle output expected exactly one particle with tag "
+                << tag << ", but found " << tag_counts[tag] << "." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
   }
 
   // Write tracked particle data collectively over minimum shared number of prtcls

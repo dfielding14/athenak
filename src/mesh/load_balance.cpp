@@ -7,10 +7,13 @@
 //! \brief Contains various Mesh and MeshRefinement functions associated with
 //! load balancing when MPI is used, both for uniform grids and with SMR/AMR.
 
+#include <cstdlib> // std::exit
 #include <iostream>
 #include <limits> // numeric_limits<>
 #include <algorithm> // max
+#include <unordered_map>
 #include <utility> // make_pair
+#include <vector>
 #include <Kokkos_Core.hpp>
 #include <Kokkos_StdAlgorithms.hpp>
 
@@ -1102,11 +1105,12 @@ void MeshRefinement::ClearSendAMR() {
     prtcl_nsends = 0;
   }
 
-  if (nmb_send == 0) return;
-
-  for (int n=0; n<nmb_send; ++n) {
-    int ierr = MPI_Wait(&(send_req[n]), MPI_STATUS_IGNORE);
-    if (ierr != MPI_SUCCESS) {no_errors=false;}
+  if (nmb_send > 0) {
+    for (int n=0; n<nmb_send; ++n) {
+      int ierr = MPI_Wait(&(send_req[n]), MPI_STATUS_IGNORE);
+      if (ierr != MPI_SUCCESS) {no_errors=false;}
+    }
+    delete [] send_req;
   }
   
   // Quit if MPI error detected
@@ -1116,7 +1120,6 @@ void MeshRefinement::ClearSendAMR() {
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  delete [] send_req;
 #endif
   return;
 }
@@ -1229,6 +1232,13 @@ void MeshRefinement::UnpackAMRBuffersParticles() {
   int &npart = ppart->nprtcl_thispack;
   int new_npart = npart + (nprtcl_recv - nprtcl_send);
   int nremain = 0;
+  if (new_npart < 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "AMR particle send/receive accounting would make a negative "
+              << "particle count" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
   // Sort particle sendlist by index for hole-filling (already done in CountParticlesPerMeshBlock)
   std::sort(KE::begin(prtcl_sendlist.h_view), KE::end(prtcl_sendlist.h_view), SortByIndex);
@@ -1252,7 +1262,6 @@ void MeshRefinement::UnpackAMRBuffersParticles() {
     auto &irecvbuf = prtcl_irecvbuf;
     int nprtcl_send_ = nprtcl_send;
     auto &sendlist_ = prtcl_sendlist;
-    auto &gid_start = pmy_mesh->pmb_pack->gids;
 
     par_for("amr_punpack",DevExeSpace(),0,(nprtcl_recv-1), KOKKOS_LAMBDA(const int n) {
       int p;
@@ -1518,16 +1527,17 @@ void MeshRefinement::CreateParticleLists() {
   const int nmb_rootx3 = pmy_mesh->nmb_rootx3;
   const int root_level = pmy_mesh->root_level;
   const int old_nmb_local = old_nmb;
+  const int nranks = global_variable::nranks;
 
   par_for("create_part_list", DevExeSpace(), 0, (npart-1),
           KOKKOS_LAMBDA(const int p) {
-    
-    int old_gid  = pi(PGID, p); 
-    int new_gid  = old_to_new.d_view(old_gid);
+    const int old_gid = pi(PGID, p);
+    const bool old_gid_valid = (old_gid >= 0 && old_gid < old_nmb_local);
+    int new_gid = old_gid_valid ? old_to_new.d_view(old_gid) : -1;
 
     // If this old block was refined, map particle to the correct child block using
     // its position within the old parent MeshBlock (child order: i + 2*j + 4*k).
-    if (old_refined.d_view(old_gid) > 0 &&
+    if (old_gid_valid && old_refined.d_view(old_gid) > 0 &&
         old_gid >= old_gids_thisrank && old_gid <= old_gide_thisrank) {
       const int old_m = old_gid - old_gids_thisrank;
       const Real x1mid = 0.5*(old_mbsize.d_view(old_m).x1min +
@@ -1579,19 +1589,16 @@ void MeshRefinement::CreateParticleLists() {
       if (found_gid >= 0) {
         new_gid = found_gid;
       } else {
-        int fallback_gid = 0;
-        if (old_gid >= 0 && old_gid < old_nmb_local) {
-          fallback_gid = old_to_new.d_view(old_gid);
-        }
-        if (fallback_gid < 0 || fallback_gid >= new_nmb) {
-          fallback_gid = 0;
-        }
-        new_gid = fallback_gid;
         Kokkos::atomic_fetch_add(&unresolved_count(), 1);
+        return;
       }
     }
 
     int dest_rank = new_rank.d_view(new_gid);
+    if (dest_rank < 0 || dest_rank >= nranks) {
+      Kokkos::atomic_fetch_add(&unresolved_count(), 1);
+      return;
+    }
 
     // Update particle's GID to new value
     pi(PGID, p) = new_gid;
@@ -1610,9 +1617,11 @@ void MeshRefinement::CreateParticleLists() {
   int unresolved = 0;
   Kokkos::deep_copy(unresolved, unresolved_count);
   if (unresolved > 0) {
-    std::cout << "WARNING in " << __FILE__ << " at line " << __LINE__
-              << ": unresolved AMR particle destination for " << unresolved
-              << " particles during CreateParticleLists()" << std::endl;
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unresolved AMR particle destination for " << unresolved
+              << " particles during CreateParticleLists()." << std::endl;
+    std::exit(EXIT_FAILURE);
   }
   Kokkos::resize(prtcl_sendlist, nprtcl_send);
 

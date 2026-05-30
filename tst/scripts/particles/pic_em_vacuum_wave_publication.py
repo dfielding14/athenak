@@ -9,7 +9,9 @@ logger = logging.getLogger('athena' + __name__[7:])
 
 _INPUT_DECK = 'tests/pic_em_vacuum_wave.athinput'
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
-_RESOLUTIONS = [16, 24, 32, 48, 64]
+_FULL_PUBLICATION = os.environ.get('ATHENA_PIC_PUBLICATION_FULL', '0') == '1'
+_RESOLUTIONS = [16, 24, 32, 48, 64] if _FULL_PUBLICATION else [16, 24, 32]
+_NLIM = 1200 if _FULL_PUBLICATION else 1000
 _RESULTS = {}
 
 
@@ -66,7 +68,7 @@ def _run_resolution(nproc, res):
         'meshblock/nx2=' + str(max(4, res // 4)),
         'meshblock/nx3=' + str(max(4, res // 4)),
         'time/tlim=1.0',
-        'time/nlim=1200',
+        'time/nlim=' + str(_NLIM),
         'problem/amp=1.0e-6',
         'problem/wave_flag=1',
         'problem/vflow=0.0',

@@ -1,0 +1,558 @@
+\begin{thebibliography}{}
+\makeatletter
+\relax
+\def\mn@urlcharsother{\let\do\@makeother \do\$\do\&\do\#\do\^\do\_\do\%\do\~}
+\def\mn@doi{\begingroup\mn@urlcharsother \@ifnextchar [ {\mn@doi@}
+  {\mn@doi@[]}}
+\def\mn@doi@[#1]#2{\def\@tempa{#1}\ifx\@tempa\@empty \href
+  {http://dx.doi.org/#2} {doi:#2}\else \href {http://dx.doi.org/#2} {#1}\fi
+  \endgroup}
+\def\mn@eprint#1#2{\mn@eprint@#1:#2::\@nil}
+\def\mn@eprint@arXiv#1{\href {http://arxiv.org/abs/#1} {{\tt arXiv:#1}}}
+\def\mn@eprint@dblp#1{\href {http://dblp.uni-trier.de/rec/bibtex/#1.xml}
+  {dblp:#1}}
+\def\mn@eprint@#1:#2:#3:#4\@nil{\def\@tempa {#1}\def\@tempb {#2}\def\@tempc
+  {#3}\ifx \@tempc \@empty \let \@tempc \@tempb \let \@tempb \@tempa \fi \ifx
+  \@tempb \@empty \def\@tempb {arXiv}\fi \@ifundefined
+  {mn@eprint@\@tempb}{\@tempb:\@tempc}{\expandafter \expandafter \csname
+  mn@eprint@\@tempb\endcsname \expandafter{\@tempc}}}
+
+\bibitem[\protect\citeauthoryear{{Alves}, {Zrake}  \& {Fiuza}}{{Alves}
+  et~al.}{2018}]{2018PhRvL.121x5101A}
+{Alves} E.~P.,  {Zrake} J.,   {Fiuza} F.,  2018, \mn@doi [\prl]
+  {10.1103/PhysRevLett.121.245101}, \href
+  {https://ui.adsabs.harvard.edu/abs/2018PhRvL.121x5101A} {121, 245101}
+
+\bibitem[\protect\citeauthoryear{{Arnold}, {Drake}, {Swisdak}  \&
+  {Dahlin}}{{Arnold} et~al.}{2019}]{2019PhPl...26j2903A}
+{Arnold} H.,  {Drake} J.~F.,  {Swisdak} M.,   {Dahlin} J.,  2019, \mn@doi
+  [Physics of Plasmas] {10.1063/1.5120373}, \href
+  {https://ui.adsabs.harvard.edu/abs/2019PhPl...26j2903A} {26, 102903}
+
+\bibitem[\protect\citeauthoryear{{Axford}, {Leer}  \& {Skadron}}{{Axford}
+  et~al.}{1977}]{1977ICRC....2..273A}
+{Axford} W.~I.,  {Leer} E.,   {Skadron} G.,  1977, in International Cosmic Ray
+  Conference. p.~273
+
+\bibitem[\protect\citeauthoryear{{Bai}}{{Bai}}{2022}]{2022ApJ...928..112B}
+{Bai} X.-N.,  2022, \mn@doi [\apj] {10.3847/1538-4357/ac56e1}, \href
+  {https://ui.adsabs.harvard.edu/abs/2022ApJ...928..112B} {928, 112}
+
+\bibitem[\protect\citeauthoryear{{Bai}, {Caprioli}, {Sironi}  \&
+  {Spitkovsky}}{{Bai} et~al.}{2015}]{2015ApJ...809...55B}
+{Bai} X.-N.,  {Caprioli} D.,  {Sironi} L.,   {Spitkovsky} A.,  2015, \mn@doi
+  [\apj] {10.1088/0004-637X/809/1/55}, \href
+  {https://ui.adsabs.harvard.edu/abs/2015ApJ...809...55B} {809, 55}
+
+\bibitem[\protect\citeauthoryear{{Bai}, {Ostriker}, {Plotnikov}  \&
+  {Stone}}{{Bai} et~al.}{2019}]{2019ApJ...876...60B}
+{Bai} X.-N.,  {Ostriker} E.~C.,  {Plotnikov} I.,   {Stone} J.~M.,  2019,
+  \mn@doi [\apj] {10.3847/1538-4357/ab1648}, \href
+  {https://ui.adsabs.harvard.edu/abs/2019ApJ...876...60B} {876, 60}
+
+\bibitem[\protect\citeauthoryear{{Bambic}, {Bai}  \& {Ostriker}}{{Bambic}
+  et~al.}{2021}]{2021ApJ...920..141B}
+{Bambic} C.~J.,  {Bai} X.-N.,   {Ostriker} E.~C.,  2021, \mn@doi [\apj]
+  {10.3847/1538-4357/ac0ce7}, \href
+  {https://ui.adsabs.harvard.edu/abs/2021ApJ...920..141B} {920, 141}
+
+\bibitem[\protect\citeauthoryear{{Beck} et~al.,}{{Beck}
+  et~al.}{2019}]{2019CoPhC.244..246B}
+{Beck} A.,  et~al., 2019, \mn@doi [Computer Physics Communications]
+  {10.1016/j.cpc.2019.05.001}, \href
+  {https://ui.adsabs.harvard.edu/abs/2019CoPhC.244..246B} {244, 246}
+
+\bibitem[\protect\citeauthoryear{{Bell}}{{Bell}}{1978a}]{1978MNRAS.182..147B}
+{Bell} A.~R.,  1978a, \mn@doi [\mnras] {10.1093/mnras/182.2.147}, \href
+  {https://ui.adsabs.harvard.edu/abs/1978MNRAS.182..147B} {182, 147}
+
+\bibitem[\protect\citeauthoryear{{Bell}}{{Bell}}{1978b}]{1978MNRAS.182..443B}
+{Bell} A.~R.,  1978b, \mn@doi [\mnras] {10.1093/mnras/182.3.443}, \href
+  {https://ui.adsabs.harvard.edu/abs/1978MNRAS.182..443B} {182, 443}
+
+\bibitem[\protect\citeauthoryear{{Bell}}{{Bell}}{2004}]{2004MNRAS.353..550B}
+{Bell} A.~R.,  2004, \mn@doi [\mnras] {10.1111/j.1365-2966.2004.08097.x}, \href
+  {https://ui.adsabs.harvard.edu/abs/2004MNRAS.353..550B} {353, 550}
+
+\bibitem[\protect\citeauthoryear{{Bell}}{{Bell}}{2005}]{2005MNRAS.358..181B}
+{Bell} A.~R.,  2005, \mn@doi [\mnras] {10.1111/j.1365-2966.2005.08774.x}, \href
+  {https://ui.adsabs.harvard.edu/abs/2005MNRAS.358..181B} {358, 181}
+
+\bibitem[\protect\citeauthoryear{{Bird}, {Tan}, {Luedtke}, {Harrell}, {Taufer}
+  \& {Albright}}{{Bird} et~al.}{2021}]{2021arXiv210213133B}
+{Bird} R.,  {Tan} N.,  {Luedtke} S.~V.,  {Harrell} S.~L.,  {Taufer} M.,
+  {Albright} B.,  2021, arXiv e-prints, \href
+  {https://ui.adsabs.harvard.edu/abs/2021arXiv210213133B} {p. arXiv:2102.13133}
+
+\bibitem[\protect\citeauthoryear{Birdsall \& Langdon}{Birdsall \&
+  Langdon}{2004}]{birdsall2004plasma}
+Birdsall C.~K.,  Langdon A.~B.,  2004, Plasma physics via computer simulation.
+CRC press
+
+\bibitem[\protect\citeauthoryear{Birdsall \& Langdon}{Birdsall \&
+  Langdon}{2018}]{birdsall2018plasma}
+Birdsall C.~K.,  Langdon A.~B.,  2018, Plasma physics via computer simulation.
+CRC press
+
+\bibitem[\protect\citeauthoryear{{Blandford} \& {Ostriker}}{{Blandford} \&
+  {Ostriker}}{1978}]{1978ApJ...221L..29B}
+{Blandford} R.~D.,  {Ostriker} J.~P.,  1978, \mn@doi [\apjl] {10.1086/182658},
+  \href {https://ui.adsabs.harvard.edu/abs/1978ApJ...221L..29B} {221, L29}
+
+\bibitem[\protect\citeauthoryear{Boris, Shanny, of Naval~Research  \&
+  Laboratory}{Boris et~al.}{1972}]{boris1972proceedings}
+Boris J.,  Shanny R.,  of Naval~Research U. S.~O.,   Laboratory N.~R.,  1972,
+  Proceedings: Fourth Conference on Numerical Simulation of Plasmas, November
+  2, 3, 1970.
+Naval Research Laboratory, \url
+  {https://books.google.com.hk/books?id=zqxSAQAACAAJ}
+
+\bibitem[\protect\citeauthoryear{{Bott}, {Arzamasskiy}, {Kunz}, {Quataert}  \&
+  {Squire}}{{Bott} et~al.}{2021}]{2021ApJ...922L..35B}
+{Bott} A.~F.~A.,  {Arzamasskiy} L.,  {Kunz} M.~W.,  {Quataert} E.,   {Squire}
+  J.,  2021, \mn@doi [\apjl] {10.3847/2041-8213/ac37c2}, \href
+  {https://ui.adsabs.harvard.edu/abs/2021ApJ...922L..35B} {922, L35}
+
+\bibitem[\protect\citeauthoryear{{Bowers}, {Albright}, {Yin}, {Bergen}  \&
+  {Kwan}}{{Bowers} et~al.}{2008}]{2008PhPl...15e5703B}
+{Bowers} K.~J.,  {Albright} B.~J.,  {Yin} L.,  {Bergen} B.,   {Kwan} T.~J.~T.,
+  2008, \mn@doi [Physics of Plasmas] {10.1063/1.2840133}, \href
+  {https://ui.adsabs.harvard.edu/abs/2008PhPl...15e5703B} {15, 055703}
+
+\bibitem[\protect\citeauthoryear{Buneman}{Buneman}{1993}]{buneman1993computer}
+Buneman O.,  1993, Simulation Techniques and Software, p.~67
+
+\bibitem[\protect\citeauthoryear{{Caprioli} \& {Spitkovsky}}{{Caprioli} \&
+  {Spitkovsky}}{2014}]{2014ApJ...783...91C}
+{Caprioli} D.,  {Spitkovsky} A.,  2014, \mn@doi [\apj]
+  {10.1088/0004-637X/783/2/91}, \href
+  {https://ui.adsabs.harvard.edu/abs/2014ApJ...783...91C} {783, 91}
+
+\bibitem[\protect\citeauthoryear{{Caprioli}, {Pop}  \& {Spitkovsky}}{{Caprioli}
+  et~al.}{2015}]{2015ApJ...798L..28C}
+{Caprioli} D.,  {Pop} A.-R.,   {Spitkovsky} A.,  2015, \mn@doi [\apjl]
+  {10.1088/2041-8205/798/2/L28}, \href
+  {https://ui.adsabs.harvard.edu/abs/2015ApJ...798L..28C} {798, L28}
+
+\bibitem[\protect\citeauthoryear{{Caprioli}, {Haggerty}  \& {Blasi}}{{Caprioli}
+  et~al.}{2020}]{2020ApJ...905....2C}
+{Caprioli} D.,  {Haggerty} C.~C.,   {Blasi} P.,  2020, \mn@doi [\apj]
+  {10.3847/1538-4357/abbe05}, \href
+  {https://ui.adsabs.harvard.edu/abs/2020ApJ...905....2C} {905, 2}
+
+\bibitem[\protect\citeauthoryear{{Chandran}, {Perez}, {Verscharen}, {Klein}  \&
+  {Mallet}}{{Chandran} et~al.}{2015}]{2015ApJ...811...50C}
+{Chandran} B. D.~G.,  {Perez} J.~C.,  {Verscharen} D.,  {Klein} K.~G.,
+  {Mallet} A.,  2015, \mn@doi [\apj] {10.1088/0004-637X/811/1/50}, \href
+  {https://ui.adsabs.harvard.edu/abs/2015ApJ...811...50C} {811, 50}
+
+\bibitem[\protect\citeauthoryear{{Chen} \& {Zonca}}{{Chen} \&
+  {Zonca}}{2016}]{2016RvMP...88a5008C}
+{Chen} L.,  {Zonca} F.,  2016, \mn@doi [Reviews of Modern Physics]
+  {10.1103/RevModPhys.88.015008}, \href
+  {https://ui.adsabs.harvard.edu/abs/2016RvMP...88a5008C} {88, 015008}
+
+\bibitem[\protect\citeauthoryear{{Cohen} \& {Kulsrud}}{{Cohen} \&
+  {Kulsrud}}{1974}]{1974PhFl...17.2215C}
+{Cohen} R.~H.,  {Kulsrud} R.~M.,  1974, \mn@doi [Physics of Fluids]
+  {10.1063/1.1694695}, \href
+  {https://ui.adsabs.harvard.edu/abs/1974PhFl...17.2215C} {17, 2215}
+
+\bibitem[\protect\citeauthoryear{{Crumley}, {Caprioli}, {Markoff}  \&
+  {Spitkovsky}}{{Crumley} et~al.}{2019}]{2019MNRAS.485.5105C}
+{Crumley} P.,  {Caprioli} D.,  {Markoff} S.,   {Spitkovsky} A.,  2019, \mn@doi
+  [\mnras] {10.1093/mnras/stz232}, \href
+  {https://ui.adsabs.harvard.edu/abs/2019MNRAS.485.5105C} {485, 5105}
+
+\bibitem[\protect\citeauthoryear{{Davelaar}, {Philippov}, {Bromberg}  \&
+  {Singh}}{{Davelaar} et~al.}{2020}]{2020ApJ...896L..31D}
+{Davelaar} J.,  {Philippov} A.~A.,  {Bromberg} O.,   {Singh} C.~B.,  2020,
+  \mn@doi [\apjl] {10.3847/2041-8213/ab95a2}, \href
+  {https://ui.adsabs.harvard.edu/abs/2020ApJ...896L..31D} {896, L31}
+
+\bibitem[\protect\citeauthoryear{{Denton} \& {Kotschenreuther}}{{Denton} \&
+  {Kotschenreuther}}{1995}]{1995JCoPh.119..283D}
+{Denton} R.~E.,  {Kotschenreuther} M.,  1995, \mn@doi [Journal of Computational
+  Physics] {10.1006/jcph.1995.1136}, \href
+  {https://ui.adsabs.harvard.edu/abs/1995JCoPh.119..283D} {119, 283}
+
+\bibitem[\protect\citeauthoryear{{Drake}, {Arnold}, {Swisdak}  \&
+  {Dahlin}}{{Drake} et~al.}{2019}]{2019PhPl...26a2901D}
+{Drake} J.~F.,  {Arnold} H.,  {Swisdak} M.,   {Dahlin} J.~T.,  2019, \mn@doi
+  [Physics of Plasmas] {10.1063/1.5058140}, \href
+  {https://ui.adsabs.harvard.edu/abs/2019PhPl...26a2901D} {26, 012901}
+
+\bibitem[\protect\citeauthoryear{{Fermi}}{{Fermi}}{1949}]{1949PhRv...75.1169F}
+{Fermi} E.,  1949, \mn@doi [Physical Review] {10.1103/PhysRev.75.1169}, \href
+  {https://ui.adsabs.harvard.edu/abs/1949PhRv...75.1169F} {75, 1169}
+
+\bibitem[\protect\citeauthoryear{{Ferri{\`e}re}}{{Ferri{\`e}re}}{2001}]{2001RvMP...73.1031F}
+{Ferri{\`e}re} K.~M.,  2001, \mn@doi [Reviews of Modern Physics]
+  {10.1103/RevModPhys.73.1031}, \href
+  {https://ui.adsabs.harvard.edu/abs/2001RvMP...73.1031F} {73, 1031}
+
+\bibitem[\protect\citeauthoryear{{Gardiner} \& {Stone}}{{Gardiner} \&
+  {Stone}}{2005}]{2005JCoPh.205..509G}
+{Gardiner} T.~A.,  {Stone} J.~M.,  2005, \mn@doi [Journal of Computational
+  Physics] {10.1016/j.jcp.2004.11.016}, \href
+  {https://ui.adsabs.harvard.edu/abs/2005JCoPh.205..509G} {205, 509}
+
+\bibitem[\protect\citeauthoryear{{Gardiner} \& {Stone}}{{Gardiner} \&
+  {Stone}}{2008}]{2008JCoPh.227.4123G}
+{Gardiner} T.~A.,  {Stone} J.~M.,  2008, \mn@doi [Journal of Computational
+  Physics] {10.1016/j.jcp.2007.12.017}, \href
+  {https://ui.adsabs.harvard.edu/abs/2008JCoPh.227.4123G} {227, 4123}
+
+\bibitem[\protect\citeauthoryear{{Gargat{\'e}}, {Bingham}, {Fonseca}  \&
+  {Silva}}{{Gargat{\'e}} et~al.}{2007}]{2007CoPhC.176..419G}
+{Gargat{\'e}} L.,  {Bingham} R.,  {Fonseca} R.~A.,   {Silva} L.~O.,  2007,
+  \mn@doi [Computer Physics Communications] {10.1016/j.cpc.2006.11.013}, \href
+  {https://ui.adsabs.harvard.edu/abs/2007CoPhC.176..419G} {176, 419}
+
+\bibitem[\protect\citeauthoryear{{Grappin}, {Velli}  \& {Mangeney}}{{Grappin}
+  et~al.}{1993}]{1993PhRvL..70.2190G}
+{Grappin} R.,  {Velli} M.,   {Mangeney} A.,  1993, \mn@doi [\prl]
+  {10.1103/PhysRevLett.70.2190}, \href
+  {https://ui.adsabs.harvard.edu/abs/1993PhRvL..70.2190G} {70, 2190}
+
+\bibitem[\protect\citeauthoryear{{Grenier}, {Black}  \& {Strong}}{{Grenier}
+  et~al.}{2015}]{2015ARA&A..53..199G}
+{Grenier} I.~A.,  {Black} J.~H.,   {Strong} A.~W.,  2015, \mn@doi [\araa]
+  {10.1146/annurev-astro-082214-122457}, \href
+  {https://ui.adsabs.harvard.edu/abs/2015ARA&A..53..199G} {53, 199}
+
+\bibitem[\protect\citeauthoryear{{Guo} \& {Giacalone}}{{Guo} \&
+  {Giacalone}}{2013}]{2013ApJ...773..158G}
+{Guo} F.,  {Giacalone} J.,  2013, \mn@doi [\apj] {10.1088/0004-637X/773/2/158},
+  \href {https://ui.adsabs.harvard.edu/abs/2013ApJ...773..158G} {773, 158}
+
+\bibitem[\protect\citeauthoryear{{Guo}, {Li}, {Daughton}  \& {Liu}}{{Guo}
+  et~al.}{2014}]{2014PhRvL.113o5005G}
+{Guo} F.,  {Li} H.,  {Daughton} W.,   {Liu} Y.-H.,  2014, \mn@doi [\prl]
+  {10.1103/PhysRevLett.113.155005}, \href
+  {https://ui.adsabs.harvard.edu/abs/2014PhRvL.113o5005G} {113, 155005}
+
+\bibitem[\protect\citeauthoryear{{Guo}, {Liu}, {Daughton}  \& {Li}}{{Guo}
+  et~al.}{2015}]{2015ApJ...806..167G}
+{Guo} F.,  {Liu} Y.-H.,  {Daughton} W.,   {Li} H.,  2015, \mn@doi [\apj]
+  {10.1088/0004-637X/806/2/167}, \href
+  {https://ui.adsabs.harvard.edu/abs/2015ApJ...806..167G} {806, 167}
+
+\bibitem[\protect\citeauthoryear{{Haggerty} \& {Caprioli}}{{Haggerty} \&
+  {Caprioli}}{2020}]{2020ApJ...905....1H}
+{Haggerty} C.~C.,  {Caprioli} D.,  2020, \mn@doi [\apj]
+  {10.3847/1538-4357/abbe06}, \href
+  {https://ui.adsabs.harvard.edu/abs/2020ApJ...905....1H} {905, 1}
+
+\bibitem[\protect\citeauthoryear{{Haggerty}, {Caprioli}  \&
+  {Zweibel}}{{Haggerty} et~al.}{2019}]{2019ICRC...36..279H}
+{Haggerty} C.,  {Caprioli} D.,   {Zweibel} E.,  2019, in 36th International
+  Cosmic Ray Conference (ICRC2019). p.~279 (\mn@eprint {arXiv} {1909.06346})
+
+\bibitem[\protect\citeauthoryear{{Heinemann} \& {Olbert}}{{Heinemann} \&
+  {Olbert}}{1980}]{1980JGR....85.1311H}
+{Heinemann} M.,  {Olbert} S.,  1980, \mn@doi [\jgr] {10.1029/JA085iA03p01311},
+  \href {https://ui.adsabs.harvard.edu/abs/1980JGR....85.1311H} {85, 1311}
+
+\bibitem[\protect\citeauthoryear{{Holcomb} \& {Spitkovsky}}{{Holcomb} \&
+  {Spitkovsky}}{2019}]{2019ApJ...882....3H}
+{Holcomb} C.,  {Spitkovsky} A.,  2019, \mn@doi [\apj]
+  {10.3847/1538-4357/ab328a}, \href
+  {https://ui.adsabs.harvard.edu/abs/2019ApJ...882....3H} {882, 3}
+
+\bibitem[\protect\citeauthoryear{{Hopkins}, {Butsky}, {Panopoulou}, {Ji},
+  {Quataert}, {Faucher-Gigu{\`e}re}  \& {Kere{\v{s}}}}{{Hopkins}
+  et~al.}{2022}]{2022MNRAS.tmp.1768H}
+{Hopkins} P.~F.,  {Butsky} I.~S.,  {Panopoulou} G.~V.,  {Ji} S.,  {Quataert}
+  E.,  {Faucher-Gigu{\`e}re} C.-A.,   {Kere{\v{s}}} D.,  2022, \mn@doi [\mnras]
+  {10.1093/mnras/stac1791}, \href
+  {https://ui.adsabs.harvard.edu/abs/2022MNRAS.tmp.1768H} {}
+
+\bibitem[\protect\citeauthoryear{{Hoshino}, {Arons}, {Gallant}  \&
+  {Langdon}}{{Hoshino} et~al.}{1992}]{1992ApJ...390..454H}
+{Hoshino} M.,  {Arons} J.,  {Gallant} Y.~A.,   {Langdon} A.~B.,  1992, \mn@doi
+  [\apj] {10.1086/171296}, \href
+  {https://ui.adsabs.harvard.edu/abs/1992ApJ...390..454H} {390, 454}
+
+\bibitem[\protect\citeauthoryear{{Hu} \& {Krommes}}{{Hu} \&
+  {Krommes}}{1994}]{1994PhPl....1..863H}
+{Hu} G.,  {Krommes} J.~A.,  1994, \mn@doi [Physics of Plasmas]
+  {10.1063/1.870745}, \href
+  {https://ui.adsabs.harvard.edu/abs/1994PhPl....1..863H} {1, 863}
+
+\bibitem[\protect\citeauthoryear{{Jain}, {Mu{\~n}oz}, {Farzalipour Tabriz},
+  {Rampp}  \& {B{\"u}chner}}{{Jain} et~al.}{2022}]{2022PhPl...29e3902J}
+{Jain} N.,  {Mu{\~n}oz} P.~A.,  {Farzalipour Tabriz} M.,  {Rampp} M.,
+  {B{\"u}chner} J.,  2022, \mn@doi [Physics of Plasmas] {10.1063/5.0087103},
+  \href {https://ui.adsabs.harvard.edu/abs/2022PhPl...29e3902J} {29, 053902}
+
+\bibitem[\protect\citeauthoryear{{Ji} \& {Hopkins}}{{Ji} \&
+  {Hopkins}}{2022}]{2022MNRAS.516.5143J}
+{Ji} S.,  {Hopkins} P.~F.,  2022, \mn@doi [\mnras] {10.1093/mnras/stac2523},
+  \href {https://ui.adsabs.harvard.edu/abs/2022MNRAS.516.5143J} {516, 5143}
+
+\bibitem[\protect\citeauthoryear{{Ji} et~al.,}{{Ji}
+  et~al.}{2020}]{2020MNRAS.496.4221J}
+{Ji} S.,  et~al., 2020, \mn@doi [\mnras] {10.1093/mnras/staa1849}, \href
+  {https://ui.adsabs.harvard.edu/abs/2020MNRAS.496.4221J} {496, 4221}
+
+\bibitem[\protect\citeauthoryear{{Ji}, {Daughton}, {Jara-Almonte}, {Le},
+  {Stanier}  \& {Yoo}}{{Ji} et~al.}{2022a}]{2022NatRP...4..263J}
+{Ji} H.,  {Daughton} W.,  {Jara-Almonte} J.,  {Le} A.,  {Stanier} A.,   {Yoo}
+  J.,  2022a, \mn@doi [Nature Reviews Physics] {10.1038/s42254-021-00419-x},
+  \href {https://ui.adsabs.harvard.edu/abs/2022NatRP...4..263J} {4, 263}
+
+\bibitem[\protect\citeauthoryear{{Ji}, {Squire}  \& {Hopkins}}{{Ji}
+  et~al.}{2022b}]{2022MNRAS.513..282J}
+{Ji} S.,  {Squire} J.,   {Hopkins} P.~F.,  2022b, \mn@doi [\mnras]
+  {10.1093/mnras/stac895}, \href
+  {https://ui.adsabs.harvard.edu/abs/2022MNRAS.513..282J} {513, 282}
+
+\bibitem[\protect\citeauthoryear{{Kawashima}, {Ishiguro}, {Moritaka},
+  {Horiuchi}  \& {Tomisaka}}{{Kawashima} et~al.}{2022}]{2022ApJ...928...62K}
+{Kawashima} T.,  {Ishiguro} S.,  {Moritaka} T.,  {Horiuchi} R.,   {Tomisaka}
+  K.,  2022, \mn@doi [\apj] {10.3847/1538-4357/ac5591}, \href
+  {https://ui.adsabs.harvard.edu/abs/2022ApJ...928...62K} {928, 62}
+
+\bibitem[\protect\citeauthoryear{{Kempski} \& {Quataert}}{{Kempski} \&
+  {Quataert}}{2022}]{2022MNRAS.514..657K}
+{Kempski} P.,  {Quataert} E.,  2022, \mn@doi [\mnras] {10.1093/mnras/stac1240},
+  \href {https://ui.adsabs.harvard.edu/abs/2022MNRAS.514..657K} {514, 657}
+
+\bibitem[\protect\citeauthoryear{{Krymskii}}{{Krymskii}}{1977}]{1977DoSSR.234.1306K}
+{Krymskii} G.~F.,  1977, Akademiia Nauk SSSR Doklady, \href
+  {https://ui.adsabs.harvard.edu/abs/1977DoSSR.234.1306K} {234, 1306}
+
+\bibitem[\protect\citeauthoryear{{Kulsrud}}{{Kulsrud}}{1998}]{1998PhPl....5.1599K}
+{Kulsrud} R.~M.,  1998, \mn@doi [Physics of Plasmas] {10.1063/1.872827}, \href
+  {https://ui.adsabs.harvard.edu/abs/1998PhPl....5.1599K} {5, 1599}
+
+\bibitem[\protect\citeauthoryear{{Kulsrud}}{{Kulsrud}}{2005}]{2005ppa..book.....K}
+{Kulsrud} R.~M.,  2005, {Plasma physics for astrophysics}
+
+\bibitem[\protect\citeauthoryear{{Kulsrud} \& {Pearce}}{{Kulsrud} \&
+  {Pearce}}{1969}]{1969ApJ...156..445K}
+{Kulsrud} R.,  {Pearce} W.~P.,  1969, \mn@doi [\apj] {10.1086/149981}, \href
+  {https://ui.adsabs.harvard.edu/abs/1969ApJ...156..445K} {156, 445}
+
+\bibitem[\protect\citeauthoryear{{Kunz}, {Stone}  \& {Bai}}{{Kunz}
+  et~al.}{2014}]{2014JCoPh.259..154K}
+{Kunz} M.~W.,  {Stone} J.~M.,   {Bai} X.-N.,  2014, \mn@doi [Journal of
+  Computational Physics] {10.1016/j.jcp.2013.11.035}, \href
+  {https://ui.adsabs.harvard.edu/abs/2014JCoPh.259..154K} {259, 154}
+
+\bibitem[\protect\citeauthoryear{{Lazarian} \& {Beresnyak}}{{Lazarian} \&
+  {Beresnyak}}{2006}]{2006MNRAS.373.1195L}
+{Lazarian} A.,  {Beresnyak} A.,  2006, \mn@doi [\mnras]
+  {10.1111/j.1365-2966.2006.11093.x}, \href
+  {https://ui.adsabs.harvard.edu/abs/2006MNRAS.373.1195L} {373, 1195}
+
+\bibitem[\protect\citeauthoryear{{Lebiga}, {Santos-Lima}  \& {Yan}}{{Lebiga}
+  et~al.}{2018}]{2018MNRAS.476.2779L}
+{Lebiga} O.,  {Santos-Lima} R.,   {Yan} H.,  2018, \mn@doi [\mnras]
+  {10.1093/mnras/sty309}, \href
+  {https://ui.adsabs.harvard.edu/abs/2018MNRAS.476.2779L} {476, 2779}
+
+\bibitem[\protect\citeauthoryear{{Lipatov}}{{Lipatov}}{2002}]{2002hmst.book.....L}
+{Lipatov} A.~S.,  2002, {The hybrid multiscale simulation technology: an
+  introduction with application to astrophysical and laboratory plasmas}
+
+\bibitem[\protect\citeauthoryear{{Lucek} \& {Bell}}{{Lucek} \&
+  {Bell}}{2000}]{2000MNRAS.314...65L}
+{Lucek} S.~G.,  {Bell} A.~R.,  2000, \mn@doi [\mnras]
+  {10.1046/j.1365-8711.2000.03363.x}, \href
+  {https://ui.adsabs.harvard.edu/abs/2000MNRAS.314...65L} {314, 65}
+
+\bibitem[\protect\citeauthoryear{{Mbarek} \& {Caprioli}}{{Mbarek} \&
+  {Caprioli}}{2019}]{2019ApJ...886....8M}
+{Mbarek} R.,  {Caprioli} D.,  2019, \mn@doi [\apj] {10.3847/1538-4357/ab4a08},
+  \href {https://ui.adsabs.harvard.edu/abs/2019ApJ...886....8M} {886, 8}
+
+\bibitem[\protect\citeauthoryear{{Mbarek} \& {Caprioli}}{{Mbarek} \&
+  {Caprioli}}{2021}]{2021ApJ...921...85M}
+{Mbarek} R.,  {Caprioli} D.,  2021, \mn@doi [\apj] {10.3847/1538-4357/ac1da8},
+  \href {https://ui.adsabs.harvard.edu/abs/2021ApJ...921...85M} {921, 85}
+
+\bibitem[\protect\citeauthoryear{{Meli} et~al.,}{{Meli}
+  et~al.}{2020}]{2020arXiv200904158M}
+{Meli} A.,  et~al., 2020, arXiv e-prints, \href
+  {https://ui.adsabs.harvard.edu/abs/2020arXiv200904158M} {p. arXiv:2009.04158}
+
+\bibitem[\protect\citeauthoryear{{Mignone}, {Bodo}, {Vaidya}  \&
+  {Mattia}}{{Mignone} et~al.}{2018}]{2018ApJ...859...13M}
+{Mignone} A.,  {Bodo} G.,  {Vaidya} B.,   {Mattia} G.,  2018, \mn@doi [\apj]
+  {10.3847/1538-4357/aabccd}, \href
+  {https://ui.adsabs.harvard.edu/abs/2018ApJ...859...13M} {859, 13}
+
+\bibitem[\protect\citeauthoryear{{Mignone}, {Haudemand}  \&
+  {Puzzoni}}{{Mignone} et~al.}{2023}]{2023CoPhC.28508625M}
+{Mignone} A.,  {Haudemand} H.,   {Puzzoni} E.,  2023, \mn@doi [Computer Physics
+  Communications] {10.1016/j.cpc.2022.108625}, \href
+  {https://ui.adsabs.harvard.edu/abs/2023CoPhC.28508625M} {285, 108625}
+
+\bibitem[\protect\citeauthoryear{{Naab} \& {Ostriker}}{{Naab} \&
+  {Ostriker}}{2017}]{2017ARA&A..55...59N}
+{Naab} T.,  {Ostriker} J.~P.,  2017, \mn@doi [\araa]
+  {10.1146/annurev-astro-081913-040019}, \href
+  {https://ui.adsabs.harvard.edu/abs/2017ARA&A..55...59N} {55, 59}
+
+\bibitem[\protect\citeauthoryear{{Ortu{\~n}o-Mac{\'\i}as}, {Nalewajko},
+  {Uzdensky}, {Begelman}, {Werner}, {Chen}  \&
+  {Mishra}}{{Ortu{\~n}o-Mac{\'\i}as} et~al.}{2022}]{2022ApJ...931..137O}
+{Ortu{\~n}o-Mac{\'\i}as} J.,  {Nalewajko} K.,  {Uzdensky} D.~A.,  {Begelman}
+  M.~C.,  {Werner} G.~R.,  {Chen} A.~Y.,   {Mishra} B.,  2022, \mn@doi [\apj]
+  {10.3847/1538-4357/ac6acd}, \href
+  {https://ui.adsabs.harvard.edu/abs/2022ApJ...931..137O} {931, 137}
+
+\bibitem[\protect\citeauthoryear{{Park}, {Caprioli}  \& {Spitkovsky}}{{Park}
+  et~al.}{2015}]{2015PhRvL.114h5003P}
+{Park} J.,  {Caprioli} D.,   {Spitkovsky} A.,  2015, \mn@doi [\prl]
+  {10.1103/PhysRevLett.114.085003}, \href
+  {https://ui.adsabs.harvard.edu/abs/2015PhRvL.114h5003P} {114, 085003}
+
+\bibitem[\protect\citeauthoryear{{Parker} \& {Lee}}{{Parker} \&
+  {Lee}}{1993}]{1993PhFlB...5...77P}
+{Parker} S.~E.,  {Lee} W.~W.,  1993, \mn@doi [Physics of Fluids B]
+  {10.1063/1.860870}, \href
+  {https://ui.adsabs.harvard.edu/abs/1993PhFlB...5...77P} {5, 77}
+
+\bibitem[\protect\citeauthoryear{{Plotnikov}, {Ostriker}  \& {Bai}}{{Plotnikov}
+  et~al.}{2021}]{2021ApJ...914....3P}
+{Plotnikov} I.,  {Ostriker} E.~C.,   {Bai} X.-N.,  2021, \mn@doi [\apj]
+  {10.3847/1538-4357/abf7b3}, \href
+  {https://ui.adsabs.harvard.edu/abs/2021ApJ...914....3P} {914, 3}
+
+\bibitem[\protect\citeauthoryear{{Priest} \& {Forbes}}{{Priest} \&
+  {Forbes}}{2000}]{2000mare.book.....P}
+{Priest} E.,  {Forbes} T.,  2000, {Magnetic Reconnection}
+
+\bibitem[\protect\citeauthoryear{{Reville} \& {Bell}}{{Reville} \&
+  {Bell}}{2012}]{2012MNRAS.419.2433R}
+{Reville} B.,  {Bell} A.~R.,  2012, \mn@doi [\mnras]
+  {10.1111/j.1365-2966.2011.19892.x}, \href
+  {https://ui.adsabs.harvard.edu/abs/2012MNRAS.419.2433R} {419, 2433}
+
+\bibitem[\protect\citeauthoryear{{Shi}, {Velli}, {Tenerani}, {Rappazzo}  \&
+  {R{\'e}ville}}{{Shi} et~al.}{2020}]{2020ApJ...888...68S}
+{Shi} C.,  {Velli} M.,  {Tenerani} A.,  {Rappazzo} F.,   {R{\'e}ville} V.,
+  2020, \mn@doi [\apj] {10.3847/1538-4357/ab5fce}, \href
+  {https://ui.adsabs.harvard.edu/abs/2020ApJ...888...68S} {888, 68}
+
+\bibitem[\protect\citeauthoryear{{Sironi}}{{Sironi}}{2015}]{2015ApJ...800...89S}
+{Sironi} L.,  2015, \mn@doi [\apj] {10.1088/0004-637X/800/2/89}, \href
+  {https://ui.adsabs.harvard.edu/abs/2015ApJ...800...89S} {800, 89}
+
+\bibitem[\protect\citeauthoryear{{Sironi} \& {Narayan}}{{Sironi} \&
+  {Narayan}}{2015}]{2015ApJ...800...88S}
+{Sironi} L.,  {Narayan} R.,  2015, \mn@doi [\apj] {10.1088/0004-637X/800/2/88},
+  \href {https://ui.adsabs.harvard.edu/abs/2015ApJ...800...88S} {800, 88}
+
+\bibitem[\protect\citeauthoryear{{Sironi} \& {Spitkovsky}}{{Sironi} \&
+  {Spitkovsky}}{2011}]{2011ApJ...726...75S}
+{Sironi} L.,  {Spitkovsky} A.,  2011, \mn@doi [\apj]
+  {10.1088/0004-637X/726/2/75}, \href
+  {https://ui.adsabs.harvard.edu/abs/2011ApJ...726...75S} {726, 75}
+
+\bibitem[\protect\citeauthoryear{{Sironi} \& {Spitkovsky}}{{Sironi} \&
+  {Spitkovsky}}{2014}]{2014ApJ...783L..21S}
+{Sironi} L.,  {Spitkovsky} A.,  2014, \mn@doi [\apjl]
+  {10.1088/2041-8205/783/1/L21}, \href
+  {https://ui.adsabs.harvard.edu/abs/2014ApJ...783L..21S} {783, L21}
+
+\bibitem[\protect\citeauthoryear{{Sironi}, {Rowan}  \& {Narayan}}{{Sironi}
+  et~al.}{2021}]{2021ApJ...907L..44S}
+{Sironi} L.,  {Rowan} M.~E.,   {Narayan} R.,  2021, \mn@doi [\apjl]
+  {10.3847/2041-8213/abd9bc}, \href
+  {https://ui.adsabs.harvard.edu/abs/2021ApJ...907L..44S} {907, L44}
+
+\bibitem[\protect\citeauthoryear{{Skilling}}{{Skilling}}{1975a}]{1975MNRAS.172..557S}
+{Skilling} J.,  1975a, \mn@doi [\mnras] {10.1093/mnras/172.3.557}, \href
+  {https://ui.adsabs.harvard.edu/abs/1975MNRAS.172..557S} {172, 557}
+
+\bibitem[\protect\citeauthoryear{{Skilling}}{{Skilling}}{1975b}]{1975MNRAS.173..245S}
+{Skilling} J.,  1975b, \mn@doi [\mnras] {10.1093/mnras/173.2.245}, \href
+  {https://ui.adsabs.harvard.edu/abs/1975MNRAS.173..245S} {173, 245}
+
+\bibitem[\protect\citeauthoryear{{Skilling}}{{Skilling}}{1975c}]{1975MNRAS.173..255S}
+{Skilling} J.,  1975c, \mn@doi [\mnras] {10.1093/mnras/173.2.255}, \href
+  {https://ui.adsabs.harvard.edu/abs/1975MNRAS.173..255S} {173, 255}
+
+\bibitem[\protect\citeauthoryear{{Spitkovsky}}{{Spitkovsky}}{2005}]{2005AIPC..801..345S}
+{Spitkovsky} A.,  2005, in {Bulik} T.,  {Rudak} B.,   {Madejski} G.,  eds,
+  American Institute of Physics Conference Series Vol. 801, Astrophysical
+  Sources of High Energy Particles and Radiation. pp 345--350 (\mn@eprint
+  {arXiv} {astro-ph/0603211}), \mn@doi{10.1063/1.2141897}
+
+\bibitem[\protect\citeauthoryear{{Squire}, {Chandran}  \& {Meyrand}}{{Squire}
+  et~al.}{2020}]{2020ApJ...891L...2S}
+{Squire} J.,  {Chandran} B.~D.~G.,   {Meyrand} R.,  2020, \mn@doi [\apjl]
+  {10.3847/2041-8213/ab74e1}, \href
+  {https://ui.adsabs.harvard.edu/abs/2020ApJ...891L...2S} {891, L2}
+
+\bibitem[\protect\citeauthoryear{{Stone} \& {Gardiner}}{{Stone} \&
+  {Gardiner}}{2009}]{2009NewA...14..139S}
+{Stone} J.~M.,  {Gardiner} T.,  2009, \mn@doi [\na]
+  {10.1016/j.newast.2008.06.003}, \href
+  {https://ui.adsabs.harvard.edu/abs/2009NewA...14..139S} {14, 139}
+
+\bibitem[\protect\citeauthoryear{{Stone}, {Gardiner}, {Teuben}, {Hawley}  \&
+  {Simon}}{{Stone} et~al.}{2008}]{2008ApJS..178..137S}
+{Stone} J.~M.,  {Gardiner} T.~A.,  {Teuben} P.,  {Hawley} J.~F.,   {Simon}
+  J.~B.,  2008, \mn@doi [\apjs] {10.1086/588755}, \href
+  {https://ui.adsabs.harvard.edu/abs/2008ApJS..178..137S} {178, 137}
+
+\bibitem[\protect\citeauthoryear{{Stone}, {Tomida}, {White}  \&
+  {Felker}}{{Stone} et~al.}{2020}]{2020ApJS..249....4S}
+{Stone} J.~M.,  {Tomida} K.,  {White} C.~J.,   {Felker} K.~G.,  2020, \mn@doi
+  [\apjs] {10.3847/1538-4365/ab929b}, \href
+  {https://ui.adsabs.harvard.edu/abs/2020ApJS..249....4S} {249, 4}
+
+\bibitem[\protect\citeauthoryear{{Vincenti}, {Lobet}, {Lehe}, {Sasanka}  \&
+  {Vay}}{{Vincenti} et~al.}{2017}]{2017CoPhC.210..145V}
+{Vincenti} H.,  {Lobet} M.,  {Lehe} R.,  {Sasanka} R.,   {Vay} J.~L.,  2017,
+  \mn@doi [Computer Physics Communications] {10.1016/j.cpc.2016.08.023}, \href
+  {https://ui.adsabs.harvard.edu/abs/2017CoPhC.210..145V} {210, 145}
+
+\bibitem[\protect\citeauthoryear{{Wentzel}}{{Wentzel}}{1974}]{1974ARA&A..12...71W}
+{Wentzel} D.~G.,  1974, \mn@doi [\araa] {10.1146/annurev.aa.12.090174.000443},
+  \href {https://ui.adsabs.harvard.edu/abs/1974ARA&A..12...71W} {12, 71}
+
+\bibitem[\protect\citeauthoryear{{Winske}, {Yin}, {Omidi}  \& {et
+  al.}}{{Winske} et~al.}{2003}]{2003LNP...615..136W}
+{Winske} D.,  {Yin} L.,  {Omidi} N.,   {et al.} 2003, in {B{\"u}chner} J.,
+  {Dum} C.,   {Scholer} M.,  eds, , Vol.~615, Space Plasma Simulation.
+pp 136--165
+
+\bibitem[\protect\citeauthoryear{{Yan} \& {Lazarian}}{{Yan} \&
+  {Lazarian}}{2011}]{2011ApJ...731...35Y}
+{Yan} H.,  {Lazarian} A.,  2011, \mn@doi [\apj] {10.1088/0004-637X/731/1/35},
+  \href {https://ui.adsabs.harvard.edu/abs/2011ApJ...731...35Y} {731, 35}
+
+\bibitem[\protect\citeauthoryear{{Zachary} \& {Cohen}}{{Zachary} \&
+  {Cohen}}{1986}]{1986JCoPh..66..469Z}
+{Zachary} A.~L.,  {Cohen} B.~I.,  1986, \mn@doi [Journal of Computational
+  Physics] {10.1016/0021-9991(86)90076-8}, \href
+  {https://ui.adsabs.harvard.edu/abs/1986JCoPh..66..469Z} {66, 469}
+
+\bibitem[\protect\citeauthoryear{{Zweibel}}{{Zweibel}}{2017}]{2017PhPl...24e5402Z}
+{Zweibel} E.~G.,  2017, \mn@doi [Physics of Plasmas] {10.1063/1.4984017}, \href
+  {https://ui.adsabs.harvard.edu/abs/2017PhPl...24e5402Z} {24, 055402}
+
+\bibitem[\protect\citeauthoryear{{Zweibel}}{{Zweibel}}{2020}]{2020ApJ...890...67Z}
+{Zweibel} E.~G.,  2020, \mn@doi [\apj] {10.3847/1538-4357/ab67bf}, \href
+  {https://ui.adsabs.harvard.edu/abs/2020ApJ...890...67Z} {890, 67}
+
+\bibitem[\protect\citeauthoryear{{van Marle}, {Casse}  \& {Marcowith}}{{van
+  Marle} et~al.}{2018}]{2018MNRAS.473.3394V}
+{van Marle} A.~J.,  {Casse} F.,   {Marcowith} A.,  2018, \mn@doi [\mnras]
+  {10.1093/mnras/stx2509}, \href
+  {https://ui.adsabs.harvard.edu/abs/2018MNRAS.473.3394V} {473, 3394}
+
+\bibitem[\protect\citeauthoryear{{van Marle}, {Bohdan}, {Morris}, {Pohl}  \&
+  {Marcowith}}{{van Marle} et~al.}{2022}]{2022ApJ...929....7V}
+{van Marle} A.~J.,  {Bohdan} A.,  {Morris} P.~J.,  {Pohl} M.,   {Marcowith} A.,
+   2022, \mn@doi [\apj] {10.3847/1538-4357/ac5962}, \href
+  {https://ui.adsabs.harvard.edu/abs/2022ApJ...929....7V} {929, 7}
+
+\makeatother
+\end{thebibliography}

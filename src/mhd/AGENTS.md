@@ -135,12 +135,14 @@ When assembled, it wires tasks into `MeshBlockPack` task lists:
     `<particles>/couple_j_to_efield_coeff`
   - representation branch:
     - `cell_centered`: reads deposited moments directly
-    - `edge_staggered`: reads converted edge-current arrays from particles.
+    - `edge_staggered`: reads particle-owned edge-current arrays; those arrays
+      come from either CC-to-edge conversion or direct staggered deposition.
 - Optional fluid momentum/energy feedback is split from E-coupling:
   - `couple_fluid_feedback_order=mhd_src_terms`: feedback applied in
     `MHD::MHDSrcTerms`
   - `couple_fluid_feedback_order=efield_src`: feedback applied in `MHD::EFieldSrc`
-  - both paths are stage-1-only and gated by per-target toggles
+  - deposited rates are built once per cycle and then applied across explicit
+    RK stages with the stage beta coefficient; targets are gated by toggles
     (`couple_moments_momentum_to_mhd`,
     `couple_moments_energy_to_mhd`).
   - for Boris + `pic_feedback_mode=coupled`, both feedback locations consume

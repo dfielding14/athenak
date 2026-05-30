@@ -155,3 +155,24 @@ file_type   = rst
 id          = rst
 dcycle      = 1
 single_file_per_rank = false
+
+<output12>
+file_type   = bin
+variable    = prtcl_jx_edge
+id          = prtcl_jx_edge
+dcycle      = 1
+ghost_zones = false
+
+<output13>
+file_type   = bin
+variable    = prtcl_jy_edge
+id          = prtcl_jy_edge
+dcycle      = 1
+ghost_zones = false
+
+<output14>
+file_type   = bin
+variable    = prtcl_jz_edge
+id          = prtcl_jz_edge
+dcycle      = 1
+ghost_zones = false

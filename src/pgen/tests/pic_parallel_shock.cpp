@@ -113,9 +113,10 @@ Real ps_particle_mass = 1.0;
 Real ps_particle_charge = 1.0;
 Real ps_particle_q_over_m = 1.0;
 Real ps_particle_macro_mass = 1.0;
-Real ps_mass_reservoir_local = 0.0;
+Real ps_mass_reservoir_global = 0.0;
 bool ps_tag_seeded = false;
 std::int64_t ps_next_tag = 0;
+ParameterInput *ps_pin = nullptr;
 
 inline bool FrameModeVelocity() {
   return ps_frame_mode == PSFrameMode::velocity;
@@ -276,6 +277,103 @@ void ApplyFrameShiftToParticles(Mesh *pm, const Real dvx) {
   KOKKOS_LAMBDA(const int p) {
     prtcl_rdata(IPVX, p) += dvx;
   });
+}
+
+void FatalParticleMigrationError(const char *message) {
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl
+            << "pic_parallel_shock recenter particle migration failed: "
+            << message << std::endl;
+  std::exit(EXIT_FAILURE);
+}
+
+void StoreRuntimeStateForRestart() {
+  if (ps_pin == nullptr) return;
+  ps_pin->SetReal("problem", "ps_mass_reservoir_global", ps_mass_reservoir_global);
+  if (!ps_tag_seeded) return;
+  if (ps_next_tag < 0 ||
+      ps_next_tag > static_cast<std::int64_t>(std::numeric_limits<int>::max())) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "pic_parallel_shock next particle tag cannot be stored in "
+              << "restart metadata." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  ps_pin->SetInteger("problem", "ps_next_tag",
+                     static_cast<int>(ps_next_tag));
+}
+
+void MigrateParticlesAfterHostEdit(Mesh *pm) {
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp == nullptr || pmbp->ppart == nullptr) return;
+  auto *ppart = pmbp->ppart;
+  if (ppart->pbval_part == nullptr) {
+    pm->CountParticles();
+    return;
+  }
+
+  if (ppart->NewGID(nullptr, 0) != TaskStatus::complete) {
+    FatalParticleMigrationError("NewGID did not complete");
+  }
+  if (ppart->SendCnt(nullptr, 0) != TaskStatus::complete) {
+    FatalParticleMigrationError("SendCnt did not complete");
+  }
+  if (ppart->InitRecv(nullptr, 0) != TaskStatus::complete) {
+    FatalParticleMigrationError("InitRecv did not complete");
+  }
+  if (ppart->SendP(nullptr, 0) != TaskStatus::complete) {
+    FatalParticleMigrationError("SendP did not complete");
+  }
+
+  int nwait = 0;
+  while (ppart->RecvP(nullptr, 0) != TaskStatus::complete) {
+    ++nwait;
+    if (nwait > 1000000) {
+      FatalParticleMigrationError("RecvP did not complete");
+    }
+  }
+  if (ppart->ClearRecv(nullptr, 0) != TaskStatus::complete) {
+    FatalParticleMigrationError("ClearRecv did not complete");
+  }
+  if (ppart->ClearSend(nullptr, 0) != TaskStatus::complete) {
+    FatalParticleMigrationError("ClearSend did not complete");
+  }
+  pm->CountParticles();
+}
+
+void ValidateLocalParticleOwnership(Mesh *pm) {
+  MeshBlockPack *pmbp = pm->pmb_pack;
+  if (pmbp == nullptr || pmbp->ppart == nullptr) return;
+  auto *ppart = pmbp->ppart;
+  const int np = ppart->nprtcl_thispack;
+  if (np <= 0) return;
+
+  pmbp->pmb->mb_size.template sync<HostMemSpace>();
+  auto h_pr = Kokkos::create_mirror_view_and_copy(HostMemSpace(), ppart->prtcl_rdata);
+  auto h_pi = Kokkos::create_mirror_view_and_copy(HostMemSpace(), ppart->prtcl_idata);
+  const int gids = pmbp->gids;
+  for (int p = 0; p < np; ++p) {
+    const int gid = h_pi(PGID, p);
+    const int m = gid - gids;
+    if (m < 0 || m >= pmbp->nmb_thispack) {
+      FatalParticleMigrationError("particle gid is not local after recenter");
+    }
+    const auto &size = pmbp->pmb->mb_size.h_view(m);
+    const Real tol1 = 16.0*std::numeric_limits<Real>::epsilon()*
+        std::max(static_cast<Real>(1.0), size.x1max - size.x1min);
+    const Real tol2 = 16.0*std::numeric_limits<Real>::epsilon()*
+        std::max(static_cast<Real>(1.0), size.x2max - size.x2min);
+    const Real tol3 = 16.0*std::numeric_limits<Real>::epsilon()*
+        std::max(static_cast<Real>(1.0), size.x3max - size.x3min);
+    const Real x1 = h_pr(IPX, p);
+    const Real x2 = h_pr(IPY, p);
+    const Real x3 = h_pr(IPZ, p);
+    if (x1 < size.x1min - tol1 || x1 > size.x1max + tol1 ||
+        x2 < size.x2min - tol2 || x2 > size.x2max + tol2 ||
+        x3 < size.x3min - tol3 || x3 > size.x3max + tol3) {
+      FatalParticleMigrationError("particle position lies outside its local gid block");
+    }
+  }
 }
 
 void UpdateOuterInflowState(Mesh *pm, const Real frame_vx) {
@@ -447,7 +545,8 @@ void ApplyRecenteringShift(Mesh *pm, const int nshift) {
   if (ps_frame_apply_to_particles) {
     const Real xshift = static_cast<Real>(nshift)*ps_recenter_dx1;
     ApplyRecenteringShiftToParticles(pm, xshift);
-    pm->CountParticles();
+    MigrateParticlesAfterHostEdit(pm);
+    ValidateLocalParticleOwnership(pm);
   }
 }
 
@@ -483,13 +582,16 @@ void SeedNextTag(particles::Particles *ppart) {
 #endif
 
   const std::int64_t start = static_cast<std::int64_t>(global_max) + 1;
-  const std::int64_t nranks = static_cast<std::int64_t>(global_variable::nranks);
-  std::int64_t rem = start % nranks;
-  if (rem < 0) rem += nranks;
-  std::int64_t shift = static_cast<std::int64_t>(global_variable::my_rank) - rem;
-  if (shift < 0) shift += nranks;
-  ps_next_tag = start + shift;
+  if (start > static_cast<std::int64_t>(std::numeric_limits<int>::max())) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Particle tag range exhausted before pic_parallel_shock injection."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  ps_next_tag = start;
   ps_tag_seeded = true;
+  StoreRuntimeStateForRestart();
 }
 
 void ParallelShockSource(Mesh *pm, const Real bdt) {
@@ -561,22 +663,55 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
     }
   }
 
-  int ninj = 0;
-  if (!cells.empty() && area_total > 0.0) {
-    const Real swept_mass = ps_eta*ps_rho0*ps_shock_speed*bdt*area_total;
-    const Real mass_budget = ps_mass_reservoir_local + swept_mass;
+  Real area_global = area_total;
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(&area_total, &area_global, 1, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
+#endif
+
+  int ninj_global = 0;
+  if (area_global > 0.0) {
+    const Real swept_mass = ps_eta*ps_rho0*ps_shock_speed*bdt*area_global;
+    const Real mass_budget = ps_mass_reservoir_global + swept_mass;
     if (mass_budget > 0.0) {
-      ninj = static_cast<int>(std::floor(mass_budget/ps_particle_macro_mass));
-      ps_mass_reservoir_local = mass_budget -
-          static_cast<Real>(ninj)*ps_particle_macro_mass;
+      ninj_global = static_cast<int>(std::floor(mass_budget/ps_particle_macro_mass));
+      ps_mass_reservoir_global = mass_budget -
+          static_cast<Real>(ninj_global)*ps_particle_macro_mass;
     }
   }
+  if (ninj_global <= 0) {
+    StoreRuntimeStateForRestart();
+    return;
+  }
 
-  int ninj_global = ninj;
+  int ninj = ninj_global;
+  int ninj_before = 0;
 #if MPI_PARALLEL_ENABLED
-  MPI_Allreduce(&ninj, &ninj_global, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+  std::vector<Real> area_eachrank(global_variable::nranks, 0.0);
+  MPI_Allgather(&area_total, 1, MPI_ATHENA_REAL, area_eachrank.data(), 1,
+                MPI_ATHENA_REAL, MPI_COMM_WORLD);
+  Real area_before = 0.0;
+  for (int r = 0; r < global_variable::my_rank; ++r) {
+    area_before += area_eachrank[r];
+  }
+  const Real area_after = area_before + area_total;
+  const Real left = static_cast<Real>(ninj_global)*area_before/area_global;
+  const Real right = static_cast<Real>(ninj_global)*area_after/area_global;
+  ninj_before = static_cast<int>(std::floor(left));
+  ninj = static_cast<int>(std::floor(right)) - static_cast<int>(std::floor(left));
 #endif
-  if (ninj_global <= 0) return;
+
+  const std::int64_t tag_base = ps_next_tag;
+  if (tag_base >
+      static_cast<std::int64_t>(std::numeric_limits<int>::max()) -
+      static_cast<std::int64_t>(ninj_global)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Particle tag range exhausted during pic_parallel_shock injection."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  ps_next_tag = tag_base + static_cast<std::int64_t>(ninj_global);
+  StoreRuntimeStateForRestart();
 
   if (ninj <= 0) {
     pm->CountParticles();
@@ -678,17 +813,6 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
     dit->second.de += 0.5*mass_rho*(SQR(part.vx) + SQR(part.vy) + SQR(part.vz));
   }
 
-  const std::int64_t nranks_ll = static_cast<std::int64_t>(global_variable::nranks);
-  const std::int64_t nreq = nranks_ll*static_cast<std::int64_t>(injected.size() + 1);
-  if (ps_next_tag >
-      static_cast<std::int64_t>(std::numeric_limits<int>::max()) - nreq) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl
-              << "Particle tag range exhausted during pic_parallel_shock injection."
-              << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
-
   const int old_npart = ppart->nprtcl_thispack;
   const int ninject = static_cast<int>(injected.size());
   const int new_npart = old_npart + ninject;
@@ -704,8 +828,7 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
   for (int n = 0; n < ninject; ++n) {
     h_pi_new(PGID, n) = injected[n].gid;
     h_pi_new(PSP, n) = ps_inject_species;
-    h_pi_new(PTAG, n) = static_cast<int>(ps_next_tag);
-    ps_next_tag += nranks_ll;
+    h_pi_new(PTAG, n) = static_cast<int>(tag_base + ninj_before + n);
 
     h_pr_new(IPX, n) = injected[n].x1;
     h_pr_new(IPY, n) = injected[n].x2;
@@ -714,6 +837,7 @@ void ParallelShockSource(Mesh *pm, const Real bdt) {
     h_pr_new(IPVY, n) = injected[n].vy;
     h_pr_new(IPVZ, n) = injected[n].vz;
     h_pr_new(IPM, n) = ps_particle_q_over_m;
+    h_pr_new(IPWT, n) = 1.0;
   }
 
   Kokkos::resize(ppart->prtcl_idata, ppart->nidata, new_npart);
@@ -971,13 +1095,13 @@ void MaybePrintFeedbackDiagnostics(Mesh *pm) {
   if (global_variable::my_rank != 0) return;
   const Real inv_ncell = (ncell_global > 0) ?
       1.0/static_cast<Real>(ncell_global) : 0.0;
-  Real rms[nfield];
+  std::array<Real, nfield> rms{};
   for (int n = 0; n < nfield; ++n) {
     rms[n] = std::sqrt(std::max(sum_sq_global[n]*inv_ncell, 0.0));
   }
   const Real inv_npart = (npart_global > 0) ?
       1.0/static_cast<Real>(npart_global) : 0.0;
-  Real pr_rms[nprt_field];
+  std::array<Real, nprt_field> pr_rms{};
   for (int n = 0; n < nprt_field; ++n) {
     pr_rms[n] = std::sqrt(std::max(pr_sum_sq_global[n]*inv_npart, 0.0));
   }
@@ -1058,7 +1182,10 @@ void ParallelShockWorkInLoop(Mesh *pm) {
     if (ps_frame_dv_max > 0.0 && std::abs(dv) > ps_frame_dv_max) {
       dv = std::copysign(ps_frame_dv_max, dv);
     }
-    if (std::abs(dv) <= 1.0e-15) return;
+    if (std::abs(dv) <= 1.0e-15) {
+      MaybePrintFeedbackDiagnostics(pm);
+      return;
+    }
 
     ApplyFrameShiftToFluid(pm, dv);
     if (ps_frame_apply_to_particles) {
@@ -1119,6 +1246,7 @@ void ParallelShockWorkInLoop(Mesh *pm) {
 //! \brief Parallel-shock MHD-PIC benchmark setup.
 
 void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart) {
+  ps_pin = pin;
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   if (pmbp->pmhd == nullptr) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -1301,9 +1429,23 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   ps_xshock0 = pmy_mesh_->mesh_size.x1min;
   ps_recenter_dx1 = pmy_mesh_->mesh_size.dx1;
   ps_use_2d3v = (pmy_mesh_->two_d && pmbp->ppart->pic_enable_2d3v);
-  ps_mass_reservoir_local = 0.0;
+  ps_mass_reservoir_global = restart ?
+      pin->GetOrAddReal("problem", "ps_mass_reservoir_global", 0.0) : 0.0;
   ps_tag_seeded = false;
   ps_next_tag = 0;
+  if (restart && pin->DoesParameterExist("problem", "ps_next_tag")) {
+    const int stored_next_tag = pin->GetInteger("problem", "ps_next_tag");
+    if (stored_next_tag < 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "pic_parallel_shock restart metadata has negative ps_next_tag."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    ps_next_tag = static_cast<std::int64_t>(stored_next_tag);
+    ps_tag_seeded = true;
+  }
+  StoreRuntimeStateForRestart();
   ConfigureSeedNoisePhases();
 
   if (ps_enable_frame_tracking && ps_frame_require_uniform &&
@@ -1376,6 +1518,10 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
   user_ref_func = ParallelShockRefinement;
   user_work_in_loop = true;
   user_work_in_loop_func = ParallelShockWorkInLoop;
+
+  // The inflow reservoir is not stored in restart files, so rebuild it before
+  // Driver::Initialize() fills ghost zones on both new and restarted runs.
+  UpdateOuterInflowState(pmy_mesh_, FrameVelocityOffset(pmy_mesh_->time));
 
   if (restart) return;
 
@@ -1453,9 +1599,6 @@ void ProblemGenerator::PICParallelShock(ParameterInput *pin, const bool restart)
     Real emag = 0.5*(SQR(bx) + SQR(by) + SQR(bz));
     u0(m, IEN, k, j, i) = ps_p0/gm1 + ekin + emag;
   });
-
-  // Outer x1 inflow reservoir set to upstream state.
-  UpdateOuterInflowState(pmy_mesh_, FrameVelocityOffset(pmy_mesh_->time));
 
   // Keep size data synced for host-side injection cell selection.
   size.template modify<HostMemSpace>();

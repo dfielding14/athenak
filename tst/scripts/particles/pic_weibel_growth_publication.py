@@ -146,6 +146,13 @@ def analyze():
         r2 = _RESULTS['np2']['r2']
         ok = _check_lower('np2:gamma_lower_bound', g2, 1.0e-1) and ok
         ok = _check_lower('np2:r2_lower_bound', r2, 0.75) and ok
-        ok = _check_close('serial_vs_mpi2:gamma', g2, g1, 3.0e-1, 0.5) and ok
+        amp_linf = float(np.max(np.abs(_RESULTS['np2']['amp'] - _RESULTS['np1']['amp'])))
+        time_linf = float(np.max(
+            np.abs(_RESULTS['np2']['time'] - _RESULTS['np1']['time'])))
+        ok = _check_close('serial_vs_mpi2:time_linf', time_linf, 0.0,
+                          1.0e-12, 0.0) and ok
+        ok = _check_close('serial_vs_mpi2:amp_linf', amp_linf, 0.0,
+                          1.0e-10, 0.0) and ok
+        ok = _check_close('serial_vs_mpi2:gamma', g2, g1, 1.0e-10, 1.0e-10) and ok
 
     return ok

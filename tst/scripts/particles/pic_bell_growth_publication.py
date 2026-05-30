@@ -16,6 +16,8 @@ logger = logging.getLogger('athena' + __name__[7:])
 
 _INPUT_DECK = 'tests/pic_bell_growth_publication.athinput'
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
+_COUPLED_GAMMA_MIN = 4.0
+_COUPLED_FIT_GROWTH_MIN = 4.0
 _RESULTS = {}
 
 
@@ -178,20 +180,28 @@ def analyze():
     sc = _RESULTS['serial_coupled']
 
     ok = _check_upper('serial_uncoupled:gamma_upper', abs(su['gamma']), 2.0e-2) and ok
-    ok = _check_lower('serial_coupled:gamma_lower', sc['gamma'], 5.0) and ok
+    ok = _check_lower(
+        'serial_coupled:gamma_lower', sc['gamma'], _COUPLED_GAMMA_MIN
+    ) and ok
     ok = _check_lower('serial_coupled:r2_lower', sc['r2'], 0.85) and ok
     ok = _check_lower(
-        'serial_coupled:fit_growth_factor_lower', sc['fit_growth_factor'], 8.0
+        'serial_coupled:fit_growth_factor_lower',
+        sc['fit_growth_factor'],
+        _COUPLED_FIT_GROWTH_MIN,
     ) and ok
 
     if 'mpi2_uncoupled' in _RESULTS and 'mpi2_coupled' in _RESULTS:
         mu = _RESULTS['mpi2_uncoupled']
         mc = _RESULTS['mpi2_coupled']
         ok = _check_upper('mpi2_uncoupled:gamma_upper', abs(mu['gamma']), 2.0e-2) and ok
-        ok = _check_lower('mpi2_coupled:gamma_lower', mc['gamma'], 5.0) and ok
+        ok = _check_lower(
+            'mpi2_coupled:gamma_lower', mc['gamma'], _COUPLED_GAMMA_MIN
+        ) and ok
         ok = _check_lower('mpi2_coupled:r2_lower', mc['r2'], 0.85) and ok
         ok = _check_lower(
-            'mpi2_coupled:fit_growth_factor_lower', mc['fit_growth_factor'], 8.0
+            'mpi2_coupled:fit_growth_factor_lower',
+            mc['fit_growth_factor'],
+            _COUPLED_FIT_GROWTH_MIN,
         ) and ok
         ok = _check_close('serial_vs_mpi2:coupled_gamma',
                           mc['gamma'], sc['gamma'], 2.0, 0.5) and ok

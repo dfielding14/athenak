@@ -22,6 +22,7 @@ except ModuleNotFoundError as exc:
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vis" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import bin_convert_new as bin_convert  # noqa: E402
+from scripts.particles.pic_analysis_utils import fit_exponential_growth  # noqa: E402
 from scripts.particles.pic_analysis_utils import (  # noqa: E402
     fit_exponential_growth_windowed,
 )
@@ -304,6 +305,36 @@ def _fit_log_growth(
     ss_tot = float(np.sum((logv - np.mean(logv)) ** 2))
     r2 = 1.0 if ss_tot <= 1.0e-30 else (1.0 - ss_res / ss_tot)
     return gamma, r2
+
+
+def _fit_proxy_stability_growth(
+    times: np.ndarray,
+    values: np.ndarray,
+) -> tuple[float, float] | None:
+    t = np.asarray(times, dtype=float)
+    v = np.asarray(values, dtype=float)
+    if t.size != v.size or t.size < 6:
+        return None
+    floor = max(1.0e-16, 1.0e-3 * float(np.max(v)))
+    gamma, _, r2 = fit_exponential_growth(
+        t, v + floor, float(t[2]), float(t[-3]), floor=1.0e-30
+    )
+    return float(gamma), float(r2)
+
+
+def _fit_publication_growth(
+    times: np.ndarray,
+    values: np.ndarray,
+) -> tuple[float, float] | None:
+    t = np.asarray(times, dtype=float)
+    v = np.asarray(values, dtype=float)
+    if t.size != v.size or t.size < 6:
+        return None
+    floor = max(1.0e-30, 1.0e-4 * float(np.max(v)))
+    fit = fit_exponential_growth_windowed(
+        t, v, min_points=6, floor=floor, min_growth_factor=2.0
+    )
+    return float(fit["gamma"]), float(fit["r2"])
 
 
 def _fit_sinusoid_fixed_freq(
@@ -590,7 +621,12 @@ def _plot_langmuir_trace(run_dir: Path, fig_dir: Path, dpi: int) -> Path | None:
     return out
 
 
-def _plot_two_stream_weibel(run_dir: Path, fig_dir: Path, dpi: int) -> Path | None:
+def _plot_two_stream_weibel(
+    run_dir: Path,
+    fig_dir: Path,
+    dpi: int,
+    allow_proxy_fallback: bool = True,
+) -> Path | None:
     ts_dir, _ = _select_case_dir(
         run_dir, ("two_stream_growth_publication", "two_stream_growth_proxy"), "bin"
     )
@@ -601,7 +637,7 @@ def _plot_two_stream_weibel(run_dir: Path, fig_dir: Path, dpi: int) -> Path | No
     ts_files_np1 = sorted(ts_dir.glob("pic_two_stream_pub_np1.mhd_bcc.*.bin"))
     ts_files_np2 = sorted(ts_dir.glob("pic_two_stream_pub_np2.mhd_bcc.*.bin"))
     ts_publication = bool(ts_files_np1 or ts_files_np2)
-    if not ts_publication:
+    if not ts_publication and allow_proxy_fallback:
         ts_files_np1 = sorted(
             ts_dir.glob("pic_two_stream_growth_proxy_np1.prtcl_rho.*.bin")
         )
@@ -612,7 +648,7 @@ def _plot_two_stream_weibel(run_dir: Path, fig_dir: Path, dpi: int) -> Path | No
     wb_files_np1 = sorted(wb_dir.glob("pic_weibel_pub_np1.mhd_bcc.*.bin"))
     wb_files_np2 = sorted(wb_dir.glob("pic_weibel_pub_np2.mhd_bcc.*.bin"))
     wb_publication = bool(wb_files_np1 or wb_files_np2)
-    if not wb_publication:
+    if not wb_publication and allow_proxy_fallback:
         wb_files_np1 = sorted(wb_dir.glob("pic_weibel_growth_proxy_np1.prtcl_jy.*.bin"))
         wb_files_np2 = sorted(wb_dir.glob("pic_weibel_growth_proxy_np2.prtcl_jy.*.bin"))
 
@@ -642,7 +678,11 @@ def _plot_two_stream_weibel(run_dir: Path, fig_dir: Path, dpi: int) -> Path | No
             axes[0].semilogy(
                 t_plot, a_safe, style, marker="o", ms=3, label=f"np{rank}"
             )
-            fit = _fit_log_growth(t_plot, a_plot, floor=floor)
+            fit = (
+                _fit_publication_growth(t_ts, a_ts)
+                if ts_publication
+                else _fit_proxy_stability_growth(t_ts, a_ts)
+            )
             if fit is not None:
                 gamma, r2 = fit
                 ann.append(f"np{rank}: g={gamma:.2e}, R2={r2:.2f}")
@@ -687,7 +727,11 @@ def _plot_two_stream_weibel(run_dir: Path, fig_dir: Path, dpi: int) -> Path | No
             axes[1].semilogy(
                 t_plot, a_safe, style, marker="o", ms=3, label=f"np{rank}"
             )
-            fit = _fit_log_growth(t_plot, a_plot, floor=floor)
+            fit = (
+                _fit_publication_growth(t_wb, a_wb)
+                if wb_publication
+                else _fit_proxy_stability_growth(t_wb, a_wb)
+            )
             if fit is not None:
                 gamma, r2 = fit
                 ann.append(f"np{rank}: g={gamma:.2e}, R2={r2:.2f}")
@@ -1183,13 +1227,18 @@ def _run_bundle(bundle: str, run_dir: Path, fig_dir: Path, dpi: int) -> list[Pat
             _plot_entity_deposit_maps,
             _plot_em_vacuum_convergence,
             _plot_langmuir_trace,
-            _plot_two_stream_weibel,
             _plot_bell_growth,
             _plot_multispecies_osc,
         ):
             out = fn(run_dir, fig_dir, dpi)
             if out is not None:
                 outputs.append(out)
+
+        out = _plot_two_stream_weibel(
+            run_dir, fig_dir, dpi, allow_proxy_fallback=True
+        )
+        if out is not None:
+            outputs.append(out)
 
         outputs.extend(_plot_crsi_crpai(run_dir, fig_dir, dpi))
 
@@ -1202,13 +1251,18 @@ def _run_bundle(bundle: str, run_dir: Path, fig_dir: Path, dpi: int) -> list[Pat
         for fn in (
             _plot_em_vacuum_convergence,
             _plot_langmuir_trace,
-            _plot_two_stream_weibel,
             _plot_bell_growth,
             _plot_multispecies_osc,
         ):
             out = fn(run_dir, fig_dir, dpi)
             if out is not None:
                 outputs.append(out)
+
+        out = _plot_two_stream_weibel(
+            run_dir, fig_dir, dpi, allow_proxy_fallback=False
+        )
+        if out is not None:
+            outputs.append(out)
 
         outputs.extend(_plot_crsi_crpai(run_dir, fig_dir, dpi))
 

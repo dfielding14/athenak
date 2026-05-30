@@ -10,14 +10,17 @@
 #include <string>
 #include <array>
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <fstream>
+#include <limits>
 #include <vector>
 #include <cstdlib>
-#include <Kokkos_Random.hpp>
 #include "athena.hpp"
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
+#include "mhd/mhd.hpp"
 #include "bvals/bvals.hpp"
 #include "particles.hpp"
 #include "units/units.hpp"
@@ -77,6 +80,68 @@ bool MomentBoundaryFlagSupported(BoundaryFlag flag) {
           (flag == BoundaryFlag::reflect));
 }
 
+bool DirectEdgeCurrentBoundaryFlagSupported(BoundaryFlag flag) {
+  return ((flag == BoundaryFlag::periodic) ||
+          (flag == BoundaryFlag::outflow) ||
+          (flag == BoundaryFlag::reflect));
+}
+
+int ParticlesInGlobalMeshBlock(const Real particles_per_mb, const int gid) {
+  const Real left = std::floor(particles_per_mb*static_cast<Real>(gid));
+  const Real right = std::floor(particles_per_mb*static_cast<Real>(gid + 1));
+  const Real nblock = std::max(static_cast<Real>(0.0), right - left);
+  if (nblock > static_cast<Real>(std::numeric_limits<int>::max())) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/ppc creates too many particles for one MeshBlock"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  return static_cast<int>(nblock);
+}
+
+int CountCosmicRayParticlesThisPack(MeshBlockPack *ppack, const Real ppc) {
+  auto &indcs = ppack->pmesh->mb_indcs;
+  const int ncells = indcs.nx1*indcs.nx2*indcs.nx3;
+  const Real particles_per_mb = ppc*static_cast<Real>(ncells);
+  int npart = 0;
+  for (int m = 0; m < ppack->nmb_thispack; ++m) {
+    const int gid = ppack->gids + m;
+    const int nblock = ParticlesInGlobalMeshBlock(particles_per_mb, gid);
+    if (nblock > std::numeric_limits<int>::max() - npart) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/ppc creates too many particles for an int counter"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    npart += nblock;
+  }
+  return npart;
+}
+
+KOKKOS_INLINE_FUNCTION
+std::uint64_t SplitMix64(std::uint64_t x) {
+  x += 0x9e3779b97f4a7c15ULL;
+  x = (x ^ (x >> 30))*0xbf58476d1ce4e5b9ULL;
+  x = (x ^ (x >> 27))*0x94d049bb133111ebULL;
+  return x ^ (x >> 31);
+}
+
+KOKKOS_INLINE_FUNCTION
+Real DeterministicUniform01(const int seed, const int gid, const int pinmb,
+                            const int component) {
+  std::uint64_t key = static_cast<std::uint64_t>(seed);
+  key ^= (static_cast<std::uint64_t>(gid) + 0x9e3779b97f4a7c15ULL)*
+         0xbf58476d1ce4e5b9ULL;
+  key ^= (static_cast<std::uint64_t>(pinmb + 1) + 0x94d049bb133111ebULL)*
+         0x9e3779b97f4a7c15ULL;
+  key ^= (static_cast<std::uint64_t>(component + 1))*0xd2b74407b1ce6e93ULL;
+  const std::uint64_t bits = SplitMix64(key);
+  return static_cast<Real>(bits >> 11)*
+         static_cast<Real>(1.0/9007199254740992.0);
+}
+
 void ValidateMomentBoundaryPolicy(Mesh *pmesh) {
   std::array<BoundaryFace, 6> faces = {
       BoundaryFace::inner_x1, BoundaryFace::outer_x1,
@@ -95,6 +160,32 @@ void ValidateMomentBoundaryPolicy(Mesh *pmesh) {
                 << "<particles>/deposit_moments=true does not support "
                 << BoundaryFaceName(face) << "=" << BoundaryFlagName(flag)
                 << " in PR3c (supported: periodic/inflow/outflow/reflect)"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+}
+
+void ValidateDirectEdgeCurrentBoundaryPolicy(Mesh *pmesh) {
+  std::array<BoundaryFace, 6> faces = {
+      BoundaryFace::inner_x1, BoundaryFace::outer_x1,
+      BoundaryFace::inner_x2, BoundaryFace::outer_x2,
+      BoundaryFace::inner_x3, BoundaryFace::outer_x3};
+  int nfaces = 2;
+  if (pmesh->multi_d) nfaces += 2;
+  if (pmesh->three_d) nfaces += 2;
+
+  for (int n = 0; n < nfaces; ++n) {
+    const auto face = faces[n];
+    BoundaryFlag flag = pmesh->mesh_bcs[face];
+    if (!DirectEdgeCurrentBoundaryFlagSupported(flag)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/couple_j_deposition_mode=direct_staggered does not "
+                << "support " << BoundaryFaceName(face) << "="
+                << BoundaryFlagName(flag)
+                << " in PR4 (supported: periodic/outflow/reflect; use "
+                << "couple_j_deposition_mode=cc_convert for inflow boundaries)"
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -125,11 +216,13 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       particle_type = ParticleType::cosmic_ray;
       // read number of particles per cell, and calculate number of particles this pack
       Real ppc = pin->GetOrAddReal("particles","ppc",1.0);
-      // compute number of particles as real number, since ppc can be < 1
-      auto &indcs = pmy_pack->pmesh->mb_indcs;
-      int ncells = indcs.nx1*indcs.nx2*indcs.nx3;
-      Real r_npart = ppc*static_cast<Real>((pmy_pack->nmb_thispack)*ncells);
-      nprtcl_thispack = static_cast<int>(r_npart); // then cast to integer
+      if (ppc < 0.0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "<particles>/ppc must be >= 0" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      nprtcl_thispack = CountCosmicRayParticlesThisPack(pmy_pack, ppc);
     } else if (ptype.compare("star") == 0) {
       particle_type = ParticleType::star;
       nprtcl_thispack = 0; // initialize to zero
@@ -175,6 +268,12 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       // Print number of particles loaded
       std::cout << "Loaded " << nprtcl_thispack
                 << " star particles from file " << particle_file << std::endl;
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "Unsupported value for <particles>/particle_type: "
+                << ptype << std::endl;
+      std::exit(EXIT_FAILURE);
     }
   }
 
@@ -185,15 +284,6 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       pusher = ParticlesPusher::drift;
     } else if (ppush.compare("rk4_gravity") == 0) {
       pusher = ParticlesPusher::rk4_gravity;
-      // load gravity constants
-      r_scale   = pin->GetReal("potential", "r_scale");
-      rho_scale = pin->GetReal("potential", "rho_scale");
-      m_gal     = pin->GetReal("potential", "mass_gal");
-      a_gal     = pin->GetReal("potential", "scale_gal");
-      z_gal     = pin->GetReal("potential", "z_gal");
-      r_200     = pin->GetReal("potential", "r_200");
-      rho_mean  = pin->GetReal("potential", "rho_mean");
-      par_grav_dx = pin->GetOrAddReal("particles", "grav_dx", 1e-6);
     } else if (ppush.compare("boris_lin") == 0) {
       pusher = ParticlesPusher::boris_lin;
     } else if (ppush.compare("boris_tsc") == 0) {
@@ -204,6 +294,39 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
                 <<std::endl;
       std::exit(EXIT_FAILURE);
     }
+  }
+
+  if (particle_type == ParticleType::star &&
+      (pusher == ParticlesPusher::boris_lin ||
+       pusher == ParticlesPusher::boris_tsc)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Boris pushers are incompatible with star particles; use "
+              << "<particles>/particle_type=cosmic_ray for boris_lin/boris_tsc, "
+              << "or use drift/rk4_gravity for star particles."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (particle_type == ParticleType::cosmic_ray &&
+      pusher == ParticlesPusher::rk4_gravity) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pusher=rk4_gravity requires "
+              << "<particles>/particle_type=star; cosmic-ray particles support "
+              << "drift, boris_lin, or boris_tsc."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (pusher == ParticlesPusher::rk4_gravity) {
+    // Gravity constants are only meaningful for the star-particle RK4 pusher.
+    r_scale   = pin->GetReal("potential", "r_scale");
+    rho_scale = pin->GetReal("potential", "rho_scale");
+    m_gal     = pin->GetReal("potential", "mass_gal");
+    a_gal     = pin->GetReal("potential", "scale_gal");
+    z_gal     = pin->GetReal("potential", "z_gal");
+    r_200     = pin->GetReal("potential", "r_200");
+    rho_mean  = pin->GetReal("potential", "rho_mean");
+    par_grav_dx = pin->GetOrAddReal("particles", "grav_dx", 1e-6);
   }
 
   // set dimensions of particle arrays. Note particles only work in 2D/3D
@@ -225,7 +348,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       {
         // CR payload now always carries sampled B/cE and per-step feedback deltas.
         track_displacement = pin->GetOrAddBoolean("particles","track_displacement",false);
-        nrdata = IPEBDOT + 1;
+        nrdata = IPWT + 1;
 
         nidata = 3;  // PGID, PTAG, PSP (species)
         break;
@@ -352,12 +475,30 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
   pic_enable_2d3v = pin->GetOrAddBoolean("particles", "pic_enable_2d3v", false);
+  if ((pusher == ParticlesPusher::boris_lin || pusher == ParticlesPusher::boris_tsc) &&
+      pmy_pack->pmesh->two_d && !pic_enable_2d3v) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Boris pushers in 2D require <particles>/pic_enable_2d3v=true; "
+              << "the reduced 2D/2V Lorentz-force path is not implemented."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
   pic_cr_light_speed = pin->GetOrAddReal("particles", "pic_cr_light_speed", 1.0);
   if (pic_cr_light_speed <= 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "<particles>/pic_cr_light_speed must be > 0" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (std::abs(pic_cr_light_speed - 1.0) >
+      64.0*std::numeric_limits<Real>::epsilon()) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_cr_light_speed is reserved for a future "
+              << "reduced-speed-of-light pusher; only the default value 1.0 "
+              << "is currently supported." << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -367,6 +508,25 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
               << std::endl
               << "<particles>/pic_max_cell_cross must be > 0" << std::endl;
     std::exit(EXIT_FAILURE);
+  }
+  {
+    const auto &indcs = pmy_pack->pmesh->mb_indcs;
+    int min_mb_cells = indcs.nx1;
+    if (pmy_pack->pmesh->multi_d) {
+      min_mb_cells = std::min(min_mb_cells, indcs.nx2);
+    }
+    if (pmy_pack->pmesh->three_d) {
+      min_mb_cells = std::min(min_mb_cells, indcs.nx3);
+    }
+    if (pic_max_cell_cross > min_mb_cells) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<particles>/pic_max_cell_cross must not exceed the smallest "
+                << "active MeshBlock dimension because particle exchange only "
+                << "supports nearest-neighbor MeshBlock crossings."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
   }
 
   pic_theta_max = pin->GetOrAddReal("particles", "pic_theta_max", 0.3);
@@ -396,8 +556,17 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "<particles>/pic_deltaf_mode=on requires "
-              << "<particles>/pic_deltaf_f0 to define background f0"
+              << "<particles>/pic_deltaf_f0 to select a staged quiet start"
               << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if ((pic_deltaf_mode == PICDeltaFMode::on) &&
+      !(pic_deltaf_f0.compare("kappa_iso") == 0 ||
+        pic_deltaf_f0.compare("uniform_quiet") == 0)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/pic_deltaf_f0: "
+              << pic_deltaf_f0 << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -406,6 +575,14 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "<particles>/pic_sort_interval must be >= 0" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
+  pic_random_seed = pin->GetOrAddInteger("particles", "pic_random_seed", 0);
+  if (pic_random_seed < 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/pic_random_seed must be >= 0" << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -521,6 +698,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     }
     ValidateMomentBoundaryPolicy(pmy_pack->pmesh);
+    if (direct_edge_mode) {
+      ValidateDirectEdgeCurrentBoundaryPolicy(pmy_pack->pmesh);
+    }
     if (pin->DoesBlockExist("shearing_box")) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl << "<particles>/deposit_moments=true does not support "
@@ -675,7 +855,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 
   if (pic_background_mode == PICBackgroundMode::no_mhd) {
     auto &indcs = pmy_pack->pmesh->mb_indcs;
-    int nmb = ppack->nmb_thispack;
+    int nmb = std::max((ppack->nmb_thispack), (ppack->pmesh->nmb_maxperrank));
     int ncells1 = indcs.nx1 + 2*(indcs.ng);
     int ncells2 = (indcs.nx2 > 1) ? (indcs.nx2 + 2*(indcs.ng)) : 1;
     int ncells3 = (indcs.nx3 > 1) ? (indcs.nx3 + 2*(indcs.ng)) : 1;
@@ -721,6 +901,12 @@ Particles::~Particles() {
 void Particles::InitializeCosmicRays(ParameterInput *pin) {
   // Read number of species
   nspecies = pin->GetOrAddInteger("particles","nspecies",1);
+  if (nspecies <= 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<particles>/nspecies must be > 0" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
   // Allocate species arrays
   Kokkos::realloc(species_mass, nspecies);
@@ -743,6 +929,12 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
     h_vx0(s) = pin->GetOrAddReal(block, "vx0", cr_vx0);
     h_vy0(s) = pin->GetOrAddReal(block, "vy0", cr_vy0);
     h_vz0(s) = pin->GetOrAddReal(block, "vz0", cr_vz0);
+    if (h_mass(s) <= 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "<" << block << ">/mass must be > 0" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
   }
 
   Kokkos::deep_copy(species_mass, h_mass);
@@ -761,17 +953,41 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
 
   // Determine distribution type for initial positions
   std::string dist = pin->GetOrAddString("particles", "cr_distribution", "center");
+  const bool center_dist = (dist.compare("center") == 0);
   const bool random_dist = (dist.compare("random") == 0);
+  if (!center_dist && !random_dist) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Unsupported value for <particles>/cr_distribution: "
+              << dist << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   const bool deltaf_quiet_start =
       (random_dist && pic_deltaf_mode == PICDeltaFMode::on);
   const bool track_disp_local = track_displacement;  // avoid capturing 'this'
+  const int nx1_local = indcs.nx1;                   // avoid capturing host refs
+  const int nx2_local = indcs.nx2;
   const int nx3_local = indcs.nx3;                   // avoid capturing host ref
 
-  // Avoid division by zero if there are fewer particles than meshblocks
-  int particles_per_mb = std::max(1, (nprtcl_thispack + nmb - 1) / nmb);
-
-  // Random number pool for optional random placement
-  Kokkos::Random_XorShift64_Pool<DevExeSpace> rand_pool64(pmy_pack->gids);
+  const Real ppc = pin->GetOrAddReal("particles", "ppc", 1.0);
+  const int ncells = nx1_local*nx2_local*nx3_local;
+  const Real particles_per_mb_real = ppc*static_cast<Real>(ncells);
+  DvceArray1D<int> block_offsets("cr_block_offsets", nmb + 1);
+  HostArray1D<int> h_block_offsets("cr_block_offsets_host", nmb + 1);
+  h_block_offsets(0) = 0;
+  for (int m = 0; m < nmb; ++m) {
+    const int gid = gids_local + m;
+    h_block_offsets(m + 1) =
+        h_block_offsets(m) + ParticlesInGlobalMeshBlock(particles_per_mb_real, gid);
+  }
+  if (h_block_offsets(nmb) != nprtcl_thispack) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Internal PIC particle-count mismatch during initialization."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  Kokkos::deep_copy(block_offsets, h_block_offsets);
 
   // Create local copies to avoid GPU lambda capture warnings
   int nspecies_local = nspecies;
@@ -781,29 +997,63 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
   auto species_vy0_local = species_vy0;
   auto species_vz0_local = species_vz0;
   const bool deltaf_quiet_start_local = deltaf_quiet_start;
+  const int pic_random_seed_local = pic_random_seed;
   // Make sure geometry is available on device
   size.template sync<DevExeSpace>();
   auto size_view = size;
   // Capture handle by value for use as size_view.d_view(...) on device.
+  const Real root_cell_vol =
+      pmy_pack->pmesh->mesh_size.dx1*
+      pmy_pack->pmesh->mesh_size.dx2*
+      pmy_pack->pmesh->mesh_size.dx3;
 
   // Simple uniform distribution for now
   par_for("init_cr", DevExeSpace(), 0, nprtcl_thispack-1,
   KOKKOS_LAMBDA(const int p) {
     // Determine which meshblock this particle belongs to
-    int m = p / particles_per_mb;
-    if (m >= nmb) m = nmb - 1;
+    int m = 0;
+    while ((m + 1) < nmb && p >= block_offsets(m + 1)) {
+      ++m;
+    }
+    const int pinmb = p - block_offsets(m);
+    const int position_index = pinmb/nspecies_local;
+    const int gid = gids_local + m;
 
     // Set GID and species
-    pi(PGID,p) = gids_local + m;
+    pi(PGID,p) = gid;
     pi(PTAG,p) = p;
-    pi(PSP,p) = p % nspecies_local;  // Round-robin species assignment
+    pi(PSP,p) = pinmb % nspecies_local;  // Round-robin species assignment per block
 
     // Choose position within the mesh block
     Real rx = 0.5, ry = 0.5, rz = 0.5;
-    if (random_dist) {
+    if (center_dist) {
+      const int particles_this_block = block_offsets(m + 1) - block_offsets(m);
+      const int positions_this_block =
+          (particles_this_block + nspecies_local - 1)/nspecies_local;
+      if (positions_this_block > 0 && ncells > 0) {
+        int cell_linear;
+        if (positions_this_block <= ncells) {
+          cell_linear = static_cast<int>(
+              (static_cast<Real>(position_index) + 0.5)*
+              static_cast<Real>(ncells)/static_cast<Real>(positions_this_block));
+          if (cell_linear >= ncells) cell_linear = ncells - 1;
+        } else {
+          cell_linear = position_index % ncells;
+        }
+
+        const int ci = cell_linear % nx1_local;
+        int rem = cell_linear/nx1_local;
+        const int cj = rem % nx2_local;
+        const int ck = rem/nx2_local;
+        rx = (static_cast<Real>(ci) + 0.5)/static_cast<Real>(nx1_local);
+        ry = (static_cast<Real>(cj) + 0.5)/static_cast<Real>(nx2_local);
+        rz = (nx3_local > 1) ?
+            (static_cast<Real>(ck) + 0.5)/static_cast<Real>(nx3_local) : 0.5;
+      }
+    } else if (random_dist) {
       if (deltaf_quiet_start_local) {
-        // Quiet-start low-discrepancy placement for staged delta-f noise control.
-        int n2 = p + 1;
+        // Low-discrepancy placement for staged quiet-start noise control.
+        int n2 = position_index + 1;
         Real w2 = 0.5;
         rx = 0.0;
         while (n2 > 0) {
@@ -812,7 +1062,7 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
           w2 *= 0.5;
         }
 
-        int n3 = p + 1;
+        int n3 = position_index + 1;
         Real w3 = 1.0/3.0;
         ry = 0.0;
         while (n3 > 0) {
@@ -822,7 +1072,7 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
         }
 
         if (nx3_local > 1) {
-          int n5 = p + 1;
+          int n5 = position_index + 1;
           Real w5 = 0.2;
           rz = 0.0;
           while (n5 > 0) {
@@ -832,13 +1082,11 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
           }
         }
       } else {
-        auto rand_gen = rand_pool64.get_state();
-        rx = rand_gen.drand();
-        ry = rand_gen.drand();
+        rx = DeterministicUniform01(pic_random_seed_local, gid, position_index, 0);
+        ry = DeterministicUniform01(pic_random_seed_local, gid, position_index, 1);
         if (nx3_local > 1) {
-          rz = rand_gen.drand();
+          rz = DeterministicUniform01(pic_random_seed_local, gid, position_index, 2);
         }
-        rand_pool64.free_state(rand_gen);
       }
     }
 
@@ -872,6 +1120,9 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
     pr(IPDPZ,p) = 0.0;
     pr(IPDE,p) = 0.0;
     pr(IPEBDOT,p) = 0.0;
+    pr(IPWT,p) = (size_view.d_view(m).dx1*
+                  size_view.d_view(m).dx2*
+                  size_view.d_view(m).dx3)/root_cell_vol;
 
     // Initialize displacement tracking if enabled
     if (track_disp_local) {
@@ -881,6 +1132,7 @@ void Particles::InitializeCosmicRays(ParameterInput *pin) {
       pr(IPDB,p) = 0.0;
     }
   });
+  Kokkos::fence();
 
   // Set timestep
   auto &dx = size.h_view(0);
@@ -933,6 +1185,133 @@ void Particles::InitializeStars(std::vector<std::array<Real, 9>> &particle_list)
 
   dtnew = std::min(size.h_view(0).dx1, size.h_view(0).dx2);
   dtnew = std::min(dtnew, size.h_view(0).dx3);
+}
+
+//----------------------------------------------------------------------------------------
+// NewTimeStep()
+// Calculates the particle timestep limit.
+
+void Particles::NewTimeStep() {
+  const Real max_dt = std::numeric_limits<Real>::max();
+  if (particle_type != ParticleType::cosmic_ray) {
+    auto &size = pmy_pack->pmb->mb_size;
+    size.template sync<HostMemSpace>();
+    Real dt_part = max_dt;
+    for (int m = 0; m < pmy_pack->nmb_thispack; ++m) {
+      Real dx_min = size.h_view(m).dx1;
+      if (pmy_pack->pmesh->multi_d) {
+        dx_min = std::min(dx_min, size.h_view(m).dx2);
+      }
+      if (pmy_pack->pmesh->three_d) {
+        dx_min = std::min(dx_min, size.h_view(m).dx3);
+      }
+      dt_part = std::min(dt_part, dx_min);
+    }
+    dtnew = dt_part;
+    return;
+  }
+
+  if (nprtcl_thispack <= 0) {
+    dtnew = max_dt;
+    return;
+  }
+
+  const bool multi_d = pmy_pack->pmesh->multi_d;
+  const bool three_d = pmy_pack->pmesh->three_d;
+  const int gids = pmy_pack->gids;
+  const int nmb = pmy_pack->nmb_thispack;
+  const Real max_cell_cross = static_cast<Real>(pic_max_cell_cross);
+  auto &size = pmy_pack->pmb->mb_size;
+  auto &pi = prtcl_idata;
+  auto &pr = prtcl_rdata;
+
+  size.template sync<DevExeSpace>();
+  auto size_view = size;
+
+  Real dt_part = max_dt;
+  Kokkos::parallel_reduce(
+      "ParticlesNewTimeStep", Kokkos::RangePolicy<>(DevExeSpace(), 0, nprtcl_thispack),
+      KOKKOS_LAMBDA(const int &p, Real &min_dt) {
+        int m = pi(PGID, p) - gids;
+        if (m < 0 || m >= nmb) return;
+
+        Real candidate = max_dt;
+        Real vx = fabs(pr(IPVX, p));
+        Real vy = fabs(pr(IPVY, p));
+        Real vz = fabs(pr(IPVZ, p));
+
+        if (vx > 0.0) {
+          candidate = fmin(candidate, max_cell_cross*size_view.d_view(m).dx1/vx);
+        }
+        if (multi_d && vy > 0.0) {
+          candidate = fmin(candidate, max_cell_cross*size_view.d_view(m).dx2/vy);
+        }
+        if (three_d && vz > 0.0) {
+          candidate = fmin(candidate, max_cell_cross*size_view.d_view(m).dx3/vz);
+        }
+        min_dt = fmin(min_dt, candidate);
+      },
+      Kokkos::Min<Real>(dt_part));
+
+  if (pusher == ParticlesPusher::boris_lin || pusher == ParticlesPusher::boris_tsc) {
+    Real qom_max = 0.0;
+    Kokkos::parallel_reduce(
+        "ParticlesNewTimeStepQom",
+        Kokkos::RangePolicy<>(DevExeSpace(), 0, nprtcl_thispack),
+        KOKKOS_LAMBDA(const int &p, Real &max_qom) {
+          max_qom = fmax(max_qom, fabs(pr(IPM, p)));
+        },
+        Kokkos::Max<Real>(qom_max));
+
+    DvceArray5D<Real> bcc;
+    if (pic_background_mode == PICBackgroundMode::no_mhd) {
+      bcc = pic_no_mhd_bcc0;
+    } else if (pmy_pack->pmhd != nullptr) {
+      bcc = pmy_pack->pmhd->bcc0;
+    }
+
+    if (bcc.size() > 0 && qom_max > 0.0) {
+      auto &indcs = pmy_pack->pmesh->mb_indcs;
+      const int is = indcs.is;
+      const int js = indcs.js;
+      const int ks = indcs.ks;
+      const int nx1 = indcs.nx1;
+      const int nx2 = indcs.nx2;
+      const int nx3 = indcs.nx3;
+      const int nkji = nx3*nx2*nx1;
+      const int nji = nx2*nx1;
+      const int nmkji = nmb*nkji;
+      Real b2_max = 0.0;
+
+      Kokkos::parallel_reduce(
+          "ParticlesNewTimeStepBmax",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+          KOKKOS_LAMBDA(const int &idx, Real &max_b2) {
+            const int m = idx/nkji;
+            int rem = idx - m*nkji;
+            int k = rem/nji;
+            rem -= k*nji;
+            int j = rem/nx1;
+            int i = rem - j*nx1;
+            k += ks;
+            j += js;
+            i += is;
+
+            const Real bx = bcc(m, IBX, k, j, i);
+            const Real by = bcc(m, IBY, k, j, i);
+            const Real bz = bcc(m, IBZ, k, j, i);
+            max_b2 = fmax(max_b2, bx*bx + by*by + bz*bz);
+          },
+          Kokkos::Max<Real>(b2_max));
+
+      if (b2_max > 0.0) {
+        const Real omega_max = qom_max*std::sqrt(b2_max);
+        dt_part = std::min(dt_part, pic_theta_max/omega_max);
+      }
+    }
+  }
+
+  dtnew = dt_part;
 }
 
 //----------------------------------------------------------------------------------------

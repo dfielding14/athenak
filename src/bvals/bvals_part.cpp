@@ -7,7 +7,9 @@
 //! \brief
 
 #include <cstdlib>
+#include <cmath>
 #include <iostream>
+#include <string>
 #include <utility>
 #include <vector>
 #include <algorithm>
@@ -68,6 +70,11 @@ constexpr int kMaxParticleNeighbors = 56;
 KOKKOS_INLINE_FUNCTION
 bool IsPeriodicParticleBoundary(const BoundaryFlag flag) {
   return (flag == BoundaryFlag::periodic || flag == BoundaryFlag::shear_periodic);
+}
+
+KOKKOS_INLINE_FUNCTION
+int ParticleMeshBlockOffset(const Real x, const Real xmin, const Real block_length) {
+  return static_cast<int>(floor((x - xmin + block_length)/block_length)) - 1;
 }
 
 template <typename NeighborViewType>
@@ -155,9 +162,9 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
     Real lz = (mbsize.d_view(m).x3max - mbsize.d_view(m).x3min);
 
     // integer offset of particle relative to center of MeshBlock (-1,0,+1)
-    int ix = static_cast<int>((x1 - mbsize.d_view(m).x1min + lx)/lx) - 1;
-    int iy = static_cast<int>((x2 - mbsize.d_view(m).x2min + ly)/ly) - 1;
-    int iz = static_cast<int>((x3 - mbsize.d_view(m).x3min + lz)/lz) - 1;
+    int ix = ParticleMeshBlockOffset(x1, mbsize.d_view(m).x1min, lx);
+    int iy = ParticleMeshBlockOffset(x2, mbsize.d_view(m).x2min, ly);
+    int iz = ParticleMeshBlockOffset(x3, mbsize.d_view(m).x3min, lz);
 
     if (ix < -1 || ix > 1 || iy < -1 || iy > 1 || iz < -1 || iz > 1) {
       MarkForDestruction(&atom_d_count(), pdestroyl, p);
@@ -177,39 +184,39 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
       if (ix < 0) {
         // level might be initizialized to -1 on some neighbours
         for (int iop = 0; iop <= 3; ++iop) {
-          if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev > 0) {
+          if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev >= 0) {
             send_to_coarser = true;
           }
         }
       } else if (ix > 0) {
          for (int iop = 4; iop <= 7; ++iop) {
-          if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev > 0) {
+          if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev >= 0) {
             send_to_coarser = true;
           }
          }
       }
       if (iy < 0) {
         for (int iop = 8; iop <= 11; ++iop) {
-          if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev > 0) {
+          if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev >= 0) {
             send_to_coarser = true;
           }
         }
       } else if (iy > 0) {
         for (int iop = 12; iop <= 15; ++iop) {
-          if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev > 0) {
+          if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev >= 0) {
             send_to_coarser = true;
           }
         }
       }
       if (iz < 0) {
         for (int iop = 24; iop <= 27; ++iop) {
-          if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev > 0) {
+          if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev >= 0) {
             send_to_coarser = true;
           }
         }
       } else if (iz > 0) {
           for (int iop = 28; iop <= 31; ++iop) {
-            if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev > 0) {
+            if (nghbr.d_view(m,iop).lev < mylevel && nghbr.d_view(m,iop).lev >= 0) {
               send_to_coarser = true;
             }
         }
@@ -404,17 +411,17 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
           // reset x,y,z positions if particle crosses Mesh boundary using periodic BCs
           if (x1 < meshsize.x1min) {
             pr(IPX,p) += (meshsize.x1max - meshsize.x1min);
-          } else if (x1 > meshsize.x1max) {
+          } else if (x1 >= meshsize.x1max) {
             pr(IPX,p) -= (meshsize.x1max - meshsize.x1min);
           }
           if (x2 < meshsize.x2min) {
             pr(IPY,p) += (meshsize.x2max - meshsize.x2min);
-          } else if (x2 > meshsize.x2max) {
+          } else if (x2 >= meshsize.x2max) {
             pr(IPY,p) -= (meshsize.x2max - meshsize.x2min);
           }
           if (x3 < meshsize.x3min) {
             pr(IPZ,p) += (meshsize.x3max - meshsize.x3min);
-          } else if (x3 > meshsize.x3max) {
+          } else if (x3 >= meshsize.x3max) {
             pr(IPZ,p) -= (meshsize.x3max - meshsize.x3min);
           }
         }

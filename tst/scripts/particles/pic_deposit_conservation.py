@@ -82,16 +82,23 @@ def _expected_totals(arguments):
     nx2 = int(mesh['nx2'])
     nx3 = int(mesh['nx3'])
     ppc = float(particles['ppc'])
+    nspecies = int(particles['nspecies'])
+    cr_distribution = str(particles['cr_distribution'])
     qscale = float(particles['deposit_qscale'])
     charge = float(species0['charge'])
+    vx0 = float(particles['cr_vx0'])
+    vy0 = float(particles['cr_vy0'])
+    vz0 = float(particles['cr_vz0'])
 
     npart = int(ppc * nx1 * nx2 * nx3)
     return {
         'npart': float(npart),
         'Q': float(npart) * qscale * charge,
-        'Jx': 0.0,
-        'Jy': 0.0,
-        'Jz': 0.0,
+        'Jx': float(npart) * qscale * charge * vx0,
+        'Jy': float(npart) * qscale * charge * vy0,
+        'Jz': float(npart) * qscale * charge * vz0,
+        'uniform_center_pdens': (
+            cr_distribution == 'center' and nspecies == 1 and ppc == 1.0),
     }
 
 
@@ -136,6 +143,8 @@ def _measure_case(basename):
         'Jy': _integrate_quantity(jy_data, 'prtcl_jy'),
         'Jz': _integrate_quantity(jz_data, 'prtcl_jz'),
         'npart': float(np.sum(pdens_data['pdens'])),
+        'pdens_min': float(np.min(pdens_data['pdens'])),
+        'pdens_max': float(np.max(pdens_data['pdens'])),
     }
 
 
@@ -182,6 +191,29 @@ def run(**kwargs):
             'nproc': 1,
             'args': ['job/basename=pic_dep_cons_serial'],
         },
+        {
+            'name': 'serial_nonunit_cell_volume',
+            'basename': 'pic_dep_cons_nonunit_volume',
+            'nproc': 1,
+            'args': ['job/basename=pic_dep_cons_nonunit_volume',
+                     'mesh/x1max=32.0',
+                     'particles/cr_vx0=0.50',
+                     'particles/cr_vy0=-0.25',
+                     'particles/cr_vz0=0.125'],
+        },
+        {
+            'name': 'serial_reflect_x1_crossing',
+            'basename': 'pic_dep_cons_reflect_x1_crossing',
+            'nproc': 1,
+            'args': ['job/basename=pic_dep_cons_reflect_x1_crossing',
+                     'mesh/ix1_bc=reflect',
+                     'mesh/ox1_bc=reflect',
+                     'particles/cr_vx0=8.0',
+                     'particles/cr_vy0=0.0',
+                     'particles/cr_vz0=0.0'],
+            'check_current_totals': False,
+            'expect_uniform_pdens': False,
+        },
     ]
     if _athena_mpi_enabled():
         positive_cases.append({
@@ -199,6 +231,8 @@ def run(**kwargs):
         _POSITIVE_RESULTS[case['name']] = {
             'measured': _measure_case(case['basename']),
             'expected': _expected_totals(case['args']),
+            'check_current_totals': case.get('check_current_totals', True),
+            'expect_uniform_pdens': case.get('expect_uniform_pdens', True),
         }
 
     _run_command(
@@ -265,11 +299,69 @@ def run(**kwargs):
         expected_message='Unsupported value for <particles>/pic_expanding_box_mode',
     )
     _run_command(
+        'guard_invalid_particle_type',
+        1,
+        ['particles/particle_type=bad_type', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='Unsupported value for <particles>/particle_type',
+    )
+    _run_command(
+        'guard_invalid_ppc',
+        1,
+        ['particles/ppc=-1.0', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='<particles>/ppc must be >= 0',
+    )
+    _run_command(
+        'guard_invalid_cr_distribution',
+        1,
+        ['particles/cr_distribution=bad_distribution', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='Unsupported value for <particles>/cr_distribution',
+    )
+    _run_command(
+        'guard_invalid_pic_random_seed',
+        1,
+        ['particles/pic_random_seed=-1', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='<particles>/pic_random_seed must be >= 0',
+    )
+    _run_command(
+        'guard_invalid_nspecies',
+        1,
+        ['particles/nspecies=0', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='<particles>/nspecies must be > 0',
+    )
+    _run_command(
+        'guard_invalid_species_mass',
+        1,
+        ['species0/mass=0.0', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='<species0>/mass must be > 0',
+    )
+    _run_command(
+        'guard_reserved_pic_cr_light_speed',
+        1,
+        ['particles/pic_cr_light_speed=2.0', 'time/nlim=0'],
+        expect_fail=True,
+        expected_message='<particles>/pic_cr_light_speed is reserved',
+    )
+    _run_command(
         'guard_pic_deltaf_requires_f0',
         1,
         ['particles/pic_deltaf_mode=on', 'time/nlim=0'],
         expect_fail=True,
         expected_message='requires <particles>/pic_deltaf_f0',
+    )
+    _run_command(
+        'guard_invalid_pic_deltaf_f0',
+        1,
+        ['particles/pic_deltaf_mode=on',
+         'particles/pic_deltaf_f0=not_a_supported_f0',
+         'time/nlim=0'],
+        expect_fail=True,
+        expected_message='Unsupported value for <particles>/pic_deltaf_f0',
     )
     _run_command(
         'guard_pic_expansion_rate_requires_mode',
@@ -284,22 +376,27 @@ def analyze():
     logger.debug('Analyzing test ' + __name__)
     ok = True
 
-    for case_name in ['serial', 'mpi2']:
-        if case_name not in _POSITIVE_RESULTS:
-            continue
-        result = _POSITIVE_RESULTS[case_name]
+    for case_name, result in _POSITIVE_RESULTS.items():
         measured = result['measured']
         expected = result['expected']
         ok = _check_with_tolerance(case_name + ':Q', measured['Q'], expected['Q'],
                                    1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':Jx', measured['Jx'], expected['Jx'],
-                                   1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':Jy', measured['Jy'], expected['Jy'],
-                                   1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':Jz', measured['Jz'], expected['Jz'],
-                                   1.0e-6, 1.0e-8) and ok
+        if result['check_current_totals']:
+            ok = _check_with_tolerance(case_name + ':Jx', measured['Jx'],
+                                       expected['Jx'], 1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':Jy', measured['Jy'],
+                                       expected['Jy'], 1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':Jz', measured['Jz'],
+                                       expected['Jz'], 1.0e-6, 1.0e-8) and ok
         ok = _check_with_tolerance(case_name + ':npart', measured['npart'],
                                    expected['npart'], 1.0e-6, 1.0e-8) and ok
+        if expected['uniform_center_pdens'] and result['expect_uniform_pdens']:
+            ok = _check_with_tolerance(case_name + ':pdens_min',
+                                       measured['pdens_min'], 1.0,
+                                       1.0e-6, 1.0e-8) and ok
+            ok = _check_with_tolerance(case_name + ':pdens_max',
+                                       measured['pdens_max'], 1.0,
+                                       1.0e-6, 1.0e-8) and ok
 
     if 'mpi2' in _POSITIVE_RESULTS:
         serial = _POSITIVE_RESULTS['serial']['measured']
@@ -315,9 +412,9 @@ def analyze():
     else:
         logger.info('No MPI run requested: serial-only non-MPI sanity path')
 
-    ok = len(_NEGATIVE_RESULTS) == 11 and ok
-    if len(_NEGATIVE_RESULTS) != 11:
-        logger.warning('Expected 11 negative checks, got %d',
+    ok = len(_NEGATIVE_RESULTS) == 19 and ok
+    if len(_NEGATIVE_RESULTS) != 19:
+        logger.warning('Expected 19 negative checks, got %d',
                        len(_NEGATIVE_RESULTS))
 
     return ok

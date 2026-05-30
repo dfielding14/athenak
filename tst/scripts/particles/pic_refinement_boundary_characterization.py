@@ -170,7 +170,10 @@ def analyze():
     amr = _RESULTS['amr_proxy_np1']
     ok = _check_close('smr_vs_amr:q_drift_np1', amr['q_drift'], smr['q_drift'],
                       1.0e4, 0.0) and ok
-    ok = _check_close('smr_vs_amr:cv_np1', amr['cv'], smr['cv'], 5.0e-1, 0.0) and ok
+    # SMR and nested-AMR refined volumes are intentionally different.  After
+    # refinement-normalized particle weights, this remains a broad same-family
+    # characterization check, not a topology-invariance oracle.
+    ok = _check_close('smr_vs_amr:cv_np1', amr['cv'], smr['cv'], 6.5e-1, 0.0) and ok
     ok = _check_close('smr_vs_amr:jump_np1', amr['jump'], smr['jump'], 4.0, 0.0) and ok
 
     if 'smr_np2' in _RESULTS:

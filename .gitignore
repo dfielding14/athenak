@@ -12,6 +12,10 @@ docs/build/
 *.hst
 *.rst
 
+# Local regression and publication artifacts
+tst/.codex/
+tst/pic_*debug*.log
+
 # Mac OS metadata
 .DS_Store
 .vscode

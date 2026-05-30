@@ -46,8 +46,8 @@ x3max = 6.0
 <time>
 evolution  = dynamic
 integrator = rk2
-cfl_number = 0.2
-nlim       = 80
+cfl_number = 0.5
+nlim       = 240
 tlim       = 20.0
 ndiag      = 1
 

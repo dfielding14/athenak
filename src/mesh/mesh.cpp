@@ -51,6 +51,7 @@ Mesh::Mesh(ParameterInput *pin) :
   nmb_packs_thisrank(1),
   nprtcl_thisrank(0),
   nprtcl_total(0),
+  nprtcl_eachrank(nullptr),
   dtold(0.) {
   // Set physical size and number of cells in mesh (root level)
   mesh_size.x1min = pin->GetReal("mesh", "x1min");
@@ -340,6 +341,7 @@ Mesh::~Mesh() {
   delete [] lloc_eachmb;
   delete [] gids_eachrank;
   delete [] nmb_eachrank;
+  delete [] nprtcl_eachrank;
   delete pmb_pack;
   if (multilevel) {
     delete pmr;
@@ -631,6 +633,7 @@ void Mesh::NewTimeStep(const Real tlim) {
   }
   // Particles timestep
   if (pmb_pack->ppart != nullptr) {
+    pmb_pack->ppart->NewTimeStep();
     dt = std::min(dt, (cfl_no)*(pmb_pack->ppart->dtnew) );
   }
 
@@ -669,12 +672,13 @@ void Mesh::AddCoordinatesAndPhysics(ParameterInput *pinput) {
 
 void Mesh::CountParticles() {
   // Determine total number of particles across all ranks
-  particles::Particles *ppart = pmb_pack->ppart;
-  nprtcl_thisrank = 0.0;
+  nprtcl_thisrank = 0;
   for (int n=0; n<nmb_packs_thisrank; ++n) {
     nprtcl_thisrank += pmb_pack->ppart->nprtcl_thispack;
   }
-  nprtcl_eachrank = new int[global_variable::nranks];
+  if (nprtcl_eachrank == nullptr) {
+    nprtcl_eachrank = new int[global_variable::nranks];
+  }
   nprtcl_eachrank[global_variable::my_rank] = nprtcl_thisrank;
 #if MPI_PARALLEL_ENABLED
   // Share number of particles on each rank with all ranks
@@ -685,5 +689,3 @@ void Mesh::CountParticles() {
     nprtcl_total += nprtcl_eachrank[n];
   }
 }
-
-

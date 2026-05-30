@@ -90,6 +90,8 @@ then should Frontier be used for GPU, AMR, scaling, and publication simulations.
 | `src/pgen/tests/pic_parallel_shock.cpp` | Shock initialization, injection, feedback subtraction, refinement behavior |
 | `inputs/tests/pic_*.athinput` and `tst/scripts/particles/pic_*.py` | Current tests and proposed publication workflows |
 | `tst/publication/PIC_LARGE_MACHINE_VALIDATION.md` | Previously documented local validation and large-machine workflow ideas, absorbed and expanded here |
+| Entity Toolkit wiki, <https://entity-toolkit.github.io/wiki/> | Comparative reference for documented particle methods, output controls, checkpoints, diagnostics and Frontier practices; not the governing MHD-PIC model |
+| `/Users/dbf75/Work/Research/AthenaK/entity` at local commit `a59065fc` | Source-level comparison of particle storage/pushers, current deposition tests, filtering, outputs, timers, parameter/restart contracts and example problems |
 | OLCF Frontier User Guide | Frontier node layout, GPU-aware MPI setup, task/GPU binding, and `debug` QOS restrictions |
 
 The checked-in reference-paper directory in the reviewed working tree contains
@@ -125,6 +127,8 @@ Every one of the following is currently required:
 - Frontier HIP/MPI validation and controlled scaling results.
 - Restart, decomposition, boundary, robustness, usability, and documentation
   qualification on the final model.
+- Frozen, provenance-recorded Entity comparison material for any shared-kernel
+  differential test used as production evidence.
 
 ## Reference-Paper Reproduction Contract
 
@@ -214,6 +218,7 @@ For each experiment, archive all of:
 | PIC-P1-003 | P1 | Shock setup contains a minimal directed injection construction and cannot yet satisfy the full paper setup | `src/pgen/tests/pic_parallel_shock.cpp`; shock input decks; paper Section 5.4 | Shock acceleration plots cannot yet be publication evidence | Establish exact injection distribution, units and diagnostic contract after P0 work |
 | PIC-P1-004 | P1 | Sorting/intermediate-array/load-cost controls are not demonstrated as effective production mechanisms | particle runtime controls; load-balance code; paper Section 4 | Performance and load-balance claims are unsupported | Implement and benchmark, or clearly remove claims and unsupported inputs |
 | PIC-P1-005 | P1 | Existing publication-named tests frequently assert sign/parity rather than analytical paper oracles | `tst/scripts/particles/pic_*publication.py` and proxy suites | Passing suite can overstate physical confidence | Reclassify proxies and add quantitative reference tests |
+| PIC-P1-006 | P1 | The `pic_entity_deposit_*` tests use Entity-oriented names but currently demonstrate AthenaK integrated-moment and decomposition parity checks rather than a provenance-frozen differential comparison with Entity kernels | `tst/scripts/particles/pic_entity_deposit_mink.py`, `pic_entity_deposit_reflect.py`; Entity `src/kernels/currents_deposit.hpp` and `src/kernels/tests/deposit.cpp` | An apparently external cross-check can be overinterpreted as independent validation | Either rename the tests as internal deposit regressions or add a bounded, frozen Entity-reference comparison for shared deposition behavior |
 
 ### What May Be Retained
 
@@ -229,6 +234,58 @@ repair, the following components are productive foundations:
 Retaining these foundations is conditional: their names, documentation and
 pass criteria must accurately reflect whether they validate infrastructure,
 proxy behavior or actual paper physics.
+
+## Entity Toolkit Comparative Audit And Adoption Decisions
+
+### Review Scope And Boundary
+
+The Entity Toolkit wiki and local Entity source tree were reviewed as an
+independent implementation reference. The local comparison used commit
+`a59065fc`; that checkout was locally ahead of its configured upstream at the
+time of review, so future differential tests must freeze the exact Entity
+source snapshot, commit identifier and checksum used to construct an oracle.
+
+Entity is a relativistic Vlasov-Maxwell PIC code with electromagnetic field
+evolution. Sun and Bai require a hybrid MHD-PIC model whose paper-tested mode
+retains ideal-MHD induction and couples particles to gas through conservative
+momentum and energy exchange. Entity is therefore useful for shared particle
+numerics, verification patterns and operational discipline. It is not a
+physics oracle for the AthenaK `paper_mhd_pic` field-coupling algorithm.
+
+### Transferable Requirements To Adopt
+
+| Entity practice observed in documentation/source | Why it matters here | Required AthenaK action and gate |
+| --- | --- | --- |
+| Relativistic particle state and analytical pusher checks: Entity stores spatial four-velocity-like momentum state, advances a gamma-dependent Boris/Vay update and tests uniform-field gyro behavior | AthenaK currently lacks the paper-required mass-normalized momentum and configurable artificial `C` implementation | Use Entity only as a test-design reference while implementing the Sun and Bai `p/m`, `gamma(C)` and energy definitions; add kernel-level orbit, phase and energy tests before end-to-end paper tests |
+| Previous/current particle positions and trajectory-deposition tests, including discrete current-divergence checks and multiple shape orders | AthenaK already has Entity-named deposit regressions and direct-staggered extension paths, but their independent reference status is incomplete | Create a frozen differential/reference harness for the deposition behavior genuinely shared with Entity, limited to AthenaK-supported orders and compatible current-diagnostic or extension modes; require local stencil, continuity, boundary and MPI checks |
+| Per-species particle tracking and payload/provenance fields | Shock injection, delta-f weights, migration and restart require traceable particle histories | Define persistent species ID, injection cohort/source, birth time, tracking ID and delta-f state metadata; verify migration, AMR and restart preserve these fields |
+| On-run spectra plus aggregate field/current/particle statistics | Paper shock, CRSI and CRPAI claims depend on distributions and spectra, not only scalar proxies | Provide species- and cohort-resolved weighted spectra with bin edges and definitions in output; cross-check in-run reductions against independent postprocessing |
+| Explicit checkpoint metadata and parameter lifecycle distinction between immutable physical setup and mutable run controls | Restarts must not silently change the simulated equations | Version the PIC restart schema; freeze physical mode, species, pusher, `C`, deposition policy, delta-f, box and AMR-coupling settings across restart; reject mismatches with deterministic diagnostics while recording allowed cadence/output changes |
+| Named kernel/substep timers and reported particle memory footprint | Frontier performance, particle-aware balancing and capacity estimates require evidence rather than flags | Record pusher, deposition, coupling, communication, sorting, AMR/load-balance, output and checkpoint timers plus memory/count telemetry by species and mesh level; archive them in Frontier manifests |
+| Tested bin/tag sorting utilities and periodic particle maintenance controls | Spatial ordering may improve GPU deposition/push locality, but can alter ordering and expose determinism issues | Treat Entity-style sorting as a benchmark candidate only; enable in production only after physics-invariance, restart, CPU/GPU and cost-benefit tests pass |
+
+### Deliberate Non-Adoptions
+
+| Entity capability or practice | Decision for this plan | Reason and required handling |
+| --- | --- | --- |
+| Electromagnetic Maxwell/current-to-field evolution | Do not import into `paper_mhd_pic` | It changes the governing model; paper mode must use the derived MHD feedback contract. Any future extension needs separate equations, names and tests |
+| Digital filtering/smoothing of deposited current | Do not enable for paper reproduction by default | Filtering can change conservation and instability spectra. A separately named extension would require preservation, boundary/corner, growth-rate and convergence studies |
+| Entity shock or Bell example decks | Do not treat as reproduction inputs | They exercise a full kinetic electromagnetic model rather than the required hybrid MHD-PIC experiment; retain only transferable diagnostics or bookkeeping ideas |
+| Vay/GCA/radiative-cooling/GR machinery | Out of scope for production readiness of this paper mode | They do not close any current Sun and Bai reproduction blocker and would expand the validation surface |
+| Entity-specific Frontier recommendation concerning GPU-aware MPI | Do not copy as an AthenaK default | Communication behavior is application dependent. Keep the official OLCF-supported baseline, then perform a short AthenaK A/B correctness/performance comparison and record the chosen environment |
+
+### Consequences For Validation
+
+1. Any Entity-derived oracle must state which quantity is shared between the
+   two codes and which physics is intentionally excluded.
+2. Existing `pic_entity_deposit_*` cases remain infrastructure regressions
+   unless a frozen source/formula provenance record and direct differential
+   comparison are added.
+3. Entity comparisons cannot close a paper-physics gate involving gas feedback,
+   induction, delta-f evolution, expanding-box MHD evolution or paper
+   benchmark parameters.
+4. Differences discovered by a valid shared-kernel comparison must be entered
+   in the findings ledger before a threshold or algorithm is changed.
 
 ## Production-Quality Architecture Contract
 
@@ -276,6 +333,10 @@ Production output must permit an independent audit of:
 - Delta-f weight statistics and background/perturbation decomposition.
 - Expanding-box scale factors and source-term energy/momentum accounting.
 - Restart metadata sufficient to assert bitwise or tolerance-level continuity.
+- Tracked particle provenance and species/cohort-resolved spectra sufficient to
+  audit injection, acceleration, migration and weighted distributions.
+- Kernel timers, particle memory and mesh-level population/load information
+  sufficient to distinguish physical failure from capacity or imbalance.
 
 ## Implementation Workstreams And Acceptance Gates
 
@@ -375,6 +436,10 @@ Implement the particle mechanics required by the paper.
    restart break.
 6. Enforce and record particle timestep constraints for maximum crossing count
    and gyro-angle.
+7. Use the frozen Entity pusher implementation and analytical test pattern only
+   as a comparative implementation aid: document the mapping from Entity's
+   normalized relativistic state to AthenaK's paper-defined `p/m` and
+   artificial `C`, and do not substitute Entity's unit conventions.
 
 ### Tests
 
@@ -382,6 +447,7 @@ Implement the particle mechanics required by the paper.
 | --- | --- | --- |
 | Zero-field ballistic motion | State and position update sanity | Exact/tight-roundoff trajectory and restart parity |
 | Uniform magnetic-field gyro-motion | Paper Section 5.1 oracle | Second-order phase convergence, bounded energy error, correct `C` dependence |
+| Entity-reference pusher microtest | Independent shared-kernel comparison | A frozen reference formulation agrees for matched normalized cases, while AthenaK-specific `C` scaling is validated separately against the paper equations |
 | Uniform electric-field energy gain | Momentum-energy consistency | Work equals kinetic-energy change within convergence tolerance |
 | Midpoint crossed-field orbit | Field interpolation and centering | Error decreases at designed order |
 | Timestep guard tests | Safety | Runs exceeding crossing/gyro limits abort with deterministic reason |
@@ -412,6 +478,8 @@ Implement the feedback model actually described in the paper.
    synchronization, including periodic, reflecting and outflow boundaries.
 5. Add global diagnostic residuals that are independent of the update kernel
    implementation.
+6. Keep any Entity-derived trajectory/current-deposition comparison explicitly
+   separated from paper-mode gas feedback and CT induction qualification.
 
 ### Tests
 
@@ -420,6 +488,7 @@ Implement the feedback model actually described in the paper.
 | Single particle plus uniform gas exchange | Local sign/time centering | Exact expected momentum and energy transfer |
 | Many-particle periodic exchange | Global conservation | Residual convergence and roundoff floor |
 | Cell-boundary and physical-boundary crossing | Shape/boundary deposition | Conservation and symmetry properties |
+| Frozen Entity-reference trajectory deposition | Shared deposition mechanics in diagnostic/extension paths only | AthenaK-supported shape orders match the recorded local-stencil/continuity reference without being used to validate paper-mode induction |
 | Serial/MPI/decomposition invariance | Communication correctness | Same metrics for multiple decompositions |
 | Bell linear mode | Coupled physical oracle | Growth rate and phase versus analytical dispersion |
 | Gas/electron/positron oscillation | Backreaction and grid support | Frequency versus analytic value on uniform/SMR/AMR |
@@ -572,6 +641,9 @@ with a correct underlying model.
    Do not chain a full production shock campaign through the `debug` QOS; if a
    full run exceeds permitted debug use, mark it blocked pending an explicitly
    revised execution authorization.
+6. Store particle provenance and species/injection-cohort spectra needed to
+   audit injected populations and acceleration histories, with independent
+   offline reconstruction of the same binned distributions.
 
 ### Required Shock Qualification Matrix
 
@@ -593,7 +665,7 @@ with a correct underlying model.
 
 ### Objective
 
-Convert a physically correct model into an maintainable production module.
+Convert a physically correct model into a maintainable production module.
 
 ### Required Work
 
@@ -603,16 +675,23 @@ Convert a physically correct model into an maintainable production module.
 2. Implement particle-aware load-balancing metrics and performance logging.
 3. Benchmark kernel time, communication, sorting, deposition, AMR overhead,
    memory use and output overhead on representative Frontier sizes.
-4. Confirm deterministic/reproducible reduction expectations; document where
+4. Add required telemetry for per-stage timers, per-species particle counts
+   and memory, mesh-level particle distribution and load imbalance, including
+   these fields in run manifests and qualification metrics.
+5. Confirm deterministic/reproducible reduction expectations; document where
    GPU/MPI order permits tolerance-level rather than bitwise agreement.
-5. Provide user documentation:
+6. Retain the OLCF-supported GPU-aware MPI environment as the initial Frontier
+   baseline, then run a short correctness/performance A/B comparison with any
+   Entity-motivated communication alternative before altering production
+   settings.
+7. Provide user documentation:
    - governing equations and supported modes;
    - parameter reference with valid/invalid combinations;
    - paper-reproduction quick start;
    - Frontier runbook and accounting requirements;
    - output/analysis definitions;
    - troubleshooting and failure interpretation.
-6. Make failure messages specific: unsupported mode, timestep constraint,
+8. Make failure messages specific: unsupported mode, timestep constraint,
    missing GPU-aware MPI support, AMR policy mismatch and restart incompatibility.
 
 ### Acceptance Gate P8
@@ -698,6 +777,7 @@ reference, not an excuse to skip the clean-baseline rerun.
 | Component | Oracle |
 | --- | --- |
 | Relativistic particle pusher | Analytic uniform-B orbit, phase and energy |
+| Shared trajectory/deposition extensions | Frozen Entity-reference stencil and discrete-continuity comparison, restricted to compatible AthenaK modes |
 | Feedback coupling | Global momentum/energy exchange and paper oscillation frequency |
 | Bell mode | Analytical dispersion relation, growth and phase |
 | Delta-f | Controlled equilibrium/perturbation weight result plus CRSI/CRPAI dispersion |
@@ -901,6 +981,13 @@ export HSA_XNACK=1
 Keep experimental communication variables in the manifest. If a result depends
 on a nondefault environment setting, run a confirming comparison before treating
 it as production evidence.
+
+Entity documentation reports application-specific Frontier communication
+experience. Treat that information as a prompt for a bounded AthenaK benchmark,
+not as permission to change the initial environment above. After correctness
+gates pass, run matched short A/B cases with the OLCF-supported GPU-aware MPI
+baseline and any proposed alternative, checking physical metrics, runtime and
+memory before selecting a recorded production setting.
 
 ### Improved Frontier Build Script Template
 
@@ -1107,6 +1194,9 @@ and measured values as work progresses.
 | Q-012 | Reliability | MPI/decomposition/restart/boundary and failure tests | Partial scaffolding only |
 | Q-013 | Usability/docs | Supported-mode docs and runbook tested by clean launch | Open |
 | Q-014 | Production sign-off | Complete artifact bundle and finding closure | Open |
+| Q-015 | Entity-derived shared-kernel comparison | Frozen source/formula provenance, relativistic pusher microtest and bounded trajectory-deposition differential checks | Open; existing Entity-named deposit regressions are partial scaffolding only |
+| Q-016 | Particle provenance and spectra | Persistent tracking/cohort metadata plus in-run/offline spectral agreement through restart/migration | Open |
+| Q-017 | Performance observability and Frontier communication choice | Stage timers, memory/load telemetry and recorded GPU-aware MPI A/B decision | Open |
 
 ## Immediate Agent Handoff: First Actions
 
@@ -1132,6 +1222,7 @@ Future implementation agents should execute the following sequence:
 | Date | Change | Reason |
 | --- | --- | --- |
 | 2026-05-25 | Created comprehensive production-readiness and paper-reproduction plan | Expanded narrow large-machine validation scope after full code/paper review exposed model-level blockers and Frontier execution requirements |
+| 2026-05-25 | Added Entity Toolkit comparative audit and bounded adoption gates | Adopt shared particle verification, provenance, spectra, restart and observability practices without importing incompatible electromagnetic PIC physics into paper mode |
 
 ## Source Pointers For The Initial Review
 
@@ -1150,6 +1241,8 @@ are implemented; future findings must record the commit examined.
 | Particle shock generator | `src/pgen/tests/pic_parallel_shock.cpp` |
 | Existing particle and publication tests | `inputs/tests/pic_*.athinput`, `tst/scripts/particles/pic_*.py`, `tst/publication/` |
 | Paper manuscript source | `docs/reference_paper/arXiv-2304.10568v1/mnras_template.tex` |
+| Entity comparative documentation | <https://entity-toolkit.github.io/wiki/> |
+| Entity local source snapshot used for comparative audit | `/Users/dbf75/Work/Research/AthenaK/entity` at `a59065fc`; especially `src/framework/containers/particles.h`, `src/kernels/particle_pusher_sr.hpp`, `src/kernels/currents_deposit.hpp`, `src/kernels/tests/pusher.cpp`, `src/kernels/tests/deposit.cpp`, `src/kernels/digital_filter.hpp`, `src/framework/domain/output.cpp`, `src/framework/domain/stats.cpp`, `src/output/checkpoint.cpp`, `src/engines/srpic.hpp` and `src/engines/engine_run.cpp` |
 
 This document is the entry point for all future MHD-PIC production work. A
 simulation result is not a production result until its governing mode, oracle,

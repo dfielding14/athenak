@@ -136,10 +136,11 @@ class Particles {
   PICIntermediateArraysMode pic_intermediate_arrays_mode =
       PICIntermediateArraysMode::auto_mode;
   PICExpandingBoxMode pic_expanding_box_mode = PICExpandingBoxMode::off;
-  Real pic_cr_light_speed = 1.0;  // artificial particle light speed (staged use)
-  int pic_max_cell_cross = 2;     // staged guard control (cells per step)
-  Real pic_theta_max = 0.3;       // staged guard control (gyro angle per step)
+  Real pic_cr_light_speed = 1.0;  // reserved; only default value is supported
+  int pic_max_cell_cross = 2;     // particle cell-crossing timestep limit
+  Real pic_theta_max = 0.3;       // Boris gyro-angle timestep limit
   int pic_sort_interval = 0;      // staged sorting cadence (0 disables re-sorting)
+  int pic_random_seed = 0;        // deterministic seed for random CR placement
   Real pic_expansion_rate_x1 = 0.0;
   Real pic_expansion_rate_x2 = 0.0;
   Real pic_expansion_rate_x3 = 0.0;
@@ -220,16 +221,7 @@ class Particles {
   TaskStatus PushDrift(Driver *pdriver, int stage);
   TaskStatus PushCosmicRays(Driver *pdriver, int stage);
   TaskStatus PushStars(Driver *pdriver, int stage);
-
-  // Field interpolation methods
-  KOKKOS_INLINE_FUNCTION
-  void InterpolateLinear(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                         Real &Bz, Real &Ux, Real &Uy, Real &Uz,
-                         bool allow_2d3v = false) const;
-  KOKKOS_INLINE_FUNCTION
-  void InterpolateTSC(int m, Real x, Real y, Real z, Real &Bx, Real &By,
-                      Real &Bz, Real &Ux, Real &Uy, Real &Uz,
-                      bool allow_2d3v = false) const;
+  void NewTimeStep();
 
  private:
   MeshBlockPack *pmy_pack; // ptr to MeshBlockPack containing this Particles

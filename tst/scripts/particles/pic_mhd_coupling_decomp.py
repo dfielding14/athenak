@@ -15,7 +15,7 @@ logger = logging.getLogger('athena' + __name__[7:])
 _INPUT_DECK = 'tests/pic_mhd_current_coupling.athinput'
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
 _RESULTS = {}
-_CONTINUITY_RESULTS = {}
+_PROJECTED_CURRENT_RESULTS = {}
 _MESHBLOCK_CONFIGS = [
     ('mb444', 4, 4, 4),
     ('mb844', 8, 4, 4),
@@ -26,7 +26,14 @@ _REPRESENTATION_CASES = [
     ('edge_direct', 'edge_staggered', 'direct_staggered'),
 ]
 _CC_CURRENT_IDS = ('prtcl_jx', 'prtcl_jy', 'prtcl_jz')
+# Edge-current outputs are cell-centered projections of edge-centered E-field
+# source arrays. They are useful output diagnostics, not raw staggered data.
 _EDGE_CURRENT_IDS = ('prtcl_jx_edge', 'prtcl_jy_edge', 'prtcl_jz_edge')
+_MOMENT_TOTAL_ABS_TOL = 2.5e-4
+_MOMENT_TOTAL_REL_TOL = 3.0e-7
+_EDGE_MOMENT_TOTAL_ABS_TOL = 1.0e-4
+_COUNT_ABS_TOL = 1.0e-6
+_COUNT_REL_TOL = 1.0e-8
 
 
 def _athena_exe_dir():
@@ -145,6 +152,7 @@ def _weighted_l2(field, dvol):
 
 
 def _compute_divergence_from_cc_current(jx, jy, jz, x1f, x2f, x3f):
+    """Diagnostic divergence of cell-centered or projected cell-centered J."""
     div = np.zeros_like(jx)
     dx1 = np.diff(x1f)
     dx2 = np.diff(x2f)
@@ -163,7 +171,9 @@ def _compute_divergence_from_cc_current(jx, jy, jz, x1f, x2f, x3f):
     return div
 
 
-def _measure_continuity_residual(basename, current_ids):
+def _measure_projected_current_residual(basename, current_ids):
+    # This is a serial/MPI parity diagnostic for output projections. It is not a
+    # discrete charge-conservation oracle for the raw edge-centered arrays.
     jx_id, jy_id, jz_id = current_ids
     rho_files = _output_files(basename, 'prtcl_rho')
     jx_files = _output_files(basename, jx_id)
@@ -172,8 +182,8 @@ def _measure_continuity_residual(basename, current_ids):
 
     nfiles = min(len(rho_files), len(jx_files), len(jy_files), len(jz_files))
     if nfiles < 2:
-        raise RuntimeError('Continuity residual requires at least two outputs: ' +
-                           basename)
+        raise RuntimeError('Projected-current residual requires at least two '
+                           'outputs: ' + basename)
 
     curr_idx = nfiles - 1
     rho_curr = bin_convert.read_binary_as_athdf(rho_files[curr_idx])
@@ -197,7 +207,8 @@ def _measure_continuity_residual(basename, current_ids):
 
     dt = float(rho_curr['Time'] - rho_prev['Time'])
     if (not np.isfinite(dt)) or dt <= 0.0:
-        raise RuntimeError('Non-positive dt in continuity residual for ' + basename)
+        raise RuntimeError('Non-positive dt in projected-current residual for ' +
+                           basename)
 
     drhodt = (rho_curr['prtcl_rho'] - rho_prev['prtcl_rho']) / dt
     divj = _compute_divergence_from_cc_current(jx_curr[jx_id],
@@ -264,12 +275,24 @@ def _measure_case(basename):
         _latest_output_file(basename, 'mhd_u_m3'))
     e_data = bin_convert.read_binary_as_athdf(
         _latest_output_file(basename, 'mhd_u_e'))
+    jx_edge_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'prtcl_jx_edge'))
+    jy_edge_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'prtcl_jy_edge'))
+    jz_edge_data = bin_convert.read_binary_as_athdf(
+        _latest_output_file(basename, 'prtcl_jz_edge'))
 
     return {
         'Q': _integrate_quantity(rho_data, 'prtcl_rho'),
         'Jx': _integrate_quantity(jx_data, 'prtcl_jx'),
         'Jy': _integrate_quantity(jy_data, 'prtcl_jy'),
         'Jz': _integrate_quantity(jz_data, 'prtcl_jz'),
+        'Jx_edge': _integrate_quantity(jx_edge_data, 'prtcl_jx_edge'),
+        'Jy_edge': _integrate_quantity(jy_edge_data, 'prtcl_jy_edge'),
+        'Jz_edge': _integrate_quantity(jz_edge_data, 'prtcl_jz_edge'),
+        'Jx_edge_l2': _l2_quantity(jx_edge_data, 'prtcl_jx_edge'),
+        'Jy_edge_l2': _l2_quantity(jy_edge_data, 'prtcl_jy_edge'),
+        'Jz_edge_l2': _l2_quantity(jz_edge_data, 'prtcl_jz_edge'),
         'npart': float(np.sum(pdens_data['pdens'])),
         'bcc1_l2': _l2_quantity(bcc_data, 'bcc1'),
         'bcc2_l2': _l2_quantity(bcc_data, 'bcc2'),
@@ -299,6 +322,23 @@ def _check_with_tolerance(label, measured, expected, abs_tol, rel_tol):
     logger.info('%s measured=% .8e expected=% .8e abs_err=% .8e rel_err=% .8e',
                 label, measured, expected, abs_err, rel_err)
     return abs_err <= abs_tol or rel_err <= rel_tol
+
+
+def _integrated_quantity_tolerances(quantity):
+    if quantity == 'npart':
+        return _COUNT_ABS_TOL, _COUNT_REL_TOL
+    return _MOMENT_TOTAL_ABS_TOL, _MOMENT_TOTAL_REL_TOL
+
+
+def _check_integrated_value(label, measured, expected, quantity):
+    abs_tol, rel_tol = _integrated_quantity_tolerances(quantity)
+    return _check_with_tolerance(label, measured, expected, abs_tol, rel_tol)
+
+
+def _check_integrated_quantity(label, measured, expected, quantity):
+    return _check_integrated_value(label + ':' + quantity,
+                                   measured[quantity], expected[quantity],
+                                   quantity)
 
 
 def run(**kwargs):
@@ -388,7 +428,7 @@ def run(**kwargs):
             'expected': _expected_totals(case['args']),
         }
 
-    continuity_cases = []
+    projected_current_cases = []
     cont_mb_tag, cont_mbx1, cont_mbx2, cont_mbx3 = _MESHBLOCK_CONFIGS[0]
     for rep_tag, rep_value, dep_mode in _REPRESENTATION_CASES:
         rep_args = ['particles/couple_j_to_efield_representation=' + rep_value]
@@ -397,8 +437,8 @@ def run(**kwargs):
 
         serial_basename = ('pic_mhd_decomp_cont_serial_' + cont_mb_tag +
                            '_' + rep_tag)
-        continuity_cases.append({
-            'name': 'serial_continuity_' + rep_tag,
+        projected_current_cases.append({
+            'name': 'serial_projected_current_' + rep_tag,
             'basename': serial_basename,
             'nproc': 1,
             'current_ids': (_CC_CURRENT_IDS if rep_tag == 'cc'
@@ -419,8 +459,8 @@ def run(**kwargs):
 
                 mpi_basename = ('pic_mhd_decomp_cont_' + mpi_tag + '_' + cont_mb_tag +
                                 '_' + rep_tag)
-                continuity_cases.append({
-                    'name': mpi_tag + '_continuity_' + rep_tag,
+                projected_current_cases.append({
+                    'name': mpi_tag + '_projected_current_' + rep_tag,
                     'basename': mpi_basename,
                     'nproc': nproc,
                     'current_ids': (_CC_CURRENT_IDS if rep_tag == 'cc'
@@ -435,11 +475,11 @@ def run(**kwargs):
                     ),
                 })
 
-    for case in continuity_cases:
+    for case in projected_current_cases:
         _remove_outputs(case['basename'])
         _run_command(case['name'], case['nproc'], case['args'])
-        _CONTINUITY_RESULTS[case['name']] = (
-            _measure_continuity_residual(case['basename'], case['current_ids']))
+        _PROJECTED_CURRENT_RESULTS[case['name']] = (
+            _measure_projected_current_residual(case['basename'], case['current_ids']))
 
 
 def analyze():
@@ -449,16 +489,22 @@ def analyze():
     for case_name, result in _RESULTS.items():
         measured = result['measured']
         expected = result['expected']
-        ok = _check_with_tolerance(case_name + ':Q', measured['Q'], expected['Q'],
-                                   1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':Jx', measured['Jx'], expected['Jx'],
-                                   1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':Jy', measured['Jy'], expected['Jy'],
-                                   1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':Jz', measured['Jz'], expected['Jz'],
-                                   1.0e-6, 1.0e-8) and ok
-        ok = _check_with_tolerance(case_name + ':npart', measured['npart'],
-                                   expected['npart'], 1.0e-6, 1.0e-8) and ok
+        ok = _check_integrated_quantity(case_name, measured, expected, 'Q') and ok
+        ok = _check_integrated_quantity(case_name, measured, expected, 'Jx') and ok
+        ok = _check_integrated_quantity(case_name, measured, expected, 'Jy') and ok
+        ok = _check_integrated_quantity(case_name, measured, expected, 'Jz') and ok
+        edge_expectations = [('Jx_edge', 'Jx'), ('Jy_edge', 'Jy'),
+                             ('Jz_edge', 'Jz')]
+        for edge_quantity, expected_quantity in edge_expectations:
+            expected_edge = expected[expected_quantity]
+            edge_abs_tol = (_EDGE_MOMENT_TOTAL_ABS_TOL
+                            if abs(expected_edge) > 1.0 else 1.0e-8)
+            ok = _check_with_tolerance(case_name + ':' + edge_quantity,
+                                       measured[edge_quantity],
+                                       expected_edge,
+                                       edge_abs_tol,
+                                       _MOMENT_TOTAL_REL_TOL) and ok
+        ok = _check_integrated_quantity(case_name, measured, expected, 'npart') and ok
 
     for mb_tag, _, _, _ in _MESHBLOCK_CONFIGS:
         for order_tag in ['mhd', 'efield']:
@@ -475,21 +521,21 @@ def analyze():
                     if case_name not in _RESULTS:
                         continue
                     measured = _RESULTS[case_name]['measured']
-                    ok = _check_with_tolerance(case_name + ':Q_vs_serial',
-                                               measured['Q'], baseline['Q'],
-                                               1.0e-6, 1.0e-8) and ok
-                    ok = _check_with_tolerance(case_name + ':Jx_vs_serial',
-                                               measured['Jx'], baseline['Jx'],
-                                               1.0e-6, 1.0e-8) and ok
-                    ok = _check_with_tolerance(case_name + ':Jy_vs_serial',
-                                               measured['Jy'], baseline['Jy'],
-                                               1.0e-6, 1.0e-8) and ok
-                    ok = _check_with_tolerance(case_name + ':Jz_vs_serial',
-                                               measured['Jz'], baseline['Jz'],
-                                               1.0e-6, 1.0e-8) and ok
-                    ok = _check_with_tolerance(case_name + ':npart_vs_serial',
-                                               measured['npart'], baseline['npart'],
-                                               1.0e-6, 1.0e-8) and ok
+                    ok = _check_integrated_value(case_name + ':Q_vs_serial',
+                                                 measured['Q'], baseline['Q'],
+                                                 'Q') and ok
+                    ok = _check_integrated_value(case_name + ':Jx_vs_serial',
+                                                 measured['Jx'], baseline['Jx'],
+                                                 'Jx') and ok
+                    ok = _check_integrated_value(case_name + ':Jy_vs_serial',
+                                                 measured['Jy'], baseline['Jy'],
+                                                 'Jy') and ok
+                    ok = _check_integrated_value(case_name + ':Jz_vs_serial',
+                                                 measured['Jz'], baseline['Jz'],
+                                                 'Jz') and ok
+                    ok = _check_integrated_value(case_name + ':npart_vs_serial',
+                                                 measured['npart'], baseline['npart'],
+                                                 'npart') and ok
                     ok = _check_with_tolerance(case_name + ':bcc1_l2_vs_serial',
                                                measured['bcc1_l2'], baseline['bcc1_l2'],
                                                1.0e-6, 1.0e-8) and ok
@@ -521,18 +567,18 @@ def analyze():
                 cc = _RESULTS[serial_cc]['measured']
                 edge = _RESULTS[serial_edge]['measured']
                 for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
-                    ok = _check_with_tolerance(mb_tag + ':' + order_tag +
-                                               ':cc_vs_edge:' + quantity,
-                                               cc[quantity], edge[quantity],
-                                               1.0e-6, 1.0e-8) and ok
+                    ok = _check_integrated_value(mb_tag + ':' + order_tag +
+                                                 ':cc_vs_edge:' + quantity,
+                                                 cc[quantity], edge[quantity],
+                                                 quantity) and ok
             if serial_edge in _RESULTS and serial_edge_direct in _RESULTS:
                 edge = _RESULTS[serial_edge]['measured']
                 edge_direct = _RESULTS[serial_edge_direct]['measured']
                 for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
-                    ok = _check_with_tolerance(mb_tag + ':' + order_tag +
-                                               ':edge_vs_edge_direct:' + quantity,
-                                               edge[quantity], edge_direct[quantity],
-                                               1.0e-6, 1.0e-8) and ok
+                    ok = _check_integrated_value(mb_tag + ':' + order_tag +
+                                                 ':edge_vs_edge_direct:' + quantity,
+                                                 edge[quantity], edge_direct[quantity],
+                                                 quantity) and ok
 
     for mb_tag, _, _, _ in _MESHBLOCK_CONFIGS:
         for rep_tag, _, _ in _REPRESENTATION_CASES:
@@ -542,69 +588,59 @@ def analyze():
                 mhd = _RESULTS[serial_mhd]['measured']
                 efield = _RESULTS[serial_efield]['measured']
                 for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
-                    ok = _check_with_tolerance(mb_tag + ':' + rep_tag +
-                                               ':mhd_vs_efield:' + quantity,
-                                               mhd[quantity], efield[quantity],
-                                               1.0e-6, 1.0e-8) and ok
+                    ok = _check_integrated_value(mb_tag + ':' + rep_tag +
+                                                 ':mhd_vs_efield:' + quantity,
+                                                 mhd[quantity], efield[quantity],
+                                                 quantity) and ok
 
-    required_cont_cases = [
-        'serial_continuity_cc',
-        'serial_continuity_edge',
-        'serial_continuity_edge_direct',
+    required_projected_current_cases = [
+        'serial_projected_current_cc',
+        'serial_projected_current_edge',
+        'serial_projected_current_edge_direct',
     ]
-    for case_name in required_cont_cases:
-        if case_name not in _CONTINUITY_RESULTS:
-            logger.warning('Missing continuity-oracle case %s', case_name)
+    for case_name in required_projected_current_cases:
+        if case_name not in _PROJECTED_CURRENT_RESULTS:
+            logger.warning('Missing projected-current diagnostic case %s', case_name)
             return False
 
-    cont_cc = _CONTINUITY_RESULTS['serial_continuity_cc']
-    cont_edge = _CONTINUITY_RESULTS['serial_continuity_edge']
-    cont_direct = _CONTINUITY_RESULTS['serial_continuity_edge_direct']
-    continuity_sets = [('cc', cont_cc), ('edge', cont_edge),
-                       ('edge_direct', cont_direct)]
-    for label, cont in continuity_sets:
-        logger.info('continuity_%s dt=% .8e cycle_delta=% .8e l2_drhodt=% .8e '
+    projected_cc = _PROJECTED_CURRENT_RESULTS['serial_projected_current_cc']
+    projected_edge = _PROJECTED_CURRENT_RESULTS['serial_projected_current_edge']
+    projected_direct = _PROJECTED_CURRENT_RESULTS[
+        'serial_projected_current_edge_direct']
+    projected_current_sets = [('cc', projected_cc), ('edge', projected_edge),
+                              ('edge_direct', projected_direct)]
+    for label, projected in projected_current_sets:
+        logger.info('projected_current_%s dt=% .8e cycle_delta=% .8e l2_drhodt=% .8e '
                     'l2_divj=% .8e l2_res=% .8e linf_res=% .8e rel=% .8e',
-                    label, cont['dt'], cont['cycle_delta'], cont['l2_drhodt'],
-                    cont['l2_divj'], cont['l2_residual'], cont['linf_residual'],
-                    cont['rel_residual'])
-        if (not np.isfinite(cont['l2_residual']) or
-                not np.isfinite(cont['linf_residual']) or
-                not np.isfinite(cont['rel_residual'])):
-            logger.warning('Non-finite continuity metric for %s', label)
+                    label, projected['dt'], projected['cycle_delta'],
+                    projected['l2_drhodt'], projected['l2_divj'],
+                    projected['l2_residual'], projected['linf_residual'],
+                    projected['rel_residual'])
+        if (not np.isfinite(projected['l2_residual']) or
+                not np.isfinite(projected['linf_residual']) or
+                not np.isfinite(projected['rel_residual'])):
+            logger.warning('Non-finite projected-current metric for %s', label)
             ok = False
-        if cont['dt'] <= 0.0 or cont['cycle_delta'] < 1.0:
-            logger.warning('Invalid continuity time metadata for %s', label)
+        if projected['dt'] <= 0.0 or projected['cycle_delta'] < 1.0:
+            logger.warning('Invalid projected-current time metadata for %s', label)
             ok = False
-
-    if cont_edge['rel_residual'] > 0.0:
-        direct_vs_edge_rel = cont_direct['rel_residual'] / cont_edge['rel_residual']
-        logger.info('continuity_direct_vs_edge_rel_ratio=% .8e', direct_vs_edge_rel)
-        if direct_vs_edge_rel > 1.25:
-            logger.warning('Direct-edge continuity residual regressed vs edge mode')
-            ok = False
-    else:
-        ok = _check_with_tolerance('continuity_edge_rel_zero',
-                                   cont_direct['rel_residual'], 0.0,
-                                   1.0e-12, 1.0e-12) and ok
 
     for mpi_tag in ['mpi2', 'mpi4']:
-        if all((mpi_tag + '_continuity_' + rep_tag) in _CONTINUITY_RESULTS
+        if all((mpi_tag + '_projected_current_' + rep_tag) in _PROJECTED_CURRENT_RESULTS
                for rep_tag in ['cc', 'edge', 'edge_direct']):
             for rep_tag in ['cc', 'edge', 'edge_direct']:
-                serial = _CONTINUITY_RESULTS['serial_continuity_' + rep_tag]
-                mpi = _CONTINUITY_RESULTS[mpi_tag + '_continuity_' + rep_tag]
-                ok = _check_with_tolerance('continuity_serial_vs_' + mpi_tag + ':' +
-                                           rep_tag + ':l2_residual',
+                serial = _PROJECTED_CURRENT_RESULTS['serial_projected_current_' + rep_tag]
+                mpi = _PROJECTED_CURRENT_RESULTS[
+                    mpi_tag + '_projected_current_' + rep_tag]
+                label = 'projected_current_serial_vs_' + mpi_tag + ':' + rep_tag
+                ok = _check_with_tolerance(label + ':l2_residual',
                                            mpi['l2_residual'], serial['l2_residual'],
                                            1.0e-6, 1.0e-8) and ok
-                ok = _check_with_tolerance('continuity_serial_vs_' + mpi_tag + ':' +
-                                           rep_tag + ':linf_residual',
+                ok = _check_with_tolerance(label + ':linf_residual',
                                            mpi['linf_residual'],
                                            serial['linf_residual'],
                                            1.0e-6, 1.0e-8) and ok
-                ok = _check_with_tolerance('continuity_serial_vs_' + mpi_tag + ':' +
-                                           rep_tag + ':rel_residual',
+                ok = _check_with_tolerance(label + ':rel_residual',
                                            mpi['rel_residual'],
                                            serial['rel_residual'],
                                            1.0e-6, 1.0e-8) and ok

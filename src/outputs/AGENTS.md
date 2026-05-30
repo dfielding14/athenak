@@ -33,7 +33,9 @@ Mesh data:
 
 Particles:
 - `pvtk` → `vtk_prtcl.cpp` (`ParticleVTKOutput`)
-- `trk` → `track_prtcl.cpp` (`TrackedParticleOutput`)
+- `trk` → `track_prtcl.cpp` (`TrackedParticleOutput`); payload rows are big-endian
+  float32 `(x, y, z, vx, vy, vz)` records written at offsets determined by
+  particle tags `0 <= PTAG < nparticles`
 
 Diagnostics:
 - `hst` → `history.cpp` (`HistoryOutput`)
@@ -76,6 +78,8 @@ The list above matches the registration in `Outputs::Outputs` (`outputs.cpp`).
   - `prtcl_dpxdt`, `prtcl_dpydt`, `prtcl_dpzdt`, `prtcl_dedt`
   - `prtcl_ebdot`
   - `prtcl_jx_edge`, `prtcl_jy_edge`, `prtcl_jz_edge`
+- The `prtcl_j*_edge` outputs are cell-centered projections of the edge-current
+  arrays used by `MHD::EFieldSrc`; they are diagnostics, not raw staggered dumps.
 - All of the above require `<particles>/deposit_moments=true`; validation is
   enforced in `BaseTypeOutput` before output object construction.
 
@@ -105,9 +109,9 @@ Rank-specific subdirectories are created when `single_file_per_rank` is enabled.
 ## Particle VTK Content Notes
 - `pvtk` outputs include:
   - `POINTS` coordinates for all particles,
-  - integer scalar attributes with explicit names (`gid`, `ptag`, plus
-    `species` for CR particles or `sn_id` for star particles; fallback names
-    use `idata_<n>`),
+  - big-endian 32-bit integer scalar attributes with explicit names (`gid`,
+    `ptag`, plus `species` for CR particles or `sn_id` for star particles;
+    fallback names use `idata_<n>`),
   - velocity vectors (`VECTORS vel`).
 - This is the preferred path for publication-style particle phase-space
   diagnostics without parsing restart files.

@@ -1,7 +1,7 @@
 # AthenaXXX input file for PIC CRPAI prolate proxy test
 
 <comment>
-problem   = CRPAI prolate-style polarization proxy (streaming +x)
+problem   = CRPAI prolate-style polarization publication run (streaming +x)
 
 <job>
 basename  = pic_crpai_prolate_publication
@@ -50,10 +50,10 @@ particle_type                     = cosmic_ray
 ppc                               = 32.0
 pusher                            = drift
 nspecies                          = 1
-cr_distribution                   = center
+cr_distribution                   = random
 deposit_moments                   = true
 deposit_order                     = 1
-deposit_qscale                    = 0.1
+deposit_qscale                    = 1.0
 couple_moments_to_mhd             = true
 couple_j_to_efield_coeff          = 1.0
 couple_j_to_efield_representation = cell_centered

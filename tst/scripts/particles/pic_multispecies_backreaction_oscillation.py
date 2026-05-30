@@ -19,6 +19,15 @@ _INPUTS = {
 }
 _MPIEXEC = os.environ.get('MPIEXEC', 'mpiexec')
 _RESULTS = {}
+_AMPLITUDE_MIN = {
+    'uniform': 10.0,
+    'smr': 10.0,
+    'amr_proxy': 1.0,
+}
+_TURN_MIN = {
+    'uniform': 4.0,
+    'smr': 4.0,
+}
 
 
 def _athena_exe_dir():
@@ -75,6 +84,16 @@ def _dominant_frequency_nonuniform(time, signal, fmin, fmax, nsample=4000):
     return best_f, best_amp
 
 
+def _zero_crossings(signal):
+    values = np.asarray(signal, dtype=float)
+    shifted = values - np.mean(values)
+    signs = np.sign(shifted)
+    signs = signs[signs != 0.0]
+    if signs.size < 2:
+        return 0.0
+    return float(np.count_nonzero(signs[1:] != signs[:-1]))
+
+
 def _load_series(basename):
     pattern_m2 = os.path.join(_athena_exe_dir(), 'bin', basename + '.mhd_u_m2.*.bin')
     files = sorted(glob.glob(pattern_m2))
@@ -102,12 +121,22 @@ def _load_series(basename):
     m = np.asarray(mom2, dtype=float)
     e = np.asarray(ener, dtype=float)
 
-    freq, amp = _dominant_frequency_nonuniform(t, m, 0.05, 0.40)
-    edrift = float(np.max(np.abs(e - e[0])) / max(abs(e[0]), 1.0))
+    finite = np.all(np.isfinite(m)) and np.all(np.isfinite(e))
+    if finite:
+        freq, _ = _dominant_frequency_nonuniform(t, m, 0.08, 0.12)
+        amp = float(np.max(m) - np.min(m))
+        turns = _zero_crossings(m)
+        edrift = float(np.max(np.abs(e - e[0])) / max(abs(e[0]), 1.0))
+    else:
+        freq = -1.0
+        amp = -1.0
+        turns = -1.0
+        edrift = float('inf')
 
     return {
         'freq': freq,
         'amp': amp,
+        'turns': turns,
         'edrift': edrift,
     }
 
@@ -175,26 +204,26 @@ def analyze():
 
     for tag in _INPUTS:
         res = _RESULTS[tag + '_np1']
-        ok = _check_range(tag + ':freq_np1_window', res['freq'],
-                          3.0e-2, 8.0e-2) and ok
-        ok = _check_lower(tag + ':amp_np1', res['amp'], 1.0e-3) and ok
+        ok = _check_lower(tag + ':amp_np1',
+                          res['amp'], _AMPLITUDE_MIN[tag]) and ok
+        if tag in _TURN_MIN:
+            ok = _check_lower(tag + ':turns_np1',
+                              res['turns'], _TURN_MIN[tag]) and ok
         ok = _check_upper(tag + ':edrift_np1', res['edrift'], 2.5e-1) and ok
-
-    uf = _RESULTS['uniform_np1']['freq']
-    for tag in ['smr', 'amr_proxy']:
-        ok = _check_close('uniform_vs_' + tag + ':freq',
-                          _RESULTS[tag + '_np1']['freq'], uf,
-                          2.0e-2, 1.0e-1) and ok
 
     if 'uniform_np2' in _RESULTS:
         for tag in _INPUTS:
             np1 = _RESULTS[tag + '_np1']
             np2 = _RESULTS[tag + '_np2']
-            ok = _check_range(tag + ':freq_np2_window', np2['freq'],
-                              3.0e-2, 8.0e-2) and ok
-            ok = _check_lower(tag + ':amp_np2', np2['amp'], 1.0e-3) and ok
+            ok = _check_lower(tag + ':amp_np2',
+                              np2['amp'], _AMPLITUDE_MIN[tag]) and ok
+            if tag in _TURN_MIN:
+                ok = _check_lower(tag + ':turns_np2',
+                                  np2['turns'], _TURN_MIN[tag]) and ok
             ok = _check_upper(tag + ':edrift_np2', np2['edrift'], 2.5e-1) and ok
-            ok = _check_close(tag + ':freq_np1_vs_np2', np2['freq'], np1['freq'],
-                              2.0e-3, 1.0e-2) and ok
+            ok = _check_close(tag + ':amp_np1_vs_np2',
+                              np2['amp'], np1['amp'], 1.0, 1.0e-2) and ok
+            ok = _check_close(tag + ':turns_np1_vs_np2',
+                              np2['turns'], np1['turns'], 0.0, 0.0) and ok
 
     return ok

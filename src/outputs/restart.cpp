@@ -645,12 +645,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     myoffset = offset_myrank;
   }
 
-  //--- STEP 5. Optional coupled particle restart state (PR3a).
+  //--- STEP 5. Optional particle restart state.
   particles::Particles *ppart = pm->pmb_pack->ppart;
-  const bool write_coupled_prtcl_state = (ppart != nullptr) &&
-                                         ppart->couple_moments_to_mhd &&
-                                         ppart->deposit_moments;
-  if (write_coupled_prtcl_state) {
+  if (ppart != nullptr) {
     constexpr std::uint64_t kPicMagic = 0x5049435253543031ULL;
     constexpr int kPicVersion = 1;
 
@@ -660,7 +657,8 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     const int nrdata = ppart->nrdata;
     const int nidata = ppart->nidata;
     const int moment_cnt = particles::Particles::NMOM*nout3*nout2*nout1;
-    const bool has_moments = (ppart->moments.size() > 0);
+    const bool has_moments = ppart->deposit_moments && (ppart->moments.size() > 0);
+    const bool requires_moments = ppart->couple_moments_to_mhd && ppart->deposit_moments;
     const bool has_edge = (ppart->couple_j_to_efield_representation ==
                            CoupledCurrentRepresentation::edge_staggered) &&
                           (ppart->j_edge_x1e.size() > 0);
@@ -668,10 +666,11 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     const int edge2_cnt = (nout3 + 1)*nout2*(nout1 + 1);
     const int edge3_cnt = nout3*(nout2 + 1)*(nout1 + 1);
 
-    if (!has_moments) {
+    if (requires_moments && !has_moments) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                 << std::endl
-                << "Coupled particle restart requested, but moments are not allocated."
+                << "Particle restart requested coupled moments, but moments are not "
+                << "allocated."
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
@@ -689,6 +688,17 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                   << h_pi(PGID, p) << ", local gid range=[" << gids_local << ","
                   << (gids_local + nmb_local - 1) << "])." << std::endl;
         std::exit(EXIT_FAILURE);
+      }
+      if (ppart->particle_type == ParticleType::cosmic_ray) {
+        const int sp = h_pi(PSP, p);
+        if (sp < 0 || sp >= ppart->nspecies) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl
+                    << "Particle species is out of range at restart write time "
+                    << "(species=" << sp << ", nspecies=" << ppart->nspecies << ")."
+                    << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
       }
       local_mb_counts[m] += 1;
     }
@@ -835,7 +845,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
             != sizeof(IOWrapperSizeT)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
-                  << "Failed to write coupled particle restart metadata." << std::endl;
+                  << "Failed to write particle restart metadata." << std::endl;
         std::exit(EXIT_FAILURE);
       }
       if (nmb_section > 0) {
@@ -844,7 +854,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                                       single_file_per_rank) != nmb_section) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl
-                    << "Failed to write coupled particle MeshBlock counts."
+                    << "Failed to write particle MeshBlock counts."
                     << std::endl;
           std::exit(EXIT_FAILURE);
         }
@@ -869,32 +879,34 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                                     "Real", single_file_per_rank) != cnt*nrdata) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
-                  << "Failed to write coupled particle real data." << std::endl;
+                  << "Failed to write particle restart real data." << std::endl;
         std::exit(EXIT_FAILURE);
       }
       if (resfile.Write_any_type_at(&(packed_pi[lstart*nidata]), cnt*nidata, pi_off,
                                     "int", single_file_per_rank) != cnt*nidata) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
-                  << "Failed to write coupled particle integer data." << std::endl;
+                  << "Failed to write particle restart integer data." << std::endl;
         std::exit(EXIT_FAILURE);
       }
     }
 
-    auto h_mom = Kokkos::create_mirror_view_and_copy(HostMemSpace(), ppart->moments);
-    for (int m=0; m<nmb_local; ++m) {
-      const int section_m = (single_file_per_rank ? m : gids_local + m);
-      auto mom_mb = Kokkos::subview(h_mom, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
-                                    Kokkos::ALL);
-      const IOWrapperSizeT moff = moments_offset +
-                                  static_cast<IOWrapperSizeT>(section_m)*moment_cnt*
-                                  sizeof(Real);
-      if (resfile.Write_any_type_at(mom_mb.data(), moment_cnt, moff, "Real",
-                                    single_file_per_rank) != moment_cnt) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl
-                  << "Failed to write coupled moment restart data." << std::endl;
-        std::exit(EXIT_FAILURE);
+    if (has_moments) {
+      auto h_mom = Kokkos::create_mirror_view_and_copy(HostMemSpace(), ppart->moments);
+      for (int m=0; m<nmb_local; ++m) {
+        const int section_m = (single_file_per_rank ? m : gids_local + m);
+        auto mom_mb = Kokkos::subview(h_mom, m, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL,
+                                      Kokkos::ALL);
+        const IOWrapperSizeT moff = moments_offset +
+                                    static_cast<IOWrapperSizeT>(section_m)*moment_cnt*
+                                    sizeof(Real);
+        if (resfile.Write_any_type_at(mom_mb.data(), moment_cnt, moff, "Real",
+                                      single_file_per_rank) != moment_cnt) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl
+                    << "Failed to write particle moment restart data." << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
       }
     }
 
@@ -925,7 +937,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
                                       single_file_per_rank) != edge3_cnt) {
           std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                     << std::endl
-                    << "Failed to write coupled edge-current restart data." << std::endl;
+                    << "Failed to write particle edge-current restart data." << std::endl;
           std::exit(EXIT_FAILURE);
         }
       }

@@ -1,7 +1,7 @@
-# AthenaXXX input file for PIC CRSI delta-f proxy test
+# AthenaXXX input file for PIC CRSI quiet-start proxy test
 
 <comment>
-problem   = CRSI-style polarization/growth proxy with delta-f toggle
+problem   = CRSI-style polarization/growth proxy with quiet-start toggle
 
 <job>
 basename  = pic_crsi_deltaf_proxy

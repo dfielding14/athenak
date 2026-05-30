@@ -9,6 +9,7 @@
 //! prolongation operators are implemented as INLINE functions in prolongation.hpp (and
 //! are used both here for AMR and in the BVals class at fine/coarse boundaries).
 
+#include <cstdlib>   // std::exit
 #include <cstdint>   // int32_t
 #include <iostream>
 #include <cstdio>    // printf
@@ -36,6 +37,22 @@
 #if MPI_PARALLEL_ENABLED
 #include <mpi.h>
 #endif
+
+namespace {
+
+KOKKOS_INLINE_FUNCTION
+bool ParticleInMeshBlockSize(const RegionSize &mb, const RegionSize &mesh,
+                             const Real x1, const Real x2, const Real x3) {
+  const bool in_x1 = (x1 >= mb.x1min) &&
+                     ((mb.x1max >= mesh.x1max) ? (x1 <= mb.x1max) : (x1 < mb.x1max));
+  const bool in_x2 = (x2 >= mb.x2min) &&
+                     ((mb.x2max >= mesh.x2max) ? (x2 <= mb.x2max) : (x2 < mb.x2max));
+  const bool in_x3 = (x3 >= mb.x3min) &&
+                     ((mb.x3max >= mesh.x3max) ? (x3 <= mb.x3max) : (x3 < mb.x3max));
+  return in_x1 && in_x2 && in_x3;
+}
+
+} // namespace
 
 //----------------------------------------------------------------------------------------
 // MeshRefinement constructor:
@@ -1556,28 +1573,32 @@ void MeshRefinement::RefineParticles() {
   auto &pr = ppart->prtcl_rdata;
   auto &pi = ppart->prtcl_idata;
   int npart = ppart->nprtcl_thispack;
+  if (npart <= 0) return;
   int nleaf = 2;
   if (pmy_mesh->two_d) {nleaf = 4;}
   if (pmy_mesh->three_d) {nleaf = 8;}
+  const auto ms = pmy_mesh->mesh_size;
 
-  par_for("refine_part",DevExeSpace(),0,(npart-1),KOKKOS_LAMBDA(const int p) {
+  int norphaned = 0;
+  Kokkos::parallel_reduce("refine_part", Kokkos::RangePolicy<>(DevExeSpace(), 0, npart),
+  KOKKOS_LAMBDA(const int p, int &orphan_count) {
     Real x1 = pr(IPX, p);
     Real x2 = pr(IPY, p);
     Real x3 = pr(IPZ, p);
     int m = pi(PGID, p) - gids;
     bool in_place = false;
-    if (x1 >= mbsize.d_view(m).x1min && x1 < mbsize.d_view(m).x1max &&
-        x2 >= mbsize.d_view(m).x2min && x2 < mbsize.d_view(m).x2max &&
-        x3 >= mbsize.d_view(m).x3min && x3 < mbsize.d_view(m).x3max) {
-        in_place = true;
+
+    if (m >= 0 && m < nmb && ParticleInMeshBlockSize(mbsize.d_view(m), ms, x1, x2, x3)) {
+      in_place = true;
     }
     if (!in_place) {
       int newm;
       for (int n = 1; n < nleaf; ++n) {
         newm = m + n;
-        if (x1 >= mbsize.d_view(newm).x1min && x1 < mbsize.d_view(newm).x1max &&
-            x2 >= mbsize.d_view(newm).x2min && x2 < mbsize.d_view(newm).x2max &&
-            x3 >= mbsize.d_view(newm).x3min && x3 < mbsize.d_view(newm).x3max) {
+        if (newm < 0 || newm >= nmb) {
+          continue;
+        }
+        if (ParticleInMeshBlockSize(mbsize.d_view(newm), ms, x1, x2, x3)) {
           pi(PGID, p) = gids + newm;
           in_place = true;
           break;
@@ -1588,9 +1609,7 @@ void MeshRefinement::RefineParticles() {
     // transitions), search all local blocks before flagging particle as orphaned.
     if (!in_place) {
       for (int newm = 0; newm < nmb; ++newm) {
-        if (x1 >= mbsize.d_view(newm).x1min && x1 < mbsize.d_view(newm).x1max &&
-            x2 >= mbsize.d_view(newm).x2min && x2 < mbsize.d_view(newm).x2max &&
-            x3 >= mbsize.d_view(newm).x3min && x3 < mbsize.d_view(newm).x3max) {
+        if (ParticleInMeshBlockSize(mbsize.d_view(newm), ms, x1, x2, x3)) {
           pi(PGID, p) = gids + newm;
           in_place = true;
           break;
@@ -1598,9 +1617,17 @@ void MeshRefinement::RefineParticles() {
       }
     }
     if (!in_place) {
-      Kokkos::printf("Error: particle orphaned!\n");
+      orphan_count += 1;
     }
-  });
+  }, norphaned);
+
+  if (norphaned > 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "Particle AMR remap orphaned " << norphaned
+              << " particles after refinement." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
   return;
 }

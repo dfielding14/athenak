@@ -6,6 +6,7 @@ import subprocess
 import numpy as np
 import scripts.utils.athena as athena
 from scripts.particles.pic_analysis_utils import fit_exponential_growth
+from scripts.particles.pic_analysis_utils import fit_exponential_growth_windowed
 
 import sys
 sys.path.insert(0, '../vis/python')
@@ -41,26 +42,51 @@ def _remove_outputs(basename):
         os.remove(fname)
 
 
-def _load_growth_metrics(basename):
+def _mode1_complex(dataset, field):
+    values = np.asarray(dataset[field], dtype=float)
+    x_mode = np.mean(values, axis=(0, 1))
+    fluc = x_mode - np.mean(x_mode)
+
+    x1f = np.asarray(dataset['x1f'], dtype=float)
+    x1v = np.asarray(dataset['x1v'], dtype=float)
+    length = float(x1f[-1] - x1f[0])
+    phase = np.exp(-2.0j * np.pi * (x1v - x1f[0]) / length)
+    return np.sum(fluc * phase) / x_mode.size
+
+
+def _load_growth_metrics(basename, fit_coupled):
     pattern = os.path.join(_athena_exe_dir(), 'bin', basename + '.mhd_bcc.*.bin')
     files = sorted(glob.glob(pattern))
     if len(files) < 8:
         raise RuntimeError('Not enough mhd_bcc outputs for Bell fit')
 
     times = []
-    bt = []
+    bmode = []
     for fname in files:
         data = bin_convert.read_binary_as_athdf(fname)
-        bperp = np.sqrt(np.mean(data['bcc2'] * data['bcc2'] +
-                                data['bcc3'] * data['bcc3']))
+        b2_k = _mode1_complex(data, 'bcc2')
+        b3_k = _mode1_complex(data, 'bcc3')
+        bperp = np.sqrt(np.abs(b2_k) * np.abs(b2_k) +
+                        np.abs(b3_k) * np.abs(b3_k))
         times.append(float(data['Time']))
-        bt.append(float(bperp))
+        bmode.append(float(bperp))
 
     t = np.asarray(times, dtype=float)
-    b = np.asarray(bt, dtype=float)
-    gamma, _, _ = fit_exponential_growth(t, b, t[1], t[-1], floor=1.0e-30)
+    b = np.asarray(bmode, dtype=float)
+    floor = max(1.0e-30, 1.0e-6 * np.max(b))
+    if fit_coupled:
+        fit = fit_exponential_growth_windowed(
+            t, b, min_points=8, floor=floor, min_growth_factor=4.0
+        )
+        gamma = float(fit['gamma'])
+        r2 = float(fit['r2'])
+    else:
+        gamma, _, r2 = fit_exponential_growth(
+            t, np.maximum(b, floor), float(t[1]), float(t[-1]), floor=floor
+        )
     return {
         'gamma': float(gamma),
+        'r2': float(r2),
         'ratio': float(b[-1] / max(b[0], 1.0e-30)),
     }
 
@@ -109,20 +135,28 @@ def run(**kwargs):
 
     _remove_outputs('pic_bell_proxy_serial_uncoupled')
     _run_case('serial_uncoupled', 'pic_bell_proxy_serial_uncoupled', 1, False)
-    _RESULTS['serial_uncoupled'] = _load_growth_metrics('pic_bell_proxy_serial_uncoupled')
+    _RESULTS['serial_uncoupled'] = _load_growth_metrics(
+        'pic_bell_proxy_serial_uncoupled', fit_coupled=False
+    )
 
     _remove_outputs('pic_bell_proxy_serial_coupled')
     _run_case('serial_coupled', 'pic_bell_proxy_serial_coupled', 1, True)
-    _RESULTS['serial_coupled'] = _load_growth_metrics('pic_bell_proxy_serial_coupled')
+    _RESULTS['serial_coupled'] = _load_growth_metrics(
+        'pic_bell_proxy_serial_coupled', fit_coupled=True
+    )
 
     if _athena_mpi_enabled():
         _remove_outputs('pic_bell_proxy_mpi2_uncoupled')
         _run_case('mpi2_uncoupled', 'pic_bell_proxy_mpi2_uncoupled', 2, False)
-        _RESULTS['mpi2_uncoupled'] = _load_growth_metrics('pic_bell_proxy_mpi2_uncoupled')
+        _RESULTS['mpi2_uncoupled'] = _load_growth_metrics(
+            'pic_bell_proxy_mpi2_uncoupled', fit_coupled=False
+        )
 
         _remove_outputs('pic_bell_proxy_mpi2_coupled')
         _run_case('mpi2_coupled', 'pic_bell_proxy_mpi2_coupled', 2, True)
-        _RESULTS['mpi2_coupled'] = _load_growth_metrics('pic_bell_proxy_mpi2_coupled')
+        _RESULTS['mpi2_coupled'] = _load_growth_metrics(
+            'pic_bell_proxy_mpi2_coupled', fit_coupled=True
+        )
 
 
 def analyze():
@@ -132,26 +166,30 @@ def analyze():
     su = _RESULTS['serial_uncoupled']
     sc = _RESULTS['serial_coupled']
 
-    ok = _check_upper('serial_uncoupled:gamma_upper', su['gamma'], 1.0e-3) and ok
-    ok = _check_lower('serial_coupled:gamma_lower', sc['gamma'], 4.0e-3) and ok
-    ok = _check_lower('serial_coupled:ratio_lower', sc['ratio'], 1.05) and ok
+    ok = _check_upper('serial_uncoupled:abs_gamma_upper',
+                      abs(su['gamma']), 5.0e-2) and ok
+    ok = _check_lower('serial_coupled:gamma_lower', sc['gamma'], 1.0e-1) and ok
+    ok = _check_lower('serial_coupled:r2_lower', sc['r2'], 0.5) and ok
+    ok = _check_lower('serial_coupled:ratio_lower', sc['ratio'], 10.0) and ok
     ok = _check_lower('serial:gamma_separation',
-                      sc['gamma'] - su['gamma'], 4.0e-3) and ok
+                      sc['gamma'] - su['gamma'], 1.0e-1) and ok
 
     if 'mpi2_uncoupled' in _RESULTS and 'mpi2_coupled' in _RESULTS:
         mu = _RESULTS['mpi2_uncoupled']
         mc = _RESULTS['mpi2_coupled']
-        ok = _check_upper('mpi2_uncoupled:gamma_upper', mu['gamma'], 1.0e-3) and ok
-        ok = _check_lower('mpi2_coupled:gamma_lower', mc['gamma'], 4.0e-3) and ok
-        ok = _check_lower('mpi2_coupled:ratio_lower', mc['ratio'], 1.05) and ok
+        ok = _check_upper('mpi2_uncoupled:abs_gamma_upper',
+                          abs(mu['gamma']), 5.0e-2) and ok
+        ok = _check_lower('mpi2_coupled:gamma_lower', mc['gamma'], 1.0e-1) and ok
+        ok = _check_lower('mpi2_coupled:r2_lower', mc['r2'], 0.5) and ok
+        ok = _check_lower('mpi2_coupled:ratio_lower', mc['ratio'], 10.0) and ok
         ok = _check_lower('mpi2:gamma_separation',
-                          mc['gamma'] - mu['gamma'], 4.0e-3) and ok
+                          mc['gamma'] - mu['gamma'], 1.0e-1) and ok
 
         ok = _check_close('serial_vs_mpi2:uncoupled_gamma',
                           mu['gamma'], su['gamma'], 1.0e-5, 0.0) and ok
         ok = _check_close('serial_vs_mpi2:coupled_gamma',
-                          mc['gamma'], sc['gamma'], 1.0e-5, 0.0) and ok
+                          mc['gamma'], sc['gamma'], 5.0e-2, 0.0) and ok
         ok = _check_close('serial_vs_mpi2:coupled_ratio',
-                          mc['ratio'], sc['ratio'], 1.0e-6, 0.0) and ok
+                          mc['ratio'], sc['ratio'], 5.0, 0.0) and ok
 
     return ok

@@ -31,6 +31,14 @@ nx1       = 4          # Number of cells in each MeshBlock, X1-dir
 nx2       = 4          # Number of cells in each MeshBlock, X2-dir
 nx3       = 4          # Number of cells in each MeshBlock, X3-dir
 
+<mesh_refinement>
+refinement           = none
+num_levels           = 1
+ddens_max            = 0.0
+ncycle_check         = 1
+refinement_interval  = 1
+max_nmb_per_rank     = 128
+
 <time>
 evolution  = dynamic   # dynamic/kinematic/static
 integrator = rk2       # time integration algorithm
@@ -69,6 +77,7 @@ cr_vz0                  = 0.10
 pic_background_mode     = no_mhd
 pic_feedback_mode       = test_particle
 pic_interp_scheme       = tsc
+pic_enable_2d3v         = false
 pic_cr_light_speed      = 1.0
 pic_max_cell_cross      = 2
 pic_theta_max           = 0.3
@@ -131,3 +140,9 @@ variable    = prtcl_d
 id          = prtcl_d
 dcycle      = 1
 ghost_zones = false
+
+<output6>
+file_type   = pvtk
+variable    = prtcl_all
+id          = prtcl_all
+dcycle      = 0

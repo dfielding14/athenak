@@ -125,6 +125,7 @@ def _measure_case(basename):
         'Jy': _integrate_quantity(jy_data, 'prtcl_jy'),
         'Jz': _integrate_quantity(jz_data, 'prtcl_jz'),
         'npart': float(np.sum(pdens_data['pdens'])),
+        'rho_field': np.asarray(rho_data['prtcl_rho'], dtype=float),
     }
 
 
@@ -185,6 +186,34 @@ def run(**kwargs):
                 'meshblock/nx3=4',
             ],
         },
+        {
+            'name': 'serial_frac_random_mb444',
+            'basename': 'pic_dep_decomp_frac_random_serial',
+            'nproc': 1,
+            'args': [
+                'job/basename=pic_dep_decomp_frac_random_serial',
+                'meshblock/nx1=4',
+                'meshblock/nx2=4',
+                'meshblock/nx3=4',
+                'particles/ppc=0.3',
+                'particles/cr_distribution=random',
+                'particles/pic_random_seed=17',
+            ],
+        },
+        {
+            'name': 'mpi2_frac_random_mb444',
+            'basename': 'pic_dep_decomp_frac_random_mpi2',
+            'nproc': 2,
+            'args': [
+                'job/basename=pic_dep_decomp_frac_random_mpi2',
+                'meshblock/nx1=4',
+                'meshblock/nx2=4',
+                'meshblock/nx3=4',
+                'particles/ppc=0.3',
+                'particles/cr_distribution=random',
+                'particles/pic_random_seed=17',
+            ],
+        },
     ]
 
     for case in cases:
@@ -228,5 +257,21 @@ def analyze():
         ok = _check_with_tolerance(case_name + ':npart_vs_serial',
                                    measured['npart'], baseline['npart'],
                                    1.0e-6, 1.0e-8) and ok
+
+    same_mb = _RESULTS['mpi2_mb444']['measured']
+    rho_diff = np.max(np.abs(same_mb['rho_field'] - baseline['rho_field']))
+    ok = _check_with_tolerance('mpi2_mb444:rho_field_vs_serial',
+                               rho_diff, 0.0, 1.0e-12, 0.0) and ok
+
+    frac_serial = _RESULTS['serial_frac_random_mb444']['measured']
+    frac_mpi = _RESULTS['mpi2_frac_random_mb444']['measured']
+    for quantity in ['Q', 'Jx', 'Jy', 'Jz', 'npart']:
+        ok = _check_with_tolerance('mpi2_frac_random_mb444:' + quantity +
+                                   '_vs_serial',
+                                   frac_mpi[quantity], frac_serial[quantity],
+                                   1.0e-10, 1.0e-10) and ok
+    rho_diff = np.max(np.abs(frac_mpi['rho_field'] - frac_serial['rho_field']))
+    ok = _check_with_tolerance('mpi2_frac_random_mb444:rho_field_vs_serial',
+                               rho_diff, 0.0, 1.0e-12, 0.0) and ok
 
     return ok

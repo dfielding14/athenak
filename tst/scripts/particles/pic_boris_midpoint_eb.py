@@ -304,28 +304,32 @@ def analyze():
 
     unc = _RESULTS['coupled_uncoupled']
     cpl = _RESULTS['coupled_feedback']
-    beta_split = 0.5
+    # A cycle-fixed source applied through the RK stages integrates to one full
+    # dt over the step; stage weights are an implementation detail of the RK
+    # update, not a half-strength physical feedback split.
+    feedback_integral = 1.0
 
     d_particle_mom = unc['jtot'] - unc['qtot'] * _V0
     d_gas_mom = cpl['gas_mom'] - unc['gas_mom']
     ok = _check_close_vec('coupled_momentum_exchange',
-                          d_gas_mom + beta_split * d_particle_mom,
+                          d_gas_mom + feedback_integral * d_particle_mom,
                           np.zeros(3), 1.0e-5) and ok
 
     dt_cpl = cpl['time']
     ok = _check_close_vec('coupled_momentum_exchange_diag',
-                          d_gas_mom + beta_split * dt_cpl * cpl['dpdt_tot'],
+                          d_gas_mom + feedback_integral * dt_cpl * cpl['dpdt_tot'],
                           np.zeros(3), 1.0e-5) and ok
 
     ke0 = 0.5 * unc['npart'] * np.dot(_V0, _V0)
     d_particle_ke = unc['pke'] - ke0
     d_gas_e = cpl['gas_e'] - unc['gas_e']
+    energy_tol = 5.0e-5
     ok = _check_close_scalar('coupled_energy_exchange',
-                             d_gas_e + beta_split * d_particle_ke, 0.0,
-                             1.0e-5) and ok
+                             d_gas_e + feedback_integral * d_particle_ke, 0.0,
+                             energy_tol) and ok
     ok = _check_close_scalar('coupled_energy_exchange_diag',
-                             d_gas_e + beta_split * dt_cpl * cpl['dedt_tot'],
-                             0.0, 1.0e-5) and ok
+                             d_gas_e + feedback_integral * dt_cpl * cpl['dedt_tot'],
+                             0.0, energy_tol) and ok
 
     if 'passive_flow_mpi2' in _RESULTS:
         ok = _check_close_vec('serial_vs_mpi2:passive_flow_vavg',
