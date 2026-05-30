@@ -87,6 +87,46 @@ def _make_rank_binary(path, source, rank, nranks):
     path.write_bytes(rewritten)
 
 
+def _sphslice_metadata_bytes(path):
+    with path.open("rb") as handle:
+        return read_sphslice_module._read_header(handle)["_retained_metadata_bytes"]
+
+
+def _sphslice_peak_bytes(path, label, monkeypatch):
+    require_allocation = read_sphslice_module._require_allocation
+    require_retained_bytes = read_sphslice_module._require_retained_bytes
+    observed = []
+
+    def capture_allocation(
+        values, itemsize, observed_label, limits=None, retained_bytes=0
+    ):
+        count = require_allocation(
+            values,
+            itemsize,
+            observed_label,
+            limits=limits,
+            retained_bytes=retained_bytes,
+        )
+        if observed_label == label:
+            observed.append(retained_bytes + count * itemsize)
+        return count
+
+    def capture(nbytes, observed_label, limits=None):
+        if observed_label == label:
+            observed.append(nbytes)
+        return require_retained_bytes(nbytes, observed_label, limits)
+
+    monkeypatch.setattr(read_sphslice_module, "_require_allocation", capture_allocation)
+    monkeypatch.setattr(read_sphslice_module, "_require_retained_bytes", capture)
+    read_sphslice(str(path))
+    monkeypatch.setattr(read_sphslice_module, "_require_allocation", require_allocation)
+    monkeypatch.setattr(
+        read_sphslice_module, "_require_retained_bytes", require_retained_bytes
+    )
+    assert observed
+    return max(observed)
+
+
 @pytest.mark.parametrize(
     ("kind", "reader"),
     (("bin", read_binary), ("cbin", read_coarsened_binary)),
@@ -197,7 +237,7 @@ def _write_sphslice(
     shard_id=None,
     sibling_count=None,
     layout=None,
-    ntheta=1,
+    ntheta=2,
     nphi=2,
 ):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -234,14 +274,17 @@ def test_sphslice_node_inventory_accepts_explicit_empty_shard_and_rejects_gap(tm
     shared = tmp_path / "shared" / "surface.00000.sph.bin"
     node0 = tmp_path / "nodes" / "node_00000000" / "surface.00000.sph.bin"
     node1 = tmp_path / "nodes" / "node_00000001" / "surface.00000.sph.bin"
-    _write_sphslice(shared, "shared", [], [10.0, 20.0])
-    _write_sphslice(node0, "node", [0, 1], [10.0, 20.0], shard_id=0, sibling_count=2)
+    _write_sphslice(shared, "shared", [], [10.0, 20.0, 30.0, 40.0])
+    _write_sphslice(
+        node0, "node", [0, 1, 2, 3], [10.0, 20.0, 30.0, 40.0],
+        shard_id=0, sibling_count=2
+    )
     _write_sphslice(node1, "node", [], [], shard_id=1, sibling_count=2)
 
     result = read_sphslice(str(node0))
     np.testing.assert_allclose(result["data"], read_sphslice(str(shared))["data"])
     assert "node" not in result["header"]
-    assert result["header"]["npoints"] == 2
+    assert result["header"]["npoints"] == 4
     assert result["header"]["number_of_nodes"] == 2
     node1.unlink()
     with pytest.raises(ValueError, match="node shard inventory is incomplete"):
@@ -304,10 +347,13 @@ def test_sphslice_rejects_oversized_declared_sibling_count(tmp_path):
 
 def test_sphslice_rejects_dense_values_above_practical_limit(tmp_path, monkeypatch):
     path = tmp_path / "surface.00000.sph.bin"
-    _write_sphslice(path, "shared", [], [10.0, 20.0])
+    _write_sphslice(path, "shared", [], [10.0] * 16, ntheta=2, nphi=8)
     monkeypatch.setattr(read_sphslice_module, "_variable_token_peak_bytes", lambda *_: 0)
+    limit = _sphslice_peak_bytes(path, "spherical-slice dense values", monkeypatch)
     monkeypatch.setattr(
-        read_sphslice_module, "_MAX_DENSE_ALLOCATION_BYTES", 4
+        read_sphslice_module,
+        "_MAX_DENSE_ALLOCATION_BYTES",
+        limit - 1,
     )
 
     with pytest.raises(ValueError, match="spherical-slice dense values requires"):
@@ -316,20 +362,37 @@ def test_sphslice_rejects_dense_values_above_practical_limit(tmp_path, monkeypat
 
 def test_sphslice_rejects_file_above_practical_read_limit(tmp_path, monkeypatch):
     path = tmp_path / "surface.00000.sph.bin"
-    _write_sphslice(path, "shared", [], [10.0, 20.0])
+    _write_sphslice(path, "shared", [], [10.0, 20.0, 30.0, 40.0])
     monkeypatch.setattr(read_sphslice_module, "_MAX_FILE_READ_BYTES", 16)
 
     with pytest.raises(ValueError, match="practical file-read limit"):
         read_sphslice(str(path))
 
 
-def test_sphslice_rejects_coordinate_array_above_practical_limit(
-    tmp_path, monkeypatch
-):
+def test_sphslice_preflights_coordinate_array_before_allocation(tmp_path, monkeypatch):
     path = tmp_path / "surface.00000.sph.bin"
-    _write_sphslice(path, "shared", [], [10.0, 20.0, 30.0], ntheta=3, nphi=1)
+    _write_sphslice(path, "shared", [], [10.0] * 32, ntheta=16, nphi=2)
     monkeypatch.setattr(read_sphslice_module, "_variable_token_peak_bytes", lambda *_: 0)
-    monkeypatch.setattr(read_sphslice_module, "_MAX_DENSE_ALLOCATION_BYTES", 16)
+    require_allocation = read_sphslice_module._require_allocation
+
+    def inflate_theta_coordinate_allocation(
+        values, itemsize, label, limits=None, retained_bytes=0
+    ):
+        if label == "spherical-slice theta coordinates":
+            itemsize = 10**9
+        return require_allocation(
+            values,
+            itemsize,
+            label,
+            limits=limits,
+            retained_bytes=retained_bytes,
+        )
+
+    monkeypatch.setattr(
+        read_sphslice_module,
+        "_require_allocation",
+        inflate_theta_coordinate_allocation,
+    )
 
     with pytest.raises(ValueError, match="theta coordinates requires"):
         read_sphslice(str(path))
@@ -339,9 +402,14 @@ def test_sphslice_rejects_cumulative_retained_arrays_above_practical_limit(
     tmp_path, monkeypatch
 ):
     path = tmp_path / "surface.00000.sph.bin"
-    _write_sphslice(path, "shared", [], [10.0, 20.0])
+    _write_sphslice(path, "shared", [], [10.0] * 16, ntheta=4, nphi=4)
     monkeypatch.setattr(read_sphslice_module, "_variable_token_peak_bytes", lambda *_: 0)
-    monkeypatch.setattr(read_sphslice_module, "_MAX_DENSE_ALLOCATION_BYTES", 31)
+    limit = _sphslice_peak_bytes(path, "spherical-slice retained arrays", monkeypatch)
+    monkeypatch.setattr(
+        read_sphslice_module,
+        "_MAX_DENSE_ALLOCATION_BYTES",
+        limit - 1,
+    )
 
     with pytest.raises(ValueError, match="spherical-slice retained arrays requires"):
         read_sphslice(str(path))
@@ -349,7 +417,7 @@ def test_sphslice_rejects_cumulative_retained_arrays_above_practical_limit(
 
 def test_sphslice_rejects_oversized_input_header_offset(tmp_path):
     path = tmp_path / "surface.00000.sph.bin"
-    _write_sphslice(path, "shared", [], [10.0, 20.0])
+    _write_sphslice(path, "shared", [], [10.0, 20.0, 30.0, 40.0])
     payload = path.read_bytes()
     payload = payload.replace(
         b"header_offset=0\n",
@@ -369,3 +437,14 @@ def test_sphslice_rejects_oversized_surface_geometry(tmp_path):
 
     with pytest.raises(ValueError, match="spherical-slice surface coverage requires"):
         read_sphslice(str(path))
+
+
+def test_restart_writer_rejects_nonpositive_segments_and_payloads_before_manifest():
+    source = (ROOT / "src" / "outputs" / "restart.cpp").read_text()
+
+    segment_validation = source.index("blocks <= 0")
+    payload_validation = source.index("blocks_per_node[id] <= 0", segment_validation)
+    coordinated_broadcast = source.index("BroadcastRootFailure(", payload_validation)
+    manifest_open = source.index("std::ofstream manifest(", coordinated_broadcast)
+
+    assert segment_validation < payload_validation < coordinated_broadcast < manifest_open

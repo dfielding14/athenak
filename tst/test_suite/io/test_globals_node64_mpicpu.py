@@ -39,6 +39,7 @@ def globals_node64_harness(tmp_path_factory):
         check=True,
         capture_output=True,
         text=True,
+        timeout=90,
     )
     return launcher, output
 

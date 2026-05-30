@@ -19,10 +19,15 @@ REGION_SIZE_BYTES = struct.calcsize("=9d")
 REGION_INDICES_BYTES = struct.calcsize("=19i")
 
 
+def _subprocess_run(*args, **kwargs):
+    kwargs.setdefault("timeout", 90)
+    return subprocess.run(*args, **kwargs)
+
+
 def _run_case(tmp_path: Path, *overrides: str):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
-    proc = subprocess.run(
+    proc = _subprocess_run(
         ["./athena", "-i", INPUT_FILE, "-d", str(run_dir), *overrides],
         check=True,
         capture_output=True,
@@ -71,7 +76,7 @@ def test_timing_is_opt_in(tmp_path):
 def test_invalid_final_output_policy_is_rejected(tmp_path):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
-    proc = subprocess.run(
+    proc = _subprocess_run(
         [
             "./athena",
             "-i",
@@ -90,7 +95,7 @@ def test_invalid_final_output_policy_is_rejected(tmp_path):
 def test_terminal_restart_resume_advances_counter_without_overwrite(tmp_path):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
-    subprocess.run(
+    _subprocess_run(
         [
             "./athena",
             "-i",
@@ -105,7 +110,7 @@ def test_terminal_restart_resume_advances_counter_without_overwrite(tmp_path):
     )
     terminal_restart = run_dir / "rst" / "io_policy.00001.rst"
     saved_terminal_bytes = terminal_restart.read_bytes()
-    subprocess.run(
+    _subprocess_run(
         [
             "./athena",
             "-r",
@@ -128,7 +133,7 @@ def test_origin_main_shared_restart_fixture_resumes(tmp_path):
     run_dir = tmp_path / "origin_main_shared_resume"
     run_dir.mkdir()
     restart = FIXTURES / "rst" / "shared" / "io_legacy_shared.00001.rst"
-    subprocess.run(
+    _subprocess_run(
         [
             "./athena",
             "-r",
@@ -146,7 +151,7 @@ def test_missing_restart_path_fails_immediately(tmp_path):
     run_dir = tmp_path / "missing_restart_run"
     run_dir.mkdir()
     restart = tmp_path / "missing.rst"
-    proc = subprocess.run(
+    proc = _subprocess_run(
         ["./athena", "-r", str(restart), "-d", str(run_dir)],
         capture_output=True,
         text=True,
@@ -171,7 +176,7 @@ def test_corrupt_restart_meshblock_extent_fails_before_mesh_arithmetic(tmp_path)
     restart.write_bytes(data)
     run_dir = tmp_path / "corrupt_meshblock_extent_run"
     run_dir.mkdir()
-    proc = subprocess.run(
+    proc = _subprocess_run(
         ["./athena", "-r", str(restart), "-d", str(run_dir)],
         capture_output=True,
         text=True,
@@ -197,7 +202,7 @@ def _corrupt_origin_main_restart(tmp_path, name, mutate):
 def _resume_corrupt_restart(tmp_path, restart):
     run_dir = tmp_path / f"{restart.stem}_run"
     run_dir.mkdir()
-    proc = subprocess.run(
+    proc = _subprocess_run(
         ["./athena", "-r", str(restart), "-d", str(run_dir)],
         capture_output=True,
         text=True,
@@ -230,7 +235,7 @@ def _rewrite_restart_inventory(restart, locations, costs):
 @pytest.fixture(scope="module")
 def restart_metadata_template(tmp_path_factory):
     run_dir = tmp_path_factory.mktemp("restart_metadata_template")
-    subprocess.run(
+    _subprocess_run(
         ["./athena", "-i", METADATA_INPUT_FILE, "-d", str(run_dir)],
         check=True,
         capture_output=True,
@@ -302,7 +307,7 @@ def test_corrupt_restart_dimension_flags_fail_before_tree_reconstruction(tmp_pat
 def test_corrupt_restart_inactive_coarse_axis_fails_before_tree(tmp_path):
     run_dir = tmp_path / "inactive_coarse_axis_source"
     run_dir.mkdir()
-    subprocess.run(
+    _subprocess_run(
         ["./athena", "-i", INPUT_FILE, "-d", str(run_dir)],
         check=True,
         capture_output=True,
@@ -369,7 +374,7 @@ def test_corrupt_restart_adaptive_level_count_fails_before_tree(
 def test_generated_3d_restart_with_nonzero_x2_resumes(tmp_path):
     run_dir = tmp_path / "generated_3d"
     run_dir.mkdir()
-    subprocess.run(
+    _subprocess_run(
         [
             "./athena",
             "-i",

@@ -27,6 +27,11 @@ ATHENAK_DIAGNOSTIC_INLINE bool IsFinite(T value) {
 }
 
 template <typename T>
+ATHENAK_DIAGNOSTIC_INLINE bool IsPositiveFinite(T value) {
+  return IsFinite(value) && value > static_cast<T>(0.0);
+}
+
+template <typename T>
 ATHENAK_DIAGNOSTIC_INLINE T ClampUnit(T value) {
   if (value < static_cast<T>(-1.0)) return static_cast<T>(-1.0);
   if (value > static_cast<T>(1.0)) return static_cast<T>(1.0);
@@ -97,8 +102,8 @@ ATHENAK_DIAGNOSTIC_INLINE Flow<T> BuildFlow(T x, T y, T z, T rho,
                                             T mx, T my, T mz) {
   Flow<T> flow{};
   flow.geometry = BuildGeometry(x, y, z);
-  flow.valid = flow.geometry.valid && IsFinite(rho) &&
-      rho > static_cast<T>(0.0) && IsFinite(mx) && IsFinite(my) && IsFinite(mz);
+  flow.valid = flow.geometry.valid && IsPositiveFinite(rho) &&
+      IsFinite(mx) && IsFinite(my) && IsFinite(mz);
   if (!flow.valid) return flow;
 
   flow.vx = mx/rho;

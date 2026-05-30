@@ -14,8 +14,10 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -43,6 +45,7 @@ constexpr std::size_t kMaxManifestPayloadRecordBytes = 4096;
 constexpr std::size_t kMaxManifestSegmentRecordBytes = 256;
 constexpr std::size_t kMaxManifestTrailingRecordBytes = 256;
 constexpr std::size_t kMaxGeneratedPayloadPathBytes = 1024;
+constexpr const char *kRestartManifestTimingEnv = "ATHENAK_RESTART_MANIFEST_TIMING";
 
 struct NodeRestartSpan {
   int node;
@@ -130,6 +133,24 @@ std::uint64_t CheckedAdd(std::uint64_t left, std::uint64_t right,
                          const std::string &context) {
   if (right > std::numeric_limits<std::uint64_t>::max() - left) {
     FailNodeRestart(context + " overflows.");
+  }
+  return left + right;
+}
+
+std::uint64_t DiagnosticCappedMultiply(std::uint64_t left, std::uint64_t right,
+                                       bool *capped) {
+  if (left != 0 && right > std::numeric_limits<std::uint64_t>::max()/left) {
+    *capped = true;
+    return std::numeric_limits<std::uint64_t>::max();
+  }
+  return left*right;
+}
+
+std::uint64_t DiagnosticCappedAdd(std::uint64_t left, std::uint64_t right,
+                                  bool *capped) {
+  if (right > std::numeric_limits<std::uint64_t>::max() - left) {
+    *capped = true;
+    return std::numeric_limits<std::uint64_t>::max();
   }
   return left + right;
 }
@@ -353,6 +374,24 @@ std::vector<NodeRestartSpan> RouteLocalSpans(
 
 }  // namespace
 
+bool RestartManifestTimingEnabled() {
+  const char *configured = std::getenv(kRestartManifestTimingEnv);
+  return configured != nullptr && std::strcmp(configured, "0") != 0;
+}
+
+void ReportRestartManifestStartupTiming(double before_parse_seconds,
+                                        double after_parse_seconds) {
+  if (!RestartManifestTimingEnabled()) return;
+  double elapsed_seconds = after_parse_seconds - before_parse_seconds;
+  std::cout << std::setprecision(17)
+            << "[restart-manifest] phase=startup_parse"
+            << " rank=" << global_variable::my_rank
+            << " startup_before_s=" << before_parse_seconds
+            << " startup_after_s=" << after_parse_seconds
+            << " elapsed_s=" << elapsed_seconds
+            << std::endl;
+}
+
 [[noreturn]] void FailNodeRestart(const std::string &message) {
   std::cerr << "### FATAL ERROR while reading node restart manifest: "
             << message << std::endl;
@@ -407,6 +446,9 @@ bool NodeRestartManifest::IsPayloadPath(const std::string &path) {
 }
 
 NodeRestartManifest NodeRestartManifest::Load(const std::string &path) {
+  bool timing_enabled = RestartManifestTimingEnabled();
+  std::unique_ptr<Kokkos::Timer> timing_timer;
+  if (timing_enabled) timing_timer = std::make_unique<Kokkos::Timer>();
   NodeRestartManifest manifest;
   manifest.manifest_path_ = path;
   std::error_code error;
@@ -463,6 +505,9 @@ NodeRestartManifest NodeRestartManifest::Load(const std::string &path) {
     };
     if (payload.node != expected_node) {
       FailNodeRestart("payload inventory must be ordered by contiguous node id.");
+    }
+    if (payload.blocks <= 0) {
+      FailNodeRestart("payload block count must be positive.");
     }
     manifest.payloads_.push_back(payload);
   }
@@ -575,12 +620,50 @@ NodeRestartManifest NodeRestartManifest::Load(const std::string &path) {
     }
   }
   ValidatePayloadHeaders(manifest.payloads_, manifest.header_size_);
+  if (timing_enabled) {
+    bool pressure_capped = false;
+    std::uint64_t logical_header_validation_bytes = DiagnosticCappedMultiply(
+        static_cast<std::uint64_t>(payload_count - 1), 2, &pressure_capped);
+    logical_header_validation_bytes = DiagnosticCappedMultiply(
+        logical_header_validation_bytes, manifest.header_size_, &pressure_capped);
+    std::uint64_t logical_validation_pressure_bytes = DiagnosticCappedAdd(
+        static_cast<std::uint64_t>(manifest_bytes), logical_header_validation_bytes,
+        &pressure_capped);
+    manifest.validation_timing_enabled_ = true;
+    manifest.logical_validation_pressure_capped_ = pressure_capped;
+    manifest.timing_payload_count_ = static_cast<std::size_t>(payload_count);
+    manifest.timing_manifest_bytes_ = static_cast<std::uint64_t>(manifest_bytes);
+    manifest.logical_header_validation_bytes_ = logical_header_validation_bytes;
+    manifest.logical_validation_pressure_bytes_ = logical_validation_pressure_bytes;
+    manifest.validation_elapsed_seconds_ = timing_timer->seconds();
+  }
   return manifest;
+}
+
+void NodeRestartManifest::ReportValidationTiming() const {
+  if (!validation_timing_enabled_) return;
+  std::cout << std::setprecision(17)
+            << "[restart-manifest] phase=validate"
+            << " rank=" << global_variable::my_rank
+            << " estimate_scope=manifest_parse_plus_replicated_header_compare"
+            << " payload_count=" << timing_payload_count_
+            << " manifest_bytes=" << timing_manifest_bytes_
+            << " header_bytes=" << header_size_
+            << " logical_header_validation_bytes=" << logical_header_validation_bytes_
+            << " logical_validation_pressure_bytes="
+            << logical_validation_pressure_bytes_
+            << " logical_validation_pressure_capped="
+            << logical_validation_pressure_capped_
+            << " elapsed_s=" << validation_elapsed_seconds_
+            << std::endl;
 }
 
 void NodeRestartManifest::LoadLocalBlocks(int gid_start, int count,
                                           std::uint64_t data_size,
                                           std::vector<char> *blocks) const {
+  bool timing_enabled = RestartManifestTimingEnabled();
+  std::unique_ptr<Kokkos::Timer> timing_timer;
+  if (timing_enabled) timing_timer = std::make_unique<Kokkos::Timer>();
   if (data_size != data_size_) {
     FailNodeRestart("payload per-block byte count does not match the restart header.");
   }
@@ -663,5 +746,17 @@ void NodeRestartManifest::LoadLocalBlocks(int gid_start, int count,
       FailNodeRestart("payload file could not be closed.");
     }
 #endif
+  }
+  if (timing_enabled) {
+    double elapsed_seconds = timing_timer->seconds();
+    std::cout << std::setprecision(17)
+              << "[restart-manifest] phase=load_local_blocks"
+              << " rank=" << global_variable::my_rank
+              << " payload_count=" << payloads_.size()
+              << " local_blocks=" << count
+              << " local_bytes=" << block_bytes
+              << " span_count=" << spans.size()
+              << " elapsed_s=" << elapsed_seconds
+              << std::endl;
   }
 }

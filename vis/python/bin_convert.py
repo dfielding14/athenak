@@ -16,7 +16,7 @@ files, you could do the following:
   import os
 
   binary_fname = "path/to/file.bin"
-  athdf_fname = binary_fname.replace(".bin", ".athdf")
+  athdf_fname = os.path.splitext(binary_fname)[0] + ".athdf"
   xdmf_fname = athdf_fname + ".xdmf"
   filedata = bin_convert.read_binary(binary_fname)
   bin_convert.write_athdf(athdf_fname, filedata)
@@ -86,9 +86,40 @@ The read_*(...) functions return a filedata dictionary-like object with
 import numpy as np
 import os
 import h5py
-import glob
 from numbers import Integral
 import re
+import sys
+
+if __package__:
+    from .io_reader_common import (
+        ReaderLimits,
+        add_reader_limit_arguments,
+        bounded_partition_files,
+        checked_product,
+        checked_sum,
+        conservative_text_metadata_bytes,
+        count_ascii_tokens,
+        metadata_record_bytes,
+        normalize_reader_limits,
+        reader_limits_from_args,
+        require_live_bytes,
+        require_read_bytes,
+    )
+else:
+    from io_reader_common import (
+        ReaderLimits,
+        add_reader_limit_arguments,
+        bounded_partition_files,
+        checked_product,
+        checked_sum,
+        conservative_text_metadata_bytes,
+        count_ascii_tokens,
+        metadata_record_bytes,
+        normalize_reader_limits,
+        reader_limits_from_args,
+        require_live_bytes,
+        require_read_bytes,
+    )
 
 
 _SHARD_DIRECTORY_RE = re.compile(r"^(rank|node)_([0-9]{8})$")
@@ -110,51 +141,67 @@ def _partition_info(filename):
     return "shared", None
 
 
-def _require_binary_bytes(nbytes, label):
+def _binary_reader_limits(limits):
+    return normalize_reader_limits(
+        limits,
+        max_live_bytes=_MAX_MESHBLOCK_ALLOCATION_BYTES,
+        max_header_read_bytes=_MAX_BINARY_HEADER_BYTES,
+    )
+
+
+def _athdf_reader_limits(limits):
+    return normalize_reader_limits(
+        limits,
+        max_live_bytes=_MAX_ATHDF_ALLOCATION_BYTES,
+        max_header_read_bytes=_MAX_BINARY_HEADER_BYTES,
+    )
+
+
+def _require_binary_bytes(nbytes, label, limits=None):
     """Reject one reader allocation before materializing unreasonable data."""
-    if nbytes > _MAX_MESHBLOCK_ALLOCATION_BYTES:
-        raise ValueError(
-            f"{label} requires {nbytes} bytes, exceeding the practical allocation "
-            f"limit of {_MAX_MESHBLOCK_ALLOCATION_BYTES} bytes"
-        )
+    return require_live_bytes(nbytes, label, _binary_reader_limits(limits))
 
 
 def _checked_binary_product(values, label):
     """Multiply non-negative integer extents without permitting malformed values."""
-    product = 1
-    for value in values:
-        if not isinstance(value, Integral) or value < 0:
-            raise ValueError(f"{label} has invalid extent {value!r}")
-        product *= int(value)
-    return product
+    return checked_product(values, label)
 
 
-def _require_athdf_bytes(nbytes, label):
+def _require_athdf_bytes(nbytes, label, limits=None):
     """Reject athdf-like helper allocations before calling NumPy."""
-    if nbytes > _MAX_ATHDF_ALLOCATION_BYTES:
-        raise ValueError(
-            f"{label} requires {nbytes} bytes, exceeding the practical allocation "
-            f"limit of {_MAX_ATHDF_ALLOCATION_BYTES} bytes"
-        )
+    return require_live_bytes(nbytes, label, _athdf_reader_limits(limits))
 
 
-def _preflight_athdf_coordinates(nx_vals, dtype):
+def _preflight_athdf_coordinates(
+    nx_vals, dtype, limits=None, retained_bytes=0
+):
     """Bound face and center coordinate arrays for one athdf-like conversion."""
     itemsize = np.dtype(dtype).itemsize
     total = sum(
         _checked_binary_product((nx + 1 + nx, itemsize), "athdf-like coordinates")
         for nx in nx_vals
     )
-    _require_athdf_bytes(total, "athdf-like coordinate arrays")
+    total = checked_sum(
+        (retained_bytes, total), "athdf-like coordinate arrays"
+    )
+    _require_athdf_bytes(total, "athdf-like coordinate arrays", limits)
     linspace_temporary = max(nx + 1 for nx in nx_vals) * np.dtype(np.float64).itemsize
     _require_athdf_bytes(
-        total + linspace_temporary, "athdf-like coordinate generation peak"
+        total + linspace_temporary,
+        "athdf-like coordinate generation peak",
+        limits,
     )
     return total
 
 
 def _preflight_athdf_outputs(
-    shape, quantities, dtype, return_levels, restricted_shape, retained_bytes=0
+    shape,
+    quantities,
+    dtype,
+    return_levels,
+    restricted_shape,
+    retained_bytes=0,
+    limits=None,
 ):
     """Bound dense fields, optional levels, and optional restriction bookkeeping."""
     cells = _checked_binary_product(shape, "athdf-like output shape")
@@ -172,16 +219,18 @@ def _preflight_athdf_outputs(
             "athdf-like restriction map",
         )
     total += retained_bytes
-    _require_athdf_bytes(total, "athdf-like output arrays")
+    _require_athdf_bytes(total, "athdf-like output arrays", limits)
     return total
 
 
-def _preflight_athdf_temporary(retained_bytes, shape, dtype, label):
+def _preflight_athdf_temporary(
+    retained_bytes, shape, dtype, label, limits=None
+):
     """Bound one temporary array while the dense athdf-like result is retained."""
     temporary = _checked_binary_product(
         (*shape, np.dtype(dtype).itemsize), label
     )
-    _require_athdf_bytes(retained_bytes + temporary, label + " peak")
+    _require_athdf_bytes(retained_bytes + temporary, label + " peak", limits)
 
 
 def _validate_binary_grid_metadata(
@@ -215,8 +264,21 @@ def _validate_meshblock_metadata(
     root_grid_size,
     root_bounds,
     nghost,
+    limits=None,
+    externally_retained_bytes=0,
 ):
     """Reject malformed logical locations before athdf-like exponent arithmetic."""
+    _require_binary_bytes(
+        checked_sum(
+            (
+                externally_retained_bytes,
+                _logical_owner_dictionary_bytes(len(logical)),
+            ),
+            f"{family} logical MeshBlock validation peak in {filename!r}",
+        ),
+        f"{family} logical MeshBlock validation peak in {filename!r}",
+        limits,
+    )
     seen = set()
     for block_num, (location, bounds) in enumerate(zip(logical, geometry)):
         values = [int(value) for value in location]
@@ -334,43 +396,274 @@ def _validate_coarsened_moments(filename, pheader, nvars, var_list):
     return number_of_moments
 
 
-def _read_limited_binary_line(fp, family, label, budget=None):
+def _read_limited_binary_line(fp, family, label, budget=None, limits=None):
     """Read one binary metadata line without accepting an unbounded record."""
-    line = fp.readline(_MAX_BINARY_HEADER_BYTES + 1)
-    if len(line) > _MAX_BINARY_HEADER_BYTES:
+    limits = _binary_reader_limits(limits)
+    retained_raw_bytes = 0 if budget is None else budget[0]
+    remaining_header_bytes = limits.max_header_read_bytes - retained_raw_bytes
+    remaining_text_bytes = limits.max_live_bytes // 4 - retained_raw_bytes
+    read_cap = max(0, min(remaining_header_bytes, remaining_text_bytes))
+    line = fp.readline(read_cap + 1)
+    if len(line) > read_cap:
+        _require_binary_bytes(
+            conservative_text_metadata_bytes(retained_raw_bytes + len(line)),
+            f"{family} metadata text peak in {fp.name!r}",
+            limits,
+        )
+        if budget is not None and retained_raw_bytes:
+            raise ValueError(
+                f"{family} metadata records in {fp.name!r} require at least "
+                f"{retained_raw_bytes + len(line)} bytes, exceeding the practical "
+                f"header limit of {limits.max_header_read_bytes} bytes"
+            )
         raise ValueError(
             f"{family} {label} in {fp.name!r} exceeds the practical header limit "
-            f"of {_MAX_BINARY_HEADER_BYTES} bytes"
+            f"of {limits.max_header_read_bytes} bytes"
         )
     if budget is not None:
         budget[0] += len(line)
-        if budget[0] > _MAX_BINARY_HEADER_BYTES:
+        if budget[0] > limits.max_header_read_bytes:
             raise ValueError(
                 f"{family} metadata records in {fp.name!r} require {budget[0]} bytes, "
                 f"exceeding the practical header limit of "
-                f"{_MAX_BINARY_HEADER_BYTES} bytes"
+                f"{limits.max_header_read_bytes} bytes"
             )
+        _require_binary_bytes(
+            conservative_text_metadata_bytes(budget[0]),
+            f"{family} metadata text peak in {fp.name!r}",
+            limits,
+        )
     return line
 
 
-def _read_binary_parameter_dump(fp, header_size, family):
+def _parse_binary_metadata_bytes(raw_line, family, label, filename):
+    """Parse one fixed ``key=value`` metadata record without token expansion."""
+    key, separator, value = raw_line.strip().partition(b"=")
+    if not separator or not key or not value or b"=" in value:
+        raise ValueError(f"invalid {family} {label} in {filename!r}")
+    return key.strip(), value.strip()
+
+
+def _parse_binary_metadata_int(raw_line, family, label, filename):
+    """Parse one bounded integer metadata record without materializing tokens."""
+    _, value = _parse_binary_metadata_bytes(raw_line, family, label, filename)
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError(f"invalid {family} {label} in {filename!r}") from exc
+
+
+def _parse_binary_preheader_text(raw_line, family, filename):
+    """Decode one bounded preheader pair after the cumulative text preflight."""
+    key, value = _parse_binary_metadata_bytes(
+        raw_line, family, "preheader metadata", filename
+    )
+    try:
+        return key.decode("utf-8"), value.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"invalid {family} preheader text in {filename!r}") from exc
+
+
+def _validate_binary_format_header(raw_line, family, filename):
+    """Require the exact versioned binary signature without splitting attacker text."""
+    signature = raw_line.rstrip(b"\r\n")
+    if not signature.startswith(b"Athena"):
+        raise TypeError(f"bad file format in {filename!r} (should start with \"Athena\")")
+    if signature != b"Athena binary output version=1.1":
+        raise TypeError(f"unsupported {family} file format version in {filename!r}")
+
+
+def _read_binary_parameter_dump(
+    fp, header_size, family, limits=None, externally_retained_bytes=0
+):
     """Read one embedded athinput dump after bounding its declared byte count."""
-    if header_size < 0 or header_size > _MAX_BINARY_HEADER_BYTES:
+    limits = _binary_reader_limits(limits)
+    if header_size < 0 or header_size > limits.max_header_read_bytes:
         raise ValueError(
             f"{family} parameter header in {fp.name!r} declares {header_size} bytes, "
-            f"exceeding the practical header limit of {_MAX_BINARY_HEADER_BYTES} bytes"
+            "exceeding the practical header limit of "
+            f"{limits.max_header_read_bytes} bytes"
         )
-    raw_header = fp.read(header_size)
-    if len(raw_header) != header_size:
+    retained_bytes = checked_sum(
+        (conservative_text_metadata_bytes(header_size), sys.getsizeof([])),
+        f"{family} retained parameter header",
+    )
+    _require_binary_bytes(
+        checked_sum(
+            (externally_retained_bytes, retained_bytes),
+            f"{family} parameter header parsing peak",
+        ),
+        f"{family} parameter header parsing peak",
+        limits,
+    )
+    lines = []
+    retained_string_bytes = 0
+    bytes_read = 0
+    while bytes_read < header_size:
+        raw_line = fp.readline(header_size - bytes_read)
+        if not raw_line:
+            raise ValueError(
+                f"truncated {family} parameter header in {fp.name!r}: "
+                f"expected {header_size} bytes, found {bytes_read}"
+            )
+        bytes_read += len(raw_line)
+        try:
+            line = raw_line.decode("utf-8").split("#", 1)[0].strip()
+        except UnicodeDecodeError as exc:
+            raise ValueError(
+                f"invalid {family} parameter header text in {fp.name!r}"
+            ) from exc
+        if not line:
+            continue
+        lines.append(line)
+        retained_string_bytes = checked_sum(
+            (retained_string_bytes, sys.getsizeof(line)),
+            f"{family} retained parameter-header strings",
+        )
+        retained_bytes = checked_sum(
+            (
+                conservative_text_metadata_bytes(header_size),
+                sys.getsizeof(lines),
+                retained_string_bytes,
+            ),
+            f"{family} retained parameter header",
+        )
+        _require_binary_bytes(
+            checked_sum(
+                (externally_retained_bytes, retained_bytes),
+                f"{family} parameter header parsing peak",
+            ),
+            f"{family} parameter header parsing peak",
+            limits,
+        )
+    return lines, retained_bytes
+
+
+def _preflight_binary_preheader_text(
+    fp, family, budget, limits=None, retained_record_bytes=0
+):
+    """Charge decoded preheader text and retained records before materialization."""
+    retained_bytes = checked_sum(
+        (
+            conservative_text_metadata_bytes(budget[0]),
+            retained_record_bytes,
+        ),
+        f"{family} retained preheader metadata",
+    )
+    _require_binary_bytes(
+        retained_bytes,
+        f"{family} preheader metadata peak in {fp.name!r}",
+        limits,
+    )
+    return retained_bytes
+
+
+def _variable_token_peak_bytes(text, token_count):
+    """Conservatively bound split variable strings and their pointer lists."""
+    pointer_bytes = np.dtype(np.intp).itemsize
+    return (
+        sys.getsizeof([])
+        + 2 * token_count * pointer_bytes
+        + token_count * sys.getsizeof("")
+        + 4 * len(text)
+    )
+
+
+def _variable_dictionary_bytes(variable_count):
+    """Conservatively bound the retained per-variable dictionary and lists."""
+    pointer_bytes = np.dtype(np.intp).itemsize
+    return (
+        sys.getsizeof({})
+        + variable_count * (8 * pointer_bytes + sys.getsizeof([]))
+    )
+
+
+def _variable_name_set_bytes(variable_names):
+    """Conservatively bound transient duplicate-name set construction."""
+    return sys.getsizeof(set()) + sum(
+        metadata_record_bytes(variable, charge_value=False)
+        for variable in variable_names
+    )
+
+
+def _logical_owner_dictionary_bytes(meshblock_count):
+    """Conservatively bound transient duplicate-detection dictionary entries."""
+    pointer_bytes = np.dtype(np.intp).itemsize
+    per_entry_bytes = (
+        sys.getsizeof((0, 0, 0, 0))
+        + 4 * sys.getsizeof(0)
+        + 32 * pointer_bytes
+    )
+    return sys.getsizeof({}) + meshblock_count * per_entry_bytes
+
+
+def _meshblock_arrays_bytes(
+    mb_index, mb_logical, mb_geometry, mb_data, retained_variable_bytes
+):
+    """Return retained binary arrays before they are attached to filedata."""
+    return checked_sum(
+        (
+            retained_variable_bytes,
+            mb_index.nbytes,
+            mb_logical.nbytes,
+            mb_geometry.nbytes,
+            *(values.nbytes for values in mb_data.values()),
+        ),
+        "retained binary MeshBlock arrays",
+    )
+
+
+def _is_effective_slice(
+    levels, logical_locations, axis, retained_binary_bytes, limits
+):
+    """Classify one reduced axis after charging tuple-set materialization."""
+    _require_athdf_bytes(
+        checked_sum(
+            (
+                retained_binary_bytes,
+                _logical_owner_dictionary_bytes(len(levels)),
+            ),
+            "athdf-like slice classification peak",
+        ),
+        "athdf-like slice classification peak",
+        limits,
+    )
+    other_locations = {
+        (
+            level,
+            logical_locations[index, (axis + 1) % 3],
+            logical_locations[index, (axis + 2) % 3],
+        )
+        for index, level in enumerate(levels)
+    }
+    return len(other_locations) == len(levels)
+
+
+def _read_binary_variable_list(
+    fp, family, budget, limits=None, externally_retained_bytes=0
+):
+    """Read and preflight one variable-name record before splitting it."""
+    limits = _binary_reader_limits(limits)
+    raw_line = _read_limited_binary_line(
+        fp, family, "variable list", budget, limits
+    )
+    try:
+        text = raw_line.decode("utf-8")
+    except UnicodeDecodeError as exc:
         raise ValueError(
-            f"truncated {family} parameter header in {fp.name!r}: "
-            f"expected {header_size} bytes, found {len(raw_header)}"
-        )
-    return [
-        line.decode("utf-8").split("#")[0].strip()
-        for line in raw_header.split(b"\n")
-        if line.decode("utf-8").split("#")[0].strip()
-    ]
+            f"invalid {family} variable list in {fp.name!r}"
+        ) from exc
+    token_count = count_ascii_tokens(text)
+    retained_bytes = _variable_token_peak_bytes(text, token_count)
+    _require_binary_bytes(
+        checked_sum(
+            (externally_retained_bytes, retained_bytes),
+            f"{family} variable tokenization peak in {fp.name!r}",
+        ),
+        f"{family} variable tokenization peak in {fp.name!r}",
+        limits,
+    )
+    return text.split()[1:], retained_bytes
 
 
 def _is_partitioned_path(filename):
@@ -378,44 +671,17 @@ def _is_partitioned_path(filename):
     return _partition_info(filename)[0] != "shared"
 
 
-def _glob_partition_files(shard_filename):
+def _glob_partition_files(shard_filename, limits=None):
     """Return all sibling files belonging to a rank- or node-sharded output."""
     shard_filename = os.path.abspath(shard_filename)
-    shard_dir = os.path.dirname(shard_filename)
-    parent_dir = os.path.dirname(shard_dir)
-    base_name = os.path.basename(shard_filename)
     shard_kind, _ = _partition_info(shard_filename)
-    if shard_kind == "rank":
-        pattern = os.path.join(parent_dir, "rank_*", base_name)
-    elif shard_kind == "node":
-        pattern = os.path.join(parent_dir, "node_*", base_name)
-    else:
-        return [shard_filename]
-
-    files = sorted(glob.glob(pattern))
-    if not files:
-        raise FileNotFoundError(
-            f"no binary shard files found for {shard_filename!r} "
-            f"(pattern {pattern!r})"
-        )
-    shard_ids = []
-    for candidate in files:
-        candidate_kind, shard_id = _partition_info(candidate)
-        if candidate_kind != shard_kind:
-            raise ValueError(
-                f"binary shard {candidate!r} does not match {shard_kind!r} inventory"
-            )
-        shard_ids.append(shard_id)
-    if len(set(shard_ids)) != len(shard_ids):
-        raise ValueError(f"binary {shard_kind} shard inventory contains duplicate IDs")
-    expected_ids = set(range(len(shard_ids)))
-    actual_ids = set(shard_ids)
-    if actual_ids != expected_ids:
-        raise ValueError(
-            f"binary {shard_kind} shard inventory is incomplete: "
-            f"expected IDs {sorted(expected_ids)!r}, found {sorted(actual_ids)!r}"
-        )
-    return files
+    return bounded_partition_files(
+        shard_filename,
+        shard_kind,
+        "binary",
+        _binary_reader_limits(limits),
+        _partition_info,
+    )
 
 
 def _optional_pheader_int(pheader, key, filename, family):
@@ -481,6 +747,19 @@ def _binary_partition_metadata(filename, pheader, family):
         raise ValueError(
             f"{family} file {filename!r} has invalid 'number of meshblocks' metadata"
         )
+    if kind == "node":
+        required = {
+            "distribution": distribution,
+            "node": node,
+            "number of nodes": number_of_nodes,
+            "number of meshblocks": number_of_meshblocks,
+        }
+        missing = [key for key, value in required.items() if value is None]
+        if missing:
+            raise ValueError(
+                f"{family} node shard {filename!r} is missing required "
+                f"inventory metadata: {', '.join(missing)}"
+            )
     return {
         "distribution": distribution if distribution is not None else kind,
         "rank": rank,
@@ -499,17 +778,19 @@ def _validate_binary_sibling_inventory(shard_files, shard_data, family):
     count_key = "number_of_ranks" if distribution == "rank" else "number_of_nodes"
     id_key = "rank" if distribution == "rank" else "node"
     count_label = count_key.replace("_", " ")
-    counts = [item.get(count_key) for item in shard_data]
-    if all(count is None for count in counts):
+    expected_count = shard_data[0].get(count_key)
+    if expected_count is None and all(
+        item.get(count_key) is None for item in shard_data
+    ):
         return
-    if any(count is None for count in counts) or len(set(counts)) != 1:
+    if expected_count is None or any(
+        item.get(count_key) != expected_count for item in shard_data
+    ):
         raise ValueError(
             f"{family} {distribution} shard inventory has inconsistent "
             f"{count_label!r} metadata"
         )
-    expected_count = counts[0]
-    sibling_ids = []
-    for path, item in zip(shard_files, shard_data):
+    for expected_id, (path, item) in enumerate(zip(shard_files, shard_data)):
         kind, shard_id = _partition_info(path)
         if kind != distribution or item.get("distribution") != distribution:
             raise ValueError(
@@ -526,22 +807,15 @@ def _validate_binary_sibling_inventory(shard_files, shard_data, family):
                 f"{id_key}={item[id_key]}, "
                 f"but its directory identifies {shard_id}"
             )
-        sibling_ids.append(shard_id)
-    if len(set(sibling_ids)) != len(sibling_ids):
-        raise ValueError(
-            f"{family} {distribution} shard inventory contains duplicate IDs"
-        )
-    if expected_count != len(sibling_ids):
-        raise ValueError(
-            f"{family} {distribution} shard inventory is incomplete: "
-            f"expected {expected_count} shards, found {len(sibling_ids)}"
-        )
-    expected_ids = set(range(len(sibling_ids)))
-    actual_ids = set(sibling_ids)
-    if actual_ids != expected_ids:
+        if shard_id != expected_id:
+            raise ValueError(
+                f"{family} {distribution} shard inventory is incomplete: "
+                f"expected ID {expected_id}, found {shard_id}"
+            )
+    if expected_count != len(shard_files):
         raise ValueError(
             f"{family} {distribution} shard inventory is incomplete: "
-            f"expected IDs {sorted(expected_ids)!r}, found {sorted(actual_ids)!r}"
+            f"expected {expected_count} shards, found {len(shard_files)}"
         )
 
 
@@ -594,15 +868,88 @@ def _binary_metadata_bytes(filedata):
     )
 
 
-def _combine_partitioned_binary(shard_filename, reader, family):
+def _binary_variable_metadata_bytes(filedata):
+    """Return the retained variable-name and per-variable container bytes."""
+    return filedata.get("_retained_variable_metadata_bytes", 0)
+
+
+def _binary_retained_bytes(filedata):
+    """Return retained binary payload, MeshBlock arrays, and variable metadata."""
+    return checked_sum(
+        (
+            _binary_payload_bytes(filedata),
+            _binary_metadata_bytes(filedata),
+            _binary_variable_metadata_bytes(filedata),
+        ),
+        "retained binary input",
+    )
+
+
+def _binary_reader_materialization_peak_bytes(filedata):
+    """Bound the parser's final-array and one-record materialization peak."""
+    retained_bytes = _binary_retained_bytes(filedata)
+    if filedata["n_mbs"] == 0:
+        return retained_bytes
+    geometry_itemsize = filedata["mb_geometry"].dtype.itemsize
+    serialized_fixed_bytes = 24 + 16 + 6 * geometry_itemsize
+    value_bytes = sum(
+        filedata["mb_data"][variable][0].nbytes
+        for variable in filedata["var_names"]
+    )
+    return checked_sum(
+        (retained_bytes, 4096, serialized_fixed_bytes, 2 * value_bytes),
+        "binary reader materialization peak",
+    )
+
+
+def _remaining_binary_limits(limits, retained_bytes, label):
+    """Reserve retained sibling arrays before parsing the next binary shard."""
+    if retained_bytes >= limits.max_live_bytes:
+        _require_binary_bytes(retained_bytes, label, limits)
+        raise ValueError(
+            f"{label} leaves no live-memory budget for another shard"
+        )
+    return ReaderLimits(
+        max_live_bytes=limits.max_live_bytes - retained_bytes,
+        max_header_read_bytes=limits.max_header_read_bytes,
+        max_payload_read_bytes=limits.max_payload_read_bytes,
+    )
+
+
+def _combine_partitioned_binary(shard_filename, reader, family, limits=None):
     """Combine one binary shard family, retaining valid empty sliced shards."""
-    shard_files = _glob_partition_files(shard_filename)
+    limits = _binary_reader_limits(limits)
+    shard_files, inventory_bytes = _glob_partition_files(shard_filename, limits)
     shard_data = []
     reference = None
     aggregate_payload_bytes = 0
     aggregate_metadata_bytes = 0
+    aggregate_variable_metadata_bytes = 0
     for path in shard_files:
-        candidate = reader(path)
+        retained_bytes = checked_sum(
+            (
+                inventory_bytes,
+                aggregate_payload_bytes,
+                aggregate_metadata_bytes,
+                aggregate_variable_metadata_bytes,
+            ),
+            f"{family} assembled retained arrays",
+        )
+        candidate_limits = _remaining_binary_limits(
+            limits, retained_bytes, f"{family} assembled retained arrays"
+        )
+        try:
+            candidate = reader(path, limits=candidate_limits)
+        except ValueError as exc:
+            if (
+                retained_bytes
+                and "exceeding the practical allocation limit" in str(exc)
+            ):
+                raise ValueError(
+                    f"{family} assembled materialization peak requires more than "
+                    f"{limits.max_live_bytes} bytes while parsing {path!r}"
+                ) from exc
+            raise
         if reference is None:
             reference = candidate
         else:
@@ -610,18 +957,65 @@ def _combine_partitioned_binary(shard_filename, reader, family):
         shard_data.append(candidate)
         aggregate_payload_bytes += _binary_payload_bytes(candidate)
         _require_binary_bytes(
-            aggregate_payload_bytes, f"{family} assembled shard payload"
+            aggregate_payload_bytes,
+            f"{family} assembled shard payload",
+            limits,
         )
         aggregate_metadata_bytes += _binary_metadata_bytes(candidate)
         _require_binary_bytes(
-            aggregate_metadata_bytes, f"{family} assembled shard metadata"
+            aggregate_metadata_bytes,
+            f"{family} assembled shard metadata",
+            limits,
+        )
+        aggregate_variable_metadata_bytes += _binary_variable_metadata_bytes(
+            candidate
+        )
+        _require_binary_bytes(
+            aggregate_variable_metadata_bytes,
+            f"{family} assembled variable metadata",
+            limits,
+        )
+        _require_binary_bytes(
+            checked_sum(
+                (
+                    inventory_bytes,
+                    aggregate_payload_bytes,
+                    aggregate_metadata_bytes,
+                    aggregate_variable_metadata_bytes,
+                ),
+                f"{family} assembled retained arrays",
+            ),
+            f"{family} assembled retained arrays",
+            limits,
         )
     _validate_binary_sibling_inventory(shard_files, shard_data, family)
     _require_binary_bytes(
-        2 * aggregate_payload_bytes, f"{family} assembled shard payload"
+        2 * aggregate_payload_bytes,
+        f"{family} assembled shard payload",
+        limits,
     )
     _require_binary_bytes(
-        2 * aggregate_metadata_bytes, f"{family} assembled shard metadata"
+        2 * aggregate_metadata_bytes,
+        f"{family} assembled shard metadata",
+        limits,
+    )
+    _require_binary_bytes(
+        2 * aggregate_variable_metadata_bytes,
+        f"{family} assembled variable metadata",
+        limits,
+    )
+    _require_binary_bytes(
+        checked_sum(
+            (
+                inventory_bytes,
+                2 * aggregate_payload_bytes,
+                2 * aggregate_metadata_bytes,
+                2 * aggregate_variable_metadata_bytes,
+            ),
+            f"{family} assembled materialization peak",
+        ),
+        f"{family} assembled materialization peak",
+        limits,
     )
 
     nonempty = next((item for item in shard_data if item["n_mbs"] > 0), reference)
@@ -635,11 +1029,23 @@ def _combine_partitioned_binary(shard_filename, reader, family):
                 f"{family} shard output-shape mismatch in {path!r}: "
                 f"{candidate_shape!r} != {nonempty_shape!r}"
             )
-    combined = nonempty.copy()
-    combined["mb_index"] = []
-    combined["mb_logical"] = []
-    combined["mb_geometry"] = []
-    combined["mb_data"] = {var: [] for var in reference["var_names"]}
+
+    total_meshblocks = sum(item["n_mbs"] for item in shard_data)
+    logical_owner_bytes = _logical_owner_dictionary_bytes(total_meshblocks)
+    _require_binary_bytes(
+        checked_sum(
+            (
+                inventory_bytes,
+                aggregate_payload_bytes,
+                aggregate_metadata_bytes,
+                aggregate_variable_metadata_bytes,
+                logical_owner_bytes,
+            ),
+            f"{family} assembled logical ownership peak",
+        ),
+        f"{family} assembled logical ownership peak",
+        limits,
+    )
     logical_owners = {}
     for path, item in zip(shard_files, shard_data):
         for logical in item["mb_logical"]:
@@ -650,18 +1056,38 @@ def _combine_partitioned_binary(shard_filename, reader, family):
                     f"{logical_key!r} in {path!r} and {logical_owners[logical_key]!r}"
                 )
             logical_owners[logical_key] = path
-        combined["mb_index"].extend(item["mb_index"])
-        combined["mb_logical"].extend(item["mb_logical"])
-        combined["mb_geometry"].extend(item["mb_geometry"])
-        for var in reference["var_names"]:
-            combined["mb_data"][var].extend(item["mb_data"][var])
+    del logical_owners
 
-    combined["mb_index"] = np.asarray(combined["mb_index"], dtype=np.int64)
-    combined["mb_logical"] = np.asarray(combined["mb_logical"], dtype=np.int32)
-    combined["mb_geometry"] = np.asarray(combined["mb_geometry"])
+    combined = nonempty.copy()
+    combined["mb_index"] = np.empty((total_meshblocks, 6), dtype=np.int64)
+    combined["mb_logical"] = np.empty((total_meshblocks, 4), dtype=np.int32)
+    combined["mb_geometry"] = np.empty(
+        (total_meshblocks, 6), dtype=nonempty["mb_geometry"].dtype
+    )
+    combined["mb_data"] = {}
     for var in reference["var_names"]:
-        combined["mb_data"][var] = np.asarray(combined["mb_data"][var])
-    combined["n_mbs"] = len(combined["mb_index"])
+        if total_meshblocks:
+            sample = next(iter(nonempty["mb_data"][var]))
+            combined["mb_data"][var] = np.empty(
+                (total_meshblocks, *sample.shape), dtype=sample.dtype
+            )
+        else:
+            combined["mb_data"][var] = np.asarray([])
+
+    cursor = 0
+    for path, item in zip(shard_files, shard_data):
+        next_cursor = cursor + item["n_mbs"]
+        if next_cursor == cursor:
+            continue
+        combined["mb_index"][cursor:next_cursor] = item["mb_index"]
+        combined["mb_logical"][cursor:next_cursor] = item["mb_logical"]
+        combined["mb_geometry"][cursor:next_cursor] = item["mb_geometry"]
+        for var in reference["var_names"]:
+            for offset, values in enumerate(item["mb_data"][var]):
+                combined["mb_data"][var][cursor + offset] = values
+        cursor = next_cursor
+
+    combined["n_mbs"] = total_meshblocks
     meshblock_counts = [item["number_of_meshblocks"] for item in shard_data]
     combined["number_of_meshblocks"] = (
         sum(meshblock_counts)
@@ -672,6 +1098,9 @@ def _combine_partitioned_binary(shard_filename, reader, family):
     combined["distribution"] = _partition_info(shard_filename)[0]
     combined["rank"] = None
     combined["node"] = None
+    combined["_retained_variable_metadata_bytes"] = (
+        aggregate_variable_metadata_bytes + inventory_bytes
+    )
     return combined
 
 
@@ -796,6 +1225,7 @@ def _copy_meshblock_to_athdf(
     restricted_data,
     vol_func,
     num_ghost,
+    limits=None,
 ):
     """Place one in-memory binary MeshBlock into an athdf-like dense result."""
     nx1, nx2, nx3 = nx_vals
@@ -839,6 +1269,7 @@ def _copy_meshblock_to_athdf(
         _require_athdf_bytes(
             output_bytes + index_bytes + index_source_bytes,
             "athdf-like prolongation index peak",
+            limits,
         )
         i_indices = np.arange(il_s, iu_s) // scale1
         j_indices = np.arange(jl_s, ju_s) // scale2
@@ -850,6 +1281,7 @@ def _copy_meshblock_to_athdf(
                 temporary_shape,
                 data[q].dtype,
                 "athdf-like prolongation",
+                limits,
             )
             block_data = filedata["mb_data"][q][block_num]
             data[q][kl_d:ku_d, jl_d:ju_d, il_d:iu_d] = block_data[
@@ -937,7 +1369,9 @@ def _copy_meshblock_to_athdf(
                 )
             )
             _require_athdf_bytes(
-                output_bytes + exact_temporary, "athdf-like exact restriction peak"
+                output_bytes + exact_temporary,
+                "athdf-like exact restriction peak",
+                limits,
             )
             faces = [
                 np.linspace(bounds[2 * axis], bounds[2 * axis + 1], size + 1)
@@ -974,35 +1408,44 @@ def _copy_meshblock_to_athdf(
         data["Levels"][kl_d:ku_d, jl_d:ju_d, il_d:iu_d] = block_level
 
 
-def _read_meshblocks(fp, filesize, nghost, locsizebytes, varsizebytes, var_list, family):
-    """Read complete meshblock records and reject partial binary payloads."""
+def _read_meshblocks(
+    fp,
+    filesize,
+    nghost,
+    locsizebytes,
+    varsizebytes,
+    var_list,
+    family,
+    limits=None,
+    retained_variable_bytes=0,
+):
+    """Read uniform MeshBlock records directly into bounded retained arrays."""
+    limits = _binary_reader_limits(limits)
     dtype_loc = np.float64 if locsizebytes == 8 else np.float32
     dtype_var = np.float64 if varsizebytes == 8 else np.float32
     nvars = len(var_list)
-    mb_index = []
-    mb_logical = []
-    mb_geometry = []
-    mb_data = {var: [] for var in var_list}
+    retained_variable_bytes = checked_sum(
+        (retained_variable_bytes, _variable_dictionary_bytes(nvars)),
+        f"{family} retained variable metadata in {fp.name!r}",
+    )
+    _require_binary_bytes(
+        retained_variable_bytes,
+        f"{family} variable dictionary materialization peak in {fp.name!r}",
+        limits,
+    )
     serialized_fixed_bytes = 24 + 16 + 6 * locsizebytes
     retained_fixed_bytes = 6 * np.dtype(np.int64).itemsize
     retained_fixed_bytes += 4 * np.dtype(np.int32).itemsize
     retained_fixed_bytes += 6 * np.dtype(dtype_loc).itemsize
-    accumulated_metadata_bytes = 0
-    accumulated_value_bytes = 0
-    emitted_extents = None
 
-    while fp.tell() < filesize:
+    def read_fixed_record():
         if filesize - fp.tell() < serialized_fixed_bytes:
             raise ValueError(
                 f"truncated {family} meshblock metadata in {fp.name!r}"
             )
-        accumulated_metadata_bytes += retained_fixed_bytes
-        _require_binary_bytes(
-            accumulated_metadata_bytes, f"{family} meshblock metadata in {fp.name!r}"
-        )
         index = np.frombuffer(fp.read(24), dtype=np.int32).astype(np.int64) - nghost
-        logical = np.frombuffer(fp.read(16), dtype=np.int32)
-        geometry = np.frombuffer(fp.read(6 * locsizebytes), dtype=dtype_loc)
+        logical = np.frombuffer(fp.read(16), dtype=np.int32).copy()
+        geometry = np.frombuffer(fp.read(6 * locsizebytes), dtype=dtype_loc).copy()
         shape = (
             int(index[5] - index[4] + 1),
             int(index[3] - index[2] + 1),
@@ -1012,23 +1455,94 @@ def _read_meshblocks(fp, filesize, nghost, locsizebytes, varsizebytes, var_list,
             raise ValueError(
                 f"invalid {family} meshblock extent {shape!r} in {fp.name!r}"
             )
-        current_extents = tuple(reversed(shape))
-        if emitted_extents is None:
-            emitted_extents = current_extents
-        elif current_extents != emitted_extents:
+        return index, logical, geometry, shape
+
+    if fp.tell() == filesize:
+        return (
+            np.empty((0, 6), dtype=np.int64),
+            np.empty((0, 4), dtype=np.int32),
+            np.empty((0, 6), dtype=dtype_loc),
+            {var: np.empty((0,), dtype=dtype_var) for var in var_list},
+            retained_variable_bytes,
+        )
+
+    first_record_offset = fp.tell()
+    shape = None
+    value_bytes = None
+    meshblock_count = 0
+    while fp.tell() < filesize:
+        _, _, _, current_shape = read_fixed_record()
+        if shape is None:
+            shape = current_shape
+            value_count = _checked_binary_product(
+                (nvars, *shape), f"{family} meshblock values in {fp.name!r}"
+            )
+            value_bytes = _checked_binary_product(
+                (value_count, varsizebytes),
+                f"{family} meshblock payload in {fp.name!r}",
+            )
+            require_read_bytes(
+                value_bytes,
+                limits.max_payload_read_bytes,
+                f"{family} meshblock payload in {fp.name!r}",
+            )
+        elif current_shape != shape:
             raise ValueError(
                 f"{family} file {fp.name!r} has nonuniform MeshBlock extents: "
-                f"{current_extents!r} != {emitted_extents!r}"
+                f"{tuple(reversed(current_shape))!r} != {tuple(reversed(shape))!r}"
             )
-        value_count = nvars
-        for extent in shape:
-            value_count *= extent
-        value_bytes = value_count * varsizebytes
-        _require_binary_bytes(value_bytes, f"{family} meshblock payload in {fp.name!r}")
-        accumulated_value_bytes += value_bytes
-        _require_binary_bytes(
-            accumulated_value_bytes, f"{family} file payload in {fp.name!r}"
-        )
+        if filesize - fp.tell() < value_bytes:
+            raise ValueError(f"truncated {family} meshblock values in {fp.name!r}")
+        fp.seek(value_bytes, 1)
+        meshblock_count += 1
+    fp.seek(first_record_offset)
+    metadata_bytes = _checked_binary_product(
+        (meshblock_count, retained_fixed_bytes),
+        f"{family} retained meshblock metadata in {fp.name!r}",
+    )
+    payload_bytes = _checked_binary_product(
+        (meshblock_count, value_bytes),
+        f"{family} retained meshblock payload in {fp.name!r}",
+    )
+    retained_bytes = checked_sum(
+        (retained_variable_bytes, metadata_bytes, payload_bytes),
+        f"{family} retained arrays in {fp.name!r}",
+    )
+    _require_binary_bytes(
+        retained_variable_bytes + metadata_bytes,
+        f"{family} meshblock metadata arrays in {fp.name!r}",
+        limits,
+    )
+    _require_binary_bytes(
+        retained_bytes, f"{family} retained arrays in {fp.name!r}", limits
+    )
+    _require_binary_bytes(
+        checked_sum(
+            (
+                retained_bytes,
+                4096,
+                serialized_fixed_bytes,
+                2 * value_bytes,
+            ),
+            f"{family} meshblock materialization peak in {fp.name!r}",
+        ),
+        f"{family} meshblock materialization peak in {fp.name!r}",
+        limits,
+    )
+    mb_index = np.empty((meshblock_count, 6), dtype=np.int64)
+    mb_logical = np.empty((meshblock_count, 4), dtype=np.int32)
+    mb_geometry = np.empty((meshblock_count, 6), dtype=dtype_loc)
+    mb_data = {
+        var: np.empty((meshblock_count, *shape), dtype=dtype_var)
+        for var in var_list
+    }
+
+    def store_record(record, index, logical, geometry, current_shape):
+        if current_shape != shape:
+            raise ValueError(
+                f"{family} file {fp.name!r} has nonuniform MeshBlock extents: "
+                f"{tuple(reversed(current_shape))!r} != {tuple(reversed(shape))!r}"
+            )
         raw_values = fp.read(value_bytes)
         if len(raw_values) != value_bytes:
             raise ValueError(
@@ -1036,20 +1550,24 @@ def _read_meshblocks(fp, filesize, nghost, locsizebytes, varsizebytes, var_list,
                 f"expected {value_bytes} bytes, found {len(raw_values)}"
             )
         values = np.frombuffer(raw_values, dtype=dtype_var).reshape((nvars,) + shape)
-        mb_index.append(index)
-        mb_logical.append(logical)
-        mb_geometry.append(geometry)
+        mb_index[record] = index
+        mb_logical[record] = logical
+        mb_geometry[record] = geometry
         for vari, var in enumerate(var_list):
-            mb_data[var].append(values[vari])
+            mb_data[var][record] = values[vari]
 
-    _require_binary_bytes(
-        2 * accumulated_metadata_bytes,
-        f"{family} retained meshblock metadata in {fp.name!r}",
+    for record in range(meshblock_count):
+        store_record(record, *read_fixed_record())
+    return (
+        mb_index,
+        mb_logical,
+        mb_geometry,
+        mb_data,
+        retained_variable_bytes,
     )
-    return mb_index, mb_logical, mb_geometry, mb_data
 
 
-def read_binary(filename, assemble_shards=False):
+def _read_binary(filename, assemble_shards=False, *, limits=None):
     """
     Reads a bin file from filename to dictionary.
 
@@ -1069,9 +1587,10 @@ def read_binary(filename, assemble_shards=False):
           dictionary of fluid file data
     """
 
+    limits = _binary_reader_limits(limits)
     if assemble_shards and _is_partitioned_path(filename):
         return _combine_partitioned_binary(
-            filename, lambda path: read_binary(path), "binary"
+            filename, _read_binary, "binary", limits
         )
 
     filedata = {}
@@ -1085,34 +1604,49 @@ def read_binary(filename, assemble_shards=False):
         # load header information and validate file format
         header_budget = [0]
         code_header = _read_limited_binary_line(
-            fp, "binary", "format header", header_budget
-        ).split()
-        if len(code_header) < 1:
-            raise TypeError("unknown file format")
-        if code_header[0] != b"Athena":
-            raise TypeError(
-                f"bad file format \"{code_header[0].decode('utf-8')}\" "
-                + '(should be "Athena")'
-            )
-        version = code_header[-1].split(b"=")[-1]
-        if version != b"1.1":
-            raise TypeError(
-                f"unsupported file format version {version.decode('utf-8')}"
-            )
+            fp, "binary", "format header", header_budget, limits
+        )
+        _validate_binary_format_header(code_header, "binary", filename)
 
-        pheader_count = int(
+        pheader_count = _parse_binary_metadata_int(
             _read_limited_binary_line(
-                fp, "binary", "preheader count", header_budget
-            ).split(b"=")[-1]
+                fp, "binary", "preheader count", header_budget, limits
+            ),
+            "binary",
+            "preheader count",
+            filename,
         )
         if not 1 <= pheader_count <= _MAX_BINARY_PREHEADER_LINES:
             raise ValueError(f"binary file {filename!r} has invalid preheader count")
         pheader = {}
+        retained_preheader_record_bytes = sys.getsizeof(pheader)
+        retained_preheader_bytes = _preflight_binary_preheader_text(
+            fp, "binary", header_budget, limits, retained_preheader_record_bytes
+        )
         for _ in range(pheader_count - 1):
             line = _read_limited_binary_line(
-                fp, "binary", "preheader line", header_budget
+                fp, "binary", "preheader line", header_budget, limits
             )
-            key, val = [x.strip() for x in line.decode("utf-8").split("=")]
+            key, val = _parse_binary_preheader_text(line, "binary", filename)
+            if key in pheader:
+                raise ValueError(
+                    f"binary file {filename!r} has duplicate preheader metadata "
+                    f"for {key!r}"
+                )
+            retained_preheader_record_bytes = checked_sum(
+                (
+                    retained_preheader_record_bytes,
+                    metadata_record_bytes(key, val),
+                ),
+                f"binary retained preheader records in {filename!r}",
+            )
+            retained_preheader_bytes = _preflight_binary_preheader_text(
+                fp,
+                "binary",
+                header_budget,
+                limits,
+                retained_preheader_record_bytes,
+            )
             pheader[key] = val
         time = float(pheader["time"])
         cycle = int(pheader["cycle"])
@@ -1120,25 +1654,42 @@ def read_binary(filename, assemble_shards=False):
         varsizebytes = int(pheader["size of variable"])
         partition_metadata = _binary_partition_metadata(filename, pheader, "binary")
 
-        nvars = int(
+        nvars = _parse_binary_metadata_int(
             _read_limited_binary_line(
-                fp, "binary", "variable count", header_budget
-            ).split(b"=")[-1]
+                fp, "binary", "variable count", header_budget, limits
+            ),
+            "binary",
+            "variable count",
+            filename,
         )
         if nvars <= 0:
             raise ValueError(f"binary file {filename!r} has invalid variable count")
-        var_list = [
-            value.decode("utf-8")
-            for value in _read_limited_binary_line(
-                fp, "binary", "variable list", header_budget
-            ).split()[1:]
-        ]
-        header_size = int(
-            _read_limited_binary_line(
-                fp, "binary", "parameter-header size", header_budget
-            ).split(b"=")[-1]
+        var_list, retained_variable_bytes = _read_binary_variable_list(
+            fp, "binary", header_budget, limits, retained_preheader_bytes
         )
-        header = _read_binary_parameter_dump(fp, header_size, "binary")
+        header_size = _parse_binary_metadata_int(
+            _read_limited_binary_line(
+                fp, "binary", "parameter-header size", header_budget, limits
+            ),
+            "binary",
+            "parameter-header size",
+            filename,
+        )
+        header, retained_parameter_bytes = _read_binary_parameter_dump(
+            fp,
+            header_size,
+            "binary",
+            limits,
+            retained_preheader_bytes + retained_variable_bytes,
+        )
+        retained_variable_bytes = checked_sum(
+            (
+                retained_preheader_bytes,
+                retained_variable_bytes,
+                retained_parameter_bytes,
+            ),
+            f"binary retained parameter header in {filename!r}",
+        )
 
         if locsizebytes not in [4, 8]:
             raise ValueError(f"unsupported location size (in bytes) {locsizebytes}")
@@ -1158,7 +1709,11 @@ def read_binary(filename, assemble_shards=False):
                 if line.startswith("<"):
                     block = line
                     continue
-                key, value = line.split("=")
+                key, separator, value = line.partition("=")
+                if not separator or "=" in value:
+                    raise ValueError(
+                        f"invalid binary parameter header record {line!r}"
+                    )
                 if block == blockname and key.strip() == keyname:
                     return value
             raise KeyError(f"no parameter called {blockname}/{keyname}")
@@ -1190,10 +1745,35 @@ def read_binary(filename, assemble_shards=False):
                 f"binary variable count mismatch in {filename!r}: "
                 f"declared {nvars}, listed {len(var_list)}"
             )
+        _require_binary_bytes(
+            checked_sum(
+                (
+                    retained_variable_bytes,
+                    _variable_name_set_bytes(var_list),
+                ),
+                f"binary variable-name duplicate check in {filename!r}",
+            ),
+            f"binary variable-name duplicate check in {filename!r}",
+            limits,
+        )
         if len(set(var_list)) != len(var_list):
             raise ValueError(f"binary file {filename!r} has duplicate variable names")
-        mb_index, mb_logical, mb_geometry, mb_data = _read_meshblocks(
-            fp, filesize, nghost, locsizebytes, varsizebytes, var_list, "binary"
+        (
+            mb_index,
+            mb_logical,
+            mb_geometry,
+            mb_data,
+            retained_variable_bytes,
+        ) = _read_meshblocks(
+            fp,
+            filesize,
+            nghost,
+            locsizebytes,
+            varsizebytes,
+            var_list,
+            "binary",
+            limits,
+            retained_variable_bytes,
         )
         _validate_meshblock_metadata(
             mb_logical,
@@ -1204,6 +1784,14 @@ def read_binary(filename, assemble_shards=False):
             (Nx1, Nx2, Nx3),
             bounds,
             nghost,
+            limits,
+            _meshblock_arrays_bytes(
+                mb_index,
+                mb_logical,
+                mb_geometry,
+                mb_data,
+                retained_variable_bytes,
+            ),
         )
         mb_count = len(mb_index)
         if (
@@ -1237,20 +1825,21 @@ def read_binary(filename, assemble_shards=False):
     filedata["nx1_mb"] = nx1
     filedata["nx2_mb"] = nx2
     filedata["nx3_mb"] = nx3
-    filedata["nx1_out_mb"] = (mb_index[0][1] - mb_index[0][0]) + 1 if mb_index else 0
-    filedata["nx2_out_mb"] = (mb_index[0][3] - mb_index[0][2]) + 1 if mb_index else 0
-    filedata["nx3_out_mb"] = (mb_index[0][5] - mb_index[0][4]) + 1 if mb_index else 0
+    filedata["nx1_out_mb"] = (mb_index[0][1] - mb_index[0][0]) + 1 if mb_count else 0
+    filedata["nx2_out_mb"] = (mb_index[0][3] - mb_index[0][2]) + 1 if mb_count else 0
+    filedata["nx3_out_mb"] = (mb_index[0][5] - mb_index[0][4]) + 1 if mb_count else 0
 
-    filedata["mb_index"] = np.array(mb_index)
-    filedata["mb_logical"] = np.array(mb_logical)
-    filedata["mb_geometry"] = np.array(mb_geometry)
+    filedata["mb_index"] = mb_index
+    filedata["mb_logical"] = mb_logical
+    filedata["mb_geometry"] = mb_geometry
     filedata["mb_data"] = mb_data
+    filedata["_retained_variable_metadata_bytes"] = retained_variable_bytes
     filedata.update(partition_metadata)
 
     return filedata
 
 
-def read_coarsened_binary(filename, assemble_shards=False):
+def _read_coarsened_binary(filename, assemble_shards=False, *, limits=None):
     """
     Reads a coarsened bin file from filename to dictionary.
     Originally written by Lev Arzamasskiy (leva@ias.edu) on 11/15/2021
@@ -1269,9 +1858,10 @@ def read_coarsened_binary(filename, assemble_shards=False):
           dictionary of fluid file data
     """
 
+    limits = _binary_reader_limits(limits)
     if assemble_shards and _is_partitioned_path(filename):
         return _combine_partitioned_binary(
-            filename, lambda path: read_coarsened_binary(path), "coarsened binary"
+            filename, _read_coarsened_binary, "coarsened binary", limits
         )
 
     filedata = {}
@@ -1285,36 +1875,61 @@ def read_coarsened_binary(filename, assemble_shards=False):
         # load header information and validate file format
         header_budget = [0]
         code_header = _read_limited_binary_line(
-            fp, "coarsened binary", "format header", header_budget
-        ).split()
-        if len(code_header) < 1:
-            raise TypeError("unknown file format")
-        if code_header[0] != b"Athena":
-            raise TypeError(
-                f"bad file format \"{code_header[0].decode('utf-8')}\" "
-                + '(should be "Athena")'
-            )
-        version = code_header[-1].split(b"=")[-1]
-        if version != b"1.1":
-            raise TypeError(
-                f"unsupported file format version {version.decode('utf-8')}"
-            )
+            fp, "coarsened binary", "format header", header_budget, limits
+        )
+        _validate_binary_format_header(code_header, "coarsened binary", filename)
 
-        pheader_count = int(
+        pheader_count = _parse_binary_metadata_int(
             _read_limited_binary_line(
-                fp, "coarsened binary", "preheader count", header_budget
-            ).split(b"=")[-1]
+                fp,
+                "coarsened binary",
+                "preheader count",
+                header_budget,
+                limits,
+            ),
+            "coarsened binary",
+            "preheader count",
+            filename,
         )
         if not 1 <= pheader_count <= _MAX_BINARY_PREHEADER_LINES:
             raise ValueError(
                 f"coarsened binary file {filename!r} has invalid preheader count"
             )
         pheader = {}
+        retained_preheader_record_bytes = sys.getsizeof(pheader)
+        retained_preheader_bytes = _preflight_binary_preheader_text(
+            fp,
+            "coarsened binary",
+            header_budget,
+            limits,
+            retained_preheader_record_bytes,
+        )
         for _ in range(pheader_count - 1):
             line = _read_limited_binary_line(
-                fp, "coarsened binary", "preheader line", header_budget
+                fp, "coarsened binary", "preheader line", header_budget, limits
             )
-            key, val = [x.strip() for x in line.decode("utf-8").split("=")]
+            key, val = _parse_binary_preheader_text(
+                line, "coarsened binary", filename
+            )
+            if key in pheader:
+                raise ValueError(
+                    f"coarsened binary file {filename!r} has duplicate preheader "
+                    f"metadata for {key!r}"
+                )
+            retained_preheader_record_bytes = checked_sum(
+                (
+                    retained_preheader_record_bytes,
+                    metadata_record_bytes(key, val),
+                ),
+                f"coarsened binary retained preheader records in {filename!r}",
+            )
+            retained_preheader_bytes = _preflight_binary_preheader_text(
+                fp,
+                "coarsened binary",
+                header_budget,
+                limits,
+                retained_preheader_record_bytes,
+            )
             pheader[key] = val
         time = float(pheader["time"])
         cycle = int(pheader["cycle"])
@@ -1329,26 +1944,42 @@ def read_coarsened_binary(filename, assemble_shards=False):
             filename, pheader, "coarsened binary"
         )
 
-        nvars = int(
+        nvars = _parse_binary_metadata_int(
             _read_limited_binary_line(
-                fp, "coarsened binary", "variable count", header_budget
-            ).split(b"=")[-1]
+                fp, "coarsened binary", "variable count", header_budget, limits
+            ),
+            "coarsened binary",
+            "variable count",
+            filename,
         )
         if nvars <= 0:
             raise ValueError(
                 f"coarsened binary file {filename!r} has invalid variable count"
             )
-        var_list = [
-            value.decode("utf-8")
-            for value in _read_limited_binary_line(
-                fp, "coarsened binary", "variable list", header_budget
-            ).split()[1:]
-        ]
+        var_list, retained_variable_bytes = _read_binary_variable_list(
+            fp,
+            "coarsened binary",
+            header_budget,
+            limits,
+            retained_preheader_bytes,
+        )
         if len(var_list) != nvars:
             raise ValueError(
                 f"coarsened binary variable count mismatch in {filename!r}: "
                 f"declared {nvars}, listed {len(var_list)}"
             )
+        _require_binary_bytes(
+            checked_sum(
+                (
+                    retained_preheader_bytes,
+                    retained_variable_bytes,
+                    _variable_name_set_bytes(var_list),
+                ),
+                f"coarsened binary variable-name duplicate check in {filename!r}",
+            ),
+            f"coarsened binary variable-name duplicate check in {filename!r}",
+            limits,
+        )
         if len(set(var_list)) != len(var_list):
             raise ValueError(
                 f"coarsened binary file {filename!r} has duplicate variable names"
@@ -1356,12 +1987,33 @@ def read_coarsened_binary(filename, assemble_shards=False):
         number_of_moments = _validate_coarsened_moments(
             filename, pheader, nvars, var_list
         )
-        header_size = int(
+        header_size = _parse_binary_metadata_int(
             _read_limited_binary_line(
-                fp, "coarsened binary", "parameter-header size", header_budget
-            ).split(b"=")[-1]
+                fp,
+                "coarsened binary",
+                "parameter-header size",
+                header_budget,
+                limits,
+            ),
+            "coarsened binary",
+            "parameter-header size",
+            filename,
         )
-        header = _read_binary_parameter_dump(fp, header_size, "coarsened binary")
+        header, retained_parameter_bytes = _read_binary_parameter_dump(
+            fp,
+            header_size,
+            "coarsened binary",
+            limits,
+            retained_preheader_bytes + retained_variable_bytes,
+        )
+        retained_variable_bytes = checked_sum(
+            (
+                retained_preheader_bytes,
+                retained_variable_bytes,
+                retained_parameter_bytes,
+            ),
+            f"coarsened binary retained parameter header in {filename!r}",
+        )
 
         if locsizebytes not in [4, 8]:
             raise ValueError(f"unsupported location size (in bytes) {locsizebytes}")
@@ -1381,7 +2033,11 @@ def read_coarsened_binary(filename, assemble_shards=False):
                 if line.startswith("<"):
                     block = line
                     continue
-                key, value = line.split("=")
+                key, separator, value = line.partition("=")
+                if not separator or "=" in value:
+                    raise ValueError(
+                        f"invalid coarsened binary parameter header record {line!r}"
+                    )
                 if block == blockname and key.strip() == keyname:
                     return value
             raise KeyError(f"no parameter called {blockname}/{keyname}")
@@ -1418,7 +2074,13 @@ def read_coarsened_binary(filename, assemble_shards=False):
         _validate_coarsening_factor(
             coarsen_factor, (Nx1, Nx2, Nx3, nx1, nx2, nx3), filename
         )
-        mb_index, mb_logical, mb_geometry, mb_data = _read_meshblocks(
+        (
+            mb_index,
+            mb_logical,
+            mb_geometry,
+            mb_data,
+            retained_variable_bytes,
+        ) = _read_meshblocks(
             fp,
             filesize,
             nghost,
@@ -1426,6 +2088,8 @@ def read_coarsened_binary(filename, assemble_shards=False):
             varsizebytes,
             var_list,
             "coarsened binary",
+            limits,
+            retained_variable_bytes,
         )
         _validate_meshblock_metadata(
             mb_logical,
@@ -1436,6 +2100,14 @@ def read_coarsened_binary(filename, assemble_shards=False):
             (Nx1, Nx2, Nx3),
             bounds,
             nghost,
+            limits,
+            _meshblock_arrays_bytes(
+                mb_index,
+                mb_logical,
+                mb_geometry,
+                mb_data,
+                retained_variable_bytes,
+            ),
         )
         mb_count = len(mb_index)
         if (
@@ -1470,20 +2142,53 @@ def read_coarsened_binary(filename, assemble_shards=False):
     filedata["nx1_mb"] = nx1 // coarsen_factor
     filedata["nx2_mb"] = nx2 // coarsen_factor
     filedata["nx3_mb"] = nx3 // coarsen_factor
-    filedata["nx1_out_mb"] = (mb_index[0][1] - mb_index[0][0]) + 1 if mb_index else 0
-    filedata["nx2_out_mb"] = (mb_index[0][3] - mb_index[0][2]) + 1 if mb_index else 0
-    filedata["nx3_out_mb"] = (mb_index[0][5] - mb_index[0][4]) + 1 if mb_index else 0
+    filedata["nx1_out_mb"] = (mb_index[0][1] - mb_index[0][0]) + 1 if mb_count else 0
+    filedata["nx2_out_mb"] = (mb_index[0][3] - mb_index[0][2]) + 1 if mb_count else 0
+    filedata["nx3_out_mb"] = (mb_index[0][5] - mb_index[0][4]) + 1 if mb_count else 0
 
-    filedata["mb_index"] = np.array(mb_index)
-    filedata["mb_logical"] = np.array(mb_logical)
-    filedata["mb_geometry"] = np.array(mb_geometry)
+    filedata["mb_index"] = mb_index
+    filedata["mb_logical"] = mb_logical
+    filedata["mb_geometry"] = mb_geometry
     filedata["mb_data"] = mb_data
+    filedata["_retained_variable_metadata_bytes"] = retained_variable_bytes
     filedata.update(partition_metadata)
 
     return filedata
 
 
-def read_all_ranks_binary(rank0_filename):
+def _public_binary_data(filedata):
+    """Remove parser bookkeeping before returning one public reader result."""
+    filedata.pop("_retained_variable_metadata_bytes", None)
+    return filedata
+
+
+def read_binary(filename, assemble_shards=False, *, limits=None):
+    """Read one binary output without exposing parser accounting fields."""
+    return _public_binary_data(
+        _read_binary(filename, assemble_shards=assemble_shards, limits=limits)
+    )
+
+
+def read_coarsened_binary(filename, assemble_shards=False, *, limits=None):
+    """Read one coarsened-binary output without parser accounting fields."""
+    return _public_binary_data(
+        _read_coarsened_binary(filename, assemble_shards=assemble_shards, limits=limits)
+    )
+
+
+def _read_all_ranks_binary(rank0_filename, *, limits=None):
+    return _combine_partitioned_binary(
+        rank0_filename, _read_binary, "binary", limits
+    )
+
+
+def _read_all_ranks_coarsened_binary(rank0_filename, *, limits=None):
+    return _combine_partitioned_binary(
+        rank0_filename, _read_coarsened_binary, "coarsened binary", limits
+    )
+
+
+def read_all_ranks_binary(rank0_filename, *, limits=None):
     """
     Reads binary files from all rank or node shards into a single dictionary.
 
@@ -1495,10 +2200,10 @@ def read_all_ranks_binary(rank0_filename):
       combined_filedata - dict
           dictionary of combined fluid file data from all ranks
     """
-    return _combine_partitioned_binary(rank0_filename, read_binary, "binary")
+    return _public_binary_data(_read_all_ranks_binary(rank0_filename, limits=limits))
 
 
-def read_all_ranks_coarsened_binary(rank0_filename):
+def read_all_ranks_coarsened_binary(rank0_filename, *, limits=None):
     """
     Reads coarsened binary files from all rank or node shards.
 
@@ -1510,8 +2215,8 @@ def read_all_ranks_coarsened_binary(rank0_filename):
       combined_filedata - dict
           dictionary of combined fluid file data from all ranks
     """
-    return _combine_partitioned_binary(
-        rank0_filename, read_coarsened_binary, "coarsened binary"
+    return _public_binary_data(
+        _read_all_ranks_coarsened_binary(rank0_filename, limits=limits)
     )
 
 
@@ -1540,18 +2245,22 @@ def read_binary_as_athdf(
     center_func_2=None,
     center_func_3=None,
     num_ghost=0,
+    *,
+    limits=None,
 ):
     """
     Reads a bin file and organizes data similar to athdf format without writing to file.
     """
     # Step 1: Read binary data
-    filedata = read_binary(filename)
+    limits = _athdf_reader_limits(limits)
+    filedata = _read_binary(filename, limits=limits)
 
     # Step 2: Organize data similar to athdf
     if raw:
-        return filedata
+        return _public_binary_data(filedata)
 
     _require_meshblocks_for_athdf(filedata, filename)
+    retained_binary_bytes = _binary_retained_bytes(filedata)
 
     # Prepare dictionary for results
     if data is None:
@@ -1589,15 +2298,9 @@ def read_binary_as_athdf(
     nx_vals = []
     for d in range(3):
         if block_size[d] == 1 and root_grid_size[d] > 1:  # sum or slice
-            other_locations = [
-                location
-                for location in zip(
-                    levels,
-                    logical_locations[:, (d + 1) % 3],
-                    logical_locations[:, (d + 2) % 3],
-                )
-            ]
-            if len(set(other_locations)) == len(other_locations):  # effective slice
+            if _is_effective_slice(
+                levels, logical_locations, d, retained_binary_bytes, limits
+            ):
                 nx_vals.append(1)
             else:  # nontrivial sum
                 num_blocks_this_dim = 0
@@ -1621,7 +2324,9 @@ def read_binary_as_athdf(
             nx_vals.append(root_grid_size[d] * 2**level + 2 * num_ghost)
     nx1, nx2, nx3 = nx_vals
     lx1, lx2, lx3 = [nx // bs for nx, bs in zip(nx_vals, block_size)]
-    coordinate_bytes = _preflight_athdf_coordinates(nx_vals, dtype)
+    coordinate_bytes = _preflight_athdf_coordinates(
+        nx_vals, dtype, limits, retained_binary_bytes
+    )
 
     # Set coordinate system and related functions
     # coord = "cartesian"  # Adjust based on your data
@@ -1678,6 +2383,7 @@ def read_binary_as_athdf(
         return_levels,
         restricted_shape,
         coordinate_bytes,
+        limits,
     )
     if new_data:
         for q in quantities:
@@ -1714,6 +2420,7 @@ def read_binary_as_athdf(
             restricted_data if restricted_shape is not None else None,
             vol_func,
             num_ghost,
+            limits,
         )
 
     # Step 4: Finalize data
@@ -1778,6 +2485,8 @@ def read_rank_binary_as_athdf(
     center_func_2=None,
     center_func_3=None,
     num_ghost=0,
+    *,
+    limits=None,
 ):
     """Read one binary shard through the canonical logical-location mapper."""
     return read_binary_as_athdf(**locals())
@@ -1808,18 +2517,22 @@ def read_all_ranks_binary_as_athdf(
     center_func_2=None,
     center_func_3=None,
     num_ghost=0,
+    *,
+    limits=None,
 ):
     """
     Reads a bin file and organizes data similar to athdf format without writing to file.
     """
     # Step 1: Read binary data
-    filedata = read_all_ranks_binary(rank0_filename)
+    limits = _athdf_reader_limits(limits)
+    filedata = _read_all_ranks_binary(rank0_filename, limits=limits)
 
     # Step 2: Organize data similar to athdf
     if raw:
-        return filedata
+        return _public_binary_data(filedata)
 
     _require_meshblocks_for_athdf(filedata, rank0_filename)
+    retained_binary_bytes = _binary_retained_bytes(filedata)
 
     # Prepare dictionary for results
     if data is None:
@@ -1857,15 +2570,9 @@ def read_all_ranks_binary_as_athdf(
     nx_vals = []
     for d in range(3):
         if block_size[d] == 1 and root_grid_size[d] > 1:  # sum or slice
-            other_locations = [
-                location
-                for location in zip(
-                    levels,
-                    logical_locations[:, (d + 1) % 3],
-                    logical_locations[:, (d + 2) % 3],
-                )
-            ]
-            if len(set(other_locations)) == len(other_locations):  # effective slice
+            if _is_effective_slice(
+                levels, logical_locations, d, retained_binary_bytes, limits
+            ):
                 nx_vals.append(1)
             else:  # nontrivial sum
                 num_blocks_this_dim = 0
@@ -1889,7 +2596,9 @@ def read_all_ranks_binary_as_athdf(
             nx_vals.append(root_grid_size[d] * 2**level + 2 * num_ghost)
     nx1, nx2, nx3 = nx_vals
     lx1, lx2, lx3 = [nx // bs for nx, bs in zip(nx_vals, block_size)]
-    coordinate_bytes = _preflight_athdf_coordinates(nx_vals, dtype)
+    coordinate_bytes = _preflight_athdf_coordinates(
+        nx_vals, dtype, limits, retained_binary_bytes
+    )
     # Set coordinate system and related functions
     # coord = "cartesian"  # Adjust based on your data
     if vol_func is None:
@@ -1945,6 +2654,7 @@ def read_all_ranks_binary_as_athdf(
         return_levels,
         restricted_shape,
         coordinate_bytes,
+        limits,
     )
     if new_data:
         for q in quantities:
@@ -1981,6 +2691,7 @@ def read_all_ranks_binary_as_athdf(
             restricted_data if restricted_shape is not None else None,
             vol_func,
             num_ghost,
+            limits,
         )
 
     # Step 4: Finalize data
@@ -2045,18 +2756,22 @@ def read_all_ranks_coarsened_binary_as_athdf(
     center_func_2=None,
     center_func_3=None,
     num_ghost=0,
+    *,
+    limits=None,
 ):
     """
     Reads a bin file and organizes data similar to athdf format without writing to file.
     """
     # Step 1: Read binary data
-    filedata = read_all_ranks_coarsened_binary(rank0_filename)
+    limits = _athdf_reader_limits(limits)
+    filedata = _read_all_ranks_coarsened_binary(rank0_filename, limits=limits)
 
     # Step 2: Organize data similar to athdf
     if raw:
-        return filedata
+        return _public_binary_data(filedata)
 
     _require_meshblocks_for_athdf(filedata, rank0_filename)
+    retained_binary_bytes = _binary_retained_bytes(filedata)
 
     # Prepare dictionary for results
     if data is None:
@@ -2100,7 +2815,9 @@ def read_all_ranks_coarsened_binary_as_athdf(
             nx_vals.append(root_grid_size[d] * 2**level + 2 * num_ghost)
     nx1, nx2, nx3 = nx_vals
     lx1, lx2, lx3 = [nx // bs for nx, bs in zip(nx_vals, block_size)]
-    coordinate_bytes = _preflight_athdf_coordinates(nx_vals, dtype)
+    coordinate_bytes = _preflight_athdf_coordinates(
+        nx_vals, dtype, limits, retained_binary_bytes
+    )
 
     # Set coordinate system and related functions
     # coord = "cartesian"  # Adjust based on your data
@@ -2157,6 +2874,7 @@ def read_all_ranks_coarsened_binary_as_athdf(
         return_levels,
         restricted_shape,
         coordinate_bytes,
+        limits,
     )
     if new_data:
         for q in quantities:
@@ -2193,6 +2911,7 @@ def read_all_ranks_coarsened_binary_as_athdf(
             restricted_data if restricted_shape is not None else None,
             vol_func,
             num_ghost,
+            limits,
         )
 
     # Step 4: Finalize data
@@ -2251,13 +2970,15 @@ def read_single_rank_binary_as_athdf(
     center_func_3=None,
     *,
     meshblock_index_in_file=0,
+    limits=None,
 ):
     """
     Reads a single rank binary file and organizes data similar to
     athdf format without writing to file.
     """
     # Step 1: Read binary data for a single rank
-    filedata = read_binary(filename)
+    limits = _athdf_reader_limits(limits)
+    filedata = _read_binary(filename, limits=limits)
 
     if isinstance(meshblock_index_in_file, (bool, np.bool_)) or not isinstance(
         meshblock_index_in_file, Integral
@@ -2268,7 +2989,7 @@ def read_single_rank_binary_as_athdf(
     if raw:
         if meshblock_index_in_file != 0:
             raise ValueError("meshblock_index_in_file must be 0 when raw=True")
-        return filedata
+        return _public_binary_data(filedata)
 
     _require_meshblocks_for_athdf(filedata, filename)
     if not 0 <= meshblock_index_in_file < filedata["n_mbs"]:
@@ -2296,9 +3017,12 @@ def read_single_rank_binary_as_athdf(
             "single-meshblock athdf-like conversion does not support ghost-bearing "
             "or sliced binary extents"
         )
+    retained_binary_bytes = _binary_retained_bytes(filedata)
     if dtype is None:
         dtype = np.float32
-    coordinate_bytes = _preflight_athdf_coordinates(block_size, dtype)
+    coordinate_bytes = _preflight_athdf_coordinates(
+        block_size, dtype, limits, retained_binary_bytes
+    )
 
     # Set coordinate system and related functions
     if vol_func is None:
@@ -2359,6 +3083,7 @@ def read_single_rank_binary_as_athdf(
         return_levels,
         None,
         coordinate_bytes,
+        limits,
     )
     if new_data:
         for q in quantities:
@@ -2414,18 +3139,22 @@ def read_coarsened_binary_as_athdf(
     center_func_2=None,
     center_func_3=None,
     num_ghost=0,
+    *,
+    limits=None,
 ):
     """
     Reads a bin file and organizes data similar to athdf format without writing to file.
     """
     # Step 1: Read binary data
-    filedata = read_coarsened_binary(filename)
+    limits = _athdf_reader_limits(limits)
+    filedata = _read_coarsened_binary(filename, limits=limits)
 
     # Step 2: Organize data similar to athdf
     if raw:
-        return filedata
+        return _public_binary_data(filedata)
 
     _require_meshblocks_for_athdf(filedata, filename)
+    retained_binary_bytes = _binary_retained_bytes(filedata)
 
     # Prepare dictionary for results
     if data is None:
@@ -2469,7 +3198,9 @@ def read_coarsened_binary_as_athdf(
             nx_vals.append(root_grid_size[d] * 2**level + 2 * num_ghost)
     nx1, nx2, nx3 = nx_vals
     lx1, lx2, lx3 = [nx // bs for nx, bs in zip(nx_vals, block_size)]
-    coordinate_bytes = _preflight_athdf_coordinates(nx_vals, dtype)
+    coordinate_bytes = _preflight_athdf_coordinates(
+        nx_vals, dtype, limits, retained_binary_bytes
+    )
 
     # Set coordinate system and related functions
     # coord = "cartesian"  # Adjust based on your data
@@ -2526,6 +3257,7 @@ def read_coarsened_binary_as_athdf(
         return_levels,
         restricted_shape,
         coordinate_bytes,
+        limits,
     )
     if new_data:
         for q in quantities:
@@ -2562,6 +3294,7 @@ def read_coarsened_binary_as_athdf(
             restricted_data if restricted_shape is not None else None,
             vol_func,
             num_ghost,
+            limits,
         )
 
     # Step 4: Finalize data
@@ -2601,7 +3334,73 @@ def read_coarsened_binary_as_athdf(
     return data
 
 
-def write_athdf(filename, fdata, varsize_bytes=4, locsize_bytes=8):
+def _preflight_write_athdf(
+    fdata, vars_without_b, vars_only_b, number_of_moments, limits
+):
+    """Bound converter outputs and one coordinate-generation working set."""
+    float_bytes = np.dtype(np.float64).itemsize
+    nmb = fdata["n_mbs"]
+    nx1 = fdata["nx1_out_mb"]
+    nx2 = fdata["nx2_out_mb"]
+    nx3 = fdata["nx3_out_mb"]
+    output_counts = [
+        nmb,
+        _checked_binary_product((nmb, 3), "ATHDF logical locations"),
+        _checked_binary_product(
+            (len(vars_without_b), nmb, nx3, nx2, nx1), "ATHDF uov"
+        ),
+    ]
+    if vars_only_b:
+        output_counts.append(
+            _checked_binary_product(
+                (3 * number_of_moments, nmb, nx3, nx2, nx1),
+                "ATHDF magnetic fields",
+            )
+        )
+    output_counts.extend(
+        _checked_binary_product(
+            (nmb, 2 * size + 1), f"ATHDF x{axis} coordinates"
+        )
+        for axis, size in enumerate((nx1, nx2, nx3), start=1)
+    )
+    output_bytes = _checked_binary_product(
+        (checked_sum(output_counts, "ATHDF output arrays"), float_bytes),
+        "ATHDF output arrays",
+    )
+    retained_input_bytes = _binary_retained_bytes(fdata)
+    _require_athdf_bytes(
+        checked_sum(
+            (retained_input_bytes, output_bytes),
+            "ATHDF converter materialization peak",
+        ),
+        "ATHDF converter materialization peak",
+        limits,
+    )
+    temporary_count = checked_sum(
+        (
+            3 * fdata["nx1_mb"] + 1,
+            3 * fdata["nx2_mb"] + 1,
+            3 * fdata["nx3_mb"] + 1,
+        ),
+        "ATHDF coordinate working set",
+    )
+    _require_athdf_bytes(
+        checked_sum(
+            (
+                retained_input_bytes,
+                output_bytes,
+                temporary_count * float_bytes,
+            ),
+            "ATHDF coordinate generation peak",
+        ),
+        "ATHDF coordinate generation peak",
+        limits,
+    )
+
+
+def write_athdf(
+    filename, fdata, varsize_bytes=4, locsize_bytes=8, *, limits=None
+):
     """
     Writes an athdf (hdf5) file from a loaded python filedata object.
 
@@ -2616,6 +3415,7 @@ def write_athdf(filename, fdata, varsize_bytes=4, locsize_bytes=8):
           number of bytes to use for output location data
     """
 
+    limits = _athdf_reader_limits(limits)
     if varsize_bytes not in [4, 8]:
         raise ValueError(f"varsizebytes must be 4 or 8, not {varsize_bytes}")
     if locsize_bytes not in [4, 8]:
@@ -2647,6 +3447,9 @@ def write_athdf(filename, fdata, varsize_bytes=4, locsize_bytes=8):
     # keep variable order but separate out magnetic field
     vars_without_b = [v for v in fdata["var_names"] if "bcc" not in v]
     vars_only_b = [v for v in fdata["var_names"] if v not in vars_without_b]
+    _preflight_write_athdf(
+        fdata, vars_without_b, vars_only_b, number_of_moments, limits
+    )
 
     if len(vars_only_b) > 0:
         B = np.zeros((3 * number_of_moments, nmb, nx3_out, nx2_out, nx1_out))
@@ -2766,20 +3569,20 @@ def write_xdmf_for(xdmfname, dumpname, fdata, mode="auto"):
     def write_meshblock(fp, mb, nx1, nx2, nx3, nmb, dumpname, vars_no_b, vars_w_b):
         fp.write(f"""  <Grid Name="MeshBlock{mb}" GridType="Uniform">\n""")
         fp.write("""   <Topology TopologyType="3DRectMesh" """)
-        fp.write(f""" NumberOfElements="{nx3+1} {nx2+1} {nx1+1}"/>\n""")
+        fp.write(f""" NumberOfElements="{nx3 + 1} {nx2 + 1} {nx1 + 1}"/>\n""")
         fp.write("""   <Geometry GeometryType="VXVYVZ">\n""")
         fp.write(
-            f"""    <DataItem ItemType="HyperSlab" Dimensions="{nx1+1}">
-     <DataItem Dimensions="3 2" NumberType="Int"> {mb} 0 1 1 1 {nx1+1} </DataItem>
-     <DataItem Dimensions="{nmb} {nx1+1}" Format="HDF"> {dumpname}:/x1f </DataItem>
+            f"""    <DataItem ItemType="HyperSlab" Dimensions="{nx1 + 1}">
+     <DataItem Dimensions="3 2" NumberType="Int"> {mb} 0 1 1 1 {nx1 + 1} </DataItem>
+     <DataItem Dimensions="{nmb} {nx1 + 1}" Format="HDF"> {dumpname}:/x1f </DataItem>
     </DataItem>
-    <DataItem ItemType="HyperSlab" Dimensions="{nx2+1}">
-     <DataItem Dimensions="3 2" NumberType="Int"> {mb} 0 1 1 1 {nx2+1} </DataItem>
-     <DataItem Dimensions="{nmb} {nx2+1}" Format="HDF"> {dumpname}:/x2f </DataItem>
+    <DataItem ItemType="HyperSlab" Dimensions="{nx2 + 1}">
+     <DataItem Dimensions="3 2" NumberType="Int"> {mb} 0 1 1 1 {nx2 + 1} </DataItem>
+     <DataItem Dimensions="{nmb} {nx2 + 1}" Format="HDF"> {dumpname}:/x2f </DataItem>
     </DataItem>
-    <DataItem ItemType="HyperSlab" Dimensions="{nx3+1}">
-     <DataItem Dimensions="3 2" NumberType="Int"> {mb} 0 1 1 1 {nx3+1} </DataItem>
-     <DataItem Dimensions="{nmb} {nx3+1}" Format="HDF"> {dumpname}:/x3f </DataItem>
+    <DataItem ItemType="HyperSlab" Dimensions="{nx3 + 1}">
+     <DataItem Dimensions="3 2" NumberType="Int"> {mb} 0 1 1 1 {nx3 + 1} </DataItem>
+     <DataItem Dimensions="{nmb} {nx3 + 1}" Format="HDF"> {dumpname}:/x3f </DataItem>
     </DataItem>
    </Geometry>\n"""
         )
@@ -2847,7 +3650,9 @@ def write_xdmf_for(xdmfname, dumpname, fdata, mode="auto"):
     fp.close()
 
 
-def convert_file(binary_fname, assemble_shards=False, coarsened=None):
+def convert_file(
+    binary_fname, assemble_shards=False, coarsened=None, *, limits=None
+):
     """
     Converts a binary file, optionally assembling its rank/node shard family.
 
@@ -2862,19 +3667,24 @@ def convert_file(binary_fname, assemble_shards=False, coarsened=None):
     This will create new files "binary_data.bin" -> "binary_data.athdf" and
     "binary_data.athdf.xdmf"
     """
+    limits = _binary_reader_limits(limits)
     athdf_fname = os.path.splitext(binary_fname)[0] + ".athdf"
     xdmf_fname = athdf_fname + ".xdmf"
     if coarsened is None:
         coarsened = binary_fname.endswith(".cbin")
     if coarsened:
-        filedata = read_coarsened_binary(binary_fname, assemble_shards=assemble_shards)
+        filedata = _read_coarsened_binary(
+            binary_fname, assemble_shards=assemble_shards, limits=limits
+        )
     else:
-        filedata = read_binary(binary_fname, assemble_shards=assemble_shards)
+        filedata = _read_binary(
+            binary_fname, assemble_shards=assemble_shards, limits=limits
+        )
     if filedata["n_mbs"] == 0:
         raise ValueError(
             f"cannot convert {binary_fname!r}: binary output contains no meshblocks"
         )
-    write_athdf(athdf_fname, filedata)
+    write_athdf(athdf_fname, filedata, limits=limits)
     write_xdmf_for(xdmf_fname, os.path.basename(athdf_fname), filedata)
 
 
@@ -2897,7 +3707,6 @@ __all__ = [
 
 if __name__ == "__main__":
     import argparse
-    import sys
 
     try:
         from tqdm import tqdm
@@ -2922,12 +3731,15 @@ if __name__ == "__main__":
         default=None,
         help="force the coarsened-binary reader (otherwise inferred from .cbin)",
     )
+    add_reader_limit_arguments(parser)
     parser.add_argument("binary_files", nargs="+", help="binary files to convert")
     args = parser.parse_args(sys.argv[1:])
+    limits = reader_limits_from_args(args)
 
     for binary_fname in tqdm(args.binary_files):
         convert_file(
             binary_fname,
             assemble_shards=args.assemble_shards,
             coarsened=args.coarsened,
+            limits=limits,
         )

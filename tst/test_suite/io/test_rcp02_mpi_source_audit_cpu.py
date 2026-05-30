@@ -18,14 +18,19 @@ ALLOWED_DISPOSITIONS = {
 }
 
 
+def _subprocess_run(*args, **kwargs):
+    kwargs.setdefault("timeout", 30)
+    return subprocess.run(*args, **kwargs)
+
+
 def _diff_touched_source_files():
-    tracked_output = subprocess.run(
+    tracked_output = _subprocess_run(
         ["git", "-C", str(ROOT), "diff", "--name-only", "origin/main", "--", "src"],
         check=True,
         capture_output=True,
         text=True,
     ).stdout
-    untracked_output = subprocess.run(
+    untracked_output = _subprocess_run(
         [
             "git",
             "-C",

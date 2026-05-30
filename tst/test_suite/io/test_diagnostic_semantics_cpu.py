@@ -13,6 +13,11 @@ ROOT = Path(__file__).resolve().parents[3]
 HARNESS_SOURCE = ROOT / "tst" / "test_suite" / "io" / "diagnostic_semantics_harness.cpp"
 
 
+def _subprocess_run(*args, **kwargs):
+    kwargs.setdefault("timeout", 90)
+    return subprocess.run(*args, **kwargs)
+
+
 @pytest.fixture(scope="session")
 def diagnostic_semantics_harness(tmp_path_factory):
     compiler_parts = shlex.split(os.environ.get("CXX", "c++"))
@@ -22,7 +27,7 @@ def diagnostic_semantics_harness(tmp_path_factory):
         tmp_path_factory.mktemp("diagnostic_semantics_harness")
         / "diagnostic_semantics_harness"
     )
-    subprocess.run(
+    _subprocess_run(
         [
             compiler,
             *compiler_parts[1:],
@@ -41,7 +46,7 @@ def diagnostic_semantics_harness(tmp_path_factory):
 
 
 def test_diagnostic_semantics_contract(diagnostic_semantics_harness):
-    proc = subprocess.run(
+    proc = _subprocess_run(
         [str(diagnostic_semantics_harness)],
         capture_output=True,
         text=True,

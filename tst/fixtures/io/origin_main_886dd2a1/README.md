@@ -12,9 +12,21 @@ These files are immutable compatibility fixtures generated from the clean baseli
 The producer commands were:
 
 ```sh
+cd /tmp/athenak-io-baseline-src/tst/fixtures/io/origin_main_886dd2a1
+cmake --build /tmp/athenak-io-baseline-build -j 4
+cmake --build /tmp/athenak-io-baseline-build-mpi -j 4
 /tmp/athenak-io-baseline-build/src/athena -i producer/origin_main_legacy_shared.athinput -d /tmp/athenak-io-baseline-shared
 /tmp/athenak-io-baseline-build/src/athena -i producer/origin_main_legacy_pdf_2d.athinput -d /tmp/athenak-io-baseline-pdf2d
 mpirun -np 2 /tmp/athenak-io-baseline-build-mpi/src/athena -i producer/origin_main_legacy_per_rank.athinput -d /tmp/athenak-io-baseline-rank
+```
+
+The preserved fixture set is rechecked from this directory with:
+
+```sh
+shasum -a 256 -c SHA256SUMS
+PYTHONDONTWRITEBYTECODE=1 python -m pytest -p no:cacheprovider -q \
+  ../../../test_suite/io/test_python_io_readers_cpu.py \
+  -k 'frozen_fixture_manifest_and_checksums_match or legacy_binary_fixtures_are_read_and_rank_assembly_matches_shared or legacy_pdf_fixtures_are_read'
 ```
 
 The artifacts establish the legacy contract for:

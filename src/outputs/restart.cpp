@@ -58,12 +58,10 @@ struct RestartAttemptCleanup {
   std::string temporary_payload;
   std::string published_payload;
   std::string temporary_manifest;
-  std::string published_manifest;
   std::string reservation;
   bool owns_temporary_payload = false;
   bool owns_published_payload = false;
   bool owns_temporary_manifest = false;
-  bool owns_published_manifest = false;
   bool owns_reservation = false;
 };
 
@@ -74,14 +72,11 @@ void CleanupActiveRestartAttempt() {
   if (active_restart_cleanup->owns_temporary_payload) {
     output_file_utils::DiscardOwnedPath(active_restart_cleanup->temporary_payload);
   }
-  if (active_restart_cleanup->owns_published_payload) {
-    output_file_utils::DiscardOwnedPath(active_restart_cleanup->published_payload);
-  }
   if (active_restart_cleanup->owns_temporary_manifest) {
     output_file_utils::DiscardOwnedPath(active_restart_cleanup->temporary_manifest);
   }
-  if (active_restart_cleanup->owns_published_manifest) {
-    output_file_utils::DiscardOwnedPath(active_restart_cleanup->published_manifest);
+  if (active_restart_cleanup->owns_published_payload) {
+    output_file_utils::DiscardOwnedPath(active_restart_cleanup->published_payload);
   }
   if (active_restart_cleanup->owns_reservation) {
     output_file_utils::DiscardOwnedPath(active_restart_cleanup->reservation);
@@ -1121,7 +1116,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       for (int r = 0; r < global_variable::nranks; ++r) {
         int id = manifest_nodes[r];
         int blocks = pm->nmb_eachrank[r];
-        if (id < 0 || id >= global_variable::nnodes || blocks < 0 ||
+        if (id < 0 || id >= global_variable::nnodes || blocks <= 0 ||
             pm->gids_eachrank[r] != next_gid ||
             manifest_offsets[r] != next_payload_block[id]) {
           manifest_error = "Node restart segment map is inconsistent and cannot "
@@ -1141,6 +1136,15 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       }
       if (manifest_error.empty() && next_gid != pm->nmb_total) {
         manifest_error = "Node restart segment map does not cover all mesh blocks.";
+      }
+      if (manifest_error.empty()) {
+        for (int id = 0; id < global_variable::nnodes; ++id) {
+          if (blocks_per_node[id] <= 0) {
+            manifest_error = "Node restart segment map contains a non-positive "
+                             "payload block count.";
+            break;
+          }
+        }
       }
     }
     if (BroadcastRootFailure(
@@ -1214,22 +1218,32 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           manifest_error = publish_error;
         } else {
           cleanup.owns_temporary_manifest = false;
-          cleanup.published_manifest = manifest_name;
-          cleanup.owns_published_manifest = true;
         }
       }
     }
+    bool restore_payload_rollback_ownership = cleanup.owns_published_payload;
+    cleanup.owns_published_payload = false;
     if (BroadcastRootFailure(
             global_variable::my_rank == 0 && !manifest_error.empty(),
             "MPI_Bcast for node restart manifest publication")) {
+      cleanup.owns_published_payload = restore_payload_rollback_ownership;
       FailNodeRestartWriteCoordinated(manifest_error.empty()
           ? "Node restart manifest publication failed."
           : manifest_error);
     }
+    if (AnyWorldFailure(InjectNodeRestartFailure("after_manifest_publication"),
+                        "MPI_Allreduce for injected node restart failure")) {
+      FailNodeRestartWriteCoordinated(
+          "Injected node restart failure after manifest publication.");
+    }
     int reservation_remove_failure = 0;
     std::string reservation_remove_error;
     if (global_variable::my_rank == 0) {
-      if (std::remove(reservation_name.c_str()) != 0) {
+      if (InjectNodeRestartFailure("reservation_removal")) {
+        reservation_remove_failure = 1;
+        reservation_remove_error =
+            "Injected node restart generation reservation removal failure.";
+      } else if (std::remove(reservation_name.c_str()) != 0) {
         reservation_remove_failure = 1;
         reservation_remove_error =
             "Could not remove node restart generation reservation '" +
@@ -1249,8 +1263,6 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     mpi_utils::CheckMpi(MPI_Barrier(MPI_COMM_WORLD),
                         "MPI_Barrier after node restart manifest publication");
 #endif
-    cleanup.owns_published_payload = false;
-    cleanup.owns_published_manifest = false;
   }
 
   active_restart_cleanup = nullptr;

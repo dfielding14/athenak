@@ -28,6 +28,7 @@ def test_mpi_timing_reports_one_rank_maximum_per_event(tmp_path: Path):
         check=True,
         capture_output=True,
         text=True,
+        timeout=90,
     )
     assert proc.stdout.count("[output-io] event=initial ") == 2
     assert proc.stdout.count("[output-io] event=final ") == 1

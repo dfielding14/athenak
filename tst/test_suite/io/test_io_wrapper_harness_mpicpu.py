@@ -42,6 +42,7 @@ def io_wrapper_harness(tmp_path_factory):
         check=True,
         capture_output=True,
         text=True,
+        timeout=90,
     )
     return output
 

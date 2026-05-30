@@ -46,6 +46,16 @@ void TestGeometry() {
 }
 
 void TestFlow() {
+  Require(output_diagnostics::IsPositiveFinite(1.0),
+          "Positive finite density must be accepted.");
+  Require(!output_diagnostics::IsPositiveFinite(0.0),
+          "Zero density must be rejected.");
+  Require(!output_diagnostics::IsPositiveFinite(-1.0),
+          "Negative density must be rejected.");
+  Require(!output_diagnostics::IsPositiveFinite(
+              std::numeric_limits<double>::quiet_NaN()),
+          "Nonfinite density must be rejected.");
+
   auto flow = output_diagnostics::BuildFlow(1.0, 0.0, 0.0, 2.0, 4.0, -6.0, 8.0);
   Require(flow.valid, "Finite positive-density flow must be valid.");
   RequireClose(flow.radial_velocity, 2.0, "Radial velocity is incorrect.");

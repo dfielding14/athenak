@@ -1,5 +1,6 @@
 """MPI regression coverage for per-node diagnostic and restart output."""
 
+import math
 import os
 from pathlib import Path
 import shutil
@@ -21,6 +22,8 @@ from read_sphslice import read_sphslice  # noqa: E402
 
 INPUT_FILE = "inputs/io_node_sharding.athinput"
 MAX_MPI_BYTES_ENV = "ATHENAK_TEST_MAX_MPI_BYTES"
+MANIFEST_TIMING_ENV = "ATHENAK_RESTART_MANIFEST_TIMING"
+MANIFEST_TIMING_PREFIX = "[restart-manifest]"
 NODE_PAYLOAD_MARKER = b"AthenaK node restart payload version=1\n"
 MAX_NODE_MANIFEST_BYTES = 64 * 1024 * 1024
 MAX_GENERATED_PAYLOAD_PATH_BYTES = 1024
@@ -103,6 +106,211 @@ def _payload_path(manifest: Path):
     return manifest.parent / payload_record.split()[4]
 
 
+def _parse_manifest_timing_records(output: str):
+    expected_fields = {
+        "validate": {
+            "phase",
+            "rank",
+            "estimate_scope",
+            "payload_count",
+            "manifest_bytes",
+            "header_bytes",
+            "logical_header_validation_bytes",
+            "logical_validation_pressure_bytes",
+            "logical_validation_pressure_capped",
+            "elapsed_s",
+        },
+        "startup_parse": {
+            "phase",
+            "rank",
+            "startup_before_s",
+            "startup_after_s",
+            "elapsed_s",
+        },
+        "load_local_blocks": {
+            "phase",
+            "rank",
+            "payload_count",
+            "local_blocks",
+            "local_bytes",
+            "span_count",
+            "elapsed_s",
+        },
+    }
+    records = []
+    for line in output.splitlines():
+        if not line.startswith(MANIFEST_TIMING_PREFIX + " "):
+            continue
+        fields = line.split()[1:]
+        assert all("=" in field for field in fields)
+        record = dict(field.split("=", 1) for field in fields)
+        assert len(record) == len(fields)
+        assert record["phase"] in expected_fields
+        assert set(record) == expected_fields[record["phase"]]
+        records.append(record)
+    return records
+
+
+def _assert_manifest_timing_records(output: str, manifest: Path, payload_count: int):
+    records = _parse_manifest_timing_records(output)
+    assert len(records) == 6
+    grouped = {
+        phase: [record for record in records if record["phase"] == phase]
+        for phase in ("validate", "startup_parse", "load_local_blocks")
+    }
+    assert all(len(records) == 2 for records in grouped.values())
+    assert all({int(record["rank"]) for record in records} == {0, 1}
+               for records in grouped.values())
+
+    for record in records:
+        elapsed = float(record["elapsed_s"])
+        assert math.isfinite(elapsed)
+        assert elapsed >= 0.0
+
+    for record in grouped["startup_parse"]:
+        before = float(record["startup_before_s"])
+        after = float(record["startup_after_s"])
+        assert math.isfinite(before)
+        assert math.isfinite(after)
+        assert before >= 0.0
+        assert after >= before
+        assert float(record["elapsed_s"]) == pytest.approx(after - before)
+
+    for record in grouped["validate"]:
+        assert record["estimate_scope"] == (
+            "manifest_parse_plus_replicated_header_compare"
+        )
+        assert int(record["payload_count"]) == payload_count
+        manifest_bytes = int(record["manifest_bytes"])
+        header_bytes = int(record["header_bytes"])
+        logical_header_bytes = int(record["logical_header_validation_bytes"])
+        logical_pressure_bytes = int(record["logical_validation_pressure_bytes"])
+        assert manifest_bytes == manifest.stat().st_size
+        assert header_bytes > 0
+        assert logical_header_bytes == 2 * (payload_count - 1) * header_bytes
+        assert logical_pressure_bytes == manifest_bytes + logical_header_bytes
+        assert int(record["logical_validation_pressure_capped"]) == 0
+
+    for record in grouped["load_local_blocks"]:
+        assert int(record["payload_count"]) == payload_count
+        assert int(record["local_blocks"]) >= 0
+        assert int(record["local_bytes"]) >= 0
+        assert int(record["span_count"]) >= 0
+
+
+def _split_manifest_into_two_payloads(manifest: Path):
+    lines = manifest.read_text().splitlines()
+    header_size = next(
+        int(line.split("=", 1)[1]) for line in lines
+        if line.startswith("header_size=")
+    )
+    data_size = next(
+        int(line.split("=", 1)[1]) for line in lines
+        if line.startswith("data_size=")
+    )
+    nmb_total = next(
+        int(line.split("=", 1)[1]) for line in lines
+        if line.startswith("nmb_total=")
+    )
+    first_blocks = nmb_total // 2
+    second_blocks = nmb_total - first_blocks
+    assert first_blocks > 0
+    assert second_blocks > 0
+
+    payload_index = next(
+        index for index, line in enumerate(lines) if line.startswith("payload ")
+    )
+    original_fields = lines[payload_index].split()
+    original_payload = manifest.parent / original_fields[4]
+    original_data = original_payload.read_bytes()
+    assert len(original_data) == header_size + nmb_total * data_size
+
+    second_relative = (
+        "node_00000001/" + Path(original_fields[4]).name
+    )
+    second_payload = manifest.parent / second_relative
+    second_payload.parent.mkdir()
+    split_offset = header_size + first_blocks * data_size
+    second_payload.write_bytes(original_data[:header_size] + original_data[split_offset:])
+    original_payload.write_bytes(original_data[:split_offset])
+
+    payload_records = (
+        f"payload 0 {first_blocks} {header_size + first_blocks * data_size} "
+        f"{original_fields[4]}",
+        f"payload 1 {second_blocks} {header_size + second_blocks * data_size} "
+        f"{second_relative}",
+    )
+    segment_records = (
+        f"segment 0 0 {first_blocks} 0",
+        f"segment 1 {first_blocks} {second_blocks} 0",
+    )
+    end_index = lines.index("end")
+    lines[payload_index:end_index] = payload_records + segment_records
+    payload_count_index = next(
+        index for index, line in enumerate(lines)
+        if line.startswith("payload_count=")
+    )
+    lines[payload_count_index] = "payload_count=2"
+    manifest.write_text("\n".join(lines) + "\n")
+
+
+def _interleave_manifest_across_two_payloads(manifest: Path):
+    lines = manifest.read_text().splitlines()
+    header_size = next(
+        int(line.split("=", 1)[1]) for line in lines
+        if line.startswith("header_size=")
+    )
+    data_size = next(
+        int(line.split("=", 1)[1]) for line in lines
+        if line.startswith("data_size=")
+    )
+    nmb_total = next(
+        int(line.split("=", 1)[1]) for line in lines
+        if line.startswith("nmb_total=")
+    )
+    assert nmb_total >= 2
+    payload_index = next(
+        index for index, line in enumerate(lines) if line.startswith("payload ")
+    )
+    original_fields = lines[payload_index].split()
+    original_payload = manifest.parent / original_fields[4]
+    original_data = original_payload.read_bytes()
+    assert len(original_data) == header_size + nmb_total * data_size
+    blocks = [
+        original_data[
+            header_size + index * data_size:header_size + (index + 1) * data_size
+        ]
+        for index in range(nmb_total)
+    ]
+    second_relative = "node_00000001/" + Path(original_fields[4]).name
+    second_payload = manifest.parent / second_relative
+    second_payload.parent.mkdir(exist_ok=True)
+    payload_blocks = (blocks[::2], blocks[1::2])
+    original_payload.write_bytes(
+        original_data[:header_size] + b"".join(payload_blocks[0])
+    )
+    second_payload.write_bytes(original_data[:header_size] + b"".join(payload_blocks[1]))
+    payload_records = (
+        f"payload 0 {len(payload_blocks[0])} "
+        f"{header_size + len(payload_blocks[0]) * data_size} {original_fields[4]}",
+        f"payload 1 {len(payload_blocks[1])} "
+        f"{header_size + len(payload_blocks[1]) * data_size} {second_relative}",
+    )
+    segment_records = tuple(
+        f"segment {payload_id} {gid} 1 {payload_offset}"
+        for gid in range(nmb_total)
+        for payload_id, payload_offset in ((gid % 2, gid // 2),)
+    )
+    end_index = lines.index("end")
+    lines[payload_index:end_index] = payload_records + segment_records
+    payload_count_index = next(
+        index for index, line in enumerate(lines)
+        if line.startswith("payload_count=")
+    )
+    lines[payload_count_index] = "payload_count=2"
+    manifest.write_text("\n".join(lines) + "\n")
+
+
 @pytest.fixture(scope="module")
 def node_restart_template(tmp_path_factory):
     template_root = tmp_path_factory.mktemp("node_restart_template")
@@ -156,8 +364,10 @@ def test_node_sharded_diagnostics_reconstruct_to_shared_output(tmp_path):
     )
     np.testing.assert_allclose(node_pdf["pdf"], shared_pdf["pdf"])
     shared_surface = read_sphslice(
-        str(shared / "bin" /
-            "io_node.density.r_2.5000000000000000e-01.00000.sph.bin")
+        str(
+            shared / "bin"
+            / "io_node.density.r_2.5000000000000000e-01.00000.sph.bin"
+        )
     )
     node_surface = read_sphslice(
         str(node_dir / "io_node.density.r_2.5000000000000000e-01.00000.sph.bin")
@@ -174,6 +384,7 @@ def test_node_sharded_diagnostics_reconstruct_to_shared_output(tmp_path):
         check=True,
         capture_output=True,
         text=True,
+        timeout=90,
     )
     assert (node_dir / "io_node.full.00000.athdf").exists()
 
@@ -213,10 +424,40 @@ def test_node_restart_manifest_resumes_without_overwriting_terminal_checkpoint(t
         check=True,
         capture_output=True,
         text=True,
+        timeout=90,
     )
     assert terminal.read_bytes() == original_manifest
     assert (run_dir / "rst" / "io_node.00002.rst").exists()
     assert not list((run_dir / "rst").rglob("*.assembled"))
+
+
+def test_node_restart_manifest_scaling_timing_is_default_off(
+    tmp_path, node_restart_template
+):
+    _, manifest = _copy_node_checkpoint(tmp_path, node_restart_template, "timing_off")
+    env = os.environ.copy()
+    env.pop(MANIFEST_TIMING_ENV, None)
+    proc = _resume(tmp_path / "timing_off_resume", manifest, env=env)
+    assert MANIFEST_TIMING_PREFIX not in proc.stdout + proc.stderr
+
+
+def test_node_restart_opt_in_manifest_scaling_timing(tmp_path, node_restart_template):
+    _, manifest = _copy_node_checkpoint(tmp_path, node_restart_template, "timing")
+    env = os.environ.copy()
+    env[MANIFEST_TIMING_ENV] = "1"
+    proc = _resume(tmp_path / "timing_resume", manifest, env=env)
+    _assert_manifest_timing_records(proc.stdout + proc.stderr, manifest, payload_count=1)
+
+
+def test_node_restart_manifest_scaling_timing_two_payload_formula(
+    tmp_path, node_restart_template
+):
+    _, manifest = _copy_node_checkpoint(tmp_path, node_restart_template, "timing_two")
+    _split_manifest_into_two_payloads(manifest)
+    env = os.environ.copy()
+    env[MANIFEST_TIMING_ENV] = "1"
+    proc = _resume(tmp_path / "timing_two_resume", manifest, env=env)
+    _assert_manifest_timing_records(proc.stdout + proc.stderr, manifest, payload_count=2)
 
 
 def test_node_restart_generation_collision_preserves_ambient_reservation(tmp_path):
@@ -243,8 +484,8 @@ def test_node_restart_generation_collision_preserves_ambient_reservation(tmp_pat
         check=True,
         capture_output=True,
         text=True,
-        env=env,
         timeout=90,
+        env=env,
     )
 
     manifest = reserve_dir / "io_node.00000.rst"
@@ -295,6 +536,54 @@ def test_injected_node_restart_failure_discards_owned_attempt_artifacts(
     assert not list((run_dir / "rst").rglob("*.payload.rst"))
     assert not list((run_dir / "rst").glob(".*.reserve"))
     assert not (run_dir / "rst" / "io_node.00000.rst").exists()
+
+
+@pytest.mark.parametrize(
+    ("stage", "expected"),
+    (
+        (
+            "after_manifest_publication",
+            "Injected node restart failure after manifest publication",
+        ),
+        (
+            "reservation_removal",
+            "Injected node restart generation reservation removal failure",
+        ),
+    ),
+)
+def test_post_commit_node_restart_failure_preserves_published_checkpoint(
+    tmp_path, stage, expected
+):
+    run_dir = tmp_path / f"injected_{stage}_failure"
+    run_dir.mkdir()
+    env = os.environ.copy()
+    env["ATHENAK_TEST_NODE_RESTART_FAIL_STAGE"] = stage
+    proc = subprocess.run(
+        [
+            "mpirun",
+            "-np",
+            "2",
+            "./athena",
+            "-i",
+            INPUT_FILE,
+            "-d",
+            str(run_dir),
+            *RESTART_ONLY_NODE_OVERRIDES,
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=90,
+    )
+
+    assert proc.returncode != 0
+    assert expected in (proc.stdout + proc.stderr)
+    manifest = run_dir / "rst" / "io_node.00000.rst"
+    assert manifest.exists()
+    assert list((run_dir / "rst").rglob("*.payload.rst"))
+    assert not list((run_dir / "rst").rglob("*.tmp"))
+    assert not list((run_dir / "rst").glob(".*.reserve"))
+    _resume(tmp_path / f"{stage}_resume", manifest)
 
 
 def test_restart_persisted_exhausted_counter_can_resume_without_publication(tmp_path):
@@ -363,6 +652,7 @@ def test_node_restart_rejects_generated_payload_path_before_open(tmp_path):
         ("absolute", "payload path"),
         ("incomplete", "completion record"),
         ("byte_count", "payload block count or byte count"),
+        ("payload_zero", "payload block count must be positive"),
         ("payload_count", "'payload_count' value must be between"),
         ("missing_record", "expected 'data_size' record"),
         ("duplicate_record", "expected 'header_size' record"),
@@ -408,6 +698,14 @@ def test_node_restart_rejects_corrupted_manifest(
                 fields[3] = str(int(fields[3]) + 1)
                 lines[index] = " ".join(fields)
                 break
+        text = "\n".join(lines) + "\n"
+    elif corruption == "payload_zero":
+        lines = text.splitlines()
+        index = next(index for index, line in enumerate(lines)
+                     if line.startswith("payload "))
+        fields = lines[index].split()
+        fields[2] = "0"
+        lines[index] = " ".join(fields)
         text = "\n".join(lines) + "\n"
     elif corruption == "payload_count":
         text = text.replace("payload_count=1", "payload_count=1000000000", 1)
@@ -472,37 +770,31 @@ def test_node_restart_rejects_corrupted_manifest(
             stream.write(b"\n")
         text = None
     elif corruption == "mixed_generation":
+        _split_manifest_into_two_payloads(manifest)
         lines = text.splitlines()
-        payload_index = next(index for index, line in enumerate(lines)
-                             if line.startswith("payload "))
-        fields = lines[payload_index].split()
-        header_size = next(line.split("=")[1] for line in lines
-                           if line.startswith("header_size="))
-        fields[1] = "1"
-        fields[2] = "0"
-        fields[3] = header_size
-        fields[4] = fields[4].replace("node_00000000/", "node_00000001/", 1)
+        lines = manifest.read_text().splitlines()
+        payload_indexes = [
+            index for index, line in enumerate(lines) if line.startswith("payload ")
+        ]
+        fields = lines[payload_indexes[1]].split()
         fields[4] = fields[4].replace(".payload.rst", "1.payload.rst", 1)
-        lines.insert(payload_index + 1, " ".join(fields))
-        text = "\n".join(lines).replace("payload_count=1", "payload_count=2", 1) + "\n"
+        lines[payload_indexes[1]] = " ".join(fields)
+        text = "\n".join(lines) + "\n"
     elif corruption == "header_mismatch":
-        lines = text.splitlines()
-        payload_index = next(index for index, line in enumerate(lines)
-                             if line.startswith("payload "))
-        fields = lines[payload_index].split()
+        _split_manifest_into_two_payloads(manifest)
+        lines = manifest.read_text().splitlines()
+        payload_indexes = [
+            index for index, line in enumerate(lines) if line.startswith("payload ")
+        ]
+        fields = lines[payload_indexes[1]].split()
         header_size = next(int(line.split("=")[1]) for line in lines
                            if line.startswith("header_size="))
-        fields[1] = "1"
-        fields[2] = "0"
-        fields[3] = str(header_size)
-        fields[4] = fields[4].replace("node_00000000/", "node_00000001/", 1)
         duplicate = manifest.parent / fields[4]
-        duplicate.parent.mkdir()
-        header = bytearray(_payload_path(manifest).read_bytes()[:header_size])
+        duplicate_bytes = duplicate.read_bytes()
+        header = bytearray(duplicate_bytes[:header_size])
         header[0] ^= 1
-        duplicate.write_bytes(header)
-        lines.insert(payload_index + 1, " ".join(fields))
-        text = "\n".join(lines).replace("payload_count=1", "payload_count=2", 1) + "\n"
+        duplicate.write_bytes(header + duplicate_bytes[header_size:])
+        text = "\n".join(lines) + "\n"
     elif corruption == "bad_node_directory":
         text = text.replace("node_00000000/", "node_00000001/", 1)
     else:
@@ -551,6 +843,7 @@ def test_node_restart_rejects_corrupted_manifest(
         ["mpirun", "-np", "2", "./athena", "-r", str(manifest), "-d", str(run_dir)],
         capture_output=True,
         text=True,
+        timeout=90,
     )
     assert proc.returncode != 0
     assert expected in (proc.stdout + proc.stderr)
@@ -667,6 +960,14 @@ def test_forced_small_chunk_node_restart_write_and_read(tmp_path):
     assert not list((run_dir / "rst").rglob("*.assembled"))
 
 
+def test_node_restart_one_rank_combines_interleaved_spans_from_multiple_payloads(
+    tmp_path, node_restart_template
+):
+    _, manifest = _copy_node_checkpoint(tmp_path, node_restart_template, "interleaved")
+    _interleave_manifest_across_two_payloads(manifest)
+    _resume(tmp_path / "interleaved_resume", manifest, env=_env("7"), nranks=1)
+
+
 def test_node_restart_supports_rank_count_change_on_local_node(
     tmp_path, node_restart_template
 ):
@@ -708,6 +1009,7 @@ def test_existing_per_rank_restart_resumes_and_timing_identifies_layout(tmp_path
         check=True,
         capture_output=True,
         text=True,
+        timeout=90,
     )
 
 
@@ -757,6 +1059,7 @@ def test_conflicting_rank_and_node_modes_are_rejected(tmp_path):
         ],
         capture_output=True,
         text=True,
+        timeout=90,
     )
     assert proc.returncode != 0
     assert "cannot set both single_file_per_rank=true and single_file_per_node=true" in (
@@ -781,6 +1084,7 @@ def test_promoted_node_example_generates_readable_outputs_and_manifest(tmp_path)
         check=True,
         capture_output=True,
         text=True,
+        timeout=90,
     )
     node_bin = run_dir / "bin" / "node_00000000" / "io_node_example.density.00000.bin"
     node_cbin = (
@@ -823,6 +1127,7 @@ def test_promoted_node_example_generates_readable_outputs_and_manifest(tmp_path)
         check=True,
         capture_output=True,
         text=True,
+        timeout=30,
     )
     assert "binary meshblocks=4" in summary.stdout
 
@@ -837,5 +1142,38 @@ def test_promoted_node_example_generates_readable_outputs_and_manifest(tmp_path)
         check=True,
         capture_output=True,
         text=True,
+        timeout=30,
     )
     assert "coarsened meshblocks=4" in coarsened_summary.stdout
+
+    pdf_summary = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "vis" / "python" / "examples" / "read_io_outputs.py"),
+            "pdf",
+            str(node_pdf),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert "pdf shape=" in pdf_summary.stdout
+
+    sphslice_summary = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "vis" / "python" / "examples" / "read_io_outputs.py"),
+            "sphslice",
+            str(node_surface),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert "sphslice shape=(16, 32, 1)" in sphslice_summary.stdout
+
+    manifest = run_dir / "rst" / "io_node_example.00001.rst"
+    _resume(tmp_path / "node_example_resume", manifest)
+    assert not list(tmp_path.rglob("*.assembled"))

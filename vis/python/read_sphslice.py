@@ -4,15 +4,43 @@
 
 Shared files contain a complete ``(variable, theta, phi)`` payload.  Rank-
 and node-sharded files contain sparse angular ownership records and are
-reassembled when any sibling shard path is supplied.
+reassembled when any sibling shard path is supplied. Historical version-1
+shared/rank files may omit ``distribution`` and use ``single_file_per_rank``;
+new node and explicit rank layouts require complete shard inventory metadata.
 """
 
-import glob
 import os
 import re
 import sys
 
 import numpy as np
+
+if __package__:
+    from .io_reader_common import (
+        bounded_partition_files,
+        checked_product,
+        conservative_text_metadata_bytes,
+        count_ascii_tokens,
+        metadata_record_bytes,
+        normalize_reader_limits,
+        preflight_allocation,
+        preflight_file_read,
+        require_live_bytes,
+        shallow_mapping_bytes,
+    )
+else:
+    from io_reader_common import (
+        bounded_partition_files,
+        checked_product,
+        conservative_text_metadata_bytes,
+        count_ascii_tokens,
+        metadata_record_bytes,
+        normalize_reader_limits,
+        preflight_allocation,
+        preflight_file_read,
+        require_live_bytes,
+        shallow_mapping_bytes,
+    )
 
 
 _FIRST_LINE_RE = re.compile(r"^Athena spherical slice version=(.+)$")
@@ -54,66 +82,81 @@ _REQUIRED_KEYS = frozenset(
 )
 
 
+def _reader_limits(limits):
+    return normalize_reader_limits(
+        limits,
+        max_live_bytes=_MAX_DENSE_ALLOCATION_BYTES,
+        max_header_read_bytes=_MAX_HEADER_READ_BYTES,
+        max_payload_read_bytes=_MAX_FILE_READ_BYTES,
+    )
+
+
 def _checked_product(values, label):
-    product = 1
-    for value in values:
-        if not isinstance(value, (int, np.integer)) or value < 0:
-            raise ValueError(f"{label} has invalid extent {value!r}")
-        product *= int(value)
-    return product
+    return checked_product(values, label)
 
 
-def _require_allocation(values, itemsize, label):
-    count = _checked_product(values, label)
-    nbytes = _checked_product((count, itemsize), label + " byte count")
-    if nbytes > _MAX_DENSE_ALLOCATION_BYTES:
-        raise ValueError(
-            f"{label} requires {nbytes} bytes, exceeding the practical allocation "
-            f"limit of {_MAX_DENSE_ALLOCATION_BYTES} bytes"
-        )
-    return count
+def _require_allocation(
+    values, itemsize, label, limits=None, retained_bytes=0
+):
+    return preflight_allocation(
+        values, itemsize, label, _reader_limits(limits), retained_bytes
+    )
 
 
-def _require_retained_bytes(nbytes, label):
-    if nbytes > _MAX_DENSE_ALLOCATION_BYTES:
-        raise ValueError(
-            f"{label} requires {nbytes} bytes, exceeding the practical allocation "
-            f"limit of {_MAX_DENSE_ALLOCATION_BYTES} bytes"
-        )
+def _require_retained_bytes(nbytes, label, limits=None):
+    return require_live_bytes(nbytes, label, _reader_limits(limits))
 
 
-def _require_file_size(path):
-    size = os.path.getsize(path)
-    if size > _MAX_FILE_READ_BYTES:
-        raise ValueError(
-            f"spherical-slice file {path!r} requires reading {size} bytes, "
-            f"exceeding the practical file-read limit of {_MAX_FILE_READ_BYTES} bytes"
-        )
+def _require_file_size(path, limits=None):
+    limits = _reader_limits(limits)
+    return preflight_file_read(
+        path, limits.max_payload_read_bytes, "spherical-slice file"
+    )
 
 
-def _read_limited_header_line(handle, budget):
+def _read_limited_header_line(
+    handle,
+    budget,
+    limits=None,
+    externally_retained_bytes=0,
+    retained_variable_bytes=0,
+):
     """Read one metadata line without accepting an unbounded header."""
-    raw_line = handle.readline(_MAX_HEADER_READ_BYTES + 1)
-    budget[0] += len(raw_line)
-    if len(raw_line) > _MAX_HEADER_READ_BYTES or budget[0] > _MAX_HEADER_READ_BYTES:
+    limits = _reader_limits(limits)
+    remaining_header_bytes = limits.max_header_read_bytes - budget[0]
+    remaining_live_bytes = (
+        limits.max_live_bytes
+        - externally_retained_bytes
+        - retained_variable_bytes
+    )
+    remaining_text_bytes = remaining_live_bytes // 4 - budget[0]
+    read_cap = max(0, min(remaining_header_bytes, remaining_text_bytes))
+    raw_line = handle.readline(read_cap + 1)
+    if len(raw_line) > read_cap:
+        _require_retained_bytes(
+            externally_retained_bytes
+            + retained_variable_bytes
+            + conservative_text_metadata_bytes(budget[0] + len(raw_line)),
+            "spherical-slice header metadata peak",
+            limits=limits,
+        )
         raise ValueError(
             f"spherical-slice header in {handle.name!r} exceeds the practical "
-            f"metadata limit of {_MAX_HEADER_READ_BYTES} bytes"
+            f"metadata limit of {limits.max_header_read_bytes} bytes"
         )
+    budget[0] += len(raw_line)
+    _require_retained_bytes(
+        externally_retained_bytes
+        + retained_variable_bytes
+        + conservative_text_metadata_bytes(budget[0]),
+        "spherical-slice header metadata peak",
+        limits=limits,
+    )
     return raw_line
 
 
 def _count_ascii_tokens(text):
-    """Count whitespace-delimited tokens without first materializing a list."""
-    count = 0
-    in_token = False
-    for character in text:
-        if character.isspace():
-            in_token = False
-        elif not in_token:
-            count += 1
-            in_token = True
-    return count
+    return count_ascii_tokens(text)
 
 
 def _variable_token_peak_bytes(text, token_count):
@@ -143,44 +186,24 @@ def _shard_kind(path):
     return _partition_info(path)[0]
 
 
-def _glob_partition_files(path):
+def _glob_partition_files(path, limits=None):
     kind = _shard_kind(path)
-    if kind == "shared":
-        return [os.path.abspath(path)]
-    directory = os.path.dirname(os.path.abspath(path))
-    pattern = os.path.join(
-        os.path.dirname(directory), kind + "_*", os.path.basename(path)
+    return bounded_partition_files(
+        path,
+        kind,
+        "spherical-slice",
+        _reader_limits(limits),
+        _partition_info,
     )
-    files = sorted(glob.glob(pattern))
-    if not files:
-        raise FileNotFoundError(
-            f"no spherical-slice {kind} shards found for pattern {pattern!r}"
-        )
-    shard_ids = []
-    for candidate in files:
-        candidate_kind, shard_id = _partition_info(candidate)
-        if candidate_kind != kind:
-            raise ValueError(
-                f"spherical-slice shard {candidate!r} does not match {kind!r} inventory"
-            )
-        shard_ids.append(shard_id)
-    if len(set(shard_ids)) != len(shard_ids):
-        raise ValueError(
-            f"spherical-slice {kind} shard inventory contains duplicate IDs"
-        )
-    expected_ids = set(range(len(shard_ids)))
-    actual_ids = set(shard_ids)
-    if actual_ids != expected_ids:
-        raise ValueError(
-            f"spherical-slice {kind} shard inventory is incomplete: "
-            f"expected IDs {sorted(expected_ids)!r}, found {sorted(actual_ids)!r}"
-        )
-    return files
 
 
-def _read_header(handle, externally_retained_bytes=0):
+def _read_header(handle, externally_retained_bytes=0, limits=None):
+    limits = _reader_limits(limits)
     header_budget = [0]
-    first = _read_limited_header_line(handle, header_budget)
+    retained_variable_bytes = 0
+    first = _read_limited_header_line(
+        handle, header_budget, limits, externally_retained_bytes
+    )
     if not first:
         raise ValueError(f"empty spherical-slice file {handle.name!r}")
     try:
@@ -194,12 +217,40 @@ def _read_header(handle, externally_retained_bytes=0):
         raise ValueError(
             f"unsupported spherical-slice version {match.group(1)!r} in {handle.name!r}"
         )
+    _require_retained_bytes(
+        externally_retained_bytes + conservative_text_metadata_bytes(header_budget[0]),
+        "spherical-slice header metadata peak",
+        limits=limits,
+    )
 
     header = {"version": match.group(1)}
+    retained_record_bytes = metadata_record_bytes("version", match.group(1))
+    _require_retained_bytes(
+        externally_retained_bytes
+        + conservative_text_metadata_bytes(header_budget[0])
+        + retained_record_bytes,
+        "spherical-slice header metadata peak",
+        limits=limits,
+    )
     while "header_offset" not in header:
-        raw_line = _read_limited_header_line(handle, header_budget)
+        raw_line = _read_limited_header_line(
+            handle,
+            header_budget,
+            limits,
+            externally_retained_bytes,
+            retained_variable_bytes + retained_record_bytes,
+        )
         if not raw_line:
             raise ValueError(f"truncated spherical-slice header in {handle.name!r}")
+        retained_text_bytes = conservative_text_metadata_bytes(header_budget[0])
+        _require_retained_bytes(
+            externally_retained_bytes
+            + retained_text_bytes
+            + retained_variable_bytes
+            + retained_record_bytes,
+            "spherical-slice header metadata peak",
+            limits=limits,
+        )
         try:
             line = raw_line.decode("ascii").strip()
         except UnicodeDecodeError as exc:
@@ -217,55 +268,92 @@ def _read_header(handle, externally_retained_bytes=0):
                 variables_text, token_count
             )
             _require_retained_bytes(
-                externally_retained_bytes + retained_variable_bytes,
+                externally_retained_bytes
+                + retained_text_bytes
+                + retained_variable_bytes
+                + retained_record_bytes
+                + metadata_record_bytes("variables", charge_value=False),
                 "spherical-slice variable tokenization peak",
+                limits=limits,
             )
             header["variables"] = variables_text.split()
-            header["_retained_metadata_bytes"] = retained_variable_bytes
+            retained_record_bytes += metadata_record_bytes(
+                "variables", charge_value=False
+            )
             continue
         if "=" not in line:
             continue
         key, value = (part.strip() for part in line.partition("=")[::2])
         key = key.replace(" ", "_")
+        if key in header:
+            raise ValueError(
+                f"duplicate spherical-slice metadata for {key!r} in {handle.name!r}"
+            )
         try:
             if key in _INT_KEYS:
-                header[key] = int(value)
+                parsed_value = int(value)
             elif key in _FLOAT_KEYS:
-                header[key] = float(value)
+                parsed_value = float(value)
             else:
-                header[key] = value
+                parsed_value = value
         except ValueError as exc:
             raise ValueError(
                 f"invalid spherical-slice header value for {key!r} in {handle.name!r}"
             ) from exc
+        record_bytes = metadata_record_bytes(key, parsed_value)
+        _require_retained_bytes(
+            externally_retained_bytes
+            + retained_text_bytes
+            + retained_variable_bytes
+            + retained_record_bytes
+            + record_bytes,
+            "spherical-slice header metadata peak",
+            limits=limits,
+        )
+        header[key] = parsed_value
+        retained_record_bytes += record_bytes
 
     missing = sorted(_REQUIRED_KEYS.difference(header))
     if missing:
         raise ValueError(
             f"spherical-slice header {handle.name!r} is missing {', '.join(missing)}"
         )
+    header["_retained_metadata_bytes"] = (
+        retained_text_bytes + retained_variable_bytes + retained_record_bytes
+    )
+    retained_metadata_bytes = (
+        externally_retained_bytes + header["_retained_metadata_bytes"]
+    )
     header["nvars"] = header["number_of_variables"]
-    if header["ntheta"] <= 0 or header["nphi"] <= 0 or header["nvars"] <= 0:
+    if header["ntheta"] < 2 or header["nphi"] < 2 or header["nvars"] <= 0:
         raise ValueError(f"spherical-slice header {handle.name!r} has invalid dimensions")
     header["surface_points"] = _require_allocation(
         (header["ntheta"], header["nphi"]),
         np.dtype(bool).itemsize,
         "spherical-slice surface coverage",
+        limits=limits,
+        retained_bytes=retained_metadata_bytes,
     )
     dense_values = _require_allocation(
         (header["nvars"], header["surface_points"]),
         np.dtype(np.float32).itemsize,
         "spherical-slice dense values",
+        limits=limits,
+        retained_bytes=retained_metadata_bytes,
     )
     _require_allocation(
         (header["ntheta"],),
         np.dtype(np.float64).itemsize,
         "spherical-slice theta coordinates",
+        limits=limits,
+        retained_bytes=retained_metadata_bytes,
     )
     _require_allocation(
         (header["nphi"],),
         np.dtype(np.float64).itemsize,
         "spherical-slice phi coordinates",
+        limits=limits,
+        retained_bytes=retained_metadata_bytes,
     )
     header["_retained_dense_bytes"] = (
         header["surface_points"] * np.dtype(bool).itemsize
@@ -273,7 +361,9 @@ def _read_header(handle, externally_retained_bytes=0):
         + (header["ntheta"] + header["nphi"]) * np.dtype(np.float64).itemsize
     )
     _require_retained_bytes(
-        header["_retained_dense_bytes"], "spherical-slice retained arrays"
+        retained_metadata_bytes + header["_retained_dense_bytes"],
+        "spherical-slice retained arrays",
+        limits=limits,
     )
     if header["size_of_variable"] != np.dtype(np.float32).itemsize:
         raise ValueError(
@@ -284,30 +374,52 @@ def _read_header(handle, externally_retained_bytes=0):
         raise ValueError(
             f"spherical-slice file {handle.name!r} variable count does not match metadata"
         )
-    if header["header_offset"] < 0 or header["npoints"] < 0:
+    if (
+        header["header_offset"] < 0
+        or header["npoints"] < 0
+        or header["npoints"] > header["surface_points"]
+    ):
         raise ValueError(
-            f"spherical-slice file {handle.name!r} has a negative size field"
+            f"spherical-slice file {handle.name!r} has an invalid size field"
         )
-    if not np.isfinite(header["time"]) or not np.isfinite(header["radius"]):
-        raise ValueError(f"spherical-slice file {handle.name!r} has non-finite metadata")
+    if (
+        not np.isfinite(header["time"])
+        or not np.isfinite(header["radius"])
+        or header["radius"] <= 0.0
+    ):
+        raise ValueError(f"spherical-slice file {handle.name!r} has invalid metadata")
     return header
 
 
 def _distribution_for(header, path):
     distribution = header.get("distribution")
+    kind, shard_id = _partition_info(path)
+    legacy_inferred_distribution = distribution is None
     if distribution is None:
-        distribution = "rank" if header.get("single_file_per_rank", 0) else "shared"
+        single_file_per_rank = header.get("single_file_per_rank", 0)
+        if kind == "shared" and single_file_per_rank == 0:
+            distribution = "shared"
+        elif kind == "rank" and single_file_per_rank == 1:
+            distribution = "rank"
+        else:
+            raise ValueError(
+                f"spherical-slice file {path!r} is missing required distribution "
+                "metadata"
+            )
     if distribution not in ("shared", "rank", "node"):
         raise ValueError(
             f"spherical-slice file {path!r} has invalid distribution {distribution!r}"
         )
-    kind, shard_id = _partition_info(path)
     if kind != distribution:
         raise ValueError(
             f"spherical-slice file {path!r} declares distribution={distribution!r} "
             f"but resides in a {kind!r} layout"
         )
     expected_layout = "dense" if distribution == "shared" else "sparse_angles"
+    if not legacy_inferred_distribution and "layout" not in header:
+        raise ValueError(
+            f"spherical-slice file {path!r} is missing required layout metadata"
+        )
     layout = header.get("layout", expected_layout)
     if layout != expected_layout:
         raise ValueError(
@@ -315,16 +427,23 @@ def _distribution_for(header, path):
             f"expected {expected_layout!r} for distribution={distribution!r}"
         )
     header["layout"] = layout
-    if distribution == "rank" and "rank" in header and header["rank"] != shard_id:
-        raise ValueError(
-            f"spherical-slice file {path!r} declares rank={header['rank']}, "
-            f"but resides in rank_{shard_id:08d}"
-        )
-    if distribution == "node" and "node" in header and header["node"] != shard_id:
-        raise ValueError(
-            f"spherical-slice file {path!r} declares node={header['node']}, "
-            f"but resides in node_{shard_id:08d}"
-        )
+    header["_legacy_inferred_distribution"] = legacy_inferred_distribution
+    if distribution != "shared":
+        id_key = "rank" if distribution == "rank" else "node"
+        count_key = "number_of_ranks" if distribution == "rank" else "number_of_nodes"
+        if (
+            not legacy_inferred_distribution
+            and (id_key not in header or count_key not in header)
+        ):
+            raise ValueError(
+                f"spherical-slice {distribution} shard {path!r} is missing required "
+                "inventory metadata"
+            )
+        if id_key in header and header[id_key] != shard_id:
+            raise ValueError(
+                f"spherical-slice file {path!r} declares {id_key}={header[id_key]}, "
+                f"but resides in {distribution}_{shard_id:08d}"
+            )
     for count_key, expected_distribution in (
         ("number_of_ranks", "rank"),
         ("number_of_nodes", "node"),
@@ -352,7 +471,19 @@ def _validate_header_offset(handle, header):
         )
 
 
-def _read_payload(handle, header, distribution, externally_retained_bytes=0):
+def _require_finite_payload(values, path):
+    """Reject non-finite spherical-slice samples before exposing reader data."""
+    for value in np.asarray(values).flat:
+        if not np.isfinite(value):
+            raise ValueError(
+                f"spherical-slice payload in {path!r} contains non-finite values"
+            )
+
+
+def _read_payload(
+    handle, header, distribution, externally_retained_bytes=0, limits=None
+):
+    limits = _reader_limits(limits)
     _validate_header_offset(handle, header)
     dump_bytes = header["header_offset"]
     npoints = header["npoints"]
@@ -376,6 +507,7 @@ def _read_payload(handle, header, distribution, externally_retained_bytes=0):
         _require_retained_bytes(
             retained_header_bytes + dump_bytes + 2 * expected,
             "spherical-slice dense reconstruction peak",
+            limits=limits,
         )
         dump = handle.read(dump_bytes)
         if len(dump) != dump_bytes:
@@ -389,6 +521,7 @@ def _read_payload(handle, header, distribution, externally_retained_bytes=0):
                 f"expected {expected} bytes, found {len(payload)}"
             )
         values = np.frombuffer(payload, dtype=np.float32).copy()
+        _require_finite_payload(values, handle.name)
         return None, values
 
     if npoints > surface_points:
@@ -411,6 +544,7 @@ def _read_payload(handle, header, distribution, externally_retained_bytes=0):
     _require_retained_bytes(
         retained_header_bytes + dump_bytes + 2 * expected + index_bytes,
         "spherical-slice sparse reconstruction peak",
+        limits=limits,
     )
     value_bytes = _checked_product(
         (nvars, npoints, np.dtype(np.float32).itemsize),
@@ -425,6 +559,7 @@ def _read_payload(handle, header, distribution, externally_retained_bytes=0):
         + value_bytes
         + unique_bytes,
         "spherical-slice sparse duplicate-validation peak",
+        limits=limits,
     )
     dump = handle.read(dump_bytes)
     if len(dump) != dump_bytes:
@@ -441,6 +576,7 @@ def _read_payload(handle, header, distribution, externally_retained_bytes=0):
     values = np.frombuffer(
         payload, dtype=np.float32, count=nvars * npoints, offset=4 * npoints
     ).copy()
+    _require_finite_payload(values, handle.name)
     if npoints and (np.min(indices) < 0 or np.max(indices) >= surface_points):
         bad = int(np.min(indices) if np.min(indices) < 0 else np.max(indices))
         raise ValueError(
@@ -453,15 +589,16 @@ def _read_payload(handle, header, distribution, externally_retained_bytes=0):
     return indices, values
 
 
-def _read_one(path, externally_retained_bytes=0):
-    _require_file_size(path)
+def _read_one(path, externally_retained_bytes=0, limits=None):
+    limits = _reader_limits(limits)
+    _require_file_size(path, limits)
     with open(path, "rb") as handle:
-        header = _read_header(handle, externally_retained_bytes)
+        header = _read_header(handle, externally_retained_bytes, limits)
         _validate_header_offset(handle, header)
         distribution = _distribution_for(header, path)
         header["distribution"] = distribution
         indices, values = _read_payload(
-            handle, header, distribution, externally_retained_bytes
+            handle, header, distribution, externally_retained_bytes, limits
         )
     return header, indices, values
 
@@ -485,6 +622,13 @@ def _compare_headers(reference, candidate, path):
                 f"spherical-slice shard metadata mismatch for {key!r} in {path!r}: "
                 f"{candidate[key]!r} != {reference[key]!r}"
             )
+    if candidate.get("_legacy_inferred_distribution") != reference.get(
+        "_legacy_inferred_distribution"
+    ):
+        raise ValueError(
+            f"spherical-slice shard metadata mismatch for legacy distribution "
+            f"inference in {path!r}"
+        )
 
 
 def _validate_sibling_inventory(files, headers):
@@ -493,17 +637,22 @@ def _validate_sibling_inventory(files, headers):
         return
     count_key = "number_of_ranks" if distribution == "rank" else "number_of_nodes"
     id_key = "rank" if distribution == "rank" else "node"
-    count_values = [header.get(count_key) for header in headers]
-    if all(value is None for value in count_values):
+    expected_count = headers[0].get(count_key)
+    if expected_count is None:
+        if any(header.get(count_key) is not None for header in headers):
+            raise ValueError(
+                f"spherical-slice {distribution} shard inventory has inconsistent "
+                f"{count_key} metadata"
+            )
         return
-    if any(value is None for value in count_values) or len(set(count_values)) != 1:
+    if any(
+        header.get(count_key) != expected_count for header in headers
+    ):
         raise ValueError(
             f"spherical-slice {distribution} shard inventory has inconsistent "
             f"{count_key} metadata"
         )
-    expected_count = count_values[0]
-    sibling_ids = []
-    for path, header in zip(files, headers):
+    for expected_id, (path, header) in enumerate(zip(files, headers)):
         kind, shard_id = _partition_info(path)
         if kind != distribution:
             raise ValueError(
@@ -519,68 +668,89 @@ def _validate_sibling_inventory(files, headers):
                 f"spherical-slice shard {path!r} declares {id_key}={header[id_key]}, "
                 f"but its directory identifies {shard_id}"
             )
-        sibling_ids.append(shard_id)
-    if len(set(sibling_ids)) != len(sibling_ids):
-        raise ValueError(
-            f"spherical-slice {distribution} shard inventory contains duplicate IDs"
-        )
-    if expected_count != len(sibling_ids):
-        raise ValueError(
-            f"spherical-slice {distribution} shard inventory is incomplete: "
-            f"expected {expected_count} shards, found {len(sibling_ids)}"
-        )
-    expected_ids = set(range(len(sibling_ids)))
-    actual_ids = set(sibling_ids)
-    if actual_ids != expected_ids:
+        if shard_id != expected_id:
+            raise ValueError(
+                f"spherical-slice {distribution} shard inventory is incomplete: "
+                f"expected ID {expected_id}, found {shard_id}"
+            )
+    if expected_count != len(files):
         raise ValueError(
             f"spherical-slice {distribution} shard inventory is incomplete: "
-            f"expected IDs {sorted(expected_ids)!r}, found {sorted(actual_ids)!r}"
+            f"expected {expected_count} shards, found {len(files)}"
         )
 
 
-def read_sphslice_header(path):
+def read_sphslice_header(path, *, limits=None):
     """Read and validate only a spherical-slice preheader."""
-    _require_file_size(path)
+    limits = _reader_limits(limits)
+    _require_file_size(path, limits)
     with open(path, "rb") as handle:
-        header = _read_header(handle)
+        header = _read_header(handle, limits=limits)
         _validate_header_offset(handle, header)
     header["distribution"] = _distribution_for(header, path)
     header.pop("_retained_dense_bytes", None)
     header.pop("_retained_metadata_bytes", None)
+    header.pop("_legacy_inferred_distribution", None)
     return header
 
 
-def read_sphslice(path):
+def read_sphslice(path, *, limits=None):
     """Read a shared or rank/node-sharded spherical slice as a dense surface.
 
     The returned ``data`` array is ordered ``(theta, phi, variable)``.
     Partitioned input must provide exactly one owner for every angular point;
     zero-point shard files are valid and are retained during validation.
     """
-    files = _glob_partition_files(path)
+    limits = _reader_limits(limits)
+    files, inventory_bytes = _glob_partition_files(path, limits)
     header = None
     full = None
     covered = None
     inventory_headers = []
+    inventory_header_member_bytes = 0
     for shard in files:
-        externally_retained_bytes = 0
+        inventory_header_bytes = (
+            sys.getsizeof(inventory_headers) + inventory_header_member_bytes
+        )
+        externally_retained_bytes = inventory_bytes + inventory_header_bytes
         if header is not None:
-            externally_retained_bytes = (
+            externally_retained_bytes += (
                 header["_retained_dense_bytes"] + header["_retained_metadata_bytes"]
             )
-        candidate, indices, values = _read_one(shard, externally_retained_bytes)
-        inventory_headers.append(
-            {
-                key: candidate[key]
-                for key in (
-                    "distribution",
-                    "number_of_ranks",
-                    "number_of_nodes",
-                    "rank",
-                    "node",
-                )
-                if key in candidate
-            }
+        candidate, indices, values = _read_one(
+            shard, externally_retained_bytes, limits
+        )
+        summary = {
+            key: candidate[key]
+            for key in (
+                "distribution",
+                "number_of_ranks",
+                "number_of_nodes",
+                "rank",
+                "node",
+            )
+            if key in candidate
+        }
+        inventory_headers.append(summary)
+        inventory_header_member_bytes += shallow_mapping_bytes(summary)
+        inventory_header_bytes = (
+            sys.getsizeof(inventory_headers) + inventory_header_member_bytes
+        )
+        retained_primary_bytes = 0
+        if header is not None:
+            retained_primary_bytes = (
+                header["_retained_dense_bytes"] + header["_retained_metadata_bytes"]
+            )
+        _require_retained_bytes(
+            inventory_bytes
+            + inventory_header_bytes
+            + retained_primary_bytes
+            + candidate["_retained_dense_bytes"]
+            + candidate["_retained_metadata_bytes"]
+            + (0 if indices is None else indices.nbytes)
+            + values.nbytes,
+            "spherical-slice sibling metadata inventory",
+            limits=limits,
         )
         if header is None:
             header = candidate
@@ -602,12 +772,15 @@ def read_sphslice(path):
                 retained_metadata_bytes += candidate["_retained_metadata_bytes"]
             _require_retained_bytes(
                 header["_retained_dense_bytes"]
+                + inventory_bytes
+                + inventory_header_bytes
                 + retained_metadata_bytes
                 + indices.nbytes
                 + values.nbytes
                 + indices.size * np.dtype(bool).itemsize
                 + indices.nbytes,
                 "spherical-slice duplicate ownership check peak",
+                limits=limits,
             )
             duplicate = indices[covered[indices]]
             if duplicate.size:
@@ -645,13 +818,17 @@ def read_sphslice(path):
     )
     _require_retained_bytes(
         retained_dense_bytes
+        + inventory_bytes
+        + inventory_header_bytes
         + retained_metadata_bytes
         + coordinate_temporary_bytes,
         "spherical-slice coordinate generation peak",
+        limits=limits,
     )
     theta = np.arccos(-1.0 + 2.0 * (np.arange(ntheta) + 0.5) / ntheta)
     phi = 2.0 * np.pi * (np.arange(nphi) + 0.5) / nphi
     header.pop("_retained_metadata_bytes", None)
+    header.pop("_legacy_inferred_distribution", None)
     return {
         "header": header,
         "data": data,

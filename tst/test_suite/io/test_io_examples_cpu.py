@@ -21,6 +21,7 @@ def _run(tmp_path: Path, input_file: Path, *overrides: str):
         check=True,
         capture_output=True,
         text=True,
+        timeout=90,
     )
     return run_dir, proc.stdout
 
@@ -35,8 +36,10 @@ def test_output_formats_example_generates_readable_pdf_and_slice(tmp_path):
         )
     )
     surface = read_sphslice(
-        str(run_dir / "bin" /
-            "io_formats.density.r_2.5000000000000000e-01.00000.sph.bin")
+        str(
+            run_dir / "bin"
+            / "io_formats.density.r_2.5000000000000000e-01.00000.sph.bin"
+        )
     )
     assert pdf["pdf"].shape == (26, 14, 22)
     assert surface["data"].shape == (32, 64, 1)
@@ -85,5 +88,6 @@ def test_shipped_readback_example_reads_legacy_cbin_fixture():
         check=True,
         capture_output=True,
         text=True,
+        timeout=30,
     )
     assert "coarsened meshblocks=1 variables=['dens']" in proc.stdout

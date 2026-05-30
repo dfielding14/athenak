@@ -15,6 +15,11 @@ HARNESS_SOURCE = (
 )
 
 
+def _subprocess_run(*args, **kwargs):
+    kwargs.setdefault("timeout", 90)
+    return subprocess.run(*args, **kwargs)
+
+
 @pytest.fixture(scope="session")
 def rcp02_output_file_utils_harness(tmp_path_factory):
     compiler_parts = shlex.split(os.environ.get("CXX", "c++"))
@@ -24,7 +29,7 @@ def rcp02_output_file_utils_harness(tmp_path_factory):
         tmp_path_factory.mktemp("rcp02_output_file_utils_harness")
         / "rcp02_output_file_utils_harness"
     )
-    subprocess.run(
+    _subprocess_run(
         [
             compiler,
             *compiler_parts[1:],
@@ -45,7 +50,7 @@ def rcp02_output_file_utils_harness(tmp_path_factory):
 def _run_harness(rcp02_output_file_utils_harness: Path, tmp_path: Path, mode: str):
     root = tmp_path / mode
     root.mkdir()
-    return subprocess.run(
+    return _subprocess_run(
         [str(rcp02_output_file_utils_harness), mode, str(root)],
         capture_output=True,
         text=True,

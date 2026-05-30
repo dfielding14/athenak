@@ -311,7 +311,7 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
       sizeof(Real), "PDF derived fields", FatalPDFError);
   std::size_t result_mirror_bytes = PDFResultMirrorBytes(pdf_data.total_bins);
   constexpr std::size_t metadata_bytes =
-      2*PDFData::MAX_DIM*(3*sizeof(int) + 5*sizeof(Real)) + 2*sizeof(int);
+      2*PDFData::MAX_DIM*(3*sizeof(int) + 5*sizeof(Real)) + 4*sizeof(int);
   std::size_t load_bytes = output_file_utils::CheckedSizeAdd(
       persistent_writer_allocation_bytes, field_bytes, "PDF load allocation",
       FatalPDFError);
@@ -385,7 +385,7 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
   Kokkos::fence();
   int ndim = pdf_data.ndim;
   int weight_index = (weight_mode == 2) ? ndim : -1;
-  DvceArray1D<int> invalid("pdf_invalid_sample", 1);
+  DvceArray1D<int> invalid("pdf_invalid_sample", 2);
   Kokkos::deep_copy(invalid, 0);
 
   par_for("pdf_nd", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
@@ -417,14 +417,22 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
       flat_index += bin*d_stride(d);
     }
 
-    Real weight = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
+    Real weight_factor = 1.0;
     if (weight_mode == 1) {
-      weight *= density_data(m, IDN, k, j, i);
+      Real density = density_data(m, IDN, k, j, i);
+      if (!output_diagnostics::IsPositiveFinite(density)) {
+        Kokkos::atomic_exchange(&invalid(1), 1);
+        return;
+      }
+      weight_factor = density;
     } else if (weight_mode == 2) {
-      weight *= fields(weight_index, m, k, j, i);
+      weight_factor = fields(weight_index, m, k, j, i);
     }
+    Real weight =
+        size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3*weight_factor;
     if (!output_diagnostics::IsFinite(weight)) {
       Kokkos::atomic_exchange(&invalid(0), 1);
+      return;
     }
     Kokkos::atomic_add(&result(flat_index), weight);
   });
@@ -433,7 +441,11 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
   auto host_invalid = Kokkos::create_mirror_view(invalid);
   Kokkos::deep_copy(host_invalid, invalid);
   Kokkos::fence();
-  if (host_invalid(0) != 0) {
+  if (host_invalid(1) != 0) {
+    FatalPDFError(
+        "PDF output with weight=mass encountered a nonfinite or non-positive "
+        "conserved density.");
+  } else if (host_invalid(0) != 0) {
     FatalPDFError("PDF output encountered a nonfinite axis, transform, or weight.");
   }
   ValidatePDFResult(result, pdf_data.total_bins, "Local PDF result");
@@ -564,6 +576,8 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       if (IsNodeSharded(out_params.shard_mode)) {
         CheckedPDFPrint(header, temporary_header_name, "node = %d\n",
                         global_variable::node_id);
+        CheckedPDFPrint(header, temporary_header_name, "payload_rank = %d\n",
+                        global_variable::my_rank);
         CheckedPDFPrint(header, temporary_header_name, "number_of_nodes = %d\n",
                         global_variable::nnodes);
       } else if (IsRankSharded(out_params.shard_mode)) {

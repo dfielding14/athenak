@@ -56,6 +56,8 @@ src/outputs/spherical_slice.cpp	MPI_Gatherv	2	checked	sphslice node payload
 src/outputs/spherical_slice.cpp	MPI_Reduce	2	checked	sphslice values
 src/outputs/spherical_surface.cpp	MPI_Reduce	2	checked	spherical-surface values
 src/outputs/track_prtcl.cpp	MPI_Allgather	1	checked	tracked-particle inventory
+src/outputs/track_prtcl.cpp	MPI_Allreduce	1	checked	tracked-particle dense-tag ownership
+src/outputs/track_prtcl.cpp	MPI_Barrier	1	checked	tracked-particle header publication ordering
 src/outputs/vtk_mesh.cpp	MPI_File_close	1	checked	mesh-VTK file lifecycle
 src/outputs/vtk_mesh.cpp	MPI_File_open	1	checked	mesh-VTK file lifecycle
 src/outputs/vtk_mesh.cpp	MPI_File_set_view	3	checked	mesh-VTK collective views

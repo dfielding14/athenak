@@ -8,13 +8,41 @@ The binary format stores shared data densely and rank/node shards as sparse
 COO records.  Passing any sparse shard discovers and sums its sibling shards.
 """
 
-import glob
 import os
 import re
 import struct
 import sys
 
 import numpy as np
+
+if __package__:
+    from .io_reader_common import (
+        bounded_partition_files,
+        checked_product,
+        conservative_text_metadata_bytes,
+        count_ascii_tokens,
+        metadata_record_bytes,
+        normalize_reader_limits,
+        parse_ascii_floats,
+        preflight_allocation,
+        preflight_file_read,
+        require_live_bytes,
+        shallow_mapping_bytes,
+    )
+else:
+    from io_reader_common import (
+        bounded_partition_files,
+        checked_product,
+        conservative_text_metadata_bytes,
+        count_ascii_tokens,
+        metadata_record_bytes,
+        normalize_reader_limits,
+        parse_ascii_floats,
+        preflight_allocation,
+        preflight_file_read,
+        require_live_bytes,
+        shallow_mapping_bytes,
+    )
 
 
 _HEADER_KEY_RE = re.compile(r"^([A-Za-z0-9_]+)\s*=\s*(.*)$")
@@ -25,6 +53,9 @@ _LEGACY_VARIABLE_RE = re.compile(r"^#\s*\[(\d+)\]\s*=\s*(\S+)")
 _LEGACY_TIME_RE = re.compile(r"^#\s*time\s*=\s*(\S+)\s*$")
 _SCALES = frozenset(("linear", "log", "symlog"))
 _V2_MAGIC = b"AKPDFV2\0"
+_DIMENSION_KEY_RE = re.compile(
+    r"^(variable_|nbin|scale|linthresh|logscale|stride)(\d+)$"
+)
 _V2_PREAMBLE = struct.Struct("=8sIIIIQdq")
 _MAX_DENSE_ALLOCATION_BYTES = 512 * 1024 * 1024
 _MAX_HEADER_READ_BYTES = 16 * 1024 * 1024
@@ -40,36 +71,33 @@ def _parse_bool(value):
     raise ValueError(f"PDF header has invalid boolean value {value!r}")
 
 
+def _reader_limits(limits):
+    return normalize_reader_limits(
+        limits,
+        max_live_bytes=_MAX_DENSE_ALLOCATION_BYTES,
+        max_header_read_bytes=_MAX_HEADER_READ_BYTES,
+        max_payload_read_bytes=_MAX_PAYLOAD_READ_BYTES,
+    )
+
+
 def _checked_product(values, label):
-    product = 1
-    for value in values:
-        if not isinstance(value, (int, np.integer)) or value < 0:
-            raise ValueError(f"{label} has invalid extent {value!r}")
-        product *= int(value)
-    return product
+    return checked_product(values, label)
 
 
-def _require_allocation(values, itemsize, label):
-    count = _checked_product(values, label)
-    nbytes = _checked_product((count, itemsize), label + " byte count")
-    if nbytes > _MAX_DENSE_ALLOCATION_BYTES:
-        raise ValueError(
-            f"{label} requires {nbytes} bytes, exceeding the practical allocation "
-            f"limit of {_MAX_DENSE_ALLOCATION_BYTES} bytes"
-        )
-    return count
+def _require_allocation(
+    values, itemsize, label, limits=None, retained_bytes=0
+):
+    return preflight_allocation(
+        values, itemsize, label, _reader_limits(limits), retained_bytes
+    )
 
 
-def _require_retained_bytes(nbytes, label):
-    if nbytes > _MAX_DENSE_ALLOCATION_BYTES:
-        raise ValueError(
-            f"{label} requires {nbytes} bytes, exceeding the practical allocation "
-            f"limit of {_MAX_DENSE_ALLOCATION_BYTES} bytes"
-        )
+def _require_retained_bytes(nbytes, label, limits=None):
+    return require_live_bytes(nbytes, label, _reader_limits(limits))
 
 
 def _header_retained_bytes(header):
-    return sum(
+    return header.get("_retained_metadata_bytes", 0) + sum(
         dimension["bin_edges"].nbytes + dimension["bin_centers"].nbytes
         for dimension in header["dimensions"]
     )
@@ -80,14 +108,15 @@ def _require_finite(value, label):
         raise ValueError(f"{label} must be finite")
 
 
+def _require_finite_histogram(values, label):
+    """Reject non-finite histogram weights without allocating a mask array."""
+    for value in np.asarray(values).flat:
+        if not np.isfinite(value):
+            raise ValueError(f"{label} contains a non-finite histogram value")
+
+
 def _require_file_size(path, limit, label):
-    size = os.path.getsize(path)
-    if size > limit:
-        raise ValueError(
-            f"{label} {path!r} requires reading {size} bytes, exceeding the "
-            f"practical file-read limit of {limit} bytes"
-        )
-    return size
+    return preflight_file_read(path, limit, label)
 
 
 def _partition_info(path):
@@ -104,34 +133,16 @@ def _shard_kind(path):
     return _partition_info(path)[0]
 
 
-def _glob_partition_files(path):
+def _glob_partition_files(path, limits=None, externally_retained_bytes=0):
     kind = _shard_kind(path)
-    if kind == "shared":
-        return [os.path.abspath(path)]
-    shard_dir = os.path.dirname(os.path.abspath(path))
-    parent = os.path.dirname(shard_dir)
-    pattern = os.path.join(parent, kind + "_*", os.path.basename(path))
-    files = sorted(glob.glob(pattern))
-    if not files:
-        raise FileNotFoundError(f"no PDF {kind} shards found for pattern {pattern!r}")
-    shard_ids = []
-    for candidate in files:
-        candidate_kind, shard_id = _partition_info(candidate)
-        if candidate_kind != kind:
-            raise ValueError(
-                f"PDF shard {candidate!r} does not match {kind!r} inventory"
-            )
-        shard_ids.append(shard_id)
-    if len(set(shard_ids)) != len(shard_ids):
-        raise ValueError(f"PDF {kind} shard inventory contains duplicate IDs")
-    expected_ids = set(range(len(shard_ids)))
-    actual_ids = set(shard_ids)
-    if actual_ids != expected_ids:
-        raise ValueError(
-            f"PDF {kind} shard inventory is incomplete: "
-            f"expected IDs {sorted(expected_ids)!r}, found {sorted(actual_ids)!r}"
-        )
-    return files
+    return bounded_partition_files(
+        path,
+        kind,
+        "PDF",
+        _reader_limits(limits),
+        _partition_info,
+        externally_retained_bytes,
+    )
 
 
 def _header_candidates(data_path):
@@ -218,16 +229,7 @@ def _symlog_metadata_peak_bytes(edge_count):
 
 
 def _count_ascii_tokens(text):
-    """Count whitespace-delimited tokens without first materializing a list."""
-    count = 0
-    in_token = False
-    for character in text:
-        if character.isspace():
-            in_token = False
-        elif not in_token:
-            count += 1
-            in_token = True
-    return count
+    return count_ascii_tokens(text)
 
 
 def _ascii_token_list_peak_bytes(text, token_count):
@@ -254,20 +256,18 @@ def _ascii_float_parse_peak_bytes(text, token_count):
     )
 
 
-def _parse_ascii_floats(text, label, externally_retained_bytes=0):
+def _parse_ascii_floats(text, label, externally_retained_bytes=0, limits=None):
     """Strictly parse one bounded ASCII float row."""
-    if not text.isascii():
-        raise ValueError(f"{label} must contain ASCII numeric tokens")
     token_count = _count_ascii_tokens(text)
-    _require_allocation((token_count,), np.dtype(np.float64).itemsize, label)
+    _require_allocation(
+        (token_count,), np.dtype(np.float64).itemsize, label, limits=limits
+    )
     _require_retained_bytes(
         externally_retained_bytes + _ascii_float_parse_peak_bytes(text, token_count),
         label + " parsing peak",
+        limits=limits,
     )
-    try:
-        return np.array([float(token) for token in text.split()], dtype=np.float64)
-    except ValueError as exc:
-        raise ValueError(f"{label} contains an invalid numeric token") from exc
+    return np.array(parse_ascii_floats(text, label), dtype=np.float64)
 
 
 def _edge_validation_peak_bytes(edge_count):
@@ -296,17 +296,37 @@ def _bin_center_peak_bytes(info):
     return 2 * info["nbin"] * np.dtype(np.float64).itemsize
 
 
-def _read_legacy_header(header_path, externally_retained_bytes=0):
+def _read_legacy_header(header_path, externally_retained_bytes=0, limits=None):
+    limits = _reader_limits(limits)
     dimensions = []
     variable_names = {}
-    retained_bytes = externally_retained_bytes
-    _require_file_size(header_path, _MAX_HEADER_READ_BYTES, "legacy PDF header")
+    header_bytes = _require_file_size(
+        header_path, limits.max_header_read_bytes, "legacy PDF header"
+    )
+    retained_metadata_bytes = conservative_text_metadata_bytes(header_bytes)
+    retained_object_bytes = sys.getsizeof(dimensions) + sys.getsizeof(variable_names)
+    retained_bytes = (
+        externally_retained_bytes + retained_metadata_bytes + retained_object_bytes
+    )
+    _require_retained_bytes(
+        retained_bytes, "legacy PDF header metadata peak", limits=limits
+    )
     with open(header_path, "r") as handle:
         for raw_line in handle:
             line = raw_line.strip()
             match = _LEGACY_VARIABLE_RE.match(line)
             if match is not None:
-                variable_names[int(match.group(1))] = match.group(2)
+                variable_id = int(match.group(1))
+                variable_name = match.group(2)
+                record_bytes = metadata_record_bytes(variable_id, variable_name)
+                _require_retained_bytes(
+                    retained_bytes + record_bytes,
+                    "legacy PDF header object metadata peak",
+                    limits=limits,
+                )
+                variable_names[variable_id] = variable_name
+                retained_bytes += record_bytes
+                retained_object_bytes += record_bytes
                 continue
             if not line or line.startswith("#"):
                 continue
@@ -314,6 +334,7 @@ def _read_legacy_header(header_path, externally_retained_bytes=0):
                 line,
                 "legacy PDF bin edges",
                 externally_retained_bytes=retained_bytes,
+                limits=limits,
             )
             if edges.size < 2:
                 raise ValueError(f"legacy PDF header {header_path!r} has invalid bin row")
@@ -322,6 +343,7 @@ def _read_legacy_header(header_path, externally_retained_bytes=0):
                 + edges.nbytes
                 + _edge_validation_peak_bytes(edges.size),
                 "legacy PDF bin-edge validation peak",
+                limits=limits,
             )
             if not np.all(np.isfinite(edges)) or np.any(np.diff(edges) <= 0.0):
                 raise ValueError(
@@ -332,30 +354,50 @@ def _read_legacy_header(header_path, externally_retained_bytes=0):
                 + edges.nbytes
                 + 2 * (edges.size - 1) * np.dtype(np.float64).itemsize,
                 "legacy PDF retained bin metadata",
+                limits=limits,
             )
             centers = 0.5 * (edges[:-1] + edges[1:])
-            retained_bytes += edges.nbytes + centers.nbytes
-            dimensions.append(
-                {
-                    "variable": variable_names.get(len(dimensions) + 1),
-                    "nbin": int(edges.size - 1),
-                    "nbin_with_overflow": int(edges.size + 1),
-                    "bin_edges": edges,
-                    "bin_centers": centers,
-                    "scale": None,
-                }
+            dimension = {
+                "variable": variable_names.get(len(dimensions) + 1),
+                "nbin": int(edges.size - 1),
+                "nbin_with_overflow": int(edges.size + 1),
+                "bin_edges": edges,
+                "bin_centers": centers,
+                "scale": None,
+            }
+            record_bytes = metadata_record_bytes(
+                len(dimensions), charge_value=False
+            ) + sum(
+                metadata_record_bytes(
+                    key,
+                    value,
+                    charge_value=not isinstance(value, np.ndarray),
+                )
+                for key, value in dimension.items()
             )
+            _require_retained_bytes(
+                retained_bytes + edges.nbytes + centers.nbytes + record_bytes,
+                "legacy PDF retained dimension metadata",
+                limits=limits,
+            )
+            retained_bytes += edges.nbytes + centers.nbytes + record_bytes
+            retained_object_bytes += record_bytes
+            dimensions.append(dimension)
     if not dimensions or len(dimensions) > 2:
         raise ValueError(
             f"legacy PDF header {header_path!r} must contain one or two bin rows"
         )
     shape = tuple(item["nbin_with_overflow"] for item in dimensions)
     total_bins = _require_allocation(
-        shape, np.dtype(np.float64).itemsize, "legacy PDF dense histogram"
+        shape,
+        np.dtype(np.float64).itemsize,
+        "legacy PDF dense histogram",
+        limits=limits,
     )
     _require_retained_bytes(
         retained_bytes + total_bins * np.dtype(np.float64).itemsize,
         "legacy PDF retained histogram and bin metadata",
+        limits=limits,
     )
     return {
         "format": "legacy_dense",
@@ -365,18 +407,64 @@ def _read_legacy_header(header_path, externally_retained_bytes=0):
         "shape": shape,
         "total_bins": total_bins,
         "header_path": os.path.abspath(header_path),
+        "_retained_metadata_bytes": retained_metadata_bytes + retained_object_bytes,
     }
 
 
-def _read_pdf_header(header_path, externally_retained_bytes=0):
+def _read_pdf_header(
+    header_path, externally_retained_bytes=0, limits=None,
+    *, require_sparse_path_binding=False
+):
     """Parse a modern ``.header.pdf`` or legacy ``.bins.pdf`` metadata file."""
+    limits = _reader_limits(limits)
     if header_path.endswith(".bins.pdf"):
-        return _read_legacy_header(header_path, externally_retained_bytes)
+        return _read_legacy_header(
+            header_path, externally_retained_bytes, limits
+        )
 
     header = {}
     dims = {}
-    parsed_edge_bytes = externally_retained_bytes
-    _require_file_size(header_path, _MAX_HEADER_READ_BYTES, "PDF header")
+    seen_keys = set()
+    header_bytes = _require_file_size(
+        header_path, limits.max_header_read_bytes, "PDF header"
+    )
+    retained_metadata_bytes = conservative_text_metadata_bytes(header_bytes)
+    retained_object_bytes = (
+        sys.getsizeof(header) + sys.getsizeof(dims) + sys.getsizeof(seen_keys)
+    )
+    parsed_edge_bytes = (
+        externally_retained_bytes + retained_metadata_bytes + retained_object_bytes
+    )
+    _require_retained_bytes(
+        parsed_edge_bytes, "PDF header metadata peak", limits=limits
+    )
+
+    def retain_record(key, value=None, *, charge_value=True):
+        nonlocal parsed_edge_bytes, retained_object_bytes
+        record_bytes = metadata_record_bytes(
+            key, value, charge_value=charge_value
+        )
+        _require_retained_bytes(
+            parsed_edge_bytes + record_bytes,
+            "PDF header object metadata peak",
+            limits=limits,
+        )
+        parsed_edge_bytes += record_bytes
+        retained_object_bytes += record_bytes
+
+    def store_dimension_value(dimension, field, value):
+        if dimension not in dims:
+            retain_record(dimension, charge_value=False)
+            dims[dimension] = {}
+        info = dims[dimension]
+        if field in info:
+            raise ValueError(
+                f"duplicate PDF dimension metadata for {field!r} in "
+                f"{header_path!r}"
+            )
+        retain_record(field, value, charge_value=not isinstance(value, np.ndarray))
+        info[field] = value
+
     with open(header_path, "r") as handle:
         for raw_line in handle:
             line = raw_line.strip()
@@ -388,10 +476,19 @@ def _read_pdf_header(header_path, externally_retained_bytes=0):
                     f"malformed PDF header line in {header_path!r}: {line!r}"
                 )
             key, value = match.group(1), match.group(2).strip()
+            semantic_key = "format" if key == "layout" else key
+            if semantic_key in seen_keys:
+                raise ValueError(
+                    f"duplicate PDF header metadata for {key!r} in {header_path!r}"
+                )
+            retain_record(semantic_key, charge_value=False)
+            seen_keys.add(semantic_key)
             if key in ("format", "distribution", "weight", "weight_variable",
                        "binary_magic"):
+                retain_record(key, value)
                 header[key] = value
             elif key == "layout":
+                retain_record("format", value)
                 header["format"] = value
             elif key in (
                 "ndim",
@@ -399,10 +496,13 @@ def _read_pdf_header(header_path, externally_retained_bytes=0):
                 "cycle",
                 "rank",
                 "node",
+                "payload_rank",
                 "number_of_ranks",
                 "number_of_nodes",
             ):
-                header[key] = int(value)
+                parsed_value = int(value)
+                retain_record(key, parsed_value)
+                header[key] = parsed_value
             else:
                 edge_match = _BIN_EDGE_RE.match(key)
                 if edge_match is not None:
@@ -411,40 +511,50 @@ def _read_pdf_header(header_path, externally_retained_bytes=0):
                         value,
                         f"PDF bin_edges_{dimension}",
                         externally_retained_bytes=parsed_edge_bytes,
+                        limits=limits,
                     )
-                    dims.setdefault(dimension, {})["bin_edges"] = edges
+                    store_dimension_value(dimension, "bin_edges", edges)
                     parsed_edge_bytes += edges.nbytes
                     continue
                 bound_match = re.match(r"^bin(\d+)_(min|max)$", key)
                 if bound_match is not None:
                     dimension = int(bound_match.group(1))
-                    dims.setdefault(dimension, {})[
-                        "bin_" + bound_match.group(2)
-                    ] = float(value)
+                    store_dimension_value(
+                        dimension, "bin_" + bound_match.group(2), float(value)
+                    )
                     continue
-                suffix = re.search(r"(\d+)$", key)
-                if suffix is None:
+                dimension_match = _DIMENSION_KEY_RE.match(key)
+                if dimension_match is None:
+                    if re.search(r"\d+$", key):
+                        raise ValueError(
+                            f"unsupported PDF dimension metadata {key!r} in "
+                            f"{header_path!r}"
+                        )
                     continue
-                dimension = int(suffix.group(1))
-                info = dims.setdefault(dimension, {})
-                if key.startswith("variable_"):
-                    info["variable"] = value
-                elif key.startswith("nbin"):
-                    info["nbin"] = int(value)
-                elif key.startswith("scale"):
-                    info["scale"] = value
-                elif key.startswith("linthresh"):
-                    info["linthresh"] = float(value)
-                elif key.startswith("logscale"):
-                    info["logscale"] = _parse_bool(value)
-                elif key.startswith("stride"):
-                    info["stride"] = int(value)
+                field, suffix = dimension_match.groups()
+                dimension = int(suffix)
+                if field == "variable_":
+                    store_dimension_value(dimension, "variable", value)
+                elif field == "nbin":
+                    store_dimension_value(dimension, "nbin", int(value))
+                elif field == "scale":
+                    store_dimension_value(dimension, "scale", value)
+                elif field == "linthresh":
+                    store_dimension_value(dimension, "linthresh", float(value))
+                elif field == "logscale":
+                    store_dimension_value(dimension, "logscale", _parse_bool(value))
+                elif field == "stride":
+                    store_dimension_value(dimension, "stride", int(value))
 
     if header.get("format", "dense") not in ("dense", "sparse_coo"):
         raise ValueError(
             f"unsupported PDF format in {header_path!r}: {header.get('format')!r}"
         )
     header.setdefault("format", "dense")
+    if header.get("binary_magic") == "AKPDFV2" and "distribution" not in header:
+        raise ValueError(
+            f"PDF V2 header {header_path!r} is missing required distribution metadata"
+        )
     if header["format"] == "dense":
         distribution = header.get("distribution", "shared")
         if distribution != "shared":
@@ -462,7 +572,8 @@ def _read_pdf_header(header_path, externally_retained_bytes=0):
         raise ValueError(f"PDF header {header_path!r} must declare ndim between 1 and 4")
 
     dimensions = []
-    retained_bytes = externally_retained_bytes
+    retained_metadata_bytes += retained_object_bytes
+    retained_bytes = externally_retained_bytes + retained_metadata_bytes
     pending_explicit_edge_bytes = sum(
         info["bin_edges"].nbytes for info in dims.values() if "bin_edges" in info
     )
@@ -477,6 +588,11 @@ def _read_pdf_header(header_path, externally_retained_bytes=0):
         if "variable" not in info:
             raise ValueError(
                 f"PDF header {header_path!r} is missing variable_{dimension}"
+            )
+        if "scale" in info and "logscale" in info:
+            raise ValueError(
+                f"PDF header {header_path!r} defines both scale{dimension} "
+                f"and legacy logscale{dimension}"
             )
         scale = info.get("scale", "log" if info.get("logscale", False) else "linear")
         if scale not in _SCALES:
@@ -506,6 +622,7 @@ def _read_pdf_header(header_path, externally_retained_bytes=0):
             (info["nbin"] + 1,),
             np.dtype(np.float64).itemsize,
             f"PDF dimension {dimension} bin edges",
+            limits=limits,
         )
         current_edges_are_explicit = "bin_edges" in info
         if not current_edges_are_explicit:
@@ -514,6 +631,7 @@ def _read_pdf_header(header_path, externally_retained_bytes=0):
                 + pending_explicit_edge_bytes
                 + _generated_edge_peak_bytes(info),
                 "PDF generated bin-edge peak",
+                limits=limits,
             )
             info["bin_edges"] = _generated_edges(info)
         edges = info["bin_edges"]
@@ -527,6 +645,7 @@ def _read_pdf_header(header_path, externally_retained_bytes=0):
         _require_retained_bytes(
             live_edge_bytes + _edge_validation_peak_bytes(edges.size),
             "PDF bin-edge validation peak",
+            limits=limits,
         )
         if not np.all(np.isfinite(edges)) or np.any(np.diff(edges) <= 0.0):
             raise ValueError(
@@ -536,6 +655,7 @@ def _read_pdf_header(header_path, externally_retained_bytes=0):
         _require_retained_bytes(
             live_edge_bytes + _bin_center_peak_bytes(info),
             "PDF retained bin metadata",
+            limits=limits,
         )
         info["bin_centers"] = _bin_centers(info)
         if current_edges_are_explicit:
@@ -545,11 +665,15 @@ def _read_pdf_header(header_path, externally_retained_bytes=0):
 
     shape = tuple(item["nbin_with_overflow"] for item in dimensions)
     total_bins = _require_allocation(
-        shape, np.dtype(np.float64).itemsize, "PDF dense histogram"
+        shape,
+        np.dtype(np.float64).itemsize,
+        "PDF dense histogram",
+        limits=limits,
     )
     _require_retained_bytes(
         retained_bytes + total_bins * np.dtype(np.float64).itemsize,
         "PDF retained histogram and bin metadata",
+        limits=limits,
     )
     if "total_bins" in header and header["total_bins"] != total_bins:
         raise ValueError(
@@ -569,12 +693,93 @@ def _read_pdf_header(header_path, externally_retained_bytes=0):
     header["dimensions"] = dimensions
     header["shape"] = shape
     header["header_path"] = os.path.abspath(header_path)
+    header["_retained_metadata_bytes"] = retained_metadata_bytes
+    if header["format"] == "sparse_coo" and header.get("binary_magic") == "AKPDFV2":
+        distribution = header.get("distribution")
+        if distribution not in ("rank", "node"):
+            raise ValueError(
+                f"PDF V2 sparse header {header_path!r} has invalid "
+                f"distribution={distribution!r}"
+            )
+        id_key = distribution
+        count_key = (
+            "number_of_ranks" if distribution == "rank" else "number_of_nodes"
+        )
+        if id_key not in header or count_key not in header:
+            raise ValueError(
+                f"PDF V2 {distribution} header {header_path!r} is missing "
+                "required inventory metadata"
+            )
+        if header[count_key] <= 0:
+            raise ValueError(
+                f"PDF V2 {distribution} header {header_path!r} has invalid "
+                f"{count_key}={header[count_key]}"
+            )
+        header_leaf = os.path.basename(os.path.dirname(os.path.abspath(header_path)))
+        header_partition = _SHARD_DIRECTORY_RE.fullmatch(header_leaf)
+        if header_partition is not None:
+            header_kind = header_partition.group(1)
+            header_shard_id = int(header_partition.group(2))
+            if header_kind != distribution:
+                raise ValueError(
+                    f"PDF V2 sparse header {header_path!r} declares "
+                    f"distribution={distribution!r}, but resides in a "
+                    f"{header_kind!r} layout"
+                )
+            if header[id_key] != header_shard_id:
+                raise ValueError(
+                    f"PDF V2 {distribution} header {header_path!r} declares "
+                    f"{id_key}={header[id_key]}, but its directory identifies "
+                    f"{header_shard_id}"
+                )
+        if not 0 <= header[id_key] < header[count_key]:
+            raise ValueError(
+                f"PDF V2 {distribution} header {header_path!r} has out-of-range "
+                f"{id_key}={header[id_key]} for {count_key}={header[count_key]}"
+            )
+        opposite_id = "node" if distribution == "rank" else "rank"
+        opposite_count = (
+            "number_of_nodes" if distribution == "rank" else "number_of_ranks"
+        )
+        if opposite_id in header or opposite_count in header:
+            raise ValueError(
+                f"PDF V2 {distribution} header {header_path!r} defines "
+                "opposite-family inventory metadata"
+            )
+        if distribution == "rank" and "payload_rank" in header:
+            raise ValueError(
+                f"PDF V2 rank header {header_path!r} defines node-only "
+                "payload_rank metadata"
+            )
+        if distribution == "node":
+            if "payload_rank" not in header:
+                raise ValueError(
+                    f"PDF V2 node header {header_path!r} is missing "
+                    "payload_rank metadata"
+                )
+            if header["payload_rank"] < 0:
+                raise ValueError(
+                    f"PDF V2 node header {header_path!r} has invalid "
+                    f"payload_rank={header['payload_rank']}"
+                )
+        if require_sparse_path_binding:
+            kind, shard_id = _partition_info(header_path)
+            if kind != distribution:
+                raise ValueError(
+                    f"PDF V2 sparse header {header_path!r} declares "
+                    f"distribution={distribution!r}, but resides in a {kind!r} "
+                    "layout"
+                )
     return header
 
 
-def read_pdf_header(header_path):
+def read_pdf_header(header_path, *, limits=None):
     """Read and validate PDF metadata without exposing internal peak accounting."""
-    return _read_pdf_header(header_path)
+    header = _read_pdf_header(
+        header_path, limits=limits, require_sparse_path_binding=True
+    )
+    header.pop("_retained_metadata_bytes", None)
+    return header
 
 
 def _compare_headers(reference, candidate, path):
@@ -643,11 +848,15 @@ def _read_v2_preamble(payload, path, header, expected_layout):
     return int(rank), int(count), float(time_value), int(cycle), _V2_PREAMBLE.size
 
 
-def _read_sparse_file(path, header, retained_bytes):
-    payload_bytes = _require_file_size(path, _MAX_PAYLOAD_READ_BYTES, "PDF payload")
+def _read_sparse_file(path, header, retained_bytes, limits=None):
+    limits = _reader_limits(limits)
+    payload_bytes = _require_file_size(
+        path, limits.max_payload_read_bytes, "PDF payload"
+    )
     _require_retained_bytes(
         retained_bytes + payload_bytes,
         "PDF sparse reconstruction peak",
+        limits=limits,
     )
     with open(path, "rb") as handle:
         prefix = handle.read(_V2_PREAMBLE.size)
@@ -656,6 +865,10 @@ def _read_sparse_file(path, header, retained_bytes):
         ):
             raise ValueError(f"PDF V2 payload {path!r} is missing its AKPDFV2 preamble")
         if prefix.startswith(_V2_MAGIC):
+            if header.get("binary_magic") != "AKPDFV2":
+                raise ValueError(
+                    f"PDF V2 payload {path!r} is missing its AKPDFV2 header declaration"
+                )
             rank, nnz, time_value, cycle, offset = _read_v2_preamble(
                 prefix, path, header, 1
             )
@@ -697,6 +910,7 @@ def _read_sparse_file(path, header, retained_bytes):
         _require_retained_bytes(
             retained_bytes + payload_bytes + 2 * index_bytes + value_bytes,
             "PDF sparse reconstruction peak",
+            limits=limits,
         )
         unique_bytes = 2 * index_bytes + nnz * np.dtype(bool).itemsize
         _require_retained_bytes(
@@ -706,6 +920,7 @@ def _read_sparse_file(path, header, retained_bytes):
             + value_bytes
             + unique_bytes,
             "PDF sparse duplicate-validation peak",
+            limits=limits,
         )
         del prefix
         handle.seek(0)
@@ -746,13 +961,17 @@ def _read_sparse_file(path, header, retained_bytes):
     return time_value, None, indices, values, None
 
 
-def _read_dense_binary(path, header):
-    payload_bytes = _require_file_size(path, _MAX_PAYLOAD_READ_BYTES, "PDF payload")
+def _read_dense_binary(path, header, *, limits=None):
+    limits = _reader_limits(limits)
+    payload_bytes = _require_file_size(
+        path, limits.max_payload_read_bytes, "PDF payload"
+    )
     _require_retained_bytes(
         _header_retained_bytes(header)
         + payload_bytes
         + header["total_bins"] * np.dtype(np.float64).itemsize,
         "PDF dense reconstruction peak",
+        limits=limits,
     )
     with open(path, "rb") as handle:
         payload = handle.read()
@@ -760,6 +979,10 @@ def _read_dense_binary(path, header):
     if header.get("binary_magic") == "AKPDFV2" and not payload.startswith(_V2_MAGIC):
         raise ValueError(f"PDF V2 payload {path!r} is missing its AKPDFV2 preamble")
     if payload.startswith(_V2_MAGIC):
+        if header.get("binary_magic") != "AKPDFV2":
+            raise ValueError(
+                f"PDF V2 payload {path!r} is missing its AKPDFV2 header declaration"
+            )
         _, count, time_value, cycle, offset = _read_v2_preamble(
             payload, path, header, 0
         )
@@ -821,6 +1044,16 @@ def _validate_sparse_shard_metadata(path, header, payload_rank):
             )
         if header.get("binary_magic") == "AKPDFV2" and "node" not in header:
             raise ValueError(f"PDF node shard {path!r} is missing node metadata")
+        if header.get("binary_magic") == "AKPDFV2":
+            if "payload_rank" not in header:
+                raise ValueError(
+                    f"PDF node shard {path!r} is missing payload_rank metadata"
+                )
+            if payload_rank != header["payload_rank"]:
+                raise ValueError(
+                    f"PDF shard {path!r} payload declares rank={payload_rank}, "
+                    f"but its header identifies rank={header['payload_rank']}"
+                )
     for count_key, expected_distribution in (
         ("number_of_ranks", "rank"),
         ("number_of_nodes", "node"),
@@ -840,36 +1073,91 @@ def _validate_sparse_shard_metadata(path, header, payload_rank):
 def _validate_sparse_sibling_inventory(files, headers):
     distribution = headers[0]["distribution"]
     count_key = "number_of_ranks" if distribution == "rank" else "number_of_nodes"
-    count_values = [header.get(count_key) for header in headers]
-    if all(value is None for value in count_values):
+    expected_count = headers[0].get(count_key)
+    if expected_count is None and all(
+        header.get(count_key) is None for header in headers
+    ):
         return
-    if any(value is None for value in count_values) or len(set(count_values)) != 1:
+    if expected_count is None or any(
+        header.get(count_key) != expected_count for header in headers
+    ):
         raise ValueError(
             f"PDF {distribution} shard inventory has inconsistent {count_key} metadata"
         )
-    expected_count = count_values[0]
     if expected_count != len(files):
         raise ValueError(
             f"PDF {distribution} shard inventory is incomplete: "
             f"expected {expected_count} shards, found {len(files)}"
         )
-    expected_ids = set(range(len(files)))
-    actual_ids = {_partition_info(path)[1] for path in files}
-    if actual_ids != expected_ids:
-        raise ValueError(
-            f"PDF {distribution} shard inventory is incomplete: "
-            f"expected IDs {sorted(expected_ids)!r}, found {sorted(actual_ids)!r}"
-        )
+    for expected_id, path in enumerate(files):
+        _, shard_id = _partition_info(path)
+        if shard_id != expected_id:
+            raise ValueError(
+                f"PDF {distribution} shard inventory is incomplete: "
+                f"expected ID {expected_id}, found {shard_id}"
+            )
+    if distribution == "node":
+        has_payload_rank = "payload_rank" in headers[0]
+        for index, header in enumerate(headers):
+            if ("payload_rank" in header) != has_payload_rank:
+                raise ValueError(
+                    "PDF node shard inventory has inconsistent payload ranks"
+                )
+            if has_payload_rank and any(
+                headers[previous]["payload_rank"] == header["payload_rank"]
+                for previous in range(index)
+            ):
+                raise ValueError(
+                    "PDF node shard inventory has inconsistent payload ranks"
+                )
 
 
-def _read_legacy_data(data_path, header):
+def _read_legacy_data(data_path, header, *, limits=None):
+    limits = _reader_limits(limits)
     time_value = None
-    rows = []
     retained_bytes = _header_retained_bytes(header)
-    _require_file_size(data_path, _MAX_PAYLOAD_READ_BYTES, "legacy PDF payload")
-    with open(data_path, "r") as handle:
-        for raw_line in handle:
-            line = raw_line.strip()
+    row_count = 1 if header["ndim"] == 1 else header["shape"][1]
+    row_size = header["shape"][0]
+    _require_allocation(
+        (row_count, row_size),
+        np.dtype(np.float64).itemsize,
+        "legacy PDF dense payload",
+        limits=limits,
+        retained_bytes=retained_bytes,
+    )
+    data = np.empty((row_count, row_size), dtype=np.float64)
+    retained_bytes += data.nbytes
+    next_row = 0
+    _require_file_size(
+        data_path, limits.max_payload_read_bytes, "legacy PDF payload"
+    )
+    with open(data_path, "rb") as handle:
+        while True:
+            remaining_text_bytes = max(0, (limits.max_live_bytes - retained_bytes) // 4)
+            raw_line = handle.readline(remaining_text_bytes + 1)
+            if not raw_line:
+                break
+            if len(raw_line) > remaining_text_bytes:
+                _require_retained_bytes(
+                    retained_bytes + conservative_text_metadata_bytes(len(raw_line)),
+                    "legacy PDF payload row text peak",
+                    limits=limits,
+                )
+                raise ValueError(
+                    f"legacy PDF payload row in {data_path!r} exceeds the practical "
+                    "live-memory limit"
+                )
+            _require_retained_bytes(
+                retained_bytes + conservative_text_metadata_bytes(len(raw_line)),
+                "legacy PDF payload row text peak",
+                limits=limits,
+            )
+            try:
+                line = raw_line.decode("ascii").strip()
+            except UnicodeDecodeError as exc:
+                raise ValueError(
+                    f"legacy PDF data {data_path!r} contains non-ASCII text"
+                ) from exc
             if not line:
                 continue
             time_match = _LEGACY_TIME_RE.match(line)
@@ -887,27 +1175,27 @@ def _read_legacy_data(data_path, header):
                 line,
                 "legacy PDF payload row",
                 externally_retained_bytes=retained_bytes,
+                limits=limits,
             )
-            retained_bytes += row.nbytes
-            rows.append(row)
+            if next_row >= row_count or row.size != row_size:
+                raise ValueError(
+                    f"legacy PDF data {data_path!r} has an invalid "
+                    f"{header['ndim']}-D shape"
+                )
+            data[next_row] = row
+            next_row += 1
     if time_value is None:
         raise ValueError(f"legacy PDF data {data_path!r} is missing its time header")
     if header["ndim"] == 1:
-        if len(rows) != 1 or rows[0].size != header["shape"][0]:
+        if next_row != 1:
             raise ValueError(f"legacy PDF data {data_path!r} has an invalid 1-D shape")
-        return time_value, rows[0]
-    if len(rows) != header["shape"][1] or any(
-        row.size != header["shape"][0] for row in rows
-    ):
+        return time_value, data[0]
+    if next_row != row_count:
         raise ValueError(f"legacy PDF data {data_path!r} has an invalid 2-D shape")
-    _require_retained_bytes(
-        retained_bytes + header["total_bins"] * np.dtype(np.float64).itemsize,
-        "legacy PDF stacked payload peak",
-    )
-    return time_value, np.vstack(rows).T
+    return time_value, data.T
 
 
-def read_pdf(data_path, header_path=None, reshape=True):
+def read_pdf(data_path, header_path=None, reshape=True, *, limits=None):
     """Read a PDF output and return ``time``, dense ``pdf``, and ``header``.
 
     Modern arrays are returned in declared dimension order.  Legacy two-axis
@@ -916,24 +1204,27 @@ def read_pdf(data_path, header_path=None, reshape=True):
     across shards because shard histograms are summed; repeated indices within
     one shard are rejected as malformed.
     """
+    limits = _reader_limits(limits)
     explicit_header = header_path
     if header_path is None:
         header_path = _infer_header_path(data_path)
-    header = read_pdf_header(header_path)
+    header = _read_pdf_header(header_path, limits=limits)
     fmt = header["format"]
     if fmt == "legacy_dense":
         if _shard_kind(data_path) != "shared":
             raise ValueError(
                 "legacy PDF data do not define rank/node shard reconstruction"
             )
-        time_value, data = _read_legacy_data(data_path, header)
+        time_value, data = _read_legacy_data(data_path, header, limits=limits)
         cycle = None
     elif fmt == "dense":
         if _shard_kind(data_path) != "shared":
             raise ValueError(
                 f"dense PDF data {data_path!r} unexpectedly resides in a shard directory"
             )
-        time_value, cycle, data = _read_dense_binary(data_path, header)
+        time_value, cycle, data = _read_dense_binary(
+            data_path, header, limits=limits
+        )
     else:
         kind = _shard_kind(data_path)
         distribution = header.get("distribution", kind if kind != "shared" else None)
@@ -942,21 +1233,36 @@ def read_pdf(data_path, header_path=None, reshape=True):
                 f"sparse PDF data {data_path!r} cannot be resolved as a "
                 f"{distribution!r} shard family"
             )
+        if kind == "node" and header.get("binary_magic") != "AKPDFV2":
+            raise ValueError(
+                f"unversioned PDF node shard {data_path!r} is unsupported"
+            )
         header["distribution"] = distribution
         retained_bytes = _header_retained_bytes(header)
         _require_retained_bytes(
             retained_bytes + header["total_bins"] * np.dtype(np.float64).itemsize,
             "PDF sparse reconstruction",
+            limits=limits,
         )
         data = np.zeros(header["total_bins"], dtype=np.float64)
         time_value = None
         cycle = None
-        shard_files = _glob_partition_files(data_path)
+        shard_files, inventory_bytes = _glob_partition_files(
+            data_path, limits, retained_bytes + data.nbytes
+        )
         shard_headers = []
+        shard_header_member_bytes = 0
         for shard in shard_files:
+            shard_inventory_bytes = (
+                inventory_bytes
+                + sys.getsizeof(shard_headers)
+                + shard_header_member_bytes
+            )
             shard_header_path = _header_for_shard(shard, explicit_header, header_path)
             shard_header = _read_pdf_header(
-                shard_header_path, retained_bytes + data.nbytes
+                shard_header_path,
+                retained_bytes + data.nbytes + shard_inventory_bytes,
+                limits,
             )
             if (
                 shard_header.get("binary_magic") == "AKPDFV2"
@@ -971,21 +1277,38 @@ def read_pdf(data_path, header_path=None, reshape=True):
             shard_time, shard_cycle, indices, values, payload_rank = _read_sparse_file(
                 shard,
                 shard_header,
-                retained_bytes + _header_retained_bytes(shard_header) + data.nbytes,
+                retained_bytes
+                + _header_retained_bytes(shard_header)
+                + data.nbytes
+                + shard_inventory_bytes,
+                limits,
             )
             _validate_sparse_shard_metadata(shard, shard_header, payload_rank)
-            shard_headers.append(
-                {
-                    key: shard_header[key]
-                    for key in (
-                        "distribution",
-                        "number_of_ranks",
-                        "number_of_nodes",
-                        "rank",
-                        "node",
-                    )
-                    if key in shard_header
-                }
+            summary = {
+                key: shard_header[key]
+                for key in (
+                    "distribution",
+                    "number_of_ranks",
+                    "number_of_nodes",
+                    "rank",
+                    "node",
+                    "payload_rank",
+                )
+                if key in shard_header
+            }
+            shard_headers.append(summary)
+            shard_header_member_bytes += shallow_mapping_bytes(summary)
+            _require_retained_bytes(
+                retained_bytes
+                + _header_retained_bytes(shard_header)
+                + data.nbytes
+                + indices.nbytes
+                + values.nbytes
+                + inventory_bytes
+                + sys.getsizeof(shard_headers)
+                + shard_header_member_bytes,
+                "PDF sibling metadata inventory",
+                limits=limits,
             )
             if time_value is None:
                 time_value = shard_time
@@ -1007,11 +1330,14 @@ def read_pdf(data_path, header_path=None, reshape=True):
         _validate_sparse_sibling_inventory(shard_files, shard_headers)
         header.pop("rank", None)
         header.pop("node", None)
+        header.pop("payload_rank", None)
 
+    _require_finite_histogram(data, f"PDF payload {data_path!r}")
     if not reshape:
         data = np.asarray(data).reshape(-1, order="C")
     else:
         data = np.asarray(data).reshape(header["shape"], order="C")
+    header.pop("_retained_metadata_bytes", None)
     result = {"time": time_value, "pdf": data, "header": header}
     if cycle is not None:
         result["cycle"] = cycle

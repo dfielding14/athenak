@@ -260,15 +260,25 @@ int main(int argc, char *argv[]) {
   IOWrapper infile, restartfile;
   std::unique_ptr<NodeRestartManifest> node_restart_manifest;
   // read parameters from restart file
-  bool single_file_per_rank = false; // DBF: flag for single_file_per_rank for rst files
+  bool single_file_per_rank = false;  // Track legacy per-rank restart layout.
   if (res_flag) {
     if (NodeRestartManifest::IsPayloadPath(restart_file)) {
       FailNodeRestart("node payload paths are not supported restart entry points; "
                       "use the public manifest path.");
     }
     if (NodeRestartManifest::LooksLikeManifest(restart_file)) {
+      bool report_manifest_timing = RestartManifestTimingEnabled();
+      double before_manifest_parse = 0.0;
+      if (report_manifest_timing) before_manifest_parse = timer.seconds();
       node_restart_manifest =
           std::make_unique<NodeRestartManifest>(NodeRestartManifest::Load(restart_file));
+      if (report_manifest_timing) {
+        // Snapshot before emitting either record so diagnostics do not contaminate
+        // the startup-parse endpoint.
+        double after_manifest_parse = timer.seconds();
+        node_restart_manifest->ReportValidationTiming();
+        ReportRestartManifestStartupTiming(before_manifest_parse, after_manifest_parse);
+      }
       restart_file = node_restart_manifest->CanonicalPayloadPath();
     }
     // Check if the path contains "rank_" directory

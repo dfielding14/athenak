@@ -13,13 +13,18 @@ ROOT = Path(__file__).resolve().parents[3]
 HARNESS_SOURCE = ROOT / "tst" / "test_suite" / "io" / "cbin_layout_harness.cpp"
 
 
+def _subprocess_run(*args, **kwargs):
+    kwargs.setdefault("timeout", 90)
+    return subprocess.run(*args, **kwargs)
+
+
 @pytest.fixture(scope="session")
 def cbin_layout_harness(tmp_path_factory):
     compiler_parts = shlex.split(os.environ.get("CXX", "c++"))
     compiler = shutil.which(compiler_parts[0])
     assert compiler is not None
     output = tmp_path_factory.mktemp("cbin_layout_harness") / "cbin_layout_harness"
-    subprocess.run(
+    _subprocess_run(
         [
             compiler,
             *compiler_parts[1:],
@@ -51,7 +56,7 @@ def cbin_layout_harness(tmp_path_factory):
     ),
 )
 def test_cbin_layout_contract(cbin_layout_harness, mode):
-    proc = subprocess.run(
+    proc = _subprocess_run(
         [str(cbin_layout_harness), mode],
         capture_output=True,
         text=True,

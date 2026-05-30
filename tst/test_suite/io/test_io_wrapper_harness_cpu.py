@@ -14,6 +14,11 @@ HARNESS_SOURCE = ROOT / "tst" / "test_suite" / "io" / "io_wrapper_serial_harness
 WRAPPER_SOURCE = ROOT / "src" / "outputs" / "io_wrapper.cpp"
 
 
+def _subprocess_run(*args, **kwargs):
+    kwargs.setdefault("timeout", 90)
+    return subprocess.run(*args, **kwargs)
+
+
 def _read_make_variable(flags_file: Path, name: str):
     prefix = f"{name} = "
     for line in flags_file.read_text().splitlines():
@@ -47,7 +52,7 @@ def io_wrapper_serial_harness(tmp_path_factory):
         tmp_path_factory.mktemp("io_wrapper_serial_harness")
         / "io_wrapper_serial_harness"
     )
-    subprocess.run(
+    _subprocess_run(
         [
             compiler,
             *compiler_parts[1:],
@@ -67,7 +72,7 @@ def io_wrapper_serial_harness(tmp_path_factory):
 
 
 def _run_harness(io_wrapper_serial_harness: Path, tmp_path: Path, mode: str):
-    return subprocess.run(
+    return _subprocess_run(
         [
             str(io_wrapper_serial_harness),
             mode,

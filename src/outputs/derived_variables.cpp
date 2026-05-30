@@ -12,6 +12,7 @@
 //!   - z-component of current density Jz  [non-relativistic]
 //!   - magnitude of current density J^2  [non-relativistic]
 
+#include <cstddef>
 #include <iostream>
 #include <sstream>
 #include <string>   // std::string, to_string()
@@ -46,6 +47,17 @@ void AbortOnInvalidDiagnostic(const DvceArray1D<int> &invalid,
                           "\nDerived diagnostic '" + name +
                           "' encountered a nonfinite value or a non-positive fluid "
                           "density.");
+  }
+}
+
+void EnsureDerivedVariableShape(DvceArray5D<Real> &derived_var, int nmb, int n_dv,
+                                int n3, int n2, int n1) {
+  if (derived_var.extent(0) != static_cast<std::size_t>(nmb) ||
+      derived_var.extent(1) != static_cast<std::size_t>(n_dv) ||
+      derived_var.extent(2) != static_cast<std::size_t>(n3) ||
+      derived_var.extent(3) != static_cast<std::size_t>(n2) ||
+      derived_var.extent(4) != static_cast<std::size_t>(n1)) {
+    Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
   }
 }
 
@@ -114,8 +126,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
 
   // temperature = pressure / density
   if (name.compare("temperature") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &w0_ = (name.compare("hydro_wz") == 0)?
       pm->pmb_pack->phydro->w0 : pm->pmb_pack->pmhd->w0;
@@ -130,8 +141,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // Not computed in ghost zones since requires derivative
   if (name.compare("hydro_wz") == 0 ||
       name.compare("mhd_wz") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &w0_ = (name.compare("hydro_wz") == 0)?
       pm->pmb_pack->phydro->w0 : pm->pmb_pack->pmhd->w0;
@@ -151,8 +161,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // Not computed in ghost zones since requires derivative
   if (name.compare("hydro_w2") == 0 ||
       name.compare("mhd_w2") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &w0_ = (name.compare("hydro_w2") == 0)?
       pm->pmb_pack->phydro->w0 : pm->pmb_pack->pmhd->w0;
@@ -184,8 +193,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // This makes for a large stencil, but approximates volume-averaged value within cell.
   // Not computed in ghost zones since requires derivative
   if (name.compare("mhd_jz") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("jz", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
@@ -203,8 +211,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // magnitude of current density.  Calculated from cell-centered fields.
   // Not computed in ghost zones since requires derivative
   if (name.compare("mhd_j2") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("j2", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
@@ -236,8 +243,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // Calculated from cell-centered fields.
   // Not computed in ghost zones since requires derivative
   if (name.compare("mhd_curv") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("curv", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
@@ -304,8 +310,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // Calculated from cell-centered fields.
   // Not computed in ghost zones since requires derivative
   if (name.compare("mhd_curv_alt") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("curv_alt", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
@@ -805,8 +810,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // Calculated from cell-centered fields.
   // Not computed in ghost zones since requires derivative
   if (name.compare("mhd_k_jxb") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("mhd_k_jxb", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
@@ -842,8 +846,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // Calculated from cell-centered fields.
   // Not computed in ghost zones since requires derivative
   if (name.compare("mhd_curv_perp") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("curv_perp", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
@@ -952,8 +955,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   // Calculated from cell-centered fields.
   // Not computed in ghost zones since requires derivative
   if (name.compare("mhd_bmag") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("bmag", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
@@ -1069,8 +1071,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
 
   // divergence of B, including ghost zones
   if (name.compare("mhd_divb") == 0) {
-    if (derived_var.extent(4) <= 1)
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
 
     // set the loop limits for 1D/2D/3D problems
     int jl = js, ju = je, kl = ks, ku = ke;
@@ -1291,9 +1292,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   if (name == "coord_costheta") coord_kind = 9;
   if (name == "coord_abscostheta") coord_kind = 10;
   if (coord_kind >= 0) {
-    if (derived_var.extent(4) <= 1) {
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
-    }
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     auto dv = derived_var;
     int nx1 = indcs.nx1;
     int nx2 = indcs.nx2;
@@ -1339,9 +1338,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   if (name == "mdot_vert_out") flow_kind = 9;
   if (name == "mdot_vert_in") flow_kind = 10;
   if (flow_kind >= 0) {
-    if (derived_var.extent(4) <= 1) {
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
-    }
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     DvceArray5D<Real> u0_;
     if (pm->pmb_pack->phydro != nullptr) {
       u0_ = pm->pmb_pack->phydro->u0;
@@ -1395,9 +1392,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
   if (name == "edot_vert_out") energy_kind = 7;
   if (name == "edot_vert_in") energy_kind = 8;
   if (energy_kind >= 0) {
-    if (derived_var.extent(4) <= 1) {
-      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
-    }
+    EnsureDerivedVariableShape(derived_var, nmb, n_dv, n3, n2, n1);
     bool is_mhd = (pm->pmb_pack->pmhd != nullptr);
     DvceArray5D<Real> u0_;
     DvceArray5D<Real> bcc_;
@@ -1439,19 +1434,19 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
           require_total_energy ? u0_(m, IEN, k, j, i) : 0.0, gamma, is_mhd,
           bx, by, bz, require_total_energy);
       Real sign_z = output_diagnostics::VerticalSign(z);
-      Real vvert = energy.flow.vz*sign_z;
+      Real vertical_flux = energy.total_vertical*sign_z;
       Real value = 0.0;
       if (kind == 0) value = energy.total_radial;
-      if (kind == 1) value = (energy.flow.radial_velocity > 0.0)
+      if (kind == 1) value = (energy.total_radial > 0.0)
           ? energy.total_radial : 0.0;
-      if (kind == 2) value = (energy.flow.radial_velocity < 0.0)
+      if (kind == 2) value = (energy.total_radial < 0.0)
           ? energy.total_radial : 0.0;
       if (kind == 3) value = energy.kinetic_radial;
       if (kind == 4) value = energy.thermal_radial;
       if (kind == 5) value = energy.magnetic_radial;
-      if (kind == 6) value = energy.total_vertical*sign_z;
-      if (kind == 7) value = (vvert > 0.0) ? energy.total_vertical*sign_z : 0.0;
-      if (kind == 8) value = (vvert < 0.0) ? energy.total_vertical*sign_z : 0.0;
+      if (kind == 6) value = vertical_flux;
+      if (kind == 7) value = (vertical_flux > 0.0) ? vertical_flux : 0.0;
+      if (kind == 8) value = (vertical_flux < 0.0) ? vertical_flux : 0.0;
       if (!energy.valid || !output_diagnostics::IsFinite(value)) {
         Kokkos::atomic_exchange(&invalid(0), 1);
       }

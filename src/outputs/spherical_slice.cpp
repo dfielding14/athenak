@@ -16,8 +16,10 @@
 #include <iostream>
 #include <iomanip>
 #include <limits>
+#include <memory>
 #include <numeric>
 #include <sstream>
+#include <streambuf>
 #include <string>
 #include <vector>
 
@@ -71,28 +73,130 @@ int CheckedAngularCount(int ntheta, int nphi) {
                     "sphslice angular grid");
 }
 
-std::size_t SphericalSliceAllocationBytes(int nangles, std::size_t nvars) {
+std::size_t SphericalSlicePersistentBytes(int nangles) {
   std::size_t angles = static_cast<std::size_t>(nangles);
-  std::size_t fixed_per_angle =
-      8*sizeof(int) + 8*sizeof(Real) + 8*sizeof(std::int32_t) +
-      2*sizeof(std::size_t);
-  std::size_t variable_per_angle = output_file_utils::CheckedSizeAdd(
-      output_file_utils::CheckedSizeProduct(
-          output_file_utils::CheckedSizeProduct(
-              4, nvars, "sphslice variable staging", FatalSphericalSliceError),
-          sizeof(Real), "sphslice variable staging", FatalSphericalSliceError),
-      output_file_utils::CheckedSizeProduct(
-          output_file_utils::CheckedSizeProduct(
-              6, nvars, "sphslice serialized staging", FatalSphericalSliceError),
-          sizeof(float), "sphslice serialized staging",
-          FatalSphericalSliceError),
-      "sphslice variable staging", FatalSphericalSliceError);
+  std::size_t fixed_per_angle = 8*sizeof(int) + 8*sizeof(Real) +
+                                sizeof(std::int32_t);
   return output_file_utils::CheckedSizeProduct(
-      angles,
-      output_file_utils::CheckedSizeAdd(
-          fixed_per_angle, variable_per_angle, "sphslice allocation",
-          FatalSphericalSliceError),
+      angles, fixed_per_angle,
       "sphslice allocation", FatalSphericalSliceError);
+}
+
+std::size_t SphericalSliceSparseBytes(std::size_t npoints, std::size_t nvars) {
+  return CheckedAdd(
+      CheckedProduct(npoints, sizeof(std::int32_t), "sphslice sparse angles"),
+      CheckedProduct(CheckedProduct(nvars, npoints, "sphslice sparse values"),
+                     sizeof(float), "sphslice sparse values"),
+      "sphslice sparse staging");
+}
+
+std::size_t SphericalSliceDenseBytes(std::size_t npoints, std::size_t nvars,
+                                     std::size_t value_size,
+                                     const char *context) {
+  return CheckedProduct(CheckedProduct(nvars, npoints, context), value_size, context);
+}
+
+std::size_t SphericalSliceSortBytes(std::size_t npoints, std::size_t nvars) {
+  return CheckedAdd(
+      CheckedAdd(
+          CheckedProduct(CheckedProduct(2, npoints, "sphslice sort angles"),
+                         sizeof(std::int32_t), "sphslice sort angles"),
+          CheckedProduct(npoints, sizeof(std::size_t), "sphslice sort order"),
+          "sphslice sort staging"),
+      CheckedProduct(CheckedProduct(nvars, npoints, "sphslice sort values"),
+                     sizeof(float), "sphslice sort values"),
+      "sphslice sort staging");
+}
+
+void RequireSphericalSliceBudget(std::size_t persistent_bytes,
+                                 std::size_t staging_bytes,
+                                 std::size_t max_writer_allocation_bytes,
+                                 const char *context) {
+  output_file_utils::RequireAllocationBudget(
+      CheckedAdd(persistent_bytes, staging_bytes, context),
+      max_writer_allocation_bytes, context, FatalSphericalSliceError);
+}
+
+class CountingStreamBuffer : public std::streambuf {
+ public:
+  std::size_t size() const { return size_; }
+
+ protected:
+  std::streamsize xsputn(const char *, std::streamsize count) override {
+    if (count < 0) {
+      FatalSphericalSliceError("sphslice serialization received a negative count.");
+    }
+    size_ = CheckedAdd(size_, static_cast<std::size_t>(count),
+                       "sphslice serialization staging");
+    return count;
+  }
+
+  int_type overflow(int_type character) override {
+    if (!traits_type::eq_int_type(character, traits_type::eof())) {
+      size_ = CheckedAdd(size_, 1, "sphslice serialization staging");
+    }
+    return traits_type::not_eof(character);
+  }
+
+ private:
+  std::size_t size_ = 0;
+};
+
+class FileStreamBuffer : public std::streambuf {
+ public:
+  explicit FileStreamBuffer(std::FILE *output) : output_(output) {}
+
+ protected:
+  std::streamsize xsputn(const char *data, std::streamsize count) override {
+    if (count < 0) return 0;
+    return static_cast<std::streamsize>(
+        std::fwrite(data, sizeof(char), static_cast<std::size_t>(count), output_));
+  }
+
+  int_type overflow(int_type character) override {
+    if (traits_type::eq_int_type(character, traits_type::eof())) {
+      return traits_type::not_eof(character);
+    }
+    return std::fputc(traits_type::to_char_type(character), output_) == EOF
+        ? traits_type::eof() : character;
+  }
+
+  int sync() override {
+    return std::fflush(output_) == 0 ? 0 : -1;
+  }
+
+ private:
+  std::FILE *output_;
+};
+
+std::size_t ParameterDumpSerializedSize(const ParameterInput &pin) {
+  constexpr char marker[] =
+      "#------------------------- PAR_DUMP -------------------------\n";
+  std::size_t bytes = sizeof(marker) - 1;
+  for (const auto &block : pin.block) {
+    bytes = CheckedAdd(bytes, CheckedAdd(block.block_name.size(), 3,
+                                         "sphslice parameter block"),
+                       "sphslice parameter dump");
+    for (const auto &line : block.line) {
+      std::size_t line_bytes = CheckedAdd(block.max_len_parname, 1,
+                                          "sphslice parameter name");
+      line_bytes = CheckedAdd(line_bytes, 2, "sphslice parameter assignment");
+      line_bytes = CheckedAdd(line_bytes,
+                              CheckedAdd(block.max_len_parvalue, 1,
+                                         "sphslice parameter value"),
+                              "sphslice parameter line");
+      line_bytes = CheckedAdd(line_bytes, line.param_comment.size(),
+                              "sphslice parameter comment");
+      bytes = CheckedAdd(bytes, CheckedAdd(line_bytes, 1, "sphslice parameter line"),
+                         "sphslice parameter dump");
+    }
+  }
+  bytes = CheckedAdd(bytes, sizeof(marker) - 1, "sphslice parameter dump");
+  return CheckedAdd(bytes, sizeof("<par_end>\n") - 1, "sphslice parameter dump");
+}
+
+std::size_t StringStorageBytes(std::size_t characters, const char *context) {
+  return CheckedAdd(characters, 1, context);
 }
 
 void ValidateOwnedAngles(const std::vector<std::int32_t> &angles, int nangles,
@@ -120,6 +224,11 @@ void SortAndValidateShardRecords(std::vector<std::int32_t> &angles,
   if (values.size() != expected_values) {
     FatalSphericalSliceError(std::string(context) + " value count does not match its "
                              "angular index count.");
+  }
+  for (float value : values) {
+    if (!std::isfinite(value)) {
+      FatalSphericalSliceError(std::string(context) + " contains a non-finite value.");
+    }
   }
   ValidateOwnedAngles(angles, nangles, context);
   std::vector<std::size_t> order(npoints);
@@ -191,6 +300,7 @@ class SphericalSlice {
         interp_indcs("sphslice_indices", nangles, 4),
         interp_wghts("sphslice_weights", nangles, 3),
         interp_vals("sphslice_values", nangles) {
+    owned_angles.reserve(nangles);
     Rebuild();
   }
 
@@ -309,7 +419,8 @@ class SphericalSlice {
 
 SphericalSliceOutput::SphericalSliceOutput(ParameterInput *pin, Mesh *pm,
                                            OutputParameters op)
-    : BaseTypeOutput(pin, pm, op), psph(nullptr) {
+    : BaseTypeOutput(pin, pm, op), psph(nullptr),
+      persistent_writer_allocation_bytes(0) {
   if (pm->mesh_indcs.nx2 <= 1 || pm->mesh_indcs.nx3 <= 1) {
     FatalSphericalSliceError("sphslice output requires a 3D mesh.");
   }
@@ -342,8 +453,9 @@ SphericalSliceOutput::SphericalSliceOutput(ParameterInput *pin, Mesh *pm,
         "ghost-zone-safe sampling is implemented.");
   }
   int nangles = CheckedAngularCount(ntheta, nphi);
+  persistent_writer_allocation_bytes = SphericalSlicePersistentBytes(nangles);
   output_file_utils::RequireAllocationBudget(
-      SphericalSliceAllocationBytes(nangles, outvars.size()),
+      persistent_writer_allocation_bytes,
       max_writer_allocation_bytes, "sphslice allocation", FatalSphericalSliceError);
   output_file_utils::EnsureDirectory("bin", 0775, "sphslice output",
                                      FatalSphericalSliceError);
@@ -353,22 +465,41 @@ SphericalSliceOutput::SphericalSliceOutput(ParameterInput *pin, Mesh *pm,
     output_file_utils::EnsureDirectory(shard_path, 0775, "sphslice output",
                                        FatalSphericalSliceError);
   }
-  psph = new SphericalSlice(pm->pmb_pack, radius, ntheta, nphi);
+  psph = std::make_unique<SphericalSlice>(pm->pmb_pack, radius, ntheta, nphi);
 }
 
-SphericalSliceOutput::~SphericalSliceOutput() {
-  delete psph;
-}
+SphericalSliceOutput::~SphericalSliceOutput() = default;
 
 //----------------------------------------------------------------------------------------
 // Data collection
 
 void SphericalSliceOutput::LoadOutputData(Mesh *pm) {
+  std::size_t retained_output_bytes = CheckedAdd(
+      CheckedProduct(outarray.size(), sizeof(Real), "retained dense sphslice values"),
+      CheckedAdd(
+          CheckedProduct(shard_owned_angles.capacity(), sizeof(std::int32_t),
+                         "retained sparse sphslice angles"),
+          CheckedProduct(shard_values.capacity(), sizeof(float),
+                         "retained sparse sphslice values"),
+          "retained sparse sphslice values"),
+      "retained sphslice values");
+  int npoints = psph->nangles;
+  std::size_t angular_points = static_cast<std::size_t>(npoints);
+  std::size_t ownership_staging_bytes = CheckedAdd(
+      CheckedProduct(angular_points, sizeof(std::int32_t),
+                     "sphslice ownership validation"),
+      CheckedProduct(CheckedProduct(2, angular_points, "sphslice ownership validation"),
+                     sizeof(int), "sphslice ownership validation"),
+      "sphslice ownership validation");
+  RequireSphericalSliceBudget(
+      CheckedAdd(persistent_writer_allocation_bytes, retained_output_bytes,
+                 "sphslice ownership validation"),
+      ownership_staging_bytes, max_writer_allocation_bytes,
+      "sphslice ownership validation");
   if (pm->adaptive) {
     psph->Rebuild();
   }
   int nvars = CountAsInt(outvars.size(), "sphslice variable count");
-  int npoints = psph->nangles;
   shard_owned_angles.clear();
   shard_values.clear();
   ValidateGlobalOwnership(psph->owned_angles, psph->nangles);
@@ -379,6 +510,11 @@ void SphericalSliceOutput::LoadOutputData(Mesh *pm) {
   }
 
   if (out_params.shard_mode == FileShardMode::shared) {
+    RequireSphericalSliceBudget(
+        persistent_writer_allocation_bytes,
+        SphericalSliceDenseBytes(angular_points, static_cast<std::size_t>(nvars),
+                                 sizeof(Real), "dense sphslice values"),
+        max_writer_allocation_bytes, "dense sphslice values");
     Kokkos::realloc(outarray, nvars, 1, 1, psph->ntheta, psph->nphi);
     for (int n = 0; n < nvars; ++n) {
       psph->Interpolate(outvars[n].data_index, *(outvars[n].data_ptr));
@@ -402,9 +538,28 @@ void SphericalSliceOutput::LoadOutputData(Mesh *pm) {
                           "MPI_Reduce for dense sphslice values");
     }
 #endif
+    if (global_variable::my_rank == 0) {
+      for (int n = 0; n < nvars; ++n) {
+        for (int a = 0; a < npoints; ++a) {
+          if (!std::isfinite(outarray(n, 0, 0, a/psph->nphi, a%psph->nphi))) {
+            FatalSphericalSliceError("dense sphslice values contain a non-finite value.");
+          }
+        }
+      }
+    }
     return;
   }
 
+  std::size_t local_points_size = psph->owned_angles.size();
+  std::size_t local_sparse_bytes =
+      SphericalSliceSparseBytes(local_points_size, static_cast<std::size_t>(nvars));
+  RequireSphericalSliceBudget(
+      persistent_writer_allocation_bytes,
+      CheckedAdd(local_sparse_bytes,
+                 SphericalSliceSortBytes(local_points_size,
+                                         static_cast<std::size_t>(nvars)),
+                 "local sphslice sort staging"),
+      max_writer_allocation_bytes, "local sphslice sort staging");
   shard_owned_angles = psph->owned_angles;
   int local_points = CountAsInt(shard_owned_angles.size(), "local sphslice point count");
   shard_values.resize(CheckedProduct(static_cast<std::size_t>(nvars),
@@ -424,6 +579,15 @@ void SphericalSliceOutput::LoadOutputData(Mesh *pm) {
   if (IsNodeSharded(out_params.shard_mode)) {
     std::vector<int> counts;
     if (global_variable::node_rank == 0) {
+      std::size_t node_metadata_bytes = CheckedProduct(
+          CheckedProduct(2, static_cast<std::size_t>(global_variable::node_size),
+                         "node sphslice metadata"),
+          sizeof(int), "node sphslice metadata");
+      RequireSphericalSliceBudget(
+          persistent_writer_allocation_bytes,
+          CheckedAdd(local_sparse_bytes, node_metadata_bytes,
+                     "node sphslice metadata"),
+          max_writer_allocation_bytes, "node sphslice metadata");
       counts.resize(global_variable::node_size);
     }
     mpi_utils::CheckMpi(
@@ -444,6 +608,21 @@ void SphericalSliceOutput::LoadOutputData(Mesh *pm) {
     std::vector<std::int32_t> node_angles;
     std::vector<float> node_values;
     if (global_variable::node_rank == 0) {
+      std::size_t node_metadata_bytes = CheckedProduct(
+          CheckedProduct(2, static_cast<std::size_t>(global_variable::node_size),
+                         "node sphslice metadata"),
+          sizeof(int), "node sphslice metadata");
+      std::size_t node_sparse_bytes =
+          SphericalSliceSparseBytes(node_points, static_cast<std::size_t>(nvars));
+      RequireSphericalSliceBudget(
+          persistent_writer_allocation_bytes,
+          CheckedAdd(
+              CheckedAdd(CheckedAdd(local_sparse_bytes, node_metadata_bytes,
+                                    "node sphslice sort staging"),
+                         node_sparse_bytes, "node sphslice sort staging"),
+              SphericalSliceSortBytes(node_points, static_cast<std::size_t>(nvars)),
+              "node sphslice sort staging"),
+          max_writer_allocation_bytes, "node sphslice sort staging");
       node_angles.resize(node_points);
       node_values.resize(CheckedProduct(static_cast<std::size_t>(nvars), node_points,
                                         "node sphslice values"));
@@ -488,61 +667,164 @@ void SphericalSliceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   if (i_write) {
     int nvars = CountAsInt(outvars.size(), "sphslice variable count");
     if (sharded) {
+      std::size_t sparse_bytes = SphericalSliceSparseBytes(
+          shard_owned_angles.size(), static_cast<std::size_t>(nvars));
+      RequireSphericalSliceBudget(
+          persistent_writer_allocation_bytes,
+          CheckedAdd(sparse_bytes,
+                     SphericalSliceSortBytes(shard_owned_angles.size(),
+                                             static_cast<std::size_t>(nvars)),
+                     "published sphslice sort staging"),
+          max_writer_allocation_bytes, "published sphslice sort staging");
       SortAndValidateShardRecords(shard_owned_angles, shard_values, nvars, psph->nangles,
                                   "published sphslice shard");
+    }
+    int npoints = sharded ? CountAsInt(shard_owned_angles.size(), "sphslice point count")
+                          : psph->nangles;
+    std::size_t parameter_dump_size = ParameterDumpSerializedSize(*pin);
+    auto write_metadata = [&](std::ostream &header) {
+      header << "Athena spherical slice version=1.0\n"
+             << "  layout=" << (sharded ? "sparse_angles" : "dense") << "\n"
+             << "  distribution=" << ShardDistributionName(out_params.shard_mode) << "\n"
+             << "  rank=" << global_variable::my_rank << "\n"
+             << "  time=" << pm->time << "\n"
+             << "  cycle=" << pm->ncycle << "\n"
+             << "  radius=" << std::scientific
+             << std::setprecision(std::numeric_limits<Real>::max_digits10 - 1)
+             << psph->radius << std::defaultfloat << "\n"
+             << "  ntheta=" << psph->ntheta << "\n"
+             << "  nphi=" << psph->nphi << "\n"
+             << "  size of variable=" << sizeof(float) << "\n"
+             << "  number of variables=" << nvars << "\n"
+             << "  npoints=" << npoints << "\n";
+      if (IsNodeSharded(out_params.shard_mode)) {
+        header << "  node=" << global_variable::node_id << "\n"
+               << "  number of nodes=" << global_variable::nnodes << "\n";
+      } else if (IsRankSharded(out_params.shard_mode)) {
+        header << "  number of ranks=" << global_variable::nranks << "\n";
+      }
+      header << "  variables: ";
+      for (int n = 0; n < nvars; ++n) {
+        header << outvars[n].label << " ";
+      }
+      header << "\n  header offset=" << parameter_dump_size << "\n";
+    };
+    CountingStreamBuffer metadata_counter_buffer;
+    std::ostream metadata_counter(&metadata_counter_buffer);
+    write_metadata(metadata_counter);
+    if (!metadata_counter) {
+      FatalSphericalSliceError("Could not size sphslice metadata.");
+    }
+    std::size_t serialization_bytes =
+        CheckedAdd(metadata_counter_buffer.size(), parameter_dump_size,
+                   "sphslice serialization staging");
+    constexpr std::size_t kMaxRadiusTokenCharacters = 64;
+    constexpr std::size_t kMaxSequenceTokenCharacters = 10;
+    constexpr std::size_t kShardDirectoryCharacters = sizeof("node_00000000/") - 1;
+    std::size_t shard_directory_characters = sharded ? kShardDirectoryCharacters : 0;
+    std::size_t filename_characters = sizeof("bin/") - 1;
+    filename_characters = CheckedAdd(filename_characters, shard_directory_characters,
+                                     "sphslice filename");
+    filename_characters = CheckedAdd(filename_characters, out_params.file_basename.size(),
+                                     "sphslice filename");
+    filename_characters = CheckedAdd(filename_characters, out_params.file_id.size(),
+                                     "sphslice filename");
+    filename_characters = CheckedAdd(filename_characters, kMaxRadiusTokenCharacters,
+                                     "sphslice filename");
+    filename_characters = CheckedAdd(filename_characters, kMaxSequenceTokenCharacters,
+                                     "sphslice filename");
+    filename_characters = CheckedAdd(filename_characters, sizeof("....sph.bin") - 1,
+                                     "sphslice filename");
+    std::size_t path_staging_bytes = CheckedAdd(
+        StringStorageBytes(filename_characters, "sphslice filename"),
+        StringStorageBytes(CheckedAdd(filename_characters, sizeof(".tmp") - 1,
+                                      "sphslice temporary filename"),
+                           "sphslice temporary filename"),
+        "sphslice path staging");
+    path_staging_bytes = CheckedAdd(
+        path_staging_bytes,
+        CheckedAdd(StringStorageBytes(kMaxSequenceTokenCharacters,
+                                      "sphslice sequence token"),
+                   StringStorageBytes(kMaxRadiusTokenCharacters,
+                                      "sphslice radius token"),
+                   "sphslice token staging"),
+        "sphslice path staging");
+    path_staging_bytes = CheckedAdd(
+        path_staging_bytes,
+        StringStorageBytes(shard_directory_characters, "sphslice shard directory"),
+        "sphslice path staging");
+    serialization_bytes = CheckedAdd(serialization_bytes, path_staging_bytes,
+                                     "sphslice serialization staging");
+    if (sharded) {
+      serialization_bytes = CheckedAdd(
+          serialization_bytes,
+          SphericalSliceSparseBytes(shard_owned_angles.size(),
+                                    static_cast<std::size_t>(nvars)),
+          "sphslice serialization staging");
+    } else {
+      std::size_t angular_points = static_cast<std::size_t>(psph->nangles);
+      serialization_bytes = CheckedAdd(
+          serialization_bytes,
+          CheckedAdd(
+              SphericalSliceDenseBytes(angular_points, static_cast<std::size_t>(nvars),
+                                       sizeof(Real), "dense sphslice values"),
+              SphericalSliceDenseBytes(angular_points, static_cast<std::size_t>(nvars),
+                                       sizeof(float), "dense sphslice serialization"),
+              "sphslice serialization staging"),
+          "sphslice serialization staging");
+    }
+    RequireSphericalSliceBudget(persistent_writer_allocation_bytes,
+                                serialization_bytes,
+                                max_writer_allocation_bytes,
+                                "sphslice serialization staging");
+    std::vector<float> dense_values;
+    if (!sharded) {
+      dense_values.resize(CheckedProduct(static_cast<std::size_t>(nvars),
+                                         static_cast<std::size_t>(psph->nangles),
+                                         "dense sphslice values"));
+      std::size_t q = 0;
+      for (int n = 0; n < nvars; ++n) {
+        for (int it = 0; it < psph->ntheta; ++it) {
+          for (int ip = 0; ip < psph->nphi; ++ip) {
+            float value = static_cast<float>(outarray(n, 0, 0, it, ip));
+            if (!std::isfinite(value)) {
+              FatalSphericalSliceError(
+                  "dense sphslice values contain a non-finite serialized value.");
+            }
+            dense_values[q++] = value;
+          }
+        }
+      }
     }
     std::string number = output_file_utils::FormatSequence(
         out_params.file_number, "sphslice output", FatalSphericalSliceError);
     std::string radius_token =
         output_file_utils::FormatSphericalSliceRadius(psph->radius);
-    std::string path = "bin/";
+    std::string shard_directory;
     if (sharded) {
-      path += ShardDirectoryName(out_params.shard_mode, global_variable::my_rank,
-                                 global_variable::node_id) + "/";
+      shard_directory = ShardDirectoryName(
+          out_params.shard_mode, global_variable::my_rank, global_variable::node_id)
+          + "/";
     }
-    std::string filename = path + out_params.file_basename + "." + out_params.file_id
-        + "." + radius_token + "." + number + ".sph.bin";
+    std::string filename = "bin/" + shard_directory + out_params.file_basename + "."
+        + out_params.file_id + "." + radius_token + "." + number + ".sph.bin";
     std::string temporary_filename = output_file_utils::TemporaryPath(filename);
     std::FILE *output = std::fopen(temporary_filename.c_str(), "wb");
     if (output == nullptr) {
       FatalSphericalSliceError(
           "Cannot open sphslice output '" + temporary_filename + "'.");
     }
-    int npoints = sharded ? CountAsInt(shard_owned_angles.size(), "sphslice point count")
-                          : psph->nangles;
-    std::stringstream parameters;
-    pin->ParameterDump(parameters);
-    std::string parameter_dump = parameters.str();
-    std::stringstream header;
-    header << "Athena spherical slice version=1.0\n"
-           << "  layout=" << (sharded ? "sparse_angles" : "dense") << "\n"
-           << "  distribution=" << ShardDistributionName(out_params.shard_mode) << "\n"
-           << "  rank=" << global_variable::my_rank << "\n"
-           << "  time=" << pm->time << "\n"
-           << "  cycle=" << pm->ncycle << "\n"
-           << "  radius="
-           << output_file_utils::FormatRoundTripScientific(psph->radius) << "\n"
-           << "  ntheta=" << psph->ntheta << "\n"
-           << "  nphi=" << psph->nphi << "\n"
-           << "  size of variable=" << sizeof(float) << "\n"
-           << "  number of variables=" << nvars << "\n"
-           << "  npoints=" << npoints << "\n";
-    if (IsNodeSharded(out_params.shard_mode)) {
-      header << "  node=" << global_variable::node_id << "\n"
-             << "  number of nodes=" << global_variable::nnodes << "\n";
-    } else if (IsRankSharded(out_params.shard_mode)) {
-      header << "  number of ranks=" << global_variable::nranks << "\n";
+    FileStreamBuffer header_buffer(output);
+    std::ostream serialized_header(&header_buffer);
+    write_metadata(serialized_header);
+    pin->ParameterDump(serialized_header);
+    serialized_header.flush();
+    if (!serialized_header) {
+      std::fclose(output);
+      output_file_utils::DiscardOwnedPath(temporary_filename);
+      FatalSphericalSliceError("Could not write sphslice serialized header to '" +
+                               temporary_filename + "'.");
     }
-    header << "  variables: ";
-    for (int n = 0; n < nvars; ++n) {
-      header << outvars[n].label << " ";
-    }
-    header << "\n  header offset=" << parameter_dump.size() << "\n";
-    std::string metadata = header.str();
-    CheckedFileWrite(output, metadata.data(), sizeof(char), metadata.size(),
-                     temporary_filename, "sphslice metadata");
-    CheckedFileWrite(output, parameter_dump.data(), sizeof(char), parameter_dump.size(),
-                     temporary_filename, "sphslice input header");
     if (sharded) {
       CheckedFileWrite(output, shard_owned_angles.data(), sizeof(std::int32_t),
                        shard_owned_angles.size(), temporary_filename,
@@ -550,18 +832,7 @@ void SphericalSliceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       CheckedFileWrite(output, shard_values.data(), sizeof(float), shard_values.size(),
                        temporary_filename, "sphslice sparse values");
     } else {
-      std::vector<float> values(CheckedProduct(static_cast<std::size_t>(nvars),
-                                               static_cast<std::size_t>(psph->nangles),
-                                               "dense sphslice values"));
-      std::size_t q = 0;
-      for (int n = 0; n < nvars; ++n) {
-        for (int it = 0; it < psph->ntheta; ++it) {
-          for (int ip = 0; ip < psph->nphi; ++ip) {
-            values[q++] = static_cast<float>(outarray(n, 0, 0, it, ip));
-          }
-        }
-      }
-      CheckedFileWrite(output, values.data(), sizeof(float), values.size(),
+      CheckedFileWrite(output, dense_values.data(), sizeof(float), dense_values.size(),
                        temporary_filename, "sphslice dense values");
     }
     if (std::fclose(output) != 0) {
@@ -573,6 +844,11 @@ void SphericalSliceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         temporary_filename, filename, "sphslice output", FatalSphericalSliceError);
   }
 
+  // These buffers are write-only staging. Release them so the next output cycle
+  // starts without carrying a previous dense or sparse allocation into admission.
+  outarray = HostArray5D<Real>();
+  std::vector<std::int32_t>().swap(shard_owned_angles);
+  std::vector<float>().swap(shard_values);
   out_params.file_number = output_file_utils::AdvanceFileNumber(
       out_params.file_number, "sphslice output", FatalSphericalSliceError);
   if (out_params.last_time < 0.0) {

@@ -19,6 +19,7 @@ using  IOWrapperFile = MPI_File;
 using  IOWrapperFile = FILE*;
 #endif
 
+// File offsets and byte counts use an explicit 64-bit unsigned domain.
 using IOWrapperSizeT = std::uint64_t;
 
 namespace io_wrapper {
@@ -39,7 +40,8 @@ class IOWrapper {
   // nested type definition of strongly typed/scoped enum in class definition
   enum class FileMode {read, write, append};
 
-  // wrapper functions for basic I/O tasks
+  // Offsets are byte offsets. MPI-backed open, close, and *_at_all operations are
+  // collective over comm_; every rank in that communicator must participate.
   int Open(const char* fname, FileMode rw, bool use_serial_io = false);
   std::size_t Read_bytes(void *buf, IOWrapperSizeT size, IOWrapperSizeT count,
                          bool use_serial_io = false);

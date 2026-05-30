@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -25,7 +26,7 @@
 #endif
 
 #define NOUTPUT_CHOICES 184
-// choices for output variables used in <ouput> blocks in input file
+// Choices for output variables used in <output> blocks in input files.
 // TO ADD MORE CHOICES:
 //   - add more strings to array below, change NOUTPUT_CHOICES above appropriately
 //   - add code to load new variables in BaseOutputType constructor
@@ -185,34 +186,31 @@ inline const char *PDFScaleName(int scale) {
 //  Outputs constructor.
 
 struct OutputParameters {
-  int block_number;
+  int block_number=0;
   std::string block_name;
-  Real last_time, dt;
-  int dcycle;                 // enables outputs every 'dcycle'
-  int file_number;
+  Real last_time=-1.0, dt=0.0;
+  int dcycle=0;               // enables outputs every 'dcycle'
+  int file_number=0;
   std::string file_basename;
   std::string file_type;
   std::string file_id;
   std::string variable;
-  bool include_gzs;
-  int gid;
-  bool slice1, slice2, slice3;
-  Real slice_x1, slice_x2, slice_x3;
-  bool user_hist_only;
+  bool include_gzs=false;
+  int gid=-1;
+  bool slice1=false, slice2=false, slice3=false;
+  Real slice_x1=0.0, slice_x2=0.0, slice_x3=0.0;
+  bool user_hist_only=false;
   std::string data_format;
   bool contains_derived=false;
-  // DBF parameters for coarsened binary:
-  // cannot be less than 2 and must be a power of 2 and
-  // cannot be greater than shortest meshblock dimension
-  int coarsen_factor;
-  bool compute_moments; // if true then will compute
+  // Coarsened-binary factors are powers of two bounded by the shortest MeshBlock axis.
+  int coarsen_factor=0;
+  bool compute_moments=false; // if true then will compute
   // <q>, <q^2>, <q^3>, <q^4> for each variable q
-  // DBF parameters for PDF:
   // number of derived variables, index of current derived variable
   int n_derived=0, i_derived=0;
-  std::string variable_2; // DBF: for 2d PDFs
-  Real bin_min, bin_max;
-  Real bin2_min, bin2_max;
+  std::string variable_2; // compatibility field for legacy 2D PDFs
+  Real bin_min=0.0, bin_max=1.0;
+  Real bin2_min=0.0, bin2_max=1.0;
   int nbin=0, nbin2=0;
   bool logscale=true, logscale2=true;
   bool mass_weighted=false;
@@ -535,8 +533,9 @@ class SphericalSliceOutput : public BaseTypeOutput {
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
 
  private:
-  SphericalSlice *psph;
+  std::unique_ptr<SphericalSlice> psph;
   std::size_t max_writer_allocation_bytes;
+  std::size_t persistent_writer_allocation_bytes;
   std::vector<std::int32_t> shard_owned_angles;
   std::vector<float> shard_values;
 };
@@ -624,7 +623,7 @@ class TrackedParticleOutput : public BaseTypeOutput {
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
  protected:
   int ntrack;           // total number of tracked particles across all ranks
-  int ntrack_thisrank;  // number of tracked particles this rank (guess)
+  int ntrack_thisrank;  // safe per-rank staging capacity upper bound
   int npout;            // number of tracked particles to be written this rank
   bool header_written;
   std::vector<int> npout_eachrank;

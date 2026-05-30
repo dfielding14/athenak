@@ -36,6 +36,8 @@ struct NodeRestartSegment {
 
 class NodeRestartManifest {
  public:
+  // Load() validates the complete manifest and its payload inventory before
+  // returning. Accessors and direct local-block reads are valid only afterward.
   static bool LooksLikeManifest(const std::string &path);
   static bool IsPayloadPath(const std::string &path);
   static NodeRestartManifest Load(const std::string &path);
@@ -45,20 +47,31 @@ class NodeRestartManifest {
   std::uint64_t DataSize() const { return data_size_; }
   int NumMeshBlocks() const { return nmb_total_; }
 
+  void ReportValidationTiming() const;
   void LoadLocalBlocks(int gid_start, int count, std::uint64_t data_size,
                        std::vector<char> *blocks) const;
 
  private:
   std::string manifest_path_;
-  int nmb_total_;
-  std::uint64_t header_size_;
-  std::uint64_t data_size_;
+  int nmb_total_=0;
+  std::uint64_t header_size_=0;
+  std::uint64_t data_size_=0;
   std::vector<NodeRestartPayload> payloads_;
   std::vector<NodeRestartSegment> segments_;
+  bool validation_timing_enabled_=false;
+  bool logical_validation_pressure_capped_=false;
+  std::size_t timing_payload_count_=0;
+  std::uint64_t timing_manifest_bytes_=0;
+  std::uint64_t logical_header_validation_bytes_=0;
+  std::uint64_t logical_validation_pressure_bytes_=0;
+  double validation_elapsed_seconds_=0.0;
 };
 
 [[noreturn]] void FailNodeRestart(const std::string &message);
 void CheckNodeRestartPayloadMarker(IOWrapper &input, bool single_file_per_rank,
                                    bool expected);
+bool RestartManifestTimingEnabled();
+void ReportRestartManifestStartupTiming(double before_parse_seconds,
+                                        double after_parse_seconds);
 
 #endif  // RESTART_MANIFEST_HPP_
