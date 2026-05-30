@@ -1,0 +1,83 @@
+{
+  "binary": "/private/tmp/athenak-rel-phase6-build/src/athena",
+  "criteria": {
+    "count": 57,
+    "path": "/Users/dbf75/.codex/worktrees/e354/athenak-DF/docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase8_preregistered_criteria.json",
+    "sha256": "c11ee798522629e4cc4aa14af3c45bf3df730d84a1eb4f114609651c1d75c645",
+    "status": "PASS"
+  },
+  "expected_fence_rejections": {
+    "mpi_2_fence": "Particle pusher 'relativistic_hc' execution currently requires a serial uniform-level mesh; MPI, SMR, and AMR remain closed until qualification",
+    "mpi_4_adaptive_device_fence": "Particle pusher 'relativistic_hc' execution currently requires a serial uniform-level mesh; MPI, SMR, and AMR remain closed until qualification",
+    "mpi_4_adaptive_host_fence": "Particle pusher 'relativistic_hc' execution currently requires a serial uniform-level mesh; MPI, SMR, and AMR remain closed until qualification",
+    "mpi_4_static_smr_fence": "Particle pusher 'relativistic_hc' execution currently requires a serial uniform-level mesh; MPI, SMR, and AMR remain closed until qualification",
+    "serial_adaptive_fence": "Particle pusher 'relativistic_hc' execution currently requires a serial uniform-level mesh; MPI, SMR, and AMR remain closed until qualification",
+    "serial_static_smr_fence": "Particle pusher 'relativistic_hc' execution currently requires a serial uniform-level mesh; MPI, SMR, and AMR remain closed until qualification"
+  },
+  "gaps": [
+    "Positive-cycle MPI, static SMR, and adaptive AMR remain deliberately fenced until the parent implementation removes the Phase-8 runtime fence.",
+    "The current C++ reader rejects a changed-rank restart deterministically, but the changed topology diagnostic preempts the exact DR-009 rank-count diagnostic required by the post-fence qualifier."
+  ],
+  "input": "/Users/dbf75/.codex/worktrees/e354/athenak-DF/inputs/unit_tests/cr_relativistic_migration_runtime.athinput",
+  "mpi_binary": "/private/tmp/athenak-rel-phase6-mpicpu-build/src/athena",
+  "qualification": "cr_relativistic_migration_runtime_phase8_pre_fence_smoke",
+  "rank_count_change_pre_fence": {
+    "accepted_diagnostics": [
+      "typed-v2 restart rejects MPI rank-count change",
+      "typed-v2 restart rejects changed rank-to-MeshBlock topology"
+    ],
+    "exact_dr009_diagnostic": false,
+    "observed_diagnostic": "typed-v2 restart rejects changed rank-to-MeshBlock topology"
+  },
+  "retained_runtime_negative_controls": {
+    "mhd_ideal_amr_rejection": "Particle pusher 'relativistic_hc' execution currently requires a serial uniform-level mesh; MPI, SMR, and AMR remain closed until qualification",
+    "mhd_ideal_mpi_rejection": "Particle pusher 'relativistic_hc' execution currently requires a serial uniform-level mesh; MPI, SMR, and AMR remain closed until qualification",
+    "mhd_ideal_multiblock_rejection": "relativistic_field_source = mhd_ideal currently requires exactly one MeshBlock",
+    "mhd_ideal_smr_rejection": "Particle pusher 'relativistic_hc' execution currently requires a serial uniform-level mesh; MPI, SMR, and AMR remain closed until qualification",
+    "prescribed_nonperiodic": "Particle pusher 'relativistic_hc' currently requires a 3D strictly periodic mesh"
+  },
+  "schema_version": 1,
+  "serial_subset": {
+    "all_22_typed_v2_reals_inspected": true,
+    "max_real_error": 0.0,
+    "multiblock": {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        8
+      ],
+      "final_topology_hash": 13693262057698997051,
+      "meshblocks": 8,
+      "name": "serial_multiblock",
+      "root": "/private/tmp/cr-rel-phase8-prefence-expanded/serial_multiblock"
+    },
+    "owner_change_count": 6,
+    "periodic_wrap_particle_count": 6,
+    "prescribed_field_witness": {
+      "momentum_change_count": 8,
+      "nonzero_field_component_count": 4,
+      "nonzero_work_count": 8,
+      "sampled_field_max_real_error": 0.0
+    },
+    "single": {
+      "checkpoint_numbers": [
+        0,
+        1
+      ],
+      "created_blocks": 0,
+      "deleted_blocks": 0,
+      "final_rank_counts": [
+        8
+      ],
+      "final_topology_hash": 2955283251572180930,
+      "meshblocks": 1,
+      "name": "serial_single",
+      "root": "/private/tmp/cr-rel-phase8-prefence-expanded/serial_single"
+    }
+  },
+  "status": "PASS"
+}

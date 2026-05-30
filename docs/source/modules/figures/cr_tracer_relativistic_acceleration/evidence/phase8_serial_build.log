@@ -1,0 +1,6 @@
+[  2%] Built target kokkossimd
+[ 12%] Built target kokkoscore
+[ 13%] Built target kokkoscontainers
+[ 13%] Built target AlwaysCheckGit
+[ 14%] Built target impl_git_version
+[100%] Built target athena

@@ -1,0 +1,8 @@
+cr_relativistic_migration_runtime_phase8_pre_fence_smoke PASS
+  frozen criteria validated: 57
+  executable serial subset: one-block/multiblock typed-v2 parity, owner changes=6, periodic wraps=6
+  expected runtime fences rejected: 6
+  gap: Positive-cycle MPI, static SMR, and adaptive AMR remain deliberately fenced until the parent implementation removes the Phase-8 runtime fence.
+  gap: The current C++ reader rejects a changed-rank restart deterministically, but the changed topology diagnostic preempts the exact DR-009 rank-count diagnostic required by the post-fence qualifier.
+  JSON report: docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_pre_fence_metrics.json
+  preserved runtime cases: /private/tmp/cr-rel-phase8-prefence-expanded

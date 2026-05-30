@@ -1,0 +1,49 @@
+branch=feature/CR_tracers_relativistic_acceleration
+head=addd12d4e26f7d8b275165b6be7b364d39f22a43
+origin_head=addd12d4e26f7d8b275165b6be7b364d39f22a43
+prerequisite=64a4d1be8da1c22d1328cc47280195b3747fa0ab
+development=c6a73b08e60807f8b925164c5e7edd5cb820c8ae
+
+recent_commits:
+addd12d4 (HEAD -> feature/CR_tracers_relativistic_acceleration, origin/feature/CR_tracers_relativistic_acceleration) particles: qualify relativistic CR migration infrastructure
+9eba722e outputs: qualify relativistic particle diagnostics
+7fbd841a outputs: version relativistic particle restart schema
+1faf0c8a particles: add acceleration-aware relativistic subcycling
+4d0fef6e particles: add bounded relativistic ideal-MHD acceleration
+02f85f2a feat: add prescribed relativistic CR pusher
+812aef13 test: qualify relativistic CR live-grid gather diagnostics
+56dcbf3f feat: add shared relativistic CR trilinear gather helper
+be24fa12 feat: add fail-closed relativistic CR parser contract
+0687973f feat: add relativistic CR state helpers
+04090c1a docs: freeze relativistic CR acceleration phase 0 evidence
+3984b57e docs: add relativistic CR acceleration implementation guide
+64a4d1be (origin/feature/CR_tracers_followup_architecture, feature/CR_tracers_followup_architecture) Expand CR tracer accuracy validation and MPI robustness
+8c041244 Add per-test CR tracer trajectory figures
+ea71142f Add qualitative CR tracer accuracy figures
+106f541b Add CR tracer accuracy validation suite
+
+status_before_phase8_evidence_seal:
+ M docs/source/modules/cr_tracer_relativistic_acceleration_ledger.md
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_branch_snapshot.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_command_log.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_diff_check.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_legacy_accuracy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_legacy_accuracy_mpicpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_legacy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_legacy_mpicpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_migration_metrics.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_migration_runtime.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_mpicpu_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_mpicpu_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_negative_controls.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_parser_contract.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_pre_fence_metrics.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_pre_fence_negative_controls.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_pre_fence_registration.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_pre_fence_runtime.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_registration.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_replay_bundle.tar.gz
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_replay_bundle_inventory.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_replay_bundle_verify.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_serial_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_serial_build.log

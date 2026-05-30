@@ -1,0 +1,15 @@
+rejected tampered criteria digest: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase8-negative-w0knfraw/tampered-criteria.json: frozen criteria SHA-256 mismatch
+rejected reordered criterion IDs: /var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/cr-rel-phase8-negative-w0knfraw/reordered-criteria.json: criterion ID sequence does not match the frozen registration
+rejected typed-v2 width loss: particle (0, 7): typed-v2 real width 21 != 22
+rejected non-finite typed-v2 state: particle (0, 7): non-finite typed-v2 real state
+rejected duplicate typed identity: duplicate particle identity (0, 6)
+rejected lost typed identity: particle identities ((0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (0, 6)) != expected ((0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (0, 6), (0, 7))
+rejected physical-state parity drift: negative parity: (0, 0) IPX changed: 0.0 != 0.001
+rejected periodic-wrap witness loss: particle (0, 0): wrapped coordinate disagrees with displacement
+rejected runtime criterion weakening: P8-01: typed_v2_real_field_count=21 does not satisfy == 22
+rejected prescribed sampled-field witness weakening: P8-03: prescribed_sampled_field_max_real_error=0.001 does not satisfy <= 2e-12
+rejected static-SMR multilevel exchange witness weakening: P8-19: static_smr_mpi_exchange_sent=0 does not satisfy >= 1
+rejected adaptive off-rank remap witness weakening: P8-27: adaptive_device_off_rank_remap_sent=0 does not satisfy >= 1
+rejected missing AMR-remap performance witness: Athena log lacks Particle performance 'amr_remap' counters
+rejected initialization-only AMR-remap performance witness: Athena log lacks setup-complete marker
+CR relativistic Phase-8 mutation controls passed: 14 rejected

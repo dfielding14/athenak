@@ -2,16 +2,16 @@
 orphan: true
 ---
 
-# CR Tracer Relativistic Acceleration Phase 0 Ledger
+# CR Tracer Relativistic Acceleration Living Ledger
 
 ## Ledger Status
 
-This is the Phase 0 implementation ledger required by
-`cr_tracer_relativistic_acceleration_implementation_guide.md`.  It freezes the
-audited baseline, opens the mandatory decision records, and records missing
-evidence without authorizing production-code edits.
+This is the living implementation ledger required by
+`cr_tracer_relativistic_acceleration_implementation_guide.md`.  It began as the
+Phase-0 audited baseline and now records each accepted implementation milestone,
+decision, reflection gate, independent review, and retained evidence seal.
 
-The statuses in this initial draft are intentionally conservative:
+The historical Phase-0 entries use these intentionally conservative statuses:
 
 - `selected`: a Phase 0 working selection defensible from the current code and
   guide.  It is not an accepted checkpoint and does not open a production edit
@@ -25,16 +25,16 @@ The statuses in this initial draft are intentionally conservative:
 | --- | --- | --- |
 | Ledger date | `2026-05-30` | Record the date of each accepted update. |
 | Working branch | `feature/CR_tracers_relativistic_acceleration` | Stop if the working branch changes unexpectedly. |
-| Working branch HEAD at latest accepted commit | `02f85f2a1b45b7d9f93bff42ac24ed0b691f5ef8` | Refresh after every accepted commit. |
+| Working branch HEAD at latest accepted commit | `addd12d4e26f7d8b275165b6be7b364d39f22a43` | Refresh after every accepted commit. |
 | Frozen feature base | `64a4d1be8da1c22d1328cc47280195b3747fa0ab` from `feature/CR_tracers_followup_architecture` | Change only through an accepted `DR-000` update. |
 | Intended eventual integration target | `origin/development` at `c6a73b08e60807f8b925164c5e7edd5cb820c8ae` | Refresh the target SHA and merge-tree audit after target updates and before handoff. |
-| Current implementation phase | `Phase 5: acceleration-aware subcycling and outer timestep refresh` | Keep the temporal claim explicitly first-order for evolving fields until a separately reviewed stage-coupled widening exists. |
-| Allowed write manifest | Phase-5 surfaces only after the Phase-4b milestone commit: `src/particles/particles_pushers.cpp`, `src/particles/particles_tasks.cpp`, `src/pgen/part_random.cpp`, timestep-focused tests and evidence, and conditionally `src/mesh/mesh.cpp` after explicit ownership review | Keep restart serialization, outputs, MHD stage implementations, AMR infrastructure, CT EMF reuse, and wider migration qualification unchanged. |
-| Last accepted checkpoint | `CP-4 Solver Coupling PROCEED`: experimental frozen-`t^n` ideal-MHD opening accepted after corrected rebound evidence, orientation-sensitive oracle hardening, and final sealed independent recheck | Record each milestone commit before opening the next phase. |
-| Open blocking findings | Downstream `BF-009`, `BF-014`, backend qualification, restart, output, solver-coupling, subcycling, timestep-refresh, and migration obligations remain open for their owning phases | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
-| CPU/MPI qualification status | Phase-4a accepted serial scope: parser `92 passed`; prescribed runtime `38/38`; legacy CPU plus accuracy `32 passed`; legacy MPI CPU plus accuracy `9 passed`; Phase-3 diagnostic-only serial and MPI replay ladder passes; style `2 passed`; production MPI/SMR/AMR remains deliberately fail-closed; single precision remains blocked by inherited repository narrowing errors | Rerun and archive qualification at each accepted milestone. |
+| Current implementation phase | `Phase 9: GPU disposition, documentation, public overlay, and final handoff` | Keep the temporal claim explicitly first-order for evolving fields until a separately reviewed stage-coupled widening exists. |
+| Allowed write manifest | Phase-9 documentation and retained qualification evidence only: `docs/source/modules/particles.md`, bounded handoff documents, append-only ledger updates, and evidence artifacts | Do not widen solver-coupled MPI/SMR/AMR execution, nonperiodic boundaries, changed-rank redistribution, or physics semantics in the handoff phase. |
+| Last accepted checkpoint | `CP-6 AMR And MPI PROCEED`: bounded periodic `prescribed_test` MPI, same-level multiblock, static-SMR, adaptive-AMR, and same-topology continuation qualification accepted on `addd12d4` after source and evidence rebounds | Record each milestone commit before opening the next phase. |
+| Open blocking findings | Phase-9 docs overlay, GPU disposition, final evidence archive, `RG-010`, and `CP-7 Final Cold Review` remain open | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
+| CPU/MPI qualification status | Phase-8 accepted source `addd12d4`: frozen registration `62/62`; mutation controls `17/17` rejected; migration replay `62/62` across `21` cases; parser `172/172`; legacy CPU plus accuracy `20/20` and `12/12`; legacy MPI CPU plus accuracy `4/4` and `5/5`; bounded periodic `prescribed_test` MPI/SMR/AMR opening accepted; solver-coupled `mhd_ideal` MPI/SMR/AMR remains fail-closed; single precision remains blocked by inherited repository narrowing errors | Rerun and archive qualification at each accepted milestone. |
 | GPU qualification status | Not started; unavailable on this workstation | GPU qualification is optional for `MERGE READY` on this workstation, but it remains a separate unqualified residual risk.  Do not claim `GPU QUALIFIED` without accelerator evidence on an accepted SHA. |
-| Merge-ready status | Not eligible | Requires the guide's checkpoint sequence, including `CP-4 Solver Coupling` and `CP-7 Final Cold Review`. |
+| Merge-ready status | Not eligible | Requires Phase-9 qualification, public docs overlay, `RG-010`, and `CP-7 Final Cold Review`. |
 
 ## Historical Branch And Base Facts At Ledger Creation
 
@@ -4302,3 +4302,116 @@ before the fixes are accepted.
   - accept the corrected source rebound for a source-bound milestone commit;
   - rebuild and rerun the Phase-8 evidence package on that accepted source SHA
     before recording `CP-6` and `RG-009`.
+
+## CP-6 AMR And MPI Seal
+
+- Date: 2026-05-30
+- Accepted source SHA:
+  `addd12d4e26f7d8b275165b6be7b364d39f22a43`
+- Verdict: `PROCEED`.
+- Bounded production opening:
+  - `relativistic_hc` plus `relativistic_field_source=prescribed_test` is open
+    for periodic MPI, same-level multiblock, static SMR, and adaptive AMR
+    qualification;
+  - solver-coupled `relativistic_field_source=mhd_ideal` remains fail-closed for
+    MPI, SMR, and AMR;
+  - nonperiodic execution, changed-rank redistribution, GPU execution, and
+    scientific production-readiness claims remain deferred.
+- Accepted-SHA evidence:
+  - serial and MPI builds passed;
+  - frozen amended registration validated `62` ordered criteria with SHA-256
+    `add2ab12fbaf7f669e8e4eecc9e8f9cb0d581f06947c7e39876f934239708b74`;
+  - mutation controls rejected `17` deliberate weakenings;
+  - complete replay passed `62/62` criteria across `21` isolated runtime cases;
+  - MPI rank ladder `1`, `2`, `4`, and `8` passed with particle-empty-rank
+    evidence;
+  - periodic wrap, nonzero prescribed field, momentum-change, and work
+    witnesses passed;
+  - static-SMR device-table and host-tree fixtures each recorded exact physical
+    parity, off-rank movement, and one explicit cross-level transition;
+  - adaptive moving-box refinement and derefinement passed for both remap
+    implementations with off-rank sends and fine-uniform reference agreement;
+  - restart-after-AMR continuations passed for both remap implementations with
+    exact physical-state agreement;
+  - schedule-matched same-topology continuations before and after migration
+    passed exactly;
+  - changed-rank typed-v2 continuation rejected with the exact rank-count
+    diagnostic before the derivative topology diagnostic;
+  - parser contract passed `172/172`;
+  - retained legacy particle suites passed `20/20`, `12/12`, `4/4`, and `5/5`.
+- Durable replay package:
+  - `phase8_replay_bundle.tar.gz` retains selected static-SMR, adaptive-AMR,
+    restart-after-AMR, same-topology continuation, and changed-rank rejection
+    roots;
+  - its sorted archive inventory is retained;
+  - fresh extraction and offline typed-v2 decode passed for `29` retained
+    checkpoints.
+
+## DR-061: Phase-8 Durable Replay Decoder Completeness
+
+- Date: 2026-05-30
+- Status: corrected verifier replay and evidence rebound passed
+- Fresh evidence-adversary `HOLD` finding:
+  - the durable replay tarball correctly retained the changed-rank rejection
+    root, but the retained offline decoder enumerated only the positive static,
+    adaptive, and same-topology continuation roots;
+  - the archive therefore contained `29` valid typed-v2 checkpoints while the
+    retained decoder proved only `28`.
+- Corrected choice:
+  - add `mpi_rank_count_change_rejection` to the retained offline decode list;
+  - update the CP-6 candidate count to `29`;
+  - regenerate the direct path-sorted SHA-256 manifest and verification log;
+  - require a fresh evidence rebound after the corrected verifier replay.
+- Alternative rejected:
+  - accepting the adversary's independent decode without correcting the
+    retained executable evidence would leave the seal weaker than the archive
+    it describes.
+- Inflection point:
+  - stop again if the changed-rank root fails typed-v2 decoding or if the fresh
+    evidence rebound identifies another durability or provenance gap.
+
+## Phase-8 Evidence-Adversary Rebound Sequence
+
+- Date: 2026-05-30
+- First evidence-adversary verdict: `HOLD`
+  - the durable tarball retained the changed-rank rejection root, but the
+    retained offline decoder omitted that root and proved only `28` of its `29`
+    typed-v2 checkpoints.
+- Correction:
+  - add the omitted changed-rank rejection root to the retained decoder;
+  - regenerate the replay verification log and evidence manifest.
+- Second evidence-adversary verdict: `HOLD`
+  - corrected replay durability, provenance, executable assertions, and
+    retained logs passed;
+  - the living-ledger header still described a stale Phase-5 state, and
+    `DR-061` still said pending after its verifier replay passed.
+- Correction:
+  - refresh the living-ledger control header for the accepted Phase-8 scope;
+  - mark `DR-061` complete;
+  - require one final ledger-focused read-only rebound before committing the
+    Phase-8 seal.
+
+## RG-009: Is Infrastructure Noise Hiding Physics Error?
+
+- Date: 2026-05-30
+- Verdict: `PROCEED`.
+- Reassessment:
+  - kernel-only, gather, coupled, subcycle, restart, diagnostic, parser, and
+    legacy milestones remained sealed before the bounded migration opening;
+  - new migration-only failures were isolated in fixture scheduling,
+    diagnostic expectations, parser grammar, and witness strength rather than
+    hidden by relaxed physical tolerances;
+  - every discovered fixture defect stopped the replay and produced a decision
+    record before qualification resumed;
+  - accepted adaptive and restart continuations now agree exactly, so the
+    migration infrastructure does not introduce a detectable physics drift in
+    the qualified prescribed-test scope.
+- Deferred risks:
+  - solver-coupled `mhd_ideal` MPI, SMR, and AMR widening remains closed;
+  - GPU qualification remains unavailable locally and unclaimed;
+  - changed-rank redistribution remains rejected pending separate design;
+  - public documentation overlay and final cold review remain Phase-9 work.
+- Inflection point:
+  - require a fresh evidence-adversary `PROCEED` before sealing CP-6;
+  - if the evidence review finds a source-bound provenance, replay durability,
+    or executable-oracle gap, reopen Phase 8 rather than advancing to Phase 9.

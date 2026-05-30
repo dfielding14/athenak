@@ -1,0 +1,62 @@
+Phase-8 bounded prescribed-test migration qualification command log
+Accepted source SHA: addd12d4e26f7d8b275165b6be7b364d39f22a43
+Date: 2026-05-30
+
+Source-bound build and oracle validation:
+
+  cmake --build /tmp/athenak-rel-phase6-build -j2
+  cmake --build /tmp/athenak-rel-phase6-mpicpu-build -j2
+  python3 scripts/particles/cr_relativistic_migration_runtime_inspect.py \
+    --check-registration
+  python3 scripts/particles/cr_relativistic_migration_negative_controls.py
+  git diff --check
+
+Source-bound complete runtime replay:
+
+  rm -rf /tmp/cr-rel-phase8-runtime-cases
+  python3 scripts/particles/cr_relativistic_migration_runtime_inspect.py \
+    --binary /tmp/athenak-rel-phase6-build/src/athena \
+    --mpi-binary /tmp/athenak-rel-phase6-mpicpu-build/src/athena \
+    --work-dir /tmp/cr-rel-phase8-runtime-cases \
+    --json docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase8_migration_metrics.json
+
+Retained parser and legacy regressions:
+
+  cd tst
+  python run_test_suite.py \
+    --test test_suite/particles/test_particles_cr_relativistic_contract_cpu.py \
+    --cpu
+  python run_test_suite.py \
+    --test test_suite/particles/test_particles_cr_cpu.py \
+    --cpu
+  python run_test_suite.py \
+    --test test_suite/particles/test_particles_cr_accuracy_cpu.py \
+    --cpu
+  python run_test_suite.py \
+    --test test_suite/particles/test_particles_cr_mpicpu.py \
+    --mpicpu
+  python run_test_suite.py \
+    --test test_suite/particles/test_particles_cr_accuracy_mpicpu.py \
+    --mpicpu
+
+Durable replay archive:
+
+  Archive the selected accepted-SHA runtime roots from
+  /tmp/cr-rel-phase8-runtime-cases into phase8_replay_bundle.tar.gz.
+  List the sorted tar inventory in phase8_replay_bundle_inventory.txt.
+  Extract the tarball into a fresh temporary directory.
+  Compare its sorted inventory byte-for-byte with the retained inventory.
+  Import scripts/particles/cr_relativistic_migration_runtime_inspect.py.
+  Decode all typed-v2 checkpoints from the retained static-SMR, adaptive-AMR,
+  restart-after-AMR, same-topology continuation, and changed-rank rejection
+  roots.
+
+Evidence seal:
+
+  Copy the serial and MPI CMakeCache.txt files into the evidence directory.
+  Capture branch, accepted source, prerequisite, origin, development target,
+  recent commits, and pre-seal status in phase8_branch_snapshot.txt.
+  Hash every retained Phase-8 evidence file except the manifest and its verify
+  log into phase8_evidence_sha256.txt.
+  Run shasum -a 256 -c phase8_evidence_sha256.txt and retain the result in
+  phase8_evidence_verify.log.

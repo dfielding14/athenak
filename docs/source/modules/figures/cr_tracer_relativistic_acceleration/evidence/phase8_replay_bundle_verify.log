@@ -1,0 +1,13 @@
+mpi_4_static_smr: checkpoints=2 particles=15
+mpi_4_static_smr_host_tree: checkpoints=2 particles=15
+mpi_4_adaptive_device_table: checkpoints=2 particles=8
+mpi_4_adaptive_device_table_long_reference: checkpoints=2 particles=8
+mpi_4_adaptive_device_table_continuation_after_amr: checkpoints=2 particles=8
+mpi_4_adaptive_host_tree: checkpoints=2 particles=8
+mpi_4_adaptive_host_tree_long_reference: checkpoints=2 particles=8
+mpi_4_adaptive_host_tree_continuation_after_amr: checkpoints=2 particles=8
+mpi_4_continuation_source: checkpoints=5 particles=8
+mpi_4_long_reference: checkpoints=5 particles=8
+mpi_4_continuation_after_migration: checkpoints=2 particles=8
+mpi_rank_count_change_rejection: checkpoints=1 particles=8
+phase8_replay_bundle_verify PASS decoded_checkpoints=29
