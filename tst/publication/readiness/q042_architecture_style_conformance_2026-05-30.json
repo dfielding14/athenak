@@ -1,0 +1,157 @@
+{
+  "record_type": "q042_architecture_style_conformance",
+  "date": "2026-05-30",
+  "qualification_effect": "bounded_host_evidence_only",
+  "subject_commit": "3bcd3f21e4f5439e655d977854f03b287fa814b9",
+  "scope": "Review of the uncommitted AthenaK PIC/MHD/restart/mesh implementation batch. This record supports Q-042 architecture and style review but does not qualify Frontier GPU, MPI-runtime, scientific-reproduction, or restart-failure-matrix claims.",
+  "reviewed_surfaces": [
+    {
+      "surface": "particles",
+      "files": [
+        "src/particles/particles.cpp",
+        "src/particles/particles.hpp",
+        "src/particles/particles_moments.cpp",
+        "src/particles/particles_pushers.cpp",
+        "src/particles/particles_tasks.cpp"
+      ],
+      "disposition": "conforms_after_scoped_cleanup",
+      "notes": "Runtime controls are explicit and startup-validated; hot loops remain Kokkos kernels; adaptive delta-f is inserted through the existing TaskList; deposited moments and diagnostics retain particle-module ownership."
+    },
+    {
+      "surface": "mhd",
+      "files": [
+        "src/mhd/mhd.hpp",
+        "src/mhd/mhd_tasks.cpp"
+      ],
+      "disposition": "conforms",
+      "notes": "Wave damping and expanding-box maps are staged through existing MHD task dependencies. CT current injection remains in MHD::EFieldSrc and paper-mode isolation is guarded by the particle runtime model."
+    },
+    {
+      "surface": "mesh_refinement",
+      "files": [
+        "src/mesh/mesh_refinement.cpp",
+        "src/mesh/mesh_refinement.hpp"
+      ],
+      "disposition": "conforms",
+      "notes": "Particle-aware AMR cost is opt-in with a zero-cost default, feeds the existing Mesh::LoadBalance interface, and runs on the host AMR control path. Particle retained state is refreshed through Particles::UpdateAfterAMR."
+    },
+    {
+      "surface": "restart_and_outputs",
+      "files": [
+        "src/main.cpp",
+        "src/outputs/io_wrapper.cpp",
+        "src/outputs/io_wrapper.hpp",
+        "src/outputs/restart.cpp",
+        "src/outputs/restart_utils.cpp",
+        "src/outputs/restart_utils.hpp",
+        "src/outputs/track_prtcl.cpp",
+        "src/outputs/vtk_prtcl.cpp"
+      ],
+      "disposition": "conforms_with_scoped_reliability_helper",
+      "notes": "Restart schema state remains integrated through the existing writer, loader, and IOWrapper surfaces. Particle diagnostics extend existing VTK and tracking outputs. restart_utils isolates atomic promotion and completion-marker durability helpers."
+    },
+    {
+      "surface": "problem_generators",
+      "files": [
+        "src/pgen/part_random.cpp",
+        "src/pgen/pgen.cpp",
+        "src/pgen/tests/pic_parallel_shock.cpp"
+      ],
+      "disposition": "conforms",
+      "notes": "Restart load and physical-state initialization remain in established problem-generator paths with explicit mode guards."
+    }
+  ],
+  "corrections_applied_during_review": [
+    {
+      "id": "Q042-C01",
+      "files": [
+        "src/main.cpp",
+        "src/mesh/mesh_refinement.cpp"
+      ],
+      "change": "Removed inherited but unused headeroffset and ppart declarations exposed by touched-file warning review."
+    },
+    {
+      "id": "Q042-C02",
+      "files": [
+        "src/particles/particles_pushers.cpp"
+      ],
+      "change": "Hoisted expanding-box timestep scale factors out of the per-particle Boris kernel and bypassed their evaluation when expanding-box mode is disabled."
+    },
+    {
+      "id": "Q042-C03",
+      "files": [
+        "src/particles/particles.hpp",
+        "src/particles/particles_tasks.cpp"
+      ],
+      "change": "Replaced adaptive-cadence long long state with std::int64_t to satisfy fixed-width integer lint policy."
+    },
+    {
+      "id": "Q042-C04",
+      "files": [
+        "src/mesh/mesh_refinement.hpp",
+        "src/mhd/mhd.hpp"
+      ],
+      "change": "Added the direct vector include required by the mesh header and removed inherited whitespace debt from touched headers."
+    }
+  ],
+  "formal_accuracy_or_efficiency_exceptions": [],
+  "scoped_reliability_extension": {
+    "surface": "src/outputs/restart_utils.cpp",
+    "disposition": "accepted_for_bounded_host_implementation_review",
+    "reason": "Atomic checkpoint promotion and durable completion metadata require file fsync, directory fsync, and rename operations not represented by the previous IOWrapper API.",
+    "scope_limit": "The helper is isolated under outputs and called by the existing restart publication path. Frontier filesystem interrupted-write and write-failure qualification remain open."
+  },
+  "style_checks": {
+    "targeted_vendored_cpplint": {
+      "status": "pass",
+      "diagnostics": 0,
+      "scope": "All 21 touched or newly added C++ source/header files with the repository-wide build/include_subdir convention filtered as baseline debt"
+    },
+    "repository_vendored_cpplint_baseline": {
+      "status": "pre_existing_debt_recorded",
+      "diagnostics": 1453,
+      "method": "Non-mutating vendored cpplint invocation equivalent to the repository wrapper cpplint stage. The wrapper itself was not invoked because it downloads, overwrites, and removes the tracked cpplint.py file."
+    },
+    "repository_custom_baseline": {
+      "tab_lines": 83,
+      "double_closing_brace_lines_excluding_comments": 4,
+      "indented_pragma_lines": 0,
+      "trailing_space_lines": 466
+    },
+    "touched_file_checks": {
+      "git_diff_check": "pass",
+      "tab_lines": 0,
+      "cpp_lines_over_90_columns": 0,
+      "python_compile": "pass"
+    }
+  },
+  "build_checks": [
+    {
+      "configuration": "Debug serial",
+      "status": "pass",
+      "captured_warning_lines": 0
+    },
+    {
+      "configuration": "Debug MPI",
+      "status": "pass",
+      "captured_warning_lines": 0,
+      "runtime_rank_launch": "not_run"
+    }
+  ],
+  "representative_host_runtime_passes": [
+    "pic_relativistic_gyro_paper",
+    "pic_mhd_expanding_box_uniform",
+    "pic_adaptive_deltaf_smoke",
+    "pic_ion_neutral_friction_smoke",
+    "pic_extended_hall_ct_smoke",
+    "pic_amr_shock_lb_smoke"
+  ],
+  "residual_risks": [
+    "Frontier HIP/GPU compile and runtime evidence is not part of this sidecar.",
+    "MPI-enabled compilation passes, but adaptive-delta-f reductions and particle-aware AMR cost all-reduce still require controlled multi-rank runtime evidence.",
+    "Atomic restart publication still requires interrupted-write, truncated-restart, write-failure, timeout, recovery, and Frontier-filesystem qualification.",
+    "Repository-wide style debt remains outside this scoped implementation batch.",
+    "External reviewer disposition remains pending."
+  ],
+  "q042_disposition": "host_architecture_and_touched_style_review_passed_with_residual_frontier_and_external_review_gates"
+}

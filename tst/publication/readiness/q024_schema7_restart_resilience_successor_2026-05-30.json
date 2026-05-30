@@ -1,0 +1,49 @@
+{
+  "record_type": "q024_schema7_restart_resilience_successor",
+  "date": "2026-05-30",
+  "gate": "Q-024",
+  "qualification_effect": "bounded_serial_host_schema7_successor_evidence_only",
+  "predecessor_chronology_record": "tst/publication/readiness/q024_schema6_restart_and_shock_controls_successor_2026-05-30.json",
+  "scope": "Successor chronology record for restart schema version 7. The schema-6 restart and shock-control sidecar remains preserved as predecessor evidence. This record links bounded schema-7 provenance, restart-preservation and loader-contract evidence plus serial-host restart fault injection without closing per-rank MPI, node-loss, scheduler-pretimeout, Frontier-filesystem, or external-review gates.",
+  "schema7_successor_evidence": {
+    "source_record": "tst/publication/readiness/q016_particle_provenance_spectra_local_2026-05-30.json",
+    "restart_schema_contract": 7,
+    "persistent_integer_fields": [
+      "gid",
+      "ptag",
+      "species",
+      "cr_source"
+    ],
+    "persistent_real_fields": [
+      "macro_weight",
+      "birth_time",
+      "deltaf_f0",
+      "deltaf_weight"
+    ],
+    "recorded_local_checks": {
+      "typed_fixture_regression": "passed locally in the bounded Q-016 successor",
+      "live_serial_restart_regression": "passed locally in the bounded Q-016 successor with exact provenance preservation, observed MeshBlock migration, and independent weighted-spectrum reconstruction",
+      "restart_writer_loader_contract": "writer and both loaders use particles::Particles::PIC_RESTART_SCHEMA_VERSION",
+      "restart_safety_guards": "passed locally in the bounded Q-016 successor",
+      "adaptive_deltaf_smoke": "passed locally in the bounded Q-016 successor",
+      "schema_mutation_rejection": "passed locally with deterministic loader rejection",
+      "short_write_injection": "passed locally with no final artifact publication",
+      "seek_failure_injection": "passed locally with no final artifact publication",
+      "dev_full_storage_failure": "passed locally with no final artifact publication",
+      "killed_writer_interruption": "passed locally with non-empty partial residue, no replacement final artifact, and prior checkpoint restartability",
+      "soft_wallclock_continuation_parity": "passed locally by continuing from the observed host-load-dependent stop cycle to observed_cycle plus two and comparing against an uninterrupted control"
+    }
+  },
+  "preserved_schema6_boundary": {
+    "status": "predecessor_chronology_retained",
+    "record": "tst/publication/readiness/q024_schema6_restart_and_shock_controls_successor_2026-05-30.json",
+    "note": "Schema-6 continuation-control evidence remains historical predecessor evidence and must not be rewritten as schema-7 execution evidence."
+  },
+  "limitations": [
+    "The bounded schema-7 Q-016 successor is serial-host evidence only and is not a full Q-024 resilience closure.",
+    "Per-rank MPI publication, node-loss, scheduler-pretimeout, and Frontier-filesystem drills remain open.",
+    "MPI decomposition and Frontier HIP parity remain open.",
+    "External reviewer disposition remains pending."
+  ],
+  "q024_disposition": "bounded_serial_host_schema7_restart_fault_matrix_recorded_full_q024_and_q036_gates_remain_open"
+}

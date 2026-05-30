@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "athenak_pic_q022_tolerance_table.schema.json",
+  "title": "AthenaK PIC Q-022 comparison tolerance table",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "comparison_id",
+    "freeze_status",
+    "rows",
+    "reviewer_disposition"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "comparison_id": {"type": "string", "minLength": 1},
+    "freeze_status": {
+      "enum": ["draft_open", "frozen_before_qualifying_run"]
+    },
+    "rows": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "observable",
+          "units",
+          "reference_value_or_extraction",
+          "expected_discretization_trend",
+          "absolute_tolerance",
+          "relative_tolerance",
+          "tolerance_rationale",
+          "cpu_mpi_gpu_reduction_variation",
+          "failure_artifact_path"
+        ],
+        "properties": {
+          "observable": {"type": "string", "minLength": 1},
+          "units": {"type": "string", "minLength": 1},
+          "reference_value_or_extraction": {"type": "string", "minLength": 1},
+          "expected_discretization_trend": {"type": "string", "minLength": 1},
+          "absolute_tolerance": {"type": "number", "minimum": 0},
+          "relative_tolerance": {"type": "number", "minimum": 0},
+          "tolerance_rationale": {"type": "string", "minLength": 1},
+          "cpu_mpi_gpu_reduction_variation": {"type": "string", "minLength": 1},
+          "failure_artifact_path": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": true
+      }
+    },
+    "reviewer_disposition": {
+      "enum": ["pending external review", "qualified", "rejected", "limited"]
+    }
+  },
+  "additionalProperties": true
+}

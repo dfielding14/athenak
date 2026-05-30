@@ -1,0 +1,26 @@
+{
+  "record_type": "storage_artifact_lifecycle_successor",
+  "date": "2026-05-30",
+  "qualification_effect": "control_record_correction_only",
+  "scope": "Successor chronology record for the user-selected Orion-only bulk-evidence policy. Project Home remains an operational ledger and immutable control-plane mirror only. The historical Project Home private rendered-PDF path is superseded by the Orion policy copy and does not authorize new Project Home bulk artifacts.",
+  "bulk_evidence_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+  "project_home_mirror_root": "/ccs/proj/ast207/proj-shared/PIC",
+  "project_home_role": "small_append_only_ledger_and_immutable_control_plane_mirror_only",
+  "historical_project_home_pdf": {
+    "status": "chronology_only_superseded_by_orion_policy_copy",
+    "artifact_id": "SUN_BAI_2023_ARXIV_V1_RENDERED_PDF"
+  },
+  "orion_pdf_copy": {
+    "status": "selected_policy_copy",
+    "artifact_id": "SUN_BAI_2023_ARXIV_V1_RENDERED_PDF_ORION_COPY"
+  },
+  "frontier_admission_policy": {
+    "checked_in_source_policy_role": "fail_closed_successor_staging_policy",
+    "historical_predecessor_f0": "registered_job_4744225_consumed_and_reconciled",
+    "new_submissions": "paused_pending_successor_control_plane_repair_and_independent_reaudit"
+  },
+  "limitations": [
+    "Orion-only retention is user-directed and does not provide institutional or approved off-site durable archival.",
+    "Terminal durability-risk disposition remains pending external review."
+  ]
+}

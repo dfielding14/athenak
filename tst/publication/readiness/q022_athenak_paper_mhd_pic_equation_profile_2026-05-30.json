@@ -1,0 +1,30 @@
+{
+  "record_type": "q022_athenak_paper_mhd_pic_equation_profile",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-022",
+  "qualification_effect": "local_equation_profile_only",
+  "disposition": "open",
+  "athenak_physical_mode": "paper_mhd_pic",
+  "paper_reference": "tst/publication/readiness/q022_sun_bai_repository_reference_manifest_2026-05-30.json",
+  "runtime_contract": "docs/source/engineering/pic_mhd_model_contract.md",
+  "matched_equations": [
+    "Cosmic rays store mass-normalized momentum and derive relativistic velocity and kinetic energy with configurable artificial light speed C.",
+    "Paper mode retains ideal-MHD induction cE = -u x B.",
+    "Particle feedback enters the MHD carrier through conservative momentum and energy exchange.",
+    "True delta-f mode evolves perturbation weights and deposits weighted perturbation moments.",
+    "The bounded expanding-box path stores divergence-preserving comoving face flux and derives physical MHD views."
+  ],
+  "intentional_exclusions": [
+    "Direct cosmic-ray-current Hall induction is excluded from paper_mhd_pic and belongs to the separately named extended_mhd_pic path.",
+    "Entity electromagnetic Maxwell evolution is not an AthenaK MHD-PIC oracle.",
+    "Unqualified active-MHD expanding-box compositions remain fail-closed.",
+    "Engineering proxy decks do not become paper reproductions by sharing a runtime executable."
+  ],
+  "open_before_cross_code_use": [
+    "Freeze one reference-specific equation and normalization map per executed comparison.",
+    "Ingest reference datasets with checksums, redistribution basis, and extraction uncertainty.",
+    "Freeze numeric tolerances before qualifying output inspection.",
+    "Obtain external reviewer disposition."
+  ]
+}

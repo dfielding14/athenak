@@ -1,0 +1,826 @@
+{
+  "record_type": "q023_local_preregistration_profiles",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-023",
+  "qualification_effect": "local_preregistration_choices_only",
+  "disposition": "open",
+  "scope": "Normative local profiles for Q-023 campaign drafts. These profiles freeze every locally decidable seed, sampling, grid, analysis-window, estimator, exclusion, tolerance, analyzer-candidate, and independent-recompute choice before qualifying output inspection. They do not bind a clean candidate, create missing qualifying decks or analyzers, inspect Frontier output, extract external reference data, or substitute for external review.",
+  "output_inspection_boundary": "No qualifying output may be inspected until the selected campaign draft is expanded with a clean candidate commit, clean Frontier executable checksum, qualifying input checksums, production-analysis checksums, Orion failure-artifact root, and any campaign-specific open values identified by its referenced profiles.",
+  "seed_profiles": {
+    "Q023-SEEDS-FIXED-8": {
+      "status": "frozen_before_qualifying_output_inspection",
+      "design": "fixed_sample",
+      "qualifying_seed_list": [
+        23050101,
+        23050102,
+        23050103,
+        23050104,
+        23050105,
+        23050106,
+        23050107,
+        23050108
+      ],
+      "qualifying_seed_count": 8,
+      "pilot_seed_list": [
+        23050091,
+        23050092
+      ],
+      "pilot_seed_count": 2,
+      "pilot_reuse_policy": "Pilot seeds are optional design probes only. If run, archive them and exclude them from every qualifying estimate.",
+      "paired_sensitivity_policy": "Reuse the same eight qualifying seeds across paired sensitivity points wherever the initialization semantics are comparable.",
+      "optional_seed_addition": "forbidden_without_preregistration_revision_and_candidate_dataset_invalidation"
+    }
+  },
+  "sampling_rule_profiles": {
+    "Q023-SAMPLING-FIXED-8-HOLM-BCA": {
+      "status": "frozen_before_qualifying_output_inspection",
+      "seed_profile": "Q023-SEEDS-FIXED-8",
+      "design": "fixed_sample",
+      "central_estimator": "median_across_qualifying_seeds",
+      "secondary_summaries": [
+        "arithmetic_mean",
+        "sample_standard_deviation",
+        "per_seed_values"
+      ],
+      "paired_sensitivity_estimator": "median_of_per_seed_differences",
+      "interval_method": "bca_bootstrap_across_qualifying_seeds",
+      "confidence_level": 0.95,
+      "bootstrap_resamples": 10000,
+      "bootstrap_rng_seed": 20260530,
+      "multiplicity_control": "holm_family_wise_error_rate",
+      "family_alpha": 0.05,
+      "small_sample_rule": "If BCa assumptions or eight seeds are inadequate, mark the candidate limited or rerun_required and preregister a revised design before replacement qualifying data are generated."
+    }
+  },
+  "exclusion_profiles": {
+    "Q023-EXCLUSIONS-FAIL-CLOSED": {
+      "status": "frozen_before_qualifying_output_inspection",
+      "predeclared_exclusion_categories": [
+        "scheduler_or_transport_failure_before_simulation_start",
+        "artifact_integrity_failure",
+        "declared_runtime_safety_abort",
+        "nonfinite_or_corrupt_output"
+      ],
+      "archive_every_attempt": true,
+      "finite_completed_outliers": "retain_in_qualifying_estimate",
+      "exception_rule": "Excluding a finite completed outlier requires a linked finding with physical justification, external review, candidate-dataset invalidation, and a registered rerun.",
+      "post_inspection_window_threshold_or_seed_tuning": "forbidden"
+    }
+  },
+  "grid_profiles": {
+    "Q023-GRID-PAPER-BELL-LINEAR": {
+      "status": "locally_frozen_paper_values_and_sensitivity_structure",
+      "epsilon_values": [
+        0.1,
+        0.2,
+        0.4,
+        0.6,
+        0.8
+      ],
+      "dimensions": [
+        1,
+        2,
+        3
+      ],
+      "paper_particles_per_cell": 2,
+      "particle_count_sensitivity_ppc": [
+        2,
+        8,
+        32
+      ],
+      "resolution_scale_around_paper": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "timestep_scale_around_selected_deck": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "paper_normalization": "rho=B_g=U_A=2*pi/k0=1; Omega=1e-6*k0*U_A; C=1e3*v_CR",
+      "open_values": [
+        "Freeze the exact clean-candidate input decks and their timestep values before qualifying runs."
+      ]
+    },
+    "Q023-GRID-PAPER-SHOCK": {
+      "status": "locally_frozen_paper_values_and_sensitivity_structure",
+      "dimensions": [
+        "2D3V"
+      ],
+      "domain_c_over_omega_pi": [
+        48000.0,
+        3120.0
+      ],
+      "mach_alfven": 30.0,
+      "injection_efficiency": 0.001,
+      "injection_p_over_m_over_u0": 3.16227766017,
+      "injection_start_omega0_inverse": 45.0,
+      "light_speed_over_ua0": 10000.0,
+      "grid_cell_size_c_over_omega_pi": [
+        12.0,
+        6.0,
+        3.0
+      ],
+      "grid_variants": [
+        "coarse_uniform",
+        "three_level_amr_root_12_finest_3",
+        "fine_uniform"
+      ],
+      "downstream_finest_ppc_target": 40,
+      "particle_count_scale_around_target": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "timestep_scale_around_selected_deck": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "box_size_scale": [
+        0.5,
+        1.0
+      ],
+      "open_values": [
+        "Complete the exact paper injection audit and freeze clean-candidate input checksums before qualifying runs.",
+        "A smaller box is a sensitivity point only and cannot replace the full paper domain."
+      ]
+    },
+    "Q023-GRID-PAPER-CRSI-LINEAR": {
+      "status": "locally_frozen_paper_values_and_sensitivity_structure",
+      "dimensions": [
+        "1D3V"
+      ],
+      "vd_over_ua": 2.0,
+      "mncr_over_rho0": 0.0001,
+      "light_speed_over_ua": 300.0,
+      "p0_over_m": "C",
+      "kappa": 1.25,
+      "domain_ua_over_omega0": 96000.0,
+      "dx_ua_over_omega0": [
+        20.0,
+        10.0,
+        5.0
+      ],
+      "momentum_species_bins": [
+        4,
+        8,
+        16
+      ],
+      "particles_per_cell_per_bin": [
+        128,
+        256,
+        512
+      ],
+      "timestep_scale_around_selected_deck": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "box_size_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "deltaf_fullf_control": [
+        "true_delta_f",
+        "matched_reduced_nonlinear_full_f"
+      ],
+      "open_values": [
+        "Freeze clean-candidate CRSI decks and theory-oracle checksums before qualifying runs."
+      ]
+    },
+    "Q023-GRID-PAPER-CRPAI-LINEAR": {
+      "status": "locally_frozen_paper_values_and_sensitivity_structure",
+      "dimensions": [
+        "1D3V"
+      ],
+      "xi": [
+        0.99,
+        1.01
+      ],
+      "mncr_over_rho0": 0.0001,
+      "light_speed_over_ua": 30000.0,
+      "light_speed_over_p0_over_m": 100.0,
+      "kappa": 1.75,
+      "dx_ua_over_omega0": [
+        40.0,
+        20.0,
+        10.0
+      ],
+      "momentum_species_bins": [
+        4,
+        8,
+        16
+      ],
+      "particles_per_cell_per_bin": [
+        128,
+        256,
+        512
+      ],
+      "timestep_scale_around_selected_deck": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "open_values": [
+        "Freeze clean-candidate prolate and oblate decks and theory-oracle checksums before qualifying runs."
+      ]
+    },
+    "Q023-GRID-PAPER-CRPAI-DRIVEN": {
+      "status": "locally_frozen_paper_values_and_sensitivity_structure",
+      "dimensions": [
+        "1D3V"
+      ],
+      "box_laws": [
+        "a=1+adot*t",
+        "a=(1+adot*t)^-1"
+      ],
+      "axis_scale_factors": "a1=a^2,a2=a3=a",
+      "adot_over_omega0": [
+        0.000005,
+        0.00001,
+        0.00002
+      ],
+      "light_speed_over_ua": 300.0,
+      "kappa": 1.25,
+      "resolution_scale_around_selected_deck": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "particle_count_scale_around_selected_deck": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "timestep_scale_around_selected_deck": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "momentum_species_bins": [
+        4,
+        8,
+        16
+      ],
+      "open_values": [
+        "Freeze the exact clean-candidate driven-box deck and distribution-output cadence before qualifying runs."
+      ]
+    },
+    "Q023-GRID-NONLINEAR-BELL-MINIMUM": {
+      "status": "relative_grid_frozen_exact_fiducial_open_requires_q019_deck",
+      "particle_count_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "timestep_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "resolution_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "box_size_scale": [
+        1.0,
+        2.0
+      ],
+      "dimensions": [
+        1,
+        2,
+        3
+      ],
+      "induction_modes": [
+        "paper_mhd_pic_no_hall"
+      ],
+      "open_values": [
+        "Freeze the Q-019 fiducial physical regime and exact values before qualifying runs."
+      ]
+    },
+    "Q023-GRID-NONLINEAR-DELTAF-MINIMUM": {
+      "status": "relative_grid_frozen_exact_fiducial_open_requires_claim_specific_deck",
+      "particle_count_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "timestep_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "resolution_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "box_size_scale": [
+        1.0,
+        2.0
+      ],
+      "momentum_species_bins_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "pitch_angle_bins_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "distribution_controls": [
+        "true_delta_f",
+        "matched_reduced_nonlinear_full_f"
+      ],
+      "deltaf_weight_validity_profile": "Q023-DELTAF-VALIDITY-BOUNDED",
+      "open_values": [
+        "Freeze the claim-specific fiducial regime and exact values before qualifying runs."
+      ]
+    },
+    "Q023-GRID-EXT-HALL-BELL": {
+      "status": "relative_grid_frozen_hall_normalization_and_exact_fiducial_open",
+      "particle_count_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "timestep_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "resolution_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "box_size_scale": [
+        1.0,
+        2.0
+      ],
+      "dimensions": [
+        1,
+        2,
+        3
+      ],
+      "hall_mode_controls": [
+        "paper_mhd_pic_no_hall",
+        "extended_mhd_pic_hall"
+      ],
+      "open_values": [
+        "Derive and review the CR-Hall normalization before freezing the dimensionless Hall coefficient grid.",
+        "Freeze the exact Hall Bell and shock-front decks before qualifying runs."
+      ]
+    },
+    "Q023-GRID-EXT-CRSI-IN-DAMPING": {
+      "status": "locally_frozen_reduced_scan_and_relative_qualifying_structure",
+      "local_reduced_collision_rates": [
+        0.0,
+        0.2,
+        0.7,
+        1.4
+      ],
+      "particle_count_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "timestep_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "resolution_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "box_size_scale": [
+        1.0,
+        2.0
+      ],
+      "momentum_species_bins_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "open_values": [
+        "Freeze the Plotnikov-matched applicability map, physical rate normalization, exact damped-CRSI decks, and external-reference extraction before qualifying runs."
+      ]
+    },
+    "Q023-GRID-EXT-CRPAI-TRANSPORT": {
+      "status": "locally_frozen_relative_structure_and_reduced_fixture_points",
+      "paper_adot_over_omega0": 0.00001,
+      "driving_rate_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "local_reduced_collision_rates": [
+        0.0,
+        0.2,
+        0.7,
+        1.4
+      ],
+      "adaptive_refit_interval_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "particle_count_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "timestep_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "resolution_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "box_size_scale": [
+        1.0,
+        2.0
+      ],
+      "momentum_species_bins_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "pitch_angle_bins_scale": [
+        0.5,
+        1.0,
+        2.0
+      ],
+      "deltaf_weight_validity_profile": "Q023-DELTAF-VALIDITY-BOUNDED",
+      "open_values": [
+        "Freeze the Sun-Bai-Zhao applicability map, physical damping normalization, exact transport decks, and external-reference extraction before qualifying runs."
+      ]
+    }
+  },
+  "analysis_window_profiles": {
+    "Q023-WINDOW-PAPER-BELL-LINEAR": {
+      "status": "frozen_analytic_rule_before_qualifying_output_inspection",
+      "growth_fit_rule": "Use the fixed theory-derived interval 1 <= gamma_theory*t <= 5 with at least eight snapshots; do not select a window from measured growth.",
+      "phase_measurement_interval": "pi/(k0*U_A)",
+      "failed_fit_rule": "Archive and fail the endpoint; do not choose a replacement measured-data window."
+    },
+    "Q023-WINDOW-PAPER-SHOCK": {
+      "status": "frozen_paper_snapshot_windows_before_qualifying_output_inspection",
+      "morphology_snapshot_omega0_inverse": 500.0,
+      "spectrum_snapshots_omega0_inverse": [
+        500.0,
+        1200.0
+      ],
+      "late_spectrum_slope_snapshot_omega0_inverse": 1200.0,
+      "open_values": [
+        "Freeze the downstream spectrum fit energy interval after the injection audit and before qualifying runs."
+      ]
+    },
+    "Q023-WINDOW-PAPER-CRSI-LINEAR": {
+      "status": "frozen_paper_window_before_qualifying_output_inspection",
+      "growth_fit_omega0_inverse": [
+        0.0,
+        20000.0
+      ],
+      "spectrum_snapshot_omega0_inverse": 100000.0
+    },
+    "Q023-WINDOW-PAPER-CRPAI-LINEAR": {
+      "status": "frozen_pre_output_window",
+      "growth_fit_omega0_inverse": [
+        0.0,
+        6000.0
+      ],
+      "spectrum_snapshot_omega0_inverse": 6000.0,
+      "rationale": "The paper reports the branch spectrum at t=6000 Omega0^-1 but does not state a separate fitted interval. The preregistration fixes the bounded pre-output interval [0,6000] for the qualifying analyzer."
+    },
+    "Q023-WINDOW-PAPER-CRPAI-DRIVEN": {
+      "status": "frozen_paper_snapshot_windows_no_growth_fit",
+      "growth_fit": "not_applicable_time_varying_growth_rate",
+      "spectrum_snapshot_omega0_inverse": 6000.0,
+      "anisotropy_build_up_boundary_omega0_inverse": 10000.0,
+      "distribution_evolution_end_omega0_inverse": 50000.0
+    },
+    "Q023-WINDOW-NONLINEAR-SATURATION": {
+      "status": "open_requires_excluded_pilot_or_theory_design_revision_before_qualifying_run",
+      "required_frozen_fields": [
+        "linear_to_nonlinear_transition_window",
+        "saturation_window",
+        "time_history_cadence",
+        "failed_fit_rule"
+      ],
+      "rule": "The exact physical fiducial and asymptotic timescale are not locally frozen. Use excluded pilot seeds or theory only, then revise this preregistration before generating qualifying output."
+    },
+    "Q023-WINDOW-EXTENSION-COMPARISON": {
+      "status": "open_requires_external_mapping_and_excluded_pilot_or_theory_design_revision_before_qualifying_run",
+      "required_frozen_fields": [
+        "linear_or_saturation_window",
+        "comparison_snapshot_cadence",
+        "failed_fit_rule"
+      ]
+    }
+  },
+  "tolerance_profiles": {
+    "Q023-TOL-PAPER-BELL-LINEAR": {
+      "status": "frozen_numeric_thresholds_before_qualifying_output_inspection",
+      "rows": [
+        {
+          "observable": "growth_rate_over_k0_ua",
+          "absolute_tolerance": 0.02,
+          "relative_tolerance": 0.05,
+          "rationale": "Analytical dispersion endpoint with resolution scan; both limits apply."
+        },
+        {
+          "observable": "phase_frequency_over_k0_ua",
+          "absolute_tolerance": 0.02,
+          "relative_tolerance": 0.05,
+          "rationale": "Analytical dispersion endpoint with resolution scan; both limits apply."
+        },
+        {
+          "observable": "polarization",
+          "acceptance": "expected_right_polarized_unstable_branch",
+          "rationale": "Wrong-branch growth is a failure."
+        }
+      ]
+    },
+    "Q023-TOL-PAPER-SHOCK": {
+      "status": "locally_frozen_paper_thresholds_remaining_rows_explicitly_open",
+      "rows": [
+        {
+          "observable": "upstream_magnetic_amplification_at_t500",
+          "acceptance_range": [
+            2.0,
+            4.0
+          ],
+          "rationale": "Paper text states amplification by a factor of approximately 2-4 in certain regions."
+        },
+        {
+          "observable": "downstream_late_energy_spectrum_power_law_slope_at_t1200",
+          "target": -1.5,
+          "absolute_tolerance": 0.2,
+          "rationale": "Pre-output bounded acceptance around the paper's stated late-time epsilon^-3/2 tail."
+        },
+        {
+          "observable": "amr_vs_fine_uniform_spectrum_and_morphology_residuals",
+          "status": "open_requires_qualifying_analyzer_and_paper_extraction_before_run"
+        }
+      ]
+    },
+    "Q023-TOL-PAPER-GYRORESONANT-LINEAR": {
+      "status": "frozen_numeric_thresholds_before_qualifying_output_inspection",
+      "rows": [
+        {
+          "observable": "k_by_k_growth_rate",
+          "absolute_tolerance_over_omega0": 0.000001,
+          "relative_tolerance": 0.1,
+          "rationale": "Analytical dispersion endpoint with resolution and particle-count scans; both limits apply."
+        },
+        {
+          "observable": "polarization_branch",
+          "acceptance": "paper_predicted_branch_only",
+          "rationale": "Wrong-branch amplification is a failure."
+        }
+      ]
+    },
+    "Q023-TOL-PAPER-CRPAI-DRIVEN": {
+      "status": "locally_frozen_branch_endpoints_quantitative_residuals_open",
+      "rows": [
+        {
+          "observable": "driven_branch_direction",
+          "acceptance": "expansion_oblate_right_polarized_and_compression_prolate_opposite_branch",
+          "rationale": "Paper branch direction is a categorical endpoint."
+        },
+        {
+          "observable": "spectra_anisotropy_distribution_residuals",
+          "status": "open_requires_qualifying_analyzer_and_reference_extraction_before_run"
+        }
+      ]
+    },
+    "Q023-TOL-NONLINEAR-COMPARISON": {
+      "status": "open_requires_q022_reference_extraction_equation_map_and_pre_run_freeze",
+      "rows": [
+        {
+          "observable_family": "all_primary_nonlinear_endpoints",
+          "status": "open_no_numeric_threshold_fabricated_without_reference_data_and_fiducial_regime"
+        }
+      ],
+      "no_relaxation_after_inspection": true
+    },
+    "Q023-TOL-EXT-HALL-BELL": {
+      "status": "open_requires_derived_hall_normalization_and_pre_run_freeze",
+      "local_smoke_only": {
+        "plus_and_minus_norm_min": 1e-08,
+        "odd_error_max": 0.00005,
+        "cosine_max": -0.9999
+      }
+    },
+    "Q023-TOL-EXT-CRSI-IN-DAMPING": {
+      "status": "local_reduced_threshold_frozen_plotnikov_thresholds_open",
+      "local_reduced_envelope_only": {
+        "inferred_excess_rate_absolute_error_max": 0.08,
+        "initial_amplitude_cross_case_absolute_difference_max": 1e-12
+      },
+      "qualifying_status": "open_requires_plotnikov_mapping_reference_extraction_and_pre_run_freeze"
+    },
+    "Q023-TOL-EXT-CRPAI-TRANSPORT": {
+      "status": "local_fixture_threshold_frozen_transport_thresholds_open",
+      "local_fixture_only": {
+        "particle_weight_absolute_value_max": 1.3,
+        "frequent_minus_slow_final_variance_min": 0.1
+      },
+      "qualifying_status": "open_requires_sun_bai_zhao_mapping_reference_extraction_and_pre_run_freeze"
+    }
+  },
+  "deltaf_validity_profiles": {
+    "Q023-DELTAF-VALIDITY-BOUNDED": {
+      "status": "frozen_before_qualifying_output_inspection",
+      "max_absolute_deltaf_weight": 0.5,
+      "p99_absolute_deltaf_weight": 0.35,
+      "matched_reduced_nonlinear_fullf_required": true,
+      "fullf_control_relative_tolerance": 0.15,
+      "rule": "Leaving this envelope or disagreeing with the matched reduced nonlinear full-f control outside tolerance yields limited or rejected disposition. The local adaptive-cadence fixture is not a qualifying trajectory and is not expected to satisfy this production envelope."
+    }
+  },
+  "local_analyzer_inventory": [
+    {
+      "analyzer_id": "Q023-ANALYZER-COMMON-GROWTH",
+      "path": "tst/scripts/particles/pic_analysis_utils.py",
+      "sha256": "1d7c0ed9c35020d14ec2c2c632c7203ed8b16db2abf0b06b01cf815b851d8a1a",
+      "qualification_limit": "shared_local_candidate_helpers_only_not_independent_recompute"
+    },
+    {
+      "analyzer_id": "Q023-ANALYZER-BELL-LOCAL",
+      "path": "tst/scripts/particles/pic_q005_q006_local_analytical.py",
+      "sha256": "5232240c51694c48a7d3744f27fcad209d3d97629adc8817e0f40dd258f330eb",
+      "qualification_limit": "engineering_proxy_characterization_only_qualifying_bell_analyzer_missing"
+    },
+    {
+      "analyzer_id": "Q023-ANALYZER-SHOCK-LOCAL",
+      "path": "tst/publication/analyze_pic_shock_storyline.py",
+      "sha256": "94f9db3ae56a23e4991b18b00f1c2b323f4b3553cf674d5007f6c760e5155b41",
+      "qualification_limit": "engineering_proxy_diagnostics_only_qualifying_section54_analyzer_missing"
+    },
+    {
+      "analyzer_id": "Q023-ANALYZER-SPECTRA-LOCAL",
+      "path": "tst/publication/q016_particle_spectra.py",
+      "sha256": "b84dfadd56a55ffcfd8d626f3b793da4ec61cbc844b4930c251ec60147505c0e",
+      "qualification_limit": "bounded_weighted_species_cohort_spectrum_candidate_requires_campaign_specific_bins_and_independent_recompute"
+    },
+    {
+      "analyzer_id": "Q023-ANALYZER-CRSI-LOCAL",
+      "path": "tst/scripts/particles/pic_crsi_deltaf_publication.py",
+      "sha256": "d2879747e77d1a905e16ae4f24c5031c0752b0983626d1e2663c7b41359b4f1e",
+      "qualification_limit": "legacy_engineering_proxy_only_qualifying_crsi_theory_analyzer_missing"
+    },
+    {
+      "analyzer_id": "Q023-ANALYZER-CRPAI-LOCAL",
+      "path": "tst/scripts/particles/pic_crpai_polarization_publication.py",
+      "sha256": "43bfc9f089c378ef8dff0dd92105ef1d5a91a46d137a6e38e05e4e18db0e4090",
+      "qualification_limit": "legacy_engineering_proxy_only_qualifying_crpai_theory_analyzer_missing"
+    },
+    {
+      "analyzer_id": "Q023-ANALYZER-DRIVEN-LOCAL",
+      "path": "tst/scripts/particles/pic_expanding_box_anisotropy_proxy.py",
+      "sha256": "88904534828e89ddd5992081f17b3cc3c8b620d5e52cf898563fa2942d69e7e7",
+      "qualification_limit": "legacy_engineering_proxy_only_qualifying_driven_crpai_analyzer_missing"
+    },
+    {
+      "analyzer_id": "Q023-ANALYZER-HALL-SMOKE",
+      "path": "tst/scripts/particles/pic_extended_hall_ct_smoke.py",
+      "sha256": "ef329f42473c91724d9cce7684133de9de69d9bba42a31720d7e97b531bd8e34",
+      "qualification_limit": "manufactured_source_smoke_only_not_hall_bell_qualification"
+    },
+    {
+      "analyzer_id": "Q023-ANALYZER-IN-DAMPING-LOCAL",
+      "path": "tst/scripts/particles/pic_ion_neutral_alfven_envelope.py",
+      "sha256": "faa2967198fbe83477c800c7cb337c306d9bf56a5589063495e54ccfdac1aeee",
+      "qualification_limit": "reduced_static_neutral_local_envelope_only_not_plotnikov_matched_crsi"
+    },
+    {
+      "analyzer_id": "Q023-ANALYZER-ADAPTIVE-LOCAL",
+      "path": "tst/scripts/particles/pic_adaptive_deltaf_cadence_variance.py",
+      "sha256": "082af4505de261c4614e95d1e4afeb35e15d3c96593d55327c2d824a46879394",
+      "qualification_limit": "bounded_cadence_fixture_only_not_transport_calibration"
+    },
+    {
+      "analyzer_id": "Q023-ANALYZER-PVTK-READER",
+      "path": "tst/publication/pvtk_particles.py",
+      "sha256": "feb99ddb8ef68fceec14c9b24829b58aec97c65c36fae6b5922f8799441dad0d",
+      "qualification_limit": "shared_particle_output_reader_only"
+    },
+    {
+      "analyzer_id": "Q023-ANALYZER-BIN-READER",
+      "path": "vis/python/bin_convert_new.py",
+      "sha256": "5835cad3233c351689c9a961d57e352613a9a731608b80a733f8f00977daac65",
+      "qualification_limit": "shared_binary_output_reader_only"
+    }
+  ],
+  "local_input_inventory": [
+    {
+      "input_id": "Q023-INPUT-PAPER-SHOCK-SCAFFOLD",
+      "path": "inputs/tests/pic_parallel_shock_section54_hpc.athinput",
+      "sha256": "e755cf96f97e6078343d793015699bf958cf5c22809c7be1fa37aab7a1a83290",
+      "qualification_limit": "engineering_scaffold_only_exact_injection_audit_and_clean_freeze_open"
+    },
+    {
+      "input_id": "Q023-INPUT-BELL-PROXY",
+      "path": "inputs/tests/pic_bell_growth_publication.athinput",
+      "sha256": "72e767aad00fdfbc4098a074cceb40d09727575e08d58c0797c7e74db981d309",
+      "qualification_limit": "legacy_engineering_proxy_only_not_section52_deck"
+    },
+    {
+      "input_id": "Q023-INPUT-CRSI-PROXY",
+      "path": "inputs/tests/pic_crsi_deltaf_publication.athinput",
+      "sha256": "49457e7caf28911924ef43112948d847a5c7d6c5a557d5c881deec8a3184a7a4",
+      "qualification_limit": "legacy_engineering_proxy_only_not_section55_deck"
+    },
+    {
+      "input_id": "Q023-INPUT-CRPAI-PROLATE-PROXY",
+      "path": "inputs/tests/pic_crpai_prolate_publication.athinput",
+      "sha256": "a0f3b89a18c849ddca749a723c4d077b518fa275bbef9f5197c854908183d235",
+      "qualification_limit": "legacy_engineering_proxy_only_not_section56_deck"
+    },
+    {
+      "input_id": "Q023-INPUT-CRPAI-OBLATE-PROXY",
+      "path": "inputs/tests/pic_crpai_oblate_publication.athinput",
+      "sha256": "795ae55f6975a07fe17a44d92397ae5c16449134356315f18ffe0b0504123c77",
+      "qualification_limit": "legacy_engineering_proxy_only_not_section56_deck"
+    },
+    {
+      "input_id": "Q023-INPUT-HALL-SMOKE",
+      "path": "inputs/tests/pic_extended_hall_ct_smoke.athinput",
+      "sha256": "22e6b44a5aa4e346746f565a16e319f0a03126d15c9497bb6b61a9c13585f97f",
+      "qualification_limit": "manufactured_source_smoke_only"
+    },
+    {
+      "input_id": "Q023-INPUT-IN-DAMPING-SMOKE",
+      "path": "inputs/tests/pic_ion_neutral_friction_smoke.athinput",
+      "sha256": "ea79b464cf4c3bc1d9b148a36a4dff350f290c2d19ef016299c778d155705e3b",
+      "qualification_limit": "reduced_static_neutral_smoke_only"
+    },
+    {
+      "input_id": "Q023-INPUT-ADAPTIVE-DELTAF-SMOKE",
+      "path": "inputs/tests/pic_adaptive_deltaf_smoke.athinput",
+      "sha256": "9ba47abb50e67fbf3db11a75722d7c522ff18aafb59d164537414a2f05d995f3",
+      "qualification_limit": "bounded_adaptive_deltaf_smoke_only"
+    },
+    {
+      "input_id": "Q023-INPUT-EXPANDING-ADAPTIVE-DAMPING-SMOKE",
+      "path": "inputs/tests/pic_mhd_expanding_box_adaptive_damping_smoke.athinput",
+      "sha256": "021ab779c0f5c8321776b6cde6e23a34b0ed03e294e32fb18067c2e5874a1ad3",
+      "qualification_limit": "bounded_one_cycle_composition_launch_smoke_only"
+    }
+  ],
+  "independent_recompute_profiles": {
+    "Q023-RECOMPUTE-RAW-ARTIFACT-INDEPENDENT": {
+      "status": "plan_frozen_reviewer_owned_or_independent_script_artifact_open",
+      "implementation_rule": "Recompute every primary metric from archived raw artifacts using a reviewer-owned script or an independently implemented analyzer. The recompute script must not import production metric-extraction functions or the local analyzer candidates listed in this record.",
+      "required_records": [
+        "script_path_or_archive_locator",
+        "script_sha256",
+        "environment_lock",
+        "input_artifact_checksums",
+        "metric_comparison_table",
+        "reviewer",
+        "reviewer_disposition"
+      ],
+      "required_metric_table_columns": [
+        "campaign_id",
+        "seed",
+        "parameter_point",
+        "observable",
+        "production_metric",
+        "independent_metric",
+        "absolute_difference",
+        "relative_difference",
+        "declared_tolerance",
+        "disposition"
+      ],
+      "open_values": [
+        "Implement or receive the reviewer-owned independent analyzer after raw-artifact schema freeze and before claim closure.",
+        "Freeze the script checksum and environment lock before independent recomputation.",
+        "Obtain external reviewer disposition."
+      ]
+    }
+  },
+  "candidate_bound_open_values": {
+    "git_commit": "open_clean_candidate_not_frozen",
+    "executable_sha256": "open_clean_frontier_executable_not_frozen",
+    "qualifying_input_checksums": "open_qualifying_decks_not_frozen",
+    "production_analysis_checksums": "open_qualifying_analyzers_not_frozen",
+    "failure_artifact_root": "open_authorized_orion_campaign_subdirectory_not_frozen",
+    "independent_recompute_script": "open_later_reviewer_owned_or_independent_artifact",
+    "external_reviewer_disposition": "pending external review"
+  },
+  "q023_profile_status": "open_local_choices_frozen_candidate_frontier_external_reference_later_artifact_and_review_bindings_absent"
+}

@@ -36,6 +36,16 @@ qualification and Frontier-authorization plan.
 - `test_pic_artifact_taxonomy.py`
   - Regression checks for engineering-proxy labels, legacy aliases, checksummed
     archives, HPC emit-only safety and the retired-runbook boundary.
+- `readiness/`
+  - Compact release-control records: claims, findings, external-artifact
+    inventory, storage policy and the qualifying validation-manifest schema.
+- `pic_qualification_manifest.py`
+  - Separate fail-closed validator and exclusive freezer for prepared
+    qualification manifests. It rejects exploratory proxies, dirty source
+    candidates, unknown claims, escaped or missing files and checksum drift.
+- `test_pic_readiness_registry.py`
+  - Regression checks for release-control records and the authorized Frontier
+    boundary.
 - `PIC_LARGE_MACHINE_VALIDATION.md`
   - Retired historical note. Do not execute commands or infer sign-off authority
     from that file.
@@ -105,6 +115,8 @@ Run the artifact-safety regression after changing this toolkit:
 
 ```bash
 python3 tst/publication/test_pic_artifact_taxonomy.py
+python3 tst/publication/test_pic_readiness_registry.py
+python3 tst/publication/test_pic_qualification_manifest.py
 ```
 
 ## Notes

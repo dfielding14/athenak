@@ -24,6 +24,13 @@ Sun and Bai (2023) reproduction manifest.
 - `test_pic_artifact_taxonomy.py`
   - Enforces artifact classifications, lineage hashes, aliases and HPC
     emit-only safety.
+- `readiness/`
+  - Source-controlled release claims, findings, external-artifact inventory,
+    storage policy and validation-manifest schema. These records are compact
+    control metadata, not qualification evidence.
+- `test_pic_readiness_registry.py`
+  - Enforces the authorized Frontier root and budget, selected extension claims,
+    initial findings, paper-source checksum and minimum validation schema.
 - `pvtk_particles.py`
   - Reader for AthenaK particle VTK files.
 
@@ -42,5 +49,7 @@ Sun and Bai (2023) reproduction manifest.
   `evidence_class=engineering_proxy` and `not_sun_bai_reproduction=true`.
 - Run `python3 tst/publication/test_pic_artifact_taxonomy.py` after changing
   this toolkit.
+- Run `python3 tst/publication/test_pic_readiness_registry.py` after changing
+  release registries, schema, budget or storage policy.
 - Do not cite a checked-in exploratory case as `sun_bai_2023_reproduction`
   evidence until it is promoted through the canonical plan's claims registry.

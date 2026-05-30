@@ -1,0 +1,87 @@
+{
+  "record_type": "q017_driver_performance_observability",
+  "date": "2026-05-30",
+  "qualification_effect": "bounded_driver_observability_only",
+  "dirty_batch_base_commit": "3bcd3f21e4f5439e655d977854f03b287fa814b9",
+  "source_state": "dirty_worktree_batch_based_on_recorded_commit_not_frozen_subject_commit",
+  "scope": "Driver-only Q-017 observability tranche recorded in a dirty worktree batch based on dirty_batch_base_commit, not a frozen subject commit. Final stdout scalars provide low-overhead host-side timing and safely derivable mesh, particle and load aggregates for downstream Frontier manifest capture. This record does not qualify particle-kernel timing, memory footprint, Frontier scaling or GPU-aware MPI behavior.",
+  "changed_files": [
+    "src/driver/driver.hpp",
+    "src/driver/driver.cpp",
+    "inputs/tests/pic_q017_driver_telemetry.athinput",
+    "tst/scripts/particles/pic_q017_driver_telemetry.py",
+    "tst/publication/readiness/q017_driver_performance_observability_2026-05-30.json"
+  ],
+  "telemetry_contract": {
+    "stdout_prefix": "q017.telemetry.",
+    "timers": [
+      "timer.driver",
+      "timer.task_lists",
+      "timer.task_list.before_timeintegrator",
+      "timer.task_list.before_stagen",
+      "timer.task_list.stagen",
+      "timer.task_list.after_stagen",
+      "timer.task_list.after_timeintegrator",
+      "timer.output_publication",
+      "timer.amr_load_balance"
+    ],
+    "timer_fields": [
+      "seconds_rank_max",
+      "seconds_rank_mean",
+      "calls_rank_max"
+    ],
+    "aggregate_groups": [
+      "mesh",
+      "meshblocks",
+      "particles",
+      "updates",
+      "throughput",
+      "load",
+      "amr"
+    ],
+    "mpi_behavior": "Final timer values are reduced to rank zero only. No collectives are inserted into task-list, output-publication or AMR hot paths."
+  },
+  "verification": [
+    {
+      "command": "python3 tst/scripts/style/cpplint.py --filter=-build/include_subdir,-build/header_guard src/driver/driver.hpp src/driver/driver.cpp",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --check -- src/driver/driver.hpp src/driver/driver.cpp inputs/tests/pic_q017_driver_telemetry.athinput tst/scripts/particles/pic_q017_driver_telemetry.py",
+      "status": "pass"
+    },
+    {
+      "configuration": "Debug serial Kokkos SERIAL",
+      "command": "cmake -S . -B /tmp/athenak-pic-q017-build -D CMAKE_BUILD_TYPE=Debug && cmake --build /tmp/athenak-pic-q017-build -j8",
+      "status": "pass"
+    },
+    {
+      "configuration": "Debug MPI Kokkos SERIAL",
+      "command": "cmake -S . -B /tmp/athenak-pic-q017-mpi-build -D CMAKE_BUILD_TYPE=Debug -D Athena_ENABLE_MPI=ON && cmake --build /tmp/athenak-pic-q017-mpi-build -j8",
+      "status": "pass"
+    },
+    {
+      "configuration": "Debug serial focused PIC runtime",
+      "harness": "tst/scripts/particles/pic_q017_driver_telemetry.py",
+      "input": "inputs/tests/pic_q017_driver_telemetry.athinput",
+      "status": "pass"
+    },
+    {
+      "configuration": "Debug MPI-enabled one-rank focused PIC runtime",
+      "harness": "tst/scripts/particles/pic_q017_driver_telemetry.py",
+      "input": "inputs/tests/pic_q017_driver_telemetry.athinput",
+      "status": "pass"
+    },
+    {
+      "command": "PYTHONPATH=. python3 tst/publication/test_pic_readiness_registry.py",
+      "status": "pass"
+    }
+  ],
+  "remaining_q017_gaps": [
+    "Particle push, deposit, migration and adaptive-delta-f kernel timers require particle-module ownership and remain open.",
+    "Memory accounting by particle species and mesh-refinement level is not safely derivable from driver-only metadata and remains open.",
+    "Frontier GPU-aware MPI enabled-versus-disabled A/B runs, multi-rank scaling and retained manifest ingestion remain open.",
+    "Multi-rank host runtime was not launched in this tranche because no active Slurm allocation was present."
+  ],
+  "q017_disposition": "bounded_driver_observability_implemented_with_frontier_and_particle_detail_gaps_open"
+}

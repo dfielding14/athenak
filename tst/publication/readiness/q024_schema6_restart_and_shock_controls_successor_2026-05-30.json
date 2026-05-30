@@ -1,0 +1,71 @@
+{
+  "record_type": "q024_schema6_restart_and_shock_controls_successor",
+  "date": "2026-05-30",
+  "qualification_effect": "bounded_serial_host_evidence_only",
+  "scope": "Successor local resilience record for restart schema version 6 and parallel-shock continuation controls. This record strengthens Q-024 and Q-036 host evidence without closing interruption, storage-failure, timeout, per-rank MPI, node-loss, Frontier-filesystem, or external-review gates.",
+  "artifacts": [
+    "inputs/tests/pic_restart_safety_guards.athinput",
+    "tst/scripts/particles/pic_restart_safety_guards.py",
+    "tst/scripts/particles/pic_parallel_shock_restart_controls.py",
+    "src/outputs/restart.cpp",
+    "src/outputs/restart_utils.cpp",
+    "src/main.cpp",
+    "src/particles/particles.cpp",
+    "src/pgen/tests/pic_parallel_shock.cpp"
+  ],
+  "restart_schema": {
+    "version": 6,
+    "status": "pass",
+    "continuation_sensitive_state": [
+      "particle_mode_selectors_and_coefficients",
+      "adaptive_delta_f_fitted_state_and_cadence_bucket",
+      "star_potential_parameters",
+      "parallel_shock_injection_and_frame_tracking_controls"
+    ]
+  },
+  "serial_host_regressions": {
+    "pic_restart_safety_guards": {
+      "status": "pass",
+      "coverage": [
+        "uninterrupted_versus_restarted_state_parity",
+        "completed_artifact_checksum_and_manifest_binding",
+        "missing_or_truncated_completion_marker_rejection",
+        "truncated_payload_rejection",
+        "wrong_manifest_path_or_digest_rejection",
+        "interrupted_publication_preserves_prior_completed_restart",
+        "unwritable_target_rejection",
+        "corrupt_particle_species_and_moment_count_rejection",
+        "bound_particle_coefficient_override_rejection",
+        "star_gravity_bound_override_rejection",
+        "tracked_particle_and_pusher_guards",
+        "direct_staggered_inflow_boundary_rejection"
+      ]
+    },
+    "pic_parallel_shock_restart_controls": {
+      "status": "pass",
+      "coverage": [
+        "unchanged_restart_continuation",
+        "changed_injection_control_rejected",
+        "changed_frame_tracking_control_rejected"
+      ]
+    }
+  },
+  "focused_regression_status": {
+    "pic_parser_contract_guards": "pass",
+    "pic_paper_task_stage_trace": "pass",
+    "pic_restart_safety_guards": "pass",
+    "pic_adaptive_deltaf_smoke": "pass",
+    "pic_extended_hall_ct_smoke": "pass",
+    "pic_ion_neutral_friction_smoke": "pass",
+    "pic_parallel_shock_restart_controls": "pass",
+    "pic_paper_coupling_conservation": "pass",
+    "pic_relativistic_gyro_paper": "pass"
+  },
+  "limitations": [
+    "The current host profile does not close the per-rank MPI restart drill.",
+    "Forced timeout, interrupted writer process, bounded short-write, storage-failure, node-loss, and Frontier-filesystem drills remain open.",
+    "The shock-control fingerprint is a continuation-safety guard, not a Section 5.4 scientific reproduction result.",
+    "External reviewer disposition remains pending."
+  ],
+  "q024_disposition": "bounded_serial_host_schema6_restart_and_shock_continuation_guards_passed_full_q024_and_q036_gates_remain_open"
+}

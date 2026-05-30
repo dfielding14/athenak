@@ -1,0 +1,93 @@
+{
+  "record_type": "q003_frontier_f1_gpu_gyro",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-003",
+    "Q-025",
+    "Q-027",
+    "Q-038",
+    "Q-042"
+  ],
+  "qualification_effect": "bounded_frontier_one_rank_gpu_gyro_candidate_oracle_passed_clean_freeze_and_full_gpu_matrix_remain_open",
+  "scope": "Successor record for the bounded registered Frontier F1 one-rank GPU relativistic-gyro oracle. The retained hardened rerun proves immutable manifest-digest anchoring inside the scheduled allocation, a visible GPU binding, HIP-linked and GPU-aware-MPI-linked executable configuration, runtime paper-test-particle identity and a cycle-2 relativistic Boris velocity oracle. It remains dirty-candidate evidence only. It does not qualify a clean release archive, multi-rank Athena communication, the complete Q-003 GPU matrix, performance or production operation.",
+  "candidate": {
+    "git_commit": "3bcd3f21e4f5439e655d977854f03b287fa814b9",
+    "status": "dirty_candidate_not_release_archive",
+    "source_snapshot": "/lustre/orion/ast207/proj-shared/dfielding/PIC/source_snapshots/candidate_20260530T123549Z",
+    "binary": "/lustre/orion/ast207/proj-shared/dfielding/PIC/bin/candidate_20260530T123549Z/hip-mpi-release-paper-pic/athena",
+    "binary_sha256": "15caf800e978f46b183a7f339d49fc2cf3c17df699c82eac8fdc3a1932f8e38f"
+  },
+  "preliminary_submission": {
+    "job_id": "4744231",
+    "reservation_id": "d93f9176-7917-43ac-8050-410241d78d59",
+    "submission_id": "06985b8c-5b43-4293-8658-dd99e1565792",
+    "elapsed_seconds": 14,
+    "consumed_node_hours": 0.0038888888888888888,
+    "analysis_status": "pass",
+    "max_abs_velocity_error": 5.808176634092277e-09,
+    "limitation": "Independent audit found that the passing numerical artifact did not fail closed on visible GPU identity, linked executable configuration or supporting evidence artifacts. Preserve this bundle as preliminary evidence only."
+  },
+  "hardened_submission": {
+    "job_id": "4744232",
+    "reservation_id": "ab60131e-78f4-42f2-a1c2-205bcb876dda",
+    "submission_id": "db10a4bc-485e-4a49-9ed4-13250beb7758",
+    "control_plane_version": "1635c9f6bab8ae03bd9ce59ca399f2262b61a386d27d699ae14d37ea35962d1c",
+    "qos": "debug",
+    "requested_nodes": 1,
+    "requested_walltime": "00:15:00",
+    "elapsed_seconds": 12,
+    "consumed_node_hours": 0.0033333333333333335,
+    "manifest": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/db10a4bc-485e-4a49-9ed4-13250beb7758/pre_submit_manifest.json",
+    "manifest_sha256": "fa2683b54bb84bc7b52d69ddf017d87be0e39a4bce71394cd50daa7afd1b9454",
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_relativistic_gyro/db10a4bc-485e-4a49-9ed4-13250beb7758",
+    "artifact_manifest_sha256": "db1af9ba805d3228cc36747cbbc28e6404de63f1bbf5ba2f85203f25f77cf621",
+    "analysis_status": "pass",
+    "cycle": 2,
+    "particle_count": 64,
+    "velocity_tolerance": 2e-06,
+    "max_abs_velocity_error": 5.808176634092277e-09,
+    "execution_context": {
+      "snapshot_verification": "pass",
+      "rocr_visible_devices": "0",
+      "gpu_mapping_rank": 0,
+      "hip_linked": true,
+      "gpu_aware_mpi_linked": true,
+      "environment_allowlist": {
+        "HSA_XNACK": "0",
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "OMP_NUM_THREADS": "unset",
+        "SLURM_EXPORT_ENV": "ALL"
+      }
+    }
+  },
+  "preserved_pre_reservation_registration_rejections": [
+    {
+      "submission_id": "6fcc2849-4c1a-443a-85d3-e08d01101334",
+      "diagnosis": "manifest_creator_rejected_precreated_manifest_directory"
+    },
+    {
+      "submission_id": "6fcc2849-4c1a-443a-85d3-e08d01101334",
+      "diagnosis": "validator_rejected_queue_snapshot_format_mismatch_before_reservation"
+    }
+  ],
+  "ledger_after_f1": {
+    "orion_primary_events": 22,
+    "project_home_mirror_events": 22,
+    "mirror_receipts": 22,
+    "chain_head": "76497bd022181e550f640b7f2644102e1355abcc82997f7921cb2b75c1c99329",
+    "cumulative_consumed_node_hours": 0.07444444444444442,
+    "currently_reserved_node_hours": 0.0
+  },
+  "validation": {
+    "artifact_checksum_verification": "pass",
+    "manifest_digest_attachment_verification": "pass",
+    "orion_project_home_ledger_comparison": "pass",
+    "python_compile": "pass",
+    "shell_syntax": "pass",
+    "synthetic_analyzer_replay": "pass",
+    "post_audit_strict_analyzer_replay": "pass_with_negative_gpu_linkage_and_nan_cases",
+    "git_diff_check": "pass"
+  },
+  "overall_disposition": "bounded_dirty_candidate_f1_gpu_gyro_oracle_passed_freeze_clean_candidate_before_additional_science_submissions"
+}

@@ -1,0 +1,66 @@
+{
+  "record_type": "q042_post_repair_architecture_docs_successor",
+  "date": "2026-05-30",
+  "qualification_effect": "bounded_host_review_only",
+  "scope": "Successor Q-042 record for the schema-6 restart, parallel-shock continuation-control, active-MHD expanding-box comoving-flux and documentation repair tranche. The staged Frontier control plane remains under separate hardening and adversarial re-audit.",
+  "reviewed_surfaces": [
+    {
+      "surface": "mhd_expanding_box",
+      "files": [
+        "src/mhd/mhd.cpp",
+        "src/mhd/mhd.hpp",
+        "src/mhd/mhd_fluxes.cpp",
+        "src/mhd/mhd_newdt.cpp",
+        "src/mhd/mhd_tasks.cpp",
+        "src/mhd/mhd_update.cpp",
+        "src/particles/particles.cpp",
+        "src/particles/particles.hpp"
+      ],
+      "disposition": "bounded_comoving_flux_model_conforms_with_fail_closed_compositions"
+    },
+    {
+      "surface": "restart_and_shock_controls",
+      "files": [
+        "src/main.cpp",
+        "src/outputs/restart.cpp",
+        "src/outputs/restart_utils.cpp",
+        "src/pgen/tests/pic_parallel_shock.cpp",
+        "tst/scripts/particles/pic_restart_safety_guards.py",
+        "tst/scripts/particles/pic_parallel_shock_restart_controls.py"
+      ],
+      "disposition": "bounded_schema6_host_guards_pass"
+    },
+    {
+      "surface": "documentation",
+      "files": [
+        "docs/source/conf.py",
+        "docs/source/index.md",
+        "docs/source/engineering/pic_mhd_model_contract.md",
+        "docs/source/modules/outputs.md",
+        "docs/source/modules/particles.md",
+        "docs/source/quickstart.md",
+        "docs/source/running.md",
+        "docs/source/troubleshooting.md"
+      ],
+      "disposition": "warning_free_isolated_sphinx_render_pass"
+    }
+  ],
+  "checks": {
+    "athena_host_rebuild": "pass",
+    "focused_host_regression_count": 13,
+    "focused_host_regressions": "pass",
+    "git_diff_check": "pass",
+    "python_compile": "pass",
+    "sphinx_render": {
+      "status": "pass",
+      "pages": 56,
+      "command": "/tmp/athenak-pic-docs-venv/bin/sphinx-build -b html -W --keep-going -E docs/source docs/build/html"
+    }
+  },
+  "residual_risks": [
+    "The successor Frontier control plane must receive a separate local unit/static pass and independent adversarial re-audit before Orion installation.",
+    "MPI, Frontier HIP/GPU, failure-injection and scientific campaigns remain open.",
+    "External reviewer disposition remains pending."
+  ],
+  "q042_disposition": "post_repair_host_architecture_docs_and_focused_regressions_passed_frontier_control_plane_and_external_gates_remain_open"
+}

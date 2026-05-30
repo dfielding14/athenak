@@ -1,0 +1,265 @@
+{
+  "record_type": "q032_q033_extension_local_scans",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "qualification_effect": "bounded_serial_host_evidence_only",
+  "scope": "Archive of already measured bounded serial-host extension regressions for Q-032 ion-neutral Alfven damping and Q-033 adaptive-delta-f cadence sensitivity. This sidecar records local implementation evidence only. It does not close either publication-readiness question.",
+  "archive_method": {
+    "status": "archived_from_existing_measurements_without_athena_rerun",
+    "source_scripts": [
+      "tst/scripts/particles/pic_ion_neutral_alfven_envelope.py",
+      "tst/scripts/particles/pic_adaptive_deltaf_cadence_variance.py"
+    ],
+    "execution_scope": "bounded serial host",
+    "archive_step_athena_rerun": false
+  },
+  "q032_ion_neutral_alfven_envelope": {
+    "question": "Q-032",
+    "status": "local_scan_pass_full_question_open",
+    "purpose": "Strengthen the reduced ion-neutral-friction local evidence with an eight-cycle transverse Alfven-wave damping envelope across multiple collision rates.",
+    "setup": {
+      "fixture": "inputs/tests/pic_ion_neutral_friction_smoke.athinput",
+      "physical_mode": "extended_mhd_pic",
+      "wave_damping_modes": [
+        "off",
+        "ion_neutral_friction"
+      ],
+      "rk_steps": 8,
+      "collision_rates": [
+        0.0,
+        0.2,
+        0.7,
+        1.4
+      ],
+      "observable": "domain RMS transverse velocity fluctuation amplitude after removal of domain-mean vy and vz",
+      "excess_rate_estimator": "-log(final_amplitude(nu_in)/final_amplitude(off))/final_time"
+    },
+    "pass_criteria": {
+      "snapshot_count_after_duplicate_time_suppression": 9,
+      "times_finite_and_strictly_increasing": true,
+      "amplitudes_finite": true,
+      "initial_amplitude_cross_case_absolute_difference_max": 1e-12,
+      "off_initial_amplitude_min": 1e-06,
+      "each_case_amplitude_strictly_decreases_over_time": true,
+      "final_amplitude_strictly_decreases_with_collision_rate": true,
+      "inferred_excess_rate_strictly_increases_with_collision_rate": true,
+      "inferred_excess_rate_absolute_error_max": 0.08
+    },
+    "measurements": {
+      "times": [
+        0.0,
+        0.0454545,
+        0.0909089,
+        0.136363,
+        0.181818,
+        0.227272,
+        0.272727,
+        0.318181,
+        0.363635
+      ],
+      "amplitudes": {
+        "nu_0.0": [
+          0.00707106851041317,
+          0.007013637572526932,
+          0.006956914905458689,
+          0.006900519598275423,
+          0.006844291463494301,
+          0.006788210943341255,
+          0.006732331123203039,
+          0.00667674420401454,
+          0.006621553562581539
+        ],
+        "nu_0.2": [
+          0.00707106851041317,
+          0.00695016561076045,
+          0.006831635721027851,
+          0.006715226918458939,
+          0.006600905675441027,
+          0.006488757207989693,
+          0.0063789281994104385,
+          0.00627158721908927,
+          0.006166897714138031
+        ],
+        "nu_0.7": [
+          0.00707106851041317,
+          0.006793989334255457,
+          0.0065282233990728855,
+          0.006273526698350906,
+          0.0060298447497189045,
+          0.005797215271741152,
+          0.005575699731707573,
+          0.005365347024053335,
+          0.005166172981262207
+        ],
+        "nu_1.4": [
+          0.00707106851041317,
+          0.006581220310181379,
+          0.0061259642243385315,
+          0.0057036480866372585,
+          0.005312880035489798,
+          0.004952412564307451,
+          0.004621068015694618,
+          0.004317698534578085,
+          0.004041156731545925
+        ]
+      },
+      "final_amplitudes": {
+        "nu_0.0": 0.006621553562581539,
+        "nu_0.2": 0.006166897714138031,
+        "nu_0.7": 0.005166172981262207,
+        "nu_1.4": 0.004041156731545925
+      },
+      "inferred_excess_damping_rates": {
+        "nu_0.0": 0.0,
+        "nu_0.2": 0.195619535170862,
+        "nu_0.7": 0.682546621930583,
+        "nu_1.4": 1.3579524766941682
+      },
+      "inferred_rate_absolute_errors": {
+        "nu_0.0": 0.0,
+        "nu_0.2": 0.004380464829138009,
+        "nu_0.7": 0.017453378069416936,
+        "nu_1.4": 0.042047523305831724
+      },
+      "maximum_inferred_rate_absolute_error": 0.042047523305831724
+    },
+    "local_result": "pass",
+    "limitations": [
+      "This is a reduced static-neutral host envelope regression for the implemented friction map, not a Plotnikov et al. matched CRSI comparison.",
+      "The scan does not qualify unstable-bandwidth dependence, CR feedback saturation, isotropization, nonlinear evolution, MPI decomposition parity, or Frontier HIP/GPU execution.",
+      "External reviewer disposition remains pending."
+    ],
+    "q032_disposition": "open_bounded_serial_host_alfven_envelope_passed_nonlocal_and_external_qualification_required"
+  },
+  "q033_adaptive_deltaf_cadence_variance": {
+    "question": "Q-033",
+    "status": "local_scan_pass_full_question_open",
+    "purpose": "Strengthen adaptive-delta-f local evidence with deterministic bucket-trace, fitted-parameter, and particle-weight variance assertions under slow and frequent cadence.",
+    "setup": {
+      "fixture": "inputs/tests/pic_adaptive_deltaf_smoke.athinput",
+      "physical_mode": "extended_mhd_pic",
+      "adaptive_mode": "global_bikappa_moments_experimental",
+      "rk_steps": 8,
+      "slow_interval": 10.0,
+      "frequent_interval": 0.2,
+      "observed_cycle_step": 0.30000000000000004,
+      "particle_count": 64,
+      "observable": "population variance of particle deltaf_weight snapshots",
+      "interpretation_boundary": "This deterministic fixture measures cadence sensitivity. It is not evidence that frequent adaptive refits reduce variance."
+    },
+    "pass_criteria": {
+      "slow_fit_count": 1,
+      "slow_initial_fit_time": 0.0,
+      "slow_initial_fit_bucket": 0,
+      "frequent_fit_count": 8,
+      "frequent_fit_times_strictly_increasing": true,
+      "frequent_fit_buckets_strictly_increasing": true,
+      "frequent_fit_buckets_match_roundoff_aware_floor_time_over_interval": true,
+      "frequent_fit_xi_finite_and_strictly_decreasing": true,
+      "frequent_fit_p0_finite_and_strictly_decreasing": true,
+      "all_particle_weight_snapshots_have_64_finite_values": true,
+      "initial_variance": 0.0,
+      "slow_final_variance_range": [
+        0.2,
+        0.3
+      ],
+      "frequent_final_variance_range": [
+        0.33,
+        0.45
+      ],
+      "frequent_minus_slow_final_variance_min": 0.1,
+      "particle_weight_absolute_value_max": 1.3
+    },
+    "measurements": {
+      "slow_fit_count": 1,
+      "frequent_fit_times": [
+        0.0,
+        0.30000000000000004,
+        0.6000000000000001,
+        0.9000000000000001,
+        1.2000000000000002,
+        1.5000000000000002,
+        1.8000000000000003,
+        2.1000000000000005
+      ],
+      "frequent_fit_buckets": [
+        0,
+        1,
+        3,
+        4,
+        6,
+        7,
+        9,
+        10
+      ],
+      "expected_frequent_fit_buckets": [
+        0,
+        1,
+        3,
+        4,
+        6,
+        7,
+        9,
+        10
+      ],
+      "frequent_fit_xi": [
+        0.6366197723675814,
+        0.6302878226184387,
+        0.6240238538495376,
+        0.6178271003186319,
+        0.611696805147356,
+        0.6056322202171067,
+        0.5996326060661613,
+        0.593697231788014
+      ],
+      "frequent_fit_p0": [
+        0.6572328082228759,
+        0.6401395137010997,
+        0.6235013949698619,
+        0.6073060875081709,
+        0.5915415682686713,
+        0.5761961461184918,
+        0.5612584525506354,
+        0.5467174326582006
+      ],
+      "slow_weight_variances": [
+        0.0,
+        0.44259910833198074,
+        0.41138111239329106,
+        0.3810257807007922,
+        0.35160742200906225,
+        0.32319456285519627,
+        0.295849798271374,
+        0.26962949532623154,
+        0.24458309697296365,
+        0.24458309697296365
+      ],
+      "frequent_weight_variances": [
+        0.0,
+        0.44259910833198074,
+        0.432813864465051,
+        0.423043819831351,
+        0.4132923236616998,
+        0.40356282737365223,
+        0.3938587957075628,
+        0.384183573176591,
+        0.3745408146893752,
+        0.3745408146893752
+      ],
+      "slow_final_weight_variance": 0.24458309697296365,
+      "frequent_final_weight_variance": 0.3745408146893752,
+      "frequent_minus_slow_final_variance": 0.12995771771641157,
+      "observed_particle_weight_absolute_value_max": 1.218591570854187
+    },
+    "local_result": "pass",
+    "variance_reduction_observed": false,
+    "variance_interpretation": "Frequent adaptive refits increased the final delta-f weight variance in this bounded deterministic expanding-box fixture: 0.3745408146893752 versus 0.24458309697296365 for slow cadence. The local pass is a cadence-sensitivity and bounded-behavior result, not a variance-reduction result.",
+    "limitations": [
+      "This is a deterministic two-species expanding-box host fixture, not a physical CRPAI transport-calibration comparison against Sun, Bai, and Zhao.",
+      "The scan does not qualify physical damping calibration, effective scattering nu_eff, anisotropy, spectra, quasi-steady state, saturation, scaling comparison, MPI decomposition parity, or Frontier HIP/GPU execution.",
+      "External reviewer disposition remains pending."
+    ],
+    "q033_disposition": "open_bounded_serial_host_cadence_sensitivity_passed_variance_reduction_not_observed_nonlocal_and_external_qualification_required"
+  },
+  "overall_disposition": "q032_and_q033_remain_open_bounded_serial_host_extension_scans_archived"
+}

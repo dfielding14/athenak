@@ -1,0 +1,98 @@
+{
+  "record_type": "q008_q033_expanding_coupled_source_successor",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "qualification_effect": "bounded_serial_host_evidence_only",
+  "supersedes": [
+    "The active-MHD coupled-feedback, reduced-damping and history-output exclusions recorded in q008_expanding_box_comoving_flux_successor_2026-05-30.json",
+    "The local Q-033 composition-launch blocker recorded before this successor"
+  ],
+  "scope": "Bounded serial-host successor for the narrow active-MHD expanding-box conservative source split and the selected adaptive physical delta-f plus reduced static-neutral damping launch composition. This is mechanics evidence only. It does not qualify Appendix-A, driven CRPAI transport calibration, MPI, HIP/GPU, Frontier campaigns, or external review.",
+  "implementation_contract": {
+    "moment_density_frame": "physical_volume_at_cycle_endpoint",
+    "nondeltaf_particle_feedback_frame": "final_physical_frame_after_second_particle_expansion_half_map",
+    "nondeltaf_gas_feedback_frame": "opposite_impulse_after_gas_expansion_map",
+    "adaptive_deltaf_feedback_frame": "endpoint_normalized_analytic_rhoE_plus_JcrossB_source_after_gas_expansion_map",
+    "built_in_mhd_history": "physical_cell_volume_integrals_and_physical_face_field_magnetic_energy",
+    "deltaf_background_density": "configured_t0_physical_density_redshifted_by_inverse_volume",
+    "reduced_ion_neutral_friction": "final_physical_frame_transverse_momentum_map_with_ideal_mhd_kinetic_energy_sink_after_feedback",
+    "common_admitted_coupled_envelope": {
+      "background": "coupled",
+      "feedback": "coupled",
+      "deposition": "cell_centered_cc_convert",
+      "fluid_feedback": "conservative_momentum_and_energy",
+      "fluid_feedback_order": "mhd_src_terms",
+      "hall_mode": "off"
+    }
+  },
+  "fail_closed_residuals": [
+    "smr_or_amr",
+    "non_periodic_boundaries",
+    "relativistic_coordinates",
+    "nonideal_mhd",
+    "non_dynamic_evolution",
+    "fofc",
+    "mhd_diffusion",
+    "shearing_or_orbital_advection",
+    "fluid_radiation_relativity_or_turbulence_blocks",
+    "staggered_or_direct_current_deposition",
+    "hall_current_induction",
+    "nonzero_analytic_deltaf_background_current",
+    "user_defined_history_callbacks",
+    "active_mhd_with_no_mhd_background_mode",
+    "nonadaptive_expanding_mhd_deltaf_feedback",
+    "coupled_feedback_outside_the_qualified_cell_centered_conservative_split"
+  ],
+  "artifacts": [
+    "src/particles/particles.cpp",
+    "src/particles/particles_moments.cpp",
+    "src/particles/particles_pushers.cpp",
+    "src/mhd/mhd.hpp",
+    "src/mhd/mhd_tasks.cpp",
+    "src/outputs/history.cpp",
+    "inputs/tests/pic_mhd_expanding_box_uniform.athinput",
+    "inputs/tests/pic_mhd_expanding_box_adaptive_damping_smoke.athinput",
+    "tst/scripts/particles/pic_mhd_expanding_box_uniform.py",
+    "tst/scripts/particles/pic_mhd_expanding_box_coupled_conservation.py",
+    "tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_smoke.py",
+    "tst/scripts/particles/pic_mhd_expanding_box_guards.py",
+    "tst/scripts/particles/pic_parser_contract_guards.py",
+    "tst/scripts/particles/pic_paper_task_stage_trace.py"
+  ],
+  "focused_regressions": {
+    "pic_parser_contract_guards": "pass",
+    "pic_paper_task_stage_trace": "pass",
+    "pic_mhd_expanding_box_guards": "pass",
+    "pic_mhd_expanding_box_uniform": "pass",
+    "pic_mhd_expanding_box_oblique_divb": "pass",
+    "pic_expanding_box_appendix_local_oracles": "pass",
+    "pic_paper_coupling_conservation": "pass",
+    "pic_mhd_expanding_box_coupled_conservation": {
+      "status": "pass",
+      "momentum_residual_absolute_max": 1.59389476e-06,
+      "energy_residual_absolute": 1.23236397e-05
+    },
+    "pic_mhd_expanding_box_adaptive_damping_smoke": {
+      "status": "pass",
+      "endpoint_analytic_background_density_source_status": "pass",
+      "physical_background_rho": 0.997276445622224,
+      "source_norm": 0.01279240008443594,
+      "source_error_absolute_max": 1.1175870895385742e-08,
+      "damping_factor": 0.9775290684695616,
+      "damping_error_absolute_max": 4.656612873077393e-10,
+      "feedback_then_damping_order_error_absolute_max": 9.313225746154785e-10
+    },
+    "pic_ion_neutral_friction_smoke": "pass",
+    "pic_ion_neutral_alfven_envelope": "pass",
+    "pic_adaptive_deltaf_smoke": "pass",
+    "pic_adaptive_deltaf_cadence_variance": "pass"
+  },
+  "limitations": [
+    "The combined adaptive-delta-f reduced-damping fixture is a one-cycle bounded host manufactured-source ordering and launch oracle, not a physical CRPAI transport-calibration result.",
+    "The final-frame conservation fixture exercises the non-delta-f conservative exchange branch. Delta-f feedback retains its endpoint-normalized analytic rho E plus J cross B source formulation and needs physical campaign qualification.",
+    "The adaptive-cadence fixture does not show variance reduction.",
+    "Coupled restart continuation while scale factors evolve, full Appendix-A history convergence, changing-volume campaign accounting, driven CRPAI saturation, MPI decomposition parity, Frontier HIP/GPU runtime and external review remain open."
+  ],
+  "q008_disposition": "verifying_bounded_host_source_mapping_and_history_semantics_pass_full_gate_open",
+  "q033_disposition": "verifying_local_composition_launch_blocker_removed_physical_transport_qualification_open"
+}

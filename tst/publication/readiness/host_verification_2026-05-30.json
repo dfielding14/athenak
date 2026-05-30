@@ -1,0 +1,195 @@
+{
+  "record_type": "bounded_host_verification",
+  "date": "2026-05-30",
+  "qualification_effect": "descriptive_only",
+  "scope": "Host compilation and serial runtime checks collected before Kronos transport preflight. This record does not qualify MPI runtime, GPU runtime, Frontier portability, or scientific reproduction claims.",
+  "operational_policy_lifecycle": {
+    "status": "predecessor_kronos_policy_superseded",
+    "superseded_by": "tst/publication/readiness/q027_orion_only_storage_transition_2026-05-30.json",
+    "note": "The Kronos DTN or Globus preflight gate records the historical pre-transition policy only. Q-027 removes Kronos, DTN and Globus from the execution boundary."
+  },
+  "builds": [
+    {
+      "build_type": "Debug",
+      "mpi": false,
+      "kokkos_backend": "SERIAL",
+      "precision": "double",
+      "status": "pass"
+    },
+    {
+      "build_type": "Debug",
+      "mpi": true,
+      "kokkos_backend": "SERIAL",
+      "precision": "double",
+      "status": "pass",
+      "runtime_rank_launch": "not_run"
+    },
+    {
+      "build_type": "Release",
+      "mpi": true,
+      "kokkos_backend": "SERIAL",
+      "precision": "double",
+      "status": "pass",
+      "runtime_rank_launch": "not_run"
+    },
+    {
+      "build_type": "Release",
+      "mpi": false,
+      "kokkos_backend": "SERIAL",
+      "precision": "double",
+      "status": "pass"
+    },
+    {
+      "build_type": "Debug",
+      "mpi": false,
+      "openmp": true,
+      "kokkos_backend": "OPENMP",
+      "precision": "double",
+      "status": "pass",
+      "bounded_runtime": "paper_mhd_pic threads_1_and_2_byte_identical_output_artifacts"
+    },
+    {
+      "build_type": "Release",
+      "mpi": false,
+      "openmp": true,
+      "kokkos_backend": "OPENMP",
+      "precision": "double",
+      "status": "pass",
+      "bounded_runtime": "not_run"
+    },
+    {
+      "build_type": "Debug",
+      "mpi": false,
+      "kokkos_backend": "SERIAL",
+      "precision": "double",
+      "warning_flags": "-Wall -Wextra -Wpedantic",
+      "status": "pass_with_pre_existing_warning_debt",
+      "warning_records": 1311,
+      "note": "The warnings-enabled build links and starts. Q-042 records the touched-file review and repository baseline debt; this is not a warning-clean repository claim."
+    }
+  ],
+  "sanitizer_checks": [
+    {
+      "compiler": "GNU 13.3.1",
+      "sanitizers": "address,undefined",
+      "build_type": "Debug",
+      "status": "pass",
+      "bounded_runtime": "paper_mhd_pic two-cycle coupling fixture passed without sanitizer finding"
+    },
+    {
+      "compiler": "Cray Clang",
+      "sanitizers": "address,undefined",
+      "build_type": "Debug",
+      "status": "toolchain_startup_blocked",
+      "reason": "ASan aborts before AthenaK main on an ODR indicator collision in the linked toolchain. GNU ASan and the separate UBSan build are retained as host fallbacks."
+    },
+    {
+      "compiler": "AMD Clang",
+      "sanitizers": "undefined",
+      "build_type": "Debug",
+      "status": "pass",
+      "bounded_runtime": "startup and bounded PIC script checks passed"
+    }
+  ],
+  "serial_runtime_passes": [
+    "pic_parser_contract_guards",
+    "pic_paper_coupling_conservation",
+    "pic_paper_task_stage_trace",
+    "pic_q005_q006_local_analytical",
+    "pic_entity_differential",
+    "pic_adaptive_deltaf_smoke",
+    "pic_adaptive_deltaf_cadence_variance",
+    "pic_extended_hall_ct_smoke",
+    "pic_ion_neutral_friction_smoke",
+    "pic_ion_neutral_alfven_envelope",
+    "pic_relativistic_gyro_paper",
+    "pic_mhd_expanding_box_uniform",
+    "pic_expanding_box_appendix_local_oracles",
+    "pic_restart_safety_guards",
+    "pic_amr_shock_lb_smoke",
+    "pic_no_mhd_boris",
+    "pic_boris_midpoint_eb",
+    "pic_deposit_conservation",
+    "pic_mhd_current_coupling",
+    "pic_mhd_passive_mode",
+    "pic_mhd_coupling_nonperiodic",
+    "pic_mhd_restart_fidelity",
+    "pic_entity_deposit_mink",
+    "pic_entity_deposit_reflect",
+    "pic_refinement_boundary_characterization",
+    "pic_expanding_box_anisotropy_proxy",
+    "pic_crsi_deltaf_proxy",
+    "pic_crpai_polarization_proxy",
+    "pic_em_vacuum_wave",
+    "pic_langmuir_frequency_proxy",
+    "pic_two_stream_growth_proxy",
+    "pic_weibel_growth_proxy",
+    "pic_bell_growth_proxy"
+  ],
+  "mixed_scripts_with_serial_branches_passed": [
+    "pic_mhd_coupling_decomp",
+    "pic_mhd_coupling_multilevel",
+    "pic_multispecies_backreaction_oscillation"
+  ],
+  "multispecies_amr_proxy_recalibration": {
+    "classification": "short_horizon_interface_smoke_not_frequency_oracle",
+    "origin_pic_amplitude": 2.2951018810272217,
+    "corrected_branch_amplitude": 0.06881540268659592,
+    "corrected_branch_turns": 1.0,
+    "corrected_branch_energy_drift": 0.0012802842365086,
+    "revised_amplitude_floor": 0.05,
+    "reason": "The corrected nearest-center TSC interpolation changes the short AMR smoke response. Uniform and SMR oscillation thresholds remain unchanged."
+  },
+  "launcher_blocked_multi_rank_scripts": [
+    {
+      "test": "pic_decomp_invariance",
+      "reason": "The login host exposes no mpiexec or mpirun launcher. Rank launch is deferred to the controlled Frontier phase."
+    },
+    {
+      "test": "pic_parallel_shock_recenter",
+      "reason": "The script includes an unconditional np=2 branch and stopped when mpiexec was unavailable. Rank launch is deferred to the controlled Frontier phase."
+    }
+  ],
+  "control_plane_and_registry_passes": [
+    {
+      "test": "tst/publication/frontier_control_plane/test_ledger.py",
+      "tests_run": 5
+    },
+    {
+      "test": "tst/publication/frontier_control_plane/test_control_plane.py",
+      "tests_run": 24
+    },
+    {
+      "test": "tst/publication/test_pic_preregistration.py",
+      "tests_run": 6
+    },
+    {
+      "test": "tst/publication/test_pic_q039_gizmo_decision.py",
+      "tests_run": 5
+    },
+    {
+      "test": "tst/publication/test_pic_readiness_registry.py",
+      "tests_run": 8
+    },
+    {
+      "test": "tst/publication/test_pic_artifact_taxonomy.py",
+      "tests_run": 20
+    }
+  ],
+  "static_checks_passed": [
+    "git diff --check",
+    "python3 -m py_compile for changed PIC smoke scripts and readiness/control-plane tests",
+    "no greater-than-90-column lines in touched PIC, MHD, restart, and mesh-refinement C++ files",
+    "no active restart-schema-version-3 reference or active 4000-node-hour cap remnant",
+    "Project Home private paper-render bundle restored in a fresh directory with 23 of 23 archived payload checksums verified"
+  ],
+  "historical_predecessor_execution_gates": [
+    "Superseded by Q-027: authenticated Kronos DTN or Globus transport preflight"
+  ],
+  "open_execution_gates": [
+    "Host or Frontier multi-rank runtime matrix",
+    "Frontier HIP/MPI build and runtime matrix",
+    "Release runtime and Frontier memory-tool matrix",
+    "Scientific reproduction and selected-extension qualification matrices"
+  ]
+}

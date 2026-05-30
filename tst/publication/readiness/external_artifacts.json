@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "inventory_date": "2026-05-30",
+  "reviewer": "pending external review",
+  "artifacts": [
+    {
+      "artifact_id": "SUN_BAI_2023_ARXIV_V1_TEX",
+      "kind": "paper_source",
+      "path": "docs/reference_paper/arXiv-2304.10568v1/mnras_template.tex",
+      "sha256": "8f99cec40b8c9fad7f6011c0c32f14724cc0dddabb86db95a7f1687ce04cbdae",
+      "citation": "Sun & Bai (2023), arXiv:2304.10568v1",
+      "redistribution_status": "review_required_before_external_export",
+      "allowed_location": "repository_and_private_qualification_archive"
+    },
+    {
+      "artifact_id": "SUN_BAI_2023_ARXIV_V1_PLOTS",
+      "kind": "paper_figure_bundle",
+      "path": "docs/reference_paper/arXiv-2304.10568v1/plot",
+      "file_count": 35,
+      "sha256_manifest_sha256": "e5c87d8a85ebe110392dbba077869c426e85f7284da80b40deac456c710c9e70",
+      "citation": "Sun & Bai (2023), arXiv:2304.10568v1",
+      "redistribution_status": "review_required_before_external_export",
+      "allowed_location": "repository_and_private_qualification_archive"
+    },
+    {
+      "artifact_id": "SUN_BAI_2023_ARXIV_V1_RENDERED_PDF",
+      "kind": "rendered_pdf",
+      "status": "historical_project_home_private_render_superseded_by_orion_policy_copy",
+      "source_artifact_id": "SUN_BAI_2023_ARXIV_V1_TEX",
+      "path": "/ccs/proj/ast207/proj-shared/PIC/reference_artifacts/sun_bai_2023_arxiv_v1_render_2026-05-30/mnras_template.pdf",
+      "sha256": "86e1f53ee335685a833b65b000e105d72c83c9bcea3a7b4a0ccaaa4deabaf3d6",
+      "pages": 20,
+      "bundle_manifest_sha256": "6103d0da9c5782e22b702fd7ecf50cc04ae75126b5d11e1aa12bea41684611ed",
+      "restore_record": "tst/publication/readiness/q026_private_render_restore_2026-05-30.json",
+      "redistribution_status": "review_required_before_external_export",
+      "allowed_location": "historical_chronology_only_do_not_add_project_home_bulk_artifacts"
+    },
+    {
+      "artifact_id": "SUN_BAI_2023_ARXIV_V1_RENDERED_PDF_ORION_COPY",
+      "kind": "rendered_pdf_orion_policy_copy",
+      "status": "private_copy_restore_drill_passed",
+      "source_artifact_id": "SUN_BAI_2023_ARXIV_V1_RENDERED_PDF",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/sun_bai_2023_arxiv_v1_render_2026-05-30/mnras_template.pdf",
+      "sha256": "86e1f53ee335685a833b65b000e105d72c83c9bcea3a7b4a0ccaaa4deabaf3d6",
+      "pages": 20,
+      "bundle_manifest_sha256": "6103d0da9c5782e22b702fd7ecf50cc04ae75126b5d11e1aa12bea41684611ed",
+      "transition_record": "tst/publication/readiness/q027_orion_only_storage_transition_2026-05-30.json",
+      "redistribution_status": "review_required_before_external_export",
+      "allowed_location": "user_selected_orion_only_bulk_evidence_root_with_documented_durability_risk"
+    },
+    {
+      "artifact_id": "ENTITY_TOOLKIT_REPLACEMENT_CANDIDATE",
+      "kind": "external_code_snapshot",
+      "path": "/ccs/home/dfielding/entity",
+      "git_commit": "512998c471bf3fdec292cb4a64150c4f0aeea539",
+      "git_tree": "38d511d3d317d0866fab33201a7355815c26bedf",
+      "git_archive_sha256": "c92f5fac17cdbf90fc0c6adcc0b9445fa5b9f4f78c1b6a53c97aa6520423ce1d",
+      "snapshot_manifest": "tst/publication/readiness/entity_snapshot.json",
+      "status": "frozen_clean_source_snapshot",
+      "historical_unavailable_commit": "a59065fc",
+      "redistribution_status": "record_commit_and_checksums_before_private_archive",
+      "allowed_location": "private_reference_archive_or_retrieval_instructions"
+    },
+      {
+        "artifact_id": "CROSS_CODE_REFERENCE_DATA",
+        "kind": "digitized_or_machine_readable_reference_data",
+        "status": "local_staged_checksummed_reference_sources_pending_orion_copy_post_copy_verification_and_dataset_extraction",
+        "private_source_ingest_record": "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json",
+        "pending_orion_private_bundle_target": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/q022_external_preprints_2026-05-30",
+        "required_action": "copy_locally_staged_reference_sources_to_orion_verify_post_copy_checksums_then_freeze_each_extracted_dataset_with_citation_checksum_license_and_extraction_uncertainty",
+        "allowed_location": "private_reference_archive_or_retrieval_instructions"
+      },
+        {
+            "artifact_id": "PLOTTING_ENVIRONMENT",
+            "kind": "analysis_dependency_lock",
+            "status": "candidate_recorded_qualification_lock_not_yet_approved",
+            "candidate_record": "tst/publication/readiness/plotting_environment_lock_candidate_2026-05-30.json",
+            "required_action": "freeze the controlled backend font configuration and exact environment artifact then obtain external export review before qualification figures",
+            "allowed_location": "repository_compact_lock_and_private_archive"
+        }
+  ]
+}

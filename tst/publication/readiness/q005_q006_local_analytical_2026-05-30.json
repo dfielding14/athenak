@@ -1,0 +1,134 @@
+{
+  "record_type": "q005_q006_local_analytical_tranche",
+  "date": "2026-05-30",
+  "qualification_effect": "bounded_host_evidence_only",
+  "scope": "Serial-host analytical characterization for the existing Bell-growth and multi-species oscillatory-backreaction engineering proxies. This record validates bounded analytical extractors, records deck-bound oracle mismatches, and prevents proxy results from being promoted to Section 5.2 or Section 5.3 paper-reproduction closure.",
+  "source_constraints": {
+    "production_source_edited": false,
+    "controlled_readiness_documents_edited": false,
+    "reused_existing_fixtures": true
+  },
+  "athenak_subject": {
+    "base_commit": "3bcd3f21e4f5439e655d977854f03b287fa814b9",
+    "note": "The AthenaK PIC readiness batch contains pre-existing concurrent edits. This bounded tranche added only tst/scripts/particles/pic_q005_q006_local_analytical.py and this sidecar."
+  },
+  "verification": {
+    "harness": "tst/scripts/particles/pic_q005_q006_local_analytical.py",
+    "harness_sha256": "5232240c51694c48a7d3744f27fcad209d3d97629adc8817e0f40dd258f330eb",
+    "direct_command": "cd tst && python3 -m scripts.particles.pic_q005_q006_local_analytical",
+    "direct_result": "pass",
+    "post_edit_existing_output_analysis": "pass",
+    "python_compile": "pass",
+    "untracked_file_diff_check": "pass",
+    "athena_executable": "tst/build/src/athena",
+    "athena_configuration": "double_precision_serial_no_openmp"
+  },
+  "synthetic_oracle_checks": {
+    "bell_standard_no_hall": {
+      "k0": 0.64,
+      "midpoint_gamma": 0.32,
+      "expected_midpoint_gamma": 0.32,
+      "left_gamma": 0.27712812921102037,
+      "right_gamma": 0.27712812921102037,
+      "result": "pass"
+    },
+    "section_5_3_frequency_extractor": {
+      "expected_omega": 1.4142135623730951,
+      "expected_frequency_cycles": 0.22507907903927654,
+      "measured_frequency_cycles": 0.22509918319719951,
+      "single_tone_r2": 0.9999994553995171,
+      "result": "pass"
+    }
+  },
+  "q005_bell": {
+    "classification": "engineering_proxy_not_section_5_2_reproduction",
+    "fixture": "inputs/tests/pic_bell_growth_proxy.athinput",
+    "deck_bound_standard_no_hall_oracle": {
+      "current_density": 0.6400000000000001,
+      "k": 0.39269908169872414,
+      "k0": 0.6400000000000001,
+      "omega_real": 0.0,
+      "gamma": 0.31163254566903353,
+      "unstable": true
+    },
+    "serial_uncoupled": {
+      "outputs": 32,
+      "time_span": 4.39661,
+      "gamma": -0.017680024394050458,
+      "growth_r2": 0.86152477365135,
+      "growth_ratio": 0.9133887644781162,
+      "omega_real_measured": 0.7908785249425566
+    },
+    "serial_coupled": {
+      "outputs": 32,
+      "time_span": 4.18958,
+      "gamma": 4.565519590688688,
+      "growth_r2": 0.7470411572533446,
+      "growth_ratio": 352.27306348138285,
+      "omega_real_measured": 1.3317151421637186,
+      "fit_tmin": 0.0,
+      "fit_tmax": 0.998169
+    },
+    "disposition": "The engineering proxy demonstrates current-driven growth separation, but its measured growth and phase do not match the deck-bound standard no-Hall branch. It is not Section 5.2 analytical-dispersion evidence."
+  },
+  "q006_oscillatory_backreaction": {
+    "classification": "engineering_proxy_not_section_5_3_reproduction",
+    "fixtures": {
+      "uniform": "inputs/tests/pic_multispecies_osc_uniform.athinput",
+      "smr": "inputs/tests/pic_multispecies_osc_smr.athinput",
+      "amr_proxy": "inputs/tests/pic_multispecies_osc_amr_proxy.athinput"
+    },
+    "deck_bound_section_5_3_oracle": {
+      "normalization": "ppc=1 split round-robin across two species, rho=1, |q|/m=1, and B_parallel=1",
+      "omega": 1.4142135623730951,
+      "frequency_cycles": 0.22507907903927654
+    },
+    "uniform": {
+      "outputs": 242,
+      "time_span": 19.7306,
+      "amplitude": 139.04803085327148,
+      "zero_crossings": 13,
+      "energy_drift": 0.050553046101747795,
+      "single_tone_frequency_cycles": 0.40194865810968494,
+      "single_tone_r2": 0.6154319079822721
+    },
+    "smr": {
+      "outputs": 242,
+      "time_span": 19.2903,
+      "amplitude": 53.71123695373535,
+      "zero_crossings": 13,
+      "energy_drift": 0.021519140809346537,
+      "single_tone_frequency_cycles": 0.39533255542590434,
+      "single_tone_r2": 0.5125671178173778
+    },
+    "uniform_vs_smr_abs_frequency_difference": 0.0066161026837806,
+    "amr_proxy": {
+      "outputs": 82,
+      "time_span": 0.475702,
+      "amplitude": 0.06881540268659592,
+      "zero_crossings": 1,
+      "energy_drift": 0.0012802842365086,
+      "frequency_qualified": false
+    },
+    "disposition": "Uniform and SMR have bounded serial proxy parity under the broad extractor, but both traces miss the deck-bound Section 5.3 frequency and are not clean single tones. The nested level-2 AMR deck is short-horizon interface smoke only and cannot qualify frequency agreement."
+  },
+  "residual_work": {
+    "local_prerequisites_outside_this_tranche": [
+      "Complete the production coupling and AMR repairs tracked by the readiness plan before freezing publication decks.",
+      "For Q-005, replace the engineering proxy with frozen Section 5.2 parameter decks and compare real and imaginary dispersion branches in 1D, 2D, and 3D with declared convergence and seed policy.",
+      "For Q-006, replace the engineering proxy with frozen Section 5.3 decks and run long-horizon uniform, SMR, and true AMR frequency-oracle agreement with declared convergence."
+    ],
+    "mpi": [
+      "Run Q-005 1D, 2D, and 3D decomposition matrices with an MPI-enabled executable and controlled multi-rank launcher.",
+      "Run Q-006 uniform, SMR, and true-AMR decomposition matrices with an MPI-enabled executable and controlled multi-rank launcher."
+    ],
+    "frontier": [
+      "Build the frozen Q-005 and Q-006 publication configurations with the Frontier HIP/MPI toolchain.",
+      "Execute the declared Frontier rank and GPU matrices, retain logs, and check host-versus-Frontier scientific-metric agreement."
+    ],
+    "external": [
+      "Obtain the deferred external-review disposition for the frozen publication decks, oracle formulas, tolerances, retained artifacts, and final Q-005/Q-006 evidence."
+    ]
+  },
+  "q005_q006_disposition": "bounded_serial_host_analytical_characterization_passed_claim_closure_remains_open"
+}

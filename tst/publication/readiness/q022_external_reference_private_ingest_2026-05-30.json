@@ -1,0 +1,107 @@
+{
+  "record_type": "q022_external_reference_private_ingest",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-022",
+  "qualification_effect": "local_staged_checksummed_reference_source_preparation_only",
+  "disposition": "open",
+  "scope": "Local staged checksummed source-artifact preparation for a pending private Orion copy and post-copy checksum verification. These artifacts are papers and GIZMO interpretation references, not digitized comparison datasets. Orion copy, post-copy checksum verification, extraction provenance, uncertainty, equation maps, numerical tolerances, comparisons, export review and external reviewer disposition remain open.",
+  "local_staged_preparation": {
+    "status": "local_staged_checksummed_preparation_pending_orion_copy_and_post_copy_checksum_verification",
+    "orion_target_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/q022_external_preprints_2026-05-30",
+    "checksum_manifest": "SHA256SUMS",
+    "allowed_orion_target_location": "user_selected_orion_only_bulk_evidence_root_with_documented_durability_risk",
+    "redistribution_status": "private_archive_only_review_required_before_external_export"
+  },
+  "transport_notes": [
+    "arXiv PDFs were fetched from public arXiv export endpoints and checksummed in local staging before the pending Orion copy.",
+    "The official GIZMO tapir.caltech.edu host presented a legacy TLS chain rejected by the system OpenSSL policy as EE certificate key too weak. Public reference-only HTML and PDF retrieval used an explicit curl --insecure exception, followed immediately by SHA-256 capture. This exception is not authorized for production control-plane, ledger, executable or simulation-artifact transport.",
+    "The GIZMO public Git HEAD was captured with git ls-remote over the GitHub endpoint; no source checkout is archived by this record."
+  ],
+  "artifacts": [
+    {
+      "reference_id": "riquelme_spitkovsky_2009_arxiv_0810.4565",
+      "path": "arxiv_0810.4565.pdf",
+      "source_locator": "arXiv:0810.4565",
+      "sha256": "c2f698d20dd78e291adb8b79ffb8b3e1f3bd953a71236cbe986a91701ea0b2a1"
+    },
+    {
+      "reference_id": "gargate_2010_arxiv_1002.1701",
+      "path": "arxiv_1002.1701.pdf",
+      "source_locator": "arXiv:1002.1701",
+      "sha256": "e0406569c49809936d6a275e93da3991c51720303c6c4914aac799be8ed9408b"
+    },
+    {
+      "reference_id": "bai_2015_arxiv_1412.1087",
+      "path": "arxiv_1412.1087.pdf",
+      "source_locator": "arXiv:1412.1087",
+      "sha256": "d9daeaa1c072aff617d8850797f570080d0b597a67eb60592689b24cf4e8cf1b"
+    },
+    {
+      "reference_id": "van_marle_casse_marcowith_2018_doi_stx2509",
+      "path": "arxiv_1709.08482.pdf",
+      "source_locator": "arXiv:1709.08482; DOI:10.1093/mnras/stx2509",
+      "sha256": "043bc5062e01773e4de78e4d53c55abfc9d80b9e19cef670cc61d6087aeb1eb4"
+    },
+    {
+      "reference_id": "mignone_2018_arxiv_1804.01946",
+      "path": "arxiv_1804.01946.pdf",
+      "source_locator": "arXiv:1804.01946",
+      "sha256": "856c4c15809b540566cad4438de50eb0a29375d8b94805397a5e2278d320309e"
+    },
+    {
+      "reference_id": "bai_2019_arxiv_1902.10219",
+      "path": "arxiv_1902.10219.pdf",
+      "source_locator": "arXiv:1902.10219",
+      "sha256": "482200d9212020de913ccb413690d14698d1ff72f7aeedf9eb25aaeb896bdb9d"
+    },
+    {
+      "reference_id": "plotnikov_ostriker_bai_2021_arxiv_2102.11878",
+      "path": "arxiv_2102.11878.pdf",
+      "source_locator": "arXiv:2102.11878",
+      "sha256": "4d2c5275cc1b155f85d5c31d48389d718502bb902a4ec8f6f356e39b2a907d51"
+    },
+    {
+      "reference_id": "ji_hopkins_2022_arxiv_2111.14704",
+      "path": "arxiv_2111.14704.pdf",
+      "source_locator": "arXiv:2111.14704",
+      "sha256": "0c333d329b2304b90547f8e1218e43560af2bc23b048bfbf7e82189d6afc5edd"
+    },
+    {
+      "reference_id": "zacharegkas_2022_arxiv_2210.08072",
+      "path": "arxiv_2210.08072.pdf",
+      "source_locator": "arXiv:2210.08072",
+      "sha256": "b3b941a4de70d119276e7500f66a351cbeb327c63a044007563c52fe4dcf0d8f"
+    },
+    {
+      "reference_id": "sun_bai_zhao_2024_arxiv_2409.08592",
+      "path": "arxiv_2409.08592.pdf",
+      "source_locator": "arXiv:2409.08592",
+      "sha256": "6df4aef1cb57d665b0843dd622aa25a47ed28041378dcb59633661477dc4b2cc"
+    },
+    {
+      "reference_id": "gizmo_official_documentation",
+      "path": "gizmo_docs/gizmo_documentation.html",
+      "source_locator": "official tapir.caltech.edu GIZMO documentation HTML",
+      "sha256": "500e051675e663270a162dce30fc347fb1821819505a63e9cad2af3f0efa5d0f"
+    },
+    {
+      "reference_id": "gizmo_official_cosmic_ray_notes",
+      "path": "gizmo_docs/notes_cosmicrays.pdf",
+      "source_locator": "official tapir.caltech.edu cosmic-ray notes PDF",
+      "sha256": "fcb45f715db921e919871109f742312aa07636312d66681124ec07acabc74bc1"
+    }
+  ],
+  "gizmo_public_git_head": {
+    "repository": "pfhopkins/gizmo-public",
+    "head": "a828c4ba79d67093bd1a3d04f6f90b5d2d94d65f"
+  },
+  "remaining_open_items": [
+    "Copy the locally staged private bundle to Orion and verify the Orion SHA256SUMS file after copy.",
+    "Classify redistribution and license basis before any external export.",
+    "Digitize or otherwise extract each comparison dataset with provenance and uncertainty.",
+    "Freeze one equation and normalization map plus numeric tolerances per executed comparison.",
+    "Obtain external reviewer disposition."
+  ],
+  "ingest_status": "local_staged_checksummed_preparation_pending_orion_copy_and_post_copy_checksum_verification"
+}

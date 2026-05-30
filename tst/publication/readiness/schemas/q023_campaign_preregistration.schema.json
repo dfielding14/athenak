@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "athenak_pic_q023_campaign_preregistration.schema.json",
+  "title": "AthenaK PIC Q-023 campaign preregistration draft",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "campaign_id",
+    "claim_ids",
+    "freeze_status",
+    "physical_mode",
+    "primary_observables",
+    "secondary_observables",
+    "estimators",
+    "seed_profile",
+    "sampling_rule_profile",
+    "parameter_grid_profile",
+    "fit_window_profile",
+    "tolerance_profile",
+    "exclusion_profile",
+    "multiplicity_family",
+    "local_input_ids",
+    "local_analyzer_ids",
+    "reference_values",
+    "claim_specific_exclusions",
+    "failure_artifact_root",
+    "independent_recompute_profile",
+    "candidate_bindings",
+    "open_dependencies"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "campaign_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "claim_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "freeze_status": {
+      "enum": [
+        "locally_preregistered_run_blocked",
+        "frozen_before_qualifying_run"
+      ]
+    },
+    "physical_mode": {
+      "type": "string",
+      "minLength": 1
+    },
+    "primary_observables": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "secondary_observables": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "estimators": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "seed_profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sampling_rule_profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "parameter_grid_profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "fit_window_profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tolerance_profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "exclusion_profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "multiplicity_family": {
+      "type": "string",
+      "minLength": 1
+    },
+    "local_input_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "local_analyzer_ids": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "reference_values": {
+      "type": "object",
+      "minProperties": 1
+    },
+    "claim_specific_exclusions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "failure_artifact_root": {
+      "type": "string",
+      "minLength": 1
+    },
+    "independent_recompute_profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "candidate_bindings": {
+      "type": "object",
+      "required": [
+        "status",
+        "git_commit",
+        "executable_sha256",
+        "qualifying_input_checksums",
+        "production_analysis_checksums"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "open_before_qualifying_run",
+            "frozen_before_qualifying_run"
+          ]
+        },
+        "git_commit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "executable_sha256": {
+          "type": "string",
+          "minLength": 1
+        },
+        "qualifying_input_checksums": {
+          "type": "string",
+          "minLength": 1
+        },
+        "production_analysis_checksums": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "open_dependencies": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "additionalProperties": true
+}

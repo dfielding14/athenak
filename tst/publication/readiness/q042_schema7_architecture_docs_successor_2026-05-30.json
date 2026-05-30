@@ -1,0 +1,55 @@
+{
+  "record_type": "q042_schema7_architecture_docs_successor",
+  "date": "2026-05-30",
+  "gate": "Q-042",
+  "qualification_effect": "bounded_host_architecture_docs_successor_record_only",
+  "predecessor_chronology_record": "tst/publication/readiness/q042_post_repair_architecture_docs_successor_2026-05-30.json",
+  "scope": "Successor chronology record for the schema-7 provenance and weighted-spectrum tranche, bounded repeated-AMR lifetime tranche, bounded serial-host restart fault injection, bounded expanding-box endpoint-source composition, bounded serial-host standard-MHD compatibility repair, and current documentation render. The prior schema-6 architecture/docs sidecar remains preserved as predecessor evidence. This record does not close Frontier promotion, MPI per-rank, node-loss, scheduler-pretimeout, scientific-campaign, or external-review gates.",
+  "reviewed_successor_records": [
+    {
+      "surface": "schema7_particle_provenance_and_spectra",
+      "record": "tst/publication/readiness/q016_particle_provenance_spectra_local_2026-05-30.json",
+      "disposition": "bounded_serial_host_schema7_successor_recorded"
+    },
+    {
+      "surface": "repeated_amr_lifetime",
+      "record": "tst/publication/readiness/q009_repeated_amr_lifetime_bounded_local_2026-05-30.json",
+      "disposition": "bounded_serial_host_six_transition_successor_recorded"
+    },
+    {
+      "surface": "schema7_restart_resilience",
+      "record": "tst/publication/readiness/q024_schema7_restart_resilience_successor_2026-05-30.json",
+      "disposition": "bounded_serial_host_schema7_restart_fault_matrix_recorded"
+    },
+    {
+      "surface": "expanding_box_endpoint_source_and_damping_order",
+      "record": "tst/publication/readiness/q008_q033_expanding_coupled_source_successor_2026-05-30.json",
+      "disposition": "bounded_serial_host_endpoint_source_and_damping_order_recorded"
+    },
+    {
+      "surface": "standard_mhd_compatibility",
+      "record": "tst/publication/readiness/q042_standard_mhd_compatibility_local_2026-05-30.json",
+      "disposition": "bounded_serial_host_standard_mhd_compatibility_repair_recorded"
+    }
+  ],
+  "documentation_evidence": {
+    "source": "docs/documentation_audit_log.md",
+    "status": "recorded_warning_free_isolated_sphinx_render",
+    "pages": 58,
+    "command": "/tmp/athenak-q016-docs-venv/bin/sphinx-build -b html -W --keep-going docs/source docs/build/html"
+  },
+  "readiness_cleanup_scope": [
+    "Index the schema-7 Q-024 and Q-042 successor chronology records.",
+    "Correct stale post-ingest Q-018, Q-035 and Q-039 wording while retaining fail-closed pending language.",
+    "Remove the stale checked glossary entry from the documentation audit checklist.",
+    "Record the landed bounded Q-009 interface policy and the bounded Q-033 endpoint-source composition launch oracle.",
+    "Record the bounded standard-MHD custom-generator and isothermal-timestep compatibility repair."
+  ],
+  "residual_risks": [
+    "The schema-7 records do not replace the required clean-candidate freeze or full resilience matrix.",
+    "The successor Frontier control plane passed its separate local unit/static suite and independent adversarial re-audit in q027_successor_control_plane_independent_pass_2026-05-30.json; paired Orion and Project Home install plus policy promotion remain pending a clean source candidate.",
+    "MPI per-rank, non-PIC multilevel and orbital-advection runtime coverage, node-loss, scheduler-pretimeout, Frontier-filesystem, Frontier HIP/GPU and scientific campaigns remain open.",
+    "External reviewer disposition remains pending."
+  ],
+  "q042_disposition": "schema7_architecture_docs_successor_chronology_recorded_control_plane_local_reaudit_passed_paired_promotion_frontier_and_external_gates_remain_open"
+}

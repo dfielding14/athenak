@@ -1,0 +1,806 @@
+{
+  "record_type": "q023_campaign_drafts",
+  "schema_version": 2,
+  "date": "2026-05-30",
+  "gate": "Q-023",
+  "qualification_effect": "locally_preregistered_draft_control_records_only",
+  "disposition": "open",
+  "profile_registry": "tst/publication/readiness/q023_local_preregistration_profiles_2026-05-30.json",
+  "schema": "tst/publication/readiness/schemas/q023_campaign_preregistration.schema.json",
+  "inheritance_rule": "Each campaign draft normatively inherits its referenced seed, sampling, exclusion, grid, fit-window, tolerance, and independent-recompute profiles. Before a qualifying run, materialize those profile values into an immutable campaign record, bind the candidate-specific open fields, validate the expanded record, and freeze it before inspecting output.",
+  "shared_candidate_bound_open_values": {
+    "git_commit": "open_clean_candidate_not_frozen",
+    "executable_sha256": "open_clean_frontier_executable_not_frozen",
+    "qualifying_input_checksums": "open_qualifying_decks_not_frozen",
+    "production_analysis_checksums": "open_qualifying_analyzers_not_frozen",
+    "failure_artifact_root": "open_authorized_orion_campaign_subdirectory_not_frozen",
+    "independent_recompute_script": "open_later_reviewer_owned_or_independent_artifact",
+    "external_reviewer_disposition": "pending external review"
+  },
+  "campaigns": [
+    {
+      "schema_version": 2,
+      "campaign_id": "Q023-PAPER-BELL-LINEAR",
+      "claim_ids": [
+        "CLAIM-PAPER-BELL-LINEAR-001"
+      ],
+      "freeze_status": "locally_preregistered_run_blocked",
+      "physical_mode": "paper_mhd_pic",
+      "primary_observables": [
+        "growth_rate_over_k0_ua",
+        "phase_frequency_over_k0_ua",
+        "polarization"
+      ],
+      "secondary_observables": [
+        "particle_count_trend",
+        "resolution_trend",
+        "timestep_trend",
+        "dimensionality"
+      ],
+      "estimators": [
+        "per_seed_fixed_theory_window_exponential_growth_fit",
+        "per_seed_fixed_interval_spatial_phase_fit",
+        "median_across_qualifying_seeds",
+        "bca_bootstrap_across_qualifying_seeds"
+      ],
+      "seed_profile": "Q023-SEEDS-FIXED-8",
+      "sampling_rule_profile": "Q023-SAMPLING-FIXED-8-HOLM-BCA",
+      "parameter_grid_profile": "Q023-GRID-PAPER-BELL-LINEAR",
+      "fit_window_profile": "Q023-WINDOW-PAPER-BELL-LINEAR",
+      "tolerance_profile": "Q023-TOL-PAPER-BELL-LINEAR",
+      "exclusion_profile": "Q023-EXCLUSIONS-FAIL-CLOSED",
+      "multiplicity_family": "paper_bell_linear_primary_endpoints",
+      "local_input_ids": [
+        "Q023-INPUT-BELL-PROXY"
+      ],
+      "local_analyzer_ids": [
+        "Q023-ANALYZER-COMMON-GROWTH",
+        "Q023-ANALYZER-BELL-LOCAL",
+        "Q023-ANALYZER-BIN-READER"
+      ],
+      "reference_values": {
+        "status": "frozen_analytical_formula",
+        "source": "Sun and Bai Section 5.2",
+        "formula": "omega/(k0*U_A)=epsilon+i*sqrt(1-epsilon^2) at k=k0"
+      },
+      "claim_specific_exclusions": [
+        "Hall-extension inference",
+        "promotion of the checksummed Bell proxy deck or local proxy analyzer into Section 5.2 evidence"
+      ],
+      "failure_artifact_root": "open_authorized_orion_campaign_subdirectory_not_frozen",
+      "independent_recompute_profile": "Q023-RECOMPUTE-RAW-ARTIFACT-INDEPENDENT",
+      "candidate_bindings": {
+        "status": "open_before_qualifying_run",
+        "git_commit": "open_clean_candidate_not_frozen",
+        "executable_sha256": "open_clean_frontier_executable_not_frozen",
+        "qualifying_input_checksums": "open_paper_faithful_decks_not_created",
+        "production_analysis_checksums": "open_qualifying_dispersion_analyzer_not_created"
+      },
+      "open_dependencies": [
+        "Create and checksum paper-faithful 1D, 2D, and 3D decks.",
+        "Create and checksum the qualifying analytical-dispersion analyzer.",
+        "Bind the clean candidate and Frontier executable."
+      ]
+    },
+    {
+      "schema_version": 2,
+      "campaign_id": "Q023-PAPER-SHOCK",
+      "claim_ids": [
+        "CLAIM-PAPER-SHOCK-001"
+      ],
+      "freeze_status": "locally_preregistered_run_blocked",
+      "physical_mode": "paper_mhd_pic",
+      "primary_observables": [
+        "shock_position",
+        "upstream_magnetic_amplification_at_t500",
+        "downstream_weighted_spectra_at_t500_and_t1200",
+        "late_energy_spectrum_power_law_slope_at_t1200",
+        "morphology"
+      ],
+      "secondary_observables": [
+        "amr_vs_uniform_trend",
+        "load_balance",
+        "provenance_cohorts"
+      ],
+      "estimators": [
+        "median_across_qualifying_seeds",
+        "bca_bootstrap_across_qualifying_seeds",
+        "downstream_weighted_spectrum",
+        "fixed_snapshot_power_law_fit"
+      ],
+      "seed_profile": "Q023-SEEDS-FIXED-8",
+      "sampling_rule_profile": "Q023-SAMPLING-FIXED-8-HOLM-BCA",
+      "parameter_grid_profile": "Q023-GRID-PAPER-SHOCK",
+      "fit_window_profile": "Q023-WINDOW-PAPER-SHOCK",
+      "tolerance_profile": "Q023-TOL-PAPER-SHOCK",
+      "exclusion_profile": "Q023-EXCLUSIONS-FAIL-CLOSED",
+      "multiplicity_family": "paper_shock_primary_endpoints",
+      "local_input_ids": [
+        "Q023-INPUT-PAPER-SHOCK-SCAFFOLD"
+      ],
+      "local_analyzer_ids": [
+        "Q023-ANALYZER-SHOCK-LOCAL",
+        "Q023-ANALYZER-SPECTRA-LOCAL",
+        "Q023-ANALYZER-PVTK-READER",
+        "Q023-ANALYZER-BIN-READER"
+      ],
+      "reference_values": {
+        "status": "paper_text_values_frozen_remaining_extraction_open",
+        "source": "Sun and Bai Section 5.4",
+        "amplification_range": [
+          2.0,
+          4.0
+        ],
+        "late_energy_spectrum_power_law_slope": -1.5
+      },
+      "claim_specific_exclusions": [
+        "thermal-pool injection",
+        "oblique-shock generality",
+        "promotion of the checksummed shock scaffold or engineering analyzers into Section 5.4 evidence"
+      ],
+      "failure_artifact_root": "open_authorized_orion_campaign_subdirectory_not_frozen",
+      "independent_recompute_profile": "Q023-RECOMPUTE-RAW-ARTIFACT-INDEPENDENT",
+      "candidate_bindings": {
+        "status": "open_before_qualifying_run",
+        "git_commit": "open_clean_candidate_not_frozen",
+        "executable_sha256": "open_clean_frontier_executable_not_frozen",
+        "qualifying_input_checksums": "open_exact_injection_audit_and_clean_deck_freeze_required",
+        "production_analysis_checksums": "open_qualifying_section54_analyzer_not_created"
+      },
+      "open_dependencies": [
+        "Complete the exact injection audit.",
+        "Freeze the downstream spectrum fit energy interval before qualifying output.",
+        "Create and checksum the qualifying Section 5.4 analyzer.",
+        "Bind the clean candidate, Frontier executable, and Orion artifact root."
+      ]
+    },
+    {
+      "schema_version": 2,
+      "campaign_id": "Q023-PAPER-CRSI-LINEAR",
+      "claim_ids": [
+        "CLAIM-PAPER-CRSI-LINEAR-001"
+      ],
+      "freeze_status": "locally_preregistered_run_blocked",
+      "physical_mode": "paper_mhd_pic",
+      "primary_observables": [
+        "k_by_k_growth_rate",
+        "polarization_resolved_spectra",
+        "polarization_branch"
+      ],
+      "secondary_observables": [
+        "deltaf_weight_validity",
+        "particle_count_trend",
+        "momentum_bin_trend",
+        "resolution_trend",
+        "box_size_trend"
+      ],
+      "estimators": [
+        "per_seed_fixed_window_k_by_k_exponential_growth_fit",
+        "median_across_qualifying_seeds",
+        "bca_bootstrap_across_qualifying_seeds"
+      ],
+      "seed_profile": "Q023-SEEDS-FIXED-8",
+      "sampling_rule_profile": "Q023-SAMPLING-FIXED-8-HOLM-BCA",
+      "parameter_grid_profile": "Q023-GRID-PAPER-CRSI-LINEAR",
+      "fit_window_profile": "Q023-WINDOW-PAPER-CRSI-LINEAR",
+      "tolerance_profile": "Q023-TOL-PAPER-GYRORESONANT-LINEAR",
+      "exclusion_profile": "Q023-EXCLUSIONS-FAIL-CLOSED",
+      "multiplicity_family": "paper_crsi_linear_primary_endpoints",
+      "local_input_ids": [
+        "Q023-INPUT-CRSI-PROXY"
+      ],
+      "local_analyzer_ids": [
+        "Q023-ANALYZER-COMMON-GROWTH",
+        "Q023-ANALYZER-CRSI-LOCAL",
+        "Q023-ANALYZER-BIN-READER"
+      ],
+      "reference_values": {
+        "status": "frozen_analytical_equation_qualifying_oracle_implementation_open",
+        "source": "Sun and Bai Section 5.5",
+        "formula": "Equation equ::crsi_dispersion and its low-mncr/rho0 approximation"
+      },
+      "claim_specific_exclusions": [
+        "nonlinear transport closure",
+        "promotion of the checksummed quiet-start proxy into true-delta-f Section 5.5 evidence"
+      ],
+      "failure_artifact_root": "open_authorized_orion_campaign_subdirectory_not_frozen",
+      "independent_recompute_profile": "Q023-RECOMPUTE-RAW-ARTIFACT-INDEPENDENT",
+      "candidate_bindings": {
+        "status": "open_before_qualifying_run",
+        "git_commit": "open_clean_candidate_not_frozen",
+        "executable_sha256": "open_clean_frontier_executable_not_frozen",
+        "qualifying_input_checksums": "open_true_deltaf_paper_decks_not_created",
+        "production_analysis_checksums": "open_qualifying_crsi_theory_analyzer_not_created"
+      },
+      "open_dependencies": [
+        "Create and checksum true-delta-f Section 5.5 decks and the theory analyzer.",
+        "Bind the clean candidate and Frontier executable."
+      ]
+    },
+    {
+      "schema_version": 2,
+      "campaign_id": "Q023-PAPER-CRPAI-LINEAR",
+      "claim_ids": [
+        "CLAIM-PAPER-CRPAI-LINEAR-001"
+      ],
+      "freeze_status": "locally_preregistered_run_blocked",
+      "physical_mode": "paper_mhd_pic",
+      "primary_observables": [
+        "k_by_k_growth_rate",
+        "polarization_resolved_spectra",
+        "prolate_oblate_branch_selection"
+      ],
+      "secondary_observables": [
+        "deltaf_weight_validity",
+        "particle_count_trend",
+        "momentum_bin_trend",
+        "resolution_trend"
+      ],
+      "estimators": [
+        "per_seed_fixed_window_k_by_k_exponential_growth_fit",
+        "median_across_qualifying_seeds",
+        "bca_bootstrap_across_qualifying_seeds"
+      ],
+      "seed_profile": "Q023-SEEDS-FIXED-8",
+      "sampling_rule_profile": "Q023-SAMPLING-FIXED-8-HOLM-BCA",
+      "parameter_grid_profile": "Q023-GRID-PAPER-CRPAI-LINEAR",
+      "fit_window_profile": "Q023-WINDOW-PAPER-CRPAI-LINEAR",
+      "tolerance_profile": "Q023-TOL-PAPER-GYRORESONANT-LINEAR",
+      "exclusion_profile": "Q023-EXCLUSIONS-FAIL-CLOSED",
+      "multiplicity_family": "paper_crpai_linear_primary_endpoints",
+      "local_input_ids": [
+        "Q023-INPUT-CRPAI-PROLATE-PROXY",
+        "Q023-INPUT-CRPAI-OBLATE-PROXY"
+      ],
+      "local_analyzer_ids": [
+        "Q023-ANALYZER-COMMON-GROWTH",
+        "Q023-ANALYZER-CRPAI-LOCAL",
+        "Q023-ANALYZER-BIN-READER"
+      ],
+      "reference_values": {
+        "status": "frozen_analytical_equation_qualifying_oracle_implementation_open",
+        "source": "Sun and Bai Section 5.6",
+        "formula": "Equation equ::crai_dispersion"
+      },
+      "claim_specific_exclusions": [
+        "driven-box saturation",
+        "promotion of the checksummed prolate and oblate proxies into true-delta-f Section 5.6 evidence"
+      ],
+      "failure_artifact_root": "open_authorized_orion_campaign_subdirectory_not_frozen",
+      "independent_recompute_profile": "Q023-RECOMPUTE-RAW-ARTIFACT-INDEPENDENT",
+      "candidate_bindings": {
+        "status": "open_before_qualifying_run",
+        "git_commit": "open_clean_candidate_not_frozen",
+        "executable_sha256": "open_clean_frontier_executable_not_frozen",
+        "qualifying_input_checksums": "open_true_deltaf_prolate_oblate_decks_not_created",
+        "production_analysis_checksums": "open_qualifying_crpai_theory_analyzer_not_created"
+      },
+      "open_dependencies": [
+        "Create and checksum true-delta-f Section 5.6 decks and the theory analyzer.",
+        "Bind the clean candidate and Frontier executable."
+      ]
+    },
+    {
+      "schema_version": 2,
+      "campaign_id": "Q023-PAPER-CRPAI-DRIVEN",
+      "claim_ids": [
+        "CLAIM-PAPER-CRPAI-DRIVEN-001"
+      ],
+      "freeze_status": "locally_preregistered_run_blocked",
+      "physical_mode": "paper_mhd_pic",
+      "primary_observables": [
+        "anisotropy_evolution",
+        "polarization_resolved_spectra",
+        "distribution_evolution"
+      ],
+      "secondary_observables": [
+        "driving_rate_response",
+        "deltaf_weight_validity",
+        "matched_reduced_nonlinear_fullf"
+      ],
+      "estimators": [
+        "per_seed_fixed_snapshot_metric_table",
+        "median_across_qualifying_seeds",
+        "bca_bootstrap_across_qualifying_seeds"
+      ],
+      "seed_profile": "Q023-SEEDS-FIXED-8",
+      "sampling_rule_profile": "Q023-SAMPLING-FIXED-8-HOLM-BCA",
+      "parameter_grid_profile": "Q023-GRID-PAPER-CRPAI-DRIVEN",
+      "fit_window_profile": "Q023-WINDOW-PAPER-CRPAI-DRIVEN",
+      "tolerance_profile": "Q023-TOL-PAPER-CRPAI-DRIVEN",
+      "exclusion_profile": "Q023-EXCLUSIONS-FAIL-CLOSED",
+      "multiplicity_family": "paper_crpai_driven_primary_endpoints",
+      "local_input_ids": [
+        "Q023-INPUT-EXPANDING-ADAPTIVE-DAMPING-SMOKE"
+      ],
+      "local_analyzer_ids": [
+        "Q023-ANALYZER-DRIVEN-LOCAL",
+        "Q023-ANALYZER-SPECTRA-LOCAL",
+        "Q023-ANALYZER-PVTK-READER",
+        "Q023-ANALYZER-BIN-READER"
+      ],
+      "reference_values": {
+        "status": "paper_text_values_frozen_quantitative_extraction_open",
+        "source": "Sun and Bai Section 5.7"
+      },
+      "claim_specific_exclusions": [
+        "calibrated transport coefficient",
+        "promotion of local expanding-box proxies or the bounded composition-launch smoke into Section 5.7 evidence"
+      ],
+      "failure_artifact_root": "open_authorized_orion_campaign_subdirectory_not_frozen",
+      "independent_recompute_profile": "Q023-RECOMPUTE-RAW-ARTIFACT-INDEPENDENT",
+      "candidate_bindings": {
+        "status": "open_before_qualifying_run",
+        "git_commit": "open_clean_candidate_not_frozen",
+        "executable_sha256": "open_clean_frontier_executable_not_frozen",
+        "qualifying_input_checksums": "open_driven_box_paper_decks_not_created",
+        "production_analysis_checksums": "open_qualifying_driven_crpai_analyzer_not_created"
+      },
+      "open_dependencies": [
+        "Create and checksum the driven-box paper deck and qualifying analyzer.",
+        "Extract and freeze quantitative reference residuals before the run.",
+        "Bind the clean candidate and Frontier executable."
+      ]
+    },
+    {
+      "schema_version": 2,
+      "campaign_id": "Q023-PROD-BELL-NONLINEAR",
+      "claim_ids": [
+        "CLAIM-PROD-BELL-NONLINEAR-NOHALL-001"
+      ],
+      "freeze_status": "locally_preregistered_run_blocked",
+      "physical_mode": "paper_mhd_pic",
+      "primary_observables": [
+        "magnetic_amplification",
+        "dominant_wavelength_evolution",
+        "saturation_amplitude",
+        "saturation_time",
+        "energy_partition"
+      ],
+      "secondary_observables": [
+        "filament_cavity_morphology",
+        "particle_count_trend",
+        "resolution_trend",
+        "timestep_trend",
+        "box_size_trend",
+        "dimensionality"
+      ],
+      "estimators": [
+        "median_across_qualifying_seeds",
+        "bca_bootstrap_across_qualifying_seeds",
+        "median_of_per_seed_differences_for_paired_sensitivity"
+      ],
+      "seed_profile": "Q023-SEEDS-FIXED-8",
+      "sampling_rule_profile": "Q023-SAMPLING-FIXED-8-HOLM-BCA",
+      "parameter_grid_profile": "Q023-GRID-NONLINEAR-BELL-MINIMUM",
+      "fit_window_profile": "Q023-WINDOW-NONLINEAR-SATURATION",
+      "tolerance_profile": "Q023-TOL-NONLINEAR-COMPARISON",
+      "exclusion_profile": "Q023-EXCLUSIONS-FAIL-CLOSED",
+      "multiplicity_family": "prod_bell_nonlinear_primary_endpoints",
+      "local_input_ids": [],
+      "local_analyzer_ids": [
+        "Q023-ANALYZER-COMMON-GROWTH",
+        "Q023-ANALYZER-BIN-READER"
+      ],
+      "reference_values": {
+        "status": "open_requires_q022_reference_extraction_and_q019_fiducial_regime"
+      },
+      "claim_specific_exclusions": [
+        "Hall-dominated shock-front inference"
+      ],
+      "failure_artifact_root": "open_authorized_orion_campaign_subdirectory_not_frozen",
+      "independent_recompute_profile": "Q023-RECOMPUTE-RAW-ARTIFACT-INDEPENDENT",
+      "candidate_bindings": {
+        "status": "open_before_qualifying_run",
+        "git_commit": "open_clean_candidate_not_frozen",
+        "executable_sha256": "open_clean_frontier_executable_not_frozen",
+        "qualifying_input_checksums": "open_q019_fiducial_decks_not_created",
+        "production_analysis_checksums": "open_nonlinear_bell_analyzer_not_created"
+      },
+      "open_dependencies": [
+        "Freeze the Q-019 fiducial physical regime and exact grid values.",
+        "Freeze saturation windows from theory or excluded pilots before qualifying output.",
+        "Complete Q-022 extraction, maps, and numeric tolerance freeze.",
+        "Create and checksum the nonlinear analyzer."
+      ]
+    },
+    {
+      "schema_version": 2,
+      "campaign_id": "Q023-PROD-CRSI-SATURATION",
+      "claim_ids": [
+        "CLAIM-PROD-CRSI-SATURATION-001"
+      ],
+      "freeze_status": "locally_preregistered_run_blocked",
+      "physical_mode": "paper_mhd_pic",
+      "primary_observables": [
+        "polarization_resolved_spectra",
+        "wave_energy_evolution",
+        "pitch_angle_distribution",
+        "effective_diffusion",
+        "isotropization",
+        "saturation_level"
+      ],
+      "secondary_observables": [
+        "deltaf_weight_validity",
+        "matched_reduced_nonlinear_fullf",
+        "particle_count_trend",
+        "resolution_trend",
+        "timestep_trend",
+        "momentum_bin_trend",
+        "pitch_angle_bin_trend",
+        "box_size_trend"
+      ],
+      "estimators": [
+        "median_across_qualifying_seeds",
+        "bca_bootstrap_across_qualifying_seeds",
+        "median_of_per_seed_differences_for_paired_sensitivity"
+      ],
+      "seed_profile": "Q023-SEEDS-FIXED-8",
+      "sampling_rule_profile": "Q023-SAMPLING-FIXED-8-HOLM-BCA",
+      "parameter_grid_profile": "Q023-GRID-NONLINEAR-DELTAF-MINIMUM",
+      "fit_window_profile": "Q023-WINDOW-NONLINEAR-SATURATION",
+      "tolerance_profile": "Q023-TOL-NONLINEAR-COMPARISON",
+      "exclusion_profile": "Q023-EXCLUSIONS-FAIL-CLOSED",
+      "multiplicity_family": "prod_crsi_saturation_primary_endpoints",
+      "local_input_ids": [],
+      "local_analyzer_ids": [
+        "Q023-ANALYZER-SPECTRA-LOCAL",
+        "Q023-ANALYZER-PVTK-READER",
+        "Q023-ANALYZER-BIN-READER"
+      ],
+      "reference_values": {
+        "status": "open_requires_q022_bai2019_extraction_and_q020_fiducial_regime"
+      },
+      "claim_specific_exclusions": [
+        "physical-damping extension inference"
+      ],
+      "failure_artifact_root": "open_authorized_orion_campaign_subdirectory_not_frozen",
+      "independent_recompute_profile": "Q023-RECOMPUTE-RAW-ARTIFACT-INDEPENDENT",
+      "candidate_bindings": {
+        "status": "open_before_qualifying_run",
+        "git_commit": "open_clean_candidate_not_frozen",
+        "executable_sha256": "open_clean_frontier_executable_not_frozen",
+        "qualifying_input_checksums": "open_q020_fiducial_decks_not_created",
+        "production_analysis_checksums": "open_nonlinear_crsi_analyzer_not_created"
+      },
+      "open_dependencies": [
+        "Freeze the Q-020 fiducial regime and exact grid values.",
+        "Freeze saturation windows from theory or excluded pilots before qualifying output.",
+        "Complete Bai et al. 2019 extraction, maps, and numeric tolerance freeze.",
+        "Create and checksum the nonlinear analyzer."
+      ]
+    },
+    {
+      "schema_version": 2,
+      "campaign_id": "Q023-PROD-CRPAI-SATURATION",
+      "claim_ids": [
+        "CLAIM-PROD-CRPAI-SATURATION-001"
+      ],
+      "freeze_status": "locally_preregistered_run_blocked",
+      "physical_mode": "paper_mhd_pic",
+      "primary_observables": [
+        "anisotropy",
+        "effective_scattering_rate",
+        "polarization_resolved_spectra",
+        "distribution_evolution",
+        "quasi_steady_or_saturated_state"
+      ],
+      "secondary_observables": [
+        "deltaf_weight_validity",
+        "matched_reduced_nonlinear_fullf",
+        "driving_rate_response",
+        "particle_count_trend",
+        "resolution_trend",
+        "timestep_trend",
+        "momentum_bin_trend",
+        "pitch_angle_bin_trend",
+        "box_size_trend"
+      ],
+      "estimators": [
+        "median_across_qualifying_seeds",
+        "bca_bootstrap_across_qualifying_seeds",
+        "median_of_per_seed_differences_for_paired_sensitivity"
+      ],
+      "seed_profile": "Q023-SEEDS-FIXED-8",
+      "sampling_rule_profile": "Q023-SAMPLING-FIXED-8-HOLM-BCA",
+      "parameter_grid_profile": "Q023-GRID-NONLINEAR-DELTAF-MINIMUM",
+      "fit_window_profile": "Q023-WINDOW-NONLINEAR-SATURATION",
+      "tolerance_profile": "Q023-TOL-NONLINEAR-COMPARISON",
+      "exclusion_profile": "Q023-EXCLUSIONS-FAIL-CLOSED",
+      "multiplicity_family": "prod_crpai_driven_saturation_primary_endpoints",
+      "local_input_ids": [],
+      "local_analyzer_ids": [
+        "Q023-ANALYZER-SPECTRA-LOCAL",
+        "Q023-ANALYZER-PVTK-READER",
+        "Q023-ANALYZER-BIN-READER"
+      ],
+      "reference_values": {
+        "status": "open_requires_q021_fiducial_regime_and_reference_design"
+      },
+      "claim_specific_exclusions": [
+        "physical-damping transport calibration"
+      ],
+      "failure_artifact_root": "open_authorized_orion_campaign_subdirectory_not_frozen",
+      "independent_recompute_profile": "Q023-RECOMPUTE-RAW-ARTIFACT-INDEPENDENT",
+      "candidate_bindings": {
+        "status": "open_before_qualifying_run",
+        "git_commit": "open_clean_candidate_not_frozen",
+        "executable_sha256": "open_clean_frontier_executable_not_frozen",
+        "qualifying_input_checksums": "open_q021_fiducial_decks_not_created",
+        "production_analysis_checksums": "open_nonlinear_crpai_analyzer_not_created"
+      },
+      "open_dependencies": [
+        "Freeze the Q-021 fiducial regime and exact grid values.",
+        "Freeze saturation windows from theory or excluded pilots before qualifying output.",
+        "Freeze quantitative tolerances before qualifying output.",
+        "Create and checksum the nonlinear analyzer."
+      ]
+    },
+    {
+      "schema_version": 2,
+      "campaign_id": "Q023-PROD-CRPAI-UNDRIVEN",
+      "claim_ids": [
+        "CLAIM-PROD-CRPAI-UNDRIVEN-SATURATION-001"
+      ],
+      "freeze_status": "locally_preregistered_run_blocked",
+      "physical_mode": "paper_mhd_pic",
+      "primary_observables": [
+        "anisotropy",
+        "effective_scattering_rate",
+        "polarization_resolved_spectra",
+        "distribution_evolution",
+        "saturation_level"
+      ],
+      "secondary_observables": [
+        "deltaf_weight_validity",
+        "matched_reduced_nonlinear_fullf",
+        "particle_count_trend",
+        "resolution_trend",
+        "timestep_trend",
+        "momentum_bin_trend",
+        "pitch_angle_bin_trend",
+        "box_size_trend"
+      ],
+      "estimators": [
+        "median_across_qualifying_seeds",
+        "bca_bootstrap_across_qualifying_seeds",
+        "median_of_per_seed_differences_for_paired_sensitivity"
+      ],
+      "seed_profile": "Q023-SEEDS-FIXED-8",
+      "sampling_rule_profile": "Q023-SAMPLING-FIXED-8-HOLM-BCA",
+      "parameter_grid_profile": "Q023-GRID-NONLINEAR-DELTAF-MINIMUM",
+      "fit_window_profile": "Q023-WINDOW-NONLINEAR-SATURATION",
+      "tolerance_profile": "Q023-TOL-NONLINEAR-COMPARISON",
+      "exclusion_profile": "Q023-EXCLUSIONS-FAIL-CLOSED",
+      "multiplicity_family": "prod_crpai_undriven_saturation_primary_endpoints",
+      "local_input_ids": [],
+      "local_analyzer_ids": [
+        "Q023-ANALYZER-SPECTRA-LOCAL",
+        "Q023-ANALYZER-PVTK-READER",
+        "Q023-ANALYZER-BIN-READER"
+      ],
+      "reference_values": {
+        "status": "open_requires_q041_fiducial_regime_and_reference_design"
+      },
+      "claim_specific_exclusions": [
+        "driven-box inference",
+        "physical-damping transport calibration"
+      ],
+      "failure_artifact_root": "open_authorized_orion_campaign_subdirectory_not_frozen",
+      "independent_recompute_profile": "Q023-RECOMPUTE-RAW-ARTIFACT-INDEPENDENT",
+      "candidate_bindings": {
+        "status": "open_before_qualifying_run",
+        "git_commit": "open_clean_candidate_not_frozen",
+        "executable_sha256": "open_clean_frontier_executable_not_frozen",
+        "qualifying_input_checksums": "open_q041_fiducial_decks_not_created",
+        "production_analysis_checksums": "open_nonlinear_crpai_analyzer_not_created"
+      },
+      "open_dependencies": [
+        "Freeze the Q-041 fiducial regime and exact grid values.",
+        "Freeze saturation windows from theory or excluded pilots before qualifying output.",
+        "Freeze quantitative tolerances before qualifying output.",
+        "Create and checksum the nonlinear analyzer."
+      ]
+    },
+    {
+      "schema_version": 2,
+      "campaign_id": "Q023-EXT-HALL-BELL",
+      "claim_ids": [
+        "CLAIM-EXT-HALL-BELL-001"
+      ],
+      "freeze_status": "locally_preregistered_run_blocked",
+      "physical_mode": "extended_mhd_pic",
+      "primary_observables": [
+        "derived_hall_dispersion",
+        "nonlinear_amplification",
+        "hall_applicability",
+        "shock_front_metrics"
+      ],
+      "secondary_observables": [
+        "spectra",
+        "morphology",
+        "decomposition_parity",
+        "gpu_parity"
+      ],
+      "estimators": [
+        "median_across_qualifying_seeds",
+        "bca_bootstrap_across_qualifying_seeds",
+        "median_of_per_seed_differences_for_paired_sensitivity"
+      ],
+      "seed_profile": "Q023-SEEDS-FIXED-8",
+      "sampling_rule_profile": "Q023-SAMPLING-FIXED-8-HOLM-BCA",
+      "parameter_grid_profile": "Q023-GRID-EXT-HALL-BELL",
+      "fit_window_profile": "Q023-WINDOW-EXTENSION-COMPARISON",
+      "tolerance_profile": "Q023-TOL-EXT-HALL-BELL",
+      "exclusion_profile": "Q023-EXCLUSIONS-FAIL-CLOSED",
+      "multiplicity_family": "ext_hall_bell_primary_endpoints",
+      "local_input_ids": [
+        "Q023-INPUT-HALL-SMOKE"
+      ],
+      "local_analyzer_ids": [
+        "Q023-ANALYZER-HALL-SMOKE",
+        "Q023-ANALYZER-BIN-READER"
+      ],
+      "reference_values": {
+        "status": "open_requires_derived_cr_hall_normalization_and_bai2015_map"
+      },
+      "claim_specific_exclusions": [
+        "silent substitution for paper_mhd_pic",
+        "promotion of the host manufactured-source smoke into Hall Bell qualification"
+      ],
+      "failure_artifact_root": "open_authorized_orion_campaign_subdirectory_not_frozen",
+      "independent_recompute_profile": "Q023-RECOMPUTE-RAW-ARTIFACT-INDEPENDENT",
+      "candidate_bindings": {
+        "status": "open_before_qualifying_run",
+        "git_commit": "open_clean_candidate_not_frozen",
+        "executable_sha256": "open_clean_frontier_executable_not_frozen",
+        "qualifying_input_checksums": "open_derived_hall_decks_not_created",
+        "production_analysis_checksums": "open_hall_bell_analyzer_not_created"
+      },
+      "open_dependencies": [
+        "Derive and review the CR-Hall normalization.",
+        "Freeze the Hall coefficient grid, exact decks, windows, and numeric tolerances before qualifying output.",
+        "Create and checksum the Hall Bell analyzer."
+      ]
+    },
+    {
+      "schema_version": 2,
+      "campaign_id": "Q023-EXT-CRSI-IN-DAMPING",
+      "claim_ids": [
+        "CLAIM-EXT-CRSI-IN-DAMPING-001"
+      ],
+      "freeze_status": "locally_preregistered_run_blocked",
+      "physical_mode": "extended_mhd_pic",
+      "primary_observables": [
+        "damping_rate_dependence",
+        "unstable_bandwidth",
+        "nonlinear_saturation",
+        "isotropization"
+      ],
+      "secondary_observables": [
+        "particle_count_trend",
+        "resolution_trend",
+        "timestep_trend",
+        "momentum_bin_trend",
+        "box_size_trend",
+        "decomposition_parity",
+        "gpu_parity"
+      ],
+      "estimators": [
+        "median_across_qualifying_seeds",
+        "bca_bootstrap_across_qualifying_seeds",
+        "median_of_per_seed_differences_for_paired_sensitivity"
+      ],
+      "seed_profile": "Q023-SEEDS-FIXED-8",
+      "sampling_rule_profile": "Q023-SAMPLING-FIXED-8-HOLM-BCA",
+      "parameter_grid_profile": "Q023-GRID-EXT-CRSI-IN-DAMPING",
+      "fit_window_profile": "Q023-WINDOW-EXTENSION-COMPARISON",
+      "tolerance_profile": "Q023-TOL-EXT-CRSI-IN-DAMPING",
+      "exclusion_profile": "Q023-EXCLUSIONS-FAIL-CLOSED",
+      "multiplicity_family": "ext_crsi_in_damping_primary_endpoints",
+      "local_input_ids": [
+        "Q023-INPUT-IN-DAMPING-SMOKE"
+      ],
+      "local_analyzer_ids": [
+        "Q023-ANALYZER-IN-DAMPING-LOCAL",
+        "Q023-ANALYZER-BIN-READER"
+      ],
+      "reference_values": {
+        "status": "local_reduced_map_frozen_plotnikov_applicability_and_reference_extraction_open"
+      },
+      "claim_specific_exclusions": [
+        "ordinary paper-mode CRSI inference",
+        "promotion of the reduced static-neutral envelope into Plotnikov-matched CRSI qualification"
+      ],
+      "failure_artifact_root": "open_authorized_orion_campaign_subdirectory_not_frozen",
+      "independent_recompute_profile": "Q023-RECOMPUTE-RAW-ARTIFACT-INDEPENDENT",
+      "candidate_bindings": {
+        "status": "open_before_qualifying_run",
+        "git_commit": "open_clean_candidate_not_frozen",
+        "executable_sha256": "open_clean_frontier_executable_not_frozen",
+        "qualifying_input_checksums": "open_plotnikov_matched_damped_crsi_decks_not_created",
+        "production_analysis_checksums": "open_damped_crsi_analyzer_not_created"
+      },
+      "open_dependencies": [
+        "Freeze the Plotnikov applicability map and extracted reference data.",
+        "Freeze exact decks, physical damping normalization, windows, and numeric tolerances before qualifying output.",
+        "Create and checksum the damped-CRSI analyzer."
+      ]
+    },
+    {
+      "schema_version": 2,
+      "campaign_id": "Q023-EXT-CRPAI-TRANSPORT",
+      "claim_ids": [
+        "CLAIM-EXT-CRPAI-TRANSPORT-001"
+      ],
+      "freeze_status": "locally_preregistered_run_blocked",
+      "physical_mode": "extended_mhd_pic",
+      "primary_observables": [
+        "effective_scattering_rate",
+        "anisotropy",
+        "polarization_resolved_spectra",
+        "quasi_steady_state",
+        "driving_rate_scaling",
+        "friction_scaling"
+      ],
+      "secondary_observables": [
+        "deltaf_weight_validity",
+        "matched_reduced_nonlinear_fullf",
+        "adaptive_refit_cadence_trend",
+        "particle_count_trend",
+        "resolution_trend",
+        "timestep_trend",
+        "momentum_bin_trend",
+        "pitch_angle_bin_trend",
+        "box_size_trend",
+        "decomposition_parity",
+        "gpu_parity"
+      ],
+      "estimators": [
+        "median_across_qualifying_seeds",
+        "bca_bootstrap_across_qualifying_seeds",
+        "median_of_per_seed_differences_for_paired_sensitivity"
+      ],
+      "seed_profile": "Q023-SEEDS-FIXED-8",
+      "sampling_rule_profile": "Q023-SAMPLING-FIXED-8-HOLM-BCA",
+      "parameter_grid_profile": "Q023-GRID-EXT-CRPAI-TRANSPORT",
+      "fit_window_profile": "Q023-WINDOW-EXTENSION-COMPARISON",
+      "tolerance_profile": "Q023-TOL-EXT-CRPAI-TRANSPORT",
+      "exclusion_profile": "Q023-EXCLUSIONS-FAIL-CLOSED",
+      "multiplicity_family": "ext_crpai_transport_primary_endpoints",
+      "local_input_ids": [
+        "Q023-INPUT-ADAPTIVE-DELTAF-SMOKE",
+        "Q023-INPUT-EXPANDING-ADAPTIVE-DAMPING-SMOKE"
+      ],
+      "local_analyzer_ids": [
+        "Q023-ANALYZER-ADAPTIVE-LOCAL",
+        "Q023-ANALYZER-SPECTRA-LOCAL",
+        "Q023-ANALYZER-PVTK-READER",
+        "Q023-ANALYZER-BIN-READER"
+      ],
+      "reference_values": {
+        "status": "local_reduced_fixtures_frozen_sun_bai_zhao_applicability_and_reference_extraction_open"
+      },
+      "claim_specific_exclusions": [
+        "transport calibration from numerical damping",
+        "promotion of bounded adaptive-cadence or one-cycle composition-launch fixtures into physical transport calibration"
+      ],
+      "failure_artifact_root": "open_authorized_orion_campaign_subdirectory_not_frozen",
+      "independent_recompute_profile": "Q023-RECOMPUTE-RAW-ARTIFACT-INDEPENDENT",
+      "candidate_bindings": {
+        "status": "open_before_qualifying_run",
+        "git_commit": "open_clean_candidate_not_frozen",
+        "executable_sha256": "open_clean_frontier_executable_not_frozen",
+        "qualifying_input_checksums": "open_sun_bai_zhao_matched_transport_decks_not_created",
+        "production_analysis_checksums": "open_transport_calibration_analyzer_not_created"
+      },
+      "open_dependencies": [
+        "Freeze the Sun-Bai-Zhao applicability map and extracted reference data.",
+        "Freeze exact decks, physical damping normalization, windows, and numeric tolerances before qualifying output.",
+        "Create and checksum the transport-calibration analyzer."
+      ]
+    }
+  ],
+  "rule": "Every campaign is locally preregistered but remains blocked. No campaign may generate or inspect qualifying output until its open dependencies are closed and an immutable expanded campaign record passes the Q-023 schema.",
+  "q023_drafts_status": "open_local_profiles_bound_candidate_frontier_external_reference_later_artifact_and_review_fields_remain_explicitly_open"
+}

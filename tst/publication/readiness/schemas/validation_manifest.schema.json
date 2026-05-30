@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://athenak.example.invalid/pic/validation_manifest.schema.json",
+  "title": "AthenaK PIC Validation Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_id",
+    "created_utc",
+    "claim_ids",
+    "test_id",
+    "evidence_class",
+    "physical_mode",
+    "git",
+    "executable",
+    "parameters",
+    "oracle",
+    "metrics",
+    "resources",
+    "artifacts",
+    "review"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "manifest_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "created_utc": {"type": "string", "minLength": 1, "pattern": "\\S", "format": "date-time"},
+    "claim_ids": {"type": "array", "items": {"type": "string", "minLength": 1, "pattern": "\\S"}, "minItems": 1},
+    "test_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "evidence_class": {
+      "enum": [
+        "unit/regression",
+        "engineering_proxy",
+        "physics_validation",
+        "sun_bai_2023_reproduction",
+        "athenak_production_mode",
+        "cross_code_comparison",
+        "scoped_state_of_the_art",
+        "unsupported"
+      ]
+    },
+    "physical_mode": {"type": "string", "minLength": 1, "pattern": "\\S"},
+    "git": {
+      "type": "object",
+      "required": ["commit", "status", "submodules"],
+      "properties": {
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "status": {"type": "array", "items": {"type": "string", "minLength": 1, "pattern": "\\S"}},
+        "submodules": {"type": "array", "items": {"type": "string", "minLength": 1, "pattern": "\\S"}}
+      }
+    },
+    "executable": {
+      "type": "object",
+      "required": ["path", "sha256", "cmake_cache", "modules", "environment_allowlist"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "cmake_cache": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "modules": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "environment_allowlist": {"type": "string", "minLength": 1, "pattern": "\\S"}
+      }
+    },
+    "parameters": {"type": "object"},
+    "oracle": {
+      "type": "object",
+      "required": ["kind", "reference", "tolerances"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "reference": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "tolerances": {"type": "object", "minProperties": 1}
+      }
+    },
+    "metrics": {"type": "array", "items": {"type": "object", "minProperties": 1}, "minItems": 1},
+    "resources": {
+      "type": "object",
+      "required": ["platform", "artifact_root"],
+      "properties": {
+        "platform": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "artifact_root": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "submission_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "reservation_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "job_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "node_hours": {"type": "number", "minimum": 0}
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "required": ["reviewer", "disposition"],
+      "properties": {
+        "reviewer": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "disposition": {
+          "enum": [
+            "open",
+            "pending external review",
+            "qualified",
+            "limited",
+            "superseded",
+            "rejected"
+          ]
+        }
+      },
+      "not": {
+        "properties": {
+          "reviewer": {"const": "pending external review"},
+          "disposition": {"const": "qualified"}
+        },
+        "required": ["reviewer", "disposition"]
+      }
+    }
+  }
+}

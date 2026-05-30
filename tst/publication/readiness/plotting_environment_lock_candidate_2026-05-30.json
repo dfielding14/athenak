@@ -1,0 +1,31 @@
+{
+  "record_type": "plotting_environment_lock_candidate",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "qualification_effect": "candidate_only_external_export_review_open",
+  "disposition": "open",
+  "python": "3.11.7",
+  "dependencies": {
+    "numpy": "1.26.4",
+    "matplotlib": "3.10.7",
+    "contourpy": "1.3.3",
+    "cycler": "0.12.1",
+    "fonttools": "4.60.1",
+    "kiwisolver": "1.4.9",
+    "packaging": "23.2",
+    "pillow": "11.3.0",
+    "pyparsing": "3.1.1",
+    "python-dateutil": "2.8.2"
+  },
+  "plot_scripts": [
+    {"path": "tst/publication/plot_pic_parallel_shock_section54.py", "sha256": "5381321f3a1df1c9d6514898cc57418934df846b4ccffa006e0bd0cb85692b93"},
+    {"path": "tst/publication/plot_pic_publication_figures.py", "sha256": "a1577ca272f35079065bccecebd9c66b302a4c0c97ddc1fa3c7cdc0f27d9e52c"},
+    {"path": "tst/publication/plot_pic_shock_paper_style.py", "sha256": "162aba9512cf3bb0c60cbef31a1108b738f2040ffde6d625b2e6473d99851285"},
+    {"path": "tst/publication/plot_pic_shock_storyline.py", "sha256": "1fc26459d212170ff160ec53236ed89460a3e54f2e95daea7c45640e68977177"}
+  ],
+  "open_before_qualification_lock": [
+    "Record the selected matplotlib backend and font configuration in the controlled plotting environment.",
+    "Freeze the exact environment artifact and its checksum.",
+    "Obtain redistribution and external-export review."
+  ]
+}

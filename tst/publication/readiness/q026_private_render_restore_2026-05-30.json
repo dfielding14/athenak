@@ -1,0 +1,85 @@
+{
+  "record_type": "q026_private_render_restore",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-026",
+  "qualification_effect": "bounded_private_archive_evidence_only",
+  "disposition": "verifying",
+  "scope": "Private reconstruction and fresh-directory checksum restore evidence for the Sun and Bai (2023) arXiv v1 rendered paper. This record does not authorize external redistribution, select the permanent archive, or close terminal sign-off. Its Kronos transport language records the historical predecessor policy and is superseded by Q-027.",
+  "operational_policy_lifecycle": {
+    "status": "predecessor_kronos_policy_superseded",
+    "superseded_by": "tst/publication/readiness/q027_orion_only_storage_transition_2026-05-30.json",
+    "note": "Q-027 removes Kronos, DTN and Globus from the execution boundary. Preserve the pre-transition blocker below as chronology only."
+  },
+  "source_artifact": {
+    "path": "docs/reference_paper/arXiv-2304.10568v1/mnras_template.tex",
+    "sha256": "8f99cec40b8c9fad7f6011c0c32f14724cc0dddabb86db95a7f1687ce04cbdae"
+  },
+  "private_bundle": {
+    "path": "/ccs/proj/ast207/proj-shared/PIC/reference_artifacts/sun_bai_2023_arxiv_v1_render_2026-05-30",
+    "usage": "private_qualification_archive_until_export_review",
+    "file_count": 24,
+    "size_mib_approx": 38,
+    "manifest": "SHA256SUMS",
+    "manifest_sha256": "6103d0da9c5782e22b702fd7ecf50cc04ae75126b5d11e1aa12bea41684611ed"
+  },
+  "rendered_pdf": {
+    "path": "mnras_template.pdf",
+    "sha256": "86e1f53ee335685a833b65b000e105d72c83c9bcea3a7b4a0ccaaa4deabaf3d6",
+    "pages": 20,
+    "producer": "pdfTeX-1.40.28",
+    "render_passes": 2,
+    "status": "private_render_passed"
+  },
+  "retrieved_dependencies": [
+    {
+      "name": "mnras.cls",
+      "source": "CTAN MNRAS package",
+      "sha256": "43403d42440caa704a0b6631acd5ae01524869e124450a0449646fc07f4c1152"
+    },
+    {
+      "name": "mnras.bst",
+      "source": "CTAN MNRAS package",
+      "sha256": "8dd7405398edf44e97c055b1e5b9b5ba1420102f1315dbf22d23c06f0d56f314"
+    },
+    {
+      "name": "newtx.zip",
+      "source": "CTAN newtx package",
+      "sha256": "bbe07d4ad91ade9f61326e59f2f3bf389b4ace1c0c1ef2e8c85377e4e2535f4e"
+    },
+    {
+      "name": "txfonts.zip",
+      "source": "CTAN txfonts package",
+      "sha256": "26bea7fab28a21f21d26c36013938e52bc20ef1ccdad4a0e83b16243ffbcaece"
+    },
+    {
+      "name": "tex-gyre.tds.zip",
+      "source": "CTAN tex-gyre package",
+      "sha256": "5981f5489e1f21ed9ec53f97a8fd7509cfb873ed6b8dfa2953c425bc9117616f"
+    }
+  ],
+  "archived_dependency_inventory": {
+    "status": "complete_for_private_render",
+    "note": "The private bundle also archives the xstring, mweights, kastrup, fontaxes, physics, algorithm2e, ifoddpage, tikz-3dplot, relsize, and ydoc retrieval archives plus both pdflatex logs."
+  },
+  "render_compatibility_patch": {
+    "status": "private_archived_patch_applied",
+    "path": "compatibility_patch/t1ntxtt.fd.render-compat.patch",
+    "reason": "The downloaded newtx T1 typewriter font definition substituted the undeclared txtt family. The private render changes those substitution targets to the declared ntxtt family while retaining the original and patched files.",
+    "before_sha256": "4b9a0b8d0ce8ce2782c536b98a977b8e58a7b778386e78aafaf69db13e8f5e32",
+    "after_sha256": "666d9e06dc0b3ea6fd3c834bd5b7c7bcc4358ac65503004d166cfd8be5b872aa"
+  },
+  "fresh_directory_restore": {
+    "path": "/tmp/athenak-pic-paper-restore-2026-05-30",
+    "method": "copy_private_bundle_then_sha256sum_check_SHA256SUMS",
+    "verified_files": 23,
+    "status": "pass"
+  },
+  "open_items": [
+    "External redistribution and sensitive-data review remains pending.",
+    "Historical predecessor item, superseded by Q-027: authenticated Kronos mirror transport preflight remained blocked before Kronos was removed from the execution boundary.",
+    "The permanent institutional or approved off-site archive has not been selected.",
+    "The private render contains warning-level TeX layout diagnostics and is provenance evidence, not a publication-quality editorial sign-off."
+  ],
+  "q026_status": "verifying_private_render_and_project_home_restore_passed_external_export_and_permanent_archive_open_historical_kronos_item_superseded_by_q027"
+}

@@ -1,0 +1,87 @@
+{
+  "record_type": "q027_orion_only_storage_transition",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-026",
+    "Q-027",
+    "Q-037"
+  ],
+  "qualification_effect": "frontier_execution_storage_unlock_only_terminal_durability_review_remains_open",
+  "scope": "Successor record for the user-authorized removal of Kronos, DTN and Globus from the Frontier execution boundary. Orion is the sole bulk-evidence root. Project Home remains the mounted filesystem_copy ledger and immutable control-plane mirror only. This does not represent Orion-only retention as institutional or approved off-site durable archival.",
+  "user_authorization": {
+    "instruction": "don't use kronos just put everything here: /lustre/orion/ast207/proj-shared/dfielding/PIC",
+    "selected_orion_bulk_evidence_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+    "removed_from_execution_boundary": [
+      "Kronos",
+      "DTN",
+      "Globus"
+    ]
+  },
+  "project_home_ledger_mirror": {
+    "root": "/ccs/proj/ast207/proj-shared/PIC",
+    "usage": "small_append_only_ledger_and_immutable_control_plane_mirror_only",
+    "transport": "filesystem_copy",
+    "preflight": "passed"
+  },
+  "orion_private_render_copy": {
+    "source_historical_bundle": "/ccs/proj/ast207/proj-shared/PIC/reference_artifacts/sun_bai_2023_arxiv_v1_render_2026-05-30",
+    "orion_bundle": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/sun_bai_2023_arxiv_v1_render_2026-05-30",
+    "copy_status": "passed",
+    "manifest": "SHA256SUMS",
+    "manifest_sha256": "6103d0da9c5782e22b702fd7ecf50cc04ae75126b5d11e1aa12bea41684611ed",
+    "verified_payload_files": 23,
+    "rendered_pdf_sha256": "86e1f53ee335685a833b65b000e105d72c83c9bcea3a7b4a0ccaaa4deabaf3d6",
+    "fresh_directory_restore": {
+      "path": "/tmp/athenak-pic-paper-orion-restore-2026-05-30",
+      "method": "copy_orion_private_bundle_then_sha256sum_check_SHA256SUMS",
+      "status": "pass"
+    }
+  },
+  "control_plane_transition": {
+    "active_at_transition_installed_version": "36761ee206c3fc7e2b788cde818a703e2a8af5a57ee04026ad294fb13b66f33a",
+    "paired_install_status": "passed",
+    "orion_install": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/36761ee206c3fc7e2b788cde818a703e2a8af5a57ee04026ad294fb13b66f33a",
+    "project_home_install": "/ccs/proj/ast207/proj-shared/PIC/control_plane/36761ee206c3fc7e2b788cde818a703e2a8af5a57ee04026ad294fb13b66f33a",
+    "successor_record": "tst/publication/readiness/q028_frontier_f0_admission_and_manifest_anchor_2026-05-30.json",
+    "successor_active_installed_version": "1635c9f6bab8ae03bd9ce59ca399f2262b61a386d27d699ae14d37ea35962d1c",
+    "lifecycle": "historical_transition_snapshot_superseded_for_active_control_plane_by_q028"
+  },
+  "ledger_genesis": {
+    "status": "initialized",
+    "timestamp": "2026-05-30T12:28:40Z",
+    "control_plane_version": "cde67c16228af41b47d70139185e92b484890db4d2a714505108ad4df6245a08",
+    "event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
+    "orion_primary_events": 1,
+    "project_home_mirror_events": 1,
+    "mirror_receipts": 1,
+    "mirror_transport": "filesystem_copy",
+    "mirror_ack_sha256": "a3af8af8c3b579ee323850902aad7aab58abde98dff98618ccffd15958dbb296",
+    "cumulative_consumed_node_hours": 0.0,
+    "currently_reserved_node_hours": 0.0
+  },
+  "durability_risk": {
+    "status": "open_pending_external_review",
+    "statement": "Orion-only retention is user-directed and does not provide an institutional or approved off-site durable archive.",
+    "terminal_effect": "terminal_durable_retention_signoff_pending_external_review"
+  },
+  "predecessor_proceed_language": {
+    "status": "superseded_chronology_only",
+    "historical_statement": "frontier_execution_storage_unlocked_registered_budget_tracked_submissions_may_proceed_terminal_durability_review_open",
+    "current_submission_status": "all_submissions_paused",
+    "current_rule": "All submissions remain paused pending repaired successor independent PASS, paired promotion from a clean source candidate, and applicable prerequisites.",
+    "resume_only_after": [
+      "repaired successor independent PASS",
+      "paired promotion from a clean source candidate",
+      "applicable prerequisites"
+    ]
+  },
+  "validation": {
+    "ledger_tests_passed": 5,
+    "control_plane_tests_passed": 25,
+    "readiness_registry_tests_passed": 8,
+    "private_bundle_payload_checksums_verified": 23,
+    "installed_unlock_validation": "pass"
+  },
+  "overall_disposition": "historical_transition_snapshot_predecessor_proceed_language_superseded_chronology_only_all_submissions_paused_pending_repaired_successor_independent_pass_paired_promotion_from_clean_source_candidate_and_applicable_prerequisites"
+}

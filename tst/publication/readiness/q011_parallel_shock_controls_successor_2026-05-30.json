@@ -1,0 +1,33 @@
+{
+  "record_type": "q011_parallel_shock_controls_successor",
+  "date": "2026-05-30",
+  "qualification_effect": "bounded_serial_host_engineering_evidence_only",
+  "scope": "Successor local Q-011 record for the parallel-shock engineering scaffold. The isotropic shock-surface injection path, frame-tracking controls and restart fingerprints are implementation prerequisites only. This record does not qualify Sun and Bai Section 5.4 shock acceleration.",
+  "artifacts": [
+    "src/pgen/tests/pic_parallel_shock.cpp",
+    "inputs/tests/pic_parallel_shock_section54_hpc.athinput",
+    "inputs/tests/pic_parallel_shock_coarse_uniform.athinput",
+    "tst/scripts/particles/pic_parallel_shock_restart_controls.py"
+  ],
+  "implemented_controls": [
+    "isotropic_shock_surface_injection_scaffold",
+    "gas_subtraction_toggle",
+    "frame_tracking_toggle",
+    "frame_mode",
+    "frame_start_and_ramp",
+    "frame_velocity_fraction",
+    "schema6_restart_continuation_fingerprint"
+  ],
+  "serial_host_guard": {
+    "status": "pass",
+    "unchanged_restart_continuation": true,
+    "changed_injection_control_rejected": true,
+    "changed_frame_tracking_control_rejected": true
+  },
+  "limitations": [
+    "The scaffold remains an engineering proxy, not a paper-faithful Section 5.4 reproduction deck.",
+    "Exact injection distribution, normalization, units, provenance, cohort tracking, spectra, morphology, timing and load-balance acceptance criteria remain open.",
+    "AMR policy, MPI migration/restart, clean Frontier GPU pilots, scaling and external review remain open."
+  ],
+  "q011_disposition": "engineering_scaffold_restart_controls_passed_full_q011_paper_shock_gate_remains_open"
+}

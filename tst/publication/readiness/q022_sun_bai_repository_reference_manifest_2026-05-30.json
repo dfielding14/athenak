@@ -1,0 +1,26 @@
+{
+  "record_type": "q022_sun_bai_repository_reference_manifest",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-022",
+  "qualification_effect": "local_source_anchor_only",
+  "disposition": "open",
+  "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+  "citation": "Sun and Bai (2023), arXiv:2304.10568v1",
+  "source_root": "docs/reference_paper/arXiv-2304.10568v1",
+  "primary_tex": {
+    "path": "docs/reference_paper/arXiv-2304.10568v1/mnras_template.tex",
+    "sha256": "8f99cec40b8c9fad7f6011c0c32f14724cc0dddabb86db95a7f1687ce04cbdae"
+  },
+  "figure_bundle": {
+    "path": "docs/reference_paper/arXiv-2304.10568v1/plot",
+    "file_count": 35,
+    "sha256_manifest_sha256": "e5c87d8a85ebe110392dbba077869c426e85f7284da80b40deac456c710c9e70"
+  },
+  "external_inventory": "tst/publication/readiness/external_artifacts.json",
+  "redistribution_status": "review_required_before_external_export",
+  "limitations": [
+    "This compact record anchors the repository paper source; it is not machine-readable reference data.",
+    "Figure digitization provenance and extraction uncertainty remain open before qualifying comparisons."
+  ]
+}

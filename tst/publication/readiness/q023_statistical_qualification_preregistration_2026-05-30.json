@@ -1,0 +1,107 @@
+{
+  "record_type": "q023_statistical_qualification_preregistration",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-023",
+  "qualification_effect": "preregistration_scaffold_only",
+  "disposition": "open",
+  "scope": "Local policy tranche for future stochastic qualification campaigns. The successor Q-023 profile registry and campaign drafts freeze every locally decidable seed, sampling, grid, fit-window, estimator, exclusion, tolerance, local-analyzer-candidate, and independent-recompute-plan field before qualifying output inspection. Clean-candidate bindings, missing qualifying decks and analyzers, Orion campaign roots, Frontier output, external reference extraction, later independent-recompute scripts, and reviewer dispositions remain explicitly open.",
+  "campaigns_requiring_campaign_specific_freeze": [
+    "CLAIM-PAPER-BELL-LINEAR-001",
+    "CLAIM-PAPER-SHOCK-001",
+    "CLAIM-PAPER-CRSI-LINEAR-001",
+    "CLAIM-PAPER-CRPAI-LINEAR-001",
+    "CLAIM-PAPER-CRPAI-DRIVEN-001",
+    "CLAIM-PROD-BELL-NONLINEAR-NOHALL-001",
+    "CLAIM-PROD-CRSI-SATURATION-001",
+    "CLAIM-PROD-CRPAI-SATURATION-001",
+    "CLAIM-PROD-CRPAI-UNDRIVEN-SATURATION-001",
+    "CLAIM-EXT-HALL-BELL-001",
+    "CLAIM-EXT-CRSI-IN-DAMPING-001",
+    "CLAIM-EXT-CRPAI-TRANSPORT-001"
+  ],
+  "campaign_preregistration_template": {
+    "status": "local_profiles_recorded_expanded_immutable_campaign_records_open",
+    "required_fields_before_qualifying_run": ["campaign_id", "claim_ids", "git_commit", "executable_sha256", "physical_mode", "input_checksums", "analysis_checksums", "primary_observables", "secondary_observables", "estimators", "fit_windows", "exclusion_rules", "qualifying_seed_list", "pilot_seed_list", "parameter_grid", "reference_values", "tolerances", "sensitivity_grid", "sampling_rule", "multiplicity_family", "failure_artifact_root", "independent_recompute_plan"]
+  },
+  "seed_policy": {
+    "default_design": "fixed_sample",
+    "qualifying_seed_list_status": "locally_frozen_in_q023_profile_registry_must_be_materialized_into_immutable_campaign_record_before_qualifying_run",
+    "pilot_seed_list_status": "locally_frozen_optional_design_probes_if_used_must_be_archived_and_excluded_from_qualifying_estimate",
+    "seed_type": "nonnegative_integer",
+    "archive_every_attempted_seed": true,
+    "archive_failed_and_outlier_seeds": true,
+    "informal_optional_seed_addition_forbidden": true,
+    "reuse_same_seeds_across_paired_sensitivity_points_where_meaningful": true,
+    "sequential_design": {
+      "default_status": "disabled",
+      "enable_only_by_preregistration_revision_before_qualifying_run": true,
+      "required_fields_if_enabled": ["confidence_level", "maximum_seed_count", "pilot_reuse_policy", "inspection_schedule", "alpha_spending_or_equivalent", "stopping_boundaries", "multiplicity_control", "campaign_node_hour_ceiling"]
+    }
+  },
+  "estimator_policy": {
+    "status": "frozen_default_campaign_draft_endpoint_mappings_recorded_missing_qualifying_analyzers_explicitly_open",
+    "primary_central_estimator": "median_across_qualifying_seeds",
+    "required_secondary_summaries": ["arithmetic_mean", "sample_standard_deviation", "per_seed_values"],
+    "paired_sensitivity_estimator": "median_of_per_seed_differences",
+    "fitted_quantity_rule": "Archive per-seed fit inputs, fit window, fit diagnostics, and failed fits. Freeze the fit window before qualifying output inspection.",
+    "endpoint_mapping_status": "locally_recorded_in_q023_campaign_drafts_qualifying_analyzer_bindings_open"
+  },
+  "interval_policy": {
+    "status": "frozen_default",
+    "confidence_level": 0.95,
+    "method_for_noisy_aggregate_metrics": "bca_bootstrap_across_qualifying_seeds",
+    "bootstrap_resamples": 10000,
+    "bootstrap_rng_seed": 20260530,
+    "deterministic_oracle_rule": "Use declared absolute and relative numerical tolerances instead of a stochastic interval.",
+    "reference_extraction_uncertainty_rule": "Report digitization or extraction uncertainty separately and include it explicitly in the comparison model; never absorb it silently by broadening AthenaK tolerance.",
+    "small_sample_rule": "If BCa assumptions or seed count are inadequate, mark the candidate limited or rerun_required and preregister a revised design before generating replacement qualifying data."
+  },
+  "multiplicity_policy": {
+    "status": "frozen_default",
+    "claim_level_primary_endpoint_control": "holm_family_wise_error_rate",
+    "family_alpha": 0.05,
+    "secondary_endpoint_rule": "Report as secondary or exploratory unless promoted through a preregistration revision before qualifying output inspection.",
+    "sensitivity_scan_rule": "Freeze which sensitivity endpoints are gates and which are descriptive before the qualifying run."
+  },
+  "exclusion_policy": {
+    "status": "frozen",
+    "predeclared_exclusion_categories": ["scheduler_or_transport_failure_before_simulation_start", "artifact_integrity_failure", "declared_runtime_safety_abort", "nonfinite_or_corrupt_output"],
+    "archive_excluded_attempts": true,
+    "outlier_rule": "Retain finite completed outliers in the qualifying estimate. Excluding one requires a linked finding with physical justification, external review, candidate-dataset invalidation, and a registered rerun.",
+    "post_inspection_window_or_threshold_tuning_forbidden": true,
+    "candidate_dataset_invalidated_by_policy_revision": true
+  },
+  "sensitivity_policy": {
+    "status": "frozen_minimum_families_local_exact_or_relative_campaign_profiles_recorded",
+    "required_for_every_stochastic_campaign": ["particle_count", "timestep", "resolution"],
+    "required_when_physically_relevant": ["box_size", "dimensionality", "momentum_bin_resolution", "driving_rate", "damping_model", "deltaf_fullf_control", "cpu_mpi_gpu_scope"],
+    "parameter_values_status": "locally_available_exact_and_relative_values_frozen_exact_fiducials_that_depend_on_missing_qualifying_decks_or_external_maps_remain_open"
+  },
+  "independent_recompute_policy": {
+    "status": "frozen_required_before_claim_closure",
+    "implementation_rule": "Critical metrics must be recomputed from archived raw artifacts by a reviewer-owned script or an independently implemented analyzer that does not import production metric-extraction functions.",
+    "required_records": ["script_path_or_archive_locator", "script_sha256", "environment_lock", "input_artifact_checksums", "metric_comparison_table", "reviewer", "reviewer_disposition"],
+    "current_artifact_status": "plan_frozen_in_q023_profile_registry_reviewer_owned_or_independent_script_and_recompute_artifacts_open"
+  },
+  "reproducibility_levels": {
+    "bitwise_reproducibility": "Use only where execution ordering and backend make bitwise identity a declared requirement.",
+    "deterministic_metric_reproducibility": "Require declared numerical tolerance for deterministic metric comparisons.",
+    "statistical_agreement": "Require preregistered aggregate estimator, interval, and multiplicity policy for stochastic comparisons.",
+    "cpu_mpi_gpu_assignment_status": "open_requires_clean_candidate_frontier_campaign_binding_before_qualifying_run"
+  },
+  "open_items": [
+    "Materialize one immutable expanded campaign record from the locally frozen profiles before each qualifying run.",
+    "Create and checksum the missing qualifying decks and production analyzers identified by each campaign draft.",
+    "Freeze exact fiducials, saturation windows, external-reference maps, extracted values, and remaining numeric tolerances where the draft records an explicit dependency.",
+    "Freeze the clean candidate commit, Frontier executable checksum, input and production-analysis checksums, Orion campaign artifact root, and CPU/MPI/GPU assignment before qualifying output inspection.",
+    "Implement or archive the reviewer-owned or independently implemented critical-metric recomputation script, recompute from archived raw artifacts, and obtain external reviewer disposition before claim closure."
+  ],
+  "successor_local_control_artifacts": [
+    "tst/publication/readiness/q023_campaign_drafts_2026-05-30.json",
+    "tst/publication/readiness/q023_local_preregistration_profiles_2026-05-30.json",
+    "tst/publication/readiness/schemas/q023_campaign_preregistration.schema.json",
+    "tst/publication/readiness/plotting_environment_lock_candidate_2026-05-30.json"
+  ],
+  "q023_status": "open_local_preregistration_profiles_and_campaign_drafts_recorded_candidate_frontier_external_reference_later_artifact_and_review_bindings_absent"
+}

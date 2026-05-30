@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "comparison_id": "XCMP-ENTITY-MICRO",
+  "reference_ids": ["entity_toolkit_snapshot_512998c4"],
+  "athenak_physical_mode": "bounded_shared_particle_kernel_micro_oracle",
+  "matched_equations": [
+    "Cartesian special-relativistic Boris rotation with identical q*dt/(2*m), electric half-kicks, gamma-dependent magnetic rotation, and second electric half-kick.",
+    "Cartesian first- and second-order particle shape-support formulas."
+  ],
+  "intentional_mismatches": [
+    "The complete trajectory-current deposition kernels are not claimed interchangeable.",
+    "Entity electromagnetic field evolution is outside the AthenaK MHD-PIC overlap.",
+    "Curvilinear, GR, filtering, Vay, GCA, radiation, and Entity statistics paths are outside this bounded map."
+  ],
+  "unit_map": {
+    "entity_momentum": "normalized c=1 momentum",
+    "athenak_momentum": "mass-normalized momentum with pic_cr_light_speed=1 for the differential",
+    "shape_coordinates": "shared Cartesian cell-centered normalized coordinates"
+  },
+  "normalization_map": {
+    "boris_rotation": "identical q*dt/(2*m) rotation normalization",
+    "shape_support": "Entity order<STAGGERED,O>/for_deposit<O> against AthenaK ShapeOrder<STAGGERED,O>/ShapeForDeposit<O> for O=1,2"
+  },
+  "parameter_overlap": {
+    "pic_cr_light_speed": 1.0,
+    "shape_orders": [1, 2],
+    "geometry": "Cartesian"
+  },
+  "excluded_regimes": [
+    "MHD feedback",
+    "expanding-box evolution",
+    "delta-f physics",
+    "AMR and SMR",
+    "MPI and GPU execution"
+  ],
+  "source_records": [
+    "tst/publication/readiness/entity_snapshot.json",
+    "tst/publication/readiness/q015_entity_differential_2026-05-30.json"
+  ],
+  "reviewer_disposition": "pending external review"
+}

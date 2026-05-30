@@ -1,0 +1,91 @@
+{
+  "record_type": "q042_standard_mhd_compatibility_local",
+  "date": "2026-05-30",
+  "gate": "Q-042",
+  "qualification_effect": "bounded_serial_host_standard_mhd_compatibility_regression_only",
+  "disposition": "bounded_local_pass",
+  "scope": "Bounded serial-host compatibility repair and launch evidence for standard non-PIC MHD paths affected by the PIC tranche. This record is not MPI, orbital-advection, GPU, Frontier, scientific-campaign or external-review qualification.",
+  "repairs": [
+    {
+      "surface": "custom_shearing_box_source_term_ownership",
+      "files": [
+        "src/pgen/mri2d.cpp",
+        "src/pgen/shwave.cpp"
+      ],
+      "status": "repaired",
+      "detail": "Route shearing-box enablement, geometry and rotation state through the current SourceTerms psrc owner."
+    },
+    {
+      "surface": "shwave_custom_generator_initialization",
+      "files": [
+        "src/pgen/shwave.cpp",
+        "inputs/shearing_box/jgg.athinput"
+      ],
+      "status": "repaired",
+      "detail": "Restore hydro coordinate-local perturbation construction, allocate all three vector-potential arrays, accumulate magnetic energy from the matching face-field components, identify the shipped hydro deck accurately, and replace removed vl2 with rk2."
+    },
+    {
+      "surface": "isothermal_mhd_timestep",
+      "files": [
+        "src/mhd/mhd_newdt.cpp"
+      ],
+      "status": "repaired",
+      "detail": "Read the ideal-gas energy primitive only inside the ideal-EOS branch so isothermal MHD primitive arrays are not indexed out of bounds."
+    }
+  ],
+  "bounded_launches": [
+    {
+      "profile": "serial_debug_custom_blast",
+      "command": "/tmp/athenak-blast-build/src/athena -i inputs/mhd/blast_mhd_amr.athinput time/nlim=1 job/basename=pic_static_taskchain_blast_amr",
+      "status": "passed_one_cycle"
+    },
+    {
+      "profile": "serial_debug_custom_mri2d",
+      "command": "/tmp/athenak-mri2d-build/src/athena -i inputs/mhd/mri2d.athinput time/nlim=1 job/basename=pic_static_taskchain_mri2d",
+      "status": "passed_one_cycle"
+    },
+    {
+      "profile": "serial_debug_custom_shwave_hydro",
+      "command": "/tmp/athenak-shwave-build/src/athena -i inputs/shearing_box/jgg.athinput time/nlim=1 job/basename=pic_static_taskchain_shwave_hydro",
+      "status": "passed_one_cycle"
+    },
+    {
+      "profile": "serial_debug_custom_shwave_mhd",
+      "command": "/tmp/athenak-shwave-build/src/athena -i /tmp/pic_static_taskchain_shwave_mhd.athinput problem/ipert=3 time/integrator=rk2 time/nlim=1 job/basename=pic_static_taskchain_shwave_mhd",
+      "status": "passed_one_cycle",
+      "note": "The temporary MHD launch deck is the shipped hydro shwave deck with its module block changed from hydro to mhd for bounded branch coverage; it is not a source-controlled production deck."
+    },
+    {
+      "profile": "serial_debug_custom_field_loop_orbital_advection",
+      "command": "/tmp/athenak-field-loop-build/src/athena -i inputs/shearing_box/mhd_orb_adv.athinput time/nlim=1 job/basename=pic_static_taskchain_mhd_orb_adv",
+      "status": "passed_one_cycle"
+    }
+  ],
+  "build_evidence": [
+    {
+      "profile": "serial_debug_built_in_pgens",
+      "command": "cmake --build /tmp/athenak-pic-build -j 8",
+      "status": "passed"
+    },
+    {
+      "profile": "mpi_release_built_in_pgens",
+      "command": "cmake --build /tmp/athenak-pic-build-release-mpi -j 8",
+      "status": "passed_compile_only"
+    },
+    {
+      "profile": "serial_debug_custom_shwave",
+      "command": "cmake --build /tmp/athenak-shwave-build -j 8",
+      "status": "passed"
+    },
+    {
+      "profile": "serial_debug_custom_field_loop",
+      "command": "cmake --build /tmp/athenak-field-loop-build -j 8",
+      "status": "passed"
+    }
+  ],
+  "residual_open_items": [
+    "Run the standard non-PIC MPI decomposition and multilevel runtime matrix.",
+    "Run the Frontier HIP/GPU standard-MHD compatibility slice.",
+    "Obtain external reviewer disposition."
+  ]
+}

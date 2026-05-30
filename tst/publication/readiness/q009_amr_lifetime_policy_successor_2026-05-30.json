@@ -1,0 +1,65 @@
+{
+  "record_type": "q009_amr_lifetime_policy_successor",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-009",
+  "qualification_effect": "bounded_local_audit_and_policy_freeze_only",
+  "disposition": "open",
+  "policy_document": "docs/source/engineering/pic_amr_lifetime_and_interface_policy.md",
+  "lifetime_inventory": {
+    "meshblock_pack": "retained",
+    "child_meshblock_and_coordinates": "reconstructed_and_neighbor_table_rebuilt",
+    "physics_module_pointer_preservation": "explicit_during_child_reconstruction",
+    "mhd_refresh": "MHD::UpdateAfterAMR",
+    "particle_refresh": "Particles::UpdateAfterAMR",
+    "particle_refresh_checks": [
+      "moment_capacity",
+      "coarse_moment_capacity",
+      "old_position_capacity",
+      "edge_current_capacity",
+      "no_mhd_field_capacity"
+    ],
+    "particle_boundary_helper": "retains_stable_particles_object_and_resizes_message_buffers_from_current_layout",
+    "moment_and_edge_helpers": "retain_stable_pack_pointer_and_allocate_against_max_nmb_per_rank",
+    "amr_and_load_balance_requests": "transient_and_cleared_per_operation",
+    "particle_load_cost": "post_amr_geometric_ownership_count_weight_applied_before_balance"
+  },
+  "refinement_interface_policy": {
+    "production_policy": "paper_smooth",
+    "implementation_mapping": [
+      "cell_centered_deposition",
+      "coarse_restriction",
+      "additive_neighbor_exchange",
+      "coarse_boundary_fill",
+      "fine_ghost_prolongation"
+    ],
+    "limitation": "locally_smooth_paper_policy_not_claimed_individually_conservative_for_every_interface_crossing",
+    "optional_conservative_policy": "not_retained_as_qualified_production_mode",
+    "direct_staggered_status": "experimental_trajectory_current_candidate_only_not_a_qualified_conservative_amr_gas_feedback_policy"
+  },
+  "existing_local_guards": [
+    {
+      "script": "tst/scripts/particles/pic_amr_shock_lb_smoke.py",
+      "scope": "serial_refinement_and_conditional_mpi_migration_particle_tracking_proxy"
+    },
+    {
+      "script": "tst/scripts/particles/pic_refinement_boundary_characterization.py",
+      "scope": "bounded_smr_and_amr_proxy_refinement_interface_characterization"
+    },
+    {
+      "script": "tst/scripts/particles/pic_q009_repeated_amr_lifetime.py",
+      "scope": "bounded_serial_six_transition_refine_derefine_stress_through_five_restart_continuations",
+      "record": "tst/publication/readiness/q009_repeated_amr_lifetime_bounded_local_2026-05-30.json"
+    }
+  ],
+  "open_items": [
+    "Add repeated refine and derefine coupled-boundary lifetime stress beyond the bounded serial successor.",
+    "Run MPI migration, restart and supported boundary modes in combination.",
+    "Run host memory checking against repeated transitions.",
+    "Run controlled MPI migration and decomposition-change evidence.",
+    "Run Frontier HIP GPU memory-lifetime stress.",
+    "Correlate particle-aware load costs with measured Frontier time.",
+    "Close the Section 5.3 scientific AMR matrix separately."
+  ],
+  "q009_status": "open_local_lifetime_inventory_paper_smooth_policy_and_bounded_serial_repeated_stress_recorded_full_mpi_hip_matrix_absent"
+}

@@ -1,0 +1,121 @@
+{
+  "record_type": "q028_frontier_f0_admission_and_manifest_anchor",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-002",
+    "Q-025",
+    "Q-027",
+    "Q-038",
+    "Q-042"
+  ],
+  "qualification_effect": "frontier_f0_admission_smoke_passed_science_campaigns_remain_open",
+  "scope": "Successor record for the bounded registered Frontier HIP/MPI admission smoke and the post-smoke control-plane hardening. F0 proves the login build workflow, immutable dependency verification, redacted environment capture, eight distinct rank-to-GPU bindings and a one-rank Athena parser/startup launch. It does not qualify multi-rank Athena communication, HIP particle kernels, physics claims, performance or production operation.",
+  "candidate": {
+    "git_commit": "3bcd3f21e4f5439e655d977854f03b287fa814b9",
+    "status": "dirty_candidate_not_release_archive",
+    "source_snapshot": "/lustre/orion/ast207/proj-shared/dfielding/PIC/source_snapshots/candidate_20260530T123549Z",
+    "build_log_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/logs/build/candidate_20260530T123549Z",
+    "binary": "/lustre/orion/ast207/proj-shared/dfielding/PIC/bin/candidate_20260530T123549Z/hip-mpi-release-paper-pic/athena",
+    "binary_sha256": "15caf800e978f46b183a7f339d49fc2cf3c17df699c82eac8fdc3a1932f8e38f"
+  },
+  "hip_build": {
+    "status": "pass_after_device_capture_fix",
+    "profile": "hip-mpi-release-paper-pic",
+    "kokkos_backends": [
+      "SERIAL",
+      "HIP"
+    ],
+    "architectures": [
+      "ZEN3",
+      "AMD_GFX90A"
+    ],
+    "rocm_library": "/opt/rocm-6.2.4/lib/libamdhip64.so",
+    "portability_fix": "src/pgen/tests/pic_parallel_shock.cpp now copies runtime upstream scalars into local values before HIP device-kernel capture"
+  },
+  "passing_submission": {
+    "job_id": "4744225",
+    "reservation_id": "25f83ea6-6fcd-495a-a8fc-077bc77d0ff6",
+    "submission_id": "f2d2879f-7826-4709-9f9e-4ce663919bd6",
+    "control_plane_version": "36761ee206c3fc7e2b788cde818a703e2a8af5a57ee04026ad294fb13b66f33a",
+    "qos": "debug",
+    "requested_nodes": 1,
+    "requested_walltime": "00:15:00",
+    "elapsed_seconds": 40,
+    "consumed_node_hours": 0.011111111111111112,
+    "manifest": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f0_hipmpi_smoke/f2d2879f-7826-4709-9f9e-4ce663919bd6/pre_submit_manifest.json",
+    "manifest_sha256": "af85f944b2c98baec58307077d8b8c53a72a1266972a7521b35abb4df9af3135",
+    "artifact_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f0_hipmpi_smoke/f2d2879f-7826-4709-9f9e-4ce663919bd6",
+    "artifact_manifest_sha256": "8c2b4a7246084fcee6b8ecd325fa982ce2c49442463caac902bcfc9bfa9bf9de",
+    "analysis_status": "pass",
+    "gpu_mapping_rank_count": 8,
+    "distinct_rocr_visible_devices": 8,
+    "environment_allowlist": {
+      "HSA_XNACK": "0",
+      "MPICH_GPU_SUPPORT_ENABLED": "1",
+      "OMP_NUM_THREADS": "unset",
+      "SLURM_EXPORT_ENV": "ALL"
+    }
+  },
+  "preserved_admission_failures": [
+    {
+      "job_id": "4744215",
+      "elapsed_seconds": 6,
+      "consumed_node_hours": 0.0016666666666666668,
+      "diagnosis": "inferred_batch_environment_bootstrap_failure"
+    },
+    {
+      "job_id": "4744218",
+      "elapsed_seconds": 108,
+      "consumed_node_hours": 0.03,
+      "diagnosis": "compute_node_usr_bin_python3_is_too_old_for_future_annotations"
+    },
+    {
+      "job_id": "4744223",
+      "elapsed_seconds": 50,
+      "consumed_node_hours": 0.013888888888888888,
+      "diagnosis": "rocm_smi_not_on_minimal_compute_step_path"
+    },
+    {
+      "job_id": "4744224",
+      "elapsed_seconds": 38,
+      "consumed_node_hours": 0.010555555555555556,
+      "diagnosis": "remote_srun_step_requires_absolute_bash_path"
+    }
+  ],
+  "ledger_after_f0": {
+    "orion_primary_events": 16,
+    "project_home_mirror_events": 16,
+    "mirror_receipts": 16,
+    "chain_head": "6b73d0d1071984ef495fbc2298e70d32501f86926edc3f6f93c44d75eaf3acca",
+    "cumulative_consumed_node_hours": 0.06722222222222221,
+    "currently_reserved_node_hours": 0.0
+  },
+  "successor_control_plane": {
+    "reason": "Independent post-F0 audit found that the scheduled allocation must cryptographically bind the pre-submit manifest digest rather than trust the current owner-writable manifest checksum list.",
+    "active_installed_version": "1635c9f6bab8ae03bd9ce59ca399f2262b61a386d27d699ae14d37ea35962d1c",
+    "paired_install_status": "passed",
+    "orion_install": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/1635c9f6bab8ae03bd9ce59ca399f2262b61a386d27d699ae14d37ea35962d1c",
+    "project_home_install": "/ccs/proj/ast207/proj-shared/PIC/control_plane/1635c9f6bab8ae03bd9ce59ca399f2262b61a386d27d699ae14d37ea35962d1c",
+    "manifest_digest_anchor": "reservation ledger event plus PIC_MANIFEST_SHA256 scheduled export plus compute-node verifier equality check"
+  },
+  "predecessor_proceed_language": {
+    "status": "superseded_chronology_only",
+    "historical_statement": "frontier_f0_admission_passed_hardened_registered_science_campaigns_may_proceed_after_clean_candidate_freeze",
+    "current_submission_status": "all_submissions_paused",
+    "current_rule": "All submissions remain paused pending repaired successor independent PASS, paired promotion from a clean source candidate, and applicable prerequisites.",
+    "resume_only_after": [
+      "repaired successor independent PASS",
+      "paired promotion from a clean source candidate",
+      "applicable prerequisites"
+    ]
+  },
+  "validation": {
+    "artifact_checksums_verified": 8,
+    "control_plane_tests_passed": 31,
+    "python_compile": "pass",
+    "shell_syntax": "pass",
+    "git_diff_check": "pass"
+  },
+  "overall_disposition": "historical_f0_snapshot_predecessor_proceed_language_superseded_chronology_only_all_submissions_paused_pending_repaired_successor_independent_pass_paired_promotion_from_clean_source_candidate_and_applicable_prerequisites"
+}

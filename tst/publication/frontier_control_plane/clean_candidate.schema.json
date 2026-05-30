@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://athenak.example.invalid/frontier-pic-clean-candidate.schema.json",
+  "title": "Frontier PIC clean-candidate freeze manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "freeze_id",
+    "created_utc",
+    "source",
+    "build"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "freeze_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "created_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "archive_path",
+        "archive_sha256",
+        "git_commit",
+        "git_tree",
+        "worktree_status",
+        "submodule_status"
+      ],
+      "properties": {
+        "archive_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "archive_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "git_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "git_tree": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "worktree_status": {
+          "const": "clean"
+        },
+        "submodule_status": {
+          "const": "absent"
+        }
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "profile_path",
+        "profile_sha256",
+        "source_archive_sha256",
+        "toolchain",
+        "build_command",
+        "executable_path",
+        "executable_sha256"
+      ],
+      "properties": {
+        "profile_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "profile_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "profile_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "source_archive_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "toolchain": {
+          "type": "string",
+          "minLength": 1
+        },
+        "build_command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "executable_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "executable_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "record_type": "q009_repeated_amr_lifetime_bounded_local_tranche",
+  "date": "2026-05-30",
+  "gate": "Q-009",
+  "qualification_effect": "bounded_local_serial_host_regression_only",
+  "disposition": "local_regression_added_claim_closure_remains_open",
+  "scope": "A focused serial-host regression alternates the built-in mesh_refinement/dens_max threshold across restart continuations to force three refine and three derefine transitions with cosmic-ray particles. Successful transitions exercise retained particle ownership refresh; particle snapshots gate finite state, stable count and tag identity, valid ownership, ownership changes across every AMR transition, and same-level physical MeshBlock migration.",
+  "source_constraints": {
+    "production_source_edited": false,
+    "existing_q016_q017_files_edited": false,
+    "new_q009_specific_files_only": true
+  },
+  "verification": {
+    "input": "inputs/tests/pic_q009_repeated_amr_lifetime.athinput",
+    "harness": "tst/scripts/particles/pic_q009_repeated_amr_lifetime.py",
+    "direct_command": "cd tst && python3 -m scripts.particles.pic_q009_repeated_amr_lifetime",
+    "direct_result": "pass",
+    "athena_configuration": "double_precision_serial_no_openmp",
+    "expected_transition_sequence": [
+      "refine",
+      "derefine",
+      "refine",
+      "derefine",
+      "refine",
+      "derefine"
+    ],
+    "restart_continuations": 5,
+    "particle_integrity_checks": [
+      "finite_mesh_state",
+      "stable_nonzero_particle_count",
+      "stable_unique_particle_tags",
+      "finite_particle_positions_and_velocities",
+      "in_domain_particle_positions",
+      "valid_particle_species_and_meshblock_gid",
+      "ownership_change_on_every_amr_transition",
+      "same_level_root_meshblock_physical_migration"
+    ]
+  },
+  "observed_bounded_local_metrics": {
+    "meshblock_sequence": [
+      8,
+      2,
+      8,
+      2,
+      8,
+      2
+    ],
+    "created_deleted_per_stage": [
+      [6, 0],
+      [0, 6],
+      [6, 0],
+      [0, 6],
+      [6, 0],
+      [0, 6]
+    ],
+    "particle_count": 64,
+    "ownership_changes_per_amr_transition": [
+      57,
+      51,
+      53,
+      49,
+      56,
+      50
+    ],
+    "same_level_root_migration_count": 26,
+    "same_level_root_max_point_displacement": 0.7750000283122063
+  },
+  "bounded_evidence_limits": {
+    "mpi": "open: this tranche is intentionally serial-host only and does not exercise rank-to-rank particle transfer, decomposition changes, or MPI interruption handling",
+    "memory_checking": "open: run the repeated-transition tranche under ASan, UBSan, Valgrind, or an equivalent host memory checker",
+    "hip": "open: run the repeated-transition lifetime stress with the supported Frontier HIP GPU toolchain and retain registered evidence",
+    "coupled_boundary": "open: this tranche uses periodic boundaries and test-particle feedback; coupled feedback with supported non-periodic boundary combinations remains to be exercised",
+    "scientific_amr": "open: this engineering lifetime regression is not Section 5.3 AMR scientific qualification"
+  },
+  "q009_status": "bounded_local_repeated_serial_host_regression_added_full_q009_matrix_open"
+}

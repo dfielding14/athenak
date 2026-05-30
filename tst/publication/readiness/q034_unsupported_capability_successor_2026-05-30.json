@@ -1,0 +1,58 @@
+{
+  "record_type": "q034_unsupported_capability_successor",
+  "date": "2026-05-30",
+  "qualification_effect": "local_fail_closed_addendum_only",
+  "supersedes": [
+    "The active-MHD expanding-box capability boundary in q034_unsupported_capability_local_closure.md"
+  ],
+  "scope": "Successor Q-034 addendum for active-MHD expanding-box capability boundaries. It acknowledges the admitted narrow expanding-box coupled-source successor while recording parser rejection and documentation limits for unsupported or unqualified compositions. The admitted successor is bounded serial-host mechanics evidence only, not an implemented-and-qualified general extension.",
+  "artifacts": [
+    "src/particles/particles.cpp",
+    "tst/scripts/particles/pic_mhd_expanding_box_guards.py",
+    "docs/source/engineering/pic_mhd_model_contract.md",
+    "docs/source/modules/particles.md",
+    "docs/source/modules/outputs.md",
+    "docs/source/troubleshooting.md"
+  ],
+  "acknowledged_coupled_source_successor": {
+    "record": "tst/publication/readiness/q008_q033_expanding_coupled_source_successor_2026-05-30.json",
+    "status": "admitted_narrow_expanding_box_coupled_source_successor",
+    "qualification_effect": "bounded_serial_host_mechanics_evidence_only",
+    "admitted_envelope": [
+      "cell_centered_conservative_coupled_source_split",
+      "selected_adaptive_physical_deltaf_plus_reduced_static_neutral_damping_launch_composition",
+      "built_in_mhd_history_with_physical_cell_volume_integrals_and_physical_face_field_magnetic_energy"
+    ]
+  },
+  "active_mhd_expanding_box_policy": {
+    "status": "narrow_coupled_source_successor_admitted_with_fail_closed_unsupported_or_unqualified_compositions",
+    "parser_reject": [
+      "non_periodic_boundaries",
+      "smr_or_amr",
+      "relativistic_coordinates",
+      "nonideal_mhd",
+      "non_dynamic_evolution",
+      "fofc",
+      "mhd_diffusion",
+      "shearing_or_orbital_advection",
+      "fluid_radiation_relativity_or_turbulence_blocks",
+      "initial_turb",
+      "non_boris_particle_pushers",
+      "contracting_scale_factors_with_configured_active_particles",
+      "staggered_or_direct_current_deposition",
+      "hall_current_induction",
+      "nonzero_analytic_deltaf_background_current",
+      "user_defined_history_callbacks",
+      "active_mhd_with_no_mhd_background_mode",
+      "nonadaptive_expanding_mhd_deltaf_feedback",
+      "coupled_feedback_outside_the_admitted_cell_centered_conservative_split"
+    ],
+    "guard_suite": "pass"
+  },
+  "limitations": [
+    "Parser rejection and the admitted narrow coupled-source successor close bounded local mechanics handling only; they do not satisfy the authorized extension qualification target.",
+    "Driven CRPAI transport calibration, full Appendix-A history convergence, changing-volume campaign accounting, coupled restart continuation, MPI decomposition parity and Frontier HIP/GPU runtime remain open.",
+    "External reviewer disposition remains pending."
+  ],
+  "q034_disposition": "active_mhd_expanding_box_narrow_coupled_source_successor_acknowledged_unsupported_or_unqualified_compositions_fail_closed_local_addendum_recorded"
+}

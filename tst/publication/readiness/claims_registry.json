@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "registry_date": "2026-05-30",
+  "default_reviewer": "pending external review",
+  "claims": [
+    {"claim_id": "CLAIM-PAPER-GYRO-001", "claim_class": "sun_bai_2023_reproduction", "required_gates": ["Q-003", "Q-025", "Q-026"], "disposition": "open"},
+    {"claim_id": "CLAIM-PAPER-BELL-LINEAR-001", "claim_class": "sun_bai_2023_reproduction", "required_gates": ["Q-003", "Q-004", "Q-005", "Q-023", "Q-025", "Q-026"], "disposition": "open"},
+    {"claim_id": "CLAIM-PAPER-OSCILLATION-001", "claim_class": "sun_bai_2023_reproduction", "required_gates": ["Q-004", "Q-006", "Q-009", "Q-025", "Q-026"], "disposition": "open"},
+    {"claim_id": "CLAIM-PAPER-SHOCK-001", "claim_class": "sun_bai_2023_reproduction", "required_gates": ["Q-003", "Q-004", "Q-009", "Q-011", "Q-016", "Q-023", "Q-025", "Q-026", "Q-027"], "disposition": "open"},
+    {"claim_id": "CLAIM-PAPER-CRSI-LINEAR-001", "claim_class": "sun_bai_2023_reproduction", "required_gates": ["Q-003", "Q-004", "Q-007", "Q-023", "Q-025", "Q-026"], "disposition": "open"},
+    {"claim_id": "CLAIM-PAPER-CRPAI-LINEAR-001", "claim_class": "sun_bai_2023_reproduction", "required_gates": ["Q-003", "Q-004", "Q-007", "Q-023", "Q-025", "Q-026"], "disposition": "open"},
+    {"claim_id": "CLAIM-PAPER-CRPAI-DRIVEN-001", "claim_class": "sun_bai_2023_reproduction", "required_gates": ["Q-007", "Q-008", "Q-023", "Q-025", "Q-026"], "disposition": "open"},
+    {"claim_id": "CLAIM-PROD-BELL-NONLINEAR-NOHALL-001", "claim_class": "athenak_production_mode", "required_gates": ["Q-019", "Q-023", "Q-025", "Q-026", "Q-028"], "disposition": "open"},
+    {"claim_id": "CLAIM-PROD-CRSI-SATURATION-001", "claim_class": "athenak_production_mode", "required_gates": ["Q-020", "Q-023", "Q-025", "Q-026", "Q-031"], "disposition": "open"},
+    {"claim_id": "CLAIM-PROD-CRPAI-SATURATION-001", "claim_class": "athenak_production_mode", "required_gates": ["Q-021", "Q-023", "Q-025", "Q-026"], "disposition": "open"},
+    {"claim_id": "CLAIM-PROD-CRPAI-UNDRIVEN-SATURATION-001", "claim_class": "athenak_production_mode", "required_gates": ["Q-041", "Q-023", "Q-025", "Q-026"], "disposition": "open"},
+    {"claim_id": "CLAIM-EXT-HALL-BELL-001", "claim_class": "athenak_production_mode", "required_gates": ["Q-029"], "disposition": "open", "authorized_extension_required": true},
+    {"claim_id": "CLAIM-EXT-CRSI-IN-DAMPING-001", "claim_class": "athenak_production_mode", "required_gates": ["Q-032"], "disposition": "open", "authorized_extension_required": true},
+    {"claim_id": "CLAIM-EXT-CRPAI-TRANSPORT-001", "claim_class": "athenak_production_mode", "required_gates": ["Q-033"], "disposition": "open", "authorized_extension_required": true},
+    {"claim_id": "CLAIM-XCODE-ATHENA-BELL-SHOCK-001", "claim_class": "cross_code_comparison", "required_gates": ["Q-022", "Q-028", "Q-030", "Q-040"], "disposition": "open"},
+    {"claim_id": "CLAIM-XCODE-BELL-SATURATION-001", "claim_class": "cross_code_comparison", "required_gates": ["Q-022", "Q-028", "Q-040"], "disposition": "open"},
+    {"claim_id": "CLAIM-XCODE-BAI2019-CRSI-001", "claim_class": "cross_code_comparison", "required_gates": ["Q-022", "Q-031", "Q-040"], "disposition": "open"},
+    {"claim_id": "CLAIM-XCODE-PLUTO-COUPLING-001", "claim_class": "cross_code_comparison", "required_gates": ["Q-022", "Q-030", "Q-040"], "disposition": "open"},
+    {"claim_id": "CLAIM-XCODE-AMRVAC-SHOCK-001", "claim_class": "cross_code_comparison", "required_gates": ["Q-022", "Q-030", "Q-040"], "disposition": "open"},
+    {"claim_id": "CLAIM-XCODE-GIZMO-RSOL-DECISION-001", "claim_class": "cross_code_comparison", "required_gates": ["Q-039"], "disposition": "open"},
+    {"claim_id": "CLAIM-XCODE-ENTITY-MICRO-001", "claim_class": "cross_code_comparison", "required_gates": ["Q-015", "Q-022"], "disposition": "open"},
+    {"claim_id": "CLAIM-STATEART-CRPAI-SCATTERING-001", "claim_class": "scoped_state_of_the_art", "required_gates": ["Q-033", "Q-035"], "disposition": "open", "authorized_extension_required": true},
+    {"claim_id": "CLAIM-BUNDLE-SUN-BAI-2023-001", "claim_class": "sun_bai_2023_reproduction", "required_gates": ["PROFILE-sun_bai_2023_reproduction", "Q-014"], "disposition": "open"},
+    {"claim_id": "CLAIM-RELEASE-PAPER-MHD-PIC-001", "claim_class": "athenak_production_mode", "required_gates": ["PROFILE-paper_mhd_pic", "Q-014"], "disposition": "open"},
+    {"claim_id": "CLAIM-RELEASE-EXTENDED-MHD-PIC-001", "claim_class": "athenak_production_mode", "required_gates": ["PROFILE-paper_mhd_pic", "Q-029", "Q-032", "Q-033", "Q-014"], "disposition": "open", "authorized_extension_required": true}
+  ]
+}

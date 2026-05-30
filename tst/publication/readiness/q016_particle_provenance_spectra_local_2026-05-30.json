@@ -1,0 +1,47 @@
+{
+  "record": "q016_particle_provenance_spectra_local_2026-05-30",
+  "scope": "Bounded local implementation and regression scaffold for persistent CR provenance plus weighted species/source/birth-cohort spectra. This record is not publication evidence and does not qualify a production shock campaign.",
+  "implementation": {
+    "restart_schema_contract": 7,
+    "persistent_integer_fields": [
+      "gid",
+      "ptag",
+      "species",
+      "cr_source"
+    ],
+    "persistent_real_fields": [
+      "macro_weight",
+      "birth_time",
+      "deltaf_f0",
+      "deltaf_weight"
+    ],
+    "spectrum_quantity": "physical_speed",
+    "spectrum_normalization": "weighted_sum_in_bins / diff(bin_edges)",
+    "delta_f_semantics": {
+      "full_f": "macro_weight",
+      "delta_f_perturbation": "macro_weight * deltaf_weight; signed sampled perturbation only; analytic deltaf_f0 background intentionally not added"
+    }
+  },
+  "artifacts": {
+    "input": "inputs/tests/pic_q016_particle_provenance.athinput",
+    "live_regression": "tst/scripts/particles/pic_q016_particle_provenance.py",
+    "spectrum_helper": "tst/publication/q016_particle_spectra.py",
+    "independent_fixture_regression": "tst/publication/test_pic_q016_particle_provenance_spectra.py",
+    "documentation": "docs/source/engineering/pic_q016_particle_provenance_spectra.md"
+  },
+  "verification_state": {
+    "typed_fixture_regression": "passed locally",
+    "serial_release_build": "passed locally",
+    "live_serial_restart_regression": "passed locally with restart schema 7, exact provenance preservation, observed MeshBlock migration, and exact independent full-f plus signed delta-f spectrum reconstruction",
+    "restart_writer_loader_contract": "writer and both loaders use particles::Particles::PIC_RESTART_SCHEMA_VERSION",
+    "restart_safety_guards": "passed locally",
+    "adaptive_deltaf_smoke": "passed locally",
+    "strict_sphinx_warnings_as_errors": "passed locally using a temporary Python 3.11 documentation environment"
+  },
+  "qualification_gaps": [
+    "MPI decomposition coverage",
+    "full repeated-AMR MPI/HIP lifetime coverage beyond the bounded serial Q-009 successor",
+    "HIP parity",
+    "preregistered qualifying shock campaign"
+  ]
+}

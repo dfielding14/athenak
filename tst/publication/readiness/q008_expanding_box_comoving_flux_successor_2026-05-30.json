@@ -1,0 +1,85 @@
+{
+  "record_type": "q008_expanding_box_comoving_flux_successor",
+  "date": "2026-05-30",
+  "qualification_effect": "bounded_serial_host_evidence_only",
+  "supersedes": [
+    "The active-MHD face-field representation described in q008_expanding_box_local_oracles_2026-05-30.json",
+    "Any interpretation of the earlier one-step CPAW source map as a nonuniform CT qualification"
+  ],
+  "scope": "Successor Q-008 local record for the active-MHD expanding-box comoving-flux repair. This record archives bounded host implementation evidence only. It does not qualify the full Appendix-A campaign, driven CRPAI, MPI, GPU, or external-review gates.",
+  "implementation_contract": {
+    "raw_face_centered_arrays": "divergence_preserving_comoving_magnetic_fluxes",
+    "physical_mhd_view": "derived_from_directional_face_areas_for_eos_riemann_and_primitive_consumers",
+    "ct_update": "edge_emfs_are_mapped_before_cartesian_constrained_transport",
+    "fluid_flux_divergence": "directional_metric_factors_are_applied",
+    "mhd_timestep": "physical_directional_widths_are_used",
+    "unqualified_compositions": "rejected_fail_closed"
+  },
+  "artifacts": [
+    "inputs/tests/pic_mhd_expanding_box_oblique_divb.athinput",
+    "tst/scripts/particles/pic_mhd_expanding_box_oblique_divb.py",
+    "tst/scripts/particles/pic_mhd_expanding_box_guards.py",
+    "tst/scripts/particles/pic_expanding_box_appendix_local_oracles.py",
+    "src/mhd/mhd_tasks.cpp",
+    "src/mhd/mhd_fluxes.cpp",
+    "src/mhd/mhd_update.cpp",
+    "src/mhd/mhd_newdt.cpp",
+    "src/particles/particles.cpp"
+  ],
+  "serial_host_profile": {
+    "build_target": "athena",
+    "status": "pass"
+  },
+  "oblique_divb_oracle": {
+    "status": "pass",
+    "purpose": "Exercise a non-axis-aligned physical magnetic field under anisotropic expansion while checking native comoving divB preservation and physical component scaling.",
+    "assertions": {
+      "initial_native_divb_max": 1e-12,
+      "final_native_divb_max": 1e-12,
+      "physical_component_relative_error_max": 5e-07
+    },
+    "measured": {
+      "initial_native_divb_max": 5.329070518200751e-15,
+      "final_native_divb_max": 5.329070518200751e-15,
+      "physical_component_relative_errors": "approximately_9.1e-08_or_below"
+    }
+  },
+  "active_mhd_guard_suite": {
+    "status": "pass",
+    "rejection_count": 4,
+    "rejections": [
+      "initial_turb",
+      "history_output_until_physical_comoving_volume_semantics_are_qualified",
+      "non_boris_particle_pusher",
+      "contracting_scale_factors_with_configured_active_particles"
+    ],
+    "additional_constructor_rejections": [
+      "non_periodic_boundaries",
+      "smr_or_amr",
+      "relativistic_coordinates",
+      "nonideal_mhd",
+      "non_dynamic_evolution",
+      "fofc",
+      "mhd_diffusion",
+      "shearing_or_orbital_advection",
+      "fluid_radiation_relativity_or_turbulence_blocks",
+      "particle_moment_feedback",
+      "ion_neutral_wave_damping"
+    ]
+  },
+  "focused_regression_status": {
+    "pic_parser_contract_guards": "pass",
+    "pic_paper_task_stage_trace": "pass",
+    "pic_mhd_expanding_box_guards": "pass",
+    "pic_mhd_expanding_box_uniform": "pass",
+    "pic_mhd_expanding_box_oblique_divb": "pass",
+    "pic_expanding_box_appendix_local_oracles": "pass"
+  },
+  "limitations": [
+    "Active-MHD history output is intentionally rejected until physical versus comoving diagnostic-volume semantics are qualified.",
+    "The initial_turb source path is intentionally rejected because its raw face-field primitive initialization path is not mapped.",
+    "The bounded implementation rejects active-MHD particle feedback and therefore does not yet implement or qualify the full driven CRPAI Section 5.7 composition.",
+    "Full Appendix-A history convergence, changing-volume conservation accounting, restart continuation across scale-factor evolution, MPI decomposition parity, Frontier HIP/GPU runtime, and external review remain open."
+  ],
+  "q008_disposition": "bounded_serial_host_comoving_flux_repair_oblique_divb_and_fail_closed_guards_passed_full_q008_gate_remains_open"
+}

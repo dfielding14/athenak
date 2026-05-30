@@ -1,0 +1,93 @@
+{
+  "record_type": "q015_entity_differential",
+  "date": "2026-05-30",
+  "qualification_effect": "bounded_host_evidence_only",
+  "scope": "Frozen-source differential evidence for the overlapping Cartesian special-relativistic Boris rotation and particle-shape support formulas. This record does not treat Entity electromagnetic evolution, full trajectory-current deposition, curvilinear metrics, or GPU execution as AthenaK MHD-PIC qualification oracles.",
+  "entity_snapshot": {
+    "path": "/ccs/home/dfielding/entity",
+    "git_commit": "512998c471bf3fdec292cb4a64150c4f0aeea539",
+    "git_tree": "38d511d3d317d0866fab33201a7355815c26bedf",
+    "snapshot_record": "tst/publication/readiness/entity_snapshot.json",
+    "snapshot_commit_match": true,
+    "snapshot_tree_match": true,
+    "snapshot_worktree_clean": true,
+    "declared_file_hashes_match": true,
+    "declared_snapshot_dependency": {
+      "path": "src/kernels/particle_shapes.hpp",
+      "sha256": "ca6e1acbd182d44c057ac8286777106e9fc7192e6f5fffe8d42effb64192641c",
+      "snapshot_manifest_includes_dependency": true
+    }
+  },
+  "athenak_subject": {
+    "base_commit": "3bcd3f21e4f5439e655d977854f03b287fa814b9",
+    "note": "The AthenaK PIC readiness batch contains pre-existing uncommitted changes. Q-015 added only this sidecar and tst/scripts/particles/pic_entity_differential.py."
+  },
+  "exact_overlap": [
+    {
+      "id": "Q015-EO1",
+      "surface": "cartesian_special_relativistic_boris_rotation",
+      "entity_source": "src/kernels/pushers/sr.hpp:337-368",
+      "athenak_source": "src/particles/particles_pushers.cpp:626-654",
+      "normalization": "Entity c=1 normalized momentum and AthenaK momentum-state pic_cr_light_speed=1 with identical q*dt/(2*m), electric half-kicks, gamma-minus magnetic rotation, and second electric half-kick.",
+      "reused_entity_regression": "tests/kernels/pusher.cpp:78-84,139-145,172-273",
+      "bounded_measurements": {
+        "entity_regression_steps": 2000,
+        "entity_vs_athenak_max_abs_diff": 4.440892098500626e-16,
+        "entity_vs_continuum_max_abs_error": 1.438729392289062e-07,
+        "entity_b_only_max_pnorm_drift": 4.884981308350689e-15,
+        "generic_eb_64_step_max_abs_diff": 0.0
+      }
+    },
+    {
+      "id": "Q015-EO2",
+      "surface": "cartesian_particle_shape_support",
+      "entity_source": "src/kernels/particle_shapes.hpp:544-585,934-1024",
+      "athenak_source": "src/particles/particles_moments.cpp:92-180",
+      "normalization": "Entity order<STAGGERED,O> and for_deposit<O> are compared against AthenaK ShapeOrder<STAGGERED,O> and ShapeForDeposit<O> for the shared O=1 and O=2 support. This is exact shape-support overlap, not a claim that the complete current-deposition kernels are interchangeable.",
+      "reused_entity_regression": "tests/kernels/deposit.cpp:89-127",
+      "bounded_measurements": {
+        "shape_order_evaluations": 28,
+        "trajectory_support_evaluations": 10,
+        "entity_vs_athenak_max_abs_diff": 0.0,
+        "max_partition_of_unity_error": 0.0
+      }
+    }
+  ],
+  "reused_athenak_regressions": [
+    {
+      "script": "tst/scripts/particles/pic_entity_deposit_mink.py",
+      "deck": "inputs/tests/pic_entity_deposit_mink.athinput",
+      "host_result": "pass",
+      "scope": "Serial periodic pair-plasma deposited rho/J totals and particle-count evidence. The available Athena executable has MPI parallelism disabled."
+    },
+    {
+      "script": "tst/scripts/particles/pic_entity_deposit_reflect.py",
+      "deck": "inputs/tests/pic_entity_deposit_reflect.athinput",
+      "host_result": "pass",
+      "scope": "Serial reflective-boundary pair-plasma deposited rho/J totals and particle-retention evidence. The available Athena executable has MPI parallelism disabled."
+    }
+  ],
+  "non_overlap": [
+    "Entity evolves electromagnetic fields as an SRPIC/GRPIC code; AthenaK couples particles to an MHD carrier. Entity is not an AthenaK MHD-PIC scientific-output oracle.",
+    "Entity src/kernels/currents_deposit.hpp and AthenaK src/particles/particles_moments.cpp use shared shape-support concepts but do not have a complete current-kernel equivalence. Full trajectory-current arrays are not claimed as exact overlap.",
+    "Entity curvilinear and GR metric paths are outside AthenaK's Cartesian MHD-PIC overlap.",
+    "Entity Vay, GCA, radiative-drag, emission, filtering, checkpoint, and statistics paths are outside this bounded differential.",
+    "AthenaK expanding-box maps, delta-f extensions, MHD feedback, AMR/SMR behavior, restart safety, and Frontier control-plane behavior are outside this bounded differential."
+  ],
+  "verification": {
+    "harness": "tst/scripts/particles/pic_entity_differential.py",
+    "python_compile": "pass",
+    "untracked_file_diff_check": "pass",
+    "harness_suite": "pass",
+    "athena_executable": "tst/build/src/athena",
+    "athena_configuration": "double_precision_serial_no_openmp"
+  },
+  "residual_risks": [
+    "The frozen Entity native C++ regression binaries were inspected but not built or executed in this AthenaK worktree.",
+    "The available Athena host executable is serial. Existing Entity-style AthenaK decomposition checks still require an MPI-enabled runtime launch.",
+    "No HIP/GPU compilation, GPU runtime, CPU/GPU differential, or Frontier execution is part of this sidecar.",
+    "Full trajectory-current deposition differential evidence remains open because the complete Entity and AthenaK deposition kernels are not exact algorithmic overlaps.",
+    "External reviewer disposition remains pending."
+  ],
+  "q015_disposition": "bounded_exact_overlap_host_differential_passed_with_non_overlap_and_frontier_residuals"
+}

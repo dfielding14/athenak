@@ -1,0 +1,48 @@
+{
+  "record_type": "q027_successor_control_plane_independent_pass",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-027",
+    "Q-042"
+  ],
+  "qualification_effect": "local_successor_control_plane_adversarial_pass_only_paired_install_and_policy_promotion_pending_clean_candidate",
+  "scope": "Local successor Frontier control-plane hardening and independent adversarial retest. Orion, Project Home and the scheduler remained unchanged. This record does not authorize submissions, replace the clean-candidate freeze or close Frontier runtime gates.",
+  "staged_successor": {
+    "control_plane_version": "12750ea6f8ef540e3807a56cb7573d9d690532f729405b37b031936d045b22dc",
+    "installed_predecessor_version": "1635c9f6bab8ae03bd9ce59ca399f2262b61a386d27d699ae14d37ea35962d1c",
+    "paired_install_status": "pending_clean_candidate_commit",
+    "active_policy_promotion_status": "pending_paired_install"
+  },
+  "local_validation": {
+    "control_plane_tests": {
+      "status": "pass",
+      "tests_run": 98
+    },
+    "python_compile": "pass",
+    "shell_syntax": "pass",
+    "git_diff_check": "pass"
+  },
+  "independent_adversarial_retest": {
+    "status": "pass",
+    "closed_probe_classes": [
+      "repo_controlled_queue_command_alias",
+      "forged_USER_and_LOGNAME_queue_identity",
+      "mutable_post_reservation_snapshot_replacement",
+      "forged_scheduler_attachment_and_reconciliation",
+      "launcher_substitution_and_launcher_toctou",
+      "interrupted_ledger_recovery",
+      "caller_argument_ledger_role_confusion",
+      "receipt_provenance_transport_substitution",
+      "snapshotted_athena_execute_mode_loss"
+    ],
+    "residual_site_boundary": "The account holder can still invoke sbatch directly or mutate owner-writable Orion state outside the wrapper. This is a site-policy limitation, not a repo-controlled wrapper bypass."
+  },
+  "next_actions": [
+    "Curate and commit the exact clean source candidate.",
+    "Install the paired immutable successor control plane in Orion and Project Home without recreating ledger genesis.",
+    "Promote the reviewed active storage policy through the installed successor wrapper.",
+    "Keep registered Frontier submissions paused until applicable prerequisite gates close."
+  ],
+  "overall_disposition": "local_independent_adversarial_pass_paired_install_and_policy_promotion_pending_clean_candidate_all_submissions_paused"
+}

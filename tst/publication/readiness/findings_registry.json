@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "registry_date": "2026-05-30",
+  "baseline_commit": "3bcd3f21e4f5439e655d977854f03b287fa814b9",
+  "findings": [
+    {"finding_id": "PIC-P0-001", "severity": "P0", "invariant": "paper mode must not inject CR current directly into CT electric fields", "verification_gate": "Q-004", "status": "verifying"},
+    {"finding_id": "PIC-P0-002", "severity": "P0", "invariant": "paper particle state must use relativistic mass-normalized momentum and configurable artificial C", "verification_gate": "Q-003", "status": "verifying"},
+    {"finding_id": "PIC-P0-003", "severity": "P0", "invariant": "delta-f mode must evolve and deposit perturbation weights", "verification_gate": "Q-007", "status": "verifying"},
+    {"finding_id": "PIC-P0-004", "severity": "P0", "invariant": "expanding-box mode must transform MHD and particle equations coherently", "verification_gate": "Q-008", "status": "verifying"},
+    {"finding_id": "PIC-P0-005", "severity": "P0", "invariant": "AMR retained objects and communication buffers must be refreshed safely", "verification_gate": "Q-009", "status": "verifying"},
+    {"finding_id": "PIC-P0-006", "severity": "P0", "invariant": "restart publication must be atomic and preserve a last-known-good checkpoint", "verification_gate": "Q-036", "status": "verifying"},
+    {"finding_id": "PIC-P1-001", "severity": "P1", "invariant": "refinement-boundary deposition policy must be explicit and measured", "verification_gate": "Q-009", "status": "open", "local_policy_status": "landed_bounded_paper_smooth_cell_centered_restriction_exchange_prolongation_policy", "remaining_closure": "coupled_boundary_host_memory_check_controlled_mpi_and_frontier_hip_lifetime_evidence_open"},
+    {"finding_id": "PIC-P1-002", "severity": "P1", "invariant": "task-stage ordering and conservative delta exchange must match the documented integrator", "verification_gate": "Q-004", "status": "verifying"},
+    {"finding_id": "PIC-P1-003", "severity": "P1", "invariant": "shock injection and diagnostics must match the frozen Section 5.4 contract", "verification_gate": "Q-011", "status": "open"},
+    {"finding_id": "PIC-P1-004", "severity": "P1", "invariant": "sorting intermediate arrays and particle-aware load costs require measured behavior", "verification_gate": "Q-010", "status": "verifying"},
+    {"finding_id": "PIC-P1-005", "severity": "P1", "invariant": "engineering proxies must not be represented as paper physics validation", "verification_gate": "Q-034", "status": "open"},
+    {"finding_id": "PIC-P1-006", "severity": "P1", "invariant": "Entity-named tests require frozen differential provenance or internal-regression naming", "verification_gate": "Q-015", "status": "open"},
+    {"finding_id": "PIC-P1-007", "severity": "P1", "invariant": "qualification artifacts require durable mirrors and redacted environment capture", "verification_gate": "Q-037", "status": "open"},
+    {"finding_id": "PIC-P1-008", "severity": "P1", "invariant": "experimental Hall-current CT source isolation must remain separate from derived Hall Bell qualification", "verification_gate": "Q-029", "status": "verifying"},
+    {"finding_id": "PIC-P1-009", "severity": "P1", "invariant": "reduced static-neutral ion-neutral friction mechanics must remain separate from damped-CRSI qualification", "verification_gate": "Q-032", "status": "verifying"},
+    {"finding_id": "PIC-P1-010", "severity": "P1", "invariant": "adaptive global bi-kappa delta-f fit mechanics must remain separate from CRPAI transport calibration", "verification_gate": "Q-033", "status": "verifying", "launchability_blocker": "resolved_locally_pending_independent_review: the bounded active-MHD cell-centered conservative source split now launches adaptive physical delta-f with reduced ion-neutral damping and built-in physical-volume history output", "required_action": "complete independent implementation review, coupled restart continuation, MPI/HIP parity, and the preregistered physical CRPAI calibration matrix before any Q-033 qualification claim"}
+  ]
+}

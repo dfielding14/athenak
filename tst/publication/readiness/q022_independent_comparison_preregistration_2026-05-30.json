@@ -1,0 +1,218 @@
+{
+  "record_type": "q022_independent_comparison_preregistration",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-022",
+  "qualification_effect": "preregistration_scaffold_only",
+  "disposition": "open",
+  "scope": "Local metadata tranche freezing the mandatory comparison-family inventory and comparison-report contract. Private source-reference artifacts are locally staged and checksummed in preparation for Orion copy and post-copy checksum verification, but this record does not freeze extracted external datasets, complete equation maps, numerical tolerances, comparison runs, discrepancy dispositions, or reviewer sign-off.",
+  "primary_reproduction_contract": {
+    "reference_id": "sun_bai_2023_arxiv_2304.10568v1",
+    "citation": "Sun and Bai (2023), arXiv:2304.10568v1",
+    "local_source": "docs/reference_paper/arXiv-2304.10568v1/mnras_template.tex",
+    "sha256": "8f99cec40b8c9fad7f6011c0c32f14724cc0dddabb86db95a7f1687ce04cbdae",
+    "status": "frozen_source_private_rendered_pdf_restore_passed_external_export_open"
+  },
+  "reference_families": [
+    {
+      "reference_id": "bai_2015_arxiv_1412.1087",
+      "citation": "Bai et al. (2015), arXiv:1412.1087",
+      "locator": "arXiv:1412.1087",
+      "role": "Bell growth, nonlinear evolution, shock precursor, and Hall-applicability comparison",
+      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "reference_id": "riquelme_spitkovsky_2009_arxiv_0810.4565",
+      "citation": "Riquelme and Spitkovsky (2009), arXiv:0810.4565",
+      "locator": "arXiv:0810.4565",
+      "role": "Independent kinetic nonlinear Bell and CRCD saturation comparison",
+      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "reference_id": "gargate_2010_arxiv_1002.1701",
+      "citation": "Gargate et al. (2010), arXiv:1002.1701",
+      "locator": "arXiv:1002.1701",
+      "role": "Independent hybrid-PIC nonlinear Bell saturation comparison",
+      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "reference_id": "zacharegkas_2022_arxiv_2210.08072",
+      "citation": "Zacharegkas et al. (2022), arXiv:2210.08072",
+      "locator": "arXiv:2210.08072",
+      "role": "Hybrid nonlinear Bell saturation survey comparison",
+      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "reference_id": "mignone_2018_arxiv_1804.01946",
+      "citation": "Mignone et al. (2018), arXiv:1804.01946",
+      "locator": "arXiv:1804.01946",
+      "role": "Independent PLUTO conservative-coupling comparison",
+      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "reference_id": "van_marle_casse_marcowith_2018_doi_stx2509",
+      "citation": "van Marle, Casse and Marcowith (2018), DOI:10.1093/mnras/stx2509",
+      "locator": "DOI:10.1093/mnras/stx2509",
+      "role": "Independent MPI-AMRVAC AMR-shock and particle-acceleration comparison",
+      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "reference_id": "bai_2019_arxiv_1902.10219",
+      "citation": "Bai et al. (2019), arXiv:1902.10219",
+      "locator": "arXiv:1902.10219",
+      "role": "True delta-f nonlinear CRSI comparison",
+      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "reference_id": "plotnikov_ostriker_bai_2021_arxiv_2102.11878",
+      "citation": "Plotnikov, Ostriker and Bai (2021), arXiv:2102.11878",
+      "locator": "arXiv:2102.11878",
+      "role": "Ion-neutral-damped CRSI extension comparison",
+      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "reference_id": "sun_bai_zhao_2024_arxiv_2409.08592",
+      "citation": "Sun, Bai and Zhao (2024), arXiv:2409.08592",
+      "locator": "arXiv:2409.08592",
+      "role": "Adaptive-delta-f ion-neutral-friction CRPAI transport-calibration extension comparison",
+      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "reference_id": "ji_hopkins_2022_arxiv_2111.14704",
+      "citation": "Ji and Hopkins (2022), arXiv:2111.14704, plus frozen GIZMO documentation",
+      "locator": "arXiv:2111.14704",
+      "role": "Bounded reduced-speed-of-light comparison or documented exclusion decision",
+      "retrieved_artifact_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "reference_id": "entity_toolkit_snapshot_512998c4",
+      "citation": "Entity Toolkit frozen accessible replacement snapshot",
+      "locator": "/ccs/home/dfielding/entity",
+      "role": "Shared particle-numerics micro-oracles only",
+      "retrieved_artifact_status": "frozen_clean_source_snapshot",
+      "git_commit": "512998c471bf3fdec292cb4a64150c4f0aeea539",
+      "snapshot_manifest": "tst/publication/readiness/entity_snapshot.json"
+    }
+  ],
+  "comparison_matrix": [
+    {
+      "comparison_id": "XCMP-ATHENA-BAI-BELL-SHOCK",
+      "claim_ids": ["CLAIM-XCODE-ATHENA-BELL-SHOCK-001"],
+      "reference_ids": ["bai_2015_arxiv_1412.1087"],
+      "observable_families": ["dispersion", "amplification", "spectra", "morphology", "shock_diagnostics", "hall_applicability"],
+      "equation_map_status": "open_placeholder_requires_freeze_before_run",
+      "normalization_map_status": "open_placeholder_requires_freeze_before_run",
+      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "comparison_id": "XCMP-BELL-NONLINEAR-INDEPENDENT",
+      "claim_ids": ["CLAIM-XCODE-BELL-SATURATION-001"],
+      "reference_ids": ["riquelme_spitkovsky_2009_arxiv_0810.4565", "gargate_2010_arxiv_1002.1701", "zacharegkas_2022_arxiv_2210.08072"],
+      "observable_families": ["growth", "dominant_wavelength", "magnetic_amplification", "spectra", "morphology", "energy_transfer", "saturation"],
+      "equation_map_status": "open_placeholder_requires_freeze_before_run",
+      "normalization_map_status": "open_placeholder_requires_freeze_before_run",
+      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "comparison_id": "XCMP-BAI2019-CRSI",
+      "claim_ids": ["CLAIM-XCODE-BAI2019-CRSI-001"],
+      "reference_ids": ["bai_2019_arxiv_1902.10219"],
+      "observable_families": ["growth", "polarization_spectra", "distribution_evolution", "quasilinear_diffusion", "pitch_angle_evolution", "ninety_degree_crossing", "isotropization", "saturation", "resolution_dependence"],
+      "equation_map_status": "open_placeholder_requires_freeze_before_run",
+      "normalization_map_status": "open_placeholder_requires_freeze_before_run",
+      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "comparison_id": "XCMP-PLUTO-COUPLING",
+      "claim_ids": ["CLAIM-XCODE-PLUTO-COUPLING-001"],
+      "reference_ids": ["mignone_2018_arxiv_1804.01946"],
+      "observable_families": ["linear_modes", "feedback_conservation", "matched_instability_metrics", "matched_shock_diagnostics"],
+      "equation_map_status": "open_placeholder_requires_freeze_before_run",
+      "normalization_map_status": "open_placeholder_requires_freeze_before_run",
+      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "comparison_id": "XCMP-AMRVAC-SHOCK",
+      "claim_ids": ["CLAIM-XCODE-AMRVAC-SHOCK-001"],
+      "reference_ids": ["van_marle_casse_marcowith_2018_doi_stx2509"],
+      "observable_families": ["shock_morphology", "precursor_structure", "spectra", "amr_behavior", "setup_differences"],
+      "equation_map_status": "open_placeholder_requires_freeze_before_run",
+      "normalization_map_status": "open_placeholder_requires_freeze_before_run",
+      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "comparison_id": "XCMP-GIZMO-RSOL-DECISION",
+      "claim_ids": ["CLAIM-XCODE-GIZMO-RSOL-DECISION-001"],
+      "reference_ids": ["ji_hopkins_2022_arxiv_2111.14704"],
+      "observable_families": ["steady_state_rsol_invariance", "normalization", "applicability_differences"],
+      "equation_map_status": "open_placeholder_requires_freeze_before_decision",
+      "normalization_map_status": "open_placeholder_requires_freeze_before_decision",
+      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "comparison_id": "XCMP-ENTITY-MICRO",
+      "claim_ids": ["CLAIM-XCODE-ENTITY-MICRO-001"],
+      "reference_ids": ["entity_toolkit_snapshot_512998c4"],
+      "observable_families": ["relativistic_pusher", "trajectory_deposition", "discrete_continuity", "restart_payload"],
+      "equation_map_status": "bounded_map_recorded_external_review_open",
+      "normalization_map_status": "bounded_map_recorded_external_review_open",
+      "equation_normalization_map": "tst/publication/readiness/q022_xcmp_entity_micro_equation_map_2026-05-30.json",
+      "reference_data_status": "frozen_source_available_differential_oracle_open"
+    },
+    {
+      "comparison_id": "XCMP-EXT-CRSI-IN-DAMPING",
+      "claim_ids": ["CLAIM-EXT-CRSI-IN-DAMPING-001"],
+      "reference_ids": ["plotnikov_ostriker_bai_2021_arxiv_2102.11878"],
+      "observable_families": ["damping_rate_dependence", "unstable_bandwidth", "saturation", "isotropization"],
+      "equation_map_status": "open_placeholder_requires_freeze_before_run",
+      "normalization_map_status": "open_placeholder_requires_freeze_before_run",
+      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    },
+    {
+      "comparison_id": "XCMP-EXT-CRPAI-TRANSPORT",
+      "claim_ids": ["CLAIM-EXT-CRPAI-TRANSPORT-001", "CLAIM-STATEART-CRPAI-SCATTERING-001"],
+      "reference_ids": ["sun_bai_zhao_2024_arxiv_2409.08592"],
+      "observable_families": ["anisotropy", "spectra", "effective_scattering_rate", "quasi_steady_state", "driving_rate_scaling", "friction_scaling"],
+      "equation_map_status": "open_placeholder_requires_freeze_before_run",
+      "normalization_map_status": "open_placeholder_requires_freeze_before_run",
+      "reference_data_status": "local_staged_checksummed_pending_orion_post_copy_verification_and_data_extraction"
+    }
+  ],
+  "equation_and_normalization_map_placeholder": {
+    "status": "open_template_only",
+    "required_fields_before_comparison_run": ["comparison_id", "reference_id", "athenak_physical_mode", "matched_equations", "intentional_mismatches", "unit_map", "normalization_map", "parameter_overlap", "excluded_regimes", "reviewer_disposition"],
+    "rule": "A missing or incomplete map blocks the comparison run. Model differences become discrepancy-ledger entries and never silent tolerance changes."
+  },
+  "tolerance_policy": {
+    "status": "frozen_policy_numeric_thresholds_open_per_comparison",
+    "required_fields_before_comparison_run": ["observable", "units", "reference_value_or_extraction", "expected_discretization_trend", "absolute_tolerance", "relative_tolerance", "tolerance_rationale", "cpu_mpi_gpu_reduction_variation", "failure_artifact_path"],
+    "reference_extraction_uncertainty_required": true,
+    "numeric_thresholds_status": "open_requires_freeze_before_qualifying_run",
+    "no_relaxation_after_inspection": true,
+    "threshold_revision_invalidates_candidate_dataset": true,
+    "threshold_revision_requires": ["physical_or_numerical_justification", "repeated_resolution_evidence", "linked_finding", "review"]
+  },
+  "discrepancy_ledger_schema": {
+    "status": "frozen_required_fields",
+    "required_fields": ["discrepancy_id", "comparison_id", "claim_ids", "observable", "regime", "athenak_artifact", "reference_artifact", "equation_map_revision", "measured_residual", "uncertainty", "tolerance", "classification", "disposition", "linked_findings", "reviewer"],
+    "classification_enum": ["within_tolerance", "expected_model_difference", "athenak_defect", "reference_extraction_issue", "unresolved"],
+    "disposition_enum": ["open", "accepted_scoped_limit", "fix_and_rerun", "reextract_reference", "rejected_claim", "closed_with_evidence"],
+    "rule": "No unresolved discrepancy may be hidden behind a proxy pass, omitted observable, or broadened tolerance."
+  },
+    "open_items": [
+        "Copy the locally staged private reference-source bundle to Orion, verify its post-copy checksums, and classify redistribution basis before external export.",
+        "Freeze one equation and normalization map per executed comparison.",
+        "Ingest or digitize reference data with provenance and extraction uncertainty.",
+        "Freeze numerical tolerances per observable before qualifying comparison output is inspected.",
+        "Populate discrepancy ledger entries and obtain external reviewer dispositions."
+    ],
+    "successor_local_control_artifacts": [
+        "tst/publication/readiness/q022_sun_bai_repository_reference_manifest_2026-05-30.json",
+        "tst/publication/readiness/q022_athenak_paper_mhd_pic_equation_profile_2026-05-30.json",
+        "tst/publication/readiness/q022_xcmp_entity_micro_equation_map_2026-05-30.json",
+        "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json",
+        "tst/publication/readiness/schemas/q022_equation_normalization_map.schema.json",
+        "tst/publication/readiness/schemas/q022_tolerance_table.schema.json"
+    ],
+    "q022_status": "open_local_staged_checksummed_reference_sources_pending_orion_post_copy_verification_extraction_maps_thresholds_comparison_runs_and_review"
+}

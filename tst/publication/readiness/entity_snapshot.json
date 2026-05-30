@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "snapshot_date": "2026-05-30",
+  "path": "/ccs/home/dfielding/entity",
+  "git_commit": "512998c471bf3fdec292cb4a64150c4f0aeea539",
+  "git_tree": "38d511d3d317d0866fab33201a7355815c26bedf",
+  "git_archive_sha256": "c92f5fac17cdbf90fc0c6adcc0b9445fa5b9f4f78c1b6a53c97aa6520423ce1d",
+  "worktree_status": "clean",
+  "comparison_scope": "shared particle storage, relativistic pusher, trajectory deposition, filtering, checkpoint and statistics design only; excludes Entity electromagnetic evolution as an AthenaK MHD-PIC oracle",
+  "files": [
+    {"path": "src/framework/containers/particles.h", "sha256": "563ee8e0fd0ccdf4ee2d32b9239546eafb4a2a757fcb774ba843e5f4ed362b97"},
+    {"path": "src/kernels/pushers/sr.hpp", "sha256": "7633215c6baa5855808187f581c05dc7260291a0ac358075feb9c317ce559371"},
+    {"path": "src/kernels/currents_deposit.hpp", "sha256": "85c11a6c49412742c019ca18ed4250f417bcae26d5290779ae24a8c5c8341b62"},
+    {"path": "src/kernels/particle_shapes.hpp", "sha256": "ca6e1acbd182d44c057ac8286777106e9fc7192e6f5fffe8d42effb64192641c"},
+    {"path": "src/kernels/digital_filter.hpp", "sha256": "671c949a5587dc4dd6d8115c284dd5ac87aecab8a9f645f80c6cf189ad40f61b"},
+    {"path": "src/output/checkpoint.cpp", "sha256": "0063b255277bcc6a8ac95ccd49cdbf1b237f9eb1f57f9a760cad3dbe231af849"},
+    {"path": "src/output/stats.cpp", "sha256": "cbf41f1b85c56ef71c00d8fd111bcedddeedb27343521c59057d464d5d4283d1"},
+    {"path": "src/engines/srpic/srpic.hpp", "sha256": "ff7066190aecf6e43e004a0d27be74fb0e4ea20863acf6eb5edf745f558f7f6d"},
+    {"path": "src/engines/engine.hpp", "sha256": "45fa9f7970fbd1b899c0655251e36e0d346fce87b8e27fc40cbdcfb2a53d4018"},
+    {"path": "src/framework/domain/metadomain_stats.cpp", "sha256": "bddab5d13212597138f66b4e09e461a6fa575fd6a1abfc5d8b4cb356dc53af4c"},
+    {"path": "tests/kernels/pusher.cpp", "sha256": "bdcbc89107e3749209085d79358baddf1bebeed22e70e1518130ec7d29a28e57"},
+    {"path": "tests/kernels/deposit.cpp", "sha256": "4deab320c38b4045c51dec6ab579da8f7494ffdb4ad2edfa1638edd5e311b43d"},
+    {"path": "tests/framework/checkpoint-data.cpp", "sha256": "c245697c1031dfb50ba62e9dff3bdcb86ef8aa1fc160140f50d6c490ccf978b3"},
+    {"path": "tests/framework/checkpoint-extents.cpp", "sha256": "ded74775a4a06e8059022b5cf5d910688996c0a6b3232b43f01a43a49fb091e0"},
+    {"path": "tests/framework/particles.cpp", "sha256": "84c32128df7776e3e32606a760bb82d7a0ddf55ff2dcabceba96d83830c5e2dc"},
+    {"path": "tests/framework/particles_sort.cpp", "sha256": "842f395223f13e6d1af6e3c496cb794875ed495b137425095c2810234205e4b8"}
+  ]
+}

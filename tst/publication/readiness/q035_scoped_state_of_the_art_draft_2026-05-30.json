@@ -1,0 +1,25 @@
+{
+  "record_type": "q035_scoped_state_of_the_art_draft",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-035",
+  "qualification_effect": "unapproved_wording_draft_only",
+  "disposition": "open",
+  "reviewer_assignment": "pending external review",
+  "wording_draft": "tst/publication/readiness/q035_scoped_state_of_the_art_wording_draft_2026-05-30.md",
+  "linked_claim_ids": [
+    "CLAIM-STATEART-CRPAI-SCATTERING-001",
+    "CLAIM-EXT-CRPAI-TRANSPORT-001"
+  ],
+  "known_exclusions": [
+    "No production-ready, calibrated CRPAI transport claim is made from the current bounded host adaptive-delta-f mechanics scan.",
+    "No state-of-the-art claim is made before Q-018, Q-023, Q-034, and Q-040 close.",
+    "No GIZMO/RSOL inference is made from the privately ingested public references before Orion checksum verification, any required dataset extraction, equation mapping, reviewed route selection, and external disposition close."
+  ],
+  "blocking_gates": ["Q-018", "Q-023", "Q-034", "Q-040"],
+  "required_before_signoff": [
+    "Replace draft wording with reviewer-approved exact wording.",
+    "Link immutable qualifying bundles, equation maps, tolerances, discrepancy dispositions, and performance evidence.",
+    "Record named external reviewer disposition."
+  ]
+}

@@ -1,0 +1,138 @@
+{
+  "record_type": "q008_expanding_box_local_oracles",
+  "date": "2026-05-30",
+  "qualification_effect": "bounded_serial_host_evidence_only",
+  "scope": "Local analytical-oracle tranche for Q-008. This record strengthens expanding-box gyromotion and CPAW closure evidence without claiming the full publication gate.",
+  "artifacts": [
+    "inputs/tests/pic_mhd_expanding_box_cpaw_local.athinput",
+    "tst/scripts/particles/pic_expanding_box_appendix_local_oracles.py"
+  ],
+  "serial_host_profile": {
+    "build_type": "Debug",
+    "athena_mpi": "OFF",
+    "athena_openmp": "OFF",
+    "kokkos_backend": "SERIAL",
+    "status": "pass"
+  },
+  "gyro_history_oracle": {
+    "status": "pass",
+    "purpose": "Exercise Appendix-B-style expanding-box gyromotion histories at the manuscript expansion-rate anchor.",
+    "setup": {
+      "background": "uniform no-MHD Bz=1 test-particle carrier",
+      "expansion_law": "linear",
+      "expansion_rate_x1": 0.01,
+      "expansion_rate_x2": 0.01,
+      "expansion_rate_x3": 0.0,
+      "initial_transverse_momentum": 1.0,
+      "artificial_light_speed": 3.0,
+      "end_time": 6.0,
+      "theta_max_values": [
+        0.2,
+        0.1,
+        0.05
+      ]
+    },
+    "analytical_contract": {
+      "scale_factor": "a(t)=1+0.01*t",
+      "transverse_momentum": "p_perp(t)=p_perp(0)/a(t)",
+      "gamma": "gamma(t)=sqrt(1+(p_perp(t)/C)^2)",
+      "phase": "phi(t)=[asinh(p0/C)-asinh(p0/(C*a(t)))]/[0.01*(p0/C)]"
+    },
+    "assertions": {
+      "history_pnorm_relative_error_max": 3e-06,
+      "history_gamma_absolute_error_max": 1e-06,
+      "fine_history_phase_absolute_error_max": 0.002,
+      "momentum_spread_max": 2e-07,
+      "endpoint_phase_error_strictly_decreases": true,
+      "endpoint_phase_convergence_order_min": 1.7
+    },
+    "measured": {
+      "theta_0.2": {
+        "cycles": 101,
+        "average_dt": 0.0594059405940594,
+        "snapshot_count": 103,
+        "history_pnorm_relative_error": 4.129854312961977e-08,
+        "history_gamma_absolute_error": 4.279737453316557e-09,
+        "history_phase_absolute_error": 0.0013050830487255638,
+        "momentum_spread": 1.6653345369377348e-15
+      },
+      "theta_0.1": {
+        "cycles": 200,
+        "average_dt": 0.03,
+        "snapshot_count": 202,
+        "history_pnorm_relative_error": 4.6060508286471784e-08,
+        "history_gamma_absolute_error": 4.462463953913698e-09,
+        "history_phase_absolute_error": 0.00032637931070311765,
+        "momentum_spread": 1.6653345369377348e-15
+      },
+      "theta_0.05": {
+        "cycles": 401,
+        "average_dt": 0.014962593516209476,
+        "snapshot_count": 403,
+        "history_pnorm_relative_error": 4.5142894843192005e-08,
+        "history_gamma_absolute_error": 4.695363875484304e-09,
+        "history_phase_absolute_error": 8.160798612344422e-05,
+        "momentum_spread": 1.7763568394002505e-15
+      },
+      "endpoint_phase_convergence_orders": [
+        2.02864185,
+        1.99258958
+      ]
+    }
+  },
+  "cpaw_local_closure_oracle": {
+    "status": "pass",
+    "purpose": "Exercise a coupled-MHD along-x1 CPAW for one RK2 step, then compare expansion and compression against the exact post-RK anisotropic source map.",
+    "setup": {
+      "mesh": "128x4x4",
+      "background": "coupled MHD with zero particles and test-particle feedback disabled",
+      "expansion_law": "linear",
+      "expansion_rate_x1_values": [
+        0.0,
+        0.01,
+        -0.01
+      ],
+      "expansion_rate_x2": 0.0,
+      "expansion_rate_x3": 0.0,
+      "rk_steps": 1,
+      "end_time": 0.000388308
+    },
+    "analytical_contract": {
+      "static_phase": "The circular transverse Fourier mode advances by |delta_phi|=2*pi*dt for B_parallel=rho=1.",
+      "box_map": "For x1-only scaling r=1/a(t): rho->r*rho, vx->r*vx, vyz->vyz, eint->r^gamma*eint, Bx->Bx, Byz->r*Byz."
+    },
+    "assertions": {
+      "static_mode_amplitude_relative_drift_max": 0.0002,
+      "static_translation_phase_absolute_error_max": 0.001,
+      "static_velocity_magnetic_phase_lock_absolute_error_max": 1e-05,
+      "box_source_map_relative_error_max": 1e-06,
+      "box_mode_amplitude_relative_error_max": 1e-06,
+      "box_mode_phase_absolute_error_max": 1e-06
+    },
+    "measured": {
+      "static": {
+        "velocity_mode_amplitude_relative_drift": 2.2660759158021904e-07,
+        "magnetic_mode_amplitude_relative_drift": 2.2573302083106483e-07,
+        "translation_phase_absolute_error": 2.4529453552081873e-07,
+        "velocity_magnetic_phase_lock_absolute_error": 4.900984632650465e-07
+      },
+      "expanding": {
+        "source_map_relative_error_max": 9.934171214447464e-08,
+        "magnetic_mode_amplitude_relative_error": 8.363495229701812e-09,
+        "magnetic_mode_phase_absolute_error": 5.791509069271868e-10
+      },
+      "compressing": {
+        "source_map_relative_error_max": 7.453544850029087e-08,
+        "magnetic_mode_amplitude_relative_error": 8.291169684149224e-08,
+        "magnetic_mode_phase_absolute_error": 2.4347469488842714e-09
+      }
+    }
+  },
+  "limitations": [
+    "The gyro oracle exercises the implemented transverse-isotropic no-MHD carrier and the manuscript dot(a)=0.01 Omega_0 anchor, but it is not an archived manuscript reproduction deck.",
+    "The CPAW oracle is deliberately a one-step local composition check. It does not implement or qualify the full Appendix-A expanding/compressing amplitude-and-phase history or its resolution-convergence campaign.",
+    "The CPAW source-map comparator uses the rate-zero evolved CPAW as the pre-map numerical reference, then checks the exact expansion/compression map independently.",
+    "Driven CRPAI Section 5.7, changing-volume conservation accounting, restart continuation across scale-factor evolution, MPI decomposition parity, Frontier HIP/GPU runtime, and external review remain open."
+  ],
+  "q008_disposition": "bounded_serial_host_gyro_history_and_cpaw_local_closure_passed_full_q008_gate_remains_open"
+}
