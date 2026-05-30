@@ -13,6 +13,7 @@
 #include "coordinates/cell_locations.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "eos/ideal_c2p_mhd.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
 #include "pgen.hpp"
@@ -119,27 +120,36 @@ void ProblemGenerator::Turb(ParameterInput *pin, const bool restart) {
       Real &x1max = size.d_view(m).x1max;
       int nx1 = indcs.nx1;
       Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+      Real bz_cc = 0.0;
 
       if (ifield == 1) {
         // zero-net-flux Bz
+        bz_cc = B0*std::sin(kx*x1v);
         b0.x1f(m,k,j,i) = 0.0;
         b0.x2f(m,k,j,i) = 0.0;
-        b0.x3f(m,k,j,i) = B0*std::sin(kx*x1v);
+        b0.x3f(m,k,j,i) = bz_cc;
         if (i==ie) {b0.x1f(m,k,j,i+1) = 0.0;}
         if (j==je) {b0.x2f(m,k,j+1,i) = 0.0;}
-        if (k==ke) {b0.x3f(m,k+1,j,i) = B0*std::sin(kx*x1v);}
+        if (k==ke) {b0.x3f(m,k+1,j,i) = bz_cc;}
       } else if (ifield == 2) {
         // constant Bz
+        bz_cc = B0;
         b0.x1f(m,k,j,i) = 0.0;
         b0.x2f(m,k,j,i) = 0.0;
-        b0.x3f(m,k,j,i) = B0;
+        b0.x3f(m,k,j,i) = bz_cc;
         if (i==ie) {b0.x1f(m,k,j,i+1) = 0.0;}
         if (j==je) {b0.x2f(m,k,j+1,i) = 0.0;}
-        if (k==ke) {b0.x3f(m,k+1,j,i) = B0;}
+        if (k==ke) {b0.x3f(m,k+1,j,i) = bz_cc;}
       }
 
-      if (eos.is_ideal) {
-        Real bz_cc = 0.5*(b0.x3f(m,k,j,i) + b0.x3f(m,k+1,j,i));
+      if (eos.is_cgl) {
+        Real bmag = fmax(fabs(bz_cc), eos.bfloor);
+        u0(m,IEN,k,j,i) = 1.5*p0 + 0.5*bz_cc*bz_cc +
+           0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
+           SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
+        u0(m,IAN,k,j,i) =
+            CGLConservedAnisotropy(u0(m,IDN,k,j,i), p0, p0, bmag);
+      } else if (eos.is_ideal) {
         u0(m,IEN,k,j,i) = p0/gm1 + 0.5*bz_cc*bz_cc +
            0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
            SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
