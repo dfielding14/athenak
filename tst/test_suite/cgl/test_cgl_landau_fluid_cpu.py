@@ -714,7 +714,7 @@ def test_cgl_lf_paper_physical_forcing_shell_requires_positive_unit():
     assert "k_shell_unit must be positive" in result.stdout
 
 
-def test_cgl_lf_paper_production_inputs_explicitly_use_shared_mpiio():
+def test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io():
     spec = importlib.util.spec_from_file_location(
         "cgl_lf_workflow_test", PAPER_WORKFLOW_PATH
     )
@@ -927,7 +927,10 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
     spec.loader.exec_module(stage_i)
 
     root = tmp_path / "root"
-    output_dir = root / "runs" / "mks24-stage-i" / "R16" / "s00" / "output"
+    output_dir = (
+        root / "runs" / "mks24-stage-i" / stage_i.EXECUTION_EPOCH
+        / "R16" / "s00" / "output"
+    )
     manifest_dir = output_dir.parent / "manifest"
     (output_dir / "bin").mkdir(parents=True)
     (output_dir / "rst").mkdir()
@@ -959,6 +962,7 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
 
     manifest_path = manifest_dir / "prepared_run.json"
     manifest = {
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
         "state": "submitted",
         "project_root": str(root),
         "job_id": "test-job",
@@ -984,6 +988,7 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
     stage_i.write_json(manifest_path, manifest)
     paths = stage_i.initialize(root)
     stage_i.write_json(paths["reservations"], [{
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
         "manifest": str(manifest_path),
         "case_id": "R16",
         "case_name": "case",
@@ -1043,6 +1048,15 @@ def test_cgl_lf_stage_i_acceptance_requires_clean_complete_segment(tmp_path):
         output_dir / "rst" / "case.00000.rst"
     )
     assert parent["result"] == "accepted"
+    assert parent["execution_epoch"] == stage_i.EXECUTION_EPOCH
+    accounted["execution_epoch"] = "E01-pre-modal-driver"
+    stage_i.write_json(manifest_path, accounted)
+    with pytest.raises(ValueError, match="execution epoch"):
+        stage_i.verify_continuation_restart(
+            output_dir / "rst" / "case.00000.rst"
+        )
+    accounted["execution_epoch"] = stage_i.EXECUTION_EPOCH
+    stage_i.write_json(manifest_path, accounted)
     continuation = tmp_path / "continuation.mhd.hst"
     continuation.write_text(
         "# [0]=time [1]=lf_dfloor [2]=lf_pfloor [3]=lf_nonfin "
@@ -1078,6 +1092,86 @@ def test_cgl_lf_stage_i_groups_rank_local_output_products(tmp_path):
     assert stage_i.retained_product_paths(product) == groups[0]
 
 
+def test_cgl_lf_stage_i_isolates_e02_and_checks_all_shared_root_jobs(tmp_path):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_stage_i_epoch_test", PAPER_STAGE_I_TOOL
+    )
+    assert spec is not None and spec.loader is not None
+    stage_i = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = stage_i
+    spec.loader.exec_module(stage_i)
+
+    root = tmp_path / "root"
+    paths = stage_i.initialize(root)
+    assert paths["runs"] == (
+        root / "runs" / "mks24-stage-i" / stage_i.EXECUTION_EPOCH
+    )
+    assert paths["ledger"].name == "mks24_stage_i_E02_modal_driver_node_hours.csv"
+    assert paths["reservations"].name == (
+        "mks24_stage_i_E02_modal_driver_reservations.json"
+    )
+    with pytest.raises(ValueError, match="authorized only for the R16 pilot"):
+        stage_i.require_pilot_case("R02")
+
+    manifest_path = (
+        paths["runs"] / "R16" / "s00" / "manifest" / "prepared_run.json"
+    )
+    manifest_path.parent.mkdir(parents=True)
+    batch_script = manifest_path.parent / "cgl_lf_stage_i.sbatch"
+    batch_script.write_text("#!/bin/bash\n")
+    stage_i.write_json(manifest_path, {
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "project_root": str(root),
+        "state": "prepared",
+        "paths": {"batch_script": str(batch_script)},
+    })
+    stage_i.write_json(paths["reservations"], [{
+        "execution_epoch": stage_i.EXECUTION_EPOCH,
+        "manifest": str(manifest_path),
+        "case_id": "R16",
+        "case_name": "case",
+        "segment": "s00",
+        "nodes": 1,
+        "requested_walltime": "00:10:00",
+        "reserved_node_hours": 1.0 / 6.0,
+        "state": "prepared",
+    }])
+    queue = tmp_path / "squeue.txt"
+    queue.write_text("")
+    args = SimpleNamespace(
+        manifest=str(manifest_path),
+        allow_local_root=True,
+        squeue_file=str(queue),
+        skip_slurm_test=True,
+        allow_shared_root_campaign=[],
+    )
+    assert stage_i.check_submit(args) == 0
+
+    queue.write_text("123|batch|RUNNING|unrelated_job\n")
+    with pytest.raises(ValueError, match="another user job is queued"):
+        stage_i.check_submit(args)
+    queue.write_text("")
+
+    shared_manifest = (
+        root / "runs" / "exploratory" / "manifest" / "prepared_run.json"
+    )
+    shared_manifest.parent.mkdir(parents=True)
+    stage_i.write_json(shared_manifest, {
+        "campaign_id": "exploratory",
+        "state": "running",
+    })
+    with pytest.raises(ValueError, match="shared-root campaign records"):
+        stage_i.check_submit(args)
+    args.allow_shared_root_campaign = ["exploratory"]
+    assert stage_i.check_submit(args) == 0
+
+    manifest = json.loads(manifest_path.read_text())
+    manifest["execution_epoch"] = "E01-pre-modal-driver"
+    stage_i.write_json(manifest_path, manifest)
+    with pytest.raises(ValueError, match="execution epoch"):
+        stage_i.check_submit(args)
+
+
 def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(
     tmp_path, monkeypatch
 ):
@@ -1094,7 +1188,8 @@ def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(
 
     def record_segment(segment, times, result, input_sha, parent=None):
         manifest_path = (
-            root / "runs" / "mks24-stage-i" / "R16" / segment
+            root / "runs" / "mks24-stage-i" / stage_i.EXECUTION_EPOCH
+            / "R16" / segment
             / "manifest" / "prepared_run.json"
         )
         manifest_path.parent.mkdir(parents=True)
@@ -1127,6 +1222,7 @@ def test_cgl_lf_stage_i_bundle_selects_terminal_restart_lineage(
         if parent is not None:
             command["parent_segment"] = {"manifest": str(parent)}
         stage_i.write_json(manifest_path, {
+            "execution_epoch": stage_i.EXECUTION_EPOCH,
             "state": "recorded",
             "accounting": {"result": result},
             "command": command,

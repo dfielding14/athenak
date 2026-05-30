@@ -1,6 +1,7 @@
 # MKS24 Reproduction-First CGL-LF Manuscript and Later Extension Plan
 
-Status: execution plan, revised 2026-05-29. The first paper-production
+Status: execution plan, revised 2026-05-30 after a read-only Frontier-root
+audit on 2026-05-29 EDT (2026-05-30 UTC). The first paper-production
 segment, mapped case `R16/s00_t0_t2`, completed on Frontier as job `4674731`
 on 2026-05-25 and was recorded only as a clean partial diagnostic result
 (`t = 1.66204848945`, `1.253333` node-hours), not an accepted scientific
@@ -49,6 +50,16 @@ cannot continue under the replacement executable. Stage I actual use is now
 `9.962778` node-hours with no active reservation; further production requires
 replacement-driver qualification, an immutable production build, and a fresh
 lineage from `t = 0`.
+The cleanest recovery is a new execution epoch, not an attempt to salvage the
+pre-replacement lineage. Preserve the existing `R16` tree, inspections, and
+ledger as immutable historical epoch `E01-pre-modal-driver`. Create a separate
+`E02-modal-driver` namespace and ledger before the next MKS24 submission. That
+namespace, its pilot-only reservation, and its shared-root submission checks
+are now implemented locally and must be committed before use.
+Reset the planning ceiling for that new epoch to an incremental `4000`
+node-hours while continuing to report the historical `0.851670` debug and
+`9.962778` Stage I node-hours. A reset is an accounting boundary for future
+authorization; it does not erase consumed allocation.
 Utility commits `476f9dbd`, `9c5c1b40`, and `bad8ba05` select only the
 explicit accepted restart lineage during bundling and admit normal
 sampled-history separation across authenticated restart boundaries while
@@ -442,7 +453,10 @@ work is:
 | Freeze MKS24 case inventory | `inputs/cgl_lf_paper/mks24_stage_i_manifest.json` and guarded workflow `paper-mks24-stage-i` define sixteen source-mapped executions, reuse aliases, and exclude the unmapped active-Alfvenic beta-1 deck. | Preserve the committed manifest and validate it against every submitted input bundle. |
 | Close reference-data boundary | Many dimensionless curves/surfaces are extracted; dimensional panels remain blocked. | Author/archive data, explicit transform proof, or manuscript-scoped blocked-panel decision. |
 | Verify numerical model identity | Corrected collisions, limiter threshold selection, forcing work, passive feedback, and reduced/GPU gates are recorded. | Formal pre-production review against Stage I Sections 3-6 and passing required tests. |
-| Production accounting path | `scripts/frontier/cgl_lf_stage_i.py` is separate from the debug-only utility, validates mapped cases and aliases, uses `batch` with default production `normal` QOS, archives executable/input and production-utility provenance, enforces sequential Stage I reservations, and requires an inspection record before an output may be recorded as `accepted` or retained as a clean partial prefix. Rank-local output sets are retained and checksum-verified as grouped products. Continuations may use only the inspected terminal restart set from a parent with matching case, input digest, and executable digest. | Record and review each completed segment before preparing its continuation or the next case. |
+| Replacement-driver qualification | The merged modal OU driver records `TurbulenceRestartMetadata` and authoritative modal state. Existing local regressions cover fixed-grid/AMR restart and CGL-LF interaction paths, but no replacement-driver MKS24 GPU qualification bundle exists. | Run focused local gates, rank-local restart identity, GPU/MPI decomposition checks, reduced hard-wall CGL-LF validation, and a standard-layout rank-local I/O probe from one immutable replacement-driver build. |
+| Execution-epoch isolation | `scripts/frontier/cgl_lf_stage_i.py` now records new work beneath `runs/mks24-stage-i/E02-modal-driver/`, uses `mks24_stage_i_E02_modal_driver_*` accounting files, tags manifests and job names with the epoch, and rejects cross-epoch restart ancestry and bundle discovery. The old `runs/mks24-stage-i/R16` tree remains outside discovery. | Commit the helper and retain its passing offline epoch-isolation regression before any Frontier submission. |
+| Shared-root coordination | `/lustre/orion/ast207/proj-shared/dfielding/CGL` also contains exploratory non-MKS24 runs. A read-only audit found cancelled job `4743020` and running two-node debug job `4743106` beneath `runs/beta25-accel05-*`; neither is Stage I evidence. The helper now checks all queued user jobs and top-level active CGL-root campaign records, requiring explicit acknowledgement only after an isolation review. | Before every Stage I prepare and submit action, inspect all user jobs and all active CGL-root campaign records. Do not overlap Stage I with another root-writing CGL campaign unless an explicit isolation and concurrency review authorizes it. Account exploratory runs separately from the MKS24 ledgers. |
+| Production accounting path | `scripts/frontier/cgl_lf_stage_i.py` is separate from the debug-only utility, validates mapped cases and aliases, uses `batch` with default production `normal` QOS, archives executable/input and production-utility provenance, enforces sequential Stage I reservations, and requires an inspection record before an output may be recorded as `accepted` or retained as a clean partial prefix. Rank-local output sets are retained and checksum-verified as grouped products. Continuations may use only the inspected terminal restart set from a parent with matching epoch, case, input digest, and executable digest. The initial `E02` implementation permits only an `R16` pilot under a `4.0` node-hour envelope until recosting is reviewed. | Commit the helper, then record and review each completed pilot segment before preparing its continuation. Expand the matrix reservation only after pilot recosting. |
 | Production analysis/plot orchestration | Existing analyzer and MKS24 extractors implement many products; `paper-analyze` composes repeated checksum-qualified split reference manifests while rejecting duplicate product identifiers, and commit `449e297b` adds explicit partial-case comparison recording plus header-only snapshot-window selection; `cgl_lf_stage_i.py bundle-case` follows the explicit accepted restart lineage, merges sampled histories that need not repeat authenticated restart boundary rows while bounding gaps by their retained cadence and boundary timesteps, and links time-deduplicated shared or rank-local snapshot sets only after a case reaches its required final time, while `bundle-campaign` requires all sixteen completed mapped cases for cross-case comparisons. | Workflow command regenerating the per-panel gate table and retained figures from accepted output bundles. |
 | Manuscript conversion | Illustrated validation note exists. | TeX manuscript structured around reproduction claims, blocked boundaries, and only later an extension. |
 
@@ -451,44 +465,55 @@ implemented as a production priority while these reproduction blockers remain.
 
 ## 8. Stage I Compute and Storage Budget
 
-The user-raised ceiling is `4000` Frontier node-hours for the broader project.
-Stage I is prioritized within that ceiling. The detailed implementation record
-provides the current conservative MKS24 production estimate from corrected
-reduced-GPU evidence:
+The user has authorized a clean planning reset if it improves the campaign.
+This revision adopts that reset because the turbulent-driver replacement
+already requires a new lineage from `t = 0`. Historical allocation remains
+visible, while future authorization moves to `E02-modal-driver`.
 
-Any `1000` node-hour ceiling retained in that earlier implementation record
-predates this revision; the `4000` node-hour project ceiling and Stage I-first
-reservation in this document control future submission authorization.
+Any `1000` node-hour debug ceiling and `1068.888889` Stage I reservation
+retained in the earlier implementation record describe the archived
+pre-replacement campaign. They do not authorize new submissions and must not
+be silently copied into `E02`.
 
-| Stage I allocation | Calculation basis | Node-hours |
+| Allocation record | Calculation basis | Node-hours |
 | --- | --- | ---: |
-| Previously consumed qualification ledger | Retained CGL-LF debug qualification evidence | `0.851670` |
-| Conservative mapped-run reservation including a held contingency | Earlier seventeen-run estimate: fourteen mapped standard-layout cases plus one unexecuted beta-1 contingency slot, one `n_perp = 96`, and one `n_perp = 384` case | `534.444444` |
-| Runtime contingency for measurement error, segment extensions, and reruns | `2x` planning ceiling retaining the held slot until a separate reservation reduction is recorded | `534.444445` |
-| Stage I production reservation plus prior consumption | `0.851670 + 1068.888889` | `1069.740559` |
-| Remaining project ceiling after Stage I reservation | `4000 - 1069.740559` | `2930.259441` |
+| Historical debug qualification | Retained pre-replacement CGL-LF debug ledger | `0.851670` |
+| Historical `E01-pre-modal-driver` Stage I | Retained production segments through rejected job `4686032` | `9.962778` |
+| Historical archive total | Reported for provenance; not charged against the fresh planning reset | `10.814448` |
+| Fresh `E02-modal-driver` project ceiling | Incremental ceiling for replacement-driver qualification, Stage I production, and any later separately approved Stage II work | `4000.000000` |
+| Initial `E02` replacement-driver qualification envelope | Smallest-discriminating local and Frontier debug reruns before production recosting | `50.000000` |
+| Approved `E02` `R16` pilot reservation | Initial production-path measurement only; helper rejects non-`R16` cases until recosting review | `4.000000` |
+| Remaining `E02` Stage I matrix reservation | Recalculate after replacement-driver qualification and the fresh `R16` pilot segment | `TBD` |
 
-The estimate is not a measured standard-run benchmark. Prior to production:
+The archived estimate is not a measured replacement-driver benchmark. Prior
+to `E02` production:
 
-1. Implement or approve the production submission/accounting path.
-2. Execute no more than one production case at a time.
-3. Segment runs at restart boundaries and review strict counters, work
+1. Commit the implemented epoch-isolated accounting and shared-root
+   concurrency checks after their offline regression passes.
+2. Qualify one immutable replacement-driver build and rerun a fresh `R16`
+   pilot from `t = 0`.
+3. Recalculate runtime, rank-local storage, and the Stage I reservation from
+   the accepted pilot rather than carrying forward the archived estimate.
+4. Execute no more than one production segment at a time.
+5. Segment runs at restart boundaries and review strict counters, work
    accounting, storage, and measured cost after the first segment.
-4. Stop and recost if projected Stage I consumption exceeds its reserved
+6. Stop and recost if projected Stage I consumption exceeds its reserved
    ceiling.
 
-The existing estimated sequential-retention storage allocation, conservatively
+The archived estimated sequential-retention storage allocation, conservatively
 including the excluded beta-1 inventory definition only as an unexecuted contingency, is approximately
 `880.368 GB` with margin; the no-pruning alternative is approximately
-`1140.924 GB`. Confirm the storage reservation and retention rule before
-executing the mapped matrix, and reduce these envelopes only through a
-recorded reservation/storage revision. The contingency does not authorize a
-beta-1 production run absent a source-mapped role.
+`1140.924 GB`. Those values are planning history, not an `E02` reservation:
+they predate rank-local production retention and the modal restart payload.
+Measure rank-local snapshot/restart sizes with the replacement executable,
+then record the new storage reservation and retention rule before executing
+the mapped matrix. The contingency does not authorize a beta-1 production run
+absent a source-mapped role.
 
-### 8.1 Active production record
+### 8.1 Archived `E01-pre-modal-driver` Production Record
 
-Stage I execution has begun under the production path; the following rows
-are execution provenance, not accepted reproduction evidence:
+The following rows are immutable historical execution provenance, not
+replacement-driver reproduction evidence:
 
 | Case/segment | Frontier job | Requested allocation | Input/build provenance | Acceptance gate |
 | --- | ---: | --- | --- | --- |
@@ -575,21 +600,50 @@ the old restart lineage or describe `R16` as a completed accepted case;
 replacement-driver production must begin from `t = 0` after qualification
 and immutable-build archival.
 
-### 8.2 Why Stage II is not currently reserved in full
+### 8.2 Fresh `E02-modal-driver` entry gate
+
+Do not submit a replacement-driver MKS24 segment until all of the following
+are retained:
+
+1. Focused local CPU and MPI tests for modal-driver restart identity,
+   MKS24 forcing orientation/cadence/work accounting, CGL-LF AMR interaction,
+   and F-056 layout-independent cap fractions.
+2. One immutable HIP/MPI build whose source revision, Kokkos revision,
+   toolchain, executable checksum, and build manifest are archived for Stage I.
+3. Frontier debug evidence for rank-local restart identity, one-rank versus
+   eight-rank GPU/MPI behavior, reduced active/passive/random paper smoke, and
+   a corrected hard-wall active-beta-10 run through at least `t = 2`.
+4. A standard-layout startup probe using the replacement executable and the
+   intended rank-local snapshot/restart layout, so modal restart size and I/O
+   behavior are measured rather than inferred from shared-file history.
+5. The committed epoch-aware `cgl_lf_stage_i.py` path that stores new runs
+   beneath `runs/mks24-stage-i/E02-modal-driver/`, keeps separate accounting
+   files, refuses cross-epoch continuation or bundle discovery, and limits the
+   initial authorization to the `4.0` node-hour `R16` pilot.
+6. An all-user-job preflight confirming that no unrelated live CGL-root
+   campaign will be modified or unintentionally overlapped.
+
+After those gates pass, execute `R16` from `t = 0` as the first `E02` pilot.
+Inspect the first segment, test restart continuation, assemble a transient
+diagnostic bundle, and recalculate runtime/storage before reserving the
+remaining matrix.
+
+### 8.3 Why Stage II is not currently reserved
 
 The former full extension plan reserved `3735.627090` node-hours including
-the existing ledger. Its incremental requirement after the already consumed
-ledger is `3734.775420` node-hours. Combining that extension matrix with the
-Stage I MKS24 reservation would require:
+the earlier ledger. Before the `E02` reset, combining that extension matrix
+with the archived Stage I planning reservation would have required:
 
 ```text
 0.851670 + 1068.888889 + 3734.775420 = 4804.515979 node-hours,
 ```
 
 which exceeds the `4000` node-hour ceiling by `804.515979` node-hours. The
-full extension matrix is therefore not simultaneously authorized. After
-Stage I, use measured costs and results to design a reduced Stage II within
-the remaining budget or request a larger allocation.
+fresh `E02` ceiling does not make that stale extension matrix executable.
+Stage II remains unauthorized until accepted Stage I results and measured
+replacement-driver costs exist. After Stage I, use the actual `E02` ledger to
+design a reduced extension within the remaining ceiling or request a larger
+allocation.
 
 ## 9. Stage I Manuscript Program
 
@@ -755,8 +809,7 @@ Stage I is inserted ahead of it. After Stage I:
 1. Use measured MKS24 performance and remaining ledger rather than the prior
    speculative scaling.
 2. Decide whether a reduced extension can answer the main new question within
-   the remaining `2930.259441` node-hours or whatever remainder is actually
-   measured.
+   the measured `E02` remainder.
 3. If the full two-guide, five-collisionality, beta/LF-sensitivity, paired
    `384^3` program remains scientifically necessary, request an amended total
    budget before submission.
@@ -767,8 +820,8 @@ Stage I is inserted ahead of it. After Stage I:
 | --- | --- | --- | --- |
 | A. Reproduction specification audit | Verify pinned MKS24 source, sixteen-run mapped alias map, disposition of the unmapped active-Alfvenic beta-1 definition, closure/forcing/limiter identity, and figure/status table. | Reviewed Stage I protocol. | A published simulation role or observable remains unidentified. |
 | B. Reference-data closure | Resolve dimensional panel normalization/data boundary and the Figure 10 external-model decision. | Qualified reference manifests or explicit scoped limitation. | A "complete" claim would depend on unqualified data. |
-| C. Production readiness | Validate required local/GPU/restart/work-accounting tests and implement reviewed production accounting. | Passing readiness review and fail-closed ledger. | Numerical gates or submission controls fail. |
-| D. MKS24 production | Execute the sixteen mapped Stage I runs conditionally, plus the beta-1 case only if Phase A assigns it a published role; run one at a time with segment reviews. | Accepted run bundles and measured ledger/storage. | Safety, stationarity, accounting, storage, or budget gate fails. |
+| C. Production readiness | Commit the locally implemented epoch-isolated accounting and shared-root concurrency checks; validate required local/GPU/restart/work-accounting tests for the replacement driver; archive an immutable production build. | Passing readiness review and fail-closed `E02-modal-driver` ledger. | Numerical gates, epoch isolation, or submission controls fail. |
+| D. MKS24 production | Execute a fresh `R16` pilot from `t = 0`, recost Stage I, then conditionally execute the sixteen mapped Stage I runs plus the beta-1 case only if Phase A assigns it a published role; run one segment at a time with reviews. | Accepted `E02` run bundles and measured ledger/storage. | Safety, stationarity, accounting, storage, or budget gate fails. |
 | E. MKS24 analysis | Generate each required product and complete the figure-by-figure status table. | Quantitative reproduction report. | Any claimed result lacks qualified comparison evidence. |
 | F. Reproduction manuscript | Transform the TeX note into a buildable Stage I manuscript. | Manuscript and reproducibility package. | Claims exceed the accepted status table. |
 | G. Extension decision | Recalculate the Stage II design using measured Stage I results/costs. | Approved extension matrix or deferred-work record. | Insufficient budget or unresolved baseline reproduction. |
@@ -776,7 +829,8 @@ Stage I is inserted ahead of it. After Stage I:
 
 ## 12. Immediate Handoff
 
-As of 2026-05-29:
+As of the read-only Frontier-root audit on 2026-05-29 EDT
+(2026-05-30 UTC):
 
 1. The repository contains the TeX validation note, the writing style guide,
    a detailed MKS24 implementation/evidence plan, substantial MKS24 analysis
@@ -814,11 +868,20 @@ As of 2026-05-29:
    program, resolved dimensional reference mappings for all panels,
    independent reproduction of the Figure 10 hybrid-kinetic comparator, or a
    completed paper manuscript.
-4. The next task is not to launch the weak-guide extension or continue old
-   restarts. It is to qualify the replacement turbulent driver, archive a new
-   immutable production build, and start a fresh sequential Stage I lineage
-   from `t = 0`; only accepted replacement-driver bundles can support new
-   comparison claims.
+4. The shared Frontier root also contains exploratory, non-MKS24 comparison
+   campaigns beneath `runs/beta25-accel05-*`. Job `4743020` was cancelled and
+   cleaned while preserving provenance. Two-node debug job `4743106` was
+   running during the audit from revision `89835fea`; it is not Stage I
+   evidence and must be accounted separately. Do not modify, prune, or overlap
+   live root-writing campaigns while preparing the MKS24 restart.
+5. The next task is not to launch the weak-guide extension or continue old
+   restarts. The isolated `E02-modal-driver` accounting namespace,
+   pilot-only reservation, and shared-root helper checks are implemented
+   locally with focused offline regression coverage. Commit those controls,
+   qualify the replacement turbulent driver, archive one immutable Stage I
+   build, and run a fresh `R16` pilot from `t = 0`. Recalculate runtime and
+   storage from that pilot before reserving the sixteen-case matrix. Only
+   accepted `E02` bundles can support new comparison claims.
 
 ## 13. Reproducibility Record
 

@@ -33,10 +33,15 @@ ACCOUNT = "AST207"
 PARTITION = "batch"
 PRODUCTION_QOS = "normal (Frontier default; no -q directive)"
 PROJECT_BUDGET_NODE_HOURS = 4000.0
-PRIOR_QUALIFICATION_NODE_HOURS = 0.851670
-STAGE_I_RESERVED_NODE_HOURS = 1068.888889
+HISTORICAL_DEBUG_NODE_HOURS = 0.851670
+HISTORICAL_E01_STAGE_I_NODE_HOURS = 9.962778
+EXECUTION_EPOCH = "E02-modal-driver"
+EXECUTION_EPOCH_SLUG = "E02_modal_driver"
+PILOT_CASE_ID = "R16"
+STAGE_I_RESERVED_NODE_HOURS = 4.0
 MAX_SEGMENT_SECONDS = 24 * 60 * 60
 LEDGER_COLUMNS = (
+    "execution_epoch",
     "job_id",
     "submitted_utc",
     "completed_utc",
@@ -65,6 +70,12 @@ NONTERMINAL_STATES = {
     "CONFIGURING",
     "COMPLETING",
     "SUSPENDED",
+}
+SHARED_ROOT_ACTIVE_STATES = {
+    "prepared",
+    "submitted",
+    "pending",
+    "running",
 }
 STRICT_LF_FAILURE_COLUMNS = (
     "lf_dfloor",
@@ -138,17 +149,41 @@ def require_beneath_root(path: Path, root: Path, label: str,
         raise ValueError(f"{label} must be beneath {root}: {path}") from error
 
 
+def require_current_epoch(manifest: dict[str, object], label: str) -> None:
+    """Reject archival or untagged manifests in the E02 production path."""
+
+    if manifest.get("execution_epoch") != EXECUTION_EPOCH:
+        raise ValueError(
+            f"{label} execution epoch is not {EXECUTION_EPOCH}: "
+            f"{manifest.get('execution_epoch')!r}"
+        )
+
+
+def require_pilot_case(case_id: str) -> None:
+    """Limit the initial E02 authorization to the measured R16 pilot."""
+
+    if case_id != PILOT_CASE_ID:
+        raise ValueError(
+            f"E02 Stage I is authorized only for the {PILOT_CASE_ID} pilot "
+            "until the measured matrix reservation is reviewed"
+        )
+
+
 def layout(root: Path) -> dict[str, Path]:
-    """Return retained Stage I production locations."""
+    """Return retained E02 Stage I production locations."""
 
     accounting = root / "accounting"
     return {
         "root": root,
         "accounting": accounting,
-        "ledger": accounting / "mks24_stage_i_node_hours.csv",
-        "reservations": accounting / "mks24_stage_i_reservations.json",
-        "summary": accounting / "mks24_stage_i_budget_summary.md",
-        "runs": root / "runs" / "mks24-stage-i",
+        "ledger": accounting / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_node_hours.csv",
+        "reservations": (
+            accounting / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_reservations.json"
+        ),
+        "summary": (
+            accounting / f"mks24_stage_i_{EXECUTION_EPOCH_SLUG}_budget_summary.md"
+        ),
+        "runs": root / "runs" / "mks24-stage-i" / EXECUTION_EPOCH,
         "logs_slurm": root / "logs" / "slurm",
     }
 
@@ -195,7 +230,7 @@ def active_reservations(reservations: list[dict[str, object]]
 
 
 def reservation_usage(paths: dict[str, Path]) -> tuple[float, float]:
-    """Return actual and actively reserved Stage I node-hours."""
+    """Return actual and actively reserved E02 Stage I node-hours."""
 
     actual = sum(float(row["actual_node_hours"]) for row in read_ledger(paths))
     reserved = sum(
@@ -206,7 +241,7 @@ def reservation_usage(paths: dict[str, Path]) -> tuple[float, float]:
 
 
 def refresh_summary(paths: dict[str, Path]) -> None:
-    """Regenerate the human-readable production accounting summary."""
+    """Regenerate the human-readable E02 production accounting summary."""
 
     ledger = read_ledger(paths)
     reservations = read_reservations(paths)
@@ -214,23 +249,24 @@ def refresh_summary(paths: dict[str, Path]) -> None:
     active = active_reservations(reservations)
     reserved = sum(float(item["reserved_node_hours"]) for item in active)
     stage_remaining = STAGE_I_RESERVED_NODE_HOURS - actual - reserved
-    project_remaining = (
-        PROJECT_BUDGET_NODE_HOURS - PRIOR_QUALIFICATION_NODE_HOURS
-        - actual - reserved
-    )
+    project_remaining = PROJECT_BUDGET_NODE_HOURS - actual - reserved
     lines = [
-        "# MKS24 Stage I Frontier Production Budget",
+        "# MKS24 Stage I Frontier E02 Pilot Budget",
         "",
         f"- Updated UTC: `{utc_now()}`",
-        f"- Project ceiling: `{PROJECT_BUDGET_NODE_HOURS:.6f}` node-hours",
-        f"- Previously recorded qualification use: "
-        f"`{PRIOR_QUALIFICATION_NODE_HOURS:.6f}` node-hours",
-        f"- Stage I production reservation: "
+        f"- Execution epoch: `{EXECUTION_EPOCH}`",
+        f"- Fresh incremental project ceiling: "
+        f"`{PROJECT_BUDGET_NODE_HOURS:.6f}` node-hours",
+        f"- Historical debug qualification use, reported but not charged to E02: "
+        f"`{HISTORICAL_DEBUG_NODE_HOURS:.6f}` node-hours",
+        f"- Historical E01 Stage I use, reported but not charged to E02: "
+        f"`{HISTORICAL_E01_STAGE_I_NODE_HOURS:.6f}` node-hours",
+        f"- Approved E02 R16 pilot reservation: "
         f"`{STAGE_I_RESERVED_NODE_HOURS:.6f}` node-hours",
-        f"- Stage I actual use: `{actual:.6f}` node-hours",
+        f"- E02 Stage I actual use: `{actual:.6f}` node-hours",
         f"- Active segment reservations: `{reserved:.6f}` node-hours",
-        f"- Unreserved Stage I remainder: `{stage_remaining:.6f}` node-hours",
-        f"- Project remainder after active Stage I use: "
+        f"- Unreserved E02 pilot remainder: `{stage_remaining:.6f}` node-hours",
+        f"- Incremental project remainder after active E02 Stage I use: "
         f"`{project_remaining:.6f}` node-hours",
         "",
         "## Recorded Segments",
@@ -247,7 +283,7 @@ def refresh_summary(paths: dict[str, Path]) -> None:
                 "`{actual_node_hours}` | {result} |".format(**row)
             )
     else:
-        lines.append("No Stage I production allocation has been recorded.")
+        lines.append("No E02 Stage I production allocation has been recorded.")
     lines.extend(["", "## Active Reservations", ""])
     if active:
         lines.extend([
@@ -260,10 +296,11 @@ def refresh_summary(paths: dict[str, Path]) -> None:
                 "`{reserved_node_hours:.6f}` | {state} |".format(**item)
             )
     else:
-        lines.append("No prepared or submitted Stage I segment is reserved.")
+        lines.append("No prepared or submitted E02 Stage I segment is reserved.")
     lines.extend([
         "",
-        "Only one Stage I segment may be prepared or submitted at a time. "
+        "Only one E02 Stage I segment may be prepared or submitted at a time. "
+        "The current authorization is an R16 pilot only. "
         "Jobs use the `batch` partition with Frontier's default production "
         "`normal` QOS; the `debug` QOS is not used for paper production.",
         "",
@@ -449,7 +486,9 @@ def generated_batch_script(manifest: dict[str, object],
         overrides = " " + overrides
     restart = command.get("restart_file")
     restart_literal = quote(str(restart)) if restart else "''"
-    job_name = f"cgl_mks24_{run['case_id']}_{run['segment']}"
+    job_name = (
+        f"cgl_mks24_{EXECUTION_EPOCH_SLUG}_{run['case_id']}_{run['segment']}"
+    )
     job_name = re.sub(r"[^A-Za-z0-9_]+", "_", job_name)[:60]
     return f"""#!/bin/bash
 #SBATCH -J {job_name}
@@ -535,6 +574,7 @@ def prepare(args: argparse.Namespace) -> Path:
 
     root = require_root(Path(args.root), args.allow_local_root)
     paths = initialize(root)
+    require_pilot_case(args.case_id)
     if active_reservations(read_reservations(paths)):
         raise ValueError(
             "another Stage I segment is prepared or submitted; "
@@ -586,8 +626,7 @@ def prepare(args: argparse.Namespace) -> Path:
     if actual + reserved + segment_hours > STAGE_I_RESERVED_NODE_HOURS:
         raise ValueError("proposed segment exceeds the Stage I reservation")
     if (
-        PRIOR_QUALIFICATION_NODE_HOURS + actual + reserved + segment_hours
-        > PROJECT_BUDGET_NODE_HOURS
+        actual + reserved + segment_hours > PROJECT_BUDGET_NODE_HOURS
     ):
         raise ValueError("proposed segment exceeds the project ceiling")
     run_dir = paths["runs"] / args.case_id / args.segment
@@ -626,7 +665,8 @@ def prepare(args: argparse.Namespace) -> Path:
             archived_restart_files.append(archived_restart)
     batch_script = manifest_dir / "cgl_lf_stage_i.sbatch"
     manifest: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "execution_epoch": EXECUTION_EPOCH,
         "state": "prepared",
         "prepared_utc": utc_now(),
         "project_root": str(root),
@@ -635,15 +675,17 @@ def prepare(args: argparse.Namespace) -> Path:
             "partition": PARTITION,
             "qos": PRODUCTION_QOS,
             "project_budget_node_hours": PROJECT_BUDGET_NODE_HOURS,
-            "prior_qualification_node_hours": PRIOR_QUALIFICATION_NODE_HOURS,
+            "historical_debug_node_hours": HISTORICAL_DEBUG_NODE_HOURS,
+            "historical_e01_stage_i_node_hours": HISTORICAL_E01_STAGE_I_NODE_HOURS,
             "stage_i_reserved_node_hours": STAGE_I_RESERVED_NODE_HOURS,
+            "stage_i_authorization": f"{PILOT_CASE_ID} pilot only",
             "sequential_manual_submission_required": True,
         },
         "run": {
             "case_id": args.case_id,
             "case_name": case["name"],
             "segment": args.segment,
-            "run_basename": f"{case['name']}_{args.segment}",
+            "run_basename": f"{EXECUTION_EPOCH_SLUG}_{case['name']}_{args.segment}",
             "resolution": case["resolution"],
             "figure_roles": case["figure_roles"],
             "acceptance_criterion": args.acceptance_criterion,
@@ -694,6 +736,7 @@ def prepare(args: argparse.Namespace) -> Path:
     write_json(manifest_path, manifest)
     reservations = read_reservations(paths)
     reservations.append({
+        "execution_epoch": EXECUTION_EPOCH,
         "manifest": str(manifest_path),
         "case_id": args.case_id,
         "case_name": case["name"],
@@ -732,6 +775,7 @@ def verify_continuation_restart(restart: Path) -> dict[str, object]:
     if parent_manifest_path is None:
         raise ValueError("restart does not belong to a retained Stage I segment")
     parent = read_manifest(parent_manifest_path)
+    require_current_epoch(parent, "continuation parent")
     accounting = parent.get("accounting", {})
     inspection = parent.get("scientific_inspection", {})
     if (
@@ -757,6 +801,7 @@ def verify_continuation_restart(restart: Path) -> dict[str, object]:
         if not path.is_file() or record.get("sha256") != sha256(path):
             raise ValueError("inspected terminal restart set has changed")
     return {
+        "execution_epoch": EXECUTION_EPOCH,
         "manifest": str(parent_manifest_path),
         "case_id": parent["run"]["case_id"],
         "segment": parent["run"]["segment"],
@@ -780,11 +825,13 @@ def reservation_for_manifest(reservations: list[dict[str, object]],
         raise ValueError(
             f"expected one reservation for {manifest_path}, found {len(matches)}"
         )
+    if matches[0].get("execution_epoch") != EXECUTION_EPOCH:
+        raise ValueError("reservation does not belong to the current execution epoch")
     return matches[0]
 
 
 def production_queue_output(args: argparse.Namespace) -> str:
-    """Query this user's currently queued Stage I production jobs."""
+    """Query all of this user's queued jobs before a root-writing submission."""
 
     if args.squeue_file:
         return Path(args.squeue_file).read_text(encoding="utf-8")
@@ -792,9 +839,29 @@ def production_queue_output(args: argparse.Namespace) -> str:
     if not user:
         raise ValueError("USER is not set; cannot check production queue")
     return subprocess.run(
-        ["squeue", "-h", "-u", user, "-p", PARTITION, "-o", "%i|%T|%j"],
+        ["squeue", "-h", "-u", user, "-o", "%i|%P|%T|%j"],
         check=True, capture_output=True, text=True,
     ).stdout
+
+
+def shared_root_campaign_conflicts(root: Path,
+                                   allowed: set[str]) -> list[str]:
+    """Return top-level CGL campaigns requiring an explicit overlap review."""
+
+    conflicts = []
+    for manifest_path in sorted(
+        (root / "runs").glob("*/manifest/prepared_run.json")
+    ):
+        manifest = read_manifest(manifest_path)
+        state = str(manifest.get("state", "")).lower()
+        if state not in SHARED_ROOT_ACTIVE_STATES:
+            continue
+        campaign_id = str(
+            manifest.get("campaign_id", manifest_path.parents[1].name)
+        )
+        if campaign_id not in allowed:
+            conflicts.append(f"{campaign_id}|{state}|{manifest_path}")
+    return conflicts
 
 
 def check_submit(args: argparse.Namespace) -> int:
@@ -802,6 +869,7 @@ def check_submit(args: argparse.Namespace) -> int:
 
     manifest_path = Path(args.manifest).resolve()
     manifest = read_manifest(manifest_path)
+    require_current_epoch(manifest, "prepared segment")
     root = require_root(Path(str(manifest["project_root"])), args.allow_local_root)
     paths = initialize(root)
     if manifest.get("state") != "prepared":
@@ -812,13 +880,21 @@ def check_submit(args: argparse.Namespace) -> int:
     actual, reserved = reservation_usage(paths)
     if actual + reserved > STAGE_I_RESERVED_NODE_HOURS:
         raise ValueError("active Stage I reservation exceeds its ceiling")
-    lines = [
-        line for line in production_queue_output(args).splitlines()
-        if line.strip() and "cgl_mks24_" in line
-    ]
+    lines = [line for line in production_queue_output(args).splitlines()
+             if line.strip()]
     if lines:
         raise ValueError(
-            "another Stage I production segment is queued: " + "; ".join(lines)
+            "another user job is queued; review shared-root concurrency before "
+            "submitting E02: " + "; ".join(lines)
+        )
+    conflicts = shared_root_campaign_conflicts(
+        root, set(getattr(args, "allow_shared_root_campaign", []))
+    )
+    if conflicts:
+        raise ValueError(
+            "shared-root campaign records require explicit review; pass "
+            "--allow-shared-root-campaign only after confirming isolation: "
+            + "; ".join(conflicts)
         )
     script = str(manifest["paths"]["batch_script"])
     if not args.allow_local_root and not args.skip_slurm_test:
@@ -841,6 +917,7 @@ def mark_submitted(args: argparse.Namespace) -> int:
 
     manifest_path = Path(args.manifest).resolve()
     manifest = read_manifest(manifest_path)
+    require_current_epoch(manifest, "prepared segment")
     root = require_root(Path(str(manifest["project_root"])), args.allow_local_root)
     paths = initialize(root)
     if manifest.get("state") != "prepared":
@@ -1025,6 +1102,7 @@ def inspect_segment(args: argparse.Namespace) -> int:
 
     manifest_path = Path(args.manifest).expanduser().resolve()
     manifest = read_manifest(manifest_path)
+    require_current_epoch(manifest, "submitted segment")
     if manifest.get("state") not in {"submitted", "recorded"}:
         raise ValueError("only a submitted or recorded segment may be inspected")
     output_dir = Path(str(manifest["paths"]["output_dir"])).resolve()
@@ -1080,7 +1158,8 @@ def inspect_segment(args: argparse.Namespace) -> int:
     )
     restart_records = [retained_product(group) for group in restarts]
     inspection: dict[str, object] = {
-        "schema_version": 1,
+        "schema_version": 2,
+        "execution_epoch": EXECUTION_EPOCH,
         "inspected_utc": utc_now(),
         "manifest": str(manifest_path),
         "job_id": manifest.get("job_id"),
@@ -1164,6 +1243,7 @@ def record(args: argparse.Namespace) -> int:
 
     manifest_path = Path(args.manifest).resolve()
     manifest = read_manifest(manifest_path)
+    require_current_epoch(manifest, "submitted segment")
     root = require_root(Path(str(manifest["project_root"])), args.allow_local_root)
     paths = initialize(root)
     if manifest.get("state") != "submitted":
@@ -1191,6 +1271,7 @@ def record(args: argparse.Namespace) -> int:
         inspection = json.loads(inspection_path.read_text(encoding="utf-8"))
         if (
             not isinstance(inspection, dict)
+            or inspection.get("execution_epoch") != EXECUTION_EPOCH
             or inspection.get("job_id") != args.job_id
             or Path(str(inspection.get("manifest", ""))).resolve()
             != manifest_path
@@ -1210,10 +1291,13 @@ def record(args: argparse.Namespace) -> int:
     cumulative = sum(float(row["actual_node_hours"]) for row in ledger) + actual
     if cumulative > STAGE_I_RESERVED_NODE_HOURS:
         raise ValueError("actual use exceeds the Stage I reservation")
+    if cumulative > PROJECT_BUDGET_NODE_HOURS:
+        raise ValueError("actual use exceeds the incremental project ceiling")
     command = manifest["command"]
     run = manifest["run"]
     allocation = manifest["allocation"]
     row = {
+        "execution_epoch": EXECUTION_EPOCH,
         "job_id": args.job_id,
         "submitted_utc": sacct["submitted_utc"],
         "completed_utc": sacct["completed_utc"],
@@ -1267,6 +1351,7 @@ def accepted_case_segments(paths: dict[str, Path],
     )
     for manifest_path in manifests:
         manifest = read_manifest(manifest_path)
+        require_current_epoch(manifest, "retained segment")
         accounting = manifest.get("accounting", {})
         if manifest.get("state") != "recorded" or not isinstance(accounting, dict):
             continue
@@ -1533,6 +1618,7 @@ def bundle_case(args: argparse.Namespace) -> int:
     }
     manifest = {
         "workflow": "paper-mks24-stage-i-production",
+        "execution_epoch": EXECUTION_EPOCH,
         "created_utc": utc_now(),
         "status": "accepted_for_analysis",
         "git_revision": first_command["input_revision"],
@@ -1616,6 +1702,7 @@ def bundle_campaign(args: argparse.Namespace) -> int:
         case_times[case_id] = float(nested_manifest["accepted_final_time"])
     campaign_manifest = {
         "workflow": "paper-mks24-stage-i-production",
+        "execution_epoch": EXECUTION_EPOCH,
         "created_utc": utc_now(),
         "status": "accepted_for_analysis",
         "git_revision": subprocess.run(
@@ -1642,6 +1729,7 @@ def cancel(args: argparse.Namespace) -> int:
 
     manifest_path = Path(args.manifest).resolve()
     manifest = read_manifest(manifest_path)
+    require_current_epoch(manifest, "prepared segment")
     root = require_root(Path(str(manifest["project_root"])), args.allow_local_root)
     paths = initialize(root)
     if manifest.get("state") != "prepared":
@@ -1694,6 +1782,13 @@ def parser() -> argparse.ArgumentParser:
     submit_parser.add_argument("--manifest", required=True)
     submit_parser.add_argument("--squeue-file")
     submit_parser.add_argument("--skip-slurm-test", action="store_true")
+    submit_parser.add_argument(
+        "--allow-shared-root-campaign", action="append", default=[],
+        help=(
+            "Acknowledge one reviewed top-level CGL-root campaign record. "
+            "Queued user jobs still fail closed."
+        ),
+    )
     submitted = actions.add_parser("mark-submitted")
     submitted.add_argument("--manifest", required=True)
     submitted.add_argument("--job-id", required=True)
