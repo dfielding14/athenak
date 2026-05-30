@@ -102,8 +102,8 @@
     "sha256": "0c3e9957220204ba38c7751c64fffa95d070673597dc310d032916105f718869"
   },
   "qualification": "cr_relativistic_phase9_workstation_provenance_envelope",
-  "rebound_correction_candidate_head": "fb213b45a6ce4bfdf61c0bf154a95ea0262d26ed",
-  "rebound_correction_candidate_tree": "a92205e4b46f0e4db9ef60a3238f4414233164bc",
+  "rebound_correction_candidate_head": "892091d968c783aa8c36904f7f67730d1fd1567f",
+  "rebound_correction_candidate_tree": "7d112062bcb0cb2aefb879bf41a834c0d24b820c",
   "result_artifacts": {
     "phase9_all_formats_debug_metrics.json": {
       "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_all_formats_debug_metrics.json",
@@ -119,7 +119,7 @@
     },
     "phase9_artifact_privacy_scan.log": {
       "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_artifact_privacy_scan.log",
-      "sha256": "974a2f2a2d2a98ed9cf43bd0bf1b263cdf7ecb4876e71aa7939e6d42fd4dd644"
+      "sha256": "27670b43cb70e337065f065bfc12698f7644a3a18933fb510d77dd6fa43f96ed"
     },
     "phase9_commit_range_diff_check.log": {
       "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_commit_range_diff_check.log",
@@ -139,15 +139,15 @@
     },
     "phase9_gh_pages_overlay_build.log": {
       "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_gh_pages_overlay_build.log",
-      "sha256": "8e6f6313a18d207a019dfd8d5f99e423129c7866a861c638964e923c636fc914"
+      "sha256": "403bc90a6e94ea0b9ff1e188519191c6df246e6fd0eb5ef4097a33f31af3df11"
     },
     "phase9_gh_pages_overlay_inventory.txt": {
       "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_gh_pages_overlay_inventory.txt",
-      "sha256": "1a066edbe78cb6a89ab3a6e2b39eb4fac5e21943133416121297dee82e3aa67f"
+      "sha256": "826303dc435de4b19ed1a3bb539196bc8dc61b17660b9cb64f289fb0bca76736"
     },
     "phase9_merge_tree_origin_development.log": {
       "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_merge_tree_origin_development.log",
-      "sha256": "8fea46d706cfae88aa3abfb729272794a03d49299583741ba638d519787063a6"
+      "sha256": "eafb7dafe0ab1848267622faef4b1dfbb2942ab185a5edb6d71d85e446e759f7"
     },
     "phase9_migration_debug_metrics.json": {
       "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_migration_debug_metrics.json",
