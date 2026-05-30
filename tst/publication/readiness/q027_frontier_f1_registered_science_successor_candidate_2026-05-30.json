@@ -10,7 +10,7 @@
     "Q-038",
     "Q-042"
   ],
-  "qualification_effect": "local_registered_f1_successor_gyro_first_attempt_reconciled_retry_policy_active_late_review_repair_staged",
+  "qualification_effect": "local_registered_f1_successor_gyro_first_attempt_reconciled_retry_policy_active_late_review_repair_active",
   "scope": "Staged successor chronology after the clean-candidate Frontier F0 admission closure. The candidate retains the completed F0 chronology and adds two exact one-attempt registered-science slices: a clean-candidate GPU relativistic-gyro oracle and a clean-candidate GPU paper-mode coupling oracle. The launch trampoline freezes an exact structured artifact tree and immutable inventory. Offline analyzers retain descriptor-pinned tree identity, validate exact inventory closure, publish one immutable result and receipt, and support qualification-time no-write recomputation from the snapshotted analyzer. Qualification retains descriptors for the immutable inventory, result and receipt plus their directory ancestry across recomputation and rechecks path identity and bytes afterward. This candidate does not claim Frontier F1 execution or scientific qualification.",
   "initial_live_predecessor": {
     "record": "tst/publication/readiness/q027_frontier_f0_compute_snapshot_activation_2026-05-30.json",
@@ -26,7 +26,7 @@
     "control_plane_inventory_files": 19,
     "worktree_state": "clean_reviewed_commit_6fa926a9bf113edf6258a7555aeab4ac450ca06b",
     "paired_install_status": "pass_identical_immutable_paired_install",
-    "active_policy_promotion_status": "pending"
+    "active_policy_promotion_status": "pass"
   },
   "registered_science_slices": [
     {
@@ -252,6 +252,20 @@
     "active_reservations": 0,
     "pending_submission_marker": "absent"
   },
+  "active_policy_transition": {
+    "status": "pass",
+    "validated_utc": "2026-05-30T22:54:16Z",
+    "control_plane_version": "4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
+    "policy_sha256": "3895221e6a063f0b415f39bda3e2191801cc168b7fa663f1f6880e5f71ae48da",
+    "promotion_sha256": "016cbb66332a6f09d49d8025c25f1bcf4c52127e8619211049f6ae799482f72c",
+    "idempotent_post_promotion_validation": "pass",
+    "orion_ledger_records": 34,
+    "orion_receipt_records": 34,
+    "project_home_ledger_records": 34,
+    "cumulative_consumed_node_hours": 0.08138888888888887,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent"
+  },
   "superseded_registered_execution": {
     "status": "reconciled_scheduler_pass_scientific_analysis_rejected_retry_registration_required",
     "submission_id": "7fbdd818-c3c8-4da3-9ce8-ba71a6446b16",
@@ -312,10 +326,9 @@
     "evidence_rule": "Archive the current preflight result separately from the immutable historical incident fixture. Legitimate later reservations may advance live ledger counts without changing the frozen 34/34/34 incident chronology."
   },
   "open_boundaries": [
-    "reviewed policy promotion for paired-installed repair successor 4ccde8df is pending",
     "archive one reviewed same-account process-isolation attestation from tst/publication/readiness/q027_frontier_registered_science_same_account_isolation_attestation_template_2026-05-30.json immediately before each v2 registered-science submission",
     "the v2 registered Frontier F1 slices have not executed",
     "external reviewer disposition remains pending external review"
   ],
-  "overall_disposition": "local_registered_f1_repair_candidate_only_keep_registered_science_submissions_paused"
+  "overall_disposition": "local_registered_f1_repair_successor_active_keep_registered_science_submissions_paused_until_attested_boundary"
 }
