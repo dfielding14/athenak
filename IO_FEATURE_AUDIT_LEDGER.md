@@ -10,18 +10,20 @@
 | Forbidden implementation source | `origin/feature/single-file-per-node-outputs` |
 
 This ledger records independent audits, blocking findings, implementation
-resolutions, and re-audit results required by `IO_FEATURE_BRANCH_GUIDE.md`.
+resolutions, and re-audit results. `IO_FEATURE_BRANCH_GUIDE.md` is the
+historical feature-isolation plan. Active execution is governed by the frozen
+`IO_FEATURE_BRANCH_ROBUSTIFICATION_GUIDE.md`.
 
 ## Audit Gates
 
 | Gate | Scope | Status | Evidence Or Required Resolution |
 | --- | --- | --- | --- |
 | Historical-scope separation | Gotham IO changes versus unrelated source/physics/mesh/test drift | Complete | Independent audit accepted; only listed generic IO behaviors were reconstructed. |
-| File-format compatibility | Headers, versions, names, frozen fixtures and reader boundaries | Locally complete | Frozen compatibility, modern writer/reader, and one-node node-layout evidence pass; real multi-node qualification remains recorded. |
-| Python API consolidation | One canonical `bin_convert.py`, consumers, CLI and reader behavior | Complete locally | Canonical module/readers/examples pass tests; final documentation/tooling re-audit found no remaining actionable issue. |
+| File-format compatibility | Headers, versions, names, frozen fixtures and reader boundaries | Corrective local matrix passed; fresh re-audit pending | Frozen compatibility, modern writer/reader, node-PDF payload binding, and one-node node-layout evidence pass; real multi-node qualification remains recorded. |
+| Python API consolidation | One canonical `bin_convert.py`, consumers, CLI and reader behavior | Reopened for `D-110` full rerun and fresh re-audit | Canonical module/readers/examples pass focused tests after fixed-grammar parsing, direct preallocated shard assembly, and legacy wrapper-default correction; complete local matrix and fresh malformed-input/API re-audit remain required. |
 | MPI and restart correctness | Node sharding, empty shards, manifests and resume numbering | Locally complete; external topology qualification remains | Native direct manifest loading, forced chunks, alias rejection, and one-node MPI tests pass. True multi-node routing with an empty or non-owning node remains required. |
-| Tests and examples | Harness placement, fixtures, negative cases and executable usage | Complete locally | Final serial/MPI suites, style gate, fixture checksums, and executable examples pass; GPU and multi-node execution remain external gates. |
-| Deferred Pages integration | Candidate docs content, final API alignment and later Sphinx validation | Validated in detached worktree; publication deferred | Deferred package builds against refreshed `origin/gh-pages` at `4833aa9341e19861297e330ff02aabfd8001935c`; live branch remains unchanged and publication waits for code merge. |
+| Tests and examples | Harness placement, fixtures, negative cases and executable usage | Corrective local matrix passed; final audit pending | Corrected serial/MPI suites, style gate, fixture checksums, and executable examples pass; GPU and multi-node execution remain external gates. |
+| Deferred Pages integration | Candidate docs content, final API alignment and later Sphinx validation | Locally accepted; publication deferred | The exact nine-file detached stage, strict builds, rendered table checks, and fresh independent structure audit pass. Live Pages remains unchanged and publication waits for code merge. |
 
 ## Evidence Log
 
@@ -583,15 +585,15 @@ resolutions, and re-audit results required by `IO_FEATURE_BRANCH_GUIDE.md`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | RCP-00 | Locally closed | D-069, D-070, D-071, D-073, D-075, D-081, D-083, D-085 | Runtime baseline; format/tooling baseline; documentation/process baseline | `e40621d8` guide freeze | Fresh floors registered below | Three baseline reports accepted | R-00 recorded below | External CUDA and multi-node topology remain unavailable locally |
 | RCP-01 | Locally closed | D-070, D-071, D-085, D-091, D-092, D-093 | Focused layout auditor accepted | `3b96e2d1` | Full serial `238 passed`; full MPI `67 passed`; style `2 passed`; fixtures `27` verified; exact pre-edit byte comparisons pass | Arithmetic, compatibility, topology, admission, and single-issue re-auditors accepted after corrections | R-01 recorded below | Signed output-sequence domain remains queued for RCP-02 |
-| RCP-02 | Locally closed | D-072, D-073, D-074, D-086, D-087 accepted | MPI call inventory; filesystem-publication inventory; sequence and namespace inventory accepted | Runtime-hardening snapshot pending | Focused publication `58 passed`; injected cleanup `2 passed`; full local MPI `76 passed`; style `2 passed` | Three publication audits accepted after corrections | R-02 recorded below | Real cross-node cleanup ordering and production-filesystem behavior remain RCP-09 gates |
-| RCP-03 | Locally closed | D-094 and D-095 accepted; supersede D-075 and resolve D-088 | Kernel-range, producer-contract, and reader-compatibility audits accepted direction | Runtime-hardening snapshot pending | Layout, node64, reader, conversion, explicit adaptive-AMR rejection, and rank/node sliced rejection pass | Fresh final acceptance audit accepted | R-03 recorded below | External multi-node writer qualification remains open |
-| RCP-04 | Locally closed | D-076, D-077, D-078, D-089, D-096 accepted | Numerical semantics, analytic-test, and backend portability audits completed | Runtime-hardening snapshot pending | Direct analytic, writer/readback, negative-boundary, cap, serial `363 passed`, MPI `76 passed`, Python `159 passed`, style `2 passed` | Fresh docs-to-code and backend acceptance audit accepted | R-04 recorded below | Representative CUDA execution remains an RCP-09 gate |
-| RCP-05 | Not started | D-079 pending |  |  |  |  |  |  |
-| RCP-06 | Not started | D-080 pending; D-081 accepted direction |  |  |  |  |  |  |
-| RCP-07 | Not started | D-082 pending |  |  |  |  |  | Preservation-aware staging must replace literal full-page application |
-| RCP-08 | Not started | D-083 accepted direction; D-090 pending |  |  |  |  |  | Production topology evidence required |
-| RCP-09 | Blocked locally |  |  |  |  |  |  | No CUDA/HIP toolchain, scheduler launcher, or second physical host locally |
-| RCP-10 | Not started | D-084 pending |  |  |  |  |  |  |
+| RCP-02 | Locally closed | D-072, D-073, D-074, D-086, D-087 accepted | MPI call inventory; filesystem-publication inventory; sequence and namespace inventory accepted | `e6e6ee7c` runtime hardening | Focused publication `58 passed`; injected cleanup `2 passed`; full local MPI `76 passed`; style `2 passed` | Three publication audits accepted after corrections | R-02 recorded below | Real cross-node cleanup ordering and production-filesystem behavior remain RCP-09 gates |
+| RCP-03 | Locally closed | D-094 and D-095 accepted; supersede D-075 and resolve D-088 | Kernel-range, producer-contract, and reader-compatibility audits accepted direction | `e6e6ee7c` runtime hardening | Layout, node64, reader, conversion, explicit adaptive-AMR rejection, and rank/node sliced rejection pass | Fresh final acceptance audit accepted | R-03 recorded below | External multi-node writer qualification remains open |
+| RCP-04 | Locally closed | D-076, D-077, D-078, D-089, D-096, D-097, D-112, D-116 accepted | Numerical semantics, analytic-test, backend portability, and late adaptive-shape/staging audits completed | `e6e6ee7c` runtime hardening | Serial format matrix and mixed-level oracle pass; sharded sparse-overflow MPI `3 passed`; repeated shared/rank/node smoke passed | Fresh numerical/MPI re-auditor accepted; mixed-level MPI composition retained as nonblocking enhancement | R-04 refreshed below | Representative CUDA execution remains an RCP-09 gate |
+| RCP-05 | Locally closed | D-079 accepted | Bounded registration cleanup and tracked-particle repair implemented | `e6e6ee7c` runtime hardening | Parser-sensitive serial `88 passed`; MPI format hardening `8 passed`; tracked serial `5 passed`; tracked MPI `3 passed`; source audit `1 passed`; style `2 passed`; post-correction focused serial `113 passed`; post-correction MPI `63 passed` | Behavior-preservation auditor accepted; scope auditor accepted after narrow correction | R-05 recorded below | Tracked-particle bytes remain intentionally native-endian legacy format |
+| RCP-06 | Locally closed; committed-tree rerun pending | D-080, D-081, D-108, D-110, D-111, D-114, D-118 accepted | Python API and memory-budget audits completed | `e6e6ee7c` runtime hardening | Focused readers and writer hardening `298 passed`; canonical serial `532 passed, 4 skipped`; canonical MPI `85 passed, 3 skipped`; collection `624 tests` | Fresh Python/file-format re-auditor accepted checked-in fail-closed boundary coverage | Closure refreshed below | Public limits remain keyword-only overrides and CLI flags |
+| RCP-07 | Locally closed again; post-merge restaging required | D-082, D-098, D-099, D-104, D-107 accepted | Live Pages structure and protected-blob inventory established | `6d64ab74` deferred Pages integration | Helper `25 passed`; nine-file strict detached stage, build, linkcheck, drift packet, and rendered browser QA passed | Fresh file-format/Pages re-auditor accepted exact allowlist, hashes, prose, and helper assertions | R-07 refreshed below | Publish only after code merge through a separate Pages review |
+| RCP-08 | RCP-08A locally closed; RCP-08B external | D-083 direction retained; D-090 accepted | Benchmark-design auditor accepted corrected instrumentation and preregistration | `e6e6ee7c` instrumentation; process snapshot pending | Focused timing `3 passed`; full node-sharding MPI `58 passed`; style passed | Fresh benchmark-design correction auditor accepted | R-08A closure recorded below | RCP-08B requires scheduler-backed measurements |
+| RCP-09 | Blocked locally; corrected external plan recorded | D-109, D-115, D-117, D-119, D-120 accepted | Local environment and evidence-plan auditors completed | Snapshot pending | Local environment probe recorded; Slurm runner syntax-check and expanded macOS Python/Bash-3 mock lifecycle matrix passed; checked-in runner suite `9 passed` | External qualification-plan re-audit required before execution | Plan corrected again after settled-tree audit | No CUDA/HIP toolchain, scheduler launcher, second physical host, or attributable deployment-filesystem measurements locally |
+| RCP-10 | Settled local matrix passed; scheduler and committed-tree audits active | D-084, D-100 through D-120 accepted | Final lane auditors found bounded reader, diagnostic, timeout, package-summary, restart-payload, rendered-doc, transient-admission, evidence-boundary, token-expansion, shard-bookkeeping, wrapper-default, commit-point, intrinsic-header, coarse-fine-oracle, serialized-narrowing, external-packet, and header-only-contract blockers | `e6e6ee7c` runtime; `6d64ab74` Pages; process snapshot pending | Readers `298 passed`; spherical slices `14 passed`; restart MPI `7 passed`; sharded sparse-overflow MPI `3 passed`; runner mock `9 passed`; canonical serial `532 passed, 4 skipped`; canonical MPI `85 passed, 3 skipped`; collection `624 tests`; style and static gates passed | Numerical/MPI and Python/file-format lanes accepted; scheduler and final committed-tree whole-branch lanes required | R-10 local correction matrix recorded; audit correction active | Cannot close merge-readiness gate before external CUDA, optional deployment-specific HIP, physical multi-node, filesystem, and RCP-08B evidence |
 
 ### Expanded Robustification Finding Register
 
@@ -853,3 +855,383 @@ The local matrix does not satisfy these production gates:
 | Frozen-guide check | `IO_FEATURE_BRANCH_ROBUSTIFICATION_GUIDE.md` remains SHA-256 `cdf53351104c135f2d79f9ee2f36c2908001b00a31339db18eb1cf66bcae11ff`, `2222` lines, and `89840` bytes. |
 | External boundary | Local closure is not production qualification. Real CUDA execution and scheduler-backed multi-node cleanup, empty-node, routing, restart, timing, scaling, and production-filesystem behavior remain open under `RCP-09`. |
 | Status | `RCP-02`, `RCP-03`, and `RCP-04` are locally closed. Commit the coherent correctness snapshot before starting `RCP-05`. |
+
+### 2026-05-29: Reopened RCP-04 Adaptive-Shape And Spherical-Slice Staging Correction
+
+| Field | Record |
+| --- | --- |
+| Late independent findings | Added `ROB-044` and `ROB-045`. A retained derived-variable view was reallocated only on first use, so a derived PDF emitted after adaptive local-pack growth could write beyond its original meshblock extent. The `sphslice` constructor cap did not explicitly preflight later ownership, node-gather, sorting, metadata, or dense-serialization peaks. |
+| Resolution | Added full-shape derived-view admission before every shared derived-field kernel. Split `sphslice` retained geometry from transient staging estimates; preflight global ownership scratch, shared dense storage, local sparse buffers, sort copies, node metadata and gather buffers, publication sorting, and dense serialization. After a correction audit rejected the first text model, replaced the parameter-dump counting invocation with structural sizing over the parsed hierarchy, streamed the actual serialized header directly to the temporary file, admitted path and token staging, and moved local and node sort checks ahead of retained-vector mutation. Metadata still uses an allocation-free counting stream. |
+| Focused regressions | Added a GPU-selectable adaptive derived-PDF regression that emits through an AMR pack expansion and a serial `sphslice` serialization-cap regression with an oversized input dump. Both targeted regressions pass locally on the serial CPU build. |
+| Scope boundary | The adaptive regression is CPU-executed locally and remains part of the CUDA qualification row under `RCP-09`. `sphslice` still rejects derived interpolation until ghost-zone-safe sampling is implemented. |
+| Status | `RCP-04` is reopened pending focused matrices and a fresh independent acceptance audit. |
+
+### 2026-05-29: RCP-04 Direct-Streaming Re-Audit Correction
+
+| Field | Record |
+| --- | --- |
+| Fresh audit blockers | The first late-correction auditor found that `ParameterDump()` itself allocated padded strings during the sizing pass, materialized stringstream buffers and `.str()` copies overlapped without being counted twice, and local/node sorting admission occurred after retained vectors had already been populated or swapped. |
+| Resolution | Size parameter dumps structurally without calling the serializer, stream metadata and the actual parameter dump directly through a checked file-backed stream buffer, include path/token staging in the budget, and perform local/node sort admission before retained shard mutation. |
+| Focused verification | All four serial/MPI ordinary and particle builds completed. Serial output, GPU-selectable CPU smoke, writer hardening, namespace, and MPI-source coverage returned `113 passed`; MPI formats, writer hardening, and node sharding returned `63 passed`; tracked-particle serial returned `5 passed`; tracked-particle MPI returned `3 passed`; `git diff --check` returned no output. |
+| Status | Awaiting the correction auditor's fresh acceptance report. |
+
+### 2026-05-29: RCP-08A Manifest-Scaling Preparation And RCP-09 External Plan
+
+| Field | Record |
+| --- | --- |
+| Current protocol | Every rank validates the strict public manifest and replicated payload headers before direct local-span loading. Retain that correct path until production evidence exists. |
+| Instrumentation | Added default-off `ATHENAK_RESTART_MANIFEST_TIMING=1` structured diagnostics for per-rank validation, startup parse, and routed local-block loading. Validation records include payload count, manifest bytes, replicated header bytes, and the per-rank replicated-header read estimate. |
+| Preregistration | `IO_RESTART_MANIFEST_SCALING_QUALIFICATION.md` fixes required topology tiers, payload targets, one warm-up plus five measured resumes, percentile reporting, environment capture, empty/non-owning-node arrangement, and keep/follow-up/separate-branch thresholds. |
+| External plan | `IO_EXTERNAL_IO_QUALIFICATION_PLAN.md` records CUDA and scheduler-backed multi-node evidence requirements, including rank-to-host mapping, reader equality, restart rollback, no `.assembled` files, production-filesystem behavior, and independent audits. |
+| Local environment | `Tin-Drum` exposes `/opt/homebrew/bin/mpirun`, but no `nvidia-smi`, `nvcc`, `hipcc`, `sbatch`, `srun`, `qsub`, or `bsub`. External CUDA and physical multi-node execution remain unavailable locally. |
+| Status | `RCP-08A` implementation awaits rebuild, focused regression, and benchmark-design audit. `RCP-08B` and `RCP-09` remain externally blocked until scheduler-backed evidence is supplied. |
+
+### 2026-05-29: RCP-10 Local Process-Packaging Preparation
+
+| Field | Record |
+| --- | --- |
+| Decision | Added `IO_FEATURE_BRANCH_PROCESS_ARTIFACT_DISPOSITION.md` and accepted `D-084` for the local packaging stage. Preserve the active frozen guide, decision log, audit ledger, compatibility contract, qualification plans, and deferred Pages bundle while external gates remain open. |
+| Durable branch records | Retain `IO_FORMAT_COMPATIBILITY.md`, the scaling preregistration, the external qualification plan, the Pages bundle, and its staging helper. |
+| Review-only records | Preserve large guides and implementation diaries for review now; migrate durable content into the compatibility contract, Pages documentation, and pull-request record before any later cleanup. |
+| Scope rule | No process artifact may be removed, moved, or summarized silently. The frozen robustification guide stays at its recorded root path until checksum-based execution closes. |
+| Status | Local packaging preparation complete. Full matrices, final lane audits, detached Pages validation, and external qualification evidence remain required before final closure. |
+
+### 2026-05-29: RCP-05 Bounded Output-Registration Refactor And Tracked-Particle Repair
+
+| Field | Record |
+| --- | --- |
+| Refactor scope | Extracted common variable and ID parsing, MeshBlock selection, slice parsing, and PDF parsing into private helpers while preserving the existing constructor chain. Added safe in-class defaults for touched output parameters, converted the branch-added `sphslice` owner to `std::unique_ptr`, and documented byte units, collective participation, node-communicator lifetime, and manifest post-load invariants. |
+| Adjacent inherited defect | The duplicated parser incorrectly required `variable` for `file_type=trk`. The touched tracked writer also used a host-stack counter inside a device kernel, computed payload offsets without `sizeof(float)`, and did not prove dense unique tag ownership. |
+| Tracked resolution | Exclude `trk` from variable and ID parsing; validate particle-module presence and requested count; use a device counter with explicit synchronization; validate global dense unique tags; compute checked byte offsets; preserve the native-endian legacy payload; and retain MPI ordering with checked collectives. |
+| Focused verification | Ordinary parser-sensitive serial matrix returned `88 passed`; ordinary MPI format-hardening matrix returned `8 passed`; dedicated `PROBLEM=part_random` serial tracked suite returned `5 passed`; dedicated tracked MPI suite returned `3 passed`; the checked-MPI source disposition test returned `1 passed`; `git diff --check` returned no output. |
+| Scope boundary | Retain the established format-construction chain and raw list ownership outside the branch-added spherical-slice owner. Do not redesign inherited output formats or tracked-particle wire bytes in this checkpoint. |
+| Status | Implementation complete locally; independent behavior-preservation and scope audits required before `RCP-05` closure. |
+
+### Reflection R-05: Keep The Refactor Bounded
+
+| Question | Record |
+| --- | --- |
+| Did parser extraction preserve the established construction chain? | Yes. Common parsing moved into focused helpers while writer dispatch and inherited output ownership stayed in place. |
+| Did adjacent tracked-particle repair change compatibility? | No. It restores correct dense-tag ownership and byte offsets while preserving six native-endian floats per tag slot. |
+| Did scope audit find maintainability defects? | Yes. It caught an allocation-domain cast, a world-vs-node collective comment ambiguity, stale vector wording, and board drift. All were corrected and re-audited. |
+| Should a broader output-factory rewrite happen here? | No. It remains a separate refactor candidate after every inherited format has behavior snapshots. |
+| Status | `RCP-05` is locally closed after independent behavior acceptance and correction-only scope re-audit. |
+
+### 2026-05-30: RCP-07 Detached Pages Staging Helper Implementation
+
+| Field | Record |
+| --- | --- |
+| Preservation correction | Removed destructive complete overlays for `configuration.md`, `running.md`, `tools/visualization.md`, and `modules/outputs.md`. Replaced them with reconciliation-aware marker-wrapped fragments that edit only live IO-owned sections. Retained a hash-checked examples-index replacement and an absence-checked worked-example add. |
+| Machine contract | Added `deferred_docs/gh-pages/io-output-formats-and-sharding/manifest.json` with the frozen Pages baseline, exact eight-file public allowlist, five protected blobs, seven target baseline blobs, expected add absence, source SHA256 values, unique anchors, replacement-section SHA256 values, and contradiction rules. |
+| Helper behavior | Added Python-standard-library `scripts/stage_gh_pages_io_docs.py`. Strict mode requires a clean detached linked worktree, frozen target `HEAD`, matching local `origin/gh-pages`, protected and target blobs, source hashes, unique anchors, idempotent in-memory transforms, contradiction acceptance, atomic writes, and exact allowlist dirtiness. `--verify-staged` permits only intended dirtiness and reproves byte identity and idempotence. `--reviewed-drift` emits an external three-way packet and fingerprints the target before and after generation. |
+| Focused verification | `PYTHONDONTWRITEBYTECODE=1 python3 -m flake8 scripts/stage_gh_pages_io_docs.py tst/test_suite/io/test_stage_gh_pages_io_docs_cpu.py` passed. `PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -p no:cacheprovider -q tst/test_suite/io/test_stage_gh_pages_io_docs_cpu.py` returned `11 passed`. |
+| Detached Pages preview | Created `/tmp/athenak-gh-pages-io-docs` detached at `4833aa9341e19861297e330ff02aabfd8001935c`. Strict stage and `--verify-staged` passed with exactly eight intended paths. Contradiction search found zero unsupported alternate-converter, stale modern-PDF-scale, or stale legacy-weight rejection matches. |
+| Documentation gates | From detached `docs/`, `make clean html SPHINXOPTS="-W --keep-going"` passed and `make linkcheck SPHINXOPTS="-W --keep-going"` passed with an empty `build/linkcheck/output.txt`. Rendered browser inspection loaded all eight staged pages, found every expected staged section anchor, and found the new example link in the examples index and navigation. |
+| Drift-packet exercise | Ran real `--reviewed-drift /tmp/athenak-gh-pages-io-docs-drift /tmp/athenak-gh-pages-io-docs`. It wrote base/current/proposed trees, diffs, source copies, and `report.json` outside the target while leaving target status unchanged. |
+| Baseline protection | Before removing the preview, protected working blobs matched the recorded IDs for `docs/source/index.md`, `docs/source/modules/index.md`, `docs/Makefile`, `docs/requirements.txt`, and `.github/workflows/docs.yml`. Removed the generated site, packet, logs, and detached worktree. Local `origin/gh-pages` remained `4833aa9341e19861297e330ff02aabfd8001935c`. |
+| Status | Local implementation and validation passed. Independent helper-safety, docs-to-code, and navigation/build auditors remain required before `RCP-07` checkpoint closure. Repeat staging against a refreshed detached Pages baseline after code merge before opening a separate Pages review. |
+
+### Reflection R-07: Keep Pages Staging Bounded And Drift-Aware
+
+| Question | Record |
+| --- | --- |
+| Does the helper fail safely when Pages moves? | Yes locally. Strict mode rejects baseline, target-blob, source-hash, section-hash, anchor, protected-blob, and dirty-target drift before writes. Reviewed-drift mode emits an external reconciliation packet without target writes. |
+| Are insertion anchors stable enough? | Yes for the inspected baseline. Replacements use unique live section boundaries plus section SHA256 values. The one insertion uses the unique `## Shipped Input Families` anchor. Any ambiguity is a hard failure. |
+| Does staged documentation describe only qualified behavior? | The public payload preserves explicit boundaries: no external CUDA qualification claim, no real multi-node qualification claim, native state-backed `sphslice` scalar fields and native groups, and narrow uniform 3D active-zone full-volume `cbin` production support. Independent docs-to-code audit remains pending. |
+| Should any page remain manual because automation would be brittle? | No page in the eight-file allowlist needs manual staging on the inspected baseline. Drift is deliberately escalated to packet review rather than guessed reconciliation. |
+| Is the later publication procedure clear? | Yes. `VALIDATION.md` separates detached preview, write-free drift reconciliation, refreshed post-code-merge restaging, strict Sphinx gates, independent audit, and a separate Pages review. |
+
+### 2026-05-30: RCP-02 Fresh Current-Tree Publication Reconciliation
+
+| Field | Record |
+| --- | --- |
+| Trigger | A late report from an older snapshot required a fresh read-only audit of the current dirty tree before relying on prior publication-cleanup closure. |
+| Fresh acceptance | The correction auditor accepted predictable node-restart header, payload-write, close, manifest-publication, and reservation-removal failures as coordinated cleanup paths. Unexpected wrapper or MPI fatal exits retain explicitly best-effort process-local cleanup rather than being mislabeled as coordinated recovery. |
+| Source-audit correction | The current MPI source inventory unions tracked diffs with untracked `src/**` files. The accepted inventory contained `69` `(path, symbol)` rows and `112` direct MPI calls, including the branch-added `mpi_utils.hpp`. |
+| Focused evidence | Serial and MPI Debug rebuilds passed. Shared-helper plus MPI-source audit returned `11 passed`; serial publication, modern PDF/`sphslice`, and reduced-cap coverage returned `31 passed`; node-restart reservation collision and injected cleanup stages returned `3 passed`; scoped `git diff --check` returned no output. |
+| External boundary | Cross-node cleanup ordering, remote-node unlink completion before abort, and production parallel-filesystem rename/unlink behavior remain scheduler-backed `RCP-09` requirements. |
+| Status | `RCP-02` remains locally closed. |
+
+### 2026-05-30: RCP-04 Repeated Spherical-Slice Retention Correction
+
+| Field | Record |
+| --- | --- |
+| Fresh audit blocker | A correction auditor reproduced a repeated shared-`sphslice` case where the prior dense `outarray` remained live during the next ownership-validation scratch allocation but was omitted from the admission check. With `ntheta=128`, `nphi=128`, and a `1900000`-byte cap, the unmodeled live peak was `1966080` bytes. |
+| Resolution | Reserve the persistent ownership vector at construction. Before adaptive rebuild or retained sparse-vector mutation, include any retained dense and sparse writer buffers in the ownership-validation admission. After publication, release write-only dense and sparse staging buffers on every participating rank so the next cycle begins without stale staging. |
+| Regression | Added a repeated shared-output reduced-cap test with `dcycle=1`, `ntheta=128`, `nphi=128`, and `max_writer_allocation_bytes=1900000`. It emits two spherical-slice files and leaves no temporary artifact. The focused cap subset returned `4 passed`. |
+| Status | `RCP-04` remains reopened pending a fresh correction-only auditor and the broader format matrix. |
+
+### 2026-05-30: RCP-06 Python Reader Audit Reopen
+
+| Field | Record |
+| --- | --- |
+| Independent blockers | The API auditor found package-form imports such as `import vis.python.bin_convert` broken by top-level-only helper imports. The same audit demonstrated that `.bin` and `.cbin` variable-list tokenization could materialize unbudgeted metadata under a one-byte live limit. |
+| Required correction | Preserve package-form and standalone/top-level imports. Preflight binary variable token expansion and retain metadata accounting before split and dictionary materialization. Add empty-shard reduced-budget regressions. |
+| Status | `RCP-06` is reopened. A bounded correction worker owns the Python-reader files and tests; independent re-audit is required. |
+
+### 2026-05-30: RCP-08A Benchmark-Contract Audit Reopen
+
+| Field | Record |
+| --- | --- |
+| Independent blockers | The benchmark-design auditor found that a logical comparison-byte estimate was mislabeled as observed filesystem amplification; the p95 decision statistic and external startup endpoint were underspecified; the empty-node arrangement was not reproducible from the named decks; the timing regression checked labels rather than the record contract; and default-off wording overstated unconditional timer construction and potentially fatal report-only arithmetic. |
+| Required correction | Relabel the scoped estimate, freeze aggregation and endpoint rules, freeze reproducible deck overrides and placement, strengthen parser-level and synthetic multi-payload regressions, gate disabled probes, and make diagnostic reporting nonfatal or explicitly bounded. |
+| Status | `RCP-08A` is reopened. A bounded correction worker owns instrumentation, tests, and the preregistration document; fresh benchmark-design audit is required before scheduler use. |
+
+### 2026-05-30: RCP-10 Comment-Hygiene And Publication-Prose Classification
+
+| Field | Record |
+| --- | --- |
+| Contradiction scan | Production code contains no `.assembled`, `StageNodeRestart`, `CopyFileRange`, or `bin_convert_new` implementation path. Remaining matches are explicit negative tests, compatibility boundaries, deferred documentation, and qualification-plan checks. |
+| Marker classification | Remaining `TODO`, `FIXME`, and `DBF` matches in `src/outputs/vtk_mesh.cpp`, `src/outputs/basetype_output.cpp`, and the top-level instructional comment in `src/outputs/outputs.hpp` are inherited from `origin/main`. The touched `src/main.cpp` restart flag comment was normalized during the RCP-08A correction. |
+| Compatibility prose | Updated `IO_FORMAT_COMPATIBILITY.md` to describe the deterministic detached-worktree helper, exact allowlist, bounded anchors, hashes, contradiction checks, and write-free drift packet instead of the superseded manual overlay/include workflow. |
+| Status | Local hygiene classification is recorded. Final whole-branch audits remain required. |
+
+### 2026-05-30: RCP-04 Repeated-Retention Correction Closure
+
+| Field | Record |
+| --- | --- |
+| Independent acceptance | A fresh correction-only auditor accepted ownership admission before adaptive rebuild and sparse mutation, retained dense/sparse accounting, bounded persistent ownership storage, admission-before-allocation in shared/rank/node and serialization phases, direct header streaming, and release of write-only buffers on publishing and non-publishing ranks. |
+| Focused evidence | Serial format matrix returned `71 passed`; MPI format and writer-hardening matrix returned `8 passed`; a temporary two-rank repeated-output smoke emitted shared `2`, rank `4`, and node `2` spherical-slice files with no temporary artifacts; scoped and whole-worktree `git diff --check` returned no output. |
+| External boundary | The local node smoke uses one physical machine. Representative CUDA and true multi-node qualification remain `RCP-09` gates. |
+| Status | `RCP-04` is locally closed again. |
+
+### 2026-05-30: RCP-06 Shared Python Reader Utility Closure
+
+| Field | Record |
+| --- | --- |
+| Decision | Accepted `D-080`: extract private shared reader-limit, checked-arithmetic, token, and CLI helpers while retaining `bin_convert.py` as the one supported binary converter. |
+| Corrected blockers | Added package-relative imports with direct-script fallbacks. Added `.bin` and `.cbin` variable-list tokenization preflight before split, retained variable-name and dictionary accounting before construction, and propagation through shard assembly and ATHDF conversion. |
+| Evidence | Focused reader module returned `181 passed`. Package imports, top-level imports, direct scripts, all `16` keyword-only public signatures, `py_compile`, targeted `flake8`, and `git diff --check` passed. An independent API and memory-budget auditor accepted the corrected current tree. |
+| Scope boundary | `bin_convert_new.py` remains absent and unsupported. Reader limits remain keyword-only overrides and CLI flags rather than a new public configuration module. |
+| Status | `RCP-06` is locally closed. |
+
+### 2026-05-30: RCP-07 Documentation-To-Code Inflection
+
+| Field | Record |
+| --- | --- |
+| Independent blockers | The docs-to-code auditor found scalar-only `sphslice` prose inconsistent with the implemented multi-variable payload, omitted public `sphslice` 3D/interior-radius construction constraints, and omitted per-axis `cbin` divisibility requirements. |
+| Chosen disposition | Accepted `D-098`: document and test native state-backed spherical-slice scalar fields and native multi-field groups rather than artificially reject groups. Document that the origin-centered spherical surface must fit inside a 3D domain, with a positive radius strictly interior to every domain face. Add per-axis `cbin` divisibility wherever the supported row is advertised. |
+| Evidence | Added producer-reader coverage for `variable=hydro_w`, which returns `dens`, `velx`, `vely`, `velz`, and `eint`; added negative 2D and boundary-radius construction rows; focused new regressions returned `3 passed`; broader serial format plus cbin-layout matrix returned `79 passed`. |
+| Status | RCP-07 documentation alignment remains open pending helper-safety correction, detached restaging, and fresh independent audits. |
+
+### 2026-05-30: RCP-07 Fail-Closed Pages Helper Correction
+
+| Field | Record |
+| --- | --- |
+| Independent blockers | Two helper-safety auditors reproduced hidden `assume-unchanged` and `skip-worktree` mutations, accepted intent-to-add state, accepted allowlisted symlink or mode substitutions, and omission of target-root metadata from reviewed-drift fingerprints. |
+| Decision | Accepted `D-099`: compare the full index to `HEAD`, reject noncanonical index flags before trusting porcelain status, require regular-file type and expected mode for every payload target, and fingerprint the worktree root as well as descendants. |
+| Regressions | Added intent-to-add, both hidden-index-flag variants, allowlisted symlink, allowlisted mode, and root-metadata mutation rows. The focused no-cache helper suite returned `22 passed`; `py_compile`, targeted `flake8`, and `git diff --check` passed. |
+| Detached verification | Recreated `/tmp/athenak-gh-pages-io-docs` detached at `4833aa9341e19861297e330ff02aabfd8001935c`. Strict stage, `--verify-staged --run-builds`, warnings-as-errors HTML, linkcheck, and external reviewed-drift packet generation passed with exactly eight intended payload paths. |
+| Status | Helper-safety correction is implemented. Fresh independent helper-safety and navigation/build acceptance remain required before local `RCP-07` closure. |
+
+### 2026-05-30: RCP-07 Local Closure
+
+| Field | Record |
+| --- | --- |
+| Independent helper-safety acceptance | A fresh adversarial auditor accepted full-index equality, intent-to-add rejection, hidden-index-flag rejection, exact allowlist proof, regular-file and mode enforcement, reviewed-drift destination exclusion, and root-plus-descendant fingerprinting. Disposable probes and the focused suite exercised the exploit classes. |
+| Independent docs acceptance | A fresh docs-to-code auditor accepted the implemented `sphslice` surface contract, native group support, derived rejection, supported `cbin` divisibility wording, source hashes, and exact staging allowlist. An asymmetric 3D spherical-slice smoke accepted a shifted containing domain and rejected inadequate face clearance. |
+| Independent navigation acceptance | A separate detached-worktree auditor staged the exact eight-file payload, ran warnings-as-errors HTML and linkcheck builds, verified no tracked deletions or protected-blob drift, and followed rendered navigation from the site index through the examples index to the IO example. |
+| Residual boundary | The deferred bundle remains intentionally unpublished on this code branch. Refresh `origin/gh-pages`, repeat detached staging, and open a separate Pages review after code merge. External CUDA and physical multi-node qualification remain open. |
+| Status | `RCP-07` is locally closed. |
+
+### 2026-05-30: RCP-08A Benchmark-Contract Closure
+
+| Field | Record |
+| --- | --- |
+| Correction | `NodeRestartManifest::Load()` now captures validation metrics without emitting records. `main` snapshots `startup_parse` before emitting either validation or startup records. Diagnostic estimates remain default-off and saturating. The preregistration document pairs `external_minimal_resume_wall_s` with every measured representative no-step launcher invocation. |
+| Evidence | Focused timing regressions returned `3 passed`; full node-sharding MPI returned `58 passed`; style and `git diff --check` passed. A fresh benchmark-design correction auditor independently accepted the implementation, formula, endpoint, and external protocol. |
+| External boundary | `RCP-08B` remains intentionally open until scheduler-backed representative measurements are collected. |
+| Status | `RCP-08A` is locally closed. |
+
+### 2026-05-30: RCP-10 Full Local Validation Matrix
+
+| Field | Record |
+| --- | --- |
+| Builds | Rebuilt serial Debug `/tmp/athenak-io-robust-build`, MPI Debug `/tmp/athenak-io-robust-build-mpi`, tracked-particle serial `/tmp/athenak-io-robust-build-part`, and tracked-particle MPI `/tmp/athenak-io-robust-build-part-mpi`. |
+| Full local IO matrices | Serial CPU IO returned `412 passed, 4 skipped`. MPI IO returned `79 passed, 3 skipped`. Collection returned `500 tests`. The skips are environment-selective rows, not unexpected failures. |
+| Focused compatibility evidence | Frozen shared restart plus promoted serial examples returned `5 passed`. Frozen per-rank restart plus generated node-manifest resume returned `2 passed`. The promoted node-sharded reader/manifest example returned `1 passed`. Tracked-particle serial returned `5 passed`; tracked-particle MPI returned `3 passed`; GPU-selectable CPU smoke returned `2 passed`. |
+| Fixture integrity | `shasum -a 256 -c SHA256SUMS` passed for all `27` frozen `origin/main` artifacts. |
+| Static gates | Python `py_compile`, targeted `flake8`, repository C++ style, and `git diff --check origin/main --` passed. IO collection returned `500 tests`. |
+| Contradiction and hygiene scan | No production implementation path matched `.assembled`, `StageNodeRestart`, `CopyFileRange`, or `bin_convert_new`. Remaining `TODO`, `FIXME`, and `DBF` markers are inherited baseline comments already classified above. |
+| Deferred Pages | Fresh detached strict stage, exact `--verify-staged`, warnings-as-errors HTML, linkcheck, reviewed-drift packet generation, rendered inspection, helper-safety audit, docs-to-code audit, and navigation/build audit passed against local `origin/gh-pages=4833aa9341e19861297e330ff02aabfd8001935c`. |
+| External probe | Host `Tin-Drum` provides `/opt/homebrew/bin/mpirun` but no `nvidia-smi`, `nvcc`, `hipcc`, `sbatch`, `srun`, `qsub`, or `bsub`. CUDA execution, physical multi-node MPI, scheduler-backed restart scaling, and deployment-filesystem qualification remain external gates. |
+| Status | All locally executable matrix rows pass. `RCP-10` remains open pending final independent red-team lanes, deliberate commits, and the explicit external `RCP-08B` and `RCP-09` block. |
+
+### 2026-05-30: RCP-10 Red-Team Reopen
+
+| Field | Record |
+| --- | --- |
+| File-format blockers | The file-format lane reproduced inventory-free node `.bin` and `.cbin` relocation, intrinsic sparse `AKPDFV2` payload downgrade after header-declaration removal, inventory-free spherical-slice shards, and duplicate scalar metadata accepted with last-write-wins behavior. |
+| Python API blockers | The Python lane reproduced scalable embedded athinput, PDF-header, and spherical-header text accepted under a low `max_live_bytes` budget; duplicate `.cbin` preheaders; and `make_athdf.py` corruption of interior `.bin` basename components. |
+| Numerical blockers | The numerical lane showed that MHD Poynting flux can oppose gas motion while `edot_*_{out,in}` used gas velocity for classification. The same lane identified missing fail-closed handling for non-positive PDF mass density. |
+| Packaging blockers | The test-evidence lane identified two MPI rejection subprocesses without explicit timeouts and a summary-only validation record below the frozen exact-command evidence standard. The scope lane identified a retained historical integration plan presented as governing, a decision-summary entry point that stopped at `D-067`, and a stale live checkpoint board. |
+| External boundary | The test-evidence lane reconfirmed the intended external block: no local CUDA execution, scheduler-backed physical multi-node qualification, restart-manifest scaling measurement, or deployment-filesystem qualification. |
+| Status | Local `RCP-10` closure was reopened. No earlier successful run is treated as final evidence until the corrected full matrix and fresh independent audits pass. |
+
+### 2026-05-30: RCP-10 Bounded Red-Team Corrections
+
+| Field | Record |
+| --- | --- |
+| Decisions | Accepted `D-100`, `D-101`, and `D-102`. Preserve historical inventory-free rank binary compatibility and bounded transitional unversioned sparse PDF support, but require fail-closed metadata for new node and spherical-slice layouts. Count scalable text materialization against live budgets. Partition energy channels by signed total flux. |
+| Reader correction | Require node binary inventory metadata, require spherical-slice shard inventory metadata, require intrinsic dense and sparse V2 payloads to carry V2 header declarations, reject duplicate metadata, account retained decoded text, and replace only the final batch-converter suffix. |
+| Runtime correction | Classify radial and vertical energy `_out` and `_in` channels by signed total energy flux after MHD Poynting contributions. Reject non-finite or non-positive conserved density for PDF `weight = mass`; retain finite signed `weight = variable`. |
+| Test and package correction | Added explicit timeouts to the corrupt-manifest and conflicting rank/node MPI rejection rows. Marked `IO_FEATURE_BRANCH_INTEGRATION_PLAN.md` historical and superseded. Redirected the decision-summary entry point to controlling post-`D-067` decisions and the live ledger. |
+| Focused evidence | Corrected reader module returned `197 passed`. Serial and MPI Debug rebuilds passed. Diagnostic harness, adversarial radial and vertical MHD regressions, and non-positive mass-density regressions returned `5 passed`. Broad Python `flake8`, `py_compile`, and `git diff --check origin/main --` passed before the final record update. Deferred Pages helper suite returned `22 passed`. |
+| Status | Bounded corrections are implemented. Full local matrices, detached Pages restaging, fresh correction audits, deliberate commits, and clean-tree inspection remain required. |
+
+### 2026-05-30: RCP-10 Corrected Local Matrix And Nine-File Pages Verification
+
+| Field | Record |
+| --- | --- |
+| Decisions | Accepted `D-103`, `D-104`, and `D-105`. Bind node-PDF headers to binary payload leader ranks, reject non-positive restart segments before publication, supersede only the eight-file portion of `D-082`, and require immutable external qualification packets. |
+| Builds | From the repository root, `cmake --build /tmp/athenak-io-robust-build -j 4`, `cmake --build /tmp/athenak-io-robust-build-mpi -j 4`, `cmake --build /tmp/athenak-io-robust-build-part -j 4`, and `cmake --build /tmp/athenak-io-robust-build-part-mpi -j 4` returned exit `0`. Retained logs: `/tmp/athenak-io-robust-logs/build-serial.log`, `build-mpi.log`, `build-part-serial.log`, and `build-part-mpi.log`. |
+| Canonical serial matrix | From `/tmp/athenak-io-robust-build/src`, `PYTHONDONTWRITEBYTECODE=1 /Users/dbf75/.uv/envs/interactive/.venv/bin/python -m pytest -p no:cacheprovider -q /Users/dbf75/.codex/worktrees/e948/athenak-DF/tst/test_suite/io/*_cpu.py /Users/dbf75/.codex/worktrees/e948/athenak-DF/tst/test_suite/io/test_output_formats_gpu.py` returned exit `0`: `441 passed, 4 skipped`. Retained log: `/tmp/athenak-io-robust-logs/pytest-serial-canonical.log`. |
+| Canonical MPI matrix | From `/tmp/athenak-io-robust-build-mpi/src`, `PYTHONDONTWRITEBYTECODE=1 /Users/dbf75/.uv/envs/interactive/.venv/bin/python -m pytest -p no:cacheprovider -q /Users/dbf75/.codex/worktrees/e948/athenak-DF/tst/test_suite/io/*_mpicpu.py` returned exit `0`: `79 passed, 3 skipped`. Retained log: `/tmp/athenak-io-robust-logs/pytest-mpi-canonical.log`. |
+| Dedicated tracked-particle matrix | From `/tmp/athenak-io-robust-build-part/src`, the explicit-interpreter `test_tracked_particle_output_cpu.py` command returned exit `0`: `5 passed`. From `/tmp/athenak-io-robust-build-part-mpi/src`, the matching `test_tracked_particle_output_mpicpu.py` command returned exit `0`: `3 passed`. Retained logs: `/tmp/athenak-io-robust-logs/pytest-part-serial.log` and `pytest-part-mpi.log`. |
+| Reader correction subset | From the repository root, `PYTHONDONTWRITEBYTECODE=1 /Users/dbf75/.uv/envs/interactive/.venv/bin/python -m pytest -p no:cacheprovider -q tst/test_suite/io/test_python_io_readers_cpu.py tst/test_suite/io/test_writer_hardening_cpu.py` returned exit `0`: `230 passed`. Retained log: `/tmp/athenak-io-robust-logs/python-readers.log`. |
+| Collection | From the repository root, `PYTHONDONTWRITEBYTECODE=1 /Users/dbf75/.uv/envs/interactive/.venv/bin/python -m pytest -p no:cacheprovider --collect-only -q tst/test_suite/io` returned exit `0`: `527 tests collected`. Retained log: `/tmp/athenak-io-robust-logs/pytest-collect.log`. |
+| Fixtures | From `tst/fixtures/io/origin_main_886dd2a1`, `shasum -a 256 -c SHA256SUMS` returned exit `0` for all `27` immutable artifacts. Retained log: `/tmp/athenak-io-robust-logs/fixture-checksums.log`. |
+| Static gates | From `tst`, the explicit-interpreter `pytest -p no:cacheprovider -q test_suite/style` command returned exit `0`: `2 passed`. Broad explicit-interpreter `flake8`, `py_compile`, `git diff --check`, and the production contradiction search returned exit `0`. Retained logs: `/tmp/athenak-io-robust-logs/style.log`, `flake8.log`, `static-gates.log`, and `contradiction.log`. |
+| Nine-file detached Pages stage | Recreated `/tmp/athenak-gh-pages-io-docs` detached at local `origin/gh-pages=4833aa9341e19861297e330ff02aabfd8001935c`. From the repository root, `python scripts/stage_gh_pages_io_docs.py /tmp/athenak-gh-pages-io-docs`, `python scripts/stage_gh_pages_io_docs.py --verify-staged --run-builds /tmp/athenak-gh-pages-io-docs`, and `python scripts/stage_gh_pages_io_docs.py --reviewed-drift /tmp/athenak-gh-pages-io-docs-drift /tmp/athenak-gh-pages-io-docs` returned exit `0`. The exact dirty path set is nine files, linkcheck output is empty, and the reviewed-drift packet remained outside the target. Retained logs: `/tmp/athenak-io-robust-logs-pages/stage.log`, `verify-build.log`, and `drift.log`. |
+| Rendered Pages QA | Served the detached HTML preview locally and inspected rendered navigation with the in-app browser. Confirmed `Data I/O (13 registered formats)`, followed the rendered IO example link, verified promoted shard-reader and manifest-resume commands, verified `payload_rank` fail-closed prose, checked Outputs-module mass-weight wording, and preserved the home-page iframe. Retained record: `/tmp/athenak-io-robust-logs-pages/browser.log`. |
+| External boundary | Host `Tin-Drum` still has `/opt/homebrew/bin/mpirun` but no CUDA/HIP toolchain, scheduler launcher, or second physical host. `RCP-08B` and `RCP-09` remain external gates governed by immutable evidence packets. |
+| Status | Locally executable validation passed. Fresh correction audits, deliberate commits, final whole-branch audit, clean-tree inspection, and the explicit external gates remain required. |
+
+### 2026-05-30: RCP-10 Late Admission, Restart, And Rendered-Pages Correction
+
+| Field | Record |
+| --- | --- |
+| Independent late blockers | The Python API lane found binary metadata records and legacy PDF text rows that still decoded before low-memory rejection, public binary-reader dictionaries that leaked internal accounting, and a batch wrapper that bypassed canonical `convert_file`. The restart lane demonstrated an unused zero-block header-only payload accepted by the loader and a weak unversioned node-PDF relocation path. The numerical lane requested permanent signed-variable and non-finite-weight producer locks. The deferred-Pages lane found twice that marker comments inside Markdown tables split rendered HTML even though Sphinx and linkcheck passed: first in the Support Systems table, then in the Implementation Entry Points table. It also found that the retained PDF implementation row still said one or two dimensions. |
+| Decisions | Accepted `D-106` and `D-107`. Reject non-positive restart payload counts; reject unversioned node PDFs while retaining shared/rank transitional compatibility; enforce text admission before decode; keep parser accounting private; route `make_athdf.py` through canonical conversion; wrap the full bounded Support Systems and Implementation Entry Points sections so markers remain outside table rows; refresh the PDF implementation entry. |
+| Focused correction evidence | Reader and writer-hardening subset returned `236 passed`. Serial output-format producer module returned `79 passed`. Corrupted node-manifest subset returned `29 passed`. Deferred-Pages helper suite returned `23 passed`. Incremental serial, MPI, particle serial, and particle MPI builds returned exit `0`. |
+| Corrected full local matrix | Serial canonical IO including the GPU-selectable CPU smoke returned `453 passed, 4 skipped`. MPI IO returned `80 passed, 3 skipped`. Collection returned `540 tests`. Reader plus writer-hardening subset returned `236 passed`. Tracked-particle serial and MPI rows returned `5 passed` and `3 passed`. Repository style returned `2 passed`; targeted `flake8`, `py_compile`, fixture checksums, and `git diff --check` returned exit `0`. The preceding `441`/`79`/`527` matrix row is retained as historical evidence and superseded by this corrected rerun. |
+| Corrected detached Pages evidence | Recreated the detached preview from local `origin/gh-pages=4833aa9341e19861297e330ff02aabfd8001935c`. Strict stage, `--verify-staged --run-builds`, empty linkcheck, and reviewed-drift packet generation passed for the exact nine-file payload. Browser QA recorded all checks true, including Outputs and Boundary Values in one Support Systems table, both links, the 13-format count, one-through-four PDF implementation wording, mass-weight wording, example route and commands, `payload_rank` fail-closed prose, and the preserved home iframe. |
+| External boundary | This workstation still cannot execute representative CUDA/HIP or scheduler-backed physical multi-node qualification. `RCP-08B` and `RCP-09` remain explicit external gates. |
+| Status | Local correction matrix passed. Fresh independent correction audits, deliberate commits, final committed-tree audit, and clean-tree inspection remain required. |
+
+### 2026-05-30: RCP-10 Superseding Admission And Rendered-Structure Closure
+
+| Field | Record |
+| --- | --- |
+| Decisions | Accepted `D-108` and `D-109`. Enforce reader live-memory caps before textual materialization, stream embedded athinput records with retained-object accounting, reject non-finite PDF histogram payloads while preserving finite signed values, extend the batch wrapper to canonical `.bin`/`.cbin` options, enforce root-side positive restart payload totals, and state the HIP qualification boundary explicitly. |
+| Builds | Incremental serial Debug `/tmp/athenak-io-robust-build`, MPI Debug `/tmp/athenak-io-robust-build-mpi`, tracked-particle serial `/tmp/athenak-io-robust-build-part`, and tracked-particle MPI `/tmp/athenak-io-robust-build-part-mpi` builds returned exit `0`. Retained logs: `/tmp/athenak-io-robust-logs-final/build-serial.log`, `build-mpi.log`, `build-part-serial.log`, and `build-part-mpi.log`. |
+| Canonical local matrix | Serial canonical IO including GPU-selectable CPU smoke returned `467 passed, 4 skipped`. MPI IO returned `80 passed, 3 skipped`. Dedicated tracked-particle serial and MPI rows returned `5 passed` and `3 passed`. Collection returned `554 tests`. Reader plus writer-hardening subset returned `250 passed`. Repository style returned `2 passed`. |
+| Static and fixtures | Broad `py_compile`, `flake8`, `git diff --check origin/main --`, production contradiction search, and all `27` frozen fixture SHA-256 checks passed. Retained logs live under `/tmp/athenak-io-robust-logs-final/`. |
+| Corrected detached Pages evidence | Recreated `/tmp/athenak-gh-pages-io-docs` detached from local `origin/gh-pages=4833aa9341e19861297e330ff02aabfd8001935c`. Strict stage, exact nine-file verification, warnings-as-errors HTML, empty linkcheck, and reviewed-drift packet generation passed. In-app browser QA proved that Support Systems is one HTML table containing Outputs and Boundary Values with working links, Implementation Entry Points is one HTML table containing `src/outputs/pdf.cpp`, no stray PDF paragraph exists, the updated `.bin`/`.cbin` batch-wrapper row renders, the example route resolves, `payload_rank` prose renders, and the home iframe remains present. Retained log: `/tmp/athenak-io-robust-logs-final/browser.log`. |
+| Independent Pages acceptance | A fresh auditor independently recreated the preview and accepted both repaired HTML tables, marker placement outside tables, exact allowlist, source hash, protected blobs, empty linkcheck, preserved iframe, and deferred-publication boundary. |
+| Restart re-audit | A fresh restart/MPI auditor accepted current writer-loader symmetry, cleanup, routing, and one-node MPI evidence and requested one P3 source-test strengthening: assert both the per-rank zero-segment and aggregate per-node zero-payload guards before public manifest creation. The regression was strengthened accordingly. |
+| External boundary | CUDA remains the frozen required device lane. HIP readiness requires a separate packet when a HIP deployment is intended. Scheduler-backed physical multi-node routing, deployment-filesystem cleanup behavior, and `RCP-08B` scaling measurements remain external. |
+| Status | Superseding local matrix passed. Fresh reader, file-format, numerical, test-evidence, scope-packaging, and final whole-branch audit acceptance, deliberate commits, and committed-tree inspection remain required. |
+
+### 2026-05-30: RCP-10 Python Container And Spherical Numerical Closure Correction
+
+| Field | Record |
+| --- | --- |
+| Independent Python blockers | A fresh Python audit found that historical spherical-slice version-1 shared/rank fallback had been removed accidentally, post-discovery validation still rebuilt unaccounted shard identifier containers, direct binary validation and athdf-like slice classification created unaccounted tuple sets, legacy PDF reconstruction retained row arrays before stacking, `make_athdf.py` materialized an unbounded glob inventory, and high-cardinality metadata dictionaries remained undercharged. |
+| Decisions | Accepted `D-111` and `D-112`. Preserve narrow historical spherical-slice fallback while keeping new explicit rank/node layouts strict. Stream sibling validation, charge sort peaks and transient tuple ownership, bound batch discovery, preallocate legacy PDF rows, charge per-record header objects, keep the documented direct-reader ndarray contract, and add independent numerical producer oracles. |
+| Reader correction evidence | `PYTHONDONTWRITEBYTECODE=1 /Users/dbf75/.uv/envs/interactive/.venv/bin/python -m pytest -p no:cacheprovider -q tst/test_suite/io/test_python_io_readers_cpu.py tst/test_suite/io/test_writer_hardening_cpu.py` returned exit `0`: `270 passed`. The suite now includes actual high-cardinality modern PDF, legacy PDF, and spherical-slice headers; historical spherical-slice shared/rank fixtures; direct logical-owner and slice-classification preflight; bounded batch discovery; and public ndarray assertions. |
+| Numerical correction evidence | From `/tmp/athenak-io-robust-build/src`, the focused spherical-slice serial subset returned `12 passed, 71 deselected`. From `/tmp/athenak-io-robust-build-mpi/src`, the strengthened MPI output-format module returned `1 passed`. The serial regressions force MeshBlock-face interpolation and compare post-redistribution spherical slices to an independent binary-snapshot oracle. |
+| Test-failure triage | Stricter metadata accounting initially moved several low-budget tests to earlier rejection phases. Recalibrated each test against parser-entry, retained-header, or initial-inventory state as appropriate rather than weakening validation. A later serial matrix intentionally failed because reviewed documentation fragments had stale machine-manifest hashes; refreshed only the five reviewed source hashes, then updated the visualization-utility hash again after documenting the restored historical reader fallback. |
+| Frozen guide | `IO_FEATURE_BRANCH_ROBUSTIFICATION_GUIDE.md` remains SHA-256 `cdf53351104c135f2d79f9ee2f36c2908001b00a31339db18eb1cf66bcae11ff`, `2222` lines, and `89840` bytes. |
+| Status | Local corrections are implemented. Canonical serial rerun, detached Pages restaging, fresh Python audit disposition, final lane audits, deliberate commits, committed-tree verification, and the external `RCP-08B`/`RCP-09` gates remain open. |
+
+### Reflection R-10.1: Keep Compatibility Narrow And Make Admission Claims Literal
+
+| Question | Record |
+| --- | --- |
+| Did strictness remove useful compatibility? | Yes once: historical spherical-slice version-1 fallback disappeared while the format version remained unchanged. Restored only the shared/rank inference path; new explicit rank/node layouts remain strict. |
+| Is a text-byte multiplier sufficient for Python readers? | No. It bounds decoded text expansion but not many short retained dictionary and set records. Per-record object admission now supplements the text charge. |
+| Should direct binary readers expose lists again? | No. The documented `mb_data[variable]` array contract is clearer, ordinary indexing remains intact, and preallocation avoids scalable row-list overhead. |
+| Did numerical test direction change? | Yes. Shape and cross-layout comparisons were insufficient for interpolation. Added analytical cross-face and independent post-redistribution binary-backed oracles. |
+| Is the branch ready for merge? | No. Local correction qualification and committed-tree audit remain active, and external CUDA plus scheduler-backed multi-node evidence is still unavailable on this workstation. |
+
+### 2026-05-30: RCP-10 Commit-Point, Intrinsic-Header, And Coarse-Fine Correction
+
+| Field | Record |
+| --- | --- |
+| Independent restart/MPI blockers | The restart lane found that cleanup still owned published manifests and payloads after public-manifest rename. A later reservation-removal or injected post-publication failure could invalidate an already visible checkpoint. It also requested a local one-rank resume that combines spans from more than one payload under forced-small-chunk reads. |
+| Independent file-format blockers | The format lane found that explicit spherical-slice layouts were not mandatory, degenerate dimensions and non-positive radii reached payload processing, header-only PDF V2 sparse APIs accepted incomplete inventories, and historical spherical fallback evidence was described more strongly than the synthetic regression justified. |
+| Independent numerical blockers | The numerical lane found finite `double` spherical samples that overflowed to non-finite serialized floats after the writer's finite-value check. It also found that the adaptive binary-backed oracle refined every block uniformly and therefore did not force coarse-fine interpolation stencils. |
+| Independent evidence blockers | The evidence lane found that the external packet checksum rule was self-referential, scheduler instructions were not directly executable, per-rank logs and timeout policy were underspecified, and logical restart-validation pressure was standing in for the guide-required observed filesystem-read-amplification measurement. |
+| Decisions | Accepted `D-113` through `D-116`. Treat public-manifest rename as the transaction commit point; require postcommit checkpoint preservation; tighten intrinsic header and header-only reader admission; document host-native new-payload byte order; require attributable observed filesystem-read measurements; make packet manifests non-self-referential; and add serialized-float plus mixed-level AMR spherical-slice regressions. |
+| Focused correction evidence | Reader and writer-hardening suite returned `288 passed`. Focused spherical-slice producer subset returned `14 passed, 71 deselected`. Focused node-restart MPI subset returned `7 passed, 55 deselected`. Broad static gates and the canonical full local matrix remain to be rerun after deferred Pages hash refresh. |
+| External boundary | The external plan now requires rank-separated scheduler logs, explicit launcher substitutions, timeout dispositions, CUDA spherical-slice execution, observed filesystem reads distinct from logical pressure, and packet checksum manifests that exclude themselves. This workstation cannot execute those external rows. |
+| Status | Bounded corrections are implemented. Deferred Pages hashes, detached Pages restaging, canonical matrices, fresh settled-tree audits, deliberate commits, immutable local evidence, and committed-tree inspection remain required. |
+
+### Reflection R-10.2: Keep Commit And Evidence Boundaries Explicit
+
+| Question | Record |
+| --- | --- |
+| What is the node-restart transaction boundary? | Successful rename of the public manifest. Before that point rollback removes owned publication artifacts. After that point cleanup failures preserve the resumable checkpoint and return an error. |
+| Did existing adaptive coverage force coarse-fine interpolation? | No. The earlier slope-driven case refined all blocks. The new location-driven case retains both level-0 and level-1 blocks and asserts that sampled owner-block ghost stencils cross levels. |
+| Is logical validation pressure an observed filesystem measurement? | No. Keep it as required protocol telemetry and collect attributable observed filesystem-read bytes separately on the deployment platform. |
+| Can historical spherical fallback be claimed as frozen compatibility evidence? | No. The regression is synthetic until a provenance-qualified predecessor artifact is frozen. |
+
+### 2026-05-30: RCP-10 Settled Correction Matrix And Detached Pages Restage
+
+| Field | Record |
+| --- | --- |
+| Frozen guide | `sha256sum IO_FEATURE_BRANCH_ROBUSTIFICATION_GUIDE.md` returned `cdf53351104c135f2d79f9ee2f36c2908001b00a31339db18eb1cf66bcae11ff`; `wc -lc` returned `2222` lines and `89840` bytes. |
+| Builds | `cmake --build /tmp/athenak-io-robust-build -j 4`, `cmake --build /tmp/athenak-io-robust-build-mpi -j 4`, `cmake --build /tmp/athenak-io-robust-build-part -j 4`, and `cmake --build /tmp/athenak-io-robust-build-part-mpi -j 4` returned exit `0`. Retained logs: `/tmp/athenak-io-robust-logs-settled/build-*.log`. |
+| Canonical serial matrix | From `/tmp/athenak-io-robust-build/src`, explicit-interpreter pytest over `tst/test_suite/io/*_cpu.py` plus `test_output_formats_gpu.py` returned exit `0`: `511 passed, 4 skipped`. Retained log: `/tmp/athenak-io-robust-logs-settled/pytest-serial-canonical.log`. |
+| Canonical MPI matrix | From `/tmp/athenak-io-robust-build-mpi/src`, explicit-interpreter pytest over `tst/test_suite/io/*_mpicpu.py` returned exit `0`: `83 passed, 3 skipped`. Retained log: `/tmp/athenak-io-robust-logs-settled/pytest-mpi-canonical.log`. |
+| Dedicated tracked-particle matrix | Explicit-interpreter serial and MPI tracked-particle modules returned exit `0`: `5 passed` and `3 passed`. Retained logs: `/tmp/athenak-io-robust-logs-settled/pytest-part-serial.log` and `pytest-part-mpi.log`. |
+| Reader correction subset | Explicit-interpreter pytest over `test_python_io_readers_cpu.py` and `test_writer_hardening_cpu.py` returned exit `0`: `288 passed`. Retained log: `/tmp/athenak-io-robust-logs-settled/python-readers.log`. |
+| Collection, style, fixtures, and static gates | Collection returned `601 tests`. Repository style returned `2 passed`. All `27` frozen fixture SHA-256 checks passed. Broad `py_compile`, `flake8`, `git diff --check`, and contradiction search returned exit `0`. Retained logs: `/tmp/athenak-io-robust-logs-settled/`. |
+| Detached Pages stage | Recreated `/tmp/athenak-gh-pages-io-docs` detached at local `origin/gh-pages=4833aa9341e19861297e330ff02aabfd8001935c`. Strict stage, `--verify-staged --run-builds`, reviewed-drift generation, exact nine-file status, and empty `docs/build/linkcheck/output.txt` passed. Retained logs: `/tmp/athenak-io-robust-logs-settled-pages/`. |
+| Rendered Pages QA | In-app browser QA confirmed 13 registered formats, one Support Systems table containing Outputs and Boundary Values, added binary/coarsened-binary/spherical-slice implementation entries, mass-weight prose, serialized-float overflow prose, native-endian limitation, ReaderLimits and both header-only APIs, promoted example readback plus manifest-resume commands, `payload_rank` prose, public restart commit-point prose, and one preserved home-page iframe. Retained record: `/tmp/athenak-io-robust-logs-settled-pages/browser-final.log`. |
+| External boundary | CUDA, optional deployment-specific HIP, scheduler-backed physical multi-node routing, target-filesystem rename/unlink behavior, attributable observed filesystem-read amplification, and `RCP-08B` scaling remain external. |
+| Status | Superseding local correction matrix passed. Fresh settled-tree audits, deliberate commits, immutable local packet assembly, committed-tree rerun, and external qualification remain open. |
+
+### 2026-05-30: RCP-09 External Packet And Scheduler-Deck Reopen
+
+| Field | Record |
+| --- | --- |
+| Independent finding | Fresh process-evidence audit rejected the packet checksum cycle, prose-only scheduler deck, stale live-board wording, and opening `RCP-08A` label in the scaling preregistration. |
+| Checksum correction | `artifacts.sha256` now excludes itself and the packet index. The index records the inner digest; the ledger or archive record retains an outer index digest. |
+| Scheduler correction | Added `scripts/run_external_io_qualification_slurm.sh` with fixed ED-1 and MR-1 mappings, hostfile-forced asymmetric MR-2 mapping, row/sample-separated logs, warm-up plus five measured resumes, measured-only restart telemetry, monotonic launcher timing, filesystem-accounting hooks, exit codes, and timeout dispositions. |
+| Board correction | Refreshed RCP-06 and RCP-10 to retain the already-passed settled canonical matrix while leaving fresh audits, committed-tree rerun, and external gates open. |
+| Status | Local syntax-check passed. Fresh mock lifecycle checks and process-evidence re-audit remain required before the scheduler deck is accepted for external use. |
+
+### 2026-05-30: RCP-10 Header-Only Workflow And Sparse-Overflow Correction
+
+| Field | Record |
+| --- | --- |
+| Independent finding | Fresh file-format audit found that public `read_pdf_header()` accepted malformed sparse AKPDFV2 distributions and path-ID mismatches, the staged Visualization example passed a payload path to the header API, and the public prose overstated sibling-family validation. Fresh numerical audit requested direct sparse sharded serialized-overflow coverage. |
+| Decision | Accepted `D-118`. Keep public PDF header admission path-bound and fail-closed while preserving internal full-reader root-metadata compatibility. Narrow public prose to single-header declaration checks and use the companion `.header.pdf` path in the example. Add rank- and node-sharded MPI sparse serialized-overflow regressions. |
+| Focused reader evidence | Reader plus writer-hardening subset returned exit `0`: `298 passed`, including public unbound-root rejection, internal full-reader root-metadata compatibility, opposite-family ID rejection, and rank-header `payload_rank` rejection. Staging-helper suite returned exit `0`: `25 passed`. Targeted `flake8`, `bash -n scripts/run_external_io_qualification_slurm.sh`, and `git diff --check` returned exit `0`. |
+| Detached Pages evidence | Recreated the detached `origin/gh-pages` preview after fragment changes. Strict staging with builds, reviewed-drift packet generation, exact nine-file status, and empty linkcheck output passed. |
+| Status | Sharded MPI correction, rendered Pages QA refresh, fresh targeted re-audits, canonical rerun, deliberate commits, immutable local packet assembly, committed-tree rerun, and external qualification remain open. |
+
+### 2026-05-30: RCP-09 Terminal Scheduler-Deck Indexing Correction
+
+| Field | Record |
+| --- | --- |
+| Independent finding | Fresh process-evidence re-audit found Slurm retry collisions, missing or false-pass terminal rows after accounting and `.assembled` failures, Bash-4-only MR-2 parsing, and stale syntax-check wording. |
+| Decision | Accepted `D-119`. Add attempt-scoped packet paths, Slurm `%J` job-step logs, duplicate-key rejection, rank-map timeout indexing, terminal post-validation Athena indexing, and portable MR-2 hostfile parsing. |
+| Local mock evidence | A `/tmp/athenak-slurm-runner-mock` lifecycle matrix passed under `/bin/bash` `3.2.57`: ordinary ED-1 generation, duplicate-attempt rejection, MR-2 hostfile parsing, unset-hook incompleteness, post-hook failure indexing, forbidden-`.assembled` indexing, and rank-map timeout indexing. |
+| Static evidence | `bash -n scripts/run_external_io_qualification_slurm.sh`, scoped `flake8`, and `git diff --check` returned exit `0`. |
+| Status | Fresh process-evidence re-audit remains required before external scheduler use. Physical external execution remains open. |
+
+### 2026-05-30: RCP-09 Single-Process Timing And Restart-Sidecar Scan Correction
+
+| Field | Record |
+| --- | --- |
+| Independent finding | Fresh process-evidence re-audit found that separate Python timer processes can produce non-comparable macOS monotonic epochs and that output-directory-only staging scans miss `<manifest>.assembled` and `<manifest>.assembled.tmp`. |
+| Decision | Accepted `D-120`. Time each launcher within one Python process, retain its timing TSV, and scan packet, output, and manifest directories for both forbidden sidecar suffixes before terminal indexing. Add a checked-in pytest mock suite. |
+| Local mock evidence | Expanded `/tmp/athenak-slurm-runner-mock-final` matrix passed under macOS `/usr/bin/python3` `3.9.6` and `/bin/bash` `3.2.57`: nonnegative timers, one warm-up plus five measured samples, duplicate rejection, MR-2 parsing, accounting failures, output staging, both manifest-sidecar suffixes, and rank-map timeout. |
+| Checked-in regression evidence | `PYTHONDONTWRITEBYTECODE=1 /Users/dbf75/.uv/envs/interactive/.venv/bin/python -m pytest -p no:cacheprovider -q tst/test_suite/io/test_external_io_slurm_runner_cpu.py` returned exit `0`: `9 passed`. The suite includes direct negative-timer-artifact rejection for rank-map and Athena launches. |
+| Canonical refresh | Serial IO plus GPU-selectable CPU smoke returned `532 passed, 4 skipped`; MPI IO remained `85 passed, 3 skipped`; collection returned `624 tests`; repository style returned `2 passed`; static gates passed. |
+| Status | Fresh process-evidence re-audit remains required before external scheduler use. |
+
+### 2026-05-30: RCP-10 Superseding Precommit Matrix And Rendered Pages QA
+
+| Field | Record |
+| --- | --- |
+| Canonical serial matrix | Explicit-interpreter serial IO plus GPU-selectable CPU smoke returned exit `0`: `532 passed, 4 skipped`. Retained log: `/tmp/athenak-io-robust-logs-precommit-final/pytest-serial-canonical.log`. |
+| Canonical MPI matrix | Explicit-interpreter MPI IO returned exit `0`: `85 passed, 3 skipped`. Retained log: `/tmp/athenak-io-robust-logs-precommit-final/pytest-mpi-canonical.log`. |
+| Readers, collection, and style | Reader plus writer-hardening subset returned `298 passed`; collection returned `624 tests`; checked-in scheduler-runner mock suite returned `9 passed`; repository style returned `2 passed`. |
+| Static gates | Scoped `flake8`, broad reader/tool `py_compile`, `bash -n scripts/run_external_io_qualification_slurm.sh`, `git diff --check`, frozen fixture checksums, and frozen-guide verification passed. |
+| Detached Pages | Fresh strict staging with warnings-as-errors builds, `--verify-staged --run-builds`, reviewed-drift generation, exact nine-file status, and empty linkcheck output passed. |
+| Rendered Pages QA | In-app browser QA confirmed output commit-point, native-endian, serialized-overflow, spherical-slice, implementation-entry, and mass-weighting prose; Configuration and Running commit-point/native-endian prose; the 13-format module-index row and Boundary Values neighbor; Visualization header-path, declaration-scope, `ReaderLimits`, and both header APIs; promoted example readback, `--assemble-shards`, manifest resume, and spherical-slice prose; File Reference `payload_rank`, native-endian, commit-point, and declaration-scope prose; and one preserved home iframe. Retained record: `/tmp/athenak-io-robust-logs-settled-pages-final/browser-final.log`. |
+| Status | Precommit local matrix passed. Fresh targeted re-audits, deliberate commits, immutable local packet assembly, committed-tree rerun, final whole-branch audit, and external qualification remain open. |

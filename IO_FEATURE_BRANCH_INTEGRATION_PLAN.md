@@ -1,24 +1,35 @@
-# IO Output Formats And Sharding Selective Integration Plan
+# IO Output Formats And Sharding Selective Integration Plan (Historical; Superseded)
 
 ## Document Status
 
 | Item | Value |
 | --- | --- |
+| Status of this document | Historical record of the original selective-integration pass; superseded for active execution |
 | Target branch | `feature/io-output-formats-and-sharding` |
 | Clean base | `origin/main` at `886dd2a1437e45a3a30b3eeebf2adfa838328f73` |
-| Current local state | Selective integration is locally qualified and organized into reviewable commits; external CUDA plus real multi-node gates stay open |
+| Historical local state at selective-integration closure | Selective integration is locally qualified and organized into reviewable commits; external CUDA plus real multi-node gates stay open |
 | Comparison reference | Local remote-tracking ref `origin/feature/single-file-per-node-outputs` at `47462c5da45d3c763b37fb21505fac5fd3498805` |
 | Comparison rule | Use the remote branch as read-only evidence. Do not merge or cherry-pick it wholesale. |
+| Active execution guide | `IO_FEATURE_BRANCH_ROBUSTIFICATION_GUIDE.md` |
 | Decision record | `IO_FEATURE_BRANCH_DECISION_LOG.md` |
-| Existing implementation audit record | `IO_FEATURE_AUDIT_LEDGER.md` |
+| Current audit ledger and checkpoint status | `IO_FEATURE_AUDIT_LEDGER.md` |
 | Compatibility contract | `IO_FORMAT_COMPATIBILITY.md` |
 
-This document governs the next implementation pass. The local branch already
-contains a substantial clean reconstruction of Gotham IO behavior. The goal is
-not to replace that work with `origin/feature/single-file-per-node-outputs`.
-The goal is to preserve the stronger local design, selectively port useful
-remote hardening, close the remaining scalability gaps, and leave a
-well-tested branch that can be reviewed and merged intentionally.
+This retained document historically governed the original `CP-00` through
+`CP-08` selective-integration pass. It no longer governs active execution. Use
+`IO_FEATURE_BRANCH_ROBUSTIFICATION_GUIDE.md` for the current process,
+`IO_FEATURE_AUDIT_LEDGER.md` for the current checkpoint board and evidence, and
+`IO_FEATURE_BRANCH_DECISION_LOG.md` for controlling decisions. Statements below
+that describe current state, gaps, checkpoints, or completion conditions record
+the earlier pass at the time it ran and must not be treated as current
+contracts.
+
+The local branch already contained a substantial clean reconstruction of
+Gotham IO behavior. The historical goal was not to replace that work with
+`origin/feature/single-file-per-node-outputs`. The goal was to preserve the
+stronger local design, selectively port useful remote hardening, close the
+remaining scalability gaps, and leave a well-tested branch that could be
+reviewed and merged intentionally.
 
 ## Executive Goal
 
@@ -63,7 +74,7 @@ Produce one reviewable IO feature branch that contains:
 7. Append evidence to `IO_FEATURE_AUDIT_LEDGER.md`.
 8. Append decisions to `IO_FEATURE_BRANCH_DECISION_LOG.md`.
 
-## Current Baseline Assessment
+## Historical Baseline Assessment
 
 ### Local Implementation To Preserve
 

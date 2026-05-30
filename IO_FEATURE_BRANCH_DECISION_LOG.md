@@ -31,6 +31,14 @@ decision.
 
 ## Decision Summary
 
+Review entry point: the compact table below summarizes the original
+selective-integration decisions through `D-067`. It is not a complete summary
+of the active branch contract. `D-068` onward are controlling post-review
+robustification decisions: read their full entries under **Detailed Decisions**
+below and use the current **Robustification Pass** section of
+`IO_FEATURE_AUDIT_LEDGER.md` for checkpoint status. Active execution is governed
+by `IO_FEATURE_BRANCH_ROBUSTIFICATION_GUIDE.md`.
+
 | ID | Status | Decision | Implementation checkpoint |
 | --- | --- | --- | --- |
 | D-001 | Accepted | Use `feature/io-output-formats-and-sharding` as the branch name | CP-01 |
@@ -100,6 +108,7 @@ decision.
 | D-065 | Accepted and verified | Enforce ASCII PDF tokens and retain spherical sibling metadata budgets | CP-05, CP-06 |
 | D-066 | Accepted and verified | Prove public spherical sibling-budget forwarding in automation | CP-06 |
 | D-067 | Accepted and verified | Retain spherical metadata through coordinate generation | CP-05, CP-06 |
+| D-068 onward | See detailed decisions and current robustification ledger | Controlling post-review robustification decisions are recorded in full below and summarized by the current `IO_FEATURE_AUDIT_LEDGER.md` robustification checkpoint board | RCP-00 onward |
 
 ## Detailed Decisions
 
@@ -894,17 +903,405 @@ decision.
 | Evidence | `src/outputs/pdf.cpp`; local serial and MPI PDF regressions; deferred documentation overlay. |
 | Follow-up | Execute the representative CUDA PDF regression during `RCP-09`. |
 
+### D-097: Revalidate Derived Shapes After AMR And Preflight Spherical-Slice Peaks
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for reopened `RCP-04` correction cycle |
+| Decision | Reallocate the shared derived-variable view whenever any meshblock, variable, or cell extent differs from the current request, rather than only on first use. For `sphslice`, retain a geometry baseline and preflight each transient peak before allocation: ownership validation, shared dense storage, local sparse storage and sorting, node metadata and gather buffers, publication sorting, structurally sized parameter-dump and counted metadata serialization, and dense payload serialization. Compute parameter-dump bytes from the parsed hierarchy without invoking its allocating serializer, stream the actual serialized header directly to the temporary file, and admit sort peaks before mutating retained shard vectors. |
+| Reason | Adaptive refinement can increase the local meshblock pack after an earlier diagnostic output, making a first-allocation-only view too small. A constructor-only spherical-slice estimate also misses late node and serialization buffers, especially input-controlled parameter dumps. |
+| Alternatives | Allocate derived views at a fixed mesh maximum; retain constructor-only spherical-slice checks; check string sizes only after materialization; remove spherical-slice configurability. |
+| Why not | Fixed maxima consume avoidable accelerator memory. Constructor-only checks do not cover later peaks. Post-materialization checks are too late for input-controlled text. Removing configurability would block legitimate production tuning without improving the contract. |
+| Reversal path | Replace the conservative peak model only with an audited equivalent that remains allocation-before-use and retains the adaptive-PDF regression. |
+| Evidence | `src/outputs/derived_variables.cpp`; `src/outputs/spherical_slice.cpp`; adaptive pack-growth derived-PDF regression in `tst/test_suite/io/test_output_formats_gpu.py`; serialization-cap regression in `tst/test_suite/io/test_output_formats_cpu.py`; fresh correction audit after direct-streaming repair. |
+| Follow-up | Require a fresh independent `RCP-04` acceptance audit and retain CUDA execution in `RCP-09`. |
+
+### D-079: Keep C++ Output Registration Cleanup Bounded
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-05` |
+| Decision | Keep the existing format-construction chain. Extract common variable and ID parsing, MeshBlock selection, slices, and PDF parameter parsing into focused private helpers. Add in-class defaults for touched `OutputParameters` fields. Convert the branch-added spherical-slice owner to `std::unique_ptr`. Document wrapper byte units, MPI collectivity, lazy node-communicator lifetime, and restart-manifest post-load invariants. Repair the inherited tracked-particle path only where the existing fixed-width format requires correctness: skip irrelevant `variable` parsing, use a device counter, require a dense unique tag range, compute checked byte offsets, preserve native-endian payload bytes, and retain collective ordering. |
+| Reason | These changes remove duplicated parsing and make branch-touched contracts explicit without replacing the established output factory style or broadening the wire-format surface. The tracked-particle inconsistency was directly exposed by common-parser cleanup and could corrupt or misplace records if left untouched. |
+| Alternatives | Introduce a registration factory or table-driven constructor; redesign all output ownership to RAII; change tracked-particle wire bytes; defer the inherited tracked-particle defect. |
+| Why not | A broad factory or ownership rewrite increases review surface without advancing the IO formats. Changing tracked bytes breaks compatibility. Deferral would leave a touched constructor path knowingly incorrect and the no-variable contract inconsistent. |
+| Reversal path | Consider a table-driven registration layer in a separate refactor branch after behavior snapshots exist for every inherited format. Version tracked-particle payloads explicitly if a future format redesign is needed. |
+| Evidence | `src/outputs/outputs.cpp`; `src/outputs/outputs.hpp`; `src/outputs/track_prtcl.cpp`; touched interface headers; dedicated tracked-particle serial and MPI regressions. |
+| Follow-up | Require behavior-preservation and scope audits before closing `RCP-05`. |
+
+### D-090: Preregister Restart-Manifest Scaling Before Optimizing
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-08A`; `RCP-08B` remains pending external evidence |
+| Decision | Keep strict per-rank manifest and replicated-header validation in this feature branch until scheduler-backed measurements exist. Add default-off `ATHENAK_RESTART_MANIFEST_TIMING=1` records for validation, startup parse, and direct local-block loading. Preregister 2-node and 4-node topology tiers, one warm-up plus five measured resumes, median/p95/maximum reporting, and explicit keep/follow-up/separate-branch thresholds. |
+| Reason | The current protocol is correct and reviewable. A rank-0 or node-leader metadata distribution protocol may reduce filesystem amplification, but changing restart semantics without production topology measurements would increase risk based on speculation. |
+| Alternatives | Parse and validate only on rank 0 now; validate headers on node leaders now; omit instrumentation and rely on external wall-clock timing. |
+| Why not | Both centralized designs alter the restart protocol and require multi-node requalification. External wall-clock timing alone cannot isolate manifest parse/validation from routed local-span loading. |
+| Reversal path | If `RCP-09` evidence exceeds the preregistered threshold, open a separate scaling branch to compare rank-0 structured broadcast and node-leader header validation, then rerun the full restart qualification lane. |
+| Evidence | `IO_RESTART_MANIFEST_SCALING_QUALIFICATION.md`; `IO_EXTERNAL_IO_QUALIFICATION_PLAN.md`; `src/restart_manifest.cpp`; `src/main.cpp`; opt-in timing regression in `tst/test_suite/io/test_node_sharding_mpicpu.py`. |
+| Follow-up | Benchmark-design audit approved the local instrumentation contract. Run scheduler-backed `RCP-09`, then record the `RCP-08B` keep, follow-up, or separate-branch disposition. |
+
+### D-084: Preserve Active Qualification Records And Package Deliberately
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for local `RCP-10` packaging preparation |
+| Decision | Retain `IO_FORMAT_COMPATIBILITY.md`, the external qualification plans, the deferred Pages bundle, and its deterministic staging helper with the branch. Keep the large guide, integration, decision, and ledger records at their current review paths until external gates close. Before final merge, summarize durable content into the compatibility contract, user docs, and pull-request record; archive process records in-repository only if maintainers explicitly want that history. |
+| Reason | The branch still has active external qualification gates, so removing or moving the evidence now would lose audit context and invalidate the frozen guide path. Long implementation diaries should not silently become permanent user-facing documentation either. |
+| Alternatives | Delete process records now; retain every root-level guide indefinitely; move the frozen guide into an archive before qualification finishes. |
+| Why not | Immediate deletion loses provenance. Permanent root-level diaries add maintenance bulk. Moving the frozen guide before closure breaks the checksum-path contract used throughout robustification. |
+| Reversal path | A maintainer may request an in-repository development archive after qualification. Update the disposition record and preserve a migration map in the cleanup commit. |
+| Evidence | `IO_FEATURE_BRANCH_PROCESS_ARTIFACT_DISPOSITION.md`; current open `RCP-08B` and `RCP-09` gates; frozen-guide checksum rule. |
+| Follow-up | Revisit after external qualification and before the final merge commit or pull-request handoff. |
+
+### D-082: Stage Deferred Pages Documentation With Bounded Detached-Worktree Edits
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for local `RCP-07` |
+| Decision | Use `scripts/stage_gh_pages_io_docs.py`, implemented with the Python 3 standard library, and `deferred_docs/gh-pages/io-output-formats-and-sharding/manifest.json` as the machine-readable contract. Require a canonical detached Pages worktree, frozen target and protected blobs, source SHA256 values, expected add-target absence, unique anchors, baseline section SHA256 values, marker-wrapped bounded edits, an exact eight-file allowlist, in-memory planning, pure second-transform idempotence, and atomic writes. Permit drift handling only through `--reviewed-drift <packet-dir>`, which fingerprints the target and emits an external three-way packet without target writes. |
+| Reason | Literal complete-page overlays can delete unrelated live Pages guidance while still producing a successful Sphinx build. Bounded verified edits preserve unrelated content and make drift explicit before publication. |
+| Alternatives | Continue manual copy-and-merge staging; retain destructive whole-page overlays; edit a checked-out `gh-pages` branch directly. |
+| Why not | Manual staging is difficult to reproduce and audit. Broad replacement is unsafe under live Pages drift. Direct branch edits violate the deferred separate-review lifecycle. |
+| Reversal path | If the Pages structure changes, run reviewed-drift mode against a fresh detached worktree, audit the packet, update anchors and hashes deliberately, and rerun strict staging. |
+| Evidence | `scripts/stage_gh_pages_io_docs.py`; `manifest.json`; bounded fragments; `tst/test_suite/io/test_stage_gh_pages_io_docs_cpu.py`; local `22 passed`; targeted `flake8`; strict detached stage and `--verify-staged`; warnings-as-errors HTML and link-check builds; rendered inspection of all eight staged pages; accepted docs-to-code audit; unchanged local `origin/gh-pages=4833aa9341e19861297e330ff02aabfd8001935c`. |
+| Follow-up | After the code branch merges, refresh `origin/gh-pages`, restage in a fresh detached worktree, and open a separate Pages review. |
+
+### D-080: Extract Shared Private Python Reader Utilities
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-06` |
+| Decision | Extract common private reader-limit, checked-arithmetic, ASCII-token, and CLI-limit helpers into `vis/python/io_reader_common.py`. Keep `vis/python/bin_convert.py` as the one supported binary converter, add package-relative imports with direct-script fallbacks, and thread retained metadata accounting through binary, coarsened-binary, PDF, and spherical-slice readback. |
+| Reason | The readers need one consistent practical-limit contract while preserving both existing script-style imports and package-form imports. Local duplicate helpers made it too easy for one format to bypass a live-memory preflight. |
+| Alternatives | Retain duplicated format-local helpers; expose a new public configuration module; restore `bin_convert_new.py` as a compatibility alias. |
+| Why not | Duplicated helpers already diverged. A new public module would unnecessarily expand the supported API. Restoring the redundant converter would recreate the ambiguity this branch is intended to remove. |
+| Reversal path | Add public configuration only if user workflows demonstrate a need beyond keyword-only `limits=` overrides and shared CLI flags. |
+| Evidence | `vis/python/io_reader_common.py`; `vis/python/bin_convert.py`; `vis/python/read_pdf.py`; `vis/python/read_sphslice.py`; `vis/python/examples/read_io_outputs.py`; `tst/test_suite/io/test_python_io_readers_cpu.py`; independent API/memory-budget correction audit; `181 passed`. |
+| Follow-up | Retain malformed-input, package-import, direct-script, and reduced-budget rows in the final RCP-10 matrix. |
+
+### D-098: Document Native Multi-Field Spherical Slices
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-07` documentation alignment |
+| Decision | Preserve and document `sphslice` support for native state-backed scalar fields and native multi-field groups. Continue rejecting derived arrays until interpolation is ghost-zone-safe. Document that the origin-centered spherical surface must fit inside a 3D domain, with a positive radius strictly interior to every domain face, and add producer-reader coverage for a native hydro group. |
+| Reason | The writer serializes `outvars.size()` variables and the public reader returns `(theta, phi, variable)` arrays. Native groups are therefore an implemented format capability, not an accidental parser side effect. |
+| Alternatives | Reject every group that expands to more than one native variable; advertise groups without adding executable evidence. |
+| Why not | Artificially narrowing the writer would remove a coherent existing behavior. Advertising an untested behavior would leave the docs-to-code audit unresolved. |
+| Reversal path | Narrow the contract later only through an explicit compatibility decision and migration note if production use shows that group output is unsafe. |
+| Evidence | `src/outputs/spherical_slice.cpp`; `vis/python/read_sphslice.py`; native-group and invalid-domain regressions in `tst/test_suite/io/test_output_formats_cpu.py`; deferred Pages fragments; `IO_FORMAT_COMPATIBILITY.md`. |
+| Follow-up | Rerun detached Pages staging and obtain a fresh docs-to-code audit after helper-safety corrections land. |
+
+### D-099: Prove Deferred Pages Staging Against A Canonical Index
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted for `RCP-07` |
+| Decision | Before trusting status output, require the detached Pages worktree index to match `HEAD` exactly and reject noncanonical index flags such as `assume-unchanged` and `skip-worktree`. Require every staged target to remain a regular file with its expected mode. Include target-root metadata in reviewed-drift fingerprints. |
+| Reason | Porcelain status alone can hide tracked mutations behind index flags. Byte comparison alone can accept an allowlisted symlink to identical bytes or an executable-bit change. Descendant-only fingerprints cannot prove that reviewed-drift packet generation leaves the worktree root untouched. |
+| Alternatives | Keep status-only verification; document that operators must avoid index flags; ignore Markdown file-mode changes; fingerprint descendants only. |
+| Why not | The helper is a publication-safety boundary. Its checks must fail closed under Git features and filesystem substitutions that a normal review workflow can accidentally preserve. |
+| Reversal path | None for the fail-closed requirements. If a future Pages payload intentionally needs executable files or symlinks, extend the manifest schema with explicit per-target type and mode declarations and add matching regressions. |
+| Evidence | `scripts/stage_gh_pages_io_docs.py`; exploit regressions in `tst/test_suite/io/test_stage_gh_pages_io_docs_cpu.py`; local `22 passed`; strict detached stage, verify, HTML, linkcheck, and reviewed-drift packet generation against `origin/gh-pages`. |
+| Follow-up | Keep the exploit regressions in the final matrix and repeat staging against refreshed `origin/gh-pages` after code merge. |
+
+### D-100: Make New Reader Contracts Fail Closed Without Breaking Legacy Rank Fixtures
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during `RCP-10` red-team correction |
+| Decision | Require explicit distribution, shard ID, sibling count, and MeshBlock count metadata for new node-sharded `.bin` and `.cbin` files. Require explicit distribution, shard ID, and sibling count metadata for every new rank- or node-sharded `sphslice` file. Require every intrinsic `AKPDFV2` dense or sparse payload to have a matching header declaration. Reject duplicate scalar metadata in binary preheaders, PDF headers, PDF dimension aliases, and spherical-slice headers. Preserve legacy inventory-free rank-sharded binary fixtures and transitional unversioned sparse PDF compatibility. |
+| Reason | The red-team audit demonstrated that relocating a shared binary fixture into a `node_########` directory, stripping a sparse PDF V2 header declaration, or omitting spherical-slice shard counts could downgrade new formats into less-audited compatibility paths. New layouts have no historical inventory-free files to preserve. Legacy per-rank binary fixtures and transitional unversioned sparse PDF readers do have an intentional compatibility purpose. |
+| Alternatives | Require inventory metadata for every historical rank-sharded binary file; remove transitional unversioned sparse PDF support; treat duplicate keys as last-write-wins; retain optional inventory for new formats. |
+| Why not | Breaking historical rank fixtures is unnecessary. Transitional sparse support remains bounded when intrinsic V2 payloads cannot masquerade as unversioned files. Last-write-wins metadata and optional new-format inventory create ambiguous parsing contracts. |
+| Reversal path | Narrow a retained compatibility row only through an explicit migration decision with affected-reader evidence. Do not relax metadata requirements for new producer layouts. |
+| Evidence | `vis/python/bin_convert.py`; `vis/python/read_pdf.py`; `vis/python/read_sphslice.py`; downgrade, duplicate-key, and positive shard regressions in `tst/test_suite/io/test_python_io_readers_cpu.py`; corrected reader suite returned `197 passed`. |
+| Follow-up | Obtain a fresh independent file-format and Python-reader audit against the settled tree. |
+
+### D-101: Account For Text Metadata And Preserve Suffix-Only Batch Conversion
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during `RCP-10` red-team correction |
+| Decision | Charge conservatively decoded textual metadata against `max_live_bytes` before parser-controlled materialization using a four-times byte charge. Carry retained charges through later reconstruction checks. Keep public return dictionaries free of internal accounting fields. In `make_athdf.py`, replace only the final `.bin` suffix when naming `.athdf` output. |
+| Reason | The API red-team audit reproduced megabyte-scale textual metadata accepted under a `64 KiB` live budget and demonstrated that the batch wrapper corrupted identifiers containing an interior `.bin`. The live budget must cover scalable text expansion as well as array allocations. |
+| Alternatives | Rely only on header-read limits; exempt a fixed text allowance from `max_live_bytes`; use interpreter-specific `sys.getsizeof()` accounting for every object; keep global string replacement in the batch helper. |
+| Why not | Header-read limits do not bound live expansion. A fixed allowance weakens the advertised aggregate budget. Exact interpreter object accounting is brittle and still needs conservative transient assumptions. Global replacement changes user-visible basenames. |
+| Reversal path | Replace the conservative multipliers only with an audited parser-specific accounting model that remains admission-before-materialization and preserves keyword-only budget overrides. |
+| Evidence | `vis/python/io_reader_common.py`; `vis/python/bin_convert.py`; `vis/python/read_pdf.py`; `vis/python/read_sphslice.py`; `vis/python/make_athdf.py`; large-text and interior-suffix regressions in `tst/test_suite/io/test_python_io_readers_cpu.py`; corrected reader suite returned `197 passed`. |
+| Follow-up | Keep the malformed-input regressions in the full local matrix and fresh Python API audit. |
+
+### D-102: Partition Energy Channels By Signed Flux And Reject Non-Positive PDF Mass
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during `RCP-10` red-team correction |
+| Decision | Define `edot_sph_out`, `edot_sph_in`, `edot_vert_out`, and `edot_vert_in` as positive and negative partitions of signed total energy flux. For MHD, include the Poynting contribution before partitioning. For PDF `weight = mass`, require positive finite conserved density before multiplying by cell volume. Preserve finite signed `weight = variable` values. |
+| Reason | In MHD, the Poynting contribution can oppose the gas velocity, so gas-motion-selected energy channels contradict the `_out` and `_in` names. A mass histogram has no defensible meaning for zero, negative, or non-finite conserved density, even if ordinary conversion floors make the path uncommon. |
+| Alternatives | Keep gas-motion-selected transport channels and rename or document them; classify by gas velocity only for Hydro; silently floor PDF mass density; reject signed variable weights. |
+| Why not | Flux-sign partitioning is consistent across Hydro and MHD and matches the public names. Silent floors alter diagnostics. Finite signed variable weighting is a useful deliberate capability distinct from mass weighting. |
+| Reversal path | Add separately named gas-motion-selected diagnostics later if a concrete analysis workflow needs them. Do not overload the signed flux partitions. |
+| Evidence | `src/outputs/diagnostic_semantics.hpp`; `src/outputs/derived_variables.cpp`; `src/outputs/pdf.cpp`; direct harness, adversarial radial and vertical MHD regressions, and non-positive mass-density regressions in `tst/test_suite/io`; focused diagnostic set returned `5 passed`; broader serial producer set returned `75 passed` before the final mass-density rows were added. |
+| Follow-up | Rerun the full producer matrix, refresh deferred Pages staging, and obtain a fresh numerical-semantics audit. |
+
+### D-103: Bind Node-PDF Payload Identity And Reject Zero Restart Segments
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during `RCP-10` red-team correction |
+| Decision | Add `payload_rank` to every newly written node-sharded `AKPDFV2` header and require it to match the leader rank embedded in the binary preamble. Reject duplicate node payload-rank inventories. In node-restart publication, reject non-positive rank segment counts before emitting a manifest so writer and loader enforce the same positive-segment contract. |
+| Reason | Separate node headers and PDF payloads could previously be swapped while each file remained individually parseable. The restart loader already rejects zero-count segments, but the publisher accepted them even though AthenaK load balancing intends each participating rank to own at least one MeshBlock. Both boundaries should fail closed before reconstruction or publication. |
+| Alternatives | Encode node ID into the existing payload-rank field; checksum each PDF payload; accept swappable node payloads because ordinary writes do not move files; keep the restart writer looser than the loader. |
+| Why not | The preamble field already has a stable writer-rank meaning, so adding matching header metadata is the narrow compatibility-preserving fix. Checksums are a larger format revision. Reader and writer disagreement creates avoidable malformed artifacts. |
+| Reversal path | Introduce payload checksums only through a future explicit format-version decision. Keep `payload_rank` validation for V2 node shards. |
+| Evidence | `src/outputs/pdf.cpp`; `src/outputs/restart.cpp`; `vis/python/read_pdf.py`; swapped-node-payload regression in `tst/test_suite/io/test_python_io_readers_cpu.py`; corrected reader suite `230 passed`; serial and MPI Debug rebuilds passed. |
+| Follow-up | Include node-PDF and restart publication behavior in fresh file-format and restart/MPI correction audits. |
+
+### D-104: Expand Deferred Pages Staging To Nine Bounded Files
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during `RCP-10` documentation correction |
+| Decision | Supersede only the eight-file allowlist portion of `D-082`. Add one bounded replacement for `docs/source/modules/index.md` so the Outputs landing-page row reports 13 registered formats. Require the staging helper to prove an exact nine-file payload while preserving the detached-worktree, hash, marker, idempotence, build, linkcheck, rendered-inspection, and write-free drift-packet requirements. |
+| Reason | The deferred Outputs module page advertises the added IO format while the live modules landing page still says 12 registered formats. Leaving that row untouched produces an internally inconsistent public site. |
+| Alternatives | Keep the stale count; remove the count from the landing page; replace the whole modules index; edit live Pages directly after code merge. |
+| Why not | A stale count is user-visible drift. Removing or broadly replacing unrelated live documentation is outside this branch. A bounded hash-checked row replacement preserves the deferred publication lifecycle. |
+| Reversal path | If the live Pages row changes before publication, run reviewed-drift mode and deliberately update the bounded section fingerprint before restaging. |
+| Supersedes | The eight-file payload count in `D-082`; all other `D-082` requirements remain controlling. |
+| Evidence | `deferred_docs/gh-pages/io-output-formats-and-sharding/manifest.json`; bounded modules-index fragment; helper suite `22 passed`; exact nine-file detached strict stage; `--verify-staged --run-builds`; empty linkcheck output; reviewed-drift packet generation outside the target; rendered inspection of the 13-format row, IO example route, `payload_rank` prose, and preserved home-page iframe. |
+| Follow-up | Record fresh nine-file stage, build, linkcheck, drift-packet, and navigation evidence in the ledger. |
+
+### D-105: Require Immutable External Qualification Packets
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during `RCP-10` process-packaging correction |
+| Decision | Require one durable immutable evidence-packet root per external qualification run family, including copied inputs, overrides, commands, environment, raw logs, generated inventories, packet index, and a SHA-256 manifest covering retained artifacts. Record the archive root and checksum-manifest digest in every external evidence row. |
+| Reason | Scheduler scratch paths and terminal summaries can disappear or become unauditable before independent review. The external CUDA, topology, filesystem, and scaling gates need evidence that survives handoff. |
+| Alternatives | Retain cluster-local paths only; paste summarized output into the ledger; archive logs without checksums or copied input decks. |
+| Why not | Those choices cannot prove what was run or whether retained artifacts changed after collection. |
+| Reversal path | A site-specific archival system may replace the directory layout only if it preserves immutable indexed artifacts and checksums. |
+| Evidence | `IO_EXTERNAL_IO_QUALIFICATION_PLAN.md`; process-packaging auditor finding; frozen scaling deck checksum in `IO_RESTART_MANIFEST_SCALING_QUALIFICATION.md`. |
+| Follow-up | Use the packet contract during external `RCP-08B` and `RCP-09`; do not claim merge readiness until independent auditors accept both lanes. |
+
+### D-106: Close Late Reader And Restart Compatibility Apertures
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-10` correction |
+| Decision | Reject non-positive restart payload block counts as well as non-positive segment counts. Preserve transitional unversioned sparse PDF compatibility for shared and historical rank layouts, but reject unversioned node shards because node sharding is a V2 producer feature. Enforce conservative binary metadata admission before callers decode or split records and legacy PDF row admission before ASCII decoding. Keep parser accounting fields internal to the canonical binary reader. Route `make_athdf.py` through `bin_convert.convert_file`. |
+| Reason | A synthetic manifest could add unused zero-block header-only payloads that the producer cannot emit. Relocating an unversioned sparse PDF below `node_########/` bypassed V2 inventory and payload identity checks without preserving a real historical format. Some metadata paths still decoded before low-memory rejection, public readers leaked private bookkeeping, and the batch wrapper duplicated canonical conversion steps. |
+| Alternatives | Document zero-block restart payloads; retain weak unversioned node-PDF reconstruction; treat decode-before-reject as acceptable because header byte limits exist; expose accounting fields as public API; keep duplicate batch-wrapper conversion logic. |
+| Why not | Those choices preserve noncanonical layouts or implementation leakage without a user requirement. The narrower contract preserves actual historical compatibility while making new node formats fail closed. |
+| Reversal path | Broaden transitional node-PDF support only with a frozen historical producer artifact and explicit migration tests. Introduce empty restart payloads only through a versioned manifest decision. |
+| Evidence | `src/restart_manifest.cpp`; `vis/python/bin_convert.py`; `vis/python/read_pdf.py`; `vis/python/make_athdf.py`; zero-payload, unversioned-node, duplicate-payload-rank, public-accounting, package-import, and low-budget regressions in `tst/test_suite/io`; focused readers `236 passed`; corrupted-manifest subset `29 passed`. |
+| Follow-up | Require fresh restart/file-format and Python API audits against the settled tree. |
+
+### D-107: Keep Deferred Pages Markers Outside Markdown Table Rows
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-07` correction |
+| Decision | Supersede the row-level landing-page edit portion of `D-104`. Replace the full bounded Support Systems section in `docs/source/modules/index.md`, preserving every neighboring row while changing the Outputs count to 13. Replace the full bounded Implementation Entry Points section in `docs/source/modules/outputs.md` so the refreshed PDF row remains inside its Markdown table. Require semantic helper regression and rendered browser checks for both tables. |
+| Reason | The row-level replacement inserted marker comments between Markdown rows. Sphinx and linkcheck passed, but rendered HTML split the table and dropped neighboring navigation. The retained Outputs implementation table also continued to understate PDF dimensionality. |
+| Alternatives | Remove bounded markers for the row; hand-edit Pages after merge; tolerate split rendered HTML; replace the whole module index file. |
+| Why not | Marker-free edits weaken idempotence, manual repair is not reproducible, broken navigation is user-visible, and whole-file replacement is broader than required. A bounded section preserves unrelated content and places comments outside row flow. |
+| Reversal path | If the live Support Systems section changes, generate reviewed drift, reconcile its bounded fingerprint deliberately, and repeat rendered checks before publication. |
+| Supersedes | The row-level `docs/source/modules/index.md` replacement shape in `D-104`; the nine-file payload and all other `D-104` requirements remain controlling. |
+| Evidence | `manifest.json`; Support Systems and Implementation Entry Points fragments; staging-helper semantic regression; helper suite `23 passed` before the final table-width correction; strict detached HTML and linkcheck builds; rendered browser record retained under `/tmp/athenak-io-robust-logs-pages/browser.log`. |
+| Follow-up | Obtain a fresh independent deferred-Pages audit and repeat staging after code merge before opening a Pages review. |
+
+### D-108: Enforce Reader Budgets Before Materialization And Validate PDF Weights
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-10` re-audit correction |
+| Decision | Derive binary, spherical-slice, and legacy-PDF textual `readline()` caps from the remaining live-memory allowance before yielding bytes for decoding. Stream declared embedded athinput regions one line at a time, decode retained records once, and count retained list and string objects. Reject non-finite dense, sparse, aggregated, and legacy PDF histogram values while preserving finite signed values. Extend `make_athdf.py` to expose canonical `.bin`/`.cbin`, shard-assembly, and reader-budget behavior. Explicitly reject non-positive root-side restart payload totals before manifest publication. |
+| Reason | Header and payload byte caps bound absolute reads but did not strictly honor a smaller configured live-memory ceiling before materialization. Newline-heavy athinput content amplified Python containers beyond a byte-only estimate. Reader acceptance of NaN or infinity contradicted writer-side diagnostic validation. The batch wrapper and restart publisher should enforce the same contracts as their canonical implementations and consumers. |
+| Alternatives | Treat bounded transient overshoot as acceptable; retain byte-only embedded-header accounting; reject negative PDF histogram values as well as non-finite values; document `make_athdf.py` as a narrower legacy wrapper; rely on restart topology invariants rather than an explicit payload-total guard. |
+| Why not | Those choices weaken the advertised practical-limit contract, reject valid signed variable-weight diagnostics, preserve unnecessary wrapper drift, or leave writer-loader symmetry implicit. |
+| Reversal path | Replace conservative text charges only with an audited admission-before-materialization model. Broaden payload validation only through an explicit format decision and compatibility evidence. |
+| Evidence | `vis/python/bin_convert.py`; `vis/python/read_sphslice.py`; `vis/python/read_pdf.py`; `vis/python/make_athdf.py`; `src/outputs/restart.cpp`; focused low-budget, newline-heavy, non-finite, signed-weight, batch-wrapper, and guard-order regressions in `tst/test_suite/io`. |
+| Follow-up | Rerun the full local matrix and obtain fresh Python API, restart/MPI, compatibility, and whole-branch audits against the settled committed tree. |
+
+### D-109: Keep CUDA As The Frozen Device Lane And Require Explicit HIP Evidence For HIP Deployment
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` qualification-plan clarification |
+| Decision | Preserve CUDA as the device-execution lane required by the frozen robustification guide. Do not infer HIP readiness from CPU smoke or CUDA evidence. If a production deployment uses HIP, require a separate immutable HIP evidence packet with the same representative regressions, environment inventory, and independent audit before making a HIP production-readiness claim. |
+| Reason | This workstation exposes neither CUDA nor HIP, while the frozen guide explicitly specifies CUDA qualification. Stating the HIP boundary prevents an ambiguous device-readiness claim without expanding the frozen guide retroactively. |
+| Alternatives | Add HIP as a mandatory merge gate for every deployment; claim HIP readiness from Kokkos portability; omit HIP entirely from the qualification plan. |
+| Why not | A universal HIP gate expands scope without a named deployment requirement. Backend portability is not execution evidence. Silence leaves the deployment boundary unclear. |
+| Reversal path | Promote HIP into a required merge gate if maintainers identify a HIP production target for this branch. |
+| Evidence | `IO_FEATURE_BRANCH_ROBUSTIFICATION_GUIDE.md`; `IO_EXTERNAL_IO_QUALIFICATION_PLAN.md`; local environment probe recorded in `IO_FEATURE_AUDIT_LEDGER.md`. |
+| Follow-up | External operators must retain CUDA evidence and, when applicable, a separate HIP packet before the corresponding production-readiness claim. |
+
+### D-088: Superseded By D-094
+
+| Field | Value |
+| --- | --- |
+| Status | Superseded by `D-094` |
+| Decision | Preserve this navigable record for the earlier `RCP-03` question about checked coarsened-binary kernel-range and normalization-range representation. |
+| Reason | `D-094` resolved the question by selecting signed checked `std::int64_t` launch arithmetic and separate `std::size_t` allocation and serialized-payload preflights while narrowing the producer to uniform 3D active-zone-only output. |
+| Alternatives | Use `int` launch ranges; use `std::size_t` directly for kernel arithmetic; broaden the producer contract before qualification. |
+| Why not | Those alternatives either narrow representability incorrectly, mix signed launch arithmetic with allocation domains, or expand unsupported output semantics. |
+| Reversal path | Promote one additional producer row at a time only with explicit writer, reader, conversion, equality, and documentation evidence. |
+| Evidence | `D-094`; `src/outputs/coarsened_binary.cpp`; `src/outputs/coarsened_binary_layout.hpp`; `tst/test_suite/io/cbin_layout_harness.cpp`. |
+| Follow-up | None beyond the controlling `D-094` qualification rows. |
+
+### D-110: Parse Fixed Binary Grammar Without Token Expansion And Preallocate Shard Assembly
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-10` Python re-audit correction |
+| Decision | Parse fixed binary signatures, scalar records, and preheader `key=value` records with bounded exact grammar rather than unconstrained token lists. Before reconstructing partitioned `.bin` or `.cbin`, account conservatively for the transient duplicate-logical-ownership dictionary, release it after validation, and copy shard rows directly into preallocated NumPy arrays. Preserve direct `make_athdf.main(file_stem=..., verbose=...)` compatibility by defaulting additive assembly and reader-limit options. |
+| Reason | A malformed whitespace-heavy metadata record could expand into Python token containers beyond the configured live-memory cap before later rejection. Shard assembly budgeted duplicated NumPy payloads but materialized uncharged Python row lists and logical-owner bookkeeping. The batch wrapper's additive options accidentally became mandatory for historical direct callers. |
+| Alternatives | Pre-count every fixed-grammar token split; add broad conservative charges while retaining Python row-list assembly; remove callable-wrapper compatibility; rely on byte caps alone. |
+| Why not | Exact grammar avoids unnecessary materialization. Direct array assembly is simpler to bound than interpreter-specific row-list amplification. The callable wrapper is an existing low-cost compatibility surface. Byte caps alone do not prove the live-memory contract. |
+| Reversal path | Replace conservative ownership accounting only with an audited lower-overhead duplicate detector whose peak is admitted before construction. Remove direct-wrapper defaults only through an explicit API migration decision. |
+| Evidence | `vis/python/bin_convert.py`; `vis/python/make_athdf.py`; whitespace-amplification, ownership-peak, empty-shard, and direct-wrapper regressions in `tst/test_suite/io/test_python_io_readers_cpu.py`; focused reader module returned `228 passed`. |
+| Follow-up | Rerun the complete local matrix, capture an immutable local packet, and require fresh independent Python plus whole-branch acceptance audits against the committed tree. |
+
+### D-111: Preserve Historical Spherical-Slice Fallback And Bound Python Metadata Objects
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-10` Python correction re-audit |
+| Decision | Restore narrow historical spherical-slice version-1 inference for shared and rank layouts that use `single_file_per_rank`, while requiring complete metadata for every new explicit rank/node layout. Stream post-discovery shard validation without rebuilding unbounded identifier containers. Conservatively preflight direct binary logical-owner sets, athdf-like slice-classification sets, sorted shard inventories, `make_athdf.py` batch inventories, modern and legacy PDF metadata records, and spherical-slice metadata records. Preallocate legacy dense PDF payload rows. Preserve the canonical direct-reader `mb_data[variable]` NumPy array contract. |
+| Reason | Version-1 fallback is an established reader compatibility surface; new node formats still need fail-closed inventories. Text-byte charges alone do not cover high-cardinality Python metadata objects, and bounded file payloads do not justify unaccounted shard lists, tuple sets, or legacy row arrays. The ndarray result matches the canonical module documentation and avoids row-list amplification. |
+| Alternatives | Break all inventory-free spherical-slice files; retain broad fallback for new node layouts; accept interpreter-object overhead as negligible; expose lists of per-MeshBlock arrays for direct readers; keep unbounded `glob` inventories in the batch wrapper. |
+| Why not | Those choices either discard useful compatibility, weaken new-format validation, or leave scalable live-memory gaps. Restoring list results would conflict with the documented array contract and reintroduce avoidable container growth. |
+| Reversal path | Remove historical fallback only through a versioned migration decision with fixture evidence. Replace conservative record charges only with an audited admission model. Add a list-like compatibility adapter only if a real external caller requires mutation semantics that ndarray indexing does not preserve. |
+| Evidence | `vis/python/io_reader_common.py`; `vis/python/bin_convert.py`; `vis/python/read_pdf.py`; `vis/python/read_sphslice.py`; `vis/python/make_athdf.py`; high-cardinality, legacy-fallback, bounded-inventory, direct-validation, slice-classification, preallocated-row, and ndarray-contract regressions in `tst/test_suite/io/test_python_io_readers_cpu.py`; focused reader and hardening suite returned `270 passed`. |
+| Follow-up | Require fresh Python API audit acceptance, rerun the canonical local matrix, refresh detached Pages hashes, and include these boundaries in the committed-tree evidence packet. |
+
+### D-112: Use Analytical And Binary-Backed Spherical-Slice Producer Oracles
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-10` numerical re-audit |
+| Decision | Keep a cycle-zero analytical shock-tube oracle that forces spherical-slice interpolation across an internal MeshBlock face, strengthen the MPI shared/rank/node comparison to force the same cross-rank face interpolation, and validate adaptive `Rebuild()` behavior against an independent same-cycle binary-snapshot trilinear oracle after redistribution. |
+| Reason | Shape, finiteness, and cross-layout equality can all pass when interpolation weights are stale or when all compared layouts share the same face-sampling defect. The independent oracles prove the numerical producer behavior rather than only the wire format. |
+| Alternatives | Retain metadata-only spherical-slice round trips; compare shared/rank/node output only; inspect adaptive output at cycle one before redistribution; use the spherical-slice implementation itself to compute expected values. |
+| Why not | Those checks miss ghost-zone face interpolation, stale adaptive ownership, or common-mode numerical defects. The selected shock-tube and cycle-two adaptive cases isolate both risks with deterministic local evidence. |
+| Reversal path | Replace the fixtures only with equally independent numerical oracles that still force cross-face and post-redistribution interpolation. |
+| Evidence | `tst/test_suite/io/test_output_formats_cpu.py`; `tst/test_suite/io/test_output_formats_mpicpu.py`; focused serial spherical-slice subset returned `12 passed`; strengthened MPI output-format module returned `1 passed`. |
+| Follow-up | Retain both numerical regressions in the canonical committed-tree matrix and request final numerical audit acceptance. |
+
+### D-113: Treat Public Node-Restart Manifest Rename As The Commit Point
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-10` restart/MPI correction re-audit |
+| Decision | Keep published node-restart payloads rollback-owned until the public manifest rename is attempted. Restore rollback ownership if manifest publication fails. Once the public manifest rename succeeds, treat the checkpoint as committed: later injected failures and generation-reservation removal failures may report an error but must preserve the manifest and declared payloads as a resumable checkpoint. |
+| Reason | A visible public manifest is the reader-visible commit record. Removing payloads or the manifest after that point can turn a successfully published checkpoint into a broken public artifact. Precommit rollback and postcommit preservation give the transaction one unambiguous boundary. |
+| Alternatives | Roll back the public manifest and payloads after any later cleanup failure; ignore reservation-removal failure; publish payloads without a public commit boundary. |
+| Why not | Postcommit rollback can invalidate a checkpoint already visible to readers. Ignoring cleanup failures hides operational defects. Payload-only visibility is not a supported restart entry point. |
+| Reversal path | Change the transaction protocol only through a versioned design with crash-recovery and production-filesystem qualification. |
+| Evidence | `src/outputs/restart.cpp`; injected `after_manifest_publication` and `reservation_removal` regressions plus one-rank multi-payload span resume in `tst/test_suite/io/test_node_sharding_mpicpu.py`; focused restart subset returned `7 passed`. |
+| Follow-up | Retain rank-separated multi-node precommit and postcommit failure-injection evidence in external `RCP-09`. |
+
+### D-114: Tighten Spherical Headers And Document Native-Endian New Payloads
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-10` file-format correction re-audit |
+| Decision | Require explicit modern spherical-slice layout metadata, positive radius, at least two angles on each axis, bounded `npoints`, and strict header-only admission. Preserve only the narrow synthetic version-1 shared/rank fallback. Document that new PDF V2 and spherical-slice binary scalars are host-native endian rather than silently changing bytes late in this branch. |
+| Reason | Lightweight header APIs should fail closed on intrinsically invalid metadata before payload reads. A byte-order migration is a wire-format change and needs an explicit version rather than an implicit late correction. Historical fallback claims must match available provenance evidence. |
+| Alternatives | Infer layout for all modern shards; accept degenerate angular axes or non-positive radii; switch existing new payload bytes to a fixed order without versioning; claim a historical fixture that has not been frozen. |
+| Why not | Those choices weaken new-format admission, risk compatibility ambiguity, or overstate evidence. |
+| Reversal path | Add a versioned fixed-byte-order format with same-platform and cross-endian fixtures. Freeze a predecessor artifact before upgrading synthetic fallback evidence to provenance-qualified compatibility evidence. |
+| Evidence | `vis/python/read_sphslice.py`; strict malformed-header tests in `tst/test_suite/io/test_python_io_readers_cpu.py`; `IO_FORMAT_COMPATIBILITY.md`; deferred Pages fragments. |
+| Follow-up | Retain reader regressions and require final file-format audit acceptance. |
+
+### D-115: Require Attributable Filesystem Measurements And Reproducible External Packets
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-08B` and `RCP-09` plan correction |
+| Decision | Preserve logical restart-validation pressure as mandatory structured telemetry, but require a separate attributable observed filesystem-read measurement on the target platform. Mark the filesystem-amplification row incomplete when reliable attribution is unavailable. Require rank-separated scheduler logs, exact launcher templates, per-row timeouts, and a two-level checksum contract: `artifacts.sha256` excludes itself and the packet index; the index records the inner digest; the ledger or archive record holds an outer index digest. |
+| Reason | Logical pressure is useful protocol telemetry but cannot prove physical read amplification under caches, read-ahead, and parallel-filesystem behavior. Reproducible packet structure is required for an independent external audit. |
+| Alternatives | Treat logical pressure as observed IO; accept summary-only scheduler evidence; allow self-referential checksum claims; drop the filesystem row when platform telemetry is inconvenient. |
+| Why not | Those choices overclaim performance evidence or make the packet impossible to reproduce and verify. |
+| Reversal path | Replace the observed-read row only with a more direct platform-supported filesystem measurement and an explicit auditor-approved definition. |
+| Evidence | `IO_EXTERNAL_IO_QUALIFICATION_PLAN.md`; `IO_RESTART_MANIFEST_SCALING_QUALIFICATION.md`; final test-evidence audit. |
+| Follow-up | External operators must complete the templates and retain raw accounting logs before recording `RCP-08B` or `RCP-09` acceptance. |
+
+### D-117: Make The External Scheduler Deck Executable
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-08B` and `RCP-09` plan re-audit correction |
+| Decision | Add `scripts/run_external_io_qualification_slurm.sh` as the normative Slurm launcher for ED-1, MR-1, MR-2, and representative scaling resumes. Require unique row/sample logs, exact ED-1 and MR-1 placement, a three-line arbitrary-distribution hostfile for asymmetric MR-2 placement, one unmeasured warm-up plus five measured samples, measured-only restart telemetry, monotonic launcher intervals, exit-code and timeout records, and a site-filled attributable-read accounting hook. |
+| Reason | Prose templates did not execute the preregistered sampling contract and could overwrite evidence or silently use the wrong asymmetric topology. |
+| Alternatives | Leave launcher assembly to each external operator; retain uniform `--ntasks-per-node` examples for MR-2; permit unindexed repeated samples. |
+| Why not | Those choices allow irreproducible evidence and cannot prove the frozen topology or measurement protocol. |
+| Reversal path | Replace the Slurm script with a scheduler-specific equivalent only if it preserves the same row, topology, sample, timing, filesystem-accounting, and packet-index contract. |
+| Evidence | `scripts/run_external_io_qualification_slurm.sh`; `IO_EXTERNAL_IO_QUALIFICATION_PLAN.md`; `IO_RESTART_MANIFEST_SCALING_QUALIFICATION.md`; final process-evidence re-audit. |
+| Follow-up | Syntax-check the script locally and require an external operator plus independent auditor to review the site-filled accounting hook before consuming an allocation. |
+
+### D-116: Exercise Mixed-Level Spherical Interpolation And Serialized Narrowing
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-10` numerical correction re-audit |
+| Decision | Stage shared spherical-slice values as serialized floats before publication and reject any finite in-memory value that becomes non-finite during narrowing. Add a mixed-level AMR regression with coarse and refined blocks, synchronized ghost-zone binary output, an independent owner-block ghost-snapshot interpolation oracle, and an assertion that sampled stencils cross AMR levels. |
+| Reason | A finite `double` can overflow to a non-finite float on disk. The earlier adaptive oracle refined every block uniformly, so it did not exercise coarse-fine ghost stencils even though it validated post-redistribution rebuilding. |
+| Alternatives | Let the reader reject serialized infinity after publication; retain the all-refined adaptive oracle; compare only spherical-slice layouts against each other. |
+| Why not | Those choices publish invalid files or miss a numerically distinct coarse-fine path. |
+| Reversal path | Replace the oracle only with an equally independent coarse-fine numerical check and preserve pre-publication serialized-value admission. |
+| Evidence | `src/outputs/spherical_slice.cpp`; `tst/test_suite/io/test_output_formats_cpu.py`; focused spherical-slice subset returned `14 passed`. |
+| Follow-up | Run this producer lane on CUDA and any deployment HIP backend during external qualification. |
+
+### D-118: Keep Header-Only Admission Strict And Claims Narrow
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-10` file-format re-audit correction |
+| Decision | Make public `read_pdf_header()` reject AKPDFV2 sparse metadata unless it declares a rank or node distribution, required same-family inventory fields, a path-bound shard identity, an in-range shard ID, no opposite-family inventory fields, and node-only `payload_rank` where required. Preserve internal full-reader support for a root metadata copy because full assembly validates the actual payload path separately. Document header-only APIs as single-header declaration checks; reserve sibling completeness and consistency claims for full readers. |
+| Reason | The public header API is advertised for bounded preflight and must fail closed without a payload read. Full assembly still needs compatibility with metadata copies stored above shard directories. Documentation must describe the boundary the code actually enforces. |
+| Alternatives | Let malformed sparse distributions pass until payload loading; require all internal metadata copies to reside inside shard directories; claim that header-only calls discover sibling families. |
+| Why not | Those choices weaken preflight, remove a supported full-reader metadata layout, or overstate API behavior. |
+| Reversal path | Add an explicit family-header API if sibling-only inventory inspection becomes a user requirement. Keep `read_pdf_header()` bounded to one metadata artifact. |
+| Evidence | `vis/python/read_pdf.py`; strict sparse-header regressions in `tst/test_suite/io/test_python_io_readers_cpu.py`; staged Visualization and File Reference fragments; helper smoke assertions. |
+| Follow-up | Retain reader and staged-doc regressions in committed-tree qualification and require fresh file-format audit acceptance. |
+
+### D-119: Index Every External Launch Terminally And Isolate Retries
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` scheduler-deck re-audit correction |
+| Decision | Use packet-local `ATTEMPT_ID` tokens, Slurm `%J` job-step log IDs, duplicate launch-key rejection, and attempt-scoped output, inventory, accounting, stdout, and stderr paths. Index rank-map launches and every attempted Athena launch only after accounting and forbidden-`.assembled` validation determine the terminal disposition. Preserve Bash 3 compatibility with a portable MR-2 hostfile loop. |
+| Reason | Repeated Slurm steps and retries must not overwrite evidence. Accounting-hook failures and forbidden staging artifacts must not disappear from the packet index or remain mislabeled as passed. |
+| Alternatives | Retain `%j` job-only log names; rely on operators to avoid retries; require Bash 4 for `mapfile`; append success before artifact validation. |
+| Why not | Those choices allow evidence collisions, incomplete failure records, avoidable platform incompatibility, or false pass rows. |
+| Reversal path | Replace this runner only with a scheduler-specific equivalent that preserves unique launch keys and one truthful terminal index row per attempt. |
+| Evidence | `scripts/run_external_io_qualification_slurm.sh`; local mock lifecycle matrix under Bash `3.2.57`; `IO_EXTERNAL_IO_QUALIFICATION_PLAN.md`; `IO_RESTART_MANIFEST_SCALING_QUALIFICATION.md`; fresh process-evidence re-audit. |
+| Follow-up | Require an external operator and independent auditor to inspect the site-filled filesystem-accounting hook before consuming a production allocation. |
+
+### D-120: Time Launches In One Process And Scan Restart Sidecars
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted during final `RCP-09` scheduler-deck re-audit correction |
+| Decision | Measure every launcher interval inside one Python timer process around the subprocess, retain its timing TSV, and reject malformed or negative interval records terminally. After every Athena launch, retain a forbidden-staging scan over the packet, output directory, and restart-manifest directory where applicable; reject both `*.assembled` and `*.assembled.tmp` before appending the terminal packet-index row. |
+| Reason | Separate macOS Python processes can expose non-comparable monotonic epochs. Historical restart assembly staging lives beside the manifest and includes a temporary sidecar suffix, outside the output directory scanned by the earlier runner. |
+| Alternatives | Assume cross-process monotonic comparability; scan only the `-d` output directory; reject only final `.assembled` files. |
+| Why not | Those choices allow negative elapsed intervals or miss the precise unsupported restart-staging artifacts the qualification lane must disprove. |
+| Reversal path | Replace the timer or scan only with a scheduler-specific equivalent that retains a nonnegative launcher interval and proves absence of both restart-sidecar suffixes. |
+| Evidence | `scripts/run_external_io_qualification_slurm.sh`; `tst/test_suite/io/test_external_io_slurm_runner_cpu.py`; local macOS Python `3.9.6` and Bash `3.2.57` mock lifecycle matrix; fresh process-evidence re-audit. |
+| Follow-up | Preserve the checked-in mock suite and require real scheduler evidence before closing external qualification. |
+
 ## Pending Decision Queue
 
 Resolve these before merge readiness:
 
-| ID | Question | Required evidence | Owner checkpoint |
-| --- | --- | --- | --- |
-| D-079 | Bound the C++ parser and interface cleanup. | Scope audit after correctness checkpoints. | RCP-05 |
-| D-080 | Decide whether to extract shared private Python reader utilities. | Duplication inventory and API review. | RCP-06 |
-| D-082 | Select preservation-aware deferred Pages staging implementation. | Live `origin/gh-pages` blob inventory and idempotence design. | RCP-07 |
-| D-084 | Select final process-artifact packaging. | Whole-branch review and PR usability audit. | RCP-10 |
-| D-090 | Preregister production scaling topology and optimization threshold. | Scheduler qualification plan. | RCP-08 |
+No pending local design decision remains. `RCP-08B` still requires external
+scheduler-backed measurements before a keep, refactor, or separate-branch
+disposition can be recorded.
 
 ## Decision Update Template
 
