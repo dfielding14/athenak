@@ -505,7 +505,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
             "analysis_script_sha256":
                 "tst/publication/frontier_f2_multirank_runtime_metadata_analysis.py",
             "analysis_support_sha256":
-                "tst/publication/frontier_f0_structured_smoke_analysis.py",
+                "tst/publication/frontier_f1_structured_artifacts.py",
         }.items():
             self.assertEqual(binding[digest_key], _git_blob_sha256(commit, relative_path))
         contract = _load("frontier_f2_multirank_runtime_metadata_launch_contract.json")
@@ -576,7 +576,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
                     REPO_ROOT
                     / "tst/publication/frontier_f2_multirank_runtime_metadata_analysis.py",
                     REPO_ROOT
-                    / "tst/publication/frontier_f0_structured_smoke_analysis.py",
+                    / "tst/publication/frontier_f1_structured_artifacts.py",
                 ],
             },
         }
