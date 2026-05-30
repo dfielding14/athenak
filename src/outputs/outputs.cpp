@@ -44,13 +44,36 @@
 #include <cstring>    // strcmp
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>   // std::string, to_string()
 
 #include "athena.hpp"
+#include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "outputs.hpp"
+
+namespace {
+
+FileShardMode ParseShardMode(ParameterInput *pin, const std::string &block_name) {
+  bool per_rank = pin->GetOrAddBoolean(block_name, "single_file_per_rank", false);
+  bool per_node = pin->GetOrAddBoolean(block_name, "single_file_per_node", false);
+  if (per_rank && per_node) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Output block '" << block_name
+              << "' cannot set both single_file_per_rank=true and "
+              << "single_file_per_node=true." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (per_node) {
+    global_variable::InitializeNodeCommunicator();
+    return FileShardMode::node;
+  }
+  return per_rank ? FileShardMode::rank : FileShardMode::shared;
+}
+
+}  // namespace
 
 //----------------------------------------------------------------------------------------
 // Outputs constructor
@@ -93,7 +116,12 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
           opar.file_type.compare("rst") != 0 &&
           opar.file_type.compare("log") != 0 &&
           opar.file_type.compare("trk") != 0) {
-        opar.variable = pin->GetString(opar.block_name, "variable");
+        if (opar.file_type.compare("pdf") == 0 &&
+            pin->DoesParameterExist(opar.block_name, "variable_1")) {
+          opar.variable = pin->GetString(opar.block_name, "variable_1");
+        } else {
+          opar.variable = pin->GetString(opar.block_name, "variable");
+        }
         opar.file_id = pin->GetOrAddString(opar.block_name,"id",opar.variable);
       }
 
@@ -183,7 +211,12 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
       if (opar.file_type.compare("hst") != 0 &&
           opar.file_type.compare("rst") != 0 &&
           opar.file_type.compare("log") != 0) {
-        opar.variable = pin->GetString(opar.block_name, "variable");
+        if (opar.file_type.compare("pdf") == 0 &&
+            pin->DoesParameterExist(opar.block_name, "variable_1")) {
+          opar.variable = pin->GetString(opar.block_name, "variable_1");
+        } else {
+          opar.variable = pin->GetString(opar.block_name, "variable");
+        }
         opar.file_id = pin->GetOrAddString(opar.block_name,"id",opar.variable);
       }
 
@@ -242,38 +275,207 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
         pnode = new TrackedParticleOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("cbin") == 0) {
-        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,
-          "single_file_per_rank", false);
+        opar.shard_mode = ParseShardMode(pin, opar.block_name);
         opar.coarsen_factor = pin->GetInteger(opar.block_name,"coarsen_factor");
         opar.compute_moments = pin->GetOrAddBoolean(opar.block_name,
           "compute_moments", false);
         pnode = new CoarsenedBinaryOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("pdf") == 0) {
-        opar.bin_min = pin->GetReal(opar.block_name,"bin_min");
-        opar.bin_max = pin->GetReal(opar.block_name,"bin_max");
-        opar.nbin = pin->GetInteger(opar.block_name,"nbin");
-        opar.logscale = pin->GetOrAddBoolean(opar.block_name,"logscale",true);
-        opar.mass_weighted = pin->GetOrAddBoolean(opar.block_name,"mass_weighted",false);
-        // check and set second variable option.
-        if (pin->DoesParameterExist(opar.block_name,"variable_2")) {
-          opar.variable_2 = pin->GetString(opar.block_name, "variable_2");
-          opar.bin2_min = pin->GetOrAddReal(opar.block_name,"bin2_min",0);
-          opar.bin2_max = pin->GetOrAddReal(opar.block_name,"bin2_max",1);
-          opar.nbin2 = pin->GetOrAddInteger(opar.block_name,"nbin2",0);
-          opar.logscale2 = pin->GetOrAddBoolean(opar.block_name,"logscale2",true);
+        auto fail_pdf = [&](const std::string &message) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "PDF output block '" << opar.block_name << "' "
+              << message << std::endl;
+          exit(EXIT_FAILURE);
+        };
+        auto parse_scale = [&](const std::string &key) {
+          std::string value = pin->GetString(opar.block_name, key);
+          if (value == "linear") return PDF_SCALE_LINEAR;
+          if (value == "log") return PDF_SCALE_LOG;
+          if (value == "symlog") return PDF_SCALE_SYMLOG;
+          fail_pdf("has invalid " + key + "='" + value
+                   + "'; expected linear, log, or symlog");
+          return PDF_SCALE_LINEAR;
+        };
+        auto set_scale = [&](int d, const std::string &scale_key,
+                             const std::string &log_key,
+                             const std::string &linthresh_key,
+                             bool legacy_log_default) {
+          bool has_scale = pin->DoesParameterExist(opar.block_name, scale_key);
+          bool has_log = pin->DoesParameterExist(opar.block_name, log_key);
+          bool has_linthresh = pin->DoesParameterExist(opar.block_name, linthresh_key);
+          int scale = has_scale ? parse_scale(scale_key) :
+              ((has_log ? pin->GetBoolean(opar.block_name, log_key) :
+                          legacy_log_default) ? PDF_SCALE_LOG : PDF_SCALE_LINEAR);
+          if (has_scale && has_log) {
+            int legacy_scale = pin->GetBoolean(opar.block_name, log_key) ?
+                PDF_SCALE_LOG : PDF_SCALE_LINEAR;
+            if (scale != legacy_scale) {
+              fail_pdf("has conflicting " + scale_key + " and " + log_key);
+            }
+          }
+          if (scale == PDF_SCALE_SYMLOG) {
+            if (!has_linthresh) {
+              fail_pdf("requires " + linthresh_key + " when " + scale_key
+                       + "=symlog");
+            }
+            opar.pdf_linthresh[d] = pin->GetReal(opar.block_name, linthresh_key);
+          } else {
+            if (has_linthresh) {
+              fail_pdf("cannot set " + linthresh_key + " unless " + scale_key
+                       + "=symlog");
+            }
+            opar.pdf_linthresh[d] = 1.0;
+          }
+          opar.pdf_scale[d] = scale;
+        };
+
+        bool has_mass_weighted =
+            pin->DoesParameterExist(opar.block_name, "mass_weighted");
+        bool legacy_mass = has_mass_weighted ?
+            pin->GetBoolean(opar.block_name, "mass_weighted") : false;
+        std::string translated_weight = legacy_mass ? "mass" : "volume";
+        if (pin->DoesParameterExist(opar.block_name, "weight")) {
+          opar.pdf_weight = pin->GetString(opar.block_name, "weight");
+          if (has_mass_weighted && opar.pdf_weight != translated_weight) {
+            fail_pdf("has inconsistent mass_weighted and weight settings");
+          }
         } else {
-          opar.variable_2 = "";
-          opar.bin2_min = 0;
-          opar.bin2_max = 1;
-          opar.nbin2 = 0;
-          opar.logscale2 = true;
+          opar.pdf_weight = translated_weight;
+        }
+        if (opar.pdf_weight != "volume" && opar.pdf_weight != "mass" &&
+            opar.pdf_weight != "variable") {
+          fail_pdf("has invalid weight='" + opar.pdf_weight
+                   + "'; expected volume, mass, or variable");
+        }
+        if (opar.pdf_weight == "variable") {
+          if (!pin->DoesParameterExist(opar.block_name, "weight_variable")) {
+            fail_pdf("requires weight_variable when weight=variable");
+          }
+          opar.pdf_weight_variable =
+              pin->GetString(opar.block_name, "weight_variable");
+        }
+        opar.mass_weighted = (opar.pdf_weight == "mass");
+
+        bool modern = pin->DoesParameterExist(opar.block_name, "variable_1");
+        opar.shard_mode = ParseShardMode(pin, opar.block_name);
+        bool requests_modern_storage = modern || IsSharded(opar.shard_mode) ||
+            pin->DoesParameterExist(opar.block_name, "weight") ||
+            pin->DoesParameterExist(opar.block_name, "scale") ||
+            pin->DoesParameterExist(opar.block_name, "scale1") ||
+            pin->DoesParameterExist(opar.block_name, "scale2") ||
+            pin->DoesParameterExist(opar.block_name, "linthresh") ||
+            pin->DoesParameterExist(opar.block_name, "linthresh1") ||
+            pin->DoesParameterExist(opar.block_name, "linthresh2");
+        opar.pdf_legacy_layout = !requests_modern_storage;
+        if (modern) {
+          bool gap = false;
+          for (int d = 0; d < opar.PDF_MAX_DIM; ++d) {
+            std::string suffix = std::to_string(d + 1);
+            bool present = pin->DoesParameterExist(opar.block_name,
+                                                   "variable_" + suffix);
+            if (!present) {
+              gap = true;
+              continue;
+            }
+            if (gap) {
+              fail_pdf("has a gap in active variable_N dimensions");
+            }
+            opar.pdf_ndim = d + 1;
+            opar.pdf_variables[d] =
+                pin->GetString(opar.block_name, "variable_" + suffix);
+            opar.pdf_nbin[d] = pin->GetInteger(opar.block_name, "nbin" + suffix);
+            opar.pdf_bin_min[d] =
+                pin->GetReal(opar.block_name, "bin" + suffix + "_min");
+            opar.pdf_bin_max[d] =
+                pin->GetReal(opar.block_name, "bin" + suffix + "_max");
+            set_scale(d, "scale" + suffix, "logscale" + suffix,
+                      "linthresh" + suffix, false);
+          }
+          for (const auto &line : it->line) {
+            const std::string prefix = "variable_";
+            if (line.param_name.compare(0, prefix.size(), prefix) != 0) {
+              continue;
+            }
+            const std::string suffix = line.param_name.substr(prefix.size());
+            bool numeric_suffix = !suffix.empty();
+            int dimension = 0;
+            for (char ch : suffix) {
+              if (ch < '0' || ch > '9') {
+                numeric_suffix = false;
+                break;
+              }
+              dimension = 10*dimension + static_cast<int>(ch - '0');
+            }
+            if (numeric_suffix && dimension > OutputParameters::PDF_MAX_DIM) {
+              fail_pdf("requests more than four dimensions");
+            }
+          }
+        } else {
+          opar.pdf_ndim = 1;
+          opar.pdf_variables[0] = opar.variable;
+          opar.pdf_nbin[0] = pin->GetInteger(opar.block_name, "nbin");
+          opar.pdf_bin_min[0] = pin->GetReal(opar.block_name, "bin_min");
+          opar.pdf_bin_max[0] = pin->GetReal(opar.block_name, "bin_max");
+          std::string scale_key =
+              pin->DoesParameterExist(opar.block_name, "scale1") ? "scale1" : "scale";
+          std::string log_key =
+              pin->DoesParameterExist(opar.block_name, "logscale1") ?
+              "logscale1" : "logscale";
+          std::string lin_key =
+              pin->DoesParameterExist(opar.block_name, "linthresh1") ?
+              "linthresh1" : "linthresh";
+          set_scale(0, scale_key, log_key, lin_key, true);
+          if (pin->DoesParameterExist(opar.block_name, "variable_2")) {
+            opar.pdf_ndim = 2;
+            opar.pdf_variables[1] =
+                pin->GetString(opar.block_name, "variable_2");
+            opar.pdf_nbin[1] = pin->GetInteger(opar.block_name, "nbin2");
+            opar.pdf_bin_min[1] = pin->GetReal(opar.block_name, "bin2_min");
+            opar.pdf_bin_max[1] = pin->GetReal(opar.block_name, "bin2_max");
+            set_scale(1, "scale2", "logscale2", "linthresh2", true);
+          }
+        }
+
+        long long total_bins = 1;
+        for (int d = 0; d < opar.pdf_ndim; ++d) {
+          if (opar.pdf_nbin[d] <= 0) {
+            fail_pdf("requires positive nbin for dimension " + std::to_string(d + 1));
+          }
+          if (!(opar.pdf_bin_min[d] < opar.pdf_bin_max[d])) {
+            fail_pdf("requires bin_min < bin_max for dimension "
+                     + std::to_string(d + 1));
+          }
+          if (opar.pdf_scale[d] == PDF_SCALE_LOG &&
+              (opar.pdf_bin_min[d] <= 0.0 || opar.pdf_bin_max[d] <= 0.0)) {
+            fail_pdf("requires positive bounds for logarithmic dimension "
+                     + std::to_string(d + 1));
+          }
+          if (opar.pdf_scale[d] == PDF_SCALE_SYMLOG &&
+              opar.pdf_linthresh[d] <= 0.0) {
+            fail_pdf("requires positive linthresh for symlog dimension "
+                     + std::to_string(d + 1));
+          }
+          total_bins *= static_cast<long long>(opar.pdf_nbin[d]) + 2;
+          if (total_bins > std::numeric_limits<int>::max()) {
+            fail_pdf("has too many total bins for a dense shared histogram");
+          }
+        }
+        opar.nbin = opar.pdf_nbin[0];
+        opar.bin_min = opar.pdf_bin_min[0];
+        opar.bin_max = opar.pdf_bin_max[0];
+        opar.logscale = (opar.pdf_scale[0] == PDF_SCALE_LOG);
+        if (opar.pdf_ndim > 1) {
+          opar.variable_2 = opar.pdf_variables[1];
+          opar.nbin2 = opar.pdf_nbin[1];
+          opar.bin2_min = opar.pdf_bin_min[1];
+          opar.bin2_max = opar.pdf_bin_max[1];
+          opar.logscale2 = (opar.pdf_scale[1] == PDF_SCALE_LOG);
         }
         pnode = new PDFOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("bin") == 0) {
-        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,
-          "single_file_per_rank", false);
+        opar.shard_mode = ParseShardMode(pin, opar.block_name);
         pnode = new MeshBinaryOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("cart") == 0) {
@@ -282,11 +484,14 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
       } else if (opar.file_type.compare("sph") == 0) {
         pnode = new SphericalSurfaceOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
+      } else if (opar.file_type.compare("sphslice") == 0) {
+        opar.shard_mode = ParseShardMode(pin, opar.block_name);
+        pnode = new SphericalSliceOutput(pin,pm,opar);
+        pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("rst") == 0) {
       // Add restarts to the tail end of BaseTypeOutput list, so file counters for other
       // output types are up-to-date in restart file
-        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,
-          "single_file_per_rank", false);
+        opar.shard_mode = ParseShardMode(pin, opar.block_name);
         pnode = new RestartOutput(pin,pm,opar);
         pout_list.push_back(pnode);
         num_rst++;

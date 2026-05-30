@@ -29,6 +29,39 @@
 #include <mpi.h>
 #endif
 
+namespace {
+
+void ReportOutputTiming(const std::string &description, double elapsed) {
+  double elapsed_max = elapsed;
+#if MPI_PARALLEL_ENABLED
+  MPI_Reduce(&elapsed, &elapsed_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+#endif
+  if (global_variable::my_rank == 0) {
+    std::cout << "[output-io] " << description << " elapsed_max_s="
+              << std::setprecision(8) << elapsed_max << std::endl;
+  }
+}
+
+void WriteOutputAndMaybeReport(const std::string &event, BaseTypeOutput *out,
+                               Mesh *pmesh, ParameterInput *pin, bool timing) {
+  if (!timing) {
+    out->LoadOutputData(pmesh);
+    out->WriteOutputFile(pmesh, pin);
+    return;
+  }
+  Kokkos::fence();
+  Kokkos::Timer timer;
+  out->LoadOutputData(pmesh);
+  out->WriteOutputFile(pmesh, pin);
+  Kokkos::fence();
+  ReportOutputTiming("event=" + event + " block=" + out->out_params.block_name +
+                     " type=" + out->out_params.file_type + " distribution=" +
+                     ShardDistributionName(out->out_params.shard_mode),
+                     timer.seconds());
+}
+
+} // namespace
+
 //----------------------------------------------------------------------------------------
 // constructor, initializes data structures and parameters
 //
@@ -64,6 +97,8 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
   lb_efficiency_(0),
   pwall_clock_(ptimer),
   wall_time(wtlim),
+  output_timing_(false),
+  final_output_policy_(FinalOutputPolicy::all),
   impl_src("ru",1,1,1,1,1,1) {
   // set time-evolution option (no default)
   {
@@ -80,6 +115,24 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
       std::exit(EXIT_FAILURE);
     }
   } // extra brace to limit scope of string
+
+  output_timing_ = pin->GetOrAddBoolean("time", "output_timing", false);
+  {
+    std::string policy = pin->GetOrAddString("time", "final_output_policy", "all");
+    if (policy == "all") {
+      final_output_policy_ = FinalOutputPolicy::all;
+    } else if (policy == "restart_only") {
+      final_output_policy_ = FinalOutputPolicy::restart_only;
+    } else if (policy == "none") {
+      final_output_policy_ = FinalOutputPolicy::none;
+    } else {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<time> final_output_policy = '" << policy
+                << "' not implemented. Choose all, restart_only, or none."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
 
   // read <time> parameters controlling driver if run requires time-evolution
   if (time_evolution != TimeEvolution::tstatic) {
@@ -338,8 +391,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   //---- Step 3.  Cycle through output Types and load data / write files.
   if (!res_flag) { // only write outputs at the beginning of the run
     for (auto &out : pout->pout_list) {
-      out->LoadOutputData(pmesh);
-      out->WriteOutputFile(pmesh, pin);
+      WriteOutputAndMaybeReport("initial", out, pmesh, pin, output_timing_);
     }
   }
 
@@ -432,8 +484,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
         if (((out->out_params.dt > 0.0) && ((time_32 >= next_32) && (time_32<tlim_32))) ||
             ((dcycle_ > 0) && ((pmesh->ncycle)%(dcycle_) == 0)) ) {
-          out->LoadOutputData(pmesh);
-          out->WriteOutputFile(pmesh, pin);
+          WriteOutputAndMaybeReport("scheduled", out, pmesh, pin, output_timing_);
         }
       }
 
@@ -460,8 +511,14 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   // cycle through output Types and load data / write files
   //  This design allows for asynchronous outputs to implemented in the future.
   for (auto &out : pout->pout_list) {
-    out->LoadOutputData(pmesh);
-    out->WriteOutputFile(pmesh, pin);
+    bool is_restart = (out->out_params.file_type == "rst" ||
+                       out->out_params.file_type == "rst_prtcl");
+    if (final_output_policy_ == FinalOutputPolicy::none ||
+        (final_output_policy_ == FinalOutputPolicy::restart_only && !is_restart)) {
+      continue;
+    }
+    // Final outputs are emitted normally so their counters advance normally.
+    WriteOutputAndMaybeReport("final", out, pmesh, pin, output_timing_);
   }
 
   // call any problem specific functions to do work after main loop

@@ -24,12 +24,17 @@
 //========================================================================================
 
 // C/C++ headers
+#include <algorithm>
 #include <cstdlib>
+#include <cstdint>
 #include <iostream>
 #include <string>
 #include <memory>
 #include <cstdio> // sscanf
 #include <fstream>  // Include this for std::ifstream
+#include <limits>
+#include <sstream>
+#include <vector>
 
 // Athena headers
 #include "athena.hpp"
@@ -52,6 +57,337 @@
 #if defined(KOKKOS_ENABLE_HIP)
 #include <hip/hip_runtime.h>
 #endif
+
+namespace {
+
+constexpr const char *kNodeRestartMagic = "AthenaK node restart manifest version=1";
+
+struct NodeRestartPayload {
+  int node;
+  int blocks;
+  std::uint64_t bytes;
+  std::string path;
+};
+
+struct NodeRestartSegment {
+  int node;
+  int gid_start;
+  int count;
+  int payload_block_start;
+};
+
+[[noreturn]] void FailNodeRestart(const std::string &message) {
+  std::cerr << "### FATAL ERROR while reading node restart manifest: "
+            << message << std::endl;
+#if MPI_PARALLEL_ENABLED
+  MPI_Abort(MPI_COMM_WORLD, 1);
+#endif
+  std::exit(EXIT_FAILURE);
+}
+
+bool IsNodeRestartManifest(const std::string &path) {
+  std::ifstream input(path);
+  std::string first_line;
+  return input.good() && std::getline(input, first_line) &&
+      first_line == kNodeRestartMagic;
+}
+
+std::string ParentDirectory(const std::string &path) {
+  std::size_t slash = path.rfind('/');
+  return (slash == std::string::npos) ? std::string(".") : path.substr(0, slash);
+}
+
+bool CopyFileRange(std::ifstream &input, std::ofstream &output, std::uint64_t input_offset,
+                   std::uint64_t output_offset, std::uint64_t bytes) {
+  constexpr std::size_t kCopyBytes = 1024*1024;
+  std::vector<char> buffer(kCopyBytes);
+  input.clear();
+  input.seekg(static_cast<std::streamoff>(input_offset), std::ios::beg);
+  output.seekp(static_cast<std::streamoff>(output_offset), std::ios::beg);
+  while (bytes > 0) {
+    std::size_t amount = static_cast<std::size_t>(
+        std::min<std::uint64_t>(bytes, buffer.size()));
+    input.read(buffer.data(), static_cast<std::streamsize>(amount));
+    if (input.gcount() != static_cast<std::streamsize>(amount)) return false;
+    output.write(buffer.data(), static_cast<std::streamsize>(amount));
+    if (!output.good()) return false;
+    bytes -= amount;
+  }
+  return true;
+}
+
+bool ParseUnsignedField(const std::string &line, const std::string &prefix,
+                        std::uint64_t &value) {
+  if (line.rfind(prefix, 0) != 0) return false;
+  std::string token = line.substr(prefix.size());
+  if (token.empty() ||
+      !std::all_of(token.begin(), token.end(),
+                   [](char ch) { return ch >= '0' && ch <= '9'; })) {
+    return false;
+  }
+  std::istringstream input(token);
+  input >> value;
+  std::string trailing;
+  return input && !(input >> trailing);
+}
+
+bool ParseSignedField(const std::string &line, const std::string &prefix, int &value) {
+  if (line.rfind(prefix, 0) != 0) return false;
+  std::istringstream input(line.substr(prefix.size()));
+  input >> value;
+  std::string trailing;
+  return input && !(input >> trailing);
+}
+
+std::string ManifestPayloadPrefix(const std::string &manifest_path) {
+  std::size_t slash = manifest_path.rfind('/');
+  std::string leaf = (slash == std::string::npos) ? manifest_path :
+      manifest_path.substr(slash + 1);
+  constexpr const char *suffix = ".rst";
+  if (leaf.size() <= 4 || leaf.compare(leaf.size() - 4, 4, suffix) != 0 ||
+      leaf.find('/') != std::string::npos || leaf.find('\\') != std::string::npos) {
+    FailNodeRestart("manifest filename does not follow the restart leaf contract.");
+  }
+  return leaf.substr(0, leaf.size() - 4) + ".g";
+}
+
+std::string ValidatePayloadPath(const NodeRestartPayload &payload,
+                                const std::string &payload_prefix) {
+  if (payload.path.empty() || payload.path[0] == '/' ||
+      payload.path.find('\\') != std::string::npos) {
+    FailNodeRestart("payload path is not a relative node-shard path.");
+  }
+  std::size_t slash = payload.path.find('/');
+  if (slash == std::string::npos || slash == 0 ||
+      slash + 1 >= payload.path.size() ||
+      payload.path.find('/', slash + 1) != std::string::npos) {
+    FailNodeRestart("payload path must contain exactly one node-directory component.");
+  }
+  std::string directory = payload.path.substr(0, slash);
+  std::string leaf = payload.path.substr(slash + 1);
+  char expected_directory[32];
+  std::snprintf(expected_directory, sizeof(expected_directory), "node_%08d", payload.node);
+  if (directory != expected_directory || directory == "." || directory == ".." ||
+      leaf == "." || leaf == "..") {
+    FailNodeRestart("payload path does not match its declared node directory.");
+  }
+  constexpr const char *payload_suffix = ".payload.rst";
+  if (leaf.rfind(payload_prefix, 0) != 0 ||
+      leaf.size() <= payload_prefix.size() + 12 ||
+      leaf.compare(leaf.size() - 12, 12, payload_suffix) != 0) {
+    FailNodeRestart("payload leaf does not match the generated restart contract.");
+  }
+  std::string generation = leaf.substr(payload_prefix.size(),
+      leaf.size() - payload_prefix.size() - 12);
+  if (generation.empty() ||
+      !std::all_of(generation.begin(), generation.end(),
+                   [](char ch) { return ch >= '0' && ch <= '9'; })) {
+    FailNodeRestart("payload leaf has an invalid generation token.");
+  }
+  return leaf;
+}
+
+std::uint64_t ExpectedPayloadBytes(std::uint64_t header_size, std::uint64_t data_size,
+                                   int blocks) {
+  if (blocks < 0 || (blocks > 0 && data_size >
+      (std::numeric_limits<std::uint64_t>::max() - header_size) /
+      static_cast<std::uint64_t>(blocks))) {
+    FailNodeRestart("payload byte count overflows its restart inventory.");
+  }
+  return header_size + data_size*static_cast<std::uint64_t>(blocks);
+}
+
+std::string StageNodeRestart(const std::string &manifest_path) {
+  std::ifstream manifest(manifest_path);
+  std::string line;
+  if (!std::getline(manifest, line) || line != kNodeRestartMagic) {
+    FailNodeRestart("invalid manifest signature in '" + manifest_path + "'.");
+  }
+  bool complete = false;
+  int payload_count = -1;
+  int nmb_total = -1;
+  std::uint64_t header_size = 0;
+  std::uint64_t data_size = 0;
+  std::vector<NodeRestartPayload> payloads;
+  std::vector<NodeRestartSegment> segments;
+  bool saw_complete = false;
+  bool saw_payload_count = false;
+  bool saw_nmb_total = false;
+  bool saw_header_size = false;
+  bool saw_data_size = false;
+  bool saw_end = false;
+  while (std::getline(manifest, line)) {
+    if (line == "end") {
+      saw_end = true;
+      break;
+    }
+    if (line.rfind("complete=", 0) == 0) {
+      if (saw_complete || line != "complete=1") {
+        FailNodeRestart("invalid or duplicate completion record.");
+      }
+      complete = true;
+      saw_complete = true;
+    } else if (line.rfind("payload_count=", 0) == 0) {
+      if (saw_payload_count || !ParseSignedField(line, "payload_count=", payload_count) ||
+          payload_count <= 0) {
+        FailNodeRestart("invalid or duplicate payload count.");
+      }
+      saw_payload_count = true;
+    } else if (line.rfind("nmb_total=", 0) == 0) {
+      if (saw_nmb_total || !ParseSignedField(line, "nmb_total=", nmb_total) ||
+          nmb_total < 0) {
+        FailNodeRestart("invalid or duplicate total mesh block count.");
+      }
+      saw_nmb_total = true;
+    } else if (line.rfind("header_size=", 0) == 0) {
+      if (saw_header_size || !ParseUnsignedField(line, "header_size=", header_size) ||
+          header_size == 0) {
+        FailNodeRestart("invalid or duplicate header byte count.");
+      }
+      saw_header_size = true;
+    } else if (line.rfind("data_size=", 0) == 0) {
+      if (saw_data_size || !ParseUnsignedField(line, "data_size=", data_size)) {
+        FailNodeRestart("invalid or duplicate per-block byte count.");
+      }
+      saw_data_size = true;
+    } else if (line.rfind("payload ", 0) == 0) {
+      std::istringstream values(line);
+      std::string tag;
+      NodeRestartPayload payload;
+      values >> tag >> payload.node >> payload.blocks >> payload.bytes >> payload.path;
+      std::string trailing;
+      if (!values || payload.node < 0 || payload.blocks < 0 || (values >> trailing)) {
+        FailNodeRestart("malformed payload entry in '" + manifest_path + "'.");
+      }
+      if (payload.node != static_cast<int>(payloads.size())) {
+        FailNodeRestart("payload inventory must be ordered by contiguous node id.");
+      }
+      payloads.push_back(payload);
+    } else if (line.rfind("segment ", 0) == 0) {
+      std::istringstream values(line);
+      std::string tag;
+      NodeRestartSegment segment;
+      values >> tag >> segment.node >> segment.gid_start >> segment.count
+             >> segment.payload_block_start;
+      std::string trailing;
+      if (!values || segment.node < 0 || segment.gid_start < 0 || segment.count < 0 ||
+          segment.payload_block_start < 0 || (values >> trailing)) {
+        FailNodeRestart("malformed segment entry in '" + manifest_path + "'.");
+      }
+      segments.push_back(segment);
+    } else {
+      FailNodeRestart("unrecognized inventory record in '" + manifest_path + "'.");
+    }
+  }
+  while (std::getline(manifest, line)) {
+    if (!line.empty()) {
+      FailNodeRestart("records found after the manifest terminator.");
+    }
+  }
+  if (!complete || !saw_end || !saw_payload_count || !saw_nmb_total ||
+      !saw_header_size || !saw_data_size ||
+      payload_count != static_cast<int>(payloads.size()) || payloads.empty()) {
+    FailNodeRestart("incomplete inventory in '" + manifest_path + "'.");
+  }
+
+  std::string expected_payload_leaf;
+  std::string payload_prefix = ManifestPayloadPrefix(manifest_path);
+  std::vector<int> node_to_payload(static_cast<std::size_t>(payload_count), -1);
+  for (std::size_t i = 0; i < payloads.size(); ++i) {
+    if (payloads[i].node >= payload_count ||
+        node_to_payload[payloads[i].node] != -1) {
+      FailNodeRestart("node payload inventory is duplicated or non-contiguous.");
+    }
+    node_to_payload[payloads[i].node] = static_cast<int>(i);
+    std::string leaf = ValidatePayloadPath(payloads[i], payload_prefix);
+    if (expected_payload_leaf.empty()) {
+      expected_payload_leaf = leaf;
+    } else if (leaf != expected_payload_leaf) {
+      FailNodeRestart("node payload inventory refers to mixed generations.");
+    }
+  }
+  for (int node = 0; node < payload_count; ++node) {
+    if (node_to_payload[node] < 0) {
+      FailNodeRestart("node payload inventory omits node " + std::to_string(node) + ".");
+    }
+  }
+
+  std::vector<int> covered(static_cast<std::size_t>(nmb_total), 0);
+  std::vector<int> mapped_blocks(payloads.size(), 0);
+  std::vector<int> next_payload_block(payloads.size(), 0);
+  int next_gid = 0;
+  ExpectedPayloadBytes(header_size, data_size, nmb_total);
+  for (const auto &segment : segments) {
+    int index = (segment.node < payload_count) ? node_to_payload[segment.node] : -1;
+    if (index < 0 || segment.gid_start != next_gid ||
+        segment.payload_block_start != next_payload_block[index] ||
+        segment.count > nmb_total - segment.gid_start ||
+        segment.count > payloads[index].blocks - segment.payload_block_start) {
+      FailNodeRestart("segment ordering or node-local range is inconsistent.");
+    }
+    mapped_blocks[index] += segment.count;
+    next_payload_block[index] = segment.payload_block_start + segment.count;
+    next_gid = segment.gid_start + segment.count;
+    for (int gid = segment.gid_start; gid < segment.gid_start + segment.count; ++gid) {
+      if (++covered[gid] != 1) {
+        FailNodeRestart("payload segments overlap at mesh block " + std::to_string(gid) + ".");
+      }
+    }
+  }
+  if (next_gid != nmb_total) {
+    FailNodeRestart("payload segments do not cover the declared block range.");
+  }
+  for (int gid = 0; gid < nmb_total; ++gid) {
+    if (covered[gid] != 1) {
+      FailNodeRestart("payload segments do not cover mesh block " + std::to_string(gid) + ".");
+    }
+  }
+  std::string directory = ParentDirectory(manifest_path);
+  for (std::size_t i = 0; i < payloads.size(); ++i) {
+    if (mapped_blocks[i] != payloads[i].blocks ||
+        next_payload_block[i] != payloads[i].blocks ||
+        payloads[i].bytes != ExpectedPayloadBytes(header_size, data_size,
+                                                   payloads[i].blocks)) {
+      FailNodeRestart("payload block count or byte count is inconsistent.");
+    }
+    std::ifstream payload(directory + "/" + payloads[i].path,
+                          std::ios::binary | std::ios::ate);
+    std::uint64_t bytes = payload.good()
+        ? static_cast<std::uint64_t>(payload.tellg()) : 0;
+    if (bytes != payloads[i].bytes) {
+      FailNodeRestart("payload '" + payloads[i].path + "' is absent or incomplete.");
+    }
+  }
+
+  std::string assembled_path = manifest_path + ".assembled";
+  std::string temporary_path = assembled_path + ".tmp";
+  std::ofstream assembled(temporary_path, std::ios::binary | std::ios::trunc);
+  std::ifstream first_payload(directory + "/" + payloads[0].path, std::ios::binary);
+  if (!assembled.good() || !first_payload.good() ||
+      !CopyFileRange(first_payload, assembled, 0, 0, header_size)) {
+    FailNodeRestart("could not stage shared restart header.");
+  }
+  for (const auto &segment : segments) {
+    if (segment.count == 0) continue;
+    int index = node_to_payload[segment.node];
+    std::ifstream payload(directory + "/" + payloads[index].path, std::ios::binary);
+    std::uint64_t bytes = data_size*static_cast<std::uint64_t>(segment.count);
+    std::uint64_t source = header_size + data_size*segment.payload_block_start;
+    std::uint64_t destination = header_size + data_size*segment.gid_start;
+    if (!payload.good() ||
+        !CopyFileRange(payload, assembled, source, destination, bytes)) {
+      FailNodeRestart("could not stage payload data for node "
+                      + std::to_string(segment.node) + ".");
+    }
+  }
+  assembled.close();
+  if (!assembled.good() || std::rename(temporary_path.c_str(), assembled_path.c_str()) != 0) {
+    FailNodeRestart("could not publish transient assembled restart file.");
+  }
+  return assembled_path;
+}
+
+}  // namespace
 
 //----------------------------------------------------------------------------------------
 //! \fn int main(int argc, char *argv[])
@@ -231,9 +567,35 @@ int main(int argc, char *argv[]) {
 
   ParameterInput* pinput = new ParameterInput;
   IOWrapper infile, restartfile;
+  bool staged_node_restart = false;
+  std::string staged_restart_file;
+  auto cleanup_staged_restart = [&]() {
+    if (!staged_node_restart) return;
+#if MPI_PARALLEL_ENABLED
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
+    if (global_variable::my_rank == 0) {
+      std::remove(staged_restart_file.c_str());
+    }
+#if MPI_PARALLEL_ENABLED
+    MPI_Barrier(MPI_COMM_WORLD);
+#endif
+  };
   // read parameters from restart file
   bool single_file_per_rank = false; // DBF: flag for single_file_per_rank for rst files
   if (res_flag) {
+    if (IsNodeRestartManifest(restart_file)) {
+      staged_node_restart = true;
+      global_variable::InitializeNodeCommunicator();
+      staged_restart_file = restart_file + ".assembled";
+      if (global_variable::my_rank == 0) {
+        staged_restart_file = StageNodeRestart(restart_file);
+      }
+#if MPI_PARALLEL_ENABLED
+      MPI_Barrier(MPI_COMM_WORLD);
+#endif
+      restart_file = staged_restart_file;
+    }
     // Check if the path contains "rank_" directory
     size_t rank_pos = restart_file.find("/rank_");
     single_file_per_rank = (rank_pos != std::string::npos);
@@ -278,9 +640,11 @@ int main(int argc, char *argv[]) {
   if (narg_flag) {
     if (global_variable::my_rank == 0) pinput->ParameterDump(std::cout);
     if (res_flag) restartfile.Close(single_file_per_rank);
+    cleanup_staged_restart();
     delete pinput;
     Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
+    global_variable::FinalizeNodeCommunicator();
     MPI_Finalize();
 #endif
     return(0);
@@ -302,10 +666,12 @@ int main(int argc, char *argv[]) {
   if (marg_flag) {
     if (global_variable::my_rank == 0) {pmesh->WriteMeshStructure();}
     if (res_flag) {restartfile.Close(single_file_per_rank);}
+    cleanup_staged_restart();
     delete pmesh;
     delete pinput;
     Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
+    global_variable::FinalizeNodeCommunicator();
     MPI_Finalize();
 #endif
     return(0);
@@ -327,6 +693,7 @@ int main(int argc, char *argv[]) {
                                                      restartfile,
                                                      single_file_per_rank);
     restartfile.Close(single_file_per_rank);
+    cleanup_staged_restart();
   }
   //--- Step 6. --------------------------------------------------------------------------
   // Construct Driver and Outputs. Actual outputs (including initial conditions) are made
@@ -358,6 +725,7 @@ int main(int argc, char *argv[]) {
   delete pinput;
   Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
+  global_variable::FinalizeNodeCommunicator();
   MPI_Finalize();
 #endif
   return(0);

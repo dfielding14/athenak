@@ -25,6 +25,12 @@
 
 class Driver {
  public:
+  enum class FinalOutputPolicy {
+    all,
+    restart_only,
+    none
+  };
+
   Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptimer);
   ~Driver() = default;
 
@@ -47,6 +53,8 @@ class Driver {
   Real gamma;                      // gamma value for the IMEX_new integrator
   Kokkos::Timer* pwall_clock_;     // timer for tracking the wall clock
   Real wall_time;
+  bool output_timing_;              // report output wall times when explicitly enabled
+  FinalOutputPolicy final_output_policy_;  // automatic output selection at shutdown
 
   // functions
   void ExecuteTaskList(Mesh *pm, std::string tl, int stage);

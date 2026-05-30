@@ -8,12 +8,15 @@
 //! \file outputs.hpp
 //  \brief provides classes to handle ALL types of data output
 
+#include <cmath>
+#include <cstdint>
 #include <string>
 #include <vector>
 
 #include "Kokkos_ScatterView.hpp"
 
 #include "athena.hpp"
+#include "../file_sharding.hpp"
 #include "io_wrapper.hpp"
 
 #define NHISTORY_VARIABLES 20
@@ -21,7 +24,7 @@
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif
 
-#define NOUTPUT_CHOICES 153
+#define NOUTPUT_CHOICES 184
 // choices for output variables used in <ouput> blocks in input file
 // TO ADD MORE CHOICES:
 //   - add more strings to array below, change NOUTPUT_CHOICES above appropriately
@@ -98,13 +101,83 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "tmunu",
 
   // Particles (151-152)
-  "prtcl_all", "prtcl_d"
+  "prtcl_all", "prtcl_d",
+
+  // Generic coordinate diagnostics (153-163)
+  "coord_x", "coord_y", "coord_z",
+  "coord_r", "coord_theta", "coord_phi",
+  "coord_cyl_R", "coord_cyl_phi", "coord_cyl_z",
+  "coord_costheta", "coord_abscostheta",
+
+  // Generic flux diagnostics (164-175)
+  "mdot_sph", "mdot_sph_out", "mdot_sph_in",
+  "edot_sph", "edot_sph_out", "edot_sph_in",
+  "mdot_vert", "mdot_vert_out", "mdot_vert_in",
+  "edot_vert", "edot_vert_out", "edot_vert_in",
+
+  // Generic transformed velocities and radial energy components (176-183)
+  "vel_sph_r", "vel_sph_theta", "vel_sph_phi",
+  "vel_cyl_R", "vel_cyl_phi",
+  "edot_sph_kin", "edot_sph_th", "edot_sph_mag"
 };
 
 
 // forward declarations
 class Mesh;
 class ParameterInput;
+
+enum PDFScaleMode {
+  PDF_SCALE_LINEAR = 0,
+  PDF_SCALE_LOG = 1,
+  PDF_SCALE_SYMLOG = 2
+};
+
+KOKKOS_INLINE_FUNCTION
+Real PDFAbs(Real value) {
+  return (value < 0.0) ? -value : value;
+}
+
+KOKKOS_INLINE_FUNCTION
+Real PDFTransformValue(Real value, int scale, Real linthresh) {
+  if (scale == PDF_SCALE_LOG) {
+    return Kokkos::log10(value);
+  }
+  if (scale == PDF_SCALE_SYMLOG) {
+    Real sign = (value < 0.0) ? -1.0 : 1.0;
+    Real abs_value = PDFAbs(value);
+    if (abs_value <= linthresh) {
+      return sign * (abs_value / linthresh);
+    }
+    return sign * (1.0 + Kokkos::log10(abs_value / linthresh));
+  }
+  return value;
+}
+
+KOKKOS_INLINE_FUNCTION
+Real PDFInverseTransformValue(Real value, int scale, Real linthresh) {
+  if (scale == PDF_SCALE_LOG) {
+    return Kokkos::pow(10.0, value);
+  }
+  if (scale == PDF_SCALE_SYMLOG) {
+    Real sign = (value < 0.0) ? -1.0 : 1.0;
+    Real abs_value = PDFAbs(value);
+    if (abs_value <= 1.0) {
+      return sign * abs_value * linthresh;
+    }
+    return sign * linthresh * Kokkos::pow(10.0, abs_value - 1.0);
+  }
+  return value;
+}
+
+inline const char *PDFScaleName(int scale) {
+  if (scale == PDF_SCALE_LOG) {
+    return "log";
+  }
+  if (scale == PDF_SCALE_SYMLOG) {
+    return "symlog";
+  }
+  return "linear";
+}
 
 //----------------------------------------------------------------------------------------
 //! \struct OutputParameters
@@ -143,7 +216,21 @@ struct OutputParameters {
   int nbin=0, nbin2=0;
   bool logscale=true, logscale2=true;
   bool mass_weighted=false;
-  bool single_file_per_rank=false; // DBF: parameter for single file per rank
+  FileShardMode shard_mode=FileShardMode::shared;
+
+  // N-D PDF parameters; legacy PDF inputs are translated into these fields.
+  static constexpr int PDF_MAX_DIM = 4;
+  int pdf_ndim=0;
+  std::string pdf_variables[PDF_MAX_DIM];
+  int pdf_nbin[PDF_MAX_DIM] = {0, 0, 0, 0};
+  Real pdf_bin_min[PDF_MAX_DIM] = {0.0, 0.0, 0.0, 0.0};
+  Real pdf_bin_max[PDF_MAX_DIM] = {1.0, 1.0, 1.0, 1.0};
+  int pdf_scale[PDF_MAX_DIM] = {PDF_SCALE_LINEAR, PDF_SCALE_LINEAR,
+                                PDF_SCALE_LINEAR, PDF_SCALE_LINEAR};
+  Real pdf_linthresh[PDF_MAX_DIM] = {1.0, 1.0, 1.0, 1.0};
+  std::string pdf_weight = "volume";
+  std::string pdf_weight_variable;
+  bool pdf_legacy_layout=false;  // preserve historical text output for legacy blocks
 };
 
 //----------------------------------------------------------------------------------------
@@ -307,23 +394,80 @@ class CoarsenedBinaryOutput : public BaseTypeOutput {
 //  \brief  container for PDF data
 
 struct PDFData {
-  int pdf_dimension;
-  int nbin, nbin2;
-  Kokkos::View<Real*> bins;
-  Kokkos::View<Real*> bins2;
+  static constexpr int MAX_DIM = 4;
+
+  int ndim;
+  int nbin[MAX_DIM];
+  int nbin_with_overflow[MAX_DIM];
+  int stride[MAX_DIM];
+  int total_bins;
+  Kokkos::View<Real*> bin_edges[MAX_DIM];
+  Real step_size[MAX_DIM];
+  Real transformed_min[MAX_DIM];
+  Real transformed_max[MAX_DIM];
+  int scale[MAX_DIM];
+  Real linthresh[MAX_DIM];
+  Real bin_min[MAX_DIM];
+  Real bin_max[MAX_DIM];
   bool bins_written;
-  // if logscale is true then this step is the log10 of the step size
-  Real step_size, step_size2;
-  bool mass_weighted;
-  bool logscale, logscale2;
 
-  DvceArray2D<Real> result_; // resulting histogram
-  Kokkos::Experimental::ScatterView<Real **, LayoutWrapper> scatter_result;
+  DvceArray1D<Real> result_;
+  Kokkos::Experimental::ScatterView<Real*, LayoutWrapper> scatter_result;
 
-  PDFData(int dim, int nbinVal, int nbin2Val)
-    : pdf_dimension(dim), nbin(nbinVal), nbin2(nbin2Val),
-      bins("bins", nbin + 1), bins2("bins2", nbin2 + 1),
-      bins_written(false), mass_weighted(false), logscale(false), logscale2(false) {
+  PDFData() : ndim(0), total_bins(0), bins_written(false) {
+    for (int d = 0; d < MAX_DIM; ++d) {
+      nbin[d] = 0;
+      nbin_with_overflow[d] = 0;
+      stride[d] = 0;
+      step_size[d] = 0.0;
+      transformed_min[d] = 0.0;
+      transformed_max[d] = 0.0;
+      scale[d] = PDF_SCALE_LINEAR;
+      linthresh[d] = 1.0;
+      bin_min[d] = 0.0;
+      bin_max[d] = 1.0;
+    }
+  }
+
+  void Initialize(int ndim_in, const int *nbin_in, const Real *bin_min_in,
+                  const Real *bin_max_in, const int *scale_in,
+                  const Real *linthresh_in) {
+    ndim = ndim_in;
+    total_bins = 1;
+    for (int d = 0; d < ndim; ++d) {
+      nbin[d] = nbin_in[d];
+      nbin_with_overflow[d] = nbin[d] + 2;
+      bin_min[d] = bin_min_in[d];
+      bin_max[d] = bin_max_in[d];
+      scale[d] = scale_in[d];
+      linthresh[d] = linthresh_in[d];
+      transformed_min[d] = PDFTransformValue(bin_min[d], scale[d], linthresh[d]);
+      transformed_max[d] = PDFTransformValue(bin_max[d], scale[d], linthresh[d]);
+      step_size[d] = (transformed_max[d] - transformed_min[d])/nbin[d];
+      bin_edges[d] = Kokkos::View<Real*>("pdf_bin_edges_" + std::to_string(d),
+                                         nbin[d] + 1);
+      total_bins *= nbin_with_overflow[d];
+    }
+    stride[ndim - 1] = 1;
+    for (int d = ndim - 2; d >= 0; --d) {
+      stride[d] = stride[d + 1]*nbin_with_overflow[d + 1];
+    }
+    result_ = DvceArray1D<Real>("pdf_result", total_bins);
+    scatter_result =
+        Kokkos::Experimental::ScatterView<Real*, LayoutWrapper>(result_);
+  }
+
+  void PopulateBinEdges() {
+    for (int d = 0; d < ndim; ++d) {
+      auto h_edges = Kokkos::create_mirror_view(bin_edges[d]);
+      for (int n = 0; n <= nbin[d]; ++n) {
+        Real transformed = transformed_min[d]
+            + n*(transformed_max[d] - transformed_min[d])/nbin[d];
+        h_edges(n) = PDFInverseTransformValue(transformed, scale[d], linthresh[d]);
+      }
+      Kokkos::deep_copy(bin_edges[d], h_edges);
+    }
+    Kokkos::fence();
   }
 };
 
@@ -374,6 +518,25 @@ class MeshBinaryOutput : public BaseTypeOutput {
  public:
   MeshBinaryOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+};
+
+//----------------------------------------------------------------------------------------
+//! \class SphericalSliceOutput
+//  \brief binary origin-centered 2D spherical sampling output
+
+class SphericalSlice;
+
+class SphericalSliceOutput : public BaseTypeOutput {
+ public:
+  SphericalSliceOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  ~SphericalSliceOutput() override;
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+
+ private:
+  SphericalSlice *psph;
+  std::vector<std::int32_t> shard_owned_angles;
+  std::vector<float> shard_values;
 };
 
 //----------------------------------------------------------------------------------------

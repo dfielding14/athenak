@@ -117,9 +117,11 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
       pm->pmb_pack->phydro->w0 : pm->pmb_pack->pmhd->w0;
     par_for("vorz", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      dv(m,i_dv,k,j,i) = (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1))/size.d_view(m).dx1;
+      dv(m,i_dv,k,j,i) = (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1))
+                          /(2.0*size.d_view(m).dx1);
       if (multi_d) {
-        dv(m,i_dv,k,j,i) -=(w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i))/size.d_view(m).dx2;
+        dv(m,i_dv,k,j,i) -= (w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i))
+                            /(2.0*size.d_view(m).dx2);
       }
     });
     i_dv += 1; // increment derived variable index
@@ -137,15 +139,21 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     par_for("vor2", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real w1 = 0.0;
-      Real w2 = -(w0_(m,IVZ,k,j,i+1) - w0_(m,IVZ,k,j,i-1))/size.d_view(m).dx1;
-      Real w3 =  (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1))/size.d_view(m).dx1;
+      Real w2 = -(w0_(m,IVZ,k,j,i+1) - w0_(m,IVZ,k,j,i-1))
+                /(2.0*size.d_view(m).dx1);
+      Real w3 =  (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1))
+                /(2.0*size.d_view(m).dx1);
       if (multi_d) {
-        w1 += (w0_(m,IVZ,k,j+1,i) - w0_(m,IVZ,k,j-1,i))/size.d_view(m).dx2;
-        w3 -= (w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i))/size.d_view(m).dx2;
+        w1 += (w0_(m,IVZ,k,j+1,i) - w0_(m,IVZ,k,j-1,i))
+              /(2.0*size.d_view(m).dx2);
+        w3 -= (w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i))
+              /(2.0*size.d_view(m).dx2);
       }
       if (three_d) {
-        w1 -= (w0_(m,IVY,k+1,j,i) - w0_(m,IVY,k-1,j,i))/size.d_view(m).dx3;
-        w2 += (w0_(m,IVX,k+1,j,i) - w0_(m,IVX,k-1,j,i))/size.d_view(m).dx3;
+        w1 -= (w0_(m,IVY,k+1,j,i) - w0_(m,IVY,k-1,j,i))
+              /(2.0*size.d_view(m).dx3);
+        w2 += (w0_(m,IVX,k+1,j,i) - w0_(m,IVX,k-1,j,i))
+              /(2.0*size.d_view(m).dx3);
       }
       dv(m,i_dv,k,j,i) = w1*w1 + w2*w2 + w3*w3;
     });
@@ -162,9 +170,11 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     auto &bcc = pm->pmb_pack->pmhd->bcc0;
     par_for("jz", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      dv(m,i_dv,k,j,i) = (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/size.d_view(m).dx1;
+      dv(m,i_dv,k,j,i) = (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))
+                          /(2.0*size.d_view(m).dx1);
       if (multi_d) {
-        dv(m,i_dv,k,j,i) -=(bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/size.d_view(m).dx2;
+        dv(m,i_dv,k,j,i) -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))
+                            /(2.0*size.d_view(m).dx2);
       }
     });
     i_dv += 1; // increment derived variable index
@@ -180,15 +190,21 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     par_for("j2", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real j1 = 0.0;
-      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/size.d_view(m).dx1;
-      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/size.d_view(m).dx1;
+      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))
+                /(2.0*size.d_view(m).dx1);
+      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))
+                /(2.0*size.d_view(m).dx1);
       if (multi_d) {
-        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/size.d_view(m).dx2;
-        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/size.d_view(m).dx2;
+        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))
+              /(2.0*size.d_view(m).dx2);
+        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))
+              /(2.0*size.d_view(m).dx2);
       }
       if (three_d) {
-        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/size.d_view(m).dx3;
-        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/size.d_view(m).dx3;
+        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))
+              /(2.0*size.d_view(m).dx3);
+        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))
+              /(2.0*size.d_view(m).dx3);
       }
       dv(m,i_dv,k,j,i) = j1*j1 + j2*j2 + j3*j3;
     });
@@ -1240,6 +1256,196 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
         }
       }
     });
+  }
+
+  int coord_kind = -1;
+  if (name == "coord_x") coord_kind = 0;
+  if (name == "coord_y") coord_kind = 1;
+  if (name == "coord_z") coord_kind = 2;
+  if (name == "coord_r") coord_kind = 3;
+  if (name == "coord_theta") coord_kind = 4;
+  if (name == "coord_phi") coord_kind = 5;
+  if (name == "coord_cyl_R") coord_kind = 6;
+  if (name == "coord_cyl_phi") coord_kind = 7;
+  if (name == "coord_cyl_z") coord_kind = 8;
+  if (name == "coord_costheta") coord_kind = 9;
+  if (name == "coord_abscostheta") coord_kind = 10;
+  if (coord_kind >= 0) {
+    if (derived_var.extent(4) <= 1) {
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    }
+    auto dv = derived_var;
+    int nx1 = indcs.nx1;
+    int nx2 = indcs.nx2;
+    int nx3 = indcs.nx3;
+    int kind = coord_kind;
+    par_for("coordinate_diagnostic", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real x = CellCenterX(i-is, nx1, size.d_view(m).x1min, size.d_view(m).x1max);
+      Real y = CellCenterX(j-js, nx2, size.d_view(m).x2min, size.d_view(m).x2max);
+      Real z = CellCenterX(k-ks, nx3, size.d_view(m).x3min, size.d_view(m).x3max);
+      Real cyl_r = sqrt(x*x + y*y);
+      Real radius = sqrt(cyl_r*cyl_r + z*z);
+      Real phi = atan2(y, x);
+      if (phi < 0.0) phi += 2.0*M_PI;
+      Real value = 0.0;
+      if (kind == 0) value = x;
+      if (kind == 1) value = y;
+      if (kind == 2 || kind == 8) value = z;
+      if (kind == 3) value = radius;
+      if (kind == 4) value = (radius > 0.0) ? acos(z/radius) : 0.0;
+      if (kind == 5 || kind == 7) value = phi;
+      if (kind == 6) value = cyl_r;
+      if (kind == 9) value = (radius > 0.0) ? z/radius : 1.0;
+      if (kind == 10) value = (radius > 0.0) ? fabs(z/radius) : 1.0;
+      dv(m, i_dv, k, j, i) = value;
+    });
+    i_dv += 1;
+  }
+
+  int flow_kind = -1;
+  if (name == "vel_sph_r") flow_kind = 0;
+  if (name == "vel_sph_theta") flow_kind = 1;
+  if (name == "vel_sph_phi") flow_kind = 2;
+  if (name == "vel_cyl_R") flow_kind = 3;
+  if (name == "vel_cyl_phi") flow_kind = 4;
+  if (name == "mdot_sph") flow_kind = 5;
+  if (name == "mdot_sph_out") flow_kind = 6;
+  if (name == "mdot_sph_in") flow_kind = 7;
+  if (name == "mdot_vert") flow_kind = 8;
+  if (name == "mdot_vert_out") flow_kind = 9;
+  if (name == "mdot_vert_in") flow_kind = 10;
+  if (flow_kind >= 0) {
+    if (derived_var.extent(4) <= 1) {
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    }
+    DvceArray5D<Real> u0_;
+    if (pm->pmb_pack->phydro != nullptr) {
+      u0_ = pm->pmb_pack->phydro->u0;
+    } else {
+      u0_ = pm->pmb_pack->pmhd->u0;
+    }
+    auto dv = derived_var;
+    int nx1 = indcs.nx1;
+    int nx2 = indcs.nx2;
+    int nx3 = indcs.nx3;
+    int kind = flow_kind;
+    par_for("flow_diagnostic", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real x = CellCenterX(i-is, nx1, size.d_view(m).x1min, size.d_view(m).x1max);
+      Real y = CellCenterX(j-js, nx2, size.d_view(m).x2min, size.d_view(m).x2max);
+      Real z = CellCenterX(k-ks, nx3, size.d_view(m).x3min, size.d_view(m).x3max);
+      Real cyl_r = sqrt(x*x + y*y);
+      Real radius = sqrt(cyl_r*cyl_r + z*z);
+      Real rho = u0_(m, IDN, k, j, i);
+      Real vx = u0_(m, IM1, k, j, i)/rho;
+      Real vy = u0_(m, IM2, k, j, i)/rho;
+      Real vz = u0_(m, IM3, k, j, i)/rho;
+      Real vr = (radius > 0.0) ? (vx*x + vy*y + vz*z)/radius : 0.0;
+      Real vcyl = (cyl_r > 0.0) ? (vx*x + vy*y)/cyl_r : 0.0;
+      Real vphi = (cyl_r > 0.0) ? (-vx*y + vy*x)/cyl_r : 0.0;
+      Real vtheta = (radius > 0.0 && cyl_r > 0.0) ?
+          (z*(vx*x + vy*y)/(radius*cyl_r) - vz*cyl_r/radius) : 0.0;
+      Real vvert = vz*((z >= 0.0) ? 1.0 : -1.0);
+      Real value = 0.0;
+      if (kind == 0) value = vr;
+      if (kind == 1) value = vtheta;
+      if (kind == 2 || kind == 4) value = vphi;
+      if (kind == 3) value = vcyl;
+      if (kind == 5) value = rho*vr;
+      if (kind == 6) value = rho*fmax(vr, 0.0);
+      if (kind == 7) value = rho*fmin(vr, 0.0);
+      if (kind == 8) value = rho*vvert;
+      if (kind == 9) value = rho*fmax(vvert, 0.0);
+      if (kind == 10) value = rho*fmin(vvert, 0.0);
+      dv(m, i_dv, k, j, i) = value;
+    });
+    i_dv += 1;
+  }
+
+  int energy_kind = -1;
+  if (name == "edot_sph") energy_kind = 0;
+  if (name == "edot_sph_out") energy_kind = 1;
+  if (name == "edot_sph_in") energy_kind = 2;
+  if (name == "edot_sph_kin") energy_kind = 3;
+  if (name == "edot_sph_th") energy_kind = 4;
+  if (name == "edot_sph_mag") energy_kind = 5;
+  if (name == "edot_vert") energy_kind = 6;
+  if (name == "edot_vert_out") energy_kind = 7;
+  if (name == "edot_vert_in") energy_kind = 8;
+  if (energy_kind >= 0) {
+    if (derived_var.extent(4) <= 1) {
+      Kokkos::realloc(derived_var, nmb, n_dv, n3, n2, n1);
+    }
+    bool is_mhd = (pm->pmb_pack->pmhd != nullptr);
+    DvceArray5D<Real> u0_;
+    DvceArray5D<Real> bcc_;
+    Real gamma = 0.0;
+    if (is_mhd) {
+      u0_ = pm->pmb_pack->pmhd->u0;
+      bcc_ = pm->pmb_pack->pmhd->bcc0;
+      gamma = pm->pmb_pack->pmhd->peos->eos_data.gamma;
+    } else {
+      u0_ = pm->pmb_pack->phydro->u0;
+      gamma = pm->pmb_pack->phydro->peos->eos_data.gamma;
+    }
+    auto dv = derived_var;
+    int nx1 = indcs.nx1;
+    int nx2 = indcs.nx2;
+    int nx3 = indcs.nx3;
+    int kind = energy_kind;
+    par_for("energy_flux_diagnostic", DevExeSpace(), 0, (nmb-1),
+            ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      Real x = CellCenterX(i-is, nx1, size.d_view(m).x1min, size.d_view(m).x1max);
+      Real y = CellCenterX(j-js, nx2, size.d_view(m).x2min, size.d_view(m).x2max);
+      Real z = CellCenterX(k-ks, nx3, size.d_view(m).x3min, size.d_view(m).x3max);
+      Real radius = sqrt(x*x + y*y + z*z);
+      Real rho = u0_(m, IDN, k, j, i);
+      Real vx = u0_(m, IM1, k, j, i)/rho;
+      Real vy = u0_(m, IM2, k, j, i)/rho;
+      Real vz = u0_(m, IM3, k, j, i)/rho;
+      Real vr = (radius > 0.0) ? (vx*x + vy*y + vz*z)/radius : 0.0;
+      Real v_sq = vx*vx + vy*vy + vz*vz;
+      Real b_sq = 0.0;
+      Real v_dot_b = 0.0;
+      Real br = 0.0;
+      Real bz = 0.0;
+      if (is_mhd) {
+        Real bx = bcc_(m, IBX, k, j, i);
+        Real by = bcc_(m, IBY, k, j, i);
+        bz = bcc_(m, IBZ, k, j, i);
+        b_sq = bx*bx + by*by + bz*bz;
+        v_dot_b = vx*bx + vy*by + vz*bz;
+        br = (radius > 0.0) ? (bx*x + by*y + bz*z)/radius : 0.0;
+      }
+      Real kin_radial = 0.5*rho*v_sq*vr;
+      Real mag_radial = b_sq*vr - v_dot_b*br;
+      Real thermal_radial = 0.0;
+      Real total_radial = 0.0;
+      Real total_vertical = 0.0;
+      if (kind != 3 && kind != 5) {
+        Real eint = u0_(m, IEN, k, j, i) - 0.5*rho*v_sq - 0.5*b_sq;
+        Real enthalpy_plus_ke = 0.5*rho*v_sq + gamma*eint;
+        thermal_radial = gamma*eint*vr;
+        total_radial = (enthalpy_plus_ke + b_sq)*vr - v_dot_b*br;
+        total_vertical = (enthalpy_plus_ke + b_sq)*vz - v_dot_b*bz;
+      }
+      Real sign_z = (z >= 0.0) ? 1.0 : -1.0;
+      Real vvert = vz*sign_z;
+      Real value = 0.0;
+      if (kind == 0) value = total_radial;
+      if (kind == 1) value = (vr > 0.0) ? total_radial : 0.0;
+      if (kind == 2) value = (vr < 0.0) ? total_radial : 0.0;
+      if (kind == 3) value = kin_radial;
+      if (kind == 4) value = thermal_radial;
+      if (kind == 5) value = mag_radial;
+      if (kind == 6) value = total_vertical*sign_z;
+      if (kind == 7) value = (vvert > 0.0) ? total_vertical*sign_z : 0.0;
+      if (kind == 8) value = (vvert < 0.0) ? total_vertical*sign_z : 0.0;
+      dv(m, i_dv, k, j, i) = value;
+    });
+    i_dv += 1;
   }
 
   // Particle density binned to mesh.

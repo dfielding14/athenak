@@ -8,8 +8,26 @@
 //! \file globals.hpp
 //  \brief namespace containing external global variables
 
+#include "athena.hpp"
+
+#if MPI_PARALLEL_ENABLED
+#include <mpi.h>
+#endif
+
 namespace global_variable {
 extern int my_rank, nranks;
+extern int node_rank, node_size, node_id, nnodes;
+extern bool node_comm_initialized;
+#if MPI_PARALLEL_ENABLED
+extern MPI_Comm node_comm;
+#endif
+
+void InitializeNodeCommunicator();
+void FinalizeNodeCommunicator();
+int NodePrefixSum(int local_count);
+int NodeSum(int local_count);
+int NodeMin(int local_count);
+int NodeMax(int local_count);
 }
 
 #endif // GLOBALS_HPP_
