@@ -199,8 +199,8 @@ def analyze():
                          owned_total == owned_rank_max) and ok
     ok = _check_relation('one-rank owned high-water reduction is exact',
                          owned_high_water_sum == owned_high_water_max) and ok
-    ok = _check_relation('owned high-water dominates final snapshot',
-                         owned_high_water_max >= owned_rank_max) and ok
+    ok = _check_relation('owned high-water exceeds final snapshot',
+                         owned_high_water_max > owned_rank_max) and ok
     ok = _check_equal('particle_memory.invalid_records', 0.0) and ok
     ok = _check_equal('particle_memory.species.0.count', 120.0) and ok
     ok = _check_equal('particle_memory.species.1.count', 120.0) and ok

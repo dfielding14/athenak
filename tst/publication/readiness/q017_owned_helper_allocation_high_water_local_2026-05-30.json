@@ -45,13 +45,15 @@
       "configuration": "Debug serial Kokkos SERIAL one rank",
       "direct_view_snapshot_bytes": 3414224,
       "tracked_snapshot_bytes": 44924492,
-      "tracked_high_water_bytes_rank_max": 44924492
+      "tracked_high_water_bytes_rank_max": 44930260,
+      "tracked_transient_margin_bytes": 5768
     },
     {
       "configuration": "Debug MPI-enabled Kokkos SERIAL one rank",
       "direct_view_snapshot_bytes": 3414224,
       "tracked_snapshot_bytes": 44924540,
-      "tracked_high_water_bytes_rank_max": 44924540
+      "tracked_high_water_bytes_rank_max": 44930308,
+      "tracked_transient_margin_bytes": 5768
     }
   ],
   "verification": [
