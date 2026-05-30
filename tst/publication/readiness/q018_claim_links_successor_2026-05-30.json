@@ -3,7 +3,7 @@
   "schema_version": 1,
   "date": "2026-05-30",
   "gate": "Q-018",
-  "qualification_effect": "registry_links_with_registered_f1_pending_review_bundle",
+  "qualification_effect": "registry_links_with_registered_f1_pending_review_bundle_and_source_local_open_preparation_records",
   "disposition": "open",
   "reviewer_assignment": "pending external review",
   "claims_registry": "tst/publication/readiness/claims_registry.json",
@@ -34,9 +34,9 @@
   ],
   "claim_links": [
     {"claim_id": "CLAIM-PAPER-GYRO-001", "applicability_envelope": "paper particle-orbit validation with configurable artificial C", "limitations": ["clean-candidate GPU matrix remains open"], "evidence_links": ["tst/publication/readiness/q003_frontier_f1_gpu_gyro_2026-05-30.json"]},
-    {"claim_id": "CLAIM-PAPER-BELL-LINEAR-001", "applicability_envelope": "Sun and Bai Section 5.2 no-Hall paper-mode dispersion", "limitations": ["paper-faithful 1D/2D/3D qualifying campaign remains open"], "evidence_links": ["tst/publication/readiness/q005_q006_local_analytical_2026-05-30.json"]},
+    {"claim_id": "CLAIM-PAPER-BELL-LINEAR-001", "applicability_envelope": "Sun and Bai Section 5.2 no-Hall paper-mode dispersion", "limitations": ["source-local paper-value 1D/2D/3D candidates exist, but the dedicated generator, exact qualifying variants, registered execution, independent recomputation and review remain open"], "evidence_links": ["tst/publication/readiness/q005_q006_local_analytical_2026-05-30.json", "tst/publication/readiness/q023_local_preregistration_profiles_2026-05-30.json"]},
     {"claim_id": "CLAIM-PAPER-OSCILLATION-001", "applicability_envelope": "Sun and Bai Section 5.3 paper-mode oscillation on uniform, SMR, and audited AMR grids", "limitations": ["long-horizon qualifying campaign remains open"], "evidence_links": ["tst/publication/readiness/q005_q006_local_analytical_2026-05-30.json"]},
-    {"claim_id": "CLAIM-PAPER-SHOCK-001", "applicability_envelope": "Sun and Bai Section 5.4 parallel shock in paper_mhd_pic", "limitations": ["exact injection audit, provenance, spectra, AMR, MPI, GPU, and campaign evidence remain open"], "evidence_links": ["tst/publication/readiness/q011_parallel_shock_controls_successor_2026-05-30.json", "tst/publication/readiness/q016_particle_provenance_spectra_local_2026-05-30.json"]},
+    {"claim_id": "CLAIM-PAPER-SHOCK-001", "applicability_envelope": "Sun and Bai Section 5.4 parallel shock in paper_mhd_pic", "limitations": ["the Q009 coupled inflow sibling currently fails closed; exact injection audit, provenance, spectra, AMR, MPI, GPU, and campaign evidence remain open"], "evidence_links": ["tst/publication/readiness/q009_coupled_inflow_lifetime_bounded_local_2026-05-30.json", "tst/publication/readiness/q011_parallel_shock_controls_successor_2026-05-30.json", "tst/publication/readiness/q016_particle_provenance_spectra_local_2026-05-30.json"]},
     {"claim_id": "CLAIM-PAPER-CRSI-LINEAR-001", "applicability_envelope": "Sun and Bai Section 5.5 paper-mode true-delta-f CRSI", "limitations": ["theory and qualifying campaign remain open"], "evidence_links": ["tst/publication/readiness/q032_q033_extension_local_scans_2026-05-30.json"]},
     {"claim_id": "CLAIM-PAPER-CRPAI-LINEAR-001", "applicability_envelope": "Sun and Bai Section 5.6 paper-mode true-delta-f CRPAI", "limitations": ["theory and qualifying campaign remain open"], "evidence_links": ["tst/publication/readiness/q032_q033_extension_local_scans_2026-05-30.json"]},
     {"claim_id": "CLAIM-PAPER-CRPAI-DRIVEN-001", "applicability_envelope": "Sun and Bai Section 5.7 driven-box paper-mode CRPAI", "limitations": ["coupled driven expanding-box qualification remains open"], "evidence_links": ["tst/publication/readiness/q008_expanding_box_comoving_flux_successor_2026-05-30.json", "tst/publication/readiness/q008_q033_expanding_coupled_source_successor_2026-05-30.json"]},
@@ -59,5 +59,5 @@
     {"claim_id": "CLAIM-RELEASE-PAPER-MHD-PIC-001", "applicability_envelope": "bounded production-ready paper_mhd_pic release profile", "limitations": ["all profile gates and terminal review remain open"], "evidence_links": []},
     {"claim_id": "CLAIM-RELEASE-EXTENDED-MHD-PIC-001", "applicability_envelope": "bounded production-ready selected extended_mhd_pic release profile", "limitations": ["all paper and extension gates plus terminal review remain open"], "evidence_links": []}
   ],
-  "q018_status": "open_registry_links_scaffolded_registered_f1_qualification_bundle_frozen_pending_external_review_named_external_dispositions_absent"
+  "q018_status": "open_registry_links_scaffolded_registered_f1_qualification_bundle_frozen_source_local_open_preparation_links_recorded_pending_external_review_named_external_dispositions_absent"
 }
