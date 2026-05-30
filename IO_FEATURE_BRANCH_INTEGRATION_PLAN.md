@@ -583,7 +583,8 @@ Do not add by default:
 - [ ] Public API inventory test passes.
 - [ ] Legacy converter call forms pass.
 - [ ] Indexed meshblock read passes if added.
-- [ ] `read_rank_binary_as_athdf()` passes on a rank shard and a node shard.
+- [x] `read_rank_binary_as_athdf()` passes on a rank shard.
+- [ ] `read_rank_binary_as_athdf()` passes on a node shard after CP-04 reader inventory hardening.
 - [ ] Shared `.bin` and `.cbin` CLI conversion passes.
 - [ ] `--assemble-shards` rank and node conversion passes.
 - [ ] `rg -n "bin_convert_new" .` finds no supported code or docs dependency.

@@ -87,6 +87,7 @@ import numpy as np
 import os
 import h5py
 import glob
+from numbers import Integral
 
 
 def _is_partitioned_path(filename):
@@ -174,7 +175,16 @@ def _combine_partitioned_binary(shard_filename, reader, family):
     combined["mb_logical"] = []
     combined["mb_geometry"] = []
     combined["mb_data"] = {var: [] for var in reference["var_names"]}
-    for item in shard_data:
+    logical_owners = {}
+    for path, item in zip(shard_files, shard_data):
+        for logical in item["mb_logical"]:
+            logical_key = tuple(int(value) for value in logical)
+            if logical_key in logical_owners:
+                raise ValueError(
+                    f"{family} shards contain duplicate logical MeshBlock "
+                    f"{logical_key!r} in {path!r} and {logical_owners[logical_key]!r}"
+                )
+            logical_owners[logical_key] = path
         combined["mb_index"].extend(item["mb_index"])
         combined["mb_logical"].extend(item["mb_logical"])
         combined["mb_geometry"].extend(item["mb_geometry"])
@@ -192,6 +202,15 @@ def _combine_partitioned_binary(shard_filename, reader, family):
         os.path.dirname(os.path.abspath(shard_filename))
     ).split("_", 1)[0] if _is_partitioned_path(shard_filename) else "shared"
     return combined
+
+
+def _require_meshblocks_for_athdf(filedata, filename):
+    """Reject athdf-like conversion when a valid binary input has no MeshBlocks."""
+    if filedata["n_mbs"] == 0:
+        raise ValueError(
+            f"cannot convert {filename!r} to athdf-like data: "
+            "binary output contains no meshblocks"
+        )
 
 
 def _read_meshblocks(fp, filesize, nghost, locsizebytes, varsizebytes, var_list, family):
@@ -267,94 +286,94 @@ def read_binary(filename, assemble_shards=False):
 
     filedata = {}
 
-    # load file and get size
-    fp = open(filename, "rb")
-    fp.seek(0, 2)
-    filesize = fp.tell()
-    fp.seek(0, 0)
+    with open(filename, "rb") as fp:
+        # load file and get size
+        fp.seek(0, 2)
+        filesize = fp.tell()
+        fp.seek(0, 0)
 
-    # load header information and validate file format
-    code_header = fp.readline().split()
-    if len(code_header) < 1:
-        raise TypeError("unknown file format")
-    if code_header[0] != b"Athena":
-        raise TypeError(
-            f"bad file format \"{code_header[0].decode('utf-8')}\" "
-            + '(should be "Athena")'
+        # load header information and validate file format
+        code_header = fp.readline().split()
+        if len(code_header) < 1:
+            raise TypeError("unknown file format")
+        if code_header[0] != b"Athena":
+            raise TypeError(
+                f"bad file format \"{code_header[0].decode('utf-8')}\" "
+                + '(should be "Athena")'
+            )
+        version = code_header[-1].split(b"=")[-1]
+        if version != b"1.1":
+            raise TypeError(
+                f"unsupported file format version {version.decode('utf-8')}"
+            )
+
+        pheader_count = int(fp.readline().split(b"=")[-1])
+        pheader = {}
+        for _ in range(pheader_count - 1):
+            key, val = [x.strip() for x in fp.readline().decode("utf-8").split("=")]
+            pheader[key] = val
+        time = float(pheader["time"])
+        cycle = int(pheader["cycle"])
+        locsizebytes = int(pheader["size of location"])
+        varsizebytes = int(pheader["size of variable"])
+
+        nvars = int(fp.readline().split(b"=")[-1])
+        var_list = [v.decode("utf-8") for v in fp.readline().split()[1:]]
+        header_size = int(fp.readline().split(b"=")[-1])
+        header = [
+            line.decode("utf-8").split("#")[0].strip()
+            for line in fp.read(header_size).split(b"\n")
+        ]
+        header = [line for line in header if len(line) > 0]
+
+        if locsizebytes not in [4, 8]:
+            raise ValueError(f"unsupported location size (in bytes) {locsizebytes}")
+        if varsizebytes not in [4, 8]:
+            raise ValueError(f"unsupported variable size (in bytes) {varsizebytes}")
+
+        # load grid information from header and validate
+        def get_from_header(header, blockname, keyname):
+            blockname = blockname.strip()
+            keyname = keyname.strip()
+            if not blockname.startswith("<"):
+                blockname = "<" + blockname
+            if blockname[-1] != ">":
+                blockname += ">"
+            block = "<none>"
+            for line in [entry for entry in header]:
+                if line.startswith("<"):
+                    block = line
+                    continue
+                key, value = line.split("=")
+                if block == blockname and key.strip() == keyname:
+                    return value
+            raise KeyError(f"no parameter called {blockname}/{keyname}")
+
+        Nx1 = int(get_from_header(header, "<mesh>", "nx1"))
+        Nx2 = int(get_from_header(header, "<mesh>", "nx2"))
+        Nx3 = int(get_from_header(header, "<mesh>", "nx3"))
+        nx1 = int(get_from_header(header, "<meshblock>", "nx1"))
+        nx2 = int(get_from_header(header, "<meshblock>", "nx2"))
+        nx3 = int(get_from_header(header, "<meshblock>", "nx3"))
+
+        nghost = int(get_from_header(header, "<mesh>", "nghost"))
+
+        x1min = float(get_from_header(header, "<mesh>", "x1min"))
+        x1max = float(get_from_header(header, "<mesh>", "x1max"))
+        x2min = float(get_from_header(header, "<mesh>", "x2min"))
+        x2max = float(get_from_header(header, "<mesh>", "x2max"))
+        x3min = float(get_from_header(header, "<mesh>", "x3min"))
+        x3max = float(get_from_header(header, "<mesh>", "x3max"))
+
+        if len(var_list) != nvars:
+            raise ValueError(
+                f"binary variable count mismatch in {filename!r}: "
+                f"declared {nvars}, listed {len(var_list)}"
+            )
+        mb_index, mb_logical, mb_geometry, mb_data = _read_meshblocks(
+            fp, filesize, nghost, locsizebytes, varsizebytes, var_list, "binary"
         )
-    version = code_header[-1].split(b"=")[-1]
-    if version != b"1.1":
-        raise TypeError(f"unsupported file format version {version.decode('utf-8')}")
-
-    pheader_count = int(fp.readline().split(b"=")[-1])
-    pheader = {}
-    for _ in range(pheader_count - 1):
-        key, val = [x.strip() for x in fp.readline().decode("utf-8").split("=")]
-        pheader[key] = val
-    time = float(pheader["time"])
-    cycle = int(pheader["cycle"])
-    locsizebytes = int(pheader["size of location"])
-    varsizebytes = int(pheader["size of variable"])
-
-    nvars = int(fp.readline().split(b"=")[-1])
-    var_list = [v.decode("utf-8") for v in fp.readline().split()[1:]]
-    header_size = int(fp.readline().split(b"=")[-1])
-    header = [
-        line.decode("utf-8").split("#")[0].strip()
-        for line in fp.read(header_size).split(b"\n")
-    ]
-    header = [line for line in header if len(line) > 0]
-
-    if locsizebytes not in [4, 8]:
-        raise ValueError(f"unsupported location size (in bytes) {locsizebytes}")
-    if varsizebytes not in [4, 8]:
-        raise ValueError(f"unsupported variable size (in bytes) {varsizebytes}")
-
-    # load grid information from header and validate
-    def get_from_header(header, blockname, keyname):
-        blockname = blockname.strip()
-        keyname = keyname.strip()
-        if not blockname.startswith("<"):
-            blockname = "<" + blockname
-        if blockname[-1] != ">":
-            blockname += ">"
-        block = "<none>"
-        for line in [entry for entry in header]:
-            if line.startswith("<"):
-                block = line
-                continue
-            key, value = line.split("=")
-            if block == blockname and key.strip() == keyname:
-                return value
-        raise KeyError(f"no parameter called {blockname}/{keyname}")
-
-    Nx1 = int(get_from_header(header, "<mesh>", "nx1"))
-    Nx2 = int(get_from_header(header, "<mesh>", "nx2"))
-    Nx3 = int(get_from_header(header, "<mesh>", "nx3"))
-    nx1 = int(get_from_header(header, "<meshblock>", "nx1"))
-    nx2 = int(get_from_header(header, "<meshblock>", "nx2"))
-    nx3 = int(get_from_header(header, "<meshblock>", "nx3"))
-
-    nghost = int(get_from_header(header, "<mesh>", "nghost"))
-
-    x1min = float(get_from_header(header, "<mesh>", "x1min"))
-    x1max = float(get_from_header(header, "<mesh>", "x1max"))
-    x2min = float(get_from_header(header, "<mesh>", "x2min"))
-    x2max = float(get_from_header(header, "<mesh>", "x2max"))
-    x3min = float(get_from_header(header, "<mesh>", "x3min"))
-    x3max = float(get_from_header(header, "<mesh>", "x3max"))
-
-    if len(var_list) != nvars:
-        raise ValueError(
-            f"binary variable count mismatch in {filename!r}: "
-            f"declared {nvars}, listed {len(var_list)}"
-        )
-    mb_index, mb_logical, mb_geometry, mb_data = _read_meshblocks(
-        fp, filesize, nghost, locsizebytes, varsizebytes, var_list, "binary"
-    )
-    mb_count = len(mb_index)
-
-    fp.close()
+        mb_count = len(mb_index)
 
     filedata["header"] = header
     filedata["time"] = time
@@ -415,95 +434,101 @@ def read_coarsened_binary(filename, assemble_shards=False):
 
     filedata = {}
 
-    # load file and get size
-    fp = open(filename, "rb")
-    fp.seek(0, 2)
-    filesize = fp.tell()
-    fp.seek(0, 0)
+    with open(filename, "rb") as fp:
+        # load file and get size
+        fp.seek(0, 2)
+        filesize = fp.tell()
+        fp.seek(0, 0)
 
-    # load header information and validate file format
-    code_header = fp.readline().split()
-    if len(code_header) < 1:
-        raise TypeError("unknown file format")
-    if code_header[0] != b"Athena":
-        raise TypeError(
-            f"bad file format \"{code_header[0].decode('utf-8')}\" "
-            + '(should be "Athena")'
+        # load header information and validate file format
+        code_header = fp.readline().split()
+        if len(code_header) < 1:
+            raise TypeError("unknown file format")
+        if code_header[0] != b"Athena":
+            raise TypeError(
+                f"bad file format \"{code_header[0].decode('utf-8')}\" "
+                + '(should be "Athena")'
+            )
+        version = code_header[-1].split(b"=")[-1]
+        if version != b"1.1":
+            raise TypeError(
+                f"unsupported file format version {version.decode('utf-8')}"
+            )
+
+        pheader_count = int(fp.readline().split(b"=")[-1])
+        pheader = {}
+        for _ in range(pheader_count - 1):
+            key, val = [x.strip() for x in fp.readline().decode("utf-8").split("=")]
+            pheader[key] = val
+        time = float(pheader["time"])
+        cycle = int(pheader["cycle"])
+        locsizebytes = int(pheader["size of location"])
+        varsizebytes = int(pheader["size of variable"])
+        coarsen_factor = int(pheader["coarsening factor"])
+
+        nvars = int(fp.readline().split(b"=")[-1])
+        var_list = [v.decode("utf-8") for v in fp.readline().split()[1:]]
+        header_size = int(fp.readline().split(b"=")[-1])
+        header = [
+            line.decode("utf-8").split("#")[0].strip()
+            for line in fp.read(header_size).split(b"\n")
+        ]
+        header = [line for line in header if len(line) > 0]
+
+        if locsizebytes not in [4, 8]:
+            raise ValueError(f"unsupported location size (in bytes) {locsizebytes}")
+        if varsizebytes not in [4, 8]:
+            raise ValueError(f"unsupported variable size (in bytes) {varsizebytes}")
+
+        # load grid information from header and validate
+        def get_from_header(header, blockname, keyname):
+            blockname = blockname.strip()
+            keyname = keyname.strip()
+            if not blockname.startswith("<"):
+                blockname = "<" + blockname
+            if blockname[-1] != ">":
+                blockname += ">"
+            block = "<none>"
+            for line in [entry for entry in header]:
+                if line.startswith("<"):
+                    block = line
+                    continue
+                key, value = line.split("=")
+                if block == blockname and key.strip() == keyname:
+                    return value
+            raise KeyError(f"no parameter called {blockname}/{keyname}")
+
+        Nx1 = int(get_from_header(header, "<mesh>", "nx1"))
+        Nx2 = int(get_from_header(header, "<mesh>", "nx2"))
+        Nx3 = int(get_from_header(header, "<mesh>", "nx3"))
+        nx1 = int(get_from_header(header, "<meshblock>", "nx1"))
+        nx2 = int(get_from_header(header, "<meshblock>", "nx2"))
+        nx3 = int(get_from_header(header, "<meshblock>", "nx3"))
+
+        nghost = int(get_from_header(header, "<mesh>", "nghost"))
+
+        x1min = float(get_from_header(header, "<mesh>", "x1min"))
+        x1max = float(get_from_header(header, "<mesh>", "x1max"))
+        x2min = float(get_from_header(header, "<mesh>", "x2min"))
+        x2max = float(get_from_header(header, "<mesh>", "x2max"))
+        x3min = float(get_from_header(header, "<mesh>", "x3min"))
+        x3max = float(get_from_header(header, "<mesh>", "x3max"))
+
+        if len(var_list) != nvars:
+            raise ValueError(
+                f"coarsened binary variable count mismatch in {filename!r}: "
+                f"declared {nvars}, listed {len(var_list)}"
+            )
+        mb_index, mb_logical, mb_geometry, mb_data = _read_meshblocks(
+            fp,
+            filesize,
+            nghost,
+            locsizebytes,
+            varsizebytes,
+            var_list,
+            "coarsened binary",
         )
-    version = code_header[-1].split(b"=")[-1]
-    if version != b"1.1":
-        raise TypeError(f"unsupported file format version {version.decode('utf-8')}")
-
-    pheader_count = int(fp.readline().split(b"=")[-1])
-    pheader = {}
-    for _ in range(pheader_count - 1):
-        key, val = [x.strip() for x in fp.readline().decode("utf-8").split("=")]
-        pheader[key] = val
-    time = float(pheader["time"])
-    cycle = int(pheader["cycle"])
-    locsizebytes = int(pheader["size of location"])
-    varsizebytes = int(pheader["size of variable"])
-    coarsen_factor = int(pheader["coarsening factor"])
-
-    nvars = int(fp.readline().split(b"=")[-1])
-    var_list = [v.decode("utf-8") for v in fp.readline().split()[1:]]
-    header_size = int(fp.readline().split(b"=")[-1])
-    header = [
-        line.decode("utf-8").split("#")[0].strip()
-        for line in fp.read(header_size).split(b"\n")
-    ]
-    header = [line for line in header if len(line) > 0]
-
-    if locsizebytes not in [4, 8]:
-        raise ValueError(f"unsupported location size (in bytes) {locsizebytes}")
-    if varsizebytes not in [4, 8]:
-        raise ValueError(f"unsupported variable size (in bytes) {varsizebytes}")
-
-    # load grid information from header and validate
-    def get_from_header(header, blockname, keyname):
-        blockname = blockname.strip()
-        keyname = keyname.strip()
-        if not blockname.startswith("<"):
-            blockname = "<" + blockname
-        if blockname[-1] != ">":
-            blockname += ">"
-        block = "<none>"
-        for line in [entry for entry in header]:
-            if line.startswith("<"):
-                block = line
-                continue
-            key, value = line.split("=")
-            if block == blockname and key.strip() == keyname:
-                return value
-        raise KeyError(f"no parameter called {blockname}/{keyname}")
-
-    Nx1 = int(get_from_header(header, "<mesh>", "nx1"))
-    Nx2 = int(get_from_header(header, "<mesh>", "nx2"))
-    Nx3 = int(get_from_header(header, "<mesh>", "nx3"))
-    nx1 = int(get_from_header(header, "<meshblock>", "nx1"))
-    nx2 = int(get_from_header(header, "<meshblock>", "nx2"))
-    nx3 = int(get_from_header(header, "<meshblock>", "nx3"))
-
-    nghost = int(get_from_header(header, "<mesh>", "nghost"))
-
-    x1min = float(get_from_header(header, "<mesh>", "x1min"))
-    x1max = float(get_from_header(header, "<mesh>", "x1max"))
-    x2min = float(get_from_header(header, "<mesh>", "x2min"))
-    x2max = float(get_from_header(header, "<mesh>", "x2max"))
-    x3min = float(get_from_header(header, "<mesh>", "x3min"))
-    x3max = float(get_from_header(header, "<mesh>", "x3max"))
-
-    if len(var_list) != nvars:
-        raise ValueError(
-            f"coarsened binary variable count mismatch in {filename!r}: "
-            f"declared {nvars}, listed {len(var_list)}"
-        )
-    mb_index, mb_logical, mb_geometry, mb_data = _read_meshblocks(
-        fp, filesize, nghost, locsizebytes, varsizebytes, var_list, "coarsened binary"
-    )
-    mb_count = len(mb_index)
-
-    fp.close()
+        mb_count = len(mb_index)
 
     filedata["header"] = header
     filedata["time"] = time
@@ -606,6 +631,8 @@ def read_binary_as_athdf(
     # Step 2: Organize data similar to athdf
     if raw:
         return filedata
+
+    _require_meshblocks_for_athdf(filedata, filename)
 
     # Prepare dictionary for results
     if data is None:
@@ -831,6 +858,36 @@ def read_binary_as_athdf(
     return data
 
 
+def read_rank_binary_as_athdf(
+    filename,
+    raw=False,
+    data=None,
+    quantities=None,
+    dtype=None,
+    level=None,
+    return_levels=False,
+    subsample=False,
+    fast_restrict=False,
+    x1_min=None,
+    x1_max=None,
+    x2_min=None,
+    x2_max=None,
+    x3_min=None,
+    x3_max=None,
+    vol_func=None,
+    vol_params=None,
+    face_func_1=None,
+    face_func_2=None,
+    face_func_3=None,
+    center_func_1=None,
+    center_func_2=None,
+    center_func_3=None,
+    num_ghost=0,
+):
+    """Read one binary shard through the canonical logical-location mapper."""
+    return read_binary_as_athdf(**locals())
+
+
 def read_all_ranks_binary_as_athdf(
     rank0_filename,
     raw=False,
@@ -866,6 +923,8 @@ def read_all_ranks_binary_as_athdf(
     # Step 2: Organize data similar to athdf
     if raw:
         return filedata
+
+    _require_meshblocks_for_athdf(filedata, rank0_filename)
 
     # Prepare dictionary for results
     if data is None:
@@ -1126,6 +1185,8 @@ def read_all_ranks_coarsened_binary_as_athdf(
     if raw:
         return filedata
 
+    _require_meshblocks_for_athdf(filedata, rank0_filename)
+
     # Prepare dictionary for results
     if data is None:
         data = {}
@@ -1339,6 +1400,8 @@ def read_single_rank_binary_as_athdf(
     center_func_1=None,
     center_func_2=None,
     center_func_3=None,
+    *,
+    meshblock_index_in_file=0,
 ):
     """
     Reads a single rank binary file and organizes data similar to
@@ -1347,8 +1410,23 @@ def read_single_rank_binary_as_athdf(
     # Step 1: Read binary data for a single rank
     filedata = read_binary(filename)
 
+    if isinstance(meshblock_index_in_file, (bool, np.bool_)) or not isinstance(
+        meshblock_index_in_file, Integral
+    ):
+        raise TypeError("meshblock_index_in_file must be an integer")
+    meshblock_index_in_file = int(meshblock_index_in_file)
+
     if raw:
+        if meshblock_index_in_file != 0:
+            raise ValueError("meshblock_index_in_file must be 0 when raw=True")
         return filedata
+
+    _require_meshblocks_for_athdf(filedata, filename)
+    if not 0 <= meshblock_index_in_file < filedata["n_mbs"]:
+        raise IndexError(
+            f"meshblock_index_in_file {meshblock_index_in_file} is out of range "
+            f"for {filedata['n_mbs']} meshblocks"
+        )
 
     # Prepare dictionary for results
     if data is None:
@@ -1391,8 +1469,8 @@ def read_single_rank_binary_as_athdf(
         nx = block_size[d - 1]
 
         # Use the meshblock geometry for local min and max
-        xmin = filedata["mb_geometry"][0, (d - 1) * 2]
-        xmax = filedata["mb_geometry"][0, (d - 1) * 2 + 1]
+        xmin = filedata["mb_geometry"][meshblock_index_in_file, (d - 1) * 2]
+        xmax = filedata["mb_geometry"][meshblock_index_in_file, (d - 1) * 2 + 1]
 
         data[xf] = np.linspace(xmin, xmax, nx + 1, dtype=dtype)
         data[xv] = np.empty(nx, dtype=dtype)
@@ -1436,16 +1514,16 @@ def read_single_rank_binary_as_athdf(
 
     # Process the single block
     for q in quantities:
-        block_data = filedata["mb_data"][q][0]  # Single rank, so only one block
+        block_data = filedata["mb_data"][q][meshblock_index_in_file]
         data[q] = block_data[k_min:k_max, j_min:j_max, i_min:i_max]
 
     if return_levels:
-        data["Levels"].fill(filedata["mb_logical"][0, 3])  # Level of the single block
+        data["Levels"].fill(filedata["mb_logical"][meshblock_index_in_file, 3])
 
     # Add metadata
     data["Time"] = filedata["time"]
     data["NumCycles"] = filedata["cycle"]
-    data["MaxLevel"] = filedata["mb_logical"][0, 3]
+    data["MaxLevel"] = filedata["mb_logical"][meshblock_index_in_file, 3]
 
     return data
 
@@ -1485,6 +1563,8 @@ def read_coarsened_binary_as_athdf(
     # Step 2: Organize data similar to athdf
     if raw:
         return filedata
+
+    _require_meshblocks_for_athdf(filedata, filename)
 
     # Prepare dictionary for results
     if data is None:
@@ -1968,6 +2048,7 @@ __all__ = [
     "read_all_ranks_binary_as_athdf",
     "read_all_ranks_coarsened_binary_as_athdf",
     "read_single_rank_binary_as_athdf",
+    "read_rank_binary_as_athdf",
     "read_coarsened_binary_as_athdf",
     "write_athdf",
     "write_xdmf_for",
@@ -1988,7 +2069,9 @@ if __name__ == "__main__":
                 print(x)
                 yield x
 
-    parser = argparse.ArgumentParser(description="Convert AthenaK binary output to ATHDF/XDMF.")
+    parser = argparse.ArgumentParser(
+        description="Convert AthenaK binary output to ATHDF/XDMF."
+    )
     parser.add_argument(
         "--assemble-shards",
         action="store_true",

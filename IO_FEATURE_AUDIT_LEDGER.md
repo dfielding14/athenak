@@ -251,7 +251,17 @@ resolutions, and re-audit results required by `IO_FEATURE_BRANCH_GUIDE.md`.
 | Independent findings | The reference `read_rank_binary_as_athdf()` scatter implementation misplaces later logical MeshBlocks at the root-grid origin; its indexed single-block overload changes established positional-call meaning; target-tree readers lack focused athdf-like and malformed-binary coverage. |
 | Accepted architecture | Add a thin canonical rank-reader delegate, add only a keyword-only `meshblock_index_in_file=...` selector, omit unneeded `athinput()`, and harden malformed-reader behavior with focused regressions. |
 | Decision update | Added D-040, resolving D-017 and D-019. |
-| Status | Preimplementation direction accepted; execute during CP-05. |
+| Status | Preimplementation direction accepted; superseded by the successful implementation audit below. |
+
+### 2026-05-29: CP-05 Canonical Python Reader Hardening
+
+| Field | Record |
+| --- | --- |
+| Implementation | Added `read_rank_binary_as_athdf()` as a thin canonical delegate; added keyword-only `meshblock_index_in_file=...`; retained all existing positional forms; omitted `athinput()`; converted binary readers to context-managed file IO; rejected duplicate logical MeshBlocks across shards; and added explicit empty-shard athdf-like conversion errors. |
+| Focused verification | `test_python_io_readers_cpu.py` returned `39 passed`. Python byte-compilation, targeted `flake8`, and `git diff --check` passed. |
+| Independent re-audit | A separate Python auditor confirmed the canonical delegate, rank-1 logical placement test, positional compatibility, keyword-only selector, descriptor closure, duplicate-block rejection, empty-shard errors, intended `__all__`, absent `athinput()`, and no unrelated API drift. |
+| Deferred optional coverage | Add explicit node-shard delegate readback, parameterize duplicate-block rejection for `.cbin`, and optionally add malformed-header closure and empty-`convert_file()` tests. |
+| Status | CP-05 stop gate closed. |
 
 ### 2026-05-29: CP-06 Local Qualification Resource Probe
 

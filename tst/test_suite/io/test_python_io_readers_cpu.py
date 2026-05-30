@@ -1,5 +1,7 @@
 """Pure-Python regression coverage for binary, PDF, and spherical-slice readers."""
 
+import builtins
+import inspect
 from pathlib import Path
 import shutil
 import struct
@@ -14,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = ROOT / "tst" / "fixtures" / "io" / "origin_main_886dd2a1"
 sys.path.insert(0, str(ROOT / "vis" / "python"))
 
+import bin_convert  # noqa: E402
 from bin_convert import (  # noqa: E402
     convert_file,
     read_all_ranks_binary,
@@ -39,6 +42,69 @@ def _join_x1_blocks(filedata, variable):
     order = np.argsort(filedata["mb_logical"][:, 0])
     blocks = [filedata["mb_data"][variable][item] for item in order]
     return np.concatenate(blocks, axis=-1)
+
+
+def _binary_layout(path):
+    with path.open("rb") as fp:
+        fp.readline()
+        pheader_count = int(fp.readline().split(b"=")[-1])
+        pheader = {}
+        for _ in range(pheader_count - 1):
+            key, value = [
+                item.strip() for item in fp.readline().decode("utf-8").split("=")
+            ]
+            pheader[key] = value
+        nvars = int(fp.readline().split(b"=")[-1])
+        fp.readline()
+        header_size = int(fp.readline().split(b"=")[-1])
+        fp.seek(header_size, 1)
+        return (
+            fp.tell(),
+            nvars,
+            int(pheader["size of location"]),
+            int(pheader["size of variable"]),
+        )
+
+
+def _copy_binary_shards(tmp_path, kind, sources):
+    paths = []
+    for rank, source in enumerate(sources):
+        path = tmp_path / f"rank_{rank:08d}" / f"output.00000.{kind}"
+        path.parent.mkdir(parents=True)
+        shutil.copyfile(source, path)
+        paths.append(path)
+    return paths
+
+
+def _write_empty_binary(path, source):
+    payload_offset, _, _, _ = _binary_layout(source)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(source.read_bytes()[:payload_offset])
+
+
+def _write_two_meshblock_binary(path):
+    rank0 = _binary_fixture("bin", "per_rank", "00000", rank=0)
+    rank1 = _binary_fixture("bin", "per_rank", "00000", rank=1)
+    payload_offset, _, _, _ = _binary_layout(rank1)
+    path.write_bytes(rank0.read_bytes() + rank1.read_bytes()[payload_offset:])
+
+
+def _shrink_first_meshblock_x1(path):
+    payload_offset, nvars, locsizebytes, varsizebytes = _binary_layout(path)
+    payload = bytearray(path.read_bytes())
+    meshblock_index = list(struct.unpack_from("=6i", payload, payload_offset))
+    assert meshblock_index[1] > meshblock_index[0]
+    meshblock_index[1] -= 1
+    struct.pack_into("=6i", payload, payload_offset, *meshblock_index)
+
+    shape = (
+        meshblock_index[1] - meshblock_index[0] + 1,
+        meshblock_index[3] - meshblock_index[2] + 1,
+        meshblock_index[5] - meshblock_index[4] + 1,
+    )
+    values_offset = payload_offset + 24 + 16 + 6 * locsizebytes
+    values_size = nvars * shape[0] * shape[1] * shape[2] * varsizebytes
+    path.write_bytes(payload[: values_offset + values_size])
 
 
 @pytest.mark.parametrize(
@@ -137,6 +203,244 @@ def test_repository_exposes_only_canonical_converter_imports():
         for path in (ROOT / directory).rglob("*"):
             if path.is_file() and path.suffix in {".py", ".md", ".athinput"}:
                 assert forbidden not in path.read_text(errors="ignore")
+
+
+def test_binary_converter_public_api_and_signature_contracts():
+    assert "read_rank_binary_as_athdf" in bin_convert.__all__
+    assert not hasattr(bin_convert, "athinput")
+    assert inspect.signature(bin_convert.read_rank_binary_as_athdf) == inspect.signature(
+        bin_convert.read_binary_as_athdf
+    )
+
+    signature = inspect.signature(bin_convert.read_single_rank_binary_as_athdf)
+    positional_names = [
+        "filename",
+        "raw",
+        "data",
+        "quantities",
+        "dtype",
+        "return_levels",
+        "x1_min",
+        "x1_max",
+        "x2_min",
+        "x2_max",
+        "x3_min",
+        "x3_max",
+        "vol_func",
+        "center_func_1",
+        "center_func_2",
+        "center_func_3",
+    ]
+    assert list(signature.parameters)[:-1] == positional_names
+    selector = signature.parameters["meshblock_index_in_file"]
+    assert selector.kind is inspect.Parameter.KEYWORD_ONLY
+    assert selector.default == 0
+
+
+def test_rank_binary_as_athdf_is_a_thin_canonical_delegate(monkeypatch):
+    sentinel = object()
+    calls = []
+
+    def fake_read_binary_as_athdf(**kwargs):
+        calls.append(kwargs)
+        return sentinel
+
+    monkeypatch.setattr(bin_convert, "read_binary_as_athdf", fake_read_binary_as_athdf)
+
+    assert bin_convert.read_rank_binary_as_athdf("rank.bin", raw=True) is sentinel
+    assert calls[0]["filename"] == "rank.bin"
+    assert calls[0]["raw"] is True
+    assert calls[0]["num_ghost"] == 0
+
+
+def test_rank_binary_as_athdf_places_rank_one_at_its_logical_location():
+    path = _binary_fixture("bin", "per_rank", "00000", rank=1)
+    raw = read_binary(str(path))
+    positioned = bin_convert.read_rank_binary_as_athdf(str(path))
+
+    block_width = raw["nx1_out_mb"]
+    logical_x1 = raw["mb_logical"][0, 0]
+    start = logical_x1 * block_width
+    np.testing.assert_allclose(positioned["dens"][..., :start], 0.0)
+    np.testing.assert_allclose(
+        positioned["dens"][..., start:start + block_width],
+        raw["mb_data"]["dens"][0],
+    )
+
+
+def test_single_rank_binary_as_athdf_keyword_index_and_legacy_positionals(tmp_path):
+    path = tmp_path / "two_meshblocks.bin"
+    _write_two_meshblock_binary(path)
+    raw = read_binary(str(path))
+
+    legacy = bin_convert.read_single_rank_binary_as_athdf(
+        str(path), False, None, ["dens"]
+    )
+    first = bin_convert.read_single_rank_binary_as_athdf(
+        str(path), quantities=["dens"], meshblock_index_in_file=0
+    )
+    second = bin_convert.read_single_rank_binary_as_athdf(
+        str(path), quantities=["dens"], meshblock_index_in_file=np.int64(1)
+    )
+
+    np.testing.assert_allclose(legacy["dens"], raw["mb_data"]["dens"][0])
+    np.testing.assert_allclose(first["dens"], legacy["dens"])
+    np.testing.assert_allclose(second["dens"], raw["mb_data"]["dens"][1])
+    assert second["x1f"][0] == raw["mb_geometry"][1, 0]
+    assert second["x1f"][-1] == raw["mb_geometry"][1, 1]
+
+
+@pytest.mark.parametrize("index", (True, np.bool_(True), 1.5, "1", None))
+def test_single_rank_binary_as_athdf_rejects_non_integral_indexes(tmp_path, index):
+    path = tmp_path / "two_meshblocks.bin"
+    _write_two_meshblock_binary(path)
+
+    with pytest.raises(TypeError, match="meshblock_index_in_file must be an integer"):
+        bin_convert.read_single_rank_binary_as_athdf(
+            str(path), meshblock_index_in_file=index
+        )
+
+
+@pytest.mark.parametrize("index", (-1, 2))
+def test_single_rank_binary_as_athdf_rejects_out_of_range_indexes(tmp_path, index):
+    path = tmp_path / "two_meshblocks.bin"
+    _write_two_meshblock_binary(path)
+
+    with pytest.raises(IndexError, match="meshblock_index_in_file .* is out of range"):
+        bin_convert.read_single_rank_binary_as_athdf(
+            str(path), meshblock_index_in_file=index
+        )
+
+
+def test_single_rank_binary_as_athdf_rejects_nonzero_raw_index(tmp_path):
+    path = tmp_path / "two_meshblocks.bin"
+    _write_two_meshblock_binary(path)
+
+    with pytest.raises(ValueError, match="meshblock_index_in_file must be 0"):
+        bin_convert.read_single_rank_binary_as_athdf(
+            str(path), raw=True, meshblock_index_in_file=1
+        )
+
+
+@pytest.mark.parametrize(
+    ("kind", "reader", "family"),
+    (
+        ("bin", read_binary, "binary"),
+        ("cbin", read_coarsened_binary, "coarsened binary"),
+    ),
+)
+def test_binary_readers_close_malformed_record_files(
+    tmp_path, monkeypatch, kind, reader, family
+):
+    source = _binary_fixture(kind, "shared", "00000")
+    malformed = tmp_path / source.name
+    malformed.write_bytes(source.read_bytes()[:-1])
+
+    actual_open = builtins.open
+    opened = []
+
+    def tracked_open(*args, **kwargs):
+        fp = actual_open(*args, **kwargs)
+        opened.append(fp)
+        return fp
+
+    monkeypatch.setattr(builtins, "open", tracked_open)
+
+    with pytest.raises(ValueError, match=f"truncated {family} meshblock values"):
+        reader(str(malformed))
+    assert opened
+    assert all(fp.closed for fp in opened)
+
+
+@pytest.mark.parametrize(
+    ("kind", "reader", "family"),
+    (
+        ("bin", read_binary, "binary"),
+        ("cbin", read_coarsened_binary, "coarsened binary"),
+    ),
+)
+def test_binary_shard_assembly_rejects_metadata_mismatch(tmp_path, kind, reader, family):
+    paths = _copy_binary_shards(
+        tmp_path,
+        kind,
+        [
+            _binary_fixture(kind, "per_rank", "00000", rank=0),
+            _binary_fixture(kind, "per_rank", "00001", rank=1),
+        ],
+    )
+
+    with pytest.raises(ValueError, match=f"{family} shard metadata mismatch for 'time'"):
+        reader(str(paths[0]), assemble_shards=True)
+
+
+@pytest.mark.parametrize(
+    ("kind", "reader", "family"),
+    (
+        ("bin", read_binary, "binary"),
+        ("cbin", read_coarsened_binary, "coarsened binary"),
+    ),
+)
+def test_binary_shard_assembly_rejects_output_shape_mismatch(
+    tmp_path, kind, reader, family
+):
+    paths = _copy_binary_shards(
+        tmp_path,
+        kind,
+        [
+            _binary_fixture(kind, "per_rank", "00000", rank=0),
+            _binary_fixture(kind, "per_rank", "00000", rank=1),
+        ],
+    )
+    _shrink_first_meshblock_x1(paths[1])
+
+    with pytest.raises(ValueError, match=f"{family} shard output-shape mismatch"):
+        reader(str(paths[0]), assemble_shards=True)
+
+
+def test_binary_shard_assembly_rejects_duplicate_logical_meshblocks(tmp_path):
+    rank0 = _binary_fixture("bin", "per_rank", "00000", rank=0)
+    paths = _copy_binary_shards(tmp_path, "bin", [rank0, rank0])
+
+    with pytest.raises(ValueError, match="duplicate logical MeshBlock"):
+        read_binary(str(paths[0]), assemble_shards=True)
+
+
+@pytest.mark.parametrize(
+    ("kind", "reader", "athdf_readers"),
+    (
+        (
+            "bin",
+            read_binary,
+            (
+                bin_convert.read_binary_as_athdf,
+                bin_convert.read_rank_binary_as_athdf,
+                bin_convert.read_single_rank_binary_as_athdf,
+                bin_convert.read_all_ranks_binary_as_athdf,
+            ),
+        ),
+        (
+            "cbin",
+            read_coarsened_binary,
+            (
+                bin_convert.read_coarsened_binary_as_athdf,
+                bin_convert.read_all_ranks_coarsened_binary_as_athdf,
+            ),
+        ),
+    ),
+)
+def test_athdf_like_readers_reject_valid_empty_shards(
+    tmp_path, kind, reader, athdf_readers
+):
+    source = _binary_fixture(kind, "per_rank", "00000", rank=0)
+    empty = tmp_path / "rank_00000000" / f"empty.00000.{kind}"
+    _write_empty_binary(empty, source)
+
+    assert reader(str(empty))["n_mbs"] == 0
+    for athdf_reader in athdf_readers:
+        with pytest.raises(
+            ValueError, match="athdf-like data: binary output contains no"
+        ):
+            athdf_reader(str(empty))
 
 
 @pytest.mark.parametrize(
