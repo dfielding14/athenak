@@ -1165,8 +1165,9 @@ def test_cgl_lf_stage_i_isolates_e02_and_checks_all_shared_root_jobs(tmp_path):
     assert paths["reservations"].name == (
         "mks24_stage_i_E02_modal_driver_reservations.json"
     )
-    with pytest.raises(ValueError, match="authorized only for the R16 pilot"):
-        stage_i.require_pilot_case("R02")
+    assert stage_i.R16_COMPLETION_RESERVED_NODE_HOURS == 7.0
+    with pytest.raises(ValueError, match="authorized only for R16 completion"):
+        stage_i.require_authorized_case("R02")
 
     manifest_path = (
         paths["runs"] / "R16" / "s00" / "manifest" / "prepared_run.json"
