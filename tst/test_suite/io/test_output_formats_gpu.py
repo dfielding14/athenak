@@ -1,9 +1,4 @@
-"""GPU-targeted derived-variable PDF regression.
-
-This test is named for GPU-suite selection. It may also be run against a CPU
-binary to check the producer/readback assertions, but a GPU build is required
-to qualify device-memory safety.
-"""
+"""GPU-selectable smoke regression for derived PDF axes and scalar weighting."""
 
 from pathlib import Path
 import subprocess
@@ -18,7 +13,7 @@ sys.path.insert(0, str(ROOT / "vis" / "python"))
 from read_pdf import read_pdf  # noqa: E402
 
 
-def test_scalar_and_spherical_derived_fields_are_device_safe(tmp_path: Path):
+def test_gpu_pdf_derived_axes_and_scalar_weight_round_trip(tmp_path):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     subprocess.run(
@@ -27,6 +22,7 @@ def test_scalar_and_spherical_derived_fields_are_device_safe(tmp_path: Path):
         capture_output=True,
         text=True,
     )
+
     pdf = read_pdf(
         str(
             run_dir
@@ -34,6 +30,15 @@ def test_scalar_and_spherical_derived_fields_are_device_safe(tmp_path: Path):
             / "io_pdf_extended.00000.pdf"
         )
     )
+    assert pdf["header"]["ndim"] == 4
+    assert pdf["header"]["weight"] == "variable"
+    assert pdf["header"]["weight_variable"] == "hydro_u_s_0"
+    assert [entry["variable"] for entry in pdf["header"]["dimensions"]] == [
+        "coord_x",
+        "coord_r",
+        "hydro_w_s_0",
+        "vel_sph_r",
+    ]
     assert pdf["pdf"].shape == (4, 4, 4, 4)
     assert np.isfinite(pdf["pdf"]).all()
     assert pdf["pdf"].sum() > 0.0
