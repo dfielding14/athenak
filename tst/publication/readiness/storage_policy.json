@@ -36,7 +36,7 @@
       "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
       "analysis_script_sha256": [
         "ea995c6f7b7d8a7d333dff7411243e279ab8abc06246f0eb4ee4675665aa58f3",
-        "7d482905e3e678db20f94bd85ed0686ce0157476c2cb8db5dcf9a015175181a1"
+        "a24ac54490dee03d577ea15543021059a1f88d38a5ab743a2da00704a32cdf67"
       ],
       "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
       "launch_contract_sha256": "f63d539df5118ff0f9cec769fa656f4f34784dce54847a285aea48517e299a1f",
@@ -60,7 +60,7 @@
       "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
       "analysis_script_sha256": [
         "8f3c6bd4240f4ae3be2310061743e389c21ed5088b716fd98654cbbba95f2414",
-        "7d482905e3e678db20f94bd85ed0686ce0157476c2cb8db5dcf9a015175181a1"
+        "a24ac54490dee03d577ea15543021059a1f88d38a5ab743a2da00704a32cdf67"
       ],
       "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
       "launch_contract_sha256": "0daebd7708c642af2aae000a9a35c773599956e5e3273c4eb4124125fdd5a1e6",
@@ -72,9 +72,9 @@
   },
   "olcf_side_storage": {
     "status": "passed_user_authorized_orion_only_storage",
-    "last_preflight_utc": "2026-05-30T04:49:18Z",
+    "last_preflight_utc": "2026-05-30T21:49:15Z",
     "installed_control_plane_version": "e8e47eadb491b20e3f196f3d8ea0b859c61ccad961f8d56bc85ea2a48424eecf",
-    "staged_control_plane_candidate_version": "140e9a2981ba4378b1164f6eed4021fe5d4462c37571d59439c11b491d58ac49",
+    "staged_control_plane_candidate_version": "6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
     "installed_control_plane_lifecycle": "live_active_generation_successor_staged_not_installed",
     "orion_simulation_root_preflight": {
       "status": "passed",

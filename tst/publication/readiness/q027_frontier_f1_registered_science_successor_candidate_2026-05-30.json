@@ -24,9 +24,9 @@
   "staged_successor": {
     "control_plane_version": "140e9a2981ba4378b1164f6eed4021fe5d4462c37571d59439c11b491d58ac49",
     "control_plane_inventory_files": 19,
-    "worktree_state": "dirty_candidate_pending_clean_commit_curation",
-    "paired_install_status": "pending_clean_commit_and_paired_install",
-    "active_policy_promotion_status": "pending_paired_install"
+    "worktree_state": "clean_operational_commit_ab7b2bbc977551de9d7b67c2ec264abfcc9246a5",
+    "paired_install_status": "pass",
+    "active_policy_promotion_status": "pending"
   },
   "registered_science_slices": [
     {
@@ -116,14 +116,22 @@
     ]
   },
   "paired_install_transition": {
-    "status": "pending_clean_commit_and_paired_install"
-  },
-  "active_policy_transition": {
-    "status": "pending_paired_install"
+    "status": "pass",
+    "timestamp": "2026-05-30T21:49:15Z",
+    "control_plane_version": "140e9a2981ba4378b1164f6eed4021fe5d4462c37571d59439c11b491d58ac49",
+    "operational_commit": "ab7b2bbc977551de9d7b67c2ec264abfcc9246a5",
+    "orion_inventory_sha256": "7a5988c84cdd3ce309045c8149b09f26f61dd227fc73d2e3226b7bc11e5dcb40",
+    "project_home_inventory_sha256": "7a5988c84cdd3ce309045c8149b09f26f61dd227fc73d2e3226b7bc11e5dcb40",
+    "genesis_event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
+    "genesis_mirror_ack_sha256": "a3af8af8c3b579ee323850902aad7aab58abde98dff98618ccffd15958dbb296",
+    "orion_ledger_records": 31,
+    "project_home_ledger_records": 31,
+    "orion_receipt_records": 31,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent"
   },
   "open_boundaries": [
-    "paired immutable install remains blocked until the reviewed candidate is curated into a clean commit",
-    "paired immutable Orion and Project Home install is pending",
+    "active-policy promotion is pending after the paired immutable Orion and Project Home install",
     "active-policy promotion is pending",
     "the two registered Frontier F1 slices have not executed",
     "external reviewer disposition remains pending external review"
