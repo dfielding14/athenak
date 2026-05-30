@@ -15,9 +15,7 @@
     "status": "pending_clean_candidate_freeze"
   },
   "frontier_admission_smoke": {
-    "status": "pending_exact_executable_binding",
-    "source_policy_role": "fail_closed_successor_staging_policy",
-    "historical_predecessor_lifecycle": "registered_f0_job_4744225_consumed_and_reconciled_under_predecessor_policy"
+    "status": "pending_exact_executable_binding"
   },
   "olcf_side_storage": {
     "status": "passed_user_authorized_orion_only_storage",
