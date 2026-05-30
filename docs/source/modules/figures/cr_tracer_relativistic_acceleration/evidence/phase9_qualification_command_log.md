@@ -466,6 +466,7 @@ test "$MERGE_TREE_STATUS" -eq 1
   echo 'accepted_phase8_evidence_seal=aa8663e8a5d49e26c206363d028b52d0e350a91f'
   echo 'replaced_leaked_remote_tip=5e031387e66224b0e9dc4462fbf4d9a7ee01c9df'
   echo 'previous_portability_rebound_seal=aa66f6c27531116e12554631281c8f2ed07d93c6'
+  echo 'previous_documentation_durability_seal=88d631e4943648fe83f0624cb30291fa52ab4296'
   echo 'origin_development=c6a73b08e60807f8b925164c5e7edd5cb820c8ae'
   echo 'origin_gh_pages=4833aa9341e19861297e330ff02aabfd8001935c'
 } > "$EVID/phase9_branch_snapshot.txt"
