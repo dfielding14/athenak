@@ -83,9 +83,10 @@ def _authorized_source_path(source_root: Path, authorized_source_root: Path) -> 
         )
     if not source_root.is_dir():
         raise ValueError(f"Source root is not a directory: {source_root}")
-    if source_root.resolve(strict=True) != authorized_source_root.resolve(strict=True):
+    resolved_source_root = source_root.resolve(strict=True)
+    if resolved_source_root != authorized_source_root.resolve(strict=True):
         raise ValueError(f"Source root differs from authorized source: {source_root}")
-    return source_root
+    return resolved_source_root
 
 
 def _reviewed_utf8(data: bytes, *, label: str) -> str:
@@ -236,6 +237,9 @@ def _relative_submodule_path(value: str) -> PurePosixPath:
 
 
 def _validated_submodules(source_root: Path) -> list[dict[str, str]]:
+    source_root = Path(os.path.abspath(source_root))
+    if source_root.resolve() != source_root or not source_root.is_dir():
+        raise ValueError(f"Source root is not a canonical directory: {source_root}")
     output = _git(source_root, "submodule", "status", "--recursive")
     parsed: list[tuple[PurePosixPath, str]] = []
     seen: set[str] = set()

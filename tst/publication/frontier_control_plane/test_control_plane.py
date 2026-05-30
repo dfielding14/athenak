@@ -41,6 +41,7 @@ from control_plane_common import PRODUCTION_RUNTIME_MODULEPATH
 from control_plane_common import TRUSTED_GIT, TRUSTED_PYTHON
 from control_plane_common import TRUSTED_SACCT, TRUSTED_SBATCH, TRUSTED_SCANCEL
 from control_plane_common import TRUSTED_SCONTROL, TRUSTED_SQUEUE
+from create_clean_candidate_freeze import _authorized_source_path
 from create_clean_candidate_freeze import create_freeze, _validated_submodules
 from create_pre_submit_manifest import create_manifest
 from initialize_frontier_ledger import initialize_from_policy
@@ -3415,6 +3416,59 @@ PY
         commit_object = Path(str(candidate["source"]["submodules"][0]["commit_path"]))
         self.assertEqual(commit_object, manifest_path.parent / "submodules" / "0000.commit")
         self.assertFalse(bool(commit_object.stat().st_mode & 0o222))
+
+    def test_authorized_source_path_normalizes_trusted_source_root_alias(self) -> None:
+        source_root = self._clean_source("aliased-submodule-source")
+        self._add_submodule(source_root, "nested")
+        aliased_source_root = self.root / "aliased-submodule-source-root"
+        aliased_source_root.symlink_to(source_root, target_is_directory=True)
+        trusted_source_root = _authorized_source_path(
+            aliased_source_root, aliased_source_root
+        )
+        self.assertEqual(trusted_source_root, source_root.resolve())
+        records = _validated_submodules(trusted_source_root)
+        self.assertEqual([record["path"] for record in records], ["nested"])
+
+    def test_validated_submodules_rejects_source_root_alias(self) -> None:
+        source_root = self._clean_source("untrusted-aliased-submodule-source")
+        self._add_submodule(source_root, "nested")
+        aliased_source_root = self.root / "untrusted-aliased-submodule-source-root"
+        aliased_source_root.symlink_to(source_root, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            _validated_submodules(aliased_source_root)
+
+    def test_validated_submodules_rejects_empty_source_root_alias(self) -> None:
+        source_root = self._clean_source("untrusted-empty-aliased-source")
+        aliased_source_root = self.root / "untrusted-empty-aliased-source-root"
+        aliased_source_root.symlink_to(source_root, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            _validated_submodules(aliased_source_root)
+
+    def test_validated_submodules_rejects_submodule_path_symlink(self) -> None:
+        source_root = self.root / "symlinked-submodule-source"
+        source_root.mkdir()
+        nested_real = self.root / "symlinked-submodule-target"
+        nested_real.mkdir()
+        (source_root / "nested").symlink_to(nested_real, target_is_directory=True)
+        with patch(
+            "create_clean_candidate_freeze._git",
+            return_value=f" {'0' * 40} nested",
+        ):
+            with self.assertRaisesRegex(ValueError, "traverses a symlink"):
+                _validated_submodules(source_root)
+
+    def test_orion_build_profile_writer_accepts_trusted_source_root_alias(self) -> None:
+        source_root = self._clean_source("aliased-profile-writer-source")
+        self._add_submodule(source_root, "nested")
+        aliased_source_root = self.root / "aliased-profile-writer-source-root"
+        aliased_source_root.symlink_to(source_root, target_is_directory=True)
+        _, profile = self._build_profile(
+            aliased_source_root,
+            self.pic_root / "aliased-profile-writer-build",
+            "aliased-profile-writer",
+        )
+        value = json.loads(profile.read_text(encoding="utf-8"))
+        self.assertEqual(value["authorized_source_root"], str(aliased_source_root))
 
     def test_clean_candidate_creator_rejects_dirty_submodule(self) -> None:
         source_root = self._clean_source("dirty-submodule-source")

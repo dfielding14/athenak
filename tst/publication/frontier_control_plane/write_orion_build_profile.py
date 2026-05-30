@@ -468,6 +468,7 @@ def build_profile(
         if production_root
         else production_module_list_bytes()
     )
+    authorized_source_spelling = Path(os.path.abspath(source_root))
     source_root = _authorized_source_path(source_root, authorized_source_root)
     commit, tree, submodules = _source_identity(source_root)
     if commit != expected_git_commit:
@@ -609,7 +610,7 @@ def build_profile(
         authorized_pic_root=authorized_pic_root,
     )
     return write_profile(
-        source_root=source_root,
+        source_root=authorized_source_spelling,
         fresh_source_root=fresh_source,
         executable=paths["executable"],
         output=paths["build_profile"],
