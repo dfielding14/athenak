@@ -102,8 +102,8 @@
     "sha256": "0c3e9957220204ba38c7751c64fffa95d070673597dc310d032916105f718869"
   },
   "qualification": "cr_relativistic_phase9_workstation_provenance_envelope",
-  "rebound_correction_candidate_head": "d7276a775332e677018427562f341a123bd7517f",
-  "rebound_correction_candidate_tree": "4f2a31b3360e97750126d7538f367dd2bf6b8bec",
+  "rebound_correction_candidate_head": "fb213b45a6ce4bfdf61c0bf154a95ea0262d26ed",
+  "rebound_correction_candidate_tree": "a92205e4b46f0e4db9ef60a3238f4414233164bc",
   "result_artifacts": {
     "phase9_all_formats_debug_metrics.json": {
       "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_all_formats_debug_metrics.json",
@@ -139,15 +139,15 @@
     },
     "phase9_gh_pages_overlay_build.log": {
       "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_gh_pages_overlay_build.log",
-      "sha256": "f028fa5e9559581a10e4dc4d28f7f8638228ff5e0fcf89184f2d39f2e9ab75a8"
+      "sha256": "8e6f6313a18d207a019dfd8d5f99e423129c7866a861c638964e923c636fc914"
     },
     "phase9_gh_pages_overlay_inventory.txt": {
       "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_gh_pages_overlay_inventory.txt",
-      "sha256": "78bfe3a8b4494dcb3a8cf563d387ae41d85c3fd1b6c9a5a03acdc41d8517120d"
+      "sha256": "1a066edbe78cb6a89ab3a6e2b39eb4fac5e21943133416121297dee82e3aa67f"
     },
     "phase9_merge_tree_origin_development.log": {
       "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_merge_tree_origin_development.log",
-      "sha256": "3ddc081f6ae382babf583f0c616e93e9fa8052d1257a37d15677faf9c31989f0"
+      "sha256": "8fea46d706cfae88aa3abfb729272794a03d49299583741ba638d519787063a6"
     },
     "phase9_migration_debug_metrics.json": {
       "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_migration_debug_metrics.json",

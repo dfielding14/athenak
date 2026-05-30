@@ -1,4 +1,5 @@
 phase9 text privacy scan
 PASS: retained text has no local identity markers
+PASS: public overlay source has no local identity markers
 PASS: portable text has no local identity markers
 PASS: portable binary has no local identity markers
