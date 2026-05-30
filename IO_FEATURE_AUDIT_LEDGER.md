@@ -582,7 +582,7 @@ resolutions, and re-audit results required by `IO_FEATURE_BRANCH_GUIDE.md`.
 | Checkpoint | Status | Decisions | Pre-edit auditors | Implementation commit(s) | Focused tests | Post-edit auditors | Reflection | Remaining risk |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | RCP-00 | Locally closed | D-069, D-070, D-071, D-073, D-075, D-081, D-083, D-085 | Runtime baseline; format/tooling baseline; documentation/process baseline | `e40621d8` guide freeze | Fresh floors registered below | Three baseline reports accepted | R-00 recorded below | External CUDA and multi-node topology remain unavailable locally |
-| RCP-01 | Locally closed | D-070, D-071, D-085, D-091, D-092, D-093 | Focused layout auditor accepted | Pending coherent commit | Full serial `238 passed`; full MPI `67 passed`; style `2 passed`; fixtures `27` verified; exact pre-edit byte comparisons pass | Arithmetic, compatibility, topology, admission, and single-issue re-auditors accepted after corrections | R-01 recorded below | Signed output-sequence domain remains queued for RCP-02 |
+| RCP-01 | Locally closed | D-070, D-071, D-085, D-091, D-092, D-093 | Focused layout auditor accepted | `3b96e2d1` | Full serial `238 passed`; full MPI `67 passed`; style `2 passed`; fixtures `27` verified; exact pre-edit byte comparisons pass | Arithmetic, compatibility, topology, admission, and single-issue re-auditors accepted after corrections | R-01 recorded below | Signed output-sequence domain remains queued for RCP-02 |
 | RCP-02 | Not started | D-072, D-073, D-074, D-086, D-087 pending |  |  |  |  |  |  |
 | RCP-03 | Not started | D-075 accepted direction; D-088 pending |  |  |  |  |  |  |
 | RCP-04 | Not started | D-076, D-077, D-078, D-089 pending |  |  |  |  |  |  |
