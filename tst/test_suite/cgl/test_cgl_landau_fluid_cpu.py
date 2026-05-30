@@ -1167,12 +1167,15 @@ def test_cgl_lf_stage_i_isolates_e02_and_checks_all_shared_root_jobs(tmp_path):
     )
     assert stage_i.COMPLETED_R16_NODE_HOURS == 6.145556
     assert stage_i.COMPLETED_R02_STANDARD_LAYOUT_PILOT_NODE_HOURS == 0.473333
-    assert stage_i.HIGH_RESOLUTION_PILOT_RESERVED_NODE_HOURS == 8.0
-    assert stage_i.CURRENT_STAGE_I_RESERVED_NODE_HOURS == 14.618889
+    assert stage_i.COMPLETED_R17_HIGH_RESOLUTION_PILOT_NODE_HOURS == 4.235556
+    assert stage_i.MEASURED_STAGE_I_RESERVED_NODE_HOURS == 900.0
+    assert stage_i.CURRENT_STAGE_I_RESERVED_NODE_HOURS == 900.0
+    stage_i.require_authorized_case("R02")
+    stage_i.require_authorized_case("R17")
     with pytest.raises(
-        ValueError, match="authorized only for the R17 high-resolution timing probe"
+        ValueError, match="authorized only for frozen mapped matrix cases R02-R17"
     ):
-        stage_i.require_authorized_case("R02")
+        stage_i.require_authorized_case("R18")
 
     manifest_path = (
         paths["runs"] / "R16" / "s00" / "manifest" / "prepared_run.json"

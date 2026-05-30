@@ -62,9 +62,13 @@ and `4744158` are now accepted through exact `R16 t = 10.0`, using
 production-window analyzer. Standard-layout `R02` jobs `4744198` and
 `4744205` are accepted through native snapshot boundary `t = 0.25`, use
 `0.473333` node-hours, and project `19.000000` node-hours per standard
-`t = 10` case from the authenticated continuation rate. The mapped matrix
-remains blocked because `R17` still dominates the residual runtime uncertainty;
-only an `8.0` node-hour `R17` high-resolution timing probe is authorized.
+`t = 10` case from the authenticated continuation rate. High-resolution `R17`
+jobs `4744210` and `4744230` are accepted through `t = 0.10`, use `4.235556`
+node-hours, and project `42.488889` node-hours per simulated time unit from
+the authenticated continuation rate. F-071 closes the residual runtime and
+storage bracket and authorizes only the frozen sixteen-case `R02`--`R17`
+mapped matrix under sequential inspection inside a `900.000000` node-hour
+`E02` Stage I envelope. Resume `R02` first and complete `R17` last.
 Reset the planning ceiling for that new epoch to an incremental `4000`
 node-hours while continuing to report the historical `0.851670` debug and
 `9.962778` Stage I node-hours. A reset is an accounting boundary for future
@@ -525,11 +529,11 @@ work is:
 | Freeze MKS24 case inventory | `inputs/cgl_lf_paper/mks24_stage_i_manifest.json` and guarded workflow `paper-mks24-stage-i` define sixteen source-mapped executions, reuse aliases, and exclude the unmapped active-Alfvenic beta-1 deck. | Preserve the committed manifest and validate it against every submitted input bundle. |
 | Close reference-data boundary | Many dimensionless curves/surfaces are extracted; dimensional panels remain blocked. | Author/archive data, explicit transform proof, or manuscript-scoped blocked-panel decision. |
 | Verify numerical model identity | Corrected collisions, limiter threshold selection, forcing work, passive feedback, and reduced/GPU gates are recorded. | Formal pre-production review against Stage I Sections 3-6 and passing required tests. |
-| Replacement-driver qualification | The merged modal OU driver records `TurbulenceRestartMetadata` and authoritative modal state. An immutable replacement-driver HIP/MPI executable is retained at revision `462b9dbd53e085dea46c2478b567781576d7d03e` with SHA-256 `df87684e9d2b7af33b36c2757779d15de87b84ef051ca9c4489f2efa358f5c48`. Focused post-merge local serial (`39 passed`) and scheduled MPI CPU (`2 passed`) gates are retained. Reduced startup `g015`, natural-cycle rank-local restart comparison `g018`, one-rank versus eight-rank decomposition comparison `g019`, passive-Alfvénic smoke `g020`, active-random smoke `g021`, reduced nonlinear hard-wall run `g022`, and standard-layout rank-local sizing run `g023` pass with zero strict counters. Fresh rank-local R16 production is accepted through exact `t = 10.0`; its production-window analyzer passes. Standard-layout R02 timing is accepted through native cadence `t = 0.25`. | Frontier debug qualification, low-resolution R16 completion, and the standard-layout R02 timing gate are closed. Run only the bounded `R17` high-resolution timing probe before reviewing matrix authorization. |
+| Replacement-driver qualification | The merged modal OU driver records `TurbulenceRestartMetadata` and authoritative modal state. An immutable replacement-driver HIP/MPI executable is retained at revision `462b9dbd53e085dea46c2478b567781576d7d03e` with SHA-256 `df87684e9d2b7af33b36c2757779d15de87b84ef051ca9c4489f2efa358f5c48`. Focused post-merge local serial (`39 passed`) and scheduled MPI CPU (`2 passed`) gates are retained. Reduced startup `g015`, natural-cycle rank-local restart comparison `g018`, one-rank versus eight-rank decomposition comparison `g019`, passive-Alfvénic smoke `g020`, active-random smoke `g021`, reduced nonlinear hard-wall run `g022`, and standard-layout rank-local sizing run `g023` pass with zero strict counters. Fresh rank-local R16 production is accepted through exact `t = 10.0`; its production-window analyzer passes. Standard-layout R02 timing is accepted through native cadence `t = 0.25`. High-resolution R17 timing is accepted through authenticated continuation `t = 0.10`. | Frontier debug qualification and the three runtime/storage gates are closed. Execute only the frozen mapped matrix under sequential inspection and the F-071 measured envelope. |
 | Execution-epoch isolation | Commit `462b9dbd` makes `scripts/frontier/cgl_lf_stage_i.py` record new work beneath `runs/mks24-stage-i/E02-modal-driver/`, use `mks24_stage_i_E02_modal_driver_*` accounting files, tag manifests and job names with the epoch, and reject cross-epoch restart ancestry and bundle discovery. The old `runs/mks24-stage-i/R16` tree remains outside discovery. | Retain its passing offline epoch-isolation regression before any Frontier submission. |
 | Shared-root coordination | `/lustre/orion/ast207/proj-shared/dfielding/CGL` also contains exploratory non-MKS24 runs. A read-only audit found cancelled job `4743020` and two-node debug job `4743106` beneath `runs/beta25-accel05-*`; neither is Stage I evidence. Slurm now records `4743106` as `COMPLETED 0:0`, but its top-level campaign manifest remains stale at `state = running`. The helper therefore continues to require explicit acknowledgement after a read-only isolation review. | Before every Stage I prepare and submit action, inspect all user jobs and all active CGL-root campaign records. Do not modify the stale exploratory manifest. Do not overlap Stage I with another root-writing CGL campaign unless an explicit isolation and concurrency review authorizes it. Account exploratory runs separately from the MKS24 ledgers. |
-| Retained source provenance | The campaign-root working checkout was intentionally replaced by Git bundles on 2026-05-29. Both launchers now permit a clean external source checkout while requiring a checksummed in-root `--source-bundle` that contains the prepared revision. The debug helper also retains complete sibling rank restart sets rather than only rank zero, rejects every queued user job, scans active top-level CGL-root records before submission, and rejects absent override targets before reservation. Commits `d210cdd5`, `eab6e12b`, and `7fae0bcf` implement F-060/F-061; `g023` used indexed bundle `athenak-feature-cgl-through-e4249794.bundle` with SHA-256 `492c178e67feb0c3b8ceae674e4766a48fa43415c459e3465b055464971326a4`, containing the immutable executable revision. Fresh initial E02 R16 pilot jobs used indexed bundle `athenak-feature-cgl-through-d93abefb.bundle` with SHA-256 `4a3653afdf8394daad5b4c2f7c0542c5017437d89d60bcbb91e51abde0e6240a`. Completed R02 timing jobs used indexed bundle `athenak-feature-cgl-through-c5bd782b.bundle` with SHA-256 `e25e86ec61f743fdfce76ec8f942cc3093620aa99b0576851211b3b7cc7a74c1`. | Retain the passing bundle/rank-local/shared-root/override self-tests and use the latest indexed bundle for each continuation. |
-| Production accounting path | `scripts/frontier/cgl_lf_stage_i.py` is separate from the debug-only utility, validates mapped cases and aliases, uses `batch` with default production `normal` QOS, archives executable/input, retained-bundle, and production-utility provenance, enforces sequential Stage I reservations, and requires an inspection record before an output may be recorded as `accepted` or retained as a clean partial prefix. Rank-local output sets are retained and checksum-verified as grouped products. Continuations may use only the inspected terminal restart set from a parent with matching epoch, case, input digest, and executable digest. Fresh `E02` R16 is accepted through exact `t = 10.0`, using `6.145556` node-hours inside its `7.0` node-hour envelope. F-070 records the completed `0.473333` node-hour R02 timing pilot and permits only an `8.0` node-hour R17 high-resolution probe next. | Record and review the bounded `R17` probe before proposing any mapped-matrix reservation. |
+| Retained source provenance | The campaign-root working checkout was intentionally replaced by Git bundles on 2026-05-29. Both launchers now permit a clean external source checkout while requiring a checksummed in-root `--source-bundle` that contains the prepared revision. The debug helper also retains complete sibling rank restart sets rather than only rank zero, rejects every queued user job, scans active top-level CGL-root records before submission, and rejects absent override targets before reservation. Commits `d210cdd5`, `eab6e12b`, and `7fae0bcf` implement F-060/F-061; `g023` used indexed bundle `athenak-feature-cgl-through-e4249794.bundle` with SHA-256 `492c178e67feb0c3b8ceae674e4766a48fa43415c459e3465b055464971326a4`, containing the immutable executable revision. Fresh initial E02 R16 pilot jobs used indexed bundle `athenak-feature-cgl-through-d93abefb.bundle` with SHA-256 `4a3653afdf8394daad5b4c2f7c0542c5017437d89d60bcbb91e51abde0e6240a`. Completed R02 timing jobs used indexed bundle `athenak-feature-cgl-through-c5bd782b.bundle` with SHA-256 `e25e86ec61f743fdfce76ec8f942cc3093620aa99b0576851211b3b7cc7a74c1`. Completed R17 timing jobs used indexed bundle `athenak-feature-cgl-through-cd63f81e.bundle` with SHA-256 `361b3d45a0ecaca29cd84d17c231db965bab5c90fd18e652b6b5fedff4fa2b67`. | Retain the passing bundle/rank-local/shared-root/override self-tests and use the latest indexed bundle for each continuation. |
+| Production accounting path | `scripts/frontier/cgl_lf_stage_i.py` is separate from the debug-only utility, validates mapped cases and aliases, uses `batch` with default production `normal` QOS, archives executable/input, retained-bundle, and production-utility provenance, enforces sequential Stage I reservations, and requires an inspection record before an output may be recorded as `accepted` or retained as a clean partial prefix. Rank-local output sets are retained and checksum-verified as grouped products. Continuations may use only the inspected terminal restart set from a parent with matching epoch, case, input digest, and executable digest. Fresh `E02` R16 is accepted through exact `t = 10.0`, using `6.145556` node-hours. F-070 records the completed `0.473333` node-hour R02 timing pilot. F-071 records the completed `4.235556` node-hour R17 timing pilot and expands only the frozen mapped-matrix envelope to `900.000000` node-hours. | Resume R02 first, execute one inspected segment at a time, and stop for recost if the measured projection exceeds the F-071 envelope. |
 | Production analysis/plot orchestration | Existing analyzer and MKS24 extractors implement many products; `paper-analyze` composes repeated checksum-qualified split reference manifests while rejecting duplicate product identifiers, and commit `449e297b` adds explicit partial-case comparison recording plus header-only snapshot-window selection; `cgl_lf_stage_i.py bundle-case` follows the explicit accepted restart lineage, merges sampled histories that need not repeat authenticated restart boundary rows while bounding gaps by their retained cadence and boundary timesteps, and links time-deduplicated shared or rank-local snapshot sets only after a case reaches its required final time, while `bundle-campaign` requires all sixteen completed mapped cases for cross-case comparisons. | Workflow command regenerating the per-panel gate table and retained figures from accepted output bundles. |
 | Manuscript conversion | Illustrated validation note exists. | TeX manuscript structured around reproduction claims, blocked boundaries, and only later an extension. |
 
@@ -561,8 +565,8 @@ be silently copied into `E02`.
 | Completed fresh `E02` `R16` | Seven accepted jobs through exact `t = 10.0`; zero strict counters; completed production-window analysis | `6.145556` |
 | Approved `E02` `R16` completion reservation | F-068 envelope; completed R16 leaves `0.854444` node-hours unused | `7.000000` |
 | Completed `E02` `R02` standard-layout timing pilot | F-069 bounded measurement; two accepted jobs through native snapshot boundary `t = 0.25` | `0.473333` |
-| Approved `E02` `R17` high-resolution timing probe | F-070 bounded eight-node measurement only; helper rejects every other case until review | `8.000000` |
-| Remaining `E02` Stage I matrix reservation | Recalculate after the `R17` probe; no broader matrix execution is currently authorized | `TBD` |
+| Completed `E02` `R17` high-resolution timing pilot | F-071 bounded eight-node measurement; two accepted jobs through authenticated continuation `t = 0.10` | `4.235556` |
+| Approved `E02` Stage I mapped-matrix envelope | F-071 measured projection `697.019444` plus `202.980556` node-hours of margin; only frozen `R02`--`R17` cases | `900.000000` |
 
 The archived estimate is not a measured replacement-driver benchmark. For
 continued `E02` production:
@@ -573,13 +577,14 @@ continued `E02` production:
    SHA-256 `d42a0432858127a94ab4aee5aab0c0b79572b70730085352aec53147670adad3`.
 3. Preserve completed R02 timing-pilot evidence JSON SHA-256
    `81c9f6e56cca9eb5a69449a1166bf5d3e3cc8a0a4102b6b4fd0c3f73f3c2123b`.
-   Run one bounded eight-node `R17` high-resolution production-path probe, then
-   recalculate runtime and the mapped Stage I reservation rather than carrying
-   forward a cell/CFL bracket.
-4. Execute no more than one production segment at a time.
-5. Segment runs at restart boundaries and review strict counters, work
+4. Preserve completed R17 timing-pilot evidence JSON SHA-256
+   `79147715729a2c9017400e170de2191a3f7d6b0bf411acee09a948ada464b822`.
+   Use its authenticated developed continuation rate and measured rank-local
+   groups rather than carrying forward a cell/CFL bracket.
+5. Execute no more than one production segment at a time.
+6. Resume R02 first, segment runs at restart boundaries, and review strict counters, work
    accounting, storage, and measured cost after the first segment.
-6. Stop and recost if projected Stage I consumption exceeds its reserved
+7. Complete R17 last and stop to recost if projected Stage I consumption exceeds its reserved
    ceiling.
 
 The archived estimated sequential-retention storage allocation, conservatively
@@ -591,11 +596,14 @@ Completed R16 retains `4686854064` raw segment-tree snapshot/restart bytes
 (`4.365` GiB); its deduplicated 41-snapshot/11-restart cadence is
 `4514126544` bytes. R02 terminal groups measure `509682424` snapshot bytes
 and `1381366304` restart bytes. They project `36092008728` bytes (`33.613`
-GiB) for one standard-layout case at the same cadence. The cell-scaled
-sixteen-case logical raw estimate is `798538318560` bytes (`743.697` GiB),
-before retention-policy margin. These are measured standard-layout products
-plus a cell-scaled R17 projection, not a mapped-matrix reservation. Record the
-final storage reservation and retention rule after the `R17` probe.
+GiB) for one standard-layout case at the same cadence. R17 measures maximum
+rank-local snapshot and restart groups of `4077462784` and `11052866880`
+bytes. The measured sixteen-case logical raw estimate is `798559758560`
+bytes (`743.717` GiB). Running R17 last, retaining accepted snapshots and
+only the final two restart groups, yields a sequential peak of `622953051824`
+bytes and an F-071 storage reservation of `747543662189` bytes after a
+20-percent margin. The no-pruning alternative with the same margin is
+`958271710272` bytes.
 The contingency does not authorize a beta-1 production run absent a
 source-mapped role.
 
@@ -704,6 +712,8 @@ The following rows are current replacement-driver reproduction evidence:
 | `R16/s06_rankio_t9p5_t10` | `4744158`, `COMPLETED`, `0:0` | `1` node, `00:21:20` charged elapsed; `0.355556` actual node-hours | Continued from inspected `s05` modal restart siblings with unchanged input/executable digests. | `accepted`: exact `t = 10.0`, zero strict counters, and complete terminal ranked products; closes the production window. |
 | `R02/s00_rankio_t0_t0p1` | `4744198`, `COMPLETED`, `0:0` | `1` node, `00:11:18` charged elapsed; `0.188333` actual node-hours | Fresh standard-layout timing pilot from `t = 0`; source bundle `athenak-feature-cgl-through-c5bd782b.bundle` SHA-256 `e25e86ec61f743fdfce76ec8f942cc3093620aa99b0576851211b3b7cc7a74c1`; immutable executable SHA-256 `df87684e9d2b7af33b36c2757779d15de87b84ef051ca9c4489f2efa358f5c48`. | `accepted`: exact `t = 0.1`, zero strict counters, complete initial/terminal ranked products, and authenticated modal restart siblings. |
 | `R02/s01_rankio_t0p1_t0p25` | `4744205`, `COMPLETED`, `0:0` | `1` node, `00:17:06` charged elapsed; `0.285000` actual node-hours | Continued from inspected `s00` modal restart siblings with matching input and executable digests. | `accepted`: exact native snapshot boundary `t = 0.25`, zero strict counters, complete terminal ranked products, and measured developed continuation cost. |
+| `R17/s00_rankio_t0_t0p05` | `4744210`, `COMPLETED`, `0:0` | `8` nodes, `00:15:50` charged elapsed; `2.111111` actual node-hours | Fresh high-resolution timing pilot from `t = 0`; source bundle `athenak-feature-cgl-through-cd63f81e.bundle` SHA-256 `361b3d45a0ecaca29cd84d17c231db965bab5c90fd18e652b6b5fedff4fa2b67`; immutable executable SHA-256 `df87684e9d2b7af33b36c2757779d15de87b84ef051ca9c4489f2efa358f5c48`. | `accepted`: exact `t = 0.05`, zero strict counters, complete 64-rank products, and balanced 27-meshblock-per-rank decomposition. |
+| `R17/s01_rankio_t0p05_t0p1` | `4744230`, `COMPLETED`, `0:0` | `8` nodes, `00:15:56` charged elapsed; `2.124444` actual node-hours | Continued from inspected `s00` 64-rank modal restart siblings with matching input and executable digests. | `accepted`: exact `t = 0.10`, zero strict counters, complete terminal ranked products, and measured developed high-resolution cost. |
 
 Completed lineage bundle
 `runs/mks24-stage-i/E02-modal-driver/bundles/completed/R16_rankio_t10_20260530`
@@ -728,9 +738,22 @@ through native snapshot boundary `t = 0.25`. The authenticated
 node-hours per simulated time unit, projecting `19.000000` node-hours for one
 standard-layout `t = 10` case. R02 recost evidence JSON SHA-256
 `81c9f6e56cca9eb5a69449a1166bf5d3e3cc8a0a4102b6b4fd0c3f73f3c2123b`
-narrows the mapped-matrix runtime bracket to `424.145556`--`576.145556`
-node-hours. The remaining spread is the `R17` high-resolution factor, so R02
-is timing evidence only, not an accepted paper-statistics bundle.
+initially narrowed the mapped-matrix runtime bracket to
+`424.145556`--`576.145556` node-hours. At the F-070 review, the remaining
+spread was the `R17` high-resolution factor. R02 remains timing evidence only,
+not an accepted paper-statistics bundle.
+
+High-resolution timing pilot
+`runs/mks24-stage-i/E02-modal-driver/R17` contains two accepted eight-node,
+64-rank segments through authenticated continuation `t = 0.10`. Each rank
+owns the intended standard-layout load of 27 meshblocks. The developed
+`t = 0.05`--`0.10` continuation uses `2.124444` node-hours, or `42.488889`
+node-hours per simulated time unit. Together with the reusable R02 and R17
+prefixes, that projects `697.019444` node-hours for the full mapped E02
+matrix. R17 recost evidence JSON SHA-256
+`79147715729a2c9017400e170de2191a3f7d6b0bf411acee09a948ada464b822`
+records the runtime, strict counters, product sizes, and F-071 `900.000000`
+node-hour measured envelope.
 
 ### 8.3 Fresh `E02-modal-driver` Entry Gate
 
@@ -755,8 +778,8 @@ are retained:
 5. The committed epoch-aware `cgl_lf_stage_i.py` path that stores new runs
    beneath `runs/mks24-stage-i/E02-modal-driver/`, keeps separate accounting
    files, refuses cross-epoch continuation or bundle discovery, preserves
-   completed R16 and R02 accounting, and limits current authorization to the
-   `8.0` node-hour `R17` high-resolution timing probe.
+   completed R16, R02, and R17 accounting, and limits current authorization to
+   the frozen mapped `R02`--`R17` matrix under sequential inspection.
 6. An all-user-job preflight confirming that no unrelated live CGL-root
    campaign will be modified or unintentionally overlapped.
 
@@ -765,8 +788,9 @@ from `t = 0` through exact `t = 10.0`, pass segment inspections with zero
 strict counters, authenticate restart continuation, assemble the completed
 bundle, and pass production-window analysis. R02 jobs `4744198` and `4744205`
 complete the standard-layout timing pilot through native cadence `t = 0.25`.
-Run the bounded `R17` high-resolution probe, then recalculate runtime/storage
-before reserving the remaining matrix.
+R17 jobs `4744210` and `4744230` close high-resolution timing through
+authenticated continuation `t = 0.10`. Resume R02 first under the F-071
+measured matrix envelope and complete R17 last to control sequential storage.
 
 Progress on 2026-05-30: `g014` retained an input-parse failure because its
 archived sizing deck lacked the `mhd/limiter_hardwall` key targeted by a
@@ -818,10 +842,11 @@ Focused post-merge local retention is complete: the serial CGL suites passed
 decomposition regressions. With no queued user job after that allocation, the
 six `E02-modal-driver` entry conditions above are satisfied. R16 is accepted
 through exact `t = 10.0`. R02 then closes the standard-layout timing gate
-through native snapshot boundary `t = 0.25`. The next authorized computation
-is one bounded `R17` high-resolution timing probe, chosen because it holds the
-active Alfvenic beta-10 physics fixed while changing from `192 x 192 x 384`
-to `384 x 384 x 768`.
+through native snapshot boundary `t = 0.25`. R17 closes the high-resolution
+timing gate through authenticated continuation `t = 0.10`, holding the active
+Alfvenic beta-10 physics fixed while changing from `192 x 192 x 384` to
+`384 x 384 x 768`. The next authorized computation is an inspected R02
+continuation under the F-071 mapped-matrix envelope.
 
 ### 8.4 Why Stage II Is Not Currently Reserved
 
@@ -1016,7 +1041,7 @@ Stage I is inserted ahead of it. After Stage I:
 | A. Reproduction specification audit | Verify pinned MKS24 source, sixteen-run mapped alias map, disposition of the unmapped active-Alfvenic beta-1 definition, closure/forcing/limiter identity, and figure/status table. | Reviewed Stage I protocol. | A published simulation role or observable remains unidentified. |
 | B. Reference-data closure | Resolve dimensional panel normalization/data boundary and the Figure 10 external-model decision. | Qualified reference manifests or explicit scoped limitation. | A "complete" claim would depend on unqualified data. |
 | C. Production readiness | Retain and commit the bundle-backed source-provenance follow-up; validate required local/GPU/restart/work-accounting tests for the replacement driver; complete debug qualification of the archived immutable build. | Passing readiness review and fail-closed `E02-modal-driver` ledger. | Numerical gates, retained provenance, epoch isolation, or submission controls fail. |
-| D. MKS24 production | Preserve completed R16 and the accepted R02 timing pilot, run one bounded `R17` high-resolution probe, recost Stage I, then conditionally execute the sixteen mapped Stage I runs plus the beta-1 case only if Phase A assigns it a published role; run one segment at a time with reviews. | Accepted `E02` run bundles and measured ledger/storage. | Safety, stationarity, accounting, storage, or budget gate fails. |
+| D. MKS24 production | Preserve completed R16 and the accepted R02/R17 timing pilots, then execute the sixteen mapped Stage I runs plus the beta-1 case only if Phase A assigns it a published role; resume R02 first, complete R17 last, and run one segment at a time with reviews. | Accepted `E02` run bundles and measured ledger/storage. | Safety, stationarity, accounting, storage, or budget gate fails. |
 | E. MKS24 analysis | Generate each required product and complete the figure-by-figure status table. | Quantitative reproduction report. | Any claimed result lacks qualified comparison evidence. |
 | F. Reproduction manuscript | Transform the TeX note into a buildable Stage I manuscript. | Manuscript and reproducibility package. | Claims exceed the accepted status table. |
 | G. Extension decision | Recalculate the Stage II design using measured Stage I results/costs. | Approved extension matrix or deferred-work record. | Insufficient budget or unresolved baseline reproduction. |
@@ -1082,10 +1107,12 @@ As of the read-only Frontier-root audit on 2026-05-29 EDT
    through `4744158` are accepted through exact `t = 10.0`; the completed
    bundle passes its `t = 8`--`10` analysis. R02 jobs `4744198` and `4744205`
    complete the standard-layout timing pilot through native cadence `t = 0.25`
-   in `0.473333` node-hours. F-070 permits only an `8.0` node-hour `R17`
-   high-resolution timing probe next because R17 dominates the residual
-   matrix-runtime uncertainty. Measure that probe before reserving the mapped
-   matrix. Only accepted `E02` bundles can support new comparison claims.
+   in `0.473333` node-hours. R17 jobs `4744210` and `4744230` complete the
+   high-resolution timing pilot through authenticated continuation `t = 0.10`
+   in `4.235556` node-hours. F-071 authorizes only the frozen mapped matrix
+   under a `900.000000` node-hour envelope and sequential inspection. Resume
+   R02 first and complete R17 last. Only accepted `E02` bundles can support
+   new comparison claims.
 
 ## 13. Reproducibility Record
 

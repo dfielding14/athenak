@@ -38,15 +38,12 @@ HISTORICAL_DEBUG_NODE_HOURS = 0.851670
 HISTORICAL_E01_STAGE_I_NODE_HOURS = 9.962778
 EXECUTION_EPOCH = "E02-modal-driver"
 EXECUTION_EPOCH_SLUG = "E02_modal_driver"
-AUTHORIZED_CASE_ID = "R17"
+AUTHORIZED_CASE_IDS = frozenset(f"R{number:02d}" for number in range(2, 18))
 COMPLETED_R16_NODE_HOURS = 6.145556
 COMPLETED_R02_STANDARD_LAYOUT_PILOT_NODE_HOURS = 0.473333
-HIGH_RESOLUTION_PILOT_RESERVED_NODE_HOURS = 8.0
-CURRENT_STAGE_I_RESERVED_NODE_HOURS = (
-    COMPLETED_R16_NODE_HOURS
-    + COMPLETED_R02_STANDARD_LAYOUT_PILOT_NODE_HOURS
-    + HIGH_RESOLUTION_PILOT_RESERVED_NODE_HOURS
-)
+COMPLETED_R17_HIGH_RESOLUTION_PILOT_NODE_HOURS = 4.235556
+MEASURED_STAGE_I_RESERVED_NODE_HOURS = 900.0
+CURRENT_STAGE_I_RESERVED_NODE_HOURS = MEASURED_STAGE_I_RESERVED_NODE_HOURS
 MAX_SEGMENT_SECONDS = 24 * 60 * 60
 LEDGER_COLUMNS = (
     "execution_epoch",
@@ -168,13 +165,12 @@ def require_current_epoch(manifest: dict[str, object], label: str) -> None:
 
 
 def require_authorized_case(case_id: str) -> None:
-    """Limit the current E02 authorization to the high-resolution timing probe."""
+    """Limit E02 execution to the frozen mapped Stage I matrix."""
 
-    if case_id != AUTHORIZED_CASE_ID:
+    if case_id not in AUTHORIZED_CASE_IDS:
         raise ValueError(
-            f"E02 Stage I is authorized only for the {AUTHORIZED_CASE_ID} "
-            "high-resolution timing probe "
-            "until the measured matrix reservation is reviewed"
+            "E02 Stage I is authorized only for frozen mapped matrix cases "
+            "R02-R17 under sequential inspection"
         )
 
 
@@ -257,10 +253,12 @@ def refresh_summary(paths: dict[str, Path]) -> None:
     actual = sum(float(row["actual_node_hours"]) for row in ledger)
     active = active_reservations(reservations)
     reserved = sum(float(item["reserved_node_hours"]) for item in active)
-    stage_remaining = CURRENT_STAGE_I_RESERVED_NODE_HOURS - actual - reserved
+    stage_remaining = max(
+        0.0, CURRENT_STAGE_I_RESERVED_NODE_HOURS - actual - reserved
+    )
     project_remaining = PROJECT_BUDGET_NODE_HOURS - actual - reserved
     lines = [
-        "# MKS24 Stage I Frontier E02 High-Resolution Pilot Budget",
+        "# MKS24 Stage I Frontier E02 Measured Matrix Budget",
         "",
         f"- Updated UTC: `{utc_now()}`",
         f"- Execution epoch: `{EXECUTION_EPOCH}`",
@@ -273,11 +271,13 @@ def refresh_summary(paths: dict[str, Path]) -> None:
         f"- Completed E02 R16 use: `{COMPLETED_R16_NODE_HOURS:.6f}` node-hours",
         f"- Completed E02 R02 standard-layout timing-pilot use: "
         f"`{COMPLETED_R02_STANDARD_LAYOUT_PILOT_NODE_HOURS:.6f}` node-hours",
-        f"- Approved E02 R17 high-resolution timing-probe reservation: "
-        f"`{HIGH_RESOLUTION_PILOT_RESERVED_NODE_HOURS:.6f}` node-hours",
+        f"- Completed E02 R17 high-resolution timing-pilot use: "
+        f"`{COMPLETED_R17_HIGH_RESOLUTION_PILOT_NODE_HOURS:.6f}` node-hours",
+        f"- Approved E02 mapped-matrix envelope: "
+        f"`{MEASURED_STAGE_I_RESERVED_NODE_HOURS:.6f}` node-hours",
         f"- E02 Stage I actual use: `{actual:.6f}` node-hours",
         f"- Active segment reservations: `{reserved:.6f}` node-hours",
-        f"- Unreserved E02 R17 timing-probe remainder: "
+        f"- Unreserved E02 mapped-matrix remainder: "
         f"`{stage_remaining:.6f}` node-hours",
         f"- Incremental project remainder after active E02 Stage I use: "
         f"`{project_remaining:.6f}` node-hours",
@@ -313,7 +313,8 @@ def refresh_summary(paths: dict[str, Path]) -> None:
     lines.extend([
         "",
         "Only one E02 Stage I segment may be prepared or submitted at a time. "
-        "The current authorization is an R17 high-resolution timing probe only. "
+        "The current authorization is the frozen R02-R17 mapped Stage I matrix "
+        "under sequential inspection. "
         "Jobs use the `batch` partition with Frontier's default production "
         "`normal` QOS; the `debug` QOS is not used for paper production.",
         "",
@@ -745,7 +746,7 @@ def prepare(args: argparse.Namespace) -> Path:
             "historical_e01_stage_i_node_hours": HISTORICAL_E01_STAGE_I_NODE_HOURS,
             "stage_i_reserved_node_hours": CURRENT_STAGE_I_RESERVED_NODE_HOURS,
             "stage_i_authorization": (
-                f"{AUTHORIZED_CASE_ID} high-resolution timing probe only"
+                "frozen mapped Stage I matrix R02-R17 under sequential inspection"
             ),
             "sequential_manual_submission_required": True,
         },
