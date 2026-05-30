@@ -2286,7 +2286,10 @@ and coherent policy promotion pass. Exact clean build-profile publication and
 immutable clean-candidate freeze `31be2cd6` pass with source bundle `e11dc8fb`
 and executable `bea2a418`; applicable registered-science prerequisites remain
 open. Mirrored exact-freeze authorization policy SHA `e8909bf5` and promotion
-SHA `3e7e8c7f` pass with the original 22-record ledger preserved.
+SHA `3e7e8c7f` pass with the original 22-record ledger preserved. Narrow
+structured F0 parser-contract admission policy SHA `1d525be1` and promotion SHA
+`2460cc0c` are live with exact template, deck, profile, analyzer, executable and
+trusted launch-contract bindings; submission and reconciliation remain pending.
 
 ## Immediate Agent Handoff: First Actions
 
@@ -2383,6 +2386,7 @@ Future implementation agents should execute the following successor sequence:
 | 2026-05-30 | Activated source-alias hardening snapshot `6cbbbbd6`: paired immutable Orion and Project Home install, idempotent existing-genesis anchor migration, coherent policy SHA `6533172b` promotion and post-promotion validation pass while all three ledger streams remain at 22 records | Keep science submissions paused until the exact clean-candidate build and freeze plus applicable prerequisites close |
 | 2026-05-30 | Passed exact clean HIP/MPI build-profile publication and immutable clean-candidate freeze `31be2cd6` through live `6cbbbbd6`: archived clean source commit `4cceb5d4`, tree `933f2e3a`, pinned `kokkos`, source bundle `e11dc8fb`, build profile `353412be`, receipt `f6a9ac20` and executable `bea2a418` | Authorize only this exact clean freeze in the reviewed policy while keeping registered science submissions paused until their applicable prerequisites close |
 | 2026-05-30 | Promoted the exact-freeze authorization through installed `6cbbbbd6`: mirrored policy SHA `e8909bf5`, promotion SHA `3e7e8c7f`, idempotent anchor validation and unchanged 22-record Orion, Project Home and receipt streams pass | Preserve freeze `31be2cd6`; keep registered science submissions paused until their applicable prerequisites close |
+| 2026-05-30 | Activated narrow structured clean-candidate F0 parser-contract admission policy through installed `6cbbbbd6`: mirrored policy SHA `1d525be1`, promotion SHA `2460cc0c`, exact template, deck, profile, analyzer, executable and trusted launch-contract bindings pass with unchanged 22-record streams | Submit and reconcile only the authorized F0 admission smoke; keep registered science submissions paused |
 
 ## Source Pointers For The Initial Review
 

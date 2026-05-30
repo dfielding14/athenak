@@ -1,0 +1,60 @@
+{
+  "record_type": "q027_frontier_f0_clean_candidate_admission_policy_activation",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-002",
+    "Q-013",
+    "Q-025",
+    "Q-027",
+    "Q-038"
+  ],
+  "qualification_effect": "narrow_clean_candidate_f0_parser_admission_policy_activation_submission_pending",
+  "scope": "Live mirrored policy activation authorizing exactly one structured clean-candidate Frontier F0 parser-contract admission-smoke shape. The authorization binds the directive-only template, parser deck, installed Frontier environment profile, offline structured analyzer, frozen executable and canonical trusted-trampoline launch contract. It does not attest F0 execution and does not authorize registered-science evidence.",
+  "control_plane_version": "6cbbbbd6f5da8fb2dcd0a1ab9b91fca51570f5a54502dcb1da59aea0eda0f3ab",
+  "validated_utc": "2026-05-30T19:45:17Z",
+  "policy_sha256": "1d525be15cf288621d3436d139860e5823c387f9613b11c092934aaf70382150",
+  "promotion_sha256": "2460cc0c5bf1c286d292ea7fc9008ff395fc9d8c01ad8dadcbe39a6e4a685286",
+  "science_submission_freeze": {
+    "status": "authorized",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/clean_candidate_manifest.json",
+    "manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41",
+    "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8"
+  },
+  "frontier_admission_smoke": {
+    "status": "authorized_f0_parser_contract_only",
+    "campaign": "f0_hipmpi_smoke",
+    "test_id": "pic_parser_contract_guards",
+    "evidence_class": "frontier_f0_admission_smoke_candidate",
+    "physical_mode": "extended_mhd_pic_parser_contract",
+    "selected_qos": "debug",
+    "registered_short_nonproduction": true,
+    "maximum_nodes": 1,
+    "maximum_walltime_seconds": 900,
+    "job_script_sha256": "e8def5947dcf4c7550d419bf0eb6092e83099e35cf33058c5dcf3526b619c1b8",
+    "input_deck_sha256": "e14ac149dc3f8c6fb3d5400f6e330063e6f72f2ed2f54691ade8c65ce5173a45",
+    "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
+    "analysis_script_sha256": [
+      "25728c4ad94512aec8c5cbffd86b5ed0bc34e03400db5d79cd0f308e884f8f6c"
+    ],
+    "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
+    "launch_contract_sha256": "d8fc9a1373174f03e15a29758a0d2706f62a8ad9db39fc24b930b699558922a7"
+  },
+  "ledger_validation": {
+    "anchor_migration": "pass_existing_genesis_preserved_without_append",
+    "genesis_event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
+    "orion_ledger_records": 22,
+    "orion_receipt_records": 22,
+    "project_home_ledger_records": 22,
+    "cumulative_consumed_node_hours": 0.07444444444444442,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent"
+  },
+  "open_boundaries": [
+    "the authorized structured F0 parser-contract admission smoke has not yet been submitted or reconciled",
+    "registered-science submissions remain paused pending applicable prerequisites",
+    "matched Frontier environment-profile A/B evidence remains open",
+    "external reviewer disposition remains pending external review"
+  ],
+  "overall_disposition": "narrow_structured_f0_admission_policy_live_submission_pending_registered_science_remains_paused"
+}

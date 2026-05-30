@@ -122,6 +122,11 @@ qualify any scientific claim by itself.
   `31be2cd6` pass with pinned `kokkos`, immutable provenance and executable
   closure; mirrored exact-freeze authorization promotion SHA `3e7e8c7f` passes
   with the original 22-record ledger preserved.
+- `q027_frontier_f0_clean_candidate_admission_policy_activation_2026-05-30.json`:
+  narrow mirrored policy activation for the structured clean-candidate F0
+  parser-contract admission smoke. Policy SHA `1d525be1`, promotion SHA
+  `2460cc0c`, exact template, deck, profile, analyzer, executable and trusted
+  launch-contract bindings pass; submission and reconciliation remain pending.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.

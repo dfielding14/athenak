@@ -292,6 +292,40 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 clean_candidate_transition["orion_receipt_records"],
             )
             self.assertEqual(clean_candidate_transition["active_reservations"], 0)
+            admission_activation = _load(
+                "q027_frontier_f0_clean_candidate_admission_policy_activation_2026-05-30.json"
+            )
+            self.assertEqual(
+                admission_activation["control_plane_version"],
+                storage["installed_control_plane_version"],
+            )
+            self.assertEqual(
+                admission_activation["policy_sha256"],
+                _sha256(READINESS_DIR / "storage_policy.json"),
+            )
+            self.assertEqual(
+                admission_activation["science_submission_freeze"],
+                {
+                    **science_freeze,
+                    "executable_sha256": clean_candidate["executable_sha256"],
+                },
+            )
+            self.assertEqual(
+                admission_activation["frontier_admission_smoke"],
+                policy["frontier_admission_smoke"],
+            )
+            admission_ledger = admission_activation["ledger_validation"]
+            self.assertEqual(admission_ledger["orion_ledger_records"], 22)
+            self.assertEqual(
+                admission_ledger["orion_ledger_records"],
+                admission_ledger["project_home_ledger_records"],
+            )
+            self.assertEqual(
+                admission_ledger["orion_ledger_records"],
+                admission_ledger["orion_receipt_records"],
+            )
+            self.assertEqual(admission_ledger["active_reservations"], 0)
+            self.assertEqual(admission_ledger["pending_submission_marker"], "absent")
         else:
             self.fail(f"Unknown installed-control-plane lifecycle: {lifecycle}")
         self.assertEqual(
