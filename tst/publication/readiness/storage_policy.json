@@ -65,6 +65,30 @@
       "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
       "launch_contract_sha256": "0daebd7708c642af2aae000a9a35c773599956e5e3273c4eb4124125fdd5a1e6",
       "clean_candidate_manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41"
+    },
+    {
+      "authorization_id": "f2-parser-multirank-runtime-metadata-v1",
+      "status": "authorized",
+      "campaign": "f2_multirank_runtime_metadata",
+      "test_id": "pic_parser_contract_guards",
+      "evidence_class": "frontier_f2_clean_candidate_multirank_runtime_metadata",
+      "physical_mode": "extended_mhd_pic_parser_contract",
+      "runtime_profile": "frontier_minimum_supported",
+      "selected_qos": "debug",
+      "registered_short_nonproduction": true,
+      "maximum_nodes": 1,
+      "maximum_walltime_seconds": 900,
+      "maximum_attempts": 1,
+      "job_script_sha256": "e825d2c153b789706d2c293d04a34e1db08b0dc2a8e0043d1e88183f0b029b87",
+      "input_deck_sha256": "e14ac149dc3f8c6fb3d5400f6e330063e6f72f2ed2f54691ade8c65ce5173a45",
+      "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
+      "analysis_script_sha256": [
+        "7112f706b6462a3bfa6d875c82906ee9e5127c31a13d7491c7c4da800750fc52",
+        "25728c4ad94512aec8c5cbffd86b5ed0bc34e03400db5d79cd0f308e884f8f6c"
+      ],
+      "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
+      "launch_contract_sha256": "05ecc15d519b9f74c9dc0a0f9c7b38f730f8397843f73a164cb24a91178f075d",
+      "clean_candidate_manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41"
     }
   ],
   "frontier_admission_smoke": {

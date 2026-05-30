@@ -466,6 +466,9 @@ class PicReadinessRegistryTests(unittest.TestCase):
             "f1-clean-paper-coupling-mpich-stderr-v2": (
                 "frontier_f1_clean_paper_coupling_launch_contract.json"
             ),
+            "f2-parser-multirank-runtime-metadata-v1": (
+                "frontier_f2_multirank_runtime_metadata_launch_contract.json"
+            ),
         }
         self.assertEqual(set(authorizations), set(sidecars))
         for authorization_id, filename in sidecars.items():
@@ -476,6 +479,40 @@ class PicReadinessRegistryTests(unittest.TestCase):
                     launch_contract_sha256(contract),
                     authorizations[authorization_id]["launch_contract_sha256"],
                 )
+
+    def test_f2_multirank_runtime_metadata_candidate_resolves_source_commit(self) -> None:
+        candidate = _load(
+            "q027_frontier_f2_multirank_runtime_metadata_candidate_2026-05-30.json"
+        )
+        commit = candidate["implementation_source_commit"]
+        self.assertEqual(
+            subprocess.check_output(
+                ["git", "cat-file", "-t", commit],
+                cwd=REPO_ROOT,
+                text=True,
+            ).strip(),
+            "commit",
+        )
+        binding = candidate["registered_science_slice"]
+        self.assertEqual(
+            candidate["staged_policy_sha256"],
+            _sha256(READINESS_DIR / "storage_policy.json"),
+        )
+        for digest_key, relative_path in {
+            "job_script_sha256":
+                "tst/publication/frontier_f2_structured_multirank_runtime_metadata_job.sh",
+            "input_deck_sha256": "inputs/tests/pic_parser_contract_guards.athinput",
+            "analysis_script_sha256":
+                "tst/publication/frontier_f2_multirank_runtime_metadata_analysis.py",
+            "analysis_support_sha256":
+                "tst/publication/frontier_f0_structured_smoke_analysis.py",
+        }.items():
+            self.assertEqual(binding[digest_key], _git_blob_sha256(commit, relative_path))
+        contract = _load("frontier_f2_multirank_runtime_metadata_launch_contract.json")
+        self.assertEqual(
+            binding["launch_contract_sha256"],
+            launch_contract_sha256(contract),
+        )
 
     def test_registered_science_staged_bindings_recompute_from_exact_files(self) -> None:
         policy = _load("storage_policy.json")
@@ -527,9 +564,30 @@ class PicReadinessRegistryTests(unittest.TestCase):
                     REPO_ROOT / "tst/publication/frontier_f1_structured_artifacts.py",
                 ],
             },
+            "f2-parser-multirank-runtime-metadata-v1": {
+                "job_script_sha256": (
+                    REPO_ROOT
+                    / "tst/publication/frontier_f2_structured_multirank_runtime_metadata_job.sh"
+                ),
+                "input_deck_sha256": (
+                    REPO_ROOT / "inputs/tests/pic_parser_contract_guards.athinput"
+                ),
+                "analysis_script_sha256": [
+                    REPO_ROOT
+                    / "tst/publication/frontier_f2_multirank_runtime_metadata_analysis.py",
+                    REPO_ROOT
+                    / "tst/publication/frontier_f0_structured_smoke_analysis.py",
+                ],
+            },
         }
         environment_path = CONTROL_PLANE_DIR / "frontier_pic_environment.sh"
-        successor_records = successor["registered_science_slices"]
+        f2_candidate = _load(
+            "q027_frontier_f2_multirank_runtime_metadata_candidate_2026-05-30.json"
+        )
+        successor_records = [
+            *successor["registered_science_slices"],
+            f2_candidate["registered_science_slice"],
+        ]
         successors = {
             record["authorization_id"]: record
             for record in successor_records

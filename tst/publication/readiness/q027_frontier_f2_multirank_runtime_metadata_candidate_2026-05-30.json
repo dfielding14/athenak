@@ -1,0 +1,55 @@
+{
+  "record_type": "q027_frontier_f2_multirank_runtime_metadata_candidate",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-002",
+    "Q-013",
+    "Q-025",
+    "Q-027",
+    "Q-038"
+  ],
+  "qualification_effect": "f2_multirank_runtime_metadata_policy_staged_live_promotion_and_execution_pending",
+  "scope": "Stage one bounded clean-candidate Frontier F2 engineering slice for the remaining Q-002 multi-rank Athena runtime-metadata boundary. The slice reuses the immutable clean candidate and installed non-restart control plane, runs exactly eight GPU-bound MPI ranks on one Frontier node, checks the parser-contract deck at one cycle, and publishes descriptor-bound artifacts for offline analysis. It does not qualify a paper claim, a broader F2 row, multi-node operation or a production campaign.",
+  "predecessor": {
+    "record": "tst/publication/readiness/q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json",
+    "active_policy_sha256": "559a4b1ebc13425e53e40b544cf92931d11271ec0a07f678b680f68bf5c00052",
+    "active_promotion_sha256": "84065c8a8abb5aad3fc41e452537e27507260ca968eb1bae6eec60b0655fa436",
+    "terminal_ledger_records": 43,
+    "cumulative_consumed_node_hours": 0.09388888888888887
+  },
+  "implementation_source_commit": "5a9f1ac36199c51386e27a79757a1d66062c54e3",
+  "staged_policy_sha256": "1db3157aadcfa0eed1171d9362258481b78d9e1e551a3e6fb754df54e0234d59",
+  "registered_science_slice": {
+    "authorization_id": "f2-parser-multirank-runtime-metadata-v1",
+    "status": "authorized",
+    "campaign": "f2_multirank_runtime_metadata",
+    "test_id": "pic_parser_contract_guards",
+    "evidence_class": "frontier_f2_clean_candidate_multirank_runtime_metadata",
+    "physical_mode": "extended_mhd_pic_parser_contract",
+    "runtime_profile": "frontier_minimum_supported",
+    "selected_qos": "debug",
+    "registered_short_nonproduction": true,
+    "maximum_nodes": 1,
+    "maximum_walltime_seconds": 900,
+    "maximum_attempts": 1,
+    "job_script_sha256": "e825d2c153b789706d2c293d04a34e1db08b0dc2a8e0043d1e88183f0b029b87",
+    "input_deck_sha256": "e14ac149dc3f8c6fb3d5400f6e330063e6f72f2ed2f54691ade8c65ce5173a45",
+    "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
+    "analysis_script_sha256": "7112f706b6462a3bfa6d875c82906ee9e5127c31a13d7491c7c4da800750fc52",
+    "analysis_support_sha256": "25728c4ad94512aec8c5cbffd86b5ed0bc34e03400db5d79cd0f308e884f8f6c",
+    "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
+    "launch_contract_sha256": "05ecc15d519b9f74c9dc0a0f9c7b38f730f8397843f73a164cb24a91178f075d",
+    "clean_candidate_manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41"
+  },
+  "submission_state": "blocked_until_curated_policy_binding_commit_live_preflight_operator_attestation_and_mirrored_policy_promotion",
+  "open_boundaries": [
+    "curate and commit the staged policy binding",
+    "run the live zero-reservation no-marker rejected-UUID preflight",
+    "archive a reviewed same-account process-isolation attestation before policy promotion and again before manifest creation and submission",
+    "promote the mirrored reviewed policy through installed control plane 4ccde8df",
+    "submit only the single serialized F2 runtime-metadata slice",
+    "external reviewer disposition remains pending external review"
+  ],
+  "overall_disposition": "f2_q002_multirank_runtime_metadata_source_policy_staged_live_promotion_and_execution_pending"
+}
