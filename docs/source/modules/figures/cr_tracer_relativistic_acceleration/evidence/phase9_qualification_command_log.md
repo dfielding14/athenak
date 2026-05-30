@@ -19,25 +19,41 @@ EVID=$REPO_ROOT/$EVID_REL
 ## General Builds
 
 ```bash
-cmake -S . -B /tmp/athenak-cr-phase9-release -D CMAKE_BUILD_TYPE=Release
-cmake --build /tmp/athenak-cr-phase9-release -j 4
+cmake -S . -B /tmp/athenak-cr-phase9-release -D CMAKE_BUILD_TYPE=Release \
+  > "$EVID/phase9_release_configure.log" 2>&1
+cmake --build /tmp/athenak-cr-phase9-release -j 4 \
+  > "$EVID/phase9_release_build.log" 2>&1
+cp /tmp/athenak-cr-phase9-release/CMakeCache.txt \
+  "$EVID/phase9_release_CMakeCache.txt"
 
 cmake -S . -B /tmp/athenak-cr-phase9-mpi-release \
-  -D CMAKE_BUILD_TYPE=Release -D Athena_ENABLE_MPI=ON
-cmake --build /tmp/athenak-cr-phase9-mpi-release -j 4
+  -D CMAKE_BUILD_TYPE=Release -D Athena_ENABLE_MPI=ON \
+  > "$EVID/phase9_mpi_release_configure.log" 2>&1
+cmake --build /tmp/athenak-cr-phase9-mpi-release -j 4 \
+  > "$EVID/phase9_mpi_release_build.log" 2>&1
+cp /tmp/athenak-cr-phase9-mpi-release/CMakeCache.txt \
+  "$EVID/phase9_mpi_release_CMakeCache.txt"
 
 cmake -S . -B /tmp/athenak-cr-phase9-debug \
   -D CMAKE_BUILD_TYPE=Debug \
   -D Kokkos_ENABLE_DEBUG=ON \
-  -D Kokkos_ENABLE_DEBUG_BOUNDS_CHECK=ON
-cmake --build /tmp/athenak-cr-phase9-debug -j 4
+  -D Kokkos_ENABLE_DEBUG_BOUNDS_CHECK=ON \
+  > "$EVID/phase9_debug_configure.log" 2>&1
+cmake --build /tmp/athenak-cr-phase9-debug -j 4 \
+  > "$EVID/phase9_debug_build.log" 2>&1
+cp /tmp/athenak-cr-phase9-debug/CMakeCache.txt \
+  "$EVID/phase9_debug_CMakeCache.txt"
 
 cmake -S . -B /tmp/athenak-cr-phase9-mpi-debug \
   -D CMAKE_BUILD_TYPE=Debug \
   -D Athena_ENABLE_MPI=ON \
   -D Kokkos_ENABLE_DEBUG=ON \
-  -D Kokkos_ENABLE_DEBUG_BOUNDS_CHECK=ON
-cmake --build /tmp/athenak-cr-phase9-mpi-debug -j 4
+  -D Kokkos_ENABLE_DEBUG_BOUNDS_CHECK=ON \
+  > "$EVID/phase9_mpi_debug_configure.log" 2>&1
+cmake --build /tmp/athenak-cr-phase9-mpi-debug -j 4 \
+  > "$EVID/phase9_mpi_debug_build.log" 2>&1
+cp /tmp/athenak-cr-phase9-mpi-debug/CMakeCache.txt \
+  "$EVID/phase9_mpi_debug_CMakeCache.txt"
 ```
 
 ## Dedicated Analytical Builds
@@ -45,20 +61,32 @@ cmake --build /tmp/athenak-cr-phase9-mpi-debug -j 4
 ```bash
 cmake -S . -B /tmp/athenak-cr-phase9-pusher-release \
   -D CMAKE_BUILD_TYPE=Release \
-  -D PROBLEM=unit_tests/cr_relativistic_pusher_runtime_test
-cmake --build /tmp/athenak-cr-phase9-pusher-release -j 4
+  -D PROBLEM=unit_tests/cr_relativistic_pusher_runtime_test \
+  > "$EVID/phase9_pusher_release_configure.log" 2>&1
+cmake --build /tmp/athenak-cr-phase9-pusher-release -j 4 \
+  > "$EVID/phase9_pusher_release_build.log" 2>&1
+cp /tmp/athenak-cr-phase9-pusher-release/CMakeCache.txt \
+  "$EVID/phase9_pusher_release_CMakeCache.txt"
 
 cmake -S . -B /tmp/athenak-cr-phase9-coupled-release \
   -D CMAKE_BUILD_TYPE=Release \
-  -D PROBLEM=unit_tests/cr_relativistic_coupled_runtime_test
-cmake --build /tmp/athenak-cr-phase9-coupled-release -j 4
+  -D PROBLEM=unit_tests/cr_relativistic_coupled_runtime_test \
+  > "$EVID/phase9_coupled_release_configure.log" 2>&1
+cmake --build /tmp/athenak-cr-phase9-coupled-release -j 4 \
+  > "$EVID/phase9_coupled_release_build.log" 2>&1
+cp /tmp/athenak-cr-phase9-coupled-release/CMakeCache.txt \
+  "$EVID/phase9_coupled_release_CMakeCache.txt"
 
 cmake -S . -B /tmp/athenak-cr-phase9-coupled-debug \
   -D CMAKE_BUILD_TYPE=Debug \
   -D PROBLEM=unit_tests/cr_relativistic_coupled_runtime_test \
   -D Kokkos_ENABLE_DEBUG=ON \
-  -D Kokkos_ENABLE_DEBUG_BOUNDS_CHECK=ON
-cmake --build /tmp/athenak-cr-phase9-coupled-debug -j 4
+  -D Kokkos_ENABLE_DEBUG_BOUNDS_CHECK=ON \
+  > "$EVID/phase9_coupled_debug_configure.log" 2>&1
+cmake --build /tmp/athenak-cr-phase9-coupled-debug -j 4 \
+  > "$EVID/phase9_coupled_debug_build.log" 2>&1
+cp /tmp/athenak-cr-phase9-coupled-debug/CMakeCache.txt \
+  "$EVID/phase9_coupled_debug_CMakeCache.txt"
 ```
 
 ## Analytical And Contract Replays
@@ -72,7 +100,8 @@ python3 scripts/particles/cr_relativistic_pusher_runtime_inspect.py \
   --input inputs/unit_tests/cr_relativistic_pusher_runtime.athinput \
   --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4a_preregistered_criteria.json \
   --work-dir /tmp/cr-rel-phase9-pusher \
-  --metrics docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_pusher_runtime_metrics.json
+  --metrics "$EVID/phase9_pusher_runtime_metrics.json" \
+  > "$EVID/phase9_pusher_runtime.log" 2>&1
 
 python3 scripts/particles/cr_relativistic_coupled_runtime_inspect.py \
   --binary /tmp/athenak-cr-phase9-coupled-release/src/athena \
@@ -80,80 +109,139 @@ python3 scripts/particles/cr_relativistic_coupled_runtime_inspect.py \
   --prescribed-input inputs/unit_tests/cr_relativistic_pusher_runtime.athinput \
   --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4b_preregistered_criteria.json \
   --work-dir /tmp/cr-rel-phase9-coupled \
-  --metrics docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_coupled_runtime_metrics.json
+  --metrics "$EVID/phase9_coupled_runtime_metrics.json" \
+  > "$EVID/phase9_coupled_runtime.log" 2>&1
 
 python3 scripts/particles/cr_relativistic_subcycle_runtime_inspect.py \
   --binary /tmp/athenak-cr-phase9-coupled-release/src/athena \
   --input inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput \
   --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase5_preregistered_criteria.json \
   --work-dir /tmp/cr-rel-phase9-subcycle \
-  --metrics docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_subcycle_runtime_metrics.json
+  --metrics "$EVID/phase9_subcycle_runtime_metrics.json" \
+  > "$EVID/phase9_subcycle_runtime.log" 2>&1
 
 python3 scripts/particles/cr_relativistic_restart_runtime_inspect.py \
   --binary /tmp/athenak-cr-phase9-release/src/athena \
   --input inputs/unit_tests/cr_relativistic_restart_runtime.athinput \
   --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase6_preregistered_criteria.json \
   --work-dir /tmp/cr-rel-phase9-restart \
-  --json docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_restart_runtime_metrics.json
+  --json "$EVID/phase9_restart_runtime_metrics.json" \
+  > "$EVID/phase9_restart_runtime.log" 2>&1
 
 python3 scripts/particles/cr_relativistic_diagnostics_runtime_inspect.py \
   --binary /tmp/athenak-cr-phase9-release/src/athena \
   --input inputs/unit_tests/cr_relativistic_diagnostics_runtime.athinput \
   --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase7_preregistered_criteria.json \
   --work-dir /tmp/cr-rel-phase9-diagnostics \
-  --metrics docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_diagnostics_runtime_metrics.json
+  --metrics "$EVID/phase9_diagnostics_runtime_metrics.json" \
+  > "$EVID/phase9_diagnostics_runtime.log" 2>&1
 
 python3 scripts/particles/cr_relativistic_all_formats_inspect.py \
   --runtime-root /tmp/cr-rel-phase9-diagnostics/acceleration_uninterrupted \
   --binary /tmp/athenak-cr-phase9-release/src/athena \
   --input inputs/unit_tests/cr_relativistic_diagnostics_runtime.athinput \
   --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase7_preregistered_criteria.json \
-  --metrics docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_diagnostics_runtime_metrics.json
+  --metrics "$EVID/phase9_diagnostics_runtime_metrics.json" \
+  > "$EVID/phase9_all_formats_metrics.json"
+echo 'CR relativistic Phase-7 all-format inspection PASS' \
+  > "$EVID/phase9_all_formats.log"
 ```
 
-Release replays used the release binaries and fresh `/tmp/cr-rel-phase9-*`
-runtime roots.  Debug replays used the debug-bounds binaries and separate
-`/tmp/cr-rel-phase9-*-debug` roots with the same argument structure.  The
-portable release all-format package carries its own qualified binary, runtime
-artifacts, input, criteria, required inspector scripts, deterministic manifest,
-and replay wrapper.
+The retained debug-bounds artifacts use explicit separate roots and binaries:
+
+```bash
+python3 scripts/particles/cr_relativistic_coupled_runtime_inspect.py \
+  --binary /tmp/athenak-cr-phase9-coupled-debug/src/athena \
+  --input inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput \
+  --prescribed-input inputs/unit_tests/cr_relativistic_pusher_runtime.athinput \
+  --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4b_preregistered_criteria.json \
+  --work-dir /tmp/cr-rel-phase9-coupled-debug \
+  --metrics "$EVID/phase9_coupled_debug_runtime_metrics.json" \
+  > "$EVID/phase9_coupled_debug_runtime.log" 2>&1
+
+python3 scripts/particles/cr_relativistic_subcycle_runtime_inspect.py \
+  --binary /tmp/athenak-cr-phase9-coupled-debug/src/athena \
+  --input inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput \
+  --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase5_preregistered_criteria.json \
+  --work-dir /tmp/cr-rel-phase9-subcycle-debug \
+  --metrics "$EVID/phase9_subcycle_debug_runtime_metrics.json" \
+  > "$EVID/phase9_subcycle_debug_runtime.log" 2>&1
+
+python3 scripts/particles/cr_relativistic_restart_runtime_inspect.py \
+  --binary /tmp/athenak-cr-phase9-debug/src/athena \
+  --input inputs/unit_tests/cr_relativistic_restart_runtime.athinput \
+  --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase6_preregistered_criteria.json \
+  --work-dir /tmp/cr-rel-phase9-restart-debug \
+  --json "$EVID/phase9_restart_debug_runtime_metrics.json" \
+  > "$EVID/phase9_restart_debug_runtime.log" 2>&1
+
+python3 scripts/particles/cr_relativistic_diagnostics_runtime_inspect.py \
+  --binary /tmp/athenak-cr-phase9-debug/src/athena \
+  --input inputs/unit_tests/cr_relativistic_diagnostics_runtime.athinput \
+  --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase7_preregistered_criteria.json \
+  --work-dir /tmp/cr-rel-phase9-diagnostics-debug \
+  --metrics "$EVID/phase9_diagnostics_debug_runtime_metrics.json" \
+  > "$EVID/phase9_diagnostics_debug_runtime.log" 2>&1
+
+python3 scripts/particles/cr_relativistic_all_formats_inspect.py \
+  --runtime-root /tmp/cr-rel-phase9-diagnostics-debug/acceleration_uninterrupted \
+  --binary /tmp/athenak-cr-phase9-debug/src/athena \
+  --input inputs/unit_tests/cr_relativistic_diagnostics_runtime.athinput \
+  --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase7_preregistered_criteria.json \
+  --metrics "$EVID/phase9_diagnostics_debug_runtime_metrics.json" \
+  > "$EVID/phase9_all_formats_debug_metrics.json"
+echo 'CR relativistic Phase-7 all-format inspection PASS' \
+  > "$EVID/phase9_all_formats_debug.log"
+```
+
+The portable release all-format package carries its own qualified binary,
+runtime artifacts, input, criteria, required inspector scripts, deterministic
+manifest, and replay wrapper.
 
 ## MPI, SMR, And AMR Migration
 
 ```bash
 python3 scripts/particles/cr_relativistic_migration_runtime_inspect.py \
   --check-registration \
-  --json docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_migration_registration_metrics.json
+  --json "$EVID/phase9_migration_registration_metrics.json" \
+  > "$EVID/phase9_migration_registration.log" 2>&1
 
 python3 scripts/particles/cr_relativistic_migration_runtime_inspect.py \
   --binary /tmp/athenak-cr-phase9-release/src/athena \
   --mpi-binary /tmp/athenak-cr-phase9-mpi-release/src/athena \
   --work-dir /tmp/cr-rel-phase9-migration \
-  --json docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_migration_metrics.json
+  --json "$EVID/phase9_migration_metrics.json" \
+  > "$EVID/phase9_migration_runtime.log" 2>&1
 
 python3 scripts/particles/cr_relativistic_migration_runtime_inspect.py \
   --binary /tmp/athenak-cr-phase9-debug/src/athena \
   --mpi-binary /tmp/athenak-cr-phase9-mpi-debug/src/athena \
   --work-dir /tmp/cr-rel-phase9-migration-debug \
-  --json docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_migration_debug_metrics.json
+  --json "$EVID/phase9_migration_debug_metrics.json" \
+  > "$EVID/phase9_migration_debug_runtime.log" 2>&1
 ```
 
 ## Adversarial Controls
 
 ```bash
-python3 scripts/particles/cr_relativistic_migration_negative_controls.py
-python3 scripts/particles/cr_relativistic_diagnostics_negative_controls.py
+python3 scripts/particles/cr_relativistic_migration_negative_controls.py \
+  > "$EVID/phase9_migration_negative_controls.log" 2>&1
+python3 scripts/particles/cr_relativistic_diagnostics_negative_controls.py \
+  > "$EVID/phase9_diagnostics_negative_controls.log" 2>&1
 python3 scripts/particles/cr_relativistic_subcycle_negative_controls.py \
-  --metrics docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_subcycle_negative_control_metrics.json
+  --metrics "$EVID/phase9_subcycle_negative_control_metrics.json" \
+  > "$EVID/phase9_subcycle_negative_controls.log" 2>&1
 python3 scripts/particles/cr_relativistic_coupled_oracle_negative_controls.py \
   --analyzer scripts/particles/cr_relativistic_coupled_runtime_inspect.py \
   --binary /tmp/athenak-cr-phase9-coupled-release/src/athena \
   --input inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput \
   --prescribed-input inputs/unit_tests/cr_relativistic_pusher_runtime.athinput \
-  --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4b_preregistered_criteria.json
+  --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4b_preregistered_criteria.json \
+  > "$EVID/phase9_coupled_negative_controls.log" 2>&1
 python3 scripts/particles/cr_relativistic_diagnostics_writer_adversarial.py \
   --binary /tmp/athenak-cr-phase9-release/src/athena \
-  --work-dir /tmp/cr-rel-phase9-writer-adversarial
+  --work-dir /tmp/cr-rel-phase9-writer-adversarial \
+  > "$EVID/phase9_diagnostics_writer_adversarial.log" 2>&1
 ```
 
 ## Repository Harness
@@ -164,20 +252,20 @@ These harness invocations ran sequentially because they share `tst/build`:
 cd tst
 python run_test_suite.py \
   --test test_suite/particles/test_particles_cr_relativistic_contract_cpu.py \
-  --cpu
+  --cpu > "$EVID/phase9_parser_contract.log" 2>&1
 python run_test_suite.py \
   --test test_suite/particles/test_particles_cr_cpu.py \
-  --cpu
+  --cpu > "$EVID/phase9_legacy_cpu.log" 2>&1
 python run_test_suite.py \
   --test test_suite/particles/test_particles_cr_accuracy_cpu.py \
-  --cpu
+  --cpu > "$EVID/phase9_legacy_accuracy_cpu.log" 2>&1
 python run_test_suite.py \
   --test test_suite/particles/test_particles_cr_mpicpu.py \
-  --mpicpu
+  --mpicpu > "$EVID/phase9_legacy_mpicpu.log" 2>&1
 python run_test_suite.py \
   --test test_suite/particles/test_particles_cr_accuracy_mpicpu.py \
-  --mpicpu
-python run_test_suite.py --style
+  --mpicpu > "$EVID/phase9_legacy_accuracy_mpicpu.log" 2>&1
+python run_test_suite.py --style > "$EVID/phase9_style.log" 2>&1
 python run_tests.py mhd/mhd_divb_amr \
   --log_file ../docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_deep_amr_divb.log
 ```
@@ -227,6 +315,8 @@ The overlay baseline is frozen as
 ## Public Solver-Coupled Example Smoke
 
 ```bash
+cp inputs/particles/cr_tracer_relativistic_mhd_ideal_example.athinput \
+  "$EVID/phase9_public_solver_coupled_example.athinput"
 mkdir -p /tmp/cr-rel-phase9-public-example
 (
   cd /tmp/cr-rel-phase9-public-example
@@ -259,15 +349,20 @@ The portable package uses a prefix-mapped release binary so compiled
 ```bash
 cmake -S . -B /tmp/athenak-cr-phase9-release-redacted \
   -D CMAKE_BUILD_TYPE=Release \
-  -D "CMAKE_CXX_FLAGS=-ffile-prefix-map=$REPO_ROOT=REPO_ROOT -fdebug-prefix-map=$REPO_ROOT=REPO_ROOT"
-cmake --build /tmp/athenak-cr-phase9-release-redacted -j 4
+  -D "CMAKE_CXX_FLAGS=-ffile-prefix-map=$REPO_ROOT=REPO_ROOT -fdebug-prefix-map=$REPO_ROOT=REPO_ROOT" \
+  > "$EVID/phase9_portable_release_configure.log" 2>&1
+cmake --build /tmp/athenak-cr-phase9-release-redacted -j 4 \
+  > "$EVID/phase9_portable_release_build.log" 2>&1
+cp /tmp/athenak-cr-phase9-release-redacted/CMakeCache.txt \
+  "$EVID/phase9_portable_release_CMakeCache.txt"
 
 python3 scripts/particles/cr_relativistic_diagnostics_runtime_inspect.py \
   --binary /tmp/athenak-cr-phase9-release-redacted/src/athena \
   --input inputs/unit_tests/cr_relativistic_diagnostics_runtime.athinput \
   --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase7_preregistered_criteria.json \
   --work-dir /tmp/cr-rel-phase9-diagnostics-portable \
-  --metrics docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_diagnostics_portable_runtime_metrics.json
+  --metrics "$EVID/phase9_diagnostics_portable_runtime_metrics.json" \
+  > "$EVID/phase9_diagnostics_portable_runtime.log" 2>&1
 
 PACKAGE_PARENT=/tmp/cr-rel-phase9-portable-package
 PACKAGE_ROOT=$PACKAGE_PARENT/phase9_all_formats_portable_replay
@@ -334,6 +429,15 @@ tar -xzf docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidenc
     /tmp/cr-rel-phase9-portable-extract-b/phase9_all_formats_portable_replay/portable_all_formats_report.json
   echo 'PASS: two fresh extractions produced byte-identical reports'
 } > "$EVID/phase9_all_formats_portable_replay.log" 2>&1
+
+{
+  LOCAL_USER='dbf''75'
+  LOCAL_HOME_PATTERN="/Users/$LOCAL_USER"
+  HOST_PATTERN='Tin''-Drum'
+  ! strings \
+    /tmp/cr-rel-phase9-portable-extract-a/phase9_all_formats_portable_replay/qualified_binary/athena |
+    rg -n "$LOCAL_HOME_PATTERN|$HOST_PATTERN"
+} > "$EVID/phase9_portable_binary_privacy_scan.log"
 ```
 
 ## Integration Merge-Tree Audit
@@ -531,9 +635,43 @@ verify_outer_manifest
 ## Explicit Unsupported Or Unavailable Gates
 
 ```bash
-cmake -S . -B /tmp/athenak-cr-phase9-single-precision \
-  -D Athena_SINGLE_PRECISION=ON
-cmake --build /tmp/athenak-cr-phase9-single-precision -j 4
+set +e
+{
+  cmake -S . -B /tmp/athenak-cr-phase9-single-precision \
+    -D Athena_SINGLE_PRECISION=ON
+  cmake --build /tmp/athenak-cr-phase9-single-precision -j 4
+} > "$EVID/phase9_single_precision_build.log" 2>&1
+SINGLE_PRECISION_STATUS=$?
+set -e
+cp /tmp/athenak-cr-phase9-single-precision/CMakeCache.txt \
+  "$EVID/phase9_single_precision_CMakeCache.txt"
+test "$SINGLE_PRECISION_STATUS" -ne 0
+
+cat > "$EVID/phase9_gpu_disposition.log" <<'EOF'
+date=2026-05-30
+
+--- workstation backend boundary ---
+host_os=macOS-arm64
+host_processor=Apple-M4-Max
+graphics_api=Metal
+
+--- accelerator toolchain probes ---
+nvcc=NOT_FOUND
+hipcc=NOT_FOUND
+nvidia-smi=NOT_FOUND
+rocminfo=NOT_FOUND
+
+--- accepted Kokkos cache boundary ---
+Kokkos_ENABLE_SERIAL=ON
+Kokkos_ENABLE_CUDA=OFF
+Kokkos_ENABLE_HIP=OFF
+Kokkos_ENABLE_SYCL=OFF
+
+--- disposition ---
+GPU QUALIFIED is not claimed: this workstation exposes Metal graphics but no
+configured CUDA or HIP Kokkos backend and no CUDA or HIP toolchain.
+Accelerator qualification remains an explicit follow-up residual risk.
+EOF
 ```
 
 The single-precision build configures but fails before CR source in inherited

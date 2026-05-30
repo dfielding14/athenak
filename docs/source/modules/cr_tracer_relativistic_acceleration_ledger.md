@@ -4730,3 +4730,51 @@ before the fixes are accepted.
   - reseal the documentation-only correction;
   - rebuild the strict frozen Pages overlay including both public inputs;
   - require another exact-SHA cold review before recording closure.
+
+## DR-069: Phase-9 Documentation-Durability Rebound Capture Correction
+
+- Date: 2026-05-30
+- Status: documentation-only capture-completeness correction prepared for
+  final cold review
+- Documentation-durability correction candidate:
+  `9a270755f2739398d61023fa7a950add2dd550e0`
+- Documentation-durability seal reviewed:
+  `88d631e4943648fe83f0624cb30291fa52ab4296`
+- Independent-review result:
+  - physics and evidence-durability reviewers returned `PROCEED`;
+  - integration and documentation reviewers returned `HOLD`;
+  - do not record `RG-010`, `CP-7`, or `MERGE READY` on `88d631e4`.
+- Findings:
+  - the handoff still named `aa66f6c2` as the live portability-rebound seal and
+    did not identify the later correction candidate `9a270755` or the reviewed
+    documentation-durability seal `88d631e4`;
+  - the replay inventory did not bind retained stdout, stderr, metrics, and
+    CMake-cache artifacts for the general builds, dedicated builds, release
+    and debug analytical replays, migration replays, adversarial probes,
+    sequential repository harness, portable build, or unsupported
+    single-precision attempt;
+  - the retained evidence-local public solver deck copy and standalone empty
+    portable-binary privacy scan also lacked explicit producer commands.
+- Corrected choices:
+  - preserve immutable historical candidate and seal labels, then require
+    `CP-7` to resolve and record the exact pushed tip after this
+    capture-completeness reseal because a commit cannot embed its own SHA;
+  - replace implied capture with explicit output redirection, metrics paths,
+    cache copies, and producer commands for every retained Phase-9 artifact;
+  - retain the standalone empty binary privacy-scan artifact as an explicit
+    successful no-match output rather than deleting an already sealed
+    evidence surface;
+  - rerun the frozen `gh-pages` overlay, bounded whitespace audit, provenance
+    envelope, repository-relative outer manifest, relocated-root manifest
+    verification, and final privacy audit after the correction reaches its
+    final bytes.
+- Alternatives rejected:
+  - relying on filename conventions and prose descriptions would force the
+    next agent to reconstruct evidence-capture behavior by inference;
+  - deleting retained evidence surfaces solely to shorten the recipe would
+    weaken continuity with the already reviewed durable packet.
+- Inflection point:
+  - seal and push the capture-completeness correction;
+  - require fresh exact-SHA cold review of the pushed immutable tip;
+  - stop again on any blocking finding before recording `RG-010`, `CP-7`, or
+    `MERGE READY`.

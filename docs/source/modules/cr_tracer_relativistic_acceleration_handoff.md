@@ -15,8 +15,8 @@ The workstation qualification verdict is:
 
 - `CPU/MPI QUALIFIED`: yes, within the bounded scope below;
 - `GPU QUALIFIED`: no, unavailable locally and explicitly unclaimed;
-- `MERGE READY`: pending the final Phase-9 rebound seal, `RG-010`, and
-  `CP-7 Final Cold Review`.  The strict public documentation overlay has
+- `MERGE READY`: pending the final Phase-9 capture-completeness seal, `RG-010`,
+  and `CP-7 Final Cold Review`.  The strict public documentation overlay has
   passed as a development-preview render, not as a stable-site publication.
 
 ## Branch Facts
@@ -33,7 +33,10 @@ The workstation qualification verdict is:
 | Historical removed Phase-9 tips | `720fb8fc`, `89084c66`, `fa39416a`, and `5e031387` were replaced after cold-review holds. |
 | Sanitized Phase-9 pre-seal candidate SHA | `5c2d39b5c36a48e3b552eb14406a039edf1d29f8` |
 | Pushed Phase-9 portability-rebound seal SHA | `aa66f6c27531116e12554631281c8f2ed07d93c6` |
-| Next reviewed packet range | `64a4d1be8da1c22d1328cc47280195b3747fa0ab..aa66f6c27531116e12554631281c8f2ed07d93c6` plus the successor documentation-only rebound seal |
+| Documentation-durability correction candidate SHA | `9a270755f2739398d61023fa7a950add2dd550e0` |
+| Pushed documentation-durability seal SHA reviewed on rebound | `88d631e4943648fe83f0624cb30291fa52ab4296` |
+| Final capture-completeness review target | Resolve and record the exact pushed branch-tip SHA after this documentation-only reseal.  A commit cannot embed its own SHA; `CP-7` must name the reviewed immutable tip explicitly. |
+| Next reviewed packet range | `64a4d1be8da1c22d1328cc47280195b3747fa0ab..refs/remotes/origin/feature/CR_tracers_relativistic_acceleration` resolved after the final documentation-only reseal |
 | Decision ledger | `cr_tracer_relativistic_acceleration_ledger.md` |
 
 ## Physical Model
