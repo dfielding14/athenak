@@ -85,6 +85,7 @@ The shipped smoke and stress inputs are:
 | `inputs/particles/cr_tracer_drift_amr_perf.athinput` | Remap-focused CPU/MPI AMR performance comparison. |
 | `inputs/particles/cr_tracer_relativistic_contract.athinput` | Explicit opt-in relativistic parser and single-cycle smoke fixture. |
 | `inputs/particles/cr_tracer_relativistic_mhd_ideal_example.athinput` | Complete one-cycle solver-coupled relativistic development-preview example. |
+| `inputs/particles/cr_tracer_relativistic_prescribed_restart_resume.athinput` | Tracked serial prescribed-test typed-v2 paired-restart resume template. |
 
 The solver-coupled relativistic opening is deliberately narrower than the
 legacy Boris mode.  It currently requires a 3-D strictly periodic, serial,
@@ -507,15 +508,20 @@ its paired particle shard:
 ```text
 <problem>
 prtcl_rst_flag = 1
-prtcl_res_file = prst/rank_00000000/cr_rel.00002.prst
+prtcl_res_file = prst/rank_00000000/cr_relativistic_restart.00001.prst
 ```
 
 ```bash
-./athena -r rst/cr_rel.00002.rst -i inputs/particles/cr_rel_resume.athinput
+./athena -r rst/cr_relativistic_restart.00001.rst \
+  -i inputs/particles/cr_tracer_relativistic_prescribed_restart_resume.athinput
 ```
 
 The executable injects the paired mesh-restart path internally after processing
 `-r`.  Do not set `relativistic_paired_mesh_restart_file` in the input deck.
+The tracked resume template selects the matching
+`prst/rank_00000000/cr_relativistic_restart.00001.prst` shard.  To resume a
+different cycle, change both paths to that cycle's matching native mesh and
+particle checkpoints.
 Typed-v2 continuation currently requires the saved MPI rank count and topology.
 Changed-rank continuation rejects clearly until a separately reviewed
 redistribution design exists.

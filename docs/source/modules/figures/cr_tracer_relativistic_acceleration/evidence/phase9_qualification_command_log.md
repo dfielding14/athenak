@@ -7,6 +7,15 @@ This command inventory records the final workstation qualification replay for
 ephemeral runtime roots.  Retained logs, metrics, caches, archive inventories,
 and hash manifests live beside this file.
 
+Run each retained replay block from the repository root unless a block changes
+directory explicitly:
+
+```bash
+REPO_ROOT=$(pwd)
+EVID_REL=docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence
+EVID=$REPO_ROOT/$EVID_REL
+```
+
 ## General Builds
 
 ```bash
@@ -176,6 +185,7 @@ python run_tests.py mhd/mhd_divb_amr \
 ## Public Documentation Overlay
 
 ```bash
+rm -rf /tmp/athenak-rel-gh-pages-overlay
 git worktree add --detach /tmp/athenak-rel-gh-pages-overlay \
   4833aa9341e19861297e330ff02aabfd8001935c
 cp docs/source/modules/particles.md \
@@ -187,11 +197,28 @@ cp -R docs/source/modules/figures/cr_tracer_accuracy \
   /tmp/athenak-rel-gh-pages-overlay/docs/source/modules/figures/
 mkdir -p /tmp/athenak-rel-gh-pages-overlay/inputs/particles
 cp inputs/particles/cr_tracer_relativistic_mhd_ideal_example.athinput \
+  inputs/particles/cr_tracer_relativistic_prescribed_restart_resume.athinput \
   /tmp/athenak-rel-gh-pages-overlay/inputs/particles/
-cd /tmp/athenak-rel-gh-pages-overlay/docs
-make clean html SPHINXOPTS="-W --keep-going"
+(
+  cd /tmp/athenak-rel-gh-pages-overlay/docs
+  make clean html SPHINXOPTS="-W --keep-going"
+) > "$EVID/phase9_gh_pages_overlay_build.log" 2>&1
 perl -0pi -e 's/[ \t]+$//mg' \
-  $REPO_ROOT/docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_gh_pages_overlay_build.log
+  "$EVID/phase9_gh_pages_overlay_build.log"
+{
+  echo 'origin_gh_pages_head=4833aa9341e19861297e330ff02aabfd8001935c'
+  echo 'overlay_files:'
+  {
+    find docs/source/modules -maxdepth 1 -type f \
+      \( -name 'particles.md' -o -name 'cr_tracer*.md' \) -print
+    find docs/source/modules/figures/cr_tracer_accuracy -type f -print
+    echo inputs/particles/cr_tracer_relativistic_mhd_ideal_example.athinput
+    echo inputs/particles/cr_tracer_relativistic_prescribed_restart_resume.athinput
+  } | LC_ALL=C sort | xargs shasum -a 256
+} > "$EVID/phase9_gh_pages_overlay_inventory.txt"
+tail -n +3 "$EVID/phase9_gh_pages_overlay_inventory.txt" |
+  (cd /tmp/athenak-rel-gh-pages-overlay && shasum -a 256 -c /dev/stdin)
+git worktree remove --force /tmp/athenak-rel-gh-pages-overlay
 ```
 
 The overlay baseline is frozen as
@@ -201,9 +228,27 @@ The overlay baseline is frozen as
 
 ```bash
 mkdir -p /tmp/cr-rel-phase9-public-example
-cd /tmp/cr-rel-phase9-public-example
-/tmp/athenak-cr-phase9-release/src/athena \
-  -i $REPO_ROOT/inputs/particles/cr_tracer_relativistic_mhd_ideal_example.athinput
+(
+  cd /tmp/cr-rel-phase9-public-example
+  /tmp/athenak-cr-phase9-release/src/athena \
+    -i "$REPO_ROOT/inputs/particles/cr_tracer_relativistic_mhd_ideal_example.athinput"
+) > "$EVID/phase9_public_solver_coupled_example_runtime.log" 2>&1
+```
+
+## Public Typed-V2 Restart Resume Template Smoke
+
+```bash
+rm -rf /tmp/cr-rel-phase9-public-restart-template
+mkdir -p /tmp/cr-rel-phase9-public-restart-template
+(
+  cd /tmp/cr-rel-phase9-public-restart-template
+  /tmp/athenak-cr-phase9-release/src/athena \
+    -i "$REPO_ROOT/inputs/unit_tests/cr_relativistic_restart_runtime.athinput" \
+    > initial.log 2>&1
+  /tmp/athenak-cr-phase9-release/src/athena \
+    -r rst/cr_relativistic_restart.00001.rst \
+    -i "$REPO_ROOT/inputs/particles/cr_tracer_relativistic_prescribed_restart_resume.athinput"
+) > "$EVID/phase9_public_restart_resume_template_runtime.log" 2>&1
 ```
 
 ## Portable All-Format Replay
@@ -214,7 +259,7 @@ The portable package uses a prefix-mapped release binary so compiled
 ```bash
 cmake -S . -B /tmp/athenak-cr-phase9-release-redacted \
   -D CMAKE_BUILD_TYPE=Release \
-  -D 'CMAKE_CXX_FLAGS=-ffile-prefix-map=$REPO_ROOT=REPO_ROOT -fdebug-prefix-map=$REPO_ROOT=REPO_ROOT'
+  -D "CMAKE_CXX_FLAGS=-ffile-prefix-map=$REPO_ROOT=REPO_ROOT -fdebug-prefix-map=$REPO_ROOT=REPO_ROOT"
 cmake --build /tmp/athenak-cr-phase9-release-redacted -j 4
 
 python3 scripts/particles/cr_relativistic_diagnostics_runtime_inspect.py \
@@ -224,7 +269,6 @@ python3 scripts/particles/cr_relativistic_diagnostics_runtime_inspect.py \
   --work-dir /tmp/cr-rel-phase9-diagnostics-portable \
   --metrics docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_diagnostics_portable_runtime_metrics.json
 
-EVID=docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence
 PACKAGE_PARENT=/tmp/cr-rel-phase9-portable-package
 PACKAGE_ROOT=$PACKAGE_PARENT/phase9_all_formats_portable_replay
 rm -rf "$PACKAGE_PARENT"
@@ -282,20 +326,45 @@ tar -xzf docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidenc
   -C /tmp/cr-rel-phase9-portable-extract-a
 tar -xzf docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_all_formats_portable_replay_bundle.tar.gz \
   -C /tmp/cr-rel-phase9-portable-extract-b
-python3 /tmp/cr-rel-phase9-portable-extract-a/phase9_all_formats_portable_replay/phase9_portable_replay.py
-python3 /tmp/cr-rel-phase9-portable-extract-b/phase9_all_formats_portable_replay/phase9_portable_replay.py
-cmp \
-  /tmp/cr-rel-phase9-portable-extract-a/phase9_all_formats_portable_replay/portable_all_formats_report.json \
-  /tmp/cr-rel-phase9-portable-extract-b/phase9_all_formats_portable_replay/portable_all_formats_report.json
+{
+  python3 /tmp/cr-rel-phase9-portable-extract-a/phase9_all_formats_portable_replay/phase9_portable_replay.py
+  python3 /tmp/cr-rel-phase9-portable-extract-b/phase9_all_formats_portable_replay/phase9_portable_replay.py
+  cmp \
+    /tmp/cr-rel-phase9-portable-extract-a/phase9_all_formats_portable_replay/portable_all_formats_report.json \
+    /tmp/cr-rel-phase9-portable-extract-b/phase9_all_formats_portable_replay/portable_all_formats_report.json
+  echo 'PASS: two fresh extractions produced byte-identical reports'
+} > "$EVID/phase9_all_formats_portable_replay.log" 2>&1
 ```
 
 ## Integration Merge-Tree Audit
 
 ```bash
 PHASE9_PRESEAL_CANDIDATE=$(git rev-parse HEAD)
+set +e
 git merge-tree --write-tree \
   c6a73b08e60807f8b925164c5e7edd5cb820c8ae \
-  "$PHASE9_PRESEAL_CANDIDATE"
+  "$PHASE9_PRESEAL_CANDIDATE" \
+  > "$EVID/phase9_merge_tree_origin_development.log" 2>&1
+MERGE_TREE_STATUS=$?
+set -e
+{
+  echo
+  echo 'merge_tree_direction=development<-sanitized-preseal-candidate'
+  echo 'merge_tree_target=c6a73b08e60807f8b925164c5e7edd5cb820c8ae'
+  echo "merge_tree_candidate=$PHASE9_PRESEAL_CANDIDATE"
+  echo "merge_tree_exit=$MERGE_TREE_STATUS"
+} >> "$EVID/phase9_merge_tree_origin_development.log"
+test "$MERGE_TREE_STATUS" -eq 1
+{
+  echo 'branch=feature/CR_tracers_relativistic_acceleration'
+  echo "sanitized_preseal_candidate_head=$PHASE9_PRESEAL_CANDIDATE"
+  echo "sanitized_preseal_candidate_tree=$(git rev-parse HEAD^{tree})"
+  echo 'accepted_phase8_evidence_seal=aa8663e8a5d49e26c206363d028b52d0e350a91f'
+  echo 'replaced_leaked_remote_tip=5e031387e66224b0e9dc4462fbf4d9a7ee01c9df'
+  echo 'previous_portability_rebound_seal=aa66f6c27531116e12554631281c8f2ed07d93c6'
+  echo 'origin_development=c6a73b08e60807f8b925164c5e7edd5cb820c8ae'
+  echo 'origin_gh_pages=4833aa9341e19861297e330ff02aabfd8001935c'
+} > "$EVID/phase9_branch_snapshot.txt"
 ```
 
 This records the intended direction: merge the stacked candidate into the
@@ -307,7 +376,8 @@ frozen `origin/development` target.
 PHASE9_PRESEAL_CANDIDATE=$(git rev-parse HEAD)
 git diff --check \
   aa8663e8a5d49e26c206363d028b52d0e350a91f.."$PHASE9_PRESEAL_CANDIDATE" \
-  -- docs/source/modules
+  -- docs/source/modules inputs/particles \
+  > "$EVID/phase9_commit_range_diff_check.log"
 ```
 
 `phase9_commit_range_diff_check.log` retains the empty passing output for the
@@ -323,12 +393,12 @@ successor evidence-seal tip before recording `CP-7 PROCEED`.
 The retained envelope is regenerated after the overlay, public smoke, merge
 tree, whitespace check, and portable archive have reached their final bytes.
 Its `result_artifacts` map records SHA-256 digests of the retained replay
-surfaces.  The following verification and outer-seal commands then run from the
-repository root:
+surfaces.  Its `portable_binary` entry binds the only binary archived for
+offline reconstruction.  Ephemeral workstation build hashes are not claimed
+as reconstructable envelope evidence.  The following verification and
+outer-seal commands then run from the repository root:
 
 ```bash
-REPO_ROOT=$(pwd)
-EVID=docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence
 PHASE9_PRESEAL_CANDIDATE=$(git rev-parse HEAD)
 python3 - "$EVID/phase9_provenance_envelope.json" "$PHASE9_PRESEAL_CANDIDATE" <<'PY'
 import hashlib
@@ -336,6 +406,7 @@ import json
 import pathlib
 import subprocess
 import sys
+import tarfile
 
 def digest(path):
     return hashlib.sha256(pathlib.Path(path).read_bytes()).hexdigest()
@@ -343,6 +414,8 @@ def digest(path):
 path = pathlib.Path(sys.argv[1])
 candidate = sys.argv[2]
 envelope = json.loads(path.read_text())
+envelope.pop("binaries", None)
+envelope.pop("first_sanitized_evidence_seal_head", None)
 envelope["rebound_correction_candidate_head"] = candidate
 envelope["rebound_correction_candidate_tree"] = subprocess.check_output(
     ["git", "rev-parse", f"{candidate}^{{tree}}"], text=True).strip()
@@ -351,10 +424,26 @@ envelope["inputs"]["cr_tracer_relativistic_mhd_ideal_example.athinput"] = {
     "path": public_input,
     "sha256": digest(public_input),
 }
+resume_input = "inputs/particles/cr_tracer_relativistic_prescribed_restart_resume.athinput"
+envelope["inputs"]["cr_tracer_relativistic_prescribed_restart_resume.athinput"] = {
+    "path": resume_input,
+    "sha256": digest(resume_input),
+}
+restart_smoke = "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_public_restart_resume_template_runtime.log"
+envelope["result_artifacts"]["phase9_public_restart_resume_template_runtime.log"] = {
+    "path": restart_smoke,
+    "sha256": digest(restart_smoke),
+}
 for section in ("analyzers", "criteria", "inputs", "result_artifacts"):
     for item in envelope[section].values():
         item["sha256"] = digest(item["path"])
 envelope["portable_bundle"]["sha256"] = digest(envelope["portable_bundle"]["path"])
+envelope["portable_binary"] = {
+    "archive_member": "phase9_all_formats_portable_replay/qualified_binary/athena",
+}
+with tarfile.open(envelope["portable_bundle"]["path"], "r:gz") as archive:
+    payload = archive.extractfile(envelope["portable_binary"]["archive_member"]).read()
+envelope["portable_binary"]["sha256"] = hashlib.sha256(payload).hexdigest()
 path.write_text(json.dumps(envelope, indent=2, sort_keys=True) + "\n")
 PY
 
@@ -364,6 +453,7 @@ import hashlib
 import json
 import pathlib
 import sys
+import tarfile
 
 envelope = json.loads(pathlib.Path(sys.argv[1]).read_text())
 checked = 0
@@ -377,42 +467,65 @@ bundle = envelope["portable_bundle"]
 actual = hashlib.sha256(pathlib.Path(bundle["path"]).read_bytes()).hexdigest()
 assert actual == bundle["sha256"], f"{bundle['path']}: {actual} != {bundle['sha256']}"
 checked += 1
+binary = envelope["portable_binary"]
+with tarfile.open(bundle["path"], "r:gz") as archive:
+    payload = archive.extractfile(binary["archive_member"]).read()
+actual = hashlib.sha256(payload).hexdigest()
+assert actual == binary["sha256"], (
+    f"{binary['archive_member']}: {actual} != {binary['sha256']}")
+checked += 1
 print(f"PASS: provenance envelope verified {checked} retained artifacts")
 PY
 
-{
-  LOCAL_USER='dbf''75'
-  LOCAL_HOME_PATTERN="/Users/$LOCAL_USER"
-  HOST_PATTERN='Tin''-Drum'
-  echo "phase9 text privacy scan"
-  ! rg -n "$LOCAL_HOME_PATTERN|$HOST_PATTERN" "$EVID"/phase9*
-  echo "PASS: retained text has no local identity markers"
-  ! rg -n "$LOCAL_HOME_PATTERN|$HOST_PATTERN" \
-    /tmp/cr-rel-phase9-portable-extract-a/phase9_all_formats_portable_replay
-  echo "PASS: portable text has no local identity markers"
-  ! strings \
-    /tmp/cr-rel-phase9-portable-extract-a/phase9_all_formats_portable_replay/qualified_binary/athena |
-    rg -n "$LOCAL_HOME_PATTERN|$HOST_PATTERN"
-  echo "PASS: portable binary has no local identity markers"
-} > "$EVID/phase9_artifact_privacy_scan.log"
+write_outer_manifest() {
+  find "$EVID_REL" -maxdepth 1 -type f -name 'phase9_*' \
+    ! -name phase9_evidence_sha256.txt \
+    ! -name phase9_evidence_verify.log \
+    ! -name phase9_evidence_relocated_verify.log \
+    -print | LC_ALL=C sort | xargs shasum -a 256 \
+    > "$EVID/phase9_evidence_sha256.txt"
+}
+verify_outer_manifest() {
+  shasum -a 256 -c "$EVID/phase9_evidence_sha256.txt" \
+    > "$EVID/phase9_evidence_verify.log"
+  rm -rf /tmp/cr-rel-phase9-relocated-root
+  mkdir -p "/tmp/cr-rel-phase9-relocated-root/$EVID_REL"
+  cp "$EVID"/phase9_* "/tmp/cr-rel-phase9-relocated-root/$EVID_REL/"
+  (cd /tmp/cr-rel-phase9-relocated-root && \
+    shasum -a 256 -c "$EVID_REL/phase9_evidence_sha256.txt") \
+    > "$EVID/phase9_evidence_relocated_verify.log"
+  cmp "$EVID/phase9_evidence_verify.log" \
+    "$EVID/phase9_evidence_relocated_verify.log"
+}
+write_privacy_scan() {
+  {
+    LOCAL_USER='dbf''75'
+    LOCAL_HOME_PATTERN="/Users/$LOCAL_USER"
+    HOST_PATTERN='Tin''-Drum'
+    echo "phase9 text privacy scan"
+    ! rg -n "$LOCAL_HOME_PATTERN|$HOST_PATTERN" "$EVID"/phase9*
+    echo "PASS: retained text has no local identity markers"
+    ! rg -n "$LOCAL_HOME_PATTERN|$HOST_PATTERN" \
+      /tmp/cr-rel-phase9-portable-extract-a/phase9_all_formats_portable_replay
+    echo "PASS: portable text has no local identity markers"
+    ! strings \
+      /tmp/cr-rel-phase9-portable-extract-a/phase9_all_formats_portable_replay/qualified_binary/athena |
+      rg -n "$LOCAL_HOME_PATTERN|$HOST_PATTERN"
+    echo "PASS: portable binary has no local identity markers"
+  } > "$EVID/phase9_artifact_privacy_scan.log"
+}
 
-find "$EVID" -maxdepth 1 -type f -name 'phase9_*' \
-  ! -name phase9_evidence_sha256.txt \
-  ! -name phase9_evidence_verify.log \
-  ! -name phase9_evidence_relocated_verify.log \
-  -print | LC_ALL=C sort | xargs shasum -a 256 \
-  > "$EVID/phase9_evidence_sha256.txt"
-shasum -a 256 -c "$EVID/phase9_evidence_sha256.txt" \
-  > "$EVID/phase9_evidence_verify.log"
-
-rm -rf /tmp/cr-rel-phase9-relocated-root
-mkdir -p "/tmp/cr-rel-phase9-relocated-root/$EVID"
-cp "$EVID"/phase9_* "/tmp/cr-rel-phase9-relocated-root/$EVID/"
-(cd /tmp/cr-rel-phase9-relocated-root && \
-  shasum -a 256 -c "$EVID/phase9_evidence_sha256.txt") \
-  > "$REPO_ROOT/$EVID/phase9_evidence_relocated_verify.log"
-cmp "$EVID/phase9_evidence_verify.log" \
-  "$EVID/phase9_evidence_relocated_verify.log"
+# First create both verification logs, then generate and bind the privacy log.
+# The final scan runs after every retained text artifact exists. Its stable
+# deterministic PASS output leaves the manifest valid.
+rm -f "$EVID/phase9_artifact_privacy_scan.log"
+write_outer_manifest
+verify_outer_manifest
+write_privacy_scan
+write_outer_manifest
+verify_outer_manifest
+write_privacy_scan
+verify_outer_manifest
 ```
 
 ## Explicit Unsupported Or Unavailable Gates

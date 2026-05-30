@@ -4686,3 +4686,47 @@ before the fixes are accepted.
   - regenerate and verify the complete Phase-9 envelope and portable packet;
   - force-update the remote branch with an exact lease against the leaked tip;
   - require a fresh exact-SHA cold review before recording closure.
+
+## DR-068: Phase-9 Portability-Rebound Documentation Durability Correction
+
+- Date: 2026-05-30
+- Status: documentation-only correction prepared for final rebound
+- Portability-rebound evidence seal reviewed:
+  `aa66f6c27531116e12554631281c8f2ed07d93c6`
+- Independent-review result:
+  - evidence durability reviewer returned `PROCEED`;
+  - physics, integration, and handoff reviewers returned `HOLD`;
+  - do not record `RG-010`, `CP-7`, or `MERGE READY` on `aa66f6c2`.
+- Findings:
+  - the handoff Branch Facts table still presented removed pre-rewrite Phase-9
+    commits as the live lineage and left the top-level verdict stale;
+  - the typed-v2 resume command named an untracked input deck;
+  - the replay inventory initialized `$REPO_ROOT` after first use, quoted the
+    prefix-map flags so shell expansion would not occur, and omitted producer
+    commands or retained-output capture for several generated artifacts;
+  - the retained recipe ran its privacy scan before creating all final text
+    verification artifacts;
+  - the envelope listed ephemeral workstation binary hashes that its retained
+    verifier could not reconstruct independently.
+- Corrected choices:
+  - distinguish historical removed Phase-9 tips from the live sanitized
+    candidate and portability-rebound seal;
+  - ship a tracked serial prescribed-test typed-v2 resume template and
+    document paired native mesh `-r` plus particle-shard cycle selection;
+  - define `$REPO_ROOT` and `$EVID` once before use, expand prefix-map flags,
+    and retain producer commands for snapshots, overlay artifacts, public
+    smoke, merge-tree output, and whitespace output;
+  - run the privacy scan after the outer manifest and both verification logs
+    exist, then rerun the two manifest verification commands to prove that the
+    scan output remained stable;
+  - narrow the reconstructable envelope to the archived portable binary,
+    retained analyzers, criteria, inputs, result artifacts, and bundle.
+- Alternative rejected:
+  - preserving unverifiable ephemeral binary hashes would overstate the
+    durable packet;
+  - documenting an untracked illustrative resume deck would keep the public
+    procedure non-runnable.
+- Inflection point:
+  - reseal the documentation-only correction;
+  - rebuild the strict frozen Pages overlay including both public inputs;
+  - require another exact-SHA cold review before recording closure.

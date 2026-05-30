@@ -15,7 +15,7 @@ The workstation qualification verdict is:
 
 - `CPU/MPI QUALIFIED`: yes, within the bounded scope below;
 - `GPU QUALIFIED`: no, unavailable locally and explicitly unclaimed;
-- `MERGE READY`: pending the corrected Phase-9 evidence seal, `RG-010`, and
+- `MERGE READY`: pending the final Phase-9 rebound seal, `RG-010`, and
   `CP-7 Final Cold Review`.  The strict public documentation overlay has
   passed as a development-preview render, not as a stable-site publication.
 
@@ -30,10 +30,10 @@ The workstation qualification verdict is:
 | Refreshed integration-target SHA | `c6a73b08e60807f8b925164c5e7edd5cb820c8ae` |
 | Accepted Phase-8 source SHA | `addd12d4e26f7d8b275165b6be7b364d39f22a43` |
 | Accepted Phase-8 evidence seal | `aa8663e8a5d49e26c206363d028b52d0e350a91f` |
-| Phase-9 corrected documentation candidate SHA | `720fb8fc193a8d598dccbf780cee3777ebba8bc9` |
-| Phase-9 first sanitized evidence-seal SHA | `89084c66b149e9b310a06e13eb4465c58240a4aa` |
-| Phase-9 rebound-correction documentation candidate SHA | `fa39416aa25219f498da05d448f7c51ffbc13c53` |
-| Reviewed packet range before final rebound seal | `64a4d1be8da1c22d1328cc47280195b3747fa0ab..fa39416aa25219f498da05d448f7c51ffbc13c53` |
+| Historical removed Phase-9 tips | `720fb8fc`, `89084c66`, `fa39416a`, and `5e031387` were replaced after cold-review holds. |
+| Sanitized Phase-9 pre-seal candidate SHA | `5c2d39b5c36a48e3b552eb14406a039edf1d29f8` |
+| Pushed Phase-9 portability-rebound seal SHA | `aa66f6c27531116e12554631281c8f2ed07d93c6` |
+| Next reviewed packet range | `64a4d1be8da1c22d1328cc47280195b3747fa0ab..aa66f6c27531116e12554631281c8f2ed07d93c6` plus the successor documentation-only rebound seal |
 | Decision ledger | `cr_tracer_relativistic_acceleration_ledger.md` |
 
 ## Physical Model
@@ -196,6 +196,8 @@ docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/
 | Frozen public baseline and overlay inventory | `phase9_gh_pages_overlay_inventory.txt` |
 | Executed public solver-coupled example | `phase9_public_solver_coupled_example_runtime.log` |
 | Complete public solver-coupled input | `inputs/particles/cr_tracer_relativistic_mhd_ideal_example.athinput` |
+| Tracked typed-v2 restart resume template | `inputs/particles/cr_tracer_relativistic_prescribed_restart_resume.athinput` |
+| Executed typed-v2 restart resume template | `phase9_public_restart_resume_template_runtime.log` |
 | Commit-range whitespace audit | `phase9_commit_range_diff_check.log` |
 | Retained-artifact privacy audit | `phase9_artifact_privacy_scan.log` |
 | Provenance-envelope verification | `phase9_provenance_envelope_verify.log` |
