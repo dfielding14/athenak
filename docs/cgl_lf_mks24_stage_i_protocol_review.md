@@ -13,7 +13,10 @@ preserve its outputs as pipeline and cost evidence, and use the now-qualified
 explicit E03 forcing policies. The reviewed token is retained, reconciliation
 passed. Fresh `R02/s00_rankio_t0_t0p1` job `4745922` was then submitted from
 `t = 0`, formally inspected, and recorded `accepted` at exact `t = 0.1` for
-`0.188889` node-hours.
+`0.188889` node-hours. Authenticated continuation
+`R02/s01_rankio_t0p1_t0p25` job `4746154` is also formally inspected and
+recorded `accepted` through exact `t = 0.25` for `0.289167` node-hours,
+bringing corrected E03 Stage I use to `0.478056` node-hours.
 
 The `900.000000` node-hour `E02` value is an authorized measurement-based
 projected envelope, not a fully measured matrix cost. It no longer authorizes
@@ -123,7 +126,7 @@ AthenaK CGL-LF result (`MKS24.tex:621,626`).
 
 The corrected E03 simulation protocol entry gate is closed through Frontier
 qualification and token retention. Fresh mapped production has started with
-accepted `R02/s00_rankio_t0_t0p1` job `4745922` through exact `t = 0.1`.
+accepted R02 jobs `4745922` and `4746154` through exact `t = 0.25`.
 The manuscript also still needs
 compact derivation prose. That prose must:
 
@@ -171,8 +174,18 @@ qualification is closed. The reviewed E03 approval token is retained and
 reconciliation passed. Fresh `R02/s00_rankio_t0_t0p1` job `4745922` was
 formally inspected and recorded `accepted` at exact `t = 0.1`, using
 `0.188889` node-hours. F-079/F-080 controller provenance is committed,
-archived, and reconciled. Continue only from the authenticated R02 checkpoint,
-then run one formally inspected segment at a time and complete `R17` last.
+archived, and reconciled. Authenticated `R02/s01_rankio_t0p1_t0p25` job
+`4746154` is also accepted through exact `t = 0.25` for `0.289167`
+node-hours. Its sampled-history forcing-work relative residual is
+`1.7741014899016423e-11`; strict LF failure counters remain zero; terminal
+`lf_hwproj = 28701760`; complete eight-rank snapshot and restart groups are
+retained. Corrected E03 use is `0.478056` node-hours. Retained recost evidence
+JSON SHA-256 is
+`eb6071cf53d453b2f75707003616ac9cbdfe025d62969d00e34e7948bee3310c`;
+it projects `700.868889` provisional matrix node-hours inside the
+`900.000000` envelope. Prepare only
+`R02/s02_rankio_t0p25_t1` from the authenticated terminal siblings, then
+inspect and recost before any further extension. Complete `R17` last.
 
 The first R02 preflight exposed a nonblocking preview-rendering defect:
 `check-submit` enforced the reviewed shared-root acknowledgement but omitted it
@@ -191,5 +204,6 @@ transition `05cb4c324bfd8feec72ebdeb33b1961c9fde70bf` is archived in
 `1381918e471730d8c9639014475566f93fc87bac66b62738dd8316fc69c03570`.
 Retained F-080 evidence JSON SHA-256 is
 `46fc1c4054e75f4224302be1895c1b9eaae88097544512ac067c53376e542e34`;
-post-archive reconciliation passes. Prepare the R02 continuation only from the
-authenticated checkpoint.
+post-archive reconciliation passes. The first post-transition continuation is
+accepted as job `4746154`; use only its authenticated `t = 0.25` checkpoint
+for the next bounded R02 continuation.
