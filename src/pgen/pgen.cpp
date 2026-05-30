@@ -1592,7 +1592,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
 
   if (pturb != nullptr) {
     // root process reads size the random seed
-    char *rng_data = new char[sizeof(RNG_State)];
+    char rng_data[sizeof(RNG_State)];
     // the master process reads the variables data
     if (global_variable::my_rank == 0 || single_file_per_rank) {
       if (resfile.Read_bytes(rng_data, 1, sizeof(RNG_State), single_file_per_rank)
@@ -1614,7 +1614,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
 
   // root process reads size of CC and FC data arrays from restart file
   IOWrapperSizeT variablesize = sizeof(IOWrapperSizeT);
-  char *variabledata = new char[variablesize];
+  char variabledata[sizeof(IOWrapperSizeT)];
   if (global_variable::my_rank == 0 || single_file_per_rank) {
     if (resfile.Read_bytes(variabledata, 1, variablesize, single_file_per_rank)
         != variablesize) {
