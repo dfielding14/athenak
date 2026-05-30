@@ -77,8 +77,11 @@ node-hours. F-073 updates the projection to `725.464938` node-hours, leaving
 `174.535062` node-hours of envelope margin. R02 job `4744913` continues the
 same inspected lineage through exact `t = 2.0` in `1.068889` node-hours.
 F-074 updates the projection to `730.081697` node-hours, leaving `169.918303`
-node-hours of envelope margin. Continue `R02` conservatively through `t = 2.5`
-next and complete `R17` last.
+node-hours of envelope margin. R02 job `4745305` continues the same inspected
+lineage through exact `t = 2.5` in `1.061944` node-hours. F-075 updates the
+projection to `728.164877` node-hours, leaving `171.835123` node-hours of
+envelope margin. Continue the frozen matrix one inspected segment at a time
+and complete `R17` last.
 Reset the planning ceiling for that new epoch to an incremental `4000`
 node-hours while continuing to report the historical `0.851670` debug and
 `9.962778` Stage I node-hours. A reset is an accounting boundary for future
@@ -543,7 +546,7 @@ work is:
 | Execution-epoch isolation | Commit `462b9dbd` makes `scripts/frontier/cgl_lf_stage_i.py` record new work beneath `runs/mks24-stage-i/E02-modal-driver/`, use `mks24_stage_i_E02_modal_driver_*` accounting files, tag manifests and job names with the epoch, and reject cross-epoch restart ancestry and bundle discovery. The old `runs/mks24-stage-i/R16` tree remains outside discovery. | Retain its passing offline epoch-isolation regression before any Frontier submission. |
 | Shared-root coordination | `/lustre/orion/ast207/proj-shared/dfielding/CGL` also contains exploratory non-MKS24 runs. A read-only audit found cancelled job `4743020` and two-node debug job `4743106` beneath `runs/beta25-accel05-*`; neither is Stage I evidence. Slurm now records `4743106` as `COMPLETED 0:0`, but its top-level campaign manifest remains stale at `state = running`. The helper therefore continues to require explicit acknowledgement after a read-only isolation review. | Before every Stage I prepare and submit action, inspect all user jobs and all active CGL-root campaign records. Do not modify the stale exploratory manifest. Do not overlap Stage I with another root-writing CGL campaign unless an explicit isolation and concurrency review authorizes it. Account exploratory runs separately from the MKS24 ledgers. |
 | Retained source provenance | The campaign-root working checkout was intentionally replaced by Git bundles on 2026-05-29. Both launchers now permit a clean external source checkout while requiring a checksummed in-root `--source-bundle` that contains the prepared revision. The debug helper also retains complete sibling rank restart sets rather than only rank zero, rejects every queued user job, scans active top-level CGL-root records before submission, and rejects absent override targets before reservation. Commits `d210cdd5`, `eab6e12b`, and `7fae0bcf` implement F-060/F-061; `g023` used indexed bundle `athenak-feature-cgl-through-e4249794.bundle` with SHA-256 `492c178e67feb0c3b8ceae674e4766a48fa43415c459e3465b055464971326a4`, containing the immutable executable revision. Fresh initial E02 R16 pilot jobs used indexed bundle `athenak-feature-cgl-through-d93abefb.bundle` with SHA-256 `4a3653afdf8394daad5b4c2f7c0542c5017437d89d60bcbb91e51abde0e6240a`. Completed R02 timing jobs used indexed bundle `athenak-feature-cgl-through-c5bd782b.bundle` with SHA-256 `e25e86ec61f743fdfce76ec8f942cc3093620aa99b0576851211b3b7cc7a74c1`. Completed R17 timing jobs used indexed bundle `athenak-feature-cgl-through-cd63f81e.bundle` with SHA-256 `361b3d45a0ecaca29cd84d17c231db965bab5c90fd18e652b6b5fedff4fa2b67`. | Retain the passing bundle/rank-local/shared-root/override self-tests and use the latest indexed bundle for each continuation. |
-| Production accounting path | `scripts/frontier/cgl_lf_stage_i.py` is separate from the debug-only utility, validates mapped cases and aliases, uses `batch` with default production `normal` QOS, archives executable/input, retained-bundle, and production-utility provenance, enforces sequential Stage I reservations, rejects normal-QOS requests above two hours before restart archival, and requires an inspection record before an output may be recorded as `accepted` or retained as a clean partial prefix. Rank-local output sets are retained and checksum-verified as grouped products. Continuations may use only the inspected terminal restart set from a parent with matching epoch, case, input digest, and executable digest. Fresh `E02` R16 is accepted through exact `t = 10.0`, using `6.145556` node-hours. F-070 records the completed `0.473333` node-hour R02 timing pilot. F-071 records the completed `4.235556` node-hour R17 timing pilot and expands only the frozen mapped-matrix envelope to `900.000000` node-hours. F-072 through F-074 record accepted R02 production through `t = 2.0`. | Continue R02 conservatively through `t = 2.5`, execute one inspected segment at a time, and stop for recost if the measured projection exceeds the F-071 envelope. |
+| Production accounting path | `scripts/frontier/cgl_lf_stage_i.py` is separate from the debug-only utility, validates mapped cases and aliases, uses `batch` with default production `normal` QOS, archives executable/input, retained-bundle, and production-utility provenance, enforces sequential Stage I reservations, rejects normal-QOS requests above two hours before restart archival, and requires an inspection record before an output may be recorded as `accepted` or retained as a clean partial prefix. Rank-local output sets are retained and checksum-verified as grouped products. Continuations may use only the inspected terminal restart set from a parent with matching epoch, case, input digest, and executable digest. Fresh `E02` R16 is accepted through exact `t = 10.0`, using `6.145556` node-hours. F-070 records the completed `0.473333` node-hour R02 timing pilot. F-071 records the completed `4.235556` node-hour R17 timing pilot and expands only the frozen mapped-matrix envelope to `900.000000` node-hours. F-072 through F-075 record accepted R02 production through `t = 2.5`. | Continue the frozen matrix one inspected segment at a time and stop for recost if the measured projection exceeds the F-071 envelope. |
 | Production analysis/plot orchestration | Existing analyzer and MKS24 extractors implement many products; `paper-analyze` composes repeated checksum-qualified split reference manifests while rejecting duplicate product identifiers, and commit `449e297b` adds explicit partial-case comparison recording plus header-only snapshot-window selection; `cgl_lf_stage_i.py bundle-case` follows the explicit accepted restart lineage, merges sampled histories that need not repeat authenticated restart boundary rows while bounding gaps by their retained cadence and boundary timesteps, and links time-deduplicated shared or rank-local snapshot sets only after a case reaches its required final time, while `bundle-campaign` requires all sixteen completed mapped cases for cross-case comparisons. | Workflow command regenerating the per-panel gate table and retained figures from accepted output bundles. |
 | Manuscript conversion | Illustrated validation note exists. | TeX manuscript structured around reproduction claims, blocked boundaries, and only later an extension. |
 
@@ -580,6 +583,7 @@ be silently copied into `E02`.
 | Accepted `E02` `R02` mapped continuation through `t = 1.0` | F-072 longer developed standard-layout interval; updated matrix projection `702.195370` leaves `197.804630` margin | `1.452778` |
 | Accepted `E02` `R02` mapped continuation from `t = 1.0` through `t = 1.5` | F-073 late-time standard-layout interval; updated matrix projection `725.464938` leaves `174.535062` margin | `1.052222` |
 | Accepted `E02` `R02` mapped continuation from `t = 1.5` through `t = 2.0` | F-074 late-time standard-layout interval; updated matrix projection `730.081697` leaves `169.918303` margin | `1.068889` |
+| Accepted `E02` `R02` mapped continuation from `t = 2.0` through `t = 2.5` | F-075 late-time standard-layout interval; updated matrix projection `728.164877` leaves `171.835123` margin | `1.061944` |
 
 The archived estimate is not a measured replacement-driver benchmark. For
 continued `E02` production:
@@ -603,10 +607,13 @@ continued `E02` production:
 7. Preserve accepted R02 `t = 2.0` continuation evidence JSON SHA-256
    `d0c7e0f9cdd8031a9d88c195adee9822943a358eb55193b0e1146bf3b95a08e4`.
    Continue to use the most recent measured late-time rate conservatively.
-8. Execute no more than one production segment at a time.
-9. Continue R02 conservatively through `t = 2.5`, segment runs at restart boundaries, and review strict counters, work
+8. Preserve accepted R02 `t = 2.5` continuation evidence JSON SHA-256
+   `f823ef6993045d5d90f016f7052518a353f348f7f83b9efdc19d32ee097f0c59`.
+   Continue to use the most recent measured late-time rate conservatively.
+9. Execute no more than one production segment at a time.
+10. Continue the frozen matrix at restart boundaries and review strict counters, work
    accounting, storage, and measured cost after each segment.
-10. Complete R17 last and stop to recost if projected Stage I consumption exceeds its reserved
+11. Complete R17 last and stop to recost if projected Stage I consumption exceeds its reserved
    ceiling.
 
 The archived estimated sequential-retention storage allocation, conservatively
@@ -737,6 +744,7 @@ The following rows are current replacement-driver reproduction evidence:
 | `R02/s03_rankio_t0p25_t1` | `4744249`, `COMPLETED`, `0:0` | `1` node, `01:27:10` charged elapsed; `1.452778` actual node-hours | Continued from inspected `s01` modal restart siblings with matching input and executable digests. The preceding `s02` reservation was released before submission after Slurm normal-QOS preflight rejected a `02:15:00` request above the 120-minute limit. | `accepted`: exact native restart boundary `t = 1.0`, zero strict counters, expected active hard-wall projection, complete terminal ranked products, and measured longer developed cost. |
 | `R02/s04_rankio_t1_t1p5` | `4744518`, `COMPLETED`, `0:0` | `1` node, `01:03:08` charged elapsed; `1.052222` actual node-hours | Continued from inspected `s03` modal restart siblings with matching input and executable digests; source bundle `athenak-feature-cgl-through-5089701f.bundle` SHA-256 `c3e62cb50fd89c823b5d2610d13c024a9d293639b7f1404af01dd801c37066f0`. | `accepted`: exact native restart boundary `t = 1.5`, zero strict counters, expected active hard-wall projection, complete terminal ranked products, and measured late-time cost. |
 | `R02/s05_rankio_t1p5_t2` | `4744913`, `COMPLETED`, `0:0` | `1` node, `01:04:08` charged elapsed; `1.068889` actual node-hours | Continued from inspected `s04` modal restart siblings with matching input and executable digests; source bundle `athenak-feature-cgl-through-0814d835.bundle` SHA-256 `a629b8da254cfc000dd4ceb75de57a40113ed7070c261c3ebddf907bb94ea4ad`. | `accepted`: exact native restart boundary `t = 2.0`, zero strict counters, expected active hard-wall projection, complete terminal ranked products, and measured late-time cost. |
+| `R02/s06_rankio_t2_t2p5` | `4745305`, `COMPLETED`, `0:0` | `1` node, `01:03:43` charged elapsed; `1.061944` actual node-hours | Continued from inspected `s05` modal restart siblings with matching input and executable digests; source bundle `athenak-feature-cgl-through-9d9ee2f7.bundle` SHA-256 `c3053e7c312cfe67035cceae7b0ec407afa3cfc8b76ee27a27f71f07b01d2bac`. | `accepted`: exact native restart boundary `t = 2.5`, zero strict counters, expected active hard-wall projection, complete terminal ranked products, and measured late-time cost. |
 | `R17/s00_rankio_t0_t0p05` | `4744210`, `COMPLETED`, `0:0` | `8` nodes, `00:15:50` charged elapsed; `2.111111` actual node-hours | Fresh high-resolution timing pilot from `t = 0`; source bundle `athenak-feature-cgl-through-cd63f81e.bundle` SHA-256 `361b3d45a0ecaca29cd84d17c231db965bab5c90fd18e652b6b5fedff4fa2b67`; immutable executable SHA-256 `df87684e9d2b7af33b36c2757779d15de87b84ef051ca9c4489f2efa358f5c48`. | `accepted`: exact `t = 0.05`, zero strict counters, complete 64-rank products, and balanced 27-meshblock-per-rank decomposition. |
 | `R17/s01_rankio_t0p05_t0p1` | `4744230`, `COMPLETED`, `0:0` | `8` nodes, `00:15:56` charged elapsed; `2.124444` actual node-hours | Continued from inspected `s00` 64-rank modal restart siblings with matching input and executable digests. | `accepted`: exact `t = 0.10`, zero strict counters, complete terminal ranked products, and measured developed high-resolution cost. |
 
@@ -813,6 +821,17 @@ continuation-aware matrix projection to `730.081697` node-hours while leaving
 `d0c7e0f9cdd8031a9d88c195adee9822943a358eb55193b0e1146bf3b95a08e4`
 records its inspection, terminal products, accounting, and recost.
 
+Fourth mapped-matrix continuation
+`R02/s06_rankio_t2_t2p5` reaches exact native restart boundary `t = 2.5`
+in `1.061944` node-hours with zero strict counters and expected active
+hard-wall projection. The late-time `t = 2.0`--`2.5` interval measures
+`2.123888` node-hours per simulated time unit. Applying that rate
+conservatively to the unfinished standard-layout work updates the
+continuation-aware matrix projection to `728.164877` node-hours while leaving
+`171.835123` node-hours of F-071 envelope margin. F-075 evidence JSON SHA-256
+`f823ef6993045d5d90f016f7052518a353f348f7f83b9efdc19d32ee097f0c59`
+records its inspection, terminal products, accounting, and recost.
+
 ### 8.3 Fresh `E02-modal-driver` Entry Gate
 
 Do not submit a replacement-driver MKS24 segment until all of the following
@@ -850,8 +869,9 @@ R17 jobs `4744210` and `4744230` close high-resolution timing through
 authenticated continuation `t = 0.10`. R02 job `4744249` then advances the
 first mapped lineage through exact `t = 1.0`, and job `4744518` continues it
 through exact `t = 1.5`. Job `4744913` continues it through exact `t = 2.0`.
-Continue R02 conservatively through `t = 2.5` under the F-071 measured matrix
-envelope and complete R17 last to control sequential storage.
+Job `4745305` continues it through exact `t = 2.5`. Continue the frozen matrix
+one inspected segment at a time under the F-071 measured envelope and complete
+R17 last to control sequential storage.
 
 Progress on 2026-05-30: `g014` retained an input-parse failure because its
 archived sizing deck lacked the `mhd/limiter_hardwall` key targeted by a
@@ -909,8 +929,9 @@ Alfvenic beta-10 physics fixed while changing from `192 x 192 x 384` to
 `384 x 384 x 768`. R02 subsequently reaches exact `t = 1.0`. The next
 inspected continuation reaches exact `t = 1.5` in job `4744518`. The next
 inspected continuation reaches exact `t = 2.0` in job `4744913`. The next
-authorized computation is a conservative inspected R02 continuation through
-`t = 2.5` under the F-071 mapped-matrix envelope.
+inspected continuation reaches exact `t = 2.5` in job `4745305`. Continue
+the frozen matrix one inspected segment at a time under the F-071
+mapped-matrix envelope and complete R17 last.
 
 ### 8.4 Why Stage II Is Not Currently Reserved
 
@@ -1182,8 +1203,11 @@ As of the read-only Frontier-root audit on 2026-05-29 EDT
    `1.052222` node-hours; F-073 updates the projection to `725.464938`
    node-hours. R02 job `4744913` continues through exact `t = 2.0` in
    `1.068889` node-hours; F-074 updates the projection to `730.081697`
-   node-hours. Continue R02 conservatively through `t = 2.5` and complete R17
-   last. Only accepted `E02` bundles can support new comparison claims.
+   node-hours. R02 job `4745305` continues through exact `t = 2.5` in
+   `1.061944` node-hours; F-075 updates the projection to `728.164877`
+   node-hours. Continue the frozen matrix one inspected segment at a time and
+   complete R17 last. Only accepted `E02` bundles can support new comparison
+   claims.
 
 ## 13. Reproducibility Record
 
