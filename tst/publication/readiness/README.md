@@ -85,7 +85,7 @@ qualify any scientific claim by itself.
   local chronology superseded after a later activation audit found replaceable
   lock pathnames, cross-root ledger serialization and schema-type blockers.
 - `q027_control_plane_activation_lock_hardening_candidate_2026-05-30.json`:
-  current local successor candidate. It preserves the earlier controls and
+  outer-anchor activation chronology. It preserves the earlier controls and
   adds an isolated exact-inventory runner, reviewed HEAD-blob installation,
   hermetic Git reads, a closed Frontier scheduler environment,
   `sbatch --export=NIL`, descriptor-anchored artifact finalization and exact
@@ -102,6 +102,13 @@ qualify any scientific claim by itself.
 - `q027_outer_anchor_paired_activation_2026-05-30.json`: current live paired
   `80c0797b` outer-anchor activation, preserved genesis-anchor migration,
   coherent mirrored policy promotion and unchanged 22-record ledger evidence.
+- `q027_control_plane_modulepath_hardening_candidate_2026-05-30.json`: staged
+  successor `c8002a1d` after the first clean build-profile preflight through
+  live `80c0797b` rejected caller-dependent Frontier `MODULEPATH` provenance
+  before artifact creation. The successor resets a reviewed seed before module
+  loading, publishes the reviewed 19-component value after all module work and
+  passes stripped, inherited and poisoned-wrapper audit variants. Paired
+  install, promotion and science freeze remain pending.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.

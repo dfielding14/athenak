@@ -1,0 +1,81 @@
+{
+  "record_type": "q027_control_plane_modulepath_hardening_candidate",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-027",
+    "Q-038",
+    "Q-042"
+  ],
+  "qualification_effect": "local_modulepath_hardening_successor_pass_independent_runtime_audit_paired_install_pending",
+  "scope": "Successor chronology after the first clean Orion build-profile attempt through live outer-anchor digest 80c0797b rejected the measured Frontier MODULEPATH before creating build artifacts. The live profile retained caller-dependent site Lmod hook state: an interactive shell regenerated four rocmcc Spack prefixes while the stripped compute-node launcher did not. This successor resets MODULEPATH to a reviewed system seed before module loading, publishes the exact reviewed 19-component value after all module operations and preserves strict build-time and runtime equality checks. This record does not attest a paired live install, active-policy promotion, clean-candidate freeze or Frontier science execution.",
+  "live_predecessor": {
+    "record": "tst/publication/readiness/q027_outer_anchor_paired_activation_2026-05-30.json",
+    "control_plane_version": "80c0797be1ce71bbe24f0848b6c983be5ffa31f884c2a8e2596cf8839dc1e9d5",
+    "lifecycle": "live_active_generation_pending_reviewed_modulepath_successor_install"
+  },
+  "rejected_build_preflight": {
+    "source_commit": "33abb89664fc8b793e4bd6492db5dd383af72c0b",
+    "active_control_plane_version": "80c0797be1ce71bbe24f0848b6c983be5ffa31f884c2a8e2596cf8839dc1e9d5",
+    "status": "expected_fail_closed_rejection_before_artifact_creation",
+    "diagnostic": "ValueError: Frontier MODULEPATH differs from the reviewed exact value",
+    "partial_build_artifacts": "none"
+  },
+  "staged_successor": {
+    "control_plane_version": "c8002a1d5d30b5ab98b36907e0dad5f67cc39ea25e3f9c597857f8e911f6c859",
+    "operational_source_commit": "37ccee56248929e1576a6ac127a8080a8df58153",
+    "paired_install_status": "pending",
+    "active_policy_promotion_status": "pending",
+    "science_submission_freeze": "pending_clean_candidate_freeze"
+  },
+  "local_validation": {
+    "control_plane_discovery_tests": {
+      "status": "pass",
+      "tests_run": 212
+    },
+    "publication_discovery_tests": {
+      "status": "pass",
+      "tests_run": 288
+    },
+    "temporary_install_digest_probe": {
+      "status": "pass",
+      "control_plane_version": "c8002a1d5d30b5ab98b36907e0dad5f67cc39ea25e3f9c597857f8e911f6c859"
+    },
+    "profile_contract": {
+      "status": "pass",
+      "variants": [
+        "stripped",
+        "inherited",
+        "poisoned_modulepath"
+      ],
+      "runtime_allowlist_payloads_identical": true,
+      "writer_precondition_accepts_canonical_profile": true,
+      "writer_precondition_rejects_post_activation_modulepath_mutation": true,
+      "qualification_allowlist_rejects_prefix_suffix_and_missing_component_mutations": true
+    },
+    "python_compile": "pass",
+    "shell_syntax": "pass",
+    "git_diff_check": "pass"
+  },
+  "closed_activation_blockers": [
+    "caller MODULEPATH is replaced with a reviewed narrow system seed immediately after successful module purge",
+    "the exact reviewed 19-component MODULEPATH is exported after every possible module load or unload",
+    "stripped compute-node launchers no longer depend on inherited OLCF Lmod hook variables",
+    "build writer and runtime qualification equality checks remain fail closed",
+    "all outer-anchor serialization controls from live predecessor 80c0797b remain preserved"
+  ],
+  "independent_review": {
+    "status": "pass",
+    "review_scope": "interactive writer profile, stripped compute-node wrapper, inherited and poisoned MODULEPATH variants, exact payload equality, qualification mutation rejection and suite-compatible regression invocation",
+    "reviewed_commit": "37ccee56248929e1576a6ac127a8080a8df58153",
+    "reviewed_control_plane_version": "c8002a1d5d30b5ab98b36907e0dad5f67cc39ea25e3f9c597857f8e911f6c859"
+  },
+  "open_boundaries": [
+    "paired Orion and Project Home immutable install remains pending",
+    "active-policy promotion remains pending",
+    "science_submission_freeze.status remains pending_clean_candidate_freeze",
+    "matched Frontier environment-profile A/B evidence remains open",
+    "external reviewer disposition remains pending external review"
+  ],
+  "overall_disposition": "modulepath_hardening_successor_staged_all_science_submissions_paused_pending_paired_install_promotion_clean_candidate_freeze_and_applicable_prerequisites"
+}
