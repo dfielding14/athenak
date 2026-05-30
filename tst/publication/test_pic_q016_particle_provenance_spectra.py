@@ -215,7 +215,7 @@ class TestQ016ParticleProvenanceSpectra(unittest.TestCase):
         )
         self._assert_reader_rejects(contents + b"\nFORGED\n", "Unexpected VTK content")
 
-    def test_harness_merges_same_cycle_partitions_before_comparison(self) -> None:
+    def test_harness_merges_same_cycle_gid_slices_before_comparison(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             pvtk = root / "pvtk"
@@ -236,7 +236,7 @@ class TestQ016ParticleProvenanceSpectra(unittest.TestCase):
             self.assertEqual(snapshot["ptag"].tolist(), [10, 11, 12, 13])
             self.assertEqual(snapshot["gid"].tolist(), [0, 1, 1, 2])
 
-    def test_harness_rejects_duplicate_tags_across_partitions(self) -> None:
+    def test_harness_rejects_duplicate_tags_across_gid_slices(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             first = Path(tmpdir) / "first.part.vtk"
             second = Path(tmpdir) / "second.part.vtk"

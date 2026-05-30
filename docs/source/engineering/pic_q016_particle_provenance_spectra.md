@@ -66,6 +66,18 @@ parallel-shock fixture, requires restart schema `7`, compares uninterrupted and
 restarted particle metadata, observes MeshBlock migration, and independently
 reconstructs exported spectra.
 
+The particle VTK reader requires exactly one `POINTS` section and one matching
+`POINT_DATA` section, rejects duplicate scalar or vector sections, requires
+float vector payloads, and rejects trailing unknown content. The harness merges
+schema-compatible same-cycle optional `gid` slices before tag-sorted
+comparison. This synthetic `gid`-slice coverage is not MPI decomposition
+evidence.
+
+The serial harness invokes `./athena` directly by default. A controlled MPI
+execution sets `ATHENA_Q016_NPROC` and may set `ATHENA_Q016_LAUNCHER` or
+`MPIEXEC`; the harness rejects multi-rank requests when the selected executable
+reports MPI support disabled.
+
 The remaining qualification gaps are MPI decomposition coverage, repeated AMR
 refinement/derefinement lifetime coverage, HIP parity, and a preregistered
 qualifying shock campaign.

@@ -30,7 +30,7 @@
     "mpi_ready_harness": {
       "launcher_configuration": "ATHENA_Q016_NPROC plus ATHENA_Q016_LAUNCHER or MPIEXEC; serial default remains direct ./athena",
       "multi_rank_guard": "reject ATHENA_Q016_NPROC greater than one unless the selected Athena executable reports MPI parallelism ON",
-      "partition_handling": "merge schema-compatible same-cycle particle VTK partitions before tag-sorted uninterrupted-versus-restart comparison and reject duplicate tags across partitions",
+      "gid_slice_handling": "merge schema-compatible same-cycle particle VTK optional gid slices before tag-sorted uninterrupted-versus-restart comparison and reject duplicate tags across gid slices; this fixture coverage is not MPI decomposition evidence",
       "runtime_evidence": "host fixture coverage only; controlled Frontier MPI and HIP execution remain open"
     }
   },
@@ -42,7 +42,7 @@
     "documentation": "docs/source/engineering/pic_q016_particle_provenance_spectra.md"
   },
   "verification_state": {
-    "typed_fixture_regression": "passed locally with strict POINT_DATA, duplicate-section, vector-type, trailing-content, same-cycle partition-merge, duplicate-tag and serial-executable multi-rank rejection coverage",
+    "typed_fixture_regression": "passed locally with strict POINT_DATA, duplicate-section, vector-type, trailing-content, same-cycle optional-gid-slice merge, duplicate-tag and serial-executable multi-rank rejection coverage",
     "serial_release_build": "passed locally",
     "live_serial_restart_regression": "passed locally after strict parser hardening with restart schema 7, exact provenance preservation, observed MeshBlock migration, and exact independent full-f plus signed delta-f spectrum reconstruction",
     "restart_writer_loader_contract": "writer and both loaders use particles::Particles::PIC_RESTART_SCHEMA_VERSION",

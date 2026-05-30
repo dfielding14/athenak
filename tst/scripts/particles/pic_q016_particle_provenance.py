@@ -143,7 +143,7 @@ def _particle_vtk_cycles(basename):
     return {cycle: sorted(partitions) for cycle, partitions in cycles.items()}
 
 
-def _latest_particle_vtk_partitions(basename):
+def _latest_particle_vtk_gid_slices(basename):
     cycles = _particle_vtk_cycles(basename)
     return cycles[max(cycles)]
 
@@ -165,40 +165,40 @@ def _restart_schema(path):
     raise RuntimeError("Particle restart marker not found in " + path)
 
 
-def _merge_particle_vtk_partitions(paths):
+def _merge_particle_vtk_gid_slices(paths):
     if not paths:
-        raise RuntimeError("Particle VTK partition list is empty")
-    partitions = [read_particle_vtk(path) for path in paths]
+        raise RuntimeError("Particle VTK gid-slice list is empty")
+    gid_slices = [read_particle_vtk(path) for path in paths]
     scalar_schema = {
-        name: values.dtype.str for name, values in partitions[0].scalars.items()
+        name: values.dtype.str for name, values in gid_slices[0].scalars.items()
     }
     vector_schema = {
-        name: values.dtype.str for name, values in partitions[0].vectors.items()
+        name: values.dtype.str for name, values in gid_slices[0].vectors.items()
     }
-    for data in partitions[1:]:
+    for data in gid_slices[1:]:
         if {
             name: values.dtype.str for name, values in data.scalars.items()
         } != scalar_schema:
-            raise RuntimeError("Particle VTK scalar schemas differ across partitions")
+            raise RuntimeError("Particle VTK scalar schemas differ across gid slices")
         if {
             name: values.dtype.str for name, values in data.vectors.items()
         } != vector_schema:
-            raise RuntimeError("Particle VTK vector schemas differ across partitions")
+            raise RuntimeError("Particle VTK vector schemas differ across gid slices")
     return ParticleVTKData(
-        points=np.concatenate([data.points for data in partitions], axis=0),
+        points=np.concatenate([data.points for data in gid_slices], axis=0),
         scalars={
-            name: np.concatenate([data.scalars[name] for data in partitions])
+            name: np.concatenate([data.scalars[name] for data in gid_slices])
             for name in scalar_schema
         },
         vectors={
-            name: np.concatenate([data.vectors[name] for data in partitions], axis=0)
+            name: np.concatenate([data.vectors[name] for data in gid_slices], axis=0)
             for name in vector_schema
         },
     )
 
 
 def _snapshot(paths):
-    data = _merge_particle_vtk_partitions(paths)
+    data = _merge_particle_vtk_gid_slices(paths)
     for name in _INT_SCALARS + _FLOAT_SCALARS:
         if name not in data.scalars:
             raise RuntimeError("Missing particle VTK scalar: " + name)
@@ -210,7 +210,7 @@ def _snapshot(paths):
 
     order = np.argsort(data.scalars["ptag"])
     if np.unique(data.scalars["ptag"]).size != data.scalars["ptag"].size:
-        raise RuntimeError("Particle VTK ptag values must be unique across partitions")
+        raise RuntimeError("Particle VTK ptag values must be unique across gid slices")
     return {
         "points": data.points[order],
         "vel": data.vectors["vel"][order],
@@ -232,7 +232,7 @@ def _manual_histogram(speed, weights, edges, mask):
 
 
 def _spectrum_agreement(paths, semantics):
-    data = _merge_particle_vtk_partitions(paths)
+    data = _merge_particle_vtk_gid_slices(paths)
     speed = np.linalg.norm(data.vectors["vel"], axis=1)
     max_speed = max(1.0, float(np.max(speed)))
     edges = np.linspace(0.0, max_speed + 1.0, 9)
@@ -316,7 +316,7 @@ def run(**kwargs):
         ],
         restart_file=os.path.relpath(restart_path, _athena_exe_dir()),
     )
-    _RESULTS["restart_final"] = _snapshot(_latest_particle_vtk_partitions(restarted))
+    _RESULTS["restart_final"] = _snapshot(_latest_particle_vtk_gid_slices(restarted))
 
 
 def analyze():
