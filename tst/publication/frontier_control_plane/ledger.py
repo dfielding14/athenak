@@ -362,6 +362,21 @@ def _require_same_directory(path: Path, descriptor: int) -> None:
         os.close(lexical_descriptor)
 
 
+def _require_same_regular_file_at(
+    parent_descriptor: int, name: str, descriptor: int, *, label: str
+) -> None:
+    try:
+        actual = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+    except FileNotFoundError as error:
+        raise ValueError(f"{label} path changed while locked: {name}") from error
+    expected = os.fstat(descriptor)
+    if (
+        not stat.S_ISREG(actual.st_mode)
+        or (actual.st_dev, actual.st_ino) != (expected.st_dev, expected.st_ino)
+    ):
+        raise ValueError(f"{label} path changed while locked: {name}")
+
+
 @contextmanager
 def _pinned_parent_directories(paths: list[Path]) -> Iterator[None]:
     existing = _PINNED_PARENT_DESCRIPTORS.get()
@@ -398,7 +413,7 @@ def _pinned_parent_directories(paths: list[Path]) -> Iterator[None]:
 
 
 @contextmanager
-def ledger_lock(ledger_jsonl: Path) -> Iterator[None]:
+def _local_ledger_lock(ledger_jsonl: Path) -> Iterator[None]:
     ledger_parent = Path(os.path.abspath(ledger_jsonl.parent))
     durable_mkdir_parents(ledger_parent)
     lock_path = _require_canonical_path(
@@ -411,54 +426,150 @@ def ledger_lock(ledger_jsonl: Path) -> Iterator[None]:
         os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
     )
     try:
-        ledger_parent_descriptor = os.open(
-            ledger_parent.name,
-            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-            dir_fd=stable_parent_descriptor,
-        )
+        fcntl.flock(stable_parent_descriptor, fcntl.LOCK_EX)
         try:
-            _require_same_directory(ledger_parent, ledger_parent_descriptor)
-            with _open_regular_nofollow(
-                Path(anchored_lock_path.name),
-                "a",
-                flags=os.O_APPEND | os.O_CREAT | os.O_WRONLY,
+            _require_same_directory(stable_parent, stable_parent_descriptor)
+            ledger_parent_descriptor = os.open(
+                ledger_parent.name,
+                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
                 dir_fd=stable_parent_descriptor,
-            ) as anchored_lock_stream:
-                fcntl.flock(anchored_lock_stream.fileno(), fcntl.LOCK_EX)
+            )
+            try:
+                fcntl.flock(ledger_parent_descriptor, fcntl.LOCK_EX)
                 try:
+                    _require_same_directory(stable_parent, stable_parent_descriptor)
                     _require_same_directory(ledger_parent, ledger_parent_descriptor)
-                    # Retain the historical lock for deployed callers while the
-                    # stable parent lock prevents a replacement ledger split.
                     with _open_regular_nofollow(
-                        Path(lock_path.name),
+                        Path(anchored_lock_path.name),
                         "a",
                         flags=os.O_APPEND | os.O_CREAT | os.O_WRONLY,
-                        dir_fd=ledger_parent_descriptor,
-                    ) as lock_stream:
-                        fcntl.flock(lock_stream.fileno(), fcntl.LOCK_EX)
+                        dir_fd=stable_parent_descriptor,
+                    ) as anchored_lock_stream:
+                        fcntl.flock(anchored_lock_stream.fileno(), fcntl.LOCK_EX)
                         try:
-                            _require_same_directory(
-                                ledger_parent, ledger_parent_descriptor
+                            _require_same_regular_file_at(
+                                stable_parent_descriptor,
+                                anchored_lock_path.name,
+                                anchored_lock_stream.fileno(),
+                                label="Anchored ledger lock",
                             )
-                            yield
+                            # Retain the historical lock for deployed callers while
+                            # pinned directory locks prevent a replacement split.
+                            with _open_regular_nofollow(
+                                Path(lock_path.name),
+                                "a",
+                                flags=os.O_APPEND | os.O_CREAT | os.O_WRONLY,
+                                dir_fd=ledger_parent_descriptor,
+                            ) as lock_stream:
+                                fcntl.flock(lock_stream.fileno(), fcntl.LOCK_EX)
+                                try:
+                                    _require_same_directory(
+                                        stable_parent, stable_parent_descriptor
+                                    )
+                                    _require_same_directory(
+                                        ledger_parent, ledger_parent_descriptor
+                                    )
+                                    _require_same_regular_file_at(
+                                        stable_parent_descriptor,
+                                        anchored_lock_path.name,
+                                        anchored_lock_stream.fileno(),
+                                        label="Anchored ledger lock",
+                                    )
+                                    _require_same_regular_file_at(
+                                        ledger_parent_descriptor,
+                                        lock_path.name,
+                                        lock_stream.fileno(),
+                                        label="Historical ledger lock",
+                                    )
+                                    yield
+                                finally:
+                                    try:
+                                        _require_same_directory(
+                                            stable_parent, stable_parent_descriptor
+                                        )
+                                        _require_same_directory(
+                                            ledger_parent, ledger_parent_descriptor
+                                        )
+                                        _require_same_regular_file_at(
+                                            stable_parent_descriptor,
+                                            anchored_lock_path.name,
+                                            anchored_lock_stream.fileno(),
+                                            label="Anchored ledger lock",
+                                        )
+                                        _require_same_regular_file_at(
+                                            ledger_parent_descriptor,
+                                            lock_path.name,
+                                            lock_stream.fileno(),
+                                            label="Historical ledger lock",
+                                        )
+                                    finally:
+                                        fcntl.flock(
+                                            lock_stream.fileno(), fcntl.LOCK_UN
+                                        )
                         finally:
+                            _require_same_directory(
+                                stable_parent, stable_parent_descriptor
+                            )
                             try:
-                                _require_same_directory(
-                                    ledger_parent, ledger_parent_descriptor
+                                _require_same_regular_file_at(
+                                    stable_parent_descriptor,
+                                    anchored_lock_path.name,
+                                    anchored_lock_stream.fileno(),
+                                    label="Anchored ledger lock",
                                 )
                             finally:
-                                fcntl.flock(lock_stream.fileno(), fcntl.LOCK_UN)
+                                fcntl.flock(
+                                    anchored_lock_stream.fileno(), fcntl.LOCK_UN
+                                )
                 finally:
                     try:
-                        _require_same_directory(ledger_parent, ledger_parent_descriptor)
-                    finally:
-                        fcntl.flock(
-                            anchored_lock_stream.fileno(), fcntl.LOCK_UN
+                        _require_same_directory(
+                            stable_parent, stable_parent_descriptor
                         )
+                        _require_same_directory(
+                            ledger_parent, ledger_parent_descriptor
+                        )
+                    finally:
+                        fcntl.flock(ledger_parent_descriptor, fcntl.LOCK_UN)
+            finally:
+                os.close(ledger_parent_descriptor)
         finally:
-            os.close(ledger_parent_descriptor)
+            try:
+                _require_same_directory(stable_parent, stable_parent_descriptor)
+            finally:
+                fcntl.flock(stable_parent_descriptor, fcntl.LOCK_UN)
     finally:
         os.close(stable_parent_descriptor)
+
+
+@contextmanager
+def ledger_lock(ledger_jsonl: Path, mirror_jsonl: Path | None = None) -> Iterator[None]:
+    if mirror_jsonl is None:
+        with _local_ledger_lock(ledger_jsonl):
+            yield
+        return
+
+    mirror_parent = Path(os.path.abspath(mirror_jsonl.parent))
+    durable_mkdir_parents(mirror_parent)
+    mirror_parent_descriptor = os.open(
+        mirror_parent,
+        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+    )
+    try:
+        fcntl.flock(mirror_parent_descriptor, fcntl.LOCK_EX)
+        try:
+            _require_same_directory(mirror_parent, mirror_parent_descriptor)
+            with _local_ledger_lock(ledger_jsonl):
+                _require_same_directory(mirror_parent, mirror_parent_descriptor)
+                yield
+                _require_same_directory(mirror_parent, mirror_parent_descriptor)
+        finally:
+            try:
+                _require_same_directory(mirror_parent, mirror_parent_descriptor)
+            finally:
+                fcntl.flock(mirror_parent_descriptor, fcntl.LOCK_UN)
+    finally:
+        os.close(mirror_parent_descriptor)
 
 
 def mirror_preflight(mirror_jsonl: Path) -> None:
@@ -636,7 +747,7 @@ def migrate_existing_genesis_anchors(
     expected_mirror_ack_sha256: str,
 ) -> dict[str, object]:
     """Create paired anchors for one audited pre-anchor ledger exactly once."""
-    with ledger_lock(ledger_jsonl):
+    with ledger_lock(ledger_jsonl, mirror_jsonl):
         with _pinned_parent_directories(
             _ledger_state_paths(ledger_jsonl, None, receipts_jsonl, mirror_jsonl)
         ):
@@ -803,7 +914,7 @@ def repair_mirrored_state(
     *,
     mirror_transport: str,
 ) -> dict[str, int]:
-    with ledger_lock(ledger_jsonl):
+    with ledger_lock(ledger_jsonl, mirror_jsonl):
         return repair_mirrored_state_locked(
             ledger_jsonl,
             ledger_csv,
@@ -894,7 +1005,7 @@ def append_primary_event(
     *,
     mirror_transport: str,
 ) -> dict[str, object]:
-    with ledger_lock(ledger_jsonl):
+    with ledger_lock(ledger_jsonl, mirror_jsonl):
         return append_primary_event_locked(
             ledger_jsonl,
             ledger_csv,
@@ -954,7 +1065,7 @@ def initialize_ledger(
     notes: str,
     control_plane_version: str,
 ) -> dict[str, object]:
-    with ledger_lock(ledger_jsonl):
+    with ledger_lock(ledger_jsonl, mirror_jsonl):
         with _pinned_parent_directories(
             _ledger_state_paths(ledger_jsonl, ledger_csv, receipts_jsonl, mirror_jsonl)
         ):

@@ -794,7 +794,7 @@ def reserve(
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
-    with ledger_lock(ledger_jsonl):
+    with ledger_lock(ledger_jsonl, mirror_jsonl):
         inventory = _verify_installed_control_plane_pair(
             control_plane_dir,
             authorized_pic_root=authorized_pic_root,
@@ -960,7 +960,7 @@ def transition(
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
-    with ledger_lock(ledger_jsonl):
+    with ledger_lock(ledger_jsonl, mirror_jsonl):
         inventory = _verify_installed_control_plane_pair(
             control_plane_dir,
             authorized_pic_root=authorized_pic_root,
@@ -1038,7 +1038,7 @@ def mark_dispatch_started(
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
-    with ledger_lock(ledger_jsonl):
+    with ledger_lock(ledger_jsonl, mirror_jsonl):
         inventory = _verify_installed_control_plane_pair(
             control_plane_dir,
             authorized_pic_root=authorized_pic_root,
@@ -1080,7 +1080,8 @@ def mark_submitted(
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
-    with ledger_lock(ledger_jsonl):
+    mirror_jsonl = authorized_project_home_root / "ledger" / "node_hours.jsonl"
+    with ledger_lock(ledger_jsonl, mirror_jsonl):
         _verify_installed_control_plane_pair(
             control_plane_dir,
             authorized_pic_root=authorized_pic_root,
@@ -1132,7 +1133,7 @@ def repair_reservation_attachments(
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
-    with ledger_lock(ledger_jsonl):
+    with ledger_lock(ledger_jsonl, mirror_jsonl):
         _verify_installed_control_plane_pair(
             control_plane_dir,
             authorized_pic_root=authorized_pic_root,
@@ -1229,7 +1230,7 @@ def repair_ledger_mirror(
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
-    with ledger_lock(ledger_jsonl):
+    with ledger_lock(ledger_jsonl, mirror_jsonl):
         _verify_installed_control_plane_pair(
             control_plane_dir,
             authorized_pic_root=authorized_pic_root,
@@ -1273,7 +1274,7 @@ def reservation_bound_manifest(
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
-    with ledger_lock(ledger_jsonl):
+    with ledger_lock(ledger_jsonl, mirror_jsonl):
         _verify_installed_control_plane_pair(
             control_plane_dir,
             authorized_pic_root=authorized_pic_root,

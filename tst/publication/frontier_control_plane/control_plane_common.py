@@ -2021,8 +2021,8 @@ def validate_control_plane_inventory(inventory: dict[str, object]) -> list[dict[
     """Require the exact closed inventory shape used by installed generations."""
     if (
         set(inventory) != {"schema_version", "version", "files"}
+        or type(inventory.get("schema_version")) is not int
         or inventory.get("schema_version") != 1
-        or isinstance(inventory.get("schema_version"), bool)
         or not isinstance(inventory.get("version"), str)
         or re.fullmatch(r"[0-9a-f]{64}", str(inventory["version"])) is None
     ):

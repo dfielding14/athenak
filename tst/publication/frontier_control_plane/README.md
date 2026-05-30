@@ -152,11 +152,18 @@ caller-selected build root, executable path, output path, log path or Project
 Home build location:
 
 ```bash
+ENV_FILE="${CONTROL_PLANE_DIR}/frontier_pic_environment.sh"
+source "$ENV_FILE" || exit $?
+
 "${CONTROL_PLANE[@]}" write_orion_build_profile.py \
   --source-root /ccs/home/dfielding/athenak-pic \
   --profile-id hip-mpi-release-paper-pic \
   --expected-git-commit <full-lowercase-git-commit>
 ```
+
+The writer measures and requires the exact reviewed module stack before it
+creates any build path. Source the installed profile in the build shell first;
+an unactivated clean shell is intentionally rejected.
 
 For `<commit12>` equal to the first twelve characters of that commit and
 `<profile>` equal to the profile ID, the writer derives this Orion-only layout:

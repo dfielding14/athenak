@@ -113,8 +113,8 @@ def _inventory(data: bytes) -> dict[str, object]:
     if (
         not isinstance(inventory, dict)
         or set(inventory) != {"schema_version", "version", "files"}
+        or type(inventory.get("schema_version")) is not int
         or inventory.get("schema_version") != 1
-        or isinstance(inventory.get("schema_version"), bool)
         or not isinstance(inventory.get("version"), str)
         or re.fullmatch(r"[0-9a-f]{64}", str(inventory.get("version", ""))) is None
     ):

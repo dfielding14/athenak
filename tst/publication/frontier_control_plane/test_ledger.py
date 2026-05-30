@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 from ledger import accounting, append_primary_event, initialize_ledger
 from ledger import genesis_anchor_paths, migrate_existing_genesis_anchors
+from ledger import ledger_lock
 from ledger import repair_mirrored_state, validate_mirrored_state
 from ledger import validate_primary_chain, validate_receipts, write_csv
 
@@ -260,6 +261,27 @@ class LedgerTests(unittest.TestCase):
             outside.read_text(encoding="utf-8"),
             "preserve external lock target\n",
         )
+
+    def test_replaced_lock_entries_fail_closed_while_held(self) -> None:
+        paths = [
+            self.ledger.parent.parent / ".ledger.lock",
+            self.ledger.with_suffix(self.ledger.suffix + ".lock"),
+        ]
+        for path in paths:
+            with self.subTest(path=path):
+                with self.assertRaisesRegex(ValueError, "lock path changed"):
+                    with ledger_lock(self.ledger):
+                        path.unlink()
+                        path.write_text("replacement lock\n", encoding="utf-8")
+
+    def test_mirror_parent_swap_fails_closed_while_held(self) -> None:
+        mirror_parent = self.mirror.parent
+        displaced = mirror_parent.with_name("displaced-mirror")
+        with self.assertRaisesRegex(ValueError, "path changed"):
+            with ledger_lock(self.ledger, self.mirror):
+                mirror_parent.rename(displaced)
+                mirror_parent.mkdir()
+        self.assertEqual(list(mirror_parent.iterdir()), [])
 
     def test_ledger_parent_swap_fails_without_writing_replacement(self) -> None:
         import ledger

@@ -44,7 +44,7 @@ from initialize_frontier_ledger import initialize_from_policy
 from install_control_plane import install
 from launch_trampoline import _TASK_LOCAL_EXEC, launch
 from ledger import accounting, genesis_anchor_paths, validate_primary_chain
-from promote_active_policy import promote
+from promote_active_policy import _promotion_lock, promote
 from reconcile_frontier_job import reconcile
 from validate_and_reserve_frontier_job import _clear_matching_pending_marker
 from validate_and_reserve_frontier_job import _require_scheduler_output_path
@@ -1036,6 +1036,39 @@ class SnapshotTests(unittest.TestCase):
                 inventory_path.write_bytes(original)
                 inventory_path.chmod(0o444)
 
+    def test_installed_control_plane_rejects_float_inventory_schema_version(self) -> None:
+        inventory_path = self.control_plane_dir / "inventory.json"
+        original = inventory_path.read_bytes()
+        inventory = json.loads(original)
+        inventory["schema_version"] = 1.0
+        inventory_path.chmod(0o644)
+        inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
+        inventory_path.chmod(0o444)
+        try:
+            with self.assertRaisesRegex(ValueError, "inventory schema"):
+                verify_installed_control_plane(
+                    self.control_plane_dir, authorized_pic_root=self.pic_root
+                )
+            result = subprocess.run(
+                [
+                    TRUSTED_PYTHON,
+                    "-I",
+                    str(self.control_plane_dir / "run_control_plane.py"),
+                    "promote_active_policy.py",
+                    "--help",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(
+                "Unsupported installed control-plane inventory", result.stderr
+            )
+        finally:
+            inventory_path.chmod(0o644)
+            inventory_path.write_bytes(original)
+            inventory_path.chmod(0o444)
+
     def test_captured_runner_imports_verified_sibling_bytes(self) -> None:
         import run_control_plane
 
@@ -1123,6 +1156,13 @@ class SnapshotTests(unittest.TestCase):
                 self._promote_policy()
         self.assertTrue(swapped)
         self.assertEqual(list(policy_parent.iterdir()), [])
+
+    def test_policy_promotion_lock_replacement_fails_closed_while_held(self) -> None:
+        lock = self.pic_root / ".promotion.lock"
+        with self.assertRaisesRegex(ValueError, "lock path changed"):
+            with _promotion_lock(self.pic_root):
+                lock.unlink()
+                lock.write_text("replacement lock\n", encoding="utf-8")
 
     def test_atomic_writer_fsyncs_parent_directory(self) -> None:
         output = self.root / "durable" / "output.json"

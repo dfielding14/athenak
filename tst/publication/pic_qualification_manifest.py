@@ -525,7 +525,7 @@ def _require_frontier_ledger_binding(
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
-    with ledger_lock(ledger_jsonl):
+    with ledger_lock(ledger_jsonl, mirror_jsonl):
         records = validate_mirrored_state(
             ledger_jsonl,
             receipts_jsonl,

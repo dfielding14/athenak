@@ -47,6 +47,21 @@ def _require_same_directory(path: Path, descriptor: int) -> None:
         os.close(lexical_descriptor)
 
 
+def _require_same_regular_file_at(
+    parent_descriptor: int, name: str, descriptor: int, *, label: str
+) -> None:
+    try:
+        actual = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+    except FileNotFoundError as error:
+        raise ValueError(f"{label} path changed while locked: {name}") from error
+    expected = os.fstat(descriptor)
+    if (
+        not stat.S_ISREG(actual.st_mode)
+        or (actual.st_dev, actual.st_ino) != (expected.st_dev, expected.st_ino)
+    ):
+        raise ValueError(f"{label} path changed while locked: {name}")
+
+
 @contextmanager
 def _promotion_lock(authorized_pic_root: Path) -> Iterator[int]:
     lexical_root = Path(os.path.abspath(authorized_pic_root))
@@ -60,38 +75,69 @@ def _promotion_lock(authorized_pic_root: Path) -> Iterator[int]:
         os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
     )
     try:
-        policy_descriptor = os.open(
-            policy_parent.name,
-            os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
-            dir_fd=root_descriptor,
-        )
+        fcntl.flock(root_descriptor, fcntl.LOCK_EX)
         try:
-            _require_same_directory(policy_parent, policy_descriptor)
-            descriptor = os.open(
-                path.name,
-                os.O_APPEND
-                | os.O_CREAT
-                | os.O_WRONLY
-                | getattr(os, "O_NOFOLLOW", 0),
-                0o600,
+            _require_same_directory(lexical_root, root_descriptor)
+            policy_descriptor = os.open(
+                policy_parent.name,
+                os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
                 dir_fd=root_descriptor,
             )
             try:
-                if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-                    raise ValueError("Policy promotion lock is not a regular file")
-                fcntl.flock(descriptor, fcntl.LOCK_EX)
+                fcntl.flock(policy_descriptor, fcntl.LOCK_EX)
                 try:
+                    _require_same_directory(lexical_root, root_descriptor)
                     _require_same_directory(policy_parent, policy_descriptor)
-                    yield policy_descriptor
+                    descriptor = os.open(
+                        path.name,
+                        os.O_APPEND
+                        | os.O_CREAT
+                        | os.O_WRONLY
+                        | getattr(os, "O_NOFOLLOW", 0),
+                        0o600,
+                        dir_fd=root_descriptor,
+                    )
+                    try:
+                        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                            raise ValueError("Policy promotion lock is not a regular file")
+                        fcntl.flock(descriptor, fcntl.LOCK_EX)
+                        try:
+                            _require_same_regular_file_at(
+                                root_descriptor,
+                                path.name,
+                                descriptor,
+                                label="Policy promotion lock",
+                            )
+                            yield policy_descriptor
+                        finally:
+                            try:
+                                _require_same_directory(lexical_root, root_descriptor)
+                                _require_same_directory(
+                                    policy_parent, policy_descriptor
+                                )
+                                _require_same_regular_file_at(
+                                    root_descriptor,
+                                    path.name,
+                                    descriptor,
+                                    label="Policy promotion lock",
+                                )
+                            finally:
+                                fcntl.flock(descriptor, fcntl.LOCK_UN)
+                    finally:
+                        os.close(descriptor)
                 finally:
                     try:
+                        _require_same_directory(lexical_root, root_descriptor)
                         _require_same_directory(policy_parent, policy_descriptor)
                     finally:
-                        fcntl.flock(descriptor, fcntl.LOCK_UN)
+                        fcntl.flock(policy_descriptor, fcntl.LOCK_UN)
             finally:
-                os.close(descriptor)
+                os.close(policy_descriptor)
         finally:
-            os.close(policy_descriptor)
+            try:
+                _require_same_directory(lexical_root, root_descriptor)
+            finally:
+                fcntl.flock(root_descriptor, fcntl.LOCK_UN)
     finally:
         os.close(root_descriptor)
 
@@ -143,49 +189,58 @@ def promote(
             mirror_policy_parent, root=authorized_project_home_root
         )
         try:
-            def require_pinned_policy_parents() -> None:
-                require_same_directory(
-                    policy_path.parent, policy_descriptor, root=authorized_pic_root
-                )
+            fcntl.flock(mirror_policy_descriptor, fcntl.LOCK_EX)
+            try:
                 require_same_directory(
                     mirror_policy_parent,
                     mirror_policy_descriptor,
                     root=authorized_project_home_root,
                 )
+                def require_pinned_policy_parents() -> None:
+                    require_same_directory(
+                        policy_path.parent, policy_descriptor, root=authorized_pic_root
+                    )
+                    require_same_directory(
+                        mirror_policy_parent,
+                        mirror_policy_descriptor,
+                        root=authorized_project_home_root,
+                    )
 
-            require_pinned_policy_parents()
-            atomic_write_bytes_at(
-                policy_descriptor,
-                policy_path.name,
-                reviewed_bytes,
-                post_publish_check=require_pinned_policy_parents,
-            )
-            atomic_write_bytes_at(
-                mirror_policy_descriptor,
-                mirror_policy_path.name,
-                reviewed_bytes,
-                post_publish_check=require_pinned_policy_parents,
-            )
-            atomic_write_json_at(
-                policy_descriptor,
-                active_promotion_path(authorized_pic_root).name,
-                record,
-                post_publish_check=require_pinned_policy_parents,
-            )
-            atomic_write_json_at(
-                mirror_policy_descriptor,
-                active_promotion_path(authorized_project_home_root).name,
-                record,
-                post_publish_check=require_pinned_policy_parents,
-            )
-            require_storage_policy_unlock_snapshot(
-                control_plane_version=version,
-                authorized_pic_root=authorized_pic_root,
-                authorized_project_home_root=authorized_project_home_root,
-                authorized_account=authorized_account,
-                allow_pending_genesis=True,
-            )
-            require_pinned_policy_parents()
+                require_pinned_policy_parents()
+                atomic_write_bytes_at(
+                    policy_descriptor,
+                    policy_path.name,
+                    reviewed_bytes,
+                    post_publish_check=require_pinned_policy_parents,
+                )
+                atomic_write_bytes_at(
+                    mirror_policy_descriptor,
+                    mirror_policy_path.name,
+                    reviewed_bytes,
+                    post_publish_check=require_pinned_policy_parents,
+                )
+                atomic_write_json_at(
+                    policy_descriptor,
+                    active_promotion_path(authorized_pic_root).name,
+                    record,
+                    post_publish_check=require_pinned_policy_parents,
+                )
+                atomic_write_json_at(
+                    mirror_policy_descriptor,
+                    active_promotion_path(authorized_project_home_root).name,
+                    record,
+                    post_publish_check=require_pinned_policy_parents,
+                )
+                require_storage_policy_unlock_snapshot(
+                    control_plane_version=version,
+                    authorized_pic_root=authorized_pic_root,
+                    authorized_project_home_root=authorized_project_home_root,
+                    authorized_account=authorized_account,
+                    allow_pending_genesis=True,
+                )
+                require_pinned_policy_parents()
+            finally:
+                fcntl.flock(mirror_policy_descriptor, fcntl.LOCK_UN)
         finally:
             os.close(mirror_policy_descriptor)
     print(record["policy_sha256"])

@@ -96,7 +96,7 @@ def reconcile(
         authorized_project_home_root / "control_plane" / str(inventory["version"]),
         authorized_pic_root=authorized_project_home_root,
     )
-    with ledger_lock(ledger_jsonl):
+    with ledger_lock(ledger_jsonl, mirror_jsonl):
         inventory = verify_installed_control_plane(
             control_plane_dir, authorized_pic_root=authorized_pic_root
         )
