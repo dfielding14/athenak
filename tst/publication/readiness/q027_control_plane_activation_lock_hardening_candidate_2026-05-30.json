@@ -24,8 +24,8 @@
   },
   "staged_successor": {
     "control_plane_version": "80c0797be1ce71bbe24f0848b6c983be5ffa31f884c2a8e2596cf8839dc1e9d5",
-    "paired_install_status": "pending_quiescent_paired_install",
-    "active_policy_promotion_status": "pending_paired_install_and_anchor_migration",
+    "paired_install_status": "pass_identical_immutable_install_and_anchor_migration",
+    "active_policy_promotion_status": "pending_reviewed_policy_commit_and_promotion",
     "science_submission_freeze": "pending_clean_candidate_freeze"
   },
   "local_validation": {
@@ -85,14 +85,26 @@
       "nonblocking exclusive descriptor lock acquired on Project Home ledger directory"
     ]
   },
+  "paired_install_transition": {
+    "status": "pass_active_policy_promotion_pending",
+    "installed_utc": "2026-05-30T19:04:22Z",
+    "orion_install": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/80c0797be1ce71bbe24f0848b6c983be5ffa31f884c2a8e2596cf8839dc1e9d5",
+    "project_home_install": "/ccs/proj/ast207/proj-shared/PIC/control_plane/80c0797be1ce71bbe24f0848b6c983be5ffa31f884c2a8e2596cf8839dc1e9d5",
+    "inventory_sha256": "7fa4d9d47274e77da15ae1382d352736e61ecf0ed4d7366a740b5d95ef891fb5",
+    "anchor_migration": "pass_existing_genesis_preserved_without_append",
+    "genesis_event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
+    "genesis_mirror_ack_sha256": "a3af8af8c3b579ee323850902aad7aab58abde98dff98618ccffd15958dbb296",
+    "orion_ledger_records": 22,
+    "orion_receipt_records": 22,
+    "project_home_ledger_records": 22
+  },
   "staged_source_context": {
     "core_repair_commit": "20ca3fce90a9fb1073a681cd4a4af198bb9ca842",
-    "worktree_state": "dirty_readiness_chronology_pending_quiescent_paired_install"
+    "worktree_state": "dirty_reviewed_policy_transition_pending_active_policy_promotion"
   },
   "next_actions": [
-    "Prove quiescent cutover: no predecessor mutator, reconciler or promoter is running or launchable.",
-    "Paired-install the identical control-plane digest in Orion and Project Home, migrate the predecessor genesis anchors exactly once and promote the reviewed closed policy without recreating ledger genesis.",
+    "Promote the committed reviewed closed policy without recreating ledger genesis.",
     "Build and freeze the exact clean source candidate under Orion before any new Frontier submission."
   ],
-  "overall_disposition": "local_activation_lock_hardening_outer_anchor_candidate_pass_independent_clone_retest_pass_all_submissions_paused_pending_quiescent_paired_install_anchor_migration_active_policy_promotion_clean_candidate_science_freeze_and_applicable_prerequisites"
+  "overall_disposition": "outer_anchor_successor_paired_installed_anchor_migration_pass_all_submissions_paused_pending_active_policy_promotion_clean_candidate_science_freeze_and_applicable_prerequisites"
 }

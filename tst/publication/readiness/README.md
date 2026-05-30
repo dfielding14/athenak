@@ -96,9 +96,9 @@ qualify any scientific claim by itself.
   intermediate digest `0d07f132`: current staged digest `80c0797be` additionally
   serializes ledger mutation and policy promotion through a descriptor lock on
   site-owned `/lustre/orion/ast207`, outside the replaceable PIC tree. Final
-  independent clone/hardlink lock retest passes. Quiescent paired install,
-  active-policy promotion, science freeze and applicable Frontier prerequisites
-  remain open.
+  independent clone/hardlink lock retest and quiescent paired immutable install
+  plus anchor migration pass. Active-policy promotion, science freeze and
+  applicable Frontier prerequisites remain open.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.
