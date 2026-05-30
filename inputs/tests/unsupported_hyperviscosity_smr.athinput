@@ -1,0 +1,61 @@
+# Configuration-rejection check: hyperviscosity is not yet supported with SMR.
+
+<job>
+basename = unsupported_hyperviscosity_smr
+
+<mesh>
+nghost = 2
+nx1 = 16
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 1
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 1
+nx3 = 1
+
+<mesh_refinement>
+refinement = static
+
+<refined_region1>
+level = 1
+x1min = 0.25
+x1max = 0.75
+x2min = 0.0
+x2max = 1.0
+x3min = 0.0
+x3max = 1.0
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+tlim = 0.01
+nlim = -1
+ndiag = 100000
+sts_integrator = rkl2
+
+<hydro>
+eos = ideal
+gamma = 1.6666666666667
+reconstruct = plm
+rsolver = hllc
+hyperviscosity = 1.0e-4
+hyperviscosity_integrator = sts
+
+<problem>
+pgen_name = hyperviscous_shear
+amp = 0.1
+mode = 1.0

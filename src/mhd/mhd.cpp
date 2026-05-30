@@ -15,6 +15,7 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "diffusion/viscosity.hpp"
+#include "diffusion/hyperviscosity.hpp"
 #include "diffusion/resistivity.hpp"
 #include "diffusion/conduction.hpp"
 #include "diffusion/scalar_diffusion.hpp"
@@ -123,6 +124,25 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     pvisc = nullptr;
   }
 
+  // Fourth-derivative numerical viscosity (only constructed if needed)
+  if (pin->DoesParameterExist("mhd", "hyperviscosity")) {
+    phypervisc = new HyperViscosity("mhd", ppack, pin);
+    const bool active = (phypervisc->nu4 > 0.0);
+    has_sts_hyperviscosity = active &&
+        (phypervisc->mode == parabolic::ParabolicIntegratorMode::sts);
+    has_explicit_hyperviscosity = active &&
+        (phypervisc->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
+    if (active) {
+      ppack->RegisterParabolicProcess({"mhd/hyperviscosity",
+                                       parabolic::ParabolicProcessOwner::mhd,
+                                       phypervisc->mode,
+                                       parabolic::ParabolicUpdateShape::cell_centered,
+                                       &(phypervisc->dtnew)});
+    }
+  } else {
+    phypervisc = nullptr;
+  }
+
   // Resistivity (only constructed if needed)
   if (pin->DoesParameterExist("mhd","ohmic_resistivity")) {
     presist = new Resistivity(ppack, pin);
@@ -191,8 +211,8 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     psrc = new SourceTerms("mhd_srcterms", ppack, pin);
   }
 
-  has_any_sts_cell_update = (has_sts_viscosity || has_sts_conduction ||
-                             has_sts_scalar_diffusion ||
+  has_any_sts_cell_update = (has_sts_viscosity || has_sts_hyperviscosity ||
+                             has_sts_conduction || has_sts_scalar_diffusion ||
                              (has_sts_resistivity && peos->eos_data.is_ideal));
   has_any_sts_field_update = has_sts_resistivity;
   has_any_sts_diffusion = (has_any_sts_cell_update || has_any_sts_field_update);
@@ -455,6 +475,7 @@ MHD::~MHD() {
   if (pscalar_diff != nullptr) {delete pscalar_diff;}
   if (pcond != nullptr) {delete pcond;}
   if (presist!= nullptr) {delete presist;}
+  if (phypervisc != nullptr) {delete phypervisc;}
   if (pvisc != nullptr) {delete pvisc;}
   delete peos;
 }

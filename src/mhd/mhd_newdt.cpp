@@ -21,6 +21,7 @@
 #include "diffusion/resistivity.hpp"
 #include "diffusion/scalar_diffusion.hpp"
 #include "diffusion/viscosity.hpp"
+#include "diffusion/hyperviscosity.hpp"
 #include "srcterms/srcterms.hpp"
 
 namespace mhd {
@@ -171,6 +172,9 @@ void MHD::RecomputeTimeStepFromCurrentState(Driver *pdriver) {
   }
   if (pvisc != nullptr) {
     pvisc->NewTimeStep(w0, peos->eos_data);
+  }
+  if (phypervisc != nullptr) {
+    phypervisc->NewTimeStep();
   }
   if (presist != nullptr) {
     presist->NewTimeStep(w0, peos->eos_data);

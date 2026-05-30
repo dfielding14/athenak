@@ -21,6 +21,7 @@
 class EquationOfState;
 class Coordinates;
 class Viscosity;
+class HyperViscosity;
 class Resistivity;
 class Conduction;
 class ScalarDiffusion;
@@ -119,8 +120,9 @@ class MHD {
   ShearingBoxFC *psbox_b = nullptr;
 
   // Object(s) for extra physics
-  // (viscosity, resistivity, thermal/scalar diffusion, source terms)
+  // (viscosity, hyperviscosity, resistivity, thermal/scalar diffusion, source terms)
   Viscosity *pvisc = nullptr;
+  HyperViscosity *phypervisc = nullptr;
   Resistivity *presist = nullptr;
   Conduction *pcond = nullptr;
   ScalarDiffusion *pscalar_diff = nullptr;
@@ -155,10 +157,12 @@ class MHD {
   bool use_fofc = false;   // flag to enable FOFC
 
   bool has_explicit_viscosity = false;
+  bool has_explicit_hyperviscosity = false;
   bool has_explicit_conduction = false;
   bool has_explicit_resistivity = false;
   bool has_explicit_scalar_diffusion = false;
   bool has_sts_viscosity = false;
+  bool has_sts_hyperviscosity = false;
   bool has_sts_conduction = false;
   bool has_sts_resistivity = false;
   bool has_sts_scalar_diffusion = false;

@@ -15,6 +15,7 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "diffusion/viscosity.hpp"
+#include "diffusion/hyperviscosity.hpp"
 #include "diffusion/conduction.hpp"
 #include "diffusion/scalar_diffusion.hpp"
 #include "srcterms/srcterms.hpp"
@@ -96,6 +97,25 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     pvisc = nullptr;
   }
 
+  // Fourth-derivative numerical viscosity (if requested in input file)
+  if (pin->DoesParameterExist("hydro", "hyperviscosity")) {
+    phypervisc = new HyperViscosity("hydro", ppack, pin);
+    const bool active = (phypervisc->nu4 > 0.0);
+    has_sts_hyperviscosity = active &&
+        (phypervisc->mode == parabolic::ParabolicIntegratorMode::sts);
+    has_explicit_hyperviscosity = active &&
+        (phypervisc->mode == parabolic::ParabolicIntegratorMode::explicit_mode);
+    if (active) {
+      ppack->RegisterParabolicProcess({"hydro/hyperviscosity",
+                                       parabolic::ParabolicProcessOwner::hydro,
+                                       phypervisc->mode,
+                                       parabolic::ParabolicUpdateShape::cell_centered,
+                                       &(phypervisc->dtnew)});
+    }
+  } else {
+    phypervisc = nullptr;
+  }
+
   // Thermal conduction (if requested in input file)
   if (pin->DoesParameterExist("hydro","conductivity") ||
       pin->DoesParameterExist("hydro","tdep_conductivity")) {
@@ -145,8 +165,8 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
     psrc = new SourceTerms("hydro_srcterms", ppack, pin);
   }
 
-  has_any_sts_diffusion = (has_sts_viscosity || has_sts_conduction ||
-                           has_sts_scalar_diffusion);
+  has_any_sts_diffusion = (has_sts_viscosity || has_sts_hyperviscosity ||
+                           has_sts_conduction || has_sts_scalar_diffusion);
 
   // (3) read time-evolution option [already error checked in driver constructor]
   // Then initialize memory and algorithms for reconstruction and Riemann solvers
@@ -361,6 +381,7 @@ Hydro::~Hydro() {
   if (psrc != nullptr) {delete psrc;}
   if (pscalar_diff != nullptr) {delete pscalar_diff;}
   if (pcond != nullptr) {delete pcond;}
+  if (phypervisc != nullptr) {delete phypervisc;}
   if (pvisc != nullptr) {delete pvisc;}
   delete peos;
 }

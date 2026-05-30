@@ -1,0 +1,65 @@
+# MHD cell-centered STS verification for fourth-derivative hyperviscosity.
+
+<job>
+basename = sts_mhd_hyperviscous_shear
+
+<mesh>
+nghost = 2
+nx1 = 128
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 1
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 64
+nx2 = 1
+nx3 = 1
+
+<time>
+evolution = dynamic
+integrator = rk2
+cfl_number = 0.4
+tlim = 0.05
+nlim = -1
+ndiag = 100000
+sts_integrator = rkl2
+sts_max_dt_ratio = -1.0
+
+<mhd>
+eos = ideal
+gamma = 1.6666666666667
+reconstruct = plm
+rsolver = hlle
+hyperviscosity = 1.0e-4
+hyperviscosity_integrator = sts
+
+<problem>
+pgen_name = hyperviscous_shear
+density = 1.0
+pressure = 1.0
+amp = 0.1
+mode = 2.0
+
+<output1>
+file_type = tab
+variable = mhd_w
+data_format = %24.16e
+dt = 0.05
+slice_x2 = 0.0
+slice_x3 = 0.0
+
+<output2>
+file_type = hst
+data_format = %24.16e
+dt = 0.0025

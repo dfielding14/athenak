@@ -20,6 +20,7 @@
 #include "diffusion/conduction.hpp"
 #include "diffusion/scalar_diffusion.hpp"
 #include "diffusion/viscosity.hpp"
+#include "diffusion/hyperviscosity.hpp"
 #include "srcterms/srcterms.hpp"
 
 namespace hydro {
@@ -140,6 +141,9 @@ void Hydro::RecomputeTimeStepFromCurrentState(Driver *pdrive) {
   }
   if (pvisc != nullptr) {
     pvisc->NewTimeStep(w0, peos->eos_data);
+  }
+  if (phypervisc != nullptr) {
+    phypervisc->NewTimeStep();
   }
   if (pscalar_diff != nullptr) {
     pscalar_diff->NewTimeStep(w0, nhydro, nscalars);

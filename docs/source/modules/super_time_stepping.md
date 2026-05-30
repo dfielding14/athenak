@@ -15,6 +15,7 @@ The currently supported STS operators are:
 | --- | --- | --- | --- | --- |
 | Thermal conduction | Yes | Yes | Energy | `conductivity_integrator` |
 | Isotropic viscosity | Yes | Yes | Momentum and energy | `viscosity_integrator` |
+| Fourth-derivative hyperviscosity | Yes | Yes | Momentum and ideal-gas energy | `hyperviscosity_integrator` |
 | Ohmic resistivity | No | Yes | Face-centered magnetic field | `ohmic_resistivity_integrator` |
 | Passive-scalar diffusion | Yes | Yes | Each scalar density | `scalar_diffusivity_integrator` |
 
@@ -229,6 +230,79 @@ The constant-viscosity path retains its low-overhead host timestep
 calculation. Only the variable-coefficient path performs the device
 reduction required to find the local diffusive timestep.
 
+## Fourth-Derivative Hyperviscosity
+
+Hyperviscosity is separate from Navier-Stokes viscosity. It is a controlled
+numerical damping operator for velocity structure at short wavelengths:
+
+$$
+\frac{\partial \boldsymbol{v}}{\partial t}
+= -\nu_4\nabla^4\boldsymbol{v}, \qquad [\nu_4]=L^4/T.
+$$
+
+The phrase *fourth-derivative* describes the operator, not the convergence
+order. AthenaK forms a centered second-order Laplacian
+$L_i=\nabla_h^2v_i$ and constructs the face flux
+
+$$
+F^{\rm hv}_{\rho v_i,q}
+= \rho_f\nu_4\left(\partial_q L_i\right)_f .
+$$
+
+The conservative update applies $-\nabla_h\cdot\boldsymbol{F}^{\rm hv}$.
+For constant density this is
+$-\nu_4(\nabla_h^2)^2\boldsymbol{v}$ and is second-order convergent in
+space. For ideal-gas Hydro and MHD, the operator also adds the conservative
+energy flux
+
+$$
+F^{\rm hv}_{E,q}
+= \boldsymbol{v}_f\cdot\boldsymbol{F}^{\rm hv}_{\rho\boldsymbol{v},q},
+$$
+
+so periodic damping transfers kinetic energy into internal energy while
+preserving total energy. Isothermal runs update momentum only. In MHD,
+hyperviscosity does not update magnetic fields and does not enter the
+constrained-transport EMF path.
+
+Configure the constant coefficient in `<hydro>` or `<mhd>`:
+
+```ini
+hyperviscosity = 1.0e-5
+hyperviscosity_integrator = sts
+```
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `hyperviscosity` | absent | Constant coefficient `nu4`; a positive value enables the operator |
+| `hyperviscosity_integrator` | `explicit` | `explicit` or `sts` |
+
+A zero coefficient contributes no flux and no timestep restriction; negative
+values are rejected. Ordinary viscosity and hyperviscosity can be active at
+the same time and can select explicit or STS integration independently.
+
+On a uniform mesh define
+
+$$
+S = \Delta x_1^{-2}
++ \mathbf{1}_{2D}\Delta x_2^{-2}
++ \mathbf{1}_{3D}\Delta x_3^{-2}.
+$$
+
+The most negative componentwise discrete eigenvalue is
+$-16\nu_4 S^2$, giving the registered explicit limit
+
+$$
+\Delta t_{\rm hv} = \frac{1}{8\nu_4 S^2}.
+$$
+
+This $\Delta x^4/\nu_4$ restriction is why STS is useful for
+hyperviscosity. The implementation caches its three velocity Laplacians once
+per diffusion evaluation or RKL2 stage and reuses them to form all face
+fluxes. It requires at least two ghost cells and currently supports only
+uniform-grid Newtonian Hydro and MHD. Active hyperviscosity is rejected for
+SMR/AMR and for SR, GR, or dynamical-GR coordinate modes.
+
 ## Resistivity
 
 Ohmic resistivity can be integrated with STS in MHD:
@@ -246,10 +320,12 @@ resistivity does not impose a timestep bound.
 ## Verification Suite
 
 Regression coverage is in
-`tst/test_suite/diffusion/test_sts_diffusion_cpu.py`. Run it from `tst/`:
+`tst/test_suite/diffusion/test_sts_diffusion_cpu.py` and
+`tst/test_suite/diffusion/test_hyperviscosity_cpu.py`. Run it from `tst/`:
 
 ```bash
 python run_test_suite.py --cpu --test test_suite/diffusion/test_sts_diffusion_cpu.py
+python run_test_suite.py --cpu --test test_suite/diffusion/test_hyperviscosity_cpu.py
 ```
 
 The suite performs the following checks:
@@ -262,6 +338,16 @@ The suite performs the following checks:
 | Bounded viscous shear wave | `sts_viscous_shear.athinput` | STS power-law viscosity agrees with explicit integration |
 | Resistive field diffusion | `sts_resistivity.athinput` | CT-based STS field update is finite and agrees with capped explicit comparison |
 | Advected scalar blob | `sts_scalar_blob.athinput` | Two-dimensional output is generated and the diffusing peak decreases |
+| Hyperviscous Hydro shear | `sts_hyperviscous_shear.athinput` | Analytic damping converges near second order; capped STS agrees with explicit integration; uncapped STS accelerates a stiff case |
+| Hyperviscous MHD shear | `sts_mhd_hyperviscous_shear.athinput` | The cell-centered MHD path follows analytic damping without changing the CT update |
+| Viscosity plus hyperviscosity | `sts_viscosity_plus_hyperviscosity.athinput` | Measured decay matches `nu*k^2 + nu4*k^4` |
+| Hyperviscous energy transfer | `sts_hyperviscous_shear.athinput` | Periodic ideal-gas total energy is conserved while kinetic energy becomes internal energy |
+| Unsupported inputs | `unsupported_hyperviscosity_smr.athinput` and runtime overrides | Negative coefficients, refinement, and relativistic modes fail clearly |
+
+MPI coverage in `test_hyperviscosity_mpicpu.py` compares a decomposed uniform
+run with its single-rank reference. The GPU smoke coverage in
+`test_hyperviscosity_gpu.py` executes the analytic Hydro shear problem on an
+available device build.
 
 Documentation figures can be regenerated after building `build-sts/src/athena`:
 
@@ -312,6 +398,33 @@ absolute difference.
 
 ![Power-law viscous shear test comparison](../_static/sts/viscous_shear_comparison.png)
 
+### Hyperviscous Shear Problem
+
+`inputs/tests/sts_hyperviscous_shear.athinput` initializes
+$v_y=A\sin(kx)$ at constant density. The exact solution is
+
+$$
+v_y(x,t)=A\exp(-\nu_4 k^4t)\sin(kx).
+$$
+
+The comparison below uses the same face-flux operator under ordinary explicit
+integration and RKL2 STS. A separate MHD input uses zero magnetic field to
+isolate the MHD cell-centered diffusion path.
+
+![Hyperviscous shear analytic and integrator comparison](../_static/sts/hyperviscous_shear_comparison.png)
+
+The fourth-derivative operator preferentially damps short wavelength
+velocity structure: increasing the Fourier mode number by four increases
+the analytic decay rate by a factor of $4^4$.
+
+![Hyperviscosity mode selectivity](../_static/sts/hyperviscosity_mode_selectivity.png)
+
+For ideal-gas runs, the conservative energy flux transfers damped kinetic
+energy to internal energy while total energy remains constant to floating
+point accuracy.
+
+![Hyperviscosity energy transfer](../_static/sts/hyperviscosity_energy_transfer.png)
+
 ### Resistive Current-Sheet Problem
 
 `inputs/tests/sts_resistivity.athinput` initializes a one-dimensional MHD
@@ -347,6 +460,11 @@ Both follow the expected second-order spatial convergence trend.
 
 ![Scalar diffusion convergence](../_static/sts/scalar_convergence.png)
 
+The hyperviscous shear test likewise converges at second order because the
+fourth derivative is formed from centered second-order differences.
+
+![Hyperviscosity convergence](../_static/sts/hyperviscosity_convergence.png)
+
 ## Source Map
 
 | Component | Files |
@@ -354,5 +472,5 @@ Both follow the expected second-order spatial convergence trend.
 | RKL2 controller and coefficients | `src/driver/driver.cpp`, `src/diffusion/sts_rkl2.cpp` |
 | Registered process descriptor | `src/diffusion/parabolic_process.hpp`, `src/mesh/meshblock_pack.hpp` |
 | Hydro/MHD STS task implementations | `src/hydro/hydro_sts.cpp`, `src/mhd/mhd_sts.cpp` |
-| Physical diffusion operators | `src/diffusion/conduction.cpp`, `src/diffusion/viscosity.cpp`, `src/diffusion/resistivity.cpp`, `src/diffusion/scalar_diffusion.cpp` |
-| Verification problem generator | `src/pgen/tests/sts_diffusion.cpp` |
+| Physical diffusion operators | `src/diffusion/conduction.cpp`, `src/diffusion/viscosity.cpp`, `src/diffusion/hyperviscosity.cpp`, `src/diffusion/resistivity.cpp`, `src/diffusion/scalar_diffusion.cpp` |
+| Verification problem generators | `src/pgen/tests/sts_diffusion.cpp`, `src/pgen/tests/hyperviscous_shear.cpp` |

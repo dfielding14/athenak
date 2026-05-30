@@ -281,6 +281,180 @@ def make_resistive_figure(executable, run_root, output_dir):
     plt.close(fig)
 
 
+def make_hyperviscous_shear_figure(executable, run_root, output_dir):
+    """Compare STS, explicit, and analytic fourth-derivative shear damping."""
+    sts_name = "figure_hyperviscous_shear_sts"
+    explicit_name = "figure_hyperviscous_shear_explicit"
+    overrides = (
+        "mesh/nx1=64",
+        "meshblock/nx1=64",
+        "time/tlim=0.005",
+        "output1/dt=0.005",
+        "output2/dt=0.005",
+        "problem/mode=4",
+    )
+    sts_dir = run_case(
+        executable,
+        run_root,
+        "sts_hyperviscous_shear.athinput",
+        sts_name,
+        *overrides,
+    )
+    explicit_dir = run_case(
+        executable,
+        run_root,
+        "sts_hyperviscous_shear.athinput",
+        explicit_name,
+        *overrides,
+        "hydro/hyperviscosity_integrator=explicit",
+        "time/sts_integrator=none",
+    )
+    initial = athena_read.tab(
+        str(sts_dir / "tab" / f"{sts_name}.hydro_w.00000.tab")
+    )
+    sts = athena_read.tab(
+        str(sts_dir / "tab" / f"{sts_name}.hydro_w.00001.tab")
+    )
+    explicit = athena_read.tab(
+        str(explicit_dir / "tab" / f"{explicit_name}.hydro_w.00001.tab")
+    )
+    order = np.argsort(sts["x1v"])
+    k = 8.0 * np.pi
+    analytic = 0.1 * np.exp(-1.0e-4 * k ** 4 * 0.005) * np.sin(k * sts["x1v"])
+
+    fig, (ax, residual) = plt.subplots(
+        2,
+        1,
+        figsize=(6.1, 5.0),
+        sharex=True,
+        gridspec_kw={"height_ratios": (3.0, 1.15)},
+        constrained_layout=True,
+    )
+    ax.plot(initial["x1v"][order], initial["vely"][order], "--", label=r"$t=0$")
+    ax.plot(sts["x1v"][order], analytic[order], "k-", label="Analytic")
+    ax.plot(sts["x1v"][order], sts["vely"][order], label="RKL2 STS")
+    ax.plot(explicit["x1v"][order], explicit["vely"][order], ":", label="Explicit")
+    ax.set_ylabel(r"$v_y$")
+    ax.set_title(r"Hyperviscous shear mode, $\nu_4=10^{-4}$")
+    ax.grid(True, alpha=0.25)
+    ax.legend(frameon=False, ncol=2)
+    residual.plot(
+        sts["x1v"][order],
+        (sts["vely"] - analytic)[order],
+        label="STS - analytic",
+    )
+    residual.plot(
+        explicit["x1v"][order],
+        (explicit["vely"] - analytic)[order],
+        ":",
+        label="Explicit - analytic",
+    )
+    residual.axhline(0.0, color="0.3", lw=0.8)
+    residual.set_xlabel(r"$x$")
+    residual.set_ylabel("Residual")
+    residual.grid(True, alpha=0.25)
+    residual.legend(frameon=False, fontsize="small")
+    fig.savefig(output_dir / "hyperviscous_shear_comparison.png", dpi=180)
+    plt.close(fig)
+
+
+def make_hyperviscosity_convergence_figure(executable, run_root, output_dir):
+    """Plot second-order spatial convergence of analytic shear damping."""
+    resolutions = np.array([32, 64, 128])
+    errors = []
+    for resolution in resolutions:
+        basename = f"figure_hypervisc_convergence_{resolution}"
+        case_dir = run_case(
+            executable,
+            run_root,
+            "sts_hyperviscous_shear.athinput",
+            basename,
+            f"mesh/nx1={resolution}",
+            f"meshblock/nx1={min(resolution, 64)}",
+        )
+        errors.append(
+            np.loadtxt(case_dir / f"{basename}-hypervisc-errors.dat")[2]
+        )
+    errors = np.asarray(errors)
+
+    fig, ax = plt.subplots(figsize=(5.7, 4.0), constrained_layout=True)
+    ax.loglog(resolutions, errors, "o-", label="RKL2 STS")
+    reference = errors[0] * (resolutions[0] / resolutions) ** 2
+    ax.loglog(resolutions, reference, "k--", label=r"$\mathcal{O}(\Delta x^2)$")
+    ax.set_xlabel("Number of cells")
+    ax.set_ylabel(r"$L_1$ velocity error")
+    ax.set_title("Fourth-derivative hyperviscosity convergence")
+    ax.grid(True, which="both", alpha=0.25)
+    ax.legend(frameon=False)
+    fig.savefig(output_dir / "hyperviscosity_convergence.png", dpi=180)
+    plt.close(fig)
+
+
+def make_hyperviscosity_selectivity_figure(executable, run_root, output_dir):
+    """Measure the expected stronger damping of shorter wavelength modes."""
+    times = np.array([0.0, 0.00125, 0.0025, 0.00375, 0.005])
+    nu4 = 1.0e-4
+    amp0 = 0.1
+    fig, ax = plt.subplots(figsize=(5.9, 4.0), constrained_layout=True)
+    for mode, marker in ((1, "o"), (4, "s")):
+        amplitudes = [amp0]
+        for index, time in enumerate(times[1:], start=1):
+            basename = f"figure_hypervisc_mode_{mode}_{index}"
+            case_dir = run_case(
+                executable,
+                run_root,
+                "sts_hyperviscous_shear.athinput",
+                basename,
+                "mesh/nx1=64",
+                "meshblock/nx1=64",
+                f"time/tlim={time}",
+                f"problem/mode={mode}",
+            )
+            amplitudes.append(
+                np.loadtxt(case_dir / f"{basename}-hypervisc-errors.dat")[4]
+            )
+        wavenumber = 2.0 * np.pi * mode
+        analytic = amp0 * np.exp(-nu4 * wavenumber ** 4 * times)
+        ax.plot(times, analytic, "-", label=rf"Analytic, $m={mode}$")
+        ax.plot(times, amplitudes, marker, linestyle="none", label=rf"STS, $m={mode}$")
+    ax.set_xlabel(r"$t$")
+    ax.set_ylabel(r"Projected amplitude of $v_y$")
+    ax.set_title(r"Hyperviscous selectivity: damping rate $\propto k^4$")
+    ax.grid(True, alpha=0.25)
+    ax.legend(frameon=False, ncol=2, fontsize="small")
+    fig.savefig(output_dir / "hyperviscosity_mode_selectivity.png", dpi=180)
+    plt.close(fig)
+
+
+def make_hyperviscosity_energy_figure(executable, run_root, output_dir):
+    """Show conservative conversion of damped kinetic energy to internal energy."""
+    basename = "figure_hypervisc_energy"
+    case_dir = run_case(
+        executable,
+        run_root,
+        "sts_hyperviscous_shear.athinput",
+        basename,
+    )
+    history = athena_read.hst(str(case_dir / f"{basename}.hydro.hst"))
+    kinetic = history["2-KE"]
+    internal = (
+        history["tot-E"] - history["1-KE"] - history["2-KE"] - history["3-KE"]
+    )
+    total = history["tot-E"]
+
+    fig, ax = plt.subplots(figsize=(6.1, 4.0), constrained_layout=True)
+    ax.plot(history["time"], kinetic - kinetic[0], label=r"$\Delta E_{\rm kin}$")
+    ax.plot(history["time"], internal - internal[0], label=r"$\Delta E_{\rm int}$")
+    ax.plot(history["time"], total - total[0], "k--", label=r"$\Delta E_{\rm tot}$")
+    ax.set_xlabel(r"$t$")
+    ax.set_ylabel("Energy change")
+    ax.set_title("Periodic hyperviscous energy transfer")
+    ax.grid(True, alpha=0.25)
+    ax.legend(frameon=False)
+    fig.savefig(output_dir / "hyperviscosity_energy_transfer.png", dpi=180)
+    plt.close(fig)
+
+
 def main():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -314,6 +488,10 @@ def main():
     make_thermal_front_figure(executable, run_root, output_dir)
     make_viscous_shear_figure(executable, run_root, output_dir)
     make_resistive_figure(executable, run_root, output_dir)
+    make_hyperviscous_shear_figure(executable, run_root, output_dir)
+    make_hyperviscosity_convergence_figure(executable, run_root, output_dir)
+    make_hyperviscosity_selectivity_figure(executable, run_root, output_dir)
+    make_hyperviscosity_energy_figure(executable, run_root, output_dir)
 
     for path in sorted(output_dir.glob("*.png")):
         print(path.relative_to(REPO_ROOT))

@@ -17,7 +17,7 @@ The Hydrodynamics module advances the Euler equations for Newtonian, special-rel
 
 - Selects the equation of state and instantiates the appropriate EOS helper (`src/hydro/hydro.cpp:40`).
 - Allocates conservative/primitive arrays (and coarse-grid buffers when AMR is enabled).
-- Optionally enables viscosity (`diffusion/viscosity.hpp`) and thermal conduction (`diffusion/conduction.hpp`) if the corresponding coefficients appear in the `<hydro>` block.
+- Optionally enables viscosity (`diffusion/viscosity.hpp`), hyperviscosity (`diffusion/hyperviscosity.hpp`), and thermal conduction (`diffusion/conduction.hpp`) if the corresponding coefficients appear in the `<hydro>` block.
 - Always creates a `SourceTerms` instance for hydro sources.
 - Registers all per-stage tasks via `Hydro::AssembleHydroTasks`, wiring MPI exchanges, flux calculations, updates, prolongation/restriction, and the cooling timestep evaluation (`src/hydro/hydro_tasks.cpp:36`).
 
@@ -60,6 +60,7 @@ Passive scalars (`nscalars`) are stored immediately after the hydro primitives/c
 | `rsolver` | – (required) | Riemann solver (see compatibility table below). |
 | `fofc` | `false` | Enables first-order flux correction; requires additional ghost zones. |
 | `viscosity` | absent | Presence activates isotropic viscosity via `diffusion/viscosity.hpp`. |
+| `hyperviscosity` | absent | Positive value activates constant fourth-derivative velocity damping via `diffusion/hyperviscosity.hpp`. |
 | `conductivity` / `tdep_conductivity` | absent | Presence activates thermal conduction (`diffusion/conduction.hpp`). |
 
 > The global `<time>` block controls `time/evolution`. Non-relativistic kinematic runs support only the linear advection solver.
@@ -89,6 +90,7 @@ Invalid combinations (e.g., `hllc` with isothermal EOS or relativistic kinematic
 `Hydro::Fluxes` dispatches to `CalculateFluxes<Hydro_RSolver::*>`, which reconstructs face states, solves the chosen Riemann problem, and fills `uflx` for all faces on every MeshBlock in the pack (`src/hydro/hydro_fluxes.cpp`). Diffusive contributions are added immediately afterwards:
 
 - `Viscosity::IsotropicViscousFlux` when `viscosity` is present (`src/hydro/hydro_tasks.cpp:115`).
+- `HyperViscosity::AddHyperViscousFlux` when positive `hyperviscosity` is present.
 - `Conduction::AddHeatFlux` for conductive runs.
 
 FOFC is applied either when explicitly enabled or implicitly when a GR run excises cells (black-hole masks), clamping troubled cells to first-order updates (`src/hydro/hydro_tasks.cpp:121`).
@@ -100,7 +102,7 @@ FOFC is applied either when explicitly enabled or implicitly when a GR run excis
 `Hydro::NewTimeStep` executes only on the final stage. It evaluates:
 
 1. The hydrodynamic CFL (or pure advection limit for kinematic runs) using local wave speeds, including relativistic characteristic speeds where appropriate (`src/hydro/hydro_newdt.cpp:39`).
-2. Diffusion limits when thermal conduction is active.
+2. Diffusion limits for active conduction, viscosity, scalar diffusion, or hyperviscosity.
 3. Source-term limits supplied by `SourceTerms::NewTimeStep`.
 
 The minimum value is stored in `dtnew` and reduced into the driver’s global timestep.
@@ -114,4 +116,5 @@ The minimum value is stored in `dtnew` and reduced into the driver’s global ti
 - `hllc` cannot be combined with the isothermal EOS; use `hlle` instead.
 - Ensure the mesh ghost-zone count satisfies the reconstruction plus FOFC requirements before enabling the option.
 - For kinematic runs, only `rsolver=advect` is valid—dynamic solvers expect conservative energy updates.
-- Viscosity and conduction must be declared in `<hydro>`; diffusion blocks elsewhere are not consulted by the hydro module.
+- Diffusion coefficients must be declared in `<hydro>`; diffusion blocks elsewhere are not consulted by the hydro module.
+- Hyperviscosity requires uniform Newtonian meshes with at least two ghost cells; active AMR/SMR and relativistic modes are rejected.

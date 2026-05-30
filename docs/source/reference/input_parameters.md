@@ -53,6 +53,8 @@ Complete list of all input parameters by block, extracted from source code.
 | `viscosity_floor` | Real | 0.0 | viscosity.cpp |
 | `viscosity_ceiling` | Real | large | viscosity.cpp |
 | `viscosity_integrator` | string | explicit | viscosity.cpp |
+| `hyperviscosity` | Real | required when active | hyperviscosity.cpp |
+| `hyperviscosity_integrator` | string | explicit | hyperviscosity.cpp |
 | `scalar_diffusivity` | Real | required when active | scalar_diffusion.cpp |
 | `scalar_diffusivity_N` | Real | `scalar_diffusivity` | scalar_diffusion.cpp |
 | `scalar_diffusivity_integrator` | string | explicit | scalar_diffusion.cpp |
@@ -157,6 +159,8 @@ Complete list of all input parameters by block, extracted from source code.
 | `viscosity_floor` | Real | 0.0 | viscosity.cpp |
 | `viscosity_ceiling` | Real | large | viscosity.cpp |
 | `viscosity_integrator` | string | explicit | viscosity.cpp |
+| `hyperviscosity` | Real | required when active | hyperviscosity.cpp |
+| `hyperviscosity_integrator` | string | explicit | hyperviscosity.cpp |
 | `scalar_diffusivity` | Real | required when active | scalar_diffusion.cpp |
 | `scalar_diffusivity_N` | Real | `scalar_diffusivity` | scalar_diffusion.cpp |
 | `scalar_diffusivity_integrator` | string | explicit | scalar_diffusion.cpp |

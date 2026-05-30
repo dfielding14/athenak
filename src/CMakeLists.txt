@@ -32,6 +32,7 @@ add_executable(
         coordinates/excision.cpp
 
         diffusion/conduction.cpp
+        diffusion/hyperviscosity.cpp
         diffusion/resistivity.cpp
         diffusion/scalar_diffusion.cpp
         diffusion/sts_rkl2.cpp
@@ -120,6 +121,7 @@ add_executable(
         pgen/tests/cshock.cpp
         pgen/tests/diffusion.cpp
         pgen/tests/sts_diffusion.cpp
+        pgen/tests/hyperviscous_shear.cpp
         pgen/tests/gr_bondi.cpp
         pgen/tests/gr_monopole.cpp
         pgen/tests/linear_wave.cpp

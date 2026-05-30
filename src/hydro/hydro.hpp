@@ -21,6 +21,7 @@
 class EquationOfState;
 class Coordinates;
 class Viscosity;
+class HyperViscosity;
 class Conduction;
 class ScalarDiffusion;
 class SourceTerms;
@@ -92,6 +93,7 @@ class Hydro {
 
   // Object(s) for extra physics (viscosity, thermal/scalar diffusion, srcterms)
   Viscosity *pvisc = nullptr;
+  HyperViscosity *phypervisc = nullptr;
   Conduction *pcond = nullptr;
   ScalarDiffusion *pscalar_diff = nullptr;
   SourceTerms *psrc = nullptr;
@@ -106,9 +108,11 @@ class Hydro {
   Real dtnew;
 
   bool has_explicit_viscosity = false;
+  bool has_explicit_hyperviscosity = false;
   bool has_explicit_conduction = false;
   bool has_explicit_scalar_diffusion = false;
   bool has_sts_viscosity = false;
+  bool has_sts_hyperviscosity = false;
   bool has_sts_conduction = false;
   bool has_sts_scalar_diffusion = false;
   bool has_any_sts_diffusion = false;

@@ -21,7 +21,7 @@ The Magnetohydrodynamics (MHD) module extends the hydrodynamics integrator to ev
 Per-stage task ordering (`tl["stagen"]`):
 
 1. `CopyCons` – stage register setup for higher-order integrators.
-2. `Fluxes` – reconstruct interface states, run the chosen MHD Riemann solver, add viscosity, resistivity, and conduction fluxes.
+2. `Fluxes` – reconstruct interface states, run the chosen MHD Riemann solver, add viscosity, hyperviscosity, resistivity, and conduction fluxes.
 3. `SendFlux` / `RecvFlux` – AMR flux exchange.
 4. `RKUpdate` – conserved-variable update.
 5. `HydroSrcTerms` equivalent – applies shared `SourceTerms` to the MHD state.
@@ -59,6 +59,7 @@ Passive scalars are appended to hydro variables in both `u0` and `w0`, ensuring 
 | `rsolver` | – (required) | Riemann solver keyword (see below). |
 | `fofc` | `false` | Enable first-order flux correction. |
 | `viscosity` | absent | Enables isotropic viscosity (diffusion module). |
+| `hyperviscosity` | absent | Positive value enables constant fourth-derivative velocity damping. |
 | `ohmic_resistivity` | absent | Enables resistive diffusion. |
 | `conductivity` / `tdep_conductivity` | absent | Enables thermal conduction. |
 
@@ -85,7 +86,7 @@ The constructor enforces EOS/solver compatibility and throws fatal errors for un
 No Roe solver is implemented for MHD; specifying it raises a fatal error.
 
 ## Diffusion & Source Coupling
-- Viscosity, resistivity, and conduction modules are instantiated only when the corresponding coefficients appear in `<mhd>`. Their fluxes are added immediately after the Riemann solver inside `MHD::Fluxes` (`src/mhd/mhd_tasks.cpp:121`).
+- Viscosity, hyperviscosity, resistivity, and conduction modules are instantiated only when the corresponding coefficients appear in `<mhd>`. Cell-centered diffusive fluxes are added after the Riemann solver, while resistivity remains on the constrained-transport EMF path.
 - `SourceTerms("mhd", …)` applies body forces, turbulence driving, etc., and contributes to the timestep limiter.
 - Orbital advection and shearing-box boundary handlers (`OrbitalAdvection{CC,FC}`, `ShearingBoxBoundary{CC,FC}`) are constructed when `<shearing_box>` exists.
 
@@ -96,7 +97,7 @@ No Roe solver is implemented for MHD; specifying it raises a fatal error.
 `MHD::NewTimeStep` executes on the final stage and evaluates:
 
 1. Fast-magnetosonic CFL speed (or relativistic characteristic speeds if SR/GR is active).
-2. Diffusion limits from resistivity and conduction.
+2. Diffusion limits from active resistivity, conduction, viscosity, scalar diffusion, or hyperviscosity.
 3. Source-term limits from the shared `SourceTerms` instance.
 
 The tightest value is stored in `dtnew` (`src/mhd/mhd_newdt.cpp`).
@@ -111,6 +112,7 @@ The tightest value is stored in `dtnew` (`src/mhd/mhd_newdt.cpp`).
 - HLLD requires an ideal EOS; use HLLE otherwise.
 - FOFC is automatically enabled in excision regions when running GRMHD with black hole masks (`src/mhd/mhd_tasks.cpp:127`).
 - Allocate sufficient ghost zones before enabling higher-order reconstruction plus FOFC.
+- Hyperviscosity requires uniform Newtonian meshes with at least two ghost cells and does not alter the constrained-transport magnetic-field update.
 
 
 ### $\nabla \cdot \mathbf{B}$ Growth
