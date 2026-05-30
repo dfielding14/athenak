@@ -7,12 +7,12 @@
     "Q-038",
     "Q-042"
   ],
-  "qualification_effect": "paired_modulepath_hardening_successor_install_pass_active_policy_promotion_pending",
+  "qualification_effect": "paired_modulepath_hardening_successor_activation_pass_science_submission_freeze_pending",
   "scope": "Successor chronology after the first clean Orion build-profile attempt through live outer-anchor digest 80c0797b rejected the measured Frontier MODULEPATH before creating build artifacts. The live profile retained caller-dependent site Lmod hook state: an interactive shell regenerated four rocmcc Spack prefixes while the stripped compute-node launcher did not. This successor resets MODULEPATH to a reviewed system seed before module loading, publishes the exact reviewed 19-component value after all module operations and preserves strict build-time and runtime equality checks. This record does not attest a paired live install, active-policy promotion, clean-candidate freeze or Frontier science execution.",
   "live_predecessor": {
     "record": "tst/publication/readiness/q027_outer_anchor_paired_activation_2026-05-30.json",
     "control_plane_version": "80c0797be1ce71bbe24f0848b6c983be5ffa31f884c2a8e2596cf8839dc1e9d5",
-    "lifecycle": "live_active_generation_pending_reviewed_modulepath_successor_install"
+    "lifecycle": "chronology_only_superseded_by_modulepath_hardening_successor_activation"
   },
   "rejected_build_preflight": {
     "source_commit": "33abb89664fc8b793e4bd6492db5dd383af72c0b",
@@ -25,7 +25,7 @@
     "control_plane_version": "c8002a1d5d30b5ab98b36907e0dad5f67cc39ea25e3f9c597857f8e911f6c859",
     "operational_source_commit": "37ccee56248929e1576a6ac127a8080a8df58153",
     "paired_install_status": "pass_identical_immutable_install_and_anchor_migration",
-    "active_policy_promotion_status": "pending",
+    "active_policy_promotion_status": "pass",
     "science_submission_freeze": "pending_clean_candidate_freeze"
   },
   "local_validation": {
@@ -85,11 +85,20 @@
     "reviewed_commit": "37ccee56248929e1576a6ac127a8080a8df58153",
     "reviewed_control_plane_version": "c8002a1d5d30b5ab98b36907e0dad5f67cc39ea25e3f9c597857f8e911f6c859"
   },
+  "active_policy_transition": {
+    "status": "pass",
+    "activated_utc": "2026-05-30T19:19:14Z",
+    "control_plane_version": "c8002a1d5d30b5ab98b36907e0dad5f67cc39ea25e3f9c597857f8e911f6c859",
+    "policy_sha256": "46bac2799d0c8b0637b1d3e6c6d88c06be8658158a941a305d59a55930358b23",
+    "promotion_sha256": "b777788cd848abd70c39edf2d75911cf91baf6d3f03cb98c6c3566a05a8f7eb2",
+    "idempotent_post_promotion_anchor_validation": "pass",
+    "cumulative_consumed_node_hours": 0.07444444444444442,
+    "active_reservations": 0
+  },
   "open_boundaries": [
-    "active-policy promotion remains pending",
     "science_submission_freeze.status remains pending_clean_candidate_freeze",
     "matched Frontier environment-profile A/B evidence remains open",
     "external reviewer disposition remains pending external review"
   ],
-  "overall_disposition": "modulepath_hardening_successor_paired_install_pass_all_science_submissions_paused_pending_promotion_clean_candidate_freeze_and_applicable_prerequisites"
+  "overall_disposition": "modulepath_hardening_successor_paired_activation_pass_all_science_submissions_paused_pending_clean_candidate_freeze_and_applicable_prerequisites"
 }
