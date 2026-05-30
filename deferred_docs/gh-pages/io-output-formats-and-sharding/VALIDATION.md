@@ -1,13 +1,13 @@
 # Deferred Documentation Application And Validation
 
-## Do Not Publish Before Code Merge And CP-03
+## Do Not Publish Before Code Merge
 
 This procedure is for applying the staged pages to a separate `gh-pages`
-change after the IO code branch has merged and CP-03 has removed transient
-rank-0 `<manifest>.assembled` restart staging. Building pages in a temporary
-worktree is permitted before publication; pushing or merging Pages content
-before the code exists on the primary branch or before the staging path is
-removed is not.
+change after the IO code branch has merged. CP-03 native direct restart loading
+has replaced the earlier transient rank-0 `<manifest>.assembled` staging
+design. Building pages in a temporary worktree is permitted before
+publication; pushing or merging Pages content before the code exists on the
+primary branch is not.
 
 ## Integration Procedure
 
@@ -17,10 +17,14 @@ removed is not.
    rg -n "single_file_per_node|final_output_policy|output_timing|sphslice|scale[1-4]|weight_variable" \
      src inputs/io tst/test_suite/io vis/python
    rg -n "bin_convert_new" vis/python inputs tst
+   rg -n "assembled|CanonicalPayloadPath|LoadLocalBlocks|Read_bytes_at_all|number of nodes|sparse_angles" \
+     src tst/test_suite/io vis/python
    ```
 
    The second search should show only intentional rejection/tests or migration
-   discussion, not an imported public module or promoted example.
+   discussion, not an imported public module or promoted example. For the
+   third search, `.assembled` references should be no-production-staging tests
+   or clearly marked historical documentation, not a runtime assembly path.
 
 2. Create a temporary worktree for the current Pages baseline:
 
@@ -82,7 +86,7 @@ removed is not.
 
    - parser keys and defaults in `src/outputs/outputs.cpp` and
      `src/driver/driver.cpp`;
-   - layouts implemented by output writers and restart loading;
+   - layouts implemented by output writers and native direct restart loading;
    - reader behavior in `vis/python/`;
    - test/example inputs; and
    - candidate Pages content and toctrees.
@@ -99,5 +103,11 @@ The Pages change description should include:
 - successful `make clean html SPHINXOPTS="-W --keep-going"` result;
 - confirmation that public documentation no longer promotes
   `bin_convert_new.py`;
+- confirmation that node restart uses the public manifest only, performs native
+  direct payload reads, and has no production `.assembled` staging path;
+- frozen `origin/main` shared and per-rank restart resume qualification status,
+  in addition to immutable fixture checksum status;
+- CUDA-capable GPU execution status for the IO regression, distinguishing a
+  real device run from the CPU smoke path;
 - real multi-node qualification status for per-node output/restart paths; and
 - any retained boundary, especially sliced `cbin`.

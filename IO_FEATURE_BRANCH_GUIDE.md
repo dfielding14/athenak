@@ -13,6 +13,50 @@ created by merging or cherry-picking the Gotham branch wholesale. The objective 
 not merely to recover Gotham functionality: it is to turn that functionality into a
 well-designed, maintainable, rigorously tested, documented IO subsystem.
 
+### CP-07 Implementation Refresh
+
+The planning narrative below is retained as decision history. The current feature
+implementation has now landed the following contracts, which supersede earlier
+forward-looking statements where they differ:
+
+- node restart loading is native and direct: the public `.rst` manifest is parsed
+  strictly, each rank routes its local MeshBlock spans from node payloads through
+  CP-02 chunked `IOWrapper::Read_bytes_at_all` reads, and production loading never
+  stages `<manifest>.assembled`;
+- the public node restart entry point is the manifest only; generated
+  `node_########/*.g<generation>.payload.rst` paths are rejected as direct `-r`
+  arguments, and a payload content marker also rejects hard-link or copied-byte
+  aliases that cannot be identified reliably from their pathname;
+- manifest loading validates relative generated paths, canonical containment after
+  symlink resolution, ordered dense node inventory, exact segment coverage and
+  node-local offsets, byte counts, consistent generations, completion, and
+  byte-identical replicated payload headers; payload and segment inventories are
+  bounded, and segment counts must be positive;
+- node-sharded `.bin` and full-volume `.cbin` add preheader inventory metadata
+  (`distribution`, `node`, `number of nodes`, and `number of meshblocks`) without
+  changing legacy shared or rank files; readers accept explicit empty shards and
+  reject incomplete or duplicate node inventories, bound cumulative metadata and
+  payload reads, reject non-positive variable counts, and preflight aggregate
+  reconstruction plus athdf-like conversion allocations incrementally;
+- spherical slices publish through `<file>.tmp` followed by rename, declare
+  `layout=dense` or `layout=sparse_angles`, record rank/node inventory metadata for
+  sharded files, preserve explicit empty shards, validate complete ownership, bound
+  whole-file reads plus coordinate allocations and embedded-header offsets, and
+  normalize reconstructed metadata while combining sparse siblings incrementally;
+- modern PDF headers and payloads publish independently through checked `<file>.tmp`
+  files followed by atomic rename; sparse rank/node headers declare sibling-inventory
+  metadata, sibling headers must agree on V2 declaration, declared V2 headers
+  require V2 payload preambles with matching cycles, and shipped readers reject
+  malformed shard aliases and unreasonable metadata, payload, or aggregate
+  reconstruction sizes while retaining only inventory summaries and normalizing
+  reconstructed metadata; readers preserve historical transitional unversioned
+  dense/sparse payload compatibility;
+- frozen `origin/main` shared and per-rank restart fixtures are resumed by regression
+  tests in addition to checksum verification;
+- `vis/python/bin_convert.py` is the only supported binary conversion API; and
+- sliced `.cbin` remains deliberately excluded in every shard mode and is rejected
+  during construction.
+
 The requested feature set includes:
 
 1. `single_file_per_node` output and restart sharding.
@@ -495,6 +539,11 @@ The PDF metadata/header must record enough information for readers to reconstruc
 - shared, rank, or node distribution;
 - total bin count.
 
+Each modern PDF header and payload file must be written to `<file>.tmp`, checked,
+closed, and atomically renamed independently. This prevents a reader from observing
+partial individual files. It is not a filesystem transaction covering the header and
+payload as one indivisible family.
+
 ### Reader Requirements
 
 `vis/python/read_pdf.py` should:
@@ -505,6 +554,9 @@ The PDF metadata/header must record enough information for readers to reconstruc
 - read sparse per-node PDFs by locating matching sibling shards;
 - sum sparse records into a dense histogram;
 - validate compatible metadata across shards;
+- validate canonical sibling paths, shard identifiers, and complete declared rank or
+  node inventories before reconstruction;
+- reject unreasonable file-controlled dense allocations before construction;
 - report missing, duplicated, or inconsistent shard data clearly;
 - expose physical bin coordinates for linear, log, and symlog axes.
 
@@ -560,6 +612,11 @@ surface using the implementation's established interpolation behavior.
 
 For partitioned output, each shard must contain enough angular-index information to
 reassemble a complete surface without assuming every shard owns data.
+
+The implemented writer publishes every spherical-slice file through
+`<file>.tmp` followed by rename. Shared files declare `layout=dense`; rank and node
+files declare `layout=sparse_angles`, include shard-inventory metadata, and retain a
+valid explicit empty shard when the selected owner has no angles.
 
 ### Reader Requirements
 
@@ -638,7 +695,7 @@ The new branch should support the following modes:
 | Output Type | Shared | Per-Rank | Per-Node | Notes |
 | --- | --- | --- | --- | --- |
 | Binary mesh output | Yes | Existing/retained | Add | Include slice-reader correctness |
-| Coarsened binary output | Yes | Existing/retained | Add | Same sharding model as binary |
+| Coarsened binary output | Yes for full volume | Existing/retained for full volume | Add for full volume | Sliced `cbin` remains excluded and is rejected explicitly |
 | PDF | Yes | Retain/complete | Add | Sparse COO for partitioned files |
 | Spherical slice | Yes | Add/retain as implemented | Add | Sparse angular ownership |
 | Restart | Yes | Existing/retained | Add | Requires manifest/payload design |
@@ -683,10 +740,14 @@ payload.
 Required behavior:
 
 - collective operations remain collective across the relevant communicator;
-- an empty shard either writes a valid empty representation or is skipped in a way
-  explicitly supported by the reader;
+- node-sharded writers publish a valid explicit empty representation when a node
+  owns no records for the selected product;
+- node-sharded binary and full-volume coarsened-binary shards carry additive
+  `distribution`, `node`, `number of nodes`, and `number of meshblocks` preheader
+  fields, and spherical-slice shards carry layout plus rank/node inventory metadata;
 - output schedule counters advance once for an ordinary scheduled output event;
-- the Python reader does not interpret a legitimately empty shard as missing data.
+- the Python reader accepts legitimate empty shards but rejects missing, duplicate,
+  malformed, or non-dense node inventories when the additive metadata is present.
 
 ## Feature Family 5: Per-Node Restart Files
 
@@ -713,10 +774,40 @@ restart payload for data assigned to that node.
 
 ### Restart Entry Points
 
-The current supported restart entry point is the public manifest path only.
-Direct payload restart is unsupported. D-026 tracks whether strict component-based
-normalization from a node-payload path should be added later. Any accepted
-normalization must reject malformed shard directories clearly.
+The supported node restart entry point is the public manifest path only. Direct
+restart from a generated node payload is rejected with an instruction to use the
+manifest. Ordinary shared restart files remain valid even if an unrelated filename
+ends in `.payload.rst`. Each generated node payload also carries an explicit marker
+after the replicated parameter dump. Manifest loading requires and consumes the
+marker, while ordinary restart loading rejects marked bytes. This closes direct
+restart through hard links or copied payload bytes without changing legacy shared
+or per-rank restart files.
+
+### Native Direct Loading
+
+The earlier implementation temporarily assembled a rank-0 shared restart file before
+calling legacy restart loading. That prior state is retained as useful decision
+history, but it is not the production path. The current loader:
+
+1. Parses and validates the public manifest.
+2. Opens one canonical payload for the replicated restart header.
+3. Checks byte-identical replicated headers across payloads.
+4. Routes each rank's local MeshBlock spans to the declared node payloads.
+5. Reads those spans directly through CP-02 chunked `IOWrapper` positioned reads.
+
+No production `<manifest>.assembled` or `<manifest>.assembled.tmp` artifact is
+created. Tests reserve those names as directories during resume to prove that native
+loading does not depend on them.
+
+### Manifest Validation
+
+The manifest loader rejects absolute or traversing paths, malformed node-directory
+or generation components, payload symlink escapes after canonicalization, incomplete
+or reordered fixed records, non-contiguous node inventories, mixed generations,
+inconsistent byte counts, segment gaps or overlaps, inconsistent node-local offsets,
+missing or truncated payloads, replicated-header mismatches, oversized declared
+payload or segment inventories, non-positive segment counts, and absent or corrupt
+payload markers.
 
 ### MPI-IO Robustness
 
@@ -1043,7 +1134,7 @@ The writer-to-tool contract is:
 | Binary, sliced binary, and coarsened binary | Unified `vis/python/bin_convert.py` |
 | N-dimensional PDF | `vis/python/read_pdf.py` |
 | Spherical slice | `vis/python/read_sphslice.py` |
-| Per-node restart manifest and payloads | Strict public-manifest validation followed by transient rank-0 `<manifest>.assembled` staging until CP-03; native distributed loading remains planned |
+| Per-node restart manifest and payloads | Strict public-manifest validation followed by native routed payload reads; generated payload paths are not public restart entry points and no production `.assembled` staging is used |
 
 No additional reader helper is required merely to split logic by sharding mode. If a
 shared utility module is warranted to remove meaningful duplication between readers,
@@ -1072,6 +1163,8 @@ Required failure cases include:
 - duplicate or out-of-range sparse PDF entries where not permitted;
 - a missing node/rank shard when completeness is required;
 - a requested file that belongs to a sharded family but cannot be resolved safely;
+- binary or coarsened-binary MeshBlocks with nonuniform emitted extents inside
+  one file;
 - malformed headers or unsupported layout versions.
 
 Error messages should identify the file family and the incompatible field rather than
@@ -1367,11 +1460,12 @@ The benchmark should record:
 
 The feature branch must include extensive, merge-ready documentation content, but it
 must not modify, merge into, or publish the live `gh-pages` branch before the code
-feature branch has been accepted and merged. Do not publish or open a Pages
-integration review until CP-03 removes transient rank-0 `<manifest>.assembled`
-staging and the staged pages are reapplied, rebuilt, and re-audited against the
-then-current `origin/gh-pages`. Documentation may be validated against a temporary
-worktree of `origin/gh-pages`; validation is not publication.
+feature branch has been accepted and merged. CP-03 native direct restart loading has
+replaced the earlier transient rank-0 `<manifest>.assembled` staging design. Do not
+publish or open a Pages integration review until the staged pages are reapplied,
+rebuilt, and re-audited against the then-current `origin/gh-pages`. Documentation
+may be validated against a temporary worktree of `origin/gh-pages`; validation is
+not publication.
 
 ### Live Documentation Framework To Target
 
@@ -1499,9 +1593,14 @@ The feature branch is ready for review only when all of the following are true:
 - Gotham-specific pgen, dust, cooling-flow, and SN edits are absent.
 - Existing inputs continue to run without enabling new behavior.
 - N-dimensional PDF output and readers pass focused tests.
+- Modern PDF headers and payloads publish atomically per file, sparse shards declare
+  complete inventory metadata, and shipped readers reject malformed aliases and
+  unreasonable file-controlled allocations.
 - Spherical-slice output and reader pass focused tests.
 - Shared/per-rank/per-node comparisons pass for supported output formats.
 - Per-node restart round trips pass.
+- Node-payload hard links, byte copies, and corrupt content markers cannot bypass the
+  public-manifest-only restart contract.
 - `bin_convert.py` is the only supported binary conversion module, incorporates the
   required modern functionality, and all repository imports/examples use it.
 - All shipped reader/helper scripts have valid-file and corrupt/inconsistent-file
@@ -1541,7 +1640,7 @@ review:
 | Canonical converter module | `vis/python/bin_convert.py` | User uses modern implementation; avoid duplicated APIs |
 | Converter migration basis | Fold `bin_convert_new.py` into `bin_convert.py`, preserving required old helpers | Modern functionality with one maintained entry point |
 | Example status | Executable and tested, not prose-only | Demonstrates production-facing workflows |
-| Documentation timing | Stage in feature branch; integrate into `gh-pages` only after code merge, CP-03 staging removal, reapplication, rebuild, and re-audit | Avoid publishing behavior before it exists |
+| Documentation timing | Stage in feature branch; integrate into `gh-pages` only after code merge, reapplication, rebuild, and re-audit | Avoid publishing behavior before it exists |
 | Documentation validation | Temporary `origin/gh-pages` worktree with Sphinx warnings as errors | Fits live Pages framework safely |
 | Review method | Multiple bounded subagent audits plus main-agent verification | High-risk IO work requires independent checks |
 | Particle restart enhancements | Separate follow-up | Keeps IO branch focused |

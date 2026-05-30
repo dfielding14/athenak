@@ -6,7 +6,7 @@
 | --- | --- |
 | Target branch | `feature/io-output-formats-and-sharding` |
 | Clean base | `origin/main` at `886dd2a1437e45a3a30b3eeebf2adfa838328f73` |
-| Current local state | Reconstructed implementation preserved in `ca00581b`, `3049aa92`, and `fcc534fe`; CP-01 planning and deferred documentation corrections remain uncommitted |
+| Current local state | Selective integration is locally qualified and organized into reviewable commits; external CUDA plus real multi-node gates stay open |
 | Comparison reference | Local remote-tracking ref `origin/feature/single-file-per-node-outputs` at `47462c5da45d3c763b37fb21505fac5fd3498805` |
 | Comparison rule | Use the remote branch as read-only evidence. Do not merge or cherry-pick it wholesale. |
 | Decision record | `IO_FEATURE_BRANCH_DECISION_LOG.md` |
@@ -82,19 +82,40 @@ The local tree is the preferred baseline for:
 | Converter consolidation | Exposes one canonical `vis/python/bin_convert.py` and removes `bin_convert_new.py` redundancy |
 | Tests and docs | Uses the repository pytest harness, frozen fixtures, promoted examples, and a deferred Pages overlay |
 
-### Remaining Local Gaps
+### Resolved Local Gaps And External Qualification Gates
 
-The next pass must address these gaps before merge readiness:
+The selective integration pass resolved the local implementation gaps. Two
+environment-dependent qualifications remain before merge readiness can be claimed:
 
 | ID | Gap | Why it matters |
 | --- | --- | --- |
-| GAP-001 | Per-node restart input reconstructs `manifest.rst.assembled` on rank 0 before using the legacy reader | Correct but not scalable for large restart files |
-| GAP-002 | `IOWrapper` lacks generalized chunked MPI byte operations and forced-small-chunk tests | Large IO operations still depend on MPI `int` count limits |
-| GAP-003 | Local canonical `bin_convert.py` lacks useful newer helpers retained by the remote consolidation | One canonical module should include the useful modern API surface |
-| GAP-004 | Local `tst/scripts/utils/athena.py` still constructs `['mpiexec -n', ...]` | The older test helper invokes MPI incorrectly |
-| GAP-005 | Empty-node sliced-output behavior is not qualified on multiple physical nodes | One-node local MPI tests cannot prove true node-shard behavior |
-| GAP-006 | The compatibility record overstates the restart loader as native | Documentation must match the implementation at every checkpoint |
+| GAP-001 | Resolved: per-node restart reads validated payload spans directly and never stages `manifest.rst.assembled` | CP-03 |
+| GAP-002 | Resolved: `IOWrapper` uses checked chunked MPI byte operations with forced-small-chunk tests | CP-02 |
+| GAP-003 | Resolved: canonical `bin_convert.py` exposes the accepted additive helpers | CP-05 |
+| GAP-004 | Resolved: `tst/scripts/utils/athena.py` passes MPI launcher arguments separately | CP-06 |
+| GAP-005 | External gate: empty-node sliced-output and direct-restart behavior still require multiple physical nodes | One-node local MPI tests cannot prove true node-shard topology behavior |
+| GAP-006 | Resolved: compatibility and deferred Pages records describe native direct restart loading | CP-03 and CP-07 |
 | GAP-007 | Resolved during CP-01: earlier planning artifacts used a superseded prefixed branch name | Branch identity should remain consistent |
+| GAP-008 | External gate: GPU-selectable IO regression still requires a CUDA-capable build | CPU smoke proves test logic, not device-memory correctness |
+| GAP-009 | Resolved: node restart payloads carry a content marker so direct hard-link or copied-payload aliases cannot bypass the manifest-only API | CP-03 |
+| GAP-010 | Resolved: modern PDF files publish atomically per file and sparse shards declare strict sibling inventory metadata | CP-04 and CP-05 |
+| GAP-011 | Resolved: shipped readers require declared V2 preambles and matching cycles, normalize reconstructed metadata, bound metadata/payload reads and aggregate reconstruction, and resume frozen baseline restart fixtures | CP-05 and CP-06 |
+| GAP-012 | Resolved: sparse PDF siblings agree on V2 declaration, binary metadata and shard totals are incrementally bounded, binary variable counts are positive, spherical-slice coordinate/offset inputs are preflighted, and generated Python caches stay ignored | CP-05 and CP-06 |
+| GAP-013 | Resolved: spherical/PDF reconstruction retains only incremental inventory state, binary limits account for retained and transient-copy bytes, coarsening factors are positive, and all athdf-like helper allocations are preflighted | CP-05 |
+| GAP-014 | Resolved: athdf-like helpers crop prolongation before materialization, restore coarse-level restriction, validate logical levels, preserve single-rank destination arrays, reject duplicate scalar labels, require finite PDF metadata and mandatory V2 sparse inventories, and validate the complete `cbin` factor contract before unsafe arithmetic | CP-05 and CP-06 |
+| GAP-015 | Resolved: sliced `cbin` is rejected consistently in every shard mode, and full-volume writers require ghost-expanded emitted extents to be divisible by the validated factor during construction | CP-04 and CP-06 |
+| GAP-016 | Resolved: canonical Python tooling validates root-grid and MeshBlock topology before reconstruction, places requested ghost zones by interior width with extended coordinates, retains lower-bound-intersecting cells, initializes uncovered partial-shard levels deterministically, rejects non-shared dense PDF declarations, and bounds cumulative ATHDF/PDF/spherical live peaks before materialization | CP-05 and CP-06 |
+| GAP-017 | Resolved: canonical Python tooling detects omitted ghost counts, rejects duplicate and out-of-domain direct MeshBlocks, preallocates root centers, and bounds prolongation-index, symlog-transform, and final spherical-coordinate temporaries | CP-05 and CP-06 |
+| GAP-018 | Resolved: canonical Python tooling binds MeshBlock geometry to exact logical physical intervals, rejects singleton-axis ghost mismatches, bounds coordinate/prolongation/restriction source temporaries and sparse duplicate-validation peaks, accounts for retained PDF reference state during shard-header parsing, releases incorporated PDF/spherical sibling arrays before reading the next shard, and makes the preserved single-MeshBlock ATHDF helper reject unsupported ghost-bearing or sliced extents without changing its signature | CP-05 and CP-06 |
+| GAP-019 | Resolved: retained ATHDF orchestration APIs have positive frozen-fixture regressions and the promoted node-sharded `cbin --assemble-shards` helper command executes end to end under MPI automation | CP-06 |
+| GAP-020 | Resolved: modern explicit/generated and legacy PDF edge paths preflight parsing, generation, validation, and bin-center NumPy peaks before materialization while accounting for retained arrays from other dimensions and reference headers | CP-05 and CP-06 |
+| GAP-021 | Resolved: MeshBlock physical-interval comparison uses zero relative tolerance with a storage-aware bounded absolute tolerance; strict legacy ASCII parsing rejects trailing junk and preflights cumulative payload-row plus final-stack expansion | CP-05 and CP-06 |
+| GAP-022 | Resolved: generated PDF edge retained-peak rejection has an explicit regression proving it runs before NumPy edge generation | CP-06 |
+| GAP-023 | Resolved: legacy PDF candidate headers retain shard-reference budgets during private parsing; spherical-slice readers cap header lines and cumulative metadata bytes and preflight variable-token expansion before splitting | CP-05 and CP-06 |
+| GAP-024 | Resolved: PDF numeric-token parsing rejects non-ASCII input before applying its ASCII-sized peak model; spherical-slice sibling parsing retains and budgets reference metadata, rejects duplicate variable declarations, and threads coexistence budgets through payload validation | CP-05 and CP-06 |
+| GAP-025 | Resolved: public multi-shard spherical reconstruction regression proves later sibling reads receive a nonzero retained-state budget | CP-06 |
+| GAP-026 | Resolved: final spherical coordinate-generation preflight retains variable-metadata bytes until after theta/phi construction and has a focused reduced-cap regression | CP-05 and CP-06 |
+| GAP-027 | Resolved: canonical binary and coarsened-binary readers reject nonuniform emitted MeshBlock extents within one file before exposing file data to dense reconstruction | CP-05 and CP-06 |
 
 ## Subagent Operating Protocol
 
@@ -254,12 +275,12 @@ included.
 
 ### Stop Gate
 
-- [ ] Branch identity recorded.
-- [ ] Existing local files inventoried.
-- [ ] Baseline tests re-run.
-- [ ] Fixture checksums pass.
-- [ ] Baseline commits created without unrelated changes.
-- [ ] Baseline audit recorded in `IO_FEATURE_AUDIT_LEDGER.md`.
+- [x] Branch identity recorded.
+- [x] Existing local files inventoried.
+- [x] Baseline tests re-run.
+- [x] Fixture checksums pass.
+- [x] Baseline commits created without unrelated changes.
+- [x] Baseline audit recorded in `IO_FEATURE_AUDIT_LEDGER.md`.
 
 ## CP-01: Correct Planning Records And Finalize Contracts
 
@@ -358,7 +379,7 @@ Do not copy those files wholesale.
 - [x] MPI build passes.
 - [x] Existing shared and per-rank IO tests pass.
 - [x] Forced-small-chunk shared restart write/read passes.
-- [ ] Forced-small-chunk node restart write/read passes after CP-03.
+- [x] Forced-small-chunk node restart write/read passes after CP-03.
 - [x] `git diff --check` passes.
 
 ### Stop Gate
@@ -394,13 +415,15 @@ loading.
 The native flow should:
 
 1. Accept a public manifest path.
-2. Optionally accept a node payload path only when it can be normalized
-   unambiguously to its public manifest.
+2. Reject generated node payload paths as unsupported entry points; the public
+   manifest is the transactional restart API.
 3. Reject malformed shard directories, path traversal, absolute payload paths,
    mixed generations, missing nodes, duplicate nodes, incomplete manifests,
    inconsistent byte counts, and incomplete segment coverage.
-4. Parse and validate the public text manifest once in a controlled location.
-5. Broadcast validated structured metadata where required.
+4. Parse and validate the public text manifest in a controlled module.
+5. For this branch, retain correctness-first validation independently on each MPI
+   rank. Central validation plus structured metadata broadcast is a future scaling
+   optimization, recorded explicitly rather than added late in the integration.
 6. Read parameter and mesh metadata without assembling a full shared payload.
 7. Route MeshBlock field reads directly to node payload shards.
 8. Coalesce contiguous payload requests into spans.
@@ -451,28 +474,32 @@ Likely files:
 
 ### Required Tests
 
-- [ ] Shared restart round trip.
-- [ ] Existing per-rank restart round trip.
-- [ ] Per-node restart by manifest path.
-- [ ] Per-node restart by normalized node-payload path if that API is accepted.
-- [ ] No `.assembled` file is created during node restart.
-- [ ] Terminal node checkpoint resume advances numbering without overwrite.
-- [ ] Corrupted manifest rejection: traversal, absolute path, incomplete marker,
+- [x] Shared restart round trip.
+- [x] Existing per-rank restart round trip.
+- [x] Per-node restart by manifest path.
+- [x] Generated node-payload restart paths are rejected by the accepted
+      manifest-only API.
+- [x] Hard-link and byte-for-byte copied node-payload aliases are rejected by
+      the manifest-only content-marker contract.
+- [x] No `.assembled` file is created during node restart.
+- [x] Terminal node checkpoint resume advances numbering without overwrite.
+- [x] Corrupted manifest rejection: traversal, absolute path, incomplete marker,
       wrong byte count, missing node, duplicate node, mixed generation,
       overlapping segment, missing segment coverage.
-- [ ] Missing payload rejection.
-- [ ] Truncated payload rejection.
-- [ ] Forced-small-chunk restart read and write.
-- [ ] Zero-payload rank participation.
+- [x] Missing payload rejection.
+- [x] Truncated payload rejection.
+- [x] Forced-small-chunk restart read and write.
+- [x] Zero-payload rank participation on one physical node.
 - [ ] Real multi-node qualification with an empty or non-owning node.
 
 ### Stop Gate
 
 Do not describe the restart reader as native until:
 
-- [ ] production restart loading no longer creates `.assembled`;
-- [ ] direct distributed reads pass focused MPI tests;
-- [ ] the new implementation has an independent correctness audit.
+- [x] production restart loading no longer creates `.assembled`;
+- [x] direct distributed reads pass focused MPI tests;
+- [x] the new implementation has an independent correctness audit and the
+      post-audit payload-alias correction passes focused regressions.
 
 ## CP-04: Harden Node-Sharded Writers And Empty-Node Behavior
 
@@ -489,9 +516,10 @@ spherical-slice output without regressing local format contracts.
 2. Ensure every rank advances output counters consistently.
 3. Ensure collective calls include zero-byte ranks.
 4. Preserve full-volume node-sharded `.cbin`.
-5. Keep sliced node-sharded `.cbin` outside the promoted workflow until the
-   existing zero-width extent defect is repaired separately.
-6. Add optional phase-level stats only behind an explicit opt-in mechanism.
+5. Keep sliced `.cbin` outside the promoted workflow in every shard mode and
+   reject its incompatible emitted extent during construction.
+6. Do not add the rejected reference phase-level stats surface; preserve the
+   existing opt-in `<time>/output_timing=true` interface.
 
 ### Spherical-Slice Requirements
 
@@ -515,12 +543,12 @@ spherical-slice output without regressing local format contracts.
 
 ### Verification
 
-- [ ] Shared, rank, and node `.bin` reconstruction equality.
-- [ ] Full-volume shared, rank, and node `.cbin` reconstruction equality.
-- [ ] Sliced `.bin` empty-owner tests.
-- [ ] Shared, rank, and node spherical-slice reconstruction equality.
-- [ ] Spherical-slice malformed payload and ownership rejection.
-- [ ] Explicit exclusion remains documented for sliced node-sharded `.cbin`.
+- [x] Shared, rank, and node `.bin` reconstruction equality.
+- [x] Full-volume shared, rank, and node `.cbin` reconstruction equality.
+- [x] Sliced `.bin` empty-owner tests.
+- [x] Shared, rank, and node spherical-slice reconstruction equality.
+- [x] Spherical-slice malformed payload and ownership rejection.
+- [x] Explicit exclusion remains documented for sliced `.cbin`.
 - [ ] Real multi-node empty-node qualification is recorded.
 
 ## CP-05: Complete The Canonical Python Converter API
@@ -580,14 +608,15 @@ Do not add by default:
 
 ### Verification
 
-- [ ] Public API inventory test passes.
-- [ ] Legacy converter call forms pass.
-- [ ] Indexed meshblock read passes if added.
+- [x] Public API inventory test passes.
+- [x] Legacy converter call forms pass.
+- [x] Keyword-only indexed meshblock read passes.
 - [x] `read_rank_binary_as_athdf()` passes on a rank shard.
-- [ ] `read_rank_binary_as_athdf()` passes on a node shard after CP-04 reader inventory hardening.
-- [ ] Shared `.bin` and `.cbin` CLI conversion passes.
-- [ ] `--assemble-shards` rank and node conversion passes.
-- [ ] `rg -n "bin_convert_new" .` finds no supported code or docs dependency.
+- [x] `read_rank_binary_as_athdf()` passes on a node shard after CP-04 reader inventory hardening.
+- [x] Shared `.bin` and `.cbin` CLI conversion passes.
+- [x] `--assemble-shards` rank and node conversion passes.
+- [x] `rg -n "bin_convert_new" vis/python tst inputs` finds no supported code dependency;
+      documentation references are migration warnings or historical records only.
 
 ## CP-06: Expand Regression And Qualification Coverage
 
@@ -608,30 +637,30 @@ the qualification runs that local single-node development cannot prove.
 
 ### Scenarios To Port From The Remote Branch
 
-- [ ] Forced-small MPI byte chunks using `ATHENAK_TEST_MAX_MPI_BYTES`.
-- [ ] Restart from public manifest.
-- [ ] Restart from normalized node-payload path if supported.
-- [ ] Relative and absolute restart path handling.
-- [ ] Stale node-payload collision beside a valid shared restart.
-- [ ] Detailed restart phase statistics if retained.
-- [ ] Detailed output stats for skipped empty node shards if retained.
-- [ ] Empty-node sliced binary behavior.
-- [ ] Converter convenience API behavior.
+- [x] Forced-small MPI byte chunks using `ATHENAK_TEST_MAX_MPI_BYTES`.
+- [x] Restart from public manifest.
+- [x] Generated node-payload paths are rejected by the accepted manifest-only API.
+- [x] Relative manifest and invalid absolute payload-path handling.
+- [x] Stale node-payload collision beside a valid shared restart.
+- [x] Detailed restart phase statistics were deliberately rejected from scope.
+- [x] Detailed output stats for skipped empty node shards were deliberately rejected from scope.
+- [x] Empty-node sliced binary reader behavior.
+- [x] Converter convenience API behavior.
 
 ### Existing Local Scenarios To Preserve
 
-- [ ] Legacy one-dimensional PDF byte compatibility.
-- [ ] Legacy two-dimensional PDF byte compatibility.
-- [ ] Modern `AKPDFV2` dense and sparse readback.
-- [ ] Transitional unversioned dense and sparse PDF readback.
-- [ ] Three- and four-dimensional PDFs.
-- [ ] Linear, log, and symlog axes.
-- [ ] Volume, mass, and variable weighting.
-- [ ] Spherical-slice strict malformed-input rejection.
-- [ ] Derived spherical-slice rejection.
-- [ ] Two-fluid generic diagnostic rejection.
-- [ ] Final-output policy and terminal-checkpoint numbering.
-- [ ] Canonical converter CLI and example readback.
+- [x] Legacy one-dimensional PDF byte compatibility.
+- [x] Legacy two-dimensional PDF byte compatibility.
+- [x] Modern `AKPDFV2` dense and sparse readback.
+- [x] Transitional unversioned dense and sparse PDF readback.
+- [x] Three- and four-dimensional PDFs.
+- [x] Linear, log, and symlog axes.
+- [x] Volume, mass, and variable weighting.
+- [x] Spherical-slice strict malformed-input rejection.
+- [x] Derived spherical-slice rejection.
+- [x] Two-fluid generic diagnostic rejection.
+- [x] Final-output policy and terminal-checkpoint numbering.
+- [x] Canonical converter CLI and example readback.
 
 ### Qualification Matrix
 
@@ -646,8 +675,12 @@ the qualification runs that local single-node development cannot prove.
 
 ### Stop Gate
 
-- [ ] Every accepted behavior has a positive test.
-- [ ] Every parser or manifest validation rule has a negative test.
+- [x] Every locally promoted behavior has a positive test.
+- [x] Parser and manifest validation rules have focused negative tests, including
+      post-audit payload aliases, oversized declared inventories, bounded segment
+      inventory, and non-positive segment rejection.
+- [x] Frozen `origin/main` shared and per-rank restart fixtures are resumed, not
+      checksummed only.
 - [ ] GPU qualification is run, not merely defined.
 - [ ] Real multi-node qualification is run, not inferred from two local ranks.
 
@@ -672,9 +705,12 @@ Keep documentation merge-ready without publishing behavior prematurely.
    - legacy text compatibility;
    - `AKPDFV2`;
    - transitional unversioned read compatibility;
-   - dense shared and sparse rank/node layouts.
+   - dense shared and sparse rank/node layouts;
+   - checked temporary-file publication and atomic rename for each modern PDF
+     header or payload file;
+   - strict sparse sibling inventory metadata and bounded reader allocations.
 5. Ensure converter docs expose only canonical `bin_convert.py`.
-6. Keep sliced node-sharded `.cbin` explicitly outside the promoted workflow.
+6. Keep sliced `.cbin` explicitly outside the promoted workflow.
 7. Apply the deferred overlay only in a temporary detached Pages worktree.
 8. Run:
 
@@ -690,9 +726,9 @@ current implementation and tests.
 
 ### Stop Gate
 
-- [ ] Deferred docs match code.
-- [ ] Sphinx warnings-as-errors build passes in a temporary Pages worktree.
-- [ ] Live `gh-pages` remains untouched.
+- [x] Deferred docs match code.
+- [x] Sphinx warnings-as-errors build passes in a temporary Pages worktree.
+- [x] Live `gh-pages` remains untouched.
 
 ## CP-08: Final Independent Audits And Commit Preparation
 
@@ -726,7 +762,7 @@ Spawn separate read-only auditors for:
 7. Are shared and per-rank restart paths preserved?
 8. Are terminal checkpoint counters advanced normally?
 9. Are detailed stats opt-in?
-10. Are sliced node-sharded `.cbin` claims still excluded?
+10. Are sliced `.cbin` claims still excluded?
 11. Are unrelated remote changes absent?
 12. Do decision-log and audit-ledger entries match the final implementation?
 
@@ -752,13 +788,13 @@ recorded during earlier checkpoints.
 
 ### Stop Gate
 
-- [ ] All blocking findings resolved.
-- [ ] Remaining scope exclusions are explicit.
+- [x] All locally actionable blocking findings resolved.
+- [x] Remaining scope exclusions are explicit.
 - [ ] GPU qualification passed.
 - [ ] Real multi-node qualification passed.
-- [ ] Deferred Pages validation passed.
-- [ ] Final independent audit reports are recorded.
-- [ ] Commit sequence is coherent and reviewable.
+- [x] Deferred Pages validation passed.
+- [x] Final independent audit reports are recorded.
+- [x] Commit sequence is coherent and reviewable.
 
 ## Recommended Final Commit Shape
 

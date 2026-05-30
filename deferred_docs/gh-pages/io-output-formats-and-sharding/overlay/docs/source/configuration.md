@@ -97,6 +97,13 @@ single_file_per_node = true
 `single_file_per_rank` and `single_file_per_node` cannot both be true in the
 same output block.
 
+For `file_type = cbin`, set `coarsen_factor` to a power of two between `2`
+and the shortest MeshBlock dimension, inclusive. Every emitted extent,
+including optional ghost zones, must be divisible by the factor. The writer
+rejects invalid factors before construction and invalid extents during
+construction. Full-volume node-sharded `cbin` is supported; sliced `cbin`
+remains deliberately excluded.
+
 ### Distribution Examples
 
 Shared output:
@@ -132,7 +139,9 @@ single_file_per_node = true
 ```
 
 Supported node-sharded products are `bin`, full-volume `cbin`, modern `pdf`,
-`sphslice`, and `rst`. Sliced node-sharded `cbin` is not a promoted workflow.
+`sphslice`, and `rst`. Node-sharded binary and full-volume coarsened-binary
+writers emit additive inventory metadata and valid explicit empty shards.
+Sliced `cbin` is rejected explicitly and is not a promoted workflow.
 
 ## Modern PDF Configuration
 
@@ -208,7 +217,12 @@ single_file_per_node = true
 ```
 
 In node mode the visible `.rst` file is a manifest; restart using that
-manifest, not its payload files.
+manifest, not its payload files. The manifest is the only public node restart
+entry point. Native resume validates paths, symlink containment, inventory,
+bounded positive segment records, payload sizes, replicated headers, and a
+node-payload content marker before reading routed local MeshBlock spans
+directly from node payloads without `.assembled` staging. Marked hard-link and
+byte-copy aliases are rejected outside validated manifest loading.
 
 ## Physics Blocks And Tips
 

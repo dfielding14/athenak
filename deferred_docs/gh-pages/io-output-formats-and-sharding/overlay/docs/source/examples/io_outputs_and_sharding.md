@@ -141,7 +141,12 @@ mpirun -np 2 ./build-mpi/src/athena \
 ```
 
 Do not point `-r` at a node payload. The runtime validates manifest
-completeness and payload metadata before reconstructing the checkpoint.
+completeness, generated paths, symlink containment, bounded positive segment
+inventory, payload sizes, and replicated headers before reading each rank's
+routed MeshBlock spans directly from the node payloads. Native resume uses
+chunked positioned reads and does not create a shared `.assembled` staging
+file. Generated payloads carry a content marker, so hard-link and byte-copy
+aliases cannot bypass the manifest-only restart API.
 
 ## Compatibility Boundaries
 
@@ -149,9 +154,9 @@ completeness and payload metadata before reconstructing the checkpoint.
   PDF configurations should use the modern `variable_N`, `scaleN`, and
   `weight` interface.
 - `sphslice` is not a replacement for the existing `file_type = sph` output.
-- Node-sharded full-volume `cbin` is covered by this example; sliced
-  node-sharded `cbin` is outside the promoted workflow pending a separate
-  legacy slice/readback repair.
+- Node-sharded full-volume `cbin` is covered by this example; sliced `cbin` is
+  rejected and remains outside the promoted workflow because its emitted
+  extent is incompatible with supported coarsening.
 - The automated MPI example can run multiple ranks on one physical node.
   Before production use, qualify node sharding and node restart on a real
   multi-node allocation and the target parallel filesystem.

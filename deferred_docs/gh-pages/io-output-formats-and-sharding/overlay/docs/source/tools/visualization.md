@@ -37,8 +37,28 @@ cbin_node = bin_convert.read_coarsened_binary(
 When `assemble_shards=True`, the reader discovers sibling `rank_########` or
 `node_########` files and assembles their meshblock records into one logical
 output. It validates file structure and consistent metadata across discovered
-shards. Tests cover emitted empty/non-owning binary-slice cases. Shared output
-needs no assembly flag.
+shards. New node-sharded binary and full-volume coarsened-binary files add
+`distribution`, `node`, `number of nodes`, and `number of meshblocks`
+preheader fields. The canonical reader uses these optional fields to reject
+missing or duplicate node IDs while accepting explicit empty shards. Shared
+output needs no assembly flag. Metadata records, parameter dumps, and
+accumulated MeshBlock payloads are bounded while each shard is read. Aggregate
+payload and metadata totals are checked incrementally after each bounded shard
+load and before combined aggregate materialization. The canonical readers
+require uniform emitted MeshBlock extents within each file. Athdf-like
+conversion helpers validate grid and logical-location metadata plus each
+MeshBlock's exact logical physical interval before reconstruction, using zero relative
+  tolerance and a storage-aware absolute tolerance capped at one eighth of the
+  logical block width. They preflight cumulative coordinate,
+  field, level-map, and restriction-map allocations plus NumPy
+  coordinate/prolongation/restriction-generation temporaries derived from parsed
+  metadata. Dense assembly helpers require a matching `num_ghost` argument for
+  ghost-bearing products, and malformed singleton-axis ghost widths are
+  rejected. Requested ghost zones are placed by interior MeshBlock width with
+  coordinates extended outside root bounds; lower crop bounds retain cells they
+  intersect; uncovered partial-shard level-map cells are initialized to `-1`.
+  The preserved legacy single-MeshBlock ATHDF helper has no ghost argument and
+  rejects ghost-bearing or sliced emitted extents rather than truncating them.
 
 ### Conversion
 
@@ -64,9 +84,9 @@ python vis/python/examples/read_io_outputs.py \
   --assemble-shards
 ```
 
-Full-volume node-sharded `.cbin` is supported. Sliced `cbin` is not a promoted
-workflow in this feature because the pre-existing shared sliced-output path
-still requires a separate extent/readback repair.
+Full-volume node-sharded `.cbin` is supported. Sliced `cbin` is rejected
+explicitly because its emitted extent is incompatible with supported
+coarsening.
 
 ## Reading PDFs
 
@@ -75,6 +95,9 @@ still requires a separate extent/readback repair.
 - legacy unsharded text PDFs written by unchanged old-style inputs;
 - modern dense shared V2 PDF files; and
 - modern sparse per-rank or per-node V2 shards.
+
+Modern writers emit `AKPDFV2`. The reader also retains historical compatibility for
+transitional unversioned dense and sparse binary payloads.
 
 ```python
 from vis.python import read_pdf
@@ -89,8 +112,25 @@ node = read_pdf.read_pdf(
 Modern V2 validation covers the `AKPDFV2` preamble, dimensionality and edge
 metadata, time/cycle agreement between shards, sparse index range, duplicate
 records within an individual shard, truncation, and unexpected trailing
-records. The reader sums normal contributions to one bin from distinct
-shards.
+records. Sparse reconstruction also requires canonical sibling directory
+names, matching path/header shard identifiers, and rank-sharded payload writer
+ranks that match the rank directory. New V2 sparse shards declare a complete
+rank or node inventory; historical transitional artifacts may omit those
+additive fields. Node payloads still carry writer ranks rather than node IDs.
+A declared V2 header requires a V2 payload preamble with the same cycle, sparse
+V2 families require complete inventory declarations, and sibling headers must
+agree on V2 declaration. Metadata must be finite where required, and a modern
+dense file must use the shared distribution. Metadata and payload sizes are
+  bounded before each shard load. Retained reference state is included while
+  each replacement shard header is parsed. Explicit, generated, and legacy bin
+  edges are preflighted before token-list or NumPy materialization. Legacy
+  numeric rows are ASCII-only, parsed strictly, retained cumulatively, and bounded again
+  before stacking. Payload-copy and duplicate-validation temporaries are included
+  in the cumulative retained peak before materialization and aggregate
+  accumulation, and incorporated local headers and sparse arrays are released
+  before the next sibling read. Reconstructed aggregates remove
+  shard-local identifiers. The reader sums normal contributions to one bin from
+  distinct shards.
 
 The public example script can be used for a quick summary:
 
@@ -115,8 +155,17 @@ node = read_sphslice.read_sphslice(
 ```
 
 The assembled object contains the angular grid and sampled values. Sharded
-readback rejects inconsistent headers, truncated payloads, and missing or
-duplicate angular ownership.
+readback rejects inconsistent headers, layout/distribution mismatches,
+truncated payloads, incomplete shard inventory, and missing or duplicate
+angular ownership. Shared files declare `layout=dense`; sharded files declare
+`layout=sparse_angles`. Empty shards are valid inventory members. Whole-file
+  reads, cumulative header bytes, individual metadata lines, variable-token
+  expansion before splitting, retained reference variable-metadata summary through final
+  coordinate generation, coordinate allocations, embedded input dumps, payload copies,
+  duplicate-validation and ownership-diagnostic temporaries, and embedded-header
+  offsets are bounded before loading or materialization. Incorporated sparse
+  arrays are released before the next sibling read, and reconstructed aggregates
+  remove shard-local identifiers.
 
 ```bash
 python vis/python/examples/read_io_outputs.py \

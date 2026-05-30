@@ -60,15 +60,26 @@ node-sharded stream or node restart manifest requires it.
 
 | Product | Per-node support | Notes |
 | --- | --- | --- |
-| `bin` | Yes | Full output and Cartesian slicing are reader-tested. |
-| `cbin` | Yes for full-volume output | Do not promote sliced `cbin`; existing shared sliced readback has a separate extent defect. |
-| Modern `pdf` | Yes | Shards use the sparse-coordinate V2 layout. |
-| `sphslice` | Yes | Angular ownership is assembled by the reader. |
-| `rst` | Yes | Public manifest references transactional node payloads. |
+| `bin` | Yes | Full output and Cartesian slicing are reader-tested. Node shards include additive inventory metadata and preserve explicit empty shards. |
+| `cbin` | Yes for full-volume output | Node shards include additive inventory metadata and preserve explicit empty shards. Sliced `cbin` is rejected because its emitted extent is incompatible with supported coarsening. |
+| Modern `pdf` | Yes | Shards use the sparse-coordinate V2 layout, carry inventory metadata, and publish each header or payload file atomically. |
+| `sphslice` | Yes | Angular ownership is assembled by the reader; shards declare layout and inventory metadata and publish atomically. |
+| `rst` | Yes | Public manifest references transactional node payloads and is the only supported node restart entry point. |
+
+Node-sharded binary and full-volume coarsened-binary preheaders add
+`distribution`, `node`, `number of nodes`, and `number of meshblocks`.
+Canonical readers use these optional fields to require a complete dense node
+inventory while remaining compatible with older files that do not define
+them. A node with no selected records still publishes a valid empty shard.
 
 The feature tests exercise MPI ranks sharing a physical node. Production
 adoption of `single_file_per_node` should also include a real multi-node run
 that checks empty/non-owning node cases and restart recovery.
+
+For `cbin`, `coarsen_factor` is validated before writer construction. It must
+be a power of two between `2` and the shortest MeshBlock dimension,
+inclusive. Every emitted extent, including optional ghost zones, must also be
+divisible by the factor; that check runs during writer construction.
 
 ## N-D PDF Output
 
@@ -181,7 +192,7 @@ pdf_<id>[_<axis-labels>]/node_00000000/<basename>.<output-number>.pdf
 
 The header identifies `AthenaK PDF format version=2`, distribution, axes,
 edges, layout, and weight. Binary files begin with the `AKPDFV2` magic and
-carry version, layout, dimensionality, rank/node identifier, count, time, and
+carry version, layout, dimensionality, writer rank, count, time, and
 cycle before their values.
 
 | Distribution | V2 layout | Contents |
@@ -190,9 +201,19 @@ cycle before their values.
 | Per-rank or per-node | `sparse_coo` | `(flattened-bin-index, value)` contributions assembled by the reader. |
 
 Use `vis/python/read_pdf.py` for both legacy PDFs and modern shared or sharded
-V2 files. It validates header/preamble consistency, dimensions, edge arrays,
-truncated records, duplicate sparse indices within a shard, and shard
-metadata. Contributions to the same bin from different shards are summed.
+V2 files. Modern writers emit `AKPDFV2`; the reader also retains historical
+compatibility for transitional unversioned dense and sparse binary payloads.
+It validates header/preamble consistency, dimensions, edge arrays, truncated
+records, duplicate sparse indices within a shard, and shard metadata. Sparse
+readers require canonical sibling directories. New V2 shards declare complete
+rank/node inventory metadata; transitional artifacts may omit those additive
+fields. Sibling headers must agree on V2 declaration; when a header declares
+V2, the payload must carry a V2 preamble with the same cycle. Readers bound
+metadata and payload reads before construction and remove shard-local
+identifiers from reconstructed aggregates. Contributions to the same bin from
+different shards are summed.
+Each modern header or payload file publishes through a checked `<file>.tmp`
+followed by atomic rename; the two files are not one filesystem transaction.
 
 ## Spherical Slice Output
 
@@ -231,9 +252,14 @@ are rejected for `sphslice` because its trilinear sampling may require
 ghost-zone values that those derived arrays do not yet populate.
 
 Use `vis/python/read_sphslice.py` to read and automatically assemble sharded
-angular data when a shard path is supplied. The
-reader rejects truncated files, inconsistent metadata, and missing or
-duplicate angular ownership in sharded products.
+angular data when a shard path is supplied. Shared files declare
+`layout = dense`; rank/node shards declare `layout = sparse_angles` and carry
+inventory metadata. A sharded writer publishes `<file>.tmp` and then renames
+it into place atomically, including for valid empty shards. The reader rejects
+truncated files, layout/distribution mismatches, incomplete shard inventory,
+inconsistent metadata, and missing or duplicate angular ownership. Whole-file
+reads, coordinate allocations, and embedded-header offsets are bounded before
+loading, and reconstructed aggregates remove shard-local identifiers.
 
 ## Node-Sharded Restart Files
 
@@ -262,10 +288,18 @@ Restart from the public manifest, never from an individual payload:
 ./build-mpi/src/athena -r run/rst/simulation.00001.rst
 ```
 
-The runtime validates relative payload paths, ordered contiguous node IDs,
-consistent generations, file byte counts, segment coverage, and the manifest
-completion marker before reconstructing restart input. Malformed or incomplete
-manifests are rejected.
+The runtime validates generated relative payload paths, canonical containment
+after symlink resolution, ordered contiguous node IDs, consistent generations,
+file byte counts, exact segment coverage, bounded payload and segment
+inventories, positive segment counts, replicated payload headers, and the
+manifest completion marker. Each generated node payload also carries a
+content marker after its replicated parameter dump. Manifest loading requires
+and consumes that marker, while ordinary restart loading rejects marked bytes
+so hard links or byte copies cannot bypass the manifest-only API. AthenaK then
+routes each rank's local MeshBlock spans directly from node payloads through
+chunked positioned reads. Production resume never creates a shared
+`.assembled` staging file. Malformed or incomplete manifests and direct
+payload-byte restart attempts are rejected.
 
 ## End-Of-Run Output Policy
 

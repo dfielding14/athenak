@@ -85,8 +85,14 @@ mpirun -np 16 ./build-mpi/src/athena \
 ```
 
 Do not restart from `rst/node_########/*.payload.rst`. The public manifest is
-validated for complete ordered node coverage, matching generations, payload
-sizes, and completion before its state is consumed.
+the only supported node restart entry point. It is validated for generated
+relative paths, symlink containment, complete ordered node coverage, matching
+generations, bounded positive segment inventory, payload sizes, replicated
+headers, and completion before each rank reads its routed MeshBlock spans
+directly from the payloads. Generated payloads carry a content marker, so
+hard-link and byte-copy aliases are rejected outside validated manifest
+loading. Native resume uses chunked positioned reads and does not create a
+shared `.assembled` staging file.
 
 ## Timing And Final Writes
 
@@ -131,5 +137,5 @@ A resumed terminal checkpoint is not overwritten merely because it is loaded.
 - Node-sharded output reduces file counts but introduces node-level
   aggregation; qualify it on the target filesystem and node topology.
 - Full-volume coarsened binary node output is supported. Avoid documenting or
-  depending on sliced node-sharded `cbin` until its existing slice/readback
-  extent issue is repaired separately.
+  depending on sliced `cbin`: construction rejects emitted extents that are
+  incompatible with supported coarsening.

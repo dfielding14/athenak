@@ -12,7 +12,9 @@ input decks exercised by the source-tree test suite.
 | [MRI Turbulence](mri_turbulence.md) | MHD instability | [MHD](../modules/mhd.md) |
 | [Binary Merger](binary_merger.md) | Relativistic application | [DynGRMHD](../modules/dyn_grmhd.md) |
 | [IO Outputs And Sharding](io_outputs_and_sharding.md) | PDFs, slices, node shards, restarts, and Python readback | [Outputs](../modules/outputs.md) |
-| [CGM Cooling Flow With Metals](../cgm_cooling_flow_metals.md) | Cooling-flow setup | [Configuration](../configuration.md) |
+
+Development records that are not runnable public examples are kept under
+[Developer Notes](../engineering/index.md), separately from this selection path.
 
 ```{toctree}
 :hidden:
@@ -24,5 +26,4 @@ turbulence
 mri_turbulence
 binary_merger
 io_outputs_and_sharding
-../cgm_cooling_flow_metals
 ```

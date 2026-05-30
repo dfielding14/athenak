@@ -24,9 +24,23 @@ restart file.
 | `single_file_per_node` | boolean | `false` | `bin`, full-volume `cbin`, modern `pdf`, `sphslice`, `rst` | Write one shard per MPI shared-memory node. |
 
 `single_file_per_rank = true` and `single_file_per_node = true` in the same
-block are mutually exclusive and cause input rejection. Sliced node-sharded
-`cbin` is not a promoted workflow because shared sliced `cbin` readback has a
-pre-existing meshblock-extent defect requiring a separate fix.
+block are mutually exclusive and cause input rejection. Sliced `cbin` is
+rejected explicitly because its pre-existing output extent is incompatible
+with supported coarsening. Node-sharded
+binary and full-volume coarsened-binary writers add inventory metadata and
+publish valid empty shards when a node owns no selected records.
+
+### Coarsened-Binary `<output#>` Parameters
+
+Use `file_type = cbin` for full-volume coarsened binary output:
+
+| Parameter | Type | Required/default | Validation |
+| --- | --- | --- | --- |
+| `coarsen_factor` | integer | Required | Power of two between `2` and the shortest MeshBlock dimension, inclusive; every emitted extent, including optional ghost zones, must be divisible by the factor. |
+| `compute_moments` | boolean | `false` | When enabled, retain the supported coarsened moments in addition to the mean. |
+
+The factor and emitted-extent contract is validated during writer
+construction. Sliced `cbin` remains deliberately excluded as described above.
 
 ### Modern `<output#>` PDF Parameters
 
