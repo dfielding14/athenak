@@ -3,8 +3,8 @@
 
 This utility intentionally never submits a Slurm job.  It writes an
 inspectable debug-QOS batch script, reserves conservative node hours, checks
-that the debug queue is empty immediately before manual submission, and
-records completed allocation use from ``sacct``.
+that the user queue and shared-root campaign records are safe immediately
+before manual submission, and records completed allocation use from ``sacct``.
 """
 
 from __future__ import annotations
@@ -59,6 +59,12 @@ NONTERMINAL_STATES = {
     "CONFIGURING",
     "COMPLETING",
     "SUSPENDED",
+}
+SHARED_ROOT_ACTIVE_STATES = {
+    "prepared",
+    "submitted",
+    "pending",
+    "running",
 }
 
 
@@ -698,7 +704,7 @@ def reservation_for_manifest(reservations: list[dict[str, object]],
 
 
 def debug_queue_output(args: argparse.Namespace) -> str:
-    """Read or query current debug-QOS jobs for the user."""
+    """Read or query all queued jobs before a shared-root debug submission."""
 
     if args.squeue_file is not None:
         return Path(args.squeue_file).read_text(encoding="utf-8")
@@ -708,8 +714,7 @@ def debug_queue_output(args: argparse.Namespace) -> str:
     try:
         return subprocess.run(
             [
-                "squeue", "-h", "-u", user, "-p", PARTITION, "-q", QOS,
-                "-o", "%i|%T|%j",
+                "squeue", "-h", "-u", user, "-o", "%i|%P|%T|%j",
             ],
             check=True, capture_output=True, text=True,
         ).stdout
@@ -717,8 +722,28 @@ def debug_queue_output(args: argparse.Namespace) -> str:
         raise ValueError("squeue is unavailable; refusing submission check") from error
 
 
+def shared_root_campaign_conflicts(root: Path,
+                                   allowed: set[str]) -> list[str]:
+    """Return top-level CGL campaigns requiring an explicit overlap review."""
+
+    conflicts = []
+    for manifest_path in sorted(
+        (root / "runs").glob("*/manifest/prepared_run.json")
+    ):
+        manifest = read_manifest(manifest_path)
+        state = str(manifest.get("state", "")).lower()
+        if state not in SHARED_ROOT_ACTIVE_STATES:
+            continue
+        campaign_id = str(
+            manifest.get("campaign_id", manifest_path.parents[1].name)
+        )
+        if campaign_id not in allowed:
+            conflicts.append(f"{campaign_id}|{state}|{manifest_path}")
+    return conflicts
+
+
 def check_submit(args: argparse.Namespace) -> int:
-    """Fail closed unless a prepared job is budgeted and debug queue is empty."""
+    """Fail closed unless a prepared shared-root debug job can run alone."""
 
     manifest_path = Path(args.manifest).resolve()
     manifest = read_manifest(manifest_path)
@@ -735,8 +760,17 @@ def check_submit(args: argparse.Namespace) -> int:
     queued = [line for line in debug_queue_output(args).splitlines() if line.strip()]
     if queued:
         raise ValueError(
-            "another debug-QOS job is present; sequential submission required: "
+            "another user job is queued; shared-root submission requires review: "
             + "; ".join(queued)
+        )
+    conflicts = shared_root_campaign_conflicts(
+        root, set(getattr(args, "allow_shared_root_campaign", []))
+    )
+    if conflicts:
+        raise ValueError(
+            "shared-root campaign records require explicit review; pass "
+            "--allow-shared-root-campaign only after confirming isolation: "
+            + "; ".join(conflicts)
         )
     script = manifest["paths"]["batch_script"]
     print("Submission preflight passed. Submit manually, then record its job ID:")
@@ -959,10 +993,37 @@ def self_test() -> int:
                 or "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=0" not in script_text
                 or "--gpus-per-task=1" not in script_text):
             raise ValueError("self-test failed to configure the GPU target")
-        check_submit(argparse.Namespace(
+        submit_arguments = argparse.Namespace(
             manifest=str(manifest_path), allow_local_root=True,
-            squeue_file=str(empty_queue),
-        ))
+            squeue_file=str(empty_queue), allow_shared_root_campaign=[],
+        )
+        check_submit(submit_arguments)
+        empty_queue.write_text(
+            "123|batch|RUNNING|unrelated_job\n", encoding="utf-8"
+        )
+        try:
+            check_submit(submit_arguments)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("self-test failed to reject another queued user job")
+        empty_queue.write_text("", encoding="utf-8")
+        shared_manifest = root / "runs" / "exploratory" / "manifest" / (
+            "prepared_run.json"
+        )
+        shared_manifest.parent.mkdir(parents=True)
+        write_json(shared_manifest, {
+            "campaign_id": "exploratory",
+            "state": "running",
+        })
+        try:
+            check_submit(submit_arguments)
+        except ValueError:
+            pass
+        else:
+            raise ValueError("self-test failed to reject shared-root campaign record")
+        submit_arguments.allow_shared_root_campaign = ["exploratory"]
+        check_submit(submit_arguments)
         mark_submitted(argparse.Namespace(
             manifest=str(manifest_path), allow_local_root=True, job_id="12345",
         ))
@@ -1227,6 +1288,13 @@ def parser() -> argparse.ArgumentParser:
     submit_parser.add_argument("--manifest", required=True)
     submit_parser.add_argument(
         "--squeue-file", help="Offline test input in place of querying squeue."
+    )
+    submit_parser.add_argument(
+        "--allow-shared-root-campaign", action="append", default=[],
+        help=(
+            "Acknowledge one reviewed top-level CGL-root campaign record. "
+            "Queued user jobs still fail closed."
+        ),
     )
     submitted_parser = subparsers.add_parser(
         "mark-submitted", help="Attach a manually returned Slurm job ID."

@@ -732,8 +732,9 @@ and output locations beneath
 may remain outside that root. It verifies that the retained bundle contains
 the prepared revision, records the bundle checksum, archives complete sibling
 sets for rank-local restart continuations, limits debug walltime to two hours,
-reserves against the 1000 node-hour testing budget, checks that no other debug
-job is queued, and rejects
+reserves against the 1000 node-hour testing budget, rejects any queued user
+job, requires explicit acknowledgement of an active top-level CGL-root
+campaign record only after an isolation review, and rejects
 `paper-standard`, `paper-nulim`, `paper-heat-flux`, `paper-compressive`, and
 `paper-scale-separation` inputs.
 Paper-production simulations must not be run through this debug-only workflow.
