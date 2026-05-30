@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "executor": "trusted_trampoline_athena_argv_v1",
+  "pre_actions": [],
+  "actions": [
+    {
+      "action_id": "f1-gyro",
+      "kind": "athena",
+      "resources": {
+        "nodes": 1,
+        "tasks": 1,
+        "cpus_per_task": 7,
+        "gpus_per_task": 1,
+        "gpu_bind": "closest"
+      },
+      "arguments": [
+        {"literal": "-i"},
+        {"snapshot_role": "input-deck"},
+        {"literal": "-d"},
+        {"artifact_directory": "output"},
+        {"literal": "job/basename=f1_gpu_relativistic_gyro"},
+        {"literal": "time/nlim=2"}
+      ],
+      "stdout_artifact": "athena_stdout.txt",
+      "stderr_artifact": "athena_stderr.txt"
+    }
+  ],
+  "post_actions": [
+    {
+      "action_id": "require-gyro-stdout",
+      "kind": "artifact_nonempty",
+      "artifact": "athena_stdout.txt"
+    },
+    {
+      "action_id": "sha-gyro-stdout",
+      "kind": "artifact_sha256",
+      "artifact": "athena_stdout.txt",
+      "output_artifact": "athena_stdout.sha256"
+    }
+  ]
+}

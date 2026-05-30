@@ -322,7 +322,8 @@ read-only, syncs every staged file and directory, atomically renames it beneath
 `${PIC_ROOT}/clean_candidates/<freeze-id>/`, and syncs the parent directory.
 Review that manifest and then
 update `science_submission_freeze` to `status=authorized` with its exact
-`manifest_path` and `manifest_sha256`, followed by another active-policy
+`manifest_path`, `manifest_sha256`, and reviewed
+`build_profile_control_plane_version`, followed by another active-policy
 promotion. The freeze creator never authorizes itself.
 
 The fresh detached checkout, direct argv execution, exclusive paths, dual
@@ -358,15 +359,26 @@ outside that dedicated PIC log path. The template body is never executed. It
 must also reference the executable, input deck, environment profile, queue
 snapshot, analysis scripts and timeout-margin artifact. Every config must
 declare exactly one `submission_scope`. `registered_science` configs must also
-reference the policy-authorized `clean_candidate_manifest`. Every config must declare
+reference the policy-authorized `clean_candidate_manifest` and one exact
+`registered_science_authorization_id`. The active policy allowlists each
+registered slice separately, binding its campaign, test identity, evidence class,
+physical mode, minimum-supported runtime profile, QoS, short-job classification,
+node, walltime and attempt ceilings, template, deck, environment profile,
+analysis-script set, executable, launch contract and clean-candidate digests.
+Reservation creation consumes one attempt, including a later cancellation or
+failure. Unknown, exhausted and drifting slices fail before reservation. Every config must declare
 `job_script_executable_env=PIC_EXECUTABLE`. The creator promotes a read-only
 submission snapshot through a pinned descriptor for its authorized Orion
 parent. Every registered artifact directory is exactly
 `${PIC_ROOT}/runs/<campaign>/<submission-id>`; reruns use new submission IDs
-and never reuse an existing directory. Reservation rechecks the original
+and new reviewed authorization IDs, and never reuse an existing directory.
+Reservation rechecks the original
 candidate manifest, archived source, clean Git commit and tree attestation, structured
 build profile, exact candidate executable digest, and snapshotted executable
-digest.
+digest. A promoted controller successor may continue to use an already authorized
+clean candidate: it validates the frozen build-profile receipt against the exact
+policy-bound historical controller version and its immutable inventory on both
+Orion and Project Home instead of rewriting that receipt to name the successor.
 
 Every config must also define a closed `launch_contract`. The installed
 trampoline converts each `athena` action into a fixed `/usr/bin/srun` argv whose
@@ -389,6 +401,34 @@ its pinned parent-directory descriptor, closes both descriptors and removes
 both environment bindings before executing the workload. Athena and its
 descendants therefore cannot rewrite the captured evidence through the
 inherited launch descriptors.
+The task-local helper also requires a numeric Slurm rank and numeric
+`ROCR_VISIBLE_DEVICES` binding, verifies `libamdhip64`, `libmpi_amd` and
+`libmpi_gtl_hsa` through `/usr/bin/ldd` on the pinned executable descriptor,
+and emits one trusted GPU-launch preflight line before `exec`. After all actions
+and declarative post-actions complete, the trampoline freezes every launch
+artifact read-only, publishes a checksummed `artifact_inventory.json`, freezes
+the artifact root read-only, and leaves only the original empty owner-only
+`analysis/` directory writable. It retains
+the artifact-root descriptor throughout launch, rechecks the lexical run path
+around execution and inventory publication, retains the original nested-directory
+identities through final publication, and rejects replacement while freezing.
+Offline F1 analysis retains one no-follow
+artifact-root descriptor for inventory load, exact tree-closure validation,
+every checksummed read and result publication. It rejects duplicate inventory
+keys, noncanonical relative paths, unlisted artifacts, root substitution and
+redirected `analysis/`, then publishes `analysis/analysis.json` once without
+replacement. Invoke the snapshotted analyzer only through
+`/opt/cray/pe/python/3.11.7/bin/python3 -I -B`; it publishes a second immutable
+`analysis/offline_analysis_receipt.json` that binds that runner, the snapshotted
+analyzer and support-module digests, the frozen inventory and the passing
+analysis result. Frontier qualification requires all three evidence digests
+beneath the ledger-bound run directory, verifies the snapshotted analyzer and
+support-module bytes, retains descriptors for the run tree, the inventory,
+result and receipt files, their directory ancestry and both source files, binds
+the exact inventory digest into the child, executes the analyzer through its
+inherited `/proc/self/fd` descriptor, and rejects run-root, evidence-file,
+ancestry or source replacement around no-write recomputation before accepting
+the qualification manifest.
 The snapshotted environment profile must match that installed trusted profile:
 
 ```json
@@ -423,7 +463,11 @@ The snapshotted environment profile must match that installed trusted profile:
 Optional `pre_actions` and `post_actions` are declarative built-ins only:
 `snapshot_sha256`, `artifact_sha256` and `artifact_nonempty`. They cannot run
 user code. Snapshotted Python analysis remains an offline evidence step after
-the registered job, not a trusted launch action.
+the registered job, not a trusted launch action. The first authorized analysis
+script is snapshotted as `000-<basename>` for explicit operator invocation.
+Additional authorized analysis support modules retain their original basenames
+inside the same immutable `snapshot/analysis/` directory so an isolated
+analyzer can explicitly load only the adjacent snapshotted hashed helper bytes.
 
 The existing F0/F1 shell files remain usable as reviewed Slurm-directive and
 argv references, but their bodies are not executable launch contracts. Before
@@ -446,6 +490,10 @@ snapshot digest, exact canonical launch-contract digest, with a one-node and
 promoted, F0 remains
 `pending_exact_executable_binding`. The exception cannot be used for registered
 science evidence.
+After the F0 parser-contract smoke passes, promote `frontier_admission_smoke` to
+`closed_after_pass`; that terminal state contains no reusable executable fields
+and rejects later admission-smoke reservations. The policy rejects every
+registered-science allowlist until this terminal closure has been promoted.
 
 The timeout-margin artifact must include
 `athena_walltime_seconds`, `scheduler_walltime_seconds`,

@@ -6,6 +6,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -21,6 +22,7 @@ from unittest.mock import patch
 import uuid
 
 import install_control_plane
+import launch_trampoline
 import reconcile_frontier_job
 import terminal_recovery_handoff
 from control_plane_common import atomic_write_bytes, durable_mkdir_parents
@@ -51,7 +53,9 @@ from create_clean_candidate_freeze import create_freeze, _validated_submodules
 from create_pre_submit_manifest import create_manifest
 from initialize_frontier_ledger import initialize_from_policy
 from install_control_plane import install
-from launch_trampoline import _TASK_LOCAL_EXEC, launch
+from launch_trampoline import _freeze_artifact_file_at
+from launch_trampoline import _freeze_artifact_tree_at
+from launch_trampoline import _publish_frozen_artifact_inventory, _TASK_LOCAL_EXEC, launch
 from ledger import accounting, genesis_anchor_paths, validate_primary_chain
 from promote_active_policy import _promotion_lock, promote
 from reconcile_frontier_job import reconcile
@@ -81,6 +85,8 @@ class SnapshotTests(unittest.TestCase):
         self.policy = self.root / "storage_policy.json"
         self.submission_id = "804dca3d-f89f-4357-9407-e59804961ad7"
         self.authorized_clean_candidate_source_root: Path | None = None
+        self.registered_science_slices: list[dict[str, object]] = []
+        self.science_submission_freeze: dict[str, object] | None = None
         self.control_plane_dir = install(self.pic_root)
         self.control_plane_version = self.control_plane_dir.name
         self.project_home_control_plane_dir = install(self.project_home_root)
@@ -194,6 +200,11 @@ class SnapshotTests(unittest.TestCase):
 
     def _promote_test_control_plane_successor(self, successor: Path) -> None:
         self._write_policy(
+            admission_smoke_overrides=(
+                {"status": "closed_after_pass"}
+                if self.registered_science_slices
+                else None
+            ),
             installed_control_plane_version=successor.name,
             staged_control_plane_candidate_version=successor.name,
         )
@@ -247,6 +258,7 @@ class SnapshotTests(unittest.TestCase):
         *,
         science_submission_freeze: dict[str, object] | None = None,
         admission_smoke_overrides: dict[str, object] | None = None,
+        registered_science_slices: list[dict[str, object]] | None = None,
         **storage_overrides: object,
     ) -> None:
         storage = {
@@ -298,6 +310,11 @@ class SnapshotTests(unittest.TestCase):
                 self._launch_contract()
             ),
         }
+        if (admission_smoke_overrides or {}).get("status") in {
+            "closed_after_pass",
+            "pending_exact_executable_binding",
+        }:
+            admission_smoke = {"status": admission_smoke_overrides["status"]}
         admission_smoke.update(admission_smoke_overrides or {})
         policy = {
             "schema_version": 1,
@@ -308,9 +325,16 @@ class SnapshotTests(unittest.TestCase):
                 "maximum_node_hours": 10000.0,
                 "serial_pic_submissions": True,
             },
-            "science_submission_freeze": science_submission_freeze or {
-                "status": "pending_clean_candidate_freeze",
-            },
+            "science_submission_freeze": (
+                science_submission_freeze
+                or self.science_submission_freeze
+                or {"status": "pending_clean_candidate_freeze"}
+            ),
+            "registered_science_slices": (
+                self.registered_science_slices
+                if registered_science_slices is None
+                else registered_science_slices
+            ),
             "frontier_admission_smoke": admission_smoke,
             "olcf_side_storage": storage,
             "long_term_storage": {
@@ -593,14 +617,28 @@ class SnapshotTests(unittest.TestCase):
         git_commit = str(manifest["source"]["git_commit"])
         if authorize:
             self._write_policy(
-                science_submission_freeze={
-                    "status": "authorized",
-                    "manifest_path": str(manifest_path),
-                    "manifest_sha256": sha256(manifest_path),
-                }
+                science_submission_freeze=self._authorized_science_freeze(
+                    manifest_path
+                )
             )
             self._promote_policy()
         return manifest_path, frozen_executable, git_commit
+
+    def _authorized_science_freeze(
+        self,
+        manifest: Path,
+        *,
+        manifest_sha256: str | None = None,
+        build_profile_control_plane_version: str | None = None,
+    ) -> dict[str, object]:
+        return {
+            "status": "authorized",
+            "manifest_path": str(manifest),
+            "manifest_sha256": manifest_sha256 or sha256(manifest),
+            "build_profile_control_plane_version": (
+                build_profile_control_plane_version or self.control_plane_version
+            ),
+        }
 
     def _write_science_config(self, *, authorize: bool, **overrides: object) -> Path:
         manifest, executable, git_commit = self._clean_candidate(authorize=authorize)
@@ -608,6 +646,7 @@ class SnapshotTests(unittest.TestCase):
             "campaign": "f1_gpu_gyro",
             "test_id": "pic_relativistic_gyro_paper",
             "submission_scope": "registered_science",
+            "registered_science_authorization_id": "f1-clean-gyro-v1",
             "git_commit": git_commit,
             "evidence_class": "frontier_f1_registered_science",
             "physical_mode": "paper_test_particle",
@@ -619,7 +658,53 @@ class SnapshotTests(unittest.TestCase):
         }
         config.update(overrides)
         self._write_config(**config)
+        if authorize:
+            self.science_submission_freeze = self._authorized_science_freeze(manifest)
+            self.registered_science_slices = [
+                {
+                    "authorization_id": config["registered_science_authorization_id"],
+                    "status": "authorized",
+                    "campaign": config["campaign"],
+                    "test_id": config["test_id"],
+                    "evidence_class": config["evidence_class"],
+                    "physical_mode": config["physical_mode"],
+                    "runtime_profile": "frontier_minimum_supported",
+                    "selected_qos": "debug",
+                    "registered_short_nonproduction": True,
+                    "maximum_nodes": 1,
+                    "maximum_walltime_seconds": 10 * 60,
+                    "maximum_attempts": 1,
+                    "job_script_sha256": sha256(self.sources / "job.sh"),
+                    "input_deck_sha256": sha256(self.sources / "input.athinput"),
+                    "environment_profile_sha256": sha256(self.sources / "environment.sh"),
+                    "analysis_script_sha256": [sha256(self.sources / "analysis.py")],
+                    "executable_sha256": sha256(executable),
+                    "launch_contract_sha256": launch_contract_sha256(
+                        self._launch_contract()
+                    ),
+                    "clean_candidate_manifest_sha256": sha256(manifest),
+                }
+            ]
+            self._write_policy(
+                science_submission_freeze=self.science_submission_freeze,
+                admission_smoke_overrides={"status": "closed_after_pass"},
+            )
+            self._promote_policy()
         return manifest
+
+    def _update_registered_science_candidate_sha(self, candidate: Path) -> None:
+        for record in self.registered_science_slices:
+            record["clean_candidate_manifest_sha256"] = sha256(candidate)
+
+    def _fresh_submission_manifest(self) -> Path:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        submission_id = str(uuid.uuid4())
+        config["submission_id"] = submission_id
+        config["artifact_dir"] = str(
+            self.pic_root / "runs" / str(config["campaign"]) / submission_id
+        )
+        self.config.write_text(json.dumps(config), encoding="utf-8")
+        return self._create_manifest()
 
     def _rewrite_clean_candidate_profile(
         self, candidate: Path, profile: dict[str, object]
@@ -637,19 +722,17 @@ class SnapshotTests(unittest.TestCase):
         candidate.write_text(json.dumps(candidate_value), encoding="utf-8")
         candidate.chmod(0o444)
         candidate.parent.chmod(0o555)
+        self._update_registered_science_candidate_sha(candidate)
         self._write_policy(
-            science_submission_freeze={
-                "status": "authorized",
-                "manifest_path": str(candidate),
-                "manifest_sha256": sha256(candidate),
-            }
+            science_submission_freeze=self._authorized_science_freeze(candidate),
+            admission_smoke_overrides={"status": "closed_after_pass"},
         )
         self._promote_policy()
 
-    def _create_manifest(self) -> Path:
+    def _create_manifest(self, *, control_plane_dir: Path | None = None) -> Path:
         return create_manifest(
             self.config,
-            control_plane_dir=self.control_plane_dir,
+            control_plane_dir=control_plane_dir or self.control_plane_dir,
             authorized_pic_root=self.pic_root,
         )
 
@@ -658,6 +741,9 @@ class SnapshotTests(unittest.TestCase):
         manifest_path: Path,
         cap: float = 10000.0,
         reservation_id: str = "89c76745-6c37-47f7-9847-800a98a47c9b",
+        control_plane_dir: Path | None = None,
+        *,
+        patch_clean_candidate_bundle: bool = True,
     ) -> dict[str, object]:
         def validate_with_test_roots(
             candidate: dict[str, object], **kwargs: object
@@ -671,10 +757,7 @@ class SnapshotTests(unittest.TestCase):
                 authorized_source_root=self.authorized_clean_candidate_source_root,
             )
 
-        with patch(
-            "validate_and_reserve_frontier_job.validate_clean_candidate_bundle",
-            side_effect=validate_with_test_roots,
-        ):
+        def invoke() -> dict[str, object]:
             return reserve(
                 manifest_path=manifest_path,
                 ledger_jsonl=self.ledger,
@@ -683,10 +766,18 @@ class SnapshotTests(unittest.TestCase):
                 mirror_jsonl=self.mirror,
                 node_hour_cap=cap,
                 reservation_id=reservation_id,
-                control_plane_dir=self.control_plane_dir,
+                control_plane_dir=control_plane_dir or self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
                 authorized_project_home_root=self.project_home_root,
             )
+
+        if not patch_clean_candidate_bundle:
+            return invoke()
+        with patch(
+            "validate_and_reserve_frontier_job.validate_clean_candidate_bundle",
+            side_effect=validate_with_test_roots,
+        ):
+            return invoke()
 
     def _attach(self, reservation_id: str, job_id: str = "12345") -> None:
         scheduler = (
@@ -1224,8 +1315,53 @@ class SnapshotTests(unittest.TestCase):
     def test_task_local_verifier_executes_pinned_input_deck_descriptor(self) -> None:
         task_root = self.root / "task-local-exec"
         task_root.mkdir()
-        executable = task_root / "cat"
-        shutil.copyfile("/usr/bin/cat", executable)
+        symbols = {
+            "amdhip64": "test_amdhip64",
+            "mpi_amd": "test_mpi_amd",
+            "mpi_gtl_hsa": "test_mpi_gtl_hsa",
+        }
+        for library, symbol in symbols.items():
+            source = task_root / f"{library}.c"
+            source.write_text(f"void {symbol}(void) {{}}\n", encoding="utf-8")
+            subprocess.run(
+                [
+                    "/usr/bin/cc",
+                    "-shared",
+                    "-fPIC",
+                    "-o",
+                    str(task_root / f"lib{library}.so"),
+                    str(source),
+                ],
+                check=True,
+            )
+        executable = task_root / "cat-wrapper"
+        source = task_root / "cat-wrapper.c"
+        source.write_text(
+            "#include <unistd.h>\n"
+            + "".join(f"void {symbol}(void);\n" for symbol in symbols.values())
+            + "int main(int argc, char **argv) {\n"
+            + "".join(f"  {symbol}();\n" for symbol in symbols.values())
+            + '  execl("/usr/bin/cat", "cat", argv[1], (char *)0);\n'
+            + "  return 1;\n"
+            + "}\n",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                "/usr/bin/cc",
+                "-o",
+                str(executable),
+                str(source),
+                "-L",
+                str(task_root),
+                "-Wl,-rpath,$ORIGIN",
+                "-Wl,--no-as-needed",
+                "-lamdhip64",
+                "-lmpi_amd",
+                "-lmpi_gtl_hsa",
+            ],
+            check=True,
+        )
         executable.chmod(0o555)
         deck = task_root / "input.athinput"
         deck.write_text("verified task-local input\n", encoding="utf-8")
@@ -1246,8 +1382,98 @@ class SnapshotTests(unittest.TestCase):
             check=True,
             text=True,
             capture_output=True,
+            env={
+                **os.environ,
+                "LD_LIBRARY_PATH": str(task_root),
+                "SLURM_PROCID": "0",
+                "ROCR_VISIBLE_DEVICES": "0",
+            },
         )
-        self.assertEqual(result.stdout, "verified task-local input\n")
+        self.assertRegex(
+            result.stdout,
+            r"^PIC trusted GPU launch: rank=0 host=\S+ ROCR_VISIBLE_DEVICES=0 "
+            r"linkage=libamdhip64,libmpi_amd,libmpi_gtl_hsa\n",
+        )
+        self.assertTrue(result.stdout.endswith("verified task-local input\n"))
+
+    def test_task_local_verifier_rejects_gpu_library_prefix_lookalike(self) -> None:
+        task_root = self.root / "task-local-fake-prefix"
+        task_root.mkdir()
+        symbols = {
+            "amdhip64evil": "test_amdhip64evil",
+            "mpi_amd": "test_mpi_amd",
+            "mpi_gtl_hsa": "test_mpi_gtl_hsa",
+        }
+        for library, symbol in symbols.items():
+            source = task_root / f"{library}.c"
+            source.write_text(f"void {symbol}(void) {{}}\n", encoding="utf-8")
+            subprocess.run(
+                [
+                    "/usr/bin/cc",
+                    "-shared",
+                    "-fPIC",
+                    "-o",
+                    str(task_root / f"lib{library}.so"),
+                    str(source),
+                ],
+                check=True,
+            )
+        executable = task_root / "cat-wrapper"
+        source = task_root / "cat-wrapper.c"
+        source.write_text(
+            "#include <unistd.h>\n"
+            + "".join(f"void {symbol}(void);\n" for symbol in symbols.values())
+            + "int main(int argc, char **argv) {\n"
+            + "".join(f"  {symbol}();\n" for symbol in symbols.values())
+            + '  execl("/usr/bin/cat", "cat", argv[1], (char *)0);\n'
+            + "  return 1;\n"
+            + "}\n",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                "/usr/bin/cc",
+                "-o",
+                str(executable),
+                str(source),
+                "-L",
+                str(task_root),
+                "-Wl,-rpath,$ORIGIN",
+                "-Wl,--no-as-needed",
+                "-lamdhip64evil",
+                "-lmpi_amd",
+                "-lmpi_gtl_hsa",
+            ],
+            check=True,
+        )
+        executable.chmod(0o555)
+        deck = task_root / "input.athinput"
+        deck.write_text("verified task-local input\n", encoding="utf-8")
+        deck.chmod(0o444)
+        result = subprocess.run(
+            [
+                TRUSTED_PYTHON,
+                "-I",
+                "-c",
+                _TASK_LOCAL_EXEC,
+                str(task_root),
+                str(executable),
+                sha256(executable),
+                str(deck),
+                sha256(deck),
+                "__PIC_INPUT_DECK_FD__",
+            ],
+            text=True,
+            capture_output=True,
+            env={
+                **os.environ,
+                "LD_LIBRARY_PATH": str(task_root),
+                "SLURM_PROCID": "0",
+                "ROCR_VISIBLE_DEVICES": "0",
+            },
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not linked against libamdhip64", result.stderr)
 
     def test_promoted_policy_anchor_is_mirrored_and_read_only(self) -> None:
         policy = self.pic_root / "policy" / "storage_policy.json"
@@ -1573,6 +1799,179 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(calls[0][0][2], "--jobid=12345")
         self.assertEqual(calls[0][0][13], str(executable["path"]))
         self.assertTrue(calls[0][1]["check"])
+        artifact_dir = Path(str(manifest["artifact_dir"]))
+        inventory = json.loads(
+            (artifact_dir / "artifact_inventory.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(inventory["schema_version"], 1)
+        self.assertEqual(
+            [record["path"] for record in inventory["files"]],
+            [
+                "athena-parser.environment.allowlist.txt",
+                "athena_stderr.txt",
+                "athena_stdout.txt",
+            ],
+        )
+        self.assertEqual(stat.S_IMODE(artifact_dir.stat().st_mode), 0o555)
+        self.assertEqual(stat.S_IMODE((artifact_dir / "analysis").stat().st_mode), 0o700)
+
+    def test_trampoline_rejects_run_artifact_root_swap_during_launch(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        artifact_dir = Path(str(manifest["artifact_dir"]))
+
+        def runner(_: list[str], **__: object) -> None:
+            artifact_dir.rename(artifact_dir.with_name(f"{artifact_dir.name}.detached"))
+            artifact_dir.mkdir()
+
+        with self.assertRaisesRegex(ValueError, "path changed"):
+            self._launch(manifest_path, reservation, runner=runner)
+
+    def test_artifact_freeze_rejects_nested_directory_swap(self) -> None:
+        root = self.root / "artifact-freeze"
+        nested = root / "nested"
+        detached = root / "nested.detached"
+        nested.mkdir(parents=True)
+        (nested / "artifact.txt").write_text("verified\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_fsync = os.fsync
+        swapped = False
+
+        def fsync(descriptor: int) -> None:
+            nonlocal swapped
+            metadata = os.fstat(descriptor)
+            if not swapped:
+                entry = nested.stat()
+                if (metadata.st_dev, metadata.st_ino) == (entry.st_dev, entry.st_ino):
+                    nested.rename(detached)
+                    nested.mkdir()
+                    swapped = True
+            real_fsync(descriptor)
+
+        try:
+            with patch("launch_trampoline.os.fsync", side_effect=fsync):
+                with self.assertRaisesRegex(ValueError, "directory changed"):
+                    _freeze_artifact_tree_at(root_fd)
+        finally:
+            os.close(root_fd)
+
+    def test_artifact_freeze_hashes_final_read_only_bytes(self) -> None:
+        root = self.root / "artifact-freeze-final-bytes"
+        root.mkdir()
+        artifact = root / "artifact.txt"
+        artifact.write_text("old\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_fchmod = os.fchmod
+        replaced = False
+
+        def fchmod(descriptor: int, mode: int) -> None:
+            nonlocal replaced
+            metadata = os.fstat(descriptor)
+            entry = artifact.stat()
+            if (
+                not replaced
+                and (metadata.st_dev, metadata.st_ino) == (entry.st_dev, entry.st_ino)
+            ):
+                artifact.write_text("new\n", encoding="utf-8")
+                replaced = True
+            real_fchmod(descriptor, mode)
+
+        try:
+            with patch("launch_trampoline.os.fchmod", side_effect=fchmod):
+                record = _freeze_artifact_file_at(root_fd, artifact.name, artifact.name)
+        finally:
+            os.close(root_fd)
+        self.assertEqual(record["sha256"], hashlib.sha256(b"new\n").hexdigest())
+        self.assertEqual(stat.S_IMODE(artifact.stat().st_mode), 0o444)
+
+    def test_artifact_inventory_rejects_late_unlisted_file(self) -> None:
+        root = self.root / "artifact-freeze-late-file"
+        root.mkdir()
+        (root / "artifact.txt").write_text("verified\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_write = launch_trampoline._write_new_text_artifact
+
+        def write_with_late_file(*args: object, **kwargs: object) -> None:
+            real_write(*args, **kwargs)
+            late = root / "late.txt"
+            late.write_text("late\n", encoding="utf-8")
+            late.chmod(0o444)
+
+        try:
+            with patch(
+                "launch_trampoline._write_new_text_artifact",
+                side_effect=write_with_late_file,
+            ):
+                with self.assertRaisesRegex(ValueError, "unlisted file"):
+                    _publish_frozen_artifact_inventory(root_fd, root)
+        finally:
+            os.close(root_fd)
+
+    def test_artifact_inventory_rejects_late_nested_directory_swap(self) -> None:
+        root = self.root / "artifact-freeze-late-directory"
+        nested = root / "nested"
+        detached = root / "nested.detached"
+        nested.mkdir(parents=True)
+        (nested / "artifact.txt").write_text("verified\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_write = launch_trampoline._write_new_text_artifact
+
+        def write_with_late_directory(*args: object, **kwargs: object) -> None:
+            real_write(*args, **kwargs)
+            nested.rename(detached)
+            nested.mkdir()
+            replacement = nested / "artifact.txt"
+            replacement.write_text("verified\n", encoding="utf-8")
+            replacement.chmod(0o444)
+            nested.chmod(0o555)
+
+        try:
+            with patch(
+                "launch_trampoline._write_new_text_artifact",
+                side_effect=write_with_late_directory,
+            ):
+                with self.assertRaisesRegex(ValueError, "directory changed"):
+                    _publish_frozen_artifact_inventory(root_fd, root)
+        finally:
+            os.close(root_fd)
+
+    def test_artifact_inventory_rejects_late_analysis_directory_swap(self) -> None:
+        root = self.root / "artifact-freeze-late-analysis-directory"
+        detached = root / "analysis.detached"
+        root.mkdir()
+        (root / "artifact.txt").write_text("verified\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_write = launch_trampoline._write_new_text_artifact
+
+        def write_with_late_analysis_directory(*args: object, **kwargs: object) -> None:
+            real_write(*args, **kwargs)
+            (root / "analysis").rename(detached)
+            (root / "analysis").mkdir()
+            (root / "analysis").chmod(0o777)
+
+        try:
+            with patch(
+                "launch_trampoline._write_new_text_artifact",
+                side_effect=write_with_late_analysis_directory,
+            ):
+                with self.assertRaisesRegex(ValueError, "analysis directory changed"):
+                    _publish_frozen_artifact_inventory(root_fd, root)
+        finally:
+            os.close(root_fd)
+
+    def test_artifact_inventory_normalizes_restrictive_umask_for_analysis(self) -> None:
+        root = self.root / "artifact-freeze-restrictive-umask"
+        root.mkdir()
+        (root / "artifact.txt").write_text("verified\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        inherited_umask = os.umask(0o777)
+        try:
+            _publish_frozen_artifact_inventory(root_fd, root)
+        finally:
+            os.umask(inherited_umask)
+            os.close(root_fd)
+        self.assertEqual(stat.S_IMODE((root / "analysis").stat().st_mode), 0o700)
 
     def test_trampoline_compute_snapshot_does_not_require_flock(self) -> None:
         manifest_path = self._create_manifest()
@@ -2422,6 +2821,14 @@ PY
                 with self.assertRaises(ValueError):
                     validate_launch_contract(contract)
 
+    def test_launch_contract_rejects_noncanonical_artifact_paths(self) -> None:
+        for value in ("output/./stdout.txt", "output//stdout.txt", "output/"):
+            with self.subTest(value=value):
+                contract = self._launch_contract()
+                contract["actions"][0]["stdout_artifact"] = value
+                with self.assertRaisesRegex(ValueError, "relative artifact path"):
+                    validate_launch_contract(contract)
+
     def test_admission_smoke_rejects_valid_but_unbound_launch_resource_drift(
         self,
     ) -> None:
@@ -2535,6 +2942,46 @@ PY
         self.config.write_text(json.dumps(config), encoding="utf-8")
         with self.assertRaises(ValueError):
             self._create_manifest()
+
+    def test_manifest_preserves_authorized_analysis_support_module_basename(self) -> None:
+        self._write(
+            "analysis.py",
+            "import importlib.util\n"
+            "from pathlib import Path\n"
+            "path = Path(__file__).with_name('frontier_f1_structured_artifacts.py')\n"
+            "spec = importlib.util.spec_from_file_location('_verified_helper', path)\n"
+            "module = importlib.util.module_from_spec(spec)\n"
+            "spec.loader.exec_module(module)\n"
+            "print(module.VALUE)\n",
+        )
+        helper = self._write(
+            "frontier_f1_structured_artifacts.py", "VALUE = 'verified helper bytes'\n"
+        )
+        self._write_config(
+            analysis_scripts=[str(self.sources / "analysis.py"), str(helper)]
+        )
+        manifest_path = self._create_manifest()
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        analysis_paths = {
+            record["role"]: Path(str(record["path"])).name
+            for record in manifest["snapshot_files"]
+            if str(record["role"]).startswith("analysis-script-")
+        }
+        self.assertEqual(
+            analysis_paths,
+            {
+                "analysis-script-000": "000-analysis.py",
+                "analysis-script-001": "frontier_f1_structured_artifacts.py",
+            },
+        )
+        snapshot_analysis = manifest_path.parent / "snapshot" / "analysis"
+        self.assertEqual(
+            subprocess.check_output(
+                [TRUSTED_PYTHON, "-I", str(snapshot_analysis / "000-analysis.py")],
+                text=True,
+            ),
+            "verified helper bytes\n",
+        )
 
     def test_reserved_launch_rejects_self_consistent_snapshot_attachment_rewrite(
         self,
@@ -4523,19 +4970,214 @@ PY
         self.assertEqual(reservation["submission_scope"], "registered_science")
         self.assertIn("clean_candidate_manifest_sha256", self.csv.read_text())
 
-    def test_registered_science_rejects_policy_digest_mismatch(self) -> None:
+    def test_registered_science_accepts_historical_candidate_receipt_after_successor(
+        self,
+    ) -> None:
+        self._write_science_config(authorize=True)
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        self._promote_test_control_plane_successor(successor)
+        manifest_path = self._create_manifest(control_plane_dir=successor)
+        reservation = self._reserve(manifest_path, control_plane_dir=successor)
+        self.assertEqual(
+            reservation["registered_science_authorization_id"], "f1-clean-gyro-v1"
+        )
+
+    def test_registered_science_rejects_unclosed_authorized_admission_smoke(
+        self,
+    ) -> None:
+        self._write_science_config(authorize=True)
+        self._write_policy(
+            admission_smoke_overrides={
+                "status": "authorized_f0_parser_contract_only"
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "closed admission smoke"):
+            self._promote_policy()
+
+    def test_registered_science_rejects_unclosed_pending_admission_smoke(
+        self,
+    ) -> None:
+        self._write_science_config(authorize=True)
+        self._write_policy(
+            admission_smoke_overrides={"status": "pending_exact_executable_binding"}
+        )
+        with self.assertRaisesRegex(ValueError, "closed admission smoke"):
+            self._promote_policy()
+
+    def test_registered_science_rejects_unbound_build_profile_control_plane(
+        self,
+    ) -> None:
         candidate = self._write_science_config(authorize=True)
         self._write_policy(
-            science_submission_freeze={
-                "status": "authorized",
-                "manifest_path": str(candidate),
-                "manifest_sha256": "0" * 64,
-            }
+            science_submission_freeze=self._authorized_science_freeze(
+                candidate, build_profile_control_plane_version="0" * 64
+            ),
+            admission_smoke_overrides={"status": "closed_after_pass"},
         )
         self._promote_policy()
         manifest_path = self._create_manifest()
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "unauthorized control-plane version"):
             self._reserve(manifest_path)
+
+    def test_registered_science_rejects_missing_paired_historical_build_authority(
+        self,
+    ) -> None:
+        self._write_science_config(authorize=True)
+        predecessor = self.project_home_root / "control_plane" / self.control_plane_version
+        successor = self._publish_test_control_plane_successor(self.pic_root)
+        project_home_successor = self._publish_test_control_plane_successor(
+            self.project_home_root
+        )
+        self.assertEqual(successor.name, project_home_successor.name)
+        self._promote_test_control_plane_successor(successor)
+        manifest_path = self._create_manifest(control_plane_dir=successor)
+        predecessor.rename(predecessor.with_name(f"{predecessor.name}.missing"))
+        with self.assertRaisesRegex(ValueError, "Missing historical"):
+            self._reserve(manifest_path, control_plane_dir=successor)
+
+    def test_registered_science_rejects_unknown_authorization_id(self) -> None:
+        self._write_science_config(authorize=True)
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["registered_science_authorization_id"] = "unknown-slice"
+        self.config.write_text(json.dumps(config), encoding="utf-8")
+        manifest_path = self._create_manifest()
+        with self.assertRaisesRegex(ValueError, "authorization ID is not active"):
+            self._reserve(manifest_path)
+
+    def test_registered_science_attempt_is_consumed_by_cancelled_reservation(
+        self,
+    ) -> None:
+        self._write_science_config(authorize=True)
+        reservation = self._reserve(self._create_manifest())
+        transition(
+            reservation_id=str(reservation["reservation_id"]),
+            notes="cancel before scheduler submission",
+            event_type="reservation_cancelled",
+            state="cancelled",
+            ledger_jsonl=self.ledger,
+            ledger_csv=self.csv,
+            receipts_jsonl=self.receipts,
+            mirror_jsonl=self.mirror,
+            control_plane_dir=self.control_plane_dir,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+        with self.assertRaisesRegex(ValueError, "attempt ceiling"):
+            self._reserve(
+                self._fresh_submission_manifest(),
+                reservation_id=str(uuid.uuid4()),
+            )
+
+    def test_registered_science_attempt_is_consumed_by_completed_reservation(
+        self,
+    ) -> None:
+        self._write_science_config(authorize=True)
+        reservation = self._reserve(self._create_manifest())
+        self._attach(str(reservation["reservation_id"]))
+        with patch(
+            "reconcile_frontier_job._scheduler_result",
+            return_value=("COMPLETED", 60, 1),
+        ):
+            reconcile(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        with self.assertRaisesRegex(ValueError, "attempt ceiling"):
+            self._reserve(
+                self._fresh_submission_manifest(),
+                reservation_id=str(uuid.uuid4()),
+            )
+
+    def test_registered_science_concurrent_first_attempt_admits_only_one(self) -> None:
+        self._write_science_config(authorize=True)
+        manifests = [self._create_manifest(), self._fresh_submission_manifest()]
+
+        def validate_with_test_roots(
+            candidate: dict[str, object], **kwargs: object
+        ) -> list[dict[str, str]]:
+            if self.authorized_clean_candidate_source_root is None:
+                raise AssertionError("Clean-candidate test source root was not injected")
+            return validate_clean_candidate_bundle(
+                candidate,
+                **kwargs,
+                authorized_pic_root=self.pic_root,
+                authorized_source_root=self.authorized_clean_candidate_source_root,
+            )
+
+        def reserve_one(index: int) -> dict[str, object] | ValueError:
+            try:
+                return self._reserve(
+                    manifests[index],
+                    reservation_id=str(uuid.uuid4()),
+                    patch_clean_candidate_bundle=False,
+                )
+            except ValueError as error:
+                return error
+
+        with patch(
+            "validate_and_reserve_frontier_job.validate_clean_candidate_bundle",
+            side_effect=validate_with_test_roots,
+        ):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                outcomes = list(executor.map(reserve_one, range(2)))
+        self.assertEqual(sum(isinstance(value, dict) for value in outcomes), 1)
+        self.assertEqual(sum(isinstance(value, ValueError) for value in outcomes), 1)
+
+    def test_registered_science_rejects_launch_contract_drift(self) -> None:
+        self._write_science_config(authorize=True)
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["launch_contract"]["actions"][0]["arguments"].append(
+            {"literal": "time/nlim=2"}
+        )
+        self.config.write_text(json.dumps(config), encoding="utf-8")
+        manifest_path = self._create_manifest()
+        with self.assertRaisesRegex(ValueError, "launch contract"):
+            self._reserve(manifest_path)
+
+    def test_closed_admission_smoke_rejects_reuse(self) -> None:
+        self._write_policy(admission_smoke_overrides={"status": "closed_after_pass"})
+        self._promote_policy()
+        manifest_path = self._create_manifest()
+        with self.assertRaisesRegex(ValueError, "exemption is not authorized"):
+            self._reserve(manifest_path)
+
+    def test_manifest_schema_tracks_registered_science_authorization_id(self) -> None:
+        schema = json.loads(
+            (self.control_plane_dir / "control_plane.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertIn("registered_science_authorization_id", schema["properties"])
+        branch = schema["allOf"][0]
+        self.assertIn(
+            "registered_science_authorization_id", branch["then"]["required"]
+        )
+        prohibited = [
+            value["required"][0]
+            for value in branch["else"]["not"]["anyOf"]
+        ]
+        self.assertIn("registered_science_authorization_id", prohibited)
+
+    def test_registered_science_rejects_policy_digest_mismatch(self) -> None:
+        candidate = self._write_science_config(authorize=True)
+        self._write_policy(
+            science_submission_freeze=self._authorized_science_freeze(
+                candidate, manifest_sha256="0" * 64
+            ),
+            admission_smoke_overrides={"status": "closed_after_pass"},
+        )
+        with self.assertRaisesRegex(ValueError, "another clean freeze"):
+            self._promote_policy()
 
     def test_registered_science_rejects_missing_candidate_manifest(self) -> None:
         candidate = self._write_science_config(authorize=True)
@@ -4556,12 +5198,10 @@ PY
         )
         candidate.chmod(0o444)
         candidate.parent.chmod(0o555)
+        self._update_registered_science_candidate_sha(candidate)
         self._write_policy(
-            science_submission_freeze={
-                "status": "authorized",
-                "manifest_path": str(candidate),
-                "manifest_sha256": sha256(candidate),
-            }
+            science_submission_freeze=self._authorized_science_freeze(candidate),
+            admission_smoke_overrides={"status": "closed_after_pass"},
         )
         self._promote_policy()
         manifest_path = self._create_manifest()
@@ -4616,12 +5256,10 @@ PY
         candidate.chmod(0o644)
         candidate.write_text(json.dumps(value), encoding="utf-8")
         candidate.chmod(0o444)
+        self._update_registered_science_candidate_sha(candidate)
         self._write_policy(
-            science_submission_freeze={
-                "status": "authorized",
-                "manifest_path": str(candidate),
-                "manifest_sha256": sha256(candidate),
-            }
+            science_submission_freeze=self._authorized_science_freeze(candidate),
+            admission_smoke_overrides={"status": "closed_after_pass"},
         )
         self._promote_policy()
         manifest_path = self._create_manifest()

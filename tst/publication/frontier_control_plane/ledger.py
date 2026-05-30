@@ -52,6 +52,7 @@ CSV_FIELDS = [
     "campaign",
     "test_id",
     "submission_scope",
+    "registered_science_authorization_id",
     "clean_candidate_manifest_sha256",
     "partition",
     "qos",

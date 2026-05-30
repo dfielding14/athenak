@@ -12,12 +12,18 @@ import unittest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "tst" / "publication" / "frontier_control_plane"))
 
+from control_plane_common import CONTROL_PLANE_FILES
+from control_plane_common import inventory_digest
+from control_plane_common import launch_contract_sha256
+from control_plane_common import validate_launch_contract
 from tst.publication.pic_qualification_manifest import validate_schema
 
 
 READINESS_DIR = REPO_ROOT / "tst" / "publication" / "readiness"
 SCHEMA_DIR = READINESS_DIR / "schemas"
+CONTROL_PLANE_DIR = REPO_ROOT / "tst" / "publication" / "frontier_control_plane"
 PAPER_TEX = (
     REPO_ROOT
     / "docs"
@@ -120,6 +126,7 @@ def _minimum_validation_manifest() -> dict[str, object]:
         },
         "authorization": {
             "control_plane_version": "0" * 64,
+            "build_profile_control_plane_version": "0" * 64,
             "clean_candidate_manifest_path": (
                 "/lustre/orion/ast207/proj-shared/dfielding/PIC/"
                 "clean_candidates/00000000-0000-0000-0000-000000000000/"
@@ -216,33 +223,45 @@ class PicReadinessRegistryTests(unittest.TestCase):
         candidate = _load(
             "q027_frontier_f0_compute_snapshot_activation_2026-05-30.json"
         )
+        f1_candidate = _load(
+            "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
+        )
         self.assertEqual(
             candidate["predecessor"]["control_plane_version"],
             recovery_candidate["active_successor"]["control_plane_version"],
         )
         self.assertEqual(
-            storage["staged_control_plane_candidate_version"],
+            f1_candidate["live_predecessor"]["control_plane_version"],
             candidate["active_successor"]["control_plane_version"],
         )
         lifecycle = storage["installed_control_plane_lifecycle"]
         if lifecycle == "live_active_generation_successor_staged_not_installed":
-            paired = _load(
-                "q027_control_plane_modulepath_hardening_candidate_2026-05-30.json"
-            )
             self.assertEqual(
                 storage["installed_control_plane_version"],
-                paired["active_policy_transition"]["control_plane_version"],
+                candidate["active_successor"]["control_plane_version"],
+            )
+            self.assertEqual(
+                storage["staged_control_plane_candidate_version"],
+                f1_candidate["staged_successor"]["control_plane_version"],
             )
             self.assertNotEqual(
                 storage["installed_control_plane_version"],
                 storage["staged_control_plane_candidate_version"],
+            )
+            self.assertEqual(
+                f1_candidate["paired_install_transition"]["status"],
+                "pending_clean_commit_and_paired_install",
+            )
+            self.assertEqual(
+                f1_candidate["staged_successor"]["paired_install_status"],
+                f1_candidate["paired_install_transition"]["status"],
             )
         elif lifecycle == "paired_installed_reviewed_generation":
             self.assertEqual(
                 storage["installed_control_plane_version"],
                 storage["staged_control_plane_candidate_version"],
             )
-            paired = candidate["paired_install_transition"]
+            paired = f1_candidate["paired_install_transition"]
             self.assertEqual(
                 storage["installed_control_plane_version"],
                 paired["control_plane_version"],
@@ -260,10 +279,10 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 paired["project_home_ledger_records"],
             )
             self.assertEqual(paired["active_reservations"], 0)
-            active_transition = candidate.get("active_policy_transition")
+            active_transition = f1_candidate.get("active_policy_transition")
             if active_transition is None:
                 self.assertEqual(
-                    candidate["staged_successor"]["active_policy_promotion_status"],
+                    f1_candidate["staged_successor"]["active_policy_promotion_status"],
                     "pending",
                 )
             else:
@@ -298,6 +317,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 clean_candidate_transition["orion_ledger_records"],
                 clean_candidate_transition["orion_receipt_records"],
             )
+
             self.assertEqual(clean_candidate_transition["active_reservations"], 0)
             admission_activation = _load(
                 "q027_frontier_f0_clean_candidate_admission_policy_activation_2026-05-30.json"
@@ -313,13 +333,18 @@ class PicReadinessRegistryTests(unittest.TestCase):
             self.assertEqual(
                 admission_activation["science_submission_freeze"],
                 {
-                    **science_freeze,
+                    key: science_freeze[key]
+                    for key in ["status", "manifest_path", "manifest_sha256"]
+                } | {
                     "executable_sha256": clean_candidate["executable_sha256"],
                 },
             )
             self.assertEqual(
-                admission_activation["frontier_admission_smoke"],
-                policy["frontier_admission_smoke"],
+                admission_activation["frontier_admission_smoke"]["status"],
+                "authorized_f0_parser_contract_only",
+            )
+            self.assertEqual(
+                policy["frontier_admission_smoke"], {"status": "closed_after_pass"}
             )
             admission_ledger = admission_activation["ledger_validation"]
             self.assertEqual(admission_ledger["orion_ledger_records"], 22)
@@ -340,7 +365,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
             )
             self.assertEqual(
                 recovery_transition["policy_sha256"],
-                _sha256(READINESS_DIR / "storage_policy.json"),
+                "cfe6610a4f7f54b153f2e20b30397d0417a2634b32997117f6d14a2eb4b771cc",
             )
             self.assertEqual(recovery_transition["orion_ledger_records"], 31)
             self.assertEqual(
@@ -361,6 +386,141 @@ class PicReadinessRegistryTests(unittest.TestCase):
             long_term["status"],
             "user_selected_orion_only_with_documented_durability_risk",
         )
+
+    def test_registered_science_launch_contract_sidecars_match_policy(self) -> None:
+        policy = _load("storage_policy.json")
+        authorizations = {
+            record["authorization_id"]: record
+            for record in policy["registered_science_slices"]
+        }
+        sidecars = {
+            "f1-clean-gyro-v1": "frontier_f1_clean_gyro_launch_contract.json",
+            "f1-clean-paper-coupling-v1": (
+                "frontier_f1_clean_paper_coupling_launch_contract.json"
+            ),
+        }
+        self.assertEqual(set(authorizations), set(sidecars))
+        for authorization_id, filename in sidecars.items():
+            with self.subTest(authorization_id=authorization_id):
+                contract = _load(filename)
+                validate_launch_contract(contract)
+                self.assertEqual(
+                    launch_contract_sha256(contract),
+                    authorizations[authorization_id]["launch_contract_sha256"],
+                )
+
+    def test_registered_science_staged_bindings_recompute_from_exact_files(self) -> None:
+        policy = _load("storage_policy.json")
+        storage = policy["olcf_side_storage"]
+        staged_version = inventory_digest(
+            [
+                {"path": name, "sha256": _sha256(CONTROL_PLANE_DIR / name)}
+                for name in CONTROL_PLANE_FILES
+            ]
+        )
+        self.assertEqual(
+            staged_version, storage["staged_control_plane_candidate_version"]
+        )
+        successor = _load(
+            "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
+        )
+        self.assertEqual(
+            staged_version, successor["staged_successor"]["control_plane_version"]
+        )
+        clean_manifest_path = Path(policy["science_submission_freeze"]["manifest_path"])
+        clean_manifest = json.loads(clean_manifest_path.read_text(encoding="utf-8"))
+        executable_path = Path(clean_manifest["build"]["executable_path"])
+        binding_paths = {
+            "f1-clean-gyro-v1": {
+                "job_script_sha256": (
+                    REPO_ROOT
+                    / "tst/publication/frontier_f1_structured_gpu_relativistic_gyro_job.sh"
+                ),
+                "input_deck_sha256": (
+                    REPO_ROOT / "inputs/tests/pic_relativistic_gyro_paper.athinput"
+                ),
+                "analysis_script_sha256": [
+                    REPO_ROOT
+                    / "tst/publication/frontier_f1_gpu_relativistic_gyro_analysis.py",
+                    REPO_ROOT / "tst/publication/frontier_f1_structured_artifacts.py",
+                ],
+            },
+            "f1-clean-paper-coupling-v1": {
+                "job_script_sha256": (
+                    REPO_ROOT
+                    / "tst/publication/frontier_f1_structured_gpu_paper_coupling_job.sh"
+                ),
+                "input_deck_sha256": (
+                    REPO_ROOT / "inputs/tests/pic_paper_coupling_conservation.athinput"
+                ),
+                "analysis_script_sha256": [
+                    REPO_ROOT
+                    / "tst/publication/frontier_f1_gpu_paper_coupling_analysis.py",
+                    REPO_ROOT / "tst/publication/frontier_f1_structured_artifacts.py",
+                ],
+            },
+        }
+        environment_path = CONTROL_PLANE_DIR / "frontier_pic_environment.sh"
+        successor_records = successor["registered_science_slices"]
+        successors = {
+            record["authorization_id"]: record
+            for record in successor_records
+        }
+        self.assertEqual(len(successor_records), len(successors))
+        self.assertEqual(set(successors), set(binding_paths))
+        self.assertEqual(
+            {
+                record["authorization_id"]
+                for record in policy["registered_science_slices"]
+            },
+            set(binding_paths),
+        )
+        for authorization in policy["registered_science_slices"]:
+            authorization_id = authorization["authorization_id"]
+            with self.subTest(authorization_id=authorization_id):
+                paths = binding_paths[authorization_id]
+                for key in (
+                    "campaign",
+                    "maximum_nodes",
+                    "maximum_walltime_seconds",
+                    "maximum_attempts",
+                ):
+                    self.assertEqual(
+                        successors[authorization_id][key], authorization[key]
+                    )
+                self.assertEqual(
+                    authorization["job_script_sha256"],
+                    _sha256(paths["job_script_sha256"]),
+                )
+                self.assertEqual(
+                    authorization["input_deck_sha256"],
+                    _sha256(paths["input_deck_sha256"]),
+                )
+                self.assertEqual(
+                    authorization["environment_profile_sha256"],
+                    _sha256(environment_path),
+                )
+                analysis_sha256 = [
+                    _sha256(path) for path in paths["analysis_script_sha256"]
+                ]
+                self.assertEqual(
+                    authorization["analysis_script_sha256"], analysis_sha256
+                )
+                self.assertEqual(
+                    successors[authorization_id]["analysis_script_sha256"],
+                    analysis_sha256[0],
+                )
+                self.assertEqual(
+                    successors[authorization_id]["analysis_support_sha256"],
+                    analysis_sha256[1],
+                )
+                self.assertEqual(
+                    authorization["clean_candidate_manifest_sha256"],
+                    _sha256(clean_manifest_path),
+                )
+                self.assertEqual(
+                    authorization["executable_sha256"], _sha256(executable_path)
+                )
 
     def test_claim_classes_and_required_extensions(self) -> None:
         registry = _load("claims_registry.json")

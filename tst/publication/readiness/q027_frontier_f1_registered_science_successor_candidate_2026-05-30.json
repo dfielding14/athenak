@@ -1,0 +1,132 @@
+{
+  "record_type": "q027_frontier_f1_registered_science_successor_candidate",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-003",
+    "Q-013",
+    "Q-025",
+    "Q-027",
+    "Q-038",
+    "Q-042"
+  ],
+  "qualification_effect": "local_registered_f1_successor_hardening_and_independent_retest_pass_paired_activation_pending",
+  "scope": "Staged successor chronology after the clean-candidate Frontier F0 admission closure. The candidate retains the completed F0 chronology and adds two exact one-attempt registered-science slices: a clean-candidate GPU relativistic-gyro oracle and a clean-candidate GPU paper-mode coupling oracle. The launch trampoline freezes an exact structured artifact tree and immutable inventory. Offline analyzers retain descriptor-pinned tree identity, validate exact inventory closure, publish one immutable result and receipt, and support qualification-time no-write recomputation from the snapshotted analyzer. Qualification retains descriptors for the immutable inventory, result and receipt plus their directory ancestry across recomputation and rechecks path identity and bytes afterward. This candidate does not claim Frontier F1 execution or scientific qualification.",
+  "live_predecessor": {
+    "record": "tst/publication/readiness/q027_frontier_f0_compute_snapshot_activation_2026-05-30.json",
+    "control_plane_version": "e8e47eadb491b20e3f196f3d8ea0b859c61ccad961f8d56bc85ea2a48424eecf",
+    "policy_sha256": "cfe6610a4f7f54b153f2e20b30397d0417a2634b32997117f6d14a2eb4b771cc",
+    "promotion_sha256": "6d6bf1cd54dc0d0e0a86bd296d8c84df5966c310b4b1191b53972c7b0799dbe2",
+    "ledger_records": 31,
+    "cumulative_consumed_node_hours": 0.07833333333333331,
+    "active_reservations": 0
+  },
+  "staged_successor": {
+    "control_plane_version": "140e9a2981ba4378b1164f6eed4021fe5d4462c37571d59439c11b491d58ac49",
+    "control_plane_inventory_files": 19,
+    "worktree_state": "dirty_candidate_pending_clean_commit_curation",
+    "paired_install_status": "pending_clean_commit_and_paired_install",
+    "active_policy_promotion_status": "pending_paired_install"
+  },
+  "registered_science_slices": [
+    {
+      "authorization_id": "f1-clean-gyro-v1",
+      "campaign": "f1_gpu_relativistic_gyro",
+      "maximum_nodes": 1,
+      "maximum_walltime_seconds": 900,
+      "maximum_attempts": 1,
+      "analysis_script_sha256": "ea995c6f7b7d8a7d333dff7411243e279ab8abc06246f0eb4ee4675665aa58f3",
+      "analysis_support_sha256": "7d482905e3e678db20f94bd85ed0686ce0157476c2cb8db5dcf9a015175181a1"
+    },
+    {
+      "authorization_id": "f1-clean-paper-coupling-v1",
+      "campaign": "f1_gpu_paper_coupling",
+      "maximum_nodes": 1,
+      "maximum_walltime_seconds": 900,
+      "maximum_attempts": 1,
+      "analysis_script_sha256": "8f3c6bd4240f4ae3be2310061743e389c21ed5088b716fd98654cbbba95f2414",
+      "analysis_support_sha256": "7d482905e3e678db20f94bd85ed0686ce0157476c2cb8db5dcf9a015175181a1"
+    }
+  ],
+  "closed_activation_blockers": [
+    "registered-science reservations require an exact active-policy authorization ID and permit at most one ledger attempt per slice",
+    "the launch trampoline retains and rechecks one artifact-root descriptor, retains the original nested-directory identity map through final publication, rejects root substitution and byte-identical nested-directory replacement, freezes final read-only bytes, publishes one immutable inventory and revalidates exact final tree closure",
+    "the launch trampoline retains the created owner-only analysis-directory descriptor through final publication and offline analyzers require that exact owner-only analysis directory, retain one no-follow artifact-root descriptor and reject duplicate keys, noncanonical paths, checksum drift, unlisted files, nested-directory replacement, redirected analysis output and root substitution",
+    "the launch lifecycle scopes deterministic umask 022 artifact creation and restores the inherited process value after success or failure",
+    "the gyro analyzer requires exactly the registered cycle-two particle VTK output and rejects wildcard output drift",
+    "qualification retains the run tree, immutable inventory, analysis result, offline receipt, their directory ancestry and snapshotted analyzer/helper descriptors, binds the immutable inventory digest into the child, executes the exact analyzer bytes through /proc/self/fd and rejects source, evidence-file or run-root replacement around no-write recomputation",
+    "the paper-mode coupling analyzer requires the exact registered cycle-zero through cycle-two output families for both coefficient cases and rejects every extra file anywhere beneath output/"
+  ],
+  "local_validation": {
+    "control_plane_discovery_tests": {
+      "status": "pass",
+      "tests_run": 283
+    },
+    "publication_standalone_tests": {
+      "status": "pass",
+      "tests_run": 101
+    },
+    "focused_frontier_chain_tests": {
+      "status": "pass",
+      "tests_run": 38,
+      "command": "python3 -m unittest tst.publication.test_frontier_f1_structured_analysis tst.publication.test_pic_qualification_manifest"
+    },
+    "registered_science_concurrency_regression": {
+      "status": "pass",
+      "tests_run": 5,
+      "command": "cd tst/publication/frontier_control_plane && for attempt in 1 2 3 4 5; do python3 -m unittest test_control_plane.SnapshotTests.test_registered_science_concurrent_first_attempt_admits_only_one -q || exit 1; done"
+    },
+    "readiness_registry_tests": {
+      "status": "pass",
+      "tests_run": 10,
+      "command": "python3 -m unittest tst.publication.test_pic_readiness_registry"
+    },
+    "control_plane_discovery_command": "python3 -m unittest discover -s tst/publication/frontier_control_plane -p 'test_*.py'",
+    "publication_standalone_command": "python3 -m unittest $(rg --files tst/publication -g 'test_*.py' | rg -v '^tst/publication/frontier_control_plane/' | sed -e 's#/#.#g' -e 's#[.]py$##')",
+    "python_compile": {
+      "status": "pass",
+      "command": "python3 -m py_compile tst/publication/frontier_control_plane/*.py tst/publication/frontier_f1_structured_artifacts.py tst/publication/frontier_f1_gpu_relativistic_gyro_analysis.py tst/publication/frontier_f1_gpu_paper_coupling_analysis.py tst/publication/pic_qualification_manifest.py tst/publication/test_frontier_f1_structured_analysis.py tst/publication/test_pic_qualification_manifest.py tst/publication/test_pic_readiness_registry.py"
+    },
+    "shell_syntax": {
+      "status": "pass",
+      "command": "bash -n tst/publication/frontier_control_plane/*.sh tst/publication/frontier_f1_structured_gpu_relativistic_gyro_job.sh tst/publication/frontier_f1_structured_gpu_paper_coupling_job.sh"
+    },
+    "json_parse": {
+      "status": "pass",
+      "command": "python3 -c \"import json; from pathlib import Path; [json.loads(path.read_text()) for path in Path('tst/publication/readiness').rglob('*.json')]\""
+    },
+    "git_diff_check": {
+      "status": "pass",
+      "command": "git diff --check"
+    }
+  },
+  "independent_review": {
+    "status": "pass",
+    "review_scope": "structured artifact freeze, exact inventory closure, root and directory substitution, analyzer source binding, immutable result and receipt binding, qualification-time no-write recomputation, registered output-set closure and adversarial regressions",
+    "addressed_findings": [
+      "retain and recheck immutable inventory, result and receipt descriptors plus ancestry across qualification-time recomputation",
+      "reject extra paper-mode coupling files anywhere beneath output/",
+      "retain the original launch-time nested-directory identity map through final publication and reject byte-identical replacement",
+      "retain the original empty owner-only analysis-directory descriptor through final launch publication and require exact mode 0700 during offline analysis",
+      "normalize and restore the inherited umask around launch artifact creation so artifact-root, output, immutable-inventory and owner-only analysis-directory modes do not depend on ambient process state"
+    ],
+    "fresh_retest": [
+      "launch-publication reviewer reproduced and closed nested-directory replacement, analysis-directory replacement, unsafe analysis mode, late-file insertion, final-byte binding and inherited-umask restoration probes",
+      "qualification-domain reviewer recomputed the exact 19-file inventory and all registered slice bindings, reran the restrictive-umask operational probe and completed the focused F1 qualification and registry suite"
+    ]
+  },
+  "paired_install_transition": {
+    "status": "pending_clean_commit_and_paired_install"
+  },
+  "active_policy_transition": {
+    "status": "pending_paired_install"
+  },
+  "open_boundaries": [
+    "paired immutable install remains blocked until the reviewed candidate is curated into a clean commit",
+    "paired immutable Orion and Project Home install is pending",
+    "active-policy promotion is pending",
+    "the two registered Frontier F1 slices have not executed",
+    "external reviewer disposition remains pending external review"
+  ],
+  "overall_disposition": "local_registered_f1_successor_candidate_only_keep_registered_science_submissions_paused"
+}

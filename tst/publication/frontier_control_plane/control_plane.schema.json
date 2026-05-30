@@ -91,6 +91,10 @@
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
     },
+    "registered_science_authorization_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+    },
     "selected_qos": {
       "enum": [
         "debug",
@@ -334,7 +338,8 @@
       "then": {
         "required": [
           "clean_candidate_manifest_path",
-          "clean_candidate_manifest_sha256"
+          "clean_candidate_manifest_sha256",
+          "registered_science_authorization_id"
         ]
       },
       "else": {
@@ -348,6 +353,11 @@
             {
               "required": [
                 "clean_candidate_manifest_sha256"
+              ]
+            },
+            {
+              "required": [
+                "registered_science_authorization_id"
               ]
             }
           ]

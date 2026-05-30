@@ -63,6 +63,7 @@ class LedgerTests(unittest.TestCase):
             "reservation_id": "reservation-1",
             "submission_id": "submission-1",
             "submission_scope": "registered_science",
+            "registered_science_authorization_id": "f1-clean-gyro-v1",
             "clean_candidate_manifest_sha256": "a" * 64,
             "requested_nodes": 2,
             "requested_walltime": "00:30:00",
@@ -103,6 +104,9 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(len(rows), 4)
         self.assertTrue(rows[-1]["mirror_ack_sha256"])
         self.assertEqual(rows[-1]["submission_scope"], "registered_science")
+        self.assertEqual(
+            rows[-1]["registered_science_authorization_id"], "f1-clean-gyro-v1"
+        )
         self.assertEqual(rows[-1]["clean_candidate_manifest_sha256"], "a" * 64)
 
     def test_mirror_head_divergence_fails_closed(self) -> None:

@@ -24,6 +24,7 @@ from tst.publication.pic_qualification_manifest import (
     _require_frontier_ledger_binding,
     _source_bundle_sha256,
     _validate_environment_allowlist,
+    _verify_frontier_offline_analysis,
     freeze_qualification_manifest,
     validate_qualification_manifest,
 )
@@ -330,6 +331,7 @@ class PicQualificationManifestTests(unittest.TestCase):
             },
             "authorization": {
                 "control_plane_version": "a" * 64,
+                "build_profile_control_plane_version": "a" * 64,
                 "clean_candidate_manifest_path": (
                     "/lustre/orion/ast207/proj-shared/dfielding/PIC/"
                     "clean_candidates/03a7bd9a-7d4c-4e37-a12b-46de3817eff2/"
@@ -392,6 +394,9 @@ class PicQualificationManifestTests(unittest.TestCase):
         )
         self.live_authorization = {
             "control_plane_version": self.manifest["authorization"]["control_plane_version"],
+            "build_profile_control_plane_version": self.manifest["authorization"][
+                "build_profile_control_plane_version"
+            ],
             "clean_candidate_manifest_path": self.manifest["authorization"][
                 "clean_candidate_manifest_path"
             ],
@@ -600,10 +605,81 @@ class PicQualificationManifestTests(unittest.TestCase):
         artifact_dir = pic_root / "runs" / "campaign"
         manifest_path.parent.mkdir(parents=True)
         artifact_dir.mkdir(parents=True)
+        analysis_dir = artifact_dir / "analysis"
+        analysis_dir.mkdir()
+        snapshot_analysis_dir = manifest_path.parent / "snapshot" / "analysis"
+        snapshot_analysis_dir.mkdir(parents=True)
         project_home_root.mkdir()
-        manifest_path.write_text('{"fixture": true}\n', encoding="utf-8")
+        analyzer_path = snapshot_analysis_dir / "000-analysis.py"
+        helper_path = snapshot_analysis_dir / "frontier_f1_structured_artifacts.py"
+        analyzer_path.write_text("pass\n", encoding="utf-8")
+        helper_path.write_text("pass\n", encoding="utf-8")
+        analyzer_path.chmod(0o444)
+        helper_path.chmod(0o444)
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "registered_science_authorization_id": "f1-clean-gyro-v1",
+                    "snapshot_files": [
+                        {
+                            "role": "analysis-script-000",
+                            "path": str(analyzer_path),
+                            "sha256": _sha256(analyzer_path),
+                        },
+                        {
+                            "role": "analysis-script-001",
+                            "path": str(helper_path),
+                            "sha256": _sha256(helper_path),
+                        },
+                    ],
+                    "artifact_dir": str(artifact_dir),
+                    "submission_id": "submission-1",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         manifest_path.chmod(0o444)
         manifest_sha256 = _sha256(manifest_path)
+        inventory_path = artifact_dir / "artifact_inventory.json"
+        inventory_path.write_text('{"files":[],"schema_version":1}\n', encoding="utf-8")
+        inventory_path.chmod(0o444)
+        result_path = analysis_dir / "analysis.json"
+        result_path.write_text('{"schema_version":1,"status":"pass"}\n', encoding="utf-8")
+        result_path.chmod(0o444)
+        receipt_path = analysis_dir / "offline_analysis_receipt.json"
+        receipt_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "runner": {
+                        "python": "/opt/cray/pe/python/3.11.7/bin/python3",
+                        "flags": ["-I", "-B"],
+                    },
+                    "analyzer": {
+                        "path": "000-analysis.py",
+                        "sha256": _sha256(analyzer_path),
+                    },
+                    "support_modules": [
+                        {
+                            "path": "frontier_f1_structured_artifacts.py",
+                            "sha256": _sha256(helper_path),
+                        }
+                    ],
+                    "artifact_inventory": {
+                        "path": "artifact_inventory.json",
+                        "sha256": _sha256(inventory_path),
+                    },
+                    "analysis_result": {
+                        "path": "analysis/analysis.json",
+                        "sha256": _sha256(result_path),
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        receipt_path.chmod(0o444)
         candidate_sha256 = "a" * 64
         control_plane_version = "b" * 64
         resources = {
@@ -616,12 +692,22 @@ class PicQualificationManifestTests(unittest.TestCase):
             "run_artifact_dir": str(artifact_dir),
             "artifact_root": str(artifact_dir),
             "node_hours": 1.5,
+            "registered_science_authorization_id": "f1-clean-gyro-v1",
+            "artifact_inventory_path": str(inventory_path),
+            "artifact_inventory_sha256": _sha256(inventory_path),
+            "analysis_result_path": str(result_path),
+            "analysis_result_sha256": _sha256(result_path),
+            "offline_analysis_receipt_path": str(receipt_path),
+            "offline_analysis_receipt_sha256": _sha256(receipt_path),
         }
         record = {
             "event_type": "reconciliation",
             "reconciled": True,
             "state": "COMPLETED",
             "submission_scope": "registered_science",
+            "registered_science_authorization_id": resources[
+                "registered_science_authorization_id"
+            ],
             "submission_id": resources["submission_id"],
             "reservation_id": resources["reservation_id"],
             "job_id": resources["job_id"],
@@ -640,7 +726,9 @@ class PicQualificationManifestTests(unittest.TestCase):
         with patch(
             "tst.publication.pic_qualification_manifest.validate_mirrored_state",
             return_value=[genesis, record],
-        ):
+        ), patch(
+            "tst.publication.pic_qualification_manifest._verify_frontier_offline_analysis"
+        ) as recompute:
             _require_frontier_ledger_binding(
                 {"resources": resources},
                 candidate_sha256=candidate_sha256,
@@ -658,15 +746,14 @@ class PicQualificationManifestTests(unittest.TestCase):
                     authorized_project_home_root=project_home_root,
                 )
             record["state"] = "COMPLETED"
-            resources["artifact_root"] = str(pic_root / "runs" / "other")
-            with self.assertRaises(ValueError):
-                _require_frontier_ledger_binding(
-                    {"resources": resources},
-                    candidate_sha256=candidate_sha256,
-                    control_plane_version=control_plane_version,
-                    authorized_pic_root=pic_root,
-                    authorized_project_home_root=project_home_root,
-                )
+            resources["artifact_root"] = str(self.root / "qualification-bundle")
+            _require_frontier_ledger_binding(
+                {"resources": resources},
+                candidate_sha256=candidate_sha256,
+                control_plane_version=control_plane_version,
+                authorized_pic_root=pic_root,
+                authorized_project_home_root=project_home_root,
+            )
             resources["artifact_root"] = str(artifact_dir)
             resources["node_hours"] = 2.0
             with self.assertRaises(ValueError):
@@ -678,6 +765,206 @@ class PicQualificationManifestTests(unittest.TestCase):
                     authorized_project_home_root=project_home_root,
                 )
             resources["node_hours"] = 1.5
+            resources["registered_science_authorization_id"] = "f1-clean-paper-coupling-v1"
+            with self.assertRaises(ValueError):
+                _require_frontier_ledger_binding(
+                    {"resources": resources},
+                    candidate_sha256=candidate_sha256,
+                    control_plane_version=control_plane_version,
+                    authorized_pic_root=pic_root,
+                    authorized_project_home_root=project_home_root,
+                )
+            resources["registered_science_authorization_id"] = "f1-clean-gyro-v1"
+            resources["artifact_inventory_path"] = str(
+                artifact_dir / "analysis" / ".." / "artifact_inventory.json"
+            )
+            with self.assertRaises(ValueError):
+                _require_frontier_ledger_binding(
+                    {"resources": resources},
+                    candidate_sha256=candidate_sha256,
+                    control_plane_version=control_plane_version,
+                    authorized_pic_root=pic_root,
+                    authorized_project_home_root=project_home_root,
+                )
+            resources["artifact_inventory_path"] = str(inventory_path)
+            resources["artifact_inventory_sha256"] = "0" * 64
+            with self.assertRaises(ValueError):
+                _require_frontier_ledger_binding(
+                    {"resources": resources},
+                    candidate_sha256=candidate_sha256,
+                    control_plane_version=control_plane_version,
+                    authorized_pic_root=pic_root,
+                    authorized_project_home_root=project_home_root,
+                )
+            resources["artifact_inventory_sha256"] = _sha256(inventory_path)
+            resources["analysis_result_sha256"] = "0" * 64
+            with self.assertRaises(ValueError):
+                _require_frontier_ledger_binding(
+                    {"resources": resources},
+                    candidate_sha256=candidate_sha256,
+                    control_plane_version=control_plane_version,
+                    authorized_pic_root=pic_root,
+                    authorized_project_home_root=project_home_root,
+                )
+            resources["analysis_result_sha256"] = _sha256(result_path)
+            receipt_resource_path = resources.pop("offline_analysis_receipt_path")
+            with self.assertRaises(ValueError):
+                _require_frontier_ledger_binding(
+                    {"resources": resources},
+                    candidate_sha256=candidate_sha256,
+                    control_plane_version=control_plane_version,
+                    authorized_pic_root=pic_root,
+                    authorized_project_home_root=project_home_root,
+                )
+            resources["offline_analysis_receipt_path"] = receipt_resource_path
+            resources["offline_analysis_receipt_path"] = (
+                f"{analysis_dir}/./offline_analysis_receipt.json"
+            )
+            with self.assertRaises(ValueError):
+                _require_frontier_ledger_binding(
+                    {"resources": resources},
+                    candidate_sha256=candidate_sha256,
+                    control_plane_version=control_plane_version,
+                    authorized_pic_root=pic_root,
+                    authorized_project_home_root=project_home_root,
+                )
+            resources["offline_analysis_receipt_path"] = receipt_resource_path
+            resources["offline_analysis_receipt_sha256"] = "0" * 64
+            with self.assertRaises(ValueError):
+                _require_frontier_ledger_binding(
+                    {"resources": resources},
+                    candidate_sha256=candidate_sha256,
+                    control_plane_version=control_plane_version,
+                    authorized_pic_root=pic_root,
+                    authorized_project_home_root=project_home_root,
+                )
+            resources["offline_analysis_receipt_sha256"] = _sha256(receipt_path)
+
+            original_receipt = receipt_path.read_bytes()
+            receipt_path.chmod(0o644)
+            receipt_path.write_text('{"schema_version":1}\n', encoding="utf-8")
+            receipt_path.chmod(0o444)
+            resources["offline_analysis_receipt_sha256"] = _sha256(receipt_path)
+            with self.assertRaisesRegex(ValueError, "receipt differs"):
+                _require_frontier_ledger_binding(
+                    {"resources": resources},
+                    candidate_sha256=candidate_sha256,
+                    control_plane_version=control_plane_version,
+                    authorized_pic_root=pic_root,
+                    authorized_project_home_root=project_home_root,
+                )
+            receipt_path.chmod(0o644)
+            receipt_path.write_bytes(original_receipt)
+            receipt_path.chmod(0o444)
+            resources["offline_analysis_receipt_sha256"] = _sha256(receipt_path)
+
+            for source_path in (analyzer_path, helper_path):
+                with self.subTest(replaced_source=source_path.name):
+                    detached = source_path.with_name(source_path.name + ".detached")
+
+                    def replace_source(*_: object, **__: object) -> None:
+                        source_path.rename(detached)
+                        source_path.write_text("pass\n", encoding="utf-8")
+                        source_path.chmod(0o444)
+
+                    recompute.side_effect = replace_source
+                    try:
+                        with self.assertRaisesRegex(ValueError, "path changed"):
+                            _require_frontier_ledger_binding(
+                                {"resources": resources},
+                                candidate_sha256=candidate_sha256,
+                                control_plane_version=control_plane_version,
+                                authorized_pic_root=pic_root,
+                                authorized_project_home_root=project_home_root,
+                            )
+                    finally:
+                        source_path.unlink(missing_ok=True)
+                        detached.rename(source_path)
+                    recompute.side_effect = None
+
+            for evidence_path in (inventory_path, result_path, receipt_path):
+                with self.subTest(replaced_evidence=evidence_path.name):
+                    detached = evidence_path.with_name(evidence_path.name + ".detached")
+                    original = evidence_path.read_bytes()
+
+                    def replace_evidence(*_: object, **__: object) -> None:
+                        evidence_path.rename(detached)
+                        evidence_path.write_bytes(original)
+                        evidence_path.chmod(0o444)
+
+                    recompute.side_effect = replace_evidence
+                    try:
+                        with self.assertRaisesRegex(ValueError, "path changed"):
+                            _require_frontier_ledger_binding(
+                                {"resources": resources},
+                                candidate_sha256=candidate_sha256,
+                                control_plane_version=control_plane_version,
+                                authorized_pic_root=pic_root,
+                                authorized_project_home_root=project_home_root,
+                            )
+                    finally:
+                        evidence_path.unlink(missing_ok=True)
+                        detached.rename(evidence_path)
+                    recompute.side_effect = None
+
+            detached_receipt = receipt_path.with_name("offline_analysis_receipt.detached")
+
+            def remove_receipt(*_: object, **__: object) -> None:
+                receipt_path.rename(detached_receipt)
+
+            recompute.side_effect = remove_receipt
+            try:
+                with self.assertRaisesRegex(ValueError, "path changed"):
+                    _require_frontier_ledger_binding(
+                        {"resources": resources},
+                        candidate_sha256=candidate_sha256,
+                        control_plane_version=control_plane_version,
+                        authorized_pic_root=pic_root,
+                        authorized_project_home_root=project_home_root,
+                    )
+            finally:
+                detached_receipt.rename(receipt_path)
+            recompute.side_effect = None
+
+            detached_artifact_dir = artifact_dir.with_name("campaign-detached")
+            replacement_artifact_dir = artifact_dir.with_name("campaign-replacement")
+            replacement_artifact_dir.mkdir()
+
+            def replace_artifact_dir(*_: object, **__: object) -> None:
+                artifact_dir.rename(detached_artifact_dir)
+                replacement_artifact_dir.rename(artifact_dir)
+
+            recompute.side_effect = replace_artifact_dir
+            try:
+                with self.assertRaisesRegex(ValueError, "path changed"):
+                    _require_frontier_ledger_binding(
+                        {"resources": resources},
+                        candidate_sha256=candidate_sha256,
+                        control_plane_version=control_plane_version,
+                        authorized_pic_root=pic_root,
+                        authorized_project_home_root=project_home_root,
+                    )
+            finally:
+                artifact_dir.rmdir()
+                detached_artifact_dir.rename(artifact_dir)
+            recompute.side_effect = None
+
+            _require_frontier_ledger_binding(
+                {"resources": resources},
+                candidate_sha256=candidate_sha256,
+                control_plane_version=control_plane_version,
+                authorized_pic_root=pic_root,
+                authorized_project_home_root=project_home_root,
+            )
+            kwargs = recompute.call_args.kwargs
+            self.assertIsInstance(recompute.call_args.args[0], int)
+            self.assertIsInstance(kwargs["helper_fd"], int)
+            self.assertIsInstance(kwargs["artifact_dir_fd"], int)
+            self.assertEqual(kwargs["artifact_dir"], artifact_dir)
+            self.assertEqual(
+                kwargs["artifact_inventory_sha256"], _sha256(inventory_path)
+            )
+            self.assertEqual(kwargs["result_sha256"], _sha256(result_path))
         with patch(
             "tst.publication.pic_qualification_manifest.validate_mirrored_state",
             return_value=[record],
@@ -690,6 +977,50 @@ class PicQualificationManifestTests(unittest.TestCase):
                     authorized_pic_root=pic_root,
                     authorized_project_home_root=project_home_root,
                 )
+
+    def test_frontier_offline_analysis_recompute_uses_trusted_snapshot(self) -> None:
+        completed = subprocess.CompletedProcess([], 0, stdout=b"", stderr=b"")
+        with patch(
+            "tst.publication.pic_qualification_manifest.subprocess.run",
+            return_value=completed,
+        ) as run:
+            _verify_frontier_offline_analysis(
+                10,
+                helper_fd=11,
+                artifact_dir_fd=12,
+                artifact_dir=Path("/runs/f1"),
+                artifact_inventory_sha256="b" * 64,
+                result_sha256="a" * 64,
+            )
+        run.assert_called_once_with(
+            [
+                "/opt/cray/pe/python/3.11.7/bin/python3",
+                "-I",
+                "-B",
+                "/proc/self/fd/10",
+                "--artifact-dir",
+                "/runs/f1",
+                "--artifact-dir-fd",
+                "12",
+                "--verify-artifact-inventory-sha256",
+                "b" * 64,
+                "--verify-result-sha256",
+                "a" * 64,
+            ],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=300,
+            pass_fds=(10, 11, 12),
+            env={
+                "HOME": "/",
+                "LANG": "C",
+                "LC_ALL": "C",
+                "PATH": "/usr/bin:/bin",
+                "PIC_F1_ANALYSIS_HELPER_FD": "11",
+            },
+            cwd="/",
+        )
 
     def test_candidate_internal_path_alias_is_rejected(self) -> None:
         candidate_path = self.root / "clean_candidate_manifest.json"

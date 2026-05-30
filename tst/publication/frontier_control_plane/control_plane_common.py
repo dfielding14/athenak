@@ -311,6 +311,8 @@ PENDING_CLEAN_CANDIDATE_FREEZE = "pending_clean_candidate_freeze"
 AUTHORIZED_CLEAN_CANDIDATE_FREEZE = "authorized"
 AUTHORIZED_ADMISSION_SMOKE_STATUS = "authorized_f0_parser_contract_only"
 PENDING_ADMISSION_SMOKE_STATUS = "pending_exact_executable_binding"
+CLOSED_ADMISSION_SMOKE_STATUS = "closed_after_pass"
+AUTHORIZED_REGISTERED_SCIENCE_SLICE_STATUS = "authorized"
 TRUSTED_LAUNCH_EXECUTOR = "trusted_trampoline_athena_argv_v1"
 CANONICAL_POLICY_RELATIVE = Path("policy/storage_policy.json")
 ACTIVE_PROMOTION_RELATIVE = Path("policy/active_promotion.json")
@@ -1755,6 +1757,7 @@ def _relative_artifact_path(value: object, *, field: str) -> str:
     if (
         not text
         or path.is_absolute()
+        or path.as_posix() != text
         or not path.parts
         or path.parts != tuple(part for part in path.parts if part not in {"", ".", ".."})
     ):
@@ -2243,16 +2246,18 @@ def validate_storage_policy(
     long_term = policy.get("long_term_storage")
     science_freeze = policy.get("science_submission_freeze")
     admission_smoke = policy.get("frontier_admission_smoke")
+    registered_science_slices = policy.get("registered_science_slices")
     if (
         not isinstance(frontier, dict)
         or not isinstance(storage, dict)
         or not isinstance(long_term, dict)
         or not isinstance(science_freeze, dict)
         or not isinstance(admission_smoke, dict)
+        or not isinstance(registered_science_slices, list)
     ):
         raise ValueError(
             "Storage policy is missing Frontier, OLCF-side storage, science-freeze, "
-            "or admission-smoke data"
+            "admission-smoke, or registered-science data"
         )
     expected_frontier = {
         "account": authorized_account,
@@ -2348,7 +2353,12 @@ def validate_storage_policy(
         if set(science_freeze) != {"status"}:
             raise ValueError("Pending science freeze must not retain candidate fields")
     elif freeze_status == AUTHORIZED_CLEAN_CANDIDATE_FREEZE:
-        if set(science_freeze) != {"status", "manifest_path", "manifest_sha256"}:
+        if set(science_freeze) != {
+            "status",
+            "manifest_path",
+            "manifest_sha256",
+            "build_profile_control_plane_version",
+        }:
             raise ValueError("Authorized science freeze must identify one exact manifest")
         manifest_path = Path(str(science_freeze["manifest_path"]))
         require_canonical_path_below(
@@ -2358,8 +2368,99 @@ def validate_storage_policy(
             raise ValueError("Authorized science-freeze manifest has an invalid path")
         if not re.fullmatch(r"[0-9a-f]{64}", str(science_freeze["manifest_sha256"])):
             raise ValueError("Authorized science-freeze manifest digest is malformed")
+        if not re.fullmatch(
+            r"[0-9a-f]{64}",
+            str(science_freeze["build_profile_control_plane_version"]),
+        ):
+            raise ValueError(
+                "Authorized science-freeze build-profile control-plane version is malformed"
+            )
     else:
         raise ValueError("Storage policy does not declare a recognized science freeze state")
+    identifiers = set()
+    for registered_slice in registered_science_slices:
+        if not isinstance(registered_slice, dict) or set(registered_slice) != {
+            "authorization_id",
+            "status",
+            "campaign",
+            "test_id",
+            "evidence_class",
+            "physical_mode",
+            "runtime_profile",
+            "selected_qos",
+            "registered_short_nonproduction",
+            "maximum_nodes",
+            "maximum_walltime_seconds",
+            "maximum_attempts",
+            "job_script_sha256",
+            "input_deck_sha256",
+            "environment_profile_sha256",
+            "analysis_script_sha256",
+            "executable_sha256",
+            "launch_contract_sha256",
+            "clean_candidate_manifest_sha256",
+        }:
+            raise ValueError("Storage policy registered-science authorization is malformed")
+        identifier = str(registered_slice["authorization_id"])
+        if (
+            not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,63}", identifier)
+            or identifier in identifiers
+        ):
+            raise ValueError("Storage policy registered-science authorization ID is invalid")
+        identifiers.add(identifier)
+        if registered_slice["status"] != AUTHORIZED_REGISTERED_SCIENCE_SLICE_STATUS:
+            raise ValueError("Storage policy registered-science slice is not authorized")
+        for key in ["campaign", "test_id", "evidence_class", "physical_mode"]:
+            if not str(registered_slice[key]).strip():
+                raise ValueError(f"Storage policy registered-science {key} is empty")
+        if registered_slice["runtime_profile"] != "frontier_minimum_supported":
+            raise ValueError("Storage policy registered-science runtime profile is invalid")
+        if registered_slice["selected_qos"] not in {"debug", "normal"}:
+            raise ValueError("Storage policy registered-science QoS is invalid")
+        if not isinstance(registered_slice["registered_short_nonproduction"], bool):
+            raise ValueError("Storage policy registered-science short-job flag is invalid")
+        for key in ["maximum_nodes", "maximum_walltime_seconds", "maximum_attempts"]:
+            number = registered_slice[key]
+            if not isinstance(number, int) or isinstance(number, bool) or number <= 0:
+                raise ValueError(f"Storage policy registered-science {key} is invalid")
+        for key in [
+            "job_script_sha256",
+            "input_deck_sha256",
+            "environment_profile_sha256",
+            "executable_sha256",
+            "launch_contract_sha256",
+            "clean_candidate_manifest_sha256",
+        ]:
+            if not re.fullmatch(r"[0-9a-f]{64}", str(registered_slice[key])):
+                raise ValueError(f"Storage policy registered-science {key} is malformed")
+        analysis_sha256 = registered_slice["analysis_script_sha256"]
+        if (
+            not isinstance(analysis_sha256, list)
+            or not 1 <= len(analysis_sha256) <= 16
+            or any(
+                not re.fullmatch(r"[0-9a-f]{64}", str(digest))
+                for digest in analysis_sha256
+            )
+        ):
+            raise ValueError(
+                "Storage policy registered-science analysis_script_sha256 is malformed"
+            )
+        if freeze_status != AUTHORIZED_CLEAN_CANDIDATE_FREEZE:
+            raise ValueError("Registered-science slices require an authorized clean freeze")
+        if (
+            registered_slice["clean_candidate_manifest_sha256"]
+            != science_freeze["manifest_sha256"]
+        ):
+            raise ValueError("Registered-science slice belongs to another clean freeze")
+    if (
+        registered_science_slices
+        and admission_smoke.get("status") != CLOSED_ADMISSION_SMOKE_STATUS
+    ):
+        raise ValueError("Registered-science slices require closed admission smoke")
+    if admission_smoke.get("status") == CLOSED_ADMISSION_SMOKE_STATUS:
+        if set(admission_smoke) != {"status"}:
+            raise ValueError("Closed admission smoke must not retain executable fields")
+        return policy
     if admission_smoke.get("status") == PENDING_ADMISSION_SMOKE_STATUS:
         if set(admission_smoke) != {"status"}:
             raise ValueError("Pending admission smoke must not retain executable fields")

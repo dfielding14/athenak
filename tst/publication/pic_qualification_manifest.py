@@ -17,6 +17,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import stat
+import subprocess
 import sys
 from typing import Any
 import uuid
@@ -37,15 +38,19 @@ from control_plane_common import BUILD_PROVENANCE_FILENAMES  # noqa: E402
 from control_plane_common import PRODUCTION_RUNTIME_LOADED_MODULES  # noqa: E402
 from control_plane_common import PRODUCTION_RUNTIME_MODULEFILES  # noqa: E402
 from control_plane_common import PRODUCTION_RUNTIME_MODULEPATH  # noqa: E402
+from control_plane_common import TRUSTED_PYTHON  # noqa: E402
 from control_plane_common import active_promotion_path  # noqa: E402
+from control_plane_common import open_directory_below  # noqa: E402
 from control_plane_common import read_json_bytes  # noqa: E402
 from control_plane_common import read_stable_regular_file  # noqa: E402
 from control_plane_common import read_stable_regular_file_below  # noqa: E402
 from control_plane_common import require_canonical_path_below  # noqa: E402
 from control_plane_common import require_ledger_paths  # noqa: E402
+from control_plane_common import require_same_directory  # noqa: E402
 from control_plane_common import require_storage_policy_unlock_snapshot  # noqa: E402
 from control_plane_common import utc_datetime  # noqa: E402
 from control_plane_common import validate_clean_candidate_bundle  # noqa: E402
+from control_plane_common import verify_historical_installed_control_plane  # noqa: E402
 from ledger import latest_reservations, require_explicit_genesis  # noqa: E402
 from ledger import ledger_lock  # noqa: E402
 from ledger import validate_mirrored_state  # noqa: E402
@@ -352,6 +357,138 @@ def _artifact_bytes(
         os.close(directory_fd)
 
 
+def _descriptor_bytes(descriptor: int, *, label: str) -> bytes:
+    before = os.fstat(descriptor)
+    if not stat.S_ISREG(before.st_mode) or before.st_mode & 0o222:
+        raise ValueError(f"{label} is not a read-only regular file")
+    chunks = []
+    offset = 0
+    while True:
+        payload = os.pread(descriptor, 1024 * 1024, offset)
+        if not payload:
+            break
+        chunks.append(payload)
+        offset += len(payload)
+    after = os.fstat(descriptor)
+    fields = ("st_dev", "st_ino", "st_mode", "st_size", "st_mtime_ns", "st_ctime_ns")
+    if (
+        any(getattr(before, field) != getattr(after, field) for field in fields)
+        or offset != after.st_size
+    ):
+        raise ValueError(f"{label} changed while it was read")
+    return b"".join(chunks)
+
+
+def _open_pinned_read_only_regular_file_at(
+    parent_descriptor: int, name: str, *, label: str
+) -> tuple[int, bytes]:
+    if not name or name in {".", ".."} or Path(name).name != name:
+        raise ValueError(f"{label} name is not canonical")
+    try:
+        descriptor = os.open(
+            name,
+            os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=parent_descriptor,
+        )
+    except OSError as error:
+        raise ValueError(f"{label} cannot be opened") from error
+    try:
+        data = _descriptor_bytes(descriptor, label=label)
+        _require_pinned_regular_file_identity_at(
+            parent_descriptor, name, descriptor, label=label
+        )
+        return descriptor, data
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def _require_pinned_regular_file_identity_at(
+    parent_descriptor: int, name: str, descriptor: int, *, label: str
+) -> None:
+    expected = os.fstat(descriptor)
+    try:
+        actual = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+    except OSError as error:
+        raise ValueError(f"{label} path changed while it was retained") from error
+    if (
+        not stat.S_ISREG(expected.st_mode)
+        or not stat.S_ISREG(actual.st_mode)
+        or expected.st_mode & 0o222
+        or actual.st_mode & 0o222
+        or (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino)
+    ):
+        raise ValueError(f"{label} path changed while it was retained")
+
+
+def _require_pinned_directory_identity_at(
+    parent_descriptor: int, name: str, descriptor: int, *, label: str
+) -> None:
+    expected = os.fstat(descriptor)
+    try:
+        actual = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+    except OSError as error:
+        raise ValueError(f"{label} directory changed while it was retained") from error
+    if (
+        not stat.S_ISDIR(expected.st_mode)
+        or not stat.S_ISDIR(actual.st_mode)
+        or (expected.st_dev, expected.st_ino) != (actual.st_dev, actual.st_ino)
+    ):
+        raise ValueError(f"{label} directory changed while it was retained")
+
+
+def _open_pinned_artifact_bytes(
+    artifact_root_fd: int, artifact_root: Path, raw_path: str, *, label: str
+) -> dict[str, Any]:
+    parts = _artifact_parts(artifact_root, raw_path, label)
+    directory_fds = [os.dup(artifact_root_fd)]
+    try:
+        for part in parts[:-1]:
+            directory_fds.append(
+                _open_directory_component_at(directory_fds[-1], part, label=label)
+            )
+        descriptor, data = _open_pinned_read_only_regular_file_at(
+            directory_fds[-1], parts[-1], label=label
+        )
+        return {
+            "data": data,
+            "descriptor": descriptor,
+            "directory_fds": directory_fds,
+            "parts": parts,
+        }
+    except BaseException:
+        for directory_fd in reversed(directory_fds):
+            os.close(directory_fd)
+        raise
+
+
+def _require_pinned_artifact_identity(
+    record: dict[str, Any], *, expected_sha256: str, label: str
+) -> None:
+    directory_fds = record["directory_fds"]
+    parts = record["parts"]
+    for parent_descriptor, name, descriptor in zip(
+        directory_fds, parts[:-1], directory_fds[1:]
+    ):
+        _require_pinned_directory_identity_at(
+            parent_descriptor, name, descriptor, label=label
+        )
+    _require_pinned_regular_file_identity_at(
+        directory_fds[-1], parts[-1], record["descriptor"], label=label
+    )
+    if (
+        sha256_bytes(_descriptor_bytes(record["descriptor"], label=label))
+        != expected_sha256
+    ):
+        raise ValueError(f"{label} changed during recomputation")
+
+
+def _close_pinned_artifact(record: dict[str, Any]) -> None:
+    os.close(record["descriptor"])
+    for directory_fd in reversed(record["directory_fds"]):
+        os.close(directory_fd)
+
+
 def _bound_artifact_bytes(
     artifact_root_fd: int,
     artifact_root: Path,
@@ -460,13 +597,285 @@ def _live_candidate_authorization(candidate_sha256: str) -> dict[str, str]:
         or sha256_bytes(manifest_bytes) != candidate_sha256
     ):
         raise ValueError("Qualification candidate differs from the live authorized freeze")
+    build_profile_control_plane_version = str(
+        science_freeze["build_profile_control_plane_version"]
+    )
+    for root in [AUTHORIZED_PIC_ROOT, AUTHORIZED_PROJECT_HOME_ROOT]:
+        verify_historical_installed_control_plane(
+            root / "control_plane" / build_profile_control_plane_version,
+            authorized_pic_root=root,
+        )
     return {
         "control_plane_version": control_plane_version,
+        "build_profile_control_plane_version": build_profile_control_plane_version,
         "clean_candidate_manifest_path": str(manifest_path),
         "clean_candidate_manifest_sha256": candidate_sha256,
         "active_policy_sha256": snapshot["active_policy_sha256"],
         "active_promotion_sha256": snapshot["active_promotion_sha256"],
     }
+
+
+def _verify_frontier_offline_analysis(
+    analyzer_fd: int,
+    *,
+    helper_fd: int,
+    artifact_dir_fd: int,
+    artifact_dir: Path,
+    artifact_inventory_sha256: str,
+    result_sha256: str,
+) -> None:
+    """Recompute the immutable Frontier result with the snapshotted analyzer."""
+    command = [
+        TRUSTED_PYTHON,
+        "-I",
+        "-B",
+        f"/proc/self/fd/{analyzer_fd}",
+        "--artifact-dir",
+        str(artifact_dir),
+        "--artifact-dir-fd",
+        str(artifact_dir_fd),
+        "--verify-artifact-inventory-sha256",
+        artifact_inventory_sha256,
+        "--verify-result-sha256",
+        result_sha256,
+    ]
+    completed = subprocess.run(
+        command,
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=300,
+        pass_fds=(analyzer_fd, helper_fd, artifact_dir_fd),
+        env={
+            "HOME": "/",
+            "LANG": "C",
+            "LC_ALL": "C",
+            "PATH": "/usr/bin:/bin",
+            "PIC_F1_ANALYSIS_HELPER_FD": str(helper_fd),
+        },
+        cwd="/",
+    )
+    if completed.returncode != 0 or completed.stdout or completed.stderr:
+        raise ValueError("Frontier offline analysis recomputation failed")
+
+
+def _require_frontier_completed_evidence_binding(
+    resources: dict[str, Any],
+    *,
+    pre_submit_manifest: dict[str, Any],
+    manifest_path: Path,
+    manifest_sha256: str,
+    artifact_dir: Path,
+    candidate_sha256: str,
+    control_plane_version: str,
+    authorized_pic_root: Path,
+    authorized_project_home_root: Path,
+) -> None:
+    """Retain the run tree and analyzer snapshot across ledger and science checks."""
+    analysis_scripts = sorted(
+        (
+            record
+            for record in pre_submit_manifest.get("snapshot_files", [])
+            if isinstance(record, dict)
+            and str(record.get("role", "")).startswith("analysis-script-")
+        ),
+        key=lambda record: str(record["role"]),
+    )
+    if [record.get("role") for record in analysis_scripts] != [
+        "analysis-script-000",
+        "analysis-script-001",
+    ]:
+        raise ValueError("Frontier pre-submit manifest has an unauthorized analyzer set")
+    snapshot_analysis_dir = manifest_path.parent / "snapshot" / "analysis"
+    artifact_dir_fd = open_directory_below(
+        artifact_dir, root=authorized_pic_root / "runs"
+    )
+    analysis_dir_fd = open_directory_below(
+        snapshot_analysis_dir, root=manifest_path.parent / "snapshot"
+    )
+    source_fds = []
+    pinned_evidence = {}
+    try:
+        require_same_directory(
+            artifact_dir, artifact_dir_fd, root=authorized_pic_root / "runs"
+        )
+        require_same_directory(
+            snapshot_analysis_dir,
+            analysis_dir_fd,
+            root=manifest_path.parent / "snapshot",
+        )
+        source_paths = []
+        for record in analysis_scripts:
+            source_path = require_canonical_path_below(
+                Path(str(record["path"])), snapshot_analysis_dir
+            )
+            if source_path.parent != snapshot_analysis_dir:
+                raise ValueError("Frontier offline analysis snapshot layout is unauthorized")
+            descriptor, data = _open_pinned_read_only_regular_file_at(
+                analysis_dir_fd,
+                source_path.name,
+                label="Frontier offline analysis snapshot",
+            )
+            source_fds.append(descriptor)
+            if sha256_bytes(data) != record["sha256"]:
+                raise ValueError("Frontier offline analysis snapshot checksum mismatch")
+            source_paths.append(source_path)
+        if source_paths[1].name != "frontier_f1_structured_artifacts.py":
+            raise ValueError("Frontier offline analysis helper is unauthorized")
+
+        evidence = {}
+        for label, relative in {
+            "artifact_inventory": "artifact_inventory.json",
+            "analysis_result": "analysis/analysis.json",
+            "offline_analysis_receipt": "analysis/offline_analysis_receipt.json",
+        }.items():
+            raw_path = str(resources[f"{label}_path"])
+            if raw_path != str(artifact_dir / relative):
+                raise ValueError(f"Frontier qualification {label} path is not canonical")
+            pinned = _open_pinned_artifact_bytes(
+                artifact_dir_fd, artifact_dir, raw_path, label=f"Frontier {label}"
+            )
+            data = pinned["data"]
+            if sha256_bytes(data) != resources[f"{label}_sha256"]:
+                _close_pinned_artifact(pinned)
+                raise ValueError(f"Frontier qualification {label} checksum mismatch")
+            pinned_evidence[label] = pinned
+            evidence[label] = data
+        inventory = read_json_bytes(
+            evidence["artifact_inventory"], label="Frontier structured artifact inventory"
+        )
+        if (
+            set(inventory) != {"schema_version", "files"}
+            or type(inventory.get("schema_version")) is not int
+            or inventory["schema_version"] != 1
+            or not isinstance(inventory.get("files"), list)
+        ):
+            raise ValueError("Frontier structured artifact inventory is malformed")
+        result = read_json_bytes(
+            evidence["analysis_result"], label="Frontier structured analysis result"
+        )
+        if result.get("schema_version") != 1 or result.get("status") != "pass":
+            raise ValueError("Frontier structured analysis result is not a passing result")
+        receipt = read_json_bytes(
+            evidence["offline_analysis_receipt"], label="Frontier offline analysis receipt"
+        )
+        expected_receipt = {
+            "schema_version": 1,
+            "runner": {
+                "python": TRUSTED_PYTHON,
+                "flags": ["-I", "-B"],
+            },
+            "analyzer": {
+                "path": source_paths[0].name,
+                "sha256": analysis_scripts[0]["sha256"],
+            },
+            "support_modules": [
+                {
+                    "path": source_paths[index].name,
+                    "sha256": record["sha256"],
+                }
+                for index, record in enumerate(analysis_scripts[1:], start=1)
+            ],
+            "artifact_inventory": {
+                "path": "artifact_inventory.json",
+                "sha256": resources["artifact_inventory_sha256"],
+            },
+            "analysis_result": {
+                "path": "analysis/analysis.json",
+                "sha256": resources["analysis_result_sha256"],
+            },
+        }
+        if receipt != expected_receipt:
+            raise ValueError("Frontier offline analysis receipt differs from bound evidence")
+
+        ledger_jsonl = authorized_pic_root / "ledger" / "node_hours.jsonl"
+        receipts_jsonl = authorized_pic_root / "ledger" / "mirror_receipts.jsonl"
+        mirror_jsonl = authorized_project_home_root / "ledger" / "node_hours.jsonl"
+        require_ledger_paths(
+            ledger_jsonl,
+            authorized_pic_root / "ledger" / "node_hours.csv",
+            receipts_jsonl,
+            mirror_jsonl,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
+        with ledger_lock(ledger_jsonl, mirror_jsonl):
+            records = validate_mirrored_state(
+                ledger_jsonl,
+                receipts_jsonl,
+                mirror_jsonl,
+                ledger_root=authorized_pic_root / "ledger",
+                receipts_root=authorized_pic_root / "ledger",
+                mirror_root=authorized_project_home_root / "ledger",
+            )
+            require_explicit_genesis(records)
+        reservation = latest_reservations(records).get(str(resources["reservation_id"]))
+        if reservation is None:
+            raise ValueError("Frontier qualification reservation is absent from the ledger")
+        expected = {
+            "event_type": "reconciliation",
+            "reconciled": True,
+            "state": "COMPLETED",
+            "submission_scope": "registered_science",
+            "registered_science_authorization_id": resources[
+                "registered_science_authorization_id"
+            ],
+            "submission_id": resources["submission_id"],
+            "reservation_id": resources["reservation_id"],
+            "job_id": resources["job_id"],
+            "control_plane_version": control_plane_version,
+            "clean_candidate_manifest_sha256": candidate_sha256,
+            "manifest_path": str(manifest_path),
+            "manifest_sha256": manifest_sha256,
+            "artifact_dir": str(artifact_dir),
+            "consumed_node_hours": resources["node_hours"],
+        }
+        if any(reservation.get(key) != value for key, value in expected.items()):
+            raise ValueError("Frontier qualification does not match its reconciled ledger record")
+        _verify_frontier_offline_analysis(
+            source_fds[0],
+            helper_fd=source_fds[1],
+            artifact_dir_fd=artifact_dir_fd,
+            artifact_dir=artifact_dir,
+            artifact_inventory_sha256=str(resources["artifact_inventory_sha256"]),
+            result_sha256=str(resources["analysis_result_sha256"]),
+        )
+        require_same_directory(
+            artifact_dir, artifact_dir_fd, root=authorized_pic_root / "runs"
+        )
+        require_same_directory(
+            snapshot_analysis_dir,
+            analysis_dir_fd,
+            root=manifest_path.parent / "snapshot",
+        )
+        for record, source_path, descriptor in zip(
+            analysis_scripts, source_paths, source_fds
+        ):
+            _require_pinned_regular_file_identity_at(
+                analysis_dir_fd,
+                source_path.name,
+                descriptor,
+                label="Frontier offline analysis snapshot",
+            )
+            if sha256_bytes(
+                _descriptor_bytes(
+                    descriptor, label="Frontier offline analysis snapshot"
+                )
+            ) != record["sha256"]:
+                raise ValueError("Frontier offline analysis snapshot changed during recomputation")
+        for label, pinned in pinned_evidence.items():
+            _require_pinned_artifact_identity(
+                pinned,
+                expected_sha256=str(resources[f"{label}_sha256"]),
+                label=f"Frontier {label}",
+            )
+    finally:
+        for pinned in reversed(list(pinned_evidence.values())):
+            _close_pinned_artifact(pinned)
+        for descriptor in reversed(source_fds):
+            os.close(descriptor)
+        os.close(analysis_dir_fd)
+        os.close(artifact_dir_fd)
 
 
 def _require_frontier_ledger_binding(
@@ -487,6 +896,13 @@ def _require_frontier_ledger_binding(
         "pre_submit_manifest_sha256",
         "run_artifact_dir",
         "node_hours",
+        "registered_science_authorization_id",
+        "artifact_inventory_path",
+        "artifact_inventory_sha256",
+        "analysis_result_path",
+        "analysis_result_sha256",
+        "offline_analysis_receipt_path",
+        "offline_analysis_receipt_sha256",
     }
     if resources["platform"] != "Frontier":
         unexpected = frontier_fields & set(resources)
@@ -508,53 +924,36 @@ def _require_frontier_ledger_binding(
     manifest_sha256 = sha256_bytes(manifest_bytes)
     if manifest_sha256 != resources["pre_submit_manifest_sha256"]:
         raise ValueError("Frontier pre-submit manifest checksum mismatch")
+    pre_submit_manifest = read_json_bytes(
+        manifest_bytes, label="Frontier pre-submit manifest"
+    )
+    if (
+        pre_submit_manifest.get("registered_science_authorization_id")
+        != resources["registered_science_authorization_id"]
+    ):
+        raise ValueError(
+            "Frontier qualification authorization ID differs from pre-submit manifest"
+        )
     artifact_dir = require_canonical_path_below(
         Path(str(resources["run_artifact_dir"])),
         authorized_pic_root / "runs",
     )
-    if Path(str(resources["artifact_root"])) != artifact_dir:
-        raise ValueError("Frontier qualification artifact root differs from run artifact directory")
-    ledger_jsonl = authorized_pic_root / "ledger" / "node_hours.jsonl"
-    receipts_jsonl = authorized_pic_root / "ledger" / "mirror_receipts.jsonl"
-    mirror_jsonl = authorized_project_home_root / "ledger" / "node_hours.jsonl"
-    require_ledger_paths(
-        ledger_jsonl,
-        authorized_pic_root / "ledger" / "node_hours.csv",
-        receipts_jsonl,
-        mirror_jsonl,
+    if (
+        pre_submit_manifest.get("artifact_dir") != str(artifact_dir)
+        or pre_submit_manifest.get("submission_id") != resources["submission_id"]
+    ):
+        raise ValueError("Frontier qualification run directory differs from pre-submit binding")
+    _require_frontier_completed_evidence_binding(
+        resources,
+        pre_submit_manifest=pre_submit_manifest,
+        manifest_path=manifest_path,
+        manifest_sha256=manifest_sha256,
+        artifact_dir=artifact_dir,
+        candidate_sha256=candidate_sha256,
+        control_plane_version=control_plane_version,
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
-    with ledger_lock(ledger_jsonl, mirror_jsonl):
-        records = validate_mirrored_state(
-            ledger_jsonl,
-            receipts_jsonl,
-            mirror_jsonl,
-            ledger_root=authorized_pic_root / "ledger",
-            receipts_root=authorized_pic_root / "ledger",
-            mirror_root=authorized_project_home_root / "ledger",
-        )
-        require_explicit_genesis(records)
-    reservation = latest_reservations(records).get(str(resources["reservation_id"]))
-    if reservation is None:
-        raise ValueError("Frontier qualification reservation is absent from the ledger")
-    expected = {
-        "event_type": "reconciliation",
-        "reconciled": True,
-        "state": "COMPLETED",
-        "submission_scope": "registered_science",
-        "submission_id": resources["submission_id"],
-        "reservation_id": resources["reservation_id"],
-        "job_id": resources["job_id"],
-        "control_plane_version": control_plane_version,
-        "clean_candidate_manifest_sha256": candidate_sha256,
-        "manifest_path": str(manifest_path),
-        "manifest_sha256": manifest_sha256,
-        "artifact_dir": str(artifact_dir),
-        "consumed_node_hours": resources["node_hours"],
-    }
-    if any(reservation.get(key) != value for key, value in expected.items()):
-        raise ValueError("Frontier qualification does not match its reconciled ledger record")
 
 
 def validate_qualification_manifest(
@@ -712,6 +1111,9 @@ def validate_qualification_manifest(
         require_frontier_values=resources["platform"] == "Frontier",
     )
     candidate = _load_object_bytes(candidate_bytes, label="clean-candidate manifest")
+    expected_authorization = _live_candidate_authorization(
+        manifest["git"]["clean_candidate_manifest"]["sha256"]
+    )
     candidate_submodules = validate_clean_candidate_bundle(
         candidate,
         source_archive=source_archive,
@@ -722,15 +1124,17 @@ def validate_qualification_manifest(
         build_profile_receipt=build_profile_receipt,
         build_provenance=build_provenance,
         executable_sha256=executable_sha256,
-        expected_control_plane_version=manifest["authorization"]["control_plane_version"],
+        expected_control_plane_version=expected_authorization[
+            "build_profile_control_plane_version"
+        ],
     )
     _require_portable_candidate_layout(candidate)
     authorization = manifest["authorization"]
-    expected_authorization = _live_candidate_authorization(
-        manifest["git"]["clean_candidate_manifest"]["sha256"]
-    )
     if {
         "control_plane_version": authorization["control_plane_version"],
+        "build_profile_control_plane_version": authorization[
+            "build_profile_control_plane_version"
+        ],
         "clean_candidate_manifest_path": authorization["clean_candidate_manifest_path"],
         "clean_candidate_manifest_sha256": authorization["clean_candidate_manifest_sha256"],
         "active_policy_sha256": authorization["active_policy"]["sha256"],

@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "executor": "trusted_trampoline_athena_argv_v1",
+  "pre_actions": [],
+  "actions": [
+    {
+      "action_id": "f1-coupling-coeff0",
+      "kind": "athena",
+      "resources": {
+        "nodes": 1,
+        "tasks": 1,
+        "cpus_per_task": 7,
+        "gpus_per_task": 1,
+        "gpu_bind": "closest"
+      },
+      "arguments": [
+        {"literal": "-i"},
+        {"snapshot_role": "input-deck"},
+        {"literal": "-d"},
+        {"artifact_directory": "output/coeff0"},
+        {"literal": "job/basename=f1_gpu_paper_coupling_coeff0"},
+        {"literal": "time/nlim=2"},
+        {"literal": "particles/couple_j_to_efield_coeff=0.0"}
+      ],
+      "stdout_artifact": "athena_coeff0_stdout.txt",
+      "stderr_artifact": "athena_coeff0_stderr.txt"
+    },
+    {
+      "action_id": "f1-coupling-coeff7",
+      "kind": "athena",
+      "resources": {
+        "nodes": 1,
+        "tasks": 1,
+        "cpus_per_task": 7,
+        "gpus_per_task": 1,
+        "gpu_bind": "closest"
+      },
+      "arguments": [
+        {"literal": "-i"},
+        {"snapshot_role": "input-deck"},
+        {"literal": "-d"},
+        {"artifact_directory": "output/coeff7"},
+        {"literal": "job/basename=f1_gpu_paper_coupling_coeff7"},
+        {"literal": "time/nlim=2"},
+        {"literal": "particles/couple_j_to_efield_coeff=7.0"}
+      ],
+      "stdout_artifact": "athena_coeff7_stdout.txt",
+      "stderr_artifact": "athena_coeff7_stderr.txt"
+    }
+  ],
+  "post_actions": [
+    {
+      "action_id": "require-coupling-coeff0-stdout",
+      "kind": "artifact_nonempty",
+      "artifact": "athena_coeff0_stdout.txt"
+    },
+    {
+      "action_id": "sha-coupling-coeff0-stdout",
+      "kind": "artifact_sha256",
+      "artifact": "athena_coeff0_stdout.txt",
+      "output_artifact": "athena_coeff0_stdout.sha256"
+    },
+    {
+      "action_id": "require-coupling-coeff7-stdout",
+      "kind": "artifact_nonempty",
+      "artifact": "athena_coeff7_stdout.txt"
+    },
+    {
+      "action_id": "sha-coupling-coeff7-stdout",
+      "kind": "artifact_sha256",
+      "artifact": "athena_coeff7_stdout.txt",
+      "output_artifact": "athena_coeff7_stdout.sha256"
+    }
+  ]
+}

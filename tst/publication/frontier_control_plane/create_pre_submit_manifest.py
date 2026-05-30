@@ -185,12 +185,17 @@ def create_manifest(
         if control_plane_inventory != inventory["files"]:
             raise ValueError("Installed control-plane inventory changed during snapshot")
 
+        analysis_destinations = set()
         for index, raw_path in enumerate(config.get("analysis_scripts", [])):
             source = Path(str(raw_path))
+            snapshot_name = f"{index:03d}-{source.name}" if index == 0 else source.name
+            if snapshot_name in analysis_destinations:
+                raise ValueError("Analysis script snapshot basenames must be distinct")
+            analysis_destinations.add(snapshot_name)
             snapshot_files.append(
                 snapshot_file(
                     source,
-                    snapshot_dir / "analysis" / f"{index:03d}-{source.name}",
+                    snapshot_dir / "analysis" / snapshot_name,
                     role=f"analysis-script-{index:03d}",
                     destination_root=snapshot_dir,
                 )
@@ -237,6 +242,9 @@ def create_manifest(
         if clean_candidate_manifest is not None:
             manifest["clean_candidate_manifest_path"] = str(clean_candidate_manifest)
             manifest["clean_candidate_manifest_sha256"] = sha256(clean_candidate_manifest)
+            manifest["registered_science_authorization_id"] = _safe_filename_segment(
+                config, "registered_science_authorization_id"
+            )
         write_json_exclusive(temporary / "pre_submit_manifest.json", manifest)
         make_tree_read_only(snapshot_dir, executable_names={"athena"})
         (temporary / "pre_submit_manifest.json").chmod(0o444)

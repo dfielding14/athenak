@@ -40,6 +40,7 @@ from control_plane_common import require_ledger_paths, require_storage_policy_un
 from control_plane_common import scheduler_account_matches_authorized
 from control_plane_common import utc_datetime, validate_clean_candidate_bundle
 from control_plane_common import verify_installed_control_plane
+from control_plane_common import verify_historical_installed_control_plane
 from control_plane_common import launch_contract_sha256, validate_launch_contract
 from control_plane_common import trusted_slurm_environment
 from control_plane_common import verify_snapshot_files
@@ -366,12 +367,15 @@ def _verify_manifest(
             raise ValueError("Registered science is missing the clean-candidate path")
         if not manifest.get("clean_candidate_manifest_sha256"):
             raise ValueError("Registered science is missing the clean-candidate digest")
+        if not manifest.get("registered_science_authorization_id"):
+            raise ValueError("Registered science is missing its authorization ID")
     else:
         if clean_records:
             raise ValueError("Admission smoke must not carry a clean-candidate snapshot")
         if (
             "clean_candidate_manifest_path" in manifest
             or "clean_candidate_manifest_sha256" in manifest
+            or "registered_science_authorization_id" in manifest
         ):
             raise ValueError("Admission smoke must not claim a clean-candidate freeze")
     return manifest
@@ -493,6 +497,7 @@ def _verify_clean_candidate(
     policy: dict[str, object],
     *,
     authorized_pic_root: Path,
+    authorized_project_home_root: Path,
 ) -> str:
     freeze_policy = _mapping(policy, "science_submission_freeze")
     if freeze_policy.get("status") != AUTHORIZED_CLEAN_CANDIDATE_FREEZE:
@@ -631,10 +636,23 @@ def _verify_clean_candidate(
         build_profile_receipt=receipt_bytes,
         build_provenance=build_provenance,
         executable_sha256=executable_sha256,
-        expected_control_plane_version=str(
-            _mapping(policy, "olcf_side_storage")["installed_control_plane_version"]
-        ),
     )
+    receipt = read_json_bytes(
+        receipt_bytes, label="clean-candidate build-profile receipt"
+    )
+    receipt_control_plane_version = _text(receipt, "control_plane_version")
+    if receipt_control_plane_version != freeze_policy.get(
+        "build_profile_control_plane_version"
+    ):
+        raise ValueError(
+            "Clean-candidate build-profile receipt belongs to an unauthorized "
+            "control-plane version"
+        )
+    for root in [authorized_pic_root, authorized_project_home_root]:
+        verify_historical_installed_control_plane(
+            root / "control_plane" / receipt_control_plane_version,
+            authorized_pic_root=root,
+        )
     git_commit = _text(source, "git_commit")
     if manifest.get("git_commit") != git_commit:
         raise ValueError("Science manifest Git commit differs from clean candidate")
@@ -650,17 +668,91 @@ def _verify_clean_candidate(
     return candidate_sha256
 
 
+def _registered_science_authorization(
+    manifest: dict[str, object],
+    policy: dict[str, object],
+    directives: dict[str, str],
+    *,
+    candidate_sha256: str,
+) -> tuple[str, int]:
+    identifier = str(manifest["registered_science_authorization_id"])
+    records = policy.get("registered_science_slices")
+    if not isinstance(records, list):
+        raise ValueError("Storage policy does not carry registered-science slices")
+    matches = [
+        record for record in records
+        if isinstance(record, dict) and record.get("authorization_id") == identifier
+    ]
+    if len(matches) != 1:
+        raise ValueError("Registered science authorization ID is not active")
+    authorization = matches[0]
+    expected_fields = {
+        "campaign": manifest.get("campaign"),
+        "test_id": manifest.get("test_id"),
+        "evidence_class": manifest.get("evidence_class"),
+        "physical_mode": manifest.get("physical_mode"),
+        "selected_qos": manifest.get("selected_qos"),
+        "registered_short_nonproduction": manifest.get("registered_short_nonproduction"),
+        "clean_candidate_manifest_sha256": candidate_sha256,
+    }
+    for key, expected in expected_fields.items():
+        if authorization.get(key) != expected:
+            raise ValueError(f"Registered science authorization {key} differs")
+    if authorization.get("runtime_profile") != "frontier_minimum_supported":
+        raise ValueError("Registered science runtime profile is not authorized")
+    if int(directives["nodes"]) > int(authorization["maximum_nodes"]):
+        raise ValueError("Registered science exceeds its authorized node ceiling")
+    if _walltime_seconds(directives["time"]) > int(
+        authorization["maximum_walltime_seconds"]
+    ):
+        raise ValueError("Registered science exceeds its authorized walltime ceiling")
+    role_to_digest = {
+        "job-script": "job_script_sha256",
+        "input-deck": "input_deck_sha256",
+        "environment-profile": "environment_profile_sha256",
+        "executable": "executable_sha256",
+    }
+    for role, digest_key in role_to_digest.items():
+        if record_for_role(manifest, role).get("sha256") != authorization.get(digest_key):
+            raise ValueError(f"Registered-science {role} is not policy authorized")
+    analysis_records = sorted(
+        (
+            record for record in manifest["snapshot_files"]
+            if isinstance(record, dict)
+            and str(record.get("role", "")).startswith("analysis-script-")
+        ),
+        key=lambda record: str(record["role"]),
+    )
+    if [record.get("sha256") for record in analysis_records] != authorization.get(
+        "analysis_script_sha256"
+    ):
+        raise ValueError("Registered-science analysis scripts are not policy authorized")
+    if launch_contract_sha256(manifest.get("launch_contract")) != authorization.get(
+        "launch_contract_sha256"
+    ):
+        raise ValueError("Registered-science launch contract is not policy authorized")
+    return identifier, int(authorization["maximum_attempts"])
+
+
 def _check_submission_scope(
     manifest: dict[str, object],
     policy: dict[str, object],
     directives: dict[str, str],
     *,
     authorized_pic_root: Path,
-) -> str:
+    authorized_project_home_root: Path,
+) -> tuple[str, str, int]:
     if manifest.get("submission_scope") == REGISTERED_SCIENCE_SCOPE:
-        return _verify_clean_candidate(
-            manifest, policy, authorized_pic_root=authorized_pic_root
+        candidate_sha256 = _verify_clean_candidate(
+            manifest,
+            policy,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
         )
+        identifier, maximum_attempts = _registered_science_authorization(
+            manifest, policy, directives, candidate_sha256=candidate_sha256
+        )
+        return candidate_sha256, identifier, maximum_attempts
     for key, expected in ADMISSION_SMOKE_FIELDS.items():
         if manifest.get(key) != expected:
             raise ValueError(f"Admission-smoke exemption requires {key}={expected!r}")
@@ -706,7 +798,7 @@ def _check_submission_scope(
         "launch_contract_sha256"
     ):
         raise ValueError("Admission-smoke launch contract is not policy authorized")
-    return ""
+    return "", "", 0
 
 
 def _check_timeout_margin(
@@ -851,8 +943,16 @@ def reserve(
         directives = _directives(
             Path(str(record_for_role(manifest, "job-script")["path"]))
         )
-        clean_candidate_manifest_sha256 = _check_submission_scope(
-            manifest, policy, directives, authorized_pic_root=authorized_pic_root
+        (
+            clean_candidate_manifest_sha256,
+            registered_science_authorization_id,
+            registered_science_maximum_attempts,
+        ) = _check_submission_scope(
+            manifest,
+            policy,
+            directives,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
         )
         if directives["account"] != authorized_account:
             raise ValueError(f"Frontier PIC submissions require account={authorized_account}")
@@ -880,6 +980,15 @@ def reserve(
         _check_launch_resources(manifest, directives)
 
         records = _records_with_matching_mirror(ledger_jsonl, receipts_jsonl, mirror_jsonl)
+        if registered_science_authorization_id:
+            prior_attempts = sum(
+                record.get("event_type") == "reservation"
+                and record.get("registered_science_authorization_id")
+                == registered_science_authorization_id
+                for record in records
+            )
+            if prior_attempts >= registered_science_maximum_attempts:
+                raise ValueError("Registered-science authorization attempt ceiling is exhausted")
         totals = accounting(records)
         if totals["currently_reserved_node_hours"]:
             raise ValueError("An unreconciled PIC reservation already exists")
@@ -914,6 +1023,7 @@ def reserve(
             "test_id": manifest["test_id"],
             "manifest_path": str(manifest_path),
             "submission_scope": manifest["submission_scope"],
+            "registered_science_authorization_id": registered_science_authorization_id,
             "clean_candidate_manifest_sha256": clean_candidate_manifest_sha256,
             "partition": directives["partition"],
             "qos": directives["qos"],
