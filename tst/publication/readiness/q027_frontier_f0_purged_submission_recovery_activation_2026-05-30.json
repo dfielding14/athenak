@@ -1,0 +1,156 @@
+{
+  "record_type": "q027_frontier_f0_purged_submission_recovery_activation",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-002",
+    "Q-013",
+    "Q-025",
+    "Q-027",
+    "Q-038",
+    "Q-042"
+  ],
+  "qualification_effect": "purged_preexecution_f0_submission_reconciled_zero_successor_control_plane_activation_pass_fresh_f0_retry_pending",
+  "scope": "Exceptional fail-closed recovery chronology for the first structured clean-candidate Frontier F0 parser-contract submission through predecessor 6cbbbbd6. Slurm accepted held job 4745523, but the wrapper rejected the scheduler account spelling before releasing the hold and cancelled the job. Scheduler age-out later purged scontrol and squeue state. Reviewed successor f2ad817a accepts only the narrow AST207/ast207 scheduler spelling equivalence, verifies closed historical predecessor inventories, requires an immutable mirrored handoff with explicit operator attestation for the otherwise unprovable purged reservation/job binding, and appends synthetic attachment plus zero-consumption cancellation reconciliation through the installed immutable runner. This record does not attest F0 execution and does not authorize registered-science evidence.",
+  "predecessor": {
+    "control_plane_version": "6cbbbbd6f5da8fb2dcd0a1ab9b91fca51570f5a54502dcb1da59aea0eda0f3ab",
+    "record": "tst/publication/readiness/q027_frontier_f0_clean_candidate_admission_policy_activation_2026-05-30.json",
+    "policy_sha256": "1d525be15cf288621d3436d139860e5823c387f9613b11c092934aaf70382150",
+    "promotion_sha256": "2460cc0c5bf1c286d292ea7fc9008ff395fc9d8c01ad8dadcbe39a6e4a685286"
+  },
+  "failed_submission": {
+    "submission_id": "a22a41df-f875-4a99-9bb0-bd479b2d54ad",
+    "reservation_id": "7d944553-81ec-4aba-b3e8-f8875d492c43",
+    "job_id": "4745523",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f0_hipmpi_smoke/a22a41df-f875-4a99-9bb0-bd479b2d54ad/pre_submit_manifest.json",
+    "manifest_sha256": "e515a74f7ddfeea461c7f489e26669c4ff2086bd7ec480f76b443e6859acde47",
+    "pending_marker_sha256": "91d6710333770c9aa2f161093f06e209348bab58c3c302af28b9c9029d86600f",
+    "scheduler_snapshot": {
+      "job_name": "run_installed_control_plane_job.sh",
+      "state": "CANCELLED by 18664",
+      "allocated_nodes": 0,
+      "comment": "",
+      "account": "ast207",
+      "submit": "2026-05-30T15:47:31",
+      "start": "None",
+      "end": "2026-05-30T15:47:31",
+      "elapsed_raw": 0,
+      "exit_code": "0:0",
+      "scontrol": "purged_exact_invalid_job_id",
+      "squeue": "purged_exact_invalid_job_id"
+    },
+    "disposition": "held_job_cancelled_before_execution_then_purged_pending_marker_retained_until_reviewed_terminal_recovery"
+  },
+  "repair_history": [
+    {
+      "operational_source_commit": "421dc98b6cf98b87baad10cfd4a97d44da647c8e",
+      "control_plane_version": "40fdfe22cb2a1f48af4477c85c67b643258e289a413a29b3f081774a0557764b",
+      "inventory_sha256": "8b7522651d0c90f311578c8371759da869582198294afeda7d1cd294d794aabc",
+      "paired_install_status": "pass_identical_immutable_install",
+      "activation_status": "expected_fail_closed_before_handoff_publication",
+      "diagnostic": "The first repair verified the historical predecessor through its new current-generation inventory contract and rejected the predecessor inventory before any recovery handoff or ledger mutation."
+    },
+    {
+      "operational_source_commit": "3df7deeedf3aad1e5c5843c357fda2a46545c0be",
+      "control_plane_version": "f2ad817ae63a2a4c28d60e6c08e781aaaf59a3b67fac7dc4150ea0d440fe64cd",
+      "inventory_sha256": "6346f28c620d93c058b8c75004ed35d53e8157027ae5bd29a1b4ae1fe206d606",
+      "paired_install_status": "pass_identical_immutable_install",
+      "activation_status": "pass_historical_closed_inventory_verifier_and_terminal_recovery"
+    }
+  ],
+  "active_successor": {
+    "control_plane_version": "f2ad817ae63a2a4c28d60e6c08e781aaaf59a3b67fac7dc4150ea0d440fe64cd",
+    "operational_source_commit": "3df7deeedf3aad1e5c5843c357fda2a46545c0be",
+    "orion_install": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/f2ad817ae63a2a4c28d60e6c08e781aaaf59a3b67fac7dc4150ea0d440fe64cd",
+    "project_home_install": "/ccs/proj/ast207/proj-shared/PIC/control_plane/f2ad817ae63a2a4c28d60e6c08e781aaaf59a3b67fac7dc4150ea0d440fe64cd",
+    "inventory_sha256": "6346f28c620d93c058b8c75004ed35d53e8157027ae5bd29a1b4ae1fe206d606"
+  },
+  "local_validation": {
+    "control_plane_discovery_tests": {
+      "status": "pass",
+      "tests_run": 250
+    },
+    "publication_pic_discovery_tests": {
+      "status": "pass",
+      "tests_run": 76
+    },
+    "publication_frontier_discovery_tests": {
+      "status": "pass",
+      "tests_run": 5
+    },
+    "historical_predecessor_inventory_verifier": "pass_read_only_orion_and_project_home_18_file_closed_inventories",
+    "python_compile": "pass",
+    "shell_syntax": "pass",
+    "git_diff_check": "pass"
+  },
+  "independent_review": {
+    "status": "pass",
+    "reviewed_commit": "3df7deeedf3aad1e5c5843c357fda2a46545c0be",
+    "reviewed_control_plane_version": "f2ad817ae63a2a4c28d60e6c08e781aaaf59a3b67fac7dc4150ea0d440fe64cd",
+    "independent_reviewers": 3,
+    "review_scope": "purged scheduler evidence strictness, explicit attested reservation-job binding boundary, historical immutable predecessor inventory validation, cross-generation handoff authority, restartable ledger append ordering, schema-1 predecessor-marker compatibility and schema-2 exact-generation marker binding"
+  },
+  "terminal_recovery_handoff": {
+    "status": "pass_immutable_mirrored_handoff",
+    "handoff_id": "35181896-6465-4d01-b80f-69841dcf947c",
+    "orion_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/recovery_handoffs/35181896-6465-4d01-b80f-69841dcf947c.json",
+    "project_home_path": "/ccs/proj/ast207/proj-shared/PIC/policy/recovery_handoffs/35181896-6465-4d01-b80f-69841dcf947c.json",
+    "sha256": "063925344acbc1c0370c0af5e65321c3f6247b343d165bee490f3f52e5d7ed02",
+    "mode": "0400",
+    "reservation_job_binding": "reviewed_operator_attestation_for_unprovable_purged_reservation_job_binding"
+  },
+  "paired_install_transition": {
+    "status": "pass_identical_immutable_install_and_post_recovery_activation",
+    "control_plane_version": "f2ad817ae63a2a4c28d60e6c08e781aaaf59a3b67fac7dc4150ea0d440fe64cd",
+    "inventory_sha256": "6346f28c620d93c058b8c75004ed35d53e8157027ae5bd29a1b4ae1fe206d606",
+    "genesis_event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
+    "genesis_mirror_ack_sha256": "a3af8af8c3b579ee323850902aad7aab58abde98dff98618ccffd15958dbb296",
+    "orion_ledger_records": 25,
+    "orion_receipt_records": 25,
+    "project_home_ledger_records": 25,
+    "active_reservations": 0
+  },
+  "terminal_reconciliation": {
+    "status": "pass_cancelled_zero_execution",
+    "attached_sequence_number": 23,
+    "attached_event_sha256": "f518c3d84b9dc80b9e8022cbdddc1b3a6c81ce3b79a8896e6e103cd0b4c1d9c8",
+    "reconciled_sequence_number": 24,
+    "reconciled_event_sha256": "a13311b39a6385ff3cbd9d12d972c5f0a5f19f5019af94c2e0ed9aebe00dec64",
+    "terminal_recovery_mode": "purged_scontrol_cancelled_zero_execution",
+    "consumed_node_hours": 0.0,
+    "cumulative_consumed_node_hours": 0.07444444444444442,
+    "orion_ledger_sha256": "cd56aa910703cc8d5f4100e91212e7f13d2cdde154f0607b896de182d18f346f",
+    "project_home_ledger_sha256": "cd56aa910703cc8d5f4100e91212e7f13d2cdde154f0607b896de182d18f346f",
+    "orion_receipts_sha256": "19624ad004132d4f800756deffaae67a69a0adecb49cb95abac4de4ae70ee1d5",
+    "orion_csv_sha256": "dd260492e10c7ce2825eb637daa7f2ae9a6b6a6acecef7debbc6c7193de7233a",
+    "pending_submission_marker": "absent"
+  },
+  "active_policy_transition": {
+    "status": "pass",
+    "validated_utc": "2026-05-30T20:29:41Z",
+    "control_plane_version": "f2ad817ae63a2a4c28d60e6c08e781aaaf59a3b67fac7dc4150ea0d440fe64cd",
+    "policy_sha256": "2f01e58fe21880deefc50d90cfc44ae4a70c4093bcd4adf44c32e00211baa898",
+    "promotion_sha256": "51c9d6a4979681e07e9b310f25381d6787f1545129508c5ad4ce56e88717a17c",
+    "idempotent_post_promotion_validation": "pass",
+    "frontier_admission_smoke_status": "authorized_f0_parser_contract_only",
+    "orion_ledger_records": 25,
+    "orion_receipt_records": 25,
+    "project_home_ledger_records": 25,
+    "cumulative_consumed_node_hours": 0.07444444444444442,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent"
+  },
+  "inherited_clean_candidate_freeze": {
+    "status": "authorized",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/clean_candidate_manifest.json",
+    "manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41",
+    "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8"
+  },
+  "open_boundaries": [
+    "the recovered first structured F0 submission did not execute; a fresh structured F0 parser-contract admission smoke submission and reconciliation remain pending",
+    "registered-science submissions remain paused pending applicable prerequisites",
+    "matched Frontier environment-profile A/B evidence remains open",
+    "external reviewer disposition remains pending external review"
+  ],
+  "overall_disposition": "purged_preexecution_submission_reconciled_zero_successor_control_plane_active_fresh_structured_f0_retry_pending_registered_science_remains_paused"
+}

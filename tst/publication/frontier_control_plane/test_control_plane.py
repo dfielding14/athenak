@@ -3235,18 +3235,18 @@ PY
             "ast207|2026-05-30T15:47:31|None|2026-05-30T15:47:31|0:0\n"
         )
         queue_stderr = "slurm_load_jobs error: Invalid job id specified\n"
-        queue_returncode = 1
+        squeue_returncode = 1
 
         def scheduler_output(command: list[str], **kwargs: object) -> str:
             if command[0] == TRUSTED_SCONTROL:
                 raise subprocess.CalledProcessError(
-                    queue_returncode,
+                    1,
                     command,
                     stderr="slurm_load_jobs error: Invalid job id specified\n",
                 )
             if command[0] == TRUSTED_SQUEUE:
                 raise subprocess.CalledProcessError(
-                    1,
+                    squeue_returncode,
                     command,
                     stderr=queue_stderr,
                 )
@@ -3264,12 +3264,12 @@ PY
                 )
             )
             self.assertEqual(snapshot["job_id"], "12345")
-            queue_returncode = 2
+            squeue_returncode = 2
             with self.assertRaises(ValueError):
                 terminal_recovery_handoff.require_purged_cancelled_zero_execution_snapshot(
                     "12345"
                 )
-            queue_returncode = 1
+            squeue_returncode = 1
             queue_stderr = "slurm_load_jobs error: Access/permission denied\n"
             with self.assertRaises(ValueError):
                 terminal_recovery_handoff.require_purged_cancelled_zero_execution_snapshot(

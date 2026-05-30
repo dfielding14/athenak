@@ -127,6 +127,12 @@ qualify any scientific claim by itself.
   parser-contract admission smoke. Policy SHA `1d525be1`, promotion SHA
   `2460cc0c`, exact template, deck, profile, analyzer, executable and trusted
   launch-contract bindings pass; submission and reconciliation remain pending.
+- `q027_frontier_f0_purged_submission_recovery_activation_2026-05-30.json`:
+  successor chronology for held job `4745523`, which was cancelled before
+  execution and later purged from live Slurm queries. Immutable mirrored
+  handoff `06392534`, zero-consumption reconciliation, paired recovery
+  successor `f2ad817a` and policy promotion `51c9d6a4` pass; a fresh F0 retry
+  remains pending.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.

@@ -207,12 +207,15 @@ class PicReadinessRegistryTests(unittest.TestCase):
             storage["project_home_retention_role"],
             "operational_ledger_mirror_only",
         )
-        candidate = _load(
+        source_alias_candidate = _load(
             "q027_control_plane_source_alias_hardening_candidate_2026-05-30.json"
+        )
+        candidate = _load(
+            "q027_frontier_f0_purged_submission_recovery_activation_2026-05-30.json"
         )
         self.assertEqual(
             storage["staged_control_plane_candidate_version"],
-            candidate["staged_successor"]["control_plane_version"],
+            candidate["active_successor"]["control_plane_version"],
         )
         lifecycle = storage["installed_control_plane_lifecycle"]
         if lifecycle == "live_active_generation_successor_staged_not_installed":
@@ -264,13 +267,10 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 )
             science_freeze = policy["science_submission_freeze"]
             self.assertEqual(science_freeze["status"], "authorized")
-            clean_candidate = candidate["clean_candidate_freeze"]
-            clean_candidate_transition = candidate["clean_candidate_policy_transition"]
-            self.assertEqual(clean_candidate_transition["status"], "pass")
-            self.assertEqual(
-                clean_candidate_transition["control_plane_version"],
-                storage["installed_control_plane_version"],
-            )
+            clean_candidate = candidate["inherited_clean_candidate_freeze"]
+            clean_candidate_transition = source_alias_candidate[
+                "clean_candidate_policy_transition"
+            ]
             self.assertEqual(
                 clean_candidate_transition["policy_sha256"],
                 "e8909bf541d1c69d4d19c495ebfe983934291de37d6d1423ae4cbfca2e4bb155",
@@ -297,11 +297,11 @@ class PicReadinessRegistryTests(unittest.TestCase):
             )
             self.assertEqual(
                 admission_activation["control_plane_version"],
-                storage["installed_control_plane_version"],
+                candidate["predecessor"]["control_plane_version"],
             )
             self.assertEqual(
                 admission_activation["policy_sha256"],
-                _sha256(READINESS_DIR / "storage_policy.json"),
+                candidate["predecessor"]["policy_sha256"],
             )
             self.assertEqual(
                 admission_activation["science_submission_freeze"],
@@ -326,6 +326,28 @@ class PicReadinessRegistryTests(unittest.TestCase):
             )
             self.assertEqual(admission_ledger["active_reservations"], 0)
             self.assertEqual(admission_ledger["pending_submission_marker"], "absent")
+            recovery_transition = candidate["active_policy_transition"]
+            self.assertEqual(
+                recovery_transition["control_plane_version"],
+                storage["installed_control_plane_version"],
+            )
+            self.assertEqual(
+                recovery_transition["policy_sha256"],
+                _sha256(READINESS_DIR / "storage_policy.json"),
+            )
+            self.assertEqual(recovery_transition["orion_ledger_records"], 25)
+            self.assertEqual(
+                recovery_transition["orion_ledger_records"],
+                recovery_transition["project_home_ledger_records"],
+            )
+            self.assertEqual(
+                recovery_transition["orion_ledger_records"],
+                recovery_transition["orion_receipt_records"],
+            )
+            self.assertEqual(recovery_transition["active_reservations"], 0)
+            self.assertEqual(
+                recovery_transition["pending_submission_marker"], "absent"
+            )
         else:
             self.fail(f"Unknown installed-control-plane lifecycle: {lifecycle}")
         self.assertEqual(
