@@ -232,16 +232,67 @@ decision.
 | Evidence | CP-02 preimplementation MPI audit of local and reference `src/outputs/io_wrapper.*`, `src/mesh/build_tree.cpp`, and reference restart tests. |
 | Follow-up | Implement and independently audit CP-02 before starting native restart reads. |
 
+### D-037: Native Node Restart Uses The Public Manifest Only
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted |
+| Decision | Replace transient `.assembled` staging with validated direct reads from generation-qualified node payloads. Keep the public manifest path as the only supported node-restart entry point; reject payload-path restart. |
+| Reason | The public manifest is the transactional commit point. Payload paths are implementation artifacts, and normalizing them adds ambiguity without improving the supported workflow. |
+| Evidence | CP-03 restart-design audit of local `src/main.cpp`, `src/outputs/restart.cpp`, and the reference direct-reader pattern. |
+| Supersedes | D-026 and D-031 once CP-03 implementation passes its stop gate. |
+| Follow-up | Extract a structured manifest module, remove production `.assembled` paths, and test direct node-payload reads during CP-03. |
+
+### D-038: Explicit Empty Node Shards
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted |
+| Decision | Publish explicit valid empty node shards for binary, coarsened-binary, and spherical-slice output. Do not skip empty nodes. |
+| Reason | Explicit empty shards keep inventories auditable, preserve counter semantics, and avoid silent omissions. The local readers already have a natural header-only or zero-point representation. |
+| Evidence | CP-04 preimplementation audit of `src/outputs/binary.cpp`, `src/outputs/coarsened_binary.cpp`, `src/outputs/spherical_slice.cpp`, `vis/python/bin_convert.py`, and `vis/python/read_sphslice.py`. |
+| Follow-up | Add writer hardening, sibling-inventory validation, and scheduler-backed empty-node qualification during CP-04 and CP-06. |
+
+### D-039: Reject Detailed Per-Phase IO Statistics In This Branch
+
+| Field | Value |
+| --- | --- |
+| Status | Rejected |
+| Decision | Do not port the reference `ATHENAK_OUTPUT_IO_STATS` phase diagnostics. Preserve the existing opt-in `<time>/output_timing=true` event timing interface. |
+| Reason | The reference interface overlaps the existing slowest-rank timing records, uses a separate environment-variable control surface, and adds format-specific output noise. |
+| Evidence | CP-04 preimplementation audit of local `src/driver/driver.cpp` and the reference statistics paths. |
+| Supersedes | D-025. |
+| Follow-up | Treat detailed distributed-read phase statistics as a separate scaling-analysis feature if future evidence justifies them. |
+
+### D-040: Canonical Python Rank Reader Must Delegate
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted |
+| Decision | Add `read_rank_binary_as_athdf()` as a thin delegate to the canonical logical-location mapper. Add indexed single-meshblock reads only as keyword-only `meshblock_index_in_file=...`. Omit `athinput()`. |
+| Reason | The reference rank-reader scatter implementation misplaces later logical MeshBlocks at the root-grid origin. Its positional index overload also changes the meaning of existing calls. No target-tree consumer needs `athinput()`. |
+| Evidence | CP-05 Python API audit, including a rank-1 fixture probe and repository import sweep. |
+| Supersedes | Resolves D-017 and D-019. |
+| Follow-up | Implement the additive APIs, harden malformed-file handling, and add signature and placement regressions during CP-05. |
+
+### D-041: Validate Full Positioned MPI Byte Ranges
+
+| Field | Value |
+| --- | --- |
+| Status | Accepted and verified |
+| Decision | Before any non-empty positioned MPI read or write, validate the inclusive end offset `offset + total_bytes - 1` as well as the starting offset. Add a direct MPI wrapper harness for asymmetric zero-byte collective reads and writes, range overflow, multiplication overflow, and communicator-rank chunk-limit disagreement. |
+| Reason | The first CP-02 implementation checked each chunk start but could still pass a representable start plus an unrepresentable non-empty byte range into MPI. Existing application-level pytest coverage did not directly exercise that boundary. |
+| Evidence | CP-02 independent post-integration MPI audit of `src/outputs/io_wrapper.cpp` and `tst/test_suite/io/test_chunked_io_mpicpu.py`. |
+| Supersedes | Tightens D-032 and D-036. |
+| Follow-up | Preserve the corrected wrapper checkpoint and use it for CP-03 native node restart reads. |
+
 ## Pending Decision Queue
 
 Resolve these before merge readiness:
 
 | ID | Question | Required evidence | Owner checkpoint |
 | --- | --- | --- | --- |
-| D-017 | Can indexed single-meshblock reads be added without ambiguous legacy positional calls? | Signature design and compatibility tests | CP-05 |
-| D-019 | Does any real consumer need `athinput()` in canonical `bin_convert.py`? | Repository import sweep or identified external requirement | CP-05 |
-| D-025 | Should detailed per-phase stats be retained, and under which opt-in interface? | Interface proposal, tests, docs audit | CP-04 |
-| D-026 | Should users be allowed to restart from an individual node payload path? | Strict normalization design and negative tests | CP-03 |
+| None | Current evidence-backed scope decisions are resolved. | Re-open only if implementation evidence contradicts an accepted decision. | CP-08 |
 
 ## Decision Update Template
 

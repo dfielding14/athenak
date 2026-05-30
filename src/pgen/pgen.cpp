@@ -145,7 +145,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     }
 #if MPI_PARALLEL_ENABLED
     if (!single_file_per_rank) {
-      MPI_Bcast(&last_output_time, sizeof(Real), MPI_CHAR, 0, MPI_COMM_WORLD);
+      io_wrapper::BroadcastBytes(&last_output_time, sizeof(Real), 0,
+                                 MPI_COMM_WORLD);
     }
 #endif
     pz4c->last_output_time = last_output_time;
@@ -162,7 +163,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
       }
 #if MPI_PARALLEL_ENABLED
       if (!single_file_per_rank) {
-        MPI_Bcast(&pos[0], 3*sizeof(Real), MPI_CHAR, 0, MPI_COMM_WORLD);
+        io_wrapper::BroadcastBytes(&pos[0], 3*sizeof(Real), 0, MPI_COMM_WORLD);
       }
 #endif
       pt->SetPos(&pos[0]);
@@ -185,7 +186,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
 #if MPI_PARALLEL_ENABLED
     if (!single_file_per_rank) {
       // then broadcast the RNG information
-      MPI_Bcast(rng_data, sizeof(RNG_State), MPI_CHAR, 0, MPI_COMM_WORLD);
+      io_wrapper::BroadcastBytes(rng_data, sizeof(RNG_State), 0,
+                                 MPI_COMM_WORLD);
     }
 #endif
     std::memcpy(&(pturb->rstate), &(rng_data[0]), sizeof(RNG_State));
@@ -206,7 +208,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
 #if MPI_PARALLEL_ENABLED
   // then broadcast the datasize information
   if (!single_file_per_rank) {
-    MPI_Bcast(variabledata, variablesize, MPI_CHAR, 0, MPI_COMM_WORLD);
+    io_wrapper::BroadcastBytes(variabledata, variablesize, 0, MPI_COMM_WORLD);
   }
 #endif
   IOWrapperSizeT data_size;
@@ -221,7 +223,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
 #if MPI_PARALLEL_ENABLED
   // then broadcasts it
   if (!single_file_per_rank) {
-    MPI_Bcast(&headeroffset, sizeof(IOWrapperSizeT), MPI_CHAR, 0, MPI_COMM_WORLD);
+    io_wrapper::BroadcastBytes(&headeroffset, sizeof(IOWrapperSizeT), 0,
+                               MPI_COMM_WORLD);
   }
 #endif
 

@@ -344,14 +344,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
 #if MPI_PARALLEL_ENABLED
   // then broadcast the header data
   if (!single_file_per_rank) {
-    int mpi_err = MPI_Bcast(headerdata, headersize, MPI_CHAR, 0, MPI_COMM_WORLD);
-    if (mpi_err != MPI_SUCCESS) {
-      char error_string[1024];
-      int length_of_error_string;
-      MPI_Error_string(mpi_err, error_string, &length_of_error_string);
-      std::cout << "MPI_Bcast failed with error: " << error_string << std::endl;
-      exit(EXIT_FAILURE);
-    }
+    io_wrapper::BroadcastBytes(headerdata, headersize, 0, MPI_COMM_WORLD);
   }
 #endif
 
@@ -418,7 +411,7 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
 #if MPI_PARALLEL_ENABLED
   // then broadcast the ID list
   if (!single_file_per_rank) {
-    MPI_Bcast(idlist, listsize*nmb_total, MPI_CHAR, 0, MPI_COMM_WORLD);
+    io_wrapper::BroadcastBytes(idlist, listsize*nmb_total, 0, MPI_COMM_WORLD);
   }
 #endif
 

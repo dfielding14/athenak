@@ -354,12 +354,12 @@ Do not copy those files wholesale.
 
 ### Verification
 
-- [ ] Serial build passes.
-- [ ] MPI build passes.
-- [ ] Existing shared and per-rank IO tests pass.
-- [ ] Forced-small-chunk shared restart write/read passes.
+- [x] Serial build passes.
+- [x] MPI build passes.
+- [x] Existing shared and per-rank IO tests pass.
+- [x] Forced-small-chunk shared restart write/read passes.
 - [ ] Forced-small-chunk node restart write/read passes after CP-03.
-- [ ] `git diff --check` passes.
+- [x] `git diff --check` passes.
 
 ### Stop Gate
 

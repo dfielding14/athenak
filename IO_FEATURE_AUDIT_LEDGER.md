@@ -190,6 +190,80 @@ resolutions, and re-audit results required by `IO_FEATURE_BRANCH_GUIDE.md`.
 | Decision update | Added D-032 through D-036. |
 | Status | CP-02 implementation assigned with bounded file ownership. |
 
+### 2026-05-29: CP-02 Chunked MPI IO Implementation Verification
+
+| Field | Record |
+| --- | --- |
+| Implementation | Added overflow-safe chunked sequential, positioned, and collective MPI byte IO; checked `MPI_Offset` conversion; communicator-agreed collective schedules; dummy-buffer participation for zero-byte ranks; synchronized one-rank MPI-file truncation; and chunked `BroadcastBytes()`. Migrated restart metadata broadcasts without coupling `ParameterInput` to sharding mode. |
+| Build verification | Serial `/tmp/athenak-io-build` and MPI `/tmp/athenak-io-build-mpi` builds completed successfully. Existing Clang variable-length-array warnings in `src/mesh/mesh.cpp` remain unchanged. |
+| Serial verification | From `/tmp/athenak-io-build/src`, the four focused serial IO modules returned `37 passed`. |
+| MPI verification | From `/tmp/athenak-io-build-mpi/src`, the existing MPI IO modules plus `test_chunked_io_mpicpu.py` returned `17 passed`, including shared restart round trip, file truncation reuse, restart resume, and five malformed `ATHENAK_TEST_MAX_MPI_BYTES` values. |
+| Fixture integrity | From `tst/fixtures/io/origin_main_886dd2a1`, `shasum -a 256 -c SHA256SUMS` passed for all 27 frozen artifacts. |
+| Style checks | `git diff --check origin/main` passes. The bounded worker also reported targeted `cpplint` on owned C++ files and targeted `flake8` on the new pytest passing. |
+| Remaining gate | Independent post-integration MPI audit is still required before CP-02 closes and CP-03 source edits begin. |
+| Status | Implementation verified locally; awaiting independent audit. |
+
+### 2026-05-29: CP-02 Independent Audit Rejection And Correction
+
+| Field | Record |
+| --- | --- |
+| Independent blocker | Positioned MPI helpers validated chunk starting offsets but not the inclusive end of the full non-empty byte range. A representable start near `MPI_Offset::max()` could reach MPI even when the range end was not representable. |
+| Test-coverage finding | Application-level forced-chunk tests covered shared restart round trip, truncation reuse, migrated broadcasts, malformed override values, and trailing zero-byte collective writes. They did not directly cover zero-byte collective reads, positioned range rejection, multiplication overflow, or communicator-rank disagreement for `ATHENAK_TEST_MAX_MPI_BYTES`. |
+| Required correction | Add a shared positioned-range preflight before MPI file operations and a direct MPI wrapper harness for asymmetric zero-byte read/write participation, range overflow, multiplication overflow, and mismatched chunk limits. |
+| Decision update | Added D-041. |
+| Status | CP-02 stop gate rejected; correction assigned before CP-03 source edits. Superseded by the successful re-audit below. |
+
+### 2026-05-29: CP-02 Correction Re-Audit And Stop-Gate Closure
+
+| Field | Record |
+| --- | --- |
+| Implemented correction | Added `PreflightPositionedMpiRange()` to validate checked inclusive end offsets before every non-empty positioned MPI read or write. Added a direct MPI wrapper harness compiled against the active MPI build flags. |
+| Direct harness verification | `test_io_wrapper_harness_mpicpu.py` returned `5 passed`: asymmetric `7/2/0` byte collective writes and reads, positioned write-range rejection, positioned read-range rejection, `size * count` overflow rejection, and communicator-rank chunk-limit disagreement. |
+| Full verification | Corrected serial IO plus GPU-definition smoke returned `38 passed`; corrected MPI IO including the harness and forced chunks returned `22 passed`; all 27 frozen artifacts remained byte-valid; `git diff --check` remained clean. |
+| Independent re-audit | The original MPI auditor confirmed the P1 range bug and D-036 coverage gap are resolved, and found no regression in collective symmetry, zero-byte handling, synchronized truncation/open, broadcast chunking, or serial fallback routing. |
+| Deferred risks | Caller-side restart arithmetic hardening, serial `fseek`/`ftell` width handling, and forced-small-chunk native node restart remain follow-ups for later checkpoints. |
+| Status | CP-02 stop gate closed. |
+
+### 2026-05-29: CP-03 Native Restart Design Audit
+
+| Field | Record |
+| --- | --- |
+| Independent findings | Production node restart still writes a full rank-0 `<manifest>.assembled` file; manifest parsing is embedded in `src/main.cpp`; reference direct reads provide useful span-routing evidence but its binary manifest, eager communicator setup, ambient inference, and payload-path behavior conflict with the local transactional design. |
+| Accepted architecture | Extract a structured text-manifest module; validate once; retain the manifest as the public transactional restart entry point; open a canonical payload header; route MeshBlock reads directly through validated segments; coalesce source spans; use node-collective CP-02 reads with zero-byte participants. |
+| Explicit exclusions | Reject payload-path restart, binary manifest replacement, ambient stale-shard discovery, eager node communicator setup, original-rank metadata tables, and unrelated statistics expansion. |
+| Decision update | Added D-037. |
+| Status | Design accepted; implementation must wait for the CP-02 audit stop gate. |
+
+### 2026-05-29: CP-04 Writer-Hardening Preimplementation Audit
+
+| Field | Record |
+| --- | --- |
+| Independent findings | Binary and coarsened-binary writers retain legacy large-count branches that should collapse onto the CP-02 wrapper; sliced binary bypasses zero-byte collectives; spherical-slice publication ignores write/close failures and lacks node-leader ownership validation. |
+| Accepted architecture | Consume CP-02 collective writes including zero-byte ranks; preserve counter advancement; standardize explicit valid empty node shards; make spherical-slice publication checked and transactional; validate sorted local and world angular ownership before publication; extend strict readers rather than replacing them. |
+| Explicit exclusions | Do not skip empty shards, port `ATHENAK_OUTPUT_IO_STATS`, publish spherical-slice files directly to final paths, promote sliced node-sharded `.cbin`, or import unrelated sharding refactors. |
+| Decision update | Added D-038 and D-039. |
+| Status | Preimplementation direction accepted; execute after CP-03. |
+
+### 2026-05-29: CP-05 Python API Preimplementation Audit
+
+| Field | Record |
+| --- | --- |
+| Independent findings | The reference `read_rank_binary_as_athdf()` scatter implementation misplaces later logical MeshBlocks at the root-grid origin; its indexed single-block overload changes established positional-call meaning; target-tree readers lack focused athdf-like and malformed-binary coverage. |
+| Accepted architecture | Add a thin canonical rank-reader delegate, add only a keyword-only `meshblock_index_in_file=...` selector, omit unneeded `athinput()`, and harden malformed-reader behavior with focused regressions. |
+| Decision update | Added D-040, resolving D-017 and D-019. |
+| Status | Preimplementation direction accepted; execute during CP-05. |
+
+### 2026-05-29: CP-06 Local Qualification Resource Probe
+
+| Field | Record |
+| --- | --- |
+| MPI launcher helper | Fixed `tst/scripts/utils/athena.py` so MPI execution uses separate `["mpiexec", "-n", ...]` argv entries rather than the invalid single element `"mpiexec -n"`. Python byte-compilation and `git diff --check` passed. |
+| Local MPI topology | `mpirun -np 2 hostname | sort -u` reported one physical hostname, `Tin-Drum`. No scheduler launcher command was found locally. |
+| Local GPU topology | The host has an Apple M4 Max GPU, but no CUDA or HIP compiler/runtime tool was found. The repository GPU suite configures `Kokkos_ENABLE_CUDA=On`, so this host cannot perform the required GPU qualification. |
+| GPU-selectable regression | Strengthened `tst/test_suite/io/test_output_formats_gpu.py` to assert four-dimensional derived PDF axes and scalar weighting metadata. The test logic passed once against the CPU build; that smoke run is not GPU qualification. |
+| Remaining external gates | Execute the GPU-selectable regression on a CUDA-capable build and qualify node output/restart on multiple physical nodes, including a genuinely empty or non-owning node. |
+| Status | Local resource probe complete; external GPU and multi-node qualification remain required before merge readiness. |
+
 ## Blocking Findings And Resolutions
 
 | ID | Finding | Severity | Resolution | Re-Audit |

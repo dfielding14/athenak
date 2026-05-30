@@ -223,11 +223,11 @@ void ParameterInput::LoadFromFile(IOWrapper &input, bool single_file_per_rank) {
 #if MPI_PARALLEL_ENABLED
     // then broadcasts it
   if (!single_file_per_rank) {
-    MPI_Bcast(&ret, sizeof(IOWrapperSizeT), MPI_BYTE, 0, MPI_COMM_WORLD);
+    io_wrapper::BroadcastBytes(&ret, sizeof(IOWrapperSizeT), 0, MPI_COMM_WORLD);
     if (ret == 0) {
       break;
     }
-    MPI_Bcast(buf, ret, MPI_BYTE, 0, MPI_COMM_WORLD);
+    io_wrapper::BroadcastBytes(buf, ret, 0, MPI_COMM_WORLD);
   }
 #endif
     par.write(buf, ret); // add the buffer into the stream
