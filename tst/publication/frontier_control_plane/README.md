@@ -489,11 +489,15 @@ reconciled from the durable marker.
 
 Wrapper lookups and trampoline checks use the canonical mirrored ledger
 reservation as their authority, rather than mutable snapshot attachments. The
-trampoline rechecks the scheduled manifest checksum, reservation attachments,
-submission ID, immutable snapshots, exact Slurm-template digest and exact
-executable digest. It sets `PIC_EXECUTABLE` to the verified executable snapshot
-and runs only structured Athena actions through its fixed `/usr/bin/srun` argv
-builder. It never opens the snapshotted Slurm template as a shell script.
+compute-node trampoline obtains that authority from a descriptor-pinned,
+byte-stable, read-only snapshot because the Frontier compute mount does not
+provide the mirrored writer-lock operation. Login-side reads and every mutation
+retain the mirrored ledger lock. The trampoline rechecks the scheduled manifest
+checksum, reservation attachments, submission ID, immutable snapshots, exact
+Slurm-template digest and exact executable digest. It sets `PIC_EXECUTABLE` to
+the verified executable snapshot and runs only structured Athena actions
+through its fixed `/usr/bin/srun` argv builder. It never opens the snapshotted
+Slurm template as a shell script.
 
 The registered path rejects symlink aliases beneath writable Orion and Project
 Home roots for installed control planes, policy anchors, ledgers, manifests,

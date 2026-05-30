@@ -46,6 +46,7 @@ from control_plane_common import verify_snapshot_files
 from ledger import accounting, append_primary_event_locked, ledger_lock
 from ledger import latest_reservations, require_explicit_genesis, transition_payload
 from ledger import repair_mirrored_state_locked, validate_mirrored_state
+from ledger import validated_read_only_mirrored_state_snapshot
 
 
 DEBUG_MAX_SECONDS = 2 * 60 * 60
@@ -1355,6 +1356,7 @@ def reservation_bound_manifest(
     authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
     executable_job_id: str | None = None,
     require_reserved: bool = False,
+    _compute_node_read_only_snapshot: bool = False,
 ) -> tuple[dict[str, object], dict[str, object]]:
     require_ledger_paths(
         ledger_jsonl,
@@ -1367,18 +1369,39 @@ def reservation_bound_manifest(
     manifest_path = require_canonical_path_below(
         manifest_path, authorized_pic_root.resolve() / "manifests"
     )
+    if _compute_node_read_only_snapshot and executable_job_id is None:
+        raise ValueError("Compute-node stable snapshot requires a scheduler job ID")
     _verify_installed_control_plane_pair(
         control_plane_dir,
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
-    with ledger_lock(ledger_jsonl, mirror_jsonl):
+    # Compute-node startup cannot rely on cross-root flock support. Pin and
+    # recheck the complete authoritative mirrored state across verification
+    # instead of entering the mutation hierarchy.
+    state = (
+        validated_read_only_mirrored_state_snapshot(
+            ledger_jsonl,
+            receipts_jsonl,
+            mirror_jsonl,
+            ledger_root=authorized_pic_root,
+            receipts_root=authorized_pic_root,
+            mirror_root=authorized_project_home_root,
+        )
+        if _compute_node_read_only_snapshot
+        else ledger_lock(ledger_jsonl, mirror_jsonl)
+    )
+    with state as snapshot_records:
         _verify_installed_control_plane_pair(
             control_plane_dir,
             authorized_pic_root=authorized_pic_root,
             authorized_project_home_root=authorized_project_home_root,
         )
-        records = _records_with_matching_mirror(ledger_jsonl, receipts_jsonl, mirror_jsonl)
+        records = (
+            snapshot_records
+            if _compute_node_read_only_snapshot
+            else _records_with_matching_mirror(ledger_jsonl, receipts_jsonl, mirror_jsonl)
+        )
         reservation = latest_reservations(records).get(reservation_id)
         if reservation is None:
             raise ValueError(f"Unknown reservation: {reservation_id}")
@@ -1429,6 +1452,34 @@ def reservation_bound_manifest(
             raise ValueError("Manifest checksum attachment differs from reservation ledger")
         require_read_only(manifest_digest_path)
         return manifest, reservation
+
+
+def executable_reservation_bound_manifest(
+    manifest_path: Path,
+    reservation_id: str,
+    *,
+    ledger_jsonl: Path,
+    receipts_jsonl: Path,
+    mirror_jsonl: Path,
+    executable_job_id: str,
+    control_plane_dir: Path = SCRIPT_DIR,
+    authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
+    authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
+) -> tuple[dict[str, object], dict[str, object]]:
+    if re.fullmatch(r"[0-9]+", executable_job_id) is None:
+        raise ValueError("Executable snapshot lookup requires a numeric scheduler job ID")
+    return reservation_bound_manifest(
+        manifest_path,
+        reservation_id,
+        ledger_jsonl=ledger_jsonl,
+        receipts_jsonl=receipts_jsonl,
+        mirror_jsonl=mirror_jsonl,
+        executable_job_id=executable_job_id,
+        control_plane_dir=control_plane_dir,
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+        _compute_node_read_only_snapshot=True,
+    )
 
 
 def _common(parser: argparse.ArgumentParser) -> None:

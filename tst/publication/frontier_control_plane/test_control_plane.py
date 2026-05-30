@@ -58,6 +58,7 @@ from reconcile_frontier_job import reconcile
 from terminal_recovery_handoff import create_handoff
 from validate_and_reserve_frontier_job import _clear_matching_pending_marker
 from validate_and_reserve_frontier_job import _require_scheduler_output_path
+from validate_and_reserve_frontier_job import executable_reservation_bound_manifest
 from validate_and_reserve_frontier_job import mark_dispatch_started, mark_submitted
 from validate_and_reserve_frontier_job import repair_ledger_mirror
 from validate_and_reserve_frontier_job import repair_reservation_attachments
@@ -738,6 +739,7 @@ class SnapshotTests(unittest.TestCase):
         *,
         runner: object = subprocess.run,
         environment_overrides: dict[str, str] | None = None,
+        flock_error: OSError | None = None,
     ) -> None:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         job_script = record_for_role(manifest, "job-script")
@@ -764,21 +766,28 @@ class SnapshotTests(unittest.TestCase):
                 environment,
                 clear=True,
             ):
-                launch(
-                    manifest_path=manifest_path,
-                    manifest_sha256=str(reservation["manifest_sha256"]),
-                    job_script_sha256=str(job_script["sha256"]),
-                    executable_sha256=str(executable["sha256"]),
-                    reservation_id=reservation_id,
-                    submission_id=self.submission_id,
-                    ledger_jsonl=self.ledger,
-                    receipts_jsonl=self.receipts,
-                    mirror_jsonl=self.mirror,
-                    runner=runner,
-                    control_plane_dir=self.control_plane_dir,
-                    authorized_pic_root=self.pic_root,
-                    authorized_project_home_root=self.project_home_root,
-                )
+                def execute() -> None:
+                    launch(
+                        manifest_path=manifest_path,
+                        manifest_sha256=str(reservation["manifest_sha256"]),
+                        job_script_sha256=str(job_script["sha256"]),
+                        executable_sha256=str(executable["sha256"]),
+                        reservation_id=reservation_id,
+                        submission_id=self.submission_id,
+                        ledger_jsonl=self.ledger,
+                        receipts_jsonl=self.receipts,
+                        mirror_jsonl=self.mirror,
+                        runner=runner,
+                        control_plane_dir=self.control_plane_dir,
+                        authorized_pic_root=self.pic_root,
+                        authorized_project_home_root=self.project_home_root,
+                    )
+
+                if flock_error is None:
+                    execute()
+                else:
+                    with patch("ledger.fcntl.flock", side_effect=flock_error):
+                        execute()
 
     def test_snapshot_verifies_and_detects_mutation(self) -> None:
         manifest_path = self._create_manifest()
@@ -1565,6 +1574,22 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(calls[0][0][13], str(executable["path"]))
         self.assertTrue(calls[0][1]["check"])
 
+    def test_trampoline_compute_snapshot_does_not_require_flock(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        calls: list[list[str]] = []
+
+        def runner(command: list[str], **kwargs: object) -> None:
+            calls.append(command)
+
+        self._launch(
+            manifest_path,
+            reservation,
+            runner=runner,
+            flock_error=OSError(524, "Unknown error 524"),
+        )
+        self.assertEqual(len(calls), 1)
+
     def test_trampoline_rejects_wrong_executable_binding(self) -> None:
         manifest_path = self._create_manifest()
         reservation = self._reserve(manifest_path)
@@ -2013,6 +2038,91 @@ PY
         ):
             with self.assertRaises(ValueError):
                 reservation_bound_manifest(
+                    manifest_path,
+                    reservation_id,
+                    ledger_jsonl=self.ledger,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    executable_job_id="12345",
+                )
+
+    def test_compute_node_snapshot_lookup_does_not_take_mutation_lock(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        self._attach(reservation_id)
+        scheduler = (
+            f"JobId=12345 JobState=RUNNING Account=AST207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            with patch(
+                "validate_and_reserve_frontier_job.ledger_lock",
+                side_effect=AssertionError("compute snapshot attempted mutation lock"),
+            ):
+                manifest, loaded = executable_reservation_bound_manifest(
+                    manifest_path,
+                    reservation_id,
+                    ledger_jsonl=self.ledger,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    executable_job_id="12345",
+                )
+        self.assertEqual(manifest["submission_id"], self.submission_id)
+        self.assertEqual(loaded["reservation_id"], reservation_id)
+
+    def test_predispatch_snapshot_lookup_retains_mutation_lock(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        with patch(
+            "validate_and_reserve_frontier_job.ledger_lock",
+            side_effect=OSError(524, "Unknown error 524"),
+        ):
+            with self.assertRaises(OSError):
+                reservation_bound_manifest(
+                    manifest_path,
+                    str(reservation["reservation_id"]),
+                    ledger_jsonl=self.ledger,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    require_reserved=True,
+                )
+
+    def test_compute_node_snapshot_lookup_rejects_receipt_drift_during_use(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        self._attach(reservation_id)
+        scheduler = (
+            f"JobId=12345 JobState=RUNNING Account=AST207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+
+        def mutate_receipt(*args: object, **kwargs: object) -> str:
+            self.receipts.write_text(
+                self.receipts.read_text(encoding="utf-8") + "\n",
+                encoding="utf-8",
+            )
+            return scheduler
+
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            side_effect=mutate_receipt,
+        ):
+            with self.assertRaisesRegex(ValueError, "changed during snapshot use"):
+                executable_reservation_bound_manifest(
                     manifest_path,
                     reservation_id,
                     ledger_jsonl=self.ledger,

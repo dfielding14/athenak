@@ -8,6 +8,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import shutil
 import stat
 import tempfile
 import unittest
@@ -19,6 +20,7 @@ from ledger import genesis_anchor_paths, migrate_existing_genesis_anchors
 from ledger import ledger_lock
 from ledger import repair_mirrored_state, validate_mirrored_state
 from ledger import validate_primary_chain, validate_receipts, write_csv
+from ledger import validated_read_only_mirrored_state_snapshot
 
 
 class LedgerTests(unittest.TestCase):
@@ -120,6 +122,151 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(len(primary), 1)
         self.assertEqual(len(receipts), 1)
         self.assertNotIn("sequence_number", receipts[0])
+
+    def test_read_only_snapshot_rejects_receipt_drift_during_use(self) -> None:
+        with self.assertRaisesRegex(ValueError, "changed during snapshot use"):
+            with validated_read_only_mirrored_state_snapshot(
+                self.ledger,
+                self.receipts,
+                self.mirror,
+                ledger_root=self.ledger.parent.parent,
+                receipts_root=self.receipts.parent.parent,
+                mirror_root=self.mirror.parent.parent,
+            ):
+                self.receipts.write_text(
+                    self.receipts.read_text(encoding="utf-8") + "\n",
+                    encoding="utf-8",
+                )
+
+    def test_read_only_snapshot_rejects_mirror_parent_replacement(self) -> None:
+        parent = self.mirror.parent
+        original = parent.with_name("ledger-original")
+        try:
+            with self.assertRaisesRegex(ValueError, "parent path changed"):
+                with validated_read_only_mirrored_state_snapshot(
+                    self.ledger,
+                    self.receipts,
+                    self.mirror,
+                    ledger_root=self.ledger.parent.parent,
+                    receipts_root=self.receipts.parent.parent,
+                    mirror_root=self.mirror.parent.parent,
+                ):
+                    parent.rename(original)
+                    parent.mkdir()
+        finally:
+            if parent.exists():
+                shutil.rmtree(parent)
+            if original.exists():
+                original.rename(parent)
+
+    def test_read_only_snapshot_rejects_byte_identical_receipt_replacement(self) -> None:
+        replacement = self.receipts.with_name("replacement.jsonl")
+        replacement.write_bytes(self.receipts.read_bytes())
+        with self.assertRaisesRegex(ValueError, "snapshot path changed"):
+            with validated_read_only_mirrored_state_snapshot(
+                self.ledger,
+                self.receipts,
+                self.mirror,
+                ledger_root=self.ledger.parent.parent,
+                receipts_root=self.receipts.parent.parent,
+                mirror_root=self.mirror.parent.parent,
+            ):
+                replacement.replace(self.receipts)
+
+    def test_read_only_snapshot_rejects_genesis_anchor_replacement(self) -> None:
+        anchor, _ = genesis_anchor_paths(self.ledger, self.mirror)
+        replacement = anchor.with_name("replacement-anchor.json")
+        replacement.write_bytes(anchor.read_bytes())
+        replacement.chmod(0o444)
+        with self.assertRaisesRegex(ValueError, "snapshot path changed"):
+            with validated_read_only_mirrored_state_snapshot(
+                self.ledger,
+                self.receipts,
+                self.mirror,
+                ledger_root=self.ledger.parent.parent,
+                receipts_root=self.receipts.parent.parent,
+                mirror_root=self.mirror.parent.parent,
+            ):
+                replacement.replace(anchor)
+
+    def test_read_only_snapshot_validates_pinned_bytes_not_transient_paths(self) -> None:
+        paths = [self.ledger, self.csv, self.receipts, self.mirror]
+        original = {path: path.read_bytes() for path in paths}
+        self.append(
+            {
+                "event_type": "reservation",
+                "reservation_id": "transient-alternate-reservation",
+                "state": "reserved",
+                "reserved_node_hours": 0.0,
+            }
+        )
+        alternate = {path: path.read_bytes() for path in paths}
+        for path, data in original.items():
+            path.write_bytes(data)
+
+        from ledger import _validate_mirrored_state_bytes
+
+        reopened_lengths = []
+
+        def validate_pinned_bytes(
+            state: dict[Path, bytes], **kwargs: object
+        ) -> list[dict[str, object]]:
+            for path in [self.ledger, self.receipts, self.mirror]:
+                path.write_bytes(alternate[path])
+            try:
+                reopened_lengths.append(
+                    len(validate_mirrored_state(self.ledger, self.receipts, self.mirror))
+                )
+                return _validate_mirrored_state_bytes(state, **kwargs)
+            finally:
+                for path, data in original.items():
+                    path.write_bytes(data)
+
+        with patch(
+            "ledger._validate_mirrored_state_bytes", side_effect=validate_pinned_bytes
+        ):
+            with validated_read_only_mirrored_state_snapshot(
+                self.ledger,
+                self.receipts,
+                self.mirror,
+                ledger_root=self.ledger.parent.parent,
+                receipts_root=self.receipts.parent.parent,
+                mirror_root=self.mirror.parent.parent,
+            ) as records:
+                self.assertEqual(len(records), 1)
+        self.assertEqual(reopened_lengths, [2])
+
+    def test_read_only_snapshot_missing_parent_fails_without_creation(self) -> None:
+        missing = self.mirror.parent.parent / "missing" / "node_hours.jsonl"
+        with self.assertRaises(FileNotFoundError):
+            with validated_read_only_mirrored_state_snapshot(
+                self.ledger,
+                self.receipts,
+                missing,
+                ledger_root=self.ledger.parent.parent,
+                receipts_root=self.receipts.parent.parent,
+                mirror_root=missing.parent.parent,
+            ):
+                pass
+        self.assertFalse(missing.parent.exists())
+
+    def test_read_only_snapshot_rechecks_rooted_traversal_for_nested_pin(self) -> None:
+        from ledger import _ledger_state_paths, _pinned_parent_directories
+
+        paths = _ledger_state_paths(self.ledger, None, self.receipts, self.mirror)
+        unrelated_root = self.ledger.parent.parent / "unrelated"
+        unrelated_root.mkdir()
+        with _pinned_parent_directories(paths, create_missing=False):
+            with self.assertRaisesRegex(ValueError, "outside trusted lexical root"):
+                with validated_read_only_mirrored_state_snapshot(
+                    self.ledger,
+                    self.receipts,
+                    self.mirror,
+                    ledger_root=unrelated_root,
+                    receipts_root=unrelated_root,
+                    mirror_root=self.mirror.parent.parent,
+                ):
+                    pass
 
     def test_self_consistent_receipt_provenance_rewrite_is_rejected(self) -> None:
         receipt = json.loads(self.receipts.read_text(encoding="utf-8"))

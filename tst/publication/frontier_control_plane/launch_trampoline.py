@@ -24,7 +24,7 @@ from control_plane_common import record_for_role, require_ledger_paths
 from control_plane_common import require_same_directory, validate_launch_contract
 from control_plane_common import verify_snapshot_files
 from validate_and_reserve_frontier_job import _require_run_artifact_dir
-from validate_and_reserve_frontier_job import reservation_bound_manifest
+from validate_and_reserve_frontier_job import executable_reservation_bound_manifest
 
 
 SRUN = "/usr/bin/srun"
@@ -528,7 +528,7 @@ def launch(
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
-    manifest, reservation = reservation_bound_manifest(
+    manifest, reservation = executable_reservation_bound_manifest(
         manifest_path,
         reservation_id,
         ledger_jsonl=ledger_jsonl,

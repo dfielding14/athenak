@@ -26,7 +26,7 @@ import uuid
 from control_plane_common import atomic_write_bytes, atomic_write_bytes_at
 from control_plane_common import atomic_write_json, atomic_write_json_at
 from control_plane_common import durable_mkdir_parents, fsync_directory
-from control_plane_common import read_json_bytes
+from control_plane_common import open_directory_below, read_json_bytes
 from control_plane_common import read_stable_regular_file_below
 from control_plane_common import stable_serialization_anchor
 
@@ -161,6 +161,10 @@ def _read_jsonl(path: Path, *, root: Path | None = None) -> list[dict[str, objec
             data = _read_regular_bytes(path)
     except FileNotFoundError:
         return []
+    return _read_jsonl_bytes(data, path=path)
+
+
+def _read_jsonl_bytes(data: bytes, *, path: Path) -> list[dict[str, object]]:
     records = []
     try:
         text = data.decode("utf-8")
@@ -221,7 +225,12 @@ def _append_jsonl(path: Path, record: dict[str, object]) -> None:
 def validate_primary_chain(
     path: Path, *, root: Path | None = None
 ) -> list[dict[str, object]]:
-    records = _read_jsonl(path, root=root)
+    return _validate_primary_records(_read_jsonl(path, root=root), path=path)
+
+
+def _validate_primary_records(
+    records: list[dict[str, object]], *, path: Path
+) -> list[dict[str, object]]:
     previous = ""
     for expected_sequence, record in enumerate(records):
         if record.get("sequence_number") != expected_sequence:
@@ -255,7 +264,23 @@ def validate_receipts(
     mirror_transport: str,
     root: Path | None = None,
 ) -> list[dict[str, object]]:
-    records = _read_jsonl(path, root=root)
+    return _validate_receipt_records(
+        _read_jsonl(path, root=root),
+        primary_records,
+        path=path,
+        mirror_jsonl=mirror_jsonl,
+        mirror_transport=mirror_transport,
+    )
+
+
+def _validate_receipt_records(
+    records: list[dict[str, object]],
+    primary_records: list[dict[str, object]],
+    *,
+    path: Path,
+    mirror_jsonl: Path,
+    mirror_transport: str,
+) -> list[dict[str, object]]:
     primary_hashes = [record["event_sha256"] for record in primary_records]
     for record in records:
         _validate_receipt_provenance(
@@ -384,18 +409,46 @@ def _require_same_regular_file_at(
 
 
 @contextmanager
-def _pinned_parent_directories(paths: list[Path]) -> Iterator[None]:
+def _pinned_parent_directories(
+    paths: list[Path],
+    *,
+    create_missing: bool = True,
+    roots: dict[Path, Path] | None = None,
+) -> Iterator[None]:
     existing = _PINNED_PARENT_DESCRIPTORS.get()
     opened: dict[Path, int] = {}
     try:
         for path in paths:
             parent = Path(os.path.abspath(path.parent))
-            if parent in existing or parent in opened:
+            if roots is not None and parent not in roots:
+                raise ValueError(f"Missing authorized root for pinned parent: {parent}")
+            if parent in existing:
+                if roots is not None:
+                    rooted_descriptor = open_directory_below(parent, root=roots[parent])
+                    try:
+                        expected = os.fstat(existing[parent])
+                        actual = os.fstat(rooted_descriptor)
+                        if (actual.st_dev, actual.st_ino) != (
+                            expected.st_dev,
+                            expected.st_ino,
+                        ):
+                            raise ValueError(
+                                f"Pinned parent differs from authorized-root traversal: {parent}"
+                            )
+                    finally:
+                        os.close(rooted_descriptor)
                 continue
-            durable_mkdir_parents(parent)
-            descriptor = os.open(
-                parent,
-                os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+            if parent in opened:
+                continue
+            if create_missing:
+                durable_mkdir_parents(parent)
+            descriptor = (
+                open_directory_below(parent, root=roots[parent])
+                if roots is not None and parent in roots
+                else os.open(
+                    parent,
+                    os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                )
             )
             try:
                 _require_same_directory(parent, descriptor)
@@ -728,8 +781,29 @@ def _validate_genesis_anchors(
         )
     except FileNotFoundError as error:
         raise ValueError("Frontier PIC ledger is missing a genesis anchor") from error
+    _validate_genesis_anchor_bytes(
+        local_bytes,
+        mirror_bytes,
+        ledger_jsonl=ledger_jsonl,
+        mirror_jsonl=mirror_jsonl,
+        records=records,
+        receipts=receipts,
+    )
+
+
+def _validate_genesis_anchor_bytes(
+    local_bytes: bytes,
+    mirror_bytes: bytes,
+    *,
+    ledger_jsonl: Path,
+    mirror_jsonl: Path,
+    records: list[dict[str, object]],
+    receipts: list[dict[str, object]],
+) -> None:
+    require_explicit_genesis(records)
     if local_bytes != mirror_bytes:
         raise ValueError("Orion and Project Home genesis-anchor bytes differ")
+    local_anchor, _ = genesis_anchor_paths(ledger_jsonl, mirror_jsonl)
     anchor = read_json_bytes(local_bytes, label=str(local_anchor))
     if anchor != _genesis_anchor(records[0], receipts[0], mirror_jsonl=mirror_jsonl):
         raise ValueError("Frontier PIC genesis anchor differs from ledger genesis")
@@ -759,6 +833,42 @@ def validate_mirrored_state(
     return local_records
 
 
+def _validate_mirrored_state_bytes(
+    state: dict[Path, bytes],
+    *,
+    ledger_jsonl: Path,
+    receipts_jsonl: Path,
+    mirror_jsonl: Path,
+) -> list[dict[str, object]]:
+    local_records = _validate_primary_records(
+        _read_jsonl_bytes(state[ledger_jsonl], path=ledger_jsonl),
+        path=ledger_jsonl,
+    )
+    mirror_records = _validate_primary_records(
+        _read_jsonl_bytes(state[mirror_jsonl], path=mirror_jsonl),
+        path=mirror_jsonl,
+    )
+    if local_records != mirror_records:
+        raise ValueError("Local and mirrored PIC ledger records differ")
+    receipts = _validate_receipt_records(
+        _read_jsonl_bytes(state[receipts_jsonl], path=receipts_jsonl),
+        local_records,
+        path=receipts_jsonl,
+        mirror_jsonl=mirror_jsonl,
+        mirror_transport="filesystem_copy",
+    )
+    local_anchor, mirror_anchor = genesis_anchor_paths(ledger_jsonl, mirror_jsonl)
+    _validate_genesis_anchor_bytes(
+        state[local_anchor],
+        state[mirror_anchor],
+        ledger_jsonl=ledger_jsonl,
+        mirror_jsonl=mirror_jsonl,
+        records=local_records,
+        receipts=receipts,
+    )
+    return local_records
+
+
 def _ledger_state_paths(
     ledger_jsonl: Path,
     ledger_csv: Path | None,
@@ -770,6 +880,107 @@ def _ledger_state_paths(
         paths.append(ledger_csv)
     local_anchor, mirror_anchor = genesis_anchor_paths(ledger_jsonl, mirror_jsonl)
     return [*paths, local_anchor, mirror_anchor]
+
+
+def _read_descriptor_bytes(descriptor: int) -> bytes:
+    chunks = []
+    offset = 0
+    while True:
+        chunk = os.pread(descriptor, 1024 * 1024, offset)
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
+        offset += len(chunk)
+
+
+def _require_same_pinned_regular_files(descriptors: dict[Path, int]) -> None:
+    for path, descriptor in descriptors.items():
+        parent_descriptor = _parent_descriptor(path)
+        if parent_descriptor is None:
+            raise ValueError(f"Missing pinned parent descriptor for snapshot file: {path}")
+        _require_same_regular_file_at(
+            parent_descriptor,
+            path.name,
+            descriptor,
+            label="Read-only ledger snapshot",
+        )
+
+
+@contextmanager
+def validated_read_only_mirrored_state_snapshot(
+    ledger_jsonl: Path,
+    receipts_jsonl: Path,
+    mirror_jsonl: Path,
+    *,
+    ledger_root: Path,
+    receipts_root: Path,
+    mirror_root: Path,
+) -> Iterator[list[dict[str, object]]]:
+    """Pin and recheck exact authoritative bytes without taking writer locks."""
+    paths = _ledger_state_paths(ledger_jsonl, None, receipts_jsonl, mirror_jsonl)
+    read_only_paths = set(genesis_anchor_paths(ledger_jsonl, mirror_jsonl))
+    roots: dict[Path, Path] = {}
+    for path, root in [
+        (ledger_jsonl, ledger_root),
+        (receipts_jsonl, receipts_root),
+        (mirror_jsonl, mirror_root),
+    ]:
+        parent = Path(os.path.abspath(path.parent))
+        root = Path(os.path.abspath(root))
+        if parent in roots and roots[parent] != root:
+            raise ValueError(f"Snapshot parent has conflicting authorized roots: {parent}")
+        roots[parent] = root
+    with _pinned_parent_directories(paths, create_missing=False, roots=roots):
+        descriptors: dict[Path, int] = {}
+        try:
+            for path in paths:
+                parent_descriptor = _parent_descriptor(path)
+                if parent_descriptor is None:
+                    raise ValueError(
+                        f"Missing pinned parent descriptor for snapshot file: {path}"
+                    )
+                descriptor = os.open(
+                    path.name,
+                    os.O_RDONLY | os.O_NOFOLLOW,
+                    dir_fd=parent_descriptor,
+                )
+                metadata = os.fstat(descriptor)
+                if not stat.S_ISREG(metadata.st_mode):
+                    os.close(descriptor)
+                    raise ValueError(f"Expected a regular snapshot file: {path}")
+                if path in read_only_paths and metadata.st_mode & 0o222:
+                    os.close(descriptor)
+                    raise ValueError(f"Expected a read-only snapshot file: {path}")
+                descriptors[path] = descriptor
+            _require_same_pinned_regular_files(descriptors)
+            initial = {
+                path: _read_descriptor_bytes(descriptor)
+                for path, descriptor in descriptors.items()
+            }
+            records = _validate_mirrored_state_bytes(
+                initial,
+                ledger_jsonl=ledger_jsonl,
+                receipts_jsonl=receipts_jsonl,
+                mirror_jsonl=mirror_jsonl,
+            )
+            _require_same_pinned_regular_files(descriptors)
+            validated = {
+                path: _read_descriptor_bytes(descriptor)
+                for path, descriptor in descriptors.items()
+            }
+            if initial != validated:
+                raise ValueError("Authoritative PIC ledger bytes changed during validation")
+            yield records
+            _require_same_pinned_regular_files(descriptors)
+            final = {
+                path: _read_descriptor_bytes(descriptor)
+                for path, descriptor in descriptors.items()
+            }
+            if validated != final:
+                raise ValueError("Authoritative PIC ledger bytes changed during snapshot use")
+        finally:
+            for descriptor in descriptors.values():
+                os.close(descriptor)
 
 
 def migrate_existing_genesis_anchors(
