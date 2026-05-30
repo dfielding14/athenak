@@ -102,7 +102,65 @@ def _git_object_sha1(kind: str, data: bytes) -> bytes:
     return hashlib.sha1(header + data).digest()
 
 
-def git_tree_sha1_from_archive(archive: Path) -> str:
+def direct_submodule_gitlinks(
+    records: Iterable[dict[str, object]], *, parent_path: str | None = None
+) -> dict[str, str]:
+    """Return the immediate Git links represented in one archived repository."""
+    parsed: list[tuple[PurePosixPath, str]] = []
+    seen: set[str] = set()
+    for record in records:
+        value = str(record["path"])
+        path = PurePosixPath(value)
+        commit = str(record["git_commit"])
+        if (
+            not value
+            or path.is_absolute()
+            or not path.parts
+            or path.parts
+            != tuple(part for part in path.parts if part not in {"", ".", ".."})
+            or not re.fullmatch(r"[0-9a-f]{40}", commit)
+        ):
+            raise ValueError(f"Unsafe Git-link attestation: {value!r}")
+        if value in seen:
+            raise ValueError(f"Duplicate Git-link attestation: {value!r}")
+        seen.add(value)
+        parsed.append((path, commit))
+    parent = PurePosixPath(parent_path) if parent_path is not None else None
+    result: dict[str, str] = {}
+    for path, commit in parsed:
+        ancestors = [
+            candidate
+            for candidate, _ in parsed
+            if len(candidate.parts) < len(path.parts)
+            and path.parts[: len(candidate.parts)] == candidate.parts
+        ]
+        nearest = max(ancestors, key=lambda candidate: len(candidate.parts), default=None)
+        if nearest != parent:
+            continue
+        relative = path.relative_to(parent).as_posix() if parent else path.as_posix()
+        result[relative] = commit
+    return result
+
+
+def source_bundle_sha256(
+    source_archive_sha256: str, submodules: Iterable[dict[str, object]]
+) -> str:
+    """Bind one parent archive and its ordered recursive submodule archives."""
+    value = {
+        "source_archive_sha256": source_archive_sha256,
+        "submodules": list(submodules),
+    }
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def git_tree_sha1_from_archive(
+    archive: Path,
+    *,
+    gitlinks: dict[str, str] | None = None,
+    reject_symlinks: bool = False,
+) -> str:
     """Reconstruct the Git tree object ID represented by a git-archive tarball."""
     root: dict[str, object] = {}
     with tarfile.open(archive, "r:*") as stream:
@@ -133,11 +191,35 @@ def git_tree_sha1_from_archive(archive: Path) -> str:
                 data = extracted.read()
                 mode = "100755" if member.mode & 0o111 else "100644"
             elif member.issym():
+                if reject_symlinks:
+                    raise ValueError(f"Symlink is not allowed in source archive: {member.name!r}")
                 data = member.linkname.encode("utf-8", "surrogateescape")
                 mode = "120000"
             else:
                 raise ValueError(f"Unsupported source-archive member: {member.name!r}")
             node[name] = (mode, _git_object_sha1("blob", data))
+
+    for value, commit in (gitlinks or {}).items():
+        path = PurePosixPath(value)
+        if (
+            not value
+            or path.is_absolute()
+            or not path.parts
+            or path.parts
+            != tuple(part for part in path.parts if part not in {"", ".", ".."})
+            or not re.fullmatch(r"[0-9a-f]{40}", commit)
+        ):
+            raise ValueError(f"Unsafe Git-link attestation: {value!r}")
+        node = root
+        for part in path.parts[:-1]:
+            existing = node.setdefault(part, {})
+            if not isinstance(existing, dict):
+                raise ValueError(f"Git-link path collides with a file: {value!r}")
+            node = existing
+        name = path.parts[-1]
+        if name not in node or node[name] != {}:
+            raise ValueError(f"Git-link path is not an empty archive directory: {value!r}")
+        node[name] = ("160000", bytes.fromhex(commit))
 
     def tree_sha1(node: dict[str, object]) -> bytes:
         entries = []

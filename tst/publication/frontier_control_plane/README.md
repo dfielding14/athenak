@@ -117,18 +117,29 @@ The input build profile is structured JSON and must already bind the generated
   "schema_version": 1,
   "profile_id": "hip-mpi-release-paper-pic",
   "source_archive_sha256": "<sha256 of git archive HEAD>",
+  "source_bundle_sha256": "<sha256 of canonical parent-archive and recursive-submodule binding>",
   "toolchain": "<reviewed toolchain description>",
   "build_command": "<reviewed build command>",
-  "executable_sha256": "<sha256 of athena>"
+  "executable_sha256": "<sha256 of athena>",
+  "submodules": [
+    {
+      "path": "kokkos",
+      "archive_sha256": "<sha256 of git -C kokkos archive HEAD>",
+      "git_commit": "<pinned kokkos commit>",
+      "git_tree": "<kokkos HEAD tree>"
+    }
+  ]
 }
 ```
 
-The creator forces `git status --ignore-submodules=none`, conservatively rejects
-any submodule, generates a `git archive` for the declared HEAD, verifies the
-archive commit identity and reconstructed Git tree identity, and requires an
-exact structured-profile match. It stages the archive, profile, executable and
-manifest under a temporary directory, marks the completed candidate read-only,
-and atomically renames it beneath
+The creator forces `git status --ignore-submodules=none`, rejects dirty,
+uninitialized or commit-drifted recursive submodules and tracked symlink
+payloads, generates a `git archive`
+for the declared HEAD and a deterministic archive for every clean pinned
+submodule, verifies each archive commit identity and reconstructed Git tree
+identity, and requires an exact structured-profile match. It stages the
+archives, profile, executable and manifest under a temporary directory, marks
+the completed candidate read-only, and atomically renames it beneath
 `${PIC_ROOT}/clean_candidates/<freeze-id>/`. Review that manifest and then
 update `science_submission_freeze` to `status=authorized` with its exact
 `manifest_path` and `manifest_sha256`, followed by another active-policy

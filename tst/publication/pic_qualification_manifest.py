@@ -112,6 +112,26 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _source_bundle_sha256(
+    source_archive_sha256: str, submodules: list[dict[str, Any]]
+) -> str:
+    value = {
+        "source_archive_sha256": source_archive_sha256,
+        "submodules": [
+            {
+                "path": record["path"],
+                "archive_sha256": record["archive_sha256"],
+                "git_commit": record["git_commit"],
+                "git_tree": record["git_tree"],
+            }
+            for record in submodules
+        ],
+    }
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
 def _artifact_path(artifact_root: Path, raw_path: str, label: str) -> Path:
     path = Path(raw_path)
     if not path.is_absolute():
@@ -148,6 +168,17 @@ def validate_qualification_manifest(
 
     if manifest["git"]["status"]:
         raise ValueError("qualification manifest requires a clean git status")
+    submodules = manifest["git"]["submodules"]
+    paths = [record["path"] for record in submodules]
+    if paths != sorted(set(paths)):
+        raise ValueError("qualification manifest submodules must be unique and sorted")
+    expected_status = "clean_pinned_archived" if submodules else "absent"
+    if manifest["git"]["submodule_status"] != expected_status:
+        raise ValueError("qualification manifest submodule status does not match records")
+    if manifest["git"]["source_bundle_sha256"] != _source_bundle_sha256(
+        manifest["git"]["source_archive"]["sha256"], submodules
+    ):
+        raise ValueError("qualification manifest source-bundle checksum mismatch")
 
     if not verify_files:
         return
@@ -155,6 +186,25 @@ def validate_qualification_manifest(
     artifact_root = Path(manifest["resources"]["artifact_root"]).resolve()
     if not artifact_root.is_dir():
         raise ValueError(f"artifact root is not a directory: {artifact_root}")
+
+    source_archive = _artifact_path(
+        artifact_root, manifest["git"]["source_archive"]["path"], "source archive"
+    )
+    if _sha256(source_archive) != manifest["git"]["source_archive"]["sha256"]:
+        raise ValueError("source archive checksum mismatch")
+    for index, submodule in enumerate(submodules):
+        archive = _artifact_path(
+            artifact_root, submodule["archive_path"], f"submodule archive {index}"
+        )
+        if _sha256(archive) != submodule["archive_sha256"]:
+            raise ValueError(f"submodule archive {index} checksum mismatch")
+    candidate = _artifact_path(
+        artifact_root,
+        manifest["git"]["clean_candidate_manifest"]["path"],
+        "clean-candidate manifest",
+    )
+    if _sha256(candidate) != manifest["git"]["clean_candidate_manifest"]["sha256"]:
+        raise ValueError("clean-candidate manifest checksum mismatch")
 
     executable = _artifact_path(
         artifact_root, manifest["executable"]["path"], "executable"

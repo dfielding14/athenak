@@ -43,6 +43,9 @@ qualification and Frontier-authorization plan.
   - Separate fail-closed validator and exclusive freezer for prepared
     qualification manifests. It rejects exploratory proxies, dirty source
     candidates, unknown claims, escaped or missing files and checksum drift.
+    Qualification bundles snapshot the exact clean-candidate manifest, parent
+    source archive and ordered recursive submodule archives under one canonical
+    source-bundle checksum.
 - `test_pic_readiness_registry.py`
   - Regression checks for release-control records and the authorized Frontier
     boundary.

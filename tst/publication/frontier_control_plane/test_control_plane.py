@@ -17,11 +17,13 @@ import unittest
 from unittest.mock import patch
 import uuid
 
-from control_plane_common import record_for_role, sha256, verify_installed_control_plane
+from control_plane_common import git_tree_sha1_from_archive, record_for_role, sha256
+from control_plane_common import source_bundle_sha256
+from control_plane_common import verify_installed_control_plane
 from control_plane_common import TRUSTED_GIT, TRUSTED_PYTHON
 from control_plane_common import TRUSTED_SACCT, TRUSTED_SBATCH, TRUSTED_SCANCEL
 from control_plane_common import TRUSTED_SCONTROL, TRUSTED_SQUEUE
-from create_clean_candidate_freeze import create_freeze
+from create_clean_candidate_freeze import create_freeze, _validated_submodules
 from create_pre_submit_manifest import create_manifest
 from initialize_frontier_ledger import initialize_from_policy
 from install_control_plane import install
@@ -302,27 +304,102 @@ class SnapshotTests(unittest.TestCase):
             ],
             check=True,
         )
+        submodules = []
+        declared_submodule_archives = []
+        for index, record in enumerate(_validated_submodules(source_root)):
+            declared_submodule_archive = build / f"declared-submodule-{index:04d}.tar"
+            module_root = source_root.joinpath(*Path(record["path"]).parts)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(module_root),
+                    "archive",
+                    "--format=tar",
+                    f"--output={declared_submodule_archive}",
+                    record["git_commit"],
+                ],
+                check=True,
+            )
+            declared_submodule_archives.append(declared_submodule_archive)
+            submodules.append(
+                {
+                    "path": record["path"],
+                    "archive_sha256": sha256(declared_submodule_archive),
+                    "git_commit": record["git_commit"],
+                    "git_tree": record["git_tree"],
+                }
+            )
         profile = build / "build_profile.json"
+        archive_sha256 = sha256(declared_archive)
         profile.write_text(
             json.dumps(
                 {
                     "schema_version": 1,
                     "profile_id": profile_id,
-                    "source_archive_sha256": sha256(declared_archive),
+                    "source_archive_sha256": archive_sha256,
+                    "source_bundle_sha256": source_bundle_sha256(
+                        archive_sha256, submodules
+                    ),
                     "toolchain": "test-toolchain",
                     "build_command": "cmake --build build",
                     "executable_sha256": sha256(executable),
+                    "submodules": submodules,
                 }
             ),
             encoding="utf-8",
         )
         declared_archive.unlink()
+        for declared_submodule_archive in declared_submodule_archives:
+            declared_submodule_archive.unlink()
         return executable, profile
+
+    def _add_submodule(self, source_root: Path, name: str) -> Path:
+        nested = self._clean_source(f"{source_root.name}-{name}-source")
+        self._add_existing_submodule(source_root, nested, name)
+        return source_root / name
+
+    def _add_existing_submodule(
+        self, source_root: Path, nested: Path, name: str
+    ) -> None:
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "protocol.file.allow=always",
+                "-C",
+                str(source_root),
+                "submodule",
+                "add",
+                str(nested),
+                name,
+            ],
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(["git", "-C", str(source_root), "add", "."], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(source_root),
+                "-c",
+                "user.name=PIC Test",
+                "-c",
+                "user.email=pic-test@example.invalid",
+                "commit",
+                "-m",
+                f"add {name} source",
+            ],
+            check=True,
+            capture_output=True,
+        )
 
     def _clean_candidate(
         self, *, authorize: bool
     ) -> tuple[Path, Path, str]:
         source_root = self._clean_source("candidate-source")
+        self._add_submodule(source_root, "nested")
         executable, profile = self._build_profile(
             source_root, self.pic_root / "candidate-build", "hip-mpi-release-paper-pic"
         )
@@ -1220,25 +1297,48 @@ class SnapshotTests(unittest.TestCase):
                 )
         self.assertFalse(list(candidate_root.glob(".tmp-*")))
 
-    def test_clean_candidate_creator_conservatively_rejects_submodules(self) -> None:
+    def test_clean_candidate_creator_archives_clean_pinned_submodules(self) -> None:
         source_root = self._clean_source("submodule-source")
-        nested = self._clean_source("nested-source")
-        subprocess.run(
-            [
-                "git",
-                "-c",
-                "protocol.file.allow=always",
-                "-C",
-                str(source_root),
-                "submodule",
-                "add",
-                str(nested),
-                "nested",
-            ],
-            check=True,
-            capture_output=True,
+        self._add_submodule(source_root, "nested")
+        executable, profile = self._build_profile(
+            source_root, self.pic_root / "submodule-build", "test-profile"
         )
-        subprocess.run(["git", "-C", str(source_root), "add", "."], check=True)
+        manifest_path = create_freeze(
+            source_root=source_root,
+            executable=executable,
+            build_profile=profile,
+            build_profile_id="test-profile",
+            control_plane_dir=self.control_plane_dir,
+            authorized_pic_root=self.pic_root,
+        )
+        candidate = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(candidate["source"]["submodule_status"], "clean_pinned_archived")
+        self.assertEqual(len(candidate["source"]["submodules"]), 1)
+        archive = Path(str(candidate["source"]["submodules"][0]["archive_path"]))
+        self.assertEqual(archive, manifest_path.parent / "submodules" / "0000.tar")
+        self.assertFalse(bool(archive.stat().st_mode & 0o222))
+
+    def test_clean_candidate_creator_rejects_dirty_submodule(self) -> None:
+        source_root = self._clean_source("dirty-submodule-source")
+        nested = self._add_submodule(source_root, "nested")
+        executable, profile = self._build_profile(
+            source_root, self.pic_root / "dirty-submodule-build", "test-profile"
+        )
+        (nested / "untracked.txt").write_text("dirty\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            create_freeze(
+                source_root=source_root,
+                executable=executable,
+                build_profile=profile,
+                build_profile_id="test-profile",
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+            )
+
+    def test_clean_candidate_creator_rejects_tracked_symlink_payload(self) -> None:
+        source_root = self._clean_source("symlink-payload-source")
+        (source_root / "tracked-link").symlink_to("tracked.txt")
+        subprocess.run(["git", "-C", str(source_root), "add", "tracked-link"], check=True)
         subprocess.run(
             [
                 "git",
@@ -1250,13 +1350,13 @@ class SnapshotTests(unittest.TestCase):
                 "user.email=pic-test@example.invalid",
                 "commit",
                 "-m",
-                "add nested source",
+                "add tracked symlink",
             ],
             check=True,
             capture_output=True,
         )
         executable, profile = self._build_profile(
-            source_root, self.pic_root / "submodule-build", "test-profile"
+            source_root, self.pic_root / "symlink-payload-build", "test-profile"
         )
         with self.assertRaises(ValueError):
             create_freeze(
@@ -1267,6 +1367,108 @@ class SnapshotTests(unittest.TestCase):
                 control_plane_dir=self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
             )
+
+    def test_git_tree_reconstruction_rejects_missing_gitlink_placeholder(self) -> None:
+        source_root = self._clean_source("missing-gitlink-placeholder-source")
+        archive = self.root / "missing-gitlink-placeholder.tar"
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(source_root),
+                "archive",
+                "--format=tar",
+                f"--output={archive}",
+                "HEAD",
+            ],
+            check=True,
+        )
+        with self.assertRaises(ValueError):
+            git_tree_sha1_from_archive(
+                archive, gitlinks={"missing": "0" * 40}, reject_symlinks=True
+            )
+
+    def test_clean_candidate_creator_archives_recursive_pinned_submodules(self) -> None:
+        source_root = self._clean_source("recursive-submodule-source")
+        nested = self._clean_source("recursive-nested-source")
+        self._add_submodule(nested, "child")
+        self._add_existing_submodule(source_root, nested, "nested")
+        subprocess.run(
+            [
+                "git",
+                "-c",
+                "protocol.file.allow=always",
+                "-C",
+                str(source_root),
+                "submodule",
+                "update",
+                "--init",
+                "--recursive",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        executable, profile = self._build_profile(
+            source_root, self.pic_root / "recursive-submodule-build", "test-profile"
+        )
+        manifest_path = create_freeze(
+            source_root=source_root,
+            executable=executable,
+            build_profile=profile,
+            build_profile_id="test-profile",
+            control_plane_dir=self.control_plane_dir,
+            authorized_pic_root=self.pic_root,
+        )
+        candidate = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            [record["path"] for record in candidate["source"]["submodules"]],
+            ["nested", "nested/child"],
+        )
+
+    def test_clean_candidate_creator_rejects_uninitialized_submodule(self) -> None:
+        source_root = self._clean_source("uninitialized-submodule-source")
+        self._add_submodule(source_root, "nested")
+        subprocess.run(
+            ["git", "-C", str(source_root), "submodule", "deinit", "-f", "nested"],
+            check=True,
+            capture_output=True,
+        )
+        with self.assertRaises(ValueError):
+            _validated_submodules(source_root)
+
+    def test_clean_candidate_creator_rejects_submodule_commit_drift(self) -> None:
+        source_root = self._clean_source("drifted-submodule-source")
+        nested = self._add_submodule(source_root, "nested")
+        (nested / "tracked.txt").write_text("drifted\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(nested), "add", "tracked.txt"], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(nested),
+                "-c",
+                "user.name=PIC Test",
+                "-c",
+                "user.email=pic-test@example.invalid",
+                "commit",
+                "-m",
+                "drift nested source",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        with self.assertRaises(ValueError):
+            _validated_submodules(source_root)
+
+    def test_registered_science_rejects_frozen_submodule_archive_drift(self) -> None:
+        candidate_path = self._write_science_config(authorize=True)
+        candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+        archive = Path(str(candidate["source"]["submodules"][0]["archive_path"]))
+        archive.chmod(0o644)
+        archive.write_bytes(archive.read_bytes() + b"drift")
+        manifest_path = self._create_manifest()
+        with self.assertRaises(ValueError):
+            self._reserve(manifest_path)
 
     def test_reserved_manifest_digest_rejects_self_consistent_replacement(self) -> None:
         manifest_path = self._create_manifest()

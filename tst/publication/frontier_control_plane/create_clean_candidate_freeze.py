@@ -6,16 +6,18 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+import re
 import shutil
 import subprocess
 import uuid
 
 from control_plane_common import AUTHORIZED_PIC_ROOT, TRUSTED_GIT
-from control_plane_common import git_tree_sha1_from_archive
+from control_plane_common import direct_submodule_gitlinks, git_tree_sha1_from_archive
 from control_plane_common import make_tree_read_only, read_json, remove_tree
 from control_plane_common import require_below, require_canonical_path_below
 from control_plane_common import require_no_symlink_components_below, sha256
+from control_plane_common import source_bundle_sha256
 from control_plane_common import verify_installed_control_plane, write_json_exclusive
 
 
@@ -26,7 +28,7 @@ def _git(source_root: Path, *arguments: str) -> str:
     return subprocess.check_output(
         [TRUSTED_GIT, "-C", str(source_root), *arguments],
         text=True,
-    ).strip()
+    ).rstrip("\n")
 
 
 def _utc_now() -> str:
@@ -40,6 +42,112 @@ def _archive_commit(archive: Path) -> str:
         return subprocess.check_output(
             [TRUSTED_GIT, "get-tar-commit-id"], stdin=stream, text=True
         ).strip()
+
+
+def _relative_submodule_path(value: str) -> PurePosixPath:
+    path = PurePosixPath(value)
+    if (
+        not value
+        or path.is_absolute()
+        or not path.parts
+        or path.parts
+        != tuple(part for part in path.parts if part not in {"", ".", ".."})
+    ):
+        raise ValueError(f"Unsafe submodule path: {value!r}")
+    return path
+
+
+def _validated_submodules(source_root: Path) -> list[dict[str, str]]:
+    output = _git(source_root, "submodule", "status", "--recursive")
+    parsed: list[tuple[PurePosixPath, str]] = []
+    seen: set[str] = set()
+    for line in output.splitlines():
+        match = re.fullmatch(r"([ +\-U])([0-9a-f]{40}) ([^ ]+)(?: .*)?", line)
+        if match is None:
+            raise ValueError(f"Cannot parse recursive submodule status: {line!r}")
+        state, commit, value = match.groups()
+        path = _relative_submodule_path(value)
+        normalized = path.as_posix()
+        if normalized in seen:
+            raise ValueError(f"Duplicate recursive submodule path: {normalized}")
+        if state != " ":
+            raise ValueError(f"Submodule is not initialized at its pinned commit: {normalized}")
+        seen.add(normalized)
+        parsed.append((path, commit))
+
+    records: list[dict[str, str]] = []
+    for path, commit in sorted(parsed, key=lambda item: item[0].as_posix()):
+        normalized = path.as_posix()
+        module_root = source_root.joinpath(*path.parts)
+        require_no_symlink_components_below(module_root, source_root)
+        if module_root.resolve() != module_root or not module_root.is_dir():
+            raise ValueError(f"Submodule path is not a canonical directory: {normalized}")
+        if Path(_git(module_root, "rev-parse", "--show-toplevel")).resolve() != module_root:
+            raise ValueError(f"Submodule path is not its own Git worktree: {normalized}")
+        parent = max(
+            (
+                record
+                for record in records
+                if path.parts[: len(PurePosixPath(record["path"]).parts)]
+                == PurePosixPath(record["path"]).parts
+            ),
+            key=lambda record: len(PurePosixPath(record["path"]).parts),
+            default=None,
+        )
+        parent_path = PurePosixPath(parent["path"]) if parent else PurePosixPath()
+        parent_root = source_root.joinpath(*parent_path.parts)
+        relative_to_parent = path.relative_to(parent_path).as_posix()
+        pinned_commit = _git(parent_root, "rev-parse", f"HEAD:{relative_to_parent}")
+        actual_commit = _git(module_root, "rev-parse", "HEAD")
+        if pinned_commit != commit or actual_commit != commit:
+            raise ValueError(f"Submodule commit differs from its pinned commit: {normalized}")
+        status = _git(
+            module_root,
+            "status",
+            "--ignore-submodules=none",
+            "--porcelain",
+            "--untracked-files=all",
+        )
+        if status:
+            raise ValueError(f"Submodule worktree is not clean: {normalized}")
+        records.append(
+            {
+                "path": normalized,
+                "git_commit": commit,
+                "git_tree": _git(module_root, "rev-parse", "HEAD^{tree}"),
+                "worktree_status": "clean",
+            }
+        )
+    return records
+
+
+def _source_identity(source_root: Path) -> tuple[str, str, list[dict[str, str]]]:
+    status = _git(
+        source_root,
+        "status",
+        "--ignore-submodules=none",
+        "--porcelain",
+        "--untracked-files=all",
+    )
+    if status:
+        raise ValueError("Source worktree is not clean")
+    return (
+        _git(source_root, "rev-parse", "HEAD"),
+        _git(source_root, "rev-parse", "HEAD^{tree}"),
+        _validated_submodules(source_root),
+    )
+
+
+def _profile_submodules(records: list[dict[str, str]]) -> list[dict[str, str]]:
+    return [
+        {
+            "path": record["path"],
+            "archive_sha256": record["archive_sha256"],
+            "git_commit": record["git_commit"],
+            "git_tree": record["git_tree"],
+        }
+        for record in records
+    ]
 
 
 def create_freeze(
@@ -67,20 +175,7 @@ def create_freeze(
     if not build_profile.is_file():
         raise FileNotFoundError(f"Missing Orion build profile: {build_profile}")
 
-    status = _git(
-        source_root,
-        "status",
-        "--ignore-submodules=none",
-        "--porcelain",
-        "--untracked-files=all",
-    )
-    if status:
-        raise ValueError("Source worktree is not clean")
-    submodules = _git(source_root, "submodule", "status", "--recursive")
-    if submodules:
-        raise ValueError("Clean-candidate freezes conservatively reject submodules")
-    commit = _git(source_root, "rev-parse", "HEAD")
-    tree = _git(source_root, "rev-parse", "HEAD^{tree}")
+    commit, tree, submodules = _source_identity(source_root)
 
     identifier = freeze_id or str(uuid.uuid4())
     uuid.UUID(identifier)
@@ -109,18 +204,70 @@ def create_freeze(
         )
         if _archive_commit(staged_archive) != commit:
             raise ValueError("Generated source archive does not identify HEAD")
-        if git_tree_sha1_from_archive(staged_archive) != tree:
+        if (
+            git_tree_sha1_from_archive(
+                staged_archive,
+                gitlinks=direct_submodule_gitlinks(submodules),
+                reject_symlinks=True,
+            )
+            != tree
+        ):
             raise ValueError("Generated source archive tree differs from HEAD")
         archive_sha256 = sha256(staged_archive)
+        staged_submodules: list[dict[str, str]] = []
+        for index, record in enumerate(submodules):
+            staged_submodule_archive = temporary / "submodules" / f"{index:04d}.tar"
+            staged_submodule_archive.parent.mkdir(parents=True, exist_ok=True)
+            module_root = source_root.joinpath(*PurePosixPath(record["path"]).parts)
+            subprocess.run(
+                [
+                    TRUSTED_GIT,
+                    "-C",
+                    str(module_root),
+                    "archive",
+                    "--format=tar",
+                    f"--output={staged_submodule_archive}",
+                    record["git_commit"],
+                ],
+                check=True,
+            )
+            if _archive_commit(staged_submodule_archive) != record["git_commit"]:
+                raise ValueError(f"Generated submodule archive does not identify HEAD: {record['path']}")
+            if (
+                git_tree_sha1_from_archive(
+                    staged_submodule_archive,
+                    gitlinks=direct_submodule_gitlinks(
+                        submodules, parent_path=record["path"]
+                    ),
+                    reject_symlinks=True,
+                )
+                != record["git_tree"]
+            ):
+                raise ValueError(f"Generated submodule archive tree differs from HEAD: {record['path']}")
+            staged_submodules.append(
+                {
+                    **record,
+                    "archive_path": str(
+                        freeze_dir / "submodules" / staged_submodule_archive.name
+                    ),
+                    "archive_sha256": sha256(staged_submodule_archive),
+                }
+            )
+        if _source_identity(source_root) != (commit, tree, submodules):
+            raise ValueError("Source or submodule identity changed while creating freeze")
+        profile_submodules = _profile_submodules(staged_submodules)
+        bundle_sha256 = source_bundle_sha256(archive_sha256, profile_submodules)
         executable_sha256 = sha256(executable)
         profile = read_json(build_profile)
         expected_profile = {
             "schema_version": 1,
             "profile_id": build_profile_id.strip(),
             "source_archive_sha256": archive_sha256,
+            "source_bundle_sha256": bundle_sha256,
             "toolchain": str(profile.get("toolchain", "")).strip(),
             "build_command": str(profile.get("build_command", "")).strip(),
             "executable_sha256": executable_sha256,
+            "submodules": profile_submodules,
         }
         if not expected_profile["toolchain"] or not expected_profile["build_command"]:
             raise ValueError("Build profile must declare toolchain and build_command")
@@ -139,22 +286,27 @@ def create_freeze(
         frozen_profile = freeze_dir / staged_profile.name
         frozen_executable = freeze_dir / staged_executable.name
         manifest = {
-            "schema_version": 1,
+            "schema_version": 2,
             "freeze_id": identifier,
             "created_utc": _utc_now(),
             "source": {
                 "archive_path": str(archive),
                 "archive_sha256": archive_sha256,
+                "source_bundle_sha256": bundle_sha256,
                 "git_commit": commit,
                 "git_tree": tree,
                 "worktree_status": "clean",
-                "submodule_status": "absent",
+                "submodule_status": (
+                    "clean_pinned_archived" if staged_submodules else "absent"
+                ),
+                "submodules": staged_submodules,
             },
             "build": {
                 "profile_id": expected_profile["profile_id"],
                 "profile_path": str(frozen_profile),
                 "profile_sha256": sha256(staged_profile),
                 "source_archive_sha256": archive_sha256,
+                "source_bundle_sha256": bundle_sha256,
                 "toolchain": expected_profile["toolchain"],
                 "build_command": expected_profile["build_command"],
                 "executable_path": str(frozen_executable),

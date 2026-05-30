@@ -42,11 +42,48 @@
     "physical_mode": {"type": "string", "minLength": 1, "pattern": "\\S"},
     "git": {
       "type": "object",
-      "required": ["commit", "status", "submodules"],
+      "additionalProperties": false,
+      "required": ["commit", "tree", "status", "source_archive", "source_bundle_sha256", "submodule_status", "submodules", "clean_candidate_manifest"],
       "properties": {
         "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
         "status": {"type": "array", "items": {"type": "string", "minLength": 1, "pattern": "\\S"}},
-        "submodules": {"type": "array", "items": {"type": "string", "minLength": 1, "pattern": "\\S"}}
+        "source_archive": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "source_bundle_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "submodule_status": {"enum": ["absent", "clean_pinned_archived"]},
+        "submodules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "archive_path", "archive_sha256", "git_commit", "git_tree", "worktree_status"],
+            "properties": {
+              "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*(?:^|/)\\.(?:/|$))[^\\s]+$"},
+              "archive_path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+              "archive_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "git_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+              "git_tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+              "worktree_status": {"const": "clean"}
+            }
+          }
+        },
+        "clean_candidate_manifest": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        }
       }
     },
     "executable": {

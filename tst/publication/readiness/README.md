@@ -117,7 +117,9 @@ qualify any scientific claim by itself.
 - `../pic_qualification_manifest.py`: separate fail-closed gate for validating
   and exclusively freezing a prepared qualification manifest. It rejects
   engineering proxies, unit-only evidence, dirty source candidates, unknown
-  claim IDs, escaped or missing files and checksum mismatches.
+  claim IDs, escaped or missing files and checksum mismatches. The frozen
+  record snapshots the exact clean-candidate manifest, parent source archive
+  and ordered recursive submodule archives under one source-bundle checksum.
 - `schemas/q022_equation_normalization_map.schema.json`,
   `schemas/q022_tolerance_table.schema.json` and
   `schemas/q023_campaign_preregistration.schema.json`: fail-closed machine

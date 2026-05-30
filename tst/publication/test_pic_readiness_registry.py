@@ -73,8 +73,19 @@ def _minimum_validation_manifest() -> dict[str, object]:
         "physical_mode": "paper_mhd_pic",
         "git": {
             "commit": "0" * 40,
+            "tree": "0" * 40,
             "status": [],
+            "source_archive": {
+                "path": "source.tar",
+                "sha256": "0" * 64,
+            },
+            "source_bundle_sha256": "0" * 64,
+            "submodule_status": "absent",
             "submodules": [],
+            "clean_candidate_manifest": {
+                "path": "clean_candidate_manifest.json",
+                "sha256": "0" * 64,
+            },
         },
         "executable": {
             "path": "/tmp/athena",

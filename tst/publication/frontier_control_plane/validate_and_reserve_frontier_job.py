@@ -7,7 +7,7 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import pwd
 import re
 import shlex
@@ -23,11 +23,13 @@ from control_plane_common import FRONTIER_ADMISSION_SMOKE_SCOPE, REGISTERED_SCIE
 from control_plane_common import SUBMISSION_SCOPES
 from control_plane_common import TRUSTED_GIT, TRUSTED_SCONTROL, TRUSTED_SQUEUE
 from control_plane_common import atomic_write_bytes, atomic_write_json, read_json
+from control_plane_common import direct_submodule_gitlinks
 from control_plane_common import git_tree_sha1_from_archive, record_for_role
 from control_plane_common import require_below, require_canonical_path_below
 from control_plane_common import require_not_symlink, require_read_only, sha256
 from control_plane_common import require_ledger_paths, require_storage_policy_unlock
 from control_plane_common import utc_datetime, verify_installed_control_plane
+from control_plane_common import source_bundle_sha256
 from control_plane_common import validate_launch_contract, verify_snapshot_files
 from ledger import accounting, append_primary_event_locked, ledger_lock
 from ledger import latest_reservations, require_explicit_genesis, transition_payload
@@ -315,6 +317,94 @@ def _verify_bound_file(
     return path
 
 
+def _relative_submodule_path(value: object) -> PurePosixPath:
+    if not isinstance(value, str):
+        raise ValueError("Clean-candidate submodule path must be a string")
+    text = str(value)
+    path = PurePosixPath(text)
+    if (
+        not text
+        or path.is_absolute()
+        or not path.parts
+        or path.parts
+        != tuple(part for part in path.parts if part not in {"", ".", ".."})
+    ):
+        raise ValueError(f"Unsafe clean-candidate submodule path: {text!r}")
+    return path
+
+
+def _verify_submodule_archives(
+    source: dict[str, object], *, candidate_dir: Path
+) -> list[dict[str, str]]:
+    records = source.get("submodules")
+    if not isinstance(records, list):
+        raise ValueError("Clean-candidate submodules must be a list")
+    normalized_paths: list[str] = []
+    profile_records: list[dict[str, str]] = []
+    verified_archives: list[tuple[Path, str, str]] = []
+    for index, value in enumerate(records):
+        if not isinstance(value, dict) or set(value) != {
+            "path",
+            "archive_path",
+            "archive_sha256",
+            "git_commit",
+            "git_tree",
+            "worktree_status",
+        }:
+            raise ValueError("Clean-candidate submodule attestation has unexpected fields")
+        relative = _relative_submodule_path(value["path"])
+        normalized = relative.as_posix()
+        if normalized in normalized_paths:
+            raise ValueError(f"Duplicate clean-candidate submodule path: {normalized}")
+        normalized_paths.append(normalized)
+        archive = _verify_bound_file(
+            value,
+            path_key="archive_path",
+            digest_key="archive_sha256",
+            root=candidate_dir,
+        )
+        if archive != candidate_dir / "submodules" / f"{index:04d}.tar":
+            raise ValueError("Clean-candidate submodule archive path is not canonical")
+        require_read_only(archive)
+        git_commit = _text(value, "git_commit")
+        git_tree = _text(value, "git_tree")
+        if not re.fullmatch(r"[0-9a-f]{40}", git_commit):
+            raise ValueError("Clean-candidate submodule Git commit is malformed")
+        if not re.fullmatch(r"[0-9a-f]{40}", git_tree):
+            raise ValueError("Clean-candidate submodule Git tree is malformed")
+        if value.get("worktree_status") != "clean":
+            raise ValueError("Clean-candidate submodule worktree is not attested clean")
+        if _archive_commit(archive) != git_commit:
+            raise ValueError("Clean-candidate submodule archive does not identify its commit")
+        verified_archives.append((archive, normalized, git_tree))
+        profile_records.append(
+            {
+                "path": normalized,
+                "archive_sha256": _digest(value, "archive_sha256"),
+                "git_commit": git_commit,
+                "git_tree": git_tree,
+            }
+        )
+    if normalized_paths != sorted(normalized_paths):
+        raise ValueError("Clean-candidate submodules must use canonical path order")
+    expected_status = "clean_pinned_archived" if records else "absent"
+    if source.get("submodule_status") != expected_status:
+        raise ValueError("Clean-candidate submodule status does not match its archives")
+    for archive, normalized, git_tree in verified_archives:
+        if (
+            git_tree_sha1_from_archive(
+                archive,
+                gitlinks=direct_submodule_gitlinks(
+                    profile_records, parent_path=normalized
+                ),
+                reject_symlinks=True,
+            )
+            != git_tree
+        ):
+            raise ValueError("Clean-candidate submodule archive does not match its Git tree")
+    return profile_records
+
+
 def _verify_clean_candidate(
     manifest: dict[str, object],
     policy: dict[str, object],
@@ -355,7 +445,7 @@ def _verify_clean_candidate(
     candidate = read_json(candidate_path)
     if set(candidate) != {"schema_version", "freeze_id", "created_utc", "source", "build"}:
         raise ValueError("Clean-candidate manifest has unexpected top-level fields")
-    if candidate.get("schema_version") != 1:
+    if candidate.get("schema_version") != 2:
         raise ValueError("Unsupported clean-candidate manifest schema")
     freeze_id = _text(candidate, "freeze_id")
     uuid.UUID(freeze_id)
@@ -367,10 +457,12 @@ def _verify_clean_candidate(
     if set(source) != {
         "archive_path",
         "archive_sha256",
+        "source_bundle_sha256",
         "git_commit",
         "git_tree",
         "worktree_status",
         "submodule_status",
+        "submodules",
     }:
         raise ValueError("Clean-candidate source attestation has unexpected fields")
     archive = _verify_bound_file(
@@ -390,13 +482,21 @@ def _verify_clean_candidate(
         raise ValueError("Clean-candidate Git tree is malformed")
     if source.get("worktree_status") != "clean":
         raise ValueError("Clean-candidate source worktree is not attested clean")
-    if source.get("submodule_status") != "absent":
-        raise ValueError("Clean-candidate source submodules are not attested absent")
+    profile_submodules = _verify_submodule_archives(
+        source, candidate_dir=candidate_path.parent
+    )
     if manifest.get("git_commit") != git_commit:
         raise ValueError("Science manifest Git commit differs from clean candidate")
     if _archive_commit(archive) != git_commit:
         raise ValueError("Clean-candidate source archive does not identify the Git commit")
-    if git_tree_sha1_from_archive(archive) != git_tree:
+    if (
+        git_tree_sha1_from_archive(
+            archive,
+            gitlinks=direct_submodule_gitlinks(profile_submodules),
+            reject_symlinks=True,
+        )
+        != git_tree
+    ):
         raise ValueError("Clean-candidate source archive does not match its Git tree")
 
     build = _mapping(candidate, "build")
@@ -405,6 +505,7 @@ def _verify_clean_candidate(
         "profile_path",
         "profile_sha256",
         "source_archive_sha256",
+        "source_bundle_sha256",
         "toolchain",
         "build_command",
         "executable_path",
@@ -428,15 +529,25 @@ def _verify_clean_candidate(
     )
     if build.get("source_archive_sha256") != source.get("archive_sha256"):
         raise ValueError("Build profile is not bound to the frozen source archive")
+    bundle_sha256 = source_bundle_sha256(
+        _digest(source, "archive_sha256"), profile_submodules
+    )
+    if (
+        source.get("source_bundle_sha256") != bundle_sha256
+        or build.get("source_bundle_sha256") != bundle_sha256
+    ):
+        raise ValueError("Build profile is not bound to the frozen source bundle")
     require_read_only(profile_path)
     require_read_only(executable)
     if read_json(profile_path) != {
         "schema_version": 1,
         "profile_id": profile_id,
         "source_archive_sha256": source["archive_sha256"],
+        "source_bundle_sha256": bundle_sha256,
         "toolchain": toolchain,
         "build_command": build_command,
         "executable_sha256": build["executable_sha256"],
+        "submodules": profile_submodules,
     }:
         raise ValueError("Frozen build profile does not match clean-candidate attestation")
     executable_snapshot = record_for_role(manifest, "executable")

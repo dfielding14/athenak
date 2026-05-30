@@ -13,7 +13,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": 1
+      "const": 2
     },
     "freeze_id": {
       "type": "string",
@@ -29,10 +29,12 @@
       "required": [
         "archive_path",
         "archive_sha256",
+        "source_bundle_sha256",
         "git_commit",
         "git_tree",
         "worktree_status",
-        "submodule_status"
+        "submodule_status",
+        "submodules"
       ],
       "properties": {
         "archive_path": {
@@ -40,6 +42,10 @@
           "minLength": 1
         },
         "archive_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "source_bundle_sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         },
@@ -55,9 +61,86 @@
           "const": "clean"
         },
         "submodule_status": {
-          "const": "absent"
+          "enum": [
+            "absent",
+            "clean_pinned_archived"
+          ]
+        },
+        "submodules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "archive_path",
+              "archive_sha256",
+              "git_commit",
+              "git_tree",
+              "worktree_status"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*(?:^|/)\\.(?:/|$))[^\\s]+$"
+              },
+              "archive_path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "archive_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "git_commit": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "git_tree": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{40}$"
+              },
+              "worktree_status": {
+                "const": "clean"
+              }
+            }
+          }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "submodule_status": {
+                "const": "absent"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "submodules": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "submodule_status": {
+                "const": "clean_pinned_archived"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "submodules": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
     },
     "build": {
       "type": "object",
@@ -67,6 +150,7 @@
         "profile_path",
         "profile_sha256",
         "source_archive_sha256",
+        "source_bundle_sha256",
         "toolchain",
         "build_command",
         "executable_path",
@@ -86,6 +170,10 @@
           "pattern": "^[0-9a-f]{64}$"
         },
         "source_archive_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "source_bundle_sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         },

@@ -15,6 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from tst.publication.pic_qualification_manifest import (
+    _source_bundle_sha256,
     freeze_qualification_manifest,
     validate_qualification_manifest,
 )
@@ -34,6 +35,9 @@ class PicQualificationManifestTests(unittest.TestCase):
             ("modules.txt", "modules"),
             ("environment.txt", "environment"),
             ("metrics.json", '{"relative_error": 0.0}\n'),
+            ("source.tar", "source archive"),
+            ("kokkos.tar", "kokkos archive"),
+            ("clean_candidate_manifest.json", '{"schema_version": 2}\n'),
         ):
             (self.root / name).write_text(contents, encoding="utf-8")
         self.manifest = {
@@ -46,8 +50,28 @@ class PicQualificationManifestTests(unittest.TestCase):
             "physical_mode": "paper_test_particle",
             "git": {
                 "commit": "0" * 40,
+                "tree": "1" * 40,
                 "status": [],
-                "submodules": [],
+                "source_archive": {
+                    "path": "source.tar",
+                    "sha256": _sha256(self.root / "source.tar"),
+                },
+                "source_bundle_sha256": "",
+                "submodule_status": "clean_pinned_archived",
+                "submodules": [
+                    {
+                        "path": "kokkos",
+                        "archive_path": "kokkos.tar",
+                        "archive_sha256": _sha256(self.root / "kokkos.tar"),
+                        "git_commit": "2" * 40,
+                        "git_tree": "3" * 40,
+                        "worktree_status": "clean",
+                    }
+                ],
+                "clean_candidate_manifest": {
+                    "path": "clean_candidate_manifest.json",
+                    "sha256": _sha256(self.root / "clean_candidate_manifest.json"),
+                },
             },
             "executable": {
                 "path": "athena",
@@ -78,6 +102,10 @@ class PicQualificationManifestTests(unittest.TestCase):
                 "disposition": "pending external review",
             },
         }
+        self.manifest["git"]["source_bundle_sha256"] = _source_bundle_sha256(
+            self.manifest["git"]["source_archive"]["sha256"],
+            self.manifest["git"]["submodules"],
+        )
 
     def tearDown(self) -> None:
         self.temporary_directory.cleanup()
@@ -104,6 +132,19 @@ class PicQualificationManifestTests(unittest.TestCase):
         unknown = copy.deepcopy(self.manifest)
         unknown["claim_ids"] = ["CLAIM-DOES-NOT-EXIST"]
         self._assert_rejected(unknown)
+
+    def test_submodule_bundle_and_clean_candidate_drift_are_rejected(self) -> None:
+        dirty = copy.deepcopy(self.manifest)
+        dirty["git"]["submodules"][0]["worktree_status"] = "dirty"
+        self._assert_rejected(dirty)
+
+        mismatched = copy.deepcopy(self.manifest)
+        mismatched["git"]["source_bundle_sha256"] = "0" * 64
+        self._assert_rejected(mismatched)
+
+        candidate = copy.deepcopy(self.manifest)
+        candidate["git"]["clean_candidate_manifest"]["sha256"] = "0" * 64
+        self._assert_rejected(candidate)
 
     def test_escaped_missing_and_checksum_mismatched_files_are_rejected(
         self,

@@ -512,9 +512,12 @@ quietly substituting convenient engineering parameters.
 
 For each experiment, archive all of:
 
-- Exact git commit, submodule status, CMake cache, executable checksum, loaded
-  modules, reviewed redacted allowlisted environment capture, Slurm script,
-  input deck and analysis script. Never archive unrestricted environment dumps.
+- Exact git commit and tree, clean-candidate manifest checksum, parent source
+  archive checksum, canonical recursive-submodule source-bundle checksum,
+  structured clean pinned submodule archive attestations, CMake cache,
+  executable checksum, loaded modules, reviewed redacted allowlisted
+  environment capture, Slurm script, input deck and analysis script. Never
+  archive unrestricted environment dumps.
 - Raw AthenaK output, stdout/stderr, scheduler accounting, restart checkpoints,
   and machine-readable diagnostics.
 - An immutable metrics JSON or CSV containing analytical reference values,
