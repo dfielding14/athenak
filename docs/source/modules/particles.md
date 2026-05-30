@@ -43,6 +43,7 @@ Enable the standard stopping-time law with:
 particle_type = dust
 pusher = drag
 ppc = 1.0
+cfl_part = 0.5
 
 <drag_particles>
 enabled = true
@@ -68,6 +69,13 @@ The standard force is
 exchange is operator split from the fluid update.  `particle_mass` is used only when a
 pgen leaves `IPM <= 0`; production pgens should initialize each particle mass explicitly.
 
+`<particles>/cfl_part` is a separate migration-safety limit.  Before each step, the core
+particle module computes the time for every particle to cross its current MeshBlock in
+each active direction and caps the step by `cfl_part` times the minimum.  The accepted
+range is `0 < cfl_part <= 1`; the default `0.5` leaves margin for source updates.  This
+keeps the immediate-neighbor MPI exchange valid even for fast particles and refined
+MeshBlocks.
+
 The implementation samples the host fluid primitive velocity, applies the exact
 single-particle stopping-time update for the chosen step, and deposits the equal and
 opposite momentum impulse into the fluid when `backreaction = true`:
@@ -82,8 +90,9 @@ AthenaK stores cell-averaged conserved variables.  If `include_energy = true` an
 EOS is ideal, the opposite of the drag change in particle kinetic energy is deposited
 into the gas total energy.  For isothermal fluids, `include_energy` is ignored.
 
-The drag exchange is operator split in the `after_timeintegrator` task list.  After the
-exchange, hydro or MHD primitives are refreshed so the next step sees the updated fluid.
+The drag exchange is operator split in the `after_timeintegrator` task list.  When
+backreaction changes the fluid, hydro or MHD primitives are refreshed so the next step
+sees the updated state.
 
 ## Coupling Stencils
 
@@ -181,6 +190,10 @@ these helpers through the `streaming_instability` pgen's relaxation mode.
 
 ## AMR and MPI Behavior
 
+Drag particles currently require periodic boundaries in every active direction.  The
+constructor rejects outflow, reflecting, user, and shear-periodic boundaries because the
+particle migration path does not yet define those edge semantics.
+
 Particles continue to use the existing MeshBlock boundary exchange for MPI migration.
 This branch also adds `Particles::RemapAfterAMR()`:
 
@@ -198,6 +211,10 @@ The remap path avoids particle host/device copies on ranks with zero local parti
 those ranks still participate in MPI send/receive discovery so sparse-rank AMR rebuilds
 remain collective-safe.
 
+`Particles::UpdateNewTimeStep()` enforces immediate-neighbor migration before every step,
+and `ParticlesBoundaryValues::SetNewPrtclGID()` also fails explicitly if a particle ever
+crosses more than one MeshBlock in one push.
+
 ## Restarts
 
 Restart files now append particle metadata, per-rank particle counts, `prtcl_rdata`, and
@@ -212,7 +229,8 @@ state.
 | --- | --- |
 | `inputs/tests/particle_drag_relaxation.athinput` | Dust-gas drag damping and momentum check |
 | `inputs/tests/particle_drag_mhd_relaxation.athinput` | Zero-field MHD host smoke test |
-| `inputs/tests/particle_drag_restart.athinput` | Restart and user drag callback re-enrollment |
+| `inputs/tests/particle_drag_restart.athinput` | Serial and MPI restart with user drag callback re-enrollment |
+| `inputs/tests/particle_drag_outputs.athinput` | Particle VTK and tracked-particle output smoke test, including a sparse MPI rank |
 | `inputs/particles/hello_drag_particles.athinput` | Minimal standard drag example |
 | `inputs/particles/user_drag_hook.athinput` | Minimal pgen user drag callback example |
 | `inputs/particles/streaming_instability.athinput` | Uniform-grid streaming setup |

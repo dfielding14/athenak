@@ -61,17 +61,24 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
   auto &nghbr = pmy_part->pmy_pack->pmb->nghbr;
   auto &psendl = sendlist;
   DvceArray1D<int> atom_count("particle_send_count",1);
+  DvceArray1D<int> bad_location("particle_bad_location",1);
   Kokkos::deep_copy(atom_count, 0);
+  Kokkos::deep_copy(bad_location, 0);
   bool &multi_d = pmy_part->pmy_pack->pmesh->multi_d;
   bool &three_d = pmy_part->pmy_pack->pmesh->three_d;
+  int nmb = pmy_part->pmy_pack->nmb_thispack;
 
   Kokkos::realloc(sendlist, std::max(1,npart));
   par_for("part_update",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
     int m = pi(PGID,p) - gids;
+    if ((m < 0) || (m >= nmb)) {
+      Kokkos::atomic_max(&bad_location(0), 1);
+      return;
+    }
     int mylevel = mblev.d_view(m);
     Real x1 = pr(IPX,p);
-    Real x2 = pr(IPY,p);
-    Real x3 = pr(IPZ,p);
+    Real x2 = multi_d ? pr(IPY,p) : 0.0;
+    Real x3 = three_d ? pr(IPZ,p) : 0.0;
 
     // length of MeshBlock in each direction
     Real lx = (mbsize.d_view(m).x1max - mbsize.d_view(m).x1min);
@@ -80,8 +87,14 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
 
     // integer offset of particle relative to center of MeshBlock (-1,0,+1)
     int ix = static_cast<int>((x1 - mbsize.d_view(m).x1min + lx)/lx) - 1;
-    int iy = static_cast<int>((x2 - mbsize.d_view(m).x2min + ly)/ly) - 1;
-    int iz = static_cast<int>((x3 - mbsize.d_view(m).x3min + lz)/lz) - 1;
+    int iy = multi_d ?
+        static_cast<int>((x2 - mbsize.d_view(m).x2min + ly)/ly) - 1 : 0;
+    int iz = three_d ?
+        static_cast<int>((x3 - mbsize.d_view(m).x3min + lz)/lz) - 1 : 0;
+    if (abs(ix) > 1 || abs(iy) > 1 || abs(iz) > 1) {
+      Kokkos::atomic_max(&bad_location(0), 2);
+      return;
+    }
 
     // sublock indices for faces and edges with S/AMR
     int fx = (x1 < 0.5*(mbsize.d_view(m).x1min + mbsize.d_view(m).x1max))? 0 : 1;
@@ -155,17 +168,17 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
       // reset x,y,z positions if particle crosses Mesh boundary using periodic BCs
       if (x1 < meshsize.x1min) {
         pr(IPX,p) += (meshsize.x1max - meshsize.x1min);
-      } else if (x1 > meshsize.x1max) {
+      } else if (x1 >= meshsize.x1max) {
         pr(IPX,p) -= (meshsize.x1max - meshsize.x1min);
       }
-      if (x2 < meshsize.x2min) {
+      if (multi_d && x2 < meshsize.x2min) {
         pr(IPY,p) += (meshsize.x2max - meshsize.x2min);
-      } else if (x2 > meshsize.x2max) {
+      } else if (multi_d && x2 >= meshsize.x2max) {
         pr(IPY,p) -= (meshsize.x2max - meshsize.x2min);
       }
-      if (x3 < meshsize.x3min) {
+      if (three_d && x3 < meshsize.x3min) {
         pr(IPZ,p) += (meshsize.x3max - meshsize.x3min);
-      } else if (x3 > meshsize.x3max) {
+      } else if (three_d && x3 >= meshsize.x3max) {
         pr(IPZ,p) -= (meshsize.x3max - meshsize.x3min);
       }
     }
@@ -174,6 +187,22 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
   auto atom_count_h = Kokkos::create_mirror_view(atom_count);
   Kokkos::deep_copy(atom_count_h, atom_count);
   counter = atom_count_h(0);
+  int bad = 0;
+  auto bad_location_h = Kokkos::create_mirror_view(bad_location);
+  Kokkos::deep_copy(bad_location_h, bad_location);
+  bad = bad_location_h(0);
+  if (bad != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl;
+    if (bad == 1) {
+      std::cout << "Particle has a non-local <particles>/PGID before migration."
+                << std::endl;
+    } else {
+      std::cout << "Particle crossed more than one MeshBlock in one push; reduce "
+                << "<particles>/cfl_part." << std::endl;
+    }
+    std::exit(EXIT_FAILURE);
+  }
   nprtcl_send = counter;
   Kokkos::resize(sendlist, nprtcl_send);
   // sync sendlist device array with host

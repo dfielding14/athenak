@@ -8,6 +8,10 @@ This example exercises the drag-coupled dust particle path:
 - Fourier history diagnostics for gas and particle perturbations
 - AMR particle remapping and MPI particle migration
 
+All supplied drag-particle inputs use periodic boundaries and
+`<particles>/cfl_part = 0.5`.  The core particle timestep limiter keeps each push within
+an immediate MeshBlock neighbor, including after refinement changes block widths.
+
 ## Equations
 
 The gas is evolved by the hydro module.  Dust particles carry position, velocity, and mass.

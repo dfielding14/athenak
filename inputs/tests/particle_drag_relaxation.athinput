@@ -47,6 +47,7 @@ gamma = 1.6666666666666667
 particle_type = dust
 pusher = drag
 ppc = 1.0
+cfl_part = 0.5
 assign_tag = index_order
 
 <drag_particles>

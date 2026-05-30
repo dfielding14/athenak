@@ -1,6 +1,7 @@
 """Streaming-instability linear-growth test with AMR and MPI."""
 
 from subprocess import Popen, PIPE
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -106,3 +107,88 @@ def test_streaming_instability_dynamic_amr_mpi_many_particles():
             pytest.fail("higher-count dynamic AMR history contains non-finite values")
     finally:
         Popen(["rm", "-f", history], stdout=PIPE).communicate()
+
+
+def test_drag_fast_particles_migrate_across_ranks():
+    """Limit fast particles to neighboring MeshBlock migrations under MPI."""
+    history = "particle_drag_fast_mpi.user.hst"
+    try:
+        args = [
+            "job/basename=particle_drag_fast_mpi",
+            "problem/particle_vx=100.0",
+            "drag_particles/stopping_time=100.0",
+            "drag_particles/cfl_drag=1.0",
+            "time/tlim=0.03",
+            "output1/dt=0.01",
+        ]
+        results = testutils.mpi_run(
+            "inputs/tests/particle_drag_relaxation.athinput", args, threads=2
+        )
+        assert results, "fast MPI particle migration run failed"
+
+        data = athena_read.hst(history)
+        pmass = data["pmass"]
+        mass_drift = np.max(np.abs(pmass - pmass[0])) / pmass[0]
+        if mass_drift > 1.0e-12:
+            pytest.fail(
+                f"particle mass changed during fast MPI migration: {mass_drift:g}"
+            )
+        if not np.all(np.isfinite(data["gmom1"] + data["pmom1"])):
+            pytest.fail("fast MPI particle migration history contains non-finite values")
+    finally:
+        Popen(["rm", "-f", history], stdout=PIPE).communicate()
+
+
+def test_drag_particle_outputs_with_sparse_mpi_rank():
+    """Write particle outputs when one MPI rank owns no particles."""
+    try:
+        Popen(["rm", "-rf", "pvtk", "trk"], stdout=PIPE).communicate()
+        args = [
+            "mesh/nx1=24",
+            "meshblock/nx1=8",
+            "particles/ppc=0.005",
+            "time/tlim=0.001",
+            "output1/dt=0.001",
+            "output2/dt=0.001",
+        ]
+        results = testutils.mpi_run(
+            "inputs/tests/particle_drag_outputs.athinput", args, threads=2
+        )
+        assert results, "sparse-rank MPI particle output run failed"
+
+        pvtk = list(Path("pvtk").glob("particle_drag_outputs.particles.*.part.vtk"))
+        if not pvtk or any(path.stat().st_size == 0 for path in pvtk):
+            pytest.fail("sparse-rank MPI particle VTK output was not written")
+        tracked = Path("trk/particle_drag_outputs.trk")
+        if not tracked.exists() or tracked.stat().st_size == 0:
+            pytest.fail("sparse-rank MPI tracked-particle output was not written")
+    finally:
+        Popen(["rm", "-rf", "pvtk", "trk"], stdout=PIPE).communicate()
+
+
+def test_drag_restart_user_hook_reenrollment_mpi():
+    """Restart user-hook drag particles across two MPI ranks."""
+    history = "particle_drag_restart.user.hst"
+    try:
+        Popen(["rm", "-rf", "rst", history], stdout=PIPE).communicate()
+        results = testutils.mpi_run(
+            "inputs/tests/particle_drag_restart.athinput", threads=2
+        )
+        assert results, "pre-restart MPI drag run failed"
+        rst = Path("rst/particle_drag_restart.00000.rst")
+        if not rst.exists():
+            pytest.fail(f"MPI restart file was not written: {rst}")
+
+        Popen(["rm", "-f", history], stdout=PIPE).communicate()
+        restarted = testutils.run_command(
+            ["mpirun", "-np", "2", "./athena", "-r", str(rst), "time/tlim=0.1"]
+        )
+        assert restarted, "MPI drag restart run failed"
+
+        data = athena_read.hst(history)
+        pmass = data["pmass"]
+        mass_drift = np.max(np.abs(pmass - pmass[0])) / pmass[0]
+        if mass_drift > 1.0e-12:
+            pytest.fail(f"particle mass changed across MPI restart: {mass_drift:g}")
+    finally:
+        Popen(["rm", "-rf", "rst", history], stdout=PIPE).communicate()

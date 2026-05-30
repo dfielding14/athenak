@@ -127,7 +127,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     header_offset += msg.str().size();
   }
   // allocate 1D vector of floats used to convert and output particle data
-  float *data = new float[3*npout_thisrank];
+  std::vector<float> data(std::max(1, 3*npout_thisrank));
   // Loop over particles, load positions into data[]
   for (int p=0; p<npout_thisrank; ++p) {
     data[3*p] = static_cast<float>(outpart_rdata(IPX,p));
@@ -159,7 +159,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::size_t datasize = sizeof(float);
     std::size_t myoffset=header_offset + 3*rank_offset[global_variable::my_rank]*datasize;
     // collective writes for minimum number of particles across ranks
-    if (partfile.Write_any_type_at_all(&(data[0]),3*npout_min,myoffset,"float")
+    if (partfile.Write_any_type_at_all(data.data(),3*npout_min,myoffset,"float")
           != 3*npout_min) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
           << std::endl << "particle data not written correctly to vtk particle file, "
@@ -170,7 +170,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     myoffset += datasize*3*npout_min;
     int nremain = pm->nprtcl_thisrank - npout_min;
     if (nremain > 0) {
-      if (partfile.Write_any_type_at(&(data[3*npout_min]),3*nremain,myoffset,"float")
+      if (partfile.Write_any_type_at(data.data() + 3*npout_min,3*nremain,myoffset,"float")
             != 3*nremain) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
             << std::endl << "particle data not written correctly to vtk particle file, "
@@ -220,7 +220,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::size_t datasize = sizeof(float);
     std::size_t myoffset=header_offset + rank_offset[global_variable::my_rank]*datasize;
     // collective writes for minimum number of particles across ranks
-    if (partfile.Write_any_type_at_all(&(data[0]),npout_min,myoffset,"float")
+    if (partfile.Write_any_type_at_all(data.data(),npout_min,myoffset,"float")
           != npout_min) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
           << std::endl << "particle data not written correctly to vtk particle file, "
@@ -231,7 +231,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     myoffset += datasize*npout_min;
     int nremain = pm->nprtcl_thisrank - npout_min;
     if (nremain > 0) {
-      if (partfile.Write_any_type_at(&(data[npout_min]),nremain,myoffset,"float")
+      if (partfile.Write_any_type_at(data.data() + npout_min,nremain,myoffset,"float")
             != nremain) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
             << std::endl << "particle data not written correctly to vtk particle file, "
@@ -248,8 +248,6 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
   // close the output file and clean up
   partfile.Close();
-  delete[] data;
-
   // increment counters
   out_params.file_number++;
   if (out_params.last_time < 0.0) {

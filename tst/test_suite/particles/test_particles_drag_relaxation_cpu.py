@@ -1,6 +1,7 @@
 """Dust-gas stopping-time drag relaxation tests."""
 
 import os
+from pathlib import Path
 from subprocess import Popen, PIPE
 
 import numpy as np
@@ -105,6 +106,21 @@ def test_drag_energy_conservation_ideal_gas():
         _clean([history])
 
 
+def test_drag_particle_outputs():
+    """Write particle VTK and tracked-particle files for dust particles."""
+    try:
+        results = testutils.run("inputs/tests/particle_drag_outputs.athinput")
+        assert results, "dust particle output run failed"
+        pvtk = list(Path("pvtk").glob("particle_drag_outputs.particles.*.part.vtk"))
+        if not pvtk or any(path.stat().st_size == 0 for path in pvtk):
+            pytest.fail("dust particle VTK output was not written")
+        tracked = Path("trk/particle_drag_outputs.trk")
+        if not tracked.exists() or tracked.stat().st_size == 0:
+            pytest.fail("tracked dust-particle output was not written")
+    finally:
+        _clean(["pvtk", "trk"])
+
+
 def test_drag_restart_user_hook_reenrollment():
     """Restart drag particles and ensure a pgen user drag callback is re-enrolled."""
     try:
@@ -137,6 +153,8 @@ def test_drag_restart_user_hook_reenrollment():
         (["drag_particles/model=none"], "<particles>/pusher"),
         (["drag_particles/stopping_time=0.0"], "<drag_particles>/stopping_time"),
         (["drag_particles/cfl_drag=0.0"], "<drag_particles>/cfl_drag"),
+        (["particles/cfl_part=0.0"], "<particles>/cfl_part"),
+        (["particles/cfl_part=1.1"], "<particles>/cfl_part"),
         (["drag_particles/particle_mass=0.0"], "<drag_particles>/particle_mass"),
         (["drag_particles/interpolation=bogus"], "<drag_particles>/interpolation"),
         (["drag_particles/deposition=bogus"], "<drag_particles>/deposition"),
@@ -146,6 +164,7 @@ def test_drag_restart_user_hook_reenrollment():
         (["particles/pusher=bogus"], "<particles>/pusher"),
         (["particles/ppc=-1.0"], "<particles>/ppc"),
         (["particles/assign_tag=bogus"], "<particles>/assign_tag"),
+        (["mesh/ix1_bc=outflow", "mesh/ox1_bc=outflow"], "<mesh>/*_bc"),
     ],
 )
 def test_drag_invalid_inputs_fail_cleanly(flags, expected):

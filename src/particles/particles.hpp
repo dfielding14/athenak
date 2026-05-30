@@ -203,6 +203,8 @@ class Particles {
   DvceArray2D<Real> prtcl_rdata;   // real number properties each particle (x,v,etc.)
   DvceArray2D<int>  prtcl_idata;   // integer properties each particle (gid, tag, etc.)
   Real dtnew;
+  Real dtnew_limit;
+  Real cfl_part;
 
   ParticlesPusher pusher;
   DragParticlesModel drag_model;
@@ -236,6 +238,8 @@ class Particles {
   TaskStatus ClearRecv(Driver *pdriver, int stage);
   TaskStatus ApplyDrag(Driver *pdriver, int stage);
   void ApplyStoppingTimeDrag(const Real bdt);
+  void UpdateNewTimeStep();
+  void SetFixedTimeStepLimit(const Real dtlimit);
   void RemapAfterAMR();
 
  private:

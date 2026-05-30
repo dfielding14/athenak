@@ -327,9 +327,9 @@ void ProblemGenerator::StreamingInstability(ParameterInput *pin, const bool rest
 
   Real vmax = std::max(std::abs(si.part_vx), std::abs(si.part_vy));
   vmax = std::max(vmax, std::abs(si.part_vz)) + si.amp;
-  if (vmax > 0.0) {
+  if (mode.compare("relaxation") != 0 && vmax > 0.0) {
     Real dx = std::min(size.h_view(0).dx1, size.h_view(0).dx3);
-    pmbp->ppart->dtnew = std::min(pmbp->ppart->dtnew, 0.3*dx/vmax);
+    pmbp->ppart->SetFixedTimeStepLimit(0.3*dx/vmax);
   }
 }
 
@@ -390,6 +390,7 @@ void StreamingInstabilityUserDrag(MeshBlockPack *pmbp, const Real bdt) {
   bool include_energy = ppart->drag_include_energy && eos_data.is_ideal;
   DragParticlesCoupling interpolation = ppart->drag_interpolation;
   DragParticlesCoupling deposition = ppart->drag_deposition;
+  Real drag_factor = 1.0 - exp(-bdt/stopping_time);
 
   par_for("streaming_user_particle_drag", DevExeSpace(), 0, npart-1,
   KOKKOS_LAMBDA(const int p) {
@@ -413,7 +414,6 @@ void StreamingInstabilityUserDrag(MeshBlockPack *pmbp, const Real bdt) {
     Real vx_old = pr(IPVX,p);
     Real vy_old = multi_d ? pr(IPVY,p) : 0.0;
     Real vz_old = three_d ? pr(IPVZ,p) : 0.0;
-    Real drag_factor = 1.0 - exp(-bdt/stopping_time);
     Real dv1_drag = drag_factor*(vg1 - vx_old);
     Real dv2_drag = multi_d ? drag_factor*(vg2 - vy_old) : 0.0;
     Real dv3_drag = three_d ? drag_factor*(vg3 - vz_old) : 0.0;
@@ -434,11 +434,15 @@ void StreamingInstabilityUserDrag(MeshBlockPack *pmbp, const Real bdt) {
         denergy = -(ke_new - ke_old);
       }
       DragParticleStencil deposit_stencil;
-      BuildDragParticleStencil(deposition, pr(IPX,p), pr(IPY,p), pr(IPZ,p),
-                               mbsize.d_view(m).x1min, mbsize.d_view(m).x2min,
-                               mbsize.d_view(m).x3min, mbsize.d_view(m).dx1,
-                               mbsize.d_view(m).dx2, mbsize.d_view(m).dx3, is, ie, js,
-                               je, ks, ke, multi_d, three_d, deposit_stencil);
+      if (deposition == interpolation) {
+        deposit_stencil = interp_stencil;
+      } else {
+        BuildDragParticleStencil(deposition, pr(IPX,p), pr(IPY,p), pr(IPZ,p),
+                                 mbsize.d_view(m).x1min, mbsize.d_view(m).x2min,
+                                 mbsize.d_view(m).x3min, mbsize.d_view(m).dx1,
+                                 mbsize.d_view(m).dx2, mbsize.d_view(m).dx3, is, ie, js,
+                                 je, ks, ke, multi_d, three_d, deposit_stencil);
+      }
       DepositDragBackreaction(u0, m, deposit_stencil, 1.0/vol, -pmass*dv1_drag,
                               -pmass*dv2_drag, -pmass*dv3_drag, denergy, multi_d,
                               three_d, include_energy);

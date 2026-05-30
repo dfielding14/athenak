@@ -51,6 +51,8 @@ DragParticlesCoupling ParseDragCoupling(ParameterInput *pin, const std::string &
 Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     pmy_pack(ppack),
     dtnew(std::numeric_limits<Real>::max()),
+    dtnew_limit(std::numeric_limits<Real>::max()),
+    cfl_part(0.5),
     drag_model(DragParticlesModel::none),
     drag_enabled(false),
     drag_backreaction(true),
@@ -72,6 +74,11 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
   Real ppc = pin->GetOrAddReal("particles","ppc",1.0);
   if (ppc < 0.0) {
     ParticleInputFatal(__FILE__, __LINE__, "<particles>/ppc", "must be >= 0");
+  }
+  cfl_part = pin->GetOrAddReal("particles","cfl_part",0.5);
+  if (cfl_part <= 0.0 || cfl_part > 1.0) {
+    ParticleInputFatal(__FILE__, __LINE__, "<particles>/cfl_part",
+                       "must be > 0 and <= 1");
   }
 
   // compute number of particles as real number, since ppc can be < 1
@@ -112,7 +119,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
         ParticleInputFatal(__FILE__, __LINE__, "<drag_particles>/stopping_time",
                            "must be > 0");
       }
-      dtnew = std::min(dtnew, cfl_drag*drag_stopping_time);
+      dtnew_limit = std::min(dtnew_limit, cfl_drag*drag_stopping_time);
     } else if (dmodel.compare("user") == 0) {
       drag_model = DragParticlesModel::user;
       if (pin->DoesParameterExist("drag_particles","stopping_time")) {
@@ -121,7 +128,7 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
           ParticleInputFatal(__FILE__, __LINE__, "<drag_particles>/stopping_time",
                              "must be > 0 when provided for model=user");
         }
-        dtnew = std::min(dtnew, cfl_drag*drag_stopping_time);
+        dtnew_limit = std::min(dtnew_limit, cfl_drag*drag_stopping_time);
       }
     } else if (dmodel.compare("none") == 0) {
       drag_model = DragParticlesModel::none;
@@ -213,8 +220,13 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
       ParticleInputFatal(__FILE__, __LINE__, "<drag_particles>/enabled",
                          "true currently supports exactly one host fluid block");
     }
+    if (!pmy_pack->pmesh->strictly_periodic) {
+      ParticleInputFatal(__FILE__, __LINE__, "<mesh>/*_bc",
+                         "drag particles currently require periodic boundaries");
+    }
     nrdata = std::max(nrdata, IPM + 1);
   }
+  dtnew = dtnew_limit;
   Kokkos::realloc(prtcl_rdata, nrdata, nprtcl_thispack);
   Kokkos::realloc(prtcl_idata, nidata, nprtcl_thispack);
 
@@ -226,6 +238,59 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
 // destructor
 
 Particles::~Particles() {
+  delete pbval_part;
+}
+
+//----------------------------------------------------------------------------------------
+// SetFixedTimeStepLimit()
+
+void Particles::SetFixedTimeStepLimit(const Real dtlimit) {
+  dtnew_limit = std::min(dtnew_limit, dtlimit);
+  dtnew = std::min(dtnew, dtnew_limit);
+}
+
+//----------------------------------------------------------------------------------------
+// UpdateNewTimeStep()
+// The particle exchange path communicates only with immediate MeshBlock neighbors.  Keep
+// each push below one MeshBlock width so a particle cannot skip over its destination.
+
+void Particles::UpdateNewTimeStep() {
+  dtnew = dtnew_limit;
+  if (nprtcl_thispack <= 0) {return;}
+
+  auto pr = prtcl_rdata;
+  auto pi = prtcl_idata;
+  auto &mbsize = pmy_pack->pmb->mb_size;
+  int gids = pmy_pack->gids;
+  int nmb = pmy_pack->nmb_thispack;
+  bool multi_d = pmy_pack->pmesh->multi_d;
+  bool three_d = pmy_pack->pmesh->three_d;
+  Real crossing_time = std::numeric_limits<Real>::max();
+
+  Kokkos::parallel_reduce("particle_newdt", Kokkos::RangePolicy<DevExeSpace>(0,
+      nprtcl_thispack), KOKKOS_LAMBDA(const int p, Real &dtmin) {
+    int m = pi(PGID,p) - gids;
+    if ((m < 0) || (m >= nmb)) {return;}
+
+    Real speed = fabs(pr(IPVX,p));
+    if (speed > 0.0) {
+      dtmin = fmin(dtmin, (mbsize.d_view(m).x1max - mbsize.d_view(m).x1min)/speed);
+    }
+    if (multi_d) {
+      speed = fabs(pr(IPVY,p));
+      if (speed > 0.0) {
+        dtmin = fmin(dtmin, (mbsize.d_view(m).x2max - mbsize.d_view(m).x2min)/speed);
+      }
+    }
+    if (three_d) {
+      speed = fabs(pr(IPVZ,p));
+      if (speed > 0.0) {
+        dtmin = fmin(dtmin, (mbsize.d_view(m).x3max - mbsize.d_view(m).x3min)/speed);
+      }
+    }
+  }, Kokkos::Min<Real>(crossing_time));
+
+  dtnew = std::min(dtnew, cfl_part*crossing_time);
 }
 
 //----------------------------------------------------------------------------------------
@@ -272,7 +337,7 @@ void WrapCoordinate(Real &x, Real xmin, Real xmax) {
   Real len = xmax - xmin;
   if (len <= 0.0) {return;}
   while (x < xmin) {x += len;}
-  while (x > xmax) {x -= len;}
+  while (x >= xmax) {x -= len;}
 }
 
 } // namespace

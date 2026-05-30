@@ -1248,7 +1248,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     auto pdens = derived_var;
     auto pr = pm->pmb_pack->ppart->prtcl_rdata;
     auto pi = pm->pmb_pack->ppart->prtcl_idata;
-    int &npart = pm->nprtcl_thisrank;
+    int npart = pm->pmb_pack->ppart->nprtcl_thispack;
     int gids = pm->pmb_pack->gids;
     bool mass_density = (name.compare("prtcl_rho") == 0);
 
@@ -1260,6 +1260,7 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     par_for("pdens", DevExeSpace(), 0, (npart-1),
     KOKKOS_LAMBDA(const int p) {
       int m = pi(PGID,p) - gids;
+      if ((m < 0) || (m >= nmb)) {return;}
       int ip = (pr(IPX,p) - size.d_view(m).x1min)/size.d_view(m).dx1 + is;
       int jp = (pr(IPY,p) - size.d_view(m).x2min)/size.d_view(m).dx2 + js;
       int kp = ks;

@@ -68,6 +68,7 @@ iso_sound_speed = 1.0
 particle_type = dust
 pusher = drag
 ppc = 1.0
+cfl_part = 0.5
 assign_tag = index_order
 
 <drag_particles>

@@ -132,7 +132,7 @@ Complete list of all input parameters by block, extracted from source code.
 | Parameter | Type | Default | Source |
 |-----------|------|---------|--------|
 | `assign_tag` | string | index_order | particles.cpp:L146 |
-| `cfl_part` | Real | 0.05 | part_static_turb.cpp:L53 |
+| `cfl_part` | Real | 0.5 | particles.cpp |
 | `interpolation` | string | tsc | particles.cpp:L83 |
 | `mass_log_spacing` | Real | 1.0 | part_static_turb.cpp:L57 |
 | `min_mass` | Real | 1.0 | part_static_turb.cpp:L56 |

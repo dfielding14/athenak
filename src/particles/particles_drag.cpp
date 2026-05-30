@@ -43,9 +43,13 @@ TaskStatus Particles::ApplyDrag(Driver *pdriver, int stage) {
     (pmy_pack->pmesh->pgen->user_particle_drag_func)(pmy_pack, beta_dt);
   }
 
-  if ((pmy_pack->phydro != nullptr) && (pmy_pack->pmhd == nullptr)) {
+  bool refresh_primitives = (drag_model == DragParticlesModel::user) ||
+                            (drag_backreaction && nprtcl_thispack > 0);
+  if (refresh_primitives && (pmy_pack->phydro != nullptr) &&
+      (pmy_pack->pmhd == nullptr)) {
     (void) pmy_pack->phydro->ConToPrim(pdriver, stage);
-  } else if ((pmy_pack->pmhd != nullptr) && (pmy_pack->phydro == nullptr)) {
+  } else if (refresh_primitives && (pmy_pack->pmhd != nullptr) &&
+             (pmy_pack->phydro == nullptr)) {
     (void) pmy_pack->pmhd->ConToPrim(pdriver, stage);
   }
 
@@ -89,6 +93,7 @@ void Particles::ApplyStoppingTimeDrag(const Real bdt) {
   DragParticlesCoupling deposition = drag_deposition;
   Real omega0 = drag_omega0;
   Real qshear = drag_qshear;
+  Real drag_factor = 1.0 - exp(-bdt/stopping_time);
 
   par_for("particle_drag_stopping_time", DevExeSpace(), 0, npart-1,
   KOKKOS_LAMBDA(const int p) {
@@ -121,8 +126,6 @@ void Particles::ApplyStoppingTimeDrag(const Real bdt) {
                              je, ks, ke, multi_d, three_d, interp_stencil);
     Real vg1, vg2, vg3;
     InterpolateDragVelocity(w0, m, interp_stencil, multi_d, three_d, vg1, vg2, vg3);
-    Real drag_factor = 1.0 - exp(-bdt/stopping_time);
-
     Real dv1_drag = drag_factor*(vg1 - vx_pred);
     Real dv2_drag = multi_d ? drag_factor*(vg2 - vy_pred) : 0.0;
     Real dv3_drag = three_d ? drag_factor*(vg3 - vz_pred) : 0.0;
@@ -145,11 +148,15 @@ void Particles::ApplyStoppingTimeDrag(const Real bdt) {
         denergy = -(ke_new - ke_old);
       }
       DragParticleStencil deposit_stencil;
-      BuildDragParticleStencil(deposition, pr(IPX,p), pr(IPY,p), pr(IPZ,p),
-                               mbsize.d_view(m).x1min, mbsize.d_view(m).x2min,
-                               mbsize.d_view(m).x3min, mbsize.d_view(m).dx1,
-                               mbsize.d_view(m).dx2, mbsize.d_view(m).dx3, is, ie, js,
-                               je, ks, ke, multi_d, three_d, deposit_stencil);
+      if (deposition == interpolation) {
+        deposit_stencil = interp_stencil;
+      } else {
+        BuildDragParticleStencil(deposition, pr(IPX,p), pr(IPY,p), pr(IPZ,p),
+                                 mbsize.d_view(m).x1min, mbsize.d_view(m).x2min,
+                                 mbsize.d_view(m).x3min, mbsize.d_view(m).dx1,
+                                 mbsize.d_view(m).dx2, mbsize.d_view(m).dx3, is, ie, js,
+                                 je, ks, ke, multi_d, three_d, deposit_stencil);
+      }
       DepositDragBackreaction(u0, m, deposit_stencil, inv_vol, -pmass*dv1_drag,
                               -pmass*dv2_drag, -pmass*dv3_drag, denergy, multi_d,
                               three_d, include_energy);

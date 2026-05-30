@@ -626,6 +626,7 @@ void Mesh::NewTimeStep(const Real tlim) {
   }
   // Particles timestep
   if (pmb_pack->ppart != nullptr) {
+    pmb_pack->ppart->UpdateNewTimeStep();
     dt = std::min(dt, (pmb_pack->ppart->dtnew) );
   }
 
