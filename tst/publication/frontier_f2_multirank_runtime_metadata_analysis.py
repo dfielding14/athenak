@@ -100,6 +100,7 @@ EXPECTED_RUNTIME_MODEL = (
     "expanding_box=off expansion_law=linear wave_damping=off nu_in=0 "
     "lb_cost_per_particle=0 max_cell_cross=2 theta_max=0.3 restart_schema=7"
 )
+EXPECTED_RANK_COUNT = "Number of parallel ranks = 8"
 
 
 def _sha256(data: bytes) -> str:
@@ -198,8 +199,8 @@ def _analyze_tree(artifact_tree: object) -> dict[str, object]:
         artifact_tree, inventory, "athena_stderr.txt", require_nonempty=True
     )
     validate_frontier_mpich_diagnostic_stderr(stderr)
-    if "Number of parallel ranks = 8" not in stdout.splitlines():
-        raise ValueError("F2 Athena stdout does not report eight parallel ranks")
+    if stdout.splitlines().count(EXPECTED_RANK_COUNT) != 1:
+        raise ValueError("F2 Athena stdout does not report exactly one eight-rank record")
     bindings = _rank_gpu_bindings(stdout)
     runtime_model = _require_runtime_model(stdout)
     return {

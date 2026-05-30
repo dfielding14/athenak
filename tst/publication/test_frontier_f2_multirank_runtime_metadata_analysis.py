@@ -157,6 +157,11 @@ class FrontierF2MultirankRuntimeMetadataAnalysisTests(unittest.TestCase):
                 "deltaf_adapt=off",
                 "deltaf_adapt=global_bikappa_moments_experimental",
             ),
+            "omitted_expansion_law": (" expansion_law=linear", ""),
+            "duplicate_background": (
+                "background=coupled",
+                "background=coupled background=coupled",
+            ),
             "unreviewed_extra_token": ("restart_schema=7", "restart_schema=7 extra=1"),
         }
         for label, (expected, replacement) in replacements.items():
@@ -175,6 +180,34 @@ class FrontierF2MultirankRuntimeMetadataAnalysisTests(unittest.TestCase):
                     ValueError, "differs from the reviewed identity"
                 ):
                     analyze(root)
+
+    def test_multirank_runtime_metadata_rejects_extra_runtime_model_line(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._artifacts(root)
+            stdout = root / "athena_stdout.txt"
+            stdout.write_text(
+                stdout.read_text(encoding="utf-8")
+                + "PIC runtime model: unreviewed=duplicate\n",
+                encoding="utf-8",
+            )
+            self._publish_inventory(root)
+            with self.assertRaisesRegex(ValueError, "exactly one runtime-model line"):
+                analyze(root)
+
+    def test_multirank_runtime_metadata_rejects_duplicate_rank_count(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._artifacts(root)
+            stdout = root / "athena_stdout.txt"
+            stdout.write_text(
+                stdout.read_text(encoding="utf-8")
+                + "Number of parallel ranks = 8\n",
+                encoding="utf-8",
+            )
+            self._publish_inventory(root)
+            with self.assertRaisesRegex(ValueError, "exactly one eight-rank record"):
+                analyze(root)
 
     def test_trusted_runner_publishes_receipt_and_recomputes_without_writing(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
