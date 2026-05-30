@@ -1,0 +1,10 @@
++zsh:7> cd /tmp/cr-rel-phase4a-gather-rebound
++zsh:8> /tmp/athenak-cr-phase4a-runtime/src/athena -i /Users/dbf75/.codex/worktrees/e354/athenak-DF/inputs/unit_tests/cr_relativistic_runtime_gather_periodic.athinput
++zsh:9> python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_relativistic_runtime_gather_periodic.tsv --expected-count 64 --expected-cycle 0 --expected-time 0 --expected-contiguous-tags 64 --require-boundary-tag-probes --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
+validated 64 CR runtime gather rows from cr_relativistic_runtime_gather_periodic.tsv
++zsh:10> /tmp/athenak-cr-phase4a-runtime/src/athena -i /Users/dbf75/.codex/worktrees/e354/athenak-DF/inputs/unit_tests/cr_relativistic_runtime_gather_smr.athinput
++zsh:11> python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_relativistic_runtime_gather_smr.tsv --expected-count 512 --expected-cycle 0 --expected-time 0 --expected-contiguous-tags 512 --require-refined-region-tag-probes --profile periodic --u1 0.125 --u2 -0.25 --u3 0.375 --u-amplitude 0.08 --b1 0.25 --b2 -0.5 --b3 1.0 --b-profile sinusoidal_divb_free --b-amplitude 0.05 --profile-tolerance 0.04
+validated 512 CR runtime gather rows from cr_relativistic_runtime_gather_smr.tsv
++zsh:12> /tmp/athenak-cr-phase4a-runtime/src/athena -i /Users/dbf75/.codex/worktrees/e354/athenak-DF/inputs/unit_tests/cr_relativistic_runtime_gather_amr_shadow.athinput
++zsh:13> python3 /Users/dbf75/.codex/worktrees/e354/athenak-DF/scripts/particles/cr_relativistic_runtime_gather_inspect.py cr_relativistic_runtime_gather_amr_shadow.tsv --expected-count 64 --expected-cycle 3 --expected-time 0.025970518172472944 --expected-contiguous-tags 64 --require-tag-random-motion --particle-seed 29 --min-motion 0.001 --min-moved-particles 64 --skip-profile-check
+validated 64 CR runtime gather rows from cr_relativistic_runtime_gather_amr_shadow.tsv

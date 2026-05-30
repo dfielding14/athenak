@@ -93,6 +93,13 @@ def test_relativistic_hc_valid_constructor_only_cases_cpu(tmp_path, alpha_s):
         ("c_model", "c_model"),
         ("alpha_s", "alpha_s"),
         ("relativistic_field_source", "relativistic_field_source"),
+        ("relativistic_initial_state", "relativistic_initial_state"),
+        ("B0x", "B0x"),
+        ("B0y", "B0y"),
+        ("B0z", "B0z"),
+        ("cE0x", "cE0x"),
+        ("cE0y", "cE0y"),
+        ("cE0z", "cE0z"),
     ],
 )
 def test_relativistic_hc_requires_explicit_new_fields_cpu(
@@ -219,10 +226,145 @@ def test_relativistic_hc_inherited_constructor_rejections_fail_closed_cpu(
     _assert_fails_closed(result)
 
 
-def test_relativistic_hc_positive_cycle_aborts_as_unimplemented_cpu(tmp_path):
-    """Constructor success must not expose an accidental production push path."""
+def test_relativistic_hc_positive_cycle_prescribed_test_runs_cpu(tmp_path):
+    """The bounded prescribed-test HC pusher is executable after Phase 4a opens."""
     result = _run_relativistic(tmp_path, ["time/nlim=1"])
-    _assert_fatal(result, "not implemented")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_relativistic_hc_rejects_unqualified_subcycling_cpu(tmp_path):
+    """Acceleration-aware subcycling remains closed until its owning phase."""
+    result = _run_relativistic(tmp_path, inject_in_particles="subcycle = true\n")
+    _assert_fatal(result, "Phase-5 redesign")
+
+
+def test_relativistic_hc_rejects_multilevel_mesh_cpu(tmp_path):
+    """SMR and AMR remain closed until relativistic migration is qualified."""
+    result = _run_relativistic(
+        tmp_path,
+        append_text=("\n<mesh_refinement>\nrefinement = adaptive\n"
+                     "num_levels = 2\nmax_nmb_per_rank = 16\n"))
+    _assert_fatal(result, "serial uniform-level mesh")
+
+
+def test_relativistic_hc_rejects_gather_diagnostic_escape_for_normal_pgen_cpu(
+        tmp_path):
+    """The construction-only Phase-3 escape hatch is not a general runtime opt-out."""
+    result = _run_relativistic(
+        tmp_path, append_text="\n<problem>\nrelativistic_gather_diagnostic_only = true\n")
+    _assert_fatal(result, "requires pgen_name = cr_relativistic_runtime_gather_test")
+
+
+def test_relativistic_hc_rejects_gather_diagnostic_escape_for_positive_cycle_cpu(
+        tmp_path):
+    """The registered Phase-3 pgen cannot use the escape hatch during a push cycle."""
+    result = _run_relativistic(
+        tmp_path,
+        ["problem/pgen_name=cr_relativistic_runtime_gather_test", "time/nlim=1"],
+        append_text="\n<problem>\nrelativistic_gather_diagnostic_only = true\n")
+    _assert_fatal(result, "<time>/nlim = 0")
+
+
+@pytest.mark.parametrize("b_profile", ["linear_cross", "gradb", "turbulent"])
+def test_relativistic_hc_prescribed_test_requires_uniform_b_profile_cpu(
+        tmp_path, b_profile):
+    """The frozen per-particle prescribed B tuple cannot masquerade as a grid profile."""
+    result = _run_relativistic(tmp_path, [f"problem/B_profile={b_profile}"])
+    _assert_fatal(result, "B_profile = uniform")
+
+
+def test_relativistic_hc_rejects_unknown_initial_state_selector_cpu(tmp_path):
+    """The authoritative-state selector is an exact closed enum."""
+    result = _run_relativistic(
+        tmp_path, ["problem/relativistic_initial_state=momentum"])
+    _assert_fatal(result, "Unknown relativistic_initial_state")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("B0x", "nan"),
+        ("B0y", "inf"),
+        ("B0z", "-inf"),
+        ("cE0x", "nan"),
+        ("cE0y", "inf"),
+        ("cE0z", "-inf"),
+    ],
+)
+def test_relativistic_hc_rejects_nonfinite_prescribed_fields_cpu(
+        tmp_path, field, value):
+    """Prescribed analytical fields must be finite before device initialization."""
+    result = _run_relativistic(tmp_path, [f"problem/{field}={value}"])
+    _assert_fatal(result, "fields and initial state must be finite")
+
+
+@pytest.mark.parametrize("missing_field", ["v0x", "v0y", "v0z"])
+def test_relativistic_hc_velocity_initialization_requires_complete_tuple_cpu(
+        tmp_path, missing_field):
+    """Velocity initialization must be explicit and cannot silently use defaults."""
+    result = _run_relativistic(tmp_path, drop_parameters=(missing_field,))
+    _assert_fatal(result, "velocity initialization requires")
+
+
+def test_relativistic_hc_velocity_initialization_rejects_random_mode_cpu(tmp_path):
+    """Velocity-mode authoritative state cannot be seeded from random legacy paths."""
+    result = _run_relativistic(tmp_path, ["problem/particle_velocity=random"])
+    _assert_fatal(result, "particle_velocity = uniform")
+
+
+def test_relativistic_hc_velocity_initialization_rejects_scalar_v0_cpu(tmp_path):
+    """Velocity-mode authoritative state rejects an ambiguous scalar-speed spelling."""
+    result = _run_relativistic(tmp_path, append_text="\n<problem>\nv0 = 0.2\n")
+    _assert_fatal(result, "no scalar v0")
+
+
+@pytest.mark.parametrize("partial_w", ["w0x=0.0", "w0y=0.0", "w0z=0.0"])
+def test_relativistic_hc_w_initialization_requires_complete_tuple_cpu(
+        tmp_path, partial_w):
+    """Momentum initialization fails closed on partial authoritative tuples."""
+    result = _run_relativistic(
+        tmp_path,
+        ["problem/relativistic_initial_state=w"],
+        drop_parameters=("v0x", "v0y", "v0z"),
+        append_text=f"\n<problem>\n{partial_w}\n")
+    _assert_fatal(result, "requires exactly w0x, w0y, w0z")
+
+
+def test_relativistic_hc_w_initialization_runs_cpu(tmp_path):
+    """Explicit authoritative momentum initialization reaches the bounded HC path."""
+    result = _run_relativistic(
+        tmp_path,
+        ["problem/relativistic_initial_state=w", "time/nlim=1"],
+        drop_parameters=("v0x", "v0y", "v0z"),
+        append_text="\n<problem>\nw0x = 0.2\nw0y = -0.1\nw0z = 0.05\n")
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("value", ["nan", "inf", "-inf"])
+def test_relativistic_hc_rejects_nonfinite_w_initialization_cpu(tmp_path, value):
+    """Authoritative momentum tuples must be finite and shadow-representable."""
+    result = _run_relativistic(
+        tmp_path,
+        ["problem/relativistic_initial_state=w"],
+        drop_parameters=("v0x", "v0y", "v0z"),
+        append_text=f"\n<problem>\nw0x = {value}\nw0y = 0.0\nw0z = 0.0\n")
+    _assert_fatal(result, "fields and initial state must be finite")
+
+
+def test_relativistic_hc_w_initialization_rejects_velocity_tuple_cpu(tmp_path):
+    """Momentum mode cannot retain a contradictory legacy velocity tuple."""
+    result = _run_relativistic(
+        tmp_path,
+        ["problem/relativistic_initial_state=w"],
+        append_text="\n<problem>\nw0x = 0.2\nw0y = 0.0\nw0z = 0.0\n")
+    _assert_fatal(result, "and no velocity initialization values")
+
+
+def test_relativistic_hc_velocity_initialization_rejects_w_tuple_cpu(tmp_path):
+    """Velocity mode cannot retain a contradictory authoritative momentum tuple."""
+    result = _run_relativistic(
+        tmp_path, append_text="\n<problem>\nw0x = 0.2\nw0y = 0.0\nw0z = 0.0\n")
+    _assert_fatal(result, "velocity initialization rejects")
 
 
 def test_relativistic_hc_rejects_outputs_before_writing_files_cpu(tmp_path):
@@ -255,6 +397,31 @@ def test_legacy_pushers_reject_stale_relativistic_background_cpu(tmp_path):
     ]
     result = _run_capture(
         tmp_path, flags, inject_in_particles="relativistic_background = frozen\n")
+    _assert_fatal(result, "relativistic-only")
+
+
+@pytest.mark.parametrize(
+    "problem_key",
+    [
+        "relativistic_initial_state = velocity\n",
+        "w0x = 0.0\n",
+        "w0y = 0.0\n",
+        "w0z = 0.0\n",
+        "cE0x = 0.0\n",
+        "cE0y = 0.0\n",
+        "cE0z = 0.0\n",
+        "relativistic_gather_diagnostic_only = true\n",
+    ],
+)
+def test_legacy_pushers_reject_relativistic_problem_keys_cpu(tmp_path, problem_key):
+    """Legacy modes must reject Phase-4a prescribed-test initialization keys."""
+    flags = [
+        "particles/pusher=boris",
+        "time/evolution=dynamic",
+        "mhd/rsolver=hlld",
+        "time/nlim=1",
+    ]
+    result = _run_capture(tmp_path, flags, append_text=f"\n<problem>\n{problem_key}")
     _assert_fatal(result, "relativistic-only")
 
 

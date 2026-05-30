@@ -1,0 +1,67 @@
+Phase-4a prescribed-test relativistic pusher evidence replay commands
+===================================================================
+
+Kernel helper release:
+  /tmp/athenak-cr-phase4a-pusher-kernel/src/athena \
+    -i inputs/unit_tests/cr_relativistic_pusher_kernel.athinput
+
+Kernel helper debug:
+  /tmp/athenak-cr-phase4a-pusher-kernel-debug/src/athena \
+    -i inputs/unit_tests/cr_relativistic_pusher_kernel.athinput
+
+Production-path analytical and convergence suite:
+  python3 scripts/particles/cr_relativistic_pusher_runtime_inspect.py \
+    --binary /tmp/athenak-cr-phase4a-pusher-runtime/src/athena \
+    --input inputs/unit_tests/cr_relativistic_pusher_runtime.athinput \
+    --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4a_preregistered_criteria.json \
+    --work-dir /tmp/athenak-cr-phase4a-runtime-suite-final \
+    --metrics /tmp/phase4a_pusher_runtime_metrics.json
+
+Parser contract:
+  cd /tmp/athenak-cr-phase4a-cpu/src
+  python3 -m pytest -q \
+    /Users/dbf75/.codex/worktrees/e354/athenak-DF/tst/test_suite/particles/test_particles_cr_relativistic_contract_cpu.py
+
+Retained legacy regressions:
+  cd tst
+  python3 run_test_suite.py --test test_suite/particles/test_particles_cr_cpu.py --cpu
+  python3 run_test_suite.py --test test_suite/particles/test_particles_cr_accuracy_cpu.py --cpu
+  python3 run_test_suite.py --test test_suite/particles/test_particles_cr_mpicpu.py --mpicpu
+  python3 run_test_suite.py --test test_suite/particles/test_particles_cr_accuracy_mpicpu.py --mpicpu
+  python3 run_test_suite.py --style
+
+Explicit MPI rejection probe:
+  cmake -S . -B /tmp/athenak-cr-phase4a-pusher-runtime-mpi \
+    -D PROBLEM=unit_tests/cr_relativistic_pusher_runtime_test \
+    -D Athena_ENABLE_MPI=ON \
+    -D Kokkos_ENABLE_SERIAL=ON
+  cmake --build /tmp/athenak-cr-phase4a-pusher-runtime-mpi -j 4
+  mpirun -n 2 /tmp/athenak-cr-phase4a-pusher-runtime-mpi/src/athena \
+    -i inputs/unit_tests/cr_relativistic_pusher_runtime.athinput \
+    mesh/nx1=16 \
+    meshblock/nx1=8
+
+Phase-3 diagnostic-only replay:
+  # The periodic and SMR decks set:
+  #   problem/relativistic_gather_diagnostic_only = true
+  # The constructor accepts that key only for:
+  #   pgen_name = cr_relativistic_runtime_gather_test
+  #   time/nlim = 0
+  #
+  # Rebuild and replay the serial and MPI gather ladders recorded under:
+  #   evidence/phase4a_phase3_refresh_serial/
+  #   evidence/phase4a_phase3_refresh_mpi/
+  #
+  # The retained MPI ladder covers periodic ranks 1, 2, 4, and 6 with an
+  # empty-particle rank, SMR rank 4, and dynamic-AMR-shadow rank 4.
+
+Whitespace checks:
+  git diff --check
+  rg -n '[ \t]+$' \
+    docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4a_preregistered_criteria.json \
+    inputs/unit_tests/cr_relativistic_pusher_kernel.athinput \
+    inputs/unit_tests/cr_relativistic_pusher_runtime.athinput \
+    scripts/particles/cr_relativistic_pusher_runtime_inspect.py \
+    src/particles/relativistic_pusher.hpp \
+    src/pgen/unit_tests/cr_relativistic_pusher_kernel_test.cpp \
+    src/pgen/unit_tests/cr_relativistic_pusher_runtime_test.cpp

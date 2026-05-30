@@ -18,6 +18,7 @@
 #include "globals.hpp"
 #include "mhd/mhd.hpp"
 #include "particles.hpp"
+#include "relativistic_pusher.hpp"
 #include "trilinear_gather.hpp"
 
 #if MPI_PARALLEL_ENABLED
@@ -273,6 +274,107 @@ void RunDriftStep(MeshBlockPack *pmy_pack, DvceArray2D<Real> &pr, int npart,
   });
 }
 
+[[noreturn]] void FatalRelativisticPush(const int status) {
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << "Particle pusher 'relativistic_hc' failed with status "
+            << status << std::endl;
+#if MPI_PARALLEL_ENABLED
+  int initialized = 0;
+  MPI_Initialized(&initialized);
+  if (initialized != 0) {MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);}
+#endif
+  std::exit(EXIT_FAILURE);
+}
+
+void RunRelativisticPrescribedStep(DvceArray2D<Real> &pr, int npart, Real c_model,
+                                   Real dt) {
+  DvceArray1D<int> failure("part_relativistic_push_failure", 1);
+  Kokkos::deep_copy(failure, 0);
+  par_for("part_relativistic_hc_prescribed",DevExeSpace(),0,(npart-1),
+  KOKKOS_LAMBDA(const int p) {
+    relativistic::Vector3 w_old{pr(IPWX,p), pr(IPWY,p), pr(IPWZ,p)};
+    relativistic::Vector3 velocity_old{0.0, 0.0, 0.0};
+    Real gamma_old = 0.0;
+    auto state_status =
+        relativistic::VelocityFromW(w_old, c_model, velocity_old, gamma_old);
+    if (state_status != relativistic::StateStatus::success) {
+      Kokkos::atomic_max(&failure(0), static_cast<int>(state_status));
+      return;
+    }
+
+    relativistic::PushResult result;
+    auto push_status = relativistic::HigueraCaryPush(
+        w_old, {pr(IPCEX,p), pr(IPCEY,p), pr(IPCEZ,p)},
+        {pr(IPBX,p), pr(IPBY,p), pr(IPBZ,p)}, pr(IPALPHA,p), c_model, dt, result);
+    if (push_status != relativistic::PushStatus::success) {
+      Kokkos::atomic_max(&failure(0), 100 + static_cast<int>(push_status));
+      return;
+    }
+
+    Real half_dt = 0.0;
+    relativistic::Vector3 x_old{pr(IPX,p), pr(IPY,p), pr(IPZ,p)};
+    relativistic::Vector3 old_half_drift{0.0, 0.0, 0.0};
+    relativistic::Vector3 x_mid{0.0, 0.0, 0.0};
+    relativistic::Vector3 new_half_drift{0.0, 0.0, 0.0};
+    relativistic::Vector3 x_new{0.0, 0.0, 0.0};
+    relativistic::Vector3 negative_x_old{0.0, 0.0, 0.0};
+    relativistic::Vector3 displacement{0.0, 0.0, 0.0};
+    relativistic::Vector3 displacement_old{pr(IPDX,p), pr(IPDY,p), pr(IPDZ,p)};
+    relativistic::Vector3 displacement_new{0.0, 0.0, 0.0};
+    Real work_new = 0.0;
+    if (!relativistic::CheckedProduct(0.5, dt, half_dt) ||
+        !relativistic::CheckedScale(half_dt, velocity_old, old_half_drift) ||
+        !relativistic::CheckedAdd(x_old, old_half_drift, x_mid) ||
+        !relativistic::CheckedScale(half_dt, result.velocity, new_half_drift) ||
+        !relativistic::CheckedAdd(x_mid, new_half_drift, x_new) ||
+        !relativistic::CheckedScale(-1.0, x_old, negative_x_old) ||
+        !relativistic::CheckedAdd(x_new, negative_x_old, displacement) ||
+        !relativistic::CheckedAdd(displacement_old, displacement, displacement_new) ||
+        !relativistic::CheckedScalarAdd(pr(IPWORK,p), result.work, work_new)) {
+      Kokkos::atomic_max(&failure(0), 200);
+      return;
+    }
+    relativistic::Vector3 b{pr(IPBX,p), pr(IPBY,p), pr(IPBZ,p)};
+    Real bmag = relativistic::ScaledNorm3(b);
+    Real db_new = pr(IPDB,p);
+    if (!relativistic::IsFinite(bmag) || !relativistic::IsFinite(db_new)) {
+      Kokkos::atomic_max(&failure(0), 201);
+      return;
+    }
+    if (bmag > 0.0) {
+      Real displacement_dot_b = 0.0;
+      Real db_increment = 0.0;
+      if (!relativistic::CheckedDot(displacement, b, displacement_dot_b)) {
+        Kokkos::atomic_max(&failure(0), 202);
+        return;
+      }
+      db_increment = displacement_dot_b/bmag;
+      if (!relativistic::CheckedScalarAdd(pr(IPDB,p), db_increment, db_new)) {
+        Kokkos::atomic_max(&failure(0), 203);
+        return;
+      }
+    }
+
+    state_status =
+        relativistic::StoreAuthoritativeWAndSynchronizeVelocityShadow(
+            pr, p, result.w, c_model);
+    if (state_status != relativistic::StateStatus::success) {
+      Kokkos::atomic_max(&failure(0), 300 + static_cast<int>(state_status));
+      return;
+    }
+    pr(IPWORK,p) = work_new;
+    pr(IPX,p) = x_new.x;
+    pr(IPY,p) = x_new.y;
+    pr(IPZ,p) = x_new.z;
+    pr(IPDX,p) = displacement_new.x;
+    pr(IPDY,p) = displacement_new.y;
+    pr(IPDZ,p) = displacement_new.z;
+    pr(IPDB,p) = db_new;
+  });
+  auto failure_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), failure);
+  if (failure_h(0) != 0) {FatalRelativisticPush(failure_h(0));}
+}
+
 } // namespace
 
 //----------------------------------------------------------------------------------------
@@ -420,13 +522,6 @@ void Particles::ExchangeAfterSubcycle() {
 //  \brief
 
 TaskStatus Particles::Push(Driver *pdriver, int stage) {
-  if (pusher == ParticlesPusher::relativistic_hc) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "Particle pusher 'relativistic_hc' parsed successfully "
-              << "but prescribed-field execution is not implemented or qualified"
-              << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is;
   int js = indcs.js;
@@ -471,6 +566,10 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
                                         nx2, nx3, multi_d, three_d, dt_sub);
               break;
           }
+          break;
+
+        case ParticlesPusher::relativistic_hc:
+          RunRelativisticPrescribedStep(prtcl_rdata, npart, c_model, dt_sub);
           break;
 
         default:

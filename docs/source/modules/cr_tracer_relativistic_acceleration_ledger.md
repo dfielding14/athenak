@@ -25,14 +25,14 @@ The statuses in this initial draft are intentionally conservative:
 | --- | --- | --- |
 | Ledger date | `2026-05-30` | Record the date of each accepted update. |
 | Working branch | `feature/CR_tracers_relativistic_acceleration` | Stop if the working branch changes unexpectedly. |
-| Working branch HEAD at latest accepted commit | `56dcbf3f3c0120171604af4db9300bcde86b2397` | Refresh after every accepted commit. |
+| Working branch HEAD at latest accepted commit | `812aef13c636e5647779a5b1ca506bc6f4489890` | Refresh after every accepted commit. |
 | Frozen feature base | `64a4d1be8da1c22d1328cc47280195b3747fa0ab` from `feature/CR_tracers_followup_architecture` | Change only through an accepted `DR-000` update. |
 | Intended eventual integration target | `origin/development` at `c6a73b08e60807f8b925164c5e7edd5cb820c8ae` | Refresh the target SHA and merge-tree audit after target updates and before handoff. |
 | Current implementation phase | `Phase 4a: mechanically isolated prescribed-test relativistic push` | Keep solver coupling closed until `CP-3 Minimal Serial`, `RG-005`, and later `CP-4 Solver Coupling`. |
-| Allowed write manifest | Exact DR-026 Phase-4a surfaces: `src/athena.hpp`, `src/particles/particles.cpp`, `src/pgen/part_random.cpp`, `src/particles/particles_pushers.cpp`, one narrowly scoped invariant helper, prescribed-field kernel tests and decks, Phase-4a evidence, and this ledger only | Keep restart, outputs, MHD tasks, AMR infrastructure, live-grid coupling, CT EMF reuse, subcycling, and outer timestep unchanged. |
-| Last accepted checkpoint | `RG-004 PROCEED`: Phase-3 runtime-diagnostic package accepted after fresh oracle and integration-boundary rereviews | Record each milestone commit before opening the next phase. |
+| Allowed write manifest | Exact DR-026 and DR-027 Phase-4a surfaces: `src/athena.hpp`, `src/particles/particles.cpp`, `src/pgen/part_random.cpp`, `src/particles/particles_pushers.cpp`, `src/particles/README.md`, narrowly scoped invariant and pusher helpers, prescribed-field kernel and runtime tests, decks, criteria, analyzer, Phase-4a evidence, and this ledger only | Keep restart, outputs, MHD tasks, AMR infrastructure, live-grid coupling, CT EMF reuse, subcycling, and outer timestep unchanged. |
+| Last accepted checkpoint | `RG-005 PROCEED` and `CP-3 Minimal Serial`: prescribed-test HC package accepted after corrected rebound evidence and three independent seal reviews | Record each milestone commit before opening the next phase. |
 | Open blocking findings | Downstream `BF-009`, `BF-014`, backend qualification, restart, output, solver-coupling, subcycling, timestep-refresh, and migration obligations remain open for their owning phases | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
-| CPU/MPI qualification status | Phase-3 rebound candidate: legacy CPU plus parser `81 passed`; legacy MPI CPU plus accuracy `9 passed`; custom runtime periodic, SMR, AMR, and MPI ladder pass; style `2 passed`; single precision remains blocked by inherited repository narrowing errors | Rerun and archive qualification at each accepted milestone. |
+| CPU/MPI qualification status | Phase-4a accepted serial scope: parser `92 passed`; prescribed runtime `38/38`; legacy CPU plus accuracy `32 passed`; legacy MPI CPU plus accuracy `9 passed`; Phase-3 diagnostic-only serial and MPI replay ladder passes; style `2 passed`; production MPI/SMR/AMR remains deliberately fail-closed; single precision remains blocked by inherited repository narrowing errors | Rerun and archive qualification at each accepted milestone. |
 | GPU qualification status | Not started; unavailable on this workstation | GPU qualification is optional for `MERGE READY` on this workstation, but it remains a separate unqualified residual risk.  Do not claim `GPU QUALIFIED` without accelerator evidence on an accepted SHA. |
 | Merge-ready status | Not eligible | Requires the guide's checkpoint sequence, including `CP-4 Solver Coupling` and `CP-7 Final Cold Review`. |
 
@@ -2480,3 +2480,274 @@ before the fixes are accepted.
   prescribed-test state fail-closed, integrate the prescribed HC map, and add
   isolated analytical kernel tests.  Do not edit restart, outputs, subcycling,
   outer timestep, MHD tasks, or AMR infrastructure.
+
+## DR-027: Phase-4a Prescribed-Test HC Implementation Choices
+
+- Status: candidate-selected; pending `RG-005`
+- Date: 2026-05-30
+- Question: Which bounded implementation choices make the first executable
+  relativistic push reviewable without leaking into solver coupling or later
+  schema work?
+- Options considered:
+  1. Use direct vector arithmetic and rely on post-operation finite checks.
+  2. Add checked scalar, scale, add, dot, and cross helpers and reject
+     arithmetic range violations before partial particle-state mutation.
+  3. Introduce a general vector-arithmetic abstraction across legacy and
+     relativistic pushers immediately.
+- Selected option: option 2.
+- Reasoning:
+  - direct post-operation checks can observe overflow only after it occurs;
+  - narrowly scoped checked helpers keep the legacy path unchanged;
+  - checked dot and cross operations avoid naive intermediate overflow;
+  - the negative-`sigma` Higuera-Cary root uses the conjugate form;
+  - the runtime path computes candidate work, positions, displacements,
+    `|B|`, and `IPDB` first, then commits the accepted state.
+- State-invariant choice:
+  - `IPWX`, `IPWY`, and `IPWZ` remain authoritative;
+  - one helper stores accepted `w` and synchronizes `IPVX`, `IPVY`, and
+    `IPVZ` compatibility shadows after initialization and every accepted kick;
+  - no relativistic algebra reads legacy `IPM`;
+  - a paired production-path poison test changes `IPM` while holding the
+    final-limited outer step fixed and requires identical physics fields.
+- Initialization choice:
+  - require explicit complete `B0x`, `B0y`, and `B0z` prescribed tuples;
+  - require explicit `cE0x`, `cE0y`, and `cE0z`;
+  - for `relativistic_initial_state = velocity`, require
+    `particle_velocity = uniform`, explicit complete `v0x`, `v0y`, and `v0z`,
+    and no scalar `v0`;
+  - for `relativistic_initial_state = w`, require exactly complete `w0x`,
+    `w0y`, and `w0z`, with no velocity initialization tuple;
+  - retain legacy defaults unchanged outside `relativistic_hc`.
+- Harness choice:
+  - use a helper-only custom pgen for algebra, root branches, host/device
+    parity, and deterministic failure statuses;
+  - use a distinct production-path custom pgen that calls `PartRandom`,
+    installs a finalizer, emits witness TSV data, and never invokes the HC
+    helper directly;
+  - validate the production path against independent closed-form and RK4
+    oracles in Python;
+  - poison finite live `w0` and `bcc0` arrays in a paired production run and
+    require identical physics fields, proving Phase-4a isolation from sampled
+    MHD arrays.
+- Convergence choice and inflection:
+  - the first attempted ladder varied mesh CFL values over a final-limited
+    `0.04` window; retained traces showed every case took the same single
+    `0.04` step, so that ladder was rejected as non-discriminating;
+  - probe runs then established an observed refinement axis using paired
+    mesh and particle CFL values `0.08`, `0.04`, `0.02`, and `0.01` over a
+    `0.2` window;
+  - the accepted ladder measures a combined momentum-plus-displacement slope
+    of `1.9996235673293787`.
+- Documentation reopening:
+  - reopen `src/particles/README.md` only to replace stale constructor-only
+    language with the bounded prescribed-test execution contract and the
+    appended in-memory state layout;
+  - keep restart and output semantics explicitly gated.
+- Compatibility impact: legacy prefix indices, legacy widths, restart bytes,
+  output implementations, MHD tasks, task scheduling, and subcycling remain
+  unchanged.
+- Alternatives retained:
+  - revisit a broader arithmetic abstraction only if later solver-coupled or
+    subcycling code demonstrates real duplication;
+  - revisit the authoritative state layout only at restart and diagnostic
+    schema gates;
+  - retain prescribed and solver-coupled evidence as separate classifications.
+- Revisit trigger: `RG-005`, solver-coupled Phase 4b design, acceleration-aware
+  subcycling, restart schema, or any reviewer finding that the prescribed
+  harness is not mechanically isolated.
+
+## RG-005 Candidate: Does The Prescribed-Test Pusher Merit Integration?
+
+- Date: 2026-05-30
+- Status: candidate `PROCEED`; independent physics, test-adversary, and
+  integration-boundary done-claim reviews still required.
+- Scope reviewed:
+  - append-only relativistic in-memory state with legacy prefix preservation;
+  - arbitrary-`c_model` checked Higuera-Cary helper;
+  - prescribed-test-only production path;
+  - explicit direct sampled-field work quadrature;
+  - fail-closed initialization, output, restart, solver-coupling, and
+    subcycling boundaries;
+  - README correction and preregistered Phase-4a criteria.
+- Prescribed-test evidence observed before review:
+  - helper-only serial release and debug runs pass;
+  - helper-only host/device parity covers accepted and rejected probes,
+    zero field, pure electric field, magnetic reversibility, signed
+    `alpha_s`, low-speed limit, high-`gamma`, and conjugate-root execution;
+  - parser contract reports `73 passed`;
+  - production metrics satisfy all preregistered `P4A-01` through `P4A-16`
+    thresholds;
+  - direct work closure is `2.168404344971009e-19` in pure `cE`,
+    `2.168404344971009e-19` for non-unit `c_model`, and
+    `6.776263578034403e-21` in crossed fields;
+  - uniform-`B` phase error is `1.1196392133608346e-05`;
+  - high-`gamma` relative energy drift is `0.0`;
+  - legacy-`IPM` independence and poisoned-live-grid isolation errors are
+    both `0.0`;
+  - production convergence slope is `1.9996235673293787`;
+  - refreshed Phase-3 serial periodic, SMR, and dynamic-AMR-shadow gather
+    witnesses pass after their input-deck initialization amendments.
+- Retained regression status at record time:
+  - legacy core CR CPU suite: `20 passed`;
+  - additional accuracy, MPI, style, evidence binding, and independent
+    done-claim reviews still running or pending.
+- Scope still closed:
+  - sampled-MHD solver coupling;
+  - production-path fluid-velocity cancellation;
+  - dynamic-MHD temporal-order claims;
+  - relativistic subcycling and outer-timestep redesign;
+  - relativistic restart and output schemas;
+  - MPI, AMR, and accelerator qualification for the new momentum-changing
+    runtime path.
+- Decision: hold the gate open until retained regressions, direct evidence
+  binding, and all three fresh reviews complete.
+
+## RG-005 Review Hold And Correction Scope
+
+- Date: 2026-05-30
+- Status: `HOLD`; correction and rebound validation in progress.
+- Independent review outcome:
+  - physics reviewer: `HOLD`;
+  - test-adversary reviewer: `HOLD`;
+  - integration-boundary reviewer: `HOLD`.
+- Blocking findings accepted:
+  1. the documented serial-only Phase-4a scope was reachable under MPI and on
+     multilevel meshes because the production constructor lacked a fail-closed
+     rank and mesh-level guard;
+  2. the frozen prescribed-field tuple was reachable with nonuniform
+     `B_profile` selections even though the pusher intentionally reads only the
+     stored particle tuple;
+  3. the helper conjugate-root check asserted branch entry and magnetic-energy
+     conservation but did not bind an independently evaluated momentum result;
+  4. retained production-path evidence lacked expected-failure subprocess
+     cases, a non-unit-`c_model` magnetic rotation case, a high-`gamma` phase
+     oracle, and independent Python reconstruction of velocity shadows;
+  5. the original frozen JSON bound `P4A-01` through `P4A-16` but did not bind
+     all supplemental metrics emitted by the broadened analyzer;
+  6. the control-header write manifest omitted the DR-027 README reopening and
+     the accepted Phase-3 runtime-diagnostic commit;
+  7. direct Phase-4a SHA-256 evidence binding was still pending.
+- Correction choices:
+  - reject `global_variable::nranks != 1` and `Mesh::multilevel` in the
+    production `relativistic_hc` constructor until Phase 8 qualification;
+  - reject `B_profile != uniform` in the Phase-4a prescribed-test path;
+  - preserve the accepted Phase-3 gather witnesses through one explicit
+    `problem/relativistic_gather_diagnostic_only = true` exception restricted
+    to `pgen_name = cr_relativistic_runtime_gather_test` with `time/nlim = 0`;
+    this exception may exercise MPI and refinement construction but can never
+    authorize a particle push;
+  - keep the original `P4A-01` through `P4A-16` criteria intact and add
+    explicitly labeled `P4A-R*` reviewer-driven gate-close criteria rather
+    than rewriting history;
+  - retain production expected-failure transcripts for initialization,
+    electric-range, magnetic-range, and output-shadow-cap rejection paths;
+  - bind the corrected sources, analyzer, criteria, logs, runtime case
+    transcripts, and control snapshot through a direct SHA-256 manifest after
+    rebound reviews complete.
+- Alternatives rejected:
+  - broadening Phase 4a to MPI, SMR, and AMR qualification would collapse the
+    staged migration boundary and skip the guide's dedicated Phase 8 review;
+  - silently treating nonuniform `B_profile` as a live-grid poison would leave
+    a misleading user-facing input contract;
+  - relabeling reviewer-driven criteria as preregistered would make the
+    evidence history dishonest.
+- Revisit trigger: corrected build, parser, runtime-oracle, MPI rejection,
+  retained-regression, direct-binding, and independent rebound-review results.
+
+## RG-005 Rebound Candidate And CP-3 Minimal Serial Evidence
+
+- Date: 2026-05-30
+- Status: rebound candidate `PROCEED`; final test-adversary seal recheck pending.
+- Corrected parser evidence:
+  - `92 passed`;
+  - production `relativistic_hc` rejects MPI, SMR, and AMR;
+  - production `relativistic_hc` rejects nonuniform `B_profile`;
+  - the Phase-3 diagnostic-only exception rejects a normal pgen, rejects
+    `time/nlim = 1` under the registered gather pgen, and remains rejected by
+    legacy pushers.
+- Corrected prescribed-test production evidence:
+  - helper-only serial release and debug runs pass;
+  - all emitted runtime metrics are self-enforced against the complete
+    `38`-criterion JSON surface;
+  - reviewer-driven `P4A-R*` additions bind non-unit-`c_model` magnetic
+    rotation, high-`gamma` phase, independent negative-`sigma` momentum and
+    trajectory, four production failure paths, separate convergence-component
+    slopes, finest-step component errors, independently reconstructed
+    `gamma`, and velocity-shadow consistency;
+  - direct-work closure remains `2.168404344971009e-19` in pure `cE`,
+    `2.168404344971009e-19` for non-unit `c_model`, and
+    `6.776263578034403e-21` in crossed fields;
+  - production convergence slope remains `1.9996235673293787`;
+  - legacy-`IPM` independence and poisoned-live-grid isolation errors remain
+    `0.0`.
+- Corrected fail-closed evidence:
+  - two-rank production launch rejects with the explicit serial-uniform-level
+    diagnostic on both ranks;
+  - retained production subprocesses reject unrepresentable initialization,
+    electric arithmetic range, magnetic arithmetic range, and output
+    velocity-shadow range.
+- Replayed Phase-3 diagnostic evidence:
+  - serial periodic `64` rows, SMR `512` rows, and dynamic-AMR shadow `64`
+    rows pass;
+  - MPI periodic ranks `1`, `2`, `4`, and `6` with an empty-particle rank,
+    SMR rank `4`, and dynamic-AMR-shadow rank `4` pass;
+  - traced replay transcripts retain every analyzer command and successful
+    row-count result.
+- Retained compatibility evidence:
+  - legacy CR CPU `20 passed`;
+  - legacy CR accuracy CPU `12 passed`;
+  - legacy CR MPI CPU `4 passed`;
+  - legacy CR accuracy MPI CPU `5 passed`;
+  - style `2 passed`;
+  - tracked and authored-untracked whitespace checks pass.
+- Independent rebound review status:
+  - physics reviewer: `PROCEED`;
+  - integration-boundary reviewer: `PROCEED`;
+  - test-adversary reviewer: initial rebound `HOLD` narrowed to one missing
+    parser negative case, stale generic artifacts, absent traced analyzer
+    transcripts, and the deferred direct SHA-256 seal; all four corrections
+    are now implemented and awaiting final seal recheck.
+- Reflection:
+  - the Phase-4a prescribed-field pusher merits integration as a minimal
+    serial checkpoint if and only if the direct evidence manifest verifies and
+    the final test-adversary seal recheck returns `PROCEED`;
+  - solver-coupled ideal-MHD execution remains closed until experimental
+    Phase 4b records its own temporal-model decision and separate evidence.
+
+## RG-005 Final: Prescribed-Test Pusher Merits Minimal-Serial Integration
+
+- Date: 2026-05-30
+- Status: `PROCEED`.
+- Accepted checkpoint: `CP-3 Minimal Serial`.
+- Direct seal:
+  - `evidence/phase4a_evidence_sha256.txt`;
+  - path-sorted manifest covers corrected sources, criteria, harnesses, decks,
+    analyzer, generic regressions, parser and style logs, MPI rejection,
+    nested prescribed-runtime cases, nested Phase-3 diagnostic replay
+    artifacts, whitespace report, and control snapshot;
+  - independent test-adversary replay verified every recorded digest.
+- Independent rebound verdicts:
+  - physics reviewer: `PROCEED`;
+  - integration-boundary reviewer: `PROCEED`;
+  - test-adversary seal reviewer: `PROCEED`.
+- Accepted evidence summary:
+  - helper-only release and debug HC harnesses pass;
+  - prescribed production analyzer passes all `38/38` bound criteria;
+  - parser contract passes `92` cases;
+  - explicit two-rank production probe rejects before execution;
+  - Phase-3 diagnostic-only serial and MPI replay ladder passes with traced
+    analyzer commands;
+  - retained legacy CR CPU `20`, accuracy CPU `12`, legacy MPI CPU `4`, MPI
+    accuracy CPU `5`, and style `2` suites pass;
+  - tracked and authored-untracked whitespace checks pass.
+- Scope classification:
+  - accepted: mechanically isolated serial uniform-level prescribed-field HC
+    execution and the named `nlim = 0` Phase-3 gather-diagnostic exception;
+  - still closed: solver-coupled ideal MHD, positive-cycle MPI, SMR, AMR,
+    acceleration-aware subcycling, outer-timestep refresh, restart, outputs,
+    GPU qualification, and scientific production-readiness claims.
+- Reflection decision:
+  - keep Higuera-Cary as the selected pusher;
+  - do not reopen `DR-003`;
+  - open experimental Phase 4b only as a separate grid-frozen-at-`t^n`
+    solver-coupling increment with its own preregistered evidence and reviewers.

@@ -1,0 +1,40 @@
+-- The C compiler identification is AppleClang 21.0.0.21000101
+-- The CXX compiler identification is AppleClang 21.0.0.21000101
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Setting build type to 'Release' as none was specified.
+-- Found MPI_CXX: /opt/homebrew/Cellar/open-mpi/5.0.9/lib/libmpi.dylib (found version "3.1")
+-- Found MPI: TRUE (found version "3.1") found components: CXX
+-- Including user-specified problem generator file: unit_tests/cr_relativistic_pusher_runtime_test
+-- Setting default Kokkos CXX standard to 17
+-- Kokkos version: 4.4.0
+-- The project name is: Kokkos
+-- Using internal gtest for testing
+-- Configured git information in /tmp/athenak-cr-phase4a-pusher-runtime-mpi/generated/Kokkos_Version_Info.cpp
+-- Using -std=c++17 for C++17 standard as feature
+-- Built-in Execution Spaces:
+--     Device Parallel: NoTypeDefined
+--     Host Parallel: NoTypeDefined
+--       Host Serial: SERIAL
+--
+-- Architectures:
+-- Found TPLLIBDL: /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include
+-- Using internal desul_atomics copy
+-- Experimental mdspan support is enabled
+-- Looking for C++ include experimental/mdspan
+-- Looking for C++ include experimental/mdspan - not found
+-- Looking for C++ include mdspan
+-- Looking for C++ include mdspan - found
+-- Using internal mdspan directory /Users/dbf75/.codex/worktrees/e354/athenak-DF/kokkos/core/src/../../tpls/mdspan/include
+-- Kokkos Backends: SERIAL
+-- Configuring done (3.2s)
+-- Generating done (0.1s)
+-- Build files have been written to: /tmp/athenak-cr-phase4a-pusher-runtime-mpi

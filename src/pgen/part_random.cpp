@@ -22,6 +22,7 @@
 #include "eos/eos.hpp"
 #include "mhd/mhd.hpp"
 #include "particles/particles.hpp"
+#include "particles/relativistic_pusher.hpp"
 #include "pgen.hpp"
 
 #include <Kokkos_Random.hpp>
@@ -283,13 +284,95 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
   } else {
     Real min_mass = pin->GetOrAddReal("particles","min_mass",1.0);
     Real mass_log_spacing = pin->GetOrAddReal("particles","mass_log_spacing",1.0);
+    bool has_B0x = pin->DoesParameterExist("problem","B0x");
+    bool has_B0y = pin->DoesParameterExist("problem","B0y");
+    bool has_B0z = pin->DoesParameterExist("problem","B0z");
     Real B0x = pin->GetOrAddReal("problem","B0x",0.0);
     Real B0y = pin->GetOrAddReal("problem","B0y",0.0);
     Real B0z = pin->GetOrAddReal("problem","B0z",1.0);
+    bool relativistic_hc =
+        (pmbp->ppart->pusher == ParticlesPusher::relativistic_hc);
+    bool initial_state_is_w = false;
+    Real w0x = 0.0, w0y = 0.0, w0z = 0.0;
+    Real cE0x = 0.0, cE0y = 0.0, cE0z = 0.0;
+    Real c_model = pmbp->ppart->c_model;
+    Real alpha_s = pmbp->ppart->alpha_s;
+    if (relativistic_hc) {
+      if (!has_B0x || !has_B0y || !has_B0z ||
+          !(pin->DoesParameterExist("problem","relativistic_initial_state")) ||
+          !(pin->DoesParameterExist("problem","cE0x")) ||
+          !(pin->DoesParameterExist("problem","cE0y")) ||
+          !(pin->DoesParameterExist("problem","cE0z"))) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' prescribed-test "
+                  << "initialization requires explicit B0x, B0y, B0z, "
+                  << "relativistic_initial_state, and cE0x, cE0y, cE0z" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      std::string initial_state =
+          pin->GetString("problem","relativistic_initial_state");
+      initial_state_is_w = (initial_state.compare("w") == 0);
+      if (!initial_state_is_w && initial_state.compare("velocity") != 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Unknown relativistic_initial_state = '"
+                  << initial_state << "'" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      bool has_w = pin->DoesParameterExist("problem","w0x") ||
+                   pin->DoesParameterExist("problem","w0y") ||
+                   pin->DoesParameterExist("problem","w0z");
+      if (initial_state_is_w) {
+        if (!(pin->DoesParameterExist("problem","w0x")) ||
+            !(pin->DoesParameterExist("problem","w0y")) ||
+            !(pin->DoesParameterExist("problem","w0z")) ||
+            pin->DoesParameterExist("problem","v0x") ||
+            pin->DoesParameterExist("problem","v0y") ||
+            pin->DoesParameterExist("problem","v0z") ||
+            pin->DoesParameterExist("problem","v0")) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << "Particle pusher 'relativistic_hc' w "
+                    << "initialization requires exactly w0x, w0y, w0z and no "
+                    << "velocity initialization values" << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        w0x = pin->GetReal("problem","w0x");
+        w0y = pin->GetReal("problem","w0y");
+        w0z = pin->GetReal("problem","w0z");
+      } else if (has_w) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' velocity "
+                  << "initialization rejects w0x, w0y, w0z" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      cE0x = pin->GetReal("problem","cE0x");
+      cE0y = pin->GetReal("problem","cE0y");
+      cE0z = pin->GetReal("problem","cE0z");
+      if (!std::isfinite(B0x) || !std::isfinite(B0y) || !std::isfinite(B0z) ||
+          !std::isfinite(w0x) || !std::isfinite(w0y) || !std::isfinite(w0z) ||
+          !std::isfinite(cE0x) || !std::isfinite(cE0y) || !std::isfinite(cE0z)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' prescribed-test "
+                  << "fields and initial state must be finite" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
     std::string particle_position =
         pin->GetOrAddString("problem","particle_position","random");
     std::string particle_velocity =
         pin->GetOrAddString("problem","particle_velocity","random");
+    bool has_v0x = pin->DoesParameterExist("problem","v0x");
+    bool has_v0y = pin->DoesParameterExist("problem","v0y");
+    bool has_v0z = pin->DoesParameterExist("problem","v0z");
+    bool has_v0 = pin->DoesParameterExist("problem","v0");
+    if (relativistic_hc && !initial_state_is_w &&
+        (particle_velocity.compare("uniform") != 0 ||
+         !has_v0x || !has_v0y || !has_v0z || has_v0)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Particle pusher 'relativistic_hc' velocity "
+                << "initialization requires particle_velocity = uniform, explicit "
+                << "v0x, v0y, v0z, and no scalar v0" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     if (particle_position.compare("random") != 0 &&
         particle_position.compare("tag_random") != 0 &&
         particle_position.compare("center") != 0 &&
@@ -343,6 +426,8 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
 
     // initialize particles
     Kokkos::Random_XorShift64_Pool<> rand_pool64(pmbp->gids);
+    DvceArray1D<int> relativistic_status("part_relativistic_init_status", 1);
+    Kokkos::deep_copy(relativistic_status, 0);
     par_for("part_update",DevExeSpace(),0,(npart-1),
     KOKKOS_LAMBDA(const int p) {
       auto rand_gen = rand_pool64.get_state();  // get random number state this thread
@@ -429,15 +514,60 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
       pr(IPDY,p) = 0.0;
       pr(IPDZ,p) = 0.0;
       pr(IPDB,p) = 0.0;
+      if (relativistic_hc) {
+        particles::relativistic::Vector3 initial_w{w0x, w0y, w0z};
+        particles::relativistic::StateStatus status =
+            particles::relativistic::StateStatus::success;
+        if (!initial_state_is_w) {
+          Real gamma = 0.0;
+          status = particles::relativistic::WFromVelocity(
+              {pr(IPVX,p), pr(IPVY,p), pr(IPVZ,p)}, c_model, initial_w, gamma);
+        } else {
+          status = particles::relativistic::ValidateWState(initial_w, c_model);
+        }
+        pr(IPCEX,p) = cE0x;
+        pr(IPCEY,p) = cE0y;
+        pr(IPCEZ,p) = cE0z;
+        pr(IPWORK,p) = 0.0;
+        pr(IPALPHA,p) = alpha_s;
+        if (status == particles::relativistic::StateStatus::success) {
+          status =
+              particles::relativistic::StoreAuthoritativeWAndSynchronizeVelocityShadow(
+                  pr, p, initial_w, c_model);
+        }
+        if (status != particles::relativistic::StateStatus::success) {
+          Kokkos::atomic_max(&relativistic_status(0), static_cast<int>(status));
+        }
+      }
 
       rand_pool64.free_state(rand_gen);  // free state for use by other threads
     });
+    auto relativistic_status_h =
+        Kokkos::create_mirror_view_and_copy(HostMemSpace(), relativistic_status);
+    if (relativistic_status_h(0) != 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Particle pusher 'relativistic_hc' could not "
+                << "initialize a finite representable authoritative w state"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
   }
 
   Real B0x = pin->GetOrAddReal("problem","B0x",0.0);
   Real B0y = pin->GetOrAddReal("problem","B0y",0.0);
   Real B0z = pin->GetOrAddReal("problem","B0z",1.0);
   std::string b_profile = pin->GetOrAddString("problem","B_profile","uniform");
+  bool gather_diagnostic_only =
+      pin->GetOrAddBoolean("problem","relativistic_gather_diagnostic_only",false);
+  if (pmbp->ppart != nullptr &&
+      pmbp->ppart->pusher == ParticlesPusher::relativistic_hc &&
+      !gather_diagnostic_only &&
+      b_profile.compare("uniform") != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Particle pusher 'relativistic_hc' prescribed-test "
+              << "execution requires <problem>/B_profile = uniform" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   int b_profile_id = kUniformField;
   if (b_profile.compare("uniform") == 0) {
     b_profile_id = kUniformField;

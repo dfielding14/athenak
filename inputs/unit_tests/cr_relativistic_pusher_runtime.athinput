@@ -1,0 +1,79 @@
+# AthenaK input file for the serial prescribed-field relativistic CR runtime witness
+
+<comment>
+problem   = serial prescribed-field relativistic CR production-path witness
+
+<job>
+basename  = cr_relativistic_pusher_runtime
+
+<mesh>
+nghost    = 2
+nx1       = 8
+x1min     = -1.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+
+nx2       = 8
+x2min     = -1.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+
+nx3       = 8
+x3min     = -1.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 8
+nx2       = 8
+nx3       = 8
+
+<time>
+evolution  = kinematic
+integrator = rk2
+cfl_number = 0.2
+nlim       = 1
+tlim       = 0.2
+ndiag      = 1
+
+<mhd>
+eos         = ideal
+reconstruct = plm
+rsolver     = advect
+gamma       = 1.666666667
+
+<particles>
+particle_type             = cosmic_ray
+ppc                       = 0.001953125
+nspecies                  = 1
+pusher                    = relativistic_hc
+interpolation             = trilinear
+relativistic_field_source = prescribed_test
+c_model                   = 1.0
+alpha_s                   = 1.0
+cfl_part                  = 0.05
+min_mass                  = 1.0
+
+<problem>
+pgen_name                   = none
+particle_position           = fixed
+particle_x1                 = 0.0
+particle_x2                 = 0.0
+particle_x3                 = 0.0
+particle_velocity           = uniform
+relativistic_initial_state  = w
+w0x                         = 0.0
+w0y                         = 0.0
+w0z                         = 0.0
+cE0x                        = 0.0
+cE0y                        = 0.0
+cE0z                        = 0.0
+prtcl_rst_flag              = 0
+B0x                         = 0.0
+B0y                         = 0.0
+B0z                         = 0.0
+B_profile                   = uniform
+runtime_poison_live_mhd      = false

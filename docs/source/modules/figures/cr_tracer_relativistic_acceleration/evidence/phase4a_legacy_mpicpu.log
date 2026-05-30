@@ -1,0 +1,17 @@
+2026-05-30 02:18:27,725 - INFO - Cleaning build directory
+2026-05-30 02:18:27,731 - INFO - Configuring CMake in /Users/dbf75/.codex/worktrees/e354/athenak-DF
+2026-05-30 02:18:27,731 - INFO - Executing command: cmake -D Athena_ENABLE_MPI=ON -B tst/build
+2026-05-30 02:18:29,309 - INFO - Executing command: make -j 16
+2026-05-30 02:18:52,606 - INFO - make completed in 23.30 seconds
+2026-05-30 02:18:52,606 - INFO - Build directory cleaned and project rebuilt
+2026-05-30 02:18:52,606 - INFO - Executing command: ln -s ../../inputs inputs
+============================= test session starts ==============================
+platform darwin -- Python 3.13.13, pytest-8.4.1, pluggy-1.6.0
+rootdir: /Users/dbf75/.codex/worktrees/e354/athenak-DF/tst
+plugins: anyio-4.9.0, xdist-3.8.0, jaxtyping-0.3.7, cov-6.2.1, Faker-40.1.2
+collected 4 items
+
+../../test_suite/particles/test_particles_cr_mpicpu.py ....              [100%]2026-05-30 02:18:53,642 - INFO - Cleaning build directory
+
+
+============================== 4 passed in 0.85s ===============================

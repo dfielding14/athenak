@@ -1,0 +1,21 @@
+
+Root grid = 2 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 2
+Number of logical  levels of refinement = 1 (2 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 2
+  Rank = 0: 1 MeshBlocks, cost = 1
+  Rank = 1: 1 MeshBlocks, cost = 1
+Load Balancing:
+  Maximum normalized cost = 1, Average = 1
+### FATAL ERROR in /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/particles/particles.cpp at line 301
+Particle pusher 'relativistic_hc' prescribed-test execution currently requires a serial uniform-level mesh; MPI, SMR, and AMR remain closed until qualification
+### FATAL ERROR in /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/particles/particles.cpp at line 301
+Particle pusher 'relativistic_hc' prescribed-test execution currently requires a serial uniform-level mesh; MPI, SMR, and AMR remain closed until qualification
+--------------------------------------------------------------------------
+prterun detected that one or more processes exited with non-zero status,
+thus causing the job to be terminated. The first process to do so was:
+
+   Process name: [prterun-Tin-Drum-13361@1,1]
+   Exit code:    1
+--------------------------------------------------------------------------

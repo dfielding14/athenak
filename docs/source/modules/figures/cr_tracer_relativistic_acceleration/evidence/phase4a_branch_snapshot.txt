@@ -1,0 +1,67 @@
+branch=feature/CR_tracers_relativistic_acceleration
+head=812aef13c636e5647779a5b1ca506bc6f4489890
+
+-- status --short --
+ M docs/source/modules/cr_tracer_relativistic_acceleration_ledger.md
+ M inputs/particles/cr_tracer_relativistic_contract.athinput
+ M inputs/unit_tests/cr_relativistic_runtime_gather_periodic.athinput
+ M inputs/unit_tests/cr_relativistic_runtime_gather_smr.athinput
+ M src/athena.hpp
+ M src/particles/README.md
+ M src/particles/particles.cpp
+ M src/particles/particles_pushers.cpp
+ M src/pgen/part_random.cpp
+ M tst/test_suite/particles/test_particles_cr_relativistic_contract_cpu.py
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4a_preregistered_criteria.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_branch_snapshot.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_build_commands.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_diff_check.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_evidence_sha256.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_legacy_accuracy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_legacy_accuracy_mpicpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_legacy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_legacy_mpicpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_mpi_rejection.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_mpi_rejection_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_mpi_rejection_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_mpi_rejection_configure.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_parser_contract_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_phase3_refresh_mpi.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_phase3_refresh_mpi/
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_phase3_refresh_serial.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_phase3_refresh_serial/
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_pusher_kernel_debug.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_pusher_kernel_debug_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_pusher_kernel_release.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_pusher_kernel_release_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_pusher_runtime.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_pusher_runtime_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_pusher_runtime_metrics.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_refresh_cr_relativistic_runtime_gather_amr_shadow.tsv
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_refresh_cr_relativistic_runtime_gather_periodic.tsv
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_refresh_cr_relativistic_runtime_gather_smr.tsv
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_refresh_runtime_gather_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_refresh_runtime_gather_mpi_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_runtime_cases/
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_style.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4a_untracked_whitespace_check.log
+?? inputs/unit_tests/cr_relativistic_pusher_kernel.athinput
+?? inputs/unit_tests/cr_relativistic_pusher_runtime.athinput
+?? scripts/particles/cr_relativistic_pusher_runtime_inspect.py
+?? src/particles/relativistic_pusher.hpp
+?? src/pgen/unit_tests/cr_relativistic_pusher_kernel_test.cpp
+?? src/pgen/unit_tests/cr_relativistic_pusher_runtime_test.cpp
+
+-- recent log --
+812aef13 (HEAD -> feature/CR_tracers_relativistic_acceleration, origin/feature/CR_tracers_relativistic_acceleration) test: qualify relativistic CR live-grid gather diagnostics
+56dcbf3f feat: add shared relativistic CR trilinear gather helper
+be24fa12 feat: add fail-closed relativistic CR parser contract
+0687973f feat: add relativistic CR state helpers
+04090c1a docs: freeze relativistic CR acceleration phase 0 evidence
+3984b57e docs: add relativistic CR acceleration implementation guide
+64a4d1be (origin/feature/CR_tracers_followup_architecture, feature/CR_tracers_followup_architecture) Expand CR tracer accuracy validation and MPI robustness
+8c041244 Add per-test CR tracer trajectory figures
+ea71142f Add qualitative CR tracer accuracy figures
+106f541b Add CR tracer accuracy validation suite
+8d64640d Harden CR tracer architecture and diagnostics
+51bdf4be (origin/feature/CR_tracers, feature/CR_tracers) Document CR tracer CPU MPI performance

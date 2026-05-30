@@ -1,0 +1,44 @@
+# AthenaK input for direct CR relativistic pusher kernel tests
+
+<comment>
+problem   = CR relativistic pusher direct-kernel host/device and analytical tests
+
+<job>
+basename  = cr_relativistic_pusher_kernel
+
+<mesh>
+nghost    = 2
+nx1       = 4
+x1min     = 0.0
+x1max     = 1.0
+ix1_bc    = periodic
+ox1_bc    = periodic
+nx2       = 4
+x2min     = 0.0
+x2max     = 1.0
+ix2_bc    = periodic
+ox2_bc    = periodic
+nx3       = 4
+x3min     = 0.0
+x3max     = 1.0
+ix3_bc    = periodic
+ox3_bc    = periodic
+
+<meshblock>
+nx1       = 4
+nx2       = 4
+nx3       = 4
+
+<time>
+evolution  = dynamic
+integrator = rk3
+cfl_number = 0.1
+nlim       = 0
+tlim       = 0.0
+ndiag      = 1
+
+<hydro>
+eos         = ideal
+reconstruct = plm
+rsolver     = llf
+gamma       = 1.4

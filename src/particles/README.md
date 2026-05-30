@@ -139,9 +139,9 @@ The supported particle settings are:
 - `pusher = drift`: moves particles with stored velocities.
 - `pusher = boris`: uses the magnetic Boris update and requires an `<mhd>`
   block.
-- `pusher = relativistic_hc`: reserves the explicit opt-in relativistic
-  Higuera-Cary contract.  This mode is parser-visible but execution remains
-  fail-closed until the prescribed-field kernel is implemented and qualified.
+- `pusher = relativistic_hc`: selects the explicit opt-in relativistic
+  Higuera-Cary contract.  The current staged execution boundary is the
+  mechanically isolated `prescribed_test` harness only.
 - `interpolation = tsc`: for `pusher = boris`, interpolates the cell-centered
   magnetic field with triangular-shaped-cloud weights.
 - `interpolation = trilinear`: for `pusher = boris`, uses full
@@ -191,12 +191,12 @@ comparison inputs for end-to-end Boris AMR and remap-focused AMR timing.
 ## Relativistic Parser Contract
 
 The relativistic acceleration path is under staged qualification.  The current
-runtime contract accepts construction-only parser checks for:
+runtime contract accepts prescribed-field analytical execution for:
 
 ```text
 <time>
 evolution = kinematic
-nlim      = 0
+nlim      = 1
 
 <particles>
 particle_type             = cosmic_ray
@@ -218,9 +218,10 @@ This opt-in contract is intentionally narrow:
   finite and nonzero.  Both signs are accepted.  Its sign is not the legacy
   `IPM < 0` alignment sentinel.
 - `nspecies = 1`, a 3D strictly periodic mesh, Newtonian coordinates, ideal
-  MHD, and explicit `interpolation = trilinear` are required.
+  MHD, a serial uniform-level mesh, `B_profile = uniform`, and explicit
+  `interpolation = trilinear` are required.
 - `relativistic_field_source = prescribed_test` selects the mechanically
-  isolated analytical harness planned for the next stage.  It does not enable
+  isolated analytical harness.  It does not enable
   sampled production MHD fields.
 - `evolution = kinematic` is required so later prescribed-field particle tests
   execute the particle task list.  It is not a claim that the MHD background
@@ -234,16 +235,25 @@ This opt-in contract is intentionally narrow:
   remain outside the parser-only qualification boundary and are rejected.
 - The superseded `relativistic_background` spelling is rejected explicitly.
   Select `relativistic_field_source` instead; no background mode is inferred.
-- Any positive-cycle `relativistic_hc` run currently aborts with an explicit
-  unimplemented-or-unqualified message.  The mode cannot silently no-op.
+- Positive-cycle `relativistic_hc` runs execute only the prescribed-field
+  Higuera-Cary map.  Relativistic subcycling, restart, outputs, and sampled-MHD
+  coupling remain fail-closed until their owning qualification phases.
+- MPI, static mesh refinement, and adaptive mesh refinement remain fail-closed
+  until their owning migration qualification phase.
+- `problem/relativistic_gather_diagnostic_only = true` is reserved for the
+  registered `cr_relativistic_runtime_gather_test` pgen with `nlim = 0`.  It
+  keeps the Phase-3 MPI and refinement gather witnesses replayable but never
+  authorizes particle push execution.
 
-Do not infer relativistic semantics from legacy `boris`, `IPM`, velocity,
-restart, or output fields.  The authoritative momentum layout, prescribed
-field kernel, acceleration pusher, restart schema, and relativistic
-diagnostics remain gated follow-up work.
+Do not infer relativistic semantics from legacy `boris`, `IPM`, restart, or
+output fields.  The relativistic path appends authoritative `w`, prescribed
+`cE`, direct work, and signed `alpha_s` fields while retaining synchronized
+legacy-prefix velocity shadows.  Restart schemas, relativistic outputs,
+subcycling, and sampled-MHD coupling remain gated follow-up work.
 
 `inputs/particles/cr_tracer_relativistic_contract.athinput` is the
-construction-only parser fixture.  Its default `nlim = 0` is deliberate.
+bounded parser and single-cycle smoke fixture.  Its default `nlim = 0` keeps
+constructor checks cheap; analytical runtime witnesses use dedicated decks.
 
 Useful `part_random` problem settings:
 
@@ -301,9 +311,9 @@ resolution.  This is a pusher/gather test, not an MHD evolution test.
 ## Legacy Particle Data
 
 Legacy `drift` and `boris` cosmic-ray tracer particles allocate 14 real fields
-and 3 integer fields.  Parser-only `relativistic_hc` construction checks do not
-authorize this as a relativistic data contract.  The appended authoritative
-momentum layout remains gated follow-up work.
+and 3 integer fields.  The staged `relativistic_hc` prescribed-test path
+allocates 22 real fields and the same 3 integer fields.  Its appended fields
+are deliberately not serialized until the restart-schema phase.
 
 Integer fields:
 
@@ -319,6 +329,13 @@ Real fields:
 - `IPBX`, `IPBY`, `IPBZ`: magnetic field sampled by the pusher.
 - `IPDX`, `IPDY`, `IPDZ`: accumulated displacement.
 - `IPDB`: accumulated displacement parallel to the sampled magnetic field.
+
+Appended `relativistic_hc` prescribed-test real fields:
+
+- `IPWX`, `IPWY`, `IPWZ`: authoritative `w = gamma v` momentum state.
+- `IPCEX`, `IPCEY`, `IPCEZ`: mechanically isolated prescribed `cE` sample.
+- `IPWORK`: accumulated direct sampled-field work quadrature.
+- `IPALPHA`: signed normalized force coefficient.
 
 ## AMR Behavior
 
@@ -380,9 +397,9 @@ performance comparisons.
 ## Legacy Outputs
 
 The following particle outputs remain available for legacy `drift` and
-`boris`.  Parser-only `relativistic_hc` currently rejects every output block
-before initial output emission; relativistic output semantics remain gated
-follow-up work.
+`boris`.  The staged prescribed-test `relativistic_hc` path currently rejects
+every output block before initial output emission; relativistic output
+semantics remain gated follow-up work.
 
 - `pvtk`: particle VTK output.
 - `trk`: tracked-particle output.
