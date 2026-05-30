@@ -364,6 +364,108 @@ python3 scripts/particles/cr_relativistic_diagnostics_runtime_inspect.py \
   --metrics "$EVID/phase9_diagnostics_portable_runtime_metrics.json" \
   > "$EVID/phase9_diagnostics_portable_runtime.log" 2>&1
 
+cat > "$EVID/phase9_portable_replay.py" <<'PY'
+#!/usr/bin/env python3
+"""Replay strict all-format validation from an extracted Phase-9 package."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _verify_manifest(root: Path) -> None:
+    manifest = root / "portable_manifest.sha256"
+    for line in manifest.read_text().splitlines():
+        expected, relative = line.split("  ", 1)
+        path = root / relative
+        actual = _sha256(path)
+        if actual != expected:
+            raise RuntimeError(
+                f"portable manifest mismatch for {relative}: {actual} != {expected}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+
+    root = Path(__file__).resolve().parent
+    _verify_manifest(root)
+
+    binary = (root / "qualified_binary" / "athena").resolve()
+    runtime_root = (root / "runtime_root" / "acceleration_uninterrupted").resolve()
+    input_path = (
+        root / "inputs" / "cr_relativistic_diagnostics_runtime.athinput").resolve()
+    criteria = (
+        root / "criteria"
+        / "cr_relativistic_phase7_preregistered_criteria.json").resolve()
+    metrics = json.loads(
+        (root / "metrics" / "diagnostics_runtime_metrics_template.json").read_text())
+    metrics["binary"] = str(binary)
+    metrics["input"] = str(input_path)
+    metrics["criteria"] = str(criteria)
+    metrics["runtime_cases"] = [str(runtime_root)]
+    relocated_metrics = root / "metrics" / "diagnostics_runtime_metrics_relocated.json"
+    relocated_metrics.write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n")
+
+    output = args.output or (root / "portable_all_formats_report.json")
+    command = [
+        sys.executable,
+        str(root / "scripts" / "particles" / "cr_relativistic_all_formats_inspect.py"),
+        "--runtime-root", str(runtime_root),
+        "--binary", str(binary),
+        "--input", str(input_path),
+        "--criteria", str(criteria),
+        "--metrics", str(relocated_metrics),
+    ]
+    result = subprocess.run(command, check=True, capture_output=True, text=True)
+    output.write_text(result.stdout.replace(str(root), "$PACKAGE_ROOT"))
+    print("CR relativistic Phase-9 portable all-format replay PASS")
+    print("  package root: $PACKAGE_ROOT")
+    print("  report: portable_all_formats_report.json")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+PY
+
+cat > "$EVID/phase9_portable_replay_README.md" <<'EOF'
+# Phase-9 Portable All-Format Replay
+
+Extract `phase9_all_formats_portable_replay_bundle.tar.gz` into an arbitrary
+directory and run:
+
+```bash
+python3 phase9_portable_replay.py
+```
+
+The package carries:
+
+- the qualified release AthenaK binary;
+- the retained `acceleration_uninterrupted` runtime artifacts;
+- the Phase-7 diagnostics input and preregistered criteria;
+- the strict all-format inspector and its two Python dependencies;
+- a diagnostics metrics template with the qualified binary, input, and
+  criteria SHA-256 digests;
+- `portable_manifest.sha256`.
+
+The wrapper verifies the package manifest, rewrites extraction-local paths in
+the metrics template, invokes the bundled strict inspector, and writes
+`portable_all_formats_report.json`.  The emitted report normalizes the
+extraction prefix to `$PACKAGE_ROOT`, so two fresh extractions produce
+byte-identical reports.
+EOF
+
 PACKAGE_PARENT=/tmp/cr-rel-phase9-portable-package
 PACKAGE_ROOT=$PACKAGE_PARENT/phase9_all_formats_portable_replay
 rm -rf "$PACKAGE_PARENT"
@@ -467,6 +569,7 @@ test "$MERGE_TREE_STATUS" -eq 1
   echo 'replaced_leaked_remote_tip=5e031387e66224b0e9dc4462fbf4d9a7ee01c9df'
   echo 'previous_portability_rebound_seal=aa66f6c27531116e12554631281c8f2ed07d93c6'
   echo 'previous_documentation_durability_seal=88d631e4943648fe83f0624cb30291fa52ab4296'
+  echo 'previous_capture_completeness_seal=1a7086add5fffd55356109b99e6a66fcd0b43486'
   echo 'origin_development=c6a73b08e60807f8b925164c5e7edd5cb820c8ae'
   echo 'origin_gh_pages=4833aa9341e19861297e330ff02aabfd8001935c'
 } > "$EVID/phase9_branch_snapshot.txt"
@@ -610,6 +713,13 @@ write_privacy_scan() {
     echo "phase9 text privacy scan"
     ! rg -n "$LOCAL_HOME_PATTERN|$HOST_PATTERN" "$EVID"/phase9*
     echo "PASS: retained text has no local identity markers"
+    USER_HOME_PREFIX='/Users/'
+    ! rg -n "$USER_HOME_PREFIX|$HOST_PATTERN" \
+      docs/source/modules/particles.md \
+      docs/source/modules/cr_tracer*.md \
+      docs/source/modules/figures/cr_tracer_accuracy \
+      inputs/particles/cr_tracer_relativistic_*.athinput
+    echo "PASS: public overlay source has no local identity markers"
     ! rg -n "$LOCAL_HOME_PATTERN|$HOST_PATTERN" \
       /tmp/cr-rel-phase9-portable-extract-a/phase9_all_formats_portable_replay
     echo "PASS: portable text has no local identity markers"

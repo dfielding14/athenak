@@ -4778,3 +4778,49 @@ before the fixes are accepted.
   - require fresh exact-SHA cold review of the pushed immutable tip;
   - stop again on any blocking finding before recording `RG-010`, `CP-7`, or
     `MERGE READY`.
+
+## DR-070: Phase-9 Capture Rebound Public-Overlay Privacy Correction
+
+- Date: 2026-05-30
+- Status: documentation-only public-overlay privacy correction prepared for
+  final cold review
+- Capture-completeness seal reviewed:
+  `1a7086add5fffd55356109b99e6a66fcd0b43486`
+- Independent-review result:
+  - physics and integration reviewers returned `PROCEED`;
+  - evidence-durability and documentation reviewers returned `HOLD`;
+  - do not record `RG-010`, `CP-7`, or `MERGE READY` on `1a7086ad`.
+- Findings:
+  - the portable replay wrapper and README were sealed and copied into the
+    package but lacked explicit producer commands in the retained replay
+    inventory;
+  - the frozen public overlay copied
+    `figures/cr_tracer_accuracy/cr_tracer_accuracy_summary.json`, which
+    retained `54` obsolete absolute workstation paths;
+  - the privacy audit checked retained `phase9_*` artifacts and the portable
+    package but did not scan the complete source set copied into the public
+    overlay.
+- Corrected choices:
+  - archive exact here-document producers for `phase9_portable_replay.py` and
+    `phase9_portable_replay_README.md`;
+  - normalize the obsolete public accuracy-summary worktree prefix to
+    `$REPO_ROOT` without changing numerical results;
+  - extend the privacy scan to `particles.md`, all copied `cr_tracer*.md`
+    files, the complete `figures/cr_tracer_accuracy` directory, and both
+    tracked relativistic public inputs before sealing;
+  - rerun the strict frozen Pages overlay, bounded whitespace audit,
+    provenance envelope, repository-relative outer manifest, relocated-root
+    verification, and final privacy scan after the correction reaches its
+    final bytes.
+- Alternatives rejected:
+  - accepting a privacy scan scoped only to retained evidence would ignore
+    the actual public preview surface;
+  - deleting the inherited accuracy summary from the overlay would hide a
+    public artifact rather than make it portable;
+  - treating package wrapper files as hand-authored exceptions would leave the
+    replay recipe incomplete.
+- Inflection point:
+  - seal and push the public-overlay privacy correction;
+  - require another fresh exact-SHA cold review;
+  - stop again on any blocking finding before recording `RG-010`, `CP-7`, or
+    `MERGE READY`.
