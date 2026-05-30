@@ -27,6 +27,9 @@ from tst.publication.pic_qualification_manifest import (
     freeze_qualification_manifest,
     validate_qualification_manifest,
 )
+from control_plane_common import PRODUCTION_RUNTIME_LOADED_MODULES
+from control_plane_common import PRODUCTION_RUNTIME_MODULEFILES
+from control_plane_common import PRODUCTION_RUNTIME_MODULEPATH
 from tst.publication.frontier_control_plane.control_plane_common import (
     BUILD_PROVENANCE_FILENAMES,
     git_commit_tree_from_bytes,
@@ -47,6 +50,9 @@ def _runtime_allowlist() -> str:
         MPICH_GPU_SUPPORT_ENABLED="1",
         SLURM_EXPORT_ENV="ALL",
         ROCM_PATH="/opt/rocm",
+        LOADEDMODULES=":".join(PRODUCTION_RUNTIME_LOADED_MODULES),
+        _LMFILES_=":".join(PRODUCTION_RUNTIME_MODULEFILES),
+        MODULEPATH=PRODUCTION_RUNTIME_MODULEPATH,
     )
     return "".join(f"{key}={values[key]}\n" for key in RUNTIME_ENVIRONMENT_ALLOWLIST_KEYS)
 

@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import pwd
 import inspect
+import shutil
 import stat
 import subprocess
 import sys
@@ -41,7 +42,7 @@ from create_clean_candidate_freeze import create_freeze, _validated_submodules
 from create_pre_submit_manifest import create_manifest
 from initialize_frontier_ledger import initialize_from_policy
 from install_control_plane import install
-from launch_trampoline import launch
+from launch_trampoline import _TASK_LOCAL_EXEC, launch
 from ledger import accounting, genesis_anchor_paths, validate_primary_chain
 from promote_active_policy import promote
 from reconcile_frontier_job import reconcile
@@ -1014,6 +1015,80 @@ class SnapshotTests(unittest.TestCase):
                 self.control_plane_dir, authorized_pic_root=self.pic_root
             )
 
+    def test_installed_control_plane_rejects_open_inventory_extensions(self) -> None:
+        inventory_path = self.control_plane_dir / "inventory.json"
+        original = inventory_path.read_bytes()
+        for mutation in ("top-level", "record"):
+            with self.subTest(mutation=mutation):
+                inventory = json.loads(original)
+                if mutation == "top-level":
+                    inventory["unexpected"] = "must reject"
+                else:
+                    inventory["files"][0]["unexpected"] = "must reject"
+                inventory_path.chmod(0o644)
+                inventory_path.write_text(json.dumps(inventory), encoding="utf-8")
+                inventory_path.chmod(0o444)
+                with self.assertRaises(ValueError):
+                    verify_installed_control_plane(
+                        self.control_plane_dir, authorized_pic_root=self.pic_root
+                    )
+                inventory_path.chmod(0o644)
+                inventory_path.write_bytes(original)
+                inventory_path.chmod(0o444)
+
+    def test_captured_runner_imports_verified_sibling_bytes(self) -> None:
+        import run_control_plane
+
+        poison_root = self.root / "poison-import"
+        poison_root.mkdir()
+        marker = self.root / "captured-import-marker"
+        poison_root.joinpath("sibling.py").write_text(
+            "VALUE = 'mutable lexical import executed'\n", encoding="utf-8"
+        )
+        sources = {
+            "entry.py": (
+                "from pathlib import Path\n"
+                "import sibling\n"
+                f"Path({str(marker)!r}).write_text(sibling.VALUE, encoding='utf-8')\n"
+            ).encode("utf-8"),
+            "sibling.py": b"VALUE = 'captured verified bytes executed'\n",
+        }
+        sys.modules.pop("sibling", None)
+        self.addCleanup(sys.modules.pop, "sibling", None)
+        with patch.object(sys, "path", [str(poison_root), *sys.path]):
+            run_control_plane._execute_captured(poison_root, "entry.py", sources)
+        self.assertEqual(
+            marker.read_text(encoding="utf-8"), "captured verified bytes executed"
+        )
+
+    def test_task_local_verifier_executes_pinned_input_deck_descriptor(self) -> None:
+        task_root = self.root / "task-local-exec"
+        task_root.mkdir()
+        executable = task_root / "cat"
+        shutil.copyfile("/usr/bin/cat", executable)
+        executable.chmod(0o555)
+        deck = task_root / "input.athinput"
+        deck.write_text("verified task-local input\n", encoding="utf-8")
+        deck.chmod(0o444)
+        result = subprocess.run(
+            [
+                TRUSTED_PYTHON,
+                "-I",
+                "-c",
+                _TASK_LOCAL_EXEC,
+                str(task_root),
+                str(executable),
+                sha256(executable),
+                str(deck),
+                sha256(deck),
+                "__PIC_INPUT_DECK_FD__",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.stdout, "verified task-local input\n")
+
     def test_promoted_policy_anchor_is_mirrored_and_read_only(self) -> None:
         policy = self.pic_root / "policy" / "storage_policy.json"
         mirror_policy = self.project_home_root / "policy" / "storage_policy.json"
@@ -1023,6 +1098,31 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(promotion.read_bytes(), mirror_promotion.read_bytes())
         for path in [policy, mirror_policy, promotion, mirror_promotion]:
             self.assertFalse(bool(path.stat().st_mode & 0o222))
+
+    def test_policy_promotion_parent_swap_fails_without_writing_replacement(self) -> None:
+        import promote_active_policy
+
+        policy_parent = self.pic_root / "policy"
+        displaced = self.pic_root / "displaced-policy"
+        real_write = promote_active_policy.atomic_write_bytes_at
+        swapped = False
+
+        def swap_parent_then_write(*args: object, **kwargs: object) -> None:
+            nonlocal swapped
+            if not swapped:
+                swapped = True
+                policy_parent.rename(displaced)
+                policy_parent.mkdir()
+            real_write(*args, **kwargs)
+
+        with patch(
+            "promote_active_policy.atomic_write_bytes_at",
+            side_effect=swap_parent_then_write,
+        ):
+            with self.assertRaises(ValueError):
+                self._promote_policy()
+        self.assertTrue(swapped)
+        self.assertEqual(list(policy_parent.iterdir()), [])
 
     def test_atomic_writer_fsyncs_parent_directory(self) -> None:
         output = self.root / "durable" / "output.json"
@@ -1261,13 +1361,13 @@ class SnapshotTests(unittest.TestCase):
 
         self._launch(manifest_path, reservation, runner=runner)
         self.assertEqual(len(calls), 1)
-        self.assertEqual(
+        self.assertRegex(
             calls[0][0][0],
-            str(self.control_plane_dir / "launch_with_frontier_profile.sh"),
+            r"^/proc/self/fd/[0-9]+/launch_with_frontier_profile[.]sh$",
         )
         self.assertEqual(calls[0][0][1], "/usr/bin/srun")
         self.assertEqual(calls[0][0][2], "--jobid=12345")
-        self.assertEqual(calls[0][0][8], str(executable["path"]))
+        self.assertEqual(calls[0][0][13], str(executable["path"]))
         self.assertTrue(calls[0][1]["check"])
 
     def test_trampoline_rejects_wrong_executable_binding(self) -> None:
@@ -1352,9 +1452,9 @@ class SnapshotTests(unittest.TestCase):
 
         self._launch(manifest_path, reservation, runner=runner)
         self.assertEqual(len(commands), 1)
-        self.assertEqual(
+        self.assertRegex(
             commands[0][0],
-            str(self.control_plane_dir / "launch_with_frontier_profile.sh"),
+            r"^/proc/self/fd/[0-9]+/launch_with_frontier_profile[.]sh$",
         )
         self.assertEqual(commands[0][1], "/usr/bin/srun")
         self.assertEqual(commands[0][2], "--jobid=12345")
@@ -1380,8 +1480,10 @@ class SnapshotTests(unittest.TestCase):
         with allowlist.open("wb") as stream:
             descriptor = stream.fileno()
             directory_descriptor = os.open(wrapper_dir, os.O_RDONLY | os.O_DIRECTORY)
+            control_plane_descriptor = os.open(wrapper_dir, os.O_RDONLY | os.O_DIRECTORY)
             try:
                 environment = dict(os.environ)
+                environment["PIC_CONTROL_PLANE_DIR_FD"] = str(control_plane_descriptor)
                 environment["PIC_RUNTIME_ALLOWLIST_FD"] = str(descriptor)
                 environment["PIC_RUNTIME_ALLOWLIST_DIR_FD"] = str(directory_descriptor)
                 environment["BASH_FUNC_module%%"] = "() {  :\n}"
@@ -1399,11 +1501,12 @@ class SnapshotTests(unittest.TestCase):
                         str(allowlist),
                     ],
                     env=environment,
-                    pass_fds=(descriptor, directory_descriptor),
+                    pass_fds=(descriptor, directory_descriptor, control_plane_descriptor),
                     check=False,
                 )
             finally:
                 os.close(directory_descriptor)
+                os.close(control_plane_descriptor)
         self.assertEqual(result.returncode, 0)
         self.assertEqual(allowlist.read_text(encoding="utf-8"), "ALLOWLISTED=1\n")
         self.assertEqual(stat.S_IMODE(allowlist.stat().st_mode), 0o400)
@@ -1434,21 +1537,28 @@ class SnapshotTests(unittest.TestCase):
         allowlist = wrapper_dir / "environment.allowlist.txt"
         with allowlist.open("wb") as stream:
             directory_descriptor = os.open(wrapper_dir, os.O_RDONLY | os.O_DIRECTORY)
+            control_plane_descriptor = os.open(wrapper_dir, os.O_RDONLY | os.O_DIRECTORY)
             try:
                 environment = {
                     **os.environ,
                     "HOME": str(home),
+                    "PIC_CONTROL_PLANE_DIR_FD": str(control_plane_descriptor),
                     "PIC_RUNTIME_ALLOWLIST_FD": str(stream.fileno()),
                     "PIC_RUNTIME_ALLOWLIST_DIR_FD": str(directory_descriptor),
                 }
                 subprocess.run(
                     [str(copied_wrapper), "/bin/true"],
                     env=environment,
-                    pass_fds=(stream.fileno(), directory_descriptor),
+                    pass_fds=(
+                        stream.fileno(),
+                        directory_descriptor,
+                        control_plane_descriptor,
+                    ),
                     check=True,
                 )
             finally:
                 os.close(directory_descriptor)
+                os.close(control_plane_descriptor)
         self.assertFalse(marker.exists())
         self.assertEqual(allowlist.read_text(encoding="utf-8"), "ALLOWLISTED=1\n")
 
@@ -1473,7 +1583,9 @@ class SnapshotTests(unittest.TestCase):
                         'printf "ALLOWLISTED=1\\n" >&"$PIC_RUNTIME_ALLOWLIST_FD"; '
                         'eval "exec ${PIC_RUNTIME_ALLOWLIST_FD}>&-"; '
                         'eval "exec ${PIC_RUNTIME_ALLOWLIST_DIR_FD}>&-"; '
-                        "unset PIC_RUNTIME_ALLOWLIST_FD PIC_RUNTIME_ALLOWLIST_DIR_FD; "
+                        'eval "exec ${PIC_CONTROL_PLANE_DIR_FD}>&-"; '
+                        "unset PIC_CONTROL_PLANE_DIR_FD PIC_RUNTIME_ALLOWLIST_FD "
+                        "PIC_RUNTIME_ALLOWLIST_DIR_FD; "
                         "exec /bin/bash -c '! printf \"FORGED_CHILD_WRITE\\\\n\" >&9'"
                     ),
                 ],
@@ -1511,6 +1623,7 @@ class SnapshotTests(unittest.TestCase):
                 "PIC_FRONTIER_PROFILE",
                 "PIC_RUNTIME_ALLOWLIST_FD",
                 "PIC_RUNTIME_ALLOWLIST_DIR_FD",
+                "PIC_CONTROL_PLANE_DIR_FD",
             },
         )
         self.assertEqual(seen_environment["LC_ALL"], "C")
@@ -1811,9 +1924,9 @@ class SnapshotTests(unittest.TestCase):
 
         self._launch(manifest_path, reservation, runner=runner)
         self.assertEqual(len(commands), 1)
-        self.assertEqual(
+        self.assertRegex(
             commands[0][0],
-            str(self.control_plane_dir / "launch_with_frontier_profile.sh"),
+            r"^/proc/self/fd/[0-9]+/launch_with_frontier_profile[.]sh$",
         )
         self.assertEqual(commands[0][1], "/usr/bin/srun")
         self.assertEqual(commands[0][2], "--jobid=12345")
@@ -1910,9 +2023,9 @@ class SnapshotTests(unittest.TestCase):
 
         self._launch(manifest_path, reservation, runner=runner)
         self.assertEqual(len(calls), 1)
-        self.assertEqual(
+        self.assertRegex(
             calls[0][0][0],
-            str(self.control_plane_dir / "launch_with_frontier_profile.sh"),
+            r"^/proc/self/fd/[0-9]+/launch_with_frontier_profile[.]sh$",
         )
         self.assertEqual(calls[0][0][1], "/usr/bin/srun")
         self.assertEqual(calls[0][0][2], "--jobid=12345")
@@ -1921,7 +2034,8 @@ class SnapshotTests(unittest.TestCase):
         self.assertRegex(
             calls[0][1]["env"]["PIC_RUNTIME_ALLOWLIST_DIR_FD"], r"^[0-9]+$"
         )
-        self.assertEqual(len(calls[0][1]["pass_fds"]), 2)
+        self.assertRegex(calls[0][1]["env"]["PIC_CONTROL_PLANE_DIR_FD"], r"^[0-9]+$")
+        self.assertEqual(len(calls[0][1]["pass_fds"]), 3)
         self.assertTrue(
             (artifact_dir / "athena-parser.environment.allowlist.txt").is_file()
         )
@@ -4202,7 +4316,7 @@ class SnapshotTests(unittest.TestCase):
         self.assertNotEqual(failed_module.returncode, 0)
         self.assertEqual(
             failure_marker.read_text(encoding="utf-8").splitlines(),
-            ["reset"],
+            ["--force purge"],
         )
 
     def test_reservation_rejects_wrong_account(self) -> None:

@@ -24,6 +24,7 @@ from control_plane_common import read_json_bytes, read_stable_regular_file
 from control_plane_common import require_read_only, sha256_bytes
 from control_plane_common import require_no_symlink_components_below
 from control_plane_common import trusted_git_command, trusted_git_environment
+from control_plane_common import validate_control_plane_inventory
 from control_plane_common import verify_installed_control_plane
 
 
@@ -178,6 +179,8 @@ def _verify_staged_install(
         raise ValueError(
             "Staged control-plane inventory differs from captured sources"
         )
+    if validate_control_plane_inventory(staged_inventory) != records:
+        raise ValueError("Staged control-plane inventory records differ from captured sources")
     for record in records:
         path = staging / record["path"]
         data = read_stable_regular_file(path, require_read_only_mode=True)

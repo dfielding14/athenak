@@ -4,13 +4,16 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.abc
+import importlib.util
 import json
 import os
 from pathlib import Path
-import runpy
+import re
 import stat
 import subprocess
 import sys
+from types import ModuleType
 
 
 TRUSTED_GIT = "/usr/bin/git"
@@ -33,6 +36,7 @@ CONTROL_PLANE_FILES = [
     "ledger.py",
     "promote_active_policy.py",
     "reconcile_frontier_job.py",
+    "run_installed_control_plane_job.sh",
     "run_control_plane.py",
     "submit_frontier_job.sh",
     "validate_and_reserve_frontier_job.py",
@@ -84,33 +88,76 @@ def _inventory_digest(records: list[dict[str, str]]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _verify_installed(script_dir: Path, directory_descriptor: int) -> None:
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"Non-finite JSON number is not allowed: {value}")
+
+
+def _reject_duplicate_json_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"Duplicate JSON object key is not allowed: {key}")
+        value[key] = item
+    return value
+
+
+def _inventory(data: bytes) -> dict[str, object]:
+    try:
+        inventory = json.loads(
+            data.decode("utf-8"),
+            parse_constant=_reject_json_constant,
+            object_pairs_hook=_reject_duplicate_json_pairs,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("Installed control-plane inventory is not valid UTF-8 JSON") from error
+    if (
+        not isinstance(inventory, dict)
+        or set(inventory) != {"schema_version", "version", "files"}
+        or inventory.get("schema_version") != 1
+        or isinstance(inventory.get("schema_version"), bool)
+        or not isinstance(inventory.get("version"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", str(inventory.get("version", ""))) is None
+    ):
+        raise ValueError("Unsupported installed control-plane inventory")
+    records = inventory["files"]
+    if not isinstance(records, list):
+        raise ValueError("Malformed installed control-plane inventory files")
+    for record in records:
+        if (
+            not isinstance(record, dict)
+            or set(record) != {"path", "sha256"}
+            or not isinstance(record["path"], str)
+            or not isinstance(record["sha256"], str)
+            or re.fullmatch(r"[0-9a-f]{64}", record["sha256"]) is None
+        ):
+            raise ValueError("Malformed installed control-plane inventory record")
+    return inventory
+
+
+def _verify_installed(
+    script_dir: Path, directory_descriptor: int
+) -> dict[str, bytes]:
     if script_dir.parent.name != "control_plane":
         raise ValueError("Installed runner is not below a control_plane directory")
     if os.fstat(directory_descriptor).st_mode & 0o222:
         raise ValueError("Installed control-plane directory is not read-only")
     if set(os.listdir(directory_descriptor)) != {*CONTROL_PLANE_FILES, "inventory.json"}:
         raise ValueError("Installed control-plane entries differ from required list")
-    inventory = json.loads(
+    inventory = _inventory(
         _read_file_at(
             directory_descriptor, "inventory.json", require_read_only=True
-        ).decode("utf-8")
+        )
     )
-    if not isinstance(inventory, dict) or inventory.get("schema_version") != 1:
-        raise ValueError("Unsupported installed control-plane inventory")
-    records = inventory.get("files")
-    if not isinstance(records, list) or [
-        record.get("path") if isinstance(record, dict) else None for record in records
-    ] != CONTROL_PLANE_FILES:
+    records = inventory["files"]
+    if [record["path"] for record in records] != CONTROL_PLANE_FILES:
         raise ValueError("Installed control-plane inventory file list differs from required list")
     if (
         inventory.get("version") != _inventory_digest(records)
         or script_dir.name != inventory["version"]
     ):
         raise ValueError("Installed control-plane inventory digest mismatch")
+    sources = {}
     for record in records:
-        if set(record) != {"path", "sha256"}:
-            raise ValueError("Malformed installed control-plane inventory record")
         data = _read_file_at(
             directory_descriptor, record["path"], require_read_only=True
         )
@@ -118,9 +165,13 @@ def _verify_installed(script_dir: Path, directory_descriptor: int) -> None:
             raise ValueError(
                 f"Installed control-plane checksum mismatch: {record['path']}"
             )
+        sources[record["path"]] = data
+    return sources
 
 
-def _verify_source(script_dir: Path, directory_descriptor: int, target: str) -> None:
+def _verify_source(
+    script_dir: Path, directory_descriptor: int, target: str
+) -> dict[str, bytes]:
     if target != "install_control_plane.py":
         raise ValueError("Source runner may execute only install_control_plane.py")
     environment = _git_environment()
@@ -157,6 +208,7 @@ def _verify_source(script_dir: Path, directory_descriptor: int, target: str) -> 
     )
     if subprocess.check_output(status_command, text=True, env=environment):
         raise ValueError("Production control-plane install requires clean tracked source files")
+    sources = {}
     for name, path in zip(SOURCE_CONTROL_PLANE_FILES, paths):
         tracked = subprocess.check_output(
             _git("-C", str(repository), "show", f"{head}:{path}"),
@@ -164,6 +216,7 @@ def _verify_source(script_dir: Path, directory_descriptor: int, target: str) -> 
         )
         if _read_file_at(directory_descriptor, name, require_read_only=False) != tracked:
             raise ValueError(f"Control-plane source differs from pinned HEAD blob: {name}")
+        sources[name] = tracked
     if (
         subprocess.check_output(
             _git("-C", str(repository), "rev-parse", "HEAD"),
@@ -174,6 +227,63 @@ def _verify_source(script_dir: Path, directory_descriptor: int, target: str) -> 
         or subprocess.check_output(status_command, text=True, env=environment)
     ):
         raise ValueError("Control-plane source changed while verifying pinned HEAD blobs")
+    return sources
+
+
+class _CapturedSourceLoader(importlib.abc.Loader):
+    def __init__(self, name: str, source: bytes, filename: str) -> None:
+        self.name = name
+        self.source = source
+        self.filename = filename
+
+    def create_module(self, spec: object) -> ModuleType | None:
+        return None
+
+    def exec_module(self, module: ModuleType) -> None:
+        module.__file__ = self.filename
+        exec(compile(self.source, self.filename, "exec"), module.__dict__)
+
+
+class _CapturedSourceFinder(importlib.abc.MetaPathFinder):
+    def __init__(self, script_dir: Path, sources: dict[str, bytes]) -> None:
+        self.script_dir = script_dir
+        self.sources = {
+            name[:-3]: source for name, source in sources.items() if name.endswith(".py")
+        }
+
+    def find_spec(
+        self,
+        fullname: str,
+        path: object = None,
+        target: ModuleType | None = None,
+    ) -> object:
+        del path, target
+        source = self.sources.get(fullname) if "." not in fullname else None
+        if source is None:
+            return None
+        filename = str(self.script_dir / f"{fullname}.py")
+        return importlib.util.spec_from_loader(
+            fullname,
+            _CapturedSourceLoader(fullname, source, filename),
+            origin=filename,
+        )
+
+
+def _execute_captured(script_dir: Path, target: str, sources: dict[str, bytes]) -> None:
+    finder = _CapturedSourceFinder(script_dir, sources)
+    filename = str(script_dir / target)
+    globals_dict = {
+        "__name__": "__main__",
+        "__file__": filename,
+        "__package__": None,
+        "__cached__": None,
+        "__builtins__": __builtins__,
+    }
+    sys.meta_path.insert(0, finder)
+    try:
+        exec(compile(sources[target], filename, "exec"), globals_dict)
+    finally:
+        sys.meta_path.remove(finder)
 
 
 def main() -> None:
@@ -190,18 +300,18 @@ def main() -> None:
         os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
     )
     try:
-        if (script_dir / "inventory.json").exists():
+        entries = set(os.listdir(directory_descriptor))
+        if "inventory.json" in entries:
             if target not in CONTROL_PLANE_FILES:
                 raise ValueError(f"Unsupported installed control-plane entrypoint: {target!r}")
-            _verify_installed(script_dir, directory_descriptor)
+            sources = _verify_installed(script_dir, directory_descriptor)
         else:
-            _verify_source(script_dir, directory_descriptor, target)
+            sources = _verify_source(script_dir, directory_descriptor, target)
+        sys._pic_control_plane_bootstrapped = True
+        sys.argv = [str(script_dir / target), *sys.argv[2:]]
+        _execute_captured(script_dir, target, sources)
     finally:
         os.close(directory_descriptor)
-    sys.path.insert(0, str(script_dir))
-    sys._pic_control_plane_bootstrapped = True
-    sys.argv = [str(script_dir / target), *sys.argv[2:]]
-    runpy.run_path(str(script_dir / target), run_name="__main__")
 
 
 if __name__ == "__main__":

@@ -28,6 +28,7 @@ from control_plane_common import PRODUCTION_BUILD_ENVIRONMENT
 from control_plane_common import PRODUCTION_TOOLCHAIN_DESCRIPTION
 from control_plane_common import production_build_invocations
 from control_plane_common import production_environment_allowlist_bytes
+from control_plane_common import measured_production_module_list_bytes
 from control_plane_common import production_module_list_bytes
 from control_plane_common import read_stable_regular_file_below
 from control_plane_common import require_production_build_environment
@@ -461,6 +462,12 @@ def build_profile(
     ):
         raise ValueError(f"Unsupported installed Frontier build profile: {profile_id}")
     authorized_pic_root = Path(os.path.abspath(authorized_pic_root))
+    production_root = authorized_pic_root == Path(os.path.abspath(AUTHORIZED_PIC_ROOT))
+    measured_module_list = (
+        measured_production_module_list_bytes()
+        if production_root
+        else production_module_list_bytes()
+    )
     source_root = _authorized_source_path(source_root, authorized_source_root)
     commit, tree, submodules = _source_identity(source_root)
     if commit != expected_git_commit:
@@ -555,6 +562,8 @@ def build_profile(
         environment=build_environment,
         authorized_pic_root=authorized_pic_root,
     )
+    if production_root and measured_production_module_list_bytes() != measured_module_list:
+        raise ValueError("Loaded Frontier module provenance changed during production build")
     post_build = _git_status(fresh_source)
     if post_build:
         raise ValueError("Fresh detached source is dirty after build")
@@ -581,7 +590,7 @@ def build_profile(
     )
     _write_exclusive(
         paths["module_list"],
-        production_module_list_bytes(),
+        measured_module_list,
         authorized_pic_root=authorized_pic_root,
     )
     _write_exclusive(

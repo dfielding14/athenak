@@ -12,13 +12,23 @@ case "$PIC_FRONTIER_PROFILE" in
     ;;
 esac
 
-if ! module reset \
+if ! module --force purge \
+    || ! module use /opt/cray/pe/lmod/modulefiles/core \
+    || ! module use /opt/cray/pe/lmod/modulefiles/craype-targets/1.15.0 \
+    || ! module use /opt/cray/modulefiles \
+    || ! module load cpe/24.11 \
+    || ! module load craype-x86-trento \
+    || ! module load libfabric/2.3.1 \
+    || ! module load craype-network-ofi \
+    || ! module load xpmem/1.0.1-1.5_1_gfb6998056825 \
+    || ! module load perftools-base/24.11.0 \
+    || ! module load cray-pmi/6.1.15 \
+    || ! module load cray-dsmml/0.3.0 \
     || ! module load PrgEnv-amd/8.6.0 \
     || ! module load amd/6.2.4 \
     || ! module load rocm/6.2.4 \
     || ! module load craype/2.7.33 \
     || ! module load cray-mpich/8.1.31 \
-    || ! module load cray-pmi/6.1.15 \
     || ! module load cray-libsci/24.11.0 \
     || ! module load craype-accel-amd-gfx90a; then
   printf 'Failed to load Frontier PIC module profile\n' >&2
@@ -73,7 +83,8 @@ record_pic_environment() {
       MPICH_GPU_SUPPORT_ENABLED MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED \
       MPICH_OFI_NIC_POLICY MPICH_GPU_IPC_CACHE_MAX_SIZE MPICH_MPIIO_HINTS \
       MPICH_OFI_NUM_CQ_ENTRIES FI_MR_CACHE_MONITOR FI_CXI_RX_MATCH_MODE \
-      OMP_NUM_THREADS SLURM_EXPORT_ENV ROCM_PATH; do
+      OMP_NUM_THREADS SLURM_EXPORT_ENV ROCM_PATH LOADEDMODULES _LMFILES_ \
+      MODULEPATH; do
     if value="$(/usr/bin/printenv "$name")"; then
       printf '%s=%s\n' "$name" "$value"
     else

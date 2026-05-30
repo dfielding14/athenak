@@ -9,6 +9,7 @@ CONTROL_PLANE_DIR="$(cd "$(/usr/bin/dirname "$0")" && pwd)"
 VALIDATOR="${CONTROL_PLANE_DIR}/validate_and_reserve_frontier_job.py"
 TRAMPOLINE="${CONTROL_PLANE_DIR}/launch_trampoline.py"
 RUNNER="${CONTROL_PLANE_DIR}/run_control_plane.py"
+BATCH_DELEGATE="${CONTROL_PLANE_DIR}/run_installed_control_plane_job.sh"
 PYTHON=(/opt/cray/pe/python/3.11.7/bin/python3 -I)
 CONTROL_PLANE=("${PYTHON[@]}" "$RUNNER")
 SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin SLURM_CLUSTERS=frontier)
@@ -143,7 +144,7 @@ job_id="$("${SLURM_ENV[@]}" "$SBATCH" --parsable --hold \
   --time "$walltime" \
   --output "$output" \
   --export=NIL \
-  "$RUNNER" launch_trampoline.py \
+  "$BATCH_DELEGATE" "$RUNNER" launch_trampoline.py \
   --manifest "$MANIFEST" \
   --manifest-sha256 "$manifest_sha256" \
   --job-script-sha256 "$job_script_sha256" \

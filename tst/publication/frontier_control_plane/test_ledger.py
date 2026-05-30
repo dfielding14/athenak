@@ -261,6 +261,32 @@ class LedgerTests(unittest.TestCase):
             "preserve external lock target\n",
         )
 
+    def test_ledger_parent_swap_fails_without_writing_replacement(self) -> None:
+        import ledger
+
+        ledger_parent = self.ledger.parent
+        displaced = ledger_parent.with_name("displaced-ledger")
+        real_append = ledger._append_jsonl
+        swapped = False
+
+        def swap_parent_then_append(path: Path, record: dict[str, object]) -> None:
+            nonlocal swapped
+            if path == self.ledger and not swapped:
+                swapped = True
+                ledger_parent.rename(displaced)
+                ledger_parent.mkdir()
+            real_append(path, record)
+
+        with patch("ledger._append_jsonl", side_effect=swap_parent_then_append):
+            with self.assertRaises(ValueError):
+                self.append({"event_type": "must_fail_closed"})
+        self.assertTrue(swapped)
+        self.assertEqual(list(ledger_parent.iterdir()), [])
+        self.assertEqual(
+            len(validate_primary_chain(displaced / self.ledger.name)),
+            2,
+        )
+
     def test_csv_output_symlink_alias_rejects_before_external_write(self) -> None:
         outside = Path(self.temporary.name) / "outside-csv-output"
         outside.write_text("preserve external CSV target\n", encoding="utf-8")

@@ -21,17 +21,157 @@ from typing import Callable
 from control_plane_common import AUTHORIZED_PIC_ROOT, AUTHORIZED_PROJECT_HOME_ROOT
 from control_plane_common import durable_mkdir_parents, open_directory_below
 from control_plane_common import record_for_role, require_ledger_paths
-from control_plane_common import require_read_only, validate_launch_contract
+from control_plane_common import require_same_directory, validate_launch_contract
 from control_plane_common import verify_snapshot_files
 from validate_and_reserve_frontier_job import _require_run_artifact_dir
 from validate_and_reserve_frontier_job import reservation_bound_manifest
 
 
 SRUN = "/usr/bin/srun"
+TRUSTED_PYTHON = "/opt/cray/pe/python/3.11.7/bin/python3"
+_INPUT_DECK_FD_TOKEN = "__PIC_INPUT_DECK_FD__"
 _DIRECTORY_OPEN_FLAGS = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
 _NEW_ARTIFACT_OPEN_FLAGS = (
     os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
 )
+_TASK_LOCAL_EXEC = r"""
+import hashlib
+import os
+import re
+import stat
+import sys
+
+ROOT, EXECUTABLE, EXECUTABLE_SHA256, INPUT_DECK, INPUT_DECK_SHA256, *ATHENA_ARGS = sys.argv[1:]
+INPUT_TOKEN = "__PIC_INPUT_DECK_FD__"
+DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+
+def open_parent(path):
+    root = os.path.abspath(ROOT)
+    path = os.path.abspath(path)
+    if os.path.commonpath([root, path]) != root or path == root:
+        raise SystemExit("PIC task input is outside the authorized root")
+    relative = os.path.relpath(os.path.dirname(path), root)
+    descriptor = os.open(root, DIRECTORY_FLAGS)
+    try:
+        if relative != ".":
+            for part in relative.split(os.sep):
+                child = os.open(part, DIRECTORY_FLAGS, dir_fd=descriptor)
+                os.close(descriptor)
+                descriptor = child
+        return descriptor
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+def require_same_parent(path, expected):
+    actual = open_parent(path)
+    try:
+        expected_stat = os.fstat(expected)
+        actual_stat = os.fstat(actual)
+        if (expected_stat.st_dev, expected_stat.st_ino) != (actual_stat.st_dev, actual_stat.st_ino):
+            raise SystemExit("PIC task input parent changed before execution")
+    finally:
+        os.close(actual)
+
+def open_verified(path, expected_sha256, *, executable):
+    if re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is None:
+        raise SystemExit("PIC task input checksum is malformed")
+    parent = open_parent(path)
+    try:
+        descriptor = os.open(os.path.basename(path), FILE_FLAGS, dir_fd=parent)
+    except BaseException:
+        os.close(parent)
+        raise
+    metadata = os.fstat(descriptor)
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
+        raise SystemExit("PIC task input is not a read-only regular file")
+    if executable and not metadata.st_mode & 0o111:
+        raise SystemExit("PIC task executable is not executable")
+    digest = hashlib.sha256()
+    while True:
+        data = os.read(descriptor, 1024 * 1024)
+        if not data:
+            break
+        digest.update(data)
+    if digest.hexdigest() != expected_sha256:
+        raise SystemExit("PIC task input checksum mismatch")
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    require_same_parent(path, parent)
+    return parent, descriptor
+
+executable_parent, executable_fd = open_verified(
+    EXECUTABLE, EXECUTABLE_SHA256, executable=True
+)
+input_parent, input_fd = open_verified(INPUT_DECK, INPUT_DECK_SHA256, executable=False)
+require_same_parent(EXECUTABLE, executable_parent)
+require_same_parent(INPUT_DECK, input_parent)
+if ATHENA_ARGS.count(INPUT_TOKEN) != 1:
+    raise SystemExit("PIC task input-deck binding is malformed")
+os.set_inheritable(input_fd, True)
+ATHENA_ARGS = [
+    f"/proc/self/fd/{input_fd}" if argument == INPUT_TOKEN else argument
+    for argument in ATHENA_ARGS
+]
+os.execve(executable_fd, [EXECUTABLE, *ATHENA_ARGS], os.environ)
+"""
+
+
+class _PinnedSnapshot:
+    """Retain one verified launch-node snapshot and its lexical parent."""
+
+    def __init__(
+        self,
+        path: Path,
+        *,
+        root: Path,
+        expected_sha256: str,
+        require_executable: bool = False,
+    ) -> None:
+        self.path = Path(os.path.abspath(path))
+        self.root = Path(os.path.abspath(root))
+        self.expected_sha256 = expected_sha256
+        self.require_executable = require_executable
+        self.parent_descriptor: int | None = None
+        self.descriptor: int | None = None
+
+    def __enter__(self) -> "_PinnedSnapshot":
+        self.parent_descriptor = open_directory_below(self.path.parent, root=self.root)
+        try:
+            self.descriptor = os.open(
+                self.path.name,
+                os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=self.parent_descriptor,
+            )
+            metadata = os.fstat(self.descriptor)
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
+                raise ValueError(f"Snapshot is not a read-only regular file: {self.path}")
+            if self.require_executable and not metadata.st_mode & 0o111:
+                raise ValueError(f"Snapshot executable is not executable: {self.path}")
+            digest = hashlib.sha256()
+            with os.fdopen(self.descriptor, "rb", closefd=False) as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            if digest.hexdigest() != self.expected_sha256:
+                raise ValueError(f"Snapshot checksum mismatch: {self.path}")
+            self.require_lexical_parent()
+            return self
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
+
+    def require_lexical_parent(self) -> None:
+        if self.parent_descriptor is None:
+            raise ValueError("Pinned snapshot parent is not open")
+        require_same_directory(self.path.parent, self.parent_descriptor, root=self.root)
+
+    def __exit__(self, *_: object) -> None:
+        if self.descriptor is not None:
+            os.close(self.descriptor)
+            self.descriptor = None
+        if self.parent_descriptor is not None:
+            os.close(self.parent_descriptor)
+            self.parent_descriptor = None
 
 
 def _artifact_path(artifact_dir: Path, relative: object) -> Path:
@@ -216,11 +356,27 @@ def _create_artifact_directory(artifact_dir: Path, *, pic_root: Path) -> int:
         os.close(parent_fd)
 
 
+def _require_read_only_regular_at(directory_descriptor: int, name: str) -> None:
+    descriptor = os.open(
+        name,
+        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+        dir_fd=directory_descriptor,
+    )
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o222:
+            raise ValueError(f"Control-plane launcher is not a read-only regular file: {name}")
+    finally:
+        os.close(descriptor)
+
+
 def _launch_actions(
     manifest: dict[str, object],
     *,
-    executable_path: str,
+    executable: _PinnedSnapshot,
+    input_deck: _PinnedSnapshot,
     profile_launcher: str,
+    control_plane_dir_fd: int,
     slurm_job_id: str,
     runner: Callable[..., object],
 ) -> None:
@@ -229,9 +385,10 @@ def _launch_actions(
     artifact_dir = _require_run_artifact_dir(manifest)
     artifact_dir_fd = _create_artifact_directory(artifact_dir, pic_root=pic_root)
     try:
-        input_deck = Path(str(record_for_role(manifest, "input-deck")["path"])).resolve()
         _bounded_actions(contract["pre_actions"], manifest, artifact_dir, artifact_dir_fd)
         for action in contract["actions"]:
+            executable.require_lexical_parent()
+            input_deck.require_lexical_parent()
             resources = action["resources"]
             command = [
                 profile_launcher,
@@ -242,13 +399,21 @@ def _launch_actions(
                 f"-c{resources['cpus_per_task']}",
                 f"--gpus-per-task={resources['gpus_per_task']}",
                 f"--gpu-bind={resources['gpu_bind']}",
-                executable_path,
+                TRUSTED_PYTHON,
+                "-I",
+                "-c",
+                _TASK_LOCAL_EXEC,
+                str(pic_root),
+                str(executable.path),
+                executable.expected_sha256,
+                str(input_deck.path),
+                input_deck.expected_sha256,
             ]
             for argument in action["arguments"]:
                 if "literal" in argument:
                     command.append(str(argument["literal"]))
                 elif argument.get("snapshot_role") == "input-deck":
-                    command.append(str(input_deck))
+                    command.append(_INPUT_DECK_FD_TOKEN)
                 else:
                     directory = _artifact_path(artifact_dir, argument["artifact_directory"])
                     _mkdir_artifact_directory(artifact_dir_fd, artifact_dir, directory)
@@ -266,6 +431,7 @@ def _launch_actions(
                 )
                 environment["PIC_RUNTIME_ALLOWLIST_FD"] = str(allowlist_fd)
                 environment["PIC_RUNTIME_ALLOWLIST_DIR_FD"] = str(artifact_dir_fd)
+                environment["PIC_CONTROL_PLANE_DIR_FD"] = str(control_plane_dir_fd)
                 with os.fdopen(
                     _open_new_artifact(artifact_dir_fd, artifact_dir, stdout_path), "wb"
                 ) as stdout, os.fdopen(
@@ -277,8 +443,14 @@ def _launch_actions(
                         stdout=stdout,
                         stderr=stderr,
                         env=environment,
-                        pass_fds=(allowlist_fd, artifact_dir_fd),
+                        pass_fds=(
+                            allowlist_fd,
+                            artifact_dir_fd,
+                            control_plane_dir_fd,
+                        ),
                     )
+                executable.require_lexical_parent()
+                input_deck.require_lexical_parent()
             finally:
                 if allowlist_fd is not None:
                     os.close(allowlist_fd)
@@ -298,10 +470,12 @@ def _bounded_actions(
         if kind == "snapshot_sha256":
             record = record_for_role(manifest, str(action["snapshot_role"]))
             source = Path(str(record["path"]))
-            require_read_only(source)
-            digest = hashlib.sha256(source.read_bytes()).hexdigest()
-            if digest != record.get("sha256"):
-                raise ValueError("Snapshot changed during bounded launch action")
+            with _PinnedSnapshot(
+                source,
+                root=Path(str(manifest["pic_root"])),
+                expected_sha256=str(record["sha256"]),
+            ):
+                digest = str(record["sha256"])
             output = _artifact_path(artifact_dir, action["output_artifact"])
             _write_new_text_artifact(artifact_dir_fd, artifact_dir, output, digest + "\n")
         elif kind == "artifact_sha256":
@@ -371,10 +545,16 @@ def launch(
         raise ValueError("Scheduled submission ID differs from reservation ledger")
     verify_snapshot_files(manifest, root=authorized_pic_root)
     for record in manifest["snapshot_files"]:
-        require_read_only(Path(str(record["path"])))
+        with _PinnedSnapshot(
+            Path(str(record["path"])),
+            root=authorized_pic_root,
+            expected_sha256=str(record["sha256"]),
+        ):
+            pass
 
     job_script = record_for_role(manifest, "job-script")
     executable = record_for_role(manifest, "executable")
+    input_deck = record_for_role(manifest, "input-deck")
     if (
         job_script.get("sha256") != job_script_sha256
         or reservation.get("job_script_sha256") != job_script_sha256
@@ -385,23 +565,50 @@ def launch(
         or reservation.get("executable_sha256") != executable_sha256
     ):
         raise ValueError("Snapshotted executable digest differs from scheduled binding")
-    executable_path = str(Path(str(executable["path"])).resolve())
+    executable_path = os.path.abspath(str(executable["path"]))
     if manifest.get("job_script_executable_env") != "PIC_EXECUTABLE":
         raise ValueError("Manifest does not declare the PIC_EXECUTABLE launch contract")
     declared = os.environ.get("PIC_EXECUTABLE")
-    if declared and str(Path(declared).resolve()) != executable_path:
+    if declared and os.path.abspath(declared) != executable_path:
         raise ValueError("PIC_EXECUTABLE differs from verified executable snapshot")
     os.environ["PIC_EXECUTABLE"] = executable_path
-    require_read_only(Path(executable_path))
-    profile_launcher = control_plane_dir / "launch_with_frontier_profile.sh"
-    require_read_only(profile_launcher)
-    _launch_actions(
-        manifest,
-        executable_path=executable_path,
-        profile_launcher=str(profile_launcher),
-        slurm_job_id=slurm_job_id,
-        runner=runner,
+    control_plane_dir_fd = open_directory_below(
+        control_plane_dir, root=authorized_pic_root
     )
+    try:
+        require_same_directory(
+            control_plane_dir, control_plane_dir_fd, root=authorized_pic_root
+        )
+        _require_read_only_regular_at(
+            control_plane_dir_fd, "launch_with_frontier_profile.sh"
+        )
+        profile_launcher = (
+            f"/proc/self/fd/{control_plane_dir_fd}/launch_with_frontier_profile.sh"
+        )
+        with _PinnedSnapshot(
+            Path(executable_path),
+            root=authorized_pic_root,
+            expected_sha256=str(executable["sha256"]),
+            require_executable=True,
+        ) as pinned_executable, _PinnedSnapshot(
+            Path(str(input_deck["path"])),
+            root=authorized_pic_root,
+            expected_sha256=str(input_deck["sha256"]),
+        ) as pinned_input_deck:
+            _launch_actions(
+                manifest,
+                executable=pinned_executable,
+                input_deck=pinned_input_deck,
+                profile_launcher=profile_launcher,
+                control_plane_dir_fd=control_plane_dir_fd,
+                slurm_job_id=slurm_job_id,
+                runner=runner,
+            )
+        require_same_directory(
+            control_plane_dir, control_plane_dir_fd, root=authorized_pic_root
+        )
+    finally:
+        os.close(control_plane_dir_fd)
 
 
 def main() -> None:

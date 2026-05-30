@@ -34,6 +34,9 @@ from control_plane_common import source_bundle_sha256  # noqa: E402
 from control_plane_common import AUTHORIZED_PIC_ROOT  # noqa: E402
 from control_plane_common import AUTHORIZED_PROJECT_HOME_ROOT  # noqa: E402
 from control_plane_common import BUILD_PROVENANCE_FILENAMES  # noqa: E402
+from control_plane_common import PRODUCTION_RUNTIME_LOADED_MODULES  # noqa: E402
+from control_plane_common import PRODUCTION_RUNTIME_MODULEFILES  # noqa: E402
+from control_plane_common import PRODUCTION_RUNTIME_MODULEPATH  # noqa: E402
 from control_plane_common import active_promotion_path  # noqa: E402
 from control_plane_common import read_json_bytes  # noqa: E402
 from control_plane_common import read_stable_regular_file  # noqa: E402
@@ -70,6 +73,9 @@ RUNTIME_ENVIRONMENT_ALLOWLIST_KEYS = [
     "OMP_NUM_THREADS",
     "SLURM_EXPORT_ENV",
     "ROCM_PATH",
+    "LOADEDMODULES",
+    "_LMFILES_",
+    "MODULEPATH",
 ]
 
 
@@ -237,6 +243,12 @@ def _validate_environment_allowlist(
         or any(part in {"", ".", ".."} for part in rocm_path.parts)
     ):
         raise ValueError("environment allowlist ROCM_PATH is not canonical")
+    if values["LOADEDMODULES"] != ":".join(PRODUCTION_RUNTIME_LOADED_MODULES):
+        raise ValueError("environment allowlist LOADEDMODULES is not authorized")
+    if values["_LMFILES_"] != ":".join(PRODUCTION_RUNTIME_MODULEFILES):
+        raise ValueError("environment allowlist _LMFILES_ is not authorized")
+    if values["MODULEPATH"] != PRODUCTION_RUNTIME_MODULEPATH:
+        raise ValueError("environment allowlist MODULEPATH is not authorized")
 
 
 def _source_bundle_sha256(

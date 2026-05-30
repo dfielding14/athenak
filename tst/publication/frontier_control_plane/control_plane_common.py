@@ -100,16 +100,56 @@ PRODUCTION_ENVIRONMENT_ALLOWLIST = [
     ("SLURM_EXPORT_ENV", "ALL"),
     ("ROCM_PATH", TRUSTED_ROCM_PATH),
 ]
-PRODUCTION_REQUIRED_MODULES = {
+PRODUCTION_RUNTIME_LOADED_MODULES = (
+    "cpe/24.11",
+    "craype-x86-trento",
+    "libfabric/2.3.1",
+    "craype-network-ofi",
+    "xpmem/1.0.1-1.5_1_gfb6998056825",
+    "perftools-base/24.11.0",
+    "cray-pmi/6.1.15",
+    "cray-dsmml/0.3.0",
     "PrgEnv-amd/8.6.0",
     "amd/6.2.4",
     "rocm/6.2.4",
     "craype/2.7.33",
     "cray-mpich/8.1.31",
-    "cray-pmi/6.1.15",
     "cray-libsci/24.11.0",
     "craype-accel-amd-gfx90a",
-}
+)
+PRODUCTION_RUNTIME_MODULEFILES = (
+    "/opt/cray/pe/lmod/modulefiles/core/cpe/24.11.lua",
+    "/opt/cray/pe/lmod/modulefiles/craype-targets/1.15.0/craype-x86-trento.lua",
+    "/opt/cray/modulefiles/libfabric/2.3.1",
+    "/opt/cray/pe/lmod/modulefiles/craype-targets/1.15.0/craype-network-ofi.lua",
+    "/opt/cray/modulefiles/xpmem/1.0.1-1.5_1_gfb6998056825",
+    "/opt/cray/pe/lmod/modulefiles/core/perftools-base/24.11.0.lua",
+    "/opt/cray/pe/lmod/modulefiles/core/cray-pmi/6.1.15.lua",
+    "/opt/cray/pe/lmod/modulefiles/core/cray-dsmml/0.3.0.lua",
+    "/opt/cray/pe/lmod/modulefiles/core/PrgEnv-amd/8.6.0.lua",
+    "/opt/cray/pe/lmod/modulefiles/core/amd/6.2.4.lua",
+    "/opt/cray/pe/lmod/modulefiles/core/rocm/6.2.4.lua",
+    "/opt/cray/pe/lmod/modulefiles/core/craype/2.7.33.lua",
+    "/opt/cray/pe/lmod/modulefiles/comnet/amd/4.0/ofi/1.0/cray-mpich/8.1.31.lua",
+    "/opt/cray/pe/lmod/modulefiles/compiler/amd/4.0/cray-libsci/24.11.0.lua",
+    "/opt/cray/pe/lmod/modulefiles/craype-targets/1.15.0/craype-accel-amd-gfx90a.lua",
+)
+PRODUCTION_RUNTIME_MODULEPATH = (
+    "/opt/cray/pe/lmod/modulefiles/mpi/amd/4.0/ofi/1.0/cray-mpich/8.0:"
+    "/opt/cray/pe/lmod/modulefiles/comnet/amd/4.0/ofi/1.0:"
+    "/opt/cray/pe/lmod/modulefiles/compiler/amd/4.0:"
+    "/opt/cray/pe/lmod/modulefiles/mix_compilers:"
+    "/opt/cray/pe/lmod/modulefiles/perftools/24.11.0:"
+    "/opt/cray/pe/lmod/modulefiles/net/ofi/1.0:"
+    "/opt/cray/pe/lmod/modulefiles/cpu/x86-trento/1.0:"
+    "/opt/cray/modulefiles:"
+    "/opt/cray/pe/lmod/modulefiles/craype-targets/1.15.0:"
+    "/opt/cray/pe/lmod/modulefiles/core:"
+    "/opt/cray/pe/modulefiles/Linux:"
+    "/opt/cray/pe/modulefiles/Core:"
+    "/opt/cray/pe/lmod/lmod/modulefiles/Core"
+)
+PRODUCTION_REQUIRED_MODULES = set(PRODUCTION_RUNTIME_LOADED_MODULES)
 PRODUCTION_BUILD_ENVIRONMENT = {
     "CMAKE_PREFIX_PATH": f"{TRUSTED_ROCM_PATH}/lib/cmake/hip:{TRUSTED_ROCM_PATH}",
     "CRAYPAT_LD_LIBRARY_PATH": "/opt/cray/pe/perftools/24.11.0/lib64",
@@ -272,6 +312,7 @@ CONTROL_PLANE_FILES = [
     "ledger.py",
     "promote_active_policy.py",
     "reconcile_frontier_job.py",
+    "run_installed_control_plane_job.sh",
     "run_control_plane.py",
     "submit_frontier_job.sh",
     "validate_and_reserve_frontier_job.py",
@@ -333,7 +374,34 @@ def production_environment_allowlist_bytes() -> bytes:
 
 def production_module_list_bytes() -> bytes:
     """Return the exact reviewed module selection recorded for production builds."""
-    return (":".join(sorted(PRODUCTION_REQUIRED_MODULES)) + "\n").encode("utf-8")
+    return "".join(
+        f"{module}\t{modulefile}\n"
+        for module, modulefile in zip(
+            PRODUCTION_RUNTIME_LOADED_MODULES, PRODUCTION_RUNTIME_MODULEFILES
+        )
+    ).encode("utf-8")
+
+
+def require_production_module_environment(environment: dict[str, str]) -> None:
+    """Require the exact clean Frontier module stack and modulefile provenance."""
+    if tuple(environment.get("LOADEDMODULES", "").split(":")) != (
+        PRODUCTION_RUNTIME_LOADED_MODULES
+    ):
+        raise ValueError("Loaded Frontier modules differ from the reviewed exact stack")
+    if tuple(environment.get("_LMFILES_", "").split(":")) != (
+        PRODUCTION_RUNTIME_MODULEFILES
+    ):
+        raise ValueError("Loaded Frontier modulefiles differ from the reviewed exact stack")
+    if environment.get("MODULEPATH") != PRODUCTION_RUNTIME_MODULEPATH:
+        raise ValueError("Frontier MODULEPATH differs from the reviewed exact value")
+
+
+def measured_production_module_list_bytes(
+    environment: dict[str, str] | None = None,
+) -> bytes:
+    """Measure and serialize the reviewed production module stack."""
+    require_production_module_environment(dict(os.environ if environment is None else environment))
+    return production_module_list_bytes()
 
 
 def require_production_build_environment(environment: dict[str, object]) -> None:
@@ -1422,6 +1490,13 @@ def _require_same_directory(path: Path, descriptor: int, *, root: Path | None) -
         os.close(lexical_descriptor)
 
 
+def require_same_directory(
+    path: Path, descriptor: int, *, root: Path | None = None
+) -> None:
+    """Reject replacement of a lexical directory retained by descriptor."""
+    _require_same_directory(path, descriptor, root=root)
+
+
 class PinnedStagingDirectory:
     """Stage and publish beneath one retained no-follow parent descriptor."""
 
@@ -1942,6 +2017,37 @@ def inventory_digest(records: list[dict[str, str]]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def validate_control_plane_inventory(inventory: dict[str, object]) -> list[dict[str, str]]:
+    """Require the exact closed inventory shape used by installed generations."""
+    if (
+        set(inventory) != {"schema_version", "version", "files"}
+        or inventory.get("schema_version") != 1
+        or isinstance(inventory.get("schema_version"), bool)
+        or not isinstance(inventory.get("version"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", str(inventory["version"])) is None
+    ):
+        raise ValueError("Unsupported control-plane inventory schema")
+    raw_records = inventory["files"]
+    if not isinstance(raw_records, list):
+        raise ValueError("Malformed control-plane inventory files")
+    records: list[dict[str, str]] = []
+    for raw in raw_records:
+        if (
+            not isinstance(raw, dict)
+            or set(raw) != {"path", "sha256"}
+            or not isinstance(raw["path"], str)
+            or not isinstance(raw["sha256"], str)
+            or re.fullmatch(r"[0-9a-f]{64}", raw["sha256"]) is None
+        ):
+            raise ValueError("Malformed control-plane inventory record")
+        records.append({"path": raw["path"], "sha256": raw["sha256"]})
+    if [record["path"] for record in records] != CONTROL_PLANE_FILES:
+        raise ValueError("Control-plane inventory file list differs from required list")
+    if inventory["version"] != inventory_digest(records):
+        raise ValueError("Control-plane inventory digest mismatch")
+    return records
+
+
 def _read_read_only_regular_file_at(
     directory_descriptor: int, name: str, *, label: str
 ) -> bytes:
@@ -1996,24 +2102,8 @@ def verify_installed_control_plane(
             ),
             label=str(resolved / "inventory.json"),
         )
-        if inventory.get("schema_version") != 1:
-            raise ValueError("Unsupported control-plane inventory schema")
-        raw_records = inventory.get("files")
-        if not isinstance(raw_records, list):
-            raise ValueError("Malformed control-plane inventory files")
-        records: list[dict[str, str]] = []
-        for raw in raw_records:
-            if not isinstance(raw, dict):
-                raise ValueError("Malformed control-plane inventory record")
-            record = {
-                "path": str(raw.get("path", "")),
-                "sha256": str(raw.get("sha256", "")),
-            }
-            records.append(record)
-        if [record["path"] for record in records] != CONTROL_PLANE_FILES:
-            raise ValueError("Control-plane inventory file list differs from required list")
-        version = inventory_digest(records)
-        if inventory.get("version") != version or resolved.name != version:
+        records = validate_control_plane_inventory(inventory)
+        if resolved.name != inventory["version"]:
             raise ValueError("Control-plane inventory digest mismatch")
         for record in records:
             data = _read_read_only_regular_file_at(

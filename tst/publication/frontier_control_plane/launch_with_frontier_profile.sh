@@ -2,23 +2,22 @@
 # Apply the inventory-bound Frontier profile, then exec the trusted argv.
 set -euo pipefail
 
-CONTROL_PLANE_DIR="$(cd "$(/usr/bin/dirname "$0")" && pwd)"
 export HOME=/
 export USER="$(/usr/bin/id -un)"
 source /opt/cray/pe/lmod/lmod/init/profile
-source /etc/profile.d/olcf-env.sh
 unset BASH_ENV ENV
-if ! source "${CONTROL_PLANE_DIR}/frontier_pic_environment.sh"; then
-  exit 1
-fi
+: "${PIC_CONTROL_PLANE_DIR_FD:?PIC_CONTROL_PLANE_DIR_FD is required}"
 : "${PIC_RUNTIME_ALLOWLIST_FD:?PIC_RUNTIME_ALLOWLIST_FD is required}"
 : "${PIC_RUNTIME_ALLOWLIST_DIR_FD:?PIC_RUNTIME_ALLOWLIST_DIR_FD is required}"
-case "${PIC_RUNTIME_ALLOWLIST_FD}:${PIC_RUNTIME_ALLOWLIST_DIR_FD}" in
+case "${PIC_CONTROL_PLANE_DIR_FD}:${PIC_RUNTIME_ALLOWLIST_FD}:${PIC_RUNTIME_ALLOWLIST_DIR_FD}" in
   *[!0-9:]*|:*|*:)
-    printf 'PIC runtime allowlist bindings must be file descriptors\n' >&2
+    printf 'PIC runtime bindings must be file descriptors\n' >&2
     exit 1
     ;;
 esac
+if ! source "/proc/self/fd/${PIC_CONTROL_PLANE_DIR_FD}/frontier_pic_environment.sh"; then
+  exit 1
+fi
 record_pic_environment >&"$PIC_RUNTIME_ALLOWLIST_FD"
 /opt/cray/pe/python/3.11.7/bin/python3 -E -s - \
   "$PIC_RUNTIME_ALLOWLIST_FD" "$PIC_RUNTIME_ALLOWLIST_DIR_FD" <<'PY'
@@ -37,8 +36,9 @@ os.fchmod(allowlist_fd, 0o400)
 os.fsync(allowlist_fd)
 os.fsync(directory_fd)
 PY
+eval "exec ${PIC_CONTROL_PLANE_DIR_FD}>&-"
 eval "exec ${PIC_RUNTIME_ALLOWLIST_FD}>&-"
 eval "exec ${PIC_RUNTIME_ALLOWLIST_DIR_FD}>&-"
-unset PIC_RUNTIME_ALLOWLIST_FD PIC_RUNTIME_ALLOWLIST_DIR_FD
+unset PIC_CONTROL_PLANE_DIR_FD PIC_RUNTIME_ALLOWLIST_FD PIC_RUNTIME_ALLOWLIST_DIR_FD
 unset -f module ml clearMT clearLmod xSetTitleLmod 2>/dev/null || true
 exec "$@"
