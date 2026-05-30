@@ -11,8 +11,8 @@
 | Production verdict at review time | **Not production-ready. Paper reproduction is blocked by model-level implementation gaps.** |
 | Supersedes | All scope, terminology, pass criteria, operational instructions and sign-off language in `tst/publication/PIC_LARGE_MACHINE_VALIDATION.md`; that retired note is historical evidence only |
 | Required execution root on Frontier | `/lustre/orion/ast207/proj-shared/dfielding/PIC` |
-| Frontier scheduling constraint | Use only the `debug` QOS, one job in any state at a time, no job longer than 2 hours |
-| Total Frontier testing budget | 1000 node-hours maximum, tracked before and after every submitted job |
+| Frontier scheduling constraint | Prefer the `debug` QOS only for eligible short non-production work when the user has no `debug` job in any state; otherwise use the `normal` QOS on the `batch` partition. Keep AthenaK PIC submissions serial across both QOS classes. |
+| Total Frontier testing budget | 4000 node-hours maximum, tracked before and after every submitted job. Stop and ask the user for permission before increasing the cap. |
 
 This plan is written as a production gate, not as a list of desirable enhancements.
 Agents must not declare the MHD-PIC implementation production-ready, nor claim
@@ -76,9 +76,11 @@ then should Frontier be used for GPU, AMR, scaling, and publication simulations.
    justified commits before being used as a production baseline.
 6. On Frontier, all simulation, build, log, metric, ledger, and artifact paths
    must remain below `/lustre/orion/ast207/proj-shared/dfielding/PIC`.
-7. On Frontier, submit only `debug` jobs. Never submit a second job while any
-   previous `debug` job is queued or running, never request more than 2 hours,
-   and never exceed the cumulative 1000 node-hour budget.
+7. On Frontier, prefer `debug` only for eligible short non-production work when
+   the user has no `debug` job in any state. Otherwise submit to the `normal`
+   QOS on the `batch` partition. Keep AthenaK PIC submissions serial across both
+   QOS classes and never exceed the cumulative 4000 node-hour budget without
+   stopping and obtaining explicit user permission.
 8. Treat `tst/publication/PIC_LARGE_MACHINE_VALIDATION.md` as retired historical
    evidence only. It must never authorize a run, close a gate, or define a
    scientific claim.
@@ -86,9 +88,82 @@ then should Frontier be used for GPU, AMR, scaling, and publication simulations.
    codes, physical regimes, metrics, reference versions and limitations. A
    scoped comparative conclusion is required instead.
 10. Do not start a production-scale Frontier campaign under the `debug` QOS.
-    The currently authorized Frontier phase is short correctness and
-    qualification work only. Any future production campaign requires an
-    explicit plan revision and execution authorization.
+    Use `normal` on `batch` for registered work that is not eligible for
+    `debug`, including longer paper-reproduction, nonlinear-saturation and
+    controlled-scaling jobs after their prerequisite gates close. Any request
+    for another partition, QOS, account policy or a budget above 4000 node-hours
+    requires an explicit plan revision and user authorization.
+11. Make PIC implementation work fit AthenaK's existing style framework and
+    design choices wherever possible. Depart only when the AthenaK-native design
+    would materially reduce physical accuracy or computational efficiency, and
+    document the evidence, scope and review disposition for every exception.
+
+## AthenaK Style And Design Compatibility Contract
+
+PIC code must read as an AthenaK module, not as a separately designed codebase
+embedded inside AthenaK. This requirement covers architecture, interfaces,
+execution patterns, naming, diagnostics, documentation and formatting.
+
+### Default Implementation Rules
+
+1. Study the nearest AthenaK implementation before editing. Reuse established
+   `MeshBlockPack`, module-constructor, `ParameterInput`, `TaskList`, boundary
+   exchange, output, restart and problem-generator patterns where they satisfy
+   the physical contract.
+2. Keep hot kernels in the established Kokkos execution model. Match nearby
+   `View` ownership, layout, `par_for`, host/device synchronization and MPI
+   staging patterns unless measured evidence requires a scoped alternative.
+3. Prefer existing AthenaK ownership boundaries and helper APIs over new PIC-only
+   abstractions. Add an abstraction only when it removes demonstrated complexity
+   or is required for accuracy, reliability or performance.
+4. Keep runtime parameters explicit, narrowly scoped and validated at startup.
+   Follow nearby AthenaK naming and failure-message conventions. Reject unsafe
+   combinations rather than silently selecting a fallback.
+5. Integrate outputs, diagnostics, timers and restart state through AthenaK's
+   existing extension surfaces. Do not introduce parallel ad hoc formats when an
+   established output or manifest mechanism can represent the required data.
+6. Keep changes incremental and reviewable. Separate physical-model changes,
+   performance changes and broad refactors unless they cannot be validated
+   independently.
+7. Treat Entity Toolkit and external-code patterns as comparison inputs, not as
+   automatic design replacements. Translate a useful idea into AthenaK's
+   conventions unless a documented exception is justified.
+8. Follow repository formatting rules for every touched source file: no tabs,
+   90-character C++ line limit, one closing brace per line, concise comments and
+   ASCII text unless an existing file requires otherwise.
+
+### Exception Policy
+
+An AthenaK-style deviation is allowed only when the default design would
+materially reduce physical accuracy or computational efficiency. Before merging
+an exception:
+
+1. Record the rejected AthenaK-native design, the proposed deviation and the
+   smallest affected surface in the findings ledger.
+2. For an accuracy exception, archive an analytical, manufactured or
+   independently reproduced comparison showing the material accuracy loss.
+3. For an efficiency exception, archive matched CPU and relevant GPU benchmarks
+   showing the material runtime, scaling or memory regression. Do not accept a
+   speculative performance argument.
+4. Confirm that the exception preserves restart, AMR, MPI, GPU, diagnostic and
+   usability contracts.
+5. Obtain code review and record the reviewer disposition in the release
+   manifest. Revisit the exception if AthenaK's common infrastructure changes.
+
+### Style And Architecture Verification
+
+For each implementation batch:
+
+1. Run targeted formatting and lint checks on every touched C++ and Python file.
+2. Run `bash tst/scripts/style/check_athena_cpp_style.sh`, record the existing
+   repository-wide baseline debt separately, and introduce no new violations.
+3. Run the relevant regression suite and the smallest representative GPU test
+   for any hot-kernel or data-layout change.
+4. Review the diff specifically for avoidable PIC-only infrastructure,
+   inconsistent ownership, duplicated helpers, ambiguous parameters and
+   deviations from nearby AthenaK patterns.
+5. Add any approved exception and its archived evidence to the Q-042
+   architecture/style-conformance report.
 
 ## Claims Registry And Evidence Boundaries
 
@@ -179,7 +254,7 @@ and its qualification gates are complete.
 | Relativistic MHD background fluid | `parser_reject`, `docs_limit` | Parser test and supported-mode table |
 | Physical damping and calibrated CR transport coefficients | `extension_gate` | Explicit unsupported disposition unless separately implemented and qualified |
 | Oblique-shock generality | `parser_reject`, `docs_limit` | Parser test or unsupported-mode documentation until independently implemented |
-| Production-scale Frontier qualification under the current `debug`-only authorization | `docs_limit`, `extension_gate` | Blocked disposition pending explicit revised production-campaign authorization |
+| Frontier work outside `debug`-preferred, `normal`-fallback scheduling on `batch`, or beyond the 4000 node-hour cap | `docs_limit`, `extension_gate` | Blocked disposition pending explicit revised execution authorization and user permission |
 
 ## Review Basis And Evidence Status
 
@@ -229,8 +304,8 @@ Every one of the following is currently required:
 - AMR ownership, child-state and boundary-buffer refresh stress tests, plus a
   documented AMR deposition contract.
 - Quantitative reproduction of every benchmark in the paper.
-- Frontier HIP/MPI short-run validation and, after separately approved
-  production-campaign authorization, controlled scaling results.
+- Frontier HIP/MPI short-run validation and registered `normal`-QOS controlled
+  scaling results after prerequisite gates close.
 - Restart, decomposition, boundary, robustness, usability, and documentation
   qualification on the final model.
 - Frozen, provenance-recorded Entity comparison material for any shared-kernel
@@ -929,10 +1004,11 @@ with a correct underlying model.
 4. Establish coarse, fine and AMR inputs with frozen provenance and an analysis
    script measuring the quantities shown in the paper, including spectra and
    spatial morphology at prescribed times.
-5. Validate checkpoint/restart equivalence in short, compliant debug pilots.
-   Do not chain a full production shock campaign through the `debug` QOS; if a
-   full run exceeds permitted debug use, mark it blocked pending an explicitly
-   revised execution authorization.
+5. Validate checkpoint/restart equivalence in short, compliant `debug` pilots.
+   Do not chain a full production shock campaign through the `debug` QOS. Run a
+   registered full shock campaign under `normal` on `batch` after prerequisites
+   close and only while the cumulative reservation remains within the approved
+   node-hour cap.
 6. Store particle provenance and species/injection-cohort spectra needed to
    audit injected populations and acceleration histories, with independent
    offline reconstruction of the same binned distributions.
@@ -1061,6 +1137,8 @@ Provide a defensible yes/no production decision.
 - Independent cross-code and literature comparison report for every scoped
   state-of-the-art statement.
 - Reliability, resilience and portability matrix report.
+- AthenaK architecture/style-conformance report, including any evidence-backed
+  exceptions.
 - Archive-integrity, restore-drill and licensing report.
 - Cumulative Frontier node-hour ledger, demonstrating budget compliance.
 - Final checklist signed in this document with links to immutable artifact paths.
@@ -1072,8 +1150,8 @@ in the release manifest and close every mandatory gate listed for it.
 
 | Release or evidence profile | Mandatory gates |
 | --- | --- |
-| `sun_bai_2023_reproduction` evidence bundle | Q-001 through Q-009, Q-011 through Q-013, Q-016, Q-018, Q-023, Q-025 through Q-027, Q-034, Q-036 through Q-038 |
-| Production-ready `paper_mhd_pic` | All `sun_bai_2023_reproduction` gates plus Q-010, Q-017, Q-019 through Q-021, Q-024, Q-028, Q-030, Q-031, Q-040 and Q-041 |
+| `sun_bai_2023_reproduction` evidence bundle | Q-001 through Q-009, Q-011 through Q-013, Q-016, Q-018, Q-023, Q-025 through Q-027, Q-034, Q-036 through Q-038 and Q-042 |
+| Production-ready `paper_mhd_pic` | All `sun_bai_2023_reproduction` gates plus Q-010, Q-017, Q-019 through Q-021, Q-024, Q-028, Q-030, Q-031, Q-040 through Q-042 |
 | Scoped state-of-the-art statement | Production-ready `paper_mhd_pic` plus Q-022, Q-028 through Q-035, Q-039 and Q-040; unsupported extensions must close through explicit exclusion rather than omission |
 | Optional `extended_mhd_pic` capability | Production-ready `paper_mhd_pic` plus an `implemented_and_qualified` extension-specific outcome: Q-029 for Hall Bell, Q-032 for ion-neutral-damped CRSI, or Q-033 for CRPAI transport calibration. An `excluded_as_unsupported` outcome closes scope bookkeeping but cannot qualify the extension |
 
@@ -1500,9 +1578,11 @@ At the time this plan was prepared, the guide states that:
 - GPU-aware Cray MPICH requires `craype-accel-amd-gfx90a`, `rocm` and
   `MPICH_GPU_SUPPORT_ENABLED=1`; Cray compiler wrappers with HIP sources may
   require explicit ROCm include/link flags.
+- The `batch` partition is the default partition for production work and the
+  default QOS is `normal`.
 - The `debug` QOS permits only one user job in any state and rejects walltimes
-  exceeding 2 hours. It is intended for short debugging, not production job
-  chaining.
+  exceeding 2 hours. It is intended for short non-production debugging, not
+  production work or job chaining.
 - Orion project-work storage is not backed up and is purge-eligible; required
   evidence must be mirrored to approved nearline storage and exported to an
   institutional or approved off-site long-term archive.
@@ -1510,19 +1590,21 @@ At the time this plan was prepared, the guide states that:
   page-migration behavior and must be treated as an experimental profile until
   benchmark evidence supports promotion.
 
-This project deliberately restricts all currently authorized Frontier jobs to
-`debug`. Because OLCF identifies that QOS as short, non-production use and
-prohibits production job chaining, do not attempt to evade the policy by
-manually chaining production restart segments. Use `debug` only for compliant
-short qualification/debug runs. If complete paper reproduction or a production
-scaling experiment cannot be completed within the permitted use of `debug`,
-stop, record the blocked work and obtain explicit revised authorization before
-using any other execution policy.
+This project uses a `debug`-preferred, `normal`-fallback scheduling policy on the
+`batch` partition. Because OLCF identifies `debug` as short non-production use
+and prohibits production work and job chaining under that QOS, do not attempt to
+evade the policy by manually chaining restart segments. Prefer `debug` only for
+eligible short qualification and debugging runs when the user has no `debug`
+job in any state. Use `normal` on `batch` when the `debug` slot is occupied or
+when the job is not eligible for `debug`, including registered longer
+paper-reproduction, nonlinear-saturation and controlled-scaling work after its
+prerequisite gates close. Keep AthenaK PIC submissions serial under both QOS
+classes.
 
-### Authorized Debug-QOS Qualification Scope
+### Authorized Frontier Execution Scope And QOS Selection
 
-The only currently authorized Frontier work is bounded short-run qualification
-under `#SBATCH -q debug`. These jobs may:
+Eligible short non-production jobs should request `#SBATCH -q debug` when the
+user has no `debug` job in any state. These jobs may:
 
 - verify HIP/MPI compilation, GPU placement and startup metadata;
 - run analytical pusher, coupling, delta-f and expanding-box oracles;
@@ -1532,47 +1614,66 @@ under `#SBATCH -q debug`. These jobs may:
 - measure small controlled performance A/B comparisons needed to choose a
   recorded environment setting.
 
-These jobs may not:
+No `debug` job may:
 
 - chain restart segments to approximate a production allocation;
 - run a full shock reproduction that requires production-scale time or repeated
   restart chaining;
 - run a scaling study whose purpose is production performance characterization;
-- exceed the one-job, two-hour or cumulative 1000 node-hour constraints;
-- use another QOS, partition or account policy without explicit revised
-  authorization.
+- exceed the one-job or two-hour `debug` constraints;
+- be used for production work, production scaling or restart chaining;
+- cause the cumulative reserved-plus-consumed usage to exceed the 4000
+  node-hour project testing cap.
 
-### Future Approved Production Campaign Boundary
+Use `#SBATCH -q normal` on the `batch` partition when a short eligible job cannot
+use `debug` because the user's `debug` slot is occupied, or when a registered job
+is not eligible for `debug`. Record exactly one QOS-selection reason in the
+pre-submit manifest: `debug_available`, `debug_slot_occupied`,
+`debug_ineligible_production`, `debug_ineligible_walltime`, or
+`normal_required_by_registered_campaign`. A `normal` submission is not a waiver:
+all provenance, prerequisite, accounting, artifact and serial-submission checks
+remain mandatory. Recheck the current OLCF scheduling policy before every
+substantial campaign and record `site_policy_checked_utc` in the pre-submit
+manifest; never assume that the site's `normal`-QOS limits are static.
 
-Full shock reproduction, nonlinear saturation runs that exceed compliant debug
-use, and controlled production scaling are a separate future campaign. They are
-blocked, not waived. Before any such submission, future agents must:
+### Authorization Boundary For Any Expanded Campaign
 
-1. Obtain explicit user and site-policy authorization for the execution policy.
+Registered paper reproduction, nonlinear saturation and controlled scaling may
+run under `normal` on `batch` after their prerequisite gates close. Before any
+submission outside the scheduling, account or budget envelope in this plan,
+future agents must:
+
+1. Stop and obtain explicit user and site-policy authorization for the expanded
+   execution policy. Always stop and ask the user before raising the cumulative
+   cap above 4000 node-hours.
 2. Amend this plan with the approved QOS, partition, walltime, node-count
    ceiling, concurrency rule and revised budget envelope.
 3. Preserve the same `/lustre/orion/ast207/proj-shared/dfielding/PIC` execution
    root, provenance manifests and node-hour ledger unless explicitly revised.
 4. Freeze the qualifying commit, binary checksum, deck matrix, statistical
    design, predeclared metrics and stop conditions before submission.
-5. Run the authorized production jobs only after all prerequisite small
-   correctness gates are closed.
-6. Record the resulting accounting and artifacts separately from debug-QOS
-   evidence so no short pilot is mistaken for a production result.
+5. Run registered large jobs only after all prerequisite small correctness gates
+   are closed.
+6. Record `debug` and `normal` artifacts distinctly so no short pilot is
+   mistaken for a production result.
 
 ### Mandatory Resource And Accounting Policy
 
 1. Set `PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC` for every
    Frontier action. Do not run simulations in another project directory.
-2. Use only `#SBATCH -q debug` and a time request no larger than `02:00:00`.
-3. Submit at most one job at a time. Direct `sbatch` use is prohibited. Before
-   each validated-wrapper submission, run:
+2. Use the `batch` partition. Prefer `#SBATCH -q debug` only for eligible short
+   non-production work when the user has no `debug` job in any state; otherwise
+   use `#SBATCH -q normal`. A `debug` request must not exceed `02:00:00`.
+3. Submit at most one AthenaK PIC job at a time across both QOS classes. Direct
+   `sbatch` use is prohibited. Before each validated-wrapper submission, run:
 
    ```bash
-   squeue -u "$USER" -h -o "%i %q %T %j"
+   squeue -u "$USER" -h -o "%i %P %q %T %j %k"
    ```
 
-   If any `debug` job is listed in any state, do not submit another.
+   If any user `debug` job is listed in any state, select `normal` rather than
+   submitting another `debug` job. If any AthenaK PIC job is listed in any state,
+   do not submit another PIC job under either QOS.
 4. Calculate the maximum additional budget before submission:
 
    ```text
@@ -1584,7 +1685,7 @@ blocked, not waived. Before any such submission, future agents must:
    ```text
    cumulative_consumed_node_hours
      + currently_reserved_node_hours
-     + maximum_node_hours > 1000
+     + maximum_node_hours > 4000
    ```
 
 5. Reserve maximum requested node-hours in the locked ledger before submission.
@@ -1605,7 +1706,8 @@ blocked, not waived. Before any such submission, future agents must:
 
    ```text
    sequence_number,previous_event_sha256,event_sha256,event_type,timestamp,reservation_id,
-   submission_id,job_id,git_commit,campaign,test_id,requested_nodes,
+   submission_id,job_id,git_commit,campaign,test_id,partition,qos,qos_selection_reason,
+   queue_snapshot_sha256,site_policy_checked_utc,requested_nodes,
    scheduler_reported_allocated_nodes,billed_nodes,
    requested_walltime,reserved_node_hours,elapsed_seconds,consumed_node_hours,
    cumulative_consumed_node_hours,state,reconciled,artifact_dir,
@@ -1615,7 +1717,8 @@ blocked, not waived. Before any such submission, future agents must:
 
 7. Use the budget deliberately. Begin with one-node correctness tests and only
    grow when a previous result satisfies its gate. A failed setup should cost
-   no more than one small debug job before it is corrected.
+   no more than one small `debug` job before it is corrected. Stop and ask the
+   user for permission before increasing the cap above 4000 node-hours.
 
 ### Frontier Environment Profiles
 
@@ -1695,7 +1798,7 @@ record_pic_environment() {
 | `frontier_minimum_supported` | Initial qualifying baseline | Site-supported modules, GPU-aware MPICH and explicit rank/GPU binding only |
 | `frontier_xnack1_experimental` | Managed-memory experiment | Compare correctness, runtime and memory against the default `HSA_XNACK=0` behavior before promotion |
 | `frontier_ofi_tuned_experimental` | Communication experiment | Add OFI/CXI/MPI-IO settings as one controlled profile; benchmark against minimum supported baseline |
-| `frontier_selected_production` | Future approved production profile | Define only after matched evidence and explicit future-campaign authorization |
+| `frontier_selected_production` | Selected large-run profile | Define only after matched environment-profile evidence and before any registered large `normal`-QOS campaign |
 
 Entity documentation reports application-specific Frontier communication
 experience. Treat that information as a prompt for a bounded AthenaK benchmark,
@@ -1775,7 +1878,7 @@ Notes:
 - Do not qualify a build if `git_status.txt` contains unexplained modified or
   untracked source/config files.
 
-### Improved Debug-QOS Job Template
+### Improved Frontier Job Template
 
 Create one immutable job script per test/campaign under `$PIC_ROOT/jobs/`.
 This template uses one GPU per MPI rank as recommended by the Frontier guide:
@@ -1796,6 +1899,14 @@ values, not merely test that fields exist. Runtime state belongs in a separate
 append-only status stream; never mutate the pre-submit manifest from inside an
 allocation. Direct `sbatch` use is prohibited: submit only through the validated
 wrapper below.
+
+The manifest creator must resolve `REPLACE_WITH_VALIDATED_QOS` before snapshot:
+choose `debug` only when the registered job is eligible for short
+non-production use and `squeue` shows no user `debug` job in any state;
+otherwise choose `normal`. Snapshot the queue observation, selected QOS and
+QOS-selection reason. The validator must recompute that decision immediately
+before reservation and fail closed if a race or policy change makes the
+snapshotted selection stale.
 
 Freeze the submission wrapper, validator, reconciler, ledger initializer and
 schema under an immutable checksummed control-plane version directory. Invoke
@@ -1818,7 +1929,7 @@ and unresolved `REPLACE_*` placeholders.
 #SBATCH -o /lustre/orion/ast207/proj-shared/dfielding/PIC/logs/slurm/%x.%j.log
 #SBATCH -t 00:20:00
 #SBATCH -p batch
-#SBATCH -q debug
+#SBATCH -q REPLACE_WITH_VALIDATED_QOS
 #SBATCH -N 1
 
 set -euo pipefail
@@ -1905,18 +2016,28 @@ batch job reaches a terminal state; an in-job `sacct` command is not sufficient.
 
 ### Submission And Ledger Procedure
 
-Because only one debug job can exist at once, submission is an explicit serial
-workflow. Implement and test
-`$PIC_ROOT/jobs/validate_and_reserve_debug_job.py` and
-`$PIC_ROOT/jobs/reconcile_debug_job.py` before the first Frontier submission.
+Submission is an explicit serial AthenaK PIC workflow across both allowed QOS
+classes. Implement and test
+`$PIC_ROOT/jobs/validate_and_reserve_frontier_job.py` and
+`$PIC_ROOT/jobs/reconcile_frontier_job.py` before the first Frontier submission.
 The validator must parse the immutable job script and pre-submit manifest, then reject
 submission unless all policy checks pass:
 
-- job script requests exactly `#SBATCH -q debug`;
-- requested walltime is `<=02:00:00`;
+- job script requests exactly `#SBATCH -p batch` and exactly one allowed QOS,
+  `#SBATCH -q debug` or `#SBATCH -q normal`;
+- the pre-submit manifest records the selected QOS, queue snapshot, one allowed
+  QOS-selection reason and the timestamp of the current OLCF scheduling-policy
+  check;
+- a `debug` request is a short non-production task, requests walltime
+  `<=02:00:00`, and `squeue` shows no existing user `debug` job in any state;
+- a `normal` request is selected when `debug` is occupied or ineligible and its
+  registered walltime, node count, campaign bounds and current site-policy
+  limits are satisfied;
 - requested nodes and worst-case node-hours are parsed successfully;
-- consumed plus currently reserved plus requested node-hours is `<=1000`;
-- `squeue` shows no `debug` job for the user in any state;
+- consumed plus currently reserved plus requested node-hours is `<=4000`;
+- `squeue` shows no existing AthenaK PIC job for the user in any state across
+  either allowed QOS, identified by the `pic-reservation=` Slurm comment and
+  snapshotted job metadata;
 - no previous reservation remains unreconciled;
 - executable, input, analysis and job-script checksums exist and recompute to
   the frozen values;
@@ -1948,8 +2069,8 @@ LEDGER_JSONL="${PIC_ROOT}/ledger/node_hours.jsonl"
 LEDGER_CSV="${PIC_ROOT}/ledger/node_hours.csv"
 CONTROL_PLANE_VERSION=REPLACE_WITH_CHECKSUMMED_CONTROL_PLANE_VERSION
 CONTROL_PLANE_DIR="${PIC_ROOT}/control_plane/${CONTROL_PLANE_VERSION}"
-VALIDATOR="${CONTROL_PLANE_DIR}/validate_and_reserve_debug_job.py"
-RECONCILER="${CONTROL_PLANE_DIR}/reconcile_debug_job.py"
+VALIDATOR="${CONTROL_PLANE_DIR}/validate_and_reserve_frontier_job.py"
+RECONCILER="${CONTROL_PLANE_DIR}/reconcile_frontier_job.py"
 PENDING_SUBMISSION_FILE="${PIC_ROOT}/ledger/pending_submission.json"
 
 reservation_id=""
@@ -1980,7 +2101,7 @@ trap cleanup_unattached_job ERR INT TERM
 mkdir -p "${PIC_ROOT}/ledger"
 test -r "$LEDGER_JSONL" || {
   printf "Missing initialized mirrored ledger: %s\n" "$LEDGER_JSONL" >&2
-  printf "Run the reviewed initialize_debug_ledger.py genesis procedure first.\n" >&2
+  printf "Run the reviewed initialize_frontier_ledger.py genesis procedure first.\n" >&2
   exit 1
 }
 
@@ -1990,9 +2111,10 @@ reservation_id="$(
     --run-manifest "$RUN_MANIFEST" \
     --ledger-jsonl "$LEDGER_JSONL" \
     --ledger-csv "$LEDGER_CSV" \
-    --required-qos debug \
-    --max-walltime 02:00:00 \
-    --max-node-hours 1000
+    --partition batch \
+    --allowed-qos debug,normal \
+    --debug-max-walltime 02:00:00 \
+    --max-node-hours 4000
 )"
 
 submission_id="$(python3 "$VALIDATOR" submission-id \
@@ -2037,7 +2159,7 @@ printf "python3 %q --ledger-jsonl %q --ledger-csv %q --job-id %q --run-manifest 
 
 Before the first submission, initialize an explicit genesis primary event,
 mirror it, append its receipt and derive the CSV index through the reviewed
-`initialize_debug_ledger.py` workflow. Never create an empty ledger implicitly.
+`initialize_frontier_ledger.py` workflow. Never create an empty ledger implicitly.
 
 After completion, run the reconciler to archive `sacct`, replace reserved usage
 with actual usage, and record job state. A human or agent must still inspect the
@@ -2055,7 +2177,7 @@ durably mirrored before the wrapper or reconciler reports success. If
 `scancel`, `sacct` reconciliation or durable mirroring cannot be confirmed,
 block later submissions and require manual recovery.
 
-### Authorized Debug-QOS Qualification Budget Envelope
+### Authorized Frontier Testing Budget Envelope
 
 The budget below is deliberately conservative. It uses maximum requested
 node-hours, not expected elapsed cost. Do not spend a later tier while its
@@ -2067,19 +2189,19 @@ prerequisite phase gate is open.
 | F1 Relativistic pusher and conservative coupling oracles | P2/P3 implementation complete | Up to 16 x 1 node x 0.5 h | 8 | 9.5 |
 | F2 Delta-f and box analytical tests | P4/P5 implementation complete | Up to 16 x 1 node x 1 h | 16 | 25.5 |
 | F3 AMR/restart/decomposition/load balance validation | P6 implementation complete | Up to 20 jobs varying 1-4 nodes x <=1 h, budget-capped | 50 | 75.5 |
-| F4 Bell, oscillation, CRSI, CRPAI short qualification cases | P3-P6 analytical gates closed | Up to 24 compliant debug jobs varying 1-8 nodes x <=2 h, budget-capped | 200 | 275.5 |
-| F5 Shock debug pilots and single-job resolution checks | P7 setup review complete | Up to 12 compliant debug jobs varying 1-8 nodes x <=2 h, budget-capped | 120 | 395.5 |
-| F6 Full shock reproduction, long nonlinear saturation and controlled scaling | All correctness gates closed | **Blocked:** not authorized under the current debug-only/non-production policy; revise plan and obtain approval before submission | 0 | 395.5 |
-| Reserve | Unexpected defects or compliant debug-QOS reruns only until a future plan revision explicitly reallocates it | Must be justified in ledger/plan before use | 604.5 | 1000 |
+| F4 Bell, oscillation, CRSI, CRPAI short qualification cases | P3-P6 analytical gates closed | Up to 24 compliant `debug`-preferred, `normal`-fallback jobs varying 1-8 nodes x <=2 h, budget-capped | 200 | 275.5 |
+| F5 Shock pilots and single-job resolution checks | P7 setup review complete | Up to 12 compliant `debug`-preferred, `normal`-fallback jobs varying 1-8 nodes x <=2 h, budget-capped | 120 | 395.5 |
+| F6 Full shock reproduction, long nonlinear saturation and controlled scaling | All correctness gates closed | Registered `normal`-QOS jobs on `batch`; freeze each campaign matrix and statistical design before use | 2400 | 2795.5 |
+| Reserve | Unexpected defects, justified reruns and registered follow-up tests only | Must be justified in ledger/plan before use | 1204.5 | 4000 |
 
 This envelope is not permission to spend the allotment. Stop as soon as enough
 evidence exists to decide a gate. If a one-node test fails, fix it before
 allocating more nodes.
 
-The reserve is not implicit authorization for production work. Any future
-approved production envelope must be added as a new revision with its own
-authorization record and cumulative accounting that preserves the 1000
-node-hour cap unless the user explicitly changes that cap.
+The reserve is not permission to skip prerequisite gates or broaden campaign
+scope silently. Any future expanded envelope must be added as a new revision
+with its own authorization record and cumulative accounting. Stop and ask the
+user for permission before increasing the 4000 node-hour cap.
 
 ## Detailed Qualification Matrix
 
@@ -2114,7 +2236,7 @@ and measured values as work progresses.
 | Q-024 | Resilience aggregate report | Forced walltime, interrupted output, corrupt checkpoint, restart schema and bounded storage-failure tests; closes after Q-036 | Blocked by PIC-P0-006 |
 | Q-025 | Portability aggregate report | Debug/Release, warnings, host memory checking, declared CPU/OpenMP/MPI scope and Frontier HIP/MPI matrix; closes after Q-038 | Open |
 | Q-026 | Archive integrity, licensing and sensitive-data handling | Pre-ingestion and pre-export classification, scrubbed submission artifacts, checksums, redistribution basis, manifest schema and fresh-directory restore drill | Open |
-| Q-027 | Frontier debug-QOS authorization boundary | Short-run qualification ledger complete; prohibited production work remains blocked pending revised authorization | Open |
+| Q-027 | Frontier QOS-selection and budget boundary | `debug`-preferred, `normal`-fallback selection is recorded and policy-compliant; serialized PIC submission ledger is complete; cumulative reserved-plus-consumed usage remains `<=4000` node-hours; expanded work remains blocked pending revised authorization and user permission | Open |
 | Q-028 | Independent Bell nonlinear comparisons | Non-Hall paper-mode campaign compared against Bai et al., Riquelme-Spitkovsky, Gargaté et al. and Zacharegkas et al. where regimes overlap: amplification, wavelength evolution, spectra, cavities, filaments, energy transfer and saturation time/mechanism | Blocked by Q-019/Q-022/Q-023 |
 | Q-029 | Hall-extension qualification or exclusion | Separately named derived mode with linear/nonlinear Bell and shock-front tests. Record exactly one outcome: `implemented_and_qualified` or `excluded_as_unsupported`; only the first qualifies an extension release | Unsupported unless extension is implemented |
 | Q-030 | Independent matched-code comparisons | Close explicit sub-gates Q-030-A Athena/Bai matched Bell-shock observables, Q-030-P PLUTO matched conservative coupling and Q-030-M MPI-AMRVAC overlapping AMR-shock observables, with frozen mappings, quantitative residuals and discrepancy reports | Blocked by Q-004/Q-009/Q-011/Q-019/Q-022/Q-023 |
@@ -2132,6 +2254,7 @@ and measured values as work progresses.
 | Q-039 | GIZMO/RSOL comparison decision | Before P7A interpretation, archive a bounded Ji-Hopkins/GIZMO comparison with preregistered metrics or a reviewer-approved documented exclusion from qualification scope | Open |
 | Q-040 | Independent-comparison aggregate closure | For non-Hall production Bell close Q-028; for nonlinear CRSI close Q-031; for matched code comparisons close Q-030-A, Q-030-P and Q-030-M. Extension exclusions are allowed only for Q-029/Q-032/Q-033 and the bounded Q-039 GIZMO decision. Archive the discrepancy ledger and scoped conclusions | Blocked by Q-022 and the named child gates |
 | Q-041 | Undriven CRPAI nonlinear saturation | Undriven branch evolution, anisotropy, spectra, scattering, saturation, effective-damping trends, sensitivity matrix, matched reduced nonlinear full-f controls and archived weight-validity envelope, distinct from Section 5.6 linear reproduction and physical-damping calibration | Blocked by Q-007 |
+| Q-042 | AthenaK architecture and style conformance | Review every implementation batch against nearby AthenaK patterns; run targeted formatting/lint checks and the repository style baseline; archive evidence for any accuracy- or efficiency-driven exception; introduce no new style violations or avoidable PIC-only infrastructure | Open |
 
 ## Immediate Agent Handoff: First Actions
 
@@ -2144,8 +2267,9 @@ Future implementation agents should execute the following sequence:
    manifest framework.
 4. Reclassify publication-named proxies in manifests, READMEs, figures and
    reports before generating new qualification artifacts.
-5. Write the paper-mode equations/interface specification and obtain review
-   before changing more coupling code.
+5. Write the paper-mode equations/interface specification, complete an
+   AthenaK-style compatibility review and obtain review before changing more
+   coupling code.
 6. Implement `C`-aware relativistic momentum pushing and its analytical tests.
 7. Replace or isolate the current current-to-CT field coupling and implement
    conservative paper feedback; run analytical coupling tests.
@@ -2155,12 +2279,13 @@ Future implementation agents should execute the following sequence:
 10. Implement atomic restart publication and fail-closed I/O handling, then
     pass the crash-consistency failure matrix.
 11. Only after all small analytical gates pass, build and run Frontier validation
-   under the debug-only, budget-tracked procedure above.
+   under the `debug`-preferred, `normal`-fallback, budget-tracked procedure above.
 12. Reproduce every paper result, execute registered nonlinear and cross-code
     campaigns within authorization, and complete the production sign-off bundle.
-13. If long saturation, full shock or scaling work exceeds compliant debug-QOS
-    use, stop and obtain a revised approved production-campaign policy rather
-    than chaining jobs or treating pilots as final evidence.
+13. Use `normal` on `batch` for registered long saturation, full shock or
+    controlled-scaling work after prerequisites close. Stop and ask the user for
+    permission before exceeding 4000 cumulative node-hours or expanding beyond
+    the authorized QOS, partition, account or campaign envelope.
 
 ## Initial Change Log
 
@@ -2171,6 +2296,8 @@ Future implementation agents should execute the following sequence:
 | 2026-05-30 | Retired the narrow large-machine note as historical-only evidence; corrected AMR wording; added claims registry, nonlinear saturation, cross-code, statistical, resilience, portability, archive/licensing and Frontier authorization-boundary gates | A fresh source and plan audit showed that paper reproduction plus exploratory proxies alone could not support production or scoped state-of-the-art claims |
 | 2026-05-30 | Enforced engineering-proxy classification in checked-in artifact tooling and hardened the plan after independent physics, taxonomy and Frontier-operability reviews | Legacy publication identifiers now carry explicit unqualified metadata and visible figure labels; comparison gates, sampling rules, release profiles and fail-closed submission accounting are executable specifications rather than implied policy |
 | 2026-05-30 | Added immutable Frontier control-plane snapshots, JSONL accounting with non-recursive mirror receipts, dual Slurm-ID guards, inert scan shells, root-document retirement banners and checksummed standalone-helper lineage companions | Adversarial execution review found that documentation-only policy was insufficient while mutable paths, ambient exports, copied shell scripts or partially checksummed quicklooks could bypass provenance and submission boundaries |
+| 2026-05-30 | Replaced the initial `debug`-only Frontier rule with a `debug`-preferred, `normal`-fallback policy on `batch`; raised the cumulative testing cap to 4000 node-hours with a mandatory stop-and-ask boundary | The user authorized normal-QOS fallback when the single-user `debug` slot is unavailable and expanded the tracked cluster-testing budget while preserving serial PIC submissions and fail-closed accounting |
+| 2026-05-30 | Added the AthenaK architecture/style-conformance contract and Q-042 | PIC implementation work should reuse AthenaK's existing framework and design choices unless archived evidence shows that a scoped deviation is necessary for material accuracy or efficiency |
 
 ## Source Pointers For The Initial Review
 
