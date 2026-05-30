@@ -132,17 +132,80 @@ diagnostics while the ASan startup issue remains unresolved.
 
 ## Frontier Stop Boundary
 
-Do not submit a Frontier job, initialize a real node-hour ledger, or treat a
-hand-submitted job as qualifying evidence until all of the following are true:
+A fresh ledger bootstrap and a registered-science submission are separate
+unlocks. A hand-submitted job is never qualifying evidence.
+The sole bulk-evidence root is
+`/lustre/orion/ast207/proj-shared/dfielding/PIC`; Kronos is not an execution,
+continuation, or bulk-publication path. Project Home is limited to the small
+ledger and control-plane mirror.
 
-1. The reviewed storage policy records the user-selected Orion-only bulk
+For the one-time pre-genesis bootstrap only:
+
+1. Install the exact immutable control-plane version in both the authorized
+   Orion root and Project Home mirror from a reviewed clean Git commit. The
+   production installer rejects modified or untracked control-plane source.
+2. Promote a reviewed policy that records the user-selected Orion-only bulk
    evidence root, the Project Home ledger/control-plane mirror, the explicit
-   durability risk, and `ledger_genesis_allowed=true`.
-2. The authorized Project Home mirror and initialized mirrored ledger exist.
-3. The exact immutable control-plane version authorized by the storage policy
-   is installed under the Frontier PIC root.
-4. The immutable pre-submit manifest is created and the installed
-   `submit_frontier_job.sh` wrapper is used.
+   durability risk, `ledger_genesis_allowed=true`, and no initialized
+   `ledger_genesis` fields.
+3. Run the installed `initialize_frontier_ledger.py` procedure exactly once to
+   create the mirrored genesis event and paired read-only genesis anchors.
+
+The open `ledger_genesis_allowed=true` policy authorizes initialization only.
+It is not a reservation or submission unlock. Before any registered-science
+reservation or submission:
+
+1. Confirm that the initialized mirrored ledger and paired read-only genesis
+   anchors exist.
+2. Update and promote the reviewed policy with
+   `ledger_genesis_allowed=false` and the exact initialized genesis event and
+   mirror-receipt digests.
+3. Confirm that the promoted policy authorizes the installed immutable
+   control-plane version.
+4. Create a clean-candidate freeze and promote
+   `science_submission_freeze.status=authorized` with its exact Orion manifest
+   path and SHA-256 digest.
+5. Create the immutable pre-submit manifest and use only the installed
+   `submit_frontier_job.sh` wrapper.
+
+The installed wrapper reserves and durably mirrors worst-case node-hours. The
+reservation binds the active policy and active-promotion digests; those digests
+are rechecked before dispatch, before scheduler-ID attachment, and in the
+trampoline before workload execution. Wrapper metadata reads used to construct
+the scheduler request require a live mirrored reservation in `reserved` state.
+Immediately before submitting its trusted trampoline with
+`sbatch --hold --export=NIL` through a closed environment pinned to the
+`frontier` cluster, the wrapper durably records `scheduler_dispatch_started`.
+The scheduled runner receives immutable bindings through argv and rechecks
+them against the mirrored ledger without reconstructing the submitter's login
+environment. It then records
+`scheduler_job_id_received` and `submitted_not_attached`, attaches the verified
+scheduler ID, and only then runs `scontrol release`.
+
+Only a failure known to precede `scheduler_dispatch_started` may automatically
+cancel an unused reservation. Any ambiguity at or after that marker retains
+accounting and requires reviewed Slurm inspection and reconciliation. Reconcile
+a terminal job from the durable marker if it reaches a terminal state before
+attachment. Terminal reconciliation cleanup is idempotent: rerunning it clears
+a matching stale pending marker without duplicating accounting. Slurm stdout is
+restricted to `${PIC_ROOT}/logs/slurm/%x.%j.log`. Each run uses exactly
+`/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/<campaign>/<submission-id>`;
+reruns use a new submission ID.
+
+Immediately before workload execution, the launch wrapper syncs the inherited
+runtime-allowlist descriptor, changes it to mode `0400`, syncs it again, syncs
+its pinned directory descriptor, closes both descriptors, and removes both
+environment bindings. Installed snapshots, clean-candidate freezes and
+pre-submit snapshots are staged and published relative to pinned authorized
+parent descriptors, with a fail-closed lexical-parent identity check after
+publication. This closes ancestor-swap pathname redirection during publication;
+it does not establish an integrity boundary against a malicious process running
+as the same Unix UID.
+
+The separately policy-bound Frontier admission smoke is a narrow
+non-production exception documented in
+`tst/publication/frontier_control_plane/README.md`; it is not a
+registered-science unlock.
 
 ## Verified Against
 

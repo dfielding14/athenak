@@ -1,0 +1,37 @@
+{
+  "record_type": "q027_active_control_plane_generation",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "verified_utc": "2026-05-30T16:06:05Z",
+  "gates": [
+    "Q-027",
+    "Q-042"
+  ],
+  "qualification_effect": "chronology_only_live_generation_superseded_for_next_promotion_candidate",
+  "scope": "Read-only chronology snapshot of the mirrored live Frontier PIC control plane before the next security-hardening promotion. This record does not authorize submissions, replace a fresh review of the staged successor or close the clean-candidate science freeze.",
+  "active_generation": {
+    "control_plane_version": "3e933edde9590a85976a94c0b61673979abf3c13cc2c125ed0ecbc1815029a6e",
+    "orion_install": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/3e933edde9590a85976a94c0b61673979abf3c13cc2c125ed0ecbc1815029a6e",
+    "project_home_install": "/ccs/proj/ast207/proj-shared/PIC/control_plane/3e933edde9590a85976a94c0b61673979abf3c13cc2c125ed0ecbc1815029a6e",
+    "inventory_sha256": "1fb9aad42af5891e90e40ed2086e3b326b5e3601b927f6815f1a6f4f53f15b0f",
+    "active_policy_sha256": "228440de18ff07af28721caf430775e209e8d8882190f17740796b9bbf3b13a7",
+    "active_promotion_sha256": "700a059acc725e6359f16b0663a2df255878211cae56b9c5086579d06a3db8dc",
+    "mirrors_byte_identical": true
+  },
+  "ledger_invariant": {
+    "events": 22,
+    "receipts": 22,
+    "jsonl_sha256": "018b523df8e47ae54547838c0bf928f7e4ed5fb8363d1e6ef7903489e658a837",
+    "receipts_sha256": "386dc0a57148eb12bf38287b168ebfe196ae5c8ec87ab4f322e49202b45b88dc",
+    "cumulative_consumed_node_hours": 0.07444444444444442,
+    "currently_reserved_node_hours": 0.0,
+    "pending_submission_marker": "absent"
+  },
+  "scheduler_observation": {
+    "pic_reservations": 0,
+    "unrelated_jobs_preserved": [
+      "4744913"
+    ]
+  },
+  "next_action": "Keep this generation unchanged until the exact staged successor passes fresh independent review, clean commit curation, paired immutable install and active-policy promotion."
+}

@@ -31,6 +31,11 @@ qualify any scientific claim by itself.
   `q022_athenak_paper_mhd_pic_equation_profile_2026-05-30.json` and
   `q022_xcmp_entity_micro_equation_map_2026-05-30.json`: compact paper-source
   anchor, AthenaK paper-mode equation profile and bounded Entity overlap map.
+- `q022_dataset_provenance_manifest_2026-05-30.json` and the
+  `q022_xcmp_*_{equation_map,tolerance_table}_2026-05-30.json` sidecars:
+  source-controlled Q-022 extraction queue and one fail-closed equation-map and
+  tolerance-table record per comparison. Bulk extracted datasets remain absent
+  and may be added only under the authorized Orion extracted-dataset root.
 - `q023_campaign_drafts_2026-05-30.json` and
   `q023_local_preregistration_profiles_2026-05-30.json`: per-claim campaign
   bundle with locally frozen seeds, sampling rules, grids, windows, tolerances,
@@ -40,8 +45,9 @@ qualify any scientific claim by itself.
 - `plotting_environment_lock_candidate_2026-05-30.json`: local Python and
   plotting-dependency lock candidate pending backend, font, environment
   artifact and external-export freeze.
-- `q026_private_render_restore_2026-05-30.json`: private paper-PDF
-  reconstruction bundle and fresh-directory Project Home restore drill.
+- `q026_private_render_restore_2026-05-30.json`: historical private paper-PDF
+  reconstruction bundle and fresh-directory Project Home restore drill,
+  superseded for current bulk retention by the checksummed Orion copy.
 - `q027_orion_only_storage_transition_2026-05-30.json`: user-authorized
   Orion-only bulk-evidence transition, paired control-plane install, mirrored
   ledger genesis and Orion restore drill with explicit durability risk.
@@ -49,9 +55,40 @@ qualify any scientific claim by itself.
   Frontier HIP/MPI admission smoke, reconciled node-hours and successor
   control-plane promotion with scheduled manifest-digest anchoring.
 - `q027_successor_control_plane_independent_pass_2026-05-30.json`: local
-  successor control-plane suite and independent adversarial PASS at the staged
-  digest. Paired install and active-policy promotion pass; science freeze and
-  applicable Frontier prerequisites remain open.
+  predecessor successor-control-plane suite and independent adversarial PASS at
+  its staged digest. Its paired install and active-policy promotion remain
+  chronology; a later security-hardening candidate supersedes it for the next
+  promotion.
+- `q027_active_control_plane_generation_2026-05-30.json`: read-only chronology
+  snapshot of the currently live paired `3e933edd` control plane, active policy,
+  promotion record and healthy mirrored ledger before the next promotion.
+- `q027_control_plane_security_hardening_candidate_2026-05-30.json`: local
+  security-hardening chronology superseded by the later anchor-repair
+  candidate.
+- `q027_control_plane_anchor_repair_candidate_2026-05-30.json`: local
+  anchor-repair chronology superseded after a later audit found residual
+  preflight-order, interrupted-bootstrap and completed-cancellation recovery
+  gaps.
+- `q027_control_plane_recovery_hardening_candidate_2026-05-30.json`: local
+  recovery-hardening chronology superseded after a later audit found stranded
+  successful-attachment markers, mutable-source repair entry points and
+  inherited Bash-startup descriptor duplication.
+- `q027_control_plane_recovery_provenance_candidate_2026-05-30.json`: local
+  recovery-provenance chronology superseded after an adjacent-path sweep found
+  that reconciliation did not verify the paired Project Home install before
+  appending mirrored accounting state.
+- `q027_control_plane_accounting_provenance_candidate_2026-05-30.json`: local
+  accounting-provenance chronology superseded after a later audit found
+  bootstrap-import, mutable-source-install, ambient-Git, scheduler-environment,
+  trampoline-path and module-provenance activation blockers.
+- `q027_control_plane_bootstrap_scheduler_hardening_candidate_2026-05-30.json`:
+  current local successor candidate. It preserves the earlier controls and
+  adds an isolated exact-inventory runner, reviewed HEAD-blob installation,
+  hermetic Git reads, a closed Frontier scheduler environment,
+  `sbatch --export=NIL`, descriptor-anchored artifact finalization and exact
+  canonical module provenance. Fresh independent adversarial retest, paired
+  install, active-policy promotion, science freeze and applicable Frontier
+  prerequisites remain open.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.
@@ -64,18 +101,32 @@ qualify any scientific claim by itself.
   bounded serial-host physical-volume history and final-frame conservative
   source-split evidence for the selected expanding adaptive-delta-f damping
   composition. Scientific qualification remains open.
+- `q008_expanding_box_restart_resilience_bounded_local_2026-05-30.json` and
+  `q033_expanding_box_adaptive_damping_restart_resilience_bounded_local_2026-05-30.json`:
+  successor bounded serial-host uninterrupted-versus-restarted endpoint
+  parity for the selected active-MHD expanding adaptive-delta-f plus damping
+  carrier. Frontier, MPI and physical-transport qualification remain open.
 - `q009_amr_lifetime_policy_successor_2026-05-30.json`: bounded local AMR
   retained-state inventory and `paper_smooth` interface-policy decision with
   the coupled-boundary, MPI and HIP lifetime matrix intentionally open.
 - `q009_repeated_amr_lifetime_bounded_local_2026-05-30.json`: bounded serial
   six-transition refine/derefine stress through restart continuations, with the
   coupled-boundary, MPI, memory-checking and HIP matrix intentionally open.
+- `q009_coupled_boundary_lifetime_bounded_local_2026-05-30.json`: bounded
+  serial Debug and UBSan six-transition coupled PIC/MHD reflecting/outflow
+  lifetime stress with stable tags, ownership movement, root-level migration
+  and reflection evidence. Multi-rank MPI, HIP and ASan follow-up remain open.
 - `q016_particle_provenance_spectra_local_2026-05-30.json`: bounded serial-host
   schema-7 CR provenance, restart-preservation, MeshBlock-migration and
   independently reconstructed weighted-spectrum evidence.
 - `q017_driver_performance_observability_2026-05-30.json`: bounded driver-level
   timing, throughput and safely derivable rank-load telemetry with
   particle-kernel, memory-detail, Frontier A/B and scaling evidence open.
+- `q017_particle_observability_local_2026-05-30.json`: successor bounded
+  serial-host and one-rank MPI particle-wrapper timing, fixed-record
+  species/absolute-level resident-byte and direct particle-view allocated-byte
+  snapshot evidence. Synchronized Frontier timings, full peak GPU memory,
+  GPU-aware-MPI A/B and scaling remain open.
 - `q024_schema6_restart_and_shock_controls_successor_2026-05-30.json`:
   successor bounded serial-host schema-6 restart and parallel-shock
   continuation-control evidence.
@@ -85,14 +136,20 @@ qualify any scientific claim by itself.
   predecessor evidence.
 - `q011_parallel_shock_controls_successor_2026-05-30.json`: bounded local
   parallel-shock scaffold and schema-6 continuation-control evidence.
+- `q011_parallel_shock_section54_paper_preparation_2026-05-30.json`: frozen
+  Section 5.4 preparation-only deck and fail-closed analyzer contract for the
+  future registered Frontier campaign. Open calibration fields and campaign
+  execution prevent accidental promotion to scientific evidence.
 - `q034_unsupported_capability_successor_2026-05-30.json`: successor
   fail-closed active-MHD expanding-box unsupported-composition addendum.
 - `q042_post_repair_architecture_docs_successor_2026-05-30.json`: successor
   architecture, focused-host-regression and warning-free Sphinx-render record.
 - `q042_schema7_architecture_docs_successor_2026-05-30.json`: schema-7
   provenance, repeated-AMR and current 58-page documentation-render successor
-  chronology record. Paired control-plane promotion, Frontier and external-
-  review gates remain open.
+  chronology record. Its paired-control-plane statement is historical; the
+  current successor still requires its own independent audit and paired
+  promotion before Frontier use. Frontier and external-review gates remain
+  open.
 - `storage_artifact_lifecycle_successor_2026-05-30.json`: successor chronology
   correction for Orion-only bulk evidence and Project Home mirror-only use.
 - `q032_q033_extension_local_scans_2026-05-30.json`: bounded serial-host
@@ -119,9 +176,16 @@ qualify any scientific claim by itself.
   engineering proxies, unit-only evidence, dirty source candidates, unknown
   claim IDs, escaped or missing files and checksum mismatches. The frozen
   record snapshots the exact clean-candidate manifest, parent source archive
-  and ordered recursive submodule archives under one source-bundle checksum.
+  and ordered recursive submodule archives plus raw Git commit objects under
+  one source-bundle checksum. Review freezing also requires the exact candidate
+  digest to match the live mirrored active-policy promotion and archives bound
+  policy and promotion copies for external review. Frontier records also bind
+  a completed registered-science reconciliation in the mirrored node-hour
+  ledger, including the exact reservation, scheduler job, pre-submit manifest
+  and run-artifact directory.
 - `schemas/q022_equation_normalization_map.schema.json`,
-  `schemas/q022_tolerance_table.schema.json` and
+  `schemas/q022_tolerance_table.schema.json`,
+  `schemas/q022_dataset_provenance_manifest.schema.json` and
   `schemas/q023_campaign_preregistration.schema.json`: fail-closed machine
   contracts for future comparison maps, tolerances and campaign freezes.
 

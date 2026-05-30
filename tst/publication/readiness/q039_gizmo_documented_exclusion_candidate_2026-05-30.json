@@ -1,0 +1,39 @@
+{
+  "record_type": "q039_gizmo_documented_exclusion_candidate",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-039",
+  "qualification_effect": "local_provisional_documented_exclusion_candidate_only",
+  "disposition": "open",
+  "scope": "Provisional documented-exclusion candidate for Ji-Hopkins/GIZMO reduced-speed-of-light comparative interpretation. This record is fail-closed: it does not claim a GIZMO defect, code-method disagreement, equation equivalence, completed dataset extraction, or reviewer-approved permanent exclusion.",
+  "linked_records": {
+    "claim_id": "CLAIM-XCODE-GIZMO-RSOL-DECISION-001",
+    "comparison_id": "XCMP-GIZMO-RSOL-DECISION",
+    "reference_id": "ji_hopkins_2022_arxiv_2111.14704",
+    "q039_decision": "tst/publication/readiness/q039_gizmo_rsol_decision_2026-05-30.json",
+    "q022_dataset_provenance": "tst/publication/readiness/q022_dataset_provenance_manifest_2026-05-30.json",
+    "q022_equation_map": "tst/publication/readiness/q022_xcmp_gizmo_rsol_decision_equation_map_2026-05-30.json",
+    "q022_tolerance_table": "tst/publication/readiness/q022_xcmp_gizmo_rsol_decision_tolerance_table_2026-05-30.json",
+    "private_source_ingest": "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json"
+  },
+  "candidate_route": "documented_exclusion",
+  "rationale": [
+    "The AthenaK Sun-and-Bai artificial-C paper-reproduction contract must not use Ji-Hopkins/GIZMO RSOL material as an equation oracle.",
+    "A bounded steady-state RSOL comparison remains possible only after an exact equation, parameter, normalization, regime, estimator, and tolerance map is supplied and externally reviewed.",
+    "No authorized Orion extracted GIZMO comparison dataset exists in this tranche, so a comparative result would be unsupported.",
+    "Pending an externally reviewed bounded-comparison route, manuscript comparative interpretation remains excluded."
+  ],
+  "non_claims": [
+    "No GIZMO implementation defect is asserted.",
+    "No AthenaK-GIZMO agreement or disagreement is asserted.",
+    "No permanent documented exclusion is approved by this local candidate.",
+    "No extracted measurement or numerical tolerance is implied."
+  ],
+  "closure_requires": [
+    "bounded_rationale_reviewed",
+    "external_reviewer_approval",
+    "manuscript_scope_updated_if_approved"
+  ],
+  "reviewer_disposition": "pending external review",
+  "q039_candidate_status": "open_provisional_documented_exclusion_candidate_recorded_external_review_pending"
+}

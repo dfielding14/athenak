@@ -1,0 +1,64 @@
+{
+  "record_type": "q027_control_plane_bootstrap_scheduler_hardening_candidate",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-027",
+    "Q-038",
+    "Q-042"
+  ],
+  "qualification_effect": "local_bootstrap_scheduler_hardening_candidate_pass_independent_adversarial_retest_in_progress_and_paired_install_pending",
+  "scope": "Successor chronology after an independent audit of the accounting-provenance candidate found that direct Python entry points admitted pre-bootstrap adjacent import shadowing, production installation staged mutable worktree bytes, Git reads could inherit repository-local hooks or filesystem monitors, scheduler commands inherited ambient Slurm state, the held sbatch dispatch inherited user exports, the trampoline reopened writable artifact paths after validation and module provenance accepted ambient supersets. The hardened candidate installs one isolated runner, verifies the exact immutable installed inventory before imports, stages reviewed HEAD Git blobs through hermetic Git reads, closes scheduler environments, dispatches with sbatch --export=NIL, retains descriptor anchors for the artifact lifecycle and records the exact canonical module list. This record does not attest a paired live install, active-policy promotion, clean-candidate science freeze or Frontier science execution.",
+  "historical_predecessor": {
+    "record": "tst/publication/readiness/q027_control_plane_accounting_provenance_candidate_2026-05-30.json",
+    "control_plane_version": "1843ce72c8c1d9529f1d6e4b9b465afbef05f76da8f819b6e326eb1fdf264d59",
+    "lifecycle": "chronology_only_superseded_for_next_promotion_candidate"
+  },
+  "staged_successor": {
+    "control_plane_version": "7397038b0e0190622cbbe8124acc7037ac75e2765c1bbcf11c162bf99a9460f4",
+    "paired_install_status": "pending_clean_reviewed_source_commit",
+    "active_policy_promotion_status": "pending_paired_install_and_anchor_migration",
+    "science_submission_freeze": "pending_clean_candidate_freeze"
+  },
+  "local_validation": {
+    "control_plane_and_ledger_tests": {
+      "status": "pass",
+      "tests_run": 198
+    },
+    "publication_discovery_tests": {
+      "status": "pass",
+      "tests_run": 274
+    },
+    "targeted_touched_cpp_cpplint": "pass",
+    "python_compile": "pass",
+    "shell_syntax": "pass",
+    "git_diff_check": "pass",
+    "warning_free_sphinx": "pass_58_pages"
+  },
+  "closed_activation_blockers": [
+    "installed Python entry points require the isolated run_control_plane.py bootstrap and reject direct execution before any non-stdlib control-plane import",
+    "the isolated runner enumerates and verifies the exact read-only installed inventory before importing a requested control-plane entry point",
+    "source-mode production installation verifies the exact clean tracked HEAD blobs, including the installer, before staging and repeats source identity checks before publication",
+    "reviewed Git reads disable repository filesystem monitors and hooks with core.fsmonitor=false and core.hooksPath=/dev/null",
+    "scheduler queries, cancellation and held submission execute through an env -i environment pinned to SLURM_CLUSTERS=frontier",
+    "held scheduler dispatch uses sbatch --export=NIL and passes authority only through validated immutable arguments and the mirrored reservation ledger",
+    "the installed trampoline retains descriptor anchors while publishing and finalizing runtime artifacts and never reopens writable artifact paths after validation",
+    "build-profile provenance records and verifies the exact canonical production module list rather than accepting an ambient loaded-module superset",
+    "promoted storage policies explicitly attest a paired installed reviewed generation and reject the pre-install staged-candidate lifecycle",
+    "all accounting-provenance predecessor controls remain preserved"
+  ],
+  "independent_review": {
+    "status": "in_progress",
+    "review_scope": "fresh adversarial bootstrap, scheduler-environment, descriptor-anchor and registry-completeness retest"
+  },
+  "staged_source_context": {
+    "head_commit_before_curation": "77634d4fb108f291b2576d09b13a887aafa9b4f4",
+    "worktree_state": "dirty_candidate_pending_clean_commit_curation"
+  },
+  "next_actions": [
+    "Complete and archive the fresh independent adversarial retest of this exact candidate digest.",
+    "Commit the exact reviewed source candidate, paired-install the identical control-plane digest in Orion and Project Home, migrate the predecessor genesis anchors exactly once and promote the reviewed closed policy without recreating ledger genesis.",
+    "Build and freeze the exact clean source candidate under Orion before any new Frontier submission."
+  ],
+  "overall_disposition": "local_bootstrap_scheduler_hardening_candidate_pass_all_submissions_paused_pending_independent_adversarial_retest_clean_commit_paired_install_anchor_migration_active_policy_promotion_clean_candidate_science_freeze_and_applicable_prerequisites"
+}

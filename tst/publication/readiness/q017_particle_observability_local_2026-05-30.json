@@ -1,0 +1,92 @@
+{
+  "record_type": "q017_particle_observability_local",
+  "date": "2026-05-30",
+  "qualification_effect": "bounded_local_particle_observability_only",
+  "predecessor_record": "tst/publication/readiness/q017_driver_performance_observability_2026-05-30.json",
+  "dirty_batch_base_commit": "3bcd3f21e4f5439e655d977854f03b287fa814b9",
+  "source_state": "dirty_worktree_batch_based_on_recorded_commit_not_frozen_subject_commit",
+  "scope": "Successor local Q-017 observability tranche. Final stdout scalars add particle wrapper-boundary elapsed timers, fixed-record resident-byte breakdowns by species and absolute logical mesh-refinement level, and a direct particle-view allocated-byte snapshot. This record does not claim pure device-kernel profiler timing, total or peak GPU memory, Frontier HIP timing, scaling, or GPU-aware MPI behavior.",
+  "changed_files": [
+    "inputs/tests/pic_q017_driver_telemetry.athinput",
+    "src/driver/driver.cpp",
+    "src/particles/AGENTS.md",
+    "src/particles/particles.hpp",
+    "src/particles/particles.cpp",
+    "src/particles/particles_pushers.cpp",
+    "src/particles/particles_tasks.cpp",
+    "src/particles/particles_moments.cpp",
+    "tst/scripts/particles/pic_adaptive_deltaf_smoke.py",
+    "tst/scripts/particles/pic_q017_driver_telemetry.py",
+    "tst/publication/readiness/q017_particle_observability_local_2026-05-30.json"
+  ],
+  "telemetry_contract": {
+    "stdout_prefix": "q017.telemetry.",
+    "particle_timers": [
+      "timer.particle.adaptive_deltaf",
+      "timer.particle.push",
+      "timer.particle.deposition",
+      "timer.particle.migration"
+    ],
+    "timer_fields": [
+      "seconds_rank_max",
+      "seconds_rank_mean",
+      "calls_rank_max"
+    ],
+    "timer_scope": "Timers measure wrapper-boundary elapsed time. Set particles/pic_q017_sync_kernel_timers=true only for dedicated device-timing measurements; the inserted Kokkos fences intentionally perturb execution. Migration call counts include polling callbacks.",
+    "particle_memory_contract": {
+      "record_bytes": "nrdata*sizeof(Real) + nidata*sizeof(int)",
+      "level_identity": "Keys under particle_memory.level and species-level pairs use absolute logical mesh-refinement levels. particle_memory.root_level and particle_memory.max_level make the range explicit.",
+      "resident_breakdowns": [
+        "particle_memory.species.<species>.count",
+        "particle_memory.species.<species>.resident_bytes",
+        "particle_memory.level.<absolute_logical_level>.count",
+        "particle_memory.level.<absolute_logical_level>.resident_bytes",
+        "particle_memory.species.<species>.level.<absolute_logical_level>.count",
+        "particle_memory.species.<species>.level.<absolute_logical_level>.resident_bytes"
+      ],
+      "direct_view_snapshots": [
+        "particle_memory.direct_views.allocated_snapshot_bytes_total",
+        "particle_memory.direct_views.allocated_snapshot_bytes_rank_max"
+      ],
+      "direct_view_snapshot_scope": "The direct-view snapshot uses Kokkos view span so padding is counted. It includes direct Particles views only and excludes particle migration helper buffers, moment-boundary buffers, AMR/load-balance particle buffers, and allocation high-water marks. It is not total or peak GPU memory.",
+      "focused_regression": "Two species and absolute logical levels 1 and 2 produce 240 resident particles, a 224-byte fixed record, species counts 120/120 and level counts 112/128."
+    },
+    "mpi_behavior": "Final timer and memory values are reduced to rank zero only. No collectives are inserted into task-list, output-publication, particle-wrapper, or AMR hot paths."
+  },
+  "verification": [
+    {
+      "command": "python3 tst/scripts/style/cpplint.py --filter=-build/include_subdir,-build/header_guard src/driver/driver.cpp src/particles/particles.hpp src/particles/particles.cpp src/particles/particles_pushers.cpp src/particles/particles_tasks.cpp src/particles/particles_moments.cpp",
+      "status": "pass"
+    },
+    {
+      "command": "git diff --check",
+      "status": "pass"
+    },
+    {
+      "configuration": "Debug serial Kokkos SERIAL",
+      "command": "cmake -S . -B /tmp/athenak-pic-q017-build -D CMAKE_BUILD_TYPE=Debug && cmake --build /tmp/athenak-pic-q017-build -j8",
+      "status": "pass"
+    },
+    {
+      "configuration": "Debug serial focused Q-017 runtime",
+      "command": "cd tst && ATHENA_Q017_EXE_DIR=/tmp/athenak-pic-q017-build/src python3 -c \"import scripts.particles.pic_q017_driver_telemetry as t; t.run(); raise SystemExit(0 if t.analyze() else 1)\"",
+      "status": "pass"
+    },
+    {
+      "configuration": "Debug MPI-enabled one-rank focused Q-017 runtime",
+      "command": "cd tst && ATHENA_Q017_EXE_DIR=/tmp/athenak-pic-q017-mpi-build/src python3 -c \"import scripts.particles.pic_q017_driver_telemetry as t; t.run(); raise SystemExit(0 if t.analyze() else 1)\"",
+      "status": "pass"
+    },
+    {
+      "configuration": "Debug serial adaptive delta-f positive timer runtime",
+      "command": "cd tst && PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 - <<'PY'\nfrom pathlib import Path\nfrom scripts.particles import pic_adaptive_deltaf_smoke as test\nserial = Path('/tmp/athenak-pic-q017-build/src')\ntest._athena_exe_dir = lambda: str(serial)\ntest._athena_input_path = lambda: str(Path('/ccs/home/dfielding/athenak-pic/inputs/tests/pic_adaptive_deltaf_smoke.athinput'))\ntest.run()\nassert test.analyze()\nPY",
+      "status": "pass"
+    }
+  ],
+  "remaining_q017_gaps": [
+    "Frontier HIP measurement runs must enable synchronized particle timers and characterize synchronization overhead against the default low-overhead mode.",
+    "Frontier GPU-aware MPI enabled-versus-disabled A/B runs, multi-rank scaling, and retained manifest ingestion remain open.",
+    "Total and peak GPU-memory accounting remains open because boundary, AMR, and load-balance helper buffers need explicit high-water tracking."
+  ],
+  "q017_disposition": "bounded_local_particle_observability_implemented_with_frontier_measurements_and_full_peak_memory_decision_open"
+}

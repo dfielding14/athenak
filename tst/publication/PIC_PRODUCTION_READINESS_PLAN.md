@@ -364,10 +364,10 @@ acceptance thresholds are documented before the qualifying run.
 | Section 5.1 gyro-motion | Relativistic orbit, energy and phase accuracy for the paper's `C`, `v0`, `Omega`, and timestep constraints | Momentum/`C` mechanics and bounded host analytical convergence pass | Freeze paper deck; run clean-candidate GPU and portability matrix |
 | Section 5.2 Bell instability | Measured phase and growth rate versus analytical dispersion in 1D, 2D, and 3D | Paper coupling isolation passes; existing Bell deck remains an engineering proxy | Freeze paper-faithful decks and add analytical dispersion, convergence, MPI and GPU comparison |
 | Section 5.3 gas plus electron/positron oscillation | Correct oscillation frequency and equivalent behavior on uniform, SMR, and AMR grids | Coupling conservation and serial AMR refresh smoke pass; existing oscillation fixtures remain proxies | Freeze long-horizon paper decks; close frequency, AMR-policy, MPI and GPU matrix |
-| Section 5.4 non-relativistic parallel shock acceleration | Paper domain, injection, AMR, spectra, morphology, timing and load-balancing behavior | Isotropic shock-surface injection scaffold and restart fingerprints landed; deck remains an engineering proxy | Complete injection audit, provenance/spectra contract, clean GPU pilot and paper campaign |
+| Section 5.4 non-relativistic parallel shock acceleration | Paper domain, injection, AMR, spectra, morphology, timing and load-balancing behavior | Isotropic shock-surface injection scaffold and restart fingerprints landed; a frozen Section 5.4 preparation-only deck and fail-closed analyzer contract now reject incomplete calibration, while the executed fixtures remain engineering proxies | Complete calibration and injection audit, bind provenance/spectra outputs, then run the clean GPU pilot and registered paper campaign |
 | Section 5.5 CR gyro-resonant streaming instability | Polarization-resolved spectra and growth rates against analytical prediction with true delta-f | True delta-f mechanics, deposition and restart guards pass | Freeze theory/spectral oracle and run clean MPI/GPU campaign |
 | Section 5.6 CR pressure anisotropy instability | Prolate/oblate polarization branch selection and quantitative growth against theory | True delta-f and relativistic mechanics pass bounded host tests | Freeze branch theory oracle and run clean MPI/GPU campaign |
-| Section 5.7 driven expanding/compressing-box CRPAI | Correct anisotropy evolution, spectra and distribution evolution under box driving | Bounded comoving-flux box repair and the narrow active-MHD endpoint-normalized adaptive-source plus reduced-damping launch oracle pass; physical transport calibration remains open | Complete coupled restart continuation and qualify the driven physical campaign |
+| Section 5.7 driven expanding/compressing-box CRPAI | Correct anisotropy evolution, spectra and distribution evolution under box driving | Bounded comoving-flux box repair, the narrow active-MHD endpoint-normalized adaptive-source plus reduced-damping launch oracle and serial uninterrupted-versus-restarted endpoint parity pass; physical transport calibration remains open | Close clean-candidate MPI/Frontier restart slices and qualify the driven physical campaign |
 | Appendix A circularly polarized Alfven wave | Analytic expansion/compression amplitude and phase response | Bounded one-step expanding/compressing CPAW closure and oblique-divB oracles pass | Run full history and resolution-convergence campaign with changing-volume accounting |
 | Appendix B expanding-box gyro-motion | Analytic gamma/phase history with prescribed expansion rate | Bounded relativistic expanding-box history convergence passes | Freeze manuscript deck and run clean portability matrix |
 | Optimization, scaling and load balance claims | Measured sorting/intermediate-array effects, weak scaling and shock AMR load distribution | Controls appear staged or unproven | Implement/validate production performance mechanisms |
@@ -536,8 +536,8 @@ For each experiment, archive all of:
 | PIC-P0-001 | P0 | Initial defect: engineering coupling added deposited current directly to CT while paper mode requires ideal-MHD induction and no CR Hall source. Explicit paper and extension identities are now separated; paper mode suppresses direct CT current and extension Hall is opt-in | `src/mhd/mhd_tasks.cpp`; `src/particles/particles.hpp`; paper Section 2 | Implementation landed; conservation, Bell, oscillation, GPU and decomposition qualification remain open | Pass Q-004 |
 | PIC-P0-002 | P0 | Initial defect: pusher advanced non-relativistic velocity and energy and rejected configurable `C`. Explicit paper/extension modes now store `p/m`, derive relativistic velocity and kinetic energy, and apply a `C`-aware Boris rotation | `src/particles/particles_pushers.cpp`; `src/particles/particles.cpp`; `tst/scripts/particles/pic_relativistic_gyro_paper.py`; paper Sections 2 and 5 | Host analytical smoke and restart parity pass; convergence, GPU and portability qualification remain open | Pass Q-003 |
 | PIC-P0-003 | P0 | Initial defect: `pic_deltaf_mode=on` was quiet-start only. Physical paper/extension mode now stores initial `f0`, evolves perturbation weights, deposits weighted perturbation moments, fingerprints restart state and emits VTK diagnostics | `src/particles/particles.cpp`, `particles_moments.cpp`, `particles_pushers.cpp`; `tst/scripts/particles/pic_relativistic_gyro_paper.py`; paper Section 4.4 and Sections 5.5-5.7 | Mechanics smoke passes; CRSI/CRPAI theory, spectra and nonlinear qualification remain open | Pass Q-007 |
-| PIC-P0-004 | P0 | Initial defect: expanding-box code updated particle velocity only. The repaired bounded path applies exact scale-factor particle half steps, comoving drift, one exact post-RK MHD conserved-variable map per cycle, stores raw face arrays as divergence-preserving comoving magnetic fluxes, derives physical MHD views, maps edge EMFs before CT, deposits physical-volume moments, applies non-delta-f conservative feedback in the final physical source frame, provides a separately identified endpoint-normalized adaptive delta-f analytic source path and emits built-in physical-volume MHD history | `src/particles/particles_pushers.cpp`; `src/particles/particles_moments.cpp`; `src/mhd/mhd_tasks.cpp`; `src/mhd/mhd_fluxes.cpp`; `src/outputs/history.cpp`; `tst/scripts/particles/pic_mhd_expanding_box_uniform.py`; `tst/scripts/particles/pic_mhd_expanding_box_coupled_conservation.py`; `tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_smoke.py`; `tst/scripts/particles/pic_mhd_expanding_box_oblique_divb.py`; paper Section 3 and appendices | Uniform, non-delta-f final-frame conservation, adaptive-delta-f source-normalization and damping-order, and oblique-divB host oracles pass; unsupported compositions remain fail-closed; full Appendix-A convergence, coupled restart continuation, driven CRPAI, MPI and GPU qualification remain open | Pass Q-008 |
-| PIC-P0-005 | P0 | AMR retains the `MeshBlockPack` object while reconstructing child MeshBlock/coordinate objects. Cross-rank particle migration already resolves new geometric ownership; retained particles now receive an explicit post-AMR refresh hook that validates MeshBlock-sized capacities and refreshes the stable pack pointer | `src/mesh/mesh_refinement.cpp`; `src/mesh/load_balance.cpp`; `src/particles/particles.cpp`; particle and mesh boundary-helper construction paths | Serial shock-rich refine smoke and a six-transition serial refine/derefine stress with five restart continuations pass; coupled boundary, MPI migration/load-balance/restart, memory-checking and GPU evidence remain open | Complete Q-009 matrix |
+| PIC-P0-004 | P0 | Initial defect: expanding-box code updated particle velocity only. The repaired bounded path applies exact scale-factor particle half steps, comoving drift, one exact post-RK MHD conserved-variable map per cycle, stores raw face arrays as divergence-preserving comoving magnetic fluxes, derives physical MHD views, maps edge EMFs before CT, deposits physical-volume moments, applies non-delta-f conservative feedback in the final physical source frame, provides a separately identified endpoint-normalized adaptive delta-f analytic source path and emits built-in physical-volume MHD history | `src/particles/particles_pushers.cpp`; `src/particles/particles_moments.cpp`; `src/mhd/mhd_tasks.cpp`; `src/mhd/mhd_fluxes.cpp`; `src/outputs/history.cpp`; `tst/scripts/particles/pic_mhd_expanding_box_uniform.py`; `tst/scripts/particles/pic_mhd_expanding_box_coupled_conservation.py`; `tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_smoke.py`; `tst/scripts/particles/pic_mhd_expanding_box_oblique_divb.py`; paper Section 3 and appendices | Uniform, non-delta-f final-frame conservation, adaptive-delta-f source-normalization and damping-order, oblique-divB and serial uninterrupted-versus-restarted endpoint host oracles pass; unsupported compositions remain fail-closed; full Appendix-A convergence, clean-candidate MPI/Frontier restart slices, driven CRPAI and GPU qualification remain open | Pass Q-008 |
+| PIC-P0-005 | P0 | AMR retains the `MeshBlockPack` object while reconstructing child MeshBlock/coordinate objects. Cross-rank particle migration already resolves new geometric ownership; retained particles now receive an explicit post-AMR refresh hook that validates MeshBlock-sized capacities and refreshes the stable pack pointer | `src/mesh/mesh_refinement.cpp`; `src/mesh/load_balance.cpp`; `src/particles/particles.cpp`; particle and mesh boundary-helper construction paths | Serial shock-rich refine smoke, a six-transition serial refine/derefine stress with five restart continuations and a coupled PIC/MHD reflecting/outflow Debug-plus-UBSan lifetime stress pass; broader coupled boundaries, multi-rank MPI migration/load-balance/restart, ASan and GPU evidence remain open | Complete Q-009 matrix |
 | PIC-P0-006 | P0 | Initial defect: restart output wrote directly to its final pathname and ignored close failures. Restart output now writes `.partial`, checks every sequential header append and offset seek/write, syncs, closes, atomically promotes, writes checksummed completion markers and manifests, and validates completed artifacts before consumption | `src/outputs/restart.cpp`; `src/outputs/io_wrapper.cpp`; `src/outputs/restart_utils.cpp`; `src/main.cpp`; `tst/scripts/particles/pic_restart_safety_guards.py`; `tst/scripts/particles/restart_fault_injector.c` | Serial-host parity, checksum/payload/schema rejection, short-write, seek-failure, `/dev/full`, interrupted-writer and soft-wallclock continuation drills pass; MPI per-rank, node-loss, scheduler-pretimeout and Frontier-filesystem pilots remain open | Pass Q-036 |
 | PIC-P1-001 | P1 | Refinement-boundary deposition policy has not been reconciled with the paper's smoothness-versus-conservation choice | `src/particles/particles_moments.cpp`; paper Section 4.3 | AMR results may be smooth but non-reproducing, or conservative but physically different from the paper | Specify policies, validate both errors, select paper policy for reproduction |
 | PIC-P1-002 | P1 | Task-stage ordering and conservative delta exchange are not yet proved against the paper's second-order method | `src/particles/particles_tasks.cpp`; MHD source paths; paper Section 2.3 | Good-looking tests may mask order loss or incorrect exchange timing | Create stage-contract tests and convergence/conservation gates |
@@ -548,7 +548,7 @@ For each experiment, archive all of:
 | PIC-P1-007 | P1 | Orion is a purge-eligible working filesystem rather than durable evidence storage, no OLCF resource is guaranteed as permanent institutional retention, and unrestricted environment capture can preserve sensitive values | OLCF Frontier and storage guidance; historical artifact layout and script templates | Qualification evidence may disappear or archives may expose inappropriate environment data | The user selected Orion-only bulk-evidence retention and removed Kronos from scope. Keep the durability risk explicit, run checksummed Orion restore drills, archive a redacted environment allowlist only, and require external disposition before terminal sign-off |
 | PIC-P1-008 | P1 | The opt-in `extended_mhd_pic` Hall-current path now has an explicit experimental normalization and a host manufactured-source oracle: Hall-off and `+/- alpha_H` one-cycle runs produce nonzero magnetic increments with odd residual `1.25e-5` and cosine `-0.9999999999`. This proves source isolation only; the derived CR-Hall normalization and scientific envelope remain open | `docs/source/engineering/pic_mhd_model_contract.md`; `src/mhd/mhd_tasks.cpp`; `tst/scripts/particles/pic_extended_hall_ct_smoke.py`; Bai et al. (2015) | Treating the source smoke as Bell or shock-front qualification would overstate the implementation | Derive and preregister the extension model, then close linear/nonlinear Bell, shock-front, GPU and decomposition matrices under Q-029 |
 | PIC-P1-009 | P1 | The selected ion-neutral damping extension now has a bounded `extended_mhd_pic` implementation: final-physical-frame transverse ion momentum is multiplied by `exp(-nu_in dt)` and ideal-MHD energy loses the removed ion kinetic energy. The host oracle measures factor `0.9686827210` with density/longitudinal residual zero and transverse/energy residuals below `1.2e-7` | `docs/source/engineering/pic_mhd_model_contract.md`; `src/mhd/mhd_tasks.cpp`; `tst/scripts/particles/pic_ion_neutral_friction_smoke.py`; Plotnikov et al. (2021) | The static-neutral manufactured source is not a matched damped-CRSI dispersion, saturation, GPU, or decomposition result | Preregister the reduced-model applicability envelope and close the Plotnikov comparison matrix under Q-032 |
-| PIC-P1-010 | P1 | The selected adaptive delta-f extension now has an extension-only global bi-kappa moment fit for `xi` and `p0`, fixed cadence, normalized fitted background, restart schema version 7 persistence, and a bounded active-MHD expanding-box endpoint-normalized analytic-source plus reduced-damping launch composition. A deterministic two-species host oracle matches both fitted values exactly and uninterrupted-versus-restarted particle state exactly without an unintended refit | `docs/source/engineering/pic_mhd_model_contract.md`; `src/particles/particles_tasks.cpp`; `src/particles/particles_pushers.cpp`; `tst/scripts/particles/pic_adaptive_deltaf_smoke.py`; `tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_smoke.py`; Sun, Bai and Zhao (2024) | The bounded x1-parallel fit and launch mechanics do not establish physical-damping CRPAI transport calibration, effective scattering, saturation, GPU, or MPI qualification | Close coupled restart continuation and the physical-damping, `nu_eff`, anisotropy, spectra, quasi-steady-state and scaling matrix under Q-033 |
+| PIC-P1-010 | P1 | The selected adaptive delta-f extension now has an extension-only global bi-kappa moment fit for `xi` and `p0`, fixed cadence, normalized fitted background, restart schema version 7 persistence, and a bounded active-MHD expanding-box endpoint-normalized analytic-source plus reduced-damping launch composition. Deterministic host oracles match both fitted values exactly, preserve uninterrupted-versus-restarted particle state without an unintended refit and pass coupled-carrier endpoint parity | `docs/source/engineering/pic_mhd_model_contract.md`; `src/particles/particles_tasks.cpp`; `src/particles/particles_pushers.cpp`; `tst/scripts/particles/pic_adaptive_deltaf_smoke.py`; `tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_smoke.py`; `tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_restart.py`; Sun, Bai and Zhao (2024) | The bounded x1-parallel fit, launch mechanics and serial restart parity do not establish physical-damping CRPAI transport calibration, effective scattering, saturation, GPU, or MPI qualification | Close clean-candidate MPI/Frontier restart slices and the physical-damping, `nu_eff`, anisotropy, spectra, quasi-steady-state and scaling matrix under Q-033 |
 
 ### What May Be Retained
 
@@ -1532,7 +1532,7 @@ Keep large machine output outside git in the Frontier execution root:
   jobs/<campaign>/              # exact sbatch scripts and submission metadata
   logs/build/                   # compiler logs
   logs/slurm/                   # scheduler stdout/stderr
-  runs/<campaign>/<run_id>/     # simulation raw output and restarts
+  runs/<campaign>/<submission-id>/ # exact immutable simulation output and restarts
   metrics/<campaign>/           # compact machine-readable analyses
   figures/<campaign>/           # generated plots
   manifests/<campaign>/         # provenance manifests
@@ -1758,30 +1758,51 @@ future agents must:
 
 ### Frontier Environment Profiles
 
-Store the reusable environment setup as
-`$PIC_ROOT/jobs/frontier_pic_environment.sh` and source it from build/run
-scripts. Verify module versions when the OLCF software stack changes. Start from
-the minimum supported profile. Treat page migration and communication tuning as
-experiments until matched AthenaK A/B evidence supports promotion.
+Store the reusable environment setup only inside the installed checksummed
+control plane as
+`$PIC_ROOT/control_plane/<reviewed-digest>/frontier_pic_environment.sh` and
+source it with a checked return status from build/run scripts. Verify module
+versions when the OLCF software stack changes. Start from the minimum supported
+profile. Treat page migration and communication tuning as experiments until
+matched AthenaK A/B evidence supports promotion.
 
 ```bash
 #!/bin/bash
-set -euo pipefail
-
-module restore
-module load PrgEnv-cray
-module load craype-accel-amd-gfx90a
-module load cpe/25.09 cray-mpich/9.0.1 rocm/6.4.2
-module load cce/20.0.0
-module unload darshan-runtime
-
-export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}"
-export MPICH_ENV_DISPLAY=1
-export MPICH_VERSION_DISPLAY=1
-export MPICH_GPU_SUPPORT_ENABLED=1
-
 PIC_FRONTIER_PROFILE="${PIC_FRONTIER_PROFILE:-frontier_minimum_supported}"
 export PIC_FRONTIER_PROFILE
+
+case "$PIC_FRONTIER_PROFILE" in
+  frontier_minimum_supported|frontier_xnack1_experimental|frontier_ofi_tuned_experimental)
+    ;;
+  *)
+    printf 'Unsupported PIC_FRONTIER_PROFILE=%s\n' "$PIC_FRONTIER_PROFILE" >&2
+    return 1 2>/dev/null || exit 1
+    ;;
+esac
+
+if ! module reset \
+    || ! module load PrgEnv-amd/8.6.0 \
+    || ! module load amd/6.2.4 \
+    || ! module load rocm/6.2.4 \
+    || ! module load craype/2.7.33 \
+    || ! module load cray-mpich/8.1.31 \
+    || ! module load cray-pmi/6.1.15 \
+    || ! module load cray-libsci/24.11.0 \
+    || ! module load craype-accel-amd-gfx90a; then
+  printf 'Failed to load Frontier PIC module profile\n' >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+if module is-loaded darshan-runtime && ! module unload darshan-runtime; then
+  printf 'Failed to unload inactive darshan-runtime module\n' >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+export MPICH_GPU_SUPPORT_ENABLED=1
+export MPICH_ENV_DISPLAY=1
+export MPICH_VERSION_DISPLAY=1
+export SLURM_EXPORT_ENV=ALL
+export ROCM_PATH=/opt/rocm-6.2.4
 
 unset HSA_XNACK
 unset MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED
@@ -1807,19 +1828,17 @@ case "$PIC_FRONTIER_PROFILE" in
     export FI_MR_CACHE_MONITOR=kdreg2
     export FI_CXI_RX_MATCH_MODE=software
     ;;
-  *)
-    printf "Unsupported PIC_FRONTIER_PROFILE=%s\n" "$PIC_FRONTIER_PROFILE" >&2
-    exit 1
-    ;;
 esac
 
 record_pic_environment() {
   local name value
-  for name in PIC_FRONTIER_PROFILE MPICH_ENV_DISPLAY MPICH_VERSION_DISPLAY \
+  printf 'PIC_FRONTIER_PROFILE=%s\n' "$PIC_FRONTIER_PROFILE"
+  printf 'HSA_XNACK=%s\n' "${HSA_XNACK:-0}"
+  for name in MPICH_ENV_DISPLAY MPICH_VERSION_DISPLAY \
       MPICH_GPU_SUPPORT_ENABLED MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED \
       MPICH_OFI_NIC_POLICY MPICH_GPU_IPC_CACHE_MAX_SIZE MPICH_MPIIO_HINTS \
       MPICH_OFI_NUM_CQ_ENTRIES FI_MR_CACHE_MONITOR FI_CXI_RX_MATCH_MODE \
-      HSA_XNACK ROCM_PATH; do
+      OMP_NUM_THREADS SLURM_EXPORT_ENV ROCM_PATH; do
     if value="$(printenv "$name")"; then
       printf "%s=%s\n" "$name" "$value"
     else
@@ -1845,82 +1864,90 @@ memory before selecting a recorded production setting. Archive the redacted
 allowlist emitted by `record_pic_environment`; do not archive unrestricted
 `env | sort` output because environment variables can contain sensitive values.
 
-### Improved Frontier Build Script Template
+### Installed Frontier Build Profile Workflow
 
 The example supplied with the original validation request builds an unrelated
 problem generator and leaves configuration provenance incomplete. MHD-PIC
 qualification must build the built-in PIC problem generators, store the cache
 and log, and make the resulting executable immutable by commit/config identity.
-
-Create `$PIC_ROOT/jobs/build_frontier_pic.sh`:
+The installed checksummed control plane is the build authority. Do not create a
+campaign build script that reassembles CMake flags, output paths, provenance
+sidecars, or profile JSON. Source the installed environment profile with a
+checked status and invoke only its build-profile writer:
 
 ```bash
-#!/bin/bash
 set -euo pipefail
 
 PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC
-SRC_DIR="${PIC_ROOT}/source/athenak-DF"
-ENV_FILE="${PIC_ROOT}/jobs/frontier_pic_environment.sh"
+SRC_DIR=/ccs/home/dfielding/athenak-pic
+CONTROL_PLANE_VERSION=<reviewed-control-plane-digest>
+CONTROL_PLANE_DIR="${PIC_ROOT}/control_plane/${CONTROL_PLANE_VERSION}"
+ENV_FILE="${CONTROL_PLANE_DIR}/frontier_pic_environment.sh"
+PYTHON=/opt/cray/pe/python/3.11.7/bin/python3
+CONTROL_PLANE=("$PYTHON" -I "${CONTROL_PLANE_DIR}/run_control_plane.py")
+source "$ENV_FILE" || exit $?
 
-source "$ENV_FILE"
+GIT_COMMIT_FULL="$(git -C "$SRC_DIR" rev-parse HEAD)"
 
-cd "$SRC_DIR"
-GIT_COMMIT="$(git rev-parse --short=12 HEAD)"
-CONFIG=hip-mpi-release-paper-pic
-BUILD_DIR="${PIC_ROOT}/build/${GIT_COMMIT}/${CONFIG}"
-BIN_DIR="${PIC_ROOT}/bin/${GIT_COMMIT}/${CONFIG}"
-LOG_DIR="${PIC_ROOT}/logs/build"
-
-mkdir -p "$BUILD_DIR" "$BIN_DIR" "$LOG_DIR"
-
-cmake -S "$SRC_DIR" -B "$BUILD_DIR" \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DAthena_ENABLE_MPI=ON \
-  -DKokkos_ENABLE_HIP=ON \
-  -DKokkos_ARCH_ZEN3=ON \
-  -DKokkos_ARCH_AMD_GFX90A=ON \
-  -DCMAKE_CXX_COMPILER=CC \
-  -DCMAKE_CXX_FLAGS="-I${ROCM_PATH}/include" \
-  -DCMAKE_EXE_LINKER_FLAGS="-L${ROCM_PATH}/lib -lamdhip64" \
-  -DPROBLEM=built_in_pgens \
-  2>&1 | tee "${LOG_DIR}/${GIT_COMMIT}.${CONFIG}.configure.log"
-
-cmake --build "$BUILD_DIR" --parallel 32 \
-  2>&1 | tee "${LOG_DIR}/${GIT_COMMIT}.${CONFIG}.build.log"
-
-cp -p "${BUILD_DIR}/src/athena" "${BIN_DIR}/athena" 2>/dev/null || \
-  cp -p "${BUILD_DIR}/athena" "${BIN_DIR}/athena"
-
-sha256sum "${BIN_DIR}/athena" \
-  > "${BIN_DIR}/athena.sha256"
-cp -p "${BUILD_DIR}/CMakeCache.txt" "${BIN_DIR}/CMakeCache.txt"
-git -C "$SRC_DIR" status --short --branch \
-  > "${BIN_DIR}/git_status.txt"
-module -t list 2> "${BIN_DIR}/modules.txt"
-record_pic_environment > "${BIN_DIR}/environment.allowlist.txt"
-
-printf "Built %s for %s at %s\n" "$GIT_COMMIT" "$CONFIG" "${BIN_DIR}/athena"
+"${CONTROL_PLANE[@]}" write_orion_build_profile.py \
+  --source-root "$SRC_DIR" \
+  --expected-git-commit "$GIT_COMMIT_FULL" \
+  --profile-id hip-mpi-release-paper-pic
 ```
 
-Notes:
+The writer accepts only `--source-root`, `--expected-git-commit`, and
+`--profile-id hip-mpi-release-paper-pic`. It verifies the installed control
+plane and authorized clean source closure, derives every Orion artifact and log
+path, requires fresh build, bin, and log paths, and materializes a fresh local
+detached checkout plus recursive local submodule checkouts under the derived
+build directory. It then invokes a closed direct `/usr/bin/cmake` configure and
+build argv: Release, MPI, HIP, `Kokkos_ARCH_ZEN3`,
+`Kokkos_ARCH_AMD_GFX90A`, the Cray
+`/opt/cray/pe/craype/2.7.33/bin/CC` wrapper, `/opt/rocm-6.2.4` include and HIP
+link flags, built-in problem generators, and parallel build width 32. Future
+toolchain changes belong in the installed writer and its review, not in an
+operator-authored campaign recipe.
 
-- Use `Kokkos_ARCH_AMD_GFX90A`, the explicit gfx90a architecture spelling in
-  current Kokkos, rather than relying on legacy naming.
-- The ROCm include and HIP link flags are retained because the Frontier guide
-  describes them for Cray compiler-wrapper GPU-aware builds. Record any future
-  toolchain simplification in this plan and in the manifest.
-- Run compiles on an appropriate Frontier login/build workflow according to
-  OLCF policy; run simulations only through allocated compute resources.
-- Do not qualify a build if `git_status.txt` contains unexplained modified or
-  untracked source/config files.
+The writer captures the exact configure and build argv in
+`build-invocations.json`; empty `git_status.preconfigure.txt` and post-build
+`git_status.txt` captures from the fresh checkout; configure/build logs;
+`CMakeCache.txt`; `modules.txt`; the fixed `toolchain.txt`; recursive
+`submodule_status.txt`; the redacted `environment.allowlist.txt`; and the
+retained minimal `build-environment.json`. It binds those eleven provenance
+inputs, the clean source and recursive-submodule closure, and the executable
+digest in a schema-v3 `build_profile.json`, then publishes the adjacent
+`profile_receipt.json` exclusively under Orion.
+
+Run compiles on an appropriate Frontier login/build workflow according to OLCF
+policy; run simulations only through allocated compute resources. The closed
+argv, hashes, and fresh detached checkout reduce stale or mixed-build mistakes;
+they do not cryptographically prove that the compiler honored the recorded
+command or establish compiler semantics. Reproducibility and qualification
+remain separate gates. Descriptor-relative publication below pinned authorized
+parents closes ancestor-swap pathname redirection during publication; it does
+not protect writable artifacts against a malicious same-UID process.
+
+Create one candidate freeze from the helper-published profile:
+
+```bash
+GIT_COMMIT="${GIT_COMMIT_FULL:0:12}"
+CONFIG=hip-mpi-release-paper-pic
+BIN_DIR="${PIC_ROOT}/bin/${GIT_COMMIT}/${CONFIG}"
+
+"${CONTROL_PLANE[@]}" create_clean_candidate_freeze.py \
+  --source-root "$SRC_DIR" \
+  --executable "${BIN_DIR}/athena" \
+  --build-profile "${BIN_DIR}/build_profile.json" \
+  --build-profile-id "$CONFIG"
+```
 
 ### Improved Frontier Job Template
 
 Create one immutable job script per test/campaign under `$PIC_ROOT/jobs/`.
 This template uses one GPU per MPI rank as recommended by the Frontier guide:
 
-Before submission, run
-`${PIC_ROOT}/control_plane/${CONTROL_PLANE_VERSION}/create_pre_submit_manifest.py`
+Before submission, run `create_pre_submit_manifest.py` through
+`${PIC_ROOT}/control_plane/${CONTROL_PLANE_VERSION}/run_control_plane.py`
 from the installed checksummed control-plane snapshot. Keep each campaign's
 immutable job script, queue snapshot, timeout artifact and pre-submit
 configuration under `$PIC_ROOT/jobs/<campaign>/`. The manifest creator must
@@ -1953,7 +1980,25 @@ Freeze the submission wrapper, validator, reconciler, ledger initializer and
 schema under an immutable checksummed control-plane version directory. Invoke
 that frozen wrapper path, record every control-plane checksum and schema version
 in each pre-submit manifest and ledger event, and reject checksum drift before
-reservation. Do not execute mutable scripts directly from `$PIC_ROOT/jobs/`.
+reservation. Production installation in Orion and Project Home is permitted
+only from reviewed clean tracked control-plane source files. Installation,
+clean-candidate freeze and manifest-snapshot creation must retain a pinned
+authorized-parent descriptor while staging, publish with descriptor-relative
+rename, sync the pinned parent and fail closed if the lexical parent no longer
+names that directory. This closes ancestor-swap pathname redirection during
+publication, but it is not an integrity boundary against a malicious process
+running as the same Unix UID. Do not execute mutable scripts directly from
+`$PIC_ROOT/jobs/`.
+
+The shell block below is a legacy directive-and-argv reference only. The
+successor control plane must translate its Athena invocation into a closed
+structured `launch_contract`; it must not execute this mutable shell body.
+The installed trampoline captures each
+`<action_id>.environment.allowlist.txt` through an anchored inherited file
+descriptor immediately before `srun`. Before workload execution, the wrapper
+syncs that descriptor, changes it to mode `0400`, syncs it again, syncs its
+pinned directory descriptor, closes both descriptors and unsets their
+environment bindings.
 
 The timeout-margin evidence artifact is mandatory and expires after any code,
 toolchain, environment-profile, mesh, PPC, rank-layout, restart-mode,
@@ -1999,7 +2044,7 @@ ENV_FILE="${SNAPSHOT_DIR}/frontier_pic_environment.sh"
 ATHENA="${SNAPSHOT_DIR}/athena"
 INPUT="${SNAPSHOT_DIR}/${TEST_ID}.athinput"
 SNAPSHOT_VERIFIER="${SNAPSHOT_DIR}/verify_compute_node_snapshot.py"
-OUTDIR="${PIC_ROOT}/runs/${CAMPAIGN}/${RUN_ID}"
+OUTDIR="${PIC_ROOT}/runs/${CAMPAIGN}/${SUBMISSION_ID}"
 RUNTIME_DIR="${PIC_ROOT}/runtime_status/${CAMPAIGN}/${RUN_ID}"
 RUNTIME_STATUS="${RUNTIME_DIR}/events.jsonl"
 
@@ -2028,7 +2073,7 @@ printf '{"event":"job_start","submission_id":"%s","reservation_id":"%s","started
   >> "$RUNTIME_STATUS"
 test -r "$PRE_SUBMIT_MANIFEST" || preflight_failed manifest_unreadable
 test -r "$SNAPSHOT_VERIFIER" || preflight_failed snapshot_verifier_unreadable
-"$PYTHON" "$SNAPSHOT_VERIFIER" \
+"$PYTHON" -E -s "$SNAPSHOT_VERIFIER" \
   --manifest "$PRE_SUBMIT_MANIFEST" \
   --submission-id "$SUBMISSION_ID" \
   --reservation-id "$RESERVATION_ID" \
@@ -2063,9 +2108,9 @@ batch job reaches a terminal state; an in-job `sacct` command is not sufficient.
 
 Submission is an explicit serial AthenaK PIC workflow across both allowed QOS
 classes. Install and test
-`${PIC_ROOT}/control_plane/${CONTROL_PLANE_VERSION}/validate_and_reserve_frontier_job.py`
+`${PIC_ROOT}/control_plane/${CONTROL_PLANE_VERSION}/run_control_plane.py validate_and_reserve_frontier_job.py`
 and
-`${PIC_ROOT}/control_plane/${CONTROL_PLANE_VERSION}/reconcile_frontier_job.py`
+`${PIC_ROOT}/control_plane/${CONTROL_PLANE_VERSION}/run_control_plane.py reconcile_frontier_job.py`
 before the first Frontier submission. Execute reservation, submission and
 reconciliation only through that installed checksummed snapshot; keep immutable
 campaign job scripts and submission metadata under `$PIC_ROOT/jobs/<campaign>/`.
@@ -2105,106 +2150,25 @@ submission unless all policy checks pass:
 - the ledger can be locked and a reservation row can be written before
   submission.
 
-The submission wrapper must fail closed:
+The installed submission wrapper is the only operational implementation; do
+not fork it into campaign shell. Its fail-closed transaction is:
 
-```bash
-#!/bin/bash
-set -euo pipefail
-
-PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC
-JOB_SCRIPT="$1"
-RUN_MANIFEST="$2"
-LEDGER_JSONL="${PIC_ROOT}/ledger/node_hours.jsonl"
-LEDGER_CSV="${PIC_ROOT}/ledger/node_hours.csv"
-CONTROL_PLANE_VERSION=REPLACE_WITH_CHECKSUMMED_CONTROL_PLANE_VERSION
-CONTROL_PLANE_DIR="${PIC_ROOT}/control_plane/${CONTROL_PLANE_VERSION}"
-VALIDATOR="${CONTROL_PLANE_DIR}/validate_and_reserve_frontier_job.py"
-RECONCILER="${CONTROL_PLANE_DIR}/reconcile_frontier_job.py"
-PENDING_SUBMISSION_FILE="${PIC_ROOT}/ledger/pending_submission.json"
-
-reservation_id=""
-job_id=""
-attached=0
-
-cleanup_unattached_job() {
-  status="$?"
-  set +e
-  if [[ -n "$job_id" && "$attached" -eq 0 ]]; then
-    scancel "$job_id"
-    python3 "$RECONCILER" \
-      --ledger-jsonl "$LEDGER_JSONL" \
-      --ledger-csv "$LEDGER_CSV" \
-      --job-id "$job_id" \
-      --run-manifest "$RUN_MANIFEST" \
-      --state submission_attach_failed
-  elif [[ -n "$reservation_id" && -z "$job_id" ]]; then
-    python3 "$VALIDATOR" cancel-reservation \
-      --ledger-jsonl "$LEDGER_JSONL" \
-      --ledger-csv "$LEDGER_CSV" \
-      --reservation-id "$reservation_id"
-  fi
-  exit "$status"
-}
-trap cleanup_unattached_job ERR INT TERM
-
-mkdir -p "${PIC_ROOT}/ledger"
-test -r "$LEDGER_JSONL" || {
-  printf "Missing initialized mirrored ledger: %s\n" "$LEDGER_JSONL" >&2
-  printf "Run the reviewed initialize_frontier_ledger.py genesis procedure first.\n" >&2
-  exit 1
-}
-
-reservation_id="$(
-  python3 "$VALIDATOR" reserve \
-    --job-script "$JOB_SCRIPT" \
-    --run-manifest "$RUN_MANIFEST" \
-    --ledger-jsonl "$LEDGER_JSONL" \
-    --ledger-csv "$LEDGER_CSV" \
-    --partition batch \
-    --allowed-qos debug,normal \
-    --debug-max-walltime 02:00:00 \
-    --max-node-hours 10000
-)"
-
-submission_id="$(python3 "$VALIDATOR" submission-id \
-  --run-manifest "$RUN_MANIFEST" \
-  --reservation-id "$reservation_id")"
-snapshot_job_script="$(python3 "$VALIDATOR" snapshot-path \
-  --run-manifest "$RUN_MANIFEST" \
-  --reservation-id "$reservation_id" \
-  --kind job-script)"
-pending_tmp="${PENDING_SUBMISSION_FILE}.tmp.$$"
-printf '{"reservation_id":"%s","submission_id":"%s","state":"reserved_not_attached"}\n' \
-  "$reservation_id" "$submission_id" > "$pending_tmp"
-mv "$pending_tmp" "$PENDING_SUBMISSION_FILE"
-
-if ! job_id="$(sbatch --parsable \
-    --comment "pic-reservation=${reservation_id}" \
-    --export "PIC_RESERVATION_ID=${reservation_id},PIC_SUBMISSION_ID=${submission_id}" \
-    "$snapshot_job_script")"; then
-  python3 "$VALIDATOR" cancel-reservation \
-    --ledger-jsonl "$LEDGER_JSONL" \
-    --ledger-csv "$LEDGER_CSV" \
-    --reservation-id "$reservation_id"
-  exit 1
-fi
-printf '{"reservation_id":"%s","submission_id":"%s","job_id":"%s","state":"submitted_not_attached"}\n' \
-  "$reservation_id" "$submission_id" "$job_id" > "$pending_tmp"
-mv "$pending_tmp" "$PENDING_SUBMISSION_FILE"
-python3 "$VALIDATOR" attach-job-id \
-  --ledger-jsonl "$LEDGER_JSONL" \
-  --ledger-csv "$LEDGER_CSV" \
-  --reservation-id "$reservation_id" \
-  --job-id "$job_id"
-attached=1
-rm -f "$PENDING_SUBMISSION_FILE"
-trap - ERR INT TERM
-printf "Submitted %s with reservation %s\n" "$job_id" "$reservation_id"
-
-printf "After completion run:\n"
-printf "python3 %q --ledger-jsonl %q --ledger-csv %q --job-id %q --run-manifest %q\n" \
-  "$RECONCILER" "$LEDGER_JSONL" "$LEDGER_CSV" "$job_id" "$RUN_MANIFEST"
+```text
+reserve and durably mirror worst-case node-hours
+persist reserved_not_submitted marker
+durably persist scheduler_dispatch_started marker
+sbatch --parsable --hold ... installed launch_trampoline.py
+durably persist scheduler_job_id_received marker
+verify the held job with scontrol
+durably persist submitted_not_attached marker
+append and durably mirror scheduler-ID attachment
+scontrol release <job-id>
 ```
+
+Every registered run artifact directory is exactly
+`$PIC_ROOT/runs/<campaign>/<submission-id>`. Reservation rejects an existing
+artifact directory and a launch creates that exact directory exclusively.
+Reruns use a new submission ID.
 
 Before the first submission, initialize an explicit genesis primary event,
 mirror it, append its receipt and derive the CSV index through the reviewed
@@ -2215,12 +2179,15 @@ with actual usage, and record job state. A human or agent must still inspect the
 run identity, artifact completeness, failure state and cumulative total before
 the next submission. The validator must refuse a new reservation while any prior
 row remains unreconciled, while the durable ledger head is stale, or while
-`pending_submission.json` exists without a reviewed attachment, cancellation and
-reconciliation. Because shell traps cannot close the post-`sbatch` process-loss
-window, recovery must query `squeue` and `sacct` for the reservation token stored
-in the Slurm comment, attach or cancel the matching job, reconcile usage and
-clear the pending marker only after the durable mirror acknowledges the
-transition.
+`pending_submission.json` exists without reviewed attachment, cancellation and
+reconciliation. The durable marker states are `reserved_not_submitted`,
+`scheduler_dispatch_started`, `scheduler_job_id_received` and
+`submitted_not_attached`. Only failures known to precede
+`scheduler_dispatch_started` may automatically cancel an unused reservation.
+Recovery must query `squeue` and `sacct` for the reservation token stored in the
+Slurm comment, attach or cancel the matching job, reconcile terminal usage even
+if the job reached a terminal state before attachment, and clear the pending
+marker only after the durable mirror acknowledges the transition.
 Every reservation, attachment, cancellation and reconciliation mutation must be
 durably mirrored before the wrapper or reconciler reports success. If
 `scancel`, `sacct` reconciliation or durable mirroring cannot be confirmed,
@@ -2260,33 +2227,33 @@ and measured values as work progresses.
 
 | Gate | Capability | Required test/evidence | Status at initial review |
 | --- | --- | --- | --- |
-| Q-001 | Clean provenance | Curated baseline, manifest, executable checksum | Verifying: `PIC` and `origin/PIC` are pinned at `3bcd3f21`; compact readiness records and external-artifact checksums exist; release manifest, final executable checksum and archived clean candidate remain open |
+| Q-001 | Clean provenance | Curated baseline, manifest, executable checksum | Verifying: historical `origin/PIC` baseline remains pinned at `3bcd3f21`; local `PIC` carries the successor implementation series pending final clean-commit curation; compact readiness records and external-artifact checksums exist; release manifest, final executable checksum and archived clean candidate remain open |
 | Q-002 | Physical-mode configuration | Parser rejection and metadata tests | Verifying: host parser contract accepts five bounded named-mode compositions, rejects 28 invalid combinations and checks runtime identity; registered F0 Frontier metadata capture and parser/startup smoke pass; multi-rank Athena runtime metadata remains open |
 | Q-003 | Relativistic pusher and `C` | Section 5.1 analytic convergence CPU/GPU | Verifying: host continuum gyro scan passes three `C` values and four timesteps with approximately second-order convergence; registered F1 dirty-candidate one-rank GPU oracle passes at cycle 2 with 64 particles and maximum Boris velocity error `5.808176634092277e-09`, including visible-GPU and HIP-link evidence; clean-candidate rerun and full GPU matrix remain open |
 | Q-004 | Paper coupling | Conservation tests and no direct CT-current induction | Verifying: host paper-mode task-stage trace, particle-plus-fluid conservation and coefficient-invariant ideal-MHD induction isolation pass; MPI/GPU and paper-campaign matrix remain open |
 | Q-005 | Bell | Section 5.2 dispersion and phase | Verifying: bounded serial-host extractor validation passes and the reused Bell fixture is now quantitatively classified as an engineering proxy because its growth and phase miss the deck-bound no-Hall analytical branch; frozen paper-faithful 1D/2D/3D decks, convergence, MPI, GPU and external review remain open |
 | Q-006 | Oscillation plus grid refinement | Section 5.3 uniform/SMR/AMR frequency | Verifying: bounded serial-host extractor validation passes, reused uniform/SMR proxies have broad frequency parity and the nested level-2 AMR fixture remains finite short-horizon interface smoke; all three miss or cannot qualify the paper-frequency oracle, so frozen long-horizon uniform/SMR/true-AMR decks, convergence, MPI, GPU and external review remain open |
 | Q-007 | Delta-f | Weight/deposition tests, CRSI/CRPAI reproduction | Verifying: evolving state/deposition/restart/VTK mechanics smoke passes; CRSI/CRPAI theory open |
-| Q-008 | Expanding box | CPAW, gyro and driven CRPAI tests | Verifying: particle mechanics, uniform MHD appendix invariants, bounded gyro-history convergence, one-step expanding/compressing CPAW closure, comoving-flux physical-view repair, oblique native-divB, built-in physical-volume MHD history, non-delta-f final-frame conservative source accounting and selected adaptive-delta-f endpoint-source plus reduced-damping ordering pass locally; full Appendix-A history convergence, coupled restart continuation, driven CRPAI, MPI, GPU and external review remain open |
-| Q-009 | AMR lifetime and boundary policy | Forced rebuild/restart/interface tests | Verifying: explicit particle refresh, retained-state inventory, `paper_smooth` interface-policy decision and serial refine smoke pass are archived in `q009_amr_lifetime_policy_successor_2026-05-30.json`; `q009_repeated_amr_lifetime_bounded_local_2026-05-30.json` adds six serial refine/derefine transitions through five restart continuations with stable particle identity and ownership refresh; coupled boundary, MPI migration, memory-checking and GPU matrix remain open |
+| Q-008 | Expanding box | CPAW, gyro and driven CRPAI tests | Verifying: particle mechanics, uniform MHD appendix invariants, bounded gyro-history convergence, one-step expanding/compressing CPAW closure, comoving-flux physical-view repair, oblique native-divB, built-in physical-volume MHD history, non-delta-f final-frame conservative source accounting and selected adaptive-delta-f endpoint-source plus reduced-damping ordering pass locally; `q008_expanding_box_restart_resilience_bounded_local_2026-05-30.json` adds a passing uninterrupted-versus-restarted coupled-carrier endpoint regression; full Appendix-A history convergence, driven CRPAI, MPI, GPU and external review remain open |
+| Q-009 | AMR lifetime and boundary policy | Forced rebuild/restart/interface tests | Verifying: explicit particle refresh, retained-state inventory, `paper_smooth` interface-policy decision and serial refine smoke pass are archived in `q009_amr_lifetime_policy_successor_2026-05-30.json`; `q009_repeated_amr_lifetime_bounded_local_2026-05-30.json` adds six serial refine/derefine transitions through five restart continuations with stable particle identity and ownership refresh; `q009_coupled_boundary_lifetime_bounded_local_2026-05-30.json` adds serial Debug and UBSan coupled PIC/MHD reflecting/outflow lifetime stress with stable tags, ownership movement, root-level migration and reflection evidence; multi-rank MPI migration/restart, HIP and ASan follow-up remain open |
 | Q-010 | Load balance/performance | Particle-cost implementation and Frontier measurements | Verifying: opt-in particle-aware AMR cost implementation landed; Frontier measurements open |
-| Q-011 | Shock | Section 5.4 coarse/fine/AMR reproduction | Blocked by Q-003/Q-004/Q-009: isotropic shock-surface injection scaffold, frame controls and schema-6 continuation fingerprints pass bounded serial-host guards in `q011_parallel_shock_controls_successor_2026-05-30.json`; schema-7 initial-versus-shock-injected provenance, restart preservation, MeshBlock migration and independently reconstructed weighted spectra pass the bounded Q-016 successor; exact paper injection units, AMR, MPI, GPU and campaign evidence remain open |
+| Q-011 | Shock | Section 5.4 coarse/fine/AMR reproduction | Blocked by Q-003/Q-004/Q-009: isotropic shock-surface injection scaffold, frame controls and schema-6 continuation fingerprints pass bounded serial-host guards in `q011_parallel_shock_controls_successor_2026-05-30.json`; schema-7 initial-versus-shock-injected provenance, restart preservation, MeshBlock migration and independently reconstructed weighted spectra pass the bounded Q-016 successor; `q011_parallel_shock_section54_paper_preparation_2026-05-30.json` freezes the Section 5.4 preparation-only 2D3V deck, three-level AMR sizing, `M_A=30`, `C/U_A0=10000`, continuous injection and post-`45 Omega0^-1` cohort filter with a fail-closed analyzer contract; open calibration audits, AMR, MPI, GPU and campaign evidence remain open |
 | Q-012 | Reliability aggregate report | Closes after Q-024/Q-036 plus MPI/decomposition/restart-continuation/boundary evidence | Partial scaffolding only |
 | Q-013 | Usability/docs | Supported-mode docs and runbook tested by clean launch | Verifying: clean-launch runbook, supported-toolchain declaration, runtime model contract, AMR lifetime/interface policy and bounded Q-016 provenance/spectrum page landed; isolated `docs/requirements.txt` environment renders all 58 Sphinx pages with warnings promoted to errors; controlled clean-candidate Frontier launch remains open |
 | Q-014 | Terminal sign-off aggregate | After every selected-profile gate closes, freeze a review-ready aggregate manifest with `pending_terminal_review`; then review, record the terminal disposition, sign and archive the final manifest. Never list Q-014 as its own child | Open |
 | Q-015 | Entity-derived shared-kernel comparison | Frozen source/formula provenance, relativistic pusher microtest and bounded trajectory-deposition differential checks | Verifying: frozen Entity Boris and particle-shape exact-overlap differential passes with explicit non-overlap boundaries; full current-kernel equivalence, MPI and GPU remain open |
 | Q-016 | Particle provenance and spectra | Persistent tracking/cohort metadata plus in-run/offline spectral agreement through restart/migration | Verifying: schema-7 persistent `gid`, tag, species, source, macro-weight, birth-time and delta-f fields; typed PVTK decode; tracked-row metadata; and independently reconstructed weighted species/source/birth-cohort spectra pass a bounded serial restart and MeshBlock-migration regression archived in `q016_particle_provenance_spectra_local_2026-05-30.json`; MPI decomposition, repeated AMR/HIP parity and preregistered shock-campaign evidence remain open |
-| Q-017 | Performance observability and Frontier communication choice | Stage timers, memory/load telemetry and recorded GPU-aware MPI A/B decision | Verifying: bounded driver-level task-list, output-publication, AMR/load-balance, throughput and safely derivable rank-load telemetry plus a focused host regression are archived in `q017_driver_performance_observability_2026-05-30.json`; particle-kernel timers, species/level memory telemetry, Frontier GPU-aware-MPI A/B, multi-rank scaling and retained manifest evidence remain open |
+| Q-017 | Performance observability and Frontier communication choice | Stage timers, memory/load telemetry and recorded GPU-aware MPI A/B decision | Verifying: bounded driver-level task-list, output-publication, AMR/load-balance, throughput and safely derivable rank-load telemetry are archived in `q017_driver_performance_observability_2026-05-30.json`; `q017_particle_observability_local_2026-05-30.json` adds passing serial and one-rank MPI host regressions for wrapper-boundary particle timers, fixed-record resident bytes by species and absolute logical level, and direct particle-view allocated-byte snapshots; Frontier synchronized-timer overhead, full peak GPU-memory accounting, GPU-aware-MPI A/B, multi-rank scaling and retained manifest evidence remain open |
 | Q-018 | Claims registry | Stable claim IDs, evidence links, limitations and reviewer dispositions for every release statement | Verifying: stable IDs, a per-claim applicability, limitation and current-link scaffold, and the separate fail-closed `pic_qualification_manifest.py` validator/freezer are archived; immutable qualifying bundle links and named external reviewer dispositions remain open |
 | Q-019 | Bell nonlinear saturation | Amplification, spectra, morphology, energy partition, saturation and sensitivity matrix | Blocked by Q-003/Q-004/Q-005 |
 | Q-020 | CRSI nonlinear saturation | True delta-f spectra, distribution evolution, scattering/diffusion, saturation, sensitivity matrix, matched reduced nonlinear full-f controls and archived weight-validity envelope | Blocked by Q-007 |
 | Q-021 | Driven CRPAI nonlinear saturation | Driven-box branch evolution, anisotropy, scattering, saturation, sensitivity matrix, effective-damping trends, matched reduced nonlinear full-f controls and archived weight-validity envelope | Blocked by Q-007/Q-008 |
-| Q-022 | Independent-comparison preregistration | Frozen references, equation mappings, normalization, observables, tolerances, uncertainty methods and discrepancy-ledger schema | Verifying: fail-closed inventory, paper-source anchor, AthenaK paper-mode equation profile, bounded Entity overlap map, map schema, tolerance schema, observable families, tolerance policy and discrepancy schema are frozen; non-Entity public source references and GIZMO interpretation artifacts are privately archived in Orion with post-copy verification under manifest SHA `7028552e` in `q022_external_reference_private_ingest_2026-05-30.json`; export classification, extracted datasets with uncertainty, completed external-code maps and numeric thresholds remain open before comparison runs |
+| Q-022 | Independent-comparison preregistration | Frozen references, equation mappings, normalization, observables, tolerances, uncertainty methods and discrepancy-ledger schema | Verifying: fail-closed inventory, paper-source anchor, AthenaK paper-mode equation profile, bounded Entity overlap map, map schema, tolerance schema, observable families, tolerance policy and discrepancy schema are frozen; non-Entity public source references and GIZMO interpretation artifacts are privately archived in Orion with post-copy verification under manifest SHA `7028552e` in `q022_external_reference_private_ingest_2026-05-30.json`; successor dataset-provenance, per-comparison equation-map and tolerance-table sidecars now fail closed with `pending external review` placeholders and no fabricated measurements, and the GIZMO route has a provisional documented-exclusion candidate; authorized Orion extraction, numeric thresholds, external review and comparison runs remain open |
 | Q-023 | Statistical qualification | Preregistered estimators, seeds, scans, intervals, exclusions and independent metric recomputation | Verifying: `q023_local_preregistration_profiles_2026-05-30.json` freezes eight qualifying seeds, two excluded pilot seeds, fixed-sample Holm/BCa policy, locally available grids, defensible windows and thresholds, fail-closed exclusions, checksummed local analyzer/input candidates and the independent raw-artifact recomputation plan; all 12 campaign drafts are `locally_preregistered_run_blocked`; clean-candidate and Frontier bindings, exact qualifying decks/analyzers, paper-shock fit interval, theory- or excluded-pilot-derived nonlinear regimes, external-reference tolerances, exact plotting lock, reviewer-owned recomputation artifact and external review remain open |
 | Q-024 | Resilience aggregate report | Forced walltime, interrupted output, corrupt checkpoint, restart schema and bounded storage-failure tests; closes after Q-036 | Verifying: schema-6 hardening parity plus the schema-7 Q-016 provenance successor, canonical manifest binding, wrong-path, checksum, payload, selector, adaptive-state, star-potential and shock continuation-control guards pass; bounded serial-host schema mutation, short-write, seek-failure, `/dev/full`, interrupted-writer residue and soft-wallclock continuation-parity drills pass; per-rank MPI, node-loss, scheduler-pretimeout and Frontier-filesystem matrix remain open |
 | Q-025 | Portability aggregate report | Debug/Release, warnings, host memory checking, declared CPU/OpenMP/MPI scope and Frontier HIP/MPI matrix; closes after Q-038 | Verifying: host Debug/Release serial, Debug/Release MPI compile, Debug/Release OpenMP compile, OpenMP 1/2-thread byte-identity, warnings-enabled build, GNU ASan bounded run and UBSan checks pass; registered Frontier HIP/MPI build, one-rank parser/startup launch and dirty-candidate one-rank Release GPU gyro runtime pass after the device-capture portability fix; clean-candidate and rank-launched Athena MPI matrix remain open |
 | Q-026 | Archive integrity, licensing and sensitive-data handling | Pre-ingestion and pre-export classification, scrubbed submission artifacts, checksums, redistribution basis, manifest schema and fresh-directory restore drill | Verifying: paper source, bounded Entity snapshot and private 20-page rendered PDF checksums are frozen; Orion private-bundle restore drill passes; export review and the external disposition on Orion-only durability risk remain open |
-| Q-027 | Frontier QOS-selection and budget boundary | `debug`-preferred, `normal`-fallback selection is recorded and policy-compliant; serialized PIC submission ledger is complete; cumulative reserved-plus-consumed usage remains `<=10000` node-hours; expanded work remains blocked pending revised authorization and user permission | Verifying: mirrored ledger genesis event `849bf340` was initialized by predecessor snapshot `cde67c16`; registered F0 job `4744225` and F1 dirty-candidate GPU gyro job `4744232` remain historical bounded evidence; repaired successor digest `12750ea6` passes the 98-test local suite, static checks and independent adversarial retest, and its paired immutable Orion and Project Home install plus active-policy promotion pass in `q027_successor_control_plane_independent_pass_2026-05-30.json`; science freeze and applicable Frontier prerequisites remain open; cumulative consumption remains `0.07444444444444442` node-hours with no active reservation |
+| Q-027 | Frontier QOS-selection and budget boundary | `debug`-preferred, `normal`-fallback selection is recorded and policy-compliant; serialized PIC submission ledger is complete; cumulative reserved-plus-consumed usage remains `<=10000` node-hours; expanded work remains blocked pending revised authorization and user permission | Verifying: mirrored ledger genesis event `849bf340` was initialized by predecessor snapshot `cde67c16`; registered F0 job `4744225` and F1 dirty-candidate GPU gyro job `4744232` remain historical bounded evidence; live digest `3e933edd`, policy SHA `228440de` and promotion SHA `700a059a` are preserved as read-only chronology in `q027_active_control_plane_generation_2026-05-30.json`; security-hardening `d8820c33`, anchor-repair `121f9f8f`, recovery-hardening `7b722ab2`, recovery-provenance `7ea4aa8b` and accounting-provenance `1843ce72` candidates are preserved as superseded chronology after independent audits found activation blockers; bootstrap-scheduler-hardening candidate digest `7397038b` adds an isolated exact-inventory runner, reviewed HEAD-blob installation, hermetic Git reads, a closed Frontier scheduler environment, `sbatch --export=NIL`, descriptor-anchored trampoline artifact finalization, exact canonical module provenance and an explicit paired-install lifecycle assertion, and passes its 198-test control-plane-plus-ledger suite, static checks, warning-free 58-page Sphinx build, targeted touched-file C++ lint and 274-test publication discovery in `q027_control_plane_bootstrap_scheduler_hardening_candidate_2026-05-30.json`, with fresh independent adversarial retest, paired immutable Orion and Project Home install, active-policy promotion, science freeze and applicable Frontier prerequisites still open; cumulative consumption remains `0.07444444444444442` node-hours with no active reservation |
 | Q-028 | Independent Bell nonlinear comparisons | Non-Hall paper-mode campaign compared against Bai et al., Riquelme-Spitkovsky, Gargaté et al. and Zacharegkas et al. where regimes overlap: amplification, wavelength evolution, spectra, cavities, filaments, energy transfer and saturation time/mechanism | Blocked by Q-019/Q-022/Q-023 |
 | Q-029 | Hall-extension qualification | Separately named derived mode with linear/nonlinear Bell and shock-front tests. The authorized target requires an `implemented_and_qualified` outcome | Verifying: opt-in experimental CT source and host odd-in-`alpha_H` manufactured-source smoke pass; derived normalization, linear/nonlinear Bell, shock-front, GPU and decomposition qualification remain open |
 | Q-030 | Independent matched-code comparisons | Close explicit sub-gates Q-030-A Athena/Bai matched Bell-shock observables, Q-030-P PLUTO matched conservative coupling and Q-030-M MPI-AMRVAC overlapping AMR-shock observables, with frozen mappings, quantitative residuals and discrepancy reports | Blocked by Q-004/Q-009/Q-011/Q-019/Q-022/Q-023 |
@@ -2295,16 +2262,16 @@ and measured values as work progresses.
 | Q-030-M | MPI-AMRVAC overlapping AMR-shock comparison | Frozen MPI-AMRVAC mapping, overlapping AMR-shock observables, quantitative residuals and discrepancy report | Blocked by Q-009/Q-011/Q-022/Q-023 |
 | Q-031 | Bai et al. 2019 nonlinear CRSI comparison | Growth, saturation, spectra, diffusion, pitch-angle evolution, 90-degree crossing, isotropization and resolution dependence | Blocked by Q-020/Q-022/Q-023 |
 | Q-032 | Ion-neutral-damped CRSI extension qualification | Plotnikov et al. matched comparison with damping-rate dependence. The authorized target requires an `implemented_and_qualified` outcome | Verifying: reduced static-neutral exact friction map, manufactured-source oracle and bounded Alfvén-envelope damping scan pass; applicability derivation, Plotnikov-matched damped CRSI, nonlinear, GPU and decomposition qualification remain open |
-| Q-033 | CRPAI transport-calibration extension qualification | Adaptive-delta-f, physical-damping, `nu_eff`, anisotropy, spectra, quasi-steady-state and scaling comparison against Sun, Bai and Zhao. The authorized target requires an `implemented_and_qualified` outcome | Verifying: extension-only global bi-kappa fit, schema-7 restart state, parser guards, exact host restart oracle, adaptive-cadence sensitivity scan and the bounded active-MHD expanding-box endpoint-normalized analytic-source plus reduced-damping composition smoke pass locally; the bounded fixture does not show variance reduction, and coupled restart continuation, physical calibration, effective scattering, saturation, GPU, MPI and external review remain open |
+| Q-033 | CRPAI transport-calibration extension qualification | Adaptive-delta-f, physical-damping, `nu_eff`, anisotropy, spectra, quasi-steady-state and scaling comparison against Sun, Bai and Zhao. The authorized target requires an `implemented_and_qualified` outcome | Verifying: extension-only global bi-kappa fit, schema-7 restart state, parser guards, exact host restart oracle, adaptive-cadence sensitivity scan and the bounded active-MHD expanding-box endpoint-normalized analytic-source plus reduced-damping composition smoke pass locally; `q033_expanding_box_adaptive_damping_restart_resilience_bounded_local_2026-05-30.json` adds a passing coupled-carrier restart-continuity regression without unintended adaptive refit; the bounded fixtures do not show variance reduction, and physical calibration, effective scattering, saturation, GPU, MPI and external review remain open |
 | Q-034 | Unsupported-capability review | Execute each register row's `parser_reject`, `rename_proxy`, `docs_limit` or `extension_gate` handling and archive its closure artifact | Verifying: local parser-reject, rename-proxy, docs-limit and extension-gate classifications are archived in `q034_unsupported_capability_local_closure.md`; successor active-MHD expanding-box fail-closed compositions are archived in `q034_unsupported_capability_successor_2026-05-30.json`; scientific extension qualification and external review remain open |
 | Q-035 | Scoped state-of-the-art sign-off | Reviewer-approved wording tied to qualified claim IDs, exact references, regimes, metrics, performance evidence and exclusions | Blocked by Q-018/Q-023/Q-034/Q-040: an explicitly unapproved fail-closed wording draft is archived in `q035_scoped_state_of_the_art_draft_2026-05-30.json`; it is not manuscript text or a result |
 | Q-036 | Crash consistency and I/O failure handling | Atomic restart publication, completion markers, last-known-good recovery, timeout, interrupted-write, truncated-restart and write-failure tests | Verifying: atomic writer, completion markers, manifests, startup checksum validation, truncated-artifact rejection and unwritable-target guards pass locally; deterministic serial-host schema mutation, bounded short-write, seek-failure, `/dev/full`, killed-writer residue and soft-wallclock continuation-parity drills pass; MPI per-rank publication, node-loss, scheduler-pretimeout and Frontier-filesystem matrix remain open |
 | Q-037 | Durable evidence export | Record the user-selected Orion-only bulk-evidence deviation, checksum verification, retention risk, access policy and restore drills; obtain external disposition before terminal sign-off | Verifying: Orion is selected as the sole bulk-evidence root, the private PDF restore drill passes and Kronos is removed from scope; Orion-only retention is not durable archival, and external reviewer disposition remains open |
-| Q-038 | Frontier environment profile selection | Minimum-supported baseline plus controlled XNACK/OFI A/B evidence, redacted allowlist capture and restricted-submit-export rank-0 propagation smoke test | Verifying: registered F0 baseline captures `HSA_XNACK=0`, `MPICH_GPU_SUPPORT_ENABLED=1` and `SLURM_EXPORT_ENV=ALL`, and maps eight ranks to eight distinct `ROCR_VISIBLE_DEVICES`; hardened F1 dirty-candidate gyro job captures the same allowlist, a visible rank-0 GPU, `libamdhip64`, `libmpi_amd` and `libmpi_gtl_hsa`; XNACK/OFI A/B and Athena communication evidence remain open |
+| Q-038 | Frontier environment profile selection | Minimum-supported baseline plus controlled XNACK/OFI A/B evidence, redacted allowlist capture and restricted-submit-export rank-0 propagation smoke test | Verifying: registered F0 baseline captures `HSA_XNACK=0`, `MPICH_GPU_SUPPORT_ENABLED=1` and `SLURM_EXPORT_ENV=ALL`, and maps eight ranks to eight distinct `ROCR_VISIBLE_DEVICES`; hardened F1 dirty-candidate gyro job captures the same allowlist, a visible rank-0 GPU, `libamdhip64`, `libmpi_amd` and `libmpi_gtl_hsa`; successor control-plane candidate `7397038b` installs a closed `frontier_minimum_supported`, `frontier_xnack1_experimental` and `frontier_ofi_tuned_experimental` selector, strict Frontier value validation, Bash-startup sanitization, `sbatch --export=NIL`, a scheduler `env -i` boundary, descriptor-based redacted allowlist capture closed before workload execution and exact canonical module provenance while deliberately leaving `frontier_selected_production` undefined; matched XNACK/OFI A/B and Athena communication evidence remain open |
 | Q-039 | GIZMO/RSOL comparison decision | Before P7A interpretation, archive a bounded Ji-Hopkins/GIZMO comparison with preregistered metrics or a reviewer-approved documented exclusion from qualification scope | Verifying: fail-closed local decision scaffold prohibits manuscript interpretation; Ji-Hopkins, official GIZMO documentation and cosmic-ray notes are privately archived in Orion with post-copy checksum verification, and the public repository HEAD is frozen; mapped bounded comparison or reviewed exclusion and external disposition remain open |
 | Q-040 | Independent-comparison aggregate closure | For non-Hall production Bell close Q-028; for nonlinear CRSI close Q-031; for matched code comparisons close Q-030-A, Q-030-P and Q-030-M. The selected extension scope requires implemented-and-qualified outcomes for Q-029/Q-032/Q-033. Archive the discrepancy ledger and scoped conclusions; Q-039 still permits a reviewed bounded exclusion | Blocked by Q-022 and the named child gates |
 | Q-041 | Undriven CRPAI nonlinear saturation | Undriven branch evolution, anisotropy, spectra, scattering, saturation, effective-damping trends, sensitivity matrix, matched reduced nonlinear full-f controls and archived weight-validity envelope, distinct from Section 5.6 linear reproduction and physical-damping calibration | Blocked by Q-007 |
-| Q-042 | AthenaK architecture and style conformance | Review every implementation batch against nearby AthenaK patterns; run targeted formatting/lint checks and the repository style baseline; archive evidence for any accuracy- or efficiency-driven exception; introduce no new style violations or avoidable PIC-only infrastructure | Verifying: predecessor host architecture sidecars plus `q042_schema7_architecture_docs_successor_2026-05-30.json` cover the schema-6, shock-control, comoving-flux, schema-7 provenance/spectrum, repeated-AMR, warning-free Sphinx and bounded serial-host standard-MHD compatibility tranches, including one-cycle blast-AMR, shearing and orbital-advection launches; focused host regressions and `git diff --check` pass; repaired successor control-plane digest `12750ea6` passes the separate local suite, independent adversarial retest, paired immutable install and active-policy promotion; clean-candidate freeze, non-PIC MPI/multilevel runtime slices, Frontier and external review remain open |
+| Q-042 | AthenaK architecture and style conformance | Review every implementation batch against nearby AthenaK patterns; run targeted formatting/lint checks and the repository style baseline; archive evidence for any accuracy- or efficiency-driven exception; introduce no new style violations or avoidable PIC-only infrastructure | Verifying: predecessor host architecture sidecars plus `q042_schema7_architecture_docs_successor_2026-05-30.json` cover the schema-6, shock-control, comoving-flux, schema-7 provenance/spectrum, repeated-AMR, warning-free Sphinx and bounded serial-host standard-MHD compatibility tranches, including one-cycle blast-AMR, shearing and orbital-advection launches; focused host regressions, targeted touched-file C++ lint and `git diff --check` pass; live control-plane digest `3e933edd` and superseded successor candidates `d8820c33`, `121f9f8f`, `7b722ab2`, `7ea4aa8b` and `1843ce72` are preserved as chronology; bootstrap-scheduler-hardening candidate digest `7397038b` retains all earlier controls and adds isolated exact-inventory execution, reviewed HEAD-blob installation, hermetic Git reads, closed scheduler environments, descriptor-anchored artifact finalization, exact canonical module provenance and explicit paired-install lifecycle assertion, and passes its 198-test control-plane-plus-ledger suite and 274-test publication discovery pending fresh independent adversarial retest and paired promotion; clean-candidate freeze, non-PIC MPI/multilevel runtime slices, Frontier and external review remain open |
 
 ## Immediate Agent Handoff: First Actions
 
@@ -2316,17 +2283,24 @@ Future implementation agents should execute the following successor sequence:
 3. Preserve predecessor readiness records as chronology and add successor
    sidecars for schema-6 restart, schema-7 provenance, shock controls, comoving-flux expanding-box
    repair, unsupported-capability handling and architecture review.
-4. Preserve the local independent adversarial PASS for successor control-plane
-   digest `12750ea6`; keep Orion and Project Home unchanged until the exact
-   source candidate is clean and committed.
+4. Preserve the local independent adversarial PASS for historical successor
+   control-plane digest `12750ea6` as chronology. Keep Orion and Project Home
+   unchanged until bootstrap-scheduler-hardening candidate digest `7397038b`
+   passes a fresh independent adversarial retest and the exact source candidate
+   is clean and committed.
 5. Curate a clean source commit series, remove or classify generated guard
    outputs and freeze the exact clean candidate and executable digest.
-6. Close remaining local prerequisites: Q-009 coupled/MPI/HIP stress slices,
+6. Close remaining local prerequisites: Q-009 broader-boundary, MPI, ASan and
+   HIP stress slices after the bounded coupled Debug/UBSan pass,
    Q-016 MPI/HIP parity, Q-017 kernel telemetry, Q-018 immutable claim links,
    Q-022/Q-023 extraction/reference thresholds and the Q-039 mapped or
    reviewed-exclusion route.
-7. Install and promote the paired immutable successor control plane without
-   recreating ledger genesis; archive its exact digest and promotion record.
+7. Install the paired immutable successor control plane. While the predecessor
+   policy remains active, run the installed successor's audited
+   `initialize_frontier_ledger.py --migrate-existing-anchor` transition to
+   create or repair the paired read-only genesis anchors without appending a
+   second genesis. Then promote the closed successor policy and archive its
+   exact digest, anchors and promotion record.
 8. Only after all local and control-plane gates pass, build and run Frontier validation
    under the `debug`-preferred, `normal`-fallback, budget-tracked procedure above.
 9. Reproduce every paper result, execute registered nonlinear and cross-code
@@ -2347,17 +2321,17 @@ Future implementation agents should execute the following successor sequence:
 | 2026-05-30 | Added immutable Frontier control-plane snapshots, JSONL accounting with non-recursive mirror receipts, dual Slurm-ID guards, inert scan shells, root-document retirement banners and checksummed standalone-helper lineage companions | Adversarial execution review found that documentation-only policy was insufficient while mutable paths, ambient exports, copied shell scripts or partially checksummed quicklooks could bypass provenance and submission boundaries |
 | 2026-05-30 | Replaced the initial `debug`-only Frontier rule with a `debug`-preferred, `normal`-fallback policy on `batch`; raised the cumulative testing cap to 4000 node-hours with a mandatory stop-and-ask boundary | The user authorized normal-QOS fallback when the single-user `debug` slot is unavailable and expanded the tracked cluster-testing budget while preserving serial PIC submissions and fail-closed accounting |
 | 2026-05-30 | Added the AthenaK architecture/style-conformance contract and Q-042 | PIC implementation work should reuse AthenaK's existing framework and design choices unless archived evidence shows that a scoped deviation is necessary for material accuracy or efficiency |
-| 2026-05-30 | Expanded the authorized target to include qualified Hall Bell, ion-neutral-damped CRSI and adaptive-delta-f physical-damping CRPAI extensions; raised the cumulative testing cap to 10000 node-hours; recorded `pending external review`; selected Project Home plus Kronos as the OLCF-side archive design pending exact path and off-site destination freeze | The user requested completion of the optional extensions, authorized the larger tracked Frontier budget and deferred named external review and final institutional-retention selection |
+| 2026-05-30 | Expanded the authorized target to include qualified Hall Bell, ion-neutral-damped CRSI and adaptive-delta-f physical-damping CRPAI extensions; raised the cumulative testing cap to 10000 node-hours; recorded `pending external review`; selected the then-current Project Home plus Kronos OLCF-side archive design pending exact path and off-site destination freeze | Preserve the superseded intermediate decision accurately: the user requested completion of the optional extensions, authorized the larger tracked Frontier budget and deferred named external review and final institutional-retention selection |
 | 2026-05-30 | Implemented explicit paper momentum state, `C`-aware Boris mechanics, paper-versus-Hall induction separation, physical delta-f state/deposition/restart diagnostics, particle-plus-MHD expanding-box transforms, restart schema fingerprints, and atomic checksummed restart publication | Close initial implementation defects without prematurely closing analytical, AMR, GPU, Frontier, resilience or review gates |
 | 2026-05-30 | Added a uniform-MHD expanding-box appendix invariant oracle, corrected multistage over-expansion by applying the exact MHD box map once after RK, made retained-particle AMR refresh explicit, and added opt-in geometric particle-aware AMR load costs | Convert box and AMR implementation assumptions into executable checks while keeping portability, MPI and Frontier measurements open |
 | 2026-05-30 | Froze the accessible Entity replacement tree and bounded shared-kernel hashes, recorded the manuscript PDF render dependency blocker, and established the repository-wide C++ style baseline | Make Q-015, Q-026 and Q-042 prerequisites explicit and machine-readable without promoting incomplete comparison, archive or style gates |
 | 2026-05-30 | Added an explicit `extended_mhd_pic` Hall-current CT manufactured-source smoke and documented its experimental `cE_CT = cE_ideal + alpha_H P_edge[J_CR]` normalization | Verify host source isolation with nonzero odd-in-`alpha_H` magnetic increments while keeping derived Hall Bell, nonlinear, shock-front, GPU and decomposition qualification open under Q-029 |
 | 2026-05-30 | Added the bounded reduced static-neutral ion-neutral friction map, extension-only adaptive global bi-kappa delta-f fit, restart schema version 6 fitted-state persistence, and direct host manufactured-source/restart oracles | Land selected-extension mechanics without promoting them to damped-CRSI or CRPAI transport qualification before the Q-032/Q-033 comparison matrices close |
 | 2026-05-30 | Recorded bounded host Debug serial, Debug MPI and Release MPI compilation plus serial runtime evidence; recalibrated only the short AMR multispecies interface-smoke floor after measuring the corrected nearest-center TSC response against `origin/PIC` | Preserve a nonzero AMR liveness regression without misclassifying a one-turn engineering proxy as an oscillation-frequency or MPI qualification oracle |
-| 2026-05-30 | Added parser-contract, paper task-stage, paper-coupling conservation, continuum-gyro, Entity exact-overlap, preregistration, GIZMO fail-closed decision, extension-envelope, style-conformance, OpenMP and sanitizer evidence; staged the repaired Frontier control plane without installing or initializing it | Close locally executable evidence slices while preserving the authenticated Kronos, Frontier runtime, scientific-campaign and external-review boundaries |
-| 2026-05-30 | Reconstructed the omitted MNRAS render dependencies in a private environment, archived a checksummed 20-page PDF bundle in Project Home and passed a fresh-directory restore drill | Close the local Q-026 PDF retrieval blocker without authorizing external redistribution, Kronos mirroring or terminal archive sign-off |
+| 2026-05-30 | Added parser-contract, paper task-stage, paper-coupling conservation, continuum-gyro, Entity exact-overlap, preregistration, GIZMO fail-closed decision, extension-envelope, style-conformance, OpenMP and sanitizer evidence; staged the repaired Frontier control plane without installing or initializing it | Close locally executable evidence slices while preserving the then-pending authenticated Kronos, Frontier runtime, scientific-campaign and external-review boundaries |
+| 2026-05-30 | Reconstructed the omitted MNRAS render dependencies in a private environment, archived a checksummed 20-page PDF bundle in Project Home and passed a fresh-directory restore drill | Close the local Q-026 PDF retrieval blocker without authorizing external redistribution, then-pending Kronos mirroring or terminal archive sign-off |
 | 2026-05-30 | Archived bounded Q-005/Q-006 proxy characterization, Q-008 expanding-box gyro/CPAW oracles and Q-032/Q-033 extension scans with explicit non-closure limitations | Preserve quantitative local evidence while preventing engineering proxies and bounded fixtures from being promoted to paper, Frontier or external-review qualification |
-| 2026-05-30 | Bound Project Home ledger mirroring to reviewed `filesystem_copy`, separated pending authenticated Kronos `globus` or `dtn_rsync` bulk transfer selection, and broadened Project Home's non-permanent role to include private reference-artifact staging and restore drills | Resolve transport and archive-role ambiguity before any ledger genesis, reservation or Frontier submission |
+| 2026-05-30 | Bound Project Home ledger mirroring to reviewed `filesystem_copy`, separated the then-pending authenticated Kronos `globus` or `dtn_rsync` bulk transfer selection, and broadened Project Home's non-permanent role to include private reference-artifact staging and restore drills | Resolve transport and archive-role ambiguity before any ledger genesis, reservation or Frontier submission |
 | 2026-05-30 | Removed Kronos, DTN and Globus from the execution design at user direction; selected Orion as the sole bulk-evidence root with explicit durability risk; initialized mirrored ledger genesis `849bf340` with paired immutable snapshot `cde67c16`; installed hardened active snapshot `36761ee2`; copied and restore-verified the private PDF bundle from Orion | Unlock registered Frontier execution without misrepresenting Orion-only retention as institutional archival |
 | 2026-05-30 | Passed registered Frontier F0 HIP/MPI admission job `4744225` after preserving and reconciling bounded bootstrap failures; fixed HIP device captures in the parallel-shock initializer; promoted paired control-plane snapshot `1635c9f6` with reservation-ledger and scheduled-job manifest-digest anchoring | Admit subsequent registered science work only after a real Frontier build, rank/GPU mapping and parser/startup smoke while preventing self-consistent post-reservation manifest replacement |
 | 2026-05-30 | Passed registered Frontier F1 dirty-candidate one-rank GPU relativistic-gyro job `4744232` after a preserved preliminary pass and independent evidence-hardening review; captured visible-GPU binding, HIP/GPU-aware-MPI linked libraries, scheduled manifest-digest equality and the cycle-2 Boris oracle | Preserve bounded candidate evidence while keeping the clean-candidate freeze, full GPU matrix, MPI communication, performance and scientific-claim promotion gates open |
@@ -2372,6 +2346,13 @@ Future implementation agents should execute the following successor sequence:
 | 2026-05-30 | Added physical-volume particle deposition and built-in MHD history semantics for active expanding MHD; mapped non-delta-f conservative particle EM feedback into the final physical source frame; admitted the separate endpoint-normalized adaptive delta-f analytic source path under a narrow cell-centered envelope; added final-frame conservation and adaptive-delta-f reduced-damping source-ordering smokes | Remove the local Q-008/Q-033 composition-launch blocker without promoting bounded host mechanics into Appendix-A, CRPAI transport, MPI/HIP or external-review qualification |
 | 2026-05-30 | Checked every sequential restart-header append and stdio offset seek; added deterministic `LD_PRELOAD` short-write, seek-failure and interrupted-writer injection plus `/dev/full`, schema-mutation and soft-wallclock continuation drills | Close bounded serial-host Q-024/Q-036 fault-injection slices while preserving MPI per-rank, node-loss, scheduler-pretimeout and Frontier-filesystem gates |
 | 2026-05-30 | Passed the repaired successor Frontier control plane through its 98-test local suite, Python and shell static checks and independent adversarial retest at staged digest `12750ea6`; froze local Q-023 profiles for eight qualifying seeds plus two excluded pilots; repaired standard-MHD custom generators and isothermal timestep compatibility; corrected local-staging wording for Q-022/Q-039 | Preserve an honest local successor boundary before clean-candidate commit, paired Orion and Project Home promotion, registered Frontier execution and external review |
+| 2026-05-30 | Hardened the next Frontier control-plane candidate after fresh independent reviews: closed qualification platform relabeling and run-artifact lineage gaps, bound reconciled node-hours, anchored explicit-genesis mirrored-ledger reads, rejected permissive candidate JSON and portable-layout aliases, made immutable trees and their parents durable, made qualification and replacement publication roll back after parent-directory sync failures, synced ledger first-create and CSV replacement, preserved trusted lexical Project Home mount aliases below an anchored root, anchored output-parent creation and atomic writes below trusted roots, bound staged-policy digest equality, serialized mirrored-policy promotion, added an installed Orion build-profile writer and exposed the three closed pre-selection Frontier environment profiles with redacted capture; its 118-test local suite, 16-test ledger suite, 19-test qualification suite, 199-test publication discovery, warning-free docs and static checks pass at staged digest `d8820c33` | Preserve the live `3e933edd` install as chronology and pause all submissions until this exact candidate passes fresh independent adversarial retest, paired install, active-policy promotion and clean-candidate science freeze |
+| 2026-05-30 | Repaired four additional activation blockers reproduced by a fresh independent audit of `d8820c33`: require an explicitly open active policy before ledger genesis creation, validate immutable genesis anchors before mirror-repair writes, require coherent mirrored state before CSV publication, and close plus unset the runtime-allowlist descriptor before executing the workload; the repaired digest `121f9f8f` passes its 125-test control-plane suite, 22-test ledger suite, 20-test qualification suite, 8-test readiness-registry suite, 213-test publication discovery and static checks | Preserve the live `3e933edd` install as chronology and pause all submissions until `121f9f8f` passes fresh independent adversarial retest, paired install, active-policy promotion and clean-candidate science freeze |
+| 2026-05-30 | Preserved `121f9f8f` as superseded chronology after an independent audit found residual writeability-preflight ordering, interrupted fresh-bootstrap and completed-cancellation marker recovery gaps; hardened those paths in recovery successor digest `7b722ab2` and added focused regressions | Keep Orion unchanged and submissions paused until `7b722ab2` passes the full local gate, fresh independent adversarial retest, paired install, active-policy promotion and clean-candidate science freeze |
+| 2026-05-30 | Preserved `7b722ab2` as superseded chronology after an independent audit found stranded completed-attachment markers, mutable-source mutating-repair entry points and inherited Bash-startup descriptor duplication; hardened those paths in recovery-provenance successor digest `7ea4aa8b` and expanded exact interrupted-bootstrap prefix coverage | Keep Orion unchanged and submissions paused until `7ea4aa8b` passes the full local gate, fresh independent adversarial retest, paired install, active-policy promotion and clean-candidate science freeze |
+| 2026-05-30 | Preserved `7ea4aa8b` as superseded chronology after an adjacent-path sweep found that reconciliation did not verify its paired Project Home install before scheduler accounting queries or mirrored ledger append; hardened that path in accounting-provenance successor digest `1843ce72` and added a fail-before-query regression | Keep Orion unchanged and submissions paused until `1843ce72` passes the full local gate, fresh independent adversarial retest, paired install, active-policy promotion and clean-candidate science freeze |
+| 2026-05-30 | Preserved `1843ce72` as superseded chronology after an independent audit found bootstrap-import, mutable-source-install, ambient-Git, scheduler-environment, trampoline-path and module-provenance activation blockers; hardened those paths in bootstrap-scheduler successor digest `7397038b`, added the isolated exact-inventory runner, reviewed HEAD-blob installation, hermetic Git reads, `env -i` Frontier scheduler commands, `sbatch --export=NIL`, descriptor-anchored artifact finalization, exact canonical module provenance and an explicit paired-install lifecycle assertion, then passed its 198-test control-plane-plus-ledger suite, static checks, warning-free 58-page Sphinx build, targeted touched-file C++ lint and 274-test publication discovery | Keep Orion unchanged and submissions paused until `7397038b` passes fresh independent adversarial retest, clean commit curation, paired install, anchor migration, active-policy promotion and clean-candidate science freeze |
+| 2026-05-30 | Integrated bounded local Q-008/Q-033 expanding-box coupled-carrier restart parity, Q-009 coupled reflecting/outflow Debug-plus-UBSan lifetime stress, Q-011 frozen Section 5.4 preparation deck and fail-closed analyzer, Q-017 particle-wrapper telemetry and Q-022 fail-closed comparison map/tolerance/provenance scaffolds | Close every locally executable preparation slice without promoting bounded host mechanics, empty comparison thresholds or unexecuted paper campaigns into publication evidence |
 
 ## Source Pointers For The Initial Review
 

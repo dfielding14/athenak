@@ -13,6 +13,7 @@
     "evidence_class",
     "physical_mode",
     "git",
+    "authorization",
     "executable",
     "parameters",
     "oracle",
@@ -43,12 +44,21 @@
     "git": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["commit", "tree", "status", "source_archive", "source_bundle_sha256", "submodule_status", "submodules", "clean_candidate_manifest"],
+      "required": ["commit", "tree", "status", "source_archive", "source_commit", "source_bundle_sha256", "submodule_status", "submodules", "clean_candidate_manifest", "clean_candidate_build_profile", "clean_candidate_build_profile_receipt", "clean_candidate_build_provenance"],
       "properties": {
         "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
         "tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
         "status": {"type": "array", "items": {"type": "string", "minLength": 1, "pattern": "\\S"}},
         "source_archive": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "source_commit": {
           "type": "object",
           "additionalProperties": false,
           "required": ["path", "sha256"],
@@ -64,11 +74,13 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["path", "archive_path", "archive_sha256", "git_commit", "git_tree", "worktree_status"],
+            "required": ["path", "archive_path", "archive_sha256", "commit_path", "commit_sha256", "git_commit", "git_tree", "worktree_status"],
             "properties": {
               "path": {"type": "string", "pattern": "^(?!/)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))[^\\s/]+(?:/[^\\s/]+)*$"},
               "archive_path": {"type": "string", "minLength": 1, "pattern": "\\S"},
               "archive_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+              "commit_path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+              "commit_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
               "git_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
               "git_tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
               "worktree_status": {"const": "clean"}
@@ -83,23 +95,113 @@
             "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
             "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
           }
+        },
+        "clean_candidate_build_profile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "clean_candidate_build_profile_receipt": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "clean_candidate_build_provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["configure_log", "build_log", "cmake_cache", "module_list", "toolchain", "build_invocations", "git_status_preconfigure", "git_status", "submodule_status", "environment_allowlist", "build_environment"],
+          "properties": {
+            "configure_log": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1, "pattern": "\\S"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+            "build_log": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1, "pattern": "\\S"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+            "cmake_cache": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1, "pattern": "\\S"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+            "module_list": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1, "pattern": "\\S"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+            "toolchain": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1, "pattern": "\\S"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+            "build_invocations": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1, "pattern": "\\S"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+            "git_status_preconfigure": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1, "pattern": "\\S"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+            "git_status": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1, "pattern": "\\S"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+            "submodule_status": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1, "pattern": "\\S"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+            "environment_allowlist": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1, "pattern": "\\S"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}},
+            "build_environment": {"type": "object", "additionalProperties": false, "required": ["path", "sha256"], "properties": {"path": {"type": "string", "minLength": 1, "pattern": "\\S"}, "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}
+          }
+        }
+      }
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["control_plane_version", "clean_candidate_manifest_path", "clean_candidate_manifest_sha256", "active_policy", "active_promotion"],
+      "properties": {
+        "control_plane_version": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "clean_candidate_manifest_path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "clean_candidate_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "active_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "active_promotion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
         }
       }
     },
     "executable": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["path", "sha256", "cmake_cache", "modules", "environment_allowlist"],
       "properties": {
         "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
         "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "cmake_cache": {"type": "string", "minLength": 1, "pattern": "\\S"},
-        "modules": {"type": "string", "minLength": 1, "pattern": "\\S"},
-        "environment_allowlist": {"type": "string", "minLength": 1, "pattern": "\\S"}
+        "cmake_cache": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "modules": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "environment_allowlist": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+            "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        }
       }
     },
     "parameters": {"type": "object"},
     "oracle": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["kind", "reference", "tolerances"],
       "properties": {
         "kind": {"type": "string", "minLength": 1, "pattern": "\\S"},
@@ -110,21 +212,45 @@
     "metrics": {"type": "array", "items": {"type": "object", "minProperties": 1}, "minItems": 1},
     "resources": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["platform", "artifact_root"],
       "properties": {
-        "platform": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "platform": {"enum": ["host", "Frontier"]},
         "artifact_root": {"type": "string", "minLength": 1, "pattern": "\\S"},
         "submission_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
         "reservation_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
         "job_id": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "pre_submit_manifest_path": {"type": "string", "minLength": 1, "pattern": "\\S"},
+        "pre_submit_manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "run_artifact_dir": {"type": "string", "minLength": 1, "pattern": "\\S"},
         "node_hours": {"type": "number", "minimum": 0}
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"platform": {"const": "Frontier"}},
+            "required": ["platform"]
+          },
+          "then": {
+            "required": [
+              "submission_id",
+              "reservation_id",
+              "job_id",
+              "pre_submit_manifest_path",
+              "pre_submit_manifest_sha256",
+              "run_artifact_dir",
+              "node_hours"
+            ]
+          }
+        }
+      ]
     },
     "artifacts": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
+        "additionalProperties": false,
         "required": ["path", "sha256"],
         "properties": {
           "path": {"type": "string", "minLength": 1, "pattern": "\\S"},
@@ -134,6 +260,7 @@
     },
     "review": {
       "type": "object",
+      "additionalProperties": false,
       "required": ["reviewer", "disposition"],
       "properties": {
         "reviewer": {"type": "string", "minLength": 1, "pattern": "\\S"},

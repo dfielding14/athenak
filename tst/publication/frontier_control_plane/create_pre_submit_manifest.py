@@ -1,16 +1,24 @@
-#!/opt/cray/pe/python/3.11.7/bin/python3
+#!/opt/cray/pe/python/3.11.7/bin/python3 -I
 """Create an atomically promoted Frontier PIC pre-submit dependency snapshot."""
 
 from __future__ import annotations
 
+import sys as _sys
+if __name__ == "__main__" and "/control_plane/" in __file__ and not getattr(
+    _sys, "_pic_control_plane_bootstrapped", False
+):
+    raise SystemExit("Run installed control-plane tools through run_control_plane.py")
+
 import argparse
-import os
 from pathlib import Path
 import uuid
 
 from control_plane_common import AUTHORIZED_PIC_ROOT, CONTROL_PLANE_FILES
+from control_plane_common import PinnedStagingDirectory
 from control_plane_common import REGISTERED_SCIENCE_SCOPE, SUBMISSION_SCOPES
-from control_plane_common import make_tree_read_only, read_json, remove_tree, require_below
+from control_plane_common import durable_mkdir_parents
+from control_plane_common import make_tree_read_only
+from control_plane_common import read_json, require_below
 from control_plane_common import require_canonical_path_below
 from control_plane_common import require_no_symlink_components_below
 from control_plane_common import sha256, snapshot_file, verify_installed_control_plane
@@ -65,12 +73,14 @@ def create_manifest(
     if submission_dir.exists():
         raise ValueError(f"Submission directory already exists: {submission_dir}")
     campaign_dir = submission_dir.parent
-    campaign_dir.mkdir(parents=True, exist_ok=True)
-    temporary = campaign_dir / f".tmp-{submission_id}-{uuid.uuid4()}"
-    temporary.mkdir()
-    snapshot_dir = temporary / "snapshot"
-    snapshot_dir.mkdir()
-    try:
+    durable_mkdir_parents(campaign_dir, root=pic_root)
+    with PinnedStagingDirectory(
+        campaign_dir, prefix=f".tmp-{submission_id}-", root=pic_root
+    ) as staging:
+        temporary = staging.path
+        assert temporary is not None
+        snapshot_dir = temporary / "snapshot"
+        snapshot_dir.mkdir()
         snapshot_files = []
         snapshot_files.append(
             snapshot_file(
@@ -230,10 +240,7 @@ def create_manifest(
         write_json_exclusive(temporary / "pre_submit_manifest.json", manifest)
         make_tree_read_only(snapshot_dir, executable_names={"athena"})
         (temporary / "pre_submit_manifest.json").chmod(0o444)
-        os.replace(temporary, submission_dir)
-    finally:
-        if temporary.exists():
-            remove_tree(temporary)
+        staging.publish_tree(submission_dir)
     manifest_path = submission_dir / "pre_submit_manifest.json"
     print(manifest_path)
     return manifest_path

@@ -152,3 +152,15 @@ variable    = mhd_bcc
 id          = mhd_bcc
 dcycle      = 1
 ghost_zones = false
+
+<output5>
+file_type   = pvtk
+variable    = prtcl_all
+id          = prtcl_all
+dcycle      = 1
+
+<output6>
+file_type   = rst
+id          = rst
+dcycle      = 1
+single_file_per_rank = false

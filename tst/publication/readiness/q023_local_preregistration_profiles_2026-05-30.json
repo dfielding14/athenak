@@ -777,7 +777,7 @@
     {
       "input_id": "Q023-INPUT-EXPANDING-ADAPTIVE-DAMPING-SMOKE",
       "path": "inputs/tests/pic_mhd_expanding_box_adaptive_damping_smoke.athinput",
-      "sha256": "021ab779c0f5c8321776b6cde6e23a34b0ed03e294e32fb18067c2e5874a1ad3",
+      "sha256": "52122a6100eba205191abea2c0f560f26c30f5ca97272b7fd7dd1cfc01832ba5",
       "qualification_limit": "bounded_one_cycle_composition_launch_smoke_only"
     }
   ],

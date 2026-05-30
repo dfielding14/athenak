@@ -1,7 +1,13 @@
-#!/opt/cray/pe/python/3.11.7/bin/python3
+#!/opt/cray/pe/python/3.11.7/bin/python3 -I
 """Shared helpers for immutable Frontier PIC submission snapshots."""
 
 from __future__ import annotations
+
+import sys as _sys
+if __name__ == "__main__" and "/control_plane/" in __file__ and not getattr(
+    _sys, "_pic_control_plane_bootstrapped", False
+):
+    raise SystemExit("Run installed control-plane tools through run_control_plane.py")
 
 from datetime import datetime, timezone
 import hashlib
@@ -14,13 +20,27 @@ import shutil
 import stat
 import subprocess
 import tarfile
-from typing import Iterable
+from typing import Callable, Iterable
 import uuid
 
 
 AUTHORIZED_PIC_ROOT = Path("/lustre/orion/ast207/proj-shared/dfielding/PIC")
 AUTHORIZED_PROJECT_HOME_ROOT = Path("/ccs/proj/ast207/proj-shared/PIC")
+AUTHORIZED_CLEAN_CANDIDATE_SOURCE_ROOT = Path("/ccs/home/dfielding/athenak-pic")
 AUTHORIZED_ACCOUNT = "AST207"
+BUILD_PROVENANCE_FILENAMES = {
+    "configure_log": "configure.log",
+    "build_log": "build.log",
+    "cmake_cache": "CMakeCache.txt",
+    "module_list": "modules.txt",
+    "toolchain": "toolchain.txt",
+    "build_invocations": "build-invocations.json",
+    "git_status_preconfigure": "git_status.preconfigure.txt",
+    "git_status": "git_status.txt",
+    "submodule_status": "submodule_status.txt",
+    "environment_allowlist": "environment.allowlist.txt",
+    "build_environment": "build-environment.json",
+}
 AUTHORIZED_PARTITION = "batch"
 AUTHORIZED_NODE_HOUR_CAP = 10000.0
 AUTHORIZED_LEDGER_MIRROR_TRANSPORT = "filesystem_copy"
@@ -48,12 +68,183 @@ AUTHORIZED_LONG_TERM_STORAGE_BLOCKS = [
     "terminal_durable_retention_signoff_pending_external_review",
 ]
 TRUSTED_GIT = "/usr/bin/git"
+TRUSTED_GIT_OPTIONS = [
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "core.hooksPath=/dev/null",
+]
 TRUSTED_PYTHON = "/opt/cray/pe/python/3.11.7/bin/python3"
+TRUSTED_CMAKE = "/usr/bin/cmake"
+TRUSTED_CXX_COMPILER = "/opt/cray/pe/craype/2.7.33/bin/CC"
+TRUSTED_ROCM_PATH = "/opt/rocm-6.2.4"
+PRODUCTION_BUILD_PROFILE = "hip-mpi-release-paper-pic"
+PRODUCTION_TOOLCHAIN_DESCRIPTION = (
+    "Frontier PrgEnv-amd/8.6.0 CC wrapper /opt/cray/pe/craype/2.7.33/bin/CC, "
+    "ROCm/6.2.4 HIP /opt/rocm-6.2.4, GPU-aware Cray MPICH/8.1.31, gfx90a"
+)
+PRODUCTION_ENVIRONMENT_ALLOWLIST = [
+    ("PIC_FRONTIER_PROFILE", "frontier_minimum_supported"),
+    ("HSA_XNACK", "<unset>"),
+    ("MPICH_ENV_DISPLAY", "1"),
+    ("MPICH_VERSION_DISPLAY", "1"),
+    ("MPICH_GPU_SUPPORT_ENABLED", "1"),
+    ("MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED", "<unset>"),
+    ("MPICH_OFI_NIC_POLICY", "<unset>"),
+    ("MPICH_GPU_IPC_CACHE_MAX_SIZE", "<unset>"),
+    ("MPICH_MPIIO_HINTS", "<unset>"),
+    ("MPICH_OFI_NUM_CQ_ENTRIES", "<unset>"),
+    ("FI_MR_CACHE_MONITOR", "<unset>"),
+    ("FI_CXI_RX_MATCH_MODE", "<unset>"),
+    ("OMP_NUM_THREADS", "<unset>"),
+    ("SLURM_EXPORT_ENV", "ALL"),
+    ("ROCM_PATH", TRUSTED_ROCM_PATH),
+]
+PRODUCTION_REQUIRED_MODULES = {
+    "PrgEnv-amd/8.6.0",
+    "amd/6.2.4",
+    "rocm/6.2.4",
+    "craype/2.7.33",
+    "cray-mpich/8.1.31",
+    "cray-pmi/6.1.15",
+    "cray-libsci/24.11.0",
+    "craype-accel-amd-gfx90a",
+}
+PRODUCTION_BUILD_ENVIRONMENT = {
+    "CMAKE_PREFIX_PATH": f"{TRUSTED_ROCM_PATH}/lib/cmake/hip:{TRUSTED_ROCM_PATH}",
+    "CRAYPAT_LD_LIBRARY_PATH": "/opt/cray/pe/perftools/24.11.0/lib64",
+    "CRAYPAT_OPTS_EXECUTABLE": "libexec64/opts",
+    "CRAYPAT_ROOT": "/opt/cray/pe/perftools/24.11.0",
+    "CRAYPE_DIR": "/opt/cray/pe/craype/2.7.33",
+    "CRAYPE_LINK_TYPE": "dynamic",
+    "CRAYPE_NETWORK_TARGET": "ofi",
+    "CRAYPE_VERSION": "2.7.33",
+    "CRAY_ACCEL_TARGET": "amd_gfx90a",
+    "CRAY_ACCEL_VENDOR": "amd",
+    "CRAY_AMD_COMPILER_PREFIX": TRUSTED_ROCM_PATH,
+    "CRAY_AMD_COMPILER_VERSION": "6.2.4",
+    "CRAY_CPU_TARGET": "x86-trento",
+    "CRAY_DSMML_BASEDIR": "/opt/cray/pe/dsmml/0.3.0",
+    "CRAY_DSMML_DIR": "/opt/cray/pe/dsmml/0.3.0/dsmml",
+    "CRAY_DSMML_PREFIX": "/opt/cray/pe/dsmml/0.3.0/dsmml",
+    "CRAY_DSMML_ROOTDIR": "/opt/cray/pe/dsmml/0.3.0",
+    "CRAY_DSMML_VER": "0.3.0",
+    "CRAY_DSMML_VERSION": "0.3.0",
+    "CRAY_LD_LIBRARY_PATH": (
+        "/opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64/lib:"
+        "/opt/cray/pe/pmi/6.1.15/lib:"
+        "/opt/cray/pe/mpich/8.1.31/ofi/amd/6.0/lib:"
+        "/opt/cray/pe/mpich/8.1.31/gtl/lib:"
+        "/opt/cray/pe/perftools/24.11.0/lib64:"
+        "/opt/cray/pe/dsmml/0.3.0/dsmml/lib"
+    ),
+    "CRAY_LIBSCI_BASE_DIR": "/opt/cray/pe/libsci/24.11.0",
+    "CRAY_LIBSCI_PREFIX": "/opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64",
+    "CRAY_LIBSCI_PREFIX_DIR": "/opt/cray/pe/libsci/24.11.0/AMD/6.0/x86_64",
+    "CRAY_LIBSCI_VERSION": "24.11.0",
+    "CRAY_LMOD_COMPILER": "amd/4.0",
+    "CRAY_LMOD_CPU": "x86-trento/1.0",
+    "CRAY_LMOD_MPI": "cray-mpich/8.0",
+    "CRAY_LMOD_NET": "ofi/1.0",
+    "CRAY_MPICH_BASEDIR": "/opt/cray/pe/mpich/8.1.31/ofi",
+    "CRAY_MPICH_DIR": "/opt/cray/pe/mpich/8.1.31/ofi/amd/6.0",
+    "CRAY_MPICH_PREFIX": "/opt/cray/pe/mpich/8.1.31/ofi/amd/6.0",
+    "CRAY_MPICH_ROOTDIR": "/opt/cray/pe/mpich/8.1.31",
+    "CRAY_MPICH_VER": "8.1.31",
+    "CRAY_MPICH_VERSION": "8.1.31",
+    "CRAY_PERFTOOLS_PREFIX": "/opt/cray/pe/perftools/24.11.0",
+    "CRAY_PERFTOOLS_VERSION": "24.11.0",
+    "CRAY_PMI_INCLUDE_OPTS": "-I/opt/cray/pe/pmi/6.1.15/include",
+    "CRAY_PMI_POST_LINK_OPTS": "-L/opt/cray/pe/pmi/6.1.15/lib",
+    "CRAY_PMI_PREFIX": "/opt/cray/pe/pmi/6.1.15",
+    "CRAY_PMI_VERSION": "6.1.15",
+    "CRAY_ROCM_DIR": TRUSTED_ROCM_PATH,
+    "CRAY_ROCM_INCLUDE_OPTS": (
+        "-I/opt/rocm-6.2.4/include -I/opt/rocm-6.2.4/include/rocprofiler "
+        "-I/opt/rocm-6.2.4/include/roctracer -I/opt/rocm-6.2.4/include/hip "
+        "-D__HIP_PLATFORM_AMD__"
+    ),
+    "CRAY_ROCM_POST_LINK_OPTS": (
+        " -L/opt/rocm-6.2.4/lib -L/opt/rocm-6.2.4/lib/rocprofiler "
+        "-L/opt/rocm-6.2.4/lib/roctracer -lamdhip64"
+    ),
+    "CRAY_ROCM_PREFIX": TRUSTED_ROCM_PATH,
+    "CRAY_ROCM_VERSION": "6.2.4",
+    "CRAY_TCMALLOC_MEMFS_FORCE": "1",
+    "CRAY_XPMEM_INCLUDE_OPTS": "-I/opt/xpmem/include",
+    "CRAY_XPMEM_POST_LINK_OPTS": "-L/opt/xpmem/lib64",
+    "FI_CXI_ATS": "0",
+    "HIP_LIB_PATH": f"{TRUSTED_ROCM_PATH}/lib",
+    "HOME": "/",
+    "LANG": "C",
+    "LC_ALL": "C",
+    "MPICH_DIR": "/opt/cray/pe/mpich/8.1.31/ofi/amd/6.0",
+    "PATH": f"{TRUSTED_ROCM_PATH}/bin:/opt/cray/pe/craype/2.7.33/bin:/usr/bin:/bin",
+    "PE_AMD_FIXED_PKGCONFIG_PATH": "/opt/cray/pe/mpich/8.1.31/ofi/amd/6.0/lib/pkgconfig",
+    "PE_DSMML_MODULE_NAME": "cray-dsmml",
+    "PE_DSMML_PKGCONFIG_LIBS": "dsmml",
+    "PE_ENV": "AMD",
+    "PE_FORTRAN_PKGCONFIG_LIBS": "mpichf90",
+    "PE_LIBSCI_GENCOMPILERS_AMD_x86_64": "6.0",
+    "PE_LIBSCI_GENCOMPS_AMD_x86_64": "60",
+    "PE_LIBSCI_MODULE_NAME": "cray-libsci/24.11.0",
+    "PE_LIBSCI_OMP_REQUIRES": " ",
+    "PE_LIBSCI_OMP_REQUIRES_openmp": "_mp",
+    "PE_LIBSCI_PKGCONFIG_LIBS": "libsci_mpi:libsci",
+    "PE_LIBSCI_PKGCONFIG_VARIABLES": (
+        "PE_LIBSCI_OMP_REQUIRES_@openmp@:PE_SCI_EXT_LIBPATH:PE_SCI_EXT_LIBNAME"
+    ),
+    "PE_LIBSCI_REQUIRED_PRODUCTS": "PE_MPICH",
+    "PE_LIBSCI_VOLATILE_PKGCONFIG_PATH": (
+        "/opt/cray/pe/libsci/24.11.0/@PRGENV@/@PE_LIBSCI_GENCOMPS@/"
+        "@PE_LIBSCI_TARGET@/lib/pkgconfig"
+    ),
+    "PE_LIBSCI_VOLATILE_PRGENV": "AMD",
+    "PE_MPICH_FIXED_PRGENV": "AMD",
+    "PE_MPICH_FORTRAN_PKGCONFIG_LIBS": "mpichf90",
+    "PE_MPICH_GENCOMPILERS_AMD": "6.0",
+    "PE_MPICH_GTL_DIR_amd_gfx906": "-L/opt/cray/pe/mpich/8.1.31/gtl/lib",
+    "PE_MPICH_GTL_DIR_amd_gfx908": "-L/opt/cray/pe/mpich/8.1.31/gtl/lib",
+    "PE_MPICH_GTL_DIR_amd_gfx90a": "-L/opt/cray/pe/mpich/8.1.31/gtl/lib",
+    "PE_MPICH_GTL_DIR_amd_gfx940": "-L/opt/cray/pe/mpich/8.1.31/gtl/lib",
+    "PE_MPICH_GTL_DIR_amd_gfx942": "-L/opt/cray/pe/mpich/8.1.31/gtl/lib",
+    "PE_MPICH_GTL_DIR_nvidia70": "-L/opt/cray/pe/mpich/8.1.31/gtl/lib",
+    "PE_MPICH_GTL_DIR_nvidia80": "-L/opt/cray/pe/mpich/8.1.31/gtl/lib",
+    "PE_MPICH_GTL_DIR_nvidia90": "-L/opt/cray/pe/mpich/8.1.31/gtl/lib",
+    "PE_MPICH_GTL_DIR_ponteVecchio": "-L/opt/cray/pe/mpich/8.1.31/gtl/lib",
+    "PE_MPICH_GTL_LIBS_amd_gfx906": "-lmpi_gtl_hsa",
+    "PE_MPICH_GTL_LIBS_amd_gfx908": "-lmpi_gtl_hsa",
+    "PE_MPICH_GTL_LIBS_amd_gfx90a": "-lmpi_gtl_hsa",
+    "PE_MPICH_GTL_LIBS_amd_gfx940": "-lmpi_gtl_hsa",
+    "PE_MPICH_GTL_LIBS_amd_gfx942": "-lmpi_gtl_hsa",
+    "PE_MPICH_GTL_LIBS_nvidia70": "-lmpi_gtl_cuda",
+    "PE_MPICH_GTL_LIBS_nvidia80": "-lmpi_gtl_cuda",
+    "PE_MPICH_GTL_LIBS_nvidia90": "-lmpi_gtl_cuda",
+    "PE_MPICH_GTL_LIBS_ponteVecchio": "-lmpi_gtl_ze",
+    "PE_MPICH_MODULE_NAME": "cray-mpich",
+    "PE_MPICH_PKGCONFIG_LIBS": "mpich",
+    "PE_MPICH_PKGCONFIG_VARIABLES": (
+        "PE_MPICH_GTL_DIR_@accelerator@:PE_MPICH_GTL_LIBS_@accelerator@"
+    ),
+    "PE_PERFTOOLS_MPICH_LIBDIR": "/opt/cray/pe/mpich/8.1.31/ofi/amd/6.0/lib",
+    "PE_PKGCONFIG_LIBS": "libsci_mpi:libsci:mpich:rocm-6.2.4:dsmml",
+    "PE_PKGCONFIG_PRODUCTS": "PE_LIBSCI:PE_PMI:PE_MPICH:PE_DSMML:PE_XPMEM",
+    "PE_PMI_PKGCONFIG_LIBS": "cray-pmi",
+    "PE_PRODUCT_LIST": "CRAY_PMI:CRAYPE:CRAYPE_X86_TRENTO:PERFTOOLS:CRAYPAT:CRAY_ROCM:CRAY_ACCEL",
+    "PE_XPMEM_PKGCONFIG_LIBS": "xpmem",
+    "PKG_CONFIG_PATH": (
+        "/opt/cray/pe/pmi/6.1.15/lib/pkgconfig:"
+        "/opt/cray/pe/craype/2.7.33/pkg-config:/usr/lib64/pkgconfig:"
+        "/opt/cray/pe/dsmml/0.3.0/dsmml/lib/pkgconfig:/opt/cray/libfabric/2.3.1/lib64/pkgconfig"
+    ),
+    "ROCM_PATH": TRUSTED_ROCM_PATH,
+}
 TRUSTED_SQUEUE = "/usr/bin/squeue"
 TRUSTED_SCONTROL = "/usr/bin/scontrol"
 TRUSTED_SACCT = "/usr/bin/sacct"
 TRUSTED_SBATCH = "/usr/bin/sbatch"
 TRUSTED_SCANCEL = "/usr/bin/scancel"
+AUTHORIZED_SLURM_CLUSTER = "frontier"
 REGISTERED_SCIENCE_SCOPE = "registered_science"
 FRONTIER_ADMISSION_SMOKE_SCOPE = "frontier_admission_smoke"
 SUBMISSION_SCOPES = {
@@ -81,9 +272,11 @@ CONTROL_PLANE_FILES = [
     "ledger.py",
     "promote_active_policy.py",
     "reconcile_frontier_job.py",
+    "run_control_plane.py",
     "submit_frontier_job.sh",
     "validate_and_reserve_frontier_job.py",
     "verify_compute_node_snapshot.py",
+    "write_orion_build_profile.py",
 ]
 PLACEHOLDER_PATTERN = re.compile(rb"REPLACE_[A-Z0-9_]+")
 SENSITIVE_PATTERN = re.compile(
@@ -104,6 +297,150 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def trusted_git_environment() -> dict[str, str]:
+    """Return a Git environment that does not load caller-controlled config."""
+    return {
+        "GIT_CONFIG_GLOBAL": "/dev/null",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "HOME": "/",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/usr/bin:/bin",
+    }
+
+
+def trusted_git_command(*arguments: str) -> list[str]:
+    """Return a Git argv that disables repository-local command execution hooks."""
+    return [TRUSTED_GIT, *TRUSTED_GIT_OPTIONS, *arguments]
+
+
+def trusted_slurm_environment() -> dict[str, str]:
+    """Return a scheduler environment that cannot inherit caller routing controls."""
+    return {
+        "HOME": "/",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/usr/bin:/bin",
+        "SLURM_CLUSTERS": AUTHORIZED_SLURM_CLUSTER,
+    }
+
+
+def production_environment_allowlist_bytes() -> bytes:
+    return "".join(f"{name}={value}\n" for name, value in PRODUCTION_ENVIRONMENT_ALLOWLIST).encode(
+        "utf-8"
+    )
+
+
+def production_module_list_bytes() -> bytes:
+    """Return the exact reviewed module selection recorded for production builds."""
+    return (":".join(sorted(PRODUCTION_REQUIRED_MODULES)) + "\n").encode("utf-8")
+
+
+def require_production_build_environment(environment: dict[str, object]) -> None:
+    """Reject caller-controlled process state from the reviewed build subprocesses."""
+    if any(not isinstance(key, str) or not isinstance(value, str) for key, value in environment.items()):
+        raise ValueError("Production build environment must contain only text keys and values")
+    if environment != PRODUCTION_BUILD_ENVIRONMENT:
+        raise ValueError("Production build environment differs from the reviewed exact values")
+
+
+def production_build_invocations(
+    *,
+    authorized_pic_root: Path,
+    git_commit: str,
+    profile_id: str,
+) -> dict[str, list[str]]:
+    """Return the one reviewed production build argv pair."""
+    if re.fullmatch(r"[0-9a-f]{40}", git_commit) is None:
+        raise ValueError("Build-profile Git commit must be a full lowercase hexadecimal commit")
+    if profile_id != PRODUCTION_BUILD_PROFILE:
+        raise ValueError(f"Unsupported installed Frontier build profile: {profile_id}")
+    root = Path(os.path.abspath(authorized_pic_root))
+    cmake_dir = root / "build" / git_commit[:12] / profile_id / "cmake"
+    fresh_source = root / "build" / git_commit[:12] / profile_id / "source"
+    return {
+        "configure": [
+            TRUSTED_CMAKE,
+            "-S",
+            str(fresh_source),
+            "-B",
+            str(cmake_dir),
+            "-DCMAKE_BUILD_TYPE=Release",
+            "-DAthena_ENABLE_MPI=ON",
+            "-DKokkos_ENABLE_HIP=ON",
+            "-DKokkos_ARCH_ZEN3=ON",
+            "-DKokkos_ARCH_AMD_GFX90A=ON",
+            f"-DCMAKE_CXX_COMPILER={TRUSTED_CXX_COMPILER}",
+            f"-DCMAKE_CXX_FLAGS=-I{TRUSTED_ROCM_PATH}/include",
+            f"-DCMAKE_EXE_LINKER_FLAGS=-L{TRUSTED_ROCM_PATH}/lib -lamdhip64",
+            "-DPROBLEM=built_in_pgens",
+        ],
+        "build": [TRUSTED_CMAKE, "--build", str(cmake_dir), "--parallel", "32"],
+    }
+
+
+def require_production_build_provenance(
+    *,
+    authorized_pic_root: Path,
+    git_commit: str,
+    profile_id: str,
+    toolchain: str,
+    invocations: dict[str, object],
+    module_list: bytes,
+    environment_allowlist: bytes,
+    build_environment: bytes,
+) -> None:
+    """Require exact production semantics for artifacts rooted in the Orion PIC tree."""
+    if Path(os.path.abspath(authorized_pic_root)) != Path(os.path.abspath(AUTHORIZED_PIC_ROOT)):
+        return
+    if profile_id != PRODUCTION_BUILD_PROFILE:
+        raise ValueError(f"Unsupported installed Frontier build profile: {profile_id}")
+    if toolchain != PRODUCTION_TOOLCHAIN_DESCRIPTION:
+        raise ValueError("Production build toolchain description differs from the reviewed value")
+    if invocations != production_build_invocations(
+        authorized_pic_root=authorized_pic_root,
+        git_commit=git_commit,
+        profile_id=profile_id,
+    ):
+        raise ValueError("Production build invocations differ from the reviewed argv")
+    if environment_allowlist != production_environment_allowlist_bytes():
+        raise ValueError("Production build environment differs from the reviewed allowlist")
+    try:
+        environment = read_json_bytes(build_environment, label="production build environment")
+    except ValueError as error:
+        raise ValueError("Production build environment is not valid JSON") from error
+    require_production_build_environment(environment)
+    if module_list != production_module_list_bytes():
+        raise ValueError("Production module list differs from the reviewed exact selection")
+
+
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"Non-finite JSON number is not allowed: {value}")
+
+
+def _reject_duplicate_json_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"Duplicate JSON object key is not allowed: {key}")
+        value[key] = item
+    return value
+
+
+def read_json_bytes(data: bytes, *, label: str) -> dict[str, object]:
+    try:
+        value = json.loads(
+            data.decode("utf-8"),
+            parse_constant=_reject_json_constant,
+            object_pairs_hook=_reject_duplicate_json_pairs,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"Expected valid UTF-8 JSON in {label}") from error
+    if not isinstance(value, dict):
+        raise ValueError(f"Expected a JSON object in {label}")
+    return value
+
+
 def read_stable_regular_file(path: Path, *, require_read_only_mode: bool = False) -> bytes:
     """Read one non-symlink regular file once so later checks use identical bytes."""
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
@@ -120,10 +457,106 @@ def read_stable_regular_file(path: Path, *, require_read_only_mode: bool = False
         os.close(descriptor)
 
 
+def read_stable_regular_file_below(
+    path: Path,
+    root: Path,
+    *,
+    require_read_only_mode: bool = False,
+) -> bytes:
+    """Read a file through anchored non-symlink directories below one trusted root."""
+    lexical_root = Path(os.path.abspath(root))
+    lexical_root.resolve(strict=True)
+    lexical_path = Path(os.path.abspath(path))
+    try:
+        relative = lexical_path.relative_to(lexical_root)
+    except ValueError as error:
+        raise ValueError(f"Path is outside authorized lexical root: {lexical_path}") from error
+    if not relative.parts:
+        raise ValueError(f"Expected a file below authorized root: {lexical_path}")
+    directory_flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+    file_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    root_descriptor = os.open(
+        lexical_root,
+        os.O_RDONLY | os.O_DIRECTORY,
+    )
+    directory_descriptor = root_descriptor
+    descriptor: int | None = None
+    try:
+        for part in relative.parts[:-1]:
+            next_descriptor = os.open(part, directory_flags, dir_fd=directory_descriptor)
+            if directory_descriptor != root_descriptor:
+                os.close(directory_descriptor)
+            directory_descriptor = next_descriptor
+        descriptor = os.open(relative.parts[-1], file_flags, dir_fd=directory_descriptor)
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ValueError(f"Artifact is not a regular file: {path}")
+        if require_read_only_mode and metadata.st_mode & 0o222:
+            raise ValueError(f"Artifact is not read-only: {path}")
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            return stream.read()
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        if directory_descriptor != root_descriptor:
+            os.close(directory_descriptor)
+        os.close(root_descriptor)
+
+
 def git_archive_commit_from_bytes(data: bytes) -> str:
     return subprocess.check_output(
-        [TRUSTED_GIT, "get-tar-commit-id"], input=data
+        trusted_git_command("get-tar-commit-id"),
+        input=data,
+        env=trusted_git_environment(),
     ).decode("ascii").strip()
+
+
+def git_commit_tree_from_bytes(data: bytes, *, expected_commit: str) -> str:
+    """Verify one raw Git commit object and return its referenced tree."""
+    if not re.fullmatch(r"[0-9a-f]{40}", expected_commit):
+        raise ValueError("Git commit object ID is malformed")
+    try:
+        actual_commit = subprocess.check_output(
+            trusted_git_command("hash-object", "--stdin", "-t", "commit"),
+            input=data,
+            stderr=subprocess.PIPE,
+            env=trusted_git_environment(),
+        ).decode("ascii").strip()
+    except subprocess.CalledProcessError as error:
+        raise ValueError("Raw Git commit object is malformed") from error
+    if actual_commit != expected_commit:
+        raise ValueError("Raw Git commit object does not match its declared ID")
+    headers, separator, _ = data.partition(b"\n\n")
+    if not separator:
+        raise ValueError("Raw Git commit object has no message separator")
+    names: list[bytes] = []
+    values: list[bytes] = []
+    for line in headers.splitlines():
+        if line.startswith(b" "):
+            if not names:
+                raise ValueError("Raw Git commit object starts with a continuation header")
+            continue
+        match = re.fullmatch(rb"([a-z][a-z0-9-]*) (.+)", line)
+        if match is None:
+            raise ValueError("Raw Git commit object has a malformed header")
+        names.append(match.group(1))
+        values.append(match.group(2))
+    if not names:
+        raise ValueError("Raw Git commit object has no headers")
+    match = re.fullmatch(rb"([0-9a-f]{40})", values[0]) if names[0] == b"tree" else None
+    if match is None:
+        raise ValueError("Raw Git commit object has no canonical tree header")
+    index = 1
+    while index < len(names) and names[index] == b"parent":
+        if re.fullmatch(rb"[0-9a-f]{40}", values[index]) is None:
+            raise ValueError("Raw Git commit object has a malformed parent header")
+        index += 1
+    if names[index:index + 2] != [b"author", b"committer"]:
+        raise ValueError("Raw Git commit object has noncanonical identity headers")
+    reserved = {b"tree", b"parent", b"author", b"committer"}
+    if any(name in reserved for name in names[index + 2:]):
+        raise ValueError("Raw Git commit object repeats a reserved header")
+    return match.group(1).decode("ascii")
 
 
 def canonical_relative_posix_path(value: object, *, field: str) -> PurePosixPath:
@@ -189,11 +622,14 @@ def direct_submodule_gitlinks(
 
 
 def source_bundle_sha256(
-    source_archive_sha256: str, submodules: Iterable[dict[str, object]]
+    source_archive_sha256: str,
+    source_commit_sha256: str,
+    submodules: Iterable[dict[str, object]],
 ) -> str:
-    """Bind one parent archive and its ordered recursive submodule archives."""
+    """Bind parent and recursive-submodule archives plus raw Git commit objects."""
     value = {
         "source_archive_sha256": source_archive_sha256,
+        "source_commit_sha256": source_commit_sha256,
         "submodules": list(submodules),
     }
     return hashlib.sha256(
@@ -293,23 +729,74 @@ def git_tree_sha1_from_archive(
     )
 
 
+def _documented_build_provenance_paths(
+    *,
+    authorized_pic_root: Path,
+    git_commit: str,
+    profile_id: str,
+) -> dict[str, Path]:
+    """Return the reviewed Orion provenance layout for one build profile."""
+    if re.fullmatch(r"[0-9a-f]{40}", git_commit) is None:
+        raise ValueError("Build-profile Git commit must be a full lowercase hexadecimal commit")
+    profile_id = profile_id.strip()
+    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", profile_id) is None:
+        raise ValueError("Build-profile ID must be a safe path component")
+    authorized_pic_root = Path(os.path.abspath(authorized_pic_root))
+    stem = f"{git_commit[:12]}.{profile_id}"
+    artifact_dir = authorized_pic_root / "bin" / git_commit[:12] / profile_id
+    log_dir = authorized_pic_root / "logs" / "build"
+    return {
+        "configure_log": log_dir / f"{stem}.configure.log",
+        "build_log": log_dir / f"{stem}.build.log",
+        "cmake_cache": artifact_dir / "CMakeCache.txt",
+        "module_list": artifact_dir / "modules.txt",
+        "toolchain": artifact_dir / "toolchain.txt",
+        "build_invocations": artifact_dir / "build-invocations.json",
+        "git_status_preconfigure": artifact_dir / "git_status.preconfigure.txt",
+        "git_status": artifact_dir / "git_status.txt",
+        "submodule_status": artifact_dir / "submodule_status.txt",
+        "environment_allowlist": artifact_dir / "environment.allowlist.txt",
+        "build_environment": artifact_dir / "build-environment.json",
+    }
+
+
 def validate_clean_candidate_bundle(
     candidate: dict[str, object],
     *,
     source_archive: bytes,
+    source_commit: bytes,
     submodule_archives: list[bytes],
+    submodule_commits: list[bytes],
+    build_profile: bytes,
+    build_profile_receipt: bytes,
+    build_provenance: dict[str, bytes],
     executable_sha256: str,
+    expected_control_plane_version: str | None = None,
+    authorized_pic_root: Path | None = None,
+    authorized_source_root: Path | None = None,
 ) -> list[dict[str, str]]:
-    """Validate the path-independent cryptographic closure of one candidate."""
+    """Validate the cryptographic closure and production-authorized build layout."""
+    authorized_pic_root = Path(
+        os.path.abspath(AUTHORIZED_PIC_ROOT if authorized_pic_root is None else authorized_pic_root)
+    )
+    authorized_source_root = Path(
+        os.path.abspath(
+            AUTHORIZED_CLEAN_CANDIDATE_SOURCE_ROOT
+            if authorized_source_root is None
+            else authorized_source_root
+        )
+    )
     if set(candidate) != {"schema_version", "freeze_id", "created_utc", "source", "build"}:
         raise ValueError("Clean-candidate manifest has unexpected top-level fields")
-    if candidate.get("schema_version") != 2:
+    if candidate.get("schema_version") != 3:
         raise ValueError("Unsupported clean-candidate manifest schema")
     source = candidate.get("source")
     build = candidate.get("build")
     if not isinstance(source, dict) or set(source) != {
         "archive_path",
         "archive_sha256",
+        "commit_path",
+        "commit_sha256",
         "source_bundle_sha256",
         "git_commit",
         "git_tree",
@@ -322,10 +809,13 @@ def validate_clean_candidate_bundle(
         "profile_id",
         "profile_path",
         "profile_sha256",
+        "profile_receipt_path",
+        "profile_receipt_sha256",
         "source_archive_sha256",
+        "source_commit_sha256",
         "source_bundle_sha256",
         "toolchain",
-        "build_command",
+        "build_invocations_sha256",
         "executable_path",
         "executable_sha256",
     }:
@@ -333,6 +823,9 @@ def validate_clean_candidate_bundle(
     source_digest = str(source.get("archive_sha256", ""))
     if sha256_bytes(source_archive) != source_digest:
         raise ValueError("Clean-candidate source archive checksum mismatch")
+    source_commit_digest = str(source.get("commit_sha256", ""))
+    if sha256_bytes(source_commit) != source_commit_digest:
+        raise ValueError("Clean-candidate source commit-object checksum mismatch")
     git_commit = str(source.get("git_commit", ""))
     git_tree = str(source.get("git_tree", ""))
     if not re.fullmatch(r"[0-9a-f]{40}", git_commit):
@@ -341,15 +834,29 @@ def validate_clean_candidate_bundle(
         raise ValueError("Clean-candidate Git tree is malformed")
     if source.get("worktree_status") != "clean":
         raise ValueError("Clean-candidate source worktree is not attested clean")
+    freeze_id = str(candidate.get("freeze_id", ""))
+    try:
+        uuid.UUID(freeze_id)
+    except ValueError as error:
+        raise ValueError("Clean-candidate freeze ID is malformed") from error
+    utc_datetime(candidate.get("created_utc"), field="clean_candidate.created_utc")
     records = source.get("submodules")
-    if not isinstance(records, list) or len(records) != len(submodule_archives):
+    if (
+        not isinstance(records, list)
+        or len(records) != len(submodule_archives)
+        or len(records) != len(submodule_commits)
+    ):
         raise ValueError("Clean-candidate submodule archive count mismatch")
     profile_records: list[dict[str, str]] = []
-    for index, (record, archive) in enumerate(zip(records, submodule_archives)):
+    for index, (record, archive, commit_object) in enumerate(
+        zip(records, submodule_archives, submodule_commits)
+    ):
         if not isinstance(record, dict) or set(record) != {
             "path",
             "archive_path",
             "archive_sha256",
+            "commit_path",
+            "commit_sha256",
             "git_commit",
             "git_tree",
             "worktree_status",
@@ -361,22 +868,30 @@ def validate_clean_candidate_bundle(
         commit = str(record.get("git_commit", ""))
         tree = str(record.get("git_tree", ""))
         archive_digest = str(record.get("archive_sha256", ""))
+        commit_digest = str(record.get("commit_sha256", ""))
         if not re.fullmatch(r"[0-9a-f]{40}", commit):
             raise ValueError("Clean-candidate submodule Git commit is malformed")
         if not re.fullmatch(r"[0-9a-f]{40}", tree):
             raise ValueError("Clean-candidate submodule Git tree is malformed")
         if not re.fullmatch(r"[0-9a-f]{64}", archive_digest):
             raise ValueError("Clean-candidate submodule archive checksum is malformed")
+        if not re.fullmatch(r"[0-9a-f]{64}", commit_digest):
+            raise ValueError("Clean-candidate submodule commit-object checksum is malformed")
         if record.get("worktree_status") != "clean":
             raise ValueError("Clean-candidate submodule worktree is not attested clean")
         if sha256_bytes(archive) != archive_digest:
             raise ValueError("Clean-candidate submodule archive checksum mismatch")
+        if sha256_bytes(commit_object) != commit_digest:
+            raise ValueError("Clean-candidate submodule commit-object checksum mismatch")
         if git_archive_commit_from_bytes(archive) != commit:
             raise ValueError("Clean-candidate submodule archive does not identify its commit")
+        if git_commit_tree_from_bytes(commit_object, expected_commit=commit) != tree:
+            raise ValueError("Clean-candidate submodule commit object does not match its Git tree")
         profile_records.append(
             {
                 "path": path,
                 "archive_sha256": archive_digest,
+                "commit_sha256": commit_digest,
                 "git_commit": commit,
                 "git_tree": tree,
             }
@@ -401,6 +916,8 @@ def validate_clean_candidate_bundle(
             raise ValueError("Clean-candidate submodule archive does not match its Git tree")
     if git_archive_commit_from_bytes(source_archive) != git_commit:
         raise ValueError("Clean-candidate source archive does not identify its Git commit")
+    if git_commit_tree_from_bytes(source_commit, expected_commit=git_commit) != git_tree:
+        raise ValueError("Clean-candidate source commit object does not match its Git tree")
     if (
         git_tree_sha1_from_archive_bytes(
             source_archive,
@@ -410,28 +927,183 @@ def validate_clean_candidate_bundle(
         != git_tree
     ):
         raise ValueError("Clean-candidate source archive does not match its Git tree")
-    bundle_digest = source_bundle_sha256(source_digest, profile_records)
+    bundle_digest = source_bundle_sha256(
+        source_digest, source_commit_digest, profile_records
+    )
     if (
         source.get("source_bundle_sha256") != bundle_digest
         or build.get("source_archive_sha256") != source_digest
+        or build.get("source_commit_sha256") != source_commit_digest
         or build.get("source_bundle_sha256") != bundle_digest
         or build.get("executable_sha256") != executable_sha256
     ):
         raise ValueError("Clean-candidate build is not bound to its frozen source bundle")
+    if sha256_bytes(build_profile) != build.get("profile_sha256"):
+        raise ValueError("Clean-candidate build-profile checksum mismatch")
+    if sha256_bytes(build_profile_receipt) != build.get("profile_receipt_sha256"):
+        raise ValueError("Clean-candidate build-profile receipt checksum mismatch")
+    try:
+        profile = read_json_bytes(build_profile, label="clean-candidate build profile")
+    except ValueError as error:
+        raise ValueError("Clean-candidate build profile is not valid JSON") from error
+    for field in ("profile_id", "toolchain"):
+        if not isinstance(build.get(field), str) or not str(build[field]).strip():
+            raise ValueError(f"Clean-candidate build {field} must not be blank")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(build.get("build_invocations_sha256", ""))):
+        raise ValueError("Clean-candidate build invocation checksum is malformed")
+    expected_provenance_paths = _documented_build_provenance_paths(
+        authorized_pic_root=authorized_pic_root,
+        git_commit=git_commit,
+        profile_id=str(build["profile_id"]),
+    )
+    if set(build_provenance) != set(BUILD_PROVENANCE_FILENAMES):
+        raise ValueError("Frozen build provenance input set is incomplete")
+    provenance_inputs = profile.get("provenance_inputs")
+    if (
+        not isinstance(provenance_inputs, dict)
+        or set(provenance_inputs) != set(BUILD_PROVENANCE_FILENAMES)
+    ):
+        raise ValueError("Frozen build profile provenance input set is incomplete")
+    provenance_records: dict[str, dict[str, str]] = {}
+    for label in BUILD_PROVENANCE_FILENAMES:
+        record = provenance_inputs[label]
+        if not isinstance(record, dict) or set(record) != {"path", "sha256"}:
+            raise ValueError(f"Malformed frozen build provenance input: {label}")
+        path = str(record.get("path", ""))
+        digest = str(record.get("sha256", ""))
+        if not path or not Path(path).is_absolute():
+            raise ValueError(f"Frozen build provenance path is not absolute: {label}")
+        if path != str(expected_provenance_paths[label]):
+            raise ValueError(
+                f"Frozen build provenance path does not use documented Orion layout: {label}"
+            )
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise ValueError(f"Malformed frozen build provenance checksum: {label}")
+        if sha256_bytes(build_provenance[label]) != digest:
+            raise ValueError(f"Frozen build provenance checksum mismatch: {label}")
+        provenance_records[label] = {"path": path, "sha256": digest}
+    if build_provenance["git_status_preconfigure"]:
+        raise ValueError("Frozen preconfigure Git status must be empty")
+    if build_provenance["git_status"]:
+        raise ValueError("Frozen build Git status must be empty")
+    for label in set(BUILD_PROVENANCE_FILENAMES) - {
+        "git_status_preconfigure",
+        "git_status",
+        "submodule_status",
+    }:
+        if not build_provenance[label]:
+            raise ValueError(f"Frozen build provenance input must not be empty: {label}")
+    try:
+        toolchain = build_provenance["toolchain"].decode("utf-8").strip()
+        invocations = read_json_bytes(
+            build_provenance["build_invocations"], label="frozen build invocations"
+        )
+    except UnicodeDecodeError as error:
+        raise ValueError("Frozen build reviewed provenance must be UTF-8 text") from error
+    profile_authorized_source_root = profile.get("authorized_source_root")
+    if profile_authorized_source_root != str(authorized_source_root):
+        raise ValueError("Frozen build profile does not use the authorized source root")
+    if (
+        set(invocations) != {"configure", "build"}
+        or any(
+            not isinstance(invocations[key], list)
+            or not invocations[key]
+            or any(not isinstance(token, str) or not token for token in invocations[key])
+            for key in ["configure", "build"]
+        )
+    ):
+        raise ValueError("Frozen build invocations are malformed")
+    require_production_build_provenance(
+        authorized_pic_root=authorized_pic_root,
+        git_commit=git_commit,
+        profile_id=str(build["profile_id"]),
+        toolchain=toolchain,
+        invocations=invocations,
+        module_list=build_provenance["module_list"],
+        environment_allowlist=build_provenance["environment_allowlist"],
+        build_environment=build_provenance["build_environment"],
+    )
+    invocation_sha256 = sha256_bytes(build_provenance["build_invocations"])
+    fresh_source_root = (
+        authorized_pic_root
+        / "build"
+        / git_commit[:12]
+        / str(build["profile_id"])
+        / "source"
+    )
+    if profile != {
+        "schema_version": 3,
+        "profile_id": build.get("profile_id"),
+        "authorized_source_root": str(authorized_source_root),
+        "fresh_source_root": str(fresh_source_root),
+        "git_commit": git_commit,
+        "git_tree": git_tree,
+        "source_archive_sha256": source_digest,
+        "source_commit_sha256": source_commit_digest,
+        "source_bundle_sha256": bundle_digest,
+        "toolchain": toolchain,
+        "build_invocations_sha256": invocation_sha256,
+        "executable_sha256": executable_sha256,
+        "provenance_inputs": provenance_records,
+        "submodules": profile_records,
+    }:
+        raise ValueError("Frozen build profile does not match clean-candidate attestation")
+    if (
+        build.get("toolchain") != toolchain
+        or build.get("build_invocations_sha256") != invocation_sha256
+    ):
+        raise ValueError("Clean-candidate build metadata differs from frozen provenance")
+    try:
+        receipt = read_json_bytes(
+            build_profile_receipt, label="clean-candidate build-profile receipt"
+        )
+    except ValueError as error:
+        raise ValueError("Clean-candidate build-profile receipt is not valid JSON") from error
+    artifact_dir = (
+        authorized_pic_root / "bin" / git_commit[:12] / str(build["profile_id"])
+    )
+    control_plane_version = str(receipt.get("control_plane_version", ""))
+    if not re.fullmatch(r"[0-9a-f]{64}", control_plane_version):
+        raise ValueError("Build-profile receipt control-plane version is malformed")
+    if (
+        expected_control_plane_version is not None
+        and control_plane_version != expected_control_plane_version
+    ):
+        raise ValueError("Build-profile receipt belongs to another control-plane version")
+    expected_receipt = {
+        "schema_version": 1,
+        "control_plane_version": control_plane_version,
+        "profile_path": str(artifact_dir / "build_profile.json"),
+        "profile_sha256": sha256_bytes(build_profile),
+        "source_bundle_sha256": bundle_digest,
+        "fresh_source_root": str(fresh_source_root),
+        "build_invocations_sha256": invocation_sha256,
+        "git_status_preconfigure_sha256": provenance_records[
+            "git_status_preconfigure"
+        ]["sha256"],
+        "git_status_sha256": provenance_records["git_status"]["sha256"],
+        "configure_log_sha256": provenance_records["configure_log"]["sha256"],
+        "build_log_sha256": provenance_records["build_log"]["sha256"],
+        "executable_path": str(artifact_dir / "athena"),
+        "executable_sha256": executable_sha256,
+    }
+    if receipt != expected_receipt:
+        raise ValueError("Frozen build-profile receipt does not match clean candidate")
     return profile_records
 
 
 def read_json(path: Path) -> dict[str, object]:
-    value = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(value, dict):
-        raise ValueError(f"Expected a JSON object in {path}")
-    return value
+    return read_json_bytes(read_stable_regular_file(path), label=str(path))
 
 
 def utc_datetime(value: object, *, field: str) -> datetime:
     text = str(value)
-    if not text.endswith("Z"):
-        raise ValueError(f"{field} must be an RFC-3339 UTC timestamp ending in Z")
+    if re.fullmatch(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+        r"(?:\.[0-9]{1,6})?Z",
+        text,
+    ) is None:
+        raise ValueError(f"{field} must be a canonical RFC-3339 UTC timestamp")
     try:
         result = datetime.fromisoformat(text[:-1] + "+00:00")
     except ValueError as error:
@@ -442,30 +1114,471 @@ def utc_datetime(value: object, *, field: str) -> datetime:
 
 
 def write_json_exclusive(path: Path, value: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    durable_mkdir_parents(path.parent)
     with path.open("x", encoding="utf-8") as stream:
-        json.dump(value, stream, indent=2, sort_keys=True)
+        json.dump(value, stream, indent=2, sort_keys=True, allow_nan=False)
         stream.write("\n")
 
 
-def atomic_write_bytes(path: Path, data: bytes, *, mode: int = 0o444) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.parent / f".{path.name}.tmp-{uuid.uuid4()}"
+def fsync_directory(path: Path) -> None:
+    """Sync one existing directory without following a symlink alias."""
+    descriptor = os.open(
+        path,
+        os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+    )
     try:
-        with temporary.open("xb") as stream:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def durable_mkdir_parents(
+    path: Path, *, mode: int = 0o755, root: Path | None = None
+) -> None:
+    """Create missing descendants below an optional trusted lexical root."""
+    path = Path(os.path.abspath(path))
+    if root is None:
+        anchor = path
+        while not anchor.exists():
+            if anchor.parent == anchor:
+                raise FileNotFoundError(
+                    f"No existing ancestor for directory creation: {path}"
+                )
+            anchor = anchor.parent
+    else:
+        lexical_root = Path(os.path.abspath(root))
+        try:
+            path.relative_to(lexical_root)
+        except ValueError as error:
+            raise ValueError(
+                f"Directory path is outside trusted lexical root: {path}"
+            ) from error
+        anchor = lexical_root
+        while not anchor.exists():
+            if anchor.parent == anchor:
+                raise FileNotFoundError(
+                    f"No existing trusted-root ancestor for directory creation: {path}"
+                )
+            anchor = anchor.parent
+    try:
+        relative = path.relative_to(anchor)
+    except ValueError as error:
+        raise ValueError(f"Directory path is outside trusted lexical root: {path}") from error
+    flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+    anchor_flags = flags
+    if root is not None and anchor == Path(os.path.abspath(root)):
+        anchor_flags = os.O_RDONLY | os.O_DIRECTORY
+    parent_descriptor = os.open(anchor, anchor_flags)
+    try:
+        for part in relative.parts:
+            created = False
+            try:
+                child_descriptor = os.open(part, flags, dir_fd=parent_descriptor)
+            except FileNotFoundError:
+                os.mkdir(part, mode=mode, dir_fd=parent_descriptor)
+                child_descriptor = os.open(part, flags, dir_fd=parent_descriptor)
+                created = True
+            if created:
+                os.fsync(child_descriptor)
+                os.fsync(parent_descriptor)
+            os.close(parent_descriptor)
+            parent_descriptor = child_descriptor
+    finally:
+        os.close(parent_descriptor)
+
+
+def _open_parent_directory(
+    path: Path, *, root: Path | None = None
+) -> int:
+    """Open an output parent through no-follow traversal below a trusted root."""
+    path = Path(os.path.abspath(path))
+    anchor = Path("/") if root is None else Path(os.path.abspath(root))
+    try:
+        relative = path.relative_to(anchor)
+    except ValueError as error:
+        raise ValueError(f"Output parent is outside trusted lexical root: {path}") from error
+    flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+    parent_descriptor = os.open(
+        anchor,
+        os.O_RDONLY | os.O_DIRECTORY if root is not None else flags,
+    )
+    try:
+        for part in relative.parts:
+            child_descriptor = os.open(part, flags, dir_fd=parent_descriptor)
+            os.close(parent_descriptor)
+            parent_descriptor = child_descriptor
+    except BaseException:
+        os.close(parent_descriptor)
+        raise
+    return parent_descriptor
+
+
+def open_directory_below(path: Path, *, root: Path) -> int:
+    """Open one directory through anchored no-follow traversal below root."""
+    path = Path(os.path.abspath(path))
+    root = Path(os.path.abspath(root))
+    if path == root:
+        return os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    parent_descriptor = _open_parent_directory(path.parent, root=root)
+    try:
+        return os.open(
+            path.name,
+            os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=parent_descriptor,
+        )
+    finally:
+        os.close(parent_descriptor)
+
+
+def atomic_write_bytes(
+    path: Path,
+    data: bytes,
+    *,
+    mode: int = 0o444,
+    replace: bool = True,
+    root: Path | None = None,
+) -> None:
+    path = Path(os.path.abspath(path))
+    if not path.name or path.name in {".", ".."}:
+        raise ValueError("Atomic output path must name one file")
+    durable_mkdir_parents(path.parent, root=root)
+    parent_descriptor = _open_parent_directory(path.parent, root=root)
+    try:
+        _require_same_directory(path.parent, parent_descriptor, root=root)
+        atomic_write_bytes_at(
+            parent_descriptor,
+            path.name,
+            data,
+            mode=mode,
+            replace=replace,
+            post_publish_check=lambda: _require_same_directory(
+                path.parent, parent_descriptor, root=root
+            ),
+        )
+    finally:
+        os.close(parent_descriptor)
+
+
+def atomic_write_bytes_at(
+    parent_descriptor: int,
+    name: str,
+    data: bytes,
+    *,
+    mode: int = 0o444,
+    replace: bool = True,
+    post_publish_check: Callable[[], None] | None = None,
+) -> None:
+    """Publish one file relative to a retained trusted parent descriptor."""
+    if not name or name in {".", ".."} or Path(name).name != name:
+        raise ValueError("Atomic output path must name one file")
+    temporary_name = f".{name}.tmp-{uuid.uuid4()}"
+    temporary_exists = False
+    rollback_name: str | None = None
+    try:
+        descriptor = os.open(
+            temporary_name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+            dir_fd=parent_descriptor,
+        )
+        temporary_exists = True
+        with os.fdopen(descriptor, "wb") as stream:
             stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
-        temporary.chmod(mode)
-        temporary.replace(path)
+            os.fchmod(stream.fileno(), mode)
+            os.fsync(stream.fileno())
+        if replace:
+            rollback_name = f".{name}.rollback-{uuid.uuid4()}"
+            try:
+                os.link(
+                    name,
+                    rollback_name,
+                    src_dir_fd=parent_descriptor,
+                    dst_dir_fd=parent_descriptor,
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                rollback_name = None
+            replacement_visible = False
+            try:
+                os.replace(
+                    temporary_name,
+                    name,
+                    src_dir_fd=parent_descriptor,
+                    dst_dir_fd=parent_descriptor,
+                )
+                temporary_exists = False
+                replacement_visible = True
+                os.fsync(parent_descriptor)
+                if post_publish_check is not None:
+                    post_publish_check()
+            except BaseException as error:
+                if replacement_visible:
+                    try:
+                        if rollback_name is None:
+                            os.unlink(name, dir_fd=parent_descriptor)
+                        else:
+                            os.replace(
+                                rollback_name,
+                                name,
+                                src_dir_fd=parent_descriptor,
+                                dst_dir_fd=parent_descriptor,
+                            )
+                            rollback_name = None
+                        os.fsync(parent_descriptor)
+                    except BaseException as rollback_error:
+                        raise RuntimeError(
+                            f"Failed to roll back replacement publication: {name}"
+                        ) from rollback_error
+                raise error
+            if rollback_name is not None:
+                os.unlink(rollback_name, dir_fd=parent_descriptor)
+                rollback_name = None
+        else:
+            os.link(
+                temporary_name,
+                name,
+                src_dir_fd=parent_descriptor,
+                dst_dir_fd=parent_descriptor,
+                follow_symlinks=False,
+            )
+            try:
+                os.unlink(temporary_name, dir_fd=parent_descriptor)
+                temporary_exists = False
+                os.fsync(parent_descriptor)
+                if post_publish_check is not None:
+                    post_publish_check()
+            except BaseException as error:
+                try:
+                    os.unlink(name, dir_fd=parent_descriptor)
+                    os.fsync(parent_descriptor)
+                except BaseException as rollback_error:
+                    raise RuntimeError(
+                        f"Failed to roll back exclusive publication: {name}"
+                    ) from rollback_error
+                raise error
     finally:
-        if temporary.exists():
-            temporary.unlink()
+        if temporary_exists:
+            try:
+                os.unlink(temporary_name, dir_fd=parent_descriptor)
+            except FileNotFoundError:
+                pass
+        if rollback_name is not None:
+            try:
+                os.unlink(rollback_name, dir_fd=parent_descriptor)
+            except FileNotFoundError:
+                pass
 
 
-def atomic_write_json(path: Path, value: dict[str, object], *, mode: int = 0o444) -> None:
-    data = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
-    atomic_write_bytes(path, data, mode=mode)
+def atomic_write_json(
+    path: Path,
+    value: dict[str, object],
+    *,
+    mode: int = 0o444,
+    replace: bool = True,
+    root: Path | None = None,
+) -> None:
+    data = (
+        json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    ).encode("utf-8")
+    atomic_write_bytes(path, data, mode=mode, replace=replace, root=root)
+
+
+def atomic_write_json_at(
+    parent_descriptor: int,
+    name: str,
+    value: dict[str, object],
+    *,
+    mode: int = 0o444,
+    replace: bool = True,
+    post_publish_check: Callable[[], None] | None = None,
+) -> None:
+    data = (
+        json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    ).encode("utf-8")
+    atomic_write_bytes_at(
+        parent_descriptor,
+        name,
+        data,
+        mode=mode,
+        replace=replace,
+        post_publish_check=post_publish_check,
+    )
+
+
+def _descriptor_path(parent_descriptor: int, name: str) -> Path:
+    return Path("/proc") / str(os.getpid()) / "fd" / str(parent_descriptor) / name
+
+
+def _require_same_directory(path: Path, descriptor: int, *, root: Path | None) -> None:
+    lexical_descriptor = _open_parent_directory(path, root=root)
+    try:
+        expected = os.fstat(descriptor)
+        actual = os.fstat(lexical_descriptor)
+        if (actual.st_dev, actual.st_ino) != (expected.st_dev, expected.st_ino):
+            raise ValueError(f"Writable parent path changed during publication: {path}")
+    finally:
+        os.close(lexical_descriptor)
+
+
+class PinnedStagingDirectory:
+    """Stage and publish beneath one retained no-follow parent descriptor."""
+
+    def __init__(self, parent: Path, *, prefix: str, root: Path | None = None) -> None:
+        self.parent = Path(os.path.abspath(parent))
+        self.root = Path(os.path.abspath(root)) if root is not None else None
+        self.name = f"{prefix}{uuid.uuid4()}"
+        self.parent_descriptor: int | None = None
+        self.path: Path | None = None
+        self._staging_exists = False
+
+    def __enter__(self) -> "PinnedStagingDirectory":
+        durable_mkdir_parents(self.parent, root=self.root)
+        self.parent_descriptor = _open_parent_directory(self.parent, root=self.root)
+        try:
+            os.mkdir(self.name, mode=0o700, dir_fd=self.parent_descriptor)
+            self._staging_exists = True
+            self.path = _descriptor_path(self.parent_descriptor, self.name)
+            self.require_lexical_parent()
+            return self
+        except BaseException:
+            if self._staging_exists:
+                remove_tree(self._path())
+                os.fsync(self.parent_descriptor)
+                self._staging_exists = False
+            os.close(self.parent_descriptor)
+            self.parent_descriptor = None
+            raise
+
+    def _descriptor(self) -> int:
+        if self.parent_descriptor is None:
+            raise ValueError("Pinned staging directory is not open")
+        return self.parent_descriptor
+
+    def _path(self) -> Path:
+        if self.path is None:
+            raise ValueError("Pinned staging directory is not open")
+        return self.path
+
+    def require_lexical_parent(self) -> None:
+        _require_same_directory(self.parent, self._descriptor(), root=self.root)
+
+    def publish_tree(self, destination: Path) -> None:
+        destination = Path(os.path.abspath(destination))
+        if destination.parent != self.parent:
+            raise ValueError("Tree destination does not use the pinned staging parent")
+        durable_replace_tree(
+            self._path(),
+            destination,
+            parent_descriptor=self._descriptor(),
+            temporary_name=self.name,
+            root=self.root,
+        )
+        self._staging_exists = False
+
+    def write_json(
+        self,
+        destination: Path,
+        value: dict[str, object],
+        *,
+        mode: int = 0o444,
+        replace: bool = True,
+    ) -> None:
+        destination = Path(os.path.abspath(destination))
+        if destination.parent != self.parent:
+            raise ValueError("JSON destination does not use the pinned staging parent")
+        self.require_lexical_parent()
+        atomic_write_json_at(
+            self._descriptor(),
+            destination.name,
+            value,
+            mode=mode,
+            replace=replace,
+            post_publish_check=self.require_lexical_parent,
+        )
+
+    def __exit__(self, *_: object) -> None:
+        try:
+            if self._staging_exists:
+                remove_tree(self._path())
+                os.fsync(self._descriptor())
+        finally:
+            if self.parent_descriptor is not None:
+                os.close(self.parent_descriptor)
+                self.parent_descriptor = None
+
+
+def durable_replace_tree(
+    temporary: Path,
+    destination: Path,
+    *,
+    parent_descriptor: int | None = None,
+    temporary_name: str | None = None,
+    root: Path | None = None,
+) -> None:
+    """Publish one staged tree only after its files and directories are durable."""
+    temporary = Path(os.path.abspath(temporary))
+    destination = Path(os.path.abspath(destination))
+    owns_parent_descriptor = parent_descriptor is None
+    if parent_descriptor is None:
+        if temporary.parent != destination.parent:
+            raise ValueError("Staged tree and destination must share one parent")
+        parent_descriptor = _open_parent_directory(destination.parent, root=root)
+    source_name = temporary.name if temporary_name is None else temporary_name
+    temporary = _descriptor_path(parent_descriptor, source_name)
+    stable_destination = _descriptor_path(parent_descriptor, destination.name)
+    paths = [temporary, *temporary.rglob("*")]
+    for path in paths:
+        if path.is_symlink():
+            raise ValueError(f"Durable tree publication rejects symlinks: {path}")
+    for path in paths:
+        if not path.is_file():
+            continue
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                raise ValueError(f"Durable tree entry is not a regular file: {path}")
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    directories = sorted(
+        (path for path in paths if path.is_dir()),
+        key=lambda path: len(path.parts),
+        reverse=True,
+    )
+    for path in directories:
+        descriptor = os.open(
+            path,
+            os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    try:
+        _require_same_directory(destination.parent, parent_descriptor, root=root)
+        os.replace(
+            source_name,
+            destination.name,
+            src_dir_fd=parent_descriptor,
+            dst_dir_fd=parent_descriptor,
+        )
+        try:
+            os.fsync(parent_descriptor)
+            _require_same_directory(destination.parent, parent_descriptor, root=root)
+        except BaseException as error:
+            try:
+                remove_tree(stable_destination)
+                os.fsync(parent_descriptor)
+            except BaseException as rollback_error:
+                raise RuntimeError(
+                    f"Failed to roll back durable tree publication: {destination}"
+                ) from rollback_error
+            raise error
+    finally:
+        if owns_parent_descriptor:
+            os.close(parent_descriptor)
 
 
 def make_tree_read_only(root: Path, *, executable_names: set[str] | None = None) -> None:
@@ -500,11 +1613,11 @@ def require_not_symlink(path: Path) -> None:
 
 
 def canonical_policy_path(authorized_pic_root: Path = AUTHORIZED_PIC_ROOT) -> Path:
-    return authorized_pic_root.resolve() / CANONICAL_POLICY_RELATIVE
+    return Path(os.path.abspath(authorized_pic_root)) / CANONICAL_POLICY_RELATIVE
 
 
 def active_promotion_path(root: Path) -> Path:
-    return root.resolve() / ACTIVE_PROMOTION_RELATIVE
+    return Path(os.path.abspath(root)) / ACTIVE_PROMOTION_RELATIVE
 
 
 def require_below(path: Path, root: Path) -> Path:
@@ -535,9 +1648,12 @@ def require_no_symlink_components_below(path: Path, root: Path) -> Path:
 def require_canonical_path_below(path: Path, root: Path) -> Path:
     """Require one lexical path under root with no symlink aliases."""
     lexical = require_no_symlink_components_below(path, root)
-    resolved = require_below(lexical, root)
-    if lexical != resolved:
-        raise ValueError(f"Path must use its canonical spelling: {lexical}; expected {resolved}")
+    lexical_root = Path(os.path.abspath(root))
+    relative = lexical.relative_to(lexical_root)
+    resolved = lexical.resolve()
+    expected = root.resolve().joinpath(*relative.parts)
+    if resolved != expected:
+        raise ValueError(f"Path must use its trusted-root spelling: {lexical}; expected {expected}")
     return lexical
 
 
@@ -666,7 +1782,9 @@ def validate_launch_contract(value: object) -> dict[str, object]:
         arguments = action.get("arguments")
         if not isinstance(arguments, list):
             raise ValueError("Launch-action arguments must be an array")
-        for argument in arguments:
+        argument_index = 0
+        while argument_index < len(arguments):
+            argument = arguments[argument_index]
             if not isinstance(argument, dict) or len(argument) != 1:
                 raise ValueError("Launch-action argument must be one structured token")
             if "literal" in argument:
@@ -678,17 +1796,52 @@ def validate_launch_contract(value: object) -> dict[str, object]:
                     or len(literal) > 4096
                 ):
                     raise ValueError("Launch-action literal is malformed")
-            elif argument.get("snapshot_role") == "input-deck":
-                if set(argument) != {"snapshot_role"}:
-                    raise ValueError("Launch-action snapshot token is malformed")
-            elif "artifact_directory" in argument:
-                if set(argument) != {"artifact_directory"}:
-                    raise ValueError("Launch-action artifact token is malformed")
-                _relative_artifact_path(
-                    argument["artifact_directory"], field="artifact_directory"
-                )
+                if literal in {"-i", "-d"}:
+                    argument_index += 1
+                    if argument_index >= len(arguments):
+                        raise ValueError(f"Launch-action {literal} requires one value")
+                    structured = arguments[argument_index]
+                    if literal == "-i" and structured != {"snapshot_role": "input-deck"}:
+                        raise ValueError("Launch-action -i requires the frozen input deck")
+                    if literal == "-d":
+                        if (
+                            not isinstance(structured, dict)
+                            or set(structured) != {"artifact_directory"}
+                        ):
+                            raise ValueError(
+                                "Launch-action -d requires one artifact directory"
+                            )
+                        _relative_artifact_path(
+                            structured["artifact_directory"],
+                            field="artifact_directory",
+                        )
+                elif literal == "-r" or literal.startswith("-r="):
+                    raise ValueError(
+                        "Launch-action restart input is not authorized before trusted "
+                        "restart snapshots are implemented"
+                    )
+                elif literal in {"-n", "-c"}:
+                    pass
+                elif literal.startswith("-"):
+                    raise ValueError(f"Launch-action CLI flag is not authorized: {literal}")
+                else:
+                    key, separator, override = literal.partition("=")
+                    if (
+                        not separator
+                        or not re.fullmatch(r"[A-Za-z0-9_]+(?:/[A-Za-z0-9_]+)+", key)
+                        or not override
+                        or "/" in override
+                        or "\\" in override
+                        or ".." in override
+                    ):
+                        raise ValueError(
+                            f"Launch-action Athena override is not authorized: {literal}"
+                        )
             else:
-                raise ValueError("Launch-action argument type is not authorized")
+                raise ValueError(
+                    "Launch-action structured path token must immediately follow -i or -d"
+                )
+            argument_index += 1
         stdout = _relative_artifact_path(
             action.get("stdout_artifact"), field="stdout_artifact"
         )
@@ -698,6 +1851,14 @@ def validate_launch_contract(value: object) -> dict[str, object]:
         if stdout == stderr:
             raise ValueError("Launch-action stdout and stderr artifacts must differ")
     return value
+
+
+def launch_contract_sha256(value: object) -> str:
+    contract = validate_launch_contract(value)
+    payload = json.dumps(
+        contract, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    return sha256_bytes(payload)
 
 
 def scrub_file(path: Path) -> None:
@@ -739,17 +1900,23 @@ def snapshot_file(
     }
 
 
-def verify_snapshot_files(manifest: dict[str, object]) -> None:
+def verify_snapshot_files(manifest: dict[str, object], *, root: Path) -> None:
     snapshot_files = manifest.get("snapshot_files")
     if not isinstance(snapshot_files, list) or not snapshot_files:
         raise ValueError("Manifest has no snapshot_files")
     for record in snapshot_files:
-        if not isinstance(record, dict):
+        if not isinstance(record, dict) or set(record) != {
+            "role",
+            "path",
+            "sha256",
+            "source_path",
+            "source_sha256",
+        }:
             raise ValueError("Malformed snapshot file record")
         path = Path(str(record["path"]))
-        if not path.is_file():
-            raise FileNotFoundError(f"Missing snapshotted dependency: {path}")
-        if sha256(path) != record.get("sha256"):
+        require_canonical_path_below(path, root)
+        data = read_stable_regular_file_below(path, root)
+        if sha256_bytes(data) != record.get("sha256"):
             raise ValueError(f"Snapshot checksum mismatch: {path}")
 
 
@@ -775,47 +1942,92 @@ def inventory_digest(records: list[dict[str, str]]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def _read_read_only_regular_file_at(
+    directory_descriptor: int, name: str, *, label: str
+) -> bytes:
+    if not name or "/" in name or Path(name).name != name:
+        raise ValueError(f"{label} has an invalid installed name")
+    descriptor = os.open(
+        name,
+        os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+        dir_fd=directory_descriptor,
+    )
+    try:
+        metadata = os.fstat(descriptor)
+        if not stat.S_ISREG(metadata.st_mode):
+            raise ValueError(f"{label} is not a regular file")
+        if metadata.st_mode & 0o222:
+            raise ValueError(f"{label} is not read-only")
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            return stream.read()
+    finally:
+        os.close(descriptor)
+
+
 def verify_installed_control_plane(
     control_plane_dir: Path,
     *,
     authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
 ) -> dict[str, object]:
-    expected_parent = authorized_pic_root.resolve() / "control_plane"
+    lexical_root = Path(os.path.abspath(authorized_pic_root))
+    expected_parent = lexical_root / "control_plane"
     resolved = require_canonical_path_below(
-        control_plane_dir, authorized_pic_root.resolve()
+        control_plane_dir, lexical_root
     )
     if resolved.parent != expected_parent:
         raise ValueError(
             f"Control plane is not installed under authorized root: {resolved}"
         )
-    inventory_path = require_canonical_path_below(resolved / "inventory.json", resolved)
-    if not inventory_path.is_file():
-        raise ValueError(f"Missing installed control-plane inventory: {inventory_path}")
-    inventory = read_json(inventory_path)
-    if inventory.get("schema_version") != 1:
-        raise ValueError("Unsupported control-plane inventory schema")
-    raw_records = inventory.get("files")
-    if not isinstance(raw_records, list):
-        raise ValueError("Malformed control-plane inventory files")
-    records: list[dict[str, str]] = []
-    for raw in raw_records:
-        if not isinstance(raw, dict):
-            raise ValueError("Malformed control-plane inventory record")
-        record = {"path": str(raw.get("path", "")), "sha256": str(raw.get("sha256", ""))}
-        records.append(record)
-    if [record["path"] for record in records] != CONTROL_PLANE_FILES:
-        raise ValueError("Control-plane inventory file list differs from required list")
-    version = inventory_digest(records)
-    if inventory.get("version") != version or resolved.name != version:
-        raise ValueError("Control-plane inventory digest mismatch")
-    for record in records:
-        path = require_canonical_path_below(resolved / record["path"], resolved)
-        if not path.is_file() or sha256(path) != record["sha256"]:
-            raise ValueError(f"Installed control-plane checksum mismatch: {path}")
-        require_read_only(path)
-    require_read_only(inventory_path)
-    require_read_only(resolved)
-    return inventory
+    try:
+        directory_descriptor = open_directory_below(resolved, root=lexical_root)
+    except FileNotFoundError as error:
+        raise ValueError(f"Missing installed control-plane directory: {resolved}") from error
+    try:
+        if os.fstat(directory_descriptor).st_mode & 0o222:
+            raise ValueError(f"Installed control-plane directory is not read-only: {resolved}")
+        expected_names = {*CONTROL_PLANE_FILES, "inventory.json"}
+        if set(os.listdir(directory_descriptor)) != expected_names:
+            raise ValueError("Installed control-plane entries differ from required list")
+        inventory = read_json_bytes(
+            _read_read_only_regular_file_at(
+                directory_descriptor,
+                "inventory.json",
+                label="Installed control-plane inventory",
+            ),
+            label=str(resolved / "inventory.json"),
+        )
+        if inventory.get("schema_version") != 1:
+            raise ValueError("Unsupported control-plane inventory schema")
+        raw_records = inventory.get("files")
+        if not isinstance(raw_records, list):
+            raise ValueError("Malformed control-plane inventory files")
+        records: list[dict[str, str]] = []
+        for raw in raw_records:
+            if not isinstance(raw, dict):
+                raise ValueError("Malformed control-plane inventory record")
+            record = {
+                "path": str(raw.get("path", "")),
+                "sha256": str(raw.get("sha256", "")),
+            }
+            records.append(record)
+        if [record["path"] for record in records] != CONTROL_PLANE_FILES:
+            raise ValueError("Control-plane inventory file list differs from required list")
+        version = inventory_digest(records)
+        if inventory.get("version") != version or resolved.name != version:
+            raise ValueError("Control-plane inventory digest mismatch")
+        for record in records:
+            data = _read_read_only_regular_file_at(
+                directory_descriptor,
+                record["path"],
+                label=f"Installed control-plane file {record['path']}",
+            )
+            if sha256_bytes(data) != record["sha256"]:
+                raise ValueError(
+                    f"Installed control-plane checksum mismatch: {resolved / record['path']}"
+                )
+        return inventory
+    finally:
+        os.close(directory_descriptor)
 
 
 def validate_storage_policy(
@@ -826,6 +2038,7 @@ def validate_storage_policy(
     authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
     authorized_account: str = AUTHORIZED_ACCOUNT,
     ledger_mirror_transport: str = AUTHORIZED_LEDGER_MIRROR_TRANSPORT,
+    allow_pending_genesis: bool = False,
 ) -> dict[str, object]:
     frontier = policy.get("frontier")
     storage = policy.get("olcf_side_storage")
@@ -893,10 +2106,45 @@ def validate_storage_policy(
         record = storage.get(key)
         if not isinstance(record, dict) or record.get("status") != "passed":
             raise ValueError(f"Storage policy {key} has not passed")
-    if storage.get("ledger_genesis_allowed") is not True:
-        raise ValueError("Storage policy does not allow Frontier PIC ledger genesis")
+    genesis_allowed = storage.get("ledger_genesis_allowed")
+    genesis = storage.get("ledger_genesis")
+    if genesis_allowed is True:
+        if not allow_pending_genesis:
+            raise ValueError("Storage policy has not closed Frontier PIC ledger genesis")
+        if genesis is not None:
+            raise ValueError("Pending ledger genesis must not retain initialized fields")
+    elif genesis_allowed is False:
+        if not isinstance(genesis, dict) or set(genesis) != {
+            "status",
+            "timestamp",
+            "control_plane_version",
+            "event_sha256",
+            "mirror_ack_sha256",
+            "mirror_transport",
+        }:
+            raise ValueError("Storage policy initialized ledger genesis is malformed")
+        if genesis.get("status") != "initialized":
+            raise ValueError("Storage policy ledger genesis is not initialized")
+        utc_datetime(genesis.get("timestamp"), field="ledger_genesis.timestamp")
+        if not re.fullmatch(
+            r"[0-9a-f]{64}", str(genesis.get("control_plane_version", ""))
+        ):
+            raise ValueError("Storage policy ledger genesis control-plane version is malformed")
+        for field in ["event_sha256", "mirror_ack_sha256"]:
+            if not re.fullmatch(r"[0-9a-f]{64}", str(genesis.get(field, ""))):
+                raise ValueError(f"Storage policy ledger_genesis.{field} is malformed")
+        if genesis.get("mirror_transport") != AUTHORIZED_LEDGER_MIRROR_TRANSPORT:
+            raise ValueError("Storage policy ledger genesis mirror transport is invalid")
+    else:
+        raise ValueError("Storage policy ledger genesis authorization is malformed")
     if storage.get("installed_control_plane_version") != control_plane_version:
         raise ValueError("Storage policy does not authorize this control-plane version")
+    if storage.get("staged_control_plane_candidate_version") != control_plane_version:
+        raise ValueError("Storage policy staged candidate does not match this control-plane version")
+    if storage.get("installed_control_plane_lifecycle") != (
+        "paired_installed_reviewed_generation"
+    ):
+        raise ValueError("Storage policy does not attest a paired installed reviewed generation")
     freeze_status = science_freeze.get("status")
     if freeze_status == PENDING_CLEAN_CANDIDATE_FREEZE:
         if set(science_freeze) != {"status"}:
@@ -933,6 +2181,7 @@ def validate_storage_policy(
         "environment_profile_sha256",
         "analysis_script_sha256",
         "executable_sha256",
+        "launch_contract_sha256",
     }:
         raise ValueError("Storage policy admission-smoke authorization is malformed")
     expected_admission_smoke = {
@@ -954,6 +2203,7 @@ def validate_storage_policy(
         "input_deck_sha256",
         "environment_profile_sha256",
         "executable_sha256",
+        "launch_contract_sha256",
     ]:
         if not re.fullmatch(r"[0-9a-f]{64}", str(admission_smoke.get(key, ""))):
             raise ValueError(f"Storage policy frontier_admission_smoke.{key} is malformed")
@@ -969,6 +2219,73 @@ def validate_storage_policy(
     return policy
 
 
+def require_storage_policy_unlock_snapshot(
+    *,
+    control_plane_version: str,
+    authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
+    authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
+    authorized_account: str = AUTHORIZED_ACCOUNT,
+    ledger_mirror_transport: str = AUTHORIZED_LEDGER_MIRROR_TRANSPORT,
+    allow_pending_genesis: bool = False,
+) -> tuple[dict[str, object], dict[str, str]]:
+    policy_path = canonical_policy_path(authorized_pic_root)
+    mirror_policy_path = canonical_policy_path(authorized_project_home_root)
+    promotion_path = active_promotion_path(authorized_pic_root)
+    mirror_promotion_path = active_promotion_path(authorized_project_home_root)
+    artifacts: dict[Path, bytes] = {}
+    for path, root in [
+        (policy_path, authorized_pic_root),
+        (mirror_policy_path, authorized_project_home_root),
+        (promotion_path, authorized_pic_root),
+        (mirror_promotion_path, authorized_project_home_root),
+    ]:
+        lexical_root = Path(os.path.abspath(root))
+        lexical_root.resolve(strict=True)
+        require_canonical_path_below(path, lexical_root)
+        artifacts[path] = read_stable_regular_file_below(
+            path, lexical_root, require_read_only_mode=True
+        )
+    promotion_bytes = artifacts[promotion_path]
+    mirror_promotion_bytes = artifacts[mirror_promotion_path]
+    if promotion_bytes != mirror_promotion_bytes:
+        raise ValueError("Orion and Project Home active-policy promotion bytes differ")
+    promotion = read_json_bytes(promotion_bytes, label=str(promotion_path))
+    mirror_promotion = read_json_bytes(
+        mirror_promotion_bytes, label=str(mirror_promotion_path)
+    )
+    if promotion != mirror_promotion:
+        raise ValueError("Orion and Project Home active-policy promotion records differ")
+    policy_bytes = artifacts[policy_path]
+    mirror_policy_bytes = artifacts[mirror_policy_path]
+    if policy_bytes != mirror_policy_bytes:
+        raise ValueError("Orion and Project Home active-policy bytes differ")
+    policy_sha256 = sha256_bytes(policy_bytes)
+    expected = {
+        "schema_version": 1,
+        "control_plane_version": control_plane_version,
+        "policy_path": str(policy_path),
+        "project_home_policy_path": str(mirror_policy_path),
+        "policy_sha256": policy_sha256,
+    }
+    if promotion != expected:
+        raise ValueError("Active-policy promotion record is not anchored to this control plane")
+    if sha256_bytes(mirror_policy_bytes) != promotion["policy_sha256"]:
+        raise ValueError("Project Home active-policy mirror checksum differs")
+    policy = validate_storage_policy(
+        read_json_bytes(policy_bytes, label=str(policy_path)),
+        control_plane_version=control_plane_version,
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+        authorized_account=authorized_account,
+        ledger_mirror_transport=ledger_mirror_transport,
+        allow_pending_genesis=allow_pending_genesis,
+    )
+    return policy, {
+        "active_policy_sha256": policy_sha256,
+        "active_promotion_sha256": sha256_bytes(promotion_bytes),
+    }
+
+
 def require_storage_policy_unlock(
     *,
     control_plane_version: str,
@@ -976,44 +2293,17 @@ def require_storage_policy_unlock(
     authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
     authorized_account: str = AUTHORIZED_ACCOUNT,
     ledger_mirror_transport: str = AUTHORIZED_LEDGER_MIRROR_TRANSPORT,
+    allow_pending_genesis: bool = False,
 ) -> dict[str, object]:
-    policy_path = canonical_policy_path(authorized_pic_root)
-    mirror_policy_path = canonical_policy_path(authorized_project_home_root)
-    promotion_path = active_promotion_path(authorized_pic_root)
-    mirror_promotion_path = active_promotion_path(authorized_project_home_root)
-    for path, root in [
-        (policy_path, authorized_pic_root),
-        (mirror_policy_path, authorized_project_home_root),
-        (promotion_path, authorized_pic_root),
-        (mirror_promotion_path, authorized_project_home_root),
-    ]:
-        require_canonical_path_below(path, root)
-        if not path.is_file():
-            raise FileNotFoundError(f"Missing active policy artifact: {path}")
-        require_read_only(path)
-    promotion = read_json(promotion_path)
-    mirror_promotion = read_json(mirror_promotion_path)
-    if promotion != mirror_promotion:
-        raise ValueError("Orion and Project Home active-policy promotion records differ")
-    expected = {
-        "schema_version": 1,
-        "control_plane_version": control_plane_version,
-        "policy_path": str(policy_path),
-        "project_home_policy_path": str(mirror_policy_path),
-        "policy_sha256": sha256(policy_path),
-    }
-    if promotion != expected:
-        raise ValueError("Active-policy promotion record is not anchored to this control plane")
-    if sha256(mirror_policy_path) != promotion["policy_sha256"]:
-        raise ValueError("Project Home active-policy mirror checksum differs")
-    return validate_storage_policy(
-        read_json(policy_path),
+    policy, _ = require_storage_policy_unlock_snapshot(
         control_plane_version=control_plane_version,
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
         authorized_account=authorized_account,
         ledger_mirror_transport=ledger_mirror_transport,
+        allow_pending_genesis=allow_pending_genesis,
     )
+    return policy
 
 
 def require_ledger_paths(
@@ -1028,23 +2318,23 @@ def require_ledger_paths(
     expected = [
         (
             ledger_jsonl,
-            authorized_pic_root.resolve() / "ledger" / "node_hours.jsonl",
-            authorized_pic_root.resolve(),
+            Path(os.path.abspath(authorized_pic_root)) / "ledger" / "node_hours.jsonl",
+            authorized_pic_root,
         ),
         (
             ledger_csv,
-            authorized_pic_root.resolve() / "ledger" / "node_hours.csv",
-            authorized_pic_root.resolve(),
+            Path(os.path.abspath(authorized_pic_root)) / "ledger" / "node_hours.csv",
+            authorized_pic_root,
         ),
         (
             receipts_jsonl,
-            authorized_pic_root.resolve() / "ledger" / "mirror_receipts.jsonl",
-            authorized_pic_root.resolve(),
+            Path(os.path.abspath(authorized_pic_root)) / "ledger" / "mirror_receipts.jsonl",
+            authorized_pic_root,
         ),
         (
             mirror_jsonl,
-            authorized_project_home_root.resolve() / "ledger" / "node_hours.jsonl",
-            authorized_project_home_root.resolve(),
+            Path(os.path.abspath(authorized_project_home_root)) / "ledger" / "node_hours.jsonl",
+            authorized_project_home_root,
         ),
     ]
     for supplied, required, root in expected:

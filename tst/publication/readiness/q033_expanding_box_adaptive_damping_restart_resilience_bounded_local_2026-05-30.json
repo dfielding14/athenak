@@ -1,0 +1,85 @@
+{
+  "record_type": "q033_expanding_box_adaptive_damping_restart_resilience_bounded_local_tranche",
+  "date": "2026-05-30",
+  "gate": "Q-033",
+  "qualification_effect": "bounded_local_serial_host_regression_only",
+  "disposition": "local_adaptive_restart_continuity_regression_added_full_q033_gate_open",
+  "scope": "A focused serial-host successor regression exercises the selected extension-only active-MHD expanding-box adaptive physical delta-f plus reduced ion-neutral-friction launch composition through one restart checkpoint. It verifies endpoint continuity for particle adaptive state and the coupled MHD carrier without an unintended adaptive refit. This is mechanics evidence only. It does not show variance reduction, physical damping calibration, effective scattering, anisotropy evolution, spectra, quasi-steady state, saturation, scaling agreement, Frontier portability, or external review.",
+  "companion_q008_record": "tst/publication/readiness/q008_expanding_box_restart_resilience_bounded_local_2026-05-30.json",
+  "source_constraints": {
+    "production_source_edited_by_this_tranche": false,
+    "existing_q017_files_edited_by_this_tranche": false,
+    "control_plane_files_edited_by_this_tranche": false,
+    "readiness_plan_edited_by_this_tranche": false,
+    "tranche_owned_artifacts": [
+      "inputs/tests/pic_mhd_expanding_box_adaptive_damping_smoke.athinput",
+      "tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_restart.py",
+      "tst/publication/readiness/q008_expanding_box_restart_resilience_bounded_local_2026-05-30.json",
+      "tst/publication/readiness/q033_expanding_box_adaptive_damping_restart_resilience_bounded_local_2026-05-30.json"
+    ]
+  },
+  "selected_extension_fixture": {
+    "physical_mode": "extended_mhd_pic",
+    "background_mode": "coupled",
+    "feedback_mode": "coupled",
+    "deltaf_mode": "physical",
+    "deltaf_background": "kappa_aniso",
+    "adaptive_mode": "global_bikappa_moments_experimental",
+    "adaptive_interval": 1.0,
+    "expanding_box_mode": "on",
+    "expansion_law": "exponential",
+    "expansion_rates": [
+      0.01,
+      0.02,
+      0.03
+    ],
+    "wave_damping_mode": "ion_neutral_friction",
+    "ion_neutral_collision_rate": 0.5
+  },
+  "verification": {
+    "input": "inputs/tests/pic_mhd_expanding_box_adaptive_damping_smoke.athinput",
+    "harness": "tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_restart.py",
+    "focused_command": "cd tst && PATH=/tmp/dfielding-codex-cmake3-shim:$PATH python3 run_tests.py particles/pic_mhd_expanding_box_adaptive_damping_restart --log_file=.pic_mhd_expanding_box_adaptive_damping_restart.log",
+    "focused_result": "pass",
+    "execution_location": "local host shell; Kronos was not used",
+    "worktree_state": "dirty shared worktree with unrelated in-progress edits; this is not a clean-candidate qualification run",
+    "build_profile": {
+      "cmake_build_type": "Release",
+      "kokkos_backend": "SERIAL",
+      "cmake": "3.30.5",
+      "cmake3_compatibility_note": "The local environment exposed cmake but not the harness-required cmake3 name. The focused run used an out-of-tree temporary /tmp cmake3 symlink and did not edit the repository harness."
+    },
+    "checked_typed_particle_integer_fields": [
+      "gid",
+      "ptag",
+      "species",
+      "cr_source"
+    ],
+    "checked_particle_float_payloads": [
+      "points",
+      "vel",
+      "macro_weight",
+      "birth_time",
+      "deltaf_f0",
+      "deltaf_weight"
+    ]
+  },
+  "observed_bounded_local_metrics": {
+    "endpoint_time": 0.0909571,
+    "checkpoint_continuations": 1,
+    "particle_count": 64,
+    "typed_particle_integer_payload_equal": true,
+    "particle_float_payload_absolute_error_max": 0.0,
+    "mhd_field_absolute_error_max": 0.0,
+    "history_endpoint_absolute_error_max": 0.0,
+    "restart_refit_observed": false
+  },
+  "remaining_frontier_scope": [
+    "Run the selected adaptive-delta-f restart-continuation carrier under the supported Frontier HIP/GPU clean-candidate profile and retain registered artifacts.",
+    "Exercise MPI decomposition parity and Frontier-filesystem restart publication behavior under the authorized resilience gates.",
+    "Qualify physical damping calibration, effective scattering nu_eff, anisotropy, spectra, quasi-steady state, saturation and scaling comparisons in the driven CRPAI matrix.",
+    "Determine whether a qualifying physical setup demonstrates adaptive variance reduction; the bounded deterministic cadence scan does not.",
+    "Obtain external reviewer disposition."
+  ],
+  "q033_status": "bounded_local_serial_host_adaptive_expanding_box_restart_continuity_passed_frontier_and_physical_transport_gates_open"
+}

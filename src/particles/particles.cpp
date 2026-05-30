@@ -748,6 +748,9 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
 
+  pic_q017_sync_kernel_timers = pin->GetOrAddBoolean(
+      "particles", "pic_q017_sync_kernel_timers", false);
+
   pic_random_seed = pin->GetOrAddInteger("particles", "pic_random_seed", 0);
   if (pic_random_seed < 0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
@@ -872,7 +875,8 @@ Particles::Particles(MeshBlockPack *ppack, ParameterInput *pin) :
     if ((particle_type != ParticleType::cosmic_ray) ||
         ((pusher != ParticlesPusher::boris_lin) &&
          (pusher != ParticlesPusher::boris_tsc))) {
-      reject_expanding_mhd("particle types or pushers other than cosmic-ray Boris pushers");
+      reject_expanding_mhd(
+          "particle types or pushers other than cosmic-ray Boris pushers");
     }
     if (pin->GetReal("particles", "ppc") > 0.0) {
       const Real tstart = pmy_pack->pmesh->time;

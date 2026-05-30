@@ -16,6 +16,7 @@
 #include <memory>
 #include <string>
 #include <iostream>
+#include <vector>
 
 #include "athena.hpp"
 #if MPI_PARALLEL_ENABLED
@@ -47,6 +48,8 @@ TaskStatus Particles::AdaptDeltaF(Driver *pdriver, int stage) {
   const std::int64_t bucket = static_cast<std::int64_t>(
       std::floor(time/pic_deltaf_adapt_interval + bucket_roundoff));
   if (bucket == pic_deltaf_adapt_last_bucket) return TaskStatus::complete;
+  Q017Fence();
+  Kokkos::Timer q017_timer;
 
   auto &pr = prtcl_rdata;
   Real total_weight = 0.0;
@@ -135,6 +138,8 @@ TaskStatus Particles::AdaptDeltaF(Driver *pdriver, int stage) {
               << " bucket=" << bucket << " xi=" << xi << " p0=" << p0
               << std::endl;
   }
+  Q017Fence();
+  AccumulateQ017Timer(Q017ParticleTimer::adaptive_deltaf, q017_timer.seconds());
   return TaskStatus::complete;
 }
 
@@ -431,7 +436,11 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
 //! MeshBlocks.
 
 TaskStatus Particles::NewGID(Driver *pdrive, int stage) {
+  Q017Fence();
+  Kokkos::Timer q017_timer;
   TaskStatus tstat = pbval_part->SetNewPrtclGID();
+  Q017Fence();
+  AccumulateQ017Timer(Q017ParticleTimer::migration, q017_timer.seconds());
   return tstat;
 }
 
@@ -441,7 +450,11 @@ TaskStatus Particles::NewGID(Driver *pdrive, int stage) {
 //! MPI between all ranks
 
 TaskStatus Particles::SendCnt(Driver *pdrive, int stage) {
+  Q017Fence();
+  Kokkos::Timer q017_timer;
   TaskStatus tstat = pbval_part->CountSendsAndRecvs();
+  Q017Fence();
+  AccumulateQ017Timer(Q017ParticleTimer::migration, q017_timer.seconds());
   return tstat;
 }
 
@@ -451,7 +464,11 @@ TaskStatus Particles::SendCnt(Driver *pdrive, int stage) {
 
 TaskStatus Particles::InitRecv(Driver *pdrive, int stage) {
   // post receives for particles
+  Q017Fence();
+  Kokkos::Timer q017_timer;
   TaskStatus tstat = pbval_part->InitPrtclRecv();
+  Q017Fence();
+  AccumulateQ017Timer(Q017ParticleTimer::migration, q017_timer.seconds());
   return tstat;
 }
 
@@ -460,7 +477,11 @@ TaskStatus Particles::InitRecv(Driver *pdrive, int stage) {
 //! \brief Wrapper task list function to pack/send particles
 
 TaskStatus Particles::SendP(Driver *pdrive, int stage) {
+  Q017Fence();
+  Kokkos::Timer q017_timer;
   TaskStatus tstat = pbval_part->PackAndSendPrtcls();
+  Q017Fence();
+  AccumulateQ017Timer(Q017ParticleTimer::migration, q017_timer.seconds());
   return tstat;
 }
 
@@ -469,7 +490,11 @@ TaskStatus Particles::SendP(Driver *pdrive, int stage) {
 //! \brief Wrapper task list function to receive/unpack particles
 
 TaskStatus Particles::RecvP(Driver *pdrive, int stage) {
+  Q017Fence();
+  Kokkos::Timer q017_timer;
   TaskStatus tstat = pbval_part->RecvAndUnpackPrtcls();
+  Q017Fence();
+  AccumulateQ017Timer(Q017ParticleTimer::migration, q017_timer.seconds());
   return tstat;
 }
 
@@ -480,7 +505,11 @@ TaskStatus Particles::RecvP(Driver *pdrive, int stage) {
 
 TaskStatus Particles::ClearSend(Driver *pdrive, int stage) {
   // check sends of particles complete
+  Q017Fence();
+  Kokkos::Timer q017_timer;
   TaskStatus tstat = pbval_part->ClearPrtclSend();
+  Q017Fence();
+  AccumulateQ017Timer(Q017ParticleTimer::migration, q017_timer.seconds());
   return tstat;
 }
 
@@ -490,8 +519,155 @@ TaskStatus Particles::ClearSend(Driver *pdrive, int stage) {
 
 TaskStatus Particles::ClearRecv(Driver *pdrive, int stage) {
   // check receives of particles complete
+  Q017Fence();
+  Kokkos::Timer q017_timer;
   TaskStatus tstat = pbval_part->ClearPrtclRecv();
+  Q017Fence();
+  AccumulateQ017Timer(Q017ParticleTimer::migration, q017_timer.seconds());
   return tstat;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void Particles::OutputQ017Telemetry()
+//! \brief Emit final-only particle timers and resident-memory telemetry.
+
+void Particles::OutputQ017Telemetry() const {
+  constexpr const char* timer_names[nq017_particle_timers] = {
+    "adaptive_deltaf", "push", "deposition", "migration"
+  };
+  const int nranks = global_variable::nranks;
+  auto *pm = pmy_pack->pmesh;
+  const bool cosmic_ray = (particle_type == ParticleType::cosmic_ray);
+  const int nsp = cosmic_ray ? nspecies : 0;
+  const int nlevels = std::max(1, pm->max_level - pm->root_level + 1);
+  const std::uint64_t record_bytes =
+      static_cast<std::uint64_t>(nrdata)*sizeof(Real) +
+      static_cast<std::uint64_t>(nidata)*sizeof(int);
+  const std::uint64_t resident_bytes =
+      static_cast<std::uint64_t>(nprtcl_thispack)*record_bytes;
+  const std::uint64_t allocated_bytes =
+      static_cast<std::uint64_t>(prtcl_rdata.span())*sizeof(Real) +
+      static_cast<std::uint64_t>(prtcl_idata.span())*sizeof(int) +
+      static_cast<std::uint64_t>(species_mass.span())*sizeof(Real) +
+      static_cast<std::uint64_t>(species_charge.span())*sizeof(Real) +
+      static_cast<std::uint64_t>(species_vx0.span())*sizeof(Real) +
+      static_cast<std::uint64_t>(species_vy0.span())*sizeof(Real) +
+      static_cast<std::uint64_t>(species_vz0.span())*sizeof(Real) +
+      static_cast<std::uint64_t>(moments.span())*sizeof(Real) +
+      static_cast<std::uint64_t>(coarse_moments.span())*sizeof(Real) +
+      static_cast<std::uint64_t>(j_edge_x1e.span())*sizeof(Real) +
+      static_cast<std::uint64_t>(j_edge_x2e.span())*sizeof(Real) +
+      static_cast<std::uint64_t>(j_edge_x3e.span())*sizeof(Real) +
+      static_cast<std::uint64_t>(x1_old.span())*sizeof(Real) +
+      static_cast<std::uint64_t>(x2_old.span())*sizeof(Real) +
+      static_cast<std::uint64_t>(x3_old.span())*sizeof(Real) +
+      static_cast<std::uint64_t>(pic_no_mhd_bcc0.span())*sizeof(Real);
+
+  std::vector<std::uint64_t> species_counts(nsp, 0);
+  std::vector<std::uint64_t> level_counts(nlevels, 0);
+  std::vector<std::uint64_t> species_level_counts(nsp*nlevels, 0);
+  std::uint64_t invalid_records = 0;
+  auto h_pi = Kokkos::create_mirror_view_and_copy(HostMemSpace(), prtcl_idata);
+  for (int p=0; p<nprtcl_thispack; ++p) {
+    const int gid = h_pi(PGID, p);
+    if (gid < 0 || gid >= pm->nmb_total) {
+      invalid_records++;
+      continue;
+    }
+    const int logical_level = pm->lloc_eachmb[gid].level;
+    const int level_offset = logical_level - pm->root_level;
+    if (level_offset < 0 || level_offset >= nlevels) {
+      invalid_records++;
+      continue;
+    }
+    level_counts[level_offset]++;
+    if (cosmic_ray) {
+      const int sp = h_pi(PSP, p);
+      if (sp < 0 || sp >= nsp) {
+        invalid_records++;
+        continue;
+      }
+      species_counts[sp]++;
+      species_level_counts[sp*nlevels + level_offset]++;
+    }
+  }
+
+  std::array<double, nq017_particle_timers> sum_times = q017_particle_time_;
+  std::array<double, nq017_particle_timers> max_times = q017_particle_time_;
+  std::array<std::uint64_t, nq017_particle_timers> max_calls = q017_particle_calls_;
+  std::uint64_t total_resident_bytes = resident_bytes;
+  std::uint64_t total_allocated_bytes = allocated_bytes;
+  std::uint64_t max_allocated_bytes = allocated_bytes;
+  std::uint64_t total_invalid_records = invalid_records;
+  std::vector<std::uint64_t> global_species_counts = species_counts;
+  std::vector<std::uint64_t> global_level_counts = level_counts;
+  std::vector<std::uint64_t> global_species_level_counts = species_level_counts;
+#if MPI_PARALLEL_ENABLED
+  MPI_Reduce(q017_particle_time_.data(), sum_times.data(), nq017_particle_timers,
+             MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(q017_particle_time_.data(), max_times.data(), nq017_particle_timers,
+             MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+  MPI_Reduce(q017_particle_calls_.data(), max_calls.data(), nq017_particle_timers,
+             MPI_UINT64_T, MPI_MAX, 0, MPI_COMM_WORLD);
+  MPI_Reduce(&resident_bytes, &total_resident_bytes, 1, MPI_UINT64_T, MPI_SUM, 0,
+             MPI_COMM_WORLD);
+  MPI_Reduce(&allocated_bytes, &total_allocated_bytes, 1, MPI_UINT64_T, MPI_SUM, 0,
+             MPI_COMM_WORLD);
+  MPI_Reduce(&allocated_bytes, &max_allocated_bytes, 1, MPI_UINT64_T, MPI_MAX, 0,
+             MPI_COMM_WORLD);
+  MPI_Reduce(&invalid_records, &total_invalid_records, 1, MPI_UINT64_T, MPI_SUM, 0,
+             MPI_COMM_WORLD);
+  if (nsp > 0) {
+    MPI_Reduce(species_counts.data(), global_species_counts.data(), nsp, MPI_UINT64_T,
+               MPI_SUM, 0, MPI_COMM_WORLD);
+    MPI_Reduce(species_level_counts.data(), global_species_level_counts.data(),
+               nsp*nlevels, MPI_UINT64_T, MPI_SUM, 0, MPI_COMM_WORLD);
+  }
+  MPI_Reduce(level_counts.data(), global_level_counts.data(), nlevels, MPI_UINT64_T,
+             MPI_SUM, 0, MPI_COMM_WORLD);
+#endif
+  if (global_variable::my_rank != 0) return;
+
+  std::cout << std::scientific << std::setprecision(17);
+  auto print_scalar = [](const std::string &name, double value) {
+    std::cout << "q017.telemetry." << name << "=" << value << std::endl;
+  };
+  for (int n=0; n<nq017_particle_timers; ++n) {
+    const std::string prefix = std::string("timer.particle.") + timer_names[n];
+    print_scalar(prefix + ".seconds_rank_max", max_times[n]);
+    print_scalar(prefix + ".seconds_rank_mean", sum_times[n]/nranks);
+    print_scalar(prefix + ".calls_rank_max", max_calls[n]);
+  }
+  print_scalar("particle_memory.sync_kernel_timers", pic_q017_sync_kernel_timers);
+  print_scalar("particle_memory.record_bytes", record_bytes);
+  print_scalar("particle_memory.root_level", pm->root_level);
+  print_scalar("particle_memory.max_level", pm->max_level);
+  print_scalar("particle_memory.resident_records.bytes_total", total_resident_bytes);
+  print_scalar("particle_memory.direct_views.allocated_snapshot_bytes_total",
+               total_allocated_bytes);
+  print_scalar("particle_memory.direct_views.allocated_snapshot_bytes_rank_max",
+               max_allocated_bytes);
+  print_scalar("particle_memory.invalid_records", total_invalid_records);
+  for (int sp=0; sp<nsp; ++sp) {
+    const std::string prefix = "particle_memory.species." + std::to_string(sp);
+    print_scalar(prefix + ".count", global_species_counts[sp]);
+    print_scalar(prefix + ".resident_bytes", global_species_counts[sp]*record_bytes);
+  }
+  for (int level=0; level<nlevels; ++level) {
+    const std::string prefix = "particle_memory.level." +
+                               std::to_string(pm->root_level + level);
+    print_scalar(prefix + ".count", global_level_counts[level]);
+    print_scalar(prefix + ".resident_bytes", global_level_counts[level]*record_bytes);
+  }
+  for (int sp=0; sp<nsp; ++sp) {
+    for (int level=0; level<nlevels; ++level) {
+      const std::string prefix = "particle_memory.species." + std::to_string(sp) +
+                                 ".level." + std::to_string(pm->root_level + level);
+      const std::uint64_t count = global_species_level_counts[sp*nlevels + level];
+      print_scalar(prefix + ".count", count);
+      print_scalar(prefix + ".resident_bytes", count*record_bytes);
+    }
+  }
 }
 
 } // namespace particles

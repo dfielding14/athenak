@@ -1,0 +1,25 @@
+{
+  "schema_version": 2,
+  "map_status": "documented_exclusion_candidate_pending_external_review",
+  "comparison_id": "XCMP-GIZMO-RSOL-DECISION",
+  "dataset_provenance_id": "Q022-DATASET-XCMP-GIZMO-RSOL-DECISION",
+  "reference_ids": ["ji_hopkins_2022_arxiv_2111.14704"],
+  "athenak_physical_mode": "documented exclusion candidate; bounded comparison route not frozen",
+  "matched_equations": [],
+  "intentional_mismatches": [],
+  "unit_map": {},
+  "normalization_map": {},
+  "parameter_overlap": {},
+  "excluded_regimes": [],
+  "source_records": [
+    "tst/publication/readiness/q039_gizmo_rsol_decision_2026-05-30.json",
+    "tst/publication/readiness/q039_gizmo_documented_exclusion_candidate_2026-05-30.json",
+    "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json",
+    "tst/publication/readiness/q022_dataset_provenance_manifest_2026-05-30.json"
+  ],
+  "blocked_inputs": [
+    "The provisional documented-exclusion candidate is recorded; a bounded equation and normalization map is intentionally not asserted.",
+    "External reviewer approval is pending before a documented exclusion can close Q-039."
+  ],
+  "reviewer_disposition": "pending external review"
+}

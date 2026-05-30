@@ -1,0 +1,142 @@
+{
+  "record_type": "q011_parallel_shock_section54_paper_preparation",
+  "date": "2026-05-30",
+  "gate": "Q-011",
+  "qualification_effect": "preparation_only",
+  "scope": "Exact-byte Section 5.4 preparation deck and fail-closed analyzer contract only. This record contains no campaign results and does not qualify the paper-shock claim.",
+  "predecessor": "tst/publication/readiness/q011_parallel_shock_controls_successor_2026-05-30.json",
+  "artifacts": [
+    {
+      "path": "inputs/publication/pic_parallel_shock_section54_paper.athinput",
+      "sha256": "c56bcdc56713eb9bee253a05c9221364e1fb75a1022d201e6eed9ada0fd2b353"
+    },
+    {
+      "path": "tst/scripts/particles/pic_parallel_shock_section54_paper.py",
+      "sha256": "260ad7a799e862c80d6eb7a1d852a84234107903e736dba2d05ecdcb741cbea5"
+    },
+    {
+      "path": "tst/publication/test_pic_q011_parallel_shock_section54_paper.py",
+      "sha256": "1005849bc842e3c7166afe15b87cd79bcc324db5b4eb21317bee561c19651de6"
+    }
+  ],
+  "paper_section_contract": {
+    "source": "docs/reference_paper/arXiv-2304.10568v1/mnras_template.tex Section 5.4",
+    "physical_mode": "paper_mhd_pic",
+    "dimensions": "2D3V",
+    "geometry": "reflecting_left_wall_parallel_Bx_periodic_y",
+    "domain_c_over_omega_pi": [
+      48000.0,
+      3120.0
+    ],
+    "mach_alfven": 30.0,
+    "gas_gamma": 1.6666666666666667,
+    "injection_efficiency": 0.001,
+    "injection_p_over_m_over_u0": 3.1622776601683795,
+    "light_speed_over_ua0": 10000.0,
+    "exclude_birth_time_before_omega0_inverse": 45.0,
+    "amr_cell_sizes_c_over_omega_pi": [
+      12.0,
+      6.0,
+      3.0
+    ],
+    "amr_refine_curvature_threshold": 1.0,
+    "amr_derefine_curvature_threshold": 0.1,
+    "snapshot_times_omega0_inverse": [
+      500.0,
+      1200.0
+    ]
+  },
+  "analyzer_contract": {
+    "required_candidate_bindings": [
+      "clean_candidate_git_commit",
+      "clean_frontier_executable_sha256",
+      "input_deck_sha256",
+      "analyzer_sha256",
+      "authorized_orion_artifact_root"
+    ],
+    "particle_filters": {
+      "source": "shock_injected",
+      "birth_time_min_omega0_inverse": 45.0,
+      "region": "downstream"
+    },
+    "primary_observables": [
+      "shock_position",
+      "upstream_magnetic_amplification_at_t500",
+      "downstream_weighted_energy_spectra_at_t500_and_t1200",
+      "late_energy_spectrum_power_law_slope_at_t1200",
+      "morphology"
+    ],
+    "required_snapshot_times_omega0_inverse": [
+      500.0,
+      1200.0
+    ],
+    "required_grid_variants": [
+      "coarse_uniform",
+      "three_level_amr_root_12_finest_3",
+      "fine_uniform"
+    ],
+    "required_raw_artifacts_per_snapshot": [
+      "rho_bin",
+      "bmag_bin",
+      "j2_bin",
+      "prtcl_all_pvtk"
+    ],
+    "required_run_artifacts": [
+      "stdout_with_q017_telemetry",
+      "restart_checkpoint",
+      "attempt_status_and_failure_artifacts"
+    ],
+    "required_seeds": [
+      23050101,
+      23050102,
+      23050103,
+      23050104,
+      23050105,
+      23050106,
+      23050107,
+      23050108
+    ],
+    "result_metrics_recorded": false,
+    "campaign_output_inspection": "blocked_pending_open_items"
+  },
+  "preparation_choices_not_qualification_results": {
+    "gas_pressure_ps_p0": 0.1,
+    "deposit_qscale": 0.0009,
+    "pic_load_balance_cost_per_particle": 0.0,
+    "field_and_particle_output_dt_omega0_inverse": 100.0
+  },
+  "open_items": [
+    "Exact shock-surface injection distribution audit remains open.",
+    "Finite-Mach shock-speed estimate to ideal surface mapping audit remains open.",
+    "Gas pressure and unit-normalization mapping audit remains open.",
+    "Downstream 40/640 ppc macro-mass calibration remains open.",
+    "Frontier load-balance cost tuning remains open.",
+    "Snapshot-time selection tolerance remains open.",
+    "Downstream spectrum fit energy interval remains open.",
+    "AMR versus fine-uniform residual tolerances remain open.",
+    "Clean candidate executable, Orion root, and Frontier campaign remain open.",
+    "Independent raw-artifact recompute and external review remain open."
+  ],
+  "local_verification": {
+    "static_analyzer_contract": "passed locally",
+    "python_syntax": "passed locally",
+    "python_style": "flake8 unavailable; manual line-length and diff checks passed",
+    "athena_parser_startup": "passed locally with reduced mesh overrides and nlim=0; no campaign execution"
+  },
+  "execution_policy": {
+    "frontier_campaign_execution": "open_not_run",
+    "allowed_compute_platforms": [
+      "Frontier"
+    ],
+    "allowed_bulk_storage_systems": [
+      "Orion"
+    ],
+    "authorized_orion_bulk_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
+    "forbidden_storage_systems": [
+      "Kronos"
+    ],
+    "kronos_use": "prohibited_not_used"
+  },
+  "result_metrics": [],
+  "q011_disposition": "preparation_frozen_frontier_campaign_and_qualification_open"
+}

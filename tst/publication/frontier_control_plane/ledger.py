@@ -1,19 +1,31 @@
-#!/opt/cray/pe/python/3.11.7/bin/python3
+#!/opt/cray/pe/python/3.11.7/bin/python3 -I
 """Hash-chained PIC node-hour ledger with a durable non-recursive mirror."""
 
 from __future__ import annotations
+
+import sys as _sys
+if __name__ == "__main__" and "/control_plane/" in __file__ and not getattr(
+    _sys, "_pic_control_plane_bootstrapped", False
+):
+    raise SystemExit("Run installed control-plane tools through run_control_plane.py")
 
 from contextlib import contextmanager
 import csv
 from datetime import datetime, timezone
 import fcntl
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import stat
 from typing import Iterator, TextIO
 import uuid
+
+from control_plane_common import atomic_write_bytes, atomic_write_json
+from control_plane_common import durable_mkdir_parents, fsync_directory
+from control_plane_common import read_json_bytes
+from control_plane_common import read_stable_regular_file_below
 
 
 CSV_FIELDS = [
@@ -26,6 +38,8 @@ CSV_FIELDS = [
     "submission_id",
     "job_id",
     "control_plane_version",
+    "active_policy_sha256",
+    "active_promotion_sha256",
     "git_commit",
     "campaign",
     "test_id",
@@ -57,6 +71,7 @@ CSV_FIELDS = [
     "mirror_ack_sha256",
     "notes",
 ]
+GENESIS_ANCHOR_FILENAME = "genesis_anchor.json"
 
 
 def utc_now() -> str:
@@ -67,21 +82,60 @@ def utc_now() -> str:
 
 def canonical_json(record: dict[str, object], omit: str | None = None) -> str:
     payload = {key: value for key, value in record.items() if key != omit}
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
+    )
 
 
 def record_sha256(record: dict[str, object], omit: str) -> str:
     return hashlib.sha256(canonical_json(record, omit).encode("utf-8")).hexdigest()
 
 
-def _read_jsonl(path: Path) -> list[dict[str, object]]:
-    if not path.exists():
+def _reject_json_constant(value: str) -> None:
+    raise ValueError(f"Non-finite JSON number is not allowed: {value}")
+
+
+def _reject_duplicate_json_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    value: dict[str, object] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"Duplicate JSON object key is not allowed: {key}")
+        value[key] = item
+    return value
+
+
+def _read_jsonl(path: Path, *, root: Path | None = None) -> list[dict[str, object]]:
+    try:
+        if root is not None:
+            data = read_stable_regular_file_below(path, root)
+        else:
+            descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            try:
+                if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                    raise ValueError(f"Expected a regular JSONL file: {path}")
+                with os.fdopen(descriptor, "rb", closefd=False) as stream:
+                    data = stream.read()
+            finally:
+                os.close(descriptor)
+    except FileNotFoundError:
         return []
     records = []
-    for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError(f"JSONL file is not UTF-8: {path}") from error
+    for number, raw in enumerate(text.splitlines(), 1):
         if not raw:
             raise ValueError(f"Blank JSONL line in {path}:{number}")
-        record = json.loads(raw)
+        record = json.loads(
+            raw,
+            parse_constant=_reject_json_constant,
+            object_pairs_hook=_reject_duplicate_json_pairs,
+        )
         if not isinstance(record, dict):
             raise ValueError(f"JSONL record is not an object in {path}:{number}")
         records.append(record)
@@ -89,15 +143,33 @@ def _read_jsonl(path: Path) -> list[dict[str, object]]:
 
 
 def _append_jsonl(path: Path, record: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as stream:
+    durable_mkdir_parents(path.parent)
+    created = False
+    flags = os.O_APPEND | os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW
+    try:
+        descriptor = os.open(path, flags, 0o600)
+        created = True
+    except FileExistsError:
+        descriptor = os.open(path, os.O_APPEND | os.O_WRONLY | os.O_NOFOLLOW)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise ValueError(f"Expected a regular JSONL file: {path}")
+        stream = os.fdopen(descriptor, "a", encoding="utf-8")
+    except BaseException:
+        os.close(descriptor)
+        raise
+    with stream:
         stream.write(canonical_json(record) + "\n")
         stream.flush()
         os.fsync(stream.fileno())
+    if created:
+        fsync_directory(path.parent)
 
 
-def validate_primary_chain(path: Path) -> list[dict[str, object]]:
-    records = _read_jsonl(path)
+def validate_primary_chain(
+    path: Path, *, root: Path | None = None
+) -> list[dict[str, object]]:
+    records = _read_jsonl(path, root=root)
     previous = ""
     for expected_sequence, record in enumerate(records):
         if record.get("sequence_number") != expected_sequence:
@@ -129,8 +201,9 @@ def validate_receipts(
     *,
     mirror_jsonl: Path,
     mirror_transport: str,
+    root: Path | None = None,
 ) -> list[dict[str, object]]:
-    records = _read_jsonl(path)
+    records = _read_jsonl(path, root=root)
     primary_hashes = [record["event_sha256"] for record in primary_records]
     for record in records:
         _validate_receipt_provenance(
@@ -233,7 +306,7 @@ def ledger_lock(ledger_jsonl: Path) -> Iterator[None]:
     lock_path = _require_canonical_path(
         ledger_jsonl.with_suffix(ledger_jsonl.suffix + ".lock")
     )
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    durable_mkdir_parents(lock_path.parent)
     lock_path = _require_canonical_path(lock_path)
     with _open_regular_nofollow(
         lock_path,
@@ -248,12 +321,13 @@ def ledger_lock(ledger_jsonl: Path) -> Iterator[None]:
 
 
 def mirror_preflight(mirror_jsonl: Path) -> None:
-    mirror_jsonl.parent.mkdir(parents=True, exist_ok=True)
+    durable_mkdir_parents(mirror_jsonl.parent)
     probe = mirror_jsonl.parent / f".pic-ledger-probe-{os.getpid()}-{uuid.uuid4()}"
     probe.write_text("pic-ledger-mirror-preflight\n", encoding="utf-8")
     with probe.open("rb") as stream:
         os.fsync(stream.fileno())
     probe.unlink()
+    fsync_directory(probe.parent)
 
 
 def _append_mirror_receipt(
@@ -273,22 +347,178 @@ def _append_mirror_receipt(
     return receipt
 
 
+def genesis_anchor_paths(ledger_jsonl: Path, mirror_jsonl: Path) -> tuple[Path, Path]:
+    return (
+        ledger_jsonl.parent / GENESIS_ANCHOR_FILENAME,
+        mirror_jsonl.parent / GENESIS_ANCHOR_FILENAME,
+    )
+
+
+def _genesis_anchor(
+    first_event: dict[str, object],
+    first_receipt: dict[str, object],
+    *,
+    mirror_jsonl: Path,
+) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "event_sha256": first_event["event_sha256"],
+        "mirror_ack_sha256": first_receipt["mirror_ack_sha256"],
+        "mirror_destination": str(mirror_jsonl),
+        "mirror_transport": "filesystem_copy",
+    }
+
+
+def _write_genesis_anchors(
+    ledger_jsonl: Path,
+    mirror_jsonl: Path,
+    anchor: dict[str, object],
+) -> None:
+    local_anchor, mirror_anchor = genesis_anchor_paths(ledger_jsonl, mirror_jsonl)
+    _write_one_genesis_anchor(local_anchor, ledger_jsonl.parent.parent, anchor)
+    _write_one_genesis_anchor(mirror_anchor, mirror_jsonl.parent.parent, anchor)
+
+
+def _write_one_genesis_anchor(
+    path: Path,
+    root: Path,
+    anchor: dict[str, object],
+) -> None:
+    atomic_write_json(path, anchor, replace=False, root=root)
+
+
+def _read_one_genesis_anchor(path: Path, root: Path) -> dict[str, object]:
+    data = read_stable_regular_file_below(
+        path,
+        root,
+        require_read_only_mode=True,
+    )
+    return read_json_bytes(data, label=str(path))
+
+
+def _validate_genesis_anchors(
+    ledger_jsonl: Path,
+    mirror_jsonl: Path,
+    records: list[dict[str, object]],
+    receipts: list[dict[str, object]],
+) -> None:
+    local_anchor, mirror_anchor = genesis_anchor_paths(ledger_jsonl, mirror_jsonl)
+    if not records:
+        if local_anchor.exists() or mirror_anchor.exists():
+            raise ValueError("Genesis anchor exists without Frontier PIC ledger records")
+        return
+    require_explicit_genesis(records)
+    try:
+        local_bytes = read_stable_regular_file_below(
+            local_anchor,
+            ledger_jsonl.parent.parent,
+            require_read_only_mode=True,
+        )
+        mirror_bytes = read_stable_regular_file_below(
+            mirror_anchor,
+            mirror_jsonl.parent.parent,
+            require_read_only_mode=True,
+        )
+    except FileNotFoundError as error:
+        raise ValueError("Frontier PIC ledger is missing a genesis anchor") from error
+    if local_bytes != mirror_bytes:
+        raise ValueError("Orion and Project Home genesis-anchor bytes differ")
+    anchor = read_json_bytes(local_bytes, label=str(local_anchor))
+    if anchor != _genesis_anchor(records[0], receipts[0], mirror_jsonl=mirror_jsonl):
+        raise ValueError("Frontier PIC genesis anchor differs from ledger genesis")
+
+
 def validate_mirrored_state(
     ledger_jsonl: Path,
     receipts_jsonl: Path,
     mirror_jsonl: Path,
+    *,
+    ledger_root: Path | None = None,
+    receipts_root: Path | None = None,
+    mirror_root: Path | None = None,
 ) -> list[dict[str, object]]:
-    local_records = validate_primary_chain(ledger_jsonl)
-    mirror_records = validate_primary_chain(mirror_jsonl)
+    local_records = validate_primary_chain(ledger_jsonl, root=ledger_root)
+    mirror_records = validate_primary_chain(mirror_jsonl, root=mirror_root)
     if local_records != mirror_records:
         raise ValueError("Local and mirrored PIC ledger records differ")
-    validate_receipts(
+    receipts = validate_receipts(
         receipts_jsonl,
         local_records,
         mirror_jsonl=mirror_jsonl,
         mirror_transport="filesystem_copy",
+        root=receipts_root,
     )
+    _validate_genesis_anchors(ledger_jsonl, mirror_jsonl, local_records, receipts)
     return local_records
+
+
+def migrate_existing_genesis_anchors(
+    ledger_jsonl: Path,
+    receipts_jsonl: Path,
+    mirror_jsonl: Path,
+    *,
+    expected_event_sha256: str,
+    expected_mirror_ack_sha256: str,
+) -> dict[str, object]:
+    """Create paired anchors for one audited pre-anchor ledger exactly once."""
+    with ledger_lock(ledger_jsonl):
+        local_anchor, mirror_anchor = genesis_anchor_paths(ledger_jsonl, mirror_jsonl)
+        if local_anchor.exists() and mirror_anchor.exists():
+            records = validate_mirrored_state(ledger_jsonl, receipts_jsonl, mirror_jsonl)
+            receipts = validate_receipts(
+                receipts_jsonl,
+                records,
+                mirror_jsonl=mirror_jsonl,
+                mirror_transport="filesystem_copy",
+            )
+            anchor = _genesis_anchor(records[0], receipts[0], mirror_jsonl=mirror_jsonl)
+        else:
+            local_records = validate_primary_chain(ledger_jsonl)
+            mirror_records = validate_primary_chain(mirror_jsonl)
+            if local_records != mirror_records:
+                raise ValueError("Local and mirrored PIC ledger records differ")
+            require_explicit_genesis(local_records)
+            receipts = validate_receipts(
+                receipts_jsonl,
+                local_records,
+                mirror_jsonl=mirror_jsonl,
+                mirror_transport="filesystem_copy",
+            )
+            anchor = _genesis_anchor(
+                local_records[0], receipts[0], mirror_jsonl=mirror_jsonl
+            )
+            if (
+                anchor["event_sha256"] != expected_event_sha256
+                or anchor["mirror_ack_sha256"] != expected_mirror_ack_sha256
+            ):
+                raise ValueError("Audited policy genesis anchor differs from ledger genesis")
+            if local_anchor.exists():
+                if _read_one_genesis_anchor(
+                    local_anchor, ledger_jsonl.parent.parent
+                ) != anchor:
+                    raise ValueError("Existing Orion genesis anchor differs from ledger")
+            else:
+                _write_one_genesis_anchor(
+                    local_anchor, ledger_jsonl.parent.parent, anchor
+                )
+            if mirror_anchor.exists():
+                if _read_one_genesis_anchor(
+                    mirror_anchor, mirror_jsonl.parent.parent
+                ) != anchor:
+                    raise ValueError(
+                        "Existing Project Home genesis anchor differs from ledger"
+                    )
+            else:
+                _write_one_genesis_anchor(
+                    mirror_anchor, mirror_jsonl.parent.parent, anchor
+                )
+            validate_mirrored_state(ledger_jsonl, receipts_jsonl, mirror_jsonl)
+        if (
+            anchor["event_sha256"] != expected_event_sha256
+            or anchor["mirror_ack_sha256"] != expected_mirror_ack_sha256
+        ):
+            raise ValueError("Existing genesis anchor differs from audited policy")
+        return anchor
 
 
 def repair_mirrored_state_locked(
@@ -302,7 +532,6 @@ def repair_mirrored_state_locked(
     """Repair only missing trailing mirror records or receipts from canonical Orion."""
     if mirror_transport != "filesystem_copy":
         raise ValueError("Only preflighted filesystem_copy transport is implemented")
-    mirror_preflight(mirror_jsonl)
     local_records = validate_primary_chain(ledger_jsonl)
     mirror_records = validate_primary_chain(mirror_jsonl)
     if mirror_records != local_records[:len(mirror_records)]:
@@ -323,6 +552,10 @@ def repair_mirrored_state_locked(
     ]
     if receipt_hashes != expected_receipt_prefix:
         raise ValueError("Mirror receipts are not an exact prefix of mirrored events")
+    if not receipts:
+        raise ValueError("Cannot repair a mirrored ledger without its genesis receipt")
+    _validate_genesis_anchors(ledger_jsonl, mirror_jsonl, local_records, receipts)
+    mirror_preflight(mirror_jsonl)
 
     appended_mirror = 0
     for record in local_records[len(mirror_records):]:
@@ -377,8 +610,8 @@ def append_primary_event_locked(
     if mirror_transport != "filesystem_copy":
         raise ValueError("Only preflighted filesystem_copy transport is implemented")
 
-    mirror_preflight(mirror_jsonl)
     local_records = validate_mirrored_state(ledger_jsonl, receipts_jsonl, mirror_jsonl)
+    mirror_preflight(mirror_jsonl)
     mirror_records = local_records
     if event.get("event_type") == "genesis":
         if local_records or mirror_records:
@@ -396,7 +629,15 @@ def append_primary_event_locked(
     record["event_sha256"] = record_sha256(record, "event_sha256")
     _append_jsonl(ledger_jsonl, record)
     _append_jsonl(mirror_jsonl, record)
-    _append_mirror_receipt(receipts_jsonl, record, mirror_jsonl, mirror_transport)
+    receipt = _append_mirror_receipt(
+        receipts_jsonl, record, mirror_jsonl, mirror_transport
+    )
+    if event.get("event_type") == "genesis":
+        _write_genesis_anchors(
+            ledger_jsonl,
+            mirror_jsonl,
+            _genesis_anchor(record, receipt, mirror_jsonl=mirror_jsonl),
+        )
     write_csv(
         ledger_jsonl,
         receipts_jsonl,
@@ -435,7 +676,7 @@ def write_csv(
     mirror_jsonl: Path,
     mirror_transport: str,
 ) -> None:
-    primary = validate_primary_chain(ledger_jsonl)
+    primary = validate_mirrored_state(ledger_jsonl, receipts_jsonl, mirror_jsonl)
     receipts = validate_receipts(
         receipts_jsonl,
         primary,
@@ -445,28 +686,16 @@ def write_csv(
     receipt_by_event = {
         str(receipt["mirrored_event_sha256"]): receipt for receipt in receipts
     }
-    ledger_csv.parent.mkdir(parents=True, exist_ok=True)
+    durable_mkdir_parents(ledger_csv.parent)
     ledger_csv = _require_canonical_path(ledger_csv)
-    temporary = _require_canonical_path(
-        ledger_csv.with_suffix(ledger_csv.suffix + ".tmp")
-    )
-    with _open_regular_nofollow(
-        temporary,
-        "w",
-        flags=os.O_CREAT | os.O_TRUNC | os.O_WRONLY,
-        newline="",
-    ) as stream:
-        writer = csv.DictWriter(stream, fieldnames=CSV_FIELDS, extrasaction="ignore")
-        writer.writeheader()
-        for record in primary:
-            row = dict(record)
-            row.update(receipt_by_event.get(str(record["event_sha256"]), {}))
-            writer.writerow({field: row.get(field, "") for field in CSV_FIELDS})
-        stream.flush()
-        os.fsync(stream.fileno())
-    temporary = _require_canonical_path(temporary)
-    ledger_csv = _require_canonical_path(ledger_csv)
-    os.replace(temporary, ledger_csv)
+    stream = io.StringIO(newline="")
+    writer = csv.DictWriter(stream, fieldnames=CSV_FIELDS, extrasaction="ignore")
+    writer.writeheader()
+    for record in primary:
+        row = dict(record)
+        row.update(receipt_by_event.get(str(record["event_sha256"]), {}))
+        writer.writerow({field: row.get(field, "") for field in CSV_FIELDS})
+    atomic_write_bytes(ledger_csv, stream.getvalue().encode("utf-8"), mode=0o600)
 
 
 def initialize_ledger(
@@ -480,9 +709,18 @@ def initialize_ledger(
     control_plane_version: str,
 ) -> dict[str, object]:
     with ledger_lock(ledger_jsonl):
-        for path in [ledger_jsonl, ledger_csv, receipts_jsonl, mirror_jsonl]:
-            if path.exists() and path.stat().st_size:
-                raise ValueError(f"Refusing to overwrite existing ledger state: {path}")
+        anchors = genesis_anchor_paths(ledger_jsonl, mirror_jsonl)
+        for path in [ledger_jsonl, ledger_csv, receipts_jsonl, mirror_jsonl, *anchors]:
+            if path.exists():
+                return _repair_interrupted_genesis_locked(
+                    ledger_jsonl,
+                    ledger_csv,
+                    receipts_jsonl,
+                    mirror_jsonl,
+                    mirror_transport=mirror_transport,
+                    notes=notes,
+                    control_plane_version=control_plane_version,
+                )
         return append_primary_event_locked(
             ledger_jsonl,
             ledger_csv,
@@ -496,3 +734,96 @@ def initialize_ledger(
             },
             mirror_transport=mirror_transport,
         )
+
+
+def _repair_interrupted_genesis_locked(
+    ledger_jsonl: Path,
+    ledger_csv: Path,
+    receipts_jsonl: Path,
+    mirror_jsonl: Path,
+    *,
+    mirror_transport: str,
+    notes: str,
+    control_plane_version: str,
+) -> dict[str, object]:
+    """Complete only one exact interrupted fresh-genesis publication."""
+    if mirror_transport != "filesystem_copy":
+        raise ValueError("Only preflighted filesystem_copy transport is implemented")
+    local_records = validate_primary_chain(ledger_jsonl)
+    mirror_records = validate_primary_chain(mirror_jsonl)
+    if len(local_records) != 1:
+        raise ValueError("Refusing to overwrite existing ledger state")
+    genesis = local_records[0]
+    if (
+        set(genesis)
+        != {
+            "event_type",
+            "state",
+            "notes",
+            "control_plane_version",
+            "sequence_number",
+            "previous_event_sha256",
+            "timestamp",
+            "event_sha256",
+        }
+        or genesis.get("event_type") != "genesis"
+        or genesis.get("state") != "initialized"
+        or genesis.get("notes") != notes
+        or genesis.get("control_plane_version") != control_plane_version
+        or genesis.get("sequence_number") != 0
+        or genesis.get("previous_event_sha256") != ""
+        or record_sha256(genesis, "event_sha256") != genesis.get("event_sha256")
+    ):
+        raise ValueError("Existing state is not the expected interrupted ledger genesis")
+    if mirror_records not in [[], local_records]:
+        raise ValueError("Existing Project Home state is not an interrupted genesis prefix")
+    receipts = _read_jsonl(receipts_jsonl)
+    if len(receipts) > 1 or (receipts and not mirror_records):
+        raise ValueError("Existing receipt state is not an interrupted genesis prefix")
+    for receipt in receipts:
+        _validate_receipt_provenance(
+            receipt,
+            mirror_jsonl=mirror_jsonl,
+            mirror_transport=mirror_transport,
+        )
+        if (
+            receipt.get("mirrored_event_sha256") != genesis["event_sha256"]
+            or receipt.get("mirror_ack_sha256")
+            != record_sha256(receipt, "mirror_ack_sha256")
+        ):
+            raise ValueError("Existing genesis receipt is invalid")
+    local_anchor, mirror_anchor = genesis_anchor_paths(ledger_jsonl, mirror_jsonl)
+    if receipts:
+        anchor = _genesis_anchor(genesis, receipts[0], mirror_jsonl=mirror_jsonl)
+        for path, root in [
+            (local_anchor, ledger_jsonl.parent.parent),
+            (mirror_anchor, mirror_jsonl.parent.parent),
+        ]:
+            if path.exists() and _read_one_genesis_anchor(path, root) != anchor:
+                raise ValueError("Existing genesis anchor differs from interrupted genesis")
+    elif local_anchor.exists() or mirror_anchor.exists():
+        raise ValueError("Genesis anchor exists without a durable mirror receipt")
+
+    mirror_preflight(mirror_jsonl)
+    if not mirror_records:
+        _append_jsonl(mirror_jsonl, genesis)
+    if not receipts:
+        receipts = [
+            _append_mirror_receipt(
+                receipts_jsonl, genesis, mirror_jsonl, mirror_transport
+            )
+        ]
+    anchor = _genesis_anchor(genesis, receipts[0], mirror_jsonl=mirror_jsonl)
+    if not local_anchor.exists():
+        _write_one_genesis_anchor(local_anchor, ledger_jsonl.parent.parent, anchor)
+    if not mirror_anchor.exists():
+        _write_one_genesis_anchor(mirror_anchor, mirror_jsonl.parent.parent, anchor)
+    validate_mirrored_state(ledger_jsonl, receipts_jsonl, mirror_jsonl)
+    write_csv(
+        ledger_jsonl,
+        receipts_jsonl,
+        ledger_csv,
+        mirror_jsonl=mirror_jsonl,
+        mirror_transport=mirror_transport,
+    )
+    return genesis

@@ -1,0 +1,24 @@
+{
+  "schema_version": 2,
+  "map_status": "blocked_pending_reference_specific_mapping_and_external_review",
+  "comparison_id": "XCMP-BELL-NONLINEAR-INDEPENDENT",
+  "dataset_provenance_id": "Q022-DATASET-XCMP-BELL-NONLINEAR-INDEPENDENT",
+  "reference_ids": ["riquelme_spitkovsky_2009_arxiv_0810.4565", "gargate_2010_arxiv_1002.1701", "zacharegkas_2022_arxiv_2210.08072"],
+  "athenak_physical_mode": "pending reference-specific bounded route freeze",
+  "matched_equations": [],
+  "intentional_mismatches": [],
+  "unit_map": {},
+  "normalization_map": {},
+  "parameter_overlap": {},
+  "excluded_regimes": [],
+  "source_records": [
+    "tst/publication/readiness/q022_athenak_paper_mhd_pic_equation_profile_2026-05-30.json",
+    "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json",
+    "tst/publication/readiness/q022_dataset_provenance_manifest_2026-05-30.json"
+  ],
+  "blocked_inputs": [
+    "Reference-specific equation, normalization, parameter-overlap, and excluded-regime mapping has not been supplied.",
+    "The required external reviewer disposition is pending."
+  ],
+  "reviewer_disposition": "pending external review"
+}

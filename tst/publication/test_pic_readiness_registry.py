@@ -79,6 +79,10 @@ def _minimum_validation_manifest() -> dict[str, object]:
                 "path": "source.tar",
                 "sha256": "0" * 64,
             },
+            "source_commit": {
+                "path": "source.commit",
+                "sha256": "0" * 64,
+            },
             "source_bundle_sha256": "0" * 64,
             "submodule_status": "absent",
             "submodules": [],
@@ -86,13 +90,60 @@ def _minimum_validation_manifest() -> dict[str, object]:
                 "path": "clean_candidate_manifest.json",
                 "sha256": "0" * 64,
             },
+            "clean_candidate_build_profile": {
+                "path": "build_profile.json",
+                "sha256": "0" * 64,
+            },
+            "clean_candidate_build_profile_receipt": {
+                "path": "profile_receipt.json",
+                "sha256": "0" * 64,
+            },
+            "clean_candidate_build_provenance": {
+                label: {
+                    "path": f"build_provenance/{filename}",
+                    "sha256": "0" * 64,
+                }
+                for label, filename in {
+                    "configure_log": "configure.log",
+                    "build_log": "build.log",
+                    "cmake_cache": "CMakeCache.txt",
+                    "module_list": "modules.txt",
+                    "toolchain": "toolchain.txt",
+                    "build_invocations": "build-invocations.json",
+                    "git_status_preconfigure": "git_status.preconfigure.txt",
+                    "git_status": "git_status.txt",
+                    "submodule_status": "submodule_status.txt",
+                    "environment_allowlist": "environment.allowlist.txt",
+                    "build_environment": "build-environment.json",
+                }.items()
+            },
+        },
+        "authorization": {
+            "control_plane_version": "0" * 64,
+            "clean_candidate_manifest_path": (
+                "/lustre/orion/ast207/proj-shared/dfielding/PIC/"
+                "clean_candidates/00000000-0000-0000-0000-000000000000/"
+                "clean_candidate_manifest.json"
+            ),
+            "clean_candidate_manifest_sha256": "0" * 64,
+            "active_policy": {
+                "path": "active_policy.json",
+                "sha256": "0" * 64,
+            },
+            "active_promotion": {
+                "path": "active_promotion.json",
+                "sha256": "0" * 64,
+            },
         },
         "executable": {
             "path": "/tmp/athena",
             "sha256": "0" * 64,
-            "cmake_cache": "/tmp/CMakeCache.txt",
-            "modules": "/tmp/modules.txt",
-            "environment_allowlist": "/tmp/environment.txt",
+            "cmake_cache": {"path": "/tmp/CMakeCache.txt", "sha256": "0" * 64},
+            "modules": {"path": "/tmp/modules.txt", "sha256": "0" * 64},
+            "environment_allowlist": {
+                "path": "/tmp/environment.txt",
+                "sha256": "0" * 64,
+            },
         },
         "parameters": {},
         "oracle": {
@@ -142,7 +193,12 @@ class PicReadinessRegistryTests(unittest.TestCase):
             frontier["simulation_root"],
             "/lustre/orion/ast207/proj-shared/dfielding/PIC",
         )
-        self.assertTrue(storage["ledger_genesis_allowed"])
+        self.assertFalse(storage["ledger_genesis_allowed"])
+        self.assertEqual(storage["ledger_genesis"]["status"], "initialized")
+        self.assertEqual(
+            storage["ledger_genesis"]["mirror_transport"],
+            "filesystem_copy",
+        )
         self.assertEqual(
             storage["orion_bulk_evidence_root"],
             "/lustre/orion/ast207/proj-shared/dfielding/PIC",
@@ -151,6 +207,31 @@ class PicReadinessRegistryTests(unittest.TestCase):
             storage["project_home_retention_role"],
             "operational_ledger_mirror_only",
         )
+        active = _load("q027_active_control_plane_generation_2026-05-30.json")
+        candidate = _load(
+            "q027_control_plane_bootstrap_scheduler_hardening_candidate_2026-05-30.json"
+        )
+        self.assertEqual(
+            storage["staged_control_plane_candidate_version"],
+            candidate["staged_successor"]["control_plane_version"],
+        )
+        lifecycle = storage["installed_control_plane_lifecycle"]
+        if lifecycle == "live_active_generation_successor_staged_not_installed":
+            self.assertEqual(
+                storage["installed_control_plane_version"],
+                active["active_generation"]["control_plane_version"],
+            )
+            self.assertNotEqual(
+                storage["installed_control_plane_version"],
+                storage["staged_control_plane_candidate_version"],
+            )
+        elif lifecycle == "paired_installed_reviewed_generation":
+            self.assertEqual(
+                storage["installed_control_plane_version"],
+                storage["staged_control_plane_candidate_version"],
+            )
+        else:
+            self.fail(f"Unknown installed-control-plane lifecycle: {lifecycle}")
         self.assertEqual(
             long_term["status"],
             "user_selected_orion_only_with_documented_durability_risk",
@@ -257,11 +338,11 @@ class PicReadinessRegistryTests(unittest.TestCase):
             ("blank test ID", ("test_id",), " "),
             ("blank physical mode", ("physical_mode",), " "),
             ("blank executable path", ("executable", "path"), " "),
-            ("blank CMake cache path", ("executable", "cmake_cache"), " "),
-            ("blank modules path", ("executable", "modules"), " "),
+            ("blank CMake cache path", ("executable", "cmake_cache", "path"), " "),
+            ("blank modules path", ("executable", "modules", "path"), " "),
             (
                 "blank environment allowlist path",
-                ("executable", "environment_allowlist"),
+                ("executable", "environment_allowlist", "path"),
                 " ",
             ),
             ("blank oracle kind", ("oracle", "kind"), " "),

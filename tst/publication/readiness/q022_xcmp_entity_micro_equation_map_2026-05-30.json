@@ -1,6 +1,8 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "map_status": "bounded_map_recorded_external_review_open",
   "comparison_id": "XCMP-ENTITY-MICRO",
+  "dataset_provenance_id": "Q022-DATASET-XCMP-ENTITY-MICRO",
   "reference_ids": ["entity_toolkit_snapshot_512998c4"],
   "athenak_physical_mode": "bounded_shared_particle_kernel_micro_oracle",
   "matched_equations": [
@@ -36,6 +38,9 @@
   "source_records": [
     "tst/publication/readiness/entity_snapshot.json",
     "tst/publication/readiness/q015_entity_differential_2026-05-30.json"
+  ],
+  "blocked_inputs": [
+    "External reviewer disposition is pending before this bounded local source differential may support a cross-code claim."
   ],
   "reviewer_disposition": "pending external review"
 }

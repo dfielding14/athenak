@@ -1,0 +1,73 @@
+{
+  "record_type": "q027_control_plane_accounting_provenance_candidate",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-027",
+    "Q-038",
+    "Q-042"
+  ],
+  "qualification_effect": "local_accounting_provenance_candidate_pass_fresh_independent_adversarial_retest_and_paired_install_pending",
+  "scope": "Successor chronology after an adjacent-path sweep of the recovery-provenance candidate found that reconciliation verified the Orion installed generation but not its paired Project Home install before querying scheduler accounting and appending mirrored accounting state. The hardened candidate requires paired installed-generation provenance before reconciliation can query scheduler accounting or mutate the ledger. It preserves all earlier scheduler-recovery, Bash-startup sanitization, closed-policy genesis, anchored mirror-repair, coherent CSV-publication, preflight-order and exact interrupted-bootstrap recovery controls. This record does not authorize submissions, replace a fresh independent adversarial pass, attest a paired live install or close the clean-candidate science freeze.",
+  "historical_predecessor": {
+    "record": "tst/publication/readiness/q027_control_plane_recovery_provenance_candidate_2026-05-30.json",
+    "control_plane_version": "7ea4aa8bcab804425a00d833e13b520b780ef5182c6c3e576ee791188511acbe",
+    "lifecycle": "chronology_only_superseded_for_next_promotion_candidate"
+  },
+  "staged_successor": {
+    "control_plane_version": "1843ce72c8c1d9529f1d6e4b9b465afbef05f76da8f819b6e326eb1fdf264d59",
+    "paired_install_status": "pending_fresh_independent_adversarial_retest",
+    "active_policy_promotion_status": "pending_fresh_independent_adversarial_retest",
+    "science_submission_freeze": "pending_clean_candidate_freeze"
+  },
+  "local_validation": {
+    "control_plane_tests": {
+      "status": "pass",
+      "tests_run": 131
+    },
+    "qualification_manifest_tests": {
+      "status": "pass",
+      "tests_run": 20
+    },
+    "ledger_tests": {
+      "status": "pass",
+      "tests_run": 31
+    },
+    "readiness_registry_tests": {
+      "status": "pass",
+      "tests_run": 8
+    },
+    "publication_discovery_tests": {
+      "status": "pass",
+      "tests_run": 228
+    },
+    "python_compile": "pass",
+    "shell_syntax": "pass",
+    "git_diff_check": "pass",
+    "warning_free_sphinx": "pass_58_pages"
+  },
+  "closed_activation_blockers": [
+    "reconciliation requires the paired immutable installed control-plane generation before scheduler accounting query or mirrored ledger append",
+    "successful scheduler attachment and cancellation both clear a matching stranded pending marker after their durable ledger event",
+    "scheduler-recovery mutations require the paired immutable installed control-plane generation before changing ledger, mirror, CSV, attachment or pending-marker state",
+    "the trampoline strips Bash startup hooks, exported functions and shell-option startup state before passing the writable allowlist descriptor to the profile wrapper",
+    "existing ledger state is authenticated before a Project Home writeability preflight can mutate mirror storage",
+    "ledger initialization may complete only an exact interrupted fresh-bootstrap prefix and rejects divergent or later state",
+    "ledger initialization requires active ledger_genesis_allowed=true with no initialized genesis fields",
+    "mirror repair validates immutable genesis anchors against canonical Orion state before copying any mirror suffix or emitting receipts",
+    "CSV regeneration requires coherent mirrored ledger records, receipts and immutable genesis anchors before publication",
+    "the profile wrapper closes the trampoline-opened runtime-allowlist file descriptor and unsets its environment binding before workload execution"
+  ],
+  "staged_source_context": {
+    "head_commit": "77634d4fb108f291b2576d09b13a887aafa9b4f4",
+    "head_tree": "bdfc00f2e225d0f592c8b4f491496960291297ea",
+    "worktree_state": "dirty_candidate_pending_clean_commit_curation",
+    "validation_completed_utc": "2026-05-30T16:53:43Z"
+  },
+  "next_actions": [
+    "Complete a fresh independent adversarial retest of this exact candidate digest.",
+    "Commit the exact reviewed source candidate, paired-install the identical control-plane digest in Orion and Project Home, migrate the predecessor genesis anchors exactly once and promote the reviewed closed policy without recreating ledger genesis.",
+    "Build and freeze the exact clean source candidate under Orion before any new Frontier submission."
+  ],
+  "overall_disposition": "local_accounting_provenance_candidate_pass_all_submissions_paused_pending_fresh_independent_adversarial_retest_paired_install_active_policy_promotion_clean_candidate_science_freeze_and_applicable_prerequisites"
+}

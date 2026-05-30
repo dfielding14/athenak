@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "comparison_id": "XCMP-BELL-NONLINEAR-INDEPENDENT",
+  "dataset_provenance_id": "Q022-DATASET-XCMP-BELL-NONLINEAR-INDEPENDENT",
+  "freeze_status": "blocked_pending_reference_dataset_extraction_and_external_review",
+  "observable_families": ["growth", "dominant_wavelength", "magnetic_amplification", "spectra", "morphology", "energy_transfer", "saturation"],
+  "rows": [],
+  "blocked_inputs": [
+    "No authorized Orion extracted dataset exists for this comparison.",
+    "Reference-specific units, extraction uncertainty, and externally reviewed numerical thresholds remain unavailable.",
+    "Numeric tolerance rows are intentionally absent rather than fabricated."
+  ],
+  "reviewer_disposition": "pending external review"
+}

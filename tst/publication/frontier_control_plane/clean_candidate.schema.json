@@ -13,7 +13,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": 2
+      "const": 3
     },
     "freeze_id": {
       "type": "string",
@@ -21,7 +21,8 @@
     },
     "created_utc": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"
     },
     "source": {
       "type": "object",
@@ -29,6 +30,8 @@
       "required": [
         "archive_path",
         "archive_sha256",
+        "commit_path",
+        "commit_sha256",
         "source_bundle_sha256",
         "git_commit",
         "git_tree",
@@ -39,9 +42,17 @@
       "properties": {
         "archive_path": {
           "type": "string",
-          "minLength": 1
+          "pattern": "^/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/[^/]+/source\\.tar$"
         },
         "archive_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "commit_path": {
+          "type": "string",
+          "pattern": "^/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/[^/]+/source\\.commit$"
+        },
+        "commit_sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         },
@@ -68,6 +79,7 @@
         },
         "submodules": {
           "type": "array",
+          "uniqueItems": true,
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -75,6 +87,8 @@
               "path",
               "archive_path",
               "archive_sha256",
+              "commit_path",
+              "commit_sha256",
               "git_commit",
               "git_tree",
               "worktree_status"
@@ -86,9 +100,17 @@
               },
               "archive_path": {
                 "type": "string",
-                "minLength": 1
+                "pattern": "^/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/[^/]+/submodules/[0-9]{4}\\.tar$"
               },
               "archive_sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "commit_path": {
+                "type": "string",
+                "pattern": "^/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/[^/]+/submodules/[0-9]{4}\\.commit$"
+              },
+              "commit_sha256": {
                 "type": "string",
                 "pattern": "^[0-9a-f]{64}$"
               },
@@ -149,27 +171,41 @@
         "profile_id",
         "profile_path",
         "profile_sha256",
+        "profile_receipt_path",
+        "profile_receipt_sha256",
         "source_archive_sha256",
+        "source_commit_sha256",
         "source_bundle_sha256",
         "toolchain",
-        "build_command",
+        "build_invocations_sha256",
         "executable_path",
         "executable_sha256"
       ],
       "properties": {
         "profile_id": {
-          "type": "string",
-          "minLength": 1
+          "const": "hip-mpi-release-paper-pic"
         },
         "profile_path": {
           "type": "string",
-          "minLength": 1
+          "pattern": "^/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/[^/]+/build_profile\\.json$"
         },
         "profile_sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         },
+        "profile_receipt_path": {
+          "type": "string",
+          "pattern": "^/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/[^/]+/profile_receipt\\.json$"
+        },
+        "profile_receipt_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
         "source_archive_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "source_commit_sha256": {
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         },
@@ -179,15 +215,15 @@
         },
         "toolchain": {
           "type": "string",
-          "minLength": 1
+          "pattern": "\\S"
         },
-        "build_command": {
+        "build_invocations_sha256": {
           "type": "string",
-          "minLength": 1
+          "pattern": "^[0-9a-f]{64}$"
         },
         "executable_path": {
           "type": "string",
-          "minLength": 1
+          "pattern": "^/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/[^/]+/athena$"
         },
         "executable_sha256": {
           "type": "string",

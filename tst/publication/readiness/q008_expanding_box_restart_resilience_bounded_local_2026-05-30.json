@@ -1,0 +1,75 @@
+{
+  "record_type": "q008_expanding_box_restart_resilience_bounded_local_tranche",
+  "date": "2026-05-30",
+  "gate": "Q-008",
+  "qualification_effect": "bounded_local_serial_host_regression_only",
+  "disposition": "local_restart_continuity_regression_added_full_q008_gate_open",
+  "scope": "A focused serial-host regression continues the admitted active-MHD expanding-box adaptive-delta-f plus reduced static-neutral damping smoke through one shared restart checkpoint. The uninterrupted and restarted paths are compared at the same two-cycle endpoint for MHD conserved, primitive and cell-centered magnetic views, built-in physical-volume MHD history output, and typed particle payload state. This is bounded local implementation evidence only. It is not clean-candidate, Frontier, MPI, HIP/GPU, physical CRPAI transport, Appendix-A convergence, or external-review evidence.",
+  "source_constraints": {
+    "production_source_edited_by_this_tranche": false,
+    "existing_q017_files_edited_by_this_tranche": false,
+    "control_plane_files_edited_by_this_tranche": false,
+    "readiness_plan_edited_by_this_tranche": false,
+    "tranche_owned_artifacts": [
+      "inputs/tests/pic_mhd_expanding_box_adaptive_damping_smoke.athinput",
+      "tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_restart.py",
+      "tst/publication/readiness/q008_expanding_box_restart_resilience_bounded_local_2026-05-30.json",
+      "tst/publication/readiness/q033_expanding_box_adaptive_damping_restart_resilience_bounded_local_2026-05-30.json"
+    ]
+  },
+  "verification": {
+    "input": "inputs/tests/pic_mhd_expanding_box_adaptive_damping_smoke.athinput",
+    "harness": "tst/scripts/particles/pic_mhd_expanding_box_adaptive_damping_restart.py",
+    "focused_command": "cd tst && PATH=/tmp/dfielding-codex-cmake3-shim:$PATH python3 run_tests.py particles/pic_mhd_expanding_box_adaptive_damping_restart --log_file=.pic_mhd_expanding_box_adaptive_damping_restart.log",
+    "focused_result": "pass",
+    "execution_location": "local host shell; Kronos was not used",
+    "worktree_state": "dirty shared worktree with unrelated in-progress edits; this is not a clean-candidate qualification run",
+    "build_profile": {
+      "cmake_build_type": "Release",
+      "kokkos_backend": "SERIAL",
+      "cmake": "3.30.5",
+      "cmake3_compatibility_note": "The local environment exposed cmake but not the harness-required cmake3 name. The focused run used an out-of-tree temporary /tmp cmake3 symlink and did not edit the repository harness."
+    },
+    "restart_shape": {
+      "uninterrupted_cycles": 2,
+      "segment_cycles": 1,
+      "checkpoint_continuations": 1,
+      "continued_endpoint_cycle": 2,
+      "shared_restart_output": true,
+      "particle_vtk_output": true
+    },
+    "checked_mhd_fields": [
+      "mhd_u:dens",
+      "mhd_u:mom1",
+      "mhd_u:mom2",
+      "mhd_u:mom3",
+      "mhd_u:ener",
+      "mhd_w:dens",
+      "mhd_w:velx",
+      "mhd_w:vely",
+      "mhd_w:velz",
+      "mhd_w:eint",
+      "mhd_bcc:bcc1",
+      "mhd_bcc:bcc2",
+      "mhd_bcc:bcc3"
+    ]
+  },
+  "observed_bounded_local_metrics": {
+    "endpoint_time": 0.0909571,
+    "mhd_time_absolute_error": 0.0,
+    "mhd_field_absolute_error_max": 0.0,
+    "history_endpoint_absolute_error_max": 0.0,
+    "particle_count": 64,
+    "typed_particle_payload_equal": true,
+    "particle_float_payload_absolute_error_max": 0.0,
+    "restart_refit_observed": false
+  },
+  "remaining_frontier_scope": [
+    "Run the restart-continuation carrier under the supported Frontier HIP/GPU clean-candidate profile and retain registered artifacts.",
+    "Exercise MPI decomposition parity, including shared and admitted per-rank restart publication behavior where applicable.",
+    "Exercise Frontier-filesystem checkpoint publication, scheduler-pretimeout continuation, interruption and node-loss resilience drills under their authorized gates.",
+    "Complete the full Appendix-A expanding/compressing-box convergence and driven CRPAI physical campaign matrix.",
+    "Obtain external reviewer disposition."
+  ],
+  "q008_status": "bounded_local_serial_host_active_mhd_expanding_box_restart_continuity_passed_frontier_and_full_physics_gates_open"
+}

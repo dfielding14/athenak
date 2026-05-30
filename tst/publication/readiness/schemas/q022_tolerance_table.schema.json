@@ -6,19 +6,33 @@
   "required": [
     "schema_version",
     "comparison_id",
+    "dataset_provenance_id",
     "freeze_status",
+    "observable_families",
     "rows",
+    "blocked_inputs",
     "reviewer_disposition"
   ],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {"const": 2},
     "comparison_id": {"type": "string", "minLength": 1},
+    "dataset_provenance_id": {"type": "string", "minLength": 1},
     "freeze_status": {
-      "enum": ["draft_open", "frozen_before_qualifying_run"]
+      "enum": [
+        "blocked_pending_reference_dataset_extraction_and_external_review",
+        "blocked_pending_external_review",
+        "not_applicable_documented_exclusion_candidate",
+        "draft_open",
+        "frozen_before_qualifying_run"
+      ]
+    },
+    "observable_families": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
     },
     "rows": {
       "type": "array",
-      "minItems": 1,
       "items": {
         "type": "object",
         "required": [
@@ -46,9 +60,48 @@
         "additionalProperties": true
       }
     },
+    "blocked_inputs": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
     "reviewer_disposition": {
       "enum": ["pending external review", "qualified", "rejected", "limited"]
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "required": ["freeze_status"],
+        "properties": {
+          "freeze_status": {"const": "frozen_before_qualifying_run"}
+        }
+      },
+      "then": {
+        "properties": {
+          "rows": {"minItems": 1}
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["freeze_status"],
+        "properties": {
+          "freeze_status": {
+            "enum": [
+              "blocked_pending_reference_dataset_extraction_and_external_review",
+              "blocked_pending_external_review",
+              "not_applicable_documented_exclusion_candidate"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "blocked_inputs": {"minItems": 1},
+          "reviewer_disposition": {"const": "pending external review"}
+        }
+      }
+    }
+  ],
   "additionalProperties": true
 }

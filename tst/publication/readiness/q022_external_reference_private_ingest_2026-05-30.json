@@ -15,6 +15,17 @@
     "orion_manifest_sha256": "7028552e0c9975bcc9ae869959f6ea30599bd3a0c192a1b9c626b3c4d5e12278",
     "verified_payload_files": 12
   },
+  "dataset_provenance": {
+    "source_controlled_manifest": "tst/publication/readiness/q022_dataset_provenance_manifest_2026-05-30.json",
+    "schema": "tst/publication/readiness/schemas/q022_dataset_provenance_manifest.schema.json",
+    "authorized_orion_extracted_dataset_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/q022_extracted_datasets_2026-05-30",
+    "inspection_status": "absent_no_bulk_extracted_dataset_ingested",
+    "bulk_extracted_dataset_files_recorded": 0,
+    "source_control_scope": "metadata_only_no_bulk_extracted_data",
+    "allowed_bulk_storage_system": "Orion",
+    "forbidden_storage_systems": ["Kronos"],
+    "rule": "Do not infer extracted measurements from archived PDFs or documentation. Add bulk extracted data only under the authorized Orion extracted-dataset root and record checksum, extraction method, uncertainty, redistribution basis, equation map, tolerance table, and external reviewer disposition before use."
+  },
   "transport_notes": [
     "arXiv PDFs were fetched from public arXiv export endpoints, checksummed in local staging, copied atomically to Orion and verified again after rename.",
     "The official GIZMO tapir.caltech.edu host presented a legacy TLS chain rejected by the system OpenSSL policy as EE certificate key too weak. Public reference-only HTML and PDF retrieval used an explicit curl --insecure exception, followed immediately by SHA-256 capture. This exception is not authorized for production control-plane, ledger, executable or simulation-artifact transport.",
@@ -100,9 +111,9 @@
   },
   "remaining_open_items": [
     "Classify redistribution and license basis before any external export.",
-    "Digitize or otherwise extract each comparison dataset with provenance and uncertainty.",
+    "Digitize or otherwise extract each comparison dataset with provenance and uncertainty only under the authorized Orion q022_extracted_datasets_2026-05-30 root; that root was absent when this tranche was recorded.",
     "Freeze one equation and normalization map plus numeric tolerances per executed comparison.",
     "Obtain external reviewer disposition."
   ],
-  "ingest_status": "orion_private_copy_checksum_verified_extraction_maps_thresholds_export_review_and_external_disposition_open"
+  "ingest_status": "orion_private_copy_checksum_verified_source_controlled_dataset_queue_recorded_authorized_orion_extracted_dataset_root_absent_extraction_maps_thresholds_export_review_and_external_disposition_open"
 }

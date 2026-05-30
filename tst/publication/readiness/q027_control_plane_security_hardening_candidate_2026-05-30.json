@@ -1,0 +1,87 @@
+{
+  "record_type": "q027_control_plane_security_hardening_candidate",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-027",
+    "Q-042"
+  ],
+  "qualification_effect": "local_security_hardening_candidate_pass_independent_adversarial_retest_and_paired_install_pending",
+  "scope": "Successor chronology after fresh independent reviews found qualification-platform relabeling, run-artifact lineage, crash-durability including post-rename rollback and durable parent creation, strict candidate-JSON and portable-layout alias, ledger-read anchoring plus explicit-genesis, first-create and CSV directory sync, trusted Project Home mount-alias handling, rollback-capable mirrored-policy replacement, staged-policy digest, mirrored-promotion serialization and Frontier node-hour-binding gaps. The candidate also adds an immutable Orion build-profile writer. This record does not authorize submissions, replace a fresh independent adversarial pass, attest a paired live install or close the clean-candidate science freeze.",
+  "historical_predecessor": {
+    "record": "tst/publication/readiness/q027_successor_control_plane_independent_pass_2026-05-30.json",
+    "control_plane_version": "12750ea6f8ef540e3807a56cb7573d9d690532f729405b37b031936d045b22dc",
+    "lifecycle": "chronology_only_superseded_for_next_promotion_candidate"
+  },
+  "staged_successor": {
+    "control_plane_version": "d8820c33f2b84e9ccf4736c409612a398c78b65fb7cafa0a0a1d11fb8d367553",
+    "paired_install_status": "pending_fresh_independent_adversarial_retest",
+    "active_policy_promotion_status": "pending_fresh_independent_adversarial_retest",
+    "science_submission_freeze": "pending_clean_candidate_freeze"
+  },
+  "local_validation": {
+    "control_plane_tests": {
+      "status": "pass",
+      "tests_run": 118
+    },
+    "qualification_manifest_tests": {
+      "status": "pass",
+      "tests_run": 19
+    },
+    "ledger_tests": {
+      "status": "pass",
+      "tests_run": 16
+    },
+    "publication_discovery_tests": {
+      "status": "pass",
+      "tests_run": 199
+    },
+    "python_compile": "pass",
+    "shell_syntax": "pass",
+    "json_parse": "pass",
+    "sphinx_render_58_pages_warnings_as_errors": "pass",
+    "git_diff_check": "pass"
+  },
+  "hardened_contracts": [
+    "closed host_or_Frontier qualification platform enum with host Frontier-field rejection",
+    "Frontier qualification artifact_root equality with reconciled run_artifact_dir",
+    "Frontier qualification node_hours equality with reconciled consumed_node_hours",
+    "anchored no-follow mirrored-ledger reads under the canonical ledger lock",
+    "strict duplicate-key and non-finite JSON rejection for registered-science candidates",
+    "durable staged-tree file and directory sync before immutable publication rename",
+    "fail-closed immutable-tree and exclusive-file rollback after parent-directory sync failure",
+    "durable parent-directory creation for immutable-tree publication",
+    "rollback-capable replacement publication for every mirrored-policy stage",
+    "trusted lexical Project Home mount-alias preservation with anchored no-follow traversal below the root",
+    "trusted-root anchored parent creation and atomic output traversal with below-root symlink rejection before side effects",
+    "ledger first-create and CSV-replace parent-directory sync",
+    "explicit mirrored-ledger genesis requirement before qualification",
+    "staged-policy candidate digest equality with the exact installed control-plane digest",
+    "portable clean-candidate layout rejection for parent-directory aliases",
+    "serialized mirrored policy promotion with final coherent fail-closed reread",
+    "installed immutable Orion build-profile writer with exclusive read-only publication",
+    "closed minimum, XNACK and OFI pre-selection Frontier environment profiles with redacted allowlist capture and unknown-profile rejection"
+  ],
+  "staged_source_context": {
+    "head_commit": "77634d4fb108f291b2576d09b13a887aafa9b4f4",
+    "head_tree": "bdfc00f2e225d0f592c8b4f491496960291297ea",
+    "worktree_state": "dirty_candidate_pending_clean_commit_curation",
+    "validation_completed_utc": "2026-05-30T16:17:19Z"
+  },
+  "local_validation_commands": [
+    "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 tst/publication/frontier_control_plane/test_control_plane.py",
+    "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 tst/publication/frontier_control_plane/test_ledger.py",
+    "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 tst/publication/test_pic_qualification_manifest.py",
+    "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=.:tst/publication/frontier_control_plane python3 -m unittest discover -s tst/publication -p 'test_*.py'",
+    "/tmp/athenak-q016-docs-venv/bin/sphinx-build -b html -W --keep-going -E docs/source docs/build/html",
+    "python3 -m py_compile tst/publication/frontier_control_plane/*.py tst/publication/pic_qualification_manifest.py tst/publication/test_pic_qualification_manifest.py",
+    "bash -n tst/publication/frontier_control_plane/*.sh",
+    "git diff --check"
+  ],
+  "next_actions": [
+    "Run a fresh independent adversarial retest of this exact candidate digest.",
+    "Commit the exact reviewed source candidate, paired-install the identical control-plane digest in Orion and Project Home, and promote its reviewed policy without recreating ledger genesis.",
+    "Build and freeze the exact clean source candidate under Orion before any new Frontier submission."
+  ],
+  "overall_disposition": "local_security_hardening_candidate_pass_all_submissions_paused_pending_fresh_independent_adversarial_retest_paired_install_active_policy_promotion_clean_candidate_science_freeze_and_applicable_prerequisites"
+}

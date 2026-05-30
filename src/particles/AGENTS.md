@@ -353,6 +353,15 @@ In coupled mode, moment wrappers are also inserted into `stagen` on stage 1:
   writes big-endian float32 position/velocity rows at tag-derived offsets.
 - Derived variable `prtcl_d` (in `outputs/derived_variables.cpp`) bins particle
   counts onto the mesh.
+- Final Q-017 stdout telemetry reports wrapper-boundary `adaptive_deltaf`,
+  `push`, `deposition`, and `migration` elapsed timers, fixed-record resident
+  bytes by species and absolute logical mesh-refinement level, and a direct
+  particle-view allocated-byte snapshot. The direct-view snapshot includes
+  view padding but excludes boundary, moment-boundary, AMR, and load-balance
+  helper buffers; it is not a peak GPU-memory measurement.
+- Set `<particles>/pic_q017_sync_kernel_timers=true` only for dedicated timing
+  runs. It fences measured particle boundaries so device elapsed times are
+  interpretable, but the synchronization intentionally perturbs execution.
 
 ---
 

@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "athenak_pic_q022_dataset_provenance_manifest.schema.json",
+  "title": "AthenaK PIC Q-022 external dataset provenance manifest",
+  "type": "object",
+  "required": [
+    "record_type",
+    "schema_version",
+    "date",
+    "gate",
+    "qualification_effect",
+    "disposition",
+    "source_ingest",
+    "authorized_extracted_dataset_root",
+    "authorized_extracted_dataset_root_status",
+    "storage_policy",
+    "blocked_inputs",
+    "dataset_candidates",
+    "manifest_status"
+  ],
+  "properties": {
+    "record_type": {"const": "q022_dataset_provenance_manifest"},
+    "schema_version": {"const": 1},
+    "date": {"const": "2026-05-30"},
+    "gate": {"const": "Q-022"},
+    "qualification_effect": {
+      "const": "source_controlled_dataset_provenance_queue_only"
+    },
+    "disposition": {"const": "open"},
+    "source_ingest": {"type": "string", "minLength": 1},
+    "authorized_extracted_dataset_root": {
+      "const": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/q022_extracted_datasets_2026-05-30"
+    },
+    "authorized_extracted_dataset_root_status": {
+      "enum": [
+        "absent_no_bulk_extracted_dataset_ingested",
+        "present_extracted_dataset_ingest_requires_manifest_update"
+      ]
+    },
+    "storage_policy": {
+      "type": "object",
+      "required": [
+        "source_control_scope",
+        "allowed_bulk_storage_system",
+        "forbidden_storage_systems",
+        "no_fabricated_extracted_measurements",
+        "required_before_dataset_use"
+      ],
+      "properties": {
+        "source_control_scope": {
+          "const": "metadata_only_no_bulk_extracted_data"
+        },
+        "allowed_bulk_storage_system": {"const": "Orion"},
+        "forbidden_storage_systems": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "no_fabricated_extracted_measurements": {"const": true},
+        "required_before_dataset_use": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "additionalProperties": false
+    },
+    "blocked_inputs": {"type": "object", "minProperties": 1},
+    "dataset_candidates": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "dataset_id",
+          "comparison_id",
+          "reference_ids",
+          "source_records",
+          "extraction_status",
+          "redistribution_basis",
+          "reviewer_disposition",
+          "blocked_input_ids"
+        ],
+        "properties": {
+          "dataset_id": {"type": "string", "minLength": 1},
+          "comparison_id": {"type": "string", "minLength": 1},
+          "reference_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "source_records": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "extraction_status": {
+            "enum": [
+              "blocked_extraction_input_unavailable",
+              "not_applicable_local_source_oracle",
+              "not_applicable_documented_exclusion_candidate",
+              "extracted_dataset_checksum_verified_pending_external_review"
+            ]
+          },
+          "redistribution_basis": {"type": "string", "minLength": 1},
+          "reviewer_disposition": {
+            "enum": ["pending external review", "qualified", "rejected", "limited"]
+          },
+          "blocked_input_ids": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "extracted_dataset_locator": {"type": "string", "minLength": 1},
+          "extracted_dataset_sha256": {"type": "string", "minLength": 1},
+          "extraction_method": {"type": "string", "minLength": 1},
+          "extraction_script_sha256": {"type": "string", "minLength": 1},
+          "extraction_uncertainty": {"type": "string", "minLength": 1}
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": ["extraction_status"],
+              "properties": {
+                "extraction_status": {
+                  "const": "extracted_dataset_checksum_verified_pending_external_review"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "extracted_dataset_locator",
+                "extracted_dataset_sha256",
+                "extraction_method",
+                "extraction_script_sha256",
+                "extraction_uncertainty"
+              ]
+            }
+          },
+          {
+            "if": {
+              "required": ["extraction_status"],
+              "properties": {
+                "extraction_status": {
+                  "enum": [
+                    "blocked_extraction_input_unavailable",
+                    "not_applicable_local_source_oracle",
+                    "not_applicable_documented_exclusion_candidate"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "blocked_input_ids": {"minItems": 1},
+                "reviewer_disposition": {"const": "pending external review"}
+              }
+            }
+          }
+        ],
+        "additionalProperties": false
+      }
+    },
+    "manifest_status": {"type": "string", "minLength": 1}
+  },
+  "additionalProperties": false
+}

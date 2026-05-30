@@ -59,6 +59,7 @@ enum class PICIntermediateArraysMode { auto_mode, off };
 enum class PICExpandingBoxMode { off, on };
 enum class PICExpansionLaw { linear, reciprocal_linear, exponential };
 enum class CRParticleSource { initial = 0, shock_injected = 1 };
+enum class Q017ParticleTimer { adaptive_deltaf, push, deposition, migration, count };
 
 //----------------------------------------------------------------------------------------
 //! \struct ParticlesTaskIDs
@@ -250,6 +251,7 @@ class Particles {
   int pic_sort_interval = 0;      // staged sorting cadence (0 disables re-sorting)
   int pic_random_seed = 0;        // deterministic seed for random CR placement
   Real pic_load_balance_cost_per_particle = 0.0; // optional AMR balancing cost weight
+  bool pic_q017_sync_kernel_timers = false; // opt-in fences for device elapsed timing
   Real pic_expansion_rate_x1 = 0.0;
   Real pic_expansion_rate_x2 = 0.0;
   Real pic_expansion_rate_x3 = 0.0;
@@ -349,6 +351,15 @@ class Particles {
   TaskStatus PushCosmicRays(Driver *pdriver, int stage);
   TaskStatus PushStars(Driver *pdriver, int stage);
   void NewTimeStep();
+  void Q017Fence() const {
+    if (pic_q017_sync_kernel_timers) Kokkos::fence();
+  }
+  void AccumulateQ017Timer(Q017ParticleTimer timer, double seconds) {
+    const int n = static_cast<int>(timer);
+    q017_particle_time_[n] += seconds;
+    q017_particle_calls_[n]++;
+  }
+  void OutputQ017Telemetry() const;
   bool UsesRelativisticCRState() const {
     return pic_physical_mode != PICPhysicalMode::engineering;
   }
@@ -404,7 +415,8 @@ class Particles {
                   static_cast<int>(particle_type),
                   static_cast<int>(pusher),
                   (particle_type == ParticleType::cosmic_ray) ? nspecies : 0,
-                  (particle_type == ParticleType::cosmic_ray && track_displacement) ? 1 : 0,
+                  (particle_type == ParticleType::cosmic_ray &&
+                   track_displacement) ? 1 : 0,
                   deposit_moments ? 1 : 0,
                   deposit_order,
                   couple_moments_to_mhd ? 1 : 0,
@@ -489,6 +501,10 @@ class Particles {
 
  private:
   MeshBlockPack *pmy_pack; // ptr to MeshBlockPack containing this Particles
+  static constexpr int nq017_particle_timers =
+      static_cast<int>(Q017ParticleTimer::count);
+  std::array<double, nq017_particle_timers> q017_particle_time_{};
+  std::array<std::uint64_t, nq017_particle_timers> q017_particle_calls_{};
 };
 
 } // namespace particles

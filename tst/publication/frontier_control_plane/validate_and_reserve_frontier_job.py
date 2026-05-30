@@ -1,12 +1,17 @@
-#!/opt/cray/pe/python/3.11.7/bin/python3
+#!/opt/cray/pe/python/3.11.7/bin/python3 -I
 """Validate and reserve a serialized Frontier PIC job before sbatch."""
 
 from __future__ import annotations
 
+import sys as _sys
+if __name__ == "__main__" and "/control_plane/" in __file__ and not getattr(
+    _sys, "_pic_control_plane_bootstrapped", False
+):
+    raise SystemExit("Run installed control-plane tools through run_control_plane.py")
+
 import argparse
 from datetime import datetime, timezone
 import hashlib
-import json
 import os
 from pathlib import Path
 import pwd
@@ -21,17 +26,22 @@ from control_plane_common import AUTHORIZED_CLEAN_CANDIDATE_FREEZE
 from control_plane_common import AUTHORIZED_NODE_HOUR_CAP
 from control_plane_common import AUTHORIZED_PIC_ROOT
 from control_plane_common import AUTHORIZED_PROJECT_HOME_ROOT, SITE_POLICY_MAX_AGE_SECONDS
+from control_plane_common import BUILD_PROVENANCE_FILENAMES
 from control_plane_common import FRONTIER_ADMISSION_SMOKE_SCOPE, REGISTERED_SCIENCE_SCOPE
 from control_plane_common import SUBMISSION_SCOPES
 from control_plane_common import TRUSTED_GIT, TRUSTED_SCONTROL, TRUSTED_SQUEUE
-from control_plane_common import atomic_write_bytes, atomic_write_json, read_json
+from control_plane_common import atomic_write_bytes, atomic_write_json, fsync_directory
+from control_plane_common import read_json
+from control_plane_common import read_json_bytes
 from control_plane_common import record_for_role, sha256_bytes
 from control_plane_common import require_below, require_canonical_path_below
 from control_plane_common import require_not_symlink, require_read_only, sha256
-from control_plane_common import require_ledger_paths, require_storage_policy_unlock
+from control_plane_common import require_ledger_paths, require_storage_policy_unlock_snapshot
 from control_plane_common import utc_datetime, validate_clean_candidate_bundle
 from control_plane_common import verify_installed_control_plane
-from control_plane_common import validate_launch_contract, verify_snapshot_files
+from control_plane_common import launch_contract_sha256, validate_launch_contract
+from control_plane_common import trusted_slurm_environment
+from control_plane_common import verify_snapshot_files
 from ledger import accounting, append_primary_event_locked, ledger_lock
 from ledger import latest_reservations, require_explicit_genesis, transition_payload
 from ledger import repair_mirrored_state_locked, validate_mirrored_state
@@ -47,6 +57,39 @@ ADMISSION_SMOKE_FIELDS = {
     "selected_qos": "debug",
     "registered_short_nonproduction": True,
 }
+
+
+def _verify_installed_control_plane_pair(
+    control_plane_dir: Path,
+    *,
+    authorized_pic_root: Path,
+    authorized_project_home_root: Path,
+) -> dict[str, object]:
+    inventory = verify_installed_control_plane(
+        control_plane_dir, authorized_pic_root=authorized_pic_root
+    )
+    verify_installed_control_plane(
+        authorized_project_home_root / "control_plane" / str(inventory["version"]),
+        authorized_pic_root=authorized_project_home_root,
+    )
+    return inventory
+
+
+def _require_run_artifact_dir(manifest: dict[str, object]) -> Path:
+    pic_root = Path(str(manifest["pic_root"])).resolve()
+    runs_root = pic_root / "runs"
+    artifact_dir = require_canonical_path_below(
+        Path(str(manifest["artifact_dir"])), runs_root
+    )
+    relative = artifact_dir.relative_to(runs_root)
+    if relative.parts != (
+        str(manifest["campaign"]),
+        str(manifest["submission_id"]),
+    ):
+        raise ValueError(
+            "Manifest artifact directory must be runs/<campaign>/<submission-id>"
+        )
+    return artifact_dir
 
 
 def _walltime_seconds(value: str) -> int:
@@ -117,6 +160,7 @@ def _queue_output() -> str:
             "%i|%P|%q|%T|%j|%k",
         ],
         text=True,
+        env=trusted_slurm_environment(),
     )
 
 
@@ -124,6 +168,7 @@ def _scheduler_job_output(job_id: str) -> str:
     return subprocess.check_output(
         [TRUSTED_SCONTROL, "show", "job", "--oneliner", job_id],
         text=True,
+        env=trusted_slurm_environment(),
     )
 
 
@@ -142,6 +187,31 @@ def _verify_scheduler_job(job_id: str, reservation_id: str) -> None:
         raise ValueError("Slurm job account does not match the authorized PIC account")
     if fields.get("JobState") not in {"PENDING", "CONFIGURING", "RUNNING", "COMPLETING"}:
         raise ValueError("Slurm job is not in an attachable scheduler state")
+
+
+def _require_scheduler_output_path(value: str, authorized_pic_root: Path) -> Path:
+    log_root = authorized_pic_root.resolve() / "logs" / "slurm"
+    output = require_canonical_path_below(Path(value), log_root)
+    expected = log_root / "%x.%j.log"
+    if output != expected:
+        raise ValueError(f"Slurm output must use the dedicated PIC log path: {expected}")
+    return output
+
+
+def _require_reservation_policy_snapshot(
+    reservation: dict[str, object],
+    *,
+    authorized_pic_root: Path,
+    authorized_project_home_root: Path,
+) -> None:
+    _, snapshot = require_storage_policy_unlock_snapshot(
+        control_plane_version=str(reservation["control_plane_version"]),
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+    )
+    for field in ["active_policy_sha256", "active_promotion_sha256"]:
+        if reservation.get(field) != snapshot[field]:
+            raise ValueError("Reservation belongs to another active-policy generation")
 
 
 def _append_locked(
@@ -181,6 +251,7 @@ def _matching_pending_marker(path: Path, reservation_id: str) -> dict[str, objec
 def _clear_matching_pending_marker(path: Path, reservation_id: str) -> None:
     if _matching_pending_marker(path, reservation_id) is not None:
         path.unlink()
+        fsync_directory(path.parent)
 
 
 def _write_reservation_attachments(
@@ -241,8 +312,8 @@ def _verify_manifest(
         raise ValueError("Manifest does not declare a recognized submission scope")
     require_canonical_path_below(manifest_path, pic_root / "manifests")
     require_read_only(manifest_path)
-    require_canonical_path_below(Path(str(manifest["artifact_dir"])), pic_root)
-    verify_snapshot_files(manifest)
+    _require_run_artifact_dir(manifest)
+    verify_snapshot_files(manifest, root=authorized_pic_root)
     for record in manifest["snapshot_files"]:
         path = require_canonical_path_below(Path(str(record["path"])), pic_root)
         require_read_only(path)
@@ -296,13 +367,6 @@ def _digest(record: dict[str, object], key: str) -> str:
     return value
 
 
-def _read_json_bytes(data: bytes, *, label: str) -> dict[str, object]:
-    value = json.loads(data.decode("utf-8"))
-    if not isinstance(value, dict):
-        raise ValueError(f"{label} must contain a JSON object")
-    return value
-
-
 def _read_regular_file_at(directory_fd: int, name: str, *, label: str) -> bytes:
     if not name or "/" in name:
         raise ValueError(f"{label} has an invalid fixed-layout name")
@@ -347,23 +411,26 @@ def _require_exact_layout_path(record: dict[str, object], key: str, expected: Pa
 
 def _read_submodule_archives(
     source: dict[str, object], *, candidate_dir: Path, candidate_fd: int
-) -> list[bytes]:
+) -> tuple[list[bytes], list[bytes]]:
     records = source.get("submodules")
     if not isinstance(records, list):
         raise ValueError("Clean-candidate submodules must be a list")
     if not records:
-        return []
+        return [], []
     submodules_fd = _open_read_only_directory_at(
         candidate_fd, "submodules", label="Clean-candidate submodule directory"
     )
     try:
         archives = []
+        commits = []
         names = set()
         for index, record in enumerate(records):
             if not isinstance(record, dict):
                 raise ValueError("Clean-candidate submodule attestation must be an object")
             name = f"{index:04d}.tar"
+            commit_name = f"{index:04d}.commit"
             names.add(name)
+            names.add(commit_name)
             _require_exact_layout_path(
                 record, "archive_path", candidate_dir / "submodules" / name
             )
@@ -372,10 +439,20 @@ def _read_submodule_archives(
                     submodules_fd, name, label=f"Clean-candidate submodule archive {index}"
                 )
             )
+            _require_exact_layout_path(
+                record, "commit_path", candidate_dir / "submodules" / commit_name
+            )
+            commits.append(
+                _read_regular_file_at(
+                    submodules_fd,
+                    commit_name,
+                    label=f"Clean-candidate submodule commit object {index}",
+                )
+            )
         _require_exact_directory_entries(
             submodules_fd, names, label="Clean-candidate submodule directory"
         )
-        return archives
+        return archives, commits
     finally:
         os.close(submodules_fd)
 
@@ -434,7 +511,7 @@ def _verify_clean_candidate(
             )
             if sha256_bytes(candidate_bytes) != candidate_sha256:
                 raise ValueError("Policy-authorized clean-candidate manifest checksum mismatch")
-            candidate = _read_json_bytes(candidate_bytes, label="Clean-candidate manifest")
+            candidate = read_json_bytes(candidate_bytes, label="Clean-candidate manifest")
             freeze_id = _text(candidate, "freeze_id")
             uuid.UUID(freeze_id)
             if candidate_path.parent.name != freeze_id:
@@ -443,8 +520,14 @@ def _verify_clean_candidate(
             source = _mapping(candidate, "source")
             build = _mapping(candidate, "build")
             _require_exact_layout_path(source, "archive_path", candidate_path.parent / "source.tar")
+            _require_exact_layout_path(source, "commit_path", candidate_path.parent / "source.commit")
             _require_exact_layout_path(
                 build, "profile_path", candidate_path.parent / "build_profile.json"
+            )
+            _require_exact_layout_path(
+                build,
+                "profile_receipt_path",
+                candidate_path.parent / "profile_receipt.json",
             )
             _require_exact_layout_path(
                 build, "executable_path", candidate_path.parent / "athena"
@@ -452,19 +535,49 @@ def _verify_clean_candidate(
             source_archive = _read_regular_file_at(
                 candidate_fd, "source.tar", label="Clean-candidate source archive"
             )
-            submodule_archives = _read_submodule_archives(
+            source_commit = _read_regular_file_at(
+                candidate_fd, "source.commit", label="Clean-candidate source commit object"
+            )
+            submodule_archives, submodule_commits = _read_submodule_archives(
                 source, candidate_dir=candidate_path.parent, candidate_fd=candidate_fd
             )
             profile_bytes = _read_regular_file_at(
                 candidate_fd, "build_profile.json", label="Clean-candidate build profile"
             )
+            receipt_bytes = _read_regular_file_at(
+                candidate_fd,
+                "profile_receipt.json",
+                label="Clean-candidate build-profile receipt",
+            )
             executable_bytes = _read_regular_file_at(
                 candidate_fd, "athena", label="Clean-candidate executable"
             )
+            provenance_fd = _open_read_only_directory_at(
+                candidate_fd, "build_provenance", label="Frozen build provenance directory"
+            )
+            try:
+                _require_exact_directory_entries(
+                    provenance_fd,
+                    set(BUILD_PROVENANCE_FILENAMES.values()),
+                    label="Frozen build provenance directory",
+                )
+                build_provenance = {
+                    label: _read_regular_file_at(
+                        provenance_fd,
+                        filename,
+                        label=f"Frozen build provenance {label}",
+                    )
+                    for label, filename in BUILD_PROVENANCE_FILENAMES.items()
+                }
+            finally:
+                os.close(provenance_fd)
             entries = {
                 "athena",
+                "build_provenance",
                 "build_profile.json",
                 "clean_candidate_manifest.json",
+                "profile_receipt.json",
+                "source.commit",
                 "source.tar",
             }
             if source.get("submodules"):
@@ -480,25 +593,20 @@ def _verify_clean_candidate(
     profile_submodules = validate_clean_candidate_bundle(
         candidate,
         source_archive=source_archive,
+        source_commit=source_commit,
         submodule_archives=submodule_archives,
+        submodule_commits=submodule_commits,
+        build_profile=profile_bytes,
+        build_profile_receipt=receipt_bytes,
+        build_provenance=build_provenance,
         executable_sha256=executable_sha256,
+        expected_control_plane_version=str(
+            _mapping(policy, "olcf_side_storage")["installed_control_plane_version"]
+        ),
     )
     git_commit = _text(source, "git_commit")
     if manifest.get("git_commit") != git_commit:
         raise ValueError("Science manifest Git commit differs from clean candidate")
-    if sha256_bytes(profile_bytes) != _digest(build, "profile_sha256"):
-        raise ValueError("Clean-candidate build profile checksum mismatch")
-    if _read_json_bytes(profile_bytes, label="Clean-candidate build profile") != {
-        "schema_version": 1,
-        "profile_id": _text(build, "profile_id"),
-        "source_archive_sha256": source["archive_sha256"],
-        "source_bundle_sha256": source["source_bundle_sha256"],
-        "toolchain": _text(build, "toolchain"),
-        "build_command": _text(build, "build_command"),
-        "executable_sha256": executable_sha256,
-        "submodules": profile_submodules,
-    }:
-        raise ValueError("Frozen build profile does not match clean-candidate attestation")
     executable = candidate_path.parent / "athena"
     executable_snapshot = record_for_role(manifest, "executable")
     if Path(str(executable_snapshot.get("source_path", ""))) != executable:
@@ -563,6 +671,10 @@ def _check_submission_scope(
         "analysis_script_sha256"
     ):
         raise ValueError("Admission-smoke analysis scripts are not policy authorized")
+    if launch_contract_sha256(manifest.get("launch_contract")) != authorization.get(
+        "launch_contract_sha256"
+    ):
+        raise ValueError("Admission-smoke launch contract is not policy authorized")
     return ""
 
 
@@ -677,16 +789,19 @@ def reserve(
     manifest_path = require_canonical_path_below(
         manifest_path, authorized_pic_root.resolve() / "manifests"
     )
+    _verify_installed_control_plane_pair(
+        control_plane_dir,
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+    )
     with ledger_lock(ledger_jsonl):
-        inventory = verify_installed_control_plane(
-            control_plane_dir, authorized_pic_root=authorized_pic_root
+        inventory = _verify_installed_control_plane_pair(
+            control_plane_dir,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
         )
         version = str(inventory["version"])
-        verify_installed_control_plane(
-            authorized_project_home_root / "control_plane" / version,
-            authorized_pic_root=authorized_project_home_root,
-        )
-        policy = require_storage_policy_unlock(
+        policy, policy_snapshot = require_storage_policy_unlock_snapshot(
             control_plane_version=version,
             authorized_pic_root=authorized_pic_root,
             authorized_project_home_root=authorized_project_home_root,
@@ -699,6 +814,9 @@ def reserve(
             control_plane_dir=control_plane_dir,
             authorized_pic_root=authorized_pic_root,
         )
+        artifact_dir = _require_run_artifact_dir(manifest)
+        if artifact_dir.exists():
+            raise ValueError(f"Launch artifact directory already exists: {artifact_dir}")
         directives = _directives(
             Path(str(record_for_role(manifest, "job-script")["path"]))
         )
@@ -707,7 +825,7 @@ def reserve(
         )
         if directives["account"] != authorized_account:
             raise ValueError(f"Frontier PIC submissions require account={authorized_account}")
-        require_canonical_path_below(Path(directives["output"]), authorized_pic_root)
+        _require_scheduler_output_path(directives["output"], authorized_pic_root)
         queue_output = _queue_output()
         queue_sha256 = hashlib.sha256(queue_output.encode("utf-8")).hexdigest()
         if queue_sha256 != manifest.get("queue_snapshot_sha256"):
@@ -758,6 +876,8 @@ def reserve(
             "reservation_id": reservation,
             "submission_id": manifest["submission_id"],
             "control_plane_version": version,
+            "active_policy_sha256": policy_snapshot["active_policy_sha256"],
+            "active_promotion_sha256": policy_snapshot["active_promotion_sha256"],
             "git_commit": manifest["git_commit"],
             "campaign": manifest["campaign"],
             "test_id": manifest["test_id"],
@@ -835,9 +955,16 @@ def transition(
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
+    _verify_installed_control_plane_pair(
+        control_plane_dir,
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+    )
     with ledger_lock(ledger_jsonl):
-        inventory = verify_installed_control_plane(
-            control_plane_dir, authorized_pic_root=authorized_pic_root
+        inventory = _verify_installed_control_plane_pair(
+            control_plane_dir,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
         )
         records = _records_with_matching_mirror(ledger_jsonl, receipts_jsonl, mirror_jsonl)
         latest = latest_reservations(records).get(reservation_id)
@@ -848,6 +975,11 @@ def transition(
         if latest.get("control_plane_version") != inventory["version"]:
             raise ValueError("Reservation belongs to another control-plane version")
         if event_type == "job_id_attached":
+            _require_reservation_policy_snapshot(
+                latest,
+                authorized_pic_root=authorized_pic_root,
+                authorized_project_home_root=authorized_project_home_root,
+            )
             marker = _matching_pending_marker(
                 _pending_marker_path(authorized_pic_root), reservation_id
             )
@@ -858,6 +990,14 @@ def transition(
             ):
                 raise ValueError("Scheduler attachment does not match the pending marker")
             _verify_scheduler_job(job_id, reservation_id)
+        elif event_type == "reservation_cancelled":
+            marker = _matching_pending_marker(
+                _pending_marker_path(authorized_pic_root), reservation_id
+            )
+            if marker is None or marker.get("state") != "reserved_not_submitted":
+                raise ValueError(
+                    "Cannot cancel a reservation after scheduler submission"
+                )
         event = transition_payload(latest)
         event.update({"event_type": event_type, "state": state})
         if job_id:
@@ -874,24 +1014,97 @@ def transition(
         return result
 
 
+def mark_dispatch_started(
+    *,
+    reservation_id: str,
+    ledger_jsonl: Path,
+    ledger_csv: Path,
+    receipts_jsonl: Path,
+    mirror_jsonl: Path,
+    control_plane_dir: Path = SCRIPT_DIR,
+    authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
+    authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
+) -> None:
+    require_ledger_paths(
+        ledger_jsonl,
+        ledger_csv,
+        receipts_jsonl,
+        mirror_jsonl,
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+    )
+    _verify_installed_control_plane_pair(
+        control_plane_dir,
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+    )
+    with ledger_lock(ledger_jsonl):
+        inventory = _verify_installed_control_plane_pair(
+            control_plane_dir,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
+        records = _records_with_matching_mirror(ledger_jsonl, receipts_jsonl, mirror_jsonl)
+        reservation = latest_reservations(records).get(reservation_id)
+        if reservation is None or reservation.get("state") != "reserved":
+            raise ValueError("Only a live reserved reservation may begin scheduler dispatch")
+        if reservation.get("control_plane_version") != inventory["version"]:
+            raise ValueError("Reservation belongs to another control-plane version")
+        _require_reservation_policy_snapshot(
+            reservation,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
+        marker_path = _pending_marker_path(authorized_pic_root)
+        marker = _matching_pending_marker(marker_path, reservation_id)
+        if marker is None or marker.get("state") != "reserved_not_submitted":
+            raise ValueError("Expected a reserved-not-submitted recovery marker")
+        marker["state"] = "scheduler_dispatch_started"
+        _write_pending_marker(marker_path, marker)
+
+
 def mark_submitted(
     *,
     reservation_id: str,
     job_id: str,
     ledger_jsonl: Path,
+    control_plane_dir: Path = SCRIPT_DIR,
     authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
+    authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
 ) -> None:
     expected_ledger = authorized_pic_root.resolve() / "ledger" / "node_hours.jsonl"
     if require_canonical_path_below(ledger_jsonl, authorized_pic_root) != expected_ledger:
         raise ValueError(f"Unauthorized ledger path: {ledger_jsonl}")
+    _verify_installed_control_plane_pair(
+        control_plane_dir,
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+    )
     with ledger_lock(ledger_jsonl):
-        _verify_scheduler_job(job_id, reservation_id)
+        _verify_installed_control_plane_pair(
+            control_plane_dir,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
         marker_path = _pending_marker_path(authorized_pic_root)
         marker = _matching_pending_marker(marker_path, reservation_id)
-        if marker is None or marker.get("state") != "reserved_not_submitted":
-            raise ValueError("Expected a reserved-not-submitted recovery marker")
+        if marker is None:
+            raise ValueError("Expected a pending scheduler-submission recovery marker")
+        if marker.get("state") == "submitted_not_attached":
+            if marker.get("job_id") != job_id:
+                raise ValueError("Scheduler job differs from pending attachment marker")
+            return
+        if marker.get("state") == "scheduler_dispatch_started":
+            marker["state"] = "scheduler_job_id_received"
+            marker["job_id"] = job_id
+            _write_pending_marker(marker_path, marker)
+        elif (
+            marker.get("state") != "scheduler_job_id_received"
+            or marker.get("job_id") != job_id
+        ):
+            raise ValueError("Expected a scheduler-dispatch-started recovery marker")
+        _verify_scheduler_job(job_id, reservation_id)
         marker["state"] = "submitted_not_attached"
-        marker["job_id"] = job_id
         _write_pending_marker(marker_path, marker)
 
 
@@ -902,6 +1115,7 @@ def repair_reservation_attachments(
     ledger_csv: Path,
     receipts_jsonl: Path,
     mirror_jsonl: Path,
+    control_plane_dir: Path = SCRIPT_DIR,
     authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
     authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
 ) -> str:
@@ -913,7 +1127,17 @@ def repair_reservation_attachments(
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
+    _verify_installed_control_plane_pair(
+        control_plane_dir,
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+    )
     with ledger_lock(ledger_jsonl):
+        _verify_installed_control_plane_pair(
+            control_plane_dir,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
         repair_mirrored_state_locked(
             ledger_jsonl,
             ledger_csv,
@@ -927,6 +1151,27 @@ def repair_reservation_attachments(
         marker = _matching_pending_marker(marker_path, reservation_id)
         if marker is None:
             raise ValueError("Missing pending marker for attachment repair")
+        if (
+            latest is not None
+            and latest.get("event_type") == "job_id_attached"
+            and latest.get("state") == "submitted"
+        ):
+            _clear_matching_pending_marker(marker_path, reservation_id)
+            return "cleared_completed_attachment_pending_marker"
+        if (
+            latest is not None
+            and latest.get("event_type") == "reservation_cancelled"
+            and latest.get("state") == "cancelled"
+        ):
+            _clear_matching_pending_marker(marker_path, reservation_id)
+            return "cleared_completed_cancellation_pending_marker"
+        if (
+            latest is not None
+            and latest.get("event_type") == "reconciliation"
+            and latest.get("reconciled") is True
+        ):
+            _clear_matching_pending_marker(marker_path, reservation_id)
+            return "cleared_completed_reconciliation_pending_marker"
         if latest is None:
             if marker.get("state") != "reservation_intent":
                 raise ValueError("Only an unappended reservation intent may be cleared")
@@ -936,9 +1181,14 @@ def repair_reservation_attachments(
                 if attachment.exists():
                     raise ValueError("Unappended reservation intent unexpectedly has attachments")
             marker_path.unlink()
+            fsync_directory(marker_path.parent)
             return "cleared_unappended_reservation_intent"
         if latest.get("state") != "reserved":
             raise ValueError("Expected one recoverable reserved reservation")
+        if marker.get("state") not in {"reservation_intent", "reserved_not_submitted"}:
+            raise ValueError(
+                "Scheduler dispatch may have started; reviewed scheduler reconciliation is required"
+            )
         manifest_path = Path(str(latest["manifest_path"]))
         manifest_path = require_canonical_path_below(
             manifest_path, authorized_pic_root.resolve() / "manifests"
@@ -962,6 +1212,7 @@ def repair_ledger_mirror(
     ledger_csv: Path,
     receipts_jsonl: Path,
     mirror_jsonl: Path,
+    control_plane_dir: Path = SCRIPT_DIR,
     authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
     authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
 ) -> dict[str, int]:
@@ -973,7 +1224,17 @@ def repair_ledger_mirror(
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
     )
+    _verify_installed_control_plane_pair(
+        control_plane_dir,
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+    )
     with ledger_lock(ledger_jsonl):
+        _verify_installed_control_plane_pair(
+            control_plane_dir,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
         return repair_mirrored_state_locked(
             ledger_jsonl,
             ledger_csv,
@@ -993,6 +1254,8 @@ def reservation_bound_manifest(
     control_plane_dir: Path = SCRIPT_DIR,
     authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
     authorized_project_home_root: Path = AUTHORIZED_PROJECT_HOME_ROOT,
+    executable_job_id: str | None = None,
+    require_reserved: bool = False,
 ) -> tuple[dict[str, object], dict[str, object]]:
     require_ledger_paths(
         ledger_jsonl,
@@ -1005,11 +1268,35 @@ def reservation_bound_manifest(
     manifest_path = require_canonical_path_below(
         manifest_path, authorized_pic_root.resolve() / "manifests"
     )
+    _verify_installed_control_plane_pair(
+        control_plane_dir,
+        authorized_pic_root=authorized_pic_root,
+        authorized_project_home_root=authorized_project_home_root,
+    )
     with ledger_lock(ledger_jsonl):
+        _verify_installed_control_plane_pair(
+            control_plane_dir,
+            authorized_pic_root=authorized_pic_root,
+            authorized_project_home_root=authorized_project_home_root,
+        )
         records = _records_with_matching_mirror(ledger_jsonl, receipts_jsonl, mirror_jsonl)
         reservation = latest_reservations(records).get(reservation_id)
         if reservation is None:
             raise ValueError(f"Unknown reservation: {reservation_id}")
+        if require_reserved and reservation.get("state") != "reserved":
+            raise ValueError("Reservation is not available for pre-dispatch lookup")
+        if executable_job_id is not None:
+            _require_reservation_policy_snapshot(
+                reservation,
+                authorized_pic_root=authorized_pic_root,
+                authorized_project_home_root=authorized_project_home_root,
+            )
+            _verify_scheduler_job(executable_job_id, reservation_id)
+            if reservation.get("state") == "submitted":
+                if reservation.get("job_id") != executable_job_id:
+                    raise ValueError("Submitted reservation belongs to another Slurm job")
+            else:
+                raise ValueError("Reservation is not executable")
         manifest = _verify_manifest(
             manifest_path,
             control_plane_dir=control_plane_dir,
@@ -1102,6 +1389,9 @@ def main() -> None:
     _common(submitted_parser)
     submitted_parser.add_argument("--reservation-id", required=True)
     submitted_parser.add_argument("--job-id", required=True)
+    dispatch_parser = subparsers.add_parser("mark-dispatch-started")
+    _common(dispatch_parser)
+    dispatch_parser.add_argument("--reservation-id", required=True)
     repair_parser = subparsers.add_parser("repair-reservation-attachments")
     _common(repair_parser)
     repair_parser.add_argument("--reservation-id", required=True)
@@ -1126,6 +1416,7 @@ def main() -> None:
             ledger_jsonl=args.ledger_jsonl,
             receipts_jsonl=args.receipts_jsonl,
             mirror_jsonl=args.mirror_jsonl,
+            require_reserved=True,
         )
         if args.command == "submission-id":
             print(reservation["submission_id"])
@@ -1163,6 +1454,13 @@ def main() -> None:
             reservation_id=args.reservation_id,
             job_id=args.job_id,
             ledger_jsonl=args.ledger_jsonl,
+        )
+        print(args.reservation_id)
+        return
+    elif args.command == "mark-dispatch-started":
+        mark_dispatch_started(
+            reservation_id=args.reservation_id,
+            **common,
         )
         print(args.reservation_id)
         return

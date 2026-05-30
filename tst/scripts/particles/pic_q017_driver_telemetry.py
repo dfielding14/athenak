@@ -31,6 +31,14 @@ _REQUIRED_NAMES = {
     'timer.output_publication.calls_rank_max',
     'timer.amr_load_balance.seconds_rank_max',
     'timer.amr_load_balance.calls_rank_max',
+    'timer.particle.adaptive_deltaf.seconds_rank_max',
+    'timer.particle.adaptive_deltaf.calls_rank_max',
+    'timer.particle.push.seconds_rank_max',
+    'timer.particle.push.calls_rank_max',
+    'timer.particle.deposition.seconds_rank_max',
+    'timer.particle.deposition.calls_rank_max',
+    'timer.particle.migration.seconds_rank_max',
+    'timer.particle.migration.calls_rank_max',
     'cycles',
     'meshblocks.total',
     'meshblocks.rank_min',
@@ -55,6 +63,26 @@ _REQUIRED_NAMES = {
     'amr.meshblocks_created',
     'amr.meshblocks_deleted',
     'amr.meshblocks_communicated',
+    'particle_memory.sync_kernel_timers',
+    'particle_memory.record_bytes',
+    'particle_memory.root_level',
+    'particle_memory.max_level',
+    'particle_memory.resident_records.bytes_total',
+    'particle_memory.direct_views.allocated_snapshot_bytes_total',
+    'particle_memory.direct_views.allocated_snapshot_bytes_rank_max',
+    'particle_memory.invalid_records',
+    'particle_memory.species.0.count',
+    'particle_memory.species.0.resident_bytes',
+    'particle_memory.species.1.count',
+    'particle_memory.species.1.resident_bytes',
+    'particle_memory.level.1.count',
+    'particle_memory.level.1.resident_bytes',
+    'particle_memory.level.2.count',
+    'particle_memory.level.2.resident_bytes',
+    'particle_memory.species.0.level.1.count',
+    'particle_memory.species.0.level.2.count',
+    'particle_memory.species.1.level.1.count',
+    'particle_memory.species.1.level.2.count',
 }
 
 
@@ -119,18 +147,36 @@ def analyze():
         logger.info('%s=% .8e', name, value)
         ok = math.isfinite(value) and value >= 0.0 and ok
 
-    ok = _check_equal('schema_version', 1.0) and ok
+    ok = _check_equal('schema_version', 2.0) and ok
     ok = _check_equal('mpi.ranks', 1.0) and ok
     ok = _check_equal('cycles', 1.0) and ok
-    ok = _check_equal('meshblocks.total', 8.0) and ok
+    ok = _check_equal('meshblocks.total', 15.0) and ok
     ok = _check_equal('mesh.cells_per_meshblock', 64.0) and ok
-    ok = _check_equal('mesh.active_cells', 512.0) and ok
-    ok = _check_equal('particles.total', 128.0) and ok
-    ok = _check_equal('updates.meshblock_cycles', 8.0) and ok
-    ok = _check_equal('updates.particle_updates', 128.0) and ok
+    ok = _check_equal('mesh.active_cells', 960.0) and ok
+    ok = _check_equal('particles.total', 240.0) and ok
+    ok = _check_equal('updates.meshblock_cycles', 15.0) and ok
+    ok = _check_equal('updates.particle_updates', 240.0) and ok
     ok = _check_equal('timer.task_lists.calls_rank_max', 8.0) and ok
     ok = _check_equal('timer.output_publication.calls_rank_max', 3.0) and ok
     ok = _check_equal('timer.amr_load_balance.calls_rank_max', 1.0) and ok
     ok = _check_equal('load.cost.invalid_meshblocks', 0.0) and ok
     ok = _check_equal('amr.enabled', 1.0) and ok
+    ok = _check_equal('timer.particle.adaptive_deltaf.calls_rank_max', 0.0) and ok
+    ok = _check_equal('timer.particle.push.calls_rank_max', 1.0) and ok
+    ok = _check_equal('timer.particle.deposition.calls_rank_max', 1.0) and ok
+    ok = _check_equal('timer.particle.migration.calls_rank_max', 7.0) and ok
+    ok = _check_equal('particle_memory.sync_kernel_timers', 1.0) and ok
+    ok = _check_equal('particle_memory.record_bytes', 224.0) and ok
+    ok = _check_equal('particle_memory.root_level', 1.0) and ok
+    ok = _check_equal('particle_memory.max_level', 2.0) and ok
+    ok = _check_equal('particle_memory.resident_records.bytes_total', 53760.0) and ok
+    ok = _check_equal('particle_memory.invalid_records', 0.0) and ok
+    ok = _check_equal('particle_memory.species.0.count', 120.0) and ok
+    ok = _check_equal('particle_memory.species.1.count', 120.0) and ok
+    ok = _check_equal('particle_memory.level.1.count', 112.0) and ok
+    ok = _check_equal('particle_memory.level.2.count', 128.0) and ok
+    ok = _check_equal('particle_memory.species.0.level.1.count', 56.0) and ok
+    ok = _check_equal('particle_memory.species.0.level.2.count', 64.0) and ok
+    ok = _check_equal('particle_memory.species.1.level.1.count', 56.0) and ok
+    ok = _check_equal('particle_memory.species.1.level.2.count', 64.0) and ok
     return ok

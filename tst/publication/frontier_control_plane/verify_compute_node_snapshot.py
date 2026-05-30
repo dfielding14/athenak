@@ -1,7 +1,13 @@
-#!/opt/cray/pe/python/3.11.7/bin/python3
+#!/opt/cray/pe/python/3.11.7/bin/python3 -I
 """Verify immutable submission dependencies before a compute-node run."""
 
 from __future__ import annotations
+
+import sys as _sys
+if __name__ == "__main__" and "/control_plane/" in __file__ and not getattr(
+    _sys, "_pic_control_plane_bootstrapped", False
+):
+    raise SystemExit("Run installed control-plane tools through run_control_plane.py")
 
 import argparse
 from pathlib import Path
@@ -39,7 +45,7 @@ def verify(
         if manifest_digest_path.read_text(encoding="utf-8").strip() != manifest_sha256:
             raise ValueError("Manifest checksum does not match immutable attachment")
         require_read_only(manifest_digest_path)
-    verify_snapshot_files(manifest)
+    verify_snapshot_files(manifest, root=Path(str(manifest["pic_root"])))
     for record in manifest["snapshot_files"]:
         require_read_only(Path(str(record["path"])))
 

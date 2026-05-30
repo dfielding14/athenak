@@ -1,0 +1,124 @@
+{
+  "record_type": "q022_dataset_provenance_manifest",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-022",
+  "qualification_effect": "source_controlled_dataset_provenance_queue_only",
+  "disposition": "open",
+  "source_ingest": "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json",
+  "authorized_extracted_dataset_root": "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/q022_extracted_datasets_2026-05-30",
+  "authorized_extracted_dataset_root_status": "absent_no_bulk_extracted_dataset_ingested",
+  "storage_policy": {
+    "source_control_scope": "metadata_only_no_bulk_extracted_data",
+    "allowed_bulk_storage_system": "Orion",
+    "forbidden_storage_systems": ["Kronos"],
+    "no_fabricated_extracted_measurements": true,
+    "required_before_dataset_use": [
+      "Store bulk extracted data only under the authorized Orion extracted-dataset root.",
+      "Record the source figure, table, or machine-readable payload locator.",
+      "Record extraction method, extraction-script SHA-256 if used, dataset SHA-256, extraction uncertainty, and redistribution basis.",
+      "Freeze the equation map and numerical tolerance table before inspecting qualifying AthenaK output.",
+      "Obtain external reviewer disposition."
+    ]
+  },
+  "blocked_inputs": {
+    "Q022-BLOCK-EXTRACTED-DATASET-ROOT-ABSENT": "The authorized Orion q022_extracted_datasets_2026-05-30 directory was absent when this source-controlled tranche was recorded; no bulk extracted dataset is available for ingestion.",
+    "Q022-BLOCK-REFERENCE-SPECIFIC-EXTRACTION": "Reference-specific figure, table, or machine-readable dataset extraction with uncertainty has not been supplied.",
+    "Q022-BLOCK-EXTERNAL-REVIEW": "External reviewer disposition remains pending.",
+    "Q022-BLOCK-ENTITY-LOCAL-ORACLE": "XCMP-ENTITY-MICRO uses a frozen local source differential oracle rather than an externally extracted bulk dataset.",
+    "Q022-BLOCK-GIZMO-DOCUMENTED-EXCLUSION": "XCMP-GIZMO-RSOL-DECISION is routed to a provisional documented-exclusion candidate pending external reviewer approval; no comparative dataset may be implied."
+  },
+  "dataset_candidates": [
+    {
+      "dataset_id": "Q022-DATASET-XCMP-ATHENA-BAI-BELL-SHOCK",
+      "comparison_id": "XCMP-ATHENA-BAI-BELL-SHOCK",
+      "reference_ids": ["bai_2015_arxiv_1412.1087"],
+      "source_records": ["tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json"],
+      "extraction_status": "blocked_extraction_input_unavailable",
+      "redistribution_basis": "pending external review",
+      "reviewer_disposition": "pending external review",
+      "blocked_input_ids": ["Q022-BLOCK-EXTRACTED-DATASET-ROOT-ABSENT", "Q022-BLOCK-REFERENCE-SPECIFIC-EXTRACTION", "Q022-BLOCK-EXTERNAL-REVIEW"]
+    },
+    {
+      "dataset_id": "Q022-DATASET-XCMP-BELL-NONLINEAR-INDEPENDENT",
+      "comparison_id": "XCMP-BELL-NONLINEAR-INDEPENDENT",
+      "reference_ids": ["riquelme_spitkovsky_2009_arxiv_0810.4565", "gargate_2010_arxiv_1002.1701", "zacharegkas_2022_arxiv_2210.08072"],
+      "source_records": ["tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json"],
+      "extraction_status": "blocked_extraction_input_unavailable",
+      "redistribution_basis": "pending external review",
+      "reviewer_disposition": "pending external review",
+      "blocked_input_ids": ["Q022-BLOCK-EXTRACTED-DATASET-ROOT-ABSENT", "Q022-BLOCK-REFERENCE-SPECIFIC-EXTRACTION", "Q022-BLOCK-EXTERNAL-REVIEW"]
+    },
+    {
+      "dataset_id": "Q022-DATASET-XCMP-BAI2019-CRSI",
+      "comparison_id": "XCMP-BAI2019-CRSI",
+      "reference_ids": ["bai_2019_arxiv_1902.10219"],
+      "source_records": ["tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json"],
+      "extraction_status": "blocked_extraction_input_unavailable",
+      "redistribution_basis": "pending external review",
+      "reviewer_disposition": "pending external review",
+      "blocked_input_ids": ["Q022-BLOCK-EXTRACTED-DATASET-ROOT-ABSENT", "Q022-BLOCK-REFERENCE-SPECIFIC-EXTRACTION", "Q022-BLOCK-EXTERNAL-REVIEW"]
+    },
+    {
+      "dataset_id": "Q022-DATASET-XCMP-PLUTO-COUPLING",
+      "comparison_id": "XCMP-PLUTO-COUPLING",
+      "reference_ids": ["mignone_2018_arxiv_1804.01946"],
+      "source_records": ["tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json"],
+      "extraction_status": "blocked_extraction_input_unavailable",
+      "redistribution_basis": "pending external review",
+      "reviewer_disposition": "pending external review",
+      "blocked_input_ids": ["Q022-BLOCK-EXTRACTED-DATASET-ROOT-ABSENT", "Q022-BLOCK-REFERENCE-SPECIFIC-EXTRACTION", "Q022-BLOCK-EXTERNAL-REVIEW"]
+    },
+    {
+      "dataset_id": "Q022-DATASET-XCMP-AMRVAC-SHOCK",
+      "comparison_id": "XCMP-AMRVAC-SHOCK",
+      "reference_ids": ["van_marle_casse_marcowith_2018_doi_stx2509"],
+      "source_records": ["tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json"],
+      "extraction_status": "blocked_extraction_input_unavailable",
+      "redistribution_basis": "pending external review",
+      "reviewer_disposition": "pending external review",
+      "blocked_input_ids": ["Q022-BLOCK-EXTRACTED-DATASET-ROOT-ABSENT", "Q022-BLOCK-REFERENCE-SPECIFIC-EXTRACTION", "Q022-BLOCK-EXTERNAL-REVIEW"]
+    },
+    {
+      "dataset_id": "Q022-DATASET-XCMP-GIZMO-RSOL-DECISION",
+      "comparison_id": "XCMP-GIZMO-RSOL-DECISION",
+      "reference_ids": ["ji_hopkins_2022_arxiv_2111.14704"],
+      "source_records": ["tst/publication/readiness/q039_gizmo_documented_exclusion_candidate_2026-05-30.json"],
+      "extraction_status": "not_applicable_documented_exclusion_candidate",
+      "redistribution_basis": "pending external review",
+      "reviewer_disposition": "pending external review",
+      "blocked_input_ids": ["Q022-BLOCK-GIZMO-DOCUMENTED-EXCLUSION", "Q022-BLOCK-EXTERNAL-REVIEW"]
+    },
+    {
+      "dataset_id": "Q022-DATASET-XCMP-ENTITY-MICRO",
+      "comparison_id": "XCMP-ENTITY-MICRO",
+      "reference_ids": ["entity_toolkit_snapshot_512998c4"],
+      "source_records": ["tst/publication/readiness/q022_xcmp_entity_micro_equation_map_2026-05-30.json", "tst/publication/readiness/q015_entity_differential_2026-05-30.json"],
+      "extraction_status": "not_applicable_local_source_oracle",
+      "redistribution_basis": "local source snapshot only; external export remains pending external review",
+      "reviewer_disposition": "pending external review",
+      "blocked_input_ids": ["Q022-BLOCK-ENTITY-LOCAL-ORACLE", "Q022-BLOCK-EXTERNAL-REVIEW"]
+    },
+    {
+      "dataset_id": "Q022-DATASET-XCMP-EXT-CRSI-IN-DAMPING",
+      "comparison_id": "XCMP-EXT-CRSI-IN-DAMPING",
+      "reference_ids": ["plotnikov_ostriker_bai_2021_arxiv_2102.11878"],
+      "source_records": ["tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json"],
+      "extraction_status": "blocked_extraction_input_unavailable",
+      "redistribution_basis": "pending external review",
+      "reviewer_disposition": "pending external review",
+      "blocked_input_ids": ["Q022-BLOCK-EXTRACTED-DATASET-ROOT-ABSENT", "Q022-BLOCK-REFERENCE-SPECIFIC-EXTRACTION", "Q022-BLOCK-EXTERNAL-REVIEW"]
+    },
+    {
+      "dataset_id": "Q022-DATASET-XCMP-EXT-CRPAI-TRANSPORT",
+      "comparison_id": "XCMP-EXT-CRPAI-TRANSPORT",
+      "reference_ids": ["sun_bai_zhao_2024_arxiv_2409.08592"],
+      "source_records": ["tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json"],
+      "extraction_status": "blocked_extraction_input_unavailable",
+      "redistribution_basis": "pending external review",
+      "reviewer_disposition": "pending external review",
+      "blocked_input_ids": ["Q022-BLOCK-EXTRACTED-DATASET-ROOT-ABSENT", "Q022-BLOCK-REFERENCE-SPECIFIC-EXTRACTION", "Q022-BLOCK-EXTERNAL-REVIEW"]
+    }
+  ],
+  "manifest_status": "open_authorized_orion_extracted_dataset_root_absent_no_bulk_extracted_measurements_recorded_external_review_pending"
+}

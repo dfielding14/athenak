@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -21,6 +22,25 @@ Q023_PATH = READINESS_DIR / "q023_statistical_qualification_preregistration_2026
 Q018_LINKS_PATH = READINESS_DIR / "q018_claim_links_successor_2026-05-30.json"
 Q022_ENTITY_MAP_PATH = (
     READINESS_DIR / "q022_xcmp_entity_micro_equation_map_2026-05-30.json"
+)
+Q022_DATASET_PROVENANCE_PATH = (
+    READINESS_DIR / "q022_dataset_provenance_manifest_2026-05-30.json"
+)
+Q022_PRIVATE_INGEST_PATH = (
+    READINESS_DIR / "q022_external_reference_private_ingest_2026-05-30.json"
+)
+Q039_PATH = READINESS_DIR / "q039_gizmo_rsol_decision_2026-05-30.json"
+Q039_EXCLUSION_CANDIDATE_PATH = (
+    READINESS_DIR / "q039_gizmo_documented_exclusion_candidate_2026-05-30.json"
+)
+Q022_DATASET_PROVENANCE_SCHEMA_PATH = (
+    READINESS_DIR / "schemas" / "q022_dataset_provenance_manifest.schema.json"
+)
+Q022_EQUATION_MAP_SCHEMA_PATH = (
+    READINESS_DIR / "schemas" / "q022_equation_normalization_map.schema.json"
+)
+Q022_TOLERANCE_TABLE_SCHEMA_PATH = (
+    READINESS_DIR / "schemas" / "q022_tolerance_table.schema.json"
 )
 Q023_DRAFTS_PATH = READINESS_DIR / "q023_campaign_drafts_2026-05-30.json"
 Q023_PROFILES_PATH = (
@@ -55,6 +75,11 @@ Q022_COMPARISON_IDS = {
     "XCMP-EXT-CRSI-IN-DAMPING",
     "XCMP-EXT-CRPAI-TRANSPORT",
 }
+
+Q022_AUTHORIZED_EXTRACTED_DATASET_ROOT = (
+    "/lustre/orion/ast207/proj-shared/dfielding/PIC/reference_artifacts/"
+    "q022_extracted_datasets_2026-05-30"
+)
 
 
 def _load(path: Path) -> dict[str, object]:
@@ -95,6 +120,9 @@ class PicPreregistrationTests(unittest.TestCase):
                 self.assertTrue(comparison["reference_ids"])
                 self.assertTrue(set(comparison["reference_ids"]) <= reference_ids)
                 self.assertTrue(comparison["observable_families"])
+                self.assertTrue(comparison["dataset_provenance_id"])
+                self.assertTrue(comparison["equation_normalization_map"])
+                self.assertTrue(comparison["tolerance_table"])
                 if comparison["comparison_id"] == "XCMP-ENTITY-MICRO":
                     self.assertEqual(
                         comparison["equation_map_status"],
@@ -109,11 +137,39 @@ class PicPreregistrationTests(unittest.TestCase):
                         "tst/publication/readiness/"
                         "q022_xcmp_entity_micro_equation_map_2026-05-30.json",
                     )
+                    self.assertEqual(
+                        comparison["tolerance_table_status"],
+                        "blocked_pending_external_review",
+                    )
+                elif comparison["comparison_id"] == "XCMP-GIZMO-RSOL-DECISION":
+                    self.assertEqual(
+                        comparison["equation_map_status"],
+                        "documented_exclusion_candidate_pending_external_review",
+                    )
+                    self.assertEqual(
+                        comparison["normalization_map_status"],
+                        "documented_exclusion_candidate_pending_external_review",
+                    )
+                    self.assertEqual(
+                        comparison["tolerance_table_status"],
+                        "not_applicable_documented_exclusion_candidate",
+                    )
                 else:
-                    self.assertIn("open_placeholder",
-                                  comparison["equation_map_status"])
-                    self.assertIn("open_placeholder",
-                                  comparison["normalization_map_status"])
+                    self.assertEqual(
+                        comparison["equation_map_status"],
+                        "blocked_pending_reference_specific_mapping_and_"
+                        "external_review",
+                    )
+                    self.assertEqual(
+                        comparison["normalization_map_status"],
+                        "blocked_pending_reference_specific_mapping_and_"
+                        "external_review",
+                    )
+                    self.assertEqual(
+                        comparison["tolerance_table_status"],
+                        "blocked_pending_reference_dataset_extraction_and_"
+                        "external_review",
+                    )
 
     def test_q022_freezes_tolerance_and_discrepancy_rules(self) -> None:
         policy = self.q022["tolerance_policy"]
@@ -199,17 +255,168 @@ class PicPreregistrationTests(unittest.TestCase):
                 self.assertIsInstance(claim["evidence_links"], list)
 
     def test_q022_entity_map_matches_schema_and_stays_bounded(self) -> None:
-        schema = _load(
-            READINESS_DIR / "schemas" / "q022_equation_normalization_map.schema.json"
-        )
+        schema = _load(Q022_EQUATION_MAP_SCHEMA_PATH)
         entity_map = _load(Q022_ENTITY_MAP_PATH)
         validate_schema(entity_map, schema)
+        self.assertEqual(entity_map["map_status"],
+                         "bounded_map_recorded_external_review_open")
         self.assertEqual(entity_map["comparison_id"], "XCMP-ENTITY-MICRO")
         self.assertEqual(entity_map["reviewer_disposition"],
                          "pending external review")
         self.assertIn("MHD feedback", entity_map["excluded_regimes"])
         self.assertTrue(any("not claimed interchangeable" in mismatch
                             for mismatch in entity_map["intentional_mismatches"]))
+
+    def test_q022_dataset_provenance_manifest_stays_fail_closed(self) -> None:
+        schema = _load(Q022_DATASET_PROVENANCE_SCHEMA_PATH)
+        provenance = _load(Q022_DATASET_PROVENANCE_PATH)
+        validate_schema(provenance, schema)
+        self.assertEqual(
+            provenance["authorized_extracted_dataset_root"],
+            Q022_AUTHORIZED_EXTRACTED_DATASET_ROOT,
+        )
+        self.assertEqual(
+            provenance["authorized_extracted_dataset_root_status"],
+            "absent_no_bulk_extracted_dataset_ingested",
+        )
+        policy = provenance["storage_policy"]
+        self.assertEqual(policy["source_control_scope"],
+                         "metadata_only_no_bulk_extracted_data")
+        self.assertEqual(policy["allowed_bulk_storage_system"], "Orion")
+        self.assertEqual(policy["forbidden_storage_systems"], ["Kronos"])
+        self.assertTrue(policy["no_fabricated_extracted_measurements"])
+
+        blocked_input_ids = set(provenance["blocked_inputs"])
+        comparisons = {
+            item["comparison_id"]: item for item in self.q022["comparison_matrix"]
+        }
+        candidates = provenance["dataset_candidates"]
+        self.assertEqual(
+            {item["comparison_id"] for item in candidates},
+            set(comparisons),
+        )
+        self.assertEqual(
+            len({item["dataset_id"] for item in candidates}),
+            len(candidates),
+        )
+        for candidate in candidates:
+            with self.subTest(dataset=candidate["dataset_id"]):
+                comparison = comparisons[candidate["comparison_id"]]
+                self.assertEqual(candidate["dataset_id"],
+                                 comparison["dataset_provenance_id"])
+                self.assertEqual(candidate["reference_ids"],
+                                 comparison["reference_ids"])
+                self.assertEqual(candidate["reviewer_disposition"],
+                                 "pending external review")
+                self.assertTrue(candidate["blocked_input_ids"])
+                self.assertTrue(set(candidate["blocked_input_ids"])
+                                <= blocked_input_ids)
+                self.assertNotIn("extracted_dataset_locator", candidate)
+                self.assertNotIn("extracted_dataset_sha256", candidate)
+
+    def test_q022_ingest_metadata_records_absent_authorized_extraction_root(
+        self,
+    ) -> None:
+        ingest = _load(Q022_PRIVATE_INGEST_PATH)
+        provenance = ingest["dataset_provenance"]
+        self.assertEqual(
+            provenance["source_controlled_manifest"],
+            "tst/publication/readiness/"
+            "q022_dataset_provenance_manifest_2026-05-30.json",
+        )
+        self.assertEqual(
+            provenance["authorized_orion_extracted_dataset_root"],
+            Q022_AUTHORIZED_EXTRACTED_DATASET_ROOT,
+        )
+        self.assertEqual(
+            provenance["inspection_status"],
+            "absent_no_bulk_extracted_dataset_ingested",
+        )
+        self.assertEqual(provenance["bulk_extracted_dataset_files_recorded"], 0)
+        self.assertEqual(provenance["allowed_bulk_storage_system"], "Orion")
+        self.assertEqual(provenance["forbidden_storage_systems"], ["Kronos"])
+
+    def test_q022_comparison_sidecars_validate_without_fabricated_rows(
+        self,
+    ) -> None:
+        equation_schema = _load(Q022_EQUATION_MAP_SCHEMA_PATH)
+        tolerance_schema = _load(Q022_TOLERANCE_TABLE_SCHEMA_PATH)
+        for comparison in self.q022["comparison_matrix"]:
+            with self.subTest(comparison=comparison["comparison_id"]):
+                equation_map = _load(REPO_ROOT
+                                     / comparison["equation_normalization_map"])
+                tolerance_table = _load(REPO_ROOT
+                                        / comparison["tolerance_table"])
+                validate_schema(equation_map, equation_schema)
+                validate_schema(tolerance_table, tolerance_schema)
+                self.assertEqual(equation_map["comparison_id"],
+                                 comparison["comparison_id"])
+                self.assertEqual(equation_map["dataset_provenance_id"],
+                                 comparison["dataset_provenance_id"])
+                self.assertEqual(equation_map["reference_ids"],
+                                 comparison["reference_ids"])
+                self.assertEqual(equation_map["map_status"],
+                                 comparison["equation_map_status"])
+                self.assertEqual(tolerance_table["comparison_id"],
+                                 comparison["comparison_id"])
+                self.assertEqual(tolerance_table["dataset_provenance_id"],
+                                 comparison["dataset_provenance_id"])
+                self.assertEqual(tolerance_table["freeze_status"],
+                                 comparison["tolerance_table_status"])
+                self.assertEqual(tolerance_table["observable_families"],
+                                 comparison["observable_families"])
+                self.assertEqual(tolerance_table["rows"], [])
+                self.assertTrue(tolerance_table["blocked_inputs"])
+                self.assertEqual(tolerance_table["reviewer_disposition"],
+                                 "pending external review")
+
+    def test_q039_gizmo_documented_exclusion_candidate_stays_provisional(
+        self,
+    ) -> None:
+        q039 = _load(Q039_PATH)
+        candidate = _load(Q039_EXCLUSION_CANDIDATE_PATH)
+        comparison = next(
+            item for item in self.q022["comparison_matrix"]
+            if item["comparison_id"] == "XCMP-GIZMO-RSOL-DECISION"
+        )
+        self.assertEqual(
+            q039["linked_records"]["documented_exclusion_candidate"],
+            "tst/publication/readiness/"
+            "q039_gizmo_documented_exclusion_candidate_2026-05-30.json",
+        )
+        self.assertEqual(candidate["candidate_route"], "documented_exclusion")
+        self.assertEqual(candidate["disposition"], "open")
+        self.assertEqual(candidate["reviewer_disposition"],
+                         "pending external review")
+        self.assertEqual(
+            comparison["tolerance_table_status"],
+            "not_applicable_documented_exclusion_candidate",
+        )
+        self.assertTrue(any("No extracted measurement" in item
+                            for item in candidate["non_claims"]))
+
+    def test_q022_schemas_reject_unfilled_controls_promoted_to_ready(
+        self,
+    ) -> None:
+        provenance_schema = _load(Q022_DATASET_PROVENANCE_SCHEMA_PATH)
+        provenance = copy.deepcopy(_load(Q022_DATASET_PROVENANCE_PATH))
+        provenance["dataset_candidates"][0]["extraction_status"] = (
+            "extracted_dataset_checksum_verified_pending_external_review"
+        )
+        with self.assertRaises(ValueError):
+            validate_schema(provenance, provenance_schema)
+
+        comparison = self.q022["comparison_matrix"][0]
+        equation_map = _load(REPO_ROOT / comparison["equation_normalization_map"])
+        equation_map["map_status"] = "frozen_before_comparison_run"
+        with self.assertRaises(ValueError):
+            validate_schema(equation_map, _load(Q022_EQUATION_MAP_SCHEMA_PATH))
+
+        tolerance_table = _load(REPO_ROOT / comparison["tolerance_table"])
+        tolerance_table["freeze_status"] = "frozen_before_qualifying_run"
+        with self.assertRaises(ValueError):
+            validate_schema(tolerance_table,
+                            _load(Q022_TOLERANCE_TABLE_SCHEMA_PATH))
 
     def test_q023_drafts_cover_policy_campaigns_and_block_runs(self) -> None:
         drafts = _load(Q023_DRAFTS_PATH)

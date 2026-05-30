@@ -20,8 +20,9 @@
   "olcf_side_storage": {
     "status": "passed_user_authorized_orion_only_storage",
     "last_preflight_utc": "2026-05-30T04:49:18Z",
-    "installed_control_plane_version": "12750ea6f8ef540e3807a56cb7573d9d690532f729405b37b031936d045b22dc",
-    "staged_control_plane_candidate_version": "12750ea6f8ef540e3807a56cb7573d9d690532f729405b37b031936d045b22dc",
+    "installed_control_plane_version": "3e933edde9590a85976a94c0b61673979abf3c13cc2c125ed0ecbc1815029a6e",
+    "staged_control_plane_candidate_version": "7397038b0e0190622cbbe8124acc7037ac75e2765c1bbcf11c162bf99a9460f4",
+    "installed_control_plane_lifecycle": "live_active_generation_successor_staged_not_installed",
     "orion_simulation_root_preflight": {
       "status": "passed",
       "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
@@ -46,7 +47,7 @@
       "restore_drill_evidence"
     ],
     "orion_retention_role": "user_selected_sole_bulk_evidence_root_with_documented_durability_risk",
-    "ledger_genesis_allowed": true,
+    "ledger_genesis_allowed": false,
     "ledger_genesis_authorization": "user_removed_kronos_dependency_and_selected_orion_only_bulk_evidence_root",
     "ledger_genesis": {
       "status": "initialized",

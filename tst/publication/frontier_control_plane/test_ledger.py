@@ -5,11 +5,15 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from pathlib import Path
+import stat
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from ledger import accounting, append_primary_event, initialize_ledger
+from ledger import genesis_anchor_paths, migrate_existing_genesis_anchors
 from ledger import repair_mirrored_state, validate_mirrored_state
 from ledger import validate_primary_chain, validate_receipts, write_csv
 
@@ -158,6 +162,12 @@ class LedgerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_mirrored_state(self.ledger, self.receipts, self.mirror)
 
+    def test_duplicate_json_key_rejects_validation(self) -> None:
+        self.ledger.write_text('{"sequence_number": 0, "sequence_number": 1}\n',
+                               encoding="utf-8")
+        with self.assertRaises(ValueError):
+            validate_primary_chain(self.ledger)
+
     def test_repair_copies_missing_mirror_suffix_and_receipt(self) -> None:
         self.append({"event_type": "reservation", "state": "reserved"})
         self._drop_last_line(self.mirror)
@@ -194,6 +204,50 @@ class LedgerTests(unittest.TestCase):
         )
         validate_mirrored_state(self.ledger, self.receipts, self.mirror)
 
+    def test_repair_rejects_forged_primary_before_mutating_mirror(self) -> None:
+        from ledger import canonical_json, record_sha256
+
+        forged = json.loads(self.ledger.read_text(encoding="utf-8"))
+        forged["notes"] = "forged replacement genesis"
+        forged["event_sha256"] = record_sha256(forged, "event_sha256")
+        self.ledger.write_text(canonical_json(forged) + "\n", encoding="utf-8")
+        self.mirror.write_bytes(b"")
+        self.receipts.write_bytes(b"")
+        with self.assertRaises(ValueError):
+            repair_mirrored_state(
+                self.ledger,
+                self.csv,
+                self.receipts,
+                self.mirror,
+                mirror_transport="filesystem_copy",
+            )
+        self.assertEqual(self.mirror.read_bytes(), b"")
+        self.assertEqual(self.receipts.read_bytes(), b"")
+
+    def test_repair_rejects_missing_anchor_before_mirror_preflight(self) -> None:
+        local_anchor, _ = genesis_anchor_paths(self.ledger, self.mirror)
+        local_anchor.chmod(0o600)
+        local_anchor.unlink()
+        with patch("ledger.mirror_preflight") as preflight:
+            with self.assertRaises(ValueError):
+                repair_mirrored_state(
+                    self.ledger,
+                    self.csv,
+                    self.receipts,
+                    self.mirror,
+                    mirror_transport="filesystem_copy",
+                )
+        preflight.assert_not_called()
+
+    def test_append_rejects_missing_anchor_before_mirror_preflight(self) -> None:
+        local_anchor, _ = genesis_anchor_paths(self.ledger, self.mirror)
+        local_anchor.chmod(0o600)
+        local_anchor.unlink()
+        with patch("ledger.mirror_preflight") as preflight:
+            with self.assertRaises(ValueError):
+                self.append({"event_type": "must_not_append"})
+        preflight.assert_not_called()
+
     def test_lock_symlink_alias_rejects_before_external_write(self) -> None:
         lock_path = self.ledger.with_suffix(self.ledger.suffix + ".lock")
         lock_path.unlink()
@@ -207,11 +261,11 @@ class LedgerTests(unittest.TestCase):
             "preserve external lock target\n",
         )
 
-    def test_csv_temporary_symlink_alias_rejects_before_external_write(self) -> None:
-        temporary = self.csv.with_suffix(self.csv.suffix + ".tmp")
-        outside = Path(self.temporary.name) / "outside-csv-temporary"
+    def test_csv_output_symlink_alias_rejects_before_external_write(self) -> None:
+        outside = Path(self.temporary.name) / "outside-csv-output"
         outside.write_text("preserve external CSV target\n", encoding="utf-8")
-        temporary.symlink_to(outside)
+        self.csv.unlink()
+        self.csv.symlink_to(outside)
         with self.assertRaises(ValueError):
             write_csv(
                 self.ledger,
@@ -224,6 +278,407 @@ class LedgerTests(unittest.TestCase):
             outside.read_text(encoding="utf-8"),
             "preserve external CSV target\n",
         )
+
+    def test_initialize_fsyncs_created_ledger_directories(self) -> None:
+        root = Path(self.temporary.name) / "durable-genesis"
+        fsynced_modes: list[int] = []
+        real_fsync = os.fsync
+
+        def record_fsync(descriptor: int) -> None:
+            fsynced_modes.append(os.fstat(descriptor).st_mode)
+            real_fsync(descriptor)
+
+        with patch("ledger.os.fsync", side_effect=record_fsync):
+            initialize_ledger(
+                root / "orion" / "ledger" / "node_hours.jsonl",
+                root / "orion" / "ledger" / "node_hours.csv",
+                root / "orion" / "ledger" / "mirror_receipts.jsonl",
+                root / "project_home" / "ledger" / "node_hours.jsonl",
+                mirror_transport="filesystem_copy",
+                notes="durable test genesis",
+                control_plane_version="durable-test-control-plane",
+            )
+        self.assertGreaterEqual(sum(stat.S_ISDIR(mode) for mode in fsynced_modes), 1)
+
+    def test_csv_replace_fsyncs_parent_directory(self) -> None:
+        fsynced_modes: list[int] = []
+        real_fsync = os.fsync
+
+        def record_fsync(descriptor: int) -> None:
+            fsynced_modes.append(os.fstat(descriptor).st_mode)
+            real_fsync(descriptor)
+
+        with patch("ledger.os.fsync", side_effect=record_fsync):
+            write_csv(
+                self.ledger,
+                self.receipts,
+                self.csv,
+                mirror_jsonl=self.mirror,
+                mirror_transport="filesystem_copy",
+            )
+        self.assertTrue(any(stat.S_ISDIR(mode) for mode in fsynced_modes))
+
+    def test_csv_rejects_missing_genesis_anchors_before_rewrite(self) -> None:
+        original = self.csv.read_bytes()
+        for anchor in genesis_anchor_paths(self.ledger, self.mirror):
+            anchor.chmod(0o600)
+            anchor.unlink()
+        with self.assertRaises(ValueError):
+            write_csv(
+                self.ledger,
+                self.receipts,
+                self.csv,
+                mirror_jsonl=self.mirror,
+                mirror_transport="filesystem_copy",
+            )
+        self.assertEqual(self.csv.read_bytes(), original)
+
+    def test_csv_parent_fsync_failure_rolls_back_previous_projection(self) -> None:
+        original = self.csv.read_bytes()
+        real_fsync = os.fsync
+        failed = False
+
+        def fail_first_directory_fsync(descriptor: int) -> None:
+            nonlocal failed
+            if stat.S_ISDIR(os.fstat(descriptor).st_mode) and not failed:
+                failed = True
+                raise OSError("directory fsync failed")
+            real_fsync(descriptor)
+
+        with patch(
+            "control_plane_common.os.fsync",
+            side_effect=fail_first_directory_fsync,
+        ):
+            with self.assertRaises(OSError):
+                write_csv(
+                    self.ledger,
+                    self.receipts,
+                    self.csv,
+                    mirror_jsonl=self.mirror,
+                    mirror_transport="filesystem_copy",
+                )
+        self.assertTrue(failed)
+        self.assertEqual(self.csv.read_bytes(), original)
+
+    def test_initialize_accepts_trusted_mount_alias_above_existing_root(self) -> None:
+        root = Path(self.temporary.name) / "trusted-alias-genesis"
+        real_parent = root / "real-parent"
+        real_mirror_root = real_parent / "project-home"
+        real_mirror_root.mkdir(parents=True)
+        alias_parent = root / "project-home-alias"
+        alias_parent.symlink_to(real_parent, target_is_directory=True)
+        mirror = alias_parent / "project-home" / "ledger" / "node_hours.jsonl"
+        ledger = root / "orion" / "ledger" / "node_hours.jsonl"
+        receipts = root / "orion" / "ledger" / "mirror_receipts.jsonl"
+        initialize_ledger(
+            ledger,
+            root / "orion" / "ledger" / "node_hours.csv",
+            receipts,
+            mirror,
+            mirror_transport="filesystem_copy",
+            notes="trusted alias genesis",
+            control_plane_version="trusted-alias-control-plane",
+        )
+        records = validate_mirrored_state(ledger, receipts, mirror)
+        self.assertEqual(len(records), 1)
+        receipt = json.loads(receipts.read_text(encoding="utf-8"))
+        self.assertEqual(receipt["mirror_destination"], str(mirror))
+
+    def test_truncated_ledger_files_cannot_reinitialize_after_genesis(self) -> None:
+        for path in [self.ledger, self.csv, self.receipts, self.mirror]:
+            path.write_bytes(b"")
+        with self.assertRaises(ValueError):
+            initialize_ledger(
+                self.ledger,
+                self.csv,
+                self.receipts,
+                self.mirror,
+                mirror_transport="filesystem_copy",
+                notes="must not recreate genesis",
+                control_plane_version="replacement-control-plane",
+            )
+        with self.assertRaises(ValueError):
+            validate_mirrored_state(self.ledger, self.receipts, self.mirror)
+
+    def test_interrupted_fresh_genesis_primary_only_is_repairable(self) -> None:
+        root = Path(self.temporary.name) / "interrupted-genesis-primary"
+        ledger = root / "orion" / "ledger" / "node_hours.jsonl"
+        csv_path = root / "orion" / "ledger" / "node_hours.csv"
+        receipts = root / "orion" / "ledger" / "mirror_receipts.jsonl"
+        mirror = root / "project_home" / "ledger" / "node_hours.jsonl"
+        real_append = __import__("ledger")._append_jsonl
+
+        def interrupt_mirror(path: Path, record: dict[str, object]) -> None:
+            if path == mirror:
+                raise RuntimeError("simulated mirror append interruption")
+            real_append(path, record)
+
+        with patch("ledger._append_jsonl", side_effect=interrupt_mirror):
+            with self.assertRaises(RuntimeError):
+                initialize_ledger(
+                    ledger,
+                    csv_path,
+                    receipts,
+                    mirror,
+                    mirror_transport="filesystem_copy",
+                    notes="recover exact interrupted genesis",
+                    control_plane_version="recoverable-control-plane",
+                )
+        initialize_ledger(
+            ledger,
+            csv_path,
+            receipts,
+            mirror,
+            mirror_transport="filesystem_copy",
+            notes="recover exact interrupted genesis",
+            control_plane_version="recoverable-control-plane",
+        )
+        self.assertEqual(len(validate_mirrored_state(ledger, receipts, mirror)), 1)
+
+    def test_interrupted_fresh_genesis_receipt_only_is_repairable(self) -> None:
+        root = Path(self.temporary.name) / "interrupted-genesis-receipt"
+        ledger = root / "orion" / "ledger" / "node_hours.jsonl"
+        csv_path = root / "orion" / "ledger" / "node_hours.csv"
+        receipts = root / "orion" / "ledger" / "mirror_receipts.jsonl"
+        mirror = root / "project_home" / "ledger" / "node_hours.jsonl"
+        with patch(
+            "ledger._write_genesis_anchors",
+            side_effect=RuntimeError("simulated anchor publication interruption"),
+        ):
+            with self.assertRaises(RuntimeError):
+                initialize_ledger(
+                    ledger,
+                    csv_path,
+                    receipts,
+                    mirror,
+                    mirror_transport="filesystem_copy",
+                    notes="recover exact interrupted genesis",
+                    control_plane_version="recoverable-control-plane",
+                )
+        initialize_ledger(
+            ledger,
+            csv_path,
+            receipts,
+            mirror,
+            mirror_transport="filesystem_copy",
+            notes="recover exact interrupted genesis",
+            control_plane_version="recoverable-control-plane",
+        )
+        self.assertEqual(len(validate_mirrored_state(ledger, receipts, mirror)), 1)
+
+    def test_interrupted_fresh_genesis_mirror_only_is_repairable(self) -> None:
+        root = Path(self.temporary.name) / "interrupted-genesis-mirror"
+        ledger = root / "orion" / "ledger" / "node_hours.jsonl"
+        csv_path = root / "orion" / "ledger" / "node_hours.csv"
+        receipts = root / "orion" / "ledger" / "mirror_receipts.jsonl"
+        mirror = root / "project_home" / "ledger" / "node_hours.jsonl"
+        with patch(
+            "ledger._append_mirror_receipt",
+            side_effect=RuntimeError("simulated receipt append interruption"),
+        ):
+            with self.assertRaises(RuntimeError):
+                initialize_ledger(
+                    ledger,
+                    csv_path,
+                    receipts,
+                    mirror,
+                    mirror_transport="filesystem_copy",
+                    notes="recover exact interrupted genesis",
+                    control_plane_version="recoverable-control-plane",
+                )
+        initialize_ledger(
+            ledger,
+            csv_path,
+            receipts,
+            mirror,
+            mirror_transport="filesystem_copy",
+            notes="recover exact interrupted genesis",
+            control_plane_version="recoverable-control-plane",
+        )
+        self.assertEqual(len(validate_mirrored_state(ledger, receipts, mirror)), 1)
+
+    def test_interrupted_fresh_genesis_one_anchor_is_repairable(self) -> None:
+        root = Path(self.temporary.name) / "interrupted-genesis-one-anchor"
+        ledger = root / "orion" / "ledger" / "node_hours.jsonl"
+        csv_path = root / "orion" / "ledger" / "node_hours.csv"
+        receipts = root / "orion" / "ledger" / "mirror_receipts.jsonl"
+        mirror = root / "project_home" / "ledger" / "node_hours.jsonl"
+        real_write = __import__("ledger")._write_one_genesis_anchor
+
+        def interrupt_second_anchor(path: Path, root: Path, anchor: dict[str, object]) -> None:
+            if path == mirror.parent / "genesis_anchor.json":
+                raise RuntimeError("simulated second anchor interruption")
+            real_write(path, root, anchor)
+
+        with patch("ledger._write_one_genesis_anchor", side_effect=interrupt_second_anchor):
+            with self.assertRaises(RuntimeError):
+                initialize_ledger(
+                    ledger,
+                    csv_path,
+                    receipts,
+                    mirror,
+                    mirror_transport="filesystem_copy",
+                    notes="recover exact interrupted genesis",
+                    control_plane_version="recoverable-control-plane",
+                )
+        initialize_ledger(
+            ledger,
+            csv_path,
+            receipts,
+            mirror,
+            mirror_transport="filesystem_copy",
+            notes="recover exact interrupted genesis",
+            control_plane_version="recoverable-control-plane",
+        )
+        self.assertEqual(len(validate_mirrored_state(ledger, receipts, mirror)), 1)
+
+    def test_interrupted_fresh_genesis_missing_csv_is_repairable(self) -> None:
+        root = Path(self.temporary.name) / "interrupted-genesis-csv"
+        ledger = root / "orion" / "ledger" / "node_hours.jsonl"
+        csv_path = root / "orion" / "ledger" / "node_hours.csv"
+        receipts = root / "orion" / "ledger" / "mirror_receipts.jsonl"
+        mirror = root / "project_home" / "ledger" / "node_hours.jsonl"
+        with patch("ledger.write_csv", side_effect=RuntimeError("simulated CSV interruption")):
+            with self.assertRaises(RuntimeError):
+                initialize_ledger(
+                    ledger,
+                    csv_path,
+                    receipts,
+                    mirror,
+                    mirror_transport="filesystem_copy",
+                    notes="recover exact interrupted genesis",
+                    control_plane_version="recoverable-control-plane",
+                )
+        initialize_ledger(
+            ledger,
+            csv_path,
+            receipts,
+            mirror,
+            mirror_transport="filesystem_copy",
+            notes="recover exact interrupted genesis",
+            control_plane_version="recoverable-control-plane",
+        )
+        self.assertEqual(len(validate_mirrored_state(ledger, receipts, mirror)), 1)
+
+    def test_interrupted_fresh_genesis_rejects_identity_drift(self) -> None:
+        root = Path(self.temporary.name) / "interrupted-genesis-identity"
+        ledger = root / "orion" / "ledger" / "node_hours.jsonl"
+        csv_path = root / "orion" / "ledger" / "node_hours.csv"
+        receipts = root / "orion" / "ledger" / "mirror_receipts.jsonl"
+        mirror = root / "project_home" / "ledger" / "node_hours.jsonl"
+        real_append = __import__("ledger")._append_jsonl
+
+        def interrupt_mirror(path: Path, record: dict[str, object]) -> None:
+            if path == mirror:
+                raise RuntimeError("simulated mirror append interruption")
+            real_append(path, record)
+
+        with patch("ledger._append_jsonl", side_effect=interrupt_mirror):
+            with self.assertRaises(RuntimeError):
+                initialize_ledger(
+                    ledger,
+                    csv_path,
+                    receipts,
+                    mirror,
+                    mirror_transport="filesystem_copy",
+                    notes="recover exact interrupted genesis",
+                    control_plane_version="recoverable-control-plane",
+                )
+        for notes, version in [
+            ("changed notes", "recoverable-control-plane"),
+            ("recover exact interrupted genesis", "changed-control-plane"),
+        ]:
+            with self.assertRaises(ValueError):
+                initialize_ledger(
+                    ledger,
+                    csv_path,
+                    receipts,
+                    mirror,
+                    mirror_transport="filesystem_copy",
+                    notes=notes,
+                    control_plane_version=version,
+                )
+
+    def test_interrupted_fresh_genesis_rejects_corrupt_receipt(self) -> None:
+        root = Path(self.temporary.name) / "interrupted-genesis-corrupt-receipt"
+        ledger = root / "orion" / "ledger" / "node_hours.jsonl"
+        csv_path = root / "orion" / "ledger" / "node_hours.csv"
+        receipts = root / "orion" / "ledger" / "mirror_receipts.jsonl"
+        mirror = root / "project_home" / "ledger" / "node_hours.jsonl"
+        with patch(
+            "ledger._write_genesis_anchors",
+            side_effect=RuntimeError("simulated anchor publication interruption"),
+        ):
+            with self.assertRaises(RuntimeError):
+                initialize_ledger(
+                    ledger,
+                    csv_path,
+                    receipts,
+                    mirror,
+                    mirror_transport="filesystem_copy",
+                    notes="recover exact interrupted genesis",
+                    control_plane_version="recoverable-control-plane",
+                )
+        receipt = json.loads(receipts.read_text(encoding="utf-8"))
+        receipt["mirrored_event_sha256"] = "0" * 64
+        receipts.write_text(json.dumps(receipt) + "\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            initialize_ledger(
+                ledger,
+                csv_path,
+                receipts,
+                mirror,
+                mirror_transport="filesystem_copy",
+                notes="recover exact interrupted genesis",
+                control_plane_version="recoverable-control-plane",
+            )
+
+    def test_audited_pre_anchor_ledger_migration_is_one_shot(self) -> None:
+        local_anchor, mirror_anchor = genesis_anchor_paths(self.ledger, self.mirror)
+        event = json.loads(self.ledger.read_text(encoding="utf-8"))
+        receipt = json.loads(self.receipts.read_text(encoding="utf-8"))
+        local_anchor.chmod(0o600)
+        mirror_anchor.chmod(0o600)
+        local_anchor.unlink()
+        mirror_anchor.unlink()
+        anchor = migrate_existing_genesis_anchors(
+            self.ledger,
+            self.receipts,
+            self.mirror,
+            expected_event_sha256=event["event_sha256"],
+            expected_mirror_ack_sha256=receipt["mirror_ack_sha256"],
+        )
+        self.assertEqual(anchor["event_sha256"], event["event_sha256"])
+        self.assertEqual(len(validate_mirrored_state(
+            self.ledger, self.receipts, self.mirror
+        )), 1)
+        with self.assertRaises(ValueError):
+            migrate_existing_genesis_anchors(
+                self.ledger,
+                self.receipts,
+                self.mirror,
+                expected_event_sha256="0" * 64,
+                expected_mirror_ack_sha256=receipt["mirror_ack_sha256"],
+            )
+
+    def test_audited_pre_anchor_migration_repairs_one_missing_anchor(self) -> None:
+        local_anchor, mirror_anchor = genesis_anchor_paths(self.ledger, self.mirror)
+        event = json.loads(self.ledger.read_text(encoding="utf-8"))
+        receipt = json.loads(self.receipts.read_text(encoding="utf-8"))
+        mirror_anchor.chmod(0o600)
+        mirror_anchor.unlink()
+        with self.assertRaises(ValueError):
+            validate_mirrored_state(self.ledger, self.receipts, self.mirror)
+        anchor = migrate_existing_genesis_anchors(
+            self.ledger,
+            self.receipts,
+            self.mirror,
+            expected_event_sha256=event["event_sha256"],
+            expected_mirror_ack_sha256=receipt["mirror_ack_sha256"],
+        )
+        self.assertTrue(local_anchor.is_file())
+        self.assertTrue(mirror_anchor.is_file())
+        self.assertEqual(anchor["event_sha256"], event["event_sha256"])
 
 
 if __name__ == "__main__":

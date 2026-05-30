@@ -25,6 +25,7 @@
 #include "z4c/z4c.hpp"
 #include "dyn_grmhd/dyn_grmhd.hpp"
 #include "ion-neutral/ion-neutral.hpp"
+#include "particles/particles.hpp"
 #include "radiation/radiation.hpp"
 #include "driver.hpp"
 
@@ -640,6 +641,10 @@ void Driver::OutputQ017Telemetry(Mesh *pm, double exe_time) {
              MPI_COMM_WORLD);
 #endif
 
+  if (pm->pmb_pack->ppart != nullptr) {
+    pm->pmb_pack->ppart->OutputQ017Telemetry();
+  }
+
   if (global_variable::my_rank != 0) {return;}
 
   const int nranks = global_variable::nranks;
@@ -697,7 +702,7 @@ void Driver::OutputQ017Telemetry(Mesh *pm, double exe_time) {
               << std::endl;
   };
 
-  print_scalar("schema_version", 1.0);
+  print_scalar("schema_version", 2.0);
   print_scalar("mpi.ranks", nranks);
   for (int n=0; n<ntimers; ++n) {
     std::string prefix = std::string("timer.") + timer_names[n];

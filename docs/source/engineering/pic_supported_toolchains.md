@@ -59,30 +59,72 @@ Do not infer MPI runtime qualification from the MPI `-c` output.
 ## Frontier HIP Candidate
 
 The Frontier candidate profile uses the Cray `CC` wrapper, AMD `gfx90a`, HIP,
-and MPI:
+and MPI. Keep every bulk artifact under
+`/lustre/orion/ast207/proj-shared/dfielding/PIC`; Kronos is not a build,
+execution, continuation, or publication path. Before this workflow, install the
+paired production control plane from reviewed clean tracked source files. The
+production installer rejects modified or untracked control-plane source and
+publishes its immutable tree relative to a pinned authorized-parent
+descriptor. Source that installed environment profile, then invoke only the
+installed build-profile writer:
 
 ```bash
-module reset
-module load PrgEnv-amd
-module load amd
-module load rocm
-module load craype-accel-amd-gfx90a
-export MPICH_GPU_SUPPORT_ENABLED=1
+set -euo pipefail
 
-cmake -S . -B /tmp/athenak-pic-frontier-hip \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DAthena_ENABLE_MPI=ON \
-  -DKokkos_ENABLE_MPI=ON \
-  -DKokkos_ARCH_ZEN3=ON \
-  -DKokkos_ARCH_VEGA90A=ON \
-  -DKokkos_ENABLE_HIP=ON \
-  -DCMAKE_CXX_COMPILER=CC \
-  -DCMAKE_CXX_FLAGS="-I${ROCM_PATH}/include" \
-  -DCMAKE_EXE_LINKER_FLAGS="-L${ROCM_PATH}/lib -lamdhip64"
-cmake --build /tmp/athenak-pic-frontier-hip -j 8
+export PIC_ROOT=/lustre/orion/ast207/proj-shared/dfielding/PIC
+export CONTROL_PLANE_DIR="${PIC_ROOT}/control_plane/<reviewed-control-plane-digest>"
+CONTROL_PLANE=("$PYTHON" -I "${CONTROL_PLANE_DIR}/run_control_plane.py")
+export SRC_DIR=/ccs/home/dfielding/athenak-pic
+PYTHON=/opt/cray/pe/python/3.11.7/bin/python3
+source "${CONTROL_PLANE_DIR}/frontier_pic_environment.sh" || exit $?
+export GIT_COMMIT_FULL="$(git -C "$SRC_DIR" rev-parse HEAD)"
+
+"${CONTROL_PLANE[@]}" write_orion_build_profile.py \
+  --source-root "$SRC_DIR" \
+  --expected-git-commit "$GIT_COMMIT_FULL" \
+  --profile-id hip-mpi-release-paper-pic
+
+export GIT_COMMIT="${GIT_COMMIT_FULL:0:12}"
+export CONFIG=hip-mpi-release-paper-pic
+export BIN_DIR="${PIC_ROOT}/bin/${GIT_COMMIT}/${CONFIG}"
+"${CONTROL_PLANE[@]}" create_clean_candidate_freeze.py \
+  --source-root "$SRC_DIR" \
+  --executable "${BIN_DIR}/athena" \
+  --build-profile "${BIN_DIR}/build_profile.json" \
+  --build-profile-id hip-mpi-release-paper-pic
 ```
 
-This is a candidate build recipe, not permission to submit. Do not invoke
+`write_orion_build_profile.py` accepts no operator-selected executable, output,
+build-directory, log, command-file, or provenance-input paths. For
+`hip-mpi-release-paper-pic`, it derives the Orion layout, requires fresh build,
+bin, and log paths, materializes a detached local checkout plus recursive local
+submodule checkouts from the authorized clean source closure, and invokes the
+closed direct `/usr/bin/cmake` configure and build argv with
+`/opt/cray/pe/craype/2.7.33/bin/CC`, `ROCM_PATH=/opt/rocm-6.2.4`, and a minimal
+subprocess environment that excludes caller Git, Python, CMake, and loader
+overrides. The installed profile explicitly unloads the inactive default
+`darshan-runtime` module so its site-Spack pkg-config path cannot drift into
+the closed PIC compiler-wrapper environment. It captures the exact
+argv as `build-invocations.json`, binds empty `git_status.preconfigure.txt` and
+post-build `git_status.txt` captures from the fresh checkout, and records the
+cache, module list, fixed toolchain description, recursive submodule status,
+redacted runtime environment allowlist, retained `build-environment.json`, and
+configure/build logs. It publishes the
+schema-v3 `build_profile.json` and adjacent `profile_receipt.json` exclusively
+under Orion.
+
+The clean-candidate freeze revalidates the profile and receipt and retains
+read-only copies of all eleven provenance inputs. The closed argv, hashes, and
+fresh detached checkout reduce stale or mixed-build mistakes; they do not
+cryptographically prove that the compiler honored the recorded command or
+establish compiler semantics. Reproducibility and qualification remain
+separate gates. The freeze and later pre-submit snapshots use
+descriptor-relative staging and publication below pinned authorized parents,
+followed by a lexical-parent identity check. This closes ancestor-swap pathname
+redirection during publication; it does not protect writable artifacts against
+a malicious same-UID process.
+
+This workflow creates a candidate build profile, not permission to submit. Do not invoke
 `sbatch`, initialize the production ledger, or bypass the installed immutable
 submission wrapper before the control-plane and storage unlock described in
 [MHD-PIC Clean-Launch Runbook](pic_clean_launch_runbook.md).

@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "comparison_id": "XCMP-GIZMO-RSOL-DECISION",
+  "dataset_provenance_id": "Q022-DATASET-XCMP-GIZMO-RSOL-DECISION",
+  "freeze_status": "not_applicable_documented_exclusion_candidate",
+  "observable_families": ["steady_state_rsol_invariance", "normalization", "applicability_differences"],
+  "rows": [],
+  "blocked_inputs": [
+    "The provisional Q-039 documented-exclusion candidate does not authorize a bounded comparison.",
+    "No extracted GIZMO comparison measurement or numerical tolerance is implied.",
+    "External reviewer approval is pending."
+  ],
+  "reviewer_disposition": "pending external review"
+}

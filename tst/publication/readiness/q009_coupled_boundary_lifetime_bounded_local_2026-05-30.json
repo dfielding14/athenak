@@ -1,0 +1,139 @@
+{
+  "record_type": "q009_coupled_boundary_lifetime_bounded_local_tranche",
+  "date": "2026-05-30",
+  "gate": "Q-009",
+  "qualification_effect": "bounded_local_serial_host_regression_and_ubsan_only",
+  "disposition": "combined_coupled_boundary_lifetime_local_regression_added_frontier_matrix_open",
+  "scope": "A focused Frontier-login-side serial-host regression exercises the paper_mhd_pic coupled MHD background, coupled feedback, cell-centered current deposition, conservative momentum and energy feedback, supported x1 reflect particle and moment boundaries, supported x2 outflow moment boundaries, adaptive refine/derefine reconstruction, and restart continuation in one bounded path. Alternating dens_max overrides force three refine and three derefine transitions through five restart continuations. This is development evidence only, not a registered Frontier compute-node run or scientific AMR qualification.",
+  "source_constraints": {
+    "production_source_edited": false,
+    "existing_q009_files_edited": false,
+    "plan_readme_control_plane_edited": false,
+    "q017_q008_q033_files_edited": false,
+    "bulk_storage_accessed": false,
+    "new_q009_specific_files_only": [
+      "inputs/tests/pic_q009_coupled_boundary_lifetime.athinput",
+      "tst/scripts/particles/pic_q009_coupled_boundary_lifetime.py",
+      "tst/publication/readiness/q009_coupled_boundary_lifetime_bounded_local_2026-05-30.json"
+    ]
+  },
+  "verification": {
+    "input": "inputs/tests/pic_q009_coupled_boundary_lifetime.athinput",
+    "harness": "tst/scripts/particles/pic_q009_coupled_boundary_lifetime.py",
+    "debug_serial_build": {
+      "configure_command": "cmake -S . -B /tmp/athenak-pic-q009-coupled-boundary-debug-20260530 -DCMAKE_BUILD_TYPE=Debug -DAthena_ENABLE_MPI=OFF -DAthena_ENABLE_OPENMP=OFF",
+      "build_command": "cmake --build /tmp/athenak-pic-q009-coupled-boundary-debug-20260530 -j 8",
+      "startup_command": "/tmp/athenak-pic-q009-coupled-boundary-debug-20260530/src/athena -c",
+      "startup_result": "pass: built_in_pgens double precision MPI OFF OpenMP OFF",
+      "direct_command": "cd tst && ATHENA_Q009_COUPLED_BOUNDARY_EXE_DIR=/tmp/athenak-pic-q009-coupled-boundary-debug-20260530/src PYTHONDONTWRITEBYTECODE=1 python3 -m scripts.particles.pic_q009_coupled_boundary_lifetime",
+      "direct_result": "pass"
+    },
+    "ubsan_serial_build": {
+      "configure_command": "cmake -S . -B /tmp/athenak-pic-q009-coupled-boundary-ubsan-20260530 -DCMAKE_BUILD_TYPE=Debug -DAthena_ENABLE_MPI=OFF -DAthena_ENABLE_OPENMP=OFF -DCMAKE_CXX_FLAGS='-fsanitize=undefined -fno-omit-frame-pointer' -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=undefined'",
+      "build_command": "cmake --build /tmp/athenak-pic-q009-coupled-boundary-ubsan-20260530 -j 8",
+      "startup_command": "UBSAN_OPTIONS='halt_on_error=1:print_stacktrace=1' /tmp/athenak-pic-q009-coupled-boundary-ubsan-20260530/src/athena -c",
+      "startup_result": "pass: built_in_pgens double precision MPI OFF OpenMP OFF",
+      "direct_command": "cd tst && ATHENA_Q009_COUPLED_BOUNDARY_EXE_DIR=/tmp/athenak-pic-q009-coupled-boundary-ubsan-20260530/src UBSAN_OPTIONS='halt_on_error=1:print_stacktrace=1' PYTHONDONTWRITEBYTECODE=1 python3 -m scripts.particles.pic_q009_coupled_boundary_lifetime",
+      "direct_result": "pass_without_ubsan_finding"
+    },
+    "runtime_identity": "physical_mode=paper_mhd_pic state=momentum_p_over_m C=3 background=coupled feedback=coupled induction=ideal_mhd_only deposition=tsc restart_schema=7",
+    "supported_boundary_combination": {
+      "x1": "reflect",
+      "x2": "outflow",
+      "x3": "periodic"
+    },
+    "expected_transition_sequence": [
+      "refine",
+      "derefine",
+      "refine",
+      "derefine",
+      "refine",
+      "derefine"
+    ],
+    "restart_continuations": 5,
+    "gated_checks": [
+      "stable_paper_mhd_pic_runtime_identity",
+      "strictly_increasing_stage_time",
+      "finite_mesh_state",
+      "stable_nonzero_particle_count",
+      "stable_unique_particle_tags",
+      "finite_particle_positions_and_velocities",
+      "in_domain_particle_positions",
+      "valid_particle_species_and_meshblock_gid",
+      "ownership_change_on_every_amr_transition",
+      "root_gid_matches_position_after_derefine",
+      "same_level_root_meshblock_physical_migration",
+      "reflect_boundary_particle_interaction"
+    ]
+  },
+  "observed_bounded_local_metrics": {
+    "stage_time_sequence": [
+      0.0279405,
+      0.0550708,
+      0.0817521,
+      0.108079,
+      0.134177,
+      0.160081
+    ],
+    "meshblock_sequence": [
+      8,
+      2,
+      8,
+      2,
+      8,
+      2
+    ],
+    "created_deleted_per_stage": [
+      [
+        6,
+        0
+      ],
+      [
+        0,
+        6
+      ],
+      [
+        6,
+        0
+      ],
+      [
+        0,
+        6
+      ],
+      [
+        6,
+        0
+      ],
+      [
+        0,
+        6
+      ]
+    ],
+    "particle_count": 64,
+    "ownership_changes_per_amr_transition": [
+      56,
+      55,
+      57,
+      56,
+      59,
+      59
+    ],
+    "same_level_root_migration_count": 4,
+    "same_level_root_max_point_displacement": 0.080921471118927,
+    "reflected_particle_count": 10
+  },
+  "bounded_evidence_limits": {
+    "local_scope": "This tranche is serial login-side development evidence. It does not represent a registered Frontier compute-node run.",
+    "mpi_runtime": "open: mpiexec and mpirun are unavailable on the login host; run the combined boundary, AMR, restart and rank-to-rank migration path under a controlled Frontier allocation",
+    "frontier_hip": "open: run the combined lifetime path with the supported Frontier HIP GPU toolchain and retain registered Orion evidence",
+    "asan": "open: the documented Cray/AMD login-toolchain ASan startup ODR issue prevents an honest ASan runtime claim; UBSan-only passed and does not replace ASan memory-safety coverage",
+    "boundary_matrix": "open: this tranche combines reflect, outflow and periodic faces in the paper cell-centered path; controlled MPI, inflow-lifetime, and any separately admissible experimental direct-staggered boundary slices remain separate work",
+    "scientific_amr": "open: this engineering lifetime regression is not Section 5.3 AMR scientific qualification"
+  },
+  "frontier_only_remainder": [
+    "Run the combined coupled-boundary lifetime path with controlled multi-rank MPI migration and restart continuation on Frontier compute nodes.",
+    "Run the combined coupled-boundary lifetime path with the supported Frontier HIP GPU profile and retained registered Orion evidence.",
+    "Correlate retained Frontier particle-aware load costs with measured runtime separately from this bounded lifetime regression."
+  ],
+  "q009_status": "bounded_local_combined_coupled_boundary_lifetime_and_ubsan_added_frontier_mpi_hip_matrix_open"
+}

@@ -3,31 +3,34 @@
 # SCRIPT: check_athena_cpp_style.sh
 # AUTHOR: Kyle Gerard Felker - kfelker@princeton.edu
 # DATE:   4/18/2018
-# PURPOSE:  Wrapper script to ./cpplint.py application to check AthenaK src/ code
+# PURPOSE:  Wrapper script to vendored cpplint.py application to check AthenaK src/ code
 #           compliance with C++ style guildes. User's Python and/or Bash shell
 #           implementation may not support recursive globbing of src/ subdirectories
 #           and files, so this uses "find" cmd w/ non-POSIX Bash process substitution.
 #
-# USAGE:    ./check_athena_cpp_style.sh
-#           Assumes this script is executed from ./tst/style/ with cpplint.py in
-#           the same directory, and that CPPLINT.cfg is in root directory.
-#           TODO: add explicit check of execution directory
+# USAGE:    ./tst/scripts/style/check_athena_cpp_style.sh
+#           May be invoked from any directory.
 #
 # LOG:      Updated by @pdmullen on 1/12/2022 for use in AthenaK
 
-# Obtain Google C++ Style Linter:
-echo "Obtaining Google C++ Style cpplint.py test"
-curl https://raw.githubusercontent.com/cpplint/cpplint/master/cpplint.py \
---output cpplint.py --silent
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd -- "${script_dir}/../../.." && pwd)"
+cpplint_py="${script_dir}/cpplint.py"
+
+if [ ! -r "$cpplint_py" ]; then
+  echo "ERROR: Vendored cpplint.py not found at $cpplint_py"
+  exit 1
+fi
+
+cd "$repo_root" || exit 1
 
 # Apply Google C++ Style Linter to all source code files at once:
 echo "Starting Google C++ Style cpplint.py test"
 # Use "python3 -u" to prevent buffering of sys.stdout,stderr.write()
 # calls in cpplint.py and mix-up in Jenkins logs,
-find ../../../src -type f \( -name "*.cpp" -o -name "*.hpp" \) \
--print | xargs python3 -u cpplint.py --filter=-build/include_subdir --counting=detailed
-if [ $? -ne 0 ]; then echo "ERROR: C++ style errors found"; rm -f cpplint.py; exit 1; fi
-rm -f cpplint.py
+find src -type f \( -name "*.cpp" -o -name "*.hpp" \) \
+-print | xargs python3 -u "$cpplint_py" --filter=-build/include_subdir --counting=detailed
+if [ $? -ne 0 ]; then echo "ERROR: C++ style errors found"; exit 1; fi
 echo "End of Google C++ Style cpplint.py test"
 
 # Begin custom AthenaK style rules and checks:
@@ -49,14 +52,14 @@ do
     grep -nrEi '^\s+#pragma' "$file"
     if [ $? -ne 1 ]; then echo "ERROR: Left justify any #pragma statements"; exit 1; fi
 
-done < <(find ../../../src -type f \( -name "*.cpp" -o -name "*.hpp" \) -print)
+done < <(find src -type f \( -name "*.cpp" -o -name "*.hpp" \) -print)
 echo "End of \t, closing brace, and #pragma test"
 
 # Search src/ C++ source code for trailing whitespace errors
 # (Google C++ Style Linter does not check for this,
 # but flake8 via pycodestyle warning W291 will check *.py)
 echo "Checking for trailing whitespace in src/"
-find ../../../src -type f \( -name "*.cpp" -o -name "*.hpp*" \) \
+find src -type f \( -name "*.cpp" -o -name "*.hpp*" \) \
 -exec grep -n -E " +$" {} +
 if [ $? -ne 1 ]; then echo "ERROR: Found C++ file(s) in src/ \
 with trailing whitespace"; exit 1; fi

@@ -96,17 +96,26 @@ Real GravPot(Real x1, Real x2, Real x3, Real G, Real r_s, Real rho_s,
 //  \brief
 
 TaskStatus Particles::Push(Driver *pdriver, int stage) {
+  Q017Fence();
+  Kokkos::Timer q017_timer;
+  TaskStatus status = TaskStatus::fail;
   switch (pusher) {
   case ParticlesPusher::drift:
-    return PushDrift(pdriver, stage);
+    status = PushDrift(pdriver, stage);
+    break;
   case ParticlesPusher::rk4_gravity:
-    return PushStars(pdriver, stage);
+    status = PushStars(pdriver, stage);
+    break;
   case ParticlesPusher::boris_lin:
   case ParticlesPusher::boris_tsc:
-    return PushCosmicRays(pdriver, stage);
+    status = PushCosmicRays(pdriver, stage);
+    break;
   default:
-    return TaskStatus::fail;
+    break;
   }
+  Q017Fence();
+  AccumulateQ017Timer(Q017ParticleTimer::push, q017_timer.seconds());
+  return status;
 }
 
 //----------------------------------------------------------------------------------------

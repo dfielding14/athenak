@@ -416,6 +416,8 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
 
   int npart = nprtcl_thispack;
   if (npart <= 0) return TaskStatus::complete;
+  Q017Fence();
+  Kokkos::Timer q017_timer;
 
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int is = indcs.is;
@@ -578,6 +580,8 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
   if (!UseDirectEdgeCurrentDeposit(deposit_moments, couple_moments_to_mhd,
                                    couple_j_to_efield_representation,
                                    couple_j_deposition_mode)) {
+    Q017Fence();
+    AccumulateQ017Timer(Q017ParticleTimer::deposition, q017_timer.seconds());
     return TaskStatus::complete;
   }
 
@@ -976,6 +980,8 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
       Kokkos::atomic_add(&jz_e(m, k1, j1+1, i1+1), fx3_2*wx1_2*wx2_2);
     }
     });
+    Q017Fence();
+    AccumulateQ017Timer(Q017ParticleTimer::deposition, q017_timer.seconds());
     return TaskStatus::complete;
   }
 
@@ -1337,6 +1343,8 @@ TaskStatus Particles::DepositMoments(Driver *pdriver, int stage) {
         }
       }
     });
+    Q017Fence();
+    AccumulateQ017Timer(Q017ParticleTimer::deposition, q017_timer.seconds());
     return TaskStatus::complete;
   }
 

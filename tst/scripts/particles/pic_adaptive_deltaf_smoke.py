@@ -146,6 +146,15 @@ def _parse_fit(output):
     }
 
 
+def _parse_adaptive_timer_calls(output):
+    match = re.search(
+        r'q017\.telemetry\.timer\.particle\.adaptive_deltaf\.calls_rank_max=([^\n]+)',
+        output)
+    if match is None:
+        raise RuntimeError('Missing adaptive delta-f Q-017 timer telemetry:\n' + output)
+    return float(match.group(1))
+
+
 def run(**kwargs):
     logger.debug('Running test ' + __name__)
     full = 'pic_adaptive_deltaf_full'
@@ -156,6 +165,7 @@ def run(**kwargs):
 
     full_output = _run_athena('full', ['job/basename=' + full, 'time/nlim=2'])
     _RESULTS['fit'] = _parse_fit(full_output)
+    _RESULTS['adaptive_timer_calls'] = _parse_adaptive_timer_calls(full_output)
     _RESULTS['full'] = _read_pvtk_snapshot(full)
 
     _run_athena('segment', ['job/basename=' + segment, 'time/nlim=1'])
@@ -210,6 +220,7 @@ def analyze():
         'fit_errors': fit_errors,
         'restart_errors': restart_errors,
         'restart_refit': _RESULTS['restart_refit'],
+        'adaptive_timer_calls': _RESULTS['adaptive_timer_calls'],
     }
     logger.info('adaptive delta-f metrics: %s', measured)
     _RESULTS['metrics'] = measured
@@ -217,6 +228,7 @@ def analyze():
             and max(fit_errors.values()) <= 1.0e-12
             and max(restart_errors.values()) <= 1.0e-6
             and not _RESULTS['restart_refit']
+            and _RESULTS['adaptive_timer_calls'] > 0.0
             and full['npoint'] == restarted['npoint'] == 64
             and np.all(np.isfinite(full['deltaf_weight']))
             and np.max(np.abs(full['deltaf_weight'])) > 1.0e-6)

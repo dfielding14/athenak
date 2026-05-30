@@ -13,7 +13,8 @@
     "q022_sidecar": "tst/publication/readiness/q022_independent_comparison_preregistration_2026-05-30.json",
     "external_artifact_inventory": "tst/publication/readiness/external_artifacts.json",
     "external_artifact_id": "CROSS_CODE_REFERENCE_DATA",
-    "private_source_ingest": "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json"
+    "private_source_ingest": "tst/publication/readiness/q022_external_reference_private_ingest_2026-05-30.json",
+    "documented_exclusion_candidate": "tst/publication/readiness/q039_gizmo_documented_exclusion_candidate_2026-05-30.json"
   },
   "reference_source_preparation": {
     "status": "orion_private_copy_checksum_verified_mapping_and_data_extraction_open",
@@ -111,6 +112,7 @@
     },
     "documented_exclusion": {
       "status": "provisional_fail_closed_exclusion_only",
+      "candidate_record": "tst/publication/readiness/q039_gizmo_documented_exclusion_candidate_2026-05-30.json",
       "rule": "Public reference sources are privately archived in Orion with post-copy SHA256SUMS verification. Until a bounded route rationale and external reviewer approval close, exclude Ji-Hopkins/GIZMO RSOL comparative interpretation from manuscript claims. This provisional exclusion prevents overclaiming but is not the reviewer-approved documented exclusion that closes Q-039.",
       "closure_requires": [
         "orion_reference_source_copy_complete",

@@ -109,8 +109,8 @@
     },
     "repository_vendored_cpplint_baseline": {
       "status": "pre_existing_debt_recorded",
-      "diagnostics": 1453,
-      "method": "Non-mutating vendored cpplint invocation equivalent to the repository wrapper cpplint stage. The wrapper itself was not invoked because it downloads, overwrites, and removes the tracked cpplint.py file."
+      "diagnostics": 1456,
+      "method": "Repaired repository wrapper invoked from both the repository root and /tmp. Both caller-directory-independent invocations used the vendored tst/scripts/style/cpplint.py read-only, exited 1 with the same pre-existing style baseline, and preserved its SHA-256 hash 0c9f128f029c91c3eda8b033a4d879e2f5c904b1607b0af5fb89636dc716a603."
     },
     "repository_custom_baseline": {
       "tab_lines": 83,

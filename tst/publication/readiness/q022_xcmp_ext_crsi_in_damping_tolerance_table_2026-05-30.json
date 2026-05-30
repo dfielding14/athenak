@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "comparison_id": "XCMP-EXT-CRSI-IN-DAMPING",
+  "dataset_provenance_id": "Q022-DATASET-XCMP-EXT-CRSI-IN-DAMPING",
+  "freeze_status": "blocked_pending_reference_dataset_extraction_and_external_review",
+  "observable_families": ["damping_rate_dependence", "unstable_bandwidth", "saturation", "isotropization"],
+  "rows": [],
+  "blocked_inputs": [
+    "No authorized Orion extracted dataset exists for this comparison.",
+    "Reference-specific units, extraction uncertainty, and externally reviewed numerical thresholds remain unavailable.",
+    "Numeric tolerance rows are intentionally absent rather than fabricated."
+  ],
+  "reviewer_disposition": "pending external review"
+}

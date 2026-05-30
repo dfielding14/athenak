@@ -1,0 +1,70 @@
+{
+  "record_type": "q027_control_plane_recovery_provenance_candidate",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-027",
+    "Q-038",
+    "Q-042"
+  ],
+  "qualification_effect": "local_recovery_provenance_chronology_superseded_after_adjacent_accounting_sweep",
+  "scope": "Successor chronology after an independent audit of the recovery-hardening candidate found stranded successful-attachment markers, mutable-source mutating-repair entry points and inherited Bash-startup descriptor duplication. This candidate repaired those reproduced blockers, but an adjacent-path sweep found that reconciliation did not verify the paired Project Home install before appending mirrored accounting state. This record is chronology only and does not authorize submissions.",
+  "historical_predecessor": {
+    "record": "tst/publication/readiness/q027_control_plane_recovery_hardening_candidate_2026-05-30.json",
+    "control_plane_version": "7b722ab2e2acde5bb22432ac601c475b5035ec6f7c448280d0bb1145eb042b64",
+    "lifecycle": "chronology_only_superseded_for_next_promotion_candidate"
+  },
+  "staged_successor": {
+    "control_plane_version": "7ea4aa8bcab804425a00d833e13b520b780ef5182c6c3e576ee791188511acbe",
+    "paired_install_status": "superseded_before_install",
+    "active_policy_promotion_status": "superseded_before_promotion",
+    "science_submission_freeze": "pending_clean_candidate_freeze"
+  },
+  "local_validation": {
+    "control_plane_tests": {
+      "status": "pass",
+      "tests_run": 130
+    },
+    "qualification_manifest_tests": {
+      "status": "pass",
+      "tests_run": 20
+    },
+    "ledger_tests": {
+      "status": "pass",
+      "tests_run": 31
+    },
+    "readiness_registry_tests": {
+      "status": "pass",
+      "tests_run": 8
+    },
+    "publication_discovery_tests": {
+      "status": "pass",
+      "tests_run": 227
+    },
+    "python_compile": "pass",
+    "shell_syntax": "pass",
+    "git_diff_check": "pass",
+    "warning_free_sphinx": "pass_58_pages"
+  },
+  "closed_activation_blockers": [
+    "successful scheduler attachment and cancellation both clear a matching stranded pending marker after their durable ledger event",
+    "scheduler-recovery mutations require the paired immutable installed control-plane generation before changing ledger, mirror, CSV, attachment or pending-marker state",
+    "the trampoline strips Bash startup hooks, exported functions and shell-option startup state before passing the writable allowlist descriptor to the profile wrapper",
+    "existing ledger state is authenticated before a Project Home writeability preflight can mutate mirror storage",
+    "ledger initialization may complete only an exact interrupted fresh-bootstrap prefix and rejects divergent or later state",
+    "ledger initialization requires active ledger_genesis_allowed=true with no initialized genesis fields",
+    "mirror repair validates immutable genesis anchors against canonical Orion state before copying any mirror suffix or emitting receipts",
+    "CSV regeneration requires coherent mirrored ledger records, receipts and immutable genesis anchors before publication",
+    "the profile wrapper closes the trampoline-opened runtime-allowlist file descriptor and unsets its environment binding before workload execution"
+  ],
+  "staged_source_context": {
+    "head_commit": "77634d4fb108f291b2576d09b13a887aafa9b4f4",
+    "head_tree": "bdfc00f2e225d0f592c8b4f491496960291297ea",
+    "worktree_state": "dirty_candidate_pending_clean_commit_curation",
+    "validation_completed_utc": "2026-05-30T16:50:03Z"
+  },
+  "next_actions": [
+    "Use q027_control_plane_accounting_provenance_candidate_2026-05-30.json for the next promotable successor chronology."
+  ],
+  "overall_disposition": "local_recovery_provenance_chronology_only_superseded_before_install_or_promotion"
+}

@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "comparison_id": "XCMP-ENTITY-MICRO",
+  "dataset_provenance_id": "Q022-DATASET-XCMP-ENTITY-MICRO",
+  "freeze_status": "blocked_pending_external_review",
+  "observable_families": ["relativistic_pusher", "trajectory_deposition", "discrete_continuity", "restart_payload"],
+  "rows": [],
+  "blocked_inputs": [
+    "The frozen local Entity source differential remains bounded source evidence only.",
+    "Externally reviewed numerical tolerance rows for cross-code claim use have not been supplied.",
+    "Numeric tolerance rows are intentionally absent rather than fabricated."
+  ],
+  "reviewer_disposition": "pending external review"
+}

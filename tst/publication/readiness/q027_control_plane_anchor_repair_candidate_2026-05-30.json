@@ -1,0 +1,64 @@
+{
+  "record_type": "q027_control_plane_anchor_repair_candidate",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-027",
+    "Q-038",
+    "Q-042"
+  ],
+  "qualification_effect": "local_anchor_repair_chronology_superseded_after_residual_recovery_audit",
+  "scope": "Successor chronology after a fresh independent adversarial audit reproduced closed-policy genesis recreation after complete ledger deletion, mirror repair mutation before immutable-anchor validation, runtime-allowlist descriptor inheritance by the workload and CSV publication from unanchored state. This candidate repaired those reproduced blockers, but a later independent audit found residual mirror-preflight ordering, interrupted fresh-bootstrap and completed-cancellation marker recovery gaps. This record is chronology only and does not authorize submissions.",
+  "historical_predecessor": {
+    "record": "tst/publication/readiness/q027_control_plane_security_hardening_candidate_2026-05-30.json",
+    "control_plane_version": "d8820c33f2b84e9ccf4736c409612a398c78b65fb7cafa0a0a1d11fb8d367553",
+    "lifecycle": "chronology_only_superseded_for_next_promotion_candidate"
+  },
+  "staged_successor": {
+    "control_plane_version": "121f9f8f4000744ebf77cfc38a5446890d502a7e5ae3264488317005dd8fdf90",
+    "paired_install_status": "superseded_before_install",
+    "active_policy_promotion_status": "superseded_before_promotion",
+    "science_submission_freeze": "pending_clean_candidate_freeze"
+  },
+  "local_validation": {
+    "control_plane_tests": {
+      "status": "pass",
+      "tests_run": 125
+    },
+    "qualification_manifest_tests": {
+      "status": "pass",
+      "tests_run": 20
+    },
+    "ledger_tests": {
+      "status": "pass",
+      "tests_run": 22
+    },
+    "readiness_registry_tests": {
+      "status": "pass",
+      "tests_run": 8
+    },
+    "publication_discovery_tests": {
+      "status": "pass",
+      "tests_run": 213
+    },
+    "python_compile": "pass",
+    "shell_syntax": "pass",
+    "git_diff_check": "pass"
+  },
+  "closed_activation_blockers": [
+    "ledger initialization now requires active ledger_genesis_allowed=true with no initialized genesis fields",
+    "mirror repair validates the immutable genesis anchors against canonical Orion state before copying any mirror suffix or emitting receipts",
+    "CSV regeneration requires coherent mirrored ledger records, receipts and immutable genesis anchors before publication",
+    "the profile wrapper closes the trampoline-opened runtime-allowlist file descriptor and unsets its environment binding before workload execution"
+  ],
+  "staged_source_context": {
+    "head_commit": "77634d4fb108f291b2576d09b13a887aafa9b4f4",
+    "head_tree": "bdfc00f2e225d0f592c8b4f491496960291297ea",
+    "worktree_state": "dirty_candidate_pending_clean_commit_curation",
+    "validation_completed_utc": "2026-05-30T16:39:33Z"
+  },
+  "next_actions": [
+    "Use q027_control_plane_recovery_hardening_candidate_2026-05-30.json for the next promotable successor chronology."
+  ],
+  "overall_disposition": "local_anchor_repair_chronology_only_superseded_before_install_or_promotion"
+}

@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import pwd
 import inspect
+import stat
 import subprocess
 import sys
 import tempfile
@@ -17,9 +18,22 @@ import unittest
 from unittest.mock import patch
 import uuid
 
-from control_plane_common import git_tree_sha1_from_archive, record_for_role, sha256
+import install_control_plane
+from control_plane_common import atomic_write_bytes, durable_mkdir_parents
+from control_plane_common import durable_replace_tree
+from control_plane_common import git_archive_commit_from_bytes
+from control_plane_common import git_commit_tree_from_bytes
+from control_plane_common import git_tree_sha1_from_archive
+from control_plane_common import read_stable_regular_file_below, remove_tree
+from control_plane_common import require_ledger_paths
+from control_plane_common import launch_contract_sha256, record_for_role, sha256
 from control_plane_common import source_bundle_sha256
-from control_plane_common import verify_installed_control_plane
+from control_plane_common import trusted_git_command, trusted_git_environment
+from control_plane_common import trusted_slurm_environment
+from control_plane_common import require_storage_policy_unlock_snapshot
+from control_plane_common import validate_clean_candidate_bundle
+from control_plane_common import validate_launch_contract, verify_installed_control_plane
+from control_plane_common import verify_snapshot_files
 from control_plane_common import TRUSTED_GIT, TRUSTED_PYTHON
 from control_plane_common import TRUSTED_SACCT, TRUSTED_SBATCH, TRUSTED_SCANCEL
 from control_plane_common import TRUSTED_SCONTROL, TRUSTED_SQUEUE
@@ -28,13 +42,19 @@ from create_pre_submit_manifest import create_manifest
 from initialize_frontier_ledger import initialize_from_policy
 from install_control_plane import install
 from launch_trampoline import launch
-from ledger import accounting, validate_primary_chain
+from ledger import accounting, genesis_anchor_paths, validate_primary_chain
 from promote_active_policy import promote
 from reconcile_frontier_job import reconcile
-from validate_and_reserve_frontier_job import mark_submitted, repair_reservation_attachments
+from validate_and_reserve_frontier_job import _clear_matching_pending_marker
+from validate_and_reserve_frontier_job import _require_scheduler_output_path
+from validate_and_reserve_frontier_job import mark_dispatch_started, mark_submitted
+from validate_and_reserve_frontier_job import repair_ledger_mirror
+from validate_and_reserve_frontier_job import repair_reservation_attachments
 from validate_and_reserve_frontier_job import reservation_bound_manifest
 from validate_and_reserve_frontier_job import reserve, transition
 from verify_compute_node_snapshot import verify
+from write_orion_build_profile import build_profile as build_orion_profile
+from write_orion_build_profile import write_profile
 
 
 class SnapshotTests(unittest.TestCase):
@@ -48,6 +68,7 @@ class SnapshotTests(unittest.TestCase):
         self.config = self.root / "config.json"
         self.policy = self.root / "storage_policy.json"
         self.submission_id = "804dca3d-f89f-4357-9407-e59804961ad7"
+        self.authorized_clean_candidate_source_root: Path | None = None
         self.control_plane_dir = install(self.pic_root)
         self.control_plane_version = self.control_plane_dir.name
         self.project_home_control_plane_dir = install(self.project_home_root)
@@ -84,14 +105,14 @@ class SnapshotTests(unittest.TestCase):
         self.queue_output_patcher.start()
         self.addCleanup(self.queue_output_patcher.stop)
         self._write("analysis.py", "print('analysis')\n")
+        self._write_config()
         self._write_policy()
         self._promote_policy()
-        self._write_config()
         self.ledger = self.pic_root / "ledger" / "node_hours.jsonl"
         self.csv = self.pic_root / "ledger" / "node_hours.csv"
         self.receipts = self.pic_root / "ledger" / "mirror_receipts.jsonl"
         self.mirror = self.project_home_root / "ledger" / "node_hours.jsonl"
-        initialize_from_policy(
+        genesis = initialize_from_policy(
             ledger_jsonl=self.ledger,
             ledger_csv=self.csv,
             mirror_receipts=self.receipts,
@@ -102,6 +123,17 @@ class SnapshotTests(unittest.TestCase):
             authorized_pic_root=self.pic_root,
             authorized_project_home_root=self.project_home_root,
         )
+        receipt = json.loads(self.receipts.read_text(encoding="utf-8").splitlines()[0])
+        self._closed_genesis = {
+            "status": "initialized",
+            "timestamp": genesis["timestamp"],
+            "control_plane_version": genesis["control_plane_version"],
+            "event_sha256": genesis["event_sha256"],
+            "mirror_transport": "filesystem_copy",
+            "mirror_ack_sha256": receipt["mirror_ack_sha256"],
+        }
+        self._write_policy()
+        self._promote_policy()
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
@@ -133,10 +165,13 @@ class SnapshotTests(unittest.TestCase):
         self,
         *,
         science_submission_freeze: dict[str, object] | None = None,
+        admission_smoke_overrides: dict[str, object] | None = None,
         **storage_overrides: object,
     ) -> None:
         storage = {
             "installed_control_plane_version": self.control_plane_version,
+            "staged_control_plane_candidate_version": self.control_plane_version,
+            "installed_control_plane_lifecycle": "paired_installed_reviewed_generation",
             "orion_simulation_root_preflight": {"status": "passed"},
             "project_home_mirror_root": str(self.project_home_root),
             "project_home_usage": [
@@ -157,7 +192,32 @@ class SnapshotTests(unittest.TestCase):
             ),
             "ledger_genesis_allowed": True,
         }
+        if hasattr(self, "_closed_genesis"):
+            storage.update(
+                ledger_genesis_allowed=False,
+                ledger_genesis=self._closed_genesis,
+            )
         storage.update(storage_overrides)
+        admission_smoke = {
+            "status": "authorized_f0_parser_contract_only",
+            "campaign": "f0_hipmpi_smoke",
+            "test_id": "pic_parser_contract_guards",
+            "evidence_class": "frontier_f0_admission_smoke_candidate",
+            "physical_mode": "extended_mhd_pic_parser_contract",
+            "selected_qos": "debug",
+            "registered_short_nonproduction": True,
+            "maximum_nodes": 1,
+            "maximum_walltime_seconds": 15 * 60,
+            "job_script_sha256": sha256(self.sources / "job.sh"),
+            "input_deck_sha256": sha256(self.sources / "input.athinput"),
+            "environment_profile_sha256": sha256(self.sources / "environment.sh"),
+            "analysis_script_sha256": [sha256(self.sources / "analysis.py")],
+            "executable_sha256": sha256(self.sources / "athena"),
+            "launch_contract_sha256": launch_contract_sha256(
+                self._launch_contract()
+            ),
+        }
+        admission_smoke.update(admission_smoke_overrides or {})
         policy = {
             "schema_version": 1,
             "frontier": {
@@ -170,22 +230,7 @@ class SnapshotTests(unittest.TestCase):
             "science_submission_freeze": science_submission_freeze or {
                 "status": "pending_clean_candidate_freeze",
             },
-            "frontier_admission_smoke": {
-                "status": "authorized_f0_parser_contract_only",
-                "campaign": "f0_hipmpi_smoke",
-                "test_id": "pic_parser_contract_guards",
-                "evidence_class": "frontier_f0_admission_smoke_candidate",
-                "physical_mode": "extended_mhd_pic_parser_contract",
-                "selected_qos": "debug",
-                "registered_short_nonproduction": True,
-                "maximum_nodes": 1,
-                "maximum_walltime_seconds": 15 * 60,
-                "job_script_sha256": sha256(self.sources / "job.sh"),
-                "input_deck_sha256": sha256(self.sources / "input.athinput"),
-                "environment_profile_sha256": sha256(self.sources / "environment.sh"),
-                "analysis_script_sha256": [sha256(self.sources / "analysis.py")],
-                "executable_sha256": sha256(self.sources / "athena"),
-            },
+            "frontier_admission_smoke": admission_smoke,
             "olcf_side_storage": storage,
             "long_term_storage": {
                 "status": "user_selected_orion_only_with_documented_durability_risk",
@@ -225,32 +270,7 @@ class SnapshotTests(unittest.TestCase):
             "queue_snapshot": str(self.sources / "queue.txt"),
             "submission_scope": "frontier_admission_smoke",
             "job_script_executable_env": "PIC_EXECUTABLE",
-            "launch_contract": {
-                "schema_version": 1,
-                "executor": "trusted_trampoline_athena_argv_v1",
-                "pre_actions": [],
-                "actions": [
-                    {
-                        "action_id": "athena-parser",
-                        "kind": "athena",
-                        "resources": {
-                            "nodes": 1,
-                            "tasks": 1,
-                            "cpus_per_task": 1,
-                            "gpus_per_task": 1,
-                            "gpu_bind": "closest",
-                        },
-                        "arguments": [
-                            {"literal": "-i"},
-                            {"snapshot_role": "input-deck"},
-                            {"literal": "-n"},
-                        ],
-                        "stdout_artifact": "athena_stdout.txt",
-                        "stderr_artifact": "athena_stderr.txt",
-                    }
-                ],
-                "post_actions": [],
-            },
+            "launch_contract": self._launch_contract(),
             "git_commit": "abc123",
             "evidence_class": "frontier_f0_admission_smoke_candidate",
             "physical_mode": "extended_mhd_pic_parser_contract",
@@ -258,10 +278,40 @@ class SnapshotTests(unittest.TestCase):
             "qos_selection_reason": "debug_available",
             "site_policy_checked_utc": self._utc(now),
             "registered_short_nonproduction": True,
-            "artifact_dir": str(self.pic_root / "runs" / "snapshot"),
+            "artifact_dir": str(
+                self.pic_root / "runs" / "f0_hipmpi_smoke" / self.submission_id
+            ),
         }
         config.update(overrides)
         self.config.write_text(json.dumps(config), encoding="utf-8")
+
+    def _launch_contract(self) -> dict[str, object]:
+        return {
+            "schema_version": 1,
+            "executor": "trusted_trampoline_athena_argv_v1",
+            "pre_actions": [],
+            "actions": [
+                {
+                    "action_id": "athena-parser",
+                    "kind": "athena",
+                    "resources": {
+                        "nodes": 1,
+                        "tasks": 1,
+                        "cpus_per_task": 1,
+                        "gpus_per_task": 1,
+                        "gpu_bind": "closest",
+                    },
+                    "arguments": [
+                        {"literal": "-i"},
+                        {"snapshot_role": "input-deck"},
+                        {"literal": "-n"},
+                    ],
+                    "stdout_artifact": "athena_stdout.txt",
+                    "stderr_artifact": "athena_stderr.txt",
+                }
+            ],
+            "post_actions": [],
+        }
 
     def _clean_source(self, name: str) -> Path:
         source_root = self.root / name
@@ -287,71 +337,114 @@ class SnapshotTests(unittest.TestCase):
         )
         return source_root
 
-    def _build_profile(self, source_root: Path, build: Path, profile_id: str) -> tuple[Path, Path]:
-        build.mkdir(parents=True)
-        executable = build / "athena"
+    def _profile_writer_arguments(
+        self, source_root: Path, profile_id: str = "test-profile"
+    ) -> dict[str, object]:
+        commit = subprocess.check_output(
+            ["git", "-C", str(source_root), "rev-parse", "HEAD"], text=True
+        ).strip()
+        artifact_dir = self.pic_root / "bin" / commit[:12] / profile_id
+        artifact_dir.mkdir(parents=True)
+        log_dir = self.pic_root / "logs" / "build"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        executable = artifact_dir / "athena"
         executable.write_text("built executable\n", encoding="utf-8")
-        declared_archive = build / "declared-source.tar"
-        subprocess.run(
-            [
-                "git",
-                "-C",
-                str(source_root),
-                "archive",
-                "--format=tar",
-                f"--output={declared_archive}",
-                "HEAD",
-            ],
-            check=True,
-        )
-        submodules = []
-        declared_submodule_archives = []
-        for index, record in enumerate(_validated_submodules(source_root)):
-            declared_submodule_archive = build / f"declared-submodule-{index:04d}.tar"
-            module_root = source_root.joinpath(*Path(record["path"]).parts)
-            subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(module_root),
-                    "archive",
-                    "--format=tar",
-                    f"--output={declared_submodule_archive}",
-                    record["git_commit"],
-                ],
-                check=True,
+        provenance = {
+            "configure_log": log_dir / f"{commit[:12]}.{profile_id}.configure.log",
+            "build_log": log_dir / f"{commit[:12]}.{profile_id}.build.log",
+            "cmake_cache": artifact_dir / "CMakeCache.txt",
+            "module_list": artifact_dir / "modules.txt",
+            "toolchain_file": artifact_dir / "toolchain.txt",
+            "build_invocations_file": artifact_dir / "build-invocations.json",
+            "git_status_preconfigure_file": artifact_dir / "git_status.preconfigure.txt",
+            "git_status_file": artifact_dir / "git_status.txt",
+            "submodule_status_file": artifact_dir / "submodule_status.txt",
+            "environment_allowlist_file": artifact_dir / "environment.allowlist.txt",
+            "build_environment_file": artifact_dir / "build-environment.json",
+        }
+        for key, path in provenance.items():
+            if key in {"git_status_preconfigure_file", "git_status_file"}:
+                text = subprocess.check_output(
+                    [
+                        "git",
+                        "-C",
+                        str(source_root),
+                        "status",
+                        "--ignore-submodules=none",
+                        "--porcelain",
+                        "--untracked-files=all",
+                    ],
+                    text=True,
+                )
+            elif key == "submodule_status_file":
+                text = subprocess.check_output(
+                    ["git", "-C", str(source_root), "submodule", "status", "--recursive"],
+                    text=True,
+                )
+            elif key == "build_invocations_file":
+                text = json.dumps(
+                    {"configure": ["/fake/cmake", "-S", "source"], "build": ["/fake/cmake", "--build", "build"]}
+                )
+            elif key == "build_environment_file":
+                text = "{}"
+            else:
+                text = f"{key}=reviewed\n"
+            path.write_text(text, encoding="utf-8")
+        return {
+            "source_root": source_root,
+            "fresh_source_root": source_root,
+            "executable": executable,
+            "output": artifact_dir / "build_profile.json",
+            "profile_id": profile_id,
+            "expected_git_commit": commit,
+            "configure_log": provenance["configure_log"],
+            "build_log": provenance["build_log"],
+            "cmake_cache": provenance["cmake_cache"],
+            "module_list": provenance["module_list"],
+            "toolchain_file": provenance["toolchain_file"],
+            "build_invocations_file": provenance["build_invocations_file"],
+            "git_status_preconfigure_file": provenance["git_status_preconfigure_file"],
+            "git_status_file": provenance["git_status_file"],
+            "submodule_status_file": provenance["submodule_status_file"],
+            "environment_allowlist_file": provenance["environment_allowlist_file"],
+            "build_environment_file": provenance["build_environment_file"],
+            "control_plane_dir": self.control_plane_dir,
+            "authorized_pic_root": self.pic_root,
+            "authorized_source_root": source_root,
+        }
+
+    def _build_profile(self, source_root: Path, build: Path, profile_id: str) -> tuple[Path, Path]:
+        del build
+        commit = subprocess.check_output(
+            ["git", "-C", str(source_root), "rev-parse", "HEAD"], text=True
+        ).strip()
+
+        def execute(command: list[str], *, stream: object, environment: dict[str, str]) -> None:
+            del environment
+            stream.write(b"fake cmake invocation\n")
+            if "--build" in command:
+                cmake_dir = Path(command[command.index("--build") + 1])
+                (cmake_dir / "src").mkdir(parents=True)
+                (cmake_dir / "src" / "athena").write_text(
+                    "built executable\n", encoding="utf-8"
+                )
+            else:
+                cmake_dir = Path(command[command.index("-B") + 1])
+                cmake_dir.mkdir(parents=True)
+                (cmake_dir / "CMakeCache.txt").write_text(
+                    "fixture cache\n", encoding="utf-8"
+                )
+
+        with patch("write_orion_build_profile._execute_logged_command", side_effect=execute):
+            profile = build_orion_profile(
+                source_root=source_root,
+                expected_git_commit=commit,
+                profile_id=profile_id,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_source_root=source_root,
             )
-            declared_submodule_archives.append(declared_submodule_archive)
-            submodules.append(
-                {
-                    "path": record["path"],
-                    "archive_sha256": sha256(declared_submodule_archive),
-                    "git_commit": record["git_commit"],
-                    "git_tree": record["git_tree"],
-                }
-            )
-        profile = build / "build_profile.json"
-        archive_sha256 = sha256(declared_archive)
-        profile.write_text(
-            json.dumps(
-                {
-                    "schema_version": 1,
-                    "profile_id": profile_id,
-                    "source_archive_sha256": archive_sha256,
-                    "source_bundle_sha256": source_bundle_sha256(
-                        archive_sha256, submodules
-                    ),
-                    "toolchain": "test-toolchain",
-                    "build_command": "cmake --build build",
-                    "executable_sha256": sha256(executable),
-                    "submodules": submodules,
-                }
-            ),
-            encoding="utf-8",
-        )
-        declared_archive.unlink()
-        for declared_submodule_archive in declared_submodule_archives:
-            declared_submodule_archive.unlink()
+        executable = profile.with_name("athena")
         return executable, profile
 
     def _add_submodule(self, source_root: Path, name: str) -> Path:
@@ -399,6 +492,7 @@ class SnapshotTests(unittest.TestCase):
         self, *, authorize: bool
     ) -> tuple[Path, Path, str]:
         source_root = self._clean_source("candidate-source")
+        self.authorized_clean_candidate_source_root = source_root
         self._add_submodule(source_root, "nested")
         executable, profile = self._build_profile(
             source_root, self.pic_root / "candidate-build", "hip-mpi-release-paper-pic"
@@ -411,6 +505,7 @@ class SnapshotTests(unittest.TestCase):
             freeze_id="03a7bd9a-7d4c-4e37-a12b-46de3817eff2",
             control_plane_dir=self.control_plane_dir,
             authorized_pic_root=self.pic_root,
+            authorized_source_root=source_root,
         )
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         frozen_executable = Path(str(manifest["build"]["executable_path"]))
@@ -437,10 +532,38 @@ class SnapshotTests(unittest.TestCase):
             "physical_mode": "paper_test_particle",
             "executable": str(executable),
             "clean_candidate_manifest": str(manifest),
+            "artifact_dir": str(
+                self.pic_root / "runs" / "f1_gpu_gyro" / self.submission_id
+            ),
         }
         config.update(overrides)
         self._write_config(**config)
         return manifest
+
+    def _rewrite_clean_candidate_profile(
+        self, candidate: Path, profile: dict[str, object]
+    ) -> None:
+        candidate_value = json.loads(candidate.read_text(encoding="utf-8"))
+        build = candidate_value["build"]
+        self.assertIsInstance(build, dict)
+        frozen_profile = Path(str(build["profile_path"]))
+        candidate.parent.chmod(0o755)
+        frozen_profile.chmod(0o644)
+        frozen_profile.write_text(json.dumps(profile), encoding="utf-8")
+        frozen_profile.chmod(0o444)
+        build["profile_sha256"] = sha256(frozen_profile)
+        candidate.chmod(0o644)
+        candidate.write_text(json.dumps(candidate_value), encoding="utf-8")
+        candidate.chmod(0o444)
+        candidate.parent.chmod(0o555)
+        self._write_policy(
+            science_submission_freeze={
+                "status": "authorized",
+                "manifest_path": str(candidate),
+                "manifest_sha256": sha256(candidate),
+            }
+        )
+        self._promote_policy()
 
     def _create_manifest(self) -> Path:
         return create_manifest(
@@ -455,18 +578,34 @@ class SnapshotTests(unittest.TestCase):
         cap: float = 10000.0,
         reservation_id: str = "89c76745-6c37-47f7-9847-800a98a47c9b",
     ) -> dict[str, object]:
-        return reserve(
-            manifest_path=manifest_path,
-            ledger_jsonl=self.ledger,
-            ledger_csv=self.csv,
-            receipts_jsonl=self.receipts,
-            mirror_jsonl=self.mirror,
-            node_hour_cap=cap,
-            reservation_id=reservation_id,
-            control_plane_dir=self.control_plane_dir,
-            authorized_pic_root=self.pic_root,
-            authorized_project_home_root=self.project_home_root,
-        )
+        def validate_with_test_roots(
+            candidate: dict[str, object], **kwargs: object
+        ) -> list[dict[str, str]]:
+            if self.authorized_clean_candidate_source_root is None:
+                raise AssertionError("Clean-candidate test source root was not injected")
+            return validate_clean_candidate_bundle(
+                candidate,
+                **kwargs,
+                authorized_pic_root=self.pic_root,
+                authorized_source_root=self.authorized_clean_candidate_source_root,
+            )
+
+        with patch(
+            "validate_and_reserve_frontier_job.validate_clean_candidate_bundle",
+            side_effect=validate_with_test_roots,
+        ):
+            return reserve(
+                manifest_path=manifest_path,
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                node_hour_cap=cap,
+                reservation_id=reservation_id,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
 
     def _attach(self, reservation_id: str, job_id: str = "12345") -> None:
         scheduler = (
@@ -477,11 +616,14 @@ class SnapshotTests(unittest.TestCase):
             "validate_and_reserve_frontier_job._scheduler_job_output",
             return_value=scheduler,
         ):
+            self._mark_dispatch_started(reservation_id)
             mark_submitted(
                 reservation_id=reservation_id,
                 job_id=job_id,
                 ledger_jsonl=self.ledger,
+                control_plane_dir=self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
             )
             transition(
                 reservation_id=reservation_id,
@@ -497,40 +639,66 @@ class SnapshotTests(unittest.TestCase):
                 authorized_project_home_root=self.project_home_root,
             )
 
+    def _mark_dispatch_started(self, reservation_id: str) -> None:
+        mark_dispatch_started(
+            reservation_id=reservation_id,
+            ledger_jsonl=self.ledger,
+            ledger_csv=self.csv,
+            receipts_jsonl=self.receipts,
+            mirror_jsonl=self.mirror,
+            control_plane_dir=self.control_plane_dir,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+
     def _launch(
         self,
         manifest_path: Path,
         reservation: dict[str, object],
         *,
         runner: object = subprocess.run,
+        environment_overrides: dict[str, str] | None = None,
     ) -> None:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         job_script = record_for_role(manifest, "job-script")
         executable = record_for_role(manifest, "executable")
-        with patch.dict(
-            os.environ,
-            {
-                "PIC_MANIFEST_SHA256": str(reservation["manifest_sha256"]),
-                "PIC_RESERVATION_ID": str(reservation["reservation_id"]),
-                "PIC_SUBMISSION_ID": self.submission_id,
-            },
-            clear=True,
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=RUNNING Account=AST207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        self._attach(reservation_id)
+        environment = {
+            "PIC_MANIFEST_SHA256": str(reservation["manifest_sha256"]),
+            "PIC_RESERVATION_ID": reservation_id,
+            "PIC_SUBMISSION_ID": self.submission_id,
+            "SLURM_JOB_ID": "12345",
+        }
+        environment.update(environment_overrides or {})
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
         ):
-            launch(
-                manifest_path=manifest_path,
-                manifest_sha256=str(reservation["manifest_sha256"]),
-                job_script_sha256=str(job_script["sha256"]),
-                executable_sha256=str(executable["sha256"]),
-                reservation_id=str(reservation["reservation_id"]),
-                submission_id=self.submission_id,
-                ledger_jsonl=self.ledger,
-                receipts_jsonl=self.receipts,
-                mirror_jsonl=self.mirror,
-                runner=runner,
-                control_plane_dir=self.control_plane_dir,
-                authorized_pic_root=self.pic_root,
-                authorized_project_home_root=self.project_home_root,
-            )
+            with patch.dict(
+                os.environ,
+                environment,
+                clear=True,
+            ):
+                launch(
+                    manifest_path=manifest_path,
+                    manifest_sha256=str(reservation["manifest_sha256"]),
+                    job_script_sha256=str(job_script["sha256"]),
+                    executable_sha256=str(executable["sha256"]),
+                    reservation_id=reservation_id,
+                    submission_id=self.submission_id,
+                    ledger_jsonl=self.ledger,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    runner=runner,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
 
     def test_snapshot_verifies_and_detects_mutation(self) -> None:
         manifest_path = self._create_manifest()
@@ -565,7 +733,7 @@ class SnapshotTests(unittest.TestCase):
     def test_snapshot_rename_failure_cleans_read_only_staging(self) -> None:
         campaign_dir = self.pic_root / "manifests" / "f0_hipmpi_smoke"
         with patch(
-            "create_pre_submit_manifest.os.replace", side_effect=OSError("rename failed")
+            "control_plane_common.os.replace", side_effect=OSError("rename failed")
         ):
             with self.assertRaises(OSError):
                 self._create_manifest()
@@ -583,10 +751,231 @@ class SnapshotTests(unittest.TestCase):
 
     def test_installed_control_plane_rename_failure_cleans_staging(self) -> None:
         target = self.root / "failed-install"
-        with patch("install_control_plane.os.replace", side_effect=OSError("rename failed")):
+        with patch("control_plane_common.os.replace", side_effect=OSError("rename failed")):
             with self.assertRaises(OSError):
                 install(target)
         self.assertFalse(list((target / "control_plane").glob(".tmp-*")))
+
+    def test_durable_tree_publication_fsyncs_entries_and_parent(self) -> None:
+        staging = self.root / "durable-tree-staging"
+        nested = staging / "nested"
+        nested.mkdir(parents=True)
+        (nested / "evidence.txt").write_text("durable\n", encoding="utf-8")
+        destination = self.root / "durable-tree-final"
+        fsynced_modes: list[int] = []
+        real_fsync = os.fsync
+
+        def record_fsync(descriptor: int) -> None:
+            fsynced_modes.append(os.fstat(descriptor).st_mode)
+            real_fsync(descriptor)
+
+        with patch("control_plane_common.os.fsync", side_effect=record_fsync):
+            durable_replace_tree(staging, destination)
+        self.assertEqual(
+            (destination / "nested" / "evidence.txt").read_text(encoding="utf-8"),
+            "durable\n",
+        )
+        self.assertEqual(sum(stat.S_ISREG(mode) for mode in fsynced_modes), 1)
+        self.assertGreaterEqual(sum(stat.S_ISDIR(mode) for mode in fsynced_modes), 3)
+
+    def test_durable_parent_creation_fsyncs_created_ancestors(self) -> None:
+        target = self.root / "durable-parents" / "nested"
+        fsynced_modes: list[int] = []
+        real_fsync = os.fsync
+
+        def record_fsync(descriptor: int) -> None:
+            fsynced_modes.append(os.fstat(descriptor).st_mode)
+            real_fsync(descriptor)
+
+        with patch("control_plane_common.os.fsync", side_effect=record_fsync):
+            durable_mkdir_parents(target)
+        self.assertTrue(target.is_dir())
+        self.assertGreaterEqual(sum(stat.S_ISDIR(mode) for mode in fsynced_modes), 4)
+
+    def test_durable_tree_publication_parent_fsync_failure_rolls_back(self) -> None:
+        staging = self.root / "failed-durable-tree-staging"
+        staging.mkdir()
+        (staging / "evidence.txt").write_text("durable\n", encoding="utf-8")
+        destination = self.root / "failed-durable-tree-final"
+        real_fsync = os.fsync
+        directory_fsyncs = 0
+
+        def fail_publish_parent_once(descriptor: int) -> None:
+            nonlocal directory_fsyncs
+            if stat.S_ISDIR(os.fstat(descriptor).st_mode):
+                directory_fsyncs += 1
+                if directory_fsyncs == 2:
+                    raise OSError("publication parent fsync failed")
+            real_fsync(descriptor)
+
+        with patch("control_plane_common.os.fsync", side_effect=fail_publish_parent_once):
+            with self.assertRaises(OSError):
+                durable_replace_tree(staging, destination)
+        self.assertFalse(staging.exists())
+        self.assertFalse(destination.exists())
+
+    def test_durable_tree_publication_parent_swap_cannot_redirect_publication(self) -> None:
+        parent = self.root / "swapped-publication-parent"
+        parent.mkdir()
+        staging = parent / "staging"
+        staging.mkdir()
+        (staging / "evidence.txt").write_text("trusted\n", encoding="utf-8")
+        destination = parent / "published"
+        moved_parent = self.root / "swapped-publication-parent-original"
+        outside = self.root / "outside-publication-parent"
+        outside.mkdir()
+        outside_staging = outside / staging.name
+        outside_staging.mkdir()
+        (outside_staging / "evidence.txt").write_text("outside\n", encoding="utf-8")
+        real_replace = os.replace
+        swapped = False
+
+        def swap_parent_then_replace(*args: object, **kwargs: object) -> None:
+            nonlocal swapped
+            if not swapped:
+                swapped = True
+                parent.rename(moved_parent)
+                parent.symlink_to(outside, target_is_directory=True)
+            real_replace(*args, **kwargs)
+
+        with patch("control_plane_common.os.replace", side_effect=swap_parent_then_replace):
+            with self.assertRaises((OSError, ValueError)):
+                durable_replace_tree(staging, destination)
+        self.assertTrue((outside_staging / "evidence.txt").is_file())
+        self.assertFalse((outside / destination.name).exists())
+        self.assertFalse((moved_parent / destination.name).exists())
+
+    def test_durable_tree_publication_rollback_never_deletes_outside_sentinel(
+        self,
+    ) -> None:
+        parent = self.root / "swapped-rollback-parent"
+        parent.mkdir()
+        staging = parent / "staging"
+        staging.mkdir()
+        (staging / "evidence.txt").write_text("trusted\n", encoding="utf-8")
+        destination = parent / "published"
+        moved_parent = self.root / "swapped-rollback-parent-original"
+        outside = self.root / "outside-rollback-parent"
+        outside.mkdir()
+        outside_destination = outside / destination.name
+        outside_destination.mkdir()
+        sentinel = outside_destination / "sentinel.txt"
+        sentinel.write_text("preserve\n", encoding="utf-8")
+        parent_inode = parent.stat().st_ino
+        real_fsync = os.fsync
+        failed = False
+
+        def swap_parent_then_fail(descriptor: int) -> None:
+            nonlocal failed
+            descriptor_stat = os.fstat(descriptor)
+            if stat.S_ISDIR(descriptor_stat.st_mode) and descriptor_stat.st_ino == parent_inode:
+                if not failed:
+                    failed = True
+                    parent.rename(moved_parent)
+                    parent.symlink_to(outside, target_is_directory=True)
+                    raise OSError("publication parent fsync failed")
+            real_fsync(descriptor)
+
+        with patch("control_plane_common.os.fsync", side_effect=swap_parent_then_fail):
+            with self.assertRaises(OSError):
+                durable_replace_tree(staging, destination)
+        self.assertTrue(sentinel.is_file(), "rollback deleted the outside sentinel")
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve\n")
+        self.assertFalse((moved_parent / destination.name).exists())
+
+    def test_production_installer_guard_rejects_dirty_or_untracked_source(self) -> None:
+        production_root = self.root / "production-pic"
+        project_home_root = self.root / "production-project-home"
+        repository = install_control_plane.SCRIPT_DIR.parent
+        for status in [
+            " M frontier_control_plane/README.md\n",
+            "?? frontier_control_plane/untracked.py\n",
+        ]:
+            with self.subTest(status=status):
+                with patch(
+                    "install_control_plane.AUTHORIZED_PIC_ROOT", production_root
+                ), patch(
+                    "install_control_plane.AUTHORIZED_PROJECT_HOME_ROOT",
+                    project_home_root,
+                ), patch(
+                    "install_control_plane.subprocess.check_output",
+                    side_effect=[f"{repository}\n", status],
+                ), patch("install_control_plane.subprocess.run") as tracked:
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "requires clean tracked source files",
+                    ):
+                        install_control_plane._require_reviewed_source_for_production(
+                            production_root
+                        )
+                tracked.assert_called_once()
+                self.assertEqual(
+                    tracked.call_args.kwargs["env"], trusted_git_environment()
+                )
+
+    def test_common_git_hash_helpers_ignore_caller_configuration(self) -> None:
+        commit = "1" * 40
+        tree = "2" * 40
+        commit_object = (
+            f"tree {tree}\n"
+            "author Test Author <test@example.com> 0 +0000\n"
+            "committer Test Author <test@example.com> 0 +0000\n"
+            "\nmessage\n"
+        ).encode("ascii")
+        with patch(
+            "control_plane_common.subprocess.check_output",
+            side_effect=[b"archive-commit\n", f"{commit}\n".encode("ascii")],
+        ) as checked:
+            self.assertEqual(
+                git_archive_commit_from_bytes(b"archive"),
+                "archive-commit",
+            )
+            self.assertEqual(
+                git_commit_tree_from_bytes(
+                    commit_object,
+                    expected_commit=commit,
+                ),
+                tree,
+            )
+        self.assertEqual(len(checked.call_args_list), 2)
+        for call in checked.call_args_list:
+            self.assertEqual(
+                call.kwargs["env"],
+                trusted_git_environment(),
+            )
+
+    def test_repository_local_fsmonitor_cannot_execute_during_git_status(self) -> None:
+        from create_clean_candidate_freeze import _git
+
+        repository = self.root / "fsmonitor-repository"
+        marker = self.root / "fsmonitor-executed"
+        monitor = self.root / "fsmonitor.sh"
+        monitor.write_text(
+            f"#!/bin/sh\n: > {marker}\n",
+            encoding="utf-8",
+        )
+        monitor.chmod(0o755)
+        subprocess.run(["git", "init", str(repository)], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(repository), "config", "core.fsmonitor", str(monitor)],
+            check=True,
+        )
+        self.assertEqual(_git(repository, "status", "--porcelain"), "")
+        self.assertFalse(marker.exists())
+
+    def test_pending_marker_clear_fsyncs_parent_directory(self) -> None:
+        marker = self.root / "pending-marker" / "pending_submission.json"
+        marker.parent.mkdir()
+        marker.write_text(
+            json.dumps({"reservation_id": "reservation-1"}),
+            encoding="utf-8",
+        )
+        with patch(
+            "validate_and_reserve_frontier_job.fsync_directory"
+        ) as fsync_parent:
+            _clear_matching_pending_marker(marker, "reservation-1")
+        self.assertFalse(marker.exists())
+        fsync_parent.assert_called_once_with(marker.parent)
 
     def test_installed_control_plane_rejects_symlinked_inventory(self) -> None:
         inventory = self.control_plane_dir / "inventory.json"
@@ -614,6 +1003,17 @@ class SnapshotTests(unittest.TestCase):
                 self.control_plane_dir, authorized_pic_root=self.pic_root
             )
 
+    def test_installed_control_plane_rejects_extra_adjacent_entry(self) -> None:
+        self.control_plane_dir.chmod(0o755)
+        unexpected = self.control_plane_dir / "pathlib.py"
+        unexpected.write_text("raise RuntimeError('must not import')\n", encoding="utf-8")
+        unexpected.chmod(0o444)
+        self.control_plane_dir.chmod(0o555)
+        with self.assertRaisesRegex(ValueError, "entries differ"):
+            verify_installed_control_plane(
+                self.control_plane_dir, authorized_pic_root=self.pic_root
+            )
+
     def test_promoted_policy_anchor_is_mirrored_and_read_only(self) -> None:
         policy = self.pic_root / "policy" / "storage_policy.json"
         mirror_policy = self.project_home_root / "policy" / "storage_policy.json"
@@ -623,6 +1023,201 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(promotion.read_bytes(), mirror_promotion.read_bytes())
         for path in [policy, mirror_policy, promotion, mirror_promotion]:
             self.assertFalse(bool(path.stat().st_mode & 0o222))
+
+    def test_atomic_writer_fsyncs_parent_directory(self) -> None:
+        output = self.root / "durable" / "output.json"
+        modes = []
+        real_fsync = os.fsync
+
+        def record_fsync(descriptor: int) -> None:
+            modes.append(os.fstat(descriptor).st_mode)
+            real_fsync(descriptor)
+
+        with patch("control_plane_common.os.fsync", side_effect=record_fsync):
+            atomic_write_bytes(output, b'{"fixture": true}\n')
+        self.assertEqual(output.read_bytes(), b'{"fixture": true}\n')
+        self.assertTrue(any(stat.S_ISDIR(mode) for mode in modes))
+
+    def test_atomic_replacement_parent_fsync_failure_rolls_back(self) -> None:
+        output = self.root / "durable-replacement" / "output.json"
+        output.parent.mkdir()
+        output.write_bytes(b'{"generation": "old"}\n')
+        real_fsync = os.fsync
+        failed = False
+
+        def fail_first_directory_fsync(descriptor: int) -> None:
+            nonlocal failed
+            if stat.S_ISDIR(os.fstat(descriptor).st_mode) and not failed:
+                failed = True
+                raise OSError("directory fsync failed")
+            real_fsync(descriptor)
+
+        with patch("control_plane_common.os.fsync", side_effect=fail_first_directory_fsync):
+            with self.assertRaises(OSError):
+                atomic_write_bytes(output, b'{"generation": "new"}\n')
+        self.assertTrue(failed)
+        self.assertEqual(output.read_bytes(), b'{"generation": "old"}\n')
+
+    def test_atomic_writer_parent_swap_rolls_back_pinned_publication(self) -> None:
+        parent = self.root / "swapped-atomic-parent"
+        parent.mkdir()
+        output = parent / "output.json"
+        moved_parent = self.root / "swapped-atomic-parent-original"
+        outside = self.root / "outside-atomic-parent"
+        outside.mkdir()
+        outside_output = outside / output.name
+        outside_output.write_bytes(b'{"generation": "outside"}\n')
+        parent_inode = parent.stat().st_ino
+        real_fsync = os.fsync
+        swapped = False
+
+        def swap_parent_then_sync(descriptor: int) -> None:
+            nonlocal swapped
+            descriptor_stat = os.fstat(descriptor)
+            if (
+                stat.S_ISDIR(descriptor_stat.st_mode)
+                and descriptor_stat.st_ino == parent_inode
+                and not swapped
+            ):
+                swapped = True
+                parent.rename(moved_parent)
+                parent.symlink_to(outside, target_is_directory=True)
+            real_fsync(descriptor)
+
+        with patch("control_plane_common.os.fsync", side_effect=swap_parent_then_sync):
+            with self.assertRaises((OSError, ValueError)):
+                atomic_write_bytes(output, b'{"generation": "trusted"}\n')
+        self.assertTrue(swapped)
+        self.assertEqual(outside_output.read_bytes(), b'{"generation": "outside"}\n')
+        self.assertFalse((moved_parent / output.name).exists())
+
+    def test_policy_promotion_each_directory_fsync_failure_never_accepts_new_generation(
+        self,
+    ) -> None:
+        baseline = self.policy.read_bytes()
+        replacement = baseline + b"\n"
+        for failure_index in range(1, 5):
+            with self.subTest(failure_index=failure_index):
+                self.policy.write_bytes(replacement)
+                real_fsync = os.fsync
+                directory_fsyncs = 0
+
+                def fail_selected_directory_fsync(descriptor: int) -> None:
+                    nonlocal directory_fsyncs
+                    if stat.S_ISDIR(os.fstat(descriptor).st_mode):
+                        directory_fsyncs += 1
+                        if directory_fsyncs == failure_index:
+                            raise OSError("directory fsync failed")
+                    real_fsync(descriptor)
+
+                with patch(
+                    "control_plane_common.os.fsync",
+                    side_effect=fail_selected_directory_fsync,
+                ):
+                    with self.assertRaises(OSError):
+                        self._promote_policy()
+                try:
+                    require_storage_policy_unlock_snapshot(
+                        control_plane_version=self.control_plane_version,
+                        authorized_pic_root=self.pic_root,
+                        authorized_project_home_root=self.project_home_root,
+                    )
+                except ValueError:
+                    pass
+                else:
+                    self.assertEqual(
+                        (self.pic_root / "policy" / "storage_policy.json").read_bytes(),
+                        baseline,
+                    )
+                self.policy.write_bytes(baseline)
+                self._promote_policy()
+
+    def test_trusted_project_home_mount_alias_preserves_lexical_ledger_path(self) -> None:
+        real_parent = self.root / "real-project-home-parent"
+        real_root = real_parent / "mirror"
+        (real_root / "ledger").mkdir(parents=True)
+        alias_parent = self.root / "project-home-alias"
+        alias_parent.symlink_to(real_parent, target_is_directory=True)
+        trusted_root = alias_parent / "mirror"
+        mirror = trusted_root / "ledger" / "node_hours.jsonl"
+        mirror.write_text("trusted mount alias\n", encoding="utf-8")
+        require_ledger_paths(
+            self.ledger,
+            self.csv,
+            self.receipts,
+            mirror,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=trusted_root,
+        )
+        self.assertEqual(
+            read_stable_regular_file_below(mirror, trusted_root / "ledger"),
+            b"trusted mount alias\n",
+        )
+        durable_mkdir_parents(
+            trusted_root / "new-ledger-parent" / "nested", root=trusted_root
+        )
+        self.assertTrue((real_root / "new-ledger-parent" / "nested").is_dir())
+        output = trusted_root / "new-ledger-parent" / "output.json"
+        atomic_write_bytes(
+            output,
+            b'{"trusted": true}\n',
+            replace=False,
+            root=trusted_root,
+        )
+        self.assertEqual(
+            (real_root / "new-ledger-parent" / "output.json").read_bytes(),
+            b'{"trusted": true}\n',
+        )
+
+    def test_durable_parent_creation_rejects_below_root_alias_without_side_effect(
+        self,
+    ) -> None:
+        trusted_root = self.root / "trusted-root"
+        trusted_root.mkdir()
+        outside = self.root / "outside-root"
+        outside.mkdir()
+        (trusted_root / "aliased").symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(OSError):
+            durable_mkdir_parents(
+                trusted_root / "aliased" / "created", root=trusted_root
+            )
+        self.assertFalse((outside / "created").exists())
+
+    def test_durable_parent_creation_rejects_path_outside_missing_trusted_root(
+        self,
+    ) -> None:
+        missing_root = self.root / "missing-trusted-root"
+        outside = self.root / "outside-missing-root" / "created"
+        with self.assertRaises(ValueError):
+            durable_mkdir_parents(outside, root=missing_root)
+        self.assertFalse(outside.exists())
+
+    def test_policy_promoter_rejects_duplicate_json_keys(self) -> None:
+        text = self.policy.read_text(encoding="utf-8")
+        self.policy.write_text(
+            text.replace(
+                '"schema_version": 1,',
+                '"schema_version": 1, "schema_version": 1,',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        with self.assertRaises(ValueError):
+            self._promote_policy()
+
+    def test_policy_promoter_rejects_staged_candidate_version_mismatch(self) -> None:
+        self._write_policy(staged_control_plane_candidate_version="0" * 64)
+        with self.assertRaises(ValueError):
+            self._promote_policy()
+
+    def test_policy_promoter_rejects_uninstalled_candidate_lifecycle(self) -> None:
+        self._write_policy(
+            installed_control_plane_lifecycle=(
+                "live_active_generation_successor_staged_not_installed"
+            )
+        )
+        with self.assertRaises(ValueError):
+            self._promote_policy()
 
     def test_reserve_attach_reconcile_and_compute_node_verify(self) -> None:
         manifest_path = self._create_manifest()
@@ -671,7 +1266,8 @@ class SnapshotTests(unittest.TestCase):
             str(self.control_plane_dir / "launch_with_frontier_profile.sh"),
         )
         self.assertEqual(calls[0][0][1], "/usr/bin/srun")
-        self.assertEqual(calls[0][0][7], str(executable["path"]))
+        self.assertEqual(calls[0][0][2], "--jobid=12345")
+        self.assertEqual(calls[0][0][8], str(executable["path"]))
         self.assertTrue(calls[0][1]["check"])
 
     def test_trampoline_rejects_wrong_executable_binding(self) -> None:
@@ -761,8 +1357,445 @@ class SnapshotTests(unittest.TestCase):
             str(self.control_plane_dir / "launch_with_frontier_profile.sh"),
         )
         self.assertEqual(commands[0][1], "/usr/bin/srun")
+        self.assertEqual(commands[0][2], "--jobid=12345")
         self.assertNotIn("/bin/bash", commands[0])
         self.assertNotIn("/bin/true", commands[0])
+
+    def test_profile_wrapper_closes_runtime_allowlist_fd_before_exec(self) -> None:
+        wrapper_dir = self.root / "profile-wrapper"
+        wrapper_dir.mkdir()
+        wrapper = wrapper_dir / "launch_with_frontier_profile.sh"
+        wrapper.write_text(
+            Path(__file__).with_name("launch_with_frontier_profile.sh").read_text(
+                encoding="utf-8"
+            ),
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+        (wrapper_dir / "frontier_pic_environment.sh").write_text(
+            "record_pic_environment() { printf 'ALLOWLISTED=1\\n'; }\n",
+            encoding="utf-8",
+        )
+        allowlist = wrapper_dir / "environment.allowlist.txt"
+        with allowlist.open("wb") as stream:
+            descriptor = stream.fileno()
+            directory_descriptor = os.open(wrapper_dir, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                environment = dict(os.environ)
+                environment["PIC_RUNTIME_ALLOWLIST_FD"] = str(descriptor)
+                environment["PIC_RUNTIME_ALLOWLIST_DIR_FD"] = str(directory_descriptor)
+                environment["BASH_FUNC_module%%"] = "() {  :\n}"
+                result = subprocess.run(
+                    [
+                        str(wrapper),
+                        "/bin/bash",
+                        "-c",
+                        (
+                            'test -z "${PIC_RUNTIME_ALLOWLIST_FD+x}" '
+                            '&& test -z "${PIC_RUNTIME_ALLOWLIST_DIR_FD+x}" '
+                            '&& ! printf "FORGED_CHILD_WRITE\\n" > "$1"'
+                        ),
+                        "bash",
+                        str(allowlist),
+                    ],
+                    env=environment,
+                    pass_fds=(descriptor, directory_descriptor),
+                    check=False,
+                )
+            finally:
+                os.close(directory_descriptor)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(allowlist.read_text(encoding="utf-8"), "ALLOWLISTED=1\n")
+        self.assertEqual(stat.S_IMODE(allowlist.stat().st_mode), 0o400)
+
+    def test_profile_wrapper_does_not_source_user_bashrc(self) -> None:
+        wrapper = Path(__file__).with_name("launch_with_frontier_profile.sh")
+        wrapper_text = wrapper.read_text(encoding="utf-8")
+        self.assertNotIn("source /etc/profile", wrapper_text.splitlines())
+        self.assertIn("source /opt/cray/pe/lmod/lmod/init/profile", wrapper_text)
+        self.assertIn("export HOME=/", wrapper_text)
+
+        wrapper_dir = self.root / "profile-wrapper"
+        wrapper_dir.mkdir()
+        copied_wrapper = wrapper_dir / wrapper.name
+        copied_wrapper.write_text(wrapper_text, encoding="utf-8")
+        copied_wrapper.chmod(0o755)
+        (wrapper_dir / "frontier_pic_environment.sh").write_text(
+            "record_pic_environment() { printf 'ALLOWLISTED=1\\n'; }\n",
+            encoding="utf-8",
+        )
+        home = self.root / "forged-home"
+        home.mkdir()
+        marker = self.root / "user-bashrc-sourced"
+        (home / ".bashrc").write_text(
+            f": > {marker}\n",
+            encoding="utf-8",
+        )
+        allowlist = wrapper_dir / "environment.allowlist.txt"
+        with allowlist.open("wb") as stream:
+            directory_descriptor = os.open(wrapper_dir, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                environment = {
+                    **os.environ,
+                    "HOME": str(home),
+                    "PIC_RUNTIME_ALLOWLIST_FD": str(stream.fileno()),
+                    "PIC_RUNTIME_ALLOWLIST_DIR_FD": str(directory_descriptor),
+                }
+                subprocess.run(
+                    [str(copied_wrapper), "/bin/true"],
+                    env=environment,
+                    pass_fds=(stream.fileno(), directory_descriptor),
+                    check=True,
+                )
+            finally:
+                os.close(directory_descriptor)
+        self.assertFalse(marker.exists())
+        self.assertEqual(allowlist.read_text(encoding="utf-8"), "ALLOWLISTED=1\n")
+
+    def test_trampoline_strips_bash_startup_hooks_before_profile_wrapper(self) -> None:
+        hook = self.root / "bash-env-hook.sh"
+        hook.write_text(
+            'eval "exec 9>&${PIC_RUNTIME_ALLOWLIST_FD}"\n',
+            encoding="utf-8",
+        )
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        seen_environment: dict[str, str] = {}
+
+        def runner(_: list[str], **kwargs: object) -> None:
+            environment = dict(kwargs["env"])
+            seen_environment.update(environment)
+            result = subprocess.run(
+                [
+                    "/bin/bash",
+                    "-c",
+                    (
+                        'printf "ALLOWLISTED=1\\n" >&"$PIC_RUNTIME_ALLOWLIST_FD"; '
+                        'eval "exec ${PIC_RUNTIME_ALLOWLIST_FD}>&-"; '
+                        'eval "exec ${PIC_RUNTIME_ALLOWLIST_DIR_FD}>&-"; '
+                        "unset PIC_RUNTIME_ALLOWLIST_FD PIC_RUNTIME_ALLOWLIST_DIR_FD; "
+                        "exec /bin/bash -c '! printf \"FORGED_CHILD_WRITE\\\\n\" >&9'"
+                    ),
+                ],
+                env=environment,
+                pass_fds=kwargs["pass_fds"],
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0)
+
+        injected = {
+            "BASH_ENV": str(hook),
+            "ENV": str(hook),
+            "BASH_FUNC_injected%%": "() { :; }",
+            "CDPATH": str(self.root),
+            "LD_PRELOAD": str(hook),
+            "LD_LIBRARY_PATH": str(self.root),
+            "PYTHONPATH": str(self.root),
+            "HSA_XNACK": "1",
+            "MPICH_OFI_NIC_POLICY": "GPU",
+            "FI_MR_CACHE_MONITOR": "forged",
+        }
+        self._launch(
+            manifest_path,
+            reservation,
+            runner=runner,
+            environment_overrides=injected,
+        )
+        for name in injected:
+            self.assertNotIn(name, seen_environment)
+        self.assertEqual(
+            set(seen_environment),
+            {
+                "LC_ALL",
+                "PATH",
+                "PIC_FRONTIER_PROFILE",
+                "PIC_RUNTIME_ALLOWLIST_FD",
+                "PIC_RUNTIME_ALLOWLIST_DIR_FD",
+            },
+        )
+        self.assertEqual(seen_environment["LC_ALL"], "C")
+        self.assertEqual(seen_environment["PATH"], "/usr/bin:/bin")
+        self.assertEqual(
+            seen_environment["PIC_FRONTIER_PROFILE"], "frontier_minimum_supported"
+        )
+        allowlist = (
+            self.pic_root
+            / "runs"
+            / "f0_hipmpi_smoke"
+            / self.submission_id
+            / "athena-parser.environment.allowlist.txt"
+        )
+        self.assertEqual(allowlist.read_text(encoding="utf-8"), "ALLOWLISTED=1\n")
+
+    def test_trampoline_requires_live_slurm_job_id(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        with self.assertRaises(ValueError):
+            self._launch(
+                manifest_path,
+                reservation,
+                runner=lambda *_args, **_kwargs: None,
+                environment_overrides={"SLURM_JOB_ID": ""},
+            )
+
+    def test_trampoline_rejects_existing_run_artifact_directory(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        artifact_dir = (
+            self.pic_root / "runs" / "f0_hipmpi_smoke" / self.submission_id
+        )
+        artifact_dir.mkdir(parents=True)
+        (artifact_dir / "stale.txt").write_text("must not be reused\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            self._launch(
+                manifest_path,
+                reservation,
+                runner=lambda *_args, **_kwargs: None,
+            )
+
+    def test_reservation_rejects_existing_run_artifact_directory(self) -> None:
+        manifest_path = self._create_manifest()
+        artifact_dir = (
+            self.pic_root / "runs" / "f0_hipmpi_smoke" / self.submission_id
+        )
+        artifact_dir.mkdir(parents=True)
+        with self.assertRaises(ValueError):
+            self._reserve(manifest_path)
+
+    def test_reservation_rejects_unbound_run_artifact_directory(self) -> None:
+        self._write_config(
+            artifact_dir=str(
+                self.pic_root / "runs" / "f0_hipmpi_smoke" / str(uuid.uuid4())
+            )
+        )
+        manifest_path = self._create_manifest()
+        with self.assertRaises(ValueError):
+            self._reserve(manifest_path)
+
+    def test_reservation_rejects_operational_namespace_artifact_directory(self) -> None:
+        self._write_config(artifact_dir=str(self.pic_root / "ledger" / "forged-run"))
+        manifest_path = self._create_manifest()
+        with self.assertRaises(ValueError):
+            self._reserve(manifest_path)
+
+    def test_executable_lookup_rejects_cancelled_reservation(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        transition(
+            reservation_id=reservation_id,
+            notes="cancel before scheduler submission",
+            event_type="reservation_cancelled",
+            state="cancelled",
+            ledger_jsonl=self.ledger,
+            ledger_csv=self.csv,
+            receipts_jsonl=self.receipts,
+            mirror_jsonl=self.mirror,
+            control_plane_dir=self.control_plane_dir,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+        scheduler = (
+            f"JobId=12345 JobState=RUNNING Account=AST207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            with self.assertRaises(ValueError):
+                reservation_bound_manifest(
+                    manifest_path,
+                    reservation_id,
+                    ledger_jsonl=self.ledger,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    executable_job_id="12345",
+                )
+
+    def test_predispatch_lookup_rejects_cancelled_reservation(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        transition(
+            reservation_id=reservation_id,
+            notes="cancel before scheduler submission",
+            event_type="reservation_cancelled",
+            state="cancelled",
+            ledger_jsonl=self.ledger,
+            ledger_csv=self.csv,
+            receipts_jsonl=self.receipts,
+            mirror_jsonl=self.mirror,
+            control_plane_dir=self.control_plane_dir,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+        with self.assertRaises(ValueError):
+            reservation_bound_manifest(
+                manifest_path,
+                reservation_id,
+                ledger_jsonl=self.ledger,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+                require_reserved=True,
+            )
+
+    def test_dispatch_start_rechecks_policy_generation_and_retains_accounting(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        self.assertRegex(str(reservation["active_policy_sha256"]), r"^[0-9a-f]{64}$")
+        self.assertRegex(str(reservation["active_promotion_sha256"]), r"^[0-9a-f]{64}$")
+        self.policy.write_text(
+            self.policy.read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        self._promote_policy()
+        with self.assertRaises(ValueError):
+            self._mark_dispatch_started(reservation_id)
+        totals = accounting(validate_primary_chain(self.ledger))
+        self.assertGreater(totals["currently_reserved_node_hours"], 0.0)
+
+    def test_dispatch_started_reservation_cannot_be_cancelled_or_repaired(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        self._mark_dispatch_started(reservation_id)
+        marker = json.loads(
+            (self.pic_root / "ledger" / "pending_submission.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(marker["state"], "scheduler_dispatch_started")
+        with self.assertRaises(ValueError):
+            transition(
+                reservation_id=reservation_id,
+                notes="ambiguous sbatch result must retain accounting",
+                event_type="reservation_cancelled",
+                state="cancelled",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        with self.assertRaises(ValueError):
+            repair_reservation_attachments(
+                reservation_id=reservation_id,
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_scheduler_output_is_restricted_to_dedicated_log_path(self) -> None:
+        expected = self.pic_root / "logs" / "slurm" / "%x.%j.log"
+        self.assertEqual(
+            _require_scheduler_output_path(str(expected), self.pic_root),
+            expected,
+        )
+        with self.assertRaises(ValueError):
+            _require_scheduler_output_path(str(self.ledger), self.pic_root)
+
+    def test_executable_lookup_rejects_pre_attachment_race(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=RUNNING Account=AST207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            mark_submitted(
+                reservation_id=reservation_id,
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+            with self.assertRaises(ValueError):
+                reservation_bound_manifest(
+                    manifest_path,
+                    reservation_id,
+                    ledger_jsonl=self.ledger,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                    executable_job_id="12345",
+                )
+
+    def test_cancellation_rejects_submitted_not_attached_job(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=PENDING Account=AST207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            mark_submitted(
+                reservation_id=reservation_id,
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        with self.assertRaises(ValueError):
+            transition(
+                reservation_id=reservation_id,
+                notes="must not release accounting after sbatch",
+                event_type="reservation_cancelled",
+                state="cancelled",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+
+    def test_lookup_rejects_missing_paired_install_before_lock_creation(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        lock = self.ledger.with_suffix(self.ledger.suffix + ".lock")
+        lock.unlink()
+        remove_tree(self.project_home_control_plane_dir)
+        with self.assertRaises(ValueError):
+            reservation_bound_manifest(
+                manifest_path,
+                str(reservation["reservation_id"]),
+                ledger_jsonl=self.ledger,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertFalse(lock.exists())
 
     def test_trampoline_does_not_open_shell_template_after_verification(self) -> None:
         manifest_path = self._create_manifest()
@@ -783,6 +1816,7 @@ class SnapshotTests(unittest.TestCase):
             str(self.control_plane_dir / "launch_with_frontier_profile.sh"),
         )
         self.assertEqual(commands[0][1], "/usr/bin/srun")
+        self.assertEqual(commands[0][2], "--jobid=12345")
         self.assertNotIn(str(template), commands[0])
 
     def test_manifest_rejects_arbitrary_shell_launch_action(self) -> None:
@@ -793,6 +1827,51 @@ class SnapshotTests(unittest.TestCase):
         self.config.write_text(json.dumps(config), encoding="utf-8")
         with self.assertRaises(ValueError):
             self._create_manifest()
+
+    def test_launch_contract_rejects_untrusted_path_bearing_literals(self) -> None:
+        unsafe_arguments = [
+            [{"literal": "-i"}, {"literal": "/outside/input.athinput"}],
+            [{"literal": "-d"}, {"literal": "/tmp"}],
+            [{"literal": "-r"}, {"literal": "/outside/restart.rst"}],
+            [{"literal": "job/basename=../../outside"}],
+        ]
+        for arguments in unsafe_arguments:
+            with self.subTest(arguments=arguments):
+                contract = self._launch_contract()
+                contract["actions"][0]["arguments"] = arguments
+                with self.assertRaises(ValueError):
+                    validate_launch_contract(contract)
+
+    def test_admission_smoke_rejects_valid_but_unbound_launch_resource_drift(
+        self,
+    ) -> None:
+        config = json.loads(self.config.read_text(encoding="utf-8"))
+        config["launch_contract"]["actions"][0]["resources"]["tasks"] = 2
+        self.config.write_text(json.dumps(config), encoding="utf-8")
+        manifest_path = self._create_manifest()
+        with self.assertRaises(ValueError):
+            self._reserve(manifest_path)
+
+    def test_snapshot_escape_rejects_before_reading_outside_root(self) -> None:
+        outside = self.root / "outside-snapshot"
+        outside.write_text("must not be read\n", encoding="utf-8")
+        manifest = {
+            "snapshot_files": [
+                {
+                    "role": "input-deck",
+                    "path": str(outside),
+                    "sha256": sha256(outside),
+                    "source_path": str(outside),
+                    "source_sha256": sha256(outside),
+                }
+            ]
+        }
+        with patch(
+            "control_plane_common.read_stable_regular_file_below"
+        ) as stable_read:
+            with self.assertRaises(ValueError):
+                verify_snapshot_files(manifest, root=self.pic_root)
+        stable_read.assert_not_called()
 
     def test_trampoline_runs_only_declarative_bounded_hooks(self) -> None:
         self._write_config()
@@ -814,6 +1893,14 @@ class SnapshotTests(unittest.TestCase):
             }
         ]
         self.config.write_text(json.dumps(config), encoding="utf-8")
+        self._write_policy(
+            admission_smoke_overrides={
+                "launch_contract_sha256": launch_contract_sha256(
+                    config["launch_contract"]
+                ),
+            }
+        )
+        self._promote_policy()
         manifest_path = self._create_manifest()
         reservation = self._reserve(manifest_path)
         calls: list[tuple[list[str], dict[str, object]]] = []
@@ -828,7 +1915,16 @@ class SnapshotTests(unittest.TestCase):
             str(self.control_plane_dir / "launch_with_frontier_profile.sh"),
         )
         self.assertEqual(calls[0][0][1], "/usr/bin/srun")
-        artifact_dir = self.pic_root / "runs" / "snapshot"
+        self.assertEqual(calls[0][0][2], "--jobid=12345")
+        artifact_dir = self.pic_root / "runs" / "f0_hipmpi_smoke" / self.submission_id
+        self.assertRegex(calls[0][1]["env"]["PIC_RUNTIME_ALLOWLIST_FD"], r"^[0-9]+$")
+        self.assertRegex(
+            calls[0][1]["env"]["PIC_RUNTIME_ALLOWLIST_DIR_FD"], r"^[0-9]+$"
+        )
+        self.assertEqual(len(calls[0][1]["pass_fds"]), 2)
+        self.assertTrue(
+            (artifact_dir / "athena-parser.environment.allowlist.txt").is_file()
+        )
         self.assertEqual(
             (artifact_dir / "checksums" / "executable.sha256").read_text(
                 encoding="utf-8"
@@ -921,6 +2017,7 @@ class SnapshotTests(unittest.TestCase):
             ledger_csv=self.csv,
             receipts_jsonl=self.receipts,
             mirror_jsonl=self.mirror,
+            control_plane_dir=self.control_plane_dir,
             authorized_pic_root=self.pic_root,
             authorized_project_home_root=self.project_home_root,
         )
@@ -949,12 +2046,144 @@ class SnapshotTests(unittest.TestCase):
             ledger_csv=self.csv,
             receipts_jsonl=self.receipts,
             mirror_jsonl=self.mirror,
+            control_plane_dir=self.control_plane_dir,
             authorized_pic_root=self.pic_root,
             authorized_project_home_root=self.project_home_root,
         )
         self.assertEqual(result, "cleared_unappended_reservation_intent")
         self.assertFalse((self.pic_root / "ledger" / "pending_submission.json").exists())
         self.assertEqual(len(validate_primary_chain(self.ledger)), 1)
+
+    def test_completed_cancellation_stranded_marker_is_recoverable(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        with patch(
+            "validate_and_reserve_frontier_job._clear_matching_pending_marker",
+            side_effect=RuntimeError("simulated marker cleanup interruption"),
+        ):
+            with self.assertRaises(RuntimeError):
+                transition(
+                    reservation_id=reservation_id,
+                    event_type="reservation_cancelled",
+                    state="cancelled",
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        result = repair_reservation_attachments(
+            reservation_id=reservation_id,
+            ledger_jsonl=self.ledger,
+            ledger_csv=self.csv,
+            receipts_jsonl=self.receipts,
+            mirror_jsonl=self.mirror,
+            control_plane_dir=self.control_plane_dir,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+        self.assertEqual(result, "cleared_completed_cancellation_pending_marker")
+        self.assertFalse((self.pic_root / "ledger" / "pending_submission.json").exists())
+
+    def test_completed_attachment_stranded_marker_is_recoverable(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            "JobId=12345 JobState=PENDING Account=AST207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            mark_submitted(
+                reservation_id=reservation_id,
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+            with patch(
+                "validate_and_reserve_frontier_job._clear_matching_pending_marker",
+                side_effect=RuntimeError("simulated marker cleanup interruption"),
+            ):
+                with self.assertRaises(RuntimeError):
+                    transition(
+                        reservation_id=reservation_id,
+                        job_id="12345",
+                        event_type="job_id_attached",
+                        state="submitted",
+                        ledger_jsonl=self.ledger,
+                        ledger_csv=self.csv,
+                        receipts_jsonl=self.receipts,
+                        mirror_jsonl=self.mirror,
+                        control_plane_dir=self.control_plane_dir,
+                        authorized_pic_root=self.pic_root,
+                        authorized_project_home_root=self.project_home_root,
+                    )
+        result = repair_reservation_attachments(
+            reservation_id=reservation_id,
+            ledger_jsonl=self.ledger,
+            ledger_csv=self.csv,
+            receipts_jsonl=self.receipts,
+            mirror_jsonl=self.mirror,
+            control_plane_dir=self.control_plane_dir,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=self.project_home_root,
+        )
+        self.assertEqual(result, "cleared_completed_attachment_pending_marker")
+        self.assertFalse((self.pic_root / "ledger" / "pending_submission.json").exists())
+
+    def test_mutable_source_tree_cannot_run_mutating_ledger_repairs(self) -> None:
+        common = {
+            "ledger_jsonl": self.ledger,
+            "ledger_csv": self.csv,
+            "receipts_jsonl": self.receipts,
+            "mirror_jsonl": self.mirror,
+            "authorized_pic_root": self.pic_root,
+            "authorized_project_home_root": self.project_home_root,
+        }
+        with patch(
+            "validate_and_reserve_frontier_job.repair_mirrored_state_locked"
+        ) as repair:
+            with self.assertRaises(ValueError):
+                repair_ledger_mirror(**common)
+            with self.assertRaises(ValueError):
+                repair_reservation_attachments(
+                    reservation_id="89c76745-6c37-47f7-9847-800a98a47c9b",
+                    **common,
+                )
+        repair.assert_not_called()
+
+    def test_closed_policy_rejects_interrupted_looking_genesis_prefix(self) -> None:
+        for path in [
+            self.csv,
+            self.receipts,
+            self.mirror,
+            self.pic_root / "ledger" / "genesis_anchor.json",
+            self.project_home_root / "ledger" / "genesis_anchor.json",
+        ]:
+            if path.exists():
+                path.chmod(0o600)
+                path.unlink()
+        with self.assertRaises(ValueError):
+            initialize_from_policy(
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                mirror_receipts=self.receipts,
+                mirror_jsonl=self.mirror,
+                mirror_transport="filesystem_copy",
+                notes="snapshot control plane test",
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
 
     def test_reservation_creation_rejects_broken_attachment_symlink_alias(self) -> None:
         manifest_path = self._create_manifest()
@@ -1023,6 +2252,7 @@ class SnapshotTests(unittest.TestCase):
                 ledger_csv=self.csv,
                 receipts_jsonl=self.receipts,
                 mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
                 authorized_project_home_root=self.project_home_root,
             )
@@ -1051,6 +2281,7 @@ class SnapshotTests(unittest.TestCase):
                 ledger_csv=self.csv,
                 receipts_jsonl=self.receipts,
                 mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
                 authorized_project_home_root=self.project_home_root,
             )
@@ -1065,12 +2296,15 @@ class SnapshotTests(unittest.TestCase):
             "validate_and_reserve_frontier_job._scheduler_job_output",
             return_value="JobId=12345 JobState=PENDING Account=AST207 Comment=wrong",
         ):
+            self._mark_dispatch_started(reservation_id)
             with self.assertRaises(ValueError):
                 mark_submitted(
                     reservation_id=reservation_id,
                     job_id="12345",
                     ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
                     authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
                 )
         with patch(
             "validate_and_reserve_frontier_job._scheduler_job_output",
@@ -1084,7 +2318,9 @@ class SnapshotTests(unittest.TestCase):
                     reservation_id=reservation_id,
                     job_id="12345",
                     ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
                     authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
                 )
         with patch(
             "validate_and_reserve_frontier_job._scheduler_job_output",
@@ -1098,7 +2334,9 @@ class SnapshotTests(unittest.TestCase):
                     reservation_id=reservation_id,
                     job_id="12345",
                     ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
                     authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
                 )
 
     def test_reconcile_queries_slurm_and_rejects_comment_mismatch(self) -> None:
@@ -1123,6 +2361,156 @@ class SnapshotTests(unittest.TestCase):
                     authorized_pic_root=self.pic_root,
                     authorized_project_home_root=self.project_home_root,
                 )
+
+    def test_reconcile_recovers_terminal_submitted_not_attached_job(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        scheduler = (
+            f"JobId=12345 JobState=PENDING Account=AST207 "
+            f"Comment=pic-reservation={reservation_id}"
+        )
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=scheduler,
+        ):
+            self._mark_dispatch_started(reservation_id)
+            mark_submitted(
+                reservation_id=reservation_id,
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        with patch(
+            "reconcile_frontier_job._scheduler_result",
+            return_value=("CANCELLED", 30, 1),
+        ):
+            result = reconcile(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual(result["state"], "CANCELLED")
+        self.assertTrue(result["reconciled"])
+        self.assertFalse((self.pic_root / "ledger" / "pending_submission.json").exists())
+        records = validate_primary_chain(self.ledger)
+        self.assertEqual(records[-2]["event_type"], "job_id_attached")
+        self.assertEqual(records[-1]["event_type"], "reconciliation")
+
+    def test_reconcile_recovers_terminal_received_job_id(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        with patch(
+            "validate_and_reserve_frontier_job._scheduler_job_output",
+            return_value=(
+                f"JobId=12345 JobState=CANCELLED Account=AST207 "
+                f"Comment=pic-reservation={reservation_id}"
+            ),
+        ):
+            self._mark_dispatch_started(reservation_id)
+            with self.assertRaises(ValueError):
+                mark_submitted(
+                    reservation_id=reservation_id,
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        marker = json.loads(
+            (self.pic_root / "ledger" / "pending_submission.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(marker["state"], "scheduler_job_id_received")
+        with patch(
+            "reconcile_frontier_job._scheduler_result",
+            return_value=("CANCELLED", 0, 1),
+        ):
+            result = reconcile(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertEqual(result["state"], "CANCELLED")
+        self.assertFalse((self.pic_root / "ledger" / "pending_submission.json").exists())
+
+    def test_reconcile_terminal_retry_clears_stranded_marker_without_reaccounting(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        self._attach(reservation_id)
+        with patch(
+            "reconcile_frontier_job._scheduler_result",
+            return_value=("COMPLETED", 300, 1),
+        ):
+            first = reconcile(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        marker_path = self.pic_root / "ledger" / "pending_submission.json"
+        marker_path.write_text(
+            json.dumps({"reservation_id": reservation_id}),
+            encoding="utf-8",
+        )
+        with patch("reconcile_frontier_job._scheduler_result") as scheduler_result:
+            second = reconcile(
+                job_id="12345",
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                receipts_jsonl=self.receipts,
+                mirror_jsonl=self.mirror,
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        scheduler_result.assert_not_called()
+        self.assertEqual(second["event_sha256"], first["event_sha256"])
+        self.assertFalse(marker_path.exists())
+
+    def test_reconcile_requires_paired_installed_generation_before_scheduler_query(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        self._attach(str(reservation["reservation_id"]))
+        self.project_home_control_plane_dir.rename(
+            self.project_home_control_plane_dir.with_name("missing-control-plane")
+        )
+        with patch("reconcile_frontier_job._scheduler_result") as scheduler_result:
+            with self.assertRaises(ValueError):
+                reconcile(
+                    job_id="12345",
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        scheduler_result.assert_not_called()
 
     def test_registered_science_rejects_pending_clean_candidate_freeze(self) -> None:
         self._write_science_config(authorize=False)
@@ -1160,6 +2548,28 @@ class SnapshotTests(unittest.TestCase):
         candidate.unlink()
         candidate.parent.chmod(0o555)
         with self.assertRaises(FileNotFoundError):
+            self._reserve(manifest_path)
+
+    def test_registered_science_rejects_duplicate_candidate_keys(self) -> None:
+        candidate = self._write_science_config(authorize=True)
+        candidate.parent.chmod(0o755)
+        candidate.chmod(0o644)
+        candidate.write_text(
+            '{"schema_version": 1, "schema_version": 1}\n',
+            encoding="utf-8",
+        )
+        candidate.chmod(0o444)
+        candidate.parent.chmod(0o555)
+        self._write_policy(
+            science_submission_freeze={
+                "status": "authorized",
+                "manifest_path": str(candidate),
+                "manifest_sha256": sha256(candidate),
+            }
+        )
+        self._promote_policy()
+        manifest_path = self._create_manifest()
+        with self.assertRaises(ValueError):
             self._reserve(manifest_path)
 
     def test_registered_science_rejects_bound_executable_drift(self) -> None:
@@ -1220,6 +2630,30 @@ class SnapshotTests(unittest.TestCase):
         self._promote_policy()
         manifest_path = self._create_manifest()
         with self.assertRaises(ValueError):
+            self._reserve(manifest_path)
+
+    def test_registered_science_rejects_forged_build_profile_source_root(self) -> None:
+        candidate = self._write_science_config(authorize=True)
+        candidate_value = json.loads(candidate.read_text(encoding="utf-8"))
+        profile_path = Path(str(candidate_value["build"]["profile_path"]))
+        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+        profile["authorized_source_root"] = str(self.root / "forged-source")
+        self._rewrite_clean_candidate_profile(candidate, profile)
+        manifest_path = self._create_manifest()
+        with self.assertRaisesRegex(ValueError, "authorized source root"):
+            self._reserve(manifest_path)
+
+    def test_registered_science_rejects_forged_build_provenance_path(self) -> None:
+        candidate = self._write_science_config(authorize=True)
+        candidate_value = json.loads(candidate.read_text(encoding="utf-8"))
+        profile_path = Path(str(candidate_value["build"]["profile_path"]))
+        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+        profile["provenance_inputs"]["toolchain"]["path"] = str(
+            self.pic_root / "bin" / "forged-toolchain.txt"
+        )
+        self._rewrite_clean_candidate_profile(candidate, profile)
+        manifest_path = self._create_manifest()
+        with self.assertRaisesRegex(ValueError, "documented Orion layout"):
             self._reserve(manifest_path)
 
     def test_registered_science_rejects_extra_candidate_file(self) -> None:
@@ -1286,6 +2720,9 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(candidate["source"]["worktree_status"], "clean")
         self.assertEqual(candidate["source"]["submodule_status"], "absent")
         self.assertEqual(candidate["build"]["executable_sha256"], sha256(executable))
+        self.assertFalse(
+            bool(Path(str(candidate["source"]["commit_path"])).stat().st_mode & 0o222)
+        )
         self.assertFalse(bool(manifest_path.stat().st_mode & 0o222))
         self.assertFalse(
             bool(Path(str(candidate["build"]["executable_path"])).stat().st_mode & 0o222)
@@ -1299,6 +2736,332 @@ class SnapshotTests(unittest.TestCase):
             )
         self.assertFalse(list(manifest_path.parent.parent.glob(".tmp-*")))
 
+    def test_clean_candidate_creator_stages_captured_orion_input_bytes(self) -> None:
+        source_root = self._clean_source("captured-input-source")
+        executable, profile = self._build_profile(
+            source_root, self.pic_root / "captured-input-build", "test-profile"
+        )
+        receipt = profile.with_name("profile_receipt.json")
+        captured = {
+            executable: executable.read_bytes(),
+            profile: profile.read_bytes(),
+            receipt: receipt.read_bytes(),
+        }
+        real_read = read_stable_regular_file_below
+        mutated = False
+
+        def mutate_after_capture(path: Path, root: Path, **kwargs: object) -> bytes:
+            nonlocal mutated
+            data = real_read(path, root, **kwargs)
+            if not mutated and (Path(path) == receipt or Path(path) not in captured):
+                mutated = True
+                for artifact, payload, mode in [
+                    (executable, b"forged executable\n", 0o555),
+                    (profile, b'{"forged": true}\n', 0o444),
+                    (receipt, b'{"forged": true}\n', 0o444),
+                ]:
+                    artifact.chmod(0o644)
+                    artifact.write_bytes(payload)
+                    artifact.chmod(mode)
+            return data
+
+        with patch(
+            "create_clean_candidate_freeze.read_stable_regular_file_below",
+            side_effect=mutate_after_capture,
+        ):
+            manifest_path = create_freeze(
+                source_root=source_root,
+                executable=executable,
+                build_profile=profile,
+                build_profile_id="test-profile",
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+            )
+        self.assertTrue(mutated)
+        candidate = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            Path(str(candidate["build"]["executable_path"])).read_bytes(),
+            captured[executable],
+        )
+        self.assertEqual(
+            Path(str(candidate["build"]["profile_path"])).read_bytes(),
+            captured[profile],
+        )
+        self.assertEqual(
+            Path(str(candidate["build"]["profile_receipt_path"])).read_bytes(),
+            captured[receipt],
+        )
+
+    def test_orion_build_profile_writer_records_immutable_attestation(self) -> None:
+        source_root = self._clean_source("profile-writer-source")
+        arguments = self._profile_writer_arguments(source_root)
+        executable = Path(str(arguments["executable"]))
+        profile = Path(str(arguments["output"]))
+        toolchain = Path(str(arguments["toolchain_file"]))
+        toolchain.write_text("Frontier test toolchain\n", encoding="utf-8")
+        profile = write_profile(**arguments)
+        value = json.loads(profile.read_text(encoding="utf-8"))
+        self.assertEqual(value["profile_id"], "test-profile")
+        self.assertEqual(value["toolchain"], "Frontier test toolchain")
+        self.assertEqual(
+            value["build_invocations_sha256"],
+            sha256(Path(str(arguments["build_invocations_file"]))),
+        )
+        self.assertEqual(value["executable_sha256"], sha256(executable))
+        self.assertFalse(bool(profile.stat().st_mode & 0o222))
+        self.assertFalse(list(profile.parent.glob(".build-profile-*")))
+        with self.assertRaises(FileExistsError):
+            write_profile(**arguments)
+
+    def test_orion_build_profile_writer_rejects_dirty_source_tree(self) -> None:
+        source_root = self._clean_source("dirty-profile-writer-source")
+        (source_root / "untracked.txt").write_text("dirty\n", encoding="utf-8")
+        arguments = self._profile_writer_arguments(source_root)
+        profile = Path(str(arguments["output"]))
+        with self.assertRaises(ValueError):
+            write_profile(**arguments)
+        self.assertFalse(profile.exists())
+
+    def test_orion_build_profile_writer_rejects_invalid_metadata_and_aliases(self) -> None:
+        source_root = self._clean_source("invalid-profile-writer-source")
+        arguments = self._profile_writer_arguments(source_root)
+        toolchain = Path(str(arguments["toolchain_file"]))
+        with self.assertRaises(ValueError):
+            write_profile(**{**arguments, "profile_id": " "})
+        toolchain.write_bytes(b"\xff")
+        with self.assertRaises(ValueError):
+            write_profile(**arguments)
+        toolchain.write_text("Frontier test toolchain\n", encoding="utf-8")
+        outside = self.root / "outside-profile-writer"
+        outside.mkdir()
+        alias = self.pic_root / "profile-writer-alias"
+        alias.symlink_to(outside, target_is_directory=True)
+        with self.assertRaises(ValueError):
+            write_profile(**{**arguments, "output": alias / "build_profile.json"})
+        self.assertEqual(list(outside.iterdir()), [])
+
+    def test_orion_build_profile_writer_rejects_tracked_symlink_payload(self) -> None:
+        source_root = self._clean_source("symlink-profile-writer-source")
+        (source_root / "tracked-link").symlink_to("tracked.txt")
+        subprocess.run(["git", "-C", str(source_root), "add", "tracked-link"], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(source_root),
+                "-c",
+                "user.name=PIC Test",
+                "-c",
+                "user.email=pic-test@example.invalid",
+                "commit",
+                "-m",
+                "add tracked symlink",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        commit = subprocess.check_output(
+            ["git", "-C", str(source_root), "rev-parse", "HEAD"], text=True
+        ).strip()
+        with patch("write_orion_build_profile._execute_logged_command") as execute:
+            with self.assertRaises(ValueError):
+                build_orion_profile(
+                    source_root=source_root,
+                    expected_git_commit=commit,
+                    profile_id="test-profile",
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_source_root=source_root,
+                )
+        execute.assert_not_called()
+
+    def test_orion_build_profile_api_has_no_caller_injection_hooks(self) -> None:
+        parameters = inspect.signature(build_orion_profile).parameters
+        self.assertNotIn("invocations_factory", parameters)
+        self.assertNotIn("runner", parameters)
+        self.assertNotIn("toolchain_description", parameters)
+
+    def test_orion_build_profile_subprocess_environment_excludes_caller_poison(self) -> None:
+        import write_orion_build_profile
+
+        with patch.dict(
+            os.environ,
+            {
+                "CMAKE_TOOLCHAIN_FILE": "/tmp/forged-cmake-toolchain",
+                "GIT_CONFIG_GLOBAL": "/tmp/forged-git-config",
+                "LD_PRELOAD": "/tmp/forged-loader.so",
+                "PYTHONPATH": "/tmp/forged-python",
+            },
+        ):
+            environment = write_orion_build_profile._production_build_environment()
+        self.assertNotIn("CMAKE_TOOLCHAIN_FILE", environment)
+        self.assertNotIn("GIT_CONFIG_GLOBAL", environment)
+        self.assertNotIn("LD_PRELOAD", environment)
+        self.assertNotIn("PYTHONPATH", environment)
+        with patch.dict(
+            os.environ,
+            {
+                "CRAY_FORGED": "apparently-safe-wrapper-option",
+                "PE_ENV": "FORGED",
+            },
+        ):
+            environment = write_orion_build_profile._production_build_environment()
+        self.assertNotIn("CRAY_FORGED", environment)
+        self.assertEqual(environment["PE_ENV"], "AMD")
+
+    def test_orion_build_profile_rejects_symlinked_generated_outputs(self) -> None:
+        for linked_output in ["athena", "CMakeCache.txt"]:
+            with self.subTest(linked_output=linked_output):
+                profile_id = f"linked-{linked_output.lower().replace('.', '-')}"
+                source_root = self._clean_source(f"linked-{linked_output}-source")
+                commit = subprocess.check_output(
+                    ["git", "-C", str(source_root), "rev-parse", "HEAD"], text=True
+                ).strip()
+                outside = self.root / f"outside-{linked_output}"
+                outside.write_text("outside payload\n", encoding="utf-8")
+
+                def execute(
+                    command: list[str], *, stream: object, environment: dict[str, str]
+                ) -> None:
+                    del environment
+                    stream.write(b"fake cmake invocation\n")
+                    if "--build" in command:
+                        cmake_dir = Path(command[command.index("--build") + 1])
+                        (cmake_dir / "src").mkdir(parents=True)
+                        executable = cmake_dir / "src" / "athena"
+                        if linked_output == "athena":
+                            executable.symlink_to(outside)
+                        else:
+                            executable.write_text("built executable\n", encoding="utf-8")
+                    else:
+                        cmake_dir = Path(command[command.index("-B") + 1])
+                        cmake_dir.mkdir(parents=True)
+                        cache = cmake_dir / "CMakeCache.txt"
+                        if linked_output == "CMakeCache.txt":
+                            cache.symlink_to(outside)
+                        else:
+                            cache.write_text("fixture cache\n", encoding="utf-8")
+
+                with patch(
+                    "write_orion_build_profile._execute_logged_command",
+                    side_effect=execute,
+                ):
+                    with self.assertRaises(OSError):
+                        build_orion_profile(
+                            source_root=source_root,
+                            expected_git_commit=commit,
+                            profile_id=profile_id,
+                            control_plane_dir=self.control_plane_dir,
+                            authorized_pic_root=self.pic_root,
+                            authorized_source_root=source_root,
+                        )
+
+    def test_orion_build_profile_writer_rejects_executable_drift(self) -> None:
+        source_root = self._clean_source("drifted-profile-writer-source")
+        arguments = self._profile_writer_arguments(source_root)
+        executable = Path(str(arguments["executable"]))
+        from write_orion_build_profile import read_stable_regular_file_below
+
+        executable_reads = 0
+
+        def read_and_drift(path: Path, root: Path) -> bytes:
+            nonlocal executable_reads
+            if path == executable:
+                executable_reads += 1
+                if executable_reads == 2:
+                    executable.write_text("drifted executable\n", encoding="utf-8")
+            return read_stable_regular_file_below(path, root)
+
+        profile = Path(str(arguments["output"]))
+        with patch(
+            "write_orion_build_profile.read_stable_regular_file_below",
+            side_effect=read_and_drift,
+        ):
+            with self.assertRaises(ValueError):
+                write_profile(**arguments)
+        self.assertEqual(executable_reads, 2)
+        self.assertFalse(profile.exists())
+
+    def test_orion_build_profile_writer_rejects_dirty_recursive_submodule(self) -> None:
+        source_root = self._clean_source("dirty-submodule-profile-writer-source")
+        nested = self._add_submodule(source_root, "nested")
+        (nested / "untracked.txt").write_text("dirty\n", encoding="utf-8")
+        arguments = self._profile_writer_arguments(source_root)
+        profile = Path(str(arguments["output"]))
+        with self.assertRaises(ValueError):
+            write_profile(**arguments)
+        self.assertFalse(profile.exists())
+
+    def test_orion_build_profile_writer_atomic_failure_cleans_staging(self) -> None:
+        source_root = self._clean_source("failed-profile-writer-source")
+        arguments = self._profile_writer_arguments(source_root)
+        profile = Path(str(arguments["output"]))
+        with patch("control_plane_common.os.link", side_effect=OSError("link failed")):
+            with self.assertRaises(OSError):
+                write_profile(**arguments)
+        self.assertFalse(profile.exists())
+        self.assertFalse(list(profile.parent.glob(".build-profile-*")))
+        self.assertFalse(list(profile.parent.glob(".build_profile.json.tmp-*")))
+
+    def test_orion_build_profile_writer_parent_fsync_failure_rolls_back(self) -> None:
+        source_root = self._clean_source("fsync-failed-profile-writer-source")
+        arguments = self._profile_writer_arguments(source_root)
+        profile = Path(str(arguments["output"]))
+        real_fsync = os.fsync
+        directory_fsyncs = 0
+
+        def fail_publish_parent_once(descriptor: int) -> None:
+            nonlocal directory_fsyncs
+            if stat.S_ISDIR(os.fstat(descriptor).st_mode):
+                directory_fsyncs += 1
+                if directory_fsyncs == 1:
+                    raise OSError("publication parent fsync failed")
+            real_fsync(descriptor)
+
+        with patch("control_plane_common.os.fsync", side_effect=fail_publish_parent_once):
+            with self.assertRaises(OSError):
+                write_profile(**arguments)
+        self.assertFalse(profile.exists())
+        self.assertFalse(list(profile.parent.glob(".build-profile-*")))
+        self.assertFalse(list(profile.parent.glob(".build_profile.json.tmp-*")))
+
+    def test_orion_build_profile_writer_parent_swap_rejects_lexical_bytes(self) -> None:
+        source_root = self._clean_source("swapped-profile-writer-source")
+        arguments = self._profile_writer_arguments(source_root)
+        profile = Path(str(arguments["output"]))
+        parent = profile.parent
+        moved_parent = parent.with_name(parent.name + "-original")
+        outside = self.root / "outside-profile-parent"
+        outside.mkdir()
+        outside_profile = outside / profile.name
+        outside_profile.write_text('{"generation": "outside"}\n', encoding="utf-8")
+        parent_inode = parent.stat().st_ino
+        real_fsync = os.fsync
+        swapped = False
+
+        def swap_parent_then_sync(descriptor: int) -> None:
+            nonlocal swapped
+            descriptor_stat = os.fstat(descriptor)
+            if (
+                stat.S_ISDIR(descriptor_stat.st_mode)
+                and descriptor_stat.st_ino == parent_inode
+                and not swapped
+            ):
+                swapped = True
+                parent.rename(moved_parent)
+                parent.symlink_to(outside, target_is_directory=True)
+            real_fsync(descriptor)
+
+        with patch("control_plane_common.os.fsync", side_effect=swap_parent_then_sync):
+            with self.assertRaises((OSError, ValueError)):
+                write_profile(**arguments)
+        self.assertTrue(swapped)
+        self.assertEqual(
+            outside_profile.read_text(encoding="utf-8"),
+            '{"generation": "outside"}\n',
+        )
+        self.assertFalse((moved_parent / profile.name).exists())
+
     def test_clean_candidate_creator_rejects_dirty_source_tree(self) -> None:
         source_root = self.root / "dirty-source"
         source_root.mkdir()
@@ -1310,6 +3073,7 @@ class SnapshotTests(unittest.TestCase):
         executable.write_text("built executable\n", encoding="utf-8")
         profile = build / "build_profile.json"
         profile.write_text("{}\n", encoding="utf-8")
+        (build / "profile_receipt.json").write_text("{}\n", encoding="utf-8")
         with self.assertRaises(ValueError):
             create_freeze(
                 source_root=source_root,
@@ -1327,6 +3091,7 @@ class SnapshotTests(unittest.TestCase):
         )
         value = json.loads(profile.read_text(encoding="utf-8"))
         value["source_archive_sha256"] = "0" * 64
+        profile.chmod(0o644)
         profile.write_text(json.dumps(value), encoding="utf-8")
         with self.assertRaises(ValueError):
             create_freeze(
@@ -1345,7 +3110,7 @@ class SnapshotTests(unittest.TestCase):
         )
         candidate_root = self.pic_root / "clean_candidates"
         with patch(
-            "create_clean_candidate_freeze.os.replace",
+            "control_plane_common.os.replace",
             side_effect=OSError("rename failed"),
         ):
             with self.assertRaises(OSError):
@@ -1372,6 +3137,7 @@ class SnapshotTests(unittest.TestCase):
             build_profile_id="test-profile",
             control_plane_dir=self.control_plane_dir,
             authorized_pic_root=self.pic_root,
+            authorized_source_root=source_root,
         )
         candidate = json.loads(manifest_path.read_text(encoding="utf-8"))
         self.assertEqual(candidate["source"]["submodule_status"], "clean_pinned_archived")
@@ -1379,6 +3145,9 @@ class SnapshotTests(unittest.TestCase):
         archive = Path(str(candidate["source"]["submodules"][0]["archive_path"]))
         self.assertEqual(archive, manifest_path.parent / "submodules" / "0000.tar")
         self.assertFalse(bool(archive.stat().st_mode & 0o222))
+        commit_object = Path(str(candidate["source"]["submodules"][0]["commit_path"]))
+        self.assertEqual(commit_object, manifest_path.parent / "submodules" / "0000.commit")
+        self.assertFalse(bool(commit_object.stat().st_mode & 0o222))
 
     def test_clean_candidate_creator_rejects_dirty_submodule(self) -> None:
         source_root = self._clean_source("dirty-submodule-source")
@@ -1395,6 +3164,7 @@ class SnapshotTests(unittest.TestCase):
                 build_profile_id="test-profile",
                 control_plane_dir=self.control_plane_dir,
                 authorized_pic_root=self.pic_root,
+                authorized_source_root=source_root,
             )
 
     def test_clean_candidate_creator_rejects_tracked_symlink_payload(self) -> None:
@@ -1417,17 +3187,9 @@ class SnapshotTests(unittest.TestCase):
             check=True,
             capture_output=True,
         )
-        executable, profile = self._build_profile(
-            source_root, self.pic_root / "symlink-payload-build", "test-profile"
-        )
         with self.assertRaises(ValueError):
-            create_freeze(
-                source_root=source_root,
-                executable=executable,
-                build_profile=profile,
-                build_profile_id="test-profile",
-                control_plane_dir=self.control_plane_dir,
-                authorized_pic_root=self.pic_root,
+            self._build_profile(
+                source_root, self.pic_root / "symlink-payload-build", "test-profile"
             )
 
     def test_git_tree_reconstruction_rejects_missing_gitlink_placeholder(self) -> None:
@@ -1586,7 +3348,7 @@ class SnapshotTests(unittest.TestCase):
             self._reserve(manifest_path)
 
     def test_initializer_rejects_locked_storage_policy(self) -> None:
-        self._write_policy(ledger_genesis_allowed=False)
+        self._write_policy(ledger_genesis=None)
         with self.assertRaises(ValueError):
             self._promote_policy()
 
@@ -1608,6 +3370,28 @@ class SnapshotTests(unittest.TestCase):
                 authorized_pic_root=self.pic_root,
                 authorized_project_home_root=self.project_home_root,
             )
+
+    def test_initializer_rejects_closed_policy_after_complete_ledger_deletion(
+        self,
+    ) -> None:
+        for anchor in genesis_anchor_paths(self.ledger, self.mirror):
+            anchor.chmod(0o600)
+            anchor.unlink()
+        for path in [self.ledger, self.csv, self.receipts, self.mirror]:
+            path.unlink()
+        with self.assertRaises(ValueError):
+            initialize_from_policy(
+                ledger_jsonl=self.ledger,
+                ledger_csv=self.csv,
+                mirror_receipts=self.receipts,
+                mirror_jsonl=self.mirror,
+                mirror_transport="filesystem_copy",
+                notes="must not recreate closed genesis",
+                control_plane_dir=self.control_plane_dir,
+                authorized_pic_root=self.pic_root,
+                authorized_project_home_root=self.project_home_root,
+            )
+        self.assertFalse(self.ledger.exists())
 
     def test_initializer_rejects_unreviewed_ledger_mirror_transport(self) -> None:
         self._write_policy(project_home_ledger_mirror_transport="dtn_rsync")
@@ -1641,9 +3425,10 @@ class SnapshotTests(unittest.TestCase):
             self._create_manifest()
 
     def test_reservation_rejects_locked_storage_policy(self) -> None:
-        self._write_policy(ledger_genesis_allowed=False)
+        self._write_policy(ledger_genesis_allowed=True, ledger_genesis=None)
+        self._promote_policy()
         with self.assertRaises(ValueError):
-            self._promote_policy()
+            self._reserve(self._create_manifest())
 
     def test_reservation_rejects_unreviewed_ledger_mirror_transport(self) -> None:
         self._write_policy(project_home_ledger_mirror_transport="dtn_rsync")
@@ -1652,9 +3437,33 @@ class SnapshotTests(unittest.TestCase):
 
     def test_reservation_ignores_unpromoted_source_policy_override(self) -> None:
         manifest_path = self._create_manifest()
-        self._write_policy(ledger_genesis_allowed=False)
+        self._write_policy(ledger_genesis_allowed=True, ledger_genesis=None)
         reservation = self._reserve(manifest_path)
         self.assertEqual(reservation["state"], "reserved")
+
+    def test_active_policy_snapshot_accepts_configured_project_home_root_alias(
+        self,
+    ) -> None:
+        project_home_alias = self.root / "project_home_alias"
+        project_home_alias.symlink_to(self.project_home_root, target_is_directory=True)
+        self._write_policy(project_home_mirror_root=str(project_home_alias))
+        promote(
+            self.policy,
+            control_plane_dir=self.control_plane_dir,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=project_home_alias,
+        )
+        policy, snapshot = require_storage_policy_unlock_snapshot(
+            control_plane_version=self.control_plane_version,
+            authorized_pic_root=self.pic_root,
+            authorized_project_home_root=project_home_alias,
+        )
+        self.assertEqual(
+            policy["olcf_side_storage"]["project_home_mirror_root"],
+            str(project_home_alias),
+        )
+        self.assertEqual(len(snapshot["active_policy_sha256"]), 64)
+        self.assertEqual(len(snapshot["active_promotion_sha256"]), 64)
 
     def test_reservation_rejects_active_promotion_record_tamper(self) -> None:
         manifest_path = self._create_manifest()
@@ -1879,6 +3688,50 @@ class SnapshotTests(unittest.TestCase):
                 )
         git.assert_not_called()
 
+    def test_orion_build_profile_writer_rejects_installed_version_symlink_alias(
+        self,
+    ) -> None:
+        alias = self.pic_root / "control_plane" / "alias"
+        alias.symlink_to(self.control_plane_dir, target_is_directory=True)
+        build = self.pic_root / "alias-profile-writer-build"
+        build.mkdir()
+        executable = build / "athena"
+        executable.write_text("placeholder\n", encoding="utf-8")
+        toolchain = build / "toolchain.txt"
+        toolchain.write_text("Frontier test toolchain\n", encoding="utf-8")
+        build_invocations = build / "build-invocations.json"
+        build_invocations.write_text(
+            '{"build":["/fake/cmake"],"configure":["/fake/cmake"]}\n',
+            encoding="utf-8",
+        )
+        with patch(
+            "write_orion_build_profile._source_identity",
+            side_effect=AssertionError("alias reached source inspection"),
+        ) as source_identity:
+            with self.assertRaises(ValueError):
+                write_profile(
+                    source_root=self.sources,
+                    fresh_source_root=self.sources,
+                    executable=executable,
+                    output=build / "build_profile.json",
+                    profile_id="must-reject-alias",
+                    expected_git_commit="0" * 40,
+                    configure_log=toolchain,
+                    build_log=toolchain,
+                    cmake_cache=toolchain,
+                    module_list=toolchain,
+                    toolchain_file=toolchain,
+                    build_invocations_file=build_invocations,
+                    git_status_preconfigure_file=toolchain,
+                    git_status_file=toolchain,
+                    submodule_status_file=toolchain,
+                    environment_allowlist_file=toolchain,
+                    build_environment_file=toolchain,
+                    control_plane_dir=alias,
+                    authorized_pic_root=self.pic_root,
+                )
+        source_identity.assert_not_called()
+
     def test_policy_promoter_rejects_installed_version_symlink_alias(self) -> None:
         alias = self.pic_root / "control_plane" / "alias"
         alias.symlink_to(self.control_plane_dir, target_is_directory=True)
@@ -2030,6 +3883,7 @@ class SnapshotTests(unittest.TestCase):
                 validate_and_reserve_frontier_job._queue_output()
         self.assertEqual(queue.call_args.args[0][0], TRUSTED_SQUEUE)
         self.assertEqual(queue.call_args.args[0][2], pwd.getpwuid(os.getuid()).pw_name)
+        self.assertEqual(queue.call_args.kwargs["env"], trusted_slurm_environment())
         with patch.object(
             validate_and_reserve_frontier_job.subprocess,
             "check_output",
@@ -2037,6 +3891,7 @@ class SnapshotTests(unittest.TestCase):
         ) as scheduler:
             validate_and_reserve_frontier_job._scheduler_job_output("123")
         self.assertEqual(scheduler.call_args.args[0][0], TRUSTED_SCONTROL)
+        self.assertEqual(scheduler.call_args.kwargs["env"], trusted_slurm_environment())
         with patch.object(
             reconcile_frontier_job.subprocess,
             "check_output",
@@ -2045,16 +3900,162 @@ class SnapshotTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 reconcile_frontier_job._scheduler_result("123", "reservation")
         self.assertEqual(accounting_call.call_args.args[0][0], TRUSTED_SACCT)
+        self.assertEqual(accounting_call.call_args.kwargs["env"], trusted_slurm_environment())
         self.assertIn(
-            "[TRUSTED_GIT, \"-C\", str(source_root), *arguments]",
+            'trusted_git_command("-C", str(source_root), *arguments)',
             inspect.getsource(create_clean_candidate_freeze._git),
+        )
+        self.assertEqual(
+            trusted_git_command("status"),
+            [
+                "/usr/bin/git",
+                "-c",
+                "core.fsmonitor=false",
+                "-c",
+                "core.hooksPath=/dev/null",
+                "status",
+            ],
         )
         wrapper = Path(__file__).with_name("submit_frontier_job.sh").read_text(
             encoding="utf-8"
         )
-        self.assertIn('PYTHON="/opt/cray/pe/python/3.11.7/bin/python3"', wrapper)
+        self.assertIn('PYTHON=(/opt/cray/pe/python/3.11.7/bin/python3 -I)', wrapper)
+        self.assertIn('CONTROL_PLANE=("${PYTHON[@]}" "$RUNNER")', wrapper)
+        self.assertIn(
+            'SLURM_ENV=(/usr/bin/env -i HOME=/ LANG=C LC_ALL=C PATH=/usr/bin:/bin '
+            'SLURM_CLUSTERS=frontier)',
+            wrapper,
+        )
+        self.assertIn(
+            '"${CONTROL_PLANE[@]}" validate_and_reserve_frontier_job.py verify-control-plane',
+            wrapper,
+        )
         self.assertIn('SBATCH="/usr/bin/sbatch"', wrapper)
         self.assertIn('SCANCEL="/usr/bin/scancel"', wrapper)
+        self.assertIn('SCONTROL="/usr/bin/scontrol"', wrapper)
+        self.assertIn('"${SLURM_ENV[@]}" "$SBATCH" --parsable --hold', wrapper)
+        self.assertIn("--export=NIL", wrapper)
+        self.assertNotIn("--get-user-env", wrapper)
+        self.assertIn('"${SLURM_ENV[@]}" "$SCANCEL" "$job_id"', wrapper)
+        self.assertIn('"${SLURM_ENV[@]}" "$SCONTROL" release "$job_id"', wrapper)
+        launch_wrapper = Path(__file__).with_name("launch_with_frontier_profile.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("/opt/cray/pe/python/3.11.7/bin/python3 -E -s -", launch_wrapper)
+
+    def test_installed_python_entrypoints_are_isolated_from_pythonpath(self) -> None:
+        entrypoints = [
+            path
+            for path in self.control_plane_dir.glob("*.py")
+            if path.name != "test_control_plane.py"
+        ]
+        self.assertTrue(entrypoints)
+        for entrypoint in entrypoints:
+            self.assertEqual(
+                entrypoint.read_text(encoding="utf-8").splitlines()[0],
+                "#!/opt/cray/pe/python/3.11.7/bin/python3 -I",
+            )
+        poisoned = self.root / "poisoned-pythonpath"
+        poisoned.mkdir()
+        marker = self.root / "pythonpath-imported"
+        (poisoned / "pathlib.py").write_text(
+            f"open({str(marker)!r}, 'w').write('imported')\n",
+            encoding="utf-8",
+        )
+        result = subprocess.run(
+            [
+                str(self.control_plane_dir / "run_control_plane.py"),
+                "create_pre_submit_manifest.py",
+                "--help",
+            ],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PYTHONPATH": str(poisoned)},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(marker.exists())
+        direct = subprocess.run(
+            [str(self.control_plane_dir / "create_pre_submit_manifest.py"), "--help"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(direct.returncode, 0)
+        self.assertIn("run_control_plane.py", direct.stderr)
+        self.control_plane_dir.chmod(0o755)
+        (self.control_plane_dir / "pathlib.py").write_text(
+            f"open({str(marker)!r}, 'w').write('imported')\n",
+            encoding="utf-8",
+        )
+        self.control_plane_dir.chmod(0o555)
+        adjacent = subprocess.run(
+            [
+                str(self.control_plane_dir / "run_control_plane.py"),
+                "create_pre_submit_manifest.py",
+                "--help",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertNotEqual(adjacent.returncode, 0)
+        self.assertIn("entries differ", adjacent.stderr)
+        self.assertFalse(marker.exists())
+
+    def test_clean_candidate_schema_closes_production_profile_id(self) -> None:
+        schema = json.loads(
+            (self.control_plane_dir / "clean_candidate.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            schema["properties"]["build"]["properties"]["profile_id"],
+            {"const": "hip-mpi-release-paper-pic"},
+        )
+
+    def test_production_semantics_reject_self_authored_profile_receipt_chain(self) -> None:
+        from control_plane_common import AUTHORIZED_PIC_ROOT
+        from control_plane_common import require_production_build_provenance
+
+        with self.assertRaisesRegex(ValueError, "Unsupported installed Frontier build profile"):
+            require_production_build_provenance(
+                authorized_pic_root=AUTHORIZED_PIC_ROOT,
+                git_commit="0" * 40,
+                profile_id="self-authored-profile",
+                toolchain="self-authored toolchain",
+                invocations={"configure": ["/tmp/cmake"], "build": ["/tmp/cmake"]},
+                module_list=b"self-authored/module\n",
+                environment_allowlist=b"self-authored=1\n",
+                build_environment=b'{"HOME": "/tmp"}\n',
+            )
+
+    def test_production_semantics_reject_extra_module_provenance(self) -> None:
+        from control_plane_common import AUTHORIZED_PIC_ROOT
+        from control_plane_common import PRODUCTION_BUILD_ENVIRONMENT
+        from control_plane_common import PRODUCTION_BUILD_PROFILE
+        from control_plane_common import PRODUCTION_TOOLCHAIN_DESCRIPTION
+        from control_plane_common import production_build_invocations
+        from control_plane_common import production_environment_allowlist_bytes
+        from control_plane_common import production_module_list_bytes
+        from control_plane_common import require_production_build_provenance
+
+        commit = "0" * 40
+        environment = (
+            json.dumps(PRODUCTION_BUILD_ENVIRONMENT, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        with self.assertRaisesRegex(ValueError, "exact selection"):
+            require_production_build_provenance(
+                authorized_pic_root=AUTHORIZED_PIC_ROOT,
+                git_commit=commit,
+                profile_id=PRODUCTION_BUILD_PROFILE,
+                toolchain=PRODUCTION_TOOLCHAIN_DESCRIPTION,
+                invocations=production_build_invocations(
+                    authorized_pic_root=AUTHORIZED_PIC_ROOT,
+                    git_commit=commit,
+                    profile_id=PRODUCTION_BUILD_PROFILE,
+                ),
+                module_list=production_module_list_bytes() + b"caller/module\n",
+                environment_allowlist=production_environment_allowlist_bytes(),
+                build_environment=environment,
+            )
 
     def test_reserve_cli_rejects_caller_forged_queue_output_file(self) -> None:
         import validate_and_reserve_frontier_job
@@ -2108,6 +4109,102 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self._reserve(manifest_path)
 
+    def test_frontier_environment_profiles_are_closed_and_redacted(self) -> None:
+        path = Path(__file__).with_name("frontier_pic_environment.sh")
+        command = 'module() { :; }\nsource "$1" || exit $?\nrecord_pic_environment\n'
+        scrubbed = {
+            "HSA_XNACK",
+            "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED",
+            "MPICH_OFI_NIC_POLICY",
+            "MPICH_GPU_IPC_CACHE_MAX_SIZE",
+            "MPICH_MPIIO_HINTS",
+            "MPICH_OFI_NUM_CQ_ENTRIES",
+            "FI_MR_CACHE_MONITOR",
+            "FI_CXI_RX_MATCH_MODE",
+        }
+
+        def capture(profile: str) -> dict[str, str]:
+            environment = dict(os.environ)
+            environment["PIC_FRONTIER_PROFILE"] = profile
+            for name in scrubbed:
+                environment.pop(name, None)
+            result = subprocess.run(
+                ["/bin/bash", "-c", command, "bash", str(path)],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+            return dict(line.split("=", 1) for line in result.stdout.splitlines())
+
+        baseline = capture("frontier_minimum_supported")
+        self.assertEqual(baseline["PIC_FRONTIER_PROFILE"], "frontier_minimum_supported")
+        self.assertEqual(baseline["HSA_XNACK"], "0")
+        self.assertEqual(baseline["MPICH_GPU_SUPPORT_ENABLED"], "1")
+        self.assertEqual(baseline["MPICH_OFI_NIC_POLICY"], "<unset>")
+        self.assertEqual(baseline["SLURM_EXPORT_ENV"], "ALL")
+
+        xnack = capture("frontier_xnack1_experimental")
+        self.assertEqual(xnack["HSA_XNACK"], "1")
+        self.assertEqual(xnack["MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED"], "1")
+
+        ofi = capture("frontier_ofi_tuned_experimental")
+        self.assertEqual(ofi["MPICH_OFI_NIC_POLICY"], "GPU")
+        self.assertEqual(ofi["MPICH_GPU_IPC_CACHE_MAX_SIZE"], "1000")
+        self.assertEqual(ofi["FI_CXI_RX_MATCH_MODE"], "software")
+
+        result = subprocess.run(
+            ["/bin/bash", "-c", command, "bash", str(path)],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "PIC_FRONTIER_PROFILE": "unsupported"},
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Unsupported PIC_FRONTIER_PROFILE", result.stderr)
+
+        mutation_marker = self.root / "unsupported-profile-module-called"
+        unsupported = subprocess.run(
+            [
+                "/bin/bash",
+                "-c",
+                'module() { : > "$MUTATION_MARKER"; }\nsource "$1"',
+                "bash",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "PIC_FRONTIER_PROFILE": "unsupported",
+                "MUTATION_MARKER": str(mutation_marker),
+            },
+        )
+        self.assertNotEqual(unsupported.returncode, 0)
+        self.assertFalse(mutation_marker.exists())
+
+        failure_marker = self.root / "module-failure-called"
+        failed_module = subprocess.run(
+            [
+                "/bin/bash",
+                "-c",
+                'module() { printf "%s\\n" "$*" >> "$FAILURE_MARKER"; return 1; }\nsource "$1"',
+                "bash",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "PIC_FRONTIER_PROFILE": "frontier_minimum_supported",
+                "FAILURE_MARKER": str(failure_marker),
+            },
+        )
+        self.assertNotEqual(failed_module.returncode, 0)
+        self.assertEqual(
+            failure_marker.read_text(encoding="utf-8").splitlines(),
+            ["reset"],
+        )
+
     def test_reservation_rejects_wrong_account(self) -> None:
         self._write(
             "job.sh",
@@ -2134,9 +4231,12 @@ class SnapshotTests(unittest.TestCase):
 
     def test_concurrent_reservations_are_serialized(self) -> None:
         first = self._create_manifest()
+        second_submission_id = str(uuid.uuid4())
         self._write_config(
-            submission_id=str(uuid.uuid4()),
-            artifact_dir=str(self.pic_root / "runs" / "snapshot-two"),
+            submission_id=second_submission_id,
+            artifact_dir=str(
+                self.pic_root / "runs" / "f0_hipmpi_smoke" / second_submission_id
+            ),
         )
         second = self._create_manifest()
         identifiers = [str(uuid.uuid4()), str(uuid.uuid4())]
