@@ -140,8 +140,9 @@ The supported particle settings are:
 - `pusher = boris`: uses the magnetic Boris update and requires an `<mhd>`
   block.
 - `pusher = relativistic_hc`: selects the explicit opt-in relativistic
-  Higuera-Cary contract.  The current staged execution boundary is the
-  mechanically isolated `prescribed_test` harness only.
+  Higuera-Cary contract.  The prescribed analytical harness and experimental
+  solver-coupled ideal-MHD schema are selected explicitly and remain
+  mechanically separate.
 - `interpolation = tsc`: for `pusher = boris`, interpolates the cell-centered
   magnetic field with triangular-shaped-cloud weights.
 - `interpolation = trilinear`: for `pusher = boris`, uses full
@@ -211,9 +212,10 @@ alpha_s                   = 1.0
 
 This opt-in contract is intentionally narrow:
 
-- `c_model` is the explicit code-unit model light speed and must be finite and
-  strictly positive.  Choosing physical light speed or a reduced model speed
-  is a deliberate model decision; neither is inferred from legacy inputs.
+- For `prescribed_test`, `c_model` is the explicit code-unit model light speed
+  and must be finite and strictly positive.  Choosing physical light speed or
+  a reduced model speed is a deliberate model decision; neither is inferred
+  from legacy inputs.
 - `alpha_s` is a separate signed normalized force coefficient and must be
   finite and nonzero.  Both signs are accepted.  Its sign is not the legacy
   `IPM < 0` alignment sentinel.
@@ -236,7 +238,8 @@ This opt-in contract is intentionally narrow:
 - The superseded `relativistic_background` spelling is rejected explicitly.
   Select `relativistic_field_source` instead; no background mode is inferred.
 - Positive-cycle `relativistic_hc` runs execute only the prescribed-field
-  Higuera-Cary map.  Relativistic subcycling, restart, outputs, and sampled-MHD
+  Higuera-Cary map unless the separate experimental solver-coupled schema is
+  selected.  Relativistic subcycling, restart, outputs, and wider sampled-MHD
   coupling remain fail-closed until their owning qualification phases.
 - MPI, static mesh refinement, and adaptive mesh refinement remain fail-closed
   until their owning migration qualification phase.
@@ -245,11 +248,47 @@ This opt-in contract is intentionally narrow:
   keeps the Phase-3 MPI and refinement gather witnesses replayable but never
   authorizes particle push execution.
 
+The experimental solver-coupled parser/schema opening is:
+
+```text
+<time>
+evolution = dynamic
+
+<mhd>
+eos     = ideal
+rsolver = hlld
+
+<particles>
+pusher                         = relativistic_hc
+interpolation                  = trilinear
+relativistic_field_source      = mhd_ideal
+relativistic_temporal_sampling = frozen_tn
+c_model                        = 1.0
+```
+
+`mhd_ideal` is deliberately narrower than a general dynamic-MHD claim:
+
+- `relativistic_temporal_sampling = frozen_tn` selects the grid state at
+  `t^n`.  Spatial midpoint regathers do not establish time-centered or
+  stage-coupled MHD accuracy.
+- The selected field source is Newtonian ideal-MHD primitive velocity and
+  cell-centered `B`, with pointwise `cE = -u x B`.  It does not authorize CT
+  edge-EMF reuse.
+- The coupled sampled `B` and `cE` particle slots initialize deterministically
+  to zero and must be overwritten by the first gather.  Analytical `cE0x`,
+  `cE0y`, and `cE0z` inputs are prescribed-test-only and are rejected for
+  `mhd_ideal`.
+- The coupled selector retains the 3D strictly periodic, serial uniform-level,
+  exactly-one-MeshBlock, Newtonian ideal-MHD boundary.  It currently requires
+  normalized `c_model = 1.0` until acceleration-aware timestep qualification.
+  Restart, outputs, subcycling, MHD diffusion, source blocks, passive scalars,
+  and unqualified coupled modules remain rejected.
+
 Do not infer relativistic semantics from legacy `boris`, `IPM`, restart, or
-output fields.  The relativistic path appends authoritative `w`, prescribed
-`cE`, direct work, and signed `alpha_s` fields while retaining synchronized
+output fields.  The relativistic path appends authoritative `w`, sampled `cE`,
+direct work, and signed `alpha_s` fields while retaining synchronized
 legacy-prefix velocity shadows.  Restart schemas, relativistic outputs,
-subcycling, and sampled-MHD coupling remain gated follow-up work.
+subcycling, and wider sampled-MHD coupling remain gated follow-up work.
 
 `inputs/particles/cr_tracer_relativistic_contract.athinput` is the
 bounded parser and single-cycle smoke fixture.  Its default `nlim = 0` keeps
@@ -311,9 +350,10 @@ resolution.  This is a pusher/gather test, not an MHD evolution test.
 ## Legacy Particle Data
 
 Legacy `drift` and `boris` cosmic-ray tracer particles allocate 14 real fields
-and 3 integer fields.  The staged `relativistic_hc` prescribed-test path
-allocates 22 real fields and the same 3 integer fields.  Its appended fields
-are deliberately not serialized until the restart-schema phase.
+and 3 integer fields.  The staged `relativistic_hc` prescribed-test and
+experimental `mhd_ideal` paths allocate 22 real fields and the same 3 integer
+fields.  Their appended fields are deliberately not serialized until the
+restart-schema phase.
 
 Integer fields:
 
@@ -330,10 +370,10 @@ Real fields:
 - `IPDX`, `IPDY`, `IPDZ`: accumulated displacement.
 - `IPDB`: accumulated displacement parallel to the sampled magnetic field.
 
-Appended `relativistic_hc` prescribed-test real fields:
+Appended `relativistic_hc` real fields:
 
 - `IPWX`, `IPWY`, `IPWZ`: authoritative `w = gamma v` momentum state.
-- `IPCEX`, `IPCEY`, `IPCEZ`: mechanically isolated prescribed `cE` sample.
+- `IPCEX`, `IPCEY`, `IPCEZ`: prescribed or gathered `cE` sample.
 - `IPWORK`: accumulated direct sampled-field work quadrature.
 - `IPALPHA`: signed normalized force coefficient.
 
@@ -397,7 +437,7 @@ performance comparisons.
 ## Legacy Outputs
 
 The following particle outputs remain available for legacy `drift` and
-`boris`.  The staged prescribed-test `relativistic_hc` path currently rejects
+`boris`.  Both staged `relativistic_hc` field-source paths currently reject
 every output block before initial output emission; relativistic output
 semantics remain gated follow-up work.
 

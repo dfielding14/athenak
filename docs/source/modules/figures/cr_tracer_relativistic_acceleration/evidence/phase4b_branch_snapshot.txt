@@ -1,0 +1,125 @@
+branch=feature/CR_tracers_relativistic_acceleration
+head=02f85f2a1b45b7d9f93bff42ac24ed0b691f5ef8
+upstream=02f85f2a1b45b7d9f93bff42ac24ed0b691f5ef8
+origin_tip=02f85f2a1b45b7d9f93bff42ac24ed0b691f5ef8
+
+submodules:
+ 08ceff92bcf3a828844480bc1e6137eb74028517 kokkos (post-formating-9968-g08ceff92b)
+
+status_short:
+ M docs/source/modules/cr_tracer_relativistic_acceleration_ledger.md
+ M src/main.cpp
+ M src/particles/README.md
+ M src/particles/particles.cpp
+ M src/particles/particles.hpp
+ M src/particles/particles_pushers.cpp
+ M src/particles/particles_tasks.cpp
+ M src/pgen/part_random.cpp
+ M tst/test_suite/particles/test_particles_cr_relativistic_contract_cpu.py
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4b_preregistered_criteria.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_accuracy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_accuracy_mpi_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_branch_snapshot.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_build_commands.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_contract_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_contract_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_contract_configure.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_configure.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_constructor_smoke.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_debug_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_debug_analyzer.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_debug_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_debug_configure.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_mpi_rejection.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_mpi_rejection_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_mpi_rejection_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_mpi_rejection_configure.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_runtime_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_runtime_analyzer.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_runtime_cases/
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_runtime_metrics.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_evidence_sha256.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_fail_closed_negative_controls.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_full_mesh_restart_rejection.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_full_mesh_restart_source.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_git_diff_check.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_legacy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_legacy_mpi_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_oracle_negative_controls.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_parser_contract.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_phase4a_rebuild.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_phase4a_runtime_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_phase4a_runtime_analyzer.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_phase4a_runtime_cases/
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_phase4a_runtime_configure.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_phase4a_runtime_metrics.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_rebound_criteria_freeze_sha256.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_restart_rejection_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_restart_rejection_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_restart_rejection_configure.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_style.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_untracked_whitespace_check.log
+?? inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput
+?? scripts/particles/cr_relativistic_coupled_oracle_negative_controls.py
+?? scripts/particles/cr_relativistic_coupled_runtime_inspect.py
+?? src/pgen/unit_tests/cr_relativistic_coupled_runtime_test.cpp
+
+ignored_status_short:
+ M docs/source/modules/cr_tracer_relativistic_acceleration_ledger.md
+ M src/main.cpp
+ M src/particles/README.md
+ M src/particles/particles.cpp
+ M src/particles/particles.hpp
+ M src/particles/particles_pushers.cpp
+ M src/particles/particles_tasks.cpp
+ M src/pgen/part_random.cpp
+ M tst/test_suite/particles/test_particles_cr_relativistic_contract_cpu.py
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4b_preregistered_criteria.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_accuracy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_accuracy_mpi_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_branch_snapshot.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_build_commands.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_contract_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_contract_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_contract_configure.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_configure.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_constructor_smoke.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_debug_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_debug_analyzer.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_debug_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_debug_configure.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_mpi_rejection.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_mpi_rejection_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_mpi_rejection_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_mpi_rejection_configure.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_runtime_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_runtime_analyzer.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_runtime_cases/
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_runtime_metrics.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_evidence_sha256.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_fail_closed_negative_controls.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_full_mesh_restart_rejection.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_full_mesh_restart_source.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_git_diff_check.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_legacy_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_legacy_mpi_cpu.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_oracle_negative_controls.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_parser_contract.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_phase4a_rebuild.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_phase4a_runtime_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_phase4a_runtime_analyzer.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_phase4a_runtime_cases/
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_phase4a_runtime_configure.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_phase4a_runtime_metrics.json
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_rebound_criteria_freeze_sha256.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_restart_rejection_CMakeCache.txt
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_restart_rejection_build.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_restart_rejection_configure.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_style.log
+?? docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_untracked_whitespace_check.log
+?? inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput
+?? scripts/particles/cr_relativistic_coupled_oracle_negative_controls.py
+?? scripts/particles/cr_relativistic_coupled_runtime_inspect.py
+?? src/pgen/unit_tests/cr_relativistic_coupled_runtime_test.cpp

@@ -33,6 +33,20 @@ struct ParticleBField {
 };
 
 KOKKOS_INLINE_FUNCTION
+bool IsCellCenteredTrilinearCoordinateSupported(Real x, Real xmin, Real dx,
+                                                int is, int nx, int ng) {
+  if (!relativistic::IsFinite(x) || !relativistic::IsFinite(xmin) ||
+      !relativistic::IsFinite(dx) || dx <= 0.0) {
+    return false;
+  }
+  const Real lower = xmin + (0.5 - static_cast<Real>(is))*dx;
+  const Real upper =
+      xmin + (static_cast<Real>(nx + 2*ng - is) - 0.5)*dx;
+  return relativistic::IsFinite(lower) && relativistic::IsFinite(upper) &&
+         x >= lower && x < upper;
+}
+
+KOKKOS_INLINE_FUNCTION
 int StepsForRatio(Real ratio) {
   if (ratio <= 1.0) {return 1;}
   int n = static_cast<int>(ratio);
@@ -375,6 +389,158 @@ void RunRelativisticPrescribedStep(DvceArray2D<Real> &pr, int npart, Real c_mode
   if (failure_h(0) != 0) {FatalRelativisticPush(failure_h(0));}
 }
 
+void RunRelativisticMHDIdealStep(MeshBlockPack *pmy_pack, DvceArray2D<Real> &pr,
+                                 DvceArray2D<int> &pi, int npart, int gids, int is,
+                                 int js, int ks, bool multi_d, bool three_d,
+                                 Real c_model, Real dt) {
+  auto mbsize = pmy_pack->pmb->mb_size;
+  auto w0 = pmy_pack->pmhd->w0;
+  auto bcc0 = pmy_pack->pmhd->bcc0;
+  int nmb = pmy_pack->nmb_thispack;
+  int nx1 = pmy_pack->pmesh->mb_indcs.nx1;
+  int nx2 = pmy_pack->pmesh->mb_indcs.nx2;
+  int nx3 = pmy_pack->pmesh->mb_indcs.nx3;
+  int ng = pmy_pack->pmesh->mb_indcs.ng;
+  DvceArray1D<int> failure("part_relativistic_mhd_ideal_push_failure", 1);
+  Kokkos::deep_copy(failure, 0);
+  par_for("part_relativistic_hc_mhd_ideal",DevExeSpace(),0,(npart-1),
+  KOKKOS_LAMBDA(const int p) {
+    relativistic::Vector3 w_old{pr(IPWX,p), pr(IPWY,p), pr(IPWZ,p)};
+    relativistic::Vector3 velocity_old{0.0, 0.0, 0.0};
+    Real gamma_old = 0.0;
+    auto state_status =
+        relativistic::VelocityFromW(w_old, c_model, velocity_old, gamma_old);
+    if (state_status != relativistic::StateStatus::success) {
+      Kokkos::atomic_max(&failure(0), static_cast<int>(state_status));
+      return;
+    }
+
+    Real half_dt = 0.0;
+    relativistic::Vector3 x_old{pr(IPX,p), pr(IPY,p), pr(IPZ,p)};
+    relativistic::Vector3 old_half_drift{0.0, 0.0, 0.0};
+    relativistic::Vector3 x_mid{0.0, 0.0, 0.0};
+    if (!relativistic::CheckedProduct(0.5, dt, half_dt) ||
+        !relativistic::CheckedScale(half_dt, velocity_old, old_half_drift) ||
+        !relativistic::CheckedAdd(x_old, old_half_drift, x_mid)) {
+      Kokkos::atomic_max(&failure(0), 200);
+      return;
+    }
+
+    int m = pi(PGID,p) - gids;
+    if (m < 0 || m >= nmb) {
+      Kokkos::atomic_max(&failure(0), 207);
+      return;
+    }
+    if (!IsCellCenteredTrilinearCoordinateSupported(
+            x_mid.x, mbsize.d_view(m).x1min, mbsize.d_view(m).dx1, is, nx1,
+            ng) ||
+        (multi_d && !IsCellCenteredTrilinearCoordinateSupported(
+                        x_mid.y, mbsize.d_view(m).x2min, mbsize.d_view(m).dx2,
+                        js, nx2, ng)) ||
+        (three_d && !IsCellCenteredTrilinearCoordinateSupported(
+                       x_mid.z, mbsize.d_view(m).x3min, mbsize.d_view(m).dx3,
+                       ks, nx3, ng))) {
+      Kokkos::atomic_max(&failure(0), 208);
+      return;
+    }
+    auto stencil = ConstructCellCenteredTrilinearStencil(
+        mbsize, m, x_mid.x, x_mid.y, x_mid.z, is, js, ks, multi_d, three_d);
+    if (stencil.i0 < 0 || stencil.i0 + 1 >= nx1 + 2*ng ||
+        stencil.j0 < 0 || stencil.j0 + stencil.nj - 1 >= nx2 + 2*ng ||
+        stencil.k0 < 0 || stencil.k0 + stencil.nk - 1 >= nx3 + 2*ng) {
+      Kokkos::atomic_max(&failure(0), 208);
+      return;
+    }
+    NewtonianCellCenteredFields fields;
+    fields.u = stencil.Gather(w0, m, IVX, IVY, IVZ);
+    fields.b = GatherCellCenteredB(stencil, bcc0, m);
+    relativistic::Vector3 fluid_velocity{
+        fields.u.x, fields.u.y, fields.u.z};
+    relativistic::Vector3 b{fields.b.x, fields.b.y, fields.b.z};
+    Real fluid_speed = relativistic::ScaledNorm3(fluid_velocity);
+    if (!relativistic::IsFinite(fluid_velocity) || !relativistic::IsFinite(b) ||
+        !relativistic::IsFinite(fluid_speed) || fluid_speed >= c_model) {
+      Kokkos::atomic_max(&failure(0), 201);
+      return;
+    }
+    relativistic::Vector3 uxB{0.0, 0.0, 0.0};
+    relativistic::Vector3 cE{0.0, 0.0, 0.0};
+    if (!relativistic::CheckedCross(fluid_velocity, b, uxB) ||
+        !relativistic::CheckedScale(-1.0, uxB, cE)) {
+      Kokkos::atomic_max(&failure(0), 202);
+      return;
+    }
+
+    relativistic::PushResult result;
+    auto push_status = relativistic::HigueraCaryPush(
+        w_old, cE, b, pr(IPALPHA,p), c_model, dt, result);
+    if (push_status != relativistic::PushStatus::success) {
+      Kokkos::atomic_max(&failure(0), 100 + static_cast<int>(push_status));
+      return;
+    }
+
+    relativistic::Vector3 new_half_drift{0.0, 0.0, 0.0};
+    relativistic::Vector3 x_new{0.0, 0.0, 0.0};
+    relativistic::Vector3 negative_x_old{0.0, 0.0, 0.0};
+    relativistic::Vector3 displacement{0.0, 0.0, 0.0};
+    relativistic::Vector3 displacement_old{pr(IPDX,p), pr(IPDY,p), pr(IPDZ,p)};
+    relativistic::Vector3 displacement_new{0.0, 0.0, 0.0};
+    Real work_new = 0.0;
+    if (!relativistic::CheckedScale(half_dt, result.velocity, new_half_drift) ||
+        !relativistic::CheckedAdd(x_mid, new_half_drift, x_new) ||
+        !relativistic::CheckedScale(-1.0, x_old, negative_x_old) ||
+        !relativistic::CheckedAdd(x_new, negative_x_old, displacement) ||
+        !relativistic::CheckedAdd(displacement_old, displacement, displacement_new) ||
+        !relativistic::CheckedScalarAdd(pr(IPWORK,p), result.work, work_new)) {
+      Kokkos::atomic_max(&failure(0), 203);
+      return;
+    }
+    Real bmag = relativistic::ScaledNorm3(b);
+    Real db_new = pr(IPDB,p);
+    if (!relativistic::IsFinite(bmag) || !relativistic::IsFinite(db_new)) {
+      Kokkos::atomic_max(&failure(0), 204);
+      return;
+    }
+    if (bmag > 0.0) {
+      Real displacement_dot_b = 0.0;
+      Real db_increment = 0.0;
+      if (!relativistic::CheckedDot(displacement, b, displacement_dot_b)) {
+        Kokkos::atomic_max(&failure(0), 205);
+        return;
+      }
+      db_increment = displacement_dot_b/bmag;
+      if (!relativistic::CheckedScalarAdd(pr(IPDB,p), db_increment, db_new)) {
+        Kokkos::atomic_max(&failure(0), 206);
+        return;
+      }
+    }
+
+    state_status =
+        relativistic::StoreAuthoritativeWAndSynchronizeVelocityShadow(
+            pr, p, result.w, c_model);
+    if (state_status != relativistic::StateStatus::success) {
+      Kokkos::atomic_max(&failure(0), 300 + static_cast<int>(state_status));
+      return;
+    }
+    pr(IPBX,p) = b.x;
+    pr(IPBY,p) = b.y;
+    pr(IPBZ,p) = b.z;
+    pr(IPCEX,p) = cE.x;
+    pr(IPCEY,p) = cE.y;
+    pr(IPCEZ,p) = cE.z;
+    pr(IPWORK,p) = work_new;
+    pr(IPX,p) = x_new.x;
+    pr(IPY,p) = x_new.y;
+    pr(IPZ,p) = x_new.z;
+    pr(IPDX,p) = displacement_new.x;
+    pr(IPDY,p) = displacement_new.y;
+    pr(IPDZ,p) = displacement_new.z;
+    pr(IPDB,p) = db_new;
+  });
+  auto failure_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), failure);
+  if (failure_h(0) != 0) {FatalRelativisticPush(failure_h(0));}
+}
+
 } // namespace
 
 //----------------------------------------------------------------------------------------
@@ -569,7 +735,16 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
           break;
 
         case ParticlesPusher::relativistic_hc:
-          RunRelativisticPrescribedStep(prtcl_rdata, npart, c_model, dt_sub);
+          switch (relativistic_field_source) {
+            case RelativisticFieldSource::prescribed_test:
+              RunRelativisticPrescribedStep(prtcl_rdata, npart, c_model, dt_sub);
+              break;
+            case RelativisticFieldSource::mhd_ideal:
+              RunRelativisticMHDIdealStep(
+                  pmy_pack, prtcl_rdata, prtcl_idata, npart, gids, is, js, ks,
+                  multi_d, three_d, c_model, dt_sub);
+              break;
+          }
           break;
 
         default:

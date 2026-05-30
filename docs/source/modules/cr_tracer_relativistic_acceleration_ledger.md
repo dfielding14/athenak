@@ -25,12 +25,12 @@ The statuses in this initial draft are intentionally conservative:
 | --- | --- | --- |
 | Ledger date | `2026-05-30` | Record the date of each accepted update. |
 | Working branch | `feature/CR_tracers_relativistic_acceleration` | Stop if the working branch changes unexpectedly. |
-| Working branch HEAD at latest accepted commit | `812aef13c636e5647779a5b1ca506bc6f4489890` | Refresh after every accepted commit. |
+| Working branch HEAD at latest accepted commit | `02f85f2a1b45b7d9f93bff42ac24ed0b691f5ef8` | Refresh after every accepted commit. |
 | Frozen feature base | `64a4d1be8da1c22d1328cc47280195b3747fa0ab` from `feature/CR_tracers_followup_architecture` | Change only through an accepted `DR-000` update. |
 | Intended eventual integration target | `origin/development` at `c6a73b08e60807f8b925164c5e7edd5cb820c8ae` | Refresh the target SHA and merge-tree audit after target updates and before handoff. |
-| Current implementation phase | `Phase 4a: mechanically isolated prescribed-test relativistic push` | Keep solver coupling closed until `CP-3 Minimal Serial`, `RG-005`, and later `CP-4 Solver Coupling`. |
-| Allowed write manifest | Exact DR-026 and DR-027 Phase-4a surfaces: `src/athena.hpp`, `src/particles/particles.cpp`, `src/pgen/part_random.cpp`, `src/particles/particles_pushers.cpp`, `src/particles/README.md`, narrowly scoped invariant and pusher helpers, prescribed-field kernel and runtime tests, decks, criteria, analyzer, Phase-4a evidence, and this ledger only | Keep restart, outputs, MHD tasks, AMR infrastructure, live-grid coupling, CT EMF reuse, subcycling, and outer timestep unchanged. |
-| Last accepted checkpoint | `RG-005 PROCEED` and `CP-3 Minimal Serial`: prescribed-test HC package accepted after corrected rebound evidence and three independent seal reviews | Record each milestone commit before opening the next phase. |
+| Current implementation phase | `Phase 5: acceleration-aware subcycling and outer timestep refresh` | Keep the temporal claim explicitly first-order for evolving fields until a separately reviewed stage-coupled widening exists. |
+| Allowed write manifest | Phase-5 surfaces only after the Phase-4b milestone commit: `src/particles/particles_pushers.cpp`, `src/particles/particles_tasks.cpp`, `src/pgen/part_random.cpp`, timestep-focused tests and evidence, and conditionally `src/mesh/mesh.cpp` after explicit ownership review | Keep restart serialization, outputs, MHD stage implementations, AMR infrastructure, CT EMF reuse, and wider migration qualification unchanged. |
+| Last accepted checkpoint | `CP-4 Solver Coupling PROCEED`: experimental frozen-`t^n` ideal-MHD opening accepted after corrected rebound evidence, orientation-sensitive oracle hardening, and final sealed independent recheck | Record each milestone commit before opening the next phase. |
 | Open blocking findings | Downstream `BF-009`, `BF-014`, backend qualification, restart, output, solver-coupling, subcycling, timestep-refresh, and migration obligations remain open for their owning phases | Keep the live list current.  Do not proceed while a blocker for the next edit set remains open. |
 | CPU/MPI qualification status | Phase-4a accepted serial scope: parser `92 passed`; prescribed runtime `38/38`; legacy CPU plus accuracy `32 passed`; legacy MPI CPU plus accuracy `9 passed`; Phase-3 diagnostic-only serial and MPI replay ladder passes; style `2 passed`; production MPI/SMR/AMR remains deliberately fail-closed; single precision remains blocked by inherited repository narrowing errors | Rerun and archive qualification at each accepted milestone. |
 | GPU qualification status | Not started; unavailable on this workstation | GPU qualification is optional for `MERGE READY` on this workstation, but it remains a separate unqualified residual risk.  Do not claim `GPU QUALIFIED` without accelerator evidence on an accepted SHA. |
@@ -2751,3 +2751,295 @@ before the fixes are accepted.
   - do not reopen `DR-003`;
   - open experimental Phase 4b only as a separate grid-frozen-at-`t^n`
     solver-coupling increment with its own preregistered evidence and reviewers.
+
+## DR-028: Experimental Solver-Coupled Frozen-`t^n` Ideal-MHD Path
+
+- Date: 2026-05-30
+- Status: selected for bounded Phase-4b implementation after `RG-005 PROCEED`
+  and `CP-3 Minimal Serial`.
+- Question: what is the smallest honest solver-coupled acceleration increment
+  that can follow the mechanically isolated prescribed-field checkpoint?
+- Options considered:
+  1. reuse CT edge EMFs or add a stage-centered MHD coupling immediately;
+  2. gather the repaired Newtonian primitive velocity and cell-centered
+     magnetic field from the live grid at the particle spatial midpoint,
+     construct checked pointwise `cE = -u_fluid x B`, and freeze that sample
+     for one Higuera-Cary update;
+  3. leave all live-grid execution closed until the later subcycling and
+     timestep redesigns are complete.
+- Selected option: option 2.
+- Reasoning:
+  - the accepted Phase-3 trilinear helper already applies one stencil to
+    `u_fluid` and cell-centered `B`;
+  - the accepted Higuera-Cary helper already consumes a single sampled field
+    tuple and commits only after candidate validation;
+  - this adds the missing live ideal-MHD force without changing CT ownership,
+    MHD RK stages, restart bytes, outputs, or relativistic subcycling;
+  - explicit `SaveMHDState -> Push` task dependency documents the chosen
+    repaired-grid `t^n` scheduling boundary instead of relying on insertion
+    order;
+  - dynamic evolving-field accuracy is expected to be first order globally
+    under this temporal model, even though the spatial drift-kick-drift update
+    remains midpoint based.
+- Runtime contract:
+  - select
+    `<particles>/relativistic_field_source = mhd_ideal` and
+    `<particles>/relativistic_temporal_sampling = frozen_tn`;
+  - require dynamic, Newtonian, three-dimensional, strictly periodic,
+    serial, uniform-level, passive ideal-gas MHD with trilinear gather;
+  - reject diffusion, source blocks, CT-EMF reuse aliases, restart, outputs,
+    and relativistic subcycling until their owning phases qualify them;
+  - preserve `prescribed_test` as a mechanically separate kinematic harness.
+- Atomicity requirement:
+  - gather and validate live `u_fluid` and `B`;
+  - construct `cE` through checked arithmetic;
+  - compute the full Higuera-Cary and drift-kick-drift candidate;
+  - commit sampled `B`, sampled `cE`, authoritative `w`, velocity shadows,
+    explicit work, positions, displacement, and `IPDB` only after every check
+    succeeds.
+- Alternatives retained:
+  - stage-coupled or time-centered reconstruction remains a separate widening
+    if later physics requirements demand second-order evolving-field accuracy;
+  - CT EMF reuse remains excluded because edge-centered solver EMFs are not
+    the selected particle-facing pointwise ideal field;
+  - production MPI, SMR, AMR, acceleration-aware subcycling, and outer
+    timestep refresh remain deferred to their dedicated phases.
+- Inflection point:
+  - stop and reassess before `CP-4 Solver Coupling` if the live-grid poison
+    test does not prove overwrite, the cancellation invariant fails, or a
+    manufactured evolving-field ladder does not show the preregistered
+    frozen-`t^n` first-order trend.
+
+### DR-028 Independent Scheduling-Audit Corrections
+
+- Date: 2026-05-30
+- Status: accepted corrections before Phase-4b qualification.
+- Findings:
+  1. the first parser patch introduced
+     `<particles>/relativistic_mhd_temporal_mode`, which drifted from the
+     preregistered `<particles>/relativistic_temporal_sampling` spelling;
+  2. rejecting `<mhd_srcterms>` alone did not reject
+     `<problem>/user_srcs = true`, which executes through the MHD source task;
+  3. the particle constructor rejects legacy particle-only restart input but
+     cannot observe command-line full-mesh `-r` restart selection;
+  4. the live gather indexed `PGID - gids` without a local-range guard.
+- Corrections:
+  - use only `<particles>/relativistic_temporal_sampling = frozen_tn`;
+  - reject the unregistered temporal spelling rather than treating it as an
+    alias;
+  - reject user source enrollment and orphan source blocks in the bounded
+    coupled contract;
+  - reopen `src/main.cpp` narrowly to reject full-mesh restart selection for
+    `relativistic_hc` before mesh construction;
+  - fail closed before a live gather if a particle does not map to a local
+    MeshBlock index.
+- Alternative retained:
+  - restart support remains Phase-6 work; this correction rejects unsupported
+    state restoration and does not introduce serialization behavior.
+
+## RG-005 Phase-4b Candidate: Does The Experimental Frozen-`t^n` Coupling Merit CP-4?
+
+- Date: 2026-05-30
+- Status: candidate `PROCEED`; fresh physics, test-adversary, and
+  integration-boundary done-claim reviews in progress.
+- Scope reviewed:
+  - explicit `mhd_ideal` field source with one accepted
+    `relativistic_temporal_sampling = frozen_tn` selector;
+  - live primitive-velocity and cell-centered-`B` midpoint gather;
+  - checked pointwise `cE = -u_fluid x B`;
+  - explicit `SaveMHDState -> Particles::Push` scheduling edge;
+  - atomic sampled-field and accepted-state commit;
+  - fail-closed serial uniform-level, three-dimensional, strictly periodic,
+    Newtonian ideal-MHD execution envelope.
+- Preregistered coupled-runtime evidence:
+  - all `20/20` Phase-4b criteria pass;
+  - stale sampled-field poison overwrite error is `0.0`;
+  - prescribed-versus-coupled parity error is `0.0`;
+  - `cE dot B` error is `0.0`;
+  - fluid-velocity cancellation momentum and trajectory errors are
+    `2.7755575615628914e-17` and `3.602423855278284e-18`;
+  - acceleration and deceleration direct-work closure errors are
+    `1.6940658945086007e-21` and `6.071532165918825e-17`;
+  - spatial-midpoint field error is `3.469446951953614e-17`, with a
+    `0.003922322702763681` separation from stale old-position sampling;
+  - the dynamic-MHD frozen-`t^n` ladder measures slope
+    `0.9872005890039331` and finest error `4.726247195889718e-06`.
+- Temporal-qualification honesty:
+  - the accepted ladder is a periodic dynamic-MHD self-convergence test
+    against a finer reference run;
+  - it is not a closed-form manufactured evolving-field solution;
+  - therefore it supports only the experimental first-order frozen-`t^n`
+    temporal classification and does not justify stage-centered, nonlinear
+    production-science, or broad dynamic-MHD accuracy claims.
+- Parser and retained prescribed evidence:
+  - corrected parser matrix passes `110` cases;
+  - prescribed Phase-4a production analyzer remains `38/38`.
+- Review-driven corrections already applied:
+  - normalized the temporal-selector spelling;
+  - rejected obsolete aliases, user source enrollment, orphan source blocks,
+    and full-mesh restart;
+  - added a local MeshBlock-index guard before live gather;
+  - added a defensive standalone-MHD task dependency guard.
+- Scope still closed:
+  - relativistic subcycling and outer-timestep refresh;
+  - restart serialization and outputs;
+  - positive-cycle MPI, SMR, AMR, GPU, and scientific production-readiness
+    claims.
+
+## DR-029: Phase-4b Rebound After Independent Done-Claim Review
+
+- Date: 2026-05-30
+- Status: corrections implemented; rebound evidence replay and fresh independent
+  review pending.
+- Trigger: the first Phase-4b done-claim review returned `HOLD`.
+- Findings:
+  1. the coupled midpoint gather could index beyond the allocated ghost stencil
+     when the particle midpoint left the supported local range;
+  2. same-level multi-MeshBlock ownership and periodic-wrap behavior had not
+     been qualified for solver-coupled live gathers;
+  3. the coupled timestep still inherited a legacy cap and had not qualified
+     arbitrary `c_model`;
+  4. the original evolving-field ladder used fine-reference self convergence
+     rather than an independently integrated manufactured field;
+  5. the stale-field poison criterion did not prove at runtime that poisoned
+     per-particle fields existed before the live gather overwrote them;
+  6. explicit negative probes were missing for local-GID, superluminal-fluid,
+     and stencil-range rejection;
+  7. two README passages still described `prescribed_test` as the only
+     relativistic allocation and output-rejection path;
+  8. the first rebound stencil guard still constructed integer stencil
+     indices before rejecting an extreme finite midpoint coordinate;
+  9. the first rebound one-MeshBlock fence unintentionally narrowed the
+     retained `prescribed_test` Phase-4a surface;
+  10. the manufactured source exception trusted an input-controlled
+      `pgen_name` instead of the compiled test-harness identity.
+  11. first-order manufactured convergence did not distinguish the intended
+      frozen-`t^n` left-end sample from an incorrect right-end sample.
+- Options considered:
+  1. qualify migration, wrap, arbitrary-`c_model`, and acceleration-aware
+     timesteps immediately inside Phase 4b;
+  2. narrow Phase 4b to one MeshBlock and coupled `c_model = 1.0`, add a
+     pre-gather stencil guard, and defer those widenings to their owning
+     phases;
+  3. close solver coupling again and return to the Phase-4a prescribed-only
+     checkpoint.
+- Selected option: option 2.
+- Reasoning:
+  - one MeshBlock removes the unqualified same-level ownership transition
+    without discarding the live-grid force path;
+  - coupled `c_model = 1.0` keeps the opening normalized until Phase 5 replaces
+    the inherited timestep model with acceleration-aware bounds;
+  - an explicit stencil-range guard fails closed before dereferencing live MHD
+    arrays;
+  - this preserves Phase 4b as a bounded solver-coupling checkpoint rather than
+    importing Phase-5 and Phase-8 obligations prematurely.
+- Implemented corrections:
+  - require exactly one MeshBlock for positive-cycle solver-coupled
+    `relativistic_field_source = mhd_ideal` execution until Phase-8 migration
+    qualification;
+  - require coupled `<particles>/c_model = 1.0` until the Phase-5 timestep
+    redesign;
+  - validate local `PGID - gids` and the complete cell-centered trilinear
+    coordinate range before constructing integer stencil indices or gathering
+    live-grid fields;
+  - scope the exactly-one-MeshBlock execution fence to `mhd_ideal`, preserving
+    the retained same-level multi-MeshBlock `prescribed_test` harness;
+  - bind the manufactured source exception to the compiled
+    `unit_tests/cr_relativistic_coupled_runtime_test` harness as well as its
+    runtime pgen selector;
+  - add a test-generator-only manufactured MHD source that evolves uniform
+    fluid velocity in time, while the analyzer compares production results
+    against an independent RK4 integration;
+  - emit and consume a runtime pre-push witness showing poisoned stored `B` and
+    `cE` values before live-grid overwrite;
+  - emit final-live gathered fields under explicit `final_live_*` names and
+    bind `final_live_cE_dot_b`;
+  - bind a one-step manufactured orientation witness: the committed particle
+    `cE` and momentum must match the pre-source `t^n` field, the final live
+    field must match the separately evolved right-end state, and a deliberate
+    right-end oracle must be rejected;
+  - add runtime probes for status `207`, `201`, ordinary status `208`, and
+    positive and negative extreme finite-coordinate status `208` preflights;
+  - correct the README allocation and output wording.
+- Rebound criteria:
+  - the reviewer-rebound surface now contains `34` criteria binding `32`
+    unique metrics;
+  - the criteria file is relabeled explicitly as a post-HOLD reviewer-rebound
+    freeze before corrected replay rather than as the original pre-harness
+    preregistration;
+  - the original periodic self-convergence ladder remains as a compatibility
+    witness;
+  - the independent manufactured ladder is the controlling evolving-field
+    temporal witness.
+- Alternatives retained:
+  - acceleration-aware subcycling and timestep refresh remain Phase-5 work;
+  - restart schema remains Phase-6 work;
+  - explicit outputs remain Phase-7 work;
+  - same-level migration, periodic wrap, MPI, SMR, and AMR remain Phase-8
+    work.
+- Inflection point:
+  - do not accept `CP-4 Solver Coupling` unless a fresh independent reviewer
+  replay verifies the narrowed parser contract, the manufactured ladder, all
+  five runtime negative probes, the executable restart fence, and the
+  direct evidence seal.
+
+## CP-4 Solver Coupling: Experimental Frozen-`t^n` Ideal-MHD Opening
+
+- Date: 2026-05-30
+- Verdict: `PROCEED`
+- Accepted scope:
+  - one-way passive Newtonian ideal-MHD sampling only;
+  - explicit `relativistic_field_source = mhd_ideal`;
+  - explicit `relativistic_temporal_sampling = frozen_tn`;
+  - live primitive velocity and cell-centered magnetic field gathered at the
+    particle spatial midpoint from the repaired `t^n` state;
+  - pointwise normalized `cE = -u_fluid x B`;
+  - serial, uniform-level, exactly-one-MeshBlock, 3-D strictly periodic
+    execution with normalized `c_model = 1.0`.
+- Accepted evidence:
+  - `34/34` rebound criteria bind `32` unique metrics and pass;
+  - the one-step manufactured orientation witness binds committed sampled
+    `cE` to `t^n` with error `2.4747374745180785e-18`, committed momentum with
+    error `0.0`, final-live right-end `cE` with error
+    `1.0842021724855044e-19`, and a nontrivial left-versus-right separation of
+    `0.0035902646142032483`;
+  - a deliberate right-end oracle is rejected with sampled-field mismatch
+    `3.590265e-03`;
+  - the independent evolving-field RK4 ladder measures slope
+    `0.9902663432088565` and finest error `1.0848032296554225e-05`;
+  - multi-cycle accumulated-work closure error is
+    `1.4405658740543337e-16`;
+  - release and Kokkos bounds-check coupled analyzers pass;
+  - parser contract replay passes `114` cases;
+  - retained prescribed Phase-4a analyzer passes;
+  - fixed-energy compatibility regressions pass CPU `20 + 12`, MPI CPU
+    `4 + 5`, style `2`, and whitespace checks;
+  - the executable two-rank coupled fence and full-mesh-restart fence reject
+    unsupported paths;
+  - status probes reject invalid GID `207`, superluminal fluid `201`,
+    ordinary stencil range `208`, and positive and negative extreme finite
+    coordinates `208`;
+  - the final path-sorted Phase-4b direct evidence seal authenticates `160`
+    files and verifies cleanly.
+- Independent review disposition:
+  - initial three-reviewer `HOLD` exposed the unsafe integer conversion,
+    overbroad one-MeshBlock fence, spoofable manufactured-source exception,
+    evidence-provenance gaps, and missing cumulative controls;
+  - post-rebound review exposed replay-packaging gaps and the temporal-
+    orientation oracle gap;
+  - the final narrow reviewer returned `PROCEED` after verifying the sealed
+    package and orientation-sensitive mutation rejection.
+- Deferred residual risks:
+  - the shared trilinear helper still depends on callers to preflight
+    representable coordinates;
+  - relativistic subcycling and outer timestep refresh remain Phase-5 work;
+  - restart remains Phase-6 work;
+  - diagnostics remain Phase-7 work;
+  - same-level migration, periodic wrap, MPI, SMR, and AMR remain Phase-8
+    work;
+  - GPU and public documentation overlay remain Phase-9 work.
+- Next permitted edit set:
+  - Phase 5 only: `src/particles/particles_pushers.cpp`,
+    `src/particles/particles_tasks.cpp`, `src/pgen/part_random.cpp`,
+    timestep-focused tests and evidence, and conditionally
+    `src/mesh/mesh.cpp` after an explicit ownership review.

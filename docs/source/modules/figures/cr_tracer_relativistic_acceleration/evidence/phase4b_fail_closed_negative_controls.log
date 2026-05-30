@@ -1,0 +1,70 @@
+=== failure_invalid_gid ===
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=7.028750e-04 cycle=0 time=0.000000e+00 dt=5.000000e-02
+### FATAL ERROR in /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/particles/particles_pushers.cpp at line 292
+Particle pusher 'relativistic_hc' failed with status 207
+
+=== failure_superluminal_fluid ===
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=6.435830e-04 cycle=0 time=0.000000e+00 dt=5.000000e-02
+### FATAL ERROR in /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/particles/particles_pushers.cpp at line 292
+Particle pusher 'relativistic_hc' failed with status 201
+
+=== failure_stencil_guard ===
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=9.093340e-04 cycle=0 time=0.000000e+00 dt=5.000000e-02
+### FATAL ERROR in /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/particles/particles_pushers.cpp at line 292
+Particle pusher 'relativistic_hc' failed with status 208
+
+=== failure_extreme_stencil_guard ===
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=6.297080e-04 cycle=0 time=0.000000e+00 dt=5.000000e-02
+### FATAL ERROR in /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/particles/particles_pushers.cpp at line 292
+Particle pusher 'relativistic_hc' failed with status 208
+
+=== failure_negative_extreme_stencil_guard ===
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=1.240583e-03 cycle=0 time=0.000000e+00 dt=5.000000e-02
+### FATAL ERROR in /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/particles/particles_pushers.cpp at line 292
+Particle pusher 'relativistic_hc' failed with status 208
+

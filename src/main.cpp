@@ -273,6 +273,21 @@ int main(int argc, char *argv[]) {
     pinput->CheckBlockNames();
   }
   pinput->ModifyFromCmdline(argc, argv);
+  if (res_flag && pinput->DoesBlockExist("particles") &&
+      pinput->DoesParameterExist("particles","pusher") &&
+      pinput->GetString("particles","pusher").compare("relativistic_hc") == 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Particle pusher 'relativistic_hc' does not support "
+              << "full mesh restart input until the relativistic restart schema is "
+              << "qualified" << std::endl;
+    if (res_flag) restartfile.Close(single_file_per_rank);
+    delete pinput;
+    Kokkos::finalize();
+#if MPI_PARALLEL_ENABLED
+    MPI_Finalize();
+#endif
+    return(EXIT_FAILURE);
+  }
 
   // Dump input parameters and quit if code was run with -n option.
   if (narg_flag) {

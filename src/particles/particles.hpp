@@ -28,7 +28,10 @@ enum class ParticlesPusher {drift, leap_frog, lagrangian_tracer, lagrangian_mc,
 enum class ParticleInterpolation {lin_legacy, trilinear, tsc};
 
 // constants that enumerate relativistic CR field-source options
-enum class RelativisticFieldSource {prescribed_test};
+enum class RelativisticFieldSource {prescribed_test, mhd_ideal};
+
+// constants that enumerate solver-coupled relativistic CR temporal options
+enum class RelativisticTemporalSampling {none, frozen_tn};
 
 // constants that enumerate ParticleTypes
 enum class ParticleType {cosmic_ray};
@@ -105,6 +108,7 @@ class Particles {
   ParticlesPusher pusher;
   ParticleInterpolation interpolation;
   RelativisticFieldSource relativistic_field_source;
+  RelativisticTemporalSampling relativistic_temporal_sampling;
 
   // Boundary communication buffers and functions for particles
   ParticlesBoundaryValues *pbval_part;

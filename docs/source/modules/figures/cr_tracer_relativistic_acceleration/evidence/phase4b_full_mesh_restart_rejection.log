@@ -1,0 +1,2 @@
+### FATAL ERROR in /Users/dbf75/.codex/worktrees/e354/athenak-DF/src/main.cpp at line 279
+Particle pusher 'relativistic_hc' does not support full mesh restart input until the relativistic restart schema is qualified

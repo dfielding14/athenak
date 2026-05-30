@@ -1,0 +1,1 @@
+13dc90ae4c0776b5d4665ec5ccc49de341b71b51710e0b49e3578d9d22c3b1e7  docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4b_preregistered_criteria.json

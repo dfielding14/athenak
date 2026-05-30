@@ -12,6 +12,12 @@ RELATIVISTIC_INPUT = (
 LEGACY_INPUT = ROOT / "inputs" / "particles" / "cr_tracer_boris_uniform.athinput"
 
 VALID_RELATIVISTIC_FLAGS = []
+COUPLED_RELATIVISTIC_FLAGS = [
+    "particles/relativistic_field_source=mhd_ideal",
+    "time/evolution=dynamic",
+    "mhd/rsolver=hlld",
+]
+COUPLED_DROP_PARAMETERS = ("cE0x", "cE0y", "cE0z")
 
 
 def _render_input(tmp_path, input_file=RELATIVISTIC_INPUT, drop_parameters=(),
@@ -65,6 +71,20 @@ def _run_relativistic(tmp_path, extra_flags=(), drop_parameters=(),
                         inject_before_particles=inject_before_particles,
                         inject_in_particles=inject_in_particles,
                         append_text=append_text)
+
+
+def _run_coupled(tmp_path, extra_flags=(), drop_parameters=(), drop_blocks=(),
+                 inject_before_particles="", inject_in_particles="", append_text="",
+                 temporal_mode="frozen_tn"):
+    temporal_input = (
+        f"relativistic_temporal_sampling = {temporal_mode}\n"
+        if temporal_mode is not None else "")
+    return _run_capture(
+        tmp_path, COUPLED_RELATIVISTIC_FLAGS + list(extra_flags),
+        drop_parameters=COUPLED_DROP_PARAMETERS + tuple(drop_parameters),
+        drop_blocks=drop_blocks, inject_before_particles=inject_before_particles,
+        inject_in_particles=temporal_input + inject_in_particles,
+        append_text=append_text)
 
 
 def _assert_fatal(result, substring):
@@ -159,10 +179,155 @@ def test_relativistic_hc_rejects_unsupported_constructor_modes_cpu(
 
 
 def test_relativistic_hc_rejects_unimplemented_field_source_cpu(tmp_path):
-    """Only the prescribed Phase-2 test field is accepted."""
+    """Unqualified and CT-edge field-source spellings remain closed."""
     result = _run_relativistic(
         tmp_path, ["particles/relativistic_field_source=mhd"])
     _assert_fatal(result, "relativistic_field_source")
+
+
+def test_relativistic_hc_rejects_ct_emf_field_source_cpu(tmp_path):
+    """The ideal-MHD source does not authorize CT-edge EMF reuse."""
+    result = _run_relativistic(
+        tmp_path, ["particles/relativistic_field_source=ct_emf"])
+    _assert_fatal(result, "relativistic_field_source")
+
+
+def test_relativistic_hc_coupled_frozen_tn_constructor_runs_without_ce0_cpu(tmp_path):
+    """The experimental coupled schema accepts explicit frozen-t^n dynamic ideal MHD."""
+    result = _run_coupled(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_relativistic_hc_coupled_requires_unit_c_model_cpu(tmp_path):
+    """Coupled timesteps remain bounded to the normalized unit-c opening."""
+    result = _run_coupled(tmp_path, ["particles/c_model=2.0"])
+    _assert_fatal(result, "requires <particles>/c_model = 1.0")
+
+
+def test_relativistic_hc_coupled_rejects_multiple_same_level_meshblocks_cpu(tmp_path):
+    """Same-level migration remains closed until the Phase-8 ownership qualification."""
+    result = _run_coupled(tmp_path, ["meshblock/nx1=4"])
+    _assert_fatal(result, "requires exactly one meshblock")
+
+
+def test_relativistic_hc_prescribed_retains_multiple_same_level_meshblocks_cpu(tmp_path):
+    """The coupled-only migration fence does not narrow the Phase-4a harness."""
+    result = _run_relativistic(
+        tmp_path, ["meshblock/nx1=4", "time/nlim=1"])
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_relativistic_hc_coupled_requires_explicit_temporal_mode_cpu(tmp_path):
+    """The coupled grid state is selected explicitly rather than inferred."""
+    result = _run_capture(
+        tmp_path,
+        ["particles/relativistic_field_source=mhd_ideal",
+         "time/evolution=dynamic", "mhd/rsolver=hlld"],
+        drop_parameters=COUPLED_DROP_PARAMETERS)
+    _assert_fatal(result, "relativistic_temporal_sampling = frozen_tn")
+
+
+def test_relativistic_hc_coupled_rejects_unknown_temporal_mode_cpu(tmp_path):
+    """Only the preregistered frozen-t^n coupled temporal model is open."""
+    result = _run_coupled(tmp_path, temporal_mode="stage_centered")
+    _assert_fatal(result, "relativistic_temporal_sampling")
+
+
+def test_relativistic_hc_coupled_rejects_obsolete_temporal_spelling_cpu(tmp_path):
+    """The preregistered temporal selector has one spelling and no silent alias."""
+    result = _run_coupled(
+        tmp_path, temporal_mode=None,
+        inject_in_particles="relativistic_mhd_temporal_mode = frozen_tn\n")
+    _assert_fatal(result, "relativistic_mhd_temporal_mode is unsupported")
+
+
+def test_relativistic_hc_prescribed_rejects_coupled_temporal_mode_cpu(tmp_path):
+    """The coupled temporal selector cannot leak into the prescribed harness."""
+    result = _run_relativistic(
+        tmp_path, inject_in_particles="relativistic_temporal_sampling = frozen_tn\n")
+    _assert_fatal(result, "applies only")
+
+
+def test_relativistic_hc_coupled_rejects_prescribed_ce0_cpu(tmp_path):
+    """Coupled sampled fields are gathered, not seeded from analytical cE constants."""
+    result = _run_relativistic(
+        tmp_path,
+        ["particles/relativistic_field_source=mhd_ideal",
+         "time/evolution=dynamic", "mhd/rsolver=hlld"],
+        inject_in_particles="relativistic_temporal_sampling = frozen_tn\n")
+    _assert_fatal(result, "prescribed-test-only cE0x")
+
+
+@pytest.mark.parametrize(
+    ("extra_flags", "expected_substring"),
+    [
+        (["time/evolution=kinematic", "mhd/rsolver=advect"], "evolution = dynamic"),
+        (["mesh/nx3=1", "meshblock/nx3=1"], "3d"),
+        (["mesh/ix1_bc=outflow", "mesh/ox1_bc=outflow"], "periodic"),
+        (["particles/interpolation=tsc"], "interpolation"),
+    ],
+    ids=["dynamic-only", "three-dimensional-only", "periodic-only", "trilinear-only"],
+)
+def test_relativistic_hc_coupled_rejects_unsupported_modes_cpu(
+        tmp_path, extra_flags, expected_substring):
+    """Experimental coupled parsing retains the bounded relativistic envelope."""
+    result = _run_coupled(tmp_path, extra_flags)
+    _assert_fatal(result, expected_substring)
+
+
+def test_relativistic_hc_coupled_rejects_multilevel_mesh_cpu(tmp_path):
+    """The coupled opening remains serial uniform-level only."""
+    result = _run_coupled(
+        tmp_path,
+        append_text=("\n<mesh_refinement>\nrefinement = adaptive\n"
+                     "num_levels = 2\nmax_nmb_per_rank = 16\n"))
+    _assert_fatal(result, "serial uniform-level mesh")
+
+
+@pytest.mark.parametrize(
+    "append_text",
+    [
+        "\n<hydro_srcterms>\n",
+        "\n<rad_srcterms>\n",
+    ],
+    ids=["orphan-hydro-source-block", "orphan-radiation-source-block"],
+)
+def test_relativistic_hc_coupled_rejects_orphan_source_blocks_cpu(
+        tmp_path, append_text):
+    """Source blocks remain rejected even when their owning physics block is absent."""
+    result = _run_coupled(tmp_path, append_text=append_text)
+    _assert_fatal(result, "coupled physics blocks")
+
+
+def test_relativistic_hc_coupled_rejects_user_sources_cpu(tmp_path):
+    """Problem-generator user sources cannot bypass the explicit source-block fence."""
+    result = _run_coupled(tmp_path, append_text="\n<problem>\nuser_srcs = true\n")
+    _assert_fatal(result, "coupled physics blocks")
+
+
+def test_relativistic_hc_coupled_manufactured_source_exception_is_test_pgen_only_cpu(
+        tmp_path):
+    """The evolving-field test source is not a general user-source bypass."""
+    result = _run_coupled(
+        tmp_path,
+        append_text=("\n<problem>\nuser_srcs = true\n"
+                     "relativistic_coupled_manufactured_test = true\n"))
+    _assert_fatal(result, "requires the compiled coupled-runtime test harness")
+
+
+def test_relativistic_hc_coupled_dependency_is_explicit_cpu():
+    """The frozen-t^n task fence is encoded rather than implied by insertion order."""
+    source = (ROOT / "src" / "particles" / "particles_tasks.cpp").read_text()
+    assert "relativistic_field_source == RelativisticFieldSource::mhd_ideal" in source
+    assert "push_dependency = pmy_pack->pmhd->id.savest;" in source
+    assert "AddTask(&Particles::Push, this, push_dependency)" in source
+
+
+def test_relativistic_hc_full_mesh_restart_guard_is_explicit_cpu():
+    """Full-mesh -r restoration remains closed until the Phase-6 schema exists."""
+    source = (ROOT / "src" / "main.cpp").read_text()
+    assert "res_flag && pinput->DoesBlockExist(\"particles\")" in source
+    assert "full mesh restart input until the relativistic restart schema is " in source
 
 
 def test_relativistic_hc_requires_mhd_block_cpu(tmp_path):
@@ -397,6 +562,21 @@ def test_legacy_pushers_reject_stale_relativistic_background_cpu(tmp_path):
     ]
     result = _run_capture(
         tmp_path, flags, inject_in_particles="relativistic_background = frozen\n")
+    _assert_fatal(result, "relativistic-only")
+
+
+def test_legacy_pushers_reject_relativistic_temporal_sampling_cpu(tmp_path):
+    """Legacy modes must reject the solver-coupled temporal selector."""
+    flags = [
+        "particles/pusher=boris",
+        "time/evolution=dynamic",
+        "mhd/rsolver=hlld",
+        "time/nlim=1",
+    ]
+    result = _run_capture(
+        tmp_path, flags,
+        input_file=LEGACY_INPUT,
+        inject_in_particles="relativistic_temporal_sampling = frozen_tn\n")
     _assert_fatal(result, "relativistic-only")
 
 

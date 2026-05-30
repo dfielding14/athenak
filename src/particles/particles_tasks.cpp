@@ -6,6 +6,7 @@
 //! \file particles_tasks.cpp
 //! \brief functions that control Particles tasks stored in tasklists in MeshBlockPack
 
+#include <cstdlib>
 #include <map>
 #include <memory>
 #include <string>
@@ -16,6 +17,7 @@
 #include "parameter_input.hpp"
 #include "tasklist/task_list.hpp"
 #include "mesh/mesh.hpp"
+#include "mhd/mhd.hpp"
 #include "bvals/bvals.hpp"
 #include "particles.hpp"
 
@@ -29,7 +31,19 @@ void Particles::AssembleTasks(std::map<std::string, std::shared_ptr<TaskList>> t
   TaskID none(0);
 
   // particle integration done in "before_timeintegrator" task list
-  id.push   = tl["before_timeintegrator"]->AddTask(&Particles::Push, this, none);
+  TaskID push_dependency = none;
+  if (pusher == ParticlesPusher::relativistic_hc &&
+      relativistic_field_source == RelativisticFieldSource::mhd_ideal) {
+    if (pmy_pack->pmhd == nullptr) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "relativistic_field_source = mhd_ideal requires "
+                << "standalone MHD task assembly" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    push_dependency = pmy_pack->pmhd->id.savest;
+  }
+  id.push   =
+      tl["before_timeintegrator"]->AddTask(&Particles::Push, this, push_dependency);
   id.newgid = tl["before_timeintegrator"]->AddTask(&Particles::NewGID, this, id.push);
   id.count  = tl["before_timeintegrator"]->AddTask(&Particles::SendCnt, this, id.newgid);
   id.irecv  = tl["before_timeintegrator"]->AddTask(&Particles::InitRecv, this, id.count);

@@ -1,0 +1,129 @@
+Phase-4b experimental solver-coupled frozen-t^n evidence replay commands
+=======================================================================
+
+Repository root for every section:
+  cd /Users/dbf75/.codex/worktrees/e354/athenak-DF
+
+Coupled runtime release build:
+  cd /Users/dbf75/.codex/worktrees/e354/athenak-DF
+  cmake -S . -B /tmp/athenak-cr-phase4b-coupled-runtime \
+    -D PROBLEM=unit_tests/cr_relativistic_coupled_runtime_test \
+    -D Kokkos_ENABLE_SERIAL=ON
+  cmake --build /tmp/athenak-cr-phase4b-coupled-runtime -j 6
+
+Coupled runtime analytical, manufactured, and fail-closed suite:
+  cd /Users/dbf75/.codex/worktrees/e354/athenak-DF
+  python3 scripts/particles/cr_relativistic_coupled_runtime_inspect.py \
+    --binary /tmp/athenak-cr-phase4b-coupled-runtime/src/athena \
+    --input inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput \
+    --prescribed-input inputs/unit_tests/cr_relativistic_pusher_runtime.athinput \
+    --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4b_preregistered_criteria.json \
+    --work-dir docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_runtime_cases \
+    --metrics docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_coupled_runtime_metrics.json
+
+Coupled runtime Kokkos bounds-check replay:
+  cd /Users/dbf75/.codex/worktrees/e354/athenak-DF
+  cmake -S . -B /tmp/athenak-cr-phase4b-coupled-runtime-debug \
+    -D PROBLEM=unit_tests/cr_relativistic_coupled_runtime_test \
+    -D Kokkos_ENABLE_SERIAL=ON \
+    -D Kokkos_ENABLE_DEBUG_BOUNDS_CHECK=ON
+  cmake --build /tmp/athenak-cr-phase4b-coupled-runtime-debug -j 6
+  python3 scripts/particles/cr_relativistic_coupled_runtime_inspect.py \
+    --binary /tmp/athenak-cr-phase4b-coupled-runtime-debug/src/athena \
+    --input inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput \
+    --prescribed-input inputs/unit_tests/cr_relativistic_pusher_runtime.athinput \
+    --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4b_preregistered_criteria.json \
+    --work-dir /tmp/athenak-cr-phase4b-coupled-debug-cases \
+    --metrics /tmp/athenak-cr-phase4b-coupled-debug-metrics.json
+
+Parser contract:
+  cd /Users/dbf75/.codex/worktrees/e354/athenak-DF
+  cmake -S . -B /tmp/athenak-cr-phase4b-contract \
+    -D PROBLEM=part_random \
+    -D Kokkos_ENABLE_SERIAL=ON
+  cmake --build /tmp/athenak-cr-phase4b-contract -j 6
+  cd /tmp/athenak-cr-phase4b-contract/src
+  /Users/dbf75/.uv/envs/interactive/.venv/bin/python -m pytest -q \
+    /Users/dbf75/.codex/worktrees/e354/athenak-DF/tst/test_suite/particles/test_particles_cr_relativistic_contract_cpu.py
+
+Constructor smoke:
+  cd /Users/dbf75/.codex/worktrees/e354/athenak-DF
+  mkdir -p /tmp/phase4b-constructor-smoke
+  cd /tmp/phase4b-constructor-smoke
+  /tmp/athenak-cr-phase4b-coupled-runtime/src/athena \
+    -i /Users/dbf75/.codex/worktrees/e354/athenak-DF/inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput \
+    time/nlim=0
+
+Explicit two-rank coupled rejection:
+  cd /Users/dbf75/.codex/worktrees/e354/athenak-DF
+  cmake -S . -B /tmp/athenak-cr-phase4b-coupled-mpi \
+    -D PROBLEM=unit_tests/cr_relativistic_coupled_runtime_test \
+    -D Athena_ENABLE_MPI=ON \
+    -D Kokkos_ENABLE_SERIAL=ON
+  cmake --build /tmp/athenak-cr-phase4b-coupled-mpi -j 6
+  mpirun -n 2 /tmp/athenak-cr-phase4b-coupled-mpi/src/athena \
+    -i inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput \
+    mesh/nx1=16 meshblock/nx1=8
+
+Executable full-mesh restart rejection:
+  cd /Users/dbf75/.codex/worktrees/e354/athenak-DF
+  cmake -S . -B /tmp/athenak-cr-phase4b-generic -D Kokkos_ENABLE_SERIAL=ON
+  cmake --build /tmp/athenak-cr-phase4b-generic -j 6
+  mkdir -p /tmp/phase4b-restart-source /tmp/phase4b-restart-reject
+  cd /tmp/phase4b-restart-source
+  /tmp/athenak-cr-phase4b-generic/src/athena \
+    -i /Users/dbf75/.codex/worktrees/e354/athenak-DF/inputs/hydro/sod.athinput \
+    time/nlim=1 time/tlim=0.001 output1/file_type=rst output1/dt=0.0005
+  cd /tmp/phase4b-restart-reject
+  /tmp/athenak-cr-phase4b-generic/src/athena \
+    -r /tmp/phase4b-restart-source/rst/Sod.00001.rst \
+    -i /Users/dbf75/.codex/worktrees/e354/athenak-DF/inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput
+
+Retained Phase-4a prescribed production analyzer:
+  cd /Users/dbf75/.codex/worktrees/e354/athenak-DF
+  cmake -S . -B /tmp/athenak-cr-phase4a-pusher-runtime \
+    -D PROBLEM=unit_tests/cr_relativistic_pusher_runtime_test \
+    -D Kokkos_ENABLE_SERIAL=ON
+  cmake --build /tmp/athenak-cr-phase4a-pusher-runtime -j 6
+  python3 scripts/particles/cr_relativistic_pusher_runtime_inspect.py \
+    --binary /tmp/athenak-cr-phase4a-pusher-runtime/src/athena \
+    --input inputs/unit_tests/cr_relativistic_pusher_runtime.athinput \
+    --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4a_preregistered_criteria.json \
+    --work-dir docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_phase4a_runtime_cases \
+    --metrics docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase4b_phase4a_runtime_metrics.json
+
+Oracle mutation controls:
+  cd /Users/dbf75/.codex/worktrees/e354/athenak-DF
+  python3 scripts/particles/cr_relativistic_coupled_oracle_negative_controls.py \
+    --analyzer scripts/particles/cr_relativistic_coupled_runtime_inspect.py \
+    --binary /tmp/athenak-cr-phase4b-coupled-runtime/src/athena \
+    --input inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput \
+    --prescribed-input inputs/unit_tests/cr_relativistic_pusher_runtime.athinput \
+    --criteria docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4b_preregistered_criteria.json
+
+Retained legacy regressions and style:
+  cd /Users/dbf75/.codex/worktrees/e354/athenak-DF/tst
+  /Users/dbf75/.uv/envs/interactive/.venv/bin/python run_test_suite.py \
+    --test test_suite/particles/test_particles_cr_cpu.py --cpu
+  /Users/dbf75/.uv/envs/interactive/.venv/bin/python run_test_suite.py \
+    --test test_suite/particles/test_particles_cr_accuracy_cpu.py --cpu
+  /Users/dbf75/.uv/envs/interactive/.venv/bin/python run_test_suite.py \
+    --test test_suite/particles/test_particles_cr_mpicpu.py --mpicpu
+  /Users/dbf75/.uv/envs/interactive/.venv/bin/python run_test_suite.py \
+    --test test_suite/particles/test_particles_cr_accuracy_mpicpu.py --mpicpu
+  /Users/dbf75/.uv/envs/interactive/.venv/bin/python -m pytest -q \
+    test_suite/style/test_style.py
+
+Whitespace checks:
+  cd /Users/dbf75/.codex/worktrees/e354/athenak-DF
+  git diff --check
+  rg -n '[ \t]+$' \
+    docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4b_preregistered_criteria.json \
+    inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput \
+    scripts/particles/cr_relativistic_coupled_runtime_inspect.py \
+    scripts/particles/cr_relativistic_coupled_oracle_negative_controls.py \
+    src/main.cpp src/particles/README.md src/particles/particles.cpp \
+    src/particles/particles.hpp src/particles/particles_pushers.cpp \
+    src/particles/particles_tasks.cpp src/pgen/part_random.cpp \
+    src/pgen/unit_tests/cr_relativistic_coupled_runtime_test.cpp \
+    tst/test_suite/particles/test_particles_cr_relativistic_contract_cpu.py

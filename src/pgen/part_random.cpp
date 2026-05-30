@@ -292,6 +292,9 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
     Real B0z = pin->GetOrAddReal("problem","B0z",1.0);
     bool relativistic_hc =
         (pmbp->ppart->pusher == ParticlesPusher::relativistic_hc);
+    bool relativistic_mhd_ideal =
+        relativistic_hc &&
+        pmbp->ppart->relativistic_field_source == RelativisticFieldSource::mhd_ideal;
     bool initial_state_is_w = false;
     Real w0x = 0.0, w0y = 0.0, w0z = 0.0;
     Real cE0x = 0.0, cE0y = 0.0, cE0z = 0.0;
@@ -299,14 +302,21 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
     Real alpha_s = pmbp->ppart->alpha_s;
     if (relativistic_hc) {
       if (!has_B0x || !has_B0y || !has_B0z ||
-          !(pin->DoesParameterExist("problem","relativistic_initial_state")) ||
-          !(pin->DoesParameterExist("problem","cE0x")) ||
-          !(pin->DoesParameterExist("problem","cE0y")) ||
-          !(pin->DoesParameterExist("problem","cE0z"))) {
+          !(pin->DoesParameterExist("problem","relativistic_initial_state"))) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle pusher 'relativistic_hc' initialization "
+                  << "requires explicit B0x, B0y, B0z, and relativistic_initial_state"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      if (!relativistic_mhd_ideal &&
+          (!(pin->DoesParameterExist("problem","cE0x")) ||
+           !(pin->DoesParameterExist("problem","cE0y")) ||
+           !(pin->DoesParameterExist("problem","cE0z")))) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl << "Particle pusher 'relativistic_hc' prescribed-test "
-                  << "initialization requires explicit B0x, B0y, B0z, "
-                  << "relativistic_initial_state, and cE0x, cE0y, cE0z" << std::endl;
+                  << "initialization requires explicit cE0x, cE0y, and cE0z"
+                  << std::endl;
         std::exit(EXIT_FAILURE);
       }
       std::string initial_state =
@@ -344,14 +354,16 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
                   << "initialization rejects w0x, w0y, w0z" << std::endl;
         std::exit(EXIT_FAILURE);
       }
-      cE0x = pin->GetReal("problem","cE0x");
-      cE0y = pin->GetReal("problem","cE0y");
-      cE0z = pin->GetReal("problem","cE0z");
+      if (!relativistic_mhd_ideal) {
+        cE0x = pin->GetReal("problem","cE0x");
+        cE0y = pin->GetReal("problem","cE0y");
+        cE0z = pin->GetReal("problem","cE0z");
+      }
       if (!std::isfinite(B0x) || !std::isfinite(B0y) || !std::isfinite(B0z) ||
           !std::isfinite(w0x) || !std::isfinite(w0y) || !std::isfinite(w0z) ||
           !std::isfinite(cE0x) || !std::isfinite(cE0y) || !std::isfinite(cE0z)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Particle pusher 'relativistic_hc' prescribed-test "
+                  << std::endl << "Particle pusher 'relativistic_hc' "
                   << "fields and initial state must be finite" << std::endl;
         std::exit(EXIT_FAILURE);
       }
@@ -507,9 +519,9 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
         pr(IPVZ,p) = 2.0*(rand_gen.frand() - 0.5);
       }
       pr(IPM,p) = min_mass*pow(mass_log_spacing, spec);
-      pr(IPBX,p) = B0x;
-      pr(IPBY,p) = B0y;
-      pr(IPBZ,p) = B0z;
+      pr(IPBX,p) = relativistic_mhd_ideal ? 0.0 : B0x;
+      pr(IPBY,p) = relativistic_mhd_ideal ? 0.0 : B0y;
+      pr(IPBZ,p) = relativistic_mhd_ideal ? 0.0 : B0z;
       pr(IPDX,p) = 0.0;
       pr(IPDY,p) = 0.0;
       pr(IPDZ,p) = 0.0;
@@ -561,6 +573,8 @@ void ProblemGenerator::PartRandom(ParameterInput *pin, const bool restart) {
       pin->GetOrAddBoolean("problem","relativistic_gather_diagnostic_only",false);
   if (pmbp->ppart != nullptr &&
       pmbp->ppart->pusher == ParticlesPusher::relativistic_hc &&
+      pmbp->ppart->relativistic_field_source ==
+          RelativisticFieldSource::prescribed_test &&
       !gather_diagnostic_only &&
       b_profile.compare("uniform") != 0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
