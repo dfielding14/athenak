@@ -8,9 +8,11 @@
 
 #include <sys/stat.h>
 
+#include <cerrno>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <string>
 #include <utility>
@@ -29,6 +31,64 @@
 #endif
 
 namespace {
+
+[[noreturn]] void FatalPDFError(const std::string &message) {
+  std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+            << std::endl << message << std::endl;
+#if MPI_PARALLEL_ENABLED
+  MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+#endif
+  std::exit(EXIT_FAILURE);
+}
+
+void DiscardTemporaryPDFFile(std::FILE *output, const std::string &filename) {
+  static_cast<void>(std::fclose(output));
+  std::remove(filename.c_str());
+}
+
+void CheckedPDFPrint(std::FILE *output, const std::string &filename, const char *text) {
+  if (std::fputs(text, output) == EOF) {
+    DiscardTemporaryPDFFile(output, filename);
+    FatalPDFError("Could not write PDF header '" + filename + "'.");
+  }
+}
+
+template <typename Arg, typename... Args>
+void CheckedPDFPrint(std::FILE *output, const std::string &filename,
+                     const char *format, Arg arg, Args... args) {
+  if (std::fprintf(output, format, arg, args...) < 0) {
+    DiscardTemporaryPDFFile(output, filename);
+    FatalPDFError("Could not write PDF header '" + filename + "'.");
+  }
+}
+
+void CheckedPDFWrite(std::FILE *output, const void *data, std::size_t element_size,
+                     std::size_t count, const std::string &filename,
+                     const char *context) {
+  if (count == 0) {
+    return;
+  }
+  if (std::fwrite(data, element_size, count, output) != count) {
+    DiscardTemporaryPDFFile(output, filename);
+    FatalPDFError(std::string(context) + " was not written completely to '" +
+                  filename + "'.");
+  }
+}
+
+void PublishTemporaryPDFFile(std::FILE *output, const std::string &temporary_filename,
+                             const std::string &filename, const char *context) {
+  if (std::fclose(output) != 0) {
+    std::remove(temporary_filename.c_str());
+    FatalPDFError("Could not close " + std::string(context) + " '" +
+                  temporary_filename + "'.");
+  }
+  if (std::rename(temporary_filename.c_str(), filename.c_str()) != 0) {
+    int rename_errno = errno;
+    std::remove(temporary_filename.c_str());
+    FatalPDFError("Could not atomically publish " + std::string(context) + " '" +
+                  filename + "': " + std::strerror(rename_errno));
+  }
+}
 
 std::string PDFDirectory(const OutputParameters &op) {
   std::string directory = "pdf_" + op.file_id;
@@ -316,64 +376,77 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
     if (!pdf_data.bins_written) {
       std::string header_name = path + out_params.file_basename + ".header.pdf";
-      std::FILE *header = std::fopen(header_name.c_str(), "w");
+      std::string temporary_header_name = header_name + ".tmp";
+      std::FILE *header = std::fopen(temporary_header_name.c_str(), "w");
       if (header == nullptr) {
-        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                  << std::endl << "Cannot open PDF header '" << header_name << "'"
-                  << std::endl;
-        std::exit(EXIT_FAILURE);
+        FatalPDFError("Cannot open PDF header '" + temporary_header_name + "'.");
       }
-      std::fprintf(header, "# AthenaK PDF format version=2\n");
-      std::fprintf(header, "binary_magic = AKPDFV2\n");
-      std::fprintf(header, "layout = %s\n", sharded ? "sparse_coo" : "dense");
-      std::fprintf(header, "distribution = %s\n",
-                   ShardDistributionName(out_params.shard_mode));
+      CheckedPDFPrint(header, temporary_header_name, "# AthenaK PDF format version=2\n");
+      CheckedPDFPrint(header, temporary_header_name, "binary_magic = AKPDFV2\n");
+      CheckedPDFPrint(header, temporary_header_name, "layout = %s\n",
+                      sharded ? "sparse_coo" : "dense");
+      CheckedPDFPrint(header, temporary_header_name, "distribution = %s\n",
+                      ShardDistributionName(out_params.shard_mode));
       if (IsNodeSharded(out_params.shard_mode)) {
-        std::fprintf(header, "node = %d\n", global_variable::node_id);
+        CheckedPDFPrint(header, temporary_header_name, "node = %d\n",
+                        global_variable::node_id);
+        CheckedPDFPrint(header, temporary_header_name, "number_of_nodes = %d\n",
+                        global_variable::nnodes);
+      } else if (IsRankSharded(out_params.shard_mode)) {
+        CheckedPDFPrint(header, temporary_header_name, "rank = %d\n",
+                        global_variable::my_rank);
+        CheckedPDFPrint(header, temporary_header_name, "number_of_ranks = %d\n",
+                        global_variable::nranks);
       }
-      std::fprintf(header, "ndim = %d\n", pdf_data.ndim);
-      std::fprintf(header, "total_bins = %d\n", pdf_data.total_bins);
-      std::fprintf(header, "weight = %s\n", out_params.pdf_weight.c_str());
+      CheckedPDFPrint(header, temporary_header_name, "ndim = %d\n", pdf_data.ndim);
+      CheckedPDFPrint(header, temporary_header_name, "total_bins = %d\n",
+                      pdf_data.total_bins);
+      CheckedPDFPrint(header, temporary_header_name, "weight = %s\n",
+                      out_params.pdf_weight.c_str());
       if (out_params.pdf_weight == "variable") {
-        std::fprintf(header, "weight_variable = %s\n",
-                     out_params.pdf_weight_variable.c_str());
+        CheckedPDFPrint(header, temporary_header_name, "weight_variable = %s\n",
+                        out_params.pdf_weight_variable.c_str());
       }
-      std::fprintf(header, "symlog_transform = sign(x)*(abs(x)/linthresh if "
-                   "abs(x)<=linthresh else 1+log10(abs(x)/linthresh))\n");
+      CheckedPDFPrint(header, temporary_header_name,
+                      "symlog_transform = sign(x)*(abs(x)/linthresh if "
+                      "abs(x)<=linthresh else 1+log10(abs(x)/linthresh))\n");
       for (int d = 0; d < pdf_data.ndim; ++d) {
-        std::fprintf(header, "variable_%d = %s\n", d + 1,
-                     out_params.pdf_variables[d].c_str());
-        std::fprintf(header, "nbin%d = %d\n", d + 1, pdf_data.nbin[d]);
-        std::fprintf(header, "bin%d_min = %.17e\n", d + 1, pdf_data.bin_min[d]);
-        std::fprintf(header, "bin%d_max = %.17e\n", d + 1, pdf_data.bin_max[d]);
-        std::fprintf(header, "scale%d = %s\n", d + 1, PDFScaleName(pdf_data.scale[d]));
+        CheckedPDFPrint(header, temporary_header_name, "variable_%d = %s\n", d + 1,
+                        out_params.pdf_variables[d].c_str());
+        CheckedPDFPrint(header, temporary_header_name, "nbin%d = %d\n", d + 1,
+                        pdf_data.nbin[d]);
+        CheckedPDFPrint(header, temporary_header_name, "bin%d_min = %.17e\n", d + 1,
+                        pdf_data.bin_min[d]);
+        CheckedPDFPrint(header, temporary_header_name, "bin%d_max = %.17e\n", d + 1,
+                        pdf_data.bin_max[d]);
+        CheckedPDFPrint(header, temporary_header_name, "scale%d = %s\n", d + 1,
+                        PDFScaleName(pdf_data.scale[d]));
         if (pdf_data.scale[d] == PDF_SCALE_SYMLOG) {
-          std::fprintf(header, "linthresh%d = %.17e\n", d + 1,
-                       pdf_data.linthresh[d]);
+          CheckedPDFPrint(header, temporary_header_name, "linthresh%d = %.17e\n",
+                          d + 1, pdf_data.linthresh[d]);
         }
-        std::fprintf(header, "stride%d = %d\n", d + 1, pdf_data.stride[d]);
+        CheckedPDFPrint(header, temporary_header_name, "stride%d = %d\n", d + 1,
+                        pdf_data.stride[d]);
         auto edges = Kokkos::create_mirror_view(pdf_data.bin_edges[d]);
         Kokkos::deep_copy(edges, pdf_data.bin_edges[d]);
         Kokkos::fence();
-        std::fprintf(header, "bin_edges_%d =", d + 1);
+        CheckedPDFPrint(header, temporary_header_name, "bin_edges_%d =", d + 1);
         for (int n = 0; n <= pdf_data.nbin[d]; ++n) {
-          std::fprintf(header, " %.17e", edges(n));
+          CheckedPDFPrint(header, temporary_header_name, " %.17e", edges(n));
         }
-        std::fprintf(header, "\n");
+        CheckedPDFPrint(header, temporary_header_name, "\n");
       }
-      std::fclose(header);
+      PublishTemporaryPDFFile(header, temporary_header_name, header_name, "PDF header");
       pdf_data.bins_written = true;
     }
 
     char sequence[6];
     std::snprintf(sequence, sizeof(sequence), "%05d", out_params.file_number);
     std::string data_name = path + out_params.file_basename + "." + sequence + ".pdf";
-    std::FILE *output = std::fopen(data_name.c_str(), "wb");
+    std::string temporary_data_name = data_name + ".tmp";
+    std::FILE *output = std::fopen(temporary_data_name.c_str(), "wb");
     if (output == nullptr) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "Cannot open PDF data file '" << data_name << "'"
-                << std::endl;
-      std::exit(EXIT_FAILURE);
+      FatalPDFError("Cannot open PDF data file '" + temporary_data_name + "'.");
     }
     auto values = Kokkos::create_mirror_view(pdf_data.result_);
     Kokkos::deep_copy(values, pdf_data.result_);
@@ -397,26 +470,37 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         static_cast<std::uint64_t>(pdf_data.total_bins);
     double time = static_cast<double>(pm->time);
     std::int64_t cycle = static_cast<std::int64_t>(pm->ncycle);
-    std::fwrite(magic, sizeof(char), 8, output);
-    std::fwrite(&version, sizeof(version), 1, output);
-    std::fwrite(&layout, sizeof(layout), 1, output);
-    std::fwrite(&ndim, sizeof(ndim), 1, output);
-    std::fwrite(&rank, sizeof(rank), 1, output);
-    std::fwrite(&count, sizeof(count), 1, output);
-    std::fwrite(&time, sizeof(time), 1, output);
-    std::fwrite(&cycle, sizeof(cycle), 1, output);
+    CheckedPDFWrite(output, magic, sizeof(char), 8, temporary_data_name,
+                    "PDF binary magic");
+    CheckedPDFWrite(output, &version, sizeof(version), 1, temporary_data_name,
+                    "PDF format version");
+    CheckedPDFWrite(output, &layout, sizeof(layout), 1, temporary_data_name,
+                    "PDF layout");
+    CheckedPDFWrite(output, &ndim, sizeof(ndim), 1, temporary_data_name,
+                    "PDF dimensionality");
+    CheckedPDFWrite(output, &rank, sizeof(rank), 1, temporary_data_name,
+                    "PDF writer rank");
+    CheckedPDFWrite(output, &count, sizeof(count), 1, temporary_data_name,
+                    "PDF record count");
+    CheckedPDFWrite(output, &time, sizeof(time), 1, temporary_data_name,
+                    "PDF simulation time");
+    CheckedPDFWrite(output, &cycle, sizeof(cycle), 1, temporary_data_name,
+                    "PDF simulation cycle");
     if (sharded) {
       for (std::size_t n = 0; n < sparse_indices.size(); ++n) {
-        std::fwrite(&(sparse_indices[n]), sizeof(std::uint64_t), 1, output);
-        std::fwrite(&(sparse_values[n]), sizeof(double), 1, output);
+        CheckedPDFWrite(output, &(sparse_indices[n]), sizeof(std::uint64_t), 1,
+                        temporary_data_name, "PDF sparse index");
+        CheckedPDFWrite(output, &(sparse_values[n]), sizeof(double), 1,
+                        temporary_data_name, "PDF sparse value");
       }
     } else {
       for (int n = 0; n < pdf_data.total_bins; ++n) {
         double value = static_cast<double>(values(n));
-        std::fwrite(&value, sizeof(value), 1, output);
+        CheckedPDFWrite(output, &value, sizeof(value), 1, temporary_data_name,
+                        "PDF dense value");
       }
     }
-    std::fclose(output);
+    PublishTemporaryPDFFile(output, temporary_data_name, data_name, "PDF data file");
   }
 
   AdvanceOutputCounters(out_params, pm, pin);

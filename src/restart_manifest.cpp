@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -32,6 +33,8 @@ namespace {
 constexpr const char *kNodeRestartMagic = "AthenaK node restart manifest version=1";
 constexpr const char *kNodeRestartPrefix = "AthenaK node restart manifest version=";
 constexpr const char *kPayloadSuffix = ".payload.rst";
+constexpr int kMaxNodeRestartPayloads = 1024 * 1024;
+constexpr std::size_t kMaxNodeRestartSegments = 1024 * 1024;
 
 struct NodeRestartSpan {
   int node;
@@ -318,6 +321,27 @@ std::vector<NodeRestartSpan> RouteLocalSpans(
   std::exit(EXIT_FAILURE);
 }
 
+void CheckNodeRestartPayloadMarker(IOWrapper &input, bool single_file_per_rank,
+                                   bool expected) {
+  IOWrapperSizeT position = input.GetPosition(single_file_per_rank);
+  char marker[kNodeRestartPayloadMarkerSize];
+  std::size_t read = input.Read_bytes(marker, 1, kNodeRestartPayloadMarkerSize,
+                                      single_file_per_rank);
+  bool present = read == kNodeRestartPayloadMarkerSize &&
+      std::memcmp(marker, kNodeRestartPayloadMarker,
+                  kNodeRestartPayloadMarkerSize) == 0;
+  if (!present && input.Seek(position, single_file_per_rank) != 0) {
+    FailNodeRestart("restart payload marker probe could not restore the file position.");
+  }
+  if (expected && !present) {
+    FailNodeRestart("node restart payload marker is absent or invalid.");
+  }
+  if (!expected && present) {
+    FailNodeRestart("node payload paths are not supported restart entry points; "
+                    "use the public manifest path.");
+  }
+}
+
 bool NodeRestartManifest::LooksLikeManifest(const std::string &path) {
   std::ifstream input(path);
   std::string first_line;
@@ -345,10 +369,13 @@ NodeRestartManifest NodeRestartManifest::Load(const std::string &path) {
     FailNodeRestart("invalid completion record.");
   }
   int payload_count = ReadIntRecord(&input, "payload_count");
-  if (payload_count <= 0) {
-    FailNodeRestart("'payload_count' value must be positive.");
+  if (payload_count <= 0 || payload_count > kMaxNodeRestartPayloads) {
+    FailNodeRestart("'payload_count' value must be between 1 and 1048576.");
   }
   manifest.nmb_total_ = ReadIntRecord(&input, "nmb_total");
+  if (manifest.nmb_total_ <= 0) {
+    FailNodeRestart("'nmb_total' value must be positive.");
+  }
   manifest.header_size_ = ReadUnsignedRecord(&input, "header_size");
   if (manifest.header_size_ == 0) {
     FailNodeRestart("'header_size' value must be positive.");
@@ -385,12 +412,21 @@ NodeRestartManifest NodeRestartManifest::Load(const std::string &path) {
     if (fields.size() != 5 || fields[0] != "segment") {
       FailNodeRestart("unrecognized or malformed inventory record '" + line + "'.");
     }
-    manifest.segments_.push_back(NodeRestartSegment{
+    std::size_t segment_limit = std::min(
+        kMaxNodeRestartSegments, static_cast<std::size_t>(manifest.nmb_total_));
+    if (manifest.segments_.size() >= segment_limit) {
+      FailNodeRestart("node restart manifest contains too many segment records.");
+    }
+    NodeRestartSegment segment{
       ParseIntToken(fields[1], "segment node"),
       ParseIntToken(fields[2], "segment gid start"),
       ParseIntToken(fields[3], "segment block count"),
       ParseIntToken(fields[4], "segment payload block start")
-    });
+    };
+    if (segment.count <= 0) {
+      FailNodeRestart("segment block count must be positive.");
+    }
+    manifest.segments_.push_back(segment);
   }
   if (!saw_end) {
     FailNodeRestart("missing manifest terminator.");

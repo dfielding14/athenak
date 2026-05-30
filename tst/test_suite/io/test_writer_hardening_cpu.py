@@ -13,8 +13,9 @@ FIXTURES = ROOT / "tst" / "fixtures" / "io" / "origin_main_886dd2a1"
 sys.path.insert(0, str(ROOT / "vis" / "python"))
 
 import bin_convert  # noqa: E402
+import read_sphslice as read_sphslice_module  # noqa: E402
 from bin_convert import read_binary, read_coarsened_binary  # noqa: E402
-from read_sphslice import read_sphslice  # noqa: E402
+from read_sphslice import read_sphslice, read_sphslice_header  # noqa: E402
 
 
 def _binary_fixture(kind, rank):
@@ -62,6 +63,30 @@ def _make_node_binary(path, source, node, nnodes, empty=False):
     path.write_bytes(rewritten)
 
 
+def _make_rank_binary(path, source, rank, nranks):
+    payload = source.read_bytes()
+    fp = BytesIO(payload)
+    first = fp.readline()
+    count_line = fp.readline()
+    pheader_count = int(count_line.split(b"=")[-1])
+    pheader = [fp.readline() for _ in range(pheader_count - 1)]
+    remainder = fp.read()
+    additions = [
+        b"  distribution=rank\n",
+        f"  rank={rank}\n".encode("ascii"),
+        f"  number of ranks={nranks}\n".encode("ascii"),
+    ]
+    rewritten = (
+        first
+        + f"  size of preheader={pheader_count + len(additions)}\n".encode("ascii")
+        + b"".join(pheader)
+        + b"".join(additions)
+        + remainder
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(rewritten)
+
+
 @pytest.mark.parametrize(
     ("kind", "reader"),
     (("bin", read_binary), ("cbin", read_coarsened_binary)),
@@ -78,6 +103,8 @@ def test_node_binary_inventory_accepts_explicit_empty_shards_and_rejects_gaps(
     assembled = reader(str(node0), assemble_shards=True)
     assert assembled["n_mbs"] == 1
     assert assembled["number_of_nodes"] == 2
+    assert assembled["rank"] is None
+    assert assembled["node"] is None
 
     node1.unlink()
     with pytest.raises(ValueError, match="node shard inventory is incomplete"):
@@ -104,6 +131,23 @@ def test_node_binary_inventory_aggregates_meshblock_counts(tmp_path, kind, reade
     ("kind", "reader"),
     (("bin", read_binary), ("cbin", read_coarsened_binary)),
 )
+def test_rank_binary_aggregate_clears_shard_local_metadata(tmp_path, kind, reader):
+    root = tmp_path / kind
+    rank0 = root / "rank_00000000" / f"output.00000.{kind}"
+    rank1 = root / "rank_00000001" / f"output.00000.{kind}"
+    _make_rank_binary(rank0, _binary_fixture(kind, 0), 0, 2)
+    _make_rank_binary(rank1, _binary_fixture(kind, 1), 1, 2)
+
+    assembled = reader(str(rank0), assemble_shards=True)
+    assert assembled["number_of_ranks"] == 2
+    assert assembled["rank"] is None
+    assert assembled["node"] is None
+
+
+@pytest.mark.parametrize(
+    ("kind", "reader"),
+    (("bin", read_binary), ("cbin", read_coarsened_binary)),
+)
 def test_node_binary_inventory_rejects_oversized_declared_count(tmp_path, kind, reader):
     path = tmp_path / kind / "node_00000000" / f"output.00000.{kind}"
     _make_node_binary(path, _binary_fixture(kind, 0), 0, 10**12)
@@ -116,14 +160,14 @@ def test_node_binary_inventory_rejects_oversized_declared_count(tmp_path, kind, 
     ("kind", "reader"),
     (("bin", read_binary), ("cbin", read_coarsened_binary)),
 )
-def test_node_binary_inventory_rejects_duplicate_integer_ids(tmp_path, kind, reader):
+def test_node_binary_inventory_rejects_alias_directory(tmp_path, kind, reader):
     root = tmp_path / kind
     canonical = root / "node_00000000" / f"output.00000.{kind}"
     duplicate = root / "node_0" / f"output.00000.{kind}"
     _make_node_binary(canonical, _binary_fixture(kind, 0), 0, 1)
     _make_node_binary(duplicate, _binary_fixture(kind, 1), 0, 1)
 
-    with pytest.raises(ValueError, match="duplicate node IDs"):
+    with pytest.raises(ValueError, match="invalid binary shard directory"):
         reader(str(canonical), assemble_shards=True)
 
 
@@ -153,6 +197,8 @@ def _write_sphslice(
     shard_id=None,
     sibling_count=None,
     layout=None,
+    ntheta=1,
+    nphi=2,
 ):
     path.parent.mkdir(parents=True, exist_ok=True)
     if layout is None:
@@ -164,11 +210,11 @@ def _write_sphslice(
         "time=0.25",
         "cycle=5",
         "radius=2.0",
-        "ntheta=1",
-        "nphi=2",
+        f"ntheta={ntheta}",
+        f"nphi={nphi}",
         "size_of_variable=4",
         "number_of_variables=1",
-        f"npoints={2 if distribution == 'shared' else len(indices)}",
+        f"npoints={ntheta * nphi if distribution == 'shared' else len(indices)}",
     ]
     if distribution == "rank" and shard_id is not None:
         lines += [f"rank={shard_id}", f"number of ranks={sibling_count}"]
@@ -192,8 +238,11 @@ def test_sphslice_node_inventory_accepts_explicit_empty_shard_and_rejects_gap(tm
     _write_sphslice(node0, "node", [0, 1], [10.0, 20.0], shard_id=0, sibling_count=2)
     _write_sphslice(node1, "node", [], [], shard_id=1, sibling_count=2)
 
-    np.testing.assert_allclose(read_sphslice(str(node0))["data"],
-                               read_sphslice(str(shared))["data"])
+    result = read_sphslice(str(node0))
+    np.testing.assert_allclose(result["data"], read_sphslice(str(shared))["data"])
+    assert "node" not in result["header"]
+    assert result["header"]["npoints"] == 2
+    assert result["header"]["number_of_nodes"] == 2
     node1.unlink()
     with pytest.raises(ValueError, match="node shard inventory is incomplete"):
         read_sphslice(str(node0))
@@ -217,10 +266,10 @@ def test_sphslice_rejects_layout_distribution_mismatch(
 
 
 def test_sphslice_rejects_rank_header_path_id_mismatch(tmp_path):
-    path = tmp_path / "rank_00000001" / "surface.00000.sph.bin"
-    _write_sphslice(path, "rank", [0, 1], [10.0, 20.0], shard_id=0, sibling_count=1)
+    path = tmp_path / "rank_00000000" / "surface.00000.sph.bin"
+    _write_sphslice(path, "rank", [0, 1], [10.0, 20.0], shard_id=1, sibling_count=1)
 
-    with pytest.raises(ValueError, match="declares rank=0"):
+    with pytest.raises(ValueError, match="declares rank=1"):
         read_sphslice(str(path))
 
 
@@ -234,13 +283,13 @@ def test_sphslice_rejects_malformed_sibling_directory(tmp_path):
         read_sphslice(str(node0))
 
 
-def test_sphslice_rejects_duplicate_integer_sibling_ids(tmp_path):
+def test_sphslice_rejects_alias_sibling_directory(tmp_path):
     canonical = tmp_path / "node_00000000" / "surface.00000.sph.bin"
     duplicate = tmp_path / "node_0" / "surface.00000.sph.bin"
     _write_sphslice(canonical, "node", [0], [10.0], shard_id=0, sibling_count=1)
     _write_sphslice(duplicate, "node", [1], [20.0], shard_id=0, sibling_count=1)
 
-    with pytest.raises(ValueError, match="duplicate IDs"):
+    with pytest.raises(ValueError, match="invalid spherical-slice shard directory"):
         read_sphslice(str(canonical))
 
 
@@ -250,4 +299,73 @@ def test_sphslice_rejects_oversized_declared_sibling_count(tmp_path):
                     sibling_count=10**12)
 
     with pytest.raises(ValueError, match="node shard inventory is incomplete"):
+        read_sphslice(str(path))
+
+
+def test_sphslice_rejects_dense_values_above_practical_limit(tmp_path, monkeypatch):
+    path = tmp_path / "surface.00000.sph.bin"
+    _write_sphslice(path, "shared", [], [10.0, 20.0])
+    monkeypatch.setattr(read_sphslice_module, "_variable_token_peak_bytes", lambda *_: 0)
+    monkeypatch.setattr(
+        read_sphslice_module, "_MAX_DENSE_ALLOCATION_BYTES", 4
+    )
+
+    with pytest.raises(ValueError, match="spherical-slice dense values requires"):
+        read_sphslice(str(path))
+
+
+def test_sphslice_rejects_file_above_practical_read_limit(tmp_path, monkeypatch):
+    path = tmp_path / "surface.00000.sph.bin"
+    _write_sphslice(path, "shared", [], [10.0, 20.0])
+    monkeypatch.setattr(read_sphslice_module, "_MAX_FILE_READ_BYTES", 16)
+
+    with pytest.raises(ValueError, match="practical file-read limit"):
+        read_sphslice(str(path))
+
+
+def test_sphslice_rejects_coordinate_array_above_practical_limit(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "surface.00000.sph.bin"
+    _write_sphslice(path, "shared", [], [10.0, 20.0, 30.0], ntheta=3, nphi=1)
+    monkeypatch.setattr(read_sphslice_module, "_variable_token_peak_bytes", lambda *_: 0)
+    monkeypatch.setattr(read_sphslice_module, "_MAX_DENSE_ALLOCATION_BYTES", 16)
+
+    with pytest.raises(ValueError, match="theta coordinates requires"):
+        read_sphslice(str(path))
+
+
+def test_sphslice_rejects_cumulative_retained_arrays_above_practical_limit(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "surface.00000.sph.bin"
+    _write_sphslice(path, "shared", [], [10.0, 20.0])
+    monkeypatch.setattr(read_sphslice_module, "_variable_token_peak_bytes", lambda *_: 0)
+    monkeypatch.setattr(read_sphslice_module, "_MAX_DENSE_ALLOCATION_BYTES", 31)
+
+    with pytest.raises(ValueError, match="spherical-slice retained arrays requires"):
+        read_sphslice(str(path))
+
+
+def test_sphslice_rejects_oversized_input_header_offset(tmp_path):
+    path = tmp_path / "surface.00000.sph.bin"
+    _write_sphslice(path, "shared", [], [10.0, 20.0])
+    payload = path.read_bytes()
+    payload = payload.replace(
+        b"header_offset=0\n",
+        b"header_offset=999999999999999999999999999999999999999\n",
+        1,
+    )
+    path.write_bytes(payload)
+
+    for reader in (read_sphslice, read_sphslice_header):
+        with pytest.raises(ValueError, match="truncated spherical-slice input-header"):
+            reader(str(path))
+
+
+def test_sphslice_rejects_oversized_surface_geometry(tmp_path):
+    path = tmp_path / "surface.00000.sph.bin"
+    _write_sphslice(path, "shared", [], [], ntheta=10**12, nphi=2)
+
+    with pytest.raises(ValueError, match="spherical-slice surface coverage requires"):
         read_sphslice(str(path))

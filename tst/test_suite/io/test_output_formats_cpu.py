@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = ROOT / "tst" / "fixtures" / "io" / "origin_main_886dd2a1"
 sys.path.insert(0, str(ROOT / "vis" / "python"))
 
+from bin_convert import read_binary  # noqa: E402
 from read_pdf import read_pdf  # noqa: E402
 from read_sphslice import read_sphslice  # noqa: E402
 
@@ -133,6 +134,14 @@ def test_four_dimensional_scalar_weighted_and_volume_pdf_outputs(tmp_path):
             ("output1/linthresh4=-0.1",),
             "requires positive linthresh for symlog dimension 4",
         ),
+        (
+            ("output1/linthresh4=nan",),
+            "requires positive linthresh for symlog dimension 4",
+        ),
+        (
+            ("output1/bin4_max=inf",),
+            "requires finite bounds for dimension 4",
+        ),
     ),
 )
 def test_pdf_invalid_axis_configuration_is_rejected(tmp_path, overrides, expected):
@@ -172,6 +181,106 @@ def test_sphslice_rejects_derived_field_until_sampling_is_ghost_safe(tmp_path):
     assert proc.returncode != 0
     assert "requires derived-field interpolation" in proc.stdout
     assert "ghost-zone-safe sampling" in proc.stdout
+
+
+@pytest.mark.parametrize("factor", (0, 1, 3, 16))
+def test_cbin_rejects_invalid_coarsen_factor_before_writer_construction(
+    tmp_path, factor
+):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    proc = subprocess.run(
+        [
+            "./athena",
+            "-i",
+            "inputs/io_node_sharding.athinput",
+            "-d",
+            str(run_dir),
+            f"output3/coarsen_factor={factor}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode != 0
+    assert "requires coarsen_factor to be a power of two between 2" in proc.stdout
+
+
+@pytest.mark.parametrize(
+    ("extra", "factor", "expected"),
+    (
+        (
+            "ghost_zones = true\n",
+            8,
+            "Coarsened-binary output extents must be divisible by coarsen_factor.",
+        ),
+        (
+            "slice_x1 = 0.25\n",
+            2,
+            "Sliced coarsened-binary output is not supported.",
+        ),
+    ),
+)
+def test_cbin_rejects_incompatible_emitted_extents_during_construction(
+    tmp_path, extra, factor, expected
+):
+    input_file = tmp_path / "invalid_cbin_extent.athinput"
+    text = Path("inputs/io_node_sharding.athinput").read_text()
+    text = text.replace(
+        "<output3>\nfile_type = cbin\n",
+        "<output3>\nfile_type = cbin\n" + extra,
+        1,
+    )
+    input_file.write_text(text)
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    proc = subprocess.run(
+        [
+            "./athena",
+            "-i",
+            str(input_file),
+            "-d",
+            str(run_dir),
+            f"output3/coarsen_factor={factor}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode != 0
+    assert expected in proc.stdout
+
+
+def test_binary_passive_scalar_labels_do_not_wrap_after_99(tmp_path):
+    input_file = tmp_path / "scalar_labels.athinput"
+    text = Path("inputs/io_pdf_extended.athinput").read_text()
+    text = text.replace(
+        "<output1>\nfile_type = pdf\n",
+        "<output1>\nfile_type = pdf\nvariable = hydro_w_s\n",
+        1,
+    )
+    input_file.write_text(text)
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    subprocess.run(
+        [
+            "./athena",
+            "-i",
+            str(input_file),
+            "-d",
+            str(run_dir),
+            "hydro/nscalars=101",
+            "output1/file_type=bin",
+            "time/nlim=0",
+            "time/tlim=0.0",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    output = read_binary(str(run_dir / "bin" / "io_pdf_extended.nd4.00000.bin"))
+    assert len(output["var_names"]) == 101
+    assert len(set(output["var_names"])) == 101
+    assert output["var_names"][-1] == "s_100"
 
 
 def test_two_fluid_pdf_rejects_unqualified_generic_flux_diagnostic(tmp_path):

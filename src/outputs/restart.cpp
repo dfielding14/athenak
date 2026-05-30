@@ -16,6 +16,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <utility> // make_pair
@@ -34,6 +35,7 @@
 #include "radiation/radiation.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "outputs.hpp"
+#include "restart_manifest.hpp"
 
 namespace {
 
@@ -50,6 +52,29 @@ bool IsSafeRestartLeaf(const std::string &leaf) {
   MPI_Abort(MPI_COMM_WORLD, 1);
 #endif
   std::exit(EXIT_FAILURE);
+}
+
+IOWrapperSizeT CheckedRestartAdd(IOWrapperSizeT left, IOWrapperSizeT right,
+                                 const std::string &context) {
+  if (right > std::numeric_limits<IOWrapperSizeT>::max() - left) {
+    FailNodeRestartWrite(context + " overflows.");
+  }
+  return left + right;
+}
+
+IOWrapperSizeT CheckedRestartMultiply(IOWrapperSizeT left, IOWrapperSizeT right,
+                                      const std::string &context) {
+  if (left != 0 && right > std::numeric_limits<IOWrapperSizeT>::max()/left) {
+    FailNodeRestartWrite(context + " overflows.");
+  }
+  return left*right;
+}
+
+void CheckedRestartWrite(IOWrapper &file, const void *data, IOWrapperSizeT bytes,
+                         const std::string &context, bool independent_file) {
+  if (file.Write_any_type(data, bytes, "byte", independent_file) != bytes) {
+    FailNodeRestartWrite(context + " was not written completely.");
+  }
 }
 
 }  // namespace
@@ -260,54 +285,64 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   resfile.Open(fname.c_str(), IOWrapper::FileMode::write, independent_file);
   if (shard_writer) {
     // output the input parameters (input file)
-    resfile.Write_any_type(sbuf.c_str(), sbuf.size(), "byte", independent_file);
+    CheckedRestartWrite(resfile, sbuf.c_str(), sbuf.size(), "restart parameter dump",
+                        independent_file);
+    if (node_sharded) {
+      CheckedRestartWrite(resfile, kNodeRestartPayloadMarker,
+                          kNodeRestartPayloadMarkerSize,
+                          "node restart payload marker", independent_file);
+    }
 
     // output Mesh information
-    resfile.Write_any_type(&(pm->nmb_total), (sizeof(int)), "byte",
-                            independent_file);
-    resfile.Write_any_type(&(pm->root_level), (sizeof(int)), "byte",
-                            independent_file);
-    resfile.Write_any_type(&(pm->mesh_size), (sizeof(RegionSize)), "byte",
-                            independent_file);
-    resfile.Write_any_type(&(pm->mesh_indcs), (sizeof(RegionIndcs)), "byte",
-                            independent_file);
-    resfile.Write_any_type(&(pm->mb_indcs), (sizeof(RegionIndcs)), "byte",
-                            independent_file);
-    resfile.Write_any_type(&(pm->time), (sizeof(Real)), "byte",
-                            independent_file);
-    resfile.Write_any_type(&(pm->dt), (sizeof(Real)), "byte",
-                            independent_file);
-    resfile.Write_any_type(&(pm->ncycle), (sizeof(int)), "byte",
-                            independent_file);
+    CheckedRestartWrite(resfile, &(pm->nmb_total), sizeof(int),
+                        "restart total MeshBlock count", independent_file);
+    CheckedRestartWrite(resfile, &(pm->root_level), sizeof(int),
+                        "restart root level", independent_file);
+    CheckedRestartWrite(resfile, &(pm->mesh_size), sizeof(RegionSize),
+                        "restart mesh size", independent_file);
+    CheckedRestartWrite(resfile, &(pm->mesh_indcs), sizeof(RegionIndcs),
+                        "restart mesh indices", independent_file);
+    CheckedRestartWrite(resfile, &(pm->mb_indcs), sizeof(RegionIndcs),
+                        "restart MeshBlock indices", independent_file);
+    CheckedRestartWrite(resfile, &(pm->time), sizeof(Real),
+                        "restart time", independent_file);
+    CheckedRestartWrite(resfile, &(pm->dt), sizeof(Real),
+                        "restart timestep", independent_file);
+    CheckedRestartWrite(resfile, &(pm->ncycle), sizeof(int),
+                        "restart cycle", independent_file);
   }
   //--- STEP 2.  Root process writes list of logical locations and cost of MeshBlocks
   // This data read in Mesh::BuildTreeFromRestart()
 
   if (shard_writer) {
-    resfile.Write_any_type(&(pm->lloc_eachmb[0]),(pm->nmb_total)*sizeof(LogicalLocation),
-                           "byte", independent_file);
-    resfile.Write_any_type(&(pm->cost_eachmb[0]), (pm->nmb_total)*sizeof(float),
-                           "byte", independent_file);
+    CheckedRestartWrite(resfile, &(pm->lloc_eachmb[0]),
+                        CheckedRestartMultiply(pm->nmb_total, sizeof(LogicalLocation),
+                                               "restart logical-location bytes"),
+                        "restart logical locations", independent_file);
+    CheckedRestartWrite(resfile, &(pm->cost_eachmb[0]),
+                        CheckedRestartMultiply(pm->nmb_total, sizeof(float),
+                                               "restart MeshBlock-cost bytes"),
+                        "restart MeshBlock costs", independent_file);
   }
 
   //--- STEP 3.  Root process writes internal state of objects that require it
   if (shard_writer) {
     // store z4c information
     if (pz4c != nullptr) {
-      resfile.Write_any_type(&(pz4c->last_output_time), sizeof(Real), "byte",
-                             independent_file);
+      CheckedRestartWrite(resfile, &(pz4c->last_output_time), sizeof(Real),
+                          "restart z4c output time", independent_file);
     }
     // output puncture tracker data
     if (nco > 0) {
       for (auto & pt : pz4c->ptracker) {
-        resfile.Write_any_type(pt->GetPos(), 3*sizeof(Real), "byte",
-                               independent_file);
+        CheckedRestartWrite(resfile, pt->GetPos(), 3*sizeof(Real),
+                            "restart puncture position", independent_file);
       }
     }
     // turbulence driver internal RNG
     if (pturb != nullptr) {
-      resfile.Write_any_type(&(pturb->rstate), sizeof(RNG_State), "byte",
-                             independent_file);
+      CheckedRestartWrite(resfile, &(pturb->rstate), sizeof(RNG_State),
+                          "restart turbulence RNG state", independent_file);
     }
   }
 
@@ -338,13 +373,17 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     data_size += nout1*nout2*nout3*nadm*sizeof(Real);   // adm u_adm
   }
   if (shard_writer) {
-    resfile.Write_any_type(&(data_size), sizeof(IOWrapperSizeT), "byte",
-                            independent_file);
+    CheckedRestartWrite(resfile, &(data_size), sizeof(IOWrapperSizeT),
+                        "restart per-MeshBlock byte count", independent_file);
   }
 
   // calculate size of data written in Steps 1-2 above
   IOWrapperSizeT step1size = sbuf.size()*sizeof(char) + 3*sizeof(int) + 2*sizeof(Real) +
                              sizeof(RegionSize) + 2*sizeof(RegionIndcs);
+  if (node_sharded) {
+    step1size = CheckedRestartAdd(step1size, kNodeRestartPayloadMarkerSize,
+                                  "node restart header size");
+  }
   IOWrapperSizeT step2size = (pm->nmb_total)*(sizeof(LogicalLocation) + sizeof(float));
 
   IOWrapperSizeT step3size = 3*nco*sizeof(Real);
@@ -360,7 +399,11 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     offset_myrank += data_size*(pm->gids_eachrank[global_variable::my_rank]);
   } else if (node_sharded) {
     payload_block_offset = global_variable::NodePrefixSum(pm->nmb_thisrank);
-    offset_myrank += data_size*payload_block_offset;
+    offset_myrank = CheckedRestartAdd(
+        offset_myrank,
+        CheckedRestartMultiply(data_size, payload_block_offset,
+                               "node restart rank payload offset"),
+        "node restart rank payload offset");
     noutmbs_min = global_variable::NodeMin(pm->nmb_thisrank);
     noutmbs_max = global_variable::NodeMax(pm->nmb_thisrank);
   }
@@ -677,12 +720,17 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   }
 
   // close file, clean up
-  resfile.Close(independent_file);
+  if (resfile.Close(independent_file) != 0) {
+    FailNodeRestartWrite("restart payload could not be closed cleanly.");
+  }
 
   if (node_sharded) {
     int node_blocks = global_variable::NodeSum(pm->nmb_thisrank);
-    IOWrapperSizeT expected_size = header_size
-        + data_size*static_cast<IOWrapperSizeT>(node_blocks);
+    IOWrapperSizeT expected_size = CheckedRestartAdd(
+        header_size,
+        CheckedRestartMultiply(data_size, static_cast<IOWrapperSizeT>(node_blocks),
+                               "node restart payload size"),
+        "node restart payload size");
     std::string completed_payload = fname.substr(0, fname.size() - 4);
     if (global_variable::node_rank == 0) {
       std::ifstream payload_check(fname, std::ios::binary | std::ios::ate);
@@ -753,8 +801,12 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       for (int id = 0; id < global_variable::nnodes; ++id) {
         std::string relative_path = ShardDirectoryName(FileShardMode::node, 0, id)
             + "/" + payload_name;
-        IOWrapperSizeT payload_size = header_size
-            + data_size*static_cast<IOWrapperSizeT>(blocks_per_node[id]);
+        IOWrapperSizeT payload_size = CheckedRestartAdd(
+            header_size,
+            CheckedRestartMultiply(data_size,
+                                   static_cast<IOWrapperSizeT>(blocks_per_node[id]),
+                                   "node restart manifest payload size"),
+            "node restart manifest payload size");
         manifest << "payload " << id << " " << blocks_per_node[id] << " "
                  << payload_size << " " << relative_path << "\n";
       }

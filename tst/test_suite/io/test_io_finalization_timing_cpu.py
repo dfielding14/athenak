@@ -4,6 +4,8 @@ from pathlib import Path
 import subprocess
 
 
+ROOT = Path(__file__).resolve().parents[3]
+FIXTURES = ROOT / "tst" / "fixtures" / "io" / "origin_main_886dd2a1"
 INPUT_FILE = "inputs/io_finalization_timing.athinput"
 
 
@@ -110,3 +112,21 @@ def test_terminal_restart_resume_advances_counter_without_overwrite(tmp_path):
     )
     assert terminal_restart.read_bytes() == saved_terminal_bytes
     assert (run_dir / "rst" / "io_policy.00002.rst").exists()
+
+
+def test_origin_main_shared_restart_fixture_resumes(tmp_path):
+    run_dir = tmp_path / "origin_main_shared_resume"
+    run_dir.mkdir()
+    restart = FIXTURES / "rst" / "shared" / "io_legacy_shared.00001.rst"
+    subprocess.run(
+        [
+            "./athena",
+            "-r",
+            str(restart),
+            "-d",
+            str(run_dir),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )

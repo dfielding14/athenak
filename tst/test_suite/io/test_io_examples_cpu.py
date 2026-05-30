@@ -6,6 +6,7 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[3]
+FIXTURES = ROOT / "tst" / "fixtures" / "io" / "origin_main_886dd2a1"
 sys.path.insert(0, str(ROOT / "vis" / "python"))
 
 from read_pdf import read_pdf  # noqa: E402
@@ -69,3 +70,19 @@ def test_runtime_policy_example_demonstrates_timing_and_restart_only(tmp_path):
     assert "[output-io] event=initial " in stdout
     assert "[output-io] event=final " in stdout
     assert list((run_dir / "rst").glob("*.rst"))
+
+
+def test_shipped_readback_example_reads_legacy_cbin_fixture():
+    fixture = FIXTURES / "cbin" / "shared" / "io_legacy_shared.cbin_shared.00000.cbin"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "vis" / "python" / "examples" / "read_io_outputs.py"),
+            "cbin",
+            str(fixture),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "coarsened meshblocks=1 variables=['dens']" in proc.stdout

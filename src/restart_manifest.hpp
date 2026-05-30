@@ -8,9 +8,16 @@
 //! \file restart_manifest.hpp
 //! \brief Strict parser and native reader for transactional node restart manifests.
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
+
+class IOWrapper;
+
+constexpr char kNodeRestartPayloadMarker[] = "AthenaK node restart payload version=1\n";
+constexpr std::size_t kNodeRestartPayloadMarkerSize =
+    sizeof(kNodeRestartPayloadMarker) - 1;
 
 struct NodeRestartPayload {
   int node;
@@ -51,5 +58,7 @@ class NodeRestartManifest {
 };
 
 [[noreturn]] void FailNodeRestart(const std::string &message);
+void CheckNodeRestartPayloadMarker(IOWrapper &input, bool single_file_per_rank,
+                                   bool expected);
 
 #endif  // RESTART_MANIFEST_HPP_

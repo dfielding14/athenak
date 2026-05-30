@@ -135,6 +135,6 @@ def test_sliced_node_coarsened_binary_remains_explicitly_unpromoted(tmp_path, nr
         nranks=nranks,
     )
     assert proc.returncode != 0
-    assert "Sliced node-sharded coarsened-binary output is not supported." in (
+    assert "Sliced coarsened-binary output is not supported." in (
         proc.stdout + proc.stderr
     )

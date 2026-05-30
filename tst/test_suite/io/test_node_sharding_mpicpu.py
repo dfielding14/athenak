@@ -11,6 +11,7 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[3]
+FIXTURES = ROOT / "tst" / "fixtures" / "io" / "origin_main_886dd2a1"
 sys.path.insert(0, str(ROOT / "vis" / "python"))
 
 import bin_convert  # noqa: E402
@@ -20,6 +21,7 @@ from read_sphslice import read_sphslice  # noqa: E402
 
 INPUT_FILE = "inputs/io_node_sharding.athinput"
 MAX_MPI_BYTES_ENV = "ATHENAK_TEST_MAX_MPI_BYTES"
+NODE_PAYLOAD_MARKER = b"AthenaK node restart payload version=1\n"
 NODE_OVERRIDES = tuple(
     f"output{number}/single_file_per_node=true" for number in range(1, 7)
 )
@@ -214,6 +216,7 @@ def test_node_restart_manifest_resumes_without_overwriting_terminal_checkpoint(t
         ("absolute", "payload path"),
         ("incomplete", "completion record"),
         ("byte_count", "payload block count or byte count"),
+        ("payload_count", "'payload_count' value must be between"),
         ("missing_record", "expected 'data_size' record"),
         ("duplicate_record", "expected 'header_size' record"),
         ("reordered_record", "expected 'header_size' record"),
@@ -228,6 +231,8 @@ def test_node_restart_manifest_resumes_without_overwriting_terminal_checkpoint(t
         ("segment_invalid_node", "invalid node"),
         ("segment_local_offset", "node-local payload offset"),
         ("segment_count", "node-local payload count"),
+        ("segment_zero", "segment block count must be positive"),
+        ("segment_inventory", "too many segment records"),
     ),
 )
 def test_node_restart_rejects_corrupted_manifest(
@@ -250,6 +255,8 @@ def test_node_restart_rejects_corrupted_manifest(
                 lines[index] = " ".join(fields)
                 break
         text = "\n".join(lines) + "\n"
+    elif corruption == "payload_count":
+        text = text.replace("payload_count=1", "payload_count=1000000000", 1)
     elif corruption == "missing_record":
         text = text.replace(next(line for line in text.splitlines()
                                  if line.startswith("data_size=")) + "\n", "", 1)
@@ -319,6 +326,20 @@ def test_node_restart_rejects_corrupted_manifest(
         elif corruption == "segment_count":
             payload = next(line.split() for line in lines if line.startswith("payload "))
             fields[3] = str(int(payload[2]) + 1)
+        elif corruption == "segment_zero":
+            fields[3] = "0"
+        elif corruption == "segment_inventory":
+            nmb_total = next(
+                int(line.split("=")[1])
+                for line in lines
+                if line.startswith("nmb_total=")
+            )
+            lines[segment_indexes[0]:segment_indexes[0]] = [
+                lines[segment_indexes[0]]
+            ] * nmb_total
+            text = "\n".join(lines) + "\n"
+            manifest.write_text(text)
+            fields = None
         else:
             assert corruption == "segment_overlap"
             fields = lines[segment_indexes[1]].split()
@@ -357,7 +378,7 @@ def test_node_restart_rejects_missing_or_truncated_payload(
 
 @pytest.mark.parametrize(
     "alias",
-    ("exact", "dot", "repeated_slash", "symlink", "temporary"),
+    ("exact", "dot", "repeated_slash", "symlink", "temporary", "hardlink", "copied"),
 )
 def test_node_restart_rejects_payload_path_entry(tmp_path, node_restart_template, alias):
     run_dir, manifest = _copy_node_checkpoint(
@@ -373,14 +394,33 @@ def test_node_restart_rejects_payload_path_entry(tmp_path, node_restart_template
     elif alias == "symlink":
         restart = tmp_path / "payload_alias.rst"
         restart.symlink_to(payload)
-    else:
+    elif alias == "temporary":
         restart = Path(str(payload) + ".tmp")
+        shutil.copyfile(payload, restart)
+    elif alias == "hardlink":
+        restart = tmp_path / "payload_hardlink_alias.rst"
+        os.link(payload, restart)
+    else:
+        restart = tmp_path / "payload_copy_alias.rst"
         shutil.copyfile(payload, restart)
     proc = _resume(
         tmp_path / f"payload_entry_resume_{alias}", restart, check=False
     )
     assert proc.returncode != 0
     assert "use the public manifest path" in (proc.stdout + proc.stderr)
+
+
+def test_node_restart_rejects_corrupt_payload_marker(tmp_path, node_restart_template):
+    _, manifest = _copy_node_checkpoint(tmp_path, node_restart_template, "payload_marker")
+    payload = _payload_path(manifest)
+    data = payload.read_bytes()
+    assert NODE_PAYLOAD_MARKER in data
+    payload.write_bytes(
+        data.replace(NODE_PAYLOAD_MARKER, b"X" * len(NODE_PAYLOAD_MARKER), 1)
+    )
+    proc = _resume(tmp_path / "payload_marker_resume", manifest, check=False)
+    assert proc.returncode != 0
+    assert "payload marker is absent or invalid" in (proc.stdout + proc.stderr)
 
 
 def test_unrelated_shared_restart_payload_suffix_remains_compatible(tmp_path):
@@ -476,6 +516,34 @@ def test_existing_per_rank_restart_resumes_and_timing_identifies_layout(tmp_path
     )
 
 
+def test_origin_main_per_rank_restart_fixture_resumes(tmp_path):
+    run_dir = tmp_path / "origin_main_per_rank_resume"
+    run_dir.mkdir()
+    rank0 = (
+        FIXTURES
+        / "rst"
+        / "per_rank"
+        / "rank_00000000"
+        / "io_legacy_per_rank.00001.rst"
+    )
+    subprocess.run(
+        [
+            "mpirun",
+            "-np",
+            "2",
+            "./athena",
+            "-r",
+            str(rank0),
+            "-d",
+            str(run_dir),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+
+
 def test_conflicting_rank_and_node_modes_are_rejected(tmp_path):
     run_dir = tmp_path / "conflict"
     run_dir.mkdir()
@@ -562,3 +630,17 @@ def test_promoted_node_example_generates_readable_outputs_and_manifest(tmp_path)
         text=True,
     )
     assert "binary meshblocks=4" in summary.stdout
+
+    coarsened_summary = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "vis" / "python" / "examples" / "read_io_outputs.py"),
+            "cbin",
+            str(node_cbin),
+            "--assemble-shards",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "coarsened meshblocks=4" in coarsened_summary.stdout

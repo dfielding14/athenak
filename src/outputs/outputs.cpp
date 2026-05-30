@@ -39,6 +39,8 @@
 //! comment text: 'NEW_OUTPUT_TYPES'.
 //========================================================================================
 
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -72,6 +74,19 @@ FileShardMode ParseShardMode(ParameterInput *pin, const std::string &block_name)
     return FileShardMode::node;
   }
   return per_rank ? FileShardMode::rank : FileShardMode::shared;
+}
+
+void ValidateCoarsenFactor(Mesh *pm, const std::string &block_name, int factor) {
+  auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
+  int shortest = std::min({indcs.nx1, indcs.nx2, indcs.nx3});
+  if (factor < 2 || (factor & (factor - 1)) != 0 || factor > shortest) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "Coarsened-binary output block '" << block_name
+              << "' requires coarsen_factor to be a power of two between 2 and "
+              << "the shortest MeshBlock dimension (" << shortest << ")."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 }
 
 }  // namespace
@@ -278,6 +293,7 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
       } else if (opar.file_type.compare("cbin") == 0) {
         opar.shard_mode = ParseShardMode(pin, opar.block_name);
         opar.coarsen_factor = pin->GetInteger(opar.block_name,"coarsen_factor");
+        ValidateCoarsenFactor(pm, opar.block_name, opar.coarsen_factor);
         opar.compute_moments = pin->GetOrAddBoolean(opar.block_name,
           "compute_moments", false);
         pnode = new CoarsenedBinaryOutput(pin,pm,opar);
@@ -443,6 +459,10 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
           if (opar.pdf_nbin[d] <= 0) {
             fail_pdf("requires positive nbin for dimension " + std::to_string(d + 1));
           }
+          if (!std::isfinite(opar.pdf_bin_min[d]) ||
+              !std::isfinite(opar.pdf_bin_max[d])) {
+            fail_pdf("requires finite bounds for dimension " + std::to_string(d + 1));
+          }
           if (!(opar.pdf_bin_min[d] < opar.pdf_bin_max[d])) {
             fail_pdf("requires bin_min < bin_max for dimension "
                      + std::to_string(d + 1));
@@ -453,7 +473,8 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
                      + std::to_string(d + 1));
           }
           if (opar.pdf_scale[d] == PDF_SCALE_SYMLOG &&
-              opar.pdf_linthresh[d] <= 0.0) {
+              (!std::isfinite(opar.pdf_linthresh[d]) ||
+               opar.pdf_linthresh[d] <= 0.0)) {
             fail_pdf("requires positive linthresh for symlog dimension "
                      + std::to_string(d + 1));
           }

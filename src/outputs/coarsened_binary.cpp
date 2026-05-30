@@ -92,10 +92,21 @@ void CheckedWrite(IOWrapper &file, const void *data, std::size_t count,
 CoarsenedBinaryOutput::CoarsenedBinaryOutput(ParameterInput *pin, Mesh *pm,
                                              OutputParameters op) :
   BaseTypeOutput(pin, pm, op) {
-  if ((out_params.slice1 || out_params.slice2 || out_params.slice3) &&
-      IsNodeSharded(out_params.shard_mode)) {
+  if (out_params.slice1 || out_params.slice2 || out_params.slice3) {
     FatalCoarsenedBinaryError(
-        "Sliced node-sharded coarsened-binary output is not supported.");
+        "Sliced coarsened-binary output is not supported.");
+  }
+  auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
+  int nout1 = indcs.nx1 + (out_params.include_gzs ? 2 * indcs.ng : 0);
+  int nout2 = indcs.nx2 +
+      (out_params.include_gzs && indcs.nx2 > 1 ? 2 * indcs.ng : 0);
+  int nout3 = indcs.nx3 +
+      (out_params.include_gzs && indcs.nx3 > 1 ? 2 * indcs.ng : 0);
+  if (nout1 % out_params.coarsen_factor != 0 ||
+      nout2 % out_params.coarsen_factor != 0 ||
+      nout3 % out_params.coarsen_factor != 0) {
+    FatalCoarsenedBinaryError(
+        "Coarsened-binary output extents must be divisible by coarsen_factor.");
   }
   // create directories for outputs
   // useful for mpiio-based outputs because on some supercomputers you may need to
