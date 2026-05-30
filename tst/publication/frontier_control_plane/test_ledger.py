@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import csv
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from control_plane_common import AUTHORIZED_PIC_ROOT, stable_serialization_anchor
 from ledger import accounting, append_primary_event, initialize_ledger
 from ledger import genesis_anchor_paths, migrate_existing_genesis_anchors
 from ledger import ledger_lock
@@ -273,6 +275,26 @@ class LedgerTests(unittest.TestCase):
                     with ledger_lock(self.ledger):
                         path.unlink()
                         path.write_text("replacement lock\n", encoding="utf-8")
+
+    def test_production_serialization_anchor_is_outside_replaceable_pic_root(self) -> None:
+        self.assertEqual(
+            stable_serialization_anchor(AUTHORIZED_PIC_ROOT),
+            Path("/lustre/orion/ast207"),
+        )
+        self.assertEqual(
+            stable_serialization_anchor(self.ledger.parent.parent),
+            Path(self.temporary.name),
+        )
+
+    def test_ledger_lock_holds_stable_serialization_anchor(self) -> None:
+        anchor = stable_serialization_anchor(self.ledger.parent.parent)
+        with ledger_lock(self.ledger):
+            descriptor = os.open(anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                os.close(descriptor)
 
     def test_mirror_parent_swap_fails_closed_while_held(self) -> None:
         mirror_parent = self.mirror.parent

@@ -13,6 +13,10 @@ exact reviewed `filesystem_copy` transport, and followed by exactly one local
 non-recursive mirror receipt. Normal reads and appends reject a missing,
 duplicate or divergent receipt and reject any Project Home drift.
 `node_hours.csv` is a derived RFC-4180 index only.
+Ledger mutation and policy promotion additionally serialize through a
+descriptor lock on the site-owned Orion project directory
+`/lustre/orion/ast207`, outside the user-replaceable PIC tree. Inner pinned
+directory locks and compatibility lock-file identity checks remain mandatory.
 
 Project Home is the operational ledger and control-plane mirror only. The user
 selected the authorized Orion root as the sole bulk-evidence location for

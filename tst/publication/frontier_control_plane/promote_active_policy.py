@@ -27,6 +27,7 @@ from control_plane_common import read_json_bytes
 from control_plane_common import read_stable_regular_file, sha256_bytes
 from control_plane_common import require_no_symlink_components_below
 from control_plane_common import require_storage_policy_unlock_snapshot
+from control_plane_common import stable_serialization_anchor
 from control_plane_common import validate_storage_policy, verify_installed_control_plane
 
 
@@ -63,7 +64,9 @@ def _require_same_regular_file_at(
 
 
 @contextmanager
-def _promotion_lock(authorized_pic_root: Path) -> Iterator[int]:
+def _promotion_lock_within_serialization_anchor(
+    authorized_pic_root: Path,
+) -> Iterator[int]:
     lexical_root = Path(os.path.abspath(authorized_pic_root))
     policy_parent = lexical_root / "policy"
     path = lexical_root / ".promotion.lock"
@@ -140,6 +143,33 @@ def _promotion_lock(authorized_pic_root: Path) -> Iterator[int]:
                 fcntl.flock(root_descriptor, fcntl.LOCK_UN)
     finally:
         os.close(root_descriptor)
+
+
+@contextmanager
+def _promotion_lock(authorized_pic_root: Path) -> Iterator[int]:
+    anchor = stable_serialization_anchor(authorized_pic_root)
+    durable_mkdir_parents(anchor)
+    anchor_descriptor = os.open(
+        anchor,
+        os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+    )
+    try:
+        fcntl.flock(anchor_descriptor, fcntl.LOCK_EX)
+        try:
+            _require_same_directory(anchor, anchor_descriptor)
+            with _promotion_lock_within_serialization_anchor(
+                authorized_pic_root
+            ) as policy_descriptor:
+                _require_same_directory(anchor, anchor_descriptor)
+                yield policy_descriptor
+                _require_same_directory(anchor, anchor_descriptor)
+        finally:
+            try:
+                _require_same_directory(anchor, anchor_descriptor)
+            finally:
+                fcntl.flock(anchor_descriptor, fcntl.LOCK_UN)
+    finally:
+        os.close(anchor_descriptor)
 
 
 def promote(

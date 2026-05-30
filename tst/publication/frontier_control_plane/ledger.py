@@ -28,6 +28,7 @@ from control_plane_common import atomic_write_json, atomic_write_json_at
 from control_plane_common import durable_mkdir_parents, fsync_directory
 from control_plane_common import read_json_bytes
 from control_plane_common import read_stable_regular_file_below
+from control_plane_common import stable_serialization_anchor
 
 
 CSV_FIELDS = [
@@ -543,7 +544,9 @@ def _local_ledger_lock(ledger_jsonl: Path) -> Iterator[None]:
 
 
 @contextmanager
-def ledger_lock(ledger_jsonl: Path, mirror_jsonl: Path | None = None) -> Iterator[None]:
+def _ledger_lock_within_serialization_anchor(
+    ledger_jsonl: Path, mirror_jsonl: Path | None = None
+) -> Iterator[None]:
     if mirror_jsonl is None:
         with _local_ledger_lock(ledger_jsonl):
             yield
@@ -570,6 +573,32 @@ def ledger_lock(ledger_jsonl: Path, mirror_jsonl: Path | None = None) -> Iterato
                 fcntl.flock(mirror_parent_descriptor, fcntl.LOCK_UN)
     finally:
         os.close(mirror_parent_descriptor)
+
+
+@contextmanager
+def ledger_lock(ledger_jsonl: Path, mirror_jsonl: Path | None = None) -> Iterator[None]:
+    pic_root = Path(os.path.abspath(ledger_jsonl.parent.parent))
+    anchor = stable_serialization_anchor(pic_root)
+    durable_mkdir_parents(anchor)
+    anchor_descriptor = os.open(
+        anchor,
+        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+    )
+    try:
+        fcntl.flock(anchor_descriptor, fcntl.LOCK_EX)
+        try:
+            _require_same_directory(anchor, anchor_descriptor)
+            with _ledger_lock_within_serialization_anchor(ledger_jsonl, mirror_jsonl):
+                _require_same_directory(anchor, anchor_descriptor)
+                yield
+                _require_same_directory(anchor, anchor_descriptor)
+        finally:
+            try:
+                _require_same_directory(anchor, anchor_descriptor)
+            finally:
+                fcntl.flock(anchor_descriptor, fcntl.LOCK_UN)
+    finally:
+        os.close(anchor_descriptor)
 
 
 def mirror_preflight(mirror_jsonl: Path) -> None:

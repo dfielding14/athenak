@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -29,6 +30,7 @@ from control_plane_common import read_stable_regular_file_below, remove_tree
 from control_plane_common import require_ledger_paths
 from control_plane_common import launch_contract_sha256, record_for_role, sha256
 from control_plane_common import source_bundle_sha256
+from control_plane_common import stable_serialization_anchor
 from control_plane_common import trusted_git_command, trusted_git_environment
 from control_plane_common import trusted_slurm_environment
 from control_plane_common import require_storage_policy_unlock_snapshot
@@ -1163,6 +1165,16 @@ class SnapshotTests(unittest.TestCase):
             with _promotion_lock(self.pic_root):
                 lock.unlink()
                 lock.write_text("replacement lock\n", encoding="utf-8")
+
+    def test_policy_promotion_lock_holds_stable_serialization_anchor(self) -> None:
+        anchor = stable_serialization_anchor(self.pic_root)
+        with _promotion_lock(self.pic_root):
+            descriptor = os.open(anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                with self.assertRaises(BlockingIOError):
+                    fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                os.close(descriptor)
 
     def test_atomic_writer_fsyncs_parent_directory(self) -> None:
         output = self.root / "durable" / "output.json"

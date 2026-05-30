@@ -2432,3 +2432,11 @@ def require_ledger_paths(
         if actual != required:
             raise ValueError(f"Unauthorized ledger path: {actual}; expected {required}")
         require_canonical_path_below(actual, root)
+
+
+def stable_serialization_anchor(authorized_pic_root: Path) -> Path:
+    lexical_root = Path(os.path.abspath(authorized_pic_root))
+    production_root = Path(os.path.abspath(AUTHORIZED_PIC_ROOT))
+    if lexical_root == production_root:
+        return production_root.parents[2]
+    return lexical_root.parent
