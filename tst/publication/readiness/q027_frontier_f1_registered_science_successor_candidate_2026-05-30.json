@@ -10,8 +10,8 @@
     "Q-038",
     "Q-042"
   ],
-  "qualification_effect": "local_registered_f1_successor_gyro_first_attempt_reconciled_retry_policy_active_late_review_repair_active",
-  "scope": "Staged successor chronology after the clean-candidate Frontier F0 admission closure. The candidate retains the completed F0 chronology and adds two exact one-attempt registered-science slices: a clean-candidate GPU relativistic-gyro oracle and a clean-candidate GPU paper-mode coupling oracle. The launch trampoline freezes an exact structured artifact tree and immutable inventory. Offline analyzers retain descriptor-pinned tree identity, validate exact inventory closure, publish one immutable result and receipt, and support qualification-time no-write recomputation from the snapshotted analyzer. Qualification retains descriptors for the immutable inventory, result and receipt plus their directory ancestry across recomputation and rechecks path identity and bytes afterward. This candidate does not claim Frontier F1 execution or scientific qualification.",
+  "qualification_effect": "local_registered_f1_gyro_v2_reconciled_analysis_rejected_v3_retry_policy_staged",
+  "scope": "Successor chronology after the clean-candidate Frontier F0 admission closure. The candidate retains the completed F0 chronology and narrows execution to exact one-attempt registered-science slices: a clean-candidate GPU relativistic-gyro oracle and a clean-candidate GPU paper-mode coupling oracle. The launch trampoline freezes an exact structured artifact tree and immutable inventory. Offline analyzers retain descriptor-pinned tree identity, validate exact inventory closure, publish one immutable result and receipt, and support qualification-time no-write recomputation from the snapshotted analyzer. Qualification retains descriptors for the immutable inventory, result and receipt plus their directory ancestry across recomputation and rechecks path identity and bytes afterward. Reconciled gyro v2 execution is preserved as unqualified chronology after offline analysis rejected before result publication; this candidate does not claim scientific qualification.",
   "initial_live_predecessor": {
     "record": "tst/publication/readiness/q027_frontier_f0_compute_snapshot_activation_2026-05-30.json",
     "control_plane_version": "e8e47eadb491b20e3f196f3d8ea0b859c61ccad961f8d56bc85ea2a48424eecf",
@@ -26,16 +26,16 @@
     "control_plane_inventory_files": 19,
     "worktree_state": "clean_reviewed_commit_6fa926a9bf113edf6258a7555aeab4ac450ca06b",
     "paired_install_status": "pass_identical_immutable_paired_install",
-    "active_policy_promotion_status": "pass"
+    "active_policy_promotion_status": "pending_reviewed_gyro_v3_parser_policy_promotion"
   },
   "registered_science_slices": [
     {
-      "authorization_id": "f1-clean-gyro-mpich-stderr-v2",
+      "authorization_id": "f1-clean-gyro-mpich-stderr-v3",
       "campaign": "f1_gpu_relativistic_gyro",
       "maximum_nodes": 1,
       "maximum_walltime_seconds": 900,
       "maximum_attempts": 1,
-      "analysis_script_sha256": "e9a5c93aea3e2cc288e07fc2adbc93ab22c49df74c1e83dfaf5cd694eced7d68",
+      "analysis_script_sha256": "411337175b5d3a2506939833656142a766dfac00b54ae8c1f7b34ca28e0ed905",
       "analysis_support_sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
     },
     {
@@ -44,7 +44,7 @@
       "maximum_nodes": 1,
       "maximum_walltime_seconds": 900,
       "maximum_attempts": 1,
-      "analysis_script_sha256": "f9c23bddf0ad0ac991baced9ffc7cf94e9b9776993962f2ece042e41aec9556b",
+      "analysis_script_sha256": "40dc7567aff8faa4b1db9c922a2d489ae098b902d2347420179d6dbaed046d40",
       "analysis_support_sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
     }
   ],
@@ -53,19 +53,20 @@
     "the launch trampoline traverses from a stable account serialization anchor outside the replaceable PIC-root name, retains artifact-parent ancestry before creating the artifact root, creates the artifact root and every declared launch directory exclusively, requires same-account process isolation from mkdir until the first no-follow descriptor and retained-ancestry binding complete, captures workload-created descendant identities after each action under the same isolation prerequisite through the recursive-capture handoff, retains and rechecks every observed directory identity and frozen workload-payload identity through final publication, rejects later root substitution, byte-identical nested-directory replacement, byte-identical top-level or nested workload-payload replacement and empty artifact subtrees, freezes final read-only bytes, retains the generated immutable-inventory exclusive-creation descriptor through final publication verification and revalidates exact final tree closure",
     "the launch trampoline creates the owner-only analysis directory under an unpredictable staging name with the same first-observation operational boundary, renames it into place, verifies the published identity through final publication and offline analyzers require that exact owner-only analysis directory, retain one no-follow artifact-root descriptor, bind directory and regular-file pre-open metadata to each opened descriptor, retain the inventory bytes plus inventory and payload-file identities through analysis, retain each published analysis-result descriptor through receipt publication, and reject duplicate keys, noncanonical paths, checksum drift, unlisted files, nested-directory replacement, redirected analysis output and root substitution",
     "the launch lifecycle scopes deterministic umask 022 artifact creation and restores the inherited process value after success or failure",
-    "the gyro analyzer requires exactly the registered cycle-two particle VTK output and rejects wildcard output drift",
+    "the gyro analyzer requires the exact deterministic cycle-zero through cycle-three particle VTK output family, measures the registered cycle-two artifact and rejects wildcard output drift",
     "qualification traverses the lexical PIC root, runs/, manifests/ and snapshot/ below a stable account serialization anchor without following aliases, pins the pre-submit-manifest ancestry before reading it, retains that manifest descriptor plus the run tree, immutable inventory, analysis result, offline receipt, their directory ancestry and snapshotted analyzer/helper descriptors, binds the immutable inventory digest into the child, executes the exact analyzer bytes through /proc/self/fd and rejects pre-submit-manifest, source, evidence-file, run-root or PIC-root replacement around no-write recomputation",
-    "the paper-mode coupling analyzer requires the exact registered cycle-zero through cycle-two output families for both coefficient cases and the structured artifact layer rejects every extra file or empty directory subtree beneath output/",
-    "the v2 analyzers accept Athena stderr only when it is byte-identical to the reviewed Cray MPICH informational transcript and reject additional diagnostics, warnings or setting drift"
+    "the paper-mode coupling analyzer requires the exact registered cycle-zero through cycle-three output families for both coefficient cases, measures the registered cycle-two artifacts and rejects wildcard output drift",
+    "both particle-VTK analyzers require the canonical emitted prefix, binary points, POINT_DATA marker, all schema-7 scalar fields and velocity payload without reordering or suffix drift",
+    "the registered analyzers accept Athena stderr only when it is byte-identical to the reviewed Cray MPICH informational transcript and reject additional diagnostics, warnings or setting drift"
   ],
   "local_validation": {
     "control_plane_discovery_tests": {
       "status": "pass",
-      "tests_run": 303
+      "tests_run": 304
     },
     "publication_standalone_tests": {
       "status": "pass",
-      "tests_run": 112
+      "tests_run": 114
     },
     "focused_frontier_chain_tests": {
       "status": "pass",
@@ -79,7 +80,7 @@
     },
     "readiness_registry_tests": {
       "status": "pass",
-      "tests_run": 14,
+      "tests_run": 16,
       "command": "python3 -m unittest tst.publication.test_pic_readiness_registry"
     },
     "control_plane_discovery_command": "python3 -m unittest discover -s tst/publication/frontier_control_plane -p 'test_*.py'",
@@ -313,22 +314,88 @@
     "active_reservations": 0
   },
   "rejected_pre_reservation_manifest_fixture": "tst/publication/readiness/q027_frontier_f1_rejected_pre_reservation_manifest_fixture_2026-05-30.json",
+  "rejected_pre_reservation_operator_queue_format_chronology": {
+    "status": "fail_closed_before_reservation_intent_and_scheduler_submission",
+    "submission_id": "13f053df-e488-4394-82a4-585c02d92063",
+    "registered_science_authorization_id": "f1-clean-gyro-mpich-stderr-v2",
+    "control_plane_version": "4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/pre_submit_manifest.json",
+    "manifest_sha256": "57cb70c5ed1448c9238393fb4a0a9046cfb3aff7e07357d5f3724bf67ed9aeb1",
+    "rejection": "The installed submit wrapper failed closed before reservation because the immutable manifest froze the operator-attestation seven-field queue format while the validator requires its exact six-field queue snapshot format.",
+    "pre_manifest_attestation_sha256": "343c0b51e3ab474fd2a4087c432aadbdcfc8061bbe8295a21c570e32b6bd65f8",
+    "pre_submit_wrapper_attestation_sha256": "1857d29babc300a05f72bf51e92e7abd85dbf99fc2ddc892bbb78e2ae248415a",
+    "reservation_attachments": "absent",
+    "pending_submission_marker": "absent",
+    "ledger_uuid_hits": 0,
+    "orion_ledger_records": 34,
+    "orion_receipt_records": 34,
+    "project_home_ledger_records": 34,
+    "active_reservations": 0
+  },
+  "rejected_pre_reservation_operator_queue_format_fixture": "tst/publication/readiness/q027_frontier_f1_rejected_operator_queue_format_manifest_fixture_2026-05-30.json",
+  "superseded_gyro_v2_registered_execution": {
+    "status": "reconciled_scheduler_pass_scientific_analysis_rejected_retry_registration_required",
+    "submission_id": "8245b90f-f2cd-437c-bd5e-64564fe2b9ba",
+    "reservation_id": "02ea1f97-48a3-4513-a107-289334946bbf",
+    "job_id": "4746245",
+    "registered_science_authorization_id": "f1-clean-gyro-mpich-stderr-v2",
+    "run_artifact_dir": "/lustre/orion/ast207/proj-shared/dfielding/PIC/runs/f1_gpu_relativistic_gyro/8245b90f-f2cd-437c-bd5e-64564fe2b9ba",
+    "pre_submit_manifest_sha256": "2a504f1ee2a0004ac6d9ab7fd61847e56f2174e910d5d8864207b37d92b3fecb",
+    "artifact_inventory_sha256": "eb961e414d60fccdb10945385512bd27fc23057d995de97b3795ec7e647a5899",
+    "scheduler_state": "COMPLETED",
+    "elapsed_seconds": 11,
+    "consumed_node_hours": 0.0030555555555555557,
+    "cumulative_consumed_node_hours": 0.08444444444444443,
+    "analysis_status": "rejected_before_result_publication",
+    "analysis_rejection": "The immutable output family contains deterministic cycle-zero through cycle-three particle VTK publications while the v2 gyro analyzer required only cycle two. Read-only replay after closure repair also exposed an abbreviated synthetic VTK parser fixture that omitted the emitted POINT_DATA, cr_source, macro_weight and birth_time records.",
+    "immutable_analysis_directory": "empty",
+    "analysis_result": "absent",
+    "offline_analysis_receipt": "absent",
+    "orion_ledger_records": 37,
+    "orion_receipt_records": 37,
+    "project_home_ledger_records": 37,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent",
+    "pre_manifest_attestation_sha256": "087efd82d2c5977a17fd801a25bfdbb5727dcb3a55c8f13bce429ecd904dd733",
+    "pre_submit_wrapper_attestation_sha256": "7a3fa51a2eda4eafb0ace72a8723236d61fbc8ae4bb458a491acff2c78b725ad",
+    "read_only_replay": {
+      "status": "pass_after_parser_repair_without_result_publication",
+      "cycle": 2,
+      "particle_count": 64,
+      "max_abs_velocity_error": 5.808176634092277e-09
+    },
+    "remediation": "Register gyro v3 with the exact deterministic output tree and emitted particle VTK schema. Preserve the unused paper-coupling v2 authorization unchanged until its serialized execution boundary."
+  },
+  "superseded_gyro_v2_registered_execution_fixture": "tst/publication/readiness/q027_frontier_f1_gyro_v2_analysis_rejection_fixture_2026-05-30.json",
+  "gyro_v3_parser_policy_transition": {
+    "status": "pending_reviewed_policy_promotion",
+    "predecessor_policy_sha256": "3895221e6a063f0b415f39bda3e2191801cc168b7fa663f1f6880e5f71ae48da",
+    "predecessor_promotion_sha256": "016cbb66332a6f09d49d8025c25f1bcf4c52127e8619211049f6ae799482f72c",
+    "control_plane_version": "4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
+    "gyro_registered_science_authorization_id": "f1-clean-gyro-mpich-stderr-v3",
+    "paper_registered_science_authorization_id": "f1-clean-paper-coupling-mpich-stderr-v2",
+    "reason": "Rotate the consumed gyro one-attempt authorization and bind its analyzer to the exact deterministic output tree plus emitted particle VTK schema before any further submission. Preserve the unused paper-coupling v2 authorization ID while binding its repaired analyzer before first submission."
+  },
   "required_live_preflight": {
     "status": "required_immediately_before_policy_promotion_and_each_registered_science_submission_boundary",
-    "historical_submission_id_must_remain_absent_from_live_ledgers": "bc7febae-e4a5-493f-ae52-d6578851e563",
+    "historical_submission_ids_must_remain_absent_from_live_ledgers": [
+      "bc7febae-e4a5-493f-ae52-d6578851e563",
+      "13f053df-e488-4394-82a4-585c02d92063"
+    ],
     "checks": [
       "current Orion ledger, Orion mirror-receipt and Project Home mirror chains are coherent",
       "current Orion pending_submission.json marker is absent",
       "current mirrored ledger state has zero active reservations",
-      "historical rejected pre-reservation submission UUID has zero hits in current Orion JSONL, Orion CSV, Orion receipts and Project Home mirror streams",
+      "each historical rejected pre-reservation submission UUID has zero hits in current Orion JSONL, Orion CSV, Orion receipts and Project Home mirror streams",
       "same-account process and scheduler snapshots are reviewed for the current boundary"
     ],
     "evidence_rule": "Archive the current preflight result separately from the immutable historical incident fixture. Legitimate later reservations may advance live ledger counts without changing the frozen 34/34/34 incident chronology."
   },
   "open_boundaries": [
-    "archive one reviewed same-account process-isolation attestation from tst/publication/readiness/q027_frontier_registered_science_same_account_isolation_attestation_template_2026-05-30.json immediately before each v2 registered-science submission",
-    "the v2 registered Frontier F1 slices have not executed",
+    "promote the reviewed gyro-v3 and unused paper-v2 parser-binding policy through installed repair successor 4ccde8df",
+    "archive one reviewed same-account process-isolation attestation from tst/publication/readiness/q027_frontier_registered_science_same_account_isolation_attestation_template_2026-05-30.json immediately before each registered-science submission",
+    "the gyro-v3 and paper-coupling-v2 registered Frontier F1 slices have not qualified",
     "external reviewer disposition remains pending external review"
   ],
-  "overall_disposition": "local_registered_f1_repair_successor_active_keep_registered_science_submissions_paused_until_attested_boundary"
+  "overall_disposition": "local_registered_f1_gyro_v2_reconciled_analysis_rejected_v3_retry_policy_staged_keep_submissions_paused"
 }

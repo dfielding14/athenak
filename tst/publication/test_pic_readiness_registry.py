@@ -404,7 +404,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
             for record in policy["registered_science_slices"]
         }
         sidecars = {
-            "f1-clean-gyro-mpich-stderr-v2": "frontier_f1_clean_gyro_launch_contract.json",
+            "f1-clean-gyro-mpich-stderr-v3": "frontier_f1_clean_gyro_launch_contract.json",
             "f1-clean-paper-coupling-mpich-stderr-v2": (
                 "frontier_f1_clean_paper_coupling_launch_contract.json"
             ),
@@ -441,7 +441,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
         clean_manifest = json.loads(clean_manifest_path.read_text(encoding="utf-8"))
         executable_path = Path(clean_manifest["build"]["executable_path"])
         binding_paths = {
-            "f1-clean-gyro-mpich-stderr-v2": {
+            "f1-clean-gyro-mpich-stderr-v3": {
                 "job_script_sha256": (
                     REPO_ROOT
                     / "tst/publication/frontier_f1_structured_gpu_relativistic_gyro_job.sh"
@@ -588,7 +588,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
             self.assertEqual(binding[key], _sha256(REPO_ROOT / relative))
         self.assertEqual(
             provenance["disposition"],
-            "pass_historical_transcript_bound_to_local_fixture_retry_requires_separate_v2_policy_activation",
+            "pass_historical_transcript_bound_to_local_fixture_retry_requires_separate_v3_policy_activation",
         )
 
     def test_rejected_pre_reservation_manifest_chronology_is_bound(self) -> None:
@@ -707,9 +707,12 @@ class PicReadinessRegistryTests(unittest.TestCase):
             preflight["status"],
             "required_immediately_before_policy_promotion_and_each_registered_science_submission_boundary",
         )
+        queue_chronology = successor[
+            "rejected_pre_reservation_operator_queue_format_chronology"
+        ]
         self.assertEqual(
-            preflight["historical_submission_id_must_remain_absent_from_live_ledgers"],
-            chronology["submission_id"],
+            preflight["historical_submission_ids_must_remain_absent_from_live_ledgers"],
+            [chronology["submission_id"], queue_chronology["submission_id"]],
         )
         self.assertEqual(
             preflight["checks"],
@@ -717,11 +720,120 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 "current Orion ledger, Orion mirror-receipt and Project Home mirror chains are coherent",
                 "current Orion pending_submission.json marker is absent",
                 "current mirrored ledger state has zero active reservations",
-                "historical rejected pre-reservation submission UUID has zero hits in current Orion JSONL, Orion CSV, Orion receipts and Project Home mirror streams",
+                "each historical rejected pre-reservation submission UUID has zero hits in current Orion JSONL, Orion CSV, Orion receipts and Project Home mirror streams",
                 "same-account process and scheduler snapshots are reviewed for the current boundary",
             ],
         )
         self.assertIn("Legitimate later reservations", preflight["evidence_rule"])
+
+    def test_rejected_operator_queue_format_manifest_chronology_is_bound(self) -> None:
+        successor = _load(
+            "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
+        )
+        chronology = successor[
+            "rejected_pre_reservation_operator_queue_format_chronology"
+        ]
+        fixture = _load(
+            "q027_frontier_f1_rejected_operator_queue_format_manifest_fixture_2026-05-30.json"
+        )
+        self.assertEqual(
+            successor["rejected_pre_reservation_operator_queue_format_fixture"],
+            "tst/publication/readiness/"
+            "q027_frontier_f1_rejected_operator_queue_format_manifest_fixture_2026-05-30.json",
+        )
+        self.assertEqual(chronology, fixture["chronology"])
+        manifest_path = Path(chronology["manifest_path"])
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        binding = fixture["manifest_binding"]
+        self.assertEqual(f"{manifest_path.stat().st_mode & 0o777:04o}", binding["mode"])
+        self.assertEqual(_sha256(manifest_path), chronology["manifest_sha256"])
+        self.assertEqual(manifest["submission_id"], chronology["submission_id"])
+        self.assertEqual(
+            manifest["queue_snapshot_sha256"], binding["queue_snapshot_sha256"]
+        )
+        self.assertEqual(
+            binding["queue_snapshot_format"], "%i|%a|%P|%q|%T|%j|%k"
+        )
+        self.assertEqual(
+            binding["validator_queue_snapshot_format"], "%i|%P|%q|%T|%j|%k"
+        )
+        self.assertNotEqual(
+            binding["queue_snapshot_sha256"],
+            binding["validator_queue_snapshot_sha256"],
+        )
+        self.assertEqual(chronology["reservation_attachments"], "absent")
+        for name in ("reservation_id.txt", "manifest_sha256.txt"):
+            self.assertFalse((manifest_path.parent / name).exists())
+        for attestation, digest_key in zip(
+            fixture["attestations"],
+            (
+                "pre_manifest_attestation_sha256",
+                "pre_submit_wrapper_attestation_sha256",
+            ),
+        ):
+            path = Path(attestation["path"])
+            self.assertEqual(attestation["sha256"], chronology[digest_key])
+            self.assertEqual(_sha256(path), chronology[digest_key])
+            contents = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(contents["phase"], attestation["phase"])
+            self.assertEqual(
+                contents["queue_snapshot"]["sha256"],
+                binding["queue_snapshot_sha256"],
+            )
+        live_surfaces = (
+            "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl",
+            "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.csv",
+            "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/mirror_receipts.jsonl",
+            "/ccs/proj/ast207/proj-shared/PIC/ledger/node_hours.jsonl",
+        )
+        for surface in live_surfaces:
+            self.assertNotIn(chronology["submission_id"], Path(surface).read_text())
+
+    def test_reconciled_gyro_v2_analysis_rejection_chronology_is_bound(self) -> None:
+        successor = _load(
+            "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
+        )
+        chronology = successor["superseded_gyro_v2_registered_execution"]
+        fixture = _load(
+            "q027_frontier_f1_gyro_v2_analysis_rejection_fixture_2026-05-30.json"
+        )
+        self.assertEqual(
+            successor["superseded_gyro_v2_registered_execution_fixture"],
+            "tst/publication/readiness/"
+            "q027_frontier_f1_gyro_v2_analysis_rejection_fixture_2026-05-30.json",
+        )
+        self.assertEqual(chronology, fixture["chronology"])
+        inventory_path = Path(fixture["artifact_inventory_path"])
+        self.assertEqual(
+            f"{inventory_path.stat().st_mode & 0o777:04o}",
+            fixture["artifact_inventory_mode"],
+        )
+        self.assertEqual(_sha256(inventory_path), chronology["artifact_inventory_sha256"])
+        self.assertEqual(
+            json.loads(inventory_path.read_text(encoding="utf-8")),
+            fixture["artifact_inventory"],
+        )
+        output_paths = [
+            record["path"]
+            for record in fixture["artifact_inventory"]["files"]
+            if record["path"].startswith("output/")
+        ]
+        self.assertEqual(len(output_paths), 21)
+        self.assertEqual(
+            output_paths,
+            sorted(output_paths),
+        )
+        artifact_dir = Path(chronology["run_artifact_dir"])
+        self.assertEqual(list((artifact_dir / "analysis").iterdir()), [])
+        ledger_events = [
+            json.loads(line)
+            for line in Path(
+                "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl"
+            ).read_text(encoding="utf-8").splitlines()
+        ]
+        self.assertIn(fixture["terminal_reconciliation_event"], ledger_events)
+        self.assertEqual(chronology["analysis_result"], "absent")
+        self.assertEqual(chronology["offline_analysis_receipt"], "absent")
 
     def test_registered_science_same_account_isolation_attestation_template(self) -> None:
         template = _load(

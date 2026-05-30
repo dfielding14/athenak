@@ -256,23 +256,28 @@ def expected_velocity(cycle: int, time: float) -> tuple[float, float, float]:
 
 
 def parse_particle_vtk_bytes(contents: bytes, *, label: str) -> dict[str, object]:
-    header = re.search(
-        rb"# AthenaK particle data at time=\s*([^ ]+)\s+nranks=.*cycle=([0-9]+)",
+    header = re.match(
+        rb"# vtk DataFile Version 2\.0\n"
+        rb"# AthenaK particle data at time=\s*([^ \n]+)\s+nranks=\s*[0-9]+\s+"
+        rb"cycle=([0-9]+)\s+variables=[^\n]*\n"
+        rb"BINARY\nDATASET UNSTRUCTURED_GRID\n\n"
+        rb"POINTS\s+([0-9]+)\s+float\n",
         contents,
     )
     if header is None:
-        raise ValueError(f"Missing particle VTK header: {label}")
+        raise ValueError(f"Missing canonical particle VTK prefix: {label}")
     time = float(header.group(1))
     if not math.isfinite(time):
         raise ValueError(f"Non-finite particle VTK time: {label}")
     cycle = int(header.group(2))
-
-    points = re.search(rb"\nPOINTS\s+([0-9]+)\s+float\n", contents)
-    if points is None:
-        raise ValueError(f"Missing POINTS marker: {label}")
-    count = int(points.group(1))
-    offset = points.end() + 12 * count
-    for name in ("gid", "ptag", "species"):
+    count = int(header.group(3))
+    offset = header.end() + 12 * count
+    point_data = re.match(rb"\n\nPOINT_DATA\s+" + str(count).encode("ascii") + rb"\n",
+                          contents[offset:])
+    if point_data is None:
+        raise ValueError(f"Missing POINT_DATA marker: {label}")
+    offset += point_data.end()
+    for name in ("gid", "ptag", "species", "cr_source"):
         marker = re.match(
             rb"\nSCALARS " + name.encode("ascii") + rb" int\nLOOKUP_TABLE default\n",
             contents[offset:],
@@ -280,7 +285,7 @@ def parse_particle_vtk_bytes(contents: bytes, *, label: str) -> dict[str, object
         if marker is None:
             raise ValueError(f"Missing {name} marker: {label}")
         offset += marker.end() + 4 * count
-    for name in ("deltaf_f0", "deltaf_weight"):
+    for name in ("macro_weight", "birth_time", "deltaf_f0", "deltaf_weight"):
         marker = re.match(
             rb"\nSCALARS " + name.encode("ascii") + rb" float\nLOOKUP_TABLE default\n",
             contents[offset:],
@@ -324,13 +329,21 @@ def require_trusted_gpu_launch(stdout: str) -> dict[str, object]:
 
 def registered_particle_output(inventory: dict[str, dict[str, object]]) -> str:
     expected = "output/pvtk/f1_gpu_relativistic_gyro.prtcl_all.00002.part.vtk"
-    paths = sorted(
-        path for path in inventory
-        if path.startswith("output/pvtk/f1_gpu_relativistic_gyro.prtcl_all.")
-        and path.endswith(".part.vtk")
+    expected_paths = [
+        "output/f1_gpu_relativistic_gyro-errs.dat",
+        *[
+            f"output/pvtk/f1_gpu_relativistic_gyro.prtcl_all.{cycle:05d}.part.vtk"
+            for cycle in range(4)
+        ],
+    ]
+    expected_paths.extend(
+        f"output/rst/f1_gpu_relativistic_gyro.{cycle:05d}.rst{suffix}"
+        for cycle in range(4)
+        for suffix in ("", ".complete", ".manifest", ".manifest.complete")
     )
-    if paths != [expected]:
-        raise ValueError("Gyro particle VTK output set differs from registered cycle 2 artifact")
+    paths = sorted(path for path in inventory if path.startswith("output/"))
+    if paths != sorted(expected_paths):
+        raise ValueError("Gyro output set differs from registered artifacts")
     return expected
 
 

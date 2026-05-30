@@ -293,33 +293,36 @@ def find_marker(contents: bytes, pattern: bytes, offset: int, *, path: Path,
 
 
 def parse_particle_vtk_bytes(contents: bytes, *, label: str) -> dict[str, object]:
-    header = re.search(
-        rb"# AthenaK particle data at time=\s*([^ ]+)\s+nranks=.*cycle=([0-9]+)",
+    header = re.match(
+        rb"# vtk DataFile Version 2\.0\n"
+        rb"# AthenaK particle data at time=\s*([^ \n]+)\s+nranks=\s*[0-9]+\s+"
+        rb"cycle=([0-9]+)\s+variables=[^\n]*\n"
+        rb"BINARY\nDATASET UNSTRUCTURED_GRID\n\n"
+        rb"POINTS\s+([0-9]+)\s+float\n",
         contents,
     )
     if header is None:
-        raise ValueError(f"Missing particle VTK header: {label}")
+        raise ValueError(f"Missing canonical particle VTK prefix: {label}")
     time = float(header.group(1))
     if not math.isfinite(time):
         raise ValueError(f"Non-finite particle VTK time: {label}")
     cycle = int(header.group(2))
-
-    offset, points = find_marker(
+    count = int(header.group(3))
+    offset = header.end() + 12 * count
+    offset, _ = find_marker(
         contents,
-        rb"\nPOINTS\s+([0-9]+)\s+float\n",
-        header.end(),
+        rb"\n\nPOINT_DATA\s+" + str(count).encode("ascii") + rb"\n",
+        offset,
         path=Path(label),
-        label="POINTS marker",
+        label="POINT_DATA marker",
     )
-    count = int(points.group(1))
-    offset += 12 * count
-    for name in ("gid", "ptag", "species"):
+    for name in ("gid", "ptag", "species", "cr_source"):
         pattern = (
             rb"\nSCALARS " + name.encode("ascii") + rb" int\nLOOKUP_TABLE default\n"
         )
         offset, _ = find_marker(contents, pattern, offset, path=Path(label), label=name)
         offset += 4 * count
-    for name in ("deltaf_f0", "deltaf_weight"):
+    for name in ("macro_weight", "birth_time", "deltaf_f0", "deltaf_weight"):
         pattern = (
             rb"\nSCALARS " + name.encode("ascii") + rb" float\nLOOKUP_TABLE default\n"
         )
@@ -418,12 +421,12 @@ def registered_case_output_paths(
     output_dir = f"output/{label}"
     expected = [
         f"{output_dir}/pvtk/{basename}.prtcl_all.{cycle:05d}.part.vtk"
-        for cycle in range(3)
+        for cycle in range(4)
     ]
     expected.extend(
         f"{output_dir}/bin/{basename}.{file_id}.{cycle:05d}.bin"
         for file_id in ("mhd_bcc", "mhd_u_e", "mhd_u_m1", "mhd_u_m2", "mhd_u_m3")
-        for cycle in range(3)
+        for cycle in range(4)
     )
     registered_paths = []
     for registered_label in ("coeff0", "coeff7"):
@@ -431,12 +434,12 @@ def registered_case_output_paths(
         registered_dir = f"output/{registered_label}"
         registered_paths.extend(
             f"{registered_dir}/pvtk/{registered_basename}.prtcl_all.{cycle:05d}.part.vtk"
-            for cycle in range(3)
+            for cycle in range(4)
         )
         registered_paths.extend(
             f"{registered_dir}/bin/{registered_basename}.{file_id}.{cycle:05d}.bin"
             for file_id in ("mhd_bcc", "mhd_u_e", "mhd_u_m1", "mhd_u_m2", "mhd_u_m3")
-            for cycle in range(3)
+            for cycle in range(4)
         )
     paths = sorted(path for path in inventory if path.startswith("output/"))
     if paths != sorted(registered_paths):

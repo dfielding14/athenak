@@ -6568,6 +6568,27 @@ PY
         for path, expected in before.items():
             self.assertEqual(path.read_bytes(), expected)
 
+    def test_reservation_rejects_attestation_seven_field_queue_snapshot_without_ledger_intent(
+        self,
+    ) -> None:
+        self._write("queue.txt", "123|AST207|batch|normal|RUNNING|other-job|\n")
+        manifest_path = self._create_manifest()
+        before = {
+            path: path.read_bytes()
+            for path in [self.ledger, self.csv, self.receipts, self.mirror]
+        }
+        self._write("queue.txt", "123|batch|normal|RUNNING|other-job|\n")
+        with self.assertRaisesRegex(
+            ValueError, "Fresh queue output differs from frozen queue snapshot"
+        ):
+            self._reserve(manifest_path)
+        self.assertTrue(manifest_path.is_file())
+        for name in ["reservation_id.txt", "manifest_sha256.txt"]:
+            self.assertFalse((manifest_path.parent / name).exists())
+        self.assertFalse((self.pic_root / "ledger" / "pending_submission.json").exists())
+        for path, expected in before.items():
+            self.assertEqual(path.read_bytes(), expected)
+
     def test_reservation_rejects_untrusted_environment_profile(self) -> None:
         self._write("environment.sh", "export MPICH_GPU_SUPPORT_ENABLED=0\n")
         self._write_timeout()

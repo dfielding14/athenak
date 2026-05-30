@@ -1,0 +1,44 @@
+{
+  "record_type": "q027_frontier_f1_rejected_operator_queue_format_manifest_fixture",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-027",
+  "qualification_effect": "immutable_historical_incident_fixture_only",
+  "chronology": {
+    "status": "fail_closed_before_reservation_intent_and_scheduler_submission",
+    "submission_id": "13f053df-e488-4394-82a4-585c02d92063",
+    "registered_science_authorization_id": "f1-clean-gyro-mpich-stderr-v2",
+    "control_plane_version": "4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/13f053df-e488-4394-82a4-585c02d92063/pre_submit_manifest.json",
+    "manifest_sha256": "57cb70c5ed1448c9238393fb4a0a9046cfb3aff7e07357d5f3724bf67ed9aeb1",
+    "rejection": "The installed submit wrapper failed closed before reservation because the immutable manifest froze the operator-attestation seven-field queue format while the validator requires its exact six-field queue snapshot format.",
+    "pre_manifest_attestation_sha256": "343c0b51e3ab474fd2a4087c432aadbdcfc8061bbe8295a21c570e32b6bd65f8",
+    "pre_submit_wrapper_attestation_sha256": "1857d29babc300a05f72bf51e92e7abd85dbf99fc2ddc892bbb78e2ae248415a",
+    "reservation_attachments": "absent",
+    "pending_submission_marker": "absent",
+    "ledger_uuid_hits": 0,
+    "orion_ledger_records": 34,
+    "orion_receipt_records": 34,
+    "project_home_ledger_records": 34,
+    "active_reservations": 0
+  },
+  "manifest_binding": {
+    "mode": "0444",
+    "queue_snapshot_format": "%i|%a|%P|%q|%T|%j|%k",
+    "queue_snapshot_sha256": "d3bae5ba96a8dc8989338f3588afbbef814963d51cb61447fdc30a40135d378b",
+    "validator_queue_snapshot_format": "%i|%P|%q|%T|%j|%k",
+    "validator_queue_snapshot_sha256": "057fe8ea530de2cc544e7ddff3e5415612ce6031ceb7245e3b08b8588ff7618c"
+  },
+  "attestations": [
+    {
+      "phase": "pre_manifest",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260530T225555Z-f1-clean-gyro-mpich-stderr-v2-pre_manifest/attestation.json",
+      "sha256": "343c0b51e3ab474fd2a4087c432aadbdcfc8061bbe8295a21c570e32b6bd65f8"
+    },
+    {
+      "phase": "pre_submit_wrapper",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260530T225615Z-f1-clean-gyro-mpich-stderr-v2-pre_submit_wrapper/attestation.json",
+      "sha256": "1857d29babc300a05f72bf51e92e7abd85dbf99fc2ddc892bbb78e2ae248415a"
+    }
+  ]
+}

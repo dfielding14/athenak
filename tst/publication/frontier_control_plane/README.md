@@ -351,6 +351,11 @@ MANIFEST="$(
 "${CONTROL_PLANE_DIR}/submit_frontier_job.sh" "$MANIFEST"
 ```
 
+The validator-bound queue snapshot above is intentionally the exact six-field
+`%i|%P|%q|%T|%j|%k` artifact. The separately archived operator-isolation
+attestation captures the seven-field `%i|%a|%P|%q|%T|%j|%k` snapshot including
+the account. These artifacts have different roles and are not interchangeable.
+
 The config must reference the exact authorized Orion root, an immutable Slurm
 directive template containing `#SBATCH -A AST207`, `#SBATCH -p batch`, one
 allowed QOS, node count, walltime and exactly

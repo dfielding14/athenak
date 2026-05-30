@@ -19,7 +19,7 @@
   },
   "registered_science_slices": [
     {
-      "authorization_id": "f1-clean-gyro-mpich-stderr-v2",
+      "authorization_id": "f1-clean-gyro-mpich-stderr-v3",
       "status": "authorized",
       "campaign": "f1_gpu_relativistic_gyro",
       "test_id": "pic_relativistic_gyro_paper",
@@ -35,7 +35,7 @@
       "input_deck_sha256": "994acc009bf7455d3666db44da2c8825b6124ce025a2e3547bef6e7c75992c8e",
       "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
       "analysis_script_sha256": [
-        "e9a5c93aea3e2cc288e07fc2adbc93ab22c49df74c1e83dfaf5cd694eced7d68",
+        "411337175b5d3a2506939833656142a766dfac00b54ae8c1f7b34ca28e0ed905",
         "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
       ],
       "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
@@ -59,7 +59,7 @@
       "input_deck_sha256": "d0dc2e23a2085c9ad54479240f3f65c4b28f6d565d8bf4279c9865b40d095fc5",
       "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
       "analysis_script_sha256": [
-        "f9c23bddf0ad0ac991baced9ffc7cf94e9b9776993962f2ece042e41aec9556b",
+        "40dc7567aff8faa4b1db9c922a2d489ae098b902d2347420179d6dbaed046d40",
         "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
       ],
       "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",

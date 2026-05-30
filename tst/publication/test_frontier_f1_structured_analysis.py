@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import struct
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -127,6 +128,36 @@ class FrontierF1StructuredAnalysisTests(unittest.TestCase):
         root.chmod(0o555)
 
     def _particle_vtk(self, *, suffix: bytes = b"") -> bytes:
+        return (
+            b"# vtk DataFile Version 2.0\n"
+            b"# AthenaK particle data at time= 0.0  nranks= 1  cycle=0  variables=all\n"
+            b"BINARY\n"
+            b"DATASET UNSTRUCTURED_GRID\n"
+            b"\nPOINTS 1 float\n"
+            + struct.pack(">fff", 0.0, 0.0, 0.0)
+            + b"\n\nPOINT_DATA 1\n"
+            + b"\nSCALARS gid int\nLOOKUP_TABLE default\n"
+            + struct.pack(">i", 0)
+            + b"\nSCALARS ptag int\nLOOKUP_TABLE default\n"
+            + struct.pack(">i", 0)
+            + b"\nSCALARS species int\nLOOKUP_TABLE default\n"
+            + struct.pack(">i", 0)
+            + b"\nSCALARS cr_source int\nLOOKUP_TABLE default\n"
+            + struct.pack(">i", 0)
+            + b"\nSCALARS macro_weight float\nLOOKUP_TABLE default\n"
+            + struct.pack(">f", 0.0)
+            + b"\nSCALARS birth_time float\nLOOKUP_TABLE default\n"
+            + struct.pack(">f", 0.0)
+            + b"\nSCALARS deltaf_f0 float\nLOOKUP_TABLE default\n"
+            + struct.pack(">f", 0.0)
+            + b"\nSCALARS deltaf_weight float\nLOOKUP_TABLE default\n"
+            + struct.pack(">f", 0.0)
+            + b"\nVECTORS vel float\n"
+            + struct.pack(">fff", 0.0, 0.0, 0.0)
+            + suffix
+        )
+
+    def _legacy_particle_vtk(self, *, suffix: bytes = b"") -> bytes:
         return (
             b"# AthenaK particle data at time= 0.0 nranks=1 cycle=0\n"
             b"POINTS 0 float\n"
@@ -568,14 +599,37 @@ class FrontierF1StructuredAnalysisTests(unittest.TestCase):
                 "libamdhip64",
             )
 
-    def test_gyro_requires_exact_registered_cycle_two_artifact(self) -> None:
+    def test_gyro_requires_exact_registered_output_set(self) -> None:
         expected = "output/pvtk/f1_gpu_relativistic_gyro.prtcl_all.00002.part.vtk"
-        self.assertEqual(registered_particle_output({expected: {}}), expected)
+        inventory = {
+            "output/f1_gpu_relativistic_gyro-errs.dat": {},
+            **{
+            f"output/pvtk/f1_gpu_relativistic_gyro.prtcl_all.{cycle:05d}.part.vtk": {}
+            for cycle in range(4)
+            },
+            **{
+                f"output/rst/f1_gpu_relativistic_gyro.{cycle:05d}.rst{suffix}": {}
+                for cycle in range(4)
+                for suffix in ("", ".complete", ".manifest", ".manifest.complete")
+            },
+        }
+        self.assertEqual(registered_particle_output(inventory), expected)
+        del inventory[expected]
+        with self.assertRaisesRegex(ValueError, "differs"):
+            registered_particle_output(inventory)
+        inventory[expected] = {}
+        final_publication = (
+            "output/pvtk/f1_gpu_relativistic_gyro.prtcl_all.00003.part.vtk"
+        )
+        del inventory[final_publication]
+        with self.assertRaisesRegex(ValueError, "differs"):
+            registered_particle_output(inventory)
+        inventory[final_publication] = {}
         with self.assertRaisesRegex(ValueError, "differs"):
             registered_particle_output(
                 {
-                    expected: {},
-                    "output/pvtk/f1_gpu_relativistic_gyro.prtcl_all.zzzzz.part.vtk": {},
+                    **inventory,
+                    "output/unregistered.bin": {},
                 }
             )
 
@@ -600,13 +654,68 @@ class FrontierF1StructuredAnalysisTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "differs"):
                     registered_case_output_paths(expected, "coeff0")
                 del expected[path]
+        del expected[
+            "output/coeff0/pvtk/f1_gpu_paper_coupling_coeff0.prtcl_all.00002.part.vtk"
+        ]
+        with self.assertRaisesRegex(ValueError, "differs"):
+            registered_case_output_paths(expected, "coeff0")
 
-    def test_particle_vtk_parsers_reject_suffix(self) -> None:
-        for parser in (parse_gyro_vtk, parse_coupling_vtk):
-            with self.subTest(parser=parser.__module__):
-                parser(self._particle_vtk(), label="particles.vtk")
-                with self.assertRaisesRegex(ValueError, "suffix"):
-                    parser(self._particle_vtk(suffix=b"forged"), label="particles.vtk")
+    def test_gyro_particle_vtk_parser_requires_exact_emitted_schema(self) -> None:
+        contents = self._particle_vtk()
+        parse_gyro_vtk(contents, label="particles.vtk")
+        with self.assertRaisesRegex(ValueError, "suffix"):
+            parse_gyro_vtk(contents + b"forged", label="particles.vtk")
+        with self.assertRaisesRegex(ValueError, "prefix"):
+            parse_gyro_vtk(
+                contents.replace(b"DATASET UNSTRUCTURED_GRID", b"DATASET FORGED_GRID"),
+                label="particles.vtk",
+            )
+        with self.assertRaisesRegex(ValueError, "POINT_DATA"):
+            parse_gyro_vtk(
+                contents.replace(b"POINT_DATA", b"FORGED_DATA"),
+                label="particles.vtk",
+            )
+        for name in (
+            "gid",
+            "ptag",
+            "species",
+            "cr_source",
+            "macro_weight",
+            "birth_time",
+            "deltaf_f0",
+            "deltaf_weight",
+        ):
+            with self.subTest(missing=name):
+                with self.assertRaisesRegex(ValueError, name):
+                    parse_gyro_vtk(
+                        contents.replace(
+                            f"SCALARS {name}".encode("ascii"),
+                            b"SCALARS forged",
+                        ),
+                        label="particles.vtk",
+                    )
+        with self.assertRaises(ValueError):
+            parse_gyro_vtk(
+                contents.replace(
+                    b"SCALARS gid int\nLOOKUP_TABLE default\n"
+                    + struct.pack(">i", 0)
+                    + b"\nSCALARS ptag int\nLOOKUP_TABLE default\n"
+                    + struct.pack(">i", 0),
+                    b"SCALARS ptag int\nLOOKUP_TABLE default\n"
+                    + struct.pack(">i", 0)
+                    + b"\nSCALARS gid int\nLOOKUP_TABLE default\n"
+                    + struct.pack(">i", 0),
+                ),
+                label="particles.vtk",
+            )
+
+    def test_coupling_particle_vtk_parser_rejects_suffix(self) -> None:
+        parse_coupling_vtk(self._legacy_particle_vtk(), label="particles.vtk")
+        with self.assertRaisesRegex(ValueError, "suffix"):
+            parse_coupling_vtk(
+                self._legacy_particle_vtk(suffix=b"forged"),
+                label="particles.vtk",
+            )
 
 
 if __name__ == "__main__":
