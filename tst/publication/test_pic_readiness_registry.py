@@ -250,12 +250,18 @@ class PicReadinessRegistryTests(unittest.TestCase):
                 paired["project_home_ledger_records"],
             )
             self.assertEqual(paired["active_reservations"], 0)
-            active_transition = candidate["active_policy_transition"]
-            self.assertEqual(active_transition["status"], "pass")
-            self.assertEqual(
-                active_transition["control_plane_version"],
-                storage["installed_control_plane_version"],
-            )
+            active_transition = candidate.get("active_policy_transition")
+            if active_transition is None:
+                self.assertEqual(
+                    candidate["staged_successor"]["active_policy_promotion_status"],
+                    "pending",
+                )
+            else:
+                self.assertEqual(active_transition["status"], "pass")
+                self.assertEqual(
+                    active_transition["control_plane_version"],
+                    storage["installed_control_plane_version"],
+                )
         else:
             self.fail(f"Unknown installed-control-plane lifecycle: {lifecycle}")
         self.assertEqual(

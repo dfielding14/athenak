@@ -2281,8 +2281,9 @@ exact lexical authentication, preserves that lexical spelling for the second
 writer authorization boundary, rejects arbitrary generated-checkout aliases
 including the zero-submodule case and passes 217 control-plane tests, 293
 publication tests, static checks, the actual clean pinned `kokkos` probe and
-two independent reviews. Paired immutable install, active-policy promotion and
-the exact clean-candidate freeze remain open.
+two independent reviews. Paired immutable install and idempotent anchor
+migration pass; active-policy promotion and the exact clean-candidate freeze
+remain open.
 
 ## Immediate Agent Handoff: First Actions
 
@@ -2302,9 +2303,9 @@ Future implementation agents should execute the following successor sequence:
    artifact creation. Active reviewed successor `c8002a1d` from operational
    commit `37ccee56` closed that drift, but the exact clean-build retry then
    rejected the authenticated `/ccs/home/...` source alias before artifact
-   creation. Paired-install and promote staged reviewed successor `6cbbbbd6`
-   from operational commit `5f1458e3`, then rerun the exact clean build and
-   freeze.
+   creation. Paired reviewed successor `6cbbbbd6` from operational commit
+   `5f1458e3` is installed with its existing-genesis anchor migration complete.
+   Promote it, then rerun the exact clean build and freeze.
 5. Curate a clean source commit series, remove or classify generated guard
    outputs and freeze the exact clean candidate and executable digest.
 6. Close remaining local prerequisites: Q-009 broader-boundary, MPI, ASan and

@@ -117,8 +117,8 @@ qualify any scientific claim by itself.
   `/autofs/...` path. The successor normalizes only after exact lexical
   authentication, preserves that spelling for the second writer boundary,
   keeps generated checkout and submodule aliases fail closed, and passes two
-  independent reviews. Paired install, promotion and science freeze remain
-  pending.
+  independent reviews. Paired immutable install and idempotent anchor migration
+  pass; promotion and science freeze remain pending.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.
