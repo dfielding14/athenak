@@ -26,7 +26,7 @@
     "control_plane_inventory_files": 19,
     "worktree_state": "clean_reviewed_commit_6fa926a9bf113edf6258a7555aeab4ac450ca06b",
     "paired_install_status": "pass_identical_immutable_paired_install",
-    "active_policy_promotion_status": "pending_reviewed_gyro_v3_parser_policy_promotion"
+    "active_policy_promotion_status": "pass_reviewed_gyro_v3_and_paper_v2_parser_policy_promoted"
   },
   "registered_science_slices": [
     {
@@ -368,10 +368,20 @@
   },
   "superseded_gyro_v2_registered_execution_fixture": "tst/publication/readiness/q027_frontier_f1_gyro_v2_analysis_rejection_fixture_2026-05-30.json",
   "gyro_v3_parser_policy_transition": {
-    "status": "pending_reviewed_policy_promotion",
+    "status": "pass_reviewed_policy_promoted",
     "predecessor_policy_sha256": "3895221e6a063f0b415f39bda3e2191801cc168b7fa663f1f6880e5f71ae48da",
     "predecessor_promotion_sha256": "016cbb66332a6f09d49d8025c25f1bcf4c52127e8619211049f6ae799482f72c",
     "control_plane_version": "4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
+    "source_commit": "c878dd6cc6965ac0e97af2638ee17c7e18f593c8",
+    "active_policy_sha256": "0538da6d231dccf8382edbaa6483ca274adaed439afbb1ad8c89d9c898d5467b",
+    "active_promotion_sha256": "f84fc7b7b6d1c7e98202e76d5496b73826989125be802024fb483b571f6286e0",
+    "pre_policy_promotion_attestation_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/operator_attestations/20260530T230934Z-f1-clean-gyro-mpich-stderr-v3-pre_policy_promotion_retry/attestation.json",
+    "pre_policy_promotion_attestation_sha256": "49d94859ded5c8ed3958528e5645aef35e92b1f85d825d1eeb8c93e0ed8d38fb",
+    "orion_ledger_records": 37,
+    "orion_receipt_records": 37,
+    "project_home_ledger_records": 37,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent",
     "gyro_registered_science_authorization_id": "f1-clean-gyro-mpich-stderr-v3",
     "paper_registered_science_authorization_id": "f1-clean-paper-coupling-mpich-stderr-v2",
     "reason": "Rotate the consumed gyro one-attempt authorization and bind its analyzer to the exact deterministic output tree plus emitted particle VTK schema before any further submission. Preserve the unused paper-coupling v2 authorization ID while binding its repaired analyzer before first submission."
@@ -392,10 +402,10 @@
     "evidence_rule": "Archive the current preflight result separately from the immutable historical incident fixture. Legitimate later reservations may advance live ledger counts without changing the frozen 34/34/34 incident chronology."
   },
   "open_boundaries": [
-    "promote the reviewed gyro-v3 and unused paper-v2 parser-binding policy through installed repair successor 4ccde8df",
+    "preserve the active reviewed gyro-v3 and unused paper-v2 parser-binding policy promoted through installed repair successor 4ccde8df",
     "archive one reviewed same-account process-isolation attestation from tst/publication/readiness/q027_frontier_registered_science_same_account_isolation_attestation_template_2026-05-30.json immediately before each registered-science submission",
     "the gyro-v3 and paper-coupling-v2 registered Frontier F1 slices have not qualified",
     "external reviewer disposition remains pending external review"
   ],
-  "overall_disposition": "local_registered_f1_gyro_v2_reconciled_analysis_rejected_v3_retry_policy_staged_keep_submissions_paused"
+  "overall_disposition": "local_registered_f1_gyro_v2_reconciled_analysis_rejected_v3_retry_policy_active_keep_submissions_paused"
 }
