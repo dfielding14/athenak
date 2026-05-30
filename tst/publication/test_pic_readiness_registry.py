@@ -262,6 +262,36 @@ class PicReadinessRegistryTests(unittest.TestCase):
                     active_transition["control_plane_version"],
                     storage["installed_control_plane_version"],
                 )
+            science_freeze = policy["science_submission_freeze"]
+            self.assertEqual(science_freeze["status"], "authorized")
+            clean_candidate = candidate["clean_candidate_freeze"]
+            clean_candidate_transition = candidate["clean_candidate_policy_transition"]
+            self.assertEqual(clean_candidate_transition["status"], "pass")
+            self.assertEqual(
+                clean_candidate_transition["control_plane_version"],
+                storage["installed_control_plane_version"],
+            )
+            self.assertEqual(
+                clean_candidate_transition["policy_sha256"],
+                _sha256(READINESS_DIR / "storage_policy.json"),
+            )
+            self.assertEqual(
+                clean_candidate_transition["science_submission_freeze_status"],
+                science_freeze["status"],
+            )
+            for key in ["manifest_path", "manifest_sha256"]:
+                self.assertEqual(science_freeze[key], clean_candidate_transition[key])
+                self.assertEqual(clean_candidate_transition[key], clean_candidate[key])
+            self.assertEqual(clean_candidate_transition["orion_ledger_records"], 22)
+            self.assertEqual(
+                clean_candidate_transition["orion_ledger_records"],
+                clean_candidate_transition["project_home_ledger_records"],
+            )
+            self.assertEqual(
+                clean_candidate_transition["orion_ledger_records"],
+                clean_candidate_transition["orion_receipt_records"],
+            )
+            self.assertEqual(clean_candidate_transition["active_reservations"], 0)
         else:
             self.fail(f"Unknown installed-control-plane lifecycle: {lifecycle}")
         self.assertEqual(

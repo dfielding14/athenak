@@ -8,7 +8,7 @@
     "Q-042"
   ],
   "qualification_effect": "paired_source_alias_hardening_successor_activation_and_clean_candidate_freeze_pass",
-  "scope": "Successor chronology after the exact clean Orion build-profile attempt through live MODULEPATH-hardening digest c8002a1d rejected initialized clean submodule kokkos before creating artifacts. The authorized lexical source spelling /ccs/home/dfielding/athenak-pic resolves through site mount aliases to /autofs/nccs-svm1_home2/dfielding/athenak-pic. The predecessor validator authenticated the reviewed lexical root but then compared each lexical submodule path directly with its resolved physical path. This successor normalizes only after the exact authorized-spelling and resolved-identity checks, preserves the lexical spelling across the second writer authentication boundary, and keeps generated checkout plus submodule canonical-path rejection strict. This record does not attest a paired live install, active-policy promotion, clean-candidate freeze or Frontier science execution.",
+  "scope": "Successor chronology after the exact clean Orion build-profile attempt through live MODULEPATH-hardening digest c8002a1d rejected initialized clean submodule kokkos before creating artifacts. The authorized lexical source spelling /ccs/home/dfielding/athenak-pic resolves through site mount aliases to /autofs/nccs-svm1_home2/dfielding/athenak-pic. The predecessor validator authenticated the reviewed lexical root but then compared each lexical submodule path directly with its resolved physical path. This successor normalizes only after the exact authorized-spelling and resolved-identity checks, preserves the lexical spelling across the second writer authentication boundary, and keeps generated checkout plus submodule canonical-path rejection strict. This record attests the paired live install, active-policy promotion, exact clean-candidate freeze and mirrored exact-freeze authorization promotion. It does not attest Frontier clean-candidate science execution.",
   "live_predecessor": {
     "record": "tst/publication/readiness/q027_control_plane_modulepath_hardening_candidate_2026-05-30.json",
     "control_plane_version": "c8002a1d5d30b5ab98b36907e0dad5f67cc39ea25e3f9c597857f8e911f6c859",
@@ -112,6 +112,21 @@
     "build_profile_sha256": "353412bed0ccd1c7717a52bca72a0e5c6883d5dbcd91099d3b41512cdbff9c23",
     "build_profile_receipt_sha256": "f6a9ac200cfc33a0cad2e468b82e5d70c635c2dac93dafe64c94aac5f3dcb79f",
     "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8"
+  },
+  "clean_candidate_policy_transition": {
+    "status": "pass",
+    "validated_utc": "2026-05-30T19:36:21Z",
+    "control_plane_version": "6cbbbbd6f5da8fb2dcd0a1ab9b91fca51570f5a54502dcb1da59aea0eda0f3ab",
+    "policy_sha256": "e8909bf541d1c69d4d19c495ebfe983934291de37d6d1423ae4cbfca2e4bb155",
+    "promotion_sha256": "3e7e8c7fbece177f6548707400777a0783140f0c7ab29fd1e44fee2080cd192f",
+    "science_submission_freeze_status": "authorized",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/clean_candidates/31be2cd6-19db-4246-9857-06fc2f523c19/clean_candidate_manifest.json",
+    "manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41",
+    "idempotent_post_promotion_anchor_validation": "pass_existing_genesis_preserved_without_append",
+    "orion_ledger_records": 22,
+    "orion_receipt_records": 22,
+    "project_home_ledger_records": 22,
+    "active_reservations": 0
   },
   "open_boundaries": [
     "frontier_admission_smoke.status remains pending_exact_executable_binding",

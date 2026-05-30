@@ -120,7 +120,8 @@ qualify any scientific claim by itself.
   independent reviews. Paired immutable install and idempotent anchor migration
   plus coherent policy promotion pass. Exact clean-candidate build and freeze
   `31be2cd6` pass with pinned `kokkos`, immutable provenance and executable
-  closure.
+  closure; mirrored exact-freeze authorization promotion SHA `3e7e8c7f` passes
+  with the original 22-record ledger preserved.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.
