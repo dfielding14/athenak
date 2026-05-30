@@ -1,5 +1,10 @@
 # Lagrangian Monte-Carlo Thermodynamic Tracers
 
+This source-adjacent note stays next to the runnable tracer inputs. The
+GitHub Pages-ready module page is
+`docs/source/modules/lagrangian_mc_tracers.md`; use that file when publishing this
+feature into the Sphinx/MyST documentation tree on `origin/gh-pages`.
+
 `particle_type = lagrangian_mc` adds Monte-Carlo tracer particles that jump between
 cell centers with probabilities set by the RK-accumulated density flux through the
 faces of the current cell. Tracers carry only transport state in the particle arrays:
