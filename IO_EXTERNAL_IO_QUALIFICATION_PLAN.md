@@ -11,11 +11,9 @@ external evidence required before the branch can be called merge-ready.
 | Field | Value |
 | --- | --- |
 | Feature branch | `feature/io-output-formats-and-sharding` |
-| Final tested local branch SHA | Pending: record the exact committed robustification SHA before external qualification |
+| Final tested local runtime/tooling SHA | `5ee873e2b099800a9e86f64f33b27901c0bb1510` |
 | Robustification guide SHA-256 | `cdf53351104c135f2d79f9ee2f36c2908001b00a31339db18eb1cf66bcae11ff` |
 | Guide size | `2222` lines, `89840` bytes |
-
-Record the exact tested branch SHA after local robustification commits land.
 
 ## Immutable Evidence Packets
 
