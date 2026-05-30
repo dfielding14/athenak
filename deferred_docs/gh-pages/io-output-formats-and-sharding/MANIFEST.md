@@ -11,168 +11,110 @@ rank-0 `<manifest>.assembled` staging design. Do not publish this bundle until
 the IO code branch is merged and the staged pages are reconciled, rebuilt, and
 re-audited against the then-current Pages baseline.
 
-Target documentation baseline inspected while preparing this bundle:
+The RCP-07 preview baseline is:
 
 ```text
 origin/gh-pages 4833aa9341e19861297e330ff02aabfd8001935c
 ```
 
 The branch carrying this bundle intentionally does not copy the live
-`docs/source/` tree into the code branch. Apply and review this material in a
-temporary worktree based on the then-current `origin/gh-pages` after merging
-the IO feature branch.
+`docs/source/` tree into the code branch. Apply it only with
+`scripts/stage_gh_pages_io_docs.py` in a detached Pages worktree. The helper
+never fetches, commits, pushes, switches branches, or edits a checked-out
+`gh-pages` branch.
+
+## Machine-Readable Contract
+
+[`manifest.json`](manifest.json) is the authoritative staging contract. It
+records:
+
+- the expected `origin/gh-pages` baseline;
+- the exact nine-file public allowlist;
+- protected live blobs that must remain unchanged;
+- baseline blobs for existing targets and expected absence for the new page;
+- source-fragment SHA256 values;
+- unique anchors and baseline section SHA256 values for bounded edits; and
+- contradiction-search rules.
+
+The helper verifies the complete contract before writing any target file,
+builds every transformed document in memory, proves a second pure
+transformation is idempotent, and then uses atomic replacement writes.
 
 ## Code Surface Documented
-
-The documentation in this bundle is tied to these implemented public surfaces:
 
 | Feature | Implemented source or tool | Executable evidence |
 | --- | --- | --- |
 | Shared, per-rank, and per-node binary output | `src/outputs/binary.cpp`, `src/file_sharding.hpp` | `tst/test_suite/io/test_node_sharding_mpicpu.py` |
-| Shared, per-rank, and per-node coarsened binary output | `src/outputs/coarsened_binary.cpp` | `tst/test_suite/io/test_node_sharding_mpicpu.py` |
+| Uniform 3D active-zone full-volume coarsened binary output | `src/outputs/coarsened_binary.cpp` | `tst/test_suite/io/test_node_sharding_mpicpu.py` |
 | N-dimensional PDF output and V2 format | `src/outputs/pdf.cpp`, `vis/python/read_pdf.py` | `tst/test_suite/io/test_output_formats_cpu.py`, `test_output_formats_mpicpu.py` |
 | Spherical slices | `src/outputs/spherical_slice.cpp`, `vis/python/read_sphslice.py` | `tst/test_suite/io/test_output_formats_cpu.py`, `test_output_formats_mpicpu.py` |
 | Per-node restart manifests and native direct reads | `src/outputs/restart.cpp`, `src/restart_manifest.cpp`, `src/main.cpp`, `src/pgen/pgen.cpp`, `src/outputs/io_wrapper.cpp` | `tst/test_suite/io/test_node_sharding_mpicpu.py`, `test_chunked_io_mpicpu.py` |
-| Hardened binary/coarsened shard inventory and atomic spherical-slice publication | `src/outputs/binary.cpp`, `src/outputs/coarsened_binary.cpp`, `src/outputs/spherical_slice.cpp`, `vis/python/bin_convert.py`, `vis/python/read_sphslice.py` | `tst/test_suite/io/test_writer_hardening_cpu.py`, `test_writer_hardening_mpicpu.py` |
 | Output timing and final-output policy | `src/driver/driver.cpp` | `tst/test_suite/io/test_io_finalization_timing_cpu.py`, `test_io_finalization_timing_mpicpu.py` |
 | Single supported binary converter | `vis/python/bin_convert.py` | `tst/test_suite/io/test_python_io_readers_cpu.py` |
 | Runnable examples | `inputs/io/*.athinput`, `vis/python/examples/read_io_outputs.py` | `tst/test_suite/io/test_io_examples_cpu.py`, `test_node_sharding_mpicpu.py` |
 
-## Files To Apply To `gh-pages`
+## Exact Public Allowlist
 
-The `overlay/` files are complete page bodies to copy into their listed
-destinations after reconciling any intervening Pages changes.
+| Target path | Operation |
+| --- | --- |
+| `docs/source/configuration.md` | Replace the unique stale `### Output Blocks` section with a marker-wrapped reviewed fragment. |
+| `docs/source/examples/index.md` | Replace the whole examples index only after its baseline blob matches. |
+| `docs/source/examples/io_outputs_and_sharding.md` | Add the worked example only when the target is absent. |
+| `docs/source/modules/index.md` | Replace the unique Support Systems section with a marker-wrapped reviewed fragment that updates the Outputs count while preserving every neighboring row. |
+| `docs/source/modules/outputs.md` | Replace the unique central output-module body and stale PDF implementation-entry row with marker-wrapped reviewed fragments. |
+| `docs/source/running.md` | Replace the unique stale `## Output Files` section with a marker-wrapped reviewed fragment. |
+| `docs/source/tools/visualization.md` | Replace two unique IO-owned sections with marker-wrapped reviewed fragments. |
+| `docs/source/reference/input_parameters.md` | Replace the unique stale `## Output Blocks` section through the line before `## Public Source Terms`. |
+| `docs/source/reference/file_reference.md` | Insert a marker-wrapped IO artifact reference before the unique `## Shipped Input Families` anchor. |
 
-| Staged file | Target path | Operation | Reason |
-| --- | --- | --- | --- |
-| `overlay/docs/source/modules/outputs.md` | `docs/source/modules/outputs.md` | Replace after review | Correct PDF V2, slice, sharding, restart, timing, and policy guidance. |
-| `overlay/docs/source/tools/visualization.md` | `docs/source/tools/visualization.md` | Replace after review | Establish `bin_convert.py` as the sole supported binary converter and add new readers. |
-| `overlay/docs/source/configuration.md` | `docs/source/configuration.md` | Replace after review | Expose final parser names and safe output configuration patterns. |
-| `overlay/docs/source/running.md` | `docs/source/running.md` | Replace after review | Document run, readback, timing, and per-node restart invocation. |
-| `overlay/docs/source/examples/index.md` | `docs/source/examples/index.md` | Replace after review | Register the new worked IO example page. |
-| `overlay/docs/source/examples/io_outputs_and_sharding.md` | `docs/source/examples/io_outputs_and_sharding.md` | Add | Provide executable input/readback workflows. |
+The former complete overlays for `configuration.md`, `running.md`,
+`tools/visualization.md`, and `modules/outputs.md` were removed. Their bounded
+fragments preserve unrelated live Pages content.
 
-The `insertions/` files are reviewed MyST sections for existing broad
-catalogue pages. Merge them into the live files at the identified subject
-headings; do not replace the unrelated reference catalogue.
+## RCP-07 Design Decisions
 
-| Staged file | Target path | Merge location | Reason |
-| --- | --- | --- | --- |
-| `insertions/docs/source/reference/input_parameters.io_outputs.md` | `docs/source/reference/input_parameters.md` | Output and time-parameter reference sections | Record finalized keys, defaults, accepted values, and failures. |
-| `insertions/docs/source/reference/file_reference.io_outputs.md` | `docs/source/reference/file_reference.md` | Output-file format reference section | Record file families, shard paths, manifest/payload rules, and readers. |
+| Topic | Decision |
+| --- | --- |
+| Script language | Use Python 3 standard library only. |
+| Anchor strategy | Require exact unique heading anchors and baseline section SHA256 values for replacements. Require an exact unique anchor for the insertion. |
+| Idempotence | Wrap every bounded edit in an RCP-07 marker pair and require a pure second transform to reproduce identical bytes. |
+| Baseline handling | In strict mode, require detached target `HEAD` and local `origin/gh-pages` to equal the recorded baseline. Verify protected and target Git blobs before staging. |
+| Drift handling | Strict mode rejects drift. `--reviewed-drift <packet-dir>` writes a three-way reconciliation packet outside the target without target writes. |
+| Build execution | Print strict HTML and link-check commands by default. Run them only with explicit `--run-builds`. |
+| Unrelated-page proof | Validate the planned file set before writes and require the final Git status path set to equal the exact nine-file allowlist. |
 
 ## Navigation Decision
 
-`docs/source/modules/index.md` already routes to `modules/outputs.md`, and
+`docs/source/modules/index.md` already routes to `modules/outputs.md`; the
+bounded Support Systems replacement updates its registered-format count from
+12 to 13 while keeping the Markdown table continuous. Keeping marker comments
+outside the table rows is required because comments inserted between rows split
+the rendered table even when Sphinx and linkcheck succeed.
 `docs/source/index.md` already routes to the Examples and Visualization
-sections on the inspected Pages baseline. No edits to those two files are
-required for this feature. The only new navigation target is
-`examples/io_outputs_and_sharding`, registered by the staged replacement for
-`docs/source/examples/index.md`.
-
-If the live Pages routing changes before application, re-check this decision
-against the then-current toctrees rather than copying it mechanically.
-
-## Stale Guidance To Remove
-
-When applying this package, remove or replace guidance that:
-
-- promotes `bin_convert_new.py` or describes `bin_convert.py` as legacy;
-- describes modern PDF payloads as unversioned doubles or uses `logscaleN`
-  instead of `scaleN`;
-- states that `mass_weighted` is not accepted for legacy PDF inputs;
-- omits `single_file_per_node`, per-node restart manifests, `sphslice`,
-  `output_timing`, or `final_output_policy`;
-- implies sliced `cbin` output is qualified by this feature.
+sections on the inspected Pages baseline and remains protected. The
+examples-index replacement registers `examples/io_outputs_and_sharding`.
 
 ## Scope Boundaries
 
-- Existing `file_type=sph` output remains supported and distinct from the new
-  `file_type=sphslice`.
-- `sphslice` currently accepts native state-backed scalar fields only;
-  derived-array fields are rejected until ghost-zone-safe interpolation is
-  implemented.
-- Legacy unsharded PDF input syntax remains supported and is tested against
-  frozen `origin/main` one- and two-dimensional output bytes.
-- Modern PDF files use the versioned V2 representation documented here.
-- Generic `mdot_*`, `edot_*`, and `vel_*` diagnostics reject
-  `<ion-neutral>` two-fluid inputs until module-qualified semantics are
-  introduced.
-- Uniform three-dimensional active-zone full-volume node-sharded `cbin` is
-  covered. Lower-dimensional, ghost-zone-expanded, static-refinement, AMR, and
-  sliced `cbin` are rejected explicitly before publication. The supported
-  producer validates `coarsen_factor` as a power of two between `2` and the
-  shortest MeshBlock dimension before writer construction.
-- Node-sharded binary and full-volume coarsened-binary files add inventory
-  metadata without changing legacy shared or rank files. Readers accept
-  explicit empty shards, reject incomplete or duplicate node inventories, and
-  bound cumulative metadata, fixed MeshBlock metadata, payload, and
-  incremental aggregate reconstruction sizes, including transient copies,
-  while rejecting duplicate variables, malformed grid/logical metadata,
-  nonuniform emitted MeshBlock extents within one file,
-  geometry outside each MeshBlock's exact logical physical interval using zero
-  relative tolerance and a storage-aware absolute tolerance capped at one
-  eighth of the logical block width, and invalid
-  variable/coarsening counts. Athdf-like helpers preflight cumulative conversion
-  allocations and NumPy coordinate/prolongation/restriction-generation
-  temporaries, reject omitted or mismatched ghost counts including impossible
-  singleton-axis widths, place requested ghost zones by interior MeshBlock width
-  with extended coordinates, and retain cells
-  intersecting a selected lower bound, initialize uncovered partial-shard
-  levels deterministically, crop prolongation before materialization, and
-  restore bounded fine-to-coarse restriction. The preserved legacy
-  single-MeshBlock ATHDF helper has no ghost argument and rejects ghost-bearing
-  or sliced emitted extents instead of silently truncating them.
-- Spherical-slice shards declare dense or sparse-angular layout metadata,
-  preserve explicit empty shards, and publish atomically through a temporary
-  file followed by rename. Readers combine sparse siblings incrementally,
-  bound whole-file reads, cumulative header bytes, individual metadata lines,
-  variable-token expansion before splitting, retained reference variable-metadata summary
-  through final coordinate generation, cumulative retained arrays, embedded input dumps,
-  payload-copy, duplicate-validation, and ownership-diagnostic peaks, release
-  incorporated sparse arrays before reading each sibling, bound coordinate
-  allocations and embedded-header offsets, and normalize reconstructed
-  aggregate metadata.
-- Modern PDF sparse shards declare rank/node sibling inventory metadata and
-  publish each checked header or payload file atomically through a temporary
-  file followed by rename. The reader rejects malformed shard aliases,
-  identifier mismatches, inventory gaps, and unreasonable metadata or payload
-  sizes. Sibling headers agree on V2 declaration, declared V2 headers require
-  V2 payload preambles with matching cycles and finite metadata, require
-  writer-mandatory inventory fields for V2 sparse families, reject non-shared
-  modern dense distribution metadata, account for retained reference state
-  while parsing each replacement shard header including legacy candidates,
-  preflight explicit/generated and legacy bin-edge tokenization and NumPy
-  materialization, require ASCII-only legacy numeric rows and parse them
-  strictly with cumulative retained and final stacking bounds,
-  bound payload-copy and duplicate-validation peaks before materialization,
-  release incorporated local headers and sparse arrays before reading each
-  sibling, and remove shard-local identifiers from reconstructed aggregates. Readers retain
-  historical compatibility for transitional unversioned dense/sparse binary
-  payloads that may omit additive inventory metadata.
-- Modern PDF writers reject invalid transformed axis bounds and non-positive
-  transformed bin steps before launching the histogram kernel. They preflight
-  histogram and edge arrays, host mirrors, copied and derived fields,
-  metadata, and serialized staging before allocation. Histogram updates use
-  backend-portable atomics, and MPI reductions stage through host memory
-  rather than requiring GPU-aware MPI.
-- Node restart loading accepts the public manifest only. It validates generated
-  relative paths, symlink containment, ordered inventory, exact segment
-  coverage, payload sizes, replicated headers, bounded payload and segment
-  inventories, positive segment counts, and an on-disk node-payload marker
-  before reading rank-local MeshBlock spans directly through chunked positioned
-  reads. Marked hard-link and copied-payload aliases are rejected outside
-  manifest loading. Production resume does not create `.assembled` files.
-- Multi-rank tests exercised per-node paths on one physical node. A real
-  multi-node MPI qualification run remains required before production rollout.
+- Existing `file_type = sph` output remains supported and distinct from
+  `file_type = sphslice`.
+- `sphslice` samples an origin-centered spherical surface on a 3D domain. Its
+  positive radius must be strictly interior to every domain face. It
+  accepts native state-backed scalar fields and native multi-field groups, but
+  not derived arrays.
+- Legacy unsharded PDF syntax remains supported; modern PDF files use V2.
+- Modern PDF V2 and spherical-slice binary payload scalars currently use
+  host-native byte order; cross-endian portability is not claimed.
+- Node-sharded uniform 3D active-zone full-volume `cbin` is covered.
+  Every emitted axis extent must be divisible by `coarsen_factor`.
+  Lower-dimensional, ghost-zone-expanded, static-refinement, AMR, and sliced
+  `cbin` producer workflows are not advertised.
+- Multi-rank tests exercised per-node paths on one physical node. Real
+  multi-node MPI qualification remains required before production rollout.
+- This local workflow does not claim an external CUDA-capable qualification
+  run.
 
 ## Application And Validation
 
-Follow [VALIDATION.md](VALIDATION.md) after the code merge. Record:
-
-1. the final code branch merge commit;
-2. the `gh-pages` baseline actually used;
-3. every applied replacement/insertion and any conflict resolution;
-4. stale guidance removed;
-5. warnings-as-errors Sphinx build output;
-6. the independent code-to-doc audit disposition.
+Follow [VALIDATION.md](VALIDATION.md). Preserve this deferred bundle until the
+separate Pages change merges.

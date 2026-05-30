@@ -2,112 +2,95 @@
 
 ## Do Not Publish Before Code Merge
 
-This procedure is for applying the staged pages to a separate `gh-pages`
-change after the IO code branch has merged. CP-03 native direct restart loading
-has replaced the earlier transient rank-0 `<manifest>.assembled` staging
-design. Building pages in a temporary worktree is permitted before
-publication; pushing or merging Pages content before the code exists on the
+This procedure supports a detached pre-merge preview and a post-code-merge
+restaging pass. Building pages in a detached worktree is permitted before
+publication. Pushing or merging Pages content before the code exists on the
 primary branch is not.
 
-## Integration Procedure
+## Strict Preview
 
-1. Re-check the merged code rather than trusting this staged package alone:
+Create a detached worktree from the inspected Pages baseline:
 
-   ```bash
-   rg -n "single_file_per_node|final_output_policy|output_timing|sphslice|scale[1-4]|weight_variable" \
-     src inputs/io tst/test_suite/io vis/python
-   rg -n "bin_convert_new" vis/python inputs tst
-   rg -n "assembled|CanonicalPayloadPath|LoadLocalBlocks|Read_bytes_at_all|number of nodes|sparse_angles" \
-     src tst/test_suite/io vis/python
-   ```
+```bash
+git worktree add --detach /tmp/athenak-gh-pages-io-docs origin/gh-pages
+python3 scripts/stage_gh_pages_io_docs.py /tmp/athenak-gh-pages-io-docs
+python3 scripts/stage_gh_pages_io_docs.py \
+  --verify-staged /tmp/athenak-gh-pages-io-docs
+```
 
-   The second search should show only intentional rejection/tests or migration
-   discussion, not an imported public module or promoted example. For the
-   third search, `.assembled` references should be no-production-staging tests
-   or clearly marked historical documentation, not a runtime assembly path.
+The helper refuses a symbolic branch target, a dirty strict target, baseline
+or protected-blob drift, source-fragment drift, missing or ambiguous anchors,
+unexpected add-target presence, non-idempotent transformations, contradiction
+search failures, and any modified-file set other than the manifest allowlist.
 
-2. Create a temporary worktree for the current Pages baseline:
+It prints a complete review diff and these strict documentation commands:
 
-   ```bash
-   git fetch origin gh-pages
-   git worktree add --detach /tmp/athenak-gh-pages-io-docs origin/gh-pages
-   ```
+```bash
+cd /tmp/athenak-gh-pages-io-docs/docs
+make clean html SPHINXOPTS="-W --keep-going"
+make linkcheck SPHINXOPTS="-W --keep-going"
+```
 
-3. Copy the complete staged pages from `overlay/docs/source/` to their matching
-   locations under `/tmp/athenak-gh-pages-io-docs/docs/source/`.
+Pass `--run-builds` to either strict staging or `--verify-staged` when the
+helper should run those two commands itself.
 
-4. Merge the two reviewed insertion fragments into the corresponding live
-   reference pages:
+## Drift Reconciliation
 
-   - add `input_parameters.io_outputs.md` material to
-     `docs/source/reference/input_parameters.md`;
-   - add `file_reference.io_outputs.md` material to
-     `docs/source/reference/file_reference.md`.
+If the Pages baseline has moved, do not edit around the failure manually.
+Create a fresh detached worktree from the new baseline and generate an
+external packet:
 
-   Retain all unrelated live reference material. These are insertions, not
-   whole-page replacements.
+```bash
+python3 scripts/stage_gh_pages_io_docs.py \
+  --reviewed-drift /tmp/athenak-gh-pages-io-docs-drift \
+  /tmp/athenak-gh-pages-io-docs
+```
 
-   For a validation-only build before editing the live page bodies, copy each
-   fragment beside its target using an `.inc` suffix and temporarily append a
-   MyST ``{include}`` directive in the parent page. Do not copy a section-level
-   fragment into `docs/source/` as a standalone `.md` page because Sphinx will
-   correctly warn that it is not a complete top-level document.
+Reviewed-drift mode writes `base/`, `current/`, `proposed/`, `diffs/`, source
+payload copies, and `report.json` outside the target worktree. It fingerprints
+the target before and after packet creation and fails if target bytes or Git
+status change. An auditor must review the packet and approve a reconciled
+manifest baseline before a later strict staging pass writes anything.
 
-5. Verify navigation:
+## Post-Code-Merge Restaging
 
-   - `docs/source/modules/index.md` still routes to `modules/outputs`;
-   - `docs/source/index.md` still routes to the tools and examples catalogues;
-   - `docs/source/examples/index.md` now routes to
-     `examples/io_outputs_and_sharding`.
+After the IO code branch merges:
 
-6. Audit contradictory language in the temporary Pages worktree:
+1. Update local `origin/gh-pages` explicitly outside the helper.
+2. Create a fresh detached worktree from that current remote-tracking ref.
+3. Run strict staging. If the baseline moved, use reviewed-drift mode and
+   reconcile deliberately.
+4. Run `--verify-staged`.
+5. Run warnings-as-errors HTML and link-check builds.
+6. Review the exact nine-file diff and the contradiction-search report.
+7. Inspect the rendered Modules Support Systems table. Confirm that Outputs and
+   Boundary Values remain rows in one table and that both links resolve.
+8. Follow the rendered route from Examples to IO Outputs And Sharding, inspect
+   the PDF implementation table, verify that its PDF entry remains a table row,
+   verify the `payload_rank` fail-closed prose, and confirm that the home-page
+   iframe remains present.
+9. Assign an independent code-to-doc audit.
+10. Open a separate `gh-pages` review only after discrepancies are resolved or
+   explicitly scoped out.
 
-   ```bash
-   rg -n "bin_convert_new|logscale[1-4]|mass_weighted is not|unversioned|single_file_per_node|sphslice|final_output_policy|output_timing" \
-     /tmp/athenak-gh-pages-io-docs/docs/source
-   ```
-
-   Resolve stale converter/PDF descriptions before the Pages change is
-   proposed. References to new names should agree with the merged source and
-   executable examples.
-
-7. Build the candidate site with warnings treated as errors:
-
-   ```bash
-   cd /tmp/athenak-gh-pages-io-docs/docs
-   make clean html SPHINXOPTS="-W --keep-going"
-   ```
-
-8. Re-run the IO tests or cite the accepted code-branch qualification result,
-   with particular attention to public example input decks and reader
-   commands.
-
-9. Assign a read-only independent audit comparing:
-
-   - parser keys and defaults in `src/outputs/outputs.cpp` and
-     `src/driver/driver.cpp`;
-   - layouts implemented by output writers and native direct restart loading;
-   - reader behavior in `vis/python/`;
-   - test/example inputs; and
-   - candidate Pages content and toctrees.
-
-10. Only after discrepancies are resolved or explicitly scoped out should a
-    separate `gh-pages` review be opened.
+The helper never fetches, commits, pushes, or edits a checked-out `gh-pages`
+branch.
 
 ## Expected Validation Record
 
-The Pages change description should include:
+Record:
 
-- code merge commit and Pages base commit;
-- replacement pages and inserted sections;
-- successful `make clean html SPHINXOPTS="-W --keep-going"` result;
-- confirmation that public documentation no longer promotes
-  `bin_convert_new.py`;
-- confirmation that node restart uses the public manifest only, performs native
-  direct payload reads, and has no production `.assembled` staging path;
-- frozen `origin/main` shared and per-rank restart resume qualification status,
-  in addition to immutable fixture checksum status;
-- CUDA-capable GPU execution status for the IO regression, distinguishing a
-  real device run from the CPU smoke path;
-- real multi-node qualification status for per-node output/restart paths; and
-- any retained boundary, especially sliced `cbin`.
+- merged code commit and Pages baseline commit;
+- helper command and exact allowlist diff;
+- successful `--verify-staged` result;
+- warnings-as-errors HTML and link-check results;
+- rendered Modules-table, neighboring-link, example-route, PDF-table-entry,
+  `payload_rank`, and home-iframe checks;
+- contradiction-search report;
+- independent code-to-doc and navigation audit dispositions;
+- real CUDA-capable GPU execution status, distinguishing it from CPU smoke;
+- intended deployment backend and separate HIP packet status or explicit `N/A`
+  justification;
+- real multi-node qualification status for per-node output and restart paths;
+  and
+- retained boundaries, especially sliced or adaptive `cbin`.

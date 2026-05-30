@@ -63,7 +63,7 @@ The test suite also checks rejected invalid scale combinations.
   time/final_output_policy=restart_only
 ```
 
-The input enables:
+The command above overrides `<time>` to:
 
 ```ini
 <time>
@@ -155,11 +155,16 @@ aliases cannot bypass the manifest-only restart API.
   PDF configurations should use the modern `variable_N`, `scaleN`, and
   `weight` interface.
 - `sphslice` is not a replacement for the existing `file_type = sph` output.
+- `sphslice` samples an origin-centered spherical surface on a 3D domain;
+  `slice_r` must be positive and strictly interior to every domain face.
+  It accepts native state-backed scalar fields and native multi-field groups,
+  but not derived-array fields.
 - `sphslice` radius filenames use deterministic round-trip scientific tokens;
   for example, `slice_r = 0.25` emits `r_2.5000000000000000e-01`.
 - Node-sharded uniform 3D active-zone full-volume `cbin` is covered by this
-  example. Lower-dimensional, ghost-zone-expanded, static-refinement, AMR, and
-  sliced `cbin` are rejected before publication.
+  example. Every emitted axis extent must be divisible by `coarsen_factor`.
+  Lower-dimensional, ghost-zone-expanded, static-refinement, AMR, and sliced
+  `cbin` are rejected before publication.
 - The automated MPI example can run multiple ranks on one physical node.
   Before production use, qualify node sharding and node restart on a real
   multi-node allocation and the target parallel filesystem.

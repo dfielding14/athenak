@@ -1,0 +1,205 @@
+{
+  "schema_version": 1,
+  "bundle": "io-output-formats-and-sharding",
+  "expected_baseline": "4833aa9341e19861297e330ff02aabfd8001935c",
+  "allowlist": [
+    "docs/source/configuration.md",
+    "docs/source/examples/index.md",
+    "docs/source/examples/io_outputs_and_sharding.md",
+    "docs/source/modules/index.md",
+    "docs/source/modules/outputs.md",
+    "docs/source/running.md",
+    "docs/source/tools/visualization.md",
+    "docs/source/reference/input_parameters.md",
+    "docs/source/reference/file_reference.md"
+  ],
+  "protected_blobs": {
+    "docs/source/index.md": "c9340a508a6b01cf0addb7e09a6e08540ab223be",
+    "docs/Makefile": "782986efd46cfbe18c295690145d548438d006e8",
+    "docs/requirements.txt": "a99a63507915d39dbbd960a40c2a58654a6aeb55",
+    ".github/workflows/docs.yml": "6a572302c5e032e3f06a55ad714a196ab1810ce0"
+  },
+  "targets": [
+    {
+      "path": "docs/source/configuration.md",
+      "baseline_blob": "dc4b80cd92943d5df334e46aa78083d356964dfb",
+      "operations": [
+        {
+          "kind": "replace_section",
+          "marker": "configuration-output-blocks",
+          "source": "fragments/docs/source/configuration.io_outputs.md",
+          "source_sha256": "7a00594ea5f21a59e19fb79e9ef25ab451bd8f2f4be4819a9f2de3f2efe72306",
+          "start_anchor": "### Output Blocks\n",
+          "end_anchor": "\n## Physics-Specific Blocks\n",
+          "baseline_section_sha256": "229e37f801cc5d0ad415f27456b8c15ed1c874bee2fbf7c6f9b73af687dc350e"
+        }
+      ]
+    },
+    {
+      "path": "docs/source/examples/index.md",
+      "baseline_blob": "d7bfcd27e336e18142ec8f195d9974d112008b47",
+      "operations": [
+        {
+          "kind": "replace_file",
+          "source": "overlay/docs/source/examples/index.md",
+          "source_sha256": "9e2f5cd20f0426e1eaca2cf60646e6763467c317efbb3b371abc90782bd6546f"
+        }
+      ]
+    },
+    {
+      "path": "docs/source/examples/io_outputs_and_sharding.md",
+      "expected_absent": true,
+      "operations": [
+        {
+          "kind": "add_file",
+          "source": "overlay/docs/source/examples/io_outputs_and_sharding.md",
+          "source_sha256": "e28caac5deb0ae70c590c03d133e3c9392f8d711e055b47b85ba3394637cfa84"
+        }
+      ]
+    },
+    {
+      "path": "docs/source/modules/index.md",
+      "baseline_blob": "2dbc222e0bbc478c2745d4f651ad7a1b89f76505",
+      "operations": [
+        {
+          "kind": "replace_section",
+          "marker": "modules-index-output-count",
+          "source": "fragments/docs/source/modules/index.io_outputs.md",
+          "source_sha256": "ba5aacaa250b37081164af1837d43a3cf1045bd4bc26fe57674be07eb23c22d7",
+          "start_anchor": "## Support Systems (5+ modules)\n\n| Module | Directory | Description | Documentation |\n",
+          "end_anchor": "\n\n## Development Records\n",
+          "baseline_section_sha256": "1cba43f49b46357e16321d22f3e0a54fc54df97a11c08a73956713402a8763bf"
+        }
+      ]
+    },
+    {
+      "path": "docs/source/modules/outputs.md",
+      "baseline_blob": "f97c3b789caa7835a3a5edacb5044310bd6249df",
+      "operations": [
+        {
+          "kind": "replace_section",
+          "marker": "modules-outputs-body",
+          "source": "fragments/docs/source/modules/outputs.io_outputs.md",
+          "source_sha256": "506d0e3c812313fcb94112793c4aeb8fc9a77807a9a919992466f25cb8f3b92a",
+          "start_anchor": "## Registered Formats\n",
+          "end_anchor": "\n## Implementation Entry Points\n",
+          "baseline_section_sha256": "d5fa903b9cea99732eca908f29f34bba76026917cdeff9f733fd83b68c7389c0"
+        },
+        {
+          "kind": "replace_section",
+          "marker": "modules-outputs-implementation-entries",
+          "source": "fragments/docs/source/modules/outputs.implementation_entries.io_outputs.md",
+          "source_sha256": "34d3cdd86cce28388e378f30f1cb730243ccc827cc6fdce5d095c1539de54685",
+          "start_anchor": "## Implementation Entry Points\n\n| File | Responsibility |\n",
+          "end_anchor": "\n\n## See Also\n",
+          "baseline_section_sha256": "8c69554f3561a066fe2707e89a04924d498191134d1bd962169f9f39c90e2327"
+        }
+      ]
+    },
+    {
+      "path": "docs/source/running.md",
+      "baseline_blob": "ab84c2ca16205bed2f225886a1cb4d9c11c2ac26",
+      "operations": [
+        {
+          "kind": "replace_section",
+          "marker": "running-output-files",
+          "source": "fragments/docs/source/running.io_outputs.md",
+          "source_sha256": "4b44378e618a837ec42e94f7fcf5c2afa831a9baf3ebbb1f1caed9c4662dc6ad",
+          "start_anchor": "## Output Files\n",
+          "end_anchor": "\n## Performance Tips\n",
+          "baseline_section_sha256": "e10c650417fb271891bff15204db9fa048f50f108f29bdad75143679f4245fdb"
+        }
+      ]
+    },
+    {
+      "path": "docs/source/tools/visualization.md",
+      "baseline_blob": "3c630bab083d28bea91301b7df20ae5c20ec4bed",
+      "operations": [
+        {
+          "kind": "replace_section",
+          "marker": "visualization-shipped-utilities",
+          "source": "fragments/docs/source/tools/visualization.utilities.io_outputs.md",
+          "source_sha256": "47301568f54375c15212c20a294596bf4d58cc2130fd863f8d4e838f88a04c3e",
+          "start_anchor": "## Shipped Utilities\n",
+          "end_anchor": "\n## Plot The Quickstart Output\n",
+          "baseline_section_sha256": "cfcb9108b7f4bd21455275fe7828188819aefa81e85a3c050fc98fccd42ba688"
+        },
+        {
+          "kind": "replace_section",
+          "marker": "visualization-io-readback",
+          "source": "fragments/docs/source/tools/visualization.io_outputs.md",
+          "source_sha256": "bd156f710e82b7171a9264d1db4c9b7e0f8b8f953effeac60060274f76371295",
+          "start_anchor": "## Convert Binary Mesh Output\n",
+          "end_anchor": "\n## Output Guidance\n",
+          "baseline_section_sha256": "d0f3dad6615a2feccef8b9065ad5429935b03937cd555eb8bad2cae81c68922a"
+        }
+      ]
+    },
+    {
+      "path": "docs/source/reference/input_parameters.md",
+      "baseline_blob": "c821f4c12a23ebf912836f5c64809bffebce0425",
+      "operations": [
+        {
+          "kind": "replace_section",
+          "marker": "reference-input-parameters-output-blocks",
+          "source": "fragments/docs/source/reference/input_parameters.io_outputs.md",
+          "source_sha256": "669c5bcc8d38e14bb8b0ade43cc6bc28a5600232d1d7308ba43cfb4bf3ea6ebf",
+          "start_anchor": "## Output Blocks\n",
+          "end_anchor": "\n## Public Source Terms\n",
+          "baseline_section_sha256": "56ff66bd20e7af4c39a1c1582ed8607dd2e902a88f1f78a26302559786211901"
+        }
+      ]
+    },
+    {
+      "path": "docs/source/reference/file_reference.md",
+      "baseline_blob": "b9a328d7c90ff2330543b9639854f9f53dd59a25",
+      "operations": [
+        {
+          "kind": "insert_before",
+          "marker": "reference-file-artifacts",
+          "source": "fragments/docs/source/reference/file_reference.io_outputs.md",
+          "source_sha256": "b3a218e3998dd6f863e15d43461e09c91c2eb93736ae25f9089159ebfda0bade",
+          "anchor": "\n## Shipped Input Families\n",
+          "anchor_sha256": "2b70b57effd725870f1a6fd449c6a490bc8fd7f9316f0c8cdc862f0ac3242496"
+        }
+      ]
+    }
+  ],
+  "contradiction_checks": [
+    {
+      "pattern": "bin_convert_new\\.py",
+      "description": "unsupported alternate binary converter",
+      "maximum": 0
+    },
+    {
+      "pattern": "logscale[1-4]",
+      "description": "stale modern PDF scale spelling",
+      "maximum": 0
+    },
+    {
+      "pattern": "mass_weighted\\s+is\\s+not",
+      "description": "stale legacy PDF rejection language",
+      "maximum": 0
+    },
+    {
+      "pattern": "single_file_per_node",
+      "description": "node-sharding guidance",
+      "minimum": 1
+    },
+    {
+      "pattern": "sphslice",
+      "description": "spherical-slice guidance",
+      "minimum": 1
+    },
+    {
+      "pattern": "final_output_policy",
+      "description": "final-output policy guidance",
+      "minimum": 1
+    },
+    {
+      "pattern": "output_timing",
+      "description": "output timing guidance",
+      "minimum": 1
+    }
+  ]
+}
