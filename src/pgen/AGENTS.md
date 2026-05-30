@@ -173,10 +173,11 @@ These are the only problems selectable with `problem/pgen_name` when
   `single_file_per_rank` restarts. The per-rank path uses restart metadata
   (`rank_eachmb`, `gids_eachrank`, `nmb_eachrank`) to remap each local
   MeshBlock's source file/offset before loading.
-- `tests/pic_parallel_shock.cpp` is the physics-benchmark pgen for Section 5.4
-  style parallel-shock studies (reflecting wall, `B0 || x`, eta injection,
+- `tests/pic_parallel_shock.cpp` is the eventual-paper-target pgen for Section
+  5.4-style parallel-shock studies (reflecting wall, `B0 || x`, eta injection,
   conservative gas subtraction, and curvature AMR via `g_rho`/`g_P`).
-  Keep this benchmark path separate from Orszag-Tang smoke/pipeline workflows.
+  Current decks are unqualified engineering scaffolds. Keep this path separate
+  from Orszag-Tang smoke/pipeline workflows.
 
 ---
 

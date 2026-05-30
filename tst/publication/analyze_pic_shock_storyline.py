@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Extract CR-shock storyline diagnostics from AthenaK bin + particle VTK outputs."""
+"""Extract shock-rich engineering diagnostics from AthenaK output artifacts."""
 
 from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -19,9 +20,18 @@ sys.path.insert(0, str(REPO_ROOT / "vis" / "python"))
 import bin_convert_new as bin_convert  # noqa: E402
 
 from pvtk_particles import read_particle_vtk  # noqa: E402
+from artifact_lineage import write_companion_manifest  # noqa: E402
 
 
 _CYCLE_RE = re.compile(r"\.(\d+)\.bin$")
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fobj:
+        for chunk in iter(lambda: fobj.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _files_by_cycle(bin_dir: Path, basename: str, file_id: str) -> Dict[int, Path]:
@@ -194,8 +204,9 @@ def main() -> int:
             for row in series:
                 writer.writerow(row)
 
+    shock_series_json = out_dir / "shock_series.json"
     _write_json(
-        out_dir / "shock_series.json",
+        shock_series_json,
         {
             "basename": args.basename,
             "n_samples": len(series),
@@ -204,8 +215,9 @@ def main() -> int:
         },
     )
 
+    profiles_npz = out_dir / "shock_profiles_latest.npz"
     np.savez(
-        out_dir / "shock_profiles_latest.npz",
+        profiles_npz,
         x=latest_payload["x"],
         rho_x=latest_payload["rho_x"],
         bmag_x=latest_payload["bmag_x"],
@@ -239,16 +251,18 @@ def main() -> int:
     hup, _ = np.histogram(p_mag[umask_p], bins=pbins)
     hdown, _ = np.histogram(p_mag[dmask_p], bins=pbins)
 
+    phase_space_npz = out_dir / "phase_space_xp.npz"
     np.savez(
-        out_dir / "phase_space_xp.npz",
+        phase_space_npz,
         hist=hxp,
         x_edges=xedges,
         p_edges=pedges,
         pvtk_file=np.array([str(pvtk_path)], dtype=object),
     )
 
+    spectra_npz = out_dir / "spectra.npz"
     np.savez(
-        out_dir / "spectra.npz",
+        spectra_npz,
         p_edges=pbins,
         dndp_global=hglobal,
         dndp_upstream=hup,
@@ -257,6 +271,10 @@ def main() -> int:
 
     summary = {
         "basename": args.basename,
+        "evidence_class": "engineering_proxy",
+        "not_sun_bai_reproduction": True,
+        "qualification_status": "unqualified_engineering_diagnostics",
+        "physical_model": "orszag_tang_shock_rich_engineering_stress",
         "bin_dir": str(bin_dir),
         "pvtk_dir": str(pvtk_dir),
         "output_dir": str(out_dir),
@@ -264,9 +282,33 @@ def main() -> int:
         "n_particles_latest": int(p_mag.size),
         "shock_x_latest": float(shock_x),
         "pvtk_latest": str(pvtk_path),
+        "pvtk_latest_sha256": _sha256(pvtk_path),
+        "rho_latest_sha256": _sha256(rho_map[shared[-1]]),
+        "bmag_latest_sha256": _sha256(bmag_map[shared[-1]]),
+        "j2_latest_sha256": _sha256(j2_map[shared[-1]]),
         "profile_cycles": [int(c) for c in shared],
     }
-    _write_json(out_dir / "diagnostics_summary.json", summary)
+    diagnostics_summary = out_dir / "diagnostics_summary.json"
+    _write_json(diagnostics_summary, summary)
+    consumed = [pvtk_path]
+    for cyc in shared:
+        consumed.extend((rho_map[cyc], bmag_map[cyc], j2_map[cyc]))
+    outputs = [
+        shock_series_json,
+        profiles_npz,
+        phase_space_npz,
+        spectra_npz,
+        diagnostics_summary,
+    ]
+    if args.save_csv:
+        outputs.append(out_dir / "shock_series.csv")
+    write_companion_manifest(
+        out_dir / "diagnostics_artifact_manifest.json",
+        generator="analyze_pic_shock_storyline.py",
+        physical_model="orszag_tang_shock_rich_engineering_stress",
+        inputs=consumed,
+        outputs=outputs,
+    )
 
     print("diagnostics_summary:", out_dir / "diagnostics_summary.json")
     return 0

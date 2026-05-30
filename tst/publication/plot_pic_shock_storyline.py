@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate multi-panel CR-shock storyline figures from extracted diagnostics."""
+"""Generate unqualified shock-rich engineering figures from diagnostics."""
 
 from __future__ import annotations
 
@@ -10,10 +10,15 @@ import re
 
 import numpy as np
 
+from artifact_lineage import write_companion_manifest
+
 try:
     import matplotlib.pyplot as plt
 except ModuleNotFoundError as exc:
     raise SystemExit("matplotlib is required: python3 -m pip install matplotlib") from exc
+
+
+_PROXY_WATERMARK = "ENGINEERING PROXY - NOT SUN & BAI (2023) REPRODUCTION"
 
 
 def _parse_log_metrics(path: Path) -> dict:
@@ -162,7 +167,7 @@ def _panel_d(ax, local_metrics: dict, hpc_metrics: dict,
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Plot CR-shock storyline multi-panel figure."
+        description="Plot shock-rich engineering-stress multi-panel figure."
     )
     parser.add_argument("--diagnostics-dir", required=True)
     parser.add_argument("--step2-dir", required=True)
@@ -200,12 +205,21 @@ def main() -> int:
     _panel_d(axs[1, 1], local_metrics, hpc_metrics, scan_nx, scan_runtime)
 
     fig.tight_layout()
+    fig.text(
+        0.995, 0.005, _PROXY_WATERMARK, ha="right", va="bottom",
+        fontsize=7, color="#8b0000",
+    )
     fig_path = output_dir / args.figure_name
     fig.savefig(fig_path, dpi=args.dpi)
     plt.close(fig)
 
     summary = {
         "figure": str(fig_path),
+        "evidence_class": "engineering_proxy",
+        "not_sun_bai_reproduction": True,
+        "qualification_status": "unqualified_engineering_quicklook",
+        "physical_model": "orszag_tang_shock_rich_engineering_stress",
+        "visible_watermark": _PROXY_WATERMARK,
         "diagnostics_dir": str(diagnostics_dir),
         "step2_dir": str(step2_dir),
         "scan_summary": str(args.scan_summary),
@@ -213,9 +227,26 @@ def main() -> int:
         "hpc_metrics": hpc_metrics,
         "scan_points": int(scan_nx.size),
     }
-    (output_dir / "figure_summary.json").write_text(
+    figure_summary = output_dir / "figure_summary.json"
+    figure_summary.write_text(
         json.dumps(summary, indent=2),
         encoding="utf-8",
+    )
+    inputs = [
+        diagnostics_dir / "shock_profiles_latest.npz",
+        diagnostics_dir / "phase_space_xp.npz",
+        diagnostics_dir / "spectra.npz",
+        local_log,
+        hpc_log,
+    ]
+    if args.scan_summary:
+        inputs.append(Path(args.scan_summary).resolve())
+    write_companion_manifest(
+        output_dir / "figure_artifact_manifest.json",
+        generator="plot_pic_shock_storyline.py",
+        physical_model="orszag_tang_shock_rich_engineering_stress",
+        inputs=inputs,
+        outputs=(fig_path, figure_summary),
     )
 
     print("figure:", fig_path)

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Generate proxy and publication-physics figure bundles from archived artifacts."""
+"""Generate explicitly unqualified engineering figures from archived artifacts."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import re
 from pathlib import Path
 import sys
@@ -22,6 +24,7 @@ except ModuleNotFoundError as exc:
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vis" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import bin_convert_new as bin_convert  # noqa: E402
+from artifact_lineage import write_companion_manifest  # noqa: E402
 from scripts.particles.pic_analysis_utils import fit_exponential_growth  # noqa: E402
 from scripts.particles.pic_analysis_utils import (  # noqa: E402
     fit_exponential_growth_windowed,
@@ -41,8 +44,45 @@ _PUB_COLORS = [
     "#666666",  # gray
 ]
 
+_BUNDLE_ALIASES = {
+    "proxy_regression": "engineering_proxy",
+    "publication_physics": "extended_engineering",
+}
 
-def _configure_publication_style() -> None:
+_PROXY_WATERMARK = "ENGINEERING PROXY - NOT SUN & BAI (2023) REPRODUCTION"
+_SELECTED_SOURCES: list[dict[str, object]] = []
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fobj:
+        for chunk in iter(lambda: fobj.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _file_records(paths: list[Path]) -> list[dict[str, str]]:
+    return [{"path": str(path), "sha256": _sha256(path)} for path in paths]
+
+
+def _register_input_files(label: str, paths: list[Path]) -> None:
+    _SELECTED_SOURCES.append(
+        {
+            "selection": label,
+            "files": _file_records(paths),
+        }
+    )
+
+
+def _selected_source_paths() -> list[Path]:
+    return [
+        Path(str(record["path"]))
+        for source in _SELECTED_SOURCES
+        for record in source["files"]
+    ]
+
+
+def _configure_artifact_style() -> None:
     plt.style.use("default")
     mpl.rcParams.update(
         {
@@ -157,6 +197,16 @@ def _style_colorbar(cbar, label: str | None = None) -> None:
 
 
 def _save_figure(fig, out: Path, dpi: int) -> None:
+    fig.text(
+        0.995,
+        0.005,
+        _PROXY_WATERMARK,
+        ha="right",
+        va="bottom",
+        fontsize=7,
+        color="#8b0000",
+        alpha=0.9,
+    )
     fig.savefig(out, dpi=dpi, bbox_inches="tight")
     fig.savefig(out.with_suffix(".pdf"), bbox_inches="tight")
 
@@ -192,9 +242,28 @@ def _select_case_dir(
         else:
             raise ValueError("unsupported case subdir: " + subdir)
         if cand.is_dir():
+            files = sorted(path for path in cand.rglob("*") if path.is_file())
+            _SELECTED_SOURCES.append(
+                {
+                    "artifact_kind": subdir,
+                    "candidate_cases": list(case_ids),
+                    "selected_case": case_id,
+                    "selected_case_exists": True,
+                    "files": _file_records(files),
+                }
+            )
             return cand, case_id
 
     fallback = case_ids[0]
+    _SELECTED_SOURCES.append(
+        {
+            "artifact_kind": subdir,
+            "candidate_cases": list(case_ids),
+            "selected_case": fallback,
+            "selected_case_exists": False,
+            "files": [],
+        }
+    )
     if subdir == "bin":
         return _case_bin_dir(run_dir, fallback), fallback
     if subdir == "src":
@@ -322,7 +391,7 @@ def _fit_proxy_stability_growth(
     return float(gamma), float(r2)
 
 
-def _fit_publication_growth(
+def _fit_extended_growth(
     times: np.ndarray,
     values: np.ndarray,
 ) -> tuple[float, float] | None:
@@ -636,8 +705,8 @@ def _plot_two_stream_weibel(
 
     ts_files_np1 = sorted(ts_dir.glob("pic_two_stream_pub_np1.mhd_bcc.*.bin"))
     ts_files_np2 = sorted(ts_dir.glob("pic_two_stream_pub_np2.mhd_bcc.*.bin"))
-    ts_publication = bool(ts_files_np1 or ts_files_np2)
-    if not ts_publication and allow_proxy_fallback:
+    ts_extended = bool(ts_files_np1 or ts_files_np2)
+    if not ts_extended and allow_proxy_fallback:
         ts_files_np1 = sorted(
             ts_dir.glob("pic_two_stream_growth_proxy_np1.prtcl_rho.*.bin")
         )
@@ -647,8 +716,8 @@ def _plot_two_stream_weibel(
 
     wb_files_np1 = sorted(wb_dir.glob("pic_weibel_pub_np1.mhd_bcc.*.bin"))
     wb_files_np2 = sorted(wb_dir.glob("pic_weibel_pub_np2.mhd_bcc.*.bin"))
-    wb_publication = bool(wb_files_np1 or wb_files_np2)
-    if not wb_publication and allow_proxy_fallback:
+    wb_extended = bool(wb_files_np1 or wb_files_np2)
+    if not wb_extended and allow_proxy_fallback:
         wb_files_np1 = sorted(wb_dir.glob("pic_weibel_growth_proxy_np1.prtcl_jy.*.bin"))
         wb_files_np2 = sorted(wb_dir.glob("pic_weibel_growth_proxy_np2.prtcl_jy.*.bin"))
 
@@ -669,7 +738,7 @@ def _plot_two_stream_weibel(
             t_ts, a_ts = _series_from_bin(
                 files,
                 (lambda data: np.abs(_mode1_complex(data, "bcc2")))
-                if ts_publication
+                if ts_extended
                 else (lambda data: np.abs(_mode1_complex(data, "prtcl_rho"))),
             )
             t_plot, a_plot = _trim_startup_zeros(t_ts, a_ts)
@@ -679,8 +748,8 @@ def _plot_two_stream_weibel(
                 t_plot, a_safe, style, marker="o", ms=3, label=f"np{rank}"
             )
             fit = (
-                _fit_publication_growth(t_ts, a_ts)
-                if ts_publication
+                _fit_extended_growth(t_ts, a_ts)
+                if ts_extended
                 else _fit_proxy_stability_growth(t_ts, a_ts)
             )
             if fit is not None:
@@ -697,12 +766,12 @@ def _plot_two_stream_weibel(
                 bbox=_annotation_bbox(),
             )
         axes[0].set_title(
-            "Two-stream publication growth (k=1)"
-            if ts_publication
+            "Two-stream extended engineering growth (k=1)"
+            if ts_extended
             else "Two-stream stability proxy (k=1)"
         )
         axes[0].set_xlabel("time")
-        axes[0].set_ylabel("|B_y,k=1|" if ts_publication else "|rho_k=1|")
+        axes[0].set_ylabel("|B_y,k=1|" if ts_extended else "|rho_k=1|")
         _add_legend(axes[0], loc="lower right")
     else:
         axes[0].set_title("Two-stream data missing")
@@ -718,7 +787,7 @@ def _plot_two_stream_weibel(
             t_wb, a_wb = _series_from_bin(
                 files,
                 (lambda data: np.abs(_mode1_complex(data, "bcc2")))
-                if wb_publication
+                if wb_extended
                 else (lambda data: np.abs(_mode1_complex(data, "prtcl_jy"))),
             )
             t_plot, a_plot = _trim_startup_zeros(t_wb, a_wb)
@@ -728,8 +797,8 @@ def _plot_two_stream_weibel(
                 t_plot, a_safe, style, marker="o", ms=3, label=f"np{rank}"
             )
             fit = (
-                _fit_publication_growth(t_wb, a_wb)
-                if wb_publication
+                _fit_extended_growth(t_wb, a_wb)
+                if wb_extended
                 else _fit_proxy_stability_growth(t_wb, a_wb)
             )
             if fit is not None:
@@ -746,12 +815,12 @@ def _plot_two_stream_weibel(
                 bbox=_annotation_bbox(),
             )
         axes[1].set_title(
-            "Weibel publication growth (k=1)"
-            if wb_publication
+            "Weibel extended engineering growth (k=1)"
+            if wb_extended
             else "Weibel stability proxy (k=1)"
         )
         axes[1].set_xlabel("time")
-        axes[1].set_ylabel("|B_y,k=1|" if wb_publication else "|Jy_k=1|")
+        axes[1].set_ylabel("|B_y,k=1|" if wb_extended else "|Jy_k=1|")
         _add_legend(axes[1], loc="lower right")
     else:
         axes[1].set_title("Weibel data missing")
@@ -767,7 +836,7 @@ def _plot_bell_growth(run_dir: Path, fig_dir: Path, dpi: int) -> Path | None:
     bin_dir, _ = _select_case_dir(
         run_dir, ("bell_growth_publication", "bell_growth_proxy"), "bin"
     )
-    pub_tags = [
+    extended_tags = [
         ("pic_bell_pub_serial_uncoupled", "serial uncoupled"),
         ("pic_bell_pub_serial_coupled", "serial coupled"),
         ("pic_bell_pub_mpi2_uncoupled", "mpi2 uncoupled"),
@@ -780,8 +849,8 @@ def _plot_bell_growth(run_dir: Path, fig_dir: Path, dpi: int) -> Path | None:
         ("pic_bell_proxy_mpi2_coupled", "mpi2 coupled"),
     ]
     tags = (
-        pub_tags
-        if sorted(bin_dir.glob(pub_tags[0][0] + ".mhd_bcc.*.bin"))
+        extended_tags
+        if sorted(bin_dir.glob(extended_tags[0][0] + ".mhd_bcc.*.bin"))
         else proxy_tags
     )
     fig, ax = plt.subplots(figsize=(7, 4))
@@ -848,15 +917,15 @@ def _plot_multispecies_osc(run_dir: Path, fig_dir: Path, dpi: int) -> Path | Non
         ),
         "bin",
     )
-    pub_tags = ["uniform", "smr", "amr_publication"]
-    use_publication = bool(sorted(bin_dir.glob("pic_mso_pub_uniform_np1.mhd_u_m2.*.bin")))
-    tags = pub_tags if use_publication else ["uniform", "smr", "amr_proxy"]
+    extended_tags = ["uniform", "smr", "amr_publication"]
+    use_extended = bool(sorted(bin_dir.glob("pic_mso_pub_uniform_np1.mhd_u_m2.*.bin")))
+    tags = extended_tags if use_extended else ["uniform", "smr", "amr_proxy"]
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
     _style_axes(axes[0], grid=True)
     _style_axes(axes[1], grid=True, log_grid=True)
     plotted = 0
     for tag in tags:
-        prefix = f"pic_mso_pub_{tag}" if use_publication else f"pic_mso_{tag}"
+        prefix = f"pic_mso_pub_{tag}" if use_extended else f"pic_mso_{tag}"
         m2_files = sorted(bin_dir.glob(f"{prefix}_np1.mhd_u_m2.*.bin"))
         e_files = sorted(bin_dir.glob(f"{prefix}_np1.mhd_u_e.*.bin"))
         if not m2_files or not e_files:
@@ -977,7 +1046,7 @@ def _plot_crsi_crpai(run_dir: Path, fig_dir: Path, dpi: int) -> list[Path]:
             t4, r4, l4 = _polarization_series(crsi_mpi4)
             ax.semilogy(t4, np.maximum(r4, 1.0e-30), ":", label="right np4")
             ax.semilogy(t4, np.maximum(l4, 1.0e-30), ":", label="left np4")
-        ax.set_title("CRSI delta-f polarization growth")
+        ax.set_title("CRSI quiet-start polarization-growth proxy")
         ax.set_xlabel("time")
         ax.set_ylabel("mode amplitude")
         _add_legend(ax, loc="lower right")
@@ -1126,6 +1195,10 @@ def _shock_dataset(
 
     pvtk_dir = _case_pvtk_dir(run_dir, case_id)
     pfile = _latest_file(f"{prefix}.prtcl_all.*.part.vtk", pvtk_dir)
+    _register_input_files(
+        f"shock_dataset:{case_id}",
+        [rho_file, bmag_file, j2_file] + ([] if pfile is None else [pfile]),
+    )
     pdata = read_particle_vtk(pfile) if pfile is not None else None
     return rho, bmag, j2, pdata
 
@@ -1134,7 +1207,7 @@ def _plot_shock_story(run_dir: Path, fig_dir: Path, dpi: int) -> Path | None:
     loaded = _shock_dataset(
         run_dir, "amr_shock_publication_local", "pic_amr_shock_pub_local"
     )
-    title_suffix = "publication-local"
+    title_suffix = "legacy-extended-engineering"
     if loaded is None:
         # fallback to smoke outputs (limited diagnostics, no particle spectrum)
         bin_dir = _case_bin_dir(run_dir, "amr_shock_lb_smoke")
@@ -1144,6 +1217,7 @@ def _plot_shock_story(run_dir: Path, fig_dir: Path, dpi: int) -> Path | None:
         jz = _latest_file("pic_amr_shock_lb_serial.prtcl_jz.*.bin", bin_dir)
         if bfile is None or jx is None or jy is None or jz is None:
             return None
+        _register_input_files("shock_dataset:smoke_fallback", [bfile, jx, jy, jz])
         bdat = bin_convert.read_binary_as_athdf(str(bfile))
         jxdat = bin_convert.read_binary_as_athdf(str(jx))
         jydat = bin_convert.read_binary_as_athdf(str(jy))
@@ -1211,7 +1285,7 @@ def _plot_shock_story(run_dir: Path, fig_dir: Path, dpi: int) -> Path | None:
         )
         ax.set_axis_off()
 
-    fig.suptitle("CR-shock storyline quick-look (" + title_suffix + ")")
+    fig.suptitle("Shock-rich engineering quick-look (" + title_suffix + ")")
     out = fig_dir / "10_shock_storyline.png"
     fig.tight_layout()
     _save_figure(fig, out, dpi)
@@ -1222,7 +1296,7 @@ def _plot_shock_story(run_dir: Path, fig_dir: Path, dpi: int) -> Path | None:
 def _run_bundle(bundle: str, run_dir: Path, fig_dir: Path, dpi: int) -> list[Path]:
     outputs: list[Path] = []
 
-    if bundle == "proxy_regression":
+    if bundle == "engineering_proxy":
         for fn in (
             _plot_entity_deposit_maps,
             _plot_em_vacuum_convergence,
@@ -1247,7 +1321,7 @@ def _run_bundle(bundle: str, run_dir: Path, fig_dir: Path, dpi: int) -> list[Pat
             outputs.append(out)
         return outputs
 
-    if bundle == "publication_physics":
+    if bundle == "extended_engineering":
         for fn in (
             _plot_em_vacuum_convergence,
             _plot_langmuir_trace,
@@ -1284,7 +1358,7 @@ def _run_bundle(bundle: str, run_dir: Path, fig_dir: Path, dpi: int) -> list[Pat
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Plot publication-priority figures from a run directory."
+        description="Plot unqualified engineering figures from an artifact run."
     )
     parser.add_argument("--run-dir", required=True, help="Path to one run directory.")
     parser.add_argument(
@@ -1294,28 +1368,75 @@ def main() -> int:
     )
     parser.add_argument(
         "--bundle",
-        choices=("proxy_regression", "publication_physics", "all"),
+        choices=(
+            "engineering_proxy",
+            "extended_engineering",
+            "proxy_regression",
+            "publication_physics",
+            "sun_bai_2023_reproduction",
+            "all",
+        ),
         default="all",
         help="Figure bundle selector.",
     )
     parser.add_argument("--dpi", type=int, default=320, help="PNG DPI.")
     args = parser.parse_args()
 
-    _configure_publication_style()
+    _configure_artifact_style()
 
     run_dir = Path(args.run_dir).resolve()
     fig_root = Path(args.fig_dir).resolve() if args.fig_dir else (run_dir / "figures")
     bundles = (
-        ["proxy_regression", "publication_physics"]
+        ["engineering_proxy", "extended_engineering"]
         if args.bundle == "all"
         else [args.bundle]
     )
 
     all_outputs: list[Path] = []
     for bundle in bundles:
-        fig_dir = fig_root / bundle
+        if bundle == "sun_bai_2023_reproduction":
+            raise RuntimeError(
+                "No checked-in Sun and Bai (2023) reproduction figure bundle exists. "
+                "Implement and qualify it through PIC_PRODUCTION_READINESS_PLAN.md."
+            )
+        canonical_bundle = _BUNDLE_ALIASES.get(bundle, bundle)
+        if canonical_bundle != bundle:
+            print(
+                f"warning: legacy bundle '{bundle}' maps to "
+                f"'{canonical_bundle}' and remains engineering-only"
+            )
+        fig_dir = fig_root / canonical_bundle
         fig_dir.mkdir(parents=True, exist_ok=True)
-        all_outputs.extend(_run_bundle(bundle, run_dir, fig_dir, args.dpi))
+        _SELECTED_SOURCES.clear()
+        outputs = _run_bundle(canonical_bundle, run_dir, fig_dir, args.dpi)
+        all_outputs.extend(outputs)
+        generated_files = []
+        for path in outputs:
+            generated_files.extend([path, path.with_suffix(".pdf")])
+        artifact_bundle = fig_dir / "artifact_bundle.json"
+        artifact_bundle.write_text(
+            json.dumps(
+                {
+                    "bundle": canonical_bundle,
+                    "requested_bundle": bundle,
+                    "evidence_class": "engineering_proxy",
+                    "not_sun_bai_reproduction": True,
+                    "qualification_status": "unqualified_exploratory_figures",
+                    "visible_watermark": _PROXY_WATERMARK,
+                    "selected_sources": _SELECTED_SOURCES,
+                    "outputs": _file_records(generated_files),
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        write_companion_manifest(
+            fig_dir / "lineage_manifest.json",
+            generator="plot_pic_publication_figures.py",
+            physical_model=f"{canonical_bundle}_quicklook_bundle",
+            inputs=_selected_source_paths(),
+            outputs=[artifact_bundle] + generated_files,
+        )
 
     if not all_outputs:
         print("No figures generated (missing case artifacts).")

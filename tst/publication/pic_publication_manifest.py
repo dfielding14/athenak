@@ -1,4 +1,9 @@
-"""Manifest for publication-oriented PIC/MHD-PIC runs and artifacts."""
+"""Manifest for exploratory PIC/MHD-PIC engineering artifacts.
+
+Historical identifiers containing ``publication`` are retained for CLI and
+archive compatibility only. Every checked-in case is explicitly unqualified:
+none is Sun and Bai (2023) reproduction evidence.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +12,19 @@ from typing import Iterable
 from typing import Tuple
 
 
+ENGINEERING_PROXY = "engineering_proxy"
+
+LEGACY_GROUP_ALIASES = {
+    "entity_core_proxy": "entity_core_engineering",
+    "benchmarks_proxy": "benchmark_engineering",
+    "entity_core_publication": "extended_entity_engineering",
+    "benchmarks_publication": "extended_benchmark_engineering",
+    "shock_story": "shock_engineering",
+}
+
+
 @dataclass(frozen=True)
-class PublicationCase:
+class ArtifactCase:
     case_id: str
     group: str
     runner: str  # "module" or "deck"
@@ -19,163 +35,203 @@ class PublicationCase:
     ranks_hpc: int = 8
     athena_args: Tuple[str, ...] = ()
     profile: str = "local"  # "local", "hpc", or "both"
+    evidence_class: str = ENGINEERING_PROXY
     note: str = ""
 
+    @property
+    def legacy_identifier(self) -> bool:
+        """Return whether the compatibility identifier predates reclassification."""
+        return "publication" in self.case_id
 
-PUBLICATION_CASES: Tuple[PublicationCase, ...] = (
+    @property
+    def physical_model(self) -> str:
+        """Return a scoped identifier for the unqualified model exercised."""
+        cid = self.case_id
+        if "entity_deposit" in cid:
+            return "entity_inspired_deposition_parity"
+        if "em_vacuum" in cid:
+            return "mhd_linear_wave_with_inactive_particles"
+        if "langmuir" in cid:
+            return "nonrelativistic_uniform_b_gyrofrequency_anchor"
+        if "two_stream" in cid:
+            return "two_stream_like_engineering_control"
+        if "weibel" in cid:
+            return "transverse_current_weibel_like_engineering_control"
+        if "bell" in cid:
+            return "bell_like_current_coupling_engineering_control"
+        if "multispecies" in cid:
+            return "multispecies_backreaction_oscillation_engineering_control"
+        if "crsi" in cid:
+            return "crsi_quiet_start_engineering_control"
+        if "crpai" in cid:
+            return "crpai_branch_selectivity_engineering_control"
+        if "expanding_box" in cid:
+            return "particle_only_box_scaling_engineering_control"
+        if "shock" in cid:
+            return "orszag_tang_shock_rich_engineering_stress"
+        return "exploratory_unqualified"
+
+
+ARTIFACT_CASES: Tuple[ArtifactCase, ...] = (
     # ---------------------------------------------------------------------
     # Proxy-regression anchors (unchanged physics and thresholds)
     # ---------------------------------------------------------------------
-    PublicationCase(
+    ArtifactCase(
         case_id="entity_deposit_mink",
-        group="entity_core_proxy",
+        group="entity_core_engineering",
         runner="module",
         module="scripts.particles.pic_entity_deposit_mink",
         output_globs=("tst/build/src/bin/pic_entity_dep_mink_*.*.bin",),
         note="Entity parity: Minkowski deposit invariance.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="entity_deposit_reflect",
-        group="entity_core_proxy",
+        group="entity_core_engineering",
         runner="module",
         module="scripts.particles.pic_entity_deposit_reflect",
         output_globs=("tst/build/src/bin/pic_entity_dep_reflect_*.*.bin",),
         note="Entity parity: reflecting-boundary deposit invariance.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="em_vacuum_wave",
-        group="entity_core_proxy",
+        group="entity_core_engineering",
         runner="module",
         module="scripts.particles.pic_em_vacuum_wave",
         output_globs=("tst/build/src/pic_em_vacuum_np*-errs.dat",),
         note="EM vacuum proxy convergence from L1 error tables.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="langmuir_frequency_proxy",
-        group="entity_core_proxy",
+        group="entity_core_engineering",
         runner="module",
         module="scripts.particles.pic_langmuir_frequency_proxy",
         output_globs=("tst/build/src/bin/pic_langmuir_freq_proxy_np*.*.bin",),
         note="Frequency extraction from integrated particle-current traces.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="two_stream_growth_proxy",
-        group="entity_core_proxy",
+        group="entity_core_engineering",
         runner="module",
         module="scripts.particles.pic_two_stream_growth_proxy",
         output_globs=("tst/build/src/bin/pic_two_stream_growth_proxy_np*.*.bin",),
         note="Mode-growth envelope from deposited charge density.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="weibel_growth_proxy",
-        group="entity_core_proxy",
+        group="entity_core_engineering",
         runner="module",
         module="scripts.particles.pic_weibel_growth_proxy",
         output_globs=("tst/build/src/bin/pic_weibel_growth_proxy_np*.*.bin",),
         note="Mode-growth envelope from transverse current.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="bell_growth_proxy",
-        group="benchmarks_proxy",
+        group="benchmark_engineering",
         runner="module",
         module="scripts.particles.pic_bell_growth_proxy",
         output_globs=("tst/build/src/bin/pic_bell_proxy_*.*.bin",),
         note="Coupled-vs-uncoupled Bell-like magnetic growth proxy.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="multispecies_backreaction_oscillation",
-        group="benchmarks_proxy",
+        group="benchmark_engineering",
         runner="module",
         module="scripts.particles.pic_multispecies_backreaction_oscillation",
         output_globs=("tst/build/src/bin/pic_mso_*.*.bin",),
         note="Uniform/SMR/AMR-proxy oscillation and energy-drift trends.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="crsi_deltaf_proxy",
-        group="benchmarks_proxy",
+        group="benchmark_engineering",
         runner="module",
         module="scripts.particles.pic_crsi_deltaf_proxy",
         output_globs=("tst/build/src/bin/pic_crsi_deltaf_*.*.bin",),
-        note="CRSI polarization growth with delta-f noise suppression.",
+        note="CRSI polarization-growth quiet-start engineering proxy.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="crpai_polarization_proxy",
-        group="benchmarks_proxy",
+        group="benchmark_engineering",
         runner="module",
         module="scripts.particles.pic_crpai_polarization_proxy",
         output_globs=("tst/build/src/bin/pic_crpai_*.*.bin",),
         note="CRPAI branch-selection and polarization behavior.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="expanding_box_anisotropy_proxy",
-        group="benchmarks_proxy",
+        group="benchmark_engineering",
         runner="module",
         module="scripts.particles.pic_expanding_box_anisotropy_proxy",
         output_globs=("tst/build/src/bin/pic_box_*.*.bin",),
         note="Expanding/compressing anisotropy trend split.",
     ),
     # ---------------------------------------------------------------------
-    # Publication-physics variants (preserve proxy suite, add stronger runs)
+    # Extended engineering variants (preserve proxy suite, add stronger runs)
     # ---------------------------------------------------------------------
-    PublicationCase(
+    ArtifactCase(
         case_id="entity_deposit_mink_publication",
-        group="entity_core_publication",
+        group="extended_entity_engineering",
         runner="module",
         module="scripts.particles.pic_entity_deposit_mink",
         output_globs=("tst/build/src/bin/pic_entity_dep_mink_*.*.bin",),
-        note="Publication panel source: Entity parity Minkowski support map.",
+        note="Legacy extended engineering panel: Entity parity Minkowski support map.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="entity_deposit_reflect_publication",
-        group="entity_core_publication",
+        group="extended_entity_engineering",
         runner="module",
         module="scripts.particles.pic_entity_deposit_reflect",
         output_globs=("tst/build/src/bin/pic_entity_dep_reflect_*.*.bin",),
-        note="Publication panel source: Entity parity reflecting support map.",
+        note="Legacy extended engineering panel: Entity parity reflecting support map.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="em_vacuum_wave_publication",
-        group="entity_core_publication",
+        group="extended_entity_engineering",
         runner="module",
         module="scripts.particles.pic_em_vacuum_wave_publication",
         output_globs=("tst/build/src/pic_em_vacuum_pub_np*-errs.dat",),
-        note="Publication convergence sweep with 5+ resolutions and MPI parity.",
+        note=(
+            "Legacy extended engineering convergence sweep with 5+ resolutions "
+            "and MPI parity."
+        ),
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="langmuir_frequency_publication",
-        group="entity_core_publication",
+        group="extended_entity_engineering",
         runner="module",
         module="scripts.particles.pic_langmuir_frequency_proxy",
         output_globs=("tst/build/src/bin/pic_langmuir_freq_proxy_np*.*.bin",),
-        note="Publication panel source: Langmuir oscillation with analytic overlay.",
+        note=(
+            "Legacy extended engineering panel: nonrelativistic uniform-B "
+            "frequency anchor."
+        ),
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="two_stream_growth_publication",
-        group="entity_core_publication",
+        group="extended_entity_engineering",
         runner="module",
         module="scripts.particles.pic_two_stream_growth_publication",
         output_globs=("tst/build/src/bin/pic_two_stream_pub_np*.*.bin",),
-        note="Coupled MHD-PIC two-stream growth publication regime.",
+        note="Legacy extended engineering two-stream-like growth regime.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="weibel_growth_publication",
-        group="entity_core_publication",
+        group="extended_entity_engineering",
         runner="module",
         module="scripts.particles.pic_weibel_growth_publication",
         output_globs=("tst/build/src/bin/pic_weibel_pub_np*.*.bin",),
-        note="Coupled MHD-PIC Weibel growth publication regime.",
+        note="Legacy extended engineering Weibel-like growth regime.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="bell_growth_publication",
-        group="benchmarks_publication",
+        group="extended_benchmark_engineering",
         runner="module",
         module="scripts.particles.pic_bell_growth_publication",
         output_globs=("tst/build/src/bin/pic_bell_pub_*.*.bin",),
-        note="Extended Bell growth with auto-fit linear window and MPI overlays.",
+        note="Legacy extended engineering Bell-like growth with auto-fit window.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="multispecies_backreaction_publication",
-        group="benchmarks_publication",
+        group="extended_benchmark_engineering",
         runner="module",
         module="scripts.particles.pic_multispecies_backreaction_publication",
         output_globs=("tst/build/src/bin/pic_mso_pub_*.*.bin",),
@@ -184,44 +240,44 @@ PUBLICATION_CASES: Tuple[PublicationCase, ...] = (
             "drift check."
         ),
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="crsi_deltaf_publication",
-        group="benchmarks_publication",
+        group="extended_benchmark_engineering",
         runner="module",
         module="scripts.particles.pic_crsi_deltaf_publication",
         output_globs=("tst/build/src/bin/pic_crsi_pub_*.*.bin",),
-        note="CRSI publication regime with branch growth/rank spread diagnostics.",
+        note="Legacy extended engineering CRSI-like branch-growth diagnostics.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="crpai_polarization_publication",
-        group="benchmarks_publication",
+        group="extended_benchmark_engineering",
         runner="module",
         module="scripts.particles.pic_crpai_polarization_publication",
         output_globs=("tst/build/src/bin/pic_crpai_pub_*.*.bin",),
-        note="CRPAI publication regime with prolate/oblate branch asymmetry checks.",
+        note="Legacy extended engineering CRPAI-like branch-asymmetry checks.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="expanding_box_anisotropy_publication",
-        group="benchmarks_publication",
+        group="extended_benchmark_engineering",
         runner="module",
         module="scripts.particles.pic_expanding_box_anisotropy_proxy",
         output_globs=("tst/build/src/bin/pic_box_*.*.bin",),
-        note="Publication panel source: expanding/compressing anisotropy trends.",
+        note="Legacy extended engineering expanding/compressing anisotropy trends.",
     ),
     # ---------------------------------------------------------------------
-    # CR-shock MHD-PIC storyline
+    # Shock-rich engineering stress storyline
     # ---------------------------------------------------------------------
-    PublicationCase(
+    ArtifactCase(
         case_id="amr_shock_lb_smoke",
-        group="shock_story",
+        group="shock_engineering",
         runner="module",
         module="scripts.particles.pic_amr_shock_lb_smoke",
         output_globs=("tst/build/src/bin/pic_amr_shock_lb_*.*.bin",),
         note="Fast regression smoke anchor for shock/AMR/LB behavior.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="amr_shock_publication_local",
-        group="shock_story",
+        group="shock_engineering",
         runner="deck",
         input_deck="inputs/tests/pic_amr_shock_lb_publication_local.athinput",
         output_globs=(
@@ -231,11 +287,11 @@ PUBLICATION_CASES: Tuple[PublicationCase, ...] = (
         ranks_local=2,
         ranks_hpc=8,
         profile="both",
-        note="Publication local profile with richer fields plus particle dumps.",
+        note="Legacy local engineering-stress profile with richer diagnostics.",
     ),
-    PublicationCase(
+    ArtifactCase(
         case_id="amr_shock_publication_hpc",
-        group="shock_story",
+        group="shock_engineering",
         runner="deck",
         input_deck="inputs/tests/pic_amr_shock_lb_publication_hpc.athinput",
         output_globs=(
@@ -245,16 +301,25 @@ PUBLICATION_CASES: Tuple[PublicationCase, ...] = (
         ranks_local=4,
         ranks_hpc=64,
         profile="hpc",
-        note="Heavy production profile intended for GPU-capable clusters.",
+        note="Legacy heavy engineering-stress profile; not production-qualified.",
     ),
 )
 
 
-def select_cases(groups: Iterable[str], tier: str) -> list[PublicationCase]:
+def canonicalize_groups(groups: Iterable[str]) -> set[str]:
+    """Map deprecated group aliases to canonical engineering group names."""
+    return {
+        LEGACY_GROUP_ALIASES.get(g.strip(), g.strip())
+        for g in groups
+        if g.strip()
+    }
+
+
+def select_cases(groups: Iterable[str], tier: str) -> list[ArtifactCase]:
     """Return manifest cases filtered by group and execution tier."""
-    gset = {g.strip() for g in groups if g.strip()}
+    gset = canonicalize_groups(groups)
     out = []
-    for case in PUBLICATION_CASES:
+    for case in ARTIFACT_CASES:
         if gset and case.group not in gset:
             continue
         if tier == "local" and case.profile == "hpc":

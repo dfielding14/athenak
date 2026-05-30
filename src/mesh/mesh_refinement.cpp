@@ -782,7 +782,7 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
   pm->pmb_pack->punit = saved_punit;
   pm->pmb_pack->ppart = saved_ppart;
 
-  // Update the pmy_pack pointer in physics modules after MeshBlockPack rebuild
+  // Refresh retained modules after child MeshBlock/coordinate reconstruction.
   if (saved_pturb != nullptr) {
     saved_pturb->UpdateMeshBlockPack(pm->pmb_pack);
   }
@@ -791,12 +791,10 @@ void MeshRefinement::RedistAndRefineMeshBlocks(ParameterInput *pin, int nnew, in
     saved_pmhd->UpdateAfterAMR(pm->pmb_pack);
   }
 
-  // TODO(dbf75): Update all module pack pointers after MeshBlockPack rebuild.
-  // Currently this causes issues because pmy_pack is private in each physics module
-  // The proper fix would be to either:
-  // 1. Add a public UpdateMeshBlockPack() method to each physics module (done for turb)
-  // 2. Make MeshRefinement a friend class of the physics modules
-  // 3. Recreate the physics modules after AMR (expensive)
+  // TODO(dbf75): Audit every retained module and particle-owned helper after
+  // reconstructing child MeshBlocks and coordinates. Refresh retained Views,
+  // neighbor state, and communication buffers through module-specific hooks
+  // where required; pointer reassignment alone is not a complete AMR contract.
 
   // Mark newly created blocks (those that were refined)
   // newtoold[n] contains old gid for new gid n

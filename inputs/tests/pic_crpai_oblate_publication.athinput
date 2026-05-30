@@ -1,7 +1,8 @@
+# LEGACY NAME: engineering proxy only; not Sun & Bai (2023) reproduction evidence.
 # AthenaXXX input file for PIC CRPAI oblate proxy test
 
 <comment>
-problem   = CRPAI oblate-style polarization publication run (streaming -x)
+problem   = CRPAI oblate-style polarization engineering proxy (streaming -x)
 
 <job>
 basename  = pic_crpai_oblate_publication

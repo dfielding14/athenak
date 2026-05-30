@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Render a Section-5.4-style 3-panel figure for `pic_parallel_shock` runs."""
+"""Render an unqualified Section-5.4-inspired engineering quick-look figure."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -18,9 +19,19 @@ sys.path.insert(0, str(REPO_ROOT / "vis" / "python"))
 import bin_convert_new as bin_convert  # noqa: E402
 
 from pvtk_particles import read_particle_vtk  # noqa: E402
+from artifact_lineage import write_companion_manifest  # noqa: E402
 
 _BIN_CYCLE_RE = re.compile(r"\.(\d+)\.bin$")
 _PVTK_CYCLE_RE = re.compile(r"\.prtcl_all\.(\d+)\.part\.vtk$")
+_PROXY_WATERMARK = "ENGINEERING PROXY - NOT SUN & BAI (2023) REPRODUCTION"
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fobj:
+        for chunk in iter(lambda: fobj.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _files_by_cycle(bin_dir: Path, basename: str, file_id: str) -> dict[int, Path]:
@@ -120,7 +131,7 @@ def _spectrum_proxy(
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate a Section-5.4-style 3-panel publication figure."
+        description="Generate a Section-5.4-inspired engineering quick-look figure."
     )
     parser.add_argument("--basename", required=True)
     parser.add_argument(
@@ -131,7 +142,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--output-dir", required=True)
     parser.add_argument(
-        "--figure-name", default="pic_parallel_shock_section54_style.png"
+        "--figure-name", default="pic_parallel_shock_engineering_quicklook.png"
     )
     parser.add_argument("--mb-nx1", type=int, default=16)
     parser.add_argument("--mb-nx2", type=int, default=16)
@@ -291,17 +302,30 @@ def main() -> int:
     cbar3.set_label(r"$\epsilon f(\epsilon)$ (proxy)", fontsize=14)
 
     fig_path = out_dir / args.figure_name
+    fig.text(
+        0.995, 0.005, _PROXY_WATERMARK, ha="right", va="bottom",
+        fontsize=7, color="#8b0000",
+    )
     fig.savefig(fig_path, dpi=args.dpi, bbox_inches="tight")
     plt.close(fig)
 
     summary = {
         "figure": str(fig_path),
+        "evidence_class": "engineering_proxy",
+        "not_sun_bai_reproduction": True,
+        "qualification_status": "unqualified_engineering_quicklook",
+        "physical_model": "pic_parallel_shock_engineering_scaffold",
+        "visible_watermark": _PROXY_WATERMARK,
         "basename": args.basename,
         "rho_file": str(rho_file),
+        "rho_file_sha256": _sha256(rho_file),
         "bmag_file": str(bmag_file),
+        "bmag_file_sha256": _sha256(bmag_file),
         "cycle": int(cycle),
         "pvtk_file": "" if pvtk_file is None else str(pvtk_file),
+        "pvtk_file_sha256": "" if pvtk_file is None else _sha256(pvtk_file),
         "pvtk_cycle": None if pvtk_cycle is None else int(pvtk_cycle),
+        "figure_sha256": _sha256(fig_path),
         "time": tval,
         "shock_x": float(shock_x),
         "rho_ref": float(rho_ref),
@@ -313,9 +337,20 @@ def main() -> int:
         "spec_ymin": float(args.spec_ymin),
         "spec_ymax": float(args.spec_ymax),
     }
-    (out_dir / "section54_style_summary.json").write_text(
+    quicklook_summary = out_dir / "engineering_quicklook_summary.json"
+    quicklook_summary.write_text(
         json.dumps(summary, indent=2),
         encoding="utf-8",
+    )
+    inputs = [rho_file, bmag_file]
+    if pvtk_file is not None:
+        inputs.append(pvtk_file)
+    write_companion_manifest(
+        out_dir / "engineering_quicklook_artifact_manifest.json",
+        generator="plot_pic_parallel_shock_section54.py",
+        physical_model="pic_parallel_shock_engineering_scaffold",
+        inputs=inputs,
+        outputs=(fig_path, quicklook_summary),
     )
     print(f"figure: {fig_path}")
     return 0

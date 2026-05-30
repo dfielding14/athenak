@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create and run tiered CR-shock scan matrices with machine-readable summaries."""
+"""Create shock-rich engineering-stress scans with machine-readable summaries."""
 
 from __future__ import annotations
 
@@ -8,11 +8,15 @@ import csv
 from dataclasses import asdict
 from dataclasses import dataclass
 from datetime import datetime
+import hashlib
 import json
+import os
 from pathlib import Path
 import shlex
 import subprocess
 import time
+
+from artifact_lineage import write_companion_manifest
 
 
 @dataclass
@@ -32,6 +36,27 @@ class ScanCase:
 
 def _timestamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def _frontier_runtime_detected(path: Path) -> bool:
+    host = os.uname().nodename.lower()
+    return (
+        str(path).startswith("/lustre/orion/")
+        or "frontier" in host
+        or os.environ.get("LMOD_SYSTEM_NAME", "").lower() == "frontier"
+    )
+
+
+def _in_slurm_environment() -> bool:
+    return bool(os.environ.get("SLURM_JOB_ID") or os.environ.get("SLURM_JOBID"))
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fobj:
+        for chunk in iter(lambda: fobj.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _parse_float_list(raw: str) -> list[float]:
@@ -67,6 +92,10 @@ def _resolve_nproc(tier: str, nproc: int | None) -> int:
 def _resolve_deck(repo_root: Path, tier: str, deck_arg: str) -> Path:
     if deck_arg:
         if deck_arg in {"local", "hpc"}:
+            if deck_arg != tier:
+                raise ValueError(
+                    f"deck selector '{deck_arg}' requires --tier {deck_arg}"
+                )
             tag = deck_arg
             return repo_root / f"inputs/tests/pic_amr_shock_lb_publication_{tag}.athinput"
         return (repo_root / deck_arg).resolve()
@@ -137,13 +166,22 @@ def _build_cases(
     return cases
 
 
-def _write_command_script(path: Path, cwd: Path, cases: list[ScanCase]) -> None:
+def _write_command_script(
+    path: Path, cwd: Path, cases: list[ScanCase], tier: str
+) -> None:
     with path.open("w", encoding="utf-8") as fobj:
         fobj.write("#!/usr/bin/env bash\nset -euo pipefail\n\n")
+        fobj.write(
+            f'printf "%s\\n" "{tier.upper()} scan output is planning material only. '
+            'Use the Python local acknowledgement or the approved external '
+            'manifest, ledger, and Slurm wrapper." >&2\n'
+        )
+        fobj.write("exit 2\n\n")
+        fobj.write("# Planned commands follow; do not execute directly.\n")
         fobj.write(f"cd {shlex.quote(str(cwd))}\n\n")
         for case in cases:
-            fobj.write(_command_str(case.command) + "\n")
-    path.chmod(0o755)
+            fobj.write("# " + _command_str(case.command) + "\n")
+    path.chmod(0o644)
 
 
 def _write_summary_csv(path: Path, cases: list[ScanCase]) -> None:
@@ -174,7 +212,7 @@ def _write_summary_csv(path: Path, cases: list[ScanCase]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Create and run CR-shock scan matrices for local/HPC tiers."
+        description="Create shock-rich engineering-stress scans for local/HPC tiers."
     )
     parser.add_argument("--tier", choices=("local", "hpc"), default="local")
     parser.add_argument(
@@ -208,6 +246,11 @@ def main() -> int:
         help="Additional Athena override (block/param=value). Repeatable.",
     )
     parser.add_argument("--run", action="store_true")
+    parser.add_argument(
+        "--local-exploratory-run",
+        action="store_true",
+        help="Acknowledge that direct execution is limited to local engineering use.",
+    )
     parser.add_argument("--keep-going", action="store_true")
     parser.add_argument("--max-cases", type=int, default=0)
     parser.add_argument(
@@ -218,8 +261,23 @@ def main() -> int:
     parser.add_argument("--run-id", default="")
     parser.add_argument("--athena-cwd", default="tst/build/src")
     args = parser.parse_args()
+    if args.tier == "hpc" and args.run:
+        parser.error(
+            "--tier hpc is emit-only. Execute external jobs only through the "
+            "approved pre-submit manifest, validator, ledger, and scheduler wrapper."
+        )
 
     repo_root = Path(__file__).resolve().parents[2]
+    athena_cwd = (repo_root / args.athena_cwd).resolve()
+    if args.run and not args.local_exploratory_run:
+        parser.error("local execution requires --local-exploratory-run")
+    if args.run and (
+        _in_slurm_environment() or _frontier_runtime_detected(athena_cwd)
+    ):
+        parser.error(
+            "direct execution is local-only; use the approved external "
+            "manifest, validator, ledger, and scheduler wrapper"
+        )
     run_id = args.run_id if args.run_id else f"pic_shock_scan_{_timestamp()}"
     output_root = (repo_root / args.output_dir).resolve()
     scan_dir = output_root / run_id / "reviews" / "shock_step4"
@@ -255,12 +313,11 @@ def main() -> int:
     if args.max_cases > 0:
         cases = cases[: args.max_cases]
 
-    athena_cwd = (repo_root / args.athena_cwd).resolve()
     script_path = scan_dir / "scan_commands.sh"
     summary_json = scan_dir / "scan_summary.json"
     summary_csv = scan_dir / "scan_summary.csv"
 
-    _write_command_script(script_path, athena_cwd, cases)
+    _write_command_script(script_path, athena_cwd, cases, args.tier)
 
     if args.run:
         for case in cases:
@@ -280,8 +337,13 @@ def main() -> int:
     summary = {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
         "run_id": run_id,
+        "evidence_class": "engineering_proxy",
+        "not_sun_bai_reproduction": True,
+        "qualification_status": "unqualified_engineering_stress_scan",
+        "physical_model": "orszag_tang_shock_rich_engineering_stress",
         "tier": args.tier,
         "deck": str(deck),
+        "deck_sha256": _sha256(deck),
         "athena_cwd": str(athena_cwd),
         "nproc": nproc,
         "launch_prefix": launch_prefix,
@@ -298,6 +360,18 @@ def main() -> int:
 
     if cases:
         _write_summary_csv(summary_csv, cases)
+    outputs = [script_path, summary_json]
+    if summary_csv.is_file():
+        outputs.append(summary_csv)
+    athena = athena_cwd / "athena"
+    write_companion_manifest(
+        scan_dir / "scan_artifact_manifest.json",
+        generator="run_pic_shock_scan.py",
+        physical_model="orszag_tang_shock_rich_engineering_stress",
+        inputs=(deck,),
+        outputs=outputs,
+        executables=(athena,) if args.run else (),
+    )
 
     print("scan_dir:", scan_dir)
     print("command_script:", script_path)

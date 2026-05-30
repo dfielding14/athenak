@@ -9,6 +9,7 @@ It reports matched-snapshot field deltas and optional threshold gates.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -19,8 +20,27 @@ import numpy as np
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "vis" / "python"))
 import bin_convert_new as bin_convert  # noqa: E402
+from artifact_lineage import write_companion_manifest  # noqa: E402
 
 _CYCLE_RE = re.compile(r"\.(\d+)\.bin$")
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fobj:
+        for chunk in iter(lambda: fobj.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _input_records(bin_dir: Path, basename: str) -> list[dict[str, str]]:
+    rho_map = _map_files(bin_dir, basename, "rho")
+    b_map = _map_files(bin_dir, basename, "bmag")
+    shared = sorted(set(rho_map) & set(b_map))
+    if not shared:
+        return []
+    paths = [rho_map[shared[-1]], b_map[min(b_map)], b_map[shared[-1]]]
+    return [{"path": str(path), "sha256": _sha256(path)} for path in paths]
 
 
 def _map_files(bin_dir: Path, basename: str, file_id: str) -> dict[int, Path]:
@@ -160,7 +180,17 @@ def main() -> int:
     off_b0 = _load_first_bmag(off_bin, args.off_basename)
     on_b0 = _load_first_bmag(on_bin, args.on_basename)
 
+    off_inputs = _input_records(off_bin, args.off_basename)
+    on_inputs = _input_records(on_bin, args.on_basename)
     metrics = {
+        "artifact_metadata": {
+            "evidence_class": "engineering_proxy",
+            "not_sun_bai_reproduction": True,
+            "qualification_status": "unqualified_feedback_sensitivity_metric",
+            "physical_model": "pic_parallel_shock_engineering_scaffold",
+            "off_inputs": off_inputs,
+            "on_inputs": on_inputs,
+        },
         "off": {
             "cycle": int(off_cycle),
             "time": float(off_time),
@@ -193,15 +223,21 @@ def main() -> int:
             "b_l2": float(np.sqrt(np.mean(db * db))),
             "b_linf": float(np.max(np.abs(db))),
             "rho_downstream_mean_rel": _rel_delta(
-                float(np.mean(off_rho[:, down_mask])) if np.any(down_mask) else float("nan"),
-                float(np.mean(on_rho[:, down_mask])) if np.any(down_mask) else float("nan"),
+                float(np.mean(off_rho[:, down_mask]))
+                if np.any(down_mask)
+                else float("nan"),
+                float(np.mean(on_rho[:, down_mask]))
+                if np.any(down_mask)
+                else float("nan"),
             ),
             "rho_upstream_mean_rel": _rel_delta(
                 float(np.mean(off_rho[:, up_mask])) if np.any(up_mask) else float("nan"),
                 float(np.mean(on_rho[:, up_mask])) if np.any(up_mask) else float("nan"),
             ),
             "b_downstream_mean_rel": _rel_delta(
-                float(np.mean(off_b[:, down_mask])) if np.any(down_mask) else float("nan"),
+                float(np.mean(off_b[:, down_mask]))
+                if np.any(down_mask)
+                else float("nan"),
                 float(np.mean(on_b[:, down_mask])) if np.any(down_mask) else float("nan"),
             ),
             "b_upstream_mean_rel": _rel_delta(
@@ -234,6 +270,13 @@ def main() -> int:
     out_path = Path(args.out_json).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+    write_companion_manifest(
+        out_path.with_name(out_path.stem + "_artifact_manifest.json"),
+        generator="check_pic_parallel_shock_feedback_sensitivity.py",
+        physical_model="pic_parallel_shock_engineering_scaffold",
+        inputs=[Path(record["path"]) for record in off_inputs + on_inputs],
+        outputs=(out_path,),
+    )
 
     print(f"metrics_json={out_path}")
     print(f"gate_pass={gate['pass']}")

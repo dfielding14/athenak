@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run and compare the PIC parallel-shock benchmark trio."""
+"""Run and compare an unqualified PIC parallel-shock engineering scaffold."""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ import argparse
 import csv
 from dataclasses import dataclass
 from datetime import datetime
+import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -23,8 +25,11 @@ sys.path.insert(0, str(REPO_ROOT / "vis" / "python"))
 import bin_convert_new as bin_convert  # noqa: E402
 
 from pvtk_particles import read_particle_vtk  # noqa: E402
+from artifact_lineage import file_records  # noqa: E402
+from artifact_lineage import write_companion_manifest  # noqa: E402
 
 _CYCLE_RE = re.compile(r"\.(\d+)\.bin$")
+_PROXY_WATERMARK = "ENGINEERING PROXY - NOT SUN & BAI (2023) REPRODUCTION"
 
 
 @dataclass
@@ -36,6 +41,28 @@ class CaseSpec:
 
 def _timestamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def _frontier_runtime_detected(athena_cwd: Path) -> bool:
+    host = os.uname().nodename.lower()
+    return (
+            str(REPO_ROOT).startswith("/lustre/orion/")
+            or str(athena_cwd).startswith("/lustre/orion/")
+            or "frontier" in host
+            or os.environ.get("LMOD_SYSTEM_NAME", "").lower() == "frontier"
+    )
+
+
+def _in_slurm_environment() -> bool:
+    return bool(os.environ.get("SLURM_JOB_ID") or os.environ.get("SLURM_JOBID"))
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fobj:
+        for chunk in iter(lambda: fobj.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _files_by_cycle(bin_dir: Path, basename: str, file_id: str) -> dict[int, Path]:
@@ -112,6 +139,9 @@ def _compute_case_metrics(bin_dir: Path, pvtk_dir: Path, case: CaseSpec) -> dict
         p_mag = np.array([], dtype=float)
     else:
         p_mag = _load_pmag(pvtk_path)
+    consumed = [bmag_map[shared[0]], bmag_map[shared[-1]], rho_map[shared[-1]]]
+    if pvtk_path is not None:
+        consumed.append(pvtk_path)
 
     if p_mag.size > 0:
         p50 = float(np.percentile(p_mag, 50.0))
@@ -137,6 +167,7 @@ def _compute_case_metrics(bin_dir: Path, pvtk_dir: Path, case: CaseSpec) -> dict
             "p90_last": p90,
             "p99_last": p99,
             "pvtk_last": "" if pvtk_path is None else str(pvtk_path),
+            "consumed_raw_outputs": file_records(consumed),
             "p_mag_last": p_mag,
     }
 
@@ -213,32 +244,64 @@ def _plot_comparison(path: Path, rows: list[dict], pinj: float) -> None:
     ax1.legend(fontsize=8, frameon=False)
 
     fig.tight_layout()
+    fig.text(
+            0.995, 0.005, _PROXY_WATERMARK, ha="right", va="bottom",
+            fontsize=7, color="#8b0000",
+    )
     fig.savefig(path, bbox_inches="tight")
     plt.close(fig)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-            description="Run coarse/fine/AMR pic_parallel_shock decks and compare trends."
+            description=(
+                    "Run coarse/fine/AMR engineering scaffold decks and compare trends."
+            )
     )
-    parser.add_argument("--run", action="store_true")
+    parser.add_argument(
+            "--run",
+            action="store_true",
+            help="Execute locally only; also requires --local-exploratory-run.",
+    )
+    parser.add_argument(
+            "--local-exploratory-run",
+            action="store_true",
+            help=(
+                    "Acknowledge that direct execution is limited to local "
+                    "engineering use."
+            ),
+    )
     parser.add_argument("--nproc", type=int, default=8)
     parser.add_argument("--mpiexec", default="mpiexec")
     parser.add_argument("--athena-cwd", default="tst/build/src")
     parser.add_argument(
             "--output-root",
             default="tst/.codex/pic_parallel_shock_runs",
-            help="Base directory for run logs and benchmark summaries.",
+            help="Base directory for run logs and engineering summaries.",
     )
     parser.add_argument("--run-id", default="")
     parser.add_argument("--pinj", type=float, default=3.16227766017 * 3.0)
     args = parser.parse_args()
-
-    run_id = args.run_id if args.run_id else f"pic_parallel_shock_bench_{_timestamp()}"
-    out_dir = (REPO_ROOT / args.output_root / run_id / "reviews" / "benchmark").resolve()
+    if args.run and not args.local_exploratory_run:
+        parser.error("--run requires --local-exploratory-run")
+    run_id = (
+            args.run_id
+            if args.run_id
+            else f"pic_parallel_shock_engineering_{_timestamp()}"
+    )
+    out_dir = (
+            REPO_ROOT / args.output_root / run_id / "reviews" / "engineering_scaffold"
+    ).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     athena_cwd = (REPO_ROOT / args.athena_cwd).resolve()
+    if args.run and (
+            _in_slurm_environment() or _frontier_runtime_detected(athena_cwd)
+    ):
+        parser.error(
+                "direct execution is local-only; use the approved external "
+                "manifest, validator, ledger, and scheduler wrapper"
+        )
     bin_dir = athena_cwd / "bin"
     pvtk_dir = athena_cwd / "pvtk"
 
@@ -299,6 +362,14 @@ def main() -> int:
 
     compare = {
             "run_id": run_id,
+            "evidence_class": "engineering_proxy",
+            "not_sun_bai_reproduction": True,
+            "qualification_status": "unqualified_engineering_scaffold",
+            "physical_model": "pic_parallel_shock_engineering_scaffold",
+            "visible_watermark": _PROXY_WATERMARK,
+            "deck_sha256": {
+                    case.label: _sha256(Path(case.deck)) for case in cases
+            },
             "cases": [],
             "trend_checks": {},
     }
@@ -325,15 +396,26 @@ def main() -> int:
             "p90_fine_over_coarse": fine["p90_last"] / max(coarse["p90_last"], 1.0e-30),
     }
 
-    summary_json = out_dir / "benchmark_summary.json"
-    summary_csv = out_dir / "benchmark_summary.csv"
-    run_json = out_dir / "benchmark_runs.json"
-    fig_path = out_dir / "pic_parallel_shock_benchmark_compare.png"
+    summary_json = out_dir / "engineering_scaffold_summary.json"
+    summary_csv = out_dir / "engineering_scaffold_summary.csv"
+    run_json = out_dir / "engineering_scaffold_runs.json"
+    fig_path = out_dir / "pic_parallel_shock_engineering_compare.png"
 
     summary_json.write_text(json.dumps(compare, indent=2), encoding="utf-8")
     _write_summary_csv(summary_csv, summary_rows)
     run_json.write_text(json.dumps(run_rows, indent=2), encoding="utf-8")
     _plot_comparison(fig_path, summary_rows, args.pinj)
+    raw_inputs = []
+    for row in summary_rows:
+        raw_inputs.extend(Path(item["path"]) for item in row["consumed_raw_outputs"])
+    write_companion_manifest(
+            out_dir / "engineering_scaffold_artifact_manifest.json",
+            generator="run_pic_parallel_shock_benchmark.py",
+            physical_model="pic_parallel_shock_engineering_scaffold",
+            inputs=[Path(case.deck) for case in cases] + raw_inputs,
+            outputs=(summary_json, summary_csv, run_json, fig_path),
+            executables=(athena_cwd / "athena",) if args.run else (),
+    )
 
     print(f"run_id={run_id}")
     print(f"summary_json={summary_json}")

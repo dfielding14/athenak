@@ -1,7 +1,8 @@
+# LEGACY NAME: engineering proxy only; not Sun & Bai (2023) reproduction evidence.
 # AthenaXXX input file for publication Bell growth run
 
 <comment>
-problem   = Bell-style coupled-vs-uncoupled publication run
+problem   = Bell-style coupled-vs-uncoupled engineering proxy
 
 <job>
 basename  = pic_bell_growth_publication

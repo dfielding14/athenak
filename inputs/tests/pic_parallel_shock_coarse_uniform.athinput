@@ -1,15 +1,16 @@
-# AthenaXXX input file: PIC parallel shock benchmark (coarse uniform)
+# UNQUALIFIED ENGINEERING SCAFFOLD: not Sun & Bai (2023) reproduction evidence.
+# AthenaXXX input file: PIC parallel shock engineering scaffold (coarse uniform)
 
 <comment>
-problem   = pic_parallel_shock coarse uniform benchmark (laptop np=8 validation)
+problem   = pic_parallel_shock coarse uniform engineering scaffold
 
 <job>
 basename  = pic_parallel_shock_coarse
 
 <mesh>
 nghost    = 2
-# HPC scaling knobs: increase nx1/nx2 and optionally add AMR levels in the
-# fiducial deck; no code changes are needed for large-rank/GPU campaigns.
+# Engineering stress knobs: increase nx1/nx2 only under an approved execution
+# policy; this scaffold is not a production campaign deck.
 nx1       = 128
 x1min     = 0.0
 x1max     = 4.0
@@ -44,7 +45,7 @@ max_nmb_per_rank     = 8192
 evolution  = dynamic
 integrator = rk2
 cfl_number = 0.3
-# Laptop gate values; raise nlim/tlim for production runs.
+# Local exploratory values only.
 nlim       = 12
 tlim       = 0.02
 ndiag      = 1

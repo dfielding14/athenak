@@ -1,3 +1,5 @@
+"""Legacy-named CRPAI-like engineering proxy; not reproduction evidence."""
+
 import glob
 import logging
 import os
@@ -75,7 +77,7 @@ def _load_growth_metrics(basename):
     pattern = os.path.join(_athena_exe_dir(), 'bin', basename + '.mhd_bcc.*.bin')
     files = sorted(glob.glob(pattern))
     if len(files) < 10:
-        raise RuntimeError('Not enough mhd_bcc outputs for CRPAI publication fit')
+        raise RuntimeError('Not enough mhd_bcc outputs for CRPAI engineering-proxy fit')
 
     times = []
     by_mode = []

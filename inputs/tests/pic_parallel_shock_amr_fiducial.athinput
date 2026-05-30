@@ -1,15 +1,16 @@
-# AthenaXXX input file: PIC parallel shock benchmark (AMR fiducial)
+# UNQUALIFIED ENGINEERING SCAFFOLD: not Sun & Bai (2023) reproduction evidence.
+# AthenaXXX input file: PIC parallel shock engineering scaffold (AMR fiducial)
 
 <comment>
-problem   = pic_parallel_shock AMR fiducial benchmark (Section 5.4 style curvature AMR)
+problem   = pic_parallel_shock AMR fiducial engineering scaffold
 
 <job>
 basename  = pic_parallel_shock_amr
 
 <mesh>
 nghost    = 2
-# HPC scaling knobs: increase nx1/nx2, num_levels, and rank/GPU counts for
-# production campaigns while preserving this pgen and analysis workflow.
+# Engineering stress knobs: increase nx1/nx2, num_levels, and rank/GPU counts
+# only under an approved execution policy.
 nx1       = 128
 x1min     = 0.0
 x1max     = 4.0
@@ -48,7 +49,7 @@ max_nmb_per_rank     = 8192
 evolution  = dynamic
 integrator = rk2
 cfl_number = 0.3
-# Laptop gate values; raise nlim/tlim for production runs.
+# Local exploratory values only.
 nlim       = 12
 tlim       = 0.02
 ndiag      = 1

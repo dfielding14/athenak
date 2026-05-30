@@ -1,7 +1,8 @@
+# LEGACY NAME: engineering proxy only; not Sun & Bai (2023) reproduction evidence.
 # AthenaXXX input file for publication Weibel growth run
 
 <comment>
-problem   = Coupled MHD-PIC Weibel-style growth publication run
+problem   = Coupled MHD-PIC Weibel-style growth engineering proxy
 
 <job>
 basename  = pic_weibel_growth_publication

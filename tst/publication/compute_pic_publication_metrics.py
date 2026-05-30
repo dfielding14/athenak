@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Compute F01-F09 numeric metrics from one publication run directory."""
+"""Compute exploratory F01-F09 engineering metrics from one artifact run."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -13,6 +14,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "vis" / "python"))
 import bin_convert_new as bin_convert  # noqa: E402
+from artifact_lineage import write_companion_manifest  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.particles.pic_analysis_utils import fit_exponential_growth  # noqa: E402
@@ -20,6 +22,29 @@ from scripts.particles.pic_analysis_utils import (  # noqa: E402
     fit_exponential_growth_windowed,
 )
 from scripts.particles.pic_analysis_utils import polarization_split  # noqa: E402
+
+
+_SELECTED_SOURCES: list[dict[str, object]] = []
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fobj:
+        for chunk in iter(lambda: fobj.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _file_records(paths: list[Path]) -> list[dict[str, str]]:
+    return [{"path": str(path), "sha256": _sha256(path)} for path in paths]
+
+
+def _selected_source_paths() -> list[Path]:
+    return [
+        Path(str(record["path"]))
+        for source in _SELECTED_SOURCES
+        for record in source["files"]
+    ]
 
 
 def _case_dir(run_dir: Path, case_id: str) -> Path:
@@ -38,7 +63,9 @@ def _select_case_bin_dir(run_dir: Path, candidates: tuple[str, ...]) -> Path:
     for cid in candidates:
         p = _case_bin_dir(run_dir, cid)
         if p.is_dir():
+            _record_selected_source(run_dir, "bin", candidates, cid)
             return p
+    _record_selected_source(run_dir, "bin", candidates, candidates[0])
     return _case_bin_dir(run_dir, candidates[0])
 
 
@@ -46,8 +73,47 @@ def _select_case_src_dir(run_dir: Path, candidates: tuple[str, ...]) -> Path:
     for cid in candidates:
         p = _case_src_dir(run_dir, cid)
         if p.is_dir():
+            _record_selected_source(run_dir, "src", candidates, cid)
             return p
+    _record_selected_source(run_dir, "src", candidates, candidates[0])
     return _case_src_dir(run_dir, candidates[0])
+
+
+def _record_selected_source(
+    run_dir: Path,
+    artifact_kind: str,
+    candidates: tuple[str, ...],
+    selected_case: str,
+) -> None:
+    case_record = run_dir / "cases" / selected_case / "case.json"
+    evidence_class = "legacy_unclassified"
+    physical_model = "unknown"
+    if case_record.is_file():
+        data = json.loads(case_record.read_text(encoding="utf-8"))
+        evidence_class = str(data.get("evidence_class", evidence_class))
+        physical_model = str(data.get("physical_model", physical_model))
+    selected_path = (
+        _case_bin_dir(run_dir, selected_case)
+        if artifact_kind == "bin"
+        else _case_src_dir(run_dir, selected_case)
+    )
+    files = (
+        sorted(path for path in selected_path.rglob("*") if path.is_file())
+        if selected_path.is_dir()
+        else []
+    )
+    _SELECTED_SOURCES.append(
+        {
+            "artifact_kind": artifact_kind,
+            "candidate_cases": list(candidates),
+            "selected_case": selected_case,
+            "selected_case_exists": case_record.is_file(),
+            "evidence_class": evidence_class,
+            "physical_model": physical_model,
+            "selected_path": str(selected_path),
+            "files": _file_records(files),
+        }
+    )
 
 
 def _latest(pattern: str, root: Path) -> Path | None:
@@ -126,7 +192,7 @@ def _proxy_stability_fit(
     return float(gamma), float(r2), ratio
 
 
-def _publication_growth_fit(
+def _extended_growth_fit(
     times: np.ndarray, amp: np.ndarray
 ) -> tuple[float, float, float]:
     t = np.asarray(times, dtype=float)
@@ -259,7 +325,7 @@ def _collect_two_stream_weibel(run_dir: Path, out: dict[str, object]) -> None:
     for rank in (1, 2):
         files = sorted(ts_dir.glob(f"pic_two_stream_pub_np{rank}.mhd_bcc.*.bin"))
         field = "bcc2"
-        publication = bool(files)
+        extended = bool(files)
         if not files:
             files = sorted(
                 ts_dir.glob(f"pic_two_stream_growth_proxy_np{rank}.prtcl_rho.*.bin")
@@ -272,8 +338,8 @@ def _collect_two_stream_weibel(run_dir: Path, out: dict[str, object]) -> None:
             d = bin_convert.read_binary_as_athdf(str(f))
             t.append(float(d["Time"]))
             a.append(abs(_mode1_complex(d, field)))
-        if publication:
-            gamma, r2, growth_factor = _publication_growth_fit(
+        if extended:
+            gamma, r2, growth_factor = _extended_growth_fit(
                 np.asarray(t), np.asarray(a)
             )
             ts[f"np{rank}_growth_factor"] = growth_factor
@@ -289,7 +355,7 @@ def _collect_two_stream_weibel(run_dir: Path, out: dict[str, object]) -> None:
     for rank in (1, 2):
         files = sorted(wb_dir.glob(f"pic_weibel_pub_np{rank}.mhd_bcc.*.bin"))
         field = "bcc2"
-        publication = bool(files)
+        extended = bool(files)
         if not files:
             files = sorted(
                 wb_dir.glob(f"pic_weibel_growth_proxy_np{rank}.prtcl_jy.*.bin")
@@ -302,8 +368,8 @@ def _collect_two_stream_weibel(run_dir: Path, out: dict[str, object]) -> None:
             d = bin_convert.read_binary_as_athdf(str(f))
             t.append(float(d["Time"]))
             a.append(abs(_mode1_complex(d, field)))
-        if publication:
-            gamma, r2, growth_factor = _publication_growth_fit(
+        if extended:
+            gamma, r2, growth_factor = _extended_growth_fit(
                 np.asarray(t), np.asarray(a)
             )
             wb[f"np{rank}_growth_factor"] = growth_factor
@@ -528,7 +594,7 @@ def _collect_aniso(run_dir: Path, out: dict[str, object]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Compute publication-run F01-F09 metrics summary."
+        description="Compute exploratory engineering F01-F09 metrics summary."
     )
     parser.add_argument("--run-dir", required=True)
     args = parser.parse_args()
@@ -545,9 +611,38 @@ def main() -> int:
     _collect_crsi(run_dir, out)
     _collect_crpai(run_dir, out)
     _collect_aniso(run_dir, out)
+    out["artifact_metadata"] = {
+        "evidence_class": "engineering_proxy",
+        "not_sun_bai_reproduction": True,
+        "qualification_status": "unqualified_exploratory_metrics",
+        "selected_sources": _SELECTED_SOURCES,
+    }
 
     out_path = run_dir / "metrics_summary.json"
     out_path.write_text(json.dumps(out, indent=2), encoding="utf-8")
+    metrics_artifact_manifest = run_dir / "metrics_artifact_manifest.json"
+    metrics_artifact_manifest.write_text(
+        json.dumps(
+            {
+                "evidence_class": "engineering_proxy",
+                "not_sun_bai_reproduction": True,
+                "metrics_summary": {
+                    "path": str(out_path),
+                    "sha256": _sha256(out_path),
+                },
+                "selected_sources": _SELECTED_SOURCES,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    write_companion_manifest(
+        run_dir / "metrics_lineage_manifest.json",
+        generator="compute_pic_publication_metrics.py",
+        physical_model="exploratory_pic_metric_bundle",
+        inputs=_selected_source_paths(),
+        outputs=(out_path, metrics_artifact_manifest),
+    )
     print(out_path)
     return 0
 

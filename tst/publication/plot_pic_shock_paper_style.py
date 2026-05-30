@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Render an Athena++-style MHD-PIC shock figure from AthenaK outputs."""
+"""Render an unqualified Athena++-inspired shock engineering quick-look."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -20,8 +21,18 @@ except ModuleNotFoundError as exc:
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "vis" / "python"))
 import bin_convert_new as bin_convert  # noqa: E402
+from artifact_lineage import write_companion_manifest  # noqa: E402
 
 _CYCLE_RE = re.compile(r"\.(\d+)\.bin$")
+_PROXY_WATERMARK = "ENGINEERING PROXY - NOT SUN & BAI (2023) REPRODUCTION"
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fobj:
+        for chunk in iter(lambda: fobj.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _latest_bin(bin_dir: Path, basename: str, file_id: str) -> tuple[Path, int]:
@@ -62,7 +73,7 @@ def _slice_xy(arr: np.ndarray) -> np.ndarray:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Create a paper-style MHD-PIC shock plot."
+        description="Create an unqualified shock engineering quick-look."
     )
     parser.add_argument("--basename", required=True)
     parser.add_argument(
@@ -70,7 +81,9 @@ def main() -> int:
         default=str(REPO_ROOT / "tst" / "build" / "src" / "bin"),
     )
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--figure-name", default="shock_storyline_paper_style.png")
+    parser.add_argument(
+        "--figure-name", default="shock_storyline_engineering_quicklook.png"
+    )
     parser.add_argument("--mb-nx1", type=int, default=8)
     parser.add_argument("--mb-nx2", type=int, default=8)
     parser.add_argument("--rho-vmax", type=float, default=4.0)
@@ -156,21 +169,41 @@ def main() -> int:
     c2.set_label(r"$B/B_0$", fontsize=14)
 
     fig_path = output_dir / args.figure_name
+    fig.text(
+        0.995, 0.005, _PROXY_WATERMARK, ha="right", va="bottom",
+        fontsize=7, color="#8b0000",
+    )
     fig.savefig(fig_path, dpi=args.dpi, bbox_inches="tight")
     plt.close(fig)
 
     summary = {
         "figure": str(fig_path),
+        "figure_sha256": _sha256(fig_path),
+        "evidence_class": "engineering_proxy",
+        "not_sun_bai_reproduction": True,
+        "qualification_status": "unqualified_engineering_quicklook",
+        "physical_model": "shock_storyline_engineering_scaffold",
+        "visible_watermark": _PROXY_WATERMARK,
         "rho_file": str(rho_file),
+        "rho_file_sha256": _sha256(rho_file),
         "b_file": str(b_file),
+        "b_file_sha256": _sha256(b_file),
         "cycle": cycle,
         "time": tval,
         "rho_ref": rho_ref,
         "b_ref": b_ref,
     }
-    (output_dir / "paper_style_summary.json").write_text(
+    quicklook_summary = output_dir / "engineering_quicklook_summary.json"
+    quicklook_summary.write_text(
         json.dumps(summary, indent=2),
         encoding="utf-8",
+    )
+    write_companion_manifest(
+        output_dir / "engineering_quicklook_artifact_manifest.json",
+        generator="plot_pic_shock_paper_style.py",
+        physical_model="shock_storyline_engineering_scaffold",
+        inputs=(rho_file, b_file),
+        outputs=(fig_path, quicklook_summary),
     )
 
     print("figure:", fig_path)

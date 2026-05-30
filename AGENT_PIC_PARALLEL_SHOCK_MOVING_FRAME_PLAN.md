@@ -1,3 +1,7 @@
+> **HISTORICAL ONLY.** Do not execute commands or infer qualification,
+> publication, branch, or Frontier-submission authority from this file. Use
+> `tst/publication/PIC_PRODUCTION_READINESS_PLAN.md` as the sole controlling plan.
+
 # PIC Parallel Shock Moving-Frame/Recentering Plan
 
 ## Context and Goal

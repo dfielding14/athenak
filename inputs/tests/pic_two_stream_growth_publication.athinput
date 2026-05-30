@@ -1,7 +1,8 @@
+# LEGACY NAME: engineering proxy only; not Sun & Bai (2023) reproduction evidence.
 # AthenaXXX input file for publication two-stream growth run
 
 <comment>
-problem   = Coupled MHD-PIC two-stream growth publication run
+problem   = Coupled MHD-PIC two-stream growth engineering proxy
 
 <job>
 basename  = pic_two_stream_growth_publication

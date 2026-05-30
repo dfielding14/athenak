@@ -1,3 +1,5 @@
+"""Legacy-named linear-wave engineering proxy; not reproduction evidence."""
+
 import logging
 import os
 import subprocess

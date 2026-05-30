@@ -1,7 +1,8 @@
+# LEGACY NAME: engineering proxy only; not Sun & Bai (2023) reproduction evidence.
 # AthenaXXX input file for PIC CRPAI prolate proxy test
 
 <comment>
-problem   = CRPAI prolate-style polarization publication run (streaming +x)
+problem   = CRPAI prolate-style polarization engineering proxy (streaming +x)
 
 <job>
 basename  = pic_crpai_prolate_publication

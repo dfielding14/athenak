@@ -1,3 +1,7 @@
+> **HISTORICAL ONLY.** Do not execute commands or infer qualification,
+> publication, branch, or Frontier-submission authority from this file. Use
+> `tst/publication/PIC_PRODUCTION_READINESS_PLAN.md` as the sole controlling plan.
+
 # AthenaK MHD-PIC Entity-Mirroring Test Implementation Plan
 
 This document defines the full sequential plan to implement an Entity-mirroring
