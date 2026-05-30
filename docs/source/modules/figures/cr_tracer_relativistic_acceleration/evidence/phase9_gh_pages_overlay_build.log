@@ -1,0 +1,194 @@
+rm -rf "build"
+Running Sphinx v8.2.3
+loading translations [en]... done
+making output directory... done
+myst v4.0.1: MdParserConfig(commonmark_only=False, gfm_only=False, enable_extensions={'linkify', 'fieldlist', 'substitution', 'deflist', 'colon_fence'}, disable_syntax=[], all_links_external=False, links_external_new_tab=False, url_schemes=('http', 'https', 'mailto', 'ftp'), ref_domains=None, fence_as_directive=set(), number_code_blocks=[], title_to_header=False, heading_anchors=0, heading_slug_func=None, html_meta={}, footnote_sort=True, footnote_transition=True, words_per_minute=200, substitutions={project: ...}, linkify_fuzzy_links=True, dmath_allow_labels=True, dmath_allow_space=True, dmath_allow_digits=True, dmath_double_inline=False, update_mathjax=True, mathjax_classes='tex2jax_process|mathjax_process|math|output_area', enable_checkboxes=False, suppress_warnings=[], highlight_code_blocks=True)
+[autosummary] generating autosummary for: building.md, cgm_cooling_flow_metals.md, configuration.md, contributing_docs.md, engineering/amr_turbulence_implementation.md, engineering/divb_amr_completion_plan.md, engineering/divb_amr_final_status.md, engineering/divb_amr_implementation_plan.md, engineering/divb_amr_implementation_summary.md, engineering/face_field_correction_implementation.md, ..., modules/tasklist.md, modules/z4c.md, overview.md, quickstart.md, reference/api_reference.md, reference/file_reference.md, reference/input_parameters.md, running.md, tools/visualization.md, troubleshooting.md
+loading intersphinx inventory 'python' from https://docs.python.org/3/objects.inv ...
+loading intersphinx inventory 'numpy' from https://numpy.org/doc/stable/objects.inv ...
+building [mo]: targets for 0 po files that are out of date
+writing output...
+building [html]: targets for 66 source files that are out of date
+updating environment: [new config] 66 added, 0 changed, 0 removed
+reading sources... [  2%] building
+reading sources... [  3%] cgm_cooling_flow_metals
+reading sources... [  5%] configuration
+reading sources... [  6%] contributing_docs
+reading sources... [  8%] engineering/amr_turbulence_implementation
+reading sources... [  9%] engineering/divb_amr_completion_plan
+reading sources... [ 11%] engineering/divb_amr_final_status
+reading sources... [ 12%] engineering/divb_amr_implementation_plan
+reading sources... [ 14%] engineering/divb_amr_implementation_summary
+reading sources... [ 15%] engineering/face_field_correction_implementation
+reading sources... [ 17%] engineering/index
+reading sources... [ 18%] engineering/particle_merge_cr_pushers
+reading sources... [ 20%] engineering/particle_merge_implementation
+reading sources... [ 21%] engineering/particle_merge_unified_data
+reading sources... [ 23%] examples/binary_merger
+reading sources... [ 24%] examples/blast_wave
+reading sources... [ 26%] examples/index
+reading sources... [ 27%] examples/mri_turbulence
+reading sources... [ 29%] examples/shock_tube
+reading sources... [ 30%] examples/turbulence
+reading sources... [ 32%] flowcharts/runtime
+reading sources... [ 33%] flowcharts/system_architecture
+reading sources... [ 35%] index
+reading sources... [ 36%] kokkos_guide
+reading sources... [ 38%] migration/common_gotchas
+reading sources... [ 39%] migration/index
+reading sources... [ 41%] modules/boundaries
+reading sources... [ 42%] modules/coordinates
+reading sources... [ 44%] modules/cr_tracer_accuracy
+reading sources... [ 45%] modules/cr_tracer_accuracy_test_plan
+reading sources... [ 47%] modules/cr_tracer_cpu_mpi_performance
+reading sources... [ 48%] modules/cr_tracer_feature_branch_plan
+reading sources... [ 50%] modules/cr_tracer_followup_architecture_plan
+reading sources... [ 52%] modules/cr_tracer_gpu_testing_handoff
+reading sources... [ 53%] modules/cr_tracer_relativistic_acceleration_handoff
+reading sources... [ 55%] modules/cr_tracer_relativistic_acceleration_implementation_guide
+reading sources... [ 56%] modules/cr_tracer_relativistic_acceleration_ledger
+reading sources... [ 58%] modules/cr_tracer_relativistic_gpu_testing_handoff
+reading sources... [ 59%] modules/diffusion
+reading sources... [ 61%] modules/driver
+reading sources... [ 62%] modules/dyn_grmhd
+reading sources... [ 64%] modules/eos
+reading sources... [ 65%] modules/figures/cr_tracer_accuracy/cr_tracer_accuracy_results
+reading sources... [ 67%] modules/hydro
+reading sources... [ 68%] modules/index
+reading sources... [ 70%] modules/ion_neutral
+reading sources... [ 71%] modules/mesh
+reading sources... [ 73%] modules/mhd
+reading sources... [ 74%] modules/outputs
+reading sources... [ 76%] modules/particles
+reading sources... [ 77%] modules/pgen
+reading sources... [ 79%] modules/radiation
+reading sources... [ 80%] modules/reconstruction
+reading sources... [ 82%] modules/riemann_solvers
+reading sources... [ 83%] modules/shearing_box
+reading sources... [ 85%] modules/srcterms
+reading sources... [ 86%] modules/tasklist
+reading sources... [ 88%] modules/z4c
+reading sources... [ 89%] overview
+reading sources... [ 91%] quickstart
+reading sources... [ 92%] reference/api_reference
+reading sources... [ 94%] reference/file_reference
+reading sources... [ 95%] reference/input_parameters
+reading sources... [ 97%] running
+reading sources... [ 98%] tools/visualization
+reading sources... [100%] troubleshooting
+
+looking for now-outdated files... none found
+pickling environment... done
+checking consistency... done
+preparing documents... done
+copying assets...
+copying static files...
+Writing evaluated template result to /private/tmp/athenak-rel-gh-pages-overlay/docs/build/html/_static/basic.css
+Writing evaluated template result to /private/tmp/athenak-rel-gh-pages-overlay/docs/build/html/_static/language_data.js
+Writing evaluated template result to /private/tmp/athenak-rel-gh-pages-overlay/docs/build/html/_static/documentation_options.js
+Writing evaluated template result to /private/tmp/athenak-rel-gh-pages-overlay/docs/build/html/_static/js/versions.js
+copying static files: done
+copying extra files...
+copying extra files: done
+copying assets: done
+writing output... [  2%] building
+writing output... [  3%] cgm_cooling_flow_metals
+writing output... [  5%] configuration
+writing output... [  6%] contributing_docs
+writing output... [  8%] engineering/amr_turbulence_implementation
+writing output... [  9%] engineering/divb_amr_completion_plan
+writing output... [ 11%] engineering/divb_amr_final_status
+writing output... [ 12%] engineering/divb_amr_implementation_plan
+writing output... [ 14%] engineering/divb_amr_implementation_summary
+writing output... [ 15%] engineering/face_field_correction_implementation
+writing output... [ 17%] engineering/index
+writing output... [ 18%] engineering/particle_merge_cr_pushers
+writing output... [ 20%] engineering/particle_merge_implementation
+writing output... [ 21%] engineering/particle_merge_unified_data
+writing output... [ 23%] examples/binary_merger
+writing output... [ 24%] examples/blast_wave
+writing output... [ 26%] examples/index
+writing output... [ 27%] examples/mri_turbulence
+writing output... [ 29%] examples/shock_tube
+writing output... [ 30%] examples/turbulence
+writing output... [ 32%] flowcharts/runtime
+writing output... [ 33%] flowcharts/system_architecture
+writing output... [ 35%] index
+writing output... [ 36%] kokkos_guide
+writing output... [ 38%] migration/common_gotchas
+writing output... [ 39%] migration/index
+writing output... [ 41%] modules/boundaries
+writing output... [ 42%] modules/coordinates
+writing output... [ 44%] modules/cr_tracer_accuracy
+writing output... [ 45%] modules/cr_tracer_accuracy_test_plan
+writing output... [ 47%] modules/cr_tracer_cpu_mpi_performance
+writing output... [ 48%] modules/cr_tracer_feature_branch_plan
+writing output... [ 50%] modules/cr_tracer_followup_architecture_plan
+writing output... [ 52%] modules/cr_tracer_gpu_testing_handoff
+writing output... [ 53%] modules/cr_tracer_relativistic_acceleration_handoff
+writing output... [ 55%] modules/cr_tracer_relativistic_acceleration_implementation_guide
+writing output... [ 56%] modules/cr_tracer_relativistic_acceleration_ledger
+writing output... [ 58%] modules/cr_tracer_relativistic_gpu_testing_handoff
+writing output... [ 59%] modules/diffusion
+writing output... [ 61%] modules/driver
+writing output... [ 62%] modules/dyn_grmhd
+writing output... [ 64%] modules/eos
+writing output... [ 65%] modules/figures/cr_tracer_accuracy/cr_tracer_accuracy_results
+writing output... [ 67%] modules/hydro
+writing output... [ 68%] modules/index
+writing output... [ 70%] modules/ion_neutral
+writing output... [ 71%] modules/mesh
+writing output... [ 73%] modules/mhd
+writing output... [ 74%] modules/outputs
+writing output... [ 76%] modules/particles
+writing output... [ 77%] modules/pgen
+writing output... [ 79%] modules/radiation
+writing output... [ 80%] modules/reconstruction
+writing output... [ 82%] modules/riemann_solvers
+writing output... [ 83%] modules/shearing_box
+writing output... [ 85%] modules/srcterms
+writing output... [ 86%] modules/tasklist
+writing output... [ 88%] modules/z4c
+writing output... [ 89%] overview
+writing output... [ 91%] quickstart
+writing output... [ 92%] reference/api_reference
+writing output... [ 94%] reference/file_reference
+writing output... [ 95%] reference/input_parameters
+writing output... [ 97%] running
+writing output... [ 98%] tools/visualization
+writing output... [100%] troubleshooting
+
+generating indices... genindex done
+highlighting module code...
+writing additional pages... search done
+copying images... [  4%] modules/figures/cr_tracer_accuracy/uniform_gyro_phase_convergence.png
+copying images... [  8%] modules/figures/cr_tracer_accuracy/qualitative_uniform_gyro.png
+copying images... [ 12%] modules/figures/cr_tracer_accuracy/uniform_amr_mpi_activity.png
+copying images... [ 16%] modules/figures/cr_tracer_accuracy/qualitative_uniform_amr_mpi.png
+copying images... [ 20%] modules/figures/cr_tracer_accuracy/linear_gather_error.png
+copying images... [ 24%] modules/figures/cr_tracer_accuracy/qualitative_linear_gather.png
+copying images... [ 28%] modules/figures/cr_tracer_accuracy/manufactured_gather_convergence.png
+copying images... [ 32%] modules/figures/cr_tracer_accuracy/qualitative_manufactured_gather.png
+copying images... [ 36%] modules/figures/cr_tracer_accuracy/smooth_orbit_reference_error.png
+copying images... [ 40%] modules/figures/cr_tracer_accuracy/qualitative_smooth_orbit_reference.png
+copying images... [ 44%] modules/figures/cr_tracer_accuracy/magnetic_mirror_moment.png
+copying images... [ 48%] modules/figures/cr_tracer_accuracy/magnetic_mirror_convergence.png
+copying images... [ 52%] modules/figures/cr_tracer_accuracy/qualitative_magnetic_mirror.png
+copying images... [ 56%] modules/figures/cr_tracer_accuracy/gradb_drift_response.png
+copying images... [ 60%] modules/figures/cr_tracer_accuracy/qualitative_gradb_drift.png
+copying images... [ 64%] modules/figures/cr_tracer_accuracy/amr_boundary_activity.png
+copying images... [ 68%] modules/figures/cr_tracer_accuracy/qualitative_amr_boundary.png
+copying images... [ 72%] modules/figures/cr_tracer_accuracy/mpi_decomposition_delta.png
+copying images... [ 76%] modules/figures/cr_tracer_accuracy/qualitative_mpi_decomposition.png
+copying images... [ 80%] modules/figures/cr_tracer_accuracy/isotropic_ensemble_moments.png
+copying images... [ 84%] modules/figures/cr_tracer_accuracy/qualitative_isotropic_ensemble.png
+copying images... [ 88%] modules/figures/cr_tracer_accuracy/frozen_turbulent_moments.png
+copying images... [ 92%] modules/figures/cr_tracer_accuracy/qualitative_frozen_turbulent.png
+copying images... [ 96%] modules/figures/cr_tracer_accuracy/pitch_angle_decorrelation.png
+copying images... [100%] modules/figures/cr_tracer_accuracy/qualitative_pitch_angle_decorrelation.png
+
+dumping search index in English (code: en)... done
+dumping object inventory... done
+build succeeded.
+
+The HTML pages are in build/html.

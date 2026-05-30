@@ -1,0 +1,7 @@
+CR relativistic Phase-9 portable all-format replay PASS
+  package root: $PACKAGE_ROOT
+  report: portable_all_formats_report.json
+CR relativistic Phase-9 portable all-format replay PASS
+  package root: $PACKAGE_ROOT
+  report: portable_all_formats_report.json
+PASS: two fresh extractions produced byte-identical reports

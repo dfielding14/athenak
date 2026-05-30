@@ -1,0 +1,46 @@
+54d6c9726596697f15267936527a61730b9eed61
+100644 d84c3a41339ae371929561a2a21a3a4731f5f90f 1	src/main.cpp
+100644 af143fe3a9f6d61fe2bf927244bb2cd705100f45 2	src/main.cpp
+100644 00d50a78d8d131e0e19ab1b92c27acf25f103234 3	src/main.cpp
+100644 06ab87fddfb5312c8e7d1adb58d07ebef920cb58 1	src/mesh/mesh.cpp
+100644 42d488e640175695678dc24398553abf6e7871d7 2	src/mesh/mesh.cpp
+100644 dc72adf6e8bb5af5359740307e72848740f5bd0b 3	src/mesh/mesh.cpp
+100644 d2009cca55238897b781b7236aeb3b3f7dd82702 1	src/mesh/mesh.hpp
+100644 501663dd3db6f18a6f21684d12b5716a61af3006 2	src/mesh/mesh.hpp
+100644 937d33ed1e83d9790cbb514b76507e33c9082ce1 3	src/mesh/mesh.hpp
+100644 255737205f12fef59c3648322d5226bf33a59c77 1	src/outputs/outputs.cpp
+100644 20cdaee3d8a8cc15a7124fcff467610bcf9049c6 2	src/outputs/outputs.cpp
+100644 465f873d09acbdea9791bce1959685ba8fc7eee0 3	src/outputs/outputs.cpp
+100644 f80928f35ff76e620abf01ce1952343cc985c5fe 1	src/outputs/outputs.hpp
+100644 f4200f29380ea5fbc3b88d3988ab52fd634ce5fa 2	src/outputs/outputs.hpp
+100644 85f816d5bba33f3fb6c74e0ec214162a88a90041 3	src/outputs/outputs.hpp
+100644 2d9f5b0be4f5981676f29c9a2ca422d3301bd4d2 1	src/outputs/restart.cpp
+100644 474fc97fcf2cc21cd1e26b4ae7460c84cbf059e5 2	src/outputs/restart.cpp
+100644 9d9039a9fb0e46ecd93de7187269b4b49251fa62 3	src/outputs/restart.cpp
+100644 680b0782237c17c8dbf64fdfe168af7ab4e43ce3 1	src/pgen/pgen.cpp
+100644 05936fac787aab679a0e3bdc5b17055e9b3ebcbd 2	src/pgen/pgen.cpp
+100644 12854e19b52507cfc3e2d0d903b99b45002e4beb 3	src/pgen/pgen.cpp
+
+Auto-merging src/CMakeLists.txt
+Auto-merging src/main.cpp
+CONFLICT (content): Merge conflict in src/main.cpp
+Auto-merging src/mesh/mesh.cpp
+CONFLICT (content): Merge conflict in src/mesh/mesh.cpp
+Auto-merging src/mesh/mesh.hpp
+CONFLICT (content): Merge conflict in src/mesh/mesh.hpp
+Auto-merging src/mesh/mesh_refinement.cpp
+Auto-merging src/outputs/basetype_output.cpp
+Auto-merging src/outputs/outputs.cpp
+CONFLICT (content): Merge conflict in src/outputs/outputs.cpp
+Auto-merging src/outputs/outputs.hpp
+CONFLICT (content): Merge conflict in src/outputs/outputs.hpp
+Auto-merging src/outputs/restart.cpp
+CONFLICT (content): Merge conflict in src/outputs/restart.cpp
+Auto-merging src/pgen/pgen.cpp
+CONFLICT (content): Merge conflict in src/pgen/pgen.cpp
+Auto-merging src/pgen/pgen.hpp
+
+merge_tree_direction=development<-sanitized-preseal-candidate
+merge_tree_target=c6a73b08e60807f8b925164c5e7edd5cb820c8ae
+merge_tree_candidate=5c2d39b5c36a48e3b552eb14406a039edf1d29f8
+merge_tree_exit=1

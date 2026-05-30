@@ -1,0 +1,208 @@
+{
+  "analyzers": {
+    "cr_relativistic_all_formats_inspect.py": {
+      "path": "scripts/particles/cr_relativistic_all_formats_inspect.py",
+      "sha256": "695e701a662e6b2827c1ff17a86160a397afa1ffdc573374d003fa4a27bb91b6"
+    },
+    "cr_relativistic_coupled_runtime_inspect.py": {
+      "path": "scripts/particles/cr_relativistic_coupled_runtime_inspect.py",
+      "sha256": "8255e09acf7b6a7ef9225b6fbc429254f755deb2084141318b21609379ed0dc0"
+    },
+    "cr_relativistic_diagnostics_runtime_inspect.py": {
+      "path": "scripts/particles/cr_relativistic_diagnostics_runtime_inspect.py",
+      "sha256": "fa269591f40c9c9102ad020279a7e8fadbb4057bd7244115423b04218f6a3619"
+    },
+    "cr_relativistic_migration_runtime_inspect.py": {
+      "path": "scripts/particles/cr_relativistic_migration_runtime_inspect.py",
+      "sha256": "911de18099bb47759f469a8967c466df0bafb0aa4bf987632958aabf2f495af1"
+    },
+    "cr_relativistic_pusher_runtime_inspect.py": {
+      "path": "scripts/particles/cr_relativistic_pusher_runtime_inspect.py",
+      "sha256": "d95ef093a75c98f0f275153fd32e110ecd83810e216dba662a801e1529cdebab"
+    },
+    "cr_relativistic_restart_runtime_inspect.py": {
+      "path": "scripts/particles/cr_relativistic_restart_runtime_inspect.py",
+      "sha256": "a7cd21e8acadd9a790932ff615643a0e2056ef4b235f24cc82877a8ec0abc8d0"
+    },
+    "cr_relativistic_subcycle_runtime_inspect.py": {
+      "path": "scripts/particles/cr_relativistic_subcycle_runtime_inspect.py",
+      "sha256": "b08c1619fedbb08d6543e74e7a2d1edf219afde9d504fb0c3d23d68fd35783d2"
+    },
+    "cr_tracer_inspect.py": {
+      "path": "scripts/particles/cr_tracer_inspect.py",
+      "sha256": "968a4e3c94712a1a3589482439960119049d366dd3a9217061655e24ce26ccc5"
+    }
+  },
+  "binaries": {
+    "coupled_debug_bounds": {
+      "label": "phase9-coupled-debug-bounds",
+      "sha256": "8a778be5710da119337759c1fc198cc64eb859abf28b9d9bd23f4846232326ed"
+    },
+    "coupled_release": {
+      "label": "phase9-coupled-release",
+      "sha256": "a7eb7466be812d3c6b0a4ca63fbe3d83b10bef4d1c7ac9f1bf708464e5a9576c"
+    },
+    "debug_bounds": {
+      "label": "phase9-debug-bounds",
+      "sha256": "ac6ef31d0a0172adefe94e109452ce54315d7a10f184bbdddcf76821e0408909"
+    },
+    "mpi_debug_bounds": {
+      "label": "phase9-mpi-debug-bounds",
+      "sha256": "6c32dcbdad7f7437ca5bf56210eed2fa8ccb13df652ff5ecc54eb220f4b89b87"
+    },
+    "mpi_release": {
+      "label": "phase9-mpi-release",
+      "sha256": "4a1b9d40f8e753195016ca445df147520c773aa6a8424e1588dde168f01fa878"
+    },
+    "portable_release": {
+      "label": "phase9-prefix-mapped-portable-release",
+      "sha256": "251369dfd90c32d6c2337028cb52b6bae3c265e6f8a60bbe93c5567927e3de37"
+    },
+    "pusher_release": {
+      "label": "phase9-pusher-release",
+      "sha256": "970c72b96c1171b05aee2b97d9ce773b7115f9f7b1b80285685822710a3f5453"
+    },
+    "release": {
+      "label": "phase9-release",
+      "sha256": "0a0fbf21728e82fea39eb131b73b27793e6f734ef7d634ef25b8ba7e77ee938f"
+    }
+  },
+  "branch": "feature/CR_tracers_relativistic_acceleration",
+  "criteria": {
+    "cr_relativistic_phase4a_preregistered_criteria.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4a_preregistered_criteria.json",
+      "sha256": "dbc4a6ad4b015ca0a108cf950e61ded78439089f472b1010af5835a789272064"
+    },
+    "cr_relativistic_phase4b_preregistered_criteria.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase4b_preregistered_criteria.json",
+      "sha256": "13dc90ae4c0776b5d4665ec5ccc49de341b71b51710e0b49e3578d9d22c3b1e7"
+    },
+    "cr_relativistic_phase5_preregistered_criteria.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase5_preregistered_criteria.json",
+      "sha256": "d4c3afd55f55a3ddf8ddb1997b0b5a4d6a15c3b54597e25f51abc13027824340"
+    },
+    "cr_relativistic_phase6_preregistered_criteria.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase6_preregistered_criteria.json",
+      "sha256": "123701e93374eb61bdd5921f6d4b07eb3899a3aaabae36db632930da980fb269"
+    },
+    "cr_relativistic_phase7_preregistered_criteria.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase7_preregistered_criteria.json",
+      "sha256": "1608e681952fa5d0133d8fc2ae1b0681fa17a09a667272340446625dccfba0d1"
+    },
+    "cr_relativistic_phase8_preregistered_criteria.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/cr_relativistic_phase8_preregistered_criteria.json",
+      "sha256": "add2ab12fbaf7f669e8e4eecc9e8f9cb0d581f06947c7e39876f934239708b74"
+    }
+  },
+  "first_sanitized_evidence_seal_head": "89084c66b149e9b310a06e13eb4465c58240a4aa",
+  "frozen_prerequisite_head": "64a4d1be8da1c22d1328cc47280195b3747fa0ab",
+  "inputs": {
+    "cr_relativistic_coupled_runtime_test.athinput": {
+      "path": "inputs/unit_tests/cr_relativistic_coupled_runtime_test.athinput",
+      "sha256": "d4e63b19db4546a07e3a8221872449f180d201ca46921f08ac894ff93a122995"
+    },
+    "cr_relativistic_diagnostics_runtime.athinput": {
+      "path": "inputs/unit_tests/cr_relativistic_diagnostics_runtime.athinput",
+      "sha256": "dd485054762d0afc76fc4cfbc7e30405581f242e6262e576bd2fd3ff8f3a4538"
+    },
+    "cr_relativistic_migration_runtime.athinput": {
+      "path": "inputs/unit_tests/cr_relativistic_migration_runtime.athinput",
+      "sha256": "b88971f10608614b67b55134647a76f4384b001c8232054eae0a7798223a4c7b"
+    },
+    "cr_relativistic_pusher_runtime.athinput": {
+      "path": "inputs/unit_tests/cr_relativistic_pusher_runtime.athinput",
+      "sha256": "82bfb531c46c6d9aaa8682dffbc1d45fd70f46eece2123ca9b3a8ba50522946f"
+    },
+    "cr_relativistic_restart_runtime.athinput": {
+      "path": "inputs/unit_tests/cr_relativistic_restart_runtime.athinput",
+      "sha256": "754fc26957ceea3767183f23e1245a45b86b5ff778ea651967467f182fcb8668"
+    },
+    "cr_tracer_relativistic_mhd_ideal_example.athinput": {
+      "path": "inputs/particles/cr_tracer_relativistic_mhd_ideal_example.athinput",
+      "sha256": "9c8c60e5cb8c6ccda99dfab947ae6e62e73ad85f15942b66d12bdf027485b73e"
+    }
+  },
+  "origin_development_head": "c6a73b08e60807f8b925164c5e7edd5cb820c8ae",
+  "origin_gh_pages_head": "4833aa9341e19861297e330ff02aabfd8001935c",
+  "portable_bundle": {
+    "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_all_formats_portable_replay_bundle.tar.gz",
+    "sha256": "0c3e9957220204ba38c7751c64fffa95d070673597dc310d032916105f718869"
+  },
+  "qualification": "cr_relativistic_phase9_workstation_provenance_envelope",
+  "rebound_correction_candidate_head": "5c2d39b5c36a48e3b552eb14406a039edf1d29f8",
+  "rebound_correction_candidate_tree": "76e8daa244738f62d3d83f0250798640bdb6e220",
+  "result_artifacts": {
+    "phase9_all_formats_debug_metrics.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_all_formats_debug_metrics.json",
+      "sha256": "cb4eaba4b021364e70b11a9eae05f9f9bd8f32c9afb33caeaaa55ef6ae5df418"
+    },
+    "phase9_all_formats_metrics.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_all_formats_metrics.json",
+      "sha256": "96c30f00f39a09141e0d49fb08521a517e61fd6b136807ae81b751f7d9e67808"
+    },
+    "phase9_all_formats_portable_replay.log": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_all_formats_portable_replay.log",
+      "sha256": "883b601c2c65d5be6b835683ebbe46dc6c754fb8c64b446d8ede8d03650693f2"
+    },
+    "phase9_artifact_privacy_scan.log": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_artifact_privacy_scan.log",
+      "sha256": "974a2f2a2d2a98ed9cf43bd0bf1b263cdf7ecb4876e71aa7939e6d42fd4dd644"
+    },
+    "phase9_commit_range_diff_check.log": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_commit_range_diff_check.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "phase9_coupled_runtime_metrics.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_coupled_runtime_metrics.json",
+      "sha256": "3f3f3d4126600fd0b08b6b37a72c6d69845725bb9e8dce8eed27d8921b22fc0e"
+    },
+    "phase9_diagnostics_portable_runtime_metrics.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_diagnostics_portable_runtime_metrics.json",
+      "sha256": "55f0137b24fba50a1ec2ff4c3b87cf5197fccaf52856afc67495a5cbb382e121"
+    },
+    "phase9_diagnostics_runtime_metrics.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_diagnostics_runtime_metrics.json",
+      "sha256": "8779e5d1195e3ff4ee554cd880848b85131adaaaf46b14b013aa5815a9242baa"
+    },
+    "phase9_gh_pages_overlay_build.log": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_gh_pages_overlay_build.log",
+      "sha256": "f9fca9097d9392811fee135963fab2adb7aea68eed2f3b294f257804cfb9a183"
+    },
+    "phase9_gh_pages_overlay_inventory.txt": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_gh_pages_overlay_inventory.txt",
+      "sha256": "3d670d1e2a58ed10efc71cb3a001cb1a23ab3761cb586e35b69e9b72bb7e3334"
+    },
+    "phase9_merge_tree_origin_development.log": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_merge_tree_origin_development.log",
+      "sha256": "786cd816933f1d651a362d1efd54520257fb0471f9cf1d645b52feae14d1ccd3"
+    },
+    "phase9_migration_debug_metrics.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_migration_debug_metrics.json",
+      "sha256": "cb891a74fa7eb2a2c691d0d0b803d5ca4366b52ef2be7cafb5b0880bac55233a"
+    },
+    "phase9_migration_metrics.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_migration_metrics.json",
+      "sha256": "a3ba1d535234d3aba74da1854ccdf29628eba366fb61b6f1674d07a6a36f2b8d"
+    },
+    "phase9_public_solver_coupled_example_runtime.log": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_public_solver_coupled_example_runtime.log",
+      "sha256": "62ba2744b8afb020cdb6a138b9e8898d1555fbadf501f63189e7b2cbf1d1b7f1"
+    },
+    "phase9_pusher_runtime_metrics.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_pusher_runtime_metrics.json",
+      "sha256": "0e0a74bbbfe3e544f4c34211df9600d5ec9b2765cca218de4804509a3d908ad2"
+    },
+    "phase9_restart_runtime_metrics.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_restart_runtime_metrics.json",
+      "sha256": "6a0b3d2b72e2788a201cc8ad52504e2e918401dcd6323cb69376a62312f16130"
+    },
+    "phase9_subcycle_runtime_metrics.json": {
+      "path": "docs/source/modules/figures/cr_tracer_relativistic_acceleration/evidence/phase9_subcycle_runtime_metrics.json",
+      "sha256": "f9717c7f2f50c506e08db3e83db782fa2342b6b4fc5202c38039b18660b41532"
+    }
+  },
+  "schema_version": 1,
+  "source_head": "aa8663e8a5d49e26c206363d028b52d0e350a91f",
+  "source_tree": "9ef3431e31ba655edd0349599a802321c01c02ed",
+  "status": "PASS"
+}
