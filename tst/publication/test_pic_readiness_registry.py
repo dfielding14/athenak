@@ -209,7 +209,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
         )
         active = _load("q027_active_control_plane_generation_2026-05-30.json")
         candidate = _load(
-            "q027_control_plane_bootstrap_scheduler_hardening_candidate_2026-05-30.json"
+            "q027_control_plane_activation_lock_hardening_candidate_2026-05-30.json"
         )
         self.assertEqual(
             storage["staged_control_plane_candidate_version"],

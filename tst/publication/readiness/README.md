@@ -82,13 +82,23 @@ qualify any scientific claim by itself.
   bootstrap-import, mutable-source-install, ambient-Git, scheduler-environment,
   trampoline-path and module-provenance activation blockers.
 - `q027_control_plane_bootstrap_scheduler_hardening_candidate_2026-05-30.json`:
+  local chronology superseded after a later activation audit found replaceable
+  lock pathnames, cross-root ledger serialization and schema-type blockers.
+- `q027_control_plane_activation_lock_hardening_candidate_2026-05-30.json`:
   current local successor candidate. It preserves the earlier controls and
   adds an isolated exact-inventory runner, reviewed HEAD-blob installation,
   hermetic Git reads, a closed Frontier scheduler environment,
   `sbatch --export=NIL`, descriptor-anchored artifact finalization and exact
-  canonical module provenance. Fresh independent adversarial retest, paired
-  install, active-policy promotion, science freeze and applicable Frontier
-  prerequisites remain open.
+  canonical module provenance; it also pins ledger and promotion serialization,
+  shares production ledger serialization through the Project Home mirror,
+  rejects non-integer inventory schema versions and documents explicit build
+  profile activation. A subsequent cross-generation clone audit superseded
+  intermediate digest `0d07f132`: current staged digest `80c0797be` additionally
+  serializes ledger mutation and policy promotion through a descriptor lock on
+  site-owned `/lustre/orion/ast207`, outside the replaceable PIC tree. Final
+  independent clone/hardlink lock retest passes. Quiescent paired install,
+  active-policy promotion, science freeze and applicable Frontier prerequisites
+  remain open.
 - `q003_frontier_f1_gpu_gyro_2026-05-30.json`: bounded registered Frontier
   one-rank GPU relativistic-gyro candidate oracle, hardened execution-context
   evidence, reconciled node-hours and explicit clean-freeze boundary.

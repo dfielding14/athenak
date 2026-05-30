@@ -47,9 +47,9 @@
   ],
   "residual_risks": [
     "The schema-7 records do not replace the required clean-candidate freeze or full resilience matrix.",
-    "The successor Frontier control plane passed its separate local unit/static suite, independent adversarial re-audit, paired Orion and Project Home install and active-policy promotion in q027_successor_control_plane_independent_pass_2026-05-30.json; the clean-candidate freeze remains pending.",
+    "Historical successor control-plane digest 12750ea6 passed its separate local unit/static suite, independent adversarial re-audit, paired Orion and Project Home install and active-policy promotion in q027_successor_control_plane_independent_pass_2026-05-30.json. It was later superseded after additional activation audits; staged digest 80c0797b remains pending final independent lock retest, paired install, anchor migration and promotion.",
     "MPI per-rank, non-PIC multilevel and orbital-advection runtime coverage, node-loss, scheduler-pretimeout, Frontier-filesystem, Frontier HIP/GPU and scientific campaigns remain open.",
     "External reviewer disposition remains pending."
   ],
-  "q042_disposition": "schema7_architecture_docs_successor_chronology_recorded_control_plane_local_reaudit_passed_paired_promotion_frontier_and_external_gates_remain_open"
+  "q042_disposition": "schema7_architecture_docs_successor_chronology_recorded_historical_control_plane_paired_promotion_superseded_staged_outer_anchor_candidate_pending_retest_frontier_and_external_gates_remain_open"
 }

@@ -1,0 +1,98 @@
+{
+  "record_type": "q027_control_plane_activation_lock_hardening_candidate",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gates": [
+    "Q-027",
+    "Q-038",
+    "Q-042"
+  ],
+  "qualification_effect": "local_activation_lock_hardening_outer_anchor_candidate_pass_independent_clone_retest_passed_and_paired_install_pending",
+  "scope": "Successor chronology after independent audits of the bootstrap-scheduler-hardening candidate found that ledger and policy-promotion lock pathnames remained replaceable during held critical sections, ledger serialization did not yet share an authoritative Project Home mirror-directory lock across Orion-root generations, inventory schema_version checks admitted JSON numeric 1.0, the build workflow documentation did not explicitly source the installed reviewed environment profile before invoking the build writer, and the first activation-lock successor still allowed a same-UID combined Orion-plus-Project-Home generation clone to bypass serialization because every held lock remained inside replaceable PIC domains. This candidate retains the inner pinned locks and additionally serializes production ledger mutation and policy promotion through a descriptor lock on site-owned /lustre/orion/ast207 outside the replaceable PIC tree. It requires type-exact integer inventory schema versions in both validator layers and documents checked environment activation before build-writer execution. This record does not attest a paired live install, active-policy promotion, clean-candidate science freeze or Frontier science execution.",
+  "historical_predecessor": {
+    "record": "tst/publication/readiness/q027_control_plane_bootstrap_scheduler_hardening_candidate_2026-05-30.json",
+    "control_plane_version": "7397038b0e0190622cbbe8124acc7037ac75e2765c1bbcf11c162bf99a9460f4",
+    "lifecycle": "chronology_only_superseded_after_independent_activation_audit"
+  },
+  "superseded_intermediate_candidate": {
+    "control_plane_version": "88db7e9403fbff986a9d0ac1509fe72dd3034e67870548d2f1b65fd21653fb2d",
+    "lifecycle": "chronology_only_superseded_before_install_after_cross_root_ledger_serialization_review"
+  },
+  "superseded_inner_lock_candidate": {
+    "control_plane_version": "0d07f1326c6d26711adaa0be86c4a9e2357915e137e5eec320674e7c87519fb7",
+    "lifecycle": "chronology_only_superseded_before_install_after_combined_orion_and_project_home_generation_clone_probe"
+  },
+  "staged_successor": {
+    "control_plane_version": "80c0797be1ce71bbe24f0848b6c983be5ffa31f884c2a8e2596cf8839dc1e9d5",
+    "paired_install_status": "pending_quiescent_paired_install",
+    "active_policy_promotion_status": "pending_paired_install_and_anchor_migration",
+    "science_submission_freeze": "pending_clean_candidate_freeze"
+  },
+  "local_validation": {
+    "ledger_tests": {
+      "status": "pass",
+      "tests_run": 36
+    },
+    "control_plane_discovery_tests": {
+      "status": "pass",
+      "tests_run": 208
+    },
+    "publication_discovery_tests": {
+      "status": "pass",
+      "tests_run": 286
+    },
+    "production_bootstrap_temporary_paired_install": {
+      "status": "pass",
+      "control_plane_version": "80c0797be1ce71bbe24f0848b6c983be5ffa31f884c2a8e2596cf8839dc1e9d5"
+    },
+    "python_compile": "pass",
+    "shell_syntax": "pass",
+    "git_diff_check": "pass",
+    "warning_free_sphinx": "pass_58_pages"
+  },
+  "closed_activation_blockers": [
+    "inventory schema_version requires a type-exact JSON integer in the isolated bootstrap and post-bootstrap common validator",
+    "Orion ledger serialization holds descriptor locks on the stable root and ledger directory before compatibility lock files and verifies both compatibility lock inodes while held",
+    "production ledger mutations, reconciliation and qualification reads pass the Project Home mirror path and serialize through its pinned ledger directory before Orion-local locking",
+    "policy promotion holds descriptor locks on the Orion root, Orion policy directory and Project Home policy directory and verifies the compatibility promotion-lock inode while held",
+    "production ledger mutation and policy promotion additionally serialize through a descriptor lock on site-owned /lustre/orion/ast207 outside the replaceable Orion and Project Home PIC domains",
+    "the documented build workflow sources the installed reviewed frontier_pic_environment.sh profile with checked status before invoking write_orion_build_profile.py",
+    "all bootstrap-scheduler-hardening predecessor controls remain preserved"
+  ],
+  "independent_review": {
+    "status": "pass",
+    "review_scope": "fresh adversarial combined-domain clone, hardlink, outer-anchor serialization, lock-inode-replacement, root-transplant, schema-type, installed-bootstrap and documented-activation retest",
+    "reviewed_commit": "20ca3fce90a9fb1073a681cd4a4af198bb9ca842",
+    "reviewed_control_plane_version": "80c0797be1ce71bbe24f0848b6c983be5ffa31f884c2a8e2596cf8839dc1e9d5",
+    "results": [
+      "LEDGER combined_clone OVERLAP=False B_AFTER_A=True A_RC=1 B_RC=0",
+      "LEDGER combined_hardlink OVERLAP=False B_AFTER_A=True A_RC=1 B_RC=0",
+      "PROMOTION combined_clone OVERLAP=False B_AFTER_A=True A_RC=1 B_RC=0",
+      "PROMOTION combined_hardlink OVERLAP=False B_AFTER_A=True A_RC=1 B_RC=0"
+    ],
+    "rollout_constraint": "Activation must be quiescent because predecessor snapshots do not take the new outer serialization anchor. Before paired install, prove that no predecessor mutator, reconciler or promoter is running or launchable."
+  },
+  "quiescent_cutover_preflight": {
+    "status": "pass",
+    "checked_utc": "2026-05-30T19:03:50Z",
+    "observations": [
+      "no local predecessor control-plane process",
+      "no pending_submission.json marker in Orion or Project Home",
+      "no queued user job",
+      "nonblocking exclusive descriptor lock acquired on /lustre/orion/ast207",
+      "nonblocking exclusive descriptor lock acquired on Orion PIC root and ledger directory",
+      "nonblocking exclusive flock acquired on historical Orion ledger lock",
+      "nonblocking exclusive descriptor lock acquired on Project Home ledger directory"
+    ]
+  },
+  "staged_source_context": {
+    "core_repair_commit": "20ca3fce90a9fb1073a681cd4a4af198bb9ca842",
+    "worktree_state": "dirty_readiness_chronology_pending_quiescent_paired_install"
+  },
+  "next_actions": [
+    "Prove quiescent cutover: no predecessor mutator, reconciler or promoter is running or launchable.",
+    "Paired-install the identical control-plane digest in Orion and Project Home, migrate the predecessor genesis anchors exactly once and promote the reviewed closed policy without recreating ledger genesis.",
+    "Build and freeze the exact clean source candidate under Orion before any new Frontier submission."
+  ],
+  "overall_disposition": "local_activation_lock_hardening_outer_anchor_candidate_pass_independent_clone_retest_pass_all_submissions_paused_pending_quiescent_paired_install_anchor_migration_active_policy_promotion_clean_candidate_science_freeze_and_applicable_prerequisites"
+}
