@@ -9,8 +9,8 @@
     "Q-027",
     "Q-038"
   ],
-  "qualification_effect": "f2_multirank_runtime_metadata_v1_rejected_v2_policy_staged_live_promotion_and_execution_pending",
-  "scope": "Stage the repaired bounded clean-candidate Frontier F2 engineering slice for the remaining Q-002 multi-rank Athena runtime-metadata boundary. The slice reuses the immutable clean candidate and installed non-restart control plane, runs exactly eight GPU-bound MPI ranks on one Frontier node, checks the parser-contract deck at one cycle, routes Athena diagnostics below the registered artifact tree, and requires that frozen output during offline analysis. It does not qualify a paper claim, a broader F2 row, multi-node operation or a production campaign.",
+  "qualification_effect": "f2_multirank_runtime_metadata_v1_rejected_v2_contained_output_pass_reconciled_pending_external_review",
+  "scope": "Archive the repaired bounded clean-candidate Frontier F2 engineering slice for the remaining Q-002 multi-rank Athena runtime-metadata boundary. The slice reuses the immutable clean candidate and installed non-restart control plane, runs exactly eight GPU-bound MPI ranks on one Frontier node, checks the parser-contract deck at one cycle, routes Athena diagnostics below the registered artifact tree, and requires that frozen output during offline analysis. It does not qualify a paper claim, a broader F2 row, multi-node operation or a production campaign.",
   "predecessor": {
     "record": "tst/publication/readiness/q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json",
     "active_policy_sha256": "559a4b1ebc13425e53e40b544cf92931d11271ec0a07f678b680f68bf5c00052",
@@ -66,14 +66,33 @@
     "escaped_output_sha256": "df1a5f2a771947324955a839d3e9fed8cf6be490d0e473857835dde4228ae580",
     "disposition": "rejected_before_evidence_acceptance_because_launch_contract_omitted_artifact_output_directory_and_athena_error_history_escaped_the_registered_run_tree"
   },
-  "submission_state": "blocked_until_v2_curated_policy_binding_commit_live_preflight_operator_attestation_and_mirrored_policy_promotion",
+  "accepted_v2_execution": {
+    "authorization_id": "f2-parser-multirank-runtime-metadata-v2",
+    "submission_id": "500fa268-180f-4a71-8cf6-b5c7492939e4",
+    "reservation_id": "cdd26b3e-8ceb-4f3b-b559-2cd4a8e300ea",
+    "job_id": "4746316",
+    "state": "COMPLETED",
+    "elapsed_seconds": 9,
+    "billed_nodes": 1,
+    "consumed_node_hours": 0.0025,
+    "terminal_ledger_records": 49,
+    "cumulative_consumed_node_hours": 0.09944444444444443,
+    "active_policy_sha256": "446db26aeed7dd63330ed1cffbaa7198d073364336c6c83826028a55736890dc",
+    "active_promotion_sha256": "b772da006442e60ca36b50f4d04cdcda5cf0eb1ec7f179f0bdf0b62a2830aa64",
+    "pre_submit_manifest_sha256": "f9afb0a7efbd5f9ca933040e6a25cea7a414e481f4efb2fd43d2dd2d3699e9ac",
+    "artifact_inventory_sha256": "ca67351517011906d891cc7fc4ec9a76a6ecaba6809336e532b469ddfcc5c8a6",
+    "analysis_result_sha256": "95dc6e40a21e9fd952c46f282fec39a5077df3667af64930ded76f5fd173bea3",
+    "offline_analysis_receipt_sha256": "1685be754be94aac901bb4e173895c7b7e262fa7ca31aafe4e21fb9ffe81118f",
+    "contained_output_path": "output/f2_multirank_runtime_metadata-errs.dat",
+    "contained_output_sha256": "df1a5f2a771947324955a839d3e9fed8cf6be490d0e473857835dde4228ae580",
+    "descriptor_pinned_no_write_replay": "pass",
+    "disposition": "accepted_bounded_f2_multirank_runtime_metadata_engineering_evidence_pending_external_review"
+  },
+  "submission_state": "accepted_v2_execution_reconciled_no_active_reservation_no_pending_pic_marker",
   "open_boundaries": [
-    "curate and commit the staged v2 policy binding",
-    "run the live zero-reservation no-marker rejected-UUID preflight",
-    "archive a reviewed same-account process-isolation attestation before policy promotion and again before manifest creation and submission",
-    "promote the mirrored reviewed policy through installed control plane 4ccde8df",
-    "submit only the single serialized F2 runtime-metadata v2 slice",
+    "preserve the accepted bounded F2 runtime-metadata v2 slice as immutable engineering evidence",
+    "do not broaden this one-node eight-rank parser-contract execution into a paper claim or production campaign",
     "external reviewer disposition remains pending external review"
   ],
-  "overall_disposition": "f2_q002_multirank_runtime_metadata_v1_rejected_v2_source_policy_staged_live_promotion_and_execution_pending"
+  "overall_disposition": "f2_q002_multirank_runtime_metadata_v1_rejected_v2_contained_output_pass_reconciled_pending_external_review"
 }

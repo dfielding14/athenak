@@ -26,7 +26,6 @@ from control_plane_common import launch_contract_sha256
 from control_plane_common import validate_launch_contract
 from ledger import record_sha256
 from ledger import validate_mirrored_state
-from tst.publication.pic_qualification_manifest import validate_qualification_manifest
 from tst.publication.pic_qualification_manifest import validate_schema
 
 
@@ -1053,22 +1052,76 @@ class PicReadinessRegistryTests(unittest.TestCase):
         os.environ.get("PIC_RUN_LIVE_PREFLIGHT") == "1",
         "set PIC_RUN_LIVE_PREFLIGHT=1 for Orion live-state checks",
     )
-    def test_registered_f1_terminal_review_manifests_replay_live(self) -> None:
+    def test_registered_f1_terminal_review_manifest_bytes_remain_live(self) -> None:
         successor = _load(
             "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
         )
+        f2 = _load(
+            "q027_frontier_f2_multirank_runtime_metadata_candidate_2026-05-30.json"
+        )["accepted_v2_execution"]
+        active_policy_path = Path(
+            "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/storage_policy.json"
+        )
+        active_promotion_path = Path(
+            "/lustre/orion/ast207/proj-shared/dfielding/PIC/policy/active_promotion.json"
+        )
+        current_policy_sha256 = _sha256(active_policy_path)
+        current_promotion_sha256 = _sha256(active_promotion_path)
+        self.assertEqual(current_policy_sha256, f2["active_policy_sha256"])
+        self.assertEqual(current_promotion_sha256, f2["active_promotion_sha256"])
         for key in [
             "accepted_gyro_v3_registered_execution",
             "accepted_paper_coupling_v2_registered_execution",
         ]:
-            execution = successor[key]
-            manifest_path = Path(execution["qualification_manifest_path"])
-            with _pinned_regular_bytes(manifest_path) as manifest_bytes:
-                self.assertEqual(
-                    hashlib.sha256(manifest_bytes).hexdigest(),
-                    execution["qualification_manifest_sha256"],
+            with self.subTest(execution=key):
+                execution = successor[key]
+                manifest_path = Path(execution["qualification_manifest_path"])
+                with _pinned_regular_bytes(manifest_path) as manifest_bytes:
+                    self.assertEqual(
+                        hashlib.sha256(manifest_bytes).hexdigest(),
+                        execution["qualification_manifest_sha256"],
+                    )
+                    manifest = json.loads(manifest_bytes)
+                for path_key, sha256_key in {
+                    "pre_submit_manifest_path": "pre_submit_manifest_sha256",
+                    "artifact_inventory_path": "artifact_inventory_sha256",
+                    "analysis_result_path": "analysis_result_sha256",
+                    "offline_analysis_receipt_path":
+                        "offline_analysis_receipt_sha256",
+                }.items():
+                    with _pinned_regular_bytes(
+                        Path(manifest["resources"][path_key])
+                    ) as resource_bytes:
+                        self.assertEqual(
+                            hashlib.sha256(resource_bytes).hexdigest(),
+                            manifest["resources"][sha256_key],
+                        )
+                manifest_policy_sha256 = manifest["authorization"][
+                    "active_policy"
+                ]["sha256"]
+                manifest_promotion_sha256 = manifest["authorization"][
+                    "active_promotion"
+                ]["sha256"]
+                expected_policy_key = (
+                    "qualification_active_policy_sha256"
+                    if key == "accepted_gyro_v3_registered_execution"
+                    else "active_policy_sha256"
                 )
-                validate_qualification_manifest(json.loads(manifest_bytes))
+                expected_promotion_key = (
+                    "qualification_active_promotion_sha256"
+                    if key == "accepted_gyro_v3_registered_execution"
+                    else "active_promotion_sha256"
+                )
+                self.assertEqual(
+                    manifest_policy_sha256, execution[expected_policy_key]
+                )
+                self.assertEqual(
+                    manifest_promotion_sha256, execution[expected_promotion_key]
+                )
+                self.assertNotEqual(manifest_policy_sha256, current_policy_sha256)
+                self.assertNotEqual(
+                    manifest_promotion_sha256, current_promotion_sha256
+                )
 
     def test_registered_parser_policy_transition_resolves_source_commit(self) -> None:
         successor = _load(
