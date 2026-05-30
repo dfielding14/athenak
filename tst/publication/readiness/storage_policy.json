@@ -17,7 +17,23 @@
     "manifest_sha256": "3174515d1578f0310e8ce4b0bf214050f8b4d95ff4af3c694b44eb466b7dff41"
   },
   "frontier_admission_smoke": {
-    "status": "pending_exact_executable_binding"
+    "status": "authorized_f0_parser_contract_only",
+    "campaign": "f0_hipmpi_smoke",
+    "test_id": "pic_parser_contract_guards",
+    "evidence_class": "frontier_f0_admission_smoke_candidate",
+    "physical_mode": "extended_mhd_pic_parser_contract",
+    "selected_qos": "debug",
+    "registered_short_nonproduction": true,
+    "maximum_nodes": 1,
+    "maximum_walltime_seconds": 900,
+    "job_script_sha256": "e8def5947dcf4c7550d419bf0eb6092e83099e35cf33058c5dcf3526b619c1b8",
+    "input_deck_sha256": "e14ac149dc3f8c6fb3d5400f6e330063e6f72f2ed2f54691ade8c65ce5173a45",
+    "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
+    "analysis_script_sha256": [
+      "25728c4ad94512aec8c5cbffd86b5ed0bc34e03400db5d79cd0f308e884f8f6c"
+    ],
+    "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
+    "launch_contract_sha256": "d8fc9a1373174f03e15a29758a0d2706f62a8ad9db39fc24b930b699558922a7"
   },
   "olcf_side_storage": {
     "status": "passed_user_authorized_orion_only_storage",

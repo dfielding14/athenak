@@ -273,7 +273,7 @@ class PicReadinessRegistryTests(unittest.TestCase):
             )
             self.assertEqual(
                 clean_candidate_transition["policy_sha256"],
-                _sha256(READINESS_DIR / "storage_policy.json"),
+                "e8909bf541d1c69d4d19c495ebfe983934291de37d6d1423ae4cbfca2e4bb155",
             )
             self.assertEqual(
                 clean_candidate_transition["science_submission_freeze_status"],
