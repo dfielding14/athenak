@@ -2065,6 +2065,43 @@ def validate_control_plane_inventory(inventory: dict[str, object]) -> list[dict[
     return records
 
 
+def validate_historical_control_plane_inventory(
+    inventory: dict[str, object],
+) -> list[dict[str, str]]:
+    """Require a closed self-authenticating inventory for an older generation."""
+    if (
+        set(inventory) != {"schema_version", "version", "files"}
+        or type(inventory.get("schema_version")) is not int
+        or inventory.get("schema_version") != 1
+        or not isinstance(inventory.get("version"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", str(inventory["version"])) is None
+    ):
+        raise ValueError("Unsupported historical control-plane inventory schema")
+    raw_records = inventory["files"]
+    if not isinstance(raw_records, list) or not raw_records:
+        raise ValueError("Malformed historical control-plane inventory files")
+    records: list[dict[str, str]] = []
+    for raw in raw_records:
+        if (
+            not isinstance(raw, dict)
+            or set(raw) != {"path", "sha256"}
+            or not isinstance(raw["path"], str)
+            or not raw["path"]
+            or "/" in raw["path"]
+            or Path(raw["path"]).name != raw["path"]
+            or raw["path"] == "inventory.json"
+            or not isinstance(raw["sha256"], str)
+            or re.fullmatch(r"[0-9a-f]{64}", raw["sha256"]) is None
+        ):
+            raise ValueError("Malformed historical control-plane inventory record")
+        records.append({"path": raw["path"], "sha256": raw["sha256"]})
+    if len({record["path"] for record in records}) != len(records):
+        raise ValueError("Historical control-plane inventory has duplicate files")
+    if inventory["version"] != inventory_digest(records):
+        raise ValueError("Historical control-plane inventory digest mismatch")
+    return records
+
+
 def _read_read_only_regular_file_at(
     directory_descriptor: int, name: str, *, label: str
 ) -> bytes:
@@ -2131,6 +2168,60 @@ def verify_installed_control_plane(
             if sha256_bytes(data) != record["sha256"]:
                 raise ValueError(
                     f"Installed control-plane checksum mismatch: {resolved / record['path']}"
+                )
+        return inventory
+    finally:
+        os.close(directory_descriptor)
+
+
+def verify_historical_installed_control_plane(
+    control_plane_dir: Path,
+    *,
+    authorized_pic_root: Path = AUTHORIZED_PIC_ROOT,
+) -> dict[str, object]:
+    """Verify an immutable predecessor using its own closed inventory."""
+    lexical_root = Path(os.path.abspath(authorized_pic_root))
+    expected_parent = lexical_root / "control_plane"
+    resolved = require_canonical_path_below(control_plane_dir, lexical_root)
+    if resolved.parent != expected_parent:
+        raise ValueError(
+            f"Historical control plane is not installed under authorized root: {resolved}"
+        )
+    try:
+        directory_descriptor = open_directory_below(resolved, root=lexical_root)
+    except FileNotFoundError as error:
+        raise ValueError(
+            f"Missing historical installed control-plane directory: {resolved}"
+        ) from error
+    try:
+        if os.fstat(directory_descriptor).st_mode & 0o222:
+            raise ValueError(
+                f"Historical installed control-plane directory is not read-only: {resolved}"
+            )
+        inventory = read_json_bytes(
+            _read_read_only_regular_file_at(
+                directory_descriptor,
+                "inventory.json",
+                label="Historical installed control-plane inventory",
+            ),
+            label=str(resolved / "inventory.json"),
+        )
+        records = validate_historical_control_plane_inventory(inventory)
+        expected_names = {*(record["path"] for record in records), "inventory.json"}
+        if set(os.listdir(directory_descriptor)) != expected_names:
+            raise ValueError("Historical installed control-plane entries differ from inventory")
+        if resolved.name != inventory["version"]:
+            raise ValueError("Historical control-plane inventory digest mismatch")
+        for record in records:
+            data = _read_read_only_regular_file_at(
+                directory_descriptor,
+                record["path"],
+                label=f"Historical installed control-plane file {record['path']}",
+            )
+            if sha256_bytes(data) != record["sha256"]:
+                raise ValueError(
+                    f"Historical installed control-plane checksum mismatch: "
+                    f"{resolved / record['path']}"
                 )
         return inventory
     finally:

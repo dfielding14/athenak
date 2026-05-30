@@ -21,6 +21,7 @@ from control_plane_common import TRUSTED_SACCT
 from control_plane_common import read_json, require_ledger_paths
 from control_plane_common import scheduler_account_matches_authorized
 from control_plane_common import trusted_slurm_environment
+from control_plane_common import verify_historical_installed_control_plane
 from control_plane_common import verify_installed_control_plane
 from ledger import accounting, append_primary_event_locked, ledger_lock
 from ledger import latest_reservations, require_explicit_genesis, transition_payload
@@ -73,30 +74,34 @@ def _scheduler_result(
         text=True,
         env=trusted_slurm_environment(),
     )
-    for line in output.splitlines():
-        fields = line.split("|")
-        if len(fields) >= 6 and fields[0] == job_id:
-            if fields[4]:
-                if fields[4] != f"pic-reservation={reservation_id}":
-                    raise ValueError("Slurm accounting comment does not bind the PIC reservation")
-            else:
-                try:
-                    _verify_scheduler_job_binding(job_id, reservation_id)
-                except subprocess.CalledProcessError:
-                    if not allow_purged_cancelled_zero_execution:
-                        raise
-                    snapshot = require_purged_cancelled_zero_execution_snapshot(job_id)
-                    if (
-                        fields[1] != snapshot["state"]
-                        or int(fields[2]) != snapshot["elapsed_raw"]
-                        or int(fields[3]) != snapshot["allocated_nodes"]
-                        or fields[5] != snapshot["account"]
-                    ):
-                        raise ValueError("Slurm accounting changed during terminal recovery")
-            if not scheduler_account_matches_authorized(fields[5]):
-                raise ValueError("Slurm accounting account does not match the PIC account")
-            return fields[1].split()[0], int(fields[2]), int(fields[3])
-    raise ValueError(f"No Slurm allocation record found for job {job_id}")
+    matching = [
+        fields
+        for line in output.splitlines()
+        if (fields := line.split("|")) and fields[0] == job_id
+    ]
+    if len(matching) != 1 or len(matching[0]) != 6:
+        raise ValueError(f"Expected one exact Slurm allocation record for job {job_id}")
+    fields = matching[0]
+    if fields[4]:
+        if fields[4] != f"pic-reservation={reservation_id}":
+            raise ValueError("Slurm accounting comment does not bind the PIC reservation")
+    else:
+        try:
+            _verify_scheduler_job_binding(job_id, reservation_id)
+        except subprocess.CalledProcessError:
+            if not allow_purged_cancelled_zero_execution:
+                raise
+            snapshot = require_purged_cancelled_zero_execution_snapshot(job_id)
+            if (
+                fields[1] != snapshot["state"]
+                or int(fields[2]) != snapshot["elapsed_raw"]
+                or int(fields[3]) != snapshot["allocated_nodes"]
+                or fields[5] != snapshot["account"]
+            ):
+                raise ValueError("Slurm accounting changed during terminal recovery")
+    if not scheduler_account_matches_authorized(fields[5]):
+        raise ValueError("Slurm accounting account does not match the PIC account")
+    return fields[1].split()[0], int(fields[2]), int(fields[3])
 
 
 def _verify_reservation_control_plane_pair(
@@ -109,7 +114,7 @@ def _verify_reservation_control_plane_pair(
     if not isinstance(version, str) or re.fullmatch(r"[0-9a-f]{64}", version) is None:
         raise ValueError("Reservation has an invalid control-plane version")
     for root in [authorized_pic_root, authorized_project_home_root]:
-        inventory = verify_installed_control_plane(
+        inventory = verify_historical_installed_control_plane(
             root / "control_plane" / version,
             authorized_pic_root=root,
         )

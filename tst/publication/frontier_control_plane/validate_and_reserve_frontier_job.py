@@ -1231,7 +1231,7 @@ def repair_reservation_attachments(
             and latest.get("state") == "submitted"
         ):
             if any(
-                latest.get(field)
+                field in latest
                 for field in [
                     "terminal_recovery_handoff_path",
                     "terminal_recovery_handoff_sha256",

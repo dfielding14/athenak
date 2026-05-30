@@ -26,6 +26,7 @@ from control_plane_common import require_canonical_path_below, require_ledger_pa
 from control_plane_common import require_storage_policy_unlock_snapshot
 from control_plane_common import scheduler_account_matches_authorized
 from control_plane_common import sha256_bytes, verify_installed_control_plane
+from control_plane_common import verify_historical_installed_control_plane
 from control_plane_common import trusted_slurm_environment
 from ledger import latest_reservations, ledger_lock, require_explicit_genesis
 from ledger import validate_mirrored_state
@@ -94,7 +95,11 @@ def require_purged_cancelled_zero_execution_snapshot(job_id: str) -> dict[str, o
             env=trusted_slurm_environment(),
         )
     except subprocess.CalledProcessError as error:
-        if str(error.stderr).strip() != "slurm_load_jobs error: Invalid job id specified":
+        if (
+            error.returncode != 1
+            or str(error.stderr).strip()
+            != "slurm_load_jobs error: Invalid job id specified"
+        ):
             raise ValueError("scontrol failed for a reason other than scheduler-record purge") from error
     else:
         raise ValueError("Purged scheduler recovery requires an absent scontrol record")
@@ -106,7 +111,11 @@ def require_purged_cancelled_zero_execution_snapshot(job_id: str) -> dict[str, o
             env=trusted_slurm_environment(),
         )
     except subprocess.CalledProcessError as error:
-        if str(error.stderr).strip() != "slurm_load_jobs error: Invalid job id specified":
+        if (
+            error.returncode != 1
+            or str(error.stderr).strip()
+            != "slurm_load_jobs error: Invalid job id specified"
+        ):
             raise ValueError("squeue failed for a reason other than scheduler-record purge") from error
         queued = ""
     if queued.strip():
@@ -129,9 +138,9 @@ def require_purged_cancelled_zero_execution_snapshot(job_id: str) -> dict[str, o
     matching = [
         fields
         for line in output.splitlines()
-        if len(fields := line.split("|")) >= 11 and fields[0] == job_id
+        if (fields := line.split("|")) and fields[0] == job_id
     ]
-    if len(matching) != 1:
+    if len(matching) != 1 or len(matching[0]) != 11:
         raise ValueError(f"Expected one Slurm allocation record for job {job_id}")
     fields = matching[0]
     return _validate_purged_cancelled_zero_execution_snapshot(
@@ -158,11 +167,17 @@ def _verify_control_plane_pair(
     *,
     authorized_pic_root: Path,
     authorized_project_home_root: Path,
+    historical: bool = False,
 ) -> None:
     if re.fullmatch(r"[0-9a-f]{64}", version) is None:
         raise ValueError("Terminal-recovery control-plane version is malformed")
     for root in [authorized_pic_root, authorized_project_home_root]:
-        inventory = verify_installed_control_plane(
+        verifier = (
+            verify_historical_installed_control_plane
+            if historical
+            else verify_installed_control_plane
+        )
+        inventory = verifier(
             root / "control_plane" / version,
             authorized_pic_root=root,
         )
@@ -279,6 +294,7 @@ def verify_terminal_recovery_handoff(
         str(reservation["control_plane_version"]),
         authorized_pic_root=authorized_pic_root,
         authorized_project_home_root=authorized_project_home_root,
+        historical=True,
     )
     _verify_control_plane_pair(
         recovery_control_plane_version,
@@ -376,6 +392,7 @@ def create_handoff(
             str(reservation["control_plane_version"]),
             authorized_pic_root=authorized_pic_root,
             authorized_project_home_root=authorized_project_home_root,
+            historical=True,
         )
         snapshot = _require_prior_policy_snapshot(
             reservation,

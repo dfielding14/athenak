@@ -40,6 +40,7 @@ from control_plane_common import trusted_slurm_environment
 from control_plane_common import require_storage_policy_unlock_snapshot
 from control_plane_common import validate_clean_candidate_bundle
 from control_plane_common import validate_launch_contract, verify_installed_control_plane
+from control_plane_common import verify_historical_installed_control_plane
 from control_plane_common import verify_snapshot_files
 from control_plane_common import PRODUCTION_RUNTIME_MODULEPATH
 from control_plane_common import TRUSTED_GIT, TRUSTED_PYTHON
@@ -827,6 +828,45 @@ class SnapshotTests(unittest.TestCase):
         self.assertFalse(bool(destination.stat().st_mode & 0o222))
         with self.assertRaises(ValueError):
             install(self.pic_root)
+
+    def test_historical_control_plane_accepts_closed_predecessor_inventory(self) -> None:
+        staging = self.pic_root / "control_plane" / "historical-staging"
+        shutil.copytree(self.control_plane_dir, staging)
+        staging.chmod(0o755)
+        for path in staging.iterdir():
+            path.chmod(path.stat().st_mode | 0o200)
+        (staging / "terminal_recovery_handoff.py").unlink()
+        names = [
+            name for name in CONTROL_PLANE_FILES
+            if name != "terminal_recovery_handoff.py"
+        ]
+        records = [{"path": name, "sha256": sha256(staging / name)} for name in names]
+        digest = inventory_digest(records)
+        (staging / "inventory.json").write_text(
+            json.dumps(
+                {"schema_version": 1, "version": digest, "files": records},
+                indent=2,
+                sort_keys=True,
+            ) + "\n",
+            encoding="utf-8",
+        )
+        make_tree_read_only(
+            staging,
+            executable_names={
+                path.name for path in staging.iterdir()
+                if path.suffix in {".py", ".sh"}
+            },
+        )
+        destination = staging.with_name(digest)
+        staging.rename(destination)
+        inventory = verify_historical_installed_control_plane(
+            destination, authorized_pic_root=self.pic_root
+        )
+        self.assertEqual(inventory["version"], digest)
+        with self.assertRaises(ValueError):
+            verify_installed_control_plane(
+                destination, authorized_pic_root=self.pic_root
+            )
 
     def test_installed_control_plane_rename_failure_cleans_staging(self) -> None:
         target = self.root / "failed-install"
@@ -2663,6 +2703,37 @@ PY
         self.assertEqual(result, "cleared_completed_attachment_pending_marker")
         self.assertFalse((self.pic_root / "ledger" / "pending_submission.json").exists())
 
+    def test_attachment_repair_rejects_falsey_terminal_recovery_provenance(self) -> None:
+        manifest_path = self._create_manifest()
+        reservation = self._reserve(manifest_path)
+        reservation_id = str(reservation["reservation_id"])
+        synthetic = dict(reservation)
+        synthetic.update(
+            {
+                "event_type": "job_id_attached",
+                "state": "submitted",
+                "terminal_recovery_handoff_path": "",
+                "terminal_recovery_handoff_sha256": "",
+                "terminal_recovery_mode": "",
+            }
+        )
+        with patch(
+            "validate_and_reserve_frontier_job.latest_reservations",
+            return_value={reservation_id: synthetic},
+        ):
+            with self.assertRaises(ValueError):
+                repair_reservation_attachments(
+                    reservation_id=reservation_id,
+                    ledger_jsonl=self.ledger,
+                    ledger_csv=self.csv,
+                    receipts_jsonl=self.receipts,
+                    mirror_jsonl=self.mirror,
+                    control_plane_dir=self.control_plane_dir,
+                    authorized_pic_root=self.pic_root,
+                    authorized_project_home_root=self.project_home_root,
+                )
+        self.assertTrue((self.pic_root / "ledger" / "pending_submission.json").is_file())
+
     def test_mutable_source_tree_cannot_run_mutating_ledger_repairs(self) -> None:
         common = {
             "ledger_jsonl": self.ledger,
@@ -2966,6 +3037,21 @@ PY
         ):
             with self.assertRaises(ValueError):
                 reconcile_frontier_job._scheduler_result("12345", "reservation")
+        for output in [
+            "12345|CANCELLED|0|0|pic-reservation=reservation|ast207|extra\n",
+            "12345|CANCELLED|0|0|pic-reservation=reservation|ast207\n"
+            "12345|CANCELLED|0|0|pic-reservation=reservation|ast207\n",
+        ]:
+            with self.subTest(output=output):
+                with patch.object(
+                    reconcile_frontier_job.subprocess,
+                    "check_output",
+                    return_value=output,
+                ):
+                    with self.assertRaises(ValueError):
+                        reconcile_frontier_job._scheduler_result(
+                            "12345", "reservation"
+                        )
 
     def test_purged_cancelled_zero_execution_snapshot_is_exact(self) -> None:
         row = (
@@ -3057,6 +3143,32 @@ PY
                             )
                 finally:
                     fields[index] = original
+        fields.append("unexpected")
+        try:
+            with patch.object(
+                terminal_recovery_handoff.subprocess,
+                "check_output",
+                side_effect=purged_scontrol,
+            ):
+                with self.assertRaises(ValueError):
+                    terminal_recovery_handoff.require_purged_cancelled_zero_execution_snapshot(
+                        "12345"
+                    )
+        finally:
+            fields.pop()
+        with patch.object(
+            terminal_recovery_handoff.subprocess,
+            "check_output",
+            side_effect=subprocess.CalledProcessError(
+                2,
+                [TRUSTED_SCONTROL],
+                stderr="slurm_load_jobs error: Invalid job id specified\n",
+            ),
+        ):
+            with self.assertRaises(ValueError):
+                terminal_recovery_handoff.require_purged_cancelled_zero_execution_snapshot(
+                    "12345"
+                )
         with patch.object(
             terminal_recovery_handoff.subprocess,
             "check_output",
@@ -3109,6 +3221,11 @@ PY
                 terminal_recovery_handoff.require_purged_cancelled_zero_execution_snapshot(
                     "12345"
                 )
+            accounting = row + "12345|truncated\n"
+            with self.assertRaises(ValueError):
+                terminal_recovery_handoff.require_purged_cancelled_zero_execution_snapshot(
+                    "12345"
+                )
 
     def test_purged_cancelled_zero_execution_snapshot_accepts_exact_squeue_purge_only(
         self,
@@ -3118,11 +3235,12 @@ PY
             "ast207|2026-05-30T15:47:31|None|2026-05-30T15:47:31|0:0\n"
         )
         queue_stderr = "slurm_load_jobs error: Invalid job id specified\n"
+        queue_returncode = 1
 
         def scheduler_output(command: list[str], **kwargs: object) -> str:
             if command[0] == TRUSTED_SCONTROL:
                 raise subprocess.CalledProcessError(
-                    1,
+                    queue_returncode,
                     command,
                     stderr="slurm_load_jobs error: Invalid job id specified\n",
                 )
@@ -3146,6 +3264,12 @@ PY
                 )
             )
             self.assertEqual(snapshot["job_id"], "12345")
+            queue_returncode = 2
+            with self.assertRaises(ValueError):
+                terminal_recovery_handoff.require_purged_cancelled_zero_execution_snapshot(
+                    "12345"
+                )
+            queue_returncode = 1
             queue_stderr = "slurm_load_jobs error: Access/permission denied\n"
             with self.assertRaises(ValueError):
                 terminal_recovery_handoff.require_purged_cancelled_zero_execution_snapshot(
