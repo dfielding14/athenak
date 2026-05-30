@@ -10,9 +10,9 @@
     "Q-038",
     "Q-042"
   ],
-  "qualification_effect": "local_registered_f1_successor_gyro_first_attempt_reconciled_reviewed_retry_policy_active",
+  "qualification_effect": "local_registered_f1_successor_gyro_first_attempt_reconciled_retry_policy_active_late_review_repair_staged",
   "scope": "Staged successor chronology after the clean-candidate Frontier F0 admission closure. The candidate retains the completed F0 chronology and adds two exact one-attempt registered-science slices: a clean-candidate GPU relativistic-gyro oracle and a clean-candidate GPU paper-mode coupling oracle. The launch trampoline freezes an exact structured artifact tree and immutable inventory. Offline analyzers retain descriptor-pinned tree identity, validate exact inventory closure, publish one immutable result and receipt, and support qualification-time no-write recomputation from the snapshotted analyzer. Qualification retains descriptors for the immutable inventory, result and receipt plus their directory ancestry across recomputation and rechecks path identity and bytes afterward. This candidate does not claim Frontier F1 execution or scientific qualification.",
-  "live_predecessor": {
+  "initial_live_predecessor": {
     "record": "tst/publication/readiness/q027_frontier_f0_compute_snapshot_activation_2026-05-30.json",
     "control_plane_version": "e8e47eadb491b20e3f196f3d8ea0b859c61ccad961f8d56bc85ea2a48424eecf",
     "policy_sha256": "cfe6610a4f7f54b153f2e20b30397d0417a2634b32997117f6d14a2eb4b771cc",
@@ -22,11 +22,11 @@
     "active_reservations": 0
   },
   "staged_successor": {
-    "control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
+    "control_plane_version": "4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
     "control_plane_inventory_files": 19,
-    "worktree_state": "clean_reviewed_commit_559d5e5477cfeafea85fe958e55cdd3406bc8d59",
-    "paired_install_status": "pass_identical_immutable_install",
-    "active_policy_promotion_status": "pass"
+    "worktree_state": "dirty_candidate_pending_clean_commit_curation",
+    "paired_install_status": "pending_clean_commit_and_paired_install",
+    "active_policy_promotion_status": "pending_paired_install"
   },
   "registered_science_slices": [
     {
@@ -36,7 +36,7 @@
       "maximum_walltime_seconds": 900,
       "maximum_attempts": 1,
       "analysis_script_sha256": "e9a5c93aea3e2cc288e07fc2adbc93ab22c49df74c1e83dfaf5cd694eced7d68",
-      "analysis_support_sha256": "c5c77b6a952ed319498f08c91b9adc40101c090f91dc57d798dafdc455a38c01"
+      "analysis_support_sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
     },
     {
       "authorization_id": "f1-clean-paper-coupling-mpich-stderr-v2",
@@ -45,13 +45,13 @@
       "maximum_walltime_seconds": 900,
       "maximum_attempts": 1,
       "analysis_script_sha256": "f9c23bddf0ad0ac991baced9ffc7cf94e9b9776993962f2ece042e41aec9556b",
-      "analysis_support_sha256": "c5c77b6a952ed319498f08c91b9adc40101c090f91dc57d798dafdc455a38c01"
+      "analysis_support_sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
     }
   ],
   "closed_activation_blockers": [
     "registered-science reservations require an exact active-policy authorization ID and permit at most one ledger attempt per slice",
-    "the launch trampoline traverses from a stable account serialization anchor outside the replaceable PIC-root name, retains artifact-parent ancestry before creating the artifact root, creates the artifact root and every declared launch directory exclusively, requires same-account process isolation from mkdir until the first no-follow descriptor and retained-ancestry binding complete, captures workload-created descendant identities after each action under the same isolation prerequisite through the recursive-capture handoff, retains and rechecks every observed directory identity through final publication, rejects later root substitution, byte-identical nested-directory replacement and empty artifact subtrees, freezes final read-only bytes, publishes one immutable inventory and revalidates exact final tree closure",
-    "the launch trampoline creates the owner-only analysis directory under an unpredictable staging name with the same first-observation operational boundary, renames it into place, verifies the published identity through final publication and offline analyzers require that exact owner-only analysis directory, retain one no-follow artifact-root descriptor and reject duplicate keys, noncanonical paths, checksum drift, unlisted files, nested-directory replacement, redirected analysis output and root substitution",
+    "the launch trampoline traverses from a stable account serialization anchor outside the replaceable PIC-root name, retains artifact-parent ancestry before creating the artifact root, creates the artifact root and every declared launch directory exclusively, requires same-account process isolation from mkdir until the first no-follow descriptor and retained-ancestry binding complete, captures workload-created descendant identities after each action under the same isolation prerequisite through the recursive-capture handoff, retains and rechecks every observed directory identity and frozen workload-payload identity through final publication, rejects later root substitution, byte-identical nested-directory replacement, byte-identical top-level or nested workload-payload replacement and empty artifact subtrees, freezes final read-only bytes, retains the generated immutable-inventory exclusive-creation descriptor through final publication verification and revalidates exact final tree closure",
+    "the launch trampoline creates the owner-only analysis directory under an unpredictable staging name with the same first-observation operational boundary, renames it into place, verifies the published identity through final publication and offline analyzers require that exact owner-only analysis directory, retain one no-follow artifact-root descriptor, bind directory and regular-file pre-open metadata to each opened descriptor, retain the inventory bytes plus inventory and payload-file identities through analysis, retain each published analysis-result descriptor through receipt publication, and reject duplicate keys, noncanonical paths, checksum drift, unlisted files, nested-directory replacement, redirected analysis output and root substitution",
     "the launch lifecycle scopes deterministic umask 022 artifact creation and restores the inherited process value after success or failure",
     "the gyro analyzer requires exactly the registered cycle-two particle VTK output and rejects wildcard output drift",
     "qualification traverses the lexical PIC root, runs/, manifests/ and snapshot/ below a stable account serialization anchor without following aliases, pins the pre-submit-manifest ancestry before reading it, retains that manifest descriptor plus the run tree, immutable inventory, analysis result, offline receipt, their directory ancestry and snapshotted analyzer/helper descriptors, binds the immutable inventory digest into the child, executes the exact analyzer bytes through /proc/self/fd and rejects pre-submit-manifest, source, evidence-file, run-root or PIC-root replacement around no-write recomputation",
@@ -61,15 +61,15 @@
   "local_validation": {
     "control_plane_discovery_tests": {
       "status": "pass",
-      "tests_run": 294
+      "tests_run": 303
     },
     "publication_standalone_tests": {
       "status": "pass",
-      "tests_run": 105
+      "tests_run": 112
     },
     "focused_frontier_chain_tests": {
       "status": "pass",
-      "tests_run": 40,
+      "tests_run": 45,
       "command": "python3 -m unittest tst.publication.test_frontier_f1_structured_analysis tst.publication.test_pic_qualification_manifest"
     },
     "registered_science_concurrency_regression": {
@@ -79,7 +79,7 @@
     },
     "readiness_registry_tests": {
       "status": "pass",
-      "tests_run": 12,
+      "tests_run": 14,
       "command": "python3 -m unittest tst.publication.test_pic_readiness_registry"
     },
     "control_plane_discovery_command": "python3 -m unittest discover -s tst/publication/frontier_control_plane -p 'test_*.py'",
@@ -102,7 +102,7 @@
     }
   },
   "independent_review": {
-    "status": "pass_exact_cbc6fb50_fresh_exploit_retest",
+    "status": "pass_exact_4ccde8df_fresh_exploit_retest",
     "review_scope": "stable PIC-root ancestry, explicit same-account isolation prerequisite through first descriptor and retained-ancestry binding plus post-action descendant capture, retained post-observation launch-directory identities, structured artifact freeze, exact inventory closure, analyzer source binding, immutable result and receipt binding, qualification-time no-write recomputation, exact reviewed Cray MPICH stderr binding, registered output-set closure and adversarial regressions",
     "addressed_findings": [
       "retain and recheck immutable inventory, result and receipt descriptors plus ancestry across qualification-time recomputation",
@@ -118,6 +118,9 @@
       "retain declared launch-directory identities through workload execution, capture workload-created descendants after each action under the same isolation prerequisite and retain those observed identities through final publication",
       "pin pre-submit-manifest ancestry before reading it and retain the immutable manifest descriptor across qualification-time no-write recomputation",
       "bind each regular-file tree entry inspected before freeze to the no-follow opened descriptor and reject namespace replacement before hashing",
+      "retain the generated immutable-inventory creation descriptor through read-only freeze and final publication verification so namespace replacement cannot become authoritative between creation and publication",
+      "retain every frozen workload-payload identity through final inventory publication verification and reject byte-identical top-level or nested payload namespace replacement",
+      "bind offline structured-artifact directory and regular-file pre-open metadata to each opened descriptor, retain the observed immutable-inventory bytes plus payload-file identity map through analysis and retain each published analysis-result descriptor through receipt publication",
       "bind v2 Athena stderr acceptance to the exact reviewed Cray MPICH informational transcript digest"
     ],
     "prior_fresh_retest_for_superseded_140e9a29": [
@@ -128,10 +131,29 @@
       "launch-publication reviewer independently rejected pre-rename staging substitution, post-rename analysis-directory replacement, late nested replacement, late analysis replacement, late unlisted insertion and empty subtrees; confirmed inherited-umask restoration after success and each rejection",
       "qualification-domain reviewer independently rejected runs symlink ancestry, manifest snapshot symlink ancestry and nested empty subtrees; recomputed the exact 19-file inventory and all staged slice bindings; confirmed restrictive-umask publication modes and no staging leftovers"
     ],
-    "fresh_retest_for_cbc6fb50": [
-      "launch-publication reviewer recomputed the exact 19-file inventory, rejected artifact-parent and PIC-root relocation after artifact-root open, snapshot ancestry transplant, byte-identical nested replacement, analysis-directory replacement and regular-file metadata/open namespace substitution, confirmed inherited-umask restoration and accepted the explicit same-account isolation prerequisite through durable frozen-inventory publication",
-      "qualification-domain reviewer rejected byte-identical and changed-byte pre-submit-manifest replacement, PIC-root recreation immediately after manifest capture and PIC-root recreation with transplanted leaves during recomputation; confirmed the corrected ledger/pending_submission.json attestation probe and exact regression",
-      "stderr-provenance reviewer confirmed the immutable failed-run inventory, local fixture encoded and decoded digests, exact production-default validator, v2 analyzer bindings and altered-transcript rejection probes"
+    "superseded_review_for_cbc6fb50": [
+      "earlier launch-publication and qualification-domain probes passed, but a late independent review reproduced generated-inventory replacement between creation close and read-only reopen plus offline nested-directory and regular-file identity substitution during initial tree loading",
+      "cbc6fb50 remains immutable active chronology only; one rejected v2 pre-submit manifest is preserved, but no v2 reservation or scheduler submission was created under it"
+    ],
+    "fresh_retest_for_d55d064d": [
+      "launch-publication reviewer recomputed the exact 19-file inventory, rejected after-freeze byte-identical generated-inventory replacement, injected inventory-fsync and tree-verification failures, confirmed that success retained the original inventory namespace identity through exact final tree verification, and confirmed single-close descriptor cleanup",
+      "offline-analysis reviewer recomputed helper SHA-256 cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a, rejected in-place immutable-inventory rewrite, same-inode analysis-result rewrite, inode-replacement analysis-result substitution and receipt-before-result publication, and confirmed zero descriptor leaks after nested traversal rejection, normal publication and rejected substitutions"
+    ],
+    "superseding_late_review_for_d55d064d": [
+      "a later launch-publication review reproduced byte-identical top-level and nested frozen workload-payload namespace replacement after inventory freeze because final publication reopened payload names without checking the original identities",
+      "d55d064d remains staged chronology only; the repaired successor retains every frozen workload-payload identity through final inventory publication verification"
+    ],
+    "fresh_retest_for_d8cc7d61": [
+      "superseded after exact repaired-successor launch-publication review reproduced top-level payload, nested payload and generated-inventory replacement after their individual final checks while later verification continued",
+      "reserve-time changed-queue rejection after immutable manifest publication leaves the manifest present while reservation_id.txt, manifest_sha256.txt, pending_submission.json and all four mirrored ledger streams remain unchanged"
+    ],
+    "fresh_retest_for_d538af91": [
+      "superseded after exact retained-descriptor closing-sweep review reproduced nested-directory transplant between directory namespace rebinding and the retained payload-byte sweep",
+      "local targeted regressions reject top-level payload, nested payload and generated-inventory replacement after their first final checks; reserve-time changed-queue rejection after immutable manifest publication leaves attachments, pending marker and all four mirrored ledger streams unchanged"
+    ],
+    "fresh_retest_for_4ccde8df": [
+      "launch-publication reviewer recomputed exact 19-file digest 4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3, rejected top-level payload replacement, nested payload replacement, generated-inventory replacement during the tree sweep and nested-directory transplant before the closing payload check, and confirmed no retained-descriptor leak or unknown double-close",
+      "local targeted regression rejects nested-directory transplant immediately before the retained nested-payload byte check; earlier targeted payload, inventory and pre-reservation rejection regressions remain passing"
     ]
   },
   "superseded_pre_activation_install": {
@@ -182,7 +204,7 @@
     "cumulative_consumed_node_hours": 0.08138888888888887,
     "active_reservations": 0
   },
-  "paired_install_transition": {
+  "superseded_paired_install_transition": {
     "status": "pass",
     "installed_utc": "2026-05-30T22:25:05Z",
     "control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
@@ -199,8 +221,11 @@
     "active_reservations": 0,
     "pending_submission_marker": "absent"
   },
+  "paired_install_transition": {
+    "status": "pending_clean_commit_and_paired_install"
+  },
   "active_policy_transition": {
-    "status": "pass",
+    "status": "superseded_after_late_exploit_review_one_rejected_v2_manifest_no_reservation_or_scheduler_submission",
     "validated_utc": "2026-05-30T22:25:48Z",
     "control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
     "policy_sha256": "58f855033b426e9a75483fc7d2da53cdc1838465948a9403a94bf7870036f562",
@@ -231,7 +256,7 @@
     "remediation": "Register v2 one-attempt slices bound to analyzers that accept only the exact reviewed Cray MPICH informational transcript SHA-256 and reject any byte drift."
   },
   "registered_retry_policy_transition": {
-    "status": "pass",
+    "status": "superseded_after_late_exploit_review_one_rejected_v2_manifest_no_reservation_or_scheduler_submission",
     "predecessor_policy_sha256": "ee3923fb678d0bba692a9c3ceaf653e96984afe0bbe5632f761006b36bec92de",
     "predecessor_promotion_sha256": "433d0afcb65af36932217fe51f619119b6c95e0f6832d6ac99f6168e8d00241b",
     "control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
@@ -239,10 +264,44 @@
     "promotion_sha256": "05dfbf327a1e6b64f14359389bec2c426cd4dba713aeaf5e5dd65cce6a0f4f31",
     "reason": "Rotated one-attempt authorization IDs and bound the exact reviewed Cray MPICH informational stderr transcript SHA-256 before retry submission."
   },
+  "rejected_pre_reservation_manifest_chronology": {
+    "status": "fail_closed_before_reservation_intent_and_scheduler_submission",
+    "submission_id": "bc7febae-e4a5-493f-ae52-d6578851e563",
+    "registered_science_authorization_id": "f1-clean-gyro-mpich-stderr-v2",
+    "control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/bc7febae-e4a5-493f-ae52-d6578851e563/pre_submit_manifest.json",
+    "manifest_sha256": "d20ba3d9a7ba983ed3e0002b97cae728ee5f69c11821ce8fcf9ddfb1b7ada8d0",
+    "manifest_analysis_support_sha256": "530eee6c0140607e48eaa22eb9134cb0e5fa811f197acf22512c890861234301",
+    "active_policy_analysis_support_sha256": "c5c77b6a952ed319498f08c91b9adc40101c090f91dc57d798dafdc455a38c01",
+    "rejection": "The installed submit wrapper failed closed before reservation because the immutable manifest helper binding differed from the active reviewed retry-policy helper binding after the source helper changed.",
+    "pre_manifest_attestation_sha256": "388af92676630a89394246a17f701e15311a292a049e8e4c11eedc279996943e",
+    "pre_submit_wrapper_attestation_sha256": "960e59a4d7f68f8d752347bfb9b4fc16932386e5bdb74017685d9fab0c43b995",
+    "reservation_attachments": "absent",
+    "pending_submission_marker": "absent",
+    "ledger_uuid_hits": 0,
+    "orion_ledger_records": 34,
+    "orion_receipt_records": 34,
+    "project_home_ledger_records": 34,
+    "active_reservations": 0
+  },
+  "rejected_pre_reservation_manifest_fixture": "tst/publication/readiness/q027_frontier_f1_rejected_pre_reservation_manifest_fixture_2026-05-30.json",
+  "required_live_preflight": {
+    "status": "required_immediately_before_policy_promotion_and_each_registered_science_submission_boundary",
+    "historical_submission_id_must_remain_absent_from_live_ledgers": "bc7febae-e4a5-493f-ae52-d6578851e563",
+    "checks": [
+      "current Orion ledger, Orion mirror-receipt and Project Home mirror chains are coherent",
+      "current Orion pending_submission.json marker is absent",
+      "current mirrored ledger state has zero active reservations",
+      "historical rejected pre-reservation submission UUID has zero hits in current Orion JSONL, Orion CSV, Orion receipts and Project Home mirror streams",
+      "same-account process and scheduler snapshots are reviewed for the current boundary"
+    ],
+    "evidence_rule": "Archive the current preflight result separately from the immutable historical incident fixture. Legitimate later reservations may advance live ledger counts without changing the frozen 34/34/34 incident chronology."
+  },
   "open_boundaries": [
+    "clean commit curation, paired install and reviewed policy promotion for staged repair successor 4ccde8df are pending",
     "archive one reviewed same-account process-isolation attestation from tst/publication/readiness/q027_frontier_registered_science_same_account_isolation_attestation_template_2026-05-30.json immediately before each v2 registered-science submission",
     "the v2 registered Frontier F1 slices have not executed",
     "external reviewer disposition remains pending external review"
   ],
-  "overall_disposition": "local_registered_f1_retry_policy_active_attestation_required_before_each_v2_submission"
+  "overall_disposition": "local_registered_f1_repair_candidate_only_keep_registered_science_submissions_paused"
 }

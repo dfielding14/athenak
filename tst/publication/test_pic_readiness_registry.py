@@ -232,12 +232,15 @@ class PicReadinessRegistryTests(unittest.TestCase):
             recovery_candidate["active_successor"]["control_plane_version"],
         )
         self.assertEqual(
-            f1_candidate["live_predecessor"]["control_plane_version"],
+            f1_candidate["initial_live_predecessor"]["control_plane_version"],
             candidate["active_successor"]["control_plane_version"],
         )
         lifecycle = storage["installed_control_plane_lifecycle"]
         if lifecycle == "live_active_generation_successor_staged_not_installed":
-            prior_active = f1_candidate.get("prior_active_policy_transition")
+            prior_active = f1_candidate.get(
+                "active_policy_transition",
+                f1_candidate.get("prior_active_policy_transition"),
+            )
             expected_active_version = (
                 prior_active["control_plane_version"]
                 if prior_active is not None
@@ -587,6 +590,138 @@ class PicReadinessRegistryTests(unittest.TestCase):
             provenance["disposition"],
             "pass_historical_transcript_bound_to_local_fixture_retry_requires_separate_v2_policy_activation",
         )
+
+    def test_rejected_pre_reservation_manifest_chronology_is_bound(self) -> None:
+        successor = _load(
+            "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
+        )
+        chronology = successor["rejected_pre_reservation_manifest_chronology"]
+        fixture = _load(
+            "q027_frontier_f1_rejected_pre_reservation_manifest_fixture_2026-05-30.json"
+        )
+        self.assertEqual(
+            successor["rejected_pre_reservation_manifest_fixture"],
+            "tst/publication/readiness/"
+            "q027_frontier_f1_rejected_pre_reservation_manifest_fixture_2026-05-30.json",
+        )
+        self.assertEqual(chronology, fixture["chronology"])
+        self.assertEqual(
+            set(chronology),
+            {
+                "status",
+                "submission_id",
+                "registered_science_authorization_id",
+                "control_plane_version",
+                "manifest_path",
+                "manifest_sha256",
+                "manifest_analysis_support_sha256",
+                "active_policy_analysis_support_sha256",
+                "rejection",
+                "pre_manifest_attestation_sha256",
+                "pre_submit_wrapper_attestation_sha256",
+                "reservation_attachments",
+                "pending_submission_marker",
+                "ledger_uuid_hits",
+                "orion_ledger_records",
+                "orion_receipt_records",
+                "project_home_ledger_records",
+                "active_reservations",
+            },
+        )
+        self.assertEqual(
+            chronology["status"],
+            "fail_closed_before_reservation_intent_and_scheduler_submission",
+        )
+        self.assertEqual(
+            chronology["active_policy_analysis_support_sha256"],
+            "c5c77b6a952ed319498f08c91b9adc40101c090f91dc57d798dafdc455a38c01",
+        )
+        self.assertNotEqual(
+            chronology["manifest_analysis_support_sha256"],
+            chronology["active_policy_analysis_support_sha256"],
+        )
+        binding = fixture["manifest_binding"]
+        self.assertEqual(binding["mode"], "0444")
+        for key in (
+            "submission_id",
+            "control_plane_version",
+            "registered_science_authorization_id",
+            "manifest_sha256",
+        ):
+            self.assertEqual(binding[key], chronology[key])
+        self.assertEqual(binding["analysis_support_role"], "analysis-script-001")
+        self.assertEqual(
+            binding["analysis_support_sha256"],
+            chronology["manifest_analysis_support_sha256"],
+        )
+        self.assertEqual(chronology["reservation_attachments"], "absent")
+        self.assertEqual(chronology["pending_submission_marker"], "absent")
+        self.assertEqual(chronology["ledger_uuid_hits"], 0)
+        self.assertEqual(chronology["orion_ledger_records"], 34)
+        self.assertEqual(chronology["orion_receipt_records"], 34)
+        self.assertEqual(chronology["project_home_ledger_records"], 34)
+        self.assertEqual(chronology["active_reservations"], 0)
+        template = _load(
+            "q027_frontier_registered_science_same_account_isolation_attestation_template_2026-05-30.json"
+        )
+        attestations = fixture["attestations"]
+        self.assertEqual(
+            [record["contents"]["phase"] for record in attestations],
+            ["pre_manifest", "pre_submit_wrapper"],
+        )
+        self.assertLess(
+            attestations[0]["contents"]["recorded_utc"],
+            attestations[1]["contents"]["recorded_utc"],
+        )
+        digest_keys = (
+            "pre_manifest_attestation_sha256",
+            "pre_submit_wrapper_attestation_sha256",
+        )
+        for record, digest_key in zip(attestations, digest_keys):
+            contents = record["contents"]
+            rendered = (json.dumps(contents, indent=2, sort_keys=True) + "\n").encode()
+            self.assertEqual(
+                hashlib.sha256(rendered).hexdigest(),
+                chronology[digest_key],
+            )
+            self.assertEqual(record["attestation_sha256"], chronology[digest_key])
+            self.assertEqual(contents["control_plane_version"], chronology["control_plane_version"])
+            self.assertEqual(
+                contents["registered_science_authorization_id"],
+                chronology["registered_science_authorization_id"],
+            )
+            self.assertEqual(contents["operator_statement"], template["operator_statement"])
+            self.assertEqual(contents["pending_submission_marker"]["value"], "absent")
+            self.assertEqual(
+                sorted(contents["mirrored_ledger_line_counts"]["counts"].values()),
+                [34, 34, 34],
+            )
+
+    def test_rejected_pre_reservation_manifest_live_preflight_is_explicit(self) -> None:
+        successor = _load(
+            "q027_frontier_f1_registered_science_successor_candidate_2026-05-30.json"
+        )
+        chronology = successor["rejected_pre_reservation_manifest_chronology"]
+        preflight = successor["required_live_preflight"]
+        self.assertEqual(
+            preflight["status"],
+            "required_immediately_before_policy_promotion_and_each_registered_science_submission_boundary",
+        )
+        self.assertEqual(
+            preflight["historical_submission_id_must_remain_absent_from_live_ledgers"],
+            chronology["submission_id"],
+        )
+        self.assertEqual(
+            preflight["checks"],
+            [
+                "current Orion ledger, Orion mirror-receipt and Project Home mirror chains are coherent",
+                "current Orion pending_submission.json marker is absent",
+                "current mirrored ledger state has zero active reservations",
+                "historical rejected pre-reservation submission UUID has zero hits in current Orion JSONL, Orion CSV, Orion receipts and Project Home mirror streams",
+                "same-account process and scheduler snapshots are reviewed for the current boundary",
+            ],
+        )
+        self.assertIn("Legitimate later reservations", preflight["evidence_rule"])
 
     def test_registered_science_same_account_isolation_attestation_template(self) -> None:
         template = _load(

@@ -45,31 +45,54 @@ def _read_at(
     root_fd: int,
     relative: str,
     directory_identities: dict[str, tuple[int, int]] | None = None,
+    file_identities: dict[str, tuple[int, int]] | None = None,
 ) -> bytes:
     parts = _parts(relative)
     parent_fd = os.dup(root_fd)
     descriptor: int | None = None
     try:
         for index, part in enumerate(parts[:-1]):
+            entry = os.stat(part, dir_fd=parent_fd, follow_symlinks=False)
             child_fd = os.open(part, _DIRECTORY_FLAGS, dir_fd=parent_fd)
-            metadata = os.fstat(child_fd)
-            if not stat.S_ISDIR(metadata.st_mode) or metadata.st_mode & 0o222:
-                raise ValueError(f"Structured artifact directory is not read-only: {relative}")
-            child_relative = "/".join(parts[: index + 1])
-            if (
-                directory_identities is not None
-                and directory_identities.get(child_relative)
-                != (metadata.st_dev, metadata.st_ino)
-            ):
-                raise ValueError(
-                    f"Structured artifact directory changed during analysis: {child_relative}"
-                )
+            try:
+                metadata = os.fstat(child_fd)
+                if (
+                    not stat.S_ISDIR(metadata.st_mode)
+                    or metadata.st_mode & 0o222
+                    or (entry.st_dev, entry.st_ino) != (metadata.st_dev, metadata.st_ino)
+                ):
+                    raise ValueError(
+                        f"Structured artifact directory is not read-only: {relative}"
+                    )
+                child_relative = "/".join(parts[: index + 1])
+                if (
+                    directory_identities is not None
+                    and directory_identities.get(child_relative)
+                    != (metadata.st_dev, metadata.st_ino)
+                ):
+                    raise ValueError(
+                        f"Structured artifact directory changed during analysis: {child_relative}"
+                    )
+            except BaseException:
+                os.close(child_fd)
+                raise
             os.close(parent_fd)
             parent_fd = child_fd
+        entry = os.stat(parts[-1], dir_fd=parent_fd, follow_symlinks=False)
         descriptor = os.open(parts[-1], _FILE_FLAGS, dir_fd=parent_fd)
         before = os.fstat(descriptor)
-        if not stat.S_ISREG(before.st_mode) or before.st_mode & 0o222:
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_mode & 0o222
+            or (entry.st_dev, entry.st_ino) != (before.st_dev, before.st_ino)
+        ):
             raise ValueError(f"Structured artifact is not a read-only regular file: {relative}")
+        if (
+            file_identities is not None
+            and file_identities.setdefault(relative, (before.st_dev, before.st_ino))
+            != (before.st_dev, before.st_ino)
+        ):
+            raise ValueError(f"Structured artifact changed during analysis: {relative}")
         with os.fdopen(descriptor, "rb", closefd=False) as stream:
             data = stream.read()
         after = os.fstat(descriptor)
@@ -187,7 +210,10 @@ class StructuredArtifactTree:
         self._root_fd: int | None = None
         self._analysis_fd: int | None = None
         self._directory_identities: dict[str, tuple[int, int]] | None = None
+        self._file_identities: dict[str, tuple[int, int]] | None = None
+        self._inventory_bytes: bytes | None = None
         self._inventory: dict[str, dict[str, object]] | None = None
+        self._analysis_result_bindings: dict[str, tuple[int, bytes]] = {}
 
     @property
     def root_fd(self) -> int:
@@ -213,7 +239,14 @@ class StructuredArtifactTree:
             self.require_path_identity()
             if os.fstat(self.root_fd).st_mode & 0o222:
                 raise ValueError("Structured artifact root is not read-only")
+            analysis_entry = os.stat("analysis", dir_fd=self.root_fd, follow_symlinks=False)
             self._analysis_fd = os.open("analysis", _DIRECTORY_FLAGS, dir_fd=self.root_fd)
+            analysis = os.fstat(self._analysis_fd)
+            if (analysis_entry.st_dev, analysis_entry.st_ino) != (
+                analysis.st_dev,
+                analysis.st_ino,
+            ):
+                raise ValueError("Structured artifact analysis directory changed during analysis")
             self.require_analysis_identity()
             return self
         except BaseException:
@@ -221,6 +254,9 @@ class StructuredArtifactTree:
             raise
 
     def __exit__(self, *_: object) -> None:
+        for descriptor, _ in self._analysis_result_bindings.values():
+            os.close(descriptor)
+        self._analysis_result_bindings.clear()
         if self._analysis_fd is not None:
             os.close(self._analysis_fd)
             self._analysis_fd = None
@@ -228,6 +264,8 @@ class StructuredArtifactTree:
             os.close(self._root_fd)
             self._root_fd = None
         self._directory_identities = None
+        self._file_identities = None
+        self._inventory_bytes = None
         self._inventory = None
 
     def require_path_identity(self) -> None:
@@ -268,7 +306,12 @@ class StructuredArtifactTree:
         self.require_path_identity()
         if self._inventory is not None:
             self.require_tree_closure()
-        data = _read_at(self.root_fd, relative, self._directory_identities)
+        data = _read_at(
+            self.root_fd,
+            relative,
+            self._directory_identities,
+            self._file_identities,
+        )
         if self._inventory is not None:
             self.require_tree_closure()
         self.require_path_identity()
@@ -279,6 +322,7 @@ class StructuredArtifactTree:
         directory_fd: int,
         prefix: tuple[str, ...] = (),
         directory_identities: dict[str, tuple[int, int]] | None = None,
+        file_identities: dict[str, tuple[int, int]] | None = None,
     ) -> list[str]:
         paths = []
         for name in sorted(os.listdir(directory_fd)):
@@ -297,6 +341,27 @@ class StructuredArtifactTree:
             if stat.S_ISREG(metadata.st_mode):
                 if metadata.st_mode & 0o222:
                     raise ValueError(f"Structured artifact is not read-only: {relative}")
+                descriptor = os.open(name, _FILE_FLAGS, dir_fd=directory_fd)
+                try:
+                    opened = os.fstat(descriptor)
+                    if (
+                        not stat.S_ISREG(opened.st_mode)
+                        or opened.st_mode & 0o222
+                        or (metadata.st_dev, metadata.st_ino)
+                        != (opened.st_dev, opened.st_ino)
+                    ):
+                        raise ValueError(
+                            f"Structured artifact changed during analysis: {relative}"
+                        )
+                    if file_identities is not None:
+                        identity = (opened.st_dev, opened.st_ino)
+                        expected = file_identities.setdefault(relative, identity)
+                        if expected != identity:
+                            raise ValueError(
+                                f"Structured artifact changed during analysis: {relative}"
+                            )
+                finally:
+                    os.close(descriptor)
                 paths.append(relative)
             elif stat.S_ISDIR(metadata.st_mode):
                 if metadata.st_mode & 0o222:
@@ -304,6 +369,13 @@ class StructuredArtifactTree:
                 child_fd = os.open(name, _DIRECTORY_FLAGS, dir_fd=directory_fd)
                 try:
                     child_metadata = os.fstat(child_fd)
+                    if (metadata.st_dev, metadata.st_ino) != (
+                        child_metadata.st_dev,
+                        child_metadata.st_ino,
+                    ):
+                        raise ValueError(
+                            f"Structured artifact directory changed during analysis: {relative}"
+                        )
                     if directory_identities is not None:
                         directory_identities[relative] = (
                             child_metadata.st_dev,
@@ -313,6 +385,7 @@ class StructuredArtifactTree:
                         child_fd,
                         (*prefix, name),
                         directory_identities,
+                        file_identities,
                     )
                     if not child_paths:
                         raise ValueError(
@@ -332,21 +405,38 @@ class StructuredArtifactTree:
         return paths
 
     def require_tree_closure(self) -> None:
-        if self._inventory is None or self._directory_identities is None:
+        if (
+            self._inventory is None
+            or self._directory_identities is None
+            or self._file_identities is None
+            or self._inventory_bytes is None
+        ):
             raise ValueError("Structured artifact inventory is not loaded")
         self.require_path_identity()
         if os.fstat(self.root_fd).st_mode & 0o222:
             raise ValueError("Structured artifact root is not read-only")
         self.require_analysis_identity()
         identities: dict[str, tuple[int, int]] = {}
-        if self._tree_files(self.root_fd, directory_identities=identities) != list(
-            self._inventory
-        ):
+        file_identities: dict[str, tuple[int, int]] = {}
+        inventory_bytes = _read_at(
+            self.root_fd,
+            "artifact_inventory.json",
+            file_identities=file_identities,
+        )
+        if inventory_bytes != self._inventory_bytes:
+            raise ValueError("Structured artifact inventory changed during analysis")
+        if self._tree_files(
+            self.root_fd,
+            directory_identities=identities,
+            file_identities=file_identities,
+        ) != list(self._inventory):
             raise ValueError("Structured artifact tree differs from its exact inventory")
         if identities != self._directory_identities:
             raise ValueError("Structured artifact directory identity changed during analysis")
+        if file_identities != self._file_identities:
+            raise ValueError("Structured artifact file identity changed during analysis")
         for relative, record in self._inventory.items():
-            data = _read_at(self.root_fd, relative, identities)
+            data = _read_at(self.root_fd, relative, identities, file_identities)
             if (
                 len(data) != record["size"]
                 or hashlib.sha256(data).hexdigest() != record["sha256"]
@@ -356,10 +446,16 @@ class StructuredArtifactTree:
         self.require_path_identity()
 
     def load_inventory(self) -> dict[str, dict[str, object]]:
-        data = self.read("artifact_inventory.json")
+        self.require_path_identity()
+        file_identities: dict[str, tuple[int, int]] = {}
+        inventory_bytes = _read_at(
+            self.root_fd,
+            "artifact_inventory.json",
+            file_identities=file_identities,
+        )
         try:
             value = json.loads(
-                data.decode("utf-8"),
+                inventory_bytes.decode("utf-8"),
                 object_pairs_hook=_reject_duplicate_keys,
             )
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -394,16 +490,27 @@ class StructuredArtifactTree:
             raise ValueError("Structured artifact inventory paths are not sorted")
         self.require_path_identity()
         directory_identities: dict[str, tuple[int, int]] = {}
-        if self._tree_files(self.root_fd, directory_identities=directory_identities) != list(result):
+        if self._tree_files(
+            self.root_fd,
+            directory_identities=directory_identities,
+            file_identities=file_identities,
+        ) != list(result):
             raise ValueError("Structured artifact tree differs from its exact inventory")
         for relative in result:
-            data = _read_at(self.root_fd, relative, directory_identities)
+            data = _read_at(
+                self.root_fd,
+                relative,
+                directory_identities,
+                file_identities,
+            )
             if (
                 len(data) != result[relative]["size"]
                 or hashlib.sha256(data).hexdigest() != result[relative]["sha256"]
             ):
                 raise ValueError(f"Structured artifact inventory checksum mismatch: {relative}")
         self._directory_identities = directory_identities
+        self._file_identities = file_identities
+        self._inventory_bytes = inventory_bytes
         self._inventory = result
         self.require_tree_closure()
         self.require_path_identity()
@@ -427,21 +534,55 @@ class StructuredArtifactTree:
             raise ValueError(f"Structured artifact inventory checksum mismatch: {relative}")
         return data
 
+    def _verify_retained_analysis_results(self) -> None:
+        for name, (descriptor, expected_bytes) in self._analysis_result_bindings.items():
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            before = os.fstat(descriptor)
+            with os.fdopen(descriptor, "rb", closefd=False) as stream:
+                data = stream.read()
+            after = os.fstat(descriptor)
+            entry = os.stat(name, dir_fd=self.analysis_fd, follow_symlinks=False)
+            stable = (
+                "st_dev",
+                "st_ino",
+                "st_mode",
+                "st_size",
+                "st_mtime_ns",
+                "st_ctime_ns",
+            )
+            if (
+                not stat.S_ISREG(after.st_mode)
+                or after.st_mode & 0o222
+                or any(getattr(before, field) != getattr(after, field) for field in stable)
+                or (entry.st_dev, entry.st_ino) != (after.st_dev, after.st_ino)
+                or data != expected_bytes
+                or len(data) != after.st_size
+            ):
+                raise ValueError("Published analysis result changed after publication")
+
     def write_result_exclusive(self, relative: str, result: dict[str, object]) -> None:
-        if _parts(relative) not in {
+        parts = _parts(relative)
+        if parts not in {
             ("analysis", "analysis.json"),
             ("analysis", "offline_analysis_receipt.json"),
         }:
             raise ValueError("Structured analysis result path is not authorized")
+        name = parts[-1]
+        if (
+            name == "offline_analysis_receipt.json"
+            and "analysis.json" not in self._analysis_result_bindings
+        ):
+            raise ValueError("Offline analysis receipt requires a published analysis result")
         self.require_tree_closure()
         self.require_analysis_identity()
+        self._verify_retained_analysis_results()
         analysis_fd = os.dup(self.analysis_fd)
         descriptor: int | None = None
         try:
             before = os.fstat(analysis_fd)
             descriptor = os.open(
-                _parts(relative)[-1],
-                os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                name,
+                os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
                 0o600,
                 dir_fd=analysis_fd,
             )
@@ -453,7 +594,7 @@ class StructuredArtifactTree:
             os.fchmod(descriptor, 0o444)
             os.fsync(descriptor)
             expected = os.fstat(descriptor)
-            actual = os.stat(_parts(relative)[-1], dir_fd=analysis_fd, follow_symlinks=False)
+            actual = os.stat(name, dir_fd=analysis_fd, follow_symlinks=False)
             analysis_entry = os.stat("analysis", dir_fd=self.root_fd, follow_symlinks=False)
             if (
                 not stat.S_ISREG(actual.st_mode)
@@ -464,9 +605,12 @@ class StructuredArtifactTree:
             ):
                 raise ValueError("Published analysis result changed before directory sync")
             os.fsync(analysis_fd)
+            self._analysis_result_bindings[name] = (descriptor, data)
+            descriptor = None
             self.require_analysis_identity()
             self.require_tree_closure()
             self.require_path_identity()
+            self._verify_retained_analysis_results()
         finally:
             if descriptor is not None:
                 os.close(descriptor)

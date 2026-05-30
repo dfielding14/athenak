@@ -1909,6 +1909,286 @@ class SnapshotTests(unittest.TestCase):
         finally:
             os.close(root_fd)
 
+    def test_artifact_inventory_freeze_never_reopens_created_inventory(self) -> None:
+        root = self.root / "artifact-inventory-retained-descriptor"
+        detached = root / "artifact_inventory.detached"
+        root.mkdir()
+        (root / "artifact.txt").write_text("verified\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_open = os.open
+        swapped = False
+
+        def open_with_replacement(*args: object, **kwargs: object) -> int:
+            nonlocal swapped
+            if (
+                not swapped
+                and args[0] == "artifact_inventory.json"
+                and args[1] & os.O_ACCMODE == os.O_RDONLY
+                and kwargs.get("dir_fd") == root_fd
+                and root.stat().st_mode & 0o222
+            ):
+                inventory = root / "artifact_inventory.json"
+                inventory.rename(detached)
+                inventory.write_bytes(detached.read_bytes())
+                swapped = True
+            return real_open(*args, **kwargs)
+
+        try:
+            with patch("launch_trampoline.os.open", side_effect=open_with_replacement):
+                _publish_frozen_artifact_inventory(root_fd, root)
+        finally:
+            os.close(root_fd)
+        self.assertFalse(swapped)
+
+    def test_artifact_inventory_freeze_rejects_replacement_after_freeze(self) -> None:
+        root = self.root / "artifact-inventory-retained-identity"
+        detached = root / "artifact_inventory.detached"
+        root.mkdir()
+        (root / "artifact.txt").write_text("verified\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_freeze = launch_trampoline._freeze_open_artifact_file_at
+        swapped = False
+
+        def freeze_with_replacement(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            nonlocal swapped
+            record = real_freeze(*args, **kwargs)
+            if not swapped and args[2] == "artifact_inventory.json":
+                inventory = root / "artifact_inventory.json"
+                inventory.rename(detached)
+                inventory.write_bytes(detached.read_bytes())
+                inventory.chmod(0o444)
+                swapped = True
+            return record
+
+        try:
+            with patch(
+                "launch_trampoline._freeze_open_artifact_file_at",
+                side_effect=freeze_with_replacement,
+            ):
+                with self.assertRaisesRegex(ValueError, "changed after freezing"):
+                    _publish_frozen_artifact_inventory(root_fd, root)
+        finally:
+            os.close(root_fd)
+        self.assertTrue(swapped)
+
+    def test_artifact_inventory_freeze_rejects_payload_replacement_after_freeze(
+        self,
+    ) -> None:
+        root = self.root / "artifact-payload-retained-identity"
+        artifact = root / "artifact.txt"
+        detached = root.with_name(f"{root.name}.artifact-detached")
+        root.mkdir()
+        artifact.write_text("verified\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_freeze = launch_trampoline._freeze_open_artifact_file_at
+        swapped = False
+
+        def freeze_with_replacement(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            nonlocal swapped
+            record = real_freeze(*args, **kwargs)
+            if not swapped and args[2] == "artifact_inventory.json":
+                artifact.rename(detached)
+                artifact.write_bytes(detached.read_bytes())
+                artifact.chmod(0o444)
+                swapped = True
+            return record
+
+        try:
+            with patch(
+                "launch_trampoline._freeze_open_artifact_file_at",
+                side_effect=freeze_with_replacement,
+            ):
+                with self.assertRaisesRegex(ValueError, "changed after freezing"):
+                    _publish_frozen_artifact_inventory(root_fd, root)
+        finally:
+            os.close(root_fd)
+        self.assertTrue(swapped)
+
+    def test_artifact_inventory_freeze_rejects_nested_payload_replacement_after_freeze(
+        self,
+    ) -> None:
+        root = self.root / "artifact-nested-payload-retained-identity"
+        artifact = root / "nested" / "artifact.txt"
+        detached = root.with_name(f"{root.name}.nested-artifact-detached")
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text("verified\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_freeze = launch_trampoline._freeze_open_artifact_file_at
+        swapped = False
+
+        def freeze_with_replacement(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            nonlocal swapped
+            record = real_freeze(*args, **kwargs)
+            if not swapped and args[2] == "artifact_inventory.json":
+                artifact.parent.chmod(0o755)
+                artifact.rename(detached)
+                artifact.write_bytes(detached.read_bytes())
+                artifact.chmod(0o444)
+                artifact.parent.chmod(0o555)
+                swapped = True
+            return record
+
+        try:
+            with patch(
+                "launch_trampoline._freeze_open_artifact_file_at",
+                side_effect=freeze_with_replacement,
+            ):
+                with self.assertRaisesRegex(ValueError, "changed after freezing"):
+                    _publish_frozen_artifact_inventory(root_fd, root)
+        finally:
+            os.close(root_fd)
+        self.assertTrue(swapped)
+
+    def test_artifact_inventory_freeze_rejects_payload_replacement_after_first_final_check(
+        self,
+    ) -> None:
+        root = self.root / "artifact-payload-retained-through-final-sweep"
+        artifact = root / "artifact.txt"
+        detached = root.with_name(f"{root.name}.artifact-detached")
+        root.mkdir()
+        artifact.write_text("verified\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_verify = launch_trampoline._verify_open_frozen_artifact_file_at
+        swapped = False
+
+        def verify_with_replacement(*args: object, **kwargs: object) -> None:
+            nonlocal swapped
+            real_verify(*args, **kwargs)
+            if not swapped and args[2] == "artifact.txt":
+                root.chmod(0o755)
+                artifact.rename(detached)
+                artifact.write_bytes(detached.read_bytes())
+                artifact.chmod(0o444)
+                root.chmod(0o555)
+                swapped = True
+
+        try:
+            with patch(
+                "launch_trampoline._verify_open_frozen_artifact_file_at",
+                side_effect=verify_with_replacement,
+            ):
+                with self.assertRaisesRegex(ValueError, "changed after freezing"):
+                    _publish_frozen_artifact_inventory(root_fd, root)
+        finally:
+            os.close(root_fd)
+        self.assertTrue(swapped)
+
+    def test_artifact_inventory_freeze_rejects_nested_payload_replacement_after_first_final_check(
+        self,
+    ) -> None:
+        root = self.root / "artifact-nested-payload-retained-through-final-sweep"
+        artifact = root / "nested" / "artifact.txt"
+        detached = root.with_name(f"{root.name}.nested-artifact-detached")
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text("verified\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_verify = launch_trampoline._verify_open_frozen_artifact_file_at
+        swapped = False
+
+        def verify_with_replacement(*args: object, **kwargs: object) -> None:
+            nonlocal swapped
+            real_verify(*args, **kwargs)
+            if not swapped and args[2] == "nested/artifact.txt":
+                artifact.parent.chmod(0o755)
+                artifact.rename(detached)
+                artifact.write_bytes(detached.read_bytes())
+                artifact.chmod(0o444)
+                artifact.parent.chmod(0o555)
+                swapped = True
+
+        try:
+            with patch(
+                "launch_trampoline._verify_open_frozen_artifact_file_at",
+                side_effect=verify_with_replacement,
+            ):
+                with self.assertRaisesRegex(ValueError, "changed after freezing"):
+                    _publish_frozen_artifact_inventory(root_fd, root)
+        finally:
+            os.close(root_fd)
+        self.assertTrue(swapped)
+
+    def test_artifact_inventory_freeze_rejects_inventory_replacement_during_final_tree_check(
+        self,
+    ) -> None:
+        root = self.root / "artifact-inventory-retained-after-final-tree"
+        artifact = root / "artifact.txt"
+        detached = root.with_name(f"{root.name}.inventory-detached")
+        root.mkdir()
+        artifact.write_text("verified\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_verify = launch_trampoline._verify_open_frozen_artifact_file_at
+        swapped = False
+
+        def verify_with_replacement(*args: object, **kwargs: object) -> None:
+            nonlocal swapped
+            real_verify(*args, **kwargs)
+            if not swapped and args[2] == "artifact.txt":
+                inventory = root / "artifact_inventory.json"
+                root.chmod(0o755)
+                inventory.rename(detached)
+                inventory.write_bytes(detached.read_bytes())
+                inventory.chmod(0o444)
+                root.chmod(0o555)
+                swapped = True
+
+        try:
+            with patch(
+                "launch_trampoline._verify_open_frozen_artifact_file_at",
+                side_effect=verify_with_replacement,
+            ):
+                with self.assertRaisesRegex(ValueError, "changed after freezing"):
+                    _publish_frozen_artifact_inventory(root_fd, root)
+        finally:
+            os.close(root_fd)
+        self.assertTrue(swapped)
+
+    def test_artifact_inventory_freeze_rejects_nested_directory_transplant_before_closing_payload_check(
+        self,
+    ) -> None:
+        root = self.root / "artifact-nested-directory-retained-after-payload-sweep"
+        nested = root / "nested"
+        detached = root / "nested.detached"
+        nested.mkdir(parents=True)
+        (nested / "artifact.txt").write_text("verified\n", encoding="utf-8")
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+        real_verify = launch_trampoline._verify_open_frozen_artifact_file_at
+        nested_payload_checks = 0
+        swapped = False
+
+        def verify_with_replacement(*args: object, **kwargs: object) -> None:
+            nonlocal nested_payload_checks, swapped
+            if args[2] == "nested/artifact.txt":
+                nested_payload_checks += 1
+                if nested_payload_checks == 2:
+                    root.chmod(0o755)
+                    nested.rename(detached)
+                    nested.mkdir()
+                    (nested / "artifact.txt").write_text(
+                        "published replacement\n", encoding="utf-8"
+                    )
+                    (nested / "artifact.txt").chmod(0o444)
+                    nested.chmod(0o555)
+                    root.chmod(0o555)
+                    swapped = True
+            real_verify(*args, **kwargs)
+
+        try:
+            with patch(
+                "launch_trampoline._verify_open_frozen_artifact_file_at",
+                side_effect=verify_with_replacement,
+            ):
+                with self.assertRaisesRegex(ValueError, "directory changed after freezing"):
+                    _publish_frozen_artifact_inventory(root_fd, root)
+        finally:
+            os.close(root_fd)
+        self.assertTrue(swapped)
+
     def test_pinned_directory_ancestry_rejects_real_component_relocation(self) -> None:
         anchor = self.root / "stable-anchor"
         pic_root = anchor / "project" / "PIC"
@@ -1988,18 +2268,20 @@ class SnapshotTests(unittest.TestCase):
         root.mkdir()
         (root / "artifact.txt").write_text("verified\n", encoding="utf-8")
         root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
-        real_write = launch_trampoline._write_new_text_artifact
+        real_freeze = launch_trampoline._freeze_open_artifact_file_at
 
-        def write_with_late_file(*args: object, **kwargs: object) -> None:
-            real_write(*args, **kwargs)
-            late = root / "late.txt"
-            late.write_text("late\n", encoding="utf-8")
-            late.chmod(0o444)
+        def freeze_with_late_file(*args: object, **kwargs: object) -> dict[str, object]:
+            record = real_freeze(*args, **kwargs)
+            if args[2] == "artifact_inventory.json":
+                late = root / "late.txt"
+                late.write_text("late\n", encoding="utf-8")
+                late.chmod(0o444)
+            return record
 
         try:
             with patch(
-                "launch_trampoline._write_new_text_artifact",
-                side_effect=write_with_late_file,
+                "launch_trampoline._freeze_open_artifact_file_at",
+                side_effect=freeze_with_late_file,
             ):
                 with self.assertRaisesRegex(ValueError, "unlisted file"):
                     _publish_frozen_artifact_inventory(root_fd, root)
@@ -2013,21 +2295,25 @@ class SnapshotTests(unittest.TestCase):
         nested.mkdir(parents=True)
         (nested / "artifact.txt").write_text("verified\n", encoding="utf-8")
         root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
-        real_write = launch_trampoline._write_new_text_artifact
+        real_freeze = launch_trampoline._freeze_open_artifact_file_at
 
-        def write_with_late_directory(*args: object, **kwargs: object) -> None:
-            real_write(*args, **kwargs)
-            nested.rename(detached)
-            nested.mkdir()
-            replacement = nested / "artifact.txt"
-            replacement.write_text("verified\n", encoding="utf-8")
-            replacement.chmod(0o444)
-            nested.chmod(0o555)
+        def freeze_with_late_directory(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            record = real_freeze(*args, **kwargs)
+            if args[2] == "artifact_inventory.json":
+                nested.rename(detached)
+                nested.mkdir()
+                replacement = nested / "artifact.txt"
+                replacement.write_text("verified\n", encoding="utf-8")
+                replacement.chmod(0o444)
+                nested.chmod(0o555)
+            return record
 
         try:
             with patch(
-                "launch_trampoline._write_new_text_artifact",
-                side_effect=write_with_late_directory,
+                "launch_trampoline._freeze_open_artifact_file_at",
+                side_effect=freeze_with_late_directory,
             ):
                 with self.assertRaisesRegex(ValueError, "directory changed"):
                     _publish_frozen_artifact_inventory(root_fd, root)
@@ -2040,18 +2326,22 @@ class SnapshotTests(unittest.TestCase):
         root.mkdir()
         (root / "artifact.txt").write_text("verified\n", encoding="utf-8")
         root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
-        real_write = launch_trampoline._write_new_text_artifact
+        real_freeze = launch_trampoline._freeze_open_artifact_file_at
 
-        def write_with_late_analysis_directory(*args: object, **kwargs: object) -> None:
-            real_write(*args, **kwargs)
-            (root / "analysis").rename(detached)
-            (root / "analysis").mkdir()
-            (root / "analysis").chmod(0o777)
+        def freeze_with_late_analysis_directory(
+            *args: object, **kwargs: object
+        ) -> dict[str, object]:
+            record = real_freeze(*args, **kwargs)
+            if args[2] == "artifact_inventory.json":
+                (root / "analysis").rename(detached)
+                (root / "analysis").mkdir()
+                (root / "analysis").chmod(0o777)
+            return record
 
         try:
             with patch(
-                "launch_trampoline._write_new_text_artifact",
-                side_effect=write_with_late_analysis_directory,
+                "launch_trampoline._freeze_open_artifact_file_at",
+                side_effect=freeze_with_late_analysis_directory,
             ):
                 with self.assertRaisesRegex(ValueError, "analysis directory changed"):
                     _publish_frozen_artifact_inventory(root_fd, root)
@@ -6259,6 +6549,24 @@ PY
         self._write("queue.txt", "123|batch|normal|RUNNING|other-job|\n")
         with self.assertRaises(ValueError):
             self._reserve(manifest_path)
+
+    def test_reservation_rejection_after_manifest_publication_leaves_no_ledger_intent(
+        self,
+    ) -> None:
+        manifest_path = self._create_manifest()
+        before = {
+            path: path.read_bytes()
+            for path in [self.ledger, self.csv, self.receipts, self.mirror]
+        }
+        self._write("queue.txt", "123|batch|normal|RUNNING|other-job|\n")
+        with self.assertRaises(ValueError):
+            self._reserve(manifest_path)
+        self.assertTrue(manifest_path.is_file())
+        for name in ["reservation_id.txt", "manifest_sha256.txt"]:
+            self.assertFalse((manifest_path.parent / name).exists())
+        self.assertFalse((self.pic_root / "ledger" / "pending_submission.json").exists())
+        for path, expected in before.items():
+            self.assertEqual(path.read_bytes(), expected)
 
     def test_reservation_rejects_untrusted_environment_profile(self) -> None:
         self._write("environment.sh", "export MPICH_GPU_SUPPORT_ENABLED=0\n")

@@ -34,7 +34,7 @@
   },
   "reviewed_validator_binding": {
     "support_module": "tst/publication/frontier_f1_structured_artifacts.py",
-    "support_module_sha256": "c5c77b6a952ed319498f08c91b9adc40101c090f91dc57d798dafdc455a38c01",
+    "support_module_sha256": "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a",
     "gyro_analyzer": "tst/publication/frontier_f1_gpu_relativistic_gyro_analysis.py",
     "gyro_analyzer_sha256": "e9a5c93aea3e2cc288e07fc2adbc93ab22c49df74c1e83dfaf5cd694eced7d68",
     "paper_coupling_analyzer": "tst/publication/frontier_f1_gpu_paper_coupling_analysis.py",

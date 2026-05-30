@@ -11,6 +11,7 @@ from pathlib import Path
 import stat
 import tempfile
 import unittest
+from unittest.mock import patch
 
 PUBLICATION_DIR = Path(__file__).resolve().parent
 CONTROL_PLANE_DIR = PUBLICATION_DIR / "frontier_control_plane"
@@ -32,6 +33,7 @@ from frontier_f1_gpu_relativistic_gyro_analysis import registered_particle_outpu
 from frontier_f1_gpu_relativistic_gyro_analysis import require_linked_library
 from frontier_f1_structured_artifacts import StructuredArtifactTree
 from frontier_f1_structured_artifacts import REVIEWED_FRONTIER_MPICH_DIAGNOSTIC_SHA256
+from frontier_f1_structured_artifacts import _read_at
 from frontier_f1_structured_artifacts import load_inventory
 from frontier_f1_structured_artifacts import read_inventory_bytes
 from frontier_f1_structured_artifacts import require_inventory_sha256
@@ -256,6 +258,37 @@ class FrontierF1StructuredAnalysisTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "malformed"):
                     load_inventory(artifact_tree)
 
+    def test_inventory_rejects_same_inode_inventory_rewrite_after_load(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            self._publish_inventory(root)
+            inventory_path = root / "artifact_inventory.json"
+            with StructuredArtifactTree(root) as artifact_tree:
+                load_inventory(artifact_tree)
+                inventory_path.chmod(0o644)
+                inventory_path.write_bytes(inventory_path.read_bytes() + b"\n")
+                inventory_path.chmod(0o444)
+                with self.assertRaisesRegex(ValueError, "inventory changed"):
+                    artifact_tree.require_tree_closure()
+
+    def test_rejected_nested_read_does_not_leak_descriptor(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            nested = root / "nested"
+            nested.mkdir()
+            (nested / "artifact.txt").write_text("verified\n", encoding="utf-8")
+            self._publish_inventory(root)
+            with StructuredArtifactTree(root) as artifact_tree:
+                baseline = len(os.listdir("/proc/self/fd"))
+                for _ in range(25):
+                    with self.assertRaisesRegex(ValueError, "directory changed"):
+                        _read_at(
+                            artifact_tree.root_fd,
+                            "nested/artifact.txt",
+                            {"nested": (-1, -1)},
+                        )
+                self.assertEqual(len(os.listdir("/proc/self/fd")), baseline)
+
     def test_parent_inventory_binding_rejects_mismatched_digest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -286,6 +319,34 @@ class FrontierF1StructuredAnalysisTests(unittest.TestCase):
                 )
                 self.assertEqual(stat.S_IMODE(receipt.stat().st_mode), 0o444)
             self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o444)
+
+    def test_receipt_publication_rejects_analysis_result_mutation(self) -> None:
+        for variant in ("same-inode-rewrite", "inode-replacement"):
+            with self.subTest(variant=variant), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                self._publish_inventory(root)
+                output = root / "analysis" / "analysis.json"
+                with StructuredArtifactTree(root) as artifact_tree:
+                    load_inventory(artifact_tree)
+                    write_result_exclusive(
+                        artifact_tree, "analysis/analysis.json", {"status": "pass"}
+                    )
+                    if variant == "same-inode-rewrite":
+                        output.chmod(0o644)
+                        output.write_text('{"status":"forged"}\n', encoding="utf-8")
+                        output.chmod(0o444)
+                    else:
+                        output.unlink()
+                        output.write_text('{"status":"forged"}\n', encoding="utf-8")
+                        output.chmod(0o444)
+                    with self.assertRaisesRegex(
+                        ValueError, "analysis result changed"
+                    ):
+                        write_result_exclusive(
+                            artifact_tree,
+                            "analysis/offline_analysis_receipt.json",
+                            {"status": "bound"},
+                        )
 
     def test_inventory_rejects_duplicate_keys_noncanonical_paths_and_unlisted_files(
         self,
@@ -402,6 +463,73 @@ class FrontierF1StructuredAnalysisTests(unittest.TestCase):
                 root.chmod(0o555)
                 with self.assertRaisesRegex(ValueError, "directory identity changed"):
                     read_inventory_bytes(artifact_tree, inventory, "nested/artifact.txt")
+
+    def test_inventory_load_rejects_nested_directory_swap_before_open(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            root = base / "root"
+            nested = root / "nested"
+            detached = root / "nested-detached"
+            root.mkdir()
+            nested.mkdir()
+            (nested / "artifact.txt").write_text("verified\n", encoding="utf-8")
+            self._publish_inventory(root)
+            real_open = os.open
+            swapped = False
+
+            def open_with_replacement(*args: object, **kwargs: object) -> int:
+                nonlocal swapped
+                if not swapped and args[0] == "nested":
+                    root.chmod(0o755)
+                    nested.rename(detached)
+                    nested.mkdir()
+                    replacement = nested / "artifact.txt"
+                    replacement.write_text("verified\n", encoding="utf-8")
+                    replacement.chmod(0o444)
+                    nested.chmod(0o555)
+                    root.chmod(0o555)
+                    swapped = True
+                return real_open(*args, **kwargs)
+
+            with StructuredArtifactTree(root) as artifact_tree:
+                with patch(
+                    "frontier_f1_structured_artifacts.os.open",
+                    side_effect=open_with_replacement,
+                ):
+                    with self.assertRaisesRegex(ValueError, "directory changed"):
+                        load_inventory(artifact_tree)
+            self.assertTrue(swapped)
+
+    def test_inventory_load_rejects_regular_file_swap_before_open(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "root"
+            artifact = root / "artifact.txt"
+            detached = root / "artifact-detached"
+            root.mkdir()
+            artifact.write_text("verified\n", encoding="utf-8")
+            self._publish_inventory(root)
+            real_open = os.open
+            swapped = False
+
+            def open_with_replacement(*args: object, **kwargs: object) -> int:
+                nonlocal swapped
+                if not swapped and args[0] == artifact.name:
+                    root.chmod(0o755)
+                    artifact.rename(detached)
+                    artifact.write_text("verified\n", encoding="utf-8")
+                    artifact.chmod(0o444)
+                    root.chmod(0o555)
+                    swapped = True
+                return real_open(*args, **kwargs)
+
+            with StructuredArtifactTree(root) as artifact_tree:
+                with patch(
+                    "frontier_f1_structured_artifacts.os.open",
+                    side_effect=open_with_replacement,
+                ):
+                    with self.assertRaisesRegex(ValueError, "changed during analysis"):
+                        load_inventory(artifact_tree)
+            self.assertTrue(swapped)
 
     def test_pinned_tree_rejects_analysis_directory_substitution(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

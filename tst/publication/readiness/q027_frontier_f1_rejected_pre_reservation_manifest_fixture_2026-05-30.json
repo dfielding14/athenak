@@ -1,0 +1,106 @@
+{
+  "record_type": "q027_frontier_f1_rejected_pre_reservation_manifest_fixture",
+  "schema_version": 1,
+  "date": "2026-05-30",
+  "gate": "Q-027",
+  "qualification_effect": "immutable_historical_incident_fixture_only",
+  "chronology": {
+    "status": "fail_closed_before_reservation_intent_and_scheduler_submission",
+    "submission_id": "bc7febae-e4a5-493f-ae52-d6578851e563",
+    "registered_science_authorization_id": "f1-clean-gyro-mpich-stderr-v2",
+    "control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
+    "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/PIC/manifests/f1_gpu_relativistic_gyro/bc7febae-e4a5-493f-ae52-d6578851e563/pre_submit_manifest.json",
+    "manifest_sha256": "d20ba3d9a7ba983ed3e0002b97cae728ee5f69c11821ce8fcf9ddfb1b7ada8d0",
+    "manifest_analysis_support_sha256": "530eee6c0140607e48eaa22eb9134cb0e5fa811f197acf22512c890861234301",
+    "active_policy_analysis_support_sha256": "c5c77b6a952ed319498f08c91b9adc40101c090f91dc57d798dafdc455a38c01",
+    "rejection": "The installed submit wrapper failed closed before reservation because the immutable manifest helper binding differed from the active reviewed retry-policy helper binding after the source helper changed.",
+    "pre_manifest_attestation_sha256": "388af92676630a89394246a17f701e15311a292a049e8e4c11eedc279996943e",
+    "pre_submit_wrapper_attestation_sha256": "960e59a4d7f68f8d752347bfb9b4fc16932386e5bdb74017685d9fab0c43b995",
+    "reservation_attachments": "absent",
+    "pending_submission_marker": "absent",
+    "ledger_uuid_hits": 0,
+    "orion_ledger_records": 34,
+    "orion_receipt_records": 34,
+    "project_home_ledger_records": 34,
+    "active_reservations": 0
+  },
+  "manifest_binding": {
+    "mode": "0444",
+    "submission_id": "bc7febae-e4a5-493f-ae52-d6578851e563",
+    "registered_science_authorization_id": "f1-clean-gyro-mpich-stderr-v2",
+    "control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
+    "manifest_sha256": "d20ba3d9a7ba983ed3e0002b97cae728ee5f69c11821ce8fcf9ddfb1b7ada8d0",
+    "analysis_support_role": "analysis-script-001",
+    "analysis_support_sha256": "530eee6c0140607e48eaa22eb9134cb0e5fa811f197acf22512c890861234301"
+  },
+  "attestations": [
+    {
+      "attestation_sha256": "388af92676630a89394246a17f701e15311a292a049e8e4c11eedc279996943e",
+      "contents": {
+        "control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
+        "mirrored_ledger_line_counts": {
+          "counts": {
+            "/ccs/proj/ast207/proj-shared/PIC/ledger/node_hours.jsonl": 34,
+            "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/mirror_receipts.jsonl": 34,
+            "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl": 34
+          },
+          "path": "mirrored_ledger_line_counts.txt",
+          "sha256": "905daf0751a09ebf844e648a9798d64dd326afa6bded135fe00b67e97b961a6a"
+        },
+        "operator_statement": "Reviewed same-account process snapshot immediately before registered submission; no competing process is authorized to mutate the PIC roots throughout registered launch and publication until the frozen artifact inventory is durably published.",
+        "pending_submission_marker": {
+          "path": "pending_submission_marker.txt",
+          "sha256": "7925d3e9a9613a093e5eb4054b32aa39de910d2b03ba7e8046c3b4550b8de1e4",
+          "value": "absent"
+        },
+        "phase": "pre_manifest",
+        "queue_snapshot": {
+          "path": "queue_snapshot.txt",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "record_type": "q027_frontier_registered_science_same_account_isolation_attestation",
+        "recorded_utc": "2026-05-30T22:28:23Z",
+        "registered_science_authorization_id": "f1-clean-gyro-mpich-stderr-v2",
+        "same_account_process_snapshot": {
+          "path": "same_account_process_snapshot.txt",
+          "sha256": "5776a13e8f42364f6a957ed25b853a99501bf418a50f73d10e67b3310a22525f"
+        },
+        "schema_version": 1
+      }
+    },
+    {
+      "attestation_sha256": "960e59a4d7f68f8d752347bfb9b4fc16932386e5bdb74017685d9fab0c43b995",
+      "contents": {
+        "control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
+        "mirrored_ledger_line_counts": {
+          "counts": {
+            "/ccs/proj/ast207/proj-shared/PIC/ledger/node_hours.jsonl": 34,
+            "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/mirror_receipts.jsonl": 34,
+            "/lustre/orion/ast207/proj-shared/dfielding/PIC/ledger/node_hours.jsonl": 34
+          },
+          "path": "mirrored_ledger_line_counts.txt",
+          "sha256": "905daf0751a09ebf844e648a9798d64dd326afa6bded135fe00b67e97b961a6a"
+        },
+        "operator_statement": "Reviewed same-account process snapshot immediately before registered submission; no competing process is authorized to mutate the PIC roots throughout registered launch and publication until the frozen artifact inventory is durably published.",
+        "pending_submission_marker": {
+          "path": "pending_submission_marker.txt",
+          "sha256": "7925d3e9a9613a093e5eb4054b32aa39de910d2b03ba7e8046c3b4550b8de1e4",
+          "value": "absent"
+        },
+        "phase": "pre_submit_wrapper",
+        "queue_snapshot": {
+          "path": "queue_snapshot.txt",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "record_type": "q027_frontier_registered_science_same_account_isolation_attestation",
+        "recorded_utc": "2026-05-30T22:28:36Z",
+        "registered_science_authorization_id": "f1-clean-gyro-mpich-stderr-v2",
+        "same_account_process_snapshot": {
+          "path": "same_account_process_snapshot.txt",
+          "sha256": "5fd6eea472bab22487c036b0fc416e4f05de0ad643d0b86c1bd537c3da966fdc"
+        },
+        "schema_version": 1
+      }
+    }
+  ]
+}

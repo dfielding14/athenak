@@ -423,6 +423,11 @@ those observed identities through final publication. It rejects replacement
 while freezing, including substitution between pre-open metadata inspection
 and descriptor acquisition.
 Regular-file freeze applies the same pre-open identity binding before hashing.
+The freeze retains every workload-payload descriptor through a closing
+namespace and byte sweep, then rechecks the retained generated-inventory
+descriptor. These checks reject byte-identical replacement.
+The generated immutable inventory retains its exclusive-creation descriptor
+through read-only freeze and final publication verification.
 POSIX `mkdirat` does not return the created directory descriptor. Registered
 launch therefore requires same-account process isolation from directory
 creation until the first no-follow open and retained-ancestry binding complete.
@@ -432,9 +437,12 @@ boundaries, retained ancestry and identity checks reject later substitution.
 Offline F1 analysis retains one no-follow
 artifact-root descriptor for inventory load, exact tree-closure validation,
 every checksummed read and result publication. It rejects duplicate inventory
-keys, noncanonical relative paths, unlisted artifacts, root substitution and
-redirected `analysis/`, then publishes `analysis/analysis.json` once without
-replacement. Invoke the snapshotted analyzer only through
+keys, noncanonical relative paths, unlisted artifacts, root substitution,
+redirected `analysis/` and directory or regular-file replacement between
+pre-open metadata inspection and descriptor acquisition. It retains the exact
+observed inventory bytes and payload-file identity map through analysis, then
+publishes `analysis/analysis.json` once without replacement and retains each
+published result descriptor through receipt publication. Invoke the snapshotted analyzer only through
 `/opt/cray/pe/python/3.11.7/bin/python3 -I -B`; it publishes a second immutable
 `analysis/offline_analysis_receipt.json` that binds that runner, the snapshotted
 analyzer and support-module digests, the frozen inventory and the passing
@@ -601,6 +609,14 @@ reviewed `attestation.json`, sync the files and directory, then make that
 attestation tree read-only. Do not submit if another same-account process is
 authorized to mutate either PIC root throughout registered launch and
 publication until the frozen artifact inventory is durably published.
+
+Keep immutable rejected-manifest chronology separate from current live
+preflight. Immediately before policy promotion and each registered-science
+submission boundary, verify coherent Orion, mirror-receipt and Project Home
+chains, an absent Orion `pending_submission.json`, zero active reservations and
+zero live ledger hits for any rejected pre-reservation submission UUID. Archive
+the current result separately; later valid reservations may advance live
+ledger counts without changing the historical incident record.
 
 Scientific qualification is a separate freeze step. A Frontier qualification
 manifest is accepted only when its candidate matches the live policy and its

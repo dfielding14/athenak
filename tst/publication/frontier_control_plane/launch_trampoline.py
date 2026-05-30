@@ -39,6 +39,9 @@ _DIRECTORY_OPEN_FLAGS = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW",
 _NEW_ARTIFACT_OPEN_FLAGS = (
     os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
 )
+_NEW_READ_WRITE_ARTIFACT_OPEN_FLAGS = (
+    os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+)
 _TASK_LOCAL_EXEC = r"""
 import hashlib
 import os
@@ -471,12 +474,35 @@ def _freeze_artifact_file_at(
     relative: str,
     *,
     expected_metadata: os.stat_result | None = None,
+    file_identities: dict[str, tuple[int, int]] | None = None,
 ) -> dict[str, object]:
     descriptor = os.open(
         name,
         os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
         dir_fd=directory_fd,
     )
+    try:
+        return _freeze_open_artifact_file_at(
+            directory_fd,
+            name,
+            relative,
+            descriptor,
+            expected_metadata=expected_metadata,
+            file_identities=file_identities,
+        )
+    finally:
+        os.close(descriptor)
+
+
+def _freeze_open_artifact_file_at(
+    directory_fd: int,
+    name: str,
+    relative: str,
+    descriptor: int,
+    *,
+    expected_metadata: os.stat_result | None = None,
+    file_identities: dict[str, tuple[int, int]] | None = None,
+) -> dict[str, object]:
     try:
         initial = os.fstat(descriptor)
         if (
@@ -488,6 +514,7 @@ def _freeze_artifact_file_at(
             raise ValueError(f"Launch artifact is not a regular file: {relative}")
         os.fchmod(descriptor, 0o444)
         os.fsync(descriptor)
+        os.lseek(descriptor, 0, os.SEEK_SET)
         before = os.fstat(descriptor)
         with os.fdopen(descriptor, "rb", closefd=False) as stream:
             data = stream.read()
@@ -503,19 +530,25 @@ def _freeze_artifact_file_at(
             or after.st_mode & 0o222
         ):
             raise ValueError(f"Launch artifact changed while freezing: {relative}")
+        if file_identities is not None:
+            identity = (after.st_dev, after.st_ino)
+            expected = file_identities.setdefault(relative, identity)
+            if expected != identity:
+                raise ValueError(f"Launch artifact changed while freezing: {relative}")
         return {
             "path": relative,
             "sha256": hashlib.sha256(data).hexdigest(),
             "size": len(data),
         }
-    finally:
-        os.close(descriptor)
+    except OSError as error:
+        raise ValueError(f"Launch artifact cannot be frozen: {relative}") from error
 
 
 def _freeze_artifact_tree_at(
     directory_fd: int,
     prefix: tuple[str, ...] = (),
     directory_identities: dict[str, tuple[int, int]] | None = None,
+    file_identities: dict[str, tuple[int, int]] | None = None,
 ) -> list[dict[str, object]]:
     records = []
     for name in sorted(os.listdir(directory_fd)):
@@ -530,6 +563,7 @@ def _freeze_artifact_tree_at(
                     name,
                     relative,
                     expected_metadata=metadata,
+                    file_identities=file_identities,
                 )
             )
         elif stat.S_ISDIR(metadata.st_mode):
@@ -544,6 +578,7 @@ def _freeze_artifact_tree_at(
                     child_fd,
                     (*prefix, name),
                     directory_identities,
+                    file_identities,
                 )
                 if not child_records:
                     raise ValueError(
@@ -577,6 +612,8 @@ def _verify_frozen_artifact_file_at(
     name: str,
     relative: str,
     expected: dict[str, object],
+    *,
+    expected_identity: tuple[int, int] | None = None,
 ) -> None:
     descriptor = os.open(
         name,
@@ -584,25 +621,49 @@ def _verify_frozen_artifact_file_at(
         dir_fd=directory_fd,
     )
     try:
-        before = os.fstat(descriptor)
-        if not stat.S_ISREG(before.st_mode) or before.st_mode & 0o222:
-            raise ValueError(f"Launch artifact is not frozen: {relative}")
-        with os.fdopen(descriptor, "rb", closefd=False) as stream:
-            data = stream.read()
-        after = os.fstat(descriptor)
-        entry = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
-        stable = ("st_dev", "st_ino", "st_mode", "st_size", "st_mtime_ns", "st_ctime_ns")
-        if (
-            any(getattr(before, field) != getattr(after, field) for field in stable)
-            or (entry.st_dev, entry.st_ino) != (after.st_dev, after.st_ino)
-            or len(data) != after.st_size
-            or expected.get("path") != relative
-            or expected.get("size") != len(data)
-            or expected.get("sha256") != hashlib.sha256(data).hexdigest()
-        ):
-            raise ValueError(f"Launch artifact changed after freezing: {relative}")
+        _verify_open_frozen_artifact_file_at(
+            directory_fd,
+            name,
+            relative,
+            expected,
+            descriptor,
+            expected_identity=expected_identity,
+        )
     finally:
         os.close(descriptor)
+
+
+def _verify_open_frozen_artifact_file_at(
+    directory_fd: int,
+    name: str,
+    relative: str,
+    expected: dict[str, object],
+    descriptor: int,
+    *,
+    expected_identity: tuple[int, int] | None = None,
+) -> None:
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    before = os.fstat(descriptor)
+    if not stat.S_ISREG(before.st_mode) or before.st_mode & 0o222:
+        raise ValueError(f"Launch artifact is not frozen: {relative}")
+    with os.fdopen(descriptor, "rb", closefd=False) as stream:
+        data = stream.read()
+    after = os.fstat(descriptor)
+    entry = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    stable = ("st_dev", "st_ino", "st_mode", "st_size", "st_mtime_ns", "st_ctime_ns")
+    if (
+        any(getattr(before, field) != getattr(after, field) for field in stable)
+        or (
+            expected_identity is not None
+            and expected_identity != (after.st_dev, after.st_ino)
+        )
+        or (entry.st_dev, entry.st_ino) != (after.st_dev, after.st_ino)
+        or len(data) != after.st_size
+        or expected.get("path") != relative
+        or expected.get("size") != len(data)
+        or expected.get("sha256") != hashlib.sha256(data).hexdigest()
+    ):
+        raise ValueError(f"Launch artifact changed after freezing: {relative}")
 
 
 def _verify_frozen_artifact_tree_at(
@@ -610,10 +671,19 @@ def _verify_frozen_artifact_tree_at(
     records: list[dict[str, object]],
     directory_identities: dict[str, tuple[int, int]],
     analysis_fd: int,
+    file_identities: dict[str, tuple[int, int]] | None = None,
     prefix: tuple[str, ...] = (),
 ) -> None:
     expected = {str(record["path"]): record for record in records}
+    all_records = dict(expected)
     expected_directories = dict(directory_identities)
+    expected_files = None if file_identities is None else dict(file_identities)
+    retained_descriptors: list[int] = []
+    retained_directory_entries: list[tuple[int, str, str, int]] = []
+    retained_directory_names: list[tuple[int, tuple[str, ...], list[str]]] = []
+    retained_file_entries: list[
+        tuple[int, str, str, dict[str, object], tuple[int, int] | None, int]
+    ] = []
 
     def verify_tree(current_fd: int, current_prefix: tuple[str, ...]) -> None:
         before = os.fstat(current_fd)
@@ -643,25 +713,52 @@ def _verify_frozen_artifact_tree_at(
                 record = expected.pop(relative, None)
                 if record is None:
                     raise ValueError(f"Launch artifact tree gained an unlisted file: {relative}")
-                _verify_frozen_artifact_file_at(current_fd, name, relative, record)
+                expected_identity = (
+                    None if expected_files is None else expected_files.pop(relative, None)
+                )
+                if file_identities is not None and expected_identity is None:
+                    raise ValueError(f"Launch artifact tree gained an unbound file: {relative}")
+                descriptor = os.open(
+                    name,
+                    os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                    dir_fd=current_fd,
+                )
+                retained_descriptors.append(descriptor)
+                _verify_open_frozen_artifact_file_at(
+                    current_fd,
+                    name,
+                    relative,
+                    record,
+                    descriptor,
+                    expected_identity=expected_identity,
+                )
+                retained_file_entries.append(
+                    (
+                        current_fd,
+                        name,
+                        relative,
+                        record,
+                        expected_identity,
+                        descriptor,
+                    )
+                )
             elif stat.S_ISDIR(metadata.st_mode):
                 child_fd = os.open(name, _DIRECTORY_OPEN_FLAGS, dir_fd=current_fd)
-                try:
-                    child = os.fstat(child_fd)
-                    expected_identity = expected_directories.pop(relative, None)
-                    if expected_identity != (child.st_dev, child.st_ino):
-                        raise ValueError(
-                            f"Launch artifact directory changed after freezing: {relative}"
-                        )
-                    verify_tree(child_fd, (*current_prefix, name))
-                    after = os.fstat(child_fd)
-                    entry = os.stat(name, dir_fd=current_fd, follow_symlinks=False)
-                    if (entry.st_dev, entry.st_ino) != (after.st_dev, after.st_ino):
-                        raise ValueError(
-                            f"Launch artifact directory changed after freezing: {relative}"
-                        )
-                finally:
-                    os.close(child_fd)
+                retained_descriptors.append(child_fd)
+                child = os.fstat(child_fd)
+                expected_identity = expected_directories.pop(relative, None)
+                if expected_identity != (child.st_dev, child.st_ino):
+                    raise ValueError(
+                        f"Launch artifact directory changed after freezing: {relative}"
+                    )
+                retained_directory_entries.append((current_fd, name, relative, child_fd))
+                verify_tree(child_fd, (*current_prefix, name))
+                after = os.fstat(child_fd)
+                entry = os.stat(name, dir_fd=current_fd, follow_symlinks=False)
+                if (entry.st_dev, entry.st_ino) != (after.st_dev, after.st_ino):
+                    raise ValueError(
+                        f"Launch artifact directory changed after freezing: {relative}"
+                    )
             else:
                 raise ValueError(f"Launch artifact tree contains an unsupported entry: {relative}")
         after = os.fstat(current_fd)
@@ -671,12 +768,64 @@ def _verify_frozen_artifact_tree_at(
         ):
             relative = "/".join(current_prefix) or "."
             raise ValueError(f"Launch artifact directory changed after freezing: {relative}")
+        retained_directory_names.append((current_fd, current_prefix, names))
 
-    verify_tree(directory_fd, prefix)
-    if expected:
-        raise ValueError("Launch artifact tree lost a frozen file")
-    if expected_directories:
-        raise ValueError("Launch artifact tree lost a frozen directory")
+    try:
+        verify_tree(directory_fd, prefix)
+        if expected:
+            raise ValueError("Launch artifact tree lost a frozen file")
+        if expected_directories:
+            raise ValueError("Launch artifact tree lost a frozen directory")
+        if expected_files:
+            raise ValueError("Launch artifact tree lost a frozen file identity")
+        def verify_retained_directories() -> None:
+            for current_fd, current_prefix, names in retained_directory_names:
+                metadata = os.fstat(current_fd)
+                if (
+                    not stat.S_ISDIR(metadata.st_mode)
+                    or metadata.st_mode & 0o222
+                    or sorted(os.listdir(current_fd)) != names
+                ):
+                    relative = "/".join(current_prefix) or "."
+                    raise ValueError(
+                        f"Launch artifact directory changed after freezing: {relative}"
+                    )
+            for parent_fd, name, relative, descriptor in retained_directory_entries:
+                metadata = os.fstat(descriptor)
+                entry = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+                if (
+                    not stat.S_ISDIR(metadata.st_mode)
+                    or metadata.st_mode & 0o222
+                    or (entry.st_dev, entry.st_ino) != (metadata.st_dev, metadata.st_ino)
+                ):
+                    raise ValueError(
+                        f"Launch artifact directory changed after freezing: {relative}"
+                    )
+
+        verify_retained_directories()
+        for parent_fd, name, relative, record, identity, descriptor in retained_file_entries:
+            _verify_open_frozen_artifact_file_at(
+                parent_fd,
+                name,
+                relative,
+                all_records[relative],
+                descriptor,
+                expected_identity=identity,
+            )
+        verify_retained_directories()
+        analysis = os.fstat(analysis_fd)
+        entry = os.stat("analysis", dir_fd=directory_fd, follow_symlinks=False)
+        if (
+            not stat.S_ISDIR(analysis.st_mode)
+            or stat.S_IMODE(analysis.st_mode) != 0o700
+            or stat.S_IMODE(entry.st_mode) != 0o700
+            or os.listdir(analysis_fd)
+            or (entry.st_dev, entry.st_ino) != (analysis.st_dev, analysis.st_ino)
+        ):
+            raise ValueError("Launch artifact analysis directory changed while freezing")
+    finally:
+        for descriptor in reversed(retained_descriptors):
+            os.close(descriptor)
 
 
 def _publish_empty_analysis_directory_at(artifact_dir_fd: int) -> int:
@@ -743,38 +892,60 @@ def _publish_frozen_artifact_inventory_at(
         frozen_directory_identities = (
             {} if directory_identities is None else dict(directory_identities)
         )
+        frozen_file_identities: dict[str, tuple[int, int]] = {}
         records = _freeze_artifact_tree_at(
             artifact_dir_fd,
             directory_identities=frozen_directory_identities,
+            file_identities=frozen_file_identities,
         )
-        _write_new_text_artifact(
+        inventory_descriptor = _open_artifact_file(
             artifact_dir_fd,
             artifact_dir,
             artifact_dir / "artifact_inventory.json",
-            json.dumps(
+            _NEW_READ_WRITE_ARTIFACT_OPEN_FLAGS,
+            create_parent=False,
+        )
+        try:
+            inventory_text = json.dumps(
                 {"schema_version": 1, "files": records},
                 indent=2,
                 sort_keys=True,
+            ) + "\n"
+            with os.fdopen(
+                inventory_descriptor, "w", encoding="utf-8", closefd=False
+            ) as stream:
+                stream.write(inventory_text)
+            inventory_record = _freeze_open_artifact_file_at(
+                artifact_dir_fd,
+                "artifact_inventory.json",
+                "artifact_inventory.json",
+                inventory_descriptor,
             )
-            + "\n",
-        )
-        inventory_record = _freeze_artifact_file_at(
-            artifact_dir_fd, "artifact_inventory.json", "artifact_inventory.json"
-        )
-        os.fchmod(artifact_dir_fd, 0o555)
-        os.fsync(artifact_dir_fd)
-        _verify_frozen_artifact_file_at(
-            artifact_dir_fd,
-            "artifact_inventory.json",
-            "artifact_inventory.json",
-            inventory_record,
-        )
-        _verify_frozen_artifact_tree_at(
-            artifact_dir_fd,
-            records,
-            frozen_directory_identities,
-            analysis_fd,
-        )
+            os.fchmod(artifact_dir_fd, 0o555)
+            os.fsync(artifact_dir_fd)
+            _verify_open_frozen_artifact_file_at(
+                artifact_dir_fd,
+                "artifact_inventory.json",
+                "artifact_inventory.json",
+                inventory_record,
+                inventory_descriptor,
+            )
+            _verify_frozen_artifact_tree_at(
+                artifact_dir_fd,
+                records,
+                frozen_directory_identities,
+                analysis_fd,
+                frozen_file_identities,
+            )
+            _verify_open_frozen_artifact_file_at(
+                artifact_dir_fd,
+                "artifact_inventory.json",
+                "artifact_inventory.json",
+                inventory_record,
+                inventory_descriptor,
+            )
+        finally:
+            os.close(inventory_descriptor)
     finally:
         os.close(analysis_fd)
 

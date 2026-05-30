@@ -36,7 +36,7 @@
       "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
       "analysis_script_sha256": [
         "e9a5c93aea3e2cc288e07fc2adbc93ab22c49df74c1e83dfaf5cd694eced7d68",
-        "c5c77b6a952ed319498f08c91b9adc40101c090f91dc57d798dafdc455a38c01"
+        "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
       ],
       "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
       "launch_contract_sha256": "f63d539df5118ff0f9cec769fa656f4f34784dce54847a285aea48517e299a1f",
@@ -60,7 +60,7 @@
       "environment_profile_sha256": "7ff6cff3e263e8b4552bcbac1d5b55a85264a2a7af5565bbc9856584e35402c1",
       "analysis_script_sha256": [
         "f9c23bddf0ad0ac991baced9ffc7cf94e9b9776993962f2ece042e41aec9556b",
-        "c5c77b6a952ed319498f08c91b9adc40101c090f91dc57d798dafdc455a38c01"
+        "cf090115bcdfd143f67b12339115102b57e74cf3205b1ebb1521c144c3415a5a"
       ],
       "executable_sha256": "bea2a418faf582e0b7e8a2830494fa156ddddb18763dde21d344a4cba14a60d8",
       "launch_contract_sha256": "0daebd7708c642af2aae000a9a35c773599956e5e3273c4eb4124125fdd5a1e6",
@@ -74,8 +74,8 @@
     "status": "passed_user_authorized_orion_only_storage",
     "last_preflight_utc": "2026-05-30T22:25:05Z",
     "installed_control_plane_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
-    "staged_control_plane_candidate_version": "cbc6fb50937a728098d22cf9e8e11aa2baf421d5549378ef5f1833a65b294fd8",
-    "installed_control_plane_lifecycle": "paired_installed_reviewed_generation",
+    "staged_control_plane_candidate_version": "4ccde8dfe557fbb6450c15b2ee68d41d2ac0711d5d56d79e775fa75178177bd3",
+    "installed_control_plane_lifecycle": "live_active_generation_successor_staged_not_installed",
     "orion_simulation_root_preflight": {
       "status": "passed",
       "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC",
