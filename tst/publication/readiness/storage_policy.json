@@ -72,10 +72,10 @@
   },
   "olcf_side_storage": {
     "status": "passed_user_authorized_orion_only_storage",
-    "last_preflight_utc": "2026-05-30T21:49:15Z",
-    "installed_control_plane_version": "e8e47eadb491b20e3f196f3d8ea0b859c61ccad961f8d56bc85ea2a48424eecf",
+    "last_preflight_utc": "2026-05-30T21:55:42Z",
+    "installed_control_plane_version": "6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
     "staged_control_plane_candidate_version": "6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
-    "installed_control_plane_lifecycle": "live_active_generation_successor_staged_not_installed",
+    "installed_control_plane_lifecycle": "paired_installed_reviewed_generation",
     "orion_simulation_root_preflight": {
       "status": "passed",
       "path": "/lustre/orion/ast207/proj-shared/dfielding/PIC",

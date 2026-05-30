@@ -10,7 +10,7 @@
     "Q-038",
     "Q-042"
   ],
-  "qualification_effect": "local_registered_f1_successor_adjacent_path_hardening_reviewed_paired_activation_pending",
+  "qualification_effect": "local_registered_f1_successor_active_registered_execution_pending",
   "scope": "Staged successor chronology after the clean-candidate Frontier F0 admission closure. The candidate retains the completed F0 chronology and adds two exact one-attempt registered-science slices: a clean-candidate GPU relativistic-gyro oracle and a clean-candidate GPU paper-mode coupling oracle. The launch trampoline freezes an exact structured artifact tree and immutable inventory. Offline analyzers retain descriptor-pinned tree identity, validate exact inventory closure, publish one immutable result and receipt, and support qualification-time no-write recomputation from the snapshotted analyzer. Qualification retains descriptors for the immutable inventory, result and receipt plus their directory ancestry across recomputation and rechecks path identity and bytes afterward. This candidate does not claim Frontier F1 execution or scientific qualification.",
   "live_predecessor": {
     "record": "tst/publication/readiness/q027_frontier_f0_compute_snapshot_activation_2026-05-30.json",
@@ -24,9 +24,9 @@
   "staged_successor": {
     "control_plane_version": "6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
     "control_plane_inventory_files": 19,
-    "worktree_state": "dirty_candidate_pending_clean_commit_curation",
-    "paired_install_status": "pending_clean_commit_and_paired_install",
-    "active_policy_promotion_status": "pending_paired_install"
+    "worktree_state": "clean_reviewed_commit_c1be6cabae1aed5df152d0033722ebb4a4616697",
+    "paired_install_status": "pass_identical_immutable_install",
+    "active_policy_promotion_status": "pass"
   },
   "registered_science_slices": [
     {
@@ -132,14 +132,37 @@
     "reason": "Superseded before promotion after an adjacent-path review added staged analysis-directory publication, empty-subtree rejection and trusted-root qualification ancestry."
   },
   "paired_install_transition": {
-    "status": "pending_clean_commit_and_paired_install"
+    "status": "pass_active_policy_promotion_pending",
+    "installed_utc": "2026-05-30T21:55:42Z",
+    "control_plane_version": "6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
+    "operational_source_commit": "c1be6cabae1aed5df152d0033722ebb4a4616697",
+    "orion_install": "/lustre/orion/ast207/proj-shared/dfielding/PIC/control_plane/6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
+    "project_home_install": "/ccs/proj/ast207/proj-shared/PIC/control_plane/6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
+    "inventory_sha256": "5144e836b455017d5e4c3ec7284b9b468b7d987659f4b893ef120fa6d9c56592",
+    "anchor_migration": "pass_existing_genesis_preserved_without_append",
+    "genesis_event_sha256": "849bf340986f4d1e1f7cc69c0d2e2845c0313c02d935822113aa8b1df5f1f4c1",
+    "genesis_mirror_ack_sha256": "a3af8af8c3b579ee323850902aad7aab58abde98dff98618ccffd15958dbb296",
+    "orion_ledger_records": 31,
+    "orion_receipt_records": 31,
+    "project_home_ledger_records": 31,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent"
   },
   "active_policy_transition": {
-    "status": "pending_paired_install"
+    "status": "pass",
+    "validated_utc": "2026-05-30T21:56:38Z",
+    "control_plane_version": "6002c80e305d6cfd322675b3e27e17e169b1718d8edd722330464cccb0c4fd86",
+    "policy_sha256": "ee3923fb678d0bba692a9c3ceaf653e96984afe0bbe5632f761006b36bec92de",
+    "promotion_sha256": "433d0afcb65af36932217fe51f619119b6c95e0f6832d6ac99f6168e8d00241b",
+    "idempotent_post_promotion_validation": "pass",
+    "orion_ledger_records": 31,
+    "orion_receipt_records": 31,
+    "project_home_ledger_records": 31,
+    "cumulative_consumed_node_hours": 0.07833333333333331,
+    "active_reservations": 0,
+    "pending_submission_marker": "absent"
   },
   "open_boundaries": [
-    "paired immutable Orion and Project Home install of the staged successor is pending",
-    "active-policy promotion is pending",
     "the two registered Frontier F1 slices have not executed",
     "external reviewer disposition remains pending external review"
   ],
