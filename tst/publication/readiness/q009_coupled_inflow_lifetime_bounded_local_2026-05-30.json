@@ -1,0 +1,102 @@
+{
+  "record_type": "q009_coupled_inflow_lifetime_bounded_local_blocker",
+  "date": "2026-05-30",
+  "gate": "Q-009",
+  "qualification_effect": "none_fail_closed_characterization_only",
+  "disposition": "blocked_linear_wave_mhd_inflow_reservoir_not_initialized",
+  "scope": "An additive bounded-local serial-host sibling changes only the archived Q-009 coupled lifetime deck's x2 physical boundaries from outflow to inflow and records the resulting fail-closed lifetime behavior. It retains the paper_mhd_pic coupled cell-centered path, x1 particle reflection, adaptive refine/derefine requests, restart continuation requests and archived sibling bytes. This is blocker characterization only, not qualification evidence and not an ASan success claim.",
+  "source_constraints": {
+    "production_source_edited_by_this_slice": false,
+    "archived_reflect_outflow_files_edited": false,
+    "plan_edited_by_this_slice": false,
+    "new_q009_inflow_specific_files_only": [
+      "inputs/tests/pic_q009_coupled_inflow_lifetime.athinput",
+      "tst/scripts/particles/pic_q009_coupled_inflow_lifetime.py",
+      "tst/publication/readiness/q009_coupled_inflow_lifetime_bounded_local_2026-05-30.json",
+      "tst/publication/test_q009_coupled_inflow_lifetime_readiness.py"
+    ]
+  },
+  "archived_reflect_outflow_sibling": {
+    "behavior_preserved": true,
+    "input": {
+      "path": "inputs/tests/pic_q009_coupled_boundary_lifetime.athinput",
+      "sha256": "382aca7642a2ca554b75c1d6fb45b2edbc9a1c8035416611b5e4e70db2268205"
+    },
+    "harness": {
+      "path": "tst/scripts/particles/pic_q009_coupled_boundary_lifetime.py",
+      "sha256": "5693fb9bff7f654f8d65bec82332d8de027b6e6a2148825fd6f831c83b358420"
+    },
+    "readiness_record": {
+      "path": "tst/publication/readiness/q009_coupled_boundary_lifetime_bounded_local_2026-05-30.json",
+      "sha256": "0c2a92fb2c20a53755cd46db3e9cf05644aada81f25881f3597138937718e072"
+    }
+  },
+  "inflow_sibling": {
+    "input": {
+      "path": "inputs/tests/pic_q009_coupled_inflow_lifetime.athinput",
+      "sha256": "6ae0c7418ef47e12ff488824bd602a579fd0aa11256db74c22c0110a8744b2b9"
+    },
+    "harness": {
+      "path": "tst/scripts/particles/pic_q009_coupled_inflow_lifetime.py",
+      "sha256": "7cbeabc40c26e0773cd3d08222b594fcae40b6f01254b28eb92a2d5a477ca682"
+    },
+    "deliberate_deck_difference": "x2 physical boundaries change from outflow to inflow; comments and sibling basename change accordingly",
+    "supported_physical_boundaries": {
+      "x1": "reflect",
+      "x2": "inflow",
+      "x3": "periodic"
+    },
+    "particle_moment_inflow_contract": "zero_valued_moment_ghosts"
+  },
+  "debug_serial_characterization": {
+    "executable": "/tmp/athenak-pic-q009-coupled-boundary-debug-20260530/src/athena",
+    "command": "cd tst && ATHENA_Q009_COUPLED_INFLOW_EXE_DIR=/tmp/athenak-pic-q009-coupled-boundary-debug-20260530/src PYTHONDONTWRITEBYTECODE=1 python3 -m scripts.particles.pic_q009_coupled_inflow_lifetime",
+    "result": "fail_closed",
+    "runtime_identity_stable": true,
+    "restart_schema": 7,
+    "first_stage_time": 0.01875,
+    "subsequent_stage_time_advance": false,
+    "finite_mesh_state": false,
+    "particle_counts": [
+      64,
+      64,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "physical_boundary_destruction_observed": true,
+    "requested_amr_transition_sequence_completed": false
+  },
+  "fresh_host_gnu_asan_attempt": {
+    "build_directory": "/tmp/athenak-pic-q009-coupled-inflow-asan-gnu-direct-20260530",
+    "compiler": "/usr/bin/g++-13 GNU 13.3.1",
+    "compiler_probe": "pass",
+    "configure_command": "CC=/usr/bin/gcc-13 CXX=/usr/bin/g++-13 cmake -S . -B /tmp/athenak-pic-q009-coupled-inflow-asan-gnu-direct-20260530 -DCMAKE_BUILD_TYPE=Debug -DAthena_ENABLE_MPI=OFF -DAthena_ENABLE_OPENMP=OFF -DCMAKE_CXX_FLAGS='-fsanitize=address,undefined -fno-omit-frame-pointer' -DCMAKE_EXE_LINKER_FLAGS='-fsanitize=address,undefined'",
+    "configure_result": "pass",
+    "build_command": "cmake --build /tmp/athenak-pic-q009-coupled-inflow-asan-gnu-direct-20260530 -j 8",
+    "build_result": "pass",
+    "startup_command": "ASAN_OPTIONS='detect_leaks=1:halt_on_error=1' UBSAN_OPTIONS='halt_on_error=1:print_stacktrace=1' /tmp/athenak-pic-q009-coupled-inflow-asan-gnu-direct-20260530/src/athena -c",
+    "startup_result": "pass: built_in_pgens double precision MPI OFF OpenMP OFF",
+    "archived_reflect_outflow_harness": {
+      "result": "fail_leaksanitizer_direct_leak_on_first_restart_continuation",
+      "asan_success_claimed": false,
+      "direct_leak_bytes": 8,
+      "allocation": "ProblemGenerator restart constructor variabledata allocation",
+      "source_location": "src/pgen/pgen.cpp:1617"
+    },
+    "inflow_sibling_harness": {
+      "result": "fail_ubsan_signed_integer_overflow_on_first_restart_continuation",
+      "asan_success_claimed": false,
+      "source_location": "src/bvals/bvals_part.cpp:77",
+      "failing_function": "ParticleMeshBlockOffset"
+    }
+  },
+  "remaining_blockers": [
+    "Provide an admissible initialized MHD inflow reservoir for the selected coupled lifetime problem path before treating x2 inflow as a passing lifetime slice.",
+    "Repair the restart ProblemGenerator variabledata allocation leak before claiming host ASan success for the archived coupled lifetime harness.",
+    "After the inflow reservoir is defined, rerun the inflow sibling under host ASan and require finite advancing mesh state plus the intended repeated AMR transition sequence."
+  ],
+  "q009_status": "bounded_local_inflow_lifetime_sibling_added_fail_closed_mhd_inflow_reservoir_and_restart_asan_leak_blockers_open"
+}
